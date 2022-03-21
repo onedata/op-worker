@@ -24,6 +24,7 @@
     enabling_for_empty_space_test/1, enabling_for_not_empty_space_test/1, enabling_large_dirs_test/1,
     enabling_during_writing_test/1, race_with_file_adding_test/1, race_with_file_writing_test/1,
     race_with_subtree_adding_test/1, race_with_subtree_filling_with_data_test/1,
+    race_with_file_adding_to_large_dir_test/1,
     multiple_status_change_test/1, adding_file_when_disabled_test/1]).
 -export([init/1, teardown/1]).
 -export([verify_dir_on_provider_creating_files/3, delete_stats/2]).
@@ -254,37 +255,41 @@ test_with_race_base(Config, TestDirIdentifier, OnSpaceChildrenListed, ExpectedSp
     Structure = [{3, 3}, {3, 3}],
     lfm_test_utils:create_files_tree(Worker, SessId, Structure, SpaceGuid),
 
-    TestGuid = case is_list(TestDirIdentifier) of
+    TestDirGuid = case is_list(TestDirIdentifier) of
         true -> resolve_guid(Config, op_worker_nodes, TestDirIdentifier, []);
         _ -> TestDirIdentifier
     end,
-    TestUuid = file_id:guid_to_uuid(TestGuid),
+    TestDirUuid = file_id:guid_to_uuid(TestDirGuid),
 
-    Master = self(),
-    Tag = make_ref(),
-    ok = test_utils:mock_new(Worker, file_meta, [passthrough]),
-    ok = test_utils:mock_expect(Worker, file_meta, list_children, fun
-        (FileUuid, ListOpts) when FileUuid =:= TestUuid ->
-            Ans = meck:passthrough([FileUuid, ListOpts]),
-            Master ! {space_children_listed, Tag},
-            timer:sleep(1000),
-            Ans;
-        (FileUuid, ListOpts) ->
-            meck:passthrough([FileUuid, ListOpts])
-    end),
+    Tag = mock_file_meta(Config, TestDirUuid, 1000),
     enable(Config, existing_space),
-
-    MessageReceived = receive
-        {space_children_listed, Tag} ->
-            OnSpaceChildrenListed(),
-            ok
-    after
-        10000 -> timeout
-    end,
-    ?assertEqual(ok, MessageReceived),
+    execute_file_meta_list_hook(Tag, OnSpaceChildrenListed),
 
     check_dir_stats(Config, op_worker_nodes, SpaceGuid, ExpectedSpaceStats),
     verify_collecting_status(Config, enabled).
+
+
+race_with_file_adding_to_large_dir_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = lfm_test_utils:get_user1_session_id(Config, Worker),
+    SpaceGuid = lfm_test_utils:get_user1_first_space_guid(Config),
+    Structure = [{3, 2000}, {3, 3}],
+    lfm_test_utils:create_files_tree(Worker, SessId, Structure, SpaceGuid),
+
+    Tag = mock_file_meta(Config, file_id:guid_to_uuid(SpaceGuid), 10),
+    enable(Config, existing_space),
+    OnSpaceChildrenListed = fun() ->
+        lfm_test_utils:create_and_write_file(Worker, SessId, SpaceGuid, <<"test_raced_file">>, 0, {rand_content, 10})
+    end,
+    execute_file_meta_list_hook(Tag, OnSpaceChildrenListed),
+
+    verify_collecting_status(Config, enabled),
+    check_dir_stats(Config, op_worker_nodes, SpaceGuid, #{
+        ?REG_FILE_AND_LINK_COUNT => 2010,
+        ?DIR_COUNT => 12,
+        ?TOTAL_SIZE => 10,
+        ?TOTAL_SIZE_ON_STORAGE(Config, op_worker_nodes) => 10
+    }).
 
 
 multiple_status_change_test(Config) ->
@@ -748,3 +753,31 @@ update_expectations_map(Map, DiffMap) ->
 get_dir_update_time_stat(Worker, Guid) ->
     {ok, CollectorTime} = ?assertMatch({ok, _}, rpc:call(Worker, dir_update_time_stats, get_update_time, [Guid])),
     CollectorTime.
+
+
+mock_file_meta(Config, Uuid, SleepTime) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    Master = self(),
+    Tag = make_ref(),
+    ok = test_utils:mock_new(Worker, file_meta, [passthrough]),
+    ok = test_utils:mock_expect(Worker, file_meta, list_children, fun
+        (FileUuid, ListOpts) when FileUuid =:= Uuid ->
+            Ans = meck:passthrough([FileUuid, ListOpts]),
+            Master ! {space_children_listed, Tag},
+            timer:sleep(SleepTime),
+            Ans;
+        (FileUuid, ListOpts) ->
+            meck:passthrough([FileUuid, ListOpts])
+    end),
+    Tag.
+
+
+execute_file_meta_list_hook(Tag, Hook) ->
+    MessageReceived = receive
+        {space_children_listed, Tag} ->
+            Hook(),
+            ok
+    after
+        10000 -> timeout
+    end,
+    ?assertEqual(ok, MessageReceived).

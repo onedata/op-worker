@@ -75,12 +75,14 @@ cancel(SpaceId, TraverseNum) ->
 
 -spec do_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()}.
-do_master_job(#tree_traverse{file_ctx = FileCtx} = Job, MasterJobExtendedArgs) ->
+do_master_job(#tree_traverse{
+    last_name = <<>>, % Call dir_stats_collector only for first batch
+    file_ctx = FileCtx
+} = Job, MasterJobExtendedArgs) ->
     ok = dir_stats_collector:initialize_collections(file_ctx:get_logical_guid_const(FileCtx)),
-    NewJobsPreprocessor = fun(_SlaveJobs, MasterJobs, _ListExtendedInfo, _SubtreeProcessingStatus) ->
-        {[], MasterJobs}
-    end,
-    tree_traverse:do_master_job(Job, MasterJobExtendedArgs, NewJobsPreprocessor).
+    do_tree_traverse_master_job(Job, MasterJobExtendedArgs);
+do_master_job(Job, MasterJobExtendedArgs) ->
+    do_tree_traverse_master_job(Job, MasterJobExtendedArgs).
 
 
 -spec do_slave_job(tree_traverse:slave_job(), tree_traverse:id()) -> ok.
@@ -126,3 +128,12 @@ gen_task_id(SpaceId, TraverseNum) ->
 get_space_id(TaskId) ->
     [_TraverseNumBinary, SpaceId] = binary:split(TaskId, <<?TASK_ID_SEPARATOR>>),
     SpaceId.
+
+
+-spec do_tree_traverse_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) ->
+    {ok, traverse:master_job_map()}.
+do_tree_traverse_master_job(Job, MasterJobExtendedArgs) ->
+    NewJobsPreprocessor = fun(_SlaveJobs, MasterJobs, _ListExtendedInfo, _SubtreeProcessingStatus) ->
+        {[], MasterJobs}
+    end,
+    tree_traverse:do_master_job(Job, MasterJobExtendedArgs, NewJobsPreprocessor).

@@ -12,6 +12,11 @@
 %%% existing space. If statistics counting is enabled from the
 %%% begging (support), initialization is not required.
 %%%
+%%% Initialization is performed in batches and processing of each
+%%% batch has to be triggered separately. It allows dir_stats_collector
+%%% handling requests between batches processing not to
+%%% block dir_stats_collector when initializing large directories.
+%%%
 %%% NOTE: There is possible race between initialization and update of 
 %%%       statistics. To handle it, initialization is repeated if 
 %%%       any update appears in less than ?RACE_PREVENTING_TIME from 
@@ -26,8 +31,10 @@
 
 
 %% API
--export([new_initialization_data/0, are_stats_ready/1, is_race_reported/1, report_race/1, get_stats/2,
-    update_stats_from_descendants/3, ensure_dir_initialized/2]).
+-export([new_initialization_data/0, are_stats_ready/1, is_race_reported/1, report_race/1,
+    get_stats/2, update_stats_from_descendants/3,
+    start_dir_initialization/2, continue_dir_initialization/1, finish_dir_initialization/3,
+    abort_collection_initialization/2]).
 
 
 -record(initialization_data, {
@@ -38,10 +45,19 @@
 }).
 
 
+-record(initialization_progress, {
+    file_uuid :: file_meta:uuid(),
+    space_id :: file_id:space_id(),
+    collections_map :: collections_map(),
+    list_opts :: file_meta:list_opts()
+}).
+
+
 -type initialization_data() :: #initialization_data{}.
+-type initialization_progress() :: #initialization_progress{}.
 -type initialization_data_map() :: #{dir_stats_collection:type() => initialization_data()}.
 -type collections_map() :: #{dir_stats_collection:type() => dir_stats_collection:collection()}.
--export_type([initialization_data/0, initialization_data_map/0]).
+-export_type([initialization_data/0, initialization_progress/0, initialization_data_map/0, collections_map/0]).
 
 
 -define(RACE_PREVENTING_TIME, 5000). % If update appears in less than ?RACE_PREVENTING_TIME from initialization
@@ -107,17 +123,54 @@ update_stats_from_descendants(#initialization_data{
     }.
 
 
--spec ensure_dir_initialized(file_id:file_guid(), initialization_data_map()) -> initialization_data_map().
-ensure_dir_initialized(Guid, DataMap) ->
+-spec start_dir_initialization(file_id:file_guid(), initialization_data_map()) -> initialization_progress().
+start_dir_initialization(Guid, DataMap) ->
     ToInit = maps:filter(fun(_CollectionType, #initialization_data{status = Status}) ->
         Status =:= race_possible
     end, DataMap),
 
     {FileUuid, SpaceId} = file_id:unpack_guid(Guid),
-    CollectionTypesToInit = maps:keys(ToInit),
-    NewStatsMap = init_for_dir_children(
-        FileUuid, SpaceId, CollectionTypesToInit, #{token => ?INITIAL_DATASTORE_LS_TOKEN, size => ?BATCH_SIZE}, #{}),
-    FinalNewStatsMap = finish_dir_init(Guid, CollectionTypesToInit, NewStatsMap),
+    InitialCollectionsMap = maps:map(fun(_CollectionType, _Data) -> undefined end, ToInit),
+    #initialization_progress{
+        file_uuid = FileUuid,
+        space_id = SpaceId,
+        collections_map = InitialCollectionsMap,
+        list_opts = #{token => ?INITIAL_DATASTORE_LS_TOKEN, size => ?BATCH_SIZE}
+    }.
+
+
+-spec continue_dir_initialization(initialization_progress()) ->
+    {finish, collections_map()} | {continue, initialization_progress()} | abort.
+continue_dir_initialization(#initialization_progress{
+    file_uuid = FileUuid,
+    space_id = SpaceId,
+    collections_map = CollectionsMap,
+    list_opts = ListOpts
+} = InitializationProgress) ->
+    case maps:size(CollectionsMap) of
+        0 ->
+            % Map can be empty as a result of abort_collection_initialization/2 function calls
+            abort;
+        _ ->
+            {ok, Links, ListExtendedInfo} = file_meta:list_children(FileUuid, ListOpts),
+            UpdatedCollectionsMap = init_batch(SpaceId, Links, CollectionsMap),
+            case ListExtendedInfo of
+                #{is_last := true} ->
+                    {finish, UpdatedCollectionsMap};
+                _ ->
+                    NewListOpts = maps:merge(ListOpts, maps:remove(is_last, ListExtendedInfo)),
+                    {continue, InitializationProgress#initialization_progress{
+                        collections_map = UpdatedCollectionsMap,
+                        list_opts = NewListOpts
+                    }}
+            end
+    end.
+
+
+-spec finish_dir_initialization(file_id:file_guid(), initialization_data_map(), collections_map()) ->
+    initialization_data_map().
+finish_dir_initialization(Guid, DataMap, CollectionsMap) ->
+    FinalCollectionsMap = finish_dir_init(Guid, CollectionsMap),
 
     Timer = countdown_timer:start_millis(?RACE_PREVENTING_TIME),
     maps:merge_with(fun(_CollectionType, Data, Stats) ->
@@ -126,37 +179,36 @@ ensure_dir_initialized(Guid, DataMap) ->
             race_preventing_timer = Timer,
             dir_and_direct_children_stats = Stats
         }
-    end, DataMap, FinalNewStatsMap).
+    end, DataMap, FinalCollectionsMap).
+
+
+-spec abort_collection_initialization(initialization_progress(), dir_stats_collection:type()) ->
+    {ok, initialization_progress()} | initialization_aborted_for_all_collections.
+abort_collection_initialization(#initialization_progress{
+    collections_map = CollectionsMap
+} = InitializationProgress, CollectionType) ->
+    UpdatedCollectionsMap = maps:remove(CollectionType, CollectionsMap),
+    case maps:size(UpdatedCollectionsMap) of
+        0 ->
+            initialization_aborted_for_all_collections;
+        _ ->
+            {ok, InitializationProgress#initialization_progress{
+                collections_map = UpdatedCollectionsMap
+            }}
+    end.
 
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
--spec init_for_dir_children(file_meta:uuid(), file_id:space_id(), [dir_stats_collection:type()],
-    file_meta:list_opts(), collections_map()) -> collections_map().
-init_for_dir_children(_FileUuid, _SpaceId, [], _ListOpts, Acc) ->
-    Acc;
-init_for_dir_children(FileUuid, SpaceId, CollectionTypes, ListOpts, Acc) ->
-    case file_meta:list_children(FileUuid, ListOpts) of
-        {ok, Links, #{is_last := true} = _ListExtendedInfo} ->
-            init_batch(SpaceId, Links, CollectionTypes, Acc);
-        {ok, Links, ListExtendedInfo} ->
-            UpdatedAcc = init_batch(SpaceId, Links, CollectionTypes, Acc),
-            NewListOpts = maps:merge(ListOpts, maps:remove(is_last, ListExtendedInfo)),
-            init_for_dir_children(FileUuid, SpaceId, CollectionTypes, NewListOpts, UpdatedAcc)
-    end.
-
-
--spec init_batch(file_id:space_id(), [file_meta:link()], [dir_stats_collection:type()], collections_map()) ->
-    collections_map().
-init_batch(_SpaceId, [], _CollectionTypes, InitialAcc) ->
-    InitialAcc;
-init_batch(SpaceId, Links, CollectionTypes, InitialAcc) ->
-    lists:foldl(fun(CollectionType, Acc) ->
-        CollectionStats = maps:get(CollectionType, Acc, undefined),
-        Acc#{CollectionType => init_batch_for_collection_type(SpaceId, Links, CollectionType, CollectionStats)}
-    end, InitialAcc, CollectionTypes).
+-spec init_batch(file_id:space_id(), [file_meta:link()], collections_map()) -> collections_map().
+init_batch(_SpaceId, [], CollectionsMap) ->
+    CollectionsMap;
+init_batch(SpaceId, Links, CollectionsMap) ->
+    maps:map(fun(CollectionType, CollectionStats) ->
+        init_batch_for_collection_type(SpaceId, Links, CollectionType, CollectionStats)
+    end, CollectionsMap).
 
 
 -spec init_batch_for_collection_type(file_id:space_id(), [file_meta:link()], [dir_stats_collection:type()],
@@ -171,12 +223,11 @@ init_batch_for_collection_type(SpaceId, Links, CollectionType, InitialStats) ->
     end, InitialStats, Links).
 
 
--spec finish_dir_init(file_id:file_guid(), [dir_stats_collection:type()], collections_map()) -> collections_map().
-finish_dir_init(Guid, CollectionTypes, ChildrenStats) ->
-    StatsForGuid = lists:map(fun(CollectionType) ->
-        {CollectionType, CollectionType:init_dir(Guid)}
-    end, CollectionTypes),
-
-    maps:merge_with(fun(CollectionType, Stats1, Stats2) ->
-        dir_stats_collection:consolidate(CollectionType, Stats1, Stats2)
-    end, maps:from_list(StatsForGuid), ChildrenStats).
+-spec finish_dir_init(file_id:file_guid(), collections_map()) -> collections_map().
+finish_dir_init(Guid, CollectionsMap) ->
+    maps:map(fun
+        (CollectionType, undefined) ->
+            CollectionType, CollectionType:init_dir(Guid);
+        (CollectionType, ChildrenStats) ->
+            dir_stats_collection:consolidate(CollectionType, CollectionType:init_dir(Guid), ChildrenStats)
+    end, CollectionsMap).
