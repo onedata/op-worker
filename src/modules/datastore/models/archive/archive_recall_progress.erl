@@ -29,7 +29,7 @@
 %% API
 -export([create/1, delete/1]).
 -export([get/1]).
--export([report_bytes_copied/2, report_file_finished/1, report_file_failed/3]).
+-export([report_bytes_copied/2, report_file_finished/1, report_error/2]).
 %% Test API
 -export([get_stats/1]).
 %% Datastore callbacks
@@ -113,13 +113,9 @@ report_file_finished(Id) ->
     datastore_time_series_collection:update(?CTX, ?TSC_ID(Id), ?NOW(), [{?FILES_TS, 1}]).
 
 
--spec report_file_failed(id(), file_id:file_guid(), {error, term()}) -> ok | {error, term()}.
-report_file_failed(Id, FileGuid, Error) ->
-    {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
-    json_infinite_log_model:append(?ERROR_LOG_ID(Id), #{
-        <<"fileId">> => ObjectId,
-        <<"reason">> => errors:to_json(Error)
-    }),
+-spec report_error(id(), json_utils:json_term()) -> ok | {error, term()}.
+report_error(Id, ErrorJson) ->
+    json_infinite_log_model:append(?ERROR_LOG_ID(Id), ErrorJson),
     datastore_time_series_collection:update(?CTX, ?TSC_ID(Id), ?NOW(), [{?FAILED_FILES_TS, 1}]).
 
 
