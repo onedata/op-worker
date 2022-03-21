@@ -40,6 +40,10 @@
 %%% collections for all directories. In such a case, it uses helper module
 %%% dir_stats_collections_initializer as collecting initialization requires
 %%% special treatment (races between initialization and updates can occur).
+%%%
+%%% NOTE: multiple collections can be initialized together to list directory
+%%%       children only once. As a result, some of initialization data must
+%%%       be stored per guid instead of per guid/collection_type pair.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(dir_stats_collector).
@@ -77,6 +81,12 @@
 -record(state, {
     dir_stats_cache = #{} :: #{cached_dir_stats_key() => cached_dir_stats()},
     has_unflushed_changes = false :: boolean(),
+
+    % Field used during collections initialization - multiple collection types for dir are initialized together so
+    % progress data cannot be stored in dir_stats_cache and must be stored in separate map
+    initialization_progress_map = #{} ::
+        #{file_id:file_guid() => dir_stats_collections_initializer:initialization_progress()},
+
     flush_timer_ref :: reference() | undefined,
     initialization_timer_ref :: reference() | undefined,
 
@@ -93,11 +103,10 @@
     last_used :: stopwatch:instance() | undefined,
     parent :: file_id:file_guid() | root_dir | undefined, % resolved and stored upon first access to this field,
 
-    % Field used to handle collections initialization when space collecting is changed to enabled for not empty space
-    % (see dir_stats_collector_config)
+    % Field used to store information about collecting status to enable special requests handing during collection
+    % initialization (when space collecting is changed to enabled for not empty space - see dir_stats_collector_config)
     collecting_status :: dir_stats_collector_config:active_collecting_status(),
     initialization_data :: dir_stats_collections_initializer:initialization_data() | undefined
-
 }).
 
 
@@ -146,6 +155,7 @@
                                                                      % period of time
 
 -define(INITIALIZE_COLLECTIONS(Guid), {initialize_collections, Guid}).
+-define(CONTINUE_COLLECTIONS_INITIALIZATION(Guid), {continue_collections_initialization, Guid}).
 -define(STOP_COLLECTING(SpaceId), {stop_collecting, SpaceId}).
 
 
@@ -404,7 +414,7 @@ handle_call(?INITIALIZE_COLLECTIONS(Guid), State) ->
         0 ->
             {ok, UpdatedState};
         _ ->
-            FinalState = initialize_collections(Guid, InitializationDataMap, UpdatedState),
+            FinalState = start_collections_initialization_for_dir(Guid, InitializationDataMap, UpdatedState),
             {ok, ensure_flush_scheduled(FinalState#state{has_unflushed_changes = true})}
     end;
 
@@ -440,6 +450,10 @@ handle_cast(#dsc_update_request{
     case UpdateAns of
         {?ERROR_FORBIDDEN, UpdatedState} ->
             UpdatedState;
+        {{ok, #cached_dir_stats{collecting_status = collections_initialization}}, UpdatedState} ->
+            abort_collection_initialization(Guid, CollectionType, ensure_flush_scheduled(UpdatedState#state{
+                has_unflushed_changes = true
+            }));
         {_, UpdatedState} ->
             ensure_flush_scheduled(UpdatedState#state{has_unflushed_changes = true})
     end;
@@ -448,10 +462,11 @@ handle_cast(?SCHEDULED_FLUSH, State) ->
     flush_all(State);
 
 handle_cast(?SCHEDULED_COLLECTIONS_INITIALIZATION, State) ->
-    % NOTE: initialize_all_cached_collections can take long time for large directories
-    % TODO VFS-8837 - consider non-blocking initialization of statistics
     verify_space_collecting_statuses(
-        initialize_all_cached_collections(State#state{initialization_timer_ref = undefined}));
+        start_collections_initialization_for_all_cached_dirs(State#state{initialization_timer_ref = undefined}));
+
+handle_cast(?CONTINUE_COLLECTIONS_INITIALIZATION(Guid), State) ->
+    continue_collections_initialization_for_dir(Guid, State);
 
 handle_cast(Info, State) ->
     ?log_bad_request(Info),
@@ -591,8 +606,8 @@ flush_cached_dir_stats({_, CollectionType} = CachedDirStatsKey, PruningStrategy,
 
 
 %% @private
--spec initialize_all_cached_collections(state()) -> state().
-initialize_all_cached_collections(#state{dir_stats_cache = DirStatsCache} = State) ->
+-spec start_collections_initialization_for_all_cached_dirs(state()) -> state().
+start_collections_initialization_for_all_cached_dirs(#state{dir_stats_cache = DirStatsCache} = State) ->
     InitializationDataMaps = maps:fold(fun
         ({Guid, CollectionType} = _CachedDirStatsKey, #cached_dir_stats{
             collecting_status = collections_initialization,
@@ -605,32 +620,96 @@ initialize_all_cached_collections(#state{dir_stats_cache = DirStatsCache} = Stat
     end, #{}, DirStatsCache),
 
     maps:fold(fun(Guid, InitializationDataMap, StateAcc) ->
-        initialize_collections(Guid, InitializationDataMap, StateAcc)
+        start_collections_initialization_for_dir(Guid, InitializationDataMap, StateAcc)
     end, State, InitializationDataMaps).
 
 
 %% @private
--spec initialize_collections(file_id:file_guid(), dir_stats_collections_initializer:initialization_data_map(), 
-    state()) -> state().
-initialize_collections(Guid, InitializationDataMap, State) ->
+-spec start_collections_initialization_for_dir(file_id:file_guid(),
+    dir_stats_collections_initializer:initialization_data_map(), state()) -> state().
+start_collections_initialization_for_dir(Guid, InitializationDataMap, #state{
+    initialization_progress_map = ProgressMap
+} = State) ->
+    case maps:is_key(Guid, ProgressMap) of
+        true ->
+            State;
+        false ->
+            DirInitializationProgress =
+                dir_stats_collections_initializer:start_dir_initialization(Guid, InitializationDataMap),
+            continue_collections_initialization_for_dir(
+                Guid, State#state{initialization_progress_map = ProgressMap#{Guid => DirInitializationProgress}})
+    end.
+
+
+%% @private
+-spec continue_collections_initialization_for_dir(file_id:file_guid(), state()) -> state().
+continue_collections_initialization_for_dir(Guid, #state{initialization_progress_map = ProgressMap} = State) ->
     try
-        UpdatedInitializationDataMap = dir_stats_collections_initializer:ensure_dir_initialized(Guid, InitializationDataMap),
-        maps:fold(fun(CollectionModule, InitializationData, StateAcc) ->
-            CachedDirStatsKey = gen_cached_dir_stats_key(Guid, CollectionModule),
-            CachedDirStats = maps:get(CachedDirStatsKey, State#state.dir_stats_cache),
-            UpdatedCachedDirStats = CachedDirStats#cached_dir_stats{
-                initialization_data = InitializationData
-            },
-            update_cached_dir_stats(CachedDirStatsKey, UpdatedCachedDirStats, StateAcc)
-        end, State, UpdatedInitializationDataMap)
+        case maps:get(Guid, ProgressMap, undefined) of
+            undefined ->
+                State; % Progress can be deleted from map as a result of race with stats update
+            DirInitializationProgress ->
+                case dir_stats_collections_initializer:continue_dir_initialization(DirInitializationProgress) of
+                    {continue, UpdatedDirInitializationProgress} ->
+                        pes:self_cast(?CONTINUE_COLLECTIONS_INITIALIZATION(Guid)),
+                        State#state{initialization_progress_map = ProgressMap#{Guid => UpdatedDirInitializationProgress}};
+                    {finish, CollectionsMap} ->
+                        finish_collections_initialization_for_dir(Guid, CollectionsMap,
+                            State#state{initialization_progress_map = maps:remove(Guid, ProgressMap)});
+                    abort ->
+                        State#state{initialization_progress_map = maps:remove(Guid, ProgressMap)}
+                end
+        end
     catch
         Error:Reason:Stacktrace ->
             ?error_stacktrace("Dir stats collector ~p error for ~p: ~p:~p",
                 [?FUNCTION_NAME, Guid, Error, Reason], Stacktrace),
-            State
+            State#state{initialization_progress_map = maps:remove(Guid, ProgressMap)}
     end.
 
 
+%% @private
+-spec finish_collections_initialization_for_dir(file_id:file_guid(),
+    dir_stats_collections_initializer:collections_map(), state()) -> state().
+finish_collections_initialization_for_dir(Guid, CollectionsMap, State) ->
+    InitializationDataMap = maps:map(fun(CollectionType, _InitializedCollection) ->
+        CachedDirStatsKey = gen_cached_dir_stats_key(Guid, CollectionType),
+        #cached_dir_stats{initialization_data = InitializationData} =
+            maps:get(CachedDirStatsKey, State#state.dir_stats_cache),
+        InitializationData
+    end, CollectionsMap),
+
+    UpdatedInitializationDataMap =
+        dir_stats_collections_initializer:finish_dir_initialization(Guid, InitializationDataMap, CollectionsMap),
+    maps:fold(fun(CollectionType, InitializationData, StateAcc) ->
+        CachedDirStatsKey = gen_cached_dir_stats_key(Guid, CollectionType),
+        CachedDirStats = maps:get(CachedDirStatsKey, State#state.dir_stats_cache),
+        UpdatedCachedDirStats = CachedDirStats#cached_dir_stats{
+            initialization_data = InitializationData
+        },
+        update_cached_dir_stats(CachedDirStatsKey, UpdatedCachedDirStats, StateAcc)
+    end, State, UpdatedInitializationDataMap).
+
+
+%% @private
+-spec abort_collection_initialization(file_id:file_guid(), dir_stats_collection:type(), state()) -> state().
+abort_collection_initialization(Guid, CollectionType, #state{initialization_progress_map = ProgressMap} = State) ->
+    case maps:get(Guid, ProgressMap, undefined) of
+        undefined ->
+            State;
+        DirInitializationProgress ->
+            case dir_stats_collections_initializer:abort_collection_initialization(
+                DirInitializationProgress, CollectionType
+            ) of
+                {ok, UpdatedDirInitializationProgress} ->
+                    State#state{initialization_progress_map = ProgressMap#{Guid => UpdatedDirInitializationProgress}};
+                initialization_aborted_for_all_collections ->
+                    State#state{initialization_progress_map = maps:remove(Guid, ProgressMap)}
+            end
+    end.
+
+
+%% @private
 -spec verify_space_collecting_statuses(state()) -> state().
 verify_space_collecting_statuses(#state{
     space_collecting_statuses = SpaceCollectingStatuses,
