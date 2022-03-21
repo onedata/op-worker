@@ -55,20 +55,6 @@
 -define(MAX_NOTIFICATION_RETRIES, 30).
 
 
--define(run(__ATM_WORKFLOW_EXECUTION_ID, __EXPR),
-    try
-        __EXPR
-    catch __TYPE:__REASON:__STACKTRACE ->
-        ?error_stacktrace(
-            "Unexpected error during atm workflow execution (~p) in ~w:~w - ~w:~p",
-            [__ATM_WORKFLOW_EXECUTION_ID, ?MODULE, ?FUNCTION_NAME, __TYPE, __REASON],
-            __STACKTRACE
-        ),
-        error
-    end
-).
-
-
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -171,10 +157,14 @@ prepare_lane(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneRunSelector
             AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
         )}
     catch Type:Reason:Stacktrace ->
-        % TODO VFS-8273 use audit log
-        ?error("[~p] FAILED TO PREPARE WORKFLOW DUE TO: ~p", [
-            AtmWorkflowExecutionId, ?atm_examine_error(Type, Reason, Stacktrace)
-        ]),
+        LogContent = #{
+            <<"description">> => str_utils:format_bin("Failed to prepare next run of ~B lane.", [
+                element(1, AtmLaneRunSelector)
+            ]),
+            <<"reason">> => errors:to_json(?atm_examine_error(Type, Reason, Stacktrace))
+        },
+        Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+        atm_workflow_execution_logger:workflow_critical(LogContent, Logger),
         error
     end.
 
@@ -199,16 +189,18 @@ restart_lane(_, _, _) ->
 ) ->
     ok | error.
 process_item(
-    AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId,
+    _AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId,
     ItemsBatch, ReportResultUrl, HeartbeatUrl
 ) ->
     AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(
         AtmTaskExecutionId, AtmWorkflowExecutionEnv
     ),
-    ?run(AtmWorkflowExecutionId, atm_task_execution_handler:process_items_batch(
+    % NOTE: no try..catch needed as exceptions are caught in 'atm_task_execution_handler'
+    % and treated as item processing errors
+    atm_task_execution_handler:process_items_batch(
         AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemsBatch,
         ReportResultUrl, HeartbeatUrl
-    )).
+    ).
 
 
 -spec process_result(
@@ -220,15 +212,17 @@ process_item(
 ) ->
     ok | error.
 process_result(
-    AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId,
+    _AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId,
     ItemsBatch, Outcome
 ) ->
     AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(
         AtmTaskExecutionId, AtmWorkflowExecutionEnv
     ),
-    ?run(AtmWorkflowExecutionId, atm_task_execution_handler:process_outcome(
+    % NOTE: no try..catch needed as exceptions are caught in 'atm_task_execution_handler'
+    % and treated as item processing errors
+    atm_task_execution_handler:process_outcome(
         AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemsBatch, Outcome
-    )).
+    ).
 
 
 -spec report_item_error(
@@ -260,15 +254,23 @@ report_item_error(_AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, ItemsBatch) 
     atm_task_execution:id()
 ) ->
     ok.
-handle_task_execution_ended(AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId) ->
+handle_task_execution_ended(_AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId) ->
+    AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(
+        AtmTaskExecutionId, AtmWorkflowExecutionEnv
+    ),
+
     try
         ok = atm_task_execution_handler:handle_ended(AtmTaskExecutionId)
     catch Type:Reason:Stacktrace ->
-        % TODO VFS-8273 use audit log
-        ?error("[~p] FAILED TO MARK TASK EXECUTION ~p AS ENDED DUE TO: ~p", [
-            AtmWorkflowExecutionId, AtmTaskExecutionId,
-            ?atm_examine_error(Type, Reason, Stacktrace)
-        ])
+        LogContent = #{
+            <<"description">> => str_utils:format_bin("Failed to end '~s' task execution.", [
+                AtmTaskExecutionId
+            ]),
+            <<"reason">> => errors:to_json(?atm_examine_error(Type, Reason, Stacktrace))
+        },
+        Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+        atm_workflow_execution_logger:task_warning(LogContent, Logger),
+        atm_workflow_execution_logger:workflow_warning(LogContent, Logger)
     end.
 
 
@@ -286,10 +288,15 @@ handle_lane_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, Atm
             AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
         )
     catch Type:Reason:Stacktrace ->
-        % TODO VFS-8273 use audit log
-        ?error("[~p] FAILED TO MARK LANE RUN EXECUTION ~p AS ENDED DUE TO: ~p", [
-            AtmWorkflowExecutionId, AtmLaneRunSelector, ?atm_examine_error(Type, Reason, Stacktrace)
-        ])
+        LogContent = #{
+            <<"description">> => str_utils:format_bin("Failed to end current run of ~B lane.", [
+                element(1, AtmLaneRunSelector)
+            ]),
+            <<"reason">> => errors:to_json(?atm_examine_error(Type, Reason, Stacktrace))
+        },
+        Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+        atm_workflow_execution_logger:workflow_critical(LogContent, Logger),
+        ?END_EXECUTION
     end.
 
 
@@ -313,10 +320,12 @@ handle_workflow_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv)
         ),
         notify_ended(EndedAtmWorkflowExecutionDoc)
     catch Type:Reason:Stacktrace ->
-        % TODO VFS-8273 use audit log
-        ?error("[~p] FAILED TO MARK WORKFLOW EXECUTION AS ENDED DUE TO: ~p", [
-            AtmWorkflowExecutionId, ?atm_examine_error(Type, Reason, Stacktrace)
-        ])
+        LogContent = #{
+            <<"description">> => <<"Failed to end workflow execution.">>,
+            <<"reason">> => errors:to_json(?atm_examine_error(Type, Reason, Stacktrace))
+        },
+        Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+        atm_workflow_execution_logger:workflow_emergency(LogContent, Logger)
     end.
 
 
