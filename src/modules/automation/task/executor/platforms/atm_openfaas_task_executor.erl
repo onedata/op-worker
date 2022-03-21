@@ -27,7 +27,7 @@
 -export([is_openfaas_available/0, assert_openfaas_available/0, get_activity_registry_id/1]).
 
 %% atm_task_executor callbacks
--export([create/4, initiate/4, teardown/2, delete/1, in_readonly_mode/1, run/3]).
+-export([create/4, initiate/4, teardown/2, delete/1, is_in_readonly_mode/1, run/3]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -163,8 +163,8 @@ delete(#atm_openfaas_task_executor{
     ok = atm_openfaas_function_activity_registry:delete(ActivityRegistryId).
 
 
--spec in_readonly_mode(record()) -> boolean().
-in_readonly_mode(#atm_openfaas_task_executor{operation_spec = #atm_openfaas_operation_spec{
+-spec is_in_readonly_mode(record()) -> boolean().
+is_in_readonly_mode(#atm_openfaas_task_executor{operation_spec = #atm_openfaas_operation_spec{
     docker_execution_options = #atm_docker_execution_options{readonly = Readonly}
 }}) ->
     Readonly.
@@ -539,7 +539,7 @@ add_oneclient_annotations_if_necessary(FunctionDefinition, #initiation_ctx{
             EnvSpecificOneclientOptions/binary, " ", LambdaSpecificOneclientOptions/binary
         >>,
         <<"oneclient.openfaas.onedata.org/oneprovider_host">> => OpDomain,
-        <<"oneclient.openfaas.onedata.org/token">> => case in_readonly_mode(AtmTaskExecutor) of
+        <<"oneclient.openfaas.onedata.org/token">> => case is_in_readonly_mode(AtmTaskExecutor) of
             true -> tokens:confine(AccessToken, #cv_data_readonly{});
             false -> AccessToken
         end

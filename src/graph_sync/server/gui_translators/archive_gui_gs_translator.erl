@@ -52,9 +52,10 @@ translate_archive_info(#archive_info{
     description = Description,
     index = Index,
     stats = Stats,
-    base_archive_id = BaseArchive,
-    related_aip = RelatedAip,
-    related_dip = RelatedDip
+    parent_archive_id = ParentArchiveId,
+    base_archive_id = BaseArchiveId,
+    related_aip_id = RelatedAipId,
+    related_dip_id = RelatedDipId
 }) ->
     #{
         <<"gri">> => gri:serialize(#gri{
@@ -81,9 +82,10 @@ translate_archive_info(#archive_info{
         <<"description">> => Description,
         <<"index">> => Index,
         <<"stats">> => archive_stats:to_json(Stats),
-        <<"baseArchive">> => prepare_archive_instance_gri(BaseArchive),
-        <<"relatedAip">> => prepare_archive_instance_gri(RelatedAip),
-        <<"relatedDip">> => prepare_archive_instance_gri(RelatedDip)
+        <<"parentArchive">> => prepare_archive_instance_gri(ParentArchiveId),
+        <<"baseArchive">> => prepare_archive_instance_gri(BaseArchiveId),
+        <<"relatedAip">> => prepare_archive_instance_gri(RelatedAipId),
+        <<"relatedDip">> => prepare_archive_instance_gri(RelatedDipId)
     }.
 
 

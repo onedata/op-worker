@@ -28,8 +28,10 @@
 %% API
 -export([
     create/4,
-    get_store_type/1, get_data_spec/1, browse_content/3, acquire_iterator/1,
-    apply_operation/2,
+    get_store_type/1, get_config/1, get_iterated_item_data_spec/1,
+    acquire_iterator/1,
+    browse_content/2,
+    update_content/2,
     delete/1
 ]).
 
@@ -42,42 +44,43 @@
     atm_list_store_container |
     atm_range_store_container |
     atm_single_value_store_container |
+    atm_time_series_store_container |
     atm_tree_forest_store_container.
 
--type initial_value() ::
-    atm_audit_log_store_container:initial_value() |
-    atm_list_store_container:initial_value() |
-    atm_range_store_container:initial_value() |
-    atm_single_value_store_container:initial_value() |
-    atm_tree_forest_store_container:initial_value().
+-type initial_content() ::
+    atm_audit_log_store_container:initial_content() |
+    atm_list_store_container:initial_content() |
+    atm_range_store_container:initial_content() |
+    atm_single_value_store_container:initial_content() |
+    atm_time_series_store_container:initial_content() |
+    atm_tree_forest_store_container:initial_content().
 
 -type record() ::
     atm_audit_log_store_container:record() |
     atm_list_store_container:record() |
     atm_range_store_container:record() |
     atm_single_value_store_container:record() |
+    atm_time_series_store_container:record() |
     atm_tree_forest_store_container:record().
 
--type operation_type() :: append | extend | set.
+-type content_browse_req() ::
+    atm_audit_log_store_container:content_browse_req() |
+    atm_list_store_container:content_browse_req() |
+    atm_range_store_container:content_browse_req() |
+    atm_single_value_store_container:content_browse_req() |
+    atm_time_series_store_container:content_browse_req() |
+    atm_tree_forest_store_container:content_browse_req().
 
--type operation_options() ::
-    atm_audit_log_store_container:operation_options() | 
-    atm_list_store_container:operation_options() |
-    atm_range_store_container:operation_options() |
-    atm_single_value_store_container:operation_options() |
-    atm_tree_forest_store_container:operation_options().
+-type content_update_req() ::
+    atm_audit_log_store_container:content_update_req() |
+    atm_list_store_container:content_update_req() |
+    atm_range_store_container:content_update_req() |
+    atm_single_value_store_container:content_update_req() |
+    atm_time_series_store_container:content_update_req() |
+    atm_tree_forest_store_container:content_update_req().
 
--type browse_options() ::
-    atm_audit_log_store_container:browse_options() |
-    atm_list_store_container:browse_options() |
-    atm_range_store_container:browse_options() |
-    atm_single_value_store_container:browse_options() |
-    atm_tree_forest_store_container:browse_options().
-
--type operation() :: #atm_store_container_operation{}.
-
--export_type([type/0, initial_value/0, record/0]).
--export_type([operation_type/0, operation_options/0, browse_options/0, operation/0]).
+-export_type([type/0, initial_content/0, record/0]).
+-export_type([content_browse_req/0, content_update_req/0]).
 
 
 %%%===================================================================
@@ -85,17 +88,23 @@
 %%%===================================================================
 
 
--callback create(atm_workflow_execution_auth:record(), atm_data_spec:record(), initial_value()) ->
+-callback create(
+    atm_workflow_execution_auth:record(),
+    atm_store_config:record(),
+    initial_content()
+) ->
     record() | no_return().
 
--callback get_data_spec(record()) -> atm_data_spec:record().
+-callback get_config(record()) -> atm_store_config:record().
 
--callback browse_content(atm_workflow_execution_auth:record(), atm_store_api:browse_options(), record()) ->
-    atm_store_api:browse_result() | no_return().
+-callback get_iterated_item_data_spec(record()) -> atm_data_spec:record().
 
 -callback acquire_iterator(record()) -> atm_store_container_iterator:record().
 
--callback apply_operation(record(), operation()) -> record() | no_return().
+-callback browse_content(record(), content_browse_req()) ->
+    atm_store_content_browse_result:record() | no_return().
+
+-callback update_content(record(), content_update_req()) -> record() | no_return().
 
 -callback delete(record()) -> ok | no_return().
 
@@ -108,13 +117,13 @@
 -spec create(
     automation:store_type(),
     atm_workflow_execution_auth:record(),
-    atm_data_spec:record(),
-    initial_value()
+    atm_store_config:record(),
+    initial_content()
 ) ->
     record().
-create(AtmStoreType, AtmWorkflowExecutionAuth, AtmDataSpec, InitArgs) ->
+create(AtmStoreType, AtmWorkflowExecutionAuth, AtmStoreConfig, InitialContent) ->
     RecordType = atm_store_type_to_atm_store_container_type(AtmStoreType),
-    RecordType:create(AtmWorkflowExecutionAuth, AtmDataSpec, InitArgs).
+    RecordType:create(AtmWorkflowExecutionAuth, AtmStoreConfig, InitialContent).
 
 
 -spec get_store_type(record()) -> automation:store_type().
@@ -123,17 +132,16 @@ get_store_type(AtmStoreContainer) ->
     atm_store_container_type_to_atm_store_type(RecordType).
 
 
--spec get_data_spec(record()) -> atm_data_spec:record().
-get_data_spec(AtmStoreContainer) ->
+-spec get_config(record()) -> atm_store_config:record().
+get_config(AtmStoreContainer) ->
     RecordType = utils:record_type(AtmStoreContainer),
-    RecordType:get_data_spec(AtmStoreContainer).
+    RecordType:get_config(AtmStoreContainer).
 
 
--spec browse_content(atm_workflow_execution_auth:record(), atm_store_api:browse_options(), record()) ->
-    atm_store_api:browse_result() | no_return().
-browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreContainer) ->
+-spec get_iterated_item_data_spec(record()) -> atm_data_spec:record().
+get_iterated_item_data_spec(AtmStoreContainer) ->
     RecordType = utils:record_type(AtmStoreContainer),
-    RecordType:browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreContainer).
+    RecordType:get_iterated_item_data_spec(AtmStoreContainer).
 
 
 -spec acquire_iterator(record()) -> atm_store_container_iterator:record().
@@ -142,10 +150,17 @@ acquire_iterator(AtmStoreContainer) ->
     RecordType:acquire_iterator(AtmStoreContainer).
 
 
--spec apply_operation(record(), operation()) -> record() | no_return().
-apply_operation(AtmStoreContainer, AtmStoreContainerOperation) ->
+-spec browse_content(record(), content_browse_req()) ->
+    atm_store_content_browse_result:record() | no_return().
+browse_content(AtmStoreContainer, AtmStoreContentBrowseReq) ->
     RecordType = utils:record_type(AtmStoreContainer),
-    RecordType:apply_operation(AtmStoreContainer, AtmStoreContainerOperation).
+    RecordType:browse_content(AtmStoreContainer, AtmStoreContentBrowseReq).
+
+
+-spec update_content(record(), content_update_req()) -> record() | no_return().
+update_content(AtmStoreContainer, AtmStoreContentUpdateReq) ->
+    RecordType = utils:record_type(AtmStoreContainer),
+    RecordType:update_content(AtmStoreContainer, AtmStoreContentUpdateReq).
 
 
 -spec delete(record()) -> ok | no_return().
@@ -197,6 +212,7 @@ atm_store_type_to_atm_store_container_type(audit_log) -> atm_audit_log_store_con
 atm_store_type_to_atm_store_container_type(list) -> atm_list_store_container;
 atm_store_type_to_atm_store_container_type(range) -> atm_range_store_container;
 atm_store_type_to_atm_store_container_type(single_value) -> atm_single_value_store_container;
+atm_store_type_to_atm_store_container_type(time_series) -> atm_time_series_store_container;
 atm_store_type_to_atm_store_container_type(tree_forest) -> atm_tree_forest_store_container.
 
 
@@ -207,4 +223,5 @@ atm_store_container_type_to_atm_store_type(atm_audit_log_store_container) -> aud
 atm_store_container_type_to_atm_store_type(atm_list_store_container) -> list;
 atm_store_container_type_to_atm_store_type(atm_range_store_container) -> range;
 atm_store_container_type_to_atm_store_type(atm_single_value_store_container) -> single_value;
+atm_store_container_type_to_atm_store_type(atm_time_series_store_container) -> time_series;
 atm_store_container_type_to_atm_store_type(atm_tree_forest_store_container) -> tree_forest.

@@ -70,13 +70,13 @@ execute(UserCtx, FileCtx, #get_recall_progress{id = Id}) ->
 execute(UserCtx, SpaceDirCtx, #schedule_atm_workflow_execution{
     atm_workflow_schema_id = AtmWorkflowSchemaId,
     atm_workflow_schema_revision_num = AtmWorkflowSchemaRevisionNum,
-    store_initial_values = AtmStoreInitialValues,
+    store_initial_content_overlay = AtmStoreInitialContentOverlay,
     callback_url = CallbackUrl
 }) ->
     {ok, atm_workflow_execution_api:schedule(
         UserCtx, file_ctx:get_space_id_const(SpaceDirCtx),
         AtmWorkflowSchemaId, AtmWorkflowSchemaRevisionNum,
-        AtmStoreInitialValues, CallbackUrl
+        AtmStoreInitialContentOverlay, CallbackUrl
     )};
 
 execute(_UserCtx, _SpaceDirCtx, #cancel_atm_workflow_execution{

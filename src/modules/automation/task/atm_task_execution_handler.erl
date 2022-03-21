@@ -74,7 +74,8 @@ initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
         value = AtmTaskExecution = #atm_task_execution{
             workflow_execution_id = AtmWorkflowExecutionId,
             executor = AtmTaskExecutor,
-            system_audit_log_id = AtmSystemAuditLogId
+            system_audit_log_id = AtmSystemAuditLogId,
+            time_series_store_id = AtmTaskTSStoreId
         }
     } = ensure_atm_task_execution_doc(AtmTaskExecutionIdOrDoc),
 
@@ -89,9 +90,12 @@ initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
     {ok, #atm_store{container = AtmTaskAuditLogStoreContainer}} = atm_store_api:get(
         AtmSystemAuditLogId
     ),
-    AtmWorkflowExecutionEnvDiff = fun(AtmWorkflowExecutionEnv) ->
-        atm_workflow_execution_env:add_task_audit_log_store_container(
-            AtmTaskExecutionId, AtmTaskAuditLogStoreContainer, AtmWorkflowExecutionEnv
+    AtmWorkflowExecutionEnvDiff = fun(Env0) ->
+        Env1 = atm_workflow_execution_env:add_task_audit_log_store_container(
+            AtmTaskExecutionId, AtmTaskAuditLogStoreContainer, Env0
+        ),
+        atm_workflow_execution_env:add_task_time_series_store_id(
+            AtmTaskExecutionId, AtmTaskTSStoreId, Env1
         )
     end,
 
@@ -141,7 +145,7 @@ process_items_batch(
 
     AtmJobCtx = atm_job_ctx:build(
         AtmWorkflowExecutionCtx,
-        atm_task_executor:in_readonly_mode(AtmTaskExecutor),
+        atm_task_executor:is_in_readonly_mode(AtmTaskExecutor),
         ReportResultUrl
     ),
 

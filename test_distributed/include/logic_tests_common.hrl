@@ -268,22 +268,22 @@ end).
             name = <<"store1Name">>,
             description = <<"store1Desc">>,
             type = list,
-            data_spec = #atm_data_spec{
+            config = #atm_list_store_config{item_data_spec = #atm_data_spec{
                 type = atm_file_type,
                 value_constraints = #{}
-            },
-            requires_initial_value = true
+            }},
+            requires_initial_content = true
         },
         #atm_store_schema{
             id = <<"store2Id">>,
             name = <<"store2Name">>,
             description = <<"store2Desc">>,
             type = single_value,
-            data_spec = #atm_data_spec{
+            config = #atm_single_value_store_config{item_data_spec = #atm_data_spec{
                 type = atm_integer_type,
                 value_constraints = #{}
-            },
-            requires_initial_value = false
+            }},
+            requires_initial_content = false
         }
     ],
     lanes = [
@@ -315,7 +315,9 @@ end).
                                 #atm_task_schema_result_mapper{
                                     result_name = <<"lambda1ResName">>,
                                     store_schema_id = <<"store1Id">>,
-                                    dispatch_function = add
+                                    store_content_update_options = #atm_list_store_content_update_options{
+                                        function = append
+                                    }
                                 }
                             ]
                         }
@@ -341,7 +343,7 @@ end).
                                 #atm_task_schema_result_mapper{
                                     result_name = <<"lambda2ResName">>,
                                     store_schema_id = <<"store2Id">>,
-                                    dispatch_function = remove
+                                    store_content_update_options = #atm_single_value_store_content_update_options{}
                                 }
                             ]
                         }
@@ -378,7 +380,7 @@ end).
                                 #atm_task_schema_result_mapper{
                                     result_name = <<"lambda3ResName">>,
                                     store_schema_id = <<"store3Id">>,
-                                    dispatch_function = set
+                                    store_content_update_options = #atm_range_store_content_update_options{}
                                 }
                             ]
                         },
@@ -398,7 +400,9 @@ end).
                                 #atm_task_schema_result_mapper{
                                     result_name = <<"lambda4ResName">>,
                                     store_schema_id = <<"store4Id">>,
-                                    dispatch_function = append
+                                    store_content_update_options = #atm_tree_forest_store_content_update_options{
+                                        function = extend
+                                    }
                                 }
                             ]
                         }

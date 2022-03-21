@@ -33,7 +33,8 @@
 
 -record(execution_components, {
     executor = undefined :: undefined | atm_task_executor:record(),
-    audit_log_store_id = undefined :: undefined | atm_store:id()
+    audit_log_store_id = undefined :: undefined | atm_store:id(),
+    time_series_store_id = undefined :: undefined | atm_store:id()
 }).
 -type execution_components() :: #execution_components{}.
 
@@ -96,11 +97,13 @@ delete(AtmTaskExecutionId) ->
     case atm_task_execution:get(AtmTaskExecutionId) of
         {ok, #document{value = #atm_task_execution{
             executor = Executor,
-            system_audit_log_id = AtmSystemAuditLogId
+            system_audit_log_id = AtmSystemAuditLogId,
+            time_series_store_id = AtmTaskTSStoreId
         }}} ->
             delete_execution_components(#execution_components{
                 executor = Executor,
-                audit_log_store_id = AtmSystemAuditLogId
+                audit_log_store_id = AtmSystemAuditLogId,
+                time_series_store_id = AtmTaskTSStoreId
             }),
             atm_task_execution:delete(AtmTaskExecutionId);
         ?ERROR_NOT_FOUND ->
@@ -147,7 +150,8 @@ create_execution_components(CreationCtx) ->
         end
     end, CreationCtx, [
         fun create_executor/1,
-        fun create_audit_log/1
+        fun create_audit_log/1,
+        fun create_time_series_store/1
     ]).
 
 
@@ -188,18 +192,46 @@ create_audit_log(CreationCtx = #creation_ctx{
     AtmWorkflowExecutionAuth = atm_workflow_execution_ctx:get_auth(AtmWorkflowExecutionCtx),
 
     {ok, #document{key = AtmSystemAuditLogId}} = atm_store_api:create(
-        AtmWorkflowExecutionAuth, undefined, #atm_store_schema{
-            id = ?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID,
-            name = ?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID,
-            description = <<>>,
-            type = audit_log,
-            data_spec = #atm_data_spec{type = atm_object_type},
-            requires_initial_value = false
-        }
+        AtmWorkflowExecutionAuth,
+        undefined,
+        ?ATM_SYSTEM_AUDIT_LOG_SCHEMA(?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID)
     ),
 
     CreationCtx#creation_ctx{execution_components = ExecutionComponents#execution_components{
         audit_log_store_id = AtmSystemAuditLogId
+    }}.
+
+
+%% @private
+-spec create_time_series_store(creation_ctx()) -> creation_ctx().
+create_time_series_store(CreationCtx = #creation_ctx{creation_args = #creation_args{
+    task_schema = #atm_task_schema{time_series_store_config = undefined}
+}}) ->
+    CreationCtx;
+
+create_time_series_store(CreationCtx = #creation_ctx{
+    creation_args = #creation_args{
+        task_schema = #atm_task_schema{
+            time_series_store_config = AtmTaskTSStoreConfig
+        },
+        parallel_box_execution_creation_args = #atm_parallel_box_execution_creation_args{
+            lane_execution_run_creation_args = #atm_lane_execution_run_creation_args{
+                workflow_execution_ctx = AtmWorkflowExecutionCtx
+            }
+        }
+    },
+    execution_components = ExecutionComponents
+}) ->
+    AtmWorkflowExecutionAuth = atm_workflow_execution_ctx:get_auth(AtmWorkflowExecutionCtx),
+
+    {ok, #document{key = AtmTaskTSStoreId}} = atm_store_api:create(
+        AtmWorkflowExecutionAuth,
+        undefined,
+        ?ATM_TASK_TIME_SERIES_STORE_SCHEMA(AtmTaskTSStoreConfig)
+    ),
+
+    CreationCtx#creation_ctx{execution_components = ExecutionComponents#execution_components{
+        time_series_store_id = AtmTaskTSStoreId
     }}.
 
 
@@ -223,6 +255,15 @@ delete_execution_components(ExecutionComponents = #execution_components{
         audit_log_store_id = undefined
     });
 
+delete_execution_components(ExecutionComponents = #execution_components{
+    time_series_store_id = AtmTaskTSStoreId
+}) when AtmTaskTSStoreId /= undefined ->
+    catch atm_store_api:delete(AtmTaskTSStoreId),
+
+    delete_execution_components(ExecutionComponents#execution_components{
+        time_series_store_id = undefined
+    });
+
 delete_execution_components(_) ->
     ok.
 
@@ -243,7 +284,8 @@ create_task_execution_doc(#creation_ctx{
     },
     execution_components = #execution_components{
         executor = Executor,
-        audit_log_store_id = AtmTaskAuditLogId
+        audit_log_store_id = AtmTaskAuditLogId,
+        time_series_store_id = AtmTaskTSStoreIdOrUndefined
     }
 }) ->
     AtmWorkflowExecutionId = atm_workflow_execution_ctx:get_workflow_execution_id(
@@ -263,6 +305,7 @@ create_task_execution_doc(#creation_ctx{
         result_specs = build_result_specs(AtmLambdaRevision, AtmTaskSchema),
 
         system_audit_log_id = AtmTaskAuditLogId,
+        time_series_store_id = AtmTaskTSStoreIdOrUndefined,
 
         status = ?PENDING_STATUS,
 

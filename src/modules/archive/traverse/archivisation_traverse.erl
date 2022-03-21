@@ -117,7 +117,7 @@ start(ArchiveDoc, DatasetDoc, UserCtx) ->
                     undefined
             end,
             
-            {ok, DipArchiveId} = archive:get_related_dip(ArchiveDoc2),
+            {ok, DipArchiveId} = archive:get_related_dip_id(ArchiveDoc2),
             {ok, DipArchiveDoc} = prepare_archive_dir(DipArchiveId, DatasetId, UserCtx),
             {ok, DipArchiveDataDirGuid} = archive:get_data_dir_guid(DipArchiveDoc),
 

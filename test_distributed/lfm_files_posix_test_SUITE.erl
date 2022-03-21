@@ -1057,6 +1057,18 @@ init_per_testcase(Case, Config) when
 ->
     dir_stats_collector_test_base:init(init_per_testcase(?DEFAULT_CASE(Case), Config));
 
+init_per_testcase(Case, Config) when
+    Case =:= readdir_plus_should_work_with_token;
+    Case =:= readdir_plus_should_work_with_token_not_full_batch;
+    Case =:= readdir_plus_should_work_with_api_token_not_full_batch;
+    Case =:= readdir_plus_should_work_with_api_token;
+    Case =:= readdir_should_work_with_token;
+    Case =:= readdir_should_work_with_token_not_full_batch;
+    Case =:= readdir_should_work_with_api_token;
+    Case =:= readdir_should_work_with_api_token_not_full_batch
+    ->
+    lfm_files_test_base:init_per_testcase(readdir_should_work_with_token, Config);
+
 init_per_testcase(Case, Config) ->
     lfm_files_test_base:init_per_testcase(Case, Config).
 
@@ -1089,6 +1101,18 @@ end_per_testcase(Case, Config) when
 ->
     dir_stats_collector_test_base:teardown(Config),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
+
+end_per_testcase(Case, Config) when
+    Case =:= readdir_plus_should_work_with_token;
+    Case =:= readdir_plus_should_work_with_token_not_full_batch;
+    Case =:= readdir_plus_should_work_with_api_token_not_full_batch;
+    Case =:= readdir_plus_should_work_with_api_token;
+    Case =:= readdir_should_work_with_token;
+    Case =:= readdir_should_work_with_token_not_full_batch;
+    Case =:= readdir_should_work_with_api_token;
+    Case =:= readdir_should_work_with_api_token_not_full_batch
+    ->
+    lfm_files_test_base:end_per_testcase(readdir_should_work_with_token, Config);
 
 end_per_testcase(Case, Config) ->
     lfm_files_test_base:end_per_testcase(Case, Config).

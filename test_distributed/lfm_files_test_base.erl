@@ -131,7 +131,8 @@ lfm_recreate_handle(Config, CreatePerms, DeleteAfterOpen) ->
         ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
         ?config({user_id, <<"user1">>}, Config)
     },
-    {ok, {FileGuid, Handle}} = lfm_proxy:create_and_open(W, SessId1, <<"/space_name1/test_read">>, CreatePerms),
+    Filename = generator:gen_name(),
+    {ok, {FileGuid, Handle}} = lfm_proxy:create_and_open(W, SessId1, <<"/space_name1/", Filename/binary>>, CreatePerms),
     case DeleteAfterOpen of
         delete_after_open ->
             ?assertEqual(ok, lfm_proxy:unlink(W, SessId1, ?FILE_REF(FileGuid))),
@@ -163,7 +164,8 @@ lfm_open_failure(Config) ->
         ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
         ?config({user_id, <<"user1">>}, Config)
     },
-    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>),
+    Filename = generator:gen_name(),
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/", Filename/binary>>),
 
     % simulate open error
     open_failure_mock(W),
@@ -188,12 +190,13 @@ lfm_create_and_open_failure(Config) ->
 
     % simulate open error
     open_failure_mock(W),
-
+    
+    Filename = generator:gen_name(),
     ?assertEqual({error, ?EAGAIN}, lfm_proxy:create_and_open(
-        W, SessId1, ParentGuid, <<"test_read">>, ?DEFAULT_FILE_PERMS)
+        W, SessId1, ParentGuid, Filename, ?DEFAULT_FILE_PERMS)
     ),
     ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(
-        W, SessId1, {path, <<"/space_name1/test_read">>})
+        W, SessId1, {path, <<"/space_name1/", Filename/binary>>})
     ),
     ?assertEqual({ok, []}, rpc:call(W, file_handles, list, [])),
     {MemEntriesAfter, CacheEntriesAfter} = get_mem_and_disc_entries(W),
@@ -211,16 +214,17 @@ lfm_open_and_create_open_failure(Config) ->
 
     % simulate open error
     open_failure_mock(W),
-
+    
+    Filename = generator:gen_name(),
     ?assertEqual({error, ?EAGAIN}, lfm_proxy:create_and_open(
-        W, SessId1, ParentGuid, <<"test_read">>, ?DEFAULT_FILE_PERMS)
+        W, SessId1, ParentGuid, Filename, ?DEFAULT_FILE_PERMS)
     ),
     ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(
-        W, SessId1, {path, <<"/space_name1/test_read">>})
+        W, SessId1, {path, <<"/space_name1/", Filename/binary>>})
     ),
     ?assertEqual({ok, []}, rpc:call(W, file_handles, list, [])),
 
-    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>),
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/", Filename/binary>>),
     ?assertEqual({error, ?EAGAIN}, lfm_proxy:open(W, SessId1, ?FILE_REF(FileGuid), rdwr)),
     ?assertEqual(false, rpc:call(
         W, file_handles, is_file_opened, [file_id:guid_to_uuid(FileGuid)])
@@ -236,7 +240,8 @@ lfm_open_multiple_times_failure(Config) ->
         ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
         ?config({user_id, <<"user1">>}, Config)
     },
-    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>),
+    Filename = generator:gen_name(),
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/", Filename/binary>>),
 
     % here all operations should succeed
     {ok, Handle} = lfm_proxy:open(W, SessId1, ?FILE_REF(FileGuid), rdwr),
@@ -279,7 +284,8 @@ lfm_open_failure_multiple_users(Config) ->
         ?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config),
         ?config({user_id, <<"user2">>}, Config)
     },
-    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name2/test_read">>),
+    Filename = generator:gen_name(),
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name2/", Filename/binary>>),
 
     % here all operations should succeed
     {ok, Handle} = lfm_proxy:open(W, SessId1, ?FILE_REF(FileGuid), rdwr),
@@ -289,7 +295,7 @@ lfm_open_failure_multiple_users(Config) ->
     open_failure_mock(W),
 
     ?assertEqual({error, ?EAGAIN}, lfm_proxy:open(
-        W, SessId2, {path, <<"/space_name2/test_read">>}, rdwr)
+        W, SessId2, {path, <<"/space_name2/", Filename/binary>>}, rdwr)
     ),
     ?assertEqual(0, get_session_file_handles_num(W, FileGuid, SessId2)),
 
@@ -318,7 +324,8 @@ lfm_open_in_direct_mode(Config) ->
         ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
         ?config({user_id, <<"user1">>}, Config)
     },
-    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>),
+    Filename = generator:gen_name(),
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/", Filename/binary>>),
 
     {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId1, ?FILE_REF(FileGuid), rdwr)),
 
@@ -340,7 +347,8 @@ lfm_mv_failure(Config) ->
         ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
         ?config({user_id, <<"user1">>}, Config)
     },
-    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>),
+    Filename = generator:gen_name(),
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/", Filename/binary>>),
 
     % simulate open error so that mv function will fail
     open_failure_mock(W),
@@ -365,7 +373,8 @@ lfm_mv_failure_multiple_users(Config) ->
         ?config({session_id, {<<"user2">>, ?GET_DOMAIN(W)}}, Config),
         ?config({user_id, <<"user2">>}, Config)
     },
-    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name2/test_read">>),
+    Filename = generator:gen_name(),
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name2/", Filename/binary>>),
 
     % user1 succeeds to write to file using handle
     {ok, Handle} = lfm_proxy:open(W, SessId1, ?FILE_REF(FileGuid), rdwr),
@@ -421,24 +430,27 @@ readdir_plus_should_work_with_size_greater_than_dir_size(Config) ->
     verify_attrs(Config, MainDirPath, Files, 10, 5).
 
 readdir_should_work_with_token(Config, DirSize, Type, InitialToken) ->
-    [Worker | _] = Workers = ?config(op_worker_nodes, Config),
-    clock_freezer_mock:setup_for_ct(Workers, [datastore_cache_writer]),
+    [Worker | _] = ?config(op_worker_nodes, Config),
     {MainDirPath, Files} = generate_dir(Config, DirSize),
     VerifyFun = case Type of
         readdir_plus -> fun verify_attrs_with_token/8;
         readdir -> fun verify_with_token/8
     end,
     Token = VerifyFun(Config, MainDirPath, Files, max(0, min(DirSize - 0, 3)), 3, 0, false, InitialToken),
-    Token2 = VerifyFun(Config, MainDirPath, Files, max(0, min(DirSize - 3, 3)), 3, 3, false, Token),
+    {ok, FoldCacheDefaultTimeout} = erpc:call(Worker, application, get_env, [?CLUSTER_WORKER_APP_NAME, fold_cache_timeout]),
     case InitialToken of
         ?INITIAL_API_LS_TOKEN ->
-            {ok, TimeToWaitMillis} = erpc:call(Worker, application, get_env, [?CLUSTER_WORKER_APP_NAME, fold_cache_timeout]),
-            clock_freezer_mock:simulate_millis_passing(TimeToWaitMillis + 1),
-            timer:sleep(timer:seconds(5)); % wait for flush of expired tokens
+            ok = erpc:call(Worker, application, set_env, [?CLUSTER_WORKER_APP_NAME, fold_cache_timeout, 0]);
         _ ->
             % only API listing token supports continued listing after datastore token expiration
             ok
     end,
+    Token2 = VerifyFun(Config, MainDirPath, Files, max(0, min(DirSize - 3, 3)), 3, 3, false, Token),
+    timer:sleep(timer:seconds(5)), % wait for flush of expired tokens
+    
+    % restore default fold cache timeout so next token does not expire
+    ok = erpc:call(Worker, application, set_env, [?CLUSTER_WORKER_APP_NAME, fold_cache_timeout, FoldCacheDefaultTimeout]),
+    
     Token3 = VerifyFun(Config, MainDirPath, Files, max(0, min(DirSize - 6, 3)), 3, 6, false, Token2),
     VerifyFun(Config, MainDirPath, Files, max(0, min(DirSize - 9, 3)), 3, 9, true, Token3).
 
@@ -1051,7 +1063,8 @@ lfm_basic_rdwr(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     {SessId1, _UserId1} =
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>),
+    Filename = generator:gen_name(),
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/", Filename/binary>>),
     {ok, Handle} = lfm_proxy:open(W, SessId1, ?FILE_REF(FileGuid), rdwr),
 
     ?assertEqual({ok, 9}, lfm_proxy:write(W, Handle, 0, <<"test_data">>)),
@@ -1063,7 +1076,8 @@ lfm_basic_rdwr_opens_file_once(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     {SessId1, _UserId1} =
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>),
+    Filename = generator:gen_name(),
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/", Filename/binary>>),
     test_utils:mock_new(W, storage_driver, [passthrough]),
     test_utils:mock_assert_num_calls(W, storage_driver, open, 2, 0),
 
@@ -1084,7 +1098,8 @@ lfm_basic_rdwr_after_file_delete(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     {SessId1, _UserId1} =
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/test_read">>),
+    Filename = generator:gen_name(),
+    {ok, FileGuid} = lfm_proxy:create(W, SessId1, <<"/space_name1/", Filename/binary>>),
     {ok, Handle} = lfm_proxy:open(W, SessId1, ?FILE_REF(FileGuid), rdwr),
     FileContent = <<"test_data">>,
 
@@ -2509,6 +2524,11 @@ init_per_testcase(ShareTest, Config) when
     initializer:mock_share_logic(Config),
     init_per_testcase(?DEFAULT_CASE(ShareTest), Config);
 
+init_per_testcase(readdir_should_work_with_token = Case, Config) ->
+    [Worker | _ ] = ?config(op_worker_nodes, Config),
+    {ok, FoldCacheDefaultTimeout} = erpc:call(Worker, application, get_env, [?CLUSTER_WORKER_APP_NAME, fold_cache_timeout]),
+    init_per_testcase(?DEFAULT_CASE(Case), [{fold_cache_default_timeout, FoldCacheDefaultTimeout} | Config]);
+
 init_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Workers),
@@ -2570,6 +2590,14 @@ end_per_testcase(Case = lfm_cp_dir, Config) ->
     test_utils:set_env(W, op_worker, ls_batch_size, 5000),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
+end_per_testcase(readdir_should_work_with_token = Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    FoldCacheDefaultTimeout = ?config(fold_cache_default_timeout, Config),
+    lists:foreach(fun(Worker) ->
+        ok = erpc:call(Worker, application, set_env, [?CLUSTER_WORKER_APP_NAME, fold_cache_timeout, FoldCacheDefaultTimeout])
+    end, Workers),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+
 end_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     lfm_test_utils:clean_space(Workers, ?SPACE_ID1, 30),
@@ -2577,6 +2605,5 @@ end_per_testcase(_Case, Config) ->
     lfm_test_utils:clean_space(Workers, ?SPACE_ID3, 30),
     lfm_test_utils:clean_space(Workers, ?SPACE_ID4, 30),
     lfm_proxy:teardown(Config),
-    clock_freezer_mock:teardown_for_ct(Workers),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     test_utils:mock_validate_and_unload(Workers, [communicator]).

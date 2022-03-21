@@ -16,29 +16,45 @@
 -behaviour(atm_store_container).
 -behaviour(persistent_record).
 
+-include("modules/automation/atm_execution.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% atm_store_container callbacks
 -export([
     create/3,
-    get_data_spec/1, browse_content/3, acquire_iterator/1,
-    apply_operation/2,
+    get_config/1,
+
+    get_iterated_item_data_spec/1,
+    acquire_iterator/1,
+
+    browse_content/2,
+    update_content/2,
+
     delete/1
 ]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
 
--type operation_options() :: json_utils:json_map().  %% for now no options are supported
--type browse_options() :: atm_list_store_container:browse_options().
--type initial_value() :: [automation:item()] | undefined.
+-type initial_content() :: [atm_value:expanded()] | undefined.
+
+-type content_browse_req() :: #atm_store_content_browse_req{
+    options :: atm_tree_forest_store_content_browse_options:record()
+}.
+-type content_update_req() :: #atm_store_content_update_req{
+    options :: atm_tree_forest_store_content_update_options:record()
+}.
 
 -record(atm_tree_forest_store_container, {
+    config :: atm_tree_forest_store_config:record(),
     roots_list :: atm_list_store_container:record()
 }).
 -type record() :: #atm_tree_forest_store_container{}.
 
--export_type([initial_value/0, operation_options/0, browse_options/0, record/0]).
+-export_type([
+    initial_content/0, content_browse_req/0, content_update_req/0,
+    record/0
+]).
 
 
 %%%===================================================================
@@ -46,39 +62,75 @@
 %%%===================================================================
 
 
--spec create(atm_workflow_execution_auth:record(), atm_data_spec:record(), initial_value()) ->
+-spec create(
+    atm_workflow_execution_auth:record(),
+    atm_tree_forest_store_config:record(),
+    initial_content()
+) ->
     record() | no_return().
-create(AtmWorkflowExecutionAuth, AtmDataSpec, InitialValue) ->
-    #atm_tree_forest_store_container{roots_list = atm_list_store_container:create(
-        AtmWorkflowExecutionAuth, AtmDataSpec, InitialValue
-    )}.
+create(AtmWorkflowExecutionAuth, AtmStoreConfig, InitialContent) ->
+    RootsListStoreConfig = #atm_list_store_config{
+        item_data_spec = AtmStoreConfig#atm_tree_forest_store_config.item_data_spec
+    },
+
+    #atm_tree_forest_store_container{
+        config = AtmStoreConfig,
+        roots_list = atm_list_store_container:create(
+            AtmWorkflowExecutionAuth, RootsListStoreConfig, InitialContent
+        )
+    }.
 
 
--spec get_data_spec(record()) -> atm_data_spec:record().
-get_data_spec(#atm_tree_forest_store_container{roots_list = RootsList}) ->
-    atm_list_store_container:get_data_spec(RootsList).
+-spec get_config(record()) -> atm_tree_forest_store_config:record().
+get_config(#atm_tree_forest_store_container{config = AtmStoreConfig}) ->
+    AtmStoreConfig.
 
 
--spec browse_content(atm_workflow_execution_auth:record(), browse_options(), record()) ->
-    atm_store_api:browse_result() | no_return().
-browse_content(AtmWorkflowExecutionAuth, BrowseOpts, #atm_tree_forest_store_container{
-    roots_list = RootsList
+-spec get_iterated_item_data_spec(record()) -> atm_data_spec:record().
+get_iterated_item_data_spec(#atm_tree_forest_store_container{
+    config = #atm_tree_forest_store_config{item_data_spec = ItemDataSpec}
 }) ->
-    atm_list_store_container:browse_content(AtmWorkflowExecutionAuth, BrowseOpts, RootsList).
+    ItemDataSpec.
 
 
 -spec acquire_iterator(record()) -> atm_tree_forest_store_container_iterator:record().
-acquire_iterator(#atm_tree_forest_store_container{roots_list = RootsList}) ->
-    AtmDataSpec = atm_list_store_container:get_data_spec(RootsList),
+acquire_iterator(#atm_tree_forest_store_container{
+    config = #atm_tree_forest_store_config{item_data_spec = ItemDataSpec},
+    roots_list = RootsList
+}) ->
     RootsIterator = atm_list_store_container:acquire_iterator(RootsList),
-    atm_tree_forest_store_container_iterator:build(RootsIterator, AtmDataSpec).
+    atm_tree_forest_store_container_iterator:build(ItemDataSpec, RootsIterator).
 
 
--spec apply_operation(record(), atm_store_container:operation()) ->
-    record() | no_return().
-apply_operation(#atm_tree_forest_store_container{roots_list = RootsList} = Record, Operation) ->
+-spec browse_content(record(), content_browse_req()) ->
+    atm_tree_forest_store_content_browse_result:record() | no_return().
+browse_content(Record, ContentBrowseReq = #atm_store_content_browse_req{
+    options = #atm_tree_forest_store_content_browse_options{listing_opts = ListingOpts}
+}) ->
+    Result = atm_list_store_container:browse_content(
+        Record#atm_tree_forest_store_container.roots_list,
+        ContentBrowseReq#atm_store_content_browse_req{
+            options = #atm_list_store_content_browse_options{listing_opts = ListingOpts}
+        }
+    ),
+    #atm_tree_forest_store_content_browse_result{
+        tree_roots = Result#atm_list_store_content_browse_result.items,
+        is_last = Result#atm_list_store_content_browse_result.is_last
+    }.
+
+
+-spec update_content(record(), content_update_req()) -> record() | no_return().
+update_content(Record, UpdateReq = #atm_store_content_update_req{
+    options = #atm_tree_forest_store_content_update_options{function = Function}
+}) ->
+    RootsList = Record#atm_tree_forest_store_container.roots_list,
+    RootsListContentUpdateReq = UpdateReq#atm_store_content_update_req{
+        options = #atm_list_store_content_update_options{function = Function}
+    },
     Record#atm_tree_forest_store_container{
-        roots_list = atm_list_store_container:apply_operation(RootsList, Operation)
+        roots_list = atm_list_store_container:update_content(
+            RootsList, RootsListContentUpdateReq
+        )
     }.
 
 
@@ -99,15 +151,23 @@ version() ->
 
 -spec db_encode(record(), persistent_record:nested_record_encoder()) ->
     json_utils:json_term().
-db_encode(#atm_tree_forest_store_container{roots_list = ListContainer}, NestedRecordEncoder) ->
+db_encode(#atm_tree_forest_store_container{
+    config = AtmStoreConfig,
+    roots_list = ListContainer
+}, NestedRecordEncoder) ->
     #{
+        <<"config">> => NestedRecordEncoder(AtmStoreConfig, atm_tree_forest_store_config),
         <<"rootsList">> => NestedRecordEncoder(ListContainer, atm_list_store_container)
     }.
 
 
 -spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
     record().
-db_decode(#{<<"rootsList">> := EncodedListContainer}, NestedRecordDecoder) ->
+db_decode(
+    #{<<"config">> := AtmStoreConfigJson, <<"rootsList">> := EncodedListContainer},
+    NestedRecordDecoder
+) ->
     #atm_tree_forest_store_container{
+        config = NestedRecordDecoder(AtmStoreConfigJson, atm_tree_forest_store_config),
         roots_list = NestedRecordDecoder(EncodedListContainer, atm_list_store_container)
     }.

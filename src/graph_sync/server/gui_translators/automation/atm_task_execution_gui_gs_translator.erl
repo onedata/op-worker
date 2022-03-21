@@ -48,6 +48,7 @@ translate_atm_task_execution(#atm_task_execution{
     schema_id = AtmTaskSchemaId,
 
     system_audit_log_id = AtmTaskAuditLogId,
+    time_series_store_id = AtmTaskTSStoreId,
 
     status = AtmTaskExecutionStatus,
 
@@ -62,7 +63,8 @@ translate_atm_task_execution(#atm_task_execution{
         }),
         <<"schemaId">> => AtmTaskSchemaId,
 
-        <<"systemAuditLogId">> => utils:undefined_to_null(AtmTaskAuditLogId),
+        <<"systemAuditLogId">> => AtmTaskAuditLogId,
+        <<"timeSeriesStoreId">> => utils:undefined_to_null(AtmTaskTSStoreId),
 
         <<"status">> => atom_to_binary(AtmTaskExecutionStatus, utf8),
 

@@ -137,7 +137,7 @@
 }).
 
 -record(file_eff_dataset_summary, {
-    direct_dataset :: dataset:id(),
+    direct_dataset :: dataset:id() | undefined,
     eff_ancestor_datasets :: [dataset:id()],
     eff_protection_flags = ?no_flags_mask :: data_access_control:bitmask()
 }).
@@ -154,9 +154,10 @@
     description :: archive:description(),
     index :: archive_api:index(),
     stats :: archive_stats:record(),
-    base_archive_id :: archive:id() | undefined,
-    related_aip :: undefined | archive:id(),
-    related_dip :: undefined | archive:id()
+    parent_archive_id :: undefined | archive:id(),
+    base_archive_id :: undefined | archive:id(),
+    related_aip_id :: undefined | archive:id(),
+    related_dip_id :: undefined | archive:id()
 }).
 
 -type provider_response_type() ::

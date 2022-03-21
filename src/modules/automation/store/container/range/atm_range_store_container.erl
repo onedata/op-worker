@@ -17,13 +17,18 @@
 -behaviour(persistent_record).
 
 -include("modules/automation/atm_execution.hrl").
--include_lib("ctool/include/errors.hrl").
 
 %% atm_store_container callbacks
 -export([
     create/3,
-    get_data_spec/1, browse_content/3, acquire_iterator/1,
-    apply_operation/2,
+    get_config/1,
+
+    get_iterated_item_data_spec/1,
+    acquire_iterator/1,
+
+    browse_content/2,
+    update_content/2,
+
     delete/1
 ]).
 
@@ -31,28 +36,28 @@
 -export([version/0, db_encode/2, db_decode/2]).
 
 
-%% Full 'initial_value' format can't be expressed directly in type spec due to
-%% dialyzer limitations in specifying concrete binaries ('initial_value' must be
-%% proper json object which implies binaries as keys). Instead it is shown below:
-%%
-%% #{
-%%      <<"end">> := integer(),
-%%      <<"start">> => integer(),  % default `0`
-%%      <<"step">> => integer()    % default `1`
-%% }
--type initial_value() :: #{binary() => integer()}.
--type operation_options() :: #{binary() => boolean()}.
--type browse_options() :: any().
+-type initial_content() :: undefined | atm_range_value:range_json().
+
+-type content_browse_req() :: #atm_store_content_browse_req{
+    options :: atm_range_store_content_browse_options:record()
+}.
+-type content_update_req() :: #atm_store_content_update_req{
+    options :: atm_range_store_content_update_options:record()
+}.
 
 -record(atm_range_store_container, {
-    data_spec :: atm_data_spec:record(),
-    start_num :: integer(),
-    end_num :: integer(),
-    step :: integer()
+    config :: atm_range_store_config:record(),
+    range :: undefined | atm_range_value:range()
 }).
 -type record() :: #atm_range_store_container{}.
 
--export_type([initial_value/0, operation_options/0, browse_options/0, record/0]).
+-export_type([
+    initial_content/0, content_browse_req/0, content_update_req/0,
+    record/0
+]).
+
+
+-define(RANGE_DATA_SPEC, #atm_data_spec{type = atm_range_type}).
 
 
 %%%===================================================================
@@ -60,57 +65,76 @@
 %%%===================================================================
 
 
--spec create(atm_workflow_execution_auth:record(), atm_data_spec:record(), initial_value()) ->
+-spec create(
+    atm_workflow_execution_auth:record(),
+    atm_range_store_config:record(),
+    initial_content()
+) ->
     record() | no_return().
-create(AtmWorkflowExecutionAuth, AtmDataSpec, #{<<"end">> := EndNum} = InitialArgs) ->
-    StartNum = maps:get(<<"start">>, InitialArgs, 0),
-    Step = maps:get(<<"step">>, InitialArgs, 1),
+create(_AtmWorkflowExecutionAuth, AtmStoreConfig, undefined) ->
+    #atm_range_store_container{
+        config = AtmStoreConfig,
+        range = undefined
+    };
 
-    assert_supported_data_spec(AtmDataSpec),
-    validate_range(AtmWorkflowExecutionAuth, AtmDataSpec, StartNum, EndNum, Step),
+create(AtmWorkflowExecutionAuth, AtmStoreConfig, InitialContent) ->
+    atm_value:validate(AtmWorkflowExecutionAuth, InitialContent, ?RANGE_DATA_SPEC),
 
     #atm_range_store_container{
-        data_spec = AtmDataSpec,
-        start_num = StartNum,
-        end_num = EndNum,
-        step = Step
-    };
-create(_AtmWorkflowExecutionAuth, _AtmDataSpec, _InitialArgs) ->
-    throw(?ERROR_MISSING_REQUIRED_VALUE(<<"end">>)).
+        config = AtmStoreConfig,
+        range = atm_value:compress(InitialContent, ?RANGE_DATA_SPEC)
+    }.
 
 
--spec get_data_spec(record()) -> atm_data_spec:record().
-get_data_spec(#atm_range_store_container{data_spec = AtmDataSpec}) ->
-    AtmDataSpec.
+-spec get_config(record()) -> atm_range_store_config:record().
+get_config(#atm_range_store_container{config = AtmStoreConfig}) ->
+    AtmStoreConfig.
 
 
--spec browse_content(atm_workflow_execution_auth:record(), browse_options(), record()) ->
-    atm_store_api:browse_result() | no_return().
-browse_content(_AtmWorkflowExecutionAuth, _Opts, #atm_range_store_container{
-    start_num = StartNum,
-    end_num = EndNum,
-    step = Step
-}) ->
-    Content = #{
-        <<"start">> => StartNum,
-        <<"end">> => EndNum,
-        <<"step">> => Step
-    },
-    {[{<<>>, {ok, Content}}], true}.
+-spec get_iterated_item_data_spec(record()) -> atm_data_spec:record().
+get_iterated_item_data_spec(_) ->
+    #atm_data_spec{type = atm_integer_type}.
 
 
 -spec acquire_iterator(record()) -> atm_range_store_container_iterator:record().
-acquire_iterator(#atm_range_store_container{
-    start_num = StartNum,
-    end_num = EndNum,
-    step = Step
+acquire_iterator(#atm_range_store_container{range = undefined}) ->
+    %% TODO VFS-9150 throw error if no content
+    atm_range_store_container_iterator:build(0, 0, 1);
+
+acquire_iterator(#atm_range_store_container{range = [Start, End, Step]}) ->
+    atm_range_store_container_iterator:build(Start, End, Step).
+
+
+-spec browse_content(record(), content_browse_req()) ->
+    atm_range_store_content_browse_result:record() | no_return().
+browse_content(
+    #atm_range_store_container{range = undefined},
+    #atm_store_content_browse_req{
+        store_schema_id = AtmStoreSchemaId,
+        options = #atm_range_store_content_browse_options{}
+    }
+) ->
+    throw(?ERROR_ATM_STORE_CONTENT_NOT_SET(AtmStoreSchemaId));
+
+browse_content(
+    #atm_range_store_container{range = Range},
+    #atm_store_content_browse_req{
+        workflow_execution_auth = AtmWorkflowExecutionAuth,
+        options = #atm_range_store_content_browse_options{}
+    }
+) ->
+    {ok, RangeJson} = atm_value:expand(AtmWorkflowExecutionAuth, Range, ?RANGE_DATA_SPEC),
+    #atm_range_store_content_browse_result{range = RangeJson}.
+
+
+-spec update_content(record(), content_update_req()) -> record() | no_return().
+update_content(Record, #atm_store_content_update_req{
+    workflow_execution_auth = AtmWorkflowExecutionAuth,
+    argument = Item,
+    options = #atm_range_store_content_update_options{}
 }) ->
-    atm_range_store_container_iterator:build(StartNum, EndNum, Step).
-
-
--spec apply_operation(record(), atm_store_container:operation()) -> no_return().
-apply_operation(_Record, _AtmStoreContainerOperation) ->
-    throw(?ERROR_NOT_SUPPORTED).
+    atm_value:validate(AtmWorkflowExecutionAuth, Item, ?RANGE_DATA_SPEC),
+    Record#atm_range_store_container{range = atm_value:compress(Item, ?RANGE_DATA_SPEC)}.
 
 
 -spec delete(record()) -> ok.
@@ -130,80 +154,24 @@ version() ->
 
 -spec db_encode(record(), persistent_record:nested_record_encoder()) ->
     json_utils:json_term().
-db_encode(#atm_range_store_container{
-    data_spec = AtmDataSpec,
-    start_num = StartNum,
-    end_num = EndNum,
-    step = Step
-}, NestedRecordEncoder) ->
-    #{
-        <<"dataSpec">> => NestedRecordEncoder(AtmDataSpec, atm_data_spec),
-        <<"start">> => StartNum,
-        <<"end">> => EndNum,
-        <<"step">> => Step
-    }.
+db_encode(
+    #atm_range_store_container{config = AtmStoreConfig, range = Range},
+    NestedRecordEncoder
+) ->
+    maps_utils:put_if_defined(
+        #{<<"config">> => NestedRecordEncoder(AtmStoreConfig, atm_range_store_config)},
+        <<"range">>,
+        Range
+    ).
 
 
 -spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
     record().
-db_decode(#{
-    <<"dataSpec">> := AtmDataSpecJson,
-    <<"start">> := StartNum,
-    <<"end">> := EndNum,
-    <<"step">> := Step
-}, NestedRecordDecoder) ->
-    #atm_range_store_container{
-        data_spec = NestedRecordDecoder(AtmDataSpecJson, atm_data_spec),
-        start_num = StartNum,
-        end_num = EndNum,
-        step = Step
-    }.
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-
-%% @private
--spec assert_supported_data_spec(atm_data_spec:record()) -> ok | no_return().
-assert_supported_data_spec(AtmDataSpec) ->
-    case atm_data_spec:get_type(AtmDataSpec) of
-        atm_integer_type ->
-            ok;
-        AtmDataType ->
-            throw(?ERROR_ATM_UNSUPPORTED_DATA_TYPE(AtmDataType, [atm_integer_type]))
-    end.
-
-
-%% @private
--spec validate_range(
-    atm_workflow_execution_auth:record(),
-    atm_data_spec:record(),
-    integer(), integer(), integer()
+db_decode(
+    AtmStoreContainerJson = #{<<"config">> := AtmStoreConfigJson},
+    NestedRecordDecoder
 ) ->
-    ok | no_return().
-validate_range(AtmWorkflowExecutionAuth, AtmDataSpec, StartNum, EndNum, Step) ->
-    lists:foreach(fun({ArgName, ArgValue}) ->
-        try
-            atm_value:validate(AtmWorkflowExecutionAuth, ArgValue, AtmDataSpec)
-        catch Type:Reason:Stacktrace ->
-            Error = ?atm_examine_error(Type, Reason, Stacktrace),
-            throw(?ERROR_BAD_DATA(ArgName, Error))
-        end
-    end, [
-        {<<"start">>, StartNum},
-        {<<"end">>, EndNum},
-        {<<"step">>, Step}
-    ]),
-    assert_proper_range(StartNum, EndNum, Step).
-
-
-%% @private
--spec assert_proper_range(integer(), integer(), integer()) -> ok | no_return().
-assert_proper_range(Start, End, Step) when Start =< End, Step > 0 ->
-    ok;
-assert_proper_range(Start, End, Step) when Start >= End, Step < 0 ->
-    ok;
-assert_proper_range(_Start, _End, _Step) ->
-    throw(?ERROR_BAD_DATA(<<"range">>, <<"invalid range specification">>)).
+    #atm_range_store_container{
+        config = NestedRecordDecoder(AtmStoreConfigJson, atm_range_store_config),
+        range = maps:get(<<"range">>, AtmStoreContainerJson, undefined)
+    }.

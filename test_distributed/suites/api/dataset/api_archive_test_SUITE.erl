@@ -41,7 +41,8 @@
     init_archive_purge_test/1,
     init_archive_recall_test/1,
     get_archive_recall_details_test/1,
-    get_archive_recall_progress_test/1
+    get_archive_recall_progress_test/1,
+    get_datasets_summary_for_archive_test/1
 ]).
 
 %% httpd callback
@@ -58,7 +59,8 @@ groups() -> [
         init_archive_purge_test,
         init_archive_recall_test,
         get_archive_recall_details_test,
-        get_archive_recall_progress_test
+        get_archive_recall_progress_test,
+        get_datasets_summary_for_archive_test
     ]}
 ].
 
@@ -1136,6 +1138,26 @@ gs_recall_get_aspect(progress) -> archive_recall_progress.
 rest_recall_get_path_suffix(details) -> <<"/recall/details">>;
 rest_recall_get_path_suffix(progress) -> <<"/recall/progress">>.
 
+
+%%%===================================================================
+%%% Miscellaneous tests
+%%%===================================================================
+
+get_datasets_summary_for_archive_test(_Config) ->
+    SessId = oct_background:get_user_session_id(user2, krakow),
+    StructureSpec = #file_spec{
+        dataset = #dataset_spec{archives = 1}
+    },
+    #object{dataset = #dataset_object{archives = [#archive_object{id = ArchiveId}]}} = 
+        onenv_file_test_utils:create_and_sync_file_tree(user2, ?SPACE, StructureSpec, krakow),
+    {ok, #archive_info{root_dir_guid = RootDirGuid}} = ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}}, 
+        opw_test_rpc:call(krakow, archive_api, get_archive_info, [ArchiveId])),
+    ?assertEqual({ok, #file_eff_dataset_summary{
+        direct_dataset = undefined,
+        eff_ancestor_datasets = []
+    }}, opt_datasets:get_file_eff_summary(krakow, SessId, ?FILE_REF(RootDirGuid))).
+
+
 %%%===================================================================
 %%% Common archive test utils
 %%%===================================================================
@@ -1174,12 +1196,12 @@ verify_archive(
         GetArchiveInfoFun = fun() ->
             case opt_archives:get_info(Node, UserSessId, ArchiveId) of
                 {ok, ActualArchiveInfo} ->
-                    ?assertEqual(archive_config:should_include_dip(Config), ActualArchiveInfo#archive_info.related_dip =/= undefined),
+                    ?assertEqual(archive_config:should_include_dip(Config), ActualArchiveInfo#archive_info.related_dip_id =/= undefined),
                     ActualArchiveInfo#archive_info{
                         % baseArchiveId is the id of the last successfully preserved, so it depends on previous test cases.
                         base_archive_id = undefined,
                         % DIP is created alongside AIP archive, so value of `relatedDip` field is not know beforehand. 
-                        related_dip = undefined
+                        related_dip_id = undefined
                     };
                 {error, _} = Error  ->
                     Error
@@ -1245,13 +1267,14 @@ init_per_suite(Config) ->
         posthook = fun(NewConfig) ->
             dir_stats_test_utils:disable_stats_counting(NewConfig),
             SpaceId = oct_background:get_space_id(?SPACE),
-            ozw_test_rpc:space_set_user_privileges(SpaceId, ?OCT_USER_ID(user3), [
+            ozt_spaces:set_privileges(SpaceId, ?OCT_USER_ID(user3), [
                 ?SPACE_MANAGE_DATASETS, ?SPACE_VIEW_ARCHIVES, ?SPACE_CREATE_ARCHIVES,
                 ?SPACE_REMOVE_ARCHIVES, ?SPACE_RECALL_ARCHIVES | privileges:space_member()
             ]),
-            ozw_test_rpc:space_set_user_privileges(
+            ozt_spaces:set_privileges(
                 SpaceId, ?OCT_USER_ID(user4), privileges:space_member() -- [?SPACE_VIEW]
             ),
+            
             start_http_server(),
             NewConfig
         end

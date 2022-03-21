@@ -68,8 +68,8 @@ translate_archive_info(#archive_info{
     description = Description,
     stats = Stats,
     base_archive_id = BaseArchive,
-    related_aip = RelatedAip,
-    related_dip = RelatedDip
+    related_aip_id = RelatedAip,
+    related_dip_id = RelatedDip
 }) ->
     #{
         <<"archiveId">> => ArchiveId,

@@ -19,7 +19,7 @@
 
 -include_lib("ctool/include/automation/automation.hrl").
 -include_lib("ctool/include/errors.hrl").
--include_lib("ctool/include/test/assertions.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 
 
@@ -33,8 +33,13 @@
 
 %% tests
 -export([
-    create_store_with_invalid_args_test/1,
-    apply_operation_test/1,
+    % infinite_log_based_stores_common_tests
+    create_test/1,
+    update_content_test/1,
+    browse_content_by_index_test/1,
+    browse_content_by_offset_test/1,
+
+    % tree_forest_store_specific_tests
     iterator_queue_test/1,
     iterate_files_test/1,
     iterate_datasets_test/1,
@@ -47,9 +52,13 @@
 ]).
 
 groups() -> [
-    {all_tests, [parallel], [
-        create_store_with_invalid_args_test,
-        apply_operation_test,
+    {infinite_log_based_stores_common_tests, [parallel], [
+        create_test,
+        update_content_test,
+        browse_content_by_index_test,
+        browse_content_by_offset_test
+    ]},
+    {tree_forest_store_specific_tests, [parallel], [
         iterator_queue_test,
         iterate_files_test,
         iterate_datasets_test,
@@ -63,75 +72,63 @@ groups() -> [
 ].
 
 all() -> [
-    {group, all_tests}
+    {group, infinite_log_based_stores_common_tests},
+    {group, tree_forest_store_specific_tests}
 ].
 
 
--define(ATM_TREE_FOREST_STORE_SCHEMA, ?ATM_TREE_FOREST_STORE_SCHEMA(atm_file_type)).
--define(ATM_TREE_FOREST_STORE_SCHEMA(DataType), #atm_store_schema{
-    id = <<"dummyId">>,
-    name = <<"tree_forest_store">>,
-    description = <<"description">>,
-    requires_initial_value = false,
-    type = tree_forest,
-    data_spec = #atm_data_spec{type = DataType}
-}).
+-define(PROVIDER_SELECTOR, krakow).
+-define(rpc(Expr), ?rpc(?PROVIDER_SELECTOR, Expr)).
 
 -define(ATTEMPTS, 30).
+
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
-create_store_with_invalid_args_test(_Config) ->
-    AtmWorkflowExecutionAuth = atm_store_test_utils:create_workflow_execution_auth(krakow, user1, space_krk),
-    ?assertEqual(?ERROR_ATM_STORE_MISSING_REQUIRED_INITIAL_VALUE,
-        atm_store_test_utils:create_store(
-            krakow, AtmWorkflowExecutionAuth, undefined,
-            (?ATM_TREE_FOREST_STORE_SCHEMA)#atm_store_schema{requires_initial_value = true})
-    ),
 
-    IntValue = rand:uniform(1000),
-    ?assertEqual(?ERROR_ATM_DATA_TYPE_UNVERIFIED(IntValue, atm_array_type), atm_store_test_utils:create_store(
-        krakow, AtmWorkflowExecutionAuth, IntValue, ?ATM_TREE_FOREST_STORE_SCHEMA)
-    ),
-    lists:foreach(fun(DataType) ->
-        BadValue = atm_store_test_utils:example_bad_data(DataType),
-        ValidValue = atm_store_test_utils:example_data(DataType),
-        ?assertEqual(?ERROR_ATM_DATA_TYPE_UNVERIFIED(BadValue, DataType), atm_store_test_utils:create_store(
-            krakow, AtmWorkflowExecutionAuth, [ValidValue, BadValue, ValidValue], ?ATM_TREE_FOREST_STORE_SCHEMA(DataType)
-        ))
-    end, atm_store_test_utils:all_data_types()).
+create_test(_Config) ->
+    atm_infinite_log_based_stores_test_base:create_test_base(#{
+        store_configs => example_configs(),
+        get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
+        input_item_formatter => fun input_item_formatter/1
+    }).
 
 
-apply_operation_test(_Config) ->
-    AtmWorkflowExecutionAuth = atm_store_test_utils:create_workflow_execution_auth(krakow, user1, space_krk),
-    {ok, AtmStoreId} = atm_store_test_utils:create_store(krakow, AtmWorkflowExecutionAuth, undefined, ?ATM_TREE_FOREST_STORE_SCHEMA),
-    
-    SpaceId = oct_background:get_space_id(space_krk),
+update_content_test(_Config) ->
+    atm_infinite_log_based_stores_test_base:update_content_test_base(#{
+        store_configs => example_configs(),
+        get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
+        input_item_formatter => fun input_item_formatter/1,
+        input_item_to_exp_store_item => fun input_item_to_exp_store_item/3,
+        build_content_update_options => fun build_content_update_options/1,
+        get_content => fun get_content/2
+    }).
 
-    {ok, BadId1} = file_id:guid_to_objectid(file_id:pack_guid(<<"dummy_uuid">>, <<"dummy_space_id">>)),
-    BadFile1 = #{<<"file_id">> => BadId1},
 
-    {ok, BadId2} = file_id:guid_to_objectid(file_id:pack_guid(<<"dummy_uuid">>, SpaceId)),
-    BadFile2 = #{<<"file_id">> => BadId2},
+browse_content_by_index_test(_Config) ->
+    atm_infinite_log_based_stores_test_base:browse_content_test_base(index, #{
+        store_configs => example_configs(),
+        get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
+        input_item_formatter => fun input_item_formatter/1,
+        input_item_to_exp_store_item => fun input_item_to_exp_store_item/3,
+        randomly_remove_entity_referenced_by_item => fun randomly_remove_entity_referenced_by_item/3,
+        build_content_browse_options => fun build_content_browse_options/1,
+        build_content_browse_result => fun build_content_browse_result/2
+    }).
 
-    ?assertEqual(
-        ?ERROR_ATM_DATA_TYPE_UNVERIFIED(<<"not a file">>, atm_file_type),
-        atm_store_test_utils:apply_operation(krakow, AtmWorkflowExecutionAuth, append, <<"not a file">>, #{}, AtmStoreId)
-    ),
-    ?assertEqual(
-        ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(BadFile1, atm_file_type, #{<<"inSpace">> => SpaceId}),
-        atm_store_test_utils:apply_operation(krakow, AtmWorkflowExecutionAuth, append, BadFile1, #{}, AtmStoreId)
-    ),
-    ?assertEqual(
-        ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(BadFile2, atm_file_type, #{<<"hasAccess">> => true}),
-        atm_store_test_utils:apply_operation(krakow, AtmWorkflowExecutionAuth, append, BadFile2, #{}, AtmStoreId)
-    ),
-    ?assertEqual(
-        ?ERROR_NOT_SUPPORTED,
-        atm_store_test_utils:apply_operation(krakow, AtmWorkflowExecutionAuth, set, <<"NaN">>, #{}, AtmStoreId)
-    ).
+
+browse_content_by_offset_test(_Config) ->
+    atm_infinite_log_based_stores_test_base:browse_content_test_base(offset, #{
+        store_configs => example_configs(),
+        get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
+        input_item_formatter => fun input_item_formatter/1,
+        input_item_to_exp_store_item => fun input_item_to_exp_store_item/3,
+        randomly_remove_entity_referenced_by_item => fun randomly_remove_entity_referenced_by_item/3,
+        build_content_browse_options => fun build_content_browse_options/1,
+        build_content_browse_result => fun build_content_browse_result/2
+    }).
 
 
 iterator_queue_test(_Config) ->
@@ -261,13 +258,13 @@ restart_iteration_test(_Config) ->
 
 restart_partial_iteration_test(_Config) ->
     {AtmWorkflowExecutionEnv, AtmStoreIterator0, _FilesMap, FileList} = create_iteration_test_env(krakow, 50, 3, atm_file_type),
-    {ok, Res0, AtmStoreIterator1} = ?assertMatch({ok, _, _}, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmStoreIterator0)),
-    {ok, _, _} = ?assertMatch({ok, _, _}, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmStoreIterator1)),
-    {ok, Res1, AtmStoreIterator2} = ?assertMatch({ok, _, _}, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmStoreIterator1)),
+    {ok, Res0, AtmStoreIterator1} = ?assertMatch({ok, _, _}, ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, AtmStoreIterator0))),
+    {ok, _, _} = ?assertMatch({ok, _, _}, ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, AtmStoreIterator1))),
+    {ok, Res1, AtmStoreIterator2} = ?assertMatch({ok, _, _}, ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, AtmStoreIterator1))),
     check_listed_values(Res1, FileList -- Res0, atm_file_type),
-    {ok, Res2, AtmStoreIterator3} = ?assertMatch({ok, _, _}, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmStoreIterator2)),
+    {ok, Res2, AtmStoreIterator3} = ?assertMatch({ok, _, _}, ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, AtmStoreIterator2))),
     check_listed_values(Res2, FileList -- Res1, atm_file_type),
-    ?assertMatch(stop, atm_store_test_utils:iterator_get_next(krakow, AtmWorkflowExecutionEnv, AtmStoreIterator3)).
+    ?assertMatch(stop, ?rpc(iterator:get_next(AtmWorkflowExecutionEnv, AtmStoreIterator3))).
 
 
 iteration_with_deleted_root(_Config) ->
@@ -328,6 +325,94 @@ iteration_without_permission(_Config) ->
 %%% Helper functions
 %%%===================================================================
 
+
+%% @private
+-spec example_configs() -> [atm_single_value_store_config:record()].
+example_configs() ->
+    lists:map(fun(ItemDataSpec) ->
+        #atm_tree_forest_store_config{item_data_spec = ItemDataSpec}
+    end, [
+        #atm_data_spec{type = atm_dataset_type},
+        #atm_data_spec{type = atm_file_type}
+    ]).
+
+
+%% @private
+-spec get_input_item_generator_seed_data_spec(atm_list_store_config:record()) ->
+    atm_data_spec:record().
+get_input_item_generator_seed_data_spec(#atm_tree_forest_store_config{item_data_spec = ItemDataSpec}) ->
+    ItemDataSpec.
+
+
+%% @private
+-spec input_item_formatter(automation:item()) -> automation:item().
+input_item_formatter(Item) -> Item.
+
+
+%% @private
+-spec input_item_to_exp_store_item(
+    atm_workflow_execution_auth:record(),
+    atm_value:expanded(),
+    atm_store:id()
+) ->
+    atm_value:expanded().
+input_item_to_exp_store_item(AtmWorkflowExecutionAuth, ItemInitializer, ItemDataSpec) ->
+    atm_store_test_utils:compress_and_expand_data(
+        ?PROVIDER_SELECTOR, AtmWorkflowExecutionAuth, ItemInitializer, ItemDataSpec
+    ).
+
+
+%% @private
+-spec randomly_remove_entity_referenced_by_item(
+    atm_workflow_execution_auth:record(),
+    atm_value:expanded(),
+    atm_data_spec:record()
+) ->
+    false | {true, errors:error()}.
+randomly_remove_entity_referenced_by_item(AtmWorkflowExecutionAuth, Item, ItemDataSpec) ->
+    atm_store_test_utils:randomly_remove_entity_referenced_by_item(
+        ?PROVIDER_SELECTOR, AtmWorkflowExecutionAuth, Item, ItemDataSpec
+    ).
+
+
+
+%% @private
+-spec build_content_update_options(atm_list_store_content_update_options:update_function()) ->
+    atm_tree_forest_store_content_update_options:record().
+build_content_update_options(UpdateFun) ->
+    #atm_tree_forest_store_content_update_options{function = UpdateFun}.
+
+
+%% @private
+-spec get_content(atm_workflow_execution_auth:record(), atm_store:id()) ->
+    [atm_value:expanded()].
+get_content(AtmWorkflowExecutionAuth, AtmStoreId) ->
+    BrowseOpts = build_content_browse_options(#{<<"limit">> => 1000}),
+    #atm_tree_forest_store_content_browse_result{
+        tree_roots = TreeRoots,
+        is_last = true
+    } = ?rpc(?PROVIDER_SELECTOR, atm_store_api:browse_content(
+        AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId
+    )),
+    lists:map(fun({_, {ok, Item}}) -> Item end, TreeRoots).
+
+
+%% @private
+-spec build_content_browse_options(json_utils:json_map()) ->
+    atm_tree_forest_store_content_browse_options:record().
+build_content_browse_options(OptsJson) ->
+    atm_tree_forest_store_content_browse_options:sanitize(OptsJson#{
+        <<"type">> => <<"treeForestStoreContentBrowseOptions">>
+    }).
+
+
+%% @private
+-spec build_content_browse_result([atm_store_container_infinite_log_backend:entry()], boolean()) ->
+    atm_tree_forest_store_content_browse_result:record().
+build_content_browse_result(Entries, IsLast) ->
+    #atm_tree_forest_store_content_browse_result{tree_roots = Entries, is_last = IsLast}.
+
+
 -spec iterate_test_base(pos_integer(), non_neg_integer(), atm_data_type:type()) -> ok.
 iterate_test_base(MaxBatchSize, Depth, Type) ->
     {AtmWorkflowExecutionEnv, AtmStoreIterator0, _FilesMap, Expected} = create_iteration_test_env(krakow, MaxBatchSize, Depth, Type),
@@ -344,19 +429,19 @@ iterate_test_base(MaxBatchSize, Depth, Type) ->
 ) -> 
     [{atm_store_iterator:record(), [file_id:file_guid()]}].
 check_iterator_listing(ProviderSelector, AtmWorkflowExecutionEnv, Iterator, [], _, _Type) ->
-    ?assertEqual(stop, atm_store_test_utils:iterator_get_next(ProviderSelector, AtmWorkflowExecutionEnv, Iterator)),
+    ?assertEqual(stop, ?rpc(ProviderSelector, iterator:get_next(AtmWorkflowExecutionEnv, Iterator))),
     [];
 check_iterator_listing(ProviderSelector, AtmWorkflowExecutionEnv, Iterator, ExpectedList, ReturnStrategy, Type) ->
     % duplication here is deliberate to check reuse of iterator
-    {ok, Res, NewIterator} = ?assertMatch({ok, _, _}, atm_store_test_utils:iterator_get_next(ProviderSelector, AtmWorkflowExecutionEnv, Iterator)),
-    ?assertMatch({ok, Res, NewIterator}, atm_store_test_utils:iterator_get_next(ProviderSelector, AtmWorkflowExecutionEnv, Iterator)),
+    {ok, Res, NewIterator} = ?assertMatch({ok, _, _}, ?rpc(ProviderSelector, iterator:get_next(AtmWorkflowExecutionEnv, Iterator))),
+    ?assertMatch({ok, Res, NewIterator}, ?rpc(ProviderSelector, iterator:get_next(AtmWorkflowExecutionEnv, Iterator))),
     ResList = utils:ensure_list(Res),
     NewExpectedList = check_listed_values(ResList, ExpectedList, Type),
     case ReturnStrategy of
         return_iterators ->
             [{Iterator, ExpectedList}] ++ check_iterator_listing(ProviderSelector, AtmWorkflowExecutionEnv, NewIterator, NewExpectedList, ReturnStrategy, Type);
         _ ->
-            ok = atm_store_test_utils:iterator_forget_before(ProviderSelector, Iterator),
+            ok = ?rpc(ProviderSelector, iterator:forget_before(Iterator)),
             check_iterator_listing(ProviderSelector, AtmWorkflowExecutionEnv, NewIterator, NewExpectedList, ReturnStrategy, Type)
     end.
 
@@ -441,7 +526,12 @@ create_iteration_test_env(ProviderSelector, MaxBatchSize, Depth, Type, WorkflowU
             atm_dataset_type -> #{<<"datasetId">> => Root}
         end
     end, Roots),
-    {ok, AtmStoreId} = atm_store_test_utils:create_store(ProviderSelector, AtmWorkflowExecutionAuth, RootsToAdd, ?ATM_TREE_FOREST_STORE_SCHEMA(Type)),
+    AtmStoreSchema = atm_store_test_utils:build_store_schema(#atm_tree_forest_store_config{
+        item_data_spec = #atm_data_spec{type = Type}
+    }),
+    {ok, AtmStoreId} = ?extract_key(?rpc(ProviderSelector, atm_store_api:create(
+        AtmWorkflowExecutionAuth, RootsToAdd, AtmStoreSchema
+    ))),
     AtmStoreIteratorSpec = #atm_store_iterator_spec{
         store_schema_id = AtmStoreDummySchemaId,
         max_batch_size = MaxBatchSize
@@ -449,7 +539,7 @@ create_iteration_test_env(ProviderSelector, MaxBatchSize, Depth, Type, WorkflowU
     AtmWorkflowExecutionEnv = atm_workflow_execution_env:build(
         SpaceId, WorkflowId, 0, #{AtmStoreDummySchemaId => AtmStoreId}
     ),
-    AtmStoreIterator0 = atm_store_test_utils:acquire_store_iterator(ProviderSelector, AtmStoreId, AtmStoreIteratorSpec),
+    AtmStoreIterator0 = ?rpc(ProviderSelector, atm_store_api:acquire_iterator(AtmStoreId, AtmStoreIteratorSpec)),
     {AtmWorkflowExecutionEnv, AtmStoreIterator0, FilesMap, Expected}.
 
 
@@ -498,8 +588,10 @@ check_queue_values(Values, ExpectedKeys, Expectation) ->
 %%% SetUp and TearDown functions
 %%%===================================================================
 
+
 init_per_suite(Config) ->
-    oct_background:init_per_suite(Config, #onenv_test_config{
+    ModulesToLoad = [?MODULE | atm_infinite_log_based_stores_test_base:modules_to_load()],
+    oct_background:init_per_suite([{?LOAD_MODULES, ModulesToLoad} | Config], #onenv_test_config{
         onenv_scenario = "1op",
         envs = [{op_worker, op_worker, [
             {fuse_session_grace_period_seconds, 24 * 60 * 60}
@@ -511,11 +603,15 @@ end_per_suite(_Config) ->
     oct_background:end_per_suite().
 
 
-init_per_group(_Group, Config) ->
+init_per_group(infinite_log_based_stores_common_tests, Config) ->
+    atm_infinite_log_based_stores_test_base:init_per_group(Config);
+init_per_group(tree_forest_store_specific_tests, Config) ->
     lfm_proxy:init(Config, false).
 
 
-end_per_group(_Group, Config) ->
+end_per_group(infinite_log_based_stores_common_tests, Config) ->
+    atm_infinite_log_based_stores_test_base:end_per_group(Config);
+end_per_group(tree_forest_store_specific_tests, Config) ->
     lfm_proxy:teardown(Config).
 
 

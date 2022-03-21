@@ -34,13 +34,6 @@
     finish_time :: atm_workflow_execution:timestamp()
 }).
 
--record(atm_store_container_operation, {
-    type :: atm_store_container:operation_type(),
-    options :: atm_store_container:operation_options(),
-    argument :: automation:item(),
-    workflow_execution_auth :: atm_workflow_execution_auth:record()
-}).
-
 -record(atm_lane_execution, {
     schema_id :: automation:id(),
     retries_left :: non_neg_integer(),
@@ -144,9 +137,117 @@
 }).
 
 
-%% Atm system stores related macros
+%% Atm stores related macros
+
+-define(ATM_SYSTEM_AUDIT_LOG_SCHEMA(__ID), #atm_store_schema{
+    id = __ID,
+    name = __ID,
+    description = <<>>,
+    type = audit_log,
+    config = #atm_audit_log_store_config{
+        log_content_data_spec = #atm_data_spec{type = atm_object_type}
+    },
+    requires_initial_content = false
+}).
+
+-define(ATM_TASK_TIME_SERIES_STORE_SCHEMA(__CONFIG), #atm_store_schema{
+    id = ?CURRENT_TASK_TIME_SERIES_STORE_SCHEMA_ID,
+    name = ?CURRENT_TASK_TIME_SERIES_STORE_SCHEMA_ID,
+    description = <<>>,
+    type = time_series,
+    config = __CONFIG,
+    requires_initial_content = false
+}).
 
 -define(CURRENT_LANE_RUN_EXCEPTION_STORE_SCHEMA_ID, <<"CURRENT_LANE_RUN_EXCEPTION_STORE">>).
+
+-define(ATM_LANE_RUN_EXCEPTION_STORE_SCHEMA(__ITEM_DATA_SPEC), #atm_store_schema{
+    id = ?CURRENT_LANE_RUN_EXCEPTION_STORE_SCHEMA_ID,
+    name = ?CURRENT_LANE_RUN_EXCEPTION_STORE_SCHEMA_ID,
+    description = <<>>,
+    type = list,
+    config = #atm_list_store_config{item_data_spec = __ITEM_DATA_SPEC},
+    requires_initial_content = false
+}).
+
+-record(atm_store_content_browse_req, {
+    store_schema_id :: automation:id(),
+    workflow_execution_auth :: atm_workflow_execution_auth:record(),
+    options :: atm_store_content_browse_options:record()
+}).
+
+-record(atm_audit_log_store_content_browse_options, {
+    listing_opts :: atm_store_container_infinite_log_backend:timestamp_aware_listing_opts()
+}).
+
+-record(atm_audit_log_store_content_browse_result, {
+    logs :: [atm_store_container_infinite_log_backend:entry()],
+    is_last :: boolean()
+}).
+
+-record(atm_list_store_content_browse_options, {
+    listing_opts :: atm_store_container_infinite_log_backend:timestamp_agnostic_listing_opts()
+}).
+
+-record(atm_list_store_content_browse_result, {
+    items :: [atm_store_container_infinite_log_backend:entry()],
+    is_last :: boolean()
+}).
+
+-record(atm_range_store_content_browse_options, {}).
+
+-record(atm_range_store_content_browse_result, {
+    range :: atm_range_value:range_json()
+}).
+
+-record(atm_single_value_store_content_browse_options, {}).
+
+-record(atm_single_value_store_content_browse_result, {
+    item :: {ok, atm_value:expanded()} | errors:error()
+}).
+
+-record(atm_time_series_store_content_browse_options, {
+    request ::
+        atm_time_series_store_content_browse_options:get_layout() |
+        atm_time_series_store_content_browse_options:get_slice()
+}).
+
+-record(atm_time_series_store_content_get_layout_req, {}).
+
+-record(atm_time_series_store_content_get_slice_req, {
+    layout :: time_series_collection:metrics_by_time_series(),
+    start_timestamp :: undefined | atm_time_series_store_content_browse_options:timestamp(),
+    windows_limit :: atm_time_series_store_content_browse_options:windows_limit()
+}).
+
+-record(atm_time_series_store_content_browse_result, {
+    result ::
+        atm_time_series_store_content_browse_result:layout() |
+        atm_time_series_store_content_browse_result:slice()
+}).
+
+-record(atm_time_series_store_content_layout, {
+    layout :: time_series_collection:metrics_by_time_series()
+}).
+
+-record(atm_time_series_store_content_slice, {
+    slice :: json_utils:json_map()
+}).
+
+-record(atm_tree_forest_store_content_browse_options, {
+    listing_opts :: atm_store_container_infinite_log_backend:timestamp_agnostic_listing_opts()
+}).
+
+-record(atm_tree_forest_store_content_browse_result, {
+    tree_roots :: [atm_store_container_infinite_log_backend:entry()],
+    is_last :: boolean()
+}).
+
+-record(atm_store_content_update_req, {
+    workflow_execution_auth :: atm_workflow_execution_auth:record(),
+    argument :: atm_value:expanded(),
+    options :: atm_store_content_update_options:record()
+}).
 
 
 %% Atm status and phase related macros
@@ -178,6 +279,12 @@
 -define(LOGGER_ERROR, <<"error">>).
 -define(LOGGER_CRITICAL, <<"critical">>).
 -define(LOGGER_EMERGENCY, <<"emergency">>).
+
+-define(LOGGER_SEVERITY_LEVELS, [
+    ?LOGGER_DEBUG, ?LOGGER_INFO, ?LOGGER_NOTICE,
+    ?LOGGER_WARNING, ?LOGGER_ALERT,
+    ?LOGGER_ERROR, ?LOGGER_CRITICAL, ?LOGGER_EMERGENCY
+]).
 
 
 -define(atm_examine_error(__TYPE, __REASON, __STACKTRACE),

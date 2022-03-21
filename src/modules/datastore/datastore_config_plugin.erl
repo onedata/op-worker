@@ -114,6 +114,7 @@ get_models() -> [
     atm_workflow_execution,
     atm_tree_forest_iterator_queue,
     atm_openfaas_function_activity_registry,
+    atm_time_series_store_container,
 
     %% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 21.02.*.
     space_strategies,
