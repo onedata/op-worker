@@ -26,7 +26,7 @@
     race_with_subtree_adding_test/1, race_with_subtree_filling_with_data_test/1,
     race_with_file_adding_to_large_dir_test/1,
     multiple_status_change_test/1, adding_file_when_disabled_test/1]).
--export([init/1, teardown/1]).
+-export([init/1, init_and_enable_for_new_space/1, teardown/1]).
 -export([verify_dir_on_provider_creating_files/3, delete_stats/2]).
 % TODO VFS-9148 - extend tests
 
@@ -395,6 +395,12 @@ init(Config) ->
 
     [{default_enable_dir_stats_collector_for_new_spaces, EnableDirStatsCollectorForNewSpaces},
         {default_minimal_sync_request, MinimalSyncRequest} | Config].
+
+
+init_and_enable_for_new_space(Config) ->
+    UpdatedConfig = init(Config),
+    enable(UpdatedConfig, new_space),
+    UpdatedConfig.
 
 
 teardown(Config) ->
