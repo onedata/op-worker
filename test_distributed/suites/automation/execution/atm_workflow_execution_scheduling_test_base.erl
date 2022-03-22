@@ -44,7 +44,10 @@
         lanes = [#atm_lane_schema_draft{
             parallel_boxes = [#atm_parallel_box_schema_draft{
                 tasks = [
-                    ?ECHO_TASK_DRAFT(?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID, append)
+                    ?ECHO_TASK_DRAFT(
+                        ?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID,
+                        #atm_audit_log_store_content_update_options{function = append}
+                    )
                 ]
             }],
             store_iterator_spec = #atm_store_iterator_spec_draft{
@@ -177,7 +180,7 @@ try_to_schedule_workflow_execution(AtmWorkflowSchemaId, AtmWorkflowSchemaRevisio
 -spec try_to_schedule_workflow_execution(
     od_atm_workflow_schema:id(),
     atm_workflow_schema_revision:revision_number(),
-    atm_workflow_execution_api:store_initial_contents()
+    atm_workflow_execution_api:store_initial_content_overlay()
 ) ->
     {atm_workflow_execution:id(), atm_workflow_execution:record()} | no_return().
 try_to_schedule_workflow_execution(

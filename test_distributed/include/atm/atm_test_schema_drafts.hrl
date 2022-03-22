@@ -32,7 +32,7 @@
     }]
 }).
 
--define(ECHO_TASK_DRAFT(__TARGET_STORE_SCHEMA_ID, __TARGET_STORE_DISPATCH_FUNCTION), #atm_task_schema_draft{
+-define(ECHO_TASK_DRAFT(__TARGET_STORE_SCHEMA_ID, __TARGET_STORE_UPDATE_OPTIONS), #atm_task_schema_draft{
     lambda_id = <<"echo">>,
     lambda_revision_number = 1,
     argument_mappings = [#atm_task_schema_argument_mapper{
@@ -45,7 +45,7 @@
     result_mappings = [#atm_task_schema_result_mapper{
         result_name = <<"val">>,
         store_schema_id = __TARGET_STORE_SCHEMA_ID,
-        dispatch_function = __TARGET_STORE_DISPATCH_FUNCTION
+        store_content_update_options = __TARGET_STORE_UPDATE_OPTIONS
     }]
 }).
 

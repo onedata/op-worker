@@ -30,7 +30,7 @@
 %% tests
 -export([
     create_test/1,
-    apply_operation_test/1,
+    update_content_test/1,
     iterator_test/1,
     browse_by_index_test/1,
     browse_by_offset_test/1,
@@ -40,7 +40,7 @@
 groups() -> [
     {infinite_log_based_stores_common_tests, [parallel], [
         create_test,
-        apply_operation_test,
+        update_content_test,
         iterator_test,
         browse_by_index_test,
         browse_by_offset_test
@@ -72,12 +72,14 @@ create_test(_Config) ->
     }).
 
 
-apply_operation_test(_Config) ->
-    atm_infinite_log_based_stores_test_base:apply_operation_test_base(#{
+update_content_test(_Config) ->
+    atm_infinite_log_based_stores_test_base:update_content_test_base(#{
         store_configs => example_configs(),
         get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
         input_item_formatter => fun input_item_formatter/1,
-        input_item_to_exp_store_item => fun input_item_to_exp_store_item/3
+        input_item_to_exp_store_item => fun input_item_to_exp_store_item/3,
+        build_content_update_options => fun build_content_update_options/1,
+        get_content => fun get_content/2
     }).
 
 
@@ -97,7 +99,9 @@ browse_by_index_test(_Config) ->
         get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
         input_item_formatter => fun input_item_formatter/1,
         input_item_to_exp_store_item => fun input_item_to_exp_store_item/3,
-        randomly_remove_entity_referenced_by_item => fun randomly_remove_entity_referenced_by_item/3
+        randomly_remove_entity_referenced_by_item => fun randomly_remove_entity_referenced_by_item/3,
+        build_content_browse_options => fun build_content_browse_options/1,
+        build_content_browse_result => fun build_content_browse_result/2
     }).
 
 
@@ -107,7 +111,9 @@ browse_by_offset_test(_Config) ->
         get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
         input_item_formatter => fun input_item_formatter/1,
         input_item_to_exp_store_item => fun input_item_to_exp_store_item/3,
-        randomly_remove_entity_referenced_by_item => fun randomly_remove_entity_referenced_by_item/3
+        randomly_remove_entity_referenced_by_item => fun randomly_remove_entity_referenced_by_item/3,
+        build_content_browse_options => fun build_content_browse_options/1,
+        build_content_browse_result => fun build_content_browse_result/2
     }).
 
 
@@ -126,6 +132,7 @@ browse_by_timestamp_test(_Config) ->
     ))),
 
     ItemsNum = rand:uniform(1000),
+    ContentUpdateOpts = build_content_update_options(append),
     [FirstTimestamp | _] = lists:map(fun(Index) ->
         Timestamp = time_test_utils:get_frozen_time_millis(),
         LogContent = #{<<"value">> => Index},
@@ -135,8 +142,8 @@ browse_by_timestamp_test(_Config) ->
             3 -> #{<<"content">> => LogContent};
             4 -> LogContent#{<<"severity">> => <<"info">>}
         end,
-        ?assertEqual(ok, ?rpc(atm_store_api:apply_operation(
-            AtmWorkflowExecutionAuth, append, ItemToAdd, #{}, AtmStoreId
+        ?assertEqual(ok, ?rpc(atm_store_api:update_content(
+            AtmWorkflowExecutionAuth, ItemToAdd, ContentUpdateOpts, AtmStoreId
         ))),
         time_test_utils:simulate_millis_passing(1),
         Timestamp
@@ -145,11 +152,12 @@ browse_by_timestamp_test(_Config) ->
     lists:foreach(fun(_) ->
         StartIndex = rand:uniform(ItemsNum),
         Limit = rand:uniform(ItemsNum),
-        BrowseOpts = #{
-            start_timestamp => StartIndex + FirstTimestamp,
-            limit => Limit
-        },
-        Expected = lists:map(fun(Index) ->
+        BrowseOpts = build_content_browse_options(#{
+            <<"timestamp">> => StartIndex + FirstTimestamp,
+            <<"limit">> => Limit
+        }),
+
+        ExpEntries = lists:map(fun(Index) ->
             {
                 integer_to_binary(Index),
                 {ok, #{
@@ -160,8 +168,13 @@ browse_by_timestamp_test(_Config) ->
             }
         end, lists:seq(StartIndex, min(StartIndex + Limit - 1, ItemsNum - 1))),
 
+        ExpContentBrowseResult = build_content_browse_result(
+            ExpEntries,
+            StartIndex + Limit >= ItemsNum
+        ),
+
         ?assertEqual(
-            {Expected, StartIndex + Limit >= ItemsNum},
+            ExpContentBrowseResult,
             ?rpc(atm_store_api:browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId))
         )
     end, lists:seq(1, 8)).
@@ -186,6 +199,7 @@ example_configs() ->
         atm_file_type,
         atm_integer_type,
         atm_object_type,
+        atm_range_type,
         atm_string_type,
         atm_time_series_measurements_type
     ]).
@@ -258,6 +272,43 @@ randomly_remove_entity_referenced_by_item(
     atm_store_test_utils:randomly_remove_entity_referenced_by_item(
         ?PROVIDER_SELECTOR, AtmWorkflowExecutionAuth, LogContent, LogContentDataSpec
     ).
+
+
+%% @private
+-spec build_content_update_options(atm_list_store_content_update_options:update_function()) ->
+    atm_audit_log_store_content_update_options:record().
+build_content_update_options(UpdateFun) ->
+    #atm_audit_log_store_content_update_options{function = UpdateFun}.
+
+
+%% @private
+-spec get_content(atm_workflow_execution_auth:record(), atm_store:id()) ->
+    [atm_value:expanded()].
+get_content(AtmWorkflowExecutionAuth, AtmStoreId) ->
+    BrowseOpts = build_content_browse_options(#{<<"limit">> => 1000}),
+    #atm_audit_log_store_content_browse_result{
+        logs = Logs,
+        is_last = true
+    } = ?rpc(?PROVIDER_SELECTOR, atm_store_api:browse_content(
+        AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId
+    )),
+    lists:map(fun({_, {ok, Item}}) -> Item end, Logs).
+
+
+%% @private
+-spec build_content_browse_options(json_utils:json_map()) ->
+    atm_audit_log_store_content_browse_options:record().
+build_content_browse_options(OptsJson) ->
+    atm_audit_log_store_content_browse_options:sanitize(OptsJson#{
+        <<"type">> => <<"auditLogStoreContentBrowseOptions">>
+    }).
+
+
+%% @private
+-spec build_content_browse_result([atm_store_container_infinite_log_backend:entry()], boolean()) ->
+    atm_audit_log_store_content_browse_result:record().
+build_content_browse_result(Entries, IsLast) ->
+    #atm_audit_log_store_content_browse_result{logs = Entries, is_last = IsLast}.
 
 
 %===================================================================

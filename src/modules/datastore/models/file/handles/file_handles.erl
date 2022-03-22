@@ -25,6 +25,7 @@
 -export([is_file_opened/1, delete/1, list/0]).
 -export([register_open/4, register_release/3, mark_to_remove/2, is_removed/1,
     invalidate_session_entry/2, is_used_by_session/2, get_creation_handle/1]).
+-export([gen_handle_id/1, get_open_flag/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -254,6 +255,19 @@ get_creation_handle(Key) ->
         {ok, #document{value = #file_handles{creation_handle = Handle}}} -> {ok, Handle};
         Other -> Other
     end.
+
+
+-spec gen_handle_id(fslogic_worker:open_flag()) -> storage_driver:handle_id().
+gen_handle_id(Flag) ->
+    <<(atom_to_binary(Flag, utf8))/binary, "_", (base64:encode(crypto:strong_rand_bytes(20)))/binary>>.
+
+
+-spec get_open_flag(storage_driver:handle_id()) -> fslogic_worker:open_flag().
+get_open_flag(HandleId) ->
+    [FlagBin | _] = binary:split(HandleId, <<"_">>),
+    binary_to_atom(FlagBin, utf8).
+
+
 
 %%%===================================================================
 %%% datastore_model callbacks

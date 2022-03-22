@@ -18,9 +18,10 @@
 %% API
 -export([
     create/3,
-    get/1, browse_content/3, acquire_iterator/2,
+    get/1, acquire_iterator/2,
     freeze/1, unfreeze/1,
-    apply_operation/5,
+    browse_content/3,
+    update_content/4,
     delete/1
 ]).
 
@@ -28,16 +29,7 @@
 
 -type initial_content() :: atm_store_container:initial_content().
 
-% Index of automation:item() stored in atm_store_container that uniquely identifies it.
--type index() :: binary().
--type offset() :: integer().
--type limit() :: pos_integer().
-
--type browse_options() :: atm_store_container:browse_options().
--type browse_result() :: {[{index(), {ok, automation:item()} | errors:error()}], IsLast :: boolean()}.
-
 -export_type([initial_content/0]).
--export_type([index/0, offset/0, limit/0, browse_options/0, browse_result/0]).
 
 
 %%%===================================================================
@@ -90,30 +82,6 @@ get(AtmStoreId) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Returns batch of items (and their indices) directly kept at store
-%% in accordance to specified browse_opts().
-%% @end
-%%-------------------------------------------------------------------
--spec browse_content(
-    atm_workflow_execution_auth:record(),
-    browse_options(),
-    atm_store:id() | atm_store:record()
-) ->
-    browse_result() | no_return().
-browse_content(AtmWorkflowExecutionAuth, BrowseOpts, #atm_store{container = AtmStoreContainer}) ->
-    atm_store_container:browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreContainer);
-
-browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId) ->
-    case get(AtmStoreId) of
-        {ok, AtmStore} ->
-            browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStore);
-        ?ERROR_NOT_FOUND ->
-            throw(?ERROR_NOT_FOUND)
-    end.
-
-
-%%-------------------------------------------------------------------
-%% @doc
 %% Returns 'atm_store_iterator' allowing to iterate over all items produced by
 %% store. Those items are not only items directly kept in store but also objects
 %% associated/inferred from them (e.g. in case of file tree forest store entire
@@ -141,29 +109,57 @@ unfreeze(AtmStoreId) ->
     end).
 
 
--spec apply_operation(
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns batch of items (and their indices) directly kept at store
+%% in accordance to specified browse_opts().
+%% @end
+%%-------------------------------------------------------------------
+-spec browse_content(
     atm_workflow_execution_auth:record(),
-    atm_store_container:operation_type(),
-    automation:item(),
-    atm_store_container:operation_options(),
+    atm_store_content_browse_options:record(),
+    atm_store:id() | atm_store:record()
+) ->
+    atm_store_content_browse_result:record() | no_return().
+browse_content(AtmWorkflowExecutionAuth, BrowseOpts, #atm_store{
+    schema_id = AtmStoreSchemaId,
+    container = AtmStoreContainer
+}) ->
+    atm_store_container:browse_content(AtmStoreContainer, #atm_store_content_browse_req{
+        store_schema_id = AtmStoreSchemaId,
+        workflow_execution_auth = AtmWorkflowExecutionAuth,
+        options = BrowseOpts
+    });
+
+browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId) ->
+    case get(AtmStoreId) of
+        {ok, AtmStore} ->
+            browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStore);
+        ?ERROR_NOT_FOUND ->
+            throw(?ERROR_NOT_FOUND)
+    end.
+
+
+-spec update_content(
+    atm_workflow_execution_auth:record(),
+    atm_value:expanded(),
+    atm_store_content_update_options:record(),
     atm_store:id()
 ) ->
     ok | no_return().
-apply_operation(AtmWorkflowExecutionAuth, Operation, Item, Options, AtmStoreId) ->
+update_content(AtmWorkflowExecutionAuth, Item, Options, AtmStoreId) ->
     % NOTE: no need to use critical section here as containers either:
     %   * are based on structure that support transaction operation on their own 
     %   * store only one item and it will be overwritten
     %   * do not support any operation
     case get(AtmStoreId) of
         {ok, #atm_store{container = AtmStoreContainer, frozen = false}} ->
-            AtmStoreContainerOperation = #atm_store_container_operation{
-                type = Operation,
-                options = Options,
-                argument = Item,
-                workflow_execution_auth = AtmWorkflowExecutionAuth
-            },
-            UpdatedAtmStoreContainer = atm_store_container:apply_operation(
-                AtmStoreContainer, AtmStoreContainerOperation
+            UpdatedAtmStoreContainer = atm_store_container:update_content(
+                AtmStoreContainer, #atm_store_content_update_req{
+                    workflow_execution_auth = AtmWorkflowExecutionAuth,
+                    argument = Item,
+                    options = Options
+                }
             ),
             atm_store:update(AtmStoreId, fun(#atm_store{} = PrevStore) ->
                 {ok, PrevStore#atm_store{container = UpdatedAtmStoreContainer}}

@@ -27,8 +27,8 @@
 -export([get_id/1, get_creation_time/1, get_dataset_id/1, get_dataset_root_file_guid/1, get_space_id/1,
     get_state/1, get_config/1, get_preserved_callback/1, get_purged_callback/1,
     get_description/1, get_stats/1, get_root_dir_guid/1,
-    get_data_dir_guid/1, get_parent/1, get_parent_doc/1, get_base_archive_id/1,
-    get_related_dip/1, get_related_aip/1, is_finished/1
+    get_data_dir_guid/1, get_parent_id/1, get_parent_doc/1, get_base_archive_id/1,
+    get_related_dip_id/1, get_related_aip_id/1, is_finished/1
 ]).
 
 % setters
@@ -321,17 +321,17 @@ get_data_dir_guid(#document{value = Archive}) ->
 get_data_dir_guid(ArchiveId) ->
     ?get_field(ArchiveId, fun get_data_dir_guid/1).
 
--spec get_parent(record() | doc() | id()) -> {ok, archive:id() | undefined}.
-get_parent(#archive{parent = Parent}) ->
+-spec get_parent_id(record() | doc() | id()) -> {ok, archive:id() | undefined}.
+get_parent_id(#archive{parent = Parent}) ->
     {ok, Parent};
-get_parent(#document{value = Archive}) ->
-    get_parent(Archive);
-get_parent(ArchiveId) ->
-    ?get_field(ArchiveId, fun get_parent/1).
+get_parent_id(#document{value = Archive}) ->
+    get_parent_id(Archive);
+get_parent_id(ArchiveId) ->
+    ?get_field(ArchiveId, fun get_parent_id/1).
 
 -spec get_parent_doc(record() | doc()) -> {ok, doc() | undefined} | {error, term()}.
 get_parent_doc(Archive) ->
-    case get_parent(Archive) of
+    case get_parent_id(Archive) of
         {ok, undefined} -> {ok, undefined};
         {ok, ParentArchiveId} -> get(ParentArchiveId)
     end.
@@ -344,21 +344,21 @@ get_base_archive_id(#document{value = Archive}) ->
 get_base_archive_id(ArchiveId) ->
     ?get_field(ArchiveId, fun get_base_archive_id/1).
 
--spec get_related_dip(record() | doc()) -> {ok, archive:id() | undefined}.
-get_related_dip(#archive{related_dip = RelatedDip}) ->
+-spec get_related_dip_id(record() | doc()) -> {ok, archive:id() | undefined}.
+get_related_dip_id(#archive{related_dip = RelatedDip}) ->
     {ok, RelatedDip};
-get_related_dip(#document{value = Archive}) ->
-    get_related_dip(Archive);
-get_related_dip(ArchiveId) ->
-    ?get_field(ArchiveId, fun get_related_dip/1).
+get_related_dip_id(#document{value = Archive}) ->
+    get_related_dip_id(Archive);
+get_related_dip_id(ArchiveId) ->
+    ?get_field(ArchiveId, fun get_related_dip_id/1).
 
--spec get_related_aip(record() | doc()) -> {ok, archive:id() | undefined}.
-get_related_aip(#archive{related_aip = RelatedAIP}) ->
+-spec get_related_aip_id(record() | doc()) -> {ok, archive:id() | undefined}.
+get_related_aip_id(#archive{related_aip = RelatedAIP}) ->
     {ok, RelatedAIP};
-get_related_aip(#document{value = Archive}) ->
-    get_related_aip(Archive);
-get_related_aip(ArchiveId) ->
-    ?get_field(ArchiveId, fun get_related_aip/1).
+get_related_aip_id(#document{value = Archive}) ->
+    get_related_aip_id(Archive);
+get_related_aip_id(ArchiveId) ->
+    ?get_field(ArchiveId, fun get_related_aip_id/1).
 
 -spec is_finished(record() | doc()) -> boolean().
 is_finished(#archive{state = State}) ->
@@ -513,7 +513,7 @@ get_all_ancestors(undefined, AncestorArchives) ->
     {ok, lists:reverse(AncestorArchives)};
 get_all_ancestors(ArchiveId, AncestorArchives) ->
     {ok, ArchiveDoc} = get(ArchiveId),
-    {ok, ParentArchiveId} = get_parent(ArchiveDoc),
+    {ok, ParentArchiveId} = get_parent_id(ArchiveDoc),
     get_all_ancestors(ParentArchiveId, [ArchiveDoc | AncestorArchives]).
 
 %%%===================================================================

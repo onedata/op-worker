@@ -113,7 +113,7 @@ run(TestSpec = #atm_workflow_execution_test_spec{
     space = SpaceSelector,
     workflow_schema_dump_or_draft = AtmWorkflowSchemaDumpOrDraft,
     workflow_schema_revision_num = AtmWorkflowSchemaRevisionNum,
-    store_initial_contents = StoreInitialContents,
+    store_initial_content_overlay = AtmStoreInitialContentOverlay,
     callback_url = CallbackUrl,
     incarnations = Incarnations
 }) ->
@@ -128,7 +128,7 @@ run(TestSpec = #atm_workflow_execution_test_spec{
     TestProcPid = self(),
     {AtmWorkflowExecutionId, _} = ?rpc(ProviderSelector, mi_atm:schedule_workflow_execution(
         SessionId, SpaceId, AtmWorkflowSchemaId, AtmWorkflowSchemaRevisionNum,
-        StoreInitialContents#{test_process => TestProcPid}, CallbackUrl
+        AtmStoreInitialContentOverlay#{test_process => TestProcPid}, CallbackUrl
     )),
 
     ExpState = atm_workflow_execution_exp_state_builder:init(

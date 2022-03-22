@@ -21,9 +21,14 @@
 %% atm_store_container callbacks
 -export([
     create/3,
-    get_config/1, get_iterated_item_data_spec/1,
-    browse_content/3, acquire_iterator/1,
-    apply_operation/2,
+    get_config/1,
+
+    get_iterated_item_data_spec/1,
+    acquire_iterator/1,
+
+    browse_content/2,
+    update_content/2,
+
     delete/1
 ]).
 
@@ -31,31 +36,28 @@
 -export([version/0, db_encode/2, db_decode/2]).
 
 
-%% Full 'initial_content' format can't be expressed directly in type spec due to
-%% dialyzer limitations in specifying concrete binaries ('initial_content' must be
-%% proper json object which implies binaries as keys). Instead it is shown below:
-%%
-%% #{
-%%      <<"end">> := integer(),
-%%      <<"start">> => integer(),  % default `0`
-%%      <<"step">> => integer()    % default `1`
-%% }
--type initial_content() :: #{binary() => integer()}.
--type operation_options() :: #{}.  %% for now no options are supported
--type browse_options() :: #{}.  %% for now no options are supported
+-type initial_content() :: undefined | atm_range_value:range_json().
+
+-type content_browse_req() :: #atm_store_content_browse_req{
+    options :: atm_range_store_content_browse_options:record()
+}.
+-type content_update_req() :: #atm_store_content_update_req{
+    options :: atm_range_store_content_update_options:record()
+}.
 
 -record(atm_range_store_container, {
     config :: atm_range_store_config:record(),
-    start_num :: integer(),
-    end_num :: integer(),
-    step :: integer()
+    range :: undefined | atm_range_value:range()
 }).
 -type record() :: #atm_range_store_container{}.
 
--export_type([initial_content/0, operation_options/0, browse_options/0, record/0]).
+-export_type([
+    initial_content/0, content_browse_req/0, content_update_req/0,
+    record/0
+]).
 
 
--define(ITEM_DATA_SPEC, #atm_data_spec{type = atm_integer_type}).
+-define(RANGE_DATA_SPEC, #atm_data_spec{type = atm_range_type}).
 
 
 %%%===================================================================
@@ -69,20 +71,19 @@
     initial_content()
 ) ->
     record() | no_return().
-create(AtmWorkflowExecutionAuth, AtmStoreConfig, #{<<"end">> := EndNum} = InitialContent) ->
-    StartNum = maps:get(<<"start">>, InitialContent, 0),
-    Step = maps:get(<<"step">>, InitialContent, 1),
+create(_AtmWorkflowExecutionAuth, AtmStoreConfig, undefined) ->
+    #atm_range_store_container{
+        config = AtmStoreConfig,
+        range = undefined
+    };
 
-    validate_range(AtmWorkflowExecutionAuth, StartNum, EndNum, Step),
+create(AtmWorkflowExecutionAuth, AtmStoreConfig, InitialContent) ->
+    atm_value:validate(AtmWorkflowExecutionAuth, InitialContent, ?RANGE_DATA_SPEC),
 
     #atm_range_store_container{
         config = AtmStoreConfig,
-        start_num = StartNum,
-        end_num = EndNum,
-        step = Step
-    };
-create(_AtmWorkflowExecutionAuth, _AtmStoreConfig, _InitialContent) ->
-    throw(?ERROR_MISSING_REQUIRED_VALUE(<<"end">>)).
+        range = atm_value:compress(InitialContent, ?RANGE_DATA_SPEC)
+    }.
 
 
 -spec get_config(record()) -> atm_range_store_config:record().
@@ -92,32 +93,48 @@ get_config(#atm_range_store_container{config = AtmStoreConfig}) ->
 
 -spec get_iterated_item_data_spec(record()) -> atm_data_spec:record().
 get_iterated_item_data_spec(_) ->
-    ?ITEM_DATA_SPEC.
-
-
--spec browse_content(atm_workflow_execution_auth:record(), browse_options(), record()) ->
-    atm_store_api:browse_result() | no_return().
-browse_content(_AtmWorkflowExecutionAuth, _BrowseOpts, #atm_range_store_container{
-    start_num = StartNum,
-    end_num = EndNum,
-    step = Step
-}) ->
-    Content = #{<<"start">> => StartNum, <<"end">> => EndNum, <<"step">> => Step},
-    {[{<<>>, {ok, Content}}], true}.
+    #atm_data_spec{type = atm_integer_type}.
 
 
 -spec acquire_iterator(record()) -> atm_range_store_container_iterator:record().
-acquire_iterator(#atm_range_store_container{
-    start_num = StartNum,
-    end_num = EndNum,
-    step = Step
+acquire_iterator(#atm_range_store_container{range = undefined}) ->
+    %% TODO VFS-9150 throw error if no content
+    atm_range_store_container_iterator:build(0, 0, 1);
+
+acquire_iterator(#atm_range_store_container{range = [Start, End, Step]}) ->
+    atm_range_store_container_iterator:build(Start, End, Step).
+
+
+-spec browse_content(record(), content_browse_req()) ->
+    atm_range_store_content_browse_result:record() | no_return().
+browse_content(
+    #atm_range_store_container{range = undefined},
+    #atm_store_content_browse_req{
+        store_schema_id = AtmStoreSchemaId,
+        options = #atm_range_store_content_browse_options{}
+    }
+) ->
+    throw(?ERROR_ATM_STORE_CONTENT_NOT_SET(AtmStoreSchemaId));
+
+browse_content(
+    #atm_range_store_container{range = Range},
+    #atm_store_content_browse_req{
+        workflow_execution_auth = AtmWorkflowExecutionAuth,
+        options = #atm_range_store_content_browse_options{}
+    }
+) ->
+    {ok, RangeJson} = atm_value:expand(AtmWorkflowExecutionAuth, Range, ?RANGE_DATA_SPEC),
+    #atm_range_store_content_browse_result{range = RangeJson}.
+
+
+-spec update_content(record(), content_update_req()) -> record() | no_return().
+update_content(Record, #atm_store_content_update_req{
+    workflow_execution_auth = AtmWorkflowExecutionAuth,
+    argument = Item,
+    options = #atm_range_store_content_update_options{}
 }) ->
-    atm_range_store_container_iterator:build(StartNum, EndNum, Step).
-
-
--spec apply_operation(record(), atm_store_container:operation()) -> no_return().
-apply_operation(_Record, _AtmStoreContainerOperation) ->
-    throw(?ERROR_NOT_SUPPORTED).
+    atm_value:validate(AtmWorkflowExecutionAuth, Item, ?RANGE_DATA_SPEC),
+    Record#atm_range_store_container{range = atm_value:compress(Item, ?RANGE_DATA_SPEC)}.
 
 
 -spec delete(record()) -> ok.
@@ -137,65 +154,24 @@ version() ->
 
 -spec db_encode(record(), persistent_record:nested_record_encoder()) ->
     json_utils:json_term().
-db_encode(#atm_range_store_container{
-    config = AtmStoreConfig,
-    start_num = StartNum,
-    end_num = EndNum,
-    step = Step
-}, NestedRecordEncoder) ->
-    #{
-        <<"config">> => NestedRecordEncoder(AtmStoreConfig, atm_range_store_config),
-        <<"start">> => StartNum,
-        <<"end">> => EndNum,
-        <<"step">> => Step
-    }.
+db_encode(
+    #atm_range_store_container{config = AtmStoreConfig, range = Range},
+    NestedRecordEncoder
+) ->
+    maps_utils:put_if_defined(
+        #{<<"config">> => NestedRecordEncoder(AtmStoreConfig, atm_range_store_config)},
+        <<"range">>,
+        Range
+    ).
 
 
 -spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
     record().
-db_decode(#{
-    <<"config">> := AtmStoreConfigJson,
-    <<"start">> := StartNum,
-    <<"end">> := EndNum,
-    <<"step">> := Step
-}, NestedRecordDecoder) ->
+db_decode(
+    AtmStoreContainerJson = #{<<"config">> := AtmStoreConfigJson},
+    NestedRecordDecoder
+) ->
     #atm_range_store_container{
         config = NestedRecordDecoder(AtmStoreConfigJson, atm_range_store_config),
-        start_num = StartNum,
-        end_num = EndNum,
-        step = Step
+        range = maps:get(<<"range">>, AtmStoreContainerJson, undefined)
     }.
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-
-%% @private
--spec validate_range(atm_workflow_execution_auth:record(), integer(), integer(), integer()) ->
-    ok | no_return().
-validate_range(AtmWorkflowExecutionAuth, StartNum, EndNum, Step) ->
-    lists:foreach(fun({ArgName, ArgValue}) ->
-        try
-            atm_value:validate(AtmWorkflowExecutionAuth, ArgValue, ?ITEM_DATA_SPEC)
-        catch Type:Reason:Stacktrace ->
-            Error = ?atm_examine_error(Type, Reason, Stacktrace),
-            throw(?ERROR_BAD_DATA(ArgName, Error))
-        end
-    end, [
-        {<<"start">>, StartNum},
-        {<<"end">>, EndNum},
-        {<<"step">>, Step}
-    ]),
-    assert_proper_range(StartNum, EndNum, Step).
-
-
-%% @private
--spec assert_proper_range(integer(), integer(), integer()) -> ok | no_return().
-assert_proper_range(Start, End, Step) when Start =< End, Step > 0 ->
-    ok;
-assert_proper_range(Start, End, Step) when Start >= End, Step < 0 ->
-    ok;
-assert_proper_range(_Start, _End, _Step) ->
-    throw(?ERROR_BAD_DATA(<<"range">>, <<"invalid range specification">>)).

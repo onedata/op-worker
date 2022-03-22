@@ -175,7 +175,9 @@ check_explicit_constraints(#file_attr{type = FileType}, Constraints) ->
         FileType ->
             ok;
         Other ->
-            UnverifiedConstraint = atm_file_type:value_constraints_to_json(#{file_type => Other}),
+            UnverifiedConstraint = atm_file_type:encode_value_constraints(
+                #{file_type => Other}, fun jsonable_record:to_json/2
+            ),
             throw({unverified_constraints, UnverifiedConstraint})
     end.
 
