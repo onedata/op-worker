@@ -143,7 +143,7 @@ pack_options({start_after, StartAfter}, Limit, Prefix) ->
 -spec list_next_file(user_ctx:ctx(), file_ctx:ctx(), state()) ->
     {progress_marker(), result()}.
 list_next_file(_UserCtx, _FileCtx, #state{limit = Limit}) when Limit =< 0 ->
-    {#list_result{}, false};
+    {more, #list_result{}};
 list_next_file(UserCtx, FileCtx, State) ->
     Path = build_current_rel_path(State),
     case {matches_prefix(Path, State), State#state.prefix > Path} of
@@ -189,7 +189,7 @@ list_children_next_batch(UserCtx, FileCtx, ListOpts, State, AccListResult) ->
                 true -> done;
                 false -> more
             end,
-            {Res, ProgressMarker};
+            {ProgressMarker, Res};
         {false, true} ->
             {done, Res};
         {false, false} ->
