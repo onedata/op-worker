@@ -538,7 +538,7 @@ get_recursive_file_list(Config) ->
     AllExpectedFilesSpace = lists:map(fun({Guid, Path}) -> {Guid, filename:join([MainDirName, Path])} end, AllExpectedFiles),
     SpaceDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(file_id:guid_to_space_id(MainDirGuid)),
     % use MainDirName prefix so this listing is independent of other files in space
-    check_list_recursive_start_after(Worker, SessId1, SpaceDirGuid, AllExpectedFilesSpace, MainDirName),
+    check_list_recursive_start_after(Worker, SessId1, SpaceDirGuid, MainDirName, AllExpectedFilesSpace),
     
     AllExpectedFilesNestedDir = lists:filtermap(fun({Guid, Path}) -> 
         case filepath_utils:is_descendant(Path, NestedDirName) of
@@ -562,6 +562,25 @@ get_recursive_file_list(Config) ->
 
 
 get_recursive_file_list_prefix_test_base(Config) ->
+    %% Created file structure: 
+    %%                      Space1
+    %%                         |
+    %%                      MainDir
+    %%                      / | | \
+    %%                     /  | |  \
+    %%                    /  /   \  \
+    %%                  aa  bb  bbb cc
+    %% 
+    %%  In each directory Dir [aa, bb, bbb, cc]: 
+    %%                      Dir  -------
+    %%                    /  |  \       |
+    %%                   /   |   \    1..8 reg files with random names
+    %%                  /    |    \    
+    %%                 /     |     \
+    %%       nested_dir  empty_dir  <<Dir/binary, "_file">>
+    %%           |
+    %%   <<Dir/binary, "_file">>
+    
     [Worker | _] = ?config(op_worker_nodes, Config),
     
     SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
@@ -572,26 +591,26 @@ get_recursive_file_list_prefix_test_base(Config) ->
     
     Dirs = [<<"aa">>, <<"bb">>, <<"bbb">>, <<"cc">>],
     Files = lists:sort(lists_utils:generate(fun generator:gen_name/0, 8)),
-    AllFiles = lists:foldl(fun(D, FilesTmp) ->
-        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId1, filename:join([MainDirPath, D]))),
-        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId1, filename:join([MainDirPath, D, <<"empty_dir">>]))),
+    AllFilesUnsorted = lists:foldl(fun(Dir, FilesTmp) ->
+        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId1, filename:join([MainDirPath, Dir]))),
+        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId1, filename:join([MainDirPath, Dir, <<"empty_dir">>]))),
         NestedDirname = <<"nested_dir">>,
-        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId1, filename:join([MainDirPath, D, NestedDirname]))),
-        Filename = <<D/binary, "_file">>,
-        {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId1, filename:join([MainDirPath, D, Filename]))),
-        {ok, NestedFileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId1, filename:join([MainDirPath, D, NestedDirname, Filename]))),
-        CreatedFiles = lists:map(fun(F) ->
-            {ok, G} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId1, filename:join([MainDirPath, D, F]))),
-            {G, filename:join([D, F])}
-        end, Files) ++ [{FileGuid, filename:join([D, Filename])}, {NestedFileGuid, filename:join([D, NestedDirname, Filename])}],
-        CreatedFilesSorted = lists:sort(fun({_G1, P1}, {_G2, P2}) -> P1 < P2 end, CreatedFiles),
-        FilesTmp ++ CreatedFilesSorted
+        ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker, SessId1, filename:join([MainDirPath, Dir, NestedDirname]))),
+        Filename = <<Dir/binary, "_file">>,
+        {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId1, filename:join([MainDirPath, Dir, Filename]))),
+        {ok, NestedFileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId1, filename:join([MainDirPath, Dir, NestedDirname, Filename]))),
+        FilesTmp ++ lists:map(fun(F) ->
+            {ok, G} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId1, filename:join([MainDirPath, Dir, F]))),
+            {G, filename:join([Dir, F])}
+        end, Files) ++ [{FileGuid, filename:join([Dir, Filename])}, {NestedFileGuid, filename:join([Dir, NestedDirname, Filename])}]
     end, [], Dirs),
     
-    NestedPrefixes = lists:flatmap(fun(D) ->
+    AllFiles = lists:sort(fun({_G1, P1}, {_G2, P2}) -> P1 < P2 end, AllFilesUnsorted),
+    
+    NestedPrefixes = lists:flatmap(fun(Dir) ->
         [
-            filename:join([D, <<"nested_dir">>]),
-            filename:join([D, <<"nested_dir">>, D])
+            filename:join([Dir, <<"nested_dir">>]),
+            filename:join([Dir, <<"nested_dir">>, Dir])
         ]
     end, Dirs),
     
@@ -599,7 +618,7 @@ get_recursive_file_list_prefix_test_base(Config) ->
         AllExpectedFiles = lists:filter(fun({_G, P}) ->
             str_utils:binary_starts_with(P, Prefix)
         end, AllFiles),
-        check_list_recursive_start_after(Worker, SessId1, MainDirGuid, AllExpectedFiles, Prefix)
+        check_list_recursive_start_after(Worker, SessId1, MainDirGuid, Prefix, AllExpectedFiles)
     end, Dirs ++ NestedPrefixes ++ [<<"a">>, <<"b">>, <<"c">>, <<"d">>]).
 
 
@@ -2288,26 +2307,22 @@ lfm_close_deleted_open_files(Config) ->
 %%%====================================================================
 
 check_list_recursive_start_after(Worker, SessId, DirToListGuid, AllExpectedFiles) ->
-    check_list_recursive_start_after(Worker, SessId, DirToListGuid, AllExpectedFiles, <<>>).
+    check_list_recursive_start_after(Worker, SessId, DirToListGuid, <<>>, AllExpectedFiles).
 
-check_list_recursive_start_after(Worker, SessId, DirToListGuid, AllExpectedFiles, Prefix) ->
+check_list_recursive_start_after(Worker, SessId, RootDirGuid, Prefix, AllExpectedFiles) ->
     ?assertMatch({ok, AllExpectedFiles, _, _},
-        get_files_recursively(Worker, SessId, ?FILE_REF(DirToListGuid), <<>>, length(AllExpectedFiles), Prefix)),
+        get_files_recursively(Worker, SessId, ?FILE_REF(RootDirGuid), <<>>, length(AllExpectedFiles), Prefix)),
     lists:foreach(fun(Num) ->
         {_, StartAfter} = lists:nth(Num, AllExpectedFiles),
         ExpectedTail = lists:nthtail(Num, AllExpectedFiles),
-        ?assertMatch({ok, ExpectedTail, _, _},
-            get_files_recursively(Worker, SessId, ?FILE_REF(DirToListGuid), StartAfter, length(AllExpectedFiles), Prefix))
-    end, lists:seq(1, length(AllExpectedFiles))),
-    
-    lists:foreach(fun(Num) ->
-        {_, StartAfter} = lists:nth(Num, AllExpectedFiles),
-        ExpectedRes = case lists:nthtail(Num, AllExpectedFiles) of
+        ExpectedSingleFileListingRes = case ExpectedTail of
             [File | _] -> [File];
             [] -> []
         end,
-        ?assertMatch({ok, ExpectedRes, _, _},
-            get_files_recursively(Worker, SessId, ?FILE_REF(DirToListGuid), StartAfter, 1, Prefix))
+        ?assertMatch({ok, ExpectedTail, _, _},
+            get_files_recursively(Worker, SessId, ?FILE_REF(RootDirGuid), StartAfter, length(AllExpectedFiles), Prefix)),
+        ?assertMatch({ok, ExpectedSingleFileListingRes, _, _},
+            get_files_recursively(Worker, SessId, ?FILE_REF(RootDirGuid), StartAfter, 1, Prefix))
     end, lists:seq(1, length(AllExpectedFiles))).
 
 %%%===================================================================

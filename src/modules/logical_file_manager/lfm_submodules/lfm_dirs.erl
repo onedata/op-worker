@@ -179,7 +179,7 @@ get_children_count(SessId, FileKey) ->
     recursive_file_listing:limit(), 
     recursive_file_listing:prefix()
 ) ->
-    {ok, [recursive_file_listing:result_file_entry()], [file_meta:path()], recursive_file_listing:token()}.
+    {ok, [recursive_file_listing:entry()], [file_meta:path()], recursive_file_listing:token()}.
 get_files_recursively(SessId, FileKey, StartAfterOrToken, Limit, Prefix) ->
     FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, resolve_symlink),
     
@@ -188,7 +188,7 @@ get_files_recursively(SessId, FileKey, StartAfterOrToken, Limit, Prefix) ->
             options = recursive_file_listing:pack_options(StartAfterOrToken, Limit, Prefix)
         },
         fun(#recursive_file_list{
-            files = Result,
+            entries = Result,
             inaccessible_paths = InaccessiblePaths,
             continuation_token = Token
         }) ->

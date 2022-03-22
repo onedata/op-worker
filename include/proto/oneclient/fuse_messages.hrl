@@ -281,7 +281,7 @@
 }).
 
 -record(recursive_file_list, {
-    files :: [{file_meta:path(), lfm_attrs:file_attributes()}],
+    entries :: [recursive_file_listing:entry()],
     inaccessible_paths :: [file_meta:path()],
     continuation_token :: undefined | recursive_file_listing:token()
 }).

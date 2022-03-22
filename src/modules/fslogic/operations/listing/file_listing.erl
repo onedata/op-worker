@@ -1,6 +1,6 @@
 %%%--------------------------------------------------------------------
 %%% @author Michal Stanisz
-%%% @copyright (C) 20222 ACK CYFRONET AGH
+%%% @copyright (C) 2022 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -59,7 +59,6 @@
 %%% API
 %%%===================================================================
 
-%% @private
 -spec list_children(user_ctx:ctx(), file_ctx:ctx(), list_opts(),
     CanonicalChildrenWhiteList :: undefined | [file_meta:name()]
 ) ->
@@ -108,7 +107,7 @@ resolve_list_opts(ListOpts) ->
 
 
 %% @private
--spec pack_api_list_token(file_meta:list_extended_info()) -> binary().
+-spec pack_api_list_token(file_meta:list_extended_info()) -> api_list_token() | undefined.
 pack_api_list_token(#{token := DatastoreToken, last_tree := LastTree, last_name := LastName}) ->
     mochiweb_base64url:encode(str_utils:join_binary(
         [<<?API_LIST_TOKEN_PREFIX>>, DatastoreToken, LastTree, LastName], <<"#">>));

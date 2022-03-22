@@ -542,7 +542,7 @@ get_children_details(SessId, FileKey, ListOpts) ->
     recursive_file_listing:limit(),
     recursive_file_listing:prefix()
 ) ->
-    {ok, [recursive_file_listing:result_file_entry()], [file_meta:path()], recursive_file_listing:token()} | error_reply().
+    {ok, [recursive_file_listing:entry()], [file_meta:path()], recursive_file_listing:token()} | error_reply().
 get_files_recursively(SessId, FileKey, StartAfterOrToken, Limit, Prefix) -> 
     ?run(lfm_dirs:get_files_recursively(SessId, FileKey, StartAfterOrToken, Limit, Prefix)).
 

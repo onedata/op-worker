@@ -577,7 +577,7 @@ get_children_details(Worker, SessId, FileKey, ListOpts) ->
     recursive_file_listing:limit(),
     recursive_file_listing:prefix()
 ) ->
-    {ok, [recursive_file_listing:result_file_entry()], [file_meta:path()], recursive_file_listing:token()} | lfm:error_reply().
+    {ok, [recursive_file_listing:entry()], [file_meta:path()], recursive_file_listing:token()} | lfm:error_reply().
 get_files_recursively(Worker, SessId, FileKey, StartAfter, Limit, Prefix) ->
     ?EXEC(Worker, lfm:get_files_recursively(SessId, uuid_to_file_ref(Worker, FileKey), StartAfter, Limit, Prefix)).
 
