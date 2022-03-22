@@ -169,10 +169,13 @@ create_test_base(#{
         ),
 
         % Assert creating store with array initial content containing some invalid items fails
-        ?assertEqual(
-            ?ERROR_ATM_DATA_TYPE_UNVERIFIED(InvalidInputItemDataSeed, InputItemGeneratorSeedDataType),
-            ?rpc(catch CreateStoreFun([ValidInputItem, InvalidInputItem]))
-        ),
+        InvalidInitialContent = [ValidInputItem, InvalidInputItem],
+        ExpError = ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(InvalidInitialContent, atm_array_type, #{
+            <<"item[1]">> => errors:to_json(?ERROR_ATM_DATA_TYPE_UNVERIFIED(
+                InvalidInputItemDataSeed, InputItemGeneratorSeedDataType
+            ))
+        }),
+        ?assertEqual(ExpError, ?rpc(catch CreateStoreFun(InvalidInitialContent))),
 
         % Assert creating store with array initial content containing only valid items succeed
         ValidInputContent = [ValidInputItem, ValidInputItem],
@@ -240,10 +243,16 @@ update_content_test_base(#{
             ))),
             ?assertEqual(InitialStoreContent, GetContentFun(AtmWorkflowExecutionAuth, AtmStoreId))
         end, [
-            {append, InvalidInputItem,
-                ?ERROR_ATM_DATA_TYPE_UNVERIFIED(InvalidInputItemDataSeed, InputItemGeneratorSeedDataType)},
-            {extend, [NewInputItem1, InvalidInputItem],
-                ?ERROR_ATM_DATA_TYPE_UNVERIFIED(InvalidInputItemDataSeed, InputItemGeneratorSeedDataType)}
+            {append, InvalidInputItem, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(
+                InvalidInputItemDataSeed, InputItemGeneratorSeedDataType
+            )},
+            {extend, [NewInputItem1, InvalidInputItem], ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+                [NewInputItem1, InvalidInputItem],
+                atm_array_type,
+                #{<<"item[1]">> => errors:to_json(?ERROR_ATM_DATA_TYPE_UNVERIFIED(
+                    InvalidInputItem, InputItemGeneratorSeedDataType
+                ))}
+            )}
             %% TODO VFS-8686 refactor atm data types errors to properly handle array types
 %%            {extend, NewInputItem1,
 %%                ?ERROR_ATM_DATA_TYPE_UNVERIFIED(NewInputItem1, atm_array_type)}

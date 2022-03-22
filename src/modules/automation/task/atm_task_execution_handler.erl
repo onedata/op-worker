@@ -280,14 +280,27 @@ zip_items_with_results(ItemsBatch, #{<<"resultsBatch">> := ResultsBatch}) when
     is_list(ResultsBatch),
     length(ItemsBatch) == length(ResultsBatch)
 ->
-    lists:zip(ItemsBatch, ResultsBatch);
+    lists:zipwith(fun
+        (Item, Result) when is_map(Result) ->
+            {Item, Result};
+        (Item, Result) ->
+            {Item, ?ERROR_BAD_DATA(<<"lambdaResult">>, str_utils:format_bin(
+                "Expected object with keys and values matching those defined in task schema. "
+                "Instead got: ~s", [json_utils:encode(Result)]
+            ))}
+    end, ItemsBatch, ResultsBatch);
 
 zip_items_with_results(ItemsBatch, {error, _} = Error) ->
-    % Entire batch processing failed (e.g. timeout or malformed response)
-    lists:zip(ItemsBatch, lists:duplicate(length(ItemsBatch), Error));
+    % Entire batch processing failed (e.g. timeout or malformed lambda response)
+    [{Item, Error} || Item <- ItemsBatch];
 
-zip_items_with_results(ItemsBatch, _MalformedResults) ->
-    lists:zip(ItemsBatch, lists:duplicate(length(ItemsBatch), ?ERROR_MALFORMED_DATA)).
+zip_items_with_results(ItemsBatch, MalformedOutcome) ->
+    Error = ?ERROR_BAD_DATA(<<"lambdaOutcome">>, str_utils:format_bin(
+        "Expected {resultsBatch: [$LAMBDA_RESULT]} object with $LAMBDA_RESULT "
+        "for each item (~B) in 'argsBatch' provided to lambda. Instead got: ~s",
+        [length(ItemsBatch), json_utils:encode(MalformedOutcome)]
+    )),
+    [{Item, Error} || Item <- ItemsBatch].
 
 
 -spec process_results(
@@ -303,7 +316,7 @@ process_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, {error, _} = 
 process_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, #{<<"exception">> := _} = Exception) ->
     handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Exception);
 
-process_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Results) when is_map(Results) ->
+process_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Results) ->
     {ok, #document{value = #atm_task_execution{
         result_specs = AtmTaskExecutionResultSpecs
     }}} = atm_task_execution:get(AtmTaskExecutionId),
@@ -314,10 +327,7 @@ process_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Results) when
     catch Type:Reason:Stacktrace ->
         Error = ?atm_examine_error(Type, Reason, Stacktrace),
         handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Error)
-    end;
-
-process_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, _MalformedResults) ->
-    handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, ?ERROR_MALFORMED_DATA).
+    end.
 
 
 %% @private
@@ -328,19 +338,25 @@ process_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, _MalformedRes
     errors:error() | json_utils:json_map()
 ) ->
     error.
-handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, #{<<"exception">> := Reason}) ->
+handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, ItemProcessingError) ->
     update_items_failed_and_processed(AtmTaskExecutionId),
 
-    ErrorLog = #{<<"item">> => Item, <<"reason">> => Reason},
+    ErrorLog = case ItemProcessingError of
+        _LambdaException = #{<<"exception">> := Reason} ->
+            #{
+                <<"description">> => <<"Lambda exception occurred during item processing.">>,
+                <<"reason">> => Reason
+            };
+        _SystemError = {error, _} ->
+            #{
+                <<"description">> => <<"Failed to process item.">>,
+                <<"reason">> => errors:to_json(ItemProcessingError)
+            }
+    end,
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-    atm_workflow_execution_logger:task_error(ErrorLog, Logger),
+    atm_workflow_execution_logger:task_error(ErrorLog#{<<"item">> => Item}, Logger),
 
-    error;
-
-handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, {error, _} = Error) ->
-    handle_exception(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, #{
-        <<"exception">> => errors:to_json(Error)
-    }).
+    error.
 
 
 %% @private

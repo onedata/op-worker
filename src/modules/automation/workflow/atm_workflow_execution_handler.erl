@@ -212,6 +212,15 @@ process_item(
 ) ->
     ok | error.
 process_result(
+    AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId,
+    ItemsBatch, OutcomeDecodingError = ?ERROR_BAD_MESSAGE(_)
+) ->
+    process_result(
+        AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId,
+        ItemsBatch, ?ERROR_BAD_DATA(<<"lambdaOutcome">>, OutcomeDecodingError)
+    );
+
+process_result(
     _AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId,
     ItemsBatch, Outcome
 ) ->
