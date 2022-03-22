@@ -19,8 +19,8 @@
 %%%
 %%% NOTE: There is possible race between initialization and update of 
 %%%       statistics. To handle it, initialization is repeated if 
-%%%       any update appears in less than ?RACE_PREVENTING_TIME from 
-%%%       initialization.
+%%%       any update appears in less than ?RACE_PREVENTING_TIME
+%%%       after finishing initialization.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(dir_stats_collections_initializer).
@@ -31,8 +31,7 @@
 
 
 %% API
--export([new_initialization_data/0, are_stats_ready/1, is_race_reported/1, report_race/1,
-    get_stats/2, update_stats_from_descendants/3,
+-export([new_initialization_data/0, are_stats_ready/1, report_race/1, get_stats/2, update_stats_from_descendants/3,
     start_dir_initialization/2, continue_dir_initialization/1, finish_dir_initialization/3,
     abort_collection_initialization/2]).
 
@@ -78,11 +77,6 @@ are_stats_ready(#initialization_data{status = initalized, race_preventing_timer 
     countdown_timer:is_expired(Timer);
 are_stats_ready(_) ->
     false.
-
-
--spec is_race_reported(initialization_data()) -> boolean().
-is_race_reported(#initialization_data{status = Status}) ->
-    Status =:= race_possible.
 
 
 -spec report_race(initialization_data()) -> initialization_data().
@@ -140,30 +134,24 @@ start_dir_initialization(Guid, DataMap) ->
 
 
 -spec continue_dir_initialization(initialization_progress()) ->
-    {finish, collections_map()} | {continue, initialization_progress()} | abort.
+    {finish, collections_map()} | {continue, initialization_progress()}.
 continue_dir_initialization(#initialization_progress{
     file_uuid = FileUuid,
     space_id = SpaceId,
     collections_map = CollectionsMap,
     list_opts = ListOpts
 } = InitializationProgress) ->
-    case maps:size(CollectionsMap) of
-        0 ->
-            % Map can be empty as a result of abort_collection_initialization/2 function calls
-            abort;
+    {ok, Links, ListExtendedInfo} = file_meta:list_children(FileUuid, ListOpts),
+    UpdatedCollectionsMap = init_batch(SpaceId, Links, CollectionsMap),
+    case ListExtendedInfo of
+        #{is_last := true} ->
+            {finish, UpdatedCollectionsMap};
         _ ->
-            {ok, Links, ListExtendedInfo} = file_meta:list_children(FileUuid, ListOpts),
-            UpdatedCollectionsMap = init_batch(SpaceId, Links, CollectionsMap),
-            case ListExtendedInfo of
-                #{is_last := true} ->
-                    {finish, UpdatedCollectionsMap};
-                _ ->
-                    NewListOpts = maps:merge(ListOpts, maps:remove(is_last, ListExtendedInfo)),
-                    {continue, InitializationProgress#initialization_progress{
-                        collections_map = UpdatedCollectionsMap,
-                        list_opts = NewListOpts
-                    }}
-            end
+            NewListOpts = maps:merge(ListOpts, maps:remove(is_last, ListExtendedInfo)),
+            {continue, InitializationProgress#initialization_progress{
+                collections_map = UpdatedCollectionsMap,
+                list_opts = NewListOpts
+            }}
     end.
 
 

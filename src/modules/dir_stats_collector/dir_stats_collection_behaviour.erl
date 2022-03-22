@@ -42,8 +42,9 @@
 %%--------------------------------------------------------------------
 %% @doc
 %% Saves collection to datastore. If collection is saved during collections initialization traverse, traverse number
-%% is the third argument, otherwise third argument is undefined.
-%% NOTE: latest initialization traverse number is persisted to allow collector determine if stored collection is
+%% is the third argument, otherwise third argument is undefined. If third argument is undefined, previously saved
+%% traverse number should not be changed.
+%% NOTE: latest initialization traverse number must be persisted to allow collector determine if stored collection is
 %% outdated as a result of temporary disabling of statistics collecting.
 %% @end
 %%--------------------------------------------------------------------

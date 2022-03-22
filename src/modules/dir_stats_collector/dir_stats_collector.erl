@@ -38,7 +38,7 @@
 %%% (see dir_stats_collector_config). However, it is also used by
 %%% dir_stats_collections_initialization_traverse which initializes
 %%% collections for all directories. In such a case, it uses helper module
-%%% dir_stats_collections_initializer as collecting initialization requires
+%%% dir_stats_collections_initializer as collections initialization requires
 %%% special treatment (races between initialization and updates can occur).
 %%%
 %%% NOTE: multiple collections can be initialized together to list directory
@@ -103,7 +103,7 @@
     last_used :: stopwatch:instance() | undefined,
     parent :: file_id:file_guid() | root_dir | undefined, % resolved and stored upon first access to this field,
 
-    % Field used to store information about collecting status to enable special requests handing during collection
+    % Field used to store information about collecting status to enable special requests handling during collection
     % initialization (when space collecting is changed to enabled for not empty space - see dir_stats_collector_config)
     collecting_status :: dir_stats_collector_config:active_collecting_status(),
     initialization_data :: dir_stats_collections_initializer:initialization_data() | undefined
@@ -131,8 +131,9 @@
 }).
 
 
--type update_type() :: internal | external. % internal update is update sent when collector is
-                                            % flushing stat_updates_acc_for_parent
+-type update_type() :: internal | external. % internal update is update sent when collector is flushing
+                                            % stat_updates_acc_for_parent; external update is update sent
+                                            % by other processes than collectors
 -type state() :: #state{}.
 
 -type cached_dir_stats_key() :: {file_id:file_guid(), dir_stats_collection:type()}.
@@ -291,16 +292,17 @@ stop_collecting(SpaceId) ->
     spawn(fun() ->
         {Ans, BadNodes} = utils:rpc_multicall(consistent_hashing:get_all_nodes(),
             pes, multi_submit_and_await, [?MODULE, ?STOP_COLLECTING(SpaceId)]),
-        FilteredAns = lists:filter(fun(NodeAns) -> NodeAns =/= ok end, lists:flatten(Ans)),
+        ErrorAns = lists:filter(fun(NodeAns) -> NodeAns =/= ok end, lists:flatten(Ans)),
 
-        case {FilteredAns, BadNodes} of
+        case {ErrorAns, BadNodes} of
             {[], []} ->
                 ok;
             _ ->
                 ?error("Dir stats collector ~p error: not ok answers: ~p, bad nodes: ~p",
-                    [?FUNCTION_NAME, FilteredAns, BadNodes])
+                    [?FUNCTION_NAME, ErrorAns, BadNodes])
         end,
 
+        % TODO VFS-8837 - handle node restart during stop
         dir_stats_collector_config:report_collectors_stopped(SpaceId)
     end),
     ok.
@@ -380,12 +382,20 @@ handle_call(#dsc_get_request{
     stat_names = StatNames
 }, State) ->
     case reset_last_used_timer(Guid, CollectionType, State) of
-        {{ok, #cached_dir_stats{current_stats = CurrentStats, collecting_status = Status}}, UpdatedState} ->
-            case Status of
-                enabled -> {dir_stats_collection:with(StatNames, CurrentStats), UpdatedState};
-                collections_initialization -> {?ERROR_FORBIDDEN, State}
-            end;
-        {?ERROR_FORBIDDEN, _UpdatedState} = Error ->
+        {
+            {ok, #cached_dir_stats{current_stats = CurrentStats, collecting_status = enabled}},
+            UpdatedState
+        } ->
+            {dir_stats_collection:with(StatNames, CurrentStats), UpdatedState};
+        {
+            {ok, #cached_dir_stats{current_stats = CurrentStats, collecting_status = collections_initialization}},
+            UpdatedState
+        } ->
+            {?ERROR_FORBIDDEN, State};
+        {
+            ?ERROR_FORBIDDEN,
+            _UpdatedState
+        } = Error ->
             Error
     end;
 
@@ -655,9 +665,7 @@ continue_collections_initialization_for_dir(Guid, #state{initialization_progress
                         State#state{initialization_progress_map = ProgressMap#{Guid => UpdatedDirInitializationProgress}};
                     {finish, CollectionsMap} ->
                         finish_collections_initialization_for_dir(Guid, CollectionsMap,
-                            State#state{initialization_progress_map = maps:remove(Guid, ProgressMap)});
-                    abort ->
-                        State#state{initialization_progress_map = maps:remove(Guid, ProgressMap)}
+                            State#state{initialization_progress_map = maps:remove(Guid, ProgressMap)})
                 end
         end
     catch
@@ -681,11 +689,11 @@ finish_collections_initialization_for_dir(Guid, CollectionsMap, State) ->
 
     UpdatedInitializationDataMap =
         dir_stats_collections_initializer:finish_dir_initialization(Guid, InitializationDataMap, CollectionsMap),
-    maps:fold(fun(CollectionType, InitializationData, StateAcc) ->
+    maps:fold(fun(CollectionType, UpdatedInitializationData, StateAcc) ->
         CachedDirStatsKey = gen_cached_dir_stats_key(Guid, CollectionType),
         CachedDirStats = maps:get(CachedDirStatsKey, State#state.dir_stats_cache),
         UpdatedCachedDirStats = CachedDirStats#cached_dir_stats{
-            initialization_data = InitializationData
+            initialization_data = UpdatedInitializationData
         },
         update_cached_dir_stats(CachedDirStatsKey, UpdatedCachedDirStats, StateAcc)
     end, State, UpdatedInitializationDataMap).
@@ -715,25 +723,25 @@ verify_space_collecting_statuses(#state{
     space_collecting_statuses = SpaceCollectingStatuses,
     dir_stats_cache = DirStatsCache
 } = State) ->
-    IsAnyInitializingMap = maps:fold(fun({Guid, _}, #cached_dir_stats{collecting_status = Status}, Acc) ->
+    IsAnyInitializingInSpaceMap = maps:fold(fun({Guid, _}, #cached_dir_stats{collecting_status = Status}, Acc) ->
         SpaceId = file_id:guid_to_space_id(Guid),
         IsAnyInitializingInSpace = maps:get(SpaceId, Acc, false),
         Acc#{SpaceId => IsAnyInitializingInSpace orelse Status =:= collections_initialization}
     end, #{}, DirStatsCache),
 
-    UpdatedSpaceCollectingStatuses = maps:fold(fun
-        (SpaceId, collections_initialization, Acc) ->
-            IsAnyInitializing = maps:get(SpaceId, IsAnyInitializingMap, false),
+    UpdatedSpaceCollectingStatuses = maps:map(fun
+        (SpaceId, collections_initialization) ->
+            IsAnyInitializing = maps:get(SpaceId, IsAnyInitializingInSpaceMap, false),
             case
                 (not IsAnyInitializing) andalso
                 dir_stats_collector_config:get_extended_collecting_status(SpaceId) =:= enabled
             of
-                true -> Acc#{SpaceId => enabled};
-                false -> Acc
+                true -> enabled;
+                false -> collections_initialization
             end;
-        (_SpaceId, _SpaceCollectingStatus, Acc) ->
-            Acc
-    end, SpaceCollectingStatuses, SpaceCollectingStatuses),
+        (_SpaceId, SpaceCollectingStatus) ->
+            SpaceCollectingStatus
+    end, SpaceCollectingStatuses),
     UpdatedState = State#state{space_collecting_statuses = UpdatedSpaceCollectingStatuses},
 
     AreAllEnabled = lists:all(fun(SpaceCollectingStatus) ->

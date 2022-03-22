@@ -963,8 +963,7 @@ get_file_size(FileCtx) ->
 get_file_size_summary(FileCtx) ->
     case get_local_file_location_doc(FileCtx, true) of
         {#document{value = #file_location{size = undefined, storage_id = StorageId}} = Doc, FileCtx2} ->
-            {FL, _} = get_local_file_location_doc(FileCtx, true),
-            TotalSize = fslogic_blocks:upper(fslogic_location_cache:get_blocks(FL)),
+            TotalSize = fslogic_blocks:upper(fslogic_location_cache:get_blocks(Doc)),
             {[{total, TotalSize}, {StorageId, file_location:count_bytes(Doc)}], FileCtx2};
         {#document{value = #file_location{size = TotalSize, storage_id = StorageId}} = Doc, FileCtx2} ->
             {[{total, TotalSize}, {StorageId, file_location:count_bytes(Doc)}], FileCtx2};
