@@ -57,11 +57,11 @@
 }).
 
 -define(NOW(), global_clock:timestamp_seconds()).
-% Metric storing current value of statistic or traverse number (depending on time series)
+% Metric storing current value of statistic or incarnation (depending on time series)
 -define(CURRENT_METRIC, <<"current">>).
-% Time series storing last traverse num - historical values are not required
+% Time series storing incarnation - historical values are not required
 % but usage of time series allows keeping everything in single structure
--define(INITIALIZATION_TRAVERSE_NUM_TIME_SERIES, <<"traverse_num">>).
+-define(INCARNATION_TIME_SERIES, <<"incarnation">>).
 
 %%%===================================================================
 %%% API
@@ -168,7 +168,7 @@ acquire(Guid) ->
         ?CTX, file_id:guid_to_uuid(Guid), {all, ?CURRENT_METRIC}, #{limit => 1}
     ) of
         {ok, WindowsMap} ->
-            {current_metrics_to_stats_collection(WindowsMap), get_initialization_traverse_num(WindowsMap)};
+            {current_metrics_to_stats_collection(WindowsMap), get_incarnation(WindowsMap)};
         ?ERROR_NOT_FOUND ->
             {gen_empty_stats_collection(Guid), 0}
     end.
@@ -180,12 +180,12 @@ consolidate(_, Value, Diff) ->
     Value + Diff.
 
 
--spec save(file_id:file_guid(), dir_stats_collection:collection(), non_neg_integer() | undefined) -> ok.
-save(Guid, Collection, InitializationTraverseNum) ->
+-spec save(file_id:file_guid(), dir_stats_collection:collection(), non_neg_integer() | current) -> ok.
+save(Guid, Collection, Incarnation) ->
     Uuid = file_id:guid_to_uuid(Guid),
-    UpdateSpec = case InitializationTraverseNum of
-        undefined -> maps:to_list(Collection);
-        _ -> [{?INITIALIZATION_TRAVERSE_NUM_TIME_SERIES, InitializationTraverseNum} | maps:to_list(Collection)]
+    UpdateSpec = case Incarnation of
+        current -> maps:to_list(Collection);
+        _ -> [{?INCARNATION_TIME_SERIES, Incarnation} | maps:to_list(Collection)]
     end,
 
     case datastore_time_series_collection:update(?CTX, Uuid, ?NOW(), UpdateSpec) of
@@ -196,12 +196,12 @@ save(Guid, Collection, InitializationTraverseNum) ->
                 {StatName, metrics_extended_with_current_value()}
             end, stat_names(Guid))),
             FinalConfig = maps:merge(BasicConfig, #{
-                ?INITIALIZATION_TRAVERSE_NUM_TIME_SERIES => #{?CURRENT_METRIC => current_metric()}
+                ?INCARNATION_TIME_SERIES => #{?CURRENT_METRIC => current_metric()}
             }),
             % NOTE: single pes process is dedicated for each guid so race resulting in
             % {error, collection_already_exists} is impossible - match create answer to ok
             ok = datastore_time_series_collection:create(?CTX, Uuid, FinalConfig),
-            save(Guid, Collection, InitializationTraverseNum)
+            save(Guid, Collection, Incarnation)
     end.
 
 
@@ -328,7 +328,7 @@ current_metrics_to_stats_collection(WindowsMap) ->
     maps_utils:map_key_value(fun
         ({StatName, _}, [{_Timestamp, Value}]) -> {StatName, Value};
         ({StatName, _}, []) -> {StatName, 0}
-    end, maps:without([{?INITIALIZATION_TRAVERSE_NUM_TIME_SERIES, ?CURRENT_METRIC}], WindowsMap)).
+    end, maps:without([{?INCARNATION_TIME_SERIES, ?CURRENT_METRIC}], WindowsMap)).
 
 
 %% @private
@@ -346,9 +346,9 @@ gen_empty_time_series_collection(Guid) ->
     end, stat_names(Guid))).
 
 
--spec get_initialization_traverse_num(time_series_collection:windows_map()) -> non_neg_integer().
-get_initialization_traverse_num(WindowsMap) ->
-    case maps:get({?INITIALIZATION_TRAVERSE_NUM_TIME_SERIES, ?CURRENT_METRIC}, WindowsMap) of
+-spec get_incarnation(time_series_collection:windows_map()) -> non_neg_integer().
+get_incarnation(WindowsMap) ->
+    case maps:get({?INCARNATION_TIME_SERIES, ?CURRENT_METRIC}, WindowsMap) of
         [] -> 0;
         [{_Timestamp, Value}] -> Value
     end.

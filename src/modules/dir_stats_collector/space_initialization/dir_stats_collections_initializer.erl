@@ -37,7 +37,7 @@
 
 
 -record(initialization_data, {
-    status = race_possible :: initalized | race_possible,
+    status = preparing :: preparing | prepared,
     race_preventing_timer :: countdown_timer:instance() | undefined, % timer used to handle initialization/update races
     dir_and_direct_children_stats :: dir_stats_collection:collection() | undefined,
     stats_from_descendants :: dir_stats_collection:collection() | undefined
@@ -73,7 +73,7 @@ new_initialization_data() ->
 
 
 -spec are_stats_ready(initialization_data()) -> boolean().
-are_stats_ready(#initialization_data{status = initalized, race_preventing_timer = Timer}) when Timer =/= undefined ->
+are_stats_ready(#initialization_data{status = prepared, race_preventing_timer = Timer}) when Timer =/= undefined ->
     countdown_timer:is_expired(Timer);
 are_stats_ready(_) ->
     false.
@@ -82,7 +82,7 @@ are_stats_ready(_) ->
 -spec report_race(initialization_data()) -> initialization_data().
 report_race(Data) ->
     Data#initialization_data{
-        status = race_possible,
+        status = preparing,
         race_preventing_timer = undefined,
         dir_and_direct_children_stats = undefined
     }.
@@ -120,7 +120,7 @@ update_stats_from_descendants(#initialization_data{
 -spec start_dir_initialization(file_id:file_guid(), initialization_data_map()) -> initialization_progress().
 start_dir_initialization(Guid, DataMap) ->
     ToInit = maps:filter(fun(_CollectionType, #initialization_data{status = Status}) ->
-        Status =:= race_possible
+        Status =:= preparing
     end, DataMap),
 
     {FileUuid, SpaceId} = file_id:unpack_guid(Guid),
@@ -163,7 +163,7 @@ finish_dir_initialization(Guid, DataMap, CollectionsMap) ->
     Timer = countdown_timer:start_millis(?RACE_PREVENTING_TIME),
     maps:merge_with(fun(_CollectionType, Data, Stats) ->
         Data#initialization_data{
-            status = initalized,
+            status = prepared,
             race_preventing_timer = Timer,
             dir_and_direct_children_stats = Stats
         }
@@ -171,7 +171,7 @@ finish_dir_initialization(Guid, DataMap, CollectionsMap) ->
 
 
 -spec abort_collection_initialization(initialization_progress(), dir_stats_collection:type()) ->
-    {ok, initialization_progress()} | initialization_aborted_for_all_collections.
+    {collections_left, initialization_progress()} | initialization_aborted_for_all_collections.
 abort_collection_initialization(#initialization_progress{
     collections_map = CollectionsMap
 } = InitializationProgress, CollectionType) ->
@@ -180,7 +180,7 @@ abort_collection_initialization(#initialization_progress{
         0 ->
             initialization_aborted_for_all_collections;
         _ ->
-            {ok, InitializationProgress#initialization_progress{
+            {collections_left, InitializationProgress#initialization_progress{
                 collections_map = UpdatedCollectionsMap
             }}
     end.

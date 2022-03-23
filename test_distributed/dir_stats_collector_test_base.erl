@@ -413,11 +413,11 @@ teardown(Config) ->
     lists:foreach(fun(W) ->
         ?assertEqual(ok, rpc:call(W, dir_stats_collector_config, clean, [SpaceId])),
         delete_stats(W, SpaceGuid),
-        lists:foreach(fun(TraverseNum) ->
+        lists:foreach(fun(Incarnation) ->
             % Clean traverse data (do not assert as not all tests use initialization traverses)
             rpc:call(W, traverse_task, delete_ended, [
                 <<"dir_stats_collections_initialization_traverse">>,
-                dir_stats_collections_initialization_traverse:gen_task_id(SpaceId, TraverseNum)
+                dir_stats_collections_initialization_traverse:gen_task_id(SpaceId, Incarnation)
             ])
         end, lists:seq(1, 10))
     end, initializer:get_different_domain_workers(Config)),

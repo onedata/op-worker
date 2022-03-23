@@ -72,7 +72,7 @@
 % outside this module while internally status and travers number are stored separately
 -type extended_collecting_status() :: extended_active_collecting_status() | disabled | collectors_stopping.
 -type extended_active_collecting_status() :: enabled |
-    {collections_initialization, InitializationTraverseNum :: non_neg_integer()}.
+    {collections_initialization, Incarnation :: non_neg_integer()}.
 
 -type collecting_status_change_order() :: enable | disable | canceled | undefined.
 -type status_change_timestamp() :: {collecting_status(), time:seconds()}.
@@ -112,9 +112,9 @@ get_extended_collecting_status(SpaceId) ->
     case datastore_model:get(?CTX, SpaceId) of
         {ok, #document{value = #dir_stats_collector_config{
             collecting_status = collections_initialization,
-            collections_initialization_traverse_num = TraverseNum
+            incarnation = Incarnation
         }}} ->
-            {collections_initialization, TraverseNum};
+            {collections_initialization, Incarnation};
         {ok, #document{value = #dir_stats_collector_config{collecting_status = Status}}} ->
             Status;
         ?ERROR_NOT_FOUND ->
@@ -180,17 +180,17 @@ clean(SpaceId) ->
 enable(SpaceId) ->
     NewRecord = #dir_stats_collector_config{
         collecting_status = collections_initialization,
-        collections_initialization_traverse_num = 1
+        incarnation = 1
     },
 
     Diff = fun
         (#dir_stats_collector_config{
             collecting_status = disabled, 
-            collections_initialization_traverse_num = Num
+            incarnation = PrevIncarnation
         } = Config) ->
             {ok, Config#dir_stats_collector_config{
                 collecting_status = collections_initialization,
-                collections_initialization_traverse_num = Num + 1
+                incarnation = PrevIncarnation + 1
             }};
         (#dir_stats_collector_config{
             collecting_status = collectors_stopping, 
@@ -206,10 +206,10 @@ enable(SpaceId) ->
     case update(SpaceId, Diff, NewRecord) of
         {ok, #document{value = #dir_stats_collector_config{
             collecting_status = collections_initialization,
-            collections_initialization_traverse_num = TraverseNum,
+            incarnation = Incarnation,
             next_collecting_status_change_order = ChangeOrder
         }}} when ChangeOrder =/= canceled ->
-            dir_stats_collections_initialization_traverse:run(SpaceId, TraverseNum);
+            dir_stats_collections_initialization_traverse:run(SpaceId, Incarnation);
         {ok, _} ->
             ok;
         {error, no_action_needed} ->
@@ -243,9 +243,9 @@ disable(SpaceId) ->
             dir_stats_collector:stop_collecting(SpaceId);
         {ok, #document{value = #dir_stats_collector_config{
             collecting_status = collections_initialization,
-            collections_initialization_traverse_num = TraverseNum
+            incarnation = Incarnation
         }}} ->
-            dir_stats_collections_initialization_traverse:cancel(SpaceId, TraverseNum);
+            dir_stats_collections_initialization_traverse:cancel(SpaceId, Incarnation);
         {ok, _} ->
             ok;
         {error, no_action_needed} ->
@@ -293,11 +293,11 @@ report_collectors_stopped(SpaceId) ->
         (#dir_stats_collector_config{
             collecting_status = collectors_stopping,
             next_collecting_status_change_order = enable,
-            collections_initialization_traverse_num = Num
+            incarnation = Incarnation
         } = Config) ->
             {ok, Config#dir_stats_collector_config{
                 collecting_status = collections_initialization,
-                collections_initialization_traverse_num = Num + 1,
+                incarnation = Incarnation + 1,
                 next_collecting_status_change_order = undefined
             }};
         (#dir_stats_collector_config{collecting_status = collectors_stopping} = Config) ->
@@ -314,9 +314,9 @@ report_collectors_stopped(SpaceId) ->
             ok;
         {ok, #document{value = #dir_stats_collector_config{
             collecting_status = collections_initialization,
-            collections_initialization_traverse_num = TraverseNum
+            incarnation = Incarnation
         }}} ->
-            dir_stats_collections_initialization_traverse:run(SpaceId, TraverseNum);
+            dir_stats_collections_initialization_traverse:run(SpaceId, Incarnation);
         {error, {wrong_status, WrongStatus}} ->
             ?warning("Reporting space ~p disabling finished when space has status ~p", [SpaceId, WrongStatus]);
         ?ERROR_NOT_FOUND ->
@@ -346,7 +346,7 @@ get_record_struct(1) ->
 get_record_struct(2) ->
     {record, [
         {collecting_status, atom},
-        {collections_initialization_traverse_num, integer},
+        {incarnation, integer},
         {next_collecting_status_change_order, atom},
         {collecting_status_change_timestamps, [{atom, integer}]}
     ]}.

@@ -54,16 +54,16 @@ stop_pool() ->
 
 
 -spec run(file_id:space_id(), non_neg_integer()) -> ok.
-run(SpaceId, TraverseNum) ->
-    Options = #{task_id => gen_task_id(SpaceId, TraverseNum)},
+run(SpaceId, Incarnation) ->
+    Options = #{task_id => gen_task_id(SpaceId, Incarnation)},
     FileCtx = file_ctx:new_by_guid(fslogic_uuid:spaceid_to_space_dir_guid(SpaceId)),
     {ok, _} = tree_traverse:run(?MODULE, FileCtx, Options),
     ok.
 
 
 -spec cancel(file_id:space_id(), non_neg_integer()) -> ok.
-cancel(SpaceId, TraverseNum) ->
-    case tree_traverse:cancel(?MODULE, gen_task_id(SpaceId, TraverseNum)) of
+cancel(SpaceId, Incarnation) ->
+    case tree_traverse:cancel(?MODULE, gen_task_id(SpaceId, Incarnation)) of
         ok -> ok;
         ?ERROR_NOT_FOUND -> ok
     end.
@@ -120,13 +120,13 @@ task_canceled(TaskId, PoolName) ->
 %%%===================================================================
 
 -spec gen_task_id(file_id:space_id(), non_neg_integer()) -> tree_traverse:id().
-gen_task_id(SpaceId, TraverseNum) ->
-    <<(integer_to_binary(TraverseNum))/binary, ?TASK_ID_SEPARATOR, SpaceId/binary>>.
+gen_task_id(SpaceId, Incarnation) ->
+    <<(integer_to_binary(Incarnation))/binary, ?TASK_ID_SEPARATOR, SpaceId/binary>>.
 
 
 -spec get_space_id(tree_traverse:id()) -> file_id:space_id().
 get_space_id(TaskId) ->
-    [_TraverseNumBinary, SpaceId] = binary:split(TaskId, <<?TASK_ID_SEPARATOR>>),
+    [_IncarnationBinary, SpaceId] = binary:split(TaskId, <<?TASK_ID_SEPARATOR>>),
     SpaceId.
 
 

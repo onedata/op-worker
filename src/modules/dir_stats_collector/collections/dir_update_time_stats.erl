@@ -86,9 +86,9 @@ acquire(Guid) ->
     case datastore_model:get(?CTX, file_id:guid_to_uuid(Guid)) of
         {ok, #document{value = #dir_update_time_stats{
             time = Time,
-            collections_initialization_traverse_num = InitializationTraverseNum
+            incarnation = Incarnation
         }}} ->
-            {#{?STAT_NAME => Time}, InitializationTraverseNum};
+            {#{?STAT_NAME => Time}, Incarnation};
         ?ERROR_NOT_FOUND ->
             {#{?STAT_NAME => 0}, 0}
     end.
@@ -101,20 +101,20 @@ consolidate(_, OldValue, NewValue) ->
     max(OldValue, NewValue).
 
 
--spec save(file_id:file_guid(), dir_stats_collection:collection(), non_neg_integer() | undefined) -> ok.
-save(Guid, #{?STAT_NAME := Time}, InitializationTraverseNum) ->
+-spec save(file_id:file_guid(), dir_stats_collection:collection(), non_neg_integer() | current) -> ok.
+save(Guid, #{?STAT_NAME := Time}, Incarnation) ->
     Default = #dir_update_time_stats{
         time = Time,
-        collections_initialization_traverse_num = utils:ensure_defined(InitializationTraverseNum, 0)
+        incarnation = utils:ensure_defined(Incarnation, current, 0)
     },
 
     Diff = fun(#dir_update_time_stats{
-        collections_initialization_traverse_num = CurrentInitializationTraverseNum
+        incarnation = CurrentIncarnation
     } = Record) ->
-        NewInitializationTraverseNum = utils:ensure_defined(InitializationTraverseNum, CurrentInitializationTraverseNum),
+        NewIncarnation = utils:ensure_defined(Incarnation, current, CurrentIncarnation),
         {ok, Record#dir_update_time_stats{
             time = Time,
-            collections_initialization_traverse_num = NewInitializationTraverseNum
+            incarnation = NewIncarnation
         }}
     end,
 
@@ -149,7 +149,7 @@ get_ctx() ->
 get_record_struct(1) ->
     {record, [
         {time, integer},
-        {collections_initialization_traverse_num, integer}
+        {incarnation, integer}
     ]}.
 
 
