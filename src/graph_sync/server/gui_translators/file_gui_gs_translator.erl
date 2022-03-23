@@ -333,7 +333,7 @@ translate_archive_recall_details(#archive_recall_details{
 }) ->
     #{
         <<"recallingProvider">> => gri:serialize(#gri{
-            type = od_provider, id = RecallingProviderId, aspect = instance, scope = private}),
+            type = op_provider, id = RecallingProviderId, aspect = instance, scope = protected}),
         <<"archive">> => gri:serialize(#gri{
             type = op_archive, id = ArchiveId, aspect = instance, scope = private}),
         <<"dataset">> => gri:serialize(#gri{
