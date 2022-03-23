@@ -653,7 +653,7 @@ remove_function(
     Payload = json_utils:encode(#{<<"functionName">> => FunctionName}),
 
     case http_client:delete(Endpoint, AuthHeaders, Payload) of
-        {ok, ?HTTP_200_OK, _, _} ->
+        {ok, ?HTTP_202_ACCEPTED, _, _} ->
             log_function_removed(AtmWorkflowExecutionCtx, FunctionName);
         {ok, ?HTTP_404_NOT_FOUND, _, _} ->
             ok;

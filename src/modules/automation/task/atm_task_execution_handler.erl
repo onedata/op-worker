@@ -296,7 +296,7 @@ zip_items_with_results(ItemsBatch, {error, _} = Error) ->
 
 zip_items_with_results(ItemsBatch, MalformedOutcome) ->
     Error = ?ERROR_BAD_DATA(<<"lambdaOutcome">>, str_utils:format_bin(
-        "Expected {resultsBatch: [$LAMBDA_RESULT]} object with $LAMBDA_RESULT "
+        "Expected '{\"resultsBatch\": [$LAMBDA_RESULT]}' object with $LAMBDA_RESULT "
         "for each item (~B) in 'argsBatch' provided to lambda. Instead got: ~s",
         [length(ItemsBatch), json_utils:encode(MalformedOutcome)]
     )),
