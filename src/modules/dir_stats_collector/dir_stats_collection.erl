@@ -22,7 +22,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 
--export([consolidate/3, with/2, list_types/0]).
+-export([consolidate/3, with_all/2, list_types/0]).
 
 
 -type type() :: module().
@@ -49,10 +49,10 @@ consolidate(CollectionType, OriginalMap, DiffMap) ->
     maps:merge_with(fun CollectionType:consolidate/3, OriginalMap, DiffMap).
 
 
--spec with(stats_selector(), collection()) -> {ok, collection()} | ?ERROR_NOT_FOUND.
-with(all, Collection) ->
+-spec with_all(stats_selector(), collection()) -> {ok, collection()} | ?ERROR_NOT_FOUND.
+with_all(all, Collection) ->
     {ok, Collection};
-with(StatNames, Collection) ->
+with_all(StatNames, Collection) ->
     StatsCount = length(StatNames),
     FilteredMap = maps:with(StatNames, Collection),
     case maps:size(FilteredMap) of

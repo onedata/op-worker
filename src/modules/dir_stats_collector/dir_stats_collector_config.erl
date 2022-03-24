@@ -74,7 +74,12 @@
 -type extended_active_collecting_status() :: enabled |
     {collections_initialization, Incarnation :: non_neg_integer()}.
 
--type collecting_status_change_order() :: enable | disable | canceled | undefined.
+% Information about next status transition that is expected to be executed after ongoing transition is finished.
+% `enable` or `disable` value is used when transition to `enabled` or `disabled` status is expected after ongoing
+% transition is finished. `undefined` value is used when no transition is expected and `canceled` value is used when
+% transition to `enabled` or `disabled` status was expected but another API call canceled transition before it started.
+-type pending_status_transition() :: enable | disable | canceled | undefined.
+
 -type status_change_timestamp() :: {collecting_status(), time:seconds()}.
 
 -type record() :: #dir_stats_collector_config{}.
@@ -83,7 +88,7 @@
 
 -export_type([collecting_status/0, active_collecting_status/0,
     extended_collecting_status/0, extended_active_collecting_status/0,
-    collecting_status_change_order/0, status_change_timestamp/0]).
+    pending_status_transition/0, status_change_timestamp/0]).
 
 
 -define(CTX, #{
@@ -194,11 +199,11 @@ enable(SpaceId) ->
             }};
         (#dir_stats_collector_config{
             collecting_status = collectors_stopping, 
-            next_collecting_status_change_order = ChangeOrder
-        } = Config) when ChangeOrder =:= undefined ; ChangeOrder =:= canceled ->
-            {ok, Config#dir_stats_collector_config{next_collecting_status_change_order = enable}};
-        (#dir_stats_collector_config{next_collecting_status_change_order = disable} = Config) ->
-            {ok, Config#dir_stats_collector_config{next_collecting_status_change_order = canceled}};
+            pending_status_transition = PendingTransition
+        } = Config) when PendingTransition =:= undefined ; PendingTransition =:= canceled ->
+            {ok, Config#dir_stats_collector_config{pending_status_transition = enable}};
+        (#dir_stats_collector_config{pending_status_transition = disable} = Config) ->
+            {ok, Config#dir_stats_collector_config{pending_status_transition = canceled}};
         (#dir_stats_collector_config{}) ->
             {error, no_action_needed}
     end,
@@ -207,8 +212,8 @@ enable(SpaceId) ->
         {ok, #document{value = #dir_stats_collector_config{
             collecting_status = collections_initialization,
             incarnation = Incarnation,
-            next_collecting_status_change_order = ChangeOrder
-        }}} when ChangeOrder =/= canceled ->
+            pending_status_transition = PendingTransition
+        }}} when PendingTransition =/= canceled ->
             dir_stats_collections_initialization_traverse:run(SpaceId, Incarnation);
         {ok, _} ->
             ok;
@@ -226,11 +231,11 @@ disable(SpaceId) ->
             {ok, Config#dir_stats_collector_config{collecting_status = collectors_stopping}};
         (#dir_stats_collector_config{
             collecting_status = collections_initialization,
-            next_collecting_status_change_order = ChangeOrder
-        } = Config) when ChangeOrder =:= undefined ; ChangeOrder =:= canceled ->
-            {ok, Config#dir_stats_collector_config{next_collecting_status_change_order = disable}};
-        (#dir_stats_collector_config{next_collecting_status_change_order = enable} = Config) ->
-            {ok, Config#dir_stats_collector_config{next_collecting_status_change_order = canceled}};
+            pending_status_transition = PendingTransition
+        } = Config) when PendingTransition =:= undefined ; PendingTransition =:= canceled ->
+            {ok, Config#dir_stats_collector_config{pending_status_transition = disable}};
+        (#dir_stats_collector_config{pending_status_transition = enable} = Config) ->
+            {ok, Config#dir_stats_collector_config{pending_status_transition = canceled}};
         (#dir_stats_collector_config{}) ->
             {error, no_action_needed}
     end,
@@ -238,8 +243,8 @@ disable(SpaceId) ->
     case update(SpaceId, Diff) of
         {ok, #document{value = #dir_stats_collector_config{
             collecting_status = collectors_stopping,
-            next_collecting_status_change_order = ChangeOrder
-        }}} when ChangeOrder =/= canceled ->
+            pending_status_transition = PendingTransition
+        }}} when PendingTransition =/= canceled ->
             dir_stats_collector:stop_collecting(SpaceId);
         {ok, #document{value = #dir_stats_collector_config{
             collecting_status = collections_initialization,
@@ -260,16 +265,16 @@ report_collections_initialization_finished(SpaceId) ->
     Diff = fun
         (#dir_stats_collector_config{
             collecting_status = collections_initialization,
-            next_collecting_status_change_order = disable
+            pending_status_transition = disable
         } = Config) ->
             {ok, Config#dir_stats_collector_config{
                 collecting_status = collectors_stopping,
-                next_collecting_status_change_order = undefined
+                pending_status_transition = undefined
             }};
         (#dir_stats_collector_config{collecting_status = collections_initialization} = Config) ->
             {ok, Config#dir_stats_collector_config{
                 collecting_status = enabled,
-                next_collecting_status_change_order = undefined
+                pending_status_transition = undefined
             }};
         (#dir_stats_collector_config{collecting_status = Status}) ->
             {error, {wrong_status, Status}}
@@ -292,18 +297,18 @@ report_collectors_stopped(SpaceId) ->
     Diff = fun
         (#dir_stats_collector_config{
             collecting_status = collectors_stopping,
-            next_collecting_status_change_order = enable,
+            pending_status_transition = enable,
             incarnation = Incarnation
         } = Config) ->
             {ok, Config#dir_stats_collector_config{
                 collecting_status = collections_initialization,
                 incarnation = Incarnation + 1,
-                next_collecting_status_change_order = undefined
+                pending_status_transition = undefined
             }};
         (#dir_stats_collector_config{collecting_status = collectors_stopping} = Config) ->
             {ok, Config#dir_stats_collector_config{
                 collecting_status = disabled,
-                next_collecting_status_change_order = undefined
+                pending_status_transition = undefined
             }};
         (#dir_stats_collector_config{collecting_status = Status}) ->
             {error, {wrong_status, Status}}
@@ -347,7 +352,7 @@ get_record_struct(2) ->
     {record, [
         {collecting_status, atom},
         {incarnation, integer},
-        {next_collecting_status_change_order, atom},
+        {pending_status_transition, atom},
         {collecting_status_change_timestamps, [{atom, integer}]}
     ]}.
 

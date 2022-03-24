@@ -389,7 +389,7 @@ handle_call(#dsc_get_request{
             {ok, #cached_dir_stats{current_stats = CurrentStats, collecting_status = enabled}},
             UpdatedState
         } ->
-            {dir_stats_collection:with(StatNames, CurrentStats), UpdatedState};
+            {dir_stats_collection:with_all(StatNames, CurrentStats), UpdatedState};
         {
             {ok, #cached_dir_stats{current_stats = CurrentStats, collecting_status = collections_initialization}},
             UpdatedState
@@ -471,7 +471,7 @@ handle_cast(?SCHEDULED_FLUSH, State) ->
     flush_all(State);
 
 handle_cast(?SCHEDULED_COLLECTIONS_INITIALIZATION, State) ->
-    verify_space_collecting_statuses(
+    ensure_space_collecting_statuses_up_to_date(
         start_collections_initialization_for_all_cached_dirs(State#state{initialization_timer_ref = undefined}));
 
 handle_cast(?CONTINUE_COLLECTIONS_INITIALIZATION(Guid), State) ->
@@ -507,7 +507,7 @@ update_collection_in_cache(CollectionType, internal = _UpdateType, CollectionUpd
     initialization_data = InitializationData
 } = CachedDirStats) ->
     CachedDirStats#cached_dir_stats{
-        initialization_data = dir_stats_collections_initializer:update_stats_from_descendants(
+        initialization_data = dir_stats_collections_initializer:update_stats_from_children_descendants(
             InitializationData, CollectionType, CollectionUpdate)
     };
 
@@ -521,7 +521,7 @@ update_collection_in_cache(CollectionType, external = UpdateType, CollectionUpda
                 CollectionType, UpdateType, CollectionUpdate, set_collecting_enabled(CachedDirStats, CollectionType));
         false ->
             CachedDirStats#cached_dir_stats{
-                initialization_data = dir_stats_collections_initializer:report_race(InitializationData)
+                initialization_data = dir_stats_collections_initializer:report_update(InitializationData)
             }
     end;
 
@@ -719,8 +719,8 @@ abort_collection_initialization(Guid, CollectionType, #state{initialization_prog
 
 
 %% @private
--spec verify_space_collecting_statuses(state()) -> state().
-verify_space_collecting_statuses(#state{
+-spec ensure_space_collecting_statuses_up_to_date(state()) -> state().
+ensure_space_collecting_statuses_up_to_date(#state{
     space_collecting_statuses = SpaceCollectingStatuses,
     dir_stats_cache = DirStatsCache
 } = State) ->

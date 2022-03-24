@@ -1070,9 +1070,8 @@
     % incarnation is equal to number of last dir_stats_collections_initialization_traverse
     incarnation = 0 :: non_neg_integer(),
 
-    % order of next status check if it cannot be executed immediately
-    % (previous status check operation is still ongoing)
-    next_collecting_status_change_order :: dir_stats_collector_config:collecting_status_change_order(),
+    % information about next status transition that is expected to be executed after ongoing transition is finished
+    pending_status_transition :: dir_stats_collector_config:pending_status_transition(),
 
     % timestamps of collecting status changes that allow verification when historic statistics were trustworthy
     collecting_status_change_timestamps = [] :: [dir_stats_collector_config:status_change_timestamp()]

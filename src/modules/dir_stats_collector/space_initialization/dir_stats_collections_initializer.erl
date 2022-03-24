@@ -31,7 +31,8 @@
 
 
 %% API
--export([new_initialization_data/0, are_stats_ready/1, report_race/1, get_stats/2, update_stats_from_descendants/3,
+-export([new_initialization_data/0, are_stats_ready/1, report_update/1, get_stats/2,
+    update_stats_from_children_descendants/3,
     start_dir_initialization/2, continue_dir_initialization/1, finish_dir_initialization/3,
     abort_collection_initialization/2]).
 
@@ -40,7 +41,7 @@
     status = preparing :: preparing | prepared,
     race_preventing_timer :: countdown_timer:instance() | undefined, % timer used to handle initialization/update races
     dir_and_direct_children_stats :: dir_stats_collection:collection() | undefined,
-    stats_from_descendants :: dir_stats_collection:collection() | undefined
+    stats_from_children_descendants :: dir_stats_collection:collection() | undefined
 }).
 
 
@@ -79,8 +80,9 @@ are_stats_ready(_) ->
     false.
 
 
--spec report_race(initialization_data()) -> initialization_data().
-report_race(Data) ->
+-spec report_update(initialization_data()) -> initialization_data().
+report_update(Data) ->
+    % Update
     Data#initialization_data{
         status = preparing,
         race_preventing_timer = undefined,
@@ -91,29 +93,30 @@ report_race(Data) ->
 -spec get_stats(initialization_data(), dir_stats_collection:type()) -> dir_stats_collection:collection().
 get_stats(#initialization_data{
     dir_and_direct_children_stats = DirWithDirectChildrenStats,
-    stats_from_descendants = undefined
+    stats_from_children_descendants = undefined
 }, _CollectionType) ->
     DirWithDirectChildrenStats;
 get_stats(#initialization_data{
     dir_and_direct_children_stats = DirWithDirectChildrenStats,
-    stats_from_descendants = StatsFromDescendants
+    stats_from_children_descendants = StatsFromDescendants
 }, CollectionType) ->
     dir_stats_collection:consolidate(CollectionType, DirWithDirectChildrenStats, StatsFromDescendants).
 
 
--spec update_stats_from_descendants(initialization_data(), dir_stats_collection:type(),
+-spec update_stats_from_children_descendants(initialization_data(), dir_stats_collection:type(),
     dir_stats_collection:collection()) -> initialization_data().
-update_stats_from_descendants(#initialization_data{
-    stats_from_descendants = undefined
+update_stats_from_children_descendants(#initialization_data{
+    stats_from_children_descendants = undefined
 } = Data, _CollectionType, CollectionUpdate) ->
     Data#initialization_data{
-        stats_from_descendants = CollectionUpdate
+        stats_from_children_descendants = CollectionUpdate
     };
-update_stats_from_descendants(#initialization_data{
-    stats_from_descendants = CurrentStats
+update_stats_from_children_descendants(#initialization_data{
+    stats_from_children_descendants = CurrentStats
 } = Data, CollectionType, CollectionUpdate) ->
     Data#initialization_data{
-        stats_from_descendants = dir_stats_collection:consolidate(CollectionType, CurrentStats, CollectionUpdate)
+        stats_from_children_descendants = dir_stats_collection:consolidate(
+            CollectionType, CurrentStats, CollectionUpdate)
     }.
 
 
