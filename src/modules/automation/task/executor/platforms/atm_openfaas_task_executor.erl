@@ -169,10 +169,10 @@ is_in_readonly_mode(#atm_openfaas_task_executor{operation_spec = #atm_openfaas_o
     Readonly.
 
 
--spec run(atm_job_ctx:record(), atm_task_executor:input(), record()) ->
+-spec run(atm_job_ctx:record(), atm_task_executor:lambda_input(), record()) ->
     ok | no_return().
-run(AtmJobCtx, Data, AtmTaskExecutor) ->
-    schedule_function_execution(AtmJobCtx, Data, AtmTaskExecutor).
+run(AtmJobCtx, LambdaInput, AtmTaskExecutor) ->
+    schedule_function_execution(AtmJobCtx, LambdaInput, AtmTaskExecutor).
 
 
 %%%===================================================================
@@ -615,9 +615,13 @@ log_function_ready(#initiation_ctx{
 
 
 %% @private
--spec schedule_function_execution(atm_job_ctx:record(), atm_task_executor:input(), record()) ->
+-spec schedule_function_execution(
+    atm_job_ctx:record(),
+    atm_task_executor:lambda_input(),
+    record()
+) ->
     ok | no_return().
-schedule_function_execution(AtmJobCtx, Data, #atm_openfaas_task_executor{
+schedule_function_execution(AtmJobCtx, LambdaInput, #atm_openfaas_task_executor{
     function_name = FunctionName
 }) ->
     OpenfaasConfig = get_openfaas_config(),
@@ -629,7 +633,7 @@ schedule_function_execution(AtmJobCtx, Data, #atm_openfaas_task_executor{
         <<"X-Callback-Url">> => atm_job_ctx:get_report_result_url(AtmJobCtx)
     },
 
-    case http_client:post(Endpoint, AllHeaders, json_utils:encode(Data)) of
+    case http_client:post(Endpoint, AllHeaders, json_utils:encode(LambdaInput)) of
         {ok, ?HTTP_202_ACCEPTED, _, _} ->
             ok;
         {ok, ?HTTP_500_INTERNAL_SERVER_ERROR, _RespHeaders, ErrorReason} ->

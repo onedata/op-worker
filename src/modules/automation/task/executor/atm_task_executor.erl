@@ -44,17 +44,17 @@
 %% limitations in specifying individual maps keys in case of binaries.
 %% Instead it is shown below their declaration.
 
--type input() :: json_utils:json_map().
+-type lambda_input() :: json_utils:json_map().
 %% #{
 %%      <<"argsBatch">> := [args()],
 %%      <<"ctx">> := #{heartbeatUrl := binary()}
 %% }
--type outcome() :: errors:error() | json_utils:json_map().
+-type lambda_output() :: errors:error() | json_utils:json_map().
 %% #{
 %%      <<"resultsBatch">> := [results()]
 %% }
 
--export_type([args/0, results/0, input/0, outcome/0]).
+-export_type([args/0, results/0, lambda_input/0, lambda_output/0]).
 
 -export_type([model/0, record/0]).
 
@@ -86,7 +86,7 @@
 
 -callback is_in_readonly_mode(record()) -> boolean().
 
--callback run(atm_job_ctx:record(), input(), record()) ->
+-callback run(atm_job_ctx:record(), lambda_input(), record()) ->
     ok | no_return().
 
 
@@ -145,11 +145,11 @@ is_in_readonly_mode(AtmTaskExecutor) ->
     Model:is_in_readonly_mode(AtmTaskExecutor).
 
 
--spec run(atm_job_ctx:record(), input(), record()) ->
+-spec run(atm_job_ctx:record(), lambda_input(), record()) ->
     ok | no_return().
-run(AtmJobCtx, Arguments, AtmTaskExecutor) ->
+run(AtmJobCtx, LambdaInput, AtmTaskExecutor) ->
     Model = utils:record_type(AtmTaskExecutor),
-    Model:run(AtmJobCtx, Arguments, AtmTaskExecutor).
+    Model:run(AtmJobCtx, LambdaInput, AtmTaskExecutor).
 
 
 %%%===================================================================

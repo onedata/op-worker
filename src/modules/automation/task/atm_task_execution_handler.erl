@@ -52,7 +52,7 @@
     set_run_num/2,
 
     process_items_batch/5,
-    process_outcome/4,
+    process_lambda_output/4,
 
     handle_ended/1
 ]).
@@ -150,31 +150,31 @@ process_items_batch(
     ),
 
     try
-        Input = #{
+        LambdaInput = #{
             <<"ctx">> => #{<<"heartbeatUrl">> => HeartbeatUrl},
             %% TODO VFS-8668 optimize argsBatch creation
             <<"argsBatch">> => atm_parallel_runner:map(fun(Item) ->
                 atm_task_execution_arguments:construct_args(Item, AtmJobCtx, AtmTaskExecutionArgSpecs)
             end, ItemsBatch)
         },
-        atm_task_executor:run(AtmJobCtx, Input, AtmTaskExecutor)
+        atm_task_executor:run(AtmJobCtx, LambdaInput, AtmTaskExecutor)
     catch Type:Reason:Stacktrace ->
         Error = ?atm_examine_error(Type, Reason, Stacktrace),
-        process_outcome(AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemsBatch, Error)
+        process_lambda_output(AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemsBatch, Error)
     end.
 
 
--spec process_outcome(
+-spec process_lambda_output(
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id(),
     [automation:item()],
-    atm_task_executor:outcome()
+    atm_task_executor:lambda_output()
 ) ->
     ok | error | no_return().
-process_outcome(AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemsBatch, Outcome) ->
+process_lambda_output(AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemsBatch, LambdaOutput) ->
     AnyExceptionOccurred = lists:member(error, atm_parallel_runner:map(fun({Item, Result}) ->
         process_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Result)
-    end, zip_items_with_results(ItemsBatch, Outcome))),
+    end, zip_items_with_results(ItemsBatch, LambdaOutput))),
 
     case AnyExceptionOccurred of
         true -> error;
@@ -274,7 +274,7 @@ get_lambda_revision(
 
 
 %% @private
--spec zip_items_with_results([automation:item()], atm_task_executor:outcome()) ->
+-spec zip_items_with_results([automation:item()], atm_task_executor:lambda_output()) ->
     [{automation:item(), atm_task_executor:results()}].
 zip_items_with_results(ItemsBatch, #{<<"resultsBatch">> := ResultsBatch}) when
     is_list(ResultsBatch),
@@ -284,8 +284,8 @@ zip_items_with_results(ItemsBatch, #{<<"resultsBatch">> := ResultsBatch}) when
         (Item, Result) when is_map(Result) ->
             {Item, Result};
         (Item, Result) ->
-            {Item, ?ERROR_BAD_DATA(<<"lambdaResult">>, str_utils:format_bin(
-                "Expected object with keys and values matching those defined in task schema. "
+            {Item, ?ERROR_BAD_DATA(<<"lambdaResultsForItem">>, str_utils:format_bin(
+                "Expected object with result names matching those defined in task schema. "
                 "Instead got: ~s", [json_utils:encode(Result)]
             ))}
     end, ItemsBatch, ResultsBatch);
@@ -294,11 +294,12 @@ zip_items_with_results(ItemsBatch, {error, _} = Error) ->
     % Entire batch processing failed (e.g. timeout or malformed lambda response)
     [{Item, Error} || Item <- ItemsBatch];
 
-zip_items_with_results(ItemsBatch, MalformedOutcome) ->
-    Error = ?ERROR_BAD_DATA(<<"lambdaOutcome">>, str_utils:format_bin(
-        "Expected '{\"resultsBatch\": [$LAMBDA_RESULT]}' object with $LAMBDA_RESULT "
-        "for each item (~B) in 'argsBatch' provided to lambda. Instead got: ~s",
-        [length(ItemsBatch), json_utils:encode(MalformedOutcome)]
+zip_items_with_results(ItemsBatch, MalformedLambdaOutput) ->
+    Error = ?ERROR_BAD_DATA(<<"lambdaOutput">>, str_utils:format_bin(
+        "Expected '{\"resultsBatch\": [$LAMBDA_RESULTS_FOR_ITEM, ...]}' with "
+        "$LAMBDA_RESULTS_FOR_ITEM object for each item (~B) in 'argsBatch' "
+        "provided to lambda. Instead got: ~s",
+        [length(ItemsBatch), json_utils:encode(MalformedLambdaOutput)]
     )),
     [{Item, Error} || Item <- ItemsBatch].
 

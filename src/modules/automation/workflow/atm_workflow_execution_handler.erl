@@ -208,29 +208,29 @@ process_item(
     atm_workflow_execution_env:record(),
     atm_task_execution:id(),
     [automation:item()],
-    atm_task_executor:outcome()
+    atm_task_executor:lambda_output()
 ) ->
     ok | error.
 process_result(
     AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId,
-    ItemsBatch, OutcomeDecodingError = ?ERROR_BAD_MESSAGE(_)
+    ItemsBatch, LambdaOutputDecodingError = ?ERROR_BAD_MESSAGE(_)
 ) ->
     process_result(
         AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId,
-        ItemsBatch, ?ERROR_BAD_DATA(<<"lambdaOutcome">>, OutcomeDecodingError)
+        ItemsBatch, ?ERROR_BAD_DATA(<<"lambdaOutput">>, LambdaOutputDecodingError)
     );
 
 process_result(
     _AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId,
-    ItemsBatch, Outcome
+    ItemsBatch, LambdaOutput
 ) ->
     AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(
         AtmTaskExecutionId, AtmWorkflowExecutionEnv
     ),
     % NOTE: no try..catch needed as exceptions are caught in 'atm_task_execution_handler'
     % and treated as item processing errors
-    atm_task_execution_handler:process_outcome(
-        AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemsBatch, Outcome
+    atm_task_execution_handler:process_lambda_output(
+        AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemsBatch, LambdaOutput
     ).
 
 
