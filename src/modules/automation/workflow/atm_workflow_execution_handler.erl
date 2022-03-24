@@ -208,7 +208,7 @@ process_item(
     atm_workflow_execution_env:record(),
     atm_task_execution:id(),
     [automation:item()],
-    atm_task_executor:lambda_output()
+    errors:error() | atm_task_executor:lambda_output()
 ) ->
     ok | error.
 process_result(

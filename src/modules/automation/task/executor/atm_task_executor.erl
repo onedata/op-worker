@@ -49,7 +49,7 @@
 %%      <<"argsBatch">> := [args()],
 %%      <<"ctx">> := #{heartbeatUrl := binary()}
 %% }
--type lambda_output() :: errors:error() | json_utils:json_map().
+-type lambda_output() :: json_utils:json_map().
 %% #{
 %%      <<"resultsBatch">> := [results()]
 %% }
