@@ -151,9 +151,8 @@ teardown(#atm_lane_execution_run_teardown_ctx{is_retry_scheduled = true}, _AtmTa
     % in case of lane run retry functions registered in OpenFaaS service are not removed
     % as they will be reused by retry
     ok;
-teardown(_AtmLaneExecutionRunTeardownCtx, AtmTaskExecutor) ->
-    % TODO VFS-8273 pass workflow_execution_ctx below and log in audit log function removal result
-    remove_function(AtmTaskExecutor).
+teardown(AtmLaneExecutionRunTeardownCtx, AtmTaskExecutor) ->
+    remove_function(AtmLaneExecutionRunTeardownCtx, AtmTaskExecutor).
 
 
 -spec delete(record()) -> ok | no_return().
@@ -170,10 +169,10 @@ is_in_readonly_mode(#atm_openfaas_task_executor{operation_spec = #atm_openfaas_o
     Readonly.
 
 
--spec run(atm_job_ctx:record(), atm_task_executor:input(), record()) ->
+-spec run(atm_job_ctx:record(), atm_task_executor:lambda_input(), record()) ->
     ok | no_return().
-run(AtmJobCtx, Data, AtmTaskExecutor) ->
-    schedule_function_execution(AtmJobCtx, Data, AtmTaskExecutor).
+run(AtmJobCtx, LambdaInput, AtmTaskExecutor) ->
+    schedule_function_execution(AtmJobCtx, LambdaInput, AtmTaskExecutor).
 
 
 %%%===================================================================
@@ -378,7 +377,7 @@ log_function_registering(#initiation_ctx{
 }) ->
     AtmWorkflowExecutionLogger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
     atm_workflow_execution_logger:workflow_info(
-        "Registering docker '~ts' as function '~ts' in OpenFaaS", [DockerImage, FunctionName],
+        "Registering docker '~ts' as function '~ts' in OpenFaaS.", [DockerImage, FunctionName],
         AtmWorkflowExecutionLogger
     ).
 
@@ -391,7 +390,7 @@ log_function_registered(#initiation_ctx{
 }) ->
     AtmWorkflowExecutionLogger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
     atm_workflow_execution_logger:workflow_info(
-        "Function '~ts' registered in OpenFaaS", [FunctionName], AtmWorkflowExecutionLogger
+        "Function '~ts' registered in OpenFaaS.", [FunctionName], AtmWorkflowExecutionLogger
     ).
 
 
@@ -611,14 +610,18 @@ log_function_ready(#initiation_ctx{
 }) ->
     AtmWorkflowExecutionLogger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
     atm_workflow_execution_logger:workflow_info(
-        "Function '~ts' ready to use in OpenFaaS", [FunctionName], AtmWorkflowExecutionLogger
+        "Function '~ts' ready to use in OpenFaaS.", [FunctionName], AtmWorkflowExecutionLogger
     ).
 
 
 %% @private
--spec schedule_function_execution(atm_job_ctx:record(), atm_task_executor:input(), record()) ->
+-spec schedule_function_execution(
+    atm_job_ctx:record(),
+    atm_task_executor:lambda_input(),
+    record()
+) ->
     ok | no_return().
-schedule_function_execution(AtmJobCtx, Data, #atm_openfaas_task_executor{
+schedule_function_execution(AtmJobCtx, LambdaInput, #atm_openfaas_task_executor{
     function_name = FunctionName
 }) ->
     OpenfaasConfig = get_openfaas_config(),
@@ -630,7 +633,7 @@ schedule_function_execution(AtmJobCtx, Data, #atm_openfaas_task_executor{
         <<"X-Callback-Url">> => atm_job_ctx:get_report_result_url(AtmJobCtx)
     },
 
-    case http_client:post(Endpoint, AllHeaders, json_utils:encode(Data)) of
+    case http_client:post(Endpoint, AllHeaders, json_utils:encode(LambdaInput)) of
         {ok, ?HTTP_202_ACCEPTED, _, _} ->
             ok;
         {ok, ?HTTP_500_INTERNAL_SERVER_ERROR, _RespHeaders, ErrorReason} ->
@@ -641,17 +644,59 @@ schedule_function_execution(AtmJobCtx, Data, #atm_openfaas_task_executor{
 
 
 %% @private
--spec remove_function(record()) -> ok | no_return().
-remove_function(#atm_openfaas_task_executor{function_name = FunctionName}) ->
+-spec remove_function(atm_lane_execution_handler:teardown_ctx(), record()) ->
+    ok | no_return().
+remove_function(
+    #atm_lane_execution_run_teardown_ctx{workflow_execution_ctx = AtmWorkflowExecutionCtx},
+    #atm_openfaas_task_executor{function_name = FunctionName}
+) ->
     OpenfaasConfig = get_openfaas_config(),
 
     Endpoint = get_openfaas_endpoint(OpenfaasConfig, <<"/system/functions">>),
     AuthHeaders = get_basic_auth_header(OpenfaasConfig),
     Payload = json_utils:encode(#{<<"functionName">> => FunctionName}),
 
-    % TODO VFS-8273 log warning in audit log if function removal failed
-    http_client:delete(Endpoint, AuthHeaders, Payload),
+    case http_client:delete(Endpoint, AuthHeaders, Payload) of
+        {ok, ?HTTP_202_ACCEPTED, _, _} ->
+            log_function_removed(AtmWorkflowExecutionCtx, FunctionName);
+        {ok, ?HTTP_404_NOT_FOUND, _, _} ->
+            ok;
+        {ok, ?HTTP_400_BAD_REQUEST, _RespHeaders, ErrorReason} ->
+            Error = ?ERROR_ATM_OPENFAAS_QUERY_FAILED(ErrorReason),
+            log_function_removal_failed(AtmWorkflowExecutionCtx, FunctionName, Error);
+        {ok, ?HTTP_500_INTERNAL_SERVER_ERROR, _RespHeaders, ErrorReason} ->
+            Error = ?ERROR_ATM_OPENFAAS_QUERY_FAILED(ErrorReason),
+            log_function_removal_failed(AtmWorkflowExecutionCtx, FunctionName, Error)
+    end.
+
+
+%% @private
+-spec log_function_removed(atm_workflow_execution_ctx:record(), function_name()) ->
     ok.
+log_function_removed(AtmWorkflowExecutionCtx, FunctionName) ->
+    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+    atm_workflow_execution_logger:workflow_info(
+        "Function '~ts' removed from OpenFaaS.", [FunctionName], Logger
+    ).
+
+
+%% @private
+-spec log_function_removal_failed(
+    atm_workflow_execution_ctx:record(),
+    function_name(),
+    errors:error()
+) ->
+    ok.
+log_function_removal_failed(AtmWorkflowExecutionCtx, FunctionName, Error) ->
+    LogContent = #{
+        <<"description">> => str_utils:format_bin(
+            "Failed to remove function '~ts' from OpenFaaS.",
+            [FunctionName]
+        ),
+        <<"reason">> => errors:to_json(Error)
+    },
+    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+    atm_workflow_execution_logger:workflow_warning(LogContent, Logger).
 
 
 %% @private

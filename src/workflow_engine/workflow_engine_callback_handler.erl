@@ -47,17 +47,17 @@
 %%--------------------------------------------------------------------
 -spec init(cowboy_req:req(), any()) -> {ok, cowboy_req:req(), any()}.
 init(Req0, State) ->
-    {Req2, Result} = try
-        {Req1, Body} = read_body(Req0, <<>>),
-        {Req1, json_utils:decode(Body)}
+    {Req1, Body} = read_body(Req0),
+    Result = try
+        json_utils:decode(Body)
     catch _:_ ->
-        {Req0, ?ERROR_MALFORMED_DATA}
+        ?ERROR_BAD_MESSAGE(Body)
     end,
 
-    Path = cowboy_req:path(Req2),
+    Path = cowboy_req:path(Req1),
     ?MODULE:handle_callback(Path, Result), % Call via ?MODULE for tests
 
-    {ok, cowboy_req:reply(?HTTP_204_NO_CONTENT, Req2), State}.
+    {ok, cowboy_req:reply(?HTTP_204_NO_CONTENT, Req1), State}.
 
 %%%===================================================================
 %%% API
@@ -95,13 +95,22 @@ handle_callback(CallbackId, Message) ->
 %%%===================================================================
 
 %% @private
--spec read_body(cowboy_req:req(), binary()) -> {cowboy_req:req(), binary()}.
-read_body(Req0, Acc) ->
+-spec read_body(cowboy_req:req()) -> {cowboy_req:req(), binary()}.
+read_body(Req) ->
+    try
+        read_body_insecure(Req, <<>>)
+    catch _:_ ->
+        {Req, <<>>}
+    end.
+
+%% @private
+-spec read_body_insecure(cowboy_req:req(), binary()) -> {cowboy_req:req(), binary()}.
+read_body_insecure(Req0, Acc) ->
     case cowboy_req:read_body(Req0) of
         {ok, Data, Req1} ->
             {Req1, <<Acc/binary, Data/binary>>};
         {more, Data, Req1} ->
-            read_body(Req1, <<Acc/binary, Data/binary>>)
+            read_body_insecure(Req1, <<Acc/binary, Data/binary>>)
     end.
 
 -spec encode_callback_id(
