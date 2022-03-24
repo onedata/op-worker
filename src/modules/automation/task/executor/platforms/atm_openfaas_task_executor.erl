@@ -690,7 +690,7 @@ log_function_removed(AtmWorkflowExecutionCtx, FunctionName) ->
 log_function_removal_failed(AtmWorkflowExecutionCtx, FunctionName, Error) ->
     LogContent = #{
         <<"description">> => str_utils:format_bin(
-            "Failed to remove function '~ts' removed from OpenFaaS.",
+            "Failed to remove function '~ts' from OpenFaaS.",
             [FunctionName]
         ),
         <<"reason">> => errors:to_json(Error)

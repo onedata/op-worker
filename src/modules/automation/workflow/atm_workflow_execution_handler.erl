@@ -158,7 +158,7 @@ prepare_lane(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneRunSelector
         )}
     catch Type:Reason:Stacktrace ->
         LogContent = #{
-            <<"description">> => str_utils:format_bin("Failed to prepare next run of ~B lane.", [
+            <<"description">> => str_utils:format_bin("Failed to prepare next run of lane number ~B.", [
                 element(1, AtmLaneRunSelector)
             ]),
             <<"reason">> => errors:to_json(?atm_examine_error(Type, Reason, Stacktrace))
@@ -272,9 +272,10 @@ handle_task_execution_ended(_AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, At
         ok = atm_task_execution_handler:handle_ended(AtmTaskExecutionId)
     catch Type:Reason:Stacktrace ->
         LogContent = #{
-            <<"description">> => str_utils:format_bin("Failed to end '~s' task execution.", [
-                AtmTaskExecutionId
-            ]),
+            <<"description">> => str_utils:format_bin(
+                "Unexpected failure when handling end procedures for task execution '~s'.",
+                [AtmTaskExecutionId]
+            ),
             <<"reason">> => errors:to_json(?atm_examine_error(Type, Reason, Stacktrace))
         },
         Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
@@ -298,9 +299,10 @@ handle_lane_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, Atm
         )
     catch Type:Reason:Stacktrace ->
         LogContent = #{
-            <<"description">> => str_utils:format_bin("Failed to end current run of ~B lane.", [
-                element(1, AtmLaneRunSelector)
-            ]),
+            <<"description">> => str_utils:format_bin(
+                "Unexpected failure when handling end procedures for current run of lane number ~B.",
+                [element(1, AtmLaneRunSelector)]
+            ),
             <<"reason">> => errors:to_json(?atm_examine_error(Type, Reason, Stacktrace))
         },
         Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
@@ -330,7 +332,9 @@ handle_workflow_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv)
         notify_ended(EndedAtmWorkflowExecutionDoc)
     catch Type:Reason:Stacktrace ->
         LogContent = #{
-            <<"description">> => <<"Failed to end workflow execution.">>,
+            <<"description">> => <<
+                "Unexpected failure when handling end procedures for workflow execution."
+            >>,
             <<"reason">> => errors:to_json(?atm_examine_error(Type, Reason, Stacktrace))
         },
         Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
