@@ -557,8 +557,8 @@ data_spec_get(#gri{aspect = files, scope = Sc}) -> #{
         <<"prefix">> => {binary, any},
         <<"start_after">> => {binary, any},
         <<"attribute">> => {any, case Sc of
-            public -> ?PUBLIC_BASIC_ATTRIBUTES ++ [<<"path">>];
-            private -> ?PRIVATE_BASIC_ATTRIBUTES ++ [<<"path">>]
+            public -> [<<"path">> | ?PUBLIC_BASIC_ATTRIBUTES];
+            private -> [<<"path">> | ?PRIVATE_BASIC_ATTRIBUTES]
         end}
     }
 };
@@ -796,15 +796,18 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = childre
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = files}}, _) ->
     SessionId = Auth#auth.session_id,
     
+    BaseOptions = #{limit => maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES)},
     %% @TODO VFS-8980 - return descriptive error when both token and start_after are provided
-    StartPoint = case maps:get(<<"token">>, Data, undefined) of
-        undefined -> {start_after, maps:get(<<"start_after">>, Data, <<>>)};
-        Token -> {token, Token}
+    BaseOptions2 = case maps:get(<<"token">>, Data, undefined) of
+        undefined -> 
+            maps_utils:put_if_defined(BaseOptions, start_after_path, maps:get(<<"start_after">>, Data, undefined));
+        PaginationToken -> 
+            BaseOptions#{pagination_token => PaginationToken}
     end,
-    Prefix = maps:get(<<"prefix">>, Data, <<>>),
+    BaseOptions3 = maps_utils:put_if_defined(BaseOptions2, prefix, maps:get(<<"prefix">>, Data, undefined)),
     RequestedAttributes = utils:ensure_list(maps:get(<<"attribute">>, Data, ?DEFAULT_RECURSIVE_FILE_LIST_ATTRIBUTES)),
-    {ok, Result, InaccessiblePaths, NextPageToken} = ?lfm_check(lfm:get_files_recursively(SessionId, ?FILE_REF(FileGuid), 
-        StartPoint, maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES), Prefix)),
+    {ok, Result, InaccessiblePaths, NextPageToken} = 
+        ?lfm_check(lfm:get_files_recursively(SessionId, ?FILE_REF(FileGuid), BaseOptions3)),
     JsonResult = lists:map(fun({Path, Attrs}) ->
         JsonAttrs = file_attrs_to_json(Attrs),
         maps:with(RequestedAttributes, JsonAttrs#{<<"path">> => Path})

@@ -50,9 +50,6 @@
     list_children/4
 ]).
 
--define(MAX_MAP_CHILDREN_PROCESSES, application:get_env(
-    ?APP_NAME, max_read_dir_plus_procs, 20
-)).
 -define(API_LIST_TOKEN_PREFIX, "api_list_token").
 
 %%%===================================================================
@@ -119,10 +116,10 @@ pack_api_list_token(_) ->
 -spec unpack_api_list_token(api_list_token()) -> map().
 unpack_api_list_token(Token) ->
     <<?API_LIST_TOKEN_PREFIX, _/binary>> = DecodedToken = mochiweb_base64url:decode(Token),
-    [_Header, DecodedDatastoreToken, LastTree | LastNameTokens] =
+    [_Header, DatastoreToken, LastTree | LastNameTokens] =
         binary:split(DecodedToken, <<"#">>, [global]),
     #{
-        token => DecodedDatastoreToken,
+        token => DatastoreToken,
         last_tree => LastTree,
         last_name => str_utils:join_binary(LastNameTokens, <<"#">>)
     }.

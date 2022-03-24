@@ -29,15 +29,13 @@
 
 %% API
 -export([
-    list/3,
-    pack_options/3
+    list/3
 ]).
 
 -type prefix() :: binary().
--type token() :: binary().
+-type pagination_token() :: binary().
 -type limit() :: file_meta:list_size().
 -type entry() :: {file_meta:path(), lfm_attrs:file_attributes()}.
--type empty_binary() :: binary(). % binary with value exactly <<>>
 -type progress_marker() :: more | done.
 
 -record(state, {
@@ -52,11 +50,11 @@
     % number of files that are still required to be listed
     limit :: limit(),
     % tokens of start_after_path trimmed to be relative to currently listed file
-    start_after_path_tokens :: [file_meta:name()], 
+    start_after_path_tokens :: [file_meta:name()],
     % name of last listed file, when in subtree pointed by start_after_path
-    prev_start_after_token :: undefined | file_meta:name(),
+    last_start_after_token :: file_meta:name(),
     % absolute path tokens to currently processed directory
-    current_path_tokens :: [file_meta:name()],
+    current_dir_path_tokens :: [file_meta:name()],
     % uuid of parent of currently listed file
     parent_uuid :: file_meta:uuid()
 }).
@@ -66,99 +64,119 @@
     inaccessible_paths = [] :: [file_meta:path()]
 }).
 
--record(options, {
-    start_after :: file_meta:path() | empty_binary(),
-    prefix :: prefix() | empty_binary(),
-    limit :: limit(),
-    guid = undefined :: file_id:file_guid() | undefined
-}).
+% For detailed options description see module doc.
+-type options() :: #{
+    pagination_token => pagination_token(),
+    prefix => prefix(),
+    limit => limit()
+} | #{
+    start_after_path => file_meta:path(),
+    prefix => prefix(),
+    limit => limit()
+}.
 
 -type state() :: #state{}.
--opaque options() :: #options{}.
 -type result() :: #list_result{}.
 
--export_type([prefix/0, token/0, limit/0, entry/0, options/0]).
+-export_type([prefix/0, pagination_token/0, limit/0, entry/0, options/0]).
 
 -define(LIST_RECURSIVE_BATCH_SIZE, 1000).
+-define(DEFAULT_PREFIX, <<>>).
+-define(DEFAULT_START_AFTER_PATH, <<>>).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
+
 -spec list(user_ctx:ctx(), file_ctx:ctx(), options())-> fslogic_worker:fuse_response().
-list(UserCtx, FileCtx0, #options{start_after = StartAfter, limit = Limit, prefix = Prefix, guid = undefined}) ->
+list(UserCtx, FileCtx, #{token := PaginationToken} = Options) ->
+    {RootGuid, StartAfter} = unpack_pagination_token(PaginationToken), 
+    Limit = maps:get(limit, Options, ?LIST_RECURSIVE_BATCH_SIZE),
+    Prefix = maps:get(prefix, Options, ?DEFAULT_PREFIX),
+    case file_ctx:get_logical_guid_const(FileCtx) of
+        RootGuid -> list(UserCtx, FileCtx, StartAfter, Limit, Prefix);
+        _ -> throw(?EINVAL)
+    end;
+list(UserCtx, FileCtx, Options) ->
+    StartAfter = maps:get(start_after_path, Options, ?DEFAULT_START_AFTER_PATH),
+    Limit = maps:get(limit, Options, ?LIST_RECURSIVE_BATCH_SIZE),
+    Prefix = maps:get(prefix, Options, ?DEFAULT_PREFIX),
+    list(UserCtx, FileCtx, StartAfter, Limit, Prefix).
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%% @private
+-spec list(user_ctx:ctx(), file_ctx:ctx(), file_meta:path(), limit(), prefix())-> 
+    fslogic_worker:fuse_response().
+list(UserCtx, FileCtx0, StartAfter, Limit, Prefix) ->
     {FilePath, FileCtx1} = file_ctx:get_canonical_path(FileCtx0),
     [_Sep, SpaceId | FilePathTokens] = filename:split(FilePath),
-    StartAfterPathTokens = filename:split(StartAfter),
-    {ProgressMarker, #list_result{entries = Files, inaccessible_paths = InaccessiblePaths}} = 
-        list_next_file(UserCtx, FileCtx1, #state{
-            start_after_path = StartAfter,
-            start_after_path_tokens = StartAfterPathTokens,
-            limit = Limit,
-            current_path_tokens = [SpaceId | FilePathTokens],
-            prev_start_after_token = filename:basename(FilePath),
-            parent_uuid = file_ctx:get_logical_uuid_const(FileCtx1),
-            prefix = Prefix,
-            root_file_depth = length(FilePathTokens) + 1
-        }),
-    #fuse_response{status = #status{code = ?OK},
-        fuse_response = #recursive_file_list{
-            entries = Files,
-            inaccessible_paths = InaccessiblePaths,
-            continuation_token = build_continuation_token(
-                Files, InaccessiblePaths, file_ctx:get_logical_guid_const(FileCtx1), ProgressMarker)
-        }
-    };
-list(UserCtx, FileCtx, #options{guid = Guid} = Options) ->
-    case file_ctx:get_logical_guid_const(FileCtx) of
-        Guid ->
-            list(UserCtx, FileCtx, Options#options{guid = undefined});
-        _ ->
-            throw(?EINVAL)
+    UpdatedStartAfter = case Prefix of
+        <<>> -> StartAfter;
+        _ -> max(StartAfter, filename:dirname(Prefix))
+    end,
+    StartAfterPathTokens = filename:split(UpdatedStartAfter),
+    InitialState = #state{
+        start_after_path = UpdatedStartAfter,
+        start_after_path_tokens = StartAfterPathTokens,
+        limit = Limit,
+        current_dir_path_tokens = [SpaceId | FilePathTokens],
+        last_start_after_token = filename:basename(FilePath),
+        parent_uuid = file_ctx:get_logical_uuid_const(FileCtx1),
+        prefix = Prefix,
+        root_file_depth = length(FilePathTokens) + 1
+    },
+    case file_ctx:is_dir(FileCtx1) of
+        {true, FileCtx2} ->
+            {ProgressMarker, #list_result{entries = Files, inaccessible_paths = InaccessiblePaths}} =
+                process_current_dir(UserCtx, FileCtx2, InitialState),
+            #fuse_response{status = #status{code = ?OK},
+                fuse_response = #recursive_file_list{
+                    entries = Files,
+                    inaccessible_paths = InaccessiblePaths,
+                    pagination_token = build_pagination_token(
+                        Files, InaccessiblePaths, file_ctx:get_logical_guid_const(FileCtx1), ProgressMarker)
+                }
+            };
+        {false, FileCtx2} ->
+            case list_children_with_access_check(UserCtx, FileCtx2, #{size => 1}) of
+                {ok, _, _, _} ->
+                    #fuse_response{status = #status{code = ?OK},
+                        fuse_response = #recursive_file_list{
+                            entries = build_result_file_entry_list(
+                                InitialState, get_file_attrs(UserCtx, FileCtx2))
+                        }
+                    };
+                {error, ?EACCES} ->
+                    throw(?EACCES)
+            end
     end.
 
 
--spec pack_options({token, token()} | {start_after, file_meta:path() | undefined}, limit(), 
-    prefix() | undefined) -> options().
-pack_options({token, Token}, Limit, Prefix) ->
-    #{<<"guid">> := Guid, <<"startAfter">> := StartAfter} = unpack_token(Token), 
-    #options{
-        start_after = undefined_to_empty_binary(StartAfter),
-        limit = Limit,
-        prefix = undefined_to_empty_binary(Prefix),
-        guid = Guid
-    };
-pack_options({start_after, StartAfter}, Limit, Prefix) ->
-    #options{
-        start_after = undefined_to_empty_binary(StartAfter),
-        limit = Limit,
-        prefix = undefined_to_empty_binary(Prefix)
-    }.
-
-%%%===================================================================
-%%% Listing internal functions
-%%%===================================================================
-
 %% @private
--spec list_next_file(user_ctx:ctx(), file_ctx:ctx(), state()) ->
+-spec process_current_dir(user_ctx:ctx(), file_ctx:ctx(), state()) ->
     {progress_marker(), result()}.
-list_next_file(_UserCtx, _FileCtx, #state{limit = Limit}) when Limit =< 0 ->
+process_current_dir(_UserCtx, _FileCtx, #state{limit = Limit}) when Limit =< 0 ->
     {more, #list_result{}};
-list_next_file(UserCtx, FileCtx, State) ->
+process_current_dir(UserCtx, FileCtx, State) ->
     Path = build_current_rel_path(State),
-    case {matches_prefix(Path, State), State#state.prefix > Path} of
-        {false, false} ->
-            {done, #list_result{}};
-        _ ->
+    case not matches_prefix(Path, State) andalso Path > State#state.prefix of
+        false ->
             {ListOpts, UpdatedState} = build_initial_listing_opts(State),
-            list_children_next_batch(UserCtx, FileCtx, ListOpts, UpdatedState, #list_result{})
+            process_current_dir_in_batches(UserCtx, FileCtx, ListOpts, UpdatedState, #list_result{});
+        true ->
+            {done, #list_result{}}
     end.
 
 
 %% @private
--spec list_children_next_batch(user_ctx:ctx(), file_ctx:ctx(), file_meta:list_opts(), state(), result()) -> 
+-spec process_current_dir_in_batches(user_ctx:ctx(), file_ctx:ctx(), file_meta:list_opts(), state(), result()) -> 
     {progress_marker(), result()}.
-list_children_next_batch(UserCtx, FileCtx, ListOpts, State, AccListResult) ->
+process_current_dir_in_batches(UserCtx, FileCtx, ListOpts, State, AccListResult) ->
     #state{limit = Limit} = State,
     {Children, UpdatedAccListResult, #{is_last := IsLast} = ExtendedInfo, FileCtx2} = 
         case list_children_with_access_check(UserCtx, FileCtx, ListOpts) of
@@ -168,11 +186,10 @@ list_children_next_batch(UserCtx, FileCtx, ListOpts, State, AccListResult) ->
                 {[], result_append_inaccessible_path(State, AccListResult), #{is_last => true}, FileCtx}
         end,
     {Res, FinalProcessedFileCount} = lists_utils:foldl_while(fun(ChildCtx, {TmpResult, ProcessedFileCount}) ->
-        {Marker, ChildBatch} = map_listed_child(
-            UserCtx, ChildCtx, file_ctx:get_logical_guid_const(FileCtx2), State#state{
-                limit = Limit - result_length(TmpResult)
-            }),
-        ResToReturn = merge_results(TmpResult, ChildBatch),
+        {Marker, ChildResult} = process_current_child(UserCtx, ChildCtx, State#state{
+            limit = Limit - result_length(TmpResult)
+        }),
+        ResToReturn = merge_results(TmpResult, ChildResult),
         FileProcessedIncrement = case Marker of
             done -> 1;
             more -> 0
@@ -194,10 +211,33 @@ list_children_next_batch(UserCtx, FileCtx, ListOpts, State, AccListResult) ->
             {done, Res};
         {false, false} ->
             NextListOpts = maps:with([last_tree, last_name], ExtendedInfo),
-            list_children_next_batch(
+            process_current_dir_in_batches(
                 UserCtx, FileCtx2, NextListOpts, State#state{limit = Limit - result_length(Res)}, Res)
     end.
 
+
+%% @private
+-spec process_current_child(user_ctx:ctx(), file_ctx:ctx(), state()) ->
+    {progress_marker(), [{file_meta:path(), lfm_attrs:file_attributes()}]}.
+process_current_child(UserCtx, ChildCtx, #state{current_dir_path_tokens = CurrentPathTokens} = State) ->
+    case get_file_attrs(UserCtx, ChildCtx) of
+        #file_attr{type = ?DIRECTORY_TYPE, name = Name, guid = G} ->
+            {ProgressMarker, NextChildrenRes} = process_current_dir(UserCtx, ChildCtx,
+                State#state{
+                    current_dir_path_tokens = CurrentPathTokens ++ [Name],
+                    parent_uuid = file_id:guid_to_uuid(G)
+                }
+            ),
+            {ProgressMarker, NextChildrenRes};
+        #file_attr{type = _, name = Name} = FileAttrs ->
+            UpdatedState = State#state{current_dir_path_tokens = CurrentPathTokens ++ [Name]},
+            {done, #list_result{entries = build_result_file_entry_list(UpdatedState, FileAttrs)}}
+    end.
+
+
+%%%===================================================================
+%%% Helper functions 
+%%%===================================================================
 
 %% @private
 -spec list_children_with_access_check(user_ctx:ctx(), file_ctx:ctx(), file_meta:list_opts()) ->
@@ -220,45 +260,6 @@ list_children_with_access_check(UserCtx, FileCtx, ListOpts) ->
 
 
 %% @private
--spec map_listed_child(user_ctx:ctx(), file_ctx:ctx(), file_id:file_guid(), state()) ->
-    {progress_marker(), [{file_meta:path(), lfm_attrs:file_attributes()}]}.
-map_listed_child(UserCtx, ChildCtx, ListedFileGuid, State) ->
-    #state{
-        current_path_tokens = CurrentPathTokens,
-        prev_start_after_token = PrevStartAfterToken
-    } = State,
-    case get_file_attrs(UserCtx, ChildCtx) of
-        #file_attr{type = ?DIRECTORY_TYPE, name = Name, guid = G} ->
-            {ProgressMarker, NextChildrenRes} = list_next_file(UserCtx, ChildCtx,
-                State#state{
-                    current_path_tokens = CurrentPathTokens ++ [Name],
-                    parent_uuid = file_id:guid_to_uuid(G)
-                }
-            ),
-            {ProgressMarker, NextChildrenRes};
-        #file_attr{type = _, name = PrevStartAfterToken} ->
-            % file pointed by start_after should be ignored in result
-            {done, #list_result{}};
-        #file_attr{guid = G} = FileAttrs when G == ListedFileGuid ->
-            % listing regular file should return this file
-            {done, #list_result{entries = build_result_file_entry_list(State, FileAttrs)}};
-        #file_attr{type = _, name = Name} = FileAttrs ->
-            UpdatedState = State#state{current_path_tokens = CurrentPathTokens ++ [Name]},
-            {done, #list_result{entries = build_result_file_entry_list(UpdatedState, FileAttrs)}}
-    end.
-
-
-%%%===================================================================
-%%% Helper functions 
-%%%===================================================================
-
-%% @private
--spec undefined_to_empty_binary(undefined | T) -> empty_binary() | T.
-undefined_to_empty_binary(undefined) -> <<>>;
-undefined_to_empty_binary(Other) -> Other.
-
-
-%% @private
 -spec get_file_attrs(user_ctx:ctx(), file_ctx:ctx()) -> lfm_attrs:file_attributes().
 get_file_attrs(UserCtx, FileCtx) ->
     #fuse_response{
@@ -272,18 +273,16 @@ get_file_attrs(UserCtx, FileCtx) ->
     
 %% @private
 -spec build_initial_listing_opts(state()) -> {file_meta:list_opts(), state()}.
-build_initial_listing_opts(#state{prev_start_after_token = undefined} = State) ->
-    {#{last_name => <<>>}, State#state{start_after_path_tokens = []}};
 build_initial_listing_opts(#state{start_after_path_tokens = []} = State) ->
-    {#{last_name => <<>>}, State#state{prev_start_after_token = undefined}};
+    {#{last_name => <<>>}, State};
 build_initial_listing_opts(#state{
     start_after_path_tokens = [CurrentStartAfterToken | NextStartAfterTokens],
-    prev_start_after_token = PrevStartAfterToken,
-    current_path_tokens = CurrentPathTokens,
+    last_start_after_token = LastStartAfterToken,
+    current_dir_path_tokens = CurrentPathTokens,
     parent_uuid = ParentUuid
 } = State) ->
     InitialOpts = #{size => ?LIST_RECURSIVE_BATCH_SIZE}, 
-    case lists:last(CurrentPathTokens) == PrevStartAfterToken of
+    case lists:last(CurrentPathTokens) == LastStartAfterToken of
         true ->
             Opts = case file_meta:get_child_uuid_and_tree_id(ParentUuid, CurrentStartAfterToken) of
                 {ok, _, TreeId} ->
@@ -302,23 +301,24 @@ build_initial_listing_opts(#state{
                 maps:merge(InitialOpts, Opts),
                 State#state{
                     start_after_path_tokens = NextStartAfterTokens, 
-                    prev_start_after_token = CurrentStartAfterToken
+                    last_start_after_token = CurrentStartAfterToken
                 }
             };
         _ ->
             % we are no longer in a subtree pointed by start_after_path
             {
                 InitialOpts#{last_name => <<>>}, 
-                State#state{start_after_path_tokens = [], prev_start_after_token = undefined}
+                State#state{start_after_path_tokens = []}
             }
     end.
 
 
 %% @private
 -spec build_result_file_entry_list(state(), lfm_attrs:file_attributes()) -> [entry()].
-build_result_file_entry_list(State, FileAttrs) ->
+build_result_file_entry_list(#state{start_after_path = StartAfterPath} = State, FileAttrs) -> % fixme pass name??
     case build_path_in_requested_scope(State) of
         out_of_scope -> [];
+        StartAfterPath -> [];
         Path -> [{Path, FileAttrs}]
     end.
 
@@ -346,16 +346,16 @@ matches_prefix(Path, #state{prefix = Prefix}) ->
 
 %% @private
 -spec build_current_rel_path(state()) -> file_meta:path().
-build_current_rel_path(#state{current_path_tokens = CurrentPathTokens, root_file_depth = Depth}) ->
+build_current_rel_path(#state{current_dir_path_tokens = CurrentPathTokens, root_file_depth = Depth}) ->
     filename:join(lists:sublist(CurrentPathTokens ++ [<<>>], Depth + 1, length(CurrentPathTokens))).
 
 
 %% @private
--spec build_continuation_token([entry()], [file_meta:path()], file_id:file_guid(), boolean()) ->
-    token() | undefined.
-build_continuation_token(_, _, _, _ProgressMarker = done) -> undefined;
-build_continuation_token([], [], _, _) -> undefined;
-build_continuation_token(Files, InaccessiblePaths, Guid, _ProgressMarker = more) ->
+-spec build_pagination_token([entry()], [file_meta:path()], file_id:file_guid(), boolean()) ->
+    pagination_token() | undefined.
+build_pagination_token(_, _, _, _ProgressMarker = done) -> undefined;
+build_pagination_token([], [], _, _) -> undefined;
+build_pagination_token(Files, InaccessiblePaths, RootGuid, _ProgressMarker = more) ->
     StartAfter = case {InaccessiblePaths, Files} of
         {[], _} ->
             {T, _} = lists:last(Files),
@@ -366,22 +366,19 @@ build_continuation_token(Files, InaccessiblePaths, Guid, _ProgressMarker = more)
             {T, _} = lists:last(Files),
             max(T, lists:last(InaccessiblePaths))
     end,
-    pack_token(#{
-        <<"guid">> => Guid,
-        <<"startAfter">> => StartAfter
-    }).
+    pack_pagination_token(RootGuid, StartAfter).
 
 
--spec pack_token(map()) -> token().
-pack_token(TokenDetails) ->
-    base64url:encode(json_utils:encode(TokenDetails)).
+-spec pack_pagination_token(file_id:file_guid(), file_meta:path()) -> pagination_token().
+pack_pagination_token(RootGuid, StartAfter) ->
+    base64url:encode(json_utils:encode(#{<<"guid">> => RootGuid, <<"startAfter">> => StartAfter})).
 
 
--spec unpack_token(token()) -> map() | no_return().
-unpack_token(Token) ->
+-spec unpack_pagination_token(pagination_token()) -> {file_id:file_guid(), file_meta:path()} | no_return().
+unpack_pagination_token(Token) ->
     try json_utils:decode(base64url:decode(Token)) of
-        #{<<"guid">> := _Guid, <<"startAfter">> := _StartAfter} = TokenDetails ->
-            TokenDetails;
+        #{<<"guid">> := RootGuid, <<"startAfter">> := StartAfter} ->
+            {RootGuid, StartAfter};
         _ ->
             throw({error, ?EINVAL})
     catch _:_ ->

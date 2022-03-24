@@ -78,7 +78,7 @@
     get_children_attrs/3,
     get_children_attrs/5,
     get_children_details/3,
-    get_files_recursively/5,
+    get_files_recursively/3,
     get_children_count/2
 ]).
 %% Permissions related operations
@@ -538,13 +538,11 @@ get_children_details(SessId, FileKey, ListOpts) ->
 -spec get_files_recursively(
     session:id(),
     lfm:file_key(),
-    {start_after, file_meta:path()} | {token, recursive_file_listing:token()},
-    recursive_file_listing:limit(),
-    recursive_file_listing:prefix()
+    recursive_file_listing:options()
 ) ->
-    {ok, [recursive_file_listing:entry()], [file_meta:path()], recursive_file_listing:token()} | error_reply().
-get_files_recursively(SessId, FileKey, StartAfterOrToken, Limit, Prefix) -> 
-    ?run(lfm_dirs:get_files_recursively(SessId, FileKey, StartAfterOrToken, Limit, Prefix)).
+    {ok, [recursive_file_listing:entry()], [file_meta:path()], recursive_file_listing:pagination_token()} | error_reply().
+get_files_recursively(SessId, FileKey, Options) -> 
+    ?run(lfm_dirs:get_files_recursively(SessId, FileKey, Options)).
 
 
 -spec get_children_count(session:id(), file_key()) ->

@@ -283,7 +283,7 @@
 -record(recursive_file_list, {
     entries :: [recursive_file_listing:entry()],
     inaccessible_paths :: [file_meta:path()],
-    continuation_token :: undefined | recursive_file_listing:token()
+    pagination_token :: undefined | recursive_file_listing:pagination_token()
 }).
 
 -record(helper_arg, {

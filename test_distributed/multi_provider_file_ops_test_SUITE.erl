@@ -860,14 +860,17 @@ get_recursive_file_list(Config0) ->
     [Worker2 | _] = ?config(workers_not1, Config),
     Domain2 = ?GET_DOMAIN_BIN(Worker2),
     
+    lfm_ct:save_named_context(w1, Worker1, SessionId(Worker1)),
+    lfm_ct:save_named_context(w2, Worker2, SessionId(Worker2)),
+    
     MainDir = generator:gen_name(),
     MainDirPath = <<"/space7/", MainDir/binary, "/">>,
-    {ok, MainDirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessionId(Worker1), MainDirPath)),
+    MainDirGuid = lfm_ct:mkdir_in_ctx(w1, [MainDirPath]),
     file_test_utils:await_sync(Worker2, MainDirGuid),
     
     Dirname = generator:gen_name(),
-    {ok, DirGuidW1} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessionId(Worker1), <<MainDirPath/binary, Dirname/binary>>)),
-    {ok, DirGuidW2} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker2, SessionId(Worker2), <<MainDirPath/binary, Dirname/binary>>)),
+    DirGuidW1 = lfm_ct:mkdir_in_ctx(w1, [<<MainDirPath/binary, Dirname/binary>>]),
+    DirGuidW2 = lfm_ct:mkdir_in_ctx(w2, [<<MainDirPath/binary, Dirname/binary>>]),
     
     file_test_utils:await_sync(Worker2, DirGuidW1),
     file_test_utils:await_sync(Worker1, DirGuidW2),
@@ -882,8 +885,8 @@ get_recursive_file_list(Config0) ->
     Files = lists:sort(lists_utils:generate(fun generator:gen_name/0, 8)),
     {AllExpectedFilesW1, AllExpectedFilesW2} = lists:foldl(fun(DG, Acc) ->
         lists:foldl(fun(Filename, {FilesTmpW1, FilesTmpW2}) ->
-            {ok, GW1} = ?assertMatch({ok, _}, lfm_proxy:create(Worker1, SessionId(Worker1), DG, Filename, ?DEFAULT_FILE_MODE)),
-            {ok, GW2} = ?assertMatch({ok, _}, lfm_proxy:create(Worker2, SessionId(Worker2), DG, Filename, ?DEFAULT_FILE_MODE)),
+            GW1 = lfm_ct:create_in_ctx(w1, [DG, Filename, ?DEFAULT_FILE_MODE]),
+            GW2 = lfm_ct:create_in_ctx(w2, [DG, Filename, ?DEFAULT_FILE_MODE]),
             {
                 FilesTmpW1 ++ [
                     {GW1, filename:join([maps:get({Worker1, DG}, DirnameMapping), Filename])}, 
