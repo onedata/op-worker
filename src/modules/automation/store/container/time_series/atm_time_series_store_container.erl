@@ -162,10 +162,13 @@ browse_content(Record, #atm_store_content_browse_req{
             Slice = maps:fold(fun({TimeSeriesId, MetricId}, Windows, Acc) ->
                 MetricsForCurrentTimeSeries = maps:get(TimeSeriesId, Acc, #{}),
                 Acc#{TimeSeriesId => MetricsForCurrentTimeSeries#{
-                    MetricId => lists:map(fun({Timestamp, {_ValuesCount, ValuesSum}}) ->
+                    MetricId => lists:map(fun({Timestamp, Value}) ->
                         #{
                             <<"timestamp">> => Timestamp,
-                            <<"value">> => ValuesSum
+                            <<"value">> => case Value of
+                                {_ValuesCount, ValuesSum} -> ValuesSum;
+                                _ -> Value
+                            end
                         }
                     end, Windows)
                 }}
@@ -311,10 +314,11 @@ match_target_ts(#{<<"tsName">> := MeasurementTSName}, DispatchRules, TSSchemas) 
                     ),
                     {true, TargetTSName, TSSchema#atm_time_series_schema.metrics};
                 error ->
-                    throw(?ERROR_BAD_DATA(<<"dispatchRules">>, <<
-                        "Dispatch rule must reference a name generator defined in "
-                        "one of store's time series schemas"
-                    >>))
+                    throw(?ERROR_BAD_DATA(<<"dispatchRules">>, str_utils:format_bin(
+                        "Time series name generator '~s' specified in one of the dispatch rules "
+                        "does not reference any defined time series schema",
+                        [DispatchRule#atm_time_series_dispatch_rule.target_ts_name_generator]
+                    )))
             end;
         error ->
             false
