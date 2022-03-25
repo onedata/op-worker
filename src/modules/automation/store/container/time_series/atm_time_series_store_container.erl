@@ -162,10 +162,13 @@ browse_content(Record, #atm_store_content_browse_req{
             Slice = maps:fold(fun({TimeSeriesId, MetricId}, Windows, Acc) ->
                 MetricsForCurrentTimeSeries = maps:get(TimeSeriesId, Acc, #{}),
                 Acc#{TimeSeriesId => MetricsForCurrentTimeSeries#{
-                    MetricId => lists:map(fun({Timestamp, {_ValuesCount, ValuesSum}}) ->
+                    MetricId => lists:map(fun({Timestamp, Value}) ->
                         #{
                             <<"timestamp">> => Timestamp,
-                            <<"value">> => ValuesSum
+                            <<"value">> => case Value of
+                                {_ValuesCount, ValuesSum} -> ValuesSum;
+                                _ -> Value
+                            end
                         }
                     end, Windows)
                 }}

@@ -48,48 +48,52 @@ all() -> [
 
 -define(MAX_FILE_SIZE_TS_NAME, <<"max_file_size">>).
 -define(MAX_FILE_SIZE_METRIC_NAME, ?MAX_FILE_SIZE_TS_NAME).
+-define(MAX_FILE_SIZE_METRIC_CONFIG, #metric_config{
+    label = ?MAX_FILE_SIZE_TS_NAME,
+    resolution = ?MONTH_RESOLUTION,
+    retention = 1,
+    aggregator = max
+}).
 
 -define(MAX_FILE_SIZE_TS_SCHEMA, #atm_time_series_schema{
     name_generator_type = exact,
     name_generator = ?MAX_FILE_SIZE_TS_NAME,
     unit = bytes,
-    metrics = #{
-        ?MAX_FILE_SIZE_TS_NAME => #metric_config{
-            label = ?MAX_FILE_SIZE_TS_NAME,
-            resolution = ?MONTH_RESOLUTION,
-            retention = 1,
-            aggregator = max
-        }
-    }
+    metrics = #{?MAX_FILE_SIZE_TS_NAME => ?MAX_FILE_SIZE_METRIC_CONFIG}
 }).
 
 -define(MINUTE_METRIC_NAME, <<"minute">>).
+-define(MINUTE_METRIC_CONFIG, #metric_config{
+    label = ?MINUTE_METRIC_NAME,
+    resolution = ?MINUTE_RESOLUTION,
+    retention = 120,
+    aggregator = sum
+}).
+
 -define(HOUR_METRIC_NAME, <<"hour">>).
+-define(HOUR_METRIC_CONFIG, #metric_config{
+    label = ?HOUR_METRIC_NAME,
+    resolution = ?HOUR_RESOLUTION,
+    retention = 48,
+    aggregator = sum
+}).
+
 -define(DAY_METRIC_NAME, <<"day">>).
+-define(DAY_METRIC_CONFIG, #metric_config{
+    label = ?DAY_METRIC_NAME,
+    resolution = ?DAY_RESOLUTION,
+    retention = 60,
+    aggregator = sum
+}).
 
 -define(COUNT_TS_SCHEMA, #atm_time_series_schema{
     name_generator_type = add_prefix,
     name_generator = <<"count_">>,
     unit = counts_per_sec,
     metrics = #{
-        ?MINUTE_METRIC_NAME => #metric_config{
-            label = ?MINUTE_METRIC_NAME,
-            resolution = ?MINUTE_RESOLUTION,
-            retention = 120,
-            aggregator = sum
-        },
-        ?HOUR_METRIC_NAME => #metric_config{
-            label = ?HOUR_METRIC_NAME,
-            resolution = ?HOUR_RESOLUTION,
-            retention = 48,
-            aggregator = sum
-        },
-        ?DAY_METRIC_NAME => #metric_config{
-            label = ?DAY_METRIC_NAME,
-            resolution = ?DAY_RESOLUTION,
-            retention = 60,
-            aggregator = sum
-        }
+        ?MINUTE_METRIC_NAME => ?MINUTE_METRIC_CONFIG,
+        ?HOUR_METRIC_NAME => ?HOUR_METRIC_CONFIG,
+        ?DAY_METRIC_NAME => ?DAY_METRIC_CONFIG
     }
 }).
 
@@ -177,28 +181,170 @@ update_content_test(_Config) ->
     ContentUpdateOpts = #atm_time_series_store_content_update_options{
         dispatch_rules = ?DISPATCH_RULES
     },
+    SortedCountTSMetricNames = lists:sort([?MINUTE_METRIC_NAME, ?HOUR_METRIC_NAME, ?DAY_METRIC_NAME]),
 
-    NewItem = [
-        #{<<"tsName">> => <<"mp3">>, <<"timestamp">> => ?NOW() + 10, <<"value">> => 10}
+    % Timestamps of other measurements will be calculated based on Timestamp1 so to
+    % ensure correctness during execution it is set to the 3rd hour from beginning of day window
+    Timestamp1 = infer_window_timestamp(?NOW(), ?DAY_METRIC_CONFIG) + 3 * ?HOUR_RESOLUTION + 1,
+    Measurements1 = [
+        #{<<"tsName">> => <<"mp3">>, <<"timestamp">> => Timestamp1, <<"value">> => 10}
     ],
-    ?assertEqual(ok, ?rpc(atm_store_api:update_content(
-        AtmWorkflowExecutionAuth, NewItem, ContentUpdateOpts, AtmStoreId
-    ))),
-    ExpLayout1 = ExpLayout0#{
-        <<"count_mp3">> => [?MINUTE_METRIC_NAME, ?HOUR_METRIC_NAME, ?DAY_METRIC_NAME]
+    ExpLayout1 = ExpLayout0#{<<"count_mp3">> => SortedCountTSMetricNames},
+    ExpWindows1 = #{
+        ?MAX_FILE_SIZE_TS_NAME => #{?MAX_FILE_SIZE_METRIC_NAME => []},
+        <<"count_mp3">> => #{
+            ?MINUTE_METRIC_NAME => [#{
+                <<"value">> => 10,
+                <<"timestamp">> => infer_window_timestamp(Timestamp1, ?MINUTE_METRIC_CONFIG)
+            }],
+            ?HOUR_METRIC_NAME => [#{
+                <<"value">> => 10,
+                <<"timestamp">> => infer_window_timestamp(Timestamp1, ?HOUR_METRIC_CONFIG)
+            }],
+            ?DAY_METRIC_NAME => [#{
+                <<"value">> => 10,
+                <<"timestamp">> => infer_window_timestamp(Timestamp1, ?DAY_METRIC_CONFIG)
+            }]
+        }
     },
+    ?assertEqual(ok, ?rpc(atm_store_api:update_content(
+        AtmWorkflowExecutionAuth, Measurements1, ContentUpdateOpts, AtmStoreId
+    ))),
+    ?assertEqual(ExpLayout1, get_layout(AtmWorkflowExecutionAuth, AtmStoreId)),
+    ?assertEqual(ExpWindows1, get_windows(AtmWorkflowExecutionAuth, AtmStoreId, ExpLayout1)),
 
-    ?assertMatch(
-        #{
-            ?MAX_FILE_SIZE_TS_NAME := #{?MAX_FILE_SIZE_METRIC_NAME := []},
-            <<"count_mp3">> := #{
-                ?MINUTE_METRIC_NAME := [#{<<"value">> := 10}],
-                ?HOUR_METRIC_NAME := [#{<<"value">> := 10}],
-                ?DAY_METRIC_NAME := [#{<<"value">> := 10}]
-            }
+    Timestamp2 = Timestamp1 - 3601,
+    Timestamp3 = Timestamp1 + 120,
+    Measurements2 = [
+        #{<<"tsName">> => <<"mp3">>, <<"timestamp">> => Timestamp3, <<"value">> => 100},
+        #{<<"tsName">> => <<"size_mp3">>, <<"timestamp">> => Timestamp1, <<"value">> => 1024},
+        #{<<"tsName">> => <<"count_ct_FIXME">>, <<"timestamp">> => Timestamp1, <<"value">> => 4},
+        #{<<"tsName">> => <<"count_cn_TODO">>, <<"timestamp">> => Timestamp1, <<"value">> => 1},
+        #{<<"tsName">> => <<"count_over_unicorns">>, <<"timestamp">> => Timestamp1, <<"value">> => 0},
+        #{<<"tsName">> => <<"mp3">>, <<"timestamp">> => Timestamp2, <<"value">> => 111},
+        % measurement not matched with any dispatch rule should be ignored
+        #{<<"tsName">> => <<"mp4">>, <<"timestamp">> => Timestamp1, <<"value">> => 1000000000},
+        % measurements with the same tsName and timestamps should be handled properly
+        #{<<"tsName">> => <<"count_cn_TODO">>, <<"timestamp">> => Timestamp1, <<"value">> => 2},
+        #{<<"tsName">> => <<"size_mp3">>, <<"timestamp">> => Timestamp1, <<"value">> => 2048}
+    ],
+    ExpLayout2 = ExpLayout1#{
+        <<"count_cn_TODO">> => SortedCountTSMetricNames,
+        <<"count_count_ct_FIXME">> => SortedCountTSMetricNames,
+        <<"count_unicorns">> => SortedCountTSMetricNames
+    },
+    ExpWindows2 = #{
+        ?MAX_FILE_SIZE_TS_NAME => #{
+            ?MAX_FILE_SIZE_METRIC_NAME => [#{
+                <<"value">> => 2048,
+                <<"timestamp">> => infer_window_timestamp(Timestamp1, ?MAX_FILE_SIZE_METRIC_CONFIG)
+            }]
         },
-        get_windows(AtmWorkflowExecutionAuth, AtmStoreId, ExpLayout1)
-    ).
+        <<"count_cn_TODO">> => #{
+            ?MINUTE_METRIC_NAME => [#{
+                <<"value">> => 3,
+                <<"timestamp">> => infer_window_timestamp(Timestamp1, ?MINUTE_METRIC_CONFIG)
+            }],
+            ?HOUR_METRIC_NAME => [#{
+                <<"value">> => 3,
+                <<"timestamp">> => infer_window_timestamp(Timestamp1, ?HOUR_METRIC_CONFIG)
+            }],
+            ?DAY_METRIC_NAME => [#{
+                <<"value">> => 3,
+                <<"timestamp">> => infer_window_timestamp(Timestamp1, ?DAY_METRIC_CONFIG)
+            }]
+        },
+        <<"count_count_ct_FIXME">> => #{
+            ?MINUTE_METRIC_NAME => [#{
+                <<"value">> => 4,
+                <<"timestamp">> => infer_window_timestamp(Timestamp1, ?MINUTE_METRIC_CONFIG)
+            }],
+            ?HOUR_METRIC_NAME => [#{
+                <<"value">> => 4,
+                <<"timestamp">> => infer_window_timestamp(Timestamp1, ?HOUR_METRIC_CONFIG)
+            }],
+            ?DAY_METRIC_NAME => [#{
+                <<"value">> => 4,
+                <<"timestamp">> => infer_window_timestamp(Timestamp1, ?DAY_METRIC_CONFIG)
+            }]
+        },
+        <<"count_mp3">> => #{
+            ?MINUTE_METRIC_NAME => [
+                #{
+                    <<"value">> => 100,
+                    <<"timestamp">> => infer_window_timestamp(Timestamp3, ?MINUTE_METRIC_CONFIG)
+                },
+                #{
+                    <<"value">> => 10,
+                    <<"timestamp">> => infer_window_timestamp(Timestamp1, ?MINUTE_METRIC_CONFIG)
+                },
+                #{
+                    <<"value">> => 111,
+                    <<"timestamp">> => infer_window_timestamp(Timestamp2, ?MINUTE_METRIC_CONFIG)
+                }
+            ],
+            ?HOUR_METRIC_NAME => [
+                #{
+                    <<"value">> => 110,
+                    <<"timestamp">> => infer_window_timestamp(Timestamp1, ?HOUR_METRIC_CONFIG)
+                },
+                #{
+                    <<"value">> => 111,
+                    <<"timestamp">> => infer_window_timestamp(Timestamp2, ?HOUR_METRIC_CONFIG)
+                }
+            ],
+            ?DAY_METRIC_NAME => [#{
+                <<"value">> => 221,
+                <<"timestamp">> => infer_window_timestamp(Timestamp1, ?DAY_METRIC_CONFIG)
+            }]
+        },
+        <<"count_unicorns">> => #{
+            ?MINUTE_METRIC_NAME => [#{
+                <<"value">> => 0,
+                <<"timestamp">> => infer_window_timestamp(Timestamp1, ?MINUTE_METRIC_CONFIG)
+            }],
+            ?HOUR_METRIC_NAME => [#{
+                <<"value">> => 0,
+                <<"timestamp">> => infer_window_timestamp(Timestamp1, ?HOUR_METRIC_CONFIG)
+            }],
+            ?DAY_METRIC_NAME => [#{
+                <<"value">> => 0,
+                <<"timestamp">> => infer_window_timestamp(Timestamp1, ?DAY_METRIC_CONFIG)
+            }]
+        }
+    },
+    ?assertEqual(ok, ?rpc(atm_store_api:update_content(
+        AtmWorkflowExecutionAuth, Measurements2, ContentUpdateOpts, AtmStoreId
+    ))),
+    ?assertEqual(ExpLayout2, get_layout(AtmWorkflowExecutionAuth, AtmStoreId)),
+    ?assertEqual(ExpWindows2, get_windows(AtmWorkflowExecutionAuth, AtmStoreId, ExpLayout2)),
+
+    % Assert operation is atomic (it it fails no metric should be modified)
+    InvalidContentUpdateOpts = #atm_time_series_store_content_update_options{
+        dispatch_rules = [
+            #atm_time_series_dispatch_rule{
+                measurement_ts_name_matcher_type = exact,
+                measurement_ts_name_matcher = <<"mp3">>,
+                target_ts_name_generator = <<"count_">>,
+                prefix_combiner = overwrite
+            },
+            #atm_time_series_dispatch_rule{
+                measurement_ts_name_matcher_type = exact,
+                measurement_ts_name_matcher = <<"size_mp3">>,
+                target_ts_name_generator = <<"shroedinger_">>,
+                prefix_combiner = overwrite
+            }
+        ]
+    },
+    ExpError = ?ERROR_BAD_DATA(<<"dispatchRules">>, <<
+        "Dispatch rule must reference a name generator defined in "
+        "one of store's time series schemas"
+    >>),
+    ?assertThrow(ExpError, ?erpc(atm_store_api:update_content(
+        AtmWorkflowExecutionAuth, Measurements2, InvalidContentUpdateOpts, AtmStoreId
+    ))),
+    ?assertEqual(ExpLayout2, get_layout(AtmWorkflowExecutionAuth, AtmStoreId)),
+    ?assertEqual(ExpWindows2, get_windows(AtmWorkflowExecutionAuth, AtmStoreId, ExpLayout2)).
 
 
 not_supported_iteration_test(_Config) ->
@@ -251,6 +397,13 @@ create_store(AtmWorkflowExecutionAuth, AtmStoreSchema) ->
 
 
 %% @private
+-spec infer_window_timestamp(ts_windows:timestamp_seconds(), metric_config:record()) ->
+    ts_windows:timestamp_seconds().
+infer_window_timestamp(Time, #metric_config{resolution = Resolution}) ->
+    Time - Time rem Resolution.
+
+
+%% @private
 -spec get_layout(atm_workflow_execution_auth:record(), atm_store:id()) ->
     time_series_collection:metrics_by_time_series().
 get_layout(AtmWorkflowExecutionAuth, AtmStoreId) ->
@@ -266,7 +419,7 @@ get_layout(AtmWorkflowExecutionAuth, AtmStoreId) ->
         AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId
     )),
 
-    Layout.
+    maps:map(fun(_, MetricNames) -> lists:sort(MetricNames) end, Layout).
 
 
 %% @private
