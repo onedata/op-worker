@@ -46,6 +46,11 @@ all() -> [
 ].
 
 
+-define(WINDOW(__METRIC_CONFIG, __TIMESTAMP, __VALUE), #{
+    <<"value">> => __VALUE,
+    <<"timestamp">> => infer_window_timestamp(__TIMESTAMP, __METRIC_CONFIG)
+}).
+
 -define(MAX_FILE_SIZE_TS_NAME, <<"max_file_size">>).
 -define(MAX_FILE_SIZE_METRIC_NAME, ?MAX_FILE_SIZE_TS_NAME).
 -define(MAX_FILE_SIZE_METRIC_CONFIG, #metric_config{
@@ -54,6 +59,9 @@ all() -> [
     retention = 1,
     aggregator = max
 }).
+-define(MAX_FILE_SIZE_METRIC_WINDOW(__TIMESTAMP, __VALUE), ?WINDOW(
+    ?MAX_FILE_SIZE_METRIC_CONFIG, __TIMESTAMP, __VALUE
+)).
 
 -define(MAX_FILE_SIZE_TS_SCHEMA, #atm_time_series_schema{
     name_generator_type = exact,
@@ -69,6 +77,9 @@ all() -> [
     retention = 120,
     aggregator = sum
 }).
+-define(MINUTE_METRIC_WINDOW(__TIMESTAMP, __VALUE), ?WINDOW(
+    ?MINUTE_METRIC_CONFIG, __TIMESTAMP, __VALUE
+)).
 
 -define(HOUR_METRIC_NAME, <<"hour">>).
 -define(HOUR_METRIC_CONFIG, #metric_config{
@@ -77,6 +88,9 @@ all() -> [
     retention = 48,
     aggregator = sum
 }).
+-define(HOUR_METRIC_WINDOW(__TIMESTAMP, __VALUE), ?WINDOW(
+    ?HOUR_METRIC_CONFIG, __TIMESTAMP, __VALUE
+)).
 
 -define(DAY_METRIC_NAME, <<"day">>).
 -define(DAY_METRIC_CONFIG, #metric_config{
@@ -85,6 +99,9 @@ all() -> [
     retention = 60,
     aggregator = sum
 }).
+-define(DAY_METRIC_WINDOW(__TIMESTAMP, __VALUE), ?WINDOW(
+    ?DAY_METRIC_CONFIG, __TIMESTAMP, __VALUE
+)).
 
 -define(COUNT_TS_SCHEMA, #atm_time_series_schema{
     name_generator_type = add_prefix,
@@ -183,6 +200,21 @@ manage_content_test(_Config) ->
     },
     SortedCountTSMetricNames = lists:sort([?MINUTE_METRIC_NAME, ?HOUR_METRIC_NAME, ?DAY_METRIC_NAME]),
 
+    % Assert that only valid measurements are accepted
+    lists:foreach(fun(InvalidData) ->
+        ?assertThrow(
+            ?ERROR_ATM_DATA_TYPE_UNVERIFIED(InvalidData, atm_time_series_measurements_type),
+            ?erpc(atm_store_api:update_content(
+                AtmWorkflowExecutionAuth, InvalidData, ContentUpdateOpts, AtmStoreId
+            ))
+        )
+    end, [
+        5,
+        <<"BIN">>,
+        [#{<<"ts">> => <<"name">>}]
+%%        [#{<<"tsName">> => <<"mp3">>, <<"timestamp">> => 0, <<"value">> => 10}, 10]  TODO VFS-8941
+    ]),
+
     % Timestamps of other measurements will be calculated based on Timestamp1 so to
     % ensure correctness during execution it is set to the 3rd hour from beginning of day window
     Timestamp1 = infer_window_timestamp(?NOW(), ?DAY_METRIC_CONFIG) + 3 * ?HOUR_RESOLUTION + 1,
@@ -193,18 +225,9 @@ manage_content_test(_Config) ->
     ExpWindows1 = #{
         ?MAX_FILE_SIZE_TS_NAME => #{?MAX_FILE_SIZE_METRIC_NAME => []},
         <<"count_mp3">> => #{
-            ?MINUTE_METRIC_NAME => [#{
-                <<"value">> => 10,
-                <<"timestamp">> => infer_window_timestamp(Timestamp1, ?MINUTE_METRIC_CONFIG)
-            }],
-            ?HOUR_METRIC_NAME => [#{
-                <<"value">> => 10,
-                <<"timestamp">> => infer_window_timestamp(Timestamp1, ?HOUR_METRIC_CONFIG)
-            }],
-            ?DAY_METRIC_NAME => [#{
-                <<"value">> => 10,
-                <<"timestamp">> => infer_window_timestamp(Timestamp1, ?DAY_METRIC_CONFIG)
-            }]
+            ?MINUTE_METRIC_NAME => [?MINUTE_METRIC_WINDOW(Timestamp1, 10)],
+            ?HOUR_METRIC_NAME => [?HOUR_METRIC_WINDOW(Timestamp1, 10)],
+            ?DAY_METRIC_NAME => [?DAY_METRIC_WINDOW(Timestamp1, 10)]
         }
     },
     ?assertEqual(ok, ?rpc(atm_store_api:update_content(
@@ -217,100 +240,54 @@ manage_content_test(_Config) ->
     Timestamp3 = Timestamp1 + 120,
     Measurements2 = [
         #{<<"tsName">> => <<"mp3">>, <<"timestamp">> => Timestamp3, <<"value">> => 100},
-        #{<<"tsName">> => <<"size_mp3">>, <<"timestamp">> => Timestamp1, <<"value">> => 1024},
-        #{<<"tsName">> => <<"count_ct_FIXME">>, <<"timestamp">> => Timestamp1, <<"value">> => 4},
-        #{<<"tsName">> => <<"count_cn_TODO">>, <<"timestamp">> => Timestamp1, <<"value">> => 1},
+        #{<<"tsName">> => <<"count_ct_supplies">>, <<"timestamp">> => Timestamp1, <<"value">> => 4},
         #{<<"tsName">> => <<"count_over_unicorns">>, <<"timestamp">> => Timestamp1, <<"value">> => 0},
         #{<<"tsName">> => <<"mp3">>, <<"timestamp">> => Timestamp2, <<"value">> => 111},
         % measurement not matched with any dispatch rule should be ignored
         #{<<"tsName">> => <<"mp4">>, <<"timestamp">> => Timestamp1, <<"value">> => 1000000000},
         % measurements with the same tsName and timestamps should be handled properly
-        #{<<"tsName">> => <<"count_cn_TODO">>, <<"timestamp">> => Timestamp1, <<"value">> => 2},
+        #{<<"tsName">> => <<"size_mp3">>, <<"timestamp">> => Timestamp1, <<"value">> => 1024},
+        #{<<"tsName">> => <<"count_cn_resources">>, <<"timestamp">> => Timestamp1, <<"value">> => 1},
+        #{<<"tsName">> => <<"count_cn_resources">>, <<"timestamp">> => Timestamp1, <<"value">> => 2},
         #{<<"tsName">> => <<"size_mp3">>, <<"timestamp">> => Timestamp1, <<"value">> => 2048}
     ],
     ExpLayout2 = ExpLayout1#{
-        <<"count_cn_TODO">> => SortedCountTSMetricNames,
-        <<"count_count_ct_FIXME">> => SortedCountTSMetricNames,
+        <<"count_cn_resources">> => SortedCountTSMetricNames,
+        <<"count_count_ct_supplies">> => SortedCountTSMetricNames,
         <<"count_unicorns">> => SortedCountTSMetricNames
     },
     ExpWindows2 = #{
         ?MAX_FILE_SIZE_TS_NAME => #{
-            ?MAX_FILE_SIZE_METRIC_NAME => [#{
-                <<"value">> => 2048,
-                <<"timestamp">> => infer_window_timestamp(Timestamp1, ?MAX_FILE_SIZE_METRIC_CONFIG)
-            }]
+            ?MAX_FILE_SIZE_METRIC_NAME => [?MAX_FILE_SIZE_METRIC_WINDOW(Timestamp1, 2048)]
         },
-        <<"count_cn_TODO">> => #{
-            ?MINUTE_METRIC_NAME => [#{
-                <<"value">> => 3,
-                <<"timestamp">> => infer_window_timestamp(Timestamp1, ?MINUTE_METRIC_CONFIG)
-            }],
-            ?HOUR_METRIC_NAME => [#{
-                <<"value">> => 3,
-                <<"timestamp">> => infer_window_timestamp(Timestamp1, ?HOUR_METRIC_CONFIG)
-            }],
-            ?DAY_METRIC_NAME => [#{
-                <<"value">> => 3,
-                <<"timestamp">> => infer_window_timestamp(Timestamp1, ?DAY_METRIC_CONFIG)
-            }]
+        <<"count_cn_resources">> => #{
+            ?MINUTE_METRIC_NAME => [?MINUTE_METRIC_WINDOW(Timestamp1, 3)],
+            ?HOUR_METRIC_NAME => [?HOUR_METRIC_WINDOW(Timestamp1, 3)],
+            ?DAY_METRIC_NAME => [?DAY_METRIC_WINDOW(Timestamp1, 3)]
         },
-        <<"count_count_ct_FIXME">> => #{
-            ?MINUTE_METRIC_NAME => [#{
-                <<"value">> => 4,
-                <<"timestamp">> => infer_window_timestamp(Timestamp1, ?MINUTE_METRIC_CONFIG)
-            }],
-            ?HOUR_METRIC_NAME => [#{
-                <<"value">> => 4,
-                <<"timestamp">> => infer_window_timestamp(Timestamp1, ?HOUR_METRIC_CONFIG)
-            }],
-            ?DAY_METRIC_NAME => [#{
-                <<"value">> => 4,
-                <<"timestamp">> => infer_window_timestamp(Timestamp1, ?DAY_METRIC_CONFIG)
-            }]
+        <<"count_count_ct_supplies">> => #{
+            ?MINUTE_METRIC_NAME => [?MINUTE_METRIC_WINDOW(Timestamp1, 4)],
+            ?HOUR_METRIC_NAME => [?HOUR_METRIC_WINDOW(Timestamp1, 4)],
+            ?DAY_METRIC_NAME => [?DAY_METRIC_WINDOW(Timestamp1, 4)]
         },
         <<"count_mp3">> => #{
             ?MINUTE_METRIC_NAME => [
-                #{
-                    <<"value">> => 100,
-                    <<"timestamp">> => infer_window_timestamp(Timestamp3, ?MINUTE_METRIC_CONFIG)
-                },
-                #{
-                    <<"value">> => 10,
-                    <<"timestamp">> => infer_window_timestamp(Timestamp1, ?MINUTE_METRIC_CONFIG)
-                },
-                #{
-                    <<"value">> => 111,
-                    <<"timestamp">> => infer_window_timestamp(Timestamp2, ?MINUTE_METRIC_CONFIG)
-                }
+                ?MINUTE_METRIC_WINDOW(Timestamp3, 100),
+                ?MINUTE_METRIC_WINDOW(Timestamp1, 10),
+                ?MINUTE_METRIC_WINDOW(Timestamp2, 111)
             ],
             ?HOUR_METRIC_NAME => [
-                #{
-                    <<"value">> => 110,
-                    <<"timestamp">> => infer_window_timestamp(Timestamp1, ?HOUR_METRIC_CONFIG)
-                },
-                #{
-                    <<"value">> => 111,
-                    <<"timestamp">> => infer_window_timestamp(Timestamp2, ?HOUR_METRIC_CONFIG)
-                }
+                ?HOUR_METRIC_WINDOW(Timestamp1, 110),
+                ?HOUR_METRIC_WINDOW(Timestamp2, 111)
             ],
-            ?DAY_METRIC_NAME => [#{
-                <<"value">> => 221,
-                <<"timestamp">> => infer_window_timestamp(Timestamp1, ?DAY_METRIC_CONFIG)
-            }]
+            ?DAY_METRIC_NAME => [
+                ?DAY_METRIC_WINDOW(Timestamp1, 221)
+            ]
         },
         <<"count_unicorns">> => #{
-            ?MINUTE_METRIC_NAME => [#{
-                <<"value">> => 0,
-                <<"timestamp">> => infer_window_timestamp(Timestamp1, ?MINUTE_METRIC_CONFIG)
-            }],
-            ?HOUR_METRIC_NAME => [#{
-                <<"value">> => 0,
-                <<"timestamp">> => infer_window_timestamp(Timestamp1, ?HOUR_METRIC_CONFIG)
-            }],
-            ?DAY_METRIC_NAME => [#{
-                <<"value">> => 0,
-                <<"timestamp">> => infer_window_timestamp(Timestamp1, ?DAY_METRIC_CONFIG)
-            }]
+            ?MINUTE_METRIC_NAME => [?MINUTE_METRIC_WINDOW(Timestamp1, 0)],
+            ?HOUR_METRIC_NAME => [?HOUR_METRIC_WINDOW(Timestamp1, 0)],
+            ?DAY_METRIC_NAME => [?DAY_METRIC_WINDOW(Timestamp1, 0)]
         }
     },
     ?assertEqual(ok, ?rpc(atm_store_api:update_content(
@@ -338,8 +315,8 @@ manage_content_test(_Config) ->
         ]
     },
     ExpError = ?ERROR_BAD_DATA(<<"dispatchRules">>, <<
-        "Dispatch rule must reference a name generator defined in "
-        "one of store's time series schemas"
+        "Time series name generator 'shroedinger_' specified in one of the dispatch rules "
+        "does not reference any defined time series schema"
     >>),
     ?assertThrow(ExpError, ?erpc(atm_store_api:update_content(
         AtmWorkflowExecutionAuth, Measurements2, InvalidContentUpdateOpts, AtmStoreId
@@ -350,48 +327,26 @@ manage_content_test(_Config) ->
     % Test slices
     ExpSliceWindows1 = #{
         ?MAX_FILE_SIZE_TS_NAME => #{
-            ?MAX_FILE_SIZE_METRIC_NAME => [#{
-                <<"value">> => 2048,
-                <<"timestamp">> => infer_window_timestamp(Timestamp1, ?MAX_FILE_SIZE_METRIC_CONFIG)
-            }]
+            ?MAX_FILE_SIZE_METRIC_NAME => [?MAX_FILE_SIZE_METRIC_WINDOW(Timestamp1, 2048)]
         },
-        <<"count_cn_TODO">> => #{
-            ?MINUTE_METRIC_NAME => [#{
-                <<"value">> => 3,
-                <<"timestamp">> => infer_window_timestamp(Timestamp1, ?MINUTE_METRIC_CONFIG)
-            }],
-            ?DAY_METRIC_NAME => [#{
-                <<"value">> => 3,
-                <<"timestamp">> => infer_window_timestamp(Timestamp1, ?DAY_METRIC_CONFIG)
-            }]
+        <<"count_cn_resources">> => #{
+            ?MINUTE_METRIC_NAME => [?MINUTE_METRIC_WINDOW(Timestamp1, 3)],
+            ?DAY_METRIC_NAME => [?DAY_METRIC_WINDOW(Timestamp1, 3)]
         }
     },
     ?assertEqual(
         ExpSliceWindows1,
         get_windows(AtmWorkflowExecutionAuth, AtmStoreId, #{
             ?MAX_FILE_SIZE_TS_NAME => [?MAX_FILE_SIZE_METRIC_NAME],
-            <<"count_cn_TODO">> => [?MINUTE_METRIC_NAME, ?DAY_METRIC_NAME]
+            <<"count_cn_resources">> => [?MINUTE_METRIC_NAME, ?DAY_METRIC_NAME]
         })
     ),
 
     ExpSliceWindows2 = #{
         <<"count_mp3">> => #{
-            ?MINUTE_METRIC_NAME => [
-                #{
-                    <<"value">> => 10,
-                    <<"timestamp">> => infer_window_timestamp(Timestamp1, ?MINUTE_METRIC_CONFIG)
-                }
-            ],
-            ?HOUR_METRIC_NAME => [
-                #{
-                    <<"value">> => 110,
-                    <<"timestamp">> => infer_window_timestamp(Timestamp1, ?HOUR_METRIC_CONFIG)
-                }
-            ],
-            ?DAY_METRIC_NAME => [#{
-                <<"value">> => 221,
-                <<"timestamp">> => infer_window_timestamp(Timestamp1, ?DAY_METRIC_CONFIG)
-            }]
+            ?MINUTE_METRIC_NAME => [?MINUTE_METRIC_WINDOW(Timestamp1, 10)],
+            ?HOUR_METRIC_NAME => [?HOUR_METRIC_WINDOW(Timestamp1, 110)],
+            ?DAY_METRIC_NAME => [?DAY_METRIC_WINDOW(Timestamp1, 221)]
         }
     },
     ?assertEqual(
