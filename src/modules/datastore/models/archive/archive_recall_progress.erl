@@ -31,7 +31,7 @@
 -export([get/1]).
 -export([report_bytes_copied/2, report_file_finished/1, report_file_failed/3]).
 %% Test API
--export([get_stats/1]).
+-export([get_stats/3]).
 %% Datastore callbacks
 -export([get_ctx/0]).
 
@@ -55,10 +55,11 @@
     model => ?MODULE
 }).
 
+-define(TSC_ID(Id), <<Id/binary, "tsc">>).
+
 -define(BYTES_TS, <<"bytesCopied">>).
 -define(FILES_TS, <<"filesCopied">>).
 -define(FAILED_FILES_TS, <<"filesFailed">>).
--define(TSC_ID(Id), <<Id/binary, "tsc">>).
 
 -define(ERROR_LOG_ID(Id), <<Id/binary, "el">>).
 
@@ -66,6 +67,12 @@
 -define(MINUTE_METRIC, <<"minute">>).
 -define(HOUR_METRIC, <<"hour">>).
 -define(DAY_METRIC, <<"day">>).
+
+-define(LAYOUT_WITH_TOTAL_METRICS, #{
+    ?BYTES_TS => [?TOTAL_METRIC],
+    ?FILES_TS => [?TOTAL_METRIC],
+    ?FAILED_FILES_TS => [?TOTAL_METRIC]
+}).
 
 -define(NOW(), global_clock:timestamp_seconds()).
 
@@ -110,7 +117,9 @@ get(Id) ->
 
 -spec report_file_finished(id()) -> ok | {error, term()}.
 report_file_finished(Id) ->
-    datastore_time_series_collection:update(?CTX, ?TSC_ID(Id), ?NOW(), [{?FILES_TS, 1}]).
+    datastore_time_series_collection:consume_measurements(?CTX, ?TSC_ID(Id), #{
+        ?FILES_TS => #{all => [{?NOW(), 1}]}}
+    ).
 
 
 -spec report_file_failed(id(), file_id:file_guid(), {error, term()}) -> ok | {error, term()}.
@@ -120,20 +129,25 @@ report_file_failed(Id, FileGuid, Error) ->
         <<"fileId">> => ObjectId,
         <<"reason">> => errors:to_json(Error)
     }),
-    datastore_time_series_collection:update(?CTX, ?TSC_ID(Id), ?NOW(), [{?FAILED_FILES_TS, 1}]).
+    datastore_time_series_collection:consume_measurements(?CTX, ?TSC_ID(Id), #{
+        ?FAILED_FILES_TS => #{all => [{?NOW(), 1}]}}
+    ).
 
 
 -spec report_bytes_copied(id(), non_neg_integer()) -> ok | {error, term()}.
 report_bytes_copied(Id, Bytes) ->
-    datastore_time_series_collection:update(?CTX, ?TSC_ID(Id), ?NOW(), [{?BYTES_TS, Bytes}]).
+    datastore_time_series_collection:consume_measurements(?CTX, ?TSC_ID(Id), #{
+        ?BYTES_TS => #{all => [{?NOW(), Bytes}]}}
+    ).
 
 %%%===================================================================
 %%% Test API 
 %%%===================================================================
 
--spec get_stats(id()) -> time_series_collection:windows_map() | {error, term()}.
-get_stats(Id) ->
-    datastore_time_series_collection:list_windows(?CTX, ?TSC_ID(Id), #{}).
+-spec get_stats(id(), time_series_collection:layout(), ts_windows:list_options()) ->
+    {ok, time_series_collection:slice()} | {error, term()}.
+get_stats(Id, SliceLayout, ListWindowsOptions) ->
+    datastore_time_series_collection:get_slice(?CTX, ?TSC_ID(Id), SliceLayout, ListWindowsOptions).
 
 
 %%%===================================================================
@@ -158,13 +172,13 @@ create_tsc(Id) ->
     },
     case datastore_time_series_collection:create(?CTX, ?TSC_ID(Id), Config) of
         ok -> ok;
-        {error, collection_already_exists} -> ok;
+        {error, already_exists} -> ok;
         Error -> Error
     end.
 
 
 %% @private
--spec supported_metrics() -> #{ts_metric:id() => ts_metric:config()}.
+-spec supported_metrics() -> #{time_series_collection:metric_name() => metric_config:record()}.
 supported_metrics() -> #{
     ?MINUTE_METRIC => #metric_config{
         resolution = ?MINUTE_RESOLUTION,
@@ -185,24 +199,22 @@ supported_metrics() -> #{
 
 
 %% @private
--spec get_counters_current_value(id()) -> {ok, map()}.
+-spec get_counters_current_value(id()) ->
+    {ok, #{time_series_collection:time_series_name() => non_neg_integer()}} | {error, term()}.
 get_counters_current_value(Id) ->
-    RequestRange = lists:map(fun(Stat) -> {Stat, ?TOTAL_METRIC} end,
-        [?BYTES_TS, ?FILES_TS, ?FAILED_FILES_TS]),
-
-    case datastore_time_series_collection:list_windows(?CTX, ?TSC_ID(Id), RequestRange, #{limit => 1}) of
-        {ok, WindowsMap} ->
-            WindowToValue = fun
-                ({{Stat, ?TOTAL_METRIC}, [{_Timestamp, {_Measurements, Value}}]}) ->
-                    {Stat, Value};
-                ({{Stat, ?TOTAL_METRIC}, []}) ->
-                    {Stat, 0}
-            end,
-            {ok, maps:from_list(lists:map(WindowToValue, maps:to_list(WindowsMap)))};
-        Error ->
+    case datastore_time_series_collection:get_slice(?CTX, ?TSC_ID(Id), ?LAYOUT_WITH_TOTAL_METRICS, #{windowLimit => 1}) of
+        {ok, Slice} ->
+            {ok, maps:map(fun(_TimeSeriesName, #{?TOTAL_METRIC := Windows}) ->
+                case Windows of
+                    [{_Timestamp, {_Count, Value}}] ->
+                        Value;
+                    [] ->
+                        0
+                end
+            end, Slice)};
+        {error, _} = Error ->
             Error
     end.
-
 
 %%%===================================================================
 %%% Datastore callbacks

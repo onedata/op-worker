@@ -162,7 +162,7 @@ create_test(_Config) ->
     ?assertEqual(ExpLayout, get_layout(AtmWorkflowExecutionAuth, AtmStoreId)),
     ?assertEqual(
         #{?MAX_FILE_SIZE_TS_NAME => #{?MAX_FILE_SIZE_METRIC_NAME => []}},
-        get_windows(AtmWorkflowExecutionAuth, AtmStoreId, ExpLayout)
+        get_slice(AtmWorkflowExecutionAuth, AtmStoreId, ExpLayout)
     ).
 
 
@@ -197,7 +197,7 @@ update_content_test(_Config) ->
                 ?DAY_METRIC_NAME := [#{<<"value">> := 10}]
             }
         },
-        get_windows(AtmWorkflowExecutionAuth, AtmStoreId, ExpLayout1)
+        get_slice(AtmWorkflowExecutionAuth, AtmStoreId, ExpLayout1)
     ).
 
 
@@ -252,7 +252,7 @@ create_store(AtmWorkflowExecutionAuth, AtmStoreSchema) ->
 
 %% @private
 -spec get_layout(atm_workflow_execution_auth:record(), atm_store:id()) ->
-    time_series_collection:metrics_by_time_series().
+    time_series_collection:layout().
 get_layout(AtmWorkflowExecutionAuth, AtmStoreId) ->
     BrowseOpts = #atm_time_series_store_content_browse_options{
         request = #atm_time_series_store_content_get_layout_req{}
@@ -270,18 +270,18 @@ get_layout(AtmWorkflowExecutionAuth, AtmStoreId) ->
 
 
 %% @private
--spec get_windows(
+-spec get_slice(
     atm_workflow_execution_auth:record(),
     atm_store:id(),
-    time_series_collection:metrics_by_time_series()
+    time_series_collection:layout()
 ) ->
-    #{time_series_collection:time_series_id() => #{ts_metric:id() => [ts_windows:value()]}}.
-get_windows(AtmWorkflowExecutionAuth, AtmStoreId, Layout) ->
+    time_series_collection:structure(json_utils:json_map()).
+get_slice(AtmWorkflowExecutionAuth, AtmStoreId, Layout) ->
     BrowseOpts = #atm_time_series_store_content_browse_options{
         request = #atm_time_series_store_content_get_slice_req{
             layout = Layout,
             start_timestamp = undefined,
-            windows_limit = 10000000000
+            window_limit = 10000000000
         }
     },
 

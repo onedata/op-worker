@@ -212,7 +212,7 @@ create_initial_file_tree(Config, NodesSelector) ->
     SessId = lfm_test_utils:get_user1_session_id(Config, Worker),
     SpaceGuid = lfm_test_utils:get_user1_first_space_guid(Config),
 
-    check_space_dir_values_map_and_time_series_collection(Config, NodesSelector, SpaceGuid, #{
+    check_space_dir_stats_and_time_series_collection(Config, NodesSelector, SpaceGuid, #{
         ?REG_FILE_AND_LINK_COUNT => 0, 
         ?DIR_COUNT => 0,
         ?TOTAL_SIZE => 0,
@@ -298,7 +298,7 @@ check_initial_dir_stats(Config, NodesSelector) ->
         ?TOTAL_SIZE => 1334,
         ?TOTAL_SIZE_ON_STORAGE(Config, NodesSelector) => ?INITIAL_DIR_TOTAL_SIZE_ON_STORAGE(NodesSelector, 1334)
     }),
-    check_space_dir_values_map_and_time_series_collection(Config, NodesSelector, SpaceGuid, #{
+    check_space_dir_stats_and_time_series_collection(Config, NodesSelector, SpaceGuid, #{
         ?REG_FILE_AND_LINK_COUNT => 363,
         ?DIR_COUNT => 120,
         ?TOTAL_SIZE => 1334,
@@ -347,26 +347,33 @@ check_update_times(Config, NodesSelectors, FileConstructorsToCheck) ->
     end.
 
 
-check_space_dir_values_map_and_time_series_collection(Config, NodesSelector, SpaceGuid, ExpectedMap, IsCollectionEmpty) ->
+check_space_dir_stats_and_time_series_collection(Config, NodesSelector, SpaceGuid, ExpectedMap, IsCollectionEmpty) ->
     [Worker | _] = ?config(NodesSelector, Config),
-    {ok, {CurrentValues, WindowsMap}} = ?assertMatch({ok, {_, _}},
-        rpc:call(Worker, dir_size_stats, get_stats_and_time_series_collections, [SpaceGuid])),
+    {ok, {CurrentValues, Slice}} = ?assertMatch({ok, {_, _}},
+        rpc:call(Worker, dir_size_stats, get_stats_and_time_series_collection, [SpaceGuid])),
 
     ?assertEqual(ExpectedMap, CurrentValues),
 
+    ?assertEqual(4, maps:size(Slice)),
     case IsCollectionEmpty of
-        true -> ?assertEqual(lists:duplicate(16, []), maps:values(WindowsMap));
-        false -> ?assertEqual(16, maps:size(WindowsMap))
+        true ->
+            maps:foreach(fun(_TimeSeriesName, WindowsPerMetric) ->
+                ?assertEqual(lists:duplicate(4, []), maps:values(WindowsPerMetric))
+            end, Slice);
+        false ->
+            maps:foreach(fun(_TimeSeriesName, WindowsPerMetric) ->
+                ?assertEqual(4, maps:size(WindowsPerMetric))
+            end, Slice)
     end.
 
 
-check_dir_stats(Config, NodesSelector, Guid, ExpectedMap) when is_binary(Guid) ->
+check_dir_stats(Config, NodesSelector, Guid, ExpectedStats) when is_binary(Guid) ->
     [Worker | _] = ?config(NodesSelector, Config),
-    ?assertEqual({ok, ExpectedMap}, rpc:call(Worker, dir_size_stats, get_stats, [Guid]), ?ATTEMPTS);
+    ?assertEqual({ok, ExpectedStats}, rpc:call(Worker, dir_size_stats, get_stats, [Guid]), ?ATTEMPTS);
 
-check_dir_stats(Config, NodesSelector, DirConstructor, ExpectedMap) ->
+check_dir_stats(Config, NodesSelector, DirConstructor, ExpectedStats) ->
     Guid = resolve_guid(Config, NodesSelector, DirConstructor, []),
-    check_dir_stats(Config, NodesSelector, Guid, ExpectedMap).
+    check_dir_stats(Config, NodesSelector, Guid, ExpectedStats).
 
 
 read_from_file(Config, NodesSelector, DirConstructor, FileConstructor, BytesCount) ->

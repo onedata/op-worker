@@ -69,10 +69,10 @@
 -define(BYTES_STATS, <<"bytes">>).
 -define(FILES_STATS, <<"files">>).
 
--define(TOTAL_TIME_SERIES_ID, <<"total">>).
--define(MINUTE_METRIC_ID, <<"minute">>).
--define(HOUR_METRIC_ID, <<"hour">>).
--define(DAY_METRIC_ID, <<"day">>).
--define(MONTH_METRIC_ID, <<"month">>).
+-define(TOTAL_TIME_SERIES_NAME, <<"total">>).
+-define(MINUTE_METRIC_NAME, <<"minute">>).
+-define(HOUR_METRIC_NAME, <<"hour">>).
+-define(DAY_METRIC_NAME, <<"day">>).
+-define(MONTH_METRIC_NAME, <<"month">>).
 
 -endif.
