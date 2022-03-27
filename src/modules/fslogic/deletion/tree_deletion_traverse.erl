@@ -18,6 +18,7 @@
 
 -include("global_definitions.hrl").
 -include("tree_traverse.hrl").
+-include("modules/datastore/qos.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 

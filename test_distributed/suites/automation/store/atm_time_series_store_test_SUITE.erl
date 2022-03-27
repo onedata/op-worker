@@ -54,7 +54,6 @@ all() -> [
 -define(MAX_FILE_SIZE_TS_NAME, <<"max_file_size">>).
 -define(MAX_FILE_SIZE_METRIC_NAME, ?MAX_FILE_SIZE_TS_NAME).
 -define(MAX_FILE_SIZE_METRIC_CONFIG, #metric_config{
-    label = ?MAX_FILE_SIZE_TS_NAME,
     resolution = ?MONTH_RESOLUTION,
     retention = 1,
     aggregator = max
@@ -72,7 +71,6 @@ all() -> [
 
 -define(MINUTE_METRIC_NAME, <<"minute">>).
 -define(MINUTE_METRIC_CONFIG, #metric_config{
-    label = ?MINUTE_METRIC_NAME,
     resolution = ?MINUTE_RESOLUTION,
     retention = 120,
     aggregator = sum
@@ -83,7 +81,6 @@ all() -> [
 
 -define(HOUR_METRIC_NAME, <<"hour">>).
 -define(HOUR_METRIC_CONFIG, #metric_config{
-    label = ?HOUR_METRIC_NAME,
     resolution = ?HOUR_RESOLUTION,
     retention = 48,
     aggregator = sum
@@ -94,7 +91,6 @@ all() -> [
 
 -define(DAY_METRIC_NAME, <<"day">>).
 -define(DAY_METRIC_CONFIG, #metric_config{
-    label = ?DAY_METRIC_NAME,
     resolution = ?DAY_RESOLUTION,
     retention = 60,
     aggregator = sum
@@ -211,8 +207,8 @@ manage_content_test(_Config) ->
     end, [
         5,
         <<"BIN">>,
-        [#{<<"ts">> => <<"name">>}]
-%%        [#{<<"tsName">> => <<"mp3">>, <<"timestamp">> => 0, <<"value">> => 10}, 10]  TODO VFS-8941
+        [#{<<"ts">> => <<"name">>}],
+        [#{<<"tsName">> => <<"mp3">>, <<"timestamp">> => 0, <<"value">> => 10}, 10]
     ]),
 
     % Timestamps of other measurements will be calculated based on Timestamp1 so to

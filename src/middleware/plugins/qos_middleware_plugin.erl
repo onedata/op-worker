@@ -17,6 +17,7 @@
 -behaviour(middleware_handler).
 
 -include("middleware/middleware.hrl").
+-include("modules/datastore/qos.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -88,7 +89,7 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = audit_log}}) -> #{
 };
 data_spec(#op_req{operation = get, gri = #gri{aspect = time_series_collections}}) ->
     undefined;
-% @TODO VFS-8958 Adjust when time series store browsing API is defined
+%% @TODO VFS-9176 Align QoS transfer stats API with time series API
 data_spec(#op_req{operation = get, gri = #gri{aspect = {time_series_collection, _}}}) -> #{
     required => #{
         <<"metrics">> => {json, fun(RequestedMetrics) ->
@@ -268,8 +269,8 @@ get(#op_req{gri = #gri{id = QosEntryId, aspect = time_series_collections}}, _Qos
 get(#op_req{gri = #gri{id = QosEntryId, aspect = {time_series_collection, Type}}, data = Data}, _QosEntry) ->
     SliceLayout = maps:get(<<"metrics">>, Data),
     PossiblyUndefOpts = #{
-        startTimestamp => maps:get(<<"startTimestamp">>, Data, undefined),
-        windowLimit => maps:get(<<"limit">>, Data, undefined)
+        start_timestamp => maps:get(<<"startTimestamp">>, Data, undefined),
+        window_limit => maps:get(<<"limit">>, Data, undefined)
     },
     Opts = maps_utils:remove_undefined(PossiblyUndefOpts),
     case qos_transfer_stats:get_slice(QosEntryId, Type, SliceLayout, Opts) of

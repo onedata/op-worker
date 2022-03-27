@@ -22,6 +22,7 @@
 -module(qos_transfer_stats).
 -author("Michal Stanisz").
 
+-include("modules/datastore/qos.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include_lib("ctool/include/time_series/common.hrl").
@@ -118,14 +119,14 @@ consume_measurements(CollectionId, ConsumeSpec, Retries) ->
             % series collection was not initialized. Create it and try again.
             ok = ensure_exists_internal(CollectionId),
             consume_measurements(CollectionId, ConsumeSpec, Retries - 1);
-        ?ERROR_BAD_VALUE_TSC_LAYOUT(MissingLayout) ->
+        ?ERROR_TSC_MISSING_LAYOUT(MissingLayout) ->
             MissingConfig = config_with_time_series(maps:keys(MissingLayout)),
             ok = datastore_time_series_collection:incorporate_config(?CTX, CollectionId, MissingConfig),
             consume_measurements(CollectionId, ConsumeSpec, Retries - 1)
     end.
 
 
--spec supported_metrics() -> #{time_series_collection:metric_name() => metric_config:record()}.
+-spec supported_metrics() -> time_series:metric_composition().
 supported_metrics() -> #{
     ?MINUTE_METRIC_NAME => #metric_config{
         resolution = ?MINUTE_RESOLUTION,

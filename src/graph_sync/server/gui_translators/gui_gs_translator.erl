@@ -17,6 +17,7 @@
 
 -include("http/gui_paths.hrl").
 -include("middleware/middleware.hrl").
+-include("modules/datastore/qos.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").

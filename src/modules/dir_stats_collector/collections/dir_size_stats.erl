@@ -169,7 +169,7 @@ delete_stats(Guid) ->
 acquire(Guid) ->
     Uuid = file_id:guid_to_uuid(Guid),
     SliceLayout = internal_stats_layout_with_current_metrics(Guid),
-    case datastore_time_series_collection:get_slice(?CTX, Uuid, SliceLayout, #{windowLimit => 1}) of
+    case datastore_time_series_collection:get_slice(?CTX, Uuid, SliceLayout, #{window_limit => 1}) of
         {ok, Slice} ->
             internal_stats_to_current_stats(Slice);
         {error, not_found} ->
@@ -250,7 +250,7 @@ stat_names(Guid) ->
 
 
 %% @private
--spec metrics_extended_with_current_value() -> #{time_series_collection:metric_name() => metric_config:record()}.
+-spec metrics_extended_with_current_value() -> time_series:metric_composition().
 metrics_extended_with_current_value() ->
     maps:put(?CURRENT_METRIC, #metric_config{
         resolution = 1,
@@ -260,7 +260,7 @@ metrics_extended_with_current_value() ->
 
 
 %% @private
--spec metrics() -> #{time_series_collection:metric_name() => metric_config:record()}.
+-spec metrics() -> time_series:metric_composition().
 metrics() ->
     #{
         ?MINUTE_METRIC => #metric_config{

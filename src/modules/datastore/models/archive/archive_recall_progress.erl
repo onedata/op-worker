@@ -178,7 +178,7 @@ create_tsc(Id) ->
 
 
 %% @private
--spec supported_metrics() -> #{time_series_collection:metric_name() => metric_config:record()}.
+-spec supported_metrics() -> time_series:metric_composition().
 supported_metrics() -> #{
     ?MINUTE_METRIC => #metric_config{
         resolution = ?MINUTE_RESOLUTION,
@@ -202,7 +202,7 @@ supported_metrics() -> #{
 -spec get_counters_current_value(id()) ->
     {ok, #{time_series_collection:time_series_name() => non_neg_integer()}} | {error, term()}.
 get_counters_current_value(Id) ->
-    case datastore_time_series_collection:get_slice(?CTX, ?TSC_ID(Id), ?LAYOUT_WITH_TOTAL_METRICS, #{windowLimit => 1}) of
+    case datastore_time_series_collection:get_slice(?CTX, ?TSC_ID(Id), ?LAYOUT_WITH_TOTAL_METRICS, #{window_limit => 1}) of
         {ok, Slice} ->
             {ok, maps:map(fun(_TimeSeriesName, #{?TOTAL_METRIC := Windows}) ->
                 case Windows of

@@ -59,8 +59,6 @@
 }).
 -type record() :: #atm_time_series_store_container{}.
 
--type ts_config() :: #{time_series_collection:metric_name() => metric_config:record()}.
-
 -export_type([
     initial_content/0, content_browse_req/0, content_update_req/0,
     record/0
@@ -143,7 +141,7 @@ browse_content(Record, #atm_store_content_browse_req{
         ?CTX,
         Record#atm_time_series_store_container.backend_id,
         SliceLayout,
-        maps_utils:remove_undefined(#{startTimestamp => StartTimestamp, windowLimit => WindowLimit})
+        maps_utils:remove_undefined(#{start_timestamp => StartTimestamp, window_limit => WindowLimit})
     ) of
         ?ERROR_NOT_FOUND ->
             throw(?ERROR_NOT_FOUND);
@@ -270,9 +268,9 @@ consume_measurements(Measurements, DispatchRules, Record = #atm_time_series_stor
             {true, TSName, TSConfig} ->
                 Timestamp = maps:get(<<"timestamp">>, Measurement),
                 Value = maps:get(<<"value">>, Measurement),
-                PreviousMeasurements = maps:get(TSName, ConsumeSpecAcc, []),
+                PreviousMeasurements = kv_utils:get([TSName, all], ConsumeSpecAcc, []),
                 NewMeasurements = [{Timestamp, Value} | PreviousMeasurements],
-                {ConsumeSpecAcc#{TSName => NewMeasurements}, InvolvedConfigAcc#{TSName => TSConfig}};
+                {ConsumeSpecAcc#{TSName => #{all => NewMeasurements}}, InvolvedConfigAcc#{TSName => TSConfig}};
             false ->
                 Acc
         end
@@ -296,7 +294,7 @@ consume_measurements(Measurements, DispatchRules, Record = #atm_time_series_stor
     [atm_time_series_dispatch_rule:record()],
     [atm_time_series_schema:record()]
 ) ->
-    {true, atm_time_series_names:target_ts_name(), ts_config()} | false | no_return().
+    {true, atm_time_series_names:target_ts_name(), time_series:metric_composition()} | false | no_return().
 match_target_ts(#{<<"tsName">> := MeasurementTSName}, DispatchRules, TSSchemas) ->
     case atm_time_series_names:find_matching_dispatch_rule(MeasurementTSName, DispatchRules) of
         {ok, DispatchRule} ->
