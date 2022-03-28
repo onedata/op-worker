@@ -10,7 +10,7 @@
 %%% for single directory. Initialization is process of creation of
 %%% directory statistics after enabling statistics counting for
 %%% existing space. If statistics counting is enabled from the
-%%% begging (support), initialization is not required.
+%%% beginning (support), initialization is not required.
 %%%
 %%% Initialization is performed in batches and processing of each
 %%% batch has to be triggered separately. It allows dir_stats_collector

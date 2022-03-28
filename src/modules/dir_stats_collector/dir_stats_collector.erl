@@ -857,6 +857,8 @@ update_in_cache(Guid, CollectionType, Diff, #state{dir_stats_cache = DirStatsCac
                         collecting_status = enabled,
                         current_stats = Stats
                     }, State2};
+                % Collection incarnation is not equal to current incarnation - collection
+                % is outdated - initialize it once more
                 {{collections_initialization, _}, State2} ->
                     {
                         #cached_dir_stats{

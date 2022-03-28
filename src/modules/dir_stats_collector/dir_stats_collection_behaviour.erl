@@ -23,7 +23,8 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Gets collection from datastore.
+%% Gets collection from datastore. Returns collection and incarnation of collection when collection was saved.
+%% Incarnation allows evaluation if acquired collection is outdated (see dir_stats_collector:update_in_cache/4).
 %% @end
 %%--------------------------------------------------------------------
 -callback acquire(file_id:file_guid()) ->

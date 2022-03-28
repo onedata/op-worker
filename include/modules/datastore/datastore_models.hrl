@@ -1067,7 +1067,8 @@
 -record(dir_stats_collector_config, {
     collecting_status :: dir_stats_collector_config:collecting_status(),
 
-    % incarnation is equal to number of last dir_stats_collections_initialization_traverse
+    % incarnation is incremented every time when collecting_status is changed to collections_initialization ;
+    % it is used to evaluate if collection is outdated (see dir_stats_collection_behaviour:acquire/1)
     incarnation = 0 :: non_neg_integer(),
 
     % information about next status transition that is expected to be executed after ongoing transition is finished
