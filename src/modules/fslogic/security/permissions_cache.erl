@@ -53,7 +53,7 @@ check_permission(Rule) ->
 %%--------------------------------------------------------------------
 -spec cache_permission(Rule :: term(), Value :: term(), bounded_cache:timestamp()) -> ok.
 cache_permission(Rule, Value, Timestamp) ->
-    bounded_cache:cache(?CACHE, Rule, Value, Timestamp).
+    bounded_cache:cache(?CACHE, Rule, Value, Timestamp, true).
 
 %%--------------------------------------------------------------------
 %% @doc
