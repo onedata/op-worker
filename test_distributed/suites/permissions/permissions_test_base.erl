@@ -95,7 +95,6 @@
     get_effective_file_qos_test/1,
     check_qos_fulfillment_test/1,
 
-    permission_cache_test/1,
     multi_provider_permission_cache_test/1,
     expired_session_test/1
 ]).
@@ -553,7 +552,7 @@ data_access_caveats_cache_test(Config) ->
     % before any call cache should be empty
     lists:foreach(fun(Guid) ->
         ?assertEqual(
-            calculate,
+            {error, not_found},
             ?rpcCache(W, check_permission, [{guid_constraint, Token, Guid}])
         )
     end, [UserRootDir, SpaceRootDirGuid, RootDirGuid, DirGuid, FileGuid]),
@@ -585,7 +584,7 @@ data_access_caveats_cache_test(Config) ->
     % so only for file should it be filled
     lists:foreach(fun(Guid) ->
         ?assertEqual(
-            calculate,
+            {error, not_found},
             ?rpcCache(W, check_permission, [{data_constraint, Token, Guid}])
         )
     end, [UserRootDir, SpaceRootDirGuid, RootDirGuid, DirGuid]),
@@ -2093,64 +2092,6 @@ check_qos_fulfillment_test(Config) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end
     }, Config).
-
-
-permission_cache_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
-    PermissionCacheStatusUuid = <<"status">>,
-
-    case ?rpcCache(W, get, [PermissionCacheStatusUuid]) of
-        {ok, #document{value = #permissions_cache{value = {permissions_cache_helper2, _}}}} ->
-            ?assertEqual(ok, ?rpcCache(W, invalidate, [])),
-            ?assertMatch({ok, #document{value = #permissions_cache{value = {permissions_cache_helper, permissions_cache_helper2}}}},
-                ?rpcCache(W, get, [PermissionCacheStatusUuid]), 3);
-        _ ->
-            ok
-    end,
-
-    ?assertEqual(calculate, ?rpcCache(W, check_permission, [p1])),
-    ?assertEqual(calculate, ?rpcCache(W, check_permission, [p2])),
-    ?assertEqual(calculate, ?rpcCache(W, check_permission, [p3])),
-
-    ?assertMatch({ok, _}, ?rpcCache(W, cache_permission, [p1, ok])),
-    ?assertEqual({ok, ok}, ?rpcCache(W, check_permission, [p1])),
-    ?assertEqual(calculate, ?rpcCache(W, check_permission, [p2])),
-    ?assertEqual(calculate, ?rpcCache(W, check_permission, [p3])),
-
-    ?assertEqual(ok, ?rpcCache(W, invalidate, [])),
-    ?assertMatch({ok, #document{value = #permissions_cache{value = {permissions_cache_helper2, _}}}},
-        ?rpcCache(W, get, [PermissionCacheStatusUuid])),
-    ?assertMatch({ok, _}, ?rpcCache(W, cache_permission, [p2, ok])),
-    ?assertEqual(calculate, ?rpcCache(W, check_permission, [p1])),
-    ?assertEqual({ok, ok}, ?rpcCache(W, check_permission, [p2])),
-    ?assertEqual(calculate, ?rpcCache(W, check_permission, [p3])),
-
-    ?assertMatch({ok, #document{value = #permissions_cache{value = {permissions_cache_helper2, permissions_cache_helper}}}},
-        ?rpcCache(W, get, [PermissionCacheStatusUuid]), 2),
-    ?assertEqual(ok, ?rpcCache(W, invalidate, [])),
-    ?assertMatch({ok, #document{value = #permissions_cache{value = {permissions_cache_helper, _}}}},
-        ?rpcCache(W, get, [PermissionCacheStatusUuid]), 2),
-    ?assertEqual(calculate, ?rpcCache(W, check_permission, [p1])),
-    ?assertEqual(calculate, ?rpcCache(W, check_permission, [p2])),
-    ?assertEqual(calculate, ?rpcCache(W, check_permission, [p3])),
-
-    for(50, fun() -> ?assertEqual(ok, ?rpcCache(W, invalidate, [])) end),
-    CheckFun = fun() ->
-        case ?rpcCache(W, get, [PermissionCacheStatusUuid]) of
-            {ok, #document{value = #permissions_cache{value = {permissions_cache_helper, permissions_cache_helper2}}}} ->
-                ok;
-            {ok, #document{value = #permissions_cache{value = {permissions_cache_helper2, permissions_cache_helper}}}} ->
-                ok;
-            Other ->
-                Other
-        end
-    end,
-    ?assertMatch(ok, CheckFun(), 10),
-    ?assertMatch({ok, _}, ?rpcCache(W, cache_permission, [p1, xyz])),
-    ?assertMatch({ok, _}, ?rpcCache(W, cache_permission, [p3, ok])),
-    ?assertEqual({ok, xyz}, ?rpcCache(W, check_permission, [p1])),
-    ?assertEqual(calculate, ?rpcCache(W, check_permission, [p2])),
-    ?assertEqual({ok, ok}, ?rpcCache(W, check_permission, [p3])).
 
 
 multi_provider_permission_cache_test(Config) ->

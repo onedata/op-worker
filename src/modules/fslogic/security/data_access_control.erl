@@ -193,12 +193,13 @@ assert_meets_access_requirement(UserCtx, FileCtx0, Requirement) when
         {ok, ?EACCES} ->
             throw(?EACCES);
         _ ->
+            Timestamp = bounded_cache:get_timestamp(),
             try
-                {ok, FileCtx1} = check_access_requirement(UserCtx, FileCtx0, Requirement),
-                permissions_cache:cache_permission(CacheKey, granted),
+                {ok, FileCtx1} = check_access_requirement(UserCtx, file_ctx:reset(FileCtx0), Requirement),
+                permissions_cache:cache_permission(CacheKey, granted, Timestamp),
                 FileCtx1
             catch _:?EACCES ->
-                permissions_cache:cache_permission(CacheKey, ?EACCES),
+                permissions_cache:cache_permission(CacheKey, ?EACCES, Timestamp),
                 throw(?EACCES)
             end
     end;
@@ -273,6 +274,7 @@ assert_operations_allowed(UserCtx, FileCtx0, RequiredOps) ->
     % TODO VFS-6224 do not construct cache key outside of permissions_cache module
     CacheKey = {user_perms_matrix, UserId, Guid},
 
+    Timestamp = bounded_cache:get_timestamp(),
     Result = case permissions_cache:check_permission(CacheKey) of
         {ok, #user_access_check_progress{
             forbidden = ForbiddenOps,
@@ -288,7 +290,7 @@ assert_operations_allowed(UserCtx, FileCtx0, RequiredOps) ->
                             case ?common_flags(LeftoverRequiredOps, DeniedOps) of
                                 ?no_flags_mask ->
                                     check_file_permissions(
-                                        UserCtx, FileCtx0, LeftoverRequiredOps,
+                                        UserCtx, file_ctx:reset(FileCtx0), LeftoverRequiredOps,
                                         UserAccessCheckProgress
                                     );
                                 _ ->
@@ -298,21 +300,21 @@ assert_operations_allowed(UserCtx, FileCtx0, RequiredOps) ->
                 _ ->
                     throw(?EPERM)
             end;
-        calculate ->
-            check_operations(UserCtx, FileCtx0, RequiredOps)
+        _ ->
+            check_operations(UserCtx, file_ctx:reset(FileCtx0), RequiredOps)
     end,
 
     case Result of
         {allowed, FileCtx1} ->
             FileCtx1;
         {allowed, FileCtx1, NewUserAccessCheckProgress} ->
-            permissions_cache:cache_permission(CacheKey, NewUserAccessCheckProgress),
+            permissions_cache:cache_permission(CacheKey, NewUserAccessCheckProgress, Timestamp),
             FileCtx1;
         {denied, _FileCtx1, NewUserAccessCheckProgress} ->
-            permissions_cache:cache_permission(CacheKey, NewUserAccessCheckProgress),
+            permissions_cache:cache_permission(CacheKey, NewUserAccessCheckProgress, Timestamp),
             throw(?EACCES);
         {forbidden, _FileCtx1, NewUserAccessCheckProgress} ->
-            permissions_cache:cache_permission(CacheKey, NewUserAccessCheckProgress),
+            permissions_cache:cache_permission(CacheKey, NewUserAccessCheckProgress, Timestamp),
             throw(?EPERM)
     end.
 

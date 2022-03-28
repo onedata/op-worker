@@ -842,21 +842,6 @@
     value = #{} :: json_utils:json_term()
 }).
 
-%% Model that manages caches of files' permissions
--record(permissions_cache, {
-    value = undefined :: term()
-}).
-
-%% Helper model for caching files' permissions
--record(permissions_cache_helper, {
-    value = undefined :: term()
-}).
-
-%% Helper model for caching files' permissions
--record(permissions_cache_helper2, {
-    value = undefined :: term()
-}).
-
 %% Model that holds file timestamps
 -record(times, {
     atime = 0 :: times:time(),

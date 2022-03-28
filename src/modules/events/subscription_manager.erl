@@ -226,9 +226,11 @@ ensure_authorized(SessId, rename, FileCtx) ->
         % (cached data cannot be used to check if file was visible to client before rename
         % because there is no guarantee that this data is cached)
         data_constraints:inspect(UserCtx, file_ctx:reset(FileCtx), disallow_ancestors, [?TRAVERSE_ANCESTORS]),
+        ?info("ggggg1 ~p", [SessId]),
         true
     catch
-        _:_ ->
+        E1:E2:Stack ->
+            ?info("ggggg2 ~p", [{SessId, E1, E2, Stack}]),
             % TODO VFS-8717 - This is hack as client does not understand that file should not be visible after rename
             % There is no possibility to check if file was visible to client before rename so #file_removed_event{}
             % is always sent and client ignores it if the file was not visible for him
