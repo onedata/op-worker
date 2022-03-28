@@ -28,7 +28,7 @@
 init() ->
     bounded_cache:init_cache(?CACHE, #{
         check_frequency => timer:seconds(30),
-        size => 0,
+        size => 0, % Clear cache every 30 seconds
         worker => true
     }).
 

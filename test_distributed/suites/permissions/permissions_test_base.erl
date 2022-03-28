@@ -2213,12 +2213,23 @@ init_per_suite(Config) ->
             [{spaces_owners, [<<"owner">>]} | NewConfig1]
         ),
         initializer:mock_auth_manager(NewConfig2),
+
+        Workers = ?config(op_worker_nodes, NewConfig),
+        test_utils:mock_new(Workers, bounded_cache, [passthrough]),
+        test_utils:mock_expect(Workers, bounded_cache, check_cache_size, fun
+            (#{name := permissions_cache} = Options) -> meck:passthrough([Options#{size := 1000000000}]);
+            (Options) -> meck:passthrough([Options])
+        end),
+
         NewConfig2
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, ?MODULE]} | Config].
 
 
 end_per_suite(Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Workers, bounded_cache),
+
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:teardown_storage(Config).
 
@@ -2269,15 +2280,6 @@ check_perms(UserCtx, FileCtx, Perms) ->
     catch _Type:Reason ->
         {error, Reason}
     end.
-
-
-%% @private
--spec for(pos_integer(), term()) -> term().
-for(1, F) ->
-    F();
-for(N, F) ->
-    F(),
-    for(N - 1, F).
 
 
 %% @private
