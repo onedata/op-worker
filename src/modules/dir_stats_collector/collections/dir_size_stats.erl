@@ -67,9 +67,7 @@
 %%% API
 %%%===================================================================
 
--spec get_stats(file_id:file_guid()) ->
-    {ok, dir_stats_collection:collection()} |
-    ?ERROR_INTERNAL_SERVER_ERROR | ?ERROR_DIR_STATS_DISABLED_FOR_SPACE | ?ERROR_FORBIDDEN | ?ERROR_NOT_FOUND.
+-spec get_stats(file_id:file_guid()) -> {ok, dir_stats_collection:collection()} | dir_stats_collector:error().
 get_stats(Guid) ->
     get_stats(Guid, all).
 
@@ -80,8 +78,7 @@ get_stats(Guid) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_stats(file_id:file_guid(), dir_stats_collection:stats_selector()) ->
-    {ok, dir_stats_collection:collection()} |
-    ?ERROR_INTERNAL_SERVER_ERROR | ?ERROR_DIR_STATS_DISABLED_FOR_SPACE | ?ERROR_FORBIDDEN | ?ERROR_NOT_FOUND.
+    {ok, dir_stats_collection:collection()} | dir_stats_collector:error().
 get_stats(Guid, StatNames) ->
     dir_stats_collector:get_stats(Guid, ?MODULE, StatNames).
 
@@ -94,7 +91,7 @@ get_stats(Guid, StatNames) ->
 %%--------------------------------------------------------------------
 -spec get_stats_and_time_series_collections(file_id:file_guid()) ->
     {ok, {dir_stats_collection:collection(), time_series_collection:windows_map()}} |
-    ?ERROR_INTERNAL_SERVER_ERROR | ?ERROR_DIR_STATS_DISABLED_FOR_SPACE | ?ERROR_FORBIDDEN.
+    dir_stats_collector:collecting_status_error() | ?ERROR_INTERNAL_SERVER_ERROR.
 get_stats_and_time_series_collections(Guid) ->
     case dir_stats_collector_config:is_collecting_active(file_id:guid_to_space_id(Guid)) of
         true ->

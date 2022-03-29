@@ -144,6 +144,10 @@
 -type dir_status() :: flushed | unflushed | collections_initialization.
 -type pruning_strategy() :: prune_flushed | prune_inactive.
 
+-type collecting_status_error() :: ?ERROR_DIR_STATS_NOT_READY | ?ERROR_DIR_STATS_DISABLED_FOR_SPACE.
+-type error() :: collecting_status_error() | ?ERROR_NOT_FOUND | ?ERROR_INTERNAL_SERVER_ERROR.
+-export_type([collecting_status_error/0, error/0]).
+
 
 -define(FLUSH_INTERVAL_MILLIS, 5000).
 -define(CACHED_DIR_STATS_INACTIVITY_PERIOD, 10000). % stats that are already flushed and not used for this period
@@ -167,8 +171,7 @@
 %%%===================================================================
 
 -spec get_stats(file_id:file_guid(), dir_stats_collection:type(), dir_stats_collection:stats_selector()) ->
-    {ok, dir_stats_collection:collection()} |
-    ?ERROR_INTERNAL_SERVER_ERROR | ?ERROR_DIR_STATS_DISABLED_FOR_SPACE | ?ERROR_FORBIDDEN | ?ERROR_NOT_FOUND.
+    {ok, dir_stats_collection:collection()} | error().
 get_stats(Guid, CollectionType, StatNames) ->
     case dir_stats_collector_config:get_extended_collecting_status(file_id:guid_to_space_id(Guid)) of
         enabled ->
@@ -178,11 +181,8 @@ get_stats(Guid, CollectionType, StatNames) ->
                 stat_names = StatNames
             },
             call_designated_node(Guid, submit_and_await, [?MODULE, Guid, Request]);
-        % TODO VFS-8837 - should we have 2 types of errors: ?ERROR_FORBIDDEN and ?ERROR_DIR_STATS_DISABLED_FOR_SPACE?
-        % Maybe return single error ?ERROR_DIR_STATS_COLLECTING_NOT_ACTIVE_FOR_SPACE or
-        % ERROR_DIR_STATS_COLLECTING_NOT_ACTIVE?
         {collections_initialization, _} ->
-            ?ERROR_FORBIDDEN;
+            ?ERROR_DIR_STATS_NOT_READY;
         _ ->
             ?ERROR_DIR_STATS_DISABLED_FOR_SPACE
     end.
@@ -206,7 +206,7 @@ update_stats_of_parent(Guid, CollectionType, CollectionUpdate) ->
 
 
 -spec update_stats_of_parent(file_id:file_guid(), dir_stats_collection:type(), dir_stats_collection:collection(),
-    add_hook | return_error) -> ok | ?ERROR_INTERNAL_SERVER_ERROR | ?ERROR_NOT_FOUND.
+    add_hook | return_error) -> ok | ?ERROR_NOT_FOUND | ?ERROR_INTERNAL_SERVER_ERROR.
 update_stats_of_parent(Guid, CollectionType, CollectionUpdate, ParentErrorHandlingMethod) ->
     case dir_stats_collector_config:is_collecting_active(file_id:guid_to_space_id(Guid)) of
         true ->
@@ -253,11 +253,11 @@ update_stats_of_nearest_dir(Guid, CollectionType, CollectionUpdate) ->
 
 
 -spec flush_stats(file_id:file_guid(), dir_stats_collection:type()) ->
-    ok | ?ERROR_FORBIDDEN | ?ERROR_DIR_STATS_DISABLED_FOR_SPACE | ?ERROR_INTERNAL_SERVER_ERROR.
+    ok | collecting_status_error() | ?ERROR_INTERNAL_SERVER_ERROR.
 flush_stats(Guid, CollectionType) ->
     case dir_stats_collector_config:get_extended_collecting_status(file_id:guid_to_space_id(Guid)) of
         enabled -> request_flush(Guid, CollectionType, prune_inactive);
-        {collections_initialization, _} -> ?ERROR_FORBIDDEN;
+        {collections_initialization, _} -> ?ERROR_DIR_STATS_NOT_READY;
         _ -> ?ERROR_DIR_STATS_DISABLED_FOR_SPACE
     end.
 
@@ -271,7 +271,7 @@ delete_stats(Guid, CollectionType) ->
         true ->
             case request_flush(Guid, CollectionType, prune_flushed) of
                 ok -> CollectionType:delete(Guid);
-                ?ERROR_FORBIDDEN -> CollectionType:delete(Guid);
+                ?ERROR_DIR_STATS_NOT_READY -> CollectionType:delete(Guid);
                 ?ERROR_INTERNAL_SERVER_ERROR -> ?ERROR_INTERNAL_SERVER_ERROR
             end;
         false ->
@@ -375,8 +375,7 @@ forced_terminate(Reason, State) ->
 -spec handle_call(#dsc_get_request{} | #dsc_flush_request{} |
     ?INITIALIZE_COLLECTIONS(file_id:file_guid()) | ?STOP_COLLECTING(od_space:id()), state()) ->
     {
-        ok | {ok, dir_stats_collection:collection()} |
-            ?ERROR_INTERNAL_SERVER_ERROR | ?ERROR_FORBIDDEN | ?ERROR_NOT_FOUND,
+        ok | {ok, dir_stats_collection:collection()} | error(),
         state()
     }.
 handle_call(#dsc_get_request{
@@ -394,9 +393,9 @@ handle_call(#dsc_get_request{
             {ok, #cached_dir_stats{current_stats = CurrentStats, collecting_status = collections_initialization}},
             UpdatedState
         } ->
-            {?ERROR_FORBIDDEN, State};
+            {?ERROR_DIR_STATS_NOT_READY, UpdatedState};
         {
-            ?ERROR_FORBIDDEN,
+            ?ERROR_DIR_STATS_DISABLED_FOR_SPACE,
             _UpdatedState
         } = Error ->
             Error
@@ -424,7 +423,7 @@ handle_call(?INITIALIZE_COLLECTIONS(Guid), State) ->
             {ok, UpdatedState};
         _ ->
             FinalState = start_collections_initialization_for_dir(Guid, InitializationDataMap, UpdatedState),
-            {ok, ensure_flush_scheduled(FinalState#state{has_unflushed_changes = true})}
+            {ok, FinalState}
     end;
 
 handle_call(?STOP_COLLECTING(SpaceId), #state{
@@ -457,12 +456,10 @@ handle_cast(#dsc_update_request{
     end, State),
 
     case UpdateAns of
-        {?ERROR_FORBIDDEN, UpdatedState} ->
+        {?ERROR_DIR_STATS_DISABLED_FOR_SPACE, UpdatedState} ->
             UpdatedState;
         {{ok, #cached_dir_stats{collecting_status = collections_initialization}}, UpdatedState} ->
-            abort_collection_initialization(Guid, CollectionType, ensure_flush_scheduled(UpdatedState#state{
-                has_unflushed_changes = true
-            }));
+            abort_collection_initialization(Guid, CollectionType, UpdatedState);
         {_, UpdatedState} ->
             ensure_flush_scheduled(UpdatedState#state{has_unflushed_changes = true})
     end;
@@ -540,7 +537,7 @@ update_collection_in_cache(CollectionType, _UpdateType, CollectionUpdate, #cache
 
 %% @private
 -spec request_flush(file_id:file_guid(), dir_stats_collection:type(), PruningStrategy :: pruning_strategy()) ->
-    ok | ?ERROR_FORBIDDEN | ?ERROR_INTERNAL_SERVER_ERROR.
+    ok | ?ERROR_DIR_STATS_NOT_READY | ?ERROR_INTERNAL_SERVER_ERROR.
 request_flush(Guid, CollectionType, PruningStrategy) ->
     Request = #dsc_flush_request{
         guid = Guid,
@@ -577,7 +574,7 @@ flush_all(#state{
 
 %% @private
 -spec flush_cached_dir_stats(cached_dir_stats_key(), pruning_strategy(), state()) ->
-    {ok | ?ERROR_INTERNAL_SERVER_ERROR | ?ERROR_FORBIDDEN, state()}.
+    {ok | ?ERROR_DIR_STATS_NOT_READY | ?ERROR_INTERNAL_SERVER_ERROR, state()}.
 flush_cached_dir_stats(CachedDirStatsKey, _, State) when not is_map_key(CachedDirStatsKey, State#state.dir_stats_cache) ->
     {ok, State}; % Key cannot be found - it has been flushed and pruned
 flush_cached_dir_stats({_, CollectionType} = CachedDirStatsKey, PruningStrategy, State) ->
@@ -611,7 +608,7 @@ flush_cached_dir_stats({_, CollectionType} = CachedDirStatsKey, PruningStrategy,
                         CachedDirStatsKey, set_collecting_enabled(CachedDirStats, CollectionType), State),
                     flush_cached_dir_stats(CachedDirStatsKey, PruningStrategy, UpdatedState);
                 false ->
-                    {?ERROR_FORBIDDEN, State}
+                    {?ERROR_DIR_STATS_NOT_READY, State}
             end
     end.
 
@@ -830,7 +827,7 @@ ensure_initialization_scheduled(State) ->
 
 %% @private
 -spec reset_last_used_timer(file_id:file_guid(), dir_stats_collection:type(), state()) ->
-    {{ok, UpdatedCachedDirStats :: cached_dir_stats()} | ?ERROR_FORBIDDEN, state()} | no_return().
+    {{ok, UpdatedCachedDirStats :: cached_dir_stats()} | ?ERROR_DIR_STATS_DISABLED_FOR_SPACE, state()} | no_return().
 reset_last_used_timer(Guid, CollectionType, State) ->
     update_in_cache(Guid, CollectionType, fun(CachedDirStats) -> CachedDirStats end, State).
 
@@ -838,7 +835,7 @@ reset_last_used_timer(Guid, CollectionType, State) ->
 %% @private
 -spec update_in_cache(file_id:file_guid(), dir_stats_collection:type(),
     fun((cached_dir_stats()) -> cached_dir_stats()), state()) ->
-    {{ok, UpdatedCachedDirStats :: cached_dir_stats()} | ?ERROR_FORBIDDEN, state()} | no_return().
+    {{ok, UpdatedCachedDirStats :: cached_dir_stats()} | ?ERROR_DIR_STATS_DISABLED_FOR_SPACE, state()} | no_return().
 update_in_cache(Guid, CollectionType, Diff, #state{dir_stats_cache = DirStatsCache} = State) ->
     CachedDirStatsKey = gen_cached_dir_stats_key(Guid, CollectionType),
     FindAns = case maps:find(CachedDirStatsKey, DirStatsCache) of
@@ -865,15 +862,17 @@ update_in_cache(Guid, CollectionType, Diff, #state{dir_stats_cache = DirStatsCac
                             collecting_status = collections_initialization,
                             initialization_data = dir_stats_collections_initializer:new_initialization_data()
                         },
-                        ensure_initialization_scheduled(State2)
+                        ensure_flush_scheduled(ensure_initialization_scheduled(
+                            State2#state{has_unflushed_changes = true}
+                        ))
                     };
                 {_, State2} ->
-                    {?ERROR_FORBIDDEN, State2}
+                    {?ERROR_DIR_STATS_DISABLED_FOR_SPACE, State2}
             end
     end,
 
     case FindAns of
-        {?ERROR_FORBIDDEN, _UpdatedState} ->
+        {?ERROR_DIR_STATS_DISABLED_FOR_SPACE, _UpdatedState} ->
             FindAns;
         {CachedDirStats, UpdatedState} ->
             UpdatedCachedDirStats = Diff(CachedDirStats#cached_dir_stats{last_used = stopwatch:start()}),
@@ -995,11 +994,13 @@ add_hook_for_missing_doc(Guid, CollectionType, CollectionUpdate) ->
 
 %% @private
 -spec call_designated_node(file_id:file_guid(), submit_and_await | acknowledged_cast, list()) ->
-    ok | {ok, dir_stats_collection:collection()} | ignored | ?ERROR_FORBIDDEN | ?ERROR_INTERNAL_SERVER_ERROR.
+    ok | {ok, dir_stats_collection:collection()} | ignored | error().
 call_designated_node(Guid, Function, Args) ->
     Node = consistent_hashing:get_assigned_node(Guid),
     case erpc:call(Node, pes, Function, Args) of
-        ?ERROR_FORBIDDEN -> ?ERROR_FORBIDDEN;
+        ?ERROR_DIR_STATS_NOT_READY -> ?ERROR_DIR_STATS_NOT_READY;
+        ?ERROR_DIR_STATS_DISABLED_FOR_SPACE -> ?ERROR_DIR_STATS_DISABLED_FOR_SPACE;
+        ?ERROR_NOT_FOUND -> ?ERROR_NOT_FOUND;
         {error, _} = Error ->
             ?error("Dir stats collector PES fun ~p error: ~p for guid ~p", [Function, Error, Guid]),
             ?ERROR_INTERNAL_SERVER_ERROR;

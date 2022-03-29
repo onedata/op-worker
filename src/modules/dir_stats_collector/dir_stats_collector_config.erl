@@ -9,7 +9,7 @@
 %%% Model storing dir_stats_collector configuration for each space.
 %%% For all space supports granted by providers in versions
 %%% 21.02.0-alpha25 or newer, collecting status is determined by the value
-%%% of enable_dir_stats_collector_for_new_spaces environment variable
+%%% of dir_stats_collecting_status_for_new_spaces environment variable
 %%% at the moment of space support granting by provider. For other spaces
 %%% collecting status is disabled.
 %%%
@@ -54,7 +54,7 @@
 
 %% API - getters
 -export([is_collecting_active/1, get_extended_collecting_status/1,
-    get_enabling_time/1, get_collecting_status_change_timestamps/1]).
+    get_last_status_change_timestamp_if_in_enabled_status/1, get_collecting_status_change_timestamps/1]).
 %% API - init/cleanup
 -export([init_for_empty_space/1, clean/1]).
 %% API - collecting status changes
@@ -68,8 +68,8 @@
 -type collecting_status() :: active_collecting_status() | disabled | collectors_stopping.
 % update requests can be generated only for active statuses
 -type active_collecting_status() :: enabled | collections_initialization.
-% extended status includes information about initialization traverse - it is used
-% outside this module while internally status and travers number are stored separately
+% extended status includes information about incarnation - it is used
+% outside this module while internally status and incarnation are stored separately
 -type extended_collecting_status() :: extended_active_collecting_status() | disabled | collectors_stopping.
 -type extended_active_collecting_status() :: enabled |
     {collections_initialization, Incarnation :: non_neg_integer()}.
@@ -96,7 +96,7 @@
     memory_copies => all
 }).
 
--define(ENABLE_FOR_NEW_SPACES, op_worker:get_env(enable_dir_stats_collector_for_new_spaces, false)).
+-define(STATUS_FOR_NEW_SPACES, op_worker:get_env(dir_stats_collecting_status_for_new_spaces, disabled)).
 -define(MAX_HISTORY_SIZE, 50).
 
 %%%===================================================================
@@ -127,23 +127,26 @@ get_extended_collecting_status(SpaceId) ->
     end.
 
 
--spec get_enabling_time(od_space:id()) -> {ok, time:seconds()} | ?ERROR_FORBIDDEN.
-get_enabling_time(SpaceId) ->
+-spec get_last_status_change_timestamp_if_in_enabled_status(od_space:id()) ->
+    {ok, time:seconds()} | dir_stats_collector:collecting_status_error().
+get_last_status_change_timestamp_if_in_enabled_status(SpaceId) ->
     case datastore_model:get(?CTX, SpaceId) of
         {ok, #document{value = #dir_stats_collector_config{
             collecting_status = enabled,
-            collecting_status_change_timestamps = []}
-        }} -> 
+            collecting_status_change_timestamps = []
+        }}} ->
             {ok, 0};
         {ok, #document{value = #dir_stats_collector_config{
             collecting_status = enabled,
-            collecting_status_change_timestamps = [{enabled, Time} | _]}
-        }} ->
+            collecting_status_change_timestamps = [{enabled, Time} | _]
+        }}} ->
             {ok, Time};
+        {ok, #document{value = #dir_stats_collector_config{collecting_status = collections_initialization}}} ->
+            ?ERROR_DIR_STATS_NOT_READY;
         {ok, _} ->
-            ?ERROR_FORBIDDEN;
+            ?ERROR_DIR_STATS_DISABLED_FOR_SPACE;
         ?ERROR_NOT_FOUND ->
-            ?ERROR_FORBIDDEN
+            ?ERROR_DIR_STATS_DISABLED_FOR_SPACE
     end.
 
 
@@ -167,7 +170,7 @@ get_collecting_status_change_timestamps(SpaceId) ->
 init_for_empty_space(SpaceId) ->
     {ok, _} = datastore_model:create(?CTX, #document{
         key = SpaceId,
-        value = #dir_stats_collector_config{collecting_status = is_enabled_to_status(?ENABLE_FOR_NEW_SPACES)}
+        value = #dir_stats_collector_config{collecting_status = ?STATUS_FOR_NEW_SPACES}
     }),
     ok.
 
@@ -360,7 +363,11 @@ get_record_struct(2) ->
 -spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
     {datastore_model:record_version(), datastore_model:record()}.
 upgrade_record(1, {?MODULE, IsEnabled}) ->
-    {2, {?MODULE, is_enabled_to_status(IsEnabled), 0, undefined, []}}.
+    Status = case IsEnabled of
+        true -> enabled;
+        false -> disabled
+    end,
+    {2, {?MODULE, Status, 0, undefined, []}}.
 
 
 %%%===================================================================
@@ -401,10 +408,3 @@ update_timestamps(NewStatus, Timestamps) ->
         true -> lists:sublist(NewTimestamps, ?MAX_HISTORY_SIZE);
         false -> NewTimestamps
     end.
-
-
--spec is_enabled_to_status(boolean()) -> collecting_status().
-is_enabled_to_status(true = _IsEnabled) ->
-    enabled;
-is_enabled_to_status(false = _IsEnabled) ->
-    disabled.

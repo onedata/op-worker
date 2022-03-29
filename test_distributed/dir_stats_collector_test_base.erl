@@ -333,7 +333,8 @@ multiple_status_change_test(Config) ->
     check_initial_dir_stats(Config, op_worker_nodes),
     check_update_times(Config, [op_worker_nodes]),
 
-    {ok, EnablingTime} = ?assertMatch({ok, _}, rpc:call(Worker, dir_stats_collector_config, get_enabling_time, [SpaceId])),
+    {ok, EnablingTime} = ?assertMatch({ok, _},
+        rpc:call(Worker, dir_stats_collector_config, get_last_status_change_timestamp_if_in_enabled_status, [SpaceId])),
     [{_, EnablingTime2} | _] = rpc:call(
         Worker, dir_stats_collector_config, get_collecting_status_change_timestamps, [SpaceId]),
     ?assertEqual(EnablingTime, EnablingTime2),
@@ -354,7 +355,8 @@ multiple_status_change_test(Config) ->
         Timestamp
     end, LastChangeTime, StatusChangesWithTimestamps2),
 
-    ?assertEqual(?ERROR_FORBIDDEN, rpc:call(Worker, dir_stats_collector_config, get_enabling_time, [SpaceId])).
+    ?assertEqual(?ERROR_DIR_STATS_DISABLED_FOR_SPACE,
+        rpc:call(Worker, dir_stats_collector_config, get_last_status_change_timestamp_if_in_enabled_status, [SpaceId])).
 
 
 adding_file_when_disabled_test(Config) ->
@@ -386,14 +388,14 @@ adding_file_when_disabled_test(Config) ->
 
 init(Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
-    {ok, EnableDirStatsCollectorForNewSpaces} =
-        test_utils:get_env(Worker, op_worker, enable_dir_stats_collector_for_new_spaces),
-    test_utils:set_env(Workers, op_worker, enable_dir_stats_collector_for_new_spaces, true),
+    {ok, DirStatsCollectingStatusForNewSpaces} =
+        test_utils:get_env(Worker, op_worker, dir_stats_collecting_status_for_new_spaces),
+    test_utils:set_env(Workers, op_worker, dir_stats_collecting_status_for_new_spaces, enabled),
 
     {ok, MinimalSyncRequest} = test_utils:get_env(Worker, op_worker, minimal_sync_request),
     test_utils:set_env(Workers, op_worker, minimal_sync_request, 1),
 
-    [{default_enable_dir_stats_collector_for_new_spaces, EnableDirStatsCollectorForNewSpaces},
+    [{default_dir_stats_collecting_status_for_new_spaces, DirStatsCollectingStatusForNewSpaces},
         {default_minimal_sync_request, MinimalSyncRequest} | Config].
 
 
@@ -425,9 +427,9 @@ teardown(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     lfm_test_utils:clean_space(Workers, SpaceId, 30),
 
-    EnableDirStatsCollectorForNewSpaces = ?config(default_enable_dir_stats_collector_for_new_spaces, Config),
+    DirStatsCollectingStatusForNewSpaces = ?config(default_dir_stats_collecting_status_for_new_spaces, Config),
     test_utils:set_env(
-        Workers, op_worker, enable_dir_stats_collector_for_new_spaces, EnableDirStatsCollectorForNewSpaces),
+        Workers, op_worker, dir_stats_collecting_status_for_new_spaces, DirStatsCollectingStatusForNewSpaces),
 
     MinimalSyncRequest = ?config(default_minimal_sync_request, Config),
     test_utils:set_env(Workers, op_worker, minimal_sync_request, MinimalSyncRequest),

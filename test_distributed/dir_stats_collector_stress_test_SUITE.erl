@@ -94,7 +94,7 @@ many_files_creation_tree_test_base(Config) ->
             SpaceGuid = lfm_test_utils:get_user1_first_space_guid(Config),
             PhaseAns = files_stress_test_base:get_final_ans_tree(Worker, 0, 0, 0, 0, 0, 0, 0, 0, 0),
             case rpc:call(Worker, dir_size_stats, get_stats, [SpaceGuid]) of
-                ?ERROR_FORBIDDEN ->
+                ?ERROR_DIR_STATS_NOT_READY ->
                     ct:print("Initializing stats collections"),
                     timer:sleep(5000),
                     PhaseAns;
@@ -129,7 +129,7 @@ init_per_testcase(stress_test = Case, Config) ->
     NewConfig = files_stress_test_base:init_per_testcase(Case, Config),
     [Worker | _] = Workers = ?config(op_worker_nodes, NewConfig),
     SpaceId = lfm_test_utils:get_user1_first_space_id(NewConfig),
-    test_utils:set_env(Workers, op_worker, enable_dir_stats_collector_for_new_spaces, true),
+    test_utils:set_env(Workers, op_worker, dir_stats_collecting_status_for_new_spaces, enabled),
     ?assertEqual(ok, rpc:call(Worker, dir_stats_collector_config, init_for_empty_space, [SpaceId])),
     NewConfig;
 init_per_testcase(_Case, Config) ->
