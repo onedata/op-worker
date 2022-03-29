@@ -156,9 +156,10 @@ create_test_base(#{
         CreateStoreFun = atm_store_test_utils:build_create_store_with_initial_content_fun(
             AtmWorkflowExecutionAuth, AtmStoreConfig, [DefaultInputItem]
         ),
-        ValidInputItem = InputItemFormatterFun(gen_valid_data(
+        ValidInputItemDataSeed = gen_valid_data(
             AtmWorkflowExecutionAuth, InputItemGeneratorSeedDataSpec
-        )),
+        ),
+        ValidInputItem = InputItemFormatterFun(ValidInputItemDataSeed),
         InvalidInputItemDataSeed = gen_invalid_data(AtmWorkflowExecutionAuth, InputItemGeneratorSeedDataSpec),
         InvalidInputItem = InputItemFormatterFun(InvalidInputItemDataSeed),
 
@@ -169,8 +170,14 @@ create_test_base(#{
         ),
 
         % Assert creating store with array initial content containing some invalid items fails
-        ?assertEqual(
-            ?ERROR_ATM_DATA_TYPE_UNVERIFIED(InvalidInputItemDataSeed, InputItemGeneratorSeedDataType),
+        ExpError = ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+            [ValidInputItemDataSeed, InvalidInputItemDataSeed],
+            atm_array_type,
+            #{<<"item[1]">> => errors:to_json(?ERROR_ATM_DATA_TYPE_UNVERIFIED(
+                InvalidInputItemDataSeed, InputItemGeneratorSeedDataType
+            ))}
+        ),
+        ?assertEqual(ExpError,
             ?rpc(catch CreateStoreFun([ValidInputItem, InvalidInputItem]))
         ),
 
@@ -226,7 +233,10 @@ update_content_test_base(#{
             AtmWorkflowExecutionAuth, InitialInputContent, AtmStoreSchema
         ))),
 
-        NewInputItem1 = GenValidInputItemFun(InputItemGeneratorSeedDataSpec),
+        NewInputItemDataSeed1 = gen_valid_data(
+            AtmWorkflowExecutionAuth, InputItemGeneratorSeedDataSpec
+        ),
+        NewInputItem1 = InputItemFormatterFun(NewInputItemDataSeed1),
         NewItem1 = PrepareExpStoreItemFun(NewInputItem1, InputItemGeneratorSeedDataSpec),
 
         % Assert append/extend with invalid arg(s) should fail
@@ -240,10 +250,16 @@ update_content_test_base(#{
             ))),
             ?assertEqual(InitialStoreContent, GetContentFun(AtmWorkflowExecutionAuth, AtmStoreId))
         end, [
-            {append, InvalidInputItem,
-                ?ERROR_ATM_DATA_TYPE_UNVERIFIED(InvalidInputItemDataSeed, InputItemGeneratorSeedDataType)},
-            {extend, [NewInputItem1, InvalidInputItem],
-                ?ERROR_ATM_DATA_TYPE_UNVERIFIED(InvalidInputItemDataSeed, InputItemGeneratorSeedDataType)}
+            {append, InvalidInputItem, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(
+                InvalidInputItemDataSeed, InputItemGeneratorSeedDataType
+            )},
+            {extend, [NewInputItem1, InvalidInputItem], ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+                [NewInputItemDataSeed1, InvalidInputItemDataSeed],
+                atm_array_type,
+                #{<<"item[1]">> => errors:to_json(?ERROR_ATM_DATA_TYPE_UNVERIFIED(
+                    InvalidInputItemDataSeed, InputItemGeneratorSeedDataType
+                ))}
+            )}
             %% TODO VFS-8686 refactor atm data types errors to properly handle array types
 %%            {extend, NewInputItem1,
 %%                ?ERROR_ATM_DATA_TYPE_UNVERIFIED(NewInputItem1, atm_array_type)}

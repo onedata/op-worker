@@ -53,10 +53,14 @@
 -record(atm_workflow_execution_env, {
     space_id :: od_space:id(),
     workflow_execution_id :: atm_workflow_execution:id(),
-    global_store_registry :: atm_workflow_execution:store_registry(),
     workflow_execution_incarnation :: atm_workflow_execution:incarnation(),
+
+    % globally accessible stores
+    global_store_registry :: atm_workflow_execution:store_registry(),
     workflow_audit_log_store_container :: undefined | atm_store_container:record(),
-    lane_exception_store_container :: undefined | atm_store_container:record(),
+
+    % current lane run execution specific stores
+    lane_run_exception_store_container :: undefined | atm_store_container:record(),
     task_audit_logs_registry :: #{atm_task_execution:id() => atm_store_container:record()},
     task_time_series_registry :: #{atm_task_execution:id() => atm_store:id()}
 }).
@@ -89,10 +93,10 @@ build(SpaceId, AtmWorkflowExecutionId, AtmWorkflowExecutionIncarnation, AtmGloba
     #atm_workflow_execution_env{
         space_id = SpaceId,
         workflow_execution_id = AtmWorkflowExecutionId,
-        global_store_registry = AtmGlobalStoreRegistry,
         workflow_execution_incarnation = AtmWorkflowExecutionIncarnation,
+        global_store_registry = AtmGlobalStoreRegistry,
         workflow_audit_log_store_container = undefined,
-        lane_exception_store_container = undefined,
+        lane_run_exception_store_container = undefined,
         task_audit_logs_registry = #{},
         task_time_series_registry = #{}
     }.
@@ -119,7 +123,7 @@ set_workflow_audit_log_store_container(AtmWorkflowAuditLogStoreContainer, Record
     record().
 set_lane_run_exception_store_container(AtmLaneRunExceptionStoreContainer, Record) ->
     Record#atm_workflow_execution_env{
-        lane_exception_store_container = AtmLaneRunExceptionStoreContainer
+        lane_run_exception_store_container = AtmLaneRunExceptionStoreContainer
     }.
 
 
@@ -195,9 +199,9 @@ get_global_store_id(AtmStoreSchemaId, #atm_workflow_execution_env{
 -spec get_lane_run_exception_store_container(record()) ->
     undefined | atm_store_container:record().
 get_lane_run_exception_store_container(#atm_workflow_execution_env{
-    lane_exception_store_container = AtmLaneExceptionStoreContainer
+    lane_run_exception_store_container = AtmLaneRunExceptionStoreContainer
 }) ->
-    AtmLaneExceptionStoreContainer.
+    AtmLaneRunExceptionStoreContainer.
 
 
 -spec get_task_time_series_store_id(atm_task_execution:id(), record()) ->

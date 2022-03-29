@@ -21,7 +21,7 @@
 %%%===================================================================
 
 
--spec exec(DockerImage :: binary(), atm_task_executor:input()) ->
-    atm_task_executor:outcome().
+-spec exec(DockerImage :: binary(), atm_task_executor:lambda_input()) ->
+    atm_task_executor:lambda_output().
 exec(<<"test/echo">>, #{<<"argsBatch">> := ArgsBatch}) ->
     #{<<"resultsBatch">> => ArgsBatch}.

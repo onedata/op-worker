@@ -26,10 +26,11 @@
 -export([mkdir/2, mkdir/3, mv/2, chmod/2, chown/3, link/2, readdir/3,
     get_child_handle/2, listobjects/4, flushbuffer/2,
     blocksize_for_path/1]).
--export([stat/1, read/3, write/3, create/2, open/2, release/1,
+-export([stat/1, read/3, write/3, create/2, create/3, open/2, release/1,
     truncate/3, unlink/2, fsync/2, rmdir/1, exists/1]).
 -export([setxattr/5, getxattr/2, removexattr/2, listxattr/1]).
 -export([open_at_creation/1]).
+-export([infer_type/1]).
 
 % Export for tests
 -export([open_insecure/2]).
@@ -428,13 +429,23 @@ read(SDHandle, Offset, MaxSize) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Creates a new file on storage.
+%% Creates a new regural file on storage.
 %% @end
 %%--------------------------------------------------------------------
 -spec create(handle(), Mode :: non_neg_integer()) -> ok | error_reply().
-create(#sd_handle{file = FileId} = SDHandle, Mode) ->
+create(SDHandle, Mode) ->
+    create(SDHandle, Mode, reg).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Creates a new file on storage.
+%% @end
+%%--------------------------------------------------------------------
+-spec create(handle(), Mode :: non_neg_integer(), helpers:file_type_flag()) -> ok | error_reply().
+create(#sd_handle{file = FileId} = SDHandle, Mode, FileTypeFlag) ->
     run_with_helper_handle(retry_as_root_and_chown, SDHandle, fun(HelperHandle) ->
-        helpers:mknod(HelperHandle, FileId, Mode, reg)
+        helpers:mknod(HelperHandle, FileId, Mode, FileTypeFlag)
     end, ?READWRITE).
 
 
@@ -571,6 +582,24 @@ fsync(SDHandle, DataOnly) ->
     run_with_file_handle(SDHandle, fun(FileHandle) ->
         helpers:fsync(FileHandle, DataOnly)
     end).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Return type of file depending on its posix mode.
+%% NOTE: currently only regular files and directories are supported
+%% (hardlinks and symlinks are metadata-only structures).
+%% @end
+%%--------------------------------------------------------------------
+-spec infer_type(Mode :: non_neg_integer()) -> {ok, file_meta:type()} | ?ERROR_NOT_SUPPORTED.
+infer_type(Mode) ->
+    IsRegFile = (Mode band 8#100000) =/= 0,
+    IsDir = (Mode band 8#40000) =/= 0,
+    case {IsRegFile, IsDir} of
+        {true, false} -> {ok, ?REGULAR_FILE_TYPE};
+        {false, true} -> {ok, ?DIRECTORY_TYPE};
+        {false, false} -> ?ERROR_NOT_SUPPORTED
+    end.
 
 
 %%%===================================================================
