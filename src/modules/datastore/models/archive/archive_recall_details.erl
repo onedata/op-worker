@@ -20,7 +20,7 @@
 %% API
 -export([create/2, delete/1]).
 -export([get/1]).
--export([report_started/1, report_finished/1, report_cancelled/1, report_error/2]).
+-export([report_started/1, report_finished/1, report_cancel_started/1, report_error/2]).
 %% Datastore callbacks
 -export([get_ctx/0, get_record_version/0, get_record_struct/1, 
     on_remote_doc_created/2, resolve_conflict/3]).
@@ -93,8 +93,8 @@ report_finished(Id) ->
     end)).
 
 
--spec report_cancelled(id()) -> ok | {error, term()}.
-report_cancelled(Id) ->
+-spec report_cancel_started(id()) -> ok | {error, term()}.
+report_cancel_started(Id) ->
     ?extract_ok(datastore_model:update(?CTX, Id, fun
         (#archive_recall_details{cancel_timestamp = undefined} = ArchiveRecall) -> 
             {ok, ArchiveRecall#archive_recall_details{cancel_timestamp = global_clock:timestamp_millis()}};
@@ -176,8 +176,13 @@ resolve_conflict(_Ctx, #document{value = RemoteValue} = RemoteDoc, #document{val
         _ ->
             case LocalCancelTimestamp < RemoteCancelTimestamp of
                 true ->
+                    #document{mutators = [RemoteMutator]} = RemoteDoc,
+                    FinalValue = case RemoteMutator of
+                        LocalProviderId -> RemoteValue;
+                        _ -> DocBase#document.value
+                    end,
                     {true, DocBase#document{
-                        value = RemoteValue#archive_recall_details{cancel_timestamp = LocalCancelTimestamp}
+                        value = FinalValue#archive_recall_details{cancel_timestamp = LocalCancelTimestamp}
                     }};
                 false ->
                     {false, RemoteDoc}
@@ -192,10 +197,15 @@ resolve_conflict(_Ctx, #document{value = RemoteValue} = RemoteDoc, #document{val
 -spec handle_remote_change(od_space:id(), doc()) -> ok.
 handle_remote_change(_SpaceId, #document{value = #archive_recall_details{finish_timestamp = undefined}}) ->
     ok;
-handle_remote_change(SpaceId, #document{value = #archive_recall_details{recalling_provider_id = ProviderId}} = Doc) ->
+handle_remote_change(SpaceId, #document{value = #archive_recall_details{recalling_provider_id = ProviderId}}) ->
     case oneprovider:get_id_or_undefined() of
         ProviderId ->
             ok;
         _ ->
+            % It should only be invalidated after changes done by recalling provider but
+            % it is not possible to unambiguously determine change origin provider 
+            % (mutator field could have been overwritten during conflict resolution).
+            % Therefore invalidate cache on each remote change 
+            % (recall cancels should be rare, so it should not be a problem).
             archive_recall_cache:invalidate_on_all_nodes(SpaceId)
     end.

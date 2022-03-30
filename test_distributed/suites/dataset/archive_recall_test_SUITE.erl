@@ -830,9 +830,9 @@ check_effective_cache_values(RecallRootFileGuid) ->
 mock_recall_traverse_finished() ->
     Nodes = oct_background:get_all_providers_nodes(),
     test_utils:mock_new(Nodes, archive_recall_traverse),
-    Self = self(),
+    TestProcess = self(),
     test_utils:mock_expect(Nodes, archive_recall_traverse, task_finished, fun(TaskId, Pool) ->
-        Self ! {recall_traverse_finished, self()},
+        TestProcess ! {recall_traverse_finished, self()},
         receive continue ->
             meck:passthrough([TaskId, Pool])
         end
@@ -842,11 +842,11 @@ mock_recall_traverse_finished() ->
 mock_cancel_test_slave_job() ->
     Nodes = oct_background:get_all_providers_nodes(),
     test_utils:mock_new(Nodes, archive_recall_traverse),
-    Self = self(),
+    TestProcess = self(),
     test_utils:mock_expect(Nodes, archive_recall_traverse, do_slave_job_unsafe, fun(_, TaskId) ->
-        Self ! {slave_job, self()},
+        TestProcess ! {slave_job, self()},
         receive check_cancel ->
-            Self ! {result, traverse:is_job_cancelled(TaskId)}
+            TestProcess ! {result, traverse:is_job_cancelled(TaskId)}
         end,
         ok
     end).

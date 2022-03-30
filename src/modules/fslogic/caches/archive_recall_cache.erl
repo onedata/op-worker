@@ -113,7 +113,7 @@ invalidate_on_all_nodes(SpaceId) ->
 -spec get(od_space:id(), file_meta:uuid() | file_meta:doc()) ->
     {ok, undefined | {ongoing | finished, file_meta:uuid()}} 
     | {error, {file_meta_missing, file_meta:uuid()}} | {error, term()}.
-get(SpaceId, Doc = #document{key = FileUuid, value = #file_meta{}}) ->
+get(SpaceId, Doc = #document{value = #file_meta{}}) ->
     CacheName = ?CACHE_NAME(SpaceId),
     case effective_value:get_or_calculate(CacheName, Doc, fun find_closest_recall/1) of
         {ok, Res, _} ->

@@ -57,7 +57,7 @@
         archive_recall:report_bytes_copied(TaskId, BytesCopied),
         case traverse:is_job_cancelled(TaskId) of
             true -> abort;
-            false -> cont
+            false -> continue
         end
     end
 }). 
@@ -124,7 +124,7 @@ start(ArchiveDoc, UserCtx, ParentGuid, TargetFilename) ->
 -spec cancel(id()) -> ok | {error, term()}.
 cancel(TaskId) ->
     case tree_traverse:cancel(?POOL_NAME, TaskId) of
-        ok -> archive_recall_details:report_cancelled(TaskId);
+        ok -> archive_recall_details:report_cancel_started(TaskId);
         {error, _} = Error -> Error 
     end.
 

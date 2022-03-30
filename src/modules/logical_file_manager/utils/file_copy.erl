@@ -36,7 +36,7 @@
 
 % Callback called after each successful write operation; 
 % the number in the function argument is the number of successfully written bytes.
--type callback() :: fun((non_neg_integer()) -> cont | abort).
+-type callback() :: fun((non_neg_integer()) -> continue | abort).
 
 -type options() :: #{
     % when enabled whole subtree will be copied
@@ -49,7 +49,7 @@
 
 -define(DEFAULT_RECURSIVE_OPT, true).
 -define(DEFAULT_OVERWRITE_OPT, false).
--define(DEFAULT_WRITE_CALLBACK_OPT, fun(_) -> cont end).
+-define(DEFAULT_WRITE_CALLBACK_OPT, fun(_) -> continue end).
 
 %%%===================================================================
 %%% API
@@ -207,7 +207,7 @@ copy_file_content(SourceHandle, TargetHandle, Offset, BufferSize, Callback) ->
             case lfm:write(TargetHandle, Offset, Data) of
                 {ok, NewTargetHandle, N} ->
                     case Callback(byte_size(Data)) of
-                        cont ->
+                        continue ->
                             copy_file_content(
                                 NewSourceHandle, NewTargetHandle, Offset + N, BufferSize, Callback);
                         abort ->

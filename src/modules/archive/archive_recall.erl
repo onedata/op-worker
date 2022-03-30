@@ -98,7 +98,9 @@ report_file_failed(Id, FileGuid, Error) ->
         <<"fileId">> => ObjectId,
         <<"reason">> => errors:to_json(Error)
     },
+    % save error in synchronized model (so remote providers have knowledge about failure).
     archive_recall_details:report_error(Id, ErrorJson),
+    % save error in local infinite log.
     archive_recall_progress:report_error(Id, ErrorJson).
 
 

@@ -79,7 +79,7 @@
 }).
 
 -record(cancel_archive_recall, {
-    id :: archive:id()
+    id :: archive_recall:id()
 }).
 
 -record(get_recall_details, {
