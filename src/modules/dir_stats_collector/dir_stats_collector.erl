@@ -264,9 +264,9 @@ flush_stats(Guid, CollectionType) ->
 
 -spec delete_stats(file_id:file_guid(), dir_stats_collection:type()) -> ok | ?ERROR_INTERNAL_SERVER_ERROR.
 delete_stats(Guid, CollectionType) ->
-    % TODO VFS-8837 - delete only for directories
-    % TODO VFS-8837 - delete collection when collecting was enabled in past
-    % TODO VFS-8837 - delete from collector memory for collections_initialization status
+    % TODO VFS-9204 - delete only for directories
+    % TODO VFS-9204 - delete collection when collecting was enabled in past
+    % TODO VFS-9204 - delete from collector memory for collections_initialization status
     case dir_stats_collector_config:is_collecting_active(file_id:guid_to_space_id(Guid)) of
         true ->
             case request_flush(Guid, CollectionType, prune_flushed) of
@@ -305,7 +305,7 @@ stop_collecting(SpaceId) ->
                     [?FUNCTION_NAME, ErrorAns, BadNodes])
         end,
 
-        % TODO VFS-8837 - handle node restart during stop and integrate with HA
+        % TODO VFS-9204 - handle node restart during stop and integrate with HA
         dir_stats_collector_config:report_collectors_stopped(SpaceId)
     end),
     ok.
