@@ -132,11 +132,10 @@ run(TestSpec = #atm_workflow_execution_test_spec{
     )),
 
     ExpState = atm_workflow_execution_exp_state_builder:init(
-        SpaceId, ?NOW(), AtmWorkflowSchemaRevision#atm_workflow_schema_revision.lanes
+        ProviderSelector, SpaceId, AtmWorkflowExecutionId, ?NOW(),
+        AtmWorkflowSchemaRevision#atm_workflow_schema_revision.lanes
     ),
-    true = atm_workflow_execution_exp_state_builder:assert_matches_with_backend(
-        ProviderSelector, AtmWorkflowExecutionId, ExpState
-    ),
+    true = atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState),
 
     monitor_workflow_execution(#test_ctx{
         test_spec = TestSpec,
@@ -173,9 +172,8 @@ monitor_workflow_execution(TestCtx) ->
                 TestCtx
         end,
 
-        reply_to_execution_process(ReplyTo, case {Timing, StepMockSpec#atm_step_mock_spec.mock_result} of
-            {before_step, false} -> passthrough;
-            {before_step, {true, MockedResult}} -> {return, MockedResult};
+        reply_to_execution_process(ReplyTo, case {Timing, StepMockSpec#atm_step_mock_spec.mock_execution} of
+            {before_step, MockExecution} -> MockExecution;
             {after_step, _} -> ok
         end),
 
@@ -278,6 +276,44 @@ call_if_defined(Fun, Input) -> Fun(Input).
 -spec get_exp_state_diff(mock_call_report(), step_mock_spec()) ->
     exp_state_diff().
 get_exp_state_diff(
+    #mock_call_report{step = prepare_lane, timing = before_step},
+    #atm_step_mock_spec{before_step_exp_state_diff = default}
+) ->
+    fun(_) -> false end;
+
+get_exp_state_diff(
+    #mock_call_report{step = create_run, timing = before_step},
+    #atm_step_mock_spec{before_step_exp_state_diff = default}
+) ->
+    fun(#atm_mock_call_ctx{
+        workflow_execution_exp_state = ExpState0,
+        call_args = [AtmLaneRunSelector, _AtmWorkflowExecutionDoc, _AtmWorkflowExecutionCtx]
+    }) ->
+        {true, atm_workflow_execution_exp_state_builder:report_lane_run_started_preparing(
+            AtmLaneRunSelector, ExpState0
+        )}
+    end;
+
+get_exp_state_diff(
+    #mock_call_report{step = create_run, timing = after_step},
+    #atm_step_mock_spec{after_step_exp_state_diff = default}
+) ->
+    fun(#atm_mock_call_ctx{
+        workflow_execution_exp_state = ExpState0,
+        call_args = [AtmLaneRunSelector, _AtmWorkflowExecutionDoc, _AtmWorkflowExecutionCtx]
+    }) ->
+        {true, atm_workflow_execution_exp_state_builder:report_lane_run_created(
+            AtmLaneRunSelector, ExpState0
+        )}
+    end;
+
+get_exp_state_diff(
+    #mock_call_report{step = prepare_lane, timing = after_step},
+    #atm_step_mock_spec{after_step_exp_state_diff = default}
+) ->
+    fun(_) -> false end;  %% TODO implement
+
+get_exp_state_diff(
     #mock_call_report{timing = before_step},
     #atm_step_mock_spec{before_step_exp_state_diff = default}
 ) ->
@@ -304,16 +340,8 @@ get_exp_state_diff(
 
 %% @private
 -spec assert_exp_workflow_execution_state(test_ctx()) -> test_ctx().
-assert_exp_workflow_execution_state(#test_ctx{
-    test_spec = #atm_workflow_execution_test_spec{
-        provider = ProviderSelector
-    },
-    workflow_execution_id = AtmWorkflowExecutionId,
-    workflow_execution_exp_state = ExpState
-}) ->
-    case atm_workflow_execution_exp_state_builder:assert_matches_with_backend(
-        ProviderSelector, AtmWorkflowExecutionId, ExpState
-    ) of
+assert_exp_workflow_execution_state(#test_ctx{workflow_execution_exp_state = ExpState}) ->
+    case atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState) of
         true -> ok;
         false -> ?assertEqual(success, failure)
     end.
@@ -510,16 +538,29 @@ exec_mock(AtmWorkflowExecutionId, Step, Args) ->
             meck:passthrough(Args);
         TestProcPid ->
             MockCallReport = #mock_call_report{timing = before_step, step = Step, args = Args},
+            MockExecution = call_test_process(TestProcPid, MockCallReport),
 
-            case call_test_process(TestProcPid, MockCallReport) of
-                passthrough ->
+            case MockExecution of
+                false ->
                     Result = meck:passthrough(Args),
                     ok = call_test_process(TestProcPid, MockCallReport#mock_call_report{timing = after_step}),
                     Result;
-                {return, MockedResult} ->
-                    MockedResult
+                {false, MockedResult} ->
+                    meck:passthrough(Args),
+                    ok = call_test_process(TestProcPid, MockCallReport#mock_call_report{timing = after_step}),
+                    return_or_throw(MockedResult);
+                {true, MockedResult} ->
+                    return_or_throw(MockedResult)
             end
     end.
+
+
+%% @private
+-spec return_or_throw
+    ({return, Result}) -> Result when Result :: term();
+    ({throw, errors:error()}) -> no_return().
+return_or_throw({return, Result}) -> Result;
+return_or_throw({throw, Error}) -> throw(Error).
 
 
 %% @private
@@ -539,7 +580,7 @@ call_test_process(TestProcPid, Msg) ->
 %% @private
 -spec reply_to_execution_process
     % when replying to 'before_step' report
-    (reply_to(), passthrough | {return, term()}) -> ok;
+    (reply_to(), {false | true, {return | throw, term()}}) -> ok;
     % when replying to 'after_step' report
     (reply_to(), ok) -> ok.
 reply_to_execution_process({ExecutionProcPid, MRef}, Reply) ->

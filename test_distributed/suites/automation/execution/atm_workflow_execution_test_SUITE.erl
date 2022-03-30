@@ -32,7 +32,8 @@
 
     atm_workflow_with_invalid_initial_store_content_scheduling_should_fail_test/1,
 
-    create_first_lane_run_failure_test/1
+    create_first_lane_run_failure_test/1,
+    prepare_first_lane_run_failure_test/1
 ]).
 
 groups() -> [
@@ -46,7 +47,8 @@ groups() -> [
         atm_workflow_with_invalid_initial_store_content_scheduling_should_fail_test
     ]},
     {execution_tests, [parallel], [
-        create_first_lane_run_failure_test
+        create_first_lane_run_failure_test,
+        prepare_first_lane_run_failure_test
     ]}
 ].
 
@@ -55,6 +57,15 @@ all() -> [
     {group, executable_workflow_schema_scheduling_with_invalid_args},
     {group, execution_tests}
 ].
+
+
+-define(ct_wtf(__EXPR),
+    try
+        __EXPR
+    catch W:T:F ->
+        ct:pal("~p", [{W,T,F}])
+    end
+).
 
 
 %%%===================================================================

@@ -16,7 +16,8 @@
 -include("atm/atm_test_schema_drafts.hrl").
 
 -export([
-    create_first_lane_run_failure_test/0
+    create_first_lane_run_failure_test/0,
+    prepare_first_lane_run_failure_test/0
 ]).
 
 
@@ -42,7 +43,8 @@
             }],
             store_iterator_spec = #atm_store_iterator_spec_draft{
                 store_schema_id = <<"st1">>
-            }
+            },
+            max_retries = 0
         }]
     },
     supplementary_lambdas = #{<<"echo">> => #{1 => ?ECHO_LAMBDA_DRAFT}}
@@ -65,12 +67,7 @@ create_first_lane_run_failure_test() ->
             lane_runs = [#atm_lane_run_execution_test_spec{
                 selector = {1, 1},
                 create_run = #atm_step_mock_spec{
-                    before_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
-                        {true, atm_workflow_execution_exp_state_builder:report_lane_run_started_preparing(
-                            {1, 1}, ExpState0
-                        )}
-                    end,
-                    mock_result = {true, ?ERROR_INTERNAL_SERVER_ERROR}
+                    mock_execution = {true, {throw, ?ERROR_INTERNAL_SERVER_ERROR}}
                 },
                 prepare_lane = #atm_step_mock_spec{
                     after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
