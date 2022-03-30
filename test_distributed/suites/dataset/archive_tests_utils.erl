@@ -282,14 +282,16 @@ assert_metadata_copied(Node, SessionId, SourceGuid, TargetGuid) ->
 
 
 assert_children_copied(Node, SessionId, SourceGuid, TargetGuid, FollowSymlinks, Attempts) ->
-    assert_children_copied(Node, SessionId, SourceGuid, TargetGuid, #{offset => 0, size => ?LISTED_CHILDREN_LIMIT}, FollowSymlinks, Attempts).
+    ListOpts = #{optimize_continuous_listing => false, offset => 0, limit => ?LISTED_CHILDREN_LIMIT},
+    assert_children_copied(Node, SessionId, SourceGuid, TargetGuid, ListOpts, FollowSymlinks, Attempts).
 
 assert_children_copied(Node, SessionId, SourceGuid, TargetGuid, ListOpts = #{offset := Offset}, FollowSymlinks, Attempts) ->
-    {ok, SourceChildren, #{is_last := SourceIsLast}} =
+    {ok, SourceChildren, SourceListingState} =
         lfm_proxy:get_children(Node, SessionId, ?FILE_REF(SourceGuid), ListOpts),
     GetTargetChildrenFun = fun() ->
-        {ok, TargetChildren, _} = ?assertMatch({ok, _, #{is_last := SourceIsLast}},
+        {ok, TargetChildren, TargetListingState} = ?assertMatch({ok, _, _},
             lfm_proxy:get_children(Node, SessionId, ?FILE_REF(TargetGuid), ListOpts), Attempts),
+        ?assertEqual(file_listing:is_finished(SourceListingState), file_listing:is_finished(TargetListingState)),
         TargetChildren
     end,
     SourceNames = [N || {_, N} <- SourceChildren],
@@ -299,7 +301,7 @@ assert_children_copied(Node, SessionId, SourceGuid, TargetGuid, ListOpts = #{off
         assert_copied(Node, SessionId, SourceChildGuid, TargetChildGuid, FollowSymlinks, Attempts)
     end, lists:zip(SourceChildren, TargetChildren)),
 
-    case SourceIsLast of
+    case file_listing:is_finished(SourceListingState) of
         true ->
             ok;
         false ->

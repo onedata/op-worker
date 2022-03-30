@@ -365,7 +365,7 @@ run_deletion_scan(StorageFileCtx, ScanNum, Config, FileCtx) ->
         deletion_job => true,
         sync_links_token => #link_token{},
         sync_links_children => [],
-        file_meta_token => ?INITIAL_DATASTORE_LS_TOKEN,
+        file_meta_token => undefined,
         file_meta_children => [],
         manual => false
     },

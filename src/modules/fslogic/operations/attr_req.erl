@@ -38,6 +38,7 @@
     resolve_name_conflicts |
     allow_name_conflicts.
 
+
 -type compute_file_attr_opts() :: #{
     % Tells whether to calculate attr even if file was recently removed.
     allow_deleted_files => boolean(),
@@ -191,6 +192,7 @@ get_file_details_insecure(UserCtx, FileCtx, Opts) ->
                 false ->
                     undefined
             end,
+            %% @TODO VFS-9280 - pass file_listing index to gui
             index_startid = file_meta:get_name(FileDoc),
             active_permissions_type = ActivePermissionsType,
             has_metadata = has_metadata(FileCtx3),

@@ -534,25 +534,25 @@ mkdir(Worker, SessId, ParentGuid, Name, Mode) ->
 
 
 -spec get_children(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path(),
-    file_meta:list_opts()) ->
-    {ok, [{fslogic_worker:file_guid(), file_meta:name()}], file_meta:list_extended_info()} | lfm:error_reply().
+    file_listing:options()) -> 
+    {ok, [{fslogic_worker:file_guid(), file_meta:name()}], file_listing:state()} | lfm:error_reply().
 get_children(Worker, SessId, FileKey, ListOpts) ->
     ?EXEC(Worker, lfm:get_children(SessId, uuid_to_file_ref(Worker, FileKey), ListOpts)).
 
 
 -spec get_children(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path(),
-    integer(), integer()) ->
+    file_listing:offset(), file_listing:limit()) ->
     {ok, [{fslogic_worker:file_guid(), file_meta:name()}]} | lfm:error_reply().
 get_children(Worker, SessId, FileKey, Offset, Limit) ->
     % TODO VFS-7327 use get_children/4 function accepting options map everywhere in tests
-    case get_children(Worker, SessId, FileKey, #{offset => Offset, size => Limit}) of
-        {ok, List, _ListExtendedInfo} -> {ok, List};
+    case get_children(Worker, SessId, FileKey, #{offset => Offset, limit => Limit, optimize_continuous_listing => false}) of
+        {ok, List, _ListingState} -> {ok, List};
         {error, _} = Error -> Error
     end.
 
 
 -spec get_children_attrs(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path(),
-    dir_req:list_opts()) -> {ok, [#file_attr{}], file_meta:list_extended_info()} | lfm:error_reply().
+    file_listing:options()) -> {ok, [#file_attr{}], file_listing:state()} | lfm:error_reply().
 get_children_attrs(Worker, SessId, FileKey, ListOpts) ->
     ?EXEC(Worker, lfm:get_children_attrs(SessId, uuid_to_file_ref(Worker, FileKey), ListOpts)).
 
@@ -564,7 +564,7 @@ get_child_attr(Worker, SessId, ParentGuid, ChildName) ->
 
 
 -spec get_children_details(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path(),
-    file_meta:list_opts()) -> {ok, [lfm_attrs:file_details()], file_meta:list_extended_info()} | lfm:error_reply().
+    file_listing:options()) -> {ok, [lfm_attrs:file_details()], file_listing:state()} | lfm:error_reply().
 get_children_details(Worker, SessId, FileKey, ListOpts) ->
     ?EXEC(Worker, lfm:get_children_details(SessId, uuid_to_file_ref(Worker, FileKey), ListOpts)).
 

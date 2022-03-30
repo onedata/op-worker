@@ -122,7 +122,7 @@ single_dir_creation_test_base(Config, Clear) ->
                         true ->
                             put(last_ls, NewSum),
                             LsTime = measure_execution_time(fun() ->
-                                ls(Worker, SessId, Dir, <<>>)
+                                ls(Worker, SessId, Dir, undefined)
                             end),
 
                             ct:print("Save num ~p, sum ~p, ls time ~p",
@@ -598,13 +598,16 @@ process_answer(Answers, Ans, ToAddV) ->
     end,
     [ToAdd | proplists:delete(K, Answers)].
 
-ls(Worker, SessId, Dir, Token) ->
-    ListOpts = #{size => 2000, token => Token},
-    {ok, _, #{token := Token2, is_last := IsLast}} = lfm_proxy:get_children(Worker, SessId, {path, Dir}, ListOpts),
-    case IsLast of
+ls(Worker, SessId, Dir, NextPageToken) ->
+    ListOpts = case NextPageToken of
+        undefined -> #{optimize_continuous_listing => true};
+        _ -> #{pagination_token => NextPageToken}
+    end,
+    {ok, _, ListingState} = lfm_proxy:get_children(Worker, SessId, {path, Dir}, ListOpts#{limit => 2000}),
+    case file_listing:is_finished(ListingState) of
         true -> ok;
         false ->
-            ls(Worker, SessId, Dir, Token2)
+            ls(Worker, SessId, Dir, file_listing:build_pagination_token(ListingState))
     end.
 
 get_param_value(ParamName, ParamsList) ->

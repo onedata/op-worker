@@ -25,7 +25,6 @@
 
 -define(COPY_BUFFER_SIZE,
     op_worker:get_env(rename_file_chunk_size, 52428800)). % 50*1024*1024
--define(COPY_LS_SIZE, op_worker:get_env(ls_batch_size, 5000)).
 
 -type child_entry() :: {
     OldGuid :: fslogic_worker:file_guid(),
@@ -220,14 +219,14 @@ copy_file_content(SourceHandle, TargetHandle, Offset, BufferSize, Callback) ->
 -spec copy_children(session:id(), file_id:file_guid(), file_id:file_guid(), options()) ->
     {ok, [child_entry()]} | {error, term()}.
 copy_children(SessId, ParentGuid, TargetParentGuid, Options) ->
-    copy_children(SessId, ParentGuid, TargetParentGuid, ?INITIAL_DATASTORE_LS_TOKEN, [], Options).
+    copy_children(SessId, ParentGuid, TargetParentGuid, #{optimize_continuous_listing => true}, [], Options).
 
 
--spec copy_children(session:id(), file_id:file_guid(), file_id:file_guid(), file_meta:list_token(), 
+-spec copy_children(session:id(), file_id:file_guid(), file_id:file_guid(), file_listing:options(), 
     [child_entry()], options()) -> {ok, [child_entry()]} | {error, term()}.
-copy_children(SessId, ParentGuid, TargetParentGuid, Token, ChildEntriesAcc, Options) ->
-    case lfm:get_children(SessId, ?FILE_REF(ParentGuid), #{token => Token, size => ?COPY_LS_SIZE}) of
-        {ok, Children, ListExtendedInfo} ->
+copy_children(SessId, ParentGuid, TargetParentGuid, ListingOpts, ChildEntriesAcc, Options) ->
+    case lfm:get_children(SessId, ?FILE_REF(ParentGuid), ListingOpts) of
+        {ok, Children, ListingState} ->
             % TODO VFS-6265 fix usage of file names from lfm:get_children as they contain
             % collision suffix which normally shouldn't be there
             ChildEntries = lists:foldl(fun({ChildGuid, ChildName}, ChildrenEntries) ->
@@ -239,12 +238,14 @@ copy_children(SessId, ParentGuid, TargetParentGuid, Token, ChildEntriesAcc, Opti
                 ]
             end, [], Children),
             AllChildEntries = ChildEntriesAcc ++ ChildEntries,
-            case maps:get(is_last, ListExtendedInfo) of
+            case file_listing:is_finished(ListingState) of
                 true ->
                     {ok, AllChildEntries};
                 false ->
-                    NewToken = maps:get(token, ListExtendedInfo),
-                    copy_children(SessId, ParentGuid, TargetParentGuid, NewToken, AllChildEntries, Options)
+                    NextPageListingOpts = 
+                        #{pagination_token => file_listing:build_pagination_token(ListingState)},
+                    copy_children(SessId, ParentGuid, TargetParentGuid, NextPageListingOpts, 
+                        AllChildEntries, Options)
             end;
         Error ->
             Error

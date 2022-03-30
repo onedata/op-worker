@@ -374,10 +374,7 @@ transfer_fs_subtree(State = #state{mod = Mod}, FileCtx, Params) ->
                 true ->
                     case file_ctx:is_dir(FileCtx) of
                         {true, FileCtx2} ->
-                            ListOpts = #{
-                                token => ?INITIAL_DATASTORE_LS_TOKEN,
-                                size => ?DEFAULT_LS_BATCH_SIZE
-                            },
+                            ListOpts = #{optimize_continuous_listing => true},
                             transfer_dir(State, FileCtx2, ListOpts, Params);
                         {false, FileCtx2} ->
                             Mod:transfer_regular_file(FileCtx2, Params)
@@ -391,25 +388,25 @@ transfer_fs_subtree(State = #state{mod = Mod}, FileCtx, Params) ->
 
 
 %% @private
--spec transfer_dir(state(), file_ctx:ctx(), file_meta:list_opts(), transfer_params()) ->
+-spec transfer_dir(state(), file_ctx:ctx(), file_listing:options(), transfer_params()) ->
     ok | {error, term()}.
 transfer_dir(State, FileCtx, ListOpts, TransferParams = #transfer_params{
     transfer_id = TransferId,
     user_ctx = UserCtx
 }) ->
-    {Children, ListExtendedInfo, FileCtx2} = files_tree:get_children(FileCtx, UserCtx, ListOpts),
+    {Children, ListingState, FileCtx2} = files_tree:list_children(FileCtx, UserCtx, ListOpts),
 
     Length = length(Children),
     transfer:increment_files_to_process_counter(TransferId, Length),
     enqueue_files_transfer(State, Children, TransferParams),
 
-    case maps:get(is_last, ListExtendedInfo) of
+    case file_listing:is_finished(ListingState) of
         true ->
             transfer:increment_files_processed_counter(TransferId),
             ok;
         false ->
-            NewToken = maps:get(token, ListExtendedInfo),
-            transfer_dir(State, FileCtx2, ListOpts#{token => NewToken}, TransferParams)
+            NextPageToken = file_listing:build_pagination_token(ListingState),
+            transfer_dir(State, FileCtx2, #{pagination_token => NextPageToken}, TransferParams)
     end.
 
 

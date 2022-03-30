@@ -59,9 +59,8 @@
 save_master_job(Key, Job = #tree_traverse{
     file_ctx = FileCtx,
     user_id = UserId,
-    token = Token,
-    last_name = LastName,
-    last_tree = LastTree,
+    optimize_continuous_listing = OptimizeContinuousListing,
+    pagination_token = PaginationToken,
     child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
     children_master_jobs_mode = ChildrenMasterJobsMode,
     track_subtree_status = TrackSubtreeStatus,
@@ -80,9 +79,8 @@ save_master_job(Key, Job = #tree_traverse{
         task_id = TaskId,
         doc_id = Uuid,
         user_id = UserId,
-        use_listing_token = Token =/= undefined,
-        last_name = LastName,
-        last_tree = LastTree,
+        optimize_continuous_listing = OptimizeContinuousListing,
+        pagination_token = PaginationToken,
         child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
         children_master_jobs_mode = ChildrenMasterJobsMode,
         track_subtree_status = TrackSubtreeStatus,
@@ -116,9 +114,8 @@ get_master_job(#document{value = #tree_traverse_job{
     task_id = TaskId,
     doc_id = DocId,
     user_id = UserId,
-    use_listing_token = UseListingToken,
-    last_name = LastName,
-    last_tree = LastTree,
+    optimize_continuous_listing = OptimizeContinuousListing,
+    pagination_token = PaginationToken,
     child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
     children_master_jobs_mode = ChildrenMasterJobsMode,
     track_subtree_status = TrackSubtreeStatus,
@@ -135,12 +132,8 @@ get_master_job(#document{value = #tree_traverse_job{
             Job = #tree_traverse{
                 file_ctx = FileCtx,
                 user_id = UserId,
-                token = case UseListingToken of
-                    true -> ?INITIAL_DATASTORE_LS_TOKEN;
-                    false -> undefined
-                end,
-                last_name = LastName,
-                last_tree = LastTree,
+                optimize_continuous_listing = OptimizeContinuousListing,
+                pagination_token = PaginationToken,
                 child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
                 children_master_jobs_mode = ChildrenMasterJobsMode,
                 track_subtree_status = TrackSubtreeStatus,
@@ -184,7 +177,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    5.
+    6.
 
 
 -spec get_record_struct(datastore_model:record_version()) ->
@@ -275,6 +268,26 @@ get_record_struct(5) ->
         {traverse_info, binary},
         {symlink_resolution_policy, atom}, % modified field
         {resolved_root_uuids, [string]}, % new field
+        {relative_path, binary},
+        {encountered_files, #{string => boolean}}
+    ]};
+get_record_struct(6) ->
+    {record, [
+        {pool, string},
+        {callback_module, atom},
+        {task_id, string},
+        {doc_id, string},
+        {user_id, string},
+        {optimize_continuous_listing, boolean}, % modified field (renamed from use_listing_token)
+        {pagination_token, string}, % new field
+        % removed fields last_name and last_tree
+        {child_dirs_job_generation_policy, atom},
+        {children_master_jobs_mode, atom},
+        {track_subtree_status, boolean},
+        {batch_size, integer},
+        {traverse_info, binary},
+        {symlink_resolution_policy, atom},
+        {resolved_root_uuids, [string]},
         {relative_path, binary},
         {encountered_files, #{string => boolean}}
     ]}.
@@ -426,6 +439,49 @@ upgrade_record(4, Record) ->
         TraverseInfo,
         SymlinkResolutionPolicy, % modified field
         [], % new field resolved_root_uuids
+        RelativePath,
+        EncounteredFiles
+    }};
+upgrade_record(5, Record) ->
+    {
+        ?MODULE,
+        Pool,
+        CallbackModule,
+        TaskId,
+        DocId,
+        UserId,
+        UseListingToken,
+        LastName,
+        LastTree,
+        ChildDirsJobGenerationPolicy,
+        ChildrenMasterJobsMode,
+        TrackSubtreeStatus,
+        BatchSize,
+        TraverseInfo,
+        SymlinkResolutionPolicy,
+        RootUuids,
+        RelativePath,
+        EncounteredFiles
+    } = Record,
+    
+    OptimizeContinuousListing = UseListingToken,
+    ListingState = file_listing:build_state(OptimizeContinuousListing, LastName, LastTree),
+    
+    {6, {?MODULE,
+        Pool,
+        CallbackModule,
+        TaskId,
+        DocId,
+        UserId,
+        OptimizeContinuousListing,
+        file_listing:build_pagination_token(ListingState),
+        ChildDirsJobGenerationPolicy,
+        ChildrenMasterJobsMode,
+        TrackSubtreeStatus,
+        BatchSize,
+        TraverseInfo,
+        SymlinkResolutionPolicy,
+        RootUuids,
         RelativePath,
         EncounteredFiles
     }}.

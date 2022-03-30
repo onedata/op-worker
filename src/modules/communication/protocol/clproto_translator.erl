@@ -447,10 +447,13 @@ translate_from_protobuf(#'GetFileChildren'{
     index_startid = StartId
 }) ->
     #get_file_children{
-        offset = Offset,
-        size = Size,
-        index_token = Token,
-        index_startid = StartId
+        listing_options = maps_utils:remove_undefined(#{
+            offset => Offset,
+            limit => Size,
+            pagination_token => Token,
+            index => StartId,
+            optimize_continuous_listing => true
+        })
     };
 translate_from_protobuf(#'GetFileChildrenAttrs'{
     offset = Offset,
@@ -460,9 +463,12 @@ translate_from_protobuf(#'GetFileChildrenAttrs'{
     include_link_count = ILC
 }) ->
     #get_file_children_attrs{
-        offset = Offset,
-        size = Size,
-        index_token = Token,
+        listing_options = maps_utils:remove_undefined(#{
+            offset => Offset,
+            limit => Size,
+            pagination_token => Token,
+            optimize_continuous_listing => true
+        }),
         include_replication_status = IRS,
         include_link_count = ILC
     };
@@ -636,8 +642,7 @@ translate_from_protobuf(#'FileChildren'{
 }) ->
     #file_children{
         child_links = [translate_from_protobuf(E) || E <- FileEntries],
-        index_token = Token,
-        is_last = IsLast
+        listing_state = file_listing:build_state(Token, IsLast)
     };
 translate_from_protobuf(#'FileChildrenAttrs'{
     child_attrs = Children,
@@ -646,8 +651,7 @@ translate_from_protobuf(#'FileChildrenAttrs'{
 }) ->
     #file_children_attrs{
         child_attrs = [translate_from_protobuf(E) || E <- Children],
-        index_token = Token,
-        is_last = IsLast
+        listing_state = file_listing:build_state(Token, IsLast)
     };
 translate_from_protobuf(#'FileLocation'{} = Record) ->
     #file_location{
@@ -1454,29 +1458,22 @@ translate_to_protobuf(#get_file_attr{include_replication_status = IRS}) ->
     {get_file_attr, #'GetFileAttr'{include_replication_status = IRS}};
 translate_to_protobuf(#get_child_attr{name = Name, include_replication_status = IRS}) ->
     {get_child_attr, #'GetChildAttr'{name = Name, include_replication_status = IRS}};
-translate_to_protobuf(#get_file_children{
-    offset = Offset,
-    size = Size,
-    index_token = Token,
-    index_startid = StartId
-}) ->
+translate_to_protobuf(#get_file_children{listing_options = ListingOpts}) ->
     {get_file_children, #'GetFileChildren'{
-        offset = Offset,
-        size = Size,
-        index_token = Token,
-        index_startid = StartId
+        offset = maps:get(offset, ListingOpts, undefined),
+        size = maps:get(limit, ListingOpts, undefined),
+        index_token = maps:get(pagination_token, ListingOpts, undefined),
+        index_startid = maps:get(index, ListingOpts, undefined)
     }};
 translate_to_protobuf(#get_file_children_attrs{
-    offset = Offset,
-    size = Size,
-    index_token = Token,
+    listing_options = ListingOpts,
     include_replication_status = IRS,
     include_link_count = ILC
 }) ->
     {get_file_children_attrs, #'GetFileChildrenAttrs'{
-        offset = Offset,
-        size = Size,
-        index_token = Token,
+        offset = maps:get(offset, ListingOpts, undefined),
+        size = maps:get(limit, ListingOpts, undefined),
+        index_token = maps:get(pagination_token, ListingOpts, undefined),
         include_replication_status = IRS,
         include_link_count = ILC
     }};
@@ -1632,26 +1629,24 @@ translate_to_protobuf(#file_attr{} = FileAttr) ->
     }};
 translate_to_protobuf(#file_children{
     child_links = FileEntries,
-    index_token = Token,
-    is_last = IsLast
+    listing_state = ListingState
 }) ->
     {file_children, #'FileChildren'{
         child_links = [translate_to_protobuf(E) || E <- FileEntries],
-        index_token = Token,
-        is_last = IsLast
+        index_token = file_listing:build_pagination_token(ListingState),
+        is_last = file_listing:is_finished(ListingState)
     }};
 translate_to_protobuf(#file_children_attrs{
     child_attrs = Children,
-    index_token = Token,
-    is_last = IsLast
+    listing_state = ListingState
 }) ->
     {file_children_attrs, #'FileChildrenAttrs'{
         child_attrs = lists:map(fun(Child) ->
             {file_attr, Translated} = translate_to_protobuf(Child),
             Translated
         end, Children),
-        index_token = Token,
-        is_last = IsLast
+        index_token = file_listing:build_pagination_token(ListingState),
+        is_last = file_listing:is_finished(ListingState)
     }};
 translate_to_protobuf(#file_location{
     uuid = Uuid,

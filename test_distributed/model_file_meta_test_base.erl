@@ -21,6 +21,10 @@
 
 -define(call_with_time(N, F, A), ?call_with_time(N, file_meta, F, A)).
 -define(call_with_time(N, M, F, A), rpc:call(N, ?MODULE, exec_and_check_time, [M, F, A])).
+-define(path_to_uuid(Worker, Path), fun() ->
+    {ok, #document{key = Uuid}} = rpc:call(Worker, canonical_path, resolve, [Path]),
+    Uuid
+end()).
 
 -export([basic_operations_test_core/2, exec_and_check_time/3]).
 -export([list_children/4, list_children/7, list_children_using_token/3, list_children_using_token/4]).
@@ -146,12 +150,12 @@ basic_operations_test_core(Config, LastLevel) ->
     ?assertMatch({ok, [{_, Space1Uuid}], #{}}, list_children(Worker1, <<"/">>, 0, 10)),
     ?assertMatch({ok, [], #{}}, list_children(Worker1, <<"/Space 1/dir2/file3">>, 0, 10)),
 
-    {{A15, U15, #{}}, ListUuids20_100} = ?call_with_time(Worker1, list_children, [{path, <<"/Space 1/dir1">>}, #{offset => 0, size => 20}]),
-    {{A15_2, U15_2, #{}}, ListUuids100_100} = ?call_with_time(Worker1, list_children, [{path, <<"/Space 1/dir1">>}, #{offset => 0, size => 100}]),
-    {{A15_3, U15_3, #{}}, ListUuids1000_100} = ?call_with_time(Worker1, list_children, [{path, <<"/Space 1/dir1">>}, #{offset => 0, size => 1000}]),
-    {{A15_4, U15_4, #{}}, ListUuids1_100} = ?call_with_time(Worker1, list_children, [{path, <<"/Space 1/dir1">>}, #{offset => 0, size => 1}]),
-    {{A16, U16, #{}}, ListUuids50_60_100} = ?call_with_time(Worker1, list_children, [{path, <<"/Space 1/dir1">>}, #{offset => 50, size => 10}]),
-    {{AL20_4, UL20_4, #{}}, ListUuidsLevel20} = ?call_with_time(Worker1, list_children, [{path, Level20Path}, #{offset => 0, size => 1}]),
+    {{A15, U15, #{}}, ListUuids20_100} = ?call_with_time(Worker1, file_meta_forest, list, [?path_to_uuid(Worker1, <<"/Space 1/dir1">>), #{offset => 0, size => 20}]),
+    {{A15_2, U15_2, #{}}, ListUuids100_100} = ?call_with_time(Worker1, file_meta_forest, list, [?path_to_uuid(Worker1, <<"/Space 1/dir1">>), #{offset => 0, size => 100}]),
+    {{A15_3, U15_3, #{}}, ListUuids1000_100} = ?call_with_time(Worker1, file_meta_forest, list, [?path_to_uuid(Worker1, <<"/Space 1/dir1">>), #{offset => 0, size => 1000}]),
+    {{A15_4, U15_4, #{}}, ListUuids1_100} = ?call_with_time(Worker1, file_meta_forest, list, [?path_to_uuid(Worker1, <<"/Space 1/dir1">>), #{offset => 0, size => 1}]),
+    {{A16, U16, #{}}, ListUuids50_60_100} = ?call_with_time(Worker1, file_meta_forest, list, [?path_to_uuid(Worker1, <<"/Space 1/dir1">>), #{offset => 50, size => 10}]),
+    {{AL20_4, UL20_4, #{}}, ListUuidsLevel20} = ?call_with_time(Worker1, file_meta_forest, list, [?path_to_uuid(Worker1, Level20Path), #{offset => 0, size => 1}]),
 
     ?assertMatch({ok, _}, {A15, U15}),
     ?assertMatch({ok, _}, {A15_2, U15_2}),
@@ -265,22 +269,31 @@ basic_operations_test_core(Config, LastLevel) ->
 %%%===================================================================
 
 list_children(Worker, ParentPath, Offset, Size) ->
-    rpc:call(Worker, file_meta, list_children, [{path, ParentPath}, #{offset => Offset, size => Size}]).
+    list_children_by_path(Worker, ParentPath, #{offset => Offset, size => Size}).
 
 list_children(Worker, ParentPath, Offset, Size, Token, LastName, LastTree) ->
-    rpc:call(Worker, file_meta, list_children, [{path, ParentPath}, #{
+    list_children_by_path(Worker, ParentPath, #{
         offset => Offset,
         size => Size,
         token => Token,
-        last_name => LastName,
-        last_tree => LastTree
-    }]).
+        prev_link_name => LastName,
+        prev_tree_id => LastTree
+    }).
 
 list_children_using_token(Worker, ParentPath, Size) ->
-    rpc:call(Worker, file_meta, list_children, [{path, ParentPath}, #{token => ?INITIAL_DATASTORE_LS_TOKEN, size => Size}]).
+    list_children_by_path(Worker, ParentPath, #{token => #link_token{}, size => Size}).
 
 list_children_using_token(Worker, ParentPath, Size, Token) ->
-    rpc:call(Worker, file_meta, list_children, [{path, ParentPath}, #{token => Token, size => Size}]).
+    list_children_by_path(Worker, ParentPath, #{token => Token, size => Size}).
+
+list_children_by_path(Worker, Path, Opts) ->
+    case rpc:call(Worker, canonical_path, resolve, [Path]) of
+        {ok, #document{key = Uuid}} ->
+            rpc:call(Worker, file_meta_forest, list, [Uuid, Opts]);
+        Error ->
+            Error
+    end.
+    
 
 %%%===================================================================
 %%% Internal functions

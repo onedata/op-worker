@@ -25,8 +25,6 @@
 %% API
 -export([rename/4]).
 
--define(DEFAULT_LS_BATCH_SIZE, op_worker:get_env(ls_batch_size, 5000)).
-
 %%%===================================================================
 %%% API functions
 %%%===================================================================
@@ -551,16 +549,16 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentCtx0, TargetNa
 -spec rename_child_locations(user_ctx:ctx(), ParentFileCtx :: file_ctx:ctx(),
     ParentStorageFileId :: helpers:file_id()) -> [#file_renamed_entry{}].
 rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId) ->
-    ListOpts = #{token => ?INITIAL_DATASTORE_LS_TOKEN, size => ?DEFAULT_LS_BATCH_SIZE},
+    ListOpts = #{optimize_continuous_listing => true},
     rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId, ListOpts, []).
 
 
 -spec rename_child_locations(user_ctx:ctx(), ParentFileCtx :: file_ctx:ctx(),
-    ParentStorageFileId :: helpers:file_id(), file_meta:list_opts(), [#file_renamed_entry{}]) ->
+    ParentStorageFileId :: helpers:file_id(), file_listing:options(), [#file_renamed_entry{}]) ->
     [#file_renamed_entry{}].
 rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId, ListOpts, ChildEntries) ->
     ParentGuid = file_ctx:get_logical_guid_const(ParentFileCtx),
-    {Children, ListExtendedInfo, ParentFileCtx2} = files_tree:get_children(ParentFileCtx, UserCtx, ListOpts),
+    {Children, ListingState, ParentFileCtx2} = files_tree:list_children(ParentFileCtx, UserCtx, ListOpts),
     NewChildEntries = lists:flatten(lists:map(fun(ChildCtx) ->
         {ChildName, ChildCtx2} = file_ctx:get_aliased_name(ChildCtx, UserCtx),
         ChildStorageFileId = filename:join(ParentStorageFileId, ChildName),
@@ -579,12 +577,13 @@ rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId, ListOpts, Ch
         end
     end, Children)),
     AllChildEntries = ChildEntries ++ NewChildEntries,
-    case maps:get(is_last, ListExtendedInfo) of
+    case file_listing:is_finished(ListingState) of
         true ->
             AllChildEntries;
         false ->
-            NewToken = maps:get(token, ListExtendedInfo),
-            rename_child_locations(UserCtx, ParentFileCtx2, ParentStorageFileId, ListOpts#{token => NewToken}, AllChildEntries)
+            NextPageToken = file_listing:build_pagination_token(ListingState),
+            rename_child_locations(UserCtx, ParentFileCtx2, ParentStorageFileId, 
+                ListOpts#{pagination_token => NextPageToken}, AllChildEntries)
     end.
 
 %%--------------------------------------------------------------------

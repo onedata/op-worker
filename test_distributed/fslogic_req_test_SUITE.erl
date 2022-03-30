@@ -162,7 +162,7 @@ fslogic_get_file_children_attrs_with_replication_status_test(Config) ->
 
     #fuse_response{fuse_response = #file_children_attrs{child_attrs = ChildrenAttrs}} =
         ?assertMatch(#fuse_response{status = #status{code = ?OK}}, ?file_req(Worker, SessId, SpaceGuid,
-            #get_file_children_attrs{offset = 0, size = 1000, include_replication_status = true})),
+            #get_file_children_attrs{listing_options = #{offset => 0, limit => 1000}, include_replication_status = true})),
     ?assertMatch([_ | _], ChildrenAttrs),
 
     lists:foreach(fun
@@ -205,7 +205,7 @@ fslogic_get_file_children_attrs_test(Config) ->
                         {_, Attrs} = lists:foldl( %% foreach Offset
                             fun(_, {Offset, CurrentChildren}) ->
                                 Response = ?file_req(Worker, SessId, FileGuid,
-                                    #get_file_children_attrs{offset = Offset, size = Size}),
+                                    #get_file_children_attrs{listing_options = #{offset => Offset, limit => Size}}),
 
                                 ?assertMatch(#fuse_response{status = #status{code = ?OK}}, Response),
                                 #fuse_response{fuse_response = #file_children_attrs{
@@ -399,7 +399,7 @@ fslogic_read_dir_test(Config) ->
                     fun(OffsetStep) ->
                         {_, Names} = lists:foldl( %% foreach Offset
                             fun(_, {Offset, CurrentChildren}) ->
-                                Response = ?file_req(Worker, SessId, FileGuid, #get_file_children{offset = Offset, size = Size}),
+                                Response = ?file_req(Worker, SessId, FileGuid, #get_file_children{listing_options = #{offset = Offset, limit = Size}}),
 
                                 ?assertMatch(#fuse_response{status = #status{code = ?OK}}, Response),
                                 #fuse_response{fuse_response = #file_children{child_links = Links}} = Response,
@@ -577,7 +577,7 @@ default_permissions_test(Config) ->
                 fun(SessId) ->
                     Guid = get_guid_privileged(Worker, SessId, Path),
                     ?assertMatch(#fuse_response{status = #status{code = Code}},
-                        ?file_req(Worker, SessId, Guid, #get_file_children{offset = 0}))
+                        ?file_req(Worker, SessId, Guid, #get_file_children{listing_options = #{offset => 0}}))
                 end, SessIds);
         ({chmod, Path, Mode, SessIds, Code}) ->
             lists:foreach(

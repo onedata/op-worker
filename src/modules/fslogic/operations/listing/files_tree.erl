@@ -85,7 +85,7 @@
     get_original_parent/2,
     get_parent/2,
 
-    get_child/3, get_children/3, get_children/4
+    get_child/3, list_children/3, list_children/4
 ]).
 
 -type children_whitelist() :: undefined | [file_meta:name()].
@@ -184,27 +184,27 @@ get_child(FileCtx, Name, UserCtx) ->
     {file_ctx:cache_parent(NewFileCtx, ChildCtx), NewFileCtx}.
 
 
--spec get_children(file_ctx:ctx(), user_ctx:ctx(), file_meta:list_opts()) ->
-    {[file_ctx:ctx()], file_meta:list_extended_info(), file_ctx:ctx()}.
-get_children(FileCtx, UserCtx, ListOpts) ->
-    get_children(FileCtx, UserCtx, ListOpts, undefined).
+-spec list_children(file_ctx:ctx(), user_ctx:ctx(), file_listing:options()) ->
+    {[file_ctx:ctx()], file_listing:state(), file_ctx:ctx()}.
+list_children(FileCtx, UserCtx, ListOpts) ->
+    list_children(FileCtx, UserCtx, ListOpts, undefined).
 
 
--spec get_children(
+-spec list_children(
     file_ctx:ctx(),
     user_ctx:ctx(),
-    file_meta:list_opts(),
+    file_listing:options(),
     children_whitelist()
 ) ->
-    {[file_ctx:ctx()], file_meta:list_extended_info(), file_ctx:ctx()}.
-get_children(FileCtx, UserCtx, ListOpts, ChildrenWhiteList) ->
+    {[file_ctx:ctx()], file_listing:state(), file_ctx:ctx()}.
+list_children(FileCtx, UserCtx, ListOpts, ChildrenWhiteList) ->
     case file_ctx:is_user_root_dir_const(FileCtx, UserCtx) of
         true ->
             get_user_root_dir_children(UserCtx, FileCtx, ListOpts, ChildrenWhiteList);
         false ->
             case file_ctx:is_share_root_dir_const(FileCtx) of
                 true ->
-                    get_share_root_dir_children(UserCtx, FileCtx, ChildrenWhiteList);
+                    list_share_root_dir_children(UserCtx, FileCtx, ChildrenWhiteList);
                 false ->
                     case is_space_dir_accessed_in_open_handle_mode(UserCtx, FileCtx) of
                         true ->
@@ -212,7 +212,7 @@ get_children(FileCtx, UserCtx, ListOpts, ChildrenWhiteList) ->
                                 UserCtx, FileCtx, ListOpts, ChildrenWhiteList
                             );
                         false ->
-                            get_file_children(FileCtx, ListOpts, ChildrenWhiteList)
+                            list_file_children(FileCtx, ListOpts, ChildrenWhiteList)
                     end
             end
     end.
@@ -317,14 +317,14 @@ get_user_root_dir_child(UserCtx, UserRootDirCtx, Name) ->
 -spec get_user_root_dir_children(
     user_ctx:ctx(),
     file_ctx:ctx(),
-    file_meta:list_opts(),
+    file_listing:options(),
     children_whitelist()
 ) ->
-    {[file_ctx:ctx()], file_meta:list_extended_info(), file_ctx:ctx()}.
+    {[file_ctx:ctx()], file_listing:state(), file_ctx:ctx()}.
 get_user_root_dir_children(UserCtx, UserRootDirCtx, ListOpts, SpaceWhiteList) ->
     % offset can be negative if last_name is passed too
     Offset = max(maps:get(offset, ListOpts, 0), 0),
-    Limit = maps:get(size, ListOpts, ?DEFAULT_LS_BATCH_SIZE),
+    Limit = maps:get(limit, ListOpts, ?DEFAULT_LS_BATCH_SIZE),
 
     AllUserSpaces = user_ctx:get_eff_spaces(UserCtx),
 
@@ -354,7 +354,7 @@ get_user_root_dir_children(UserCtx, UserRootDirCtx, ListOpts, SpaceWhiteList) ->
         false ->
             []
     end,
-    {Children, #{is_last => length(Children) < Limit}, UserRootDirCtx}.
+    {Children, build_listing_state(UserCtx, Children, Limit), UserRootDirCtx}.
 
 
 %% @private
@@ -378,10 +378,10 @@ get_space_share_child(SpaceDirCtx, Name, UserCtx) ->
 -spec get_space_open_handle_shares(
     user_ctx:ctx(),
     file_ctx:ctx(),
-    file_meta:list_opts(),
+    file_listing:options(),
     children_whitelist()
 ) ->
-    {[file_ctx:ctx()], file_meta:list_extended_info(), file_ctx:ctx()}.
+    {[file_ctx:ctx()], file_listing:state(), file_ctx:ctx()}.
 get_space_open_handle_shares(UserCtx, SpaceDirCtx, ListOpts, ShareWhiteList) ->
     % offset can be negative if last_name is passed too
     Offset = max(maps:get(offset, ListOpts, 0), 0),
@@ -416,7 +416,7 @@ get_space_open_handle_shares(UserCtx, SpaceDirCtx, ListOpts, ShareWhiteList) ->
         false ->
             []
     end,
-    {Children, #{is_last => length(Children) < Limit}, SpaceDirCtx}.
+    {Children, build_listing_state(UserCtx, Children, Limit), SpaceDirCtx}.
 
 
 %% @private
@@ -435,9 +435,9 @@ get_share_root_dir_child(UserCtx, ShareRootDirCtx, Name) ->
 
 
 %% @private
--spec get_share_root_dir_children(user_ctx:ctx(), file_ctx:ctx(), children_whitelist()) ->
-    {[file_ctx:ctx()], file_meta:list_extended_info(), file_ctx:ctx()}.
-get_share_root_dir_children(UserCtx, ShareRootDirCtx, FileWhiteList) ->
+-spec list_share_root_dir_children(user_ctx:ctx(), file_ctx:ctx(), children_whitelist()) ->
+    {[file_ctx:ctx()], file_listing:state(), file_ctx:ctx()}.
+list_share_root_dir_children(UserCtx, ShareRootDirCtx, FileWhiteList) ->
     ShareId = file_ctx:get_share_id_const(ShareRootDirCtx),
     ChildCtx = get_share_root_file(UserCtx, ShareId),
 
@@ -451,7 +451,7 @@ get_share_root_dir_children(UserCtx, ShareRootDirCtx, FileWhiteList) ->
                 false -> []
             end
     end,
-    {Children, #{is_last => true}, ShareRootDirCtx}.
+    {Children, file_listing:default_state(), ShareRootDirCtx}.
 
 
 %% @private
@@ -485,28 +485,29 @@ get_dir_child(FileCtx, Name) ->
 
 
 %% @private
--spec get_file_children(file_ctx:ctx(), file_meta:list_opts(), children_whitelist()) ->
-    {[file_ctx:ctx()], file_meta:list_extended_info(), file_ctx:ctx()}.
-get_file_children(FileCtx, ListOpts, ChildrenWhiteList) ->
+-spec list_file_children(file_ctx:ctx(), file_listing:options(), children_whitelist()) ->
+    {[file_ctx:ctx()], file_listing:state(), file_ctx:ctx()}.
+list_file_children(FileCtx, ListOpts, ChildrenWhiteList) ->
     {#document{} = FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
+    {ok, FileUuid} = file_meta:get_uuid(FileDoc),
 
     case file_meta:get_type(FileDoc) of
         ?DIRECTORY_TYPE ->
             FileGuid = file_ctx:get_logical_guid_const(FileCtx),
             {_FileUuid, SpaceId, ShareId} = file_id:unpack_share_guid(FileGuid),
 
-            {ok, ChildrenLinks, ListExtendedInfo} = case ChildrenWhiteList of
-                undefined -> file_meta:list_children(FileDoc, ListOpts);
-                _ -> file_meta:list_children_whitelisted(FileDoc, ListOpts, ChildrenWhiteList)
+            {ok, ChildrenLinks, ListingState} = case ChildrenWhiteList of
+                undefined -> file_listing:list(FileUuid, ListOpts);
+                _ -> file_listing:list_whitelisted(FileUuid, ListOpts, ChildrenWhiteList)
             end,
             Children = lists:map(fun({Name, Uuid}) ->
                 file_ctx:new_by_uuid(Uuid, SpaceId, ShareId, Name)
             end, ChildrenLinks),
 
-            {Children, ListExtendedInfo, FileCtx2};
+            {Children, ListingState, FileCtx2};
         _ ->
             % In case of listing regular file - return it
-            {[FileCtx2], #{is_last => true}, FileCtx2}
+            {[FileCtx2], file_listing:default_state(), FileCtx2}
     end.
 
 
@@ -519,3 +520,17 @@ is_space_dir_accessed_in_open_handle_mode(UserCtx, FileCtx) ->
     IsInOpenHandleMode = user_ctx:is_in_open_handle_mode(UserCtx),
 
     IsSpaceDir andalso IsInOpenHandleMode andalso ShareId == undefined.
+
+
+%% @private
+-spec build_listing_state(user_ctx:ctx(), [file_ctx:ctx()], file_listing:limit()) -> 
+    file_listing:state().
+build_listing_state(UserCtx, Children, Limit) ->
+    case Children of
+        [] ->
+            file_listing:default_state();
+        [_ | _] ->
+            LastFileCtx = lists:last(Children),
+            {Name, _} = file_ctx:get_aliased_name(LastFileCtx, UserCtx),
+            file_listing:default_state(Name, length(Children) < Limit)
+    end.

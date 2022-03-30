@@ -31,8 +31,7 @@
 -export([get_parent/1, get_parent_uuid/1, get_provider_id/1]).
 -export([
     get_uuid/1, get_child/2, trim_filename_tree_id/2,
-    get_child_uuid_and_tree_id/2, get_matching_child_uuids_with_tree_ids/3,
-    list_children/2, list_children_whitelisted/3
+    get_child_uuid_and_tree_id/2, get_matching_child_uuids_with_tree_ids/3
 ]).
 -export([get_name/1, set_name/2]).
 -export([
@@ -67,26 +66,12 @@
 -type permissions_type() :: posix | acl.
 -type conflicts() :: [link()].
 -type path_type() :: ?CANONICAL_PATH | ?UUID_BASED_PATH.
-
-
--type list_offset() :: file_meta_forest:offset().
--type list_token() :: file_meta_forest:token().
--type list_size() :: file_meta_forest:size().
--type list_opts() :: file_meta_forest:list_opts().
--type list_last_name() :: file_meta_forest:last_name().
--type list_last_tree() :: file_meta_forest:last_tree().
--type list_extended_info() :: file_meta_forest:list_extended_info().
 -type link() :: file_meta_forest:link().
 
 -export_type([
     doc/0, file_meta/0, uuid/0, path/0, uuid_based_path/0, name/0, uuid_or_path/0, entry/0,
     type/0, size/0, mode/0, time/0, posix_permissions/0, permissions_type/0,
-    conflicts/0, path_type/0
-]).
-
--export_type([
-    list_offset/0, list_size/0, list_token/0,
-    list_last_name/0, list_last_tree/0, list_opts/0, list_extended_info/0, link/0
+    conflicts/0, path_type/0, link/0
 ]).
 
 -define(CTX, #{
@@ -468,30 +453,6 @@ get_matching_child_uuids_with_tree_ids(ParentUuid, TreeIds, Name) ->
         {error, Reason} ->
             {error, Reason}
     end.
-
-
--spec list_children(entry(), list_opts()) ->
-    {ok, [link()], list_extended_info()} | {error, term()}.
-list_children(Entry, Opts) ->
-    ?run(begin
-        {ok, FileUuid} = get_uuid(Entry),
-        file_meta_forest:list(FileUuid, Opts)
-    end).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Lists children of given #file_meta bounded by specified AllowedChildren
-%% and given options (NonNegOffset and Limit).
-%% @end
-%%--------------------------------------------------------------------
--spec list_children_whitelisted(entry(), list_opts(), [file_meta:name()]) ->
-    {ok, [link()], list_extended_info()} | {error, term()}.
-list_children_whitelisted(Entry, ListOpts, ChildrenWhiteList) ->
-    ?run(begin
-        {ok, FileUuid} = get_uuid(Entry),
-        file_meta_forest:list_whitelisted(FileUuid, ListOpts, ChildrenWhiteList)
-    end).
 
 
 %%--------------------------------------------------------------------

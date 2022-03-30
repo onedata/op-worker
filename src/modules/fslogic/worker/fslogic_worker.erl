@@ -575,39 +575,14 @@ handle_file_request(UserCtx, #move_to_trash{emit_events = EmitEvents}, FileCtx) 
     delete_req:delete_using_trash(UserCtx, FileCtx, EmitEvents);
 handle_file_request(UserCtx, #create_dir{name = Name, mode = Mode}, ParentFileCtx) ->
     dir_req:mkdir(UserCtx, ParentFileCtx, Name, Mode);
-handle_file_request(UserCtx, #get_file_children{
-    offset = Offset,
-    size = Size,
-    index_token = Token,
-    index_startid = StartId
-}, FileCtx) ->
-    ListOpts = #{
-        offset => Offset,
-        size => Size,
-        token => Token,
-        last_name => StartId
-    },
-    dir_req:get_children(UserCtx, FileCtx, ListOpts);
-handle_file_request(UserCtx, #get_file_children_attrs{offset = Offset, size = Size, index_token = Token,
+handle_file_request(UserCtx, #get_file_children{listing_options = ListingOpts}, FileCtx) ->
+    dir_req:get_children(UserCtx, FileCtx, ListingOpts);
+handle_file_request(UserCtx, #get_file_children_attrs{listing_options = ListingOpts, 
     include_replication_status = IncludeReplicationStatus, include_link_count = IncludeLinkCount}, FileCtx) ->
-    ListOpts = #{
-        offset => Offset,
-        size => Size,
-        token => Token
-    },
-    dir_req:get_children_attrs(UserCtx, FileCtx, ListOpts, IncludeReplicationStatus, IncludeLinkCount);
-handle_file_request(UserCtx, #get_file_children_details{
-    offset = Offset,
-    size = Size,
-    index_startid = StartId
-}, FileCtx) ->
-    ListOpts = #{
-        offset => Offset,
-        size => Size,
-        last_name => StartId
-    },
-    dir_req:get_children_details(UserCtx, FileCtx, ListOpts);
-handle_file_request(UserCtx, #get_recursive_file_list{options = Options}, FileCtx) ->
+    dir_req:get_children_attrs(UserCtx, FileCtx, ListingOpts, IncludeReplicationStatus, IncludeLinkCount);
+handle_file_request(UserCtx, #get_file_children_details{listing_options = ListingOpts}, FileCtx) ->
+    dir_req:get_children_details(UserCtx, FileCtx, ListingOpts);
+handle_file_request(UserCtx, #get_recursive_file_list{listing_options = Options}, FileCtx) ->
     recursive_file_listing:list(UserCtx, FileCtx, Options);
 handle_file_request(UserCtx, #rename{
     target_parent_guid = TargetParentGuid,

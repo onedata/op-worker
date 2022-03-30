@@ -470,7 +470,7 @@ resolve_get_operation_handler(children, private) -> ?MODULE;             % REST 
 resolve_get_operation_handler(children, public) -> ?MODULE;              % REST only
 resolve_get_operation_handler(children_details, private) -> ?MODULE;     % gs only
 resolve_get_operation_handler(children_details, public) -> ?MODULE;      % gs only
-resolve_get_operation_handler(files, private) -> ?MODULE;       % REST only
+resolve_get_operation_handler(files, private) -> ?MODULE;                % REST only
 resolve_get_operation_handler(attrs, private) -> ?MODULE;                % REST/gs
 resolve_get_operation_handler(attrs, public) -> ?MODULE;                 % REST/gs
 resolve_get_operation_handler(xattrs, private) -> ?MODULE;               % REST/gs
@@ -522,7 +522,8 @@ data_spec_get(#gri{aspect = As}) when
             (_) ->
                 false
         end},
-        <<"offset">> => {integer, any}
+        <<"offset">> => {integer, any},
+        <<"inclusive">> => {boolean, any}
     }
 };
 
@@ -542,6 +543,8 @@ data_spec_get(#gri{aspect = children, scope = Sc}) -> #{
             (_) ->
                 false
         end},
+        <<"inclusive">> => {boolean, any},
+        <<"optimize_continuous_listing">> => {boolean, any},
         <<"attribute">> => {any, case Sc of
             public -> ?PUBLIC_BASIC_ATTRIBUTES;
             private -> ?PRIVATE_BASIC_ATTRIBUTES
@@ -749,10 +752,18 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = childre
     SessionId = Auth#auth.session_id,
     RequestedAttributes = utils:ensure_list(maps:get(<<"attribute">>, Data, ?DEFAULT_BASIC_ATTRIBUTES)),
     
-    ListingOpts = #{
-        size => maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES),
-        token => maps:get(<<"token">>, Data, ?INITIAL_API_LS_TOKEN)
-    },
+    BaseOpts = #{limit => maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES)},
+    ListingOpts = case maps:get(<<"token">>, Data, undefined) of
+        undefined ->
+            BaseOpts#{
+                optimize_continuous_listing => maps:get(<<"optimize_continuous_listing">>, Data, false),
+                inclusive => maps:get(<<"inclusive">>, Data, false)
+            }; 
+        Token ->
+            BaseOpts#{
+                pagination_token => Token
+            }
+    end,
     
     ToJsonWithRequestedAttributes = fun(ItemToJson) -> 
         fun(Res) ->
@@ -760,38 +771,38 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = childre
         end
     end,
     
-    {ResultJson, Info} = case lists:sort(lists_utils:union(RequestedAttributes, ?DEFAULT_BASIC_ATTRIBUTES)) of
+    {ResultJson, ListingState} = case lists:sort(lists_utils:union(RequestedAttributes, ?DEFAULT_BASIC_ATTRIBUTES)) of
         ?DEFAULT_BASIC_ATTRIBUTES ->
-            {ok, Children, ReturnedInfo} = ?lfm_check(lfm:get_children(
+            {ok, Children, ReturnedListingState} = ?lfm_check(lfm:get_children(
                 SessionId, ?FILE_REF(FileGuid), ListingOpts)),
             ItemToJson = fun
                 ({Guid, Name}) ->
                     {ok, ObjectId} = file_id:guid_to_objectid(Guid),
                     #{<<"file_id">> => ObjectId, <<"name">> => Name}
                 end,
-            {lists:map(ToJsonWithRequestedAttributes(ItemToJson), Children), ReturnedInfo};
+            {lists:map(ToJsonWithRequestedAttributes(ItemToJson), Children), ReturnedListingState};
         _ ->
             IncludeHardlinksCount = lists:member(<<"hardlinks_count">>, RequestedAttributes),
-            {ok, Children, ReturnedInfo} = ?lfm_check(lfm:get_children_attrs(
+            {ok, Children, ReturnedListingState} = ?lfm_check(lfm:get_children_attrs(
                 SessionId, ?FILE_REF(FileGuid), ListingOpts, false, IncludeHardlinksCount)),
-            {lists:map(ToJsonWithRequestedAttributes(fun file_attrs_to_json/1), Children), ReturnedInfo}
+            {lists:map(ToJsonWithRequestedAttributes(fun file_attrs_to_json/1), Children), ReturnedListingState}
     end,
     
-    #{is_last := IsLast} = Info,
-    %% @TODO VFS-8980 Do not use default after list options are refined and token is always returned
-    {ok, value, {ResultJson, IsLast, maps:get(token, Info, undefined)}};
+    {ok, value, {ResultJson, file_listing:is_finished(ListingState), file_listing:build_pagination_token(ListingState)}};
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = children_details}}, _) ->
     SessionId = Auth#auth.session_id,
 
-    {ok, ChildrenDetails, #{is_last := IsLast}} = ?lfm_check(lfm:get_children_details(
+    {ok, ChildrenDetails, ListingState} = ?lfm_check(lfm:get_children_details(
         SessionId, ?FILE_REF(FileGuid), #{
             offset => maps:get(<<"offset">>, Data, ?DEFAULT_LIST_OFFSET),
-            size => maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES),
-            last_name => maps:get(<<"index">>, Data, undefined)
+            limit => maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES),
+            index => maps:get(<<"index">>, Data, undefined),
+            inclusive => maps:get(<<"inclusive">>, Data, false),
+            optimize_continuous_listing => false
         }
     )),
-    {ok, value, {ChildrenDetails, IsLast}};
+    {ok, value, {ChildrenDetails, file_listing:is_finished(ListingState)}};
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = files}}, _) ->
     SessionId = Auth#auth.session_id,

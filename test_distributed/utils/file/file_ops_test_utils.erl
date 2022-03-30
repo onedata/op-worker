@@ -82,7 +82,7 @@ verify_files_and_dirs(Worker, SessId, #test_data{dir_guids = DirGuids, file_guid
 test_read_operations_on_error(Worker, SessId, #test_data{dir_guids = DirGuids, file_guids = FileGuids}, ErrorType) ->
     lists:foreach(fun(Dir) ->
         ?assertMatch({error, ErrorType}, lfm_proxy:stat(Worker, SessId, ?FILE_REF(Dir))),
-        ?assertMatch({error, ErrorType}, lfm_proxy:get_children_attrs(Worker, SessId, ?FILE_REF(Dir), #{offset => 0, size => 100}))
+        ?assertMatch({error, ErrorType}, lfm_proxy:get_children_attrs(Worker, SessId, ?FILE_REF(Dir), #{offset => 0, limit => 100, optimize_continuous_listing => false}))
     end, DirGuids),
 
     lists:foreach(fun(File) ->

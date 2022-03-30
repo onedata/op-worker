@@ -34,7 +34,7 @@
 
 -type prefix() :: binary().
 -type pagination_token() :: binary().
--type limit() :: file_meta:list_size().
+-type limit() :: file_listing:limit().
 -type entry() :: {file_meta:path(), lfm_attrs:file_attributes()}.
 -type progress_marker() :: more | done.
 
@@ -142,7 +142,8 @@ list(UserCtx, FileCtx0, StartAfter, Limit, Prefix) ->
                 }
             };
         {false, FileCtx2} ->
-            case list_children_with_access_check(UserCtx, FileCtx2, #{size => 1}) of
+            ListingOpts = #{limit => 1, optimize_continuous_listing => false},
+            case list_children_with_access_check(UserCtx, FileCtx2, ListingOpts) of
                 {ok, _, _, _} ->
                     #fuse_response{status = #status{code = ?OK},
                         fuse_response = #recursive_file_list{
@@ -174,16 +175,16 @@ process_current_dir(UserCtx, FileCtx, State) ->
 
 
 %% @private
--spec process_current_dir_in_batches(user_ctx:ctx(), file_ctx:ctx(), file_meta:list_opts(), state(), result()) -> 
+-spec process_current_dir_in_batches(user_ctx:ctx(), file_ctx:ctx(), file_listing:options(), state(), result()) -> 
     {progress_marker(), result()}.
 process_current_dir_in_batches(UserCtx, FileCtx, ListOpts, State, AccListResult) ->
     #state{limit = Limit} = State,
-    {Children, UpdatedAccListResult, #{is_last := IsLast} = ExtendedInfo, FileCtx2} = 
+    {Children, UpdatedAccListResult, ListingState, FileCtx2} = 
         case list_children_with_access_check(UserCtx, FileCtx, ListOpts) of
             {ok, C, E, F} -> 
                 {C, AccListResult, E, F};
             {error, ?EACCES} ->
-                {[], result_append_inaccessible_path(State, AccListResult), #{is_last => true}, FileCtx}
+                {[], result_append_inaccessible_path(State, AccListResult), file_listing:default_state(), FileCtx}
         end,
     {Res, FinalProcessedFileCount} = lists_utils:foldl_while(fun(ChildCtx, {TmpResult, ProcessedFileCount}) ->
         {Marker, ChildResult} = process_current_child(UserCtx, ChildCtx, State#state{
@@ -200,9 +201,9 @@ process_current_dir_in_batches(UserCtx, FileCtx, ListOpts, State, AccListResult)
             false -> {cont, ToReturn}
         end
     end, {UpdatedAccListResult, 0}, Children),
-    case {result_length(Res) >= Limit, IsLast} of
-        {true, _} ->
-            ProgressMarker = case IsLast and (FinalProcessedFileCount == length(Children)) of
+    case {result_length(Res) >= Limit, file_listing:is_finished(ListingState)} of
+        {true, IsFinished} ->
+            ProgressMarker = case IsFinished and (FinalProcessedFileCount == length(Children)) of
                 true -> done;
                 false -> more
             end,
@@ -210,7 +211,7 @@ process_current_dir_in_batches(UserCtx, FileCtx, ListOpts, State, AccListResult)
         {false, true} ->
             {done, Res};
         {false, false} ->
-            NextListOpts = maps:with([last_tree, last_name], ExtendedInfo),
+            NextListOpts = #{pagination_token => file_listing:build_pagination_token(ListingState)},
             process_current_dir_in_batches(
                 UserCtx, FileCtx2, NextListOpts, State#state{limit = Limit - result_length(Res)}, Res)
     end.
@@ -240,8 +241,8 @@ process_current_child(UserCtx, ChildCtx, #state{current_dir_path_tokens = Curren
 %%%===================================================================
 
 %% @private
--spec list_children_with_access_check(user_ctx:ctx(), file_ctx:ctx(), file_meta:list_opts()) ->
-    {ok, [file_ctx:ctx()], file_meta:list_extended_info(), file_ctx:ctx()} | {error, ?EACCES}.
+-spec list_children_with_access_check(user_ctx:ctx(), file_ctx:ctx(), file_listing:options()) ->
+    {ok, [file_ctx:ctx()], file_listing:state(), file_ctx:ctx()} | {error, ?EACCES}.
 list_children_with_access_check(UserCtx, FileCtx, ListOpts) ->
     try
         {IsDir, FileCtx2} = file_ctx:is_dir(FileCtx),
@@ -252,8 +253,8 @@ list_children_with_access_check(UserCtx, FileCtx, ListOpts) ->
         {CanonicalChildrenWhiteList, FileCtx3} = fslogic_authz:ensure_authorized_readdir(
             UserCtx, FileCtx2, AccessRequirements
         ),
-        {Children, ExtendedInfo, FileCtx4} = file_listing:list_children(UserCtx, FileCtx3, ListOpts, CanonicalChildrenWhiteList),
-        {ok, Children, ExtendedInfo, FileCtx4}
+        {Children, ListingState, FileCtx4} = files_tree:list_children(FileCtx3, UserCtx, ListOpts, CanonicalChildrenWhiteList),
+        {ok, Children, ListingState, FileCtx4}
     catch throw:?EACCES ->
         {error, ?EACCES}
     end.
@@ -272,37 +273,35 @@ get_file_attrs(UserCtx, FileCtx) ->
 
     
 %% @private
--spec init_current_dir_processing(state()) -> {file_meta:list_opts(), state()}.
+-spec init_current_dir_processing(state()) -> {file_listing:options(), state()}.
 init_current_dir_processing(#state{relative_start_after_path_tokens = []} = State) ->
-    {#{last_name => <<>>}, State};
+    {#{optimize_continuous_listing => true}, State};
 init_current_dir_processing(#state{
     relative_start_after_path_tokens = [CurrentStartAfterToken | NextStartAfterTokens],
     last_start_after_token = LastStartAfterToken,
     current_dir_path_tokens = CurrentPathTokens,
     parent_uuid = ParentUuid
 } = State) ->
-    InitialOpts = #{size => ?LIST_RECURSIVE_BATCH_SIZE},
+    InitialOpts = #{limit => ?LIST_RECURSIVE_BATCH_SIZE, optimize_continuous_listing => true},
     %% As long as the currently processed path is within the start_after_path, we can start
     %% listing from the specific file name (CurrentStartAfterToken), as all names lexicographically
     %% smaller should not be included in the results. Otherwise, The whole directory is listed and processed.
     case lists:last(CurrentPathTokens) == LastStartAfterToken of
         true ->
-            Opts = case file_meta:get_child_uuid_and_tree_id(ParentUuid, CurrentStartAfterToken) of
+            Index = case file_meta:get_child_uuid_and_tree_id(ParentUuid, CurrentStartAfterToken) of
                 {ok, _, TreeId} ->
-                    #{
+                    % @TODO VFS-8980 Use inclusive listing option
+                    file_listing:build_index(
+                        file_meta:trim_filename_tree_id(CurrentStartAfterToken, TreeId),
                         % trim tree id to always have inclusive listing
-                        % @TODO VFS-8980 Use inclusive listing option
-                        last_tree => binary:part(TreeId, 0, size(TreeId) - 1),
-                        last_name => file_meta:trim_filename_tree_id(CurrentStartAfterToken, TreeId)
-                    };
+                        binary:part(TreeId, 0, size(TreeId) - 1)
+                    );
                 _ ->
-                    #{
-                        last_name => file_meta:trim_filename_tree_id(
-                            CurrentStartAfterToken, {all, ParentUuid})
-                    }
+                    file_listing:build_index(file_meta:trim_filename_tree_id(
+                            CurrentStartAfterToken, {all, ParentUuid}))
             end,
             {
-                maps:merge(InitialOpts, Opts),
+                InitialOpts#{index => Index},
                 State#state{
                     relative_start_after_path_tokens = NextStartAfterTokens, 
                     last_start_after_token = CurrentStartAfterToken
@@ -310,7 +309,7 @@ init_current_dir_processing(#state{
             };
         _ ->
             {
-                InitialOpts#{last_name => <<>>}, 
+                InitialOpts, 
                 State#state{relative_start_after_path_tokens = []}
             }
     end.
