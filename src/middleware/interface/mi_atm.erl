@@ -32,7 +32,7 @@
     od_space:id(),
     od_atm_workflow_schema:id(),
     atm_workflow_schema_revision:revision_number(),
-    atm_workflow_execution_api:store_initial_contents(),
+    atm_workflow_execution_api:store_initial_content_overlay(),
     undefined | http_client:url()
 ) ->
     {atm_workflow_execution:id(), atm_workflow_execution:record()} | no_return().
@@ -41,7 +41,7 @@ schedule_workflow_execution(
     SpaceId,
     AtmWorkflowSchemaId,
     AtmWorkflowSchemaRevisionNum,
-    AtmStoreInitialContents,
+    AtmStoreInitialContentOverlay,
     CallbackUrl
 ) ->
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
@@ -49,7 +49,7 @@ schedule_workflow_execution(
     middleware_worker:check_exec(SessionId, SpaceGuid, #schedule_atm_workflow_execution{
         atm_workflow_schema_id = AtmWorkflowSchemaId,
         atm_workflow_schema_revision_num = AtmWorkflowSchemaRevisionNum,
-        store_initial_contents = AtmStoreInitialContents,
+        store_initial_content_overlay = AtmStoreInitialContentOverlay,
         callback_url = CallbackUrl
     }).
 

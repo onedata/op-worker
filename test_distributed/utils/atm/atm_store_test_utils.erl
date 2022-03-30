@@ -150,6 +150,7 @@ example_data_spec(AtmDataType) when
     AtmDataType =:= atm_integer_type;
     AtmDataType =:= atm_object_type;
     AtmDataType =:= atm_onedatafs_credentials_type;
+    AtmDataType =:= atm_range_type;
     AtmDataType =:= atm_string_type
 ->
     #atm_data_spec{type = AtmDataType}.
@@ -222,6 +223,26 @@ gen_valid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_data_spec{
     };
 
 gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_data_spec{
+    type = atm_range_type
+}) ->
+    case rand:uniform(3) of
+        1 ->
+            #{<<"end">> => ?RAND_INT(10, 200)};
+        2 ->
+            #{
+                <<"end">> => ?RAND_INT(10, 20),
+                <<"start">> => - (?RAND_INT(0, 10)),
+                <<"step">> => ?RAND_INT(1, 5)
+            };
+        3 ->
+            #{
+                <<"end">> => - (?RAND_INT(10, 20)),
+                <<"start">> => ?RAND_INT(0, 10),
+                <<"step">> => - (?RAND_INT(1, 5))
+            }
+    end;
+
+gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_data_spec{
     type = atm_string_type
 }) ->
     ?RAND_STR(32);
@@ -242,10 +263,16 @@ gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_data_spec{
 %% @private
 -spec gen_ts_name(atm_time_series_measurements_spec:record()) ->
     atm_time_series_attribute:name().
-gen_ts_name(#atm_time_series_measurements_spec{name_selector = fixed, name = TsName}) ->
+gen_ts_name(#atm_time_series_measurements_spec{
+    name_matcher_type = exact,
+    name_matcher = TsName
+}) ->
     TsName;
 
-gen_ts_name(#atm_time_series_measurements_spec{name_selector = pattern, name = Pattern}) ->
+gen_ts_name(#atm_time_series_measurements_spec{
+    name_matcher_type = has_prefix,
+    name_matcher = Pattern
+}) ->
     binary:replace(Pattern, <<"*">>, <<"NIHAU">>).
 
 
@@ -360,6 +387,7 @@ infer_store_type(#atm_audit_log_store_config{}) -> audit_log;
 infer_store_type(#atm_list_store_config{}) -> list;
 infer_store_type(#atm_range_store_config{}) -> range;
 infer_store_type(#atm_single_value_store_config{}) -> single_value;
+infer_store_type(#atm_time_series_store_config{}) -> time_series;
 infer_store_type(#atm_tree_forest_store_config{}) -> tree_forest.
 
 
@@ -371,6 +399,7 @@ all_basic_data_types() -> [
     atm_integer_type,
     atm_object_type,
     atm_onedatafs_credentials_type,
+    atm_range_type,
     atm_string_type,
     atm_time_series_measurements_type
 ].

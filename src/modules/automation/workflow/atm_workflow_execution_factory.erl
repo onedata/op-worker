@@ -31,7 +31,7 @@
     workflow_schema_revision_num :: atm_workflow_schema_revision:revision_number(),
     workflow_schema_revision :: atm_workflow_schema_revision:record(),
     lambda_docs :: [od_atm_lambda:doc()],
-    store_initial_contents :: atm_workflow_execution_api:store_initial_contents(),
+    store_initial_content_overlay :: atm_workflow_execution_api:store_initial_content_overlay(),
     callback_url :: undefined | http_client:url()
 }).
 -type creation_args() :: #creation_args{}.
@@ -63,7 +63,7 @@
     od_space:id(),
     od_atm_workflow_schema:id(),
     atm_workflow_schema_revision:revision_number(),
-    atm_workflow_execution_api:store_initial_contents(),
+    atm_workflow_execution_api:store_initial_content_overlay(),
     undefined | http_client:url()
 ) ->
     {atm_workflow_execution:doc(), atm_workflow_execution_env:record()} | no_return().
@@ -72,7 +72,7 @@ create(
     SpaceId,
     AtmWorkflowSchemaId,
     AtmWorkflowSchemaRevisionNum,
-    StoreInitialContents,
+    AtmStoreInitialContentOverlay,
     CallbackUrl
 ) ->
     SessionId = user_ctx:get_session_id(UserCtx),
@@ -105,7 +105,7 @@ create(
             workflow_schema_revision_num = AtmWorkflowSchemaRevisionNum,
             workflow_schema_revision = AtmWorkflowSchemaRevision,
             lambda_docs = AtmLambdaDocs,
-            store_initial_contents = StoreInitialContents,
+            store_initial_content_overlay = AtmStoreInitialContentOverlay,
             callback_url = CallbackUrl
         },
         execution_components = #execution_components{global_store_registry = #{}}
@@ -268,7 +268,7 @@ create_global_stores(CreationCtx = #creation_ctx{
         workflow_schema_revision = #atm_workflow_schema_revision{
             stores = AtmStoreSchemas
         },
-        store_initial_contents = AtmStoreInitialContents
+        store_initial_content_overlay = AtmStoreInitialContentOverlay
     }
 }) ->
     lists:foldl(fun(
@@ -281,7 +281,7 @@ create_global_stores(CreationCtx = #creation_ctx{
         }
     ) ->
         StoreInitialContent = utils:null_to_undefined(maps:get(
-            AtmStoreSchemaId, AtmStoreInitialContents, undefined
+            AtmStoreSchemaId, AtmStoreInitialContentOverlay, undefined
         )),
         try
             {ok, #document{key = AtmStoreId}} = atm_store_api:create(

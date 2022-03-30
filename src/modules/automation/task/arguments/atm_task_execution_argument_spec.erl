@@ -185,14 +185,12 @@ build_value(_Item, AtmJobCtx, #atm_task_argument_value_builder{
     end,
 
     AtmWorkflowExecutionAuth = atm_job_ctx:get_workflow_execution_auth(AtmJobCtx),
-    BrowseOpts = #{offset => 0, limit => 1},
+    BrowseOpts = #atm_single_value_store_content_browse_options{},
 
     case atm_store_api:browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStore) of
-        {[], true} ->
-            throw(?ERROR_ATM_STORE_EMPTY(AtmSingleValueStoreSchemaId));
-        {[{_Index, {error, _} = Error}], true} ->
+        #atm_single_value_store_content_browse_result{item = Error = {error, _}} ->
             throw(Error);
-        {[{_Index, {ok, Item}}], true} ->
+        #atm_single_value_store_content_browse_result{item = {ok, Item}} ->
             Item
     end;
 

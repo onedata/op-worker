@@ -67,7 +67,7 @@
         atm_test_schema_factory:atm_workflow_schema_dump_draft(),
     workflow_schema_revision_num :: atm_workflow_schema_revision:revision_number(),
 
-    store_initial_contents = #{} :: atm_workflow_execution_api:store_initial_contents(),
+    store_initial_content_overlay = #{} :: atm_workflow_execution_api:store_initial_content_overlay(),
     callback_url = undefined :: undefined | http_client:url(),
 
     incarnations :: [atm_workflow_execution_test_runner:incarnation_test_spec()]

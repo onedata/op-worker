@@ -21,7 +21,7 @@
 %% API
 -export([build/3]).
 -export([
-    task_handle_logs/4,
+    task_handle_logs/3,
     task_debug/2, task_debug/3,
     task_info/2, task_info/3,
     task_notice/2, task_notice/3,
@@ -32,7 +32,7 @@
     task_emergency/2, task_emergency/3
 ]).
 -export([
-    workflow_handle_logs/4,
+    workflow_handle_logs/3,
     workflow_debug/2, workflow_debug/3,
     workflow_info/2, workflow_info/3,
     workflow_notice/2, workflow_notice/3,
@@ -87,19 +87,18 @@ build(AtmWorkflowExecutionAuth, AtmTaskAuditLogStoreContainer, AtmWorkflowAuditL
 
 
 -spec task_handle_logs(
-    atm_store_container:operation_type(),
+    atm_audit_log_store_content_update_options:record(),
     log() | [log()],
-    atm_store_container:operation_options(),
     record()
 ) ->
     ok.
-task_handle_logs(OperationType, AuditLogObject, Options, #atm_workflow_execution_logger{
+task_handle_logs(UpdateOptions, AuditLogObject, #atm_workflow_execution_logger{
     atm_workflow_execution_auth = AtmWorkflowExecutionAuth,
     task_audit_log_store_container = AtmTaskAuditLogStoreContainer
 }) ->
     handle_logs(
-        OperationType, AuditLogObject, Options,
-        AtmWorkflowExecutionAuth, AtmTaskAuditLogStoreContainer
+        UpdateOptions, AuditLogObject, AtmWorkflowExecutionAuth,
+        AtmTaskAuditLogStoreContainer
     ).
 
 
@@ -184,19 +183,18 @@ task_emergency(Format, Args, AtmWorkflowExecutionLogger) ->
 
 
 -spec workflow_handle_logs(
-    atm_store_container:operation_type(),
+    atm_audit_log_store_content_update_options:record(),
     log() | [log()],
-    atm_store_container:operation_options(),
     record()
 ) ->
     ok.
-workflow_handle_logs(OperationType, AuditLogObject, Options, #atm_workflow_execution_logger{
+workflow_handle_logs(UpdateOptions, AuditLogObject, #atm_workflow_execution_logger{
     atm_workflow_execution_auth = AtmWorkflowExecutionAuth,
     workflow_audit_log_store_container = AtmWorkflowAuditLogStoreContainer
 }) ->
     handle_logs(
-        OperationType, AuditLogObject, Options,
-        AtmWorkflowExecutionAuth, AtmWorkflowAuditLogStoreContainer
+        UpdateOptions, AuditLogObject, AtmWorkflowExecutionAuth,
+        AtmWorkflowAuditLogStoreContainer
     ).
 
 
@@ -288,15 +286,21 @@ workflow_emergency(Format, Args, AtmWorkflowExecutionLogger) ->
 %% @private
 -spec task_append_system_log(log_content(), severity(), record()) -> ok.
 task_append_system_log(LogContent, Severity, AtmWorkflowExecutionLogger) ->
-    SystemLog = ensure_system_audit_log_object(LogContent, Severity),
-    task_handle_logs(append, SystemLog, #{}, AtmWorkflowExecutionLogger).
+    task_handle_logs(
+        #atm_audit_log_store_content_update_options{function = append},
+        ensure_system_audit_log_object(LogContent, Severity),
+        AtmWorkflowExecutionLogger
+    ).
 
 
 %% @private
 -spec workflow_append_system_log(log_content(), severity(), record()) -> ok.
 workflow_append_system_log(LogContent, Severity, AtmWorkflowExecutionLogger) ->
-    SystemLog = ensure_system_audit_log_object(LogContent, Severity),
-    workflow_handle_logs(append, SystemLog, #{}, AtmWorkflowExecutionLogger).
+    workflow_handle_logs(
+        #atm_audit_log_store_content_update_options{function = append},
+        ensure_system_audit_log_object(LogContent, Severity),
+        AtmWorkflowExecutionLogger
+    ).
 
 
 %% @private
@@ -309,21 +313,23 @@ ensure_system_audit_log_object(LogContent, Severity) when is_binary(LogContent) 
 
 %% @private
 -spec handle_logs(
-    atm_store_container:operation_type(),
+    atm_audit_log_store_content_update_options:record(),
     log() | [log()],
-    atm_store_container:operation_options(),
     atm_workflow_execution_auth:record(),
-    undefined | atm_store_container:record()
+    undefined | atm_audit_log_store_container:record()
 ) ->
     ok.
-handle_logs(_OperationType, _Logs, _Options, _AtmWorkflowExecutionAuth, undefined) ->
+handle_logs(_UpdateOptions, _Logs, _AtmWorkflowExecutionAuth, undefined) ->
     ok;
-handle_logs(OperationType, Logs, Options, AtmWorkflowExecutionAuth, AtmAuditLogStoreContainer) ->
-    Operation = #atm_store_container_operation{
-        type = OperationType,
-        options = Options,
-        argument = Logs,
-        workflow_execution_auth = AtmWorkflowExecutionAuth
-    },
-    atm_audit_log_store_container:apply_operation(AtmAuditLogStoreContainer, Operation),
+handle_logs(UpdateOptions, Logs, AtmWorkflowExecutionAuth, AtmAuditLogStoreContainer) ->
+    % NOTE: atm_store_api is bypassed for performance reasons. It is possible as
+    % audit_log store update does not modify store document itself but only
+    % referenced infinite log
+    atm_audit_log_store_container:update_content(
+        AtmAuditLogStoreContainer, #atm_store_content_update_req{
+            workflow_execution_auth = AtmWorkflowExecutionAuth,
+            argument = Logs,
+            options = UpdateOptions
+        }
+    ),
     ok.

@@ -1104,6 +1104,7 @@
     result_specs :: [atm_task_execution_result_spec:record()],
 
     system_audit_log_id :: atm_store:id(),
+    time_series_store_id :: undefined | atm_store:id(),
 
     status :: atm_task_execution:status(),
     % Flag used to tell if status was changed during doc update (set automatically

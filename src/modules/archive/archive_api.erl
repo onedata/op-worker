@@ -168,9 +168,10 @@ get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
     {ok, PreservedCallback} = archive:get_preserved_callback(ArchiveDoc),
     {ok, PurgedCallback} = archive:get_purged_callback(ArchiveDoc),
     {ok, Description} = archive:get_description(ArchiveDoc),
+    {ok, ParentArchiveId} = archive:get_parent_id(ArchiveDoc),
     {ok, BaseArchiveId} = archive:get_base_archive_id(ArchiveDoc),
-    {ok, RelatedAip} = archive:get_related_aip(ArchiveDoc),
-    {ok, RelatedDip} = archive:get_related_dip(ArchiveDoc),
+    {ok, RelatedAipId} = archive:get_related_aip_id(ArchiveDoc),
+    {ok, RelatedDipId} = archive:get_related_dip_id(ArchiveDoc),
     {ok, Stats} = get_aggregated_stats(ArchiveDoc),
     {ok, #archive_info{
         id = ArchiveId,
@@ -187,9 +188,10 @@ get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
             false -> ArchiveIndex
         end,
         stats = Stats,
+        parent_archive_id = ParentArchiveId,
         base_archive_id = BaseArchiveId,
-        related_aip = RelatedAip,
-        related_dip = RelatedDip
+        related_aip_id = RelatedAipId,
+        related_dip_id = RelatedDipId
     }};
 get_archive_info(ArchiveId, ArchiveIndex) ->
     case archive:get(ArchiveId) of
@@ -332,7 +334,7 @@ remove_single_archive(ArchiveDoc = #document{}, UserCtx) ->
             
             {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
             {ok, Timestamp} = archive:get_creation_time(ArchiveDoc),
-            {ok, ParentArchiveId} = archive:get_parent(ArchiveDoc),
+            {ok, ParentArchiveId} = archive:get_parent_id(ArchiveDoc),
             ParentArchiveId =/= undefined andalso archives_forest:delete(ParentArchiveId, SpaceId, ArchiveId),
             archives_list:delete(DatasetId, SpaceId, ArchiveId, Timestamp);
         ?ERROR_NOT_FOUND ->

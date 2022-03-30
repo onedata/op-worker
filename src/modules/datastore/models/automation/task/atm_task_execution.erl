@@ -108,6 +108,7 @@ get_record_struct(1) ->
         }}]},
 
         {system_audit_log_id, string},
+        {time_series_store_id, string},
 
         {status, atom},
         {status_changed, boolean},

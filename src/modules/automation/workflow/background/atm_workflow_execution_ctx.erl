@@ -26,14 +26,16 @@
     get_logger/1,
 
     is_global_store/2,
-    get_global_store_id/2
+    get_global_store_id/2,
+    get_task_time_series_store_id/1
 ]).
 
 
 -record(atm_workflow_execution_ctx, {
     workflow_execution_auth :: atm_workflow_execution_auth:record(),
     workflow_execution_logger :: atm_workflow_execution_logger:record(),
-    workflow_execution_env :: atm_workflow_execution_env:record()
+    workflow_execution_env :: atm_workflow_execution_env:record(),
+    task_time_series_store_id :: undefined | atm_store:id()
 }).
 -type record() :: #atm_workflow_execution_ctx{}.
 
@@ -55,7 +57,15 @@ acquire(AtmTaskExecutionId, AtmWorkflowExecutionEnv) ->
         workflow_execution_logger = atm_workflow_execution_env:acquire_logger(
             AtmTaskExecutionId, AtmWorkflowExecutionAuth, AtmWorkflowExecutionEnv
         ),
-        workflow_execution_env = AtmWorkflowExecutionEnv
+        workflow_execution_env = AtmWorkflowExecutionEnv,
+        task_time_series_store_id = case AtmTaskExecutionId of
+            undefined ->
+                undefined;
+            _ ->
+                atm_workflow_execution_env:get_task_time_series_store_id(
+                    AtmTaskExecutionId, AtmWorkflowExecutionEnv
+                )
+        end
     }.
 
 
@@ -102,3 +112,10 @@ get_global_store_id(AtmStoreSchemaId, #atm_workflow_execution_ctx{
     workflow_execution_env = AtmWorkflowExecutionEnv
 }) ->
     atm_workflow_execution_env:get_global_store_id(AtmStoreSchemaId, AtmWorkflowExecutionEnv).
+
+
+-spec get_task_time_series_store_id(record()) -> undefined | atm_store:id().
+get_task_time_series_store_id(#atm_workflow_execution_ctx{
+    task_time_series_store_id = AtmTaskTSStoreId
+}) ->
+    AtmTaskTSStoreId.

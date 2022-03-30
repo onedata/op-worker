@@ -72,12 +72,7 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
     undefined;
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = content}}) -> #{
-    optional => #{
-        <<"index">> => {binary, any},
-        <<"token">> => {binary, non_empty},
-        <<"offset">> => {integer, any},
-        <<"limit">> => {integer, {between, 1, ?MAX_LIST_LIMIT}}
-    }
+    optional => #{<<"options">> => {json, any}}
 }.
 
 
@@ -165,30 +160,19 @@ get(#op_req{gri = #gri{aspect = instance, scope = private}}, #atm_store_ctx{stor
     {ok, AtmStore};
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{aspect = content, scope = private}}, #atm_store_ctx{
-    store = #atm_store{workflow_execution_id = AtmWorkflowExecutionId} = AtmStore,
+    store = AtmStore = #atm_store{
+        workflow_execution_id = AtmWorkflowExecutionId,
+        container = AtmStoreContainer
+    },
     workflow_execution = #atm_workflow_execution{space_id = SpaceId}
 }) ->
+    BrowseOpts = atm_store_content_browse_options:sanitize(
+        atm_store_container:get_store_type(AtmStoreContainer),
+        maps:get(<<"options">>, Data, #{})
+    ),
     AtmWorkflowExecutionAuth = atm_workflow_execution_auth:build(
         SpaceId, AtmWorkflowExecutionId, Auth#auth.session_id
     ),
-
-    Offset = maps:get(<<"offset">>, Data, 0),
-    Limit = maps:get(<<"limit">>, Data, ?DEFAULT_LIST_LIMIT),
-
-    BrowseOpts = case maps:get(<<"token">>, Data, undefined) of
-        undefined ->
-            Index = maps:get(<<"index">>, Data, undefined),
-            maps_utils:put_if_defined(#{offset => Offset, limit => Limit}, start_index, Index);
-        Token when is_binary(Token) ->
-            % if token is passed, offset has to be increased by 1
-            % to ensure that listing using token is exclusive
-            #{
-                start_index => http_utils:base64url_decode(Token),
-                offset => Offset + 1,
-                limit => Limit
-            }
-    end,
-
     {ok, value, atm_store_api:browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStore)}.
 
 

@@ -75,7 +75,7 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) ->
             <<"atmWorkflowSchemaRevisionNumber">> => {integer, {not_lower_than, 1}}
         },
         optional => #{
-            <<"storeInitialValues">> => {json, any},
+            <<"storeInitialContentOverlay">> => {json, any},
             <<"callback">> => {binary, fun(Callback) -> url_utils:is_valid(Callback) end}
         }
     };
@@ -197,7 +197,7 @@ create(#op_req{auth = ?USER(_UserId, SessionId), data = Data, gri = #gri{aspect 
         maps:get(<<"spaceId">>, Data),
         maps:get(<<"atmWorkflowSchemaId">>, Data),
         maps:get(<<"atmWorkflowSchemaRevisionNumber">>, Data),
-        maps:get(<<"storeInitialValues">>, Data, #{}),  %% TODO VFS-9018 rename to StoreInitialContents
+        maps:get(<<"storeInitialContentOverlay">>, Data, #{}),
         maps:get(<<"callback">>, Data, undefined)
     ),
     {ok, resource, {GRI#gri{id = AtmWorkflowExecutionId}, AtmWorkflowExecution}};

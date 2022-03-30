@@ -30,6 +30,7 @@
     create_directory_import_many_test/1,
     create_empty_file_import_test/1,
     create_file_import_test/1,
+    ignore_fifo_import_test/1,
     create_delete_import_test/1,
     create_file_import_check_user_id_test/1,
     create_file_import_check_user_id_error_test/1,
@@ -87,6 +88,7 @@
     create_directory_import_many_test,
     create_empty_file_import_test,
     create_file_import_test,
+    ignore_fifo_import_test,
     create_delete_import_test,
     create_file_import_check_user_id_test,
     create_file_import_check_user_id_error_test,
@@ -165,6 +167,9 @@ create_empty_file_import_test(Config) ->
 
 create_file_import_test(Config) ->
     storage_import_test_base:create_file_import_test(Config).
+
+ignore_fifo_import_test(Config) ->
+    storage_import_test_base:ignore_fifo_import_test(Config).
 
 create_delete_import_test(Config) ->
     storage_import_test_base:create_delete_import_test(Config).

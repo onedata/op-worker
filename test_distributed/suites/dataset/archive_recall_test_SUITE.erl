@@ -615,7 +615,7 @@ recall_test_setup(StructureSpec, RootFileName) ->
     end, undefined, utils:ensure_list(CreatedTreeObject)),
     #object{guid = TargetParentGuid} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{}),
     {ok, RecallRootFileGuid} = opt_archives:recall(krakow, SessId, ArchiveId, TargetParentGuid, RootFileName),
-    FinalArchiveId = case opw_test_rpc:call(krakow, archive, get_related_dip, [ArchiveId]) of
+    FinalArchiveId = case opw_test_rpc:call(krakow, archive, get_related_dip_id, [ArchiveId]) of
         {ok, undefined} -> ArchiveId;
         {ok, DipArchiveId} -> DipArchiveId
     end,
