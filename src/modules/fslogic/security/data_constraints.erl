@@ -244,10 +244,10 @@ check_and_cache_data_constraints(UserCtx, FileCtx0, #constraints{
             % permissions_cache update is tagged with Timestamp to prevent races with cache invalidation.
             % All data used to calculate cached value has to be get from datastore after Timestamp so file_ctx reset is needed.
             Timestamp = bounded_cache:get_timestamp(),
-            FileCtx = file_ctx:reset(FileCtx0),
+            FileCtx1 = file_ctx:reset(FileCtx0),
             try
                 {PathRel, FileCtx2} = check_allowed_paths(
-                    FileCtx, AllowedPaths, AncestorPolicy
+                    FileCtx1, AllowedPaths, AncestorPolicy
                 ),
                 {GuidRel, FileCtx3} = check_guid_constraints(
                     UserCtx, SerializedToken, FileCtx2,
@@ -374,14 +374,14 @@ does_fulfill_guid_constraints(
             % All data used to calculate cached value has to be get from datastore after Timestamp so
             % file_ctx reset is needed.
             Timestamp = bounded_cache:get_timestamp(),
-            FileCtx = file_ctx:reset(FileCtx0),
-            case file_ctx:is_root_dir_const(FileCtx) of
+            FileCtx1 = file_ctx:reset(FileCtx0),
+            case file_ctx:is_root_dir_const(FileCtx1) of
                 true ->
                     check_and_cache_guid_constraints_fulfillment(
-                        FileCtx, CacheKey, AllGuidConstraints, Timestamp
+                        FileCtx1, CacheKey, AllGuidConstraints, Timestamp
                     );
                 false ->
-                    {ParentCtx, FileCtx1} = files_tree:get_parent(FileCtx, UserCtx),
+                    {ParentCtx, FileCtx2} = files_tree:get_parent(FileCtx1, UserCtx),
                     DoesParentFulfillGuidConstraints = does_fulfill_guid_constraints(
                         UserCtx, SerializedToken, ParentCtx,
                         AllGuidConstraints
@@ -389,10 +389,10 @@ does_fulfill_guid_constraints(
                     case DoesParentFulfillGuidConstraints of
                         {true, _} ->
                             permissions_cache:cache_permission(CacheKey, true, Timestamp),
-                            {true, FileCtx1};
+                            {true, FileCtx2};
                         {false, RemainingGuidsConstraints, _} ->
                             check_and_cache_guid_constraints_fulfillment(
-                                FileCtx, CacheKey, RemainingGuidsConstraints, Timestamp
+                                FileCtx2, CacheKey, RemainingGuidsConstraints, Timestamp
                             )
                     end
             end
