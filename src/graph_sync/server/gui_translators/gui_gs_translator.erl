@@ -42,17 +42,6 @@ handshake_attributes(_Client) ->
     {ok, ProviderName} = provider_logic:get_name(),
 
     {ok, OnezoneConfiguration} = provider_logic:get_service_configuration(onezone),
-    XRootDApiTemplates = case maps:get(<<"openDataXrootdServerDomain">>, OnezoneConfiguration, null) of
-        null ->
-            #{};
-        XRootDDomain ->
-            #{<<"xrootd">> => #{
-                <<"listSharedDirectoryChildren">> => ?XROOTD_LIST_SHARED_DIRECTORY_COMMAND_TEMPLATE(XRootDDomain),
-                <<"downloadSharedFileContent">> => ?XROOTD_DOWNLOAD_SHARED_FILE_COMMAND_TEMPLATE(XRootDDomain),
-                <<"downloadSharedDirectoryContent">> => ?XROOTD_DOWNLOAD_SHARED_DIRECTORY_COMMAND_TEMPLATE(XRootDDomain)
-            }}
-    end,
-
     BagitUploaderWorkflowSchemaId = maps:get(<<"bagitUploaderWorkflowSchemaId">>, OnezoneConfiguration, null),
 
     #{
@@ -69,16 +58,6 @@ handshake_attributes(_Client) ->
             <<"hourMetricId">> => ?HOUR_METRIC_NAME,
             <<"dayMetricId">> => ?DAY_METRIC_NAME,
             <<"monthMetricId">> => ?MONTH_METRIC_NAME
-        },
-        <<"apiTemplates">> => XRootDApiTemplates#{
-            <<"rest">> => #{
-                <<"listSharedDirectoryChildren">> => ?ZONE_SHARED_DATA_CURL_COMMAND_TEMPLATE("/children"),
-                <<"downloadSharedFileContent">> => ?ZONE_SHARED_DATA_CURL_COMMAND_TEMPLATE("/content"),
-                <<"getSharedFileAttributes">> => ?ZONE_SHARED_DATA_CURL_COMMAND_TEMPLATE(""),
-                <<"getSharedFileExtendedAttributes">> => ?ZONE_SHARED_DATA_CURL_COMMAND_TEMPLATE("/metadata/xattrs"),
-                <<"getSharedFileJsonMetadata">> => ?ZONE_SHARED_DATA_CURL_COMMAND_TEMPLATE("/metadata/json"),
-                <<"getSharedFileRdfMetadata">> => ?ZONE_SHARED_DATA_CURL_COMMAND_TEMPLATE("/metadata/rdf")
-            }
         }
     }.
 

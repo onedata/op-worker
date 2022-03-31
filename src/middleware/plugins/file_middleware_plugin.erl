@@ -335,7 +335,7 @@ authorize_create(#op_req{gri = #gri{aspect = object_id}}, _) ->
 authorize_create(#op_req{auth = Auth = ?USER(UserId), data = Data, gri = #gri{aspect = register_file}}, _) ->
     SpaceId = maps:get(<<"spaceId">>, Data),
     middleware_utils:is_eff_space_member(Auth, SpaceId) andalso
-    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_REGISTER_FILES).
+        space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_REGISTER_FILES).
 
 
 %% @private
@@ -494,6 +494,7 @@ resolve_get_operation_handler(symlink_target, public) -> ?MODULE;
 resolve_get_operation_handler(symlink_target, private) -> ?MODULE;
 resolve_get_operation_handler(archive_recall_details, private) -> ?MODULE;
 resolve_get_operation_handler(archive_recall_progress, private) -> ?MODULE;
+resolve_get_operation_handler(api_samples, public) -> ?MODULE;
 resolve_get_operation_handler(_, _) -> throw(?ERROR_NOT_SUPPORTED).
 
 
@@ -598,7 +599,8 @@ data_spec_get(#gri{aspect = As}) when
     As =:= symlink_value;
     As =:= symlink_target;
     As =:= archive_recall_details;
-    As =:= archive_recall_progress
+    As =:= archive_recall_progress;
+    As =:= api_samples
 ->
     #{required => #{id => {binary, guid}}};
 
@@ -644,7 +646,8 @@ authorize_get(#op_req{gri = #gri{id = FileGuid, aspect = As, scope = public}}, _
     As =:= json_metadata;
     As =:= rdf_metadata;
     As =:= symlink_value;
-    As =:= symlink_target
+    As =:= symlink_target;
+    As =:= api_samples
 ->
     file_id:is_share_guid(FileGuid);
 
@@ -683,12 +686,12 @@ authorize_get(#op_req{auth = ?USER(UserId), gri = #gri{id = Guid, aspect = qos_s
 
 authorize_get(#op_req{auth = Auth, gri = #gri{aspect = download_url, scope = Scope}, data = Data}, _) ->
     Predicate = case Scope of
-        private -> 
-            fun(Guid) -> 
-                not file_id:is_share_guid(Guid) 
-                    andalso middleware_utils:has_access_to_file_space(Auth, Guid) 
+        private ->
+            fun(Guid) ->
+                not file_id:is_share_guid(Guid)
+                    andalso middleware_utils:has_access_to_file_space(Auth, Guid)
             end;
-        public -> 
+        public ->
             fun file_id:is_share_guid/1
     end,
     lists:all(Predicate, maps:get(<<"file_ids">>, Data)).
@@ -715,7 +718,8 @@ validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= symlink_value;
     As =:= symlink_target;
     As =:= archive_recall_details;
-    As =:= archive_recall_progress
+    As =:= archive_recall_progress;
+    As =:= api_samples
 ->
     middleware_utils:assert_file_managed_locally(Guid);
 
@@ -742,18 +746,18 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = instance}}, _) ->
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = children}}, _) ->
     SessionId = Auth#auth.session_id,
     RequestedAttributes = utils:ensure_list(maps:get(<<"attribute">>, Data, ?DEFAULT_BASIC_ATTRIBUTES)),
-    
+
     ListingOpts = #{
         size => maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES),
         token => maps:get(<<"token">>, Data, ?INITIAL_API_LS_TOKEN)
     },
-    
-    ToJsonWithRequestedAttributes = fun(ItemToJson) -> 
+
+    ToJsonWithRequestedAttributes = fun(ItemToJson) ->
         fun(Res) ->
             maps:with(RequestedAttributes, ItemToJson(Res))
         end
     end,
-    
+
     {ResultJson, Info} = case lists:sort(lists_utils:union(RequestedAttributes, ?DEFAULT_BASIC_ATTRIBUTES)) of
         ?DEFAULT_BASIC_ATTRIBUTES ->
             {ok, Children, ReturnedInfo} = ?lfm_check(lfm:get_children(
@@ -762,7 +766,7 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = childre
                 ({Guid, Name}) ->
                     {ok, ObjectId} = file_id:guid_to_objectid(Guid),
                     #{<<"file_id">> => ObjectId, <<"name">> => Name}
-                end,
+            end,
             {lists:map(ToJsonWithRequestedAttributes(ItemToJson), Children), ReturnedInfo};
         _ ->
             IncludeHardlinksCount = lists:member(<<"hardlinks_count">>, RequestedAttributes),
@@ -770,7 +774,7 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = childre
                 SessionId, ?FILE_REF(FileGuid), ListingOpts, false, IncludeHardlinksCount)),
             {lists:map(ToJsonWithRequestedAttributes(fun file_attrs_to_json/1), Children), ReturnedInfo}
     end,
-    
+
     #{is_last := IsLast} = Info,
     %% @TODO VFS-8980 Do not use default after list options are refined and token is always returned
     {ok, value, {ResultJson, IsLast, maps:get(token, Info, undefined)}};
@@ -789,13 +793,13 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = childre
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = files}}, _) ->
     SessionId = Auth#auth.session_id,
-    
+
     %% @TODO VFS-8980 - return descriptive error when both token and start_after are provided
     StartAfter = maps:get(<<"token">>, Data, maps:get(<<"start_after">>, Data, <<>>)),
-    {ok, Result, IsLast} = ?lfm_check(lfm:get_files_recursively(SessionId, ?FILE_REF(FileGuid), 
+    {ok, Result, IsLast} = ?lfm_check(lfm:get_files_recursively(SessionId, ?FILE_REF(FileGuid),
         StartAfter, maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES))),
     NextPageToken = case IsLast of
-        true -> 
+        true ->
             null;
         false ->
             {T, _} = lists:last(Result),
@@ -962,7 +966,11 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = archive_recall_detai
 
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = archive_recall_progress}}, _) ->
-    {ok, mi_archives:get_recall_progress(Auth#auth.session_id, FileGuid)}.
+    {ok, mi_archives:get_recall_progress(Auth#auth.session_id, FileGuid)};
+
+
+get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = api_samples, scope = public}}, _) ->
+    {ok, value, public_file_api_samples:generate_for(Auth#auth.session_id, FileGuid)}.
 
 
 %%%===================================================================
