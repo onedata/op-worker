@@ -190,8 +190,8 @@ new_by_partial_context(FilePartialCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec reset(ctx()) -> ctx().
-reset(#file_ctx{guid = Guid, uuid = Uuid, space_id = SpaceId}) ->
-    #file_ctx{guid = Guid, uuid = Uuid, space_id = SpaceId}.
+reset(#file_ctx{guid = Guid, uuid = Uuid, space_id = SpaceId, share_id = ShareId}) ->
+    #file_ctx{guid = Guid, uuid = Uuid, space_id = SpaceId, share_id = ShareId}.
 
 -spec set_file_location(ctx(), file_location:id()) -> ctx().
 set_file_location(FileCtx = #file_ctx{file_location_ids = undefined}, _LocationId) ->
