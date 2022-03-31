@@ -796,18 +796,20 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = childre
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = files}}, _) ->
     SessionId = Auth#auth.session_id,
     
-    BaseOptions = #{limit => maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES)},
     %% @TODO VFS-8980 - return descriptive error when both token and start_after are provided
-    BaseOptions2 = case maps:get(<<"token">>, Data, undefined) of
+    BaseOptions = case maps:get(<<"token">>, Data, undefined) of
         undefined -> 
-            maps_utils:put_if_defined(BaseOptions, start_after_path, maps:get(<<"start_after">>, Data, undefined));
+            #{start_after_path => maps:get(<<"start_after">>, Data, undefined)};
         PaginationToken -> 
-            BaseOptions#{pagination_token => PaginationToken}
+            #{pagination_token => PaginationToken}
     end,
-    BaseOptions3 = maps_utils:put_if_defined(BaseOptions2, prefix, maps:get(<<"prefix">>, Data, undefined)),
+    Options = maps_utils:remove_undefined(BaseOptions#{
+        limit => maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES), 
+        prefix => maps:get(<<"prefix">>, Data, undefined)
+    }),
     RequestedAttributes = utils:ensure_list(maps:get(<<"attribute">>, Data, ?DEFAULT_RECURSIVE_FILE_LIST_ATTRIBUTES)),
     {ok, Result, InaccessiblePaths, NextPageToken} = 
-        ?lfm_check(lfm:get_files_recursively(SessionId, ?FILE_REF(FileGuid), BaseOptions3)),
+        ?lfm_check(lfm:get_files_recursively(SessionId, ?FILE_REF(FileGuid), Options)),
     JsonResult = lists:map(fun({Path, Attrs}) ->
         JsonAttrs = file_attrs_to_json(Attrs),
         maps:with(RequestedAttributes, JsonAttrs#{<<"path">> => Path})

@@ -15,16 +15,16 @@
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
--export([set_current_context/2, save_named_context/3, clear_context/0]).
+-export([set_default_context/2, save_named_context/3, clear_context/0]).
 
 -export([
     mkdir/1, 
     mkdir/2,
-    mkdir_in_ctx/2,
+    mkdir_with_ctx/2,
     create/1,
-    create_in_ctx/2,
+    create_with_ctx/2,
     unlink/1,
-    unlink_in_ctx/2
+    unlink_with_ctx/2
 ]).
 
 % TODO VFS-7215 - merge this module with file_ops_test_utils
@@ -38,8 +38,8 @@
 %%% API functions
 %%%===================================================================
 
--spec set_current_context(node(), session:id()) -> ok.
-set_current_context(Node, SessionId) ->
+-spec set_default_context(node(), session:id()) -> ok.
+set_default_context(Node, SessionId) ->
     save_context(?DEFAULT_CTX, #{node => Node, session_id => SessionId}).
 
 
@@ -55,34 +55,34 @@ clear_context() ->
 
 -spec mkdir(file_meta:path()) -> file_id:file_guid() | no_return().
 mkdir(Path) ->
-    mkdir_in_ctx(?DEFAULT_CTX, [Path]).
+    mkdir_with_ctx(?DEFAULT_CTX, [Path]).
 
 -spec mkdir(file_meta:path(), file_meta:posix_permissions()) -> file_id:file_guid() | no_return().
 mkdir(Path, Mode) ->
-    mkdir_in_ctx(?DEFAULT_CTX, [Path, Mode]).
+    mkdir_with_ctx(?DEFAULT_CTX, [Path, Mode]).
 
--spec mkdir_in_ctx(ctx_name(), [any()]) -> file_id:file_guid() | no_return().
-mkdir_in_ctx(CtxName, Args) ->
+-spec mkdir_with_ctx(ctx_name(), [any()]) -> file_id:file_guid() | no_return().
+mkdir_with_ctx(CtxName, Args) ->
     {ok, Guid} = ?assertMatch({ok, _}, execute_in_context(CtxName, mkdir, Args)),
     Guid.
 
 
 -spec create(file_meta:path()) -> file_id:file_guid() | no_return().
 create(Path) ->
-    create_in_ctx(?DEFAULT_CTX, [Path]).
+    create_with_ctx(?DEFAULT_CTX, [Path]).
 
--spec create_in_ctx(ctx_name(), [any()]) -> file_id:file_guid() | no_return().
-create_in_ctx(CtxName, Args) ->
+-spec create_with_ctx(ctx_name(), [any()]) -> file_id:file_guid() | no_return().
+create_with_ctx(CtxName, Args) ->
     {ok, Guid} = ?assertMatch({ok, _}, execute_in_context(CtxName, create, Args)),
     Guid.
 
 
 -spec unlink(file_id:file_guid()) -> ok | no_return().
 unlink(Guid) ->
-    unlink_in_ctx(?DEFAULT_CTX, [?FILE_REF(Guid)]).
+    unlink_with_ctx(?DEFAULT_CTX, [?FILE_REF(Guid)]).
 
--spec unlink_in_ctx(ctx_name(), [any()]) -> ok | no_return().
-unlink_in_ctx(CtxName, Args) ->
+-spec unlink_with_ctx(ctx_name(), [any()]) -> ok | no_return().
+unlink_with_ctx(CtxName, Args) ->
     ?assertEqual(ok, execute_in_context(CtxName, unlink, Args)).
 
 

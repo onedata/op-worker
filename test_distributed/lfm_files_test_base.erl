@@ -529,7 +529,7 @@ get_recursive_file_list(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     
     SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
-    lfm_ct:set_current_context(Worker, SessId1),
+    lfm_ct:set_default_context(Worker, SessId1),
     
     MainDirName = generator:gen_name(),
     MainDirPath = <<"/space_name1/", MainDirName/binary, "/">>,
@@ -596,7 +596,7 @@ get_recursive_file_list_prefix_test_base(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     
     SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
-    lfm_ct:set_current_context(Worker, SessId1),
+    lfm_ct:set_default_context(Worker, SessId1),
     
     MainDirName = generator:gen_name(),
     MainDirPath = <<"/space_name1/", MainDirName/binary, "/">>,
@@ -640,7 +640,7 @@ get_recursive_file_list_inaccessible_paths_test_base(Config) ->
     SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
     SessId2 = ?config({session_id, {<<"user2">>, ?GET_DOMAIN(Worker)}}, Config),
     
-    lfm_ct:set_current_context(Worker, SessId1),
+    lfm_ct:set_default_context(Worker, SessId1),
     
     [EaccesDirName, MainDirName] = lists:sort(lists_utils:generate(fun generator:gen_name/0, 2)),
     MainDirPath = <<"/space_name2/", MainDirName/binary, "/">>,

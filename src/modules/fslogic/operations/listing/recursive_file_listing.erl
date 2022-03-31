@@ -90,7 +90,7 @@
 
 
 -spec list(user_ctx:ctx(), file_ctx:ctx(), options())-> fslogic_worker:fuse_response().
-list(UserCtx, FileCtx, #{token := PaginationToken} = Options) ->
+list(UserCtx, FileCtx, #{pagination_token := PaginationToken} = Options) ->
     {RootGuid, StartAfter} = unpack_pagination_token(PaginationToken), 
     Limit = maps:get(limit, Options, ?LIST_RECURSIVE_BATCH_SIZE),
     Prefix = maps:get(prefix, Options, ?DEFAULT_PREFIX),
@@ -115,14 +115,13 @@ list(UserCtx, FileCtx, Options) ->
 list(UserCtx, FileCtx0, StartAfter, Limit, Prefix) ->
     {FilePath, FileCtx1} = file_ctx:get_canonical_path(FileCtx0),
     [_Sep, SpaceId | FilePathTokens] = filename:split(FilePath),
-    UpdatedStartAfter = case Prefix of
+    OptimizedStartAfter = case Prefix of
         <<>> -> StartAfter;
         _ -> max(StartAfter, filename:dirname(Prefix))
     end,
-    StartAfterPathTokens = filename:split(UpdatedStartAfter),
     InitialState = #state{
-        start_after_path = UpdatedStartAfter,
-        start_after_path_tokens = StartAfterPathTokens,
+        start_after_path = OptimizedStartAfter,
+        start_after_path_tokens = filename:split(OptimizedStartAfter),
         limit = Limit,
         current_dir_path_tokens = [SpaceId | FilePathTokens],
         last_start_after_token = filename:basename(FilePath),
@@ -148,7 +147,7 @@ list(UserCtx, FileCtx0, StartAfter, Limit, Prefix) ->
                     #fuse_response{status = #status{code = ?OK},
                         fuse_response = #recursive_file_list{
                             entries = build_result_file_entry_list(
-                                InitialState, get_file_attrs(UserCtx, FileCtx2))
+                                InitialState, get_file_attrs(UserCtx, FileCtx2), <<>>)
                         }
                     };
                 {error, ?EACCES} ->
@@ -163,10 +162,10 @@ list(UserCtx, FileCtx0, StartAfter, Limit, Prefix) ->
 process_current_dir(_UserCtx, _FileCtx, #state{limit = Limit}) when Limit =< 0 ->
     {more, #list_result{}};
 process_current_dir(UserCtx, FileCtx, State) ->
-    Path = build_current_rel_path(State),
+    Path = build_current_dir_rel_path(State),
     case not matches_prefix(Path, State) andalso Path > State#state.prefix of
         false ->
-            {ListOpts, UpdatedState} = build_initial_listing_opts(State),
+            {ListOpts, UpdatedState} = init_current_dir_processing(State),
             process_current_dir_in_batches(UserCtx, FileCtx, ListOpts, UpdatedState, #list_result{});
         true ->
             {done, #list_result{}}
@@ -230,8 +229,8 @@ process_current_child(UserCtx, ChildCtx, #state{current_dir_path_tokens = Curren
             ),
             {ProgressMarker, NextChildrenRes};
         #file_attr{type = _, name = Name} = FileAttrs ->
-            UpdatedState = State#state{current_dir_path_tokens = CurrentPathTokens ++ [Name]},
-            {done, #list_result{entries = build_result_file_entry_list(UpdatedState, FileAttrs)}}
+            UpdatedState = State#state{current_dir_path_tokens = CurrentPathTokens},
+            {done, #list_result{entries = build_result_file_entry_list(UpdatedState, FileAttrs, Name)}}
     end.
 
 
@@ -272,16 +271,19 @@ get_file_attrs(UserCtx, FileCtx) ->
 
     
 %% @private
--spec build_initial_listing_opts(state()) -> {file_meta:list_opts(), state()}.
-build_initial_listing_opts(#state{start_after_path_tokens = []} = State) ->
+-spec init_current_dir_processing(state()) -> {file_meta:list_opts(), state()}.
+init_current_dir_processing(#state{start_after_path_tokens = []} = State) ->
     {#{last_name => <<>>}, State};
-build_initial_listing_opts(#state{
+init_current_dir_processing(#state{
     start_after_path_tokens = [CurrentStartAfterToken | NextStartAfterTokens],
     last_start_after_token = LastStartAfterToken,
     current_dir_path_tokens = CurrentPathTokens,
     parent_uuid = ParentUuid
 } = State) ->
-    InitialOpts = #{size => ?LIST_RECURSIVE_BATCH_SIZE}, 
+    InitialOpts = #{size => ?LIST_RECURSIVE_BATCH_SIZE},
+    %% As long as the currently processed path is within the start_after_path, we can start
+    %% listing from the specific file name (CurrentStartAfterToken), as all names lexicographically
+    %% smaller should not be included in the results. Otherwise, The whole directory is listed and processed.
     case lists:last(CurrentPathTokens) == LastStartAfterToken of
         true ->
             Opts = case file_meta:get_child_uuid_and_tree_id(ParentUuid, CurrentStartAfterToken) of
@@ -305,7 +307,6 @@ build_initial_listing_opts(#state{
                 }
             };
         _ ->
-            % we are no longer in a subtree pointed by start_after_path
             {
                 InitialOpts#{last_name => <<>>}, 
                 State#state{start_after_path_tokens = []}
@@ -314,27 +315,30 @@ build_initial_listing_opts(#state{
 
 
 %% @private
--spec build_result_file_entry_list(state(), lfm_attrs:file_attributes()) -> [entry()].
-build_result_file_entry_list(#state{start_after_path = StartAfterPath} = State, FileAttrs) -> % fixme pass name??
-    case build_path_in_requested_scope(State) of
-        out_of_scope -> [];
-        StartAfterPath -> [];
-        Path -> [{Path, FileAttrs}]
+-spec build_result_file_entry_list(state(), lfm_attrs:file_attributes(), file_meta:name()) -> 
+    [entry()].
+build_result_file_entry_list(#state{start_after_path = StartAfterPath} = State, FileAttrs, Name) ->
+    case build_rel_path_in_current_dir_with_prefix_check(State, Name) of
+        false -> [];
+        {true, StartAfterPath} -> [];
+        {true, Path} -> [{Path, FileAttrs}]
     end.
 
 
 %% @private
--spec build_path_in_requested_scope(state()) -> file_meta:path() | out_of_scope.
-build_path_in_requested_scope(State) ->
-    Path = build_current_rel_path(State),
+-spec build_current_dir_rel_path_with_prefix_check(state()) -> {true, file_meta:path()} | false.
+build_current_dir_rel_path_with_prefix_check(State) ->
+    build_rel_path_in_current_dir_with_prefix_check(State, <<>>).
+
+
+%% @private
+-spec build_rel_path_in_current_dir_with_prefix_check(state(), file_meta:name()) -> 
+    {true, file_meta:path()} | false.
+build_rel_path_in_current_dir_with_prefix_check(State, Name) ->
+    Path = build_rel_path_in_current_dir(State, Name),
     case matches_prefix(Path, State) of
-        true ->
-            case Path of
-                <<>> -> <<".">>;
-                Path -> Path
-            end;
-        false ->
-            out_of_scope
+        true -> {true, Path};
+        false -> false
     end.
 
 
@@ -345,9 +349,18 @@ matches_prefix(Path, #state{prefix = Prefix}) ->
 
 
 %% @private
--spec build_current_rel_path(state()) -> file_meta:path().
-build_current_rel_path(#state{current_dir_path_tokens = CurrentPathTokens, root_file_depth = Depth}) ->
-    filename:join(lists:sublist(CurrentPathTokens ++ [<<>>], Depth + 1, length(CurrentPathTokens))).
+-spec build_current_dir_rel_path(state()) -> file_meta:path().
+build_current_dir_rel_path(State) ->
+    build_rel_path_in_current_dir(State, <<>>).
+
+
+%% @private
+-spec build_rel_path_in_current_dir(state(), file_meta:name()) -> file_meta:path().
+build_rel_path_in_current_dir(#state{current_dir_path_tokens = CurrentPathTokens, root_file_depth = Depth}, Name) ->
+    case filename:join(lists:sublist(CurrentPathTokens ++ [Name], Depth + 1, length(CurrentPathTokens))) of
+        <<>> -> <<".">>;
+        Path -> Path
+    end.
 
 
 %% @private
@@ -393,10 +406,10 @@ unpack_pagination_token(Token) ->
 -spec result_append_inaccessible_path(state(), result()) -> result().
 result_append_inaccessible_path(State, Result) ->
     StartAfterPath = State#state.start_after_path,
-    case build_path_in_requested_scope(State) of
-        out_of_scope -> Result;
-        StartAfterPath -> Result;
-        Path -> merge_results(Result, #list_result{inaccessible_paths = [Path]})
+    case build_current_dir_rel_path_with_prefix_check(State) of
+        false -> Result;
+        {true, StartAfterPath} -> Result;
+        {true, Path} -> merge_results(Result, #list_result{inaccessible_paths = [Path]})
     end.
 
 
