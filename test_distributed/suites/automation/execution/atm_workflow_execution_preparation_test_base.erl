@@ -16,8 +16,8 @@
 -include("atm/atm_test_schema_drafts.hrl").
 
 -export([
-    create_first_lane_run_failure_test/0,
-    prepare_first_lane_run_failure_test/0
+    first_lane_run_preparation_failure_before_run_was_created_test/0,
+    first_lane_run_preparation_failure_after_run_was_created_test/0
 ]).
 
 
@@ -56,7 +56,7 @@
 %%%===================================================================
 
 
-create_first_lane_run_failure_test() ->
+first_lane_run_preparation_failure_before_run_was_created_test() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         provider = ?PROVIDER_SELECTOR,
         user = ?USER_SELECTOR,
@@ -67,6 +67,8 @@ create_first_lane_run_failure_test() ->
             lane_runs = [#atm_lane_run_execution_test_spec{
                 selector = {1, 1},
                 create_run = #atm_step_mock_spec{
+                    % 'create_run' step execution is mocked entirely so that
+                    % no lane run execution component will be created
                     mock_execution = {true, {throw, ?ERROR_INTERNAL_SERVER_ERROR}}
                 },
                 prepare_lane = #atm_step_mock_spec{
@@ -79,6 +81,38 @@ create_first_lane_run_failure_test() ->
             handle_workflow_execution_ended = #atm_step_mock_spec{
                 after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
                     {true, atm_workflow_execution_exp_state_builder:report_workflow_execution_failed(ExpState0)}
+                end
+            }
+        }]
+    }).
+
+
+first_lane_run_preparation_failure_after_run_was_created_test() ->
+    atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
+        provider = ?PROVIDER_SELECTOR,
+        user = ?USER_SELECTOR,
+        space = ?SPACE_SELECTOR,
+        workflow_schema_dump_or_draft = ?ECHO_ATM_WORKFLOW_SCHEMA_DRAFT,
+        workflow_schema_revision_num = 1,
+        incarnations = [#atm_workflow_execution_incarnation_test_spec{
+            lane_runs = [#atm_lane_run_execution_test_spec{
+                selector = {1, 1},
+                create_run = #atm_step_mock_spec{
+                    % only 'create_run' step result is mocked but not step execution so that
+                    % lane run execution component can be created
+                    mock_execution = {false, {throw, ?ERROR_INTERNAL_SERVER_ERROR}}
+                },
+                prepare_lane = #atm_step_mock_spec{
+                    after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                        ExpState1 = atm_workflow_execution_exp_state_builder:report_lane_run_failed({1, 1}, ExpState0),
+                        {true, atm_workflow_execution_exp_state_builder:report_workflow_execution_aborting(ExpState1)}
+                    end
+                }
+            }],
+            handle_workflow_execution_ended = #atm_step_mock_spec{
+                after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                    ExpState1 = atm_workflow_execution_exp_state_builder:report_lane_run_failed({1, 1}, ExpState0),
+                    {true, atm_workflow_execution_exp_state_builder:report_workflow_execution_failed(ExpState1)}
                 end
             }
         }]

@@ -30,7 +30,10 @@
 
     report_lane_run_started_preparing/2,
     report_lane_run_created/2,
+    report_lane_run_enqueued/2,
+    report_lane_run_aborting/2,
     report_lane_run_failed/2,
+
     report_workflow_execution_aborting/1,
     report_workflow_execution_failed/1,
 
@@ -43,6 +46,7 @@
 % than concrete value)
 -type exp_workflow_execution_state() :: json_utils:json_term().
 -type exp_task_execution_state() :: json_utils:json_term().
+-type exp_task_execution_states_registry() :: #{atm_task_execution:id() => exp_task_execution_state()}.
 
 -record(exp_state, {
     provider_selector :: oct_background:entity_selector(),
@@ -53,7 +57,7 @@
     current_run_num :: atm_lane_execution:run_num(),
 
     exp_workflow_execution_state :: exp_workflow_execution_state(),
-    exp_task_execution_states_registry :: #{atm_task_execution:id() => exp_task_execution_state()}
+    exp_task_execution_states_registry :: exp_task_execution_states_registry()
 }).
 -type exp_state() :: #exp_state{}.
 
@@ -121,19 +125,84 @@ report_lane_run_started_preparing(AtmLaneRunSelector, ExpState) ->
     end.
 
 
+-spec report_lane_run_created(atm_lane_execution:lane_run_selector(), exp_state()) ->
+    exp_state().
+report_lane_run_created(AtmLaneRunSelector, ExpState0 = #exp_state{
+    workflow_execution_id = AtmWorkflowExecutionId,
+    exp_task_execution_states_registry = ExpAtmTaskExecutionStates0
+}) ->
+    AtmLaneSchema = get_lane_schema(AtmLaneRunSelector, ExpState0),
+    {ok, Run} = atm_lane_execution:get_run(AtmLaneRunSelector, get_workflow_execution(ExpState0)),
+
+    {ExpAtmParallelBoxesJson, ExpAtmTaskExecutionStates1} = lists:mapfoldl(
+        fun({AtmParallelBoxSchema, AtmParallelBoxExecution}, ExpAtmTaskExecutionStatesAcc) ->
+            % Task registry must be fetched from model stored in op - it is not
+            % possible to tell beforehand what ids will be generated
+            AtmTasksRegistry = maps:get(
+                <<"taskRegistry">>,
+                atm_parallel_box_execution:to_json(AtmParallelBoxExecution)
+            ),
+            % At the very least assert task execution id is generated for each task schema
+            ExpTaskSchemaIds = lists:sort(lists:map(
+                fun(#atm_task_schema{id = AtmTaskSchemaId}) -> AtmTaskSchemaId end,
+                AtmParallelBoxSchema#atm_parallel_box_schema.tasks
+            )),
+            ?assertEqual(ExpTaskSchemaIds, lists:sort(maps:keys(AtmTasksRegistry))),
+
+            ExpAtmParallelBoxJson = #{
+                <<"schemaId">> => AtmParallelBoxSchema#atm_parallel_box_schema.id,
+                <<"status">> => <<"pending">>,
+                <<"taskRegistry">> => AtmTasksRegistry
+            },
+            UpdatedExpAtmTaskExecutionStatesAcc = maps:fold(fun(AtmTaskSchemaId, AtmTaskExecutionId, Acc) ->
+                Acc#{AtmTaskExecutionId => #{
+                    <<"atmWorkflowExecutionId">> => AtmWorkflowExecutionId,
+                    <<"schemaId">> => AtmTaskSchemaId,
+                    <<"status">> => <<"pending">>,
+                    <<"itemsInProcessing">> => 0,
+                    <<"itemsProcessed">> => 0,
+                    <<"itemsFailed">> => 0
+                }}
+            end, ExpAtmTaskExecutionStatesAcc, AtmTasksRegistry),
+
+            {ExpAtmParallelBoxJson, UpdatedExpAtmTaskExecutionStatesAcc}
+        end,
+        ExpAtmTaskExecutionStates0,
+        lists:zip(AtmLaneSchema#atm_lane_schema.parallel_boxes, Run#atm_lane_execution_run.parallel_boxes)
+    ),
+
+    AtmLaneRunDiff = #{
+        <<"iteratedStoreId">> => Run#atm_lane_execution_run.iterated_store_id,
+        <<"exceptionStoreId">> => Run#atm_lane_execution_run.exception_store_id,
+        <<"parallelBoxes">> => ExpAtmParallelBoxesJson
+    },
+    ExpState1 = update_lane_run(AtmLaneRunSelector, AtmLaneRunDiff, ExpState0),
+
+    ExpState1#exp_state{exp_task_execution_states_registry = ExpAtmTaskExecutionStates1}.
+
+
+-spec report_lane_run_enqueued(atm_lane_execution:lane_run_selector(), exp_state()) ->
+    exp_state().
+report_lane_run_enqueued(AtmLaneRunSelector, ExpState) ->
+    update_lane_run(AtmLaneRunSelector, #{<<"status">> => <<"enqueued">>}, ExpState).
+
+
+-spec report_lane_run_aborting(atm_lane_execution:lane_run_selector(), exp_state()) ->
+    exp_state().
+report_lane_run_aborting(AtmLaneRunSelector, ExpState) ->
+    update_lane_run(AtmLaneRunSelector, #{<<"status">> => <<"aborting">>}, ExpState).
+
+
 -spec report_lane_run_failed(atm_lane_execution:lane_run_selector(), exp_state()) ->
     exp_state().
-report_lane_run_failed(AtmLaneRunSelector, ExpState = #exp_state{
-    exp_workflow_execution_state = ExpWorkflowExecutionState0
-}) ->
-    {ok, {AtmLaneRunPath, AtmLaneRun}} = locate_lane_run(AtmLaneRunSelector, ExpState),
-
-    {ok, ExpWorkflowExecutionState1} = json_utils:insert(
-        ExpWorkflowExecutionState0,
-        AtmLaneRun#{<<"status">> => <<"failed">>, <<"isRerunable">> => true},
-        AtmLaneRunPath
-    ),
-    ExpState#exp_state{exp_workflow_execution_state = ExpWorkflowExecutionState1}.
+report_lane_run_failed(AtmLaneRunSelector, ExpState0) ->
+    ExpState1 = ensure_all_parallel_boxes_ended(AtmLaneRunSelector, ExpState0),
+    FinalStatus = case is_current_lane_run(AtmLaneRunSelector, ExpState0) of
+        true -> <<"failed">>;
+        false -> <<"interrupted">>  %% lane run prepared in advance
+    end,
+    Diff = #{<<"status">> => FinalStatus, <<"isRerunable">> => true},
+    update_lane_run(AtmLaneRunSelector, Diff, ExpState1).
 
 
 -spec report_workflow_execution_aborting(exp_state()) -> exp_state().
@@ -192,29 +261,25 @@ build_initial_regular_lane_run(RunNum, InitialStatus) ->
 %% @private
 -spec report_current_lane_run_started_preparing(atm_lane_execution:lane_run_selector(), exp_state()) ->
     exp_state().
-report_current_lane_run_started_preparing(AtmLaneRunSelector, ExpState = #exp_state{
-    exp_workflow_execution_state = ExpWorkflowExecutionState0
-}) ->
-    {ok, {AtmLaneRunPath, AtmLaneRun}} = locate_lane_run(AtmLaneRunSelector, ExpState),
+report_current_lane_run_started_preparing(AtmLaneRunSelector, ExpState0) ->
+    ExpState1 = update_lane_run(AtmLaneRunSelector, #{<<"status">> => <<"preparing">>}, ExpState0),
 
-    {ok, ExpWorkflowExecutionState1} = json_utils:insert(
-        ExpWorkflowExecutionState0,
-        AtmLaneRun#{<<"status">> => <<"preparing">>},
-        AtmLaneRunPath
-    ),
-    ExpState#exp_state{exp_workflow_execution_state = case ExpWorkflowExecutionState1 of
-        #{<<"status">> := <<"scheduled">>} ->
-            ExpWorkflowExecutionState1#{
+    case ExpState1#exp_state.exp_workflow_execution_state of
+        ExpAtmWorkflowExecutionState = #{<<"status">> := <<"scheduled">>} ->
+            ExpState1#exp_state{exp_workflow_execution_state = ExpAtmWorkflowExecutionState#{
                 <<"status">> => <<"active">>,
                 <<"startTime">> => build_timestamp_field_validator(?NOW())
-            };
+            }};
         _ ->
-            ExpWorkflowExecutionState1
-    end}.
+            ExpState1
+    end.
 
 
 %% @private
--spec report_lane_run_started_preparing_in_advance(atm_lane_execution:lane_run_selector(), exp_state()) ->
+-spec report_lane_run_started_preparing_in_advance(
+    atm_lane_execution:lane_run_selector(),
+    exp_state()
+) ->
     exp_state().
 report_lane_run_started_preparing_in_advance(AtmLaneRunSelector, ExpState = #exp_state{
     exp_workflow_execution_state = ExpWorkflowExecutionState0
@@ -229,6 +294,114 @@ report_lane_run_started_preparing_in_advance(AtmLaneRunSelector, ExpState = #exp
     end,
     {ok, ExpWorkflowExecutionState1} = json_utils:insert(ExpWorkflowExecutionState0, Run, Path),
     ExpState#exp_state{exp_workflow_execution_state = ExpWorkflowExecutionState1}.
+
+
+%% @private
+-spec report_task_ended(atm_task_execution:id(), exp_state()) -> exp_state().
+report_task_ended(AtmTaskExecutionId, ExpState = #exp_state{
+    exp_workflow_execution_state = ExpWorkflowExecutionState,
+    exp_task_execution_states_registry = ExpAtmTaskExecutionStates0
+}) ->
+    PrevAtmTaskExecution = maps:get(AtmTaskExecutionId, ExpAtmTaskExecutionStates0),
+    UpdatedAtmTaskExecution = case PrevAtmTaskExecution of
+        #{<<"status">> := <<"pending">>} ->
+            PrevAtmTaskExecution#{<<"status">> => <<"skipped">>};
+        #{<<"status">> := <<"active">>, <<"itemsInProcessing">> := 0, <<"itemsFailed">> := 0} ->
+            PrevAtmTaskExecution#{<<"status">> => <<"finished">>};
+        #{<<"status">> := <<"active">>, <<"itemsInProcessing">> := IP, <<"itemsFailed">> := IF} ->
+            PrevAtmTaskExecution#{
+                <<"status">> => <<"failed">>,
+                <<"itemsInProcessing">> => 0,
+                <<"itemsProcessed">> => maps:get(<<"itemsProcessed">>, PrevAtmTaskExecution) + IP,
+                <<"itemsFailed">> => IF + IP
+            };
+        #{<<"status">> := _EndedStatus} ->
+            PrevAtmTaskExecution
+    end,
+    ExpAtmTaskExecutionStates1 = ExpAtmTaskExecutionStates0#{
+        AtmTaskExecutionId => UpdatedAtmTaskExecution
+    },
+    ExpState#exp_state{
+        exp_workflow_execution_state = ExpWorkflowExecutionState#{
+            <<"lanes">> => lists:map(fun(AtmLaneExecution) ->
+                ensure_lane_parallel_box_statuses_up_to_date(AtmLaneExecution, ExpAtmTaskExecutionStates1)
+            end, maps:get(<<"lanes">>, ExpWorkflowExecutionState))
+        },
+        exp_task_execution_states_registry = ExpAtmTaskExecutionStates1
+    }.
+
+
+%% @private
+-spec ensure_lane_parallel_box_statuses_up_to_date(
+    json_utils:json_map(),
+    exp_task_execution_states_registry()
+) ->
+    json_utils:json_map().
+ensure_lane_parallel_box_statuses_up_to_date(
+    AtmLaneExecution = #{<<"runs">> := AtmLaneRuns},
+    AtmTaskExecutionStates
+) ->
+    AtmLaneExecution#{<<"runs">> => lists:map(fun(AtmLaneRun) ->
+        ensure_lane_run_parallel_box_statuses_up_to_date(AtmLaneRun, AtmTaskExecutionStates)
+    end, AtmLaneRuns)}.
+
+
+%% @private
+-spec ensure_lane_run_parallel_box_statuses_up_to_date(
+    json_utils:json_map(),
+    exp_task_execution_states_registry()
+) ->
+    json_utils:json_map().
+ensure_lane_run_parallel_box_statuses_up_to_date(
+    AtmLaneRun = #{<<"parallelBoxes">> := AtmParallelBoxes},
+    AtmTaskExecutionStates
+) ->
+    AtmLaneRun#{<<"parallelBoxes">> => lists:map(fun(AtmParallelBox) ->
+        ensure_parallel_box_status_up_to_date(AtmParallelBox, AtmTaskExecutionStates)
+    end, AtmParallelBoxes)}.
+
+
+%% @private
+-spec ensure_parallel_box_status_up_to_date(
+    json_utils:json_map(),
+    exp_task_execution_states_registry()
+) ->
+    json_utils:json_map().
+ensure_parallel_box_status_up_to_date(AtmParallelBox, AtmTaskExecutionStates) ->
+    AtmTaskExecutionStatuses = lists:map(fun(AtmTaskExecutionId) ->
+        maps:get(<<"status">>, maps:get(AtmTaskExecutionId, AtmTaskExecutionStates))
+    end, maps:values(maps:get(<<"taskRegistry">>, AtmParallelBox))),
+
+    AtmParallelBox#{<<"status">> => case lists:usort(AtmTaskExecutionStatuses) of
+        [Status] ->
+            Status;
+        UniqueStatuses ->
+            [LowestStatusPresent | _] = lists:dropwhile(
+                fun(Status) -> not lists:member(Status, UniqueStatuses) end,
+                [<<"active">>, <<"pending">>, <<"failed">>, <<"finished">>]
+            ),
+            case LowestStatusPresent of
+                <<"pending">> ->
+                    % Some tasks must have ended execution while others are still
+                    % pending - overall parallel box status is active
+                    <<"active">>;
+                Status ->
+                    Status
+            end
+    end}.
+
+
+%% @private
+-spec ensure_all_parallel_boxes_ended(atm_lane_execution:lane_run_selector(), exp_state()) ->
+    exp_state().
+ensure_all_parallel_boxes_ended(AtmLaneRunSelector, ExpState0) ->
+    {ok, {_AtmLaneRunPath, AtmLaneRun}} = locate_lane_run(AtmLaneRunSelector, ExpState0),
+
+    lists:foldl(fun(AtmParallelBox, OuterExpStateAcc) ->
+        maps:fold(fun(_, AtmTaskExecutionId, InnerExpStateAcc) ->
+            report_task_ended(AtmTaskExecutionId, InnerExpStateAcc)
+        end, OuterExpStateAcc, maps:get(<<"taskRegistry">>, AtmParallelBox))
+    end, ExpState0, maps:get(<<"parallelBoxes">>, AtmLaneRun)).
 
 
 %% @private
@@ -310,6 +483,32 @@ resolve_run_selector(current, #exp_state{current_run_num = CurrentRunNum}) ->
     CurrentRunNum;
 resolve_run_selector(RunNum, _) ->
     RunNum.
+
+
+%% @private
+-spec update_lane_run(
+    atm_lane_execution:lane_run_selector(),
+    map() | fun((json_utils:json_map()) -> json_utils:json_map()),
+    exp_state()
+) ->
+    exp_state().
+update_lane_run(AtmLaneRunSelector, Diff, ExpState) when is_map(Diff) ->
+    update_lane_run(
+        AtmLaneRunSelector,
+        fun(AtmLaneRun) -> maps:merge(AtmLaneRun, Diff) end,
+        ExpState
+    );
+
+update_lane_run(AtmLaneRunSelector, Diff, ExpState = #exp_state{
+    exp_workflow_execution_state = ExpWorkflowExecutionState0
+}) ->
+    {ok, {AtmLaneRunPath, AtmLaneRun}} = locate_lane_run(AtmLaneRunSelector, ExpState),
+    {ok, ExpWorkflowExecutionState1} = json_utils:insert(
+        ExpWorkflowExecutionState0,
+        Diff(AtmLaneRun),
+        AtmLaneRunPath
+    ),
+    ExpState#exp_state{exp_workflow_execution_state = ExpWorkflowExecutionState1}.
 
 
 %% @private

@@ -311,7 +311,14 @@ get_exp_state_diff(
     #mock_call_report{step = prepare_lane, timing = after_step},
     #atm_step_mock_spec{after_step_exp_state_diff = default}
 ) ->
-    fun(_) -> false end;  %% TODO implement
+    fun(#atm_mock_call_ctx{
+        workflow_execution_exp_state = ExpState0,
+        call_args = [_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmLaneRunSelector]
+    }) ->
+        {true, atm_workflow_execution_exp_state_builder:report_lane_run_enqueued(
+            AtmLaneRunSelector, ExpState0
+        )}
+    end;
 
 get_exp_state_diff(
     #mock_call_report{timing = before_step},
