@@ -797,14 +797,10 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = files}}
     SessionId = Auth#auth.session_id,
     
     %% @TODO VFS-8980 - return descriptive error when both token and start_after are provided
-    BaseOptions = case maps:get(<<"token">>, Data, undefined) of
-        undefined -> 
-            #{start_after_path => maps:get(<<"start_after">>, Data, undefined)};
-        PaginationToken -> 
-            #{pagination_token => PaginationToken}
-    end,
-    Options = maps_utils:remove_undefined(BaseOptions#{
+    Options = maps_utils:remove_undefined(#{
         limit => maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES), 
+        pagination_token => maps:get(<<"token">>, Data, undefined),
+        start_after_path => maps:get(<<"start_after">>, Data, undefined),
         prefix => maps:get(<<"prefix">>, Data, undefined)
     }),
     RequestedAttributes = utils:ensure_list(maps:get(<<"attribute">>, Data, ?DEFAULT_RECURSIVE_FILE_LIST_ATTRIBUTES)),

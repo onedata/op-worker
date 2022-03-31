@@ -50,7 +50,7 @@
     % number of files that are still required to be listed
     limit :: limit(),
     % tokens of start_after_path trimmed to be relative to currently listed file
-    start_after_path_tokens :: [file_meta:name()],
+    relative_start_after_path_tokens :: [file_meta:name()],
     % name of last listed file, when in subtree pointed by start_after_path
     last_start_after_token :: file_meta:name(),
     % absolute path tokens to currently processed directory
@@ -121,7 +121,7 @@ list(UserCtx, FileCtx0, StartAfter, Limit, Prefix) ->
     end,
     InitialState = #state{
         start_after_path = OptimizedStartAfter,
-        start_after_path_tokens = filename:split(OptimizedStartAfter),
+        relative_start_after_path_tokens = filename:split(OptimizedStartAfter),
         limit = Limit,
         current_dir_path_tokens = [SpaceId | FilePathTokens],
         last_start_after_token = filename:basename(FilePath),
@@ -146,6 +146,7 @@ list(UserCtx, FileCtx0, StartAfter, Limit, Prefix) ->
                 {ok, _, _, _} ->
                     #fuse_response{status = #status{code = ?OK},
                         fuse_response = #recursive_file_list{
+                            inaccessible_paths = [],
                             entries = build_result_file_entry_list(
                                 InitialState, get_file_attrs(UserCtx, FileCtx2), <<>>)
                         }
@@ -217,7 +218,7 @@ process_current_dir_in_batches(UserCtx, FileCtx, ListOpts, State, AccListResult)
 
 %% @private
 -spec process_current_child(user_ctx:ctx(), file_ctx:ctx(), state()) ->
-    {progress_marker(), [{file_meta:path(), lfm_attrs:file_attributes()}]}.
+    {progress_marker(), result()}.
 process_current_child(UserCtx, ChildCtx, #state{current_dir_path_tokens = CurrentPathTokens} = State) ->
     case get_file_attrs(UserCtx, ChildCtx) of
         #file_attr{type = ?DIRECTORY_TYPE, name = Name, guid = G} ->
@@ -240,7 +241,7 @@ process_current_child(UserCtx, ChildCtx, #state{current_dir_path_tokens = Curren
 
 %% @private
 -spec list_children_with_access_check(user_ctx:ctx(), file_ctx:ctx(), file_meta:list_opts()) ->
-    {[file_ctx:ctx()], file_meta:list_extended_info(), file_ctx:ctx()} | {error, ?EACCES}.
+    {ok, [file_ctx:ctx()], file_meta:list_extended_info(), file_ctx:ctx()} | {error, ?EACCES}.
 list_children_with_access_check(UserCtx, FileCtx, ListOpts) ->
     try
         {IsDir, FileCtx2} = file_ctx:is_dir(FileCtx),
@@ -272,10 +273,10 @@ get_file_attrs(UserCtx, FileCtx) ->
     
 %% @private
 -spec init_current_dir_processing(state()) -> {file_meta:list_opts(), state()}.
-init_current_dir_processing(#state{start_after_path_tokens = []} = State) ->
+init_current_dir_processing(#state{relative_start_after_path_tokens = []} = State) ->
     {#{last_name => <<>>}, State};
 init_current_dir_processing(#state{
-    start_after_path_tokens = [CurrentStartAfterToken | NextStartAfterTokens],
+    relative_start_after_path_tokens = [CurrentStartAfterToken | NextStartAfterTokens],
     last_start_after_token = LastStartAfterToken,
     current_dir_path_tokens = CurrentPathTokens,
     parent_uuid = ParentUuid
@@ -302,14 +303,14 @@ init_current_dir_processing(#state{
             {
                 maps:merge(InitialOpts, Opts),
                 State#state{
-                    start_after_path_tokens = NextStartAfterTokens, 
+                    relative_start_after_path_tokens = NextStartAfterTokens, 
                     last_start_after_token = CurrentStartAfterToken
                 }
             };
         _ ->
             {
                 InitialOpts#{last_name => <<>>}, 
-                State#state{start_after_path_tokens = []}
+                State#state{relative_start_after_path_tokens = []}
             }
     end.
 
@@ -364,7 +365,7 @@ build_rel_path_in_current_dir(#state{current_dir_path_tokens = CurrentPathTokens
 
 
 %% @private
--spec build_pagination_token([entry()], [file_meta:path()], file_id:file_guid(), boolean()) ->
+-spec build_pagination_token([entry()], [file_meta:path()], file_id:file_guid(), progress_marker()) ->
     pagination_token() | undefined.
 build_pagination_token(_, _, _, _ProgressMarker = done) -> undefined;
 build_pagination_token([], [], _, _) -> undefined;
@@ -384,12 +385,12 @@ build_pagination_token(Files, InaccessiblePaths, RootGuid, _ProgressMarker = mor
 
 -spec pack_pagination_token(file_id:file_guid(), file_meta:path()) -> pagination_token().
 pack_pagination_token(RootGuid, StartAfter) ->
-    base64url:encode(json_utils:encode(#{<<"guid">> => RootGuid, <<"startAfter">> => StartAfter})).
+    mochiweb_base64url:encode(json_utils:encode(#{<<"guid">> => RootGuid, <<"startAfter">> => StartAfter})).
 
 
 -spec unpack_pagination_token(pagination_token()) -> {file_id:file_guid(), file_meta:path()} | no_return().
 unpack_pagination_token(Token) ->
-    try json_utils:decode(base64url:decode(Token)) of
+    try json_utils:decode(mochiweb_base64url:decode(Token)) of
         #{<<"guid">> := RootGuid, <<"startAfter">> := StartAfter} ->
             {RootGuid, StartAfter};
         _ ->
