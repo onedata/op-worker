@@ -26,8 +26,8 @@
     race_with_subtree_adding_test/1, race_with_subtree_filling_with_data_test/1,
     race_with_file_adding_to_large_dir_test/1,
     multiple_status_change_test/1, adding_file_when_disabled_test/1]).
--export([init/1, init_and_enable_for_new_space/1, teardown/1]).
--export([verify_dir_on_provider_creating_files/3, delete_stats/2]).
+-export([init/1, init_and_enable_for_new_space/1, teardown/1, teardown/3]).
+-export([verify_dir_on_provider_creating_files/3]).
 % TODO VFS-9148 - extend tests
 
 
@@ -406,8 +406,12 @@ init_and_enable_for_new_space(Config) ->
 
 
 teardown(Config) ->
-    SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
-    SpaceGuid = lfm_test_utils:get_user1_first_space_guid(Config),
+    teardown(Config, lfm_test_utils:get_user1_first_space_id(Config), true).
+
+
+teardown(Config, SpaceId, CleanSpace) ->
+    Workers = ?config(op_worker_nodes, Config),
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
 
     disable(Config),
     verify_collecting_status(Config, disabled),
@@ -424,8 +428,10 @@ teardown(Config) ->
         end, lists:seq(1, 10))
     end, initializer:get_different_domain_workers(Config)),
 
-    Workers = ?config(op_worker_nodes, Config),
-    lfm_test_utils:clean_space(Workers, SpaceId, 30),
+    case CleanSpace of
+        true -> lfm_test_utils:clean_space(Workers, SpaceId, 30);
+        false -> ok
+    end,
 
     DirStatsCollectingStatusForNewSpaces = ?config(default_dir_stats_collecting_status_for_new_spaces, Config),
     test_utils:set_env(
@@ -478,13 +484,14 @@ verify_dir_on_provider_creating_files(Config, NodesSelector, Guid) ->
     update_expectations_map(Expectations, #{update_time => CollectorTime}).
 
 
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
 delete_stats(Worker, Guid) ->
     ?assertEqual(ok, rpc:call(Worker, dir_size_stats, delete_stats, [Guid])),
     ?assertEqual(ok, rpc:call(Worker, dir_update_time_stats, delete_stats, [Guid])).
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
 
 enable(Config, new_space) ->
     SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
