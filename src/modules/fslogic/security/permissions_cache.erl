@@ -1,12 +1,12 @@
 %%%-------------------------------------------------------------------
 %%% @author Michal Wrzeszcz
-%%% @copyright (C) 2016 ACK CYFRONET AGH
+%%% @copyright (C) 2022 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Model used for caching permissions to files (used by fslogic_authz module).
+%%% Model used for caching permissions to files (used by data_access_control and data_constraints modules).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(permissions_cache).
@@ -53,7 +53,7 @@ check_permission(Rule) ->
 %%--------------------------------------------------------------------
 -spec cache_permission(Rule :: term(), Value :: term(), bounded_cache:timestamp()) -> ok.
 cache_permission(Rule, Value, Timestamp) ->
-    bounded_cache:cache(?CACHE, Rule, Value, Timestamp, true).
+    bounded_cache:cache(?CACHE, Rule, Value, Timestamp, override_if_exists).
 
 %%--------------------------------------------------------------------
 %% @doc

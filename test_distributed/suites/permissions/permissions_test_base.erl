@@ -2214,6 +2214,8 @@ init_per_suite(Config) ->
         ),
         initializer:mock_auth_manager(NewConfig2),
 
+        % Increase permissions_cache size during cache check procedure to prevent cache cleaning during tests
+        % (cache is cleaned only when it exceeds size)
         Workers = ?config(op_worker_nodes, NewConfig),
         test_utils:mock_new(Workers, bounded_cache, [passthrough]),
         test_utils:mock_expect(Workers, bounded_cache, check_cache_size, fun

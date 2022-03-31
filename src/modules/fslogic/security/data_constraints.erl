@@ -241,18 +241,21 @@ check_and_cache_data_constraints(UserCtx, FileCtx0, #constraints{
             % File is not permitted by constraints - eacces
             throw(?EACCES);
         _ ->
+            % permissions_cache update is tagged with Timestamp to prevent races with cache invalidation.
+            % All data used to calculate cached value has to be get from datastore after Timestamp so file_ctx reset is needed.
             Timestamp = bounded_cache:get_timestamp(),
+            FileCtx = file_ctx:reset(FileCtx0),
             try
-                {PathRel, FileCtx1} = check_allowed_paths(
-                    file_ctx:reset(FileCtx0), AllowedPaths, AncestorPolicy
+                {PathRel, FileCtx2} = check_allowed_paths(
+                    FileCtx, AllowedPaths, AncestorPolicy
                 ),
-                {GuidRel, FileCtx2} = check_guid_constraints(
-                    UserCtx, SerializedToken, FileCtx1,
+                {GuidRel, FileCtx3} = check_guid_constraints(
+                    UserCtx, SerializedToken, FileCtx2,
                     GuidConstraints, AncestorPolicy
                 ),
                 Result = intersect_constraint_relations(PathRel, GuidRel),
                 permissions_cache:cache_permission(CacheKey, Result, Timestamp),
-                {Result, FileCtx2}
+                {Result, FileCtx3}
             catch throw:?EACCES ->
                 case AncestorPolicy of
                     allow_ancestors ->
@@ -367,6 +370,9 @@ does_fulfill_guid_constraints(
         {ok, {false, NotFulfilledGuidConstraints}} ->
             {false, NotFulfilledGuidConstraints, FileCtx0};
         _ ->
+            % permissions_cache update is tagged with Timestamp to prevent races with cache invalidation.
+            % All data used to calculate cached value has to be get from datastore after Timestamp so
+            % file_ctx reset is needed.
             Timestamp = bounded_cache:get_timestamp(),
             FileCtx = file_ctx:reset(FileCtx0),
             case file_ctx:is_root_dir_const(FileCtx) of

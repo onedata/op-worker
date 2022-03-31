@@ -193,11 +193,15 @@ assert_meets_access_requirement(UserCtx, FileCtx0, Requirement) when
         {ok, ?EACCES} ->
             throw(?EACCES);
         _ ->
+            % permissions_cache update is tagged with Timestamp to prevent races with cache invalidation.
+            % All data used to calculate cached value has to be get from datastore after Timestamp so
+            % file_ctx reset is needed.
             Timestamp = bounded_cache:get_timestamp(),
+            FileCtx = file_ctx:reset(FileCtx0),
             try
-                {ok, FileCtx1} = check_access_requirement(UserCtx, file_ctx:reset(FileCtx0), Requirement),
+                {ok, FileCtx2} = check_access_requirement(UserCtx, FileCtx, Requirement),
                 permissions_cache:cache_permission(CacheKey, granted, Timestamp),
-                FileCtx1
+                FileCtx2
             catch _:?EACCES ->
                 permissions_cache:cache_permission(CacheKey, ?EACCES, Timestamp),
                 throw(?EACCES)
@@ -274,7 +278,11 @@ assert_operations_allowed(UserCtx, FileCtx0, RequiredOps) ->
     % TODO VFS-6224 do not construct cache key outside of permissions_cache module
     CacheKey = {user_perms_matrix, UserId, Guid},
 
+    % permissions_cache update is tagged with Timestamp to prevent races with cache invalidation.
+    % All data used to calculate cached value has to be get from datastore after Timestamp so file_ctx reset is needed.
     Timestamp = bounded_cache:get_timestamp(),
+    FileCtx = file_ctx:reset(FileCtx0),
+
     Result = case permissions_cache:check_permission(CacheKey) of
         {ok, #user_access_check_progress{
             forbidden = ForbiddenOps,
@@ -285,12 +293,12 @@ assert_operations_allowed(UserCtx, FileCtx0, RequiredOps) ->
                 ?no_flags_mask ->
                     case ?reset_flags(RequiredOps, AllowedOps) of
                         ?no_flags_mask ->
-                            {allowed, FileCtx0};
+                            {allowed, FileCtx0}; % permissions_cache will not be updated - original ctx can be used
                         LeftoverRequiredOps ->
                             case ?common_flags(LeftoverRequiredOps, DeniedOps) of
                                 ?no_flags_mask ->
                                     check_file_permissions(
-                                        UserCtx, file_ctx:reset(FileCtx0), LeftoverRequiredOps,
+                                        UserCtx, FileCtx, LeftoverRequiredOps,
                                         UserAccessCheckProgress
                                     );
                                 _ ->
@@ -301,7 +309,7 @@ assert_operations_allowed(UserCtx, FileCtx0, RequiredOps) ->
                     throw(?EPERM)
             end;
         _ ->
-            check_operations(UserCtx, file_ctx:reset(FileCtx0), RequiredOps)
+            check_operations(UserCtx, FileCtx, RequiredOps)
     end,
 
     case Result of
