@@ -711,7 +711,7 @@ build_download_file_verify_fun(MemRef) ->
 %% @private
 -spec check_single_file_download_distribution(
     api_test_memory:mem_ref(), expected_success | expected_failure, onenv_api_test_runner:api_test_ctx(),
-    file_id:guid(), file_meta:size(), [oneprovider:id()], node()
+    file_id:file_guid(), file_meta:size(), [oneprovider:id()], node()
 ) -> ok.
 check_single_file_download_distribution(_MemRef, expected_failure, _, FileGuid, FileSize, Providers, P1Node) ->
     file_test_utils:await_distribution(Providers, FileGuid, [{P1Node, FileSize}]);

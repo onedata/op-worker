@@ -521,7 +521,7 @@ mkdir(Worker, SessId, Path) ->
 
 
 -spec mkdir(node(), session:id(), binary(), undefined | file_meta:posix_permissions()) ->
-    {ok, DirUuid :: file_meta:uuid()} | lfm:error_reply().
+    {ok, fslogic_worker:file_guid()} | lfm:error_reply().
 mkdir(Worker, SessId, Path, Mode) ->
     ?EXEC(Worker, lfm:mkdir(SessId, Path, Mode)).
 

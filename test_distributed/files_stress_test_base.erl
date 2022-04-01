@@ -387,7 +387,6 @@ many_files_creation_tree_test_base(Config, Options) ->
                     [stop | FinalAns];
                 _ ->
                     FinalAns
-
             end;
         _ ->
             ct:print("Dirs or referenced files not ready"),

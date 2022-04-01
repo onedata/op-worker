@@ -43,7 +43,7 @@
     delete_stats/1]).
 
 %% dir_stats_collection_behaviour callbacks
--export([acquire/1, consolidate/3, save/2, delete/1]).
+-export([acquire/1, consolidate/3, save/3, delete/1, init_dir/1, init_child/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -57,15 +57,17 @@
 }).
 
 -define(NOW(), global_clock:timestamp_seconds()).
-% Metric storing current value of each statistic
+% Metric storing current value of statistic or incarnation (depending on time series)
 -define(CURRENT_METRIC, <<"current">>).
+% Time series storing incarnation - historical values are not required
+% but usage of time series allows keeping everything in single structure
+-define(INCARNATION_TIME_SERIES, <<"incarnation">>).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
--spec get_stats(file_id:file_guid()) ->
-    {ok, dir_stats_collection:collection()} | ?ERROR_INTERNAL_SERVER_ERROR | ?ERROR_DIR_STATS_DISABLED_FOR_SPACE.
+-spec get_stats(file_id:file_guid()) -> {ok, dir_stats_collection:collection()} | dir_stats_collector:error().
 get_stats(Guid) ->
     get_stats(Guid, all).
 
@@ -76,7 +78,7 @@ get_stats(Guid) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_stats(file_id:file_guid(), dir_stats_collection:stats_selector()) ->
-    {ok, dir_stats_collection:collection()} | ?ERROR_INTERNAL_SERVER_ERROR | ?ERROR_DIR_STATS_DISABLED_FOR_SPACE.
+    {ok, dir_stats_collection:collection()} | dir_stats_collector:error().
 get_stats(Guid, StatNames) ->
     dir_stats_collector:get_stats(Guid, ?MODULE, StatNames).
 
@@ -89,15 +91,21 @@ get_stats(Guid, StatNames) ->
 %%--------------------------------------------------------------------
 -spec get_stats_and_time_series_collections(file_id:file_guid()) ->
     {ok, {dir_stats_collection:collection(), time_series_collection:windows_map()}} |
-    ?ERROR_INTERNAL_SERVER_ERROR | ?ERROR_DIR_STATS_DISABLED_FOR_SPACE.
+    dir_stats_collector:collecting_status_error() | ?ERROR_INTERNAL_SERVER_ERROR.
 get_stats_and_time_series_collections(Guid) ->
-    case dir_stats_collector_config:is_enabled_for_space(file_id:guid_to_space_id(Guid)) of
+    case dir_stats_collector_config:is_collecting_active(file_id:guid_to_space_id(Guid)) of
         true ->
-            ok = dir_stats_collector:flush_stats(Guid, ?MODULE),
-            Uuid = file_id:guid_to_uuid(Guid),
-            case datastore_time_series_collection:list_windows(?CTX, Uuid, #{}) of
-                {ok, WindowsMap} -> {ok, all_metrics_to_stats_and_time_series_collections(WindowsMap)};
-                {error, not_found} -> {ok, {gen_empty_stats_collection(Guid), gen_empty_time_series_collection(Guid)}}
+            case dir_stats_collector:flush_stats(Guid, ?MODULE) of
+                ok ->
+                    Uuid = file_id:guid_to_uuid(Guid),
+                    case datastore_time_series_collection:list_windows(?CTX, Uuid, #{}) of
+                        {ok, WindowsMap} ->
+                            {ok, all_metrics_to_stats_and_time_series_collections(WindowsMap)};
+                        ?ERROR_NOT_FOUND ->
+                            {ok, {gen_empty_stats_collection(Guid), gen_empty_time_series_collection(Guid)}}
+                    end;
+                {error, _} = Error ->
+                    Error
             end;
         false ->
             ?ERROR_DIR_STATS_DISABLED_FOR_SPACE
@@ -129,7 +137,7 @@ report_file_deleted(_, Guid) ->
 
 -spec report_file_moved(file_meta:type(), file_id:file_guid(), file_id:file_guid(), file_id:file_guid()) -> ok.
 report_file_moved(?DIRECTORY_TYPE, FileGuid, SourceParentGuid, TargetParentGuid) ->
-    case dir_stats_collector_config:is_enabled_for_space(file_id:guid_to_space_id(FileGuid)) of
+    case dir_stats_collector_config:is_collecting_active(file_id:guid_to_space_id(FileGuid)) of
         true ->
             {ok, Collection} = get_stats(FileGuid),
             update_stats(TargetParentGuid, Collection),
@@ -151,13 +159,15 @@ delete_stats(Guid) ->
 %%% dir_stats_collection_behaviour callbacks
 %%%===================================================================
 
--spec acquire(file_id:file_guid()) -> dir_stats_collection:collection().
+-spec acquire(file_id:file_guid()) -> {dir_stats_collection:collection(), non_neg_integer()}.
 acquire(Guid) ->
     case datastore_time_series_collection:list_windows(
         ?CTX, file_id:guid_to_uuid(Guid), {all, ?CURRENT_METRIC}, #{limit => 1}
     ) of
-        {ok, WindowsMap} -> current_metrics_to_stats_collection(WindowsMap);
-        {error, not_found} -> maps:from_list(lists:map(fun(StatName) -> {StatName, 0} end, stat_names(Guid)))
+        {ok, WindowsMap} ->
+            {current_metrics_to_stats_collection(WindowsMap), get_incarnation(WindowsMap)};
+        ?ERROR_NOT_FOUND ->
+            {gen_empty_stats_collection(Guid), 0}
     end.
 
 
@@ -167,20 +177,28 @@ consolidate(_, Value, Diff) ->
     Value + Diff.
 
 
--spec save(file_id:file_guid(), dir_stats_collection:collection()) -> ok.
-save(Guid, Collection) ->
+-spec save(file_id:file_guid(), dir_stats_collection:collection(), non_neg_integer() | current) -> ok.
+save(Guid, Collection, Incarnation) ->
     Uuid = file_id:guid_to_uuid(Guid),
-    case datastore_time_series_collection:update(?CTX, Uuid, ?NOW(), maps:to_list(Collection)) of
+    UpdateSpec = case Incarnation of
+        current -> maps:to_list(Collection);
+        _ -> [{?INCARNATION_TIME_SERIES, Incarnation} | maps:to_list(Collection)]
+    end,
+
+    case datastore_time_series_collection:update(?CTX, Uuid, ?NOW(), UpdateSpec) of
         ok ->
             ok;
         ?ERROR_NOT_FOUND ->
-            Config = maps:from_list(lists:map(fun(StatName) ->
+            BasicConfig = maps:from_list(lists:map(fun(StatName) ->
                 {StatName, metrics_extended_with_current_value()}
             end, stat_names(Guid))),
+            FinalConfig = maps:merge(BasicConfig, #{
+                ?INCARNATION_TIME_SERIES => #{?CURRENT_METRIC => current_metric()}
+            }),
             % NOTE: single pes process is dedicated for each guid so race resulting in
             % {error, collection_already_exists} is impossible - match create answer to ok
-            ok = datastore_time_series_collection:create(?CTX, Uuid, Config),
-            save(Guid, Collection)
+            ok = datastore_time_series_collection:create(?CTX, Uuid, FinalConfig),
+            save(Guid, Collection, Incarnation)
     end.
 
 
@@ -188,7 +206,32 @@ save(Guid, Collection) ->
 delete(Guid) ->
     case datastore_time_series_collection:delete(?CTX, file_id:guid_to_uuid(Guid)) of
         ok -> ok;
-        {error, not_found} -> ok
+        ?ERROR_NOT_FOUND -> ok
+    end.
+
+
+-spec init_dir(file_id:file_guid()) -> dir_stats_collection:collection().
+init_dir(Guid) ->
+    gen_empty_stats_collection(Guid).
+
+
+-spec init_child(file_id:file_guid()) -> dir_stats_collection:collection().
+init_child(Guid) ->
+    EmptyCollection = gen_empty_stats_collection(Guid),
+    case file_meta:get_including_deleted(file_id:guid_to_uuid(Guid)) of
+        {ok, Doc} ->
+            case file_meta:get_type(Doc) of
+                ?DIRECTORY_TYPE ->
+                    EmptyCollection#{?DIR_COUNT => 1};
+                _ ->
+                    {FileSizes, _} = file_ctx:get_file_size_summary(file_ctx:new_by_guid(Guid)),
+                    lists:foldl(fun
+                        ({total, Size}, Acc) -> Acc#{?TOTAL_SIZE => Size};
+                        ({StorageId, Size}, Acc) -> Acc#{?SIZE_ON_STORAGE(StorageId) => Size}
+                    end, EmptyCollection#{?REG_FILE_AND_LINK_COUNT => 1}, FileSizes)
+            end;
+        ?ERROR_NOT_FOUND ->
+            EmptyCollection % Race with file deletion - stats will be invalidated by next update
     end.
 
 
@@ -221,11 +264,17 @@ stat_names(Guid) ->
 %% @private
 -spec metrics_extended_with_current_value() -> #{ts_metric:id() => ts_metric:config()}.
 metrics_extended_with_current_value() ->
-    maps:put(?CURRENT_METRIC, #metric_config{
+    maps:put(?CURRENT_METRIC, current_metric(), metrics()).
+
+
+%% @private
+-spec current_metric() -> ts_metric:config().
+current_metric() ->
+    #metric_config{
         resolution = 1,
         retention = 1,
         aggregator = last
-    }, metrics()).
+    }.
 
 
 %% @private
@@ -234,23 +283,23 @@ metrics() ->
     #{
         ?MINUTE_METRIC => #metric_config{
             resolution = ?MINUTE_RESOLUTION,
-            retention = 120,
-            aggregator = sum
+            retention = 720,
+            aggregator = last
         },
         ?HOUR_METRIC => #metric_config{
             resolution = ?HOUR_RESOLUTION,
-            retention = 48,
-            aggregator = sum
+            retention = 1440,
+            aggregator = last
         },
         ?DAY_METRIC => #metric_config{
             resolution = ?DAY_RESOLUTION,
-            retention = 60,
-            aggregator = sum
+            retention = 550,
+            aggregator = last
         },
         ?MONTH_METRIC => #metric_config{
             resolution = ?MONTH_RESOLUTION,
-            retention = 12,
-            aggregator = sum
+            retention = 360,
+            aggregator = last
         }
     }.
 
@@ -266,7 +315,7 @@ all_metrics_to_stats_and_time_series_collections(WindowsMap) ->
 
     {
         current_metrics_to_stats_collection(CurrentValues),
-        time_metrics_to_time_series_collection(maps:without(maps:keys(CurrentValues), WindowsMap))
+        maps:without(maps:keys(CurrentValues), WindowsMap)
     }.
 
 
@@ -276,15 +325,7 @@ current_metrics_to_stats_collection(WindowsMap) ->
     maps_utils:map_key_value(fun
         ({StatName, _}, [{_Timestamp, Value}]) -> {StatName, Value};
         ({StatName, _}, []) -> {StatName, 0}
-    end, WindowsMap).
-
-
-%% @private
--spec time_metrics_to_time_series_collection(time_series_collection:windows_map()) -> dir_stats_collection:collection().
-time_metrics_to_time_series_collection(WindowsMap) ->
-    maps:map(fun(_, Windows) ->
-        lists:map(fun({Timestamp, {Count, Sum}}) -> {Timestamp, round(Sum / Count)} end, Windows)
-    end, WindowsMap).
+    end, maps:without([{?INCARNATION_TIME_SERIES, ?CURRENT_METRIC}], WindowsMap)).
 
 
 %% @private
@@ -300,3 +341,11 @@ gen_empty_time_series_collection(Guid) ->
     maps:from_list(lists:flatmap(fun(StatName) ->
         lists:map(fun(MetricId) -> {{StatName, MetricId}, []} end, MetricIds)
     end, stat_names(Guid))).
+
+
+-spec get_incarnation(time_series_collection:windows_map()) -> non_neg_integer().
+get_incarnation(WindowsMap) ->
+    case maps:get({?INCARNATION_TIME_SERIES, ?CURRENT_METRIC}, WindowsMap) of
+        [] -> 0;
+        [{_Timestamp, Value}] -> Value
+    end.
