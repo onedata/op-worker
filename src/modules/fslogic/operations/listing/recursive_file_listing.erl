@@ -291,6 +291,7 @@ init_current_dir_processing(#state{
                 {ok, _, TreeId} ->
                     #{
                         % trim tree id to always have inclusive listing
+                        % @TODO VFS-8980 Use inclusive listing option
                         last_tree => binary:part(TreeId, 0, size(TreeId) - 1),
                         last_name => file_meta:trim_filename_tree_id(CurrentStartAfterToken, TreeId)
                     };
