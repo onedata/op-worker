@@ -7,6 +7,10 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Cache that stores open files.
+%%% Note: this module operates on referenced uuids - all operations on hardlinks
+%%% are treated as operations on original file. Thus, all hardlinks pointing on
+%%% the same file share single file_handles document. It is necessary because
+%%% file can be deleted from storage system only after deletion of last hardlink.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_handles).
@@ -21,6 +25,7 @@
 -export([is_file_opened/1, delete/1, list/0]).
 -export([register_open/4, register_release/3, mark_to_remove/2, is_removed/1,
     invalidate_session_entry/2, is_used_by_session/2, get_creation_handle/1]).
+-export([gen_handle_id/1, get_open_flag/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -48,7 +53,7 @@
 
 -spec is_file_opened(key()) -> boolean().
 is_file_opened(FileUuid) ->
-    case datastore_model:get(?CTX, FileUuid) of
+    case datastore_model:get(?CTX, fslogic_uuid:ensure_referenced_uuid(FileUuid)) of
         {ok, #document{value = #file_handles{descriptors = Fds}}} ->
             maps:size(Fds) =/= 0;
         {error, not_found} ->
@@ -62,7 +67,7 @@ is_file_opened(FileUuid) ->
 %%--------------------------------------------------------------------
 -spec delete(key()) -> ok | {error, term()}.
 delete(Key) ->
-    datastore_model:delete(?CTX, Key).
+    datastore_model:delete(?CTX, fslogic_uuid:ensure_referenced_uuid(Key)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -88,8 +93,8 @@ is_removed(#file_handles{removal_status = RemovalStatus}) ->
 -spec register_open(file_ctx:ctx(), session:id(), pos_integer(), creation_handle()) ->
     ok | {error, term()}.
 register_open(FileCtx, SessId, Count, CreateHandleID) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileUuid = file_ctx:get_referenced_uuid_const(FileCtx),
+    FileGuid = file_ctx:get_referenced_guid_const(FileCtx),
     Diff = fun
         (#file_handles{removal_status = RemovalStatus}) when RemovalStatus =/= ?NOT_REMOVED ->
             {error, removed};
@@ -151,8 +156,8 @@ register_open(FileCtx, SessId, Count, CreateHandleID) ->
 -spec register_release(file_ctx:ctx(), session:id(), pos_integer() | infinity) ->
     ok | {error, term()}.
 register_release(FileCtx, SessId, Count) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileUuid = file_ctx:get_referenced_uuid_const(FileCtx),
+    FileGuid = file_ctx:get_referenced_guid_const(FileCtx),
     Diff = fun(Handle = #file_handles{removal_status = RemovalStatus, descriptors = Fds}) ->
         FdCount = maps:get(SessId, Fds, 0),
         case Count =:= infinity orelse FdCount =< Count of
@@ -204,7 +209,7 @@ mark_to_remove(FileCtx, RemovalStatus) ->
     Diff = fun(Handle = #file_handles{}) ->
         {ok, Handle#file_handles{removal_status = RemovalStatus}}
     end,
-    case datastore_model:update(?CTX, file_ctx:get_uuid_const(FileCtx), Diff) of
+    case datastore_model:update(?CTX, file_ctx:get_referenced_uuid_const(FileCtx), Diff) of
         {ok, _} -> ok;
         {error, not_found} -> ok;
         {error, Reason} -> {error, Reason}
@@ -232,7 +237,7 @@ invalidate_session_entry(FileCtx, SessId) ->
 %%--------------------------------------------------------------------
 -spec is_used_by_session(file_ctx:ctx(), session:id()) -> boolean() | {error, term()}.
 is_used_by_session(FileCtx, SessId) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_referenced_uuid_const(FileCtx),
     case datastore_model:get(?CTX, FileUuid) of
         {ok, #document{value = #file_handles{descriptors = Fds}}} -> maps:is_key(SessId, Fds);
         {error, not_found} -> false;
@@ -246,10 +251,23 @@ is_used_by_session(FileCtx, SessId) ->
 %%--------------------------------------------------------------------
 -spec get_creation_handle(key()) -> {ok, creation_handle()} | {error, term()}.
 get_creation_handle(Key) ->
-    case datastore_model:get(?CTX, Key) of
+    case datastore_model:get(?CTX, fslogic_uuid:ensure_referenced_uuid(Key)) of
         {ok, #document{value = #file_handles{creation_handle = Handle}}} -> {ok, Handle};
         Other -> Other
     end.
+
+
+-spec gen_handle_id(fslogic_worker:open_flag()) -> storage_driver:handle_id().
+gen_handle_id(Flag) ->
+    <<(atom_to_binary(Flag, utf8))/binary, "_", (base64:encode(crypto:strong_rand_bytes(20)))/binary>>.
+
+
+-spec get_open_flag(storage_driver:handle_id()) -> fslogic_worker:open_flag().
+get_open_flag(HandleId) ->
+    [FlagBin | _] = binary:split(HandleId, <<"_">>),
+    binary_to_atom(FlagBin, utf8).
+
+
 
 %%%===================================================================
 %%% datastore_model callbacks

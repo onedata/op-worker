@@ -7,7 +7,7 @@
 %%% @doc
 %%% Model responsible for saving information about storage import scans.
 %%%
-%%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 20.02.*.
+%%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 21.02.*.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(storage_sync_monitoring).

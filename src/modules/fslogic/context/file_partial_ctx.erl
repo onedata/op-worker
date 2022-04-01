@@ -14,8 +14,8 @@
 -module(file_partial_ctx).
 -author("Tomasz Lichon").
 
--include("modules/auth/acl.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -110,7 +110,7 @@ get_parent(FilePartialCtx = #file_partial_ctx{
     ParentPartialCtx = new_by_canonical_path(UserCtx, filename:dirname(CanonicalPath)),
     {ParentPartialCtx, FilePartialCtx};
 get_parent(FileCtx, UserCtx) ->
-    file_ctx:get_parent(FileCtx, UserCtx).
+    files_tree:get_parent(FileCtx, UserCtx).
 
 %%--------------------------------------------------------------------
 %% @doc

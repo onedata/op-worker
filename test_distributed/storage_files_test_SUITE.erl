@@ -14,6 +14,7 @@
 
 -include("storage_files_test_SUITE.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("kernel/include/file.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -1063,8 +1064,8 @@ space_directory_mode_and_owner_test_base(TestName, Config, SpaceId, TestArgs) ->
     ?assertMatch({ok, #file_attr{
         uid = ExpectedDisplayUid,
         gid = ExpectedDisplayGid,
-        mode = ?DEFAULT_DIR_PERMS
-    }}, lfm_proxy:stat(Worker, SessId, {guid, SpaceGuid})),
+        mode = ?DEFAULT_DIR_MODE
+    }}, lfm_proxy:stat(Worker, SessId, ?FILE_REF(SpaceGuid))),
 
     ?EXEC_IF_SUPPORTED_BY_POSIX(Worker, SpaceId, fun() ->
         SpacePath = storage_test_utils:space_path(Worker, SpaceId),
@@ -1090,7 +1091,7 @@ regular_file_mode_and_owner_test_base(TestName, Config, SpaceId, TestArgs) ->
         uid = ExpectedDisplayUid,
         gid = ExpectedDisplayGid,
         mode = FilePerms
-    }}, lfm_proxy:stat(Worker, SessId, {guid, FileGuid})),
+    }}, lfm_proxy:stat(Worker, SessId, ?FILE_REF(FileGuid))),
 
     ?EXEC_IF_SUPPORTED_BY_POSIX(Worker, SpaceId, fun() ->
         StorageFilePath = storage_test_utils:file_path(Worker, SpaceId, FileName),
@@ -1118,14 +1119,14 @@ regular_file_unknown_owner_test_base(TestName, Config, SpaceId, TestArgs) ->
         {ok, FM#file_meta{owner = ?UNKNOWN_USER}}
     end]),
 
-    {ok, _} = lfm_proxy:open(Worker, SessId, {guid, FileGuid}, read),
+    {ok, _} = lfm_proxy:open(Worker, SessId, ?FILE_REF(FileGuid), read),
 
     % then
     ?assertMatch({ok, #file_attr{
         uid = ExpectedDisplayUid,
         gid = ExpectedDisplayGid,
         mode = FilePerms
-    }}, lfm_proxy:stat(Worker, SessId, {guid, FileGuid})),
+    }}, lfm_proxy:stat(Worker, SessId, ?FILE_REF(FileGuid))),
 
     ?EXEC_IF_SUPPORTED_BY_POSIX(Worker, SpaceId, fun() ->
         StorageFilePath = storage_test_utils:file_path(Worker, SpaceId, FileName),
@@ -1160,7 +1161,7 @@ directory_mode_and_owner_test_base(TestName, Config, SpaceId, TestArgs) ->
         uid = ExpectedDisplayUid,
         gid = ExpectedDisplayGid,
         mode = DirPerms
-    }}, lfm_proxy:stat(Worker, SessId, {guid, DirGuid})),
+    }}, lfm_proxy:stat(Worker, SessId, ?FILE_REF(DirGuid))),
 
     ?EXEC_IF_SUPPORTED_BY_POSIX(Worker, SpaceId, fun() ->
         StorageDirPath = storage_test_utils:file_path(Worker, SpaceId, DirName),
@@ -1197,7 +1198,7 @@ directory_with_unknown_owner_test_base(TestName, Config, SpaceId, TestArgs) ->
         uid = ExpectedDisplayUid,
         gid = ExpectedDisplayGid,
         mode = DirPerms
-    }}, lfm_proxy:stat(Worker, SessId, {guid, DirGuid})),
+    }}, lfm_proxy:stat(Worker, SessId, ?FILE_REF(DirGuid))),
 
     ?EXEC_IF_SUPPORTED_BY_POSIX(Worker, SpaceId, fun() ->
         StorageDirPath = storage_test_utils:file_path(Worker, SpaceId, DirName),
@@ -1229,21 +1230,21 @@ rename_file_test_base(TestName, Config, SpaceId, TestArgs) ->
     ok = lfm_proxy:close(Worker, Handle),
 
     % and
-    {ok, _} = lfm_proxy:mv(Worker, SessId, {guid, FileGuid}, TargetFilePath),
+    {ok, _} = lfm_proxy:mv(Worker, SessId, ?FILE_REF(FileGuid), TargetFilePath),
 
     % then
     ?assertMatch({ok, #file_attr{
         uid = ExpectedDisplayUid,
         gid = ExpectedDisplayGid,
         mode = FilePerms
-    }}, lfm_proxy:stat(Worker, SessId, {guid, FileGuid})),
+    }}, lfm_proxy:stat(Worker, SessId, ?FILE_REF(FileGuid))),
 
     % and
     ?assertMatch({ok, #file_attr{
         uid = ExpectedDisplayUid,
         gid = ExpectedDisplayGid,
         mode = DirPerms
-    }}, lfm_proxy:stat(Worker, SessId, {guid, DirGuid})),
+    }}, lfm_proxy:stat(Worker, SessId, ?FILE_REF(DirGuid))),
 
     % and
     ?EXEC_IF_SUPPORTED_BY_POSIX(Worker, SpaceId, fun() ->
@@ -1278,9 +1279,9 @@ remotely_updated_perms_should_be_updated_on_storage_test_base(TestName, Config, 
     ok = lfm_proxy:close(Worker2, Handle0),
 
     % then
-    ?assertMatch({ok, #file_attr{mode = InitialPerms}}, lfm_proxy:stat(Worker1, SessId, {guid, FileGuid}), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{mode = InitialPerms}}, lfm_proxy:stat(Worker1, SessId, ?FILE_REF(FileGuid)), ?ATTEMPTS),
     % open file to ensure that it's created on storage
-    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Worker1, SessId, {guid, FileGuid}, read), ?ATTEMPTS),
+    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Worker1, SessId, ?FILE_REF(FileGuid), read), ?ATTEMPTS),
     ok = lfm_proxy:close(Worker1, Handle),
     ?EXEC_IF_SUPPORTED_BY_POSIX(Worker1, SpaceId, fun() ->
         StorageFilePath = storage_test_utils:file_path(Worker1, SpaceId, FileName),
@@ -1288,8 +1289,8 @@ remotely_updated_perms_should_be_updated_on_storage_test_base(TestName, Config, 
     end),
 
     % and
-    ok = lfm_proxy:set_perms(Worker2, SessId2, {guid, FileGuid}, UpdatedPerms),
-    ?assertMatch({ok, #file_attr{mode = UpdatedPerms}}, lfm_proxy:stat(Worker1, SessId, {guid, FileGuid}), ?ATTEMPTS),
+    ok = lfm_proxy:set_perms(Worker2, SessId2, ?FILE_REF(FileGuid), UpdatedPerms),
+    ?assertMatch({ok, #file_attr{mode = UpdatedPerms}}, lfm_proxy:stat(Worker1, SessId, ?FILE_REF(FileGuid)), ?ATTEMPTS),
     % ensure that mode has been updated on storage
     ?EXEC_IF_SUPPORTED_BY_POSIX(Worker1, SpaceId, fun() ->
         StorageFilePath = storage_test_utils:file_path(Worker1, SpaceId, FileName),
@@ -1420,9 +1421,9 @@ run_test(TestName, TestBaseFun, TestNo, Config, SpaceId, TestArgs) ->
         ct:pal("Test \"~p\" for space ~p and setup no. ~p PASSED.", [TestName, SpaceId, TestNo]),
         true
     catch
-        Error:Reason ->
+        Error:Reason:Stacktrace ->
             ct:pal("Test ~p for space ~p and setup no. ~p FAILED.~nError: ~p.~n"
-            "Stacktrace:~n~p", [TestName, SpaceId, TestNo, {Error, Reason}, erlang:get_stacktrace()]),
+            "Stacktrace:~n~p", [TestName, SpaceId, TestNo, {Error, Reason}, Stacktrace]),
             false
     end.
 

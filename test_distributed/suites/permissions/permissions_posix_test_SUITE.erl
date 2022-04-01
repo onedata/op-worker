@@ -83,7 +83,6 @@
     get_effective_file_qos_test/1,
     check_qos_fulfillment_test/1,
 
-    permission_cache_test/1,
     multi_provider_permission_cache_test/1,
     expired_session_test/1
 ]).
@@ -152,7 +151,6 @@ all() -> [
     get_effective_file_qos_test,
     check_qos_fulfillment_test,
 
-    permission_cache_test,
     multi_provider_permission_cache_test,
     expired_session_test
 ].
@@ -375,10 +373,6 @@ check_qos_fulfillment_test(Config) ->
     permissions_test_base:check_qos_fulfillment_test(Config).
 
 
-permission_cache_test(Config) ->
-    permissions_test_base:permission_cache_test(Config).
-
-
 multi_provider_permission_cache_test(Config) ->
     permissions_test_base:multi_provider_permission_cache_test(Config).
 
@@ -401,6 +395,7 @@ end_per_suite(Config) ->
 
 
 init_per_testcase(Case, Config) ->
+    ct:timetrap({minutes, 5}),
     permissions_test_base:init_per_testcase(Case, Config).
 
 

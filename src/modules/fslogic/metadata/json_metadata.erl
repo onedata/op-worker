@@ -14,12 +14,19 @@
 %%% other xattrs)
 %%% - Filters, that is path under/from which json metadata should be
 %%% set/fetched.
+%%% Note: this module bases on custom_metadata and as effect all operations
+%%% on hardlinks are treated as operations on original file (custom_metadata
+%%% is shared between hardlinks and original file). The exception is use of
+%%% 'inherited' flag on link - it results in usage of ancestors of link,
+%%% not the original file.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(json_metadata).
 -author("Tomasz Lichon").
 
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/fslogic/data_access_control.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/metadata.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -42,6 +49,7 @@
 get(UserCtx, FileCtx, Query, Inherited) ->
     Result = case Inherited of
         true ->
+            % Note: in case of link, its ancestors will be used instead of original file ancestors.
             case gather_ancestors_json_metadata(UserCtx, FileCtx, []) of
                 {ok, []} ->
                     ?ERROR_NOT_FOUND;
@@ -74,7 +82,7 @@ get(UserCtx, FileCtx, Query, Inherited) ->
 set(UserCtx, FileCtx0, Json, Query, Create, Replace) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [traverse_ancestors, ?write_metadata]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?write_metadata_mask)]
     ),
     set_insecure(FileCtx1, Json, Query, Create, Replace).
 
@@ -83,9 +91,9 @@ set(UserCtx, FileCtx0, Json, Query, Create, Replace) ->
 remove(UserCtx, FileCtx) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx,
-        [traverse_ancestors, ?write_metadata]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?write_metadata_mask)]
     ),
-    FileUuid = file_ctx:get_uuid_const(FileCtx1),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx1),
     custom_metadata:remove_xattr(FileUuid, ?JSON_METADATA_KEY).
 
 
@@ -109,11 +117,11 @@ gather_ancestors_json_metadata(UserCtx, FileCtx0, GatheredMetadata) ->
             GatheredMetadata
     end,
 
-    case file_ctx:get_and_check_parent(FileCtx0, UserCtx) of
-        {undefined, _FileCtx1} ->
-            {ok, AllMetadata};
-        {ParentCtx, _FileCtx1} ->
-            gather_ancestors_json_metadata(UserCtx, ParentCtx, AllMetadata)
+    {ParentCtx, FileCtx1} = files_tree:get_parent(FileCtx0, UserCtx),
+
+    case file_ctx:equals(FileCtx1, ParentCtx) of
+        true -> {ok, AllMetadata};
+        false -> gather_ancestors_json_metadata(UserCtx, ParentCtx, AllMetadata)
     end.
 
 
@@ -123,9 +131,9 @@ gather_ancestors_json_metadata(UserCtx, FileCtx0, GatheredMetadata) ->
 get_direct_json_metadata(UserCtx, FileCtx0) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [traverse_ancestors, ?read_metadata]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_metadata_mask)]
     ),
-    FileUuid = file_ctx:get_uuid_const(FileCtx1),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx1),
     custom_metadata:get_xattr(FileUuid, ?JSON_METADATA_KEY).
 
 
@@ -139,8 +147,8 @@ get_direct_json_metadata(UserCtx, FileCtx0) ->
 ) ->
     {ok, file_meta:uuid()} | {error, term()}.
 set_insecure(FileCtx, JsonToInsert, Query, Create, Replace) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    {ok, FileObjectId} = file_id:guid_to_objectid(file_ctx:get_guid_const(FileCtx)),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
+    {ok, FileObjectId} = file_id:guid_to_objectid(file_ctx:get_referenced_guid_const(FileCtx)),
     ToCreate = #document{
         key = FileUuid,
         value = #custom_metadata{

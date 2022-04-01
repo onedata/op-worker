@@ -43,9 +43,7 @@ get_documents_diff(Worker, After, Before, SessionClosed) ->
                             ({ok, #document{value = #links_node{model = task_pool}}}) -> false;
                             ({ok, #document{value = #links_forest{model = task_pool}}}) -> false;
                             ({ok, #document{value = #task_pool{}}}) -> false;
-                            ({ok, #document{value = #permissions_cache{}}}) -> false;
-                            ({ok, #document{value = #permissions_cache_helper{}}}) -> false;
-                            ({ok, #document{value = #permissions_cache_helper2{}}}) -> false;
+                            ({ok, #document{value = #file_subscription_counter{}}}) -> false;
                             (_) -> true
     end, Ans),
 

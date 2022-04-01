@@ -7,6 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This file contains incoming_session_watcher tests.
+%%% NOTE: fuse connection for each session is made in init_per_testcase
 %%% @end
 %%%-------------------------------------------------------------------
 -module(session_watcher_test_SUITE).
@@ -28,6 +29,7 @@
     incoming_session_watcher_should_not_remove_session_with_connections/1,
     incoming_session_watcher_should_remove_session_without_connections/1,
     incoming_session_watcher_should_remove_inactive_session/1,
+    incoming_session_watcher_should_remove_session_when_requested/1,
     incoming_session_watcher_should_remove_session_on_error/1,
     incoming_session_watcher_should_retry_session_removal/1,
     incoming_session_watcher_should_work_properly_with_forward_time_warps/1,
@@ -42,6 +44,7 @@ all() -> [
     incoming_session_watcher_should_not_remove_session_with_connections,
     incoming_session_watcher_should_remove_session_without_connections,
     incoming_session_watcher_should_remove_inactive_session,
+    incoming_session_watcher_should_remove_session_when_requested,
     incoming_session_watcher_should_remove_session_on_error,
     incoming_session_watcher_should_retry_session_removal,
     incoming_session_watcher_should_work_properly_with_forward_time_warps,
@@ -86,6 +89,13 @@ incoming_session_watcher_should_remove_inactive_session(Config) ->
     SessId = ?config(session_id, Config),
 
     set_session_status(Config, inactive),
+    ?assertReceivedMatch({termination_request, SessId}, ?TIMEOUT).
+
+
+incoming_session_watcher_should_remove_session_when_requested(Config) ->
+    SessId = ?config(session_id, Config),
+
+    report_session_close(Config),
     ?assertReceivedMatch({termination_request, SessId}, ?TIMEOUT).
 
 
@@ -220,22 +230,21 @@ session_create_should_set_session_access_time(Config) ->
 
 init_per_suite(Config) ->
     ssl:start(),
-    hackney:start(),
+    application:ensure_all_started(hackney),
 
     Posthook = fun(NewConfig) ->
-        NewConfig1 = [{space_storage_mock, false} | NewConfig],
-        NewConfig2 = initializer:setup_storage(NewConfig1),
-        NewConfig3 = initializer:create_test_users_and_spaces(
-            ?TEST_FILE(NewConfig2, "env_desc.json"),
-            NewConfig2
+        NewConfig1 = initializer:setup_storage(NewConfig),
+        NewConfig2 = initializer:create_test_users_and_spaces(
+            ?TEST_FILE(NewConfig1, "env_desc.json"),
+            NewConfig1
         ),
-        NewConfig3
+        NewConfig2
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, fuse_test_utils]} | Config].
 
 
 end_per_suite(Config) ->
-    hackney:stop(),
+    application:stop(hackney),
     ssl:stop(),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:teardown_storage(Config).
@@ -331,6 +340,15 @@ set_session_status(Config, Status) ->
     ?call(Worker, update, [SessId, fun(Sess = #session{}) ->
         {ok, Sess#session{status = Status}}
     end]),
+    ok.
+
+
+%% @private
+-spec report_session_close(test_config:config()) -> ok.
+report_session_close(Config) ->
+    SessId = ?config(session_id, Config),
+    [Worker] = ?config(op_worker_nodes, Config),
+    ?call(Worker, incoming_session_watcher, report_session_close, [SessId]),
     ok.
 
 

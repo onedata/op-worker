@@ -27,9 +27,11 @@
 -include_lib("ctool/include/errors.hrl").
 
 -export([get/2, get_protected_data/2]).
+-export([force_fetch/1]).
 -export([get_name/2]).
 -export([get_eff_users/2, has_eff_user/2, has_eff_user/3]).
--export([has_eff_privilege/3, has_eff_privileges/3]).
+-export([has_eff_privilege/3, has_eff_privileges/3, get_eff_privileges/2]).
+-export([assert_has_eff_privilege/3]).
 -export([is_owner/2]).
 -export([get_eff_groups/2, get_shares/2, get_local_storages/1,
     get_local_supporting_storage/1, get_storages_by_provider/2,
@@ -59,6 +61,10 @@
 %%--------------------------------------------------------------------
 -spec get(gs_client_worker:client(), od_space:id()) ->
     {ok, od_space:doc()} | errors:error().
+get(?GUEST_SESS_ID, SpaceId) ->    
+    % Guest session is a virtual session fully managed by provider, and it needs
+    % access to space info to serve public data such as shares.
+    get(?ROOT_SESS_ID, SpaceId);
 get(SessionId, SpaceId) ->
     gs_client_worker:request(SessionId, #gs_req_graph{
         operation = get,
@@ -91,6 +97,11 @@ get_name(SessionId, SpaceId) ->
         {error, _} = Error ->
             Error
     end.
+
+
+-spec force_fetch(od_space:id()) -> {ok, od_space:doc()} | errors:error().
+force_fetch(SpaceId) ->
+    gs_client_worker:force_fetch_entity(#gri{type = od_space, id = SpaceId, aspect = instance}).
 
 
 -spec get_eff_users(gs_client_worker:client(), od_space:id()) ->
@@ -138,6 +149,33 @@ has_eff_privileges(SpaceId, UserId, Privileges) ->
             has_eff_privileges(SpaceDoc, UserId, Privileges);
         _ ->
             false
+    end.
+
+
+-spec get_eff_privileges(od_space:doc() | od_space:id(), od_user:id()) ->
+    {ok, [privileges:space_privilege()]} | errors:error().
+get_eff_privileges(#document{value = #od_space{eff_users = EffUsers}} = SpaceDoc, UserId) ->
+    case is_owner(SpaceDoc, UserId) of
+        true -> {ok, privileges:space_privileges()};
+        false -> {ok, maps:get(UserId, EffUsers, [])}
+    end;
+get_eff_privileges(SpaceId, UserId) ->
+    case get(?ROOT_SESS_ID, SpaceId) of
+        {ok, #document{} = SpaceDoc} ->
+            get_eff_privileges(SpaceDoc, UserId);
+        {error, _} = Error ->
+            Error
+    end.
+
+
+-spec assert_has_eff_privilege(od_space:id(), od_user:id(), privileges:space_privilege()) -> ok.
+assert_has_eff_privilege(SpaceId, UserId, Privilege) ->
+    % call by module to mock in tests
+    case space_logic:has_eff_privilege(SpaceId, UserId, Privilege) of
+        true ->
+            ok;
+        false ->
+            throw({error, ?EPERM})
     end.
 
 
@@ -213,18 +251,16 @@ get_local_storages(SpaceId) ->
 %% with storages supporting given space, belonging to ProviderId.
 %% @end
 %%--------------------------------------------------------------------
--spec get_storages_by_provider(od_space:id() | od_space:record(), od_provider:id()) ->
+-spec get_storages_by_provider(od_space:id(), od_provider:id()) ->
     {ok, #{storage:id() => storage:access_type()}} | errors:error().
-get_storages_by_provider(#od_space{storages_by_provider = StoragesByProvider}, ProviderId) ->
-    case maps:get(ProviderId, StoragesByProvider, undefined) of
-        undefined -> ?ERROR_SPACE_NOT_SUPPORTED_BY(ProviderId);
-        ProviderStoragesMap -> {ok, ProviderStoragesMap}
-    end;
 get_storages_by_provider(SpaceId, ProviderId) when is_binary(SpaceId)->
     % called by module to be mocked in tests
     case space_logic:get(?ROOT_SESS_ID, SpaceId) of
-        {ok, #document{value = Space}} ->
-            get_storages_by_provider(Space, ProviderId);
+        {ok, #document{value = #od_space{storages_by_provider = StoragesByProvider} }} ->
+            case maps:get(ProviderId, StoragesByProvider, undefined) of
+                undefined -> ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, ProviderId);
+                StoragesToAccessType -> {ok, StoragesToAccessType}
+            end;
         {error, _} = Error ->
             Error
     end.
@@ -247,7 +283,7 @@ get_support_size(SpaceId, ProviderId) ->
         {ok, #document{value = #od_space{providers = ProviderSupports}}} ->
             case maps:get(ProviderId, ProviderSupports, undefined) of
                 undefined ->
-                    ?ERROR_SPACE_NOT_SUPPORTED_BY(ProviderId);
+                    ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, ProviderId);
                 SupportSize ->
                     {ok, SupportSize}
             end;
@@ -306,9 +342,9 @@ is_supported_by_storage(SpaceId, StorageId) ->
 %% the space are readonly.
 %% @end
 %%--------------------------------------------------------------------
--spec has_readonly_support_from(od_space:id() | od_space:record(), od_provider:id()) -> boolean().
-has_readonly_support_from(SpaceOrId, ProviderId) ->
-    case get_storages_by_provider(SpaceOrId, ProviderId) of
+-spec has_readonly_support_from(od_space:id(), od_provider:id()) -> boolean().
+has_readonly_support_from(SpaceId, ProviderId) ->
+    case get_storages_by_provider(SpaceId, ProviderId) of
         {ok, ProviderStorages} when map_size(ProviderStorages) =:= 0 ->
             % if the map is empty, this provider does not support the space and has
             % no knowledge about other supports to determine if they are readonly

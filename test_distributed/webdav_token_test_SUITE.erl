@@ -228,7 +228,7 @@ operation_with_refreshed_token_in_user_ctx_should_succeed_base(Config, SpaceId) 
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
         application:start(ssl),
-        hackney:start(),
+        application:ensure_all_started(hackney),
         initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig, "env_desc.json"), NewConfig)
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, ?MODULE]} | Config].
@@ -248,7 +248,7 @@ end_per_testcase(_Case, Config) ->
 
 end_per_suite(Config) ->
     initializer:clean_test_users_and_spaces_no_validate(Config),
-    hackney:stop(),
+    application:stop(hackney),
     application:stop(ssl).
 
 %%%===================================================================

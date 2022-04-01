@@ -68,7 +68,9 @@ acquire_user_storage_credentials(Storage, UserId) ->
     {ok, luma_posix_credentials:credentials()}.
 acquire_default_posix_storage_credentials(Storage, SpaceId) ->
     StorageFileCtx = storage_file_ctx:new(<<?DIRECTORY_SEPARATOR>>, SpaceId, storage:get_id(Storage)),
-    {#statbuf{st_uid = Uid, st_gid = Gid}, _} = storage_file_ctx:stat(StorageFileCtx),
+    {StatBuf, _} = storage_file_ctx:stat(StorageFileCtx),
+    Uid = min(StatBuf#statbuf.st_uid, ?UID_MAX),
+    Gid = min(StatBuf#statbuf.st_gid, ?GID_MAX),
     {ok, luma_posix_credentials:new(Uid, Gid)}.
 
 
@@ -86,12 +88,12 @@ acquire_default_display_credentials(Storage, SpaceId) ->
 
 -spec generate_uid(od_user:id()) -> luma:uid().
 generate_uid(UserId) ->
-    {ok, UidRange} = application:get_env(?APP_NAME, uid_range),
+    UidRange = op_worker:get_env(uid_range),
     generate_posix_identifier(UserId, UidRange).
 
 -spec generate_gid(od_space:id()) -> luma:gid().
 generate_gid(SpaceId) ->
-    {ok, GidRange} = application:get_env(?APP_NAME, gid_range),
+    GidRange = op_worker:get_env(gid_range),
     generate_posix_identifier(SpaceId, GidRange).
 
 -spec generate_posix_credentials(od_user:id(), od_space:id()) -> {luma:uid(), luma:gid()}.

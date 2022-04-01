@@ -127,7 +127,7 @@ are_all_rules_satisfied(FileCtx, #autocleaning_rules{
     max_daily_moving_average = MaxDailyMovingAvgSetting,
     max_monthly_moving_average = MaxMonthlyMovingAvgSetting
 }) ->
-    Uuid = file_ctx:get_uuid_const(FileCtx),
+    Uuid = file_ctx:get_logical_uuid_const(FileCtx),
     {ok, #document{value=FilePopularity}} = file_popularity:get(Uuid),
     is_max_open_count_rule_satisfied(FilePopularity, MaxOpenCountSetting)
     andalso is_min_file_size_rule_satisfied(FilePopularity, MinFileSizeSetting)

@@ -12,11 +12,14 @@
 -module(guid_req).
 -author("Tomasz Lichon").
 
+-include("modules/fslogic/data_access_control.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
+-include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
--export([resolve_guid/2, get_parent/2, get_file_path/2]).
+-export([resolve_guid/2, resolve_guid_by_relative_path/3, ensure_dir/4, get_parent/2, get_file_path/2]).
 
 
 %%%===================================================================
@@ -32,9 +35,52 @@
     fslogic_worker:fuse_response().
 resolve_guid(UserCtx, FileCtx0) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
-        UserCtx, FileCtx0, [traverse_ancestors], allow_ancestors
+        UserCtx, FileCtx0, [?TRAVERSE_ANCESTORS], allow_ancestors
     ),
     resolve_guid_insecure(UserCtx, FileCtx1).
+
+
+-spec resolve_guid_by_relative_path(user_ctx:ctx(), file_ctx:ctx(), file_meta:path()) -> fslogic_worker:fuse_response().
+resolve_guid_by_relative_path(UserCtx, RootFileCtx, <<"">>) ->
+    resolve_guid(UserCtx, RootFileCtx);
+resolve_guid_by_relative_path(UserCtx, RootFileCtx, Path) ->
+    PathTokens = binary:split(Path, <<"/">>, [global]),
+    LeafFileCtx = lists:foldl(fun(PathToken, ParentCtx) ->
+        {ChildCtx, _} = files_tree:get_child(ParentCtx, PathToken, UserCtx),
+        ChildCtx
+    end, RootFileCtx, PathTokens),
+    resolve_guid(UserCtx, LeafFileCtx).
+
+
+-spec ensure_dir(
+    user_ctx:ctx(), file_ctx:ctx(), file_meta:path(), file_meta:mode()
+) -> fslogic_worker:fuse_response().
+ensure_dir(UserCtx, RootFileCtx, <<"">>, _Mode) ->
+    resolve_guid(UserCtx, RootFileCtx);
+ensure_dir(UserCtx, RootFileCtx, Path, Mode) ->
+    PathTokens = binary:split(Path, <<"/">>, [global]),
+    LeafFileCtx = lists:foldl(fun(PathToken, ParentCtx) ->
+        try
+            {ChildCtx, _} = files_tree:get_child(ParentCtx, PathToken, UserCtx),
+            ChildCtx
+        catch throw:?ENOENT ->
+            try 
+                #fuse_response{fuse_response = #dir{guid = CreatedDirGuid}} = dir_req:mkdir(
+                    UserCtx, ParentCtx, PathToken, Mode
+                ),
+                file_ctx:new_by_guid(CreatedDirGuid)
+            catch Class:Reason ->
+                case datastore_runner:normalize_error(Reason) of
+                    already_exists ->
+                        {Ctx, _} = files_tree:get_child(ParentCtx, PathToken, UserCtx),
+                        Ctx;
+                    _ ->
+                        erlang:apply(erlang, Class, [Reason])
+                end
+            end
+        end
+    end, RootFileCtx, PathTokens),
+    resolve_guid(UserCtx, LeafFileCtx).
 
 
 %%--------------------------------------------------------------------
@@ -45,7 +91,7 @@ resolve_guid(UserCtx, FileCtx0) ->
     fslogic_worker:provider_response().
 get_parent(UserCtx, FileCtx0) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
-        UserCtx, FileCtx0, [traverse_ancestors], allow_ancestors
+        UserCtx, FileCtx0, [?TRAVERSE_ANCESTORS], allow_ancestors
     ),
     get_parent_insecure(UserCtx, FileCtx1).
 
@@ -58,7 +104,7 @@ get_parent(UserCtx, FileCtx0) ->
     fslogic_worker:provider_response().
 get_file_path(UserCtx, FileCtx0) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
-        UserCtx, FileCtx0, [traverse_ancestors], allow_ancestors
+        UserCtx, FileCtx0, [?TRAVERSE_ANCESTORS], allow_ancestors
     ),
     get_file_path_insecure(UserCtx, FileCtx1).
 
@@ -77,7 +123,7 @@ get_file_path(UserCtx, FileCtx0) ->
 -spec resolve_guid_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:fuse_response().
 resolve_guid_insecure(_UserCtx, FileCtx) ->
-    Guid = file_ctx:get_guid_const(FileCtx),
+    Guid = file_ctx:get_logical_guid_const(FileCtx),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #guid{guid = Guid}
@@ -93,7 +139,7 @@ resolve_guid_insecure(_UserCtx, FileCtx) ->
 -spec get_parent_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
 get_parent_insecure(UserCtx, FileCtx) ->
-    {ParentGuid, _FileCtx2} = file_ctx:get_parent_guid(FileCtx, UserCtx),
+    {ParentGuid, _FileCtx2} = files_tree:get_parent_guid_if_not_root_dir(FileCtx, UserCtx),
     #provider_response{
         status = #status{code = ?OK},
         provider_response = #dir{guid = ParentGuid}

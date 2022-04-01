@@ -68,7 +68,7 @@
 %%% There are 2 modules, that implement this behaviour:
 %%%   * main_harvesting_stream - responsible for harvesting metadata changes
 %%%                              in given space. It is always the stream that
-%%%                              hast the highest processed sequence number in
+%%%                              has the highest processed sequence number in
 %%%                              the space, out of all streams harvesting given
 %%%                              space. It also reacts on changes in the harvesters'
 %%%                              structure by updating its own Destination and by
@@ -193,8 +193,8 @@
 -define(MAX_BACKOFF_INTERVAL, application:get_env(
     ?APP_NAME, harvesting_stream_max_backoff_interval, timer:minutes(5))).
 
--define(BATCH_SIZE, application:get_env(?APP_NAME, harvesting_batch_size, 1000)).
--define(FLUSH_TIMEOUT_SECONDS, application:get_env(?APP_NAME, harvesting_flush_timeout_seconds, 10)).
+-define(BATCH_SIZE, op_worker:get_env(harvesting_batch_size, 1000)).
+-define(FLUSH_TIMEOUT_SECONDS, op_worker:get_env(harvesting_flush_timeout_seconds, 10)).
 -define(FLUSH_TIMEOUT, timer:seconds(?FLUSH_TIMEOUT_SECONDS)).
 
 -define(EXEC_AND_HANDLE_HARVESTING_DOC_NOT_FOUND(Fun),
@@ -301,8 +301,8 @@ init([CallbackModule | OtherArgs]) ->
     try
         init_internal(CallbackModule, OtherArgs)
     catch
-        _:Reason ->
-            ?error_stacktrace("Unable to start harvesting_stream due to ~p", [Reason]),
+        _:Reason:Stacktrace ->
+            ?error_stacktrace("Unable to start harvesting_stream due to ~p", [Reason], Stacktrace),
             {stop, Reason}
     end.
 
@@ -782,4 +782,6 @@ is_harvested_model(_) -> false.
 
 -spec is_uuid_restricted(file_meta:uuid()) -> boolean().
 is_uuid_restricted(Uuid) ->
-    fslogic_uuid:is_trash_dir_uuid(Uuid).
+    fslogic_uuid:is_trash_dir_uuid(Uuid) orelse
+        archivisation_tree:is_special_uuid(Uuid) orelse 
+            archivisation_tree:uuid_to_archive_id(Uuid) =/= undefined.

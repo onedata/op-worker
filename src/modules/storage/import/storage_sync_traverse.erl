@@ -46,6 +46,7 @@
 -include("modules/storage/import/storage_import.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/acl.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -87,7 +88,7 @@
 -define(TASK_ID_SEP, <<"###">>).
 -define(TASK_ID_PREFIX, <<"storage_sync">>).
 
--define(BATCH_SIZE, application:get_env(?APP_NAME, storage_import_dir_batch_size, 1000)).
+-define(BATCH_SIZE, op_worker:get_env(storage_import_dir_batch_size, 1000)).
 
 %%%===================================================================
 %%% API functions
@@ -96,9 +97,9 @@
 -spec init_pool() -> ok.
 init_pool() ->
     % Get pool limits from app.config
-    MasterJobsLimit = application:get_env(?APP_NAME, storage_import_master_jobs_limit, 10),
-    SlaveJobsLimit = application:get_env(?APP_NAME, storage_import_slave_workers_limit, 10),
-    ParallelSyncedSpacesLimit = application:get_env(?APP_NAME, storage_import_parallel_synced_spaces_limit, 10),
+    MasterJobsLimit = op_worker:get_env(storage_import_master_jobs_limit, 10),
+    SlaveJobsLimit = op_worker:get_env(storage_import_slave_workers_limit, 10),
+    ParallelSyncedSpacesLimit = op_worker:get_env(storage_import_parallel_synced_spaces_limit, 10),
     storage_traverse:init(?POOL, MasterJobsLimit, SlaveJobsLimit, ParallelSyncedSpacesLimit).
 
 -spec stop_pool() -> ok.
@@ -364,7 +365,7 @@ run_deletion_scan(StorageFileCtx, ScanNum, Config, FileCtx) ->
         deletion_job => true,
         sync_links_token => #link_token{},
         sync_links_children => [],
-        file_meta_token => ?INITIAL_LS_TOKEN,
+        file_meta_token => ?INITIAL_DATASTORE_LS_TOKEN,
         file_meta_children => [],
         manual => false
     },
@@ -458,7 +459,7 @@ do_import_master_job(TraverseJob = #storage_traverse_master{
                     AsyncMasterJobsNum = length(maps:get(async_master_jobs, MasterJobMap, [])),
                     ToProcess = SlaveJobsNum + AsyncMasterJobsNum,
                     storage_import_monitoring:increment_queue_length_histograms(SpaceId, ToProcess),
-                    Guid = file_ctx:get_guid_const(FileCtx),
+                    Guid = file_ctx:get_logical_guid_const(FileCtx),
                     FinishCallback = ?ON_SUCCESSFUL_SLAVE_JOBS(fun() ->
                         StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
                         case Depth =:= MaxDepth of
@@ -514,38 +515,46 @@ do_update_master_job(TraverseJob = #storage_traverse_master{
             increment_counter(SyncResult, SpaceId),
             {ok, #{}};
         {ok, {SyncResult, FileCtx, StorageFileCtx2}} ->
-            SSIDoc = get_storage_sync_info_doc(TraverseJob),
-            % stat result will be cached in StorageFileCtx
-            % we perform stat here to ensure that jobs for all batches for given directory
-            % will be scheduled with the same stat result
-            {#statbuf{}, StorageFileCtx3} = storage_file_ctx:stat(StorageFileCtx2),
-            MTimeHasChanged = storage_sync_traverse:has_mtime_changed(SSIDoc, StorageFileCtx3),
-            TraverseJob2 = TraverseJob#storage_traverse_master{
-                storage_file_ctx = StorageFileCtx3,
-                info = Info2 = Info#{
-                    file_ctx => FileCtx,
-                    storage_sync_info_doc => SSIDoc,
-                    % this job will be used to generated children jobs so set current FileCtx as parent
-                    parent_ctx => FileCtx
-                }
-            },
-            StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx3),
-            increment_counter(SyncResult, SpaceId),
+            {FileDoc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
+            {ok, ProtectionFlags} = dataset_eff_cache:get_eff_file_protection_flags(FileDoc),
+            case ProtectionFlags =/= ?no_flags_mask of
+                true ->
+                    % do not schedule jobs for children as directory is protected
+                    {ok, #{}};
+                false ->
+                    SSIDoc = get_storage_sync_info_doc(TraverseJob),
+                    % stat result will be cached in StorageFileCtx
+                    % we perform stat here to ensure that jobs for all batches for given directory
+                    % will be scheduled with the same stat result
+                    {#statbuf{}, StorageFileCtx3} = storage_file_ctx:stat(StorageFileCtx2),
+                    MTimeHasChanged = storage_sync_traverse:has_mtime_changed(SSIDoc, StorageFileCtx3),
+                    TraverseJob2 = TraverseJob#storage_traverse_master{
+                        storage_file_ctx = StorageFileCtx3,
+                        info = Info2 = Info#{
+                            file_ctx => FileCtx2,
+                            storage_sync_info_doc => SSIDoc,
+                            % this job will be used to generated children jobs so set current FileCtx as parent
+                            parent_ctx => FileCtx2
+                        }
+                    },
+                    StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx3),
+                    increment_counter(SyncResult, SpaceId),
 
-            case {MTimeHasChanged, DetectDeletions, DetectModifications} of
-                {true, true, _} ->
-                    TraverseJob3 = TraverseJob2#storage_traverse_master{info = Info2#{add_deletion_detection_link => true}},
-                    StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
-                    traverse(TraverseJob3, Args, true);
-                {false, _, false} ->
-                    % DetectModifications option is disabled and MTime of directory has not changed, therefore
-                    % we are sure that hash computed out of children (only regular files) attributes
-                    % mustn't have changed
-                    traverse_only_directories(TraverseJob2#storage_traverse_master{fold_enabled = false}, Args);
-                {_, _, _} ->
-                    % Hash of children attrs might have changed, therefore it must be computed
-                    % Do not detect deletions as (MtimeHasChanged and DetectDeletions) = false
-                    traverse(TraverseJob2, Args, false)
+                    case {MTimeHasChanged, DetectDeletions, DetectModifications} of
+                        {true, true, _} ->
+                            TraverseJob3 = TraverseJob2#storage_traverse_master{info = Info2#{add_deletion_detection_link => true}},
+                            StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
+                            traverse(TraverseJob3, Args, true);
+                        {false, _, false} ->
+                            % DetectModifications option is disabled and MTime of directory has not changed, therefore
+                            % we are sure that hash computed out of children (only regular files) attributes
+                            % mustn't have changed
+                            traverse_only_directories(TraverseJob2#storage_traverse_master{fold_enabled = false}, Args);
+                        {_, _, _} ->
+                            % Hash of children attrs might have changed, therefore it must be computed
+                            % Do not detect deletions as (MtimeHasChanged and DetectDeletions) = false
+                            traverse(TraverseJob2, Args, false)
+                    end
             end;
         Error = {error, ?ENOENT} ->
             % directory might have been deleted after it was listed in parent's master job
@@ -564,7 +573,7 @@ do_update_master_job(TraverseJob = #storage_traverse_master{
                     % ensure it's deleted from the space
                     FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
                     storage_import_monitoring:mark_processed_job(SpaceId),
-                    {FileCtx, ParentCtx2} = file_ctx:get_child(ParentCtx, FileName, user_ctx:new(?ROOT_SESS_ID)),
+                    {FileCtx, ParentCtx2} = files_tree:get_child(ParentCtx, FileName, user_ctx:new(?ROOT_SESS_ID)),
                     FinishCallback = fun(#{master_job_starter_callback := MasterJobCallback}, _SlavesDescription) ->
                         storage_import_monitoring:increment_queue_length_histograms(SpaceId, 1),
                         MasterJobCallback(#{
@@ -642,7 +651,7 @@ schedule_jobs_for_directories_only(#storage_traverse_master{
     {#statbuf{st_mtime = STMtime}, _StorageFileCtx2} = storage_file_ctx:stat(StorageFileCtx),
     FinishCallback = fun(_MasterJobExtendedArgs, _SlaveJobsDescription) ->
         StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
-        Guid = file_ctx:get_guid_const(FileCtx),
+        Guid = file_ctx:get_logical_guid_const(FileCtx),
         case Depth =:= MaxDepth of
             true ->
                 storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, Guid, undefined);
@@ -674,13 +683,13 @@ schedule_jobs_for_directories_only(TraverseJob = #storage_traverse_master{
         case maps:get(slave_jobs_failed, SlavesDescription) of
             0 ->
                 StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
-                Guid = file_ctx:get_guid_const(FileCtx),
+                Guid = file_ctx:get_logical_guid_const(FileCtx),
                 {#statbuf{st_mtime = STMtime}, _} = storage_file_ctx:stat(StorageFileCtx),
                 {ok, SSI} = case Depth =:= MaxDepth of
                     true ->
                         storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, Guid, undefined);
                     false ->
-                        storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, Guid, STMtime)
+                        storage_sync_info:mark_processed_batch(StorageFileId, SpaceId, Guid, STMtime, undefined, undefined, undefined, false)
                 end,
                 case storage_sync_info:are_all_batches_processed(SSI) of
                     true ->
@@ -721,7 +730,7 @@ schedule_jobs_for_all_files(#storage_traverse_master{
     SlaveJobs = maps:get(slave_jobs, MasterJobMap, []),
     ToProcess = length(AsyncMasterJobs) + length(SlaveJobs),
     storage_import_monitoring:increment_queue_length_histograms(SpaceId, ToProcess),
-    Guid = file_ctx:get_guid_const(FileCtx),
+    Guid = file_ctx:get_logical_guid_const(FileCtx),
     FinishCallback = ?ON_SUCCESSFUL_SLAVE_JOBS(fun() ->
         StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
         case Depth =:= MaxDepth of
@@ -751,7 +760,7 @@ schedule_jobs_for_all_files(TraverseJob = #storage_traverse_master{
         case maps:get(slave_jobs_failed, SlavesDescription) of
             0 ->
                 StorageFileId = storage_file_ctx:get_storage_file_id_const(StorageFileCtx),
-                Guid = file_ctx:get_guid_const(FileCtx),
+                Guid = file_ctx:get_logical_guid_const(FileCtx),
                 {#statbuf{st_mtime = STMtime}, _} = storage_file_ctx:stat(StorageFileCtx),
                 {ok, SSI} = case Depth =:= MaxDepth of
                     true ->
@@ -828,10 +837,10 @@ process_storage_file(StorageFileCtx, Info) ->
     catch
         throw:?ENOENT ->
             {error, ?ENOENT};
-        Error2:Reason2 ->
+        Error2:Reason2:Stacktrace2 ->
             ?error_stacktrace(
                 "Syncing file ~p on storage ~p supporting space ~p failed due to ~w:~w.",
-                [StorageFileId, StorageId, SpaceId, Error2, Reason2]),
+                [StorageFileId, StorageId, SpaceId, Error2, Reason2], Stacktrace2),
             {error, {Error2, Reason2}}
     end.
 
@@ -845,7 +854,7 @@ increment_counter(?FILE_UNMODIFIED, SpaceId) ->
     storage_import_monitoring:mark_unmodified_file(SpaceId).
 
 
--spec get_storage_sync_info_doc(master_job()) -> storage_sync_info:doc().
+-spec get_storage_sync_info_doc(master_job()) -> storage_sync_info:doc() | undefined.
 get_storage_sync_info_doc(#storage_traverse_master{
     storage_file_ctx = StorageFileCtx,
     offset = 0

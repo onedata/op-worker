@@ -9,11 +9,11 @@
 %%%-------------------------------------------------------------------
 -author("Jakub Kudzia").
 
--include_lib("ctool/include/test/test_utils.hrl").
+-include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/storage/traverse/storage_traverse.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
--include("modules/auth/acl.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 
 -define(ATTEMPTS, 30).
 

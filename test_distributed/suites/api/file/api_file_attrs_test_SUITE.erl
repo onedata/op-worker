@@ -17,10 +17,12 @@
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 
 -export([
-    all/0,
+    groups/0, all/0,
     init_per_suite/1, end_per_suite/1,
+    init_per_group/2, end_per_group/2,
     init_per_testcase/2, end_per_testcase/2
 ]).
 
@@ -35,21 +37,31 @@
     set_mode_on_provider_not_supporting_space_test/1,
 
     get_file_distribution_test/1,
-    get_dir_distribution_test/1
+    get_dir_distribution_test/1,
+    
+    test_for_hardlink_between_files_test/1
 ]).
 
+groups() -> [
+    {all_tests, [parallel], [
+        get_file_attrs_test,
+        get_shared_file_attrs_test,
+        get_attrs_on_provider_not_supporting_space_test,
+
+        get_file_shares_test,
+
+        set_file_mode_test,
+        set_mode_on_provider_not_supporting_space_test,
+
+        get_file_distribution_test,
+        get_dir_distribution_test,
+
+        test_for_hardlink_between_files_test
+    ]}
+].
+
 all() -> [
-    get_file_attrs_test,
-    get_shared_file_attrs_test,
-    get_attrs_on_provider_not_supporting_space_test,
-
-    get_file_shares_test,
-
-    set_file_mode_test,
-    set_mode_on_provider_not_supporting_space_test,
-
-    get_file_distribution_test,
-    get_dir_distribution_test
+    {group, all_tests}
 ].
 
 
@@ -60,15 +72,16 @@ all() -> [
 %%% Get attrs test functions
 %%%===================================================================
 
+
 get_file_attrs_test(Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
 
-    {FileType, FilePath, FileGuid, _ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(8#707),
+    {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(8#707),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
     {ok, FileAttrs} = file_test_utils:get_attrs(P2Node, FileGuid),
-    JsonAttrs = attrs_to_json(undefined, FileAttrs),
+    JsonAttrs = api_test_utils:file_attrs_to_json(undefined, FileAttrs),
 
     ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
@@ -87,19 +100,7 @@ get_file_attrs_test(Config) ->
                 #scenario_template{
                     name = <<"Get attrs from ", FileType/binary, " using /data/ rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = build_get_attrs_prepare_new_id_rest_args_fun(FileObjectId),
-                    validate_result_fun = build_get_attrs_validate_rest_call_fun(JsonAttrs, undefined)
-                },
-                #scenario_template{
-                    name = <<"Get attrs from ", FileType/binary, " using /files/ rest endpoint">>,
-                    type = rest_with_file_path,
-                    prepare_args_fun = build_get_attrs_prepare_deprecated_path_rest_args_fun(FilePath),
-                    validate_result_fun = build_get_attrs_validate_rest_call_fun(JsonAttrs, undefined)
-                },
-                #scenario_template{
-                    name = <<"Get attrs from ", FileType/binary, " using /files-id/ rest endpoint">>,
-                    type = rest,
-                    prepare_args_fun = build_get_attrs_prepare_deprecated_id_rest_args_fun(FileObjectId),
+                    prepare_args_fun = build_get_attrs_prepare_rest_args_fun(FileObjectId),
                     validate_result_fun = build_get_attrs_validate_rest_call_fun(JsonAttrs, undefined)
                 },
                 #scenario_template{
@@ -144,7 +145,7 @@ get_shared_file_attrs_test(_Config) ->
 
     FileType = api_test_utils:randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()]),
-    {ok, FileGuid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, FilePath, 8#707),
+    {ok, FileGuid} = lfm_test_utils:create_file(FileType, P1Node, UserSessIdP1, FilePath, 8#707),
 
     ShareId1 = api_test_utils:share_file_and_sync_file_attrs(P1Node, SpaceOwnerSessId, Providers, FileGuid),
     ShareId2 = api_test_utils:share_file_and_sync_file_attrs(P1Node, SpaceOwnerSessId, Providers, FileGuid),
@@ -157,7 +158,7 @@ get_shared_file_attrs_test(_Config) ->
         file_test_utils:get_attrs(P2Node, FileGuid),
         ?ATTEMPTS
     ),
-    JsonAttrs = attrs_to_json(ShareId1, FileAttrs),
+    JsonAttrs = api_test_utils:file_attrs_to_json(ShareId1, FileAttrs),
 
     ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
@@ -167,13 +168,7 @@ get_shared_file_attrs_test(_Config) ->
                 #scenario_template{
                     name = <<"Get attrs from shared ", FileType/binary, " using /data/ rest endpoint">>,
                     type = {rest_with_shared_guid, file_id:guid_to_space_id(FileGuid)},
-                    prepare_args_fun = build_get_attrs_prepare_new_id_rest_args_fun(ShareObjectId),
-                    validate_result_fun = build_get_attrs_validate_rest_call_fun(JsonAttrs, ShareId1)
-                },
-                #scenario_template{
-                    name = <<"Get attrs from shared ", FileType/binary, " using /files-id/ rest endpoint">>,
-                    type = {deprecated_rest_with_shared_guid, file_id:guid_to_space_id(FileGuid)},
-                    prepare_args_fun = build_get_attrs_prepare_deprecated_id_rest_args_fun(ShareObjectId),
+                    prepare_args_fun = build_get_attrs_prepare_rest_args_fun(ShareObjectId),
                     validate_result_fun = build_get_attrs_validate_rest_call_fun(JsonAttrs, ShareId1)
                 },
                 #scenario_template{
@@ -207,15 +202,16 @@ get_shared_file_attrs_test(_Config) ->
 get_attrs_on_provider_not_supporting_space_test(_Config) ->
     P2Id = oct_background:get_provider_id(paris),
     [P2Node] = oct_background:get_provider_nodes(paris),
-    {FileType, FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
+    SpaceId = oct_background:get_space_id(space_krk),
+    {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
     ValidateRestCallResultFun = fun(_, {ok, RespCode, _RespHeaders, RespBody}) ->
-        ExpError = ?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id)),
+        ExpError = ?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id)),
         ?assertEqual({?HTTP_400_BAD_REQUEST, ExpError}, {RespCode, RespBody})
     end,
     ValidateGsCallResultFun = fun(_, Result) ->
-        ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id), Result)
+        ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id), Result)
     end,
 
     ?assert(onenv_api_test_runner:run_tests([
@@ -226,19 +222,7 @@ get_attrs_on_provider_not_supporting_space_test(_Config) ->
                 #scenario_template{
                     name = <<"Get attrs from ", FileType/binary, " on provider not supporting user using /data/ rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = build_get_attrs_prepare_new_id_rest_args_fun(FileObjectId),
-                    validate_result_fun = ValidateRestCallResultFun
-                },
-                #scenario_template{
-                    name = <<"Get attrs from ", FileType/binary, " on provider not supporting user using /files/ rest endpoint">>,
-                    type = rest_with_file_path,
-                    prepare_args_fun = build_get_attrs_prepare_deprecated_path_rest_args_fun(FilePath),
-                    validate_result_fun = ValidateRestCallResultFun
-                },
-                #scenario_template{
-                    name = <<"Get attrs from ", FileType/binary, " on provider not supporting user using /files-id/ rest endpoint">>,
-                    type = rest,
-                    prepare_args_fun = build_get_attrs_prepare_deprecated_id_rest_args_fun(FileObjectId),
+                    prepare_args_fun = build_get_attrs_prepare_rest_args_fun(FileObjectId),
                     validate_result_fun = ValidateRestCallResultFun
                 },
                 #scenario_template{
@@ -252,66 +236,77 @@ get_attrs_on_provider_not_supporting_space_test(_Config) ->
     ])).
 
 
-%% @private
--spec attrs_to_json(od_share:id(), #file_attr{}) -> map().
-attrs_to_json(ShareId, #file_attr{
-    guid = Guid,
-    name = Name,
-    mode = Mode,
-    uid = Uid,
-    gid = Gid,
-    atime = ATime,
-    mtime = MTime,
-    ctime = CTime,
-    type = Type,
-    size = Size,
-    shares = Shares,
-    provider_id = ProviderId,
-    owner_id = OwnerId
-}) ->
-    PublicAttrs = #{
-        <<"name">> => Name,
-        <<"atime">> => ATime,
-        <<"mtime">> => MTime,
-        <<"ctime">> => CTime,
-        <<"type">> => case Type of
-            ?REGULAR_FILE_TYPE -> <<"reg">>;
-            ?DIRECTORY_TYPE -> <<"dir">>;
-            ?SYMLINK_TYPE -> <<"lnk">>
-        end,
-        <<"size">> => Size
-    },
-
-    case ShareId of
-        undefined ->
-            {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-
-            PublicAttrs#{
-                <<"file_id">> => ObjectId,
-                <<"mode">> => <<"0", (integer_to_binary(Mode, 8))/binary>>,
-                <<"storage_user_id">> => Uid,
-                <<"storage_group_id">> => Gid,
-                <<"shares">> => Shares,
-                <<"provider_id">> => ProviderId,
-                <<"owner_id">> => OwnerId
-            };
-        _ ->
-            ShareGuid = file_id:guid_to_share_guid(Guid, ShareId),
-            {ok, ShareObjectId} = file_id:guid_to_objectid(ShareGuid),
-
-            PublicAttrs#{
-                <<"file_id">> => ShareObjectId,
-                <<"mode">> => <<"0", (integer_to_binary(2#111 band Mode, 8))/binary>>,
-                <<"storage_user_id">> => ?SHARE_UID,
-                <<"storage_group_id">> => ?SHARE_GID,
-                <<"shares">> => case lists:member(ShareId, Shares) of
-                    true -> [ShareId];
-                    false -> []
-                end,
-                <<"provider_id">> => <<"unknown">>,
-                <<"owner_id">> => <<"unknown">>
+test_for_hardlink_between_files_test(_Config) ->
+    [ProviderNode] = oct_background:get_provider_nodes(krakow),
+    GenPathFun = fun() ->
+        filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()])
+    end,
+    UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
+    {ok, TargetGuid} = lfm_test_utils:create_file(<<"file">>, ProviderNode, UserSessIdP1, GenPathFun()),
+    {ok, NotAffiliatedGuid} = lfm_test_utils:create_file(<<"file">>, ProviderNode, UserSessIdP1, GenPathFun()),
+    {ok, #file_attr{guid = LinkGuid1}} = lfm_proxy:make_link(ProviderNode, UserSessIdP1, GenPathFun(), TargetGuid),
+    {ok, #file_attr{guid = LinkGuid2}} = lfm_proxy:make_link(ProviderNode, UserSessIdP1, GenPathFun(), TargetGuid),
+    
+    MemRef = api_test_memory:init(),
+    
+    ValidateResultFun = fun
+        (<<"invalid_guid">>, Result, _ExpectedOk, _ExpectedError, ExpectedBadValue) ->
+            ?assertEqual(ExpectedBadValue, Result);
+        (Guid, Result, ExpectedOk, ExpectedError, _ExpectedBadValue) ->
+            case lists:member(Guid, [TargetGuid, LinkGuid1, LinkGuid2]) of
+                true -> ?assertEqual(ExpectedOk, Result);
+                false -> ?assertEqual(ExpectedError, Result)
+            end
+    end,
+    
+    ValidateGsCallResultFun = fun
+        (_, Result) ->
+            MappedResult = case Result of
+                {ok, ResultMap} -> {ok, maps:without([<<"gri">>, <<"revision">>], ResultMap)};
+                _ -> Result
+            end, 
+            Guid = api_test_memory:get(MemRef, <<"guid">>),
+            ValidateResultFun(Guid, MappedResult, {ok, #{}}, ?ERROR_NOT_FOUND, ?ERROR_BAD_VALUE_IDENTIFIER(<<"guid">>))
+    end,
+    
+    ValidateRestCallResultFun = fun
+        (_, {ok, RespCode, _RespHeaders, _RespBody}) ->
+            Guid = api_test_memory:get(MemRef, <<"guid">>),
+            ValidateResultFun(Guid, RespCode, 204, 404, 400)
+    end,
+    
+    ?assert(onenv_api_test_runner:run_tests([
+        #suite_spec{
+            target_nodes = [ProviderNode],
+            client_spec = #client_spec{
+                correct = [
+                    user2,  % space owner - doesn't need any perms
+                    user3,  % files owner
+                    user4   % space member - should succeed as no perms are required
+                ]
+            },
+            scenario_templates = [
+                #scenario_template{
+                    name = <<"Test for hardlink between files using gs api">>,
+                    type = gs,
+                    prepare_args_fun = build_get_hardlink_relation_prepare_gs_args_fun(MemRef, TargetGuid),
+                    validate_result_fun = ValidateGsCallResultFun
+                },
+                #scenario_template{
+                    name = <<"Test for hardlink between files using rest api">>,
+                    type = rest,
+                    prepare_args_fun = build_get_hardlink_relation_prepare_rest_args_fun(MemRef, TargetGuid),
+                    validate_result_fun = ValidateRestCallResultFun
+                }
+            ],
+            data_spec = #data_spec{
+                optional = [<<"guid">>],
+                correct_values = #{
+                    <<"guid">> => [LinkGuid1, LinkGuid2, NotAffiliatedGuid, TargetGuid]
+                }
             }
-    end.
+        }
+    ])).
 
 
 %% @private
@@ -322,7 +317,7 @@ get_attrs_data_spec(normal_mode) ->
         correct_values = #{<<"attribute">> => ?PRIVATE_BASIC_ATTRIBUTES},
         bad_values = [
             {<<"attribute">>, true, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PRIVATE_BASIC_ATTRIBUTES)},
-            {<<"attribute">>, 10, {gs, ?ERROR_BAD_VALUE_BINARY(<<"attribute">>)}},
+            {<<"attribute">>, 10, {gs, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PRIVATE_BASIC_ATTRIBUTES)}},
             {<<"attribute">>, <<"NaN">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PRIVATE_BASIC_ATTRIBUTES)}
         ]
     };
@@ -332,7 +327,7 @@ get_attrs_data_spec(share_mode) ->
         correct_values = #{<<"attribute">> => ?PUBLIC_BASIC_ATTRIBUTES},
         bad_values = [
             {<<"attribute">>, true, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PUBLIC_BASIC_ATTRIBUTES)},
-            {<<"attribute">>, 10, {gs, ?ERROR_BAD_VALUE_BINARY(<<"attribute">>)}},
+            {<<"attribute">>, 10, {gs, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PUBLIC_BASIC_ATTRIBUTES)}},
             {<<"attribute">>, <<"NaN">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PUBLIC_BASIC_ATTRIBUTES)},
             {<<"attribute">>, <<"owner_id">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PUBLIC_BASIC_ATTRIBUTES)}
         ]
@@ -340,42 +335,15 @@ get_attrs_data_spec(share_mode) ->
 
 
 %% @private
--spec build_get_attrs_prepare_new_id_rest_args_fun(file_id:objectid()) ->
+-spec build_get_attrs_prepare_rest_args_fun(file_meta:path() | file_id:objectid()) ->
     onenv_api_test_runner:prepare_args_fun().
-build_get_attrs_prepare_new_id_rest_args_fun(FileObjectId) ->
-    build_get_attrs_prepare_rest_args_fun(new_id, FileObjectId).
-
-
-%% @private
--spec build_get_attrs_prepare_deprecated_path_rest_args_fun(file_meta:path()) ->
-    onenv_api_test_runner:prepare_args_fun().
-build_get_attrs_prepare_deprecated_path_rest_args_fun(FilePath) ->
-    build_get_attrs_prepare_rest_args_fun(deprecated_path, FilePath).
-
-
-%% @private
--spec build_get_attrs_prepare_deprecated_id_rest_args_fun(file_id:objectid()) ->
-    onenv_api_test_runner:prepare_args_fun().
-build_get_attrs_prepare_deprecated_id_rest_args_fun(FileObjectId) ->
-    build_get_attrs_prepare_rest_args_fun(deprecated_id, FileObjectId).
-
-
-%% @private
--spec build_get_attrs_prepare_rest_args_fun(
-    Endpoint :: new_id | deprecated_path | deprecated_id,
-    ValidId :: file_meta:path() | file_id:objectid()
-) ->
-    onenv_api_test_runner:prepare_args_fun().
-build_get_attrs_prepare_rest_args_fun(Endpoint, ValidId) ->
+build_get_attrs_prepare_rest_args_fun(ValidId) ->
     fun(#api_test_ctx{data = Data0}) ->
         Data1 = utils:ensure_defined(Data0, #{}),
         {Id, Data2} = api_test_utils:maybe_substitute_bad_id(ValidId, Data1),
 
-        RestPath = case Endpoint of
-            new_id -> <<"data/", Id/binary>>;
-            deprecated_path -> <<"metadata/attrs", Id/binary>>;
-            deprecated_id -> <<"metadata-id/attrs/", Id/binary>>
-        end,
+        RestPath = <<"data/", Id/binary>>,
+
         #rest_args{
             method = get,
             path = http_utils:append_url_parameters(
@@ -397,6 +365,44 @@ build_get_attrs_prepare_gs_args_fun(FileGuid, Scope) ->
             operation = get,
             gri = #gri{type = op_file, id = GriId, aspect = attrs, scope = Scope},
             data = Data1
+        }
+    end.
+
+
+%% @private
+-spec build_get_hardlink_relation_prepare_gs_args_fun(api_test_memory:mem_ref(), file_id:file_guid()) ->
+    onenv_api_test_runner:prepare_args_fun().
+build_get_hardlink_relation_prepare_gs_args_fun(MemRef, FileGuid) ->
+    fun(#api_test_ctx{data = Data0}) ->
+        {GriId, Data1} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
+        Guid2 = maps:get(<<"guid">>, Data1, <<"invalid_guid">>),
+        api_test_memory:set(MemRef, <<"guid">>, Guid2),
+        
+        #gs_args{
+            operation = get,
+            gri = #gri{type = op_file, id = GriId, aspect = {hardlinks, Guid2}, scope = private},
+            data = undefined
+        }
+    end.
+
+
+%% @private
+-spec build_get_hardlink_relation_prepare_rest_args_fun(api_test_memory:mem_ref(), file_id:file_guid()) ->
+    onenv_api_test_runner:prepare_args_fun().
+build_get_hardlink_relation_prepare_rest_args_fun(MemRef, FileGuid) ->
+    fun(#api_test_ctx{data = Data0}) ->
+        Data1 = utils:ensure_defined(Data0, #{}),
+        {ok, ValidObjectId} = file_id:guid_to_objectid(FileGuid),
+        {Id, _Data2} = api_test_utils:maybe_substitute_bad_id(ValidObjectId, Data1),
+        Guid2 = maps:get(<<"guid">>, Data1, <<"invalid_guid">>),
+        {ok, ObjectId2} = file_id:guid_to_objectid(Guid2),
+        api_test_memory:set(MemRef, <<"guid">>, Guid2),
+        
+        RestPath = <<"data/", Id/binary, "/hardlinks/", ObjectId2/binary>>,
+        
+        #rest_args{
+            method = get,
+            path = RestPath
         }
     end.
 
@@ -539,7 +545,7 @@ set_file_mode_test(Config) ->
     User2Id = oct_background:get_user_id(user2),
     User3Id = oct_background:get_user_id(user3),
 
-    {FileType, FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(8#707),
+    {FileType, _FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(8#707),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
     ShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
 
@@ -587,19 +593,7 @@ set_file_mode_test(Config) ->
                 #scenario_template{
                     name = <<"Set mode for ", FileType/binary, " using /data/ rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = build_set_mode_prepare_new_id_rest_args_fun(FileObjectId),
-                    validate_result_fun = ValidateRestSuccessfulCallFun
-                },
-                #scenario_template{
-                    name = <<"Set mode for ", FileType/binary, " using /files/ rest endpoint">>,
-                    type = rest_with_file_path,
-                    prepare_args_fun = build_set_mode_prepare_deprecated_path_rest_args_fun(FilePath),
-                    validate_result_fun = ValidateRestSuccessfulCallFun
-                },
-                #scenario_template{
-                    name = <<"Set mode for ", FileType/binary, " using /files-id/ rest endpoint">>,
-                    type = rest,
-                    prepare_args_fun = build_set_mode_prepare_deprecated_id_rest_args_fun(FileObjectId),
+                    prepare_args_fun = build_set_mode_prepare_rest_args_fun(FileObjectId),
                     validate_result_fun = ValidateRestSuccessfulCallFun
                 },
                 #scenario_template{
@@ -640,18 +634,20 @@ set_mode_on_provider_not_supporting_space_test(_Config) ->
     P2Id = oct_background:get_provider_id(paris),
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
-    {FileType, FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
+
+    SpaceId = oct_background:get_space_id(space_krk),
+    {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
     DataSpec = set_mode_data_spec(),
     DataSpecWithoutBadValues = DataSpec#data_spec{bad_values = []},
 
     ValidateRestCallResultFun = fun(_, {ok, RespCode, _RespHeaders, RespBody}) ->
-        ExpError = ?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id)),
+        ExpError = ?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id)),
         ?assertEqual({?HTTP_400_BAD_REQUEST, ExpError}, {RespCode, RespBody})
     end,
     ValidateGsCallResultFun = fun(_, Result) ->
-        ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id), Result)
+        ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id), Result)
     end,
 
     VerifyFun = fun(_, _) ->
@@ -672,13 +668,7 @@ set_mode_on_provider_not_supporting_space_test(_Config) ->
                 #scenario_template{
                     name = <<"Set mode for ", FileType/binary, " on provider not supporting user using /data/ rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = build_set_mode_prepare_new_id_rest_args_fun(FileObjectId),
-                    validate_result_fun = ValidateRestCallResultFun
-                },
-                #scenario_template{
-                    name = <<"Set mode for ", FileType/binary, " on provider not supporting user using /files-id/ rest endpoint">>,
-                    type = rest,
-                    prepare_args_fun = build_set_mode_prepare_deprecated_id_rest_args_fun(FileObjectId),
+                    prepare_args_fun = build_set_mode_prepare_rest_args_fun(FileObjectId),
                     validate_result_fun = ValidateRestCallResultFun
                 },
                 #scenario_template{
@@ -690,16 +680,6 @@ set_mode_on_provider_not_supporting_space_test(_Config) ->
             ],
             randomly_select_scenarios = true,
             data_spec = DataSpecWithoutBadValues
-        },
-        #scenario_spec{
-            name = <<"Set mode for ", FileType/binary, " on provider not supporting user using /files/ rest endpoint">>,
-            type = rest_with_file_path,
-            target_nodes = [P2Node],
-            client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK,
-
-            prepare_args_fun = build_set_mode_prepare_deprecated_path_rest_args_fun(FilePath),
-            validate_result_fun = ValidateRestCallResultFun,
-            verify_fun = VerifyFun
         }
     ])).
 
@@ -721,42 +701,14 @@ set_mode_data_spec() ->
 
 
 %% @private
--spec build_set_mode_prepare_new_id_rest_args_fun(file_id:objectid()) ->
+-spec build_set_mode_prepare_rest_args_fun(file_meta:path() | file_id:objectid()) ->
     onenv_api_test_runner:prepare_args_fun().
-build_set_mode_prepare_new_id_rest_args_fun(FileObjectId) ->
-    build_set_mode_prepare_rest_args_fun(new_id, FileObjectId).
-
-
-%% @private
--spec build_set_mode_prepare_deprecated_path_rest_args_fun(file_meta:path()) ->
-    onenv_api_test_runner:prepare_args_fun().
-build_set_mode_prepare_deprecated_path_rest_args_fun(FilePath) ->
-    build_set_mode_prepare_rest_args_fun(deprecated_path, FilePath).
-
-
-%% @private
--spec build_set_mode_prepare_deprecated_id_rest_args_fun(file_id:objectid()) ->
-    onenv_api_test_runner:prepare_args_fun().
-build_set_mode_prepare_deprecated_id_rest_args_fun(FileObjectId) ->
-    build_set_mode_prepare_rest_args_fun(deprecated_id, FileObjectId).
-
-
-%% @private
--spec build_set_mode_prepare_rest_args_fun(
-    Endpoint :: new_id | deprecated_path | deprecated_id,
-    ValidId :: file_meta:path() | file_id:objectid()
-) ->
-    onenv_api_test_runner:prepare_args_fun().
-build_set_mode_prepare_rest_args_fun(Endpoint, ValidId) ->
+build_set_mode_prepare_rest_args_fun(ValidId) ->
     fun(#api_test_ctx{data = Data0}) ->
         {Id, Data1} = api_test_utils:maybe_substitute_bad_id(
             ValidId, utils:ensure_defined(Data0, #{})
         ),
-        RestPath = case Endpoint of
-            new_id -> <<"data/", Id/binary>>;
-            deprecated_path -> <<"metadata/attrs", Id/binary>>;
-            deprecated_id -> <<"metadata-id/attrs/", Id/binary>>
-        end,
+        RestPath = <<"data/", Id/binary>>,
 
         #rest_args{
             method = put,
@@ -764,7 +716,7 @@ build_set_mode_prepare_rest_args_fun(Endpoint, ValidId) ->
                 RestPath,
                 maps:with([<<"attribute">>], Data1)
             ),
-            headers = #{<<"content-type">> => <<"application/json">>},
+            headers = #{?HDR_CONTENT_TYPE => <<"application/json">>},
             body = json_utils:encode(Data1)
         }
     end.
@@ -803,23 +755,23 @@ get_file_distribution_test(Config) ->
 
     FileType = <<"file">>,
     FilePath = filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()]),
-    {ok, FileGuid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, FilePath, 8#707),
-    {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, {guid, FileGuid}, <<"share">>),
+    {ok, FileGuid} = lfm_test_utils:create_file(FileType, P1Node, UserSessIdP1, FilePath, 8#707),
+    {ok, ShareId} = opt_shares:create(P1Node, SpaceOwnerSessIdP1, ?FILE_REF(FileGuid), <<"share">>),
 
     file_test_utils:await_sync(P2Node, FileGuid),
 
-    api_test_utils:fill_file_with_dummy_data(P1Node, UserSessIdP1, FileGuid, 0, 20),
+    lfm_test_utils:write_file(P1Node, UserSessIdP1, FileGuid, 0, {rand_content, 20}),
     ExpDist1 = [#{
         <<"providerId">> => P1Id,
         <<"blocks">> => [[0, 20]],
         <<"totalBlocksSize">> => 20
     }],
     wait_for_file_location_sync(P2Node, UserSessIdP2, FileGuid, ExpDist1),
-    get_distribution_test_base(FileType, FilePath, FileGuid, ShareId, ExpDist1, Config),
+    get_distribution_test_base(FileType, FileGuid, ShareId, ExpDist1, Config),
 
     % Write another block to file on P2 and check returned distribution
 
-    api_test_utils:fill_file_with_dummy_data(P2Node, UserSessIdP2, FileGuid, 30, 20),
+    lfm_test_utils:write_file(P2Node, UserSessIdP2, FileGuid, 30, {rand_content, 20}),
     ExpDist2 = [
         #{
             <<"providerId">> => P1Id,
@@ -833,7 +785,7 @@ get_file_distribution_test(Config) ->
         }
     ],
     wait_for_file_location_sync(P1Node, UserSessIdP1, FileGuid, ExpDist2),
-    get_distribution_test_base(FileType, FilePath, FileGuid, ShareId, ExpDist2, Config).
+    get_distribution_test_base(FileType, FileGuid, ShareId, ExpDist2, Config).
 
 
 get_dir_distribution_test(Config) ->
@@ -846,25 +798,25 @@ get_dir_distribution_test(Config) ->
 
     FileType = <<"dir">>,
     DirPath = filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()]),
-    {ok, DirGuid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, DirPath, 8#707),
-    {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, {guid, DirGuid}, <<"share">>),
+    {ok, DirGuid} = lfm_test_utils:create_file(FileType, P1Node, UserSessIdP1, DirPath, 8#707),
+    {ok, ShareId} = opt_shares:create(P1Node, SpaceOwnerSessIdP1, ?FILE_REF(DirGuid), <<"share">>),
     file_test_utils:await_sync(P2Node, DirGuid),
 
     ExpDist = [],
     wait_for_file_location_sync(P2Node, UserSessIdP2, DirGuid, ExpDist),
-    get_distribution_test_base(FileType, DirPath, DirGuid, ShareId, ExpDist, Config),
+    get_distribution_test_base(FileType, DirGuid, ShareId, ExpDist, Config),
 
     % Create file in dir and assert that dir distribution hasn't changed
 
-    {ok, FileGuid} = api_test_utils:create_file(
+    {ok, FileGuid} = lfm_test_utils:create_file(
         <<"file">>, P2Node, UserSessIdP2,
         filename:join([DirPath, ?RANDOM_FILE_NAME()]),
         8#707
     ),
-    api_test_utils:fill_file_with_dummy_data(P2Node, UserSessIdP2, FileGuid, 30, 20),
+    lfm_test_utils:write_file(P2Node, UserSessIdP2, FileGuid, 30, {rand_content, 20}),
 
     wait_for_file_location_sync(P1Node, UserSessIdP1, DirGuid, ExpDist),
-    get_distribution_test_base(FileType, DirPath, DirGuid, ShareId, ExpDist, Config).
+    get_distribution_test_base(FileType, DirGuid, ShareId, ExpDist, Config).
 
 
 %% @private
@@ -872,7 +824,7 @@ wait_for_file_location_sync(Node, SessId, FileGuid, ExpDistribution) ->
     SortedExpDistribution = lists:usort(ExpDistribution),
 
     GetDistFun = fun() ->
-        case lfm_proxy:get_file_distribution(Node, SessId, {guid, FileGuid}) of
+        case lfm_proxy:get_file_distribution(Node, SessId, ?FILE_REF(FileGuid)) of
             {ok, Dist} -> {ok, lists:usort(Dist)};
             {error, _} = Error -> Error
         end
@@ -881,7 +833,7 @@ wait_for_file_location_sync(Node, SessId, FileGuid, ExpDistribution) ->
 
 
 %% @private
-get_distribution_test_base(FileType, FilePath, FileGuid, ShareId, ExpDistribution, Config) ->
+get_distribution_test_base(FileType, FileGuid, ShareId, ExpDistribution, Config) ->
     Providers = ?config(op_worker_nodes, Config),
     SortedExpDistribution = lists:usort(ExpDistribution),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
@@ -925,27 +877,6 @@ get_distribution_test_base(FileType, FilePath, FileGuid, ShareId, ExpDistributio
                     type = gs,
                     prepare_args_fun = build_get_distribution_prepare_gs_args_fun(FileGuid, private),
                     validate_result_fun = CreateValidateGsSuccessfulCallFun(op_file)
-                },
-
-                %% TEST DEPRECATED REPLICA ENDPOINTS
-
-                #scenario_template{
-                    name = <<"Get distribution for ", FileType/binary, " using /replicas/ rest endpoint">>,
-                    type = rest_with_file_path,
-                    prepare_args_fun = build_get_replicas_prepare_rest_args_fun(path, FilePath),
-                    validate_result_fun = ValidateRestSuccessfulCallFun
-                },
-                #scenario_template{
-                    name = <<"Get distribution for ", FileType/binary, " using /replicas-id/ rest endpoint">>,
-                    type = rest,
-                    prepare_args_fun = build_get_replicas_prepare_rest_args_fun(id, FileObjectId),
-                    validate_result_fun = ValidateRestSuccessfulCallFun
-                },
-                #scenario_template{
-                    name = <<"Get distribution for ", FileType/binary, " using op_replica gs api">>,
-                    type = gs,
-                    prepare_args_fun = build_get_replicas_prepare_gs_args_fun(FileGuid, private),
-                    validate_result_fun = CreateValidateGsSuccessfulCallFun(op_replica)
                 }
             ],
             data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
@@ -983,60 +914,36 @@ build_get_distribution_prepare_gs_args_fun(FileGuid, Scope) ->
     end.
 
 
-%% @private
--spec build_get_replicas_prepare_rest_args_fun(
-    Endpoint :: id | path,
-    ValidId :: file_meta:path() | file_id:objectid()
-) ->
-    onenv_api_test_runner:prepare_args_fun().
-build_get_replicas_prepare_rest_args_fun(Endpoint, ValidId) ->
-    fun(#api_test_ctx{data = Data}) ->
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(ValidId, Data),
-
-        #rest_args{
-            method = get,
-            path = case Endpoint of
-                id -> <<"replicas-id/", Id/binary>>;
-                path -> <<"replicas", Id/binary>>
-            end
-        }
-    end.
-
-
-%% @private
--spec build_get_replicas_prepare_gs_args_fun(file_id:file_guid(), gri:scope()) ->
-    onenv_api_test_runner:prepare_args_fun().
-build_get_replicas_prepare_gs_args_fun(FileGuid, Scope) ->
-    fun(#api_test_ctx{data = Data}) ->
-        {GriId, _} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data),
-
-        #gs_args{
-            operation = get,
-            gri = #gri{type = op_replica, id = GriId, aspect = distribution, scope = Scope}
-        }
-    end.
-
-
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
 
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite(Config, #onenv_test_config{
+    oct_background:init_per_suite([{?LOAD_MODULES, [dir_stats_test_utils]} | Config], #onenv_test_config{
         onenv_scenario = "api_tests",
-        envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}]
+        envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}],
+        posthook = fun dir_stats_test_utils:disable_stats_counting_ct_posthook/1
     }).
 
 
-end_per_suite(_Config) ->
-    oct_background:end_per_suite().
+end_per_suite(Config) ->
+    oct_background:end_per_suite(),
+    dir_stats_test_utils:enable_stats_counting(Config).
+
+
+init_per_group(_Group, Config) ->
+    lfm_proxy:init(Config, false).
+
+
+end_per_group(_Group, Config) ->
+    lfm_proxy:teardown(Config).
 
 
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 10}),
-    lfm_proxy:init(Config).
+    Config.
 
 
-end_per_testcase(_Case, Config) ->
-    lfm_proxy:teardown(Config).
+end_per_testcase(_Case, _Config) ->
+    ok.

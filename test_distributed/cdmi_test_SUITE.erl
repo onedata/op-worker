@@ -12,9 +12,11 @@
 -module(cdmi_test_SUITE).
 -author("Tomasz Lichon").
 
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/http/headers.hrl").
 
 %% API
 -export([
@@ -214,7 +216,7 @@ create_cdmi_dir_without_cdmi_version_header_should_fail_test(Config) ->
 
 download_empty_file(Config) ->
     [_WorkerP1, WorkerP2] = ?config(op_worker_nodes, Config),
-    AuthHeaders = [rest_test_utils:user_token_header(Config, <<"user1">>)],
+    AuthHeaders = [rest_test_utils:user_token_header(?config({access_token, <<"user1">>}, Config))],
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
 
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
@@ -225,7 +227,7 @@ download_empty_file(Config) ->
     {ok, FileGuid} = lfm_proxy:create(WorkerP2, SessionId, FilePath),
     {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
 
-    ?assertMatch(ok, lfm_proxy:truncate(WorkerP2, SessionId, {guid, FileGuid}, 0)),
+    ?assertMatch(ok, lfm_proxy:truncate(WorkerP2, SessionId, ?FILE_REF(FileGuid), 0)),
 
     {ok, _, _, Response} = ?assertMatch(
         {ok, 200, _Headers, _Response},
@@ -251,7 +253,7 @@ download_empty_file(Config) ->
 
 download_file_in_blocks(Config) ->
     [_WorkerP1, WorkerP2] = Workers = ?config(op_worker_nodes, Config),
-    AuthHeaders = [rest_test_utils:user_token_header(Config, <<"user1">>)],
+    AuthHeaders = [rest_test_utils:user_token_header(?config({access_token, <<"user1">>}, Config))],
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
 
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
@@ -261,7 +263,7 @@ download_file_in_blocks(Config) ->
 
     % Create file
     {ok, Guid} = lfm_proxy:create(WorkerP2, SessionId, FilePath),
-    {ok, Handle} = lfm_proxy:open(WorkerP2, SessionId, {guid, Guid}, write),
+    {ok, Handle} = lfm_proxy:open(WorkerP2, SessionId, ?FILE_REF(Guid), write),
     {ok, _} = lfm_proxy:write(WorkerP2, Handle, 0, Data),
     ok = lfm_proxy:close(WorkerP2, Handle),
 
@@ -287,7 +289,7 @@ download_file_in_blocks(Config) ->
     % remaining bytes.
     set_storage_block_size(Workers, 50),
     DataPart = binary:part(Data, {33, 100}),
-    RangeHeader = {<<"range">>, <<"bytes=33-132">>},    % 33-132 inclusive
+    RangeHeader = {?HDR_RANGE, <<"bytes=33-132">>},    % 33-132 inclusive
     {ok, _, _, Response2} = ?assertMatch(
         {ok, 206, _Headers, _Response},
         cdmi_test_utils:do_request(WorkerP2, FilePath, get, [RangeHeader | AuthHeaders], <<>>)
@@ -312,7 +314,7 @@ download_file_in_blocks(Config) ->
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
         ssl:start(),
-        hackney:start(),
+        application:ensure_all_started(hackney),
         initializer:disable_quota_limit(NewConfig),
         initializer:mock_provider_ids(NewConfig),
         initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig, "env_desc.json"), NewConfig)
@@ -323,7 +325,7 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
-    hackney:stop(),
+    application:stop(hackney),
     ssl:stop().
 
 
@@ -352,8 +354,8 @@ init_per_testcase(_Case, Config) ->
 end_per_testcase(choose_adequate_handler_test = Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     ok = test_utils:mock_unload(Workers, [cdmi_object_handler, cdmi_container_handler]),
-    rpc:multicall(Workers, code, ensure_loaded, [cdmi_object_handler]),
-    rpc:multicall(Workers, code, ensure_loaded, [cdmi_container_handler]),
+    utils:rpc_multicall(Workers, code, ensure_loaded, [cdmi_object_handler]),
+    utils:rpc_multicall(Workers, code, ensure_loaded, [cdmi_container_handler]),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(download_file_in_blocks = Case, Config) ->
@@ -398,5 +400,5 @@ unmock_storage_get_block_size(Workers) ->
 set_storage_block_size(Workers, BlockSize) ->
     ?assertMatch(
         {_, []},
-        rpc:multicall(Workers, node_cache, put, [storage_block_size, BlockSize])
+        utils:rpc_multicall(Workers, node_cache, put, [storage_block_size, BlockSize])
     ).

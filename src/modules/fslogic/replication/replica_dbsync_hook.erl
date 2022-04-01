@@ -32,9 +32,11 @@
 -spec on_file_location_change(file_ctx:ctx(), file_location:doc()) ->
     ok | {error, term()}.
 on_file_location_change(FileCtx, ChangedLocationDoc = #document{
+    key = LocId,
     value = #file_location{
         provider_id = ProviderId,
-        file_id = FileId
+        file_id = FileId,
+        space_id = SpaceId
     }}
 ) ->
     replica_synchronizer:apply(FileCtx, fun() ->
@@ -46,8 +48,33 @@ on_file_location_change(FileCtx, ChangedLocationDoc = #document{
                 FileCtx3 = file_ctx:set_is_dir(FileCtx2, false),
                 case file_ctx:get_local_file_location_doc(FileCtx3) of
                     {undefined, FileCtx4} ->
-                        fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx4, true, []),
-                        qos_hooks:reconcile_qos(FileCtx4);
+                        % If stats are enabled, force creation of local file_location doc
+                        % and call the procedure again so that it triggers update_local_location_replica
+                        % that internally emits events and reconciles QoS. Otherwise, do not create the
+                        % location but still emit events and reconcile QoS.
+                        % TODO VFS-8962 - fix getting file distribution in tests not to differentiate
+                        % spaces with enabled and disabled stats
+                        case dir_stats_collector_config:is_collecting_active(SpaceId) of
+                            true ->
+                                try
+                                    case fslogic_location:create_doc(FileCtx4, false, false) of
+                                        {{ok, _}, FileCtx5} ->
+                                            on_file_location_change(FileCtx5, ChangedLocationDoc);
+                                        {{error, already_exists}, FileCtx5} ->
+                                            on_file_location_change(FileCtx5, ChangedLocationDoc)
+                                    end
+                                catch
+                                    Error:Reason  ->
+                                        % create_doc crashes if file_meta is missing
+                                        % TODO VFS-8952 - add posthook on ancestor if it is missing
+                                        ?debug("~p failure: ~p~p", [?FUNCTION_NAME, Error, Reason]),
+                                        file_meta_posthooks:add_hook(file_ctx:get_logical_uuid_const(FileCtx4), LocId,
+                                            ?MODULE, ?FUNCTION_NAME, [file_ctx:reset(FileCtx), ChangedLocationDoc])
+                                end;
+                            false ->
+                                ok = fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx4, true, []),
+                                ok = qos_hooks:reconcile_qos(FileCtx4)
+                        end;
                     {LocalLocation, FileCtx4} ->
                         update_local_location_replica(FileCtx4, LocalLocation, ChangedLocationDoc)
                 end;
@@ -80,11 +107,9 @@ update_local_location_replica(FileCtx,
         identical -> ok;
         greater -> ok;
         lesser ->
-            update_outdated_local_location_replica(FileCtx, LocalDoc, RemoteDoc),
-            qos_hooks:reconcile_qos(FileCtx);
+            update_outdated_local_location_replica(FileCtx, LocalDoc, RemoteDoc);
         concurrent ->
-            reconcile_replicas(FileCtx, LocalDoc, RemoteDoc),
-            qos_hooks:reconcile_qos(FileCtx)
+            reconcile_replicas(FileCtx, LocalDoc, RemoteDoc)
     end.
 
 %%--------------------------------------------------------------------
@@ -107,7 +132,7 @@ update_outdated_local_location_replica(FileCtx,
     }}
 ) ->
     FirstLocalBlocks = fslogic_location_cache:get_blocks(LocalDoc, #{count => 2}),
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     ?debug("Updating outdated replica of file ~p, versions: ~p vs ~p", [FileGuid, VV1, VV2]),
     LocationDocWithNewVersion = version_vector:merge_location_versions(LocalDoc, ExternalDoc),
     Diff = version_vector:version_diff(LocalDoc, ExternalDoc),
@@ -144,7 +169,7 @@ reconcile_replicas(FileCtx,
         }}
 ) ->
     LocalBlocks = fslogic_location_cache:get_blocks(LocalDoc),
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     ?debug("Conflicting changes detected on file ~p, versions: ~p vs ~p", [FileGuid, VV1, VV2]),
     ExternalChangesNum = version_vector:version_diff(LocalDoc, ExternalDoc),
     LocalChangesNum = version_vector:version_diff(ExternalDoc, LocalDoc),
@@ -214,7 +239,6 @@ reconcile_replicas(FileCtx,
         {{_, LocalNum}, {_, ExternalNum}} when LocalNum < ExternalNum ->
             ExternalRename;
         {{_, LocalNum}, {_, ExternalNum}} when LocalNum =:= ExternalNum ->
-            %% TODO: resolve conflicts in the same way as in file_meta and links
             case version_vector:replica_id_is_greater(LocalDoc, ExternalDoc) of
                 true ->
                     skip;
@@ -228,6 +252,7 @@ reconcile_replicas(FileCtx,
             size = NewSize
         }}, ExternalDoc),
     NewDoc2 = fslogic_location_cache:set_blocks(NewDoc, TruncatedNewBlocks),
+    dir_size_stats:report_reg_file_size_changed(file_ctx:get_referenced_guid_const(FileCtx), total, NewSize - LocalSize),
 
     RenameResult = case Rename of
         skip ->
@@ -245,7 +270,7 @@ reconcile_replicas(FileCtx,
             notify_attrs_change_if_necessary(file_ctx:reset(FileCtx2), LocalDoc, NewDoc2, LocalBlocks);
         {{renamed, RenamedDoc, Uuid, TargetSpaceId}, _} ->
             {ok, _} = fslogic_location_cache:save_location(RenamedDoc),
-            RenamedFileCtx = file_ctx:new_by_guid(file_id:pack_guid(Uuid, TargetSpaceId)),
+            RenamedFileCtx = file_ctx:new_by_uuid(Uuid, TargetSpaceId),
             files_to_chown:chown_or_defer(RenamedFileCtx),
             notify_block_change_if_necessary(RenamedFileCtx, LocalDoc, RenamedDoc),
             notify_attrs_change_if_necessary(RenamedFileCtx, LocalDoc, RenamedDoc, LocalBlocks)
@@ -286,11 +311,13 @@ notify_attrs_change_if_necessary(FileCtx,
         FirstLocalBlocksBeforeUpdate, FirstLocalBlocks, OldSize, NewSize),
     case {ReplicaStatusChanged, OldSize =/= NewSize} of
         {true, SizeChanged} ->
-            ok = fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx, SizeChanged, []);
+            ok = fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx, SizeChanged, []),
+            ok = qos_hooks:reconcile_qos(FileCtx);
         {false, true} ->
-            ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []);
+            ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []),
+            ok = qos_hooks:report_synchronization_skipped(FileCtx);
         {false, false} ->
-            ok
+            ok = qos_hooks:report_synchronization_skipped(FileCtx)
     end.
 
 %%-------------------------------------------------------------------

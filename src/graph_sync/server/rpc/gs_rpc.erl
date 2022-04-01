@@ -33,9 +33,9 @@ handle(Auth, RpcFun, Data) ->
     catch
         throw:{error, _} = Error ->
             Error;
-        Type:Reason ->
+        Type:Reason:Stacktrace ->
             ?error_stacktrace("Unexpected error while processing gs file rpc "
-                              "request - ~p:~p", [Type, Reason]),
+                              "request - ~p:~p", [Type, Reason], Stacktrace),
             ?ERROR_INTERNAL_SERVER_ERROR
     end.
 

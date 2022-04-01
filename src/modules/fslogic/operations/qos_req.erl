@@ -13,6 +13,8 @@
 -author("Michal Cwiertnia").
 
 -include("modules/datastore/qos.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -26,6 +28,11 @@
     check_status/3
 ]).
 
+-type eff_file_qos() :: {#{qos_entry:id() => qos_status:summary()}, file_qos:assigned_entries()}.
+
+-export_type([eff_file_qos/0]).
+
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -36,12 +43,12 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec add_qos_entry(user_ctx:ctx(), file_ctx:ctx(), qos_expression:expression(),
-    qos_entry:replicas_num(), qos_entry:type()) -> fslogic_worker:provider_response().
+    qos_entry:replicas_num(), qos_entry:type()) -> {ok, qos_entry:id()} | errors:error().
 add_qos_entry(UserCtx, FileCtx, Expression, ReplicasNum, EntryType) ->
     file_ctx:assert_not_trash_dir_const(FileCtx),
+    data_constraints:assert_not_readonly_mode(UserCtx),
     FileCtx1 = fslogic_authz:ensure_authorized(
-        UserCtx, FileCtx,
-        [traverse_ancestors, ?write_metadata]
+        UserCtx, FileCtx, [?TRAVERSE_ANCESTORS]
     ),
     add_qos_entry_insecure(FileCtx1, Expression, ReplicasNum, EntryType).
 
@@ -51,11 +58,10 @@ add_qos_entry(UserCtx, FileCtx, Expression, ReplicasNum, EntryType) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_effective_file_qos(user_ctx:ctx(), file_ctx:ctx()) ->
-    fslogic_worker:provider_response().
+    {ok, eff_file_qos()} | errors:error().
 get_effective_file_qos(UserCtx, FileCtx0) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
-        UserCtx, FileCtx0,
-        [traverse_ancestors, ?read_metadata]
+        UserCtx, FileCtx0, [?TRAVERSE_ANCESTORS]
     ),
     get_effective_file_qos_insecure(FileCtx1).
 
@@ -65,11 +71,10 @@ get_effective_file_qos(UserCtx, FileCtx0) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_qos_entry(user_ctx:ctx(), file_ctx:ctx(), qos_entry:id()) ->
-    fslogic_worker:provider_response().
+    {ok, qos_entry:record()} | errors:error().
 get_qos_entry(UserCtx, FileCtx0, QosEntryId) ->
     fslogic_authz:ensure_authorized(
-        UserCtx, FileCtx0,
-        [traverse_ancestors, ?read_metadata]
+        UserCtx, FileCtx0, [?TRAVERSE_ANCESTORS]
     ),
     get_qos_entry_insecure(QosEntryId).
 
@@ -79,11 +84,11 @@ get_qos_entry(UserCtx, FileCtx0, QosEntryId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_qos_entry(user_ctx:ctx(), file_ctx:ctx(), qos_entry:id()) ->
-    fslogic_worker:provider_response().
+    ok | errors:error().
 remove_qos_entry(UserCtx, FileCtx0, QosEntryId) ->
+    data_constraints:assert_not_readonly_mode(UserCtx),
     fslogic_authz:ensure_authorized(
-        UserCtx, FileCtx0,
-        [traverse_ancestors, ?write_metadata]
+        UserCtx, FileCtx0, [?TRAVERSE_ANCESTORS]
     ),
     remove_qos_entry_insecure(UserCtx, QosEntryId).
 
@@ -93,13 +98,10 @@ remove_qos_entry(UserCtx, FileCtx0, QosEntryId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec check_status(user_ctx:ctx(), file_ctx:ctx(), qos_entry:id()) ->
-    fslogic_worker:provider_response().
+    {ok, qos_status:summary()}.
 check_status(UserCtx, FileCtx0, QosEntryId) ->
-    FileCtx1 = fslogic_authz:ensure_authorized(
-        UserCtx, FileCtx0,
-        [traverse_ancestors, ?read_metadata]
-    ),
-    check_status_insecure(FileCtx1, QosEntryId).
+    FileCtx = fslogic_authz:ensure_authorized(UserCtx, FileCtx0, [?TRAVERSE_ANCESTORS]),
+    {ok, qos_status:check(FileCtx, QosEntryId)}.
 
 
 %%%===================================================================
@@ -118,7 +120,7 @@ check_status(UserCtx, FileCtx0, QosEntryId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec add_qos_entry_insecure(file_ctx:ctx(), qos_expression:expression(), qos_entry:replicas_num(), 
-    qos_entry:type()) -> fslogic_worker:provider_response().
+    qos_entry:type()) -> {ok, qos_entry:id()} | errors:error().
 add_qos_entry_insecure(FileCtx, Expression, ReplicasNum, EntryType) ->
     % TODO: VFS-5567 for now target storage for dir is selected here and
     % does not change in qos traverse task. Have to figure out how to
@@ -142,38 +144,28 @@ add_qos_entry_insecure(FileCtx, Expression, ReplicasNum, EntryType) ->
 %% if there is no QoS entry that influences file/directory.
 %% @end
 %%--------------------------------------------------------------------
--spec get_effective_file_qos_insecure(file_ctx:ctx()) -> fslogic_worker:provider_response().
+-spec get_effective_file_qos_insecure(file_ctx:ctx()) ->
+    {ok, eff_file_qos()} | errors:error().
 get_effective_file_qos_insecure(FileCtx) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     case file_qos:get_effective(FileUuid) of
         {ok, EffQos} ->
             case file_qos:is_in_trash(EffQos) of
                 true ->
-                    #provider_response{
-                        status = #status{code = ?OK},
-                        provider_response = #eff_qos_response{}
-                    };
+                    {ok, {#{}, #{}}};
                 false ->
                     QosEntriesList = file_qos:get_qos_entries(EffQos),
                     EntriesWithStatus = lists:foldl(fun(QosEntryId, Acc) ->
                         Status = qos_status:check(FileCtx, QosEntryId),
                         Acc#{QosEntryId => Status}
                     end, #{}, QosEntriesList),
-                    #provider_response{
-                        status = #status{code = ?OK},
-                        provider_response = #eff_qos_response{
-                            entries_with_status = EntriesWithStatus,
-                            assigned_entries = file_qos:get_assigned_entries(EffQos)
-                        }
-                    }
+
+                    {ok, {EntriesWithStatus, file_qos:get_assigned_entries(EffQos)}}
             end;
         undefined ->
-            #provider_response{
-                status = #status{code = ?OK},
-                provider_response = #eff_qos_response{}
-            };
+            {ok, {#{}, #{}}};
         {error, _} ->
-            #provider_response{status = #status{code = ?EAGAIN}}
+            ?ERROR_TEMPORARY_FAILURE
     end.
 
 
@@ -184,13 +176,13 @@ get_effective_file_qos_insecure(FileCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_qos_entry_insecure(qos_entry:id()) ->
-    fslogic_worker:provider_response().
+    {ok, qos_entry:record()} | errors:error().
 get_qos_entry_insecure(QosEntryId) ->
     case qos_entry:get(QosEntryId) of
         {ok, #document{value = QosEntry}} ->
-            #provider_response{status = #status{code = ?OK}, provider_response = QosEntry};
+            {ok, QosEntry};
         {error, _} ->
-            #provider_response{status = #status{code = ?EAGAIN}}
+            ?ERROR_TEMPORARY_FAILURE
     end.
 
 
@@ -201,7 +193,7 @@ get_qos_entry_insecure(QosEntryId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec remove_qos_entry_insecure(user_ctx:ctx(), qos_entry:id()) ->
-    fslogic_worker:provider_response().
+    ok | errors:error().
 remove_qos_entry_insecure(UserCtx, QosEntryId) ->
     {ok, QosDoc} = qos_entry:get(QosEntryId),
     
@@ -211,27 +203,10 @@ remove_qos_entry_insecure(UserCtx, QosEntryId) ->
             % TODO: VFS-5567 For now QoS entry is added only for file or dir
             % for which it has been added, so starting traverse is not needed.
             ok = qos_hooks:handle_entry_delete(QosDoc),
-            ok = qos_entry:delete(QosEntryId),
-            #provider_response{status = #status{code = ?OK}};
+            ok = qos_entry:delete(QosEntryId);
         false ->
-            #provider_response{status = #status{code = ?EACCES}}
+            ?ERROR_FORBIDDEN
     end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Checks status of requirements defined in given qos_entry.
-%% @end
-%%--------------------------------------------------------------------
--spec check_status_insecure(file_ctx:ctx(), qos_entry:id()) ->
-    fslogic_worker:provider_response().
-check_status_insecure(FileCtx, QosEntryId) ->
-    QosStatus = qos_status:check(FileCtx, QosEntryId),
-
-    #provider_response{status = #status{code = ?OK}, provider_response = #qos_status_response{
-        status = QosStatus
-    }}.
 
 
 %%%===================================================================
@@ -246,25 +221,22 @@ check_status_insecure(FileCtx, QosEntryId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec add_possible_qos(file_ctx:ctx(), qos_expression:expression(), qos_entry:replicas_num(), 
-    qos_entry:type(), [storage:id()]) -> fslogic_worker:provider_response().
+    qos_entry:type(), [storage:id()]) -> {ok, qos_entry:id()} | errors:error().
 add_possible_qos(FileCtx, QosExpression, ReplicasNum, EntryType, Storages) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    InodeUuid = file_ctx:get_referenced_uuid_const(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
 
-    AllTraverseReqs = qos_traverse_req:build_traverse_reqs(FileUuid, Storages),
+    AllTraverseReqs = qos_traverse_req:build_traverse_reqs(InodeUuid, Storages),
 
     case qos_entry:create(
-        SpaceId, FileUuid, QosExpression, ReplicasNum, EntryType, true, AllTraverseReqs
+        SpaceId, InodeUuid, QosExpression, ReplicasNum, EntryType, true, AllTraverseReqs
     ) of
-        {ok, QosEntryId} ->
-            file_qos:add_qos_entry_id(SpaceId, FileUuid, QosEntryId),
+        {ok, QosEntryId} = Result ->
+            file_qos:add_qos_entry_id(SpaceId, InodeUuid, QosEntryId),
             qos_traverse_req:start_applicable_traverses(QosEntryId, SpaceId, AllTraverseReqs),
-            #provider_response{
-                status = #status{code = ?OK},
-                provider_response = #qos_entry_id{id = QosEntryId}
-            };
+            Result;
         _ ->
-            #provider_response{status = #status{code = ?EAGAIN}}
+            ?ERROR_TEMPORARY_FAILURE
     end.
 
 
@@ -275,18 +247,15 @@ add_possible_qos(FileCtx, QosExpression, ReplicasNum, EntryType, Storages) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec add_impossible_qos(file_ctx:ctx(), qos_expression:expression(), qos_entry:replicas_num(), 
-    qos_entry:type()) -> fslogic_worker:provider_response().
+    qos_entry:type()) -> {ok, qos_entry:id()} | errors:error().
 add_impossible_qos(FileCtx, QosExpression, ReplicasNum, EntryType) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    InodeUuid = file_ctx:get_referenced_uuid_const(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
 
-    case qos_entry:create(SpaceId, FileUuid, QosExpression, ReplicasNum, EntryType) of
-        {ok, QosEntryId} ->
-            ok = file_qos:add_qos_entry_id(SpaceId, FileUuid, QosEntryId),
-            #provider_response{
-                status = #status{code = ?OK},
-                provider_response = #qos_entry_id{id = QosEntryId}
-            };
+    case qos_entry:create(SpaceId, InodeUuid, QosExpression, ReplicasNum, EntryType) of
+        {ok, QosEntryId} = Result ->
+            ok = file_qos:add_qos_entry_id(SpaceId, InodeUuid, QosEntryId),
+            Result;
         _ ->
-            #provider_response{status = #status{code = ?EAGAIN}}
+            ?ERROR_TEMPORARY_FAILURE
     end.

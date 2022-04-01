@@ -16,6 +16,7 @@
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -105,7 +106,7 @@ dbsync_trigger_should_not_create_local_file_location(Config) ->
     ),
     ?assertMatch(
         {ok, _},
-        rpc:call(W1, times, create, [#document{
+        rpc:call(W1, times, save, [#document{
             key = FileUuid,
             value = #times{
                 atime = CTime,
@@ -155,7 +156,7 @@ local_file_location_should_have_correct_uid_for_local_user(Config) ->
     ),
     ?assertMatch(
         {ok, _},
-        rpc:call(W1, times, create, [#document{
+        rpc:call(W1, times, save, [#document{
             key = FileUuid,
             value = #times{
                 atime = CTime,
@@ -168,7 +169,7 @@ local_file_location_should_have_correct_uid_for_local_user(Config) ->
     {ok, FileToCompareGUID} =
         lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/file_to_compare">>),
     {ok, Handle} =
-        lfm_proxy:open(W1, SessionId, {guid, FileToCompareGUID}, read), % open in order to create storage file
+        lfm_proxy:open(W1, SessionId, ?FILE_REF(FileToCompareGUID), read), % open in order to create storage file
     lfm_proxy:close(W1, Handle),
     FileToCompareUUID = file_id:guid_to_uuid(FileToCompareGUID),
 
@@ -180,7 +181,7 @@ local_file_location_should_have_correct_uid_for_local_user(Config) ->
     rpc:call(W1, dbsync_events, change_replicated,
         [SpaceId, #document{key = FileUuid, value = FileMeta}]),
     FileGuid = file_id:pack_guid(FileUuid, SpaceId),
-    {ok, Handle2} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, read),
+    {ok, Handle2} = lfm_proxy:open(W1, SessionId, ?FILE_REF(FileGuid), read),
     lfm_proxy:close(W1, Handle2),
 
     %then
@@ -220,7 +221,7 @@ local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
     ),
     ?assertMatch(
         {ok, _},
-        rpc:call(W1, times, create, [#document{
+        rpc:call(W1, times, save, [#document{
             key = FileUuid,
             value = #times{
                 atime = CTime,
@@ -233,7 +234,7 @@ local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
     {ok, FileToCompareGUID} =
         lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/file_to_compare">>),
     {ok, Handle} =
-        lfm_proxy:open(W1, SessionId, {guid, FileToCompareGUID}, read), % open in order to create storage file
+        lfm_proxy:open(W1, SessionId, ?FILE_REF(FileToCompareGUID), read), % open in order to create storage file
     lfm_proxy:close(W1, Handle),
     FileToCompareUUID = file_id:guid_to_uuid(FileToCompareGUID),
 
@@ -246,7 +247,7 @@ local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
         [SpaceId, #document{key = FileUuid, value = FileMeta}]),
 
     FileGuid1 = file_id:pack_guid(FileUuid, SpaceId), % create deferred storage files
-    {ok, Handle1} = lfm_proxy:open(W1, SessionId, {guid, FileGuid1}, read),
+    {ok, Handle1} = lfm_proxy:open(W1, SessionId, ?FILE_REF(FileGuid1), read),
     lfm_proxy:close(W1, Handle1),
 
     % Simulate new user appearing
@@ -273,7 +274,7 @@ write_should_add_blocks_to_file_location(Config) ->
     {ok, FileGuid} =
         lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>),
     FileUuid = file_id:guid_to_uuid(FileGuid),
-    {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
+    {ok, Handle} = lfm_proxy:open(W1, SessionId, ?FILE_REF(FileGuid), rdwr),
 
     %when
     ?assertMatch({ok, 10}, lfm_proxy:write(W1, Handle, 0, <<"0123456789">>)),
@@ -326,11 +327,11 @@ truncate_should_change_size_and_blocks(Config) ->
     {ok, FileGuid} =
         lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>),
     FileUuid = file_id:guid_to_uuid(FileGuid),
-    {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
+    {ok, Handle} = lfm_proxy:open(W1, SessionId, ?FILE_REF(FileGuid), rdwr),
     ?assertMatch({ok, 10}, lfm_proxy:write(W1, Handle, 0, <<"0123456789">>)),
 
     %when
-    ?assertMatch(ok, lfm_proxy:truncate(W1, SessionId, {guid, FileGuid}, 6)),
+    ?assertMatch(ok, lfm_proxy:truncate(W1, SessionId, ?FILE_REF(FileGuid), 6)),
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
 
     %then
@@ -357,7 +358,7 @@ write_and_truncate_should_not_update_remote_file_location(Config) ->
     {ok, FileGuid} =
         lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>),
     FileUuid = file_id:guid_to_uuid(FileGuid),
-    {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
+    {ok, Handle} = lfm_proxy:open(W1, SessionId, ?FILE_REF(FileGuid), rdwr),
     ?assertMatch({ok, 10}, lfm_proxy:write(W1, Handle, 0, <<"0123456789">>)),
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
     RemoteLocation = #file_location{
@@ -378,7 +379,7 @@ write_and_truncate_should_not_update_remote_file_location(Config) ->
 
     % when
     ?assertMatch({ok, 2}, lfm_proxy:write(W1, Handle, 1, <<"00">>)),
-    ?assertMatch(ok, lfm_proxy:truncate(W1, SessionId, {guid, FileGuid}, 8)),
+    ?assertMatch(ok, lfm_proxy:truncate(W1, SessionId, ?FILE_REF(FileGuid), 8)),
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
 
     % then
@@ -393,7 +394,7 @@ update_should_bump_replica_version(Config) ->
     {ok, FileGuid} =
         lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>),
     FileUuid = file_id:guid_to_uuid(FileGuid),
-    {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
+    {ok, Handle} = lfm_proxy:open(W1, SessionId, ?FILE_REF(FileGuid), rdwr),
 
     %when
     ?assertMatch({ok, 2}, lfm_proxy:write(W1, Handle, 0, <<"01">>)),
@@ -424,11 +425,11 @@ update_should_bump_replica_version(Config) ->
     ),
 
     %when
-    ?assertMatch(ok, lfm_proxy:truncate(W1, SessionId, {guid, FileGuid}, 2)),
+    ?assertMatch(ok, lfm_proxy:truncate(W1, SessionId, ?FILE_REF(FileGuid), 2)),
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
     ?assertMatch({ok, 2}, lfm_proxy:write(W1, Handle, 0, <<"00">>)),
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
-    ?assertMatch(ok, lfm_proxy:truncate(W1, SessionId, {guid, FileGuid}, 0)),
+    ?assertMatch(ok, lfm_proxy:truncate(W1, SessionId, ?FILE_REF(FileGuid), 0)),
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
     ?assertMatch({ok, 2}, lfm_proxy:write(W1, Handle, 0, <<"00">>)),
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
@@ -445,6 +446,8 @@ read_should_synchronize_file(Config) ->
     LocalProviderId = rpc:call(W1, oneprovider, get_id, []),
     ExternalProviderId = <<"external_provider_id">>,
     ExternalFileId = <<"external_file_id">>,
+
+    override_space_providers_mock(Config, Workers, SpaceId, [LocalProviderId, ExternalProviderId]),
 
     % create test file
     {ok, FileGuid} =
@@ -493,10 +496,8 @@ read_should_synchronize_file(Config) ->
         end
     ),
 
-    override_space_providers_mock(Config, Workers, SpaceId, [LocalProviderId, ExternalProviderId]),
-
     % when
-    {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
+    {ok, Handle} = lfm_proxy:open(W1, SessionId, ?FILE_REF(FileGuid), rdwr),
     Ans = lfm_proxy:read(W1, Handle, 1, 3),
 
     % then
@@ -527,7 +528,7 @@ external_change_should_invalidate_blocks(Config) ->
     {ok, FileGuid} =
         lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>),
     FileUuid = file_id:guid_to_uuid(FileGuid),
-    {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
+    {ok, Handle} = lfm_proxy:open(W1, SessionId, ?FILE_REF(FileGuid), rdwr),
     ?assertMatch({ok, 10}, lfm_proxy:write(W1, Handle, 0, <<"0123456789">>)),
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
 
@@ -584,7 +585,7 @@ update_should_save_recent_changes(Config) ->
     {ok, FileGuid} =
         lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>),
     FileUuid = file_id:guid_to_uuid(FileGuid),
-    {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
+    {ok, Handle} = lfm_proxy:open(W1, SessionId, ?FILE_REF(FileGuid), rdwr),
 
     %when
     ?assertMatch({ok, 2}, lfm_proxy:write(W1, Handle, 0, <<"01">>)),
@@ -613,11 +614,11 @@ update_should_save_recent_changes(Config) ->
     ),
 
     %when
-    ?assertMatch(ok, lfm_proxy:truncate(W1, SessionId, {guid, FileGuid}, 2)),
+    ?assertMatch(ok, lfm_proxy:truncate(W1, SessionId, ?FILE_REF(FileGuid), 2)),
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
     ?assertMatch({ok, 2}, lfm_proxy:write(W1, Handle, 0, <<"00">>)),
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
-    ?assertMatch(ok, lfm_proxy:truncate(W1, SessionId, {guid, FileGuid}, 0)),
+    ?assertMatch(ok, lfm_proxy:truncate(W1, SessionId, ?FILE_REF(FileGuid), 0)),
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
     ?assertMatch({ok, 2}, lfm_proxy:write(W1, Handle, 0, <<"00">>)),
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
@@ -649,7 +650,7 @@ remote_change_should_invalidate_only_updated_part_of_file(Config) ->
     {ok, FileGuid} =
         lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>),
     FileUuid = file_id:guid_to_uuid(FileGuid),
-    {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
+    {ok, Handle} = lfm_proxy:open(W1, SessionId, ?FILE_REF(FileGuid), rdwr),
     ?assertMatch({ok, 10}, lfm_proxy:write(W1, Handle, 0, <<"0123456789">>)),
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
 
@@ -732,7 +733,7 @@ remote_change_without_history_should_invalidate_whole_data(Config) ->
     {ok, FileGuid} =
         lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>),
     FileUuid = file_id:guid_to_uuid(FileGuid),
-    {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
+    {ok, Handle} = lfm_proxy:open(W1, SessionId, ?FILE_REF(FileGuid), rdwr),
     ?assertMatch({ok, 10}, lfm_proxy:write(W1, Handle, 0, <<"0123456789">>)),
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
 
@@ -803,7 +804,7 @@ remote_change_of_size_should_notify_clients(Config) ->
     {ok, FileGuid} =
         lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>),
     FileUuid = file_id:guid_to_uuid(FileGuid),
-    {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
+    {ok, Handle} = lfm_proxy:open(W1, SessionId, ?FILE_REF(FileGuid), rdwr),
     ?assertMatch({ok, 10}, lfm_proxy:write(W1, Handle, 0, <<"0123456789">>)),
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
 
@@ -845,7 +846,7 @@ remote_change_of_size_should_notify_clients(Config) ->
 
     % then
     TheFileCtxWithGuid = fun(FileCtx) ->
-        FileGuid =:= file_ctx:get_guid_const(FileCtx)
+        FileGuid =:= file_ctx:get_logical_guid_const(FileCtx)
     end,
     ?assert(rpc:call(W1, meck, called, [fslogic_event_emitter, emit_file_attr_changed,
         [meck:is(TheFileCtxWithGuid), []]])),
@@ -862,7 +863,7 @@ remote_change_of_blocks_should_notify_clients(Config) ->
     {ok, FileGuid} =
         lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>),
     FileUuid = file_id:guid_to_uuid(FileGuid),
-    {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
+    {ok, Handle} = lfm_proxy:open(W1, SessionId, ?FILE_REF(FileGuid), rdwr),
     ?assertMatch({ok, 10}, lfm_proxy:write(W1, Handle, 0, <<"0123456789">>)),
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
 
@@ -917,7 +918,7 @@ remote_irrelevant_change_should_not_notify_clients(Config) ->
     {ok, FileGuid} =
         lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>),
     FileUuid = file_id:guid_to_uuid(FileGuid),
-    {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
+    {ok, Handle} = lfm_proxy:open(W1, SessionId, ?FILE_REF(FileGuid), rdwr),
     ?assertMatch({ok, 10}, lfm_proxy:write(W1, Handle, 0, <<"0123456789">>)),
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
 
@@ -988,7 +989,7 @@ conflicting_remote_changes_should_be_reconciled(Config) ->
     {ok, FileGuid} =
         lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>),
     FileUuid = file_id:guid_to_uuid(FileGuid),
-    {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, rdwr),
+    {ok, Handle} = lfm_proxy:open(W1, SessionId, ?FILE_REF(FileGuid), rdwr),
     ?assertMatch({ok, 10}, lfm_proxy:write(W1, Handle, 0, <<"0123456789">>)),
     ?assertMatch(ok, lfm_proxy:fsync(W1, Handle)),
 
@@ -1074,7 +1075,7 @@ replica_invalidate_should_migrate_unique_data(Config) ->
     % create test file
     {ok, FileGuid} =
         lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>),
-    {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, write),
+    {ok, Handle} = lfm_proxy:open(W1, SessionId, ?FILE_REF(FileGuid), write),
     {ok, 10} = lfm_proxy:write(W1, Handle, 0, <<"0123456789">>),
     ok = lfm_proxy:close(W1, Handle),
 
@@ -1108,19 +1109,19 @@ replica_invalidate_should_migrate_unique_data(Config) ->
         fun(_SessId, _FileKey, _ProviderId) -> ok end),
 
     % when
-    ok = lfm_proxy:schedule_file_replica_eviction(W1, SessionId, {guid, FileGuid}, LocalProviderId, ExternalProviderId),
-    {ok, Handle2} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, write),
+    {ok, _} = opt_transfers:schedule_file_replica_eviction(W1, SessionId, ?FILE_REF(FileGuid), LocalProviderId, ExternalProviderId),
+    {ok, Handle2} = lfm_proxy:open(W1, SessionId, ?FILE_REF(FileGuid), write),
     {ok, 10} = lfm_proxy:write(W1, Handle2, 0, <<"0123456789">>),
     ok = lfm_proxy:close(W1, Handle2),
 
     % then
-    test_utils:mock_assert_num_calls(W1, lfm, schedule_file_replication, [SessionId, {guid, FileGuid}, ExternalProviderId], 1),
+    test_utils:mock_assert_num_calls(W1, lfm, schedule_file_replication, [SessionId, ?FILE_REF(FileGuid), ExternalProviderId], 1),
 
     % when
-    ok = lfm_proxy:schedule_file_replica_eviction(W1, SessionId, {guid, FileGuid}, LocalProviderId, undefined),
+    {ok, _} = opt_transfers:schedule_file_replica_eviction(W1, SessionId, ?FILE_REF(FileGuid), LocalProviderId, undefined),
 
     % then
-    test_utils:mock_assert_num_calls(W1, lfm, schedule_file_replication, [SessionId, {guid, FileGuid}, ExternalProviderId], 1),
+    test_utils:mock_assert_num_calls(W1, lfm, schedule_file_replication, [SessionId, ?FILE_REF(FileGuid), ExternalProviderId], 1),
     test_utils:mock_validate_and_unload(Workers, [od_space, lfm]).
 
 replica_invalidate_should_truncate_storage_file_to_zero_size(Config) ->
@@ -1134,7 +1135,7 @@ replica_invalidate_should_truncate_storage_file_to_zero_size(Config) ->
     % create test file
     {ok, FileGuid} =
         lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/test_file">>),
-    {ok, Handle} = lfm_proxy:open(W1, SessionId, {guid, FileGuid}, write),
+    {ok, Handle} = lfm_proxy:open(W1, SessionId, ?FILE_REF(FileGuid), write),
     {ok, 10} = lfm_proxy:write(W1, Handle, 0, <<"0123456789">>),
     ok = lfm_proxy:close(W1, Handle),
     FileCtx = file_ctx:new_by_guid(FileGuid),
@@ -1170,7 +1171,7 @@ replica_invalidate_should_truncate_storage_file_to_zero_size(Config) ->
 
     % when
     ?assertMatch({ok, #statbuf{st_size = 10}}, rpc:call(W1, storage_driver, stat, [SDHandle])),
-    ok = lfm_proxy:schedule_file_replica_eviction(W1, SessionId, {guid, FileGuid}, LocalProviderId, ExternalProviderId),
+    {ok, _} = opt_transfers:schedule_file_replica_eviction(W1, SessionId, ?FILE_REF(FileGuid), LocalProviderId, ExternalProviderId),
 
     % then
     ?assertMatch({undefined, _}, rpc:call(W1, file_ctx, get_local_file_location_doc, [FileCtx])),
@@ -1189,14 +1190,14 @@ dir_replica_invalidate_should_invalidate_all_children(Config) ->
     {ok, DirGuid} = lfm_proxy:mkdir(W1, SessionId, <<SpaceName/binary, "/dir">>),
 
     {ok, FileGuid1} = lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/dir/file1">>),
-    {ok, Handle1} = lfm_proxy:open(W1, SessionId, {guid, FileGuid1}, write),
+    {ok, Handle1} = lfm_proxy:open(W1, SessionId, ?FILE_REF(FileGuid1), write),
     {ok, 10} = lfm_proxy:write(W1, Handle1, 0, <<"0123456789">>),
     ok = lfm_proxy:close(W1, Handle1),
 
     {ok, _Dir2Guid} = lfm_proxy:mkdir(W1, SessionId, <<SpaceName/binary, "/dir/dir2">>),
 
     {ok, FileGuid2} = lfm_proxy:create(W1, SessionId, <<SpaceName/binary, "/dir/dir2/file2">>),
-    {ok, Handle2} = lfm_proxy:open(W1, SessionId, {guid, FileGuid2}, write),
+    {ok, Handle2} = lfm_proxy:open(W1, SessionId, ?FILE_REF(FileGuid2), write),
     {ok, 10} = lfm_proxy:write(W1, Handle2, 0, <<"0123456789">>),
     ok = lfm_proxy:close(W1, Handle2),
 
@@ -1253,7 +1254,7 @@ dir_replica_invalidate_should_invalidate_all_children(Config) ->
     % when
     ?assertMatch({ok, #statbuf{st_size = 10}}, rpc:call(W1, storage_driver, stat, [SDHandle1])),
     ?assertMatch({ok, #statbuf{st_size = 10}}, rpc:call(W1, storage_driver, stat, [SDHandle2])),
-    ok = lfm_proxy:schedule_file_replica_eviction(W1, SessionId, {guid, DirGuid}, LocalProviderId, ExternalProviderId),
+    {ok, _} = opt_transfers:schedule_file_replica_eviction(W1, SessionId, ?FILE_REF(DirGuid), LocalProviderId, ExternalProviderId),
 
     % then
     ?assertMatch({ok, #statbuf{st_size = 0}}, rpc:call(W1, storage_driver, stat, [SDHandle1])),
@@ -1283,7 +1284,7 @@ init_per_testcase(local_file_location_should_be_chowned_when_missing_user_appear
     init_per_testcase(default, Config);
 init_per_testcase(_Case, Config) ->
     ssl:start(),
-    hackney:start(),
+    application:ensure_all_started(hackney),
     initializer:disable_quota_limit(Config),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(ConfigWithSessionInfo).
@@ -1296,7 +1297,7 @@ end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config),
     initializer:unload_quota_mocks(Config),
     initializer:clean_test_users_and_spaces_no_validate(Config),
-    hackney:stop(),
+    application:stop(hackney),
     ssl:stop().
 
 %%%===================================================================
@@ -1319,6 +1320,9 @@ get_storage_file_id_by_uuid(Worker, FileUuid) ->
 % Given that this just overrides the mock from initializer, no need to unmock
 % (this will be done in test cleanup).
 override_space_providers_mock(Config, Workers, SpaceId, Providers) ->
+    UserSpaces = ?config({spaces, <<"user1">>}, Config),
+    SpaceName = ?config(SpaceId, UserSpaces),
+
     test_utils:mock_unload(Workers, [space_logic]),
     test_utils:mock_new(Workers, space_logic, []),
     test_utils:mock_expect(Workers, space_logic, is_owner, fun(_, _) -> false end),
@@ -1329,6 +1333,14 @@ override_space_providers_mock(Config, Workers, SpaceId, Providers) ->
     test_utils:mock_expect(Workers, space_logic, has_eff_privilege,
         fun(SpId, UsId, Privilege) ->
             SpId =:= SpaceId andalso UsId =:= <<"user1">> andalso lists:member(Privilege, privileges:space_privileges())
+        end),
+    test_utils:mock_expect(Workers, space_logic, get_eff_privileges,
+        fun(_SpId, _UsId) ->
+            {ok, privileges:space_privileges()}
+        end),
+    test_utils:mock_expect(Workers, space_logic, get_name,
+        fun(_, SpId) when SpId =:= SpaceId ->
+            {ok, SpaceName}
         end),
     test_utils:mock_expect(Workers, space_logic, get_provider_ids,
         fun(_Client, SpId) when SpId =:= SpaceId ->

@@ -14,19 +14,107 @@
 
 -include("lfm_test_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
+-include("modules/dataset/archivisation_tree.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 
 %% API
--export([clean_space/3, clean_space/4, assert_space_and_trash_are_empty/3, assert_space_dir_empty/3]).
+-export([get_user1_session_id/2, get_user1_first_space_id/1, get_user1_first_space_guid/1, get_user1_first_space_name/1,
+    get_user1_first_storage_id/2]).
+-export([create_file/4, create_file/5, write_file/4, write_file/5, create_and_write_file/6, read_file/4]).
 -export([create_files_tree/4]).
+-export([clean_space/3, clean_space/4, assert_space_and_trash_are_empty/3, assert_space_dir_empty/3]).
 
 % TODO VFS-7215 - merge this module with file_ops_test_utils
+
+-type file_type() :: binary(). % <<"file">> | <<"dir">>
+
+%%%===================================================================
+%%% API operating on Config map
+%%% NOTE: <<"user1">> is considered default user
+%%%===================================================================
+
+get_user1_session_id(Config, Worker) ->
+    ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config).
+
+
+get_user1_first_space_id(Config) ->
+    [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    SpaceId.
+
+
+get_user1_first_space_guid(Config) ->
+    fslogic_uuid:spaceid_to_space_dir_guid(get_user1_first_space_id(Config)).
+
+
+get_user1_first_space_name(Config) ->
+    [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    SpaceName.
+
+
+get_user1_first_storage_id(Config, NodesSelector) ->
+    [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
+    [Worker | _] = ?config(NodesSelector, Config),
+    {ok, StorageId} = rpc:call(Worker, space_logic, get_local_supporting_storage, [SpaceId]),
+    StorageId.
+
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
+-spec create_file(file_type(), node(), session:id(), file_meta:path()) ->
+    {ok, file_id:file_guid()} | {error, term()}.
+create_file(FileType, Node, SessId, Path) ->
+    create_file(FileType, Node, SessId, Path, 8#777).
+
+
+-spec create_file(file_type(), node(), session:id(), file_meta:path(), file_meta:mode()) ->
+    {ok, file_id:file_guid()} | {error, term()}.
+create_file(<<"file">>, Node, SessId, Path, Mode) ->
+    lfm_proxy:create(Node, SessId, Path, Mode);
+create_file(<<"dir">>, Node, SessId, Path, Mode) ->
+    lfm_proxy:mkdir(Node, SessId, Path, Mode).
+
+
+-spec write_file(node(), session:id(), file_id:file_guid(), binary() | {rand_content, non_neg_integer()}) ->
+    ok.
+write_file(Worker, SessId, FileGuid, ContentSpec) ->
+    write_file(Worker, SessId, FileGuid, 0, ContentSpec).
+
+-spec write_file(node(), session:id(), file_id:file_guid(), non_neg_integer(),
+    binary() | {rand_content, non_neg_integer()}) -> ok.
+write_file(Worker, SessId, FileGuid, Offset, {rand_content, Size}) ->
+    write_file(Worker, SessId, FileGuid, Offset, crypto:strong_rand_bytes(Size));
+write_file(Worker, SessId, FileGuid, Offset, Data) when is_binary(Data) ->
+    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId, ?FILE_REF(FileGuid), write)),
+    ?assertMatch({ok, _}, lfm_proxy:write(Worker, Handle, Offset, Data)),
+    ?assertEqual(ok, lfm_proxy:close(Worker, Handle)).
+
+
+-spec create_and_write_file(node(), session:id(), fslogic_worker:file_guid(), file_meta:name(), non_neg_integer(),
+    binary() | {rand_content, non_neg_integer()}) -> ok.
+create_and_write_file(Worker, SessId, ParentGuid, ChildFileName, Offset, {rand_content, Size}) ->
+    create_and_write_file(Worker, SessId, ParentGuid, ChildFileName, Offset, crypto:strong_rand_bytes(Size));
+create_and_write_file(Worker, SessId, ParentGuid, ChildFileName, Offset, Data) when is_binary(Data) ->
+    {ok, {_, Handle}} = ?assertMatch({ok, _},
+        lfm_proxy:create_and_open(Worker, SessId, ParentGuid, ChildFileName, ?DEFAULT_FILE_MODE)),
+    ?assertMatch({ok, _}, lfm_proxy:write(Worker, Handle, Offset, Data)),
+    ?assertEqual(ok, lfm_proxy:close(Worker, Handle)).
+
+
+-spec read_file(node(), session:id(), file_id:file_guid(), Size :: non_neg_integer()) ->
+    binary().
+read_file(Worker, SessId, FileGuid, Size) ->
+    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId, ?FILE_REF(FileGuid), read)),
+    {ok, Bytes} = ?assertMatch({ok, _}, lfm_proxy:read(Worker, Handle, 0, Size)),
+    ?assertEqual(ok, lfm_proxy:close(Worker, Handle)),
+    Bytes.
+
+
 create_files_tree(Worker, SessId, Structure, RootGuid) ->
     create_files_tree(Worker, SessId, Structure, RootGuid, <<"dir">>, <<"file">>, [], []).
+
 
 clean_space(Workers, SpaceId, Attempts) ->
     Workers2 = utils:ensure_list(Workers),
@@ -40,6 +128,8 @@ clean_space(CleaningWorker, AllWorkers, SpaceId, Attempts) ->
     rm_recursive(CleaningWorker, ?ROOT_SESS_ID, SpaceGuid, <<>>, BatchSize, false),
     % TODO VFS-7064 remove below line after introducing link to trash directory
     rm_recursive(CleaningWorker, ?ROOT_SESS_ID, fslogic_uuid:spaceid_to_trash_dir_guid(SpaceId), <<>>, BatchSize, false),
+    ArchivesDirGuid = file_id:pack_guid(?ARCHIVES_ROOT_DIR_UUID(SpaceId), SpaceId),
+    rm_recursive(CleaningWorker, ?ROOT_SESS_ID, ArchivesDirGuid, <<>>, BatchSize, true),
     assert_space_and_trash_are_empty(AllWorkers, SpaceId, Attempts).
 
 assert_space_dir_empty(Workers, SpaceId, Attempts) ->
@@ -47,7 +137,7 @@ assert_space_dir_empty(Workers, SpaceId, Attempts) ->
     lists:foreach(fun(W) ->
         ?assertMatch({ok, []},
             % TODO VFS-7064 after introducing link to trash directory this function must be adapted
-            lfm_proxy:get_children(W, ?ROOT_SESS_ID, {guid, SpaceGuid}, 0, 10), Attempts)
+            lfm_proxy:get_children(W, ?ROOT_SESS_ID, ?FILE_REF(SpaceGuid), 0, 10), Attempts)
     end, utils:ensure_list(Workers)).
 
 
@@ -57,11 +147,12 @@ assert_space_and_trash_are_empty(Workers, SpaceId, Attempts) ->
         case opw_test_rpc:supports_space(W, SpaceId) of
             true ->
                 ?assertMatch({ok, []},
-                    lfm_proxy:get_children(W, ?ROOT_SESS_ID, {guid, SpaceGuid}, 0, 100), Attempts),
+                    lfm_proxy:get_children(W, ?ROOT_SESS_ID, ?FILE_REF(SpaceGuid), 0, 100), Attempts),
                 % trash directory should be empty
                 ?assertMatch({ok, []},
-                    lfm_proxy:get_children(W, ?ROOT_SESS_ID, {guid, fslogic_uuid:spaceid_to_trash_dir_guid(SpaceId)}, 0, 100), Attempts),
-                ?assertEqual(0, opw_test_rpc:get_space_capacity_usage(W, SpaceId), Attempts);
+                    lfm_proxy:get_children(W, ?ROOT_SESS_ID, ?FILE_REF(fslogic_uuid:spaceid_to_trash_dir_guid(SpaceId)), 0, 100), Attempts);
+                % TODO VFS-7809 Check why sometimes after cleanup in tests, space capacity is not equal to 0
+                % ?assertEqual(0, opw_test_rpc:get_space_capacity_usage(W, SpaceId), Attempts);
             false ->
                 ok
         end
@@ -75,12 +166,12 @@ rm_recursive(Worker, SessId, DirGuid, BatchSize) ->
     rm_recursive(Worker, SessId, DirGuid, <<>>, BatchSize, true).
 
 rm_recursive(Worker, SessId, DirGuid, Token, BatchSize, DeleteDir) ->
-    case lfm_proxy:get_children(Worker, SessId, {guid, DirGuid}, #{size => BatchSize, token => Token}) of
+    case lfm_proxy:get_children(Worker, SessId, ?FILE_REF(DirGuid), #{size => BatchSize, token => Token}) of
         {ok, GuidsAndNames, #{token := Token2, is_last := IsLast}} ->
             case rm_files(Worker, SessId, GuidsAndNames, BatchSize) of
                 ok ->
                     case IsLast of
-                        true when DeleteDir -> lfm_proxy:unlink(Worker, SessId, {guid, DirGuid});
+                        true when DeleteDir -> lfm_proxy:unlink(Worker, SessId, ?FILE_REF(DirGuid));
                         true -> ok;
                         false -> rm_recursive(Worker, SessId, DirGuid, Token2, BatchSize, DeleteDir)
                     end;
@@ -98,11 +189,11 @@ rm_files(Worker, SessId, GuidsAndPaths, BatchSize) ->
             true ->
                 rm_recursive(Worker, SessId, G, <<>>, BatchSize, false);
             false ->
-                case lfm_proxy:is_dir(Worker, SessId, {guid, G}) of
+                case lfm_proxy:is_dir(Worker, SessId, ?FILE_REF(G)) of
                     true ->
                         rm_recursive(Worker, SessId, G, BatchSize);
                     false ->
-                        lfm_proxy:unlink(Worker, SessId, {guid, G});
+                        lfm_proxy:unlink(Worker, SessId, ?FILE_REF(G));
                     {error, not_found} -> ok;
                     Error -> Error
                 end

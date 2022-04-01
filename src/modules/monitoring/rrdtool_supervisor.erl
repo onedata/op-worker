@@ -77,8 +77,8 @@ init([]) ->
         poolboy:child_spec(?RRDTOOL_POOL_NAME, [
             {name, {local, ?RRDTOOL_POOL_NAME}},
             {worker_module, rrdtool},
-            {size, application:get_env(?APP_NAME, rrdtool_pool_size, 10)},
-            {max_overflow, application:get_env(?APP_NAME, rrdtool_pool_max_overflow, 20)}
+            {size, op_worker:get_env(rrdtool_pool_size, 10)},
+            {max_overflow, op_worker:get_env(rrdtool_pool_max_overflow, 20)}
         ], [os:find_executable("rrdtool")])
     ]}}.
 

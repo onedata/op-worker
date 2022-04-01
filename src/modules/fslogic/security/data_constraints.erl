@@ -42,6 +42,7 @@
 
 %% API
 -export([get_allow_all_constraints/0, get/1]).
+-export([has_no_constraints/1]).
 -export([assert_not_readonly_mode/1, inspect/4]).
 
 
@@ -78,6 +79,13 @@
 -spec get_allow_all_constraints() -> constraints().
 get_allow_all_constraints() ->
     #constraints{paths = any, guids = any, readonly = false}.
+
+
+-spec has_no_constraints(constraints()) -> boolean().
+has_no_constraints(#constraints{paths = any, guids = any, readonly = false}) ->
+    true;
+has_no_constraints(_) ->
+    false.
 
 
 -spec get([caveats:caveat()]) ->
@@ -151,7 +159,7 @@ assert_not_readonly_mode(UserCtx) ->
     UserCtx :: user_ctx:ctx(),
     FileCtx :: file_ctx:ctx(),
     AncestorPolicy :: ancestor_policy(),
-    AccessRequirements :: [data_access_rights:requirement()]
+    AccessRequirements :: [data_access_control:requirement()]
 ) ->
     {CanonicalChildrenWhiteList :: undefined | [file_meta:name()], file_ctx:ctx()}.
 inspect(UserCtx, FileCtx0, AncestorPolicy, AccessRequirements) ->
@@ -159,7 +167,7 @@ inspect(UserCtx, FileCtx0, AncestorPolicy, AccessRequirements) ->
 
     case DataConstraints#constraints.readonly of
         true ->
-            data_access_rights:assert_operation_available_in_readonly_mode(
+            data_access_control:assert_available_in_readonly_mode(
                 AccessRequirements
             );
         false ->
@@ -211,7 +219,7 @@ check_and_cache_data_constraints(UserCtx, FileCtx0, #constraints{
     paths = AllowedPaths,
     guids = GuidConstraints
 }, AncestorPolicy) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx0),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx0),
     SerializedToken = get_access_token(UserCtx),
     CacheKey = {data_constraint, SerializedToken, FileGuid},
     case permissions_cache:check_permission(CacheKey) of
@@ -233,23 +241,27 @@ check_and_cache_data_constraints(UserCtx, FileCtx0, #constraints{
             % File is not permitted by constraints - eacces
             throw(?EACCES);
         _ ->
+            % permissions_cache update is tagged with Timestamp to prevent races with cache invalidation.
+            % All data used to calculate cached value has to be get from datastore after Timestamp so file_ctx reset is needed.
+            Timestamp = bounded_cache:get_timestamp(),
+            FileCtx1 = file_ctx:reset(FileCtx0),
             try
-                {PathRel, FileCtx1} = check_allowed_paths(
-                    FileCtx0, AllowedPaths, AncestorPolicy
+                {PathRel, FileCtx2} = check_allowed_paths(
+                    FileCtx1, AllowedPaths, AncestorPolicy
                 ),
-                {GuidRel, FileCtx2} = check_guid_constraints(
-                    UserCtx, SerializedToken, FileCtx1,
+                {GuidRel, FileCtx3} = check_guid_constraints(
+                    UserCtx, SerializedToken, FileCtx2,
                     GuidConstraints, AncestorPolicy
                 ),
                 Result = intersect_constraint_relations(PathRel, GuidRel),
-                permissions_cache:cache_permission(CacheKey, Result),
-                {Result, FileCtx2}
+                permissions_cache:cache_permission(CacheKey, Result, Timestamp),
+                {Result, FileCtx3}
             catch throw:?EACCES ->
                 case AncestorPolicy of
                     allow_ancestors ->
-                        permissions_cache:cache_permission(CacheKey, ?EACCES);
+                        permissions_cache:cache_permission(CacheKey, ?EACCES, Timestamp);
                     disallow_ancestors ->
-                        permissions_cache:cache_permission(CacheKey, {equal_or_descendant, ?EACCES})
+                        permissions_cache:cache_permission(CacheKey, {equal_or_descendant, ?EACCES}, Timestamp)
                 end,
                 throw(?EACCES)
             end
@@ -347,35 +359,40 @@ check_guid_constraints(
     {true, file_ctx:ctx()} |
     {false, guid_constraints(), file_ctx:ctx()}.
 does_fulfill_guid_constraints(
-    UserCtx, SerializedToken, FileCtx, AllGuidConstraints
+    UserCtx, SerializedToken, FileCtx0, AllGuidConstraints
 ) ->
-    FileGuid = get_file_bare_guid(FileCtx),
+    FileGuid = get_file_bare_guid(FileCtx0),
     CacheKey = {guid_constraint, SerializedToken, FileGuid},
 
     case permissions_cache:check_permission(CacheKey) of
         {ok, true} ->
-            {true, FileCtx};
+            {true, FileCtx0};
         {ok, {false, NotFulfilledGuidConstraints}} ->
-            {false, NotFulfilledGuidConstraints, FileCtx};
+            {false, NotFulfilledGuidConstraints, FileCtx0};
         _ ->
-            case file_ctx:is_root_dir_const(FileCtx) of
+            % permissions_cache update is tagged with Timestamp to prevent races with cache invalidation.
+            % All data used to calculate cached value has to be get from datastore after Timestamp so
+            % file_ctx reset is needed.
+            Timestamp = bounded_cache:get_timestamp(),
+            FileCtx1 = file_ctx:reset(FileCtx0),
+            case file_ctx:is_root_dir_const(FileCtx1) of
                 true ->
                     check_and_cache_guid_constraints_fulfillment(
-                        FileCtx, CacheKey, AllGuidConstraints
+                        FileCtx1, CacheKey, AllGuidConstraints, Timestamp
                     );
                 false ->
-                    {ParentCtx, FileCtx1} = file_ctx:get_parent(FileCtx, UserCtx),
+                    {ParentCtx, FileCtx2} = files_tree:get_parent(FileCtx1, UserCtx),
                     DoesParentFulfillGuidConstraints = does_fulfill_guid_constraints(
                         UserCtx, SerializedToken, ParentCtx,
                         AllGuidConstraints
                     ),
                     case DoesParentFulfillGuidConstraints of
                         {true, _} ->
-                            permissions_cache:cache_permission(CacheKey, true),
-                            {true, FileCtx1};
+                            permissions_cache:cache_permission(CacheKey, true, Timestamp),
+                            {true, FileCtx2};
                         {false, RemainingGuidsConstraints, _} ->
                             check_and_cache_guid_constraints_fulfillment(
-                                FileCtx, CacheKey, RemainingGuidsConstraints
+                                FileCtx2, CacheKey, RemainingGuidsConstraints, Timestamp
                             )
                     end
             end
@@ -384,11 +401,11 @@ does_fulfill_guid_constraints(
 
 %% @private
 -spec check_and_cache_guid_constraints_fulfillment(file_ctx:ctx(),
-    CacheKey :: term(), guid_constraints()
+    CacheKey :: term(), guid_constraints(), bounded_cache:timestamp()
 ) ->
     {true, file_ctx:ctx()} |
     {false, guid_constraints(), file_ctx:ctx()}.
-check_and_cache_guid_constraints_fulfillment(FileCtx, CacheKey, GuidConstraints) ->
+check_and_cache_guid_constraints_fulfillment(FileCtx, CacheKey, GuidConstraints, Timestamp) ->
     FileGuid = get_file_bare_guid(FileCtx),
     RemainingGuidConstraints = lists:filter(fun(GuidsList) ->
         not lists:member(FileGuid, GuidsList)
@@ -396,11 +413,11 @@ check_and_cache_guid_constraints_fulfillment(FileCtx, CacheKey, GuidConstraints)
 
     case RemainingGuidConstraints of
         [] ->
-            permissions_cache:cache_permission(CacheKey, true),
+            permissions_cache:cache_permission(CacheKey, true, Timestamp),
             {true, FileCtx};
         _ ->
             permissions_cache:cache_permission(
-                CacheKey, {false, RemainingGuidConstraints}
+                CacheKey, {false, RemainingGuidConstraints}, Timestamp
             ),
             {false, RemainingGuidConstraints, FileCtx}
     end.
@@ -487,7 +504,7 @@ get_canonical_path(FileCtx) ->
 %%--------------------------------------------------------------------
 -spec get_file_bare_guid(file_ctx:ctx()) -> file_id:file_guid().
 get_file_bare_guid(FileCtx) ->
-    file_id:share_guid_to_guid(file_ctx:get_guid_const(FileCtx)).
+    file_id:share_guid_to_guid(file_ctx:get_logical_guid_const(FileCtx)).
 
 
 %% @private

@@ -15,12 +15,11 @@
 -include("storage_import_test.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/fslogic_suffix.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("kernel/include/file.hrl").
-
-% TODO VFS-6161 divide to smaller test suites
 
 %% export for ct
 -export([init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
@@ -719,14 +718,14 @@ sync_should_not_reimport_deleted_but_still_opened_file(Config, StorageType) ->
 
     % create first file
     {ok, G1} = lfm_proxy:create(W1, SessId, ?SPACE_TEST_FILE_PATH1),
-    {ok, H1} = lfm_proxy:open(W1, SessId, {guid, G1}, write),
+    {ok, H1} = lfm_proxy:open(W1, SessId, ?FILE_REF(G1), write),
     {ok, _} = lfm_proxy:write(W1, H1, 0, ?TEST_DATA),
     ok = lfm_proxy:close(W1, H1),
 
     % open file
-    ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, {guid, G1}, read), ?ATTEMPTS),
+    ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, ?FILE_REF(G1), read), ?ATTEMPTS),
     % delete file
-    ok = lfm_proxy:unlink(W1, SessId, {guid, G1}),
+    ok = lfm_proxy:unlink(W1, SessId, ?FILE_REF(G1)),
     %ensure that space_dir mtime will change
     timer:sleep(timer:seconds(1)),
 
@@ -839,7 +838,7 @@ create_subfiles_and_delete_before_import_is_finished_test(Config) ->
 
     ok = sd_test_utils:recursive_rm(W1, SDHandle),
     ?assertMatch({ok, []}, sd_test_utils:listobjects(W1, SDHandle,  ?DEFAULT_MARKER, 0, 100)),
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W1, SessId,  {path, ?SPACE_TEST_DIR_PATH}), 2 * ?ATTEMPTS),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W1, SessId,  {path, ?SPACE_TEST_DIR_PATH}), 10 * ?ATTEMPTS),
     ?assertMatch({ok, []}, lfm_proxy:get_children(W1, SessId, {path, ?SPACE_PATH}, 0, 100), 2 * ?ATTEMPTS).
 
 
@@ -1377,7 +1376,7 @@ create_list_race_test(Config) ->
     FilePaths = [?SPACE_TEST_FILE_PATH(?TEST_FILE(N)) || N <- lists:seq(1, FilesNum)],
     lists:foreach(fun(F) ->
         {ok, FileGuid} = lfm_proxy:create(W1, SessId, F),
-        {ok, Handle} = lfm_proxy:open(W1, SessId, {guid, FileGuid}, write),
+        {ok, Handle} = lfm_proxy:open(W1, SessId, ?FILE_REF(FileGuid), write),
         {ok, _} = lfm_proxy:write(W1, Handle, 0, ?TEST_DATA),
         lfm_proxy:close(W1, Handle),
         FileGuid
@@ -1576,10 +1575,10 @@ change_file_type_test(Config) ->
     ?assertMatch({ok, #file_attr{type = ?DIRECTORY_TYPE}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1})),
     ?assertMatch({error, ?ENOENT},
-        lfm_proxy:stat(W1, SessId, {guid, FileGuid})),
+        lfm_proxy:stat(W1, SessId, ?FILE_REF(FileGuid))),
     {ok, #file_attr{guid = DirGuid}} = ?assertMatch({ok, #file_attr{type = ?DIRECTORY_TYPE}},
         lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W2, SessId2, {guid, FileGuid}), ?ATTEMPTS),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W2, SessId2, ?FILE_REF(FileGuid)), ?ATTEMPTS),
 
     % check whether file inside directory has been imported
     {ok, #file_attr{guid = FileGuid2}} = ?assertMatch({ok, #file_attr{type = ?REGULAR_FILE_TYPE}},
@@ -1592,7 +1591,7 @@ change_file_type_test(Config) ->
     % check whether we can create directory in the imported directory
     {ok, DirGuid2} = ?assertMatch({ok, _}, lfm_proxy:mkdir(W2, ?ROOT_SESS_ID, DirGuid, ?TEST_DIR, ?DEFAULT_FILE_PERMS)),
 
-    ?assertMatch({ok, _}, lfm_proxy:stat(W1, SessId, {guid, DirGuid2}), ?ATTEMPTS).
+    ?assertMatch({ok, _}, lfm_proxy:stat(W1, SessId, ?FILE_REF(DirGuid2)), ?ATTEMPTS).
 
 change_file_type3_test(Config) ->
     % this test checks whether storage import properly handles
@@ -1676,11 +1675,11 @@ change_file_type3_test(Config) ->
     ?assertMatch({ok, #file_attr{type = ?REGULAR_FILE_TYPE}},
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH})),
     ?assertMatch({error, ?ENOENT},
-        lfm_proxy:stat(W1, SessId, {guid, DirGuid})),
+        lfm_proxy:stat(W1, SessId, ?FILE_REF(DirGuid))),
     ?assertMatch({ok, #file_attr{type = ?REGULAR_FILE_TYPE}},
         lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W2, SessId2, {guid, DirGuid}), ?ATTEMPTS),
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W2, SessId2, {guid, FileGuid}), ?ATTEMPTS),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W2, SessId2, ?FILE_REF(DirGuid)), ?ATTEMPTS),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W2, SessId2, ?FILE_REF(FileGuid)), ?ATTEMPTS),
 
     % check whether we can read the imported file
     {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}, read)),
@@ -1699,7 +1698,7 @@ change_file_type3_test(Config) ->
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
         ssl:start(),
-        hackney:start(),
+        application:ensure_all_started(hackney),
         initializer:disable_quota_limit(NewConfig),
         initializer:mock_provider_ids(NewConfig),
         NewConfig2 = multi_provider_file_ops_test_base:init_env(NewConfig),
@@ -1715,7 +1714,7 @@ end_per_suite(Config) ->
     ok = wpool:stop_sup_pool(?VERIFY_POOL),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:unload_quota_mocks(Config),
-    initializer:unmock_provider_ids(Config),
+    initializer:unmock_provider_ids(?config(op_worker_nodes, Config)),
     ssl:stop().
 
 init_per_testcase(Case, Config) ->

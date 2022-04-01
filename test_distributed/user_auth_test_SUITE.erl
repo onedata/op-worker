@@ -51,6 +51,8 @@ all() -> ?ALL([
 ]).
 
 
+-define(DEFAULT_AUTH_CACHE_SIZE_LIMIT, 5000).
+
 -define(USER_ID_1, <<"test_id_1">>).
 -define(USER_ID_2, <<"test_id_2">>).
 -define(USER_FULL_NAME, <<"test_name">>).
@@ -239,7 +241,6 @@ auth_cache_size_test(Config) ->
     % (cache entries exceed limit) but not on Worker2
     set_auth_cache_size_limit(Worker1, 2),
     set_auth_cache_size_limit(Worker2, 2),
-    rpc:call(Worker1, application, set_env, [?APP_NAME, auth_cache_size_limit, 2]),
     timer:sleep(timer:seconds(5)),
     ?assertEqual(0, get_auth_cache_size(Worker1)),
     ?assertEqual(2, get_auth_cache_size(Worker2)),
@@ -640,14 +641,21 @@ init_per_testcase(_Case, Config) ->
     mock_token_logic(Config),
     Nodes = ?config(op_worker_nodes, Config),
     % required to trigger auth cache events that are based on run_after procedures
-    rpc:multicall(Nodes, gs_client_worker, enable_cache, []),
-    rpc:multicall(Nodes, od_user, invalidate_cache, [?USER_ID_1]),
-    rpc:multicall(Nodes, od_user, invalidate_cache, [?USER_ID_2]),
+    utils:rpc_multicall(Nodes, gs_client_worker, enable_cache, []),
+    utils:rpc_multicall(Nodes, od_user, invalidate_cache, [?USER_ID_1]),
+    utils:rpc_multicall(Nodes, od_user, invalidate_cache, [?USER_ID_2]),
     Config.
 
 
 end_per_testcase(auth_cache_expiration_with_time_warps_test = Case, Config) ->
     time_test_utils:unfreeze_time(Config),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+
+end_per_testcase(auth_cache_size_test = Case, Config) ->
+    % Ensure auth cache size limit will be restored after test (it is changed as part of test)
+    [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
+    set_auth_cache_size_limit(Worker1, ?DEFAULT_AUTH_CACHE_SIZE_LIMIT),
+    set_auth_cache_size_limit(Worker2, ?DEFAULT_AUTH_CACHE_SIZE_LIMIT),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(auth_cache_user_access_blocked_event_test = Case, Config) ->
@@ -879,7 +887,8 @@ simulate_user_update_with_blocked_value(Nodes, UserId, Blocked, Revision) ->
             <<"effectiveGroups">> => [],
             <<"effectiveSpaces">> => [],
             <<"effectiveHandleServices">> => [],
-            <<"effectiveHandles">> => []
+            <<"effectiveHandles">> => [],
+            <<"effectiveAtmInventories">> => []
         }}
     ]),
     % the push message processing is async - wait for the process to finish

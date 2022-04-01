@@ -15,6 +15,8 @@
 -ifndef(MIDDLEWARE_HRL).
 -define(MIDDLEWARE_HRL, 1).
 
+-include("modules/dataset/dataset.hrl").
+-include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
@@ -32,10 +34,183 @@
 }).
 
 
--define(throw_on_error(Res), case Res of
-    {error, _} = Error -> throw(Error);
-    _ -> Res
-end).
+-define(throw_on_error(__EXPR), middleware_utils:throw_if_error(__EXPR)).
+-define(check(__EXPR), middleware_utils:check_result(__EXPR)).
 
+
+%%%===================================================================
+%%% Archives related operations available in middleware_worker
+%%%===================================================================
+
+
+-record(list_archives, {
+    dataset_id :: dataset:id(),
+    opts :: archives_list:opts(),
+    mode = ?BASIC_INFO :: archive_api:listing_mode()
+}).
+
+-record(archive_dataset, {
+    id :: dataset:id(),
+    config :: archive:config(),
+    preserved_callback :: archive:callback(),
+    purged_callback :: archive:callback(),
+    description :: archive:description()
+}).
+
+-record(get_archive_info, {
+    id :: archive:id()
+}).
+
+-record(update_archive, {
+    id :: archive:id(),
+    description :: archive:description() | undefined,
+    diff :: archive:diff()
+}).
+
+-record(purge_archive, {
+    id :: archive:id(),
+    callback :: archive:callback()
+}).
+
+-record(recall_archive, {
+    archive_id :: archive:id(),
+    parent_directory_guid :: file_id:file_guid(),
+    target_filename = default :: file_meta:name() | default
+}).
+
+-record(get_recall_details, {
+    id :: archive_recall:id()
+}).
+
+-record(get_recall_progress, {
+    id :: archive_recall:id()
+}).
+
+
+%%%===================================================================
+%%% Automation related operations available in middleware_worker
+%%%===================================================================
+
+
+-record(schedule_atm_workflow_execution, {
+    atm_workflow_schema_id :: od_atm_workflow_schema:id(),
+    atm_workflow_schema_revision_num :: atm_workflow_schema_revision:revision_number(),
+    store_initial_content_overlay :: atm_workflow_execution_api:store_initial_content_overlay(),
+    callback_url :: undefined | http_client:url()
+}).
+
+-record(cancel_atm_workflow_execution, {
+    atm_workflow_execution_id :: atm_workflow_execution:id()
+}).
+
+-record(repeat_atm_workflow_execution, {
+    type :: atm_workflow_execution:repeat_type(),
+    atm_workflow_execution_id :: atm_workflow_execution:id(),
+    atm_lane_run_selector :: atm_lane_execution:lane_run_selector()
+}).
+
+
+%%%===================================================================
+%%% Datasets related operations available in middleware_worker
+%%%===================================================================
+
+
+-record(list_top_datasets, {
+    state :: dataset:state(),
+    opts :: dataset_api:listing_opts(),
+    mode = ?BASIC_INFO :: dataset_api:listing_mode()
+}).
+
+-record(list_children_datasets, {
+    id :: dataset:id(),
+    opts :: dataset_api:listing_opts(),
+    mode = ?BASIC_INFO :: dataset_api:listing_mode()
+}).
+
+-record(establish_dataset, {
+    protection_flags = ?no_flags_mask :: data_access_control:bitmask()
+}).
+
+-record(get_dataset_info, {
+    id :: dataset:id()
+}).
+
+-record(update_dataset, {
+    id :: dataset:id(),
+    state :: undefined | dataset:state(),
+    flags_to_set = ?no_flags_mask :: data_access_control:bitmask(),
+    flags_to_unset = ?no_flags_mask :: data_access_control:bitmask()
+}).
+
+-record(remove_dataset, {
+    id :: dataset:id()
+}).
+
+-record(get_file_eff_dataset_summary, {}).
+
+
+%%%===================================================================
+%%% QoS related operations available in middleware_worker
+%%%===================================================================
+
+
+-record(add_qos_entry, {
+    expression :: qos_expression:expression(),
+    replicas_num :: qos_entry:replicas_num(),
+    entry_type = user_defined :: qos_entry:type()
+}).
+
+-record(get_qos_entry, {
+    id :: qos_entry:id()
+}).
+
+-record(remove_qos_entry, {
+    id :: qos_entry:id()
+}).
+
+-record(get_effective_file_qos, {}).
+
+-record(check_qos_status, {
+    qos_id :: qos_entry:id()
+}).
+
+
+%%%===================================================================
+%%% Shares related operations available in middleware_worker
+%%%===================================================================
+
+
+-record(create_share, {
+    name :: od_share:name(),
+    description :: od_share:description()
+}).
+
+-record(remove_share, {
+    share_id :: od_share:id()
+}).
+
+
+%%%===================================================================
+%%% Transfers related operations available in middleware_worker
+%%%===================================================================
+
+
+-record(schedule_file_transfer, {
+    % meaning of fields in this record is explained in datastore_models.hrl
+    % in definition of transfer record
+    replicating_provider_id :: undefined | oneprovider:id(),
+    evicting_provider_id :: undefined | oneprovider:id(),
+    callback :: transfer:callback()
+}).
+
+-record(schedule_view_transfer, {
+    % meaning of fields in this record is explained in datastore_models.hrl
+    % in definition of transfer record
+    replicating_provider_id :: undefined | oneprovider:id(),
+    evicting_provider_id :: undefined | oneprovider:id(),
+    view_name :: transfer:view_name(),
+    query_view_params :: transfer:query_view_params(),
+    callback :: transfer:callback()
+}).
 
 -endif.
