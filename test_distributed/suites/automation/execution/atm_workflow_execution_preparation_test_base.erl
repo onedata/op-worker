@@ -98,21 +98,24 @@ first_lane_run_preparation_failure_after_run_was_created_test() ->
             lane_runs = [#atm_lane_run_execution_test_spec{
                 selector = {1, 1},
                 create_run = #atm_step_mock_spec{
-                    % only 'create_run' step result is mocked but not step execution so that
-                    % lane run execution component can be created
+                    % 'create_run' step result is replaced by the one specified below but
+                    % the step itself is executed normally so that lane run execution
+                    % components (e.g. task executions) can be created
                     mock_execution = {false, {throw, ?ERROR_INTERNAL_SERVER_ERROR}}
                 },
                 prepare_lane = #atm_step_mock_spec{
                     after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
-                        ExpState1 = atm_workflow_execution_exp_state_builder:report_lane_run_failed({1, 1}, ExpState0),
-                        {true, atm_workflow_execution_exp_state_builder:report_workflow_execution_aborting(ExpState1)}
+                        ExpState1 = atm_workflow_execution_exp_state_builder:report_all_task_executions_skipped(
+                            {1, 1}, ExpState0
+                        ),
+                        ExpState2 = atm_workflow_execution_exp_state_builder:report_lane_run_failed({1, 1}, ExpState1),
+                        {true, atm_workflow_execution_exp_state_builder:report_workflow_execution_aborting(ExpState2)}
                     end
                 }
             }],
             handle_workflow_execution_ended = #atm_step_mock_spec{
-                after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
-                    ExpState1 = atm_workflow_execution_exp_state_builder:report_lane_run_failed({1, 1}, ExpState0),
-                    {true, atm_workflow_execution_exp_state_builder:report_workflow_execution_failed(ExpState1)}
+                after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState}) ->
+                    {true, atm_workflow_execution_exp_state_builder:report_workflow_execution_failed(ExpState)}
                 end
             }
         }]
