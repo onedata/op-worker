@@ -186,7 +186,8 @@ consolidate(_, Value, Diff) ->
 -spec save(file_id:file_guid(), dir_stats_collection:collection()) -> ok.
 save(Guid, Collection) ->
     Uuid = file_id:guid_to_uuid(Guid),
-    ConsumeSpec = maps:map(fun(_StatName, Value) -> #{all => [{?NOW(), Value}]} end, Collection),
+    Timestamp = ?NOW(),
+    ConsumeSpec = maps:map(fun(_StatName, Value) -> #{all => [{Timestamp(), Value}]} end, Collection),
     case datastore_time_series_collection:consume_measurements(?CTX, Uuid, ConsumeSpec) of
         ok ->
             ok;

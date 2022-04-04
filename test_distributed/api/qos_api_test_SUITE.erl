@@ -769,13 +769,13 @@ validate_result_fun_gs(MemRef, qos_time_series_collections) ->
                 % "total" time series is created by default by all supporting providers for each QoS entry,
                 % even if no data transfer is recorded
                 #{
-                    ?BYTES_STATS => [?TOTAL_TIME_SERIES_NAME],
-                    ?FILES_STATS => [?TOTAL_TIME_SERIES_NAME]
+                    ?BYTES_STATS => [?QOS_TOTAL_TIME_SERIES_NAME],
+                    ?FILES_STATS => [?QOS_TOTAL_TIME_SERIES_NAME]
                 };
             TransferringProviderId ->
                 #{
-                    ?BYTES_STATS => [?TOTAL_TIME_SERIES_NAME | get_supporting_storages(TargetNode, SpaceId, FileCreatingProviderId)],
-                    ?FILES_STATS => [?TOTAL_TIME_SERIES_NAME | get_supporting_storages(TargetNode, SpaceId, TransferringProviderId)]
+                    ?BYTES_STATS => [?QOS_TOTAL_TIME_SERIES_NAME | get_supporting_storages(TargetNode, SpaceId, FileCreatingProviderId)],
+                    ?FILES_STATS => [?QOS_TOTAL_TIME_SERIES_NAME | get_supporting_storages(TargetNode, SpaceId, TransferringProviderId)]
                 }
         end,
 
@@ -811,7 +811,7 @@ validate_result_fun_gs(MemRef, {qos_time_series_collection, CollectionType}) ->
         ?assertEqual(lists:sort(maps:keys(RequestedMetrics)), lists:sort(maps:keys(WindowsPerMetricPerTimeSeries))),
         maps:foreach(fun(_TimeSeriesName, WindowsPerMetric) ->
             ?assertEqual(
-                lists:sort([?MINUTE_METRIC_NAME, ?HOUR_METRIC_NAME, ?DAY_METRIC_NAME, ?MONTH_METRIC_NAME]),
+                lists:sort([?QOS_MINUTE_METRIC_NAME, ?QOS_HOUR_METRIC_NAME, ?QOS_DAY_METRIC_NAME, ?QOS_MONTH_METRIC_NAME]),
                 lists:sort(maps:keys(WindowsPerMetric))
             ),
             maps:foreach(fun(_MetricId, WindowsInCurrentMetric) ->

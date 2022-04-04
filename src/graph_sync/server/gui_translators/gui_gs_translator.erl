@@ -64,11 +64,11 @@ handshake_attributes(_Client) ->
         <<"openfaasAvailable">> => atm_openfaas_task_executor:is_openfaas_available(),
         <<"bagitUploaderWorkflowSchemaId">> => utils:undefined_to_null(BagitUploaderWorkflowSchemaId),
         <<"qosTransferStatsConfig">> => #{
-            <<"totalTimeSeriesId">> => ?TOTAL_TIME_SERIES_NAME,
-            <<"minuteMetricId">> => ?MINUTE_METRIC_NAME,
-            <<"hourMetricId">> => ?HOUR_METRIC_NAME,
-            <<"dayMetricId">> => ?DAY_METRIC_NAME,
-            <<"monthMetricId">> => ?MONTH_METRIC_NAME
+            <<"totalTimeSeriesId">> => ?QOS_TOTAL_TIME_SERIES_NAME,
+            <<"minuteMetricId">> => ?QOS_MINUTE_METRIC_NAME,
+            <<"hourMetricId">> => ?QOS_HOUR_METRIC_NAME,
+            <<"dayMetricId">> => ?QOS_DAY_METRIC_NAME,
+            <<"monthMetricId">> => ?QOS_MONTH_METRIC_NAME
         },
         <<"apiTemplates">> => XRootDApiTemplates#{
             <<"rest">> => #{
