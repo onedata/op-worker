@@ -58,6 +58,11 @@
 init(ProviderSelectors, ModuleWithOpenfaasDockerMock) ->
     Workers = get_nodes(utils:ensure_list(ProviderSelectors)),
 
+    test_utils:mock_new(Workers, atm_task_execution, [passthrough, no_history]),
+    test_utils:mock_expect(Workers, atm_task_execution, get_ctx, fun() ->
+        #{model => atm_task_execution, disc_driver => undefined}
+    end),
+
     test_utils:mock_new(Workers, ?MOCKED_MODULE, [passthrough, no_history]),
 
     mock_assert_openfaas_available(Workers),
