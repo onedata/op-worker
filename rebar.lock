@@ -127,7 +127,7 @@
  {<<"observer_cli">>,{pkg,<<"observer_cli">>,<<"1.6.2">>},1},
  {<<"onenv_ct">>,
   {git,"ssh://git@git.onedata.org:7999/vfs/onenv-ct.git",
-       {ref,"b2d069f189a0c85cd9779afdd058eb885281d8c5"}},
+       {ref,"8d07fa476c1fef153ffe2288bf4676b95f97dbc5"}},
   0},
  {<<"parse_trans">>,{pkg,<<"parse_trans">>,<<"3.3.1">>},2},
  {<<"plain_fsm">>,{pkg,<<"plain_fsm">>,<<"1.4.2">>},2},
