@@ -845,21 +845,6 @@
     value = #{} :: json_utils:json_term()
 }).
 
-%% Model that manages caches of files' permissions
--record(permissions_cache, {
-    value = undefined :: term()
-}).
-
-%% Helper model for caching files' permissions
--record(permissions_cache_helper, {
-    value = undefined :: term()
-}).
-
-%% Helper model for caching files' permissions
--record(permissions_cache_helper2, {
-    value = undefined :: term()
-}).
-
 %% Model that holds file timestamps
 -record(times, {
     atime = 0 :: times:time(),
@@ -1062,12 +1047,23 @@
 }).
 
 -record(dir_update_time_stats, {
-    time = 0 :: times:time()
+    time = 0 :: times:time(),
+    incarnation = 0 :: non_neg_integer()
 }).
 
 
 -record(dir_stats_collector_config, {
-    enabled = true :: boolean()
+    collecting_status :: dir_stats_collector_config:collecting_status(),
+
+    % incarnation is incremented every time when collecting_status is changed to collections_initialization ;
+    % it is used to evaluate if collection is outdated (see dir_stats_collection_behaviour:acquire/1)
+    incarnation = 0 :: non_neg_integer(),
+
+    % information about next status transition that is expected to be executed after ongoing transition is finished
+    pending_status_transition :: dir_stats_collector_config:pending_status_transition(),
+
+    % timestamps of collecting status changes that allow verification when historic statistics were trustworthy
+    collecting_status_change_timestamps = [] :: [dir_stats_collector_config:status_change_timestamp()]
 }).
 
 

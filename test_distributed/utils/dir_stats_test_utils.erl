@@ -36,7 +36,9 @@ disable_stats_counting_ct_posthook(Config) ->
 disable_stats_counting(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     ok = test_utils:mock_new(Workers, [dir_stats_collector_config]),
-    ok = test_utils:mock_expect(Workers, dir_stats_collector_config, is_enabled_for_space, fun(_SpaceId) -> false end).
+    ok = test_utils:mock_expect(Workers, dir_stats_collector_config, is_collecting_active, fun(_SpaceId) -> false end),
+    ok = test_utils:mock_expect(
+        Workers, dir_stats_collector_config, get_extended_collecting_status, fun(_SpaceId) -> disabled end).
 
 
 -spec enable_stats_counting(config()) -> ok.

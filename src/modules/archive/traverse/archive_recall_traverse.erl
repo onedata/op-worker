@@ -158,7 +158,7 @@ get_sync_info(Job) ->
     tree_traverse:get_sync_info(Job).
 
 
--spec get_job(traverse:job_id() | tree_traverse_job:doc()) ->
+-spec get_job(traverse:job_id()) ->
     {ok, tree_traverse:master_job(), tree_traverse:pool(), id()}  | {error, term()}.
 get_job(DocOrId) ->
     tree_traverse:get_job(DocOrId).

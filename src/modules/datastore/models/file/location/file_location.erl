@@ -31,6 +31,7 @@
     update/2, set_last_replication_timestamp/2,
     delete/1, delete_and_update_quota/1
 ]).
+-export([count_bytes/1]).
 
 
 %% datastore_model callbacks
@@ -257,12 +258,8 @@ set_last_replication_timestamp(Doc = #document{value = FL}, Timestamp) ->
             last_replication_timestamp = Timestamp
     }}.
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% Returns total size used by given file_location.
 %% @end
@@ -270,6 +267,11 @@ set_last_replication_timestamp(Doc = #document{value = FL}, Timestamp) ->
 -spec count_bytes(doc()) -> non_neg_integer().
 count_bytes(#document{value = #file_location{blocks = Blocks}}) ->
     count_bytes(Blocks, 0).
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
 
 %%--------------------------------------------------------------------
 %% @private

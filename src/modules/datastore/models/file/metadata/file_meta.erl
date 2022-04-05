@@ -470,7 +470,7 @@ get_matching_child_uuids_with_tree_ids(ParentUuid, TreeIds, Name) ->
     end.
 
 
--spec list_children(entry(), list_opts()) ->
+-spec list_children(uuid() | entry(), list_opts()) ->
     {ok, [link()], list_extended_info()} | {error, term()}.
 list_children(Entry, Opts) ->
     ?run(begin
