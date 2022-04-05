@@ -33,12 +33,15 @@
     report_lane_run_started_preparing_in_advance/2,
     report_lane_run_created/2,
     report_lane_run_enqueued/2,
+    report_lane_run_aborting/2,
     report_lane_run_failed/2,
+    report_lane_run_cancelled/2,
 
     report_all_task_executions_skipped/2,
 
     report_workflow_execution_aborting/1,
     report_workflow_execution_failed/1,
+    report_workflow_execution_cancelled/1,
 
     assert_matches_with_backend/1
 ]).
@@ -230,10 +233,30 @@ report_lane_run_enqueued(AtmLaneRunSelector, ExpState) ->
     update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpState).
 
 
+-spec report_lane_run_aborting(atm_lane_execution:lane_run_selector(), exp_state()) ->
+    exp_state().
+report_lane_run_aborting(AtmLaneRunSelector, ExpState) ->
+    ExpAtmLaneRunStateDiff = #{<<"status">> => <<"aborting">>},
+    update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpState).
+
+
 -spec report_lane_run_failed(atm_lane_execution:lane_run_selector(), exp_state()) ->
     exp_state().
 report_lane_run_failed(AtmLaneRunSelector, ExpState) ->
-    ExpAtmLaneRunStateDiff = #{<<"status">> => <<"failed">>, <<"isRerunable">> => true},
+    ExpAtmLaneRunStateDiff = #{
+        <<"status">> => <<"failed">>,
+        <<"isRerunable">> => true
+    },
+    update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpState).
+
+
+-spec report_lane_run_cancelled(atm_lane_execution:lane_run_selector(), exp_state()) ->
+    exp_state().
+report_lane_run_cancelled(AtmLaneRunSelector, ExpState) ->
+    ExpAtmLaneRunStateDiff = #{
+        <<"status">> => <<"cancelled">>,
+        <<"isRerunable">> => true
+    },
     update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpState).
 
 
@@ -267,7 +290,16 @@ report_all_task_executions_skipped(AtmLaneRunSelector, ExpState = #exp_state{
 
 -spec report_workflow_execution_aborting(exp_state()) -> exp_state().
 report_workflow_execution_aborting(ExpState) ->
-    ExpAtmWorkflowExecutionStateDiff = #{<<"status">> => <<"aborting">>},
+    ExpAtmWorkflowExecutionStateDiff = fun
+        (ExpAtmWorkflowExecutionState = #{<<"startTime">> := 0}) ->
+            % atm workflow execution failure/cancel while in schedule status
+            ExpAtmWorkflowExecutionState#{
+                <<"status">> => <<"aborting">>,
+                <<"startTime">> => build_timestamp_field_validator(?NOW())
+            };
+        (ExpAtmWorkflowExecutionState) ->
+            ExpAtmWorkflowExecutionState#{<<"status">> => <<"aborting">>}
+    end,
     update_exp_workflow_execution_state(ExpAtmWorkflowExecutionStateDiff, ExpState).
 
 
@@ -275,6 +307,15 @@ report_workflow_execution_aborting(ExpState) ->
 report_workflow_execution_failed(ExpState) ->
     ExpAtmWorkflowExecutionStateDiff = #{
         <<"status">> => <<"failed">>,
+        <<"finishTime">> => build_timestamp_field_validator(?NOW())
+    },
+    update_exp_workflow_execution_state(ExpAtmWorkflowExecutionStateDiff, ExpState).
+
+
+-spec report_workflow_execution_cancelled(exp_state()) -> exp_state().
+report_workflow_execution_cancelled(ExpState) ->
+    ExpAtmWorkflowExecutionStateDiff = #{
+        <<"status">> => <<"cancelled">>,
         <<"finishTime">> => build_timestamp_field_validator(?NOW())
     },
     update_exp_workflow_execution_state(ExpAtmWorkflowExecutionStateDiff, ExpState).

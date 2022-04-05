@@ -31,6 +31,7 @@
 %% API
 -export([init/1, teardown/1]).
 -export([run/1]).
+-export([cancel_workflow_execution/1]).
 
 
 -type mock_call_ctx() :: #atm_mock_call_ctx{}.
@@ -59,6 +60,7 @@
 
 -record(test_ctx, {
     test_spec :: test_spec(),
+    session_id :: session:id(),
     workflow_execution_id :: atm_workflow_execution:id(),
     workflow_execution_exp_state :: atm_workflow_execution_exp_state_builder:exp_state(),
     current_lane_index :: atm_lane_execution:index(),
@@ -139,12 +141,23 @@ run(TestSpec = #atm_workflow_execution_test_spec{
 
     monitor_workflow_execution(#test_ctx{
         test_spec = TestSpec,
+        session_id = SessionId,
         workflow_execution_id = AtmWorkflowExecutionId,
         current_lane_index = 1,
         current_run_num = 1,
         workflow_execution_exp_state = ExpState,
         ongoing_incarnations = Incarnations
     }).
+
+
+-spec cancel_workflow_execution(atm_workflow_execution_test_runner:mock_call_ctx()) ->
+    ok.
+cancel_workflow_execution(#atm_mock_call_ctx{
+    provider = ProviderSelector,
+    session_id = SessionId,
+    workflow_execution_id = AtmWorkflowExecutionId
+}) ->
+    ?rpc(ProviderSelector, mi_atm:cancel_workflow_execution(SessionId, AtmWorkflowExecutionId)).
 
 
 %%%===================================================================
@@ -243,12 +256,16 @@ get_lane_run_test_spec(TargetAtmLaneIndex, #test_ctx{ongoing_incarnations = [
 %% @private
 -spec build_mock_call_ctx(mock_call_report(), test_ctx()) -> mock_call_ctx().
 build_mock_call_ctx(#mock_call_report{args = CallArgs}, #test_ctx{
+    test_spec = #atm_workflow_execution_test_spec{provider = ProviderSelector},
+    session_id = SessionId,
     workflow_execution_id = AtmWorkflowExecutionId,
     current_lane_index = CurrentAtmLaneIndex,
     current_run_num = CurrentRunNum,
     workflow_execution_exp_state = ExpState
 }) ->
     #atm_mock_call_ctx{
+        provider = ProviderSelector,
+        session_id = SessionId,
         workflow_execution_id = AtmWorkflowExecutionId,
         workflow_execution_exp_state = ExpState,
         current_lane_index = CurrentAtmLaneIndex,

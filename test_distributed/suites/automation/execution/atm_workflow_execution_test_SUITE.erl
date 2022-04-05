@@ -32,6 +32,7 @@
 
     atm_workflow_with_invalid_initial_store_content_scheduling_should_fail_test/1,
 
+    atm_workflow_execution_cancelled_in_scheduled_status_test/1,
     first_lane_run_preparation_failure_before_run_was_created_test/1,
     first_lane_run_preparation_failure_after_run_was_created_test/1
 ]).
@@ -47,6 +48,7 @@ groups() -> [
         atm_workflow_with_invalid_initial_store_content_scheduling_should_fail_test
     ]},
     {execution_tests, [parallel], [
+        atm_workflow_execution_cancelled_in_scheduled_status_test,
         first_lane_run_preparation_failure_before_run_was_created_test,
         first_lane_run_preparation_failure_after_run_was_created_test
     ]}
@@ -92,6 +94,9 @@ atm_workflow_scheduling_with_openfaas_not_configured_should_fail_test(_Config) -
 atm_workflow_with_invalid_initial_store_content_scheduling_should_fail_test(_Config) ->
     atm_workflow_execution_scheduling_test_base:atm_workflow_with_invalid_initial_store_content_scheduling_should_fail_test().
 
+
+atm_workflow_execution_cancelled_in_scheduled_status_test(_Config) ->
+    atm_workflow_execution_scheduling_test_base:atm_workflow_execution_cancelled_in_scheduled_status_test().
 
 first_lane_run_preparation_failure_before_run_was_created_test(_Config) ->
     atm_workflow_execution_preparation_test_base:first_lane_run_preparation_failure_before_run_was_created_test().
