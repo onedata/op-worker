@@ -27,7 +27,18 @@
 
 %% tests
 -export([
-    dir_stats_collector_test/1,
+    dir_stats_collector_test_basic_test/1,
+    dir_stats_collector_enabling_for_empty_space_test/1,
+    dir_stats_collector_enabling_for_not_empty_space_test/1,
+    dir_stats_collector_enabling_large_dirs_test/1,
+    dir_stats_collector_enabling_during_writing_test/1,
+    dir_stats_collector_race_with_file_adding_test/1,
+    dir_stats_collector_race_with_file_writing_test/1,
+    dir_stats_collector_race_with_subtree_adding_test/1,
+    dir_stats_collector_race_with_subtree_filling_with_data_test/1,
+    dir_stats_collector_race_with_file_adding_to_large_dir_test/1,
+    dir_stats_collector_multiple_status_change_test/1,
+    dir_stats_collector_adding_file_when_disabled_test/1,
     fslogic_new_file_test/1,
     lfm_create_and_unlink_test/1,
     lfm_create_and_access_test/1,
@@ -121,9 +132,20 @@
 
 -define(TEST_CASES, [
     get_recursive_file_list, % this test must be run first as it requires empty space
-    dir_stats_collector_test,
+    dir_stats_collector_test_basic_test,
+    dir_stats_collector_enabling_for_empty_space_test,
+    dir_stats_collector_enabling_for_not_empty_space_test,
+    dir_stats_collector_enabling_large_dirs_test,
+    dir_stats_collector_enabling_during_writing_test,
+    dir_stats_collector_race_with_file_adding_test,
+    dir_stats_collector_race_with_file_writing_test,
+    dir_stats_collector_race_with_subtree_adding_test,
+    dir_stats_collector_race_with_subtree_filling_with_data_test,
+    dir_stats_collector_race_with_file_adding_to_large_dir_test,
+    dir_stats_collector_multiple_status_change_test,
+    dir_stats_collector_adding_file_when_disabled_test,
     fslogic_new_file_test,
-    lfm_create_and_unlink_test,
+    lfm_`c`reate_and_unlink_test,
     lfm_create_and_access_test,
     lfm_create_failure,
     lfm_basic_rename_test,
@@ -209,7 +231,7 @@
     lfm_create_hardlink_to_symlink,
     recreate_file_on_storage,
     lfm_close_deleted_open_files
-]).
+    ]).
 
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -539,7 +561,7 @@ rename_removed_opened_file_test(Config) ->
     SessId = fun(User) -> ?config({session_id, {User, ?GET_DOMAIN(Worker)}}, Config) end,
     FileName = generator:gen_name(),
     FileNameString = binary_to_list(FileName),
-    FilePath = <<"/space_name1/",  FileName/binary>>,
+    FilePath = <<"/space_name1/", FileName/binary>>,
     User = <<"user1">>,
     User2 = <<"user2">>,
 
@@ -590,7 +612,7 @@ mkdir_removed_opened_file_test(Config) ->
     FileName = generator:gen_name(),
     FileName2 = generator:gen_name(),
     FileNameString = binary_to_list(FileName),
-    FilePath = <<"/space_name1/",  FileName/binary>>,
+    FilePath = <<"/space_name1/", FileName/binary>>,
     FilePath2 = <<FilePath/binary, "/", FileName2/binary>>,
     User = <<"user1">>,
 
@@ -655,7 +677,7 @@ rename_removed_opened_file_races_test_base(Config, MockOpts) ->
     SessId = fun(User) -> ?config({session_id, {User, ?GET_DOMAIN(Worker)}}, Config) end,
     FileName = generator:gen_name(),
     FileNameString = binary_to_list(FileName),
-    FilePath = <<"/space_name1/",  FileName/binary>>,
+    FilePath = <<"/space_name1/", FileName/binary>>,
     User = <<"user1">>,
     Master = self(),
 
@@ -757,11 +779,11 @@ lfm_monitored_open(Config) ->
     Attempts = 10,
 
     OpenAndHungFun = fun() ->
-        Self !  lfm:open(SessId1, ?FILE_REF(File1Guid), read),
+        Self ! lfm:open(SessId1, ?FILE_REF(File1Guid), read),
         receive _ -> ok end
     end,
     MonitoredOpenAndHungFun = fun() ->
-        Self !  lfm:monitored_open(SessId1, ?FILE_REF(File2Guid), read),
+        Self ! lfm:monitored_open(SessId1, ?FILE_REF(File2Guid), read),
         receive _ -> ok end
     end,
     GetAllProcessHandles = fun(Pid) ->
@@ -820,7 +842,7 @@ lfm_monitored_open(Config) ->
         {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId1, FilePath)),
 
         spawn(W, fun() ->
-            Self !  lfm:monitored_open(SessId1, ?FILE_REF(FileGuid), read),
+            Self ! lfm:monitored_open(SessId1, ?FILE_REF(FileGuid), read),
             receive _ -> ok end
         end),
         filename:join([<<"/">>, ?SPACE_ID1, <<"file_", FileIdx/binary>>])
@@ -949,8 +971,52 @@ lfm_close_deleted_open_files(Config) ->
     lfm_files_test_base:lfm_close_deleted_open_files(Config).
 
 
-dir_stats_collector_test(Config) ->
-    dir_stats_collector_test_base:single_provider_test(Config).
+dir_stats_collector_test_basic_test(Config) ->
+    dir_stats_collector_test_base:basic_test(Config).
+
+
+dir_stats_collector_enabling_for_empty_space_test(Config) ->
+    dir_stats_collector_test_base:enabling_for_empty_space_test(Config).
+
+
+dir_stats_collector_enabling_for_not_empty_space_test(Config) ->
+    dir_stats_collector_test_base:enabling_for_not_empty_space_test(Config).
+
+
+dir_stats_collector_enabling_large_dirs_test(Config) ->
+    dir_stats_collector_test_base:enabling_large_dirs_test(Config).
+
+
+dir_stats_collector_enabling_during_writing_test(Config) ->
+    dir_stats_collector_test_base:enabling_during_writing_test(Config).
+
+
+dir_stats_collector_race_with_file_adding_test(Config) ->
+    dir_stats_collector_test_base:race_with_file_adding_test(Config).
+
+
+dir_stats_collector_race_with_file_writing_test(Config) ->
+    dir_stats_collector_test_base:race_with_file_writing_test(Config).
+
+
+dir_stats_collector_race_with_subtree_adding_test(Config) ->
+    dir_stats_collector_test_base:race_with_subtree_adding_test(Config).
+
+
+dir_stats_collector_race_with_subtree_filling_with_data_test(Config) ->
+    dir_stats_collector_test_base:race_with_subtree_filling_with_data_test(Config).
+
+
+dir_stats_collector_race_with_file_adding_to_large_dir_test(Config) ->
+    dir_stats_collector_test_base:race_with_file_adding_to_large_dir_test(Config).
+
+
+dir_stats_collector_multiple_status_change_test(Config) ->
+    dir_stats_collector_test_base:multiple_status_change_test(Config).
+
+
+dir_stats_collector_adding_file_when_disabled_test(Config) ->
+    dir_stats_collector_test_base:adding_file_when_disabled_test(Config).
 
 
 %%%===================================================================
@@ -975,8 +1041,21 @@ init_per_testcase(lfm_create_and_read_symlink = Case, Config) ->
     time_test_utils:freeze_time(Config),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
-init_per_testcase(dir_stats_collector_test = Case, Config) ->
-    dir_stats_collector_test_base:init(init_per_testcase(?DEFAULT_CASE(Case), Config));
+init_per_testcase(Case, Config) when
+    Case =:= dir_stats_collector_test_basic_test;
+    Case =:= dir_stats_collector_enabling_for_empty_space_test;
+    Case =:= dir_stats_collector_enabling_for_not_empty_space_test;
+    Case =:= dir_stats_collector_enabling_large_dirs_test;
+    Case =:= dir_stats_collector_enabling_during_writing_test;
+    Case =:= dir_stats_collector_race_with_file_adding_test;
+    Case =:= dir_stats_collector_race_with_file_writing_test;
+    Case =:= dir_stats_collector_race_with_subtree_adding_test;
+    Case =:= dir_stats_collector_race_with_subtree_filling_with_data_test;
+    Case =:= dir_stats_collector_race_with_file_adding_to_large_dir_test;
+    Case =:= dir_stats_collector_multiple_status_change_test;
+    Case =:= dir_stats_collector_adding_file_when_disabled_test
+    ->
+    dir_stats_collector_test_base:init(init_per_testcase(?DEFAULT_CASE(Case), Config)).
 
 init_per_testcase(Case, Config) when
     Case =:= readdir_plus_should_work_with_token;
@@ -1006,7 +1085,20 @@ end_per_testcase(lfm_create_and_read_symlink = Case, Config) ->
     time_test_utils:unfreeze_time(Config),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
-end_per_testcase(dir_stats_collector_test = Case, Config) ->
+end_per_testcase(Case, Config) when
+    Case =:= dir_stats_collector_test_basic_test;
+    Case =:= dir_stats_collector_enabling_for_empty_space_test;
+    Case =:= dir_stats_collector_enabling_for_not_empty_space_test;
+    Case =:= dir_stats_collector_enabling_large_dirs_test;
+    Case =:= dir_stats_collector_enabling_during_writing_test;
+    Case =:= dir_stats_collector_race_with_file_adding_test;
+    Case =:= dir_stats_collector_race_with_file_writing_test;
+    Case =:= dir_stats_collector_race_with_subtree_adding_test;
+    Case =:= dir_stats_collector_race_with_subtree_filling_with_data_test;
+    Case =:= dir_stats_collector_race_with_file_adding_to_large_dir_test;
+    Case =:= dir_stats_collector_multiple_status_change_test;
+    Case =:= dir_stats_collector_adding_file_when_disabled_test
+    ->
     dir_stats_collector_test_base:teardown(Config),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 

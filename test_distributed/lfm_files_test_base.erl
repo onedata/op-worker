@@ -2471,7 +2471,8 @@ init_per_suite(Config) ->
         initializer:mock_auth_manager(NewConfig),
         initializer:setup_storage(NewConfig)
     end,
-    [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, pool_utils, ?MODULE]} | Config].
+    [{?ENV_UP_POSTHOOK, Posthook},
+        {?LOAD_MODULES, [initializer, pool_utils, dir_stats_collector_test_base, ?MODULE]} | Config].
 
 
 end_per_suite(Config) ->

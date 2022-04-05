@@ -54,7 +54,7 @@ on_file_location_change(FileCtx, ChangedLocationDoc = #document{
                         % location but still emit events and reconcile QoS.
                         % TODO VFS-8962 - fix getting file distribution in tests not to differentiate
                         % spaces with enabled and disabled stats
-                        case dir_stats_collector_config:is_enabled_for_space(SpaceId) of
+                        case dir_stats_collector_config:is_collecting_active(SpaceId) of
                             true ->
                                 try
                                     case fslogic_location:create_doc(FileCtx4, false, false) of
