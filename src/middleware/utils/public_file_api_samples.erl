@@ -12,7 +12,7 @@
 %%% operations depends on the file type.
 %%%
 %%% Two types of APIs are supported; REST and xrootd (only if
-%%% "openDataXrootdServerDomain" config variable is set in Onezone) .
+%%% "openDataXrootdServerDomain" config variable is set in Onezone).
 %%%
 %%% NOTE: API samples do not cover all available API, only the commonly used
 %%% endpoints and options.
@@ -128,8 +128,6 @@ xrootd_api(_, Domain, SpaceId, ShareId, FilePath) ->
             <<"command">> => [<<"xrdcp">>, ?XROOTD_URI(Domain, <<"/", FullDataPath/binary>>), <<".">>]
         }
     ].
-
-
 
 
 %%--------------------------------------------------------------------

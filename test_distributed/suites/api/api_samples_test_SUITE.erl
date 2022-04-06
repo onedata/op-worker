@@ -139,7 +139,7 @@ public_file_api_samples_test_base(FileType, FileGuid, ShareId, FilePathInShare, 
                     validate_result_fun = fun(_, {ok, Result}) ->
                         case XrootdStatus of
                             xrootd_enabled ->
-                                ?assertEqual([<<"rest">>, <<"xrootd">>], maps:keys(Result)),
+                                ?assertEqual(lists:sort([<<"rest">>, <<"xrootd">>]), lists:sort(maps:keys(Result))),
                                 verify_xrootd_api_samples(FileType, SpaceId, ShareId, FilePathInShare, maps:get(<<"xrootd">>, Result)),
                                 verify_rest_api_samples(FileType, ShareGuid, maps:get(<<"rest">>, Result));
                             xrootd_disabled ->
@@ -188,8 +188,7 @@ verify_xrootd_api_samples(FileType, SpaceId, ShareId, FilePath, SamplesJson) ->
 verify_rest_api_samples(FileType, ShareGuid, SamplesJson) ->
     {ok, ShareObjectId} = file_id:guid_to_objectid(ShareGuid),
 
-    ?assertMatch(#rest_api_samples{}, jsonable_record:from_json(SamplesJson, rest_api_samples)),
-    Samples = jsonable_record:from_json(SamplesJson, rest_api_samples),
+    Samples = ?assertMatch(#rest_api_samples{}, jsonable_record:from_json(SamplesJson, rest_api_samples)),
     ExpectedApiRoot = str_utils:format_bin("https://~s/api/v3/onezone", [ozw_test_rpc:get_domain()]),
     ?assertEqual(ExpectedApiRoot, Samples#rest_api_samples.api_root),
 
