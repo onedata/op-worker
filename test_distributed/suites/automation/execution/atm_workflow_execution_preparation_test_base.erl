@@ -71,7 +71,7 @@ first_lane_run_preparation_failure_before_run_was_created_test() ->
                 create_run = #atm_step_mock_spec{
                     % 'create_run' step execution is mocked entirely so that
                     % no lane run execution component will be created
-                    mock_execution = {true, {throw, ?ERROR_INTERNAL_SERVER_ERROR}}
+                    strategy = {yield, {throw, ?ERROR_INTERNAL_SERVER_ERROR}}
                 },
                 prepare_lane = #atm_step_mock_spec{
                     after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
@@ -103,7 +103,7 @@ first_lane_run_preparation_failure_after_run_was_created_test() ->
                     % 'create_run' step result is replaced by the one specified below but
                     % the step itself is executed normally so that lane run execution
                     % components (e.g. task executions) can be created
-                    mock_execution = {false, {throw, ?ERROR_INTERNAL_SERVER_ERROR}}
+                    strategy = {passthrough_with_result_override, {throw, ?ERROR_INTERNAL_SERVER_ERROR}}
                 },
                 prepare_lane = #atm_step_mock_spec{
                     after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->

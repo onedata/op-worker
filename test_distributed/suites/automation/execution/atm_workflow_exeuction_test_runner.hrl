@@ -31,13 +31,7 @@
     before_step_hook = undefined :: undefined | atm_workflow_execution_test_runner:hook(),
     before_step_exp_state_diff = default :: default | atm_workflow_execution_test_runner:exp_state_diff(),
 
-    mock_execution = false ::
-        % original step will be run unperturbed
-        false |
-        % original step will be run but it's result will be replaced with specified one
-        {false, {return | throw, Result :: term()}} |
-        % original step will not be run and specified result will be returned immediately
-        {true, {return | throw, Result :: term()}},
+    strategy = passthrough :: atm_workflow_execution_test_runner:mock_strategy(),
 
     % below checks will not be executed in case of mock_result = {true, _}
     % (step has not been executed and as such no change compared to before_step_* should occur)

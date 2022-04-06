@@ -40,14 +40,24 @@
     false | {true, atm_workflow_execution_exp_state_builder:exp_state()}
 ).
 
+-type result_override() :: {return, term()} | {throw, errors:error()}.
+-type mock_strategy() ::
+    % original step will be run unperturbed
+    passthrough |
+    % original step will be run but it's result will be replaced with specified one
+    {passthrough_with_result_override, result_override()} |
+    % original step will not be run and specified result will be returned immediately
+    {yield, result_override()}.
 -type step_mock_spec() :: #atm_step_mock_spec{}.
+
 -type lane_run_test_spec() :: #atm_lane_run_execution_test_spec{}.
 -type incarnation_test_spec() :: #atm_workflow_execution_incarnation_test_spec{}.
 -type test_spec() :: #atm_workflow_execution_test_spec{}.
 
 -export_type([
     mock_call_ctx/0, hook/0, exp_state_diff/0,
-    step_mock_spec/0, lane_run_test_spec/0, incarnation_test_spec/0, test_spec/0
+    result_override/0, mock_strategy/0, step_mock_spec/0,
+    lane_run_test_spec/0, incarnation_test_spec/0, test_spec/0
 ]).
 
 -record(mock_call_report, {
@@ -185,8 +195,8 @@ monitor_workflow_execution(TestCtx) ->
                 TestCtx
         end,
 
-        reply_to_execution_process(ReplyTo, case {Timing, StepMockSpec#atm_step_mock_spec.mock_execution} of
-            {before_step, MockExecution} -> MockExecution;
+        reply_to_execution_process(ReplyTo, case {Timing, StepMockSpec#atm_step_mock_spec.strategy} of
+            {before_step, MockStrategy} -> MockStrategy;
             {after_step, _} -> ok
         end),
 
@@ -565,26 +575,26 @@ exec_mock(AtmWorkflowExecutionId, Step, Args) ->
             MockExecution = call_test_process(TestProcPid, MockCallReport),
 
             case MockExecution of
-                false ->
+                passthrough ->
                     Result = meck:passthrough(Args),
                     ok = call_test_process(TestProcPid, MockCallReport#mock_call_report{timing = after_step}),
                     Result;
-                {false, MockedResult} ->
+                {passthrough_with_result_override, ResultOverride} ->
                     meck:passthrough(Args),
                     ok = call_test_process(TestProcPid, MockCallReport#mock_call_report{timing = after_step}),
-                    return_or_throw(MockedResult);
-                {true, MockedResult} ->
-                    return_or_throw(MockedResult)
+                    apply_result_override(ResultOverride);
+                {yield, ResultOverride} ->
+                    apply_result_override(ResultOverride)
             end
     end.
 
 
 %% @private
--spec return_or_throw
+-spec apply_result_override
     ({return, Result}) -> Result when Result :: term();
     ({throw, errors:error()}) -> no_return().
-return_or_throw({return, Result}) -> Result;
-return_or_throw({throw, Error}) -> throw(Error).
+apply_result_override({return, Result}) -> Result;
+apply_result_override({throw, Error}) -> throw(Error).
 
 
 %% @private
@@ -604,7 +614,7 @@ call_test_process(TestProcPid, Msg) ->
 %% @private
 -spec reply_to_execution_process
     % when replying to 'before_step' report
-    (reply_to(), {false | true, {return | throw, term()}}) -> ok;
+    (reply_to(), mock_strategy()) -> ok;
     % when replying to 'after_step' report
     (reply_to(), ok) -> ok.
 reply_to_execution_process({ExecutionProcPid, MRef}, Reply) ->
