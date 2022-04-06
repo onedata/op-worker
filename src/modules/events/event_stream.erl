@@ -180,6 +180,10 @@ init([Mgr, #subscription{id = SubId} = Sub, SessId]) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
+handle_call({add_subscription, Sub}, _From, #state{} = State) ->
+    #state{session_id = SessId, subscriptions = Subs} = State,
+    {reply, ok, State#state{subscriptions = add_subscription(SessId, Sub, Subs)}};
+
 handle_call(Request, From, State) ->
     gen_server2:reply(From, ok),
     handle_cast(Request, State).
@@ -197,10 +201,6 @@ handle_call(Request, From, State) ->
 handle_cast(#event{type = Evt}, #state{key = Key, session_id = SessId} = State) ->
     ?debug("Handling event ~p in event stream ~p and session ~p", [Evt, Key, SessId]),
     {noreply, process_event(Evt, State)};
-
-handle_cast({add_subscription, Sub}, #state{} = State) ->
-    #state{session_id = SessId, subscriptions = Subs} = State,
-    {noreply, State#state{subscriptions = add_subscription(SessId, Sub, Subs)}};
 
 handle_cast({remove_subscription, SubId}, #state{} = State) ->
     #state{session_id = SessId, subscriptions = Subs} = State,
