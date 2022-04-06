@@ -221,7 +221,8 @@ delete_file(FileCtx, UserId, TaskId, TraverseInfo = #{emit_events := EmitEvents}
 file_processed(FileCtx, UserCtx, TaskId, TraverseInfo = #{root_original_parent_uuid := RootOriginalParentUuid}) ->
     {ParentFileCtx, FileCtx1} = files_tree:get_parent(FileCtx, UserCtx),
     case file_qos:get_effective(RootOriginalParentUuid) of
-        {ok, #effective_file_qos{qos_entries = EffectiveQosEntries}} ->
+        {ok, EffectiveFileQos} ->
+            EffectiveQosEntries = file_qos:get_qos_entries(EffectiveFileQos),
             SpaceId = file_ctx:get_space_id_const(FileCtx1),
             OriginalRootParentCtx = file_ctx:new_by_uuid(RootOriginalParentUuid, SpaceId),
             lists:foreach(fun(EffectiveQosEntryId) ->

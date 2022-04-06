@@ -667,33 +667,39 @@ check_update_times(Config, NodesSelectors, FileConstructorsToCheck) ->
 
 
 check_space_dir_values_map_and_time_series_collection(
-    Config, NodesSelector, SpaceGuid, _ExpectedMap, _IsCollectionEmpty, disabled = _CollectingStatus
+    Config, NodesSelector, SpaceGuid, _ExpectedCurrentStats, _IsCollectionEmpty, disabled = _CollectingStatus
 ) ->
     [Worker | _] = ?config(NodesSelector, Config),
-    ?assertMatch({error, dir_stats_disabled_for_space},
-        rpc:call(Worker, dir_size_stats, get_stats_and_time_series_collections, [SpaceGuid]));
+    ?assertMatch(?ERROR_DIR_STATS_DISABLED_FOR_SPACE,
+        rpc:call(Worker, dir_size_stats, get_stats_and_time_series_collection, [SpaceGuid]));
 
 check_space_dir_values_map_and_time_series_collection(
-    Config, NodesSelector, SpaceGuid, ExpectedMap, IsCollectionEmpty, CollectingStatus
+    Config, NodesSelector, SpaceGuid, ExpectedCurrentStats, IsCollectionEmpty, CollectingStatus
 ) ->
     Attempts = case CollectingStatus of
         enabled -> 1;
         initializing -> ?ATTEMPTS
     end,
     [Worker | _] = ?config(NodesSelector, Config),
-    {ok, {CurrentValues, WindowsMap}} = ?assertMatch({ok, {_, _}},
-        rpc:call(Worker, dir_size_stats, get_stats_and_time_series_collections, [SpaceGuid]), Attempts),
+    {ok, {CurrentStats, TimeStats}} = ?assertMatch({ok, {_, _}},
+        rpc:call(Worker, dir_size_stats, get_stats_and_time_series_collection, [SpaceGuid]), Attempts),
 
-    ?assertEqual(ExpectedMap, CurrentValues),
+    ?assertEqual(ExpectedCurrentStats, CurrentStats),
 
     case {IsCollectionEmpty, CollectingStatus} of
         {true, enabled} ->
-            ?assertEqual(lists:duplicate(16, []), maps:values(WindowsMap));
+            maps:foreach(fun(_TimeSeriesName, WindowsPerMetric) ->
+                ?assertEqual(lists:duplicate(4, []), maps:values(WindowsPerMetric))
+            end, TimeStats);
         {true, initializing} ->
-            ?assertEqual(lists:duplicate(16, 0),
-                lists:map(fun([{_Timestamp, Value}]) -> Value end, maps:values(WindowsMap)));
+            maps:foreach(fun(_TimeSeriesName, WindowsPerMetric) ->
+                ?assertEqual(lists:duplicate(4, 0),
+                    lists:map(fun([{_Timestamp, Value}]) -> Value end, maps:values(WindowsPerMetric)))
+            end, TimeStats);
         {false, _} ->
-            ?assertEqual(16, maps:size(WindowsMap))
+            maps:foreach(fun(_TimeSeriesName, WindowsPerMetric) ->
+                ?assertEqual(4, maps:size(WindowsPerMetric))
+            end, TimeStats)
     end.
 
 

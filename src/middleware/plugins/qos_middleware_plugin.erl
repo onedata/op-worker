@@ -17,6 +17,7 @@
 -behaviour(middleware_handler).
 
 -include("middleware/middleware.hrl").
+-include("modules/datastore/qos.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -88,15 +89,15 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = audit_log}}) -> #{
 };
 data_spec(#op_req{operation = get, gri = #gri{aspect = time_series_collections}}) ->
     undefined;
-% @TODO VFS-8958 Adjust when time series store browsing API is defined
+%% @TODO VFS-9176 Align QoS transfer stats API with time series API
 data_spec(#op_req{operation = get, gri = #gri{aspect = {time_series_collection, _}}}) -> #{
     required => #{
         <<"metrics">> => {json, fun(RequestedMetrics) ->
             try
-                maps:foreach(fun(TimeSeriesId, MetricIds) ->
-                    true = is_binary(TimeSeriesId) andalso
-                        is_list(MetricIds) andalso
-                        lists:all(fun is_binary/1, MetricIds)
+                maps:foreach(fun(TimeSeriesName, MetricNames) ->
+                    true = is_binary(TimeSeriesName) andalso
+                        is_list(MetricNames) andalso
+                        lists:all(fun is_binary/1, MetricNames)
                 end, RequestedMetrics),
                 true
             catch _:_ ->
@@ -257,45 +258,34 @@ get(#op_req{gri = #gri{id = QosEntryId, aspect = audit_log}, data = Data}, _QosE
     {ok, value, BrowseResult};
 
 get(#op_req{gri = #gri{id = QosEntryId, aspect = time_series_collections}}, _QosEntry) ->
-    {ok, FilesTSIds} = qos_transfer_stats:list_time_series_ids(QosEntryId, ?FILES_STATS),
-    {ok, BytesTSIds} = qos_transfer_stats:list_time_series_ids(QosEntryId, ?BYTES_STATS),
+    {ok, FilesCollectionLayout} = qos_transfer_stats:get_layout(QosEntryId, ?FILES_STATS),
+    {ok, BytesCollectionLayout} = qos_transfer_stats:get_layout(QosEntryId, ?BYTES_STATS),
     {ok, value, #{
-        ?FILES_STATS => FilesTSIds,
-        ?BYTES_STATS => BytesTSIds
+        ?FILES_STATS => maps:keys(FilesCollectionLayout),
+        ?BYTES_STATS => maps:keys(BytesCollectionLayout)
     }};
 
+%% @TODO VFS-9176 Align QoS transfer stats API with time series API
 get(#op_req{gri = #gri{id = QosEntryId, aspect = {time_series_collection, Type}}, data = Data}, _QosEntry) ->
-    RequestedMetrics = maps:get(<<"metrics">>, Data),
-    RequestRange = maps:fold(fun(TimeSeriesId, MetricIds, Acc) ->
-        Acc ++ [{TimeSeriesId, MId} || MId <- MetricIds]
-    end, [], RequestedMetrics),
+    SliceLayout = maps:get(<<"metrics">>, Data),
     PossiblyUndefOpts = #{
-        start => maps:get(<<"startTimestamp">>, Data, undefined),
-        limit => maps:get(<<"limit">>, Data, undefined)
+        start_timestamp => maps:get(<<"startTimestamp">>, Data, undefined),
+        window_limit => maps:get(<<"limit">>, Data, undefined)
     },
     Opts = maps_utils:remove_undefined(PossiblyUndefOpts),
-    case qos_transfer_stats:list_windows(QosEntryId, Type, RequestRange, Opts) of
-        {error, not_found} ->
+    case qos_transfer_stats:get_slice(QosEntryId, Type, SliceLayout, Opts) of
+        ?ERROR_NOT_FOUND ->
             ?ERROR_NOT_FOUND;
-        {error, time_series_not_found} ->
-            ?ERROR_NOT_FOUND;
-        {error, metric_not_found} ->
-            ?ERROR_NOT_FOUND;
-        {ok, WindowsPerFullMetricId} ->
+        {ok, Slice} ->
             {ok, value, #{
-                <<"windows">> => maps:fold(fun({TimeSeriesId, MetricId}, Windows, Acc) ->
-                    MetricsForCurrentTimeSeries = maps:get(TimeSeriesId, Acc, #{}),
-                    Acc#{
-                        TimeSeriesId => MetricsForCurrentTimeSeries#{
-                            MetricId => lists:map(fun({Timestamp, {_ValuesCount, ValuesSum}}) ->
-                                #{
-                                    <<"timestamp">> => Timestamp,
-                                    <<"value">> => ValuesSum
-                                }
-                            end, Windows)
+                <<"windows">> => tsc_structure:map(fun(_TimeSeriesName, _MetricName, Windows) ->
+                    lists:map(fun({Timestamp, {_ValuesCount, ValuesSum}}) ->
+                        #{
+                            <<"timestamp">> => Timestamp,
+                            <<"value">> => ValuesSum
                         }
-                    }
-                end, #{}, WindowsPerFullMetricId)
+                    end, Windows)
+                end, Slice)
             }}
     end.
 

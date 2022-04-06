@@ -54,7 +54,6 @@ all() -> [
 -define(MAX_FILE_SIZE_TS_NAME, <<"max_file_size">>).
 -define(MAX_FILE_SIZE_METRIC_NAME, ?MAX_FILE_SIZE_TS_NAME).
 -define(MAX_FILE_SIZE_METRIC_CONFIG, #metric_config{
-    label = ?MAX_FILE_SIZE_TS_NAME,
     resolution = ?MONTH_RESOLUTION,
     retention = 1,
     aggregator = max
@@ -72,7 +71,6 @@ all() -> [
 
 -define(MINUTE_METRIC_NAME, <<"minute">>).
 -define(MINUTE_METRIC_CONFIG, #metric_config{
-    label = ?MINUTE_METRIC_NAME,
     resolution = ?MINUTE_RESOLUTION,
     retention = 120,
     aggregator = sum
@@ -83,7 +81,6 @@ all() -> [
 
 -define(HOUR_METRIC_NAME, <<"hour">>).
 -define(HOUR_METRIC_CONFIG, #metric_config{
-    label = ?HOUR_METRIC_NAME,
     resolution = ?HOUR_RESOLUTION,
     retention = 48,
     aggregator = sum
@@ -94,7 +91,6 @@ all() -> [
 
 -define(DAY_METRIC_NAME, <<"day">>).
 -define(DAY_METRIC_CONFIG, #metric_config{
-    label = ?DAY_METRIC_NAME,
     resolution = ?DAY_RESOLUTION,
     retention = 60,
     aggregator = sum
@@ -183,7 +179,7 @@ create_test(_Config) ->
     ?assertEqual(ExpLayout, get_layout(AtmWorkflowExecutionAuth, AtmStoreId)),
     ?assertEqual(
         #{?MAX_FILE_SIZE_TS_NAME => #{?MAX_FILE_SIZE_METRIC_NAME => []}},
-        get_windows(AtmWorkflowExecutionAuth, AtmStoreId, ExpLayout)
+        get_slice(AtmWorkflowExecutionAuth, AtmStoreId, ExpLayout)
     ).
 
 
@@ -211,8 +207,8 @@ manage_content_test(_Config) ->
     end, [
         5,
         <<"BIN">>,
-        [#{<<"ts">> => <<"name">>}]
-%%        [#{<<"tsName">> => <<"mp3">>, <<"timestamp">> => 0, <<"value">> => 10}, 10]  TODO VFS-8941
+        [#{<<"ts">> => <<"name">>}],
+        [#{<<"tsName">> => <<"mp3">>, <<"timestamp">> => 0, <<"value">> => 10}, 10]
     ]),
 
     % Timestamps of other measurements will be calculated based on Timestamp1 so to
@@ -234,7 +230,7 @@ manage_content_test(_Config) ->
         AtmWorkflowExecutionAuth, Measurements1, ContentUpdateOpts, AtmStoreId
     ))),
     ?assertEqual(ExpLayout1, get_layout(AtmWorkflowExecutionAuth, AtmStoreId)),
-    ?assertEqual(ExpWindows1, get_windows(AtmWorkflowExecutionAuth, AtmStoreId, ExpLayout1)),
+    ?assertEqual(ExpWindows1, get_slice(AtmWorkflowExecutionAuth, AtmStoreId, ExpLayout1)),
 
     Timestamp2 = Timestamp1 - 3601,
     Timestamp3 = Timestamp1 + 120,
@@ -294,7 +290,7 @@ manage_content_test(_Config) ->
         AtmWorkflowExecutionAuth, Measurements2, ContentUpdateOpts, AtmStoreId
     ))),
     ?assertEqual(ExpLayout2, get_layout(AtmWorkflowExecutionAuth, AtmStoreId)),
-    ?assertEqual(ExpWindows2, get_windows(AtmWorkflowExecutionAuth, AtmStoreId, ExpLayout2)),
+    ?assertEqual(ExpWindows2, get_slice(AtmWorkflowExecutionAuth, AtmStoreId, ExpLayout2)),
 
     % Assert operation is atomic (it it fails no metric should be modified)
     InvalidContentUpdateOpts = #atm_time_series_store_content_update_options{
@@ -322,7 +318,7 @@ manage_content_test(_Config) ->
         AtmWorkflowExecutionAuth, Measurements2, InvalidContentUpdateOpts, AtmStoreId
     ))),
     ?assertEqual(ExpLayout2, get_layout(AtmWorkflowExecutionAuth, AtmStoreId)),
-    ?assertEqual(ExpWindows2, get_windows(AtmWorkflowExecutionAuth, AtmStoreId, ExpLayout2)),
+    ?assertEqual(ExpWindows2, get_slice(AtmWorkflowExecutionAuth, AtmStoreId, ExpLayout2)),
 
     % Test slices
     ExpSliceWindows1 = #{
@@ -336,7 +332,7 @@ manage_content_test(_Config) ->
     },
     ?assertEqual(
         ExpSliceWindows1,
-        get_windows(AtmWorkflowExecutionAuth, AtmStoreId, #{
+        get_slice(AtmWorkflowExecutionAuth, AtmStoreId, #{
             ?MAX_FILE_SIZE_TS_NAME => [?MAX_FILE_SIZE_METRIC_NAME],
             <<"count_cn_resources">> => [?MINUTE_METRIC_NAME, ?DAY_METRIC_NAME]
         })
@@ -351,7 +347,7 @@ manage_content_test(_Config) ->
     },
     ?assertEqual(
         ExpSliceWindows2,
-        get_windows(
+        get_slice(
             AtmWorkflowExecutionAuth, AtmStoreId, #{<<"count_mp3">> => SortedCountTSMetricNames},
             Timestamp1, 1
         )
@@ -416,7 +412,7 @@ infer_window_timestamp(Time, #metric_config{resolution = Resolution}) ->
 
 %% @private
 -spec get_layout(atm_workflow_execution_auth:record(), atm_store:id()) ->
-    time_series_collection:metrics_by_time_series().
+    time_series_collection:layout().
 get_layout(AtmWorkflowExecutionAuth, AtmStoreId) ->
     BrowseOpts = #atm_time_series_store_content_browse_options{
         request = #atm_time_series_store_content_get_layout_req{}
@@ -434,43 +430,43 @@ get_layout(AtmWorkflowExecutionAuth, AtmStoreId) ->
 
 
 %% @private
--spec get_windows(
+-spec get_slice(
     atm_workflow_execution_auth:record(),
     atm_store:id(),
-    time_series_collection:metrics_by_time_series()
+    time_series_collection:layout()
 ) ->
     #{time_series_collection:time_series_id() => #{ts_metric:id() => [ts_windows:value()]}}.
-get_windows(AtmWorkflowExecutionAuth, AtmStoreId, Layout) ->
-    get_windows(AtmWorkflowExecutionAuth, AtmStoreId, Layout, undefined).
+get_slice(AtmWorkflowExecutionAuth, AtmStoreId, Layout) ->
+    get_slice(AtmWorkflowExecutionAuth, AtmStoreId, Layout, undefined).
 
 
 %% @private
--spec get_windows(
+-spec get_slice(
     atm_workflow_execution_auth:record(),
     atm_store:id(),
     time_series_collection:metrics_by_time_series(),
     undefined | atm_time_series_store_content_browse_options:timestamp()
 ) ->
     #{time_series_collection:time_series_id() => #{ts_metric:id() => [ts_windows:value()]}}.
-get_windows(AtmWorkflowExecutionAuth, AtmStoreId, Layout, StartTimestamp) ->
-    get_windows(AtmWorkflowExecutionAuth, AtmStoreId, Layout, StartTimestamp, 10000000000).
+get_slice(AtmWorkflowExecutionAuth, AtmStoreId, Layout, StartTimestamp) ->
+    get_slice(AtmWorkflowExecutionAuth, AtmStoreId, Layout, StartTimestamp, 10000000000).
 
 
 %% @private
--spec get_windows(
+-spec get_slice(
     atm_workflow_execution_auth:record(),
     atm_store:id(),
     time_series_collection:metrics_by_time_series(),
     undefined | atm_time_series_store_content_browse_options:timestamp(),
-    atm_time_series_store_content_browse_options:windows_limit()
+    atm_time_series_store_content_browse_options:window_limit()
 ) ->
     #{time_series_collection:time_series_id() => #{ts_metric:id() => [ts_windows:value()]}}.
-get_windows(AtmWorkflowExecutionAuth, AtmStoreId, Layout, StartTimestamp, WindowsLimit) ->
+get_slice(AtmWorkflowExecutionAuth, AtmStoreId, Layout, StartTimestamp, WindowLimit) ->
     BrowseOpts = #atm_time_series_store_content_browse_options{
         request = #atm_time_series_store_content_get_slice_req{
             layout = Layout,
             start_timestamp = StartTimestamp,
-            windows_limit = WindowsLimit
+            window_limit = WindowLimit
         }
     },
 

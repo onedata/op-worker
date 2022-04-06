@@ -584,18 +584,31 @@ recall_details_test_base(Spec, TotalFileCount, TotalByteSize) ->
     end, Providers),
     
     % check recall stats (stats are only stored on provider performing recall)
+    Layout = #{
+        <<"bytesCopied">> => [<<"hour">>, <<"minute">>, <<"day">>, <<"total">>],
+        <<"filesCopied">> => [<<"hour">>, <<"minute">>, <<"day">>, <<"total">>],
+        <<"filesFailed">> => [ <<"total">>]
+    },
     ?assertMatch({ok, #{
-        {<<"bytesCopied">>,<<"hour">>} := [{_,{_, TotalByteSize}}],
-        {<<"bytesCopied">>,<<"minute">>} := [{_,{_, TotalByteSize}}],
-        {<<"bytesCopied">>,<<"day">>} := [{_,{_, TotalByteSize}}],
-        {<<"bytesCopied">>,<<"total">>} := [{_,{_, TotalByteSize}}],
-        {<<"filesCopied">>,<<"hour">>} := [{_,{TotalFileCount, TotalFileCount}}],
-        {<<"filesCopied">>,<<"minute">>} := [{_,{TotalFileCount, TotalFileCount}}],
-        {<<"filesCopied">>,<<"day">>} := [{_,{TotalFileCount, TotalFileCount}}],
-        {<<"filesCopied">>,<<"total">>} := [{_,{TotalFileCount, TotalFileCount}}],
-        {<<"filesFailed">>,<<"total">>} := []
+        <<"bytesCopied">> := #{
+            <<"hour">> := [{_,{_, TotalByteSize}}],
+            <<"minute">> := [{_,{_, TotalByteSize}}],
+            <<"day">> := [{_,{_, TotalByteSize}}],
+            <<"total">> := [{_,{_, TotalByteSize}}]
+        },
+        <<"filesCopied">> := #{
+            <<"hour">> := [{_,{TotalFileCount, TotalFileCount}}],
+            <<"minute">> := [{_,{TotalFileCount, TotalFileCount}}],
+            <<"day">> := [{_,{TotalFileCount, TotalFileCount}}],
+            <<"total">> := [{_,{TotalFileCount, TotalFileCount}}]
+        },
+        <<"filesFailed">> := #{
+            <<"total">> := []
+        }
         %% @TODO VFS-8839 - use op_archives after implementing histogram API
-    }}, opw_test_rpc:call(krakow, archive_recall, get_stats, [file_id:guid_to_uuid(RecallRootFileGuid)]), ?ATTEMPTS),
+    }}, opw_test_rpc:call(krakow, archive_recall, get_stats, [
+        file_id:guid_to_uuid(RecallRootFileGuid), Layout, #{}
+    ]), ?ATTEMPTS),
     
     %% @TODO VFS-8839 - check progress until gui starts to support histograms and error log browsing
     ?assertMatch({ok, #{

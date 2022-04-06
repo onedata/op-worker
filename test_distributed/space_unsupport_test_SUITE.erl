@@ -17,6 +17,7 @@
 -include("modules/storage/import/storage_import.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include("modules/datastore/qos.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 
