@@ -1604,12 +1604,13 @@ flush_stats(#state{
 %% @end
 %%--------------------------------------------------------------------
 -spec flush_events(#state{}) -> #state{}.
-flush_events(State) ->
+flush_events(#state{file_ctx = FileCtx} = State) ->
     lists:foreach(fun({ExcludedSessions, LocationChanges}) ->
         % TODO VFS-7396 catch error and repeat
         ok = fslogic_event_emitter:emit_file_locations_changed(
             lists:reverse(LocationChanges), ExcludedSessions)
     end, lists:reverse(fslogic_cache:clear_location_changes())),
+    file_popularity:update_size(FileCtx),
     cancel_events_timer(State).
 
 -spec set_caching_timers(#state{}) -> #state{}.

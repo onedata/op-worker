@@ -732,7 +732,7 @@ get_file_distribution(Worker, SessId, FileKey) ->
 
 
 exec(Worker, Fun) ->
-    exec(Worker, Fun, timer:seconds(60)).
+    exec(Worker, Fun, timer:minutes(2)).
 
 
 exec(Worker, Fun, Timeout) ->
