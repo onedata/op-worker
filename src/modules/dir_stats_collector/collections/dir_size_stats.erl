@@ -58,9 +58,7 @@
 
 %% see the module doc
 -type current_stats() :: dir_stats_collection:collection().
-% time series collection slice showing the changes of stats in time
 -type time_stats() :: time_series_collection:slice().
-% time series collection slice retrieved from persistence that holds both current and time stats
 -type internal_stats() :: time_series_collection:slice().
 
 
@@ -267,20 +265,18 @@ update_stats(Guid, CollectionUpdate) ->
 %% @private
 -spec internal_stats_layout_with_current_metrics(file_id:file_guid()) -> time_series_collection:layout().
 internal_stats_layout_with_current_metrics(Guid) ->
-    maps_utils:generate_from_list(fun(StatName) ->
-        {StatName, [?CURRENT_METRIC]}
-    end, stat_names(Guid)).
+    maps_utils:generate_from_list(fun
+        (StatName) -> {StatName, [?CURRENT_METRIC]}
+    end, [?INCARNATION_TIME_SERIES | stat_names(Guid)]).
 
 
 %% @private
 -spec internal_stats_config(file_id:file_guid()) -> time_series_collection:config().
 internal_stats_config(Guid) ->
-    ConfigWithoutIncarnation = maps_utils:generate_from_list(fun(StatName) ->
-        {StatName, metrics_extended_with_current_value()}
-    end, stat_names(Guid)),
-    ConfigWithoutIncarnation#{
-        ?INCARNATION_TIME_SERIES => #{?CURRENT_METRIC => current_metric()}
-    }.
+    maps_utils:generate_from_list(fun
+        (?INCARNATION_TIME_SERIES) -> {?INCARNATION_TIME_SERIES, #{?CURRENT_METRIC => current_metric()}};
+        (StatName) -> {StatName, metrics_extended_with_current_value()}
+    end, [?INCARNATION_TIME_SERIES | stat_names(Guid)]).
 
 
 %% @private
@@ -348,9 +344,7 @@ internal_stats_to_current_stats(InternalStats) ->
 -spec internal_stats_to_time_stats(internal_stats()) -> time_stats().
 internal_stats_to_time_stats(InternalStats) ->
     maps:map(fun(_TimeSeriesName, WindowsPerMetric) ->
-        maps:map(fun(_MetricName, Windows) ->
-            lists:map(fun({Timestamp, {Count, Sum}}) -> {Timestamp, round(Sum / Count)} end, Windows)
-        end, maps:without([?CURRENT_METRIC], WindowsPerMetric))
+        maps:without([?CURRENT_METRIC], WindowsPerMetric)
     end, maps:without([?INCARNATION_TIME_SERIES], InternalStats)).
 
 
