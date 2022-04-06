@@ -306,7 +306,7 @@ get_exp_state_diff(
         workflow_execution_exp_state = ExpState0,
         call_args = [AtmLaneRunSelector, _AtmWorkflowExecutionDoc, _AtmWorkflowExecutionCtx]
     }) ->
-        {true, atm_workflow_execution_exp_state_builder:report_lane_run_started_preparing(
+        {true, atm_workflow_execution_exp_state_builder:expect_lane_run_started_preparing(
             AtmLaneRunSelector, ExpState0
         )}
     end;
@@ -319,7 +319,7 @@ get_exp_state_diff(
         workflow_execution_exp_state = ExpState0,
         call_args = [AtmLaneRunSelector, _AtmWorkflowExecutionDoc, _AtmWorkflowExecutionCtx]
     }) ->
-        {true, atm_workflow_execution_exp_state_builder:report_lane_run_created(
+        {true, atm_workflow_execution_exp_state_builder:expect_lane_run_created(
             AtmLaneRunSelector, ExpState0
         )}
     end;
@@ -332,7 +332,7 @@ get_exp_state_diff(
         workflow_execution_exp_state = ExpState0,
         call_args = [_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmLaneRunSelector]
     }) ->
-        {true, atm_workflow_execution_exp_state_builder:report_lane_run_enqueued(
+        {true, atm_workflow_execution_exp_state_builder:expect_lane_run_enqueued(
             AtmLaneRunSelector, ExpState0
         )}
     end;

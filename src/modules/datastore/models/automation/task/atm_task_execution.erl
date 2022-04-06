@@ -35,6 +35,10 @@
 -export_type([status/0]).
 
 
+% get ctx via module call to allow mocking in ct tests
+-define(CTX(), ?MODULE:get_ctx()).
+
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -42,22 +46,16 @@
 
 -spec create(record()) -> {ok, doc()} | {error, term()}.
 create(AtmTaskExecutionRecord) ->
-    % get ctx via module call to allow mocking
-    Ctx = ?MODULE:get_ctx(),
-    datastore_model:create(Ctx, #document{value = AtmTaskExecutionRecord}).
+    datastore_model:create(?CTX(), #document{value = AtmTaskExecutionRecord}).
 
 
 -spec get(id()) -> {ok, doc()} | {error, term()}.
 get(AtmTaskExecutionId) ->
-    % get ctx via module call to allow mocking
-    Ctx = ?MODULE:get_ctx(),
-    datastore_model:get(Ctx, AtmTaskExecutionId).
+    datastore_model:get(?CTX(), AtmTaskExecutionId).
 
 
 -spec update(id(), diff()) -> {ok, doc()} | {error, term()}.
 update(AtmTaskExecutionId, Diff1) ->
-    % get ctx via module call to allow mocking
-    Ctx = ?MODULE:get_ctx(),
     Diff2 = fun(#atm_task_execution{status = PrevStatus} = AtmTaskExecution) ->
         case Diff1(AtmTaskExecution#atm_task_execution{status_changed = false}) of
             {ok, #atm_task_execution{status = NewStatus} = NewAtmTaskExecution} ->
@@ -68,14 +66,12 @@ update(AtmTaskExecutionId, Diff1) ->
                 Error
         end
     end,
-    datastore_model:update(Ctx, AtmTaskExecutionId, Diff2).
+    datastore_model:update(?CTX(), AtmTaskExecutionId, Diff2).
 
 
 -spec delete(id()) -> ok | {error, term()}.
 delete(AtmStoreId) ->
-    % get ctx via module call to allow mocking
-    Ctx = ?MODULE:get_ctx(),
-    datastore_model:delete(Ctx, AtmStoreId).
+    datastore_model:delete(?CTX(), AtmStoreId).
 
 
 %%%===================================================================

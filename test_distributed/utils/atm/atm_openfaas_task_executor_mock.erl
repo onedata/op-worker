@@ -58,6 +58,11 @@
 init(ProviderSelectors, ModuleWithOpenfaasDockerMock) ->
     Workers = get_nodes(utils:ensure_list(ProviderSelectors)),
 
+    % 'atm_task_execution' is mocked to be kept in memory only. This is necessary as
+    % mocking of 'atm_openfaas_task_executor' makes it unable to dump docs containing
+    % it ('atm_task_execution' is such model) to database when shutting down provider
+    % (encoding/decoding mocks are removed automatically while some docs may not have
+    % been flushed yet) which effectively freezes op-worker.
     test_utils:mock_new(Workers, atm_task_execution, [passthrough, no_history]),
     test_utils:mock_expect(Workers, atm_task_execution, get_ctx, fun() ->
         #{model => atm_task_execution, disc_driver => undefined}

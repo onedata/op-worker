@@ -28,20 +28,20 @@
 -export([
     init/5,
 
-    report_lane_run_started_preparing/2,
-    report_current_lane_run_started_preparing/2,
-    report_lane_run_started_preparing_in_advance/2,
-    report_lane_run_created/2,
-    report_lane_run_enqueued/2,
-    report_lane_run_aborting/2,
-    report_lane_run_failed/2,
-    report_lane_run_cancelled/2,
+    expect_lane_run_started_preparing/2,
+    expect_current_lane_run_started_preparing/2,
+    expect_lane_run_started_preparing_in_advance/2,
+    expect_lane_run_created/2,
+    expect_lane_run_enqueued/2,
+    expect_lane_run_aborting/2,
+    expect_lane_run_failed/2,
+    expect_lane_run_cancelled/2,
 
-    report_all_task_executions_skipped/2,
+    expect_all_task_executions_skipped/2,
 
-    report_workflow_execution_aborting/1,
-    report_workflow_execution_failed/1,
-    report_workflow_execution_cancelled/1,
+    expect_workflow_execution_aborting/1,
+    expect_workflow_execution_failed/1,
+    expect_workflow_execution_cancelled/1,
 
     assert_matches_with_backend/1
 ]).
@@ -130,21 +130,21 @@ init(
     }.
 
 
--spec report_lane_run_started_preparing(atm_lane_execution:lane_run_selector(), exp_state()) ->
+-spec expect_lane_run_started_preparing(atm_lane_execution:lane_run_selector(), exp_state()) ->
     exp_state().
-report_lane_run_started_preparing(AtmLaneRunSelector, ExpState) ->
+expect_lane_run_started_preparing(AtmLaneRunSelector, ExpState) ->
     case is_current_lane_run(AtmLaneRunSelector, ExpState) of
-        true -> report_current_lane_run_started_preparing(AtmLaneRunSelector, ExpState);
-        false -> report_lane_run_started_preparing_in_advance(AtmLaneRunSelector, ExpState)
+        true -> expect_current_lane_run_started_preparing(AtmLaneRunSelector, ExpState);
+        false -> expect_lane_run_started_preparing_in_advance(AtmLaneRunSelector, ExpState)
     end.
 
 
--spec report_current_lane_run_started_preparing(
+-spec expect_current_lane_run_started_preparing(
     atm_lane_execution:lane_run_selector(),
     exp_state()
 ) ->
     exp_state().
-report_current_lane_run_started_preparing(AtmLaneRunSelector, ExpState0) ->
+expect_current_lane_run_started_preparing(AtmLaneRunSelector, ExpState0) ->
     ExpAtmLaneRunStateDiff = #{<<"status">> => <<"preparing">>},
     ExpState1 = update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpState0),
 
@@ -160,12 +160,12 @@ report_current_lane_run_started_preparing(AtmLaneRunSelector, ExpState0) ->
     update_exp_workflow_execution_state(ExpAtmWorkflowExecutionStateDiff, ExpState1).
 
 
--spec report_lane_run_started_preparing_in_advance(
+-spec expect_lane_run_started_preparing_in_advance(
     atm_lane_execution:lane_run_selector(),
     exp_state()
 ) ->
     exp_state().
-report_lane_run_started_preparing_in_advance(AtmLaneRunSelector, ExpState = #exp_state{
+expect_lane_run_started_preparing_in_advance(AtmLaneRunSelector, ExpState = #exp_state{
     exp_workflow_execution_state = ExpWorkflowExecutionState0
 }) ->
     {AtmLaneRunPath, ExpAtmLaneRunState} = case locate_lane_run(AtmLaneRunSelector, ExpState) of
@@ -184,9 +184,9 @@ report_lane_run_started_preparing_in_advance(AtmLaneRunSelector, ExpState = #exp
     ExpState#exp_state{exp_workflow_execution_state = ExpWorkflowExecutionState1}.
 
 
--spec report_lane_run_created(atm_lane_execution:lane_run_selector(), exp_state()) ->
+-spec expect_lane_run_created(atm_lane_execution:lane_run_selector(), exp_state()) ->
     exp_state().
-report_lane_run_created(AtmLaneRunSelector, ExpState = #exp_state{
+expect_lane_run_created(AtmLaneRunSelector, ExpState = #exp_state{
     workflow_execution_id = AtmWorkflowExecutionId,
     exp_task_execution_states_registry = ExpAtmTaskExecutionStates0
 }) ->
@@ -226,23 +226,23 @@ report_lane_run_created(AtmLaneRunSelector, ExpState = #exp_state{
     }).
 
 
--spec report_lane_run_enqueued(atm_lane_execution:lane_run_selector(), exp_state()) ->
+-spec expect_lane_run_enqueued(atm_lane_execution:lane_run_selector(), exp_state()) ->
     exp_state().
-report_lane_run_enqueued(AtmLaneRunSelector, ExpState) ->
+expect_lane_run_enqueued(AtmLaneRunSelector, ExpState) ->
     ExpAtmLaneRunStateDiff = #{<<"status">> => <<"enqueued">>},
     update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpState).
 
 
--spec report_lane_run_aborting(atm_lane_execution:lane_run_selector(), exp_state()) ->
+-spec expect_lane_run_aborting(atm_lane_execution:lane_run_selector(), exp_state()) ->
     exp_state().
-report_lane_run_aborting(AtmLaneRunSelector, ExpState) ->
+expect_lane_run_aborting(AtmLaneRunSelector, ExpState) ->
     ExpAtmLaneRunStateDiff = #{<<"status">> => <<"aborting">>},
     update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpState).
 
 
--spec report_lane_run_failed(atm_lane_execution:lane_run_selector(), exp_state()) ->
+-spec expect_lane_run_failed(atm_lane_execution:lane_run_selector(), exp_state()) ->
     exp_state().
-report_lane_run_failed(AtmLaneRunSelector, ExpState) ->
+expect_lane_run_failed(AtmLaneRunSelector, ExpState) ->
     ExpAtmLaneRunStateDiff = #{
         <<"status">> => <<"failed">>,
         <<"isRerunable">> => true
@@ -250,9 +250,9 @@ report_lane_run_failed(AtmLaneRunSelector, ExpState) ->
     update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpState).
 
 
--spec report_lane_run_cancelled(atm_lane_execution:lane_run_selector(), exp_state()) ->
+-spec expect_lane_run_cancelled(atm_lane_execution:lane_run_selector(), exp_state()) ->
     exp_state().
-report_lane_run_cancelled(AtmLaneRunSelector, ExpState) ->
+expect_lane_run_cancelled(AtmLaneRunSelector, ExpState) ->
     ExpAtmLaneRunStateDiff = #{
         <<"status">> => <<"cancelled">>,
         <<"isRerunable">> => true
@@ -260,7 +260,7 @@ report_lane_run_cancelled(AtmLaneRunSelector, ExpState) ->
     update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpState).
 
 
-report_all_task_executions_skipped(AtmLaneRunSelector, ExpState = #exp_state{
+expect_all_task_executions_skipped(AtmLaneRunSelector, ExpState = #exp_state{
     exp_task_execution_states_registry = ExpAtmTaskExecutionStates0
 }) ->
     {ok, {_AtmLaneRunPath, ExpAtmLaneRunState}} = locate_lane_run(AtmLaneRunSelector, ExpState),
@@ -288,8 +288,8 @@ report_all_task_executions_skipped(AtmLaneRunSelector, ExpState = #exp_state{
     }).
 
 
--spec report_workflow_execution_aborting(exp_state()) -> exp_state().
-report_workflow_execution_aborting(ExpState) ->
+-spec expect_workflow_execution_aborting(exp_state()) -> exp_state().
+expect_workflow_execution_aborting(ExpState) ->
     ExpAtmWorkflowExecutionStateDiff = fun
         (ExpAtmWorkflowExecutionState = #{<<"startTime">> := 0}) ->
             % atm workflow execution failure/cancel while in schedule status
@@ -303,8 +303,8 @@ report_workflow_execution_aborting(ExpState) ->
     update_exp_workflow_execution_state(ExpAtmWorkflowExecutionStateDiff, ExpState).
 
 
--spec report_workflow_execution_failed(exp_state()) -> exp_state().
-report_workflow_execution_failed(ExpState) ->
+-spec expect_workflow_execution_failed(exp_state()) -> exp_state().
+expect_workflow_execution_failed(ExpState) ->
     ExpAtmWorkflowExecutionStateDiff = #{
         <<"status">> => <<"failed">>,
         <<"finishTime">> => build_timestamp_field_validator(?NOW())
@@ -312,8 +312,8 @@ report_workflow_execution_failed(ExpState) ->
     update_exp_workflow_execution_state(ExpAtmWorkflowExecutionStateDiff, ExpState).
 
 
--spec report_workflow_execution_cancelled(exp_state()) -> exp_state().
-report_workflow_execution_cancelled(ExpState) ->
+-spec expect_workflow_execution_cancelled(exp_state()) -> exp_state().
+expect_workflow_execution_cancelled(ExpState) ->
     ExpAtmWorkflowExecutionStateDiff = #{
         <<"status">> => <<"cancelled">>,
         <<"finishTime">> => build_timestamp_field_validator(?NOW())
@@ -558,7 +558,7 @@ assert_workflow_execution_expectations(ExpState = #exp_state{
             true;
         badmatch ->
             ct:pal(
-                "Error: mismatch between exp worklfow execution state: ~n~p~n~nand model stored in op: ~n~p",
+                "Error: mismatch between exp workflow execution state: ~n~p~n~nand model stored in op: ~n~p",
                 [ExpWorkflowExecutionJson, AtmWorkflowExecutionJson]
             ),
             false
