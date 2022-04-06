@@ -82,10 +82,9 @@ report(QosEntryId, Type, ValuesPerStorage) ->
     TotalValue = maps:fold(fun(_Key, Value, Acc) ->
         Acc + Value
     end, 0, ValuesPerStorage),
-    CompleteValuesPerStorage = ValuesPerStorage#{?TOTAL_TIME_SERIES_NAME => TotalValue},
-    ConsumeSpec = maps:map(fun(_TimeSeriesName, Value) ->
-        #{all => [{?NOW(), Value}]}
-    end, CompleteValuesPerStorage),
+    CompleteValuesPerStorage = ValuesPerStorage#{?QOS_TOTAL_TIME_SERIES_NAME => TotalValue},
+    Timestamp = ?NOW(),
+    ConsumeSpec = maps:map(fun(_TimeSeriesName, Value) -> #{all => [{Timestamp, Value}]} end, CompleteValuesPerStorage),
     consume_measurements(?COLLECTION_ID(QosEntryId, Type), ConsumeSpec, ?MAX_CONSUME_MEASUREMENTS_RETRIES).
 
 
@@ -95,7 +94,7 @@ report(QosEntryId, Type, ValuesPerStorage) ->
 
 -spec ensure_exists_internal(time_series_collection:id()) -> ok | {error, term()}.
 ensure_exists_internal(CollectionId) ->
-    Config = config_with_time_series([?TOTAL_TIME_SERIES_NAME]),
+    Config = config_with_time_series([?QOS_TOTAL_TIME_SERIES_NAME]),
     case datastore_time_series_collection:create(?CTX, CollectionId, Config) of
         ok -> ok;
         {error, already_exists} -> ok;
@@ -128,22 +127,22 @@ consume_measurements(CollectionId, ConsumeSpec, Retries) ->
 
 -spec supported_metrics() -> time_series:metric_composition().
 supported_metrics() -> #{
-    ?MINUTE_METRIC_NAME => #metric_config{
+    ?QOS_MINUTE_METRIC_NAME => #metric_config{
         resolution = ?MINUTE_RESOLUTION,
         retention = 120,
         aggregator = sum
     },
-    ?HOUR_METRIC_NAME => #metric_config{
+    ?QOS_HOUR_METRIC_NAME => #metric_config{
         resolution = ?HOUR_RESOLUTION,
         retention = 48,
         aggregator = sum
     },
-    ?DAY_METRIC_NAME => #metric_config{
+    ?QOS_DAY_METRIC_NAME => #metric_config{
         resolution = ?DAY_RESOLUTION,
         retention = 60,
         aggregator = sum
     },
-    ?MONTH_METRIC_NAME => #metric_config{
+    ?QOS_MONTH_METRIC_NAME => #metric_config{
         resolution = ?MONTH_RESOLUTION,
         retention = 12,
         aggregator = sum

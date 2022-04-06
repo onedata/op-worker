@@ -81,6 +81,7 @@ move_to_trash(FileCtx, UserCtx) ->
     ok = dataset_eff_cache:invalidate_on_all_nodes(SpaceId),
     ok = paths_cache:invalidate_on_all_nodes(SpaceId),
     TrashGuid = file_id:pack_guid(TrashUuid, SpaceId),
+    permissions_cache:invalidate(),
     fslogic_event_emitter:emit_file_renamed_no_exclude(
         FileCtx5, ParentGuid, TrashGuid, NameInTrash, Name),
     FileCtx5.

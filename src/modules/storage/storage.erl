@@ -526,7 +526,7 @@ on_space_unsupported(SpaceId, StorageId) ->
     space_unsupport:cleanup_local_documents(SpaceId, StorageId),
     auto_storage_import_worker:notify_space_unsupported(SpaceId),
     main_harvesting_stream:space_unsupported(SpaceId),
-    dir_stats_collector_config:clean_for_space(SpaceId).
+    dir_stats_collector_config:clean(SpaceId).
 
 
 %% @private

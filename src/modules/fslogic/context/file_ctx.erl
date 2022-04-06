@@ -97,7 +97,7 @@
     get_or_create_local_file_location_doc/1, get_or_create_local_file_location_doc/2,
     get_or_create_local_regular_file_location_doc/3,
     get_file_location_ids/1, get_file_location_docs/1, get_file_location_docs/2,
-    get_active_perms_type/2, get_acl/1, get_mode/1, get_file_size/1,
+    get_active_perms_type/2, get_acl/1, get_mode/1, get_file_size/1, get_file_size_summary/1,
     get_replication_status_and_size/1, get_file_size_from_remote_locations/1, get_owner/1,
     get_local_storage_file_size/1
 ]).
@@ -190,8 +190,8 @@ new_by_partial_context(FilePartialCtx) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec reset(ctx()) -> ctx().
-reset(#file_ctx{guid = Guid, uuid = Uuid, space_id = SpaceId}) ->
-    #file_ctx{guid = Guid, uuid = Uuid, space_id = SpaceId}.
+reset(#file_ctx{guid = Guid, uuid = Uuid, space_id = SpaceId, share_id = ShareId}) ->
+    #file_ctx{guid = Guid, uuid = Uuid, space_id = SpaceId, share_id = ShareId}.
 
 -spec set_file_location(ctx(), file_location:id()) -> ctx().
 set_file_location(FileCtx = #file_ctx{file_location_ids = undefined}, _LocationId) ->
@@ -957,6 +957,19 @@ get_file_size(FileCtx) ->
             {Size, FileCtx2};
         {undefined, FileCtx2} ->
             get_file_size_from_remote_locations(FileCtx2)
+    end.
+
+-spec get_file_size_summary(ctx() | file_meta:uuid()) -> {[{total | storage:id(), non_neg_integer()}], ctx()}.
+get_file_size_summary(FileCtx) ->
+    case get_local_file_location_doc(FileCtx, true) of
+        {#document{value = #file_location{size = undefined, storage_id = StorageId}} = Doc, FileCtx2} ->
+            TotalSize = fslogic_blocks:upper(fslogic_location_cache:get_blocks(Doc)),
+            {[{total, TotalSize}, {StorageId, file_location:count_bytes(Doc)}], FileCtx2};
+        {#document{value = #file_location{size = TotalSize, storage_id = StorageId}} = Doc, FileCtx2} ->
+            {[{total, TotalSize}, {StorageId, file_location:count_bytes(Doc)}], FileCtx2};
+        {undefined, FileCtx2} ->
+            {TotalSize, FileCtx3} = get_file_size_from_remote_locations(FileCtx2),
+            {[{total, TotalSize}], FileCtx3}
     end.
 
 %%--------------------------------------------------------------------

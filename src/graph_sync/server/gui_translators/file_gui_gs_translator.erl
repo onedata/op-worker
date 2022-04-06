@@ -192,7 +192,7 @@ translate_dataset_summary(#file_eff_dataset_summary{
 translate_distribution(FileGuid, PossiblyIncompleteDistribution) ->
     {ok, #file_attr{size = FileSize}} = lfm:stat(?ROOT_SESS_ID, ?FILE_REF(FileGuid)),
 
-    %% @TODO VFS-8935 ultimately, location for each file should be created in each provider
+    %% @TODO VFS-9204 ultimately, location for each file should be created in each provider
     %% and the list of providers in the distribution should always be complete -
     %% for now, add placeholders with zero blocks for missing providers
     SpaceId = file_id:guid_to_space_id(FileGuid),
