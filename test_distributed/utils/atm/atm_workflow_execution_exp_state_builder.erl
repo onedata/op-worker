@@ -36,6 +36,8 @@
     expect_lane_run_aborting/2,
     expect_lane_run_failed/2,
     expect_lane_run_cancelled/2,
+    expect_lane_run_interrupted/2,
+    expect_lane_run_num_set/3,
 
     expect_all_task_executions_skipped/2,
 
@@ -257,6 +259,24 @@ expect_lane_run_cancelled(AtmLaneRunSelector, ExpState) ->
         <<"status">> => <<"cancelled">>,
         <<"isRerunable">> => true
     },
+    update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpState).
+
+
+-spec expect_lane_run_interrupted(atm_lane_execution:lane_run_selector(), exp_state()) ->
+    exp_state().
+expect_lane_run_interrupted(AtmLaneRunSelector, ExpState) ->
+    ExpAtmLaneRunStateDiff = #{<<"status">> => <<"interrupted">>},
+    update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpState).
+
+
+-spec expect_lane_run_num_set(
+    atm_lane_execution:lane_run_selector(),
+    atm_lane_execution:run_num(),
+    exp_state()
+) ->
+    exp_state().
+expect_lane_run_num_set(AtmLaneRunSelector, RunNum, ExpState) ->
+    ExpAtmLaneRunStateDiff = #{<<"runNumber">> => RunNum},
     update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpState).
 
 

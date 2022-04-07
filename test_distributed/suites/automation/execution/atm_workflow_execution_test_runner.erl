@@ -200,7 +200,7 @@ monitor_workflow_execution(TestCtx) ->
 
                 monitor_workflow_execution(TestCtx#test_ctx{deferred_step_executions = maps:update_with(
                     StepMockSpec#atm_step_mock_spec.defer_after,
-                    fun(Steps) -> [DeferredStepExecution | Steps] end,
+                    fun(OtherDeferredStepExecutions) -> [DeferredStepExecution | OtherDeferredStepExecutions] end,
                     [DeferredStepExecution],
                     TestCtx#test_ctx.deferred_step_executions
                 )});
