@@ -173,7 +173,7 @@ expect_lane_run_started_preparing_in_advance(AtmLaneRunSelector, ExpState = #exp
             {Path, Run#{<<"status">> => <<"preparing">>}};
         ?ERROR_NOT_FOUND ->
             AtmLaneIndex = resolve_lane_selector(element(1, AtmLaneRunSelector), ExpState),
-            Path = str_utils:format_bin("lanes.[~B].runs.[0]", [AtmLaneIndex - 1]),
+            Path = ?JSON_PATH(str_utils:format_bin("lanes.[~B].runs.[0]", [AtmLaneIndex - 1])),
             {Path, build_exp_initial_regular_lane_run(undefined, <<"preparing">>)}
     end,
     {ok, ExpWorkflowExecutionState1} = json_utils:insert(

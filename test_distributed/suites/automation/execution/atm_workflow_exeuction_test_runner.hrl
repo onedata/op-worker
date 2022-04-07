@@ -28,6 +28,8 @@
 }).
 
 -record(atm_step_mock_spec, {
+    defer_after = undefined :: undefined | atm_workflow_execution_test_runner:step_selector(),
+
     before_step_hook = undefined :: undefined | atm_workflow_execution_test_runner:hook(),
     before_step_exp_state_diff = default :: default | atm_workflow_execution_test_runner:exp_state_diff(),
 
@@ -54,6 +56,7 @@
 }).
 
 -record(atm_workflow_execution_incarnation_test_spec, {
+    incarnation_num :: atm_workflow_execution:incarnation(),
     lane_runs :: [atm_workflow_execution_test_runner:lane_run_test_spec()],
     handle_workflow_execution_ended = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec()
 }).

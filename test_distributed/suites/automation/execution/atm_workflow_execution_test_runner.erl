@@ -40,7 +40,14 @@
     false | {true, atm_workflow_execution_exp_state_builder:exp_state()}
 ).
 
+-type step_selector() :: {
+    Step :: atom(),
+    Timing :: before_step | after_step,
+    atm_lane_execution:lane_run_selector() | atm_workflow_execution:incarnation()
+}.
+
 -type result_override() :: {return, term()} | {throw, errors:error()}.
+
 -type mock_strategy() ::
     % original step will be run unperturbed
     passthrough |
@@ -48,6 +55,7 @@
     {passthrough_with_result_override, result_override()} |
     % original step will not be run and specified result will be returned immediately
     {yield, result_override()}.
+
 -type step_mock_spec() :: #atm_step_mock_spec{}.
 
 -type lane_run_test_spec() :: #atm_lane_run_execution_test_spec{}.
@@ -56,7 +64,7 @@
 
 -export_type([
     mock_call_ctx/0, hook/0, exp_state_diff/0,
-    result_override/0, mock_strategy/0, step_mock_spec/0,
+    result_override/0, mock_strategy/0, step_selector/0, step_mock_spec/0,
     lane_run_test_spec/0, incarnation_test_spec/0, test_spec/0
 ]).
 
@@ -75,7 +83,12 @@
     workflow_execution_exp_state :: atm_workflow_execution_exp_state_builder:exp_state(),
     current_lane_index :: atm_lane_execution:index(),
     current_run_num :: atm_lane_execution:run_num(),
-    ongoing_incarnations :: [incarnation_test_spec()]
+    ongoing_incarnations :: [incarnation_test_spec()],
+
+    executed_steps = [] :: [step_selector()],
+    deferred_step_executions = #{} :: #{
+        step_selector() => [{pid(), mock_call_report(), step_selector(), step_mock_spec()}]
+    }
 }).
 -type test_ctx() :: #test_ctx{}.
 
@@ -178,34 +191,24 @@ cancel_workflow_execution(#atm_mock_call_ctx{
 %% @private
 -spec monitor_workflow_execution(test_ctx()) -> ok | no_return().
 monitor_workflow_execution(TestCtx) ->
-    receive {ReplyTo, StepMockCallReport = #mock_call_report{timing = Timing}} ->
-        StepMockSpec = get_step_mock_spec(StepMockCallReport, TestCtx),
-        StepMockCallCtx = build_mock_call_ctx(StepMockCallReport, TestCtx),
+    receive {ReplyTo, StepMockCallReport} ->
+        {StepSelector, StepMockSpec} = get_step_mock_spec(StepMockCallReport, TestCtx),
 
-        Hook = get_hook(StepMockCallReport, StepMockSpec),
-        call_if_defined(Hook, StepMockCallCtx),
+        case should_defer_step_execution(StepMockSpec, TestCtx) of
+            true ->
+                DeferredStepExecution = {ReplyTo, StepMockCallReport, StepSelector, StepMockSpec},
 
-        ExpStateDiff = get_exp_state_diff(StepMockCallReport, StepMockSpec),
-        NewTestCtx1 = case ExpStateDiff(StepMockCallCtx) of
-            {true, NewExpState} ->
-                NewTestCtx0 = TestCtx#test_ctx{workflow_execution_exp_state = NewExpState},
-                assert_exp_workflow_execution_state(NewTestCtx0),
-                NewTestCtx0;
+                monitor_workflow_execution(TestCtx#test_ctx{deferred_step_executions = maps:update_with(
+                    StepMockSpec#atm_step_mock_spec.defer_after,
+                    fun(Steps) -> [DeferredStepExecution | Steps] end,
+                    [DeferredStepExecution],
+                    TestCtx#test_ctx.deferred_step_executions
+                )});
             false ->
-                TestCtx
-        end,
-
-        reply_to_execution_process(ReplyTo, case {Timing, StepMockSpec#atm_step_mock_spec.strategy} of
-            {before_step, MockStrategy} -> MockStrategy;
-            {after_step, _} -> ok
-        end),
-
-        NewTestCtx2 = shift_monitored_lane_run_if_current_one_ended(StepMockCallReport, NewTestCtx1),
-        case NewTestCtx2#test_ctx.ongoing_incarnations of
-            [] ->
-                ok;
-            [_ | _] ->
-                monitor_workflow_execution(NewTestCtx2)
+                case handle_step_execution(ReplyTo, StepMockCallReport, StepSelector, StepMockSpec, TestCtx) of
+                    stop -> ok;
+                    {continue, NewTestCtx2} -> monitor_workflow_execution(NewTestCtx2)
+                end
         end
     after ?TEST_HUNG_TIMEOUT ->
         ct:pal("ERROR: Atm workflow execution hung"),
@@ -214,31 +217,121 @@ monitor_workflow_execution(TestCtx) ->
 
 
 %% @private
--spec get_step_mock_spec(mock_call_report(), test_ctx()) -> step_mock_spec().
-get_step_mock_spec(#mock_call_report{step = handle_workflow_execution_ended}, #test_ctx{
-    ongoing_incarnations = [#atm_workflow_execution_incarnation_test_spec{
+-spec should_defer_step_execution(step_mock_spec(), test_ctx()) -> boolean().
+should_defer_step_execution(#atm_step_mock_spec{defer_after = undefined}, _TestCtx) ->
+    false;
+should_defer_step_execution(#atm_step_mock_spec{defer_after = StepSelector}, #test_ctx{
+    executed_steps = ExecutedSteps
+}) ->
+    not lists:member(StepSelector, ExecutedSteps).
+
+
+%% @private
+-spec handle_step_execution(pid(), mock_call_report(), step_selector(), step_mock_spec(), test_ctx()) ->
+    stop | {continue, test_ctx()}.
+handle_step_execution(ReplyTo, StepMockCallReport, StepSelector, StepMockSpec, TestCtx) ->
+    try
+        handle_step_execution_insecure(ReplyTo, StepMockCallReport, StepSelector, StepMockSpec, TestCtx)
+    catch Type:Reason:Stacktrace ->
+        ct:pal("Automation workflow execution test failed at step: ~p", [StepSelector]),
+        erlang:raise(Type, Reason, Stacktrace)
+    end.
+
+
+%% @private
+-spec handle_step_execution_insecure(pid(), mock_call_report(), step_selector(), step_mock_spec(), test_ctx()) ->
+    stop | {continue, test_ctx()}.
+handle_step_execution_insecure(ReplyTo, StepMockCallReport, StepSelector, StepMockSpec, TestCtx) ->
+    StepMockCallCtx = build_mock_call_ctx(StepMockCallReport, TestCtx),
+
+    Hook = get_hook(StepMockCallReport, StepMockSpec),
+    call_if_defined(Hook, StepMockCallCtx),
+
+    ExpStateDiff = get_exp_state_diff(StepMockCallReport, StepMockSpec),
+    NewTestCtx1 = case ExpStateDiff(StepMockCallCtx) of
+        {true, NewExpState} ->
+            NewTestCtx0 = TestCtx#test_ctx{workflow_execution_exp_state = NewExpState},
+            assert_exp_workflow_execution_state(NewTestCtx0),
+            NewTestCtx0;
+        false ->
+            TestCtx
+    end,
+
+    Timing = StepMockCallReport#mock_call_report.timing,
+    reply_to_execution_process(ReplyTo, case {Timing, StepMockSpec#atm_step_mock_spec.strategy} of
+        {before_step, MockStrategy} -> MockStrategy;
+        {after_step, _} -> ok
+    end),
+
+    NewTestCtx2 = shift_monitored_lane_run_if_current_one_ended(
+        StepMockCallReport,
+        NewTestCtx1#test_ctx{executed_steps = [StepSelector | NewTestCtx1#test_ctx.executed_steps]}
+    ),
+    case NewTestCtx2#test_ctx.ongoing_incarnations of
+        [] ->
+            stop;
+        [_ | _] ->
+            execute_deferred_steps_if_any(StepSelector, NewTestCtx2)
+    end.
+
+
+%% @private
+-spec execute_deferred_steps_if_any(step_selector(), test_ctx()) ->
+    stop | {continue, test_ctx()}.
+execute_deferred_steps_if_any(ExecutedStepSelector, TestCtx) ->
+    DeferredStepExecutions = maps:get(
+        ExecutedStepSelector, TestCtx#test_ctx.deferred_step_executions, []
+    ),
+    Result = lists_utils:foldl_while(fun({ReplyTo, StepMockCallReport, StepSelector, StepMockSpec}, TestCtxAcc) ->
+        case handle_step_execution(ReplyTo, StepMockCallReport, StepSelector, StepMockSpec, TestCtxAcc) of
+            stop -> {halt, stop};
+            {continue, UpdatedTestCtxAcc} -> {cont, UpdatedTestCtxAcc}
+        end
+    end, TestCtx, DeferredStepExecutions),
+
+    case Result of
+        stop -> stop;
+        NewTestCtx -> {continue, NewTestCtx}
+    end.
+
+
+%% @private
+-spec get_step_mock_spec(mock_call_report(), test_ctx()) ->
+    {step_selector(), step_mock_spec()}.
+get_step_mock_spec(
+    #mock_call_report{step = handle_workflow_execution_ended, timing = Timing},
+    #test_ctx{ongoing_incarnations = [#atm_workflow_execution_incarnation_test_spec{
+        incarnation_num = IncarnationNum,
         handle_workflow_execution_ended = Spec
-    } | _
-]}) ->
-    Spec;
+    } | _]}
+) ->
+    {{handle_workflow_execution_ended, Timing, IncarnationNum}, Spec};
 
-get_step_mock_spec(#mock_call_report{step = prepare_lane, args = [_, _, {AtmLaneIndex, _}]}, NewTestCtx) ->
-    #atm_lane_run_execution_test_spec{prepare_lane = Spec} = get_lane_run_test_spec(
+get_step_mock_spec(
+    #mock_call_report{step = prepare_lane, timing = Timing, args = [_, _, {AtmLaneIndex, _}]},
+    NewTestCtx
+) ->
+    #atm_lane_run_execution_test_spec{selector = Selector, prepare_lane = Spec} = get_lane_run_test_spec(
         AtmLaneIndex, NewTestCtx
     ),
-    Spec;
+    {{prepare_lane, Timing, Selector}, Spec};
 
-get_step_mock_spec(#mock_call_report{step = create_run, args = [{AtmLaneIndex, _}, _, _]}, NewTestCtx) ->
-    #atm_lane_run_execution_test_spec{create_run = Spec} = get_lane_run_test_spec(
+get_step_mock_spec(
+    #mock_call_report{step = create_run, timing = Timing, args = [{AtmLaneIndex, _}, _, _]},
+    NewTestCtx
+) ->
+    #atm_lane_run_execution_test_spec{selector = Selector, create_run = Spec} = get_lane_run_test_spec(
         AtmLaneIndex, NewTestCtx
     ),
-    Spec;
+    {{create_run, Timing, Selector}, Spec};
 
-get_step_mock_spec(#mock_call_report{step = Step}, NewTestCtx) ->
-    element(
+get_step_mock_spec(#mock_call_report{step = Step, timing = Timing}, NewTestCtx) ->
+    AtmLaneRunTestSpec = get_current_lane_run_test_spec(NewTestCtx),
+    StepMockSpec = element(
         1 + lists_utils:index_of(Step, record_info(fields, atm_lane_run_execution_test_spec)),
-        get_current_lane_run_test_spec(NewTestCtx)
-    ).
+        AtmLaneRunTestSpec
+    ),
+    {{Step, Timing, AtmLaneRunTestSpec#atm_lane_run_execution_test_spec.selector}, StepMockSpec}.
 
 
 %% @private
