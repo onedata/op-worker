@@ -163,45 +163,40 @@ resolve_conflict(_Ctx, #document{value = RemoteValue} = RemoteDoc, #document{val
     LocalProviderId = oneprovider:get_id_or_undefined(),
     #document{mutators = [RemoteDocMutator]} = RemoteDoc,
     
-    case {RecallingProviderId, datastore_rev:is_greater(RemoteRev, LocalRev), RemoteCancelTimestamp < LocalCancelTimestamp} of
-        {LocalProviderId, _IsRemoteRevGreater = true, _IsRemoteCancelEarlier = true} ->
+    case {datastore_rev:is_greater(RemoteRev, LocalRev), RecallingProviderId, RemoteCancelTimestamp < LocalCancelTimestamp} of
+        {_IsRemoteRevGreater = true, LocalProviderId, _IsRemoteCancelEarlier = true} ->
             {true, RemoteDoc#document{
                 value = LocalValue#archive_recall_details{cancel_timestamp = RemoteCancelTimestamp}
             }};
-        {LocalProviderId, _IsRemoteRevGreater = true, _IsRemoteCancelEarlier = false} ->
+        {_IsRemoteRevGreater = true, LocalProviderId, _IsRemoteCancelEarlier = false} ->
             {true, RemoteDoc#document{
                 value = LocalValue
             }};
-        {_, _IsRemoteRevGreater = true, _IsRemoteCancelEarlier = true} ->
+        {_IsRemoteRevGreater = true, _, _} when RemoteCancelTimestamp =< LocalCancelTimestamp ->
             {false, RemoteDoc};
-        {_, _IsRemoteRevGreater = true, _IsRemoteCancelEarlier = false} ->
-            case RemoteCancelTimestamp of
-                LocalCancelTimestamp -> 
-                    {false, RemoteDoc};
-                _ ->
-                    {true, RemoteDoc#document{
-                        value = RemoteValue#archive_recall_details{cancel_timestamp = LocalCancelTimestamp}
-                    }}
-            end;
-        {LocalProviderId, _IsRemoteRevGreater = false, _IsRemoteCancelEarlier = true} ->
+        {_IsRemoteRevGreater = true, _, _IsRemoteCancelEarlier = false} ->
+            {true, RemoteDoc#document{
+                value = RemoteValue#archive_recall_details{cancel_timestamp = LocalCancelTimestamp}
+            }};
+        {_IsRemoteRevGreater = false, LocalProviderId, _IsRemoteCancelEarlier = true} ->
             {true, LocalDoc#document{
                 value = LocalValue#archive_recall_details{cancel_timestamp = RemoteCancelTimestamp}
             }};
-        {LocalProviderId, _IsRemoteRevGreater = false, _IsRemoteCancelEarlier = false} ->
+        {_IsRemoteRevGreater = false, LocalProviderId, _IsRemoteCancelEarlier = false} ->
             ignore;
-        {RemoteDocMutator, _IsRemoteRevGreater = false, _IsRemoteCancelEarlier = true} ->
+        {_IsRemoteRevGreater = false, RemoteDocMutator, _IsRemoteCancelEarlier = true} ->
             {true, LocalDoc#document{
                 value = RemoteValue
             }};
-        {RemoteDocMutator, _IsRemoteRevGreater = false, _IsRemoteCancelEarlier = false} ->
+        {_IsRemoteRevGreater = false, RemoteDocMutator, _IsRemoteCancelEarlier = false} ->
             {true, LocalDoc#document{
                 value = RemoteValue#archive_recall_details{cancel_timestamp = LocalCancelTimestamp}
             }};
-        {_, _IsRemoteRevGreater = false, _IsRemoteCancelEarlier = true} ->
+        {_IsRemoteRevGreater = false, __, _IsRemoteCancelEarlier = true} ->
             {true, LocalDoc#document{
-                value = RemoteValue
+                value = LocalValue#archive_recall_details{cancel_timestamp = RemoteCancelTimestamp}
             }};
-        {_, _IsRemoteRevGreater = false, _IsRemoteCancelEarlier = false} ->
+        {_IsRemoteRevGreater = false, __, _IsRemoteCancelEarlier = false} ->
             ignore
     end.
 
