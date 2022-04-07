@@ -23,7 +23,6 @@
 -type blocks() :: fslogic_blocks:blocks().
 -type blocks_tree() :: gb_sets:set(). % TODO VFS-7395 use gb_trees (it is faster)
 -type stored_blocks() :: blocks() | blocks_tree(). % set only when used by blocks' cache
--type id() :: file_location:id().
 -type location() :: file_location:doc().
 -type location_or_record() :: location() | file_location:record().
 -type get_doc_opts() :: boolean() | skip_local_blocks |

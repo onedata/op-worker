@@ -693,7 +693,7 @@ import_file_unsafe(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
             storage_import_logger:log_creation(StorageFileId, CanonicalPath, FileUuid, SpaceId),
             {?FILE_CREATED, FileCtx2, StorageFileCtx6};
         {?ERROR_NOT_SUPPORTED, StorageFileCtx3} ->
-            {?FILE_UNMODIFIED, undefined, StorageFileCtx}
+            {?FILE_UNMODIFIED, undefined, StorageFileCtx3}
     end.
 
 %%-------------------------------------------------------------------

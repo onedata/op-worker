@@ -25,9 +25,9 @@
 
 %% API
 -export([create_docs/2, delete_synced_docs/1, delete_local_docs/1]).
--export([report_started/1, report_finished/2, 
+-export([report_started/1, report_finished/2,
     report_bytes_copied/2, report_file_finished/1, report_file_failed/3]).
--export([get_details/1, get_stats/1, get_progress/1]).
+-export([get_details/1, get_stats/3, get_progress/1]).
 -export([get_effective_recall/1]).
 
 -type id() :: file_meta:uuid().
@@ -109,9 +109,10 @@ get_details(Id) ->
     archive_recall_details:get(Id).
 
 
--spec get_stats(id()) -> time_series_collection:windows_map() | {error, term()}.
-get_stats(Id) ->
-    archive_recall_progress:get_stats(Id).
+-spec get_stats(id(), time_series_collection:layout(), ts_windows:list_options()) ->
+    {ok, time_series_collection:slice()} | {error, term()}.
+get_stats(Id, SliceLayout, ListWindowsOptions) ->
+    archive_recall_progress:get_stats(Id, SliceLayout, ListWindowsOptions).
 
 
 -spec get_progress(id()) -> {ok, recall_progress_map()}.

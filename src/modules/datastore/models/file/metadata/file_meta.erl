@@ -394,9 +394,9 @@ trim_filename_tree_id(Name, {all, ParentUuid}) ->
         {ok, T} -> T;
         ?ERROR_NOT_FOUND -> []
     end,
-    lists_utils:foldl_while(fun(TreeId, Name) ->
-        case trim_filename_tree_id(Name, TreeId) of
-            Name -> {cont, Name};
+    lists_utils:foldl_while(fun(TreeId, NameAcc) ->
+        case trim_filename_tree_id(NameAcc, TreeId) of
+            NameAcc -> {cont, NameAcc};
             TrimmedName -> {halt, TrimmedName}
         end
     end, Name, TreeIds);

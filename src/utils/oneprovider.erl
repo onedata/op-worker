@@ -206,8 +206,8 @@ set_up_service_in_onezone() ->
                 {error, _} = Error ->
                     ?alert(
                         "Oneprovider worker service could not be successfully set "
-                        "up in Onezone due to an error during GUI package upload: ~w. "
-                        "The Web GUI might be non-functional.",
+                        "up in Onezone due to an error during GUI package upload. "
+                        "The Web GUI might be non-functional.~nError was: ~p",
                         [Error]
                     )
             end

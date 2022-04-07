@@ -383,7 +383,7 @@ report_to_audit_log(QosEntries, FileCtx, Args, ReportFun) ->
     #{od_storage:id() => non_neg_integer()}) -> ok.
 report_transfer_stats(QosEntries, Type, ValuesPerStorage) ->
     lists:foreach(fun(QosEntryId) ->
-        ok = qos_transfer_stats:update(QosEntryId, Type, ValuesPerStorage)
+        ok = qos_transfer_stats:report(QosEntryId, Type, ValuesPerStorage)
     end, QosEntries).
 
 

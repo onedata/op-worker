@@ -390,7 +390,7 @@ handle_call(#dsc_get_request{
         } ->
             {dir_stats_collection:with_all(StatNames, CurrentStats), UpdatedState};
         {
-            {ok, #cached_dir_stats{current_stats = CurrentStats, collecting_status = collections_initialization}},
+            {ok, #cached_dir_stats{current_stats = _CurrentStats, collecting_status = collections_initialization}},
             UpdatedState
         } ->
             {?ERROR_DIR_STATS_NOT_READY, UpdatedState};
