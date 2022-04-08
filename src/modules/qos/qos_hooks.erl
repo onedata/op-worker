@@ -217,13 +217,13 @@ retry_failed_files(SpaceId) ->
 
 
 %% @private
--spec add_reconcile_file_meta_posthook(file_ctx:ctx(), file_meta:uuid(), file_meta_posthooks:dbsync_race_check(),
+-spec add_reconcile_file_meta_posthook(file_ctx:ctx(), file_meta:uuid(), file_meta_posthooks:missing_element(),
     binary()) -> ok.
-add_reconcile_file_meta_posthook(FileCtx, MissingUuid, DbsyncRaceCheck, IdentifierPrefix) ->
+add_reconcile_file_meta_posthook(FileCtx, MissingUuid, MissingElement, IdentifierPrefix) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     InodeUuid = file_ctx:get_referenced_uuid_const(FileCtx),
     % save Prefix and InodeUuid in hook identifier for diagnostic purpose
     HookIdentifier = <<IdentifierPrefix/binary, "_", InodeUuid/binary>>,
     ok = file_meta_posthooks:add_hook(
-        MissingUuid, DbsyncRaceCheck, HookIdentifier,
+        MissingUuid, MissingElement, HookIdentifier,
         ?MODULE, reconcile_qos, [InodeUuid, SpaceId]).

@@ -708,8 +708,8 @@ mock_file_meta_posthooks() ->
     test_utils:mock_new(Nodes, file_meta_posthooks, [passthrough]),
     TestPid = self(),
     ok = test_utils:mock_expect(Nodes, file_meta_posthooks, add_hook,
-        fun(FileUuid, Identifier, Module, Function, Args) ->
-            Res = meck:passthrough([FileUuid, Identifier, Module, Function, Args]),
+        fun(FileUuid, DbsyncRaceCheck, Identifier, Module, Function, Args) ->
+            Res = meck:passthrough([FileUuid, DbsyncRaceCheck, Identifier, Module, Function, Args]),
             TestPid ! post_hook_created,
             Res
         end).

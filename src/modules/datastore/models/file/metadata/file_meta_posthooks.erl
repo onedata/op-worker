@@ -37,11 +37,11 @@
 }).
 
 -type hook() :: #hook{}.
--type dbsync_race_check() :: file_meta | {link, file_meta:name()}.
+-type missing_element() :: file_meta | {link, file_meta:name()}.
 -type hook_identifier() :: binary().
 -type hooks() :: #{hook_identifier() => hook()}.
 
--export_type([hooks/0, dbsync_race_check/0]).
+-export_type([hooks/0, missing_element/0]).
 
 -define(CTX, #{
     model => ?MODULE
@@ -51,9 +51,9 @@
 %%% Functions operating on record using datastore_model API
 %%%===================================================================
 
--spec add_hook(file_meta:uuid(), dbsync_race_check(), hook_identifier(), module(), atom(), [term()]) ->
+-spec add_hook(file_meta:uuid(), missing_element(), hook_identifier(), module(), atom(), [term()]) ->
     ok | ?ERROR_INTERNAL_SERVER_ERROR.
-add_hook(FileUuid, DbsyncRaceCheck, Identifier, Module, Function, Args) ->
+add_hook(FileUuid, MissingElement, Identifier, Module, Function, Args) ->
     UniqueIdentifier = generate_hook_id(Identifier),
     EncodedArgs = term_to_binary(Args),
     Hook = #hook{
@@ -72,12 +72,13 @@ add_hook(FileUuid, DbsyncRaceCheck, Identifier, Module, Function, Args) ->
             % of missing file_meta document or link. If missing element appears before hook adding to datastore,
             % execution of hook is not triggered by dbsync. Thus, check if missing element exists and trigger hook
             % execution if it exists.
-            case is_race_with_dbsync(FileUuid, DbsyncRaceCheck) of
-                true ->
+            case is_missing(FileUuid, MissingElement) of
+                false ->
                     % Spawn to prevent deadlocks when hook is added from the inside of already existing hook
                     spawn(fun() -> execute_hooks(FileUuid) end),
                     ok;
-                _ -> ok
+                true ->
+                    ok
             end;
         Error ->
             ?error("~p:~p error for file ~p (identifier ~p, hook module ~p, hook fun ~p, hook args ~p): ~p",
@@ -171,13 +172,13 @@ generate_hook_id(Prefix) ->
     <<Prefix/binary, "_", (datastore_key:new())/binary>>.
 
 
--spec is_race_with_dbsync(file_meta:uuid(), dbsync_race_check()) -> boolean().
-is_race_with_dbsync(FileUuid, file_meta) ->
-    file_meta:exists(FileUuid);
-is_race_with_dbsync(FileUuid, {link, MissingName}) ->
-    case file_meta_forest:get(FileUuid, all, MissingName) of
-        {ok, _} -> true;
-        {error, _} -> false
+-spec is_missing(file_meta:uuid(), missing_element()) -> boolean().
+is_missing(FileUuid, file_meta) ->
+    not file_meta:exists(FileUuid);
+is_missing(FileUuid, {link, FileName}) ->
+    case file_meta_forest:get(FileUuid, all, FileName) of
+        {ok, _} -> false;
+        {error, _} -> true
     end.
 
 
