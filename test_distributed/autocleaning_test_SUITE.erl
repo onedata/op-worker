@@ -758,7 +758,6 @@ cancel_autocleaning_run(Config) ->
     end, ?ATTEMPTS),
 
     cancel(W1, ?SPACE_ID, ARId),
-    ?assertMatch({ok, #{status := ?CANCELLING}}, get_run_report(W1, ARId), ?ATTEMPTS),
 
     ?assertRunFinished(W1, ARId),
     ?assertEqual(true, begin
