@@ -106,13 +106,14 @@
 
     executed_step_phases = [] :: [step_phase_selector()],
     pending_step_phases = [] :: [step_phase()],
-    deferred_step_phases = #{} :: #{step_phase_selector() => [step_phase()]}
+    deferred_step_phases = #{} :: #{step_phase_selector() => [step_phase()]},
+
+    test_hung_probes_left :: non_neg_integer()
 }).
 -type test_ctx() :: #test_ctx{}.
 
-
--define(PARALLEL_STEP_EXECUTIONS, 100).
--define(TEST_HUNG_TIMEOUT, timer:seconds(30)).
+-define(AWAIT_OTHER_PARALLEL_PIPELINES_NEXT_STEP_INTERVAL, 100).
+-define(TEST_HUNG_MAX_PROBES_NUM, 10).
 
 -define(TEST_PROC_PID_KEY(__ATM_WORKFLOW_EXECUTION_ID),
     {atm_test_runner_process, __ATM_WORKFLOW_EXECUTION_ID}
@@ -189,7 +190,8 @@ run(TestSpec = #atm_workflow_execution_test_spec{
         current_run_num = 1,
         ongoing_incarnations = Incarnations,
         workflow_execution_exp_state = ExpState,
-        workflow_execution_exp_state_changed = false
+        workflow_execution_exp_state_changed = false,
+        test_hung_probes_left = ?TEST_HUNG_MAX_PROBES_NUM
     }).
 
 
@@ -212,6 +214,7 @@ cancel_workflow_execution(#atm_mock_call_ctx{
 -spec monitor_workflow_execution(test_ctx()) -> ok | no_return().
 monitor_workflow_execution(TestCtx0) ->
     receive {ReplyTo, StepMockCallReport} ->
+        TestCtx1 = TestCtx0#test_ctx{test_hung_probes_left = ?TEST_HUNG_MAX_PROBES_NUM},
         {StepPhaseSelector, StepMockSpec} = get_step_mock_spec(StepMockCallReport, TestCtx0),
 
         StepPhase = #step_phase{
@@ -221,30 +224,36 @@ monitor_workflow_execution(TestCtx0) ->
             reply_to = ReplyTo
         },
 
-        case should_defer_step_execution(StepMockSpec, TestCtx0) of
+        case should_defer_step_execution(StepMockSpec, TestCtx1) of
             true ->
-                monitor_workflow_execution(TestCtx0#test_ctx{deferred_step_phases = maps:update_with(
+                monitor_workflow_execution(TestCtx1#test_ctx{deferred_step_phases = maps:update_with(
                     StepMockSpec#atm_step_mock_spec.defer_after,
                     fun(RestDeferredStepPhases) -> [StepPhase | RestDeferredStepPhases] end,
                     [StepPhase],
-                    TestCtx0#test_ctx.deferred_step_phases
+                    TestCtx1#test_ctx.deferred_step_phases
                 )});
             false ->
-                monitor_workflow_execution(begin_step_phase_execution(StepPhase, TestCtx0))
+                monitor_workflow_execution(begin_step_phase_execution(StepPhase, TestCtx1))
         end
-    after ?PARALLEL_STEP_EXECUTIONS ->  %% TODO handle test hunging
-%%        ct:pal("ERROR: Atm workflow execution hung"),
-%%        ?assertEqual(success, failure)
+    after ?AWAIT_OTHER_PARALLEL_PIPELINES_NEXT_STEP_INTERVAL ->
+        case TestCtx0#test_ctx.test_hung_probes_left of
+            0 ->
+                ct:pal("Automation workflow execution test hung after steps: ~p", [
+                    TestCtx0#test_ctx.executed_step_phases
+                ]),
+                ?assertEqual(success, failure);
+            Num ->
+                TestCtx1 = TestCtx0#test_ctx{test_hung_probes_left = Num - 1},
+                TestCtx2 = assert_expectations_if_changed(TestCtx1),
+                TestCtx3 = end_pending_step_phase_executions(TestCtx2),
 
-        TestCtx1 = assert_expectations_if_changed(TestCtx0),
-        TestCtx2 = end_pending_step_phase_executions(TestCtx1),
-
-        case has_workflow_ended(TestCtx2) of
-            true ->
-                ok;
-            false ->
-                TestCtx3 = begin_deferred_step_phase_executions_if_possible(TestCtx2),
-                monitor_workflow_execution(TestCtx3)
+                case has_workflow_ended(TestCtx3) of
+                    true ->
+                        ok;
+                    false ->
+                        TestCtx4 = begin_deferred_step_phase_executions_if_possible(TestCtx3),
+                        monitor_workflow_execution(TestCtx4)
+                end
         end
     end.
 
