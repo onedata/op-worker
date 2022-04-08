@@ -64,11 +64,9 @@ on_file_location_change(FileCtx, ChangedLocationDoc = #document{
                                             on_file_location_change(FileCtx5, ChangedLocationDoc)
                                     end
                                 catch
-                                    Error:Reason  ->
-                                        % create_doc crashes if file_meta is missing
-                                        % TODO VFS-8952 - add posthook on ancestor if it is missing
-                                        ?debug("~p failure: ~p~p", [?FUNCTION_NAME, Error, Reason]),
-                                        file_meta_posthooks:add_hook(file_ctx:get_logical_uuid_const(FileCtx4), LocId,
+                                    throw:{error, {file_meta_missing, MissingUuid}}  ->
+                                        ?debug("~p file_meta_missing: ~p", [?FUNCTION_NAME, MissingUuid]),
+                                        file_meta_posthooks:add_hook(MissingUuid, file_meta, LocId,
                                             ?MODULE, ?FUNCTION_NAME, [file_ctx:reset(FileCtx), ChangedLocationDoc])
                                 end;
                             false ->

@@ -24,7 +24,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% functions operating on record using datastore model API
--export([add_hook/5, execute_hooks/1, delete/1]).
+-export([add_hook/6, execute_hooks/1, delete/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
@@ -37,10 +37,11 @@
 }).
 
 -type hook() :: #hook{}.
+-type dbsync_race_check() :: file_meta | {link, file_meta:name()}.
 -type hook_identifier() :: binary().
 -type hooks() :: #{hook_identifier() => hook()}.
 
--export_type([hooks/0]).
+-export_type([hooks/0, dbsync_race_check/0]).
 
 -define(CTX, #{
     model => ?MODULE
@@ -50,8 +51,9 @@
 %%% Functions operating on record using datastore_model API
 %%%===================================================================
 
--spec add_hook(file_meta:uuid(), hook_identifier(), module(), atom(), [term()]) -> ok | ?ERROR_INTERNAL_SERVER_ERROR.
-add_hook(FileUuid, Identifier, Module, Function, Args) ->
+-spec add_hook(file_meta:uuid(), dbsync_race_check(), hook_identifier(), module(), atom(), [term()]) ->
+    ok | ?ERROR_INTERNAL_SERVER_ERROR.
+add_hook(FileUuid, DbsyncRaceCheck, Identifier, Module, Function, Args) ->
     UniqueIdentifier = generate_hook_id(Identifier),
     EncodedArgs = term_to_binary(Args),
     Hook = #hook{
@@ -66,13 +68,11 @@ add_hook(FileUuid, Identifier, Module, Function, Args) ->
 
     case AddAns of
         {ok, _} ->
-            % Check race with file_meta document synchronization. Hook is added when something fails because of
-            % missing file_meta document. If missing file_meta document appears before hook adding to datastore,
-            % execution of hook is not triggered by dbsync. Thus, check if file_meta exists and trigger hook
+            % Check race with file_meta document and links synchronization. Hook is added when something fails because
+            % of missing file_meta document or link. If missing element appears before hook adding to datastore,
+            % execution of hook is not triggered by dbsync. Thus, check if missing element exists and trigger hook
             % execution if it exists.
-            % NOTE: this check does not addresses races with link documents synchronization. If any hook depends
-            % on links, this race must be handled here.
-            case file_meta:exists(FileUuid) of
+            case is_race_with_dbsync(FileUuid, DbsyncRaceCheck) of
                 true ->
                     % Spawn to prevent deadlocks when hook is added from the inside of already existing hook
                     spawn(fun() -> execute_hooks(FileUuid) end),
@@ -153,6 +153,10 @@ delete(Key) ->
     end.
 
 
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -165,6 +169,17 @@ delete(Key) ->
 -spec generate_hook_id(binary()) -> hook_identifier().
 generate_hook_id(Prefix) ->
     <<Prefix/binary, "_", (datastore_key:new())/binary>>.
+
+
+-spec is_race_with_dbsync(file_meta:uuid(), dbsync_race_check()) -> boolean().
+is_race_with_dbsync(FileUuid, file_meta) ->
+    file_meta:exists(FileUuid);
+is_race_with_dbsync(FileUuid, {link, MissingName}) ->
+    case file_meta_forest:get(FileUuid, all, MissingName) of
+        {ok, _} -> true;
+        {error, _} -> false
+    end.
+
 
 %%%===================================================================
 %%% datastore_model callbacks

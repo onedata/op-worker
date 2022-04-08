@@ -1317,8 +1317,8 @@ resolve_and_cache_path(FileCtx, PathType) ->
             case paths_cache:get(SpaceId, Doc, PathType) of
                 {ok, Path} ->
                     {Path, FileCtx2};
-                ?ERROR_NOT_FOUND ->
-                    throw(?ERROR_NOT_FOUND)
+                {error, {file_meta_missing, _MissingUuid}} = Error ->
+                    throw(Error)
             end;
         _ ->
             {ok, ParentUuid} = file_meta:get_parent_uuid(Doc),
@@ -1330,8 +1330,8 @@ resolve_and_cache_path(FileCtx, PathType) ->
                         ?UUID_BASED_PATH -> Uuid
                     end,
                     {filename:join(Path, FilenameOrUuid), FileCtx2};
-                ?ERROR_NOT_FOUND ->
-                    throw(?ERROR_NOT_FOUND)
+                {error, {file_meta_missing, _MissingUuid}} = Error ->
+                    throw(Error)
             end
     end.
 
