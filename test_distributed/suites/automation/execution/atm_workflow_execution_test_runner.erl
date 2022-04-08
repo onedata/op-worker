@@ -11,12 +11,20 @@
 %%%    it will be possible to check/assert workflow execution state machine
 %%%    properties before/after each step transition.
 %%% 2. workflow execution is started.
-%%% 3. before/after each step transition:
+%%% 3. execution of next step from each parallel pipeline (e.g. op executes
+%%%    multiple lanes in parallel or many items for single lane) is either
+%%%    deferred (if it must await for other steps to end) or started:
 %%%    a) hook (procedure defined by tester which can be used to e.g. change
 %%%       mocks behaviour, simulate sth, etc.) is called if defined.
-%%%    b) exp state diff is applied and, in case of changes, new workflow execution
-%%%       exp state is checked with data stored in op. Test fails if they differ.
-%%% 4. test successfully ends after all steps have executed and no mismatch
+%%%    b) exp state diff is applied and eventual changes to expectations are
+%%%       stored but not checked yet.
+%%% 4. when all parallel pipelines progressed and are awaiting for permission
+%%%    to continue:
+%%%    a) assert accumulated changes to workflow execution state expectations.
+%%%    b) end execution of pending steps (this allows backend to continue).
+%%%    c) deferred steps are executed (in the manner described in 3.) if steps
+%%%       they were waiting for ended.
+%%% 5. test successfully ends after all steps have executed and no mismatch
 %%%    between workflow execution exp state and data stored in Op was found.
 %%% @end
 %%%-------------------------------------------------------------------
@@ -40,11 +48,18 @@
     false | {true, atm_workflow_execution_exp_state_builder:exp_state()}
 ).
 
--type step_selector() :: {
+-type step_phase_selector() :: {
     Step :: atom(),
     Timing :: before_step | after_step,
     atm_lane_execution:lane_run_selector() | atm_workflow_execution:incarnation()
 }.
+-record(step_phase, {
+    selector :: step_phase_selector(),
+    mock_call_report :: mock_call_report(),
+    mock_spec :: step_mock_spec(),
+    reply_to :: pid()
+}).
+-type step_phase() :: #step_phase{}.
 
 -type result_override() :: {return, term()} | {throw, errors:error()}.
 
@@ -64,7 +79,7 @@
 
 -export_type([
     mock_call_ctx/0, hook/0, exp_state_diff/0,
-    result_override/0, mock_strategy/0, step_selector/0, step_mock_spec/0,
+    result_override/0, mock_strategy/0, step_phase_selector/0, step_mock_spec/0,
     lane_run_test_spec/0, incarnation_test_spec/0, test_spec/0
 ]).
 
@@ -78,21 +93,25 @@
 
 -record(test_ctx, {
     test_spec :: test_spec(),
+
     session_id :: session:id(),
     workflow_execution_id :: atm_workflow_execution:id(),
-    workflow_execution_exp_state :: atm_workflow_execution_exp_state_builder:exp_state(),
+
     current_lane_index :: atm_lane_execution:index(),
     current_run_num :: atm_lane_execution:run_num(),
     ongoing_incarnations :: [incarnation_test_spec()],
 
-    executed_steps = [] :: [step_selector()],
-    deferred_step_executions = #{} :: #{
-        step_selector() => [{pid(), mock_call_report(), step_selector(), step_mock_spec()}]
-    }
+    workflow_execution_exp_state :: atm_workflow_execution_exp_state_builder:exp_state(),
+    workflow_execution_exp_state_changed :: boolean(),
+
+    executed_step_phases = [] :: [step_phase_selector()],
+    pending_step_phases = [] :: [step_phase()],
+    deferred_step_phases = #{} :: #{step_phase_selector() => [step_phase()]}
 }).
 -type test_ctx() :: #test_ctx{}.
 
 
+-define(PARALLEL_STEP_EXECUTIONS, 100).
 -define(TEST_HUNG_TIMEOUT, timer:seconds(30)).
 
 -define(TEST_PROC_PID_KEY(__ATM_WORKFLOW_EXECUTION_ID),
@@ -168,8 +187,9 @@ run(TestSpec = #atm_workflow_execution_test_spec{
         workflow_execution_id = AtmWorkflowExecutionId,
         current_lane_index = 1,
         current_run_num = 1,
+        ongoing_incarnations = Incarnations,
         workflow_execution_exp_state = ExpState,
-        ongoing_incarnations = Incarnations
+        workflow_execution_exp_state_changed = false
     }).
 
 
@@ -190,30 +210,53 @@ cancel_workflow_execution(#atm_mock_call_ctx{
 
 %% @private
 -spec monitor_workflow_execution(test_ctx()) -> ok | no_return().
-monitor_workflow_execution(TestCtx) ->
+monitor_workflow_execution(TestCtx0) ->
     receive {ReplyTo, StepMockCallReport} ->
-        {StepSelector, StepMockSpec} = get_step_mock_spec(StepMockCallReport, TestCtx),
+        {StepPhaseSelector, StepMockSpec} = get_step_mock_spec(StepMockCallReport, TestCtx0),
 
-        case should_defer_step_execution(StepMockSpec, TestCtx) of
+        StepPhase = #step_phase{
+            selector = StepPhaseSelector,
+            mock_call_report = StepMockCallReport,
+            mock_spec = StepMockSpec,
+            reply_to = ReplyTo
+        },
+
+        case should_defer_step_execution(StepMockSpec, TestCtx0) of
             true ->
-                DeferredStepExecution = {ReplyTo, StepMockCallReport, StepSelector, StepMockSpec},
-
-                monitor_workflow_execution(TestCtx#test_ctx{deferred_step_executions = maps:update_with(
+                monitor_workflow_execution(TestCtx0#test_ctx{deferred_step_phases = maps:update_with(
                     StepMockSpec#atm_step_mock_spec.defer_after,
-                    fun(OtherDeferredStepExecutions) -> [DeferredStepExecution | OtherDeferredStepExecutions] end,
-                    [DeferredStepExecution],
-                    TestCtx#test_ctx.deferred_step_executions
+                    fun(RestDeferredStepPhases) -> [StepPhase | RestDeferredStepPhases] end,
+                    [StepPhase],
+                    TestCtx0#test_ctx.deferred_step_phases
                 )});
             false ->
-                case handle_step_execution(ReplyTo, StepMockCallReport, StepSelector, StepMockSpec, TestCtx) of
-                    stop -> ok;
-                    {continue, NewTestCtx2} -> monitor_workflow_execution(NewTestCtx2)
-                end
+                monitor_workflow_execution(begin_step_phase_execution(StepPhase, TestCtx0))
         end
-    after ?TEST_HUNG_TIMEOUT ->
-        ct:pal("ERROR: Atm workflow execution hung"),
-        ?assertEqual(success, failure)
+    after ?PARALLEL_STEP_EXECUTIONS ->  %% TODO handle test hunging
+%%        ct:pal("ERROR: Atm workflow execution hung"),
+%%        ?assertEqual(success, failure)
+
+        TestCtx1 = assert_expectations_if_changed(TestCtx0),
+        TestCtx2 = end_pending_step_phase_executions(TestCtx1),
+
+        case has_workflow_ended(TestCtx2) of
+            true ->
+                ok;
+            false ->
+                TestCtx3 = begin_deferred_step_phase_executions_if_possible(TestCtx2),
+                monitor_workflow_execution(TestCtx3)
+        end
     end.
+
+
+%% @private
+-spec assert_expectations_if_changed(test_ctx()) -> test_ctx().
+assert_expectations_if_changed(TestCtx = #test_ctx{workflow_execution_exp_state_changed = true}) ->
+    assert_exp_workflow_execution_state(TestCtx),
+    TestCtx#test_ctx{workflow_execution_exp_state_changed = false};
+
+assert_expectations_if_changed(TestCtx = #test_ctx{workflow_execution_exp_state_changed = false}) ->
+    TestCtx.
 
 
 %% @private
@@ -221,83 +264,107 @@ monitor_workflow_execution(TestCtx) ->
 should_defer_step_execution(#atm_step_mock_spec{defer_after = undefined}, _TestCtx) ->
     false;
 should_defer_step_execution(#atm_step_mock_spec{defer_after = StepSelector}, #test_ctx{
-    executed_steps = ExecutedSteps
+    executed_step_phases = ExecutedSteps
 }) ->
     not lists:member(StepSelector, ExecutedSteps).
 
 
 %% @private
--spec handle_step_execution(pid(), mock_call_report(), step_selector(), step_mock_spec(), test_ctx()) ->
-    stop | {continue, test_ctx()}.
-handle_step_execution(ReplyTo, StepMockCallReport, StepSelector, StepMockSpec, TestCtx) ->
-    try
-        handle_step_execution_insecure(ReplyTo, StepMockCallReport, StepSelector, StepMockSpec, TestCtx)
-    catch Type:Reason:Stacktrace ->
-        ct:pal("Automation workflow execution test failed at step: ~p", [StepSelector]),
-        erlang:raise(Type, Reason, Stacktrace)
-    end.
+-spec begin_step_phase_execution(step_phase(), test_ctx()) -> test_ctx().
+begin_step_phase_execution(
+    StepPhase = #step_phase{
+        mock_call_report = StepMockCallReport,
+        mock_spec = StepMockSpec
+    },
+    TestCtx0 = #test_ctx{pending_step_phases = PendingStepPhases}
+) ->
+    StepMockCallCtx = build_mock_call_ctx(StepMockCallReport, TestCtx0),
 
-
-%% @private
--spec handle_step_execution_insecure(pid(), mock_call_report(), step_selector(), step_mock_spec(), test_ctx()) ->
-    stop | {continue, test_ctx()}.
-handle_step_execution_insecure(ReplyTo, StepMockCallReport, StepSelector, StepMockSpec, TestCtx) ->
-    StepMockCallCtx = build_mock_call_ctx(StepMockCallReport, TestCtx),
-
-    Hook = get_hook(StepMockCallReport, StepMockSpec),
-    call_if_defined(Hook, StepMockCallCtx),
+    call_if_defined(get_hook(StepMockCallReport, StepMockSpec), StepMockCallCtx),
 
     ExpStateDiff = get_exp_state_diff(StepMockCallReport, StepMockSpec),
-    NewTestCtx1 = case ExpStateDiff(StepMockCallCtx) of
+    TestCtx1 = case ExpStateDiff(StepMockCallCtx) of
         {true, NewExpState} ->
-            NewTestCtx0 = TestCtx#test_ctx{workflow_execution_exp_state = NewExpState},
-            assert_exp_workflow_execution_state(NewTestCtx0),
-            NewTestCtx0;
+            TestCtx0#test_ctx{
+                workflow_execution_exp_state = NewExpState,
+                workflow_execution_exp_state_changed = true
+            };
         false ->
-            TestCtx
+            TestCtx0
     end,
 
-    Timing = StepMockCallReport#mock_call_report.timing,
-    reply_to_execution_process(ReplyTo, case {Timing, StepMockSpec#atm_step_mock_spec.strategy} of
-        {before_step, MockStrategy} -> MockStrategy;
-        {after_step, _} -> ok
-    end),
-
-    NewTestCtx2 = shift_monitored_lane_run_if_current_one_ended(
-        StepMockCallReport,
-        NewTestCtx1#test_ctx{executed_steps = [StepSelector | NewTestCtx1#test_ctx.executed_steps]}
-    ),
-    case NewTestCtx2#test_ctx.ongoing_incarnations of
-        [] ->
-            stop;
-        [_ | _] ->
-            execute_deferred_steps_if_any(StepSelector, NewTestCtx2)
-    end.
+    TestCtx1#test_ctx{pending_step_phases = [StepPhase | PendingStepPhases]}.
 
 
 %% @private
--spec execute_deferred_steps_if_any(step_selector(), test_ctx()) ->
-    stop | {continue, test_ctx()}.
-execute_deferred_steps_if_any(ExecutedStepSelector, TestCtx) ->
-    DeferredStepExecutions = maps:get(
-        ExecutedStepSelector, TestCtx#test_ctx.deferred_step_executions, []
-    ),
-    Result = lists_utils:foldl_while(fun({ReplyTo, StepMockCallReport, StepSelector, StepMockSpec}, TestCtxAcc) ->
-        case handle_step_execution(ReplyTo, StepMockCallReport, StepSelector, StepMockSpec, TestCtxAcc) of
-            stop -> {halt, stop};
-            {continue, UpdatedTestCtxAcc} -> {cont, UpdatedTestCtxAcc}
-        end
-    end, TestCtx, DeferredStepExecutions),
+-spec end_pending_step_phase_executions(test_ctx()) -> test_ctx().
+end_pending_step_phase_executions(TestCtx = #test_ctx{pending_step_phases = PendingStepPhases}) ->
+    lists:foldl(fun(
+        StepPhase = #step_phase{
+            selector = StepPhaseSelector,
+            mock_call_report = StepMockCallReport,
+            reply_to = ReplyTo
+        },
+        TestCtxAcc0 = #test_ctx{executed_step_phases = ExecutedStepPhases}
+    ) ->
+        reply_to_execution_process(ReplyTo, infer_reply(StepPhase)),
 
-    case Result of
-        stop -> stop;
-        NewTestCtx -> {continue, NewTestCtx}
-    end.
+        shift_monitored_lane_run_if_current_one_ended(
+            StepMockCallReport,
+            TestCtxAcc0#test_ctx{executed_step_phases = [StepPhaseSelector | ExecutedStepPhases]}
+        )
+    end, TestCtx#test_ctx{pending_step_phases = []}, PendingStepPhases).
+
+
+%% @private
+-spec infer_reply(step_phase()) -> mock_strategy() | ok.
+infer_reply(#step_phase{
+    mock_call_report = #mock_call_report{timing = before_step},
+    mock_spec = #atm_step_mock_spec{strategy = MockStrategy}
+}) ->
+    MockStrategy;
+
+infer_reply(#step_phase{mock_call_report = #mock_call_report{timing = after_step}}) ->
+    ok.
+
+
+%% @private
+-spec begin_deferred_step_phase_executions_if_possible(test_ctx()) -> test_ctx().
+begin_deferred_step_phase_executions_if_possible(TestCtx = #test_ctx{
+    executed_step_phases = ExecutedStepPhases,
+    deferred_step_phases = DeferredStepPhases
+}) ->
+    maps:fold(fun(DependedStepPhaseSelector, StepPhases, TestCtxAcc) ->
+        case lists:member(DependedStepPhaseSelector, ExecutedStepPhases) of
+            true ->
+                lists:foldl(fun(StepPhase, InnerTestCtxAcc) ->
+                    begin_step_phase_execution(StepPhase, InnerTestCtxAcc)
+                end, TestCtxAcc, StepPhases);
+            false ->
+                LeftoverDeferredStepPhases = TestCtxAcc#test_ctx.deferred_step_phases,
+                TestCtxAcc#test_ctx{deferred_step_phases = LeftoverDeferredStepPhases#{
+                    DependedStepPhaseSelector => StepPhases
+                }}
+        end
+    end, TestCtx#test_ctx{deferred_step_phases = #{}}, DeferredStepPhases).
+
+
+%% @private
+-spec has_workflow_ended(test_ctx()) -> boolean().
+has_workflow_ended(#test_ctx{
+    ongoing_incarnations = [],
+    pending_step_phases = [],
+    deferred_step_phases = DeferredStepPhases
+}) ->
+    map_size(DeferredStepPhases) == 0;
+
+has_workflow_ended(#test_ctx{}) ->
+    false.
 
 
 %% @private
 -spec get_step_mock_spec(mock_call_report(), test_ctx()) ->
-    {step_selector(), step_mock_spec()}.
+    {step_phase_selector(), step_mock_spec()}.
 get_step_mock_spec(
     #mock_call_report{step = handle_workflow_execution_ended, timing = Timing},
     #test_ctx{ongoing_incarnations = [#atm_workflow_execution_incarnation_test_spec{
@@ -467,10 +534,18 @@ get_exp_state_diff(
 
 %% @private
 -spec assert_exp_workflow_execution_state(test_ctx()) -> test_ctx().
-assert_exp_workflow_execution_state(#test_ctx{workflow_execution_exp_state = ExpState}) ->
+assert_exp_workflow_execution_state(#test_ctx{
+    workflow_execution_exp_state = ExpState,
+    executed_step_phases = ExecutedStepPhases
+}) ->
     case atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState) of
-        true -> ok;
-        false -> ?assertEqual(success, failure)
+        true ->
+            ok;
+        false ->
+            ct:pal("Automation workflow execution test failed after steps: ~p", [
+                ExecutedStepPhases
+            ]),
+            ?assertEqual(success, failure)
     end.
 
 

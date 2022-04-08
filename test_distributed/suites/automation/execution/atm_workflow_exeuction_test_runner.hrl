@@ -28,7 +28,7 @@
 }).
 
 -record(atm_step_mock_spec, {
-    defer_after = undefined :: undefined | atm_workflow_execution_test_runner:step_selector(),
+    defer_after = undefined :: undefined | atm_workflow_execution_test_runner:step_phase_selector(),
 
     before_step_hook = undefined :: undefined | atm_workflow_execution_test_runner:hook(),
     before_step_exp_state_diff = default :: default | atm_workflow_execution_test_runner:exp_state_diff(),
