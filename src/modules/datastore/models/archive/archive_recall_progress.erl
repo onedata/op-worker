@@ -68,12 +68,6 @@
 -define(HOUR_METRIC, <<"hour">>).
 -define(DAY_METRIC, <<"day">>).
 
--define(LAYOUT_WITH_TOTAL_METRICS, #{
-    ?BYTES_TS => [?TOTAL_METRIC],
-    ?FILES_TS => [?TOTAL_METRIC],
-    ?FAILED_FILES_TS => [?TOTAL_METRIC]
-}).
-
 -define(NOW(), global_clock:timestamp_seconds()).
 
 %%%===================================================================
@@ -118,7 +112,7 @@ get(Id) ->
 -spec report_file_finished(id()) -> ok | {error, term()}.
 report_file_finished(Id) ->
     datastore_time_series_collection:consume_measurements(?CTX, ?TSC_ID(Id), #{
-        ?FILES_TS => #{all => [{?NOW(), 1}]}}
+        ?FILES_TS => #{?ALL_METRICS => [{?NOW(), 1}]}}
     ).
 
 
@@ -130,14 +124,14 @@ report_file_failed(Id, FileGuid, Error) ->
         <<"reason">> => errors:to_json(Error)
     }),
     datastore_time_series_collection:consume_measurements(?CTX, ?TSC_ID(Id), #{
-        ?FAILED_FILES_TS => #{all => [{?NOW(), 1}]}}
+        ?FAILED_FILES_TS => #{?ALL_METRICS => [{?NOW(), 1}]}}
     ).
 
 
 -spec report_bytes_copied(id(), non_neg_integer()) -> ok | {error, term()}.
 report_bytes_copied(Id, Bytes) ->
     datastore_time_series_collection:consume_measurements(?CTX, ?TSC_ID(Id), #{
-        ?BYTES_TS => #{all => [{?NOW(), Bytes}]}}
+        ?BYTES_TS => #{?ALL_METRICS => [{?NOW(), Bytes}]}}
     ).
 
 %%%===================================================================
@@ -202,7 +196,9 @@ supported_metrics() -> #{
 -spec get_counters_current_value(id()) ->
     {ok, #{time_series_collection:time_series_name() => non_neg_integer()}} | {error, term()}.
 get_counters_current_value(Id) ->
-    case datastore_time_series_collection:get_slice(?CTX, ?TSC_ID(Id), ?LAYOUT_WITH_TOTAL_METRICS, #{window_limit => 1}) of
+    case datastore_time_series_collection:get_slice(
+        ?CTX, ?TSC_ID(Id), #{?ALL_TIME_SERIES => [?TOTAL_METRIC]}, #{window_limit => 1}
+    ) of
         {ok, Slice} ->
             {ok, maps:map(fun(_TimeSeriesName, #{?TOTAL_METRIC := Windows}) ->
                 case Windows of

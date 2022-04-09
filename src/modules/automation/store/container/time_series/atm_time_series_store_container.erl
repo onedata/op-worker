@@ -268,9 +268,9 @@ consume_measurements(Measurements, DispatchRules, Record = #atm_time_series_stor
             {true, TSName, TSConfig} ->
                 Timestamp = maps:get(<<"timestamp">>, Measurement),
                 Value = maps:get(<<"value">>, Measurement),
-                PreviousMeasurements = kv_utils:get([TSName, all], ConsumeSpecAcc, []),
+                PreviousMeasurements = kv_utils:get([TSName, ?ALL_METRICS], ConsumeSpecAcc, []),
                 NewMeasurements = [{Timestamp, Value} | PreviousMeasurements],
-                {ConsumeSpecAcc#{TSName => #{all => NewMeasurements}}, InvolvedConfigAcc#{TSName => TSConfig}};
+                {ConsumeSpecAcc#{TSName => #{?ALL_METRICS => NewMeasurements}}, InvolvedConfigAcc#{TSName => TSConfig}};
             false ->
                 Acc
         end

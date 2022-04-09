@@ -108,9 +108,8 @@ get_stats_and_time_series_collection(Guid) ->
             case dir_stats_collector:flush_stats(Guid, ?MODULE) of
                 ok ->
                     Uuid = file_id:guid_to_uuid(Guid),
-                    case datastore_time_series_collection:get_layout(?CTX, Uuid) of
-                        {ok, Layout} ->
-                            {ok, Slice} = datastore_time_series_collection:get_slice(?CTX, Uuid, Layout, #{}),
+                    case datastore_time_series_collection:get_slice(?CTX, Uuid, ?COMPLETE_LAYOUT, #{}) of
+                        {ok, Slice} ->
                             {ok, {internal_stats_to_current_stats(Slice), internal_stats_to_time_stats(Slice)}};
                         {error, not_found} ->
                             {ok, {gen_empty_current_stats(Guid), gen_empty_time_stats(Guid)}}
@@ -173,7 +172,7 @@ delete_stats(Guid) ->
 -spec acquire(file_id:file_guid()) -> {dir_stats_collection:collection(), non_neg_integer()}.
 acquire(Guid) ->
     Uuid = file_id:guid_to_uuid(Guid),
-    SliceLayout = internal_stats_layout_with_current_metrics(Guid),
+    SliceLayout = #{?ALL_TIME_SERIES => [?CURRENT_METRIC]},
     case datastore_time_series_collection:get_slice(?CTX, Uuid, SliceLayout, #{window_limit => 1}) of
         {ok, Slice} ->
             {internal_stats_to_current_stats(Slice), internal_stats_to_incarnation(Slice)};
@@ -196,7 +195,7 @@ save(Guid, Collection, Incarnation) ->
         current -> #{};
         _ -> #{?INCARNATION_TIME_SERIES => #{?CURRENT_METRIC => [{Timestamp, Incarnation}]}}
     end,
-    StatsConsumeSpec = maps:map(fun(_StatName, Value) -> #{all => [{Timestamp, Value}]} end, Collection),
+    StatsConsumeSpec = maps:map(fun(_StatName, Value) -> #{?ALL_METRICS => [{Timestamp, Value}]} end, Collection),
     ConsumeSpec = maps:merge(StatsConsumeSpec, IncarnationConsumeSpec),
     case datastore_time_series_collection:consume_measurements(?CTX, Uuid, ConsumeSpec) of
         ok ->
@@ -263,19 +262,13 @@ update_stats(Guid, CollectionUpdate) ->
 
 
 %% @private
--spec internal_stats_layout_with_current_metrics(file_id:file_guid()) -> time_series_collection:layout().
-internal_stats_layout_with_current_metrics(Guid) ->
-    maps_utils:generate_from_list(fun
-        (StatName) -> {StatName, [?CURRENT_METRIC]}
-    end, [?INCARNATION_TIME_SERIES | stat_names(Guid)]).
-
-
-%% @private
 -spec internal_stats_config(file_id:file_guid()) -> time_series_collection:config().
 internal_stats_config(Guid) ->
     maps_utils:generate_from_list(fun
-        (?INCARNATION_TIME_SERIES) -> {?INCARNATION_TIME_SERIES, #{?CURRENT_METRIC => current_metric()}};
-        (StatName) -> {StatName, metrics_extended_with_current_value()}
+        (?INCARNATION_TIME_SERIES) ->
+            {?INCARNATION_TIME_SERIES, current_metric_composition()};
+        (StatName) ->
+            {StatName, maps:merge(time_stats_metric_composition(), current_metric_composition())}
     end, [?INCARNATION_TIME_SERIES | stat_names(Guid)]).
 
 
@@ -287,24 +280,20 @@ stat_names(Guid) ->
 
 
 %% @private
--spec metrics_extended_with_current_value() -> time_series:metric_composition().
-metrics_extended_with_current_value() ->
-    maps:put(?CURRENT_METRIC, current_metric(), metrics()).
-
-
-%% @private
--spec current_metric() -> metric_config:record().
-current_metric() ->
-    #metric_config{
-        resolution = 1,
-        retention = 1,
-        aggregator = last
+-spec current_metric_composition() -> time_series:metric_composition().
+current_metric_composition() ->
+    #{
+        ?CURRENT_METRIC => #metric_config{
+            resolution = 1,
+            retention = 1,
+            aggregator = last
+        }
     }.
 
 
 %% @private
--spec metrics() -> time_series:metric_composition().
-metrics() ->
+-spec time_stats_metric_composition() -> time_series:metric_composition().
+time_stats_metric_composition() ->
     #{
         ?MINUTE_METRIC => #metric_config{
             resolution = ?MINUTE_RESOLUTION,
@@ -363,7 +352,7 @@ gen_empty_current_stats(Guid) ->
 %% @private
 -spec gen_empty_time_stats(file_id:file_guid()) -> time_stats().
 gen_empty_time_stats(Guid) ->
-    MetricNames = maps:keys(metrics()),
+    MetricNames = maps:keys(time_stats_metric_composition()),
     maps_utils:generate_from_list(fun(TimeSeriesName) ->
         {TimeSeriesName, maps_utils:generate_from_list(fun(MetricName) ->
             {MetricName, []}
