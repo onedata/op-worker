@@ -72,12 +72,12 @@ add_hook(FileUuid, MissingElement, Identifier, Module, Function, Args) ->
             % of missing file_meta document or link. If missing element appears before hook adding to datastore,
             % execution of hook is not triggered by dbsync. Thus, check if missing element exists and trigger hook
             % execution if it exists.
-            case is_missing(FileUuid, MissingElement) of
-                false ->
+            case has_missing_element_appeared(FileUuid, MissingElement) of
+                true ->
                     % Spawn to prevent deadlocks when hook is added from the inside of already existing hook
                     spawn(fun() -> execute_hooks(FileUuid) end),
                     ok;
-                true ->
+                false ->
                     ok
             end;
         Error ->
@@ -172,13 +172,13 @@ generate_hook_id(Prefix) ->
     <<Prefix/binary, "_", (datastore_key:new())/binary>>.
 
 
--spec is_missing(file_meta:uuid(), missing_element()) -> boolean().
-is_missing(FileUuid, file_meta) ->
-    not file_meta:exists(FileUuid);
-is_missing(FileUuid, {link, FileName}) ->
+-spec has_missing_element_appeared(file_meta:uuid(), missing_element()) -> boolean().
+has_missing_element_appeared(FileUuid, file_meta) ->
+    file_meta:exists(FileUuid);
+has_missing_element_appeared(FileUuid, {link, FileName}) ->
     case file_meta_forest:get(FileUuid, all, FileName) of
-        {ok, _} -> false;
-        {error, _} -> true
+        {ok, _} -> true;
+        {error, _} -> false
     end.
 
 
