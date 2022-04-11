@@ -31,7 +31,12 @@
     defer_after = undefined :: undefined | atm_workflow_execution_test_runner:step_phase_selector(),
 
     before_step_hook = undefined :: undefined | atm_workflow_execution_test_runner:hook(),
-    before_step_exp_state_diff = default :: default | atm_workflow_execution_test_runner:exp_state_diff(),
+    before_step_exp_state_diff = default ::
+        no_change |
+        % changes that would happen in case of 'happy path' that is if no execution error occurred
+        default |
+        % changes defined by test author
+        atm_workflow_execution_test_runner:exp_state_diff(),
 
     strategy = passthrough :: atm_workflow_execution_test_runner:mock_strategy(),
 

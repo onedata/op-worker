@@ -75,6 +75,8 @@
 
 
 -define(JSON_PATH(__QUERY_BIN), binary:split(__QUERY_BIN, <<".">>, [global])).
+-define(JSON_PATH(__FORMAT, __ARGS), ?JSON_PATH(str_utils:format_bin(__FORMAT, __ARGS))).
+
 -define(NOW(), global_clock:timestamp_seconds()).
 
 
@@ -175,7 +177,7 @@ expect_lane_run_started_preparing_in_advance(AtmLaneRunSelector, ExpState = #exp
             {Path, Run#{<<"status">> => <<"preparing">>}};
         ?ERROR_NOT_FOUND ->
             AtmLaneIndex = resolve_lane_selector(element(1, AtmLaneRunSelector), ExpState),
-            Path = ?JSON_PATH(str_utils:format_bin("lanes.[~B].runs.[0]", [AtmLaneIndex - 1])),
+            Path = ?JSON_PATH("lanes.[~B].runs.[0]", [AtmLaneIndex - 1]),
             {Path, build_exp_initial_regular_lane_run(undefined, <<"preparing">>)}
     end,
     {ok, ExpWorkflowExecutionState1} = json_utils:insert(
@@ -470,9 +472,7 @@ locate_lane_run({AtmLaneSelector, AtmRunSelector}, ExpState = #exp_state{
 
     case SearchResult of
         {ok, AtmRunIndex, AtmLaneRun} ->
-            Path = ?JSON_PATH(str_utils:format_bin("lanes.[~B].runs.[~B]", [
-                AtmLaneIndex - 1, AtmRunIndex - 1
-            ])),
+            Path = ?JSON_PATH("lanes.[~B].runs.[~B]", [AtmLaneIndex - 1, AtmRunIndex - 1]),
             {ok, {Path, AtmLaneRun}};
         _ ->
             ?ERROR_NOT_FOUND
