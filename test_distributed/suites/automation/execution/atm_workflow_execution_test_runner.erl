@@ -19,10 +19,10 @@
 %%% 1. start atm workflow execution.
 %%% 2. await report call from any execution process. If none is received for
 %%%    prolonged period of time go to 6.
-%%% 3. if received report concerns step phase to be blocked until other step
-%%%    phase is executed (specified 'defer_after' in step_mock_spec() which
-%%%    can be used to enforce specific order of events in parallel execution
-%%%    environment) which has not yet been then defer it and go to 2.
+%%% 3. if received report handling does not need to be blocked until other
+%%%    step phase is executed (no 'defer_after' specified in step_mock_spec())
+%%%    or such step phase was already executed go to 4. Otherwise, defer it
+%%%    and go to 2.
 %%% 4. begin handling of step by:
 %%%    a) calling hook (procedure defined by tester which can be used to e.g.
 %%%       change mocks behaviour, simulate sth, etc.) if defined.
@@ -38,7 +38,7 @@
 %%%    c) execute deferred step phases (in the manner described in 4.) if step
 %%%       phases they were waiting for ended.
 %%%    If all step phases has been executed and no mismatch between workflow
-%%%    execution exp state and data stored in op was found end test.
+%%%    execution exp state and data stored in op was found, then finish the test.
 %%%    Otherwise go to 2.
 %%% @end
 %%%-------------------------------------------------------------------
@@ -544,7 +544,7 @@ get_exp_state_diff(
 
 get_exp_state_diff(
     #mock_call_report{timing = before_step},
-    #atm_step_mock_spec{before_step_exp_state_diff = no_change}
+    #atm_step_mock_spec{before_step_exp_state_diff = no_diff}
 ) ->
     fun(_) -> false end;
 
@@ -562,7 +562,7 @@ get_exp_state_diff(
 
 get_exp_state_diff(
     #mock_call_report{timing = after_step},
-    #atm_step_mock_spec{after_step_exp_state_diff = no_change}
+    #atm_step_mock_spec{after_step_exp_state_diff = no_diff}
 ) ->
     fun(_) -> false end;
 

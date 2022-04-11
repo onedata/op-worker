@@ -28,11 +28,13 @@
 }).
 
 -record(atm_step_mock_spec, {
+    % can be used to block atm execution process until other step phase is executed
+    % and as such enforce specific order of events in parallel execution environment
     defer_after = undefined :: undefined | atm_workflow_execution_test_runner:step_phase_selector(),
 
     before_step_hook = undefined :: undefined | atm_workflow_execution_test_runner:hook(),
     before_step_exp_state_diff = default ::
-        no_change |
+        no_diff |
         % changes that would happen in case of 'happy path' that is if no execution error occurred
         default |
         % changes defined by test author

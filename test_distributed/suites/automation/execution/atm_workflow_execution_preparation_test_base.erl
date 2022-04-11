@@ -169,7 +169,7 @@ first_lane_run_preparation_failure_before_run_was_created_interrupts_lane_prepar
                     selector = {2, 1},
                     create_run = #atm_step_mock_spec{
                         defer_after = {prepare_lane, after_step, {1, 1}},
-                        before_step_exp_state_diff = no_change,
+                        before_step_exp_state_diff = no_diff,
                         after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState}) ->
                             % Lane run creation began before previous lane run failed and as such all components
                             % should be created
