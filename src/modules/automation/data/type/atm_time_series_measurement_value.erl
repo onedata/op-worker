@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements `atm_data_validator` and `atm_data_compressor`
-%%% functionality for `atm_time_series_measurements_type`.
+%%% functionality for `atm_time_series_measurement_type`.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_time_series_measurement_value).
@@ -91,7 +91,7 @@ check_implicit_measurement_constraints(#{
     is_binary(TsName) orelse throw({unverified_constraints, #{
         <<"tsName">> => <<"String">>
     }}),
-    (is_integer(Timestamp) andalso Timestamp > 0) orelse throw({unverified_constraints, #{
+    (is_integer(Timestamp) andalso Timestamp >= 0) orelse throw({unverified_constraints, #{
         <<"timestamp">> => <<"Non negative integer">>
     }}),
     is_number(MeasurementValue) orelse throw({unverified_constraints, #{

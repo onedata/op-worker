@@ -132,7 +132,7 @@ example_configs() ->
         atm_object_type,
         atm_range_type,
         atm_string_type,
-        atm_time_series_measurements_type
+        atm_time_series_measurement_type
     ]).
 
 

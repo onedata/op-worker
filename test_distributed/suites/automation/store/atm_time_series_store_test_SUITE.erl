@@ -197,18 +197,33 @@ manage_content_test(_Config) ->
     SortedCountTSMetricNames = lists:sort([?MINUTE_METRIC_NAME, ?HOUR_METRIC_NAME, ?DAY_METRIC_NAME]),
 
     % Assert that only valid measurements are accepted
-    lists:foreach(fun(InvalidData) ->
-        ?assertThrow(
-            ?ERROR_ATM_DATA_TYPE_UNVERIFIED(InvalidData, atm_time_series_measurements_type),
-            ?erpc(atm_store_api:update_content(
-                AtmWorkflowExecutionAuth, InvalidData, ContentUpdateOpts, AtmStoreId
-            ))
-        )
+    lists:foreach(fun({InvalidData, ExpError}) ->
+        ?assertThrow(ExpError, ?erpc(atm_store_api:update_content(
+            AtmWorkflowExecutionAuth, InvalidData, ContentUpdateOpts, AtmStoreId
+        )))
     end, [
-        5,
-        <<"BIN">>,
-        [#{<<"ts">> => <<"name">>}],
-        [#{<<"tsName">> => <<"mp3">>, <<"timestamp">> => 0, <<"value">> => 10}, 10]
+        {5, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(5, atm_time_series_measurement_type)},
+        {<<"BIN">>, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(<<"BIN">>, atm_time_series_measurement_type)},
+        {
+            [#{<<"ts">> => <<"name">>}],
+            ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+                [#{<<"ts">> => <<"name">>}],
+                atm_array_type,
+                #{<<"item[0]">> => errors:to_json(?ERROR_ATM_DATA_TYPE_UNVERIFIED(
+                    #{<<"ts">> => <<"name">>}, atm_time_series_measurement_type
+                ))}
+            )
+        },
+        {
+            [#{<<"tsName">> => <<"mp3">>, <<"timestamp">> => 1, <<"value">> => 10}, 10],
+            ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+                [#{<<"tsName">> => <<"mp3">>, <<"timestamp">> => 1, <<"value">> => 10}, 10],
+                atm_array_type,
+                #{<<"item[1]">> => errors:to_json(
+                    ?ERROR_ATM_DATA_TYPE_UNVERIFIED(10, atm_time_series_measurement_type)
+                )}
+            )
+        }
     ]),
 
     % Timestamps of other measurements will be calculated based on Timestamp1 so to

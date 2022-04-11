@@ -136,11 +136,19 @@ build_workflow_execution_env(AtmWorkflowExecutionAuth, AtmStoreSchema, AtmStoreI
 
 %% TODO VFS-8686 add array data spec generation after implementing compress/expand for array
 -spec example_data_spec(atm_data_type:type()) -> atm_data_spec:record().
-example_data_spec(atm_time_series_measurements_type) ->
+example_data_spec(atm_array_type) ->
+    #atm_data_spec{
+        type = atm_array_type,
+        value_constraints = #{
+            item_data_spec => example_data_spec(?RAND_ELEMENT(basic_data_types()))
+        }
+    };
+
+example_data_spec(atm_time_series_measurement_type) ->
     RandSpecs = atm_test_utils:example_time_series_measurements_specs(),
 
     #atm_data_spec{
-        type = atm_time_series_measurements_type,
+        type = atm_time_series_measurement_type,
         value_constraints = #{specs => lists_utils:random_sublist(RandSpecs, 1, all)}
     };
 
@@ -248,28 +256,26 @@ gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_data_spec{
     ?RAND_STR(32);
 
 gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_data_spec{
-    type = atm_time_series_measurements_type,
+    type = atm_time_series_measurement_type,
     value_constraints = #{specs := Specs}
 }) ->
-    lists:map(fun(_) ->
-        #{
-            <<"tsName">> => gen_ts_name(?RAND_ELEMENT(Specs)),
-            <<"timestamp">> => ?RAND_INT(100000, 999999),
-            <<"value">> => ?RAND_INT(1, 99)
-        }
-    end, lists:seq(1, ?RAND_INT(2, 5))).
+    #{
+        <<"tsName">> => gen_ts_name(?RAND_ELEMENT(Specs)),
+        <<"timestamp">> => ?RAND_INT(100000, 999999),
+        <<"value">> => ?RAND_INT(1, 99)
+    }.
 
 
 %% @private
 -spec gen_ts_name(atm_time_series_measurements_spec:record()) ->
     atm_time_series_attribute:name().
-gen_ts_name(#atm_time_series_measurements_spec{
+gen_ts_name(#atm_time_series_measurement_spec{
     name_matcher_type = exact,
     name_matcher = TsName
 }) ->
     TsName;
 
-gen_ts_name(#atm_time_series_measurements_spec{
+gen_ts_name(#atm_time_series_measurement_spec{
     name_matcher_type = has_prefix,
     name_matcher = Pattern
 }) ->
@@ -286,7 +292,7 @@ gen_invalid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_data_spec{
     type = atm_array_type,
     value_constraints = #{item_data_spec := #atm_data_spec{type = ItemDataType}}
 }) ->
-    InvalidItemDataSpec = example_data_spec(?RAND_ELEMENT(all_basic_data_types() -- [ItemDataType])),
+    InvalidItemDataSpec = example_data_spec(?RAND_ELEMENT(basic_data_types() -- [ItemDataType])),
 
     lists:map(
         fun(_) -> gen_valid_data(ProviderSelector, AtmWorkflowExecutionAuth, InvalidItemDataSpec) end,
@@ -303,7 +309,7 @@ gen_invalid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_data_spec{
 gen_invalid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_data_spec{
     type = AtmDataType
 }) ->
-    InvalidDataSpec = example_data_spec(?RAND_ELEMENT(all_basic_data_types() -- [AtmDataType])),
+    InvalidDataSpec = example_data_spec(?RAND_ELEMENT(basic_data_types() -- [AtmDataType])),
     gen_valid_data(ProviderSelector, AtmWorkflowExecutionAuth, InvalidDataSpec).
 
 
@@ -392,16 +398,16 @@ infer_store_type(#atm_tree_forest_store_config{}) -> tree_forest.
 
 
 %% @private
--spec all_basic_data_types() -> [atm_data_type:type()].
-all_basic_data_types() -> [
+-spec basic_data_types() -> [atm_data_type:type()].
+basic_data_types() -> [
+%%    atm_array_type,  %% TODO
     atm_dataset_type,
     atm_file_type,
     atm_integer_type,
     atm_object_type,
-    atm_onedatafs_credentials_type,
     atm_range_type,
     atm_string_type,
-    atm_time_series_measurements_type
+    atm_time_series_measurement_type
 ].
 
 
