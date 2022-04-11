@@ -38,6 +38,7 @@
     list_archives/5,
     init_archive_purge/4,
     init_archive_recall/5,
+    cancel_archive_recall/3,
     get_archive_recall_details/3,
     get_archive_recall_progress/3
 ]).
@@ -213,6 +214,14 @@ init_archive_recall(SpaceDirCtx, ArchiveId, ParentDirectoryGuid, TargetName, Use
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_RECALL_ARCHIVES),
     
     archive_api:recall(ArchiveId, UserCtx, ParentDirectoryGuid, TargetName).
+
+
+-spec cancel_archive_recall(file_ctx:ctx(), archive_recall:id(), user_ctx:ctx()) -> ok | error().
+cancel_archive_recall(FileCtx, RecallId, UserCtx) ->
+    assert_has_eff_privilege(FileCtx, UserCtx, ?SPACE_RECALL_ARCHIVES),
+    fslogic_authz:ensure_authorized(UserCtx, FileCtx, [?TRAVERSE_ANCESTORS]),
+    
+    archive_api:cancel_recall(RecallId).
 
 
 -spec get_archive_recall_details(file_ctx:ctx(), archive_recall:id(), user_ctx:ctx()) -> 

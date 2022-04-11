@@ -660,6 +660,14 @@ maybe_stop_cleaning(State = #state{
     stop(SpaceId, ARId),
     State;
 maybe_stop_cleaning(State = #state{
+    space_id = SpaceId,
+    run_id = ARId,
+    run_cancelled = true,
+    end_of_view_reached = true
+}) ->
+    stop(SpaceId, ARId),
+    State;
+maybe_stop_cleaning(State = #state{
     run_id = ARId,
     task_id = TaskId,
     space_id = SpaceId,

@@ -93,7 +93,15 @@ report_file_finished(Id) ->
 
 -spec report_file_failed(id(), file_id:file_guid(), {error, term()}) -> ok | {error, term()}.
 report_file_failed(Id, FileGuid, Error) ->
-    archive_recall_progress:report_file_failed(Id, FileGuid, Error).
+    {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
+    ErrorJson = #{
+        <<"fileId">> => ObjectId,
+        <<"reason">> => errors:to_json(Error)
+    },
+    % save error in synchronized model (so remote providers have knowledge about failure).
+    archive_recall_details:report_error(Id, ErrorJson),
+    % save error in local infinite log.
+    archive_recall_progress:report_error(Id, ErrorJson).
 
 
 -spec get_details(id()) -> {ok, record()} | {error, term()}.
