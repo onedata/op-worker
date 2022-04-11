@@ -148,7 +148,6 @@ create_test_base(#{
 
     lists:foreach(fun(AtmStoreConfig) ->
         InputItemGeneratorSeedDataSpec = GetInputItemGeneratorSeedDataSpecFun(AtmStoreConfig),
-        InputItemGeneratorSeedDataType = InputItemGeneratorSeedDataSpec#atm_data_spec.type,
 
         DefaultInputItem = InputItemFormatterFun(gen_valid_data(
             AtmWorkflowExecutionAuth, InputItemGeneratorSeedDataSpec
@@ -173,8 +172,8 @@ create_test_base(#{
         ExpError = ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
             [ValidInputItemDataSeed, InvalidInputItemDataSeed],
             atm_array_type,
-            #{<<"item[1]">> => errors:to_json(?ERROR_ATM_DATA_TYPE_UNVERIFIED(
-                InvalidInputItemDataSeed, InputItemGeneratorSeedDataType
+            #{<<"item[1]">> => errors:to_json(atm_store_test_utils:infer_exp_invalid_data_error(
+                InvalidInputItemDataSeed, InputItemGeneratorSeedDataSpec
             ))}
         ),
         ?assertEqual(ExpError,
@@ -219,7 +218,6 @@ update_content_test_base(#{
     lists:foreach(fun(AtmStoreConfig) ->
         AtmStoreSchema = atm_store_test_utils:build_store_schema(AtmStoreConfig, false),
         InputItemGeneratorSeedDataSpec = GetInputItemGeneratorSeedDataSpecFun(AtmStoreConfig),
-        InputItemGeneratorSeedDataType = InputItemGeneratorSeedDataSpec#atm_data_spec.type,
 
         InitialInputContent = case rand:uniform(2) of
             1 -> undefined;
@@ -244,25 +242,27 @@ update_content_test_base(#{
             AtmWorkflowExecutionAuth, InputItemGeneratorSeedDataSpec
         ),
         InvalidInputItem = InputItemFormatterFun(InvalidInputItemDataSeed),
+        ExpInvalidInputItemError = atm_store_test_utils:infer_exp_invalid_data_error(
+            InvalidInputItemDataSeed, InputItemGeneratorSeedDataSpec
+        ),
         lists:foreach(fun({Function, Args, ExpError}) ->
             ?assertEqual(ExpError, ?rpc(catch atm_store_api:update_content(
                 AtmWorkflowExecutionAuth, Args, BuildContentUpdateOptionsFun(Function), AtmStoreId
             ))),
             ?assertEqual(InitialStoreContent, GetContentFun(AtmWorkflowExecutionAuth, AtmStoreId))
         end, [
-            {append, InvalidInputItem, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(
-                InvalidInputItemDataSeed, InputItemGeneratorSeedDataType
-            )},
+            {append, InvalidInputItem, ExpInvalidInputItemError},
             {extend, [NewInputItem1, InvalidInputItem], ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
                 [NewInputItemDataSeed1, InvalidInputItemDataSeed],
                 atm_array_type,
-                #{<<"item[1]">> => errors:to_json(?ERROR_ATM_DATA_TYPE_UNVERIFIED(
-                    InvalidInputItemDataSeed, InputItemGeneratorSeedDataType
-                ))}
+                #{<<"item[1]">> => errors:to_json(ExpInvalidInputItemError)}
+            )},
+            {extend, NewInputItem1, atm_store_test_utils:infer_exp_invalid_data_error(
+                NewInputItem1, #atm_data_spec{
+                    type = atm_array_type,
+                    value_constraints = #{item_data_spec => InputItemGeneratorSeedDataSpec}
+                }
             )}
-            %% TODO VFS-8686 refactor atm data types errors to properly handle array types
-%%            {extend, NewInputItem1,
-%%                ?ERROR_ATM_DATA_TYPE_UNVERIFIED(NewInputItem1, atm_array_type)}
         ]),
 
         % Assert it is not possible to perform operation on frozen store

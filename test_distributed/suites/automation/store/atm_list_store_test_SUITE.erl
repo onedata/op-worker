@@ -124,8 +124,7 @@ example_configs() ->
             ItemDataType
         )}
     end, [
-        %% TODO VFS-8686 enable after implementing compress/expand for array
-%%        atm_array_type,
+        atm_array_type,
         atm_dataset_type,
         atm_file_type,
         atm_integer_type,
