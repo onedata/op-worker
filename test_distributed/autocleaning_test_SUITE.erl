@@ -879,7 +879,7 @@ init_per_testcase(cancel_autocleaning_run, Config) ->
     init_per_testcase(default, Config);
 
 init_per_testcase(default, Config) ->
-    ct:timetrap({minutes, 10}),
+    ct:timetrap({minutes, 20}),
     Workers = [W | _] = ?config(op_worker_nodes, Config),
     % ensure that all file blocks will be public
     ok = test_utils:set_env(Workers, ?APP_NAME, public_block_size_treshold, 0),

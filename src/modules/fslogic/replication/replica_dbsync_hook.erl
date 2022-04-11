@@ -312,7 +312,8 @@ notify_attrs_change_if_necessary(FileCtx,
     case {ReplicaStatusChanged, OldSize =/= NewSize} of
         {true, SizeChanged} ->
             ok = fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx, SizeChanged, []),
-            ok = qos_hooks:reconcile_qos(FileCtx);
+            ok = qos_hooks:reconcile_qos(FileCtx),
+            ok = file_popularity:update_size(FileCtx);
         {false, true} ->
             ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []),
             ok = qos_hooks:report_synchronization_skipped(FileCtx);
