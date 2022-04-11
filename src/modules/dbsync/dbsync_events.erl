@@ -117,6 +117,12 @@ change_replicated_internal(SpaceId, QosEntry = #document{
 }) ->
     ?debug("change_replicated_internal: qos_entry ~p", [QosEntryId]),
     qos_hooks:handle_qos_entry_change(SpaceId, QosEntry);
+change_replicated_internal(SpaceId, ArchiveRecallDetails = #document{
+    key = RecallId,
+    value = #archive_recall_details{}
+}) ->
+    ?debug("change_replicated_internal: archive_recall_details ~p", [RecallId]),
+    archive_recall_details:handle_remote_change(SpaceId, ArchiveRecallDetails);
 change_replicated_internal(_SpaceId, #document{value = #links_forest{key = LinkKey, model = Model}}) ->
     ?debug("change_replicated_internal: links_forest ~p", [LinkKey]),
    link_replicated(Model, LinkKey);

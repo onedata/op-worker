@@ -48,7 +48,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([start_archivisation/6, recall/4, update_archive/2, get_archive_info/1,
+-export([start_archivisation/6, recall/4, cancel_recall/1, update_archive/2, get_archive_info/1,
     list_archives/3, purge/2, get_nested_archives_stats/1, get_aggregated_stats/1]).
 
 %% Exported for use in tests
@@ -138,6 +138,11 @@ recall(ArchiveId, UserCtx, ParentGuid, TargetRootName) ->
         {error, _} = Error -> 
             Error
     end.
+
+
+-spec cancel_recall(archive_recall:id()) -> ok | error().
+cancel_recall(RecallId) ->
+    archive_recall_traverse:cancel(RecallId).
 
 
 -spec update_archive(archive:id(), archive:diff()) -> ok | error().

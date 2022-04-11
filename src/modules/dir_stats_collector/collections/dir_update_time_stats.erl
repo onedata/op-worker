@@ -27,7 +27,7 @@
 -export([report_update_of_dir/2, report_update_of_nearest_dir/2, get_update_time/1, delete_stats/1]).
 
 %% dir_stats_collection_behaviour callbacks
--export([acquire/1, consolidate/3, save/2, delete/1]).
+-export([acquire/1, consolidate/3, save/3, delete/1, init_dir/1, init_child/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -63,8 +63,7 @@ report_update_of_nearest_dir(Guid, Time) ->
     ok = dir_stats_collector:update_stats_of_nearest_dir(Guid, ?MODULE, #{?STAT_NAME => infer_update_time(Time)}).
 
 
--spec get_update_time(file_id:file_guid()) ->
-    {ok, times:time()} | ?ERROR_INTERNAL_SERVER_ERROR | ?ERROR_DIR_STATS_DISABLED_FOR_SPACE.
+-spec get_update_time(file_id:file_guid()) -> {ok, times:time()} | dir_stats_collector:error().
 get_update_time(Guid) ->
     case dir_stats_collector:get_stats(Guid, ?MODULE, all) of
         {ok, #{?STAT_NAME := Time}} -> {ok, Time};
@@ -81,13 +80,16 @@ delete_stats(Guid) ->
 %%% dir_stats_collection_behaviour callbacks
 %%%===================================================================
 
--spec acquire(file_id:file_guid()) -> dir_stats_collection:collection().
+-spec acquire(file_id:file_guid()) -> {dir_stats_collection:collection(), non_neg_integer()}.
 acquire(Guid) ->
     case datastore_model:get(?CTX, file_id:guid_to_uuid(Guid)) of
-        {ok, #document{value = #dir_update_time_stats{time = Time}}} ->
-            #{?STAT_NAME => Time};
-        {error, not_found} ->
-            #{?STAT_NAME => 0}
+        {ok, #document{value = #dir_update_time_stats{
+            time = Time,
+            incarnation = Incarnation
+        }}} ->
+            {#{?STAT_NAME => Time}, Incarnation};
+        ?ERROR_NOT_FOUND ->
+            {#{?STAT_NAME => 0}, 0}
     end.
 
 
@@ -98,17 +100,39 @@ consolidate(_, OldValue, NewValue) ->
     max(OldValue, NewValue).
 
 
--spec save(file_id:file_guid(), dir_stats_collection:collection()) -> ok.
-save(Guid, #{?STAT_NAME := Time}) ->
-    ok = ?extract_ok(datastore_model:save(?CTX, #document{
-        key = file_id:guid_to_uuid(Guid),
-        value = #dir_update_time_stats{time = Time}
-    })).
+-spec save(file_id:file_guid(), dir_stats_collection:collection(), non_neg_integer() | current) -> ok.
+save(Guid, #{?STAT_NAME := Time}, Incarnation) ->
+    Default = #dir_update_time_stats{
+        time = Time,
+        incarnation = utils:ensure_defined(Incarnation, current, 0)
+    },
+
+    Diff = fun(#dir_update_time_stats{
+        incarnation = CurrentIncarnation
+    } = Record) ->
+        NewIncarnation = utils:ensure_defined(Incarnation, current, CurrentIncarnation),
+        {ok, Record#dir_update_time_stats{
+            time = Time,
+            incarnation = NewIncarnation
+        }}
+    end,
+
+    ok = ?extract_ok(datastore_model:update(?CTX, file_id:guid_to_uuid(Guid), Diff, Default)).
 
 
 -spec delete(file_id:file_guid()) -> ok.
 delete(Guid) ->
     ok = datastore_model:delete(?CTX, file_id:guid_to_uuid(Guid)).
+
+
+-spec init_dir(file_id:file_guid()) -> dir_stats_collection:collection().
+init_dir(Guid) ->
+    init(Guid).
+
+
+-spec init_child(file_id:file_guid()) -> dir_stats_collection:collection().
+init_child(Guid) ->
+    init(Guid).
 
 
 %%%===================================================================
@@ -123,7 +147,8 @@ get_ctx() ->
 -spec get_record_struct(datastore_model:record_version()) -> datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
-        {time, integer}
+        {time, integer},
+        {incarnation, integer}
     ]}.
 
 
@@ -146,3 +171,15 @@ infer_update_time(#statbuf{st_mtime = StMtime, st_ctime = StCtime}) ->
     max(StMtime, StCtime);
 infer_update_time(Timestamp) when is_integer(Timestamp) ->
     Timestamp.
+
+
+%% @private
+-spec init(file_id:file_guid()) -> dir_stats_collection:collection().
+init(Guid) ->
+    Uuid = file_id:guid_to_uuid(Guid),
+    case times:get(Uuid) of
+        {ok, #document{value = Times}} ->
+            #{?STAT_NAME => infer_update_time(Times)};
+        ?ERROR_NOT_FOUND ->
+            #{?STAT_NAME => 0} % Race with file deletion - stats will be invalidated by next update
+    end.

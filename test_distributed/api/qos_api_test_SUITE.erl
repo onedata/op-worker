@@ -425,12 +425,10 @@ get_qos_time_series_collection_test_base(Config, CollectionType) ->
                     optional = [<<"startTimestamp">>, <<"limit">>],
                     correct_values = #{
                         <<"metrics">> => [fun() ->
-                            {ok, AvailableTimeSeriesIds} = opw_test_rpc:call(
-                                TargetNode, qos_transfer_stats, list_time_series_ids, [QosEntryId, CollectionType]
+                            {ok, Layout} = opw_test_rpc:call(
+                                TargetNode, qos_transfer_stats, get_layout, [QosEntryId, CollectionType]
                             ),
-                            maps_utils:generate_from_list(fun(TimeSeriesId) ->
-                                {TimeSeriesId, [?MINUTE_METRIC_ID, ?HOUR_METRIC_ID, ?DAY_METRIC_ID, ?MONTH_METRIC_ID]}
-                            end, AvailableTimeSeriesIds)
+                            Layout
                         end],
                         <<"startTimestamp">> => [global_clock:timestamp_seconds(), TimestampFarInThePast],
                         <<"limit">> => [1, 500]
@@ -771,19 +769,19 @@ validate_result_fun_gs(MemRef, qos_time_series_collections) ->
                 % "total" time series is created by default by all supporting providers for each QoS entry,
                 % even if no data transfer is recorded
                 #{
-                    ?BYTES_STATS => [?TOTAL_TIME_SERIES_ID],
-                    ?FILES_STATS => [?TOTAL_TIME_SERIES_ID]
+                    ?BYTES_STATS => [?QOS_TOTAL_TIME_SERIES_NAME],
+                    ?FILES_STATS => [?QOS_TOTAL_TIME_SERIES_NAME]
                 };
             TransferringProviderId ->
                 #{
-                    ?BYTES_STATS => [?TOTAL_TIME_SERIES_ID | get_supporting_storages(TargetNode, SpaceId, FileCreatingProviderId)],
-                    ?FILES_STATS => [?TOTAL_TIME_SERIES_ID | get_supporting_storages(TargetNode, SpaceId, TransferringProviderId)]
+                    ?BYTES_STATS => [?QOS_TOTAL_TIME_SERIES_NAME | get_supporting_storages(TargetNode, SpaceId, FileCreatingProviderId)],
+                    ?FILES_STATS => [?QOS_TOTAL_TIME_SERIES_NAME | get_supporting_storages(TargetNode, SpaceId, TransferringProviderId)]
                 }
         end,
 
         ?assertEqual(lists:sort(maps:keys(ExpectedResult)), lists:sort(maps:keys(Result))),
-        maps:foreach(fun(StatsType, TimeSeriesIds) ->
-            ?assertEqual(lists:sort(TimeSeriesIds), lists:sort(maps:get(StatsType, Result)))
+        maps:foreach(fun(StatsType, TimeSeriesNames) ->
+            ?assertEqual(lists:sort(TimeSeriesNames), lists:sort(maps:get(StatsType, Result)))
         end, ExpectedResult)
     end;
 
@@ -811,9 +809,9 @@ validate_result_fun_gs(MemRef, {qos_time_series_collection, CollectionType}) ->
 
         #{<<"windows">> := WindowsPerMetricPerTimeSeries} = ?assertMatch(#{<<"windows">> := _}, Result),
         ?assertEqual(lists:sort(maps:keys(RequestedMetrics)), lists:sort(maps:keys(WindowsPerMetricPerTimeSeries))),
-        maps:foreach(fun(_TimeSeriesId, WindowsPerMetric) ->
+        maps:foreach(fun(_TimeSeriesName, WindowsPerMetric) ->
             ?assertEqual(
-                lists:sort([?MINUTE_METRIC_ID, ?HOUR_METRIC_ID, ?DAY_METRIC_ID, ?MONTH_METRIC_ID]),
+                lists:sort([?QOS_MINUTE_METRIC_NAME, ?QOS_HOUR_METRIC_NAME, ?QOS_DAY_METRIC_NAME, ?QOS_MONTH_METRIC_NAME]),
                 lists:sort(maps:keys(WindowsPerMetric))
             ),
             maps:foreach(fun(_MetricId, WindowsInCurrentMetric) ->
@@ -823,7 +821,11 @@ validate_result_fun_gs(MemRef, {qos_time_series_collection, CollectionType}) ->
                     {false, ?BYTES_STATS} ->
                         ?assertMatch([#{<<"value">> := FileSize}], WindowsInCurrentMetric);
                     {false, ?FILES_STATS} ->
-                        ?assertMatch([#{<<"value">> := 1}], WindowsInCurrentMetric)
+                        [#{<<"value">> := Value}] = ?assertMatch([#{<<"value">> := _}], WindowsInCurrentMetric),
+                        % depending on the order of db-synced documents, the replicating provider may process
+                        % the file one or two times (the latter in case it first synced an empty file location,
+                        % then observed a changed file location)
+                        ?assert(Value == 1 orelse Value == 2)
                 end
             end, WindowsPerMetric)
         end, WindowsPerMetricPerTimeSeries)

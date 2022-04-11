@@ -394,9 +394,9 @@ trim_filename_tree_id(Name, {all, ParentUuid}) ->
         {ok, T} -> T;
         ?ERROR_NOT_FOUND -> []
     end,
-    lists_utils:foldl_while(fun(TreeId, Name) ->
-        case trim_filename_tree_id(Name, TreeId) of
-            Name -> {cont, Name};
+    lists_utils:foldl_while(fun(TreeId, NameAcc) ->
+        case trim_filename_tree_id(NameAcc, TreeId) of
+            NameAcc -> {cont, NameAcc};
             TrimmedName -> {halt, TrimmedName}
         end
     end, Name, TreeIds);
@@ -470,7 +470,7 @@ get_matching_child_uuids_with_tree_ids(ParentUuid, TreeIds, Name) ->
     end.
 
 
--spec list_children(entry(), list_opts()) ->
+-spec list_children(uuid() | entry(), list_opts()) ->
     {ok, [link()], list_extended_info()} | {error, term()}.
 list_children(Entry, Opts) ->
     ?run(begin

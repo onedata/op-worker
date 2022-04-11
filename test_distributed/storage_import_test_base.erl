@@ -473,13 +473,13 @@ create_directory_import_many_test(Config) ->
 
     ?assertMonitoring(W1, #{
         <<"scans">> => 1,
-        <<"created">> => 200,
+        <<"created">> => DirsNumber,
         <<"modified">> => 1,
         <<"deleted">> => 0,
         <<"failed">> => 0,
         <<"unmodified">> => 0,
-        <<"createdHourHist">> => 200,
-        <<"createdDayHist">> => 200,
+        <<"createdHourHist">> => DirsNumber,
+        <<"createdDayHist">> => DirsNumber,
         <<"modifiedMinHist">> => 1,
         <<"modifiedHourHist">> => 1,
         <<"modifiedDayHist">> => 1,
@@ -900,7 +900,7 @@ create_subfiles_import_many_test(Config) ->
         <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID),
 
-    dir_stats_collector_test_base:verify_dir_on_provider_creating_files(Config, op_worker_nodes, get_space_guid(Config)).
+    dir_stats_collector_test_base:verify_dir_on_provider_creating_files(Config, op_worker_nodes, get_space_guid()).
 
 create_subfiles_import_many2_test(Config) ->
     [W1 | _] = ?config(op_worker_nodes, Config),
@@ -938,7 +938,7 @@ create_subfiles_import_many2_test(Config) ->
         <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID),
 
-    dir_stats_collector_test_base:verify_dir_on_provider_creating_files(Config, op_worker_nodes, get_space_guid(Config)).
+    dir_stats_collector_test_base:verify_dir_on_provider_creating_files(Config, op_worker_nodes, get_space_guid()).
 
 create_remote_file_import_conflict_test(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
@@ -3841,7 +3841,7 @@ delete_many_subfiles_test(Config) ->
         <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID),
 
-    SpaceGuid = get_space_guid(Config),
+    SpaceGuid = get_space_guid(),
     dir_stats_collector_test_base:verify_dir_on_provider_creating_files(Config, op_worker_nodes, SpaceGuid),
 
     ok = sd_test_utils:recursive_rm(W1, SDHandle),
@@ -4307,7 +4307,7 @@ append_file_update_test(Config) ->
         <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID),
 
-    dir_stats_collector_test_base:verify_dir_on_provider_creating_files(Config, op_worker_nodes, get_space_guid(Config)).
+    dir_stats_collector_test_base:verify_dir_on_provider_creating_files(Config, op_worker_nodes, get_space_guid()).
 
 append_file_not_changing_mtime_update_test(Config) ->
     [W1, W2 | _] = ?config(op_worker_nodes, Config),
@@ -6802,11 +6802,8 @@ close_if_applicable(_Node, _Handle, ?DELETE_OPENED_MODE) ->
 close_if_applicable(Node, Handle, _) ->
     ok = lfm_proxy:close(Node, Handle).
 
-get_space_guid(Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
-    {ok, #file_attr{guid = SpaceGuid}} = ?assertMatch({ok, _}, lfm_proxy:stat(W1, SessId, {path, ?SPACE_PATH})),
-    SpaceGuid.
+get_space_guid() ->
+    fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_ID).
 
 %===================================================================
 % SetUp and TearDown functions
@@ -7042,7 +7039,7 @@ init_per_testcase(Case, Config)
     orelse Case =:= create_subfiles_import_many2_test
     orelse Case =:= append_file_update_test ->
 
-    init_per_testcase(default, dir_stats_collector_test_base:init(Config));
+    init_per_testcase(default, dir_stats_collector_test_base:init_and_enable_for_new_space(Config));
 
 init_per_testcase(delete_many_subfiles_test, Config) ->
     Config2 = [
@@ -7050,7 +7047,7 @@ init_per_testcase(delete_many_subfiles_test, Config) ->
             detect_deletions => true,
             detect_modifications => false}} | Config
     ],
-    init_per_testcase(default, dir_stats_collector_test_base:init(Config2));
+    init_per_testcase(default, dir_stats_collector_test_base:init_and_enable_for_new_space(Config2));
 
 init_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
@@ -7150,8 +7147,7 @@ end_per_testcase(Case, Config)
     orelse Case =:= delete_many_subfiles_test
     orelse Case =:= append_file_update_test ->
 
-    dir_stats_collector_test_base:delete_stats(Config, op_worker_nodes, get_space_guid(Config)),
-    dir_stats_collector_test_base:teardown(Config),
+    dir_stats_collector_test_base:teardown(Config, ?SPACE_ID, false),
     end_per_testcase(default, Config);
 
 end_per_testcase(_Case, Config) ->

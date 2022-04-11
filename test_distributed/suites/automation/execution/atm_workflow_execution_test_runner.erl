@@ -385,7 +385,7 @@ has_workflow_ended(#test_ctx{
     pending_step_phases = [],
     deferred_step_phases = DeferredStepPhases
 }) ->
-    map_size(DeferredStepPhases) == 0;
+    maps_utils:is_empty(DeferredStepPhases);
 
 has_workflow_ended(#test_ctx{}) ->
     false.

@@ -422,7 +422,7 @@ await_caches_clearing(Node, SpaceId, UserId, ExtraData) ->
     IsPermEntryCached = fun(Entry) ->
         case rpc:call(Node, permissions_cache, check_permission, [Entry]) of
             {ok, _} -> true;
-            calculate -> false
+            _ -> false
         end
     end,
 
