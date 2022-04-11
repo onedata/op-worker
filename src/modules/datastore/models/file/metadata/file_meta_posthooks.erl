@@ -37,10 +37,12 @@
 }).
 
 -type hook() :: #hook{}.
+-type missing_element() :: {file_meta_missing, MissingUuid :: file_meta:uuid()} |
+    {link_missing, Uuid :: file_meta:uuid(), MissingName :: file_meta:name()}.
 -type hook_identifier() :: binary().
 -type hooks() :: #{hook_identifier() => hook()}.
 
--export_type([hooks/0]).
+-export_type([hooks/0, missing_element/0]).
 
 -define(CTX, #{
     model => ?MODULE
@@ -50,8 +52,9 @@
 %%% Functions operating on record using datastore_model API
 %%%===================================================================
 
--spec add_hook(file_meta:uuid(), hook_identifier(), module(), atom(), [term()]) -> ok | ?ERROR_INTERNAL_SERVER_ERROR.
-add_hook(FileUuid, Identifier, Module, Function, Args) ->
+-spec add_hook(missing_element(), hook_identifier(), module(), atom(), [term()]) -> ok | ?ERROR_INTERNAL_SERVER_ERROR.
+add_hook(MissingElement, Identifier, Module, Function, Args) ->
+    FileUuid = get_hook_uuid(MissingElement),
     UniqueIdentifier = generate_hook_id(Identifier),
     EncodedArgs = term_to_binary(Args),
     Hook = #hook{
@@ -66,18 +69,17 @@ add_hook(FileUuid, Identifier, Module, Function, Args) ->
 
     case AddAns of
         {ok, _} ->
-            % Check race with file_meta document synchronization. Hook is added when something fails because of
-            % missing file_meta document. If missing file_meta document appears before hook adding to datastore,
-            % execution of hook is not triggered by dbsync. Thus, check if file_meta exists and trigger hook
+            % Check race with file_meta document and links synchronization. Hook is added when something fails because
+            % of missing file_meta document or link. If missing element appears before hook adding to datastore,
+            % execution of hook is not triggered by dbsync. Thus, check if missing element exists and trigger hook
             % execution if it exists.
-            % NOTE: this check does not addresses races with link documents synchronization. If any hook depends
-            % on links, this race must be handled here.
-            case file_meta:exists(FileUuid) of
+            case has_missing_element_appeared(MissingElement) of
                 true ->
                     % Spawn to prevent deadlocks when hook is added from the inside of already existing hook
                     spawn(fun() -> execute_hooks(FileUuid) end),
                     ok;
-                _ -> ok
+                false ->
+                    ok
             end;
         Error ->
             ?error("~p:~p error for file ~p (identifier ~p, hook module ~p, hook fun ~p, hook args ~p): ~p",
@@ -153,6 +155,10 @@ delete(Key) ->
     end.
 
 
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -165,6 +171,23 @@ delete(Key) ->
 -spec generate_hook_id(binary()) -> hook_identifier().
 generate_hook_id(Prefix) ->
     <<Prefix/binary, "_", (datastore_key:new())/binary>>.
+
+
+-spec get_hook_uuid(missing_element()) -> file_meta:uuid().
+get_hook_uuid({file_meta_missing, MissingUuid}) ->
+    MissingUuid;
+get_hook_uuid({link_missing, Uuid, _MissingName}) ->
+    Uuid.
+
+-spec has_missing_element_appeared(missing_element()) -> boolean().
+has_missing_element_appeared({file_meta_missing, MissingUuid}) ->
+    file_meta:exists(MissingUuid);
+has_missing_element_appeared({link_missing, Uuid, MissingName}) ->
+    case file_meta_forest:get(Uuid, all, MissingName) of
+        {ok, _} -> true;
+        {error, _} -> false
+    end.
+
 
 %%%===================================================================
 %%% datastore_model callbacks

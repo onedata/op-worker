@@ -85,7 +85,7 @@ handle(<<"POST">>, InitialReq) ->
 %% @private
 -spec handle_multipart_req(cowboy_req:req(), aai:auth(), map()) ->
     cowboy_req:req().
-handle_multipart_req(Req, Auth, Params) ->
+handle_multipart_req(Req, ?USER(_UserId, SessionId) = Auth, Params) ->
     case cowboy_req:read_part(Req) of
         {ok, Headers, Req2} ->
             case cow_multipart:form_data(Headers) of
@@ -99,6 +99,23 @@ handle_multipart_req(Req, Auth, Params) ->
                     handle_multipart_req(Req3, Auth, Params)
             end;
         {done, Req2} ->
+            SanitizedParams = middleware_sanitizer:sanitize_data(Params, #{
+                required => #{
+                    <<"guid">> => {binary, non_empty}
+                }
+            }),
+            FileGuid = maps:get(<<"guid">>, SanitizedParams),
+            % Fsync events to force size update in metadata
+            case lfm:fsync(SessionId, ?FILE_REF(FileGuid), oneprovider:get_id()) of
+                ok ->
+                    case file_popularity:update_size(file_ctx:new_by_guid(FileGuid)) of
+                        ok -> ok;
+                        Error -> ?warning("~p file_popularity update_size error: ~p", [?MODULE, Error])
+
+                    end;
+                FsyncError ->
+                    ?warning("~p fsync error: ~p", [?MODULE, FsyncError])
+            end,
             Req2
     end.
 
