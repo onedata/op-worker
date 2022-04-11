@@ -24,7 +24,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% functions operating on record using datastore model API
--export([add_hook/6, execute_hooks/1, delete/1]).
+-export([add_hook/5, execute_hooks/1, delete/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
@@ -37,7 +37,8 @@
 }).
 
 -type hook() :: #hook{}.
--type missing_element() :: file_meta | {link, file_meta:name()}.
+-type missing_element() :: {file_meta_missing, MissingUuid :: file_meta:uuid()} |
+    {link_missing, Uuid :: file_meta:uuid(), MissingName :: file_meta:name()}.
 -type hook_identifier() :: binary().
 -type hooks() :: #{hook_identifier() => hook()}.
 
@@ -51,9 +52,9 @@
 %%% Functions operating on record using datastore_model API
 %%%===================================================================
 
--spec add_hook(file_meta:uuid(), missing_element(), hook_identifier(), module(), atom(), [term()]) ->
-    ok | ?ERROR_INTERNAL_SERVER_ERROR.
-add_hook(FileUuid, MissingElement, Identifier, Module, Function, Args) ->
+-spec add_hook(missing_element(), hook_identifier(), module(), atom(), [term()]) -> ok | ?ERROR_INTERNAL_SERVER_ERROR.
+add_hook(MissingElement, Identifier, Module, Function, Args) ->
+    FileUuid = get_hook_uuid(MissingElement),
     UniqueIdentifier = generate_hook_id(Identifier),
     EncodedArgs = term_to_binary(Args),
     Hook = #hook{
@@ -72,7 +73,7 @@ add_hook(FileUuid, MissingElement, Identifier, Module, Function, Args) ->
             % of missing file_meta document or link. If missing element appears before hook adding to datastore,
             % execution of hook is not triggered by dbsync. Thus, check if missing element exists and trigger hook
             % execution if it exists.
-            case has_missing_element_appeared(FileUuid, MissingElement) of
+            case has_missing_element_appeared(MissingElement) of
                 true ->
                     % Spawn to prevent deadlocks when hook is added from the inside of already existing hook
                     spawn(fun() -> execute_hooks(FileUuid) end),
@@ -172,11 +173,17 @@ generate_hook_id(Prefix) ->
     <<Prefix/binary, "_", (datastore_key:new())/binary>>.
 
 
--spec has_missing_element_appeared(file_meta:uuid(), missing_element()) -> boolean().
-has_missing_element_appeared(FileUuid, file_meta) ->
-    file_meta:exists(FileUuid);
-has_missing_element_appeared(FileUuid, {link, FileName}) ->
-    case file_meta_forest:get(FileUuid, all, FileName) of
+-spec get_hook_uuid(missing_element()) -> file_meta:uuid().
+get_hook_uuid({file_meta_missing, MissingUuid}) ->
+    MissingUuid;
+get_hook_uuid({link_missing, Uuid, _MissingName}) ->
+    Uuid.
+
+-spec has_missing_element_appeared(missing_element()) -> boolean().
+has_missing_element_appeared({file_meta_missing, MissingUuid}) ->
+    file_meta:exists(MissingUuid);
+has_missing_element_appeared({link_missing, Uuid, MissingName}) ->
+    case file_meta_forest:get(Uuid, all, MissingName) of
         {ok, _} -> true;
         {error, _} -> false
     end.
