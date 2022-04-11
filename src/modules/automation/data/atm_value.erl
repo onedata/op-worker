@@ -97,4 +97,4 @@ get_callback_module(atm_object_type) -> atm_object_value;
 get_callback_module(atm_onedatafs_credentials_type) -> atm_onedatafs_credentials_value;
 get_callback_module(atm_range_type) -> atm_range_value;
 get_callback_module(atm_string_type) -> atm_string_value;
-get_callback_module(atm_time_series_measurements_type) -> atm_time_series_measurements_value.
+get_callback_module(atm_time_series_measurement_type) -> atm_time_series_measurement_value.
