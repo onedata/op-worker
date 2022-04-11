@@ -22,7 +22,7 @@
 -export([assert_meets_constraints/3]).
 
 %% atm_data_compressor callbacks
--export([compress/1, expand/2]).
+-export([compress/2, expand/3]).
 
 
 -define(DATA_TYPE, atm_time_series_measurements_type).
@@ -63,13 +63,18 @@ assert_meets_constraints(_AtmWorkflowExecutionAuth, Value, _ValueConstraints) ->
 %%%===================================================================
 
 
--spec compress(atm_value:expanded()) -> json_utils:json_map().
-compress(Value) -> Value.
+-spec compress(atm_value:expanded(), atm_data_type:value_constraints()) ->
+    json_utils:json_map().
+compress(Value, _ValueConstraints) -> Value.
 
 
--spec expand(atm_workflow_execution_auth:record(), json_utils:json_map()) ->
+-spec expand(
+    atm_workflow_execution_auth:record(),
+    json_utils:json_map(),
+    atm_data_type:value_constraints()
+) ->
     {ok, atm_value:expanded()}.
-expand(_AtmWorkflowExecutionAuth, Value) ->
+expand(_AtmWorkflowExecutionAuth, Value, _ValueConstraints) ->
     {ok, Value}.
 
 
