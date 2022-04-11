@@ -35,7 +35,8 @@
 -export_type([status/0]).
 
 
--define(CTX, #{model => ?MODULE}).
+% get ctx via module call to allow mocking in ct tests
+-define(CTX(), ?MODULE:get_ctx()).
 
 
 %%%===================================================================
@@ -45,12 +46,12 @@
 
 -spec create(record()) -> {ok, doc()} | {error, term()}.
 create(AtmTaskExecutionRecord) ->
-    datastore_model:create(?CTX, #document{value = AtmTaskExecutionRecord}).
+    datastore_model:create(?CTX(), #document{value = AtmTaskExecutionRecord}).
 
 
 -spec get(id()) -> {ok, doc()} | {error, term()}.
 get(AtmTaskExecutionId) ->
-    datastore_model:get(?CTX, AtmTaskExecutionId).
+    datastore_model:get(?CTX(), AtmTaskExecutionId).
 
 
 -spec update(id(), diff()) -> {ok, doc()} | {error, term()}.
@@ -65,12 +66,12 @@ update(AtmTaskExecutionId, Diff1) ->
                 Error
         end
     end,
-    datastore_model:update(?CTX, AtmTaskExecutionId, Diff2).
+    datastore_model:update(?CTX(), AtmTaskExecutionId, Diff2).
 
 
 -spec delete(id()) -> ok | {error, term()}.
 delete(AtmStoreId) ->
-    datastore_model:delete(?CTX, AtmStoreId).
+    datastore_model:delete(?CTX(), AtmStoreId).
 
 
 %%%===================================================================
@@ -80,7 +81,7 @@ delete(AtmStoreId) ->
 
 -spec get_ctx() -> datastore:ctx().
 get_ctx() ->
-    ?CTX.
+    #{model => ?MODULE}.
 
 
 -spec get_record_version() -> datastore_model:record_version().
