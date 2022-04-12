@@ -731,6 +731,13 @@ verify_execution_history_stats(Acc, WorkflowType, Options) ->
             ?assertEqual(20, MaxPoolSlots);
         {#{ignore_async_slots_check := true}, async} -> 
             ?assertEqual(20, MaxPoolSlots);
+        {#{timeout := true}, async} ->
+            ?assertEqual(60, MaxAsyncSlots),
+            % '0' should appear in history because slots count is decremented after async processing is scheduled ;
+            % However '1' can appear as a result of race between decrementing used slots number
+            % by workflow_timeout_monitor and workflow finishing
+            ?assert(MinPoolSlots =:= 0 orelse MinPoolSlots =:= 1),
+            ?assertEqual(20, MaxPoolSlots);
         {_, async} ->
             ?assertEqual(60, MaxAsyncSlots),
             % '0' should appear in history because slots count is decremented after async processing is scheduled

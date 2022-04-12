@@ -825,6 +825,10 @@ maybe_wait_for_preparation_in_advace(_State) ->
     index()
 ) ->
     {ok, state()} | ?WF_ERROR_RACE_CONDITION | ?WF_ERROR_LANE_CHANGED.
+handle_next_iteration_step(#workflow_execution_state{
+    execution_status = ?EXECUTION_CANCELLED
+}, _LaneIndex, _PrevItemIndex, _NextIterationStep, _ParallelBoxToStart) ->
+    ?WF_ERROR_RACE_CONDITION;
 handle_next_iteration_step(State = #workflow_execution_state{
     jobs = Jobs,
     iteration_state = IterationState,
@@ -1061,7 +1065,7 @@ verify_ongoing_jobs_when_execution_is_cancelled(Error, NewJobs, State = #workflo
                 jobs = NewJobs, iteration_state = workflow_iteration_state:init(),
                 execution_status = ?WAITING_FOR_NEXT_LANE_PREPARATION_END,
                 update_report = ?EXECUTION_CANCELLED_REPORT(ItemIds),
-                pending_callbacks = [?CALLBACKS_ON_CANCEL_SELECTOR]
+                pending_callbacks = [?CALLBACKS_ON_CANCEL_SELECTOR | PendingCallbacks]
             }};
         _ ->
             ItemIds = workflow_iteration_state:get_all_item_ids(IterationState),
@@ -1142,10 +1146,11 @@ report_job_finish(State = #workflow_execution_state{
     {NewJobs2, RemainingForBox} = workflow_jobs:mark_ongoing_job_finished(Jobs, JobIdentifier),
     case RemainingForBox of
         ?AT_LEAST_ONE_JOB_LEFT_FOR_PARALLEL_BOX ->
-            {ok, State#workflow_execution_state{
+            NotifyTaskFinished = workflow_jobs:is_task_finished(NewJobs2, JobIdentifier),
+            {ok, add_if_callback_is_pending(State#workflow_execution_state{
                 jobs = NewJobs2,
-                update_report = ?TASK_PROCESSED_REPORT(workflow_jobs:is_task_finished(NewJobs2, JobIdentifier))
-            }};
+                update_report = ?TASK_PROCESSED_REPORT(NotifyTaskFinished)
+            }, JobIdentifier, NotifyTaskFinished)};
         ?NO_JOBS_LEFT_FOR_PARALLEL_BOX ->
             prepare_next_parallel_box(State#workflow_execution_state{jobs = NewJobs2}, JobIdentifier)
     end;
@@ -1167,9 +1172,10 @@ report_job_finish(State = #workflow_execution_state{
     State3 = State2#workflow_execution_state{jobs = FinalJobs, failed_job_count = FailedJobCount + 1},
     case RemainingForBox of
         ?AT_LEAST_ONE_JOB_LEFT_FOR_PARALLEL_BOX ->
-            {ok, State3#workflow_execution_state{
-                update_report = ?TASK_PROCESSED_REPORT(workflow_jobs:is_task_finished(FinalJobs, JobIdentifier))
-            }};
+            NotifyTaskFinished = workflow_jobs:is_task_finished(FinalJobs, JobIdentifier),
+            {ok, add_if_callback_is_pending(State3#workflow_execution_state{
+                update_report = ?TASK_PROCESSED_REPORT(NotifyTaskFinished)
+            }, JobIdentifier, NotifyTaskFinished)};
         ?NO_JOBS_LEFT_FOR_PARALLEL_BOX ->
             % Call prepare_next_parallel_box/2 to delete metadata for failed item
             prepare_next_parallel_box(State3, JobIdentifier)

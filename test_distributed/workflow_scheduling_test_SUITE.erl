@@ -109,7 +109,7 @@ all() ->
         {{delay_lane_preparation, workflow_engine:lane_id()}, boolean()} |
         {delay_call, {workflow_engine:task_id(), iterator:item()}} | {sleep_on_preparation, non_neg_integer()},
     generator_options = #{} :: workflow_test_handler:test_execution_context(),
-    verify_statistics_options = #{} :: #{is_empty => boolean()},
+    verify_statistics_options = #{} :: #{is_empty | timeout => boolean()},
     verify_history_options = #{} :: #{
         delay_and_fail_lane_preparation_in_advance => workflow_engine:lane_id(),
         workflow_scheduling_test_common:test_manager_task_failure_key() =>
@@ -179,7 +179,8 @@ fail_one_of_many_async_tasks_in_box_test(Config) ->
 async_task_timeout_test(Config) ->
     failure_test_base(Config, #test_config{
         task_type = async,
-        test_manager_failure_key = timeout
+        test_manager_failure_key = timeout,
+        verify_statistics_options = #{timeout => true}
     }, <<"3">>, <<"3_3_1">>).
 
 fail_result_processing_test(Config) ->
