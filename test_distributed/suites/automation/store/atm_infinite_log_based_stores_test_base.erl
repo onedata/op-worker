@@ -172,7 +172,7 @@ create_test_base(#{
         ExpError = ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
             [ValidInputItemDataSeed, InvalidInputItemDataSeed],
             atm_array_type,
-            #{<<"item[1]">> => errors:to_json(atm_store_test_utils:infer_exp_invalid_data_error(
+            #{<<"$[1]">> => errors:to_json(atm_store_test_utils:infer_exp_invalid_data_error(
                 InvalidInputItemDataSeed, InputItemGeneratorSeedDataSpec
             ))}
         ),
@@ -255,7 +255,7 @@ update_content_test_base(#{
             {extend, [NewInputItem1, InvalidInputItem], ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
                 [NewInputItemDataSeed1, InvalidInputItemDataSeed],
                 atm_array_type,
-                #{<<"item[1]">> => errors:to_json(ExpInvalidInputItemError)}
+                #{<<"$[1]">> => errors:to_json(ExpInvalidInputItemError)}
             )},
             {extend, NewInputItem1, atm_store_test_utils:infer_exp_invalid_data_error(
                 NewInputItem1, #atm_data_spec{

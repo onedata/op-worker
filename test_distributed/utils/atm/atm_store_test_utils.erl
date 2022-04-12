@@ -318,7 +318,7 @@ infer_exp_invalid_data_error(InvalidArray = [InvalidValue | _], #atm_data_spec{
     value_constraints = #{item_data_spec := #atm_data_spec{type = ExpItemDataType}}
 }) ->
     ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
-        InvalidArray, atm_array_type, #{<<"item[0]">> => errors:to_json(
+        InvalidArray, atm_array_type, #{<<"$[0]">> => errors:to_json(
             ?ERROR_ATM_DATA_TYPE_UNVERIFIED(InvalidValue, ExpItemDataType)
         )}
     );

@@ -73,7 +73,7 @@ validate_atm_range_value(_Config) ->
 
             lists:map(fun({Value, Field}) ->
                 {Value, ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
-                    Value, atm_range_type, #{<<".", Field/binary>> => errors:to_json(
+                    Value, atm_range_type, #{<<"$.", Field/binary>> => errors:to_json(
                         ?ERROR_ATM_DATA_TYPE_UNVERIFIED(maps:get(Field, Value), atm_integer_type)
                     )}
                 )}

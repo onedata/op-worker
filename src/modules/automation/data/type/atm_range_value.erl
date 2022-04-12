@@ -124,9 +124,9 @@ assert_valid_field_types(AtmWorkflowExecutionAuth, [Start, End, Step]) ->
             }})
         end
     end, [
-        {<<".start">>, Start},
-        {<<".end">>, End},
-        {<<".step">>, Step}
+        {<<"$.start">>, Start},
+        {<<"$.end">>, End},
+        {<<"$.step">>, Step}
     ]).
 
 

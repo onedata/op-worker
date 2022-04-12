@@ -44,7 +44,7 @@ assert_meets_constraints(AtmWorkflowExecutionAuth, ItemsArray, #{
             atm_value:validate(AtmWorkflowExecutionAuth, Item, ItemDataSpec)
         catch throw:ItemError ->
             throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(ItemsArray, atm_array_type, #{
-                str_utils:format_bin("item[~B]", [Idx]) => errors:to_json(ItemError)
+                str_utils:format_bin("$[~B]", [Idx]) => errors:to_json(ItemError)
             }))
         end
     end, lists:zip(lists:seq(0, length(ItemsArray) - 1), ItemsArray)).

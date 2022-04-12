@@ -209,7 +209,7 @@ manage_content_test(_Config) ->
             ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
                 [#{<<"ts">> => <<"name">>}],
                 atm_array_type,
-                #{<<"item[0]">> => errors:to_json(?ERROR_ATM_DATA_TYPE_UNVERIFIED(
+                #{<<"$[0]">> => errors:to_json(?ERROR_ATM_DATA_TYPE_UNVERIFIED(
                     #{<<"ts">> => <<"name">>}, atm_time_series_measurement_type
                 ))}
             )
@@ -219,7 +219,7 @@ manage_content_test(_Config) ->
             ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
                 [#{<<"tsName">> => <<"mp3">>, <<"timestamp">> => 1, <<"value">> => 10}, 10],
                 atm_array_type,
-                #{<<"item[1]">> => errors:to_json(
+                #{<<"$[1]">> => errors:to_json(
                     ?ERROR_ATM_DATA_TYPE_UNVERIFIED(10, atm_time_series_measurement_type)
                 )}
             )
