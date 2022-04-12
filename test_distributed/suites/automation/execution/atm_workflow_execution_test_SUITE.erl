@@ -34,6 +34,7 @@
 
     atm_workflow_execution_cancelled_in_scheduled_status_test/1,
     first_lane_run_preparation_failure_before_run_was_created_test/1,
+    first_lane_run_preparation_failure_before_run_was_created_interrupts_lane_preparing_in_advance_1_test/1,
     first_lane_run_preparation_failure_after_run_was_created_test/1,
     atm_workflow_execution_cancelled_in_preparing_status_before_run_was_created_test/1,
     atm_workflow_execution_cancelled_in_preparing_status_after_run_was_created_test/1
@@ -52,6 +53,7 @@ groups() -> [
     {execution_tests, [parallel], [
         atm_workflow_execution_cancelled_in_scheduled_status_test,
         first_lane_run_preparation_failure_before_run_was_created_test,
+        first_lane_run_preparation_failure_before_run_was_created_interrupts_lane_preparing_in_advance_1_test,
         first_lane_run_preparation_failure_after_run_was_created_test,
         atm_workflow_execution_cancelled_in_preparing_status_before_run_was_created_test,
         atm_workflow_execution_cancelled_in_preparing_status_after_run_was_created_test
@@ -65,48 +67,66 @@ all() -> [
 ].
 
 
+-define(RUN_TEST(__TEST_BASE_MODULE),
+    try
+        __TEST_BASE_MODULE:?FUNCTION_NAME()
+    catch __TYPE:__REASON:__STACKTRACE ->
+        ct:pal("Test failed due to ~p:~p.~nStacktrace: ~p", [__TYPE, __REASON, __STACKTRACE]),
+        error(test_failed)
+    end
+).
+
+-define(RUN_SCHEDULING_TEST(), ?RUN_TEST(atm_workflow_execution_scheduling_test_base)).
+-define(RUN_PREPARATION_TEST(), ?RUN_TEST(atm_workflow_execution_preparation_test_base)).
+
+
 %%%===================================================================
 %%% Test cases
 %%%===================================================================
 
 
 atm_workflow_with_no_lanes_scheduling_should_fail_test(_Config) ->
-    atm_workflow_execution_scheduling_test_base:atm_workflow_with_no_lanes_scheduling_should_fail_test().
+    ?RUN_SCHEDULING_TEST().
 
 
 atm_workflow_with_empty_lane_scheduling_should_fail_test(_Config) ->
-    atm_workflow_execution_scheduling_test_base:atm_workflow_with_empty_lane_scheduling_should_fail_test().
+    ?RUN_SCHEDULING_TEST().
 
 
 atm_workflow_with_empty_parallel_box_scheduling_should_fail_test(_Config) ->
-    atm_workflow_execution_scheduling_test_base:atm_workflow_with_empty_parallel_box_scheduling_should_fail_test().
+    ?RUN_SCHEDULING_TEST().
 
 
 atm_workflow_scheduling_with_openfaas_not_configured_should_fail_test(_Config) ->
-    atm_workflow_execution_scheduling_test_base:atm_workflow_scheduling_with_openfaas_not_configured_should_fail_test().
+    ?RUN_SCHEDULING_TEST().
 
 
 atm_workflow_with_invalid_initial_store_content_scheduling_should_fail_test(_Config) ->
-    atm_workflow_execution_scheduling_test_base:atm_workflow_with_invalid_initial_store_content_scheduling_should_fail_test().
+    ?RUN_SCHEDULING_TEST().
 
 
 atm_workflow_execution_cancelled_in_scheduled_status_test(_Config) ->
-    atm_workflow_execution_scheduling_test_base:atm_workflow_execution_cancelled_in_scheduled_status_test().
+    ?RUN_SCHEDULING_TEST().
+
 
 first_lane_run_preparation_failure_before_run_was_created_test(_Config) ->
-    atm_workflow_execution_preparation_test_base:first_lane_run_preparation_failure_before_run_was_created_test().
+    ?RUN_PREPARATION_TEST().
+
+
+first_lane_run_preparation_failure_before_run_was_created_interrupts_lane_preparing_in_advance_1_test(_Config) ->
+    ?RUN_PREPARATION_TEST().
 
 
 first_lane_run_preparation_failure_after_run_was_created_test(_Config) ->
-    atm_workflow_execution_preparation_test_base:first_lane_run_preparation_failure_after_run_was_created_test().
+    ?RUN_PREPARATION_TEST().
 
 
 atm_workflow_execution_cancelled_in_preparing_status_before_run_was_created_test(_Config) ->
-    atm_workflow_execution_preparation_test_base:atm_workflow_execution_cancelled_in_preparing_status_before_run_was_created_test().
+    ?RUN_PREPARATION_TEST().
 
 
 atm_workflow_execution_cancelled_in_preparing_status_after_run_was_created_test(_Config) ->
-    atm_workflow_execution_preparation_test_base:atm_workflow_execution_cancelled_in_preparing_status_after_run_was_created_test().
+    ?RUN_PREPARATION_TEST().
 
 
 %===================================================================

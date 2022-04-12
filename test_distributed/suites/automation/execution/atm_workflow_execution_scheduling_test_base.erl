@@ -174,6 +174,7 @@ atm_workflow_execution_cancelled_in_scheduled_status_test() ->
         workflow_schema_dump_or_draft = ?EXAMPLE_EXECUTABLE_ATM_WORKFLOW_SCHEMA_DRAFT,
         workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
+            incarnation_num = 1,
             lane_runs = [#atm_lane_run_execution_test_spec{
                 selector = {1, 1},
                 prepare_lane = #atm_step_mock_spec{
