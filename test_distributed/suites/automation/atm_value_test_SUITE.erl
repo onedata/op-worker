@@ -29,6 +29,7 @@
 
 %% tests
 -export([
+    atm_dataset_value_validation_test/1,
     atm_file_value_validation_test/1,
     atm_integer_value_validation_test/1,
     atm_object_value_validation_test/1,
@@ -39,6 +40,7 @@
 
 groups() -> [
     {all_tests, [parallel], [
+        atm_dataset_value_validation_test,
         atm_file_value_validation_test,
         atm_integer_value_validation_test,
         atm_object_value_validation_test,
@@ -61,6 +63,63 @@ all() -> [
 %%%===================================================================
 %%% API functions
 %%%===================================================================
+
+
+atm_dataset_value_validation_test(_Config) ->
+    SpaceKrkId = oct_background:get_space_id(space_krk),
+
+    [
+        #object{dataset = #dataset_object{id = FileInSpace1DatasetId}}
+    ] = onenv_file_test_utils:create_and_sync_file_tree(
+        user1, space1, [#file_spec{dataset = #dataset_spec{}}]
+    ),
+
+    [
+        #object{dataset = #dataset_object{id = DirDatasetId}, children = [
+            #object{dataset = #dataset_object{id = FileInDirDatasetId}}
+        ]},
+        #object{dataset = #dataset_object{id = FileDatasetId}},
+        #object{dataset = #dataset_object{id = SymlinkDatasetId}}
+    ] = onenv_file_test_utils:create_and_sync_file_tree(user1, space_krk, [
+        #dir_spec{mode = 8#700, dataset = #dataset_spec{}, children = [
+            #file_spec{dataset = #dataset_spec{}}
+        ]},
+        #file_spec{dataset = #dataset_spec{}},
+        #symlink_spec{symlink_value = <<"a/b">>, dataset = #dataset_spec{}}
+    ]),
+
+    validate_value_test_base(
+        #atm_data_spec{type = atm_dataset_type},
+
+        lists:map(fun(DatasetId) -> #{<<"datasetId">> => DatasetId} end, [
+            DirDatasetId,
+            % user can view dataset even if he does not have access to file the dataset is attached
+            FileInDirDatasetId,
+            FileDatasetId,
+            SymlinkDatasetId
+        ]),
+
+        lists:flatten([
+            lists:map(fun(Value) ->
+                {Value, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_dataset_type)} end,
+                [5.5, <<"NaN">>, [5], #{<<"key">> => 5}]
+            ),
+
+            lists:map(fun({DatasetId, UnverifiedConstraint}) ->
+                Value = #{<<"datasetId">> => DatasetId},
+                {Value, ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+                    Value, atm_dataset_type, UnverifiedConstraint
+                )}
+            end, [
+                % atm workflow execution is run in space_krk so only datasets
+                % from that space can be processed
+                {FileInSpace1DatasetId, #{<<"inSpace">> => SpaceKrkId}},
+
+                % no access due to file not existing
+                {<<"NonExistentDatasetId">>, #{<<"hasAccess">> => true}}
+            ])
+        ])
+    ).
 
 
 atm_file_value_validation_test(_Config) ->
