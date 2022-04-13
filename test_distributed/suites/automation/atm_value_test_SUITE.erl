@@ -29,6 +29,7 @@
 
 %% tests
 -export([
+    atm_file_value_validation_test/1,
     atm_integer_value_validation_test/1,
     atm_object_value_validation_test/1,
     atm_onedatafs_credentials_value_validation_test/1,
@@ -38,6 +39,7 @@
 
 groups() -> [
     {all_tests, [parallel], [
+        atm_file_value_validation_test,
         atm_integer_value_validation_test,
         atm_object_value_validation_test,
         atm_onedatafs_credentials_value_validation_test,
@@ -59,6 +61,82 @@ all() -> [
 %%%===================================================================
 %%% API functions
 %%%===================================================================
+
+
+atm_file_value_validation_test(_Config) ->
+    SpaceKrkId = oct_background:get_space_id(space_krk),
+
+    [#object{guid = FileInSpace1Guid}] = onenv_file_test_utils:create_and_sync_file_tree(
+        user1, space1, [#file_spec{}]
+    ),
+    [
+        #object{guid = DirGuid, children = [#object{guid = FileInDirGuid}]},
+        #object{guid = FileGuid},
+        #object{guid = SymlinkGuid}
+    ] = onenv_file_test_utils:create_and_sync_file_tree(user1, space_krk, [
+        #dir_spec{mode = 8#700, children = [#file_spec{}]},
+        #file_spec{},
+        #symlink_spec{symlink_value = <<"a/b">>}
+    ]),
+
+    ValueConstraints = ?RAND_ELEMENT([
+        #{},
+        #{file_type => 'ANY'},
+        #{file_type => 'REG'},
+        #{file_type => 'DIR'},
+        #{file_type => 'SYMLNK'}
+    ]),
+    AllowedFileType = maps:get(file_type, ValueConstraints, 'ANY'),
+    AllowedFileTypeBin = str_utils:to_binary(AllowedFileType),
+
+    {FilesWithAllowedType, FilesWithNotAllowedType} = case AllowedFileType of
+        'ANY' -> {[DirGuid, FileGuid, SymlinkGuid], []};
+        'REG' -> {[FileGuid], [DirGuid, SymlinkGuid]};
+        'DIR' -> {[DirGuid], [FileGuid, SymlinkGuid]};
+        'SYMLNK' -> {[SymlinkGuid], [DirGuid, FileGuid]}
+    end,
+
+    BuildFileObjectFun = fun(Guid) ->
+        {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+        #{<<"file_id">> => ObjectId}
+    end,
+
+    validate_value_test_base(
+        #atm_data_spec{type = atm_file_type, value_constraints = ValueConstraints},
+
+        lists:map(fun(Guid) -> BuildFileObjectFun(Guid) end, FilesWithAllowedType),
+
+        lists:flatten([
+            lists:map(fun(Value) ->
+                {Value, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_file_type)} end,
+                [5.5, <<"NaN">>, [5], #{<<"key">> => 5}]
+            ),
+
+            lists:map(fun({Guid, UnverifiedConstraint}) ->
+                Value = BuildFileObjectFun(Guid),
+                {Value, ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+                    Value, atm_file_type, UnverifiedConstraint
+                )}
+            end, [
+                % atm workflow execution is run in space_krk so only files
+                % from that space can be processed
+                {FileInSpace1Guid, #{<<"inSpace">> => SpaceKrkId}},
+
+                % no access due to file not existing
+                {file_id:pack_guid(<<"NonExistentUuid">>, SpaceKrkId), #{<<"hasAccess">> => true}},
+
+                % no access due to ancestor dir perms
+                {FileInDirGuid, #{<<"hasAccess">> => true}}
+            ]),
+
+            lists:map(fun(Guid) ->
+                Value = BuildFileObjectFun(Guid),
+                {Value, ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+                    Value, atm_file_type, #{<<"fileType">> => AllowedFileTypeBin}
+                )}
+            end, FilesWithNotAllowedType)
+        ])
+    ).
 
 
 atm_integer_value_validation_test(_Config) ->
@@ -218,7 +296,7 @@ assert_invalid_value(AtmWorkflowExecutionAuth, Value, AtmDataSpec, ExpError) ->
 -spec create_workflow_execution_auth() -> atm_workflow_execution_auth:record().
 create_workflow_execution_auth() ->
     atm_store_test_utils:create_workflow_execution_auth(
-        ?PROVIDER_SELECTOR, user1, space_krk
+        ?PROVIDER_SELECTOR, user2, space_krk
     ).
 
 
