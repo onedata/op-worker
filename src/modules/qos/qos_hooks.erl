@@ -84,9 +84,9 @@ reconcile_qos(FileCtx) ->
         {ok, synced} ->
             reconcile_qos_internal(FileCtx, []);
         {error, {file_meta_missing, MissingUuid}} ->
-            add_reconcile_file_meta_posthook(FileCtx, MissingUuid, <<"qos_missing_file_meta">>);
-        {error, {link_missing, MissingUuid}} ->
-            add_reconcile_file_meta_posthook(FileCtx, MissingUuid, <<"qos_missing_link">>)
+            add_reconcile_file_meta_posthook(FileCtx, {file_meta_missing, MissingUuid}, <<"qos_missing_file_meta">>);
+        {error, {link_missing, MissingUuid, MissingName}} ->
+            add_reconcile_file_meta_posthook(FileCtx, {link_missing, MissingUuid, MissingName}, <<"qos_missing_link">>)
     end.
 
 %%--------------------------------------------------------------------
@@ -127,7 +127,7 @@ reconcile_qos_internal(FileCtx, Options) when is_list(Options) ->
             % new file_ctx will be generated when file_meta_posthook
             % will be executed (see function reconcile_qos/2).
             lists:member(ignore_missing_files, Options) orelse
-                add_reconcile_file_meta_posthook(FileCtx, MissingUuid, <<"qos_missing_file_meta">>),
+                add_reconcile_file_meta_posthook(FileCtx, {file_meta_missing, MissingUuid}, <<"qos_missing_file_meta">>),
             ok;
         {ok, EffFileQos} ->
             case file_qos:is_in_trash(EffFileQos) of
@@ -217,13 +217,10 @@ retry_failed_files(SpaceId) ->
 
 
 %% @private
--spec add_reconcile_file_meta_posthook(file_ctx:ctx(), file_meta:uuid(), binary()) -> 
-    ok | {error, term()}.
-add_reconcile_file_meta_posthook(FileCtx, MissingUuid, IdentifierPrefix) ->
+-spec add_reconcile_file_meta_posthook(file_ctx:ctx(), file_meta_posthooks:missing_element(), binary()) -> ok.
+add_reconcile_file_meta_posthook(FileCtx, MissingElement, IdentifierPrefix) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     InodeUuid = file_ctx:get_referenced_uuid_const(FileCtx),
     % save Prefix and InodeUuid in hook identifier for diagnostic purpose
     HookIdentifier = <<IdentifierPrefix/binary, "_", InodeUuid/binary>>,
-    file_meta_posthooks:add_hook(
-        MissingUuid, HookIdentifier,
-        ?MODULE, reconcile_qos, [InodeUuid, SpaceId]).
+    ok = file_meta_posthooks:add_hook(MissingElement, HookIdentifier, ?MODULE, reconcile_qos, [InodeUuid, SpaceId]).

@@ -319,19 +319,9 @@ consume_measurements(Measurements, DispatchRules, Record = #atm_time_series_stor
 match_target_ts(#{<<"tsName">> := MeasurementTSName}, DispatchRules, TSSchemas) ->
     case atm_time_series_names:find_matching_dispatch_rule(MeasurementTSName, DispatchRules) of
         {ok, DispatchRule} ->
-            case atm_time_series_names:find_referenced_time_series_schema(DispatchRule, TSSchemas) of
-                {ok, TSSchema} ->
-                    TargetTSName = atm_time_series_names:resolve_target_ts_name(
-                        MeasurementTSName, TSSchema, DispatchRule
-                    ),
-                    {true, TargetTSName, TSSchema#atm_time_series_schema.metrics};
-                error ->
-                    throw(?ERROR_BAD_DATA(<<"dispatchRules">>, str_utils:format_bin(
-                        "Time series name generator '~s' specified in one of the dispatch rules "
-                        "does not reference any defined time series schema",
-                        [DispatchRule#atm_time_series_dispatch_rule.target_ts_name_generator]
-                    )))
-            end;
+            TSSchema = atm_time_series_names:select_referenced_time_series_schema(DispatchRule, TSSchemas),
+            TargetTSName = atm_time_series_names:resolve_target_ts_name(MeasurementTSName, TSSchema, DispatchRule),
+            {true, TargetTSName, TSSchema#atm_time_series_schema.metrics};
         error ->
             false
     end.

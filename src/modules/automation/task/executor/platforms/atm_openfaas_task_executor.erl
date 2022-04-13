@@ -526,10 +526,6 @@ add_oneclient_annotations_if_necessary(FunctionDefinition, #initiation_ctx{
     OneclientImage = get_oneclient_image(),
 
     OneclientMountRelatedAnnotations = #{
-        % TODO VFS-8141 rm deprecated oneclient.openfass.*
-        <<"oneclient.openfass.onedata.org/inject">> => <<"enabled">>,
-        <<"oneclient.openfass.onedata.org/image">> => OneclientImage,
-
         <<"oneclient.openfaas.onedata.org/inject">> => <<"enabled">>,
         <<"oneclient.openfaas.onedata.org/image">> => OneclientImage,
         <<"oneclient.openfaas.onedata.org/space_id">> => SpaceId,
