@@ -29,6 +29,7 @@
 
 %% tests
 -export([
+    atm_array_value_validation_test/1,
     atm_dataset_value_validation_test/1,
     atm_file_value_validation_test/1,
     atm_integer_value_validation_test/1,
@@ -41,6 +42,7 @@
 
 groups() -> [
     {all_tests, [parallel], [
+        atm_array_value_validation_test,
         atm_dataset_value_validation_test,
         atm_file_value_validation_test,
         atm_integer_value_validation_test,
@@ -64,6 +66,49 @@ all() -> [
 %%%===================================================================
 %%% API functions
 %%%===================================================================
+
+
+atm_array_value_validation_test(_Config) ->
+    validate_value_test_base(
+        #atm_data_spec{
+            type = atm_array_type,
+            value_constraints = #{item_data_spec => #atm_data_spec{
+                type = atm_array_type,
+                value_constraints = #{item_data_spec => #atm_data_spec{type = atm_integer_type}}
+            }}
+        },
+
+        [
+            [],
+            [[]],
+            [[1, 2, 3], [4, 5]],
+            [[1, 2, 3], [], [4, 5]]
+        ],
+
+        lists:flatten([
+            lists:map(fun(Value) ->
+                {Value, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_array_type)} end,
+                [5.5, <<"NaN">>, #{<<"key">> => 5}]
+            ),
+
+            lists:map(fun({Value, ConstraintUnverified}) ->
+                {Value, ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+                    Value, atm_array_type, ConstraintUnverified
+                )}
+            end, [
+                {[[1, 2, 3], <<"NaN">>], #{<<"$[1]">> => errors:to_json(
+                    ?ERROR_ATM_DATA_TYPE_UNVERIFIED(<<"NaN">>, atm_array_type)
+                )}},
+                {[[1, 2, 3, <<"NaN">>], [4, 5]], #{<<"$[0]">> => errors:to_json(
+                    ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED([1, 2, 3, <<"NaN">>], atm_array_type, #{
+                        <<"$[3]">> => errors:to_json(
+                            ?ERROR_ATM_DATA_TYPE_UNVERIFIED(<<"NaN">>, atm_integer_type)
+                        )
+                    })
+                )}}
+            ])
+        ])
+    ).
 
 
 atm_dataset_value_validation_test(_Config) ->
