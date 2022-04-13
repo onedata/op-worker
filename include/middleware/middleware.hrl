@@ -78,6 +78,10 @@
     target_filename = default :: file_meta:name() | default
 }).
 
+-record(cancel_archive_recall, {
+    id :: archive_recall:id()
+}).
+
 -record(get_recall_details, {
     id :: archive_recall:id()
 }).

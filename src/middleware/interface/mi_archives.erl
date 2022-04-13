@@ -23,6 +23,7 @@
     update/3,
     purge/3,
     recall/4,
+    cancel_recall/2,
     get_recall_details/2,
     get_recall_progress/2
 ]).
@@ -110,6 +111,13 @@ recall(SessionId, ArchiveId, ParentDirectoryGuid, TargetFilename) ->
         archive_id = ArchiveId,
         parent_directory_guid = ParentDirectoryGuid,
         target_filename = TargetFilename
+    }).
+
+
+-spec cancel_recall(session:id(), file_id:file_guid()) -> ok | no_return().
+cancel_recall(SessionId, FileGuid) ->
+    middleware_worker:check_exec(SessionId, FileGuid, #cancel_archive_recall{
+        id = file_id:guid_to_uuid(FileGuid)
     }).
 
 

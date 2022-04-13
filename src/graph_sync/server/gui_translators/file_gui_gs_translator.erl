@@ -324,22 +324,32 @@ translate_file_details(#file_details{
 %% @private
 -spec translate_archive_recall_details(archive_recall:record()) -> map().
 translate_archive_recall_details(#archive_recall_details{
+    recalling_provider_id = RecallingProviderId,
     archive_id = ArchiveId,
     dataset_id = DatasetId,
     start_timestamp = StartTimestamp,
     finish_timestamp = FinishTimestamp,
+    cancel_timestamp = CancelTimestamp,
     total_file_count = TargetFileCount,
-    total_byte_size = TargetByteSize
+    total_byte_size = TargetByteSize,
+    last_error = LastError
 }) ->
     #{
+        <<"recallingProvider">> => gri:serialize(#gri{
+            type = op_provider, id = RecallingProviderId, aspect = instance, scope = protected}),
         <<"archive">> => gri:serialize(#gri{
             type = op_archive, id = ArchiveId, aspect = instance, scope = private}),
         <<"dataset">> => gri:serialize(#gri{
             type = op_dataset, id = DatasetId, aspect = instance, scope = private}),
         <<"startTime">> => utils:undefined_to_null(StartTimestamp),
         <<"finishTime">> => utils:undefined_to_null(FinishTimestamp),
+        <<"cancelTime">> => utils:undefined_to_null(CancelTimestamp),
         <<"totalFileCount">> => TargetFileCount,
-        <<"totalByteSize">> => TargetByteSize
+        <<"totalByteSize">> => TargetByteSize,
+        <<"lastError">> => case LastError of
+            undefined -> null;
+            _ -> json_utils:decode(LastError)
+        end
     }.
 
 

@@ -854,6 +854,12 @@ create_file_meta_and_handle_conflicts(FileUuid, FileName, Mode, OwnerId, ParentU
     case CreationResult of
         {ok, FinalDoc2} ->
             FileCtx = file_ctx:new_by_doc(FinalDoc2, SpaceId),
+            case FileType of
+                ?DIRECTORY_TYPE ->
+                    ok;
+                _ ->
+                    ok = file_popularity:update_size(FileCtx)
+            end,
             ok = fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx, true, []),
             {ok, FileCtx};
         stalled_link ->
@@ -1039,8 +1045,14 @@ maybe_update_attrs(StorageFileCtx, FileAttr, FileCtx, Info = #{parent_ctx := Par
             {CanonicalPath, FileCtx4} = file_ctx:get_canonical_path(FileCtx3),
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx4),
             storage_import_logger:log_modification(StorageFileId, CanonicalPath, FileUuid, SpaceId, ModifiedAttrs),
-            fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx3, true, []),
-            {?FILE_MODIFIED, FileCtx4, StorageFileCtx2};
+            fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx4, true, []),
+            case file_ctx:is_dir(FileCtx4) of
+                {true, FileCtx5} ->
+                    {?FILE_MODIFIED, FileCtx5, StorageFileCtx2};
+                {false, FileCtx5} ->
+                    file_popularity:update_size(FileCtx5),
+                    {?FILE_MODIFIED, FileCtx5, StorageFileCtx2}
+            end;
         {ModifiedAttrs, false} ->
             SpaceId = file_ctx:get_space_id_const(FileCtx3),
             {ParentStorageFileId, _} = file_ctx:get_storage_file_id(ParentCtx),

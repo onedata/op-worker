@@ -107,12 +107,13 @@ get(SpaceId, Doc = #document{value = #file_meta{}}, PathType) ->
     case effective_value:get_or_calculate(CacheName, Doc, calculate_path_tokens_callback(PathType)) of
         {ok, Path, _} ->
             {ok, filename:join(Path)};
-        {error, {file_meta_missing, _}} ->
-            ?ERROR_NOT_FOUND
+        {error, {file_meta_missing, _MissingUuid}} = Error ->
+            Error
     end;
 get(SpaceId, Uuid, PathType) ->
     case file_meta:get_including_deleted(Uuid) of
         {ok, Doc} -> get(SpaceId, Doc, PathType);
+        ?ERROR_NOT_FOUND -> {error, {file_meta_missing, Uuid}};
         {error, _} = Error -> Error
     end.
 
