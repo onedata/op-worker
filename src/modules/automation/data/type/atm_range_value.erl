@@ -56,11 +56,11 @@
     atm_data_type:value_constraints()
 ) ->
     ok | no_return().
-assert_meets_constraints(AtmWorkflowExecutionAuth, Value, ValueConstraints) ->
+assert_meets_constraints(_AtmWorkflowExecutionAuth, Value, ValueConstraints) ->
     Range = compress(Value, ValueConstraints),
 
     try
-        check_implicit_constraints(AtmWorkflowExecutionAuth, Range)
+        assert_valid_step_direction(Range)
     catch
         throw:{unverified_constraints, UnverifiedConstraints} ->
             throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
@@ -99,35 +99,6 @@ expand(_AtmWorkflowExecutionAuth, [Start, End, Step], _ValueConstraints) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-
-%% @private
--spec check_implicit_constraints(atm_workflow_execution_auth:record(), range()) ->
-    ok | no_return().
-check_implicit_constraints(AtmWorkflowExecutionAuth, Range) ->
-    assert_valid_field_types(AtmWorkflowExecutionAuth, Range),
-    assert_valid_step_direction(Range).
-
-
-%% @private
--spec assert_valid_field_types(atm_workflow_execution_auth:record(), range()) ->
-    ok | no_return().
-assert_valid_field_types(AtmWorkflowExecutionAuth, [Start, End, Step]) ->
-    FieldDataSpec = #atm_data_spec{type = atm_integer_type},
-
-    lists:foreach(fun({FieldPath, ArgValue}) ->
-        try
-            atm_value:validate(AtmWorkflowExecutionAuth, ArgValue, FieldDataSpec)
-        catch Type:Reason:Stacktrace ->
-            throw({unverified_constraints, #{
-                FieldPath => errors:to_json(?atm_examine_error(Type, Reason, Stacktrace))
-            }})
-        end
-    end, [
-        {<<"$.start">>, Start},
-        {<<"$.end">>, End},
-        {<<"$.step">>, Step}
-    ]).
 
 
 %% @private

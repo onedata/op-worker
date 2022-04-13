@@ -41,8 +41,7 @@
     ok | no_return().
 assert_meets_constraints(_AtmWorkflowExecutionAuth, Measurement, ValueConstraints) ->
     try
-        check_implicit_measurement_constraints(Measurement),
-        check_explicit_measurement_constraints(Measurement, ValueConstraints)
+        check_measurement_constraints(Measurement, ValueConstraints)
     catch
         throw:{unverified_constraints, UnverifiedConstraints} ->
             throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
@@ -81,33 +80,12 @@ expand(_AtmWorkflowExecutionAuth, Value, _ValueConstraints) ->
 
 
 %% @private
--spec check_implicit_measurement_constraints(atm_value:expanded()) ->
-    ok | no_return().
-check_implicit_measurement_constraints(#{
-    <<"tsName">> := TsName,
-    <<"timestamp">> := Timestamp,
-    <<"value">> := MeasurementValue
-}) ->
-    is_binary(TsName) orelse throw({unverified_constraints, #{
-        <<"tsName">> => <<"String">>
-    }}),
-    (is_integer(Timestamp) andalso Timestamp >= 0) orelse throw({unverified_constraints, #{
-        <<"timestamp">> => <<"Non negative integer">>
-    }}),
-    is_number(MeasurementValue) orelse throw({unverified_constraints, #{
-        <<"value">> => <<"Number">>
-    }}),
-
-    ok.
-
-
-%% @private
--spec check_explicit_measurement_constraints(
+-spec check_measurement_constraints(
     atm_value:expanded(),
     atm_data_type:value_constraints()
 ) ->
     ok | no_return().
-check_explicit_measurement_constraints(
+check_measurement_constraints(
     #{<<"tsName">> := TSName},
     #{specs := AllowedMeasurementsSpecs}
 ) ->
