@@ -85,6 +85,7 @@
     new_file_should_have_zero_popularity/1,
     opening_file_should_increase_file_popularity/1,
     file_popularity_should_have_correct_file_size/1,
+    lfm_ensure_dir/1, 
     readdir_plus_should_return_empty_result_for_empty_dir/1,
     readdir_plus_should_return_empty_result_zero_size/1,
     readdir_plus_should_work_with_zero_offset/1,
@@ -190,6 +191,7 @@
     new_file_should_have_zero_popularity,
     opening_file_should_increase_file_popularity,
     file_popularity_should_have_correct_file_size,
+    lfm_ensure_dir, 
     readdir_plus_should_return_empty_result_for_empty_dir,
     readdir_plus_should_return_empty_result_zero_size,
     readdir_plus_should_work_with_zero_offset,
@@ -423,6 +425,10 @@ opening_file_should_increase_file_popularity(Config) ->
 
 file_popularity_should_have_correct_file_size(Config) ->
     lfm_files_test_base:file_popularity_should_have_correct_file_size(Config).
+
+
+lfm_ensure_dir(Config) ->
+    lfm_files_test_base:lfm_ensure_dir(Config).
 
 
 readdir_plus_should_return_empty_result_for_empty_dir(Config) ->
