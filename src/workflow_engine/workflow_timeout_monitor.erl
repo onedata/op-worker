@@ -69,7 +69,7 @@ check_timeouts(EngineId) ->
     catch
         Error:Reason:Stacktrace  ->
             ?error_stacktrace(
-                "Unexpected error in ~w:~w (egnine id ~s): ~w:~p",
+                "Unexpected error in ~w:~w (engine id ~s)~nError was: ~w:~p",
                 [?MODULE, ?FUNCTION_NAME, EngineId, Error, Reason],
                 Stacktrace
             )
