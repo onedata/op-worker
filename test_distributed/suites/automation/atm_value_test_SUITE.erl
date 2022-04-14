@@ -59,6 +59,13 @@ all() -> [
 ].
 
 
+-record(atm_value_validation_testcase, {
+    data_spec,
+    valid_values,
+    invalid_values_with_exp_errors
+}).
+
+
 -define(PROVIDER_SELECTOR, krakow).
 -define(rpc(Expr), ?rpc(?PROVIDER_SELECTOR, Expr)).
 
@@ -69,23 +76,21 @@ all() -> [
 
 
 atm_array_value_validation_test(_Config) ->
-    validate_value_test_base(
-        #atm_data_spec{
+    atm_value_validation_test_base(#atm_value_validation_testcase{
+        data_spec = #atm_data_spec{
             type = atm_array_type,
             value_constraints = #{item_data_spec => #atm_data_spec{
                 type = atm_array_type,
                 value_constraints = #{item_data_spec => #atm_data_spec{type = atm_integer_type}}
             }}
         },
-
-        [
+        valid_values = [
             [],
             [[]],
             [[1, 2, 3], [4, 5]],
             [[1, 2, 3], [], [4, 5]]
         ],
-
-        lists:flatten([
+        invalid_values_with_exp_errors = lists:flatten([
             lists:map(fun(Value) ->
                 {Value, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_array_type)} end,
                 [5.5, <<"NaN">>, #{<<"key">> => 5}]
@@ -108,7 +113,7 @@ atm_array_value_validation_test(_Config) ->
                 )}}
             ])
         ])
-    ).
+    }).
 
 
 atm_dataset_value_validation_test(_Config) ->
@@ -134,18 +139,16 @@ atm_dataset_value_validation_test(_Config) ->
         #symlink_spec{symlink_value = <<"a/b">>, dataset = #dataset_spec{}}
     ]),
 
-    validate_value_test_base(
-        #atm_data_spec{type = atm_dataset_type},
-
-        lists:map(fun(DatasetId) -> #{<<"datasetId">> => DatasetId} end, [
+    atm_value_validation_test_base(#atm_value_validation_testcase{
+        data_spec = #atm_data_spec{type = atm_dataset_type},
+        valid_values = lists:map(fun(DatasetId) -> #{<<"datasetId">> => DatasetId} end, [
             DirDatasetId,
             % user can view dataset even if he does not have access to file the dataset is attached
             FileInDirDatasetId,
             FileDatasetId,
             SymlinkDatasetId
         ]),
-
-        lists:flatten([
+        invalid_values_with_exp_errors = lists:flatten([
             lists:map(fun(Value) ->
                 {Value, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_dataset_type)} end,
                 [5.5, <<"NaN">>, [5], #{<<"datasetId">> => 5}]
@@ -165,7 +168,7 @@ atm_dataset_value_validation_test(_Config) ->
                 {<<"NonExistentDatasetId">>, #{<<"hasAccess">> => true}}
             ])
         ])
-    ).
+    }).
 
 
 atm_file_value_validation_test(_Config) ->
@@ -206,12 +209,13 @@ atm_file_value_validation_test(_Config) ->
         #{<<"file_id">> => ObjectId}
     end,
 
-    validate_value_test_base(
-        #atm_data_spec{type = atm_file_type, value_constraints = ValueConstraints},
-
-        lists:map(fun(Guid) -> BuildFileObjectFun(Guid) end, FilesWithAllowedType),
-
-        lists:flatten([
+    atm_value_validation_test_base(#atm_value_validation_testcase{
+        data_spec = #atm_data_spec{
+            type = atm_file_type,
+            value_constraints = ValueConstraints
+        },
+        valid_values = lists:map(BuildFileObjectFun, FilesWithAllowedType),
+        invalid_values_with_exp_errors = lists:flatten([
             lists:map(fun(Value) ->
                 {Value, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_file_type)} end,
                 [5.5, <<"NaN">>, [5], #{<<"file_id">> => 5}]
@@ -241,24 +245,24 @@ atm_file_value_validation_test(_Config) ->
                 )}
             end, FilesWithNotAllowedType)
         ])
-    ).
+    }).
 
 
 atm_integer_value_validation_test(_Config) ->
-    validate_value_test_base(
-        #atm_data_spec{type = atm_integer_type},
-        [-10, 0, 10],
-        lists:map(fun(Value) ->
+    atm_value_validation_test_base(#atm_value_validation_testcase{
+        data_spec = #atm_data_spec{type = atm_integer_type},
+        valid_values = [-10, 0, 10],
+        invalid_values_with_exp_errors = lists:map(fun(Value) ->
             {Value, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_integer_type)} end,
             [5.5, [5], #{<<"key">> => 5}]
         )
-    ).
+    }).
 
 
 atm_object_value_validation_test(_Config) ->
-    validate_value_test_base(
-        #atm_data_spec{type = atm_object_type},
-        [
+    atm_value_validation_test_base(#atm_value_validation_testcase{
+        data_spec = #atm_data_spec{type = atm_object_type},
+        valid_values = [
             #{<<"key1">> => <<"value">>},
             #{<<"key2">> => 5},
             #{<<"key3">> => [5]},
@@ -271,24 +275,24 @@ atm_object_value_validation_test(_Config) ->
             % any valid map
             #{5 => 6}
         ],
-        lists:map(fun(Value) ->
+        invalid_values_with_exp_errors = lists:map(fun(Value) ->
             {Value, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_object_type)} end,
             [5.5, <<"NaN">>, [5]]
         )
-    ).
+    }).
 
 
 atm_onedatafs_credentials_value_validation_test(_Config) ->
-    validate_value_test_base(
-        #atm_data_spec{type = atm_onedatafs_credentials_type},
-        [
+    atm_value_validation_test_base(#atm_value_validation_testcase{
+        data_spec = #atm_data_spec{type = atm_onedatafs_credentials_type},
+        valid_values = [
             % atm_onedatafs_credentials_value can be specified only as an argument
             % to lambda (they will be generated by op right before lambda invocation).
             % They can not appear in any other context and as such fields content
             % is not validated beside basic type checks.
             #{<<"host">> => <<"host">>, <<"accessToken">> => <<"token">>}
         ],
-        lists:map(fun(Value) ->
+        invalid_values_with_exp_errors = lists:map(fun(Value) ->
             {Value, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_onedatafs_credentials_type)} end,
             [
                 5.5,
@@ -299,13 +303,13 @@ atm_onedatafs_credentials_value_validation_test(_Config) ->
                 #{<<"host">> => <<"host">>, <<"accessToken">> => 5}
             ]
         )
-    ).
+    }).
 
 
 atm_range_value_validation_test(_Config) ->
-    validate_value_test_base(
-        #atm_data_spec{type = atm_range_type},
-        [
+    atm_value_validation_test_base(#atm_value_validation_testcase{
+        data_spec = #atm_data_spec{type = atm_range_type},
+        valid_values = [
             #{<<"end">> => 10},
             #{<<"start">> => 1, <<"end">> => 10},
             #{<<"start">> => -5, <<"end">> => 10, <<"step">> => 2},
@@ -314,7 +318,7 @@ atm_range_value_validation_test(_Config) ->
             % Valid objects with excess fields are also accepted
             #{<<"end">> => 100, <<"key">> => <<"value">>}
         ],
-        lists:flatten([
+        invalid_values_with_exp_errors = lists:flatten([
             lists:map(
                 fun(Value) -> {Value, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_range_type)} end,
                 [
@@ -339,18 +343,18 @@ atm_range_value_validation_test(_Config) ->
                 #{<<"start">> => 10, <<"end">> => 15, <<"step">> => -1}
             ])
         ])
-    ).
+    }).
 
 
 atm_string_value_validation_test(_Config) ->
-    validate_value_test_base(
-        #atm_data_spec{type = atm_string_type},
-        [<<"">>, <<"NaN">>, <<"!@#$%^&*()">>],
-        lists:map(fun(Value) ->
+    atm_value_validation_test_base(#atm_value_validation_testcase{
+        data_spec = #atm_data_spec{type = atm_string_type},
+        valid_values = [<<"">>, <<"NaN">>, <<"!@#$%^&*()">>],
+        invalid_values_with_exp_errors = lists:map(fun(Value) ->
             {Value, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_string_type)} end,
             [5, [5], #{<<"key">> => 5}]
         )
-    ).
+    }).
 
 
 atm_time_series_measurement_value_validation_test(_Config) ->
@@ -378,16 +382,16 @@ atm_time_series_measurement_value_validation_test(_Config) ->
         MeasurementSpecs, atm_time_series_measurement_spec
     ),
 
-    validate_value_test_base(
-        #atm_data_spec{
+    atm_value_validation_test_base(#atm_value_validation_testcase{
+        data_spec = #atm_data_spec{
             type = atm_time_series_measurement_type,
             value_constraints = #{specs => MeasurementSpecs}
         },
-        [
+        valid_values = [
             BuildTSMeasurement(<<"size">>),
             BuildTSMeasurement(<<"awesome_tests">>)
         ],
-        lists:flatten([
+        invalid_values_with_exp_errors = lists:flatten([
             lists:map(fun(Value) ->
                 {Value, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_time_series_measurement_type)} end,
                 [
@@ -412,11 +416,15 @@ atm_time_series_measurement_value_validation_test(_Config) ->
                 BuildTSMeasurement(<<"awesome">>)
             ])
         ])
-    ).
+    }).
 
 
 %% @private
-validate_value_test_base(AtmDataSpec, ValidValues, InvalidValuesAndExpErrors) ->
+atm_value_validation_test_base(#atm_value_validation_testcase{
+    data_spec = AtmDataSpec,
+    valid_values = ValidValues,
+    invalid_values_with_exp_errors = InvalidValuesAndExpErrors
+}) ->
     AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
 
     lists:foreach(fun(ValidValue) ->
