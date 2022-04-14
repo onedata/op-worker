@@ -121,7 +121,9 @@
     ?EXECUTION_CANCELLED_REPORT([workflow_cached_item:id()]) | no_items_error().
 
 -define(CALLBACKS_ON_CANCEL_SELECTOR, callbacks_on_cancel).
--type callback_selector() :: workflow_jobs:job_identifier() | workflow_cached_item:id() | ?CALLBACKS_ON_CANCEL_SELECTOR.
+-define(CALLBACKS_ON_EMPTY_LANE_SELECTOR, callbacks_on_empty_lane).
+-type callback_selector() :: workflow_jobs:job_identifier() | workflow_cached_item:id() |
+    ?CALLBACKS_ON_CANCEL_SELECTOR | ?CALLBACKS_ON_EMPTY_LANE_SELECTOR.
 
 -export_type([index/0, iteration_status/0, current_lane/0, next_lane/0, execution_status/0,
     next_lane_preparation_status/0, boxes_map/0, update_report/0, callback_selector/0]).
@@ -435,7 +437,11 @@ finish_lane_preparation(ExecutionId, Handler,
 ) -> ok.
 call_handle_task_execution_ended_for_all_tasks(ExecutionId, Handler, Context, BoxesMap) ->
     TaskIds = get_task_ids(BoxesMap),
-    workflow_engine:call_handle_task_execution_ended_for_all_tasks(ExecutionId, Handler, Context, TaskIds).
+    workflow_engine:call_handle_task_execution_ended_for_all_tasks(ExecutionId, Handler, Context, TaskIds),
+    {ok, _} = update(ExecutionId, fun(State) ->
+        remove_pending_callback(State, ?CALLBACKS_ON_EMPTY_LANE_SELECTOR)
+    end),
+    ok.
 
 -spec get_task_ids(boxes_map()) -> [workflow_engine:task_id()].
 get_task_ids(BoxesMap) ->
@@ -763,12 +769,19 @@ finish_lane_preparation_internal(
         parallel_box_specs = BoxesMap,
         failure_count_to_cancel = FailureCountToCancel
     },
+    PendingCallbacks = case PrefetchedIterationStep of
+        undefined -> [?CALLBACKS_ON_EMPTY_LANE_SELECTOR];
+        ?WF_ERROR_ITERATION_FAILED -> [?CALLBACKS_ON_EMPTY_LANE_SELECTOR];
+        _ -> []
+    end,
+
     {ok, State#workflow_execution_state{
         execution_status = ?EXECUTING,
         current_lane = UpdatedCurrentLane,
         iteration_state = workflow_iteration_state:init(),
         prefetched_iteration_step = PrefetchedIterationStep,
-        jobs = workflow_jobs:init()
+        jobs = workflow_jobs:init(),
+        pending_callbacks = PendingCallbacks
     }};
 finish_lane_preparation_internal(_State, _BoxesMap, _LaneExecutionContext,
     _PrefetchedIterationStep, _FailureCountToCancel) ->
@@ -1223,22 +1236,36 @@ is_finished_and_cleaned(ExecutionId, LaneIndex) ->
             end;
         {ok, #document{value = #workflow_execution_state{
             current_lane = #current_lane{index = LaneIndex},
-            execution_status = ExecutionStatus,
-            jobs = Jobs,
-            iteration_state = IterationState
+            execution_status = ExecutionStatus
         } = Record}} when ExecutionStatus =:= ?EXECUTION_CANCELLED orelse
             ExecutionStatus =:= ?WAITING_FOR_NEXT_LANE_PREPARATION_END ->
-            HasWaitingResults = case workflow_jobs:prepare_next_waiting_result(Jobs) of
-                {{ok, _}, _} -> true;
-                _ -> false
-            end,
-            case not workflow_jobs:has_ongoing_jobs(Jobs) andalso not HasWaitingResults andalso
-                workflow_iteration_state:is_finished_and_cleaned(IterationState) of
-                true -> true;
-                false -> {false, Record}
-            end;
+            is_finished_and_cleaned_for_canceled_execution(Record);
+        {ok, #document{value = #workflow_execution_state{
+            current_lane = #current_lane{index = LaneIndex},
+            execution_status = ?EXECUTION_ENDED,
+            next_lane_preparation_status = ?PREPARED_IN_ADVANCE,
+            next_lane = #next_lane{}
+        } = Record}} ->
+            % ?EXECUTION_ENDED with next line ?PREPARED_IN_ADVANCE is possible only after cancelation
+            is_finished_and_cleaned_for_canceled_execution(Record);
         {ok, #document{value = Record}} ->
             {false, Record}
+    end.
+
+
+-spec is_finished_and_cleaned_for_canceled_execution(state()) -> true | {false, state()}.
+is_finished_and_cleaned_for_canceled_execution(#workflow_execution_state{
+    jobs = Jobs,
+    iteration_state = IterationState
+} = Record) ->
+    HasWaitingResults = case workflow_jobs:prepare_next_waiting_result(Jobs) of
+        {{ok, _}, _} -> true;
+        _ -> false
+    end,
+    case not workflow_jobs:has_ongoing_jobs(Jobs) andalso not HasWaitingResults andalso
+        workflow_iteration_state:is_finished_and_cleaned(IterationState) of
+        true -> true;
+        false -> {false, Record}
     end.
 
 
