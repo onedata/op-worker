@@ -178,7 +178,7 @@ get_children_ctxs(UserCtx, FileCtx0, ListOpts, DirOperationsRequirements) ->
     {CanonicalChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
         UserCtx, FileCtx1, AccessRequirements
     ),
-    files_tree:list_children(FileCtx2, UserCtx, ListOpts, CanonicalChildrenWhiteList).
+    file_tree:list_children(FileCtx2, UserCtx, ListOpts, CanonicalChildrenWhiteList).
 
 
 %%--------------------------------------------------------------------
@@ -245,7 +245,7 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
 get_children_attrs_insecure(
     UserCtx, FileCtx0, ListOpts, IncludeReplicationStatus, IncludeLinkCount, CanonicalChildrenWhiteList
 ) ->
-    {Children, ListingState, FileCtx1} = files_tree:list_children(
+    {Children, ListingState, FileCtx1} = file_tree:list_children(
         FileCtx0, UserCtx, ListOpts, CanonicalChildrenWhiteList),
     ChildrenAttrs = map_children(
         UserCtx,
@@ -282,7 +282,7 @@ get_children_attrs_insecure(
     fslogic_worker:fuse_response().
 get_children_details_insecure(UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhiteList) ->
     file_ctx:is_user_root_dir_const(FileCtx0, UserCtx) andalso throw(?ENOTSUP),
-    {Children, ListingState, FileCtx1} = files_tree:list_children(
+    {Children, ListingState, FileCtx1} = file_tree:list_children(
         FileCtx0, UserCtx, ListOpts, CanonicalChildrenWhiteList
     ),
     ChildrenDetails = map_children(

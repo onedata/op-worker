@@ -71,7 +71,7 @@
 %%% 6) file/dir - regular file/directory.
 %%% @end
 %%%--------------------------------------------------------------------
--module(files_tree).
+-module(file_tree).
 -author("Bartosz Walkowicz").
 
 -include("global_definitions.hrl").
@@ -93,7 +93,7 @@
 -export_type([children_whitelist/0]).
 
 
--define(DEFAULT_LS_BATCH_SIZE, op_worker:get_env(ls_batch_size, 5000)).
+-define(DEFAULT_LS_BATCH_SIZE, op_worker:get_env(default_ls_batch_size, 5000)).
 
 
 %%%===================================================================
@@ -451,7 +451,7 @@ list_share_root_dir_children(UserCtx, ShareRootDirCtx, FileWhiteList) ->
                 false -> []
             end
     end,
-    {Children, file_listing:default_state(), ShareRootDirCtx}.
+    {Children, file_listing:finished_state(), ShareRootDirCtx}.
 
 
 %% @private
@@ -507,7 +507,7 @@ list_file_children(FileCtx, ListOpts, ChildrenWhiteList) ->
             {Children, ListingState, FileCtx2};
         _ ->
             % In case of listing regular file - return it
-            {[FileCtx2], file_listing:default_state(), FileCtx2}
+            {[FileCtx2], file_listing:finished_state(), FileCtx2}
     end.
 
 
@@ -528,7 +528,7 @@ is_space_dir_accessed_in_open_handle_mode(UserCtx, FileCtx) ->
 build_listing_state(UserCtx, Children, Limit) ->
     case Children of
         [] ->
-            file_listing:default_state();
+            file_listing:finished_state();
         [_ | _] ->
             LastFileCtx = lists:last(Children),
             {Name, _} = file_ctx:get_aliased_name(LastFileCtx, UserCtx),

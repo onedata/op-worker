@@ -40,7 +40,6 @@
 -type state() :: #state{}.
 
 -define(DOC_ID_MISSING, doc_id_missing).
--define(DEFAULT_LS_BATCH_SIZE, op_worker:get_env(ls_batch_size, 5000)).
 
 %%%===================================================================
 %%% Callbacks
@@ -394,7 +393,7 @@ transfer_dir(State, FileCtx, ListOpts, TransferParams = #transfer_params{
     transfer_id = TransferId,
     user_ctx = UserCtx
 }) ->
-    {Children, ListingState, FileCtx2} = files_tree:list_children(FileCtx, UserCtx, ListOpts),
+    {Children, ListingState, FileCtx2} = file_tree:list_children(FileCtx, UserCtx, ListOpts),
 
     Length = length(Children),
     transfer:increment_files_to_process_counter(TransferId, Length),

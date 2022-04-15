@@ -954,7 +954,7 @@ init_per_testcase(Case, Config)
     % decrease batch size to ensure that all files will be moved
     % independently of relation of batch size to number of children
     [P1Node] = oct_background:get_provider_nodes(krakow),
-    ok = test_utils:set_env(P1Node, op_worker, ls_batch_size, 10),
+    ok = test_utils:set_env(P1Node, op_worker, default_ls_batch_size, 10),
     init_per_testcase(default, Config);
 
 
@@ -971,7 +971,7 @@ end_per_testcase(Case, Config)
 ->
     % revert default value
     [P1Node] = oct_background:get_provider_nodes(krakow),
-    ok = test_utils:set_env(P1Node, op_worker, ls_batch_size, 5000),
+    ok = test_utils:set_env(P1Node, op_worker, default_ls_batch_size, 5000),
     end_per_testcase(default, Config);
 
 end_per_testcase(_Case, Config) ->

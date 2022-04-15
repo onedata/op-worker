@@ -14,7 +14,7 @@
 -module(archive_verification_traverse).
 -author("Michal Stanisz").
 
--behavior(traverse_behaviour).
+-behaviour(traverse_behaviour).
 
 -include("tree_traverse.hrl").
 -include("modules/datastore/datastore_runner.hrl").

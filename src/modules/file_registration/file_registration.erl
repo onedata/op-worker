@@ -267,7 +267,7 @@ create_missing_directory_secure(ParentCtx, DirName, UserId) ->
     critical_section:run({create_missing_directory, file_ctx:get_logical_uuid_const(ParentCtx), DirName, UserId}, fun() ->
         try
             % ensure whether directory is still missing as it might have been created by other registering process
-            {DirCtx, _} = files_tree:get_child(ParentCtx, DirName, user_ctx:new(?ROOT_SESS_ID)),
+            {DirCtx, _} = file_tree:get_child(ParentCtx, DirName, user_ctx:new(?ROOT_SESS_ID)),
             {ok, DirCtx}
         catch
             error:{badmatch,{error,not_found}} ->

@@ -84,7 +84,7 @@
     % option determining whether slave jobs should be generated also for child directories.
     % NOTE: slave job for starting directory will never be generated.
     child_dirs_job_generation_policy => child_dirs_job_generation_policy(), 
-    % Flag determining whether optimisation will be used for iterating over files list (see file_listing for more details).
+    % Flag determining whether optimization will be used for iterating over files list (see file_listing for more details).
     optimize_continuous_listing  => boolean(),
     % flag determining whether children master jobs are scheduled before slave jobs are processed
     children_master_jobs_mode => children_master_jobs_mode(),

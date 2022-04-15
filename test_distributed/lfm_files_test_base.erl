@@ -1490,7 +1490,7 @@ lfm_cp_dir_to_its_child_should_fail(Config) ->
 
 
 lfm_cp_dir(Config) ->
-    % In this test, environment variable `ls_batch_size`,
+    % In this test, environment variable `default_ls_batch_size`,
     % which is responsible for size of children batches used when listing a directory,
     % is decreased to ensure that copying directory, which has more children
     % than size of a single batch, is performed correctly.
@@ -1532,7 +1532,7 @@ lfm_cp_dir(Config) ->
     {ok, TargetParentGuid1} = lfm_proxy:mkdir(W, SessId1, TargetParentPath1),
 
     % decrease batch_size to ensure that all files will be correctly copied
-    ok = test_utils:set_env(W, op_worker, ls_batch_size, 1),
+    ok = test_utils:set_env(W, op_worker, default_ls_batch_size, 1),
 
     % copy to target
     {ok, TargetGuid1} = ?assertMatch({ok, _}, lfm_proxy:cp(W, SessId1, ?FILE_REF(DirGuid), {path, TargetParentPath1}, TargetDir1)),
@@ -2707,8 +2707,8 @@ end_per_testcase(Case, Config) when
 
 end_per_testcase(Case = lfm_cp_dir, Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    % set default value of ls_batch_size env
-    test_utils:set_env(W, op_worker, ls_batch_size, 5000),
+    % set default value of default_ls_batch_size env
+    test_utils:set_env(W, op_worker, default_ls_batch_size, 5000),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(readdir_should_work_with_token = Case, Config) ->

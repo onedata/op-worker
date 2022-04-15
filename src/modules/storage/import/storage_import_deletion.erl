@@ -444,7 +444,7 @@ delete_dir_recursive(FileCtx, SpaceId, StorageId) ->
     od_space:id(), storage:id()) -> {ok, file_ctx:ctx()}.
 delete_children(FileCtx, UserCtx, ListOpts, SpaceId, StorageId) ->
     try
-        {ChildrenCtxs, ListingState, FileCtx2} = files_tree:list_children(
+        {ChildrenCtxs, ListingState, FileCtx2} = file_tree:list_children(
             FileCtx, UserCtx, ListOpts
         ),
         storage_import_monitoring:increment_queue_length_histograms(SpaceId, length(ChildrenCtxs)),

@@ -219,7 +219,7 @@ delete_file(FileCtx, UserId, TaskId, TraverseInfo = #{emit_events := EmitEvents}
 %% @private
 -spec file_processed(file_ctx:ctx(), user_ctx:ctx(), id(), info()) -> ok.
 file_processed(FileCtx, UserCtx, TaskId, TraverseInfo = #{root_original_parent_uuid := RootOriginalParentUuid}) ->
-    {ParentFileCtx, FileCtx1} = files_tree:get_parent(FileCtx, UserCtx),
+    {ParentFileCtx, FileCtx1} = file_tree:get_parent(FileCtx, UserCtx),
     case file_qos:get_effective(RootOriginalParentUuid) of
         {ok, #effective_file_qos{qos_entries = EffectiveQosEntries}} ->
             SpaceId = file_ctx:get_space_id_const(FileCtx1),

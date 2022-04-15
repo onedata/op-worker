@@ -18,7 +18,7 @@
 -module(unsupport_cleanup_traverse).
 -author("Michal Stanisz").
 
--behavior(traverse_behaviour).
+-behaviour(traverse_behaviour).
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
@@ -168,7 +168,7 @@ cleanup_dir(TaskId, FileCtx, RemoveStorageFiles) ->
 -spec file_processed(task_id(), file_ctx:ctx(), boolean()) -> ok.
 file_processed(TaskId, FileCtx, RemoveStorageFiles) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
-    {ParentFileCtx, _FileCtx} = files_tree:get_parent(FileCtx, UserCtx),
+    {ParentFileCtx, _FileCtx} = file_tree:get_parent(FileCtx, UserCtx),
     ParentUuid = file_ctx:get_logical_uuid_const(ParentFileCtx),
     ParentStatus = tree_traverse:report_child_processed(TaskId, ParentUuid),
     maybe_cleanup_dir(ParentStatus, TaskId, ParentFileCtx, RemoveStorageFiles).

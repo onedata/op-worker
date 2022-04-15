@@ -184,7 +184,7 @@ process_current_dir_in_batches(UserCtx, FileCtx, ListOpts, State, AccListResult)
             {ok, C, E, F} -> 
                 {C, AccListResult, E, F};
             {error, ?EACCES} ->
-                {[], result_append_inaccessible_path(State, AccListResult), file_listing:default_state(), FileCtx}
+                {[], result_append_inaccessible_path(State, AccListResult), file_listing:finished_state(), FileCtx}
         end,
     {Res, FinalProcessedFileCount} = lists_utils:foldl_while(fun(ChildCtx, {TmpResult, ProcessedFileCount}) ->
         {Marker, ChildResult} = process_current_child(UserCtx, ChildCtx, State#state{
@@ -253,7 +253,7 @@ list_children_with_access_check(UserCtx, FileCtx, ListOpts) ->
         {CanonicalChildrenWhiteList, FileCtx3} = fslogic_authz:ensure_authorized_readdir(
             UserCtx, FileCtx2, AccessRequirements
         ),
-        {Children, ListingState, FileCtx4} = files_tree:list_children(FileCtx3, UserCtx, ListOpts, CanonicalChildrenWhiteList),
+        {Children, ListingState, FileCtx4} = file_tree:list_children(FileCtx3, UserCtx, ListOpts, CanonicalChildrenWhiteList),
         {ok, Children, ListingState, FileCtx4}
     catch throw:?EACCES ->
         {error, ?EACCES}

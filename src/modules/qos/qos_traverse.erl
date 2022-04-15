@@ -276,7 +276,7 @@ slave_job_traverse(TaskId, UserCtx, FileCtx, AdditionalData) ->
         ?ERROR_NOT_FOUND -> []
     end,
     ok = synchronize_file_for_entries(TaskId, UserCtx, FileCtx, QosEntries),
-    {ParentFileCtx, FileCtx2} = files_tree:get_parent(FileCtx, undefined),
+    {ParentFileCtx, FileCtx2} = file_tree:get_parent(FileCtx, undefined),
     ok = qos_status:report_traverse_finished_for_file(TaskId, FileCtx2, ParentFileCtx).
 
 

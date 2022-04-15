@@ -372,7 +372,7 @@ does_fulfill_guid_constraints(
                         FileCtx, CacheKey, AllGuidConstraints
                     );
                 false ->
-                    {ParentCtx, FileCtx1} = files_tree:get_parent(FileCtx, UserCtx),
+                    {ParentCtx, FileCtx1} = file_tree:get_parent(FileCtx, UserCtx),
                     DoesParentFulfillGuidConstraints = does_fulfill_guid_constraints(
                         UserCtx, SerializedToken, ParentCtx,
                         AllGuidConstraints
