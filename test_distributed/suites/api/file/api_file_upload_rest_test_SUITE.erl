@@ -505,25 +505,11 @@ create_file_at_path_with_create_parents_in_parallel_test(_Config) ->
     SpaceId = oct_background:get_space_id(space_krk_par),
     {ok, SpaceObjectId} = file_id:guid_to_objectid(fslogic_uuid:spaceid_to_space_dir_guid(SpaceId)),
     RestPath = str_utils:join_as_binaries([<<"data">>, SpaceObjectId, <<"path">>, RelativePath], <<"/">>),
-    PortStr = case opw_test_rpc:get_env(krakow, https_server_port) of
-        443 -> "";
-        Port -> ":" ++ integer_to_list(Port)
-    end,
-    Domain = opw_test_rpc:get_provider_domain(krakow),
-    
-    RestPath2 = http_utils:append_url_parameters(RestPath, #{<<"create_parents">> => true, <<"update_existing">> => true}),
-    
-    RestApiRoot = str_utils:format_bin("https://~s~s/api/v3/oneprovider/", [Domain, PortStr]),
-    URL = str_utils:join_as_binaries([RestApiRoot, RestPath2], <<>>),
-    HeadersWithAuth = #{?HDR_X_AUTH_TOKEN => oct_background:get_user_access_token(user2)},
-    Opts = [
-        {ssl_options, [
-            {cacerts, opw_test_rpc:get_cert_chain_ders(krakow)}
-        ]}
-    ],
+    RestPathWithParams = http_utils:append_url_parameters(RestPath, #{<<"create_parents">> => true, <<"update_existing">> => true}),
+    HeadersWithAuth = [rest_test_utils:user_token_header(oct_background:get_user_access_token(user2))],
     
     lists_utils:pforeach(fun(_) ->
-        ?assertMatch({ok, 201, _, _}, http_client:request(put, URL, HeadersWithAuth, <<>>, Opts))
+        ?assertMatch({ok, 201, _, _}, rest_test_utils:request(krakow, RestPathWithParams, put, HeadersWithAuth, <<>>))
     end, lists:seq(1, 100)).
 
 
