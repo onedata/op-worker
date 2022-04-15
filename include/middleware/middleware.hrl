@@ -90,6 +90,11 @@
     id :: archive_recall:id()
 }).
 
+-record(browse_recall_log, {
+    id :: archive_recall:id(),
+    options :: json_infinite_log_model:listing_opts()
+}).
+
 
 %%%===================================================================
 %%% Automation related operations available in middleware_worker

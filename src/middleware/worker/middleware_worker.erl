@@ -36,7 +36,8 @@
     #recall_archive{} |
     #cancel_archive_recall{} | 
     #get_recall_details{} |
-    #get_recall_progress{}.
+    #get_recall_progress{} |
+    #browse_recall_log{}.
 
 -type atm_operation() ::
     #schedule_atm_workflow_execution{} |

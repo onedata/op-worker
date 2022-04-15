@@ -40,7 +40,8 @@
     init_archive_recall/5,
     cancel_archive_recall/3,
     get_archive_recall_details/3,
-    get_archive_recall_progress/3
+    get_archive_recall_progress/3,
+    browse_archive_recall_log/4
 ]).
 
 -type error() :: {error, term()}.
@@ -238,6 +239,14 @@ get_archive_recall_progress(FileCtx, RecallId, UserCtx) ->
     fslogic_authz:ensure_authorized(UserCtx, FileCtx, [?TRAVERSE_ANCESTORS]),
     
     archive_recall:get_progress(RecallId).
+
+
+-spec browse_archive_recall_log(file_ctx:ctx(), archive_recall:id(), user_ctx:ctx(), 
+    json_infinite_log_model:listing_opts()) -> {ok, json_infinite_log_model:browse_result()} | error().
+browse_archive_recall_log(FileCtx, RecallId, UserCtx, Options) ->
+    fslogic_authz:ensure_authorized(UserCtx, FileCtx, [?TRAVERSE_ANCESTORS]),
+    
+    archive_recall:browse_event_log(RecallId, Options).
 
 
 %%%===================================================================

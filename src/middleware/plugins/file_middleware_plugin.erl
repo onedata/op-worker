@@ -43,6 +43,7 @@
 -define(DEFAULT_LIST_ENTRIES, 1000).
 
 -define(DEFAULT_BASIC_ATTRIBUTES, [<<"file_id">>, <<"name">>]).
+-define(MAX_RECALL_LOG_LIST_LIMIT, 1000).
 
 
 %%%===================================================================
@@ -505,6 +506,7 @@ resolve_get_operation_handler(symlink_target, public) -> ?MODULE;
 resolve_get_operation_handler(symlink_target, private) -> ?MODULE;
 resolve_get_operation_handler(archive_recall_details, private) -> ?MODULE;
 resolve_get_operation_handler(archive_recall_progress, private) -> ?MODULE;
+resolve_get_operation_handler(archive_recall_log, private) -> ?MODULE;
 resolve_get_operation_handler(_, _) -> throw(?ERROR_NOT_SUPPORTED).
 
 
@@ -641,6 +643,15 @@ data_spec_get(#gri{aspect = As}) when
 data_spec_get(#gri{aspect = download_url}) -> #{
     required => #{<<"file_ids">> => {list_of_binaries, guid}},
     optional => #{<<"follow_symlinks">> => {boolean, any}}
+};
+
+data_spec_get(#gri{aspect = archive_recall_log}) -> #{
+    optional => #{
+        <<"index">> => {binary, any},
+        <<"timestamp">> => {integer, {not_lower_than, 0}},
+        <<"offset">> => {integer, any},
+        <<"limit">> => {integer, {between, 1, ?MAX_RECALL_LOG_LIST_LIMIT}}
+    }
 }.
 
 
@@ -676,7 +687,8 @@ authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= symlink_value;
     As =:= symlink_target;
     As =:= archive_recall_details;
-    As =:= archive_recall_progress
+    As =:= archive_recall_progress;
+    As =:= archive_recall_log
 ->
     middleware_utils:has_access_to_file_space(Auth, Guid);
 
@@ -726,7 +738,8 @@ validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= symlink_value;
     As =:= symlink_target;
     As =:= archive_recall_details;
-    As =:= archive_recall_progress
+    As =:= archive_recall_progress;
+    As =:= archive_recall_log
 ->
     middleware_utils:assert_file_managed_locally(Guid);
 
@@ -967,13 +980,23 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = symlink_target, scop
     },
     {ok, TargetFileGri, TargetFileDetails};
 
-
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = archive_recall_details}}, _) ->
     {ok, mi_archives:get_recall_details(Auth#auth.session_id, FileGuid)};
 
-
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = archive_recall_progress}}, _) ->
-    {ok, mi_archives:get_recall_progress(Auth#auth.session_id, FileGuid)}.
+    {ok, mi_archives:get_recall_progress(Auth#auth.session_id, FileGuid)};
+
+get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = archive_recall_log}, data = Data}, _) ->
+    BrowseOpts = #{
+        start_from => case Data of
+            #{<<"index">> := Index} -> {index, Index};
+            #{<<"timestamp">> := Timestamp} -> {timestamp, Timestamp};
+            _ -> undefined
+        end,
+        offset => maps:get(<<"offset">>, Data, 0),
+        limit => maps:get(<<"limit">>, Data, ?MAX_RECALL_LOG_LIST_LIMIT)
+    },
+    {ok, mi_archives:browse_recall_log(Auth#auth.session_id, FileGuid, BrowseOpts)}.
 
 
 %%%===================================================================

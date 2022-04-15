@@ -82,8 +82,9 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
     undefined;
 data_spec(#op_req{operation = get, gri = #gri{aspect = audit_log}}) -> #{
     optional => #{
-        <<"offset">> => {integer, any},
+        <<"index">> => {binary, any},
         <<"timestamp">> => {integer, {not_lower_than, 0}},
+        <<"offset">> => {integer, any},
         <<"limit">> => {integer, {between, 1, ?MAX_LIST_LIMIT}}
     }
 };
@@ -246,13 +247,14 @@ get(#op_req{auth = Auth, gri = #gri{id = QosEntryId, aspect = instance}}, QosEnt
     {ok, entry_to_details(QosEntry, Status, SpaceId)};
 
 get(#op_req{gri = #gri{id = QosEntryId, aspect = audit_log}, data = Data}, _QosEntry) ->
-    StartFrom = case maps:get(<<"timestamp">>, Data, undefined) of
-        undefined -> undefined;
-        Timestamp -> {timestamp, Timestamp}
-    end,
     Opts = #{
+        start_from => case Data of
+            #{<<"index">> := Index} -> {index, Index};
+            #{<<"timestamp">> := Timestamp} -> {timestamp, Timestamp};
+            _ -> undefined
+        end,
         offset => maps:get(<<"offset">>, Data, 0),
-        start_from => StartFrom
+        limit => maps:get(<<"limit">>, Data, ?MAX_LIST_LIMIT)
     },
     {ok, BrowseResult} = qos_entry_audit_log:browse_content(QosEntryId, Opts),
     {ok, value, BrowseResult};
