@@ -41,6 +41,11 @@
 %%%       calculate statistics using their direct children. Statistics
 %%%       propagation via files tree is asynchronous. Thus, timestamps
 %%%       should be treated as indicative.
+%%%
+%%% NOTE: Restart hook is added when space is being disabled for the first time.
+%%%       It is never deleted. Checking hook once at cluster restart it lighter
+%%%       than handling add/delete hook races.
+%%%
 %%% @end
 %%%-------------------------------------------------------------------
 -module(dir_stats_collector_config).
@@ -98,6 +103,7 @@
 
 -define(STATUS_FOR_NEW_SPACES, op_worker:get_env(dir_stats_collecting_status_for_new_spaces, disabled)).
 -define(MAX_HISTORY_SIZE, 50).
+-define(RESTART_HOOK_ID(SpaceId), <<"DIR_STATS_COLLECTOR_HOOK_", SpaceId/binary>>).
 
 %%%===================================================================
 %%% API - getters
@@ -243,6 +249,13 @@ disable(SpaceId) ->
             {error, no_action_needed}
     end,
 
+    case restart_hooks:add_hook(
+        ?RESTART_HOOK_ID(SpaceId), ?MODULE, report_collectors_stopped, [SpaceId], forbid_override
+    ) of
+        ok -> ok;
+        {error, already_exists} -> ok
+    end,
+
     case update(SpaceId, Diff) of
         {ok, #document{value = #dir_stats_collector_config{
             collecting_status = collectors_stopping,
@@ -325,10 +338,11 @@ report_collectors_stopped(SpaceId) ->
             incarnation = Incarnation
         }}} ->
             dir_stats_collections_initialization_traverse:run(SpaceId, Incarnation);
+        % Log errors on debug as they can appear at node restart
         {error, {wrong_status, WrongStatus}} ->
-            ?warning("Reporting space ~p disabling finished when space has status ~p", [SpaceId, WrongStatus]);
+            ?debug("Reporting space ~p disabling finished when space has status ~p", [SpaceId, WrongStatus]);
         ?ERROR_NOT_FOUND ->
-            ?warning("Reporting space ~p disabling finished when space has no collector config document", [SpaceId])
+            ?debug("Reporting space ~p disabling finished when space has no collector config document", [SpaceId])
     end.
 
 

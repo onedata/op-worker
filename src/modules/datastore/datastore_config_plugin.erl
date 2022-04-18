@@ -91,6 +91,7 @@ get_models() -> [
     dir_size_stats,
     dir_update_time_stats,
     dir_stats_collector_config,
+    restart_hooks,
     dataset,
     bulk_download_task,
     archive,
