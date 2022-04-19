@@ -76,7 +76,7 @@ cancel(SpaceId, Incarnation) ->
 -spec do_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()}.
 do_master_job(#tree_traverse{
-    last_name = <<>>, % Call dir_stats_collector only for first batch
+    pagination_token = undefined, % Call dir_stats_collector only for first batch
     file_ctx = FileCtx
 } = Job, MasterJobExtendedArgs) ->
     ok = dir_stats_collector:initialize_collections(file_ctx:get_logical_guid_const(FileCtx)),

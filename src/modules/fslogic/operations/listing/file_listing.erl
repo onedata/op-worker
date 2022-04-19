@@ -99,12 +99,12 @@ list_whitelisted(FileUuid, ListOpts, WhiteList) ->
     list_internal(?FUNCTION_NAME, FileUuid, ListOpts, [WhiteList], disallow_negative).
 
 
--spec build_index(binary()) -> index().
+-spec build_index(file_meta:name()) -> index().
 build_index(Name) ->
     build_index(Name, undefined).
 
 
--spec build_index(binary(), binary()) -> index().
+-spec build_index(file_meta:name(), file_meta_forest:tree_id()) -> index().
 build_index(Name, TreeId) when is_binary(Name) andalso is_binary(TreeId) ->
     #list_index{file_name = Name, tree_id = TreeId};
 build_index(_, _) ->
@@ -207,8 +207,10 @@ convert_to_datastore_options(#{pagination_token := PaginationToken} = Opts, _Neg
 convert_to_datastore_options(Opts, NegOffsetPolicy) ->
     BaseOpts = index_to_datastore_opts(maps:get(index, Opts, undefined)),
     DatastoreToken = case maps:find(optimize_continuous_listing, Opts) of
-        {ok, true} -> #link_token{};
-        {ok, false} -> undefined;
+        {ok, true} -> 
+            #link_token{};
+        {ok, false} -> 
+            undefined;
         error ->
             %% TODO VFS-7208 uncomment after introducing API errors to fslogic
             %% throw(?ERROR_MISSING_REQUIRED_VALUE(optimize_continuous_listing)),

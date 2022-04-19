@@ -31,6 +31,11 @@
 -type file_meta_children() :: [file_meta:link()].
 -type sync_links_children() :: [storage_sync_links:link()].
 
+-type file_meta_listing_info() :: #{
+    is_last := boolean(),
+    token => file_listing:pagination_token()
+}.
+
 -define(BATCH_SIZE, op_worker:get_env(storage_import_deletion_batch_size, 1000)).
 
 %%%===================================================================
@@ -169,7 +174,7 @@ refill_sync_links_children(CurrentChildren, StorageFileCtx, Token) ->
 
 -spec refill_file_meta_children(file_meta_children(), file_ctx:ctx(), 
     file_listing:pagination_token() | undefined) ->
-    {file_meta_children(), map()} | {error, term()}.
+    {file_meta_children(), file_meta_listing_info()} | {error, term()}.
 refill_file_meta_children(CurrentChildren, FileCtx, Token) -> 
     case length(CurrentChildren) < ?BATCH_SIZE of
         true ->
@@ -189,11 +194,11 @@ refill_file_meta_children(CurrentChildren, FileCtx, Token) ->
                     Error
             end;
         false ->
-            {CurrentChildren, Token}
+            {CurrentChildren, #{token => Token, is_last => false}}
     end.
 
 -spec generate_deletion_jobs(master_job(), sync_links_children(), datastore_links_iter:token(),
-    file_meta_children(), map()) -> {[master_job()], [slave_job()]}.
+    file_meta_children(), file_meta_listing_info()) -> {[master_job()], [slave_job()]}.
 generate_deletion_jobs(Job, SLChildren, SLToken, FMChildren, FMListExtendedInfo) ->
     generate_deletion_jobs(Job, SLChildren, SLToken, FMChildren, FMListExtendedInfo, [], []).
 
@@ -224,7 +229,7 @@ generate_deletion_jobs(Job, SLChildren, SLToken, FMChildren, FMListExtendedInfo)
 %% @end
 %%-------------------------------------------------------------------
 -spec generate_deletion_jobs(master_job(), sync_links_children(), datastore_links_iter:token(),
-    file_meta_children(), map(), [master_job()], [slave_job()]) -> {[master_job()], [slave_job()]}.
+    file_meta_children(), file_meta_listing_info(), [master_job()], [slave_job()]) -> {[master_job()], [slave_job()]}.
 generate_deletion_jobs(_Job, _SLChildren, _SLFinished, [], #{is_last := true}, MasterJobs, SlaveJobs) ->
     % there are no more children in file_meta links, we can finish the job;
     {MasterJobs, SlaveJobs};
