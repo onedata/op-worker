@@ -377,6 +377,7 @@ handle_execution_ended(EngineId, ExecutionId, #execution_ended{
 
             call_handler(ExecutionId, Context, Handler, handle_workflow_execution_ended, []),
             case Reason of
+                % TODO VFS-7788 - fix race with workflow_iterator_snapshot:save (snapshot can be restored)
                 ?EXECUTION_ENDED -> workflow_iterator_snapshot:cleanup(ExecutionId);
                 ?EXECUTION_CANCELLED -> ok
             end,
