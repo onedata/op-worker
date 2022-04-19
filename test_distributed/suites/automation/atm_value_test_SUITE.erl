@@ -13,6 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/automation/atm_execution.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("onenv_test_utils.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -30,27 +31,61 @@
 %% tests
 -export([
     atm_array_value_validation_test/1,
+    atm_array_value_compress_expand_test/1,
+
     atm_dataset_value_validation_test/1,
+    atm_dataset_value_compress_expand_test/1,
+
     atm_file_value_validation_test/1,
+    atm_file_value_compress_expand_test/1,
+
     atm_integer_value_validation_test/1,
+    atm_integer_value_compress_expand_test/1,
+
     atm_object_value_validation_test/1,
+    atm_object_value_compress_expand_test/1,
+
+    % compress/expand is not supported by atm_onedatafs_credentials
+    % as they can not be kept in stores
     atm_onedatafs_credentials_value_validation_test/1,
+
     atm_range_value_validation_test/1,
+    atm_range_value_compress_expand_test/1,
+
     atm_string_value_validation_test/1,
-    atm_time_series_measurement_value_validation_test/1
+    atm_string_value_compress_expand_test/1,
+
+    atm_time_series_measurement_value_validation_test/1,
+    atm_time_series_measurement_value_compress_expand_test/1
 ]).
 
 groups() -> [
     {all_tests, [parallel], [
         atm_array_value_validation_test,
+        atm_array_value_compress_expand_test,
+
         atm_dataset_value_validation_test,
+        atm_dataset_value_compress_expand_test,
+
         atm_file_value_validation_test,
+        atm_file_value_compress_expand_test,
+
         atm_integer_value_validation_test,
+        atm_integer_value_compress_expand_test,
+
         atm_object_value_validation_test,
+        atm_object_value_compress_expand_test,
+
         atm_onedatafs_credentials_value_validation_test,
+
         atm_range_value_validation_test,
+        atm_range_value_compress_expand_test,
+
         atm_string_value_validation_test,
-        atm_time_series_measurement_value_validation_test
+        atm_string_value_compress_expand_test,
+
+        atm_time_series_measurement_value_validation_test,
+        atm_time_series_measurement_value_compress_expand_test
     ]}
 ].
 
@@ -64,10 +99,16 @@ all() -> [
     valid_values,
     invalid_values_with_exp_errors
 }).
+-record(atm_value_compress_expand_testcase, {
+    data_spec,
+    values
+}).
 
 
 -define(PROVIDER_SELECTOR, krakow).
 -define(rpc(Expr), ?rpc(?PROVIDER_SELECTOR, Expr)).
+
+-define(ok(__EXPR), element(2, {ok, _} = __EXPR)).
 
 
 %%%===================================================================
@@ -113,6 +154,42 @@ atm_array_value_validation_test(_Config) ->
                 )}}
             ])
         ])
+    }).
+
+
+atm_array_value_compress_expand_test(_Config) ->
+    atm_value_compress_expand_test_base(#atm_value_compress_expand_testcase{
+        data_spec = #atm_data_spec{
+            type = atm_array_type,
+            value_constraints = #{item_data_spec => #atm_data_spec{
+                type = atm_array_type,
+                value_constraints = #{item_data_spec => #atm_data_spec{type = atm_range_type}}
+            }}
+        },
+        values = [
+            [],
+            [[]],
+
+            % Array items should be compressed and expanded according to their type rules
+            {
+                [
+                    [],
+                    [
+                        #{<<"end">> => 100},
+                        #{<<"end">> => 100, <<"start">> => -100},
+                        #{<<"start">> => 15, <<"end">> => -10, <<"step">> => -1}
+                    ]
+                ],
+                [
+                    [],
+                    [
+                        #{<<"end">> => 100, <<"start">> => 0, <<"step">> => 1},
+                        #{<<"end">> => 100, <<"start">> => -100, <<"step">> => 1},
+                        #{<<"start">> => 15, <<"end">> => -10, <<"step">> => -1}
+                    ]
+                ]
+            }
+        ]
     }).
 
 
@@ -166,6 +243,48 @@ atm_dataset_value_validation_test(_Config) ->
 
                 % no access due to file not existing
                 {<<"NonExistentDatasetId">>, #{<<"hasAccess">> => true}}
+            ])
+        ])
+    }).
+
+
+atm_dataset_value_compress_expand_test(_Config) ->
+    SessionId = oct_background:get_user_session_id(user1, krakow),
+
+    [
+        #object{dataset = #dataset_object{id = DirDatasetId}, children = [
+            #object{dataset = #dataset_object{id = FileInDirDatasetId}}
+        ]},
+        #object{dataset = #dataset_object{id = FileDatasetId}},
+        #object{dataset = #dataset_object{id = SymlinkDatasetId}}
+    ] = onenv_file_test_utils:create_and_sync_file_tree(user1, space_krk, [
+        #dir_spec{mode = 8#700, dataset = #dataset_spec{}, children = [
+            #file_spec{dataset = #dataset_spec{}}
+        ]},
+        #file_spec{dataset = #dataset_spec{}},
+        #symlink_spec{symlink_value = <<"a/b">>, dataset = #dataset_spec{}}
+    ]),
+
+    atm_value_compress_expand_test_base(#atm_value_compress_expand_testcase{
+        data_spec = #atm_data_spec{type = atm_dataset_type},
+        values = lists:flatten([
+            {#{<<"datasetId">> => <<"NonExistentDatasetId">>}, ?ERROR_NOT_FOUND},
+
+            lists:map(fun(DatasetId) ->
+                DatasetInfo = ?rpc(mi_datasets:get_info(SessionId, DatasetId)),
+
+                % atm_file_type is but a reference to underlying file entity -
+                % as such expanding it should fetch all current file attributes
+                {
+                    #{<<"datasetId">> => DatasetId},
+                    dataset_utils:dataset_info_to_json(DatasetInfo)
+                }
+            end, [
+                DirDatasetId,
+                % user can view dataset even if he does not have access to file the dataset is attached
+                FileInDirDatasetId,
+                FileDatasetId,
+                SymlinkDatasetId
             ])
         ])
     }).
@@ -248,6 +367,59 @@ atm_file_value_validation_test(_Config) ->
     }).
 
 
+atm_file_value_compress_expand_test(_Config) ->
+    SpaceKrkId = oct_background:get_space_id(space_krk),
+    SessionId = oct_background:get_user_session_id(user1, krakow),
+
+    [
+        #object{guid = DirGuid, children = [#object{guid = FileInDirGuid}]},
+        #object{guid = FileGuid},
+        #object{guid = SymlinkGuid}
+    ] = onenv_file_test_utils:create_and_sync_file_tree(user1, space_krk, [
+        #dir_spec{mode = 8#700, children = [#file_spec{}]},
+        #file_spec{},
+        #symlink_spec{symlink_value = <<"a/b">>}
+    ]),
+
+    atm_value_compress_expand_test_base(#atm_value_compress_expand_testcase{
+        data_spec = #atm_data_spec{
+            type = atm_file_type,
+            value_constraints = ?RAND_ELEMENT([
+                #{},
+                #{file_type => 'ANY'},
+                #{file_type => 'REG'},
+                #{file_type => 'DIR'},
+                #{file_type => 'SYMLNK'}
+            ])
+        },
+        values = lists:flatten([
+            {
+                #{<<"file_id">> => ?ok(file_id:guid_to_objectid(file_id:pack_guid(
+                    <<"dummy_id">>, SpaceKrkId
+                )))},
+                ?ERROR_POSIX(?ENOENT)
+            },
+            {
+                #{<<"file_id">> => ?ok(file_id:guid_to_objectid(FileInDirGuid))},
+                ?ERROR_POSIX(?EACCES)
+            },
+
+            % Compress and expand should work even for measurements not conforming
+            % to value constraints as those are not checked for these operations
+            lists:map(fun(Guid) ->
+                {ok, FileAttrs} = ?rpc(lfm:stat(SessionId, ?FILE_REF(Guid))),
+
+                % atm_file_type is but a reference to underlying file entity -
+                % as such expanding it should fetch all current file attributes
+                {
+                    #{<<"file_id">> => ?ok(file_id:guid_to_objectid(Guid))},
+                    file_middleware_plugin:file_attrs_to_json(FileAttrs)
+                }
+            end, [DirGuid, FileGuid, SymlinkGuid])
+        ])
+    }).
+
+
 atm_integer_value_validation_test(_Config) ->
     atm_value_validation_test_base(#atm_value_validation_testcase{
         data_spec = #atm_data_spec{type = atm_integer_type},
@@ -256,6 +428,13 @@ atm_integer_value_validation_test(_Config) ->
             {Value, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_integer_type)} end,
             [5.5, [5], #{<<"key">> => 5}]
         )
+    }).
+
+
+atm_integer_value_compress_expand_test(_Config) ->
+    atm_value_compress_expand_test_base(#atm_value_compress_expand_testcase{
+        data_spec = #atm_data_spec{type = atm_integer_type},
+        values = [-10, 0, 10]
     }).
 
 
@@ -279,6 +458,18 @@ atm_object_value_validation_test(_Config) ->
             {Value, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_object_type)} end,
             [5.5, <<"NaN">>, [5]]
         )
+    }).
+
+
+atm_object_value_compress_expand_test(_Config) ->
+    atm_value_compress_expand_test_base(#atm_value_compress_expand_testcase{
+        data_spec = #atm_data_spec{type = atm_object_type},
+        values = [
+            #{<<"key1">> => <<"value">>},
+            #{<<"key2">> => 5},
+            #{<<"key3">> => [5]},
+            #{<<"key4">> => #{<<"key">> => <<"value">>}}
+        ]
     }).
 
 
@@ -346,6 +537,33 @@ atm_range_value_validation_test(_Config) ->
     }).
 
 
+atm_range_value_compress_expand_test(_Config) ->
+    atm_value_compress_expand_test_base(#atm_value_compress_expand_testcase{
+        data_spec = #atm_data_spec{type = atm_range_type},
+        values = [
+            #{<<"start">> => -5, <<"end">> => 10, <<"step">> => 2},
+            #{<<"start">> => 15, <<"end">> => -10, <<"step">> => -1},
+
+            % Optional fields should be filled with defaults when expanding
+            % if not previously specified
+            {
+                #{<<"end">> => 10},
+                #{<<"end">> => 10, <<"start">> => 0, <<"step">> => 1}
+            },
+            {
+                #{<<"start">> => 1, <<"end">> => 10},
+                #{<<"start">> => 1, <<"end">> => 10, <<"step">> => 1}
+            },
+
+            % Excess fields should be removed when compressing
+            {
+                #{<<"start">> => -5, <<"end">> => 10, <<"step">> => 2, <<"key">> => <<"value">>},
+                #{<<"start">> => -5, <<"end">> => 10, <<"step">> => 2}
+            }
+        ]
+    }).
+
+
 atm_string_value_validation_test(_Config) ->
     atm_value_validation_test_base(#atm_value_validation_testcase{
         data_spec = #atm_data_spec{type = atm_string_type},
@@ -357,15 +575,14 @@ atm_string_value_validation_test(_Config) ->
     }).
 
 
-atm_time_series_measurement_value_validation_test(_Config) ->
-    BuildTSMeasurement = fun(TSName) ->
-        #{
-            <<"tsName">> => TSName,
-            <<"timestamp">> => ?RAND_INT(10000),
-            <<"value">> => ?RAND_ELEMENT([1, -1]) * ?RAND_INT(10000)
-        }
-    end,
+atm_string_value_compress_expand_test(_Config) ->
+    atm_value_compress_expand_test_base(#atm_value_compress_expand_testcase{
+        data_spec = #atm_data_spec{type = atm_string_type},
+        values = [<<"">>, <<"NaN">>, <<"!@#$%^&*()">>]
+    }).
 
+
+atm_time_series_measurement_value_validation_test(_Config) ->
     MeasurementSpecs = [
         #atm_time_series_measurement_spec{
             name_matcher_type = exact,
@@ -378,9 +595,6 @@ atm_time_series_measurement_value_validation_test(_Config) ->
             unit = none
         }
     ],
-    MeasurementSpecsJson = jsonable_record:list_to_json(
-        MeasurementSpecs, atm_time_series_measurement_spec
-    ),
 
     atm_value_validation_test_base(#atm_value_validation_testcase{
         data_spec = #atm_data_spec{
@@ -388,8 +602,8 @@ atm_time_series_measurement_value_validation_test(_Config) ->
             value_constraints = #{specs => MeasurementSpecs}
         },
         valid_values = [
-            BuildTSMeasurement(<<"size">>),
-            BuildTSMeasurement(<<"awesome_tests">>)
+            build_rand_ts_measurement(<<"size">>),
+            build_rand_ts_measurement(<<"awesome_tests">>)
         ],
         invalid_values_with_exp_errors = lists:flatten([
             lists:map(fun(Value) ->
@@ -408,14 +622,43 @@ atm_time_series_measurement_value_validation_test(_Config) ->
 
             lists:map(fun(Value) ->
                 {Value, ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
-                    Value, atm_time_series_measurement_type, #{<<"specs">> => MeasurementSpecsJson}
+                    Value, atm_time_series_measurement_type, #{
+                        <<"specs">> => jsonable_record:list_to_json(
+                            MeasurementSpecs, atm_time_series_measurement_spec
+                        )
+                    }
                 )}
             end, [
-                BuildTSMeasurement(<<"ezis">>),
-                BuildTSMeasurement(<<"awe_ja">>),
-                BuildTSMeasurement(<<"awesome">>)
+                build_rand_ts_measurement(<<"ezis">>),
+                build_rand_ts_measurement(<<"awe_ja">>),
+                build_rand_ts_measurement(<<"awesome">>)
             ])
         ])
+    }).
+
+
+atm_time_series_measurement_value_compress_expand_test(_Config) ->
+    atm_value_compress_expand_test_base(#atm_value_compress_expand_testcase{
+        data_spec = #atm_data_spec{
+            type = atm_time_series_measurement_type,
+            value_constraints = #{specs => [#atm_time_series_measurement_spec{
+                name_matcher_type = has_prefix,
+                name_matcher = <<"awesome_">>,
+                unit = none
+            }]}
+        },
+        values = [
+            % Compress and expand should work even for measurements not conforming
+            % to value constraints as those are not checked for these operations
+            build_rand_ts_measurement(),
+            build_rand_ts_measurement(),
+            build_rand_ts_measurement(),
+            build_rand_ts_measurement(),
+            build_rand_ts_measurement(),
+
+            % Excess fields are not removed when compressing - TODO reviewers: maybe they should be?
+            (build_rand_ts_measurement())#{<<"key">> => <<"value">>}
+        ]
     }).
 
 
@@ -440,6 +683,28 @@ atm_value_validation_test_base(#atm_value_validation_testcase{
     end, InvalidValuesAndExpErrors).
 
 
+%% @private
+atm_value_compress_expand_test_base(#atm_value_compress_expand_testcase{
+    data_spec = AtmDataSpec,
+    values = Values
+}) ->
+    AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
+
+    lists:foreach(fun(Value) ->
+        {InitialItem, ExpectedExpandResult} = case Value of
+            {_, {error, _}} -> Value;
+            {Item, ExpandedItem} -> {Item, {ok, ExpandedItem}};
+            Item -> {Item, {ok, Item}}
+        end,
+
+        ?assertEqual(ExpectedExpandResult, ?rpc(atm_value:expand(
+            AtmWorkflowExecutionAuth,
+            atm_value:compress(InitialItem, AtmDataSpec),
+            AtmDataSpec
+        )))
+    end, Values).
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -451,6 +716,23 @@ create_workflow_execution_auth() ->
     atm_store_test_utils:create_workflow_execution_auth(
         ?PROVIDER_SELECTOR, user2, space_krk
     ).
+
+
+%% @private
+-spec build_rand_ts_measurement() -> json_utils:json_map().
+build_rand_ts_measurement() ->
+    build_rand_ts_measurement(?RAND_STR()).
+
+
+%% @private
+-spec build_rand_ts_measurement(atm_time_series_names:measurement_ts_name()) ->
+    json_utils:json_map().
+build_rand_ts_measurement(TSName) ->
+    #{
+        <<"tsName">> => TSName,
+        <<"timestamp">> => ?RAND_INT(10000),
+        <<"value">> => ?RAND_ELEMENT([1, -1]) * ?RAND_INT(10000)
+    }.
 
 
 %===================================================================
