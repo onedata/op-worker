@@ -312,34 +312,47 @@ trigger_job_scheduling_for_acquired_slot(EngineId) ->
 
 -spec schedule_next_job(id(), [execution_id()]) -> ok | ?WF_ERROR_NOTHING_TO_START.
 schedule_next_job(EngineId, DeferredExecutions) ->
-    case workflow_engine_state:poll_next_execution_id(EngineId) of
-        {ok, ExecutionId} ->
-            case lists:member(ExecutionId, DeferredExecutions) of
-                false ->
-                    case workflow_execution_state:prepare_next_job(ExecutionId) of
-                        {ok, ExecutionSpec} ->
-                            case schedule_on_pool(EngineId, ExecutionId, ExecutionSpec) of
-                                ok ->
-                                    ok;
-                                ?WF_ERROR_LIMIT_REACHED ->
-                                    schedule_next_job(EngineId, [ExecutionId | DeferredExecutions])
-                            end;
-                        ?PREPARE_LANE_EXECUTION(Handler, ExecutionContext, LaneId, PreparationMode) ->
-                            schedule_lane_prepare_on_pool(
-                                EngineId, ExecutionId, Handler, ExecutionContext, LaneId, PreparationMode);
-                        #execution_ended{} = ExecutionEndedRecord ->
-                            handle_execution_ended(EngineId, ExecutionId, ExecutionEndedRecord),
-                            schedule_next_job(EngineId, DeferredExecutions);
-                        ?DEFER_EXECUTION ->
-                            % no jobs can be currently scheduled for this execution but new jobs will appear in future
-                            schedule_next_job(EngineId, [ExecutionId | DeferredExecutions])
-                    end;
-                true ->
-                    % no jobs can be currently scheduled for any execution (all executions has been checked and
-                    % added to DeferredExecutions) but new jobs will appear in future
-                    ?WF_ERROR_NOTHING_TO_START
-            end;
-        ?ERROR_NOT_FOUND ->
+    try
+        case workflow_engine_state:poll_next_execution_id(EngineId) of
+            {ok, ExecutionId} ->
+                case lists:member(ExecutionId, DeferredExecutions) of
+                    false ->
+                        case workflow_execution_state:prepare_next_job(ExecutionId) of
+                            {ok, ExecutionSpec} ->
+                                case schedule_on_pool(EngineId, ExecutionId, ExecutionSpec) of
+                                    ok ->
+                                        ok;
+                                    ?WF_ERROR_LIMIT_REACHED ->
+                                        schedule_next_job(EngineId, [ExecutionId | DeferredExecutions])
+                                end;
+                            ?PREPARE_LANE_EXECUTION(Handler, ExecutionContext, LaneId, PreparationMode) ->
+                                schedule_lane_prepare_on_pool(
+                                    EngineId, ExecutionId, Handler, ExecutionContext, LaneId, PreparationMode);
+                            #execution_ended{} = ExecutionEndedRecord ->
+                                handle_execution_ended(EngineId, ExecutionId, ExecutionEndedRecord),
+                                schedule_next_job(EngineId, DeferredExecutions);
+                            ?DEFER_EXECUTION ->
+                                % no jobs can be currently scheduled for this execution but new jobs will appear in future
+                                schedule_next_job(EngineId, [ExecutionId | DeferredExecutions]);
+                            ?ERROR_NOT_FOUND ->
+                                % Race with execution deletion
+                                schedule_next_job(EngineId, [ExecutionId | DeferredExecutions])
+                        end;
+                    true ->
+                        % no jobs can be currently scheduled for any execution (all executions has been checked and
+                        % added to DeferredExecutions) but new jobs will appear in future
+                        ?WF_ERROR_NOTHING_TO_START
+                end;
+            ?ERROR_NOT_FOUND ->
+                ?WF_ERROR_NOTHING_TO_START
+        end
+    catch
+        Error:Reason:Stacktrace  ->
+            ?error_stacktrace(
+                "Unexpected error scheduling next job for engine ~s~nError was: ~w:~p",
+                [EngineId, Error, Reason],
+                Stacktrace
+            ),
             ?WF_ERROR_NOTHING_TO_START
     end.
 

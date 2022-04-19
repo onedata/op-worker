@@ -210,7 +210,7 @@ cleanup(ExecutionId) ->
     ok = datastore_model:delete(?CTX, ExecutionId).
 
 -spec prepare_next_job(workflow_engine:execution_id()) ->
-    {ok, workflow_engine:execution_spec()} | ?DEFER_EXECUTION | #execution_ended{} |
+    {ok, workflow_engine:execution_spec()} | ?DEFER_EXECUTION | ?ERROR_NOT_FOUND | #execution_ended{} |
     ?PREPARE_LANE_EXECUTION(workflow_handler:handler(), workflow_engine:execution_context(),
         workflow_engine:lane_id(), workflow_engine:preparation_mode()).
 prepare_next_job(ExecutionId) ->
@@ -230,7 +230,9 @@ prepare_next_job(ExecutionId) ->
             {ok, _} = update(ExecutionId, fun(State) ->
                 remove_pending_callback(State, ?CALLBACKS_ON_CANCEL_SELECTOR)
             end),
-            ?DEFER_EXECUTION
+            ?DEFER_EXECUTION;
+        ?ERROR_NOT_FOUND ->
+            ?ERROR_NOT_FOUND % Race with execution deletion
     end.
 
 -spec report_execution_status_update(
@@ -461,7 +463,7 @@ get_task_ids(BoxesMap) ->
     ) | ?WF_ERROR_LANE_EXECUTION_CANCELLED(
         workflow_handler:handler(), workflow_engine:lane_id(),
         workflow_engine:execution_context(), [workflow_engine:task_id()]
-    ).
+    ) | ?ERROR_NOT_FOUND.
 prepare_next_job_for_current_lane(ExecutionId) ->
     case update(ExecutionId, fun prepare_next_waiting_job/1) of
         {ok, #document{value = State}} ->
@@ -477,7 +479,7 @@ prepare_next_job_for_current_lane(ExecutionId) ->
     ?WF_ERROR_LANE_EXECUTION_CANCELLED(
         workflow_handler:handler(), workflow_engine:lane_id(),
         workflow_engine:execution_context(), [workflow_engine:task_id()]
-    ).
+    ) | ?ERROR_NOT_FOUND.
 prepare_next_job_using_iterator(ExecutionId, ItemIndex, CurrentIterationStep, LaneIndex, Context) ->
     NextIterationStep = case CurrentIterationStep of
         undefined ->
@@ -520,7 +522,7 @@ prepare_next_job_using_iterator(ExecutionId, ItemIndex, CurrentIterationStep, La
     ) | ?WF_ERROR_LANE_EXECUTION_CANCELLED(
         workflow_handler:handler(), workflow_engine:lane_id(),
         workflow_engine:execution_context(), [workflow_engine:task_id()]
-    ).
+    ) | ?ERROR_NOT_FOUND.
 handle_state_update_after_job_preparation(_ExecutionId, #workflow_execution_state{
     update_report = #job_prepared_report{
         job_identifier = JobIdentifier,
