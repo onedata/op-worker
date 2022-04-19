@@ -651,18 +651,19 @@ read_file(Node, FilePath) ->
     opw_test_rpc:call(Node, file, read_file, [FilePath]).
 
 
-check_transfer_stats(Provider, QosEntryId, Type, ExpectedSeries, ExpectedValue) ->
-    {ok, Stats} = opw_test_rpc:call(Provider, qos_transfer_stats, list_windows, [QosEntryId, Type]),
-    lists:foreach(fun(Series) ->
-        lists:foreach(fun(Metric) ->
-            ?assert(maps:is_key({Series, Metric}, Stats)),
-            Value = maps:get({Series, Metric}, Stats),
-            case ExpectedValue of
+check_transfer_stats(Provider, QosEntryId, Type, ExpTimeSeriesNames, ExpectedFirstWindow) ->
+    {ok, Layout} = opw_test_rpc:call(Provider, qos_transfer_stats, get_layout, [QosEntryId, Type]),
+    {ok, Stats} = opw_test_rpc:call(Provider, qos_transfer_stats, get_slice, [QosEntryId, Type, Layout, #{}]),
+    lists:foreach(fun(TimeSeriesName) ->
+        lists:foreach(fun(MetricName) ->
+            ?assert(kv_utils:is_key([TimeSeriesName, MetricName], Stats)),
+            Windows = kv_utils:get([TimeSeriesName, MetricName], Stats),
+            case ExpectedFirstWindow of
                 empty ->
-                    ?assertEqual([], Value);
+                    ?assertEqual([], Windows);
                 _ ->
-                    [{_Timestamp, Value1}] = Value,
-                    ?assertEqual(ExpectedValue, Value1)
+                    [{_Timestamp, Value}] = Windows,
+                    ?assertEqual(ExpectedFirstWindow, Value)
             end
         end, [<<"minute">>, <<"hour">>, <<"day">>, <<"month">>])
-    end, ExpectedSeries).
+    end, ExpTimeSeriesNames).

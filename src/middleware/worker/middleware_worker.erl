@@ -34,6 +34,7 @@
     #update_archive{} |
     #purge_archive{} |
     #recall_archive{} |
+    #cancel_archive_recall{} | 
     #get_recall_details{} |
     #get_recall_progress{}.
 

@@ -143,7 +143,7 @@ access(Handle, FileId, Mask) ->
 %% Calls {@link helpers_nif:mknod/5} function.
 %% @end
 %%--------------------------------------------------------------------
--spec mknod(helper_handle(), file_id(), Mode :: non_neg_integer(), Type :: atom()) ->
+-spec mknod(helper_handle(), file_id(), Mode :: non_neg_integer(), Type :: file_type_flag()) ->
     ok | {error, Reason :: term()}.
 mknod(Handle, FileId, Mode, Type) ->
     ?MODULE:apply_helper_nif(Handle, mknod, [FileId, Mode, [file_type_for_nif(Type)], 0]).

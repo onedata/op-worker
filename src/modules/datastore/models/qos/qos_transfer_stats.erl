@@ -22,6 +22,7 @@
 -module(qos_transfer_stats).
 -author("Michal Stanisz").
 
+-include("modules/datastore/qos.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include_lib("ctool/include/time_series/common.hrl").
@@ -29,8 +30,8 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% functions operating on document using datastore model API
--export([ensure_exists/1, delete/1, update/3]).
--export([list_time_series_ids/2, list_windows/2, list_windows/4]).
+-export([ensure_exists/1, delete/1, report/3]).
+-export([get_layout/2, get_slice/4]).
 
 %% datastore model callbacks
 -export([get_ctx/0]).
@@ -43,7 +44,7 @@
 }).
 
 -define(COLLECTION_ID(QosEntryId, Type), <<QosEntryId/binary, Type/binary>>).
--define(MAX_UPDATE_RETRIES, 3).
+-define(MAX_CONSUME_MEASUREMENTS_RETRIES, 3).
 
 -define(NOW(), global_clock:timestamp_seconds()).
 
@@ -63,91 +64,85 @@ delete(QosEntryId) ->
     ok = datastore_time_series_collection:delete(?CTX, ?COLLECTION_ID(QosEntryId, ?FILES_STATS)).
 
 
--spec list_time_series_ids(qos_entry:id(), type()) ->
-    {ok, [time_series_collection:time_series_id()]} | {error, term()}.
-list_time_series_ids(QosEntryId, Type) ->
-    datastore_time_series_collection:list_time_series_ids(?CTX, ?COLLECTION_ID(QosEntryId, Type)).
+-spec get_layout(qos_entry:id(), type()) ->
+    {ok, time_series_collection:layout()} | {error, term()}.
+get_layout(QosEntryId, Type) ->
+    datastore_time_series_collection:get_layout(?CTX, ?COLLECTION_ID(QosEntryId, Type)).
 
 
--spec list_windows(qos_entry:id(), type()) ->
-    {ok, time_series_collection:windows_map()} | {error, term()}.
-list_windows(QosEntryId, Type) ->
-    datastore_time_series_collection:list_windows(?CTX, ?COLLECTION_ID(QosEntryId, Type), #{}).
+-spec get_slice(qos_entry:id(), type(), time_series_collection:layout(), ts_windows:list_options()) ->
+    {ok, time_series_collection:slice()} | {error, term()}.
+get_slice(QosEntryId, Type, SliceLayout, ListWindowsOptions) ->
+    datastore_time_series_collection:get_slice(?CTX, ?COLLECTION_ID(QosEntryId, Type), SliceLayout, ListWindowsOptions).
 
 
--spec list_windows(qos_entry:id(), type(), time_series_collection:request_range(), ts_windows:list_options()) ->
-    {ok, ts_windows:descending_windows_list() | time_series_collection:windows_map()} | {error, term()}.
-list_windows(QosEntryId, Type, RequestRange, Options) ->
-    datastore_time_series_collection:list_windows(?CTX, ?COLLECTION_ID(QosEntryId, Type), RequestRange, Options).
-
-
--spec update(qos_entry:id(), type(), #{od_storage:id() => non_neg_integer()}) -> 
+-spec report(qos_entry:id(), type(), #{od_storage:id() => non_neg_integer()}) ->
     ok | {error, term()}.
-update(QosEntryId, Type, ValuesPerStorage) ->
+report(QosEntryId, Type, ValuesPerStorage) ->
     TotalValue = maps:fold(fun(_Key, Value, Acc) ->
         Acc + Value
     end, 0, ValuesPerStorage),
-    update_internal(?COLLECTION_ID(QosEntryId, Type), ValuesPerStorage#{?TOTAL_TIME_SERIES_ID => TotalValue},
-        ?MAX_UPDATE_RETRIES).
+    CompleteValuesPerStorage = ValuesPerStorage#{?QOS_TOTAL_TIME_SERIES_NAME => TotalValue},
+    Timestamp = ?NOW(),
+    ConsumeSpec = maps:map(fun(_TSName, Value) -> #{?ALL_METRICS => [{Timestamp, Value}]} end, CompleteValuesPerStorage),
+    consume_measurements(?COLLECTION_ID(QosEntryId, Type), ConsumeSpec, ?MAX_CONSUME_MEASUREMENTS_RETRIES).
 
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
--spec ensure_exists_internal(time_series_collection:collection_id()) -> ok | {error, term()}.
+-spec ensure_exists_internal(time_series_collection:id()) -> ok | {error, term()}.
 ensure_exists_internal(CollectionId) ->
-    Config = #{?TOTAL_TIME_SERIES_ID => supported_metrics()},
+    Config = config_with_time_series([?QOS_TOTAL_TIME_SERIES_NAME]),
     case datastore_time_series_collection:create(?CTX, CollectionId, Config) of
         ok -> ok;
-        {error, collection_already_exists} -> ok;
+        {error, already_exists} -> ok;
         Error -> Error
     end.
 
 
--spec update_internal(time_series_collection:collection_id(), 
-    #{od_storage:id() | binary() => non_neg_integer()}, non_neg_integer()) -> ok.
-update_internal(CollectionId, _ValuesPerStorage, 0) ->
+-spec consume_measurements(time_series_collection:id(), time_series_collection:consume_spec(), non_neg_integer()) ->
+    ok.
+consume_measurements(CollectionId, _ConsumeSpec, 0) ->
     ?warning(
         "Could not update QoS transfer statistics in collection ~p due to 
         exceeded number of retries", [CollectionId]
     );
-update_internal(CollectionId, ValuesPerStorage, Retries) ->
-    case datastore_time_series_collection:check_and_update(?CTX, CollectionId, ?NOW(), maps:to_list(ValuesPerStorage)) of
-        ok -> 
+consume_measurements(CollectionId, ConsumeSpec, Retries) ->
+    case datastore_time_series_collection:consume_measurements(?CTX, CollectionId, ConsumeSpec) of
+        ok ->
             ok;
         ?ERROR_NOT_FOUND ->
             % There is a chance that transfer started for legacy QoS entry for which time 
             % series collection was not initialized. Create it and try again.
             ok = ensure_exists_internal(CollectionId),
-            update_internal(CollectionId, ValuesPerStorage, Retries - 1);
-        {error, time_series_not_found} ->
-            {ok, ExistingTimeSeries} = datastore_time_series_collection:list_time_series_ids(
-                ?CTX, CollectionId),
-            MissingTimeSeries = lists_utils:subtract(maps:keys(ValuesPerStorage), ExistingTimeSeries),
-            ok = create_missing_time_series(CollectionId, MissingTimeSeries),
-            update_internal(CollectionId, ValuesPerStorage, Retries - 1)
+            consume_measurements(CollectionId, ConsumeSpec, Retries - 1);
+        ?ERROR_TSC_MISSING_LAYOUT(MissingLayout) ->
+            MissingConfig = config_with_time_series(maps:keys(MissingLayout)),
+            ok = datastore_time_series_collection:incorporate_config(?CTX, CollectionId, MissingConfig),
+            consume_measurements(CollectionId, ConsumeSpec, Retries - 1)
     end.
 
 
--spec supported_metrics() -> #{ts_metric:id() => ts_metric:config()}.
+-spec supported_metrics() -> time_series:metric_composition().
 supported_metrics() -> #{
-    ?MINUTE_METRIC_ID => #metric_config{
+    ?QOS_MINUTE_METRIC_NAME => #metric_config{
         resolution = ?MINUTE_RESOLUTION,
         retention = 120,
         aggregator = sum
     },
-    ?HOUR_METRIC_ID => #metric_config{
+    ?QOS_HOUR_METRIC_NAME => #metric_config{
         resolution = ?HOUR_RESOLUTION,
         retention = 48,
         aggregator = sum
     },
-    ?DAY_METRIC_ID => #metric_config{
+    ?QOS_DAY_METRIC_NAME => #metric_config{
         resolution = ?DAY_RESOLUTION,
         retention = 60,
         aggregator = sum
     },
-    ?MONTH_METRIC_ID => #metric_config{
+    ?QOS_MONTH_METRIC_NAME => #metric_config{
         resolution = ?MONTH_RESOLUTION,
         retention = 12,
         aggregator = sum
@@ -155,21 +150,12 @@ supported_metrics() -> #{
 }.
 
 
--spec create_missing_time_series(time_series_collection:collection_id(), [od_provider:id()]) -> 
-    ok | {error, term()}.
-create_missing_time_series(_CollectionId, []) -> 
-    ok;
-create_missing_time_series(CollectionId, MissingTimeSeries) -> 
-    Configs = lists:foldl(fun(TimeSeriesId, Acc) ->
-        Acc#{TimeSeriesId => supported_metrics()}
-    end, #{}, MissingTimeSeries),
-    case datastore_time_series_collection:add_metrics(?CTX, CollectionId, Configs, #{}) of
-        ok -> ok;
-        {error, time_series_already_exists} -> ok;
-        {error, metric_already_exists} -> ok;
-        Error -> Error
-    end.
-
+%% @private
+-spec config_with_time_series([time_series_collection:time_series_name()]) -> time_series_collection:config().
+config_with_time_series(TimeSeriesNames) ->
+    maps_utils:generate_from_list(fun(TimeSeriesName) ->
+        {TimeSeriesName, supported_metrics()}
+    end, TimeSeriesNames).
 
 %%%===================================================================
 %%% datastore_model callbacks

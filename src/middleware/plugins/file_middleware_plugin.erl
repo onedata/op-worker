@@ -202,6 +202,7 @@ resolve_create_operation_handler(xattrs, private) -> ?MODULE;                % R
 resolve_create_operation_handler(json_metadata, private) -> ?MODULE;         % REST/gs
 resolve_create_operation_handler(rdf_metadata, private) -> ?MODULE;          % REST/gs
 resolve_create_operation_handler(register_file, private) -> ?MODULE;
+resolve_create_operation_handler(cancel_archive_recall, private) -> ?MODULE;
 resolve_create_operation_handler(_, _) -> throw(?ERROR_NOT_SUPPORTED).
 
 
@@ -312,7 +313,10 @@ data_spec_create(#gri{aspect = register_file}, _) -> #{
         <<"json">> => {json, any},
         <<"rdf">> => {binary, any}
     }
-}.
+};
+
+data_spec_create(#gri{aspect = cancel_archive_recall}, _) -> 
+    undefined.
 
 
 %% @private
@@ -325,7 +329,8 @@ authorize_create(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) wh
     As =:= attrs;
     As =:= xattrs;
     As =:= json_metadata;
-    As =:= rdf_metadata
+    As =:= rdf_metadata;
+    As =:= cancel_archive_recall
 ->
     middleware_utils:has_access_to_file_space(Auth, Guid);
 
@@ -349,7 +354,8 @@ validate_create(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= attrs;
     As =:= xattrs;
     As =:= json_metadata;
-    As =:= rdf_metadata
+    As =:= rdf_metadata;
+    As =:= cancel_archive_recall
 ->
     middleware_utils:assert_file_managed_locally(Guid);
 
@@ -455,7 +461,12 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = register_file}}) ->
             throw(Error);
         throw:PosixErrno ->
             throw(?ERROR_POSIX(PosixErrno))
-    end.
+    end;
+
+create(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = cancel_archive_recall}}) ->
+    SessionId = Auth#auth.session_id,
+    mi_archives:cancel_recall(SessionId, FileGuid).
+
 
 %%%===================================================================
 %%% GET SECTION

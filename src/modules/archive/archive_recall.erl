@@ -25,9 +25,9 @@
 
 %% API
 -export([create_docs/2, delete_synced_docs/1, delete_local_docs/1]).
--export([report_started/1, report_finished/2, 
+-export([report_started/1, report_finished/2,
     report_bytes_copied/2, report_file_finished/1, report_file_failed/3]).
--export([get_details/1, get_stats/1, get_progress/1]).
+-export([get_details/1, get_stats/3, get_progress/1]).
 -export([get_effective_recall/1]).
 
 -type id() :: file_meta:uuid().
@@ -93,7 +93,15 @@ report_file_finished(Id) ->
 
 -spec report_file_failed(id(), file_id:file_guid(), {error, term()}) -> ok | {error, term()}.
 report_file_failed(Id, FileGuid, Error) ->
-    archive_recall_progress:report_file_failed(Id, FileGuid, Error).
+    {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
+    ErrorJson = #{
+        <<"fileId">> => ObjectId,
+        <<"reason">> => errors:to_json(Error)
+    },
+    % save error in synchronized model (so remote providers have knowledge about failure).
+    archive_recall_details:report_error(Id, ErrorJson),
+    % save error in local infinite log.
+    archive_recall_progress:report_error(Id, ErrorJson).
 
 
 -spec get_details(id()) -> {ok, record()} | {error, term()}.
@@ -101,9 +109,10 @@ get_details(Id) ->
     archive_recall_details:get(Id).
 
 
--spec get_stats(id()) -> time_series_collection:windows_map() | {error, term()}.
-get_stats(Id) ->
-    archive_recall_progress:get_stats(Id).
+-spec get_stats(id(), time_series_collection:layout(), ts_windows:list_options()) ->
+    {ok, time_series_collection:slice()} | {error, term()}.
+get_stats(Id, SliceLayout, ListWindowsOptions) ->
+    archive_recall_progress:get_stats(Id, SliceLayout, ListWindowsOptions).
 
 
 -spec get_progress(id()) -> {ok, recall_progress_map()}.

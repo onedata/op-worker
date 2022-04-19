@@ -4,6 +4,52 @@ Release notes for project op-worker
 CHANGELOG
 ---------
 
+### 21.02.0-alpha25
+
+-   **VFS-8951** Extended directory children listing REST API -
+    additional parameter 'attribute' can now be provided to specify one
+    or more attributes to be included for each entry. Additionally, when
+    there is more entries to be listed, the operation returns a
+    'nextPageToken' that can be used to list the subsequent page of
+    results.
+-   **VFS-8887** Web GUI: fixed showing file information modal in
+    shares.
+-   **VFS-8845** Added QoS transfer statistics collection with their
+    preview in GUI. Each QoS requirement is associated with several time
+    series concerning transferred bytes and files in the context of
+    different storages.
+-   **VFS-8828** Fixed conda packages for the stable branch 20.02.\*,
+    starting with version 20.02.15 and Python 3.9.
+-   **VFS-8823** Fixed improper destruction of OnedataFS instances,
+    resulting in possible deadlocks during deletion of the OnedataFS
+    object.
+-   **VFS-8817** Added multisupport to NFS helper allowing handling of
+    multiple NFS volumes in parallel via a single NFS helper for data
+    import.
+-   **VFS-8814** Disable NFS direct io in oneclient on conda.
+-   **VFS-8788** Added the possibility to handle multiple mountpoints by
+    a single POSIX helper in read only mode.
+-   **VFS-8783** Web GUI: fixed inability to list files of nested
+    archive.
+-   **VFS-8739** Web GUI: fixed double listing of dataset items when
+    their names have the same prefixes.
+-   **VFS-8663** Improved symbolic links resolution behaviour - now, the
+    option to resolve symbolic links (e.g. during an archive creation or
+    directory download) only applies to symbolic links \*\*pointing to
+    paths outside of the dataset/directory\*\*.
+-   **VFS-8616** Added monitoring of statuses of Kubernetes pods that
+    are deployed during workflow execution using the OpenFaaS platform.
+    Monitoring is performed by the k8s-events-monitor component and
+    reported to the scheduling Oneprovider. Added preview of pod status
+    changes in GUI for each workflow task.
+-   **VFS-8523** Information about files count and size in directory
+    added.
+-   **VFS-8483** Added direct NFS v3 storage helper.
+-   **VFS-7617** Implemented archive recall functionality, used to copy
+    the archive contents to a specified destination within the space
+    scope.
+
+
 ### 21.02.0-alpha24
 
 -   **VFS-7724** Web GUI: redesigned datasets and archives browser to
@@ -247,6 +293,13 @@ CHANGELOG
 
 ### 20.02.16
 
+-   **VFS-9119** Introduced a temporary fix for uid/gid encoding of
+    values outside of signed int32 range - the values are trimmed to the
+    value of 2,147,483,646 for displaying in Oneclient. Full support for
+    unsigned int32 range (in alignment with POSIX uid\_t and gid\_t
+    types) will be introduced in the next major release.
+-   **VFS-9118** Import ignores other file types than regular and
+    directories (i.e., fifo, symlink).
 -   **VFS-8939** Fixed a bug related to path caveats in access tokens,
     where a Oneclient user would see the names of newly created
     files/directories outside of the allowed paths (but was not able to

@@ -29,14 +29,14 @@
 %% tests
 -export([
     create_test/1,
-    update_content_test/1,
+    manage_content_test/1,
     not_supported_iteration_test/1
 ]).
 
 groups() -> [
     {all_tests, [parallel], [
         create_test,
-        update_content_test,
+        manage_content_test,
         not_supported_iteration_test
     ]}
 ].
@@ -46,50 +46,67 @@ all() -> [
 ].
 
 
+-define(WINDOW(__METRIC_CONFIG, __TIMESTAMP, __VALUE), #{
+    <<"value">> => __VALUE,
+    <<"timestamp">> => infer_window_timestamp(__TIMESTAMP, __METRIC_CONFIG)
+}).
+
 -define(MAX_FILE_SIZE_TS_NAME, <<"max_file_size">>).
 -define(MAX_FILE_SIZE_METRIC_NAME, ?MAX_FILE_SIZE_TS_NAME).
+-define(MAX_FILE_SIZE_METRIC_CONFIG, #metric_config{
+    resolution = ?MONTH_RESOLUTION,
+    retention = 1,
+    aggregator = max
+}).
+-define(MAX_FILE_SIZE_METRIC_WINDOW(__TIMESTAMP, __VALUE), ?WINDOW(
+    ?MAX_FILE_SIZE_METRIC_CONFIG, __TIMESTAMP, __VALUE
+)).
 
 -define(MAX_FILE_SIZE_TS_SCHEMA, #atm_time_series_schema{
     name_generator_type = exact,
     name_generator = ?MAX_FILE_SIZE_TS_NAME,
     unit = bytes,
-    metrics = #{
-        ?MAX_FILE_SIZE_TS_NAME => #metric_config{
-            label = ?MAX_FILE_SIZE_TS_NAME,
-            resolution = ?MONTH_RESOLUTION,
-            retention = 1,
-            aggregator = max
-        }
-    }
+    metrics = #{?MAX_FILE_SIZE_TS_NAME => ?MAX_FILE_SIZE_METRIC_CONFIG}
 }).
 
 -define(MINUTE_METRIC_NAME, <<"minute">>).
+-define(MINUTE_METRIC_CONFIG, #metric_config{
+    resolution = ?MINUTE_RESOLUTION,
+    retention = 120,
+    aggregator = sum
+}).
+-define(MINUTE_METRIC_WINDOW(__TIMESTAMP, __VALUE), ?WINDOW(
+    ?MINUTE_METRIC_CONFIG, __TIMESTAMP, __VALUE
+)).
+
 -define(HOUR_METRIC_NAME, <<"hour">>).
+-define(HOUR_METRIC_CONFIG, #metric_config{
+    resolution = ?HOUR_RESOLUTION,
+    retention = 48,
+    aggregator = sum
+}).
+-define(HOUR_METRIC_WINDOW(__TIMESTAMP, __VALUE), ?WINDOW(
+    ?HOUR_METRIC_CONFIG, __TIMESTAMP, __VALUE
+)).
+
 -define(DAY_METRIC_NAME, <<"day">>).
+-define(DAY_METRIC_CONFIG, #metric_config{
+    resolution = ?DAY_RESOLUTION,
+    retention = 60,
+    aggregator = sum
+}).
+-define(DAY_METRIC_WINDOW(__TIMESTAMP, __VALUE), ?WINDOW(
+    ?DAY_METRIC_CONFIG, __TIMESTAMP, __VALUE
+)).
 
 -define(COUNT_TS_SCHEMA, #atm_time_series_schema{
     name_generator_type = add_prefix,
     name_generator = <<"count_">>,
     unit = counts_per_sec,
     metrics = #{
-        ?MINUTE_METRIC_NAME => #metric_config{
-            label = ?MINUTE_METRIC_NAME,
-            resolution = ?MINUTE_RESOLUTION,
-            retention = 120,
-            aggregator = sum
-        },
-        ?HOUR_METRIC_NAME => #metric_config{
-            label = ?HOUR_METRIC_NAME,
-            resolution = ?HOUR_RESOLUTION,
-            retention = 48,
-            aggregator = sum
-        },
-        ?DAY_METRIC_NAME => #metric_config{
-            label = ?DAY_METRIC_NAME,
-            resolution = ?DAY_RESOLUTION,
-            retention = 60,
-            aggregator = sum
-        }
+        ?MINUTE_METRIC_NAME => ?MINUTE_METRIC_CONFIG,
+        ?HOUR_METRIC_NAME => ?HOUR_METRIC_CONFIG,
+        ?DAY_METRIC_NAME => ?DAY_METRIC_CONFIG
     }
 }).
 
@@ -162,11 +179,11 @@ create_test(_Config) ->
     ?assertEqual(ExpLayout, get_layout(AtmWorkflowExecutionAuth, AtmStoreId)),
     ?assertEqual(
         #{?MAX_FILE_SIZE_TS_NAME => #{?MAX_FILE_SIZE_METRIC_NAME => []}},
-        get_windows(AtmWorkflowExecutionAuth, AtmStoreId, ExpLayout)
+        get_slice(AtmWorkflowExecutionAuth, AtmStoreId, ExpLayout)
     ).
 
 
-update_content_test(_Config) ->
+manage_content_test(_Config) ->
     AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
     AtmStoreSchema = build_store_schema(?ATM_STORE_CONFIG),
 
@@ -177,27 +194,178 @@ update_content_test(_Config) ->
     ContentUpdateOpts = #atm_time_series_store_content_update_options{
         dispatch_rules = ?DISPATCH_RULES
     },
+    SortedCountTSMetricNames = lists:sort([?MINUTE_METRIC_NAME, ?HOUR_METRIC_NAME, ?DAY_METRIC_NAME]),
 
-    NewItem = [
-        #{<<"tsName">> => <<"mp3">>, <<"timestamp">> => ?NOW() + 10, <<"value">> => 10}
-    ],
-    ?assertEqual(ok, ?rpc(atm_store_api:update_content(
-        AtmWorkflowExecutionAuth, NewItem, ContentUpdateOpts, AtmStoreId
-    ))),
-    ExpLayout1 = ExpLayout0#{
-        <<"count_mp3">> => [?MINUTE_METRIC_NAME, ?HOUR_METRIC_NAME, ?DAY_METRIC_NAME]
-    },
-
-    ?assertMatch(
-        #{
-            ?MAX_FILE_SIZE_TS_NAME := #{?MAX_FILE_SIZE_METRIC_NAME := []},
-            <<"count_mp3">> := #{
-                ?MINUTE_METRIC_NAME := [#{<<"value">> := 10}],
-                ?HOUR_METRIC_NAME := [#{<<"value">> := 10}],
-                ?DAY_METRIC_NAME := [#{<<"value">> := 10}]
-            }
+    % Assert that only valid measurements are accepted
+    lists:foreach(fun({InvalidData, ExpError}) ->
+        ?assertThrow(ExpError, ?erpc(atm_store_api:update_content(
+            AtmWorkflowExecutionAuth, InvalidData, ContentUpdateOpts, AtmStoreId
+        )))
+    end, [
+        {5, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(5, atm_time_series_measurement_type)},
+        {<<"BIN">>, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(<<"BIN">>, atm_time_series_measurement_type)},
+        {
+            [#{<<"ts">> => <<"name">>}],
+            ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+                [#{<<"ts">> => <<"name">>}],
+                atm_array_type,
+                #{<<"$[0]">> => errors:to_json(?ERROR_ATM_DATA_TYPE_UNVERIFIED(
+                    #{<<"ts">> => <<"name">>}, atm_time_series_measurement_type
+                ))}
+            )
         },
-        get_windows(AtmWorkflowExecutionAuth, AtmStoreId, ExpLayout1)
+        {
+            [#{<<"tsName">> => <<"mp3">>, <<"timestamp">> => 1, <<"value">> => 10}, 10],
+            ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+                [#{<<"tsName">> => <<"mp3">>, <<"timestamp">> => 1, <<"value">> => 10}, 10],
+                atm_array_type,
+                #{<<"$[1]">> => errors:to_json(
+                    ?ERROR_ATM_DATA_TYPE_UNVERIFIED(10, atm_time_series_measurement_type)
+                )}
+            )
+        }
+    ]),
+
+    % Timestamps of other measurements will be calculated based on Timestamp1 so to
+    % ensure correctness during execution it is set to the 3rd hour from beginning of day window
+    Timestamp1 = infer_window_timestamp(?NOW(), ?DAY_METRIC_CONFIG) + 3 * ?HOUR_RESOLUTION + 1,
+    Measurements1 = [
+        #{<<"tsName">> => <<"mp3">>, <<"timestamp">> => Timestamp1, <<"value">> => 10}
+    ],
+    ExpLayout1 = ExpLayout0#{<<"count_mp3">> => SortedCountTSMetricNames},
+    ExpWindows1 = #{
+        ?MAX_FILE_SIZE_TS_NAME => #{?MAX_FILE_SIZE_METRIC_NAME => []},
+        <<"count_mp3">> => #{
+            ?MINUTE_METRIC_NAME => [?MINUTE_METRIC_WINDOW(Timestamp1, 10)],
+            ?HOUR_METRIC_NAME => [?HOUR_METRIC_WINDOW(Timestamp1, 10)],
+            ?DAY_METRIC_NAME => [?DAY_METRIC_WINDOW(Timestamp1, 10)]
+        }
+    },
+    ?assertEqual(ok, ?rpc(atm_store_api:update_content(
+        AtmWorkflowExecutionAuth, Measurements1, ContentUpdateOpts, AtmStoreId
+    ))),
+    ?assertEqual(ExpLayout1, get_layout(AtmWorkflowExecutionAuth, AtmStoreId)),
+    ?assertEqual(ExpWindows1, get_slice(AtmWorkflowExecutionAuth, AtmStoreId, ExpLayout1)),
+
+    Timestamp2 = Timestamp1 - 3601,
+    Timestamp3 = Timestamp1 + 120,
+    Measurements2 = [
+        #{<<"tsName">> => <<"mp3">>, <<"timestamp">> => Timestamp3, <<"value">> => 100},
+        #{<<"tsName">> => <<"count_ct_supplies">>, <<"timestamp">> => Timestamp1, <<"value">> => 4},
+        #{<<"tsName">> => <<"count_over_unicorns">>, <<"timestamp">> => Timestamp1, <<"value">> => 0},
+        #{<<"tsName">> => <<"mp3">>, <<"timestamp">> => Timestamp2, <<"value">> => 111},
+        % measurement not matched with any dispatch rule should be ignored
+        #{<<"tsName">> => <<"mp4">>, <<"timestamp">> => Timestamp1, <<"value">> => 1000000000},
+        % measurements with the same tsName and timestamps should be handled properly
+        #{<<"tsName">> => <<"size_mp3">>, <<"timestamp">> => Timestamp1, <<"value">> => 1024},
+        #{<<"tsName">> => <<"count_cn_resources">>, <<"timestamp">> => Timestamp1, <<"value">> => 1},
+        #{<<"tsName">> => <<"count_cn_resources">>, <<"timestamp">> => Timestamp1, <<"value">> => 2},
+        #{<<"tsName">> => <<"size_mp3">>, <<"timestamp">> => Timestamp1, <<"value">> => 2048}
+    ],
+    ExpLayout2 = ExpLayout1#{
+        <<"count_cn_resources">> => SortedCountTSMetricNames,
+        <<"count_count_ct_supplies">> => SortedCountTSMetricNames,
+        <<"count_unicorns">> => SortedCountTSMetricNames
+    },
+    ExpWindows2 = #{
+        ?MAX_FILE_SIZE_TS_NAME => #{
+            ?MAX_FILE_SIZE_METRIC_NAME => [?MAX_FILE_SIZE_METRIC_WINDOW(Timestamp1, 2048)]
+        },
+        <<"count_cn_resources">> => #{
+            ?MINUTE_METRIC_NAME => [?MINUTE_METRIC_WINDOW(Timestamp1, 3)],
+            ?HOUR_METRIC_NAME => [?HOUR_METRIC_WINDOW(Timestamp1, 3)],
+            ?DAY_METRIC_NAME => [?DAY_METRIC_WINDOW(Timestamp1, 3)]
+        },
+        <<"count_count_ct_supplies">> => #{
+            ?MINUTE_METRIC_NAME => [?MINUTE_METRIC_WINDOW(Timestamp1, 4)],
+            ?HOUR_METRIC_NAME => [?HOUR_METRIC_WINDOW(Timestamp1, 4)],
+            ?DAY_METRIC_NAME => [?DAY_METRIC_WINDOW(Timestamp1, 4)]
+        },
+        <<"count_mp3">> => #{
+            ?MINUTE_METRIC_NAME => [
+                ?MINUTE_METRIC_WINDOW(Timestamp3, 100),
+                ?MINUTE_METRIC_WINDOW(Timestamp1, 10),
+                ?MINUTE_METRIC_WINDOW(Timestamp2, 111)
+            ],
+            ?HOUR_METRIC_NAME => [
+                ?HOUR_METRIC_WINDOW(Timestamp1, 110),
+                ?HOUR_METRIC_WINDOW(Timestamp2, 111)
+            ],
+            ?DAY_METRIC_NAME => [
+                ?DAY_METRIC_WINDOW(Timestamp1, 221)
+            ]
+        },
+        <<"count_unicorns">> => #{
+            ?MINUTE_METRIC_NAME => [?MINUTE_METRIC_WINDOW(Timestamp1, 0)],
+            ?HOUR_METRIC_NAME => [?HOUR_METRIC_WINDOW(Timestamp1, 0)],
+            ?DAY_METRIC_NAME => [?DAY_METRIC_WINDOW(Timestamp1, 0)]
+        }
+    },
+    ?assertEqual(ok, ?rpc(atm_store_api:update_content(
+        AtmWorkflowExecutionAuth, Measurements2, ContentUpdateOpts, AtmStoreId
+    ))),
+    ?assertEqual(ExpLayout2, get_layout(AtmWorkflowExecutionAuth, AtmStoreId)),
+    ?assertEqual(ExpWindows2, get_slice(AtmWorkflowExecutionAuth, AtmStoreId, ExpLayout2)),
+
+    % Assert operation is atomic (it it fails no metric should be modified)
+    InvalidContentUpdateOpts = #atm_time_series_store_content_update_options{
+        dispatch_rules = [
+            #atm_time_series_dispatch_rule{
+                measurement_ts_name_matcher_type = exact,
+                measurement_ts_name_matcher = <<"mp3">>,
+                target_ts_name_generator = <<"count_">>,
+                prefix_combiner = overwrite
+            },
+            % below dispatch rule does not match any ts generator
+            #atm_time_series_dispatch_rule{
+                measurement_ts_name_matcher_type = exact,
+                measurement_ts_name_matcher = <<"size_mp3">>,
+                target_ts_name_generator = <<"shroedinger_">>,
+                prefix_combiner = overwrite
+            }
+        ]
+    },
+    ExpError = ?ERROR_BAD_DATA(<<"dispatchRules">>, <<
+        "Time series name generator 'shroedinger_' specified in one of the dispatch rules "
+        "does not reference any defined time series schema"
+    >>),
+    ?assertThrow(ExpError, ?erpc(atm_store_api:update_content(
+        AtmWorkflowExecutionAuth, Measurements2, InvalidContentUpdateOpts, AtmStoreId
+    ))),
+    ?assertEqual(ExpLayout2, get_layout(AtmWorkflowExecutionAuth, AtmStoreId)),
+    ?assertEqual(ExpWindows2, get_slice(AtmWorkflowExecutionAuth, AtmStoreId, ExpLayout2)),
+
+    % Test slices
+    ExpSliceWindows1 = #{
+        ?MAX_FILE_SIZE_TS_NAME => #{
+            ?MAX_FILE_SIZE_METRIC_NAME => [?MAX_FILE_SIZE_METRIC_WINDOW(Timestamp1, 2048)]
+        },
+        <<"count_cn_resources">> => #{
+            ?MINUTE_METRIC_NAME => [?MINUTE_METRIC_WINDOW(Timestamp1, 3)],
+            ?DAY_METRIC_NAME => [?DAY_METRIC_WINDOW(Timestamp1, 3)]
+        }
+    },
+    ?assertEqual(
+        ExpSliceWindows1,
+        get_slice(AtmWorkflowExecutionAuth, AtmStoreId, #{
+            ?MAX_FILE_SIZE_TS_NAME => [?MAX_FILE_SIZE_METRIC_NAME],
+            <<"count_cn_resources">> => [?MINUTE_METRIC_NAME, ?DAY_METRIC_NAME]
+        })
+    ),
+
+    ExpSliceWindows2 = #{
+        <<"count_mp3">> => #{
+            ?MINUTE_METRIC_NAME => [?MINUTE_METRIC_WINDOW(Timestamp1, 10)],
+            ?HOUR_METRIC_NAME => [?HOUR_METRIC_WINDOW(Timestamp1, 110)],
+            ?DAY_METRIC_NAME => [?DAY_METRIC_WINDOW(Timestamp1, 221)]
+        }
+    },
+    ?assertEqual(
+        ExpSliceWindows2,
+        get_slice(
+            AtmWorkflowExecutionAuth, AtmStoreId, #{<<"count_mp3">> => SortedCountTSMetricNames},
+            Timestamp1, 1
+        )
     ).
 
 
@@ -251,8 +419,15 @@ create_store(AtmWorkflowExecutionAuth, AtmStoreSchema) ->
 
 
 %% @private
+-spec infer_window_timestamp(ts_windows:timestamp_seconds(), metric_config:record()) ->
+    ts_windows:timestamp_seconds().
+infer_window_timestamp(Time, #metric_config{resolution = Resolution}) ->
+    Time - Time rem Resolution.
+
+
+%% @private
 -spec get_layout(atm_workflow_execution_auth:record(), atm_store:id()) ->
-    time_series_collection:metrics_by_time_series().
+    time_series_collection:layout().
 get_layout(AtmWorkflowExecutionAuth, AtmStoreId) ->
     BrowseOpts = #atm_time_series_store_content_browse_options{
         request = #atm_time_series_store_content_get_layout_req{}
@@ -266,22 +441,47 @@ get_layout(AtmWorkflowExecutionAuth, AtmStoreId) ->
         AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId
     )),
 
-    Layout.
+    maps:map(fun(_, MetricNames) -> lists:sort(MetricNames) end, Layout).
 
 
 %% @private
--spec get_windows(
+-spec get_slice(
     atm_workflow_execution_auth:record(),
     atm_store:id(),
-    time_series_collection:metrics_by_time_series()
+    time_series_collection:layout()
 ) ->
     #{time_series_collection:time_series_id() => #{ts_metric:id() => [ts_windows:value()]}}.
-get_windows(AtmWorkflowExecutionAuth, AtmStoreId, Layout) ->
+get_slice(AtmWorkflowExecutionAuth, AtmStoreId, Layout) ->
+    get_slice(AtmWorkflowExecutionAuth, AtmStoreId, Layout, undefined).
+
+
+%% @private
+-spec get_slice(
+    atm_workflow_execution_auth:record(),
+    atm_store:id(),
+    time_series_collection:metrics_by_time_series(),
+    undefined | atm_time_series_store_content_browse_options:timestamp()
+) ->
+    #{time_series_collection:time_series_id() => #{ts_metric:id() => [ts_windows:value()]}}.
+get_slice(AtmWorkflowExecutionAuth, AtmStoreId, Layout, StartTimestamp) ->
+    get_slice(AtmWorkflowExecutionAuth, AtmStoreId, Layout, StartTimestamp, 10000000000).
+
+
+%% @private
+-spec get_slice(
+    atm_workflow_execution_auth:record(),
+    atm_store:id(),
+    time_series_collection:metrics_by_time_series(),
+    undefined | atm_time_series_store_content_browse_options:timestamp(),
+    atm_time_series_store_content_browse_options:window_limit()
+) ->
+    #{time_series_collection:time_series_id() => #{ts_metric:id() => [ts_windows:value()]}}.
+get_slice(AtmWorkflowExecutionAuth, AtmStoreId, Layout, StartTimestamp, WindowLimit) ->
     BrowseOpts = #atm_time_series_store_content_browse_options{
         request = #atm_time_series_store_content_get_slice_req{
             layout = Layout,
-            start_timestamp = undefined,
-            windows_limit = 10000000000
+            start_timestamp = StartTimestamp,
+            window_limit = WindowLimit
         }
     },
 

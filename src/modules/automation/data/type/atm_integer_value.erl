@@ -20,7 +20,7 @@
 -export([assert_meets_constraints/3]).
 
 %% atm_data_compressor callbacks
--export([compress/1, expand/2]).
+-export([compress/2, expand/3]).
 
 
 %%%===================================================================
@@ -43,11 +43,11 @@ assert_meets_constraints(_AtmWorkflowExecutionAuth, _Value, _ValueConstraints) -
 %%%===================================================================
 
 
--spec compress(atm_value:expanded()) -> integer().
-compress(Value) -> Value.
+-spec compress(atm_value:expanded(), atm_data_type:value_constraints()) -> integer().
+compress(Value, _ValueConstraints) -> Value.
 
 
--spec expand(atm_workflow_execution_auth:record(), integer()) ->
+-spec expand(atm_workflow_execution_auth:record(), integer(), atm_data_type:value_constraints()) ->
     {ok, atm_value:expanded()}.
-expand(_, Value) ->
+expand(_AtmWorkflowExecutionAuth, Value, _ValueConstraints) ->
     {ok, Value}.

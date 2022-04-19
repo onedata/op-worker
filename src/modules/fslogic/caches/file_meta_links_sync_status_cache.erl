@@ -107,7 +107,7 @@ invalidate_on_all_nodes(SpaceId) ->
 
 -spec get(od_space:id(), file_meta:uuid() | file_meta:doc()) ->
     {ok, synced} | {error, {file_meta_missing, file_meta:uuid()}} | 
-    {error, {link_missing, file_meta:uuid()}} | {error, term()}.
+    {error, {link_missing, file_meta:uuid(), file_meta:name()}} | {error, term()}.
 get(SpaceId, Doc = #document{value = #file_meta{}}) ->
     CacheName = ?CACHE_NAME(SpaceId),
     case effective_value:get_or_calculate(CacheName, Doc, fun calculate_links_sync_status/1) of
@@ -138,7 +138,7 @@ invalidate(SpaceId) ->
 
 
 -spec calculate_links_sync_status(effective_value:args()) -> 
-    {ok, synced, effective_value:calculation_info()} | {error, {link_missing, file_meta:uuid()}} | 
+    {ok, synced, effective_value:calculation_info()} | {error, {link_missing, file_meta:uuid(), file_meta:name()}} |
     {error, term()}.
 calculate_links_sync_status([_, {error, _} = Error, _CalculationInfo]) ->
     Error;
@@ -146,5 +146,5 @@ calculate_links_sync_status([#document{} = FileMetaDoc, _ParentValue, Calculatio
     #document{value = #file_meta{name = Name, parent_uuid = ParentUuid}} = FileMetaDoc,
     case file_meta_forest:get(ParentUuid, all, Name) of
         {ok, _} -> {ok, synced, CalculationInfo};
-        {error, _} -> {error, {link_missing, ParentUuid}}
+        {error, _} -> {error, {link_missing, ParentUuid, Name}}
     end.

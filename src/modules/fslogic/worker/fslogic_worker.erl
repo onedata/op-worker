@@ -57,7 +57,6 @@
 ]).
 
 % requests
--define(INVALIDATE_PERMISSIONS_CACHE, invalidate_permissions_cache).
 -define(PERIODICAL_SPACES_AUTOCLEANING_CHECK, periodical_spaces_autocleaning_check).
 -define(TERMINATE_STALE_ATM_WORKFLOW_EXECUTIONS, terminate_stale_atm_workflow_executions).
 -define(RERUN_TRANSFERS, rerun_transfers).
@@ -68,8 +67,6 @@
     op_worker:get_env(autocleaning_periodical_spaces_check_enabled, true)).
 
 % delays and intervals
--define(INVALIDATE_PERMISSIONS_CACHE_INTERVAL,
-    op_worker:get_env(invalidate_permissions_cache_interval, timer:seconds(30))).
 -define(AUTOCLEANING_PERIODICAL_SPACES_CHECK_INTERVAL,
     op_worker:get_env(autocleaning_periodical_spaces_check_interval, timer:minutes(1))).
 -define(TERMINATE_STALE_ATM_WORKFLOW_EXECUTIONS_DELAY,
@@ -184,6 +181,7 @@ init_effective_caches(Space) ->
 -spec init(Args :: term()) -> Result when
     Result :: {ok, State :: worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
+    permissions_cache:init(),
     init_effective_caches(),
     transfer:init(),
     file_upload_manager_watcher_service:setup_internal_service(),
@@ -196,7 +194,6 @@ init(_Args) ->
     clproto_serializer:load_msg_defs(),
     archivisation_traverse:init_pool(),
 
-    schedule_invalidate_permissions_cache(),
     schedule_rerun_transfers(),
     schedule_stale_atm_workflow_executions_termination(),
     schedule_restart_autocleaning_runs(),
@@ -236,10 +233,6 @@ handle(ping) ->
     pong;
 handle(healthcheck) ->
     ok;
-handle(?INVALIDATE_PERMISSIONS_CACHE) ->
-    ?debug("Invalidating permissions cache"),
-    invalidate_permissions_cache(),
-    schedule_invalidate_permissions_cache();
 handle(?TERMINATE_STALE_ATM_WORKFLOW_EXECUTIONS) ->
     ?debug("Terminating stale atm workflow executions"),
     terminate_stale_atm_workflow_executions(),
@@ -303,6 +296,7 @@ cleanup() ->
     bulk_download_traverse:stop_pool(),
     replica_synchronizer:terminate_all(),
     archivisation_traverse:stop_pool(),
+    permissions_cache:terminate(),
     ok.
 
 %%%===================================================================
@@ -738,10 +732,6 @@ handle_proxyio_request(UserCtx, #remote_read{offset = Offset, size = Size}, File
     read_write_req:read(UserCtx, FileCtx, HandleId, Offset, Size).
 
 
--spec schedule_invalidate_permissions_cache() -> ok.
-schedule_invalidate_permissions_cache() ->
-    schedule(?INVALIDATE_PERMISSIONS_CACHE, ?INVALIDATE_PERMISSIONS_CACHE_INTERVAL).
-
 -spec schedule_stale_atm_workflow_executions_termination() -> ok.
 schedule_stale_atm_workflow_executions_termination() ->
     schedule(?TERMINATE_STALE_ATM_WORKFLOW_EXECUTIONS, ?TERMINATE_STALE_ATM_WORKFLOW_EXECUTIONS_DELAY).
@@ -766,14 +756,6 @@ schedule(Request, Timeout) ->
     erlang:send_after(Timeout, ?MODULE, {sync_timer, Request}),
     ok.
 
--spec invalidate_permissions_cache() -> ok.
-invalidate_permissions_cache() ->
-    try
-        permissions_cache:invalidate_on_node()
-    catch
-        _:Reason:Stacktrace ->
-            ?error_stacktrace("Failed to invalidate permissions cache due to: ~p", [Reason], Stacktrace)
-    end.
 
 -spec periodical_spaces_autocleaning_check() -> ok.
 periodical_spaces_autocleaning_check() ->
