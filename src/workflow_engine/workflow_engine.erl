@@ -334,6 +334,8 @@ schedule_next_job(EngineId, DeferredExecutions) ->
                             ?DEFER_EXECUTION ->
                                 % no jobs can be currently scheduled for this execution but new jobs will appear in future
                                 schedule_next_job(EngineId, [ExecutionId | DeferredExecutions]);
+                            ?RETRY_EXECUTION ->
+                                schedule_next_job(EngineId, DeferredExecutions);
                             ?ERROR_NOT_FOUND ->
                                 % Race with execution deletion
                                 schedule_next_job(EngineId, [ExecutionId | DeferredExecutions])

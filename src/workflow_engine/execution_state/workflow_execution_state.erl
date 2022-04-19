@@ -210,7 +210,7 @@ cleanup(ExecutionId) ->
     ok = datastore_model:delete(?CTX, ExecutionId).
 
 -spec prepare_next_job(workflow_engine:execution_id()) ->
-    {ok, workflow_engine:execution_spec()} | ?DEFER_EXECUTION | ?ERROR_NOT_FOUND | #execution_ended{} |
+    {ok, workflow_engine:execution_spec()} | ?DEFER_EXECUTION | ?RETRY_EXECUTION | ?ERROR_NOT_FOUND | #execution_ended{} |
     ?PREPARE_LANE_EXECUTION(workflow_handler:handler(), workflow_engine:execution_context(),
         workflow_engine:lane_id(), workflow_engine:preparation_mode()).
 prepare_next_job(ExecutionId) ->
@@ -230,7 +230,9 @@ prepare_next_job(ExecutionId) ->
             {ok, _} = update(ExecutionId, fun(State) ->
                 remove_pending_callback(State, ?CALLBACKS_ON_CANCEL_SELECTOR)
             end),
-            ?DEFER_EXECUTION;
+            % If next lane is being prepared in advance and preparation of this lane is finished before execution of
+            % handlers_for_cancelled_lane, workflow_execution_ended handler will not be called - retry to call it
+            ?RETRY_EXECUTION;
         ?ERROR_NOT_FOUND ->
             ?ERROR_NOT_FOUND % Race with execution deletion
     end.
@@ -425,6 +427,7 @@ finish_lane_preparation(ExecutionId, Handler,
                 ?WF_ERROR_LANE_ALREADY_PREPARED ->
                     case NextIterationStep of
                         undefined -> ok;
+                        ?WF_ERROR_ITERATION_FAILED -> ok;
                         {ItemId, _} -> workflow_cached_item:delete(ItemId)
                     end,
                     ?WF_ERROR_LANE_ALREADY_PREPARED
