@@ -767,7 +767,8 @@ verify_memory(Config, InitialKeys, RestartDocPresent) ->
 get_all_workflow_related_datastore_keys(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
-    % TODO VFS-7788 - fix race with workflow_iterator_snapshot:save (snapshot can be restored)
+    % TODO VFS-7788 - fix race between workflow_iterator_snapshot:cleanup and workflow_iterator_snapshot:save
+    % (snapshot can be restored)
 %%    Models = [workflow_cached_item, workflow_cached_async_result, workflow_iterator_snapshot, workflow_execution_state],
     Models = [workflow_cached_item, workflow_cached_async_result, workflow_execution_state],
     lists:map(fun(Model) ->
