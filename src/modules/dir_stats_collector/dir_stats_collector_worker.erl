@@ -38,6 +38,7 @@
 -spec init(Args :: term()) -> {ok, worker_host:plugin_state()} | {error, Reason :: term()}.
 init(_Args) ->
     pes:start_link(dir_stats_collector),
+    dir_stats_collections_initialization_traverse:init_pool(),
     {ok, #{}}.
 
 
@@ -62,5 +63,6 @@ handle(Request) ->
 %%--------------------------------------------------------------------
 -spec cleanup() -> ok | {error, timeout | term()}.
 cleanup() ->
+    dir_stats_collections_initialization_traverse:stop_pool(),
     pes:stop(dir_stats_collector),
     ok.

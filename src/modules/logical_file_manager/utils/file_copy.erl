@@ -35,7 +35,7 @@
 
 % Callback called after each successful write operation; 
 % the number in the function argument is the number of successfully written bytes.
--type callback() :: fun((non_neg_integer()) -> ok).
+-type callback() :: fun((non_neg_integer()) -> continue | abort).
 
 -type options() :: #{
     % when enabled whole subtree will be copied
@@ -48,7 +48,7 @@
 
 -define(DEFAULT_RECURSIVE_OPT, true).
 -define(DEFAULT_OVERWRITE_OPT, false).
--define(DEFAULT_WRITE_CALLBACK_OPT, fun(_) -> ok end).
+-define(DEFAULT_WRITE_CALLBACK_OPT, fun(_) -> continue end).
 
 %%%===================================================================
 %%% API
@@ -196,7 +196,6 @@ copy_symlink(SessId, #file_attr{guid = SourceGuid}, TargetParentGuid, TargetName
     {ok, CopyGuid, []}.
 
 
-
 -spec copy_file_content(lfm:handle(), lfm:handle(), non_neg_integer(), non_neg_integer(), callback()) ->
     {ok, lfm:handle(), lfm:handle()} | {error, term()}.
 copy_file_content(SourceHandle, TargetHandle, Offset, BufferSize, Callback) ->
@@ -206,8 +205,13 @@ copy_file_content(SourceHandle, TargetHandle, Offset, BufferSize, Callback) ->
         {ok, NewSourceHandle, Data} ->
             case lfm:write(TargetHandle, Offset, Data) of
                 {ok, NewTargetHandle, N} ->
-                    ok = Callback(byte_size(Data)),
-                    copy_file_content(NewSourceHandle, NewTargetHandle, Offset + N, BufferSize, Callback);
+                    case Callback(byte_size(Data)) of
+                        continue ->
+                            copy_file_content(
+                                NewSourceHandle, NewTargetHandle, Offset + N, BufferSize, Callback);
+                        abort ->
+                            {ok, NewSourceHandle, NewTargetHandle}
+                    end;
                 Error ->
                     Error
             end;

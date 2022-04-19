@@ -215,9 +215,9 @@
 -record(atm_time_series_store_content_get_layout_req, {}).
 
 -record(atm_time_series_store_content_get_slice_req, {
-    layout :: time_series_collection:metrics_by_time_series(),
+    layout :: time_series_collection:layout(),
     start_timestamp :: undefined | atm_time_series_store_content_browse_options:timestamp(),
-    windows_limit :: atm_time_series_store_content_browse_options:windows_limit()
+    window_limit :: atm_time_series_store_content_browse_options:window_limit()
 }).
 
 -record(atm_time_series_store_content_browse_result, {
@@ -227,7 +227,7 @@
 }).
 
 -record(atm_time_series_store_content_layout, {
-    layout :: time_series_collection:metrics_by_time_series()
+    layout :: time_series_collection:layout()
 }).
 
 -record(atm_time_series_store_content_slice, {

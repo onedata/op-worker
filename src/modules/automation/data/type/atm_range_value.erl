@@ -23,7 +23,7 @@
 -export([assert_meets_constraints/3]).
 
 %% atm_data_compressor callbacks
--export([compress/1, expand/2]).
+-export([compress/2, expand/3]).
 
 %% Full 'initial_content' format can't be expressed directly in type spec due to
 %% dialyzer limitations in specifying concrete binaries ('initial_content' must be
@@ -56,11 +56,11 @@
     atm_data_type:value_constraints()
 ) ->
     ok | no_return().
-assert_meets_constraints(AtmWorkflowExecutionAuth, Value, _ValueConstraints) ->
-    Range = compress(Value),
+assert_meets_constraints(_AtmWorkflowExecutionAuth, Value, ValueConstraints) ->
+    Range = compress(Value, ValueConstraints),
 
     try
-        check_implicit_constraints(AtmWorkflowExecutionAuth, Range)
+        assert_valid_step_direction(Range)
     catch
         throw:{unverified_constraints, UnverifiedConstraints} ->
             throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
@@ -78,17 +78,17 @@ assert_meets_constraints(AtmWorkflowExecutionAuth, Value, _ValueConstraints) ->
 %%%===================================================================
 
 
--spec compress(range_json()) -> range().
-compress(Value = #{<<"end">> := End}) ->
+-spec compress(range_json(), atm_data_type:value_constraints()) -> range().
+compress(Value = #{<<"end">> := End}, _ValueConstraints) ->
     Start = maps:get(<<"start">>, Value, 0),
     Step = maps:get(<<"step">>, Value, 1),
 
     [Start, End, Step].
 
 
--spec expand(atm_workflow_execution_auth:record(), range()) ->
+-spec expand(atm_workflow_execution_auth:record(), range(), atm_data_type:value_constraints()) ->
     {ok, range_json()}.
-expand(_AtmWorkflowExecutionAuth, [Start, End, Step]) ->
+expand(_AtmWorkflowExecutionAuth, [Start, End, Step], _ValueConstraints) ->
     {ok, #{
         <<"start">> => Start,
         <<"end">> => End,
@@ -99,35 +99,6 @@ expand(_AtmWorkflowExecutionAuth, [Start, End, Step]) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-
-%% @private
--spec check_implicit_constraints(atm_workflow_execution_auth:record(), range()) ->
-    ok | no_return().
-check_implicit_constraints(AtmWorkflowExecutionAuth, Range) ->
-    assert_valid_field_types(AtmWorkflowExecutionAuth, Range),
-    assert_valid_step_direction(Range).
-
-
-%% @private
--spec assert_valid_field_types(atm_workflow_execution_auth:record(), range()) ->
-    ok | no_return().
-assert_valid_field_types(AtmWorkflowExecutionAuth, [Start, End, Step]) ->
-    FieldDataSpec = #atm_data_spec{type = atm_integer_type},
-
-    lists:foreach(fun({FieldPath, ArgValue}) ->
-        try
-            atm_value:validate(AtmWorkflowExecutionAuth, ArgValue, FieldDataSpec)
-        catch Type:Reason:Stacktrace ->
-            throw({unverified_constraints, #{
-                FieldPath => errors:to_json(?atm_examine_error(Type, Reason, Stacktrace))
-            }})
-        end
-    end, [
-        {<<".start">>, Start},
-        {<<".end">>, End},
-        {<<".step">>, Step}
-    ]).
 
 
 %% @private

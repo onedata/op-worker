@@ -39,7 +39,7 @@
     update_protection_flags/3, protection_flags_to_json/1, protection_flags_from_json/1
 ]).
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
-    make_space_exist/1, new_doc/6, new_doc/7, new_share_root_dir_doc/2, type/1, get_ancestors/1,
+    make_space_exist/1, new_doc/6, new_doc/7, new_share_root_dir_doc/2, get_ancestors/1,
     get_locations_by_uuid/1, rename/4, get_owner/1, get_type/1, get_effective_type/1,
     get_mode/1]).
 -export([check_name_and_get_conflicting_files/1, check_name_and_get_conflicting_files/4, has_suffix/1, is_deleted/1]).
@@ -379,9 +379,9 @@ trim_filename_tree_id(Name, {all, ParentUuid}) ->
         {ok, T} -> T;
         ?ERROR_NOT_FOUND -> []
     end,
-    lists_utils:foldl_while(fun(TreeId, Name) ->
-        case trim_filename_tree_id(Name, TreeId) of
-            Name -> {cont, Name};
+    lists_utils:foldl_while(fun(TreeId, NameAcc) ->
+        case trim_filename_tree_id(NameAcc, TreeId) of
+            NameAcc -> {cont, NameAcc};
             TrimmedName -> {halt, TrimmedName}
         end
     end, Name, TreeIds);
@@ -774,20 +774,6 @@ new_share_root_dir_doc(ShareRootDirUuid, SpaceId) ->
         },
         scope = SpaceId
     }.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Return type of file depending on its posix mode.
-%% @end
-%%--------------------------------------------------------------------
--spec type(Mode :: non_neg_integer()) -> type().
-type(Mode) ->
-    IsDir = (Mode band 8#100000) == 0,
-    case IsDir of
-        true -> ?DIRECTORY_TYPE;
-        false -> ?REGULAR_FILE_TYPE
-    end.
 
 
 %%--------------------------------------------------------------------

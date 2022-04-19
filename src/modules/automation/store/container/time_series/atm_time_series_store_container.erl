@@ -55,17 +55,24 @@
 
 -record(atm_time_series_store_container, {
     config :: atm_time_series_store_config:record(),
-    backend_id :: time_series_collection:collection_id()
+    backend_id :: time_series_collection:id()
 }).
 -type record() :: #atm_time_series_store_container{}.
-
-%% @TODO VFS-8941 reuse a type from time_series if possible
--type ts_config() :: #{metric_config:label() => metric_config:record()}.
 
 -export_type([
     initial_content/0, content_browse_req/0, content_update_req/0,
     record/0
 ]).
+
+
+-define(ANY_MEASUREMENT_DATA_SPEC, #atm_data_spec{
+    type = atm_time_series_measurement_type,
+    value_constraints = #{specs => [#atm_time_series_measurement_spec{
+        name_matcher_type = has_prefix,
+        name_matcher = <<>>,
+        unit = none
+    }]}
+}).
 
 
 -define(CTX, #{
@@ -124,7 +131,7 @@ browse_content(Record, #atm_store_content_browse_req{
         request = #atm_time_series_store_content_get_layout_req{}
     }
 }) ->
-    {ok, Layout} = datastore_time_series_collection:list_metrics_by_time_series(
+    {ok, Layout} = datastore_time_series_collection:get_layout(
         ?CTX, Record#atm_time_series_store_container.backend_id
     ),
     #atm_time_series_store_content_browse_result{
@@ -134,58 +141,61 @@ browse_content(Record, #atm_store_content_browse_req{
 browse_content(Record, #atm_store_content_browse_req{
     options = #atm_time_series_store_content_browse_options{
         request = #atm_time_series_store_content_get_slice_req{
-            layout = RequestedLayout,
+            layout = SliceLayout,
             start_timestamp = StartTimestamp,
-            windows_limit = WindowsLimit
+            window_limit = WindowLimit
         }
     }
 }) ->
-    RequestRange = maps:fold(fun(TimeSeriesId, MetricIds, OuterAcc) ->
-        lists:foldl(fun(MetricId, InnerAcc) ->
-            [{TimeSeriesId, MetricId} | InnerAcc]
-        end, OuterAcc, MetricIds)
-    end, [], RequestedLayout),
-
-    case datastore_time_series_collection:list_windows(
+    case datastore_time_series_collection:get_slice(
         ?CTX,
         Record#atm_time_series_store_container.backend_id,
-        RequestRange,
-        maps_utils:remove_undefined(#{start => StartTimestamp, limit => WindowsLimit})
+        SliceLayout,
+        maps_utils:remove_undefined(#{start_timestamp => StartTimestamp, window_limit => WindowLimit})
     ) of
-        {error, not_found} ->
+        ?ERROR_NOT_FOUND ->
             throw(?ERROR_NOT_FOUND);
-        {error, time_series_not_found} ->
-            throw(?ERROR_NOT_FOUND);
-        {error, metric_not_found} ->
-            throw(?ERROR_NOT_FOUND);
-        {ok, WindowsPerFullMetricId} ->
-            Slice = maps:fold(fun({TimeSeriesId, MetricId}, Windows, Acc) ->
-                MetricsForCurrentTimeSeries = maps:get(TimeSeriesId, Acc, #{}),
-                Acc#{TimeSeriesId => MetricsForCurrentTimeSeries#{
-                    MetricId => lists:map(fun({Timestamp, {_ValuesCount, ValuesSum}}) ->
-                        #{
-                            <<"timestamp">> => Timestamp,
-                            <<"value">> => ValuesSum
-                        }
-                    end, Windows)
-                }}
-            end, #{}, WindowsPerFullMetricId),
+        ?ERROR_TSC_MISSING_LAYOUT(MissingLayout) ->
+            throw(?ERROR_TSC_MISSING_LAYOUT(MissingLayout));
+        {ok, Slice} ->
+            SliceJson = tsc_structure:map(fun(_TimeSeriesName, _MetricName, Windows) ->
+                lists:map(fun({Timestamp, Value}) ->
+                    #{
+                        <<"timestamp">> => Timestamp,
+                        <<"value">> => case Value of
+                            {_ValuesCount, ValuesSum} -> ValuesSum;
+                            _ -> Value
+                        end
+                    }
+                end, Windows)
+            end, Slice),
 
             #atm_time_series_store_content_browse_result{
-                result = #atm_time_series_store_content_slice{slice = Slice}
+                result = #atm_time_series_store_content_slice{slice = SliceJson}
             }
     end.
 
 
 -spec update_content(record(), content_update_req()) -> record() | no_return().
 update_content(Record, #atm_store_content_update_req{
-    argument = Arg,
+    workflow_execution_auth = AtmWorkflowExecutionAuth,
+    argument = Measurements,
+    options = #atm_time_series_store_content_update_options{dispatch_rules = DispatchRules}
+}) when is_list(Measurements) ->
+    atm_value:validate(
+        AtmWorkflowExecutionAuth,
+        Measurements,
+        ?ATM_ARRAY_DATA_SPEC(?ANY_MEASUREMENT_DATA_SPEC)
+    ),
+    consume_measurements(Measurements, DispatchRules, Record);
+
+update_content(Record, #atm_store_content_update_req{
+    workflow_execution_auth = AtmWorkflowExecutionAuth,
+    argument = Measurement,
     options = #atm_time_series_store_content_update_options{dispatch_rules = DispatchRules}
 }) ->
-    case atm_data_type:is_instance(atm_time_series_measurements_type, Arg) of
-        true -> consume_measurements(Arg, DispatchRules, Record);
-        false -> throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Arg, atm_time_series_measurements_type))
-    end.
+    atm_value:validate(AtmWorkflowExecutionAuth, Measurement, ?ANY_MEASUREMENT_DATA_SPEC),
+    consume_measurements([Measurement], DispatchRules, Record).
 
 
 -spec delete(record()) -> ok.
@@ -251,7 +261,7 @@ get_ctx() ->
 %% @end
 %%-------------------------------------------------------------------
 -spec build_initial_ts_collection_config([atm_time_series_schema:record()]) ->
-    time_series_collection:collection_config().
+    time_series_collection:config().
 build_initial_ts_collection_config(TSSchemas) ->
     lists:foldl(fun
         (TSSchema = #atm_time_series_schema{name_generator_type = exact}, Acc) ->
@@ -274,22 +284,27 @@ consume_measurements(Measurements, DispatchRules, Record = #atm_time_series_stor
     config = #atm_time_series_store_config{schemas = TSSchemas},
     backend_id = BackendId
 }) ->
-    {TSUpdates, TSConfigs} = lists:foldl(fun(Measurement, Acc = {TSUpdatesAcc, TSConfigsAcc}) ->
+    {ConsumeSpec, InvolvedCollectionConfig} = lists:foldl(fun(Measurement, Acc = {ConsumeSpecAcc, InvolvedConfigAcc}) ->
         case match_target_ts(Measurement, DispatchRules, TSSchemas) of
             {true, TSName, TSConfig} ->
                 Timestamp = maps:get(<<"timestamp">>, Measurement),
                 Value = maps:get(<<"value">>, Measurement),
-                {[{Timestamp, {TSName, Value}} | TSUpdatesAcc], TSConfigsAcc#{TSName => TSConfig}};
+                PreviousMeasurements = kv_utils:get([TSName, ?ALL_METRICS], ConsumeSpecAcc, []),
+                NewMeasurements = [{Timestamp, Value} | PreviousMeasurements],
+                {ConsumeSpecAcc#{TSName => #{?ALL_METRICS => NewMeasurements}}, InvolvedConfigAcc#{TSName => TSConfig}};
             false ->
                 Acc
         end
-    end, {[], #{}}, Measurements),
+    end, {#{}, #{}}, Measurements),
 
-    extend_ts_collection_config_if_needed(TSConfigs, Record),
-
-    lists:foreach(fun({Timestamp, UpdateRange}) ->
-        ok = datastore_time_series_collection:check_and_update(?CTX, BackendId, Timestamp, UpdateRange)
-    end, TSUpdates),
+    case datastore_time_series_collection:consume_measurements(?CTX, BackendId, ConsumeSpec) of
+        ok ->
+            ok;
+        ?ERROR_TSC_MISSING_LAYOUT(MissingLayout) ->
+            MissingConfig = maps:with(maps:keys(MissingLayout), InvolvedCollectionConfig),
+            ok = datastore_time_series_collection:incorporate_config(?CTX, BackendId, MissingConfig),
+            ok = datastore_time_series_collection:consume_measurements(?CTX, BackendId, ConsumeSpec)
+    end,
 
     Record.
 
@@ -300,47 +315,13 @@ consume_measurements(Measurements, DispatchRules, Record = #atm_time_series_stor
     [atm_time_series_dispatch_rule:record()],
     [atm_time_series_schema:record()]
 ) ->
-    {true, atm_time_series_names:target_ts_name(), ts_config()} | false | no_return().
+    {true, atm_time_series_names:target_ts_name(), time_series:metric_composition()} | false | no_return().
 match_target_ts(#{<<"tsName">> := MeasurementTSName}, DispatchRules, TSSchemas) ->
     case atm_time_series_names:find_matching_dispatch_rule(MeasurementTSName, DispatchRules) of
         {ok, DispatchRule} ->
-            case atm_time_series_names:find_referenced_time_series_schema(DispatchRule, TSSchemas) of
-                {ok, TSSchema} ->
-                    TargetTSName = atm_time_series_names:resolve_target_ts_name(
-                        MeasurementTSName, TSSchema, DispatchRule
-                    ),
-                    {true, TargetTSName, TSSchema#atm_time_series_schema.metrics};
-                error ->
-                    throw(?ERROR_BAD_DATA(<<"dispatchRules">>, <<
-                        "Dispatch rule must reference a name generator defined in "
-                        "one of store's time series schemas"
-                    >>))
-            end;
+            TSSchema = atm_time_series_names:select_referenced_time_series_schema(DispatchRule, TSSchemas),
+            TargetTSName = atm_time_series_names:resolve_target_ts_name(MeasurementTSName, TSSchema, DispatchRule),
+            {true, TargetTSName, TSSchema#atm_time_series_schema.metrics};
         error ->
             false
-    end.
-
-
-%% @private
--spec extend_ts_collection_config_if_needed(
-    #{time_series_collection:time_series_id() => ts_config()},
-    record()
-) ->
-    ok.
-extend_ts_collection_config_if_needed(TSConfigs, #atm_time_series_store_container{
-    backend_id = BackendId
-}) ->
-    {ok, ExistingTSIds} = datastore_time_series_collection:list_time_series_ids(
-        ?CTX, BackendId
-    ),
-    case lists_utils:subtract(maps:keys(TSConfigs), ExistingTSIds) of
-        [] ->
-            ok;
-        NewTSIds ->
-            NewTSConfigs = maps:with(NewTSIds, TSConfigs),
-            case datastore_time_series_collection:add_metrics(?CTX, BackendId, NewTSConfigs, #{}) of
-                ok -> ok;
-                {error, time_series_already_exists} -> ok;
-                {error, metric_already_exists} -> ok
-            end
     end.

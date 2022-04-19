@@ -460,7 +460,7 @@ rename_dir(UserCtx, SourceFileCtx0, TargetParentFileCtx0, TargetName) ->
     TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) -> no_return() | #fuse_response{}.
 rename_file_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     {SourceFileCtx3, TargetFileId} =
-        rename_meta_and_storage_file(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName, false),
+        rename_meta_and_storage_file(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName),
     replica_updater:rename(SourceFileCtx, TargetFileId),
     FileGuid = file_ctx:get_logical_guid_const(SourceFileCtx3),
     #fuse_response{
@@ -481,7 +481,7 @@ rename_file_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) -> no_return() | #fuse_response{}.
 rename_dir_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     {SourceFileCtx3, TargetFileId} =
-        rename_meta_and_storage_file(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName, true),
+        rename_meta_and_storage_file(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName),
     ChildEntries = rename_child_locations(UserCtx, SourceFileCtx3, TargetFileId),
     FileGuid = file_ctx:get_logical_guid_const(SourceFileCtx3),
     #fuse_response{
@@ -499,9 +499,9 @@ rename_dir_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec rename_meta_and_storage_file(user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
-    TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name(), boolean()) ->
+    TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) ->
     {TargetFileCtx :: file_ctx:ctx(), TargetFileId :: helpers:file_id()}.
-rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentCtx0, TargetName, InvalidateCache) ->
+rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentCtx0, TargetName) ->
     {SourceFileId, SourceFileCtx} = file_ctx:get_storage_file_id(SourceFileCtx0),
     {TargetParentFileId, TargetParentCtx} = file_ctx:get_storage_file_id(TargetParentCtx0),
     TargetFileId = filename:join(TargetParentFileId, TargetName),
@@ -514,15 +514,10 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentCtx0, TargetNa
     file_meta:rename(SourceDoc, SourceParentDoc, ParentDoc, TargetName),
 
     SpaceId = file_ctx:get_space_id_const(SourceFileCtx3),
-    case InvalidateCache of
-        true ->
-            paths_cache:invalidate_on_all_nodes(SpaceId),
-            dataset_eff_cache:invalidate_on_all_nodes(SpaceId),
-            archive_recall_cache:invalidate_on_all_nodes(SpaceId),
-            file_meta_links_sync_status_cache:invalidate_on_all_nodes(SpaceId);
-        _ ->
-            ok
-    end,
+    paths_cache:invalidate_on_all_nodes(SpaceId),
+    dataset_eff_cache:invalidate_on_all_nodes(SpaceId),
+    archive_recall_cache:invalidate_on_all_nodes(SpaceId),
+    file_meta_links_sync_status_cache:invalidate_on_all_nodes(SpaceId),
 
     {Storage, SourceFileCtx4} = file_ctx:get_storage(SourceFileCtx3),
     Helper = storage:get_helper(Storage),
@@ -646,6 +641,7 @@ remotely_get_child_type(SessId, ParentGuid, ChildName) ->
     SourceParentFileCtx :: file_ctx:ctx(), TargetParentFileCtx :: file_ctx:ctx(), 
     file_meta:name()) -> ok | no_return().
 on_successful_rename(UserCtx, SourceFileCtx, SourceParentFileCtx, TargetParentFileCtx, TargetName) ->
+    permissions_cache:invalidate(),
     {PrevName, SourceFileCtx2} = file_ctx:get_aliased_name(SourceFileCtx, UserCtx),
     ParentGuid = file_ctx:get_logical_guid_const(TargetParentFileCtx),
     CurrentTime = global_clock:timestamp_seconds(),

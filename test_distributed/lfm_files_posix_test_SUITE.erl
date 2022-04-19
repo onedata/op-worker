@@ -27,7 +27,18 @@
 
 %% tests
 -export([
-    dir_stats_collector_test/1,
+    dir_stats_collector_test_basic_test/1,
+    dir_stats_collector_enabling_for_empty_space_test/1,
+    dir_stats_collector_enabling_for_not_empty_space_test/1,
+    dir_stats_collector_enabling_large_dirs_test/1,
+    dir_stats_collector_enabling_during_writing_test/1,
+    dir_stats_collector_race_with_file_adding_test/1,
+    dir_stats_collector_race_with_file_writing_test/1,
+    dir_stats_collector_race_with_subtree_adding_test/1,
+    dir_stats_collector_race_with_subtree_filling_with_data_test/1,
+    dir_stats_collector_race_with_file_adding_to_large_dir_test/1,
+    dir_stats_collector_multiple_status_change_test/1,
+    dir_stats_collector_adding_file_when_disabled_test/1,
     fslogic_new_file_test/1,
     lfm_create_and_unlink_test/1,
     lfm_create_and_access_test/1,
@@ -118,7 +129,18 @@
 
 
 -define(TEST_CASES, [
-    dir_stats_collector_test,
+    dir_stats_collector_test_basic_test,
+    dir_stats_collector_enabling_for_empty_space_test,
+    dir_stats_collector_enabling_for_not_empty_space_test,
+    dir_stats_collector_enabling_large_dirs_test,
+    dir_stats_collector_enabling_during_writing_test,
+    dir_stats_collector_race_with_file_adding_test,
+    dir_stats_collector_race_with_file_writing_test,
+    dir_stats_collector_race_with_subtree_adding_test,
+    dir_stats_collector_race_with_subtree_filling_with_data_test,
+    dir_stats_collector_race_with_file_adding_to_large_dir_test,
+    dir_stats_collector_multiple_status_change_test,
+    dir_stats_collector_adding_file_when_disabled_test,
     fslogic_new_file_test,
     lfm_create_and_unlink_test,
     lfm_create_and_access_test,
@@ -937,8 +959,52 @@ lfm_close_deleted_open_files(Config) ->
     lfm_files_test_base:lfm_close_deleted_open_files(Config).
 
 
-dir_stats_collector_test(Config) ->
-    dir_stats_collector_test_base:single_provider_test(Config).
+dir_stats_collector_test_basic_test(Config) ->
+    dir_stats_collector_test_base:basic_test(Config).
+
+
+dir_stats_collector_enabling_for_empty_space_test(Config) ->
+    dir_stats_collector_test_base:enabling_for_empty_space_test(Config).
+
+
+dir_stats_collector_enabling_for_not_empty_space_test(Config) ->
+    dir_stats_collector_test_base:enabling_for_not_empty_space_test(Config).
+
+
+dir_stats_collector_enabling_large_dirs_test(Config) ->
+    dir_stats_collector_test_base:enabling_large_dirs_test(Config).
+
+
+dir_stats_collector_enabling_during_writing_test(Config) ->
+    dir_stats_collector_test_base:enabling_during_writing_test(Config).
+
+
+dir_stats_collector_race_with_file_adding_test(Config) ->
+    dir_stats_collector_test_base:race_with_file_adding_test(Config).
+
+
+dir_stats_collector_race_with_file_writing_test(Config) ->
+    dir_stats_collector_test_base:race_with_file_writing_test(Config).
+
+
+dir_stats_collector_race_with_subtree_adding_test(Config) ->
+    dir_stats_collector_test_base:race_with_subtree_adding_test(Config).
+
+
+dir_stats_collector_race_with_subtree_filling_with_data_test(Config) ->
+    dir_stats_collector_test_base:race_with_subtree_filling_with_data_test(Config).
+
+
+dir_stats_collector_race_with_file_adding_to_large_dir_test(Config) ->
+    dir_stats_collector_test_base:race_with_file_adding_to_large_dir_test(Config).
+
+
+dir_stats_collector_multiple_status_change_test(Config) ->
+    dir_stats_collector_test_base:multiple_status_change_test(Config).
+
+
+dir_stats_collector_adding_file_when_disabled_test(Config) ->
+    dir_stats_collector_test_base:adding_file_when_disabled_test(Config).
 
 
 %%%===================================================================
@@ -954,7 +1020,7 @@ end_per_suite(Config) ->
 init_per_testcase(Case, Config) when
     Case =:= rename_removed_opened_file_races_test;
     Case =:= rename_removed_opened_file_races_test2
-    ->
+->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, storage_driver, [passthrough]),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
@@ -963,7 +1029,20 @@ init_per_testcase(lfm_create_and_read_symlink = Case, Config) ->
     time_test_utils:freeze_time(Config),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
-init_per_testcase(dir_stats_collector_test = Case, Config) ->
+init_per_testcase(Case, Config) when
+    Case =:= dir_stats_collector_test_basic_test;
+    Case =:= dir_stats_collector_enabling_for_empty_space_test;
+    Case =:= dir_stats_collector_enabling_for_not_empty_space_test;
+    Case =:= dir_stats_collector_enabling_large_dirs_test;
+    Case =:= dir_stats_collector_enabling_during_writing_test;
+    Case =:= dir_stats_collector_race_with_file_adding_test;
+    Case =:= dir_stats_collector_race_with_file_writing_test;
+    Case =:= dir_stats_collector_race_with_subtree_adding_test;
+    Case =:= dir_stats_collector_race_with_subtree_filling_with_data_test;
+    Case =:= dir_stats_collector_race_with_file_adding_to_large_dir_test;
+    Case =:= dir_stats_collector_multiple_status_change_test;
+    Case =:= dir_stats_collector_adding_file_when_disabled_test
+->
     dir_stats_collector_test_base:init(init_per_testcase(?DEFAULT_CASE(Case), Config));
 
 init_per_testcase(Case, Config) when
@@ -985,7 +1064,7 @@ init_per_testcase(Case, Config) ->
 end_per_testcase(Case, Config) when
     Case =:= rename_removed_opened_file_races_test;
     Case =:= rename_removed_opened_file_races_test2
-    ->
+->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, [storage_driver]),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
@@ -994,7 +1073,20 @@ end_per_testcase(lfm_create_and_read_symlink = Case, Config) ->
     time_test_utils:unfreeze_time(Config),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
-end_per_testcase(dir_stats_collector_test = Case, Config) ->
+end_per_testcase(Case, Config) when
+    Case =:= dir_stats_collector_test_basic_test;
+    Case =:= dir_stats_collector_enabling_for_empty_space_test;
+    Case =:= dir_stats_collector_enabling_for_not_empty_space_test;
+    Case =:= dir_stats_collector_enabling_large_dirs_test;
+    Case =:= dir_stats_collector_enabling_during_writing_test;
+    Case =:= dir_stats_collector_race_with_file_adding_test;
+    Case =:= dir_stats_collector_race_with_file_writing_test;
+    Case =:= dir_stats_collector_race_with_subtree_adding_test;
+    Case =:= dir_stats_collector_race_with_subtree_filling_with_data_test;
+    Case =:= dir_stats_collector_race_with_file_adding_to_large_dir_test;
+    Case =:= dir_stats_collector_multiple_status_change_test;
+    Case =:= dir_stats_collector_adding_file_when_disabled_test
+->
     dir_stats_collector_test_base:teardown(Config),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 

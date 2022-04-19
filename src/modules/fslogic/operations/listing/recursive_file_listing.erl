@@ -8,6 +8,7 @@
 %%% @doc
 %%% This module is responsible for listing recursively non-directory files 
 %%% (i.e regular, symlinks and hardlinks) in subtree of given top directory. 
+%%% Files are listed in lexicographically ordered by path.
 %%% For each such file returns its file basic attributes (see file_attr.hrl) 
 %%% along with the path to the file relative to the top directory.
 %%% All directory paths user does not have access to are returned under `inaccessible_paths` key.
@@ -40,7 +41,9 @@
 
 -record(state, {
     %% values provided in options (unchanged during listing)
-    start_after_path :: file_meta:path(),
+    start_after_path :: file_meta:path(),   % required for checking whether file, that is to be 
+                                            % appended to result, is not pointed by a start_after_path 
+                                            % (listing should start AFTER file with this path).
     prefix = <<>> :: prefix(),
     
     % depth of listing root file relative to space root (unchanged during listing)
@@ -91,12 +94,12 @@
 
 -spec list(user_ctx:ctx(), file_ctx:ctx(), options())-> fslogic_worker:fuse_response().
 list(UserCtx, FileCtx, #{pagination_token := PaginationToken} = Options) ->
-    {RootGuid, StartAfter} = unpack_pagination_token(PaginationToken), 
+    {TokenRootGuid, StartAfter} = unpack_pagination_token(PaginationToken), 
     Limit = maps:get(limit, Options, ?LIST_RECURSIVE_BATCH_SIZE),
     Prefix = maps:get(prefix, Options, ?DEFAULT_PREFIX),
     case file_ctx:get_logical_guid_const(FileCtx) of
-        RootGuid -> list(UserCtx, FileCtx, StartAfter, Limit, Prefix);
-        _ -> throw(?EINVAL)
+        TokenRootGuid -> list(UserCtx, FileCtx, StartAfter, Limit, Prefix);
+        _ -> throw(?EINVAL) % requested listing of other dir than token's origin
     end;
 list(UserCtx, FileCtx, Options) ->
     StartAfter = maps:get(start_after_path, Options, ?DEFAULT_START_AFTER_PATH),
@@ -143,18 +146,14 @@ list(UserCtx, FileCtx0, StartAfter, Limit, Prefix) ->
             };
         {false, FileCtx2} ->
             ListingOpts = #{limit => 1, optimize_continuous_listing => false},
-            case list_children_with_access_check(UserCtx, FileCtx2, ListingOpts) of
-                {ok, _, _, _} ->
-                    #fuse_response{status = #status{code = ?OK},
-                        fuse_response = #recursive_file_list{
-                            inaccessible_paths = [],
-                            entries = build_result_file_entry_list(
-                                InitialState, get_file_attrs(UserCtx, FileCtx2), <<>>)
-                        }
-                    };
-                {error, ?EACCES} ->
-                    throw(?EACCES)
-            end
+            {ok, _, _, _} = list_reg_file_with_access_check(UserCtx, FileCtx2, ListingOpts),
+            #fuse_response{status = #status{code = ?OK},
+                fuse_response = #recursive_file_list{
+                    inaccessible_paths = [],
+                    entries = build_result_file_entry_list(
+                        InitialState, get_file_attrs(UserCtx, FileCtx2), <<>>)
+                }
+            }
     end.
 
 
@@ -180,7 +179,7 @@ process_current_dir(UserCtx, FileCtx, State) ->
 process_current_dir_in_batches(UserCtx, FileCtx, ListOpts, State, AccListResult) ->
     #state{limit = Limit} = State,
     {Children, UpdatedAccListResult, ListingState, FileCtx2} = 
-        case list_children_with_access_check(UserCtx, FileCtx, ListOpts) of
+        case list_dir_children_with_access_check(UserCtx, FileCtx, ListOpts) of
             {ok, C, E, F} -> 
                 {C, AccListResult, E, F};
             {error, ?EACCES} ->
@@ -241,23 +240,29 @@ process_current_child(UserCtx, ChildCtx, #state{current_dir_path_tokens = Curren
 %%%===================================================================
 
 %% @private
--spec list_children_with_access_check(user_ctx:ctx(), file_ctx:ctx(), file_listing:options()) ->
+-spec list_dir_children_with_access_check(user_ctx:ctx(), file_ctx:ctx(), file_listing:options()) ->
     {ok, [file_ctx:ctx()], file_listing:state(), file_ctx:ctx()} | {error, ?EACCES}.
-list_children_with_access_check(UserCtx, FileCtx, ListOpts) ->
+list_dir_children_with_access_check(UserCtx, DirCtx, ListOpts) ->
     try
-        {IsDir, FileCtx2} = file_ctx:is_dir(FileCtx),
-        AccessRequirements = case IsDir of
-            true -> [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?list_container_mask)];
-            false -> [?TRAVERSE_ANCESTORS]
-        end,
-        {CanonicalChildrenWhiteList, FileCtx3} = fslogic_authz:ensure_authorized_readdir(
-            UserCtx, FileCtx2, AccessRequirements
-        ),
-        {Children, ListingState, FileCtx4} = file_tree:list_children(FileCtx3, UserCtx, ListOpts, CanonicalChildrenWhiteList),
-        {ok, Children, ListingState, FileCtx4}
+        {CanonicalChildrenWhiteList, DirCtx2} = fslogic_authz:ensure_authorized_readdir(
+            UserCtx, DirCtx, [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?list_container_mask)]),
+        {Children, ExtendedInfo, DirCtx3} = file_tree:list_children(
+            DirCtx2, UserCtx, ListOpts, CanonicalChildrenWhiteList),
+        {ok, Children, ExtendedInfo, DirCtx3}
     catch throw:?EACCES ->
         {error, ?EACCES}
     end.
+
+
+%% @private
+-spec list_reg_file_with_access_check(user_ctx:ctx(), file_ctx:ctx(), file_meta:list_opts()) ->
+    {ok, [file_ctx:ctx()], file_meta:list_extended_info(), file_ctx:ctx()}.
+list_reg_file_with_access_check(UserCtx, FileCtx, ListOpts) ->
+    {CanonicalChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
+        UserCtx, FileCtx, [?TRAVERSE_ANCESTORS]
+    ),
+    {Children, ExtendedInfo, FileCtx3} = file_tree:list_children(FileCtx2, UserCtx, ListOpts, CanonicalChildrenWhiteList),
+    {ok, Children, ExtendedInfo, FileCtx3}.
 
 
 %% @private

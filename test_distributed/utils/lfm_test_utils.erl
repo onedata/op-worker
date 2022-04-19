@@ -21,7 +21,7 @@
 %% API
 -export([get_user1_session_id/2, get_user1_first_space_id/1, get_user1_first_space_guid/1, get_user1_first_space_name/1,
     get_user1_first_storage_id/2]).
--export([create_file/4, create_file/5, write_file/4, write_file/5, read_file/4]).
+-export([create_file/4, create_file/5, write_file/4, write_file/5, create_and_write_file/6, read_file/4]).
 -export([create_files_tree/4]).
 -export([clean_space/3, clean_space/4, assert_space_and_trash_are_empty/3, assert_space_dir_empty/3]).
 
@@ -82,12 +82,23 @@ create_file(<<"dir">>, Node, SessId, Path, Mode) ->
 write_file(Worker, SessId, FileGuid, ContentSpec) ->
     write_file(Worker, SessId, FileGuid, 0, ContentSpec).
 
--spec write_file(node(), session:id(), file_id:file_guid(), non_neg_integer(), binary() | {rand_content, non_neg_integer()}) ->
-    ok.
+-spec write_file(node(), session:id(), file_id:file_guid(), non_neg_integer(),
+    binary() | {rand_content, non_neg_integer()}) -> ok.
 write_file(Worker, SessId, FileGuid, Offset, {rand_content, Size}) ->
     write_file(Worker, SessId, FileGuid, Offset, crypto:strong_rand_bytes(Size));
 write_file(Worker, SessId, FileGuid, Offset, Data) when is_binary(Data) ->
     {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId, ?FILE_REF(FileGuid), write)),
+    ?assertMatch({ok, _}, lfm_proxy:write(Worker, Handle, Offset, Data)),
+    ?assertEqual(ok, lfm_proxy:close(Worker, Handle)).
+
+
+-spec create_and_write_file(node(), session:id(), fslogic_worker:file_guid(), file_meta:name(), non_neg_integer(),
+    binary() | {rand_content, non_neg_integer()}) -> ok.
+create_and_write_file(Worker, SessId, ParentGuid, ChildFileName, Offset, {rand_content, Size}) ->
+    create_and_write_file(Worker, SessId, ParentGuid, ChildFileName, Offset, crypto:strong_rand_bytes(Size));
+create_and_write_file(Worker, SessId, ParentGuid, ChildFileName, Offset, Data) when is_binary(Data) ->
+    {ok, {_, Handle}} = ?assertMatch({ok, _},
+        lfm_proxy:create_and_open(Worker, SessId, ParentGuid, ChildFileName, ?DEFAULT_FILE_MODE)),
     ?assertMatch({ok, _}, lfm_proxy:write(Worker, Handle, Offset, Data)),
     ?assertEqual(ok, lfm_proxy:close(Worker, Handle)).
 

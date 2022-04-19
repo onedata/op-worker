@@ -189,7 +189,7 @@ translate_dataset_summary(#file_eff_dataset_summary{
 translate_distribution(FileGuid, PossiblyIncompleteDistribution) ->
     {ok, #file_attr{size = FileSize}} = lfm:stat(?ROOT_SESS_ID, ?FILE_REF(FileGuid)),
 
-    %% @TODO VFS-8935 ultimately, location for each file should be created in each provider
+    %% @TODO VFS-9204 ultimately, location for each file should be created in each provider
     %% and the list of providers in the distribution should always be complete -
     %% for now, add placeholders with zero blocks for missing providers
     SpaceId = file_id:guid_to_space_id(FileGuid),
@@ -321,22 +321,32 @@ translate_file_details(#file_details{
 %% @private
 -spec translate_archive_recall_details(archive_recall:record()) -> map().
 translate_archive_recall_details(#archive_recall_details{
+    recalling_provider_id = RecallingProviderId,
     archive_id = ArchiveId,
     dataset_id = DatasetId,
     start_timestamp = StartTimestamp,
     finish_timestamp = FinishTimestamp,
+    cancel_timestamp = CancelTimestamp,
     total_file_count = TargetFileCount,
-    total_byte_size = TargetByteSize
+    total_byte_size = TargetByteSize,
+    last_error = LastError
 }) ->
     #{
+        <<"recallingProvider">> => gri:serialize(#gri{
+            type = op_provider, id = RecallingProviderId, aspect = instance, scope = protected}),
         <<"archive">> => gri:serialize(#gri{
             type = op_archive, id = ArchiveId, aspect = instance, scope = private}),
         <<"dataset">> => gri:serialize(#gri{
             type = op_dataset, id = DatasetId, aspect = instance, scope = private}),
         <<"startTime">> => utils:undefined_to_null(StartTimestamp),
         <<"finishTime">> => utils:undefined_to_null(FinishTimestamp),
+        <<"cancelTime">> => utils:undefined_to_null(CancelTimestamp),
         <<"totalFileCount">> => TargetFileCount,
-        <<"totalByteSize">> => TargetByteSize
+        <<"totalByteSize">> => TargetByteSize,
+        <<"lastError">> => case LastError of
+            undefined -> null;
+            _ -> json_utils:decode(LastError)
+        end
     }.
 
 

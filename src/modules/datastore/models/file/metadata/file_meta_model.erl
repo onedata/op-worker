@@ -394,6 +394,8 @@ resolve_conflict(_Ctx,
                 FileCtx = file_ctx:new_by_uuid(Uuid, SpaceId),
                 OldParentGuid = file_id:pack_guid(PrevParentUuid, SpaceId),
                 NewParentGuid = file_id:pack_guid(NewParentUuid, SpaceId),
+                paths_cache:invalidate_on_all_nodes(SpaceId),
+                permissions_cache:invalidate(),
                 fslogic_event_emitter:emit_file_renamed_no_exclude(
                     FileCtx, OldParentGuid, NewParentGuid, NewName, PrevName);
             _ ->

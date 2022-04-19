@@ -94,13 +94,14 @@ count_file_attrs_hash(StorageFileCtx, SyncAcl) ->
 
     {Xattr, StorageFileCtx3} = maybe_get_nfs4_acl(StorageFileCtx2, SyncAcl),
 
-    case file_meta:type(StMode) of
-        ?DIRECTORY_TYPE ->
-            %% don't count hash for directory as it will be scanned anyway
-            {<<"">>, StorageFileCtx3};
-        ?REGULAR_FILE_TYPE ->
+    case storage_driver:infer_type(StMode) of
+        {ok, ?REGULAR_FILE_TYPE} ->
             FileId = storage_file_ctx:get_file_name_const(StorageFileCtx2),
-            {hash([FileId, StMode, StSize, STMtime, STCtime, Xattr]), StorageFileCtx3}
+            {hash([FileId, StMode, StSize, STMtime, STCtime, Xattr]), StorageFileCtx3};
+        _ ->
+            %% don't count hash for directory as it will be scanned anyway;
+            %% ignore also not supported file types as they cannot be imported
+            {<<"">>, StorageFileCtx3}
     end.
 
 -spec maybe_get_nfs4_acl(storage_file_ctx:ctx(), boolean()) ->

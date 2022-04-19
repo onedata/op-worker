@@ -29,12 +29,13 @@
 
 
 %% API
--export([init_pool/0, stop_pool/0, start/4]).
+-export([init_pool/0, stop_pool/0, start/4, cancel/1]).
 
 %% Traverse behaviour callbacks
 -export([
     task_started/2,
     task_finished/2,
+    task_canceled/2,
     get_sync_info/1,
     get_job/1,
     update_job_progress/5,
@@ -52,8 +53,12 @@
 -define(COPY_OPTIONS(TaskId), #{
     recursive => false, 
     overwrite => true,
-    on_write_callback => fun(BytesCopied) -> 
-        archive_recall:report_bytes_copied(TaskId, BytesCopied) 
+    on_write_callback => fun(BytesCopied) ->
+        archive_recall:report_bytes_copied(TaskId, BytesCopied),
+        case traverse:is_job_cancelled(TaskId) of
+            true -> abort;
+            false -> continue
+        end
     end
 }). 
 
@@ -115,6 +120,14 @@ start(ArchiveDoc, UserCtx, ParentGuid, TargetFilename) ->
             Error
     end.
 
+
+-spec cancel(id()) -> ok | {error, term()}.
+cancel(TaskId) ->
+    case tree_traverse:cancel(?POOL_NAME, TaskId) of
+        ok -> archive_recall_details:report_cancel_started(TaskId);
+        {error, _} = Error -> Error 
+    end.
+
 %%%===================================================================
 %%% Traverse behaviour callbacks
 %%%===================================================================
@@ -135,12 +148,17 @@ task_finished(TaskId, Pool) ->
     ?debug("Archive recall traverse ~p finished", [TaskId]).
 
 
+-spec task_canceled(id(), tree_traverse:pool()) -> ok.
+task_canceled(TaskId, Pool) ->
+    task_finished(TaskId, Pool).
+
+
 -spec get_sync_info(tree_traverse:master_job()) -> {ok, traverse:sync_info()}.
 get_sync_info(Job) ->
     tree_traverse:get_sync_info(Job).
 
 
--spec get_job(traverse:job_id() | tree_traverse_job:doc()) ->
+-spec get_job(traverse:job_id()) ->
     {ok, tree_traverse:master_job(), tree_traverse:pool(), id()}  | {error, term()}.
 get_job(DocOrId) ->
     tree_traverse:get_job(DocOrId).
@@ -173,8 +191,10 @@ do_slave_job(#tree_traverse_slave{
         archive_doc := ArchiveDoc
     }} = Job, TaskId
 ) ->
-    execute_unsafe_job(do_slave_job_unsafe, [Job, TaskId], 
-        FileCtx, TaskId, ArchiveDoc).
+    case execute_unsafe_job(do_slave_job_unsafe, [Job, TaskId], FileCtx, TaskId, ArchiveDoc) of
+        ok -> ok;
+        error -> ok % error should be logged and saved, continue recall
+    end.
 
 %%%===================================================================
 %%% Internal functions

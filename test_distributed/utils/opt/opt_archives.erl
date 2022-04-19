@@ -18,7 +18,8 @@
     get_info/3,
     update/4,
     purge/3, purge/4,
-    recall/5, 
+    recall/5,
+    cancel_recall/3,
     get_recall_details/3, get_recall_progress/3
 ]).
 
@@ -118,6 +119,12 @@ purge(NodeSelector, SessionId, ArchiveId, CallbackUrl) ->
     file_meta:name() | default) -> {ok, file_id:file_guid()} | errors:error().
 recall(NodeSelector, SessionId, ArchiveId, TargetParentGuid, RootFileName) ->
     ?CALL(NodeSelector, [SessionId, ArchiveId, TargetParentGuid, RootFileName]).
+
+
+-spec cancel_recall(oct_background:node_selector(), session:id(), file_id:file_guid()) -> 
+    ok | errors:error().
+cancel_recall(NodeSelector, SessionId, FileGuid) ->
+    ?CALL(NodeSelector, [SessionId, FileGuid]).
 
 
 -spec get_recall_details(oct_background:node_selector(), session:id(), file_id:file_guid()) ->

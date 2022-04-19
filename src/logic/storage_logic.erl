@@ -148,7 +148,7 @@ support_space(StorageId, SpaceSupportToken, SupportSize) ->
         provider_logic:force_fetch(),
         space_logic:force_fetch(SpaceId),
         storage_logic:force_fetch(StorageId),
-        dir_stats_collector_config:init_for_space(SpaceId)
+        dir_stats_collector_config:init_for_empty_space(SpaceId)
     end).
 
 

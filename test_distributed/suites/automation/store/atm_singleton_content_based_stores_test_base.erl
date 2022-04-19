@@ -89,7 +89,7 @@ create_test_base(AtmStoreConfigs, GetItemDataSpec) ->
 
         InvalidItem = gen_invalid_data(AtmWorkflowExecutionAuth, ItemDataSpec),
         ?assertEqual(
-            ?ERROR_ATM_DATA_TYPE_UNVERIFIED(InvalidItem, ItemDataSpec#atm_data_spec.type),
+            atm_store_test_utils:infer_exp_invalid_data_error(InvalidItem, ItemDataSpec),
             ?rpc(catch CreateStoreFun(InvalidItem))
         ),
 
@@ -132,7 +132,7 @@ update_content_test_base(AtmStoreConfigs, GetItemDataSpec, ContentUpdateOpts, Ge
         % Assert set with invalid item should fail
         InvalidItem = gen_invalid_data(AtmWorkflowExecutionAuth, ItemDataSpec),
         ?assertEqual(
-            ?ERROR_ATM_DATA_TYPE_UNVERIFIED(InvalidItem, ItemDataSpec#atm_data_spec.type),
+            atm_store_test_utils:infer_exp_invalid_data_error(InvalidItem, ItemDataSpec),
             ?rpc(catch atm_store_api:update_content(
                 AtmWorkflowExecutionAuth, InvalidItem, ContentUpdateOpts, AtmStoreId
             ))

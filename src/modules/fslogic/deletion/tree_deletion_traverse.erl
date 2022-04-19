@@ -114,7 +114,7 @@ task_finished(TaskId, _Pool) ->
     tree_traverse_session:close_for_task(TaskId),
     ?debug("dir deletion job ~p finished", [TaskId]).
 
--spec get_job(traverse:job_id() | tree_traverse_job:doc()) ->
+-spec get_job(traverse:job_id()) ->
     {ok, tree_traverse:master_job(), tree_traverse:pool(), id()}  | {error, term()}.
 get_job(DocOrId) ->
     tree_traverse:get_job(DocOrId).
@@ -221,7 +221,8 @@ delete_file(FileCtx, UserId, TaskId, TraverseInfo = #{emit_events := EmitEvents}
 file_processed(FileCtx, UserCtx, TaskId, TraverseInfo = #{root_original_parent_uuid := RootOriginalParentUuid}) ->
     {ParentFileCtx, FileCtx1} = file_tree:get_parent(FileCtx, UserCtx),
     case file_qos:get_effective(RootOriginalParentUuid) of
-        {ok, #effective_file_qos{qos_entries = EffectiveQosEntries}} ->
+        {ok, EffectiveFileQos} ->
+            EffectiveQosEntries = file_qos:get_qos_entries(EffectiveFileQos),
             SpaceId = file_ctx:get_space_id_const(FileCtx1),
             OriginalRootParentCtx = file_ctx:new_by_uuid(RootOriginalParentUuid, SpaceId),
             lists:foreach(fun(EffectiveQosEntryId) ->
