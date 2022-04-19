@@ -34,10 +34,12 @@
 
     atm_workflow_execution_cancelled_in_scheduled_status_test/1,
     first_lane_run_preparation_failure_before_run_was_created_test/1,
-    first_lane_run_preparation_failure_before_run_was_created_interrupts_lane_preparing_in_advance_1_test/1,
     first_lane_run_preparation_failure_after_run_was_created_test/1,
     atm_workflow_execution_cancelled_in_preparing_status_before_run_was_created_test/1,
-    atm_workflow_execution_cancelled_in_preparing_status_after_run_was_created_test/1
+    atm_workflow_execution_cancelled_in_preparing_status_after_run_was_created_test/1,
+    first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_1_test/1,
+    first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_2_test/1,
+    first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_3_test/1
 ]).
 
 groups() -> [
@@ -53,10 +55,12 @@ groups() -> [
     {execution_tests, [parallel], [
         atm_workflow_execution_cancelled_in_scheduled_status_test,
         first_lane_run_preparation_failure_before_run_was_created_test,
-        first_lane_run_preparation_failure_before_run_was_created_interrupts_lane_preparing_in_advance_1_test,
         first_lane_run_preparation_failure_after_run_was_created_test,
         atm_workflow_execution_cancelled_in_preparing_status_before_run_was_created_test,
-        atm_workflow_execution_cancelled_in_preparing_status_after_run_was_created_test
+        atm_workflow_execution_cancelled_in_preparing_status_after_run_was_created_test,
+        first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_1_test,
+        first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_2_test,
+        first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_3_test
     ]}
 ].
 
@@ -113,10 +117,6 @@ first_lane_run_preparation_failure_before_run_was_created_test(_Config) ->
     ?RUN_PREPARATION_TEST().
 
 
-first_lane_run_preparation_failure_before_run_was_created_interrupts_lane_preparing_in_advance_1_test(_Config) ->
-    ?RUN_PREPARATION_TEST().
-
-
 first_lane_run_preparation_failure_after_run_was_created_test(_Config) ->
     ?RUN_PREPARATION_TEST().
 
@@ -126,6 +126,18 @@ atm_workflow_execution_cancelled_in_preparing_status_before_run_was_created_test
 
 
 atm_workflow_execution_cancelled_in_preparing_status_after_run_was_created_test(_Config) ->
+    ?RUN_PREPARATION_TEST().
+
+
+first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_1_test(_Config) ->
+    ?RUN_PREPARATION_TEST().
+
+
+first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_2_test(_Config) ->
+    ?RUN_PREPARATION_TEST().
+
+
+first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_3_test(_Config) ->
     ?RUN_PREPARATION_TEST().
 
 
