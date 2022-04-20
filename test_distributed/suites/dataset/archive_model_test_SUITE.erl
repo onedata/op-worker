@@ -80,7 +80,11 @@ groups() -> [
         archive_of_detached_dataset_should_be_accessible,
         archive_of_dataset_associated_with_deleted_file_should_be_accessible,
         archive_reattached_dataset,
-        removal_of_not_empty_dataset_should_fail,
+        removal_of_not_empty_dataset_should_fail
+    ]},
+    {iterate_parallel_tests, [parallel], [
+        % these tests has been moved to separate group so that creation of 
+        % so many archives does not block archive traverse pool for other tests
         iterate_over_100_archives_using_offset_and_limit_1,
         iterate_over_100_archives_using_offset_and_limit_10,
         iterate_over_100_archives_using_offset_and_limit_100,
@@ -106,6 +110,7 @@ groups() -> [
 all() -> [
     {group, time_mock_parallel_tests},
     {group, parallel_tests},
+    {group, iterate_parallel_tests},
     {group, sequential_tests}
 ].
 
@@ -394,16 +399,16 @@ create_archive_privileges_test(_Config) ->
         opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
 
     lists:foreach(fun(Privilege) ->
-
-        ensure_privilege_revoked(P1Node, SpaceId, UserId2, Privilege, AllPrivileges),
+    
+        ozt_spaces:set_privileges(SpaceId, UserId2, AllPrivileges -- [Privilege]),
         % user2 cannot create archive
         ?assertEqual(?ERROR_POSIX(?EPERM),
             opt_archives:archive_dataset(P1Node, User2SessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
         % user2 cannot modify an existing archive either
         ?assertEqual(?ERROR_POSIX(?EPERM),
             opt_archives:update(P1Node, User2SessIdP1, ArchiveId, #{<<"description">> => ?TEST_DESCRIPTION2})),
-
-        ensure_privilege_assigned(P1Node, SpaceId, UserId2, Privilege, AllPrivileges),
+    
+        ozt_spaces:set_privileges(SpaceId, UserId2, AllPrivileges),
         % user2 can now create archive
 
         {ok, ArchiveId2} = ?assertMatch({ok, _},
@@ -438,7 +443,7 @@ view_archive_privileges_test(_Config) ->
     AllPrivileges = privileges:from_list([?SPACE_VIEW_ARCHIVES | privileges:space_member()]),
 
     % assign user only space_member privileges
-    ensure_privilege_revoked(P1Node, SpaceId, UserId2, ?SPACE_VIEW_ARCHIVES, AllPrivileges),
+    ozt_spaces:set_privileges(SpaceId, UserId2, AllPrivileges -- [?SPACE_VIEW_ARCHIVES]),
 
     % user2 cannot fetch archive info
     ?assertEqual(?ERROR_POSIX(?EPERM),
@@ -448,7 +453,7 @@ view_archive_privileges_test(_Config) ->
         opt_archives:list(P1Node, User2SessIdP1, DatasetId, #{offset => 0, limit => 10})),
 
     % assign user2 privilege to view archives
-    ensure_privilege_assigned(P1Node, SpaceId, UserId2, ?SPACE_VIEW_ARCHIVES, AllPrivileges),
+    ozt_spaces:set_privileges(SpaceId, UserId2, AllPrivileges),
 
     % now user2 should be able to fetch archive info
     ?assertMatch({ok, _},
@@ -482,12 +487,12 @@ remove_archive_privileges_test(_Config) ->
     AllPrivileges = privileges:from_list(RequiredPrivileges ++ privileges:space_member()),
 
     lists:foreach(fun({Privilege, ArchiveId}) ->
-
-        ensure_privilege_revoked(P1Node, SpaceId, UserId2, Privilege, AllPrivileges),
+    
+        ozt_spaces:set_privileges(SpaceId, UserId2, AllPrivileges -- [Privilege]),
         % user2 cannot remove the archive
         ?assertEqual(?ERROR_POSIX(?EPERM), opt_archives:purge(P1Node, User2SessIdP1, ArchiveId)),
-
-        ensure_privilege_assigned(P1Node, SpaceId, UserId2, Privilege, AllPrivileges),
+    
+        ozt_spaces:set_privileges(SpaceId, UserId2, AllPrivileges),
         % user2 can now remove archive
         ?assertEqual(ok, opt_archives:purge(P1Node, User2SessIdP1, ArchiveId))
 
@@ -640,7 +645,10 @@ end_per_suite(Config) ->
     oct_background:end_per_suite(),
     dir_stats_test_utils:enable_stats_counting(Config).
 
-init_per_group(parallel_tests, Config) ->
+init_per_group(Group, Config) when
+    Group =:= parallel_tests;
+    Group =:= iterate_parallel_tests
+->
     Config2 = oct_background:update_background_config(Config),
     lfm_proxy:init(Config2, false);
 init_per_group(_Group, Config) ->
@@ -693,19 +701,3 @@ update_opts(Opts = #{offset := Offset}, ListedArchives) ->
     Opts#{offset => Offset + length(ListedArchives)};
 update_opts(Opts = #{start_index := _}, ListedArchives) ->
     Opts#{start_index => element(1, lists:last(ListedArchives)), offset => 1}.
-
-has_eff_privilege(Node, SpaceId, UserId, Privilege) ->
-    rpc:call(Node, space_logic, has_eff_privilege, [SpaceId, UserId, Privilege]).
-
-ensure_privilege_revoked(Node, SpaceId, UserId, Privilege, AllPrivileges) ->
-    % assign AllPrivileges with Privilege missing
-    Privileges = privileges:from_list(AllPrivileges -- [Privilege]),
-    ozw_test_rpc:space_set_user_privileges(SpaceId, UserId, Privileges),
-    % wait till information is synced from onezone
-    ?assertMatch(false, has_eff_privilege(Node, SpaceId, UserId, Privilege), ?ATTEMPTS).
-
-ensure_privilege_assigned(Node, SpaceId, UserId, Privilege, AllPrivileges) ->
-    % assign user AllPrivileges
-    ozw_test_rpc:space_set_user_privileges(SpaceId, UserId, AllPrivileges),
-    % wait till information is synced from onezone
-    ?assertMatch(true, has_eff_privilege(Node, SpaceId, UserId, Privilege), ?ATTEMPTS).

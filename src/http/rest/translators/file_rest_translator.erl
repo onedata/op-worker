@@ -119,7 +119,8 @@ translate_archive_recall_details(#archive_recall_details{
     start_timestamp = StartTimestamp,
     finish_timestamp = FinishTimestamp,
     total_file_count = TotalFileCount,
-    total_byte_size = TotalByteSize
+    total_byte_size = TotalByteSize,
+    last_error = LastError
 }) ->
     #{
         <<"archiveId">> => ArchiveId,
@@ -127,5 +128,6 @@ translate_archive_recall_details(#archive_recall_details{
         <<"startTime">> => utils:undefined_to_null(StartTimestamp),
         <<"finishTime">> => utils:undefined_to_null(FinishTimestamp),
         <<"totalFileCount">> => TotalFileCount,
-        <<"totalByteSize">> => TotalByteSize
+        <<"totalByteSize">> => TotalByteSize,
+        <<"lastError">> => utils:undefined_to_null(LastError)
     }.

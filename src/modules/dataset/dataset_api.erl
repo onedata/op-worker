@@ -113,8 +113,12 @@ update(DatasetDoc, NewState, FlagsToSet, FlagsToUnset) ->
 
 
 -spec remove(dataset:id() | dataset:doc()) -> ok | error().
-remove(Doc = #document{key = DatasetId}) ->
+remove(#document{key = DatasetId}) ->
+    % fetch doc again in critical section to avoid races with dataset state change
+    remove(DatasetId);
+remove(DatasetId) when is_binary(DatasetId) ->
     ?CRITICAL_SECTION(DatasetId, fun() ->
+        {ok, Doc} = dataset:get(DatasetId),
         case archives_list:is_empty(DatasetId) of
             true ->
                 ok = remove_from_datasets_structure(Doc),
@@ -133,10 +137,7 @@ remove(Doc = #document{key = DatasetId}) ->
             false ->
                 {error, ?ENOTEMPTY}
         end
-    end);
-remove(DatasetId) when is_binary(DatasetId) ->
-    {ok, Doc} = dataset:get(DatasetId),
-    remove(Doc).
+    end).
 
 
 -spec move_if_applicable(file_meta:doc(), file_meta:doc()) -> ok.
