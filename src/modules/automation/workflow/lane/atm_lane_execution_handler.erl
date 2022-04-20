@@ -23,11 +23,6 @@
 ]).
 
 
--type teardown_ctx() :: #atm_lane_execution_run_teardown_ctx{}.
-
--export_type([teardown_ctx/0]).
-
-
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -200,6 +195,8 @@ end_lane_run(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
         current_run_num = CurrentRunNum
     }}} = atm_workflow_execution:get(AtmWorkflowExecutionId),
 
+    % Check if current lane run is ending here rather then right before this bool
+    % usage as below calls may shift current lane run selector
     IsCurrentAtmLaneRun = atm_lane_execution:is_current_lane_run(
         AtmLaneRunSelector, AtmWorkflowExecution
     ),
@@ -208,22 +205,21 @@ end_lane_run(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
 
     unfreeze_iterated_store_in_case_of_global_store(CurrentRun, AtmWorkflowExecutionCtx),
     freeze_exception_store(CurrentRun),
+
     atm_parallel_box_execution:ensure_all_ended(AtmParallelBoxExecutions),
 
-    #document{value = NewAtmWorkflowExecution = #atm_workflow_execution{
-        current_lane_index = NextAtmLaneIndex,
-        current_run_num = NextRunNum
-    }} = atm_lane_execution_status:handle_ended(AtmLaneRunSelector, AtmWorkflowExecutionId),
+    #document{
+        value = NewAtmWorkflowExecution = #atm_workflow_execution{
+            current_lane_index = NextAtmLaneIndex,
+            current_run_num = NextRunNum
+        }
+    } = atm_lane_execution_status:handle_ended(AtmLaneRunSelector, AtmWorkflowExecutionId),
+
+    atm_parallel_box_execution:teardown_all(AtmWorkflowExecutionCtx, AtmParallelBoxExecutions),
 
     IsRetryScheduled = IsCurrentAtmLaneRun andalso
         NextAtmLaneIndex == CurrentAtmLaneIndex andalso
         NextRunNum == CurrentRunNum + 1,
-
-    AtmLaneExecutionRunTeardownCtx = #atm_lane_execution_run_teardown_ctx{
-        workflow_execution_ctx = AtmWorkflowExecutionCtx,
-        is_retry_scheduled = IsRetryScheduled
-    },
-    atm_parallel_box_execution:teardown_all(AtmLaneExecutionRunTeardownCtx, AtmParallelBoxExecutions),
 
     {IsRetryScheduled, NewAtmWorkflowExecution}.
 

@@ -84,7 +84,7 @@ report(QosEntryId, Type, ValuesPerStorage) ->
     end, 0, ValuesPerStorage),
     CompleteValuesPerStorage = ValuesPerStorage#{?QOS_TOTAL_TIME_SERIES_NAME => TotalValue},
     Timestamp = ?NOW(),
-    ConsumeSpec = maps:map(fun(_TimeSeriesName, Value) -> #{all => [{Timestamp, Value}]} end, CompleteValuesPerStorage),
+    ConsumeSpec = maps:map(fun(_TSName, Value) -> #{?ALL_METRICS => [{Timestamp, Value}]} end, CompleteValuesPerStorage),
     consume_measurements(?COLLECTION_ID(QosEntryId, Type), ConsumeSpec, ?MAX_CONSUME_MEASUREMENTS_RETRIES).
 
 

@@ -29,6 +29,7 @@
     example_data_spec/1,
     gen_valid_data/3,
     gen_invalid_data/3,
+    infer_exp_invalid_data_error/2,
     compress_and_expand_data/4,
     randomly_remove_entity_referenced_by_item/4,
     split_into_chunks/3
@@ -134,13 +135,20 @@ build_workflow_execution_env(AtmWorkflowExecutionAuth, AtmStoreSchema, AtmStoreI
     ).
 
 
-%% TODO VFS-8686 add array data spec generation after implementing compress/expand for array
 -spec example_data_spec(atm_data_type:type()) -> atm_data_spec:record().
-example_data_spec(atm_time_series_measurements_type) ->
+example_data_spec(atm_array_type) ->
+    #atm_data_spec{
+        type = atm_array_type,
+        value_constraints = #{
+            item_data_spec => example_data_spec(?RAND_ELEMENT(basic_data_types()))
+        }
+    };
+
+example_data_spec(atm_time_series_measurement_type) ->
     RandSpecs = atm_test_utils:example_time_series_measurements_specs(),
 
     #atm_data_spec{
-        type = atm_time_series_measurements_type,
+        type = atm_time_series_measurement_type,
         value_constraints = #{specs => lists_utils:random_sublist(RandSpecs, 1, all)}
     };
 
@@ -248,28 +256,26 @@ gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_data_spec{
     ?RAND_STR(32);
 
 gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_data_spec{
-    type = atm_time_series_measurements_type,
+    type = atm_time_series_measurement_type,
     value_constraints = #{specs := Specs}
 }) ->
-    lists:map(fun(_) ->
-        #{
-            <<"tsName">> => gen_ts_name(?RAND_ELEMENT(Specs)),
-            <<"timestamp">> => ?RAND_INT(100000, 999999),
-            <<"value">> => ?RAND_INT(1, 99)
-        }
-    end, lists:seq(1, ?RAND_INT(2, 5))).
+    #{
+        <<"tsName">> => gen_ts_name(?RAND_ELEMENT(Specs)),
+        <<"timestamp">> => ?RAND_INT(100000, 999999),
+        <<"value">> => ?RAND_INT(1, 99)
+    }.
 
 
 %% @private
 -spec gen_ts_name(atm_time_series_measurements_spec:record()) ->
     atm_time_series_attribute:name().
-gen_ts_name(#atm_time_series_measurements_spec{
+gen_ts_name(#atm_time_series_measurement_spec{
     name_matcher_type = exact,
     name_matcher = TsName
 }) ->
     TsName;
 
-gen_ts_name(#atm_time_series_measurements_spec{
+gen_ts_name(#atm_time_series_measurement_spec{
     name_matcher_type = has_prefix,
     name_matcher = Pattern
 }) ->
@@ -284,12 +290,10 @@ gen_ts_name(#atm_time_series_measurements_spec{
     atm_value:expanded().
 gen_invalid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_data_spec{
     type = atm_array_type,
-    value_constraints = #{item_data_spec := #atm_data_spec{type = ItemDataType}}
+    value_constraints = #{item_data_spec := ItemDataSpec}
 }) ->
-    InvalidItemDataSpec = example_data_spec(?RAND_ELEMENT(all_basic_data_types() -- [ItemDataType])),
-
     lists:map(
-        fun(_) -> gen_valid_data(ProviderSelector, AtmWorkflowExecutionAuth, InvalidItemDataSpec) end,
+        fun(_) -> gen_invalid_data(ProviderSelector, AtmWorkflowExecutionAuth, ItemDataSpec) end,
         lists:seq(1, ?RAND_INT(5, 10))
     );
 
@@ -297,14 +301,30 @@ gen_invalid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_data_spec{
     type = atm_object_type
 }) ->
     gen_valid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_data_spec{
-        type = lists_utils:random_element([atm_integer_type, atm_string_type])
+        type = ?RAND_ELEMENT([atm_integer_type, atm_string_type])
     });
 
 gen_invalid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_data_spec{
     type = AtmDataType
 }) ->
-    InvalidDataSpec = example_data_spec(?RAND_ELEMENT(all_basic_data_types() -- [AtmDataType])),
+    InvalidDataSpec = example_data_spec(?RAND_ELEMENT(basic_data_types() -- [AtmDataType])),
     gen_valid_data(ProviderSelector, AtmWorkflowExecutionAuth, InvalidDataSpec).
+
+
+-spec infer_exp_invalid_data_error(atm_value:expanded(), atm_data_spec:record()) ->
+    errors:error().
+infer_exp_invalid_data_error(InvalidArray = [InvalidValue | _], #atm_data_spec{
+    type = atm_array_type,
+    value_constraints = #{item_data_spec := #atm_data_spec{type = ExpItemDataType}}
+}) ->
+    ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+        InvalidArray, atm_array_type, #{<<"$[0]">> => errors:to_json(
+            ?ERROR_ATM_DATA_TYPE_UNVERIFIED(InvalidValue, ExpItemDataType)
+        )}
+    );
+
+infer_exp_invalid_data_error(InvalidItem, #atm_data_spec{type = ExpItemDataType}) ->
+    ?ERROR_ATM_DATA_TYPE_UNVERIFIED(InvalidItem, ExpItemDataType).
 
 
 -spec compress_and_expand_data(
@@ -392,16 +412,15 @@ infer_store_type(#atm_tree_forest_store_config{}) -> tree_forest.
 
 
 %% @private
--spec all_basic_data_types() -> [atm_data_type:type()].
-all_basic_data_types() -> [
+-spec basic_data_types() -> [atm_data_type:type()].
+basic_data_types() -> [
     atm_dataset_type,
     atm_file_type,
     atm_integer_type,
     atm_object_type,
-    atm_onedatafs_credentials_type,
     atm_range_type,
     atm_string_type,
-    atm_time_series_measurements_type
+    atm_time_series_measurement_type
 ].
 
 
