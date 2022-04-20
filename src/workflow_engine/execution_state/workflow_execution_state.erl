@@ -1226,6 +1226,12 @@ handle_no_waiting_items_error(#workflow_execution_state{
 %%% Test API
 %%%===================================================================
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Checks if lane is finished and lane data is cleared. Current state() is returned for better output in tests
+%% when an assertion fails.
+%% @end
+%%--------------------------------------------------------------------
 -spec is_finished_and_cleaned(workflow_engine:execution_id(), index()) -> true | {false, state()}.
 is_finished_and_cleaned(ExecutionId, LaneIndex) ->
     case datastore_model:get(?CTX, ExecutionId) of
@@ -1244,7 +1250,7 @@ is_finished_and_cleaned(ExecutionId, LaneIndex) ->
             execution_status = ExecutionStatus
         } = Record}} when ExecutionStatus =:= ?EXECUTION_CANCELLED orelse
             ExecutionStatus =:= ?WAITING_FOR_NEXT_LANE_PREPARATION_END ->
-            is_finished_and_cleaned_for_canceled_execution(Record);
+            is_canceled_execution_finished_and_cleaned(Record);
         {ok, #document{value = #workflow_execution_state{
             current_lane = #current_lane{index = LaneIndex},
             execution_status = ?EXECUTION_ENDED,
@@ -1252,17 +1258,18 @@ is_finished_and_cleaned(ExecutionId, LaneIndex) ->
             next_lane = #next_lane{}
         } = Record}} ->
             % ?EXECUTION_ENDED with next line ?PREPARED_IN_ADVANCE is possible only after cancelation
-            is_finished_and_cleaned_for_canceled_execution(Record);
+            is_canceled_execution_finished_and_cleaned(Record);
         {ok, #document{value = Record}} ->
             {false, Record}
     end.
 
 
--spec is_finished_and_cleaned_for_canceled_execution(state()) -> true | {false, state()}.
-is_finished_and_cleaned_for_canceled_execution(#workflow_execution_state{
+%% @private
+-spec is_canceled_execution_finished_and_cleaned(state()) -> true | {false, state()}.
+is_canceled_execution_finished_and_cleaned(#workflow_execution_state{
     jobs = Jobs,
     iteration_state = IterationState
-} = Record) ->
+} = State) ->
     HasWaitingResults = case workflow_jobs:prepare_next_waiting_result(Jobs) of
         {{ok, _}, _} -> true;
         _ -> false
@@ -1270,7 +1277,7 @@ is_finished_and_cleaned_for_canceled_execution(#workflow_execution_state{
     case not workflow_jobs:has_ongoing_jobs(Jobs) andalso not HasWaitingResults andalso
         workflow_iteration_state:is_finished_and_cleaned(IterationState) of
         true -> true;
-        false -> {false, Record}
+        false -> {false, State}
     end.
 
 
