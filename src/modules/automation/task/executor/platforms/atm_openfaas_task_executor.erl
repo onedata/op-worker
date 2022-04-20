@@ -107,13 +107,10 @@ get_activity_registry_id(#atm_openfaas_task_executor{activity_registry = Activit
     atm_lambda_revision:record()
 ) ->
     record() | no_return().
-create(AtmWorkflowExecutionCtx, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision) ->
+create(AtmWorkflowExecutionCtx, _AtmLaneIndex, _AtmTaskSchema, AtmLambdaRevision) ->
     assert_openfaas_available(),
 
-    ResourceSpec = select_resource_spec(AtmTaskSchema, AtmLambdaRevision),
-    FunctionName = build_function_name(
-        AtmWorkflowExecutionCtx, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision, ResourceSpec
-    ),
+    FunctionName = build_function_name(AtmWorkflowExecutionCtx, AtmLambdaRevision),
     {ok, ActivityRegistryId} = atm_openfaas_function_activity_registry:ensure_for_function(FunctionName),
 
     #atm_openfaas_task_executor{
@@ -260,38 +257,17 @@ select_resource_spec(#atm_task_schema{resource_spec_override = ResourceSpec}, _A
 %% OpenFaaS service is '[a-z]([-a-z0-9]{0,61}[a-z0-9])?').
 %% @end
 %%--------------------------------------------------------------------
--spec build_function_name(
-    atm_workflow_execution_ctx:record(),
-    atm_lane_execution:index(),
-    atm_task_schema:record(),
-    atm_lambda_revision:record(),
-    atm_resource_spec:record()
-) ->
+-spec build_function_name(atm_workflow_execution_ctx:record(), atm_lambda_revision:record()) ->
     binary().
-build_function_name(
-    AtmWorkflowExecutionCtx,
-    AtmLaneIndex,
-    AtmTaskSchema,
-    AtmLambdaRevision,
-    ResourceSpec
-) ->
-    AtmLambdaRevisionName = AtmLambdaRevision#atm_lambda_revision.name,
+build_function_name(AtmWorkflowExecutionCtx, #atm_lambda_revision{name = AtmLambdaRevisionName}) ->
     AtmWorkflowExecutionId = atm_workflow_execution_ctx:get_workflow_execution_id(
         AtmWorkflowExecutionCtx
     ),
-
-    Signature = str_utils:md5_digest([
-        AtmWorkflowExecutionId,
-        atm_workflow_execution_ctx:get_workflow_execution_incarnation(AtmWorkflowExecutionCtx),
-        AtmLaneIndex,
-        AtmTaskSchema#atm_task_schema.lambda_id,
-        AtmTaskSchema#atm_task_schema.lambda_revision_number,
-        ResourceSpec
-    ]),
-
     Name = str_utils:format_bin("w~s-s~s-~s", [
         binary:part(AtmWorkflowExecutionId, 0, min(size(AtmWorkflowExecutionId), 10)),
-        binary:part(Signature, 0, min(size(Signature), 10)),
+        % Generate random substring to ensure functions registered in OpenFaaS
+        % are unique for each task despite e.g. using the same lambda
+        str_utils:rand_hex(5),
         binary:part(AtmLambdaRevisionName, 0, min(size(AtmLambdaRevisionName), 39))
     ]),
     SanitizedName = << <<(sanitize_character(Char))/integer>> || <<Char>> <= Name>>,
