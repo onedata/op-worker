@@ -22,6 +22,7 @@
 
     atm_workflow_execution_cancelled_in_preparing_status_before_run_was_created_test/0,
     atm_workflow_execution_cancelled_in_preparing_status_after_run_was_created_test/0,
+    atm_workflow_execution_cancel_before_lane_run_preparation_failed_test/0,
     atm_workflow_execution_cancel_in_aborting_status_after_lane_run_preparation_failed_test/0,
 
     first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_1_test/0,
@@ -202,7 +203,7 @@ atm_workflow_execution_cancelled_in_preparing_status_before_run_was_created_test
                         {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_aborting(ExpState1)}
                     end,
                     % no lane run components should be created
-                    after_step_exp_state_diff = fun(_) -> false end
+                    after_step_exp_state_diff = no_diff
                 },
                 prepare_lane = #atm_step_mock_spec{
                     after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState}) ->
@@ -251,6 +252,50 @@ atm_workflow_execution_cancelled_in_preparing_status_after_run_was_created_test(
                             {1, 1}, ExpState0
                         ),
                         {true, atm_workflow_execution_exp_state_builder:expect_lane_run_cancelled({1, 1}, ExpState1)}
+                    end
+                }
+            }],
+            handle_workflow_execution_ended = #atm_step_mock_spec{
+                after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_cancelled(ExpState0)}
+                end
+            }
+        }]
+    }).
+
+
+atm_workflow_execution_cancel_before_lane_run_preparation_failed_test() ->
+    atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
+        provider = ?PROVIDER_SELECTOR,
+        user = ?USER_SELECTOR,
+        space = ?SPACE_SELECTOR,
+        workflow_schema_dump_or_draft = ?ECHO_1_LANE_ATM_WORKFLOW_SCHEMA_DRAFT,
+        workflow_schema_revision_num = 1,
+        incarnations = [#atm_workflow_execution_incarnation_test_spec{
+            incarnation_num = 1,
+            lane_runs = [#atm_lane_run_execution_test_spec{
+                selector = {1, 1},
+                create_run = #atm_step_mock_spec{
+                    before_step_hook = fun(AtmMockCallCtx) ->
+                        atm_workflow_execution_test_runner:cancel_workflow_execution(AtmMockCallCtx)
+                    end,
+                    before_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                        ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_aborting({1, 1}, ExpState0),
+                        {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_aborting(ExpState1)}
+                    end,
+                    strategy = ?RAND_ELEMENT([
+                        {yield, {throw, ?ERROR_INTERNAL_SERVER_ERROR}},
+                        % Even if lane run creation proceed created components should not be saved but rather
+                        % immediately deleted due to cancel
+                        {passthrough_with_result_override, {throw, ?ERROR_INTERNAL_SERVER_ERROR}}
+                    ])
+                },
+                prepare_lane = #atm_step_mock_spec{
+                    after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                        % Despite error occurring during lane run preparation cancel was scheduled first and
+                        % has higher priority so overall lane run status should be cancelled
+                        ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_cancelled({1, 1}, ExpState0),
+                        {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_aborting(ExpState1)}
                     end
                 }
             }],
