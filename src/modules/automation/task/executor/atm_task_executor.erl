@@ -80,7 +80,7 @@
 ) ->
     workflow_engine:task_spec() | no_return().
 
--callback teardown(atm_lane_execution_handler:teardown_ctx(), record()) -> ok | no_return().
+-callback teardown(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
 
 -callback delete(record()) -> ok | no_return().
 
@@ -122,10 +122,10 @@ initiate(AtmWorkflowExecutionCtx, AtmTaskSchema, AtmLambdaRevision, AtmTaskExecu
     Model:initiate(AtmWorkflowExecutionCtx, AtmTaskSchema, AtmLambdaRevision, AtmTaskExecutor).
 
 
--spec teardown(atm_lane_execution_handler:teardown_ctx(), record()) -> ok | no_return().
-teardown(AtmLaneExecutionRunTeardownCtx, AtmTaskExecutor) ->
+-spec teardown(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
+teardown(AtmWorkflowExecutionCtx, AtmTaskExecutor) ->
     Model = utils:record_type(AtmTaskExecutor),
-    Model:teardown(AtmLaneExecutionRunTeardownCtx, AtmTaskExecutor).
+    Model:teardown(AtmWorkflowExecutionCtx, AtmTaskExecutor).
 
 
 -spec delete(record()) -> ok | no_return().

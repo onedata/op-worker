@@ -146,13 +146,9 @@ initiate(AtmWorkflowExecutionCtx, AtmTaskSchema, AtmLambdaRevision, AtmTaskExecu
     #{type => async}.
 
 
--spec teardown(atm_lane_execution_handler:teardown_ctx(), record()) -> ok | no_return().
-teardown(#atm_lane_execution_run_teardown_ctx{is_retry_scheduled = true}, _AtmTaskExecutor) ->
-    % in case of lane run retry functions registered in OpenFaaS service are not removed
-    % as they will be reused by retry
-    ok;
-teardown(AtmLaneExecutionRunTeardownCtx, AtmTaskExecutor) ->
-    remove_function(AtmLaneExecutionRunTeardownCtx, AtmTaskExecutor).
+-spec teardown(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
+teardown(AtmWorkflowExecutionCtx, AtmTaskExecutor) ->
+    remove_function(AtmWorkflowExecutionCtx, AtmTaskExecutor).
 
 
 -spec delete(record()) -> ok | no_return().
@@ -640,12 +636,11 @@ schedule_function_execution(AtmJobCtx, LambdaInput, #atm_openfaas_task_executor{
 
 
 %% @private
--spec remove_function(atm_lane_execution_handler:teardown_ctx(), record()) ->
+-spec remove_function(atm_workflow_execution_ctx:record(), record()) ->
     ok | no_return().
-remove_function(
-    #atm_lane_execution_run_teardown_ctx{workflow_execution_ctx = AtmWorkflowExecutionCtx},
-    #atm_openfaas_task_executor{function_name = FunctionName}
-) ->
+remove_function(AtmWorkflowExecutionCtx, #atm_openfaas_task_executor{
+    function_name = FunctionName
+}) ->
     OpenfaasConfig = get_openfaas_config(),
 
     Endpoint = get_openfaas_endpoint(OpenfaasConfig, <<"/system/functions">>),
