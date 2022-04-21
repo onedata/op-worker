@@ -7,7 +7,30 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% API module for performing operations on automation workflow executions.
-%%% TODO VFS-7674 Describe automation workflow execution machinery
+%%% An execution is created according to specified automation workflow schema
+%%% revision - to learn more about overall workflow concept @see automation.erl
+%%% Those schemas (workflow and all used lambdas) are fetched from Onezone and
+%%% saved at the beginning of execution (they can be changed so to ensure proper
+%%% execution snapshot of concrete version must be made).
+%%% Automation workflow execution consists of execution of lanes each of which
+%%% is made of one or more runs. Lane run execution is an execution "attempt"
+%%% of particular lane schema. Such "attempt" may fail and then new run is
+%%% created for this lane - up to max retries limit specified in schema.
+%%% With this (new run is created rather than clearing and restarting the
+%%% failed one) it is possible to view details of lane execution "attempts".
+%%% Beside automatic retries lanes can also be repeated after execution ended.
+%%% Two types of manual repeat is supported:
+%%% - retry - new lane run execution is created for retried lane which will
+%%%           operate only on failed items.
+%%% - rerun - new lane run execution is created for retried lane which will
+%%%           operate on all items from iterated store.
+%%% When repeating lanes entire workflow execution is started anew (new workflow
+%%% execution incarnation) but it is not cleared from accumulated data
+%%% (e.g. store content).
+%%% To learn more about stages of execution:
+%%% - @see atm_workflow_execution_status.erl - for overall workflow execution
+%%% - @see atm_lane_execution_status.erl - for particular lane execution
+%%% - @see atm_task_execution_handler.erl - for particular task execution
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_workflow_execution_api).
