@@ -118,12 +118,9 @@ list(UserCtx, FileCtx, Options) ->
 list(UserCtx, FileCtx0, StartAfter, Limit, Prefix) ->
     {FilePath, FileCtx1} = file_ctx:get_canonical_path(FileCtx0),
     [_Sep, SpaceId | FilePathTokens] = filename:split(FilePath),
-    OptimizedStartAfter = case Prefix of
-        <<>> -> StartAfter;
-        _ -> max(StartAfter, filename:dirname(Prefix))
-    end,
+    OptimizedStartAfter = max(StartAfter, Prefix),
     InitialState = #state{
-        start_after_path = OptimizedStartAfter,
+        start_after_path = StartAfter, % use original start after, so when prefix points to existing file it is not ignored
         relative_start_after_path_tokens = filename:split(OptimizedStartAfter),
         limit = Limit,
         current_dir_path_tokens = [SpaceId | FilePathTokens],
@@ -145,7 +142,7 @@ list(UserCtx, FileCtx0, StartAfter, Limit, Prefix) ->
                 }
             };
         {false, FileCtx2} ->
-            {ok, _, _, _} = list_reg_file_with_access_check(UserCtx, FileCtx2, #{size => 1}),
+            ok = check_reg_file_access(UserCtx, FileCtx2),
             #fuse_response{status = #status{code = ?OK},
                 fuse_response = #recursive_file_list{
                     inaccessible_paths = [],
@@ -163,11 +160,17 @@ process_current_dir(_UserCtx, _FileCtx, #state{limit = Limit}) when Limit =< 0 -
     {more, #list_result{}};
 process_current_dir(UserCtx, FileCtx, State) ->
     Path = build_current_dir_rel_path(State),
-    case not matches_prefix(Path, State) andalso Path > State#state.prefix of
-        false ->
+    % directories with path that not match given prefix, but is a prefix of this given prefix must be listed, 
+    % as they are ancestor directories to files matching this given prefix
+    IsAncestorDir = case Path of
+        <<".">> -> true; % listing root directory
+        _ -> str_utils:binary_starts_with(State#state.prefix, Path)
+    end,
+    case matches_prefix(Path, State) orelse IsAncestorDir of
+        true ->
             {ListOpts, UpdatedState} = init_current_dir_processing(State),
             process_current_dir_in_batches(UserCtx, FileCtx, ListOpts, UpdatedState, #list_result{});
-        true ->
+        false ->
             {done, #list_result{}}
     end.
 
@@ -184,11 +187,12 @@ process_current_dir_in_batches(UserCtx, FileCtx, ListOpts, State, AccListResult)
             {error, ?EACCES} ->
                 {[], result_append_inaccessible_path(State, AccListResult), #{is_last => true}, FileCtx}
         end,
+    
     {Res, FinalProcessedFileCount} = lists_utils:foldl_while(fun(ChildCtx, {TmpResult, ProcessedFileCount}) ->
-        {Marker, ChildResult} = process_current_child(UserCtx, ChildCtx, State#state{
+        {Marker, SubtreeResult} = process_subtree(UserCtx, ChildCtx, State#state{
             limit = Limit - result_length(TmpResult)
         }),
-        ResToReturn = merge_results(TmpResult, ChildResult),
+        ResToReturn = merge_results(TmpResult, SubtreeResult),
         FileProcessedIncrement = case Marker of
             done -> 1;
             more -> 0
@@ -199,16 +203,27 @@ process_current_dir_in_batches(UserCtx, FileCtx, ListOpts, State, AccListResult)
             false -> {cont, ToReturn}
         end
     end, {UpdatedAccListResult, 0}, Children),
-    case {result_length(Res) >= Limit, IsLast} of
-        {true, _} ->
+    
+    ResultLength = result_length(Res),
+    case ResultLength > Limit of
+        true -> 
+            ?critical("Listed more entries than requested in recuresive file listing of directory: ~p~nstate: ~p~noptions: ~p~n", 
+                [file_ctx:get_logical_guid_const(FileCtx), State, ListOpts]),
+            throw(?ERROR_INTERNAL_SERVER_ERROR);
+        _ -> 
+            ok
+    end, 
+    
+    case {ResultLength, IsLast} of
+        {Limit, _} ->
             ProgressMarker = case IsLast and (FinalProcessedFileCount == length(Children)) of
                 true -> done;
                 false -> more
             end,
             {ProgressMarker, Res};
-        {false, true} ->
+        {_, true} ->
             {done, Res};
-        {false, false} ->
+        {_, false} ->
             NextListOpts = maps:with([last_tree, last_name], ExtendedInfo),
             process_current_dir_in_batches(
                 UserCtx, FileCtx2, NextListOpts, State#state{limit = Limit - result_length(Res)}, Res)
@@ -216,9 +231,9 @@ process_current_dir_in_batches(UserCtx, FileCtx, ListOpts, State, AccListResult)
 
 
 %% @private
--spec process_current_child(user_ctx:ctx(), file_ctx:ctx(), state()) ->
+-spec process_subtree(user_ctx:ctx(), file_ctx:ctx(), state()) ->
     {progress_marker(), result()}.
-process_current_child(UserCtx, ChildCtx, #state{current_dir_path_tokens = CurrentPathTokens} = State) ->
+process_subtree(UserCtx, ChildCtx, #state{current_dir_path_tokens = CurrentPathTokens} = State) ->
     case get_file_attrs(UserCtx, ChildCtx) of
         #file_attr{type = ?DIRECTORY_TYPE, name = Name, guid = G} ->
             {ProgressMarker, NextChildrenRes} = process_current_dir(UserCtx, ChildCtx,
@@ -254,14 +269,15 @@ list_dir_children_with_access_check(UserCtx, DirCtx, ListOpts) ->
 
 
 %% @private
--spec list_reg_file_with_access_check(user_ctx:ctx(), file_ctx:ctx(), file_meta:list_opts()) ->
-    {ok, [file_ctx:ctx()], file_meta:list_extended_info(), file_ctx:ctx()}.
-list_reg_file_with_access_check(UserCtx, FileCtx, ListOpts) ->
+-spec check_reg_file_access(user_ctx:ctx(), file_ctx:ctx()) ->
+    ok | no_return().
+check_reg_file_access(UserCtx, FileCtx) ->
     {CanonicalChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
         UserCtx, FileCtx, [?TRAVERSE_ANCESTORS]
     ),
-    {Children, ExtendedInfo, FileCtx4} = file_listing:list_children(UserCtx, FileCtx2, ListOpts, CanonicalChildrenWhiteList),
-    {ok, Children, ExtendedInfo, FileCtx4}.
+    % throws on lack of access
+    _ = file_listing:list_children(UserCtx, FileCtx2, #{size => 1}, CanonicalChildrenWhiteList),
+    ok.
 
 
 %% @private
