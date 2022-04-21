@@ -553,7 +553,7 @@ rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId) ->
     [#file_renamed_entry{}].
 rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId, ListOpts, ChildEntries) ->
     ParentGuid = file_ctx:get_logical_guid_const(ParentFileCtx),
-    {Children, ListingState, ParentFileCtx2} = file_tree:list_children(ParentFileCtx, UserCtx, ListOpts),
+    {Children, ListingPaginationToken, ParentFileCtx2} = file_tree:list_children(ParentFileCtx, UserCtx, ListOpts),
     NewChildEntries = lists:flatten(lists:map(fun(ChildCtx) ->
         {ChildName, ChildCtx2} = file_ctx:get_aliased_name(ChildCtx, UserCtx),
         ChildStorageFileId = filename:join(ParentStorageFileId, ChildName),
@@ -572,13 +572,12 @@ rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId, ListOpts, Ch
         end
     end, Children)),
     AllChildEntries = ChildEntries ++ NewChildEntries,
-    case file_listing:is_finished(ListingState) of
+    case file_listing:is_finished(ListingPaginationToken) of
         true ->
             AllChildEntries;
         false ->
-            NextPageToken = file_listing:build_pagination_token(ListingState),
             rename_child_locations(UserCtx, ParentFileCtx2, ParentStorageFileId, 
-                ListOpts#{pagination_token => NextPageToken}, AllChildEntries)
+                ListOpts#{pagination_token => ListingPaginationToken}, AllChildEntries)
     end.
 
 %%--------------------------------------------------------------------

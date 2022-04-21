@@ -535,7 +535,7 @@ mkdir(Worker, SessId, ParentGuid, Name, Mode) ->
 
 -spec get_children(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path(),
     file_listing:options()) -> 
-    {ok, [{fslogic_worker:file_guid(), file_meta:name()}], file_listing:state()} | lfm:error_reply().
+    {ok, [{fslogic_worker:file_guid(), file_meta:name()}], file_listing:pagination_token()} | lfm:error_reply().
 get_children(Worker, SessId, FileKey, ListOpts) ->
     ?EXEC(Worker, lfm:get_children(SessId, uuid_to_file_ref(Worker, FileKey), ListOpts)).
 
@@ -552,7 +552,7 @@ get_children(Worker, SessId, FileKey, Offset, Limit) ->
 
 
 -spec get_children_attrs(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path(),
-    file_listing:options()) -> {ok, [#file_attr{}], file_listing:state()} | lfm:error_reply().
+    file_listing:options()) -> {ok, [#file_attr{}], file_listing:pagination_token()} | lfm:error_reply().
 get_children_attrs(Worker, SessId, FileKey, ListOpts) ->
     ?EXEC(Worker, lfm:get_children_attrs(SessId, uuid_to_file_ref(Worker, FileKey), ListOpts)).
 
@@ -564,7 +564,7 @@ get_child_attr(Worker, SessId, ParentGuid, ChildName) ->
 
 
 -spec get_children_details(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path(),
-    file_listing:options()) -> {ok, [lfm_attrs:file_details()], file_listing:state()} | lfm:error_reply().
+    file_listing:options()) -> {ok, [lfm_attrs:file_details()], file_listing:pagination_token()} | lfm:error_reply().
 get_children_details(Worker, SessId, FileKey, ListOpts) ->
     ?EXEC(Worker, lfm:get_children_details(SessId, uuid_to_file_ref(Worker, FileKey), ListOpts)).
 

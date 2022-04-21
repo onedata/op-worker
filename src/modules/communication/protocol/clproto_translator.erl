@@ -638,20 +638,20 @@ translate_from_protobuf(#'FileAttr'{} = FileAttr) ->
 translate_from_protobuf(#'FileChildren'{
     child_links = FileEntries,
     index_token = Token,
-    is_last = IsLast
+    is_last = _IsLast
 }) ->
     #file_children{
         child_links = [translate_from_protobuf(E) || E <- FileEntries],
-        listing_state = file_listing:build_state(Token, IsLast)
+        pagination_token = file_listing:decode_pagination_token(Token)
     };
 translate_from_protobuf(#'FileChildrenAttrs'{
     child_attrs = Children,
     index_token = Token,
-    is_last = IsLast
+    is_last = _IsLast
 }) ->
     #file_children_attrs{
         child_attrs = [translate_from_protobuf(E) || E <- Children],
-        listing_state = file_listing:build_state(Token, IsLast)
+        pagination_token = file_listing:decode_pagination_token(Token)
     };
 translate_from_protobuf(#'FileLocation'{} = Record) ->
     #file_location{
@@ -1629,23 +1629,23 @@ translate_to_protobuf(#file_attr{} = FileAttr) ->
     }};
 translate_to_protobuf(#file_children{
     child_links = FileEntries,
-    listing_state = ListingState
+    pagination_token = PaginationToken
 }) ->
     {file_children, #'FileChildren'{
         child_links = [translate_to_protobuf(E) || E <- FileEntries],
-        index_token = file_listing:build_pagination_token(ListingState),
-        is_last = file_listing:is_finished(ListingState)
+        index_token = file_listing:encode_pagination_token(PaginationToken),
+        is_last = file_listing:is_finished(PaginationToken)
     }};
 translate_to_protobuf(#file_children_attrs{
     child_attrs = Children,
-    listing_state = ListingState
+    pagination_token = ListingState
 }) ->
     {file_children_attrs, #'FileChildrenAttrs'{
         child_attrs = lists:map(fun(Child) ->
             {file_attr, Translated} = translate_to_protobuf(Child),
             Translated
         end, Children),
-        index_token = file_listing:build_pagination_token(ListingState),
+        index_token = file_listing:encode_pagination_token(ListingState),
         is_last = file_listing:is_finished(ListingState)
     }};
 translate_to_protobuf(#file_location{

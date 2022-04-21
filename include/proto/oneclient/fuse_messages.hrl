@@ -258,17 +258,17 @@
 
 -record(file_children, {
     child_links :: [#child_link{}],
-    listing_state :: file_listing:state()
+    pagination_token :: file_listing:pagination_token()
 }).
 
 -record(file_children_attrs, {
     child_attrs :: [#file_attr{}],
-    listing_state :: file_listing:state()
+    pagination_token :: file_listing:pagination_token()
 }).
 
 -record(file_children_details, {
     child_details :: [#file_details{}],
-    listing_state :: file_listing:state()
+    pagination_token :: file_listing:pagination_token()
 }).
 
 -record(recursive_file_list, {

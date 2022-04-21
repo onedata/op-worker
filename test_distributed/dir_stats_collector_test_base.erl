@@ -261,9 +261,9 @@ test_with_race_base(Config, TestDirIdentifier, OnSpaceChildrenListed, ExpectedSp
     end,
     TestDirUuid = file_id:guid_to_uuid(TestDirGuid),
 
-    Tag = mock_file_meta(Config, TestDirUuid, 1000),
+    Tag = mock_file_listing(Config, TestDirUuid, 1000),
     enable(Config, existing_space),
-    execute_file_meta_list_hook(Tag, OnSpaceChildrenListed),
+    execute_file_listing_hook(Tag, OnSpaceChildrenListed),
 
     check_dir_stats(Config, op_worker_nodes, SpaceGuid, ExpectedSpaceStats),
     verify_collecting_status(Config, enabled).
@@ -276,12 +276,12 @@ race_with_file_adding_to_large_dir_test(Config) ->
     Structure = [{3, 2000}, {3, 3}],
     lfm_test_utils:create_files_tree(Worker, SessId, Structure, SpaceGuid),
 
-    Tag = mock_file_meta(Config, file_id:guid_to_uuid(SpaceGuid), 10),
+    Tag = mock_file_listing(Config, file_id:guid_to_uuid(SpaceGuid), 10),
     enable(Config, existing_space),
     OnSpaceChildrenListed = fun() ->
         lfm_test_utils:create_and_write_file(Worker, SessId, SpaceGuid, <<"test_raced_file">>, 0, {rand_content, 10})
     end,
-    execute_file_meta_list_hook(Tag, OnSpaceChildrenListed),
+    execute_file_listing_hook(Tag, OnSpaceChildrenListed),
 
     verify_collecting_status(Config, enabled),
     check_dir_stats(Config, op_worker_nodes, SpaceGuid, #{
@@ -776,12 +776,12 @@ get_dir_update_time_stat(Worker, Guid) ->
     CollectorTime.
 
 
-mock_file_meta(Config, Uuid, SleepTime) ->
+mock_file_listing(Config, Uuid, SleepTime) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Master = self(),
     Tag = make_ref(),
-    ok = test_utils:mock_new(Worker, file_meta, [passthrough]),
-    ok = test_utils:mock_expect(Worker, file_meta, list_children, fun
+    ok = test_utils:mock_new(Worker, file_listing, [passthrough]),
+    ok = test_utils:mock_expect(Worker, file_listing, list, fun
         (FileUuid, ListOpts) when FileUuid =:= Uuid ->
             Ans = meck:passthrough([FileUuid, ListOpts]),
             Master ! {space_children_listed, Tag},
@@ -793,7 +793,7 @@ mock_file_meta(Config, Uuid, SleepTime) ->
     Tag.
 
 
-execute_file_meta_list_hook(Tag, Hook) ->
+execute_file_listing_hook(Tag, Hook) ->
     MessageReceived = receive
         {space_children_listed, Tag} ->
             Hook(),

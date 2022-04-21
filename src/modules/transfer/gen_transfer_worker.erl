@@ -393,19 +393,18 @@ transfer_dir(State, FileCtx, ListOpts, TransferParams = #transfer_params{
     transfer_id = TransferId,
     user_ctx = UserCtx
 }) ->
-    {Children, ListingState, FileCtx2} = file_tree:list_children(FileCtx, UserCtx, ListOpts),
+    {Children, ListingPaginationToken, FileCtx2} = file_tree:list_children(FileCtx, UserCtx, ListOpts),
 
     Length = length(Children),
     transfer:increment_files_to_process_counter(TransferId, Length),
     enqueue_files_transfer(State, Children, TransferParams),
 
-    case file_listing:is_finished(ListingState) of
+    case file_listing:is_finished(ListingPaginationToken) of
         true ->
             transfer:increment_files_processed_counter(TransferId),
             ok;
         false ->
-            NextPageToken = file_listing:build_pagination_token(ListingState),
-            transfer_dir(State, FileCtx2, #{pagination_token => NextPageToken}, TransferParams)
+            transfer_dir(State, FileCtx2, #{pagination_token => ListingPaginationToken}, TransferParams)
     end.
 
 

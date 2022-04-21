@@ -162,7 +162,10 @@ fslogic_get_file_children_attrs_with_replication_status_test(Config) ->
 
     #fuse_response{fuse_response = #file_children_attrs{child_attrs = ChildrenAttrs}} =
         ?assertMatch(#fuse_response{status = #status{code = ?OK}}, ?file_req(Worker, SessId, SpaceGuid,
-            #get_file_children_attrs{listing_options = #{offset => 0, limit => 1000}, include_replication_status = true})),
+            #get_file_children_attrs{
+                listing_options = #{offset => 0, limit => 1000, optimize_continuous_listing => false}, 
+                include_replication_status = true
+            })),
     ?assertMatch([_ | _], ChildrenAttrs),
 
     lists:foreach(fun
@@ -205,7 +208,9 @@ fslogic_get_file_children_attrs_test(Config) ->
                         {_, Attrs} = lists:foldl( %% foreach Offset
                             fun(_, {Offset, CurrentChildren}) ->
                                 Response = ?file_req(Worker, SessId, FileGuid,
-                                    #get_file_children_attrs{listing_options = #{offset => Offset, limit => Size}}),
+                                    #get_file_children_attrs{
+                                        listing_options = #{offset => Offset, limit => Size, optimize_continuous_listing => false}
+                                    }),
 
                                 ?assertMatch(#fuse_response{status = #status{code = ?OK}}, Response),
                                 #fuse_response{fuse_response = #file_children_attrs{
@@ -393,13 +398,15 @@ fslogic_read_dir_test(Config) ->
 
         ExpectedNames = lists:sort(NameList),
 
-        lists:foreach( %% Size
-            fun(Size) ->
+        lists:foreach( %% Limit
+            fun(Limit) ->
                 lists:foreach( %% Offset step
                     fun(OffsetStep) ->
                         {_, Names} = lists:foldl( %% foreach Offset
                             fun(_, {Offset, CurrentChildren}) ->
-                                Response = ?file_req(Worker, SessId, FileGuid, #get_file_children{listing_options = #{offset = Offset, limit = Size}}),
+                                Response = ?file_req(Worker, SessId, FileGuid, #get_file_children{
+                                    listing_options = #{offset => Offset, limit => Limit, optimize_continuous_listing => false}
+                                }),
 
                                 ?assertMatch(#fuse_response{status = #status{code = ?OK}}, Response),
                                 #fuse_response{fuse_response = #file_children{child_links = Links}} = Response,
@@ -409,13 +416,13 @@ fslogic_read_dir_test(Config) ->
                                         Name
                                     end, Links),
 
-                                ?assertEqual(min(max(0, length(ExpectedNames) - Offset), Size), length(RespNames)),
+                                ?assertEqual(min(max(0, length(ExpectedNames) - Offset), Limit), length(RespNames)),
 
                                 {Offset + OffsetStep, lists:usort(RespNames ++ CurrentChildren)}
                             end, {0, []}, lists:seq(1, 2 * round(length(ExpectedNames) / OffsetStep))),
 
                         ?assertMatch(ExpectedNames, lists:sort(lists:flatten(Names)))
-                    end, lists:seq(1, Size))
+                    end, lists:seq(1, Limit))
 
             end, lists:seq(1, length(ExpectedNames) + 1))
     end,
@@ -577,7 +584,9 @@ default_permissions_test(Config) ->
                 fun(SessId) ->
                     Guid = get_guid_privileged(Worker, SessId, Path),
                     ?assertMatch(#fuse_response{status = #status{code = Code}},
-                        ?file_req(Worker, SessId, Guid, #get_file_children{listing_options = #{offset => 0}}))
+                        ?file_req(Worker, SessId, Guid, #get_file_children{
+                            listing_options = #{offset => 0, optimize_continuous_listing => false}
+                        }))
                 end, SessIds);
         ({chmod, Path, Mode, SessIds, Code}) ->
             lists:foreach(

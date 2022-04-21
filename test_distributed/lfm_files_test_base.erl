@@ -2474,39 +2474,46 @@ verify_attrs(Config, MainDirPath, Files, Limit, ExpectedSize, Offset) ->
         ?assertEqual(F1#file_attr.name, F2)
     end, lists:zip(List, lists:sublist(Files, Offset + 1, ExpectedSize))).
 
-verify_attrs_with_token(Config, MainDirPath, Files, ExpectedSize, Limit, Offset, IsLast, Token) ->
+verify_attrs_with_token(Config, MainDirPath, Files, ExpectedSize, Limit, Offset, IsLast, PaginationToken) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     {SessId1, _UserId1} =
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    
+    BaseListOpts = case PaginationToken of
+        undefined -> #{optimize_continuous_listing => true};
+        _ -> #{pagination_token => PaginationToken}
+    end,
 
-    Ans = lfm_proxy:get_children_attrs(Worker, SessId1, {path, MainDirPath}, 
-        maps_utils:remove_undefined(#{limit => Limit, optimize_continuous_listing => true, pagination_token => Token})),
-    {ok, List, ListingState} = ?assertMatch({ok, _, _}, Ans),
+    Ans = lfm_proxy:get_children_attrs(Worker, SessId1, {path, MainDirPath}, BaseListOpts#{limit => Limit}),
+    {ok, List, NextListingPaginationToken} = ?assertMatch({ok, _, _}, Ans),
     ?assertEqual(ExpectedSize, length(List)),
 
     lists:foreach(fun({F1, F2}) ->
         ?assertEqual(F1#file_attr.name, F2)
     end, lists:zip(List, lists:sublist(Files, Offset + 1, ExpectedSize))),
-    ?assertEqual(IsLast, file_listing:is_finished(ListingState)),
-    file_listing:build_pagination_token(ListingState).
+    ?assertEqual(IsLast, file_listing:is_finished(NextListingPaginationToken)),
+    NextListingPaginationToken.
 
-verify_with_token(Config, MainDirPath, Files, ExpectedSize, Limit, Offset, IsLast, Token) ->
+verify_with_token(Config, MainDirPath, Files, ExpectedSize, Limit, Offset, IsLast, PaginationToken) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     {SessId1, _UserId1} =
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
 
-    Ans = lfm_proxy:get_children(Worker, SessId1, {path, MainDirPath},
-        maps_utils:remove_undefined(#{limit => Limit, optimize_continuous_listing => true, pagination_token => Token})),
-    {ok, List, ListingState} = ?assertMatch({ok, _, _}, Ans),
+    BaseListOpts = case PaginationToken of
+        undefined -> #{optimize_continuous_listing => true};
+        _ -> #{pagination_token => PaginationToken}
+    end,
+    Ans = lfm_proxy:get_children(Worker, SessId1, {path, MainDirPath}, BaseListOpts#{limit => Limit}),
+    {ok, List, NextListingPaginationToken} = ?assertMatch({ok, _, _}, Ans),
     ?assertEqual(ExpectedSize, length(List)),
 
     lists:foreach(fun({{_, F1}, F2}) ->
         ?assertEqual(F1, F2)
     end, lists:zip(List, lists:sublist(Files, Offset + 1, ExpectedSize))),
-    ?assertEqual(IsLast, file_listing:is_finished(ListingState)),
-    file_listing:build_pagination_token(ListingState).
+    ?assertEqual(IsLast, file_listing:is_finished(NextListingPaginationToken)),
+    NextListingPaginationToken.
 
 verify_with_startid(Config, MainDirPath, Files, FilesOffset, ExpectedSize, Offset, Limit, StartId) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -2517,7 +2524,7 @@ verify_with_startid(Config, MainDirPath, Files, FilesOffset, ExpectedSize, Offse
     Ans = lfm_proxy:get_children(Worker, SessId1, {path, MainDirPath}, #{
         offset => Offset,
         limit => Limit,
-        index => StartId,
+        index => file_listing:build_index(StartId),
         optimize_continuous_listing => false
     }),
     {ok, List, _} = ?assertMatch({ok, _, _}, Ans),
@@ -2547,7 +2554,7 @@ verify_details(Config, MainDirPath, Files, FilesOffset, ExpectedSize, Offset, Li
     {ok, List, _} = ?assertMatch(
         {ok, _, _},
         lfm_proxy:get_children_details(Worker, SessId1, {path, MainDirPath}, 
-            #{offset => Offset, limit => Limit, index => StartId, optimize_continuous_listing => false})
+            #{offset => Offset, limit => Limit, index => file_listing:build_index(StartId), optimize_continuous_listing => false})
     ),
     ?assertEqual(ExpectedSize, length(List)),
 

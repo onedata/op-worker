@@ -230,7 +230,7 @@ copy_children(SessId, ParentGuid, TargetParentGuid, Options) ->
     [child_entry()], options()) -> {ok, [child_entry()]} | {error, term()}.
 copy_children(SessId, ParentGuid, TargetParentGuid, ListingOpts, ChildEntriesAcc, Options) ->
     case lfm:get_children(SessId, ?FILE_REF(ParentGuid), ListingOpts) of
-        {ok, Children, ListingState} ->
+        {ok, Children, ListingPaginationToken} ->
             % TODO VFS-6265 fix usage of file names from lfm:get_children as they contain
             % collision suffix which normally shouldn't be there
             ChildEntries = lists:foldl(fun({ChildGuid, ChildName}, ChildrenEntries) ->
@@ -242,12 +242,12 @@ copy_children(SessId, ParentGuid, TargetParentGuid, ListingOpts, ChildEntriesAcc
                 ]
             end, [], Children),
             AllChildEntries = ChildEntriesAcc ++ ChildEntries,
-            case file_listing:is_finished(ListingState) of
+            case file_listing:is_finished(ListingPaginationToken) of
                 true ->
                     {ok, AllChildEntries};
                 false ->
                     NextPageListingOpts = 
-                        #{pagination_token => file_listing:build_pagination_token(ListingState)},
+                        #{pagination_token => ListingPaginationToken},
                     copy_children(SessId, ParentGuid, TargetParentGuid, NextPageListingOpts, 
                         AllChildEntries, Options)
             end;

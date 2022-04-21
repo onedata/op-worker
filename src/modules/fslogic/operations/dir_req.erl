@@ -96,7 +96,7 @@ get_children(UserCtx, FileCtx0, ListOpts) ->
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_children{
             child_links = ChildrenLinks,
-            listing_state = ListingState
+            pagination_token = ListingState
         }
     }.
 
@@ -105,7 +105,7 @@ get_children(UserCtx, FileCtx0, ListOpts) ->
 ) ->
     {
         ChildrenCtxs :: [file_ctx:ctx()],
-        file_listing:state(),
+        file_listing:pagination_token(),
         NewFileCtx :: file_ctx:ctx()
     }.
 get_children_ctxs(UserCtx, FileCtx0, ListOpts) ->
@@ -166,7 +166,7 @@ get_children_details(UserCtx, FileCtx0, ListOpts) ->
 ) ->
     {
         ChildrenCtxs :: [file_ctx:ctx()],
-        file_listing:state(),
+        file_listing:pagination_token(),
         NewFileCtx :: file_ctx:ctx()
     }.
 get_children_ctxs(UserCtx, FileCtx0, ListOpts, DirOperationsRequirements) ->
@@ -260,7 +260,7 @@ get_children_attrs_insecure(
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_children_attrs{
             child_attrs = ChildrenAttrs,
-            listing_state = ListingState
+            pagination_token = ListingState
         }
     }.
 
@@ -296,7 +296,7 @@ get_children_details_insecure(UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhit
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_children_details{
             child_details = ChildrenDetails,
-            listing_state = ListingState
+            pagination_token = ListingState
         }
     }.
 

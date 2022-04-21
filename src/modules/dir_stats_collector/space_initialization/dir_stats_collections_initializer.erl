@@ -144,14 +144,14 @@ continue_dir_initialization(#initialization_progress{
     collections_map = CollectionsMap,
     list_opts = ListOpts
 } = InitializationProgress) ->
-    {ok, Links, ListingState} = file_listing:list(FileUuid, ListOpts),
+    {ok, Links, ListingPaginationToken} = file_listing:list(FileUuid, ListOpts),
     UpdatedCollectionsMap = init_batch(SpaceId, Links, CollectionsMap),
-    case file_listing:is_finished(ListingState) of
+    case file_listing:is_finished(ListingPaginationToken) of
         true ->
             {finish, UpdatedCollectionsMap};
         _ ->
             NewListOpts = #{
-                pagination_token => file_listing:build_pagination_token(ListingState), 
+                pagination_token => ListingPaginationToken,
                 limit => ?BATCH_SIZE
             },
             {continue, InitializationProgress#initialization_progress{

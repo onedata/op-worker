@@ -484,7 +484,7 @@ mkdir(SessId, ParentGuid, Name, Mode) ->
 
 
 -spec get_children(session:id(), file_key(), file_listing:options()) ->
-    {ok, [{fslogic_worker:file_guid(), file_meta:name()}], file_listing:state()} | error_reply().
+    {ok, [{fslogic_worker:file_guid(), file_meta:name()}], file_listing:pagination_token()} | error_reply().
 get_children(SessId, FileKey, ListOpts) ->
     ?run(lfm_dirs:get_children(SessId, FileKey, ListOpts)).
 
@@ -506,13 +506,13 @@ get_child_attr(SessId, ParentGuid, ChildName)  ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_children_attrs(session:id(), file_key(), file_listing:options()) ->
-    {ok, [#file_attr{}], file_listing:state()} | error_reply().
+    {ok, [#file_attr{}], file_listing:pagination_token()} | error_reply().
 get_children_attrs(SessId, FileKey, ListOpts) ->
     get_children_attrs(SessId, FileKey, ListOpts, false, false).
 
 
 -spec get_children_attrs(session:id(), file_key(), file_listing:options(), boolean(), boolean()) ->
-    {ok, [#file_attr{}], file_listing:state()} | error_reply().
+    {ok, [#file_attr{}], file_listing:pagination_token()} | error_reply().
 get_children_attrs(SessId, FileKey, ListOpts, IncludeReplicationStatus, IncludeHardlinkCount) ->
     ?run(lfm_dirs:get_children_attrs(SessId, FileKey, ListOpts, IncludeReplicationStatus, IncludeHardlinkCount)).
 
@@ -523,7 +523,7 @@ get_children_attrs(SessId, FileKey, ListOpts, IncludeReplicationStatus, IncludeH
 %% @end
 %%--------------------------------------------------------------------
 -spec get_children_details(session:id(), file_key(), file_listing:options()) ->
-    {ok, [lfm_attrs:file_details()], file_listing:state()} | error_reply().
+    {ok, [lfm_attrs:file_details()], file_listing:pagination_token()} | error_reply().
 get_children_details(SessId, FileKey, ListOpts) ->
     ?run(lfm_dirs:get_children_details(SessId, FileKey, ListOpts)).
 

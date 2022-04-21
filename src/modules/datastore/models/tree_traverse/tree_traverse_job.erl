@@ -60,7 +60,7 @@ save_master_job(Key, Job = #tree_traverse{
     file_ctx = FileCtx,
     user_id = UserId,
     optimize_continuous_listing = OptimizeContinuousListing,
-    pagination_token = PaginationToken,
+    pagination_token = ListingPaginationToken,
     child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
     children_master_jobs_mode = ChildrenMasterJobsMode,
     track_subtree_status = TrackSubtreeStatus,
@@ -80,7 +80,7 @@ save_master_job(Key, Job = #tree_traverse{
         doc_id = Uuid,
         user_id = UserId,
         optimize_continuous_listing = OptimizeContinuousListing,
-        pagination_token = PaginationToken,
+        pagination_token = ListingPaginationToken,
         child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
         children_master_jobs_mode = ChildrenMasterJobsMode,
         track_subtree_status = TrackSubtreeStatus,
@@ -279,7 +279,7 @@ get_record_struct(6) ->
         {doc_id, string},
         {user_id, string},
         {optimize_continuous_listing, boolean}, % modified field (renamed from use_listing_token)
-        {pagination_token, string}, % new field
+        {pagination_token, {custom, string, {file_listing, encode_pagination_token, decode_pagination_token}}}, % new field
         % removed fields last_name and last_tree
         {child_dirs_job_generation_policy, atom},
         {children_master_jobs_mode, atom},
@@ -465,7 +465,12 @@ upgrade_record(5, Record) ->
     } = Record,
     
     OptimizeContinuousListing = UseListingToken,
-    ListingState = file_listing:build_state(OptimizeContinuousListing, LastName, LastTree),
+    Index = file_listing:build_index(LastName, LastTree),
+    {ok, [], ListingPaginationToken} = file_listing:list(<<"dummy_uuid">>, #{
+        index => Index, 
+        optimize_continuous_listing => OptimizeContinuousListing,
+        limit => 0
+    }),
     
     {6, {?MODULE,
         Pool,
@@ -474,7 +479,7 @@ upgrade_record(5, Record) ->
         DocId,
         UserId,
         OptimizeContinuousListing,
-        file_listing:build_pagination_token(ListingState),
+        ListingPaginationToken,
         ChildDirsJobGenerationPolicy,
         ChildrenMasterJobsMode,
         TrackSubtreeStatus,

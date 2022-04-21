@@ -168,16 +168,16 @@ rm_recursive(Worker, SessId, DirGuid, BatchSize, DeleteDir) ->
 rm_recursive(Worker, SessId, DirGuid, BatchSize, DeleteDir, BaseListOpts) ->
     ListOpts = BaseListOpts#{limit => BatchSize},
     case lfm_proxy:get_children(Worker, SessId, ?FILE_REF(DirGuid), ListOpts) of
-        {ok, GuidsAndNames, ListingState} -> 
+        {ok, GuidsAndNames, ListingPaginationToken} -> 
             case rm_files(Worker, SessId, GuidsAndNames, BatchSize) of
                 ok ->
-                    case file_listing:is_finished(ListingState) of
+                    case file_listing:is_finished(ListingPaginationToken) of
                         true when DeleteDir -> 
                             lfm_proxy:unlink(Worker, SessId, ?FILE_REF(DirGuid));
                         true -> 
                             ok;
                         false -> 
-                            NextListingOpts = #{pagination_token => file_listing:build_pagination_token(ListingState)},
+                            NextListingOpts = #{pagination_token => ListingPaginationToken},
                             rm_recursive(Worker, SessId, DirGuid, NextListingOpts, BatchSize, DeleteDir)
                     end;
                 Error ->

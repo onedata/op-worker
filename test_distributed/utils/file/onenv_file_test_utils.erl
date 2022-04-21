@@ -548,12 +548,12 @@ ls(Node, SessId, Guid, NextPageToken, ChildEntriesAcc) ->
         _ -> #{pagination_token => NextPageToken}
     end,
     case lfm_proxy:get_children(Node, SessId, ?FILE_REF(Guid), ListOpts#{limit => ?LS_SIZE}) of
-        {ok, Children, ListingState} ->
+        {ok, Children, ListingPaginationToken} ->
             AllChildEntries = ChildEntriesAcc ++ Children,
 
-            case file_listing:is_finished(ListingState) of
+            case file_listing:is_finished(ListingPaginationToken) of
                 true -> {ok, AllChildEntries};
-                false -> ls(Node, SessId, Guid, file_listing:build_pagination_token(ListingState), AllChildEntries)
+                false -> ls(Node, SessId, Guid, ListingPaginationToken, AllChildEntries)
             end;
         Error ->
             Error

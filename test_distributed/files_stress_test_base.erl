@@ -597,16 +597,16 @@ process_answer(Answers, Ans, ToAddV) ->
     end,
     [ToAdd | proplists:delete(K, Answers)].
 
-ls(Worker, SessId, Dir, NextPageToken) ->
-    ListOpts = case NextPageToken of
+ls(Worker, SessId, Dir, PaginationToken) ->
+    ListOpts = case PaginationToken of
         undefined -> #{optimize_continuous_listing => true};
-        _ -> #{pagination_token => NextPageToken}
+        _ -> #{pagination_token => PaginationToken}
     end,
-    {ok, _, ListingState} = lfm_proxy:get_children(Worker, SessId, {path, Dir}, ListOpts#{limit => 2000}),
-    case file_listing:is_finished(ListingState) of
+    {ok, _, NextListingPaginationToken} = lfm_proxy:get_children(Worker, SessId, {path, Dir}, ListOpts#{limit => 2000}),
+    case file_listing:is_finished(NextListingPaginationToken) of
         true -> ok;
         false ->
-            ls(Worker, SessId, Dir, file_listing:build_pagination_token(ListingState))
+            ls(Worker, SessId, Dir, NextListingPaginationToken)
     end.
 
 get_param_value(ParamName, ParamsList) ->

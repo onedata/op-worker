@@ -85,7 +85,7 @@
     % NOTE: slave job for starting directory will never be generated.
     child_dirs_job_generation_policy => child_dirs_job_generation_policy(), 
     % Flag determining whether optimization will be used for iterating over files list (see file_listing for more details).
-    optimize_continuous_listing  => boolean(),
+    optimize_continuous_listing => boolean(),
     % flag determining whether children master jobs are scheduled before slave jobs are processed
     children_master_jobs_mode => children_master_jobs_mode(),
     % With this option enabled, tree_traverse_status will be
@@ -110,7 +110,7 @@
     fun((
         slave_jobs(),
         master_jobs(),
-        file_listing:state() | undefined,
+        file_listing:pagination_token() | undefined,
         SubtreeProcessingStatus :: tree_traverse_progress:status() | {error, term()}
     ) -> ok | {slave_jobs(), master_jobs()}).
 
@@ -349,25 +349,24 @@ do_master_job_internal(?DIRECTORY_TYPE, Job, TaskId, NewJobsPreprocessor, UserCt
     case list_children(Job, UserCtx) of
         {error, ?EACCES} ->
             {ok, #{}};
-        {ok, {ChildrenCtxs, ListingState, FileCtx3}} ->
-            NextPageToken = file_listing:build_pagination_token(ListingState),
+        {ok, {ChildrenCtxs, ListingPaginationToken, FileCtx3}} ->
             {SlaveJobs, MasterJobs} = generate_children_jobs(Job, TaskId, ChildrenCtxs, UserCtx),
             ChildrenCount = length(SlaveJobs) + length(MasterJobs),
             SubtreeProcessingStatus = maybe_report_children_jobs_to_process(
-                Job, TaskId, ChildrenCount, file_listing:is_finished(ListingState)),
+                Job, TaskId, ChildrenCount, file_listing:is_finished(ListingPaginationToken)),
             {UpdatedSlaveJobs, UpdatedMasterJobs} = case 
-                NewJobsPreprocessor(SlaveJobs, MasterJobs, ListingState, SubtreeProcessingStatus) 
+                NewJobsPreprocessor(SlaveJobs, MasterJobs, ListingPaginationToken, SubtreeProcessingStatus) 
             of
                 ok -> {SlaveJobs, MasterJobs};
                 {NewSlaveJobs, NewMasterJobs} -> 
                     {NewSlaveJobs, NewMasterJobs}
             end,
-            FinalMasterJobs = case file_listing:is_finished(ListingState) of
+            FinalMasterJobs = case file_listing:is_finished(ListingPaginationToken) of
                 true ->
                     UpdatedMasterJobs;
                 false -> [Job#tree_traverse{
                     file_ctx = FileCtx3,
-                    pagination_token = NextPageToken
+                    pagination_token = ListingPaginationToken
                 } | UpdatedMasterJobs]
             end,
             
@@ -426,7 +425,7 @@ delete_subtree_status_doc(TaskId, Uuid) ->
 %%%===================================================================
 
 -spec list_children(master_job(), user_ctx:ctx()) -> 
-    {ok, {[file_ctx:ctx()], file_listing:state(), file_ctx:ctx()}} | {error, term()}.
+    {ok, {[file_ctx:ctx()], file_listing:pagination_token(), file_ctx:ctx()}} | {error, term()}.
 list_children(#tree_traverse{
     file_ctx = FileCtx,
     pagination_token = PaginationToken,

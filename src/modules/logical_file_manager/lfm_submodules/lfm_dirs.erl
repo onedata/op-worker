@@ -71,7 +71,7 @@ mkdir(SessId, ParentGuid0, Name, Mode) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_children(session:id(), lfm:file_key(), file_listing:options()) ->
-    {ok, [{fslogic_worker:file_guid(), file_meta:name()}], file_listing:state()} | lfm:error_reply().
+    {ok, [{fslogic_worker:file_guid(), file_meta:name()}], file_listing:pagination_token()} | lfm:error_reply().
 get_children(SessId, FileKey, ListingOpts) ->
     FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, resolve_symlink),
 
@@ -81,7 +81,7 @@ get_children(SessId, FileKey, ListingOpts) ->
         },
         fun(#file_children{
             child_links = List,
-            listing_state = ListingState
+            pagination_token = ListingState
         }) ->
             Children = [{Guid, FileName} || #child_link{guid = Guid, name = FileName} <- List],
             {ok, Children, ListingState}
@@ -95,7 +95,7 @@ get_children(SessId, FileKey, ListingOpts) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_children_attrs(session:id(), lfm:file_key(), file_listing:options(), boolean(), boolean()) ->
-    {ok, [#file_attr{}], file_listing:state()} | lfm:error_reply().
+    {ok, [#file_attr{}], file_listing:pagination_token()} | lfm:error_reply().
 get_children_attrs(SessId, FileKey, ListingOpts, IncludeReplicationStatus, IncludeHardlinkCount) ->
     FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, resolve_symlink),
 
@@ -107,7 +107,7 @@ get_children_attrs(SessId, FileKey, ListingOpts, IncludeReplicationStatus, Inclu
         },
         fun(#file_children_attrs{
             child_attrs = Attrs,
-            listing_state = ListingState
+            pagination_token = ListingState
         }) ->
             {ok, Attrs, ListingState}
         end).
@@ -134,7 +134,7 @@ get_child_attr(SessId, ParentGuid0, ChildName)  ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_children_details(session:id(), lfm:file_key(), file_listing:options()) ->
-    {ok, [lfm_attrs:file_details()], file_listing:state()} | lfm:error_reply().
+    {ok, [lfm_attrs:file_details()], file_listing:pagination_token()} | lfm:error_reply().
 get_children_details(SessId, FileKey, ListingOpts) ->
     FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, resolve_symlink),
 
@@ -144,7 +144,7 @@ get_children_details(SessId, FileKey, ListingOpts) ->
         },
         fun(#file_children_details{
             child_details = ChildrenInfo,
-            listing_state = ListingState
+            pagination_token = ListingState
         }) ->
             {ok, ChildrenInfo, ListingState}
         end).
@@ -201,13 +201,13 @@ count_children(SessId, FileGuid) ->
     {ok, non_neg_integer()} | lfm:error_reply().
 count_children(SessId, FileGuid, ListOpts, Acc) ->
     case get_children(SessId, ?FILE_REF(FileGuid), ListOpts) of
-        {ok, List, ListingState} ->
-            case file_listing:is_finished(ListingState) of
+        {ok, List, ListingPaginationToken} ->
+            case file_listing:is_finished(ListingPaginationToken) of
                 true ->
                     {ok, Acc + length(List)};
                 false ->
                     ListOpts2 = ListOpts#{
-                        pagination_token => file_listing:build_pagination_token(ListingState)
+                        pagination_token => ListingPaginationToken
                     },
                     count_children(SessId, FileGuid, ListOpts2, Acc + length(List))
             end;

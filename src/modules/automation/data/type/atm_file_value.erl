@@ -72,7 +72,7 @@ assert_meets_constraints(AtmWorkflowExecutionAuth, #{<<"file_id">> := ObjectId} 
 list_children(AtmWorkflowExecutionAuth, Guid, ListOpts, BatchSize) ->
     SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
     try
-        list_children_unsafe(SessionId, Guid, ListOpts#{size => BatchSize})
+        list_children_unsafe(SessionId, Guid, ListOpts#{limit => BatchSize})
     catch _:Error ->
         Errno = datastore_runner:normalize_error(Error),
         case fslogic_errors:is_access_error(Errno) of
@@ -98,7 +98,7 @@ encode_listing_options(#{optimize_continuous_listing := Value}) ->
     };
 encode_listing_options(#{pagination_token := Token}) ->
     #{
-        <<"pagination_token">> => Token
+        <<"pagination_token">> => file_listing:encode_pagination_token(Token)
     }.
 
 
@@ -107,9 +107,9 @@ decode_listing_options(#{<<"optimize_continuous_listing">> := Value}) ->
     #{
         optimize_continuous_listing => Value
     };
-decode_listing_options(#{<<"pagination_token">> := Token}) ->
+decode_listing_options(#{<<"pagination_token">> := EncodedToken}) ->
     #{
-        pagination_token => Token
+        pagination_token => file_listing:decode_pagination_token(EncodedToken)
     }.
 
 
@@ -196,7 +196,7 @@ list_children_unsafe(SessionId, Guid, ListOpts) ->
         {false, _Ctx} ->
             {[], [], #{}, true};
         {true, Ctx} ->
-            {Children, ListingState, _Ctx1} = dir_req:get_children_ctxs(
+            {Children, ListingPaginationToken, _Ctx1} = dir_req:get_children_ctxs(
                 user_ctx:new(SessionId),
                 Ctx,
                 ListOpts),
@@ -212,7 +212,7 @@ list_children_unsafe(SessionId, Guid, ListOpts) ->
             {
                 lists:reverse(ReversedDirsAndNames), 
                 lists:reverse(ReversedFiles), 
-                #{pagination_token => file_listing:build_pagination_token(ListingState)}, 
-                file_listing:is_finished(ListingState)
+                #{pagination_token => ListingPaginationToken},
+                file_listing:is_finished(ListingPaginationToken)
             }
     end.

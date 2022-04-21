@@ -178,12 +178,13 @@ process_current_dir(UserCtx, FileCtx, State) ->
     {progress_marker(), result()}.
 process_current_dir_in_batches(UserCtx, FileCtx, ListOpts, State, AccListResult) ->
     #state{limit = Limit} = State,
-    {Children, UpdatedAccListResult, ListingState, FileCtx2} = 
+    {Children, UpdatedAccListResult, ListingPaginationToken, FileCtx2} = 
         case list_dir_children_with_access_check(UserCtx, FileCtx, ListOpts) of
-            {ok, C, E, F} -> 
-                {C, AccListResult, E, F};
+            {ok, C, PT, F} -> 
+                {C, AccListResult, PT, F};
             {error, ?EACCES} ->
-                {[], result_append_inaccessible_path(State, AccListResult), file_listing:finished_state(), FileCtx}
+                {R, PaginationToken} = file_listing:prepare_result([], undefined, ?LIST_RECURSIVE_BATCH_SIZE),
+                {R, result_append_inaccessible_path(State, AccListResult), PaginationToken, FileCtx}
         end,
     {Res, FinalProcessedFileCount} = lists_utils:foldl_while(fun(ChildCtx, {TmpResult, ProcessedFileCount}) ->
         {Marker, ChildResult} = process_current_child(UserCtx, ChildCtx, State#state{
@@ -200,7 +201,7 @@ process_current_dir_in_batches(UserCtx, FileCtx, ListOpts, State, AccListResult)
             false -> {cont, ToReturn}
         end
     end, {UpdatedAccListResult, 0}, Children),
-    case {result_length(Res) >= Limit, file_listing:is_finished(ListingState)} of
+    case {result_length(Res) >= Limit, file_listing:is_finished(ListingPaginationToken)} of
         {true, IsFinished} ->
             ProgressMarker = case IsFinished and (FinalProcessedFileCount == length(Children)) of
                 true -> done;
@@ -210,7 +211,7 @@ process_current_dir_in_batches(UserCtx, FileCtx, ListOpts, State, AccListResult)
         {false, true} ->
             {done, Res};
         {false, false} ->
-            NextListOpts = #{pagination_token => file_listing:build_pagination_token(ListingState)},
+            NextListOpts = #{pagination_token => ListingPaginationToken},
             process_current_dir_in_batches(
                 UserCtx, FileCtx2, NextListOpts, State#state{limit = Limit - result_length(Res)}, Res)
     end.
@@ -241,7 +242,7 @@ process_current_child(UserCtx, ChildCtx, #state{current_dir_path_tokens = Curren
 
 %% @private
 -spec list_dir_children_with_access_check(user_ctx:ctx(), file_ctx:ctx(), file_listing:options()) ->
-    {ok, [file_ctx:ctx()], file_listing:state(), file_ctx:ctx()} | {error, ?EACCES}.
+    {ok, [file_ctx:ctx()], file_listing:pagination_token(), file_ctx:ctx()} | {error, ?EACCES}.
 list_dir_children_with_access_check(UserCtx, DirCtx, ListOpts) ->
     try
         {CanonicalChildrenWhiteList, DirCtx2} = fslogic_authz:ensure_authorized_readdir(
@@ -299,8 +300,7 @@ init_current_dir_processing(#state{
                     file_listing:build_index(
                         file_meta:trim_filename_tree_id(CurrentStartAfterToken, TreeId),
                         % trim tree id to always have inclusive listing
-                        binary:part(TreeId, 0, size(TreeId) - 1)
-                    );
+                        binary:part(TreeId, 0, size(TreeId) - 1));
                 _ ->
                     file_listing:build_index(file_meta:trim_filename_tree_id(
                             CurrentStartAfterToken, {all, ParentUuid}))

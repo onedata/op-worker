@@ -185,10 +185,10 @@ refill_file_meta_children(CurrentChildren, FileCtx, Token) ->
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
             ToFetch = ?BATCH_SIZE - length(CurrentChildren),
             case file_listing:list(FileUuid, ListingOpts#{limit => ToFetch}) of
-                {ok, NewChildren, ListingState} ->
+                {ok, NewChildren, ListingPaginationToken} ->
                     {CurrentChildren ++ NewChildren, #{
-                        is_last => file_listing:is_finished(ListingState), 
-                        token => file_listing:build_pagination_token(ListingState)
+                        is_last => file_listing:is_finished(ListingPaginationToken), 
+                        token => ListingPaginationToken
                     }};
                 Error = {error, _} ->
                     Error
@@ -449,19 +449,18 @@ delete_dir_recursive(FileCtx, SpaceId, StorageId) ->
     od_space:id(), storage:id()) -> {ok, file_ctx:ctx()}.
 delete_children(FileCtx, UserCtx, ListOpts, SpaceId, StorageId) ->
     try
-        {ChildrenCtxs, ListingState, FileCtx2} = file_tree:list_children(
+        {ChildrenCtxs, ListingPaginationToken, FileCtx2} = file_tree:list_children(
             FileCtx, UserCtx, ListOpts
         ),
         storage_import_monitoring:increment_queue_length_histograms(SpaceId, length(ChildrenCtxs)),
         lists:foreach(fun(ChildCtx) ->
             delete_file_and_update_counters(ChildCtx, SpaceId, StorageId)
         end, ChildrenCtxs),
-        case file_listing:is_finished(ListingState) of
+        case file_listing:is_finished(ListingPaginationToken) of
             true ->
                 {ok, FileCtx2};
             false ->
-                NextPageToken = file_listing:build_pagination_token(ListingState),
-                delete_children(FileCtx2, UserCtx, #{pagination_token => NextPageToken}, SpaceId, StorageId)
+                delete_children(FileCtx2, UserCtx, #{pagination_token => ListingPaginationToken}, SpaceId, StorageId)
         end
     catch
         throw:?ENOENT ->
