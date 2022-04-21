@@ -42,9 +42,9 @@
 %%%       propagation via files tree is asynchronous. Thus, timestamps
 %%%       should be treated as indicative.
 %%%
-%%% NOTE: Restart hook is added when space is being disabled for the first time.
-%%%       It is never deleted. Checking hook once at cluster restart is lighter
-%%%       than handling add/delete hook races.
+%%% NOTE: Restart hook is added when disabling of stats collecting in space is requested for the first time.
+%%%       It is not deleted after space changes status to disabled. The hook will be deleted at provider restart as
+%%%       checking hook once at cluster restart is lighter than handling add/delete hook races.
 %%%
 %%% @end
 %%%-------------------------------------------------------------------

@@ -105,20 +105,12 @@ maybe_execute_hooks() ->
 
 -spec maybe_execute_hooks_on_node() -> ok.
 maybe_execute_hooks_on_node() ->
-    RestartHooksStatus = critical_section:run(?MODULE, fun() ->
-        case node_cache:get(?RESTART_HOOKS_STATUS_KEY, scheduled) of
-            executed ->
-                executed;
-            scheduled ->
-                node_cache:put(?RESTART_HOOKS_STATUS_KEY, executed),
-                scheduled
-        end
-    end),
-
-    case RestartHooksStatus of
-        executed -> ok;
-        scheduled -> execute_hooks()
-    end.
+    critical_section:run(?MODULE, fun() ->
+        node_cache:acquire(?RESTART_HOOKS_STATUS_KEY, fun() ->
+            execute_hooks(),
+            {ok, executed, infinity}
+        end)
+    end).
 
 
 -spec execute_hooks() -> ok.
