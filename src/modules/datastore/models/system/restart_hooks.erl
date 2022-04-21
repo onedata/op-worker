@@ -110,7 +110,8 @@ maybe_execute_hooks_on_node() ->
             execute_hooks(),
             {ok, executed, infinity}
         end)
-    end).
+    end),
+    ok.
 
 
 -spec execute_hooks() -> ok.
