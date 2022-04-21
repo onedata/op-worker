@@ -843,4 +843,4 @@ execute_restart_hooks(Config) ->
 
 reset_restart_hooks(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    ?assertEqual(ok, rpc:call(Worker, node_cache, clear, [have_restart_hooks_been_executed])).
+    ?assertEqual(ok, rpc:call(Worker, node_cache, clear, [restart_hooks_status])).

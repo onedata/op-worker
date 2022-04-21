@@ -18,6 +18,7 @@
 -author("Michal Wrzeszcz").
 
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore_runner.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 
@@ -35,7 +36,7 @@
     module :: module(),
     function :: atom(),
     % list of arbitrary args encoded using term_to_binary/1
-    args :: binary()
+    encoded_args :: binary()
 }).
 
 
@@ -50,7 +51,7 @@
 
 -define(DOC_KEY, <<"restart_hooks">>).
 -define(MAX_HOOKS_NUMBER, 1000).
--define(NODE_CACHE_KEY, have_restart_hooks_been_executed).
+-define(RESTART_HOOKS_STATUS_KEY, restart_hooks_status).
 
 
 %%%===================================================================
@@ -64,7 +65,7 @@ add_hook(Identifier, Module, Function, Args, OverrideOption) ->
     Hook = #hook{
         module = Module,
         function = Function,
-        args = EncodedArgs
+        encoded_args = EncodedArgs
     },
 
     UpdateAns = datastore_model:update(?CTX, ?DOC_KEY, fun
@@ -87,14 +88,9 @@ add_hook(Identifier, Module, Function, Args, OverrideOption) ->
 
 -spec delete_hook(id()) -> ok.
 delete_hook(Identifier) ->
-    UpdateAns = datastore_model:update(?CTX, ?DOC_KEY, fun(#restart_hooks{hooks = Hooks} = Record) ->
+    ok = ?extract_ok(?ok_if_not_found(datastore_model:update(?CTX, ?DOC_KEY, fun(#restart_hooks{hooks = Hooks} = Record) ->
         {ok, Record#restart_hooks{hooks = maps:remove(Identifier, Hooks)}}
-    end),
-
-    case UpdateAns of
-        {ok, _} -> ok;
-        {error, not_found} -> ok
-    end.
+    end))).
 
 
 -spec maybe_execute_hooks() -> ok.
@@ -109,19 +105,19 @@ maybe_execute_hooks() ->
 
 -spec maybe_execute_hooks_on_node() -> ok.
 maybe_execute_hooks_on_node() ->
-    HaveRestartHooksBeenExecuted = critical_section:run(?MODULE, fun() ->
-        case node_cache:get(?NODE_CACHE_KEY, false) of
-            true ->
-                true;
-            false ->
-                node_cache:put(?NODE_CACHE_KEY, true),
-                false
+    RestartHooksStatus = critical_section:run(?MODULE, fun() ->
+        case node_cache:get(?RESTART_HOOKS_STATUS_KEY, scheduled) of
+            executed ->
+                executed;
+            scheduled ->
+                node_cache:put(?RESTART_HOOKS_STATUS_KEY, executed),
+                scheduled
         end
     end),
 
-    case HaveRestartHooksBeenExecuted of
-        true -> ok;
-        false -> execute_hooks()
+    case RestartHooksStatus of
+        executed -> ok;
+        scheduled -> execute_hooks()
     end.
 
 
@@ -134,9 +130,9 @@ execute_hooks() ->
             #{}
     end,
 
-    maps:foreach(fun(Identifier, #hook{module = Module, function = Function, args = Args}) ->
+    maps:foreach(fun(Identifier, #hook{module = Module, function = Function, encoded_args = EncodedArgs}) ->
         try
-            ok = erlang:apply(Module, Function, binary_to_term(Args))
+            ok = erlang:apply(Module, Function, binary_to_term(EncodedArgs))
         catch Error:Type:Stacktrace  ->
             ?error_stacktrace(
                 "Error during execution of restart posthook ~p: ~p:~p", [Identifier, Error, Type], Stacktrace
@@ -163,6 +159,6 @@ get_record_struct(1) ->
         {hooks, #{binary => {record, [
             {module, atom},
             {function, atom},
-            {args, binary}
+            {encoded_args, binary}
         ]}}}
     ]}.

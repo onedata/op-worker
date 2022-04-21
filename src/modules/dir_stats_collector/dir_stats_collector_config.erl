@@ -43,7 +43,7 @@
 %%%       should be treated as indicative.
 %%%
 %%% NOTE: Restart hook is added when space is being disabled for the first time.
-%%%       It is never deleted. Checking hook once at cluster restart it lighter
+%%%       It is never deleted. Checking hook once at cluster restart is lighter
 %%%       than handling add/delete hook races.
 %%%
 %%% @end
