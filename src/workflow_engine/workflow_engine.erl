@@ -302,7 +302,7 @@ trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST) ->
 
 -spec trigger_job_scheduling_for_acquired_slot(id()) -> ok | ?WF_ERROR_NOTHING_TO_START.
 trigger_job_scheduling_for_acquired_slot(EngineId) ->
-    case schedule_next_job(EngineId, []) of
+    case schedule_next_job(EngineId) of
         ok ->
             ok;
         ?WF_ERROR_NOTHING_TO_START ->
@@ -310,8 +310,22 @@ trigger_job_scheduling_for_acquired_slot(EngineId) ->
             ?WF_ERROR_NOTHING_TO_START
     end.
 
--spec schedule_next_job(id(), [execution_id()]) -> ok | ?WF_ERROR_NOTHING_TO_START.
-schedule_next_job(EngineId, DeferredExecutions) ->
+-spec schedule_next_job(id()) -> ok | ?WF_ERROR_NOTHING_TO_START.
+schedule_next_job(EngineId) ->
+    try
+        schedule_next_job_insecure(EngineId, [])
+    catch
+        Error:Reason:Stacktrace  ->
+            ?error_stacktrace(
+                "Unexpected error scheduling next job for engine ~s~nError was: ~w:~p",
+                [EngineId, Error, Reason],
+                Stacktrace
+            ),
+            ?WF_ERROR_NOTHING_TO_START
+    end.
+
+-spec schedule_next_job_insecure(id(), [execution_id()]) -> ok | ?WF_ERROR_NOTHING_TO_START.
+schedule_next_job_insecure(EngineId, DeferredExecutions) ->
     case workflow_engine_state:poll_next_execution_id(EngineId) of
         {ok, ExecutionId} ->
             case lists:member(ExecutionId, DeferredExecutions) of
@@ -322,17 +336,22 @@ schedule_next_job(EngineId, DeferredExecutions) ->
                                 ok ->
                                     ok;
                                 ?WF_ERROR_LIMIT_REACHED ->
-                                    schedule_next_job(EngineId, [ExecutionId | DeferredExecutions])
+                                    schedule_next_job_insecure(EngineId, [ExecutionId | DeferredExecutions])
                             end;
                         ?PREPARE_LANE_EXECUTION(Handler, ExecutionContext, LaneId, PreparationMode) ->
                             schedule_lane_prepare_on_pool(
                                 EngineId, ExecutionId, Handler, ExecutionContext, LaneId, PreparationMode);
                         #execution_ended{} = ExecutionEndedRecord ->
                             handle_execution_ended(EngineId, ExecutionId, ExecutionEndedRecord),
-                            schedule_next_job(EngineId, DeferredExecutions);
+                            schedule_next_job_insecure(EngineId, DeferredExecutions);
                         ?DEFER_EXECUTION ->
                             % no jobs can be currently scheduled for this execution but new jobs will appear in future
-                            schedule_next_job(EngineId, [ExecutionId | DeferredExecutions])
+                            schedule_next_job_insecure(EngineId, [ExecutionId | DeferredExecutions]);
+                        ?RETRY_EXECUTION ->
+                            schedule_next_job_insecure(EngineId, DeferredExecutions);
+                        ?ERROR_NOT_FOUND ->
+                            % Race with execution deletion
+                            schedule_next_job_insecure(EngineId, [ExecutionId | DeferredExecutions])
                     end;
                 true ->
                     % no jobs can be currently scheduled for any execution (all executions has been checked and
@@ -362,6 +381,7 @@ handle_execution_ended(EngineId, ExecutionId, #execution_ended{
 
             call_handler(ExecutionId, Context, Handler, handle_workflow_execution_ended, []),
             case Reason of
+                % TODO VFS-7788 - fix race with workflow_iterator_snapshot:save (snapshot can be restored)
                 ?EXECUTION_ENDED -> workflow_iterator_snapshot:cleanup(ExecutionId);
                 ?EXECUTION_CANCELLED -> ok
             end,
