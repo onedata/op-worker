@@ -410,7 +410,7 @@ update_times_insecure(UserCtx, FileCtx, ATime, MTime, CTime) ->
     % TODO VFS-7139: This is temporary solution to be removed after fixing oneclient
     SessId = user_ctx:get_session_id(UserCtx),
     catch lfm_event_controller:flush_event_queue(
-        SessId, oneprovider:get_id(), file_ctx:get_logical_uuid_const(FileCtx)),
+        SessId, oneprovider:get_id(), file_ctx:get_logical_guid_const(FileCtx)),
 
     TimesDiff1 = fun
         (Times = #times{}) when ATime == undefined -> Times;

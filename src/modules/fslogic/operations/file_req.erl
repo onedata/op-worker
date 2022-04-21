@@ -873,9 +873,8 @@ fsync_insecure(UserCtx, FileCtx, DataOnly, HandleId) ->
 -spec flush_event_queue(user_ctx:ctx(), file_ctx:ctx()) -> #fuse_response{}.
 flush_event_queue(UserCtx, FileCtx) ->
     SessId = user_ctx:get_session_id(UserCtx),
-    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
-    case lfm_event_controller:flush_event_queue(SessId, oneprovider:get_id(),
-        FileUuid) of
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
+    case lfm_event_controller:flush_event_queue(SessId, oneprovider:get_id(), FileGuid) of
         ok ->
             #fuse_response{
                 status = #status{code = ?OK}

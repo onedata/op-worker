@@ -19,7 +19,7 @@
 -export([get_routing_key/1, get_stream_key/1, get_stream/1, is_remote/1]).
 -export([get_context/1, update_context/2]).
 
--type ctx() :: undefined | {file, file_ctx:ctx()}.
+-type ctx() :: undefined | {file, file_id:file_guid()}.
 
 -export_type([ctx/0]).
 
@@ -114,17 +114,17 @@ is_remote(_) -> false.
 get_context(#subscription{type = Type}) ->
     get_context(Type);
 get_context(#file_attr_changed_subscription{file_guid = FileGuid}) ->
-    {file, file_ctx:new_by_guid(FileGuid)};
+    {file, FileGuid};
 get_context(#replica_status_changed_subscription{file_guid = FileGuid}) ->
-    {file, file_ctx:new_by_guid(FileGuid)};
+    {file, FileGuid};
 get_context(#file_location_changed_subscription{file_guid = FileGuid}) ->
-    {file, file_ctx:new_by_guid(FileGuid)};
+    {file, FileGuid};
 get_context(#file_perm_changed_subscription{file_guid = FileGuid}) ->
-    {file, file_ctx:new_by_guid(FileGuid)};
+    {file, FileGuid};
 get_context(#file_removed_subscription{file_guid = FileGuid}) ->
-    {file, file_ctx:new_by_guid(FileGuid)};
+    {file, FileGuid};
 get_context(#file_renamed_subscription{file_guid = FileGuid}) ->
-    {file, file_ctx:new_by_guid(FileGuid)};
+    {file, FileGuid};
 get_context(_) ->
     undefined.
 
