@@ -27,6 +27,7 @@
 
 -export([
     subscribe_on_dir_test/1,
+    sync_subscribe_on_dir_test/1,
     subscribe_on_user_root_test/1,
     subscribe_on_user_root_filter_test/1,
     subscribe_on_new_space_test/1,
@@ -44,6 +45,7 @@
 all() ->
     ?ALL([
         subscribe_on_dir_test,
+        sync_subscribe_on_dir_test,
         subscribe_on_user_root_test,
         subscribe_on_user_root_filter_test,
         subscribe_on_new_space_test,
@@ -68,6 +70,12 @@ all() ->
 %%%===================================================================
 
 subscribe_on_dir_test(Config) ->
+    subscribe_on_dir_test_base(Config, async).
+
+sync_subscribe_on_dir_test(Config) ->
+    subscribe_on_dir_test_base(Config, sync).
+
+subscribe_on_dir_test_base(Config, SubscriptionType) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
     AccessToken = ?config({access_token, <<"user1">>}, Config),
@@ -84,11 +92,25 @@ subscribe_on_dir_test(Config) ->
 
     DirId = fuse_test_utils:create_directory(Sock, SpaceGuid, Dirname),
     Seq1 = get_seq(Config, <<"user1">>),
-    ?assertEqual(ok, ssl:send(Sock,
-        fuse_test_utils:generate_file_removed_subscription_message(0, Seq1, -Seq1, DirId))),
+    SubscriptionMessage = fuse_test_utils:generate_file_removed_subscription_message(0, Seq1, -Seq1, DirId),
     {ok, SubscriptionRoutingKey} = subscription_type:get_routing_key(#file_removed_subscription{file_guid = DirId}),
+
+    CheckAttempts = case SubscriptionType of
+        sync ->
+            {SubscriptionMessageId, FinalSubscriptionMessage} = fuse_test_utils:extend_message_with_msg_id(SubscriptionMessage),
+            ?assertEqual(ok, ssl:send(Sock, FinalSubscriptionMessage)),
+            ?assertMatch(#'ServerMessage'{
+                message_id = SubscriptionMessageId,
+                message_body = {status, #'Status'{code = ?OK}}
+            }, fuse_test_utils:receive_server_message()),
+            1;
+        async ->
+            ?assertEqual(ok, ssl:send(Sock, SubscriptionMessage)),
+            10
+    end,
+
     ?assertMatch({ok, [_]},
-        rpc:call(Worker1, subscription_manager, get_subscribers, [SubscriptionRoutingKey]), 10),
+        rpc:call(Worker1, subscription_manager, get_subscribers, [SubscriptionRoutingKey]), CheckAttempts),
 
     {FileGuid, HandleId} = fuse_test_utils:create_file(Sock, DirId, Filename),
     fuse_test_utils:close(Sock, FileGuid, HandleId),
@@ -644,6 +666,7 @@ rename_auth_filtering_test(Config) ->
     ?assertEqual(ok, ssl:send(Sock,
         fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, <<"user1">>), -Seq2))),
     ok.
+
 
 %%%===================================================================
 %%% SetUp and TearDown functions

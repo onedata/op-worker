@@ -521,7 +521,28 @@ handle_remotely(#flush_events{} = Request, ProviderId, SessId) ->
 handle_remotely(#event{} = Evt, ProviderId, SessId) ->
     handle_remotely(#events{events = [Evt]}, ProviderId, SessId);
 
+handle_remotely(#subscription{} = Sub, ProviderId, SessId) ->
+    stream_to_provider(Sub, ProviderId, SessId, self()),
+
+    receive
+        % VFS-5206 - handle heartbeats
+        #server_message{message_body = #status{code = ?OK}} ->
+            ok;
+        #server_message{message_body = #status{} = Status} ->
+            ?error("Remote subscription ~p (provider ~p, seesion ~p) failed with status: ~p",
+                [Sub, ProviderId, SessId, Status])
+    after
+        ?REMOTE_CALL_TIMEOUT ->
+            ?error("Remote subscription ~p (provider ~p, seesion ~p) failed timeout", [Sub, ProviderId, SessId])
+    end;
+
 handle_remotely(Request, ProviderId, SessId) ->
+    stream_to_provider(Request, ProviderId, SessId, undefined).
+
+
+%% @private
+-spec stream_to_provider(Request :: term(), ProviderId :: oneprovider:id(), session:id(), undefined | pid()) -> ok.
+stream_to_provider(Request, ProviderId, SessId, RecipientPid) ->
     {file, FileUuid} = get_context(Request),
     StreamId = sequencer:term_to_stream_id(FileUuid),
     {ok, SessDoc} = session:get(SessId),
@@ -535,7 +556,7 @@ handle_remotely(Request, ProviderId, SessId) ->
             effective_client_tokens = auth_manager:get_client_tokens(Credentials),
             effective_session_mode = SessMode
         },
-        StreamId, undefined
+        StreamId, RecipientPid
     ),
     ok.
 
