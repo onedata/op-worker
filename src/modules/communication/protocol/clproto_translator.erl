@@ -142,7 +142,7 @@ translate_from_protobuf(#'FlushEvents'{
     #flush_events{
         provider_id = ProviderId,
         subscription_id = integer_to_binary(SubscriptionId),
-        context = binary_to_term(Ctx)
+        context = Ctx
     };
 translate_from_protobuf(#'FileReadEvent'{
     counter = Counter,
@@ -1178,7 +1178,7 @@ translate_to_protobuf(#flush_events{
     {flush_events, #'FlushEvents'{
         provider_id = ProviderId,
         subscription_id = binary_to_integer(SubId),
-        context = term_to_binary(Context)}
+        context = Context}
     };
 translate_to_protobuf(#file_read_event{
     counter = Counter,

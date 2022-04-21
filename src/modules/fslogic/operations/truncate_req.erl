@@ -68,7 +68,7 @@ truncate_insecure(UserCtx, FileCtx1, Size, UpdateTimes, CreateFileIfNotExist) ->
                 {ok, Handle} ->
                     % Flush events queue to get proper file size
                     catch lfm_event_controller:flush_event_queue(
-                        SessId, oneprovider:get_id(), file_ctx:get_logical_uuid_const(FileCtx3)),
+                        SessId, oneprovider:get_id(), file_ctx:get_logical_guid_const(FileCtx3)),
                     {CurrentSize, _} = file_ctx:get_file_size(FileCtx3),
                     case storage_driver:truncate(Handle, Size, CurrentSize) of
                         ok ->

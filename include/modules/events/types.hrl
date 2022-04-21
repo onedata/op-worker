@@ -30,7 +30,7 @@
 -record(flush_events, {
     provider_id :: oneprovider:id(),
     subscription_id :: subscription:id(),
-    context :: term(),
+    context :: binary(),
     notify :: undefined | fun((term()) -> ok)
 }).
 

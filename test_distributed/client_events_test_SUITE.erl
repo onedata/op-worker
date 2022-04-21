@@ -28,6 +28,8 @@
 -export([
     subscribe_on_dir_test/1,
     sync_subscribe_on_dir_test/1,
+    proxy_subscribe_on_dir_test/1,
+    sync_proxy_subscribe_on_dir_test/1,
     subscribe_on_user_root_test/1,
     subscribe_on_user_root_filter_test/1,
     subscribe_on_new_space_test/1,
@@ -46,6 +48,8 @@ all() ->
     ?ALL([
         subscribe_on_dir_test,
         sync_subscribe_on_dir_test,
+        proxy_subscribe_on_dir_test,
+        sync_proxy_subscribe_on_dir_test,
         subscribe_on_user_root_test,
         subscribe_on_user_root_filter_test,
         subscribe_on_new_space_test,
@@ -70,27 +74,40 @@ all() ->
 %%%===================================================================
 
 subscribe_on_dir_test(Config) ->
-    subscribe_on_dir_test_base(Config, async).
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    subscribe_on_dir_test_base(Config, <<"/space_name1">>, async, Worker).
 
 sync_subscribe_on_dir_test(Config) ->
-    subscribe_on_dir_test_base(Config, sync).
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    subscribe_on_dir_test_base(Config, <<"/space_name1">>, sync, Worker).
 
-subscribe_on_dir_test_base(Config, SubscriptionType) ->
+proxy_subscribe_on_dir_test(Config) ->
+    [_, Worker] = ?config(op_worker_nodes, Config),
+    subscribe_on_dir_test_base(Config, <<"/space_name4">>, async, Worker).
+
+sync_proxy_subscribe_on_dir_test(Config) ->
+    [_, Worker] = ?config(op_worker_nodes, Config),
+    subscribe_on_dir_test_base(Config, <<"/space_name4">>, sync, Worker).
+
+subscribe_on_dir_test_base(Config, SpaceName, SubscriptionType, EventProducingWorker) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    EventProducingWorkerSessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(EventProducingWorker)}}, Config),
     AccessToken = ?config({access_token, <<"user1">>}, Config),
-    SpaceGuid = client_simulation_test_base:get_guid(Worker1, SessionId, <<"/space_name1">>),
+    SpaceGuid = client_simulation_test_base:get_guid(Worker1, SessionId, SpaceName),
 
-    {ok, {_, RootHandle}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(Worker1, <<"0">>, SpaceGuid,
+    {ok, {_, RootHandle}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(EventProducingWorker, <<"0">>, SpaceGuid,
         generator:gen_name(), ?DEFAULT_DIR_PERMS)),
-    ?assertEqual(ok, lfm_proxy:close(Worker1, RootHandle)),
+    ?assertEqual(ok, lfm_proxy:close(EventProducingWorker, RootHandle)),
 
     {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
+    {ok, {EventProducingWorkerSock, _}} = fuse_test_utils:connect_via_token(
+        EventProducingWorker, [{active, true}], EventProducingWorkerSessionId, AccessToken),
 
     Filename = generator:gen_name(),
     Dirname = generator:gen_name(),
 
-    DirId = fuse_test_utils:create_directory(Sock, SpaceGuid, Dirname),
+    DirId = fuse_test_utils:create_directory(EventProducingWorkerSock, SpaceGuid, Dirname),
     Seq1 = get_seq(Config, <<"user1">>),
     SubscriptionMessage = fuse_test_utils:generate_file_removed_subscription_message(0, Seq1, -Seq1, DirId),
     {ok, SubscriptionRoutingKey} = subscription_type:get_routing_key(#file_removed_subscription{file_guid = DirId}),
@@ -109,20 +126,25 @@ subscribe_on_dir_test_base(Config, SubscriptionType) ->
             10
     end,
 
-    ?assertMatch({ok, [_]},
-        rpc:call(Worker1, subscription_manager, get_subscribers, [SubscriptionRoutingKey]), CheckAttempts),
+    lists:foreach(fun(Worker) ->
+        ?assertMatch({ok, [_]},
+            rpc:call(Worker, subscription_manager, get_subscribers, [SubscriptionRoutingKey]), CheckAttempts)
+    end, lists:usort([Worker1, EventProducingWorker])),
 
-    {FileGuid, HandleId} = fuse_test_utils:create_file(Sock, DirId, Filename),
-    fuse_test_utils:close(Sock, FileGuid, HandleId),
+    {FileGuid, HandleId} = fuse_test_utils:create_file(EventProducingWorkerSock, DirId, Filename),
+    fuse_test_utils:close(EventProducingWorkerSock, FileGuid, HandleId),
 
-    ?assertEqual(ok, lfm_proxy:unlink(Worker1, <<"0">>, ?FILE_REF(FileGuid))),
+    ?assertEqual(ok, lfm_proxy:unlink(EventProducingWorker, <<"0">>, ?FILE_REF(FileGuid))),
     receive_events_and_check(file_removed, FileGuid),
 
     ?assertEqual(ok, ssl:send(Sock,
         fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, <<"user1">>), -Seq1))),
-    ?assertMatch({ok, []},
-        rpc:call(Worker1, subscription_manager, get_subscribers, [SubscriptionRoutingKey]), 10),
+    lists:foreach(fun(Worker) ->
+        ?assertMatch({ok, []},
+            rpc:call(Worker, subscription_manager, get_subscribers, [SubscriptionRoutingKey]), 10)
+    end, lists:usort([Worker1, EventProducingWorker])),
     ?assertEqual(ok, ssl:close(Sock)),
+    ?assertEqual(ok, ssl:close(EventProducingWorkerSock)),
     ok.
 
 subscribe_on_user_root_test(Config) ->
@@ -667,6 +689,48 @@ rename_auth_filtering_test(Config) ->
         fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, <<"user1">>), -Seq2))),
     ok.
 
+%%sync_proxy_subscribe_on_dir_test(Config) ->
+%%    [Worker1, Worker2] = ?config(op_worker_nodes, Config),
+%%    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+%%    SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker2)}}, Config),
+%%    AccessToken = ?config({access_token, <<"user1">>}, Config),
+%%    SpaceGuid = client_simulation_test_base:get_guid(Worker1, SessionId, <<"/space_name4">>),
+%%
+%%    {ok, {_, RootHandle}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(Worker2, <<"0">>, SpaceGuid,
+%%        generator:gen_name(), ?DEFAULT_DIR_PERMS)),
+%%    ?assertEqual(ok, lfm_proxy:close(Worker2, RootHandle)),
+%%
+%%    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
+%%    {ok, {Sock2, _}} = fuse_test_utils:connect_via_token(Worker2, [{active, true}], SessionId2, AccessToken),
+%%
+%%    Filename = generator:gen_name(),
+%%    Dirname = generator:gen_name(),
+%%
+%%    DirId = fuse_test_utils:create_directory(Sock2, SpaceGuid, Dirname),
+%%    Seq1 = get_seq(Config, <<"user1">>),
+%%    SubscriptionMessage = fuse_test_utils:generate_file_removed_subscription_message(0, Seq1, -Seq1, DirId),
+%%    {SubscriptionMessageId, FinalSubscriptionMessage} = fuse_test_utils:extend_message_with_msg_id(SubscriptionMessage),
+%%    ?assertEqual(ok, ssl:send(Sock, FinalSubscriptionMessage)),
+%%    {ok, SubscriptionRoutingKey} = subscription_type:get_routing_key(#file_removed_subscription{file_guid = DirId}),
+%%    ?assertMatch(#'ServerMessage'{
+%%        message_id = SubscriptionMessageId,
+%%        message_body = {status, #'Status'{code = ?OK}}
+%%    }, fuse_test_utils:receive_server_message()),
+%%    ?assertMatch({ok, [_]},
+%%        rpc:call(Worker2, subscription_manager, get_subscribers, [SubscriptionRoutingKey]), 10),
+%%
+%%    {FileGuid, HandleId} = fuse_test_utils:create_file(Sock2, DirId, Filename),
+%%    fuse_test_utils:close(Sock2, FileGuid, HandleId),
+%%
+%%    ?assertEqual(ok, lfm_proxy:unlink(Worker2, <<"0">>, ?FILE_REF(FileGuid))),
+%%    receive_events_and_check(file_removed, FileGuid),
+%%
+%%    ?assertEqual(ok, ssl:send(Sock,
+%%        fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, <<"user1">>), -Seq1))),
+%%    ?assertMatch({ok, []},
+%%        rpc:call(Worker2, subscription_manager, get_subscribers, [SubscriptionRoutingKey]), 10),
+%%    ?assertEqual(ok, ssl:close(Sock)),
+%%    ok.
 
 %%%===================================================================
 %%% SetUp and TearDown functions

@@ -100,12 +100,8 @@ handle(Manager, Request, RetryCounter) ->
                         handle_locally(Request, Manager);
                     _ ->
                         case Request of
-                            #subscription{} = Sub ->
-                                gen_server2:cast(Manager, {cache_provider, Sub, ProviderId}),
-                                {ok, SessId} = ets_state:get(?STATE_ID, Manager, session_id),
-                                handle_remotely(Request, ProviderId, SessId);
-                            #subscription_cancellation{id = SubId} ->
-                                gen_server2:cast(Manager, {remove_provider_cache, SubId}),
+                            #subscription{} ->
+                                call_manager(Manager, {remote_subscription, ProviderId, Request}),
                                 {ok, SessId} = ets_state:get(?STATE_ID, Manager, session_id),
                                 handle_remotely(Request, ProviderId, SessId);
                             _->
@@ -202,14 +198,6 @@ handle_cast({unregister_stream, StmKey}, State) ->
     remove_from_memory(streams, StmKey),
     {noreply, State};
 
-handle_cast({cache_provider, Sub, Provider}, State) ->
-    cache_provider(Sub, Provider),
-    {noreply, State};
-
-handle_cast({remove_provider_cache, SubID}, State) ->
-    remove_provider_cache(SubID),
-    {noreply, State};
-
 handle_cast(Request, State) ->
     ?log_bad_request(Request),
     {noreply, State}.
@@ -292,31 +280,29 @@ get_provider(#event{type = Type}, Manager)
         _ -> ignore
     end;
 get_provider(Request, Manager) ->
-    RequestCtx = get_context(Request),
-    case RequestCtx of
+    case get_context(Request) of
         undefined ->
             self;
-        {file, FileCtx} ->
-            FileGuid = file_ctx:get_logical_guid_const(FileCtx), % TODO VFS-7448 - test production of events for hardlinks
+        {file, FileGuid} -> % TODO VFS-7448 - test production of events for hardlinks
             case get_from_memory(Manager, guid_to_provider, FileGuid) of
                 {ok, ID} ->
                     ID;
                 _ ->
                     case ets_state:get(session, Manager, session_id) of
-                        {ok, SessId} -> get_provider(Request, SessId, FileCtx);
+                        {ok, SessId} -> get_provider(Request, SessId, FileGuid);
                         _ -> ignore
                     end
             end
     end.
 
--spec get_provider(Request :: term(), session:id(), file_ctx:ctx()) ->
+-spec get_provider(Request :: term(), session:id(), file_id:file_guid()) ->
     provider() | no_return().
-get_provider(_, SessId, FileCtx) ->
-    case file_ctx:is_root_dir_const(FileCtx) of
+get_provider(_, SessId, FileGuid) ->
+    case fslogic_uuid:is_root_dir_guid(FileGuid) of
         true ->
             self;
         false ->
-            SpaceId = file_ctx:get_space_id_const(FileCtx),
+            SpaceId = file_id:guid_to_space_id(FileGuid),
             case provider_logic:supports_space(SpaceId) of
                 true ->
                     self;
@@ -443,30 +429,35 @@ handle_in_process(Request, #state{streams_sup = StmsSup} = State, RetryCounter) 
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_in_process(Request :: term(), State :: #state{}) -> ok.
-handle_in_process(#subscription{id = Id} = Sub, #state{} = State) ->
-    #state{
-        streams_sup = StmsSup,
-        session_id = SessId
-    } = State,
-    StmKey = subscription_type:get_stream_key(Sub),
-    case get_from_memory(streams, StmKey) of
-        {ok, Stm} ->
-            ok = event_stream:send(Stm, {add_subscription, Sub});
-        error ->
-            {ok, Stm} = event_stream_sup:start_stream(StmsSup, self(), Sub, SessId),
-            add_to_memory(streams, StmKey, Stm)
-    end,
-    add_to_memory(subscriptions, Id, StmKey),
+handle_in_process(#subscription{} = Sub, #state{} = State) ->
+    add_subscription(Sub, State),
     cache_provider(Sub, self);
 
-handle_in_process(#subscription_cancellation{id = SubId}, _State) ->
+handle_in_process({remote_subscription, ProviderId, Sub}, #state{} = State) ->
+    add_subscription(Sub, State),
+    cache_provider(Sub, ProviderId);
+
+handle_in_process(#subscription_cancellation{id = SubId} = Request, #state{session_id = SessId}) ->
     case get_from_memory(subscriptions, SubId) of
         {ok, StmKey} ->
             case get_from_memory(streams, StmKey) of
                 {ok, Stm} ->
                     ok = event_stream:send(Stm, {remove_subscription, SubId}),
                     remove_from_memory(subscriptions, SubId),
-                    remove_provider_cache(SubId);
+                    {FileGuid, ProviderId} = get_and_clean_subscription_cache(SubId),
+
+                    Self = oneprovider:get_id_or_undefined(),
+                    case is_binary(ProviderId) andalso ProviderId =/= Self of
+                        true ->
+                            % Cancel subscription also on remote provider
+                            % Spawn as sending request could block manager for long time
+                            spawn(fun() ->
+                                stream_to_provider(Request, ProviderId, SessId, FileGuid, undefined)
+                            end),
+                            ok;
+                        false ->
+                            ok
+                    end;
                 _ ->
                     ok
             end;
@@ -484,6 +475,25 @@ handle_in_process(Request, _State) ->
     ?log_bad_request(Request),
     ok.
 
+
+%% @private
+-spec add_subscription(#subscription{}, #state{}) -> ok.
+add_subscription(#subscription{id = Id} = Sub, #state{} = State) ->
+    #state{
+        streams_sup = StmsSup,
+        session_id = SessId
+    } = State,
+    StmKey = subscription_type:get_stream_key(Sub),
+    case get_from_memory(streams, StmKey) of
+        {ok, Stm} ->
+            ok = event_stream:send(Stm, {add_subscription, Sub});
+        error ->
+            {ok, Stm} = event_stream_sup:start_stream(StmsSup, self(), Sub, SessId),
+            add_to_memory(streams, StmKey, Stm)
+    end,
+    add_to_memory(subscriptions, Id, StmKey).
+
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -497,7 +507,7 @@ handle_remotely(#flush_events{} = Request, ProviderId, SessId) ->
     {ok, SessDoc} = session:get(SessId),
     Credentials = session:get_credentials(SessDoc),
     {ok, SessMode} = session:get_mode(SessDoc),
-    StreamId = sequencer:term_to_stream_id(Context),
+    StreamId = sequencer:binary_to_stream_id(Context),
     ClientMsg = #client_message{
         message_stream = #message_stream{stream_id = StreamId},
         message_body = Request,
@@ -543,8 +553,15 @@ handle_remotely(Request, ProviderId, SessId) ->
 %% @private
 -spec stream_to_provider(Request :: term(), ProviderId :: oneprovider:id(), session:id(), undefined | pid()) -> ok.
 stream_to_provider(Request, ProviderId, SessId, RecipientPid) ->
-    {file, FileUuid} = get_context(Request),
-    StreamId = sequencer:term_to_stream_id(FileUuid),
+    {file, FileGuid} = get_context(Request),
+    stream_to_provider(Request, ProviderId, SessId, FileGuid, RecipientPid).
+
+
+%% @private
+-spec stream_to_provider(Request :: term(), ProviderId :: oneprovider:id(), session:id(),
+    file_id:file_guid(), undefined | pid()) -> ok.
+stream_to_provider(Request, ProviderId, SessId, FileGuid, RecipientPid) ->
+    StreamId = sequencer:binary_to_stream_id(FileGuid),
     {ok, SessDoc} = session:get(SessId),
     Credentials = session:get_credentials(SessDoc),
     {ok, SessMode} = session:get_mode(SessDoc),
@@ -568,12 +585,10 @@ stream_to_provider(Request, ProviderId, SessId, RecipientPid) ->
 %%--------------------------------------------------------------------
 -spec cache_provider(#subscription{}, ProviderId :: provider()) -> ok.
 cache_provider(#subscription{id = Id} = Sub, Provider) ->
-    RequestCtx = get_context(Sub),
-    case RequestCtx of
+    case get_context(Sub) of
         undefined ->
             ok;
-        {file, FileCtx} ->
-            FileGuid = file_ctx:get_logical_guid_const(FileCtx),
+        {file, FileGuid} ->
             add_to_memory(guid_to_provider, FileGuid, Provider),
             add_to_memory(sub_to_guid, Id, FileGuid)
     end.
@@ -585,14 +600,21 @@ cache_provider(#subscription{id = Id} = Sub, Provider) ->
 %% connected with guid.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_provider_cache(subscription:id()) -> ok.
-remove_provider_cache(SubId) ->
+-spec get_and_clean_subscription_cache(subscription:id()) ->
+    {file_id:file_guid() | undefined, oneprovider:id() | undefined}.
+get_and_clean_subscription_cache(SubId) ->
     case get_from_memory(sub_to_guid, SubId) of
         {ok, FileGuid} ->
             remove_from_memory(sub_to_guid, SubId),
-            remove_from_memory(guid_to_provider, FileGuid);
+            case get_from_memory(guid_to_provider, FileGuid) of
+                {ok, Provider} ->
+                    remove_from_memory(guid_to_provider, FileGuid),
+                    {FileGuid, Provider};
+                _ ->
+                    {FileGuid, undefined}
+            end;
         _ ->
-            ok
+            {undefined, undefined}
     end.
 
 %%--------------------------------------------------------------------
@@ -705,8 +727,7 @@ remove_from_memory(DataType, Key) ->
 %% Gets value from state.
 %% @end
 %%--------------------------------------------------------------------
--spec get_from_memory(data_type(), term()) ->
-    {ok, Streams :: pid()} | error.
+-spec get_from_memory(data_type(), term()) -> {ok, term()} | error.
 get_from_memory(DataType, Key) ->
     ets_state:get_from_collection(?STATE_ID, DataType, Key).
 
@@ -716,8 +737,7 @@ get_from_memory(DataType, Key) ->
 %% Gets value from state.
 %% @end
 %%--------------------------------------------------------------------
--spec get_from_memory(Manager :: pid(), data_type(), term()) ->
-    {ok, Streams :: pid()} | error.
+-spec get_from_memory(Manager :: pid(), data_type(), term()) -> {ok, term()} | error.
 get_from_memory(Manager, DataType, Key) ->
     ets_state:get_from_collection(?STATE_ID, Manager, DataType, Key).
 
