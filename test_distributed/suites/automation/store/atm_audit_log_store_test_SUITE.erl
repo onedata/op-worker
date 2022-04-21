@@ -193,15 +193,14 @@ example_configs() ->
             LogContentDataType
         )}
     end, [
-        %% TODO VFS-8686 enable after implementing compress/expand for array
-%%        atm_array_type,
+        atm_array_type,
         atm_dataset_type,
         atm_file_type,
         atm_integer_type,
         atm_object_type,
         atm_range_type,
         atm_string_type,
-        atm_time_series_measurements_type
+        atm_time_series_measurement_type
     ]).
 
 

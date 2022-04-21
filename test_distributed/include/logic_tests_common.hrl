@@ -234,7 +234,8 @@ end).
     }],
     result_specs = [#atm_lambda_result_spec{
         name = <<"res">>,
-        data_spec = ?ATM_LAMBDA_DATA_SPEC
+        data_spec = ?ATM_LAMBDA_DATA_SPEC,
+        relay_method = return_value
     }],
     preferred_batch_size = 10,
     resource_spec = #atm_resource_spec{
@@ -242,7 +243,7 @@ end).
         memory_requested = 1000000000, memory_limit = 5000000000,
         ephemeral_storage_requested = 1000000000, ephemeral_storage_limit = 5000000000
     },
-    checksum = <<"48d206e512123dd08f61e1e11322bd0a">>,
+    checksum = <<"3f6d7839f3388d4f214064937e0ee66d">>,
     state = stable
 }).
 -define(ATM_LAMBDA_REVISION_REGISTRY_VALUE(__AtmLambda), #atm_lambda_revision_registry{

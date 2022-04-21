@@ -33,7 +33,7 @@
 ]).
 
 %% atm_data_compressor callbacks
--export([compress/1, expand/2]).
+-export([compress/2, expand/3]).
 
 
 -type list_opts() :: #{
@@ -107,13 +107,14 @@ decode_listing_options(#{<<"offset">> := Offset, <<"startIndex">> := StartIndex}
 %%%===================================================================
 
 
--spec compress(atm_value:expanded()) -> dataset:id().
-compress(#{<<"datasetId">> := DatasetId}) -> DatasetId.
+-spec compress(atm_value:expanded(), atm_data_type:value_constraints()) ->
+    dataset:id().
+compress(#{<<"datasetId">> := DatasetId}, _ValueConstraints) -> DatasetId.
 
 
--spec expand(atm_workflow_execution_auth:record(), dataset:id()) ->
+-spec expand(atm_workflow_execution_auth:record(), dataset:id(), atm_data_type:value_constraints()) ->
     {ok, atm_value:expanded()} | {error, term()}.
-expand(AtmWorkflowExecutionAuth, DatasetId) ->
+expand(AtmWorkflowExecutionAuth, DatasetId, _ValueConstraints) ->
     SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
     try
         DatasetInfo = mi_datasets:get_info(SessionId, DatasetId),
