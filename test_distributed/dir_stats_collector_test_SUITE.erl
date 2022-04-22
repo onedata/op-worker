@@ -32,7 +32,8 @@
     race_with_subtree_filling_with_data_test/1,
     race_with_file_adding_to_large_dir_test/1,
     multiple_status_change_test/1,
-    adding_file_when_disabled_test/1
+    adding_file_when_disabled_test/1,
+    restart_test/1
 ]).
 
 
@@ -48,7 +49,8 @@ all() -> [
     race_with_subtree_filling_with_data_test,
     race_with_file_adding_to_large_dir_test,
     multiple_status_change_test,
-    adding_file_when_disabled_test
+    adding_file_when_disabled_test,
+    restart_test
 ].
 
 
@@ -102,6 +104,10 @@ multiple_status_change_test(Config) ->
 
 adding_file_when_disabled_test(Config) ->
     dir_stats_collector_test_base:adding_file_when_disabled_test(Config).
+
+
+restart_test(Config) ->
+    dir_stats_collector_test_base:restart_test(Config).
 
 
 %%%===================================================================
