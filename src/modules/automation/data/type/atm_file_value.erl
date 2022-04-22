@@ -32,7 +32,7 @@
 ]).
 
 %% atm_data_compressor callbacks
--export([compress/1, expand/2]).
+-export([compress/2, expand/3]).
 
 -type list_opts() :: #{
     last_name := file_meta:name(),
@@ -117,15 +117,20 @@ decode_listing_options(#{<<"last_name">> := LastName, <<"last_tree">> := LastTre
 %%%===================================================================
 
 
--spec compress(atm_value:expanded()) -> file_id:file_guid().
-compress(#{<<"file_id">> := ObjectId}) ->
+-spec compress(atm_value:expanded(), atm_data_type:value_constraints()) ->
+    file_id:file_guid().
+compress(#{<<"file_id">> := ObjectId}, _ValueConstraints) ->
     {ok, Guid} = file_id:objectid_to_guid(ObjectId),
     Guid.
 
 
--spec expand(atm_workflow_execution_auth:record(), file_id:file_guid()) ->
+-spec expand(
+    atm_workflow_execution_auth:record(),
+    file_id:file_guid(),
+    atm_data_type:value_constraints()
+) ->
     {ok, atm_value:expanded()} | {error, term()}.
-expand(AtmWorkflowExecutionAuth, Guid) ->
+expand(AtmWorkflowExecutionAuth, Guid, _ValueConstraints) ->
     SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
 
     case lfm:stat(SessionId, ?FILE_REF(Guid)) of

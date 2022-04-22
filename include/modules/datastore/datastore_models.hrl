@@ -465,12 +465,15 @@
 
 
 -record(archive_recall_details, {
+    recalling_provider_id :: od_provider:id(),
     archive_id :: archive:id(),
     dataset_id :: dataset:id(),
     start_timestamp = undefined :: undefined | time:millis(),
     finish_timestamp = undefined :: undefined | time:millis(),
+    cancel_timestamp = undefined :: undefined | time:millis(),
     total_file_count :: non_neg_integer(),
-    total_byte_size :: non_neg_integer()
+    total_byte_size :: non_neg_integer(),
+    last_error :: undefined | binary()
 }).
 
 % Model used for storing information associated with dataset.
@@ -1060,6 +1063,11 @@
 
     % timestamps of collecting status changes that allow verification when historic statistics were trustworthy
     collecting_status_change_timestamps = [] :: [dir_stats_collector_config:status_change_timestamp()]
+}).
+
+
+-record(restart_hooks, {
+    hooks = #{} :: restart_hooks:hooks()
 }).
 
 

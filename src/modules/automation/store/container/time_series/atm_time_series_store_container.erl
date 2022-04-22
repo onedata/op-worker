@@ -65,6 +65,16 @@
 ]).
 
 
+-define(ANY_MEASUREMENT_DATA_SPEC, #atm_data_spec{
+    type = atm_time_series_measurement_type,
+    value_constraints = #{specs => [#atm_time_series_measurement_spec{
+        name_matcher_type = has_prefix,
+        name_matcher = <<>>,
+        unit = none
+    }]}
+}).
+
+
 -define(CTX, #{
     model => ?MODULE
 }).
@@ -168,13 +178,24 @@ browse_content(Record, #atm_store_content_browse_req{
 
 -spec update_content(record(), content_update_req()) -> record() | no_return().
 update_content(Record, #atm_store_content_update_req{
-    argument = Arg,
+    workflow_execution_auth = AtmWorkflowExecutionAuth,
+    argument = Measurements,
+    options = #atm_time_series_store_content_update_options{dispatch_rules = DispatchRules}
+}) when is_list(Measurements) ->
+    atm_value:validate(
+        AtmWorkflowExecutionAuth,
+        Measurements,
+        ?ATM_ARRAY_DATA_SPEC(?ANY_MEASUREMENT_DATA_SPEC)
+    ),
+    consume_measurements(Measurements, DispatchRules, Record);
+
+update_content(Record, #atm_store_content_update_req{
+    workflow_execution_auth = AtmWorkflowExecutionAuth,
+    argument = Measurement,
     options = #atm_time_series_store_content_update_options{dispatch_rules = DispatchRules}
 }) ->
-    case atm_data_type:is_instance(atm_time_series_measurements_type, Arg) of
-        true -> consume_measurements(Arg, DispatchRules, Record);
-        false -> throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Arg, atm_time_series_measurements_type))
-    end.
+    atm_value:validate(AtmWorkflowExecutionAuth, Measurement, ?ANY_MEASUREMENT_DATA_SPEC),
+    consume_measurements([Measurement], DispatchRules, Record).
 
 
 -spec delete(record()) -> ok.
@@ -268,9 +289,9 @@ consume_measurements(Measurements, DispatchRules, Record = #atm_time_series_stor
             {true, TSName, TSConfig} ->
                 Timestamp = maps:get(<<"timestamp">>, Measurement),
                 Value = maps:get(<<"value">>, Measurement),
-                PreviousMeasurements = kv_utils:get([TSName, all], ConsumeSpecAcc, []),
+                PreviousMeasurements = kv_utils:get([TSName, ?ALL_METRICS], ConsumeSpecAcc, []),
                 NewMeasurements = [{Timestamp, Value} | PreviousMeasurements],
-                {ConsumeSpecAcc#{TSName => #{all => NewMeasurements}}, InvolvedConfigAcc#{TSName => TSConfig}};
+                {ConsumeSpecAcc#{TSName => #{?ALL_METRICS => NewMeasurements}}, InvolvedConfigAcc#{TSName => TSConfig}};
             false ->
                 Acc
         end
@@ -298,19 +319,9 @@ consume_measurements(Measurements, DispatchRules, Record = #atm_time_series_stor
 match_target_ts(#{<<"tsName">> := MeasurementTSName}, DispatchRules, TSSchemas) ->
     case atm_time_series_names:find_matching_dispatch_rule(MeasurementTSName, DispatchRules) of
         {ok, DispatchRule} ->
-            case atm_time_series_names:find_referenced_time_series_schema(DispatchRule, TSSchemas) of
-                {ok, TSSchema} ->
-                    TargetTSName = atm_time_series_names:resolve_target_ts_name(
-                        MeasurementTSName, TSSchema, DispatchRule
-                    ),
-                    {true, TargetTSName, TSSchema#atm_time_series_schema.metrics};
-                error ->
-                    throw(?ERROR_BAD_DATA(<<"dispatchRules">>, str_utils:format_bin(
-                        "Time series name generator '~s' specified in one of the dispatch rules "
-                        "does not reference any defined time series schema",
-                        [DispatchRule#atm_time_series_dispatch_rule.target_ts_name_generator]
-                    )))
-            end;
+            TSSchema = atm_time_series_names:select_referenced_time_series_schema(DispatchRule, TSSchemas),
+            TargetTSName = atm_time_series_names:resolve_target_ts_name(MeasurementTSName, TSSchema, DispatchRule),
+            {true, TargetTSName, TSSchema#atm_time_series_schema.metrics};
         error ->
             false
     end.

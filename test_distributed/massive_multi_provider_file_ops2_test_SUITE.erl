@@ -79,7 +79,7 @@ db_sync_basic_opts_test(Config) ->
     multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {4,2,0}, 120).
 
 db_sync_basic_opts_with_errors_test(Config) ->
-    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {4,2,0}, 120, false).
+    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {4,2,0}, 300, false).
 
 db_sync_many_ops_test(Config) ->
     ?PERFORMANCE(Config, ?performance_description("Tests working on dirs and files with db_sync")).
@@ -251,6 +251,7 @@ init_per_testcase(file_consistency_test, Config) ->
     test_utils:mock_new(Workers, file_meta, [passthrough]),
     init_per_testcase(?DEFAULT_CASE(file_consistency_test), Config);
 init_per_testcase(db_sync_basic_opts_with_errors_test = Case, Config) ->
+    ct:timetrap({minutes, 60}),
     MockedConfig = multi_provider_file_ops_test_base:mock_sync_and_rtransfer_errors(Config),
     init_per_testcase(?DEFAULT_CASE(Case), MockedConfig);
 init_per_testcase(_Case, Config) ->

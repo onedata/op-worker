@@ -102,14 +102,14 @@ initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
     {AtmTaskExecutionSpec, AtmWorkflowExecutionEnvDiff}.
 
 
--spec teardown(atm_lane_execution_handler:teardown_ctx(), atm_task_execution:id()) ->
+-spec teardown(atm_workflow_execution_ctx:record(), atm_task_execution:id()) ->
     ok | no_return().
-teardown(AtmLaneExecutionRunTeardownCtx, AtmTaskExecutionId) ->
+teardown(AtmWorkflowExecutionCtx, AtmTaskExecutionId) ->
     #document{value = #atm_task_execution{
         executor = AtmTaskExecutor
     }} = ensure_atm_task_execution_doc(AtmTaskExecutionId),
 
-    atm_task_executor:teardown(AtmLaneExecutionRunTeardownCtx, AtmTaskExecutor).
+    atm_task_executor:teardown(AtmWorkflowExecutionCtx, AtmTaskExecutor).
 
 
 -spec set_run_num(atm_lane_execution:run_num(), atm_task_execution:id()) ->
@@ -454,7 +454,21 @@ update_items_failed_and_processed(AtmTaskExecutionId, Inc) ->
     ok.
 
 
+%%--------------------------------------------------------------------
 %% @private
+%% @doc
+%% Updates atm task execution status stored in atm parallel box execution of
+%% corresponding atm lane run if it was changed in task execution doc.
+%%
+%% NOTE: normally this should happen only after lane run processing has started
+%% and concrete 'run_num' was set for all its tasks (it is not possible to
+%% foresee what it will be beforehand as previous lane run may retried numerous
+%% times). However, in case of failure/interruption during lane run preparation
+%% after task execution documents have been created, this function will also
+%% be called. Despite not having 'run_num' set there is no ambiguity to which
+%% lane run it belongs as it can only happen to the newest run of given lane.
+%% @end
+%%--------------------------------------------------------------------
 -spec handle_status_change(atm_task_execution:doc()) -> ok.
 handle_status_change(#document{value = #atm_task_execution{status_changed = false}}) ->
     ok;
@@ -463,13 +477,15 @@ handle_status_change(#document{
     value = #atm_task_execution{
         workflow_execution_id = AtmWorkflowExecutionId,
         lane_index = AtmLaneIndex,
-        run_num = RunNum,
+        run_num = RunNumOrUndefined,
         parallel_box_index = AtmParallelBoxIndex,
         status = NewStatus,
         status_changed = true
     }
 }) ->
+    RunSelector = utils:ensure_defined(RunNumOrUndefined, current),
+
     ok = atm_lane_execution_status:handle_task_status_change(
-        AtmWorkflowExecutionId, {AtmLaneIndex, RunNum}, AtmParallelBoxIndex,
+        AtmWorkflowExecutionId, {AtmLaneIndex, RunSelector}, AtmParallelBoxIndex,
         AtmTaskExecutionId, NewStatus
     ).

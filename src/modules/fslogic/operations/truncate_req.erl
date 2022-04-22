@@ -120,10 +120,7 @@ log_warning(Module, Function, Error, FileCtx) ->
 -spec on_successful_truncate(file_ctx:ctx(), Size :: non_neg_integer(), UpdateTimes :: boolean()) ->
     fslogic_worker:fuse_response().
 on_successful_truncate(FileCtx, Size, UpdateTimes) ->
-    case file_popularity:update_size(FileCtx, Size) of
-        ok -> ok;
-        {error, not_found} -> ok
-    end,
+    ok = file_popularity:update_size(FileCtx, Size),
     case UpdateTimes of
         true ->
             fslogic_times:update_mtime_ctime(FileCtx);

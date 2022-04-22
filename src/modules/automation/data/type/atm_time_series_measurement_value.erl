@@ -7,10 +7,10 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements `atm_data_validator` and `atm_data_compressor`
-%%% functionality for `atm_time_series_measurements_type`.
+%%% functionality for `atm_time_series_measurement_type`.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_time_series_measurements_value).
+-module(atm_time_series_measurement_value).
 -author("Bartosz Walkowicz").
 
 -behaviour(atm_data_validator).
@@ -22,12 +22,10 @@
 -export([assert_meets_constraints/3]).
 
 %% atm_data_compressor callbacks
--export([compress/1, expand/2]).
+-export([compress/2, expand/3]).
 
 
--define(DATA_TYPE, atm_time_series_measurements_type).
-
--define(FIELD_PATH(__INDEX, __KEY), str_utils:format_bin("[~B].~s", [__INDEX, __KEY])).
+-define(DATA_TYPE, atm_time_series_measurement_type).
 
 
 %%%===================================================================
@@ -41,20 +39,18 @@
     atm_data_type:value_constraints()
 ) ->
     ok | no_return().
-assert_meets_constraints(_AtmWorkflowExecutionAuth, Value, _ValueConstraints) ->
+assert_meets_constraints(_AtmWorkflowExecutionAuth, Measurement, ValueConstraints) ->
     try
-        lists:foreach(fun({Index, Measurement}) ->
-            check_implicit_measurement_constraints(Index - 1, Measurement)
-        end, lists_utils:enumerate(Value))
+        check_measurement_constraints(Measurement, ValueConstraints)
     catch
         throw:{unverified_constraints, UnverifiedConstraints} ->
             throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
-                Value, ?DATA_TYPE, UnverifiedConstraints
+                Measurement, ?DATA_TYPE, UnverifiedConstraints
             ));
         throw:Error ->
             throw(Error);
         _:_ ->
-            throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, ?DATA_TYPE))
+            throw(?ERROR_ATM_DATA_TYPE_UNVERIFIED(Measurement, ?DATA_TYPE))
     end.
 
 
@@ -63,13 +59,18 @@ assert_meets_constraints(_AtmWorkflowExecutionAuth, Value, _ValueConstraints) ->
 %%%===================================================================
 
 
--spec compress(atm_value:expanded()) -> json_utils:json_map().
-compress(Value) -> Value.
+-spec compress(atm_value:expanded(), atm_data_type:value_constraints()) ->
+    json_utils:json_map().
+compress(Value, _ValueConstraints) -> Value.
 
 
--spec expand(atm_workflow_execution_auth:record(), json_utils:json_map()) ->
+-spec expand(
+    atm_workflow_execution_auth:record(),
+    json_utils:json_map(),
+    atm_data_type:value_constraints()
+) ->
     {ok, atm_value:expanded()}.
-expand(_AtmWorkflowExecutionAuth, Value) ->
+expand(_AtmWorkflowExecutionAuth, Value, _ValueConstraints) ->
     {ok, Value}.
 
 
@@ -79,23 +80,20 @@ expand(_AtmWorkflowExecutionAuth, Value) ->
 
 
 %% @private
--spec check_implicit_measurement_constraints(non_neg_integer(), atm_value:expanded()) ->
+-spec check_measurement_constraints(
+    atm_value:expanded(),
+    atm_data_type:value_constraints()
+) ->
     ok | no_return().
-check_implicit_measurement_constraints(Index, #{
-    <<"tsName">> := TsName,
-    <<"timestamp">> := Timestamp,
-    <<"value">> := MeasurementValue
-}) ->
-    is_binary(TsName) orelse throw({unverified_constraints, #{
-        ?FIELD_PATH(Index, <<"tsName">>) => <<"String">>
-    }}),
-
-    (is_integer(Timestamp) andalso Timestamp > 0) orelse throw({unverified_constraints, #{
-        ?FIELD_PATH(Index, <<"timestamp">>) => <<"Non negative integer">>
-    }}),
-
-    is_number(MeasurementValue) orelse throw({unverified_constraints, #{
-        ?FIELD_PATH(Index, <<"value">>) => <<"Number">>
-    }}),
-
-    ok.
+check_measurement_constraints(
+    #{<<"tsName">> := TSName},
+    #{specs := AllowedMeasurementsSpecs}
+) ->
+    case atm_time_series_names:find_matching_measurements_spec(TSName, AllowedMeasurementsSpecs) of
+        {ok, _} ->
+            ok;
+        error ->
+            throw({unverified_constraints, #{<<"specs">> => jsonable_record:list_to_json(
+                AllowedMeasurementsSpecs, atm_time_series_measurement_spec
+            )}})
+    end.

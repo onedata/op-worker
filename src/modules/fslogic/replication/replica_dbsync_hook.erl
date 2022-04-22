@@ -64,11 +64,9 @@ on_file_location_change(FileCtx, ChangedLocationDoc = #document{
                                             on_file_location_change(FileCtx5, ChangedLocationDoc)
                                     end
                                 catch
-                                    Error:Reason  ->
-                                        % create_doc crashes if file_meta is missing
-                                        % TODO VFS-8952 - add posthook on ancestor if it is missing
-                                        ?debug("~p failure: ~p~p", [?FUNCTION_NAME, Error, Reason]),
-                                        file_meta_posthooks:add_hook(file_ctx:get_logical_uuid_const(FileCtx4), LocId,
+                                    throw:{error, {file_meta_missing, MissingUuid}}  ->
+                                        ?debug("~p file_meta_missing: ~p", [?FUNCTION_NAME, MissingUuid]),
+                                        file_meta_posthooks:add_hook({file_meta_missing, MissingUuid}, LocId,
                                             ?MODULE, ?FUNCTION_NAME, [file_ctx:reset(FileCtx), ChangedLocationDoc])
                                 end;
                             false ->
@@ -312,7 +310,8 @@ notify_attrs_change_if_necessary(FileCtx,
     case {ReplicaStatusChanged, OldSize =/= NewSize} of
         {true, SizeChanged} ->
             ok = fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx, SizeChanged, []),
-            ok = qos_hooks:reconcile_qos(FileCtx);
+            ok = qos_hooks:reconcile_qos(FileCtx),
+            ok = file_popularity:update_size(FileCtx);
         {false, true} ->
             ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []),
             ok = qos_hooks:report_synchronization_skipped(FileCtx);
