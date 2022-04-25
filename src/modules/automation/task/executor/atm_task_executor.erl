@@ -47,7 +47,7 @@
 -type lambda_input() :: json_utils:json_map().
 %% #{
 %%      <<"argsBatch">> := [args()],
-%%      <<"ctx">> := #{heartbeatUrl := binary()}
+%%      <<"ctx">> := #{<<"heartbeatUrl">> := binary()}
 %% }
 -type lambda_output() :: json_utils:json_map().
 %% #{
