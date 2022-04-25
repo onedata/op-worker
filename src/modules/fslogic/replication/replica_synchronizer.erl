@@ -1464,8 +1464,8 @@ flush_blocks(#state{cached_blocks = Blocks, file_ctx = FileCtx} = State, Exclude
             op_worker:get_env(synchronizer_on_fly_finished_events, all)
     end,
 
-    IgnoreErrors = op_worker:get_env(ignore_synchronizer_flush_errors, false), % env used by initializer - remove
-                                                                               % after tests migration to onenv
+    % env used by initializer - remove after tests migration to onenv
+    IgnoreUnregisteredOneproviderError = op_worker:get_env(ignore_synchronizer_unregistered_oneprovider_error, false),
     Ans = try
         lists:foldl(fun({From, FinalBlock, Type}, Acc) ->
             case Type of
@@ -1509,7 +1509,7 @@ flush_blocks(#state{cached_blocks = Blocks, file_ctx = FileCtx} = State, Exclude
                 ok
         end
     catch
-        _:_ when IgnoreErrors -> []
+        throw:{error, unregistered_oneprovider} when IgnoreUnregisteredOneproviderError -> []
     end,
 
     {Ans, set_events_timer(cancel_caching_blocks_timer(
