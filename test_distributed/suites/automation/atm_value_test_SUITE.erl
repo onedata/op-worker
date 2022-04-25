@@ -101,7 +101,11 @@ all() -> [
 }).
 -record(atm_value_compress_expand_testcase, {
     data_spec,
-    values
+    values :: [
+        Term :: json_utils:json_term() |
+        {different, Input :: json_utils:json_term(), ExpOutput :: json_utils:json_term()} |
+        {error, Input :: json_utils:json_term(), ExpError :: errors:error()}
+    ]
 }).
 
 
@@ -172,6 +176,7 @@ atm_array_value_compress_expand_test(_Config) ->
 
             % Array items should be compressed and expanded according to their type rules
             {
+                different,
                 [
                     [],
                     [
@@ -268,7 +273,7 @@ atm_dataset_value_compress_expand_test(_Config) ->
     atm_value_compress_expand_test_base(#atm_value_compress_expand_testcase{
         data_spec = #atm_data_spec{type = atm_dataset_type},
         values = lists:flatten([
-            {#{<<"datasetId">> => <<"NonExistentDatasetId">>}, ?ERROR_NOT_FOUND},
+            {error, #{<<"datasetId">> => <<"RemovedDatasetId">>}, ?ERROR_NOT_FOUND},
 
             lists:map(fun(DatasetId) ->
                 DatasetInfo = ?rpc(mi_datasets:get_info(SessionId, DatasetId)),
@@ -276,6 +281,7 @@ atm_dataset_value_compress_expand_test(_Config) ->
                 % atm_dataset_type is but a reference to underlying file entity -
                 % as such expanding it should fetch all current file attributes
                 {
+                    different,
                     #{<<"datasetId">> => DatasetId},
                     dataset_utils:dataset_info_to_json(DatasetInfo)
                 }
@@ -394,12 +400,14 @@ atm_file_value_compress_expand_test(_Config) ->
         },
         values = lists:flatten([
             {
+                error,
                 #{<<"file_id">> => ?ok(file_id:guid_to_objectid(file_id:pack_guid(
                     <<"removed_file_id">>, SpaceKrkId
                 )))},
                 ?ERROR_POSIX(?ENOENT)
             },
             {
+                error,
                 #{<<"file_id">> => ?ok(file_id:guid_to_objectid(FileInDirGuid))},
                 ?ERROR_POSIX(?EACCES)
             },
@@ -412,6 +420,7 @@ atm_file_value_compress_expand_test(_Config) ->
                 % atm_file_type is but a reference to underlying file entity -
                 % as such expanding it should fetch all current file attributes
                 {
+                    different,
                     #{<<"file_id">> => ?ok(file_id:guid_to_objectid(Guid))},
                     file_middleware_plugin:file_attrs_to_json(FileAttrs)
                 }
@@ -547,16 +556,19 @@ atm_range_value_compress_expand_test(_Config) ->
             % Optional fields should be filled with defaults when expanding
             % if not previously specified
             {
+                different,
                 #{<<"end">> => 10},
                 #{<<"end">> => 10, <<"start">> => 0, <<"step">> => 1}
             },
             {
+                different,
                 #{<<"start">> => 1, <<"end">> => 10},
                 #{<<"start">> => 1, <<"end">> => 10, <<"step">> => 1}
             },
 
             % Excess fields should be removed when compressing
             {
+                different,
                 #{<<"start">> => -5, <<"end">> => 10, <<"step">> => 2, <<"key">> => <<"value">>},
                 #{<<"start">> => -5, <<"end">> => 10, <<"step">> => 2}
             }
@@ -659,7 +671,7 @@ atm_time_series_measurement_value_compress_expand_test(_Config) ->
             build_rand_ts_measurement(),
 
             % Excess fields should be removed when compressing
-            {RandMeasurement#{<<"key">> => <<"value">>}, RandMeasurement}
+            {different, RandMeasurement#{<<"key">> => <<"value">>}, RandMeasurement}
         ]
     }).
 
@@ -694,9 +706,9 @@ atm_value_compress_expand_test_base(#atm_value_compress_expand_testcase{
 
     lists:foreach(fun(Value) ->
         {InitialItem, ExpectedExpandResult} = case Value of
-            {_, {error, _}} -> Value;
-            {Item, ExpandedItem} -> {Item, {ok, ExpandedItem}};
-            Item -> {Item, {ok, Item}}
+            {error, Input, ExpError} -> {Input, ExpError};
+            {different, Input, ExpOutput} -> {Input, {ok, ExpOutput}};
+            Term -> {Term, {ok, Term}}
         end,
 
         ?assertEqual(ExpectedExpandResult, ?rpc(atm_value:expand(
