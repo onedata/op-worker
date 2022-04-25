@@ -1464,10 +1464,10 @@ flush_blocks(#state{cached_blocks = Blocks, file_ctx = FileCtx} = State, Exclude
             op_worker:get_env(synchronizer_on_fly_finished_events, all)
     end,
 
-    % env used by initializer - remove after tests migration to onenv
+    % env used by initializer - remove try/catch after tests migration to onenv
     IgnoreUnregisteredOneproviderError = op_worker:get_env(ignore_synchronizer_unregistered_oneprovider_error, false),
-    Ans = try
-        lists:foldl(fun({From, FinalBlock, Type}, Acc) ->
+    FinalAns = try
+        Ans = lists:foldl(fun({From, FinalBlock, Type}, Acc) ->
             case Type of
                     sync ->
                         [{From, flush_blocks_list([FinalBlock], ExcludeSessions,
@@ -1507,12 +1507,14 @@ flush_blocks(#state{cached_blocks = Blocks, file_ctx = FileCtx} = State, Exclude
             _ ->
                 % There can be race with file deletion
                 ok
-        end
+        end,
+
+        Ans
     catch
         throw:{error, unregistered_oneprovider} when IgnoreUnregisteredOneproviderError -> []
     end,
 
-    {Ans, set_events_timer(cancel_caching_blocks_timer(
+    {FinalAns, set_events_timer(cancel_caching_blocks_timer(
         State#state{cached_blocks = []}))}.
 
 %%--------------------------------------------------------------------

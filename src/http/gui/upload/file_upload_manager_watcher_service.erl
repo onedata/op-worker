@@ -91,7 +91,7 @@ start_file_upload_manager() ->
             ok;
         {error, {already_started, _}} ->
             ok;
-        _ = Error->
+        Error->
             ?debug("Failed to start file_upload_manager due to: ~p", [Error]),
             error
     end.
