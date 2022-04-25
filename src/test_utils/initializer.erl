@@ -165,6 +165,7 @@ create_test_users_and_spaces(ConfigPath, Config) ->
 -spec create_test_users_and_spaces(ConfigPath :: string(), JsonConfig :: list(), boolean()) -> list().
 create_test_users_and_spaces(ConfigPath, Config, NoHistory) ->
     Workers = ?config(op_worker_nodes, Config),
+    utils:rpc_multicall(Workers, op_worker, set_env, [ignore_synchronizer_flush_errors, true]),
     create_test_users_and_spaces(Workers, ConfigPath, Config, NoHistory).
 
 %%--------------------------------------------------------------------

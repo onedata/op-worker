@@ -85,12 +85,13 @@ healthcheck(LastInterval) ->
 %% @private
 -spec start_file_upload_manager() -> ok | error.
 start_file_upload_manager() ->
-    case supervisor:start_child(?FSLOGIC_WORKER_SUP, file_upload_manager:spec()) of
+    % Catch errors when supervisor does not exist
+    case catch supervisor:start_child(?FSLOGIC_WORKER_SUP, file_upload_manager:spec()) of
         {ok, _} ->
             ok;
         {error, {already_started, _}} ->
             ok;
-        {error, _} = Error->
+        _ = Error->
             ?debug("Failed to start file_upload_manager due to: ~p", [Error]),
             error
     end.
