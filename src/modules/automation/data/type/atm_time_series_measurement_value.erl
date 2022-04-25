@@ -61,7 +61,8 @@ assert_meets_constraints(_AtmWorkflowExecutionAuth, Measurement, ValueConstraint
 
 -spec compress(atm_value:expanded(), atm_data_type:value_constraints()) ->
     json_utils:json_map().
-compress(Value, _ValueConstraints) -> Value.
+compress(Value, _ValueConstraints) ->
+    maps:with([<<"tsName">>, <<"timestamp">>, <<"value">>], Value).
 
 
 -spec expand(
