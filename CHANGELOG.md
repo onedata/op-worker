@@ -12,6 +12,10 @@ CHANGELOG
     there is more entries to be listed, the operation returns a
     'nextPageToken' that can be used to list the subsequent page of
     results.
+-   **VFS-8939** Fixed a bug related to path caveats in access tokens,
+    where a Oneclient user would see the names of newly created
+    files/directories outside of the allowed paths (but was not able to
+    access them).
 -   **VFS-8887** Web GUI: fixed showing file information modal in
     shares.
 -   **VFS-8845** Added QoS transfer statistics collection with their
