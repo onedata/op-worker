@@ -273,7 +273,7 @@ atm_dataset_value_compress_expand_test(_Config) ->
             lists:map(fun(DatasetId) ->
                 DatasetInfo = ?rpc(mi_datasets:get_info(SessionId, DatasetId)),
 
-                % atm_file_type is but a reference to underlying file entity -
+                % atm_dataset_type is but a reference to underlying file entity -
                 % as such expanding it should fetch all current file attributes
                 {
                     #{<<"datasetId">> => DatasetId},
@@ -395,7 +395,7 @@ atm_file_value_compress_expand_test(_Config) ->
         values = lists:flatten([
             {
                 #{<<"file_id">> => ?ok(file_id:guid_to_objectid(file_id:pack_guid(
-                    <<"dummy_id">>, SpaceKrkId
+                    <<"removed_file_id">>, SpaceKrkId
                 )))},
                 ?ERROR_POSIX(?ENOENT)
             },
@@ -638,6 +638,8 @@ atm_time_series_measurement_value_validation_test(_Config) ->
 
 
 atm_time_series_measurement_value_compress_expand_test(_Config) ->
+    RandMeasurement = build_rand_ts_measurement(),
+
     atm_value_compress_expand_test_base(#atm_value_compress_expand_testcase{
         data_spec = #atm_data_spec{
             type = atm_time_series_measurement_type,
@@ -656,8 +658,8 @@ atm_time_series_measurement_value_compress_expand_test(_Config) ->
             build_rand_ts_measurement(),
             build_rand_ts_measurement(),
 
-            % Excess fields are not removed when compressing - TODO reviewers: maybe they should be?
-            (build_rand_ts_measurement())#{<<"key">> => <<"value">>}
+            % Excess fields should be removed when compressing
+            {RandMeasurement#{<<"key">> => <<"value">>}, RandMeasurement}
         ]
     }).
 

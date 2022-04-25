@@ -585,7 +585,7 @@ first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_1_test() 
                             {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_aborting(ExpState1)}
                         end,
                         % no lane run components should be created
-                        after_step_exp_state_diff = fun(_) -> false end
+                        after_step_exp_state_diff = no_diff
                     },
                     prepare_lane = #atm_step_mock_spec{
                         after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState}) ->
@@ -712,7 +712,7 @@ first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_3_test() 
                             {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_aborting(ExpState1)}
                         end,
                         % no lane run components should be created
-                        after_step_exp_state_diff = fun(_) -> false end
+                        after_step_exp_state_diff = no_diff
                     }
                 },
                 #atm_lane_run_execution_test_spec{selector = {2, 1}}
@@ -764,7 +764,7 @@ first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_4_test() 
                             {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_aborting(ExpState1)}
                         end,
                         % no lane run components should be created
-                        after_step_exp_state_diff = fun(_) -> false end
+                        after_step_exp_state_diff = no_diff
                     }
                 },
                 #atm_lane_run_execution_test_spec{
