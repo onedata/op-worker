@@ -54,7 +54,7 @@
 %% @see iterator:forget_before
 -callback forget_before(record()) -> ok.
 
-%% @see iterator:forget_before
+%% @see iterator:mark_exhausted
 -callback mark_exhausted(record()) -> ok.
 
 
