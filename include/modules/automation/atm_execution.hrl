@@ -55,7 +55,7 @@
 
     status :: atm_lane_execution:run_status(),
     % Flag used to differentiate reasons why lane execution run is aborting
-    aborting_reason = undefined :: undefined | cancel | failure,
+    aborting_reason = undefined :: undefined | atm_lane_execution:run_aborting_reason(),
 
     iterated_store_id = undefined :: undefined | atm_store:id(),
     exception_store_id = undefined :: undefined | atm_store:id(),

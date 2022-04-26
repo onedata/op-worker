@@ -31,8 +31,10 @@
     ?ACTIVE_STATUS |
     ?FINISHED_STATUS | ?FAILED_STATUS | ?SKIPPED_STATUS.
 
+-type aborting_reason() :: failure.
+
 -export_type([id/0, record/0, doc/0, diff/0]).
--export_type([status/0]).
+-export_type([status/0, aborting_reason/0]).
 
 
 % get ctx via module call to allow mocking in ct tests
