@@ -104,7 +104,10 @@ get_record_struct(1) ->
         {argument_specs, [{custom, string, {
             persistent_record, encode, decode, atm_task_execution_argument_spec
         }}]},
-        {result_specs, [{custom, string, {
+        {elementary_result_specs, [{custom, string, {
+            persistent_record, encode, decode, atm_task_execution_result_spec
+        }}]},
+        {supplementary_result_specs, [{custom, string, {
             persistent_record, encode, decode, atm_task_execution_result_spec
         }}]},
 

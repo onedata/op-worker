@@ -279,8 +279,15 @@ create_task_execution_doc(#creation_ctx{
                 lane_index = AtmLaneIndex
             }
         },
-        lambda_revision = AtmLambdaRevision,
-        task_schema = #atm_task_schema{id = AtmTaskSchemaId} = AtmTaskSchema
+        lambda_revision = #atm_lambda_revision{
+            argument_specs = AtmLambdaArgSpecs,
+            result_specs = AtmLambdaResultSpecs
+        },
+        task_schema = #atm_task_schema{
+            id = AtmTaskSchemaId,
+            argument_mappings = AtmTaskSchemaArgMappers,
+            result_mappings = AtmTaskSchemaResultMappers
+        }
     },
     execution_components = #execution_components{
         executor = Executor,
@@ -290,6 +297,10 @@ create_task_execution_doc(#creation_ctx{
 }) ->
     AtmWorkflowExecutionId = atm_workflow_execution_ctx:get_workflow_execution_id(
         AtmWorkflowExecutionCtx
+    ),
+    {ElementaryResultSpecs, SupplementaryResultSpecs} = atm_task_execution_results:build_specs(
+        AtmLambdaResultSpecs,
+        AtmTaskSchemaResultMappers
     ),
 
     {ok, AtmTaskExecutionDoc} = atm_task_execution:create(#atm_task_execution{
@@ -301,8 +312,12 @@ create_task_execution_doc(#creation_ctx{
         schema_id = AtmTaskSchemaId,
 
         executor = Executor,
-        argument_specs = build_argument_specs(AtmLambdaRevision, AtmTaskSchema),
-        result_specs = build_result_specs(AtmLambdaRevision, AtmTaskSchema),
+        argument_specs = atm_task_execution_arguments:build_specs(
+            AtmLambdaArgSpecs,
+            AtmTaskSchemaArgMappers
+        ),
+        elementary_result_specs = ElementaryResultSpecs,
+        supplementary_result_specs = SupplementaryResultSpecs,
 
         system_audit_log_id = AtmTaskAuditLogId,
         time_series_store_id = AtmTaskTSStoreIdOrUndefined,
@@ -314,23 +329,3 @@ create_task_execution_doc(#creation_ctx{
         items_failed = 0
     }),
     AtmTaskExecutionDoc.
-
-
-%% @private
--spec build_argument_specs(atm_lambda_revision:record(), atm_task_schema:record()) ->
-    [atm_task_execution_argument_spec:record()] | no_return().
-build_argument_specs(
-    #atm_lambda_revision{argument_specs = AtmLambdaArgSpecs},
-    #atm_task_schema{argument_mappings = AtmTaskSchemaArgMappers}
-) ->
-    atm_task_execution_arguments:build_specs(AtmLambdaArgSpecs, AtmTaskSchemaArgMappers).
-
-
-%% @private
--spec build_result_specs(atm_lambda_revision:record(), atm_task_schema:record()) ->
-    [atm_task_execution_result_spec:record()] | no_return().
-build_result_specs(
-    #atm_lambda_revision{result_specs = AtmLambdaResultSpecs},
-    #atm_task_schema{result_mappings = AtmTaskSchemaResultMappers}
-) ->
-    atm_task_execution_results:build_specs(AtmLambdaResultSpecs, AtmTaskSchemaResultMappers).

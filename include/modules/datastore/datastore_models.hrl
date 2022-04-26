@@ -1099,9 +1099,13 @@
 
     schema_id :: automation:id(),
 
+    %% @see atm_task_executor.erl
     executor :: atm_task_executor:record(),
+    %% @see atm_task_execution_arguments.erl
     argument_specs :: [atm_task_execution_argument_spec:record()],
-    result_specs :: [atm_task_execution_result_spec:record()],
+    %% @see atm_task_execution_results.erl
+    elementary_result_specs :: [atm_task_execution_result_spec:record()],
+    supplementary_result_specs :: [atm_task_execution_result_spec:record()],
 
     system_audit_log_id :: atm_store:id(),
     time_series_store_id :: undefined | atm_store:id(),
@@ -1201,10 +1205,10 @@
 
 -record(workflow_iterator_snapshot, {
     iterator :: iterator:iterator(),
-    lane_index = workflow_execution_state:index(),
+    lane_index :: workflow_execution_state:index(),
     lane_id :: workflow_engine:lane_id(),
     next_lane_id :: workflow_engine:lane_id() | undefined,
-    item_index = workflow_execution_state:index()
+    item_index :: workflow_execution_state:index()
 }).
 
 -record(workflow_engine_state, {

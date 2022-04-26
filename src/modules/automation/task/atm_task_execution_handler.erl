@@ -351,11 +351,15 @@ process_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, #{<<"exceptio
 
 process_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Results) ->
     {ok, #document{value = #atm_task_execution{
-        result_specs = AtmTaskExecutionResultSpecs
+        elementary_result_specs = AtmTaskExecutionElementaryResultSpecs
     }}} = atm_task_execution:get(AtmTaskExecutionId),
 
     try
-        atm_task_execution_results:consume_results(AtmWorkflowExecutionCtx, AtmTaskExecutionResultSpecs, Results),
+        atm_task_execution_results:consume_elementary_results(
+            AtmWorkflowExecutionCtx,
+            AtmTaskExecutionElementaryResultSpecs,
+            Results
+        ),
         update_items_processed(AtmTaskExecutionId)
     catch Type:Reason:Stacktrace ->
         Error = ?atm_examine_error(Type, Reason, Stacktrace),
