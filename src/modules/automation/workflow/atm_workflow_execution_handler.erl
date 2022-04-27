@@ -33,14 +33,15 @@
     prepare_lane/3,
     restart_lane/3,
 
-    process_items/6,
-    process_output/5,
-    report_items_processing_failed/3,
-    report_all_items_processed/2,
-    process_supplementary_task_results/4,
-
+    run_job/6,
+    process_job_output/5,
+    report_all_task_jobs_ended/3,
+    process_task_data/4,
     handle_task_execution_ended/3,
+
+    report_items_processing_failed/3,
     handle_lane_execution_ended/3,
+
     handle_workflow_execution_ended/2
 ]).
 
@@ -181,7 +182,7 @@ restart_lane(_, _, _) ->
     error.
 
 
--spec process_items(
+-spec run_job(
     atm_workflow_execution:id(),
     atm_workflow_execution_env:record(),
     atm_task_execution:id(),
@@ -190,7 +191,7 @@ restart_lane(_, _, _) ->
     binary()
 ) ->
     ok | error.
-process_items(
+run_job(
     _AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId,
     ItemsBatch, ReportResultUrl, HeartbeatUrl
 ) ->
@@ -205,7 +206,7 @@ process_items(
     ).
 
 
--spec process_output(
+-spec process_job_output(
     atm_workflow_execution:id(),
     atm_workflow_execution_env:record(),
     atm_task_execution:id(),
@@ -213,16 +214,16 @@ process_items(
     errors:error() | atm_task_executor:lambda_output()
 ) ->
     ok | error.
-process_output(
+process_job_output(
     AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId,
     ItemsBatch, LambdaOutputDecodingError = ?ERROR_BAD_MESSAGE(_)
 ) ->
-    process_output(
+    process_job_output(
         AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId,
         ItemsBatch, ?ERROR_BAD_DATA(<<"lambdaOutput">>, LambdaOutputDecodingError)
     );
 
-process_output(
+process_job_output(
     _AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId,
     ItemsBatch, LambdaOutput
 ) ->
@@ -236,47 +237,25 @@ process_output(
     ).
 
 
--spec report_items_processing_failed(
+-spec report_all_task_jobs_ended(
     atm_workflow_execution:id(),
     atm_workflow_execution_env:record(),
-    automation:item()
+    atm_task_execution:id()
 ) ->
     ok.
-report_items_processing_failed(_AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, ItemsBatch) ->
-    AtmWorkflowExecutionAuth = atm_workflow_execution_env:acquire_auth(AtmWorkflowExecutionEnv),
-
-    % NOTE: atm_store_api is bypassed for performance reasons. It is possible as list store update
-    % does not modify store document itself but only referenced infinite log
-    atm_list_store_container:update_content(
-        atm_workflow_execution_env:get_lane_run_exception_store_container(AtmWorkflowExecutionEnv),
-        #atm_store_content_update_req{
-            workflow_execution_auth = AtmWorkflowExecutionAuth,
-            argument = ItemsBatch,
-            options = #atm_list_store_content_update_options{function = extend}
-        }
-    ),
-
-    ok.
-
-
--spec report_all_items_processed(
-    atm_workflow_execution:id(),
-    atm_workflow_execution_env:record()
-) ->
-    ok.
-report_all_items_processed(_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv) ->
+report_all_task_jobs_ended(_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, _AtmTaskExecutionId) ->
     %% TODO ŁO flush
     ok.
 
 
--spec process_supplementary_task_results(
+-spec process_task_data(
     atm_workflow_execution:id(),
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id(),
     json_utils:json_map() | errors:error()
 ) ->
     ok | error.
-process_supplementary_task_results(
+process_task_data(
     _AtmWorkflowExecutionId,
     AtmWorkflowExecutionEnv,
     AtmTaskExecutionId,
@@ -316,6 +295,29 @@ handle_task_execution_ended(_AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, At
         atm_workflow_execution_logger:task_warning(LogContent, Logger),
         atm_workflow_execution_logger:workflow_warning(LogContent, Logger)
     end.
+
+
+-spec report_items_processing_failed(
+    atm_workflow_execution:id(),
+    atm_workflow_execution_env:record(),
+    automation:item()
+) ->
+    ok.
+report_items_processing_failed(_AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, ItemsBatch) ->
+    AtmWorkflowExecutionAuth = atm_workflow_execution_env:acquire_auth(AtmWorkflowExecutionEnv),
+
+    % NOTE: atm_store_api is bypassed for performance reasons. It is possible as list store update
+    % does not modify store document itself but only referenced infinite log
+    atm_list_store_container:update_content(
+        atm_workflow_execution_env:get_lane_run_exception_store_container(AtmWorkflowExecutionEnv),
+        #atm_store_content_update_req{
+            workflow_execution_auth = AtmWorkflowExecutionAuth,
+            argument = ItemsBatch,
+            options = #atm_list_store_content_update_options{function = extend}
+        }
+    ),
+
+    ok.
 
 
 -spec handle_lane_execution_ended(
