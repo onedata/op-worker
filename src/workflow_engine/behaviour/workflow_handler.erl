@@ -98,9 +98,10 @@
 %% are connected to the same parallel job. If any job fails, the
 %% callback is not called for next parallel boxes for item connected
 %% to the job.
+%% TODO only batch processing
 %% @end
 %%--------------------------------------------------------------------
--callback process_item(
+-callback process_items(
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
     workflow_engine:task_id(),
@@ -113,11 +114,11 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Callback processing result provided by finished_callback
+%% Callback processing job output provided by finished_callback
 %% (it is executed only for asynchronous jobs).
 %% @end
 %%--------------------------------------------------------------------
--callback process_result(
+-callback process_output(
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
     workflow_engine:task_id(),
@@ -132,9 +133,10 @@
 %% Callback reporting that at least one task for item has failed.
 %% NOTE: if any task for an item fails, this callback is executed exactly
 %% once after all tasks from parallel box are finished for the item.
+%% TODO only batch processing
 %% @end
 %%--------------------------------------------------------------------
--callback report_item_error(
+-callback report_items_processing_failed(
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
     iterator:item()
@@ -144,7 +146,34 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Callback reporting that task has been executed for all items.
+%% Callback reporting that items were processed for all tasks in lane.
+%% @end
+%%--------------------------------------------------------------------
+-callback report_all_items_processed(
+    workflow_engine:execution_id(),
+    workflow_engine:execution_context()
+) ->
+    ok.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Callback processing supplementary results for task.
+%% @end
+%%--------------------------------------------------------------------
+-callback process_supplementary_task_results(
+    workflow_engine:execution_id(),
+    workflow_engine:execution_context(),
+    workflow_engine:task_id(),
+    json_utils:json_map() | errors:error()  %% TODO type
+) ->
+    ok | error.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Callback reporting that task has been executed for all items and all results
+%% were processed (including supplementary ones).
 %% This callback is usually executed once for each task. It is guaranteed
 %% that callback is called before call of handle_lane_execution_ended
 %% callback for task's lane.

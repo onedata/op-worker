@@ -209,9 +209,15 @@ process_lambda_output(AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemsBatch, L
 -spec process_supplementary_results(
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id(),
-    json_utils:json_map()
+    json_utils:json_map() | errors:error()
 ) ->
     ok | error.
+process_supplementary_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Error = {error, _}) ->
+    handle_supplementary_results_processing_error(
+        AtmWorkflowExecutionCtx, AtmTaskExecutionId, Error
+    ),
+    error;
+
 process_supplementary_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Results) ->
     {ok, #document{value = #atm_task_execution{
         supplementary_result_specs = AtmTaskExecutionSupplementaryResultSpecs
