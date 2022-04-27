@@ -102,14 +102,14 @@ initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
     {AtmTaskExecutionSpec, AtmWorkflowExecutionEnvDiff}.
 
 
--spec teardown(atm_lane_execution_handler:teardown_ctx(), atm_task_execution:id()) ->
+-spec teardown(atm_workflow_execution_ctx:record(), atm_task_execution:id()) ->
     ok | no_return().
-teardown(AtmLaneExecutionRunTeardownCtx, AtmTaskExecutionId) ->
+teardown(AtmWorkflowExecutionCtx, AtmTaskExecutionId) ->
     #document{value = #atm_task_execution{
         executor = AtmTaskExecutor
     }} = ensure_atm_task_execution_doc(AtmTaskExecutionId),
 
-    atm_task_executor:teardown(AtmLaneExecutionRunTeardownCtx, AtmTaskExecutor).
+    atm_task_executor:teardown(AtmWorkflowExecutionCtx, AtmTaskExecutor).
 
 
 -spec set_run_num(atm_lane_execution:run_num(), atm_task_execution:id()) ->

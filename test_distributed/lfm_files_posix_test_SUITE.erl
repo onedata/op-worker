@@ -27,18 +27,6 @@
 
 %% tests
 -export([
-    dir_stats_collector_test_basic_test/1,
-    dir_stats_collector_enabling_for_empty_space_test/1,
-    dir_stats_collector_enabling_for_not_empty_space_test/1,
-    dir_stats_collector_enabling_large_dirs_test/1,
-    dir_stats_collector_enabling_during_writing_test/1,
-    dir_stats_collector_race_with_file_adding_test/1,
-    dir_stats_collector_race_with_file_writing_test/1,
-    dir_stats_collector_race_with_subtree_adding_test/1,
-    dir_stats_collector_race_with_subtree_filling_with_data_test/1,
-    dir_stats_collector_race_with_file_adding_to_large_dir_test/1,
-    dir_stats_collector_multiple_status_change_test/1,
-    dir_stats_collector_adding_file_when_disabled_test/1,
     fslogic_new_file_test/1,
     lfm_create_and_unlink_test/1,
     lfm_create_and_access_test/1,
@@ -85,6 +73,7 @@
     new_file_should_have_zero_popularity/1,
     opening_file_should_increase_file_popularity/1,
     file_popularity_should_have_correct_file_size/1,
+    lfm_ensure_dir/1, 
     readdir_plus_should_return_empty_result_for_empty_dir/1,
     readdir_plus_should_return_empty_result_zero_size/1,
     readdir_plus_should_work_with_zero_offset/1,
@@ -133,18 +122,6 @@
 
 
 -define(TEST_CASES, [
-    dir_stats_collector_test_basic_test,
-    dir_stats_collector_enabling_for_empty_space_test,
-    dir_stats_collector_enabling_for_not_empty_space_test,
-    dir_stats_collector_enabling_large_dirs_test,
-    dir_stats_collector_enabling_during_writing_test,
-    dir_stats_collector_race_with_file_adding_test,
-    dir_stats_collector_race_with_file_writing_test,
-    dir_stats_collector_race_with_subtree_adding_test,
-    dir_stats_collector_race_with_subtree_filling_with_data_test,
-    dir_stats_collector_race_with_file_adding_to_large_dir_test,
-    dir_stats_collector_multiple_status_change_test,
-    dir_stats_collector_adding_file_when_disabled_test,
     fslogic_new_file_test,
     lfm_create_and_unlink_test,
     lfm_create_and_access_test,
@@ -191,6 +168,7 @@
     new_file_should_have_zero_popularity,
     opening_file_should_increase_file_popularity,
     file_popularity_should_have_correct_file_size,
+    lfm_ensure_dir, 
     readdir_plus_should_return_empty_result_for_empty_dir,
     readdir_plus_should_return_empty_result_zero_size,
     readdir_plus_should_work_with_zero_offset,
@@ -427,6 +405,10 @@ opening_file_should_increase_file_popularity(Config) ->
 
 file_popularity_should_have_correct_file_size(Config) ->
     lfm_files_test_base:file_popularity_should_have_correct_file_size(Config).
+
+
+lfm_ensure_dir(Config) ->
+    lfm_files_test_base:lfm_ensure_dir(Config).
 
 
 readdir_plus_should_return_empty_result_for_empty_dir(Config) ->
@@ -983,54 +965,6 @@ lfm_close_deleted_open_files(Config) ->
     lfm_files_test_base:lfm_close_deleted_open_files(Config).
 
 
-dir_stats_collector_test_basic_test(Config) ->
-    dir_stats_collector_test_base:basic_test(Config).
-
-
-dir_stats_collector_enabling_for_empty_space_test(Config) ->
-    dir_stats_collector_test_base:enabling_for_empty_space_test(Config).
-
-
-dir_stats_collector_enabling_for_not_empty_space_test(Config) ->
-    dir_stats_collector_test_base:enabling_for_not_empty_space_test(Config).
-
-
-dir_stats_collector_enabling_large_dirs_test(Config) ->
-    dir_stats_collector_test_base:enabling_large_dirs_test(Config).
-
-
-dir_stats_collector_enabling_during_writing_test(Config) ->
-    dir_stats_collector_test_base:enabling_during_writing_test(Config).
-
-
-dir_stats_collector_race_with_file_adding_test(Config) ->
-    dir_stats_collector_test_base:race_with_file_adding_test(Config).
-
-
-dir_stats_collector_race_with_file_writing_test(Config) ->
-    dir_stats_collector_test_base:race_with_file_writing_test(Config).
-
-
-dir_stats_collector_race_with_subtree_adding_test(Config) ->
-    dir_stats_collector_test_base:race_with_subtree_adding_test(Config).
-
-
-dir_stats_collector_race_with_subtree_filling_with_data_test(Config) ->
-    dir_stats_collector_test_base:race_with_subtree_filling_with_data_test(Config).
-
-
-dir_stats_collector_race_with_file_adding_to_large_dir_test(Config) ->
-    dir_stats_collector_test_base:race_with_file_adding_to_large_dir_test(Config).
-
-
-dir_stats_collector_multiple_status_change_test(Config) ->
-    dir_stats_collector_test_base:multiple_status_change_test(Config).
-
-
-dir_stats_collector_adding_file_when_disabled_test(Config) ->
-    dir_stats_collector_test_base:adding_file_when_disabled_test(Config).
-
-
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -1052,22 +986,6 @@ init_per_testcase(Case, Config) when
 init_per_testcase(lfm_create_and_read_symlink = Case, Config) ->
     time_test_utils:freeze_time(Config),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
-
-init_per_testcase(Case, Config) when
-    Case =:= dir_stats_collector_test_basic_test;
-    Case =:= dir_stats_collector_enabling_for_empty_space_test;
-    Case =:= dir_stats_collector_enabling_for_not_empty_space_test;
-    Case =:= dir_stats_collector_enabling_large_dirs_test;
-    Case =:= dir_stats_collector_enabling_during_writing_test;
-    Case =:= dir_stats_collector_race_with_file_adding_test;
-    Case =:= dir_stats_collector_race_with_file_writing_test;
-    Case =:= dir_stats_collector_race_with_subtree_adding_test;
-    Case =:= dir_stats_collector_race_with_subtree_filling_with_data_test;
-    Case =:= dir_stats_collector_race_with_file_adding_to_large_dir_test;
-    Case =:= dir_stats_collector_multiple_status_change_test;
-    Case =:= dir_stats_collector_adding_file_when_disabled_test
-->
-    dir_stats_collector_test_base:init(init_per_testcase(?DEFAULT_CASE(Case), Config));
 
 init_per_testcase(Case, Config) when
     Case =:= readdir_plus_should_work_with_token;
@@ -1095,23 +1013,6 @@ end_per_testcase(Case, Config) when
 
 end_per_testcase(lfm_create_and_read_symlink = Case, Config) ->
     time_test_utils:unfreeze_time(Config),
-    end_per_testcase(?DEFAULT_CASE(Case), Config);
-
-end_per_testcase(Case, Config) when
-    Case =:= dir_stats_collector_test_basic_test;
-    Case =:= dir_stats_collector_enabling_for_empty_space_test;
-    Case =:= dir_stats_collector_enabling_for_not_empty_space_test;
-    Case =:= dir_stats_collector_enabling_large_dirs_test;
-    Case =:= dir_stats_collector_enabling_during_writing_test;
-    Case =:= dir_stats_collector_race_with_file_adding_test;
-    Case =:= dir_stats_collector_race_with_file_writing_test;
-    Case =:= dir_stats_collector_race_with_subtree_adding_test;
-    Case =:= dir_stats_collector_race_with_subtree_filling_with_data_test;
-    Case =:= dir_stats_collector_race_with_file_adding_to_large_dir_test;
-    Case =:= dir_stats_collector_multiple_status_change_test;
-    Case =:= dir_stats_collector_adding_file_when_disabled_test
-->
-    dir_stats_collector_test_base:teardown(Config),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(Case, Config) when

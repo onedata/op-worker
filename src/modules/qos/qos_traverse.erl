@@ -100,14 +100,8 @@ reconcile_file_for_qos_entries(FileCtx, QosEntries) ->
             <<"task_type">> => <<"reconcile">>
         }
     },
-    case file_ctx:get_file_size(FileCtx) of
-        {0, FileCtx2} ->
-            {StorageId, _FileCtx3} = file_ctx:get_storage_id(FileCtx2),
-            report_transfer_stats(QosEntries, ?FILES_STATS, #{StorageId => 1});
-        {_, FileCtx2} ->
-            ok = qos_status:report_reconciliation_started(TaskId, FileCtx2, QosEntries),
-            {ok, _} = tree_traverse:run(?POOL_NAME, FileCtx, Options)
-    end,
+    ok = qos_status:report_reconciliation_started(TaskId, FileCtx, QosEntries),
+    {ok, _} = tree_traverse:run(?POOL_NAME, FileCtx, Options),
     ok.
     
 

@@ -68,7 +68,13 @@ compress(Array, #{item_data_spec := ItemDataSpec}) ->
 ) ->
     {ok, atm_value:expanded()} | {error, term()}.
 expand(AtmWorkflowExecutionAuth, Array, #{item_data_spec := ItemDataSpec}) ->
-    {ok, lists:map(
-        fun(Item) -> atm_value:expand(AtmWorkflowExecutionAuth, Item, ItemDataSpec) end,
-        Array
-    )}.
+    try
+        {ok, lists:map(fun(Item) ->
+            case atm_value:expand(AtmWorkflowExecutionAuth, Item, ItemDataSpec) of
+                {ok, ExpandedItem} -> ExpandedItem;
+                {error, _} = Error -> throw(Error)
+            end
+        end, Array)}
+    catch throw:{error, _} = Error ->
+        Error
+    end.

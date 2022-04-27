@@ -169,19 +169,19 @@ ensure_all_ended(AtmParallelBoxExecutions) ->
     pforeach_not_ended_task(fun atm_task_execution_handler:handle_ended/1, AtmParallelBoxExecutions).
 
 
--spec teardown_all(atm_lane_execution_handler:teardown_ctx(), [record()]) -> ok.
-teardown_all(AtmLaneExecutionRunTeardownCtx, AtmParallelBoxExecutions) ->
+-spec teardown_all(atm_workflow_execution_ctx:record(), [record()]) -> ok.
+teardown_all(AtmWorkflowExecutionCtx, AtmParallelBoxExecutions) ->
     lists:foreach(fun(AtmParallelBoxExecution) ->
-        teardown(AtmLaneExecutionRunTeardownCtx, AtmParallelBoxExecution)
+        teardown(AtmWorkflowExecutionCtx, AtmParallelBoxExecution)
     end, AtmParallelBoxExecutions).
 
 
--spec teardown(atm_lane_execution_handler:teardown_ctx(), record()) -> ok.
-teardown(AtmLaneExecutionRunTeardownCtx, #atm_parallel_box_execution{
+-spec teardown(atm_workflow_execution_ctx:record(), record()) -> ok.
+teardown(AtmWorkflowExecutionCtx, #atm_parallel_box_execution{
     task_registry = AtmTaskExecutionRegistry
 }) ->
     lists:foreach(fun(AtmTaskExecutionId) ->
-        catch atm_task_execution_handler:teardown(AtmLaneExecutionRunTeardownCtx, AtmTaskExecutionId)
+        catch atm_task_execution_handler:teardown(AtmWorkflowExecutionCtx, AtmTaskExecutionId)
     end, maps:values(AtmTaskExecutionRegistry)).
 
 

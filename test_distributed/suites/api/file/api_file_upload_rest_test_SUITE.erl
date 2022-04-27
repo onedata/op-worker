@@ -12,6 +12,7 @@
 -module(api_file_upload_rest_test_SUITE).
 -author("Bartosz Walkowicz").
 
+-include("global_definitions.hrl").
 -include("api_file_test_utils.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("onenv_test_utils.hrl").
@@ -27,14 +28,16 @@
 -export([
     create_file_test/1,
     create_file_at_path_test/1,
-    update_file_content_test/1
+    update_file_content_test/1,
+    create_file_at_path_with_create_parents_in_parallel_test/1
 ]).
 
 %% @TODO VFS-8976 - test with update_existing=true option
 all() -> [
     create_file_test,
     create_file_at_path_test,
-    update_file_content_test
+    update_file_content_test,
+    create_file_at_path_with_create_parents_in_parallel_test
 ].
 
 
@@ -494,6 +497,20 @@ ls(Node, DirGuid) ->
         {error, _} = Error ->
             Error
     end.
+
+
+create_file_at_path_with_create_parents_in_parallel_test(_Config) ->
+    Filename = generator:gen_name(),
+    RelativePath = filename:join([Filename, Filename, Filename]),
+    SpaceId = oct_background:get_space_id(space_krk_par),
+    {ok, SpaceObjectId} = file_id:guid_to_objectid(fslogic_uuid:spaceid_to_space_dir_guid(SpaceId)),
+    RestPath = str_utils:join_as_binaries([<<"data">>, SpaceObjectId, <<"path">>, RelativePath], <<"/">>),
+    RestPathWithParams = http_utils:append_url_parameters(RestPath, #{<<"create_parents">> => true, <<"update_existing">> => true}),
+    HeadersWithAuth = [rest_test_utils:user_token_header(oct_background:get_user_access_token(user2))],
+    
+    lists_utils:pforeach(fun(_) ->
+        ?assertMatch({ok, 201, _, _}, rest_test_utils:request(krakow, RestPathWithParams, put, HeadersWithAuth, <<>>))
+    end, lists:seq(1, 100)).
 
 
 update_file_content_test(_Config) ->

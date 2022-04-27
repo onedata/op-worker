@@ -111,8 +111,8 @@ unfreeze(AtmStoreId) ->
 
 %%-------------------------------------------------------------------
 %% @doc
-%% Returns batch of items (and their indices) directly kept at store
-%% in accordance to specified browse_opts().
+%% Returns batch of exact items directly kept at store in opposition to
+%% iteration which can return items inferred from store content.
 %% @end
 %%-------------------------------------------------------------------
 -spec browse_content(
