@@ -91,9 +91,10 @@ initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
         task_execution_id = AtmTaskExecutionId,
         task_schema = AtmTaskSchema,
         lambda_revision = get_lambda_revision(AtmTaskSchema, AtmWorkflowExecution),
-        supplementary_results = lists:map(fun(AtmTaskExecutionSupplementaryResultSpec) ->
-            atm_task_execution_result_spec:get_name(AtmTaskExecutionSupplementaryResultSpec)
-        end, AtmTaskExecutionSupplementaryResultSpecs)
+        supplementary_results = lists:map(
+            fun atm_task_execution_result_spec:get_name/1,
+            AtmTaskExecutionSupplementaryResultSpecs
+        )
     },
     AtmTaskExecutionSpec = atm_task_executor:initiate(
         AtmTaskExecutorInitiationCtx,

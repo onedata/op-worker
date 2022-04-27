@@ -141,7 +141,9 @@ initiate(AtmTaskExecutorInitiationCtx = #atm_task_executor_initiation_ctx{
 
     #{
         type => async,
-        has_supplementary_results => length(AtmTaskExecutionSupplementaryResultNames) > 0
+        has_supplementary_results => not lists_utils:is_empty(
+            AtmTaskExecutionSupplementaryResultNames
+        )
     }.
 
 
