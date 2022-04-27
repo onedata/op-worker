@@ -75,17 +75,29 @@ initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
         value = AtmTaskExecution = #atm_task_execution{
             workflow_execution_id = AtmWorkflowExecutionId,
             executor = AtmTaskExecutor,
+            supplementary_result_specs = AtmTaskExecutionSupplementaryResultSpecs,
             system_audit_log_id = AtmSystemAuditLogId,
             time_series_store_id = AtmTaskTSStoreId
         }
     } = ensure_atm_task_execution_doc(AtmTaskExecutionIdOrDoc),
 
-    {ok, #document{value = AtmWorkflowExecution}} = atm_workflow_execution:get(AtmWorkflowExecutionId),
+    {ok, #document{value = AtmWorkflowExecution}} = atm_workflow_execution:get(
+        AtmWorkflowExecutionId
+    ),
     AtmTaskSchema = get_task_schema(AtmTaskExecution, AtmWorkflowExecution),
-    AtmLambdaRevision = get_lambda_revision(AtmTaskSchema, AtmWorkflowExecution),
 
+    AtmTaskExecutorInitiationCtx = #atm_task_executor_initiation_ctx{
+        workflow_execution_ctx = AtmWorkflowExecutionCtx,
+        task_execution_id = AtmTaskExecutionId,
+        task_schema = AtmTaskSchema,
+        lambda_revision = get_lambda_revision(AtmTaskSchema, AtmWorkflowExecution),
+        supplementary_results = lists:map(fun(AtmTaskExecutionSupplementaryResultSpec) ->
+            atm_task_execution_result_spec:get_name(AtmTaskExecutionSupplementaryResultSpec)
+        end, AtmTaskExecutionSupplementaryResultSpecs)
+    },
     AtmTaskExecutionSpec = atm_task_executor:initiate(
-        AtmWorkflowExecutionCtx, AtmTaskSchema, AtmLambdaRevision, AtmTaskExecutor
+        AtmTaskExecutorInitiationCtx,
+        AtmTaskExecutor
     ),
 
     {ok, #atm_store{container = AtmTaskAuditLogStoreContainer}} = atm_store_api:get(

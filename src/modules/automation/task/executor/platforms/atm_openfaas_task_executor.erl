@@ -27,7 +27,7 @@
 -export([is_openfaas_available/0, assert_openfaas_available/0, get_activity_registry_id/1]).
 
 %% atm_task_executor callbacks
--export([create/4, initiate/4, teardown/2, delete/1, is_in_readonly_mode/1, run/3]).
+-export([create/4, initiate/2, teardown/2, delete/1, is_in_readonly_mode/1, run/3]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -48,7 +48,7 @@
 -type openfaas_config() :: #openfaas_config{}.
 
 -record(initiation_ctx, {
-    workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
+    task_executor_initiation_ctx :: atm_task_executor:initiation_ctx(),
     resource_spec :: atm_resource_spec:record(),
     openfaas_config :: openfaas_config(),
     executor :: record()
@@ -120,16 +120,15 @@ create(AtmWorkflowExecutionCtx, _AtmLaneIndex, _AtmTaskSchema, AtmLambdaRevision
     }.
 
 
--spec initiate(
-    atm_workflow_execution_ctx:record(),
-    atm_task_schema:record(),
-    atm_lambda_revision:record(),
-    record()
-) ->
+-spec initiate(atm_task_executor:initiation_ctx(), record()) ->
     workflow_engine:task_spec() | no_return().
-initiate(AtmWorkflowExecutionCtx, AtmTaskSchema, AtmLambdaRevision, AtmTaskExecutor) ->
+initiate(AtmTaskExecutorInitiationCtx = #atm_task_executor_initiation_ctx{
+    task_schema = AtmTaskSchema,
+    lambda_revision = AtmLambdaRevision,
+    supplementary_results = AtmTaskExecutionSupplementaryResultNames
+}, AtmTaskExecutor) ->
     InitiationCtx = #initiation_ctx{
-        workflow_execution_ctx = AtmWorkflowExecutionCtx,
+        task_executor_initiation_ctx = AtmTaskExecutorInitiationCtx,
         resource_spec = select_resource_spec(AtmTaskSchema, AtmLambdaRevision),
         openfaas_config = get_openfaas_config(),
         executor = AtmTaskExecutor
@@ -140,7 +139,10 @@ initiate(AtmWorkflowExecutionCtx, AtmTaskSchema, AtmLambdaRevision, AtmTaskExecu
     end,
     await_function_readiness(InitiationCtx),
 
-    #{type => async}.
+    #{
+        type => async,
+        has_supplementary_results => length(AtmTaskExecutionSupplementaryResultNames) > 0
+    }.
 
 
 -spec teardown(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
@@ -341,7 +343,9 @@ register_function(#initiation_ctx{openfaas_config = OpenfaasConfig} = Initiation
 %% @private
 -spec log_function_registering(initiation_ctx()) -> ok.
 log_function_registering(#initiation_ctx{
-    workflow_execution_ctx = AtmWorkflowExecutionCtx,
+    task_executor_initiation_ctx = #atm_task_executor_initiation_ctx{
+        workflow_execution_ctx = AtmWorkflowExecutionCtx
+    },
     executor = #atm_openfaas_task_executor{
         function_name = FunctionName,
         operation_spec = #atm_openfaas_operation_spec{docker_image = DockerImage}
@@ -357,7 +361,9 @@ log_function_registering(#initiation_ctx{
 %% @private
 -spec log_function_registered(initiation_ctx()) -> ok.
 log_function_registered(#initiation_ctx{
-    workflow_execution_ctx = AtmWorkflowExecutionCtx,
+    task_executor_initiation_ctx = #atm_task_executor_initiation_ctx{
+        workflow_execution_ctx = AtmWorkflowExecutionCtx
+    },
     executor = #atm_openfaas_task_executor{function_name = FunctionName}
 }) ->
     AtmWorkflowExecutionLogger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
@@ -476,7 +482,9 @@ add_oneclient_annotations_if_necessary(FunctionDefinition, #initiation_ctx{
 ) ->
     FunctionDefinition;
 add_oneclient_annotations_if_necessary(FunctionDefinition, #initiation_ctx{
-    workflow_execution_ctx = AtmWorkflowExecutionCtx,
+    task_executor_initiation_ctx = #atm_task_executor_initiation_ctx{
+        workflow_execution_ctx = AtmWorkflowExecutionCtx
+    },
     executor = AtmTaskExecutor = #atm_openfaas_task_executor{
         operation_spec = #atm_openfaas_operation_spec{
             docker_execution_options = #atm_docker_execution_options{
@@ -573,7 +581,9 @@ await_function_readiness(#initiation_ctx{
 %% @private
 -spec log_function_ready(initiation_ctx()) -> ok.
 log_function_ready(#initiation_ctx{
-    workflow_execution_ctx = AtmWorkflowExecutionCtx,
+    task_executor_initiation_ctx = #atm_task_executor_initiation_ctx{
+        workflow_execution_ctx = AtmWorkflowExecutionCtx
+    },
     executor = #atm_openfaas_task_executor{function_name = FunctionName}
 }) ->
     AtmWorkflowExecutionLogger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),

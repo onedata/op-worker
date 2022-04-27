@@ -81,6 +81,14 @@
     parallel_box_schema :: atm_parallel_box_schema:record()
 }).
 
+-record(atm_task_executor_initiation_ctx, {
+    workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
+    task_execution_id :: atm_task_execution:id(),
+    task_schema :: atm_task_schema:record(),
+    lambda_revision :: atm_lambda_revision:record(),
+    supplementary_results :: [automation:name()]
+}).
+
 % Record carrying an activity report of an OpenFaaS function
 -record(atm_openfaas_function_activity_report, {
     type :: atm_openfaas_function_activity_report:type(),

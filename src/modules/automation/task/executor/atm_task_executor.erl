@@ -23,12 +23,13 @@
 
 -behaviour(persistent_record).
 
+-include("modules/automation/atm_execution.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/automation/automation.hrl").
 
 %% API
--export([create/4, initiate/4, teardown/2, delete/1, get_type/1, is_in_readonly_mode/1, run/3]).
+-export([create/4, initiate/2, teardown/2, delete/1, get_type/1, is_in_readonly_mode/1, run/3]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -36,6 +37,8 @@
 
 -type model() :: atm_openfaas_task_executor.
 -type record() :: atm_openfaas_task_executor:record().
+
+-type initiation_ctx() :: #atm_task_executor_initiation_ctx{}.
 
 -type args() :: json_utils:json_map().
 -type results() :: errors:error() | json_utils:json_map().
@@ -54,6 +57,7 @@
 %%      <<"resultsBatch">> := [results()]
 %% }
 
+-export_type([initiation_ctx/0]).
 -export_type([args/0, results/0, lambda_input/0, lambda_output/0]).
 
 -export_type([model/0, record/0]).
@@ -72,13 +76,7 @@
 ) ->
     record() | no_return().
 
--callback initiate(
-    atm_workflow_execution_ctx:record(),
-    atm_task_schema:record(),
-    atm_lambda_revision:record(),
-    record()
-) ->
-    workflow_engine:task_spec() | no_return().
+-callback initiate(initiation_ctx(), record()) -> workflow_engine:task_spec() | no_return().
 
 -callback teardown(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
 
@@ -110,16 +108,10 @@ create(AtmWorkflowExecutionCtx, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision =
     Model:create(AtmWorkflowExecutionCtx, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision).
 
 
--spec initiate(
-    atm_workflow_execution_ctx:record(),
-    atm_task_schema:record(),
-    atm_lambda_revision:record(),
-    record()
-) ->
-    workflow_engine:task_spec() | no_return().
-initiate(AtmWorkflowExecutionCtx, AtmTaskSchema, AtmLambdaRevision, AtmTaskExecutor) ->
+-spec initiate(initiation_ctx(), record()) -> workflow_engine:task_spec() | no_return().
+initiate(AtmTaskExecutorInitiationCtx, AtmTaskExecutor) ->
     Model = utils:record_type(AtmTaskExecutor),
-    Model:initiate(AtmWorkflowExecutionCtx, AtmTaskSchema, AtmLambdaRevision, AtmTaskExecutor).
+    Model:initiate(AtmTaskExecutorInitiationCtx, AtmTaskExecutor).
 
 
 -spec teardown(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().

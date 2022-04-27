@@ -65,6 +65,7 @@
 -type task_type() :: sync | async.
 -type task_spec() :: #{
     type := task_type(),
+    has_supplementary_results => boolean(),  %% TODO name?
     async_call_pools => [workflow_async_call_pool:id()] | undefined,
     keepalive_timeout => time:seconds()
 }.
