@@ -88,13 +88,13 @@ expand(_AtmWorkflowExecutionAuth, Value, _ValueConstraints) ->
     ok | no_return().
 check_measurement_constraints(
     #{<<"tsName">> := TSName},
-    #{specs := AllowedMeasurementsSpecs}
+    #{specs := AllowedMeasurementSpecs}
 ) ->
-    case atm_time_series_names:find_matching_measurements_spec(TSName, AllowedMeasurementsSpecs) of
+    case atm_time_series_names:find_matching_measurement_spec(TSName, AllowedMeasurementSpecs) of
         {ok, _} ->
             ok;
         error ->
             throw({unverified_constraints, #{<<"specs">> => jsonable_record:list_to_json(
-                AllowedMeasurementsSpecs, atm_time_series_measurement_spec
+                AllowedMeasurementSpecs, atm_time_series_measurement_spec
             )}})
     end.
