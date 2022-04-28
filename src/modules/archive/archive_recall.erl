@@ -114,7 +114,7 @@ get_details(Id) ->
 -spec browse_event_log(id(), json_infinite_log_model:listing_opts()) -> 
     {ok, json_infinite_log_model:browse_result()} | {error, term()}.
 browse_event_log(Id, Options) ->
-    archive_recall_progress:browse_event_log(Id, Options).
+    archive_recall_progress:browse_error_log(Id, Options).
 
 
 -spec get_stats(id(), time_series_collection:layout(), ts_windows:list_options()) ->

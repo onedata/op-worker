@@ -367,7 +367,7 @@ recall_symlink(FileCtx, TargetParentGuid, RootPathTokens, FileName, ArchiveDoc, 
 %% @private
 -spec report_error(id(), tree_traverse:job(), term(), list()) -> ok.
 report_error(TaskId, Job, Reason, Stacktrace) ->
-    {FileCtx, RelativePath, ArchiveDoc} = retrieve_error_details(Job),
+    {FileCtx, RelativePath, ArchiveDoc} = infer_job_context(Job),
     FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     {ok, ArchiveId} = archive:get_id(ArchiveDoc),
     ?error_stacktrace("Unexpected error during recall(~p) of file ~p in archive ~p: ~p.", 
@@ -385,15 +385,15 @@ create_root_file(false, SessId, TargetParentGuid, TargetRootName) ->
 
 
 %% @private
--spec retrieve_error_details(tree_traverse:job()) -> 
+-spec infer_job_context(tree_traverse:job()) -> 
     {file_ctx:ctx(), file_meta:path(), archive:doc()}.
-retrieve_error_details(#tree_traverse_slave{
+infer_job_context(#tree_traverse_slave{
     file_ctx = FileCtx, 
     relative_path = RelativePath,
     traverse_info = #{archive_doc := ArchiveDoc}}
 ) ->
     {FileCtx, RelativePath, ArchiveDoc};
-retrieve_error_details(#tree_traverse{
+infer_job_context(#tree_traverse{
     file_ctx = FileCtx,
     relative_path = RelativePath,
     traverse_info = #{archive_doc := ArchiveDoc}}

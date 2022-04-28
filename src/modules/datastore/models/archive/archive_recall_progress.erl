@@ -28,7 +28,7 @@
 
 %% API
 -export([create/1, delete/1]).
--export([get/1, browse_event_log/2]).
+-export([get/1, browse_error_log/2]).
 -export([report_bytes_copied/2, report_file_finished/1, report_error/2]).
 %% Test API
 -export([get_stats/3]).
@@ -57,7 +57,7 @@
 -define(FILES_TS, <<"filesCopied">>).
 -define(FAILED_FILES_TS, <<"filesFailed">>).
 
--define(EVENT_LOG_ID(Id), <<Id/binary, "el">>).
+-define(ERROR_LOG_ID(Id), <<Id/binary, "el">>).
 
 -define(TOTAL_METRIC, <<"total">>).
 -define(MINUTE_METRIC, <<"minute">>).
@@ -66,8 +66,8 @@
 
 -define(NOW(), global_clock:timestamp_seconds()).
 
--define(LOG_MAX_SIZE, op_worker:get_env(archive_recall_audit_log_max_size, 10000)).
--define(LOG_EXPIRATION, op_worker:get_env(archive_recall_audit_log_expiration_seconds, 1209600)). % 14 days
+-define(LOG_MAX_SIZE, op_worker:get_env(archive_recall_error_log_max_size, 10000)).
+-define(LOG_EXPIRATION, op_worker:get_env(archive_recall_error_log_expiration_seconds, 1209600)). % 14 days
 
 %%%===================================================================
 %%% API functions
@@ -76,7 +76,7 @@
 -spec create(id()) -> ok | {error, term()}.
 create(Id) ->
     try
-        ok = json_infinite_log_model:create(?EVENT_LOG_ID(Id), #{
+        ok = json_infinite_log_model:create(?ERROR_LOG_ID(Id), #{
             
         }),
         ok = create_tsc(Id)
@@ -89,7 +89,7 @@ create(Id) ->
 -spec delete(id()) -> ok | {error, term()}.
 delete(Id) ->
     datastore_time_series_collection:delete(?CTX, ?TSC_ID(Id)),
-    json_infinite_log_model:destroy(?EVENT_LOG_ID(Id)).
+    json_infinite_log_model:destroy(?ERROR_LOG_ID(Id)).
 
 
 -spec get(id()) -> {ok, recall_progress_map()}.
@@ -97,10 +97,10 @@ get(Id) ->
     get_counters_current_value(Id).
 
 
--spec browse_event_log(id(), json_infinite_log_model:listing_opts()) ->
+-spec browse_error_log(id(), json_infinite_log_model:listing_opts()) ->
     {ok, json_infinite_log_model:browse_result()} | {error, term()}.
-browse_event_log(Id, Options) ->
-    json_infinite_log_model:browse_content(?EVENT_LOG_ID(Id), Options).
+browse_error_log(Id, Options) ->
+    json_infinite_log_model:browse_content(?ERROR_LOG_ID(Id), Options).
 
 
 -spec report_file_finished(id()) -> ok | {error, term()}.
@@ -112,7 +112,7 @@ report_file_finished(Id) ->
 
 -spec report_error(id(), json_utils:json_term()) -> ok | {error, term()}.
 report_error(Id, ErrorJson) ->
-    json_infinite_log_model:append(?EVENT_LOG_ID(Id), ErrorJson),
+    json_infinite_log_model:append(?ERROR_LOG_ID(Id), ErrorJson),
     datastore_time_series_collection:consume_measurements(?CTX, ?TSC_ID(Id), #{
         ?FAILED_FILES_TS => #{?ALL_METRICS => [{?NOW(), 1}]}}
     ).
