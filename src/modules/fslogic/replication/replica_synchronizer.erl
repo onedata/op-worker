@@ -1464,49 +1464,57 @@ flush_blocks(#state{cached_blocks = Blocks, file_ctx = FileCtx} = State, Exclude
             op_worker:get_env(synchronizer_on_fly_finished_events, all)
     end,
 
-    Ans = lists:foldl(fun({From, FinalBlock, Type}, Acc) ->
-        case Type of
-                sync ->
-                    [{From, flush_blocks_list([FinalBlock], ExcludeSessions,
-                        FlushFinalBlocks)} | Acc];
-                async ->
-                    flush_blocks_list([FinalBlock], [], all),
-                    Acc
-        end
-    end, [], FinalBlocks),
+    % env used by initializer - remove try/catch after tests migration to onenv
+    IgnoreUnregisteredOneproviderError = op_worker:get_env(ignore_synchronizer_unregistered_oneprovider_error, false),
+    FinalAns = try
+        Ans = lists:foldl(fun({From, FinalBlock, Type}, Acc) ->
+            case Type of
+                    sync ->
+                        [{From, flush_blocks_list([FinalBlock], ExcludeSessions,
+                            FlushFinalBlocks)} | Acc];
+                    async ->
+                        flush_blocks_list([FinalBlock], [], all),
+                        Acc
+            end
+        end, [], FinalBlocks),
 
-    case op_worker:get_env(synchronizer_in_progress_events, transfers_only) of
-        off ->
-            false;
-        _ ->
-            ToInvalidate = [FinalBlock || {_From, FinalBlock, _Type} <- FinalBlocks],
-            Blocks2 = fslogic_blocks:consolidate(fslogic_blocks:invalidate(Blocks, ToInvalidate)),
-            lists:foreach(fun(Block) ->
-                flush_blocks_list([Block], ExcludeSessions, all)
-            end, Blocks2)
+        case op_worker:get_env(synchronizer_in_progress_events, transfers_only) of
+            off ->
+                false;
+            _ ->
+                ToInvalidate = [FinalBlock || {_From, FinalBlock, _Type} <- FinalBlocks],
+                Blocks2 = fslogic_blocks:consolidate(fslogic_blocks:invalidate(Blocks, ToInvalidate)),
+                lists:foreach(fun(Block) ->
+                    flush_blocks_list([Block], ExcludeSessions, all)
+                end, Blocks2)
+        end,
+
+        case op_worker:get_env(synchronizer_gc, on_flush_location) of
+            on_flush_blocks ->
+                erlang:garbage_collect();
+            _ ->
+                ok
+        end,
+
+        case fslogic_cache:get_local_location() of
+            #document{value = #file_location{size = Size}} = LocationDoc ->
+                case fslogic_location_cache:get_blocks(LocationDoc, #{count => 2}) of
+                    [#file_block{offset = 0, size = Size}] ->
+                        fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx, false, []);
+                    _ ->
+                        ok
+                end;
+            _ ->
+                % There can be race with file deletion
+                ok
+        end,
+
+        Ans
+    catch
+        throw:{error, unregistered_oneprovider} when IgnoreUnregisteredOneproviderError -> []
     end,
 
-    case op_worker:get_env(synchronizer_gc, on_flush_location) of
-        on_flush_blocks ->
-            erlang:garbage_collect();
-        _ ->
-            ok
-    end,
-
-    case fslogic_cache:get_local_location() of
-        #document{value = #file_location{size = Size}} = LocationDoc ->
-            case fslogic_location_cache:get_blocks(LocationDoc, #{count => 2}) of
-                [#file_block{offset = 0, size = Size}] ->
-                    fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx, false, []);
-                _ ->
-                    ok
-            end;
-        _ ->
-            % There can be race with file deletion
-            ok
-    end,
-
-    {Ans, set_events_timer(cancel_caching_blocks_timer(
+    {FinalAns, set_events_timer(cancel_caching_blocks_timer(
         State#state{cached_blocks = []}))}.
 
 %%--------------------------------------------------------------------

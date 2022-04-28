@@ -28,7 +28,8 @@
     }],
     result_specs = [#atm_lambda_result_spec{
         name = <<"val">>,
-        data_spec = #atm_data_spec{type = atm_integer_type}
+        data_spec = #atm_data_spec{type = atm_integer_type},
+        relay_method = return_value
     }]
 }).
 

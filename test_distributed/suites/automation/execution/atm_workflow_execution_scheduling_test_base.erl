@@ -156,7 +156,7 @@ atm_workflow_with_invalid_initial_store_content_scheduling_should_fail_test() ->
     ExpError = ?ERROR_ATM_STORE_CREATION_FAILED(
         ?EXAMPLE_INTEGER_LIST_STORE_SCHEMA_ID,
         ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED([InvalidInitialItem], atm_array_type, #{
-            <<"item[0]">> => errors:to_json(?ERROR_ATM_DATA_TYPE_UNVERIFIED(
+            <<"$[0]">> => errors:to_json(?ERROR_ATM_DATA_TYPE_UNVERIFIED(
                 InvalidInitialItem, atm_integer_type
             ))
         })

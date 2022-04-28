@@ -16,6 +16,7 @@
 -module(atm_value).
 -author("Michal Stanisz").
 
+-include("modules/automation/atm_execution.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% API
@@ -34,7 +35,6 @@
 %%%===================================================================
 
 
-%% TODO VFS-8689 pass 'Path' - useful in container types validation when nested item validation fails
 -spec validate(atm_workflow_execution_auth:record(), expanded(), atm_data_spec:record()) ->
     ok | no_return().
 validate(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
@@ -51,19 +51,26 @@ validate(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
 
 
 -spec compress(expanded(), atm_data_spec:record()) -> compressed() | no_return().
-compress(Value, AtmDataSpec) ->
-    Module = get_callback_module(atm_data_spec:get_type(AtmDataSpec)),
-    Module:compress(Value).
+compress(Value, #atm_data_spec{type = AtmDataType, value_constraints = ValueConstraints}) ->
+    Module = get_callback_module(AtmDataType),
+    Module:compress(Value, ValueConstraints).
 
 
 -spec expand(atm_workflow_execution_auth:record(), compressed(), atm_data_spec:record()) ->
     {ok, expanded()} | {error, term()}.
-expand(AtmWorkflowExecutionAuth, Value, AtmDataSpec) ->
-    Module = get_callback_module(atm_data_spec:get_type(AtmDataSpec)),
-    Module:expand(AtmWorkflowExecutionAuth, Value).
+expand(AtmWorkflowExecutionAuth, Value, #atm_data_spec{
+    type = AtmDataType,
+    value_constraints = ValueConstraints
+}) ->
+    Module = get_callback_module(AtmDataType),
+    Module:expand(AtmWorkflowExecutionAuth, Value, ValueConstraints).
 
 
--spec filterexpand_list(atm_workflow_execution_auth:record(), [compressed()] | compressed(), atm_data_spec:record()) ->
+-spec filterexpand_list(
+    atm_workflow_execution_auth:record(),
+    [compressed()] | compressed(),
+    atm_data_spec:record()
+) ->
     [expanded()].
 filterexpand_list(AtmWorkflowExecutionAuth, CompressedItems, AtmDataSpec) ->
     lists:filtermap(fun(CompressedItem) ->
@@ -89,4 +96,4 @@ get_callback_module(atm_object_type) -> atm_object_value;
 get_callback_module(atm_onedatafs_credentials_type) -> atm_onedatafs_credentials_value;
 get_callback_module(atm_range_type) -> atm_range_value;
 get_callback_module(atm_string_type) -> atm_string_value;
-get_callback_module(atm_time_series_measurements_type) -> atm_time_series_measurements_value.
+get_callback_module(atm_time_series_measurement_type) -> atm_time_series_measurement_value.

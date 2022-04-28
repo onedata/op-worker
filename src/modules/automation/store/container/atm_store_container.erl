@@ -97,10 +97,25 @@
 
 -callback get_config(record()) -> atm_store_config:record().
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns `atm_data_spec` for items returned by container iterator.
+%% It may differ from `atm_data_spec` specified in atm_store_config as iteration
+%% may return items inferred from store content rather than store content itself
+%% (e.g. instead of returning `atm_range_value` it may returns integers from
+%% specified range).
+%% @end
+%%-------------------------------------------------------------------
 -callback get_iterated_item_data_spec(record()) -> atm_data_spec:record().
 
 -callback acquire_iterator(record()) -> atm_store_container_iterator:record().
 
+%%-------------------------------------------------------------------
+%% @doc
+%% Returns batch of exact items directly kept at store in opposition to
+%% iteration which can return items inferred from store content.
+%% @end
+%%-------------------------------------------------------------------
 -callback browse_content(record(), content_browse_req()) ->
     atm_store_content_browse_result:record() | no_return().
 
