@@ -443,13 +443,13 @@ acquire_env(#document{key = AtmWorkflowExecutionId, value = #atm_workflow_execut
     space_id = SpaceId,
     incarnation = AtmWorkflowExecutionIncarnation,
     store_registry = AtmGlobalStoreRegistry,
-    system_audit_log_id = AtmWorkflowAuditLogId
+    system_audit_log_store_id = AtmWorkflowAuditLogStoreId
 }}) ->
     Env = atm_workflow_execution_env:build(
         SpaceId, AtmWorkflowExecutionId, AtmWorkflowExecutionIncarnation, AtmGlobalStoreRegistry
     ),
 
-    AtmWorkflowAuditLogStoreContainer = case atm_store_api:get(AtmWorkflowAuditLogId) of
+    AtmWorkflowAuditLogStoreContainer = case atm_store_api:get(AtmWorkflowAuditLogStoreId) of
         {ok, #atm_store{container = Container}} ->
             Container;
         ?ERROR_NOT_FOUND ->

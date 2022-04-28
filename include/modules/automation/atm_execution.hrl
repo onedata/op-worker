@@ -141,7 +141,7 @@
 
 %% Atm stores related macros
 
--define(ATM_SYSTEM_AUDIT_LOG_SCHEMA(__ID), #atm_store_schema{
+-define(ATM_SYSTEM_AUDIT_LOG_STORE_SCHEMA(__ID), #atm_store_schema{
     id = __ID,
     name = __ID,
     description = <<>>,

@@ -76,7 +76,7 @@ initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
             workflow_execution_id = AtmWorkflowExecutionId,
             executor = AtmTaskExecutor,
             supplementary_result_specs = AtmTaskExecutionSupplementaryResultSpecs,
-            system_audit_log_id = AtmSystemAuditLogId,
+            system_audit_log_store_id = AtmSystemAuditLogStoreId,
             time_series_store_id = AtmTaskTSStoreId
         }
     } = ensure_atm_task_execution_doc(AtmTaskExecutionIdOrDoc),
@@ -102,7 +102,7 @@ initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
     ),
 
     {ok, #atm_store{container = AtmTaskAuditLogStoreContainer}} = atm_store_api:get(
-        AtmSystemAuditLogId
+        AtmSystemAuditLogStoreId
     ),
     AtmWorkflowExecutionEnvDiff = fun(Env0) ->
         Env1 = atm_workflow_execution_env:add_task_audit_log_store_container(
@@ -272,7 +272,7 @@ handle_ended(AtmTaskExecutionId) ->
     end,
     case atm_task_execution:update(AtmTaskExecutionId, Diff) of
         {ok, #document{value = AtmTaskExecution} = AtmTaskExecutionDoc} ->
-            atm_store_api:freeze(AtmTaskExecution#atm_task_execution.system_audit_log_id),
+            atm_store_api:freeze(AtmTaskExecution#atm_task_execution.system_audit_log_store_id),
             handle_status_change(AtmTaskExecutionDoc);
         {error, already_ended} ->
             ok

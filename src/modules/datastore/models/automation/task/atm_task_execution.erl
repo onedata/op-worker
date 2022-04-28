@@ -113,7 +113,7 @@ get_record_struct(1) ->
             persistent_record, encode, decode, atm_task_execution_result_spec
         }}]},
 
-        {system_audit_log_id, string},
+        {system_audit_log_store_id, string},
         {time_series_store_id, string},
 
         {status, atom},

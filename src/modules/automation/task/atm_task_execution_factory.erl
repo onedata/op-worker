@@ -33,7 +33,7 @@
 
 -record(execution_components, {
     executor = undefined :: undefined | atm_task_executor:record(),
-    audit_log_store_id = undefined :: undefined | atm_store:id(),
+    system_audit_log_store_id = undefined :: undefined | atm_store:id(),
     time_series_store_id = undefined :: undefined | atm_store:id()
 }).
 -type execution_components() :: #execution_components{}.
@@ -97,12 +97,12 @@ delete(AtmTaskExecutionId) ->
     case atm_task_execution:get(AtmTaskExecutionId) of
         {ok, #document{value = #atm_task_execution{
             executor = Executor,
-            system_audit_log_id = AtmSystemAuditLogId,
+            system_audit_log_store_id = AtmSystemAuditLogStoreId,
             time_series_store_id = AtmTaskTSStoreId
         }}} ->
             delete_execution_components(#execution_components{
                 executor = Executor,
-                audit_log_store_id = AtmSystemAuditLogId,
+                system_audit_log_store_id = AtmSystemAuditLogStoreId,
                 time_series_store_id = AtmTaskTSStoreId
             }),
             atm_task_execution:delete(AtmTaskExecutionId);
@@ -191,14 +191,14 @@ create_audit_log(CreationCtx = #creation_ctx{
 }) ->
     AtmWorkflowExecutionAuth = atm_workflow_execution_ctx:get_auth(AtmWorkflowExecutionCtx),
 
-    {ok, #document{key = AtmSystemAuditLogId}} = atm_store_api:create(
+    {ok, #document{key = AtmSystemAuditLogStoreId}} = atm_store_api:create(
         AtmWorkflowExecutionAuth,
         undefined,
-        ?ATM_SYSTEM_AUDIT_LOG_SCHEMA(?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID)
+        ?ATM_SYSTEM_AUDIT_LOG_STORE_SCHEMA(?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID)
     ),
 
     CreationCtx#creation_ctx{execution_components = ExecutionComponents#execution_components{
-        audit_log_store_id = AtmSystemAuditLogId
+        system_audit_log_store_id = AtmSystemAuditLogStoreId
     }}.
 
 
@@ -247,12 +247,12 @@ delete_execution_components(ExecutionComponents = #execution_components{
     });
 
 delete_execution_components(ExecutionComponents = #execution_components{
-    audit_log_store_id = AtmTaskAuditLogId
-}) when AtmTaskAuditLogId /= undefined ->
-    catch atm_store_api:delete(AtmTaskAuditLogId),
+    system_audit_log_store_id = AtmTaskAuditLogStoreId
+}) when AtmTaskAuditLogStoreId /= undefined ->
+    catch atm_store_api:delete(AtmTaskAuditLogStoreId),
 
     delete_execution_components(ExecutionComponents#execution_components{
-        audit_log_store_id = undefined
+        system_audit_log_store_id = undefined
     });
 
 delete_execution_components(ExecutionComponents = #execution_components{
@@ -291,7 +291,7 @@ create_task_execution_doc(#creation_ctx{
     },
     execution_components = #execution_components{
         executor = Executor,
-        audit_log_store_id = AtmTaskAuditLogId,
+        system_audit_log_store_id = AtmTaskAuditLogStoreId,
         time_series_store_id = AtmTaskTSStoreIdOrUndefined
     }
 }) ->
@@ -319,7 +319,7 @@ create_task_execution_doc(#creation_ctx{
         job_result_specs = JobResultSpecs,
         supplementary_result_specs = SupplementaryResultSpecs,
 
-        system_audit_log_id = AtmTaskAuditLogId,
+        system_audit_log_store_id = AtmTaskAuditLogStoreId,
         time_series_store_id = AtmTaskTSStoreIdOrUndefined,
 
         status = ?PENDING_STATUS,
