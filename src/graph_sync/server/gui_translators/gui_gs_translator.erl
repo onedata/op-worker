@@ -19,7 +19,6 @@
 -include("middleware/middleware.hrl").
 -include("modules/datastore/qos.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
--include("modules/dir_stats_collector/dir_size_stats.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 

@@ -6,8 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module handles middleware operations (create, get, update, delete)
-%%% corresponding to space qos aspects.
+%%% This module handles middleware operations (create, get, update, delete) 
+%%% corresponding to space statistics aspects.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(space_stats_middleware_handler).
@@ -65,7 +65,7 @@ authorize(#op_req{auth = ?GUEST}, _) ->
 
 authorize(#op_req{operation = get, auth = ?USER(UserId, SessionId), gri = #gri{
     id = SpaceId,
-    aspect =  dir_size_stats_config
+    aspect = dir_size_stats_config
 }}, _) ->
     space_logic:has_eff_user(SessionId, SpaceId, UserId);
 
@@ -73,7 +73,7 @@ authorize(#op_req{operation = update, auth = ?USER(UserId), gri = #gri{
     id = SpaceId,
     aspect = dir_size_stats_config
 }}, _) ->
-    space_logic:is_owner(SpaceId, UserId).
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_UPDATE).
 
 
 %%--------------------------------------------------------------------
@@ -112,11 +112,10 @@ create(_) ->
 %%--------------------------------------------------------------------
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
 get(#op_req{gri = #gri{id = SpaceId, aspect = dir_size_stats_config}}, _) ->
-    {Status, Since} = case dir_stats_collector_config:get_extended_collecting_status(SpaceId) of
-        disabled -> {<<"disabled">>, undefined};
-        collectors_stopping -> {<<"stopping">>, undefined};
-        enabled -> {<<"enabled">>, undefined};
-        {collections_initialization, Timestamp} -> {<<"initializing">>, Timestamp}
+    {Status, Since} = case dir_stats_collector_config:get_last_status_change_timestamp_if_in_enabled_status(SpaceId) of
+        {ok, Timestamp} -> {<<"enabled">>, Timestamp};
+        ?ERROR_DIR_STATS_DISABLED_FOR_SPACE -> {<<"disabled">>, undefined};
+        ?ERROR_DIR_STATS_NOT_READY-> {<<"initializing">>, undefined}
     end,
     {ok, value, maps_utils:remove_undefined(#{
         <<"statsCollectionStatus">> => Status,

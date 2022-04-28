@@ -32,7 +32,7 @@
 
 -type collection() :: #{stat_name() => stat_value()}.
 
--type stats_selector() :: [stat_name()] | stat_name() | all.
+-type stats_selector() :: [stat_name()] | all.
 
 -export_type([type/0, stat_name/0, stat_value/0, collection/0, stats_selector/0]).
 

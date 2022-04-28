@@ -12,6 +12,7 @@
 -module(attr_req).
 -author("Tomasz Lichon").
 
+-include("modules/dir_stats_collector/dir_size_stats.hrl").
 -include("modules/fslogic/data_access_control.hrl").
 -include("modules/fslogic/file_details.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
@@ -458,8 +459,8 @@ resolve_file_attr(UserCtx, FileCtx, Opts) ->
                 {RS, _, Ctx} = file_ctx:get_replication_status_and_size(FileCtx5),
                 {RS, undefined, Ctx};
             {?DIRECTORY_TYPE, _, true} ->
-                case dir_size_stats:get_stats(file_ctx:get_logical_guid_const(FileCtx5), <<"total_size">>) of
-                    {ok, #{<<"total_size">> := S}} ->
+                case dir_size_stats:get_stats(file_ctx:get_logical_guid_const(FileCtx5), [?TOTAL_SIZE]) of
+                    {ok, #{?TOTAL_SIZE := S}} ->
                         {undefined, S, FileCtx5};
                     _ ->
                         {undefined, undefined, FileCtx5}
