@@ -110,9 +110,10 @@ all() -> [
     }
 }).
 
+-define(COUNTER_OF_ALL_COUNTS_TS_NAME, <<"counter_of_all_counts">>).
 -define(COUNTER_OF_ALL_COUNTS_TS_SCHEMA, #atm_time_series_schema{
     name_generator_type = exact,
-    name_generator = <<"counter_of_all_counts">>,
+    name_generator = ?COUNTER_OF_ALL_COUNTS_TS_NAME,
     unit = none,
     metrics = #{
         ?MINUTE_METRIC_NAME => ?MINUTE_METRIC_CONFIG,
@@ -169,7 +170,7 @@ all() -> [
     #atm_time_series_dispatch_rule{
         measurement_ts_name_matcher_type = has_prefix,
         measurement_ts_name_matcher = <<"count">>,
-        target_ts_name_generator = <<"counter_of_all_counts">>,
+        target_ts_name_generator = ?COUNTER_OF_ALL_COUNTS_TS_NAME,
         prefix_combiner = overwrite
     }
 ]).
@@ -203,7 +204,7 @@ create_test(_Config) ->
     % Assert only ts for exact generators are initiated
     ExpLayout = #{
         ?MAX_FILE_SIZE_TS_NAME => [?MAX_FILE_SIZE_METRIC_NAME],
-        <<"counter_of_all_counts">> => lists:sort([?MINUTE_METRIC_NAME, ?HOUR_METRIC_NAME, ?DAY_METRIC_NAME])
+        ?COUNTER_OF_ALL_COUNTS_TS_NAME => lists:sort([?MINUTE_METRIC_NAME, ?HOUR_METRIC_NAME, ?DAY_METRIC_NAME])
     },
     ?assertEqual(ExpLayout, get_layout(AtmWorkflowExecutionAuth, AtmStoreId)),
     ?assertEqual(
@@ -211,7 +212,7 @@ create_test(_Config) ->
             ?MAX_FILE_SIZE_TS_NAME => #{
                 ?MAX_FILE_SIZE_METRIC_NAME => []
             },
-            <<"counter_of_all_counts">> => #{
+            ?COUNTER_OF_ALL_COUNTS_TS_NAME => #{
                 ?MINUTE_METRIC_NAME => [],
                 ?HOUR_METRIC_NAME => [],
                 ?DAY_METRIC_NAME => []
@@ -229,7 +230,7 @@ manage_content_test(_Config) ->
     AtmStoreId = create_store(AtmWorkflowExecutionAuth, AtmStoreSchema),
     ExpLayout0 = #{
         ?MAX_FILE_SIZE_TS_NAME => [?MAX_FILE_SIZE_METRIC_NAME],
-        <<"counter_of_all_counts">> => SortedCountTSMetricNames
+        ?COUNTER_OF_ALL_COUNTS_TS_NAME => SortedCountTSMetricNames
     },
     ?assertEqual(ExpLayout0, get_layout(AtmWorkflowExecutionAuth, AtmStoreId)),
 
@@ -281,7 +282,7 @@ manage_content_test(_Config) ->
             ?HOUR_METRIC_NAME => [?HOUR_METRIC_WINDOW(Timestamp1, 10)],
             ?DAY_METRIC_NAME => [?DAY_METRIC_WINDOW(Timestamp1, 10)]
         },
-        <<"counter_of_all_counts">> => #{
+        ?COUNTER_OF_ALL_COUNTS_TS_NAME => #{
             ?MINUTE_METRIC_NAME => [],
             ?HOUR_METRIC_NAME => [],
             ?DAY_METRIC_NAME => []
@@ -349,7 +350,7 @@ manage_content_test(_Config) ->
             ?HOUR_METRIC_NAME => [?HOUR_METRIC_WINDOW(Timestamp1, 14)],
             ?DAY_METRIC_NAME => [?DAY_METRIC_WINDOW(Timestamp1, 14)]
         },
-        <<"counter_of_all_counts">> => #{
+        ?COUNTER_OF_ALL_COUNTS_TS_NAME => #{
             ?MINUTE_METRIC_NAME => [
                 ?MINUTE_METRIC_WINDOW(Timestamp1, 10)
             ],
