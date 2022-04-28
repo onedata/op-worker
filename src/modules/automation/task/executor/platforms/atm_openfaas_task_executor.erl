@@ -476,7 +476,6 @@ add_function_ctx_annotations(FunctionDefinition, #initiation_ctx{
     update_function_annotations(FunctionDefinition, #{
         <<"function.openfaas.onedata.org/workflow_execution_id">> => AtmWorkflowExecutionId,
         <<"function.openfaas.onedata.org/task_execution_id">> => AtmTaskExecutionId,
-        %% TODO ŁO change to function_name? would require changes to current pod status collector
         <<"function.openfaas.onedata.org/name">> => FunctionName
     }).
 

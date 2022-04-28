@@ -9,10 +9,10 @@
 %%% Module responsible for building task execution result specs and consuming
 %%% result values.
 %%% There are 2 types of task execution results:
-%%% - elementary - mandatory results returned directly by lambda and associated
-%%%                with items the lambda was called for. When their processing
-%%%                fails their associated items are saved in lane run exception
-%%%                store and after lane run failure the lane run can be retried.
+%%% - job - mandatory results returned directly by lambda and associated with
+%%%         items the lambda was called for. When their processing fails their
+%%%         associated items are saved in lane run exception store and after
+%%%         lane run failure the lane run can be retried.
 %%% - supplementary - optional/extra results relayed via alternative channels
 %%%                   e.g. asynchronously via websocket a.k.a. file pipe
 %%%                   (may be used for streaming logs or time series
@@ -30,9 +30,11 @@
 %% API
 -export([
     build_specs/2,
-    consume_elementary_results/3,
-    consume_supplementary_results/3
+    consume_results/4
 ]).
+
+-type type() :: job | supplementary.
+-export_type([type/0]).
 
 
 %%%===================================================================
@@ -45,7 +47,7 @@
     [atm_task_schema_result_mapper:record()]
 ) ->
     {
-        ElementaryResultSpecs :: [atm_task_execution_result_spec:record()],
+        JobResultSpecs :: [atm_task_execution_result_spec:record()],
         SupplementaryResultSpecs :: [atm_task_execution_result_spec:record()]
     }.
 build_specs(AtmLambdaResultSpecs, AtmTaskSchemaResultMappers) ->
@@ -53,26 +55,27 @@ build_specs(AtmLambdaResultSpecs, AtmTaskSchemaResultMappers) ->
         AtmTaskSchemaResultMappers
     ),
 
-    lists:foldl(fun(AtmLambdaResultSpec, {ElementaryResultSpecs, SupplementaryResultSpecs}) ->
+    lists:foldl(fun(AtmLambdaResultSpec, {JobResultSpecs, SupplementaryResultSpecs}) ->
         ResultName = AtmLambdaResultSpec#atm_lambda_result_spec.name,
         ResultSpec = atm_task_execution_result_spec:build(
             AtmLambdaResultSpec,
             maps:get(ResultName, AtmTaskSchemaResultMappersGroupedPerName, [])
         ),
         case AtmLambdaResultSpec#atm_lambda_result_spec.relay_method of
-            return_value -> {[ResultSpec | ElementaryResultSpecs], SupplementaryResultSpecs};
-            file_pipe -> {ElementaryResultSpecs, [ResultSpec | SupplementaryResultSpecs]}
+            return_value -> {[ResultSpec | JobResultSpecs], SupplementaryResultSpecs};
+            file_pipe -> {JobResultSpecs, [ResultSpec | SupplementaryResultSpecs]}
         end
     end, {[], []}, lists:usort(fun order_atm_lambda_result_specs_by_name/2, AtmLambdaResultSpecs)).
 
 
--spec consume_elementary_results(
+-spec consume_results(
     atm_workflow_execution_ctx:record(),
+    type(),
     [atm_task_execution_result_spec:record()],
     json_utils:json_map()
 ) ->
     ok | no_return().
-consume_elementary_results(AtmWorkflowExecutionCtx, ElementaryResultSpecs, ResultValues) ->
+consume_results(AtmWorkflowExecutionCtx, Type, ResultSpecs, ResultValues) ->
     lists:foreach(fun(ResultSpec) ->
         ResultName = atm_task_execution_result_spec:get_name(ResultSpec),
 
@@ -80,30 +83,9 @@ consume_elementary_results(AtmWorkflowExecutionCtx, ElementaryResultSpecs, Resul
             {ok, ResultValue} ->
                 consume_result(AtmWorkflowExecutionCtx, ResultName, ResultSpec, ResultValue);
             error ->
-                % Elementary results are mandatory
-                throw(?ERROR_ATM_TASK_RESULT_MISSING(ResultName))
+                Type == job andalso throw(?ERROR_ATM_TASK_RESULT_MISSING(ResultName))
         end
-    end, ElementaryResultSpecs).
-
-
--spec consume_supplementary_results(
-    atm_workflow_execution_ctx:record(),
-    [atm_task_execution_result_spec:record()],
-    json_utils:json_map()
-) ->
-    ok | no_return().
-consume_supplementary_results(AtmWorkflowExecutionCtx, SupplementaryResultSpecs, ResultValues) ->
-    lists:foreach(fun(ResultSpec) ->
-        ResultName = atm_task_execution_result_spec:get_name(ResultSpec),
-
-        case maps:find(ResultName, ResultValues) of
-            {ok, ResultValue} ->
-                consume_result(AtmWorkflowExecutionCtx, ResultName, ResultSpec, ResultValue);
-            error ->
-                % Supplementary results are optional
-                ok
-        end
-    end, SupplementaryResultSpecs).
+    end, ResultSpecs).
 
 
 %%%===================================================================

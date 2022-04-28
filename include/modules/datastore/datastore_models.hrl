@@ -1104,7 +1104,7 @@
     %% @see atm_task_execution_arguments.erl
     argument_specs :: [atm_task_execution_argument_spec:record()],
     %% @see atm_task_execution_results.erl
-    elementary_result_specs :: [atm_task_execution_result_spec:record()],
+    job_result_specs :: [atm_task_execution_result_spec:record()],
     supplementary_result_specs :: [atm_task_execution_result_spec:record()],
 
     system_audit_log_id :: atm_store:id(),

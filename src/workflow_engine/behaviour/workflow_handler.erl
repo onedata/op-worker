@@ -100,7 +100,7 @@
 %% to the job.
 %% @end
 %%--------------------------------------------------------------------
--callback run_job(
+-callback run_job_batch(
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
     workflow_engine:task_id(),
@@ -117,7 +117,7 @@
 %% (it is executed only for asynchronous jobs).
 %% @end
 %%--------------------------------------------------------------------
--callback process_job_output(
+-callback process_job_batch_output(
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
     workflow_engine:task_id(),

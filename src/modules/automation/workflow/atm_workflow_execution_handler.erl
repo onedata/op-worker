@@ -33,8 +33,8 @@
     prepare_lane/3,
     restart_lane/3,
 
-    run_job/6,
-    process_job_output/5,
+    run_job_batch/6,
+    process_job_batch_output/5,
     report_all_task_jobs_ended/3,
     process_task_data/4,
     handle_task_execution_ended/3,
@@ -182,7 +182,7 @@ restart_lane(_, _, _) ->
     error.
 
 
--spec run_job(
+-spec run_job_batch(
     atm_workflow_execution:id(),
     atm_workflow_execution_env:record(),
     atm_task_execution:id(),
@@ -191,22 +191,22 @@ restart_lane(_, _, _) ->
     binary()
 ) ->
     ok | error.
-run_job(
+run_job_batch(
     _AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId,
-    ItemsBatch, ReportResultUrl, HeartbeatUrl
+    ItemBatch, ReportResultUrl, HeartbeatUrl
 ) ->
     AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(
         AtmTaskExecutionId, AtmWorkflowExecutionEnv
     ),
     % NOTE: no try..catch needed as exceptions are caught in 'atm_task_execution_handler'
     % and treated as item processing errors
-    atm_task_execution_handler:process_items_batch(
-        AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemsBatch,
+    atm_task_execution_handler:run_job_batch(
+        AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemBatch,
         ReportResultUrl, HeartbeatUrl
     ).
 
 
--spec process_job_output(
+-spec process_job_batch_output(
     atm_workflow_execution:id(),
     atm_workflow_execution_env:record(),
     atm_task_execution:id(),
@@ -214,26 +214,26 @@ run_job(
     errors:error() | atm_task_executor:lambda_output()
 ) ->
     ok | error.
-process_job_output(
+process_job_batch_output(
     AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId,
-    ItemsBatch, LambdaOutputDecodingError = ?ERROR_BAD_MESSAGE(_)
+    ItemBatch, LambdaOutputDecodingError = ?ERROR_BAD_MESSAGE(_)
 ) ->
-    process_job_output(
+    process_job_batch_output(
         AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId,
-        ItemsBatch, ?ERROR_BAD_DATA(<<"lambdaOutput">>, LambdaOutputDecodingError)
+        ItemBatch, ?ERROR_BAD_DATA(<<"lambdaOutput">>, LambdaOutputDecodingError)
     );
 
-process_job_output(
+process_job_batch_output(
     _AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId,
-    ItemsBatch, LambdaOutput
+    ItemBatch, LambdaOutput
 ) ->
     AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(
         AtmTaskExecutionId, AtmWorkflowExecutionEnv
     ),
     % NOTE: no try..catch needed as exceptions are caught in 'atm_task_execution_handler'
     % and treated as item processing errors
-    atm_task_execution_handler:process_lambda_output(
-        AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemsBatch, LambdaOutput
+    atm_task_execution_handler:process_job_batch_output(
+        AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemBatch, LambdaOutput
     ).
 
 
@@ -303,7 +303,7 @@ handle_task_execution_ended(_AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, At
     automation:item()
 ) ->
     ok.
-report_items_processing_failed(_AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, ItemsBatch) ->
+report_items_processing_failed(_AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, ItemBatch) ->
     AtmWorkflowExecutionAuth = atm_workflow_execution_env:acquire_auth(AtmWorkflowExecutionEnv),
 
     % NOTE: atm_store_api is bypassed for performance reasons. It is possible as list store update
@@ -312,7 +312,7 @@ report_items_processing_failed(_AtmWorkflowExecutionId, AtmWorkflowExecutionEnv,
         atm_workflow_execution_env:get_lane_run_exception_store_container(AtmWorkflowExecutionEnv),
         #atm_store_content_update_req{
             workflow_execution_auth = AtmWorkflowExecutionAuth,
-            argument = ItemsBatch,
+            argument = ItemBatch,
             options = #atm_list_store_content_update_options{function = extend}
         }
     ),

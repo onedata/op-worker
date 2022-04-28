@@ -298,7 +298,7 @@ create_task_execution_doc(#creation_ctx{
     AtmWorkflowExecutionId = atm_workflow_execution_ctx:get_workflow_execution_id(
         AtmWorkflowExecutionCtx
     ),
-    {ElementaryResultSpecs, SupplementaryResultSpecs} = atm_task_execution_results:build_specs(
+    {JobResultSpecs, SupplementaryResultSpecs} = atm_task_execution_results:build_specs(
         AtmLambdaResultSpecs,
         AtmTaskSchemaResultMappers
     ),
@@ -316,7 +316,7 @@ create_task_execution_doc(#creation_ctx{
             AtmLambdaArgSpecs,
             AtmTaskSchemaArgMappers
         ),
-        elementary_result_specs = ElementaryResultSpecs,
+        job_result_specs = JobResultSpecs,
         supplementary_result_specs = SupplementaryResultSpecs,
 
         system_audit_log_id = AtmTaskAuditLogId,

@@ -8,8 +8,8 @@
 %%% @doc
 %%% This module provides utility functions for management of automation job
 %%% context which consists of information necessary to run or schedule task
-%%% execution for specific batch of items (automation job is automation task
-%%% execution for specific batch of items).
+%%% execution for specific batch of jobs (automation job is automation task
+%%% execution for specific item).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_job_ctx).
