@@ -392,8 +392,9 @@ prepare_function_definition(InitiationCtx = #initiation_ctx{
     },
     FullDefinition1 = add_default_properties(BaseDefinition),
     FullDefinition2 = add_resources_properties(FullDefinition1, InitiationCtx),
-    FullDefinition3 = add_function_name_annotation(FullDefinition2, FunctionName),
-    add_oneclient_annotations_if_necessary(FullDefinition3, InitiationCtx).
+    FullDefinition3 = add_function_ctx_annotations(FullDefinition2, InitiationCtx),
+    FullDefinition4 = add_data_stream_annotations_if_required(FullDefinition3, InitiationCtx),
+    add_oneclient_annotations_if_required(FullDefinition4, InitiationCtx).
 
 
 %% @private
@@ -447,24 +448,9 @@ add_resources_properties(FunctionDefinition, #initiation_ctx{resource_spec = #at
         encode_if_defined(EphemeralStorageLimit)
     ),
 
-    maps:update_with(
-        <<"annotations">>,
-        fun(Annotations) -> json_utils:merge([Annotations, EphemeralStorageAnnotations]) end,
-        EphemeralStorageAnnotations,
-        FunctionDefinition#{<<"requests">> => Requests, <<"limits">> => Limits2}
-    ).
-
-
-%% @private
--spec add_function_name_annotation(json_utils:json_map(), function_name()) ->
-    json_utils:json_map().
-add_function_name_annotation(FunctionDefinition, FunctionName) ->
-    FunctionNameAnnotation = #{<<"function.openfaas.onedata.org/name">> => FunctionName},
-    maps:update_with(
-        <<"annotations">>,
-        fun(Annotations) -> maps:merge(Annotations, FunctionNameAnnotation) end,
-        FunctionNameAnnotation,
-        FunctionDefinition
+    update_function_annotations(
+        FunctionDefinition#{<<"requests">> => Requests, <<"limits">> => Limits2},
+        EphemeralStorageAnnotations
     ).
 
 
@@ -475,15 +461,58 @@ encode_if_defined(Value) -> str_utils:to_binary(Value).
 
 
 %% @private
--spec add_oneclient_annotations_if_necessary(json_utils:json_map(), initiation_ctx()) ->
+-spec add_function_ctx_annotations(json_utils:json_map(), initiation_ctx()) ->
     json_utils:json_map().
-add_oneclient_annotations_if_necessary(FunctionDefinition, #initiation_ctx{
+add_function_ctx_annotations(FunctionDefinition, #initiation_ctx{
+    task_executor_initiation_ctx = #atm_task_executor_initiation_ctx{
+        workflow_execution_ctx = AtmWorkflowExecutionCtx,
+        task_execution_id = AtmTaskExecutionId
+    },
+    executor = #atm_openfaas_task_executor{function_name = FunctionName}
+}) ->
+    AtmWorkflowExecutionId = atm_workflow_execution_ctx:get_workflow_execution_id(
+        AtmWorkflowExecutionCtx
+    ),
+    update_function_annotations(FunctionDefinition, #{
+        <<"function.openfaas.onedata.org/workflow_execution_id">> => AtmWorkflowExecutionId,
+        <<"function.openfaas.onedata.org/task_execution_id">> => AtmTaskExecutionId,
+        %% TODO ŁO change to function_name? would require changes to current pod status collector
+        <<"function.openfaas.onedata.org/name">> => FunctionName
+    }).
+
+
+%% @private
+-spec add_data_stream_annotations_if_required(json_utils:json_map(), initiation_ctx()) ->
+    json_utils:json_map().
+add_data_stream_annotations_if_required(FunctionDefinition, #initiation_ctx{
+    task_executor_initiation_ctx = #atm_task_executor_initiation_ctx{
+        supplementary_results = []
+    }
+}) ->
+    FunctionDefinition;
+
+add_data_stream_annotations_if_required(FunctionDefinition, #initiation_ctx{
+    task_executor_initiation_ctx = #atm_task_executor_initiation_ctx{
+        supplementary_results = AtmTaskExecutionSupplementaryResultNames
+    }
+}) ->
+    update_function_annotations(FunctionDefinition, #{
+        <<"data_stream.openfaas.onedata.org/inject">> => <<"enabled">>,
+        <<"data_stream.openfaas.onedata.org/names">> => AtmTaskExecutionSupplementaryResultNames
+    }).
+
+
+%% @private
+-spec add_oneclient_annotations_if_required(json_utils:json_map(), initiation_ctx()) ->
+    json_utils:json_map().
+add_oneclient_annotations_if_required(FunctionDefinition, #initiation_ctx{
     executor = #atm_openfaas_task_executor{operation_spec = #atm_openfaas_operation_spec{
         docker_execution_options = #atm_docker_execution_options{mount_oneclient = false}
     }}}
 ) ->
     FunctionDefinition;
-add_oneclient_annotations_if_necessary(FunctionDefinition, #initiation_ctx{
+
+add_oneclient_annotations_if_required(FunctionDefinition, #initiation_ctx{
     task_executor_initiation_ctx = #atm_task_executor_initiation_ctx{
         workflow_execution_ctx = AtmWorkflowExecutionCtx
     },
@@ -507,7 +536,7 @@ add_oneclient_annotations_if_necessary(FunctionDefinition, #initiation_ctx{
     )),
     OneclientImage = get_oneclient_image(),
 
-    OneclientMountRelatedAnnotations = #{
+    update_function_annotations(FunctionDefinition, #{
         <<"oneclient.openfaas.onedata.org/inject">> => <<"enabled">>,
         <<"oneclient.openfaas.onedata.org/image">> => OneclientImage,
         <<"oneclient.openfaas.onedata.org/space_id">> => SpaceId,
@@ -520,11 +549,7 @@ add_oneclient_annotations_if_necessary(FunctionDefinition, #initiation_ctx{
             true -> tokens:confine(AccessToken, #cv_data_readonly{});
             false -> AccessToken
         end
-    },
-
-    maps:update_with(<<"annotations">>, fun(Annotations) ->
-        json_utils:merge([Annotations, OneclientMountRelatedAnnotations])
-    end, OneclientMountRelatedAnnotations, FunctionDefinition).
+    }).
 
 
 %% @private
@@ -537,6 +562,18 @@ get_oneclient_image() ->
         OneclientImage ->
             str_utils:to_binary(OneclientImage)
     end.
+
+
+%% @private
+-spec update_function_annotations(json_utils:json_map(), json_utils:json_map()) ->
+    json_utils:json_map().
+update_function_annotations(FunctionDefinition, FunctionAnnotationsDiff) ->
+    maps:update_with(
+        <<"annotations">>,
+        fun(Annotations) -> maps:merge(Annotations, FunctionAnnotationsDiff) end,
+        FunctionAnnotationsDiff,
+        FunctionDefinition
+    ).
 
 
 %% @private
