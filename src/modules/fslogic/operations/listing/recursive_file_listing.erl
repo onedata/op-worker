@@ -142,12 +142,16 @@ list(UserCtx, FileCtx0, StartAfter, Limit, Prefix) ->
                 }
             };
         {false, FileCtx2} ->
-            ok = check_reg_file_access(UserCtx, FileCtx2),
+            {Entries, InaccessiblePaths} = case check_reg_file_access(UserCtx, FileCtx2) of
+                ok -> 
+                    {build_result_file_entry_list(InitialState, get_file_attrs(UserCtx, FileCtx2), <<>>), []};
+                {error, ?EACCES} ->
+                    {[], <<".">>}
+            end,
             #fuse_response{status = #status{code = ?OK},
                 fuse_response = #recursive_file_list{
-                    inaccessible_paths = [],
-                    entries = build_result_file_entry_list(
-                        InitialState, get_file_attrs(UserCtx, FileCtx2), <<>>)
+                    inaccessible_paths = InaccessiblePaths,
+                    entries = Entries
                 }
             }
     end.
@@ -166,6 +170,7 @@ process_current_dir(UserCtx, FileCtx, State) ->
         <<".">> -> true; % listing root directory
         _ -> str_utils:binary_starts_with(State#state.prefix, Path)
     end,
+    %% @TODO VFS-VFS-9347 When prefix is provided start listing in dir with path pointed by prefix without last token if is a descendant of given dir
     case matches_prefix(Path, State) orelse IsAncestorDir of
         true ->
             {ListOpts, UpdatedState} = init_current_dir_processing(State),
@@ -269,15 +274,18 @@ list_dir_children_with_access_check(UserCtx, DirCtx, ListOpts) ->
 
 
 %% @private
--spec check_reg_file_access(user_ctx:ctx(), file_ctx:ctx()) ->
-    ok | no_return().
+-spec check_reg_file_access(user_ctx:ctx(), file_ctx:ctx()) -> ok | {error, ?EACCES}.
 check_reg_file_access(UserCtx, FileCtx) ->
-    {CanonicalChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
-        UserCtx, FileCtx, [?TRAVERSE_ANCESTORS]
-    ),
-    % throws on lack of access
-    _ = file_listing:list_children(UserCtx, FileCtx2, #{size => 1}, CanonicalChildrenWhiteList),
-    ok.
+    try
+        {CanonicalChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
+            UserCtx, FileCtx, [?TRAVERSE_ANCESTORS]
+        ),
+        % throws on lack of access
+        _ = file_listing:list_children(UserCtx, FileCtx2, #{size => 1}, CanonicalChildrenWhiteList),
+        ok
+    catch throw:?EACCES ->
+        {error, ?EACCES}
+    end.
 
 
 %% @private
