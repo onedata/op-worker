@@ -57,7 +57,8 @@
 %% higher-level functions operating on effective_file_qos record.
 -export([
     get_assigned_entries_for_storage/2,
-    get_qos_entries/1,
+    get_qos_entries/1, 
+    get_locally_required_qos_entries/1,
     get_assigned_entries/1,
     is_in_trash/1
 ]).
@@ -346,6 +347,11 @@ delete_associated_entries_on_no_references(FileCtx) ->
 -spec get_qos_entries(effective_file_qos()) -> [qos_entry:id()].
 get_qos_entries(EffectiveFileQos) ->
     EffectiveFileQos#effective_file_qos.qos_entries.
+
+
+-spec get_locally_required_qos_entries(effective_file_qos()) -> [qos_entry:id()].
+get_locally_required_qos_entries(EffectiveFileQos) ->
+    lists:usort(lists:flatten(maps:values(EffectiveFileQos#effective_file_qos.assigned_entries))).
 
 
 -spec get_assigned_entries(effective_file_qos()) -> assigned_entries().
