@@ -27,7 +27,7 @@
 -export([create_docs/2, delete_synced_docs/1, delete_local_docs/1]).
 -export([report_started/1, report_finished/2,
     report_bytes_copied/2, report_file_finished/1, report_file_failed/4]).
--export([get_details/1, get_stats/3, get_progress/1, browse_event_log/2]).
+-export([get_details/1, get_stats/3, get_progress/1, browse_log/2]).
 -export([get_effective_recall/1]).
 
 -type id() :: file_meta:uuid().
@@ -111,9 +111,9 @@ get_details(Id) ->
     archive_recall_details:get(Id).
 
 
--spec browse_event_log(id(), json_infinite_log_model:listing_opts()) -> 
+-spec browse_log(id(), json_infinite_log_model:listing_opts()) -> 
     {ok, json_infinite_log_model:browse_result()} | {error, term()}.
-browse_event_log(Id, Options) ->
+browse_log(Id, Options) ->
     archive_recall_progress:browse_error_log(Id, Options).
 
 

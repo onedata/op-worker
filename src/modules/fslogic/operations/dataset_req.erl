@@ -246,7 +246,7 @@ get_archive_recall_progress(FileCtx, RecallId, UserCtx) ->
 browse_archive_recall_log(FileCtx, RecallId, UserCtx, Options) ->
     fslogic_authz:ensure_authorized(UserCtx, FileCtx, [?TRAVERSE_ANCESTORS]),
     
-    archive_recall:browse_event_log(RecallId, Options).
+    archive_recall:browse_log(RecallId, Options).
 
 
 %%%===================================================================
