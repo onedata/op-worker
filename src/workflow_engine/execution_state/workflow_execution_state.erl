@@ -425,11 +425,7 @@ finish_lane_preparation(ExecutionId, Handler,
                 }}} ->
                     {ok, CurrentLane, Iterator, NextLaneId};
                 ?WF_ERROR_LANE_ALREADY_PREPARED ->
-                    case NextIterationStep of
-                        undefined -> ok;
-                        ?WF_ERROR_ITERATION_FAILED -> ok;
-                        {ItemId, _} -> workflow_cached_item:delete(ItemId)
-                    end,
+                    maybe_delete_prefetched_iteration_step(NextIterationStep),
                     ?WF_ERROR_LANE_ALREADY_PREPARED
             end
     end.
@@ -502,20 +498,16 @@ prepare_next_job_using_iterator(ExecutionId, ItemIndex, CurrentIterationStep, La
         {ok, #document{value = State}} ->
             handle_state_update_after_job_preparation(ExecutionId, State);
         ?WF_ERROR_LANE_CHANGED ->
-            case NextIterationStep of
-                undefined -> ok;
-                ?WF_ERROR_ITERATION_FAILED -> ok;
-                {ItemId, _} -> workflow_cached_item:delete(ItemId)
-            end,
+            maybe_delete_prefetched_iteration_step(NextIterationStep),
             prepare_next_job_for_current_lane(ExecutionId);
         ?WF_ERROR_RACE_CONDITION ->
-            case NextIterationStep of
-                undefined -> ok;
-                ?WF_ERROR_ITERATION_FAILED -> ok;
-                {ItemId, _} -> workflow_cached_item:delete(ItemId)
-            end,
-            prepare_next_job_for_current_lane(ExecutionId)
+            maybe_delete_prefetched_iteration_step(NextIterationStep),
+            prepare_next_job_for_current_lane(ExecutionId);
+        ?ERROR_NOT_FOUND -> % Race with execution deletion
+            maybe_delete_prefetched_iteration_step(NextIterationStep),
+            ?ERROR_NOT_FOUND
     end.
+
 
 -spec handle_state_update_after_job_preparation(workflow_engine:execution_id(), state()) ->
     {ok, workflow_engine:execution_spec()} | no_items_error() |
@@ -674,6 +666,16 @@ get_next_iterator(Context, Iterator, ExecutionId) ->
             ),
             ?WF_ERROR_ITERATION_FAILED
     end.
+
+
+-spec maybe_delete_prefetched_iteration_step(iteration_status()) -> ok.
+maybe_delete_prefetched_iteration_step(undefined) ->
+    ok;
+maybe_delete_prefetched_iteration_step(?WF_ERROR_ITERATION_FAILED) ->
+    ok;
+maybe_delete_prefetched_iteration_step({ItemId, _}) ->
+    workflow_cached_item:delete(ItemId).
+
 
 %%%===================================================================
 %%% Functions updating record

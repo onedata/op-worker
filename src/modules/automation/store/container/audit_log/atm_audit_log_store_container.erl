@@ -11,7 +11,7 @@
 %%%
 %%%                             !! CAUTION !!
 %%% This store container is directly used by `atm_workflow_execution_logger`
-%%% which in turn depends that `apply_operation` doesn't change container.
+%%% which in turn depends on that `apply_operation` doesn't change container.
 %%% Any changes made in this module may affect logger and should be
 %%% accounted for.
 %%% @end

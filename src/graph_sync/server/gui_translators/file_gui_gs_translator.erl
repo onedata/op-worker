@@ -95,7 +95,10 @@ translate_value(#gri{aspect = transfers}, TransfersForFile) ->
     TransfersForFile;
 
 translate_value(#gri{aspect = download_url}, URL) ->
-    #{<<"fileUrl">> => URL}.
+    #{<<"fileUrl">> => URL};
+
+translate_value(#gri{aspect = api_samples, scope = public}, ApiSamples) ->
+    ApiSamples.
 
 
 -spec translate_resource(gri:gri(), Data :: term()) ->

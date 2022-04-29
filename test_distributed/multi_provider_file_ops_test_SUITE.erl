@@ -860,17 +860,20 @@ get_recursive_file_list(Config0) ->
     [Worker2 | _] = ?config(workers_not1, Config),
     Domain2 = ?GET_DOMAIN_BIN(Worker2),
     
+    lfm_ct:save_named_context(w1, Worker1, SessionId(Worker1)),
+    lfm_ct:save_named_context(w2, Worker2, SessionId(Worker2)),
+    
     MainDir = generator:gen_name(),
     MainDirPath = <<"/space7/", MainDir/binary, "/">>,
-    {ok, MainDirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessionId(Worker1), MainDirPath)),
-    ?assertMatch({ok, _}, lfm_proxy:stat(Worker2, SessionId(Worker2), ?FILE_REF(MainDirGuid)), ?ATTEMPTS),
+    MainDirGuid = lfm_ct:mkdir_with_ctx(w1, [MainDirPath]),
+    file_test_utils:await_sync(Worker2, MainDirGuid),
     
     Dirname = generator:gen_name(),
-    {ok, DirGuidW1} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessionId(Worker1), <<MainDirPath/binary, Dirname/binary>>)),
-    {ok, DirGuidW2} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker2, SessionId(Worker2), <<MainDirPath/binary, Dirname/binary>>)),
+    DirGuidW1 = lfm_ct:mkdir_with_ctx(w1, [<<MainDirPath/binary, Dirname/binary>>]),
+    DirGuidW2 = lfm_ct:mkdir_with_ctx(w2, [<<MainDirPath/binary, Dirname/binary>>]),
     
-    ?assertMatch({ok, _}, lfm_proxy:stat(Worker2, SessionId(Worker2), ?FILE_REF(DirGuidW1)), ?ATTEMPTS),
-    ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessionId(Worker1), ?FILE_REF(DirGuidW2)), ?ATTEMPTS),
+    file_test_utils:await_sync(Worker2, DirGuidW1),
+    file_test_utils:await_sync(Worker1, DirGuidW2),
     
     DirnameMapping = #{
         {Worker1, DirGuidW1} => Dirname,
@@ -882,51 +885,26 @@ get_recursive_file_list(Config0) ->
     Files = lists:sort(lists_utils:generate(fun generator:gen_name/0, 8)),
     {AllExpectedFilesW1, AllExpectedFilesW2} = lists:foldl(fun(DG, Acc) ->
         lists:foldl(fun(Filename, {FilesTmpW1, FilesTmpW2}) ->
-            {ok, GW1} = ?assertMatch({ok, _}, lfm_proxy:create(Worker1, SessionId(Worker1), DG, Filename, ?DEFAULT_FILE_MODE)),
-            {ok, GW2} = ?assertMatch({ok, _}, lfm_proxy:create(Worker2, SessionId(Worker2), DG, Filename, ?DEFAULT_FILE_MODE)),
+            GW1 = lfm_ct:create_with_ctx(w1, [DG, Filename, ?DEFAULT_FILE_MODE]),
+            GW2 = lfm_ct:create_with_ctx(w2, [DG, Filename, ?DEFAULT_FILE_MODE]),
             {
                 FilesTmpW1 ++ [
-                    {GW1, filename:join([MainDir, maps:get({Worker1, DG}, DirnameMapping), Filename])}, 
-                    {GW2, filename:join([MainDir, maps:get({Worker1, DG}, DirnameMapping), <<Filename/binary, "@", Domain2/binary>>])}
+                    {GW1, filename:join([maps:get({Worker1, DG}, DirnameMapping), Filename])}, 
+                    {GW2, filename:join([maps:get({Worker1, DG}, DirnameMapping), <<Filename/binary, "@", Domain2/binary>>])}
                 ],
                 FilesTmpW2 ++ [
-                    {GW1, filename:join([MainDir, maps:get({Worker2, DG}, DirnameMapping), <<Filename/binary, "@", Domain1/binary>>])}, 
-                    {GW2, filename:join([MainDir, maps:get({Worker2, DG}, DirnameMapping), Filename])}
+                    {GW1, filename:join([maps:get({Worker2, DG}, DirnameMapping), <<Filename/binary, "@", Domain1/binary>>])}, 
+                    {GW2, filename:join([maps:get({Worker2, DG}, DirnameMapping), Filename])}
                 ]
             }
         end, Acc, Files)
     end, {[], []}, [DirGuidW1, DirGuidW2]),
     lists:foreach(fun({Guid, _}) ->
-        ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessionId(Worker1), ?FILE_REF(Guid)), ?ATTEMPTS),
-        ?assertMatch({ok, _}, lfm_proxy:stat(Worker2, SessionId(Worker2), ?FILE_REF(Guid)), ?ATTEMPTS)
+        file_test_utils:await_sync([Worker1, Worker2], Guid)
     end, AllExpectedFilesW1),
     
-    ResultMapper = fun
-        ({ok, Res, IsLast}) ->
-            {ok, lists:map(fun({Path, #file_attr{guid = Guid}}) -> {Guid, Path} end, Res), IsLast};
-        (Other) ->
-            Other
-    end,
-    lists:foreach(fun({Worker, AllExpectedFiles}) ->
-        ?assertMatch({ok, AllExpectedFiles, _}, 
-            ResultMapper(lfm_proxy:get_files_recursively(Worker, SessionId(Worker), ?FILE_REF(MainDirGuid), <<>>, length(AllExpectedFiles)))),
-        lists:foreach(fun(Num) ->
-            {_, StartAfter} = lists:nth(Num, AllExpectedFiles),
-            ExpectedTail = lists:nthtail(Num, AllExpectedFiles),
-            ?assertMatch({ok, ExpectedTail, _}, 
-                ResultMapper(lfm_proxy:get_files_recursively(Worker, SessionId(Worker), ?FILE_REF(MainDirGuid), StartAfter, length(AllExpectedFiles))))
-        end, lists:seq(1, length(AllExpectedFiles))),
-        
-        lists:foreach(fun(Num) ->
-            {_, StartAfter} = lists:nth(Num, AllExpectedFiles),
-            ExpectedRes = case lists:nthtail(Num, AllExpectedFiles) of
-                [File | _] -> [File];
-                [] -> []
-            end,
-            ?assertMatch({ok, ExpectedRes, _}, 
-                ResultMapper(lfm_proxy:get_files_recursively(Worker, SessionId(Worker), ?FILE_REF(MainDirGuid), StartAfter, 1)))
-        end, lists:seq(1, length(AllExpectedFiles)))
-    end, [{Worker1, AllExpectedFilesW1}, {Worker2, AllExpectedFilesW2}]).
+    lfm_files_test_base:check_list_recursive_start_after(Worker1, SessionId(Worker1), MainDirGuid, AllExpectedFilesW1),
+    lfm_files_test_base:check_list_recursive_start_after(Worker2, SessionId(Worker2), MainDirGuid, AllExpectedFilesW2).
 
 
 check_fs_stats_on_different_providers(Config) ->
