@@ -83,11 +83,11 @@ get_response(#gri{aspect = children}, {Children, IsLast, ReturnedToken}) ->
         <<"isLast">> => IsLast
     });
 
-get_response(#gri{aspect = files}, {Files, NextPageToken, IsLast}) ->
+get_response(#gri{aspect = files}, {FilesJson, InaccessiblePaths, NextPageToken}) ->
     ?OK_REPLY(#{
-        <<"files">> => Files,
-        <<"nextPageToken">> => NextPageToken,
-        <<"isLast">> => IsLast
+        <<"files">> => FilesJson,
+        <<"inaccessiblePaths">> => InaccessiblePaths,
+        <<"nextPageToken">> => utils:undefined_to_null(NextPageToken)
     });
 
 get_response(#gri{aspect = hardlinks}, Hardlinks) ->
