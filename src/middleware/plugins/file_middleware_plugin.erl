@@ -987,15 +987,7 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = archive_recall_progr
     {ok, mi_archives:get_recall_progress(Auth#auth.session_id, FileGuid)};
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = archive_recall_log}, data = Data}, _) ->
-    BrowseOpts = #{
-        start_from => case Data of
-            #{<<"index">> := Index} -> {index, Index};
-            #{<<"timestamp">> := Timestamp} -> {timestamp, Timestamp};
-            _ -> undefined
-        end,
-        offset => maps:get(<<"offset">>, Data, 0),
-        limit => maps:get(<<"limit">>, Data, ?MAX_RECALL_LOG_LIST_LIMIT)
-    },
+    BrowseOpts = json_infinite_log_model:build_browse_opts(Data),
     {ok, mi_archives:browse_recall_log(Auth#auth.session_id, FileGuid, BrowseOpts)}.
 
 
