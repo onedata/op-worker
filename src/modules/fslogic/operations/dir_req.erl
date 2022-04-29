@@ -35,10 +35,6 @@
 ]).
 
 
--define(MAX_MAP_CHILDREN_PROCESSES, application:get_env(
-    ?APP_NAME, max_read_dir_plus_procs, 20
-)).
-
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -255,9 +251,9 @@ get_children_attrs_insecure(
 ) ->
     {Children, ExtendedInfo, FileCtx1} = file_listing:list_children(
         UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhiteList),
-    ChildrenAttrs = map_children(
+    ChildrenAttrs = file_listing_utils:map_children_to_attrs(
         UserCtx,
-        fun attr_req:get_file_attr_insecure/3,
+        child_attrs_mapper(fun attr_req:get_file_attr_insecure/3),
         Children,
         IncludeReplicationStatus,
         IncludeLinkCount
@@ -294,9 +290,9 @@ get_children_details_insecure(UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhit
     {Children, ListExtendedInfo, FileCtx1} = file_listing:list_children(
         UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhiteList
     ),
-    ChildrenDetails = map_children(
+    ChildrenDetails = file_listing_utils:map_children_to_attrs(
         UserCtx,
-        fun attr_req:get_file_details_insecure/3,
+        child_attrs_mapper(fun attr_req:get_file_details_insecure/3),
         Children,
         false,
         true
@@ -310,56 +306,13 @@ get_children_details_insecure(UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhit
     }.
 
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Calls MapFunctionInsecure for every passed children in parallel and
-%% filters out children for which it raised error (potentially docs not
-%% synchronized between providers or deleted files).
-%% @end
-%%--------------------------------------------------------------------
--spec map_children(
-    UserCtx,
-    MapFunInsecure :: fun((UserCtx, ChildCtx :: file_ctx:ctx(), attr_req:compute_file_attr_opts()) ->
-        fslogic_worker:fuse_response()),
-    Children :: [file_ctx:ctx()],
-    IncludeReplicationStatus :: boolean(),
-    IncludeLinkCount :: boolean()
-) ->
-    [fuse_response_type()] when UserCtx :: user_ctx:ctx().
-map_children(UserCtx, MapFunInsecure, Children, IncludeReplicationStatus, IncludeLinkCount) ->
-    ChildrenNum = length(Children),
-    EnumeratedChildren = lists_utils:enumerate(Children),
-    ComputeFileAttrOpts = #{
-        allow_deleted_files => false,
-        include_size => true
-    },
-    FilterMapFun = fun({Num, ChildCtx}) ->
-        try
-            #fuse_response{
-                status = #status{code = ?OK},
-                fuse_response = Result
-            } = case Num == 1 orelse Num == ChildrenNum of
-                true ->
-                    MapFunInsecure(UserCtx, ChildCtx, ComputeFileAttrOpts#{
-                        name_conflicts_resolution_policy => resolve_name_conflicts,
-                        include_replication_status => IncludeReplicationStatus,
-                        include_link_count => IncludeLinkCount
-                    });
-                false ->
-                    % Other files than first and last don't need to resolve name
-                    % conflicts (to check for collisions) as list_children
-                    % (file_meta:tag_children to be precise) already did it
-                    MapFunInsecure(UserCtx, ChildCtx, ComputeFileAttrOpts#{
-                        name_conflicts_resolution_policy => allow_name_conflicts,
-                        include_replication_status => IncludeReplicationStatus,
-                        include_link_count => IncludeLinkCount
-                    })
-            end,
-            {true, Result}
-        catch _:_ ->
-            % File can be not synchronized with other provider
-            false
-        end
-    end,
-    lists_utils:pfiltermap(FilterMapFun, EnumeratedChildren, ?MAX_MAP_CHILDREN_PROCESSES).
+-spec child_attrs_mapper(
+    fun((user_ctx:ctx(), file_ctx:ctx(), attr_req:compute_file_attr_opts()) -> 
+        fslogic_worker:fuse_response())
+) -> fslogic_worker:fuse_response_type().
+child_attrs_mapper(MappingFun) ->
+    fun(UserCtx, ChildCtx, ComputeAttrsOpts) ->
+        #fuse_response{status = #status{code = ?OK}, fuse_response = Result} = 
+            MappingFun(UserCtx, ChildCtx, ComputeAttrsOpts),
+        Result
+    end.
