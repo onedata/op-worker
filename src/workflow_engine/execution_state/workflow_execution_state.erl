@@ -23,6 +23,7 @@
 %% API
 -export([init/5, restart_from_snapshot/5, cancel/1, cleanup/1, prepare_next_job/1,
     report_execution_status_update/4, report_lane_execution_prepared/5, report_limit_reached_error/2,
+    report_new_stream_task_data/3, report_task_data_processed/4, mark_task_data_stream_closed/2,
     check_timeouts/1, reset_keepalive_timer/2, get_result_processing_data/2]).
 %% Test API
 -export([is_finished_and_cleaned/2, get_item_id/2, get_current_lane_context/1]).
@@ -51,9 +52,9 @@
 -define(LANE_DESIGNATED_FOR_PREPARATION, lane_designated_for_preparation).
 -define(LANE_DESIGNATED_FOR_PREPARATION_IN_ADVANCE, lane_designated_for_preparation_in_advance).
 -record(job_prepared_report, {
-    job_identifier :: workflow_jobs:job_identifier(),
+    job_identifier :: workflow_jobs:job_identifier() | task_data,
     task_id :: workflow_engine:task_id(),
-    task_spec :: workflow_engine:task_spec(),
+    task_spec :: workflow_engine:task_spec() | undefined, % for task_data processing spec is not required
     subject_id :: workflow_engine:subject_id()
 }).
 -record(items_processed_report, {
@@ -338,6 +339,39 @@ report_lane_execution_prepared(ExecutionId, _Handler, LaneId, LaneType, error) -
 report_limit_reached_error(ExecutionId, JobIdentifier) ->
     {ok, _} = update(ExecutionId, fun(State) -> pause_job(State, JobIdentifier) end),
     ok.
+
+
+-spec report_new_stream_task_data(workflow_engine:execution_id(), workflow_engine:task_id(),
+    workflow_cached_task_data:id()) -> ok.
+report_new_stream_task_data(ExecutionId, TaskId, TaskDataId) ->
+    {ok, _} = update(ExecutionId, fun(State = #workflow_execution_state{tasks_data = Data}) ->
+        {ok, State#workflow_execution_state{tasks_data = workflow_tasks_data:register(TaskId, TaskDataId, Data)}}
+    end),
+    ok.
+
+
+-spec report_task_data_processed(workflow_engine:execution_id(), workflow_engine:task_id(),
+    workflow_cached_task_data:id(), workflow_handler:handler_execution_result()) -> ok.
+report_task_data_processed(ExecutionId, TaskId, TaskDataId, Ans) ->
+    {ok, _} = update(ExecutionId, fun
+        (State = #workflow_execution_state{tasks_data = Data}) when Ans =:= ok ->
+            {ok, State#workflow_execution_state{tasks_data = workflow_tasks_data:mark_done(TaskId, TaskDataId, Data)}};
+        (State = #workflow_execution_state{tasks_data = Data}) ->
+            {ok, State#workflow_execution_state{
+                tasks_data = workflow_tasks_data:mark_done(TaskId, TaskDataId, Data),
+                execution_status = ?EXECUTION_CANCELLED
+            }}
+    end),
+    ok.
+
+
+-spec mark_task_data_stream_closed(workflow_engine:execution_id(), workflow_engine:task_id()) -> ok.
+mark_task_data_stream_closed(ExecutionId, TaskId) ->
+    {ok, _} = update(ExecutionId, fun(State = #workflow_execution_state{tasks_data = Data}) ->
+        {ok, State#workflow_execution_state{tasks_data = workflow_tasks_data:mark_task_data_stream_closed(TaskId, Data)}}
+    end),
+    ok.
+
 
 -spec check_timeouts(workflow_engine:execution_id()) -> TimeoutAppeared :: boolean().
 check_timeouts(ExecutionId) ->
@@ -764,7 +798,8 @@ finish_lane_preparation_internal(
         current_lane = CurrentLane#current_lane{execution_context = LaneExecutionContext, parallel_box_specs = BoxesMap},
         iteration_state = workflow_iteration_state:init(),
         prefetched_iteration_step = PrefetchedIterationStep,
-        jobs = workflow_jobs:init()
+        jobs = workflow_jobs:init(),
+        tasks_data = workflow_tasks_data:init()
     }};
 finish_lane_preparation_internal(
     #workflow_execution_state{
@@ -788,6 +823,7 @@ finish_lane_preparation_internal(
         iteration_state = workflow_iteration_state:init(),
         prefetched_iteration_step = PrefetchedIterationStep,
         jobs = workflow_jobs:init(),
+        tasks_data = workflow_tasks_data:init(),
         pending_callbacks = PendingCallbacks
     }};
 finish_lane_preparation_internal(_State, _BoxesMap, _LaneExecutionContext,
@@ -981,26 +1017,36 @@ prepare_next_waiting_job(#workflow_execution_state{
 prepare_next_waiting_job(State = #workflow_execution_state{
     execution_status = ?EXECUTING,
     jobs = Jobs,
+    tasks_data = TasksData,
     iteration_state = IterationState,
     prefetched_iteration_step = PrefetchedIterationStep,
     current_lane = #current_lane{index = LaneIndex, parallel_box_specs = BoxSpecs, execution_context = Context}
 }) ->
-    case workflow_jobs:prepare_next_waiting_job(Jobs) of
-        {ok, JobIdentifier, NewJobs} ->
-            {TaskId, TaskSpec} = workflow_jobs:get_task_details(JobIdentifier, BoxSpecs),
-            % Use old `Jobs` as subject is no longer present in `NewJobs` (job is not waiting anymore)
-            SubjectId = workflow_jobs:get_subject_id(JobIdentifier, Jobs, IterationState),
+    case workflow_tasks_data:prepare_next(TasksData) of
+        {ok, TaskId, TaskDataId, UpdatedTasksData} ->
             {ok, State#workflow_execution_state{
-                update_report = #job_prepared_report{job_identifier = JobIdentifier,
-                    task_id = TaskId, task_spec = TaskSpec, subject_id = SubjectId},
-                jobs = NewJobs
+                update_report = #job_prepared_report{job_identifier = task_data,
+                    task_id = TaskId, subject_id = TaskDataId},
+                tasks_data = UpdatedTasksData
             }};
-        Error ->
-            case workflow_iteration_state:get_last_registered_item_index(IterationState) of
-                undefined -> % iteration has finished
-                    handle_no_waiting_items_error(State, Error);
-                ItemIndex ->
-                    ?WF_ERROR_NO_CACHED_ITEMS(LaneIndex, ItemIndex, PrefetchedIterationStep, Context)
+        ?ERROR_NOT_FOUND ->
+            case workflow_jobs:prepare_next_waiting_job(Jobs) of
+                {ok, JobIdentifier, NewJobs} ->
+                    {TaskId, TaskSpec} = workflow_jobs:get_task_details(JobIdentifier, BoxSpecs),
+                    % Use old `Jobs` as subject is no longer present in `NewJobs` (job is not waiting anymore)
+                    SubjectId = workflow_jobs:get_subject_id(JobIdentifier, Jobs, IterationState),
+                    {ok, State#workflow_execution_state{
+                        update_report = #job_prepared_report{job_identifier = JobIdentifier,
+                            task_id = TaskId, task_spec = TaskSpec, subject_id = SubjectId},
+                        jobs = NewJobs
+                    }};
+                Error ->
+                    case workflow_iteration_state:get_last_registered_item_index(IterationState) of
+                        undefined -> % iteration has finished
+                            handle_no_waiting_items_error(State, Error);
+                        ItemIndex ->
+                            ?WF_ERROR_NO_CACHED_ITEMS(LaneIndex, ItemIndex, PrefetchedIterationStep, Context)
+                    end
             end
     end;
 prepare_next_waiting_job(#workflow_execution_state{

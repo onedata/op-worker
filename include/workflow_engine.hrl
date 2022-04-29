@@ -28,9 +28,9 @@
     handler :: workflow_handler:handler(),
     context :: workflow_engine:execution_context(),
     task_id :: workflow_engine:task_id(),
-    task_spec :: workflow_engine:task_spec(),
+    task_spec :: workflow_engine:task_spec() | undefined, % for task_data processing spec is not required
     subject_id :: workflow_engine:subject_id(),
-    job_identifier :: workflow_jobs:job_identifier()
+    job_identifier :: workflow_jobs:job_identifier() | task_data
 }).
 
 %%%===================================================================
@@ -70,6 +70,7 @@
 -define(EXECUTING, executing).
 -define(EXECUTION_CANCELLED, execution_cancelled).
 -define(EXECUTION_ENDED, execution_ended).
+-define(WAITING_FOR_TASK_DATA, waiting_for_task_data). % Moze nie potrzebne i wtarczy bycie w stanie executing i analizowanie pola tasks_data
 -define(WAITING_FOR_NEXT_LANE_PREPARATION_END, waiting_for_next_lane_preparation_end).
 
 %%%===================================================================

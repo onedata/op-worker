@@ -24,6 +24,8 @@
 
 %% API
 -export([init/1, init/2, execute_workflow/2, cancel_execution/1, cleanup_execution/1]).
+-export([stream_task_data/3, close_task_data_stream/2]).
+%% Framework internal API
 -export([report_execution_status_update/5, get_async_call_pools/1, trigger_job_scheduling/1,
     call_handler/5, call_handle_task_execution_ended_for_all_tasks/4, call_handlers_for_cancelled_lane/5]).
 
@@ -31,14 +33,16 @@
 -export([init_service/2, takeover_service/3]).
 
 %% Function executed by wpool - do not call directly
--export([process_job_or_result/3, prepare_lane/6]).
+-export([process/3, prepare_lane/6]).
 
 -type id() :: binary(). % Id of an engine
 -type execution_id() :: binary().
 -type execution_context() :: term().
 -type lane_id() :: term(). % lane_id is opaque term for workflow engine (ids are managed by modules that use workflow engine)
 -type task_id() :: binary().
--type subject_id() :: workflow_cached_item:id() | workflow_cached_async_result:result_ref().
+-type task_data() :: json_utils:json_map() | errors:error().  %% TODO type.
+-type subject_id() :: workflow_cached_item:id() | 
+    workflow_cached_async_result:result_ref() | workflow_cached_task_data:id().
 -type execution_spec() :: #execution_spec{}.
 -type processing_stage() :: ?SYNC_CALL | ?ASYNC_CALL_STARTED | ?ASYNC_CALL_ENDED | ?ASYNC_RESULT_PROCESSED.
 -type handler_execution_result() :: workflow_handler:handler_execution_result() | {ok, KeepaliveTimeout :: time:seconds()}.
@@ -78,7 +82,7 @@
 -type execution_ended_info() :: #execution_ended{}.
 %% @formatter:on
 
--export_type([id/0, execution_id/0, execution_context/0, lane_id/0, task_id/0, subject_id/0,
+-export_type([id/0, execution_id/0, execution_context/0, lane_id/0, task_id/0, task_data/0, subject_id/0,
     execution_spec/0, processing_stage/0, handler_execution_result/0, processing_result/0,
     task_spec/0, parallel_box_spec/0, lane_spec/0, preparation_mode/0]).
 
@@ -153,6 +157,22 @@ cancel_execution(ExecutionId) ->
 -spec cleanup_execution(execution_id()) -> ok.
 cleanup_execution(ExecutionId) ->
     workflow_iterator_snapshot:cleanup(ExecutionId).
+
+
+-spec stream_task_data(workflow_engine:execution_id(), workflow_engine:task_id(), task_data()) -> ok.
+stream_task_data(ExecutionId, TaskId, TaskData) ->
+    TaskDataId = workflow_cached_task_data:put(TaskData),
+    workflow_execution_state:report_new_stream_task_data(ExecutionId, TaskId, TaskDataId).
+
+
+-spec close_task_data_stream(workflow_engine:execution_id(), workflow_engine:task_id()) -> ok.
+close_task_data_stream(ExecutionId, TaskId) ->
+    workflow_execution_state:mark_task_data_stream_closed(ExecutionId, TaskId).
+
+
+%%%===================================================================
+%%% Framework internal API - to be called only by other workflow_engine modules
+%%%===================================================================
 
 -spec report_execution_status_update(execution_id(), id(), processing_stage(),
     workflow_jobs:job_identifier(), handler_execution_result()) -> ok.
@@ -399,7 +419,7 @@ schedule_on_pool(EngineId, ExecutionId, #execution_spec{
     task_spec = TaskSpec,
     job_identifier = JobIdentifier
 } = ExecutionSpec) ->
-    CallArgs = {?MODULE, process_job_or_result, [EngineId, ExecutionId, ExecutionSpec]},
+    CallArgs = {?MODULE, process, [EngineId, ExecutionId, ExecutionSpec]},
     TaskType = maps:get(type, TaskSpec),
     CallPools = get_async_call_pools(TaskSpec),
     ProcessingType = workflow_jobs:get_processing_type(JobIdentifier),
@@ -458,8 +478,12 @@ set_default_keepalive_timeout(Id, Timeout) ->
 %%% Function executed on pool
 %%%===================================================================
 
--spec process_job_or_result(id(), execution_id(), execution_spec()) -> ok.
-process_job_or_result(EngineId, ExecutionId, ExecutionSpec = #execution_spec{
+-spec process(id(), execution_id(), execution_spec()) -> ok.
+process(EngineId, ExecutionId, ExecutionSpec = #execution_spec{
+    job_identifier = task_data
+}) ->
+    process_task_data(EngineId, ExecutionId, ExecutionSpec);
+process(EngineId, ExecutionId, ExecutionSpec = #execution_spec{
     job_identifier = JobIdentifier
 }) ->
     case workflow_jobs:get_processing_type(JobIdentifier) of
@@ -562,8 +586,41 @@ process_result(EngineId, ExecutionId, #execution_spec{
     catch
         Error2:Reason2:Stacktrace2  ->
             ?error_stacktrace(
-                "Unexpected error processing task ~p with result id ~p: ~p:~p",
+                "Unexpected error getting item or result to process task ~p result ~p: ~p:~p",
                 [TaskId, CachedResultId, Error2, Reason2],
+                Stacktrace2
+            ),
+            trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
+    end.
+
+-spec process_task_data(id(), execution_id(), execution_spec()) -> ok.
+process_task_data(EngineId, ExecutionId, #execution_spec{
+    handler = Handler,
+    context = ExecutionContext,
+    task_id = TaskId,
+    subject_id = TaskDataId
+}) ->
+    try
+        Data = workflow_cached_async_result:take(TaskDataId),
+
+        try
+            Ans = call_handler(ExecutionId, ExecutionContext, Handler, process_task_data, [TaskId, Data]),
+            workflow_execution_state:report_task_data_processed(ExecutionId, TaskId, TaskDataId, Ans),
+            trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
+        catch
+            Error:Reason:Stacktrace  ->
+                ?error_stacktrace(
+                    "Unexpected error processing task ~p data ~p for execution ~p: ~p:~p",
+                    [TaskId, TaskDataId, ExecutionId, Error, Reason],
+                    Stacktrace
+                ),
+                trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
+        end
+    catch
+        Error2:Reason2:Stacktrace2  ->
+            ?error_stacktrace(
+                "Unexpected error getting data ~p for task ~p (execution ~p): ~p:~p",
+                [TaskDataId, TaskId, ExecutionId, Error2, Reason2],
                 Stacktrace2
             ),
             trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)

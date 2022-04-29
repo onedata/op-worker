@@ -144,6 +144,34 @@
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Callback reporting that all jobs for task were executed and their
+%% outputs processed.
+%% @end
+%%--------------------------------------------------------------------
+-callback report_all_task_jobs_ended(
+    workflow_engine:execution_id(),
+    workflow_engine:execution_context(),
+    workflow_engine:task_id()
+) ->
+    ok.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Callback processing extra data provided while executing jobs.
+%% @end
+%%--------------------------------------------------------------------
+-callback process_task_data(
+    workflow_engine:execution_id(),
+    workflow_engine:execution_context(),
+    workflow_engine:task_id(),
+    workflow_engine:task_data()
+) ->
+    handler_execution_result().
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Callback reporting that task has been executed for all items.
 %% This callback is usually executed once for each task. It is guaranteed
 %% that callback is called before call of handle_lane_execution_ended
