@@ -12,28 +12,30 @@
 %%% execution for specific item).
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_job_ctx).
+-module(atm_run_job_batch_ctx).
 -author("Bartosz Walkowicz").
 
 -include("modules/automation/atm_execution.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 
 %% API
--export([build/3]).
+-export([build/4]).
 -export([
     get_workflow_execution_ctx/1,
     get_workflow_execution_auth/1,
     get_access_token/1,
-    get_report_result_url/1
+    get_forward_output_url/1,
+    get_heartbeat_url/1
 ]).
 
 
--record(atm_job_ctx, {
+-record(atm_run_job_batch_ctx, {
     workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
     is_in_readonly_mode :: boolean(),
-    report_result_url :: undefined | binary()
+    forward_output_url :: binary(),
+    heartbeat_url :: binary()
 }).
--type record() :: #atm_job_ctx{}.
+-type record() :: #atm_run_job_batch_ctx{}.
 
 -export_type([record/0]).
 
@@ -43,28 +45,31 @@
 %%%===================================================================
 
 
--spec build(atm_workflow_execution_ctx:record(), boolean(), undefined | binary()) ->
+-spec build(atm_workflow_execution_ctx:record(), binary(), binary(), atm_task_execution:record()) ->
     record().
-build(AtmWorkflowExecutionCtx, IsInReadonlyMode, ReportResultUrl) ->
-    #atm_job_ctx{
+build(AtmWorkflowExecutionCtx, ForwardOutputUrl, HeartbeatUrl, #atm_task_execution{
+    executor = AtmTaskExecutor
+}) ->
+    #atm_run_job_batch_ctx{
         workflow_execution_ctx = AtmWorkflowExecutionCtx,
-        is_in_readonly_mode = IsInReadonlyMode,
-        report_result_url = ReportResultUrl
+        is_in_readonly_mode = atm_task_executor:is_in_readonly_mode(AtmTaskExecutor),
+        forward_output_url = ForwardOutputUrl,
+        heartbeat_url = HeartbeatUrl
     }.
 
 
 -spec get_workflow_execution_ctx(record()) -> atm_workflow_execution_ctx:record().
-get_workflow_execution_ctx(#atm_job_ctx{workflow_execution_ctx = AtmWorkflowExecutionCtx}) ->
+get_workflow_execution_ctx(#atm_run_job_batch_ctx{workflow_execution_ctx = AtmWorkflowExecutionCtx}) ->
     AtmWorkflowExecutionCtx.
 
 
 -spec get_workflow_execution_auth(record()) -> atm_workflow_execution_auth:record().
-get_workflow_execution_auth(#atm_job_ctx{workflow_execution_ctx = AtmWorkflowExecutionCtx}) ->
+get_workflow_execution_auth(#atm_run_job_batch_ctx{workflow_execution_ctx = AtmWorkflowExecutionCtx}) ->
     atm_workflow_execution_ctx:get_auth(AtmWorkflowExecutionCtx).
 
 
 -spec get_access_token(record()) -> auth_manager:access_token().
-get_access_token(#atm_job_ctx{
+get_access_token(#atm_run_job_batch_ctx{
     workflow_execution_ctx = AtmWorkflowExecutionCtx,
     is_in_readonly_mode = IsInReadonlyMode
 }) ->
@@ -77,6 +82,11 @@ get_access_token(#atm_job_ctx{
     end.
 
 
--spec get_report_result_url(record()) -> undefined | binary().
-get_report_result_url(#atm_job_ctx{report_result_url = ReportResultUrl}) ->
-    ReportResultUrl.
+-spec get_forward_output_url(record()) -> binary().
+get_forward_output_url(#atm_run_job_batch_ctx{forward_output_url = ForwardOutputUrl}) ->
+    ForwardOutputUrl.
+
+
+-spec get_heartbeat_url(record()) -> binary().
+get_heartbeat_url(#atm_run_job_batch_ctx{heartbeat_url = HeartbeatUrl}) ->
+    HeartbeatUrl.

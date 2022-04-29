@@ -194,7 +194,7 @@ mock_is_in_readonly_mode(Workers) ->
 %% @private
 -spec mock_run([node()], module()) -> ok.
 mock_run(Workers, ModuleWithOpenfaasDockerMock) ->
-    MockFun = fun(AtmJobCtx, Input, #atm_openfaas_task_executor{
+    MockFun = fun(AtmRunJobBatchCtx, Input, #atm_openfaas_task_executor{
         operation_spec = #atm_openfaas_operation_spec{docker_image = DockerImage}
     }) ->
         spawn(fun() ->
@@ -209,7 +209,7 @@ mock_run(Workers, ModuleWithOpenfaasDockerMock) ->
                 false -> Result
             end,
 
-            CallbackUrl = atm_job_ctx:get_report_result_url(AtmJobCtx),
+            CallbackUrl = atm_run_job_batch_ctx:get_forward_output_url(AtmRunJobBatchCtx),
             http_client:post(CallbackUrl, #{}, Response)
         end),
 

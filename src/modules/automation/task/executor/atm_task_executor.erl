@@ -84,7 +84,7 @@
 
 -callback is_in_readonly_mode(record()) -> boolean().
 
--callback run(atm_job_ctx:record(), lambda_input(), record()) ->
+-callback run(atm_run_job_batch_ctx:record(), lambda_input(), record()) ->
     ok | no_return().
 
 
@@ -137,11 +137,11 @@ is_in_readonly_mode(AtmTaskExecutor) ->
     Model:is_in_readonly_mode(AtmTaskExecutor).
 
 
--spec run(atm_job_ctx:record(), lambda_input(), record()) ->
+-spec run(atm_run_job_batch_ctx:record(), lambda_input(), record()) ->
     ok | no_return().
-run(AtmJobCtx, LambdaInput, AtmTaskExecutor) ->
+run(AtmRunJobBatchCtx, LambdaInput, AtmTaskExecutor) ->
     Model = utils:record_type(AtmTaskExecutor),
-    Model:run(AtmJobCtx, LambdaInput, AtmTaskExecutor).
+    Model:run(AtmRunJobBatchCtx, LambdaInput, AtmTaskExecutor).
 
 
 %%%===================================================================

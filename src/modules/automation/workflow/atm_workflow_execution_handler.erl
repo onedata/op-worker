@@ -193,7 +193,7 @@ restart_lane(_, _, _) ->
     ok | error.
 run_job_batch(
     _AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId,
-    ItemBatch, ReportResultUrl, HeartbeatUrl
+    ItemBatch, ForwardOutputUrl, HeartbeatUrl
 ) ->
     AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(
         AtmTaskExecutionId, AtmWorkflowExecutionEnv
@@ -202,7 +202,7 @@ run_job_batch(
     % and treated as item processing errors
     atm_task_execution_handler:run_job_batch(
         AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemBatch,
-        ReportResultUrl, HeartbeatUrl
+        ForwardOutputUrl, HeartbeatUrl
     ).
 
 

@@ -147,35 +147,24 @@ run_job_batch(
     AtmWorkflowExecutionCtx,
     AtmTaskExecutionId,
     ItemBatch,
-    SendOutputUrl,
+    ForwardOutputUrl,
     HeartbeatUrl
 ) ->
-    #document{
-        value = #atm_task_execution{
-            executor = AtmTaskExecutor,
-            argument_specs = AtmTaskExecutionArgSpecs
-        }
-    } = update_items_in_processing(AtmTaskExecutionId, length(ItemBatch)),
-
-    AtmJobCtx = atm_job_ctx:build(
-        AtmWorkflowExecutionCtx,
-        atm_task_executor:is_in_readonly_mode(AtmTaskExecutor),
-        SendOutputUrl
+    #document{value = AtmTaskExecution} = update_items_in_processing(
+        AtmTaskExecutionId, length(ItemBatch)
+    ),
+    AtmRunJobBatchCtx = atm_run_job_batch_ctx:build(
+        AtmWorkflowExecutionCtx, ForwardOutputUrl, HeartbeatUrl, AtmTaskExecution
     ),
 
     try
-        LambdaInput = #{
-            <<"ctx">> => #{<<"heartbeatUrl">> => HeartbeatUrl},
-            %% TODO VFS-8668 optimize argsBatch creation
-            <<"argsBatch">> => atm_parallel_runner:map(fun(Item) ->
-                atm_task_execution_arguments:construct_args(Item, AtmJobCtx, AtmTaskExecutionArgSpecs)
-            end, ItemBatch)
-        },
-        atm_task_executor:run(AtmJobCtx, LambdaInput, AtmTaskExecutor)
+        LambdaInput = build_lambda_input(AtmRunJobBatchCtx, ItemBatch, AtmTaskExecution),
+        AtmTaskExecutor = AtmTaskExecution#atm_task_execution.executor,
+        atm_task_executor:run(AtmRunJobBatchCtx, LambdaInput, AtmTaskExecutor)
     catch Type:Reason:Stacktrace ->
-        Error = ?atm_examine_error(Type, Reason, Stacktrace),
         handle_job_batch_processing_error(
-            AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemBatch, Error
+            AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemBatch,
+            ?atm_examine_error(Type, Reason, Stacktrace)
         ),
         error
     end.
@@ -329,6 +318,31 @@ get_lambda_revision(
         maps:get(AtmLambdaId, AtmLambdaSnapshotRegistry)
     ),
     atm_lambda_snapshot:get_revision(AtmLambdaRevisionNum, AtmLambdaSnapshot).
+
+
+%% @private
+-spec build_lambda_input(
+    atm_run_job_batch_ctx:record(),
+    [automation:item()],
+    atm_task_execution:record()
+) ->
+    json_utils:json_map().
+build_lambda_input(AtmRunJobBatchCtx, ItemBatch, #atm_task_execution{
+    argument_specs = AtmTaskExecutionArgSpecs
+}) ->
+    %% TODO VFS-8668 optimize argsBatch creation
+    ArgsBatch = atm_parallel_runner:map(fun(Item) ->
+        atm_task_execution_arguments:construct_args(
+            Item, AtmRunJobBatchCtx, AtmTaskExecutionArgSpecs
+        )
+    end, ItemBatch),
+
+    #{
+        <<"ctx">> => #{
+            <<"heartbeatUrl">> => atm_run_job_batch_ctx:get_heartbeat_url(AtmRunJobBatchCtx)
+        },
+        <<"argsBatch">> => ArgsBatch
+    }.
 
 
 %% @private

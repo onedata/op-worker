@@ -73,15 +73,15 @@ get_name(#atm_task_execution_argument_spec{name = ArgName}) ->
     ArgName.
 
 
--spec construct_arg(automation:item(), atm_job_ctx:record(), record()) ->
+-spec construct_arg(automation:item(), atm_run_job_batch_ctx:record(), record()) ->
     json_utils:json_term() | no_return().
-construct_arg(Item, AtmJobCtx, #atm_task_execution_argument_spec{
+construct_arg(Item, AtmRunJobBatchCtx, #atm_task_execution_argument_spec{
     value_builder = ArgValueBuilder,
     data_spec = AtmDataSpec
 }) ->
-    ArgValue = build_value(Item, AtmJobCtx, ArgValueBuilder),
+    ArgValue = build_value(Item, AtmRunJobBatchCtx, ArgValueBuilder),
 
-    AtmWorkflowExecutionAuth = atm_job_ctx:get_workflow_execution_auth(AtmJobCtx),
+    AtmWorkflowExecutionAuth = atm_run_job_batch_ctx:get_workflow_execution_auth(AtmRunJobBatchCtx),
     atm_value:validate(AtmWorkflowExecutionAuth, ArgValue, AtmDataSpec),
 
     ArgValue.
@@ -133,23 +133,23 @@ db_decode(#{
 %% @private
 -spec build_value(
     automation:item(),
-    atm_job_ctx:record(),
+    atm_run_job_batch_ctx:record(),
     atm_task_argument_value_builder:record()
 ) ->
     json_utils:json_term() | no_return().
-build_value(_Item, _AtmJobCtx, #atm_task_argument_value_builder{
+build_value(_Item, _AtmRunJobBatchCtx, #atm_task_argument_value_builder{
     type = const,
     recipe = ConstValue
 }) ->
     ConstValue;
 
-build_value(Item, _AtmJobCtx, #atm_task_argument_value_builder{
+build_value(Item, _AtmRunJobBatchCtx, #atm_task_argument_value_builder{
     type = iterated_item,
     recipe = undefined
 }) ->
     Item;
 
-build_value(Item, _AtmJobCtx, #atm_task_argument_value_builder{
+build_value(Item, _AtmRunJobBatchCtx, #atm_task_argument_value_builder{
     type = iterated_item,
     recipe = Query
 }) ->
@@ -159,21 +159,21 @@ build_value(Item, _AtmJobCtx, #atm_task_argument_value_builder{
         error -> throw(?ERROR_ATM_TASK_ARG_MAPPER_ITERATED_ITEM_QUERY_FAILED(Item, Query))
     end;
 
-build_value(_Item, AtmJobCtx, #atm_task_argument_value_builder{
+build_value(_Item, AtmRunJobBatchCtx, #atm_task_argument_value_builder{
     type = onedatafs_credentials
 }) ->
     #{
         <<"host">> => oneprovider:get_domain(),
-        <<"accessToken">> => atm_job_ctx:get_access_token(AtmJobCtx)
+        <<"accessToken">> => atm_run_job_batch_ctx:get_access_token(AtmRunJobBatchCtx)
     };
 
-build_value(_Item, AtmJobCtx, #atm_task_argument_value_builder{
+build_value(_Item, AtmRunJobBatchCtx, #atm_task_argument_value_builder{
     type = single_value_store_content,
     recipe = AtmSingleValueStoreSchemaId
 }) ->
     AtmSingleValueStoreId = atm_workflow_execution_ctx:get_global_store_id(
         AtmSingleValueStoreSchemaId,
-        atm_job_ctx:get_workflow_execution_ctx(AtmJobCtx)
+        atm_run_job_batch_ctx:get_workflow_execution_ctx(AtmRunJobBatchCtx)
     ),
     {ok, AtmStore} = atm_store_api:get(AtmSingleValueStoreId),
 
@@ -184,7 +184,7 @@ build_value(_Item, AtmJobCtx, #atm_task_argument_value_builder{
             throw(?ERROR_ATM_STORE_TYPE_DISALLOWED(AtmSingleValueStoreSchemaId, [single_value]))
     end,
 
-    AtmWorkflowExecutionAuth = atm_job_ctx:get_workflow_execution_auth(AtmJobCtx),
+    AtmWorkflowExecutionAuth = atm_run_job_batch_ctx:get_workflow_execution_auth(AtmRunJobBatchCtx),
     BrowseOpts = #atm_single_value_store_content_browse_options{},
 
     case atm_store_api:browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStore) of
@@ -194,7 +194,7 @@ build_value(_Item, AtmJobCtx, #atm_task_argument_value_builder{
             Item
     end;
 
-build_value(_Item, _AtmJobCtx, #atm_task_argument_value_builder{
+build_value(_Item, _AtmRunJobBatchCtx, #atm_task_argument_value_builder{
     type = ValueBuilderType
 }) ->
     % TODO VFS-7660 handle rest of atm_task_argument_value_builder:type()
