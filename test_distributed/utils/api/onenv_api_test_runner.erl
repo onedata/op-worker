@@ -682,7 +682,7 @@ log_failure(
     "Expected: ~p~n"
     "Got: ~p~n"
     "Error: ~p:~p~n"
-    "Stacktrace: ~p~n", [
+    "Stacktrace: ~s~n", [
         ScenarioName,
         TargetNode,
         client_to_placeholder(Client),
@@ -690,7 +690,7 @@ log_failure(
         Expected,
         Got,
         ErrType, ErrReason,
-        Stacktrace
+        lager:pr_stacktrace(Stacktrace)
     ]).
 
 
