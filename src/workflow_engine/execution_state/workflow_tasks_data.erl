@@ -89,6 +89,7 @@ mark_task_data_stream_closed(TaskId, #workflow_tasks_data{closed_task_data_strea
     TasksData#workflow_tasks_data{closed_task_data_streams = [TaskId | ClosedStreams]}.
 
 
+% TODO - moze nie closed a finished (moze byc closed a nie skonczony)
 -spec is_task_data_stream_closed(workflow_engine:task_id(), tasks_data()) -> boolean().
 is_task_data_stream_closed(TaskId, #workflow_tasks_data{
     waiting = Waiting,

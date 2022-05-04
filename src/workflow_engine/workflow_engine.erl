@@ -69,6 +69,7 @@
 -type task_type() :: sync | async.
 -type task_spec() :: #{
     type := task_type(),
+    has_task_data_stream => boolean(),  %% TODO name?
     async_call_pools => [workflow_async_call_pool:id()] | undefined,
     keepalive_timeout => time:seconds()
 }.
@@ -136,9 +137,9 @@ execute_workflow(EngineId, ExecutionSpec) ->
 
     InitAns = case ExecutionSpec of
         #{force_clean_execution := true} -> 
-            workflow_execution_state:init(ExecutionId, Handler, Context, FirstLaneId, NextLaneId);
+            workflow_execution_state:init(ExecutionId, EngineId, Handler, Context, FirstLaneId, NextLaneId);
         _ ->
-            workflow_execution_state:restart_from_snapshot(ExecutionId, Handler, Context, FirstLaneId, NextLaneId)
+            workflow_execution_state:restart_from_snapshot(ExecutionId, EngineId, Handler, Context, FirstLaneId, NextLaneId)
     end,
 
     case InitAns of
@@ -162,12 +163,14 @@ cleanup_execution(ExecutionId) ->
 -spec stream_task_data(workflow_engine:execution_id(), workflow_engine:task_id(), task_data()) -> ok.
 stream_task_data(ExecutionId, TaskId, TaskData) ->
     TaskDataId = workflow_cached_task_data:put(TaskData),
-    workflow_execution_state:report_new_stream_task_data(ExecutionId, TaskId, TaskDataId).
+    {ok, EngineId} = workflow_execution_state:report_new_stream_task_data(ExecutionId, TaskId, TaskDataId),
+    trigger_job_scheduling(EngineId).
 
 
 -spec close_task_data_stream(workflow_engine:execution_id(), workflow_engine:task_id()) -> ok.
 close_task_data_stream(ExecutionId, TaskId) ->
-    workflow_execution_state:mark_task_data_stream_closed(ExecutionId, TaskId).
+    {ok, EngineId} = workflow_execution_state:mark_task_data_stream_closed(ExecutionId, TaskId),
+    trigger_job_scheduling(EngineId).
 
 
 %%%===================================================================

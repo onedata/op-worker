@@ -1218,6 +1218,7 @@
 }).
 
 -record(workflow_execution_state, {
+    engine_id :: workflow_engine:id(),
     handler :: workflow_handler:handler(),
     initial_context :: workflow_engine:execution_context(),
 

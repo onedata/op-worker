@@ -148,7 +148,7 @@
 %% outputs processed.
 %% @end
 %%--------------------------------------------------------------------
--callback report_all_task_jobs_ended(
+-callback trigger_task_data_stream_termination(
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
     workflow_engine:task_id()
