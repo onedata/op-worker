@@ -21,6 +21,7 @@
 
 % Callbacks
 -export([prepare_lane/3, restart_lane/3, process_item/6, process_result/5, report_item_error/3,
+    trigger_task_data_stream_termination/3, process_task_data/4,
     handle_task_execution_ended/3, handle_lane_execution_ended/3, handle_workflow_execution_ended/2]).
 % API
 -export([is_last_lane/1, get_ignored_lane_id/0, get_ignored_lane_predecessor_id/0]).
@@ -73,11 +74,12 @@ prepare_lane(_ExecutionId, ExecutionContext, ?IGNORED_LANE_ID = LaneId) ->
     }};
 prepare_lane(_ExecutionId, #{task_type := Type, async_call_pools := Pools} = ExecutionContext, LaneId) ->
     LaneIndex = binary_to_integer(LaneId),
+    HasStream = maps:get(has_task_data_stream, ExecutionContext, false),
     Boxes = lists:map(fun(BoxIndex) ->
         lists:foldl(fun(TaskIndex, TaskAcc) ->
             TaskAcc#{<<(integer_to_binary(LaneIndex))/binary, "_",
                 (integer_to_binary(BoxIndex))/binary, "_", (integer_to_binary(TaskIndex))/binary>> =>
-            #{type => Type, async_call_pools => Pools, keepalive_timeout => 5}}
+            #{type => Type, async_call_pools => Pools, keepalive_timeout => 5, has_task_data_stream => HasStream}}
         end, #{}, lists:seq(1, BoxIndex))
     end, lists:seq(1, LaneIndex)),
 
@@ -87,7 +89,8 @@ prepare_lane(_ExecutionId, #{task_type := Type, async_call_pools := Pools} = Exe
         iterator => workflow_test_iterator:get_first(maps:get(items_count, ExecutionContext, 200)),
         execution_context => ExecutionContext#{
             lane_index => LaneIndex,
-            lane_id => LaneId
+            lane_id => LaneId,
+            has_task_data_stream => HasStream % TODO - umozliwic testy gdzie bedzie tylko dla wybranych taskow
         }
     }}.
 
@@ -151,6 +154,26 @@ process_result(_, _, _, _, #{<<"result">> := Result}) ->
 report_item_error(_, _, _) ->
     ok.
 
+
+-spec trigger_task_data_stream_termination(
+    workflow_engine:execution_id(),
+    test_execution_context(),
+    workflow_engine:task_id()
+) ->
+    ok.
+trigger_task_data_stream_termination(_, _, _) ->
+    ok.
+
+
+-spec process_task_data(
+    workflow_engine:execution_id(),
+    workflow_engine:execution_context(),
+    workflow_engine:task_id(),
+    workflow_engine:task_data()
+) ->
+    workflow_handler:handler_execution_result().
+process_task_data(_, _, _, _) ->
+    ok.
 
 -spec handle_task_execution_ended(
     workflow_engine:execution_id(),

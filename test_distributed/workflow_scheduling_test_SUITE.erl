@@ -25,6 +25,7 @@
 
     single_sync_workflow_execution_test/1,
     single_async_workflow_execution_test/1,
+    single_async_workflow_with_streams_execution_test/1,
     prepare_in_advance_test/1,
     heartbeat_test/1,
     long_prepare_in_advance_test/1,
@@ -65,6 +66,7 @@ all() ->
 
         single_sync_workflow_execution_test,
         single_async_workflow_execution_test,
+        single_async_workflow_with_streams_execution_test,
         prepare_in_advance_test,
         heartbeat_test,
         long_prepare_in_advance_test,
@@ -140,6 +142,13 @@ single_sync_workflow_execution_test(Config) ->
 
 single_async_workflow_execution_test(Config) ->
     single_execution_test_base(Config, #test_config{task_type = async}).
+
+
+single_async_workflow_with_streams_execution_test(Config) ->
+    single_execution_test_base(Config, #test_config{
+        task_type = async,
+        generator_options = #{has_task_data_stream => true}
+    }).
 
 prepare_in_advance_test(Config) ->
     single_execution_test_base(Config, #test_config{

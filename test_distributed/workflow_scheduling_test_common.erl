@@ -336,6 +336,42 @@ mock_handlers(Workers, Manager) ->
         end),
 
 
+    test_utils:mock_expect(Workers, workflow_test_handler, trigger_task_data_stream_termination,
+        fun(ExecutionId, #{lane_id := LaneId} = Context, TaskId) ->
+            Ans = MockTemplate(
+                #handler_call{
+                    function = trigger_task_data_stream_termination,
+                    execution_id = ExecutionId,
+                    context =  Context,
+                    lane_id = LaneId,
+                    task_id = TaskId
+                },
+                [ExecutionId, Context, TaskId]
+            ),
+
+            case Ans of
+                ok -> workflow_engine:close_task_data_stream(ExecutionId, TaskId);
+                _ -> ok
+            end,
+            Ans
+        end),
+
+
+    test_utils:mock_expect(Workers, workflow_test_handler, process_task_data,
+        fun(ExecutionId, #{lane_id := LaneId} = Context, TaskId, Data) ->
+            MockTemplate(
+                #handler_call{
+                    function = process_task_data,
+                    execution_id = ExecutionId,
+                    context =  Context,
+                    lane_id = LaneId,
+                    task_id = TaskId
+                },
+                [ExecutionId, Context, TaskId, Data]
+            )
+        end),
+
+
     test_utils:mock_expect(Workers, workflow_test_handler, handle_task_execution_ended,
         fun(ExecutionId, #{lane_id := LaneId} = Context, TaskId) ->
             MockTemplate(
@@ -500,7 +536,8 @@ verify_lanes_execution_history([{_, _, #{lane_index := LaneIndex, lane_id := Lan
 verify_lanes_execution_history([{TaskIds, ExpectedItems, LaneExecutionContext} | ExpectedTail],
     Gathered, Options) ->
     #{
-        lane_id := LaneId
+        lane_id := LaneId,
+        has_task_data_stream := HasStream
     } = LaneExecutionContext,
 
     VerificationType = case Options of
@@ -546,7 +583,7 @@ verify_lanes_execution_history([{TaskIds, ExpectedItems, LaneExecutionContext} |
                 false ->
                     GatheredForLane2
             end,
-            GatheredForLane4 = verify_task_handlers(lists:reverse(GatheredForLane3), TaskIds, false),
+            GatheredForLane4 = verify_task_handlers(lists:reverse(GatheredForLane3), TaskIds, HasStream, false),
 
             Remaining = lists:foldl(fun(Item, Acc) ->
                 Filtered = lists:filtermap(fun(HandlerCall) -> HandlerCall#handler_call.item =:= Item end, Acc),
@@ -558,7 +595,7 @@ verify_lanes_execution_history([{TaskIds, ExpectedItems, LaneExecutionContext} |
             verify_lanes_execution_history(NewExpected,
                 lists:sublist(Gathered, LaneElementsCount + 1, length(Gathered) - LaneElementsCount), Options);
         skip_items_verification ->
-            GatheredForLane2 = verify_task_handlers(GatheredForLane, TaskIds, true),
+            GatheredForLane2 = verify_task_handlers(GatheredForLane, TaskIds, HasStream, true),
             [FirstNotFiltered | _] = lists:dropwhile(fun
                 (#handler_call{lane_id = Id, function = Function}) when Id =:= LaneId ->
                     Function =/= handle_lane_execution_ended;
@@ -578,7 +615,7 @@ verify_lanes_execution_history([{TaskIds, ExpectedItems, LaneExecutionContext} |
             end, Gathered),
             verify_lanes_execution_history(NewExpected, NewGathered, Options);
         expect_lane_finish ->
-            GatheredForLane2 = verify_task_handlers(GatheredForLane, TaskIds, false),
+            GatheredForLane2 = verify_task_handlers(GatheredForLane, TaskIds, HasStream, false),
             ?assertMatch([
                 #handler_call{function = handle_lane_execution_ended, lane_id = LaneId, result = true},
                 #handler_call{function = handle_workflow_execution_ended}
@@ -632,30 +669,59 @@ verify_prepare_lane_handler_calls_history(Gathered, LaneElementsCount, #{lane_id
     ?assertEqual(LaneId, FirstForLane#handler_call.lane_id),
     GatheredForLane.
 
-verify_task_handlers(GatheredForLane, TaskIds, AllowDoubleCalls) ->
+verify_task_handlers(GatheredForLane, TaskIds, HasStream, AllowDoubleCalls) ->
     ReversedGatheredForLane = lists:reverse(GatheredForLane),
     TaskIdsList = lists:foldl(fun(CallsForBox, Acc) -> sets:to_list(CallsForBox) ++ Acc end, [], TaskIds),
-    DuplicatedCalls = case AllowDoubleCalls of
-        true -> TaskIdsList;
-        false -> []
-    end,
-    {RemainingTaskIdsList, _} = lists:foldl(fun
-        (#handler_call{function = handle_task_execution_ended, task_id = TaskId}, {TaskIdsListAcc, DuplicatedCallsAcc}) ->
+    InitialAcc = #{
+        task_ids => TaskIdsList,
+        stream_ids => case HasStream of
+            true -> TaskIdsList;
+            false -> []
+        end,
+        duplicated_task_endings => case AllowDoubleCalls of
+            true -> TaskIdsList;
+            false -> []
+        end,
+        duplicated_streams => case AllowDoubleCalls of
+            true -> TaskIdsList;
+            false -> []
+        end
+    },
+    #{task_ids := RemainingTaskIdsList, stream_ids := RemainingStreamIds} = lists:foldl(fun
+        (#handler_call{function = handle_task_execution_ended, task_id = TaskId}, #{
+            task_ids := TaskIdsListAcc,
+            duplicated_task_endings := DuplicatedCallsAcc
+        } = Acc) ->
             case lists:member(TaskId, TaskIdsListAcc) of
                 true ->
-                    {TaskIdsListAcc -- [TaskId], DuplicatedCallsAcc};
+                    Acc#{task_ids => TaskIdsListAcc -- [TaskId]};
                 false ->
                     ?assert(lists:member(TaskId, DuplicatedCallsAcc)),
-                    {TaskIdsListAcc, DuplicatedCallsAcc -- [TaskId]}
+                    Acc#{duplicated_task_endings => DuplicatedCallsAcc -- [TaskId]}
             end;
-        (#handler_call{task_id = TaskId}, {TaskIdsListAcc, _DuplicatedCallsAcc} = Acc) ->
+        (#handler_call{function = trigger_task_data_stream_termination, task_id = TaskId}, #{
+            task_ids := TaskIdsListAcc,
+            stream_ids := StreamIds,
+            duplicated_streams := DuplicatedCallsAcc
+        } = Acc) ->
             ?assertNot(lists:member(TaskId, TaskIdsListAcc)),
+            case lists:member(TaskId, StreamIds) of
+                true ->
+                    Acc#{stream_ids => StreamIds -- [TaskId]};
+                false ->
+                    ?assert(lists:member(TaskId, DuplicatedCallsAcc)),
+                    Acc#{duplicated_streams => DuplicatedCallsAcc -- [TaskId]}
+            end;
+        (#handler_call{task_id = TaskId}, #{task_ids := TaskIdsListAcc, stream_ids := StreamIds} = Acc) ->
+            ?assertNot(lists:member(TaskId, TaskIdsListAcc)),
+            ?assertNot(lists:member(TaskId, StreamIds)),
             Acc
-    end, {TaskIdsList, DuplicatedCalls}, ReversedGatheredForLane),
+    end, InitialAcc, ReversedGatheredForLane),
     ?assertEqual([], RemainingTaskIdsList),
+    ?assertEqual([], RemainingStreamIds),
 
     lists:filter(fun(#handler_call{function = Fun}) ->
-        Fun =/= handle_task_execution_ended
+        Fun =/= handle_task_execution_ended andalso Fun =/= trigger_task_data_stream_termination
     end, GatheredForLane).
 
 % Helper function for verify_lanes_execution_history/3 that verifies history for single item
@@ -842,7 +908,8 @@ count_lane_elements(#{
     lane_id := LaneId,
     prepare_in_advance := PrepareInAdvance,
     is_lane_prepared := IsLanePrepared,
-    should_prepare_next_lane := ShouldPrepareNextLane
+    should_prepare_next_lane := ShouldPrepareNextLane,
+    has_task_data_stream := HasStream
 }, TaskIds, ExpectedItems, Options, VerificationType) ->
     TasksPerItemCount = count_tasks(TaskIds),
     TasksCount = TasksPerItemCount * length(ExpectedItems),
@@ -852,9 +919,12 @@ count_lane_elements(#{
         {true, false, true} -> 2;
         _ -> 1
     end,
-    TaskCallbacksCount = case VerificationType of
-        skip_items_verification -> 2 * TasksPerItemCount; % callbacks for each task can be called two times
-        _ -> TasksPerItemCount
+    TaskCallbacksCount = case {HasStream, VerificationType} of
+        {false, skip_items_verification} -> 2 * TasksPerItemCount; % callbacks for each task can be called two times
+        {false, _} -> TasksPerItemCount;
+        % If task has streams, `trigger_task_data_stream_termination` callback is additionally executed for each task
+        {true, skip_items_verification} -> 4 * TasksPerItemCount; % both callbacks for each task can be called two times
+        {true, _} -> 2* TasksPerItemCount
     end,
     NotificationsCount = TaskCallbacksCount + PrepareCallbacksCount + 1, % Notification for each task + prepare_lane
                                                                          % callbacks + handle_lane_execution_ended
