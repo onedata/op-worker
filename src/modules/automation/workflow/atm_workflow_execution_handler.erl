@@ -35,8 +35,8 @@
 
     run_job_batch/6,
     process_job_batch_output/5,
-    report_all_task_jobs_ended/3,
-    process_task_data/4,
+    process_task_data_stream_chunk/4,
+    trigger_task_data_stream_termination/3,
     handle_task_execution_ended/3,
 
     report_items_processing_failed/3,
@@ -237,25 +237,14 @@ process_job_batch_output(
     ).
 
 
--spec report_all_task_jobs_ended(
-    atm_workflow_execution:id(),
-    atm_workflow_execution_env:record(),
-    atm_task_execution:id()
-) ->
-    ok.
-report_all_task_jobs_ended(_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, _AtmTaskExecutionId) ->
-    %% TODO ŁO flush
-    ok.
-
-
--spec process_task_data(
+-spec process_task_data_stream_chunk(
     atm_workflow_execution:id(),
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id(),
     json_utils:json_map() | errors:error()
 ) ->
     ok | error.
-process_task_data(
+process_task_data_stream_chunk(
     _AtmWorkflowExecutionId,
     AtmWorkflowExecutionEnv,
     AtmTaskExecutionId,
@@ -268,6 +257,21 @@ process_task_data(
     atm_task_execution_handler:process_supplementary_results(
         AtmWorkflowExecutionCtx, AtmTaskExecutionId, Results
     ).
+
+
+-spec trigger_task_data_stream_termination(
+    atm_workflow_execution:id(),
+    atm_workflow_execution_env:record(),
+    atm_task_execution:id()
+) ->
+    ok.
+trigger_task_data_stream_termination(
+    _AtmWorkflowExecutionId,
+    _AtmWorkflowExecutionEnv,
+    _AtmTaskExecutionId
+) ->
+    %% TODO ŁO flush
+    ok.
 
 
 -spec handle_task_execution_ended(

@@ -129,30 +129,32 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Callback reporting that all jobs for task were executed and their
-%% outputs processed.
-%% @end
-%%--------------------------------------------------------------------
--callback report_all_task_jobs_ended(
-    workflow_engine:execution_id(),
-    workflow_engine:execution_context(),
-    workflow_engine:task_id()
-) ->
-    ok.
-
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Callback processing extra data provided while executing jobs.
+%% TODO WRITEME
 %% @end
 %%--------------------------------------------------------------------
--callback process_task_data(
+-callback process_task_data_stream_chunk(
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
     workflow_engine:task_id(),
     json_utils:json_map() | errors:error()  %% TODO type
 ) ->
     ok | error.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Callback reporting that all jobs for task were executed and their
+%% outputs processed.
+%% TODO WRITEME
+%% @end
+%%--------------------------------------------------------------------
+-callback trigger_task_data_stream_termination(
+    workflow_engine:execution_id(),
+    workflow_engine:execution_context(),
+    workflow_engine:task_id()
+) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
