@@ -166,6 +166,7 @@ init(ProviderSelectors) ->
 
     mock_workflow_execution_factory(Workers),
     mock_workflow_execution_handler_steps(Workers),
+    mock_lane_execution_handler_steps(Workers),
     mock_lane_execution_factory_steps(Workers).
 
 
@@ -175,6 +176,7 @@ teardown(ProviderSelectors) ->
     Workers = get_nodes(utils:ensure_list(ProviderSelectors)),
 
     unmock_lane_execution_factory_steps(Workers),
+    unmock_lane_execution_handler_steps(Workers),
     unmock_workflow_execution_handler_steps(Workers),
     unmock_workflow_execution_factory(Workers).
 
@@ -590,6 +592,7 @@ assert_exp_workflow_execution_state(#test_ctx{
     end.
 
 
+%% TODO name
 %% @private
 -spec shift_monitored_lane_run_if_current_one_ended(mock_call_report(), test_ctx()) ->
     test_ctx().
@@ -692,7 +695,6 @@ mock_workflow_execution_handler_steps(Workers) ->
     mock_workflow_execution_handler_step(Workers, process_result, 5),
     mock_workflow_execution_handler_step(Workers, report_item_error, 3),
     mock_workflow_execution_handler_step(Workers, handle_task_execution_ended, 3),
-    mock_workflow_execution_handler_step(Workers, handle_lane_execution_ended, 3),
     mock_workflow_execution_handler_step(Workers, handle_workflow_execution_ended, 2).
 
 
@@ -747,6 +749,30 @@ build_workflow_execution_handler_step_function_mock(6, Label) ->
         Args = [Arg1, Arg2, Arg3, Arg4, Arg5, Arg6],
         exec_mock(hd(Args), Label, Args)
     end.
+
+
+%% @private
+-spec mock_lane_execution_handler_steps([node()]) -> ok.
+mock_lane_execution_handler_steps(Workers) ->
+    test_utils:mock_new(Workers, atm_lane_execution_handler, [passthrough, no_history]),
+
+    test_utils:mock_expect(Workers, atm_lane_execution_handler, handle_ended, fun(
+        AtmLaneRunSelector,
+        AtmWorkflowExecutionId,
+        AtmWorkflowExecutionCtx
+    ) ->
+        exec_mock(
+            AtmWorkflowExecutionId,
+            handle_lane_execution_ended,
+            [AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx]
+        )
+    end).
+
+
+%% @private
+-spec unmock_lane_execution_handler_steps([node()]) -> ok.
+unmock_lane_execution_handler_steps(Workers) ->
+    test_utils:mock_unload(Workers, atm_lane_execution_handler).
 
 
 %% @private
