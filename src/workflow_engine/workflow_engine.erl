@@ -365,6 +365,7 @@ schedule_next_job_insecure(EngineId, DeferredExecutions) ->
                             schedule_lane_prepare_on_pool(
                                 EngineId, ExecutionId, Handler, ExecutionContext, LaneId, PreparationMode);
                         #execution_ended{} = ExecutionEndedRecord ->
+                            % xxxxxxxxxxx
                             handle_execution_ended(EngineId, ExecutionId, ExecutionEndedRecord),
                             schedule_next_job_insecure(EngineId, DeferredExecutions);
                         ?DEFER_EXECUTION ->
@@ -396,6 +397,7 @@ handle_execution_ended(EngineId, ExecutionId, #execution_ended{
         ok ->
             case CallbacksData of
                 {CancelledLaneId, CancelledLaneContext, TaskIds} ->
+                    % xxxxxxxxxxx
                     call_handlers_for_cancelled_lane(
                         ExecutionId, Handler, CancelledLaneContext, CancelledLaneId, TaskIds);
                 undefined ->

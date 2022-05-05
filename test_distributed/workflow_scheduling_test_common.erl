@@ -568,7 +568,7 @@ verify_lanes_execution_history([{TaskIds, ExpectedItems, LaneExecutionContext} |
         _ -> verify_all
     end,
 
-    LaneElementsCount = count_lane_elements(LaneExecutionContext, TaskIds, ExpectedItems, Options, VerificationType),
+    LaneElementsCount = count_lane_elements(LaneExecutionContext, TaskIds, ExpectedItems, Options),
     ct:print("Verify ~p history elements", [LaneElementsCount]),
 
     GatheredForLane = verify_prepare_lane_handler_calls_history(Gathered, LaneElementsCount, LaneExecutionContext),
@@ -603,7 +603,7 @@ verify_lanes_execution_history([{TaskIds, ExpectedItems, LaneExecutionContext} |
                 false ->
                     GatheredForLane2
             end,
-            GatheredForLane4 = verify_task_handlers(LaneIndex, lists:reverse(GatheredForLane3), TaskIds, TaskStreams, false),
+            GatheredForLane4 = verify_task_handlers(LaneIndex, lists:reverse(GatheredForLane3), TaskIds, TaskStreams),
             GatheredForLane5 = verify_stream_processing(LaneIndex, GatheredForLane4, TaskStreams),
 
             Remaining = lists:foldl(fun(Item, Acc) ->
@@ -616,7 +616,7 @@ verify_lanes_execution_history([{TaskIds, ExpectedItems, LaneExecutionContext} |
             verify_lanes_execution_history(NewExpected,
                 lists:sublist(Gathered, LaneElementsCount + 1, length(Gathered) - LaneElementsCount), Options);
         skip_items_verification ->
-            GatheredForLane2 = verify_task_handlers(LaneIndex, GatheredForLane, TaskIds, TaskStreams, true),
+            GatheredForLane2 = verify_task_handlers(LaneIndex, GatheredForLane, TaskIds, TaskStreams),
             [FirstNotFiltered | _] = lists:dropwhile(fun
                 (#handler_call{lane_id = Id, function = Function}) when Id =:= LaneId ->
                     Function =/= handle_lane_execution_ended;
@@ -636,7 +636,7 @@ verify_lanes_execution_history([{TaskIds, ExpectedItems, LaneExecutionContext} |
             end, Gathered),
             verify_lanes_execution_history(NewExpected, NewGathered, Options);
         expect_lane_finish ->
-            GatheredForLane2 = verify_task_handlers(LaneIndex, GatheredForLane, TaskIds, TaskStreams, false),
+            GatheredForLane2 = verify_task_handlers(LaneIndex, GatheredForLane, TaskIds, TaskStreams),
             ?assertMatch([
                 #handler_call{function = handle_lane_execution_ended, lane_id = LaneId, result = true},
                 #handler_call{function = handle_workflow_execution_ended}
@@ -690,7 +690,7 @@ verify_prepare_lane_handler_calls_history(Gathered, LaneElementsCount, #{lane_id
     ?assertEqual(LaneId, FirstForLane#handler_call.lane_id),
     GatheredForLane.
 
-verify_task_handlers(LaneIndex, GatheredForLane, TaskIds, TaskStreams, AllowDoubleCalls) ->
+verify_task_handlers(LaneIndex, GatheredForLane, TaskIds, TaskStreams) ->
     ReversedGatheredForLane = lists:reverse(GatheredForLane),
     TaskIdsList = lists:foldl(fun(CallsForBox, Acc) -> sets:to_list(CallsForBox) ++ Acc end, [], TaskIds),
     StreamIds = lists:map(fun({BoxIndex, TaskIndex}) ->
@@ -698,41 +698,19 @@ verify_task_handlers(LaneIndex, GatheredForLane, TaskIds, TaskStreams, AllowDoub
     end, maps:keys(TaskStreams)),
     InitialAcc = #{
         task_ids => TaskIdsList,
-        stream_ids => StreamIds,
-        duplicated_task_endings => case AllowDoubleCalls of
-            true -> TaskIdsList;
-            false -> []
-        end,
-        duplicated_streams => case AllowDoubleCalls of
-            true -> StreamIds;
-            false -> []
-        end
+        stream_ids => StreamIds
     },
     #{task_ids := RemainingTaskIdsList, stream_ids := RemainingStreamIds} = lists:foldl(fun
-        (#handler_call{function = handle_task_execution_ended, task_id = TaskId}, #{
-            task_ids := TaskIdsListAcc,
-            duplicated_task_endings := DuplicatedCallsAcc
-        } = Acc) ->
-            case lists:member(TaskId, TaskIdsListAcc) of
-                true ->
-                    Acc#{task_ids => TaskIdsListAcc -- [TaskId]};
-                false ->
-                    ?assert(lists:member(TaskId, DuplicatedCallsAcc)),
-                    Acc#{duplicated_task_endings => DuplicatedCallsAcc -- [TaskId]}
-            end;
+        (#handler_call{function = handle_task_execution_ended, task_id = TaskId}, #{task_ids := TaskIdsListAcc} = Acc) ->
+            ?assert(lists:member(TaskId, TaskIdsListAcc)),
+            Acc#{task_ids => TaskIdsListAcc -- [TaskId]};
         (#handler_call{function = trigger_task_data_stream_termination, task_id = TaskId}, #{
             task_ids := TaskIdsListAcc,
-            stream_ids := StreamIds,
-            duplicated_streams := DuplicatedCallsAcc
+            stream_ids := StreamIds
         } = Acc) ->
             ?assertNot(lists:member(TaskId, TaskIdsListAcc)),
-            case lists:member(TaskId, StreamIds) of
-                true ->
-                    Acc#{stream_ids => StreamIds -- [TaskId]};
-                false ->
-                    ?assert(lists:member(TaskId, DuplicatedCallsAcc)),
-                    Acc#{duplicated_streams => DuplicatedCallsAcc -- [TaskId]}
-            end;
+            ?assert(lists:member(TaskId, StreamIds)),
+            Acc#{stream_ids => StreamIds -- [TaskId]};
         (#handler_call{function = process_task_data, task_id = TaskId}, #{
             task_ids := TaskIdsListAcc
         } = Acc) ->
@@ -963,25 +941,20 @@ count_lane_elements(#{
     prepare_in_advance := PrepareInAdvance,
     is_lane_prepared := IsLanePrepared,
     should_prepare_next_lane := ShouldPrepareNextLane
-} = LaneExecutionContext, TaskIds, ExpectedItems, Options, VerificationType) ->
+} = LaneExecutionContext, TaskIds, ExpectedItems, Options) ->
     TasksPerItemCount = count_tasks(TaskIds),
     TasksCount = TasksPerItemCount * length(ExpectedItems),
 
     TaskStreams = maps:get(LaneIndex, maps:get(task_streams, LaneExecutionContext, #{}), #{}),
     TaskStreamCount = maps:size(TaskStreams),
-    FinishCallbackCount = TasksPerItemCount + TaskStreamCount,
 
     PrepareCallbacksCount = case {PrepareInAdvance, IsLanePrepared, ShouldPrepareNextLane} of
         {true, true, false} -> 0;
         {true, false, true} -> 2;
         _ -> 1
     end,
-    TaskCallbacksCount = case VerificationType of
-        skip_items_verification -> 2 * FinishCallbackCount; % callbacks for each task can be called two times
-        _ -> FinishCallbackCount
-    end,
-    NotificationsCount = TaskCallbacksCount + PrepareCallbacksCount + 1, % Notification for each task + prepare_lane
-                                                                         % callbacks + handle_lane_execution_ended
+    NotificationsCount = TasksPerItemCount + TaskStreamCount + PrepareCallbacksCount + 1, % Notification for each task + prepare_lane
+                                                                                          % callbacks + handle_lane_execution_ended
 
     DataProcessingCallbackCallCount = maps:fold(fun(_, CallbackCalls, Acc) ->
         lists:foldl(fun

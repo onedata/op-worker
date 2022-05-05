@@ -229,6 +229,7 @@ prepare_next_job(ExecutionId) ->
         ?WF_ERROR_EXECUTION_ENDED(ExecutionEnded) ->
             ExecutionEnded;
         ?WF_ERROR_LANE_EXECUTION_CANCELLED(Handler, CancelledLaneId, CancelledLaneContext, TaskIds) ->
+            % xxxxxxxxxxx
             workflow_engine:call_handlers_for_cancelled_lane(
                 ExecutionId, Handler, CancelledLaneContext, CancelledLaneId, TaskIds),
             {ok, _} = update(ExecutionId, fun(State) ->
@@ -481,6 +482,7 @@ finish_lane_preparation(ExecutionId, Handler,
                     NextIterationStep =:= undefined orelse NextIterationStep =:= ?WF_ERROR_ITERATION_FAILED ->
                     % TODO VFS-8456 - support iteration errors and ensure that callbacks for tasks end
                     % before handle_lane_execution_ended is executed
+                    % xxxxxxxxxxx
                     call_handle_task_execution_ended_for_all_tasks(ExecutionId, Handler, LaneExecutionContext, BoxesMap),
                     {ok, CurrentLane, Iterator, NextLaneId};
                 {ok, #document{value = #workflow_execution_state{
@@ -502,6 +504,7 @@ finish_lane_preparation(ExecutionId, Handler,
 ) -> ok.
 call_handle_task_execution_ended_for_all_tasks(ExecutionId, Handler, Context, BoxesMap) ->
     TaskIds = get_task_ids(BoxesMap),
+    % xxxxxxxxxxx
     workflow_engine:call_handle_task_execution_ended_for_all_tasks(ExecutionId, Handler, Context, TaskIds),
     {ok, _} = update(ExecutionId, fun(State) ->
         remove_pending_callback(State, ?CALLBACKS_ON_EMPTY_LANE_SELECTOR)
@@ -515,6 +518,19 @@ get_task_ids(BoxesMap) ->
         lists:map(fun(TaskIndex) ->
             {TaskId, _TaskSpec} = maps:get(TaskIndex, BoxSpec),
             TaskId
+        end, lists:seq(1, maps:size(BoxSpec)))
+    end, lists:seq(1, maps:size(BoxesMap)))).
+
+-spec get_unfinished_task_ids(boxes_map(), workflow_jobs:jobs()) -> [workflow_engine:task_id()].
+get_unfinished_task_ids(BoxesMap, Jobs) ->
+    lists:flatten(lists:map(fun(BoxIndex) ->
+        BoxSpec = maps:get(BoxIndex, BoxesMap),
+        lists:filtermap(fun(TaskIndex) ->
+            {TaskId, _TaskSpec} = maps:get(TaskIndex, BoxSpec),
+            case workflow_jobs:is_task_finished(Jobs, BoxIndex, TaskIndex) of
+                true -> false;
+                false -> {true, TaskId}
+            end
         end, lists:seq(1, maps:size(BoxSpec)))
     end, lists:seq(1, maps:size(BoxesMap)))).
 
@@ -657,11 +673,12 @@ handle_state_update_after_job_preparation(ExecutionId, #workflow_execution_state
     end;
 handle_state_update_after_job_preparation(_ExecutionId, #workflow_execution_state{
     update_report = ?EXECUTION_CANCELLED_REPORT(ItemIdsToDelete),
-    current_lane = #current_lane{id = LaneId, execution_context = LaneContext, parallel_box_specs = BoxSpecs},
+    current_lane = #current_lane{id = LaneId, execution_context = LaneContext, parallel_box_specs = BoxesMap},
     execution_status = ExecutionStatus,
     handler = Handler,
     initial_context = ExecutionContext,
-    prefetched_iteration_step = PrefetchedIterationStep
+    prefetched_iteration_step = PrefetchedIterationStep,
+    jobs = Jobs
 }) ->
     lists:foreach(fun workflow_cached_item:delete/1, ItemIdsToDelete),
     case PrefetchedIterationStep of
@@ -669,12 +686,13 @@ handle_state_update_after_job_preparation(_ExecutionId, #workflow_execution_stat
         _ -> ok
     end,
     % TODO VFS-7787 - test cancel during lane_execution_finished callback execution
+    TaskIdsToFinish = get_unfinished_task_ids(BoxesMap, Jobs),
     case ExecutionStatus of
         ?WAITING_FOR_NEXT_LANE_PREPARATION_END ->
-            ?WF_ERROR_LANE_EXECUTION_CANCELLED(Handler, LaneId, LaneContext, get_task_ids(BoxSpecs));
+            ?WF_ERROR_LANE_EXECUTION_CANCELLED(Handler, LaneId, LaneContext, TaskIdsToFinish);
         _ ->
             ?WF_ERROR_EXECUTION_ENDED(#execution_ended{handler = Handler, context = ExecutionContext,
-                reason = ?EXECUTION_CANCELLED, callbacks_data = {LaneId, LaneContext, get_task_ids(BoxSpecs)}})
+                reason = ?EXECUTION_CANCELLED, callbacks_data = {LaneId, LaneContext, TaskIdsToFinish}})
     end;
 handle_state_update_after_job_preparation(_ExecutionId, #workflow_execution_state{
     update_report = {error, _} = UpdateReport
@@ -1339,11 +1357,14 @@ handle_no_waiting_items_error(#workflow_execution_state{
     prefetched_iteration_step = ?WF_ERROR_ITERATION_FAILED,
     handler = Handler,
     initial_context = Context,
-    current_lane = #current_lane{id = LaneId, execution_context = LaneContext, parallel_box_specs = BoxesMap}
+    current_lane = #current_lane{id = LaneId, execution_context = LaneContext, parallel_box_specs = BoxesMap},
+    jobs = Jobs
 }, ?ERROR_NOT_FOUND) ->
     % TODO - co z npwymi handlarami taska przy bledach?
+    % xxxxxxxxxxx
+    TaskIdsToFinish = get_unfinished_task_ids(BoxesMap, Jobs),
     ?WF_ERROR_EXECUTION_ENDED(#execution_ended{handler = Handler, context = Context, reason = ?EXECUTION_CANCELLED,
-        callbacks_data = {LaneId, LaneContext, get_task_ids(BoxesMap)}});
+        callbacks_data = {LaneId, LaneContext, TaskIdsToFinish}});
 handle_no_waiting_items_error(#workflow_execution_state{
     current_lane = #current_lane{
         index = LaneIndex,

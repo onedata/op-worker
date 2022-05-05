@@ -176,6 +176,7 @@
 %% This callback is usually executed once for each task. It is guaranteed
 %% that callback is called before call of handle_lane_execution_ended
 %% callback for task's lane.
+%% TODO - juz nie pojawia sie podwojne calle!!!
 %% Warning: there is no guarantee that callbacks for tasks are called
 %% exactly the same order as the tasks were finished.
 %% Warning: when execution is cancelled, handler can be executed
