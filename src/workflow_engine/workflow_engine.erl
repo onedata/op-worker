@@ -33,7 +33,7 @@
 -export([init_service/2, takeover_service/3]).
 
 %% Function executed by wpool - do not call directly
--export([process/3, prepare_lane/6]).
+-export([process/3, process_task_data/3, prepare_lane/6]).
 
 -type id() :: binary(). % Id of an engine
 -type execution_id() :: binary().
@@ -419,6 +419,11 @@ handle_execution_ended(EngineId, ExecutionId, #execution_ended{
     execution_spec()
 ) -> ok | ?WF_ERROR_LIMIT_REACHED.
 schedule_on_pool(EngineId, ExecutionId, #execution_spec{
+    job_identifier = task_data % stream data processing
+} = ExecutionSpec) ->
+    CallArgs = {?MODULE, process_task_data, [EngineId, ExecutionId, ExecutionSpec]},
+    ok = worker_pool:cast(?POOL_ID(EngineId), CallArgs);
+schedule_on_pool(EngineId, ExecutionId, #execution_spec{
     task_spec = TaskSpec,
     job_identifier = JobIdentifier
 } = ExecutionSpec) ->
@@ -482,10 +487,6 @@ set_default_keepalive_timeout(Id, Timeout) ->
 %%%===================================================================
 
 -spec process(id(), execution_id(), execution_spec()) -> ok.
-process(EngineId, ExecutionId, ExecutionSpec = #execution_spec{
-    job_identifier = task_data
-}) ->
-    process_task_data(EngineId, ExecutionId, ExecutionSpec);
 process(EngineId, ExecutionId, ExecutionSpec = #execution_spec{
     job_identifier = JobIdentifier
 }) ->
@@ -604,7 +605,7 @@ process_task_data(EngineId, ExecutionId, #execution_spec{
     subject_id = TaskDataId
 }) ->
     try
-        Data = workflow_cached_async_result:take(TaskDataId),
+        Data = workflow_cached_task_data:take(TaskDataId),
 
         try
             Ans = call_handler(ExecutionId, ExecutionContext, Handler, process_task_data, [TaskId, Data]),

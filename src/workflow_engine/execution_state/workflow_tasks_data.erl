@@ -49,7 +49,7 @@ register(TaskId, TaskDataId, #workflow_tasks_data{waiting = Waiting, tasks_execu
     case maps:get(TaskId, Waiting, undefined) of
         undefined ->
             TasksData#workflow_tasks_data{
-                tasks_execution_order = Order ++ TaskId,
+                tasks_execution_order = Order ++ [TaskId],
                 waiting = Waiting#{TaskId => [TaskDataId]}
             };
         TaskDataIds ->
@@ -80,7 +80,7 @@ prepare_next(#workflow_tasks_data{waiting = Waiting, tasks_execution_order = [Ne
 mark_done(TaskId, TaskDataId, #workflow_tasks_data{ongoing = Ongoing} = TasksData) ->
     case maps:get(TaskId, Ongoing) of
         [TaskDataId] -> TasksData#workflow_tasks_data{ongoing = maps:remove(TaskId, Ongoing)};
-        TaskDataIds -> TasksData#workflow_tasks_data{ongoing = Ongoing#{TaskId => TaskDataIds -- [TaskId]}}
+        TaskDataIds -> TasksData#workflow_tasks_data{ongoing = Ongoing#{TaskId => TaskDataIds -- [TaskDataId]}}
     end.
 
 

@@ -25,6 +25,7 @@
 
     single_sync_workflow_execution_test/1,
     single_async_workflow_execution_test/1,
+    single_async_workflow_with_empty_streams_execution_test/1,
     single_async_workflow_with_streams_execution_test/1,
     prepare_in_advance_test/1,
     heartbeat_test/1,
@@ -66,6 +67,7 @@ all() ->
 
         single_sync_workflow_execution_test,
         single_async_workflow_execution_test,
+        single_async_workflow_with_empty_streams_execution_test,
         single_async_workflow_with_streams_execution_test,
         prepare_in_advance_test,
         heartbeat_test,
@@ -144,10 +146,31 @@ single_async_workflow_execution_test(Config) ->
     single_execution_test_base(Config, #test_config{task_type = async}).
 
 
+single_async_workflow_with_empty_streams_execution_test(Config) ->
+    single_execution_test_base(Config, #test_config{
+        task_type = async,
+        generator_options = #{task_streams => #{
+            1 => #{{1,1} => []},
+            3 => #{{2,2} => []},
+            5 => #{{1,1} => [], {2,2} => [], {3,1} => [], {3,2} => [], {3,3} => []}
+        }}
+    }).
+
 single_async_workflow_with_streams_execution_test(Config) ->
     single_execution_test_base(Config, #test_config{
         task_type = async,
-        generator_options = #{has_task_data_stream => true}
+        generator_options = #{task_streams => #{
+            1 => #{{1,1} => []},
+            2 => #{{1,1} => [<<"5">>]},
+            3 => #{{2,2} => [<<"100">>]},
+            5 => #{
+                {1,1} => [<<"1">>],
+                {2,2} => [{stream_termination_callback, 5}],
+                {3,1} => [<<"1">>,{<<"2">>, 10},<<"3">>,<<"4">>,<<"100">>,<<"150">>],
+                {3,2} => [<<"100">>, stream_termination_callback],
+                {3,3} => []
+            }
+        }}
     }).
 
 prepare_in_advance_test(Config) ->

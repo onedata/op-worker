@@ -396,7 +396,7 @@ mark_task_data_stream_closed(ExecutionId, TaskId) ->
             workflow_engine:call_handler(ExecutionId, Context, Handler, handle_task_execution_ended, [TaskId]),
             {ok, _} = update(ExecutionId, fun(State) -> remove_pending_callback(State, TaskId) end),
             ok;
-        ongoing ->
+        waiting_for_data_stream_finish ->
             ok
     end,
 
@@ -1241,13 +1241,14 @@ get_task_status(JobIdentifier, #workflow_execution_state{
 
 -spec mark_task_data_done(workflow_engine:task_id(), workflow_cached_task_data:id(), state()) -> state().
 mark_task_data_done(TaskId, TaskDataId, State = #workflow_execution_state{tasks_data = TasksData}) ->
-    TaskStatus = case  workflow_tasks_data:is_task_data_stream_closed(TaskId, TasksData) of
+    UpdatedTasksData = workflow_tasks_data:mark_done(TaskId, TaskDataId, TasksData),
+    TaskStatus = case  workflow_tasks_data:is_task_data_stream_closed(TaskId, UpdatedTasksData) of
         true -> finished;
         false -> ongoing
     end,
 
     add_if_callback_is_pending(State#workflow_execution_state{
-        tasks_data = workflow_tasks_data:mark_done(TaskId, TaskDataId, TasksData),
+        tasks_data = UpdatedTasksData,
         update_report = ?TASK_PROCESSED_REPORT(TaskStatus)
     }, TaskId, TaskStatus =:= finished).
 
