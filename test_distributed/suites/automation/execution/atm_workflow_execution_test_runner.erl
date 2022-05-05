@@ -409,19 +409,38 @@ get_step_mock_spec(
     #mock_call_report{step = prepare_lane, timing = Timing, args = [_, _, {AtmLaneIndex, _}]},
     NewTestCtx
 ) ->
-    #atm_lane_run_execution_test_spec{selector = Selector, prepare_lane = Spec} = get_lane_run_test_spec(
-        AtmLaneIndex, NewTestCtx
-    ),
+    #atm_lane_run_execution_test_spec{
+        selector = Selector,
+        prepare_lane = Spec
+    } = get_lane_run_test_spec(AtmLaneIndex, NewTestCtx),
+
     {{prepare_lane, Timing, Selector}, Spec};
 
 get_step_mock_spec(
     #mock_call_report{step = create_run, timing = Timing, args = [{AtmLaneIndex, _}, _, _]},
     NewTestCtx
 ) ->
-    #atm_lane_run_execution_test_spec{selector = Selector, create_run = Spec} = get_lane_run_test_spec(
-        AtmLaneIndex, NewTestCtx
-    ),
+    #atm_lane_run_execution_test_spec{
+        selector = Selector,
+        create_run = Spec
+    } = get_lane_run_test_spec(AtmLaneIndex, NewTestCtx),
+
     {{create_run, Timing, Selector}, Spec};
+
+get_step_mock_spec(
+    #mock_call_report{
+        step = handle_lane_execution_ended,
+        timing = Timing,
+        args = [{AtmLaneIndex, _}, _, _]
+    },
+    NewTestCtx
+) ->
+    #atm_lane_run_execution_test_spec{
+        selector = Selector,
+        handle_lane_execution_ended = Spec
+    } = get_lane_run_test_spec(AtmLaneIndex, NewTestCtx),
+
+    {{handle_lane_execution_ended, Timing, Selector}, Spec};
 
 get_step_mock_spec(#mock_call_report{step = Step, timing = Timing}, NewTestCtx) ->
     AtmLaneRunTestSpec = get_current_lane_run_test_spec(NewTestCtx),
@@ -888,11 +907,15 @@ exec_mock(AtmWorkflowExecutionId, Step, Args) ->
             case MockExecution of
                 passthrough ->
                     Result = meck:passthrough(Args),
-                    ok = call_test_process(TestProcPid, MockCallReport#mock_call_report{timing = after_step}),
+                    ok = call_test_process(TestProcPid, MockCallReport#mock_call_report{
+                        timing = after_step
+                    }),
                     Result;
                 {passthrough_with_result_override, ResultOverride} ->
                     meck:passthrough(Args),
-                    ok = call_test_process(TestProcPid, MockCallReport#mock_call_report{timing = after_step}),
+                    ok = call_test_process(TestProcPid, MockCallReport#mock_call_report{
+                        timing = after_step
+                    }),
                     apply_result_override(ResultOverride);
                 {yield, ResultOverride} ->
                     apply_result_override(ResultOverride)
