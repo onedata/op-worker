@@ -592,7 +592,6 @@ assert_exp_workflow_execution_state(#test_ctx{
     end.
 
 
-%% TODO name
 %% @private
 -spec shift_monitored_lane_run_if_current_one_ended(mock_call_report(), test_ctx()) ->
     test_ctx().
@@ -619,15 +618,77 @@ shift_monitored_lane_run_if_current_one_ended(
     };
 
 shift_monitored_lane_run_if_current_one_ended(
-    #mock_call_report{timing = after_step, step = handle_lane_execution_ended},
-    TestCtx = #test_ctx{ongoing_incarnations = [OngoingIncarnation | LeftoverIncarnations]}
+    StepMockCallReport = #mock_call_report{
+        timing = after_step,
+        step = Step,
+        args = [{AtmLaneIndex, _}, _, _]
+    },
+    TestCtx = #test_ctx{
+        current_lane_index = CurrentAtmLaneIndex,
+        current_run_num = CurrentAtmRunNum
+    }
+) when
+    % Lane execution ended callback may ba called during lane preparation in case of failure
+    % - in such case it will be prepare_lane that will finish executing last
+    Step =:= prepare_lane;
+    Step =:= handle_lane_execution_ended
+->
+    AtmLaneRunTestSpec = get_lane_run_test_spec(AtmLaneIndex, TestCtx),
+    AtmLaneRunSelector = AtmLaneRunTestSpec#atm_lane_run_execution_test_spec.selector,
+    IsLastLaneRunStepPhase = is_last_lane_run_step_phase(
+        StepMockCallReport, AtmLaneRunSelector, TestCtx
+    ),
+    CurrentAtmLaneRunSelector = {CurrentAtmLaneIndex, CurrentAtmRunNum},
+
+    case {IsLastLaneRunStepPhase, AtmLaneRunSelector} of
+        {true, CurrentAtmLaneRunSelector} ->
+            shift_monitored_lane_run_after_current_one_ended(TestCtx);
+        {true, _} ->
+            filter_out_ended_lane_run_preparing_in_advance(AtmLaneRunSelector, TestCtx);
+        {false, _} ->
+            TestCtx
+    end;
+
+shift_monitored_lane_run_if_current_one_ended(_, TestCtx) ->
+    TestCtx.
+
+
+%% @private
+-spec is_last_lane_run_step_phase(
+    mock_call_report(),
+    atm_lane_execution:lane_run_selector(),
+    test_ctx()
 ) ->
+    boolean().
+is_last_lane_run_step_phase(
+    #mock_call_report{timing = after_step, step = Step},
+    AtmLaneRunSelector,
+    #test_ctx{executed_step_phases = ExecutedStepPhases}
+) ->
+    SecondToLastStepPhaseInLaneRunInCaseThisIsTheLastOne = {
+        hd([prepare_lane, handle_lane_execution_ended] -- [Step]),
+        after_step,
+        AtmLaneRunSelector
+    },
+    lists:member(
+        SecondToLastStepPhaseInLaneRunInCaseThisIsTheLastOne,
+        ExecutedStepPhases
+    ).
+
+
+%% @private
+-spec shift_monitored_lane_run_after_current_one_ended(test_ctx()) -> test_ctx().
+shift_monitored_lane_run_after_current_one_ended(TestCtx = #test_ctx{
+    ongoing_incarnations = [OngoingIncarnation | LeftoverIncarnations]
+}) ->
     case OngoingIncarnation#atm_workflow_execution_incarnation_test_spec.lane_runs of
         [_] ->
             NewOngoingIncarnation = OngoingIncarnation#atm_workflow_execution_incarnation_test_spec{
                 lane_runs = []
             },
-            TestCtx#test_ctx{ongoing_incarnations = [NewOngoingIncarnation | LeftoverIncarnations]};
+            TestCtx#test_ctx{
+                ongoing_incarnations = [NewOngoingIncarnation | LeftoverIncarnations]
+            };
         [_ | LeftoverLaneRuns] ->
             #atm_lane_run_execution_test_spec{selector = {AtmLaneIndex, AtmRunNum}} = hd(
                 LeftoverLaneRuns
@@ -640,10 +701,25 @@ shift_monitored_lane_run_if_current_one_ended(
                 current_run_num = AtmRunNum,
                 ongoing_incarnations = [NewOngoingIncarnation | LeftoverIncarnations]
             }
-    end;
+    end.
 
-shift_monitored_lane_run_if_current_one_ended(_, TestCtx) ->
-    TestCtx.
+
+%% @private
+-spec filter_out_ended_lane_run_preparing_in_advance(
+    atm_lane_execution:lane_run_selector(),
+    test_ctx()
+) ->
+    test_ctx().
+filter_out_ended_lane_run_preparing_in_advance(AtmLaneRunSelector, TestCtx = #test_ctx{
+    ongoing_incarnations = [OngoingIncarnation | LeftoverIncarnations]
+}) ->
+    NewOngoingIncarnation = OngoingIncarnation#atm_workflow_execution_incarnation_test_spec{
+        lane_runs = lists:filter(fun(#atm_lane_run_execution_test_spec{selector = Selector}) ->
+            Selector =/= AtmLaneRunSelector
+        end, OngoingIncarnation#atm_workflow_execution_incarnation_test_spec.lane_runs)
+    },
+    TestCtx#test_ctx{ongoing_incarnations = [NewOngoingIncarnation | LeftoverIncarnations]}.
+
 
 
 %% @private
