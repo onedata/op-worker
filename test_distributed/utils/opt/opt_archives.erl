@@ -20,7 +20,7 @@
     purge/3, purge/4,
     recall/5,
     cancel_recall/3,
-    get_recall_details/3, get_recall_progress/3
+    get_recall_details/3, get_recall_progress/3, browse_recall_log/4
 ]).
 
 -define(CALL(NodeSelector, Args),
@@ -137,3 +137,10 @@ get_recall_details(NodeSelector, SessionId, FileGuid) ->
     {archive_recall:recall_progress_map()} | {error, term()}.
 get_recall_progress(NodeSelector, SessionId, FileGuid) ->
     ?CALL(NodeSelector, [SessionId, FileGuid]).
+
+
+-spec browse_recall_log(oct_background:node_selector(), session:id(), file_id:file_guid(), 
+    json_infinite_log_model:listing_opts()) -> 
+    {json_infinite_log_model:browse_result()} | {error, term()}.
+browse_recall_log(NodeSelector, SessionId, FileGuid, Options) ->
+    ?CALL(NodeSelector, [SessionId, FileGuid, Options]).

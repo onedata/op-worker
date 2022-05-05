@@ -1613,8 +1613,8 @@ flush_stats(#state{
 %%--------------------------------------------------------------------
 -spec flush_events(#state{}) -> #state{}.
 flush_events(#state{file_ctx = FileCtx} = State) ->
-    LocationChanges = fslogic_cache:clear_location_changes(),
-    case LocationChanges of
+    UnflushedLocationChanges = fslogic_cache:clear_location_changes(),
+    case UnflushedLocationChanges of
         [] ->
             ok;
         _ ->
@@ -1622,7 +1622,7 @@ flush_events(#state{file_ctx = FileCtx} = State) ->
                 % TODO VFS-7396 catch error and repeat
                 ok = fslogic_event_emitter:emit_file_locations_changed(
                     lists:reverse(LocationChanges), ExcludedSessions)
-            end, lists:reverse(LocationChanges)),
+            end, lists:reverse(UnflushedLocationChanges)),
             file_popularity:update_size(FileCtx)
     end,
     cancel_events_timer(State).

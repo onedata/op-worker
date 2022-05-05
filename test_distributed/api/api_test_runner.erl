@@ -525,7 +525,7 @@ log_failure(ScenarioName, #api_test_ctx{node = TargetNode, client = Client}, Arg
     "Expected: ~p~n"
     "Got: ~p~n"
     "Error: ~p:~p~n"
-    "Stacktrace: ~p~n", [
+    "Stacktrace: ~s~n", [
         ScenarioName,
         TargetNode,
         aai:auth_to_printable(Client),
@@ -533,7 +533,7 @@ log_failure(ScenarioName, #api_test_ctx{node = TargetNode, client = Client}, Arg
         Expected,
         Got,
         ErrType, ErrReason,
-        Stacktrace
+        lager:pr_stacktrace(Stacktrace)
     ]).
 
 
