@@ -509,6 +509,8 @@ call_if_defined(undefined, _Input) -> ok;
 call_if_defined(Fun, Input) -> Fun(Input).
 
 
+-define(NO_DIFF, fun(_) -> false end).
+
 %% @private
 -spec get_exp_state_diff(mock_call_report(), step_mock_spec()) ->
     exp_state_diff().
@@ -516,7 +518,7 @@ get_exp_state_diff(
     #mock_call_report{step = prepare_lane, timing = before_step},
     #atm_step_mock_spec{before_step_exp_state_diff = default}
 ) ->
-    fun(_) -> false end;
+    ?NO_DIFF;
 
 get_exp_state_diff(
     #mock_call_report{step = create_run, timing = before_step},
@@ -558,6 +560,35 @@ get_exp_state_diff(
     end;
 
 get_exp_state_diff(
+    #mock_call_report{step = process_item, timing = before_step},
+    #atm_step_mock_spec{before_step_exp_state_diff = default}
+) ->
+    ?NO_DIFF;
+
+get_exp_state_diff(
+    #mock_call_report{step = process_item, timing = after_step},
+    #atm_step_mock_spec{after_step_exp_state_diff = default}
+) ->
+    fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0, call_args = [
+        _AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId,
+        ItemsBatch, _ReportResultUrl, _HeartbeatUrl
+    ]}) ->
+        ExpState1 = atm_workflow_execution_exp_state_builder:expect_task_items_in_processing_increased(
+            AtmTaskExecutionId, length(ItemsBatch), ExpState0
+        ),
+        ExpState2 = atm_workflow_execution_exp_state_builder:expect_task_transit_to_active_status_if_in_pending_status(
+            AtmTaskExecutionId, ExpState1
+        ),
+        ExpState3 = atm_workflow_execution_exp_state_builder:expect_task_parallel_box_transit_to_active_status_if_in_pending_status(
+            AtmTaskExecutionId, ExpState2
+        ),
+        ExpState4 = atm_workflow_execution_exp_state_builder:expect_task_lane_run_transit_to_active_status_if_in_enqueued_status(
+            AtmTaskExecutionId, ExpState3
+        ),
+        {true, ExpState4}
+    end;
+
+get_exp_state_diff(
     #mock_call_report{timing = before_step},
     #atm_step_mock_spec{before_step_exp_state_diff = default}
 ) ->
@@ -567,7 +598,7 @@ get_exp_state_diff(
     #mock_call_report{timing = before_step},
     #atm_step_mock_spec{before_step_exp_state_diff = no_diff}
 ) ->
-    fun(_) -> false end;
+    ?NO_DIFF;
 
 get_exp_state_diff(
     #mock_call_report{timing = before_step},
@@ -585,7 +616,7 @@ get_exp_state_diff(
     #mock_call_report{timing = after_step},
     #atm_step_mock_spec{after_step_exp_state_diff = no_diff}
 ) ->
-    fun(_) -> false end;
+    ?NO_DIFF;
 
 get_exp_state_diff(
     #mock_call_report{timing = after_step},
