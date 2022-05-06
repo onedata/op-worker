@@ -151,6 +151,8 @@
 ).
 
 
+-define(NO_DIFF, fun(_) -> false end).
+
 -define(NOW(), global_clock:timestamp_seconds()).
 
 
@@ -509,8 +511,6 @@ call_if_defined(undefined, _Input) -> ok;
 call_if_defined(Fun, Input) -> Fun(Input).
 
 
--define(NO_DIFF, fun(_) -> false end).
-
 %% @private
 -spec get_exp_state_diff(mock_call_report(), step_mock_spec()) ->
     exp_state_diff().
@@ -586,6 +586,81 @@ get_exp_state_diff(
             AtmTaskExecutionId, ExpState3
         ),
         {true, ExpState4}
+    end;
+
+get_exp_state_diff(
+    #mock_call_report{step = process_result, timing = before_step},
+    #atm_step_mock_spec{before_step_exp_state_diff = default}
+) ->
+    ?NO_DIFF;
+
+get_exp_state_diff(
+    #mock_call_report{step = process_result, timing = after_step},
+    #atm_step_mock_spec{after_step_exp_state_diff = default}
+) ->
+    fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0, call_args = [
+        _AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId,
+        ItemsBatch, _LambdaOutput
+    ]}) ->
+        {true, atm_workflow_execution_exp_state_builder:expect_task_items_transit_from_processing_to_processed(
+            AtmTaskExecutionId, length(ItemsBatch), ExpState0
+        )}
+    end;
+
+get_exp_state_diff(
+    #mock_call_report{step = handle_task_execution_ended, timing = before_step},
+    #atm_step_mock_spec{before_step_exp_state_diff = default}
+) ->
+    ?NO_DIFF;
+
+get_exp_state_diff(
+    #mock_call_report{step = handle_task_execution_ended, timing = after_step},
+    #atm_step_mock_spec{after_step_exp_state_diff = default}
+) ->
+    fun(#atm_mock_call_ctx{
+        workflow_execution_exp_state = ExpState0,
+        call_args = [_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId]
+    }) ->
+        ExpState1 = atm_workflow_execution_exp_state_builder:expect_task_finished(
+            AtmTaskExecutionId, ExpState0
+        ),
+        ExpState2 = atm_workflow_execution_exp_state_builder:expect_task_parallel_box_finished_if_other_tasks_finished(
+            AtmTaskExecutionId, ExpState1
+        ),
+        {true, ExpState2}
+    end;
+
+get_exp_state_diff(
+    #mock_call_report{step = handle_lane_execution_ended, timing = before_step},
+    #atm_step_mock_spec{before_step_exp_state_diff = default}
+) ->
+    ?NO_DIFF;
+
+get_exp_state_diff(
+    #mock_call_report{step = handle_lane_execution_ended, timing = after_step},
+    #atm_step_mock_spec{after_step_exp_state_diff = default}
+) ->
+    fun(#atm_mock_call_ctx{
+        workflow_execution_exp_state = ExpState0,
+        call_args = [AtmLaneRunSelector, _AtmWorkflowExecutionId, _AtmWorkflowExecutionCtx]
+    }) ->
+        {true, atm_workflow_execution_exp_state_builder:expect_lane_run_finished(
+            AtmLaneRunSelector, ExpState0
+        )}
+    end;
+
+get_exp_state_diff(
+    #mock_call_report{step = handle_workflow_execution_ended, timing = before_step},
+    #atm_step_mock_spec{before_step_exp_state_diff = default}
+) ->
+    ?NO_DIFF;
+
+get_exp_state_diff(
+    #mock_call_report{step = handle_workflow_execution_ended, timing = after_step},
+    #atm_step_mock_spec{after_step_exp_state_diff = default}
+) ->
+    fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+        {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_finished(ExpState0)}
     end;
 
 get_exp_state_diff(
