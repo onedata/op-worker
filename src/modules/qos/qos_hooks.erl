@@ -135,12 +135,12 @@ reconcile_qos_internal(FileCtx, Options) when is_list(Options) ->
                     QosEntriesToUpdate = file_qos:get_assigned_entries_for_storage(EffFileQos, StorageId),
                     ok = qos_traverse:reconcile_file_for_qos_entries(FileCtx1, QosEntriesToUpdate);
                 true ->
-                    QosEntries = file_qos:get_qos_entries(EffFileQos),
+                    LocalQosEntries = file_qos:get_locally_required_qos_entries(EffFileQos),
                     FileGuid = file_ctx:get_logical_guid_const(FileCtx),
                     lists:foreach(fun(QosEntryId) ->
                         ok = qos_entry_audit_log:report_file_synchronization_skipped(
                             QosEntryId, FileGuid, <<"file deleted">>)
-                    end, QosEntries)
+                    end, LocalQosEntries)
             end;
         undefined ->
             ok
@@ -152,12 +152,12 @@ report_synchronization_skipped(FileCtx) ->
     InodeUuid = file_ctx:get_referenced_uuid_const(FileCtx),
     case file_qos:get_effective(InodeUuid) of
         {ok, EffFileQos} ->
-            QosEntries = file_qos:get_qos_entries(EffFileQos),
+            LocalQosEntries = file_qos:get_locally_required_qos_entries(EffFileQos),
             FileGuid = file_ctx:get_logical_guid_const(FileCtx),
             lists:foreach(fun(QosEntryId) ->
                 ok = qos_entry_audit_log:report_file_synchronization_skipped(
                     QosEntryId, FileGuid, <<"file already replicated">>)
-            end, QosEntries);
+            end, LocalQosEntries);
         _ ->
             ok
     end.

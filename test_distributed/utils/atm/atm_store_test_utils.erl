@@ -145,7 +145,7 @@ example_data_spec(atm_array_type) ->
     };
 
 example_data_spec(atm_time_series_measurement_type) ->
-    RandSpecs = atm_test_utils:example_time_series_measurements_specs(),
+    RandSpecs = atm_test_utils:example_time_series_measurement_specs(),
 
     #atm_data_spec{
         type = atm_time_series_measurement_type,
@@ -267,7 +267,7 @@ gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_data_spec{
 
 
 %% @private
--spec gen_ts_name(atm_time_series_measurements_spec:record()) ->
+-spec gen_ts_name(atm_time_series_measurement_spec:record()) ->
     atm_time_series_attribute:name().
 gen_ts_name(#atm_time_series_measurement_spec{
     name_matcher_type = exact,

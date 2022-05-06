@@ -6,19 +6,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module operates on two types of tokens used for continuous listing of directory content: 
-%%%     * api_list_token - used by higher-level modules and passed to the external clients as an 
-%%%                        opaque string so that they can resume listing just after previously 
-%%%                        listed batch (results paging). It encodes a datastore_token and additional
-%%%                        information about last position in the file tree, in case the datastore
-%%%                        token expires. Hence, this token does not expire and always guarantees
-%%%                        correct listing resumption.
-%%%                    
-%%%     * datastore_list_token - token used internally by datastore, has limited TTL. After its expiration, 
-%%%                              information about last position in the file tree can be used to determine
-%%%                              the starting point for listing. This token offers the best performance 
-%%%                              when resuming listing from a certain point.
-%%% @TODO VFS-8980 currently it is possible to pass datastore_token from outside
+%%% This module is responsible for handing requests operating on directories.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(dir_req).
@@ -31,17 +19,9 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 
 
--type api_list_token() :: binary().
--type list_token() :: file_meta:list_token() | api_list_token().
--type token_type() :: api_list_token | datastore_list_token.
-
 %% @TODO VFS-8980 Create opaque structure for list opts
-% When api_list_token is provided, other starting point options (offset, last_tree, last_name) are ignored
--type list_opts() :: #{
-    token := api_list_token(),
-    size := file_meta:list_size()
-} | file_meta:list_opts().
-
+-type list_opts() :: file_listing:list_opts().
+-type list_token() :: file_listing:list_token().
 
 -export_type([list_token/0, list_opts/0]).
 
@@ -51,31 +31,13 @@
     get_children_ctxs/3,
     get_children/3,
     get_children_attrs/5,
-    get_children_details/3,
-    get_recursive_file_list/4
+    get_children_details/3
 ]).
 
-%% @TODO VFS-9051 - Refactor recursive file listing
-
--record(list_recursive_state, {
-    % Split relative path between start after and start file path.
-    % Each filename in the list is a starting point at corresponding subtree level, 
-    % the only exception being the last token, if it matches regular file - then it should be filtered out.
-    filters :: [file_meta:name()],
-    limit :: non_neg_integer(),
-    current_path_tokens :: [file_meta:name()],
-    previous_filter :: undefined | file_meta:name(),
-    parent_uuid :: file_meta:uuid(),
-    canonical_children_whitelist :: undefined | [file_meta:path()]
-}).
-
--type list_recursive_state() :: #list_recursive_state{}.
 
 -define(MAX_MAP_CHILDREN_PROCESSES, application:get_env(
     ?APP_NAME, max_read_dir_plus_procs, 20
 )).
--define(LIST_RECURSIVE_BATCH_SIZE, 1000).
--define(api_list_token_PREFIX, "api_list_token").
 
 %%%===================================================================
 %%% API
@@ -104,7 +66,8 @@ mkdir(UserCtx, ParentFileCtx0, Name, Mode) ->
     fslogic_worker:fuse_response().
 get_children(UserCtx, FileCtx0, ListOpts) ->
     ParentGuid = file_ctx:get_logical_guid_const(FileCtx0),
-    {ChildrenCtxs, ExtendedInfo, FileCtx1} = get_children_ctxs(UserCtx, FileCtx0, ListOpts),
+    {ChildrenCtxs, ExtendedInfo, FileCtx1} = get_children_ctxs(
+        UserCtx, FileCtx0, ListOpts, ?OPERATIONS(?list_container_mask)),
     ChildrenNum = length(ChildrenCtxs),
 
     ChildrenLinks = lists:filtermap(fun({Num, ChildCtx}) ->
@@ -116,7 +79,9 @@ get_children(UserCtx, FileCtx0, ListOpts) ->
                     {FileDoc, _ChildCtx3} = file_ctx:get_file_doc(ChildCtx2),
                     ProviderId = file_meta:get_provider_id(FileDoc),
                     {ok, FileUuid} = file_meta:get_uuid(FileDoc),
-                    case file_meta:check_name_and_get_conflicting_files(file_id:guid_to_uuid(ParentGuid), ChildName, FileUuid, ProviderId) of
+                    case file_meta:check_name_and_get_conflicting_files(
+                        file_id:guid_to_uuid(ParentGuid), ChildName, FileUuid, ProviderId) 
+                    of
                         {conflicting, ExtendedName, _ConflictingFiles} ->
                             {true, #child_link{name = ExtendedName, guid = ChildGuid}};
                         _ ->
@@ -144,12 +109,6 @@ get_children(UserCtx, FileCtx0, ListOpts) ->
     }.
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% list_children/8 with permissions_check
-%% TODO VFS-7149 untangle permissions_check and fslogic_worker
-%% @end
-%%--------------------------------------------------------------------
 -spec get_children_ctxs(user_ctx:ctx(), file_ctx:ctx(), list_opts()
 ) ->
     {
@@ -158,15 +117,8 @@ get_children(UserCtx, FileCtx0, ListOpts) ->
         NewFileCtx :: file_ctx:ctx()
     }.
 get_children_ctxs(UserCtx, FileCtx0, ListOpts) ->
-    {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
-    AccessRequirements = case IsDir of
-        true -> [?TRAVERSE_ANCESTORS, ?OPERATIONS(?list_container_mask)];
-        false -> [?TRAVERSE_ANCESTORS]
-    end,
-    {CanonicalChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
-        UserCtx, FileCtx1, AccessRequirements
-    ),
-    list_children(UserCtx, FileCtx2, ListOpts, CanonicalChildrenWhiteList).
+    get_children_ctxs(
+        UserCtx, FileCtx0, ListOpts, ?OPERATIONS(?traverse_container_mask, ?list_container_mask)).
 
 
 %%--------------------------------------------------------------------
@@ -207,27 +159,34 @@ get_children_details(UserCtx, FileCtx0, ListOpts) ->
     get_children_details_insecure(UserCtx, FileCtx2, ListOpts, CanonicalChildrenWhiteList).
 
 
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
 %%--------------------------------------------------------------------
-%% @equiv list_recusrive_insecure/5 with permission checks
+%% @doc
+%% file_listing:list_children/4 with permissions_check
+%% TODO VFS-7149 untangle permissions_check and fslogic_worker
 %% @end
 %%--------------------------------------------------------------------
--spec get_recursive_file_list(user_ctx:ctx(), file_ctx:ctx(), file_meta:path(), non_neg_integer()) ->
-    fslogic_worker:fuse_response().
-get_recursive_file_list(UserCtx, FileCtx0, StartAfter, Limit) ->
+-spec get_children_ctxs(user_ctx:ctx(), file_ctx:ctx(), list_opts(), data_access_control:requirement()
+) ->
+    {
+        ChildrenCtxs :: [file_ctx:ctx()],
+        ExtendedListInfo :: file_meta:list_extended_info(),
+        NewFileCtx :: file_ctx:ctx()
+    }.
+get_children_ctxs(UserCtx, FileCtx0, ListOpts, DirOperationsRequirements) ->
     {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
     AccessRequirements = case IsDir of
-        true -> [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?list_container_mask)];
+        true -> [?TRAVERSE_ANCESTORS, DirOperationsRequirements];
         false -> [?TRAVERSE_ANCESTORS]
     end,
     {CanonicalChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
         UserCtx, FileCtx1, AccessRequirements
     ),
-    list_recursive_insecure(UserCtx, FileCtx2, StartAfter, Limit, CanonicalChildrenWhiteList).
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
+    file_listing:list_children(UserCtx, FileCtx2, ListOpts, CanonicalChildrenWhiteList).
 
 
 %%--------------------------------------------------------------------
@@ -294,7 +253,7 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
 get_children_attrs_insecure(
     UserCtx, FileCtx0, ListOpts, IncludeReplicationStatus, IncludeLinkCount, CanonicalChildrenWhiteList
 ) ->
-    {Children, ExtendedInfo, FileCtx1} = list_children(
+    {Children, ExtendedInfo, FileCtx1} = file_listing:list_children(
         UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhiteList),
     ChildrenAttrs = map_children(
         UserCtx,
@@ -332,7 +291,7 @@ get_children_attrs_insecure(
     fslogic_worker:fuse_response().
 get_children_details_insecure(UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhiteList) ->
     file_ctx:is_user_root_dir_const(FileCtx0, UserCtx) andalso throw(?ENOTSUP),
-    {Children, ListExtendedInfo, FileCtx1} = list_children(
+    {Children, ListExtendedInfo, FileCtx1} = file_listing:list_children(
         UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhiteList
     ),
     ChildrenDetails = map_children(
@@ -349,75 +308,6 @@ get_children_details_insecure(UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhit
             is_last = maps:get(is_last, ListExtendedInfo)
         }
     }.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Gets file basic attributes (see file_attr.hrl) for each regular file 
-%% that is in a subtree of given file starting after path from specified 
-%% StartAfter entry and up to Limit of entries and allowed by CanonicalChildrenWhiteList.
-%% @end
-%%--------------------------------------------------------------------
--spec list_recursive_insecure(user_ctx:ctx(), file_ctx:ctx(), file_meta:path(), non_neg_integer(), 
-    undefined | [file_meta:name()]
-) ->
-    fslogic_worker:fuse_response().
-list_recursive_insecure(UserCtx, FileCtx0, StartAfter, Limit, CanonicalChildrenWhiteList) ->
-    {StartPath, FileCtx1} = file_ctx:get_canonical_path(FileCtx0),
-    [_Sep, SpaceId | StartPathTokens] = filename:split(StartPath),
-    case prepare_recursive_list_filters(
-        filename:join(SpaceId, StartAfter), filename:join([SpaceId | StartPathTokens])
-    ) of
-        {cont, Filters} ->
-            {Res, IsLast} = list_recursive_next_file(UserCtx, FileCtx1, #list_recursive_state{
-                filters = Filters,
-                limit = Limit,
-                current_path_tokens = [SpaceId | StartPathTokens],
-                previous_filter = filename:basename(StartPath),
-                parent_uuid = file_ctx:get_logical_uuid_const(FileCtx1),
-                canonical_children_whitelist = CanonicalChildrenWhiteList
-            }),
-            
-            #fuse_response{status = #status{code = ?OK},
-                fuse_response = #recursive_file_list{
-                    files = Res,
-                    is_last = IsLast
-                }
-            };
-        halt ->
-            #fuse_response{status = #status{code = ?OK},
-                fuse_response = #recursive_file_list{
-                    files = [],
-                    is_last = true
-                }
-            }
-    end.
-
-
-%% @private
--spec list_children(user_ctx:ctx(), file_ctx:ctx(), list_opts(),
-    CanonicalChildrenWhiteList :: undefined | [file_meta:name()]
-) ->
-    {
-        Children :: [file_ctx:ctx()],
-        ExtendedInfo :: file_meta:list_extended_info(),
-        NewFileCtx :: file_ctx:ctx()
-    }.
-list_children(UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhiteList) ->
-    {TokenType, FinalListOpts} = resolve_list_opts(ListOpts),
-    {Children, ExtendedInfo, NewFileCtx} = files_tree:get_children(
-        FileCtx0, UserCtx, FinalListOpts, CanonicalChildrenWhiteList),
-    FinalExtendedInfo = case TokenType of
-        api_list_token -> 
-            #{
-                is_last => maps:get(is_last, ExtendedInfo),
-                token => pack_api_list_token(ExtendedInfo)
-            };
-        _ ->
-            ExtendedInfo
-    end,
-    {Children, FinalExtendedInfo, NewFileCtx}.
 
 
 %%--------------------------------------------------------------------
@@ -473,178 +363,3 @@ map_children(UserCtx, MapFunInsecure, Children, IncludeReplicationStatus, Includ
         end
     end,
     lists_utils:pfiltermap(FilterMapFun, EnumeratedChildren, ?MAX_MAP_CHILDREN_PROCESSES).
-
-
--spec prepare_recursive_list_filters(file_meta:path(), file_meta:path()) -> 
-    {cont, [file_meta:name()]} | halt.
-prepare_recursive_list_filters(StartAfter, StartPath) when StartAfter =< StartPath ->
-    {cont, []};
-prepare_recursive_list_filters(StartAfter, StartPath) ->
-    case filepath_utils:is_descendant(StartAfter, StartPath) of
-        false ->
-            halt;
-        {true, RelPath} ->
-            {cont, filename:split(RelPath)}
-    end.
-
-
--spec list_recursive_next_file(user_ctx:ctx(), file_ctx:ctx(), list_recursive_state()) ->
-    {[{file_meta:path(), lfm_attrs:file_attributes()}], boolean()}.
-list_recursive_next_file(_UserCtx, _FileCtx, #list_recursive_state{limit = Limit}) when Limit =< 0 ->
-    {[], false};
-list_recursive_next_file(UserCtx, FileCtx, State) ->
-    {ListOpts, UpdatedState} = build_starting_list_opts(State),
-    list_recursive_children_next_batch(UserCtx, FileCtx, ListOpts, UpdatedState, []).
-
-
--spec list_recursive_children_next_batch(user_ctx:ctx(), file_ctx:ctx(), map(), 
-    list_recursive_state(), [{file_meta:path(), lfm_attrs:file_attributes()}]) ->
-    {[{file_meta:path(), lfm_attrs:file_attributes()}], boolean()}.
-list_recursive_children_next_batch(UserCtx, FileCtx, ListOpts, State, Acc) ->
-    #list_recursive_state{
-        limit = Limit, 
-        canonical_children_whitelist = CanonicalChildrenWhitelist
-    } = State,
-    {Children, #{is_last := IsLast} = ExtendedInfo, _FileCtx1} =
-        list_children(UserCtx, FileCtx, ListOpts#{size => ?LIST_RECURSIVE_BATCH_SIZE}, CanonicalChildrenWhitelist),
-    {Res, FinalProcessedFiles} = lists_utils:foldl_while(fun(ChildCtx, {TmpBatch, ProcessedFiles}) ->
-        {ChildBatch, IsChildProcessed} = map_list_recursive_child(
-            UserCtx, ChildCtx, file_ctx:get_logical_guid_const(FileCtx), State#list_recursive_state{
-                limit = Limit - length(TmpBatch)
-            }),
-        BatchToReturn = TmpBatch ++ ChildBatch,
-        FileProcessedIncrement = case IsChildProcessed of
-            true -> 1;
-            false -> 0
-        end,
-        ResToReturn = {BatchToReturn, ProcessedFiles + FileProcessedIncrement},
-        case length(BatchToReturn) >= Limit of
-            true -> {halt, ResToReturn};
-            false -> {cont, ResToReturn}
-        end
-    end, {Acc, 0}, Children),
-    case {length(Res) >= Limit, IsLast} of
-        {true, _} ->
-            {Res, IsLast and (FinalProcessedFiles == length(Children))};
-        {false, true} ->
-            {Res, true};
-        {false, false} ->
-            NextListOpts = maps:with([last_tree, last_name], ExtendedInfo),
-            list_recursive_children_next_batch(
-                UserCtx, FileCtx, NextListOpts, State#list_recursive_state{limit = Limit - length(Res)}, Res)
-    end.
-
-
--spec map_list_recursive_child(user_ctx:ctx(), file_ctx:ctx(), file_id:file_guid(), list_recursive_state()) ->
-    {[{file_meta:path(), lfm_attrs:file_attributes()}], boolean()}.
-map_list_recursive_child(UserCtx, ChildCtx, ListedFileGuid, State) ->
-    #list_recursive_state{
-        current_path_tokens = CurrentPathTokens,
-        previous_filter = LastFilter
-    } = State,
-    #fuse_response{
-        status = #status{code = ?OK},
-        fuse_response = FileAttrs
-    } = attr_req:get_file_attr_insecure(UserCtx, ChildCtx, #{
-        name_conflicts_resolution_policy => resolve_name_conflicts
-    }),
-    case FileAttrs of
-        #file_attr{type = ?DIRECTORY_TYPE, name = Name, guid = G} ->
-            {NextChildren, SubtreeFinished} = list_recursive_next_file(UserCtx, ChildCtx,
-                State#list_recursive_state{
-                    current_path_tokens = CurrentPathTokens ++ [Name],
-                    parent_uuid = file_id:guid_to_uuid(G)
-                }
-            ),
-            {NextChildren, SubtreeFinished};
-        #file_attr{type = _, name = LastFilter} ->
-            {[], true};
-        #file_attr{guid = G} when G == ListedFileGuid ->
-            % listing regular file should return this file
-            [_SpaceId | RestPathTokens] = CurrentPathTokens,
-            {[{filename:join(RestPathTokens), FileAttrs}], true};
-        #file_attr{type = _, name = Name} ->
-            [_SpaceId | RestPathTokens] = CurrentPathTokens,
-            {[{filename:join(RestPathTokens ++ [Name]), FileAttrs}], true}
-    end.
-
-
--spec build_starting_list_opts(list_recursive_state()) -> 
-    {map(), list_recursive_state()}.
-build_starting_list_opts(#list_recursive_state{previous_filter = undefined} = State) ->
-    {#{last_name => <<>>}, State#list_recursive_state{filters = []}};
-build_starting_list_opts(#list_recursive_state{filters = []} = State) ->
-    {#{last_name => <<>>}, State#list_recursive_state{previous_filter = undefined}};
-build_starting_list_opts(#list_recursive_state{
-    filters = [Filter | NextFilters],
-    previous_filter = PrevFilter,
-    current_path_tokens = CurrentPathTokens,
-    parent_uuid = ParentUuid
-} = State) ->
-    case lists:last(CurrentPathTokens) == PrevFilter of
-        true ->
-            Opts = case file_meta:get_child_uuid_and_tree_id(ParentUuid, Filter) of
-                {ok, _, TreeId} ->
-                    #{
-                        % trim tree id to always have inclusive listing
-                        last_tree => binary:part(TreeId, 0, size(TreeId) - 1),
-                        last_name => file_meta:trim_filename_tree_id(Filter, TreeId)
-                    };
-                _ ->
-                    #{
-                        last_name => file_meta:trim_filename_tree_id(Filter, {all, ParentUuid})
-                    }
-            end,
-            {Opts, State#list_recursive_state{filters = NextFilters, previous_filter = Filter}};
-        _ ->
-            % we are no longer in a subtree that is filtered, so all filters ca be dropped
-            {
-                #{last_name => <<>>}, 
-                State#list_recursive_state{filters = [], previous_filter = undefined}
-            }
-    end.
-
-
-%% @private
--spec resolve_list_opts(list_opts()) -> {token_type() | none, file_meta:list_opts()}.
-resolve_list_opts(#{token := undefined} = ListOpts) ->
-    {none, ListOpts};
-resolve_list_opts(#{token := ?INITIAL_API_LS_TOKEN} = ListOpts) ->
-    {api_list_token, #{
-        token => ?INITIAL_DATASTORE_LS_TOKEN,
-        last_tree => <<>>,
-        last_name => <<>>,
-        size => maps:get(size, ListOpts)
-    }};
-resolve_list_opts(#{token := Token} = ListOpts) ->
-    try
-        {api_list_token, maps:merge(unpack_api_list_token(Token), #{
-            size => maps:get(size, ListOpts)
-        })}
-    catch _:_ ->
-        {datastore_list_token, ListOpts}
-    end;
-resolve_list_opts(ListOpts) ->
-    {none, ListOpts}.
-
-
-%% @private
--spec pack_api_list_token(file_meta:list_extended_info()) -> binary().
-pack_api_list_token(#{token := DatastoreToken, last_tree := LastTree, last_name := LastName}) ->
-    mochiweb_base64url:encode(str_utils:join_binary(
-        [<<?api_list_token_PREFIX>>, DatastoreToken, LastTree, LastName], <<"#">>));
-pack_api_list_token(_) ->
-    undefined.
-
-
-%% @private
--spec unpack_api_list_token(api_list_token()) -> map().
-unpack_api_list_token(Token) ->
-    <<?api_list_token_PREFIX, _/binary>> = DecodedToken = mochiweb_base64url:decode(Token),
-    [_Header, DecodedDatastoreToken, LastTree | LastNameTokens] =
-        binary:split(DecodedToken, <<"#">>, [global]),
-    #{
-        token => DecodedDatastoreToken,
-        last_tree => LastTree,
-        last_name => str_utils:join_binary(LastNameTokens, <<"#">>)
-    }.

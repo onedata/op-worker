@@ -83,11 +83,11 @@ get_response(#gri{aspect = children}, {Children, IsLast, ReturnedToken}) ->
         <<"isLast">> => IsLast
     });
 
-get_response(#gri{aspect = files}, {Files, NextPageToken, IsLast}) ->
+get_response(#gri{aspect = files}, {FilesJson, InaccessiblePaths, NextPageToken}) ->
     ?OK_REPLY(#{
-        <<"files">> => Files,
-        <<"nextPageToken">> => NextPageToken,
-        <<"isLast">> => IsLast
+        <<"files">> => FilesJson,
+        <<"inaccessiblePaths">> => InaccessiblePaths,
+        <<"nextPageToken">> => utils:undefined_to_null(NextPageToken)
     });
 
 get_response(#gri{aspect = hardlinks}, Hardlinks) ->
@@ -102,8 +102,8 @@ get_response(#gri{aspect = {hardlinks, _}}, _Result) ->
 get_response(#gri{aspect = archive_recall_details}, Result) ->
     ?OK_REPLY(translate_archive_recall_details(Result));
 
-get_response(#gri{aspect = archive_recall_progress}, #{<<"lastError">> := LastError} = Result) ->
-    ?OK_REPLY(Result#{<<"lastError">> => utils:undefined_to_null(LastError)}).
+get_response(#gri{aspect = archive_recall_progress}, ArchiveRecallProgress) ->
+    ?OK_REPLY(ArchiveRecallProgress).
 
 
 %%%===================================================================
