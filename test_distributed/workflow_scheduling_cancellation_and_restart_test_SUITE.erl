@@ -355,7 +355,6 @@ cancel_and_restart_test_base(Config, #test_config{
 
     #{execution_history := ExecutionHistory} = ExtendedHistoryStats =
         workflow_scheduling_test_common:get_task_execution_history(Config),
-    ct:print("qqqq ~p", [ExecutionHistory]),
     case TestExecutionManagerOption of
         cancel_execution -> ?assertMatch(#{cancel_ans := ok}, ExtendedHistoryStats);
         _ -> ok

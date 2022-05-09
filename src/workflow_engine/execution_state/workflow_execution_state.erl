@@ -1235,33 +1235,37 @@ verify_ongoing_jobs_when_execution_is_cancelled(Error, NewJobs, State = #workflo
                         pending_callbacks = [?CALLBACKS_ON_STREAMS_CANCEL_SELECTOR | PendingCallbacks]
                     }};
                 _ ->
-                    % TODO - generowanie AreAllDataStreamsClosed powtarza sie - wyciagnac do funkcji pomocniczej
-                    AreAllDataStreamsClosed = lists:all(fun(TaskId) ->
-                        workflow_tasks_data:is_task_data_stream_closed(TaskId, TasksData)
-                    end, TaskIdsWithStreams),
-
-                    UnfinishedTaskIdsWithStreams = lists:filter(fun(TaskId) ->
-                        not workflow_tasks_data:is_task_data_stream_finished(TaskId, TasksData)
-                    end, TaskIdsWithStreams),
-
-                    case AreAllDataStreamsClosed of
-                        true when NextLaneStatus =:= ?PREPARING ->
-                            ItemIds = workflow_iteration_state:get_all_item_ids(IterationState),
+                    case workflow_tasks_data:prepare_next(TasksData) of
+                        {ok, TaskId, TaskDataId, UpdatedTasksData} ->
                             {ok, State#workflow_execution_state{
-                                jobs = NewJobs, iteration_state = workflow_iteration_state:init(),
-                                execution_status = ?WAITING_FOR_NEXT_LANE_PREPARATION_END,
-                                update_report = ?EXECUTION_CANCELLED_REPORT(ItemIds,
-                                    TaskIdsWithoutStreamsToFinish ++ UnfinishedTaskIdsWithStreams),
-                                pending_callbacks = [?CALLBACKS_ON_CANCEL_SELECTOR | PendingCallbacks]
+                                jobs = NewJobs,
+                                update_report = #job_prepared_report{job_identifier = task_data,
+                                    task_id = TaskId, subject_id = TaskDataId},
+                                tasks_data = UpdatedTasksData
                             }};
-                        true ->
-                            ItemIds = workflow_iteration_state:get_all_item_ids(IterationState),
-                            {ok, State#workflow_execution_state{jobs = NewJobs, iteration_state = workflow_iteration_state:init(),
-                                update_report = ?EXECUTION_CANCELLED_REPORT(ItemIds,
-                                    TaskIdsWithoutStreamsToFinish ++ UnfinishedTaskIdsWithStreams),
-                                pending_callbacks = [?CALLBACKS_ON_CANCEL_SELECTOR | PendingCallbacks]}};
-                        false ->
-                            ?WF_ERROR_NO_WAITING_ITEMS
+                        ?ERROR_NOT_FOUND ->
+                            % TODO - generowanie AreAllDataStreamsFinished powtarza sie - wyciagnac do funkcji pomocniczej
+                            AreAllDataStreamsFinished = lists:all(fun(TaskId) ->
+                                workflow_tasks_data:is_task_data_stream_finished(TaskId, TasksData)
+                            end, TaskIdsWithStreams),
+
+                            case AreAllDataStreamsFinished of
+                                true when NextLaneStatus =:= ?PREPARING ->
+                                    ItemIds = workflow_iteration_state:get_all_item_ids(IterationState),
+                                    {ok, State#workflow_execution_state{
+                                        jobs = NewJobs, iteration_state = workflow_iteration_state:init(),
+                                        execution_status = ?WAITING_FOR_NEXT_LANE_PREPARATION_END,
+                                        update_report = ?EXECUTION_CANCELLED_REPORT(ItemIds, TaskIdsWithoutStreamsToFinish),
+                                        pending_callbacks = [?CALLBACKS_ON_CANCEL_SELECTOR | PendingCallbacks]
+                                    }};
+                                true ->
+                                    ItemIds = workflow_iteration_state:get_all_item_ids(IterationState),
+                                    {ok, State#workflow_execution_state{jobs = NewJobs, iteration_state = workflow_iteration_state:init(),
+                                        update_report = ?EXECUTION_CANCELLED_REPORT(ItemIds, TaskIdsWithoutStreamsToFinish),
+                                        pending_callbacks = [?CALLBACKS_ON_CANCEL_SELECTOR | PendingCallbacks]}};
+                                false ->
+                                    ?WF_ERROR_NO_WAITING_ITEMS
+                            end
                     end
             end
     end.
@@ -1449,12 +1453,12 @@ handle_no_waiting_items_error(#workflow_execution_state{
                 pending_callbacks = [?CALLBACKS_ON_STREAMS_CANCEL_SELECTOR | PendingCallbacks]
             }};
         _ ->
-            % TODO - generowanie AreAllDataStreamsClosed powtarza sie - wyciagnac do funkcji pomocniczej
-            AreAllDataStreamsClosed = lists:all(fun(TaskId) ->
+            % TODO - generowanie AreAllDataStreamsFinished powtarza sie - wyciagnac do funkcji pomocniczej
+            AreAllDataStreamsFinished = lists:all(fun(TaskId) ->
                 workflow_tasks_data:is_task_data_stream_finished(TaskId, TasksData)
             end, TaskIdsWithStreams),
 
-            case AreAllDataStreamsClosed of
+            case AreAllDataStreamsFinished of
                 true when NextLaneStatus =:= ?PREPARING ->
                     {ok, State#workflow_execution_state{
                         iteration_state = workflow_iteration_state:init(),
@@ -1484,11 +1488,11 @@ handle_no_waiting_items_error(#workflow_execution_state{
         (_) -> false
     end, lists:flatmap(fun(BoxSpec) -> maps:values(BoxSpec) end, maps:values(BoxSpecs))),
 
-    AreAllDataStreamsClosed = lists:all(fun(TaskId) ->
+    AreAllDataStreamsFinished = lists:all(fun(TaskId) ->
         workflow_tasks_data:is_task_data_stream_finished(TaskId, TasksData)
     end, TaskIdsToCheck),
 
-    case AreAllDataStreamsClosed of
+    case AreAllDataStreamsFinished of
         true ->
             {ok, State#workflow_execution_state{
                 current_lane = #current_lane{index = LaneIndex + 1},

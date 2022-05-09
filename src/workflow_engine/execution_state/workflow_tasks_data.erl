@@ -18,8 +18,7 @@
 
 %% API
 -export([init/0, register/3, prepare_next/1, mark_done/3,
-    mark_task_data_stream_closed/2, is_task_data_stream_closed/2, is_task_data_stream_finished/2,
-    verify_callbacks_on_cancel/1]).
+    mark_task_data_stream_closed/2, is_task_data_stream_finished/2, verify_callbacks_on_cancel/1]).
 
 
 % Internal record that describe information about all data currently processed or waiting to be processed.
@@ -90,12 +89,6 @@ mark_done(TaskId, TaskDataId, #workflow_tasks_data{ongoing = Ongoing} = TasksDat
 -spec mark_task_data_stream_closed(workflow_engine:task_id(), tasks_data()) -> tasks_data().
 mark_task_data_stream_closed(TaskId, #workflow_tasks_data{closed_task_data_streams = ClosedStreams} = TasksData) ->
     TasksData#workflow_tasks_data{closed_task_data_streams = [TaskId | ClosedStreams]}.
-
-
-% TODO - czy ta funkcja jest potrzebna (jak traktujemy cancel?
--spec is_task_data_stream_closed(workflow_engine:task_id(), tasks_data()) -> boolean().
-is_task_data_stream_closed(TaskId, #workflow_tasks_data{closed_task_data_streams = ClosedStreams}) ->
-    lists:member(TaskId, ClosedStreams).
 
 
 -spec is_task_data_stream_finished(workflow_engine:task_id(), tasks_data()) -> boolean().
