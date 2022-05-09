@@ -25,7 +25,8 @@
     recall/4,
     cancel_recall/2,
     get_recall_details/2,
-    get_recall_progress/2
+    get_recall_progress/2,
+    browse_recall_log/3
 ]).
 
 
@@ -134,6 +135,15 @@ get_recall_details(SessionId, FileGuid) ->
 get_recall_progress(SessionId, FileGuid) ->
     middleware_worker:check_exec(SessionId, FileGuid, #get_recall_progress{
         id = file_id:guid_to_uuid(FileGuid)
+    }).
+
+
+-spec browse_recall_log(session:id(), file_id:file_guid(), json_infinite_log_model:listing_opts()) ->
+    json_infinite_log_model:browse_result() | no_return().
+browse_recall_log(SessionId, FileGuid, BrowseOpts) ->
+    middleware_worker:check_exec(SessionId, FileGuid, #browse_recall_log{
+        id = file_id:guid_to_uuid(FileGuid),
+        options = BrowseOpts
     }).
     
 

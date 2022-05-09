@@ -93,6 +93,9 @@
 
 
 -spec list(user_ctx:ctx(), file_ctx:ctx(), options())-> fslogic_worker:fuse_response().
+list(_UserCtx, _FileCtx, #{pagination_token := _, start_after := _}) ->
+    %% TODO VFS-7208 introduce conflicting options error after introducing API errors to fslogic
+    throw(?EINVAL);
 list(UserCtx, FileCtx, #{pagination_token := PaginationToken} = Options) ->
     {TokenRootGuid, StartAfter} = unpack_pagination_token(PaginationToken), 
     Limit = maps:get(limit, Options, ?LIST_RECURSIVE_BATCH_SIZE),
@@ -118,12 +121,9 @@ list(UserCtx, FileCtx, Options) ->
 list(UserCtx, FileCtx0, StartAfter, Limit, Prefix) ->
     {FilePath, FileCtx1} = file_ctx:get_canonical_path(FileCtx0),
     [_Sep, SpaceId | FilePathTokens] = filename:split(FilePath),
-    OptimizedStartAfter = case Prefix of
-        <<>> -> StartAfter;
-        _ -> max(StartAfter, filename:dirname(Prefix))
-    end,
+    OptimizedStartAfter = max(StartAfter, Prefix),
     InitialState = #state{
-        start_after_path = OptimizedStartAfter,
+        start_after_path = StartAfter, % use original start after, so when prefix points to existing file it is not ignored
         relative_start_after_path_tokens = filename:split(OptimizedStartAfter),
         limit = Limit,
         current_dir_path_tokens = [SpaceId | FilePathTokens],
@@ -145,13 +145,16 @@ list(UserCtx, FileCtx0, StartAfter, Limit, Prefix) ->
                 }
             };
         {false, FileCtx2} ->
-            ListingOpts = #{limit => 1, optimize_continuous_listing => false},
-            {ok, _, _, _} = list_reg_file_with_access_check(UserCtx, FileCtx2, ListingOpts),
+            {Entries, InaccessiblePaths} = case check_reg_file_access(UserCtx, FileCtx2) of
+                ok -> 
+                    {build_result_file_entry_list(InitialState, get_file_attrs(UserCtx, FileCtx2), <<>>), []};
+                {error, ?EACCES} ->
+                    {[], <<".">>}
+            end,
             #fuse_response{status = #status{code = ?OK},
                 fuse_response = #recursive_file_list{
-                    inaccessible_paths = [],
-                    entries = build_result_file_entry_list(
-                        InitialState, get_file_attrs(UserCtx, FileCtx2), <<>>)
+                    inaccessible_paths = InaccessiblePaths,
+                    entries = Entries
                 }
             }
     end.
@@ -164,11 +167,18 @@ process_current_dir(_UserCtx, _FileCtx, #state{limit = Limit}) when Limit =< 0 -
     {more, #list_result{}};
 process_current_dir(UserCtx, FileCtx, State) ->
     Path = build_current_dir_rel_path(State),
-    case not matches_prefix(Path, State) andalso Path > State#state.prefix of
-        false ->
+    % directories with path that not match given prefix, but is a prefix of this given prefix must be listed, 
+    % as they are ancestor directories to files matching this given prefix
+    IsAncestorDir = case Path of
+        <<".">> -> true; % listing root directory
+        _ -> str_utils:binary_starts_with(State#state.prefix, Path)
+    end,
+    %% @TODO VFS-VFS-9347 When prefix is provided start listing in dir with path pointed by prefix without last token if is a descendant of given dir
+    case matches_prefix(Path, State) orelse IsAncestorDir of
+        true ->
             {ListOpts, UpdatedState} = init_current_dir_processing(State),
             process_current_dir_in_batches(UserCtx, FileCtx, ListOpts, UpdatedState, #list_result{});
-        true ->
+        false ->
             {done, #list_result{}}
     end.
 
@@ -186,11 +196,12 @@ process_current_dir_in_batches(UserCtx, FileCtx, ListOpts, State, AccListResult)
                 {R, PaginationToken} = file_listing:infer_pagination_token([], undefined, ?LIST_RECURSIVE_BATCH_SIZE),
                 {R, result_append_inaccessible_path(State, AccListResult), PaginationToken, FileCtx}
         end,
+    
     {Res, FinalProcessedFileCount} = lists_utils:foldl_while(fun(ChildCtx, {TmpResult, ProcessedFileCount}) ->
-        {Marker, ChildResult} = process_current_child(UserCtx, ChildCtx, State#state{
+        {Marker, SubtreeResult} = process_subtree(UserCtx, ChildCtx, State#state{
             limit = Limit - result_length(TmpResult)
         }),
-        ResToReturn = merge_results(TmpResult, ChildResult),
+        ResToReturn = merge_results(TmpResult, SubtreeResult),
         FileProcessedIncrement = case Marker of
             done -> 1;
             more -> 0
@@ -201,16 +212,27 @@ process_current_dir_in_batches(UserCtx, FileCtx, ListOpts, State, AccListResult)
             false -> {cont, ToReturn}
         end
     end, {UpdatedAccListResult, 0}, Children),
-    case {result_length(Res) >= Limit, file_listing:is_finished(ListingPaginationToken)} of
-        {true, IsFinished} ->
+    
+    ResultLength = result_length(Res),
+    case ResultLength > Limit of
+        true -> 
+            ?critical("Listed more entries than requested in recuresive file listing of directory: ~p~nstate: ~p~noptions: ~p~n", 
+                [file_ctx:get_logical_guid_const(FileCtx), State, ListOpts]),
+            throw(?ERROR_INTERNAL_SERVER_ERROR);
+        _ -> 
+            ok
+    end, 
+    
+    case {ResultLength, file_listing:is_finished(ListingPaginationToken)} of
+        {Limit, IsFinished} ->
             ProgressMarker = case IsFinished and (FinalProcessedFileCount == length(Children)) of
                 true -> done;
                 false -> more
             end,
             {ProgressMarker, Res};
-        {false, true} ->
+        {_, true} ->
             {done, Res};
-        {false, false} ->
+        {_, false} ->
             NextListOpts = #{pagination_token => ListingPaginationToken},
             process_current_dir_in_batches(
                 UserCtx, FileCtx2, NextListOpts, State#state{limit = Limit - result_length(Res)}, Res)
@@ -218,9 +240,9 @@ process_current_dir_in_batches(UserCtx, FileCtx, ListOpts, State, AccListResult)
 
 
 %% @private
--spec process_current_child(user_ctx:ctx(), file_ctx:ctx(), state()) ->
+-spec process_subtree(user_ctx:ctx(), file_ctx:ctx(), state()) ->
     {progress_marker(), result()}.
-process_current_child(UserCtx, ChildCtx, #state{current_dir_path_tokens = CurrentPathTokens} = State) ->
+process_subtree(UserCtx, ChildCtx, #state{current_dir_path_tokens = CurrentPathTokens} = State) ->
     case get_file_attrs(UserCtx, ChildCtx) of
         #file_attr{type = ?DIRECTORY_TYPE, name = Name, guid = G} ->
             {ProgressMarker, NextChildrenRes} = process_current_dir(UserCtx, ChildCtx,
@@ -256,14 +278,21 @@ list_dir_children_with_access_check(UserCtx, DirCtx, ListOpts) ->
 
 
 %% @private
--spec list_reg_file_with_access_check(user_ctx:ctx(), file_ctx:ctx(), file_meta:list_opts()) ->
-    {ok, [file_ctx:ctx()], file_meta:list_extended_info(), file_ctx:ctx()}.
-list_reg_file_with_access_check(UserCtx, FileCtx, ListOpts) ->
-    {CanonicalChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
-        UserCtx, FileCtx, [?TRAVERSE_ANCESTORS]
-    ),
-    {Children, ExtendedInfo, FileCtx3} = file_tree:list_children(FileCtx2, UserCtx, ListOpts, CanonicalChildrenWhiteList),
-    {ok, Children, ExtendedInfo, FileCtx3}.
+-spec check_reg_file_access(user_ctx:ctx(), file_ctx:ctx()) -> ok | {error, ?EACCES}.
+check_reg_file_access(UserCtx, FileCtx) ->
+    try
+        {CanonicalChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
+            UserCtx, FileCtx, [?TRAVERSE_ANCESTORS]
+        ),
+        % throws on lack of access
+        _ = file_tree:list_children(FileCtx2, UserCtx, #{
+                limit => 1, 
+                optimize_continuous_listing => false
+            }, CanonicalChildrenWhiteList),
+        ok
+    catch throw:?EACCES ->
+        {error, ?EACCES}
+    end.
 
 
 %% @private
@@ -294,29 +323,23 @@ init_current_dir_processing(#state{
     %% smaller should not be included in the results. Otherwise, The whole directory is listed and processed.
     case lists:last(CurrentPathTokens) == LastStartAfterToken of
         true ->
-            Index = case file_meta:get_child_uuid_and_tree_id(ParentUuid, CurrentStartAfterToken) of
+            ListingOpts = case file_meta:get_child_uuid_and_tree_id(ParentUuid, CurrentStartAfterToken) of
                 {ok, _, TreeId} ->
-                    % @TODO VFS-8980 Use inclusive listing option
-                    file_listing:build_index(
-                        file_meta:trim_filename_tree_id(CurrentStartAfterToken, TreeId),
-                        % trim tree id to always have inclusive listing
-                        binary:part(TreeId, 0, size(TreeId) - 1));
+                    StartingIndex = file_listing:build_index(
+                        file_meta:trim_filename_tree_id(CurrentStartAfterToken, TreeId), TreeId),
+                    #{index => StartingIndex, inclusive => true};
                 _ ->
-                    file_listing:build_index(file_meta:trim_filename_tree_id(
-                            CurrentStartAfterToken, {all, ParentUuid}))
+                    StartingIndex = file_listing:build_index(file_meta:trim_filename_tree_id(
+                        CurrentStartAfterToken, {all, ParentUuid})),
+                    #{index => StartingIndex}
             end,
-            {
-                InitialOpts#{index => Index},
-                State#state{
-                    relative_start_after_path_tokens = NextStartAfterTokens, 
-                    last_start_after_token = CurrentStartAfterToken
-                }
-            };
+            UpdatedState = State#state{
+                relative_start_after_path_tokens = NextStartAfterTokens, 
+                last_start_after_token = CurrentStartAfterToken
+            },
+            {maps:merge(InitialOpts, ListingOpts), UpdatedState};
         _ ->
-            {
-                InitialOpts, 
-                State#state{relative_start_after_path_tokens = []}
-            }
+            {InitialOpts, State#state{relative_start_after_path_tokens = []}}
     end.
 
 

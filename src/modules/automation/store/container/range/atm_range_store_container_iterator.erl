@@ -8,6 +8,11 @@
 %%% @doc
 %%% This module provides `atm_store_container_iterator` functionality for
 %%% `atm_range_store_container`.
+%%%
+%%%                             !!! Caution !!!
+%%% This iterator snapshots store container's range at creation time so that
+%%% even if range kept in container changes the iterator will still return
+%%% integers from previous range.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_range_store_container_iterator).

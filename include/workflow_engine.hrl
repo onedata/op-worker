@@ -107,6 +107,7 @@
         undefined
 }).
 -define(DEFER_EXECUTION, defer_execution).
+-define(RETRY_EXECUTION, retry_execution).
 -define(PREPARE_LANE_EXECUTION(Handler, ExecutionContext, LaneId, PreparationMode),
     {prepare_lane_execution, Handler, ExecutionContext, LaneId, PreparationMode}).
 

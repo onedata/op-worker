@@ -26,6 +26,7 @@
     get_file_references/3,
     resolve_guid/3, get_file_path/3,
     get_parent/3,
+    ensure_dir/5,
     check_perms/4,
     set_perms/4,
     update_times/6,
@@ -200,6 +201,12 @@ get_file_path(Worker, SessId, Guid) ->
     {ok, fslogic_worker:file_guid()} | lfm:error_reply().
 get_parent(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:get_parent(SessId, FileKey)).
+
+
+-spec ensure_dir(node(), session:id(), fslogic_worker:file_guid(), file_meta:path(), file_meta:mode()) ->
+    {ok, fslogic_worker:file_guid()} | lfm:error_reply().
+ensure_dir(Worker, SessId, RelativeRootGuid, FilePath, Mode) ->
+    ?EXEC(Worker, lfm:ensure_dir(SessId, RelativeRootGuid, FilePath, Mode)).
 
 
 -spec check_perms(node(), session:id(), lfm:file_key(), helpers:open_flag()) ->

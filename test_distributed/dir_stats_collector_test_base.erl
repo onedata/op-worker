@@ -25,7 +25,8 @@
     enabling_during_writing_test/1, race_with_file_adding_test/1, race_with_file_writing_test/1,
     race_with_subtree_adding_test/1, race_with_subtree_filling_with_data_test/1,
     race_with_file_adding_to_large_dir_test/1,
-    multiple_status_change_test/1, adding_file_when_disabled_test/1]).
+    multiple_status_change_test/1, adding_file_when_disabled_test/1,
+    restart_test/1]).
 -export([init/1, init_and_enable_for_new_space/1, teardown/1, teardown/3]).
 -export([verify_dir_on_provider_creating_files/3]).
 % TODO VFS-9148 - extend tests
@@ -382,6 +383,27 @@ adding_file_when_disabled_test(Config) ->
     }),
     check_update_times(Config, [op_worker_nodes]).
 
+
+restart_test(Config) ->
+    enable(Config, new_space),
+
+    reset_restart_hooks(Config),
+    hang_collectors_stopping(Config),
+    execute_restart_hooks(Config),
+    verify_collecting_status(Config, disabled),
+
+    enable(Config, existing_space),
+    verify_collecting_status(Config, enabled),
+
+    hang_collectors_stopping(Config),
+    execute_restart_hooks(Config),
+    verify_collecting_status(Config, collectors_stopping), % restarts hooks have been executed once so they have no effect
+
+    reset_restart_hooks(Config),
+    execute_restart_hooks(Config),
+    verify_collecting_status(Config, disabled).
+
+
 %%%===================================================================
 %%% Init and teardown
 %%%===================================================================
@@ -440,7 +462,7 @@ teardown(Config, SpaceId, CleanSpace) ->
     MinimalSyncRequest = ?config(default_minimal_sync_request, Config),
     test_utils:set_env(Workers, op_worker, minimal_sync_request, MinimalSyncRequest),
 
-    test_utils:mock_unload(Workers, file_meta).
+    test_utils:mock_unload(Workers, [file_meta, dir_stats_collector]).
 
 
 %%%===================================================================
@@ -802,3 +824,23 @@ execute_file_listing_hook(Tag, Hook) ->
         10000 -> timeout
     end,
     ?assertEqual(ok, MessageReceived).
+
+
+hang_collectors_stopping(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    ok = test_utils:mock_new(Worker, dir_stats_collector, [passthrough]),
+    ok = test_utils:mock_expect(Worker, dir_stats_collector, stop_collecting, fun(_SpaceId) -> ok end),
+    
+    disable(Config),
+    test_utils:mock_unload(Worker, [dir_stats_collector]),
+    verify_collecting_status(Config, collectors_stopping).
+
+
+execute_restart_hooks(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    ?assertEqual(ok, rpc:call(Worker, restart_hooks, maybe_execute_hooks, [])).
+
+
+reset_restart_hooks(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    ?assertEqual(ok, rpc:call(Worker, node_cache, clear, [restart_hooks_status])).

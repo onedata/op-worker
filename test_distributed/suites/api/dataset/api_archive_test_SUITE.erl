@@ -1071,28 +1071,28 @@ get_recall_validate_result(details, gs, ArchiveId, DatasetId, Result) ->
         <<"archive">> := SourceArchiveGri,
         <<"dataset">> := SourceDatasetGri,
         <<"totalFileCount">> := 1,
-        <<"totalByteSize">> := 20
+        <<"totalByteSize">> := 20,
+        <<"lastError">> := null
     }}, Result);
 get_recall_validate_result(details, rest, ArchiveId, DatasetId, RespBody) ->
     ?assertMatch(#{
         <<"archiveId">> := ArchiveId,
         <<"datasetId">> := DatasetId,
         <<"totalFileCount">> := 1,
-        <<"totalByteSize">> := 20
+        <<"totalByteSize">> := 20,
+        <<"lastError">> := null
     }, RespBody);
 get_recall_validate_result(progress, gs, _ArchiveId, _DatasetId, Result) ->
     ?assertMatch({ok, #{
         <<"bytesCopied">> := 20,
         <<"filesCopied">> := 1,
-        <<"filesFailed">> := 0,
-        <<"lastError">> := null
+        <<"filesFailed">> := 0
     }}, Result);
 get_recall_validate_result(progress, rest, _ArchiveId, _DatasetId, RespBody) ->
     ?assertMatch(#{
         <<"bytesCopied">> := 20,
         <<"filesCopied">> := 1,
-        <<"filesFailed">> := 0,
-        <<"lastError">> := null
+        <<"filesFailed">> := 0
     }, RespBody).
 
 

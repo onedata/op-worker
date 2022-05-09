@@ -77,6 +77,7 @@
     new_file_should_have_zero_popularity/1,
     opening_file_should_increase_file_popularity/1,
     file_popularity_should_have_correct_file_size/1,
+    lfm_ensure_dir/1, 
     readdir_plus_should_return_empty_result_for_empty_dir/1,
     readdir_plus_should_return_empty_result_zero_size/1,
     readdir_plus_should_work_with_zero_offset/1,
@@ -414,6 +415,20 @@ lfm_mv_failure_multiple_users(Config) ->
     {MemEntriesAfter, CacheEntriesAfter} = get_mem_and_disc_entries(W),
     print_mem_and_disc_docs_diff(W, MemEntriesBefore, MemEntriesAfter,
         CacheEntriesBefore, CacheEntriesAfter).
+
+lfm_ensure_dir(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    {SessId1, UserId1} = {
+        ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+        ?config({user_id, <<"user1">>}, Config)
+    },
+    Filename = generator:gen_name(),
+    [{SpaceId, _SpaceName} | _] = ?config({spaces, UserId1}, Config),
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    
+    lists_utils:pforeach(fun(_) ->
+        ?assertMatch({ok, _}, lfm_proxy:ensure_dir(W, SessId1, SpaceGuid, filename:join([Filename, Filename, Filename]), ?DEFAULT_DIR_MODE))
+    end, lists:seq(1, 100)).
 
 readdir_plus_should_return_empty_result_for_empty_dir(Config) ->
     {MainDirPath, Files} = generate_dir(Config, 0),
