@@ -21,6 +21,7 @@
 -behaviour(persistent_record).
 
 -include("modules/automation/atm_execution.hrl").
+-include_lib("cluster_worker/include/middleware/ts_browser.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% atm_store_container callbacks
@@ -128,7 +129,7 @@ acquire_iterator(#atm_time_series_store_container{}) ->
     atm_time_series_store_content_browse_result:record() | no_return().
 browse_content(Record, #atm_store_content_browse_req{
     options = #atm_time_series_store_content_browse_options{
-        request = #atm_time_series_store_content_get_layout_req{}
+        request = #time_series_get_layout_req{}
     }
 }) ->
     {ok, Layout} = datastore_time_series_collection:get_layout(
@@ -140,7 +141,7 @@ browse_content(Record, #atm_store_content_browse_req{
 
 browse_content(Record, #atm_store_content_browse_req{
     options = #atm_time_series_store_content_browse_options{
-        request = #atm_time_series_store_content_get_slice_req{
+        request = #time_series_get_slice_req{
             layout = SliceLayout,
             start_timestamp = StartTimestamp,
             window_limit = WindowLimit

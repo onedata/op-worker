@@ -201,17 +201,7 @@
 }).
 
 -record(atm_time_series_store_content_browse_options, {
-    request ::
-        atm_time_series_store_content_browse_options:get_layout() |
-        atm_time_series_store_content_browse_options:get_slice()
-}).
-
--record(atm_time_series_store_content_get_layout_req, {}).
-
--record(atm_time_series_store_content_get_slice_req, {
-    layout :: time_series_collection:layout(),
-    start_timestamp :: undefined | atm_time_series_store_content_browse_options:timestamp(),
-    window_limit :: atm_time_series_store_content_browse_options:window_limit()
+    request :: ts_browse_request:req()
 }).
 
 -record(atm_time_series_store_content_browse_result, {
