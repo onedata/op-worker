@@ -97,6 +97,9 @@ translate_value(#gri{aspect = transfers}, TransfersForFile) ->
 translate_value(#gri{aspect = download_url}, URL) ->
     #{<<"fileUrl">> => URL};
 
+translate_value(#gri{aspect = api_samples, scope = public}, ApiSamples) ->
+    ApiSamples;
+
 translate_value(#gri{aspect = dir_size_stats}, Value) ->
     Value.
 
@@ -156,10 +159,10 @@ translate_resource(#gri{aspect = archive_recall_details, scope = private}, Archi
     translate_archive_recall_details(ArchiveRecallDetails);
 
 translate_resource(#gri{aspect = archive_recall_progress, scope = private}, ArchiveRecallProgress) ->
-    #{<<"lastError">> := LastError} = ArchiveRecallProgress,
-    ArchiveRecallProgress#{
-        <<"lastError">> => utils:undefined_to_null(LastError)
-    }.
+    ArchiveRecallProgress;
+
+translate_resource(#gri{aspect = archive_recall_log, scope = private}, ArchiveRecallLog) ->
+    ArchiveRecallLog.
 
 
 -spec translate_dataset_summary(dataset_api:file_eff_summary()) -> map().

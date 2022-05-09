@@ -531,14 +531,14 @@ rename(SourceDoc, SourceParentUuid, TargetParentUuid, TargetName) ->
         value = #file_meta{name = FileName, type = Type},
         scope = Scope
     } = SourceDoc,
+    ok = file_meta_forest:add(TargetParentUuid, Scope, TargetName, FileUuid),
+    ok = file_meta_forest:delete(SourceParentUuid, Scope, FileName, FileUuid),
     {ok, TargetDoc} = file_meta:update(FileUuid, fun(FileMeta = #file_meta{}) ->
         {ok, FileMeta#file_meta{
             name = TargetName,
             parent_uuid = TargetParentUuid
         }}
     end),
-    ok = file_meta_forest:add(TargetParentUuid, Scope, TargetName, FileUuid),
-    ok = file_meta_forest:delete(SourceParentUuid, Scope, FileName, FileUuid),
 
     % TODO VFS-8835 - test if other mechanisms handle size change
     dir_size_stats:report_file_moved(Type, file_id:pack_guid(FileUuid, Scope),

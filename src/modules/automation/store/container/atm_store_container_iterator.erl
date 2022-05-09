@@ -8,6 +8,8 @@
 %%% @doc
 %%% This module defines `atm_store_container_iterator` interface - an object which
 %%% can be used for iteration over specific `atm_store_container` in batches.
+%%% Such iteration returns items inferred from specific store container content
+%%% (it can be store container content itself but does not need to).
 %%%
 %%%                             !!! Caution !!!
 %%% 1) This behaviour must be implemented by modules with records of the same name.
@@ -49,8 +51,10 @@
 -callback get_next_batch(atm_workflow_execution_auth:record(), batch_size(), record()) ->
     {ok, [atm_value:expanded()], record()} | stop.
 
+%% @see iterator:forget_before
 -callback forget_before(record()) -> ok.
 
+%% @see iterator:mark_exhausted
 -callback mark_exhausted(record()) -> ok.
 
 
@@ -66,12 +70,14 @@ get_next_batch(AtmWorkflowExecutionAuth, BatchSize, AtmStoreContainerIterator) -
     Module:get_next_batch(AtmWorkflowExecutionAuth, BatchSize, AtmStoreContainerIterator).
 
 
+%% @see iterator:forget_before
 -spec forget_before(record()) -> ok.
 forget_before(AtmStoreContainerIterator) ->
     Module = utils:record_type(AtmStoreContainerIterator),
     Module:forget_before(AtmStoreContainerIterator).
 
 
+%% @see iterator:mark_exhausted
 -spec mark_exhausted(record()) -> ok.
 mark_exhausted(AtmStoreContainerIterator) ->
     Module = utils:record_type(AtmStoreContainerIterator),

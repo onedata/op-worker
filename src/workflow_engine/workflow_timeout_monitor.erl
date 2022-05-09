@@ -12,6 +12,10 @@
 -module(workflow_timeout_monitor).
 -author("Michal Wrzeszcz").
 
+
+-include_lib("ctool/include/logging.hrl").
+
+
 %% API
 -export([init/2, report_heartbeat/2]).
 
@@ -54,10 +58,19 @@ server_loop(EngineId, CheckPeriod) ->
 
 -spec check_timeouts(workflow_engine:id()) -> ok.
 check_timeouts(EngineId) ->
-    ExecutionIds = workflow_engine_state:get_execution_ids(EngineId),
-    lists:foreach(fun(ExecutionId) ->
-        case workflow_execution_state:check_timeouts(ExecutionId) of
-            true -> workflow_engine:trigger_job_scheduling(EngineId);
-            false -> ok
-        end
-    end, ExecutionIds).
+    try
+        ExecutionIds = workflow_engine_state:get_execution_ids(EngineId),
+        lists:foreach(fun(ExecutionId) ->
+            case workflow_execution_state:check_timeouts(ExecutionId) of
+                true -> workflow_engine:trigger_job_scheduling(EngineId);
+                false -> ok
+            end
+        end, ExecutionIds)
+    catch
+        Error:Reason:Stacktrace  ->
+            ?error_stacktrace(
+                "Unexpected error in ~w:~w (engine id ~s)~nError was: ~w:~p",
+                [?MODULE, ?FUNCTION_NAME, EngineId, Error, Reason],
+                Stacktrace
+            )
+    end.

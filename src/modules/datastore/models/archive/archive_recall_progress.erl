@@ -28,7 +28,7 @@
 
 %% API
 -export([create/1, delete/1]).
--export([get/1]).
+-export([get/1, browse_error_log/2]).
 -export([report_bytes_copied/2, report_file_finished/1, report_error/2]).
 %% Test API
 -export([get_stats/3]).
@@ -41,11 +41,7 @@
 %  #{
 %       <<"filesCopied" := non_neg_integer(),
 %       <<"bytesCopied" := non_neg_integer(),
-%       <<"filesFailed" := non_neg_integer(),
-%       <<"lastError" := undefined | #{
-%           <<"fileId">> := file_id:objectid(), 
-%           <<"reason">> := errors:as_json()
-%       }
+%       <<"filesFailed" := non_neg_integer()
 %   }
 -type recall_progress_map() :: #{binary() => non_neg_integer() | map() | undefined}.
 -export_type([recall_progress_map/0]).
@@ -70,6 +66,9 @@
 
 -define(NOW(), global_clock:timestamp_seconds()).
 
+-define(LOG_MAX_SIZE, op_worker:get_env(archive_recall_error_log_max_size, 10000)).
+-define(LOG_EXPIRATION, op_worker:get_env(archive_recall_error_log_expiration_seconds, 1209600)). % 14 days
+
 %%%===================================================================
 %%% API functions
 %%%===================================================================
@@ -77,7 +76,9 @@
 -spec create(id()) -> ok | {error, term()}.
 create(Id) ->
     try
-        ok = json_infinite_log_model:create(?ERROR_LOG_ID(Id), #{}),
+        ok = json_infinite_log_model:create(?ERROR_LOG_ID(Id), #{
+            
+        }),
         ok = create_tsc(Id)
     catch _:{badmatch, Error} ->
         delete(Id),
@@ -93,20 +94,13 @@ delete(Id) ->
 
 -spec get(id()) -> {ok, recall_progress_map()}.
 get(Id) ->
-    {ok, CountersCurrentValue} = get_counters_current_value(Id),
-    case CountersCurrentValue of
-        #{?FAILED_FILES_TS := 0} ->
-            {ok, CountersCurrentValue#{<<"lastError">> => undefined}};
-        _ ->
-            %% @TODO VFS-8839 - browse error log when gui supports it
-            {ok, #{
-                <<"logEntries">> := [#{
-                    <<"content">> := LastEntryContent
-                }]
-            }} = json_infinite_log_model:browse_content(?ERROR_LOG_ID(Id),
-                #{limit => 1, direction => ?BACKWARD}),
-            {ok, CountersCurrentValue#{<<"lastError">> => LastEntryContent}}
-    end.
+    get_counters_current_value(Id).
+
+
+-spec browse_error_log(id(), json_infinite_log_model:listing_opts()) ->
+    {ok, json_infinite_log_model:browse_result()} | {error, term()}.
+browse_error_log(Id, Options) ->
+    json_infinite_log_model:browse_content(?ERROR_LOG_ID(Id), Options).
 
 
 -spec report_file_finished(id()) -> ok | {error, term()}.

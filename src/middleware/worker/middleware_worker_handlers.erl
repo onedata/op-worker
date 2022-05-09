@@ -67,6 +67,9 @@ execute(UserCtx, FileCtx, #get_recall_details{id = Id}) ->
 execute(UserCtx, FileCtx, #get_recall_progress{id = Id}) ->
     dataset_req:get_archive_recall_progress(FileCtx, Id, UserCtx);
 
+execute(UserCtx, FileCtx, #browse_recall_log{id = Id, options = Options}) ->
+    dataset_req:browse_archive_recall_log(FileCtx, Id, UserCtx, Options);
+
 
 %% Automation
 
