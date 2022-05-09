@@ -33,6 +33,11 @@
     external_cancel_during_lane_prepare_in_advance_test/1,
     internal_cancel_caused_by_async_job_timeout_before_prepare_in_advance_finish_test/1,
     async_workflow_with_streams_external_cancel/1,
+    async_workflow_with_streams_and_prepare_in_advance_external_cancel/1,
+    async_workflow_with_streams_and_long_lasting_prepare_in_advance_external_cancel/1,
+    internal_cancel_of_workflow_with_stream_caused_by_async_job_error_test/1,
+    internal_cancel_caused_by_stream_data_processing_error_test/1,
+    internal_cancel_caused_by_stream_closing_error_test/1,
 
     restart_callback_failure_test/1
 ]).
@@ -53,6 +58,11 @@ all() ->
         external_cancel_during_lane_prepare_in_advance_test,
         internal_cancel_caused_by_async_job_timeout_before_prepare_in_advance_finish_test,
         async_workflow_with_streams_external_cancel,
+        async_workflow_with_streams_and_prepare_in_advance_external_cancel,
+        async_workflow_with_streams_and_long_lasting_prepare_in_advance_external_cancel,
+        internal_cancel_of_workflow_with_stream_caused_by_async_job_error_test,
+        internal_cancel_caused_by_stream_data_processing_error_test,
+        internal_cancel_caused_by_stream_closing_error_test,
 
         restart_callback_failure_test
     ]).
@@ -175,6 +185,91 @@ async_workflow_with_streams_external_cancel(Config) ->
         }}
     }).
 
+async_workflow_with_streams_and_prepare_in_advance_external_cancel(Config) ->
+    cancel_and_restart_test_base(Config, #test_config{
+        task_type = async,
+        prepare_in_advance = true,
+        lane_id = <<"3">>,
+        test_execution_manager_option = {cancel_execution, process_item, <<"3_2_1">>},
+        generator_options = #{task_streams => #{
+            3 => #{
+                {1,1} => [<<"1">>],
+                {2,2} => [{stream_termination_callback, 5}],
+                {3,1} => [<<"1">>,{<<"2">>, 10},<<"3">>,<<"4">>,<<"100">>,<<"150">>],
+                {3,2} => [<<"100">>, stream_termination_callback],
+                {3,3} => []
+            }
+        }}
+    }).
+
+async_workflow_with_streams_and_long_lasting_prepare_in_advance_external_cancel(Config) ->
+    workflow_scheduling_test_common:set_test_execution_manager_option(Config, {delay_lane_preparation, <<"4">>}, true),
+    cancel_and_restart_test_base(Config, #test_config{
+        task_type = async,
+        prepare_in_advance = true,
+        lane_id = <<"3">>,
+        test_execution_manager_option = {cancel_execution, process_item, <<"3_2_1">>},
+        generator_options = #{task_streams => #{
+            3 => #{
+                {1,1} => [<<"1">>],
+                {2,2} => [{stream_termination_callback, 5}],
+                {3,1} => [<<"1">>,{<<"2">>, 10},<<"3">>,<<"4">>,<<"100">>,<<"150">>],
+                {3,2} => [<<"100">>, stream_termination_callback],
+                {3,3} => []
+            }
+        }}
+    }).
+
+internal_cancel_of_workflow_with_stream_caused_by_async_job_error_test(Config) ->
+    cancel_and_restart_test_base(Config, #test_config{
+        task_type = async,
+        lane_id = <<"3">>,
+        test_execution_manager_option = {fail_job, <<"3_3_2">>},
+        generator_options = #{task_streams => #{
+            3 => #{
+                {1,1} => [<<"1">>],
+                {2,2} => [{stream_termination_callback, 5}],
+                {3,1} => [<<"1">>,{<<"2">>, 10},<<"3">>,<<"4">>,<<"100">>,<<"150">>],
+                {3,2} => [<<"10">>, <<"100">>],
+                {3,3} => []
+            }
+        }}
+    }).
+
+internal_cancel_caused_by_stream_data_processing_error_test(Config) ->
+    cancel_and_restart_test_base(Config, #test_config{
+        task_type = async,
+        lane_id = <<"3">>,
+        test_execution_manager_option = {fail_data_processing, <<"3_3_2">>},
+        generator_options = #{task_streams => #{
+            3 => #{
+                {1,1} => [<<"1">>],
+                {2,2} => [{stream_termination_callback, 5}],
+                {3,1} => [<<"1">>,{<<"2">>, 10},<<"3">>,<<"4">>,<<"100">>,<<"150">>],
+                {3,2} => [<<"10">>, <<"100">>],
+                {3,3} => []
+            }
+        }}
+    }).
+
+internal_cancel_caused_by_stream_closing_error_test(Config) ->
+    cancel_and_restart_test_base(Config, #test_config{
+        task_type = async,
+        lane_id = <<"3">>,
+        test_execution_manager_option = {fail_stream_termination, {<<"3_2_2">>, stream_termination_callback}},
+        generator_options = #{task_streams => #{
+            3 => #{
+                {1,1} => [<<"1">>],
+                {2,1} => [{stream_termination_callback, 5}],
+                {2,2} => [<<"10">>, <<"100">>, termination_error], % termination_error does not  trigger anything but
+                                                                   % for workflow execution check (otherwise there will
+                                                                   % be one more callback execution than expected)
+                {3,1} => [<<"1">>,{<<"2">>, 10},<<"3">>,<<"4">>,<<"100">>,<<"150">>],
+                {3,3} => []
+            }
+        }}
+    }).
+
 %%%===================================================================
 
 restart_callback_failure_test(Config) ->
@@ -248,6 +343,8 @@ cancel_and_restart_test_base(Config, #test_config{
             {cancel_execution, {prepare_lane, LaneIdToCancel}};
         {cancel_execution, Function, Item} ->
             {cancel_execution, {Function, Item, <<"100">>}};
+        {_Key, {_TaskId, _Itme}} ->
+            TestExecutionManagerOption;
         {Key, TaskId} ->
             {Key, {TaskId, <<"100">>}}
     end,
@@ -258,6 +355,7 @@ cancel_and_restart_test_base(Config, #test_config{
 
     #{execution_history := ExecutionHistory} = ExtendedHistoryStats =
         workflow_scheduling_test_common:get_task_execution_history(Config),
+    ct:print("qqqq ~p", [ExecutionHistory]),
     case TestExecutionManagerOption of
         cancel_execution -> ?assertMatch(#{cancel_ans := ok}, ExtendedHistoryStats);
         _ -> ok
@@ -272,6 +370,9 @@ cancel_and_restart_test_base(Config, #test_config{
         {cancel_execution, _, _} ->
             workflow_scheduling_test_common:verify_execution_history(
                 WorkflowExecutionSpec, ExecutionHistory, #{stop_on_lane => LaneId});
+        {FailureType, {FailedTaskId, FailedItem}} ->
+            workflow_scheduling_test_common:verify_execution_history(WorkflowExecutionSpec, ExecutionHistory,
+                #{stop_on_lane => LaneId, FailureType => {LaneId, FailedTaskId, FailedItem}});
         {FailureType, FailedTaskId} ->
             workflow_scheduling_test_common:verify_execution_history(WorkflowExecutionSpec, ExecutionHistory,
                 #{stop_on_lane => LaneId, FailureType => {LaneId, FailedTaskId, <<"100">>}})

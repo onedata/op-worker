@@ -167,6 +167,12 @@ reply_to_handler_mock(Sender, ManagerAcc, Options, #handler_call{
         {prepare_lane, #{sleep_on_preparation := Value}} ->
             Sender ! {sleep, Value},
             ManagerAcc;
+        {process_task_data, #{fail_data_processing := {TaskId, Item}}} ->
+            Sender ! fail_call,
+            ManagerAcc;
+        {trigger_task_data_stream_termination, #{fail_stream_termination := {TaskId, Item}}} ->
+            Sender ! fail_call,
+            ManagerAcc;
         {Fun, #{cancel_execution := {Fun, TaskId, Item}}} ->
             CancelAns = rpc:call(node(Sender), workflow_engine, cancel_execution, [ExecutionId]),
             Sender ! history_saved,
@@ -345,7 +351,8 @@ mock_handlers(Workers, Manager) ->
                     execution_id = ExecutionId,
                     context =  Context,
                     lane_id = LaneId,
-                    task_id = TaskId
+                    task_id = TaskId,
+                    item = stream_termination_callback
                 },
                 [ExecutionId, Context, TaskId]
             ),
@@ -367,7 +374,8 @@ mock_handlers(Workers, Manager) ->
                     execution_id = ExecutionId,
                     context =  Context,
                     lane_id = LaneId,
-                    task_id = TaskId
+                    task_id = TaskId,
+                    item = Data % item_id is used as data during test
                 },
                 [ExecutionId, Context, TaskId, Data]
             )
@@ -474,11 +482,11 @@ maybe_stream_data(ExecutionId, TaskId, Context, StreamElementKey) ->
     % tuple {Id, NumberOfCallsToBeExecuted}.
     case lists:member(StreamElementKey, TaskStreams) of
         true ->
-            workflow_engine:stream_task_data(ExecutionId, TaskId, <<"task_data">>);
+            workflow_engine:stream_task_data(ExecutionId, TaskId, StreamElementKey);
         false ->
             Repeats = proplists:get_value(StreamElementKey, TaskStreams, 0),
             lists:foreach(fun(_) ->
-                workflow_engine:stream_task_data(ExecutionId, TaskId, <<"task_data">>)
+                workflow_engine:stream_task_data(ExecutionId, TaskId, StreamElementKey)
             end, lists:seq(1, Repeats))
     end.
 

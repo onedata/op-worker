@@ -174,6 +174,8 @@ trigger_task_data_stream_termination(_, _, _) ->
     workflow_engine:task_data()
 ) ->
     workflow_handler:handler_execution_result().
+process_task_data(_, _, _, error) ->
+    error;
 process_task_data(_, _, _, _) ->
     ok.
 

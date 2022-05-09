@@ -18,9 +18,6 @@
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 
-%TODO - testy internal cancelu przez fail joby ze stremami, internal cancelu przez fail streama ze stremami,
-%       faila zamykania stream'a i cancelu (internal lub external) jak juz czesc taskow jest zamkniete (trigger w handlerze taska) ze streamem lub bez
-%       przetestowac cancelowanie z prepare_in_advance
 %% tests
 -export([
     empty_workflow_execution_test/1,
@@ -37,6 +34,7 @@
     fail_the_only_task_in_lane_test/1,
     fail_the_only_task_in_box_test/1,
     fail_one_of_many_async_tasks_in_box_test/1,
+    fail_one_of_many_async_tasks_in_workflow_with_streams_test/1,
     async_task_timeout_test/1,
     fail_result_processing_test/1,
     fail_task_before_prepare_in_advance_finish_test/1,
@@ -79,6 +77,7 @@ all() ->
         fail_the_only_task_in_lane_test,
         fail_the_only_task_in_box_test,
         fail_one_of_many_async_tasks_in_box_test,
+        fail_one_of_many_async_tasks_in_workflow_with_streams_test,
         async_task_timeout_test,
         fail_result_processing_test,
         fail_task_before_prepare_in_advance_finish_test,
@@ -209,6 +208,21 @@ fail_one_of_many_async_tasks_in_box_test(Config) ->
     failure_test_base(Config, #test_config{
         task_type = async,
         test_manager_failure_key = fail_job
+    }, <<"3">>, <<"3_3_2">>).
+
+fail_one_of_many_async_tasks_in_workflow_with_streams_test(Config) ->
+    failure_test_base(Config, #test_config{
+        task_type = async,
+        test_manager_failure_key = fail_job,
+        generator_options = #{task_streams => #{
+            3 => #{
+                {1,1} => [<<"1">>],
+                {2,2} => [{stream_termination_callback, 5}],
+                {3,1} => [<<"1">>,{<<"2">>, 10},<<"3">>,<<"4">>,<<"100">>,<<"150">>],
+                {3,2} => [<<"10">>, <<"100">>],
+                {3,3} => []
+            }
+        }}
     }, <<"3">>, <<"3_3_2">>).
 
 async_task_timeout_test(Config) ->
@@ -378,12 +392,13 @@ empty_workflow_execution_test_base(Config, BasicConfig) ->
 
 failure_test_base(Config, #test_config{
     test_manager_failure_key = ManagerKey,
-    test_execution_manager_options = ManagerOptions
+    test_execution_manager_options = ManagerOptions,
+    generator_options = GeneratorOptions
 } = BasicConfig, LaneId, TaskId) ->
     Item = <<"100">>,
     single_execution_test_base(Config, BasicConfig#test_config{
         test_execution_manager_options = [{ManagerKey, {TaskId, Item}} | ManagerOptions],
-        generator_options = #{finish_on_lane => LaneId},
+        generator_options = GeneratorOptions#{finish_on_lane => LaneId},
         verify_history_options = #{ManagerKey => {LaneId, TaskId, Item}}
     }).
 
