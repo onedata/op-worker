@@ -188,6 +188,9 @@ atm_workflow_execution_cancelled_in_scheduled_status_test() ->
                     after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState}) ->
                         {true, atm_workflow_execution_exp_state_builder:expect_lane_run_cancelled({1, 1}, ExpState)}
                     end
+                },
+                handle_lane_execution_ended = #atm_step_mock_spec{
+                    after_step_exp_state_diff = no_diff
                 }
             }],
             handle_workflow_execution_ended = #atm_step_mock_spec{
