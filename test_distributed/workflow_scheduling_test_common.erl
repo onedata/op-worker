@@ -352,8 +352,8 @@ mock_handlers(Workers, Manager) ->
 
             maybe_stream_data(ExecutionId, TaskId, Context, stream_termination_callback),
             case Ans of
-                ok -> workflow_engine:close_task_data_stream(ExecutionId, TaskId);
-                _ -> ok
+                ok -> workflow_engine:close_task_data_stream(ExecutionId, TaskId, success);
+                _ -> workflow_engine:close_task_data_stream(ExecutionId, TaskId, {failure, Ans})
             end,
             Ans
         end),

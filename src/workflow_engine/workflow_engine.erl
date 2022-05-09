@@ -24,7 +24,7 @@
 
 %% API
 -export([init/1, init/2, execute_workflow/2, cancel_execution/1, cleanup_execution/1]).
--export([stream_task_data/3, close_task_data_stream/2]).
+-export([stream_task_data/3, close_task_data_stream/3]).
 %% Framework internal API
 -export([report_execution_status_update/5, get_async_call_pools/1, trigger_job_scheduling/1,
     call_handler/5, call_handle_task_execution_ended_for_all_tasks/4, call_handlers_for_cancelled_lane/5]).
@@ -41,6 +41,7 @@
 -type lane_id() :: term(). % lane_id is opaque term for workflow engine (ids are managed by modules that use workflow engine)
 -type task_id() :: binary().
 -type task_data() :: json_utils:json_map() | errors:error().  %% TODO type.
+-type stream_closing_result() :: success | {failure, term()}.
 -type subject_id() :: workflow_cached_item:id() | 
     workflow_cached_async_result:result_ref() | workflow_cached_task_data:id().
 -type execution_spec() :: #execution_spec{}.
@@ -83,8 +84,8 @@
 -type execution_ended_info() :: #execution_ended{}.
 %% @formatter:on
 
--export_type([id/0, execution_id/0, execution_context/0, lane_id/0, task_id/0, task_data/0, subject_id/0,
-    execution_spec/0, processing_stage/0, handler_execution_result/0, processing_result/0,
+-export_type([id/0, execution_id/0, execution_context/0, lane_id/0, task_id/0, task_data/0, stream_closing_result/0,
+    subject_id/0, execution_spec/0, processing_stage/0, handler_execution_result/0, processing_result/0,
     task_spec/0, parallel_box_spec/0, lane_spec/0, preparation_mode/0]).
 
 -type handler_function() :: atom().
@@ -162,14 +163,13 @@ cleanup_execution(ExecutionId) ->
 
 -spec stream_task_data(workflow_engine:execution_id(), workflow_engine:task_id(), task_data()) -> ok.
 stream_task_data(ExecutionId, TaskId, TaskData) ->
-    TaskDataId = workflow_cached_task_data:put(TaskData),
-    {ok, EngineId} = workflow_execution_state:report_new_stream_task_data(ExecutionId, TaskId, TaskDataId),
+    {ok, EngineId} = workflow_execution_state:report_new_stream_task_data(ExecutionId, TaskId, TaskData),
     trigger_job_scheduling(EngineId).
 
 
--spec close_task_data_stream(workflow_engine:execution_id(), workflow_engine:task_id()) -> ok.
-close_task_data_stream(ExecutionId, TaskId) ->
-    {ok, EngineId} = workflow_execution_state:mark_task_data_stream_closed(ExecutionId, TaskId),
+-spec close_task_data_stream(workflow_engine:execution_id(), workflow_engine:task_id(), stream_closing_result()) -> ok.
+close_task_data_stream(ExecutionId, TaskId, Result) ->
+    {ok, EngineId} = workflow_execution_state:mark_task_data_stream_closed(ExecutionId, TaskId, Result),
     trigger_job_scheduling(EngineId).
 
 
@@ -238,7 +238,7 @@ call_handler(ExecutionId, Context, Handler, Function, Args) ->
 ) -> ok.
 call_handle_task_execution_ended_for_all_tasks(ExecutionId, Handler, Context, TaskIds) ->
     lists:foreach(fun(TaskId) ->
-        workflow_engine:call_handler(ExecutionId, Context, Handler, handle_task_execution_ended, [TaskId])
+        call_handler(ExecutionId, Context, Handler, handle_task_execution_ended, [TaskId])
     end, TaskIds).
 
 -spec call_handlers_for_cancelled_lane(

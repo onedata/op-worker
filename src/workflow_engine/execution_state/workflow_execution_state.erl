@@ -23,7 +23,7 @@
 %% API
 -export([init/6, restart_from_snapshot/6, cancel/1, cleanup/1, prepare_next_job/1,
     report_execution_status_update/4, report_lane_execution_prepared/5, report_limit_reached_error/2,
-    report_new_stream_task_data/3, report_task_data_processed/4, mark_task_data_stream_closed/2,
+    report_new_stream_task_data/3, report_task_data_processed/4, mark_task_data_stream_closed/3,
     check_timeouts/1, reset_keepalive_timer/2, get_result_processing_data/2]).
 %% Test API
 -export([is_finished_and_cleaned/2, get_item_id/2, get_current_lane_context/1]).
@@ -67,7 +67,10 @@
     task_status :: task_status()
 }).
 -define(TASK_PROCESSED_REPORT(TaskStatus), {task_processed_report, TaskStatus}).
--define(EXECUTION_CANCELLED_REPORT(ItemIdsToDelete), {execution_canceled_report, ItemIdsToDelete}).
+-define(EXECUTION_CANCELLED_REPORT(ItemIdsToDelete, TaskIds), {execution_canceled_report, ItemIdsToDelete, TaskIds}).
+-define(EXECUTION_CANCELLED_WITH_OPEN_STREAMS_REPORT(TaskIds), {execution_canceled_with_open_streams_report, TaskIds}).
+-define(EXECUTION_CANCELLED_WITH_OPEN_STREAMS_REPORT(Handler, LaneContext, TaskIds),
+    {execution_canceled_with_open_streams_report, Handler, LaneContext, TaskIds}).
 -define(LANE_READY_TO_BE_FINISHED_REPORT(LaneId, LaneContext), {lane_ready_to_be_finished_report, LaneId, LaneContext}).
 -define(JOBS_EXPIRED_REPORT(AsyncPoolsChanges), {jobs_expired_report, AsyncPoolsChanges}).
 -define(LANE_PREPARED_REPORT(Lane), {lane_prepared_report, Lane}).
@@ -120,12 +123,14 @@
     #job_prepared_report{} | #items_processed_report{} | ?LANE_PREPARED_REPORT(next_lane()) |
     ?TASK_PROCESSED_REPORT(task_status()) | ?JOBS_EXPIRED_REPORT(async_pools_slots_to_free()) |
     ?LANE_READY_TO_BE_FINISHED_REPORT(workflow_engine:lane_id(), workflow_engine:execution_context()) |
-    ?EXECUTION_CANCELLED_REPORT([workflow_cached_item:id()]) | no_items_error().
+    ?EXECUTION_CANCELLED_REPORT([workflow_cached_item:id()], [workflow_engine:task_id()]) |
+    ?EXECUTION_CANCELLED_WITH_OPEN_STREAMS_REPORT([workflow_engine:task_id()]) | no_items_error().
 
 -define(CALLBACKS_ON_CANCEL_SELECTOR, callbacks_on_cancel).
+-define(CALLBACKS_ON_STREAMS_CANCEL_SELECTOR, callbacks_on_stream_cancel).
 -define(CALLBACKS_ON_EMPTY_LANE_SELECTOR, callbacks_on_empty_lane).
 -type callback_selector() :: workflow_jobs:job_identifier() | workflow_cached_item:id() |
-    ?CALLBACKS_ON_CANCEL_SELECTOR | ?CALLBACKS_ON_EMPTY_LANE_SELECTOR.
+    ?CALLBACKS_ON_CANCEL_SELECTOR | ?CALLBACKS_ON_STREAMS_CANCEL_SELECTOR | ?CALLBACKS_ON_EMPTY_LANE_SELECTOR.
 
 -export_type([index/0, iteration_status/0, current_lane/0, next_lane/0, execution_status/0,
     next_lane_preparation_status/0, boxes_map/0, update_report/0, callback_selector/0]).
@@ -238,6 +243,14 @@ prepare_next_job(ExecutionId) ->
             % If next lane is being prepared in advance and preparation of this lane is finished before execution of
             % handlers_for_cancelled_lane, workflow_execution_ended handler will not be called - retry to call it
             ?RETRY_EXECUTION;
+        ?EXECUTION_CANCELLED_WITH_OPEN_STREAMS_REPORT(Context, Handler, TaskIdsWithStreamsToFinish) ->
+            lists:foreach(fun(TaskId) ->
+                workflow_engine:call_handler(ExecutionId, Context, Handler, trigger_task_data_stream_termination, [TaskId])
+            end, TaskIdsWithStreamsToFinish),
+            {ok, _} = update(ExecutionId, fun(State) ->
+                remove_pending_callback(State, ?CALLBACKS_ON_STREAMS_CANCEL_SELECTOR)
+            end),
+            ?RETRY_EXECUTION;
         ?ERROR_NOT_FOUND ->
             ?ERROR_NOT_FOUND % Race with execution deletion
     end.
@@ -347,8 +360,9 @@ report_limit_reached_error(ExecutionId, JobIdentifier) ->
 
 
 -spec report_new_stream_task_data(workflow_engine:execution_id(), workflow_engine:task_id(),
-    workflow_cached_task_data:id()) -> {ok, workflow_engine:id()}.
-report_new_stream_task_data(ExecutionId, TaskId, TaskDataId) ->
+    workflow_engine:task_data()) -> {ok, workflow_engine:id()}.
+report_new_stream_task_data(ExecutionId, TaskId, TaskData) ->
+    TaskDataId = workflow_cached_task_data:put(TaskData),
     {ok, #document{value = #workflow_execution_state{engine_id = EngineId}}} =
         update(ExecutionId, fun(State = #workflow_execution_state{tasks_data = Data}) ->
             {ok, State#workflow_execution_state{tasks_data = workflow_tasks_data:register(TaskId, TaskDataId, Data)}}
@@ -382,8 +396,10 @@ report_task_data_processed(ExecutionId, TaskId, TaskDataId, Ans) ->
             ok
     end.
 
--spec mark_task_data_stream_closed(workflow_engine:execution_id(), workflow_engine:task_id()) -> {ok, workflow_engine:id()}.
-mark_task_data_stream_closed(ExecutionId, TaskId) ->
+-spec mark_task_data_stream_closed(workflow_engine:execution_id(), workflow_engine:task_id(),
+    workflow_engine:stream_closing_result()) -> {ok, workflow_engine:id()}.
+mark_task_data_stream_closed(ExecutionId, TaskId, success) ->
+    % TODO - ten report ma miec rezultat i error przekazujemy jako normalny task a dopiero potem konczymy (a ok olewamy i konczymy)
     {ok, #document{value = #workflow_execution_state{
         engine_id = EngineId,
         update_report = ?TASK_PROCESSED_REPORT(TaskStatus),
@@ -401,8 +417,11 @@ mark_task_data_stream_closed(ExecutionId, TaskId) ->
             ok
     end,
 
-    {ok, EngineId}.
-
+    {ok, EngineId};
+mark_task_data_stream_closed(ExecutionId, TaskId, {failure, Error}) ->
+    report_new_stream_task_data(ExecutionId, TaskId, Error),
+    % Error have been reported - close stream with success
+    mark_task_data_stream_closed(ExecutionId, TaskId, success).
 
 -spec check_timeouts(workflow_engine:execution_id()) -> TimeoutAppeared :: boolean().
 check_timeouts(ExecutionId) ->
@@ -483,6 +502,8 @@ finish_lane_preparation(ExecutionId, Handler,
                     % TODO VFS-8456 - support iteration errors and ensure that callbacks for tasks end
                     % before handle_lane_execution_ended is executed
                     % xxxxxxxxxxx
+                    % TODO - trzeba wywolac callback dla async taskow jesli istnieja i potem czekac (czy cos sie nie wywali - spraawdzic czy linia jest zainicjalizowana poprawnie)
+                    % TODO - moze to wystarczy calkiem wywalic i callbacki zawolaja sie i tak na zwyklym mechanizmie?
                     call_handle_task_execution_ended_for_all_tasks(ExecutionId, Handler, LaneExecutionContext, BoxesMap),
                     {ok, CurrentLane, Iterator, NextLaneId};
                 {ok, #document{value = #workflow_execution_state{
@@ -542,6 +563,8 @@ get_unfinished_task_ids(BoxesMap, Jobs) ->
     ) | ?WF_ERROR_LANE_EXECUTION_CANCELLED(
         workflow_handler:handler(), workflow_engine:lane_id(),
         workflow_engine:execution_context(), [workflow_engine:task_id()]
+    ) | ?EXECUTION_CANCELLED_WITH_OPEN_STREAMS_REPORT(
+        workflow_handler:handler(), workflow_engine:execution_context(), [workflow_engine:task_id()]
     ) | ?ERROR_NOT_FOUND.
 prepare_next_job_for_current_lane(ExecutionId) ->
     case update(ExecutionId, fun prepare_next_waiting_job/1) of
@@ -558,6 +581,8 @@ prepare_next_job_for_current_lane(ExecutionId) ->
     ?WF_ERROR_LANE_EXECUTION_CANCELLED(
         workflow_handler:handler(), workflow_engine:lane_id(),
         workflow_engine:execution_context(), [workflow_engine:task_id()]
+    ) | ?EXECUTION_CANCELLED_WITH_OPEN_STREAMS_REPORT(
+        workflow_handler:handler(), workflow_engine:execution_context(), [workflow_engine:task_id()]
     ) | ?ERROR_NOT_FOUND.
 prepare_next_job_using_iterator(ExecutionId, ItemIndex, CurrentIterationStep, LaneIndex, Context) ->
     NextIterationStep = case CurrentIterationStep of
@@ -597,6 +622,8 @@ prepare_next_job_using_iterator(ExecutionId, ItemIndex, CurrentIterationStep, La
     ) | ?WF_ERROR_LANE_EXECUTION_CANCELLED(
         workflow_handler:handler(), workflow_engine:lane_id(),
         workflow_engine:execution_context(), [workflow_engine:task_id()]
+    ) | ?EXECUTION_CANCELLED_WITH_OPEN_STREAMS_REPORT(
+        workflow_handler:handler(), workflow_engine:execution_context(), [workflow_engine:task_id()]
     ) | ?ERROR_NOT_FOUND.
 handle_state_update_after_job_preparation(_ExecutionId, #workflow_execution_state{
     update_report = #job_prepared_report{
@@ -672,13 +699,12 @@ handle_state_update_after_job_preparation(ExecutionId, #workflow_execution_state
             ?WF_ERROR_EXECUTION_ENDED(#execution_ended{handler = Handler, context = ExecutionContext})
     end;
 handle_state_update_after_job_preparation(_ExecutionId, #workflow_execution_state{
-    update_report = ?EXECUTION_CANCELLED_REPORT(ItemIdsToDelete),
-    current_lane = #current_lane{id = LaneId, execution_context = LaneContext, parallel_box_specs = BoxesMap},
+    update_report = ?EXECUTION_CANCELLED_REPORT(ItemIdsToDelete, TaskIdsToFinish),
+    current_lane = #current_lane{id = LaneId, execution_context = LaneContext},
     execution_status = ExecutionStatus,
     handler = Handler,
     initial_context = ExecutionContext,
-    prefetched_iteration_step = PrefetchedIterationStep,
-    jobs = Jobs
+    prefetched_iteration_step = PrefetchedIterationStep
 }) ->
     lists:foreach(fun workflow_cached_item:delete/1, ItemIdsToDelete),
     case PrefetchedIterationStep of
@@ -686,7 +712,6 @@ handle_state_update_after_job_preparation(_ExecutionId, #workflow_execution_stat
         _ -> ok
     end,
     % TODO VFS-7787 - test cancel during lane_execution_finished callback execution
-    TaskIdsToFinish = get_unfinished_task_ids(BoxesMap, Jobs),
     case ExecutionStatus of
         ?WAITING_FOR_NEXT_LANE_PREPARATION_END ->
             ?WF_ERROR_LANE_EXECUTION_CANCELLED(Handler, LaneId, LaneContext, TaskIdsToFinish);
@@ -694,6 +719,12 @@ handle_state_update_after_job_preparation(_ExecutionId, #workflow_execution_stat
             ?WF_ERROR_EXECUTION_ENDED(#execution_ended{handler = Handler, context = ExecutionContext,
                 reason = ?EXECUTION_CANCELLED, callbacks_data = {LaneId, LaneContext, TaskIdsToFinish}})
     end;
+handle_state_update_after_job_preparation(_ExecutionId, #workflow_execution_state{
+    update_report = ?EXECUTION_CANCELLED_WITH_OPEN_STREAMS_REPORT(TaskIdsWithStreamsToFinish),
+    current_lane = #current_lane{execution_context = LaneContext},
+    handler = Handler
+}) ->
+    ?EXECUTION_CANCELLED_WITH_OPEN_STREAMS_REPORT(LaneContext, Handler, TaskIdsWithStreamsToFinish);
 handle_state_update_after_job_preparation(_ExecutionId, #workflow_execution_state{
     update_report = {error, _} = UpdateReport
 }) ->
@@ -1174,25 +1205,65 @@ prepare_next_waiting_job(State = #workflow_execution_state{
 verify_ongoing_jobs_when_execution_is_cancelled(Error, NewJobs, State = #workflow_execution_state{
     iteration_state = IterationState,
     next_lane_preparation_status = NextLaneStatus,
-    pending_callbacks = PendingCallbacks
+    pending_callbacks = PendingCallbacks,
+    current_lane = #current_lane{
+        parallel_box_specs = BoxSpecs
+    },
+    tasks_data = TasksData,
+    jobs = Jobs
 }) ->
     case {workflow_jobs:has_ongoing_jobs(NewJobs) orelse PendingCallbacks =/= [], Error} of
         {true, ?ERROR_NOT_FOUND} ->
             {ok, State#workflow_execution_state{jobs = NewJobs, update_report = ?WF_ERROR_NO_WAITING_ITEMS}};
         {true, ?WF_ERROR_ITERATION_FINISHED} ->
             ?WF_ERROR_NO_WAITING_ITEMS;
-        _ when NextLaneStatus =:= ?PREPARING ->
-            ItemIds = workflow_iteration_state:get_all_item_ids(IterationState),
-            {ok, State#workflow_execution_state{
-                jobs = NewJobs, iteration_state = workflow_iteration_state:init(),
-                execution_status = ?WAITING_FOR_NEXT_LANE_PREPARATION_END,
-                update_report = ?EXECUTION_CANCELLED_REPORT(ItemIds),
-                pending_callbacks = [?CALLBACKS_ON_CANCEL_SELECTOR | PendingCallbacks]
-            }};
         _ ->
-            ItemIds = workflow_iteration_state:get_all_item_ids(IterationState),
-            {ok, State#workflow_execution_state{jobs = NewJobs, iteration_state = workflow_iteration_state:init(),
-                update_report = ?EXECUTION_CANCELLED_REPORT(ItemIds)}}
+            TaskIdsToFinish = get_unfinished_task_ids(BoxSpecs, Jobs),
+            TaskIdsWithStreams = lists:filtermap(fun
+                ({TaskId, #{has_task_data_stream := true}}) -> {true, TaskId};
+                (_) -> false
+            end, lists:flatmap(fun(BoxSpec) -> maps:values(BoxSpec) end, maps:values(BoxSpecs))),
+            TaskIdsWithStreamsToFinish = lists_utils:intersect(TaskIdsToFinish, TaskIdsWithStreams),
+            TaskIdsWithoutStreamsToFinish = TaskIdsToFinish -- TaskIdsWithStreamsToFinish,
+
+            case workflow_tasks_data:verify_callbacks_on_cancel(TasksData) of
+                {execute, UpdatedTasksData} when TaskIdsWithStreamsToFinish =/= [] ->
+                    {ok, State#workflow_execution_state{
+                        tasks_data = UpdatedTasksData,
+                        jobs = NewJobs,
+                        update_report = ?EXECUTION_CANCELLED_WITH_OPEN_STREAMS_REPORT(TaskIdsWithStreamsToFinish),
+                        pending_callbacks = [?CALLBACKS_ON_STREAMS_CANCEL_SELECTOR | PendingCallbacks]
+                    }};
+                _ ->
+                    % TODO - generowanie AreAllDataStreamsClosed powtarza sie - wyciagnac do funkcji pomocniczej
+                    AreAllDataStreamsClosed = lists:all(fun(TaskId) ->
+                        workflow_tasks_data:is_task_data_stream_closed(TaskId, TasksData)
+                    end, TaskIdsWithStreams),
+
+                    UnfinishedTaskIdsWithStreams = lists:filter(fun(TaskId) ->
+                        not workflow_tasks_data:is_task_data_stream_finished(TaskId, TasksData)
+                    end, TaskIdsWithStreams),
+
+                    case AreAllDataStreamsClosed of
+                        true when NextLaneStatus =:= ?PREPARING ->
+                            ItemIds = workflow_iteration_state:get_all_item_ids(IterationState),
+                            {ok, State#workflow_execution_state{
+                                jobs = NewJobs, iteration_state = workflow_iteration_state:init(),
+                                execution_status = ?WAITING_FOR_NEXT_LANE_PREPARATION_END,
+                                update_report = ?EXECUTION_CANCELLED_REPORT(ItemIds,
+                                    TaskIdsWithoutStreamsToFinish ++ UnfinishedTaskIdsWithStreams),
+                                pending_callbacks = [?CALLBACKS_ON_CANCEL_SELECTOR | PendingCallbacks]
+                            }};
+                        true ->
+                            ItemIds = workflow_iteration_state:get_all_item_ids(IterationState),
+                            {ok, State#workflow_execution_state{jobs = NewJobs, iteration_state = workflow_iteration_state:init(),
+                                update_report = ?EXECUTION_CANCELLED_REPORT(ItemIds,
+                                    TaskIdsWithoutStreamsToFinish ++ UnfinishedTaskIdsWithStreams),
+                                pending_callbacks = [?CALLBACKS_ON_CANCEL_SELECTOR | PendingCallbacks]}};
+                        false ->
+                            ?WF_ERROR_NO_WAITING_ITEMS
+                    end
+            end
     end.
 
 -spec prepare_next_parallel_box(state(), workflow_jobs:job_identifier()) -> {ok, state()}.
@@ -1260,7 +1331,7 @@ get_task_status(JobIdentifier, #workflow_execution_state{
 -spec mark_task_data_done(workflow_engine:task_id(), workflow_cached_task_data:id(), state()) -> state().
 mark_task_data_done(TaskId, TaskDataId, State = #workflow_execution_state{tasks_data = TasksData}) ->
     UpdatedTasksData = workflow_tasks_data:mark_done(TaskId, TaskDataId, TasksData),
-    TaskStatus = case  workflow_tasks_data:is_task_data_stream_closed(TaskId, UpdatedTasksData) of
+    TaskStatus = case  workflow_tasks_data:is_task_data_stream_finished(TaskId, UpdatedTasksData) of
         true -> finished;
         false -> ongoing
     end,
@@ -1272,7 +1343,7 @@ mark_task_data_done(TaskId, TaskDataId, State = #workflow_execution_state{tasks_
 
 mark_task_data_stream_closed_internal(TaskId, State = #workflow_execution_state{tasks_data = TasksData}) ->
     UpdatedTasksData = workflow_tasks_data:mark_task_data_stream_closed(TaskId, TasksData),
-    TaskStatus = case  workflow_tasks_data:is_task_data_stream_closed(TaskId, UpdatedTasksData) of
+    TaskStatus = case  workflow_tasks_data:is_task_data_stream_finished(TaskId, UpdatedTasksData) of
         true -> finished;
         false -> waiting_for_data_stream_finish
     end,
@@ -1358,13 +1429,47 @@ handle_no_waiting_items_error(#workflow_execution_state{
     handler = Handler,
     initial_context = Context,
     current_lane = #current_lane{id = LaneId, execution_context = LaneContext, parallel_box_specs = BoxesMap},
-    jobs = Jobs
-}, ?ERROR_NOT_FOUND) ->
-    % TODO - co z npwymi handlarami taska przy bledach?
-    % xxxxxxxxxxx
-    TaskIdsToFinish = get_unfinished_task_ids(BoxesMap, Jobs),
-    ?WF_ERROR_EXECUTION_ENDED(#execution_ended{handler = Handler, context = Context, reason = ?EXECUTION_CANCELLED,
-        callbacks_data = {LaneId, LaneContext, TaskIdsToFinish}});
+    next_lane_preparation_status = NextLaneStatus,
+    pending_callbacks = PendingCallbacks,
+    tasks_data = TasksData
+} = State, ?ERROR_NOT_FOUND) ->
+    % TODO - czy tu nie musimy posprzatac jakies item_ids jak przy cancelowaniu?
+    TaskIds = get_task_ids(BoxesMap),
+    TaskIdsWithStreams = lists:filtermap(fun
+        ({TaskId, #{has_task_data_stream := true}}) -> {true, TaskId};
+        (_) -> false
+    end, lists:flatmap(fun(BoxSpec) -> maps:values(BoxSpec) end, maps:values(BoxesMap))),
+    TaskIdsWithoutStreams = TaskIds -- TaskIdsWithStreams,
+
+    case workflow_tasks_data:verify_callbacks_on_cancel(TasksData) of
+        {execute, UpdatedTasksData} when TaskIdsWithStreams =/= [] ->
+            {ok, State#workflow_execution_state{
+                tasks_data = UpdatedTasksData,
+                update_report = ?EXECUTION_CANCELLED_WITH_OPEN_STREAMS_REPORT(TaskIdsWithStreams),
+                pending_callbacks = [?CALLBACKS_ON_STREAMS_CANCEL_SELECTOR | PendingCallbacks]
+            }};
+        _ ->
+            % TODO - generowanie AreAllDataStreamsClosed powtarza sie - wyciagnac do funkcji pomocniczej
+            AreAllDataStreamsClosed = lists:all(fun(TaskId) ->
+                workflow_tasks_data:is_task_data_stream_finished(TaskId, TasksData)
+            end, TaskIdsWithStreams),
+
+            case AreAllDataStreamsClosed of
+                true when NextLaneStatus =:= ?PREPARING ->
+                    {ok, State#workflow_execution_state{
+                        iteration_state = workflow_iteration_state:init(),
+                        execution_status = ?WAITING_FOR_NEXT_LANE_PREPARATION_END,
+                        update_report = ?EXECUTION_CANCELLED_REPORT([], TaskIdsWithoutStreams),
+                        pending_callbacks = [?CALLBACKS_ON_CANCEL_SELECTOR | PendingCallbacks]
+                    }};
+                true ->
+                    % xxxxxxxxxxx
+                    ?WF_ERROR_EXECUTION_ENDED(#execution_ended{handler = Handler, context = Context, reason = ?EXECUTION_CANCELLED,
+                        callbacks_data = {LaneId, LaneContext, TaskIdsWithoutStreams}});
+                false ->
+                    ?WF_ERROR_NO_WAITING_ITEMS
+            end
+    end;
 handle_no_waiting_items_error(#workflow_execution_state{
     current_lane = #current_lane{
         index = LaneIndex,
@@ -1380,7 +1485,7 @@ handle_no_waiting_items_error(#workflow_execution_state{
     end, lists:flatmap(fun(BoxSpec) -> maps:values(BoxSpec) end, maps:values(BoxSpecs))),
 
     AreAllDataStreamsClosed = lists:all(fun(TaskId) ->
-        workflow_tasks_data:is_task_data_stream_closed(TaskId, TasksData)
+        workflow_tasks_data:is_task_data_stream_finished(TaskId, TasksData)
     end, TaskIdsToCheck),
 
     case AreAllDataStreamsClosed of

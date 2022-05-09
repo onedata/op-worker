@@ -17,7 +17,9 @@
 
 
 %% API
--export([init/0, register/3, prepare_next/1, mark_done/3, mark_task_data_stream_closed/2, is_task_data_stream_closed/2]).
+-export([init/0, register/3, prepare_next/1, mark_done/3,
+    mark_task_data_stream_closed/2, is_task_data_stream_closed/2, is_task_data_stream_finished/2,
+    verify_callbacks_on_cancel/1]).
 
 
 % Internal record that describe information about all data currently processed or waiting to be processed.
@@ -26,7 +28,8 @@
     ongoing = #{} :: task_to_data_map(),
 
     closed_task_data_streams = [] :: [workflow_engine:task_id()],
-    tasks_execution_order = [] :: [workflow_engine:task_id()]
+    tasks_execution_order = [] :: [workflow_engine:task_id()],
+    callbacks_on_cancel_status = not_executed :: executed | not_executed
 }).
 
 
@@ -89,19 +92,32 @@ mark_task_data_stream_closed(TaskId, #workflow_tasks_data{closed_task_data_strea
     TasksData#workflow_tasks_data{closed_task_data_streams = [TaskId | ClosedStreams]}.
 
 
-% TODO - moze nie closed a finished (moze byc closed a nie skonczony)
+% TODO - czy ta funkcja jest potrzebna (jak traktujemy cancel?
 -spec is_task_data_stream_closed(workflow_engine:task_id(), tasks_data()) -> boolean().
-is_task_data_stream_closed(TaskId, #workflow_tasks_data{
+is_task_data_stream_closed(TaskId, #workflow_tasks_data{closed_task_data_streams = ClosedStreams}) ->
+    lists:member(TaskId, ClosedStreams).
+
+
+-spec is_task_data_stream_finished(workflow_engine:task_id(), tasks_data()) -> boolean().
+is_task_data_stream_finished(TaskId, #workflow_tasks_data{
     waiting = Waiting,
-    ongoing = Ongoing, 
+    ongoing = Ongoing,
     closed_task_data_streams = ClosedStreams
 }) ->
     case lists:member(TaskId, ClosedStreams) of
-        true -> 
+        true ->
             not (maps:is_key(TaskId, Waiting) orelse maps:is_key(TaskId, Ongoing));
         false ->
             false
-    end. 
+    end.
+
+
+-spec verify_callbacks_on_cancel(tasks_data()) -> {execute, tasks_data()} | do_nothing.
+verify_callbacks_on_cancel(#workflow_tasks_data{callbacks_on_cancel_status = not_executed} = Data) ->
+    {execute, Data#workflow_tasks_data{callbacks_on_cancel_status = executed}};
+verify_callbacks_on_cancel(#workflow_tasks_data{}) ->
+    do_nothing.
+
 
 %%%===================================================================
 %%% Internal functions

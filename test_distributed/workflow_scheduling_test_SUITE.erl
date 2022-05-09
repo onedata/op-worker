@@ -18,6 +18,9 @@
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 
+%TODO - testy internal cancelu przez fail joby ze stremami, internal cancelu przez fail streama ze stremami,
+%       faila zamykania stream'a i cancelu (internal lub external) jak juz czesc taskow jest zamkniete (trigger w handlerze taska) ze streamem lub bez
+%       przetestowac cancelowanie z prepare_in_advance
 %% tests
 -export([
     empty_workflow_execution_test/1,

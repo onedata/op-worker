@@ -32,6 +32,7 @@
     external_cancel_during_lane_prepare_test/1,
     external_cancel_during_lane_prepare_in_advance_test/1,
     internal_cancel_caused_by_async_job_timeout_before_prepare_in_advance_finish_test/1,
+    async_workflow_with_streams_external_cancel/1,
 
     restart_callback_failure_test/1
 ]).
@@ -51,6 +52,7 @@ all() ->
         external_cancel_during_lane_prepare_test,
         external_cancel_during_lane_prepare_in_advance_test,
         internal_cancel_caused_by_async_job_timeout_before_prepare_in_advance_finish_test,
+        async_workflow_with_streams_external_cancel,
 
         restart_callback_failure_test
     ]).
@@ -63,7 +65,8 @@ all() ->
     test_execution_manager_option ::
         {workflow_scheduling_test_common:test_manager_task_failure_key(), workflow_engine:task_id()} |
         {cancel_execution, prepare_lane, workflow_engine:lane_id()} |
-        {cancel_execution, process_item | handle_callback | process_result, workflow_engine:task_id()}
+        {cancel_execution, process_item | handle_callback | process_result, workflow_engine:task_id()},
+    generator_options = #{} :: workflow_test_handler:test_execution_context()
 }).
 
 
@@ -156,6 +159,22 @@ internal_cancel_caused_by_async_job_timeout_before_prepare_in_advance_finish_tes
         test_execution_manager_option = {timeout, <<"1_1_1">>}
     }).
 
+async_workflow_with_streams_external_cancel(Config) ->
+    cancel_and_restart_test_base(Config, #test_config{
+        task_type = async,
+        lane_id = <<"3">>,
+        test_execution_manager_option = {cancel_execution, process_item, <<"3_2_1">>},
+        generator_options = #{task_streams => #{
+            3 => #{
+                {1,1} => [<<"1">>],
+                {2,2} => [{stream_termination_callback, 5}],
+                {3,1} => [<<"1">>,{<<"2">>, 10},<<"3">>,<<"4">>,<<"100">>,<<"150">>],
+                {3,2} => [<<"100">>, stream_termination_callback],
+                {3,3} => []
+            }
+        }}
+    }).
+
 %%%===================================================================
 
 restart_callback_failure_test(Config) ->
@@ -212,7 +231,8 @@ cancel_and_restart_test_base(Config, #test_config{
     task_type = TaskType,
     prepare_in_advance = PrepareInAdvance,
     lane_id = LaneId,
-    test_execution_manager_option = TestExecutionManagerOption
+    test_execution_manager_option = TestExecutionManagerOption,
+    generator_options = GeneratorOptions
 }) ->
     InitialKeys = workflow_scheduling_test_common:get_all_workflow_related_datastore_keys(Config),
 
@@ -222,7 +242,7 @@ cancel_and_restart_test_base(Config, #test_config{
         _ -> #{failure_count_to_cancel => 1}
     end,
     #{id := ExecutionId} = WorkflowExecutionSpec = workflow_scheduling_test_common:gen_workflow_execution_spec(
-        TaskType, PrepareInAdvance, #{lane_options => LaneOptions}),
+        TaskType, PrepareInAdvance, GeneratorOptions#{lane_options => LaneOptions}),
     {TestExecutionManagerOptionKey, TestExecutionManagerOptionValue} = case TestExecutionManagerOption of
         {cancel_execution, prepare_lane, LaneIdToCancel} ->
             {cancel_execution, {prepare_lane, LaneIdToCancel}};
