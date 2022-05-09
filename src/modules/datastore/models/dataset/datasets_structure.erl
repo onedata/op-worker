@@ -94,7 +94,7 @@
 -define(LINK(LinkName, LinkValue), {LinkName, LinkValue}).
 -define(ENTRY(DatasetPath, DatasetName), {dataset_path:to_id(DatasetPath), DatasetName}).
 
--define(DEFAULT_BATCH_SIZE, op_worker:get_env(default_ls_batch_size, 5000)).
+-define(DEFAULT_BATCH_SIZE, op_worker:get_env(default_ls_batch_limit, 5000)).
 -define(DEFAULT_OFFSET, 0).
 
 -define(FOREST_SEP, <<"###">>).

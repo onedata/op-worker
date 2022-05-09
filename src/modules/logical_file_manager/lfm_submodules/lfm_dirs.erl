@@ -81,10 +81,10 @@ get_children(SessId, FileKey, ListingOpts) ->
         },
         fun(#file_children{
             child_links = List,
-            pagination_token = ListingState
+            pagination_token = ListingToken
         }) ->
             Children = [{Guid, FileName} || #child_link{guid = Guid, name = FileName} <- List],
-            {ok, Children, ListingState}
+            {ok, Children, ListingToken}
         end).
 
 
@@ -107,9 +107,9 @@ get_children_attrs(SessId, FileKey, ListingOpts, IncludeReplicationStatus, Inclu
         },
         fun(#file_children_attrs{
             child_attrs = Attrs,
-            pagination_token = ListingState
+            pagination_token = ListingToken
         }) ->
-            {ok, Attrs, ListingState}
+            {ok, Attrs, ListingToken}
         end).
 
 
@@ -144,9 +144,9 @@ get_children_details(SessId, FileKey, ListingOpts) ->
         },
         fun(#file_children_details{
             child_details = ChildrenInfo,
-            pagination_token = ListingState
+            pagination_token = ListingToken
         }) ->
-            {ok, ChildrenInfo, ListingState}
+            {ok, ChildrenInfo, ListingToken}
         end).
 
 

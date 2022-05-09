@@ -59,7 +59,7 @@ mkdir(UserCtx, ParentFileCtx0, Name, Mode) ->
     fslogic_worker:fuse_response().
 get_children(UserCtx, FileCtx0, ListOpts) ->
     ParentGuid = file_ctx:get_logical_guid_const(FileCtx0),
-    {ChildrenCtxs, ListingState, FileCtx1} = get_children_ctxs(
+    {ChildrenCtxs, ListingToken, FileCtx1} = get_children_ctxs(
         UserCtx, FileCtx0, ListOpts, ?OPERATIONS(?list_container_mask)),
     ChildrenNum = length(ChildrenCtxs),
 
@@ -96,7 +96,7 @@ get_children(UserCtx, FileCtx0, ListOpts) ->
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_children{
             child_links = ChildrenLinks,
-            pagination_token = ListingState
+            pagination_token = ListingToken
         }
     }.
 
@@ -245,7 +245,7 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
 get_children_attrs_insecure(
     UserCtx, FileCtx0, ListOpts, IncludeReplicationStatus, IncludeLinkCount, CanonicalChildrenWhiteList
 ) ->
-    {Children, ListingState, FileCtx1} = file_tree:list_children(
+    {Children, ListingToken, FileCtx1} = file_tree:list_children(
         FileCtx0, UserCtx, ListOpts, CanonicalChildrenWhiteList),
     ChildrenAttrs = map_children(
         UserCtx,
@@ -260,7 +260,7 @@ get_children_attrs_insecure(
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_children_attrs{
             child_attrs = ChildrenAttrs,
-            pagination_token = ListingState
+            pagination_token = ListingToken
         }
     }.
 
@@ -282,7 +282,7 @@ get_children_attrs_insecure(
     fslogic_worker:fuse_response().
 get_children_details_insecure(UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhiteList) ->
     file_ctx:is_user_root_dir_const(FileCtx0, UserCtx) andalso throw(?ENOTSUP),
-    {Children, ListingState, FileCtx1} = file_tree:list_children(
+    {Children, ListingToken, FileCtx1} = file_tree:list_children(
         FileCtx0, UserCtx, ListOpts, CanonicalChildrenWhiteList
     ),
     ChildrenDetails = map_children(
@@ -296,7 +296,7 @@ get_children_details_insecure(UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhit
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_children_details{
             child_details = ChildrenDetails,
-            pagination_token = ListingState
+            pagination_token = ListingToken
         }
     }.
 

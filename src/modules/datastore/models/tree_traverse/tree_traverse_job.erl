@@ -466,6 +466,8 @@ upgrade_record(5, Record) ->
     
     OptimizeContinuousListing = UseListingToken,
     Index = file_listing:build_index(LastName, LastTree),
+    % listing with limit 0 does not list anything, but returns a pagination_token that can be used 
+    % to continue listing from this point
     {ok, [], ListingPaginationToken} = file_listing:list(<<"dummy_uuid">>, #{
         index => Index, 
         optimize_continuous_listing => OptimizeContinuousListing,

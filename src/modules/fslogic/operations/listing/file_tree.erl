@@ -93,7 +93,7 @@
 -export_type([children_whitelist/0]).
 
 
--define(DEFAULT_LS_BATCH_SIZE, op_worker:get_env(default_ls_batch_size, 5000)).
+-define(DEFAULT_LS_BATCH_LIMIT, op_worker:get_env(default_ls_batch_limit, 5000)).
 
 
 %%%===================================================================
@@ -324,7 +324,7 @@ get_user_root_dir_child(UserCtx, UserRootDirCtx, Name) ->
 get_user_root_dir_children(UserCtx, UserRootDirCtx, ListOpts, SpaceWhiteList) ->
     % offset can be negative if last_name is passed too
     Offset = max(maps:get(offset, ListOpts, 0), 0),
-    Limit = maps:get(limit, ListOpts, ?DEFAULT_LS_BATCH_SIZE),
+    Limit = maps:get(limit, ListOpts, ?DEFAULT_LS_BATCH_LIMIT),
 
     AllUserSpaces = user_ctx:get_eff_spaces(UserCtx),
 
@@ -354,7 +354,7 @@ get_user_root_dir_children(UserCtx, UserRootDirCtx, ListOpts, SpaceWhiteList) ->
         false ->
             []
     end,
-    prepare_listing_result(UserCtx, Children, Limit, UserRootDirCtx).
+    build_listing_result(UserCtx, Children, Limit, UserRootDirCtx).
 
 
 %% @private
@@ -385,7 +385,7 @@ get_space_share_child(SpaceDirCtx, Name, UserCtx) ->
 get_space_open_handle_shares(UserCtx, SpaceDirCtx, ListOpts, ShareWhiteList) ->
     % offset can be negative if last_name is passed too
     Offset = max(maps:get(offset, ListOpts, 0), 0),
-    Limit = maps:get(size, ListOpts, ?DEFAULT_LS_BATCH_SIZE),
+    Limit = maps:get(size, ListOpts, ?DEFAULT_LS_BATCH_LIMIT),
 
     SessId = user_ctx:get_session_id(UserCtx),
     SpaceId = file_ctx:get_space_id_const(SpaceDirCtx),
@@ -416,7 +416,7 @@ get_space_open_handle_shares(UserCtx, SpaceDirCtx, ListOpts, ShareWhiteList) ->
         false ->
             []
     end,
-    prepare_listing_result(UserCtx, Children, Limit, SpaceDirCtx).
+    build_listing_result(UserCtx, Children, Limit, SpaceDirCtx).
 
 
 %% @private
@@ -451,7 +451,7 @@ list_share_root_dir_children(UserCtx, ShareRootDirCtx, FileWhiteList) ->
                 false -> []
             end
     end,
-    prepare_listing_result(UserCtx, Children, ?DEFAULT_LS_BATCH_SIZE, ShareRootDirCtx).
+    build_listing_result(UserCtx, Children, ?DEFAULT_LS_BATCH_LIMIT, ShareRootDirCtx).
 
 
 %% @private
@@ -496,18 +496,18 @@ list_file_children(FileCtx, ListOpts, ChildrenWhiteList) ->
             FileGuid = file_ctx:get_logical_guid_const(FileCtx),
             {_FileUuid, SpaceId, ShareId} = file_id:unpack_share_guid(FileGuid),
 
-            {ok, ChildrenLinks, ListingState} = 
+            {ok, ChildrenLinks, ListingToken} = 
                 file_listing:list(FileUuid, ListOpts#{whitelist => ChildrenWhiteList}),
             Children = lists:map(fun({Name, Uuid}) ->
                 file_ctx:new_by_uuid(Uuid, SpaceId, ShareId, Name)
             end, ChildrenLinks),
 
-            {Children, ListingState, FileCtx2};
+            {Children, ListingToken, FileCtx2};
         _ ->
             % In case of listing regular file - return it
-            {Result, PaginationToken} = file_listing:prepare_result(
-                [FileCtx], undefined, ?DEFAULT_LS_BATCH_SIZE),
-            {Result, PaginationToken, FileCtx2}
+            PaginationToken = file_listing:infer_pagination_token(
+                [FileCtx2], undefined, ?DEFAULT_LS_BATCH_LIMIT),
+            {[FileCtx2], PaginationToken, FileCtx2}
     end.
 
 
@@ -523,13 +523,11 @@ is_space_dir_accessed_in_open_handle_mode(UserCtx, FileCtx) ->
 
 
 %% @private
--spec prepare_listing_result(user_ctx:ctx(), [file_ctx:ctx()], file_listing:limit(), file_ctx:ctx()) -> 
+-spec build_listing_result(user_ctx:ctx(), [file_ctx:ctx()], file_listing:limit(), file_ctx:ctx()) -> 
     {[file_ctx:ctx()], file_listing:pagination_token(), file_ctx:ctx()}.
-prepare_listing_result(_UserCtx, [], Limit, ListedCtx) ->
-    {Res, PaginationToken} = file_listing:prepare_result([], undefined, Limit),
-    {Res, PaginationToken, ListedCtx};
-prepare_listing_result(UserCtx, Children, Limit, ListedCtx) ->
+build_listing_result(_UserCtx, [], Limit, ListedCtx) ->
+    {[], file_listing:infer_pagination_token([], undefined, Limit), ListedCtx};
+build_listing_result(UserCtx, Children, Limit, ListedCtx) ->
     LastFileCtx = lists:last(Children),
     {Name, _} = file_ctx:get_aliased_name(LastFileCtx, UserCtx),
-    {Res, PaginationToken} = file_listing:prepare_result(Children, Name, Limit),
-    {Res, PaginationToken, ListedCtx}.
+    {Children, file_listing:infer_pagination_token(Children, Name, Limit), ListedCtx}.

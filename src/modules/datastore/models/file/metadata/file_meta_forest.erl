@@ -19,7 +19,7 @@
 -author("Jakub Kudzia").
 
 -include("global_definitions.hrl").
--include("proto/oneclient/fuse_messages.hrl").
+-include("modules/fslogic/file_meta_forest.hrl").
 -include("modules/fslogic/fslogic_suffix.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 
@@ -50,7 +50,7 @@
 % Exported types
 -type offset() :: integer().
 -type limit() :: non_neg_integer().
--type token() :: binary().
+-type datastore_list_token() :: binary().
 -type last_name() :: link_name().
 -type last_tree() :: tree_id().
 -type link() :: {link_name(), link_target()}.
@@ -60,19 +60,9 @@
 %% @formatter:off
 -type list_opts() :: datastore:fold_opts().
 
-% Map returned from listing functions, containing information
-% whether end of list has been reached and needed to list next batch
--type list_extended_info() :: #{
-    % guaranteed keys
-    is_last := boolean(),
-    % optional keys
-    token => token(),
-    last_name => link_name(),
-    last_tree => last_name()
-}.
-%% @formatter:on
+-type list_extended_info() :: #list_extended_info{}.
 
--export_type([link/0, offset/0, limit/0, token/0, last_name/0, last_tree/0,
+-export_type([link/0, offset/0, limit/0, datastore_list_token/0, last_name/0, last_tree/0,
     list_opts/0, list_extended_info/0, tree_id/0, tree_ids/0
 ]).
 
@@ -180,9 +170,11 @@ list_whitelisted(ParentUuid, Opts, SortedChildrenWhiteList) ->
         case NonNegOffset < length(ValidLinks) of
             true ->
                 RequestedLinks = lists:sublist(ValidLinks, NonNegOffset + 1, Size),
-                {ok, tag_ambiguous(RequestedLinks), #{is_last => NonNegOffset + Size >= length(ValidLinks)}};
+                {ok, tag_ambiguous(RequestedLinks), #list_extended_info{
+                    is_finished = NonNegOffset + Size >= length(ValidLinks)
+                }};
             false ->
-                {ok, [], #{is_last => true}}
+                {ok, [], #list_extended_info{is_finished = true}}
         end
     catch
         throw:{error, _} = Error2 ->
@@ -258,24 +250,24 @@ fold(ParentUuid, Fun, AccIn, Opts) ->
 %% @private
 %% @doc
 %% Prepares result of list by tagging ambiguous file names and
-%% preparing list_extended_info() structure.
+%% preparing #list_extended_info{} structure.
 %% @end
 %%--------------------------------------------------------------------
 -spec prepare_list_result([internal_link()], token_internal() | undefined, boolean()) ->
     {ok, [link()], list_extended_info()}.
 prepare_list_result(ReversedLinks, TokenOrUndefined, ListedLessThanRequested) ->
     ExtendedInfo = case TokenOrUndefined of
-        #link_token{} = Token -> #{
-            token => Token,
-            is_last => Token#link_token.is_last
+        #link_token{} = Token -> #list_extended_info{
+            datastore_token = Token,
+            is_finished = Token#link_token.is_last
         };
-        undefined -> #{
-            is_last => ListedLessThanRequested
+        undefined -> #list_extended_info{
+            is_finished = ListedLessThanRequested
         }
     end,
     ExtendedInfo2 = case ReversedLinks of
         [#link{name = Name, tree_id = Tree} | _] ->
-            ExtendedInfo#{last_name => Name, last_tree => Tree};
+            ExtendedInfo#list_extended_info{last_name = Name, last_tree = Tree};
         _ ->
             ExtendedInfo
     end,

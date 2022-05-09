@@ -183,7 +183,7 @@ process_current_dir_in_batches(UserCtx, FileCtx, ListOpts, State, AccListResult)
             {ok, C, PT, F} -> 
                 {C, AccListResult, PT, F};
             {error, ?EACCES} ->
-                {R, PaginationToken} = file_listing:prepare_result([], undefined, ?LIST_RECURSIVE_BATCH_SIZE),
+                {R, PaginationToken} = file_listing:infer_pagination_token([], undefined, ?LIST_RECURSIVE_BATCH_SIZE),
                 {R, result_append_inaccessible_path(State, AccListResult), PaginationToken, FileCtx}
         end,
     {Res, FinalProcessedFileCount} = lists_utils:foldl_while(fun(ChildCtx, {TmpResult, ProcessedFileCount}) ->

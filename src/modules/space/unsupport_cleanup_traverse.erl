@@ -129,7 +129,7 @@ do_master_job(Job = #tree_traverse{
 ) ->
     RemoveStorageFiles = maps:get(remove_storage_files, TraverseInfo),
 
-    BatchProcessingPrehook = fun(_SlaveJobs, _MasterJobs, _ListingState, SubtreeProcessingStatus) ->
+    BatchProcessingPrehook = fun(_SlaveJobs, _MasterJobs, _ListingToken, SubtreeProcessingStatus) ->
         maybe_cleanup_dir(SubtreeProcessingStatus, TaskId, FileCtx, RemoveStorageFiles)
     end,
     tree_traverse:do_master_job(Job, MasterJobArgs, BatchProcessingPrehook).

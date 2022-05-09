@@ -546,7 +546,7 @@ get_children(Worker, SessId, FileKey, ListOpts) ->
 get_children(Worker, SessId, FileKey, Offset, Limit) ->
     % TODO VFS-7327 use get_children/4 function accepting options map everywhere in tests
     case get_children(Worker, SessId, FileKey, #{offset => Offset, limit => Limit, optimize_continuous_listing => false}) of
-        {ok, List, _ListingState} -> {ok, List};
+        {ok, List, _ListingToken} -> {ok, List};
         {error, _} = Error -> Error
     end.
 

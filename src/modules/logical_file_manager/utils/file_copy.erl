@@ -246,8 +246,7 @@ copy_children(SessId, ParentGuid, TargetParentGuid, ListingOpts, ChildEntriesAcc
                 true ->
                     {ok, AllChildEntries};
                 false ->
-                    NextPageListingOpts = 
-                        #{pagination_token => ListingPaginationToken},
+                    NextPageListingOpts = #{pagination_token => ListingPaginationToken},
                     copy_children(SessId, ParentGuid, TargetParentGuid, NextPageListingOpts, 
                         AllChildEntries, Options)
             end;

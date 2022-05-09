@@ -807,9 +807,9 @@ cancel_race_test_setup() ->
 
 get_direct_child(Guid) ->
     SessionId = oct_background:get_user_session_id(?USER1, krakow),
-    {ok, [{ChildGuid, _}], ListingState} = ?assertMatch({ok, [_], _}, lfm_proxy:get_children(
+    {ok, [{ChildGuid, _}], ListingToken} = ?assertMatch({ok, [_], _}, lfm_proxy:get_children(
         oct_background:get_random_provider_node(krakow), SessionId, #file_ref{guid = Guid}, #{optimize_continuous_listing => false}), ?ATTEMPTS),
-    ?assertEqual(true, file_listing:is_finished(ListingState)),
+    ?assert(file_listing:is_finished(ListingToken)),
     ChildGuid.
 
 

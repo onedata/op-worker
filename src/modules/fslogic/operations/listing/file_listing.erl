@@ -34,22 +34,25 @@
 
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/datastore/datastore_runner.hrl").
+-include("modules/fslogic/file_meta_forest.hrl").
 
 -export([list/2]).
 -export([build_index/1, build_index/2]).
 -export([encode_pagination_token/1, decode_pagination_token/1]). 
 -export([is_finished/1, get_last_listed_filename/1]).
--export([prepare_result/3]).
+-export([infer_pagination_token/3]).
 
 -record(list_index, {
     file_name :: file_meta:name(),
     tree_id :: file_meta_forest:tree_id() | undefined
 }).
 
+-type progress_marker() :: more | done.
+
 -record(pagination_token, {
     last_index :: undefined | index(),
     datastore_token :: undefined | datastore_list_token(),
-    is_finished = false :: boolean()
+    progress_marker = more :: progress_marker()
 }).
 
 -opaque index() :: #list_index{}.
@@ -75,14 +78,14 @@
 }.
 %% @formatter:on
 
--type datastore_options() :: file_meta_forest:list_opts().
+-type datastore_list_opts() :: file_meta_forest:list_opts().
 -type encoded_pagination_token() :: binary().
 -type entry() :: file_meta_forest:link().
 
 -export_type([offset/0, limit/0, index/0, pagination_token/0, options/0]).
 
 
--define(DEFAULT_LS_BATCH_SIZE, op_worker:get_env(default_ls_batch_size, 5000)).
+-define(DEFAULT_LS_BATCH_LIMIT, op_worker:get_env(default_ls_batch_limit, 5000)).
 
 %%%===================================================================
 %%% API
@@ -105,7 +108,7 @@ build_index(Name) ->
 
 
 -spec build_index(file_meta:name() | undefined, file_meta_forest:tree_id() | undefined) -> index().
-build_index(undefined, undefined) ->
+build_index(undefined, _) ->
     undefined;
 build_index(Name, TreeId) when is_binary(Name) andalso (is_binary(TreeId) orelse TreeId == undefined) ->
     #list_index{file_name = Name, tree_id = TreeId};
@@ -133,19 +136,19 @@ decode_pagination_token(Token) ->
 
 
 -spec is_finished(pagination_token()) -> boolean().
-is_finished(#pagination_token{is_finished = IsFinished}) -> IsFinished.
+is_finished(#pagination_token{progress_marker = ProgressMarker}) -> ProgressMarker == done.
 
 
 -spec get_last_listed_filename(pagination_token()) -> file_meta:name().
 get_last_listed_filename(#pagination_token{last_index = #list_index{file_name = Name}}) -> Name.
 
 
--spec prepare_result([T], file_meta:name() | undefined, limit()) -> 
-    {[T], pagination_token()}.
-prepare_result(Result, _LastName, Limit) when length(Result) < Limit ->
-    {Result, #pagination_token{is_finished = true}};
-prepare_result(Result, LastName, _Limit) ->
-    {Result, #pagination_token{is_finished = false, last_index = build_index(LastName)}}.
+-spec infer_pagination_token([any()], file_meta:name() | undefined, limit()) -> 
+    pagination_token().
+infer_pagination_token(Result, _LastName, Limit) when length(Result) < Limit ->
+    #pagination_token{progress_marker = done};
+infer_pagination_token(_Result, LastName, _Limit) ->
+    #pagination_token{progress_marker = more, last_index = build_index(LastName)}.
 
 
 %%%===================================================================
@@ -157,20 +160,20 @@ prepare_result(Result, LastName, _Limit) ->
     {ok, [entry()], pagination_token()} | {error, term()}.
 list_internal(_FunctionName, _FileUuid, #{limit := 0, pagination_token := PaginationToken}, _ExtraArgs) ->
     {ok, [], PaginationToken};
-list_internal(_FunctionName, _FileUuid, #{pagination_token := #pagination_token{is_finished = true}} = PaginationToken, _ExtraArgs) ->
+list_internal(_FunctionName, _FileUuid, #{pagination_token := #pagination_token{progress_marker = done}} = PaginationToken, _ExtraArgs) ->
     {ok, [], PaginationToken};
 list_internal(_FunctionName, _FileUuid, #{limit := 0} = ListOpts, _ExtraArgs) ->
     {ok, [], #pagination_token{
         last_index = maps:get(index, ListOpts, undefined),
         datastore_token = maps:get(token, convert_to_datastore_options(ListOpts), undefined),
-        is_finished = false
+        progress_marker = more
     }};
 list_internal(FunctionName, FileUuid, ListOpts, ExtraArgs) ->
     ?run(begin
-        DatastoreOpts = ensure_starting_point(convert_to_datastore_options(ListOpts)),
-        case erlang:apply(file_meta_forest, FunctionName, [FileUuid, DatastoreOpts | ExtraArgs]) of
+        DatastoreListOpts = ensure_starting_point(convert_to_datastore_options(ListOpts)),
+        case erlang:apply(file_meta_forest, FunctionName, [FileUuid, DatastoreListOpts | ExtraArgs]) of
             {ok, Result, ExtendedInfo} ->
-                {ok, Result, build_result_pagination_token(ExtendedInfo)};
+                {ok, Result, datastore_info_to_pagination_token(ExtendedInfo)};
             {error, _} = Error ->
                 Error
         end
@@ -182,26 +185,26 @@ list_internal(FunctionName, FileUuid, ListOpts, ExtraArgs) ->
 check_exclusive_options(#{pagination_token := _} = Options) ->
     maps_utils:is_empty(maps:with([optimize_continuous_listing, index, offset, inclusive], Options)) orelse
         %% TODO VFS-7208 introduce conflicting options error after introducing API errors to fslogic
-    throw(?EINVAL),
+        throw(?EINVAL),
     ok;
 check_exclusive_options(_Options) ->
     ok.
 
 
 %% @private
--spec convert_to_datastore_options(options()) -> datastore_options().
+-spec convert_to_datastore_options(options()) -> datastore_list_opts().
 convert_to_datastore_options(#{pagination_token := PaginationToken} = Opts) ->
     #pagination_token{
         last_index = Index,
         datastore_token = DatastoreToken
     } = PaginationToken,
-    BaseOpts = index_to_datastore_opts(Index),
+    BaseOpts = index_to_datastore_list_opts(Index),
     maps_utils:remove_undefined(BaseOpts#{
         token => DatastoreToken,
         size => sanitize_limit(Opts)
     });
 convert_to_datastore_options(Opts) ->
-    BaseOpts = index_to_datastore_opts(maps:get(index, Opts, undefined)),
+    BaseOpts = index_to_datastore_list_opts(maps:get(index, Opts, undefined)),
     DatastoreToken = case maps:find(optimize_continuous_listing, Opts) of
         {ok, true} -> 
             #link_token{};
@@ -212,17 +215,21 @@ convert_to_datastore_options(Opts) ->
             %% throw(?ERROR_MISSING_REQUIRED_VALUE(optimize_continuous_listing)),
             throw(?EINVAL)
     end,
-    Whitelist = maps:get(whitelist, Opts, undefined),
     maps_utils:remove_undefined(BaseOpts#{
-        size => sanitize_limit(Opts),
-        offset => sanitize_offset(maps:get(offset, Opts, undefined), BaseOpts, Whitelist),
-        inclusive => sanitize_inclusive(Opts),
+        size => sanitize_limit(
+            maps:get(limit, Opts, undefined)),
+        offset => sanitize_offset(
+            maps:get(offset, Opts, undefined), 
+            maps:get(prev_link_name, BaseOpts, undefined), 
+            maps:get(whitelist, Opts, undefined)),
+        inclusive => sanitize_inclusive(
+            maps:get(inclusive, Opts, undefined)),
         token => DatastoreToken
     }).
 
 
 %% @private
--spec ensure_starting_point(datastore_options()) -> datastore_options().
+-spec ensure_starting_point(datastore_list_opts()) -> datastore_list_opts().
 ensure_starting_point(InternalOpts) ->
     % at least one of: offset, token, prev_link_name must be defined so that we know
     % where to start listing
@@ -233,83 +240,78 @@ ensure_starting_point(InternalOpts) ->
 
 
 %% @private
--spec sanitize_limit(options()) -> limit().
-sanitize_limit(Opts) ->
-    case maps:get(limit, Opts, ?DEFAULT_LS_BATCH_SIZE) of
-        Size when is_integer(Size) andalso Size >= 0 ->
-            Size;
-        %% TODO VFS-7208 uncomment after introducing API errors to fslogic
-        %% Size when is_integer(Size) ->
-        %%     throw(?ERROR_BAD_VALUE_TOO_LOW(size, 0));
-        _ ->
-            %% TODO VFS-7208 uncomment after introducing API errors to fslogic
-            %% throw(?ERROR_BAD_VALUE_INTEGER(size))
-            throw(?EINVAL)
-    end.
-
-
-%% @private
--spec sanitize_inclusive(options()) -> boolean().
-sanitize_inclusive(Opts) ->
-    case maps:get(inclusive, Opts, false) of
-        Inclusive when is_boolean(Inclusive) ->
-            Inclusive;
-        _ ->
-            %% TODO VFS-7208 uncomment after introducing API errors to fslogic
-            %% throw(?ERROR_BAD_VALUE_BOOLEAN(inclusive))
-            throw(?EINVAL)
-    end.
-
-
-%% @private
--spec sanitize_offset(offset() | undefined | any(), datastore_options(), whitelist()) -> 
-    offset() | undefined.
-sanitize_offset(undefined, _DatastoreOpts, _Whitelist) ->
-    undefined;
-sanitize_offset(Offset, DatastoreOpts, Whitelist) when is_integer(Offset) ->
-    case maps:get(prev_link_name, DatastoreOpts, undefined) of
-        undefined ->
-            % if prev_link_name is undefined, offset cannot be negative
-            %% throw(?ERROR_BAD_VALUE_TOO_LOW(size, 0));
-            Offset < 0 andalso throw(?EINVAL);
-        _ ->
-            % if whitelist is provided, offset cannot be negative
-            Whitelist =/= undefined andalso Offset < 0 andalso throw(?EINVAL)
-    end,
-    Offset;
-sanitize_offset(_, _DatastoreOpts, _NegOffsetPolicy) ->
+-spec sanitize_limit(limit() | undefined | any()) -> limit().
+sanitize_limit(undefined) ->
+    ?DEFAULT_LS_BATCH_LIMIT;
+sanitize_limit(Limit) when is_integer(Limit) andalso Limit >= 0 ->
+    Limit;
+%% TODO VFS-7208 uncomment after introducing API errors to fslogic
+%%sanitize_limit(Limit) when is_integer(Limit) ->
+%%     throw(?ERROR_BAD_VALUE_TOO_LOW(Limit, 0));
+sanitize_limit(_) ->
     %% TODO VFS-7208 uncomment after introducing API errors to fslogic
     %% throw(?ERROR_BAD_VALUE_INTEGER(size))
     throw(?EINVAL).
 
 
 %% @private
--spec index_to_datastore_opts(index() | undefined | binary() | any()) -> map() | no_return().
-index_to_datastore_opts(undefined) ->
+-spec sanitize_inclusive(boolean() | undefined | any()) -> boolean().
+sanitize_inclusive(undefined) ->
+    false;
+sanitize_inclusive(Inclusive) when is_boolean(Inclusive) ->
+    Inclusive;
+sanitize_inclusive(_) ->
+    %% TODO VFS-7208 uncomment after introducing API errors to fslogic
+    %% throw(?ERROR_BAD_VALUE_BOOLEAN(inclusive))
+    throw(?EINVAL).
+
+
+%% @private
+-spec sanitize_offset(offset() | undefined | any(), file_meta_forest:link_name(), whitelist()) -> 
+    offset() | undefined.
+sanitize_offset(undefined, _DatastoreListOpts, _Whitelist) ->
+    undefined;
+sanitize_offset(Offset, undefined = _PrevLinkName, _Whitelist) when is_integer(Offset) ->
+    % if prev_link_name is undefined, offset cannot be negative
+    %% TODO VFS-7208 uncomment after introducing API errors to fslogic
+    %% throw(?ERROR_BAD_VALUE_TOO_LOW(size, 0));
+    Offset < 0 andalso throw(?EINVAL);
+sanitize_offset(Offset, _, Whitelist) when is_integer(Offset) ->
+    % if whitelist is provided, offset cannot be negative
+    Whitelist =/= undefined andalso Offset < 0 andalso throw(?EINVAL),
+    Offset;
+sanitize_offset(_, _DatastoreListOpts, _NegOffsetPolicy) ->
+    %% TODO VFS-7208 uncomment after introducing API errors to fslogic
+    %% throw(?ERROR_BAD_VALUE_INTEGER(size))
+    throw(?EINVAL).
+
+
+%% @private
+-spec index_to_datastore_list_opts(index() | undefined | binary() | any()) -> map() | no_return().
+index_to_datastore_list_opts(undefined) ->
     #{};
-index_to_datastore_opts(#list_index{file_name = Name, tree_id = TreeId}) ->
+index_to_datastore_list_opts(#list_index{file_name = Name, tree_id = TreeId}) ->
     #{
         prev_link_name => Name,
         prev_tree_id => TreeId
     };
-index_to_datastore_opts(_) ->
+index_to_datastore_list_opts(_) ->
     %% TODO VFS-7208 uncomment after introducing API errors to fslogic
     %% throw(?ERROR_BAD_VALUE_INDEX())
     throw(?EINVAL).
 
 
 %% @private
--spec build_result_pagination_token(file_meta_forest:list_extended_info()) -> pagination_token().
-build_result_pagination_token(ExtendedInfo) ->
-    Index = case maps:get(last_name, ExtendedInfo, undefined) of
-        undefined -> undefined;
-        LastName -> #list_index{
-            file_name = LastName,
-            tree_id = maps:get(last_tree, ExtendedInfo, undefined)
-        }
-    end,
+-spec datastore_info_to_pagination_token(file_meta_forest:list_extended_info()) -> pagination_token().
+datastore_info_to_pagination_token(ExtendedInfo) ->
     #pagination_token{
-        last_index = Index,
-        is_finished = maps:get(is_last, ExtendedInfo),
-        datastore_token = maps:get(token, ExtendedInfo, undefined)
+        last_index = build_index(
+            ExtendedInfo#list_extended_info.last_name, 
+            ExtendedInfo#list_extended_info.last_tree
+        ),
+        progress_marker = case ExtendedInfo#list_extended_info.is_finished of
+            true -> done;
+            false -> more
+        end,
+        datastore_token = ExtendedInfo#list_extended_info.datastore_token
     }.

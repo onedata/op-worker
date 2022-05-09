@@ -286,12 +286,12 @@ assert_children_copied(Node, SessionId, SourceGuid, TargetGuid, FollowSymlinks, 
     assert_children_copied(Node, SessionId, SourceGuid, TargetGuid, ListOpts, FollowSymlinks, Attempts).
 
 assert_children_copied(Node, SessionId, SourceGuid, TargetGuid, ListOpts = #{offset := Offset}, FollowSymlinks, Attempts) ->
-    {ok, SourceChildren, SourceListingState} =
+    {ok, SourceChildren, SourceListingToken} =
         lfm_proxy:get_children(Node, SessionId, ?FILE_REF(SourceGuid), ListOpts),
     GetTargetChildrenFun = fun() ->
-        {ok, TargetChildren, TargetListingState} = ?assertMatch({ok, _, _},
+        {ok, TargetChildren, TargetListingToken} = ?assertMatch({ok, _, _},
             lfm_proxy:get_children(Node, SessionId, ?FILE_REF(TargetGuid), ListOpts), Attempts),
-        ?assertEqual(file_listing:is_finished(SourceListingState), file_listing:is_finished(TargetListingState)),
+        ?assertEqual(file_listing:is_finished(SourceListingToken), file_listing:is_finished(TargetListingToken)),
         TargetChildren
     end,
     SourceNames = [N || {_, N} <- SourceChildren],
@@ -301,7 +301,7 @@ assert_children_copied(Node, SessionId, SourceGuid, TargetGuid, ListOpts = #{off
         assert_copied(Node, SessionId, SourceChildGuid, TargetChildGuid, FollowSymlinks, Attempts)
     end, lists:zip(SourceChildren, TargetChildren)),
 
-    case file_listing:is_finished(SourceListingState) of
+    case file_listing:is_finished(SourceListingToken) of
         true ->
             ok;
         false ->

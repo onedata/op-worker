@@ -137,7 +137,7 @@ do_master_job(Job = #tree_traverse{
     MasterJobArgs = #{task_id := TaskId}
 ) ->
     FileCtx1 = file_ctx:set_path_before_deletion(FileCtx, RelPath),
-    BatchProcessingPrehook = fun(_SlaveJobs, _MasterJobs, _ListingState, SubtreeProcessingStatus) ->
+    BatchProcessingPrehook = fun(_SlaveJobs, _MasterJobs, _ListingToken, SubtreeProcessingStatus) ->
         delete_dir_if_subtree_processed(SubtreeProcessingStatus, FileCtx1, UserId, TaskId, TraverseInfo)
     end,
     tree_traverse:do_master_job(Job, MasterJobArgs, BatchProcessingPrehook).

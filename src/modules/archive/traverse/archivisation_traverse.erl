@@ -251,12 +251,12 @@ do_master_job(Job = #tree_traverse{
                 false -> TraverseInfo
             end,
     
-            NewJobsPreprocessor = fun(SlaveJobs, MasterJobs, ListingState, SubtreeProcessingStatus) ->
+            NewJobsPreprocessor = fun(SlaveJobs, MasterJobs, ListingToken, SubtreeProcessingStatus) ->
                 DirUuid = file_ctx:get_logical_uuid_const(FileCtx2),
                 ChildrenCount = length(SlaveJobs) + length(MasterJobs),
                 ok = archive_traverse_common:update_children_count(
                     ?POOL_NAME, TaskId, DirUuid, ChildrenCount),
-                case file_listing:is_finished(ListingState) of
+                case file_listing:is_finished(ListingToken) of
                     false -> 
                         ok;
                     true ->

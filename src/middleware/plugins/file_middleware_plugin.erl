@@ -764,8 +764,8 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = childre
     RequestedAttributes = utils:ensure_list(maps:get(<<"attribute">>, Data, ?DEFAULT_BASIC_ATTRIBUTES)),
     
     BaseOpts = #{limit => maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES)},
-    ListingOpts = case maps:get(<<"token">>, Data, undefined) of
-        undefined ->
+    ListingOpts = case maps:get(<<"token">>, Data, null) of
+        null ->
             BaseOpts#{
                 optimize_continuous_listing => maps:get(<<"tune_for_large_continuous_listing">>, Data, false),
                 inclusive => maps:get(<<"inclusive">>, Data, false)
