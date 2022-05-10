@@ -24,7 +24,7 @@
 %%% When starting a new listing, the `optimize_continuous_listing` parameter must be provided. 
 %%% If the optimization is used, there is no guarantee that changes on file tree performed 
 %%% after the start of first listing will be included. Therefore it shouldn't be used when 
-%%% listing result is expected to be up to date with pagination_token of file tree at the moment of listing 
+%%% listing result is expected to be up to date with state of file tree at the moment of listing 
 %%% or when listed batch processing time is substantial (cache timeout is adjusted by cluster_worker's 
 %%% `fold_cache_timeout` env variable).
 %%% @end
@@ -201,7 +201,7 @@ convert_to_datastore_options(#{pagination_token := PaginationToken} = Opts) ->
     BaseOpts = index_to_datastore_list_opts(Index),
     maps_utils:remove_undefined(BaseOpts#{
         token => DatastoreToken,
-        size => sanitize_limit(Opts)
+        size => sanitize_limit(maps:get(limit, Opts, undefined))
     });
 convert_to_datastore_options(Opts) ->
     BaseOpts = index_to_datastore_list_opts(maps:get(index, Opts, undefined)),
@@ -267,15 +267,16 @@ sanitize_inclusive(_) ->
 
 
 %% @private
--spec sanitize_offset(offset() | undefined | any(), file_meta_forest:link_name(), whitelist()) -> 
+-spec sanitize_offset(offset() | undefined | any(), file_meta_forest:last_name(), whitelist()) -> 
     offset() | undefined.
-sanitize_offset(undefined, _DatastoreListOpts, _Whitelist) ->
+sanitize_offset(undefined, _PrevLinkName, _Whitelist) ->
     undefined;
 sanitize_offset(Offset, undefined = _PrevLinkName, _Whitelist) when is_integer(Offset) ->
     % if prev_link_name is undefined, offset cannot be negative
     %% TODO VFS-7208 uncomment after introducing API errors to fslogic
     %% throw(?ERROR_BAD_VALUE_TOO_LOW(size, 0));
-    Offset < 0 andalso throw(?EINVAL);
+    Offset < 0 andalso throw(?EINVAL),
+    Offset;
 sanitize_offset(Offset, _, Whitelist) when is_integer(Offset) ->
     % if whitelist is provided, offset cannot be negative
     Whitelist =/= undefined andalso Offset < 0 andalso throw(?EINVAL),

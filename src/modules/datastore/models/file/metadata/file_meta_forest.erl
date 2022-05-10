@@ -45,12 +45,11 @@
 -type group() :: [internal_link()].
 -type fold_acc() :: term().
 -type fold_fun() :: fun((internal_link(), fold_acc()) -> {ok | stop, fold_acc()} | {error, term()}).
--type token_internal() :: datastore_links_iter:token().
 
 % Exported types
 -type offset() :: integer().
 -type limit() :: non_neg_integer().
--type datastore_list_token() :: binary().
+-type datastore_list_token() :: datastore_links_iter:token().
 -type last_name() :: link_name().
 -type last_tree() :: tree_id().
 -type link() :: {link_name(), link_target()}.
@@ -253,7 +252,7 @@ fold(ParentUuid, Fun, AccIn, Opts) ->
 %% preparing #list_extended_info{} structure.
 %% @end
 %%--------------------------------------------------------------------
--spec prepare_list_result([internal_link()], token_internal() | undefined, boolean()) ->
+-spec prepare_list_result([internal_link()], datastore_list_token() | undefined, boolean()) ->
     {ok, [link()], list_extended_info()}.
 prepare_list_result(ReversedLinks, TokenOrUndefined, ListedLessThanRequested) ->
     ExtendedInfo = case TokenOrUndefined of

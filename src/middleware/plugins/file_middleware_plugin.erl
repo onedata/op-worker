@@ -556,7 +556,6 @@ data_spec_get(#gri{aspect = children, scope = Sc}) -> #{
             (_) ->
                 false
         end},
-        <<"inclusive">> => {boolean, any},
         <<"tune_for_large_continuous_listing">> => {boolean, any},
         <<"attribute">> => {any, case Sc of
             public -> ?PUBLIC_BASIC_ATTRIBUTES;
@@ -783,8 +782,7 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = childre
     ListingOpts = case maps:get(<<"token">>, Data, null) of
         null ->
             BaseOpts#{
-                optimize_continuous_listing => maps:get(<<"tune_for_large_continuous_listing">>, Data, false),
-                inclusive => maps:get(<<"inclusive">>, Data, false)
+                optimize_continuous_listing => maps:get(<<"tune_for_large_continuous_listing">>, Data, false)
             }; 
         EncodedPaginationToken ->
             BaseOpts#{
