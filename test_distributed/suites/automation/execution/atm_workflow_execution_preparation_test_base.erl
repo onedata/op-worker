@@ -387,9 +387,6 @@ atm_workflow_execution_cancel_in_aborting_status_after_lane_run_preparation_fail
     }).
 
 
-%% TODO test cancel beats failure
-
-
 % Test what happens when first lane run fails (e.g. before lane run was created)
 % before the one preparing in advance started preparing
 first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_1_test() ->
