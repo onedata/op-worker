@@ -6,8 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Bases for tests concerning cancellation of ongoing automation workflow
-%%% execution.
+%%% Bases for tests concerning cancellation of automation workflow execution.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_workflow_execution_cancellation_test_base).
@@ -18,6 +17,7 @@
 -include("modules/automation/atm_execution.hrl").
 
 -export([
+    cancel_enqueued_atm_workflow_execution_test/0,
     cancel_active_atm_workflow_execution_after_test/0,
     cancel_atm_workflow_execution_after_lane_run_has_ended_test/0,
     cancel_finished_atm_workflow_execution_after_test/0
@@ -71,6 +71,54 @@
 %%%===================================================================
 %%% Tests
 %%%===================================================================
+
+
+cancel_enqueued_atm_workflow_execution_test() ->
+    atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
+        provider = ?PROVIDER_SELECTOR,
+        user = ?USER_SELECTOR,
+        space = ?SPACE_SELECTOR,
+        workflow_schema_dump_or_draft = ?ECHO_SCHEMA_DRAFT,
+        workflow_schema_revision_num = 1,
+        incarnations = [#atm_workflow_execution_incarnation_test_spec{
+            incarnation_num = 1,
+            lane_runs = [#atm_lane_run_execution_test_spec{
+                selector = {1, 1},
+                prepare_lane = #atm_step_mock_spec{
+                    after_step_hook = fun(AtmMockCallCtx) ->
+                        atm_workflow_execution_test_runner:cancel_workflow_execution(AtmMockCallCtx)
+                    end,
+                    after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                        ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_aborting({1, 1}, ExpState0),
+                        {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_aborting(ExpState1)}
+                    end
+                },
+                handle_task_execution_ended = #atm_step_mock_spec{
+                    after_step_exp_state_diff = fun(#atm_mock_call_ctx{
+                        workflow_execution_exp_state = ExpState0,
+                        call_args = [_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId]
+                    }) ->
+                        ExpState1 = atm_workflow_execution_exp_state_builder:expect_task_skipped(
+                            AtmTaskExecutionId, ExpState0
+                        ),
+                        {true, atm_workflow_execution_exp_state_builder:expect_task_parallel_box_skipped(
+                            AtmTaskExecutionId, ExpState1
+                        )}
+                    end
+                },
+                handle_lane_execution_ended = #atm_step_mock_spec{
+                    after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState}) ->
+                        {true, atm_workflow_execution_exp_state_builder:expect_lane_run_cancelled({1, 1}, ExpState)}
+                    end
+                }
+            }],
+            handle_workflow_execution_ended = #atm_step_mock_spec{
+                after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_cancelled(ExpState0)}
+                end
+            }
+        }]
+    }).
 
 
 cancel_active_atm_workflow_execution_after_test() ->
