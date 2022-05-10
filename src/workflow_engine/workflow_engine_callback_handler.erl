@@ -120,7 +120,6 @@ read_body_insecure(Req0, Acc) ->
     workflow_jobs:job_identifier()
 ) -> callback().
 encode_callback_id(CallbackType, ExecutionId, EngineId, JobIdentifier) ->
-    % TODO - engine id bedzie juz niepotrzebne - bedzie w stanie workflowu
     <<"http://",
         (oneprovider:get_domain())/binary,
         ?ATM_TASK_FINISHED_CALLBACK_PATH,

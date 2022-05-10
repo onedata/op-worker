@@ -70,7 +70,6 @@
 -define(EXECUTING, executing).
 -define(EXECUTION_CANCELLED, execution_cancelled).
 -define(EXECUTION_ENDED, execution_ended).
--define(WAITING_FOR_TASK_DATA, waiting_for_task_data). % Moze nie potrzebne i wtarczy bycie w stanie executing i analizowanie pola tasks_data
 -define(WAITING_FOR_NEXT_LANE_PREPARATION_END, waiting_for_next_lane_preparation_end).
 
 %%%===================================================================

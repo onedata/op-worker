@@ -6,7 +6,9 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% TODO
+%%% Helper module for workflow_execution_state processing information
+%%% about jobs tasks' stream data being processed by workflow_engine. It
+%%% also processes information about data scheduled for processing.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(workflow_tasks_data).

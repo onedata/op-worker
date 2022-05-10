@@ -18,6 +18,7 @@
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 
+% TODO - przetestowac fail iteracji ze streamami i bez i restart jak iteracja failuje
 %% tests
 -export([
     empty_workflow_execution_test/1,

@@ -33,14 +33,14 @@
 -export([init_service/2, takeover_service/3]).
 
 %% Function executed by wpool - do not call directly
--export([process/3, process_task_data/3, prepare_lane/6]).
+-export([process_job_or_result/3, process_task_data/3, prepare_lane/6]).
 
 -type id() :: binary(). % Id of an engine
 -type execution_id() :: binary().
 -type execution_context() :: term().
 -type lane_id() :: term(). % lane_id is opaque term for workflow engine (ids are managed by modules that use workflow engine)
 -type task_id() :: binary().
--type task_data() :: json_utils:json_map() | errors:error().  %% TODO type.
+-type task_data() :: json_utils:json_map() | errors:error().
 -type stream_closing_result() :: success | {failure, term()}.
 -type subject_id() :: workflow_cached_item:id() | 
     workflow_cached_async_result:result_ref() | workflow_cached_task_data:id().
@@ -70,7 +70,7 @@
 -type task_type() :: sync | async.
 -type task_spec() :: #{
     type := task_type(),
-    has_task_data_stream => boolean(),  %% TODO name?
+    has_task_data_stream => boolean(),
     async_call_pools => [workflow_async_call_pool:id()] | undefined,
     keepalive_timeout => time:seconds()
 }.
@@ -365,7 +365,6 @@ schedule_next_job_insecure(EngineId, DeferredExecutions) ->
                             schedule_lane_prepare_on_pool(
                                 EngineId, ExecutionId, Handler, ExecutionContext, LaneId, PreparationMode);
                         #execution_ended{} = ExecutionEndedRecord ->
-                            % xxxxxxxxxxx
                             handle_execution_ended(EngineId, ExecutionId, ExecutionEndedRecord),
                             schedule_next_job_insecure(EngineId, DeferredExecutions);
                         ?DEFER_EXECUTION ->
@@ -397,7 +396,6 @@ handle_execution_ended(EngineId, ExecutionId, #execution_ended{
         ok ->
             case CallbacksData of
                 {CancelledLaneId, CancelledLaneContext, TaskIds} ->
-                    % xxxxxxxxxxx
                     call_handlers_for_cancelled_lane(
                         ExecutionId, Handler, CancelledLaneContext, CancelledLaneId, TaskIds);
                 undefined ->
@@ -429,7 +427,7 @@ schedule_on_pool(EngineId, ExecutionId, #execution_spec{
     task_spec = TaskSpec,
     job_identifier = JobIdentifier
 } = ExecutionSpec) ->
-    CallArgs = {?MODULE, process, [EngineId, ExecutionId, ExecutionSpec]},
+    CallArgs = {?MODULE, process_job_or_result, [EngineId, ExecutionId, ExecutionSpec]},
     TaskType = maps:get(type, TaskSpec),
     CallPools = get_async_call_pools(TaskSpec),
     ProcessingType = workflow_jobs:get_processing_type(JobIdentifier),
@@ -488,8 +486,8 @@ set_default_keepalive_timeout(Id, Timeout) ->
 %%% Function executed on pool
 %%%===================================================================
 
--spec process(id(), execution_id(), execution_spec()) -> ok.
-process(EngineId, ExecutionId, ExecutionSpec = #execution_spec{
+-spec process_job_or_result(id(), execution_id(), execution_spec()) -> ok.
+process_job_or_result(EngineId, ExecutionId, ExecutionSpec = #execution_spec{
     job_identifier = JobIdentifier
 }) ->
     case workflow_jobs:get_processing_type(JobIdentifier) of

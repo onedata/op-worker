@@ -145,7 +145,7 @@
 %%--------------------------------------------------------------------
 %% @doc
 %% Callback reporting that all jobs for task were executed and their
-%% outputs processed.
+%% outputs processed. It is executed only case if task has data stream.
 %% @end
 %%--------------------------------------------------------------------
 -callback trigger_task_data_stream_termination(
@@ -172,15 +172,13 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Callback reporting that task has been executed for all items.
-%% This callback is usually executed once for each task. It is guaranteed
-%% that callback is called before call of handle_lane_execution_ended
-%% callback for task's lane.
-%% TODO - juz nie pojawia sie podwojne calle!!!
+%% Callback reporting that all jobs for task were executed, their
+%% outputs processed and all stream data was processed in case if task
+%% has data stream. This callback is executed once for each task.
+%% It is guaranteed that callback is called before call of
+%% handle_lane_execution_ended callback for task's lane.
 %% Warning: there is no guarantee that callbacks for tasks are called
 %% exactly the same order as the tasks were finished.
-%% Warning: when execution is cancelled, handler can be executed
-%% twice for single task.
 %% @end
 %%--------------------------------------------------------------------
 -callback handle_task_execution_ended(
