@@ -132,7 +132,7 @@ start_dir_initialization(Guid, DataMap) ->
         file_uuid = FileUuid,
         space_id = SpaceId,
         collections_map = InitialCollectionsMap,
-        list_opts = #{optimize_continuous_listing => true, limit => ?BATCH_SIZE}
+        list_opts = #{tune_for_large_continuous_listing => true, limit => ?BATCH_SIZE}
     }.
 
 

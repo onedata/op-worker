@@ -287,7 +287,7 @@ check_reg_file_access(UserCtx, FileCtx) ->
         % throws on lack of access
         _ = file_tree:list_children(FileCtx2, UserCtx, #{
                 limit => 1, 
-                optimize_continuous_listing => false
+                tune_for_large_continuous_listing => false
             }, CanonicalChildrenWhiteList),
         ok
     catch throw:?EACCES ->
@@ -310,14 +310,14 @@ get_file_attrs(UserCtx, FileCtx) ->
 %% @private
 -spec init_current_dir_processing(state()) -> {file_listing:options(), state()}.
 init_current_dir_processing(#state{relative_start_after_path_tokens = []} = State) ->
-    {#{optimize_continuous_listing => true}, State};
+    {#{tune_for_large_continuous_listing => true}, State};
 init_current_dir_processing(#state{
     relative_start_after_path_tokens = [CurrentStartAfterToken | NextStartAfterTokens],
     last_start_after_token = LastStartAfterToken,
     current_dir_path_tokens = CurrentPathTokens,
     parent_uuid = ParentUuid
 } = State) ->
-    InitialOpts = #{limit => ?LIST_RECURSIVE_BATCH_SIZE, optimize_continuous_listing => true},
+    InitialOpts = #{limit => ?LIST_RECURSIVE_BATCH_SIZE, tune_for_large_continuous_listing => true},
     %% As long as the currently processed path is within the start_after_path, we can start
     %% listing from the specific file name (CurrentStartAfterToken), as all names lexicographically
     %% smaller should not be included in the results. Otherwise, The whole directory is listed and processed.

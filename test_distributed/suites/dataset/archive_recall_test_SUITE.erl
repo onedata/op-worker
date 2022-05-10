@@ -810,7 +810,7 @@ cancel_race_test_setup() ->
 get_direct_child(Guid) ->
     SessionId = oct_background:get_user_session_id(?USER1, krakow),
     {ok, [{ChildGuid, _}], ListingToken} = ?assertMatch({ok, [_], _}, lfm_proxy:get_children(
-        oct_background:get_random_provider_node(krakow), SessionId, #file_ref{guid = Guid}, #{optimize_continuous_listing => false}), ?ATTEMPTS),
+        oct_background:get_random_provider_node(krakow), SessionId, #file_ref{guid = Guid}, #{tune_for_large_continuous_listing => false}), ?ATTEMPTS),
     ?assert(file_listing:is_finished(ListingToken)),
     ChildGuid.
 
@@ -827,7 +827,7 @@ check_effective_cache_values(RecallRootFileGuid) ->
     SessId = oct_background:get_user_session_id(?USER1, krakow),
     Node = oct_background:get_random_provider_node(krakow),
     Pid = wait_for_recall_traverse_finish(),
-    {ok, [{ChildGuid, _}], _} = ?assertMatch({ok, [_], _}, lfm_proxy:get_children(Node, SessId, #file_ref{guid = RecallRootFileGuid}, #{optimize_continuous_listing => false})),
+    {ok, [{ChildGuid, _}], _} = ?assertMatch({ok, [_], _}, lfm_proxy:get_children(Node, SessId, #file_ref{guid = RecallRootFileGuid}, #{tune_for_large_continuous_listing => false})),
     SpaceId = file_id:guid_to_space_id(RecallRootFileGuid),
     Uuid = file_id:guid_to_uuid(RecallRootFileGuid),
     lists:foreach(fun(N) ->

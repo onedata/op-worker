@@ -59,7 +59,7 @@
 save_master_job(Key, Job = #tree_traverse{
     file_ctx = FileCtx,
     user_id = UserId,
-    optimize_continuous_listing = OptimizeContinuousListing,
+    tune_for_large_continuous_listing = TuneForLargeContinuousListing,
     pagination_token = ListingPaginationToken,
     child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
     children_master_jobs_mode = ChildrenMasterJobsMode,
@@ -79,7 +79,7 @@ save_master_job(Key, Job = #tree_traverse{
         task_id = TaskId,
         doc_id = Uuid,
         user_id = UserId,
-        optimize_continuous_listing = OptimizeContinuousListing,
+        tune_for_large_continuous_listing = TuneForLargeContinuousListing,
         pagination_token = ListingPaginationToken,
         child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
         children_master_jobs_mode = ChildrenMasterJobsMode,
@@ -114,7 +114,7 @@ get_master_job(#document{value = #tree_traverse_job{
     task_id = TaskId,
     doc_id = DocId,
     user_id = UserId,
-    optimize_continuous_listing = OptimizeContinuousListing,
+    tune_for_large_continuous_listing = TuneForLargeContinuousListing,
     pagination_token = PaginationToken,
     child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
     children_master_jobs_mode = ChildrenMasterJobsMode,
@@ -132,7 +132,7 @@ get_master_job(#document{value = #tree_traverse_job{
             Job = #tree_traverse{
                 file_ctx = FileCtx,
                 user_id = UserId,
-                optimize_continuous_listing = OptimizeContinuousListing,
+                tune_for_large_continuous_listing = TuneForLargeContinuousListing,
                 pagination_token = PaginationToken,
                 child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
                 children_master_jobs_mode = ChildrenMasterJobsMode,
@@ -278,7 +278,7 @@ get_record_struct(6) ->
         {task_id, string},
         {doc_id, string},
         {user_id, string},
-        {optimize_continuous_listing, boolean}, % modified field (renamed from use_listing_token)
+        {tune_for_large_continuous_listing, boolean}, % modified field (renamed from use_listing_token)
         {pagination_token, {custom, string, {file_listing, encode_pagination_token, decode_pagination_token}}}, % new field
         % removed fields last_name and last_tree
         {child_dirs_job_generation_policy, atom},
@@ -464,13 +464,13 @@ upgrade_record(5, Record) ->
         EncounteredFiles
     } = Record,
     
-    OptimizeContinuousListing = UseListingToken,
+    TuneForLargeContinuousListing = UseListingToken,
     Index = file_listing:build_index(LastName, LastTree),
     % listing with limit 0 does not list anything, but returns a pagination_token that can be used 
     % to continue listing from this point
     {ok, [], ListingPaginationToken} = file_listing:list(<<"dummy_uuid">>, #{
         index => Index, 
-        optimize_continuous_listing => OptimizeContinuousListing,
+        tune_for_large_continuous_listing => TuneForLargeContinuousListing,
         limit => 0
     }),
     
@@ -480,7 +480,7 @@ upgrade_record(5, Record) ->
         TaskId,
         DocId,
         UserId,
-        OptimizeContinuousListing,
+        TuneForLargeContinuousListing,
         ListingPaginationToken,
         ChildDirsJobGenerationPolicy,
         ChildrenMasterJobsMode,

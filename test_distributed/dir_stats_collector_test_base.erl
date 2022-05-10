@@ -474,7 +474,7 @@ verify_dir_on_provider_creating_files(Config, NodesSelector, Guid) ->
     SessId = lfm_test_utils:get_user1_session_id(Config, Worker),
 
     {ok, Children, _} = ?assertMatch({ok, _, _},
-        lfm_proxy:get_children_attrs(Worker, SessId, ?FILE_REF(Guid), #{offset => 0, limit => 100000, optimize_continuous_listing => false})),
+        lfm_proxy:get_children_attrs(Worker, SessId, ?FILE_REF(Guid), #{offset => 0, limit => 100000, tune_for_large_continuous_listing => false})),
 
     StatsForEmptyDir = #{
         ?REG_FILE_AND_LINK_COUNT => 0,

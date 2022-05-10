@@ -782,7 +782,7 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = childre
     ListingOpts = case maps:get(<<"token">>, Data, null) of
         null ->
             BaseOpts#{
-                optimize_continuous_listing => maps:get(<<"tune_for_large_continuous_listing">>, Data, false)
+                tune_for_large_continuous_listing => maps:get(<<"tune_for_large_continuous_listing">>, Data, false)
             }; 
         EncodedPaginationToken ->
             BaseOpts#{
@@ -828,7 +828,7 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = childre
             limit => maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES),
             index => file_listing:build_index(maps:get(<<"index">>, Data, undefined)),
             inclusive => maps:get(<<"inclusive">>, Data, false),
-            optimize_continuous_listing => false
+            tune_for_large_continuous_listing => false
         }
     )),
     {ok, value, {ChildrenDetails, file_listing:is_finished(ListingPaginationToken)}};

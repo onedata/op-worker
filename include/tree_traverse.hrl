@@ -30,7 +30,7 @@
     user_id :: od_user:id(),
 
     % Fields used for directory listing
-    optimize_continuous_listing :: boolean(),
+    tune_for_large_continuous_listing :: boolean(),
     pagination_token = undefined :: file_listing:pagination_token() | undefined,
     batch_size :: tree_traverse:batch_size(),
 

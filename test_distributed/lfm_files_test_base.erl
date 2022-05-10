@@ -1394,7 +1394,7 @@ lfm_cp_file(Config) ->
 
     % verify copied file
     ?assertMatch({ok, [{TargetGuid1, TargetFile1}], _},
-        lfm_proxy:get_children(W, SessId1, ?FILE_REF(TargetParentGuid1), #{offset => 0, limit => 10, optimize_continuous_listing => false})),
+        lfm_proxy:get_children(W, SessId1, ?FILE_REF(TargetParentGuid1), #{offset => 0, limit => 10, tune_for_large_continuous_listing => false})),
     ?assertMatch({ok, #file_attr{guid = TargetGuid1}},
         lfm_proxy:stat(W, SessId1, {path, TargetFilePath1})),
     {ok, Handle2} = lfm_proxy:open(W, SessId1, {path, TargetFilePath1}, read),
@@ -1406,7 +1406,7 @@ lfm_cp_file(Config) ->
 
     % verify copied file
     ?assertMatch({ok, [{TargetGuid2, TargetFile2}], _},
-        lfm_proxy:get_children(W, SessId1, ?FILE_REF(TargetParentGuid2), #{offset => 0, limit => 10, optimize_continuous_listing => false})),
+        lfm_proxy:get_children(W, SessId1, ?FILE_REF(TargetParentGuid2), #{offset => 0, limit => 10, tune_for_large_continuous_listing => false})),
     
     ?assertMatch({ok, #file_attr{guid = TargetGuid2}},
         lfm_proxy:stat(W, SessId1, {path, TargetFilePath2})),
@@ -1448,7 +1448,7 @@ lfm_cp_empty_dir(Config) ->
 
     % verify copied dir
     ?assertMatch({ok, [{TargetGuid1, TargetDir1}], _},
-        lfm_proxy:get_children(W, SessId1, ?FILE_REF(TargetParentGuid1), #{offset => 0, limit => 10, optimize_continuous_listing => false})),
+        lfm_proxy:get_children(W, SessId1, ?FILE_REF(TargetParentGuid1), #{offset => 0, limit => 10, tune_for_large_continuous_listing => false})),
     ?assertMatch({ok, #file_attr{guid = TargetGuid1}},
         lfm_proxy:stat(W, SessId1, {path, TargetDirPath1})),
 
@@ -1457,7 +1457,7 @@ lfm_cp_empty_dir(Config) ->
 
     % verify copied dir
     ?assertMatch({ok, [{TargetGuid2, TargetDir2}], _},
-        lfm_proxy:get_children(W, SessId1, ?FILE_REF(TargetParentGuid2), #{offset => 0, limit => 10, optimize_continuous_listing => false})),
+        lfm_proxy:get_children(W, SessId1, ?FILE_REF(TargetParentGuid2), #{offset => 0, limit => 10, tune_for_large_continuous_listing => false})),
     ?assertMatch({ok, #file_attr{guid = TargetGuid2}},
         lfm_proxy:stat(W, SessId1, {path, TargetDirPath2})).
 
@@ -1554,13 +1554,13 @@ lfm_cp_dir(Config) ->
 
     % verify copied dir
     ?assertMatch({ok, [{TargetGuid1, TargetDir1}], _},
-        lfm_proxy:get_children(W, SessId1, ?FILE_REF(TargetParentGuid1), #{offset => 0, limit => 10, optimize_continuous_listing => false})),
+        lfm_proxy:get_children(W, SessId1, ?FILE_REF(TargetParentGuid1), #{offset => 0, limit => 10, tune_for_large_continuous_listing => false})),
     ?assertMatch({ok, #file_attr{guid = TargetGuid1, mode = NewMode}},
         lfm_proxy:stat(W, SessId1, {path, TargetDirPath1})),
 
     % verify children of copied dir
     ?assertMatch({ok, [{_, Child1}, {_, Child2}], _},
-        lfm_proxy:get_children(W, SessId1, ?FILE_REF(TargetGuid1), #{offset => 0, limit => 10, optimize_continuous_listing => false})),
+        lfm_proxy:get_children(W, SessId1, ?FILE_REF(TargetGuid1), #{offset => 0, limit => 10, tune_for_large_continuous_listing => false})),
 
     ?assertMatch({ok, #file_attr{name = Child1}}, lfm_proxy:stat(W, SessId1, {path, TargetChildPath1})),
     ?assertMatch({ok, #file_attr{name = Child2}}, lfm_proxy:stat(W, SessId1, {path, TargetChildPath2})),
@@ -2481,7 +2481,7 @@ verify_attrs(Config, MainDirPath, Files, Limit, ExpectedSize, Offset) ->
     {SessId1, _UserId1} =
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
 
-    Ans = lfm_proxy:get_children_attrs(Worker, SessId1, {path, MainDirPath}, #{offset => Offset, limit => Limit, optimize_continuous_listing => false}),
+    Ans = lfm_proxy:get_children_attrs(Worker, SessId1, {path, MainDirPath}, #{offset => Offset, limit => Limit, tune_for_large_continuous_listing => false}),
     {ok, List, _} = ?assertMatch({ok, _, _}, Ans),
     ?assertEqual(ExpectedSize, length(List)),
 
@@ -2496,7 +2496,7 @@ verify_attrs_with_token(Config, MainDirPath, Files, ExpectedSize, Limit, Offset,
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     
     BaseListOpts = case PaginationToken of
-        undefined -> #{optimize_continuous_listing => true};
+        undefined -> #{tune_for_large_continuous_listing => true};
         _ -> #{pagination_token => PaginationToken}
     end,
 
@@ -2517,7 +2517,7 @@ verify_with_token(Config, MainDirPath, Files, ExpectedSize, Limit, Offset, IsLas
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
 
     BaseListOpts = case PaginationToken of
-        undefined -> #{optimize_continuous_listing => true};
+        undefined -> #{tune_for_large_continuous_listing => true};
         _ -> #{pagination_token => PaginationToken}
     end,
     Ans = lfm_proxy:get_children(Worker, SessId1, {path, MainDirPath}, BaseListOpts#{limit => Limit}),
@@ -2540,7 +2540,7 @@ verify_with_startid(Config, MainDirPath, Files, FilesOffset, ExpectedSize, Offse
         offset => Offset,
         limit => Limit,
         index => file_listing:build_index(StartId),
-        optimize_continuous_listing => false
+        tune_for_large_continuous_listing => false
     }),
     {ok, List, _} = ?assertMatch({ok, _, _}, Ans),
     ?assertEqual(ExpectedSize, length(List)),
@@ -2569,7 +2569,7 @@ verify_details(Config, MainDirPath, Files, FilesOffset, ExpectedSize, Offset, Li
     {ok, List, _} = ?assertMatch(
         {ok, _, _},
         lfm_proxy:get_children_details(Worker, SessId1, {path, MainDirPath}, 
-            #{offset => Offset, limit => Limit, index => file_listing:build_index(StartId), optimize_continuous_listing => false})
+            #{offset => Offset, limit => Limit, index => file_listing:build_index(StartId), tune_for_large_continuous_listing => false})
     ),
     ?assertEqual(ExpectedSize, length(List)),
 

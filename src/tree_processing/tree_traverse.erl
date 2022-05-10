@@ -85,7 +85,7 @@
     % NOTE: slave job for starting directory will never be generated.
     child_dirs_job_generation_policy => child_dirs_job_generation_policy(), 
     % Flag determining whether optimization will be used for iterating over files list (see file_listing for more details).
-    optimize_continuous_listing => boolean(),
+    tune_for_large_continuous_listing => boolean(),
     % flag determining whether children master jobs are scheduled before slave jobs are processed
     children_master_jobs_mode => children_master_jobs_mode(),
     % With this option enabled, tree_traverse_status will be
@@ -199,7 +199,7 @@ run(Pool, FileCtx, UserId, Opts) ->
     Job = #tree_traverse{
         file_ctx = FileCtx3,
         user_id = UserId,
-        optimize_continuous_listing = maps:get(optimize_continuous_listing , Opts, true),
+        tune_for_large_continuous_listing = maps:get(tune_for_large_continuous_listing , Opts, true),
         pagination_token = undefined,
         child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
         children_master_jobs_mode = ChildrenMasterJobsMode,
@@ -429,11 +429,11 @@ delete_subtree_status_doc(TaskId, Uuid) ->
 list_children(#tree_traverse{
     file_ctx = FileCtx,
     pagination_token = PaginationToken,
-    optimize_continuous_listing = OptimizeContinuousListing,
+    tune_for_large_continuous_listing = TuneForLargeContinuousListing,
     batch_size = BatchSize
 }, UserCtx) ->
     BaseListingOpts = case PaginationToken of
-        undefined -> #{optimize_continuous_listing => OptimizeContinuousListing};
+        undefined -> #{tune_for_large_continuous_listing => TuneForLargeContinuousListing};
         _ -> #{pagination_token => PaginationToken}
     end,
     try

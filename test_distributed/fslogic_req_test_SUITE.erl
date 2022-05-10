@@ -163,7 +163,7 @@ fslogic_get_file_children_attrs_with_replication_status_test(Config) ->
     #fuse_response{fuse_response = #file_children_attrs{child_attrs = ChildrenAttrs}} =
         ?assertMatch(#fuse_response{status = #status{code = ?OK}}, ?file_req(Worker, SessId, SpaceGuid,
             #get_file_children_attrs{
-                listing_options = #{offset => 0, limit => 1000, optimize_continuous_listing => false}, 
+                listing_options = #{offset => 0, limit => 1000, tune_for_large_continuous_listing => false}, 
                 include_replication_status = true
             })),
     ?assertMatch([_ | _], ChildrenAttrs),
@@ -209,7 +209,7 @@ fslogic_get_file_children_attrs_test(Config) ->
                             fun(_, {Offset, CurrentChildren}) ->
                                 Response = ?file_req(Worker, SessId, FileGuid,
                                     #get_file_children_attrs{
-                                        listing_options = #{offset => Offset, limit => Size, optimize_continuous_listing => false}
+                                        listing_options = #{offset => Offset, limit => Size, tune_for_large_continuous_listing => false}
                                     }),
 
                                 ?assertMatch(#fuse_response{status = #status{code = ?OK}}, Response),
@@ -405,7 +405,7 @@ fslogic_read_dir_test(Config) ->
                         {_, Names} = lists:foldl( %% foreach Offset
                             fun(_, {Offset, CurrentChildren}) ->
                                 Response = ?file_req(Worker, SessId, FileGuid, #get_file_children{
-                                    listing_options = #{offset => Offset, limit => Limit, optimize_continuous_listing => false}
+                                    listing_options = #{offset => Offset, limit => Limit, tune_for_large_continuous_listing => false}
                                 }),
 
                                 ?assertMatch(#fuse_response{status = #status{code = ?OK}}, Response),
@@ -585,7 +585,7 @@ default_permissions_test(Config) ->
                     Guid = get_guid_privileged(Worker, SessId, Path),
                     ?assertMatch(#fuse_response{status = #status{code = Code}},
                         ?file_req(Worker, SessId, Guid, #get_file_children{
-                            listing_options = #{offset => 0, optimize_continuous_listing => false}
+                            listing_options = #{offset => 0, tune_for_large_continuous_listing => false}
                         }))
                 end, SessIds);
         ({chmod, Path, Mode, SessIds, Code}) ->

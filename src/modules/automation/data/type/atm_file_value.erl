@@ -87,14 +87,14 @@ list_children(AtmWorkflowExecutionAuth, Guid, ListOpts, BatchSize) ->
 -spec initial_listing_options() -> list_opts().
 initial_listing_options() ->
     #{
-        optimize_continuous_listing => false
+        tune_for_large_continuous_listing => false
     }.
 
 
 -spec encode_listing_options(list_opts()) -> json_utils:json_term().
-encode_listing_options(#{optimize_continuous_listing := Value}) ->
+encode_listing_options(#{tune_for_large_continuous_listing := Value}) ->
     #{
-        <<"optimize_continuous_listing">> => Value
+        <<"tune_for_large_continuous_listing">> => Value
     };
 encode_listing_options(#{pagination_token := Token}) ->
     #{
@@ -103,9 +103,9 @@ encode_listing_options(#{pagination_token := Token}) ->
 
 
 -spec decode_listing_options(json_utils:json_term()) -> list_opts().
-decode_listing_options(#{<<"optimize_continuous_listing">> := Value}) ->
+decode_listing_options(#{<<"tune_for_large_continuous_listing">> := Value}) ->
     #{
-        optimize_continuous_listing => Value
+        tune_for_large_continuous_listing => Value
     };
 decode_listing_options(#{<<"pagination_token">> := EncodedToken}) ->
     #{

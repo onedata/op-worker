@@ -179,7 +179,7 @@ refill_file_meta_children(CurrentChildren, FileCtx, Token) ->
     case length(CurrentChildren) < ?BATCH_SIZE of
         true ->
             ListingOpts = case Token of
-                undefined -> #{optimize_continuous_listing => true};
+                undefined -> #{tune_for_large_continuous_listing => true};
                 _ -> #{pagination_token => Token}
             end,
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
@@ -435,7 +435,7 @@ delete_regular_file_and_update_counters(FileCtx, SpaceId) ->
 -spec delete_dir_recursive(file_ctx:ctx(), od_space:id(), storage:id()) -> ok.
 delete_dir_recursive(FileCtx, SpaceId, StorageId) ->
     RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
-    ListOpts = #{optimize_continuous_listing => true},
+    ListOpts = #{tune_for_large_continuous_listing => true},
     {ok, FileCtx2} = delete_children(FileCtx, RootUserCtx, ListOpts, SpaceId, StorageId),
     delete_file(FileCtx2).
 

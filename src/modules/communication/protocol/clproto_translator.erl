@@ -451,7 +451,7 @@ translate_from_protobuf(#'GetFileChildren'{
             #{
                 offset => Offset,
                 index => StartId,
-                optimize_continuous_listing => true
+                tune_for_large_continuous_listing => true
             };
         _ ->
             #{
@@ -474,7 +474,7 @@ translate_from_protobuf(#'GetFileChildrenAttrs'{
         undefined ->
             #{
                 offset => Offset,
-                optimize_continuous_listing => true
+                tune_for_large_continuous_listing => true
             };
         _ ->
             #{

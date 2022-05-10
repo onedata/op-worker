@@ -21,7 +21,7 @@
 %%%                              the starting point for listing. This token offers the best performance 
 %%%                              when resuming listing from a certain point. 
 %%% 
-%%% When starting a new listing, the `optimize_continuous_listing` parameter must be provided. 
+%%% When starting a new listing, the `tune_for_large_continuous_listing` parameter must be provided. 
 %%% If the optimization is used, there is no guarantee that changes on file tree performed 
 %%% after the start of first listing will be included. Therefore it shouldn't be used when 
 %%% listing result is expected to be up to date with state of file tree at the moment of listing 
@@ -68,7 +68,7 @@
     whitelist => undefined | whitelist(),
     limit => limit()
 } | #{
-    optimize_continuous_listing := boolean(),
+    tune_for_large_continuous_listing := boolean(),
     index => index(),
     offset => offset(),
     %% @TODO VFS-9283 implement inclusive option in datastore links listing
@@ -170,7 +170,7 @@ list_internal(_FunctionName, _FileUuid, #{limit := 0} = ListOpts, _ExtraArgs) ->
     }};
 list_internal(FunctionName, FileUuid, ListOpts, ExtraArgs) ->
     ?run(begin
-        DatastoreListOpts = ensure_starting_point(convert_to_datastore_options(ListOpts)),
+        DatastoreListOpts = convert_to_datastore_options(ListOpts),
         case erlang:apply(file_meta_forest, FunctionName, [FileUuid, DatastoreListOpts | ExtraArgs]) of
             {ok, Result, ExtendedInfo} ->
                 {ok, Result, datastore_info_to_pagination_token(ExtendedInfo)};
@@ -183,7 +183,7 @@ list_internal(FunctionName, FileUuid, ListOpts, ExtraArgs) ->
 %% @private
 -spec check_exclusive_options(options()) -> ok | no_return().
 check_exclusive_options(#{pagination_token := _} = Options) ->
-    maps_utils:is_empty(maps:with([optimize_continuous_listing, index, offset, inclusive], Options)) orelse
+    maps_utils:is_empty(maps:with([tune_for_large_continuous_listing, index, offset, inclusive], Options)) orelse
         %% TODO VFS-7208 introduce conflicting options error after introducing API errors to fslogic
         throw(?EINVAL),
     ok;
@@ -205,14 +205,14 @@ convert_to_datastore_options(#{pagination_token := PaginationToken} = Opts) ->
     });
 convert_to_datastore_options(Opts) ->
     BaseOpts = index_to_datastore_list_opts(maps:get(index, Opts, undefined)),
-    DatastoreToken = case maps:find(optimize_continuous_listing, Opts) of
+    DatastoreToken = case maps:find(tune_for_large_continuous_listing, Opts) of
         {ok, true} -> 
             #link_token{};
         {ok, false} -> 
             undefined;
         error ->
             %% TODO VFS-7208 uncomment after introducing API errors to fslogic
-            %% throw(?ERROR_MISSING_REQUIRED_VALUE(optimize_continuous_listing)),
+            %% throw(?ERROR_MISSING_REQUIRED_VALUE(tune_for_large_continuous_listing)),
             throw(?EINVAL)
     end,
     maps_utils:remove_undefined(BaseOpts#{
@@ -226,17 +226,6 @@ convert_to_datastore_options(Opts) ->
             maps:get(inclusive, Opts, undefined)),
         token => DatastoreToken
     }).
-
-
-%% @private
--spec ensure_starting_point(datastore_list_opts()) -> datastore_list_opts().
-ensure_starting_point(InternalOpts) ->
-    % at least one of: offset, token, prev_link_name must be defined so that we know
-    % where to start listing
-    case maps_utils:is_empty(maps:with([offset, token, prev_link_name], InternalOpts)) of
-        false -> InternalOpts;
-        true -> InternalOpts#{offset => 0}
-    end.
 
 
 %% @private
@@ -271,20 +260,25 @@ sanitize_inclusive(_) ->
     offset() | undefined.
 sanitize_offset(undefined, _PrevLinkName, _Whitelist) ->
     undefined;
-sanitize_offset(Offset, undefined = _PrevLinkName, _Whitelist) when is_integer(Offset) ->
+sanitize_offset(Offset, _PrevLinkName, _Whitelist) when not is_integer(Offset) ->
+    %% TODO VFS-7208 uncomment after introducing API errors to fslogic
+    %% throw(?ERROR_BAD_VALUE_INTEGER(Offset))
+    throw(?EINVAL);
+sanitize_offset(Offset, undefined = _PrevLinkName, _Whitelist) ->
     % if prev_link_name is undefined, offset cannot be negative
     %% TODO VFS-7208 uncomment after introducing API errors to fslogic
-    %% throw(?ERROR_BAD_VALUE_TOO_LOW(size, 0));
+    %% throw(?ERROR_BAD_VALUE_TOO_LOW(Offset, 0));
     Offset < 0 andalso throw(?EINVAL),
     Offset;
-sanitize_offset(Offset, _, Whitelist) when is_integer(Offset) ->
-    % if whitelist is provided, offset cannot be negative
-    Whitelist =/= undefined andalso Offset < 0 andalso throw(?EINVAL),
+sanitize_offset(Offset, _, undefined = _Whitelist) ->
+    % if whitelist is not provided, offset can be negative
     Offset;
-sanitize_offset(_, _DatastoreListOpts, _NegOffsetPolicy) ->
+sanitize_offset(Offset, _, _Whitelist) ->
+    % if whitelist is provided, offset cannot be negative
     %% TODO VFS-7208 uncomment after introducing API errors to fslogic
-    %% throw(?ERROR_BAD_VALUE_INTEGER(size))
-    throw(?EINVAL).
+    %% throw(?ERROR_BAD_VALUE_TOO_LOW(Offset, 0));
+    Offset < 0 andalso throw(?EINVAL),
+    Offset.
 
 
 %% @private

@@ -984,7 +984,7 @@ listing_file_attrs_should_work_properly_in_open_handle_mode(Config) ->
                 shares = [], provider_id = <<"unknown">>, owner_id = <<"unknown">>
             }
         ], _},
-        lfm_proxy:get_children_attrs(Worker, OpenHandleSessId, ?FILE_REF(SpaceGuid),  #{offset => 0, limit => 100, optimize_continuous_listing => false})
+        lfm_proxy:get_children_attrs(Worker, OpenHandleSessId, ?FILE_REF(SpaceGuid),  #{offset => 0, limit => 100, tune_for_large_continuous_listing => false})
     ),
     ?assert(file_listing:is_finished(ListingToken)),
 

@@ -192,7 +192,7 @@ get_files_recursively(SessId, FileKey, Options) ->
 -spec count_children(session:id(), fslogic_worker:file_guid()) ->
     {ok, non_neg_integer()} | lfm:error_reply().
 count_children(SessId, FileGuid) ->
-    count_children(SessId, FileGuid, #{optimize_continuous_listing => true}, 0).
+    count_children(SessId, FileGuid, #{tune_for_large_continuous_listing => true}, 0).
 
 
 %% @private

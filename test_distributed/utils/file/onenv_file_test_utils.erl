@@ -544,7 +544,7 @@ ls(Node, SessId, Guid) ->
     {ok, [{file_meta:name(), file_id:file_guid()}]} | {error, term()}.
 ls(Node, SessId, Guid, NextPageToken, ChildEntriesAcc) ->
     ListOpts = case NextPageToken of
-        undefined -> #{optimize_continuous_listing => true};
+        undefined -> #{tune_for_large_continuous_listing => true};
         _ -> #{pagination_token => NextPageToken}
     end,
     case lfm_proxy:get_children(Node, SessId, ?FILE_REF(Guid), ListOpts#{limit => ?LS_SIZE}) of

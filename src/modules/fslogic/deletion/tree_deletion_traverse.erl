@@ -77,7 +77,7 @@ start(RootDirCtx, UserCtx, EmitEvents, RootOriginalParentUuid) ->
         task_id => TaskId,
         track_subtree_status => true,
         children_master_jobs_mode => async,
-        optimize_continuous_listing  => false,
+        tune_for_large_continuous_listing  => false,
         % NOTE: do not use RootDir path, as file is already moved to trash
         initial_relative_path => filename:join(ParentPath, RootDirName),
         traverse_info => #{

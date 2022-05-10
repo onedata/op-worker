@@ -544,7 +544,7 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentCtx0, TargetNa
 -spec rename_child_locations(user_ctx:ctx(), ParentFileCtx :: file_ctx:ctx(),
     ParentStorageFileId :: helpers:file_id()) -> [#file_renamed_entry{}].
 rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId) ->
-    ListOpts = #{optimize_continuous_listing => true},
+    ListOpts = #{tune_for_large_continuous_listing => true},
     rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId, ListOpts, []).
 
 

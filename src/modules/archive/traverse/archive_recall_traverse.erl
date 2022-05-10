@@ -87,7 +87,7 @@ start(ArchiveDoc, UserCtx, ParentGuid, TargetFilename) ->
     {ok, DataFileGuid} = archive:get_data_dir_guid(ArchiveDoc),
     % archive data dir contains only one file which is a copy of a dataset file
     {[StartFileCtx], _, _} = dir_req:get_children_ctxs(UserCtx, file_ctx:new_by_guid(DataFileGuid), 
-        #{limit => 1, offset => 0, optimize_continuous_listing => false}),
+        #{limit => 1, offset => 0, tune_for_large_continuous_listing => false}),
     {FinalName, StartFileCtx1} = case TargetFilename of
         default ->
             file_ctx:get_aliased_name(StartFileCtx, UserCtx);

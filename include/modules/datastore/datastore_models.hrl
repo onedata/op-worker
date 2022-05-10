@@ -1011,7 +1011,7 @@
     % User who scheduled the traverse
     user_id :: od_user:id(),
     % Information needed to restart directory listing
-    optimize_continuous_listing :: boolean(),
+    tune_for_large_continuous_listing :: boolean(),
     pagination_token = undefined :: file_listing:pagination_token(),
     % Traverse task specific info
     child_dirs_job_generation_policy :: tree_traverse:child_dirs_job_generation_policy(),

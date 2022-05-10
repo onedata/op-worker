@@ -163,7 +163,7 @@ assert_space_and_trash_are_empty(Workers, SpaceId, Attempts) ->
 %%%===================================================================
 
 rm_recursive(Worker, SessId, DirGuid, BatchSize, DeleteDir) ->
-    rm_recursive(Worker, SessId, DirGuid, BatchSize, DeleteDir, #{optimize_continuous_listing => true}).
+    rm_recursive(Worker, SessId, DirGuid, BatchSize, DeleteDir, #{tune_for_large_continuous_listing => true}).
 
 rm_recursive(Worker, SessId, DirGuid, BatchSize, DeleteDir, BaseListOpts) ->
     ListOpts = BaseListOpts#{limit => BatchSize},

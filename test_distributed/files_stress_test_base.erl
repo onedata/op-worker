@@ -599,7 +599,7 @@ process_answer(Answers, Ans, ToAddV) ->
 
 ls(Worker, SessId, Dir, PaginationToken) ->
     ListOpts = case PaginationToken of
-        undefined -> #{optimize_continuous_listing => true};
+        undefined -> #{tune_for_large_continuous_listing => true};
         _ -> #{pagination_token => PaginationToken}
     end,
     {ok, _, NextListingPaginationToken} = lfm_proxy:get_children(Worker, SessId, {path, Dir}, ListOpts#{limit => 2000}),

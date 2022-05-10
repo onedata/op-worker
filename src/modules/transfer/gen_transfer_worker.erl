@@ -373,7 +373,7 @@ transfer_fs_subtree(State = #state{mod = Mod}, FileCtx, Params) ->
                 true ->
                     case file_ctx:is_dir(FileCtx) of
                         {true, FileCtx2} ->
-                            ListOpts = #{optimize_continuous_listing => true},
+                            ListOpts = #{tune_for_large_continuous_listing => true},
                             transfer_dir(State, FileCtx2, ListOpts, Params);
                         {false, FileCtx2} ->
                             Mod:transfer_regular_file(FileCtx2, Params)

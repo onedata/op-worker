@@ -224,7 +224,7 @@ get_directory_info(RequestedInfo, #cdmi_req{
             {ok, ChildNum} = ?lfm_check(lfm:get_children_count(SessionId, FileRef)),
             {From1, To1} = normalize_childrenrange(From, To, ChildNum, MaxChildren),
             {ok, List, _} = ?lfm_check(lfm:get_children(SessionId, FileRef, #{
-                offset => From1, limit => To1 - From1 + 1, optimize_continuous_listing => false
+                offset => From1, limit => To1 - From1 + 1, tune_for_large_continuous_listing => false
             })),
             Acc#{<<"children">> => lists:map(fun({FileGuid, Name}) ->
                 distinguish_directories(SessionId, FileGuid, Name)
@@ -232,7 +232,7 @@ get_directory_info(RequestedInfo, #cdmi_req{
         (<<"children">>, Acc) ->
             MaxChildren = ?MAX_CHILDREN_PER_REQUEST,
             {ok, List, _} = ?lfm_check(lfm:get_children(SessionId, FileRef, #{
-                offset => 0, limit => MaxChildren + 1, optimize_continuous_listing => false
+                offset => 0, limit => MaxChildren + 1, tune_for_large_continuous_listing => false
             })),
             case length(List) > MaxChildren of
                 true ->

@@ -282,7 +282,7 @@ assert_metadata_copied(Node, SessionId, SourceGuid, TargetGuid) ->
 
 
 assert_children_copied(Node, SessionId, SourceGuid, TargetGuid, FollowSymlinks, Attempts) ->
-    ListOpts = #{optimize_continuous_listing => false, offset => 0, limit => ?LISTED_CHILDREN_LIMIT},
+    ListOpts = #{tune_for_large_continuous_listing => false, offset => 0, limit => ?LISTED_CHILDREN_LIMIT},
     assert_children_copied(Node, SessionId, SourceGuid, TargetGuid, ListOpts, FollowSymlinks, Attempts).
 
 assert_children_copied(Node, SessionId, SourceGuid, TargetGuid, ListOpts = #{offset := Offset}, FollowSymlinks, Attempts) ->

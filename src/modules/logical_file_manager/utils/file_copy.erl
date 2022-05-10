@@ -223,7 +223,7 @@ copy_file_content(SourceHandle, TargetHandle, Offset, BufferSize, Callback) ->
 -spec copy_children(session:id(), file_id:file_guid(), file_id:file_guid(), options()) ->
     {ok, [child_entry()]} | {error, term()}.
 copy_children(SessId, ParentGuid, TargetParentGuid, Options) ->
-    copy_children(SessId, ParentGuid, TargetParentGuid, #{optimize_continuous_listing => true}, [], Options).
+    copy_children(SessId, ParentGuid, TargetParentGuid, #{tune_for_large_continuous_listing => true}, [], Options).
 
 
 -spec copy_children(session:id(), file_id:file_guid(), file_id:file_guid(), file_listing:options(), 

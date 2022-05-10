@@ -762,14 +762,14 @@ read_dir_collisions_test(Config0) ->
     GetNamesFromGetChildrenAttrsFun = fun(Node, Offset, Limit) ->
         {ok, ChildrenAttrs, _} = ?assertMatch(
             {ok, _, _},
-            lfm_proxy:get_children_attrs(Node, SessionId(Node), ?FILE_REF(RootDirGuid), #{offset => Offset, limit => Limit, optimize_continuous_listing => false})
+            lfm_proxy:get_children_attrs(Node, SessionId(Node), ?FILE_REF(RootDirGuid), #{offset => Offset, limit => Limit, tune_for_large_continuous_listing => false})
         ),
         lists:map(fun(#file_attr{name = Name}) -> Name end, ChildrenAttrs)
     end,
     GetNamesFromGetChildrenDetailsFun = fun(Node, Offset, Limit) ->
         {ok, ChildrenDetails, _} = ?assertMatch(
             {ok, _, _},
-            lfm_proxy:get_children_details(Node, SessionId(Node), ?FILE_REF(RootDirGuid), #{offset => Offset, limit => Limit, optimize_continuous_listing => false})
+            lfm_proxy:get_children_details(Node, SessionId(Node), ?FILE_REF(RootDirGuid), #{offset => Offset, limit => Limit, tune_for_large_continuous_listing => false})
         ),
         lists:map(fun(#file_details{file_attr = #file_attr{name = Name}}) ->
             Name
@@ -1001,10 +1001,10 @@ list_children_recreated_remotely(Config0) ->
     {ok, G} = lfm_proxy:create(Worker1, SessId(Worker1), SpaceGuid, <<"file_name">>, undefined),
     {ok, _} = lfm_proxy:get_details(Worker1, SessId(Worker1), ?FILE_REF(G)),
     {ok, _, _} = lfm_proxy:get_children_details(Worker1, SessId(Worker1), ?FILE_REF(SpaceGuid),
-        #{offset => 0, limit => 24, optimize_continuous_listing => false}),
+        #{offset => 0, limit => 24, tune_for_large_continuous_listing => false}),
     {ok, _} = lfm_proxy:stat(Worker1, SessId(Worker1), ?FILE_REF(G)),
     {ok, _, _} = lfm_proxy:get_children_details(Worker1, SessId(Worker1), ?FILE_REF(SpaceGuid),
-        #{offset => -24, limit => 24, index => <<"file_name">>, optimize_continuous_listing => false}),
+        #{offset => -24, limit => 24, index => <<"file_name">>, tune_for_large_continuous_listing => false}),
     {ok, H} = lfm_proxy:open(Worker1, SessId(Worker1), ?FILE_REF(G), write),
     {ok, _} = lfm_proxy:write(Worker1, H, 0, <<>>),
     ok = lfm_proxy:close(Worker1, H),
@@ -1012,31 +1012,31 @@ list_children_recreated_remotely(Config0) ->
 
     % Check on worker2
     {ok, _, _} = lfm_proxy:get_children_details(Worker2, SessId(Worker2), ?FILE_REF(SpaceGuid),
-        #{offset => -24, limit => 24, index => <<"file_name">>, optimize_continuous_listing => false}),
+        #{offset => -24, limit => 24, index => <<"file_name">>, tune_for_large_continuous_listing => false}),
 
     % Delete file on worker2
     ?assertMatch({ok, _}, lfm_proxy:stat(Worker2, SessId(Worker2), ?FILE_REF(G)), 30),
     ok = lfm_proxy:rm_recursive(Worker2, SessId(Worker2), ?FILE_REF(G)),
     ?assertMatch({error, ?EINVAL}, lfm_proxy:get_children_details(Worker2, SessId(Worker2), ?FILE_REF(SpaceGuid),
-        #{offset => -24, limit => 24, optimize_continuous_listing => false})),
+        #{offset => -24, limit => 24, tune_for_large_continuous_listing => false})),
     ?assertMatch({ok, _, _}, lfm_proxy:get_children_details(Worker2, SessId(Worker2), ?FILE_REF(SpaceGuid),
-        #{offset => -24, limit => 24, index => <<"file_name">>, optimize_continuous_listing => false})),
+        #{offset => -24, limit => 24, index => <<"file_name">>, tune_for_large_continuous_listing => false})),
     ?assertMatch({ok, _, _}, lfm_proxy:get_children_details(Worker2, SessId(Worker2), ?FILE_REF(SpaceGuid),
-        #{offset => 0, limit => 24, optimize_continuous_listing => false})),
+        #{offset => 0, limit => 24, tune_for_large_continuous_listing => false})),
     ?assertMatch({ok, _, _}, lfm_proxy:get_children_details(Worker2, SessId(Worker2), ?FILE_REF(SpaceGuid),
-        #{offset => 0, limit => 24, index => <<"file_name">>, optimize_continuous_listing => false})),
+        #{offset => 0, limit => 24, index => <<"file_name">>, tune_for_large_continuous_listing => false})),
 
     % Recreate file on worker2
     {ok, NewG} = lfm_proxy:create(Worker2, SessId(Worker2), SpaceGuid, <<"file_name">>, undefined),
     {ok, _} = lfm_proxy:get_details(Worker2, SessId(Worker2), ?FILE_REF(NewG)),
     {ok, _, _} = lfm_proxy:get_children_details(Worker2, SessId(Worker2), ?FILE_REF(SpaceGuid),
-        #{offset => 0, limit => 24, optimize_continuous_listing => false}),
+        #{offset => 0, limit => 24, tune_for_large_continuous_listing => false}),
     {ok, _} = lfm_proxy:stat(Worker2, SessId(Worker2), ?FILE_REF(NewG)),
 
     % Another check on worker2
     % The bug appeared here (badmatch)
     {ok, _, _} = lfm_proxy:get_children_details(Worker2, SessId(Worker2), ?FILE_REF(SpaceGuid),
-        #{offset => -24, limit => 24, index => <<"file_name">>, optimize_continuous_listing => false}),
+        #{offset => -24, limit => 24, index => <<"file_name">>, tune_for_large_continuous_listing => false}),
 
     {ok, H2} = lfm_proxy:open(Worker2, SessId(Worker2), ?FILE_REF(NewG), write),
     {ok, _} = lfm_proxy:write(Worker2, H2, 0, <<>>),
