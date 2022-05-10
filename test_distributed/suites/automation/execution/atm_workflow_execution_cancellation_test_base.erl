@@ -19,13 +19,12 @@
 
 -export([
     cancel_active_atm_workflow_execution_after_test/0,
+    cancel_atm_workflow_execution_after_lane_run_has_ended_test/0,
     cancel_finished_atm_workflow_execution_after_test/0
 ]).
 
 
--define(ST1_ITEMS_COUNT, 200).
-
--define(ECHO_SCHEMA_DRAFT, #atm_workflow_schema_dump_draft{
+-define(ECHO_SCHEMA_DRAFT(__ITEMS_COUNT), #atm_workflow_schema_dump_draft{
     name = <<"echo">>,
     revision_num = 1,
     revision = #atm_workflow_schema_revision_draft{
@@ -38,7 +37,7 @@
                     type = atm_integer_type
                 }},
                 requires_initial_content = false,
-                default_initial_content = lists:seq(1, ?ST1_ITEMS_COUNT)
+                default_initial_content = lists:seq(1, __ITEMS_COUNT)
             },
             #atm_store_schema_draft{
                 id = <<"st2">>,
@@ -66,6 +65,7 @@
     },
     supplementary_lambdas = #{<<"echo">> => #{1 => ?ECHO_LAMBDA_DRAFT}}
 }).
+-define(ECHO_SCHEMA_DRAFT, ?ECHO_SCHEMA_DRAFT(5)).
 
 
 %%%===================================================================
@@ -74,11 +74,13 @@
 
 
 cancel_active_atm_workflow_execution_after_test() ->
+    ItemsCount = 100,
+
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         provider = ?PROVIDER_SELECTOR,
         user = ?USER_SELECTOR,
         space = ?SPACE_SELECTOR,
-        workflow_schema_dump_or_draft = ?ECHO_SCHEMA_DRAFT,
+        workflow_schema_dump_or_draft = ?ECHO_SCHEMA_DRAFT(ItemsCount),
         workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,
@@ -103,7 +105,7 @@ cancel_active_atm_workflow_execution_after_test() ->
                         ),
                         % cancel blocks scheduling execution of leftover items
                         % but the ones already scheduled should be finished
-                        ?assert(ExpTaskStats < {0, 0, ?ST1_ITEMS_COUNT}),
+                        ?assert(ExpTaskStats < {0, 0, ItemsCount}),
 
                         % assert all processed items were mapped to st2
                         ExpItemsProcessed = element(3, ExpTaskStats),
@@ -126,6 +128,33 @@ cancel_active_atm_workflow_execution_after_test() ->
                     {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_cancelled(ExpState0)}
                 end
             }
+        }]
+    }).
+
+
+cancel_atm_workflow_execution_after_lane_run_has_ended_test() ->
+    atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
+        provider = ?PROVIDER_SELECTOR,
+        user = ?USER_SELECTOR,
+        space = ?SPACE_SELECTOR,
+        workflow_schema_dump_or_draft = ?ECHO_SCHEMA_DRAFT,
+        workflow_schema_revision_num = 1,
+        incarnations = [#atm_workflow_execution_incarnation_test_spec{
+            incarnation_num = 1,
+            lane_runs = [#atm_lane_run_execution_test_spec{
+                selector = {1, 1},
+                handle_lane_execution_ended = #atm_step_mock_spec{
+                    after_step_hook = fun(AtmMockCallCtx) ->
+                        % While atm workflow execution as whole has not yet transit to finished status
+                        % (last step remaining) the current lane run did. At this point cancel
+                        % is no longer possible (execution is treated as successfully ended)
+                        ?assertThrow(
+                            ?ERROR_ATM_INVALID_STATUS_TRANSITION(?FINISHED_STATUS, ?ABORTING_STATUS),
+                            atm_workflow_execution_test_runner:cancel_workflow_execution(AtmMockCallCtx)
+                        )
+                    end
+                }
+            }]
         }]
     }).
 

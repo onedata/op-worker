@@ -53,6 +53,7 @@
     first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_4_test/1,
 
     cancel_active_atm_workflow_execution_after_test/1,
+    cancel_atm_workflow_execution_after_lane_run_has_ended_test/1,
     cancel_finished_atm_workflow_execution_after_test/1
 ]).
 
@@ -88,6 +89,7 @@ groups() -> [
         first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_4_test,
 
         cancel_active_atm_workflow_execution_after_test,
+        cancel_atm_workflow_execution_after_lane_run_has_ended_test,
         cancel_finished_atm_workflow_execution_after_test
     ]}
 ].
@@ -199,6 +201,10 @@ first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_4_test(_C
 
 
 cancel_active_atm_workflow_execution_after_test(_Config) ->
+    ?RUN_CANCELLATION_TEST().
+
+
+cancel_atm_workflow_execution_after_lane_run_has_ended_test(_Config) ->
     ?RUN_CANCELLATION_TEST().
 
 
