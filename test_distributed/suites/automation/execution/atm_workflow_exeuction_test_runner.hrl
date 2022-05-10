@@ -19,6 +19,7 @@
 
 -record(atm_mock_call_ctx, {
     provider :: oct_background:entity_selector(),
+    space :: oct_background:entity_selector(),
     session_id :: session:id(),
     workflow_execution_id :: atm_workflow_execution:id(),
     workflow_execution_exp_state :: atm_workflow_execution_exp_state_builder:exp_state(),

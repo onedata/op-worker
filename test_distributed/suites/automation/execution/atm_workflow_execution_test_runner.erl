@@ -54,6 +54,7 @@
 -export([init/1, teardown/1]).
 -export([run/1]).
 -export([cancel_workflow_execution/1]).
+-export([browse_store/2]).
 
 -type step_name() ::
     prepare_lane |
@@ -155,6 +156,12 @@
 
 -define(NOW(), global_clock:timestamp_seconds()).
 
+-define(INFINITE_LOG_BASED_STORES_LISTING_OPTS, #{
+    start_from => undefined,
+    offset => 0,
+    limit => 1000000000
+}).
+
 
 %%%===================================================================
 %%% API
@@ -235,6 +242,23 @@ cancel_workflow_execution(#atm_mock_call_ctx{
     workflow_execution_id = AtmWorkflowExecutionId
 }) ->
     ?erpc(ProviderSelector, mi_atm:cancel_workflow_execution(SessionId, AtmWorkflowExecutionId)).
+
+
+-spec browse_store(automation:id(), mock_call_ctx()) -> json_utils:json_term().
+browse_store(AtmStoreSchemaId, #atm_mock_call_ctx{
+    provider = ProviderSelector,
+    space = SpaceSelector,
+    session_id = SessionId,
+    workflow_execution_id = AtmWorkflowExecutionId
+}) ->
+    SpaceId = oct_background:get_space_id(SpaceSelector),
+
+    {ok, #document{value = #atm_workflow_execution{store_registry = AtmStoreRegistry}}} = ?rpc(
+        ProviderSelector, atm_workflow_execution:get(AtmWorkflowExecutionId)
+    ),
+    AtmStoreId = maps:get(AtmStoreSchemaId, AtmStoreRegistry),
+
+    ?rpc(ProviderSelector, browse_store(SessionId, SpaceId, AtmWorkflowExecutionId, AtmStoreId)).
 
 
 %%%===================================================================
@@ -478,7 +502,10 @@ get_lane_run_test_spec(TargetAtmLaneIndex, #test_ctx{ongoing_incarnations = [
 %% @private
 -spec build_mock_call_ctx(mock_call_report(), test_ctx()) -> mock_call_ctx().
 build_mock_call_ctx(#mock_call_report{args = CallArgs}, #test_ctx{
-    test_spec = #atm_workflow_execution_test_spec{provider = ProviderSelector},
+    test_spec = #atm_workflow_execution_test_spec{
+        provider = ProviderSelector,
+        space = SpaceSelector
+    },
     session_id = SessionId,
     workflow_execution_id = AtmWorkflowExecutionId,
     current_lane_index = CurrentAtmLaneIndex,
@@ -487,6 +514,7 @@ build_mock_call_ctx(#mock_call_report{args = CallArgs}, #test_ctx{
 }) ->
     #atm_mock_call_ctx{
         provider = ProviderSelector,
+        space = SpaceSelector,
         session_id = SessionId,
         workflow_execution_id = AtmWorkflowExecutionId,
         workflow_execution_exp_state = ExpState,
@@ -1059,3 +1087,39 @@ call_test_process(TestProcPid, Msg) ->
     (reply_to(), ok) -> ok.
 reply_to_execution_process({ExecutionProcPid, MRef}, Reply) ->
     ExecutionProcPid ! {MRef, Reply}.
+
+
+%% @private
+-spec browse_store(session:id(), od_space:id(), atm_workflow_execution:id(), atm_store:id()) ->
+    json_utils:json_term().
+browse_store(SessionId, SpaceId, AtmWorkflowExecutionId, AtmStoreId) ->
+    {ok, AtmStore = #atm_store{container = AtmStoreContainer}} = atm_store_api:get(
+        AtmStoreId
+    ),
+    atm_store_content_browse_result:to_json(atm_store_api:browse_content(
+        atm_workflow_execution_auth:build(SpaceId, AtmWorkflowExecutionId, SessionId),
+        build_browse_opts(atm_store_container:get_store_type(AtmStoreContainer)),
+        AtmStore
+    )).
+
+
+%% @private
+build_browse_opts(audit_log) ->
+    #atm_audit_log_store_content_browse_options{listing_opts = ?INFINITE_LOG_BASED_STORES_LISTING_OPTS};
+
+build_browse_opts(list) ->
+    #atm_list_store_content_browse_options{listing_opts = ?INFINITE_LOG_BASED_STORES_LISTING_OPTS};
+
+build_browse_opts(tree_forest) ->
+    #atm_tree_forest_store_content_browse_options{listing_opts = ?INFINITE_LOG_BASED_STORES_LISTING_OPTS};
+
+build_browse_opts(range) ->
+    #atm_range_store_content_browse_options{};
+
+build_browse_opts(single_value) ->
+    #atm_single_value_store_content_browse_options{};
+
+build_browse_opts(time_series) ->
+    #atm_time_series_store_content_browse_options{
+        request = #atm_time_series_store_content_get_layout_req{}
+    }.
