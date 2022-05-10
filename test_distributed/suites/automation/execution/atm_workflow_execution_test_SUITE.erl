@@ -50,7 +50,10 @@
     first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_1_test/1,
     first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_2_test/1,
     first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_3_test/1,
-    first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_4_test/1
+    first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_4_test/1,
+
+    cancel_active_atm_workflow_execution_after_test/1,
+    cancel_finished_atm_workflow_execution_after_test/1
 ]).
 
 groups() -> [
@@ -82,7 +85,10 @@ groups() -> [
         first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_1_test,
         first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_2_test,
         first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_3_test,
-        first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_4_test
+        first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_4_test,
+
+        cancel_active_atm_workflow_execution_after_test,
+        cancel_finished_atm_workflow_execution_after_test
     ]}
 ].
 
@@ -104,6 +110,7 @@ all() -> [
 
 -define(RUN_SCHEDULING_TEST(), ?RUN_TEST(atm_workflow_execution_scheduling_test_base)).
 -define(RUN_PREPARATION_TEST(), ?RUN_TEST(atm_workflow_execution_preparation_test_base)).
+-define(RUN_CANCELLATION_TEST(), ?RUN_TEST(atm_workflow_execution_cancellation_test_base)).
 
 
 %%%===================================================================
@@ -189,6 +196,14 @@ first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_3_test(_C
 
 first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_4_test(_Config) ->
     ?RUN_PREPARATION_TEST().
+
+
+cancel_active_atm_workflow_execution_after_test(_Config) ->
+    ?RUN_CANCELLATION_TEST().
+
+
+cancel_finished_atm_workflow_execution_after_test(_Config) ->
+    ?RUN_CANCELLATION_TEST().
 
 
 %===================================================================

@@ -42,6 +42,7 @@
 
     expect_task_items_in_processing_increased/3,
     expect_task_items_transit_from_processing_to_processed/3,
+    get_task_stats/2,
     expect_task_transit_to_active_status_if_in_pending_status/2,
     expect_task_parallel_box_transit_to_active_status_if_in_pending_status/2,
     expect_task_lane_run_transit_to_active_status_if_in_enqueued_status/2,
@@ -341,6 +342,19 @@ expect_task_items_transit_from_processing_to_processed(AtmTaskExecutionId, Count
         }
     end,
     update_task_execution_exp_state(AtmTaskExecutionId, ExpAtmTaskExecutionStateDiff, ExpStateCtx).
+
+
+-spec get_task_stats(atm_task_execution:id(), ctx()) -> {integer(), integer(), integer()}.
+get_task_stats(AtmTaskExecutionId, #exp_workflow_execution_state_ctx{
+    exp_task_execution_state_ctx_registry = ExpAtmTaskExecutionsRegistry
+}) ->
+    #exp_task_execution_state_ctx{exp_state = #{
+        <<"itemsInProcessing">> := IIP,
+        <<"itemsFailed">> := IF,
+        <<"itemsProcessed">> := IP
+    }} = maps:get(AtmTaskExecutionId, ExpAtmTaskExecutionsRegistry),
+
+    {IIP, IF, IP}.
 
 
 -spec expect_task_transit_to_active_status_if_in_pending_status(
