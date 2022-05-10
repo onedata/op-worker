@@ -21,6 +21,8 @@
 %% API
 -export([init/0, register/3, prepare_next/1, mark_done/3,
     mark_task_data_stream_closed/2, is_task_data_stream_finished/2, verify_callbacks_on_cancel/1]).
+%% Test API
+-export([is_finished_and_cleaned/1]).
 
 
 % Internal record that describe information about all data currently processed or waiting to be processed.
@@ -122,3 +124,16 @@ verify_callbacks_on_cancel(#workflow_tasks_data{}) ->
 mark_task_ongoing(TaskId, TaskDataId, #workflow_tasks_data{ongoing = Ongoing} = TasksData) ->
     NewOngoing = maps:update_with(TaskId, fun(OngoingIds) -> [TaskDataId | OngoingIds] end, [TaskDataId], Ongoing),
     TasksData#workflow_tasks_data{ongoing = NewOngoing}.
+
+
+%%%===================================================================
+%%% Test API
+%%%===================================================================
+
+-spec is_finished_and_cleaned(tasks_data()) -> boolean().
+is_finished_and_cleaned(#workflow_tasks_data{
+    waiting = Waiting,
+    ongoing = Ongoing,
+    tasks_execution_order = Order
+}) ->
+    maps:size(Waiting) =:= 0 andalso maps:size(Ongoing) =:= 0 andalso Order =:= [].

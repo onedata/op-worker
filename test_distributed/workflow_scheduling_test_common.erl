@@ -540,9 +540,9 @@ get_expected(LaneId, PreparedInAdvanceLaneId, ExecutionId, InitialContext, LaneI
     end.
 
 get_items(Context, Iterator) ->
-    case iterator:get_next(Context, Iterator) of
+    case catch iterator:get_next(Context, Iterator) of
         {ok, NextItem, NextIterator} -> [NextItem | get_items(Context, NextIterator)];
-        stop -> []
+        _ -> []
     end.
 
 verify_lanes_execution_history([], Gathered, _Options) ->
@@ -833,6 +833,9 @@ verify_execution_history_stats(Acc, WorkflowType, Options) ->
             % Restart callback is called before any pool slot is used
             ?assertEqual(0, MinPoolSlots),
             ?assertEqual(20, MaxPoolSlots);
+        {#{ignore_max_slots_check := true}, sync} ->
+            ?assertEqual(0, MaxAsyncSlots),
+            ?assertNotEqual(0, MinPoolSlots);
         {_, sync} ->
             ?assertEqual(0, MaxAsyncSlots),
             % Task processing is initialized after pool slots count is incremented
@@ -841,6 +844,8 @@ verify_execution_history_stats(Acc, WorkflowType, Options) ->
             ?assertEqual(20, MaxPoolSlots);
         {#{ignore_async_slots_check := true}, async} -> 
             ?assertEqual(20, MaxPoolSlots);
+        {#{ignore_max_slots_check := true}, async} ->
+            ok;
         {_, async} ->
             ?assertEqual(60, MaxAsyncSlots),
             % Do not check MinPoolSlots as any value is possible ('0' can appear in history because slots count is

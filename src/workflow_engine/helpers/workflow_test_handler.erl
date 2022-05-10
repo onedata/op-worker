@@ -46,8 +46,9 @@
     prepare_ignored_lane_in_advance => boolean(), % when ?IGNORED_LANE_PREDECESSOR_ID finishes,
                                                   % set ?IGNORED_LANE_ID to be prepared in advance
     prepare_in_advance_out_of_order => {LaneId :: workflow_engine:lane_id(),
-        LaneIdOutOfOrder :: workflow_engine:lane_id()} % when LaneId finishes, set LaneIdOutOfOrder
+        LaneIdOutOfOrder :: workflow_engine:lane_id()}, % when LaneId finishes, set LaneIdOutOfOrder
                                                        % to be prepared in advance
+    fail_iteration => ItemNum :: non_neg_integer()
 }.
 
 -export_type([test_execution_context/0]).
@@ -86,10 +87,16 @@ prepare_lane(_ExecutionId, #{task_type := Type, async_call_pools := Pools} = Exe
         end, #{}, lists:seq(1, BoxIndex))
     end, lists:seq(1, LaneIndex)),
 
+    ItemsCount = maps:get(items_count, ExecutionContext, 200),
+    Iterator = case maps:get(fail_iteration, ExecutionContext, undefined) of
+        undefined -> workflow_test_iterator:get_first(ItemsCount);
+        ItemNumToFail -> workflow_test_iterator:get_first(ItemsCount, ItemNumToFail)
+    end,
+
     LaneOptions = maps:get(lane_options, ExecutionContext, #{}),
     {ok, LaneOptions#{
         parallel_boxes => Boxes,
-        iterator => workflow_test_iterator:get_first(maps:get(items_count, ExecutionContext, 200)),
+        iterator => Iterator,
         execution_context => ExecutionContext#{
             lane_index => LaneIndex,
             lane_id => LaneId

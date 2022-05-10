@@ -18,7 +18,6 @@
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 
-% TODO - przetestowac fail iteracji ze streamami i bez i restart jak iteracja failuje
 %% tests
 -export([
     empty_workflow_execution_test/1,
@@ -40,6 +39,12 @@
     fail_result_processing_test/1,
     fail_task_before_prepare_in_advance_finish_test/1,
     fail_task_before_prepare_in_advance_fail_test/1,
+    fail_iteration_test/1,
+    fail_iteration_with_prepare_in_advance_test/1,
+    fail_iteration_with_stream_test/1,
+    fail_first_item_iteration_test/1,
+    fail_first_item_iteration_with_prepare_in_advance_test/1,
+    fail_first_item_iteration_with_stream_test/1,
 
     lane_preparation_failure_test/1,
     lane_preparation_in_advance_failure_test/1,
@@ -83,6 +88,12 @@ all() ->
         fail_result_processing_test,
         fail_task_before_prepare_in_advance_finish_test,
         fail_task_before_prepare_in_advance_fail_test,
+        fail_iteration_test,
+        fail_iteration_with_prepare_in_advance_test,
+        fail_iteration_with_stream_test,
+        fail_first_item_iteration_test,
+        fail_first_item_iteration_with_prepare_in_advance_test,
+        fail_first_item_iteration_with_stream_test,
 
         lane_preparation_failure_test,
         lane_preparation_in_advance_failure_test,
@@ -252,6 +263,45 @@ fail_task_before_prepare_in_advance_fail_test(Config) ->
         test_execution_manager_options = [{{delay_lane_preparation, <<"3">>}, true}, {fail_lane_preparation, <<"3">>}]
     }, <<"2">>, <<"2_1_1">>).
 
+fail_iteration_test(Config) ->
+    iteration_failure_test_base(Config, #test_config{}, <<"1">>, 5).
+
+fail_iteration_with_prepare_in_advance_test(Config) ->
+    iteration_failure_test_base(Config, #test_config{
+        task_type = async,
+        prepare_in_advance = true
+    }, <<"1">>, 5).
+
+fail_iteration_with_stream_test(Config) ->
+    iteration_failure_test_base(Config, #test_config{
+        task_type = async,
+        generator_options = #{task_streams => #{
+            1 => #{
+                {1,1} => [<<"2">>, <<"4">>]
+            }
+        }}
+    }, <<"1">>, 5).
+
+fail_first_item_iteration_test(Config) ->
+    iteration_failure_test_base(Config, #test_config{}, <<"1">>, 1).
+
+fail_first_item_iteration_with_prepare_in_advance_test(Config) ->
+    iteration_failure_test_base(Config, #test_config{
+        task_type = async,
+        prepare_in_advance = true
+    }, <<"1">>, 1).
+
+fail_first_item_iteration_with_stream_test(Config) ->
+    iteration_failure_test_base(Config, #test_config{
+        task_type = async,
+        prepare_in_advance = true,
+        generator_options = #{task_streams => #{
+            1 => #{
+                {1,1} => []
+            }
+        }}
+    }, <<"1">>, 1).
+
 %%%===================================================================
 
 lane_preparation_failure_test(Config) ->
@@ -401,6 +451,15 @@ failure_test_base(Config, #test_config{
         test_execution_manager_options = [{ManagerKey, {TaskId, Item}} | ManagerOptions],
         generator_options = GeneratorOptions#{finish_on_lane => LaneId},
         verify_history_options = #{ManagerKey => {LaneId, TaskId, Item}}
+    }).
+
+iteration_failure_test_base(Config, #test_config{
+    verify_statistics_options = VerifyStatsOptions,
+    generator_options = GeneratorOptions
+} = BasicConfig, LaneId, ItemNum) ->
+    single_execution_test_base(Config, BasicConfig#test_config{
+        verify_statistics_options = VerifyStatsOptions#{ignore_max_slots_check => true},
+        generator_options = GeneratorOptions#{fail_iteration => ItemNum, finish_on_lane => LaneId}
     }).
 
 lane_failure_test_base(Config, #test_config{
