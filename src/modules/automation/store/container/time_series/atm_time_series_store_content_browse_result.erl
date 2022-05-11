@@ -16,12 +16,13 @@
 -behaviour(atm_store_content_browse_result).
 
 -include("modules/automation/atm_execution.hrl").
+-include_lib("cluster_worker/include/modules/datastore/ts_browser.hrl").
 
 %% API
 -export([to_json/1]).
 
--type layout() :: #atm_time_series_store_content_layout{}.
--type slice() :: #atm_time_series_store_content_slice{}.
+-type layout() :: #time_series_layout_result{}.
+-type slice() :: #time_series_slice_result{}.
 
 -type record() :: #atm_time_series_store_content_browse_result{}.
 
@@ -35,11 +36,11 @@
 
 -spec to_json(record()) -> json_utils:json_term().
 to_json(#atm_time_series_store_content_browse_result{
-    result = #atm_time_series_store_content_layout{layout = Layout}
+    result = Result
 }) ->
-    #{<<"layout">> => Layout};
+    #{<<"layout">> => ts_browse_result:to_json(Result)};
 
 to_json(#atm_time_series_store_content_browse_result{
-    result = #atm_time_series_store_content_slice{slice = SliceValue}
+    result = Result
 }) ->
-    #{<<"slice">> => SliceValue}.
+    #{<<"slice">> => ts_browse_result:to_json(Result)}.

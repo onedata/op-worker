@@ -100,8 +100,8 @@ translate_value(#gri{aspect = download_url}, URL) ->
 translate_value(#gri{aspect = api_samples, scope = public}, ApiSamples) ->
     ApiSamples;
 
-translate_value(#gri{aspect = dir_size_stats}, Value) ->
-    Value.
+translate_value(#gri{aspect = dir_size_stats}, TSBrowseResult) ->
+    ts_browse_result:to_json(TSBrowseResult).
 
 
 -spec translate_resource(gri:gri(), Data :: term()) ->

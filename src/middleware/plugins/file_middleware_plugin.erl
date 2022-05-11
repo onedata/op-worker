@@ -1009,11 +1009,8 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = api_samples, scope =
     {ok, value, public_file_api_samples:generate_for(Auth#auth.session_id, FileGuid)};
 
 get(#op_req{gri = #gri{id = Guid, aspect = dir_size_stats}, data = Data}, _) ->
-    TSBrowseRequest = ts_browse_request:sanitize(Data),
-    case dir_size_stats:browse_collection(Guid, TSBrowseRequest) of
-        {ok, BrowseResult} -> {ok, value, ts_browse_result:to_json(BrowseResult)};
-        {error, _} = Error -> throw(Error)
-    end.
+    TSBrowseRequest = ts_browse_request:from_json(Data),
+    {ok, value, ?check(dir_size_stats:browse_time_stats_collection(Guid, TSBrowseRequest))}.
 
 
 %%%===================================================================

@@ -21,7 +21,7 @@
 -behaviour(persistent_record).
 
 -include("modules/automation/atm_execution.hrl").
--include_lib("cluster_worker/include/middleware/ts_browser.hrl").
+-include_lib("cluster_worker/include/modules/datastore/ts_browser.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% atm_store_container callbacks
@@ -129,51 +129,40 @@ acquire_iterator(#atm_time_series_store_container{}) ->
     atm_time_series_store_content_browse_result:record() | no_return().
 browse_content(Record, #atm_store_content_browse_req{
     options = #atm_time_series_store_content_browse_options{
-        request = #time_series_get_layout_req{}
+        request = #time_series_get_layout_request{}
     }
 }) ->
-    {ok, Layout} = datastore_time_series_collection:get_layout(
-        ?CTX, Record#atm_time_series_store_container.backend_id
+    {ok, LayoutResult} = datastore_time_series_collection:browse(
+        ?CTX, Record#atm_time_series_store_container.backend_id, #time_series_get_layout_request{}
     ),
     #atm_time_series_store_content_browse_result{
-        result = #atm_time_series_store_content_layout{layout = Layout}
+        result = LayoutResult
     };
 
 browse_content(Record, #atm_store_content_browse_req{
     options = #atm_time_series_store_content_browse_options{
-        request = #time_series_get_slice_req{
+        request = #time_series_get_slice_request{
             layout = SliceLayout,
             start_timestamp = StartTimestamp,
             window_limit = WindowLimit
         }
     }
 }) ->
-    case datastore_time_series_collection:get_slice(
+    case datastore_time_series_collection:browse(
         ?CTX,
         Record#atm_time_series_store_container.backend_id,
-        SliceLayout,
-        maps_utils:remove_undefined(#{start_timestamp => StartTimestamp, window_limit => WindowLimit})
+        #time_series_get_slice_request{
+            layout = SliceLayout,
+            start_timestamp = StartTimestamp,
+            window_limit = WindowLimit
+        }
     ) of
+        {ok, SliceResult} ->
+            #atm_time_series_store_content_browse_result{result = SliceResult};
         ?ERROR_NOT_FOUND ->
             throw(?ERROR_NOT_FOUND);
         ?ERROR_TSC_MISSING_LAYOUT(MissingLayout) ->
-            throw(?ERROR_TSC_MISSING_LAYOUT(MissingLayout));
-        {ok, Slice} ->
-            SliceJson = tsc_structure:map(fun(_TimeSeriesName, _MetricName, Windows) ->
-                lists:map(fun({Timestamp, Value}) ->
-                    #{
-                        <<"timestamp">> => Timestamp,
-                        <<"value">> => case Value of
-                            {_ValuesCount, ValuesSum} -> ValuesSum;
-                            _ -> Value
-                        end
-                    }
-                end, Windows)
-            end, Slice),
-
-            #atm_time_series_store_content_browse_result{
-                result = #atm_time_series_store_content_slice{slice = SliceJson}
-            }
+            throw(?ERROR_TSC_MISSING_LAYOUT(MissingLayout))
     end.
 
 

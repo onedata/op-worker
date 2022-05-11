@@ -462,7 +462,11 @@ resolve_file_attr(UserCtx, FileCtx, Opts) ->
                 case dir_size_stats:get_stats(file_ctx:get_logical_guid_const(FileCtx5), [?TOTAL_SIZE]) of
                     {ok, #{?TOTAL_SIZE := S}} ->
                         {undefined, S, FileCtx5};
-                    _ ->
+                    ?ERROR_NOT_FOUND ->
+                        {undefined, 0, FileCtx5};
+                    ?ERROR_DIR_STATS_DISABLED_FOR_SPACE ->
+                        {undefined, undefined, FileCtx5};
+                    ?ERROR_DIR_STATS_NOT_READY ->
                         {undefined, undefined, FileCtx5}
                 end;
             {?SYMLINK_TYPE, _, true} ->

@@ -1312,7 +1312,7 @@ lfm_get_details(Config) ->
     {ok, Handle11} = O11,
 
     ?assertMatch({ok, #file_details{
-        file_attr = #file_attr{name = <<"space_name2">>, size = 0},
+        file_attr = #file_attr{name = <<"space_name2">>, size = undefined},
         index_startid = <<"space_id2">>,
         active_permissions_type = posix,
         has_metadata = false

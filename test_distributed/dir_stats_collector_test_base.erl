@@ -16,6 +16,7 @@
 -include("modules/dir_stats_collector/dir_size_stats.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include_lib("cluster_worker/include/modules/datastore/ts_browser.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -693,7 +694,7 @@ check_space_dir_values_map_and_time_series_collection(
 ) ->
     [Worker | _] = ?config(NodesSelector, Config),
     ?assertMatch(?ERROR_DIR_STATS_DISABLED_FOR_SPACE,
-        rpc:call(Worker, dir_size_stats, get_stats_and_time_series_collection, [SpaceGuid]));
+        rpc:call(Worker, dir_size_stats, get_stats, [SpaceGuid]));
 
 check_space_dir_values_map_and_time_series_collection(
     Config, NodesSelector, SpaceGuid, ExpectedCurrentStats, IsCollectionEmpty, CollectingStatus
@@ -703,8 +704,11 @@ check_space_dir_values_map_and_time_series_collection(
         initializing -> ?ATTEMPTS
     end,
     [Worker | _] = ?config(NodesSelector, Config),
-    {ok, {CurrentStats, TimeStats}} = ?assertMatch({ok, {_, _}},
-        rpc:call(Worker, dir_size_stats, get_stats_and_time_series_collection, [SpaceGuid]), Attempts),
+    {ok, CurrentStats} = ?assertMatch({ok, _}, rpc:call(Worker, dir_size_stats, get_stats, [SpaceGuid]), Attempts),
+    {ok, #time_series_layout_result{layout = TimeStatsLayout}} = ?assertMatch({ok, _}, 
+        rpc:call(Worker, dir_size_stats, browse_time_stats_collection, [SpaceGuid, #time_series_get_layout_request{}])),
+    {ok, #time_series_slice_result{slice = TimeStats}} = ?assertMatch({ok, _}, 
+        rpc:call(Worker, dir_size_stats, browse_time_stats_collection, [SpaceGuid, #time_series_get_slice_request{layout = TimeStatsLayout}]), Attempts),
 
     ?assertEqual(ExpectedCurrentStats, CurrentStats),
 

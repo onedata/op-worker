@@ -33,5 +33,5 @@
 -spec sanitize(json_utils:json_map()) -> record().
 sanitize(Data) ->
     #atm_time_series_store_content_browse_options{
-        request = ts_browse_request:sanitize(Data)
+        request = ts_browse_request:from_json(Data)
     }.
