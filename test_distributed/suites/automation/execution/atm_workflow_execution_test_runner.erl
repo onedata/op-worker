@@ -126,6 +126,7 @@
     session_id :: session:id(),
     workflow_execution_id :: atm_workflow_execution:id(),
 
+    lanes_count :: non_neg_integer(),
     current_lane_index :: atm_lane_execution:index(),
     current_run_num :: atm_lane_execution:run_num(),
     ongoing_incarnations :: [incarnation_test_spec()],
@@ -215,9 +216,9 @@ run(TestSpec = #atm_workflow_execution_test_spec{
         AtmStoreInitialContentOverlay#{test_process => TestProcPid}, CallbackUrl
     )),
 
+    AtmLaneSchemas = AtmWorkflowSchemaRevision#atm_workflow_schema_revision.lanes,
     ExpState = atm_workflow_execution_exp_state_builder:init(
-        ProviderSelector, SpaceId, AtmWorkflowExecutionId, ?NOW(),
-        AtmWorkflowSchemaRevision#atm_workflow_schema_revision.lanes
+        ProviderSelector, SpaceId, AtmWorkflowExecutionId, ?NOW(), AtmLaneSchemas
     ),
     true = atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState),
 
@@ -225,6 +226,7 @@ run(TestSpec = #atm_workflow_execution_test_spec{
         test_spec = TestSpec,
         session_id = SessionId,
         workflow_execution_id = AtmWorkflowExecutionId,
+        lanes_count = length(AtmLaneSchemas),
         current_lane_index = 1,
         current_run_num = 1,
         ongoing_incarnations = Incarnations,
@@ -508,6 +510,7 @@ build_mock_call_ctx(#mock_call_report{args = CallArgs}, #test_ctx{
     },
     session_id = SessionId,
     workflow_execution_id = AtmWorkflowExecutionId,
+    lanes_count = AtmLanesCount,
     current_lane_index = CurrentAtmLaneIndex,
     current_run_num = CurrentRunNum,
     workflow_execution_exp_state = ExpState
@@ -518,6 +521,7 @@ build_mock_call_ctx(#mock_call_report{args = CallArgs}, #test_ctx{
         session_id = SessionId,
         workflow_execution_id = AtmWorkflowExecutionId,
         workflow_execution_exp_state = ExpState,
+        lanes_count = AtmLanesCount,
         current_lane_index = CurrentAtmLaneIndex,
         current_run_num = CurrentRunNum,
         call_args = CallArgs
@@ -652,8 +656,12 @@ get_exp_state_diff(
         ExpState1 = atm_workflow_execution_exp_state_builder:expect_task_finished(
             AtmTaskExecutionId, ExpState0
         ),
-        ExpState2 = atm_workflow_execution_exp_state_builder:expect_task_parallel_box_finished_if_other_tasks_finished(
-            AtmTaskExecutionId, ExpState1
+        InferStatusFun = fun
+            (<<"active">>, [<<"finished">>]) -> <<"finished">>;
+            (CurrentStatus, _) -> CurrentStatus
+        end,
+        ExpState2 = atm_workflow_execution_exp_state_builder:expect_task_parallel_box_transit_to_inferred_status(
+            AtmTaskExecutionId, InferStatusFun, ExpState1
         ),
         {true, ExpState2}
     end;
@@ -670,10 +678,21 @@ get_exp_state_diff(
 ) ->
     fun(#atm_mock_call_ctx{
         workflow_execution_exp_state = ExpState0,
-        call_args = [AtmLaneRunSelector, _AtmWorkflowExecutionId, _AtmWorkflowExecutionCtx]
+        call_args = [AtmLaneRunSelector, _AtmWorkflowExecutionId, _AtmWorkflowExecutionCtx],
+        lanes_count = AtmLanesCount,
+        current_lane_index = CurrentAtmLaneIndex,
+        current_run_num = CurrentAtmRunNum
     }) ->
+        ExpState1 = case CurrentAtmLaneIndex < AtmLanesCount of
+            true ->
+                atm_workflow_execution_exp_state_builder:expect_lane_run_num_set(
+                    {CurrentAtmLaneIndex + 1, CurrentAtmRunNum}, CurrentAtmRunNum, ExpState0
+                );
+            false ->
+                ExpState0
+        end,
         {true, atm_workflow_execution_exp_state_builder:expect_lane_run_finished(
-            AtmLaneRunSelector, ExpState0
+            AtmLaneRunSelector, ExpState1
         )}
     end;
 

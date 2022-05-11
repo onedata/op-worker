@@ -48,7 +48,8 @@
 -define(ECHO_LAMBDA_ID, <<"echo">>).
 -define(ECHO_LAMBDA_REVISION_NUM, 1).
 
--define(ECHO_TASK_DRAFT(__TARGET_STORE_SCHEMA_ID, __TARGET_STORE_UPDATE_OPTIONS), #atm_task_schema_draft{
+-define(ECHO_TASK_DRAFT(__ID, __TARGET_STORE_SCHEMA_ID, __TARGET_STORE_UPDATE_OPTIONS), #atm_task_schema_draft{
+    id = __ID,
     lambda_id = ?ECHO_LAMBDA_ID,
     lambda_revision_number = ?ECHO_LAMBDA_REVISION_NUM,
     argument_mappings = [#atm_task_schema_argument_mapper{
@@ -64,6 +65,9 @@
         store_content_update_options = __TARGET_STORE_UPDATE_OPTIONS
     }]
 }).
+-define(ECHO_TASK_DRAFT(__TARGET_STORE_SCHEMA_ID, __TARGET_STORE_UPDATE_OPTIONS),
+    ?ECHO_TASK_DRAFT(?ATM_AUTOGENERATE, __TARGET_STORE_SCHEMA_ID, __TARGET_STORE_UPDATE_OPTIONS)
+).
 
 
 -endif.
