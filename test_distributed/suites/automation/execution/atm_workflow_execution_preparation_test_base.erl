@@ -41,30 +41,21 @@
     name = <<"echo">>,
     revision_num = 1,
     revision = #atm_workflow_schema_revision_draft{
-        stores = [#atm_store_schema_draft{
-            id = <<"st1">>,
-            type = list,
-            config = #atm_list_store_config{item_data_spec = #atm_data_spec{
-                type = atm_string_type
-            }},
-            requires_initial_content = false,
-            default_initial_content = [<<"A">>, <<"B">>, <<"C">>]
-        }],
+        stores = [
+            ?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"st_src">>, [3, 9, 27]),
+            ?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"st_dst">>)
+        ],
         lanes = [#atm_lane_schema_draft{
-            parallel_boxes = [#atm_parallel_box_schema_draft{
-                tasks = [?ECHO_TASK_DRAFT(
-                    ?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID,
-                    #atm_audit_log_store_content_update_options{function = append}
-                )]
-            }],
-            store_iterator_spec = #atm_store_iterator_spec_draft{
-                store_schema_id = <<"st1">>
-            },
-            % Failure during lane run preparation should not cause lane run retry
+            parallel_boxes = [#atm_parallel_box_schema_draft{tasks = [
+                ?ECHO_TASK_DRAFT(<<"st_dst">>, #atm_list_store_content_update_options{function = append})
+            ]}],
+            store_iterator_spec = #atm_store_iterator_spec_draft{store_schema_id = <<"st_src">>},
             max_retries = ?RAND_INT(3, 6)
         }]
     },
-    supplementary_lambdas = #{<<"echo">> => #{1 => ?ECHO_LAMBDA_DRAFT}}
+    supplementary_lambdas = #{?ECHO_LAMBDA_ID => #{
+        ?ECHO_LAMBDA_REVISION_NUM => ?INTEGER_ECHO_LAMBDA_DRAFT
+    }}
 }).
 
 
@@ -72,41 +63,30 @@
     name = <<"echo">>,
     revision_num = 1,
     revision = #atm_workflow_schema_revision_draft{
-        stores = [#atm_store_schema_draft{
-            id = <<"st1">>,
-            type = list,
-            config = #atm_list_store_config{item_data_spec = #atm_data_spec{
-                type = atm_string_type
-            }},
-            requires_initial_content = false,
-            default_initial_content = [<<"A">>, <<"B">>, <<"C">>]
-        }],
+        stores = [
+            ?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"st_src">>, [5, 25, 125]),
+            ?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"st_dst">>)
+        ],
         lanes = [
             #atm_lane_schema_draft{
-                parallel_boxes = [#atm_parallel_box_schema_draft{
-                    tasks = [?ECHO_TASK_DRAFT(
-                        ?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID,
-                        #atm_audit_log_store_content_update_options{function = append}
-                    )]
-                }],
-                store_iterator_spec = #atm_store_iterator_spec_draft{
-                    store_schema_id = <<"st1">>
-                }
+                parallel_boxes = [#atm_parallel_box_schema_draft{tasks = [
+                    ?ECHO_TASK_DRAFT(<<"st_dst">>, #atm_list_store_content_update_options{function = append})
+                ]}],
+                store_iterator_spec = #atm_store_iterator_spec_draft{store_schema_id = <<"st_src">>},
+                max_retries = ?RAND_INT(3, 6)
             },
             #atm_lane_schema_draft{
-                parallel_boxes = [#atm_parallel_box_schema_draft{
-                    tasks = [?ECHO_TASK_DRAFT(
-                        ?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID,
-                        #atm_audit_log_store_content_update_options{function = append}
-                    )]
-                }],
-                store_iterator_spec = #atm_store_iterator_spec_draft{
-                    store_schema_id = <<"st1">>
-                }
+                parallel_boxes = [#atm_parallel_box_schema_draft{tasks = [
+                    ?ECHO_TASK_DRAFT(<<"st_dst">>, #atm_list_store_content_update_options{function = append})
+                ]}],
+                store_iterator_spec = #atm_store_iterator_spec_draft{store_schema_id = <<"st_src">>},
+                max_retries = ?RAND_INT(3, 6)
             }
         ]
     },
-    supplementary_lambdas = #{<<"echo">> => #{1 => ?ECHO_LAMBDA_DRAFT}}
+    supplementary_lambdas = #{?ECHO_LAMBDA_ID => #{
+        ?ECHO_LAMBDA_REVISION_NUM => ?INTEGER_ECHO_LAMBDA_DRAFT
+    }}
 }).
 
 

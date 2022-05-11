@@ -17,55 +17,37 @@
 -include("modules/automation/atm_execution.hrl").
 
 -export([
+    cancel_scheduled_atm_workflow_execution_test/0,
     cancel_enqueued_atm_workflow_execution_test/0,
-    cancel_active_atm_workflow_execution_after_test/0,
-    cancel_atm_workflow_execution_after_lane_run_has_ended_test/0,
-    cancel_finished_atm_workflow_execution_after_test/0
+    cancel_active_atm_workflow_execution_test/0,
+    cancel_finishing_atm_workflow_execution_test/0,
+    cancel_finished_atm_workflow_execution_test/0
 ]).
 
 
--define(ECHO_SCHEMA_DRAFT(__ITEMS_COUNT), #atm_workflow_schema_dump_draft{
+-define(ECHO_ATM_WORKFLOW_SCHEMA_DRAFT(__ITEMS_COUNT), #atm_workflow_schema_dump_draft{
     name = <<"echo">>,
     revision_num = 1,
     revision = #atm_workflow_schema_revision_draft{
         stores = [
-            #atm_store_schema_draft{
-                id = <<"st1">>,
-                name = <<"st1">>,
-                type = list,
-                config = #atm_list_store_config{item_data_spec = #atm_data_spec{
-                    type = atm_integer_type
-                }},
-                requires_initial_content = false,
-                default_initial_content = lists:seq(1, __ITEMS_COUNT)
-            },
-            #atm_store_schema_draft{
-                id = <<"st2">>,
-                name = <<"st2">>,
-                type = list,
-                config = #atm_list_store_config{item_data_spec = #atm_data_spec{
-                    type = atm_integer_type
-                }},
-                requires_initial_content = false
-            }
+            ?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"st_src">>, lists:seq(1, __ITEMS_COUNT)),
+            ?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"st_dst">>)
         ],
         lanes = [#atm_lane_schema_draft{
-            parallel_boxes = [#atm_parallel_box_schema_draft{
-                tasks = [?ECHO_TASK_DRAFT(
-                    <<"st2">>,
-                    #atm_list_store_content_update_options{function = append}
-                )]
-            }],
-            store_iterator_spec = #atm_store_iterator_spec_draft{
-                store_schema_id = <<"st1">>
-            },
-            % Assert that cancelled executions are not retried automatically
+            parallel_boxes = [#atm_parallel_box_schema_draft{tasks = [
+                ?ECHO_TASK_DRAFT(<<"st_dst">>, #atm_list_store_content_update_options{function = append})
+            ]}],
+            store_iterator_spec = #atm_store_iterator_spec_draft{store_schema_id = <<"st_src">>},
+
+            % Check that cancelled executions are not retried automatically
             max_retries = ?RAND_INT(3, 6)
         }]
     },
-    supplementary_lambdas = #{<<"echo">> => #{1 => ?ECHO_LAMBDA_DRAFT}}
+    supplementary_lambdas = #{?ECHO_LAMBDA_ID => #{
+        ?ECHO_LAMBDA_REVISION_NUM => ?INTEGER_ECHO_LAMBDA_DRAFT
+    }}
 }).
--define(ECHO_SCHEMA_DRAFT, ?ECHO_SCHEMA_DRAFT(5)).
+-define(ECHO_ATM_WORKFLOW_SCHEMA_DRAFT, ?ECHO_ATM_WORKFLOW_SCHEMA_DRAFT(5)).
 
 
 %%%===================================================================
@@ -73,12 +55,48 @@
 %%%===================================================================
 
 
+cancel_scheduled_atm_workflow_execution_test() ->
+    atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
+        provider = ?PROVIDER_SELECTOR,
+        user = ?USER_SELECTOR,
+        space = ?SPACE_SELECTOR,
+        workflow_schema_dump_or_draft = ?ECHO_ATM_WORKFLOW_SCHEMA_DRAFT,
+        workflow_schema_revision_num = 1,
+        incarnations = [#atm_workflow_execution_incarnation_test_spec{
+            incarnation_num = 1,
+            lane_runs = [#atm_lane_run_execution_test_spec{
+                selector = {1, 1},
+                prepare_lane = #atm_step_mock_spec{
+                    before_step_hook = fun(AtmMockCallCtx) ->
+                        atm_workflow_execution_test_runner:cancel_workflow_execution(AtmMockCallCtx)
+                    end,
+                    before_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                        ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_aborting({1, 1}, ExpState0),
+                        {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_aborting(ExpState1)}
+                    end,
+                    after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState}) ->
+                        {true, atm_workflow_execution_exp_state_builder:expect_lane_run_cancelled({1, 1}, ExpState)}
+                    end
+                },
+                handle_lane_execution_ended = #atm_step_mock_spec{
+                    after_step_exp_state_diff = no_diff
+                }
+            }],
+            handle_workflow_execution_ended = #atm_step_mock_spec{
+                after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_cancelled(ExpState0)}
+                end
+            }
+        }]
+    }).
+
+
 cancel_enqueued_atm_workflow_execution_test() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         provider = ?PROVIDER_SELECTOR,
         user = ?USER_SELECTOR,
         space = ?SPACE_SELECTOR,
-        workflow_schema_dump_or_draft = ?ECHO_SCHEMA_DRAFT,
+        workflow_schema_dump_or_draft = ?ECHO_ATM_WORKFLOW_SCHEMA_DRAFT,
         workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,
@@ -121,14 +139,14 @@ cancel_enqueued_atm_workflow_execution_test() ->
     }).
 
 
-cancel_active_atm_workflow_execution_after_test() ->
+cancel_active_atm_workflow_execution_test() ->
     ItemsCount = 100,
 
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         provider = ?PROVIDER_SELECTOR,
         user = ?USER_SELECTOR,
         space = ?SPACE_SELECTOR,
-        workflow_schema_dump_or_draft = ?ECHO_SCHEMA_DRAFT(ItemsCount),
+        workflow_schema_dump_or_draft = ?ECHO_ATM_WORKFLOW_SCHEMA_DRAFT(ItemsCount),
         workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,
@@ -155,12 +173,12 @@ cancel_active_atm_workflow_execution_after_test() ->
                         % but the ones already scheduled should be finished
                         ?assert(ExpTaskStats < {0, 0, ItemsCount}),
 
-                        % assert all processed items were mapped to st2
+                        % assert all processed items were mapped to st_dst
                         ExpItemsProcessed = element(3, ExpTaskStats),
-                        #{<<"items">> := St2Items} = atm_workflow_execution_test_runner:browse_store(
-                            <<"st2">>, AtmMockCallCtx
+                        #{<<"items">> := StDstItems} = atm_workflow_execution_test_runner:browse_store(
+                            <<"st_dst">>, AtmMockCallCtx
                         ),
-                        ?assert(ExpItemsProcessed == length(St2Items)),
+                        ?assertEqual(ExpItemsProcessed, length(StDstItems)),
 
                         {true, ExpState}
                     end
@@ -180,12 +198,12 @@ cancel_active_atm_workflow_execution_after_test() ->
     }).
 
 
-cancel_atm_workflow_execution_after_lane_run_has_ended_test() ->
+cancel_finishing_atm_workflow_execution_test() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         provider = ?PROVIDER_SELECTOR,
         user = ?USER_SELECTOR,
         space = ?SPACE_SELECTOR,
-        workflow_schema_dump_or_draft = ?ECHO_SCHEMA_DRAFT,
+        workflow_schema_dump_or_draft = ?ECHO_ATM_WORKFLOW_SCHEMA_DRAFT,
         workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,
@@ -207,12 +225,12 @@ cancel_atm_workflow_execution_after_lane_run_has_ended_test() ->
     }).
 
 
-cancel_finished_atm_workflow_execution_after_test() ->
+cancel_finished_atm_workflow_execution_test() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         provider = ?PROVIDER_SELECTOR,
         user = ?USER_SELECTOR,
         space = ?SPACE_SELECTOR,
-        workflow_schema_dump_or_draft = ?ECHO_SCHEMA_DRAFT,
+        workflow_schema_dump_or_draft = ?ECHO_ATM_WORKFLOW_SCHEMA_DRAFT,
         workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,
