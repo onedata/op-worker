@@ -230,7 +230,7 @@ cancel_workflow_execution(#atm_mock_call_ctx{
     session_id = SessionId,
     workflow_execution_id = AtmWorkflowExecutionId
 }) ->
-    ?rpc(ProviderSelector, mi_atm:cancel_workflow_execution(SessionId, AtmWorkflowExecutionId)).
+    ?erpc(ProviderSelector, mi_atm:cancel_workflow_execution(SessionId, AtmWorkflowExecutionId)).
 
 
 %%%===================================================================

@@ -912,6 +912,15 @@ setup_preexisting_fulfilled_qos_causing_file_transfer(Config, SpaceId, FileCreat
     % wait for qos entries to be dbsynced to other provider and file content to be transferred
     ?assertMatch({ok, _}, opt_qos:get_qos_entry(TransferringProvider, SessIdP2, QosEntryId), ?ATTEMPTS),
     ?assertEqual({ok, ?FULFILLED_QOS_STATUS}, opt_qos:check_qos_status(FileCreatingProvider, SessIdP1, QosEntryId), ?ATTEMPTS),
+    % wait for ?BYTES_STATS to be flushed - they are reported asynchronously by replica synchronizer and
+    % may appear some time after QoS fulfillment
+    ?assertMatch(
+        {ok, #{?QOS_TOTAL_TIME_SERIES_NAME := #{?QOS_MINUTE_METRIC_NAME := [{_, _}]}}},
+        opw_test_rpc:call(TransferringProvider, qos_transfer_stats, get_slice, [
+            QosEntryId, ?BYTES_STATS, #{?QOS_TOTAL_TIME_SERIES_NAME => [?QOS_MINUTE_METRIC_NAME]}, #{}
+        ]),
+        ?ATTEMPTS
+    ),
     QosEntryId.
 
 

@@ -664,17 +664,15 @@ recall_details_test_base(Spec, TotalFileCount, TotalByteSize) ->
         <<"filesFailed">> := #{
             <<"total">> := []
         }
-        %% @TODO VFS-8839 - use op_archives after implementing histogram API
+        %% @TODO VFS-9307 - use op_archives after implementing histogram API
     }}, opw_test_rpc:call(krakow, archive_recall, get_stats, [
         file_id:guid_to_uuid(RecallRootFileGuid), Layout, #{}
     ]), ?ATTEMPTS),
     
-    %% @TODO VFS-8839 - check progress until gui starts to support histograms and error log browsing
     ?assertMatch({ok, #{
         <<"bytesCopied">>  := TotalByteSize,
         <<"filesCopied">> := TotalFileCount,
-        <<"filesFailed">> := 0,
-        <<"lastError">> := undefined
+        <<"filesFailed">> := 0
     }}, opt_archives:get_recall_progress(krakow, SessId(krakow), RecallRootFileGuid), ?ATTEMPTS),
     ?assertEqual(?ERROR_NOT_FOUND, opt_archives:get_recall_progress(paris, SessId(paris), RecallRootFileGuid)),
     
@@ -736,9 +734,13 @@ recall_error_test_base(Spec, FunName) ->
         ?assertMatch({ok, #{
             <<"bytesCopied">>  := 0,
             <<"filesCopied">> := 0,
-            <<"filesFailed">> := 1,
-            <<"lastError">> := #{<<"reason">> := ExpectedReason}
-        }}, opt_archives:get_recall_progress(krakow, SessId(krakow), RecallRootFileGuid), ?ATTEMPTS)
+            <<"filesFailed">> := 1
+        }}, opt_archives:get_recall_progress(krakow, SessId(krakow), RecallRootFileGuid), ?ATTEMPTS),
+        ?assertMatch({ok, #{
+            <<"logEntries">> := [
+                #{<<"content">> := #{<<"reason">> := ExpectedReason}}
+            ]
+        }}, opt_archives:browse_recall_log(krakow, SessId(krakow), RecallRootFileGuid, #{}), ?ATTEMPTS)
     end, Errors).
 
 

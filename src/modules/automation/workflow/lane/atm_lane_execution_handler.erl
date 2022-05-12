@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module handles the lane execution process (for information about
-%%% state machine consult 'atm_lane_execution_status.erl').
+%%% state machine @see 'atm_lane_execution_status.erl').
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_lane_execution_handler).

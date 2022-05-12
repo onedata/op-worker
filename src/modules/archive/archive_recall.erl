@@ -26,8 +26,8 @@
 %% API
 -export([create_docs/2, delete_synced_docs/1, delete_local_docs/1]).
 -export([report_started/1, report_finished/2,
-    report_bytes_copied/2, report_file_finished/1, report_file_failed/3]).
--export([get_details/1, get_stats/3, get_progress/1]).
+    report_bytes_copied/2, report_file_finished/1, report_file_failed/4]).
+-export([get_details/1, get_stats/3, get_progress/1, browse_log/2]).
 -export([get_effective_recall/1]).
 
 -type id() :: file_meta:uuid().
@@ -91,11 +91,13 @@ report_file_finished(Id) ->
     archive_recall_progress:report_file_finished(Id).
 
 
--spec report_file_failed(id(), file_id:file_guid(), {error, term()}) -> ok | {error, term()}.
-report_file_failed(Id, FileGuid, Error) ->
+-spec report_file_failed(id(), file_id:file_guid(), file_meta:path(), {error, term()}) -> 
+    ok | {error, term()}.
+report_file_failed(Id, FileGuid, RelativePath, Error) ->
     {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
     ErrorJson = #{
         <<"fileId">> => ObjectId,
+        <<"relativePath">> => RelativePath,
         <<"reason">> => errors:to_json(Error)
     },
     % save error in synchronized model (so remote providers have knowledge about failure).
@@ -107,6 +109,12 @@ report_file_failed(Id, FileGuid, Error) ->
 -spec get_details(id()) -> {ok, record()} | {error, term()}.
 get_details(Id) ->
     archive_recall_details:get(Id).
+
+
+-spec browse_log(id(), json_infinite_log_model:listing_opts()) -> 
+    {ok, json_infinite_log_model:browse_result()} | {error, term()}.
+browse_log(Id, Options) ->
+    archive_recall_progress:browse_error_log(Id, Options).
 
 
 -spec get_stats(id(), time_series_collection:layout(), ts_windows:list_options()) ->
