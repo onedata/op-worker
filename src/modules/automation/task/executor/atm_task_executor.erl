@@ -40,8 +40,8 @@
 
 -type initiation_ctx() :: #atm_task_executor_initiation_ctx{}.
 
--type args() :: json_utils:json_map().
--type results() :: errors:error() | json_utils:json_map().
+-type job_args() :: json_utils:json_map().
+-type job_results() :: errors:error() | json_utils:json_map().
 
 %% Below types format can't be expressed directly in type spec due to dialyzer
 %% limitations in specifying individual maps keys in case of binaries.
@@ -49,16 +49,18 @@
 
 -type lambda_input() :: json_utils:json_map().
 %% #{
-%%      <<"argsBatch">> := [args()],
+%%      <<"argsBatch">> := [job_args()],
 %%      <<"ctx">> := #{<<"heartbeatUrl">> := binary()}
 %% }
 -type lambda_output() :: json_utils:json_map().
 %% #{
-%%      <<"resultsBatch">> := [results()]
+%%      <<"resultsBatch">> := [job_results()]
 %% }
 
+-type data_stream() :: {chunk, json_utils:json_map()} | errors:error().
+
 -export_type([initiation_ctx/0]).
--export_type([args/0, results/0, lambda_input/0, lambda_output/0]).
+-export_type([job_args/0, job_results/0, lambda_input/0, lambda_output/0, data_stream/0]).
 
 -export_type([model/0, record/0]).
 

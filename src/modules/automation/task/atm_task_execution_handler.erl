@@ -53,7 +53,7 @@
 
     run_job_batch/5,
     process_job_batch_output/4,
-    process_supplementary_results/3,
+    process_task_data_stream/3,
 
     handle_ended/1
 ]).
@@ -196,19 +196,13 @@ process_job_batch_output(AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemBatch,
     end.
 
 
--spec process_supplementary_results(
+-spec process_task_data_stream(
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id(),
-    json_utils:json_map() | errors:error()
+    atm_task_executor:data_stream()
 ) ->
     ok | error.
-process_supplementary_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Error = {error, _}) ->
-    handle_supplementary_results_processing_error(
-        AtmWorkflowExecutionCtx, AtmTaskExecutionId, Error
-    ),
-    error;
-
-process_supplementary_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Results) ->
+process_task_data_stream(AtmWorkflowExecutionCtx, AtmTaskExecutionId, {chunk, SupplementaryResults}) ->
     {ok, #document{value = AtmTaskExecution}} = atm_task_execution:get(AtmTaskExecutionId),
 
     try
@@ -216,7 +210,7 @@ process_supplementary_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Resul
             AtmWorkflowExecutionCtx,
             supplementary,
             AtmTaskExecution#atm_task_execution.supplementary_result_specs,
-            Results
+            SupplementaryResults
         )
     catch Type:Reason:Stacktrace ->
         handle_supplementary_results_processing_error(
@@ -225,7 +219,13 @@ process_supplementary_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Resul
             ?atm_examine_error(Type, Reason, Stacktrace)
         ),
         error
-    end.
+    end;
+
+process_task_data_stream(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Error = {error, _}) ->
+    handle_supplementary_results_processing_error(
+        AtmWorkflowExecutionCtx, AtmTaskExecutionId, Error
+    ),
+    error.
 
 
 -spec handle_ended(atm_task_execution:id()) -> ok.
@@ -350,7 +350,7 @@ build_lambda_input(AtmRunJobBatchCtx, ItemBatch, #atm_task_execution{
     [automation:item()],
     errors:error() | atm_task_executor:lambda_output()
 ) ->
-    {ok, [{automation:item(), atm_task_executor:results()}]} | errors:error().
+    {ok, [{automation:item(), atm_task_executor:job_results()}]} | errors:error().
 resolve_each_job_results(_ItemBatch, Error = {error, _}) ->
     % Entire batch processing failed (e.g. timeout or malformed lambda response)
     Error;
@@ -407,7 +407,7 @@ handle_job_batch_processing_error(
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id(),
     automation:item(),
-    atm_task_executor:results()
+    atm_task_executor:job_results()
 ) ->
     ok | error | no_return().
 process_job_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, {error, _} = Error) ->

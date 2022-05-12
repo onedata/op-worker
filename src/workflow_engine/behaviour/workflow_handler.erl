@@ -133,7 +133,7 @@
 %% TODO WRITEME
 %% @end
 %%--------------------------------------------------------------------
--callback process_task_data_stream_chunk(
+-callback process_task_data_stream(
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
     workflow_engine:task_id(),

@@ -35,7 +35,7 @@
 
     run_job_batch/6,
     process_job_batch_output/5,
-    process_task_data_stream_chunk/4,
+    process_task_data_stream/4,
     trigger_task_data_stream_termination/3,
     handle_task_execution_ended/3,
 
@@ -237,14 +237,14 @@ process_job_batch_output(
     ).
 
 
--spec process_task_data_stream_chunk(
+-spec process_task_data_stream(
     atm_workflow_execution:id(),
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id(),
-    json_utils:json_map() | errors:error()
+    atm_task_executor:data_stream()
 ) ->
     ok | error.
-process_task_data_stream_chunk(
+process_task_data_stream(
     _AtmWorkflowExecutionId,
     AtmWorkflowExecutionEnv,
     AtmTaskExecutionId,
@@ -254,7 +254,7 @@ process_task_data_stream_chunk(
         AtmTaskExecutionId, AtmWorkflowExecutionEnv
     ),
     % NOTE: no try..catch needed as exceptions are caught in 'atm_task_execution_handler'
-    atm_task_execution_handler:process_supplementary_results(
+    atm_task_execution_handler:process_task_data_stream(
         AtmWorkflowExecutionCtx, AtmTaskExecutionId, Results
     ).
 
