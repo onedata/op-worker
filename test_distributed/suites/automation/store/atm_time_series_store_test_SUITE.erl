@@ -547,14 +547,10 @@ get_slice(AtmWorkflowExecutionAuth, AtmStoreId, Layout, StartTimestamp, WindowLi
         }
     },
 
-    #atm_time_series_store_content_browse_result{
-        result = #time_series_slice_result{
-            slice = Slice
-        }
-    } = ?rpc(atm_store_api:browse_content(
+    BrowseResult = ?rpc(atm_store_api:browse_content(
         AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId
     )),
-
+    #{<<"slice">> := Slice} = atm_time_series_store_content_browse_result:to_json(BrowseResult),
     Slice.
 
 

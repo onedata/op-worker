@@ -224,6 +224,7 @@ translate_distribution(FileGuid, PossiblyIncompleteDistribution) ->
             <<"chunksBarData">> => Data,
             <<"blocksPercentage">> => case FileSize of
                 0 -> 0;
+                undefined -> 0;
                 _ -> TotalBlocksSize * 100.0 / FileSize
             end
         }}

@@ -43,4 +43,5 @@ to_json(#atm_time_series_store_content_browse_result{
 to_json(#atm_time_series_store_content_browse_result{
     result = #time_series_slice_result{} = Result
 }) ->
-    #{<<"slice">> => ts_browse_result:to_json(Result)}.
+    #{<<"windows">> := Slice} = ts_browse_result:to_json(Result),
+    #{<<"slice">> => Slice}.
