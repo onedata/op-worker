@@ -144,8 +144,8 @@ get_last_listed_filename(#pagination_token{last_index = #list_index{file_name = 
 
 -spec infer_pagination_token([any()], file_meta:name() | undefined, limit()) -> 
     pagination_token().
-infer_pagination_token(Result, _LastName, Limit) when length(Result) < Limit ->
-    #pagination_token{progress_marker = done};
+infer_pagination_token(Result, LastName, Limit) when length(Result) < Limit ->
+    #pagination_token{progress_marker = done, last_index = build_index(LastName)};
 infer_pagination_token(_Result, LastName, _Limit) ->
     #pagination_token{progress_marker = more, last_index = build_index(LastName)}.
 

@@ -178,7 +178,7 @@ rm_recursive(Worker, SessId, DirGuid, BatchSize, DeleteDir, BaseListOpts) ->
                             ok;
                         false -> 
                             NextListingOpts = #{pagination_token => ListingPaginationToken},
-                            rm_recursive(Worker, SessId, DirGuid, NextListingOpts, BatchSize, DeleteDir)
+                            rm_recursive(Worker, SessId, DirGuid, BatchSize, DeleteDir, NextListingOpts)
                     end;
                 Error ->
                     ct:print("Error during space cleanup [rm_files]: ~p", [Error]),
