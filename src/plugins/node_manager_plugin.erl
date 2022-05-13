@@ -199,6 +199,7 @@ custom_workers() -> filter_disabled_workers([
 %% @end
 %%--------------------------------------------------------------------
 on_db_and_workers_ready() ->
+    middleware:load_known_atoms(),
     fslogic_delete:cleanup_opened_files(),
     space_unsupport:init_pools(),
     gs_channel_service:on_db_and_workers_ready().

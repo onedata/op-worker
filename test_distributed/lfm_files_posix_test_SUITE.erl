@@ -121,7 +121,6 @@
 ]).
 
 
-
 -define(TEST_CASES, [
     fslogic_new_file_test,
     lfm_create_and_unlink_test,

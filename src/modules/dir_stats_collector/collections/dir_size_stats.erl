@@ -36,7 +36,7 @@
 
 -include("modules/dir_stats_collector/dir_size_stats.hrl").
 -include("modules/datastore/datastore_models.hrl").
--include_lib("cluster_worker/include/modules/datastore/ts_browser.hrl").
+-include_lib("cluster_worker/include/time_series/browsing.hrl").
 -include_lib("ctool/include/time_series/common.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -105,7 +105,7 @@ browse_time_stats_collection(Guid, BrowseRequest) ->
                 ok ->
                     Uuid = file_id:guid_to_uuid(Guid),
                     case datastore_time_series_collection:browse(?CTX, Uuid, BrowseRequest) of
-                        {ok, BrowseResult} -> {ok, map_browse_result(BrowseResult)};
+                        {ok, BrowseResult} -> {ok, internal_to_time_stats_browse_result(BrowseResult)};
                         {error, not_found} -> {ok, gen_empty_time_stats_browse_result(BrowseRequest, Guid)};
                         {error, _} = Error2 -> Error2
                     end;
@@ -355,10 +355,10 @@ internal_stats_to_incarnation(#{?INCARNATION_TIME_SERIES := #{?CURRENT_METRIC :=
 
 
 %% @private
--spec map_browse_result(ts_browse_result:record()) -> ts_browse_result:record().
-map_browse_result(#time_series_layout_result{layout = InternalLayout}) ->
+-spec internal_to_time_stats_browse_result(ts_browse_result:record()) -> ts_browse_result:record().
+internal_to_time_stats_browse_result(#time_series_layout_result{layout = InternalLayout}) ->
     #time_series_layout_result{layout = internal_layout_to_time_stats_layout(InternalLayout)};
-map_browse_result(#time_series_slice_result{slice = InternalStats}) ->
+internal_to_time_stats_browse_result(#time_series_slice_result{slice = InternalStats}) ->
     #time_series_slice_result{slice = internal_stats_to_time_stats(InternalStats)}.
 
 

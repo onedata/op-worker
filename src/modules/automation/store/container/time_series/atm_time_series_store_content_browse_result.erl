@@ -16,7 +16,7 @@
 -behaviour(atm_store_content_browse_result).
 
 -include("modules/automation/atm_execution.hrl").
--include_lib("cluster_worker/include/modules/datastore/ts_browser.hrl").
+-include_lib("cluster_worker/include/time_series/browsing.hrl").
 
 %% API
 -export([to_json/1]).
@@ -36,11 +36,11 @@
 
 -spec to_json(record()) -> json_utils:json_term().
 to_json(#atm_time_series_store_content_browse_result{
-    result = Result
+    result = #time_series_layout_result{} = Result
 }) ->
     #{<<"layout">> => ts_browse_result:to_json(Result)};
 
 to_json(#atm_time_series_store_content_browse_result{
-    result = Result
+    result = #time_series_slice_result{} = Result
 }) ->
     #{<<"slice">> => ts_browse_result:to_json(Result)}.

@@ -21,7 +21,7 @@
 -behaviour(persistent_record).
 
 -include("modules/automation/atm_execution.hrl").
--include_lib("cluster_worker/include/modules/datastore/ts_browser.hrl").
+-include_lib("cluster_worker/include/time_series/browsing.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% atm_store_container callbacks
@@ -129,11 +129,11 @@ acquire_iterator(#atm_time_series_store_container{}) ->
     atm_time_series_store_content_browse_result:record() | no_return().
 browse_content(Record, #atm_store_content_browse_req{
     options = #atm_time_series_store_content_browse_options{
-        request = #time_series_get_layout_request{}
+        request = #time_series_get_layout_request{} = BrowseRequest
     }
 }) ->
     {ok, LayoutResult} = datastore_time_series_collection:browse(
-        ?CTX, Record#atm_time_series_store_container.backend_id, #time_series_get_layout_request{}
+        ?CTX, Record#atm_time_series_store_container.backend_id, BrowseRequest
     ),
     #atm_time_series_store_content_browse_result{
         result = LayoutResult
@@ -141,21 +141,13 @@ browse_content(Record, #atm_store_content_browse_req{
 
 browse_content(Record, #atm_store_content_browse_req{
     options = #atm_time_series_store_content_browse_options{
-        request = #time_series_get_slice_request{
-            layout = SliceLayout,
-            start_timestamp = StartTimestamp,
-            window_limit = WindowLimit
-        }
+        request = #time_series_get_slice_request{} = BrowseRequest
     }
 }) ->
     case datastore_time_series_collection:browse(
         ?CTX,
         Record#atm_time_series_store_container.backend_id,
-        #time_series_get_slice_request{
-            layout = SliceLayout,
-            start_timestamp = StartTimestamp,
-            window_limit = WindowLimit
-        }
+        BrowseRequest
     ) of
         {ok, SliceResult} ->
             #atm_time_series_store_content_browse_result{result = SliceResult};
