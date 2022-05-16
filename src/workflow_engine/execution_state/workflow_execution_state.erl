@@ -315,7 +315,7 @@ report_execution_status_update(ExecutionId, JobIdentifier, UpdateType, Ans) ->
             ?WF_ERROR_JOB_NOT_FOUND; % Error occurred - no task can be connected to result
         _ ->
             maybe_report_item_error(UpdatedDoc, ItemIdToReportError, ItemToReportError),
-            % TODO VFS-8456 - maybe execute notification handlers handlers also on pool?
+            % TODO VFS-8456 - maybe execute notification handlers also on pool?
             maybe_notify_task_execution_ended(UpdatedDoc, JobIdentifier, TaskStatus),
 
             #document{value = #workflow_execution_state{

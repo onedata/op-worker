@@ -144,8 +144,8 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Callback reporting that all jobs for task were executed and their
-%% outputs processed. It is executed only case if task has data stream.
+%% Callback called after all jobs for task were executed and their
+%% outputs processed. It is executed only when task has data stream.
 %% @end
 %%--------------------------------------------------------------------
 -callback trigger_task_data_stream_termination(
