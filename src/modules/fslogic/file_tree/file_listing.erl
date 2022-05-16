@@ -39,6 +39,7 @@
 -export([list/2]).
 -export([build_index/1, build_index/2]).
 -export([encode_pagination_token/1, decode_pagination_token/1]). 
+-export([encode_index/1, decode_index/1]).
 -export([is_finished/1, get_last_listed_filename/1]).
 -export([infer_pagination_token/3]).
 
@@ -131,6 +132,23 @@ decode_pagination_token(Token) ->
             throw(?EINVAL)
     catch _:_ ->
         throw(?EINVAL)
+    end.
+
+
+-spec encode_index(index()) -> binary().
+encode_index(#list_index{} = Index) ->
+    mochiweb_base64url:encode(term_to_binary(Index)).
+
+
+-spec decode_index(binary()) -> index().
+decode_index(EncodedIndex) ->
+    try binary_to_term(mochiweb_base64url:decode(EncodedIndex)) of
+        #list_index{} = Index ->
+            Index;
+        _ ->
+            throw(?EINVAL)
+    catch _:_ ->
+        #list_index{file_name = EncodedIndex}
     end.
 
 
