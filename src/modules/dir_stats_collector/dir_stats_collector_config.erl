@@ -190,7 +190,7 @@ clean(SpaceId) ->
 %%% API - collecting status changes
 %%%===================================================================
 
--spec enable(od_space:id()) -> ok.
+-spec enable(od_space:id()) -> ok | ?ERROR_INTERNAL_SERVER_ERROR.
 enable(SpaceId) ->
     NewRecord = #dir_stats_collector_config{
         collecting_status = collections_initialization,
@@ -223,7 +223,7 @@ enable(SpaceId) ->
             incarnation = Incarnation,
             pending_status_transition = PendingTransition
         }}} when PendingTransition =/= canceled ->
-            dir_stats_collections_initialization_traverse:run(SpaceId, Incarnation);
+            run_initialization_traverse(SpaceId, Incarnation);
         {ok, _} ->
             ok;
         {error, no_action_needed} ->
@@ -337,7 +337,8 @@ report_collectors_stopped(SpaceId) ->
             collecting_status = collections_initialization,
             incarnation = Incarnation
         }}} ->
-            dir_stats_collections_initialization_traverse:run(SpaceId, Incarnation);
+            run_initialization_traverse(SpaceId, Incarnation),
+            ok;
         % Log errors on debug as they can appear at node restart
         {error, {wrong_status, WrongStatus}} ->
             ?debug("Reporting space ~p disabling finished when space has status ~p", [SpaceId, WrongStatus]);
@@ -421,4 +422,35 @@ update_timestamps(NewStatus, Timestamps) ->
     case length(NewTimestamps) > ?MAX_HISTORY_SIZE of
         true -> lists:sublist(NewTimestamps, ?MAX_HISTORY_SIZE);
         false -> NewTimestamps
+    end.
+
+
+-spec run_initialization_traverse(file_id:space_id(), non_neg_integer()) -> ok | ?ERROR_INTERNAL_SERVER_ERROR.
+run_initialization_traverse(SpaceId, Incarnation) ->
+    case dir_stats_collections_initialization_traverse:run(SpaceId, Incarnation) of
+        ok ->
+            ok;
+        ?ERROR_INTERNAL_SERVER_ERROR ->
+            Diff = fun
+                (#dir_stats_collector_config{collecting_status = collections_initialization} = Config) ->
+                    {ok, Config#dir_stats_collector_config{
+                        collecting_status = disabled,
+                        pending_status_transition = undefined
+                    }};
+                (#dir_stats_collector_config{collecting_status = Status}) ->
+                    {error, {wrong_status, Status}}
+            end,
+
+            case update(SpaceId, Diff) of
+                {ok, #document{value = #dir_stats_collector_config{collecting_status = disabled}}} ->
+                    ok;
+                {error, {wrong_status, WrongStatus}} ->
+                    ?warning("Reporting space ~p initialization traverse failure when space has status ~p",
+                        [SpaceId, WrongStatus]);
+                ?ERROR_NOT_FOUND ->
+                    ?warning("Reporting space ~p initialization traverse failure when "
+                        "space has no collector config document", [SpaceId])
+            end,
+
+            ?ERROR_INTERNAL_SERVER_ERROR
     end.

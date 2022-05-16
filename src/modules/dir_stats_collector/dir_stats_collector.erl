@@ -305,7 +305,6 @@ stop_collecting(SpaceId) ->
                     [?FUNCTION_NAME, ErrorAns, BadNodes])
         end,
 
-        % TODO VFS-9204 - handle node restart during stop and integrate with HA
         dir_stats_collector_config:report_collectors_stopped(SpaceId)
     end),
     ok.
