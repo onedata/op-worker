@@ -496,7 +496,7 @@ finish_lane_preparation(ExecutionId, Handler,
                     current_lane = CurrentLane,
                     next_lane = #next_lane{id = NextLaneId}
                 } = UpdatedState}} when NextIterationStep =:= undefined ->
-                    call_handle_task_execution_ended_for_all_tasks(ExecutionId, UpdatedState),
+                    call_callbacks_for_empty_lane(ExecutionId, UpdatedState),
                     {ok, CurrentLane, Iterator, NextLaneId};
                 {ok, #document{value = #workflow_execution_state{
                     current_lane = CurrentLane,
@@ -509,8 +509,8 @@ finish_lane_preparation(ExecutionId, Handler,
             end
     end.
 
--spec call_handle_task_execution_ended_for_all_tasks(workflow_engine:execution_id(), state()) -> ok.
-call_handle_task_execution_ended_for_all_tasks(ExecutionId, State = #workflow_execution_state{
+-spec call_callbacks_for_empty_lane(workflow_engine:execution_id(), state()) -> ok.
+call_callbacks_for_empty_lane(ExecutionId, State = #workflow_execution_state{
     handler = Handler,
     current_lane = #current_lane{execution_context = Context, parallel_box_specs = BoxesMap}
 }) ->
