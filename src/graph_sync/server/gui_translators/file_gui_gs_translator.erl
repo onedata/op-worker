@@ -379,7 +379,7 @@ translate_membership(?DIRECT_AND_ANCESTOR_MEMBERSHIP) -> <<"directAndAncestor">>
 %% the output will be: [{0,33}, {4,50}, {5,0}, ...]
 %% @end
 %%--------------------------------------------------------------------
--spec interpolate_chunks(Blocks :: [[non_neg_integer()]], file_size()) ->
+-spec interpolate_chunks(Blocks :: [[non_neg_integer()]], file_size() | undefined) ->
     chunks_bar_data().
 interpolate_chunks([], _) ->
     [{0, 0}];
