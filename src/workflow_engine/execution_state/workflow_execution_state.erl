@@ -128,8 +128,9 @@
 
 -define(CALLBACKS_ON_CANCEL_SELECTOR, callbacks_on_cancel).
 -define(CALLBACKS_ON_STREAMS_CANCEL_SELECTOR, callbacks_on_stream_cancel).
+-define(CALLBACKS_ON_EMPTY_LANE_SELECTOR, callbacks_on_empty_lane).
 -type callback_selector() :: workflow_jobs:job_identifier() | workflow_cached_item:id() |
-    ?CALLBACKS_ON_CANCEL_SELECTOR | ?CALLBACKS_ON_STREAMS_CANCEL_SELECTOR.
+    ?CALLBACKS_ON_CANCEL_SELECTOR | ?CALLBACKS_ON_STREAMS_CANCEL_SELECTOR | ?CALLBACKS_ON_EMPTY_LANE_SELECTOR.
 
 -export_type([index/0, iteration_status/0, current_lane/0, next_lane/0, execution_status/0,
     next_lane_preparation_status/0, boxes_map/0, update_report/0, callback_selector/0]).
@@ -494,8 +495,8 @@ finish_lane_preparation(ExecutionId, Handler,
                 {ok, #document{value = #workflow_execution_state{
                     current_lane = CurrentLane,
                     next_lane = #next_lane{id = NextLaneId}
-                }}} when
-                    NextIterationStep =:= undefined orelse NextIterationStep =:= ?WF_ERROR_ITERATION_FAILED ->
+                } = UpdatedState}} when NextIterationStep =:= undefined ->
+                    call_handle_task_execution_ended_for_all_tasks(ExecutionId, UpdatedState),
                     {ok, CurrentLane, Iterator, NextLaneId};
                 {ok, #document{value = #workflow_execution_state{
                     current_lane = CurrentLane,
@@ -507,6 +508,32 @@ finish_lane_preparation(ExecutionId, Handler,
                     ?WF_ERROR_LANE_ALREADY_PREPARED
             end
     end.
+
+-spec call_handle_task_execution_ended_for_all_tasks(workflow_engine:execution_id(), state()) -> ok.
+call_handle_task_execution_ended_for_all_tasks(ExecutionId, State = #workflow_execution_state{
+    handler = Handler,
+    current_lane = #current_lane{execution_context = Context, parallel_box_specs = BoxesMap}
+}) ->
+    TaskIds = get_task_ids(BoxesMap),
+    TaskIdsWithStreams = get_task_ids_with_streams(State),
+    workflow_engine:trigger_task_data_stream_termination_for_all_tasks(ExecutionId, Handler, Context, TaskIdsWithStreams),
+    workflow_engine:call_handle_task_execution_ended_for_all_tasks(ExecutionId, Handler, Context,
+        TaskIds -- TaskIdsWithStreams),
+
+    {ok, _} = update(ExecutionId, fun(State) ->
+        remove_pending_callback(State, ?CALLBACKS_ON_EMPTY_LANE_SELECTOR)
+    end),
+    ok.
+
+-spec get_task_ids(boxes_map()) -> [workflow_engine:task_id()].
+get_task_ids(BoxesMap) ->
+    lists:flatten(lists:map(fun(BoxIndex) ->
+        BoxSpec = maps:get(BoxIndex, BoxesMap),
+        lists:map(fun(TaskIndex) ->
+            {TaskId, _TaskSpec} = maps:get(TaskIndex, BoxSpec),
+            TaskId
+        end, lists:seq(1, maps:size(BoxSpec)))
+    end, lists:seq(1, maps:size(BoxesMap)))).
 
 -spec prepare_next_job_for_current_lane(workflow_engine:execution_id()) ->
     {ok, workflow_engine:execution_spec()} | no_items_error() |
@@ -854,6 +881,10 @@ finish_lane_preparation_internal(
         parallel_box_specs = BoxesMap,
         failure_count_to_cancel = FailureCountToCancel
     },
+    PendingCallbacks = case PrefetchedIterationStep of
+        undefined -> [?CALLBACKS_ON_EMPTY_LANE_SELECTOR];
+        _ -> []
+    end,
 
     {ok, State#workflow_execution_state{
         execution_status = ?EXECUTING,
@@ -861,7 +892,8 @@ finish_lane_preparation_internal(
         iteration_state = workflow_iteration_state:init(),
         prefetched_iteration_step = PrefetchedIterationStep,
         jobs = workflow_jobs:init(),
-        tasks_data = workflow_tasks_data:init()
+        tasks_data = workflow_tasks_data:init(),
+        pending_callbacks = PendingCallbacks
     }};
 finish_lane_preparation_internal(_State, _BoxesMap, _LaneExecutionContext,
     _PrefetchedIterationStep, _FailureCountToCancel) ->

@@ -22,6 +22,8 @@
 -export([
     empty_workflow_execution_test/1,
     empty_async_workflow_with_prepare_in_advance_test/1,
+    empty_workflow_with_stream_execution_test/1,
+    empty_async_workflow_with_stream_and_prepare_in_advance_test/1,
 
     single_sync_workflow_execution_test/1,
     single_async_workflow_execution_test/1,
@@ -71,6 +73,8 @@ all() ->
     ?ALL([
         empty_workflow_execution_test,
         empty_async_workflow_with_prepare_in_advance_test,
+        empty_workflow_with_stream_execution_test,
+        empty_async_workflow_with_stream_and_prepare_in_advance_test,
 
         single_sync_workflow_execution_test,
         single_async_workflow_execution_test,
@@ -147,6 +151,28 @@ empty_workflow_execution_test(Config) ->
 empty_async_workflow_with_prepare_in_advance_test(Config) ->
     empty_workflow_execution_test_base(Config, #test_config{
         task_type = async,
+        prepare_in_advance = true,
+        test_execution_manager_options = [{sleep_on_preparation, 500}] % sleep to allow start preparation in advance
+    }).
+
+
+empty_workflow_with_stream_execution_test(Config) ->
+    empty_workflow_execution_test_base(Config, #test_config{
+        generator_options = #{task_streams => #{
+            1 => #{
+                {1,1} => []
+            }
+        }}
+    }).
+
+empty_async_workflow_with_stream_and_prepare_in_advance_test(Config) ->
+    empty_workflow_execution_test_base(Config, #test_config{
+        task_type = async,
+        generator_options = #{task_streams => #{
+            1 => #{
+                {1,1} => []
+            }
+        }},
         prepare_in_advance = true,
         test_execution_manager_options = [{sleep_on_preparation, 500}] % sleep to allow start preparation in advance
     }).

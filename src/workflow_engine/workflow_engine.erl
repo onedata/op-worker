@@ -27,7 +27,8 @@
 -export([stream_task_data/3, close_task_data_stream/3]).
 %% Framework internal API
 -export([report_execution_status_update/5, get_async_call_pools/1, trigger_job_scheduling/1,
-    call_handler/5, call_handle_task_execution_ended_for_all_tasks/4, call_handlers_for_cancelled_lane/5]).
+    call_handler/5, call_handle_task_execution_ended_for_all_tasks/4,
+    trigger_task_data_stream_termination_for_all_tasks/4, call_handlers_for_cancelled_lane/5]).
 
 %% Functions exported for internal_services engine - do not call directly
 -export([init_service/2, takeover_service/3]).
@@ -239,6 +240,17 @@ call_handler(ExecutionId, Context, Handler, Function, Args) ->
 call_handle_task_execution_ended_for_all_tasks(ExecutionId, Handler, Context, TaskIds) ->
     lists:foreach(fun(TaskId) ->
         call_handler(ExecutionId, Context, Handler, handle_task_execution_ended, [TaskId])
+    end, TaskIds).
+
+-spec trigger_task_data_stream_termination_for_all_tasks(
+    execution_id(),
+    workflow_handler:handler(),
+    execution_context(),
+    [task_id()]
+) -> ok.
+trigger_task_data_stream_termination_for_all_tasks(ExecutionId, Handler, Context, TaskIds) ->
+    lists:foreach(fun(TaskId) ->
+        call_handler(ExecutionId, Context, Handler, trigger_task_data_stream_termination, [TaskId])
     end, TaskIds).
 
 -spec call_handlers_for_cancelled_lane(
