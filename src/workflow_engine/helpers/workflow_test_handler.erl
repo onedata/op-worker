@@ -24,7 +24,7 @@
     trigger_task_data_stream_termination/3, process_task_data/4,
     handle_task_execution_ended/3, handle_lane_execution_ended/3, handle_workflow_execution_ended/2]).
 % API
--export([is_last_lane/1, get_ignored_lane_id/0, get_ignored_lane_predecessor_id/0, gen_task_id/3, decode_task_id/1]).
+-export([is_last_lane/1, get_ignored_lane_id/0, get_ignored_lane_predecessor_id/0, pack_task_id/3, decode_task_id/1]).
 
 -define(NEXT_LANE_ID(LaneId), integer_to_binary(binary_to_integer(LaneId) + 1)).
 -define(LAST_LANE_ID, <<"5">>).
@@ -78,7 +78,7 @@ prepare_lane(_ExecutionId, #{task_type := Type, async_call_pools := Pools} = Exe
     TaskStreams = maps:get(LaneIndex, maps:get(task_streams, ExecutionContext, #{}), #{}),
     Boxes = lists:map(fun(BoxIndex) ->
         lists:foldl(fun(TaskIndex, TaskAcc) ->
-            TaskAcc#{gen_task_id(LaneIndex, BoxIndex, TaskIndex) => #{
+            TaskAcc#{pack_task_id(LaneIndex, BoxIndex, TaskIndex) => #{
                 type => Type,
                 async_call_pools => Pools,
                 keepalive_timeout => 5,
@@ -87,10 +87,10 @@ prepare_lane(_ExecutionId, #{task_type := Type, async_call_pools := Pools} = Exe
         end, #{}, lists:seq(1, BoxIndex))
     end, lists:seq(1, LaneIndex)),
 
-    ItemsCount = maps:get(items_count, ExecutionContext, 200),
+    ItemCount = maps:get(item_count, ExecutionContext, 200),
     Iterator = case maps:get(fail_iteration, ExecutionContext, undefined) of
-        undefined -> workflow_test_iterator:get_first(ItemsCount);
-        ItemNumToFail -> workflow_test_iterator:get_first(ItemsCount, ItemNumToFail)
+        undefined -> workflow_test_iterator:get_first(ItemCount);
+        ItemNumToFail -> workflow_test_iterator:get_first(ItemCount, ItemNumToFail)
     end,
 
     LaneOptions = maps:get(lane_options, ExecutionContext, #{}),
@@ -178,7 +178,7 @@ trigger_task_data_stream_termination(_, _, _) ->
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
     workflow_engine:task_id(),
-    workflow_engine:task_data()
+    workflow_engine:task_stream_data()
 ) ->
     workflow_handler:handler_execution_result().
 process_task_data(_, _, _, error) ->
@@ -267,7 +267,7 @@ get_ignored_lane_id() ->
 get_ignored_lane_predecessor_id() ->
     ?IGNORED_LANE_PREDECESSOR_ID.
 
-gen_task_id(LaneIndex, BoxIndex, TaskIndex) ->
+pack_task_id(LaneIndex, BoxIndex, TaskIndex) ->
     <<(integer_to_binary(LaneIndex))/binary, "_",
         (integer_to_binary(BoxIndex))/binary, "_", (integer_to_binary(TaskIndex))/binary>>.
 

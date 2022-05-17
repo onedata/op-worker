@@ -1196,7 +1196,7 @@
 }).
 
 -record(workflow_cached_task_data, {
-    data :: workflow_engine:task_data()
+    data :: workflow_engine:task_stream_data()
 }).
 
 -record(workflow_cached_async_result, {
@@ -1236,6 +1236,7 @@
 
     iteration_state :: workflow_iteration_state:state() | undefined,
     prefetched_iteration_step :: workflow_execution_state:iteration_status(),
+    % TODO VFS-7788 jobs_registry and task_data_registry
     jobs :: workflow_jobs:jobs() | undefined,
     tasks_data :: workflow_tasks_data:tasks_data() | undefined,
 

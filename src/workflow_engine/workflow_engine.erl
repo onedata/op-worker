@@ -41,7 +41,8 @@
 -type execution_context() :: term().
 -type lane_id() :: term(). % lane_id is opaque term for workflow engine (ids are managed by modules that use workflow engine)
 -type task_id() :: binary().
--type task_data() :: json_utils:json_map() | errors:error().
+% Data connected with task provided using stream_task_data/3 function (not processed as a part of job).
+-type task_stream_data() :: json_utils:json_map() | errors:error().
 -type stream_closing_result() :: success | {failure, term()}.
 -type subject_id() :: workflow_cached_item:id() | 
     workflow_cached_async_result:result_ref() | workflow_cached_task_data:id().
@@ -85,7 +86,7 @@
 -type execution_ended_info() :: #execution_ended{}.
 %% @formatter:on
 
--export_type([id/0, execution_id/0, execution_context/0, lane_id/0, task_id/0, task_data/0, stream_closing_result/0,
+-export_type([id/0, execution_id/0, execution_context/0, lane_id/0, task_id/0, task_stream_data/0, stream_closing_result/0,
     subject_id/0, execution_spec/0, processing_stage/0, handler_execution_result/0, processing_result/0,
     task_spec/0, parallel_box_spec/0, lane_spec/0, preparation_mode/0]).
 
@@ -162,7 +163,7 @@ cleanup_execution(ExecutionId) ->
     workflow_iterator_snapshot:cleanup(ExecutionId).
 
 
--spec stream_task_data(workflow_engine:execution_id(), workflow_engine:task_id(), task_data()) -> ok.
+-spec stream_task_data(workflow_engine:execution_id(), workflow_engine:task_id(), task_stream_data()) -> ok.
 stream_task_data(ExecutionId, TaskId, TaskData) ->
     {ok, EngineId} = workflow_execution_state:report_new_stream_task_data(ExecutionId, TaskId, TaskData),
     trigger_job_scheduling(EngineId).
@@ -614,20 +615,20 @@ process_task_data(EngineId, ExecutionId, #execution_spec{
     handler = Handler,
     context = ExecutionContext,
     task_id = TaskId,
-    subject_id = TaskDataId
+    subject_id = CachedTaskDataId
 }) ->
     try
-        Data = workflow_cached_task_data:take(TaskDataId),
+        Data = workflow_cached_task_data:take(CachedTaskDataId),
 
         try
             Ans = call_handler(ExecutionId, ExecutionContext, Handler, process_task_data, [TaskId, Data]),
-            workflow_execution_state:report_task_data_processed(ExecutionId, TaskId, TaskDataId, Ans),
+            workflow_execution_state:report_task_data_processed(ExecutionId, TaskId, CachedTaskDataId, Ans),
             trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
         catch
             Error:Reason:Stacktrace  ->
                 ?error_stacktrace(
                     "Unexpected error processing task ~p data ~p for execution ~p: ~p:~p",
-                    [TaskId, TaskDataId, ExecutionId, Error, Reason],
+                    [TaskId, CachedTaskDataId, ExecutionId, Error, Reason],
                     Stacktrace
                 ),
                 trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
@@ -636,7 +637,7 @@ process_task_data(EngineId, ExecutionId, #execution_spec{
         Error2:Reason2:Stacktrace2  ->
             ?error_stacktrace(
                 "Unexpected error getting data ~p for task ~p (execution ~p): ~p:~p",
-                [TaskDataId, TaskId, ExecutionId, Error2, Reason2],
+                [CachedTaskDataId, TaskId, ExecutionId, Error2, Reason2],
                 Stacktrace2
             ),
             trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
@@ -653,7 +654,7 @@ process_task_data(EngineId, ExecutionId, #execution_spec{
 prepare_lane(EngineId, ExecutionId, Handler, ExecutionContext, LaneId, PreparationMode) ->
     try
         Ans = call_handler(ExecutionId, ExecutionContext, Handler, prepare_lane, [LaneId]),
-        workflow_execution_state:report_lane_execution_prepared(ExecutionId, Handler, LaneId, PreparationMode, Ans),
+        workflow_execution_state:report_lane_execution_prepared(ExecutionId, LaneId, PreparationMode, Ans),
         trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
     catch
         Error:Reason:Stacktrace  ->

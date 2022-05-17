@@ -12,6 +12,7 @@
 -module(workflow_scheduling_test_SUITE).
 -author("Michal Wrzeszcz").
 
+-include("workflow_scheduling_test_common.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 
@@ -141,6 +142,7 @@ all() ->
 }).
 
 
+
 %%%===================================================================
 %%% Test functions
 %%%===================================================================
@@ -158,21 +160,13 @@ empty_async_workflow_with_prepare_in_advance_test(Config) ->
 
 empty_workflow_with_stream_execution_test(Config) ->
     empty_workflow_execution_test_base(Config, #test_config{
-        generator_options = #{task_streams => #{
-            1 => #{
-                {1,1} => []
-            }
-        }}
+        generator_options = ?EXEMPLARY_EMPTY_STREAM
     }).
 
 empty_async_workflow_with_stream_and_prepare_in_advance_test(Config) ->
     empty_workflow_execution_test_base(Config, #test_config{
         task_type = async,
-        generator_options = #{task_streams => #{
-            1 => #{
-                {1,1} => []
-            }
-        }},
+        generator_options = ?EXEMPLARY_EMPTY_STREAM,
         prepare_in_advance = true,
         test_execution_manager_options = [{sleep_on_preparation, 500}] % sleep to allow start preparation in advance
     }).
@@ -189,28 +183,13 @@ single_async_workflow_execution_test(Config) ->
 single_async_workflow_with_empty_streams_execution_test(Config) ->
     single_execution_test_base(Config, #test_config{
         task_type = async,
-        generator_options = #{task_streams => #{
-            1 => #{{1,1} => []},
-            3 => #{{2,2} => []},
-            5 => #{{1,1} => [], {2,2} => [], {3,1} => [], {3,2} => [], {3,3} => []}
-        }}
+        generator_options = ?EXEMPLARY_EMPTY_STREAMS
     }).
 
 single_async_workflow_with_streams_execution_test(Config) ->
     single_execution_test_base(Config, #test_config{
         task_type = async,
-        generator_options = #{task_streams => #{
-            1 => #{{1,1} => []},
-            2 => #{{1,1} => [<<"5">>]},
-            3 => #{{2,2} => [<<"100">>]},
-            5 => #{
-                {1,1} => [<<"1">>],
-                {2,2} => [{stream_termination_callback, 5}],
-                {3,1} => [<<"1">>,{<<"2">>, 10},<<"3">>,<<"4">>,<<"100">>,<<"150">>],
-                {3,2} => [<<"100">>, stream_termination_callback],
-                {3,3} => []
-            }
-        }}
+        generator_options = ?EXEMPLARY_STREAMS
     }).
 
 prepare_in_advance_test(Config) ->
@@ -252,15 +231,7 @@ fail_one_of_many_async_tasks_in_workflow_with_streams_test(Config) ->
     failure_test_base(Config, #test_config{
         task_type = async,
         test_manager_failure_key = fail_job,
-        generator_options = #{task_streams => #{
-            3 => #{
-                {1,1} => [<<"1">>],
-                {2,2} => [{stream_termination_callback, 5}],
-                {3,1} => [<<"1">>,{<<"2">>, 10},<<"3">>,<<"4">>,<<"100">>,<<"150">>],
-                {3,2} => [<<"10">>, <<"100">>],
-                {3,3} => []
-            }
-        }}
+        generator_options = ?EXEMPLARY_STREAMS2
     }, <<"3">>, <<"3_3_2">>).
 
 async_task_timeout_test(Config) ->
@@ -321,11 +292,7 @@ fail_first_item_iteration_with_stream_test(Config) ->
     iteration_failure_test_base(Config, #test_config{
         task_type = async,
         prepare_in_advance = true,
-        generator_options = #{task_streams => #{
-            1 => #{
-                {1,1} => []
-            }
-        }}
+        generator_options = ?EXEMPLARY_EMPTY_STREAM
     }, <<"1">>, 1).
 
 %%%===================================================================
@@ -463,7 +430,7 @@ prepare_lane_too_early_with_long_failed_callback_execution_test(Config) ->
 
 empty_workflow_execution_test_base(Config, BasicConfig) ->
     single_execution_test_base(Config, BasicConfig#test_config{
-        generator_options = #{items_count => 0},
+        generator_options = #{item_count => 0},
         verify_statistics_options = #{is_empty => true}
     }).
 

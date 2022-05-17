@@ -167,7 +167,7 @@ reply_to_handler_mock(Sender, ManagerAcc, Options, #handler_call{
         {prepare_lane, #{sleep_on_preparation := Value}} ->
             Sender ! {sleep, Value},
             ManagerAcc;
-        {process_task_data, #{fail_data_processing := {TaskId, Item}}} ->
+        {process_task_data, #{fail_task_data_processing := {TaskId, Item}}} ->
             Sender ! fail_call,
             ManagerAcc;
         {trigger_task_data_stream_termination, #{fail_stream_termination := {TaskId, Item}}} ->
@@ -476,8 +476,7 @@ wait_for_lane_finish(ExecutionId, LaneId) ->
 maybe_stream_data(ExecutionId, TaskId, Context, StreamElementKey) ->
     {LaneIndex, BoxIndex, TaskIndex} =
         apply(meck_util:original_name(workflow_test_handler), decode_task_id, [TaskId]),
-    TaskStreams = maps:get({BoxIndex, TaskIndex},
-        maps:get(LaneIndex, maps:get(task_streams, Context, #{}), #{}), []),
+    TaskStreams = kv_utils:get([task_streams, LaneIndex, {BoxIndex, TaskIndex}], Context, []),
     % Task streams are specified as list of elements to be executed. Element can be specified using Id or
     % tuple {Id, NumberOfCallsToBeExecuted}.
     case lists:member(StreamElementKey, TaskStreams) of
@@ -566,7 +565,7 @@ verify_lanes_execution_history([{TaskIds, ExpectedItems, LaneExecutionContext} |
         lane_index := LaneIndex,
         lane_id := LaneId
     } = LaneExecutionContext,
-    TaskStreams = maps:get(LaneIndex, maps:get(task_streams, LaneExecutionContext, #{}), #{}),
+    TaskStreams = kv_utils:get([task_streams, LaneIndex], LaneExecutionContext, #{}),
 
     VerificationType = case Options of
         #{stop_on_lane := LaneId} -> skip_items_verification;
@@ -702,7 +701,7 @@ verify_task_handlers(LaneIndex, GatheredForLane, TaskIds, TaskStreams) ->
     ReversedGatheredForLane = lists:reverse(GatheredForLane),
     TaskIdsList = lists:foldl(fun(CallsForBox, Acc) -> sets:to_list(CallsForBox) ++ Acc end, [], TaskIds),
     StreamIds = lists:map(fun({BoxIndex, TaskIndex}) ->
-        workflow_test_handler:gen_task_id(LaneIndex, BoxIndex, TaskIndex)
+        workflow_test_handler:pack_task_id(LaneIndex, BoxIndex, TaskIndex)
     end, maps:keys(TaskStreams)),
     InitialAcc = #{
         task_ids => TaskIdsList,
@@ -958,7 +957,7 @@ count_lane_elements(#{
     TasksPerItemCount = count_tasks(TaskIds),
     TasksCount = TasksPerItemCount * length(ExpectedItems),
 
-    TaskStreams = maps:get(LaneIndex, maps:get(task_streams, LaneExecutionContext, #{}), #{}),
+    TaskStreams = kv_utils:get([task_streams, LaneIndex], LaneExecutionContext, #{}),
     TaskStreamCount = maps:size(TaskStreams),
 
     PrepareCallbacksCount = case {PrepareInAdvance, IsLanePrepared, ShouldPrepareNextLane} of

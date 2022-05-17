@@ -17,7 +17,7 @@
 %% API
 -export([put/1, take/1]).
 
--type id() :: binary().
+-type id() :: datastore:key().
 -export_type([id/0]).
 
 
@@ -30,14 +30,14 @@
 %%% API
 %%%===================================================================
 
--spec put(workflow_engine:task_data()) -> id().
+-spec put(workflow_engine:task_stream_data()) -> id().
 put(Data) ->
     Doc = #document{value = #workflow_cached_task_data{data = Data}},
     {ok, #document{key = Id}} = datastore_model:save(?CTX, Doc),
     Id.
 
 
--spec take(id()) -> workflow_engine:task_data().
+-spec take(id()) -> workflow_engine:task_stream_data().
 take(Id) ->
     {ok, #document{value = #workflow_cached_task_data{data = Data}}} = datastore_model:get(?CTX, Id),
     ok = datastore_model:delete(?CTX, Id),

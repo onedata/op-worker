@@ -12,6 +12,7 @@
 -module(workflow_scheduling_cancellation_and_restart_test_SUITE).
 -author("Michal Wrzeszcz").
 
+-include("workflow_scheduling_test_common.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 
@@ -174,15 +175,7 @@ async_workflow_with_streams_external_cancel(Config) ->
         task_type = async,
         lane_id = <<"3">>,
         test_execution_manager_option = {cancel_execution, process_item, <<"3_2_1">>},
-        generator_options = #{task_streams => #{
-            3 => #{
-                {1,1} => [<<"1">>],
-                {2,2} => [{stream_termination_callback, 5}],
-                {3,1} => [<<"1">>,{<<"2">>, 10},<<"3">>,<<"4">>,<<"100">>,<<"150">>],
-                {3,2} => [<<"100">>, stream_termination_callback],
-                {3,3} => []
-            }
-        }}
+        generator_options = ?EXEMPLARY_STREAMS
     }).
 
 async_workflow_with_streams_and_prepare_in_advance_external_cancel(Config) ->
@@ -191,15 +184,7 @@ async_workflow_with_streams_and_prepare_in_advance_external_cancel(Config) ->
         prepare_in_advance = true,
         lane_id = <<"3">>,
         test_execution_manager_option = {cancel_execution, process_item, <<"3_2_1">>},
-        generator_options = #{task_streams => #{
-            3 => #{
-                {1,1} => [<<"1">>],
-                {2,2} => [{stream_termination_callback, 5}],
-                {3,1} => [<<"1">>,{<<"2">>, 10},<<"3">>,<<"4">>,<<"100">>,<<"150">>],
-                {3,2} => [<<"100">>, stream_termination_callback],
-                {3,3} => []
-            }
-        }}
+        generator_options = ?EXEMPLARY_STREAMS
     }).
 
 async_workflow_with_streams_and_long_lasting_prepare_in_advance_external_cancel(Config) ->
@@ -209,15 +194,7 @@ async_workflow_with_streams_and_long_lasting_prepare_in_advance_external_cancel(
         prepare_in_advance = true,
         lane_id = <<"3">>,
         test_execution_manager_option = {cancel_execution, process_item, <<"3_2_1">>},
-        generator_options = #{task_streams => #{
-            3 => #{
-                {1,1} => [<<"1">>],
-                {2,2} => [{stream_termination_callback, 5}],
-                {3,1} => [<<"1">>,{<<"2">>, 10},<<"3">>,<<"4">>,<<"100">>,<<"150">>],
-                {3,2} => [<<"100">>, stream_termination_callback],
-                {3,3} => []
-            }
-        }}
+        generator_options = ?EXEMPLARY_STREAMS
     }).
 
 internal_cancel_of_workflow_with_stream_caused_by_async_job_error_test(Config) ->
@@ -225,31 +202,15 @@ internal_cancel_of_workflow_with_stream_caused_by_async_job_error_test(Config) -
         task_type = async,
         lane_id = <<"3">>,
         test_execution_manager_option = {fail_job, <<"3_3_2">>},
-        generator_options = #{task_streams => #{
-            3 => #{
-                {1,1} => [<<"1">>],
-                {2,2} => [{stream_termination_callback, 5}],
-                {3,1} => [<<"1">>,{<<"2">>, 10},<<"3">>,<<"4">>,<<"100">>,<<"150">>],
-                {3,2} => [<<"10">>, <<"100">>],
-                {3,3} => []
-            }
-        }}
+        generator_options = ?EXEMPLARY_STREAMS2
     }).
 
 internal_cancel_caused_by_stream_data_processing_error_test(Config) ->
     cancel_and_restart_test_base(Config, #test_config{
         task_type = async,
         lane_id = <<"3">>,
-        test_execution_manager_option = {fail_data_processing, <<"3_3_2">>},
-        generator_options = #{task_streams => #{
-            3 => #{
-                {1,1} => [<<"1">>],
-                {2,2} => [{stream_termination_callback, 5}],
-                {3,1} => [<<"1">>,{<<"2">>, 10},<<"3">>,<<"4">>,<<"100">>,<<"150">>],
-                {3,2} => [<<"10">>, <<"100">>],
-                {3,3} => []
-            }
-        }}
+        test_execution_manager_option = {fail_task_data_processing, <<"3_3_2">>},
+        generator_options = ?EXEMPLARY_STREAMS2
     }).
 
 internal_cancel_caused_by_stream_closing_error_test(Config) ->
@@ -257,17 +218,7 @@ internal_cancel_caused_by_stream_closing_error_test(Config) ->
         task_type = async,
         lane_id = <<"3">>,
         test_execution_manager_option = {fail_stream_termination, {<<"3_2_2">>, stream_termination_callback}},
-        generator_options = #{task_streams => #{
-            3 => #{
-                {1,1} => [<<"1">>],
-                {2,1} => [{stream_termination_callback, 5}],
-                {2,2} => [<<"10">>, <<"100">>, termination_error], % termination_error does not  trigger anything but
-                                                                   % for workflow execution check (otherwise there will
-                                                                   % be one more callback execution than expected)
-                {3,1} => [<<"1">>,{<<"2">>, 10},<<"3">>,<<"4">>,<<"100">>,<<"150">>],
-                {3,3} => []
-            }
-        }}
+        generator_options = ?EXEMPLARY_STREAMS_WITH_TERMINATION_ERROR
     }).
 
 %%%===================================================================

@@ -144,6 +144,20 @@
 
 %%--------------------------------------------------------------------
 %% @doc
+%% Callback processing extra data provided while executing jobs.
+%% @end
+%%--------------------------------------------------------------------
+-callback process_task_data(
+    workflow_engine:execution_id(),
+    workflow_engine:execution_context(),
+    workflow_engine:task_id(),
+    workflow_engine:task_stream_data()
+) ->
+    handler_execution_result().
+
+
+%%--------------------------------------------------------------------
+%% @doc
 %% Callback called after all jobs for task were executed and their
 %% outputs processed. It is executed only when task has data stream.
 %% @end
@@ -158,23 +172,9 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Callback processing extra data provided while executing jobs.
-%% @end
-%%--------------------------------------------------------------------
--callback process_task_data(
-    workflow_engine:execution_id(),
-    workflow_engine:execution_context(),
-    workflow_engine:task_id(),
-    workflow_engine:task_data()
-) ->
-    handler_execution_result().
-
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Callback reporting that all jobs for task were executed, their
-%% outputs processed and all stream data was processed in case if task
-%% has data stream. This callback is executed once for each task.
+%% outputs processed and all streamed task data was processed (in case
+%% the task had data stream). This callback is executed once for each task.
 %% It is guaranteed that callback is called before call of
 %% handle_lane_execution_ended callback for task's lane.
 %% Warning: there is no guarantee that callbacks for tasks are called
