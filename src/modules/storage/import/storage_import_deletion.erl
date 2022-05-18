@@ -32,7 +32,7 @@
 -type sync_links_children() :: [storage_sync_links:link()].
 
 -type file_meta_listing_info() :: #{
-    is_last := boolean(),
+    is_last := boolean(), % Redundant field (can be obtained from pagination token) for easier matching in function clauses.
     token => file_listing:pagination_token()
 }.
 
