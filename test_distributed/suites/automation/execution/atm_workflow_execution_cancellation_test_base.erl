@@ -12,7 +12,7 @@
 -module(atm_workflow_execution_cancellation_test_base).
 -author("Bartosz Walkowicz").
 
--include("atm_workflow_exeuction_test.hrl").
+-include("atm_workflow_execution_test.hrl").
 -include("atm/atm_test_schema_drafts.hrl").
 -include("modules/automation/atm_execution.hrl").
 
@@ -227,13 +227,13 @@ cancel_enqueued_atm_workflow_execution_test() ->
 
 
 cancel_active_atm_workflow_execution_test() ->
-    ItemsCount = 100,
+    ItemCount = 100,
 
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         provider = ?PROVIDER_SELECTOR,
         user = ?USER_SELECTOR,
         space = ?SPACE_SELECTOR,
-        workflow_schema_dump_or_draft = ?ECHO_ATM_WORKFLOW_SCHEMA_DRAFT(ItemsCount),
+        workflow_schema_dump_or_draft = ?ECHO_ATM_WORKFLOW_SCHEMA_DRAFT(ItemCount),
         workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,
@@ -263,7 +263,7 @@ cancel_active_atm_workflow_execution_test() ->
                             ExpItemsProcessed = element(3, ExpTaskStats),
                             % cancel blocks scheduling execution of leftover items
                             % but the ones already scheduled should be finished
-                            ?assert(ExpItemsProcessed < ItemsCount),
+                            ?assert(ExpItemsProcessed < ItemCount),
 
                             DstAtmStoreSchemaId = case atm_workflow_execution_exp_state_builder:get_task_selector(
                                 AtmTaskExecutionId, ExpState

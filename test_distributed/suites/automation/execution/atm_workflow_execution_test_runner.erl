@@ -45,7 +45,7 @@
 -module(atm_workflow_execution_test_runner).
 -author("Bartosz Walkowicz").
 
--include("atm_workflow_exeuction_test_runner.hrl").
+-include("atm_workflow_execution_test_runner.hrl").
 -include("modules/automation/atm_execution.hrl").
 -include("onenv_test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -126,7 +126,7 @@
     session_id :: session:id(),
     workflow_execution_id :: atm_workflow_execution:id(),
 
-    lanes_count :: non_neg_integer(),
+    lane_count :: non_neg_integer(),
     current_lane_index :: atm_lane_execution:index(),
     current_run_num :: atm_lane_execution:run_num(),
     ongoing_incarnations :: [incarnation_test_spec()],
@@ -226,7 +226,7 @@ run(TestSpec = #atm_workflow_execution_test_spec{
         test_spec = TestSpec,
         session_id = SessionId,
         workflow_execution_id = AtmWorkflowExecutionId,
-        lanes_count = length(AtmLaneSchemas),
+        lane_count = length(AtmLaneSchemas),
         current_lane_index = 1,
         current_run_num = 1,
         ongoing_incarnations = Incarnations,
@@ -510,7 +510,7 @@ build_mock_call_ctx(#mock_call_report{args = CallArgs}, #test_ctx{
     },
     session_id = SessionId,
     workflow_execution_id = AtmWorkflowExecutionId,
-    lanes_count = AtmLanesCount,
+    lane_count = AtmLaneCount,
     current_lane_index = CurrentAtmLaneIndex,
     current_run_num = CurrentRunNum,
     workflow_execution_exp_state = ExpState
@@ -521,7 +521,7 @@ build_mock_call_ctx(#mock_call_report{args = CallArgs}, #test_ctx{
         session_id = SessionId,
         workflow_execution_id = AtmWorkflowExecutionId,
         workflow_execution_exp_state = ExpState,
-        lanes_count = AtmLanesCount,
+        lane_count = AtmLaneCount,
         current_lane_index = CurrentAtmLaneIndex,
         current_run_num = CurrentRunNum,
         call_args = CallArgs
@@ -679,11 +679,11 @@ get_exp_state_diff(
     fun(#atm_mock_call_ctx{
         workflow_execution_exp_state = ExpState0,
         call_args = [AtmLaneRunSelector, _AtmWorkflowExecutionId, _AtmWorkflowExecutionCtx],
-        lanes_count = AtmLanesCount,
+        lane_count = AtmLaneCount,
         current_lane_index = CurrentAtmLaneIndex,
         current_run_num = CurrentAtmRunNum
     }) ->
-        ExpState1 = case CurrentAtmLaneIndex < AtmLanesCount of
+        ExpState1 = case CurrentAtmLaneIndex < AtmLaneCount of
             true ->
                 atm_workflow_execution_exp_state_builder:expect_lane_run_num_set(
                     {CurrentAtmLaneIndex + 1, CurrentAtmRunNum}, CurrentAtmRunNum, ExpState0

@@ -29,21 +29,22 @@
 -define(INTEGER_LIST_STORE_SCHEMA_DRAFT(__ID), ?INTEGER_LIST_STORE_SCHEMA_DRAFT(__ID, undefined)).
 
 
--define(INTEGER_ECHO_LAMBDA_DRAFT, #atm_lambda_revision_draft{
+-define(ECHO_LAMBDA_DRAFT(__DATA_SPEC), #atm_lambda_revision_draft{
     operation_spec = #atm_openfaas_operation_spec_draft{
         docker_image = <<"test/echo">>
     },
     argument_specs = [#atm_lambda_argument_spec{
         name = <<"value">>,
-        data_spec = #atm_data_spec{type = atm_integer_type},
+        data_spec = __DATA_SPEC,
         is_optional = false
     }],
     result_specs = [#atm_lambda_result_spec{
         name = <<"value">>,
-        data_spec = #atm_data_spec{type = atm_integer_type},
+        data_spec = __DATA_SPEC,
         relay_method = return_value
     }]
 }).
+-define(INTEGER_ECHO_LAMBDA_DRAFT, ?ECHO_LAMBDA_DRAFT(#atm_data_spec{type = atm_integer_type})).
 
 -define(ECHO_LAMBDA_ID, <<"echo">>).
 -define(ECHO_LAMBDA_REVISION_NUM, 1).

@@ -12,14 +12,14 @@
 -module(atm_workflow_execution_scheduling_test_base).
 -author("Bartosz Walkowicz").
 
--include("atm_workflow_exeuction_test.hrl").
+-include("atm_workflow_execution_test.hrl").
 -include("atm/atm_test_schema_drafts.hrl").
 
 -export([
     schedule_atm_workflow_with_no_lanes_test/0,
     schedule_atm_workflow_with_empty_lane_test/0,
     schedule_atm_workflow_with_empty_parallel_box_test/0,
-    schedule_atm_workflow_scheduling_with_openfaas_not_configured_test/0,
+    schedule_atm_workflow_with_openfaas_not_configured_test/0,
     schedule_atm_workflow_with_invalid_initial_store_content_test/0
 ]).
 
@@ -118,7 +118,7 @@ schedule_atm_workflow_with_empty_parallel_box_test() ->
     ).
 
 
-schedule_atm_workflow_scheduling_with_openfaas_not_configured_test() ->
+schedule_atm_workflow_with_openfaas_not_configured_test() ->
     AtmWorkflowSchemaId = atm_test_inventory:add_workflow_schema(
         ?EXECUTABLE_ATM_WORKFLOW_SCHEMA_DRAFT
     ),

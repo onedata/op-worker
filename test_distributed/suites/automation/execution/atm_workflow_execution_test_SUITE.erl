@@ -12,7 +12,7 @@
 -module(atm_workflow_execution_test_SUITE).
 -author("Bartosz Walkowicz").
 
--include("atm_workflow_exeuction_test.hrl").
+-include("atm_workflow_execution_test.hrl").
 -include_lib("ctool/include/privileges.hrl").
 
 %% exported for CT
@@ -28,7 +28,7 @@
     schedule_atm_workflow_with_no_lanes_test/1,
     schedule_atm_workflow_with_empty_lane_test/1,
     schedule_atm_workflow_with_empty_parallel_box_test/1,
-    schedule_atm_workflow_scheduling_with_openfaas_not_configured_test/1,
+    schedule_atm_workflow_with_openfaas_not_configured_test/1,
 
     schedule_atm_workflow_with_invalid_initial_store_content_test/1,
 
@@ -62,7 +62,7 @@ groups() -> [
         schedule_atm_workflow_with_no_lanes_test,
         schedule_atm_workflow_with_empty_lane_test,
         schedule_atm_workflow_with_empty_parallel_box_test,
-        schedule_atm_workflow_scheduling_with_openfaas_not_configured_test
+        schedule_atm_workflow_with_openfaas_not_configured_test
     ]},
     {scheduling_executable_workflow_schema_with_invalid_args_tests, [parallel], [
         schedule_atm_workflow_with_invalid_initial_store_content_test
@@ -132,7 +132,7 @@ schedule_atm_workflow_with_empty_parallel_box_test(_Config) ->
     ?RUN_SCHEDULING_TEST().
 
 
-schedule_atm_workflow_scheduling_with_openfaas_not_configured_test(_Config) ->
+schedule_atm_workflow_with_openfaas_not_configured_test(_Config) ->
     ?RUN_SCHEDULING_TEST().
 
 
