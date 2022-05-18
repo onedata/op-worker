@@ -20,7 +20,7 @@
 %% API
 -export([
     notify_preserved/3, notify_preservation_failed/4,
-    notify_purged/3
+    notify_deleted/3
 ]).
 
 -define(PRESERVATION, preservation).
@@ -50,8 +50,8 @@ notify_preservation_failed(ArchiveId, DatasetId, CallbackUrl, ErrorDescription) 
     notify_archive_callback(ArchiveId, DatasetId, CallbackUrl, ?PRESERVATION, ErrorDescription).
 
 
--spec notify_purged(archive:id(), dataset:id(), archive:callback()) -> ok.
-notify_purged(ArchiveId, DatasetId, CallbackUrl) ->
+-spec notify_deleted(archive:id(), dataset:id(), archive:callback()) -> ok.
+notify_deleted(ArchiveId, DatasetId, CallbackUrl) ->
     notify_archive_callback(ArchiveId, DatasetId, CallbackUrl, ?PURGING, null).
 
 %%%===================================================================

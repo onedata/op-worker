@@ -77,15 +77,15 @@ routes() -> [
             scope = private
         }
     }},
-    %% Purge archive
-    {<<"/archives/:aid/purge">>, rest_handler, #rest_req{
+    %% Delete archive
+    {<<"/archives/:aid/delete">>, rest_handler, #rest_req{
         method = 'POST',
         parse_body = as_json_params,
         consumes = [<<"application/json">>],
         b_gri = #b_gri{
             type = op_archive, 
             id = ?BINDING(aid), 
-            aspect = purge, 
+            aspect = delete, 
             scope = private
         }
     }},

@@ -53,7 +53,7 @@
     id :: dataset:id(),
     config :: archive:config(),
     preserved_callback :: archive:callback(),
-    purged_callback :: archive:callback(),
+    deleted_callback :: archive:callback(),
     description :: archive:description()
 }).
 
@@ -67,7 +67,7 @@
     diff :: archive:diff()
 }).
 
--record(purge_archive, {
+-record(delete_archive, {
     id :: archive:id(),
     callback :: archive:callback()
 }).

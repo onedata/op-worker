@@ -42,7 +42,7 @@
 -spec resolve_handler(middleware:operation(), gri:aspect(), middleware:scope()) ->
     module() | no_return().
 resolve_handler(create, instance, private) -> ?MODULE;
-resolve_handler(create, purge, private) -> ?MODULE;
+resolve_handler(create, delete, private) -> ?MODULE;
 resolve_handler(create, recall, private) -> ?MODULE;
 
 resolve_handler(get, instance, private) -> ?MODULE;
@@ -71,12 +71,12 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
         <<"config">> => {json, fun(RawConfig) -> {true, archive_config:sanitize(RawConfig)} end},
         <<"description">> => {binary, any},
         <<"preservedCallback">> => {binary, fun(Callback) -> url_utils:is_valid(Callback) end},
-        <<"purgedCallback">> => {binary, fun(Callback) -> url_utils:is_valid(Callback) end}
+        <<"deletedCallback">> => {binary, fun(Callback) -> url_utils:is_valid(Callback) end}
     }
 };
-data_spec(#op_req{operation = create, gri = #gri{aspect = purge}}) -> #{
+data_spec(#op_req{operation = create, gri = #gri{aspect = delete}}) -> #{
     optional => #{
-        <<"purgedCallback">> => {binary, fun(Callback) -> url_utils:is_valid(Callback) end}
+        <<"deletedCallback">> => {binary, fun(Callback) -> url_utils:is_valid(Callback) end}
     }
 };
 data_spec(#op_req{operation = create, gri = #gri{aspect = recall}}) -> #{
@@ -96,7 +96,7 @@ data_spec(#op_req{operation = update, gri = #gri{aspect = instance}}) -> #{
     optional => #{
         <<"description">> => {binary, any},
         <<"preservedCallback">> => {binary, fun(Callback) -> url_utils:is_valid(Callback) end},
-        <<"purgedCallback">> => {binary, fun(Callback) -> url_utils:is_valid(Callback) end}
+        <<"deletedCallback">> => {binary, fun(Callback) -> url_utils:is_valid(Callback) end}
     }
 }.
 
@@ -116,7 +116,7 @@ fetch_entity(#op_req{operation = Op, auth = ?USER(_UserId), gri = #gri{
     aspect = As,
     scope = private
 }}) when
-    (Op =:= create andalso As =:= purge);
+    (Op =:= create andalso As =:= delete);
     (Op =:= create andalso As =:= recall);
     (Op =:= get andalso As =:= instance);
     (Op =:= update andalso As =:= instance)
@@ -144,7 +144,7 @@ authorize(#op_req{operation = create, auth = Auth, gri = #gri{aspect = instance}
     middleware_utils:is_eff_space_member(Auth, SpaceId);
 
 authorize(#op_req{operation = Op, auth = Auth, gri = #gri{aspect = As}}, ArchiveDoc) when
-    (Op =:= create andalso As =:= purge);
+    (Op =:= create andalso As =:= delete);
     (Op =:= create andalso As =:= recall);
     (Op =:= get andalso As =:= instance);
     (Op =:= update andalso As =:= instance)
@@ -165,7 +165,7 @@ validate(#op_req{operation = create, gri = #gri{aspect = instance}, data = Data}
     middleware_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = Op, gri = #gri{aspect = As}}, ArchiveDoc) when
-    (Op =:= create andalso As =:= purge);
+    (Op =:= create andalso As =:= delete);
     (Op =:= create andalso As =:= recall);
     (Op =:= get andalso As =:= instance);
     (Op =:= update andalso As =:= instance)
@@ -187,17 +187,17 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
     Config = archive_config:from_json(ConfigJson),
     Description = maps:get(<<"description">>, Data, ?DEFAULT_ARCHIVE_DESCRIPTION),
     PreservedCallback = maps:get(<<"preservedCallback">>, Data, undefined),
-    PurgedCallback = maps:get(<<"purgedCallback">>, Data, undefined),
+    DeletedCallback = maps:get(<<"deletedCallback">>, Data, undefined),
     ArchiveId = mi_archives:archive_dataset(
-        SessionId, DatasetId, Config, PreservedCallback, PurgedCallback, Description
+        SessionId, DatasetId, Config, PreservedCallback, DeletedCallback, Description
     ),
     ArchiveInfo = mi_archives:get_info(SessionId, ArchiveId),
     {ok, resource, {GRI#gri{id = ArchiveId}, ArchiveInfo}};
 
-create(#op_req{auth = Auth, data = Data, gri = #gri{id = ArchiveId, aspect = purge}}) ->
+create(#op_req{auth = Auth, data = Data, gri = #gri{id = ArchiveId, aspect = delete}}) -> % fixme swagger
     SessionId = Auth#auth.session_id,
-    Callback = maps:get(<<"purgedCallback">>, Data, undefined),
-    mi_archives:purge(SessionId, ArchiveId, Callback);
+    Callback = maps:get(<<"deletedCallback">>, Data, undefined),
+    mi_archives:delete(SessionId, ArchiveId, Callback);
 
 create(#op_req{auth = Auth, data = Data, gri = #gri{id = ArchiveId, aspect = recall}}) ->
     SessionId = Auth#auth.session_id,

@@ -49,7 +49,7 @@
 
 %% API
 -export([start_archivisation/6, recall/4, cancel_recall/1, update_archive/2, get_archive_info/1,
-    list_archives/3, purge/2, get_nested_archives_stats/1, get_aggregated_stats/1]).
+    list_archives/3, delete/2, get_nested_archives_stats/1, get_aggregated_stats/1]).
 
 %% Exported for use in tests
 -export([remove_archive_recursive/1]).
@@ -88,7 +88,7 @@
     archive:description(), user_ctx:ctx()
 ) -> {ok, archive:id()} | error().
 start_archivisation(
-    DatasetId, Config, PreservedCallback, PurgedCallback, Description, UserCtx
+    DatasetId, Config, PreservedCallback, DeletedCallback, Description, UserCtx
 ) ->
     {ok, DatasetDoc} = dataset:get(DatasetId),
     {ok, State} = dataset:get_state(DatasetDoc),
@@ -98,7 +98,7 @@ start_archivisation(
             UserId = user_ctx:get_user_id(UserCtx),
             BaseArchiveId = ensure_base_archive_is_set_if_applicable(Config, DatasetId),
             case archive:create(DatasetId, SpaceId, UserId, Config,
-                PreservedCallback, PurgedCallback, Description, BaseArchiveId)
+                PreservedCallback, DeletedCallback, Description, BaseArchiveId)
             of
                 {ok, AipArchiveDoc} ->
                     {ok, AipArchiveId} = archive:get_id(AipArchiveDoc),
@@ -166,7 +166,7 @@ get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
     {ok, Config} = archive:get_config(ArchiveDoc),
     {ok, ArchiveRootDirGuid} = archive:get_root_dir_guid(ArchiveDoc),
     {ok, PreservedCallback} = archive:get_preserved_callback(ArchiveDoc),
-    {ok, PurgedCallback} = archive:get_purged_callback(ArchiveDoc),
+    {ok, DeletedCallback} = archive:get_deleted_callback(ArchiveDoc),
     {ok, Description} = archive:get_description(ArchiveDoc),
     {ok, ParentArchiveId} = archive:get_parent_id(ArchiveDoc),
     {ok, BaseArchiveId} = archive:get_base_archive_id(ArchiveDoc),
@@ -181,7 +181,7 @@ get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
         creation_time = Timestamp,
         config = Config,
         preserved_callback = PreservedCallback,
-        purged_callback = PurgedCallback,
+        deleted_callback = DeletedCallback,
         description = Description,
         index = case ArchiveIndex =:= undefined of
             true -> archives_list:index(ArchiveId, Timestamp);
@@ -215,15 +215,15 @@ list_archives(DatasetId, ListingOpts, ListingMode) ->
     end.
 
 
--spec purge(archive:id(), archive:callback()) -> ok | error().
-purge(ArchiveId, CallbackUrl) ->
+-spec delete(archive:id(), archive:callback()) -> ok | error().
+delete(ArchiveId, CallbackUrl) ->
     case archive:mark_purging(ArchiveId, CallbackUrl) of
         {ok, ArchiveDoc} ->
             {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
             % TODO VFS-7718 removal of archive doc and callback should be executed when deleting from trash is finished
             % (now it's done before archive files are deleted from storage)
             ok = remove_archive_recursive(ArchiveDoc),
-            archivisation_callback:notify_purged(ArchiveId, DatasetId, CallbackUrl);
+            archivisation_callback:notify_deleted(ArchiveId, DatasetId, CallbackUrl);
         {error, _} = Error ->
             Error
     end.
@@ -329,7 +329,7 @@ remove_single_archive(ArchiveDoc = #document{}, UserCtx) ->
         ok ->
             {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
             ArchiveDocCtx = file_ctx:new_by_uuid(?ARCHIVE_DIR_UUID(ArchiveId), SpaceId),
-            % TODO VFS-7718 Should it be possible to register many callbacks in case of parallel purge requests?
+            % TODO VFS-7718 Should it be possible to register many callbacks in case of parallel delete requests?
             delete_req:delete_using_trash(UserCtx, ArchiveDocCtx, true),
             
             {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
