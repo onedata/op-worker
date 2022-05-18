@@ -508,6 +508,7 @@ resolve_get_operation_handler(archive_recall_details, private) -> ?MODULE;
 resolve_get_operation_handler(archive_recall_progress, private) -> ?MODULE;
 resolve_get_operation_handler(archive_recall_log, private) -> ?MODULE;
 resolve_get_operation_handler(api_samples, public) -> ?MODULE;
+resolve_get_operation_handler(dir_size_stats, private) -> ?MODULE;
 resolve_get_operation_handler(_, _) -> throw(?ERROR_NOT_SUPPORTED).
 
 
@@ -659,6 +660,17 @@ data_spec_get(#gri{aspect = archive_recall_log}) -> #{
         <<"offset">> => {integer, any},
         <<"limit">> => {integer, {between, 1, 1000}}
     }
+};
+
+data_spec_get(#gri{aspect = dir_size_stats}) -> #{
+    % for this aspect data is sanitized in `get` function, but all possible parameters 
+    % still have to be specified so they are not removed during sanitization
+    optional => #{
+        <<"mode">> => {any, any},
+        <<"layout">> => {any, any},
+        <<"startTimestamp">> => {any, any},
+        <<"windowLimit">> => {any, any}
+    }
 }.
 
 
@@ -696,7 +708,8 @@ authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= symlink_target;
     As =:= archive_recall_details;
     As =:= archive_recall_progress;
-    As =:= archive_recall_log
+    As =:= archive_recall_log;
+    As =:= dir_size_stats
 ->
     middleware_utils:has_access_to_file_space(Auth, Guid);
 
@@ -748,7 +761,8 @@ validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= archive_recall_details;
     As =:= archive_recall_progress;
     As =:= archive_recall_log;
-    As =:= api_samples
+    As =:= api_samples;
+    As =:= dir_size_stats
 ->
     middleware_utils:assert_file_managed_locally(Guid);
 
@@ -999,7 +1013,11 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = archive_recall_log},
     {ok, mi_archives:browse_recall_log(Auth#auth.session_id, FileGuid, BrowseOpts)};
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = api_samples, scope = public}}, _) ->
-    {ok, value, public_file_api_samples:generate_for(Auth#auth.session_id, FileGuid)}.
+    {ok, value, public_file_api_samples:generate_for(Auth#auth.session_id, FileGuid)};
+
+get(#op_req{gri = #gri{id = Guid, aspect = dir_size_stats}, data = Data}, _) ->
+    TSBrowseRequest = ts_browse_request:from_json(Data),
+    {ok, value, ?check(dir_size_stats:browse_time_stats_collection(Guid, TSBrowseRequest))}.
 
 
 %%%===================================================================

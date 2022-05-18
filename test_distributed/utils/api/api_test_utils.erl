@@ -176,8 +176,8 @@ create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, 
             RandSize = rand:uniform(20),
             lfm_test_utils:write_file(P1Node, SpaceOwnerSessIdP1, FileGuid, {rand_content, RandSize}),
             RandSize;
-        _ ->
-            0
+        <<"dir">> ->
+            undefined
     end,
     {ok, FileAttrs} = ?assertMatch(
         {ok, #file_attr{size = Size, shares = FileShares}},

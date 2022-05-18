@@ -1,17 +1,17 @@
 %%%-------------------------------------------------------------------
-%%% @author Bartosz Walkowicz
-%%% @copyright (C) 2021 ACK CYFRONET AGH
+%%% @author Michal Stanisz
+%%% @copyright (C) 2022 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module handles middleware operations (create, get, update, delete)
-%%% corresponding to space qos aspects.
+%%% This module handles middleware operations (create, get, update, delete) 
+%%% corresponding to space statistics aspects.
 %%% @end
 %%%-------------------------------------------------------------------
--module(space_qos_middleware_handler).
--author("Bartosz Walkowicz").
+-module(space_stats_middleware_handler).
+-author("Michal Stanisz").
 
 -behaviour(middleware_handler).
 
@@ -28,21 +28,20 @@
 %%% middleware_handler callbacks
 %%%===================================================================
 
-
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link middleware_handler} callback data_spec/1.
 %% @end
 %%--------------------------------------------------------------------
 -spec data_spec(middleware:req()) -> undefined | middleware_sanitizer:data_spec().
-data_spec(#op_req{operation = create, gri = #gri{aspect = evaluate_qos_expression}}) -> #{
-    required => #{
-        <<"expression">> => {binary, non_empty}
-    }
-};
+data_spec(#op_req{operation = get, gri = #gri{aspect = dir_size_stats_config}}) ->
+    undefined;
 
-data_spec(#op_req{operation = get, gri = #gri{aspect = available_qos_parameters}}) ->
-    undefined.
+data_spec(#op_req{operation = update, gri = #gri{aspect = dir_size_stats_config}}) -> #{
+    required => #{
+        <<"statsCollectionEnabled">> => {boolean, any}
+    }
+}.
 
 
 %%--------------------------------------------------------------------
@@ -64,17 +63,17 @@ fetch_entity(_) ->
 authorize(#op_req{auth = ?GUEST}, _) ->
     false;
 
-authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
-    id = SpaceId,
-    aspect = evaluate_qos_expression
-}}, _) ->
-    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_QOS);
-
 authorize(#op_req{operation = get, auth = ?USER(UserId, SessionId), gri = #gri{
     id = SpaceId,
-    aspect = available_qos_parameters
+    aspect = dir_size_stats_config
 }}, _) ->
-    space_logic:has_eff_user(SessionId, SpaceId, UserId).
+    space_logic:has_eff_user(SessionId, SpaceId, UserId);
+
+authorize(#op_req{operation = update, auth = ?USER(UserId), gri = #gri{
+    id = SpaceId,
+    aspect = dir_size_stats_config
+}}, _) ->
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_UPDATE).
 
 
 %%--------------------------------------------------------------------
@@ -83,16 +82,16 @@ authorize(#op_req{operation = get, auth = ?USER(UserId, SessionId), gri = #gri{
 %% @end
 %%--------------------------------------------------------------------
 -spec validate(middleware:req(), middleware:entity()) -> ok | no_return().
-validate(#op_req{operation = create, gri = #gri{
-    id = SpaceId,
-    aspect = evaluate_qos_expression
-}}, _) ->
-    middleware_utils:assert_space_supported_locally(SpaceId);
-
 validate(#op_req{operation = get, gri = #gri{
     id = SpaceId,
-    aspect = available_qos_parameters
+    aspect = dir_size_stats_config
 }}, _QosEntry) ->
+    middleware_utils:assert_space_supported_locally(SpaceId);
+
+validate(#op_req{operation = update, gri = #gri{
+    id = SpaceId,
+    aspect = dir_size_stats_config
+}}, _) ->
     middleware_utils:assert_space_supported_locally(SpaceId).
 
 
@@ -102,20 +101,8 @@ validate(#op_req{operation = get, gri = #gri{
 %% @end
 %%--------------------------------------------------------------------
 -spec create(middleware:req()) -> middleware:create_result().
-create(#op_req{gri = #gri{id = SpaceId, aspect = evaluate_qos_expression}} = Req) ->
-    QosExpressionInfix = maps:get(<<"expression">>, Req#op_req.data),
-    QosExpression = qos_expression:parse(QosExpressionInfix),
-    StorageIds = qos_expression:get_matching_storages_in_space(SpaceId, QosExpression),
-    StoragesList = lists:map(fun(StorageId) ->
-        StorageName = storage:fetch_name_of_remote_storage(StorageId, SpaceId),
-        ProviderId = storage:fetch_provider_id_of_remote_storage(StorageId, SpaceId),
-        #{<<"id">> => StorageId, <<"name">> => StorageName, <<"providerId">> => ProviderId}
-    end, StorageIds),
-    {ok, value, #{
-        <<"expressionRpn">> => qos_expression:to_rpn(QosExpression),
-        %% @TODO VFS-6520 not needed when storage api is implemented
-        <<"matchingStorages">> => StoragesList 
-    }}.
+create(_) ->
+    ?ERROR_NOT_SUPPORTED.
 
 
 %%--------------------------------------------------------------------
@@ -124,27 +111,16 @@ create(#op_req{gri = #gri{id = SpaceId, aspect = evaluate_qos_expression}} = Req
 %% @end
 %%--------------------------------------------------------------------
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
-get(#op_req{gri = #gri{id = SpaceId, aspect = available_qos_parameters}}, _) ->
-    {ok, Storages} = space_logic:get_all_storage_ids(SpaceId),
-    Res = lists:foldl(fun(StorageId, OuterAcc) ->
-        QosParameters = storage:fetch_qos_parameters_of_remote_storage(StorageId, SpaceId),
-        maps:fold(fun(ParameterKey, Value, InnerAcc) ->
-            Key = case is_number(Value) of
-                true -> <<"numberValues">>;
-                false -> <<"stringValues">>
-            end,
-            InnerAcc#{ParameterKey => maps:update_with(
-                Key,
-                fun(Values) -> lists:usort([Value | Values]) end,
-                [Value],
-                maps:get(ParameterKey, InnerAcc, #{
-                    <<"stringValues">> => [],
-                    <<"numberValues">> => []
-                })
-            )}
-        end, OuterAcc, QosParameters)
-    end, #{}, Storages),
-    {ok, Res}.
+get(#op_req{gri = #gri{id = SpaceId, aspect = dir_size_stats_config}}, _) ->
+    {Status, Since} = case dir_stats_collector_config:get_last_status_change_timestamp_if_in_enabled_status(SpaceId) of
+        {ok, Timestamp} -> {<<"enabled">>, Timestamp};
+        ?ERROR_DIR_STATS_DISABLED_FOR_SPACE -> {<<"disabled">>, undefined};
+        ?ERROR_DIR_STATS_NOT_READY-> {<<"initializing">>, undefined}
+    end,
+    {ok, value, maps_utils:remove_undefined(#{
+        <<"statsCollectionStatus">> => Status,
+        <<"since">> => Since
+    })}.
 
 
 %%--------------------------------------------------------------------
@@ -153,8 +129,11 @@ get(#op_req{gri = #gri{id = SpaceId, aspect = available_qos_parameters}}, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec update(middleware:req()) -> middleware:update_result().
-update(_) ->
-    ?ERROR_NOT_SUPPORTED.
+update(#op_req{gri = #gri{id = SpaceId, aspect = dir_size_stats_config}, data = Data}) ->
+    case maps:get(<<"statsCollectionEnabled">>, Data) of
+        true -> dir_stats_collector_config:enable(SpaceId);
+        false -> dir_stats_collector_config:disable(SpaceId)
+    end.
 
 
 %%--------------------------------------------------------------------

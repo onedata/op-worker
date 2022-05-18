@@ -15,6 +15,7 @@
 -include("modules/automation/atm_execution.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include("onenv_test_utils.hrl").
+-include_lib("cluster_worker/include/time_series/browsing.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 
@@ -491,11 +492,11 @@ infer_window_timestamp(Time, #metric_config{resolution = Resolution}) ->
     time_series_collection:layout().
 get_layout(AtmWorkflowExecutionAuth, AtmStoreId) ->
     BrowseOpts = #atm_time_series_store_content_browse_options{
-        request = #atm_time_series_store_content_get_layout_req{}
+        request = #time_series_get_layout_request{}
     },
 
     #atm_time_series_store_content_browse_result{
-        result = #atm_time_series_store_content_layout{
+        result = #time_series_layout_result{
             layout = Layout
         }
     } = ?rpc(atm_store_api:browse_content(
@@ -539,21 +540,17 @@ get_slice(AtmWorkflowExecutionAuth, AtmStoreId, Layout, StartTimestamp) ->
     #{time_series_collection:time_series_id() => #{ts_metric:id() => [ts_windows:value()]}}.
 get_slice(AtmWorkflowExecutionAuth, AtmStoreId, Layout, StartTimestamp, WindowLimit) ->
     BrowseOpts = #atm_time_series_store_content_browse_options{
-        request = #atm_time_series_store_content_get_slice_req{
+        request = #time_series_get_slice_request{
             layout = Layout,
             start_timestamp = StartTimestamp,
             window_limit = WindowLimit
         }
     },
 
-    #atm_time_series_store_content_browse_result{
-        result = #atm_time_series_store_content_slice{
-            slice = Slice
-        }
-    } = ?rpc(atm_store_api:browse_content(
+    BrowseResult = ?rpc(atm_store_api:browse_content(
         AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId
     )),
-
+    #{<<"slice">> := Slice} = atm_time_series_store_content_browse_result:to_json(BrowseResult),
     Slice.
 
 

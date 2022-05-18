@@ -98,7 +98,10 @@ translate_value(#gri{aspect = download_url}, URL) ->
     #{<<"fileUrl">> => URL};
 
 translate_value(#gri{aspect = api_samples, scope = public}, ApiSamples) ->
-    ApiSamples.
+    ApiSamples;
+
+translate_value(#gri{aspect = dir_size_stats}, TSBrowseResult) ->
+    ts_browse_result:to_json(TSBrowseResult).
 
 
 -spec translate_resource(gri:gri(), Data :: term()) ->
@@ -221,6 +224,7 @@ translate_distribution(FileGuid, PossiblyIncompleteDistribution) ->
             <<"chunksBarData">> => Data,
             <<"blocksPercentage">> => case FileSize of
                 0 -> 0;
+                undefined -> 0;
                 _ -> TotalBlocksSize * 100.0 / FileSize
             end
         }}
@@ -261,7 +265,7 @@ translate_file_details(#file_details{
 }, Scope) ->
     PosixPerms = list_to_binary(string:right(integer_to_list(Mode, 8), 3, $0)),
     {Type, Size} = case TypeAttr of
-        ?DIRECTORY_TYPE -> {<<"DIR">>, null};
+        ?DIRECTORY_TYPE -> {<<"DIR">>, utils:undefined_to_null(SizeAttr)};
         ?REGULAR_FILE_TYPE -> {<<"REG">>, SizeAttr};
         ?SYMLINK_TYPE -> {<<"SYMLNK">>, SizeAttr}
     end,
@@ -375,7 +379,7 @@ translate_membership(?DIRECT_AND_ANCESTOR_MEMBERSHIP) -> <<"directAndAncestor">>
 %% the output will be: [{0,33}, {4,50}, {5,0}, ...]
 %% @end
 %%--------------------------------------------------------------------
--spec interpolate_chunks(Blocks :: [[non_neg_integer()]], file_size()) ->
+-spec interpolate_chunks(Blocks :: [[non_neg_integer()]], file_size() | undefined) ->
     chunks_bar_data().
 interpolate_chunks([], _) ->
     [{0, 0}];

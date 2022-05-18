@@ -293,7 +293,7 @@ assert_children_copied(Node, SessionId, SourceGuid, TargetGuid, ListOpts = #{off
         TargetChildren
     end,
     SourceNames = [N || {_, N} <- SourceChildren],
-    ?assertEqual(SourceNames, [N || {_, N} <- GetTargetChildrenFun()], 10),
+    ?assertEqual(SourceNames, [N || {_, N} <- GetTargetChildrenFun()], Attempts),
     TargetChildren = GetTargetChildrenFun(),
     lists:foreach(fun({{SourceChildGuid, _}, {TargetChildGuid, _}}) ->
         assert_copied(Node, SessionId, SourceChildGuid, TargetChildGuid, FollowSymlinks, Attempts)
