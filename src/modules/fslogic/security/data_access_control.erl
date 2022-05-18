@@ -248,14 +248,14 @@ check_access_requirement(UserCtx, FileCtx0, ?PUBLIC_ACCESS) ->
                 true ->
                     {ok, FileCtx1};
                 false ->
-                    {ParentCtx, FileCtx2} = files_tree:get_parent(FileCtx1, UserCtx),
+                    {ParentCtx, FileCtx2} = file_tree:get_parent(FileCtx1, UserCtx),
                     assert_meets_access_requirement(UserCtx, ParentCtx, ?PUBLIC_ACCESS),
                     {ok, FileCtx2}
             end
     end;
 
 check_access_requirement(UserCtx, FileCtx0, ?TRAVERSE_ANCESTORS) ->
-    {ParentCtx, FileCtx1} = files_tree:get_parent(FileCtx0, UserCtx),
+    {ParentCtx, FileCtx1} = file_tree:get_parent(FileCtx0, UserCtx),
 
     case file_ctx:equals(FileCtx1, ParentCtx) of
         true ->
@@ -472,7 +472,7 @@ get_mode_bits_triplet(Mode, other) -> ?common_flags(Mode, 2#111).
 -spec has_parent_sticky_bit_set(user_ctx:ctx(), file_ctx:ctx()) ->
     {boolean(), file_ctx:ctx()}.
 has_parent_sticky_bit_set(UserCtx, FileCtx0) ->
-    {ParentCtx, FileCtx1} = files_tree:get_parent(FileCtx0, UserCtx),
+    {ParentCtx, FileCtx1} = file_tree:get_parent(FileCtx0, UserCtx),
 
     {#document{value = #file_meta{
         mode = Mode

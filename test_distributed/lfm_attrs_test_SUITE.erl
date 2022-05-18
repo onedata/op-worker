@@ -961,7 +961,7 @@ listing_file_attrs_should_work_properly_in_open_handle_mode(Config) ->
 
     % Assert proper virtual share root dirs attrs (for all shares with open handle existing in space
     % - file3 share has no handle so it shouldn't be listed) when listing space in 'open_handle' mode
-    ?assertMatch(
+    {ok, _, ListingToken} = ?assertMatch(
         {ok, [
             #file_attr{
                 guid = DirShareRootDirGuid, name = DirShareId, mode = 8#005, parent_guid = SpaceGuid,
@@ -983,9 +983,10 @@ listing_file_attrs_should_work_properly_in_open_handle_mode(Config) ->
                 uid = ?SHARE_UID, gid = ?SHARE_GID, type = ?DIRECTORY_TYPE, size = undefined,
                 shares = [], provider_id = <<"unknown">>, owner_id = <<"unknown">>
             }
-        ], #{is_last := true}},
-        lfm_proxy:get_children_attrs(Worker, OpenHandleSessId, ?FILE_REF(SpaceGuid),  #{offset => 0, size => 100})
+        ], _},
+        lfm_proxy:get_children_attrs(Worker, OpenHandleSessId, ?FILE_REF(SpaceGuid),  #{offset => 0, limit => 100, tune_for_large_continuous_listing => false})
     ),
+    ?assert(file_listing:is_finished(ListingToken)),
 
     % Assert listing virtual share root dir returns only share root file
     lists:foreach(fun({ShareRootFileGuid, ShareRootFileName, ShareRootDirGuid}) ->

@@ -112,7 +112,7 @@ report_finished_for_dir(TraverseId, FileCtx) ->
 -spec report_finished_for_file(traverse:id(), file_ctx:ctx(), file_ctx:ctx()) ->
     ok | {error, term()}.
 report_finished_for_file(TraverseId, FileCtx, OriginalRootParentCtx) ->
-    {ParentFileCtx, FileCtx1} = files_tree:get_parent(FileCtx, undefined),
+    {ParentFileCtx, FileCtx1} = file_tree:get_parent(FileCtx, undefined),
     FileUuid = file_ctx:get_logical_uuid_const(FileCtx1),
     ?ok_if_not_found(update_status_doc_and_handle_finished(TraverseId, ParentFileCtx, OriginalRootParentCtx,
         fun(#qos_status{files_list = FilesList} = Value) ->
@@ -133,7 +133,7 @@ report_file_deleted(FileCtx, QosEntryDoc, OriginalRootParentCtx) ->
     lists:foreach(fun(TraverseId) ->
         case IsDir of
             true ->
-                {ParentFileCtx, _} = files_tree:get_original_parent(FileCtx1, OriginalRootParentCtx),
+                {ParentFileCtx, _} = file_tree:get_original_parent(FileCtx1, OriginalRootParentCtx),
                 ok = report_child_dir_traversed(TraverseId, ParentFileCtx, OriginalRootParentCtx),
                 ok = handle_traverse_finished_for_dir(TraverseId, FileCtx1, no_link);
             false ->
@@ -188,7 +188,7 @@ is_traverse_finished_for_file_in_qos_subtree(TraverseId, FileCtx, QosRootFileUui
             has_traverse_link(TraverseId, FileCtx) orelse is_parent_fulfilled(TraverseId, FileCtx, InodeUuid, QosRootFileUuid)
     end;
 is_traverse_finished_for_file_in_qos_subtree(TraverseId, FileCtx, QosRootFileUuid, _IsDir = false) ->
-    {ParentFileCtx, FileCtx1} = files_tree:get_parent(FileCtx, undefined),
+    {ParentFileCtx, FileCtx1} = file_tree:get_parent(FileCtx, undefined),
     {FileName, FileCtx2} = file_ctx:get_aliased_name(FileCtx1, undefined),
     ParentUuid = file_ctx:get_logical_uuid_const(ParentFileCtx),
     LogicalUuid = file_ctx:get_logical_uuid_const(FileCtx),
@@ -212,7 +212,7 @@ is_traverse_finished_for_file_in_qos_subtree(TraverseId, FileCtx, QosRootFileUui
 is_parent_fulfilled(_TraverseId, _FileCtx, Uuid, QosRootFileUuid) when Uuid == QosRootFileUuid ->
     false;
 is_parent_fulfilled(TraverseId, FileCtx, _Uuid, QosRootFileUuid) ->
-    {ParentFileCtx, _FileCtx1} = files_tree:get_parent(FileCtx, undefined),
+    {ParentFileCtx, _FileCtx1} = file_tree:get_parent(FileCtx, undefined),
     ParentUuid = file_ctx:get_logical_uuid_const(ParentFileCtx),
     has_traverse_link(TraverseId, ParentFileCtx)
         orelse (not has_qos_status_doc(TraverseId, ParentUuid)
@@ -255,7 +255,7 @@ update_status_doc_and_handle_finished(TraverseId, FileCtx, OriginalRootParentCtx
             child_dirs_count = 0, files_list = [], is_last_batch = true}}
         } ->
             handle_traverse_finished_for_dir(TraverseId, FileCtx, add_link),
-            {ParentFileCtx, _} = files_tree:get_original_parent(FileCtx, OriginalRootParentCtx),
+            {ParentFileCtx, _} = file_tree:get_original_parent(FileCtx, OriginalRootParentCtx),
             ok = report_child_dir_traversed(TraverseId, ParentFileCtx, OriginalRootParentCtx);
         {ok, _} ->
             ok;

@@ -77,7 +77,7 @@ start(RootDirCtx, UserCtx, EmitEvents, RootOriginalParentUuid) ->
         task_id => TaskId,
         track_subtree_status => true,
         children_master_jobs_mode => async,
-        use_listing_token => false,
+        tune_for_large_continuous_listing  => false,
         % NOTE: do not use RootDir path, as file is already moved to trash
         initial_relative_path => filename:join(ParentPath, RootDirName),
         traverse_info => #{
@@ -137,7 +137,7 @@ do_master_job(Job = #tree_traverse{
     MasterJobArgs = #{task_id := TaskId}
 ) ->
     FileCtx1 = file_ctx:set_path_before_deletion(FileCtx, RelPath),
-    BatchProcessingPrehook = fun(_SlaveJobs, _MasterJobs, _ListExtendedInfo, SubtreeProcessingStatus) ->
+    BatchProcessingPrehook = fun(_SlaveJobs, _MasterJobs, _ListingToken, SubtreeProcessingStatus) ->
         delete_dir_if_subtree_processed(SubtreeProcessingStatus, FileCtx1, UserId, TaskId, TraverseInfo)
     end,
     tree_traverse:do_master_job(Job, MasterJobArgs, BatchProcessingPrehook).
@@ -219,7 +219,7 @@ delete_file(FileCtx, UserId, TaskId, TraverseInfo = #{emit_events := EmitEvents}
 %% @private
 -spec file_processed(file_ctx:ctx(), user_ctx:ctx(), id(), info()) -> ok.
 file_processed(FileCtx, UserCtx, TaskId, TraverseInfo = #{root_original_parent_uuid := RootOriginalParentUuid}) ->
-    {ParentFileCtx, FileCtx1} = files_tree:get_parent(FileCtx, UserCtx),
+    {ParentFileCtx, FileCtx1} = file_tree:get_parent(FileCtx, UserCtx),
     case file_qos:get_effective(RootOriginalParentUuid) of
         {ok, EffectiveFileQos} ->
             EffectiveQosEntries = file_qos:get_qos_entries(EffectiveFileQos),

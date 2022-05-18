@@ -117,7 +117,7 @@ gather_ancestors_json_metadata(UserCtx, FileCtx0, GatheredMetadata) ->
             GatheredMetadata
     end,
 
-    {ParentCtx, FileCtx1} = files_tree:get_parent(FileCtx0, UserCtx),
+    {ParentCtx, FileCtx1} = file_tree:get_parent(FileCtx0, UserCtx),
 
     case file_ctx:equals(FileCtx1, ParentCtx) of
         true -> {ok, AllMetadata};

@@ -358,7 +358,7 @@ ensure_missing_parent_exist(MissingParentName, MissingParentStorageCtx, Info = #
 -spec get_child_safe(file_ctx:ctx(), file_meta:name()) -> {ok, file_ctx:ctx()} | {error, term()}.
 get_child_safe(FileCtx, ChildName) ->
     try
-        {ChildCtx, _} = files_tree:get_child(FileCtx, ChildName, user_ctx:new(?ROOT_SESS_ID)),
+        {ChildCtx, _} = file_tree:get_child(FileCtx, ChildName, user_ctx:new(?ROOT_SESS_ID)),
         {ok, ChildCtx}
     catch
         error:{badmatch,{error,not_found}} ->
@@ -651,7 +651,7 @@ rollback_file_creation(ParentCtx, StorageFileCtx) ->
 try_to_delete_file(ParentCtx, ChildName) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
     try
-        {FileCtx, _} = files_tree:get_child(ParentCtx, ChildName, UserCtx),
+        {FileCtx, _} = file_tree:get_child(ParentCtx, ChildName, UserCtx),
         fslogic_delete:handle_file_deleted_on_imported_storage(FileCtx)
     catch
         throw:?ENOENT ->

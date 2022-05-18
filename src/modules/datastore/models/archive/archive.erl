@@ -207,7 +207,7 @@ find_file(ArchiveDoc, RelativeFilePath, UserCtx) ->
     try
         lists:foldl(fun
             (ChildName, {ok, Ctx}) ->
-                {ChildCtx, _} = files_tree:get_child(Ctx, ChildName, UserCtx),
+                {ChildCtx, _} = file_tree:get_child(Ctx, ChildName, UserCtx),
                 %% @TODO VFS-7923 - use unified symlink resolving functionality
                 case file_ctx:is_symlink_const(ChildCtx) of
                     true ->

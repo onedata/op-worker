@@ -70,26 +70,21 @@ mkdir(SessId, ParentGuid0, Name, Mode) ->
 %% entry and up to Limit of entries.
 %% @end
 %%--------------------------------------------------------------------
--spec get_children(session:id(), lfm:file_key(), dir_req:list_opts()) ->
-    {ok, [{fslogic_worker:file_guid(), file_meta:name()}], file_meta:list_extended_info()} | lfm:error_reply().
-get_children(SessId, FileKey, ListOpts) ->
+-spec get_children(session:id(), lfm:file_key(), file_listing:options()) ->
+    {ok, [{fslogic_worker:file_guid(), file_meta:name()}], file_listing:pagination_token()} | lfm:error_reply().
+get_children(SessId, FileKey, ListingOpts) ->
     FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, resolve_symlink),
 
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #get_file_children{
-            offset = maps:get(offset, ListOpts, undefined),
-            size = maps:get(size, ListOpts, undefined),
-            index_startid = maps:get(last_name, ListOpts, undefined),
-            index_token = maps:get(token, ListOpts, undefined)
+            listing_options = ListingOpts
         },
         fun(#file_children{
             child_links = List,
-            is_last = IsLast,
-            index_token = ReturnedToken
+            pagination_token = ListingToken
         }) ->
             Children = [{Guid, FileName} || #child_link{guid = Guid, name = FileName} <- List],
-            ListExtendedInfo = #{is_last => IsLast},
-            {ok, Children, maps_utils:put_if_defined(ListExtendedInfo, token, ReturnedToken)}
+            {ok, Children, ListingToken}
         end).
 
 
@@ -99,26 +94,22 @@ get_children(SessId, FileKey, ListOpts) ->
 %% starting with Offset-th entry and up to Limit of entries.
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_attrs(session:id(), lfm:file_key(), dir_req:list_opts(), boolean(), boolean()) ->
-    {ok, [#file_attr{}], file_meta:list_extended_info()} | lfm:error_reply().
-get_children_attrs(SessId, FileKey, ListOpts, IncludeReplicationStatus, IncludeHardlinkCount) ->
+-spec get_children_attrs(session:id(), lfm:file_key(), file_listing:options(), boolean(), boolean()) ->
+    {ok, [#file_attr{}], file_listing:pagination_token()} | lfm:error_reply().
+get_children_attrs(SessId, FileKey, ListingOpts, IncludeReplicationStatus, IncludeHardlinkCount) ->
     FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, resolve_symlink),
 
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #get_file_children_attrs{
-            offset = maps:get(offset, ListOpts, undefined),
-            size = maps:get(size, ListOpts, undefined),
-            index_token = maps:get(token, ListOpts, undefined),
+            listing_options = ListingOpts,
             include_replication_status = IncludeReplicationStatus,
             include_link_count = IncludeHardlinkCount
         },
         fun(#file_children_attrs{
             child_attrs = Attrs,
-            is_last = IsLast,
-            index_token = ReturnedToken
+            pagination_token = ListingToken
         }) ->
-            ListExtendedInfo = #{is_last => IsLast},
-            {ok, Attrs, maps_utils:put_if_defined(ListExtendedInfo, token, ReturnedToken)}
+            {ok, Attrs, ListingToken}
         end).
 
 
@@ -142,22 +133,20 @@ get_child_attr(SessId, ParentGuid0, ChildName)  ->
 %% of entries.
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_details(session:id(), lfm:file_key(), dir_req:list_opts()) ->
-    {ok, [lfm_attrs:file_details()], file_meta:list_extended_info()} | lfm:error_reply().
-get_children_details(SessId, FileKey, ListOpts) ->
+-spec get_children_details(session:id(), lfm:file_key(), file_listing:options()) ->
+    {ok, [lfm_attrs:file_details()], file_listing:pagination_token()} | lfm:error_reply().
+get_children_details(SessId, FileKey, ListingOpts) ->
     FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, resolve_symlink),
 
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #get_file_children_details{
-            offset = maps:get(offset, ListOpts, undefined),
-            size = maps:get(size, ListOpts, undefined),
-            index_startid = maps:get(last_name, ListOpts, undefined)
+            listing_options = ListingOpts
         },
         fun(#file_children_details{
             child_details = ChildrenInfo,
-            is_last = IsLast
+            pagination_token = ListingToken
         }) ->
-            {ok, ChildrenInfo, #{is_last => IsLast}}
+            {ok, ChildrenInfo, ListingToken}
         end).
 
 
@@ -183,7 +172,7 @@ get_files_recursively(SessId, FileKey, Options) ->
     
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #get_recursive_file_list{
-            options = Options
+            listing_options = Options
         },
         fun(#recursive_file_list{
             entries = Result,
@@ -203,22 +192,23 @@ get_files_recursively(SessId, FileKey, Options) ->
 -spec count_children(session:id(), fslogic_worker:file_guid()) ->
     {ok, non_neg_integer()} | lfm:error_reply().
 count_children(SessId, FileGuid) ->
-    BatchSize = op_worker:get_env(ls_batch_size),
-    count_children(SessId, FileGuid, #{token => ?INITIAL_DATASTORE_LS_TOKEN, size => BatchSize}, 0).
+    count_children(SessId, FileGuid, #{tune_for_large_continuous_listing => true}, 0).
 
 
 %% @private
 -spec count_children( session:id(), fslogic_worker:file_guid(),
-    file_meta:list_opts(), Acc :: non_neg_integer()) ->
+    file_listing:options(), Acc :: non_neg_integer()) ->
     {ok, non_neg_integer()} | lfm:error_reply().
 count_children(SessId, FileGuid, ListOpts, Acc) ->
     case get_children(SessId, ?FILE_REF(FileGuid), ListOpts) of
-        {ok, List, ListExtendedInfo} ->
-            case maps:get(is_last, ListExtendedInfo) of
+        {ok, List, ListingPaginationToken} ->
+            case file_listing:is_finished(ListingPaginationToken) of
                 true ->
                     {ok, Acc + length(List)};
                 false ->
-                    ListOpts2 = ListOpts#{token => maps:get(token, ListExtendedInfo)},
+                    ListOpts2 = ListOpts#{
+                        pagination_token => ListingPaginationToken
+                    },
                     count_children(SessId, FileGuid, ListOpts2, Acc + length(List))
             end;
         {error, _} = Error ->
