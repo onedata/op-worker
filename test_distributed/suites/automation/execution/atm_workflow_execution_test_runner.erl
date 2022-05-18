@@ -143,7 +143,7 @@
 -type test_ctx() :: #test_ctx{}.
 
 -define(AWAIT_OTHER_PARALLEL_PIPELINES_NEXT_STEP_INTERVAL, 100).
--define(TEST_HUNG_MAX_PROBES_NUM, 10).
+-define(TEST_HUNG_MAX_PROBES_NUM, 20).
 
 -define(ASSERT_RETRIES, 30).
 

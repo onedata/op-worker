@@ -54,7 +54,24 @@
     cancel_enqueued_atm_workflow_execution_test/1,
     cancel_active_atm_workflow_execution_test/1,
     cancel_finishing_atm_workflow_execution_test/1,
-    cancel_finished_atm_workflow_execution_test/1
+    cancel_finished_atm_workflow_execution_test/1,
+
+    iterate_over_list_store_test/1,
+    iterate_over_list_store_with_some_inaccessible_items_test/1,
+    iterate_over_list_store_with_all_items_inaccessible_test/1,
+    iterate_over_empty_list_store_test/1,
+
+    iterate_over_range_store_test/1,
+    iterate_over_empty_range_store_test/1,
+
+    iterate_over_single_value_store_test/1,
+    iterate_over_single_value_store_with_all_items_inaccessible_test/1,
+    iterate_over_empty_single_value_store_test/1,
+
+    iterate_over_tree_forest_store_test/1,
+    iterate_over_tree_forest_store_with_some_inaccessible_items_test/1,
+    iterate_over_tree_forest_store_with_all_items_inaccessible_test/1,
+    iterate_over_empty_tree_forest_store_test/1
 ]).
 
 groups() -> [
@@ -90,7 +107,24 @@ groups() -> [
         cancel_enqueued_atm_workflow_execution_test,
         cancel_active_atm_workflow_execution_test,
         cancel_finishing_atm_workflow_execution_test,
-        cancel_finished_atm_workflow_execution_test
+        cancel_finished_atm_workflow_execution_test,
+
+        iterate_over_list_store_test,
+        iterate_over_list_store_with_some_inaccessible_items_test,
+        iterate_over_list_store_with_all_items_inaccessible_test,
+        iterate_over_empty_list_store_test,
+
+        iterate_over_range_store_test,
+        iterate_over_empty_range_store_test,
+
+        iterate_over_single_value_store_test,
+        iterate_over_single_value_store_with_all_items_inaccessible_test,
+        iterate_over_empty_single_value_store_test,
+
+        iterate_over_tree_forest_store_test,
+        iterate_over_tree_forest_store_with_some_inaccessible_items_test,
+        iterate_over_tree_forest_store_with_all_items_inaccessible_test,
+        iterate_over_empty_tree_forest_store_test
     ]}
 ].
 
@@ -113,6 +147,7 @@ all() -> [
 -define(RUN_SCHEDULING_TEST(), ?RUN_TEST(atm_workflow_execution_scheduling_test_base)).
 -define(RUN_PREPARATION_TEST(), ?RUN_TEST(atm_workflow_execution_preparation_test_base)).
 -define(RUN_CANCELLATION_TEST(), ?RUN_TEST(atm_workflow_execution_cancellation_test_base)).
+-define(RUN_ITERATION_TEST(), ?RUN_TEST(atm_workflow_execution_iteration_test_base)).
 
 
 %%%===================================================================
@@ -214,6 +249,58 @@ cancel_finishing_atm_workflow_execution_test(_Config) ->
 
 cancel_finished_atm_workflow_execution_test(_Config) ->
     ?RUN_CANCELLATION_TEST().
+
+
+iterate_over_list_store_test(_Config) ->
+    ?RUN_ITERATION_TEST().
+
+
+iterate_over_list_store_with_some_inaccessible_items_test(_Config) ->
+    ?RUN_ITERATION_TEST().
+
+
+iterate_over_list_store_with_all_items_inaccessible_test(_Config) ->
+    ?RUN_ITERATION_TEST().
+
+
+iterate_over_empty_list_store_test(_Config) ->
+    ?RUN_ITERATION_TEST().
+
+
+iterate_over_range_store_test(_Config) ->
+    ?RUN_ITERATION_TEST().
+
+
+iterate_over_empty_range_store_test(_Config) ->
+    ?RUN_ITERATION_TEST().
+
+
+iterate_over_single_value_store_test(_Config) ->
+    ?RUN_ITERATION_TEST().
+
+
+iterate_over_single_value_store_with_all_items_inaccessible_test(_Config) ->
+    ?RUN_ITERATION_TEST().
+
+
+iterate_over_empty_single_value_store_test(_Config) ->
+    ?RUN_ITERATION_TEST().
+
+
+iterate_over_tree_forest_store_test(_Config) ->
+    ?RUN_ITERATION_TEST().
+
+
+iterate_over_tree_forest_store_with_some_inaccessible_items_test(_Config) ->
+    ?RUN_ITERATION_TEST().
+
+
+iterate_over_tree_forest_store_with_all_items_inaccessible_test(_Config) ->
+    ?RUN_ITERATION_TEST().
+
+
+iterate_over_empty_tree_forest_store_test(_Config) ->
+    ?RUN_ITERATION_TEST().
 
 
 %===================================================================
