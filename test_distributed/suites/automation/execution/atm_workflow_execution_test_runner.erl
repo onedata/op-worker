@@ -145,6 +145,8 @@
 -define(AWAIT_OTHER_PARALLEL_PIPELINES_NEXT_STEP_INTERVAL, 100).
 -define(TEST_HUNG_MAX_PROBES_NUM, 10).
 
+-define(ASSERT_RETRIES, 30).
+
 -define(TEST_PROC_PID_KEY(__ATM_WORKFLOW_EXECUTION_ID),
     {atm_test_runner_process, __ATM_WORKFLOW_EXECUTION_ID}
 ).
@@ -220,7 +222,7 @@ run(TestSpec = #atm_workflow_execution_test_spec{
     ExpState = atm_workflow_execution_exp_state_builder:init(
         ProviderSelector, SpaceId, AtmWorkflowExecutionId, ?NOW(), AtmLaneSchemas
     ),
-    true = atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState),
+    true = atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState, 0),
 
     monitor_workflow_execution(#test_ctx{
         test_spec = TestSpec,
@@ -608,13 +610,13 @@ get_exp_state_diff(
         ExpState1 = atm_workflow_execution_exp_state_builder:expect_task_items_in_processing_increased(
             AtmTaskExecutionId, length(ItemsBatch), ExpState0
         ),
-        ExpState2 = atm_workflow_execution_exp_state_builder:expect_task_transit_to_active_status_if_in_pending_status(
+        ExpState2 = atm_workflow_execution_exp_state_builder:expect_task_moved_to_active_status_if_was_in_pending_status(
             AtmTaskExecutionId, ExpState1
         ),
-        ExpState3 = atm_workflow_execution_exp_state_builder:expect_task_parallel_box_transit_to_active_status_if_in_pending_status(
+        ExpState3 = atm_workflow_execution_exp_state_builder:expect_task_parallel_box_moved_to_active_status_if_was_in_pending_status(
             AtmTaskExecutionId, ExpState2
         ),
-        ExpState4 = atm_workflow_execution_exp_state_builder:expect_task_lane_run_transit_to_active_status_if_in_enqueued_status(
+        ExpState4 = atm_workflow_execution_exp_state_builder:expect_task_lane_run_moved_to_active_status_if_was_in_enqueued_status(
             AtmTaskExecutionId, ExpState3
         ),
         {true, ExpState4}
@@ -634,7 +636,7 @@ get_exp_state_diff(
         _AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId,
         ItemsBatch, _LambdaOutput
     ]}) ->
-        {true, atm_workflow_execution_exp_state_builder:expect_task_items_transit_from_processing_to_processed(
+        {true, atm_workflow_execution_exp_state_builder:expect_task_items_moved_from_processing_to_processed(
             AtmTaskExecutionId, length(ItemsBatch), ExpState0
         )}
     end;
@@ -660,7 +662,7 @@ get_exp_state_diff(
             (<<"active">>, [<<"finished">>]) -> <<"finished">>;
             (CurrentStatus, _) -> CurrentStatus
         end,
-        ExpState2 = atm_workflow_execution_exp_state_builder:expect_task_parallel_box_transit_to_inferred_status(
+        ExpState2 = atm_workflow_execution_exp_state_builder:expect_task_parallel_box_moved_to_inferred_status(
             AtmTaskExecutionId, InferStatusFun, ExpState1
         ),
         {true, ExpState2}
@@ -753,7 +755,7 @@ assert_exp_workflow_execution_state(#test_ctx{
     workflow_execution_exp_state = ExpState,
     executed_step_phases = ExecutedStepPhases
 }) ->
-    case atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState) of
+    case atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState, ?ASSERT_RETRIES) of
         true ->
             ok;
         false ->
@@ -807,7 +809,7 @@ shift_monitored_lane_run_if_current_one_ended(
 ->
     AtmLaneRunTestSpec = get_lane_run_test_spec(AtmLaneIndex, TestCtx),
     AtmLaneRunSelector = AtmLaneRunTestSpec#atm_lane_run_execution_test_spec.selector,
-    IsLastLaneRunStepPhase = is_last_lane_run_step_phase(
+    IsLastLaneRunStepPhase = is_end_phase_of_last_step_of_lane_run(
         StepMockCallReport, AtmLaneRunSelector, TestCtx
     ),
     CurrentAtmLaneRunSelector = {CurrentAtmLaneIndex, CurrentAtmRunNum},
@@ -826,13 +828,13 @@ shift_monitored_lane_run_if_current_one_ended(_, TestCtx) ->
 
 
 %% @private
--spec is_last_lane_run_step_phase(
+-spec is_end_phase_of_last_step_of_lane_run(
     mock_call_report(),
     atm_lane_execution:lane_run_selector(),
     test_ctx()
 ) ->
     boolean().
-is_last_lane_run_step_phase(
+is_end_phase_of_last_step_of_lane_run(
     #mock_call_report{timing = after_step, step = Step},
     AtmLaneRunSelector,
     #test_ctx{executed_step_phases = ExecutedStepPhases}

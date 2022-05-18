@@ -43,13 +43,13 @@
     get_task_selector/2,
     get_task_stats/2,
     expect_task_items_in_processing_increased/3,
-    expect_task_items_transit_from_processing_to_processed/3,
-    expect_task_transit_to_active_status_if_in_pending_status/2,
-    expect_task_parallel_box_transit_to_active_status_if_in_pending_status/2,
-    expect_task_lane_run_transit_to_active_status_if_in_enqueued_status/2,
+    expect_task_items_moved_from_processing_to_processed/3,
+    expect_task_moved_to_active_status_if_was_in_pending_status/2,
+    expect_task_parallel_box_moved_to_active_status_if_was_in_pending_status/2,
+    expect_task_lane_run_moved_to_active_status_if_was_in_enqueued_status/2,
     expect_task_finished/2,
     expect_task_skipped/2,
-    expect_task_parallel_box_transit_to_inferred_status/3,
+    expect_task_parallel_box_moved_to_inferred_status/3,
     expect_all_tasks_skipped/2,
 
     expect_workflow_execution_aborting/1,
@@ -57,7 +57,7 @@
     expect_workflow_execution_failed/1,
     expect_workflow_execution_cancelled/1,
 
-    assert_matches_with_backend/1
+    assert_matches_with_backend/2
 ]).
 
 % json object similar in structure to translations returned via API endpoints
@@ -91,6 +91,8 @@
 -type ctx() :: #exp_workflow_execution_state_ctx{}.
 
 -type task_registry() :: #{AtmTaskSchemaId :: automation:id() => atm_task_execution:id()}.
+
+-type log_fun() :: fun((binary(), [term()]) -> ok).
 
 -export_type([ctx/0]).
 
@@ -354,13 +356,13 @@ expect_task_items_in_processing_increased(AtmTaskExecutionId, Inc, ExpStateCtx) 
     update_task_execution_exp_state(AtmTaskExecutionId, ExpAtmTaskExecutionStateDiff, ExpStateCtx).
 
 
--spec expect_task_items_transit_from_processing_to_processed(
+-spec expect_task_items_moved_from_processing_to_processed(
     atm_task_execution:id(),
     pos_integer(),
     ctx()
 ) ->
     ctx().
-expect_task_items_transit_from_processing_to_processed(AtmTaskExecutionId, Count, ExpStateCtx) ->
+expect_task_items_moved_from_processing_to_processed(AtmTaskExecutionId, Count, ExpStateCtx) ->
     ExpAtmTaskExecutionStateDiff = fun(ExpAtmTaskExecutionState = #{
         <<"itemsInProcessing">> := IIP,
         <<"itemsProcessed">> := IP
@@ -373,25 +375,25 @@ expect_task_items_transit_from_processing_to_processed(AtmTaskExecutionId, Count
     update_task_execution_exp_state(AtmTaskExecutionId, ExpAtmTaskExecutionStateDiff, ExpStateCtx).
 
 
--spec expect_task_transit_to_active_status_if_in_pending_status(
+-spec expect_task_moved_to_active_status_if_was_in_pending_status(
     atm_task_execution:id(),
     ctx()
 ) ->
     ctx().
-expect_task_transit_to_active_status_if_in_pending_status(AtmTaskExecutionId, ExpStateCtx) ->
+expect_task_moved_to_active_status_if_was_in_pending_status(AtmTaskExecutionId, ExpStateCtx) ->
     update_task_execution_exp_state(
         AtmTaskExecutionId,
-        build_transit_to_status_if_in_status_diff(<<"pending">>, <<"active">>),
+        build_move_to_status_if_in_status_diff(<<"pending">>, <<"active">>),
         ExpStateCtx
     ).
 
 
--spec expect_task_parallel_box_transit_to_active_status_if_in_pending_status(
+-spec expect_task_parallel_box_moved_to_active_status_if_was_in_pending_status(
     atm_task_execution:id(),
     ctx()
 ) ->
     ctx().
-expect_task_parallel_box_transit_to_active_status_if_in_pending_status(
+expect_task_parallel_box_moved_to_active_status_if_was_in_pending_status(
     AtmTaskExecutionId,
     ExpStateCtx = #exp_workflow_execution_state_ctx{
         exp_task_execution_state_ctx_registry = ExpAtmTaskExecutionsRegistry
@@ -402,17 +404,17 @@ expect_task_parallel_box_transit_to_active_status_if_in_pending_status(
     update_exp_parallel_box_execution_state(
         TaskExecutionExtStateCtx#exp_task_execution_state_ctx.lane_run_selector,
         TaskExecutionExtStateCtx#exp_task_execution_state_ctx.parallel_box_schema_id,
-        build_transit_to_status_if_in_status_diff(<<"pending">>, <<"active">>),
+        build_move_to_status_if_in_status_diff(<<"pending">>, <<"active">>),
         ExpStateCtx
     ).
 
 
--spec expect_task_lane_run_transit_to_active_status_if_in_enqueued_status(
+-spec expect_task_lane_run_moved_to_active_status_if_was_in_enqueued_status(
     atm_task_execution:id(),
     ctx()
 ) ->
     ctx().
-expect_task_lane_run_transit_to_active_status_if_in_enqueued_status(
+expect_task_lane_run_moved_to_active_status_if_was_in_enqueued_status(
     AtmTaskExecutionId,
     ExpStateCtx = #exp_workflow_execution_state_ctx{
         exp_task_execution_state_ctx_registry = ExpAtmTaskExecutionsRegistry
@@ -423,7 +425,7 @@ expect_task_lane_run_transit_to_active_status_if_in_enqueued_status(
     ),
     update_exp_lane_run_state(
         AtmLaneRunSelector,
-        build_transit_to_status_if_in_status_diff(<<"enqueued">>, <<"active">>),
+        build_move_to_status_if_in_status_diff(<<"enqueued">>, <<"active">>),
         ExpStateCtx
     ).
 
@@ -440,13 +442,13 @@ expect_task_skipped(AtmTaskExecutionId, ExpStateCtx) ->
     expect_task_ended(AtmTaskExecutionId, <<"skipped">>, ExpStateCtx).
 
 
--spec expect_task_parallel_box_transit_to_inferred_status(
+-spec expect_task_parallel_box_moved_to_inferred_status(
     atm_task_execution:id(),
     fun((CurrentParallelBoxStatus :: binary(), [AtmTaskStatus :: binary()]) -> binary()),
     ctx()
 ) ->
     ctx().
-expect_task_parallel_box_transit_to_inferred_status(AtmTaskExecutionId, InferStatusFun, ExpStateCtx) ->
+expect_task_parallel_box_moved_to_inferred_status(AtmTaskExecutionId, InferStatusFun, ExpStateCtx) ->
     Diff = fun(ExpParallelBoxState = #{<<"status">> := CurrentStatus}) ->
         ExpParallelBoxState#{<<"status">> => InferStatusFun(CurrentStatus, get_parallel_box_tasks_statuses(
             ExpParallelBoxState, ExpStateCtx
@@ -530,9 +532,18 @@ expect_workflow_execution_cancelled(ExpStateCtx) ->
     update_workflow_execution_exp_state(ExpAtmWorkflowExecutionStateDiff, ExpStateCtx).
 
 
--spec assert_matches_with_backend(ctx()) -> boolean().
-assert_matches_with_backend(ExpStateCtx) ->
-    assert_workflow_execution_expectations(ExpStateCtx) and assert_task_execution_expectations(ExpStateCtx).
+-spec assert_matches_with_backend(ctx(), non_neg_integer()) -> boolean().
+assert_matches_with_backend(ExpStateCtx, 0) ->
+    assert_matches_with_backend_internal(ExpStateCtx, fun ct:pal/2);
+
+assert_matches_with_backend(ExpStateCtx, Retries) ->
+    case assert_matches_with_backend_internal(ExpStateCtx, fun(_, _) -> ok end) of
+        true ->
+            true;
+        false ->
+            timer:sleep(timer:seconds(1)),
+            assert_matches_with_backend(ExpStateCtx, Retries - 1)
+    end.
 
 
 %%%===================================================================
@@ -595,9 +606,9 @@ get_lane_schema({AtmLaneSelector, _}, ExpStateCtx = #exp_workflow_execution_stat
 
 
 %% @private
--spec build_transit_to_status_if_in_status_diff(binary(), binary()) ->
+-spec build_move_to_status_if_in_status_diff(binary(), binary()) ->
     fun((json_utils:json_map()) -> json_utils:json_map()).
-build_transit_to_status_if_in_status_diff(RequiredStatus, NewStatus) ->
+build_move_to_status_if_in_status_diff(RequiredStatus, NewStatus) ->
     fun
         (ExpState = #{<<"status">> := Status}) when Status =:= RequiredStatus ->
             ExpState#{<<"status">> => NewStatus};
@@ -867,19 +878,26 @@ build_task_execution_initial_exp_state(AtmWorkflowExecutionId, AtmTaskSchemaId) 
 
 
 %% @private
--spec assert_workflow_execution_expectations(ctx()) -> boolean().
+-spec assert_matches_with_backend_internal(ctx(), log_fun()) -> boolean().
+assert_matches_with_backend_internal(ExpStateCtx, LogFun) ->
+    assert_workflow_execution_expectations(ExpStateCtx, LogFun) and
+        assert_task_execution_expectations(ExpStateCtx, LogFun).
+
+
+%% @private
+-spec assert_workflow_execution_expectations(ctx(), log_fun()) -> boolean().
 assert_workflow_execution_expectations(ExpStateCtx = #exp_workflow_execution_state_ctx{
     exp_workflow_execution_state = ExpAtmWorkflowExecutionState
-}) ->
+}, LogFun) ->
     AtmWorkflowExecutionState = atm_workflow_execution_to_json(fetch_workflow_execution(ExpStateCtx)),
 
     case catch assert_json_expectations(
-        <<"atmWorkflowExecution">>, ExpAtmWorkflowExecutionState, AtmWorkflowExecutionState
+        <<"atmWorkflowExecution">>, ExpAtmWorkflowExecutionState, AtmWorkflowExecutionState, LogFun
     ) of
         ok ->
             true;
         badmatch ->
-            ct:pal(
+            LogFun(
                 "Error: mismatch between exp workflow execution state: ~n~p~n~nand model stored in op: ~n~p",
                 [ExpAtmWorkflowExecutionState, AtmWorkflowExecutionState]
             ),
@@ -888,11 +906,11 @@ assert_workflow_execution_expectations(ExpStateCtx = #exp_workflow_execution_sta
 
 
 %% @private
--spec assert_task_execution_expectations(ctx()) -> boolean().
+-spec assert_task_execution_expectations(ctx(), log_fun()) -> boolean().
 assert_task_execution_expectations(#exp_workflow_execution_state_ctx{
     provider_selector = ProviderSelector,
     exp_task_execution_state_ctx_registry = ExpAtmTaskExecutionStateCtxRegistry
-}) ->
+}, LogFun) ->
     maps_utils:fold_while(fun(AtmTaskExecutionId, ExpAtmTaskExecution, true) ->
         {ok, #document{value = AtmTaskExecution}} = opw_test_rpc:call(
             ProviderSelector, atm_task_execution, get, [AtmTaskExecutionId]
@@ -901,12 +919,12 @@ assert_task_execution_expectations(#exp_workflow_execution_state_ctx{
         ExpAtmTaskExecutionState = ExpAtmTaskExecution#exp_task_execution_state_ctx.exp_state,
 
         case catch assert_json_expectations(
-            <<"atmTaskExecution">>, ExpAtmTaskExecutionState, AtmTaskExecutionState
+            <<"atmTaskExecution">>, ExpAtmTaskExecutionState, AtmTaskExecutionState, LogFun
         ) of
             ok ->
                 {cont, true};
             badmatch ->
-                ct:pal(
+                LogFun(
                     "Error: mismatch between exp task execution state: ~n~p~n~nand model stored in op: ~n~p",
                     [ExpAtmTaskExecutionState, AtmTaskExecutionState]
                 ),
@@ -972,9 +990,14 @@ atm_task_execution_to_json(#atm_task_execution{
 
 
 %% private
--spec assert_json_expectations(binary(), json_utils:json_term(), json_utils:json_term()) ->
+-spec assert_json_expectations(
+    binary(),
+    json_utils:json_term(),
+    json_utils:json_term(),
+    log_fun()
+) ->
     ok | no_return().
-assert_json_expectations(Path, Expected, Value) when is_map(Expected), is_map(Value) ->
+assert_json_expectations(Path, Expected, Value, LogFun) when is_map(Expected), is_map(Value) ->
     ExpectedKeys = lists:sort(maps:keys(Expected)),
     ValueKeys = lists:sort(maps:keys(Value)),
 
@@ -982,7 +1005,7 @@ assert_json_expectations(Path, Expected, Value) when is_map(Expected), is_map(Va
         true ->
             ok;
         false ->
-            ct:pal("Error: unmatching keys in objects at '~p'.~nExpected: ~p~nGot: ~p", [
+            LogFun("Error: unmatching keys in objects at '~p'.~nExpected: ~p~nGot: ~p", [
                 Path, Expected, Value
             ]),
             throw(badmatch)
@@ -990,41 +1013,42 @@ assert_json_expectations(Path, Expected, Value) when is_map(Expected), is_map(Va
 
     maps:foreach(fun(Key, ExpectedField) ->
         ValueField = maps:get(Key, Value),
-        assert_json_expectations(<<Path/binary, ".", Key/binary>>, ExpectedField, ValueField)
+        assert_json_expectations(<<Path/binary, ".", Key/binary>>, ExpectedField, ValueField, LogFun)
     end, Expected);
 
-assert_json_expectations(Path, Expected, Value) when is_list(Expected), is_list(Value) ->
+assert_json_expectations(Path, Expected, Value, LogFun) when is_list(Expected), is_list(Value) ->
     case length(Expected) == length(Value) of
         true ->
             lists:foreach(fun({Index, {ExpectedItem, ValueItem}}) ->
                 assert_json_expectations(
                     str_utils:format_bin("~s.[~B]", [Path, Index - 1]),
                     ExpectedItem,
-                    ValueItem
+                    ValueItem,
+                    LogFun
                 )
             end, lists_utils:enumerate(lists:zip(Expected, Value)));
         false ->
-            ct:pal("Error: unmatching arrays at '~p'.~nExpected: ~p~nGot: ~p", [
+            LogFun("Error: unmatching arrays at '~p'.~nExpected: ~p~nGot: ~p", [
                 Path, Expected, Value
             ]),
             throw(badmatch)
     end;
 
-assert_json_expectations(Path, Expected, Value) when is_function(Expected, 1) ->
+assert_json_expectations(Path, Expected, Value, LogFun) when is_function(Expected, 1) ->
     case Expected(Value) of
         true ->
             ok;
         false ->
-            ct:pal("Error: predicate for '~p' failed.~nGot: ~p", [Path, Value]),
+            LogFun("Error: predicate for '~p' failed.~nGot: ~p", [Path, Value]),
             throw(badmatch)
     end;
 
-assert_json_expectations(Path, Expected, Value) ->
+assert_json_expectations(Path, Expected, Value, LogFun) ->
     case Expected == Value of
         true ->
             ok;
         false ->
-            ct:pal("Error: unmatching items at '~p'.~nExpected: ~p~nGot: ~p", [
+            LogFun("Error: unmatching items at '~p'.~nExpected: ~p~nGot: ~p", [
                 Path, Expected, Value
             ]),
             throw(badmatch)
