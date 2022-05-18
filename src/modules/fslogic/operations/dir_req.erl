@@ -16,6 +16,7 @@
 -include("modules/fslogic/data_access_control.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 
 
@@ -25,7 +26,8 @@
     get_children_ctxs/3,
     get_children/3,
     get_children_attrs/5,
-    get_children_details/3
+    get_children_details/3,
+    browse_stats/3
 ]).
 
 -type map_child_fun() :: fun((user_ctx:ctx(), file_ctx:ctx(), attr_req:compute_file_attr_opts()) ->
@@ -147,6 +149,27 @@ get_children_details(UserCtx, FileCtx0, ListOpts) ->
         UserCtx, FileCtx1, AccessRequirements
     ),
     get_children_details_insecure(UserCtx, FileCtx2, ListOpts, CanonicalChildrenWhiteList).
+
+
+-spec browse_stats(user_ctx:ctx(), file_ctx:ctx(), ts_browse_request:record()) -> 
+    fslogic_worker:provider_response().
+browse_stats(_UserCtx, FileCtx, BrowseRequest) ->
+    Guid = file_ctx:get_logical_guid_const(FileCtx),
+    case dir_size_stats:browse_time_stats_collection(Guid, BrowseRequest) of
+        {ok, BrowseResult} ->
+            ?PROVIDER_OK_RESP(#dir_stats_result{result = BrowseResult});
+        ?ERROR_DIR_STATS_DISABLED_FOR_SPACE = Error ->
+            %% TODO VFS-7208 pass errors after introducing API errors tofslogic
+            #provider_response{status = #status{
+                code = ?ENOTSUP, 
+                description = jiffy:encode(errors:to_json(Error))}
+            };
+        ?ERROR_DIR_STATS_NOT_READY = Error ->
+            #provider_response{status = #status{
+                code = ?EBUSY, 
+                description = jiffy:encode(errors:to_json(Error))}
+            }
+    end.
 
 
 %%%===================================================================

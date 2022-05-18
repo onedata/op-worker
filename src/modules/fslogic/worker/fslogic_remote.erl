@@ -13,20 +13,13 @@
 -module(fslogic_remote).
 -author("Rafal Slota").
 
--include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("proto/common/credentials.hrl").
 -include("proto/oneclient/client_messages.hrl").
--include("proto/oneclient/common_messages.hrl").
--include("proto/oneclient/fuse_messages.hrl").
--include("proto/oneclient/proxyio_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
--include("proto/oneprovider/provider_messages.hrl").
--include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get_provider_to_reroute/1, reroute/3]).
+-export([get_provider_to_route/1, route/3]).
 
 %%%===================================================================
 %%% API functions
@@ -37,8 +30,8 @@
 %% Get provider from list to reroute msg.
 %% @end
 %%--------------------------------------------------------------------
--spec get_provider_to_reroute([od_provider:id()]) -> od_provider:id().
-get_provider_to_reroute([ProviderId | _]) ->
+-spec get_provider_to_route([od_provider:id()]) -> od_provider:id().
+get_provider_to_route([ProviderId | _]) ->
     ProviderId.
 
 %%--------------------------------------------------------------------
@@ -46,21 +39,28 @@ get_provider_to_reroute([ProviderId | _]) ->
 %% Reroute given request to given provider.
 %% @end
 %%--------------------------------------------------------------------
--spec reroute(user_ctx:ctx(), oneprovider:id(), fslogic_worker:request()) ->
+-spec route(user_ctx:ctx(), oneprovider:id(), fslogic_worker:request()) ->
     fslogic_worker:response().
-reroute(UserCtx, ProviderId, Request) ->
+route(UserCtx, ProviderId, Request) ->
     ?debug("Rerouting ~p ~p", [ProviderId, Request]),
 
+    Msg = case user_ctx:is_root(UserCtx) of
+        true ->
+            #client_message{
+                message_body = Request,
+                effective_session_id = ?ROOT_SESS_ID
+            };
+        false ->
+            EffSessionId = user_ctx:get_session_id(UserCtx),
+            Credentials = user_ctx:get_credentials(UserCtx),
+            #client_message{
+                message_body = Request,
+                effective_session_id = EffSessionId,
+                effective_client_tokens = auth_manager:get_client_tokens(Credentials),
+                effective_session_mode = user_ctx:get_session_mode(UserCtx)
+            }
+    end,
     SessionId = session_utils:get_provider_session_id(outgoing, ProviderId),
-    EffSessionId = user_ctx:get_session_id(UserCtx),
-    Credentials = user_ctx:get_credentials(UserCtx),
-    Msg = #client_message{
-        message_body = Request,
-        effective_session_id = EffSessionId,
-        effective_client_tokens = auth_manager:get_client_tokens(Credentials),
-        effective_session_mode = user_ctx:get_session_mode(UserCtx)
-    },
-
     {ok, #server_message{
         message_body = MsgBody
     }} = communicator:communicate_with_provider(SessionId, Msg),

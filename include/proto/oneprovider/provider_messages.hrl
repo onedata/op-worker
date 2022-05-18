@@ -82,6 +82,10 @@
     type :: custom_metadata:type()
 }).
 
+-record(browse_dir_stats, {
+    request :: ts_browse_request:record()
+}).
+
 -type provider_request_type() ::
     #get_parent{} |
     #get_acl{} | #set_acl{} | #remove_acl{} | #check_perms{} |
@@ -89,7 +93,7 @@
     #get_cdmi_completion_status{} | #set_cdmi_completion_status{} |
     #get_mimetype{} | #set_mimetype{} | #get_file_path{} |
     #get_metadata{} | #remove_metadata{} | #set_metadata{} |
-    #get_file_distribution{}.
+    #get_file_distribution{} | #browse_dir_stats{}.
 
 -record(transfer_encoding, {
     value :: binary()
@@ -160,10 +164,14 @@
     related_dip_id :: undefined | archive:id()
 }).
 
+-record(dir_stats_result, {
+    result :: ts_browse_result:record()
+}).
+
 -type provider_response_type() ::
     #transfer_encoding{} | #cdmi_completion_status{} | #mimetype{} | #acl{} |
     #dir{} | #file_path{} | #file_distribution{} | #metadata{} |
-    #dataset_info{} | #file_eff_dataset_summary{} | #archive_info{} |
+    #dataset_info{} | #file_eff_dataset_summary{} | #archive_info{} | #dir_stats_result{} | 
     undefined.
 
 -record(provider_request, {

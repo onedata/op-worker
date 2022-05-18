@@ -487,8 +487,8 @@ handle_request_locally(UserCtx, #proxyio_request{
 handle_request_remotely(_UserCtx, _Req, []) ->
     #status{code = ?ENOTSUP};
 handle_request_remotely(UserCtx, Req, Providers) ->
-    ProviderId = fslogic_remote:get_provider_to_reroute(Providers),
-    fslogic_remote:reroute(UserCtx, ProviderId, Req).
+    ProviderId = fslogic_remote:get_provider_to_route(Providers),
+    fslogic_remote:route(UserCtx, ProviderId, Req).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -688,7 +688,9 @@ handle_provider_request(UserCtx, #set_metadata{
 handle_provider_request(UserCtx, #remove_metadata{type = Type}, FileCtx) ->
     metadata_req:remove_metadata(UserCtx, FileCtx, Type);
 handle_provider_request(UserCtx, #check_perms{flag = Flag}, FileCtx) ->
-    permission_req:check_perms(UserCtx, FileCtx, Flag).
+    permission_req:check_perms(UserCtx, FileCtx, Flag);
+handle_provider_request(UserCtx, #browse_dir_stats{request = BrowseRequest}, FileCtx) ->
+    dir_req:browse_stats(UserCtx, FileCtx, BrowseRequest).
 
 
 %%--------------------------------------------------------------------

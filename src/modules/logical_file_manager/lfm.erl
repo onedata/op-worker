@@ -79,7 +79,8 @@
     get_children_attrs/5,
     get_children_details/3,
     get_files_recursively/3,
-    get_children_count/2
+    get_children_count/2,
+    browse_dir_stats/4
 ]).
 %% Permissions related operations
 -export([
@@ -549,6 +550,12 @@ get_files_recursively(SessId, FileKey, Options) ->
     {ok, integer()} | error_reply().
 get_children_count(SessId, FileKey) ->
     ?run(lfm_dirs:get_children_count(SessId, FileKey)).
+
+
+-spec browse_dir_stats(session:id(), file_key(), oneprovider:id(), ts_browse_request:record()) ->
+    {ok, ts_browse_result:record()} | {error, term()}.
+browse_dir_stats(SessId, FileKey, ProviderId, BrowseRequest) ->
+    ?run(lfm_dirs:browse_dir_stats(SessId, FileKey, ProviderId, BrowseRequest)).
 
 
 %%%===================================================================

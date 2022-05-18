@@ -23,6 +23,8 @@
 -include("middleware/middleware.hrl").
 -include("modules/fslogic/acl.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include("modules/dir_stats_collector/dir_size_stats.hrl").
+-include_lib("cluster_worker/include/time_series/browsing.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -1030,9 +1032,19 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = archive_recall_log},
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = api_samples, scope = public}}, _) ->
     {ok, value, public_file_api_samples:generate_for(Auth#auth.session_id, FileGuid)};
 
-get(#op_req{gri = #gri{id = Guid, aspect = dir_size_stats}, data = Data}, _) ->
-    TSBrowseRequest = ts_browse_request:from_json(Data),
-    {ok, value, ?check(dir_size_stats:browse_time_stats_collection(Guid, TSBrowseRequest))}.
+get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = dir_size_stats}, data = Data}, _) ->
+    BrowseRequest = ts_browse_request:from_json(Data),
+    ProviderRequests = split_ts_browse_request_between_providers(file_id:guid_to_space_id(Guid), BrowseRequest),
+    FinalResult = maps:fold(fun(ProviderId, Req, Acc) ->
+        case lfm:browse_dir_stats(Auth#auth.session_id, #file_ref{guid = Guid}, ProviderId, Req) of
+            {ok, Result} ->
+                merge_ts_browse_results(Acc, Result);
+            {error, _} ->
+                % ignore statistics that could not be obtained
+                Acc
+        end
+    end, get_empty_ts_browse_result(BrowseRequest), ProviderRequests),
+    {ok, value, FinalResult}.
 
 
 %%%===================================================================
@@ -1275,3 +1287,54 @@ create_file(SessionId, ParentGuid, Name, ?LINK_TYPE, TargetGuid) ->
     lfm:make_link(SessionId, ?FILE_REF(TargetGuid), ?FILE_REF(ParentGuid), Name);
 create_file(SessionId, ParentGuid, Name, ?SYMLINK_TYPE, TargetPath) ->
     lfm:make_symlink(SessionId, ?FILE_REF(ParentGuid), Name, TargetPath).
+
+
+%% @private
+-spec split_ts_browse_request_between_providers(od_space:id(), ts_browse_request:record()) ->
+    #{oneprovider:id() => ts_browse_request:record()}.
+split_ts_browse_request_between_providers(SpaceId, #time_series_get_layout_request{} = Req) ->
+    {ok, Providers} = space_logic:get_provider_ids(SpaceId),
+    lists:foldl(fun(P, Acc) -> Acc#{P => Req} end, #{}, Providers);
+split_ts_browse_request_between_providers(SpaceId, #time_series_get_slice_request{layout = Layout} = Req) ->
+    maps:fold(fun
+        (?SIZE_ON_STORAGE(StorageId) = TS, Metrics, Acc) ->
+            case storage_logic:get_provider(StorageId, SpaceId) of
+                {ok, ProviderId} ->
+                    extend_provider_time_series_slice_request_layout(ProviderId, Acc, TS, Metrics, Req);
+                {error, _} ->
+                    Acc
+            end;
+        (TS, Metrics, Acc) ->
+            extend_provider_time_series_slice_request_layout(oneprovider:get_id(), Acc, TS, Metrics, Req)
+    end, #{}, Layout).
+
+
+%% @private
+-spec extend_provider_time_series_slice_request_layout(
+    oneprovider:id(), 
+    #{oneprovider:id() => ts_browse_request:record()}, 
+    time_series_collection:time_series_name(), 
+    [time_series_collection:metric_name()], 
+    ts_browse_request:record()
+) ->
+    #{oneprovider:id() => ts_browse_request:record()}.
+extend_provider_time_series_slice_request_layout(ProviderId, ProviderRequests, TS, Metrics, BaseRequest) ->
+    #time_series_get_slice_request{layout = ProviderLayout} =
+        maps:get(ProviderId, ProviderRequests, #time_series_get_slice_request{layout = #{}}),
+    ProviderRequests#{ProviderId => BaseRequest#time_series_get_slice_request{
+        layout = ProviderLayout#{TS => Metrics}
+    }}.
+
+
+%% @private
+-spec merge_ts_browse_results(ts_browse_result:record(), ts_browse_result:record()) -> ts_browse_result:record().
+merge_ts_browse_results(#time_series_layout_result{layout = L1}, #time_series_layout_result{layout = L2}) ->
+    #time_series_layout_result{layout = maps:merge(L1, L2)};
+merge_ts_browse_results(#time_series_slice_result{slice = S1}, #time_series_slice_result{slice = S2}) ->
+    #time_series_slice_result{slice = maps:merge(S1, S2)}.
+
+
+%% @private
+-spec get_empty_ts_browse_result(ts_browse_request:record()) -> ts_browse_result:record().
+get_empty_ts_browse_result(#time_series_get_layout_request{}) -> #time_series_layout_result{layout = #{}};
+get_empty_ts_browse_result(#time_series_get_slice_request{}) -> #time_series_slice_result{slice = #{}}.

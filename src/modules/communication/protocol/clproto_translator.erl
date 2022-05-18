@@ -923,6 +923,12 @@ translate_from_protobuf(#'RemoveMetadata'{type = Type}) ->
     #remove_metadata{
         type = binary_to_existing_atom(Type, utf8)
     };
+translate_from_protobuf(#'BrowseDirStats'{
+    request = EncodedBrowseRequest
+}) ->
+    #browse_dir_stats{
+        request = binary_to_term(EncodedBrowseRequest)
+    };
 translate_from_protobuf(#'ProviderResponse'{
     status = Status,
     provider_response = {_, ProviderResponse}
@@ -988,6 +994,8 @@ translate_from_protobuf(#'Metadata'{
     };
 translate_from_protobuf(#'CheckPerms'{flag = Flag}) ->
     #check_perms{flag = open_flag_translate_from_protobuf(Flag)};
+translate_from_protobuf(#'DirStatsResponse'{response = EncodedResult}) ->
+    #dir_stats_result{result = binary_to_term(EncodedResult)};
 
 
 %% DBSYNC
@@ -1948,6 +1956,12 @@ translate_to_protobuf(#remove_metadata{type = Type}) ->
     {remove_metadata, #'RemoveMetadata'{
         type = atom_to_binary(Type, utf8)
     }};
+translate_to_protobuf(#browse_dir_stats{
+    request = BrowseRequest
+}) ->
+    {browse_dir_stats, #'BrowseDirStats'{
+        request = term_to_binary(BrowseRequest)
+    }};
 
 translate_to_protobuf(#provider_response{
     status = Status,
@@ -2014,6 +2028,12 @@ translate_to_protobuf(#metadata{
 translate_to_protobuf(#check_perms{flag = Flag}) ->
     {check_perms, #'CheckPerms'{
         flag = open_flag_translate_to_protobuf(Flag)
+    }};
+translate_to_protobuf(#dir_stats_result{
+    result = DirStatsResult
+}) ->
+    {dir_stats_response, #'DirStatsResponse'{
+        response = term_to_binary(DirStatsResult)
     }};
 
 

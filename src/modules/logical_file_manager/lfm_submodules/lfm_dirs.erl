@@ -14,6 +14,7 @@
 -include("global_definitions.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 
 %% API
 -export([
@@ -23,7 +24,8 @@
     get_child_attr/3,
     get_children_details/3,
     get_children_count/2,
-    get_files_recursively/3
+    get_files_recursively/3,
+    browse_dir_stats/4
 ]).
 
 
@@ -181,6 +183,44 @@ get_files_recursively(SessId, FileKey, Options) ->
         }) ->
             {ok, Result, InaccessiblePaths, PaginationToken}
         end).
+
+
+-spec browse_dir_stats(session:id(), lfm:file_key(), oneprovider:id(), ts_browse_request:record()) ->
+    {ok, ts_browse_result:record()} | {error, term()}.
+browse_dir_stats(SessId, FileKey, ProviderId, BrowseRequest) ->
+    Guid = lfm_file_key:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
+    Req = #provider_request{
+        context_guid = Guid,
+        provider_request = #browse_dir_stats{request = BrowseRequest}
+    },
+    
+    Res = case {oneprovider:is_self(ProviderId), connection:is_provider_connected(ProviderId)} of
+        {true, _} ->
+            {ok, R} = worker_proxy:call(
+                {id, fslogic_worker, file_id:guid_to_uuid(Guid)},
+                {provider_request, SessId, Req}),
+            R;
+        {false, true} ->
+            % Provider is always allowed to read dir statistics of other providers.
+            fslogic_remote:route(user_ctx:new(?ROOT_SESS_ID), ProviderId, Req);
+        {false, false} ->
+            ?ERROR_NO_CONNECTION_TO_PEER_ONEPROVIDER
+    end,
+    
+    case Res of
+        #provider_response{status = #status{code = ?OK}, provider_response = #dir_stats_result{result = Result}} ->
+            {ok, Result};
+        #provider_response{status = #status{code = Error, description = undefined}} ->
+            ?ERROR_POSIX(Error);
+        #provider_response{status = #status{code = Error, description = Description}} ->
+            try
+                errors:from_json(json_utils:decode(Description))
+            catch _:_ ->
+                ?ERROR_POSIX(Error)
+            end;
+        {error, _} = Error ->
+            Error
+    end.
 
 
 %%%===================================================================
