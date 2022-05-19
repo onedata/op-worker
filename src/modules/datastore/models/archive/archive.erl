@@ -32,7 +32,7 @@
 ]).
 
 % setters
--export([mark_building/1, mark_purging/2,
+-export([mark_building/1, mark_deleting/2,
     mark_file_archived/2, mark_file_failed/1, mark_creation_finished/2,
     mark_preserved/1, mark_verification_failed/1,
     set_root_dir_guid/2, set_data_dir_guid/2, set_base_archive_id/2,
@@ -57,7 +57,7 @@
 
 -type creator() :: od_user:id().
 
--type state() :: ?ARCHIVE_PENDING | ?ARCHIVE_BUILDING | ?ARCHIVE_PRESERVED | ?ARCHIVE_PURGING 
+-type state() :: ?ARCHIVE_PENDING | ?ARCHIVE_BUILDING | ?ARCHIVE_PRESERVED | ?ARCHIVE_DELETING 
     | ?ARCHIVE_FAILED | ?ARCHIVE_VERIFYING | ?ARCHIVE_VERIFICATION_FAILED.
 -type timestamp() :: time:seconds().
 -type description() :: binary().
@@ -362,7 +362,7 @@ get_related_aip_id(ArchiveId) ->
 
 -spec is_finished(record() | doc()) -> boolean().
 is_finished(#archive{state = State}) ->
-    lists:member(State, [?ARCHIVE_PRESERVED, ?ARCHIVE_FAILED, ?ARCHIVE_PURGING, 
+    lists:member(State, [?ARCHIVE_PRESERVED, ?ARCHIVE_FAILED, ?ARCHIVE_DELETING, 
         ?ARCHIVE_VERIFYING, ?ARCHIVE_VERIFICATION_FAILED]);
 is_finished(#document{value = Archive}) ->
     is_finished(Archive).
@@ -371,8 +371,8 @@ is_finished(#document{value = Archive}) ->
 %%% Setters for #archive record
 %%%===================================================================
 
--spec mark_purging(id(), callback()) -> {ok, doc()} | error().
-mark_purging(ArchiveId, Callback) ->
+-spec mark_deleting(id(), callback()) -> {ok, doc()} | error().
+mark_deleting(ArchiveId, Callback) ->
     update(ArchiveId, fun(Archive = #archive{
         state = PrevState,
         deleted_callback = PrevDeletedCallback,
@@ -387,7 +387,7 @@ mark_purging(ArchiveId, Callback) ->
                 ?ERROR_POSIX(?EBUSY);
             false ->
                 {ok, Archive#archive{
-                    state = ?ARCHIVE_PURGING,
+                    state = ?ARCHIVE_DELETING,
                     deleted_callback = utils:ensure_defined(Callback, PrevDeletedCallback)
                 }}
         end

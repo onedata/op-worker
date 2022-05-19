@@ -12,7 +12,7 @@
 %%%  * archivisation_tree - module for creating file structure, stored in
 %%%    .__onedata__archive hidden directory, in which archived files are stored
 %%%  * archivisation_callback - module for calling HTTP webhooks to notify users
-%%%    about finished archivisation or purging jobs
+%%%    about finished archivisation or deleting jobs
 %%%  * archivisation_traverse - module that uses tree_traverse to archive a dataset.
 %%%    It traverses the dataset and builds an archive (and nested archives if required
 %%%    by create_nested_archives parameter).
@@ -68,7 +68,7 @@
 -export_type([info/0, basic_entries/0, entries/0, index/0, listing_mode/0, listing_opts/0]).
 
 
-% TODO VFS-7718 improve purging so that archive record is deleted when files are removed from storage
+% TODO VFS-7718 improve deleting so that archive record is deleted when files are removed from storage
 % TODO VFS-7613 use datastore function for getting number of links in forest to acquire number of archives per dataset
 % TODO VFS-7616 refine archives' attributes
 % TODO VFS-7619 add tests concerning archives to permissions test suites
@@ -217,7 +217,7 @@ list_archives(DatasetId, ListingOpts, ListingMode) ->
 
 -spec delete(archive:id(), archive:callback()) -> ok | error().
 delete(ArchiveId, CallbackUrl) ->
-    case archive:mark_purging(ArchiveId, CallbackUrl) of
+    case archive:mark_deleting(ArchiveId, CallbackUrl) of
         {ok, ArchiveDoc} ->
             {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
             % TODO VFS-7718 removal of archive doc and callback should be executed when deleting from trash is finished
