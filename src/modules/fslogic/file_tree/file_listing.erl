@@ -72,7 +72,6 @@
     tune_for_large_continuous_listing := boolean(),
     index => index(),
     offset => offset(),
-    %% @TODO VFS-9283 implement inclusive option in datastore links listing
     inclusive => boolean(),
     whitelist => undefined | whitelist(),
     limit => limit()

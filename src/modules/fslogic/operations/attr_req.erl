@@ -182,11 +182,12 @@ get_file_details_insecure(UserCtx, FileCtx, Opts) ->
             {#{}, FileCtx2}
     end,
 
+    Uuid = file_ctx:get_logical_uuid_const(FileCtx2),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #file_details{
             file_attr = FileAttr,
-            symlink_value = case fslogic_uuid:is_symlink_uuid(file_ctx:get_logical_uuid_const(FileCtx)) of
+            symlink_value = case fslogic_uuid:is_symlink_uuid(Uuid) of
                 true ->
                     {ok, SymlinkValue} = file_meta_symlinks:readlink(FileDoc),
                     SymlinkValue;
@@ -200,9 +201,10 @@ get_file_details_insecure(UserCtx, FileCtx, Opts) ->
             eff_dataset_membership = maps:get(effective_dataset_membership, EffectiveValues, undefined),
             eff_protection_flags = maps:get(effective_protection_flags, EffectiveValues, undefined),
             recall_root_id = maps:get(effective_recall, EffectiveValues, undefined),
-            conflicting_name = case file_meta:get_name(FileDoc) of
-                FileAttrName -> undefined;
-                ConflictingName -> ConflictingName
+            conflicting_name = case {fslogic_uuid:is_space_dir_uuid(Uuid), file_meta:get_name(FileDoc)} of
+                {true, _} -> undefined;
+                {false, FileAttrName} -> undefined;
+                {false, ConflictingName} -> ConflictingName
             end
         }
     }.
