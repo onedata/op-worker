@@ -87,7 +87,7 @@ start(ArchiveDoc, UserCtx, ParentGuid, TargetFilename) ->
     {ok, DataFileGuid} = archive:get_data_dir_guid(ArchiveDoc),
     % archive data dir contains only one file which is a copy of a dataset file
     {[StartFileCtx], _, _} = dir_req:get_children_ctxs(UserCtx, file_ctx:new_by_guid(DataFileGuid), 
-        #{size => 1, offset => 0}),
+        #{limit => 1, offset => 0, tune_for_large_continuous_listing => false}),
     {FinalName, StartFileCtx1} = case TargetFilename of
         default ->
             file_ctx:get_aliased_name(StartFileCtx, UserCtx);
@@ -185,13 +185,9 @@ do_master_job(#tree_traverse{file_ctx = FileCtx} = Job, MasterJobArgs) ->
 
 
 -spec do_slave_job(tree_traverse:slave_job(), id()) -> ok.
-do_slave_job(#tree_traverse_slave{
-    file_ctx = FileCtx,
-    traverse_info = #{
-        archive_doc := ArchiveDoc
-    }} = Job, TaskId
+do_slave_job(Job, TaskId
 ) ->
-    case execute_unsafe_job(do_slave_job_unsafe, [Job, TaskId], FileCtx, TaskId, ArchiveDoc) of
+    case execute_unsafe_job(do_slave_job_unsafe, [TaskId], Job, TaskId) of
         ok -> ok;
         error -> ok % error should be logged and saved, continue recall
     end.
@@ -262,15 +258,9 @@ setup_recall_traverse(SpaceId, ArchiveDoc, RootFileGuid, TraverseInfo, StartFile
 %% @private
 -spec do_dir_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) -> 
     {ok, traverse:master_job_map()}.
-do_dir_master_job(#tree_traverse{
-    file_ctx = SourceDirCtx,
-    traverse_info = #{
-        archive_doc := ArchiveDoc
-    }} = Job, #{task_id := TaskId} = MasterJobArgs
+do_dir_master_job(Job, #{task_id := TaskId} = MasterJobArgs
 ) ->
-    case execute_unsafe_job(do_dir_master_job_unsafe, [Job, MasterJobArgs], 
-        SourceDirCtx, TaskId, ArchiveDoc) 
-    of
+    case execute_unsafe_job(do_dir_master_job_unsafe, [MasterJobArgs], Job, TaskId) of
         error -> {ok, #{}}; % unexpected error logged by execute_unsafe_job - no jobs can be created
         Res -> Res
     end.
@@ -334,19 +324,18 @@ do_slave_job_unsafe(#tree_traverse_slave{
 
 
 %% @private
--spec execute_unsafe_job(atom(), [term()], file_ctx:ctx(), id(), archive:doc()) -> any() | error.
-execute_unsafe_job(JobFunctionName, Options, FileCtx, TaskId, ArchiveDoc) ->
+-spec execute_unsafe_job(atom(), [term()], tree_traverse:job(), id()) -> 
+    any() | error.
+execute_unsafe_job(JobFunctionName, Options, Job, TaskId) ->
     try
         % call using ?MODULE for mocking in tests
-        erlang:apply(?MODULE, JobFunctionName, Options)
+        erlang:apply(?MODULE, JobFunctionName, [Job | Options])
     catch
         _Class:{badmatch, {error, Reason}}:Stacktrace ->
-            report_error(TaskId, file_ctx:get_logical_guid_const(FileCtx), ArchiveDoc,
-                ?ERROR_POSIX(Reason), Stacktrace),
+            report_error(TaskId, Job, ?ERROR_POSIX(Reason), Stacktrace),
             error;
         _Class:Reason:Stacktrace ->
-            report_error(TaskId, file_ctx:get_logical_guid_const(FileCtx), ArchiveDoc,
-                Reason, Stacktrace),
+            report_error(TaskId, Job, Reason, Stacktrace),
             error
     end.
 
@@ -376,12 +365,14 @@ recall_symlink(FileCtx, TargetParentGuid, RootPathTokens, FileName, ArchiveDoc, 
 
 
 %% @private
--spec report_error(id(), file_id:file_guid(), archive:doc(), term(), list()) -> ok.
-report_error(TaskId, FileGuid, ArchiveDoc, Reason, Stacktrace) ->
+-spec report_error(id(), tree_traverse:job(), term(), list()) -> ok.
+report_error(TaskId, Job, Reason, Stacktrace) ->
+    {FileCtx, RelativePath, ArchiveDoc} = infer_job_context(Job),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     {ok, ArchiveId} = archive:get_id(ArchiveDoc),
-    ?error_stacktrace("Unexpected error during recall of file ~p in archive ~p: ~p.", 
-        [FileGuid, ArchiveId, Reason], Stacktrace),
-    archive_recall:report_file_failed(TaskId, FileGuid, Reason).
+    ?error_stacktrace("Unexpected error during recall(~p) of file ~p in archive ~p: ~p.", 
+        [TaskId, FileGuid, ArchiveId, Reason], Stacktrace),
+    archive_recall:report_file_failed(TaskId, FileGuid, RelativePath, Reason).
 
 
 %% @private
@@ -391,3 +382,20 @@ create_root_file(true, SessId, TargetParentGuid, TargetRootName) ->
     lfm:mkdir(SessId, TargetParentGuid, TargetRootName, ?DEFAULT_DIR_MODE);
 create_root_file(false, SessId, TargetParentGuid, TargetRootName) -> 
     lfm:create(SessId, TargetParentGuid, TargetRootName, ?DEFAULT_FILE_MODE).
+
+
+%% @private
+-spec infer_job_context(tree_traverse:job()) -> 
+    {file_ctx:ctx(), file_meta:path(), archive:doc()}.
+infer_job_context(#tree_traverse_slave{
+    file_ctx = FileCtx, 
+    relative_path = RelativePath,
+    traverse_info = #{archive_doc := ArchiveDoc}}
+) ->
+    {FileCtx, RelativePath, ArchiveDoc};
+infer_job_context(#tree_traverse{
+    file_ctx = FileCtx,
+    relative_path = RelativePath,
+    traverse_info = #{archive_doc := ArchiveDoc}}
+) ->
+    {FileCtx, RelativePath, ArchiveDoc}.

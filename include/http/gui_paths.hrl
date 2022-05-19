@@ -48,24 +48,6 @@
 -define(SHARE_ID_BINDING, share_id).
 -define(PUBLIC_SHARE_COWBOY_ROUTE, "/share/:share_id").
 
-% Expands to a centralized endpoint in Onezone used to fetch info and contents
-% of any file/directory being a part of any share (by file id) - redirects
-% to a REST endpoint in one of the supporting providers.
--define(ZONE_SHARED_DATA_CURL_COMMAND_TEMPLATE(SubPath), [
-    <<"curl">>, <<"-L">>, oneprovider:get_oz_url(<<"/api/v3/onezone/shares/data/{id}", SubPath>>)
-]).
-
--define(XROOTD_URI(Domain, Path), str_utils:format_bin("root://~s~s", [Domain, Path])).
--define(XROOTD_DOWNLOAD_SHARED_FILE_COMMAND_TEMPLATE(Domain), [
-    <<"xrdcp">>, ?XROOTD_URI(Domain, <<"//data/{spaceId}/{spaceId}/{shareId}{path}">>), <<".">>
-]).
--define(XROOTD_DOWNLOAD_SHARED_DIRECTORY_COMMAND_TEMPLATE(Domain), [
-    <<"xrdcp">>, <<"-r">>, ?XROOTD_URI(Domain, <<"//data/{spaceId}/{spaceId}/{shareId}{path}">>), <<".">>
-]).
--define(XROOTD_LIST_SHARED_DIRECTORY_COMMAND_TEMPLATE(Domain), [
-    <<"xrdfs">>, ?XROOTD_URI(Domain, <<"">>), <<"ls">>, <<"/data/{spaceId}/{spaceId}/{shareId}{path}">>
-]).
-
 %% All requests to this endpoint will be proxied to onepanel.
 -define(PANEL_REST_PROXY_PATH, "/api/v3/onepanel/").
 

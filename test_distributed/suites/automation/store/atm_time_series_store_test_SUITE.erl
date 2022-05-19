@@ -15,6 +15,7 @@
 -include("modules/automation/atm_execution.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include("onenv_test_utils.hrl").
+-include_lib("cluster_worker/include/time_series/browsing.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 
@@ -110,9 +111,22 @@ all() -> [
     }
 }).
 
+-define(COUNTER_OF_ALL_COUNTS_TS_NAME, <<"counter_of_all_counts">>).
+-define(COUNTER_OF_ALL_COUNTS_TS_SCHEMA, #atm_time_series_schema{
+    name_generator_type = exact,
+    name_generator = ?COUNTER_OF_ALL_COUNTS_TS_NAME,
+    unit = none,
+    metrics = #{
+        ?MINUTE_METRIC_NAME => ?MINUTE_METRIC_CONFIG,
+        ?HOUR_METRIC_NAME => ?HOUR_METRIC_CONFIG,
+        ?DAY_METRIC_NAME => ?DAY_METRIC_CONFIG
+    }
+}).
+
 -define(ATM_STORE_CONFIG, #atm_time_series_store_config{schemas = [
     ?MAX_FILE_SIZE_TS_SCHEMA,
-    ?COUNT_TS_SCHEMA
+    ?COUNT_TS_SCHEMA,
+    ?COUNTER_OF_ALL_COUNTS_TS_SCHEMA
 ]}).
 
 -define(DISPATCH_RULES, [
@@ -140,10 +154,24 @@ all() -> [
         target_ts_name_generator = <<"count_">>,
         prefix_combiner = converge
     },
+    % dispatch rules can be duplicated or be each other's generalization / specialization
+    % in such case the measurement will be inserted multiple times (duplicated)
     #atm_time_series_dispatch_rule{
         measurement_ts_name_matcher_type = has_prefix,
         measurement_ts_name_matcher = <<"count_over_">>,
         target_ts_name_generator = <<"count_">>,
+        prefix_combiner = overwrite
+    },
+    #atm_time_series_dispatch_rule{
+        measurement_ts_name_matcher_type = has_prefix,
+        measurement_ts_name_matcher = <<"count_over_">>,
+        target_ts_name_generator = <<"count_">>,
+        prefix_combiner = overwrite
+    },
+    #atm_time_series_dispatch_rule{
+        measurement_ts_name_matcher_type = has_prefix,
+        measurement_ts_name_matcher = <<"count">>,
+        target_ts_name_generator = ?COUNTER_OF_ALL_COUNTS_TS_NAME,
         prefix_combiner = overwrite
     }
 ]).
@@ -175,10 +203,22 @@ create_test(_Config) ->
     ),
 
     % Assert only ts for exact generators are initiated
-    ExpLayout = #{?MAX_FILE_SIZE_TS_NAME => [?MAX_FILE_SIZE_METRIC_NAME]},
+    ExpLayout = #{
+        ?MAX_FILE_SIZE_TS_NAME => [?MAX_FILE_SIZE_METRIC_NAME],
+        ?COUNTER_OF_ALL_COUNTS_TS_NAME => lists:sort([?MINUTE_METRIC_NAME, ?HOUR_METRIC_NAME, ?DAY_METRIC_NAME])
+    },
     ?assertEqual(ExpLayout, get_layout(AtmWorkflowExecutionAuth, AtmStoreId)),
     ?assertEqual(
-        #{?MAX_FILE_SIZE_TS_NAME => #{?MAX_FILE_SIZE_METRIC_NAME => []}},
+        #{
+            ?MAX_FILE_SIZE_TS_NAME => #{
+                ?MAX_FILE_SIZE_METRIC_NAME => []
+            },
+            ?COUNTER_OF_ALL_COUNTS_TS_NAME => #{
+                ?MINUTE_METRIC_NAME => [],
+                ?HOUR_METRIC_NAME => [],
+                ?DAY_METRIC_NAME => []
+            }
+        },
         get_slice(AtmWorkflowExecutionAuth, AtmStoreId, ExpLayout)
     ).
 
@@ -186,15 +226,18 @@ create_test(_Config) ->
 manage_content_test(_Config) ->
     AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
     AtmStoreSchema = build_store_schema(?ATM_STORE_CONFIG),
+    SortedCountTSMetricNames = lists:sort([?MINUTE_METRIC_NAME, ?HOUR_METRIC_NAME, ?DAY_METRIC_NAME]),
 
     AtmStoreId = create_store(AtmWorkflowExecutionAuth, AtmStoreSchema),
-    ExpLayout0 = #{?MAX_FILE_SIZE_TS_NAME => [?MAX_FILE_SIZE_METRIC_NAME]},
+    ExpLayout0 = #{
+        ?MAX_FILE_SIZE_TS_NAME => [?MAX_FILE_SIZE_METRIC_NAME],
+        ?COUNTER_OF_ALL_COUNTS_TS_NAME => SortedCountTSMetricNames
+    },
     ?assertEqual(ExpLayout0, get_layout(AtmWorkflowExecutionAuth, AtmStoreId)),
 
     ContentUpdateOpts = #atm_time_series_store_content_update_options{
         dispatch_rules = ?DISPATCH_RULES
     },
-    SortedCountTSMetricNames = lists:sort([?MINUTE_METRIC_NAME, ?HOUR_METRIC_NAME, ?DAY_METRIC_NAME]),
 
     % Assert that only valid measurements are accepted
     lists:foreach(fun({InvalidData, ExpError}) ->
@@ -239,6 +282,11 @@ manage_content_test(_Config) ->
             ?MINUTE_METRIC_NAME => [?MINUTE_METRIC_WINDOW(Timestamp1, 10)],
             ?HOUR_METRIC_NAME => [?HOUR_METRIC_WINDOW(Timestamp1, 10)],
             ?DAY_METRIC_NAME => [?DAY_METRIC_WINDOW(Timestamp1, 10)]
+        },
+        ?COUNTER_OF_ALL_COUNTS_TS_NAME => #{
+            ?MINUTE_METRIC_NAME => [],
+            ?HOUR_METRIC_NAME => [],
+            ?DAY_METRIC_NAME => []
         }
     },
     ?assertEqual(ok, ?rpc(atm_store_api:update_content(
@@ -251,8 +299,8 @@ manage_content_test(_Config) ->
     Timestamp3 = Timestamp1 + 120,
     Measurements2 = [
         #{<<"tsName">> => <<"mp3">>, <<"timestamp">> => Timestamp3, <<"value">> => 100},
-        #{<<"tsName">> => <<"count_ct_supplies">>, <<"timestamp">> => Timestamp1, <<"value">> => 4},
-        #{<<"tsName">> => <<"count_over_unicorns">>, <<"timestamp">> => Timestamp1, <<"value">> => 0},
+        #{<<"tsName">> => <<"count_ct_supplies">>, <<"timestamp">> => Timestamp1, <<"value">> => 0},
+        #{<<"tsName">> => <<"count_over_unicorns">>, <<"timestamp">> => Timestamp1, <<"value">> => 7},
         #{<<"tsName">> => <<"mp3">>, <<"timestamp">> => Timestamp2, <<"value">> => 111},
         % measurement not matched with any dispatch rule should be ignored
         #{<<"tsName">> => <<"mp4">>, <<"timestamp">> => Timestamp1, <<"value">> => 1000000000},
@@ -277,9 +325,9 @@ manage_content_test(_Config) ->
             ?DAY_METRIC_NAME => [?DAY_METRIC_WINDOW(Timestamp1, 3)]
         },
         <<"count_count_ct_supplies">> => #{
-            ?MINUTE_METRIC_NAME => [?MINUTE_METRIC_WINDOW(Timestamp1, 4)],
-            ?HOUR_METRIC_NAME => [?HOUR_METRIC_WINDOW(Timestamp1, 4)],
-            ?DAY_METRIC_NAME => [?DAY_METRIC_WINDOW(Timestamp1, 4)]
+            ?MINUTE_METRIC_NAME => [?MINUTE_METRIC_WINDOW(Timestamp1, 0)],
+            ?HOUR_METRIC_NAME => [?HOUR_METRIC_WINDOW(Timestamp1, 0)],
+            ?DAY_METRIC_NAME => [?DAY_METRIC_WINDOW(Timestamp1, 0)]
         },
         <<"count_mp3">> => #{
             ?MINUTE_METRIC_NAME => [
@@ -295,10 +343,24 @@ manage_content_test(_Config) ->
                 ?DAY_METRIC_WINDOW(Timestamp1, 221)
             ]
         },
+        % the dispatch rule with "count_over_" prefix matcher is duplicated twice,
+        % which should cause the measurement values to be doubled (each measurement is
+        % inserted twice)
         <<"count_unicorns">> => #{
-            ?MINUTE_METRIC_NAME => [?MINUTE_METRIC_WINDOW(Timestamp1, 0)],
-            ?HOUR_METRIC_NAME => [?HOUR_METRIC_WINDOW(Timestamp1, 0)],
-            ?DAY_METRIC_NAME => [?DAY_METRIC_WINDOW(Timestamp1, 0)]
+            ?MINUTE_METRIC_NAME => [?MINUTE_METRIC_WINDOW(Timestamp1, 14)],
+            ?HOUR_METRIC_NAME => [?HOUR_METRIC_WINDOW(Timestamp1, 14)],
+            ?DAY_METRIC_NAME => [?DAY_METRIC_WINDOW(Timestamp1, 14)]
+        },
+        ?COUNTER_OF_ALL_COUNTS_TS_NAME => #{
+            ?MINUTE_METRIC_NAME => [
+                ?MINUTE_METRIC_WINDOW(Timestamp1, 10)
+            ],
+            ?HOUR_METRIC_NAME => [
+                ?HOUR_METRIC_WINDOW(Timestamp1, 10)
+            ],
+            ?DAY_METRIC_NAME => [
+                ?DAY_METRIC_WINDOW(Timestamp1, 10)
+            ]
         }
     },
     ?assertEqual(ok, ?rpc(atm_store_api:update_content(
@@ -430,11 +492,11 @@ infer_window_timestamp(Time, #metric_config{resolution = Resolution}) ->
     time_series_collection:layout().
 get_layout(AtmWorkflowExecutionAuth, AtmStoreId) ->
     BrowseOpts = #atm_time_series_store_content_browse_options{
-        request = #atm_time_series_store_content_get_layout_req{}
+        request = #time_series_get_layout_request{}
     },
 
     #atm_time_series_store_content_browse_result{
-        result = #atm_time_series_store_content_layout{
+        result = #time_series_layout_result{
             layout = Layout
         }
     } = ?rpc(atm_store_api:browse_content(
@@ -478,21 +540,17 @@ get_slice(AtmWorkflowExecutionAuth, AtmStoreId, Layout, StartTimestamp) ->
     #{time_series_collection:time_series_id() => #{ts_metric:id() => [ts_windows:value()]}}.
 get_slice(AtmWorkflowExecutionAuth, AtmStoreId, Layout, StartTimestamp, WindowLimit) ->
     BrowseOpts = #atm_time_series_store_content_browse_options{
-        request = #atm_time_series_store_content_get_slice_req{
+        request = #time_series_get_slice_request{
             layout = Layout,
             start_timestamp = StartTimestamp,
             window_limit = WindowLimit
         }
     },
 
-    #atm_time_series_store_content_browse_result{
-        result = #atm_time_series_store_content_slice{
-            slice = Slice
-        }
-    } = ?rpc(atm_store_api:browse_content(
+    BrowseResult = ?rpc(atm_store_api:browse_content(
         AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId
     )),
-
+    #{<<"slice">> := Slice} = atm_time_series_store_content_browse_result:to_json(BrowseResult),
     Slice.
 
 

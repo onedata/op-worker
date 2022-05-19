@@ -21,6 +21,7 @@
 -behaviour(persistent_record).
 
 -include("modules/automation/atm_execution.hrl").
+-include_lib("cluster_worker/include/time_series/browsing.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% atm_store_container callbacks
@@ -128,51 +129,32 @@ acquire_iterator(#atm_time_series_store_container{}) ->
     atm_time_series_store_content_browse_result:record() | no_return().
 browse_content(Record, #atm_store_content_browse_req{
     options = #atm_time_series_store_content_browse_options{
-        request = #atm_time_series_store_content_get_layout_req{}
+        request = #time_series_get_layout_request{} = BrowseRequest
     }
 }) ->
-    {ok, Layout} = datastore_time_series_collection:get_layout(
-        ?CTX, Record#atm_time_series_store_container.backend_id
+    {ok, LayoutResult} = datastore_time_series_collection:browse(
+        ?CTX, Record#atm_time_series_store_container.backend_id, BrowseRequest
     ),
     #atm_time_series_store_content_browse_result{
-        result = #atm_time_series_store_content_layout{layout = Layout}
+        result = LayoutResult
     };
 
 browse_content(Record, #atm_store_content_browse_req{
     options = #atm_time_series_store_content_browse_options{
-        request = #atm_time_series_store_content_get_slice_req{
-            layout = SliceLayout,
-            start_timestamp = StartTimestamp,
-            window_limit = WindowLimit
-        }
+        request = #time_series_get_slice_request{} = BrowseRequest
     }
 }) ->
-    case datastore_time_series_collection:get_slice(
+    case datastore_time_series_collection:browse(
         ?CTX,
         Record#atm_time_series_store_container.backend_id,
-        SliceLayout,
-        maps_utils:remove_undefined(#{start_timestamp => StartTimestamp, window_limit => WindowLimit})
+        BrowseRequest
     ) of
+        {ok, SliceResult} ->
+            #atm_time_series_store_content_browse_result{result = SliceResult};
         ?ERROR_NOT_FOUND ->
             throw(?ERROR_NOT_FOUND);
         ?ERROR_TSC_MISSING_LAYOUT(MissingLayout) ->
-            throw(?ERROR_TSC_MISSING_LAYOUT(MissingLayout));
-        {ok, Slice} ->
-            SliceJson = tsc_structure:map(fun(_TimeSeriesName, _MetricName, Windows) ->
-                lists:map(fun({Timestamp, Value}) ->
-                    #{
-                        <<"timestamp">> => Timestamp,
-                        <<"value">> => case Value of
-                            {_ValuesCount, ValuesSum} -> ValuesSum;
-                            _ -> Value
-                        end
-                    }
-                end, Windows)
-            end, Slice),
-
-            #atm_time_series_store_content_browse_result{
-                result = #atm_time_series_store_content_slice{slice = SliceJson}
-            }
+            throw(?ERROR_TSC_MISSING_LAYOUT(MissingLayout))
     end.
 
 
@@ -284,17 +266,19 @@ consume_measurements(Measurements, DispatchRules, Record = #atm_time_series_stor
     config = #atm_time_series_store_config{schemas = TSSchemas},
     backend_id = BackendId
 }) ->
-    {ConsumeSpec, InvolvedCollectionConfig} = lists:foldl(fun(Measurement, Acc = {ConsumeSpecAcc, InvolvedConfigAcc}) ->
-        case match_target_ts(Measurement, DispatchRules, TSSchemas) of
-            {true, TSName, TSConfig} ->
-                Timestamp = maps:get(<<"timestamp">>, Measurement),
-                Value = maps:get(<<"value">>, Measurement),
-                PreviousMeasurements = kv_utils:get([TSName, ?ALL_METRICS], ConsumeSpecAcc, []),
-                NewMeasurements = [{Timestamp, Value} | PreviousMeasurements],
-                {ConsumeSpecAcc#{TSName => #{?ALL_METRICS => NewMeasurements}}, InvolvedConfigAcc#{TSName => TSConfig}};
-            false ->
-                Acc
-        end
+    {ConsumeSpec, InvolvedCollectionConfig} = lists:foldl(fun(Measurement, {ConsumeSpecOuterAcc, InvolvedConfigOuterAcc}) ->
+        #{<<"tsName">> := MeasurementTSName, <<"timestamp">> := Timestamp, <<"value">> := Value} = Measurement,
+        MatchingDispatchRules = atm_time_series_names:find_matching_dispatch_rules(MeasurementTSName, DispatchRules),
+
+        lists:foldl(fun(DispatchRule, {ConsumeSpecInnerAcc, InvolvedConfigInnerAcc}) ->
+            TSSchema = atm_time_series_names:select_referenced_time_series_schema(DispatchRule, TSSchemas),
+            TargetTSName = atm_time_series_names:resolve_target_ts_name(MeasurementTSName, TSSchema, DispatchRule),
+            UpdatedConsumeSpec = kv_utils:update_with([TargetTSName, ?ALL_METRICS], fun(PreviousMeasurements) ->
+                [{Timestamp, Value} | PreviousMeasurements]
+            end, [{Timestamp, Value}], ConsumeSpecInnerAcc),
+            {UpdatedConsumeSpec, InvolvedConfigInnerAcc#{TargetTSName => TSSchema#atm_time_series_schema.metrics}}
+
+        end, {ConsumeSpecOuterAcc, InvolvedConfigOuterAcc}, MatchingDispatchRules)
     end, {#{}, #{}}, Measurements),
 
     case datastore_time_series_collection:consume_measurements(?CTX, BackendId, ConsumeSpec) of
@@ -307,21 +291,3 @@ consume_measurements(Measurements, DispatchRules, Record = #atm_time_series_stor
     end,
 
     Record.
-
-
-%% @private
--spec match_target_ts(
-    json_utils:json_map(),
-    [atm_time_series_dispatch_rule:record()],
-    [atm_time_series_schema:record()]
-) ->
-    {true, atm_time_series_names:target_ts_name(), time_series:metric_composition()} | false | no_return().
-match_target_ts(#{<<"tsName">> := MeasurementTSName}, DispatchRules, TSSchemas) ->
-    case atm_time_series_names:find_matching_dispatch_rule(MeasurementTSName, DispatchRules) of
-        {ok, DispatchRule} ->
-            TSSchema = atm_time_series_names:select_referenced_time_series_schema(DispatchRule, TSSchemas),
-            TargetTSName = atm_time_series_names:resolve_target_ts_name(MeasurementTSName, TSSchema, DispatchRule),
-            {true, TargetTSName, TSSchema#atm_time_series_schema.metrics};
-        error ->
-            false
-    end.

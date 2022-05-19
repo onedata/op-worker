@@ -102,8 +102,8 @@ get_response(#gri{aspect = {hardlinks, _}}, _Result) ->
 get_response(#gri{aspect = archive_recall_details}, Result) ->
     ?OK_REPLY(translate_archive_recall_details(Result));
 
-get_response(#gri{aspect = archive_recall_progress}, #{<<"lastError">> := LastError} = Result) ->
-    ?OK_REPLY(Result#{<<"lastError">> => utils:undefined_to_null(LastError)}).
+get_response(#gri{aspect = archive_recall_progress}, ArchiveRecallProgress) ->
+    ?OK_REPLY(ArchiveRecallProgress).
 
 
 %%%===================================================================

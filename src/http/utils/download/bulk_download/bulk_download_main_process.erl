@@ -303,7 +303,8 @@ new_tar_file_entry(#state{tar_stream = TarStream, root_dir_path = RootDirPath} =
             Depth = length(filename:split(FileRelativePath)),
             {?SYMLINK_TYPE, build_internal_symlink_value(RootDirPath, SymlinkValue, Depth)}
     end,
-    UpdatedTarStream = tar_utils:new_file_entry(TarStream, FileRelativePath, FileSize, FinalMode, MTime, TypeSpec),
+    UpdatedTarStream = tar_utils:new_file_entry(
+        TarStream, FileRelativePath, utils:ensure_defined(FileSize, 0), FinalMode, MTime, TypeSpec),
     {Bytes, FinalTarStream} = tar_utils:flush_buffer(UpdatedTarStream),
     {Bytes, State#state{tar_stream = FinalTarStream}}.
 

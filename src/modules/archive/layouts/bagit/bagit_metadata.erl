@@ -41,7 +41,7 @@ init(ArchiveDirCtx, UserCtx) ->
 -spec add_entry(file_ctx:ctx(), user_ctx:ctx(), file_meta:path(), json_utils:json_term()) -> ok.
 add_entry(ArchiveDirCtx, UserCtx, FilePath, MetadataJson) ->
     SessionId = user_ctx:get_session_id(UserCtx),
-    {MetadataFileCtx, _} = files_tree:get_child(ArchiveDirCtx, ?METADATA_FILE_NAME, UserCtx),
+    {MetadataFileCtx, _} = file_tree:get_child(ArchiveDirCtx, ?METADATA_FILE_NAME, UserCtx),
     MetadataFileGuid = file_ctx:get_logical_guid_const(MetadataFileCtx),
     ?CRITICAL_SECTION(MetadataFileGuid, fun() ->
         case lfm:open(SessionId, ?FILE_REF(MetadataFileGuid), rdwr) of

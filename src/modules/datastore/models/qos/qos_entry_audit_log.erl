@@ -32,8 +32,8 @@
 
 -export_type([id/0]).
 
--define(LOG_MAX_SIZE, op_worker:get_env(qos_entry_audit_log_max_size, 1000)).
--define(LOG_EXPIRATION, op_worker:get_env(qos_entry_audit_log_expiration_seconds, 604800)).
+-define(LOG_MAX_SIZE, op_worker:get_env(qos_entry_audit_log_max_size, 10000)).
+-define(LOG_EXPIRATION, op_worker:get_env(qos_entry_audit_log_expiration_seconds, 1209600)). % 14 days
 
 %%%===================================================================
 %%% API

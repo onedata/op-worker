@@ -65,7 +65,7 @@ move_to_trash(FileCtx, UserCtx) ->
     file_ctx:assert_not_special_const(FileCtx),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     Uuid = file_ctx:get_logical_uuid_const(FileCtx),
-    {ParentGuid, FileCtx2} = files_tree:get_parent_guid_if_not_root_dir(FileCtx, UserCtx),
+    {ParentGuid, FileCtx2} = file_tree:get_parent_guid_if_not_root_dir(FileCtx, UserCtx),
     ParentUuid = file_id:guid_to_uuid(ParentGuid),
     FileCtx3 = add_deletion_marker_if_applicable(ParentUuid, FileCtx2),
     {Name, FileCtx4} = file_ctx:get_aliased_name(FileCtx3, UserCtx),

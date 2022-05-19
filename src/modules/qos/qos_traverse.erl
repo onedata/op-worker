@@ -173,18 +173,17 @@ update_job_progress(Id, Job, Pool, TaskId, Status) ->
 do_master_job(Job = #tree_traverse_slave{}, #{task_id := TaskId}) ->
     do_slave_job(Job, TaskId);
 do_master_job(Job = #tree_traverse{file_ctx = FileCtx}, MasterJobArgs = #{task_id := TaskId}) ->
-    BatchProcessingPrehook = fun(SlaveJobs, MasterJobs, ListExtendedInfo, _SubtreeProcessingStatus) ->
+    BatchProcessingPrehook = fun(SlaveJobs, MasterJobs, ListingToken, _SubtreeProcessingStatus) ->
         ChildrenFiles = lists:map(fun(#tree_traverse_slave{file_ctx = ChildFileCtx}) ->
             file_ctx:get_logical_uuid_const(ChildFileCtx)
         end, SlaveJobs),
         ChildrenDirs = lists:map(fun(#tree_traverse{file_ctx = ChildDirCtx}) ->
             file_ctx:get_logical_uuid_const(ChildDirCtx)
         end, MasterJobs),
-        BatchLastFilename = maps:get(last_name, ListExtendedInfo, undefined),
         ok = qos_status:report_next_traverse_batch(
-            TaskId, FileCtx, ChildrenDirs, ChildrenFiles, BatchLastFilename),
+            TaskId, FileCtx, ChildrenDirs, ChildrenFiles, file_listing:get_last_listed_filename(ListingToken)),
 
-        case maps:get(is_last, ListExtendedInfo) of
+        case file_listing:is_finished(ListingToken) of
             true ->
                 ok = qos_status:report_traverse_finished_for_dir(TaskId, FileCtx);
             false ->
@@ -271,7 +270,7 @@ slave_job_traverse(TaskId, UserCtx, FileCtx, AdditionalData) ->
         ?ERROR_NOT_FOUND -> []
     end,
     ok = synchronize_file_for_entries(TaskId, UserCtx, FileCtx, QosEntries),
-    {ParentFileCtx, FileCtx2} = files_tree:get_parent(FileCtx, undefined),
+    {ParentFileCtx, FileCtx2} = file_tree:get_parent(FileCtx, undefined),
     ok = qos_status:report_traverse_finished_for_file(TaskId, FileCtx2, ParentFileCtx).
 
 

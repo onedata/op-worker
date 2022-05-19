@@ -664,17 +664,15 @@ recall_details_test_base(Spec, TotalFileCount, TotalByteSize) ->
         <<"filesFailed">> := #{
             <<"total">> := []
         }
-        %% @TODO VFS-8839 - use op_archives after implementing histogram API
+        %% @TODO VFS-9307 - use op_archives after implementing histogram API
     }}, opw_test_rpc:call(krakow, archive_recall, get_stats, [
         file_id:guid_to_uuid(RecallRootFileGuid), Layout, #{}
     ]), ?ATTEMPTS),
     
-    %% @TODO VFS-8839 - check progress until gui starts to support histograms and error log browsing
     ?assertMatch({ok, #{
         <<"bytesCopied">>  := TotalByteSize,
         <<"filesCopied">> := TotalFileCount,
-        <<"filesFailed">> := 0,
-        <<"lastError">> := undefined
+        <<"filesFailed">> := 0
     }}, opt_archives:get_recall_progress(krakow, SessId(krakow), RecallRootFileGuid), ?ATTEMPTS),
     ?assertEqual(?ERROR_NOT_FOUND, opt_archives:get_recall_progress(paris, SessId(paris), RecallRootFileGuid)),
     
@@ -736,9 +734,13 @@ recall_error_test_base(Spec, FunName) ->
         ?assertMatch({ok, #{
             <<"bytesCopied">>  := 0,
             <<"filesCopied">> := 0,
-            <<"filesFailed">> := 1,
-            <<"lastError">> := #{<<"reason">> := ExpectedReason}
-        }}, opt_archives:get_recall_progress(krakow, SessId(krakow), RecallRootFileGuid), ?ATTEMPTS)
+            <<"filesFailed">> := 1
+        }}, opt_archives:get_recall_progress(krakow, SessId(krakow), RecallRootFileGuid), ?ATTEMPTS),
+        ?assertMatch({ok, #{
+            <<"logEntries">> := [
+                #{<<"content">> := #{<<"reason">> := ExpectedReason}}
+            ]
+        }}, opt_archives:browse_recall_log(krakow, SessId(krakow), RecallRootFileGuid, #{}), ?ATTEMPTS)
     end, Errors).
 
 
@@ -807,8 +809,9 @@ cancel_race_test_setup() ->
 
 get_direct_child(Guid) ->
     SessionId = oct_background:get_user_session_id(?USER1, krakow),
-    {ok, [{ChildGuid, _}], _} = ?assertMatch({ok, [_], #{is_last := true}}, lfm_proxy:get_children(
-        oct_background:get_random_provider_node(krakow), SessionId, #file_ref{guid = Guid}, #{offset => 0}), ?ATTEMPTS),
+    {ok, [{ChildGuid, _}], ListingToken} = ?assertMatch({ok, [_], _}, lfm_proxy:get_children(
+        oct_background:get_random_provider_node(krakow), SessionId, #file_ref{guid = Guid}, #{tune_for_large_continuous_listing => false}), ?ATTEMPTS),
+    ?assert(file_listing:is_finished(ListingToken)),
     ChildGuid.
 
 
@@ -824,7 +827,7 @@ check_effective_cache_values(RecallRootFileGuid) ->
     SessId = oct_background:get_user_session_id(?USER1, krakow),
     Node = oct_background:get_random_provider_node(krakow),
     Pid = wait_for_recall_traverse_finish(),
-    {ok, [{ChildGuid, _}], _} = ?assertMatch({ok, [_], _}, lfm_proxy:get_children(Node, SessId, #file_ref{guid = RecallRootFileGuid}, #{offset => 0})),
+    {ok, [{ChildGuid, _}], _} = ?assertMatch({ok, [_], _}, lfm_proxy:get_children(Node, SessId, #file_ref{guid = RecallRootFileGuid}, #{tune_for_large_continuous_listing => false})),
     SpaceId = file_id:guid_to_space_id(RecallRootFileGuid),
     Uuid = file_id:guid_to_uuid(RecallRootFileGuid),
     lists:foreach(fun(N) ->
