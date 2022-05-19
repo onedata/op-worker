@@ -101,6 +101,17 @@ routes() -> [
             scope = private
         }
     }},
+    %% Cancel an archive recall
+    {<<"/data/:id/recall/cancel">>, rest_handler, #rest_req{
+        method = 'POST',
+        produces = [<<"application/json">>],
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = cancel_archive_recall, 
+            scope = private
+        }
+    }},
     %% Get details of an archive recall
     {<<"/data/:id/recall/details">>, rest_handler, #rest_req{
         method = 'GET',
