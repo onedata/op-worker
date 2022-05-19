@@ -310,7 +310,9 @@ get_children_details_insecure(UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhit
 
 
 %% @private
--spec child_attrs_mapper(map_child_fun()) -> fslogic_worker:fuse_response_type().
+-spec child_attrs_mapper(map_child_fun()) -> 
+    fun((user_ctx:ctx(), file_ctx:ctx(), attr_req:compute_file_attr_opts(), file_listing_utils:entry_type()) -> 
+        fslogic_worker:fuse_response_type()).
 child_attrs_mapper(AttrsMappingFun) ->
     fun(UserCtx, ChildCtx, BaseOpts, EntryType) ->
         ComputeAttrsOpts = file_listing_utils:extend_compute_attr_opts(BaseOpts, EntryType),

@@ -181,7 +181,7 @@ list_non_dir_file(UserCtx, FileCtx, InitialState) ->
         ok ->
             {build_result_file_entry_list(InitialState, FileCtx, <<>>), []};
         {error, ?EACCES} ->
-            {[], <<".">>}
+            {[], [<<".">>]}
     end,
     {EntryList, InaccessiblePaths, undefined}.
 
@@ -442,7 +442,7 @@ init_current_dir_processing(#state{
 
 %% @private
 -spec build_result_file_entry_list(state(), file_ctx:ctx(), file_meta:name()) -> 
-    [entry()].
+    [internal_entry()].
 build_result_file_entry_list(#state{start_after_path = StartAfterPath} = State, FileCtx, Name) ->
     case build_rel_path_in_current_dir_with_prefix_check(State, Name) of
         false -> [];
