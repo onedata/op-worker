@@ -122,13 +122,30 @@ list(UserCtx, FileCtx, Options) ->
 list(UserCtx, FileCtx0, StartAfter, Limit, Prefix) ->
     case prepare_initial_listing_state(UserCtx, FileCtx0, StartAfter, Limit, Prefix) of
         {ok, FileToListCtx, InitialState} ->
-            case file_ctx:is_dir(FileToListCtx) of
+            {Entries, InaccessiblePaths, PaginationToken} = case file_ctx:is_dir(FileToListCtx) of
                 {true, FileToListCtx2} ->
                     list_directory(UserCtx, FileToListCtx2, InitialState, file_ctx:get_logical_guid_const(FileCtx0));
                 {false, FileToListCtx2} ->
-                    list_reg_file(UserCtx, FileToListCtx2, InitialState)
-            end;
-        abort ->
+                    list_non_dir_file(UserCtx, FileToListCtx2, InitialState)
+            end,
+    
+            ComputeAttrsOpts = #{
+                allow_deleted_files => false,
+                include_size => true,
+                include_replication_status => false,
+                include_link_count => false
+            },
+            MappedEntries = file_listing_utils:map_entries(
+                UserCtx, fun build_entry_from_internal_entry/4, Entries, ComputeAttrsOpts),
+    
+            #fuse_response{status = #status{code = ?OK},
+                fuse_response = #recursive_file_list{
+                    entries = MappedEntries,
+                    inaccessible_paths = InaccessiblePaths,
+                    pagination_token = PaginationToken
+                }
+            };
+        nothing_to_list ->
             #fuse_response{status = #status{code = ?OK},
                 fuse_response = #recursive_file_list{
                     inaccessible_paths = [],
@@ -147,45 +164,31 @@ list(UserCtx, FileCtx0, StartAfter, Limit, Prefix) ->
 
 %% @private
 -spec list_directory(user_ctx:ctx(), file_ctx:ctx(), state(), file_id:file_guid()) ->
-    fslogic_worker:fuse_response().
+    {[internal_entry()], [file_meta:path()], pagination_token()}.
 list_directory(UserCtx, DirCtx, InitialState, OriginalDirGuid) ->
     {ProgressMarker, #list_result{entries = Entries, inaccessible_paths = InaccessiblePaths}} =
         process_current_dir(UserCtx, DirCtx, InitialState),
-    
-    MappedEntries = file_listing_utils:map_children_to_attrs(UserCtx, fun map_internal_entry/3, Entries, false, false),
-    #fuse_response{status = #status{code = ?OK},
-        fuse_response = #recursive_file_list{
-            entries = MappedEntries,
-            inaccessible_paths = InaccessiblePaths,
-            pagination_token = build_pagination_token(
-                % use originally given file to build token, as this is the actual file, that was requested
-                Entries, InaccessiblePaths, OriginalDirGuid, ProgressMarker)
-        }
-    }.
+    % use originally given file to build token, as this is the actual file, that was requested
+    PaginationToken = build_pagination_token(Entries, InaccessiblePaths, OriginalDirGuid, ProgressMarker),
+    {Entries, InaccessiblePaths, PaginationToken}.
 
 
 %% @private
--spec list_reg_file(user_ctx:ctx(), file_ctx:ctx(), state()) ->
-    fslogic_worker:fuse_response().
-list_reg_file(UserCtx, FileCtx, InitialState) ->
-    {Entries, InaccessiblePaths} = case check_reg_file_access(UserCtx, FileCtx) of
+-spec list_non_dir_file(user_ctx:ctx(), file_ctx:ctx(), state()) ->
+    {[internal_entry()], [file_meta:path()], pagination_token()}.
+list_non_dir_file(UserCtx, FileCtx, InitialState) ->
+    {EntryList, InaccessiblePaths} = case check_reg_file_access(UserCtx, FileCtx) of
         ok ->
             {build_result_file_entry_list(InitialState, FileCtx, <<>>), []};
         {error, ?EACCES} ->
             {[], <<".">>}
     end,
-    MappedEntries = file_listing_utils:map_children_to_attrs(UserCtx, fun map_internal_entry/3, Entries, false, false),
-    #fuse_response{status = #status{code = ?OK},
-        fuse_response = #recursive_file_list{
-            inaccessible_paths = InaccessiblePaths,
-            entries = MappedEntries
-        }
-    }.
+    {EntryList, InaccessiblePaths, undefined}.
 
 
 %% @private
 -spec prepare_initial_listing_state(user_ctx:ctx(), file_ctx:ctx(), file_meta:path(), limit(), prefix()) -> 
-    {ok, file_ctx:ctx(), state()} | abort | {error, ?EACCES, file_meta:path()}.
+    {ok, file_ctx:ctx(), state()} | nothing_to_list | {error, ?EACCES, file_meta:path()}.
 prepare_initial_listing_state(UserCtx, RootFileCtx, StartAfter, Limit, Prefix) ->
     PrefixTokens = filename:split(Prefix),
     case infer_starting_file(PrefixTokens, RootFileCtx, UserCtx, []) of
@@ -203,10 +206,10 @@ prepare_initial_listing_state(UserCtx, RootFileCtx, StartAfter, Limit, Prefix) -
                         {true, RelStartAfter} ->
                             case str_utils:binary_starts_with(RelStartAfter, LastPrefixToken) of
                                 true -> RelStartAfter;
-                                false -> abort % start after is larger than any file path that could possibly match prefix
+                                false -> nothing_to_list % start after is larger than any file path that could possibly match prefix
                             end;
                         false ->
-                            abort
+                            nothing_to_list
                     end
             end,
             {FilePath, FileToListCtx1} = file_ctx:get_canonical_path(FileToListCtx),
@@ -230,33 +233,34 @@ prepare_initial_listing_state(UserCtx, RootFileCtx, StartAfter, Limit, Prefix) -
 
 %% @private
 -spec infer_starting_file([file_meta:name()], file_ctx:ctx(), user_ctx:ctx(), [file_meta:name()]) -> 
-    {ok, file_ctx:ctx(), file_meta:name()} | abort | {error, ?EACCES, file_meta:path()}.
+    {ok, file_ctx:ctx(), file_meta:name()} | nothing_to_list | {error, ?EACCES, file_meta:path()}.
 infer_starting_file([], DirCtx, _UserCtx, _RevRelPathTokens) ->
     {ok, DirCtx, <<>>};
 infer_starting_file([PrefixToken], DirCtx, _UserCtx, _RevRelPathTokens) ->
     % no need to check last dir access, as it will be checked during actual listing
     {ok, DirCtx, PrefixToken};
 infer_starting_file([PrefixToken | Tail], DirCtx, UserCtx, RevRelPathTokens) ->
-    Opts = #{size => 1, last_name  => PrefixToken},
+    Opts = #{limit => 1, index => file_listing:build_index(PrefixToken), tune_for_large_continuous_listing => false},
     case list_dir_children_with_access_check(UserCtx, DirCtx, Opts) of
         {ok, [NextCtx], _E, _DirCtx2} ->
             case file_ctx:get_aliased_name(NextCtx, UserCtx) of
                 {PrefixToken, NextCtx2} -> 
                     infer_starting_file(Tail, NextCtx2, UserCtx, [PrefixToken | RevRelPathTokens]);
                 _ -> 
-                    abort
+                    nothing_to_list
             end;
         {ok, [], _E, _DirCtx2} ->
-            abort;
+            nothing_to_list;
         {error, ?EACCES} ->
             {error, ?EACCES, build_path(lists:reverse(RevRelPathTokens))}
     end.
 
 
 %% @private
--spec map_internal_entry(user_ctx:ctx(), internal_entry(), attr_req:compute_file_attr_opts()) -> 
-    {file_meta:path(), lfm_attrs:file_attributes()}.
-map_internal_entry(UserCtx, {Path, FileCtx}, ComputeAttrsOpts) ->
+-spec build_entry_from_internal_entry(user_ctx:ctx(), internal_entry(), attr_req:compute_file_attr_opts(), 
+    file_listing_utils:entry_type()) -> entry() | no_return().
+build_entry_from_internal_entry(UserCtx, {Path, FileCtx}, BaseOpts, EntryType) ->
+    ComputeAttrsOpts = file_listing_utils:extend_compute_attr_opts(BaseOpts, EntryType),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = FileAttrs

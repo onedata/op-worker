@@ -28,6 +28,8 @@
     get_children_details/3
 ]).
 
+-type map_child_fun() :: fun((user_ctx:ctx(), file_ctx:ctx(), attr_req:compute_file_attr_opts()) ->
+    fslogic_worker:fuse_response()) | no_return().
 
 %%%===================================================================
 %%% API
@@ -243,12 +245,17 @@ get_children_attrs_insecure(
 ) ->
     {Children, ListingToken, FileCtx1} = file_tree:list_children(
         FileCtx0, UserCtx, ListOpts, CanonicalChildrenWhiteList),
-    ChildrenAttrs = file_listing_utils:map_children_to_attrs(
+    ComputeAttrsOpts = #{
+        allow_deleted_files => false,
+        include_size => true,
+        include_replication_status => IncludeReplicationStatus,
+        include_link_count => IncludeLinkCount
+    },
+    ChildrenAttrs = file_listing_utils:map_entries(
         UserCtx,
         child_attrs_mapper(fun attr_req:get_file_attr_insecure/3),
         Children,
-        IncludeReplicationStatus,
-        IncludeLinkCount
+        ComputeAttrsOpts
     ),
 
     fslogic_times:update_atime(FileCtx1),
@@ -281,12 +288,17 @@ get_children_details_insecure(UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhit
     {Children, ListingToken, FileCtx1} = file_tree:list_children(
         FileCtx0, UserCtx, ListOpts, CanonicalChildrenWhiteList
     ),
-    ChildrenDetails = file_listing_utils:map_children_to_attrs(
+    ComputeAttrsOpts = #{
+        allow_deleted_files => false,
+        include_size => true,
+        include_replication_status => false,
+        include_link_count => true
+    },
+    ChildrenDetails = file_listing_utils:map_entries(
         UserCtx,
         child_attrs_mapper(fun attr_req:get_file_details_insecure/3),
         Children,
-        false,
-        true
+        ComputeAttrsOpts
     ),
     fslogic_times:update_atime(FileCtx1),
     #fuse_response{status = #status{code = ?OK},
@@ -297,13 +309,13 @@ get_children_details_insecure(UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhit
     }.
 
 
--spec child_attrs_mapper(
-    fun((user_ctx:ctx(), file_ctx:ctx(), attr_req:compute_file_attr_opts()) -> 
-        fslogic_worker:fuse_response())
-) -> fslogic_worker:fuse_response_type().
-child_attrs_mapper(MappingFun) ->
-    fun(UserCtx, ChildCtx, ComputeAttrsOpts) ->
+%% @private
+-spec child_attrs_mapper(map_child_fun()) -> fslogic_worker:fuse_response_type().
+child_attrs_mapper(AttrsMappingFun) ->
+    fun(UserCtx, ChildCtx, BaseOpts, EntryType) ->
+        ComputeAttrsOpts = file_listing_utils:extend_compute_attr_opts(BaseOpts, EntryType),
         #fuse_response{status = #status{code = ?OK}, fuse_response = Result} = 
-            MappingFun(UserCtx, ChildCtx, ComputeAttrsOpts),
+            AttrsMappingFun(UserCtx, ChildCtx, ComputeAttrsOpts),
         Result
     end.
+

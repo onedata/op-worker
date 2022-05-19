@@ -17,7 +17,14 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 
--export([map_children_to_attrs/5]).
+-export([
+    map_entries/4,
+    extend_compute_attr_opts/2
+]).
+
+-type entry_type() :: edge_entry | inner_entry.
+
+-export_type([entry_type/0]).
 
 -define(MAX_MAP_CHILDREN_PROCESSES, application:get_env(
     ?APP_NAME, max_read_dir_plus_procs, 20
@@ -29,50 +36,48 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Calls MapFunctionInsecure for every passed children in parallel and
-%% filters out children for which it raised error (potentially docs not
+%% Calls MapFunctionInsecure for every passed entry in parallel and
+%% filters out entries for which it raised error (potentially docs not
 %% synchronized between providers or deleted files).
 %% @end
 %%--------------------------------------------------------------------
--spec map_children_to_attrs(
+-spec map_entries(
     user_ctx:ctx(),
-    MapFunInsecure :: fun((user_ctx:ctx(), file_ctx:ctx(), attr_req:compute_file_attr_opts()) -> Term),
-    Children :: [file_ctx:ctx()],
-    IncludeReplicationStatus :: boolean(),
-    IncludeLinkCount :: boolean()
+    MapFunInsecure :: fun((user_ctx:ctx(), Entry, BaseOpts, entry_type()) -> Term),
+    Entries :: [Entry],
+    BaseOpts
 ) ->
     [Term].
-map_children_to_attrs(UserCtx, MapFunInsecure, Children, IncludeReplicationStatus, IncludeLinkCount) ->
-    ChildrenNum = length(Children),
-    EnumeratedChildren = lists_utils:enumerate(Children),
-    Opts = #{
-        allow_deleted_files => false,
-        include_size => true
-    },
-    FilterMapFun = fun({Num, ChildCtx}) ->
+map_entries(UserCtx, MapFunInsecure, Entries, BaseOpts) ->
+    EntriesNum = length(Entries),
+    EnumeratedChildren = lists_utils:enumerate(Entries),
+    FilterMapFun = fun({Num, Entry}) ->
         try
-            Result = case Num == 1 orelse Num == ChildrenNum of
+            Result = case Num == 1 orelse Num == EntriesNum of
                 true ->
-                    MapFunInsecure(UserCtx, ChildCtx, Opts#{
-                        name_conflicts_resolution_policy => resolve_name_conflicts,
-                        include_replication_status => IncludeReplicationStatus,
-                        include_link_count => IncludeLinkCount
-                    });
+                    MapFunInsecure(UserCtx, Entry, BaseOpts, edge_entry);
                 false ->
-                    % Other files than first and last don't need to resolve name
-                    % conflicts (to check for collisions) as list_children
-                    % (file_meta_forest:tag_ambiguous to be precise) already did it
-                    MapFunInsecure(UserCtx, ChildCtx, Opts#{
-                        name_conflicts_resolution_policy => allow_name_conflicts,
-                        include_replication_status => IncludeReplicationStatus,
-                        include_link_count => IncludeLinkCount
-                    })
+                    MapFunInsecure(UserCtx, Entry, BaseOpts, inner_entry)
             end,
             {true, Result}
         catch _:_ ->
-            % File metadata can be not fully synchronized with other provider
+            % Entry metadata can be not fully synchronized with other provider
             false
         end
     end,
     lists_utils:pfiltermap(FilterMapFun, EnumeratedChildren, ?MAX_MAP_CHILDREN_PROCESSES).
 
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Other files than first and last don't need to resolve name
+%% conflicts (to check for collisions) as list_children
+%% (file_meta_forest:tag_ambiguous to be precise) already did it
+%% @end
+%%--------------------------------------------------------------------
+-spec extend_compute_attr_opts(attr_req:compute_file_attr_opts(), entry_type()) -> 
+    attr_req:compute_file_attr_opts().
+extend_compute_attr_opts(Opts, edge_entry) ->
+    Opts#{name_conflicts_resolution_policy => resolve_name_conflicts};
+extend_compute_attr_opts(Opts, inner_entry) ->
+    Opts#{name_conflicts_resolution_policy => allow_name_conflicts}.
