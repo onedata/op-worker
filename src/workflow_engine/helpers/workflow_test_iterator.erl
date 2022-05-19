@@ -17,7 +17,7 @@
 -behaviour(persistent_record).
 
 %% API
--export([get_first/1, get_first/2]).
+-export([initialize/1, initialize/2]).
 %% Iterator API
 -export([get_next/2, forget_before/1, mark_exhausted/1]).
 %% Persistent record API
@@ -31,17 +31,18 @@
 
 -type iterator() :: #workflow_test_iterator{}.
 -type item() :: binary().
+-export_type([item/0]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
--spec get_first(non_neg_integer()) -> iterator().
-get_first(ItemCount) ->
+-spec initialize(non_neg_integer()) -> iterator().
+initialize(ItemCount) ->
     #workflow_test_iterator{item_number = 1, item_count = ItemCount}.
 
--spec get_first(non_neg_integer(), non_neg_integer()) -> iterator().
-get_first(ItemCount, FailOnItem) ->
+-spec initialize(non_neg_integer(), non_neg_integer()) -> iterator().
+initialize(ItemCount, FailOnItem) ->
     #workflow_test_iterator{item_number = 1, item_count = ItemCount, fail_on_item = FailOnItem}.
 
 %%%===================================================================

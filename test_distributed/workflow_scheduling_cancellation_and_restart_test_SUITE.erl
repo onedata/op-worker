@@ -76,8 +76,10 @@ all() ->
     test_execution_manager_option ::
         {workflow_scheduling_test_common:test_manager_task_failure_key(), workflow_engine:task_id()} |
         {cancel_execution, prepare_lane, workflow_engine:lane_id()} |
-        {cancel_execution, process_item | handle_callback | process_result, workflow_engine:task_id()},
-    generator_options = #{} :: workflow_test_handler:test_execution_context()
+        {cancel_execution, run_task_for_item | handle_callback |
+        process_task_result_for_item, workflow_engine:task_id()} |
+        {fail_stream_termination, {workflow_engine:task_id(), handle_task_results_processed_for_all_items}},
+    generator_options = #{} :: workflow_test_handler:generator_options()
 }).
 
 
@@ -88,13 +90,13 @@ all() ->
 sync_workflow_external_cancel_during_execution_of_the_only_task_of_lane_test(Config) ->
     cancel_and_restart_test_base(Config, #test_config{
         lane_id = <<"1">>,
-        test_execution_manager_option = {cancel_execution, process_item, <<"1_1_1">>}
+        test_execution_manager_option = {cancel_execution, run_task_for_item, <<"1_1_1">>}
     }).
 
 sync_workflow_external_cancel_test(Config) ->
     cancel_and_restart_test_base(Config, #test_config{
         lane_id = <<"3">>,
-        test_execution_manager_option = {cancel_execution, process_item, <<"3_3_1">>}
+        test_execution_manager_option = {cancel_execution, run_task_for_item, <<"3_3_1">>}
     }).
 
 async_workflow_with_prepare_in_advance_external_cancel_test(Config) ->
@@ -102,7 +104,7 @@ async_workflow_with_prepare_in_advance_external_cancel_test(Config) ->
         task_type = async,
         prepare_in_advance = true,
         lane_id = <<"3">>,
-        test_execution_manager_option = {cancel_execution, process_item, <<"3_3_2">>}
+        test_execution_manager_option = {cancel_execution, run_task_for_item, <<"3_3_2">>}
     }).
 
 async_workflow_external_cancel_during_handle_callback_test(Config) ->
@@ -117,7 +119,7 @@ async_workflow_external_cancel_during_result_processing_test(Config) ->
     cancel_and_restart_test_base(Config, #test_config{
         task_type = async,
         lane_id = <<"3">>,
-        test_execution_manager_option = {cancel_execution, process_result, <<"3_2_1">>}
+        test_execution_manager_option = {cancel_execution, process_task_result_for_item, <<"3_2_1">>}
     }).
 
 internal_cancel_caused_by_sync_job_error_test(Config) ->
@@ -174,7 +176,7 @@ async_workflow_with_streams_external_cancel(Config) ->
     cancel_and_restart_test_base(Config, #test_config{
         task_type = async,
         lane_id = <<"3">>,
-        test_execution_manager_option = {cancel_execution, process_item, <<"3_2_1">>},
+        test_execution_manager_option = {cancel_execution, run_task_for_item, <<"3_2_1">>},
         generator_options = ?EXEMPLARY_STREAMS
     }).
 
@@ -183,7 +185,7 @@ async_workflow_with_streams_and_prepare_in_advance_external_cancel(Config) ->
         task_type = async,
         prepare_in_advance = true,
         lane_id = <<"3">>,
-        test_execution_manager_option = {cancel_execution, process_item, <<"3_2_1">>},
+        test_execution_manager_option = {cancel_execution, run_task_for_item, <<"3_2_1">>},
         generator_options = ?EXEMPLARY_STREAMS
     }).
 
@@ -193,7 +195,7 @@ async_workflow_with_streams_and_long_lasting_prepare_in_advance_external_cancel(
         task_type = async,
         prepare_in_advance = true,
         lane_id = <<"3">>,
-        test_execution_manager_option = {cancel_execution, process_item, <<"3_2_1">>},
+        test_execution_manager_option = {cancel_execution, run_task_for_item, <<"3_2_1">>},
         generator_options = ?EXEMPLARY_STREAMS
     }).
 
@@ -217,7 +219,8 @@ internal_cancel_caused_by_stream_closing_error_test(Config) ->
     cancel_and_restart_test_base(Config, #test_config{
         task_type = async,
         lane_id = <<"3">>,
-        test_execution_manager_option = {fail_stream_termination, {<<"3_2_2">>, stream_termination_callback}},
+        test_execution_manager_option =
+            {fail_stream_termination, {<<"3_2_2">>, handle_task_results_processed_for_all_items}},
         generator_options = ?EXEMPLARY_STREAMS_WITH_TERMINATION_ERROR
     }).
 

@@ -143,7 +143,7 @@ reply_to_handler_mock(Sender, ManagerAcc, Options, #handler_call{
     function = Function, execution_id = ExecutionId, lane_id = LaneId, task_id = TaskId, item = Item
 }) ->
     case {Function, Options} of
-        {process_item, #{fail_job := {TaskId, Item}}} ->
+        {run_task_for_item, #{fail_job := {TaskId, Item}}} ->
             Sender ! fail_call,
             ManagerAcc;
         {handle_callback, #{timeout := {TaskId, Item}}} ->
@@ -152,7 +152,7 @@ reply_to_handler_mock(Sender, ManagerAcc, Options, #handler_call{
         {handle_callback, #{delay_call := {TaskId, Item}}} ->
             Sender ! delay_call,
             ManagerAcc;
-        {process_result, #{fail_result_processing := {TaskId, Item}}} ->
+        {process_task_result_for_item, #{fail_result_processing := {TaskId, Item}}} ->
             Sender ! fail_call,
             ManagerAcc;
         {prepare_lane, #{fail_lane_preparation := LaneId, {delay_lane_preparation, LaneId} := true}} ->
@@ -167,10 +167,10 @@ reply_to_handler_mock(Sender, ManagerAcc, Options, #handler_call{
         {prepare_lane, #{sleep_on_preparation := Value}} ->
             Sender ! {sleep, Value},
             ManagerAcc;
-        {process_task_data, #{fail_task_data_processing := {TaskId, Item}}} ->
+        {process_streamed_task_data, #{fail_task_data_processing := {TaskId, Item}}} ->
             Sender ! fail_call,
             ManagerAcc;
-        {trigger_task_data_stream_termination, #{fail_stream_termination := {TaskId, Item}}} ->
+        {handle_task_results_processed_for_all_items, #{fail_stream_termination := {TaskId, Item}}} ->
             Sender ! fail_call,
             ManagerAcc;
         {Fun, #{cancel_execution := {Fun, TaskId, Item}}} ->
@@ -295,12 +295,12 @@ mock_handlers(Workers, Manager) ->
             )
     end),
 
-    test_utils:mock_expect(Workers, workflow_test_handler, process_item,
+    test_utils:mock_expect(Workers, workflow_test_handler, run_task_for_item,
         fun(ExecutionId, #{lane_id := LaneId} = Context, TaskId, Item, FinishCallback, HeartbeatCallback) ->
             maybe_stream_data(ExecutionId, TaskId, Context, Item),
             MockTemplate(
                 #handler_call{
-                    function = process_item,
+                    function = run_task_for_item,
                     execution_id = ExecutionId,
                     context =  Context,
                     lane_id = LaneId,
@@ -311,11 +311,11 @@ mock_handlers(Workers, Manager) ->
             )
         end),
 
-    test_utils:mock_expect(Workers, workflow_test_handler, process_result,
+    test_utils:mock_expect(Workers, workflow_test_handler, process_task_result_for_item,
         fun(ExecutionId, #{lane_id := LaneId} = Context, TaskId, Item, Result) ->
             MockTemplate(
                 #handler_call{
-                    function = process_result,
+                    function = process_task_result_for_item,
                     execution_id = ExecutionId,
                     context =  Context,
                     lane_id = LaneId,
@@ -343,34 +343,34 @@ mock_handlers(Workers, Manager) ->
         end),
 
 
-    test_utils:mock_expect(Workers, workflow_test_handler, trigger_task_data_stream_termination,
+    test_utils:mock_expect(Workers, workflow_test_handler, handle_task_results_processed_for_all_items,
         fun(ExecutionId, #{lane_id := LaneId} = Context, TaskId) ->
             Ans = MockTemplate(
                 #handler_call{
-                    function = trigger_task_data_stream_termination,
+                    function = handle_task_results_processed_for_all_items,
                     execution_id = ExecutionId,
                     context =  Context,
                     lane_id = LaneId,
                     task_id = TaskId,
-                    item = stream_termination_callback
+                    item = handle_task_results_processed_for_all_items
                 },
                 [ExecutionId, Context, TaskId]
             ),
 
-            maybe_stream_data(ExecutionId, TaskId, Context, stream_termination_callback),
+            maybe_stream_data(ExecutionId, TaskId, Context, handle_task_results_processed_for_all_items),
             case Ans of
-                ok -> workflow_engine:close_task_data_stream(ExecutionId, TaskId, success);
-                _ -> workflow_engine:close_task_data_stream(ExecutionId, TaskId, {failure, Ans})
+                ok -> workflow_engine:report_task_data_streaming_concluded(ExecutionId, TaskId, success);
+                _ -> workflow_engine:report_task_data_streaming_concluded(ExecutionId, TaskId, {failure, Ans})
             end,
             Ans
         end),
 
 
-    test_utils:mock_expect(Workers, workflow_test_handler, process_task_data,
+    test_utils:mock_expect(Workers, workflow_test_handler, process_streamed_task_data,
         fun(ExecutionId, #{lane_id := LaneId} = Context, TaskId, Data) ->
             MockTemplate(
                 #handler_call{
-                    function = process_task_data,
+                    function = process_streamed_task_data,
                     execution_id = ExecutionId,
                     context =  Context,
                     lane_id = LaneId,
@@ -711,14 +711,14 @@ verify_task_handlers(LaneIndex, GatheredForLane, TaskIds, TaskStreams) ->
         (#handler_call{function = handle_task_execution_ended, task_id = TaskId}, #{task_ids := TaskIdsListAcc} = Acc) ->
             ?assert(lists:member(TaskId, TaskIdsListAcc)),
             Acc#{task_ids => TaskIdsListAcc -- [TaskId]};
-        (#handler_call{function = trigger_task_data_stream_termination, task_id = TaskId}, #{
+        (#handler_call{function = handle_task_results_processed_for_all_items, task_id = TaskId}, #{
             task_ids := TaskIdsListAcc,
             stream_ids := StreamIds
         } = Acc) ->
             ?assertNot(lists:member(TaskId, TaskIdsListAcc)),
             ?assert(lists:member(TaskId, StreamIds)),
             Acc#{stream_ids => StreamIds -- [TaskId]};
-        (#handler_call{function = process_task_data, task_id = TaskId}, #{
+        (#handler_call{function = process_streamed_task_data, task_id = TaskId}, #{
             task_ids := TaskIdsListAcc
         } = Acc) ->
             ?assertNot(lists:member(TaskId, TaskIdsListAcc)),
@@ -732,7 +732,7 @@ verify_task_handlers(LaneIndex, GatheredForLane, TaskIds, TaskStreams) ->
     ?assertEqual([], RemainingStreamIds),
 
     lists:filter(fun(#handler_call{function = Fun}) ->
-        Fun =/= handle_task_execution_ended andalso Fun =/= trigger_task_data_stream_termination
+        Fun =/= handle_task_execution_ended andalso Fun =/= handle_task_results_processed_for_all_items
     end, GatheredForLane).
 
 verify_stream_processing(LaneIndex, GatheredForLane, TaskStreams) ->
@@ -747,7 +747,7 @@ verify_stream_processing(LaneIndex, GatheredForLane, TaskStreams) ->
     end, TaskStreams),
 
     RemainingDataProcessingCallbackCallCount = lists:foldl(fun
-        (#handler_call{function = process_task_data, task_id = TaskId}, Acc) ->
+        (#handler_call{function = process_streamed_task_data, task_id = TaskId}, Acc) ->
             {LaneIndex, BoxIndex, TaskIndex} = workflow_test_handler:decode_task_id(TaskId),
             TaskCallsCount = maps:get({BoxIndex, TaskIndex}, Acc, 0),
             ?assert(TaskCallsCount > 0),
@@ -760,7 +760,7 @@ verify_stream_processing(LaneIndex, GatheredForLane, TaskStreams) ->
     end, DataProcessingCallbackCallCount, GatheredForLane),
     ?assertEqual(0, maps:size(RemainingDataProcessingCallbackCallCount)),
 
-    lists:filter(fun(#handler_call{function = Fun}) -> Fun =/= process_task_data end, GatheredForLane).
+    lists:filter(fun(#handler_call{function = Fun}) -> Fun =/= process_streamed_task_data end, GatheredForLane).
 
 % Helper function for verify_lanes_execution_history/3 that verifies history for single item
 verify_item_execution_history(_Item, ExpectedCalls, [], _LaneExecutionContext, _Options) ->
@@ -772,7 +772,7 @@ verify_item_execution_history(Item, [CallsForBox | ExpectedCalls], [HandlerCall 
     ?assertEqual(ExpectedLaneId, LaneId),
     ?assertEqual(Item, Item),
     SetElement = case Function of
-        process_item -> TaskId;
+        run_task_for_item -> TaskId;
         _ -> {Function, TaskId}
     end,
     ?assert(sets:is_element(SetElement, CallsForBox)),
@@ -785,10 +785,10 @@ verify_item_execution_history(Item, [CallsForBox | ExpectedCalls], [HandlerCall 
     end,
 
     NewCallsForBox = case {WorkflowType, Function} of
-        {async, process_item} when Ignore =/= ignore_callback_call ->
+        {async, run_task_for_item} when Ignore =/= ignore_callback_call ->
             sets:add_element({handle_callback, TaskId}, CallsForBox);
         {async, handle_callback} ->
-            sets:add_element({process_result, TaskId}, CallsForBox);
+            sets:add_element({process_task_result_for_item, TaskId}, CallsForBox);
         _ -> CallsForBox
     end,
     FinalCallsForBox = sets:del_element(SetElement, NewCallsForBox),

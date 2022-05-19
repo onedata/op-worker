@@ -100,7 +100,7 @@
 %% to the job.
 %% @end
 %%--------------------------------------------------------------------
--callback process_item(
+-callback run_task_for_item(
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
     workflow_engine:task_id(),
@@ -117,7 +117,7 @@
 %% (it is executed only for asynchronous jobs).
 %% @end
 %%--------------------------------------------------------------------
--callback process_result(
+-callback process_task_result_for_item(
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
     workflow_engine:task_id(),
@@ -144,14 +144,15 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Callback processing extra data provided while executing jobs.
+%% Callback processing streamed task data that was generated during execution of task for item but is not
+%% a result of this processing. It is called for every chunk of streamed task data produced for task.
 %% @end
 %%--------------------------------------------------------------------
--callback process_task_data(
+-callback process_streamed_task_data(
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
     workflow_engine:task_id(),
-    workflow_engine:task_stream_data()
+    workflow_engine:streamed_task_data()
 ) ->
     handler_execution_result().
 
@@ -162,7 +163,7 @@
 %% outputs processed. It is executed only when task has data stream.
 %% @end
 %%--------------------------------------------------------------------
--callback trigger_task_data_stream_termination(
+-callback handle_task_results_processed_for_all_items(
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
     workflow_engine:task_id()

@@ -20,8 +20,8 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 
 % Callbacks
--export([prepare_lane/3, restart_lane/3, process_item/6, process_result/5, report_item_error/3,
-    trigger_task_data_stream_termination/3, process_task_data/4,
+-export([prepare_lane/3, restart_lane/3, run_task_for_item/6, process_task_result_for_item/5, report_item_error/3,
+    handle_task_results_processed_for_all_items/3, process_streamed_task_data/4,
     handle_task_execution_ended/3, handle_lane_execution_ended/3, handle_workflow_execution_ended/2]).
 % API
 -export([is_last_lane/1, get_ignored_lane_id/0, get_ignored_lane_predecessor_id/0, pack_task_id/3, decode_task_id/1]).
@@ -37,8 +37,9 @@
 
 %% @formatter:off
 -type test_execution_context() :: #{
+    lane_index => workflow_execution_state:index(),
+    lane_id => workflow_engine:lane_id(),
     task_type => sync | async,
-    async_call_pools => [workflow_async_call_pool:id()] | undefined,
     lane_to_retry => workflow_engine:lane_id(),
     prepare_in_advance => boolean(),
     % while prepare_in_advance => true ensures that all lanes are prepared in advance, usage of following
@@ -46,12 +47,36 @@
     prepare_ignored_lane_in_advance => boolean(), % when ?IGNORED_LANE_PREDECESSOR_ID finishes,
                                                   % set ?IGNORED_LANE_ID to be prepared in advance
     prepare_in_advance_out_of_order => {LaneId :: workflow_engine:lane_id(),
-        LaneIdOutOfOrder :: workflow_engine:lane_id()}, % when LaneId finishes, set LaneIdOutOfOrder
+        LaneIdOutOfOrder :: workflow_engine:lane_id()} % when LaneId finishes, set LaneIdOutOfOrder
                                                        % to be prepared in advance
-    fail_iteration => ItemNum :: non_neg_integer()
 }.
 
--export_type([test_execution_context/0]).
+-type generator_options() :: #{
+    async_call_pools => [workflow_async_call_pool:id()] | undefined,
+    fail_iteration => ItemNum :: non_neg_integer(),
+    task_streams => #{LaneIndex :: workflow_execution_state:index() => #{
+        {ParallelBoxIndex :: workflow_execution_state:index(), TaskIndex :: workflow_execution_state:index()} => [
+            % Data is streamed for following items
+            workflow_test_iterator:item() | {workflow_test_iterator:item(), NumberOfChunks :: non_neg_integer()} |
+            % Data is streamed during handle_task_results_processed_for_all_items callback execution
+            handle_task_results_processed_for_all_items |
+            {handle_task_results_processed_for_all_items, NumberOfChunks :: non_neg_integer()}
+        ]
+    }},
+    item_count => non_neg_integer(),
+
+    % Options to be used constructing context (see test_execution_context() for description)
+    lane_index => workflow_execution_state:index(),
+    lane_id => workflow_engine:lane_id(),
+    task_type => sync | async,
+    lane_to_retry => workflow_engine:lane_id(),
+    prepare_in_advance => boolean(),
+    prepare_ignored_lane_in_advance => boolean(),
+    prepare_in_advance_out_of_order => {LaneId :: workflow_engine:lane_id(),
+        LaneIdOutOfOrder :: workflow_engine:lane_id()}
+}.
+
+-export_type([test_execution_context/0, generator_options/0]).
 %% @formatter:on
 
 %%%===================================================================
@@ -89,8 +114,8 @@ prepare_lane(_ExecutionId, #{task_type := Type, async_call_pools := Pools} = Exe
 
     ItemCount = maps:get(item_count, ExecutionContext, 200),
     Iterator = case maps:get(fail_iteration, ExecutionContext, undefined) of
-        undefined -> workflow_test_iterator:get_first(ItemCount);
-        ItemNumToFail -> workflow_test_iterator:get_first(ItemCount, ItemNumToFail)
+        undefined -> workflow_test_iterator:initialize(ItemCount);
+        ItemNumToFail -> workflow_test_iterator:initialize(ItemCount, ItemNumToFail)
     end,
 
     LaneOptions = maps:get(lane_options, ExecutionContext, #{}),
@@ -114,7 +139,7 @@ restart_lane(ExecutionId, ExecutionContext, LaneId) ->
     prepare_lane(ExecutionId, ExecutionContext, LaneId).
 
 
--spec process_item(
+-spec run_task_for_item(
     workflow_engine:execution_id(),
     test_execution_context(),
     workflow_engine:task_id(),
@@ -123,7 +148,7 @@ restart_lane(ExecutionId, ExecutionContext, LaneId) ->
     workflow_handler:heartbeat_callback_id()
 ) ->
     workflow_handler:handler_execution_result().
-process_item(_ExecutionId, #{task_type := async}, _TaskId, Item, FinishCallback, _) ->
+run_task_for_item(_ExecutionId, #{task_type := async}, _TaskId, Item, FinishCallback, _) ->
     spawn(fun() ->
         timer:sleep(100), % TODO VFS-7784 - test with different sleep times
         Result = #{<<"result">> => <<"ok">>, <<"item">> => Item},
@@ -136,11 +161,11 @@ process_item(_ExecutionId, #{task_type := async}, _TaskId, Item, FinishCallback,
         end
     end),
     ok;
-process_item(_ExecutionId, _Context, _TaskId, _Item, _FinishCallback, _) ->
+run_task_for_item(_ExecutionId, _Context, _TaskId, _Item, _FinishCallback, _) ->
     ok.
 
 
--spec process_result(
+-spec process_task_result_for_item(
     workflow_engine:execution_id(),
     test_execution_context(),
     workflow_engine:task_id(),
@@ -148,9 +173,9 @@ process_item(_ExecutionId, _Context, _TaskId, _Item, _FinishCallback, _) ->
     workflow_handler:async_processing_result()
 ) ->
     workflow_handler:handler_execution_result().
-process_result(_, _, _, _, {error, _}) ->
+process_task_result_for_item(_, _, _, _, {error, _}) ->
     error;
-process_result(_, _, _, _, #{<<"result">> := Result}) ->
+process_task_result_for_item(_, _, _, _, #{<<"result">> := Result}) ->
     binary_to_atom(Result, utf8).
 
 
@@ -164,27 +189,28 @@ report_item_error(_, _, _) ->
     ok.
 
 
--spec trigger_task_data_stream_termination(
+-spec process_streamed_task_data(
+    workflow_engine:execution_id(),
+    workflow_engine:execution_context(),
+    workflow_engine:task_id(),
+    workflow_engine:streamed_task_data()
+) ->
+    workflow_handler:handler_execution_result().
+process_streamed_task_data(_, _, _, error) ->
+    error;
+process_streamed_task_data(_, _, _, _) ->
+    ok.
+
+
+-spec handle_task_results_processed_for_all_items(
     workflow_engine:execution_id(),
     test_execution_context(),
     workflow_engine:task_id()
 ) ->
     ok.
-trigger_task_data_stream_termination(_, _, _) ->
+handle_task_results_processed_for_all_items(_, _, _) ->
     ok.
 
-
--spec process_task_data(
-    workflow_engine:execution_id(),
-    workflow_engine:execution_context(),
-    workflow_engine:task_id(),
-    workflow_engine:task_stream_data()
-) ->
-    workflow_handler:handler_execution_result().
-process_task_data(_, _, _, error) ->
-    error;
-process_task_data(_, _, _, _) ->
-    ok.
 
 -spec handle_task_execution_ended(
     workflow_engine:execution_id(),

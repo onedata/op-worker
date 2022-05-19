@@ -30,14 +30,14 @@
 %%% API
 %%%===================================================================
 
--spec put(workflow_engine:task_stream_data()) -> id().
+-spec put(workflow_engine:streamed_task_data()) -> id().
 put(Data) ->
     Doc = #document{value = #workflow_cached_task_data{data = Data}},
     {ok, #document{key = Id}} = datastore_model:save(?CTX, Doc),
     Id.
 
 
--spec take(id()) -> workflow_engine:task_stream_data().
+-spec take(id()) -> workflow_engine:streamed_task_data().
 take(Id) ->
     {ok, #document{value = #workflow_cached_task_data{data = Data}}} = datastore_model:get(?CTX, Id),
     ok = datastore_model:delete(?CTX, Id),

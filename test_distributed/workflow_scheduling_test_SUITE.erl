@@ -131,7 +131,7 @@ all() ->
     test_execution_manager_options = [] :: {fail_lane_preparation, workflow_engine:lane_id()} |
         {{delay_lane_preparation, workflow_engine:lane_id()}, boolean()} |
         {delay_call, {workflow_engine:task_id(), iterator:item()}} | {sleep_on_preparation, non_neg_integer()},
-    generator_options = #{} :: workflow_test_handler:test_execution_context(),
+    generator_options = #{} :: workflow_test_handler:generator_options(),
     verify_statistics_options = #{} :: #{is_empty => boolean()},
     verify_history_options = #{} :: #{
         delay_and_fail_lane_preparation_in_advance => workflow_engine:lane_id(),

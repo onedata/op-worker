@@ -34,14 +34,15 @@
 
 -define(EXEMPLARY_STREAMS_BASE(Extension), #{task_streams => #{
     3 => #{
+        % TODO VFS-7788 - use index or id - not both
         {1,1} => [<<"1">>],
-        {2,2} => [{stream_termination_callback, 5}],
+        {2,2} => [{handle_task_results_processed_for_all_items, 5}],
         {3,1} => [<<"1">>,{<<"2">>, 10},<<"3">>,<<"4">>,<<"100">>,<<"150">>],
         {3,3} => [],
         Extension
     }
 }}).
--define(EXEMPLARY_STREAMS, ?EXEMPLARY_STREAMS_BASE({3,2} => [<<"100">>, stream_termination_callback])).
+-define(EXEMPLARY_STREAMS, ?EXEMPLARY_STREAMS_BASE({3,2} => [<<"100">>, handle_task_results_processed_for_all_items])).
 -define(EXEMPLARY_STREAMS2, ?EXEMPLARY_STREAMS_BASE({3,2} => [<<"10">>, <<"100">>])).
 -define(EXEMPLARY_STREAMS_WITH_TERMINATION_ERROR,
     ?EXEMPLARY_STREAMS_BASE({2,1} => [<<"10">>, <<"100">>, termination_error])).
