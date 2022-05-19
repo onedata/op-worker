@@ -1104,8 +1104,8 @@
     %% @see atm_task_execution_arguments.erl
     argument_specs :: [atm_task_execution_argument_spec:record()],
     %% @see atm_task_execution_results.erl
-    job_result_specs :: [atm_task_execution_result_spec:record()],
-    supplementary_result_specs :: [atm_task_execution_result_spec:record()],
+    item_related_result_specs :: [atm_task_execution_result_spec:record()],
+    uncorrelated_result_specs :: [atm_task_execution_result_spec:record()],
 
     system_audit_log_store_id :: atm_store:id(),
     time_series_store_id :: undefined | atm_store:id(),

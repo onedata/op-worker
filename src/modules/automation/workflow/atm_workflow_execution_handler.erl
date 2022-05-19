@@ -33,10 +33,10 @@
     prepare_lane/3,
     restart_lane/3,
 
-    run_job_batch/6,
-    process_job_batch_output/5,
-    process_task_data_stream/4,
-    trigger_task_data_stream_termination/3,
+    run_task_for_item/6,
+    process_task_result_for_item/5,
+    process_streamed_task_data/4,
+    handle_task_results_processed_for_all_items/3,
     handle_task_execution_ended/3,
 
     report_items_processing_failed/3,
@@ -182,7 +182,7 @@ restart_lane(_, _, _) ->
     error.
 
 
--spec run_job_batch(
+-spec run_task_for_item(
     atm_workflow_execution:id(),
     atm_workflow_execution_env:record(),
     atm_task_execution:id(),
@@ -191,7 +191,7 @@ restart_lane(_, _, _) ->
     binary()
 ) ->
     ok | error.
-run_job_batch(
+run_task_for_item(
     _AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId,
     ItemBatch, ForwardOutputUrl, HeartbeatUrl
 ) ->
@@ -206,24 +206,24 @@ run_job_batch(
     ).
 
 
--spec process_job_batch_output(
+-spec process_task_result_for_item(
     atm_workflow_execution:id(),
     atm_workflow_execution_env:record(),
     atm_task_execution:id(),
     [automation:item()],
-    errors:error() | atm_task_executor:lambda_output()
+    atm_task_executor:lambda_output()
 ) ->
     ok | error.
-process_job_batch_output(
+process_task_result_for_item(
     AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId,
     ItemBatch, LambdaOutputDecodingError = ?ERROR_BAD_MESSAGE(_)
 ) ->
-    process_job_batch_output(
+    process_task_result_for_item(
         AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId,
         ItemBatch, ?ERROR_BAD_DATA(<<"lambdaOutput">>, LambdaOutputDecodingError)
     );
 
-process_job_batch_output(
+process_task_result_for_item(
     _AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId,
     ItemBatch, LambdaOutput
 ) ->
@@ -237,35 +237,35 @@ process_job_batch_output(
     ).
 
 
--spec process_task_data_stream(
+-spec process_streamed_task_data(
     atm_workflow_execution:id(),
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id(),
-    atm_task_executor:data_stream()
+    atm_task_executor:streamed_data()
 ) ->
     ok | error.
-process_task_data_stream(
+process_streamed_task_data(
     _AtmWorkflowExecutionId,
     AtmWorkflowExecutionEnv,
     AtmTaskExecutionId,
-    Results
+    StreamedData
 ) ->
     AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(
         AtmTaskExecutionId, AtmWorkflowExecutionEnv
     ),
     % NOTE: no try..catch needed as exceptions are caught in 'atm_task_execution_handler'
-    atm_task_execution_handler:process_task_data_stream(
-        AtmWorkflowExecutionCtx, AtmTaskExecutionId, Results
+    atm_task_execution_handler:process_streamed_data(
+        AtmWorkflowExecutionCtx, AtmTaskExecutionId, StreamedData
     ).
 
 
--spec trigger_task_data_stream_termination(
+-spec handle_task_results_processed_for_all_items(
     atm_workflow_execution:id(),
     atm_workflow_execution_env:record(),
     atm_task_execution:id()
 ) ->
     ok.
-trigger_task_data_stream_termination(
+handle_task_results_processed_for_all_items(
     _AtmWorkflowExecutionId,
     _AtmWorkflowExecutionEnv,
     _AtmTaskExecutionId

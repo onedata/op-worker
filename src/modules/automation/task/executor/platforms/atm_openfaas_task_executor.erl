@@ -125,7 +125,7 @@ create(AtmWorkflowExecutionCtx, _AtmLaneIndex, _AtmTaskSchema, AtmLambdaRevision
 initiate(AtmTaskExecutorInitiationCtx = #atm_task_executor_initiation_ctx{
     task_schema = AtmTaskSchema,
     lambda_revision = AtmLambdaRevision,
-    supplementary_results = AtmTaskExecutionSupplementaryResultNames
+    uncorrelated_results = AtmTaskExecutionUncorrelatedResultNames
 }, AtmTaskExecutor) ->
     InitiationCtx = #initiation_ctx{
         task_executor_initiation_ctx = AtmTaskExecutorInitiationCtx,
@@ -141,7 +141,7 @@ initiate(AtmTaskExecutorInitiationCtx = #atm_task_executor_initiation_ctx{
 
     #{
         type => async,
-        data_stream_enabled => not lists_utils:is_empty(AtmTaskExecutionSupplementaryResultNames)
+        data_stream_enabled => not lists_utils:is_empty(AtmTaskExecutionUncorrelatedResultNames)
     }.
 
 
@@ -446,7 +446,7 @@ add_resources_properties(FunctionDefinition, #initiation_ctx{resource_spec = #at
         encode_if_defined(EphemeralStorageLimit)
     ),
 
-    update_function_annotations(
+    insert_function_annotations(
         FunctionDefinition#{<<"requests">> => Requests, <<"limits">> => Limits2},
         EphemeralStorageAnnotations
     ).
@@ -471,7 +471,7 @@ add_function_ctx_annotations(FunctionDefinition, #initiation_ctx{
     AtmWorkflowExecutionId = atm_workflow_execution_ctx:get_workflow_execution_id(
         AtmWorkflowExecutionCtx
     ),
-    update_function_annotations(FunctionDefinition, #{
+    insert_function_annotations(FunctionDefinition, #{
         <<"function.openfaas.onedata.org/workflow_execution_id">> => AtmWorkflowExecutionId,
         <<"function.openfaas.onedata.org/task_execution_id">> => AtmTaskExecutionId,
         <<"function.openfaas.onedata.org/name">> => FunctionName
@@ -483,19 +483,19 @@ add_function_ctx_annotations(FunctionDefinition, #initiation_ctx{
     json_utils:json_map().
 add_data_stream_annotations_if_required(FunctionDefinition, #initiation_ctx{
     task_executor_initiation_ctx = #atm_task_executor_initiation_ctx{
-        supplementary_results = []
+        uncorrelated_results = []
     }
 }) ->
     FunctionDefinition;
 
 add_data_stream_annotations_if_required(FunctionDefinition, #initiation_ctx{
     task_executor_initiation_ctx = #atm_task_executor_initiation_ctx{
-        supplementary_results = AtmTaskExecutionSupplementaryResultNames
+        uncorrelated_results = AtmTaskExecutionUncorrelatedResultNames
     }
 }) ->
-    update_function_annotations(FunctionDefinition, #{
-        <<"data_stream.openfaas.onedata.org/inject">> => <<"enabled">>,
-        <<"data_stream.openfaas.onedata.org/names">> => AtmTaskExecutionSupplementaryResultNames
+    insert_function_annotations(FunctionDefinition, #{
+        <<"result_stream.openfaas.onedata.org/inject">> => <<"enabled">>,
+        <<"result_stream.openfaas.onedata.org/result_names">> => AtmTaskExecutionUncorrelatedResultNames
     }).
 
 
@@ -533,7 +533,7 @@ add_oneclient_annotations_if_required(FunctionDefinition, #initiation_ctx{
     )),
     OneclientImage = get_oneclient_image(),
 
-    update_function_annotations(FunctionDefinition, #{
+    insert_function_annotations(FunctionDefinition, #{
         <<"oneclient.openfaas.onedata.org/inject">> => <<"enabled">>,
         <<"oneclient.openfaas.onedata.org/image">> => OneclientImage,
         <<"oneclient.openfaas.onedata.org/space_id">> => SpaceId,
@@ -562,13 +562,13 @@ get_oneclient_image() ->
 
 
 %% @private
--spec update_function_annotations(json_utils:json_map(), json_utils:json_map()) ->
+-spec insert_function_annotations(json_utils:json_map(), json_utils:json_map()) ->
     json_utils:json_map().
-update_function_annotations(FunctionDefinition, FunctionAnnotationsDiff) ->
+insert_function_annotations(FunctionDefinition, NewFunctionAnnotations) ->
     maps:update_with(
         <<"annotations">>,
-        fun(Annotations) -> maps:merge(Annotations, FunctionAnnotationsDiff) end,
-        FunctionAnnotationsDiff,
+        fun(Annotations) -> maps:merge(Annotations, NewFunctionAnnotations) end,
+        NewFunctionAnnotations,
         FunctionDefinition
     ).
 

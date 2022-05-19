@@ -53,7 +53,7 @@
 
     run_job_batch/5,
     process_job_batch_output/4,
-    process_task_data_stream/3,
+    process_streamed_data/3,
 
     handle_ended/1
 ]).
@@ -75,7 +75,7 @@ initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
         value = AtmTaskExecution = #atm_task_execution{
             workflow_execution_id = AtmWorkflowExecutionId,
             executor = AtmTaskExecutor,
-            supplementary_result_specs = AtmTaskExecutionSupplementaryResultSpecs,
+            uncorrelated_result_specs = AtmTaskExecutionUncorrelatedResultSpecs,
             system_audit_log_store_id = AtmSystemAuditLogStoreId,
             time_series_store_id = AtmTaskTSStoreId
         }
@@ -91,9 +91,9 @@ initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
         task_execution_id = AtmTaskExecutionId,
         task_schema = AtmTaskSchema,
         lambda_revision = get_lambda_revision(AtmTaskSchema, AtmWorkflowExecution),
-        supplementary_results = lists:map(
+        uncorrelated_results = lists:map(
             fun atm_task_execution_result_spec:get_name/1,
-            AtmTaskExecutionSupplementaryResultSpecs
+            AtmTaskExecutionUncorrelatedResultSpecs
         )
     },
     AtmTaskExecutionSpec = atm_task_executor:initiate(
@@ -158,9 +158,11 @@ run_job_batch(
     ),
 
     try
-        LambdaInput = build_lambda_input(AtmRunJobBatchCtx, ItemBatch, AtmTaskExecution),
-        AtmTaskExecutor = AtmTaskExecution#atm_task_execution.executor,
-        atm_task_executor:run(AtmRunJobBatchCtx, LambdaInput, AtmTaskExecutor)
+        atm_task_executor:run(
+            AtmRunJobBatchCtx,
+            build_lambda_input(AtmRunJobBatchCtx, ItemBatch, AtmTaskExecution),
+            AtmTaskExecution#atm_task_execution.executor
+        )
     catch Type:Reason:Stacktrace ->
         handle_job_batch_processing_error(
             AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemBatch,
@@ -174,11 +176,11 @@ run_job_batch(
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id(),
     [automation:item()],
-    errors:error() | atm_task_executor:lambda_output()
+    atm_task_executor:lambda_output()
 ) ->
     ok | error.
-process_job_batch_output(AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemBatch, JobBatchOutput) ->
-    case resolve_each_job_results(ItemBatch, JobBatchOutput) of
+process_job_batch_output(AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemBatch, LambdaOutput) ->
+    case parse_lambda_output(ItemBatch, LambdaOutput) of
         {ok, ResultsPerJob} ->
             AnyErrorOccurred = lists:member(error, atm_parallel_runner:map(fun({Item, JobResults}) ->
                 process_job_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, JobResults)
@@ -196,24 +198,24 @@ process_job_batch_output(AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemBatch,
     end.
 
 
--spec process_task_data_stream(
+-spec process_streamed_data(
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id(),
-    atm_task_executor:data_stream()
+    atm_task_executor:streamed_data()
 ) ->
     ok | error.
-process_task_data_stream(AtmWorkflowExecutionCtx, AtmTaskExecutionId, {chunk, SupplementaryResults}) ->
+process_streamed_data(AtmWorkflowExecutionCtx, AtmTaskExecutionId, {chunk, UncorrelatedResults}) ->
     {ok, #document{value = AtmTaskExecution}} = atm_task_execution:get(AtmTaskExecutionId),
 
     try
         atm_task_execution_results:consume_results(
             AtmWorkflowExecutionCtx,
-            supplementary,
-            AtmTaskExecution#atm_task_execution.supplementary_result_specs,
-            SupplementaryResults
+            uncorrelated,
+            AtmTaskExecution#atm_task_execution.uncorrelated_result_specs,
+            UncorrelatedResults
         )
     catch Type:Reason:Stacktrace ->
-        handle_supplementary_results_processing_error(
+        handle_uncorrelated_results_processing_error(
             AtmWorkflowExecutionCtx,
             AtmTaskExecutionId,
             ?atm_examine_error(Type, Reason, Stacktrace)
@@ -221,8 +223,8 @@ process_task_data_stream(AtmWorkflowExecutionCtx, AtmTaskExecutionId, {chunk, Su
         error
     end;
 
-process_task_data_stream(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Error = {error, _}) ->
-    handle_supplementary_results_processing_error(
+process_streamed_data(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Error = {error, _}) ->
+    handle_uncorrelated_results_processing_error(
         AtmWorkflowExecutionCtx, AtmTaskExecutionId, Error
     ),
     error.
@@ -243,17 +245,17 @@ handle_ended(AtmTaskExecutionId) ->
         }) ->
             % atm workflow execution may have been abruptly interrupted by e.g.
             % provider restart which resulted in stale `items_in_processing`
-            AllProcessedItems = ItemsProcessed + ItemsInProcessing,
-            AllFailedItems = ItemsFailed + ItemsInProcessing,
+            UpdatedProcessedItems = ItemsProcessed + ItemsInProcessing,
+            UpdatedFailedItems = ItemsFailed + ItemsInProcessing,
 
             {ok, AtmTaskExecution#atm_task_execution{
-                status = case {AbortingReason, AllFailedItems} of
+                status = case {AbortingReason, UpdatedFailedItems} of
                     {undefined, 0} -> ?FINISHED_STATUS;
                     _ -> ?FAILED_STATUS
                 end,
                 items_in_processing = 0,
-                items_processed = AllProcessedItems,
-                items_failed = AllFailedItems
+                items_processed = UpdatedProcessedItems,
+                items_failed = UpdatedFailedItems
             }};
 
         (_) ->
@@ -346,16 +348,13 @@ build_lambda_input(AtmRunJobBatchCtx, ItemBatch, #atm_task_execution{
 
 
 %% @private
--spec resolve_each_job_results(
-    [automation:item()],
-    errors:error() | atm_task_executor:lambda_output()
-) ->
+-spec parse_lambda_output([automation:item()], atm_task_executor:lambda_output()) ->
     {ok, [{automation:item(), atm_task_executor:job_results()}]} | errors:error().
-resolve_each_job_results(_ItemBatch, Error = {error, _}) ->
+parse_lambda_output(_ItemBatch, Error = {error, _}) ->
     % Entire batch processing failed (e.g. timeout or malformed lambda response)
     Error;
 
-resolve_each_job_results(ItemBatch, #{<<"resultsBatch">> := ResultsBatch}) when
+parse_lambda_output(ItemBatch, #{<<"resultsBatch">> := ResultsBatch}) when
     is_list(ResultsBatch),
     length(ItemBatch) == length(ResultsBatch)
 ->
@@ -369,7 +368,7 @@ resolve_each_job_results(ItemBatch, #{<<"resultsBatch">> := ResultsBatch}) when
             ))}
     end, ItemBatch, ResultsBatch)};
 
-resolve_each_job_results(_ItemBatch, MalformedLambdaOutput) ->
+parse_lambda_output(_ItemBatch, MalformedLambdaOutput) ->
     ?ERROR_BAD_DATA(<<"lambdaOutput">>, str_utils:format_bin(
         "Expected '{\"resultsBatch\": [$LAMBDA_RESULTS_FOR_ITEM, ...]}' with "
         "$LAMBDA_RESULTS_FOR_ITEM object for each item in 'argsBatch' "
@@ -426,8 +425,8 @@ process_job_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, JobResult
     try
         atm_task_execution_results:consume_results(
             AtmWorkflowExecutionCtx,
-            job,
-            AtmTaskExecution#atm_task_execution.job_result_specs,
+            item_related,
+            AtmTaskExecution#atm_task_execution.item_related_result_specs,
             JobResults
         ),
         update_items_processed(AtmTaskExecutionId)
@@ -529,13 +528,13 @@ update_items_failed_and_processed(AtmTaskExecutionId, Inc) ->
 
 
 %% @private
--spec handle_supplementary_results_processing_error(
+-spec handle_uncorrelated_results_processing_error(
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id(),
     errors:error()
 ) ->
     ok.
-handle_supplementary_results_processing_error(
+handle_uncorrelated_results_processing_error(
     AtmWorkflowExecutionCtx,
     AtmTaskExecutionId,
     Error
@@ -553,7 +552,7 @@ handle_supplementary_results_processing_error(
             lane_index = AtmLaneIndex,
             run_num = RunNum
         }}} ->
-            log_supplementary_results_processing_error(
+            log_uncorrelated_results_processing_error(
                 AtmWorkflowExecutionCtx,
                 AtmTaskExecutionId,
                 Error
@@ -571,13 +570,13 @@ handle_supplementary_results_processing_error(
 
 
 %% @private
--spec log_supplementary_results_processing_error(
+-spec log_uncorrelated_results_processing_error(
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id(),
     errors:error()
 ) ->
     ok.
-log_supplementary_results_processing_error(
+log_uncorrelated_results_processing_error(
     AtmWorkflowExecutionCtx,
     AtmTaskExecutionId,
     Error
@@ -585,13 +584,13 @@ log_supplementary_results_processing_error(
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
 
     TaskLog = #{
-        <<"description">> => <<"Failed to process supplementary results.">>,
+        <<"description">> => <<"Failed to process uncorrelated task results.">>,
         <<"reason">> => errors:to_json(Error)
     },
     atm_workflow_execution_logger:task_critical(TaskLog, Logger),
 
     atm_workflow_execution_logger:workflow_critical(
-        "Failed to process supplementary results for task '~s'.",
+        "Failed to process uncorrelated results for task '~s'.",
         [AtmTaskExecutionId],
         Logger
     ).

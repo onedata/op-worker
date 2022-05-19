@@ -100,7 +100,7 @@
 %% to the job.
 %% @end
 %%--------------------------------------------------------------------
--callback run_job_batch(
+-callback run_task_for_item(
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
     workflow_engine:task_id(),
@@ -117,7 +117,7 @@
 %% (it is executed only for asynchronous jobs).
 %% @end
 %%--------------------------------------------------------------------
--callback process_job_batch_output(
+-callback process_task_result_for_item(
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
     workflow_engine:task_id(),
@@ -133,7 +133,7 @@
 %% TODO WRITEME
 %% @end
 %%--------------------------------------------------------------------
--callback process_task_data_stream(
+-callback process_streamed_task_data(
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
     workflow_engine:task_id(),
@@ -149,7 +149,7 @@
 %% TODO WRITEME
 %% @end
 %%--------------------------------------------------------------------
--callback trigger_task_data_stream_termination(
+-callback handle_task_results_processed_for_all_items(
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
     workflow_engine:task_id()

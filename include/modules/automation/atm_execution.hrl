@@ -86,7 +86,7 @@
     task_execution_id :: atm_task_execution:id(),
     task_schema :: atm_task_schema:record(),
     lambda_revision :: atm_lambda_revision:record(),
-    supplementary_results :: [automation:name()]
+    uncorrelated_results :: [automation:name()]
 }).
 
 % Record carrying an activity report of an OpenFaaS function
