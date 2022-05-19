@@ -90,7 +90,7 @@ get_file_instance_test(_Config) ->
 
     SpaceId = oct_background:get_space_id(space_krk_par),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
-    SpaceDetails = get_space_dir_details(P2Node, SpaceGuid, ?SPACE_KRK_PAR),
+    SpaceDetails = get_space_dir_details(paris, SpaceGuid, ?SPACE_KRK_PAR),
     ExpJsonSpaceDetails = file_details_to_gs_json(undefined, SpaceDetails),
 
     ClientSpec = #client_spec{
@@ -171,7 +171,7 @@ get_shared_file_instance_test(_Config) ->
     SpaceShareId = api_test_utils:share_file_and_sync_file_attrs(P1, SpaceOwnerSessId, Providers, SpaceGuid),
     ShareSpaceGuid = file_id:guid_to_share_guid(SpaceGuid, SpaceShareId),
 
-    ShareSpaceDetails = get_space_dir_details(P2, SpaceGuid, ?SPACE_KRK_PAR),
+    ShareSpaceDetails = get_space_dir_details(paris, SpaceGuid, ?SPACE_KRK_PAR),
     ExpJsonShareSpaceDetails = file_details_to_gs_json(SpaceShareId, ShareSpaceDetails),
 
     ShareFileGuid = file_id:guid_to_share_guid(FileGuid, SpaceShareId),
@@ -287,14 +287,14 @@ build_get_instance_validate_gs_call_fun(ExpJsonDetails) ->
 
 
 %% @private
--spec get_space_dir_details(node(), file_id:file_guid(), od_space:name()) -> #file_details{}.
-get_space_dir_details(Node, SpaceDirGuid, SpaceName) ->
+-spec get_space_dir_details(oct_background:entity_selector(), file_id:file_guid(), od_space:name()) -> #file_details{}.
+get_space_dir_details(ProviderSelector, SpaceDirGuid, SpaceName) ->
     {ok, SpaceAttrs} = ?assertMatch(
-        {ok, _}, file_test_utils:get_attrs(Node, SpaceDirGuid), ?ATTEMPTS
+        {ok, _}, file_test_utils:get_attrs(oct_background:get_random_provider_node(ProviderSelector), SpaceDirGuid), ?ATTEMPTS
     ),
     #file_details{
         file_attr = SpaceAttrs#file_attr{name = SpaceName},
-        index_startid = file_id:guid_to_space_id(SpaceDirGuid),
+        index_startid = file_listing:build_index(file_id:guid_to_space_id(SpaceDirGuid), oct_background:get_provider_id(ProviderSelector)),
         active_permissions_type = posix,
         eff_protection_flags = ?no_flags_mask,
         eff_qos_membership = ?NONE_MEMBERSHIP,

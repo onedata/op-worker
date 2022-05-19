@@ -163,7 +163,7 @@ get_file_details(UserCtx, FileCtx0) ->
 -spec get_file_details_insecure(user_ctx:ctx(), file_ctx:ctx(), compute_file_attr_opts()) ->
     fslogic_worker:fuse_response().
 get_file_details_insecure(UserCtx, FileCtx, Opts) ->
-    {FileAttr, FileDoc, _, FileCtx2} = resolve_file_attr(UserCtx, FileCtx, Opts),
+    {#file_attr{name = FileAttrName} = FileAttr, FileDoc, _, FileCtx2} = resolve_file_attr(UserCtx, FileCtx, Opts),
     {ok, ActivePermissionsType} = file_meta:get_active_perms_type(FileDoc),
 
     ReferencesLimit = maps:get(effective_values_references_limit, Opts, ?DEFAULT_REFERENCES_LIMIT),
@@ -182,25 +182,30 @@ get_file_details_insecure(UserCtx, FileCtx, Opts) ->
             {#{}, FileCtx2}
     end,
 
+    Uuid = file_ctx:get_logical_uuid_const(FileCtx2),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #file_details{
             file_attr = FileAttr,
-            symlink_value = case fslogic_uuid:is_symlink_uuid(file_ctx:get_logical_uuid_const(FileCtx)) of
+            symlink_value = case fslogic_uuid:is_symlink_uuid(Uuid) of
                 true ->
                     {ok, SymlinkValue} = file_meta_symlinks:readlink(FileDoc),
                     SymlinkValue;
                 false ->
                     undefined
             end,
-            %% @TODO VFS-9280 - pass file_listing index to gui
-            index_startid = file_meta:get_name(FileDoc),
+            index_startid = file_listing:build_index(file_meta:get_name(FileDoc), file_meta:get_provider_id(FileDoc)),
             active_permissions_type = ActivePermissionsType,
             has_metadata = has_metadata(FileCtx3),
             eff_qos_membership = maps:get(effective_qos_membership, EffectiveValues, undefined),
             eff_dataset_membership = maps:get(effective_dataset_membership, EffectiveValues, undefined),
             eff_protection_flags = maps:get(effective_protection_flags, EffectiveValues, undefined),
-            recall_root_id = maps:get(effective_recall, EffectiveValues, undefined)
+            recall_root_id = maps:get(effective_recall, EffectiveValues, undefined),
+            conflicting_name = case {fslogic_uuid:is_space_dir_uuid(Uuid), file_meta:get_name(FileDoc)} of
+                {true, _} -> undefined;
+                {false, FileAttrName} -> undefined;
+                {false, ConflictingName} -> ConflictingName
+            end
         }
     }.
 

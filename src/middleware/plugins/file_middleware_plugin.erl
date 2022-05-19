@@ -840,8 +840,11 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = childre
         SessionId, ?FILE_REF(FileGuid), #{
             offset => maps:get(<<"offset">>, Data, ?DEFAULT_LIST_OFFSET),
             limit => maps:get(<<"limit">>, Data, ?DEFAULT_LIST_ENTRIES),
-            index => file_listing:build_index(maps:get(<<"index">>, Data, undefined)),
-            inclusive => maps:get(<<"inclusive">>, Data, false),
+            index => case maps:find(<<"index">>, Data) of
+                {ok, Index} -> file_listing:decode_index(Index);
+                error -> undefined
+            end,
+            inclusive => maps:get(<<"inclusive">>, Data, true),
             tune_for_large_continuous_listing => false
         }
     )),
