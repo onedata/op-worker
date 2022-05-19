@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Cache of data provided by tasks' streams.
+%%% Cache of workflow_engine:streamed_task_data().
 %%% @end
 %%%-------------------------------------------------------------------
 -module(workflow_cached_task_data).

@@ -28,9 +28,9 @@
     handler :: workflow_handler:handler(),
     context :: workflow_engine:execution_context(),
     task_id :: workflow_engine:task_id(),
-    task_spec :: workflow_engine:task_spec() | undefined, % for task_data processing spec is not required
+    task_spec :: workflow_engine:task_spec() | undefined, % for streamed_task_data processing spec is not required
     subject_id :: workflow_engine:subject_id(),
-    job_identifier :: workflow_jobs:job_identifier() | task_data
+    job_identifier :: workflow_jobs:job_identifier() | streamed_task_data
 }).
 
 %%%===================================================================

@@ -7,8 +7,9 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Helper module for workflow_execution_state processing information
-%%% about jobs tasks' stream data being processed by workflow_engine. It
-%%% also processes information about data scheduled for processing.
+%%% about streamed task data being processed by workflow_engine. It
+%%% also processes information about streamed task data scheduled for
+%%% processing.
 %%%
 %%% NOTE: Task data stream is finalized when it received all chunks of data
 %%% (mark_all_task_data_received/2 has been called) and no data connected
@@ -59,15 +60,15 @@ init() ->
 
 
 -spec put(workflow_engine:task_id(), workflow_cached_task_data:id(), registry()) -> registry().
-put(TaskId, CachedTaskDataId, #registry{waiting = Waiting, task_execution_order = Order} = TasksData) ->
+put(TaskId, CachedTaskDataId, #registry{waiting = Waiting, task_execution_order = Order} = Registry) ->
     case maps:get(TaskId, Waiting, undefined) of
         undefined ->
-            TasksData#registry{
+            Registry#registry{
                 task_execution_order = Order ++ [TaskId],
                 waiting = Waiting#{TaskId => [CachedTaskDataId]}
             };
         CachedTaskDataIds ->
-            TasksData#registry{waiting = Waiting#{TaskId => CachedTaskDataIds ++ [CachedTaskDataId]}}
+            Registry#registry{waiting = Waiting#{TaskId => CachedTaskDataIds ++ [CachedTaskDataId]}}
     end.
 
 
@@ -75,15 +76,15 @@ put(TaskId, CachedTaskDataId, #registry{waiting = Waiting, task_execution_order 
     {ok, workflow_engine:task_id(), workflow_cached_task_data:id(), registry()} | ?ERROR_NOT_FOUND.
 take_for_processing(#registry{task_execution_order = []}) ->
     ?ERROR_NOT_FOUND;
-take_for_processing(#registry{waiting = Waiting, task_execution_order = [NextTaskId | Order]} = TasksData) ->
+take_for_processing(#registry{waiting = Waiting, task_execution_order = [NextTaskId | Order]} = Registry) ->
     case maps:get(NextTaskId, Waiting) of
         [CachedTaskDataId] ->
-            {ok, NextTaskId, CachedTaskDataId, mark_task_ongoing(NextTaskId, CachedTaskDataId, TasksData#registry{
+            {ok, NextTaskId, CachedTaskDataId, mark_task_ongoing(NextTaskId, CachedTaskDataId, Registry#registry{
                 task_execution_order = Order,
                 waiting = maps:remove(NextTaskId, Waiting)
             })};
         [CachedTaskDataId | TaskDataTail] ->
-            {ok, NextTaskId, CachedTaskDataId, mark_task_ongoing(NextTaskId, CachedTaskDataId, TasksData#registry{
+            {ok, NextTaskId, CachedTaskDataId, mark_task_ongoing(NextTaskId, CachedTaskDataId, Registry#registry{
                 task_execution_order = Order ++ [NextTaskId],
                 waiting = Waiting#{NextTaskId => TaskDataTail}
             })}
@@ -91,16 +92,16 @@ take_for_processing(#registry{waiting = Waiting, task_execution_order = [NextTas
 
 
 -spec mark_processed(workflow_engine:task_id(), workflow_cached_task_data:id(), registry()) -> registry().
-mark_processed(TaskId, CachedTaskDataId, #registry{ongoing = Ongoing} = TasksData) ->
+mark_processed(TaskId, CachedTaskDataId, #registry{ongoing = Ongoing} = Registry) ->
     case maps:get(TaskId, Ongoing) of
-        [CachedTaskDataId] -> TasksData#registry{ongoing = maps:remove(TaskId, Ongoing)};
-        CachedTaskDataIds -> TasksData#registry{ongoing = Ongoing#{TaskId => CachedTaskDataIds -- [CachedTaskDataId]}}
+        [CachedTaskDataId] -> Registry#registry{ongoing = maps:remove(TaskId, Ongoing)};
+        CachedTaskDataIds -> Registry#registry{ongoing = Ongoing#{TaskId => CachedTaskDataIds -- [CachedTaskDataId]}}
     end.
 
 
 -spec mark_all_task_data_received(workflow_engine:task_id(), registry()) -> registry().
-mark_all_task_data_received(TaskId, #registry{streams_with_all_data_received = Streams} = TasksData) ->
-    TasksData#registry{streams_with_all_data_received = [TaskId | Streams]}.
+mark_all_task_data_received(TaskId, #registry{streams_with_all_data_received = Streams} = Registry) ->
+    Registry#registry{streams_with_all_data_received = [TaskId | Streams]}.
 
 
 -spec is_stream_finalized(workflow_engine:task_id(), registry()) -> boolean().
@@ -130,9 +131,9 @@ claim_execution_of_cancellation_procedures(#registry{}) ->
 
 %% @private
 -spec mark_task_ongoing(workflow_engine:task_id(), workflow_cached_task_data:id(), registry()) -> registry().
-mark_task_ongoing(TaskId, CachedTaskDataId, #registry{ongoing = Ongoing} = TasksData) ->
+mark_task_ongoing(TaskId, CachedTaskDataId, #registry{ongoing = Ongoing} = Registry) ->
     NewOngoing = maps:update_with(TaskId, fun(OngoingIds) -> [CachedTaskDataId | OngoingIds] end, [CachedTaskDataId], Ongoing),
-    TasksData#registry{ongoing = NewOngoing}.
+    Registry#registry{ongoing = NewOngoing}.
 
 
 %%%===================================================================

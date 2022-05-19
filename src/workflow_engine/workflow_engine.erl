@@ -165,13 +165,13 @@ cleanup_execution(ExecutionId) ->
 
 -spec stream_task_data(workflow_engine:execution_id(), workflow_engine:task_id(), streamed_task_data()) -> ok.
 stream_task_data(ExecutionId, TaskId, TaskData) ->
-    {ok, EngineId} = workflow_execution_state:report_new_stream_task_data(ExecutionId, TaskId, TaskData),
+    {ok, EngineId} = workflow_execution_state:report_new_streamed_task_data(ExecutionId, TaskId, TaskData),
     trigger_job_scheduling(EngineId).
 
 
 -spec report_task_data_streaming_concluded(workflow_engine:execution_id(), workflow_engine:task_id(), stream_closing_result()) -> ok.
 report_task_data_streaming_concluded(ExecutionId, TaskId, Result) ->
-    {ok, EngineId} = workflow_execution_state:mark_all_task_data_received(ExecutionId, TaskId, Result),
+    {ok, EngineId} = workflow_execution_state:mark_all_streamed_task_data_received(ExecutionId, TaskId, Result),
     trigger_job_scheduling(EngineId).
 
 
@@ -432,7 +432,7 @@ handle_execution_ended(EngineId, ExecutionId, #execution_ended{
     execution_spec()
 ) -> ok | ?WF_ERROR_LIMIT_REACHED.
 schedule_on_pool(EngineId, ExecutionId, #execution_spec{
-    job_identifier = task_data % stream data processing
+    job_identifier = streamed_task_data % stream data processing
 } = ExecutionSpec) ->
     CallArgs = {?MODULE, process_streamed_task_data, [EngineId, ExecutionId, ExecutionSpec]},
     ok = worker_pool:cast(?POOL_ID(EngineId), CallArgs);
@@ -622,7 +622,7 @@ process_streamed_task_data(EngineId, ExecutionId, #execution_spec{
 
         try
             Ans = call_handler(ExecutionId, ExecutionContext, Handler, process_streamed_task_data, [TaskId, Data]),
-            workflow_execution_state:report_task_data_processed(ExecutionId, TaskId, CachedTaskDataId, Ans),
+            workflow_execution_state:report_streamed_task_data_processed(ExecutionId, TaskId, CachedTaskDataId, Ans),
             trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
         catch
             Error:Reason:Stacktrace  ->
