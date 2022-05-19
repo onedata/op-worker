@@ -194,7 +194,7 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
     ArchiveInfo = mi_archives:get_info(SessionId, ArchiveId),
     {ok, resource, {GRI#gri{id = ArchiveId}, ArchiveInfo}};
 
-create(#op_req{auth = Auth, data = Data, gri = #gri{id = ArchiveId, aspect = delete}}) -> % fixme swagger
+create(#op_req{auth = Auth, data = Data, gri = #gri{id = ArchiveId, aspect = delete}}) ->
     SessionId = Auth#auth.session_id,
     Callback = maps:get(<<"deletedCallback">>, Data, undefined),
     mi_archives:delete(SessionId, ArchiveId, Callback);
