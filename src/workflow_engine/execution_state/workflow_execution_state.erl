@@ -1280,7 +1280,7 @@ get_task_ids_with_streams(#workflow_execution_state{
     }
 }) ->
     lists:filtermap(fun
-        ({TaskId, #{has_task_data_stream := true}}) -> {true, TaskId};
+        ({TaskId, #{data_stream_enabled := true}}) -> {true, TaskId};
         (_) -> false
     end, lists:flatmap(fun(BoxSpec) -> maps:values(BoxSpec) end, maps:values(BoxSpecs))).
 
@@ -1358,7 +1358,7 @@ get_task_status(JobIdentifier, #workflow_execution_state{
     case workflow_jobs:is_task_finished(Jobs, JobIdentifier) of
         true ->
             {_TaskId, TaskSpec} = workflow_jobs:get_task_details(JobIdentifier, BoxSpecs),
-            case maps:get(has_task_data_stream, TaskSpec, false) of
+            case maps:get(data_stream_enabled, TaskSpec, false) of
                 true -> waiting_for_data_stream_finalization;
                 false -> ended
             end;

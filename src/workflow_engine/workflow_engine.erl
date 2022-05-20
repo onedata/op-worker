@@ -72,7 +72,7 @@
 -type task_type() :: sync | async.
 -type task_spec() :: #{
     type := task_type(),
-    has_task_data_stream => boolean(),
+    data_stream_enabled => boolean(),
     async_call_pools => [workflow_async_call_pool:id()] | undefined,
     keepalive_timeout => time:seconds()
 }.

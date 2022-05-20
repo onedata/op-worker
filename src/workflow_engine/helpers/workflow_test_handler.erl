@@ -107,7 +107,7 @@ prepare_lane(_ExecutionId, #{task_type := Type, async_call_pools := Pools} = Exe
                 type => Type,
                 async_call_pools => Pools,
                 keepalive_timeout => 5,
-                has_task_data_stream => maps:is_key({BoxIndex, TaskIndex}, TaskStreams)
+                data_stream_enabled => maps:is_key({BoxIndex, TaskIndex}, TaskStreams)
             }}
         end, #{}, lists:seq(1, BoxIndex))
     end, lists:seq(1, LaneIndex)),
