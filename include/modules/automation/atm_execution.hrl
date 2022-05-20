@@ -90,9 +90,9 @@
 }).
 
 % Record carrying an activity report of an OpenFaaS function
--record(atm_openfaas_function_activity_report, {
-    type :: atm_openfaas_function_activity_report:type(),
-    batch :: atm_openfaas_function_activity_report:batch()
+-record(atm_openfaas_activity_report, {
+    type :: atm_openfaas_activity_report:type(),
+    batch :: atm_openfaas_activity_report:batch()
 }).
 
 % Record carrying a status report of a pod that executes given OpenFaaS function
@@ -128,6 +128,26 @@
     current_containers_readiness :: atm_openfaas_function_pod_status_report:containers_readiness(),
     last_status_change_timestamp :: atm_openfaas_function_pod_status_report:event_timestamp(),
     event_log :: infinite_log:log_id()
+}).
+
+% Record carrying a status report of a lambda result streamer of type 'registration'
+-record(atm_openfaas_result_streamer_registration_report, {
+    workflow_execution_id :: atm_workflow_execution:id(),
+    task_execution_id :: atm_task_execution:id(),
+    result_streamer_id :: atm_openfaas_result_streamer_registry:result_streamer_id()
+}).
+
+% Record carrying a status report of a lambda result streamer of type 'chunk'
+-record(atm_openfaas_result_streamer_chunk_report, {
+    chunk :: atm_openfaas_result_streamer_chunk_report:chunk()
+}).
+
+% Record carrying a status report of a lambda result streamer of type 'deregistration'
+-record(atm_openfaas_result_streamer_deregistration_report, {
+}).
+
+% Record expressing the push message sent to lambda result streamers to cue their termination
+-record(atm_openfaas_result_streamer_finalization_signal, {
 }).
 
 
@@ -210,8 +230,8 @@
 
 -record(atm_time_series_store_content_browse_options, {
     request ::
-        atm_time_series_store_content_browse_options:get_layout() |
-        atm_time_series_store_content_browse_options:get_slice()
+    atm_time_series_store_content_browse_options:get_layout() |
+    atm_time_series_store_content_browse_options:get_slice()
 }).
 
 -record(atm_time_series_store_content_get_layout_req, {}).
@@ -224,8 +244,8 @@
 
 -record(atm_time_series_store_content_browse_result, {
     result ::
-        atm_time_series_store_content_browse_result:layout() |
-        atm_time_series_store_content_browse_result:slice()
+    atm_time_series_store_content_browse_result:layout() |
+    atm_time_series_store_content_browse_result:slice()
 }).
 
 -record(atm_time_series_store_content_layout, {

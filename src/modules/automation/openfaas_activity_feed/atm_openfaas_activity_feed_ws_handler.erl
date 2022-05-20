@@ -29,31 +29,40 @@
     terminate/3
 ]).
 
--type state() :: no_state.
+-type connection_ref() :: pid().
+% state specific for the report handler, opaque to this module
+-type handler_state() :: term().
+-record(state, {
+    connection_ref :: connection_ref(),
+    handler_state = undefined :: handler_state()
+}).
+-type state() :: #state{}.
+-export_type([connection_ref/0, state/0]).
 
 -define(AUTHORIZATION_SECRET_ENV_NAME, openfaas_activity_feed_secret).
 
 % NOTE: lager defaults to truncating messages at 4096 bytes
 -define(MAX_LOGGED_REQUEST_SIZE, 1024).
 
+
 %%%===================================================================
 %%% Cowboy WebSocket handler callbacks
 %%%===================================================================
 
 -spec init(Req :: cowboy_req:req(), Opts :: any()) ->
-    {ok | cowboy_websocket, cowboy_req:req(), state()}.
+    {ok | cowboy_websocket, cowboy_req:req(), undefined}.
 init(Req, []) ->
     case is_authorized(Req) of
         true ->
-            {cowboy_websocket, Req, no_state};
+            {cowboy_websocket, Req, undefined};
         false ->
-            {ok, cowboy_req:reply(?HTTP_401_UNAUTHORIZED, Req), no_state}
+            {ok, cowboy_req:reply(?HTTP_401_UNAUTHORIZED, Req), undefined}
     end.
 
 
--spec websocket_init(state()) -> {ok, state()}.
-websocket_init(State) ->
-    {ok, State}.
+-spec websocket_init(any()) -> {ok, state()}.
+websocket_init(_) ->
+    {ok, #state{connection_ref = self()}}.
 
 
 %%--------------------------------------------------------------------
@@ -66,30 +75,43 @@ websocket_init(State) ->
     {reply, OutFrame | [OutFrame], State} |
     {reply, OutFrame | [OutFrame], State, hibernate} |
     {stop, State} when
-    InFrame :: {text | binary | ping | pong, binary()},
+    InFrame :: {text | binary | parsed_report | ping | pong, binary()},
     State :: state(),
     OutFrame :: cow_ws:frame().
-websocket_handle({text, Data}, State) ->
+websocket_handle({text, Payload}, #state{handler_state = HandlerState} = State) ->
     try
-        ActivityReport = jsonable_record:from_json(
-            json_utils:decode(Data), atm_openfaas_function_activity_report
-        ),
-        atm_openfaas_function_activity_registry:consume_report(ActivityReport),
-        {ok, State}
+        ActivityReport = jsonable_record:from_json(json_utils:decode(Payload), atm_openfaas_activity_report),
+        websocket_handle({parsed_report, ActivityReport}, State)
     catch Class:Reason:Stacktrace ->
-        TrimmedPayload = case byte_size(Data) > ?MAX_LOGGED_REQUEST_SIZE of
+        TrimmedPayload = case byte_size(Payload) > ?MAX_LOGGED_REQUEST_SIZE of
             true ->
-                binary:part(Data, 0, ?MAX_LOGGED_REQUEST_SIZE);
+                binary:part(Payload, 0, ?MAX_LOGGED_REQUEST_SIZE);
             false ->
-                Data
+                Payload
         end,
         ?error_stacktrace(
-            "Error while processing a request in ~p - ~w:~p~n"
+            "Error when parsing an openfaas activity report - ~w:~p~n"
             "Request payload: ~ts",
-            [?MODULE, Class, Reason, TrimmedPayload],
+            [Class, Reason, TrimmedPayload],
             Stacktrace
         ),
-        {reply, {text, <<"Bad request: ", Data/binary>>}, State}
+        atm_openfaas_activity_report:handle_reporting_error(HandlerState, ?ERROR_BAD_MESSAGE(TrimmedPayload)),
+        {reply, {text, <<"Bad request: ", Payload/binary>>}, State}
+    end;
+
+websocket_handle({parsed_report, ActivityReport}, #state{connection_ref = ConnRef, handler_state = HandlerState} = State) ->
+    try
+        NewHandlerState = atm_openfaas_activity_report:consume(ConnRef, HandlerState, ActivityReport),
+        {ok, State#state{handler_state = NewHandlerState}}
+    catch Class:Reason:Stacktrace ->
+        ?error_stacktrace(
+            "Unexpected error when processing an openfaas activity report - ~w:~p~n"
+            "Activity report: ~tp",
+            [Class, Reason, ActivityReport],
+            Stacktrace
+        ),
+        atm_openfaas_activity_report:handle_reporting_error(HandlerState, ?ERROR_INTERNAL_SERVER_ERROR),
+        {reply, {text, <<"Internal server error while processing the request">>}, State}
     end;
 
 websocket_handle(ping, State) ->
@@ -117,12 +139,16 @@ websocket_handle(Msg, SessionData) ->
     Info :: any(),
     State :: state(),
     OutFrame :: cow_ws:frame().
-websocket_info(terminate, SessionData) ->
-    {stop, SessionData};
+websocket_info(terminate, State) ->
+    {stop, State};
 
-websocket_info(Msg, SessionData) ->
-    ?warning("Unexpected message in ~p: ~p", [?MODULE, Msg]),
-    {ok, SessionData}.
+websocket_info(Msg, State) ->
+    case atm_openfaas_activity_feed_ws_connection:handle_info(Msg) of
+        {send_message, TextMessage} ->
+            {reply, {text, TextMessage}, State};
+        ok ->
+            {ok, State}
+    end.
 
 
 %%--------------------------------------------------------------------

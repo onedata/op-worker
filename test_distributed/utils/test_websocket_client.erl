@@ -13,17 +13,20 @@
 -module(test_websocket_client).
 -author("Lukasz Opiola").
 
--export([start/3]).
+-export([start/4]).
 -export([send/2]).
 
 %%% websocket client API
 -export([init/2, websocket_handle/3, websocket_info/3, websocket_terminate/3]).
 
--record(client, {
-    ws_controller_pid :: pid()
+
+-type client_ref() :: pid().
+-type push_message_handler() :: fun((client_ref(), json_utils:json_term()) -> no_reply | {reply, json_utils:json_term()}).
+-export_type([client_ref/0, push_message_handler/0]).
+
+-record(state, {
+    push_message_handler :: push_message_handler()
 }).
--type client() :: #client{}.
--export_type([client/0]).
 
 -type state() :: no_state.
 
@@ -31,30 +34,31 @@
 %%% API
 %%%===================================================================
 
--spec start(oct_background:node_selector(), binary(), http_client:headers()) -> {ok, client()} | {error, term()}.
-start(NodeSelector, Path, Headers) ->
+-spec start(oct_background:node_selector(), binary(), http_client:headers(), push_message_handler()) ->
+    {ok, client_ref()} | {error, term()}.
+start(NodeSelector, Path, Headers, PushMessageHandler) ->
     Url = binary_to_list(opw_test_rpc:call(NodeSelector, oneprovider, build_url, [wss, Path])),
     Opts = [{cacerts, opw_test_rpc:get_cert_chain_ders(NodeSelector)}],
-    case websocket_client:start_link(Url, Headers, ?MODULE, [], Opts) of
-        {ok, WsControllerPid} ->
-            {ok, #client{ws_controller_pid = WsControllerPid}};
+    case websocket_client:start_link(Url, Headers, ?MODULE, [PushMessageHandler], Opts) of
+        {ok, Pid} ->
+            {ok, Pid};
         {error, Reason} ->
             {error, Reason}
     end.
 
 
--spec send(client(), json_utils:json_term()) -> ok.
-send(#client{ws_controller_pid = WsControllerPid}, JsonMessage) ->
-    WsControllerPid ! {send, json_utils:encode(JsonMessage)},
+-spec send(client_ref(), binary()) -> ok.
+send(ClientRef, Message) ->
+    ClientRef ! {send, Message},
     ok.
 
 %%%===================================================================
 %%% websocket client API
 %%%===================================================================
 
--spec init([term()], websocket_req:req()) -> {ok, state()}.
-init([], _) ->
-    {ok, no_state}.
+-spec init([push_message_handler()], websocket_req:req()) -> {ok, state()}.
+init([PushMessageHandler], _) ->
+    {ok, #state{push_message_handler = PushMessageHandler}}.
 
 
 %%--------------------------------------------------------------------
@@ -67,19 +71,36 @@ init([], _) ->
     {ok, state()} |
     {reply, websocket_req:frame(), state()} |
     {close, Reply :: binary(), state()}.
-websocket_handle({text, Data}, _, State) ->
-    % currently, the client is used only to send data to the server
-    ct:print("Unexpected text frame in ~w: ~s", [?MODULE, Data]),
-    {ok, State};
-
 websocket_handle({ping, <<"">>}, _, State) ->
     {ok, State};
 
 websocket_handle({pong, <<"">>}, _, State) ->
     {ok, State};
 
-websocket_handle(Msg, _, State) ->
-    ct:print("Unexpected frame in ~p: ~p", [?MODULE, Msg]),
+websocket_handle({text, Payload}, _, State = #state{push_message_handler = PushMessageHandler}) ->
+    try
+        case PushMessageHandler(self(), Payload) of
+            no_reply ->
+                {ok, State};
+            {reply, Reply} ->
+                {reply, {text, Reply}, State}
+        end
+    catch
+        Class:Reason:Stacktrace ->
+            ct:print(
+                "UNEXPECTED ERROR in ~w:~w - ~w:~p~n"
+                "Stacktrace: ~s~n"
+                "Payload: ~s", [
+                    ?MODULE, ?FUNCTION_NAME, Class, Reason,
+                    lager:pr_stacktrace(Stacktrace),
+                    Payload
+                ]
+            ),
+            {ok, State}
+    end;
+
+websocket_handle(Message, _, State) ->
+    ct:print("Unexpected message in ~w: ~s", [?MODULE, Message]),
     {ok, State}.
 
 

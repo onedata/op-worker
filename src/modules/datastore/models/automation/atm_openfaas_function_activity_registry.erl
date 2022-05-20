@@ -103,12 +103,63 @@ get(RegistryId) ->
     end.
 
 
--spec consume_report(atm_openfaas_function_activity_report:record()) -> ok.
-consume_report(#atm_openfaas_function_activity_report{
-    type = atm_openfaas_function_pod_status_report,
-    batch = Batch
+-spec consume_report(atm_openfaas_function_pod_status_report:record()) -> ok.
+consume_report(#atm_openfaas_function_pod_status_report{
+    function_name = FunctionName,
+    pod_id = PodId,
+
+    pod_status = NewPodStatus,
+    containers_readiness = ContainersReadiness,
+
+    event_timestamp = EventTimestamp,
+    event_type = EventType,
+    event_reason = EventReason,
+    event_message = EventMessage
 }) ->
-    lists:foreach(fun consume_pod_status_report/1, Batch).
+    ActivityRegistryId = gen_registry_id(FunctionName),
+    PodEventLogId = gen_pod_event_log_id(ActivityRegistryId, PodId),
+    EventData = build_event_data(EventTimestamp, EventType, EventReason, EventMessage),
+
+    ok = ?extract_ok(datastore_model:update(?CTX, ActivityRegistryId, fun(ActivityRegistry) ->
+        {ok, ActivityRegistry#atm_openfaas_function_activity_registry{
+            pod_status_registry = atm_openfaas_function_pod_status_registry:update_summary(
+                PodId,
+                fun(#atm_openfaas_function_pod_status_summary{
+                    current_status = PreviousPodStatus,
+                    last_status_change_timestamp = PreviousStatusChangeTimestamp
+                } = PreviousSummary) ->
+                    case EventTimestamp >= PreviousStatusChangeTimestamp of
+                        true ->
+                            PreviousSummary#atm_openfaas_function_pod_status_summary{
+                                current_status = NewPodStatus,
+                                current_containers_readiness = ContainersReadiness,
+                                last_status_change_timestamp = case NewPodStatus of
+                                    PreviousPodStatus -> PreviousStatusChangeTimestamp;
+                                    _ -> EventTimestamp
+                                end
+                            };
+                        false ->
+                            PreviousSummary
+                    end
+                end,
+                #atm_openfaas_function_pod_status_summary{
+                    current_status = NewPodStatus,
+                    current_containers_readiness = ContainersReadiness,
+                    last_status_change_timestamp = EventTimestamp,
+                    event_log = PodEventLogId
+                },
+                ActivityRegistry#atm_openfaas_function_activity_registry.pod_status_registry
+            )
+        }}
+    end)),
+
+    case json_infinite_log_model:append(PodEventLogId, EventData) of
+        ok ->
+            ok;
+        {error, not_found} ->
+            ensure_pod_event_log(PodEventLogId),
+            ok = json_infinite_log_model:append(PodEventLogId, EventData)
+    end.
 
 
 -spec browse_pod_event_log(infinite_log:log_id(), json_infinite_log_model:listing_opts()) ->
@@ -181,66 +232,6 @@ gen_registry_id(FunctionName) ->
 -spec gen_pod_event_log_id(id(), pod_id()) -> infinite_log:log_id().
 gen_pod_event_log_id(RegistryId, PodId) ->
     datastore_key:adjacent_from_digest([PodId], RegistryId).
-
-
-%% @private
--spec consume_pod_status_report(atm_openfaas_function_pod_status_report:record()) -> ok.
-consume_pod_status_report(#atm_openfaas_function_pod_status_report{
-    function_name = FunctionName,
-    pod_id = PodId,
-
-    pod_status = NewPodStatus,
-    containers_readiness = ContainersReadiness,
-
-    event_timestamp = EventTimestamp,
-    event_type = EventType,
-    event_reason = EventReason,
-    event_message = EventMessage
-}) ->
-    ActivityRegistryId = gen_registry_id(FunctionName),
-    PodEventLogId = gen_pod_event_log_id(ActivityRegistryId, PodId),
-    EventData = build_event_data(EventTimestamp, EventType, EventReason, EventMessage),
-
-    ok = ?extract_ok(datastore_model:update(?CTX, ActivityRegistryId, fun(ActivityRegistry) ->
-        {ok, ActivityRegistry#atm_openfaas_function_activity_registry{
-            pod_status_registry = atm_openfaas_function_pod_status_registry:update_summary(
-                PodId,
-                fun(#atm_openfaas_function_pod_status_summary{
-                    current_status = PreviousPodStatus,
-                    last_status_change_timestamp = PreviousStatusChangeTimestamp
-                } = PreviousSummary) ->
-                    case EventTimestamp >= PreviousStatusChangeTimestamp of
-                        true ->
-                            PreviousSummary#atm_openfaas_function_pod_status_summary{
-                                current_status = NewPodStatus,
-                                current_containers_readiness = ContainersReadiness,
-                                last_status_change_timestamp = case NewPodStatus of
-                                    PreviousPodStatus -> PreviousStatusChangeTimestamp;
-                                    _ -> EventTimestamp
-                                end
-                            };
-                        false ->
-                            PreviousSummary
-                    end
-                end,
-                #atm_openfaas_function_pod_status_summary{
-                    current_status = NewPodStatus,
-                    current_containers_readiness = ContainersReadiness,
-                    last_status_change_timestamp = EventTimestamp,
-                    event_log = PodEventLogId
-                },
-                ActivityRegistry#atm_openfaas_function_activity_registry.pod_status_registry
-            )
-        }}
-    end)),
-
-    case json_infinite_log_model:append(PodEventLogId, EventData) of
-        ok ->
-            ok;
-        {error, not_found} ->
-            ensure_pod_event_log(PodEventLogId),
-            ok = json_infinite_log_model:append(PodEventLogId, EventData)
-    end.
 
 
 %% @private
