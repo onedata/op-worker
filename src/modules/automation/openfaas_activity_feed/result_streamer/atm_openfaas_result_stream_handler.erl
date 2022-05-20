@@ -109,7 +109,8 @@ trigger_conclusion(WorkflowExecutionId, TaskExecutionId) ->
         end,
         catch atm_openfaas_result_streamer_registry:clear(WorkflowExecutionId, TaskExecutionId),
         workflow_engine:report_task_data_streaming_concluded(WorkflowExecutionId, TaskExecutionId, StreamClosingResult)
-    end).
+    end)
+    ok.
 
 %%%===================================================================
 %%% Internal functions
