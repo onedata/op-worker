@@ -924,10 +924,10 @@ translate_from_protobuf(#'RemoveMetadata'{type = Type}) ->
         type = binary_to_existing_atom(Type, utf8)
     };
 translate_from_protobuf(#'BrowseDirStats'{
-    request = EncodedBrowseRequest
+    serialized_request = SerializedBrowseRequest
 }) ->
     #browse_dir_stats{
-        request = binary_to_term(EncodedBrowseRequest)
+        request = binary_to_term(SerializedBrowseRequest)
     };
 translate_from_protobuf(#'ProviderResponse'{
     status = Status,
@@ -994,8 +994,8 @@ translate_from_protobuf(#'Metadata'{
     };
 translate_from_protobuf(#'CheckPerms'{flag = Flag}) ->
     #check_perms{flag = open_flag_translate_from_protobuf(Flag)};
-translate_from_protobuf(#'DirStatsResponse'{response = EncodedResult}) ->
-    #dir_stats_result{result = binary_to_term(EncodedResult)};
+translate_from_protobuf(#'DirStatsResponse'{serialized_response = SerializedResult}) ->
+    #dir_stats_result{result = binary_to_term(SerializedResult)};
 
 
 %% DBSYNC
@@ -1960,7 +1960,7 @@ translate_to_protobuf(#browse_dir_stats{
     request = BrowseRequest
 }) ->
     {browse_dir_stats, #'BrowseDirStats'{
-        request = term_to_binary(BrowseRequest)
+        serialized_request = term_to_binary(BrowseRequest)
     }};
 
 translate_to_protobuf(#provider_response{
@@ -2033,7 +2033,7 @@ translate_to_protobuf(#dir_stats_result{
     result = DirStatsResult
 }) ->
     {dir_stats_response, #'DirStatsResponse'{
-        response = term_to_binary(DirStatsResult)
+        serialized_response = term_to_binary(DirStatsResult)
     }};
 
 

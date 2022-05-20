@@ -1043,7 +1043,7 @@ get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = dir_size_stats}, data = 
                 % ignore statistics that could not be obtained
                 Acc
         end
-    end, get_empty_ts_browse_result(BrowseRequest), ProviderRequests),
+    end, gen_empty_ts_browse_result(BrowseRequest), ProviderRequests),
     {ok, value, FinalResult}.
 
 
@@ -1294,36 +1294,33 @@ create_file(SessionId, ParentGuid, Name, ?SYMLINK_TYPE, TargetPath) ->
     #{oneprovider:id() => ts_browse_request:record()}.
 split_ts_browse_request_between_providers(SpaceId, #time_series_get_layout_request{} = Req) ->
     {ok, Providers} = space_logic:get_provider_ids(SpaceId),
-    lists:foldl(fun(P, Acc) -> Acc#{P => Req} end, #{}, Providers);
+    maps_utils:generate_from_list(fun(P) -> {P, Req} end, Providers);
 split_ts_browse_request_between_providers(SpaceId, #time_series_get_slice_request{layout = Layout} = Req) ->
     maps:fold(fun
-        (?SIZE_ON_STORAGE(StorageId) = TS, Metrics, Acc) ->
-            case storage_logic:get_provider(StorageId, SpaceId) of
-                {ok, ProviderId} ->
-                    extend_provider_time_series_slice_request_layout(ProviderId, Acc, TS, Metrics, Req);
-                {error, _} ->
+        (TimeSeriesName, Metrics, Acc) ->
+            case choose_provider_storing_time_series_data(SpaceId, TimeSeriesName) of
+                ProviderId ->
+                    #time_series_get_slice_request{layout = ProviderLayout} =
+                        maps:get(ProviderId, Acc, #time_series_get_slice_request{layout = #{}}),
+                    Acc#{ProviderId => Req#time_series_get_slice_request{
+                        layout = ProviderLayout#{TimeSeriesName => Metrics}
+                    }};
+                unknown ->
                     Acc
-            end;
-        (TS, Metrics, Acc) ->
-            extend_provider_time_series_slice_request_layout(oneprovider:get_id(), Acc, TS, Metrics, Req)
+            end
     end, #{}, Layout).
 
 
 %% @private
--spec extend_provider_time_series_slice_request_layout(
-    oneprovider:id(), 
-    #{oneprovider:id() => ts_browse_request:record()}, 
-    time_series_collection:time_series_name(), 
-    [time_series_collection:metric_name()], 
-    ts_browse_request:record()
-) ->
-    #{oneprovider:id() => ts_browse_request:record()}.
-extend_provider_time_series_slice_request_layout(ProviderId, ProviderRequests, TS, Metrics, BaseRequest) ->
-    #time_series_get_slice_request{layout = ProviderLayout} =
-        maps:get(ProviderId, ProviderRequests, #time_series_get_slice_request{layout = #{}}),
-    ProviderRequests#{ProviderId => BaseRequest#time_series_get_slice_request{
-        layout = ProviderLayout#{TS => Metrics}
-    }}.
+-spec choose_provider_storing_time_series_data(od_space:id(), dir_stats_collection:stat_name()) -> 
+    oneprovider:id() | unknown.
+choose_provider_storing_time_series_data(SpaceId, ?SIZE_ON_STORAGE(StorageId)) ->
+    case storage_logic:get_provider(StorageId, SpaceId) of
+        {ok, ProviderId} -> ProviderId;
+        {error, _} -> unknown
+    end;
+choose_provider_storing_time_series_data(_SpaceId, _TimeSeriesName) ->
+    oneprovider:get_id().
 
 
 %% @private
@@ -1335,6 +1332,6 @@ merge_ts_browse_results(#time_series_slice_result{slice = S1}, #time_series_slic
 
 
 %% @private
--spec get_empty_ts_browse_result(ts_browse_request:record()) -> ts_browse_result:record().
-get_empty_ts_browse_result(#time_series_get_layout_request{}) -> #time_series_layout_result{layout = #{}};
-get_empty_ts_browse_result(#time_series_get_slice_request{}) -> #time_series_slice_result{slice = #{}}.
+-spec gen_empty_ts_browse_result(ts_browse_request:record()) -> ts_browse_result:record().
+gen_empty_ts_browse_result(#time_series_get_layout_request{}) -> #time_series_layout_result{layout = #{}};
+gen_empty_ts_browse_result(#time_series_get_slice_request{}) -> #time_series_slice_result{slice = #{}}.
