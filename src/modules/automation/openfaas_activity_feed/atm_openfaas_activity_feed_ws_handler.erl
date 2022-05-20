@@ -37,7 +37,7 @@
     handler_state = undefined :: handler_state()
 }).
 -type state() :: #state{}.
--export_type([connection_ref/0, state/0]).
+-export_type([connection_ref/0, handler_state/0, state/0]).
 
 -define(AUTHORIZATION_SECRET_ENV_NAME, openfaas_activity_feed_secret).
 
@@ -75,7 +75,7 @@ websocket_init(_) ->
     {reply, OutFrame | [OutFrame], State} |
     {reply, OutFrame | [OutFrame], State, hibernate} |
     {stop, State} when
-    InFrame :: {text | binary | parsed_report | ping | pong, binary()},
+    InFrame :: {text | binary | ping | pong, binary()} | {parsed_report, atm_openfaas_activity_report:record()},
     State :: state(),
     OutFrame :: cow_ws:frame().
 websocket_handle({text, Payload}, #state{handler_state = HandlerState} = State) ->

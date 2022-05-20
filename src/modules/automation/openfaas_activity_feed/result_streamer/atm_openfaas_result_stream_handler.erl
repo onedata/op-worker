@@ -93,7 +93,7 @@ handle_reporting_error_if_related(_, _) ->
     ok.
 
 
--spec trigger_conclusion(atm_workflow_execution:id(), atm_task_execution:id()) -> pid().
+-spec trigger_conclusion(atm_workflow_execution:id(), atm_task_execution:id()) -> ok.
 trigger_conclusion(WorkflowExecutionId, TaskExecutionId) ->
     spawn(fun() ->
         StreamClosingResult = try
@@ -109,7 +109,8 @@ trigger_conclusion(WorkflowExecutionId, TaskExecutionId) ->
         end,
         catch atm_openfaas_result_streamer_registry:clear(WorkflowExecutionId, TaskExecutionId),
         workflow_engine:report_result_streaming_concluded(WorkflowExecutionId, TaskExecutionId, StreamClosingResult)
-    end).
+    end),
+    ok.
 
 %%%===================================================================
 %%% Internal functions
