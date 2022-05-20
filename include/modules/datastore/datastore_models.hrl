@@ -1199,6 +1199,10 @@
     iterator :: iterator:iterator()
 }).
 
+-record(workflow_cached_task_data, {
+    data :: workflow_engine:streamed_task_data()
+}).
+
 -record(workflow_cached_async_result, {
     result :: workflow_handler:async_processing_result()
 }).
@@ -1218,6 +1222,7 @@
 }).
 
 -record(workflow_execution_state, {
+    engine_id :: workflow_engine:id(),
     handler :: workflow_handler:handler(),
     initial_context :: workflow_engine:execution_context(),
 
@@ -1235,7 +1240,9 @@
 
     iteration_state :: workflow_iteration_state:state() | undefined,
     prefetched_iteration_step :: workflow_execution_state:iteration_status(),
+    % TODO VFS-7788 jobs_registry
     jobs :: workflow_jobs:jobs() | undefined,
+    tasks_data_registry :: workflow_tasks_data_registry:registry() | undefined,
 
     % callbacks executed after update of record (have to be executed outside datastore tp process)
     % TODO VFS-7919 - consider keeping callbacks list from beginning

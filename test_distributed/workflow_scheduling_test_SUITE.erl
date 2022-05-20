@@ -12,6 +12,7 @@
 -module(workflow_scheduling_test_SUITE).
 -author("Michal Wrzeszcz").
 
+-include("workflow_scheduling_test_common.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 
@@ -22,9 +23,13 @@
 -export([
     empty_workflow_execution_test/1,
     empty_async_workflow_with_prepare_in_advance_test/1,
+    empty_workflow_with_stream_execution_test/1,
+    empty_async_workflow_with_stream_and_prepare_in_advance_test/1,
 
     single_sync_workflow_execution_test/1,
     single_async_workflow_execution_test/1,
+    single_async_workflow_with_empty_streams_execution_test/1,
+    single_async_workflow_with_streams_execution_test/1,
     prepare_in_advance_test/1,
     heartbeat_test/1,
     long_prepare_in_advance_test/1,
@@ -32,10 +37,17 @@
     fail_the_only_task_in_lane_test/1,
     fail_the_only_task_in_box_test/1,
     fail_one_of_many_async_tasks_in_box_test/1,
+    fail_one_of_many_async_tasks_in_workflow_with_streams_test/1,
     async_task_timeout_test/1,
     fail_result_processing_test/1,
     fail_task_before_prepare_in_advance_finish_test/1,
     fail_task_before_prepare_in_advance_fail_test/1,
+    fail_iteration_test/1,
+    fail_iteration_with_prepare_in_advance_test/1,
+    fail_iteration_with_stream_test/1,
+    fail_first_item_iteration_test/1,
+    fail_first_item_iteration_with_prepare_in_advance_test/1,
+    fail_first_item_iteration_with_stream_test/1,
 
     lane_preparation_failure_test/1,
     lane_preparation_in_advance_failure_test/1,
@@ -62,9 +74,13 @@ all() ->
     ?ALL([
         empty_workflow_execution_test,
         empty_async_workflow_with_prepare_in_advance_test,
+        empty_workflow_with_stream_execution_test,
+        empty_async_workflow_with_stream_and_prepare_in_advance_test,
 
         single_sync_workflow_execution_test,
         single_async_workflow_execution_test,
+        single_async_workflow_with_empty_streams_execution_test,
+        single_async_workflow_with_streams_execution_test,
         prepare_in_advance_test,
         heartbeat_test,
         long_prepare_in_advance_test,
@@ -72,10 +88,17 @@ all() ->
         fail_the_only_task_in_lane_test,
         fail_the_only_task_in_box_test,
         fail_one_of_many_async_tasks_in_box_test,
+        fail_one_of_many_async_tasks_in_workflow_with_streams_test,
         async_task_timeout_test,
         fail_result_processing_test,
         fail_task_before_prepare_in_advance_finish_test,
         fail_task_before_prepare_in_advance_fail_test,
+        fail_iteration_test,
+        fail_iteration_with_prepare_in_advance_test,
+        fail_iteration_with_stream_test,
+        fail_first_item_iteration_test,
+        fail_first_item_iteration_with_prepare_in_advance_test,
+        fail_first_item_iteration_with_stream_test,
 
         lane_preparation_failure_test,
         lane_preparation_in_advance_failure_test,
@@ -108,7 +131,7 @@ all() ->
     test_execution_manager_options = [] :: {fail_lane_preparation, workflow_engine:lane_id()} |
         {{delay_lane_preparation, workflow_engine:lane_id()}, boolean()} |
         {delay_call, {workflow_engine:task_id(), iterator:item()}} | {sleep_on_preparation, non_neg_integer()},
-    generator_options = #{} :: workflow_test_handler:test_execution_context(),
+    generator_options = #{} :: workflow_test_handler:generator_options(),
     verify_statistics_options = #{} :: #{is_empty => boolean()},
     verify_history_options = #{} :: #{
         delay_and_fail_lane_preparation_in_advance => workflow_engine:lane_id(),
@@ -117,6 +140,7 @@ all() ->
         workflow_scheduling_test_common:lane_history_check_key() => workflow_engine:lane_id()
     }
 }).
+
 
 
 %%%===================================================================
@@ -133,6 +157,20 @@ empty_async_workflow_with_prepare_in_advance_test(Config) ->
         test_execution_manager_options = [{sleep_on_preparation, 500}] % sleep to allow start preparation in advance
     }).
 
+
+empty_workflow_with_stream_execution_test(Config) ->
+    empty_workflow_execution_test_base(Config, #test_config{
+        generator_options = ?EXEMPLARY_EMPTY_STREAM
+    }).
+
+empty_async_workflow_with_stream_and_prepare_in_advance_test(Config) ->
+    empty_workflow_execution_test_base(Config, #test_config{
+        task_type = async,
+        generator_options = ?EXEMPLARY_EMPTY_STREAM,
+        prepare_in_advance = true,
+        test_execution_manager_options = [{sleep_on_preparation, 500}] % sleep to allow start preparation in advance
+    }).
+
 %%%===================================================================
 
 single_sync_workflow_execution_test(Config) ->
@@ -140,6 +178,19 @@ single_sync_workflow_execution_test(Config) ->
 
 single_async_workflow_execution_test(Config) ->
     single_execution_test_base(Config, #test_config{task_type = async}).
+
+
+single_async_workflow_with_empty_streams_execution_test(Config) ->
+    single_execution_test_base(Config, #test_config{
+        task_type = async,
+        generator_options = ?EXEMPLARY_EMPTY_STREAMS
+    }).
+
+single_async_workflow_with_streams_execution_test(Config) ->
+    single_execution_test_base(Config, #test_config{
+        task_type = async,
+        generator_options = ?EXEMPLARY_STREAMS
+    }).
 
 prepare_in_advance_test(Config) ->
     single_execution_test_base(Config, #test_config{
@@ -176,6 +227,13 @@ fail_one_of_many_async_tasks_in_box_test(Config) ->
         test_manager_failure_key = fail_job
     }, <<"3">>, <<"3_3_2">>).
 
+fail_one_of_many_async_tasks_in_workflow_with_streams_test(Config) ->
+    failure_test_base(Config, #test_config{
+        task_type = async,
+        test_manager_failure_key = fail_job,
+        generator_options = ?EXEMPLARY_STREAMS2
+    }, <<"3">>, <<"3_3_2">>).
+
 async_task_timeout_test(Config) ->
     failure_test_base(Config, #test_config{
         task_type = async,
@@ -201,6 +259,41 @@ fail_task_before_prepare_in_advance_fail_test(Config) ->
         test_manager_failure_key = fail_job,
         test_execution_manager_options = [{{delay_lane_preparation, <<"3">>}, true}, {fail_lane_preparation, <<"3">>}]
     }, <<"2">>, <<"2_1_1">>).
+
+fail_iteration_test(Config) ->
+    iteration_failure_test_base(Config, #test_config{}, <<"1">>, 5).
+
+fail_iteration_with_prepare_in_advance_test(Config) ->
+    iteration_failure_test_base(Config, #test_config{
+        task_type = async,
+        prepare_in_advance = true
+    }, <<"1">>, 5).
+
+fail_iteration_with_stream_test(Config) ->
+    iteration_failure_test_base(Config, #test_config{
+        task_type = async,
+        generator_options = #{task_streams => #{
+            1 => #{
+                {1,1} => [<<"2">>, <<"4">>]
+            }
+        }}
+    }, <<"1">>, 5).
+
+fail_first_item_iteration_test(Config) ->
+    iteration_failure_test_base(Config, #test_config{}, <<"1">>, 1).
+
+fail_first_item_iteration_with_prepare_in_advance_test(Config) ->
+    iteration_failure_test_base(Config, #test_config{
+        task_type = async,
+        prepare_in_advance = true
+    }, <<"1">>, 1).
+
+fail_first_item_iteration_with_stream_test(Config) ->
+    iteration_failure_test_base(Config, #test_config{
+        task_type = async,
+        prepare_in_advance = true,
+        generator_options = ?EXEMPLARY_EMPTY_STREAM
+    }, <<"1">>, 1).
 
 %%%===================================================================
 
@@ -337,19 +430,29 @@ prepare_lane_too_early_with_long_failed_callback_execution_test(Config) ->
 
 empty_workflow_execution_test_base(Config, BasicConfig) ->
     single_execution_test_base(Config, BasicConfig#test_config{
-        generator_options = #{items_count => 0},
+        generator_options = #{item_count => 0},
         verify_statistics_options = #{is_empty => true}
     }).
 
 failure_test_base(Config, #test_config{
     test_manager_failure_key = ManagerKey,
-    test_execution_manager_options = ManagerOptions
+    test_execution_manager_options = ManagerOptions,
+    generator_options = GeneratorOptions
 } = BasicConfig, LaneId, TaskId) ->
     Item = <<"100">>,
     single_execution_test_base(Config, BasicConfig#test_config{
         test_execution_manager_options = [{ManagerKey, {TaskId, Item}} | ManagerOptions],
-        generator_options = #{finish_on_lane => LaneId},
+        generator_options = GeneratorOptions#{finish_on_lane => LaneId},
         verify_history_options = #{ManagerKey => {LaneId, TaskId, Item}}
+    }).
+
+iteration_failure_test_base(Config, #test_config{
+    verify_statistics_options = VerifyStatsOptions,
+    generator_options = GeneratorOptions
+} = BasicConfig, LaneId, ItemNum) ->
+    single_execution_test_base(Config, BasicConfig#test_config{
+        verify_statistics_options = VerifyStatsOptions#{ignore_max_slots_check => true},
+        generator_options = GeneratorOptions#{fail_iteration => ItemNum, finish_on_lane => LaneId}
     }).
 
 lane_failure_test_base(Config, #test_config{

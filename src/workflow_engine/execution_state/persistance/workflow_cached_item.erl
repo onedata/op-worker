@@ -20,7 +20,7 @@
 %% API
 -export([put/2, get_item/1, get_iterator/1, delete/1]).
 
--type id() :: binary().
+-type id() :: datastore:key().
 
 -export_type([id/0]).
 

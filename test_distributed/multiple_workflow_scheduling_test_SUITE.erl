@@ -68,13 +68,13 @@ sync_task_with_lanes_prepare_in_advance_execution_test(Config) ->
 multiple_workflow_execution_test_base(Config, #test_config{
     task_type = TaskType,
     prepare_in_advance = PrepareInAdvance,
-    item_count = ItemsCount
+    item_count = ItemCount
 }) ->
     InitialKeys = workflow_scheduling_test_common:get_all_workflow_related_datastore_keys(Config),
 
     WorkflowExecutionSpecs = lists:map(fun(_) ->
         #{id := Id} = Spec = workflow_scheduling_test_common:gen_workflow_execution_spec(
-            TaskType, PrepareInAdvance, #{items_count => ItemsCount}),
+            TaskType, PrepareInAdvance, #{item_count => ItemCount}),
         {Id, Spec}
     end, lists:seq(1, 5)),
     [Worker | _] = ?config(op_worker_nodes, Config),
