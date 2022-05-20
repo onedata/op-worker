@@ -28,7 +28,7 @@
 
 
 %% API
--export([init/0, put/3, take_for_processing/1, mark_processed/3,
+-export([empty/0, put/3, take_for_processing/1, mark_processed/3,
     mark_all_task_data_received/2, is_stream_finalized/2,
     claim_execution_of_cancellation_procedures/1]).
 %% Test API
@@ -54,8 +54,8 @@
 %%% API
 %%%===================================================================
 
--spec init() -> registry().
-init() ->
+-spec empty() -> registry().
+empty() ->
     #registry{}.
 
 
@@ -108,9 +108,9 @@ mark_all_task_data_received(TaskId, #registry{streams_with_all_data_received = S
 is_stream_finalized(TaskId, #registry{
     waiting = Waiting,
     ongoing = Ongoing,
-    streams_with_all_data_received = ClosedStreams
+    streams_with_all_data_received = StreamWithAllDataReceived
 }) ->
-    case lists:member(TaskId, ClosedStreams) of
+    case lists:member(TaskId, StreamWithAllDataReceived) of
         true ->
             not (maps:is_key(TaskId, Waiting) orelse maps:is_key(TaskId, Ongoing));
         false ->

@@ -870,7 +870,7 @@ finish_lane_preparation_internal(
         iteration_state = workflow_iteration_state:init(),
         prefetched_iteration_step = PrefetchedIterationStep,
         jobs = workflow_jobs:init(),
-        tasks_data_registry = workflow_tasks_data_registry:init()
+        tasks_data_registry = workflow_tasks_data_registry:empty()
     }};
 finish_lane_preparation_internal(
     #workflow_execution_state{
@@ -893,7 +893,7 @@ finish_lane_preparation_internal(
         iteration_state = workflow_iteration_state:init(),
         prefetched_iteration_step = PrefetchedIterationStep,
         jobs = workflow_jobs:init(),
-        tasks_data_registry = workflow_tasks_data_registry:init(),
+        tasks_data_registry = workflow_tasks_data_registry:empty(),
         pending_callbacks = PendingCallbacks
     }};
 finish_lane_preparation_internal(_State, _BoxesMap, _LaneExecutionContext,
