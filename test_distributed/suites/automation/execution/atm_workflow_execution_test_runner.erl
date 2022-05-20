@@ -54,7 +54,7 @@
 -export([init/1, teardown/1]).
 -export([run/1]).
 -export([cancel_workflow_execution/1]).
--export([browse_store/2]).
+-export([browse_store/2, browse_store/3]).
 
 -type step_name() ::
     prepare_lane |
@@ -249,7 +249,43 @@ cancel_workflow_execution(#atm_mock_call_ctx{
 
 
 -spec browse_store(automation:id(), mock_call_ctx()) -> json_utils:json_term().
-browse_store(AtmStoreSchemaId, #atm_mock_call_ctx{
+browse_store(AtmStoreSchemaId, AtmMockCallCtx) ->
+    browse_store(AtmStoreSchemaId, undefined, AtmMockCallCtx).
+
+
+-spec browse_store(
+    automation:id(),
+    undefined | atm_task_execution:id(),
+    mock_call_ctx()
+) ->
+    json_utils:json_term().
+browse_store(?WORKFLOW_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID, _AtmTaskExecutionId, #atm_mock_call_ctx{
+    provider = ProviderSelector,
+    space = SpaceSelector,
+    session_id = SessionId,
+    workflow_execution_id = AtmWorkflowExecutionId
+}) ->
+    SpaceId = oct_background:get_space_id(SpaceSelector),
+
+    {ok, #document{value = #atm_workflow_execution{system_audit_log_id = AtmStoreId}}} = ?rpc(
+        ProviderSelector, atm_workflow_execution:get(AtmWorkflowExecutionId)
+    ),
+    ?rpc(ProviderSelector, browse_store(SessionId, SpaceId, AtmWorkflowExecutionId, AtmStoreId));
+
+browse_store(?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID, AtmTaskExecutionId, #atm_mock_call_ctx{
+    provider = ProviderSelector,
+    space = SpaceSelector,
+    session_id = SessionId,
+    workflow_execution_id = AtmWorkflowExecutionId
+}) ->
+    SpaceId = oct_background:get_space_id(SpaceSelector),
+
+    {ok, #document{value = #atm_task_execution{system_audit_log_id = AtmStoreId}}} = ?rpc(
+        ProviderSelector, atm_task_execution:get(AtmTaskExecutionId)
+    ),
+    ?rpc(ProviderSelector, browse_store(SessionId, SpaceId, AtmWorkflowExecutionId, AtmStoreId));
+
+browse_store(AtmStoreSchemaId, _AtmTaskExecutionId, #atm_mock_call_ctx{
     provider = ProviderSelector,
     space = SpaceSelector,
     session_id = SessionId,
