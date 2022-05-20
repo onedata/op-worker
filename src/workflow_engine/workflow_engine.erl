@@ -169,7 +169,8 @@ stream_task_data(ExecutionId, TaskId, TaskData) ->
     trigger_job_scheduling(EngineId).
 
 
--spec report_task_data_streaming_concluded(workflow_engine:execution_id(), workflow_engine:task_id(), stream_closing_result()) -> ok.
+-spec report_task_data_streaming_concluded(workflow_engine:execution_id(), workflow_engine:task_id(),
+    stream_closing_result()) -> ok.
 report_task_data_streaming_concluded(ExecutionId, TaskId, Result) ->
     {ok, EngineId} = workflow_execution_state:mark_all_streamed_task_data_received(ExecutionId, TaskId, Result),
     trigger_job_scheduling(EngineId).
