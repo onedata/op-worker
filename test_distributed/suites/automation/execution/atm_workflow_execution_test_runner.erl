@@ -611,13 +611,13 @@ get_exp_state_diff(
         ExpState1 = atm_workflow_execution_exp_state_builder:expect_task_items_in_processing_increased(
             AtmTaskExecutionId, length(ItemsBatch), ExpState0
         ),
-        ExpState2 = atm_workflow_execution_exp_state_builder:expect_task_moved_to_active_status_if_was_in_pending_status(
+        ExpState2 = atm_workflow_execution_exp_state_builder:expect_task_transitioned_to_active_status_if_was_in_pending_status(
             AtmTaskExecutionId, ExpState1
         ),
-        ExpState3 = atm_workflow_execution_exp_state_builder:expect_task_parallel_box_moved_to_active_status_if_was_in_pending_status(
+        ExpState3 = atm_workflow_execution_exp_state_builder:expect_task_parallel_box_transitioned_to_active_status_if_was_in_pending_status(
             AtmTaskExecutionId, ExpState2
         ),
-        ExpState4 = atm_workflow_execution_exp_state_builder:expect_task_lane_run_moved_to_active_status_if_was_in_enqueued_status(
+        ExpState4 = atm_workflow_execution_exp_state_builder:expect_task_lane_run_transitioned_to_active_status_if_was_in_enqueued_status(
             AtmTaskExecutionId, ExpState3
         ),
         {true, ExpState4}
@@ -663,7 +663,7 @@ get_exp_state_diff(
             (<<"active">>, [<<"finished">>]) -> <<"finished">>;
             (CurrentStatus, _) -> CurrentStatus
         end,
-        ExpState2 = atm_workflow_execution_exp_state_builder:expect_task_parallel_box_moved_to_inferred_status(
+        ExpState2 = atm_workflow_execution_exp_state_builder:expect_task_parallel_box_transitioned_to_inferred_status(
             AtmTaskExecutionId, InferStatusFun, ExpState1
         ),
         {true, ExpState2}

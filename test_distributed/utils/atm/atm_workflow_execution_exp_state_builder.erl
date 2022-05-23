@@ -44,12 +44,12 @@
     get_task_stats/2,
     expect_task_items_in_processing_increased/3,
     expect_task_items_moved_from_processing_to_processed/3,
-    expect_task_moved_to_active_status_if_was_in_pending_status/2,
-    expect_task_parallel_box_moved_to_active_status_if_was_in_pending_status/2,
-    expect_task_lane_run_moved_to_active_status_if_was_in_enqueued_status/2,
+    expect_task_transitioned_to_active_status_if_was_in_pending_status/2,
+    expect_task_parallel_box_transitioned_to_active_status_if_was_in_pending_status/2,
+    expect_task_lane_run_transitioned_to_active_status_if_was_in_enqueued_status/2,
     expect_task_finished/2,
     expect_task_skipped/2,
-    expect_task_parallel_box_moved_to_inferred_status/3,
+    expect_task_parallel_box_transitioned_to_inferred_status/3,
     expect_all_tasks_skipped/2,
 
     expect_workflow_execution_aborting/1,
@@ -375,25 +375,25 @@ expect_task_items_moved_from_processing_to_processed(AtmTaskExecutionId, Count, 
     update_task_execution_exp_state(AtmTaskExecutionId, ExpAtmTaskExecutionStateDiff, ExpStateCtx).
 
 
--spec expect_task_moved_to_active_status_if_was_in_pending_status(
+-spec expect_task_transitioned_to_active_status_if_was_in_pending_status(
     atm_task_execution:id(),
     ctx()
 ) ->
     ctx().
-expect_task_moved_to_active_status_if_was_in_pending_status(AtmTaskExecutionId, ExpStateCtx) ->
+expect_task_transitioned_to_active_status_if_was_in_pending_status(AtmTaskExecutionId, ExpStateCtx) ->
     update_task_execution_exp_state(
         AtmTaskExecutionId,
-        build_move_to_status_if_in_status_diff(<<"pending">>, <<"active">>),
+        build_transition_to_status_if_in_status_diff(<<"pending">>, <<"active">>),
         ExpStateCtx
     ).
 
 
--spec expect_task_parallel_box_moved_to_active_status_if_was_in_pending_status(
+-spec expect_task_parallel_box_transitioned_to_active_status_if_was_in_pending_status(
     atm_task_execution:id(),
     ctx()
 ) ->
     ctx().
-expect_task_parallel_box_moved_to_active_status_if_was_in_pending_status(
+expect_task_parallel_box_transitioned_to_active_status_if_was_in_pending_status(
     AtmTaskExecutionId,
     ExpStateCtx = #exp_workflow_execution_state_ctx{
         exp_task_execution_state_ctx_registry = ExpAtmTaskExecutionsRegistry
@@ -404,17 +404,17 @@ expect_task_parallel_box_moved_to_active_status_if_was_in_pending_status(
     update_exp_parallel_box_execution_state(
         TaskExecutionExtStateCtx#exp_task_execution_state_ctx.lane_run_selector,
         TaskExecutionExtStateCtx#exp_task_execution_state_ctx.parallel_box_schema_id,
-        build_move_to_status_if_in_status_diff(<<"pending">>, <<"active">>),
+        build_transition_to_status_if_in_status_diff(<<"pending">>, <<"active">>),
         ExpStateCtx
     ).
 
 
--spec expect_task_lane_run_moved_to_active_status_if_was_in_enqueued_status(
+-spec expect_task_lane_run_transitioned_to_active_status_if_was_in_enqueued_status(
     atm_task_execution:id(),
     ctx()
 ) ->
     ctx().
-expect_task_lane_run_moved_to_active_status_if_was_in_enqueued_status(
+expect_task_lane_run_transitioned_to_active_status_if_was_in_enqueued_status(
     AtmTaskExecutionId,
     ExpStateCtx = #exp_workflow_execution_state_ctx{
         exp_task_execution_state_ctx_registry = ExpAtmTaskExecutionsRegistry
@@ -425,7 +425,7 @@ expect_task_lane_run_moved_to_active_status_if_was_in_enqueued_status(
     ),
     update_exp_lane_run_state(
         AtmLaneRunSelector,
-        build_move_to_status_if_in_status_diff(<<"enqueued">>, <<"active">>),
+        build_transition_to_status_if_in_status_diff(<<"enqueued">>, <<"active">>),
         ExpStateCtx
     ).
 
@@ -442,13 +442,13 @@ expect_task_skipped(AtmTaskExecutionId, ExpStateCtx) ->
     expect_task_ended(AtmTaskExecutionId, <<"skipped">>, ExpStateCtx).
 
 
--spec expect_task_parallel_box_moved_to_inferred_status(
+-spec expect_task_parallel_box_transitioned_to_inferred_status(
     atm_task_execution:id(),
     fun((CurrentParallelBoxStatus :: binary(), [AtmTaskStatus :: binary()]) -> binary()),
     ctx()
 ) ->
     ctx().
-expect_task_parallel_box_moved_to_inferred_status(AtmTaskExecutionId, InferStatusFun, ExpStateCtx) ->
+expect_task_parallel_box_transitioned_to_inferred_status(AtmTaskExecutionId, InferStatusFun, ExpStateCtx) ->
     Diff = fun(ExpParallelBoxState = #{<<"status">> := CurrentStatus}) ->
         ExpParallelBoxState#{<<"status">> => InferStatusFun(CurrentStatus, get_parallel_box_tasks_statuses(
             ExpParallelBoxState, ExpStateCtx
@@ -606,9 +606,9 @@ get_lane_schema({AtmLaneSelector, _}, ExpStateCtx = #exp_workflow_execution_stat
 
 
 %% @private
--spec build_move_to_status_if_in_status_diff(binary(), binary()) ->
+-spec build_transition_to_status_if_in_status_diff(binary(), binary()) ->
     fun((json_utils:json_map()) -> json_utils:json_map()).
-build_move_to_status_if_in_status_diff(RequiredStatus, NewStatus) ->
+build_transition_to_status_if_in_status_diff(RequiredStatus, NewStatus) ->
     fun
         (ExpState = #{<<"status">> := Status}) when Status =:= RequiredStatus ->
             ExpState#{<<"status">> => NewStatus};

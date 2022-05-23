@@ -183,12 +183,12 @@ cancel_enqueued_atm_workflow_execution_test() ->
                                         (<<"pending">>, [<<"pending">>, <<"skipped">>]) -> <<"active">>;
                                         (<<"active">>, [<<"skipped">>]) -> <<"skipped">>
                                     end,
-                                    atm_workflow_execution_exp_state_builder:expect_task_parallel_box_moved_to_inferred_status(
+                                    atm_workflow_execution_exp_state_builder:expect_task_parallel_box_transitioned_to_inferred_status(
                                         AtmTaskExecutionId, InferStatusFun, ExpState1
                                     );
                                 {_, <<"pbox_last">>, _} ->
                                     % parallel box with only 1 task - should transition to skipped status
-                                    atm_workflow_execution_exp_state_builder:expect_task_parallel_box_moved_to_inferred_status(
+                                    atm_workflow_execution_exp_state_builder:expect_task_parallel_box_transitioned_to_inferred_status(
                                         AtmTaskExecutionId, fun(_, _) -> <<"skipped">> end, ExpState1
                                     )
                             end}
@@ -315,7 +315,7 @@ cancel_active_atm_workflow_execution_test() ->
                                 % task t3 parallel box transition
                                 (<<"pending">>, [<<"skipped">>]) -> <<"skipped">>
                             end,
-                            {true, atm_workflow_execution_exp_state_builder:expect_task_parallel_box_moved_to_inferred_status(
+                            {true, atm_workflow_execution_exp_state_builder:expect_task_parallel_box_transitioned_to_inferred_status(
                                 AtmTaskExecutionId, InferStatusFun, ExpState1
                             )}
                         end

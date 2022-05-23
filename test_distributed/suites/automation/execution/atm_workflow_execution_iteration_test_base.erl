@@ -365,7 +365,7 @@ build_handle_task_execution_ended_mock_spec_for_skipped_tasks() ->
             call_args = [_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId]
         }) ->
             % No job was ever executed so lane run transition to active status only now
-            ExpState1 = atm_workflow_execution_exp_state_builder:expect_task_lane_run_moved_to_active_status_if_was_in_enqueued_status(
+            ExpState1 = atm_workflow_execution_exp_state_builder:expect_task_lane_run_transitioned_to_active_status_if_was_in_enqueued_status(
                 AtmTaskExecutionId, atm_workflow_execution_exp_state_builder:expect_task_skipped(
                     AtmTaskExecutionId, ExpState0
                 )
@@ -379,12 +379,12 @@ build_handle_task_execution_ended_mock_spec_for_skipped_tasks() ->
                         (<<"pending">>, [<<"pending">>, <<"skipped">>]) -> <<"active">>;
                         (<<"active">>, [<<"skipped">>]) -> <<"skipped">>
                     end,
-                    atm_workflow_execution_exp_state_builder:expect_task_parallel_box_moved_to_inferred_status(
+                    atm_workflow_execution_exp_state_builder:expect_task_parallel_box_transitioned_to_inferred_status(
                         AtmTaskExecutionId, InferStatusFun, ExpState1
                     );
                 {_, <<"pb2">>, _} ->
                     % parallel box with only 1 task - should transition to skipped status
-                    atm_workflow_execution_exp_state_builder:expect_task_parallel_box_moved_to_inferred_status(
+                    atm_workflow_execution_exp_state_builder:expect_task_parallel_box_transitioned_to_inferred_status(
                         AtmTaskExecutionId, fun(_, _) -> <<"skipped">> end, ExpState1
                     )
             end}
