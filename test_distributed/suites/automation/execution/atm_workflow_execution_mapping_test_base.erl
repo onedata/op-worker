@@ -46,6 +46,13 @@
     default_initial_content = __INITIAL_CONTENT
 }).
 
+-define(ECHO_TASK_SCHEMA_DRAFT(__RESULT_MAPPERS), #atm_task_schema_draft{
+    lambda_id = ?ECHO_LAMBDA_ID,
+    lambda_revision_number = ?ECHO_LAMBDA_REVISION_NUM,
+    argument_mappings = [?ITERATED_ITEM_ARG_MAPPER(?ECHO_ARG_NAME)],
+    result_mappings = __RESULT_MAPPERS
+}).
+
 -define(RESULT_MAPPING_WORKFLOW_SCHEMA_DRAFT(
     __STORE_SCHEMA_DRAFTS,
     __ITERATED_ITEM_DATA_SPEC,
@@ -59,10 +66,11 @@
             stores = __STORE_SCHEMA_DRAFTS,
             lanes = [#atm_lane_schema_draft{
                 parallel_boxes = [#atm_parallel_box_schema_draft{tasks = [
-                    ?ECHO_TASK_DRAFT(
-                        __DST_STORE_SCHEMA_ID,
-                        __DST_STORE_CONTENT_UPDATE_OPTIONS
-                    )
+                    ?ECHO_TASK_SCHEMA_DRAFT([#atm_task_schema_result_mapper{
+                        result_name = ?ECHO_ARG_NAME,
+                        store_schema_id = __DST_STORE_SCHEMA_ID,
+                        store_content_update_options = __DST_STORE_CONTENT_UPDATE_OPTIONS
+                    }])
                 ]}],
                 store_iterator_spec = #atm_store_iterator_spec_draft{
                     store_schema_id = ?SRC_STORE_SCHEMA_ID,

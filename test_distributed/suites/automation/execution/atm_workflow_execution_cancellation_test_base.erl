@@ -25,6 +25,18 @@
 ]).
 
 
+-define(ECHO_ATM_TASK_SCHEMA__DRAFT(__ID, __TARGET_STORE_SCHEMA_ID), #atm_task_schema_draft{
+    id = __ID,
+    lambda_id = ?ECHO_LAMBDA_ID,
+    lambda_revision_number = ?ECHO_LAMBDA_REVISION_NUM,
+    argument_mappings = [?ITERATED_ITEM_ARG_MAPPER(?ECHO_ARG_NAME)],
+    result_mappings = [#atm_task_schema_result_mapper{
+        result_name = ?ECHO_ARG_NAME,
+        store_schema_id = __TARGET_STORE_SCHEMA_ID,
+        store_content_update_options = #atm_list_store_content_update_options{function = append}
+    }]
+}).
+
 -define(ECHO_ATM_WORKFLOW_SCHEMA_DRAFT(__ITEMS_COUNT), #atm_workflow_schema_dump_draft{
     name = <<"echo">>,
     revision_num = 1,
@@ -42,14 +54,14 @@
                     #atm_parallel_box_schema_draft{
                         id = <<"pbox_first">>,
                         tasks = [
-                            ?ECHO_TASK_DRAFT(<<"t1">>, <<"st_2">>, #atm_list_store_content_update_options{function = append}),
-                            ?ECHO_TASK_DRAFT(<<"t2">>, <<"st_3">>, #atm_list_store_content_update_options{function = append})
+                            ?ECHO_ATM_TASK_SCHEMA__DRAFT(<<"t1">>, <<"st_2">>),
+                            ?ECHO_ATM_TASK_SCHEMA__DRAFT(<<"t2">>, <<"st_3">>)
                         ]
                     },
                     #atm_parallel_box_schema_draft{
                         id = <<"pbox_last">>,
                         tasks = [
-                            ?ECHO_TASK_DRAFT(<<"t3">>, <<"st_4">>, #atm_list_store_content_update_options{function = append})
+                            ?ECHO_ATM_TASK_SCHEMA__DRAFT(<<"t3">>, <<"st_4">>)
                         ]
                     }
                 ],
@@ -62,7 +74,7 @@
             % when previous lane run is cancelled
             #atm_lane_schema_draft{
                 parallel_boxes = [#atm_parallel_box_schema_draft{tasks = [
-                    ?ECHO_TASK_DRAFT(<<"st_5">>, #atm_list_store_content_update_options{function = append})
+                    ?ECHO_ATM_TASK_SCHEMA__DRAFT(<<"t10">>, <<"st_5">>)
                 ]}],
                 store_iterator_spec = #atm_store_iterator_spec_draft{store_schema_id = <<"st_4">>},
                 max_retries = ?RAND_INT(3, 6)

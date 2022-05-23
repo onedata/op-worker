@@ -37,6 +37,25 @@
 ]).
 
 
+-define(ECHO_ATM_LANE_SCHEMA_DRAFT, #atm_lane_schema_draft{
+    parallel_boxes = [#atm_parallel_box_schema_draft{tasks = [
+        #atm_task_schema_draft{
+            lambda_id = ?ECHO_LAMBDA_ID,
+            lambda_revision_number = ?ECHO_LAMBDA_REVISION_NUM,
+            argument_mappings = [?ITERATED_ITEM_ARG_MAPPER(?ECHO_ARG_NAME)],
+            result_mappings = [#atm_task_schema_result_mapper{
+                result_name = ?ECHO_ARG_NAME,
+                store_schema_id = <<"st_dst">>,
+                store_content_update_options = #atm_list_store_content_update_options{
+                    function = append
+                }
+            }]
+        }
+    ]}],
+    store_iterator_spec = #atm_store_iterator_spec_draft{store_schema_id = <<"st_src">>},
+    max_retries = ?RAND_INT(3, 6)
+}).
+
 -define(ECHO_1_LANE_ATM_WORKFLOW_SCHEMA_DRAFT, #atm_workflow_schema_dump_draft{
     name = <<"echo">>,
     revision_num = 1,
@@ -45,19 +64,12 @@
             ?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"st_src">>, [3, 9, 27]),
             ?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"st_dst">>)
         ],
-        lanes = [#atm_lane_schema_draft{
-            parallel_boxes = [#atm_parallel_box_schema_draft{tasks = [
-                ?ECHO_TASK_DRAFT(<<"st_dst">>, #atm_list_store_content_update_options{function = append})
-            ]}],
-            store_iterator_spec = #atm_store_iterator_spec_draft{store_schema_id = <<"st_src">>},
-            max_retries = ?RAND_INT(3, 6)
-        }]
+        lanes = [?ECHO_ATM_LANE_SCHEMA_DRAFT]
     },
     supplementary_lambdas = #{?ECHO_LAMBDA_ID => #{
         ?ECHO_LAMBDA_REVISION_NUM => ?INTEGER_ECHO_LAMBDA_DRAFT
     }}
 }).
-
 
 -define(ECHO_2_LANES_ATM_WORKFLOW_SCHEMA_DRAFT, #atm_workflow_schema_dump_draft{
     name = <<"echo">>,
@@ -68,20 +80,8 @@
             ?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"st_dst">>)
         ],
         lanes = [
-            #atm_lane_schema_draft{
-                parallel_boxes = [#atm_parallel_box_schema_draft{tasks = [
-                    ?ECHO_TASK_DRAFT(<<"st_dst">>, #atm_list_store_content_update_options{function = append})
-                ]}],
-                store_iterator_spec = #atm_store_iterator_spec_draft{store_schema_id = <<"st_src">>},
-                max_retries = ?RAND_INT(3, 6)
-            },
-            #atm_lane_schema_draft{
-                parallel_boxes = [#atm_parallel_box_schema_draft{tasks = [
-                    ?ECHO_TASK_DRAFT(<<"st_dst">>, #atm_list_store_content_update_options{function = append})
-                ]}],
-                store_iterator_spec = #atm_store_iterator_spec_draft{store_schema_id = <<"st_src">>},
-                max_retries = ?RAND_INT(3, 6)
-            }
+            ?ECHO_ATM_LANE_SCHEMA_DRAFT,
+            ?ECHO_ATM_LANE_SCHEMA_DRAFT
         ]
     },
     supplementary_lambdas = #{?ECHO_LAMBDA_ID => #{
