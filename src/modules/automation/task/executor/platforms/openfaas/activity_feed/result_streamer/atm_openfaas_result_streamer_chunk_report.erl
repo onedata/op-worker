@@ -6,11 +6,12 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Record expressing the push message sent to lambda result streamers to cue their termination.
+%%% Record expressing OpenFaaS result streamer report of type "chunk"
+%%% used in openfaas activity feed.
 %%% The record is not persistable, but is encoded to JSON on the activity feed channel.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_openfaas_result_streamer_finalization_signal).
+-module(atm_openfaas_result_streamer_chunk_report).
 -author("Lukasz Opiola").
 
 -behaviour(jsonable_record).
@@ -20,19 +21,27 @@
 %% jsonable_record callbacks
 -export([to_json/1, from_json/1]).
 
--type record() :: #atm_openfaas_result_streamer_finalization_signal{}.
+-type chunk() :: #{ResultName :: automation:name() => [json_utils:json_term()]}.
+-export_type([chunk/0]).
+
+-type record() :: #atm_openfaas_result_streamer_chunk_report{}.
 -export_type([record/0]).
 
+% @TODO VFS-8507 sanitizers for all activity report related records
 
 %%%===================================================================
 %%% jsonable_record callbacks
 %%%===================================================================
 
 -spec to_json(record()) -> json_utils:json_term().
-to_json(#atm_openfaas_result_streamer_finalization_signal{}) ->
-    #{<<"type">> => <<"finalizationSignal">>}.
+to_json(#atm_openfaas_result_streamer_chunk_report{chunk = Chunk}) when is_map(Chunk) ->
+    #{
+        <<"chunk">> => Chunk
+    }.
 
 
 -spec from_json(json_utils:json_term()) -> record().
-from_json(#{<<"type">> := <<"finalizationSignal">>}) ->
-    #atm_openfaas_result_streamer_finalization_signal{}.
+from_json(#{<<"chunk">> := Chunk}) when is_map(Chunk) ->
+    #atm_openfaas_result_streamer_chunk_report{
+        chunk = Chunk
+    }.

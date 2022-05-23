@@ -146,7 +146,8 @@
 -record(atm_openfaas_result_streamer_deregistration_report, {
 }).
 
-% Record expressing the push message sent to lambda result streamers to cue their termination
+% Record expressing the push message sent to lambda result streamers to
+% cue their finalization (flushing of all results and deregistering)
 -record(atm_openfaas_result_streamer_finalization_signal, {
 }).
 
@@ -230,8 +231,8 @@
 
 -record(atm_time_series_store_content_browse_options, {
     request ::
-    atm_time_series_store_content_browse_options:get_layout() |
-    atm_time_series_store_content_browse_options:get_slice()
+        atm_time_series_store_content_browse_options:get_layout() |
+        atm_time_series_store_content_browse_options:get_slice()
 }).
 
 -record(atm_time_series_store_content_get_layout_req, {}).
@@ -244,8 +245,8 @@
 
 -record(atm_time_series_store_content_browse_result, {
     result ::
-    atm_time_series_store_content_browse_result:layout() |
-    atm_time_series_store_content_browse_result:slice()
+        atm_time_series_store_content_browse_result:layout() |
+        atm_time_series_store_content_browse_result:slice()
 }).
 
 -record(atm_time_series_store_content_layout, {
