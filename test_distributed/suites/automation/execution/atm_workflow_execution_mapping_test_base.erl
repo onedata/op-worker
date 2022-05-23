@@ -113,6 +113,25 @@
     }
 ).
 
+-record(map_results_to_global_store_test_spec, {
+    iterated_item_spec :: atm_data_spec:record(),
+    iterated_items :: [automation:item()],
+    dst_store_type :: automation:store_type(),
+    dst_store_config :: atm_store_config:record(),
+    dst_store_update_options :: atm_store_content_update_options:record()
+}).
+-type map_results_to_global_store_test_spec() :: #map_results_to_global_store_test_spec{}.
+
+-record(map_results_to_store_test_spec, {
+    global_store_schema_drafts :: [atm_test_schema_factory:atm_store_schema_draft()],
+    iterated_item_spec :: atm_data_spec:record(),
+    iterated_items :: [automation:item()],
+    dst_store_schema_id :: automation:id(),
+    dst_store_type :: automation:store_type(),
+    dst_store_update_options :: atm_store_content_update_options:record()
+}).
+-type map_results_to_store_test_spec() :: #map_results_to_store_test_spec{}.
+
 
 -define(NOW(), global_clock:timestamp_seconds()).
 
@@ -124,50 +143,29 @@
 
 map_results_to_audit_log_store_test() ->
     IteratedItemDataSpec = #atm_data_spec{type = atm_integer_type},
-    IteratedItems = lists:seq(20, 200, 4),
-    SrcStoreSchemaDraft = ?SRC_LIST_STORE_SCHEMA_DRAFT(IteratedItemDataSpec, IteratedItems),
 
-    DstStoreSchemaId = <<"dst_st">>,
-    DstStoreSchemaDraft = #atm_store_schema_draft{
-        id = DstStoreSchemaId,
-        type = audit_log,
-        config = #atm_audit_log_store_config{log_content_data_spec = IteratedItemDataSpec}
-    },
-
-    map_results_to_dst_store_test_base(
-        [SrcStoreSchemaDraft, DstStoreSchemaDraft],
-        IteratedItemDataSpec,
-        IteratedItems,
-        DstStoreSchemaId,
-        audit_log,
-        #atm_audit_log_store_content_update_options{function = append}
-    ).
+    map_results_to_global_store_test_base(#map_results_to_global_store_test_spec{
+        iterated_item_spec = IteratedItemDataSpec,
+        iterated_items = lists:seq(20, 200, 4),
+        dst_store_type = audit_log,
+        dst_store_config = #atm_audit_log_store_config{log_content_data_spec = IteratedItemDataSpec},
+        dst_store_update_options = #atm_audit_log_store_content_update_options{function = append}
+    }).
 
 
 map_results_to_list_store_test() ->
     IteratedItemDataSpec = #atm_data_spec{type = atm_string_type},
-    IteratedItems = lists_utils:generate(fun() -> ?RAND_STR() end, ?RAND_INT(30, 50)),
-    SrcStoreSchemaDraft = ?SRC_LIST_STORE_SCHEMA_DRAFT(IteratedItemDataSpec, IteratedItems),
 
-    DstStoreSchemaId = <<"dst_st">>,
-    DstStoreSchemaDraft = #atm_store_schema_draft{
-        id = DstStoreSchemaId,
-        type = list,
-        config = #atm_list_store_config{item_data_spec = IteratedItemDataSpec}
-    },
-
-    map_results_to_dst_store_test_base(
-        [SrcStoreSchemaDraft, DstStoreSchemaDraft],
-        IteratedItemDataSpec,
-        IteratedItems,
-        DstStoreSchemaId,
-        list,
-        #atm_list_store_content_update_options{function = append}
-    ).
+    map_results_to_global_store_test_base(#map_results_to_global_store_test_spec{
+        iterated_item_spec = IteratedItemDataSpec,
+        iterated_items = lists_utils:generate(fun() -> ?RAND_STR() end, ?RAND_INT(30, 50)),
+        dst_store_type = list,
+        dst_store_config = #atm_list_store_config{item_data_spec = IteratedItemDataSpec},
+        dst_store_update_options = #atm_list_store_content_update_options{function = append}
+    }).
 
 
 map_results_to_range_store_test() ->
-    IteratedItemDataSpec = #atm_data_spec{type = atm_range_type},
     IteratedItems = lists_utils:generate(fun() ->
         #{
             <<"start">> => ?RAND_INT(0, 100),
@@ -175,72 +173,42 @@ map_results_to_range_store_test() ->
             <<"step">> => ?RAND_INT(5, 25)
         }
     end, ?RAND_INT(30, 50)),
-    SrcStoreSchemaDraft = ?SRC_LIST_STORE_SCHEMA_DRAFT(IteratedItemDataSpec, IteratedItems),
 
-    DstStoreSchemaId = <<"dst_st">>,
-    DstStoreSchemaDraft = #atm_store_schema_draft{
-        id = DstStoreSchemaId,
-        type = range,
-        config = #atm_range_store_config{}
-    },
-
-    map_results_to_dst_store_test_base(
-        [SrcStoreSchemaDraft, DstStoreSchemaDraft],
-        IteratedItemDataSpec,
-        IteratedItems,
-        DstStoreSchemaId,
-        range,
-        #atm_range_store_content_update_options{}
-    ).
+    map_results_to_global_store_test_base(#map_results_to_global_store_test_spec{
+        iterated_item_spec = #atm_data_spec{type = atm_range_type},
+        iterated_items = IteratedItems,
+        dst_store_type = range,
+        dst_store_config = #atm_range_store_config{},
+        dst_store_update_options = #atm_range_store_content_update_options{}
+    }).
 
 
 map_results_to_single_value_store_test() ->
     IteratedItemDataSpec = #atm_data_spec{type = atm_object_type},
-    IteratedItems = gen_random_object_list(),
-    SrcStoreSchemaDraft = ?SRC_LIST_STORE_SCHEMA_DRAFT(IteratedItemDataSpec, IteratedItems),
 
-    DstStoreSchemaId = <<"dst_st">>,
-    DstStoreSchemaDraft = #atm_store_schema_draft{
-        id = DstStoreSchemaId,
-        type = single_value,
-        config = #atm_single_value_store_config{item_data_spec = IteratedItemDataSpec}
-    },
-
-    map_results_to_dst_store_test_base(
-        [SrcStoreSchemaDraft, DstStoreSchemaDraft],
-        IteratedItemDataSpec,
-        IteratedItems,
-        DstStoreSchemaId,
-        single_value,
-        #atm_single_value_store_content_update_options{}
-    ).
+    map_results_to_global_store_test_base(#map_results_to_global_store_test_spec{
+        iterated_item_spec = IteratedItemDataSpec,
+        iterated_items = gen_random_object_list(),
+        dst_store_type = single_value,
+        dst_store_config = #atm_single_value_store_config{item_data_spec = IteratedItemDataSpec},
+        dst_store_update_options = #atm_single_value_store_content_update_options{}
+    }).
 
 
 map_results_to_time_series_store_test() ->
-    IteratedItemDataSpec = ?ANY_MEASUREMENT_DATA_SPEC,
-    IteratedItems = gen_random_time_series_measurements(),
-    SrcStoreSchemaDraft = ?SRC_LIST_STORE_SCHEMA_DRAFT(IteratedItemDataSpec, IteratedItems),
-
-    DstStoreSchemaId = <<"dst_st">>,
-    DstStoreSchemaDraft = #atm_store_schema_draft{
-        id = DstStoreSchemaId,
-        type = time_series,
-        config = ?ATM_TIME_SERIES_STORE_CONFIG
-    },
-
-    map_results_to_dst_store_test_base(
-        [SrcStoreSchemaDraft, DstStoreSchemaDraft],
-        IteratedItemDataSpec,
-        IteratedItems,
-        DstStoreSchemaId,
-        time_series,
-        #atm_time_series_store_content_update_options{dispatch_rules = ?ATM_TIME_SERIES_DISPATCH_RULES}
-    ).
+    map_results_to_global_store_test_base(#map_results_to_global_store_test_spec{
+        iterated_item_spec = ?ANY_MEASUREMENT_DATA_SPEC,
+        iterated_items = gen_random_time_series_measurements(),
+        dst_store_type = time_series,
+        dst_store_config = ?ATM_TIME_SERIES_STORE_CONFIG,
+        dst_store_update_options = #atm_time_series_store_content_update_options{
+            dispatch_rules = ?ATM_TIME_SERIES_DISPATCH_RULES
+        }
+    }).
 
 
 map_results_to_tree_forest_store_test() ->
     IteratedItemDataSpec = #atm_data_spec{type = atm_file_type},
-
     FileObjects = onenv_file_test_utils:create_and_sync_file_tree(
         user1, ?SPACE_SELECTOR, lists_utils:generate(fun() -> #file_spec{} end, 30)
     ),
@@ -248,23 +216,43 @@ map_results_to_tree_forest_store_test() ->
         {ok, ObjectId} = file_id:guid_to_objectid(Guid),
         #{<<"file_id">> => ObjectId}
     end, FileObjects),
+
+    map_results_to_global_store_test_base(#map_results_to_global_store_test_spec{
+        iterated_item_spec = IteratedItemDataSpec,
+        iterated_items = IteratedItems,
+        dst_store_type = tree_forest,
+        dst_store_config = #atm_tree_forest_store_config{item_data_spec = IteratedItemDataSpec},
+        dst_store_update_options = #atm_tree_forest_store_content_update_options{function = append}
+    }).
+
+
+%% @private
+-spec map_results_to_global_store_test_base(map_results_to_global_store_test_spec()) ->
+    ok.
+map_results_to_global_store_test_base(#map_results_to_global_store_test_spec{
+    iterated_item_spec = IteratedItemDataSpec,
+    iterated_items = IteratedItems,
+    dst_store_type = DstStoreType,
+    dst_store_config = DstStoreConfig,
+    dst_store_update_options = DstStoreContentUpdateOptions
+}) ->
     SrcStoreSchemaDraft = ?SRC_LIST_STORE_SCHEMA_DRAFT(IteratedItemDataSpec, IteratedItems),
 
     DstStoreSchemaId = <<"dst_st">>,
     DstStoreSchemaDraft = #atm_store_schema_draft{
         id = DstStoreSchemaId,
-        type = tree_forest,
-        config = #atm_tree_forest_store_config{item_data_spec = #atm_data_spec{type = atm_file_type}}
+        type = DstStoreType,
+        config = DstStoreConfig
     },
 
-    map_results_to_dst_store_test_base(
-        [SrcStoreSchemaDraft, DstStoreSchemaDraft],
-        IteratedItemDataSpec,
-        IteratedItems,
-        DstStoreSchemaId,
-        tree_forest,
-        #atm_tree_forest_store_content_update_options{function = append}
-    ).
+    map_results_to_store_test_base(#map_results_to_store_test_spec{
+        global_store_schema_drafts = [SrcStoreSchemaDraft, DstStoreSchemaDraft],
+        iterated_item_spec = IteratedItemDataSpec,
+        iterated_items = IteratedItems,
+        dst_store_schema_id = DstStoreSchemaId,
+        dst_store_type = DstStoreType,
+        dst_store_update_options = DstStoreContentUpdateOptions
+    }).
 
 
 map_results_to_workflow_audit_log_store_test() ->
@@ -272,14 +260,14 @@ map_results_to_workflow_audit_log_store_test() ->
     IteratedItems = gen_random_object_list(),
     SrcStoreSchemaDraft = ?SRC_LIST_STORE_SCHEMA_DRAFT(IteratedItemDataSpec, IteratedItems),
 
-    map_results_to_dst_store_test_base(
-        [SrcStoreSchemaDraft],
-        IteratedItemDataSpec,
-        IteratedItems,
-        ?WORKFLOW_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID,
-        audit_log,
-        #atm_audit_log_store_content_update_options{function = append}
-    ).
+    map_results_to_store_test_base(#map_results_to_store_test_spec{
+        global_store_schema_drafts = [SrcStoreSchemaDraft],
+        iterated_item_spec = IteratedItemDataSpec,
+        iterated_items = IteratedItems,
+        dst_store_schema_id = ?WORKFLOW_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID,
+        dst_store_type = audit_log,
+        dst_store_update_options = #atm_audit_log_store_content_update_options{function = append}
+    }).
 
 
 map_results_to_task_audit_log_store_test() ->
@@ -287,14 +275,14 @@ map_results_to_task_audit_log_store_test() ->
     IteratedItems = gen_random_object_list(),
     SrcStoreSchemaDraft = ?SRC_LIST_STORE_SCHEMA_DRAFT(IteratedItemDataSpec, IteratedItems),
 
-    map_results_to_dst_store_test_base(
-        [SrcStoreSchemaDraft],
-        IteratedItemDataSpec,
-        IteratedItems,
-        ?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID,
-        audit_log,
-        #atm_audit_log_store_content_update_options{function = append}
-    ).
+    map_results_to_store_test_base(#map_results_to_store_test_spec{
+        global_store_schema_drafts = [SrcStoreSchemaDraft],
+        iterated_item_spec = IteratedItemDataSpec,
+        iterated_items = IteratedItems,
+        dst_store_schema_id = ?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID,
+        dst_store_type = audit_log,
+        dst_store_update_options = #atm_audit_log_store_content_update_options{function = append}
+    }).
 
 
 map_results_to_task_time_series_store_test() ->
@@ -302,25 +290,28 @@ map_results_to_task_time_series_store_test() ->
     IteratedItems = gen_random_time_series_measurements(),
     SrcStoreSchemaDraft = ?SRC_LIST_STORE_SCHEMA_DRAFT(IteratedItemDataSpec, IteratedItems),
 
-    map_results_to_dst_store_test_base(
-        [SrcStoreSchemaDraft],
-        IteratedItemDataSpec,
-        IteratedItems,
-        ?CURRENT_TASK_TIME_SERIES_STORE_SCHEMA_ID,
-        time_series,
-        #atm_time_series_store_content_update_options{dispatch_rules = ?ATM_TIME_SERIES_DISPATCH_RULES}
-    ).
+    map_results_to_store_test_base(#map_results_to_store_test_spec{
+        global_store_schema_drafts = [SrcStoreSchemaDraft],
+        iterated_item_spec = IteratedItemDataSpec,
+        iterated_items = IteratedItems,
+        dst_store_schema_id = ?CURRENT_TASK_TIME_SERIES_STORE_SCHEMA_ID,
+        dst_store_type = time_series,
+        dst_store_update_options = #atm_time_series_store_content_update_options{
+            dispatch_rules = ?ATM_TIME_SERIES_DISPATCH_RULES
+        }
+    }).
 
 
 %% @private
-map_results_to_dst_store_test_base(
-    StoreSchemaDrafts,
-    IteratedItemDataSpec,
-    IteratedItems,
-    DstStoreSchemaId,
-    DstStoreType,
-    DstStoreContentUpdateOptions
-) ->
+-spec map_results_to_store_test_base(map_results_to_store_test_spec()) -> ok.
+map_results_to_store_test_base(#map_results_to_store_test_spec{
+    global_store_schema_drafts = StoreSchemaDrafts,
+    iterated_item_spec = IteratedItemDataSpec,
+    iterated_items = IteratedItems,
+    dst_store_schema_id = DstStoreSchemaId,
+    dst_store_type = DstStoreType,
+    dst_store_update_options = DstStoreContentUpdateOptions
+}) ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         provider = ?PROVIDER_SELECTOR,
         user = ?USER_SELECTOR,
@@ -425,16 +416,16 @@ assert_exp_dst_store_content(time_series, SrcListStoreContent, #{<<"slice">> := 
             WindowsAcc = maps:get(<<"count_erl">>, Acc, #{}),
 
             Acc#{<<"count_erl">> => #{
-                <<"minute">> => sum_windows(
-                    ?MINUTE_METRIC_WINDOW(Timestamp, Value),
+                <<"minute">> => insert_window_to_metric_with_sum_aggregator(
+                    ?EXP_MINUTE_METRIC_WINDOW(Timestamp, Value),
                     maps:get(<<"minute">>, WindowsAcc, [])
                 ),
-                <<"hour">> => sum_windows(
-                    ?HOUR_METRIC_WINDOW(Timestamp, Value),
+                <<"hour">> => insert_window_to_metric_with_sum_aggregator(
+                    ?EXP_HOUR_METRIC_WINDOW(Timestamp, Value),
                     maps:get(<<"hour">>, WindowsAcc, [])
                 ),
-                <<"day">> => sum_windows(
-                    ?DAY_METRIC_WINDOW(Timestamp, Value),
+                <<"day">> => insert_window_to_metric_with_sum_aggregator(
+                    ?EXP_DAY_METRIC_WINDOW(Timestamp, Value),
                     maps:get(<<"day">>, WindowsAcc, [])
                 )
             }};
@@ -446,10 +437,12 @@ assert_exp_dst_store_content(time_series, SrcListStoreContent, #{<<"slice">> := 
         }, Acc) ->
             WindowsAcc = maps:get(?MAX_FILE_SIZE_TS_NAME, Acc, #{}),
 
-            Acc#{?MAX_FILE_SIZE_TS_NAME => #{?MAX_FILE_SIZE_TS_NAME => max_window(
-                ?MAX_FILE_SIZE_METRIC_WINDOW(Timestamp, Value),
-                maps:get(?MAX_FILE_SIZE_TS_NAME, WindowsAcc, [])
-            )}};
+            Acc#{?MAX_FILE_SIZE_TS_NAME => #{
+                ?MAX_FILE_SIZE_TS_NAME => insert_window_to_metric_with_max_aggregator(
+                    ?MAX_FILE_SIZE_METRIC_WINDOW(Timestamp, Value),
+                    maps:get(?MAX_FILE_SIZE_TS_NAME, WindowsAcc, [])
+                )
+            }};
 
         (_, Acc) ->
             % other measurements should be ignored as they are not mapped to any ts
@@ -477,24 +470,24 @@ extract_value_from_infinite_log_entry(Entries) ->
 
 
 %% @private
--spec sum_windows(json_utils:json_map(), [json_utils:json_map()]) ->
+-spec insert_window_to_metric_with_sum_aggregator(json_utils:json_map(), [json_utils:json_map()]) ->
     [json_utils:json_map()].
-sum_windows(Window, []) ->
+insert_window_to_metric_with_sum_aggregator(Window, []) ->
     [Window];
 
-sum_windows(
+insert_window_to_metric_with_sum_aggregator(
     #{<<"value">> := Value1, <<"timestamp">> := Timestamp},
     [#{<<"value">> := Value2, <<"timestamp">> := Timestamp} | Tail]
 ) ->
     [#{<<"value">> => Value1 + Value2, <<"timestamp">> => Timestamp} | Tail];
 
-sum_windows(
+insert_window_to_metric_with_sum_aggregator(
     Window = #{<<"timestamp">> := Timestamp1},
     [Head = #{<<"timestamp">> := Timestamp2} | Tail]
 ) when Timestamp2 > Timestamp1 ->
-    [Head | sum_windows(Window, Tail)];
+    [Head | insert_window_to_metric_with_sum_aggregator(Window, Tail)];
 
-sum_windows(
+insert_window_to_metric_with_sum_aggregator(
     Window = #{<<"timestamp">> := Timestamp1},
     Windows = [#{<<"timestamp">> := Timestamp2} | _]
 ) when Timestamp2 < Timestamp1 ->
@@ -502,13 +495,13 @@ sum_windows(
 
 
 %% @private
--spec max_window(json_utils:json_map(), [json_utils:json_map()]) ->
+-spec insert_window_to_metric_with_max_aggregator(json_utils:json_map(), [json_utils:json_map()]) ->
     [json_utils:json_map()].
-max_window(
+insert_window_to_metric_with_max_aggregator(
     #{<<"value">> := Value1, <<"timestamp">> := Timestamp},
-    [CurrentWindow = #{<<"value">> := Value2, <<"timestamp">> := Timestamp}]
+    [CurrentMaxWindow = #{<<"value">> := Value2, <<"timestamp">> := Timestamp}]
 ) when Value1 =< Value2 ->
-    [CurrentWindow];
+    [CurrentMaxWindow];
 
-max_window(NewWindow, _) ->
-    [NewWindow].
+insert_window_to_metric_with_max_aggregator(NewMaxWindow, _) ->
+    [NewMaxWindow].
