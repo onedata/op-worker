@@ -340,7 +340,7 @@ atm_workflow_execution_cancel_in_aborting_status_after_lane_run_preparation_fail
                 },
                 handle_lane_execution_ended = #atm_step_mock_spec{
                     after_step_hook = fun(AtmMockCallCtx) ->
-                        % While atm workflow execution as whole has not yet transit to failed status
+                        % While atm workflow execution as whole has not yet transition to failed status
                         % (last step remaining) the current lane run did. At this point cancel
                         % is no longer possible (execution is treated as failed one)
                         ?assertThrow(
@@ -611,7 +611,7 @@ first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_4_test()
                             {true, atm_workflow_execution_exp_state_builder:expect_lane_run_aborting({2, 1}, ExpState)}
                         end,
                         after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState}) ->
-                            % failed lane preparing in advance always transit to interrupted status
+                            % failed lane preparing in advance always transition to interrupted status
                             {true, atm_workflow_execution_exp_state_builder:expect_lane_run_interrupted(
                                 {2, 1}, atm_workflow_execution_exp_state_builder:expect_all_tasks_skipped(
                                     {2, 1}, ExpState
@@ -884,7 +884,7 @@ first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_4_test() 
                             {true, atm_workflow_execution_exp_state_builder:expect_lane_run_aborting({2, 1}, ExpState)}
                         end,
                         after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState}) ->
-                            % failed lane preparing in advance always transit to interrupted status
+                            % failed lane preparing in advance always transition to interrupted status
                             {true, atm_workflow_execution_exp_state_builder:expect_lane_run_interrupted(
                                 {2, 1}, atm_workflow_execution_exp_state_builder:expect_all_tasks_skipped(
                                     {2, 1}, ExpState

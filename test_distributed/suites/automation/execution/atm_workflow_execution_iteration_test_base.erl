@@ -36,6 +36,15 @@
     iterate_over_empty_tree_forest_store_test/0
 ]).
 
+-record(iterate_over_file_store_test_spec, {
+    store_type :: automation:store_type(),
+    initial_files :: [onenv_file_test_utils:object()],
+    % atm_file_type values are references to file entity in op. When those files
+    % are removed the references for them should be omitted during iteration
+    files_to_remove_before_iteration_starts :: [onenv_file_test_utils:object()],
+    exp_iterated_files :: [onenv_file_test_utils:object()]
+}).
+-type iterate_over_file_store_test_spec() :: #iterate_over_file_store_test_spec{}.
 
 -define(FOREACH_TASK_DRAFT(__ID, __LAMBDA_ID, __LAMBDA_REVISION_NUM), #atm_task_schema_draft{
     id = __ID,
@@ -105,6 +114,7 @@
 
 
 -define(NOW(), global_clock:timestamp_seconds()).
+-define(CACHE_KEY(__TESTCASE_MARKER, __ATM_TASK_SCHEMA_ID), {__TESTCASE_MARKER, __ATM_TASK_SCHEMA_ID}).
 
 
 %%%===================================================================
@@ -115,32 +125,44 @@
 iterate_over_list_store_test() ->
     InitialFiles = create_initial_files(),
 
-    iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(
-        list, InitialFiles, [], InitialFiles
-    ).
+    iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(#iterate_over_file_store_test_spec{
+        store_type = list,
+        initial_files = InitialFiles,
+        files_to_remove_before_iteration_starts = [],
+        exp_iterated_files = InitialFiles
+    }).
 
 
 iterate_over_list_store_with_some_inaccessible_items_test() ->
     InitialFiles = [DirObject | FileObjects] = create_initial_files(),
     FilesToRemove = lists_utils:random_sublist(FileObjects),
 
-    iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(
-        list, InitialFiles, FilesToRemove, [DirObject | FileObjects -- FilesToRemove]
-    ).
+    iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(#iterate_over_file_store_test_spec{
+        store_type = list,
+        initial_files = InitialFiles,
+        files_to_remove_before_iteration_starts = FilesToRemove,
+        exp_iterated_files = [DirObject | FileObjects -- FilesToRemove]
+    }).
 
 
 iterate_over_list_store_with_all_items_inaccessible_test() ->
     InitialFiles = create_initial_files(),
 
-    iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(
-        list, InitialFiles, InitialFiles, []
-    ).
+    iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(#iterate_over_file_store_test_spec{
+        store_type = list,
+        initial_files = InitialFiles,
+        files_to_remove_before_iteration_starts = InitialFiles,
+        exp_iterated_files = []
+    }).
 
 
 iterate_over_empty_list_store_test() ->
-    iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(
-        list, [], [], []
-    ).
+    iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(#iterate_over_file_store_test_spec{
+        store_type = list,
+        initial_files = [],
+        files_to_remove_before_iteration_starts = [],
+        exp_iterated_files = []
+    }).
 
 
 iterate_over_range_store_test() ->
@@ -157,15 +179,12 @@ iterate_over_range_store_test() ->
             lane_runs = [#atm_lane_run_execution_test_spec{
                 selector = {1, 1},
                 process_item = #atm_step_mock_spec{
-                    before_step_hook = build_validate_iterated_item_batches_fun(
-                        ?FUNCTION_NAME,
-                        lists:seq(-100, 99, 2)
-                    )
+                    before_step_hook = build_validate_iterated_item_batches_fun(?FUNCTION_NAME)
                 }
             }]
         }]
     }),
-    assert_all_items_were_iterated(?FUNCTION_NAME).
+    assert_all_items_were_iterated(?FUNCTION_NAME, lists:seq(-100, 99, 2)).
 
 
 iterate_over_empty_range_store_test() ->
@@ -188,71 +207,86 @@ iterate_over_empty_range_store_test() ->
 iterate_over_single_value_store_test() ->
     [DirObject | _] = create_initial_files(),
 
-    iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(
-        single_value, DirObject, [], [DirObject]
-    ).
+    iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(#iterate_over_file_store_test_spec{
+        store_type = single_value,
+        initial_files = DirObject,
+        files_to_remove_before_iteration_starts = [],
+        exp_iterated_files = [DirObject]
+    }).
 
 
 iterate_over_single_value_store_with_all_items_inaccessible_test() ->
     [DirObject | _] = create_initial_files(),
 
-    iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(
-        single_value, DirObject, [DirObject], []
-    ).
+    iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(#iterate_over_file_store_test_spec{
+        store_type = single_value,
+        initial_files = DirObject,
+        files_to_remove_before_iteration_starts = [DirObject],
+        exp_iterated_files = []
+    }).
 
 
 iterate_over_empty_single_value_store_test() ->
-    iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(
-        single_value, undefined, [], []
-    ).
+    iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(#iterate_over_file_store_test_spec{
+        store_type = single_value,
+        initial_files = undefined,
+        files_to_remove_before_iteration_starts = [],
+        exp_iterated_files = []
+    }).
 
 
 iterate_over_tree_forest_store_test() ->
     InitialFiles = [DirObject, A | FileObjects] = create_initial_files(),
-    ExpIteratedFiles = lists:flatten([A, DirObject#object.children, DirObject, FileObjects]),
 
-    iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(
-        tree_forest, InitialFiles, [], ExpIteratedFiles
-    ).
+    iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(#iterate_over_file_store_test_spec{
+        store_type = tree_forest,
+        initial_files = InitialFiles,
+        files_to_remove_before_iteration_starts = [],
+        exp_iterated_files = lists:flatten([A, DirObject#object.children, DirObject, FileObjects])
+    }).
 
 
 iterate_over_tree_forest_store_with_some_inaccessible_items_test() ->
     InitialFiles = [DirObject | FileObjects] = create_initial_files(),
     FilesToRemove = [DirObject | lists_utils:random_sublist(FileObjects)],
 
-    iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(
-        tree_forest, InitialFiles, FilesToRemove, InitialFiles -- FilesToRemove
-    ).
+    iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(#iterate_over_file_store_test_spec{
+        store_type = tree_forest,
+        initial_files = InitialFiles,
+        files_to_remove_before_iteration_starts = FilesToRemove,
+        exp_iterated_files = InitialFiles -- FilesToRemove
+    }).
 
 
 iterate_over_tree_forest_store_with_all_items_inaccessible_test() ->
     InitialFiles = create_initial_files(),
 
-    iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(
-        tree_forest, InitialFiles, InitialFiles, []
-    ).
+    iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(#iterate_over_file_store_test_spec{
+        store_type = tree_forest,
+        initial_files = InitialFiles,
+        files_to_remove_before_iteration_starts = InitialFiles,
+        exp_iterated_files = []
+    }).
 
 
 iterate_over_empty_tree_forest_store_test() ->
-    iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(
-        tree_forest, [], [], []
-    ).
+    iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(#iterate_over_file_store_test_spec{
+        store_type = tree_forest,
+        initial_files = [],
+        files_to_remove_before_iteration_starts = [],
+        exp_iterated_files = []
+    }).
 
 
 %% @private
--spec iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(
-    automation:store_type(),
-    undefined | onenv_file_test_utils:object() | [onenv_file_test_utils:object()],
-    [onenv_file_test_utils:object()],
-    [onenv_file_test_utils:object()]
-) ->
+-spec iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(iterate_over_file_store_test_spec()) ->
     ok.
-iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(
-    AtmStoreType,
-    InitialFiles,
-    FilesToRemove,
-    ExpIteratedFiles
-) ->
+iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(#iterate_over_file_store_test_spec{
+    store_type = AtmStoreType,
+    initial_files = InitialFiles,
+    files_to_remove_before_iteration_starts = FilesToRemove,
+    exp_iterated_files = ExpIteratedFiles
+}) ->
     TestCaseMarker = ?RAND_STR(),
     InitialContent = case InitialFiles of
         undefined -> undefined;
@@ -290,7 +324,6 @@ iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(
                 process_item = #atm_step_mock_spec{
                     before_step_hook = build_validate_iterated_item_batches_fun(
                         TestCaseMarker,
-                        ExpIteratedEntries,
                         fun filter_out_everything_but_file_id_from_atm_file_value/1
                     )
                 },
@@ -301,7 +334,7 @@ iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(
             }]
         }]
     }),
-    assert_all_items_were_iterated(TestCaseMarker).
+    assert_all_items_were_iterated(TestCaseMarker, ExpIteratedEntries).
 
 
 %%%===================================================================
@@ -331,7 +364,7 @@ build_handle_task_execution_ended_mock_spec_for_skipped_tasks() ->
             workflow_execution_exp_state = ExpState0,
             call_args = [_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId]
         }) ->
-            % No job was ever executed so lane run transit to active status only now
+            % No job was ever executed so lane run transition to active status only now
             ExpState1 = atm_workflow_execution_exp_state_builder:expect_task_lane_run_moved_to_active_status_if_was_in_enqueued_status(
                 AtmTaskExecutionId, atm_workflow_execution_exp_state_builder:expect_task_skipped(
                     AtmTaskExecutionId, ExpState0
@@ -339,8 +372,9 @@ build_handle_task_execution_ended_mock_spec_for_skipped_tasks() ->
             ),
             {true, case atm_workflow_execution_exp_state_builder:get_task_selector(AtmTaskExecutionId, ExpState1) of
                 {_, <<"pb1">>, _} ->
-                    % parallel box with 2 tasks: it should transit to active
-                    % when first task ended and skipped after second did
+                    % parallel box with 2 tasks - it should transition to:
+                    % - active when first task ended
+                    % - skipped after second task ended
                     InferStatusFun = fun
                         (<<"pending">>, [<<"pending">>, <<"skipped">>]) -> <<"active">>;
                         (<<"active">>, [<<"skipped">>]) -> <<"skipped">>
@@ -349,7 +383,7 @@ build_handle_task_execution_ended_mock_spec_for_skipped_tasks() ->
                         AtmTaskExecutionId, InferStatusFun, ExpState1
                     );
                 {_, <<"pb2">>, _} ->
-                    % parallel box with only 1 task - should transit to skipped status
+                    % parallel box with only 1 task - should transition to skipped status
                     atm_workflow_execution_exp_state_builder:expect_task_parallel_box_moved_to_inferred_status(
                         AtmTaskExecutionId, fun(_, _) -> <<"skipped">> end, ExpState1
                     )
@@ -372,20 +406,19 @@ filter_out_everything_but_file_id_from_atm_file_value(AtmFileValue) ->
 
 
 %% @private
--spec build_validate_iterated_item_batches_fun(term(), [automation:item()]) ->
+-spec build_validate_iterated_item_batches_fun(term()) ->
     atm_workflow_execution_test_runner:hook().
-build_validate_iterated_item_batches_fun(TestCaseMarker, ExpItems) ->
-    build_validate_iterated_item_batches_fun(TestCaseMarker, ExpItems, fun(Item) -> Item end).
+build_validate_iterated_item_batches_fun(TestCaseMarker) ->
+    build_validate_iterated_item_batches_fun(TestCaseMarker, fun(Item) -> Item end).
 
 
 %% @private
 -spec build_validate_iterated_item_batches_fun(
     term(),
-    [automation:item()],
     fun((automation:item()) -> automation:item())
 ) ->
     atm_workflow_execution_test_runner:hook().
-build_validate_iterated_item_batches_fun(TestCaseMarker, ExpItems, Mapper) ->
+build_validate_iterated_item_batches_fun(TestCaseMarker, Mapper) ->
     fun(#atm_mock_call_ctx{
         workflow_execution_exp_state = ExpState,
         call_args = [
@@ -393,28 +426,34 @@ build_validate_iterated_item_batches_fun(TestCaseMarker, ExpItems, Mapper) ->
             ItemBatch, _ReportResultUrl, _HeartbeatUrl
         ]
     }) ->
-        MappedItemBatch = lists:map(Mapper, ItemBatch),
         {_, _, AtmTaskSchemaId} = atm_workflow_execution_exp_state_builder:get_task_selector(
             AtmTaskExecutionId, ExpState
         ),
-        CacheKey = {TestCaseMarker, AtmTaskSchemaId},
-
-        LeftoverExpItems = node_cache:get(CacheKey, ExpItems),
-
-        case lists:all(fun(Item) -> lists:member(Item, LeftoverExpItems) end, MappedItemBatch) of
-            true ->
-                node_cache:put(CacheKey, LeftoverExpItems -- MappedItemBatch);
-            false ->
-                ct:pal("Expected items: ~p~nGot: ~p", [LeftoverExpItems, MappedItemBatch]),
-                ?assert(false)
-        end
+        MappedItemBatch = lists:map(Mapper, ItemBatch),
+        record_iterated_items(TestCaseMarker, AtmTaskSchemaId, MappedItemBatch)
     end.
 
 
 %% @private
--spec assert_all_items_were_iterated(term()) -> ok.
-assert_all_items_were_iterated(TestCaseMarker) ->
+-spec assert_all_items_were_iterated(term(), [automation:item()]) -> ok.
+assert_all_items_were_iterated(TestCaseMarker, ExpIteratedItems) ->
     lists:foreach(fun(AtmTaskSchemaId) ->
-        CacheKey = {TestCaseMarker, AtmTaskSchemaId},
-        ?assertEqual([], node_cache:get(CacheKey, []))
+        ?assertEqual(
+            lists:sort(ExpIteratedItems),
+            get_recorded_iterated_items(TestCaseMarker, AtmTaskSchemaId)
+        )
     end, [<<"t1">>, <<"t2">>, <<"t3">>]).
+
+
+%% @private
+-spec record_iterated_items(term(), automation:id(), [automation:item()]) -> ok.
+record_iterated_items(TestCaseMarker, AtmTaskSchemaId, NewIteratedItems) ->
+    Key = ?CACHE_KEY(TestCaseMarker, AtmTaskSchemaId),
+    PrevIteratedItems = node_cache:get(Key, []),
+    node_cache:put(Key, NewIteratedItems ++ PrevIteratedItems).
+
+
+%% @private
+-spec get_recorded_iterated_items(term(), automation:id()) -> [automation:item()].
+get_recorded_iterated_items(TestCaseMarker, AtmTaskSchemaId) ->
+    lists:sort(node_cache:get(?CACHE_KEY(TestCaseMarker, AtmTaskSchemaId), [])).

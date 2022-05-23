@@ -17,7 +17,7 @@
 -include_lib("ctool/include/automation/automation.hrl").
 
 
--define(WINDOW(__METRIC_CONFIG, __TIMESTAMP, __VALUE), #{
+-define(EXP_WINDOW(__METRIC_CONFIG, __TIMESTAMP, __VALUE), #{
     <<"value">> => __VALUE,
     <<"timestamp">> => __TIMESTAMP - __TIMESTAMP rem __METRIC_CONFIG#metric_config.resolution
 }).
@@ -29,7 +29,7 @@
     retention = 1,
     aggregator = max
 }).
--define(MAX_FILE_SIZE_METRIC_WINDOW(__TIMESTAMP, __VALUE), ?WINDOW(
+-define(MAX_FILE_SIZE_METRIC_WINDOW(__TIMESTAMP, __VALUE), ?EXP_WINDOW(
     ?MAX_FILE_SIZE_METRIC_CONFIG, __TIMESTAMP, __VALUE
 )).
 
@@ -46,7 +46,7 @@
     retention = 120,
     aggregator = sum
 }).
--define(MINUTE_METRIC_WINDOW(__TIMESTAMP, __VALUE), ?WINDOW(
+-define(EXP_MINUTE_METRIC_WINDOW(__TIMESTAMP, __VALUE), ?EXP_WINDOW(
     ?MINUTE_METRIC_CONFIG, __TIMESTAMP, __VALUE
 )).
 
@@ -56,7 +56,7 @@
     retention = 48,
     aggregator = sum
 }).
--define(HOUR_METRIC_WINDOW(__TIMESTAMP, __VALUE), ?WINDOW(
+-define(EXP_HOUR_METRIC_WINDOW(__TIMESTAMP, __VALUE), ?EXP_WINDOW(
     ?HOUR_METRIC_CONFIG, __TIMESTAMP, __VALUE
 )).
 
@@ -66,7 +66,7 @@
     retention = 60,
     aggregator = sum
 }).
--define(DAY_METRIC_WINDOW(__TIMESTAMP, __VALUE), ?WINDOW(
+-define(EXP_DAY_METRIC_WINDOW(__TIMESTAMP, __VALUE), ?EXP_WINDOW(
     ?DAY_METRIC_CONFIG, __TIMESTAMP, __VALUE
 )).
 

@@ -176,8 +176,9 @@ cancel_enqueued_atm_workflow_execution_test() ->
                             ),
                             {true, case atm_workflow_execution_exp_state_builder:get_task_selector(AtmTaskExecutionId, ExpState1) of
                                 {_, <<"pbox_first">>, _} ->
-                                    % parallel box with 2 tasks: it should transit to active
-                                    % when first task ended and skipped after second did
+                                    % parallel box with 2 tasks - it should transition to:
+                                    % - active when first task ended
+                                    % - skipped after second task ended
                                     InferStatusFun = fun
                                         (<<"pending">>, [<<"pending">>, <<"skipped">>]) -> <<"active">>;
                                         (<<"active">>, [<<"skipped">>]) -> <<"skipped">>
@@ -186,7 +187,7 @@ cancel_enqueued_atm_workflow_execution_test() ->
                                         AtmTaskExecutionId, InferStatusFun, ExpState1
                                     );
                                 {_, <<"pbox_last">>, _} ->
-                                    % parallel box with only 1 task - should transit to skipped status
+                                    % parallel box with only 1 task - should transition to skipped status
                                     atm_workflow_execution_exp_state_builder:expect_task_parallel_box_moved_to_inferred_status(
                                         AtmTaskExecutionId, fun(_, _) -> <<"skipped">> end, ExpState1
                                     )
@@ -368,7 +369,7 @@ cancel_finishing_atm_workflow_execution_test() ->
                     selector = {2, 1},
                     handle_lane_execution_ended = #atm_step_mock_spec{
                         after_step_hook = fun(AtmMockCallCtx) ->
-                            % While atm workflow execution as whole has not yet transit to finished status
+                            % While atm workflow execution as whole has not yet transition to finished status
                             % (last step remaining) the current lane run did. At this point cancel
                             % is no longer possible (execution is treated as successfully ended)
                             ?assertThrow(
