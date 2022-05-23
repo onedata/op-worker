@@ -876,7 +876,7 @@ end_per_suite(_Config) ->
 init_per_group(_Group, Config) ->
     opw_test_rpc:set_env(krakow, openfaas_activity_feed_secret, ?CORRECT_SECRET),
     Workers = ?config(op_worker_nodes, Config),
-    ok = test_utils:mock_new(Workers, [workflow_engine], [non_strict]), %@fixme change to strict during integration
+    ok = test_utils:mock_new(Workers, [workflow_engine]),
     ok = test_utils:mock_expect(Workers, workflow_engine, stream_task_data, fun mocked_stream_task_data/3),
     ok = test_utils:mock_expect(Workers, workflow_engine, report_task_data_streaming_concluded, fun mocked_report_task_data_streaming_concluded/3),
     Config.
