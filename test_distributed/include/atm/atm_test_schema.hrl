@@ -104,7 +104,8 @@
     argument_mappings :: [atm_task_schema_argument_mapper:record()],
     result_mappings :: [atm_task_schema_result_mapper:record()],
 
-    resource_spec_override = ?ATM_AUTOGENERATE :: ?ATM_AUTOGENERATE | undefined | atm_resource_spec:record()
+    resource_spec_override = ?ATM_AUTOGENERATE :: ?ATM_AUTOGENERATE | undefined | atm_resource_spec:record(),
+    time_series_store_config = undefined :: undefined | atm_time_series_store_config:record()  %% TODO
 }).
 
 -record(atm_store_iterator_spec_draft, {

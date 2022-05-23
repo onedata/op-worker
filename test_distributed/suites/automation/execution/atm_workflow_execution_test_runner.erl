@@ -253,51 +253,16 @@ browse_store(AtmStoreSchemaId, AtmMockCallCtx) ->
     browse_store(AtmStoreSchemaId, undefined, AtmMockCallCtx).
 
 
--spec browse_store(
-    automation:id(),
-    undefined | atm_task_execution:id(),
-    mock_call_ctx()
-) ->
+-spec browse_store(automation:id(), undefined | atm_task_execution:id(), mock_call_ctx()) ->
     json_utils:json_term().
-browse_store(?WORKFLOW_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID, _AtmTaskExecutionId, #atm_mock_call_ctx{
+browse_store(AtmStoreSchemaId, AtmTaskExecutionId, AtmMockCallCtx = #atm_mock_call_ctx{
     provider = ProviderSelector,
     space = SpaceSelector,
     session_id = SessionId,
     workflow_execution_id = AtmWorkflowExecutionId
 }) ->
     SpaceId = oct_background:get_space_id(SpaceSelector),
-
-    {ok, #document{value = #atm_workflow_execution{system_audit_log_id = AtmStoreId}}} = ?rpc(
-        ProviderSelector, atm_workflow_execution:get(AtmWorkflowExecutionId)
-    ),
-    ?rpc(ProviderSelector, browse_store(SessionId, SpaceId, AtmWorkflowExecutionId, AtmStoreId));
-
-browse_store(?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID, AtmTaskExecutionId, #atm_mock_call_ctx{
-    provider = ProviderSelector,
-    space = SpaceSelector,
-    session_id = SessionId,
-    workflow_execution_id = AtmWorkflowExecutionId
-}) ->
-    SpaceId = oct_background:get_space_id(SpaceSelector),
-
-    {ok, #document{value = #atm_task_execution{system_audit_log_id = AtmStoreId}}} = ?rpc(
-        ProviderSelector, atm_task_execution:get(AtmTaskExecutionId)
-    ),
-    ?rpc(ProviderSelector, browse_store(SessionId, SpaceId, AtmWorkflowExecutionId, AtmStoreId));
-
-browse_store(AtmStoreSchemaId, _AtmTaskExecutionId, #atm_mock_call_ctx{
-    provider = ProviderSelector,
-    space = SpaceSelector,
-    session_id = SessionId,
-    workflow_execution_id = AtmWorkflowExecutionId
-}) ->
-    SpaceId = oct_background:get_space_id(SpaceSelector),
-
-    {ok, #document{value = #atm_workflow_execution{store_registry = AtmStoreRegistry}}} = ?rpc(
-        ProviderSelector, atm_workflow_execution:get(AtmWorkflowExecutionId)
-    ),
-    AtmStoreId = maps:get(AtmStoreSchemaId, AtmStoreRegistry),
-
+    AtmStoreId = get_store_id(AtmStoreSchemaId, AtmTaskExecutionId, AtmMockCallCtx),
     ?rpc(ProviderSelector, browse_store(SessionId, SpaceId, AtmWorkflowExecutionId, AtmStoreId)).
 
 
@@ -1144,6 +1109,44 @@ call_test_process(TestProcPid, Msg) ->
     (reply_to(), ok) -> ok.
 reply_to_execution_process({ExecutionProcPid, MRef}, Reply) ->
     ExecutionProcPid ! {MRef, Reply}.
+
+
+%% @private
+-spec get_store_id(automation:id(), undefined | atm_task_execution:id(), mock_call_ctx()) ->
+    atm_store:id().
+get_store_id(?WORKFLOW_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID, _AtmTaskExecutionId, #atm_mock_call_ctx{
+    provider = ProviderSelector,
+    workflow_execution_id = AtmWorkflowExecutionId
+}) ->
+    {ok, #document{value = #atm_workflow_execution{system_audit_log_id = AtmStoreId}}} = ?rpc(
+        ProviderSelector, atm_workflow_execution:get(AtmWorkflowExecutionId)
+    ),
+    AtmStoreId;
+
+get_store_id(?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID, AtmTaskExecutionId, #atm_mock_call_ctx{
+    provider = ProviderSelector
+}) ->
+    {ok, #document{value = #atm_task_execution{system_audit_log_id = AtmStoreId}}} = ?rpc(
+        ProviderSelector, atm_task_execution:get(AtmTaskExecutionId)
+    ),
+    AtmStoreId;
+
+get_store_id(?CURRENT_TASK_TIME_SERIES_STORE_SCHEMA_ID, AtmTaskExecutionId, #atm_mock_call_ctx{
+    provider = ProviderSelector
+}) ->
+    {ok, #document{value = #atm_task_execution{time_series_store_id = AtmStoreId}}} = ?rpc(
+        ProviderSelector, atm_task_execution:get(AtmTaskExecutionId)
+    ),
+    AtmStoreId;
+
+get_store_id(AtmStoreSchemaId, _AtmTaskExecutionId, #atm_mock_call_ctx{
+    provider = ProviderSelector,
+    workflow_execution_id = AtmWorkflowExecutionId
+}) ->
+    {ok, #document{value = #atm_workflow_execution{store_registry = AtmStoreRegistry}}} = ?rpc(
+        ProviderSelector, atm_workflow_execution:get(AtmWorkflowExecutionId)
+    ),
+    maps:get(AtmStoreSchemaId, AtmStoreRegistry).
 
 
 %% @private

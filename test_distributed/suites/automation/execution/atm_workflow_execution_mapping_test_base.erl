@@ -29,7 +29,8 @@
     map_results_to_tree_forest_store_test/0,
 
     map_results_to_workflow_audit_log_store_test/0,
-    map_results_to_task_audit_log_store_test/0
+    map_results_to_task_audit_log_store_test/0,
+    map_results_to_task_time_series_store_test/0
 ]).
 
 
@@ -46,11 +47,39 @@
     default_initial_content = __INITIAL_CONTENT
 }).
 
+-define(ATM_TIME_SERIES_STORE_CONFIG, #atm_time_series_store_config{schemas = [
+    ?MAX_FILE_SIZE_TS_SCHEMA,
+    ?COUNT_TS_SCHEMA
+]}).
+-define(ATM_TIME_SERIES_DISPATCH_RULES, [
+    #atm_time_series_dispatch_rule{
+        measurement_ts_name_matcher_type = has_prefix,
+        measurement_ts_name_matcher = <<"count_">>,
+        target_ts_name_generator = ?COUNT_TS_NAME_GENERATOR,
+        prefix_combiner = converge
+    },
+    #atm_time_series_dispatch_rule{
+        measurement_ts_name_matcher_type = exact,
+        measurement_ts_name_matcher = <<"size">>,
+        target_ts_name_generator = ?MAX_FILE_SIZE_TS_NAME,
+        prefix_combiner = overwrite
+    }
+]).
+-define(ANY_MEASUREMENT_DATA_SPEC, #atm_data_spec{
+    type = atm_time_series_measurement_type,
+    value_constraints = #{specs => [#atm_time_series_measurement_spec{
+        name_matcher_type = has_prefix,
+        name_matcher = <<>>,
+        unit = none
+    }]}
+}).
+
 -define(ECHO_TASK_SCHEMA_DRAFT(__RESULT_MAPPERS), #atm_task_schema_draft{
     lambda_id = ?ECHO_LAMBDA_ID,
     lambda_revision_number = ?ECHO_LAMBDA_REVISION_NUM,
     argument_mappings = [?ITERATED_ITEM_ARG_MAPPER(?ECHO_ARG_NAME)],
-    result_mappings = __RESULT_MAPPERS
+    result_mappings = __RESULT_MAPPERS,
+    time_series_store_config = ?ATM_TIME_SERIES_STORE_CONFIG
 }).
 
 -define(RESULT_MAPPING_WORKFLOW_SCHEMA_DRAFT(
@@ -83,33 +112,6 @@
         }}
     }
 ).
-
--define(ATM_TIME_SERIES_STORE_CONFIG, #atm_time_series_store_config{schemas = [
-    ?MAX_FILE_SIZE_TS_SCHEMA,
-    ?COUNT_TS_SCHEMA
-]}).
--define(ATM_TIME_SERIES_DISPATCH_RULES, [
-    #atm_time_series_dispatch_rule{
-        measurement_ts_name_matcher_type = has_prefix,
-        measurement_ts_name_matcher = <<"count_">>,
-        target_ts_name_generator = ?COUNT_TS_NAME_GENERATOR,
-        prefix_combiner = converge
-    },
-    #atm_time_series_dispatch_rule{
-        measurement_ts_name_matcher_type = exact,
-        measurement_ts_name_matcher = <<"size">>,
-        target_ts_name_generator = ?MAX_FILE_SIZE_TS_NAME,
-        prefix_combiner = overwrite
-    }
-]).
--define(ANY_MEASUREMENT_DATA_SPEC, #atm_data_spec{
-    type = atm_time_series_measurement_type,
-    value_constraints = #{specs => [#atm_time_series_measurement_spec{
-        name_matcher_type = has_prefix,
-        name_matcher = <<>>,
-        unit = none
-    }]}
-}).
 
 
 -define(NOW(), global_clock:timestamp_seconds()).
@@ -216,13 +218,7 @@ map_results_to_single_value_store_test() ->
 
 map_results_to_time_series_store_test() ->
     IteratedItemDataSpec = ?ANY_MEASUREMENT_DATA_SPEC,
-    IteratedItems = lists_utils:generate(fun(_) ->
-        #{
-            <<"tsName">> => ?RAND_ELEMENT([<<"count_erl">>, <<"size">>, ?RAND_STR()]),
-            <<"timestamp">> => ?RAND_ELEMENT([?NOW() - 100, ?NOW(), ?NOW() + 3700]),
-            <<"value">> => ?RAND_INT(10000000)
-        }
-    end, 100),
+    IteratedItems = gen_random_time_series_measurements(),
     SrcStoreSchemaDraft = ?SRC_LIST_STORE_SCHEMA_DRAFT(IteratedItemDataSpec, IteratedItems),
 
     DstStoreSchemaId = <<"dst_st">>,
@@ -301,6 +297,21 @@ map_results_to_task_audit_log_store_test() ->
     ).
 
 
+map_results_to_task_time_series_store_test() ->
+    IteratedItemDataSpec = ?ANY_MEASUREMENT_DATA_SPEC,
+    IteratedItems = gen_random_time_series_measurements(),
+    SrcStoreSchemaDraft = ?SRC_LIST_STORE_SCHEMA_DRAFT(IteratedItemDataSpec, IteratedItems),
+
+    map_results_to_dst_store_test_base(
+        [SrcStoreSchemaDraft],
+        IteratedItemDataSpec,
+        IteratedItems,
+        ?CURRENT_TASK_TIME_SERIES_STORE_SCHEMA_ID,
+        time_series,
+        #atm_time_series_store_content_update_options{dispatch_rules = ?ATM_TIME_SERIES_DISPATCH_RULES}
+    ).
+
+
 %% @private
 map_results_to_dst_store_test_base(
     StoreSchemaDrafts,
@@ -355,6 +366,18 @@ gen_random_object_list() ->
         fun() -> #{?RAND_STR() => ?RAND_STR()} end,
         ?RAND_INT(30, 50)
     ).
+
+
+%% @private
+-spec gen_random_time_series_measurements() -> [json_utils:json_map()].
+gen_random_time_series_measurements() ->
+    lists_utils:generate(fun(_) ->
+        #{
+            <<"tsName">> => ?RAND_ELEMENT([<<"count_erl">>, <<"size">>, ?RAND_STR()]),
+            <<"timestamp">> => ?RAND_ELEMENT([?NOW() - 100, ?NOW(), ?NOW() + 3700]),
+            <<"value">> => ?RAND_INT(10000000)
+        }
+    end, 100).
 
 
 %% @private
