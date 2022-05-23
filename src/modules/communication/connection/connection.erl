@@ -256,9 +256,7 @@ rebuild_rib(Pid) ->
 
 -spec is_provider_connected(oneprovider:id()) -> boolean().
 is_provider_connected(ProviderId) ->
-    {ok, SessionDocs} = session:list(),
-    SessionIds = [D#document.key || D <- SessionDocs],
-    lists:member(session_utils:get_provider_session_id(incoming, ProviderId), SessionIds).
+    session:exists(session_utils:get_provider_session_id(outgoing, ProviderId)).
 
 
 %%%===================================================================

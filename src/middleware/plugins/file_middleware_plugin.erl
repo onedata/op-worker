@@ -1328,6 +1328,7 @@ choose_provider_storing_time_series_data(_SpaceId, _TimeSeriesName) ->
 merge_ts_browse_results(#time_series_layout_result{layout = L1}, #time_series_layout_result{layout = L2}) ->
     #time_series_layout_result{layout = maps:merge(L1, L2)};
 merge_ts_browse_results(#time_series_slice_result{slice = S1}, #time_series_slice_result{slice = S2}) ->
+    %% @TODO VFS-9435 - come up with a consistent way of handling disabled stats collecting on some providers
     #time_series_slice_result{slice = maps:merge(S1, S2)}.
 
 

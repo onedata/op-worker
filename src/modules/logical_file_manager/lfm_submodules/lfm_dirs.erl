@@ -202,22 +202,17 @@ browse_dir_stats(SessId, FileKey, ProviderId, BrowseRequest) ->
             R;
         {false, true} ->
             % Provider is always allowed to read dir statistics of other providers.
+            %% @TODO VFS-9435 - let fslogic_worker handle routing between providers
             fslogic_remote:route(user_ctx:new(?ROOT_SESS_ID), ProviderId, Req);
         {false, false} ->
-            ?ERROR_NO_CONNECTION_TO_PEER_ONEPROVIDER
+            {error, ?EAGAIN}
     end,
     
     case Res of
         #provider_response{status = #status{code = ?OK}, provider_response = #dir_stats_result{result = Result}} ->
             {ok, Result};
-        #provider_response{status = #status{code = Error, description = undefined}} ->
-            ?ERROR_POSIX(Error);
-        #provider_response{status = #status{code = Error, description = Description}} ->
-            try
-                errors:from_json(json_utils:decode(Description))
-            catch _:_ ->
-                ?ERROR_POSIX(Error)
-            end;
+        #provider_response{status = #status{code = Error}} ->
+            {error, Error};
         {error, _} = Error ->
             Error
     end.

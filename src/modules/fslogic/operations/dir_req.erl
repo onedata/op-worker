@@ -158,17 +158,11 @@ browse_stats(_UserCtx, FileCtx, BrowseRequest) ->
     case dir_size_stats:browse_time_stats_collection(Guid, BrowseRequest) of
         {ok, BrowseResult} ->
             ?PROVIDER_OK_RESP(#dir_stats_result{result = BrowseResult});
-        ?ERROR_DIR_STATS_DISABLED_FOR_SPACE = Error ->
-            %% TODO VFS-7208 pass errors after introducing API errors tofslogic
-            #provider_response{status = #status{
-                code = ?ENOTSUP, 
-                description = jiffy:encode(errors:to_json(Error))}
-            };
-        ?ERROR_DIR_STATS_NOT_READY = Error ->
-            #provider_response{status = #status{
-                code = ?EBUSY, 
-                description = jiffy:encode(errors:to_json(Error))}
-            }
+        ?ERROR_DIR_STATS_DISABLED_FOR_SPACE ->
+            %% TODO VFS-7208 pass errors after introducing API errors to fslogic
+            #provider_response{status = #status{code = ?ENOTSUP}};
+        ?ERROR_DIR_STATS_NOT_READY ->
+            #provider_response{status = #status{code = ?EBUSY}}
     end.
 
 
