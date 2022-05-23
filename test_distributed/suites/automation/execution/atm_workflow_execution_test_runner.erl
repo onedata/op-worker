@@ -1178,5 +1178,9 @@ build_browse_opts(single_value) ->
 
 build_browse_opts(time_series) ->
     #atm_time_series_store_content_browse_options{
-        request = #atm_time_series_store_content_get_layout_req{}
+        request = #atm_time_series_store_content_get_slice_req{
+            layout = #{?ALL_TIME_SERIES => [?ALL_METRICS]},
+            start_timestamp = undefined,
+            window_limit = 10000000000000000000000000000000000000000000000000000
+        }
     }.

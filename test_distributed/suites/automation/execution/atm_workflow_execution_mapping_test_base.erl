@@ -7,6 +7,9 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Bases for tests of mapping task arguments and results.
+%%% NOTE: stores have dedicated test suites and as such only basic mapping
+%%% cases are tested here (test cases check overall integration between
+%%% various components rather than concrete one).
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_workflow_execution_mapping_test_base).
@@ -14,18 +17,19 @@
 
 -include("atm_workflow_execution_test.hrl").
 -include("atm/atm_test_schema_drafts.hrl").
+-include("atm/atm_test_store.hrl").
 -include("modules/automation/atm_execution.hrl").
 
 -export([
-    map_results_to_workflow_audit_log_store_test/0,
-    map_results_to_task_audit_log_store_test/0,
-
     map_results_to_audit_log_store_test/0,
     map_results_to_list_store_test/0,
     map_results_to_range_store_test/0,
     map_results_to_single_value_store_test/0,
     map_results_to_time_series_store_test/0,
-    map_results_to_tree_forest_store_test/0
+    map_results_to_tree_forest_store_test/0,
+
+    map_results_to_workflow_audit_log_store_test/0,
+    map_results_to_task_audit_log_store_test/0
 ]).
 
 
@@ -72,40 +76,40 @@
     }
 ).
 
+-define(ATM_TIME_SERIES_STORE_CONFIG, #atm_time_series_store_config{schemas = [
+    ?MAX_FILE_SIZE_TS_SCHEMA,
+    ?COUNT_TS_SCHEMA
+]}).
+-define(ATM_TIME_SERIES_DISPATCH_RULES, [
+    #atm_time_series_dispatch_rule{
+        measurement_ts_name_matcher_type = has_prefix,
+        measurement_ts_name_matcher = <<"count_">>,
+        target_ts_name_generator = ?COUNT_TS_NAME_GENERATOR,
+        prefix_combiner = converge
+    },
+    #atm_time_series_dispatch_rule{
+        measurement_ts_name_matcher_type = exact,
+        measurement_ts_name_matcher = <<"size">>,
+        target_ts_name_generator = ?MAX_FILE_SIZE_TS_NAME,
+        prefix_combiner = overwrite
+    }
+]).
+-define(ANY_MEASUREMENT_DATA_SPEC, #atm_data_spec{
+    type = atm_time_series_measurement_type,
+    value_constraints = #{specs => [#atm_time_series_measurement_spec{
+        name_matcher_type = has_prefix,
+        name_matcher = <<>>,
+        unit = none
+    }]}
+}).
+
+
+-define(NOW(), global_clock:timestamp_seconds()).
+
 
 %%%===================================================================
 %%% Tests
 %%%===================================================================
-
-
-map_results_to_workflow_audit_log_store_test() ->
-    IteratedItemDataSpec = #atm_data_spec{type = atm_object_type},
-    IteratedItems = gen_random_object_list(),
-    SrcStoreSchemaDraft = ?SRC_LIST_STORE_SCHEMA_DRAFT(IteratedItemDataSpec, IteratedItems),
-
-    map_results_to_dst_store_test_base(
-        [SrcStoreSchemaDraft],
-        IteratedItemDataSpec,
-        IteratedItems,
-        ?WORKFLOW_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID,
-        audit_log,
-        #atm_audit_log_store_content_update_options{function = append}
-    ).
-
-
-map_results_to_task_audit_log_store_test() ->
-    IteratedItemDataSpec = #atm_data_spec{type = atm_object_type},
-    IteratedItems = gen_random_object_list(),
-    SrcStoreSchemaDraft = ?SRC_LIST_STORE_SCHEMA_DRAFT(IteratedItemDataSpec, IteratedItems),
-
-    map_results_to_dst_store_test_base(
-        [SrcStoreSchemaDraft],
-        IteratedItemDataSpec,
-        IteratedItems,
-        ?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID,
-        audit_log,
-        #atm_audit_log_store_content_update_options{function = append}
-    ).
 
 
 map_results_to_audit_log_store_test() ->
@@ -203,23 +207,21 @@ map_results_to_single_value_store_test() ->
 
 
 map_results_to_time_series_store_test() ->
-    %% TODO
-    IteratedItemDataSpec = #atm_data_spec{type = atm_file_type},
-
-    FileObjects = onenv_file_test_utils:create_and_sync_file_tree(
-        user1, ?SPACE_SELECTOR, lists_utils:generate(fun() -> #file_spec{} end, 30)
-    ),
-    IteratedItems = lists:map(fun(#object{guid = Guid}) ->
-        {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-        #{<<"file_id">> => ObjectId}
-    end, FileObjects),
+    IteratedItemDataSpec = ?ANY_MEASUREMENT_DATA_SPEC,
+    IteratedItems = lists_utils:generate(fun(_) ->
+        #{
+            <<"tsName">> => ?RAND_ELEMENT([<<"count_erl">>, <<"size">>, ?RAND_STR()]),
+            <<"timestamp">> => ?RAND_ELEMENT([?NOW() - 100, ?NOW(), ?NOW() + 3700]),
+            <<"value">> => ?RAND_INT(10000000)
+        }
+    end, 100),
     SrcStoreSchemaDraft = ?SRC_LIST_STORE_SCHEMA_DRAFT(IteratedItemDataSpec, IteratedItems),
 
     DstStoreSchemaId = <<"dst_st">>,
     DstStoreSchemaDraft = #atm_store_schema_draft{
         id = DstStoreSchemaId,
-        type = tree_forest,
-        config = #atm_tree_forest_store_config{item_data_spec = #atm_data_spec{type = atm_file_type}}
+        type = time_series,
+        config = ?ATM_TIME_SERIES_STORE_CONFIG
     },
 
     map_results_to_dst_store_test_base(
@@ -227,8 +229,8 @@ map_results_to_time_series_store_test() ->
         IteratedItemDataSpec,
         IteratedItems,
         DstStoreSchemaId,
-        tree_forest,
-        #atm_tree_forest_store_content_update_options{function = append}
+        time_series,
+        #atm_time_series_store_content_update_options{dispatch_rules = ?ATM_TIME_SERIES_DISPATCH_RULES}
     ).
 
 
@@ -258,6 +260,36 @@ map_results_to_tree_forest_store_test() ->
         DstStoreSchemaId,
         tree_forest,
         #atm_tree_forest_store_content_update_options{function = append}
+    ).
+
+
+map_results_to_workflow_audit_log_store_test() ->
+    IteratedItemDataSpec = #atm_data_spec{type = atm_object_type},
+    IteratedItems = gen_random_object_list(),
+    SrcStoreSchemaDraft = ?SRC_LIST_STORE_SCHEMA_DRAFT(IteratedItemDataSpec, IteratedItems),
+
+    map_results_to_dst_store_test_base(
+        [SrcStoreSchemaDraft],
+        IteratedItemDataSpec,
+        IteratedItems,
+        ?WORKFLOW_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID,
+        audit_log,
+        #atm_audit_log_store_content_update_options{function = append}
+    ).
+
+
+map_results_to_task_audit_log_store_test() ->
+    IteratedItemDataSpec = #atm_data_spec{type = atm_object_type},
+    IteratedItems = gen_random_object_list(),
+    SrcStoreSchemaDraft = ?SRC_LIST_STORE_SCHEMA_DRAFT(IteratedItemDataSpec, IteratedItems),
+
+    map_results_to_dst_store_test_base(
+        [SrcStoreSchemaDraft],
+        IteratedItemDataSpec,
+        IteratedItems,
+        ?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID,
+        audit_log,
+        #atm_audit_log_store_content_update_options{function = append}
     ).
 
 
@@ -352,9 +384,48 @@ assert_exp_dst_store_content(single_value, SrcListStoreContent, #{
 }) ->
     ?assert(lists:member(Value, SrcListStoreContent));
 
-assert_exp_dst_store_content(time_series, ExpLayout, #{<<"layout">> := Layout}) ->
-    %% TODO
-    ok;
+assert_exp_dst_store_content(time_series, SrcListStoreContent, #{<<"slice">> := Slice}) ->
+    ExpSlice = lists:foldl(fun
+        (#{
+            <<"tsName">> := <<"count_erl">>,
+            <<"timestamp">> := Timestamp,
+            <<"value">> := Value
+        }, Acc) ->
+            WindowsAcc = maps:get(<<"count_erl">>, Acc, #{}),
+
+            Acc#{<<"count_erl">> => #{
+                <<"minute">> => sum_windows(
+                    ?MINUTE_METRIC_WINDOW(Timestamp, Value),
+                    maps:get(<<"minute">>, WindowsAcc, [])
+                ),
+                <<"hour">> => sum_windows(
+                    ?HOUR_METRIC_WINDOW(Timestamp, Value),
+                    maps:get(<<"hour">>, WindowsAcc, [])
+                ),
+                <<"day">> => sum_windows(
+                    ?DAY_METRIC_WINDOW(Timestamp, Value),
+                    maps:get(<<"day">>, WindowsAcc, [])
+                )
+            }};
+
+        (#{
+            <<"tsName">> := <<"size">>,
+            <<"timestamp">> := Timestamp,
+            <<"value">> := Value
+        }, Acc) ->
+            WindowsAcc = maps:get(?MAX_FILE_SIZE_TS_NAME, Acc, #{}),
+
+            Acc#{?MAX_FILE_SIZE_TS_NAME => #{?MAX_FILE_SIZE_TS_NAME => max_window(
+                ?MAX_FILE_SIZE_METRIC_WINDOW(Timestamp, Value),
+                maps:get(?MAX_FILE_SIZE_TS_NAME, WindowsAcc, [])
+            )}};
+
+        (_, Acc) ->
+            % other measurements should be ignored as they are not mapped to any ts
+            Acc
+    end, #{}, SrcListStoreContent),
+
+    ?assertEqual(ExpSlice, Slice);
 
 assert_exp_dst_store_content(tree_forest, SrcListStoreContent, #{
     <<"treeRoots">> := TreeRoots,
@@ -372,3 +443,41 @@ assert_exp_dst_store_content(tree_forest, SrcListStoreContent, #{
     json_utils:json_map().
 extract_value_from_infinite_log_entry(Entries) ->
     lists:map(fun(#{<<"value">> := Value}) -> Value end, Entries).
+
+
+%% @private
+-spec sum_windows(json_utils:json_map(), [json_utils:json_map()]) ->
+    [json_utils:json_map()].
+sum_windows(Window, []) ->
+    [Window];
+
+sum_windows(
+    #{<<"value">> := Value1, <<"timestamp">> := Timestamp},
+    [#{<<"value">> := Value2, <<"timestamp">> := Timestamp} | Tail]
+) ->
+    [#{<<"value">> => Value1 + Value2, <<"timestamp">> => Timestamp} | Tail];
+
+sum_windows(
+    Window = #{<<"timestamp">> := Timestamp1},
+    [Head = #{<<"timestamp">> := Timestamp2} | Tail]
+) when Timestamp2 > Timestamp1 ->
+    [Head | sum_windows(Window, Tail)];
+
+sum_windows(
+    Window = #{<<"timestamp">> := Timestamp1},
+    Windows = [#{<<"timestamp">> := Timestamp2} | _]
+) when Timestamp2 < Timestamp1 ->
+    [Window | Windows].
+
+
+%% @private
+-spec max_window(json_utils:json_map(), [json_utils:json_map()]) ->
+    [json_utils:json_map()].
+max_window(
+    #{<<"value">> := Value1, <<"timestamp">> := Timestamp},
+    [CurrentWindow = #{<<"value">> := Value2, <<"timestamp">> := Timestamp}]
+) when Value1 =< Value2 ->
+    [CurrentWindow];
+
+max_window(NewWindow, _) ->
+    [NewWindow].
