@@ -364,7 +364,7 @@ build_handle_task_execution_ended_mock_spec_for_skipped_tasks() ->
             workflow_execution_exp_state = ExpState0,
             call_args = [_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId]
         }) ->
-            % No job was ever executed so lane run transition to active status only now
+            % No job was ever executed so lane run transitions to active status just now
             ExpState1 = atm_workflow_execution_exp_state_builder:expect_task_lane_run_transitioned_to_active_status_if_was_in_enqueued_status(
                 AtmTaskExecutionId, atm_workflow_execution_exp_state_builder:expect_task_skipped(
                     AtmTaskExecutionId, ExpState0
