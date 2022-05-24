@@ -178,7 +178,7 @@ iterate_over_range_store_test() ->
             incarnation_num = 1,
             lane_runs = [#atm_lane_run_execution_test_spec{
                 selector = {1, 1},
-                process_item = #atm_step_mock_spec{
+                run_task_for_item = #atm_step_mock_spec{
                     before_step_hook = build_validate_iterated_item_batches_fun(?FUNCTION_NAME)
                 }
             }]
@@ -321,7 +321,7 @@ iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(#iterate_
                         end, FilesToRemove)
                     end
                 },
-                process_item = #atm_step_mock_spec{
+                run_task_for_item = #atm_step_mock_spec{
                     before_step_hook = build_validate_iterated_item_batches_fun(
                         TestCaseMarker,
                         fun filter_out_everything_but_file_id_from_atm_file_value/1

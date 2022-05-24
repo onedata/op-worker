@@ -256,7 +256,7 @@ cancel_active_atm_workflow_execution_test() ->
                     prepare_lane = #atm_step_mock_spec{
                         defer_after = {prepare_lane, after_step, {2, 1}}
                     },
-                    process_item = #atm_step_mock_spec{
+                    run_task_for_item = #atm_step_mock_spec{
                         before_step_hook = fun(AtmMockCallCtx) ->
                             atm_workflow_execution_test_runner:cancel_workflow_execution(AtmMockCallCtx)
                         end,

@@ -145,7 +145,10 @@ mock_create(Workers) ->
 %% @private
 -spec mock_initiate([node()]) -> ok.
 mock_initiate(Workers) ->
-    MockFun = fun(AtmWorkflowExecutionCtx, _AtmTaskSchema, _AtmLambdaRevision, AtmTaskExecutor) ->
+    MockFun = fun(#atm_task_executor_initiation_ctx{
+        workflow_execution_ctx = AtmWorkflowExecutionCtx,
+        uncorrelated_results = AtmTaskExecutionUncorrelatedResultNames
+    }, AtmTaskExecutor) ->
         AtmWorkflowExecutionId = atm_workflow_execution_ctx:get_workflow_execution_id(
             AtmWorkflowExecutionCtx
         ),
@@ -156,7 +159,10 @@ mock_initiate(Workers) ->
             success
         ) of
             success ->
-                #{type => async};
+                #{
+                    type => async,
+                    data_stream_enabled => not lists_utils:is_empty(AtmTaskExecutionUncorrelatedResultNames)
+                };
             failure ->
                 throw(?ERROR_ATM_OPENFAAS_FUNCTION_REGISTRATION_FAILED)
         end

@@ -40,6 +40,7 @@
     handle_task_execution_ended/3,
 
     report_item_error/3,
+
     handle_lane_execution_ended/3,
 
     handle_workflow_execution_ended/2

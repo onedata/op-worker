@@ -56,8 +56,8 @@
     prepare_lane = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
     create_run = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
 
-    process_item = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
-    process_result = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
+    run_task_for_item = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
+    process_task_result_for_item = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
     report_item_error = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
 
     handle_task_execution_ended = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
