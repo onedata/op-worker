@@ -75,44 +75,11 @@ websocket_init(_) ->
     {reply, OutFrame | [OutFrame], State} |
     {reply, OutFrame | [OutFrame], State, hibernate} |
     {stop, State} when
-    InFrame :: {text | binary | ping | pong, binary()} | {parsed_report, atm_openfaas_activity_report:record()},
+    InFrame :: {text | binary | ping | pong, binary()},
     State :: state(),
     OutFrame :: cow_ws:frame().
-websocket_handle({text, Payload}, #state{handler_state = HandlerState} = State) ->
-    try
-        ActivityReport = jsonable_record:from_json(json_utils:decode(Payload), atm_openfaas_activity_report),
-        websocket_handle({parsed_report, ActivityReport}, State)
-    catch Class:Reason:Stacktrace ->
-        TrimmedPayload = case byte_size(Payload) > ?MAX_LOGGED_REQUEST_SIZE of
-            true ->
-                binary:part(Payload, 0, ?MAX_LOGGED_REQUEST_SIZE);
-            false ->
-                Payload
-        end,
-        ?error_stacktrace(
-            "Error when parsing an openfaas activity report - ~w:~p~n"
-            "Request payload: ~ts",
-            [Class, Reason, TrimmedPayload],
-            Stacktrace
-        ),
-        atm_openfaas_activity_report:handle_reporting_error(HandlerState, ?ERROR_BAD_MESSAGE(TrimmedPayload)),
-        {reply, {text, <<"Bad request: ", Payload/binary>>}, State}
-    end;
-
-websocket_handle({parsed_report, ActivityReport}, #state{connection_ref = ConnRef, handler_state = HandlerState} = State) ->
-    try
-        NewHandlerState = atm_openfaas_activity_report:consume(ConnRef, HandlerState, ActivityReport),
-        {ok, State#state{handler_state = NewHandlerState}}
-    catch Class:Reason:Stacktrace ->
-        ?error_stacktrace(
-            "Unexpected error when processing an openfaas activity report - ~w:~p~n"
-            "Activity report: ~tp",
-            [Class, Reason, ActivityReport],
-            Stacktrace
-        ),
-        atm_openfaas_activity_report:handle_reporting_error(HandlerState, ?ERROR_INTERNAL_SERVER_ERROR),
-        {reply, {text, <<"Internal server error while processing the request">>}, State}
-    end;
+websocket_handle({text, Payload}, State) ->
+    handle_text_message(Payload, State);
 
 websocket_handle(ping, State) ->
     {ok, State};
@@ -191,4 +158,48 @@ is_authorized(Req) ->
                 ], Stacktrace),
                 false
             end
+    end.
+
+
+%% @private
+-spec handle_text_message(binary(), state()) ->
+    {ok, state()} | {reply, {text, binary()}, state()}.
+handle_text_message(Payload, #state{handler_state = HandlerState} = State) ->
+    try
+        ActivityReport = jsonable_record:from_json(json_utils:decode(Payload), atm_openfaas_activity_report),
+        handle_activity_report(ActivityReport, State)
+    catch Class:Reason:Stacktrace ->
+        TrimmedPayload = case byte_size(Payload) > ?MAX_LOGGED_REQUEST_SIZE of
+            true ->
+                binary:part(Payload, 0, ?MAX_LOGGED_REQUEST_SIZE);
+            false ->
+                Payload
+        end,
+        ?error_stacktrace(
+            "Error when parsing an openfaas activity report - ~w:~p~n"
+            "Request payload: ~ts",
+            [Class, Reason, TrimmedPayload],
+            Stacktrace
+        ),
+        atm_openfaas_activity_report:handle_reporting_error(HandlerState, ?ERROR_BAD_MESSAGE(TrimmedPayload)),
+        {reply, {text, <<"Bad request: ", Payload/binary>>}, State}
+    end.
+
+
+%% @private
+-spec handle_activity_report(atm_openfaas_activity_report:record(), state()) ->
+    {ok, state()} | {reply, {text, binary()}, state()}.
+handle_activity_report(ActivityReport, #state{connection_ref = ConnRef, handler_state = HandlerState} = State) ->
+    try
+        NewHandlerState = atm_openfaas_activity_report:consume(ConnRef, HandlerState, ActivityReport),
+        {ok, State#state{handler_state = NewHandlerState}}
+    catch Class:Reason:Stacktrace ->
+        ?error_stacktrace(
+            "Unexpected error when processing an openfaas activity report - ~w:~p~n"
+            "Activity report: ~tp",
+            [Class, Reason, ActivityReport],
+            Stacktrace
+        ),
+        atm_openfaas_activity_report:handle_reporting_error(HandlerState, ?ERROR_INTERNAL_SERVER_ERROR),
+        {reply, {text, <<"Internal server error while processing the request">>}, State}
     end.

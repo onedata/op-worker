@@ -16,6 +16,7 @@
 
 -include("http/gui_paths.hrl").
 -include("modules/automation/atm_execution.hrl").
+-include("onenv_test_utils.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/http/codes.hrl").
@@ -89,6 +90,10 @@ all() -> [
 -define(await(Term), ?assert(Term, ?ATTEMPTS)).
 -define(awaitLong(Term), ?assert(Term, 120)).
 
+-define(PROVIDER_SELECTOR, krakow).
+-define(rpc(Expr), ?rpc(?PROVIDER_SELECTOR, Expr)).
+-define(erpc(Expr), ?erpc(?PROVIDER_SELECTOR, Expr)).
+
 -define(STREAM_CHUNK_ALPHA, #{<<"a">> => [1, 2, 3], <<"b">> => [<<"a">>, <<"b">>, <<"c">>]}).
 -define(STREAM_CHUNK_BETA, #{<<"c">> => [9, 8, 7], <<"d">> => [<<"x">>, <<"y">>, <<"z">>]}).
 
@@ -102,19 +107,19 @@ all() -> [
 connectivity_test(_Config) ->
     InvalidSecret = str_utils:rand_hex(10),
 
-    opw_test_rpc:set_env(krakow, openfaas_activity_feed_secret, undefined),
+    opw_test_rpc:set_env(?PROVIDER_SELECTOR, openfaas_activity_feed_secret, undefined),
     ?assertMatch({error, unauthorized}, try_connect(undefined)),
     ?assertMatch({error, unauthorized}, try_connect(<<"not-a-base-64">>)),
     ?assertMatch({error, unauthorized}, try_connect(base64:encode(InvalidSecret))),
     ?assertMatch({error, unauthorized}, try_connect(base64:encode(?CORRECT_SECRET))),
 
-    opw_test_rpc:set_env(krakow, openfaas_activity_feed_secret, ?CORRECT_SECRET),
+    opw_test_rpc:set_env(?PROVIDER_SELECTOR, openfaas_activity_feed_secret, ?CORRECT_SECRET),
     ?assertMatch({error, unauthorized}, try_connect(undefined)),
     ?assertMatch({error, unauthorized}, try_connect(<<"not-a-base-64">>)),
     ?assertMatch({error, unauthorized}, try_connect(base64:encode(InvalidSecret))),
     ?assertMatch({ok, _}, try_connect(base64:encode(?CORRECT_SECRET))),
 
-    opw_test_rpc:set_env(krakow, openfaas_activity_feed_secret, binary_to_list(?CORRECT_SECRET)),
+    opw_test_rpc:set_env(?PROVIDER_SELECTOR, openfaas_activity_feed_secret, binary_to_list(?CORRECT_SECRET)),
     ?assertMatch({ok, _}, try_connect(base64:encode(?CORRECT_SECRET))).
 
 
@@ -156,9 +161,10 @@ function_pod_status_lifecycle_test(_Config) ->
     atm_openfaas_function_pod_status_registry:foreach_summary(fun(_PodId, #atm_openfaas_function_pod_status_summary{
         event_log = PodEventLogId
     }) ->
-        ?assertEqual({error, not_found}, opw_test_rpc:call(
-            krakow, atm_openfaas_function_activity_registry, browse_pod_event_log, [PodEventLogId, #{}]
-        ))
+        ?assertEqual(
+            {error, not_found},
+            ?rpc(atm_openfaas_function_activity_registry:browse_pod_event_log(PodEventLogId, #{}))
+        )
     end, PodStatusRegistry).
 
 
@@ -475,7 +481,7 @@ try_connect(SecretB64) ->
         undefined -> [];
         _ -> [{?HDR_AUTHORIZATION, <<"Basic ", SecretB64/binary>>}]
     end,
-    test_websocket_client:start(krakow, ?OPENFAAS_ACTIVITY_FEED_WS_PATH, Headers, fun handle_push_message/2).
+    test_websocket_client:start(?PROVIDER_SELECTOR, ?OPENFAAS_ACTIVITY_FEED_WS_PATH, Headers, fun handle_push_message/2).
 
 
 %% @private
@@ -520,21 +526,21 @@ handle_push_message(ClientRef, Payload) ->
 -spec create_activity_registry(atm_openfaas_task_executor:function_name()) ->
     {ok, atm_openfaas_function_activity_registry:id()} | {error, term()}.
 create_activity_registry(FunctionName) ->
-    opw_test_rpc:call(krakow, atm_openfaas_function_activity_registry, ensure_for_function, [FunctionName]).
+    ?rpc(atm_openfaas_function_activity_registry:ensure_for_function(FunctionName)).
 
 
 %% @private
 -spec get_activity_registry(atm_openfaas_function_activity_registry:id()) ->
     {ok, atm_openfaas_function_activity_registry:record()} | {error, term()}.
 get_activity_registry(RegistryId) ->
-    opw_test_rpc:call(krakow, atm_openfaas_function_activity_registry, get, [RegistryId]).
+    ?rpc(atm_openfaas_function_activity_registry:get(RegistryId)).
 
 
 %% @private
 -spec delete_activity_registry(atm_openfaas_function_activity_registry:id()) ->
     ok | {error, term()}.
 delete_activity_registry(RegistryId) ->
-    opw_test_rpc:call(krakow, atm_openfaas_function_activity_registry, delete, [RegistryId]).
+    ?rpc(atm_openfaas_function_activity_registry:delete(RegistryId)).
 
 
 -spec submit_pod_status_reports(test_websocket_client:client(), [atm_openfaas_function_pod_status_report:record()]) -> ok.
@@ -620,9 +626,9 @@ verify_recorded_pod_status_changes(RegistryId, SubmittedReports) ->
                 <<"logEntries">> => lists:reverse(ExpectedReversedPodEventLogs),
                 <<"isLast">> => true
             }},
-            opw_test_rpc:call(krakow, atm_openfaas_function_activity_registry, browse_pod_event_log, [
+            ?rpc(atm_openfaas_function_activity_registry:browse_pod_event_log(
                 PodEventLogId, #{direction => ?FORWARD, limit => 1000}
-            ]),
+            )),
             ?ATTEMPTS
         )
     end, ExpectedReversedPodEventLogsByPod).
@@ -734,27 +740,31 @@ send_result_streamer_deregistration_report(Client) ->
 -spec trigger_result_stream_conclusion(atm_workflow_execution:id(), atm_task_execution:id()) ->
     ok.
 trigger_result_stream_conclusion(WorkflowExecutionId, TaskExecutionId) ->
-    opw_test_rpc:call(krakow, atm_openfaas_result_stream_handler, trigger_conclusion, [
-        WorkflowExecutionId, TaskExecutionId
-    ]).
+    ?rpc(atm_openfaas_result_stream_handler:trigger_conclusion(WorkflowExecutionId, TaskExecutionId)).
 
 
 %% @private
 -spec compare_result_streamer_registry(
     atm_workflow_execution:id(),
     atm_task_execution:id(),
-    [atm_openfaas_result_streamer_registry:result_streamer_id()]
+    [atm_openfaas_result_streamer_registry:result_streamer_id()] | errors:error()
 ) ->
     boolean().
-compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, ExpectedRegisteredStreamerIdsOrError) ->
+compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, ExpError = {error, _}) ->
     try
-        AllSteamerIds = opw_test_rpc:insecure_call(krakow, atm_openfaas_result_streamer_registry, get_all, [
-            WorkflowExecutionId, TaskExecutionId
-        ]),
-        lists:sort(ExpectedRegisteredStreamerIdsOrError) =:= lists:sort(AllSteamerIds)
+        ?erpc(atm_openfaas_result_streamer_registry:get_all(WorkflowExecutionId, TaskExecutionId)),
+        false
     catch
-        error:{exception, {badmatch, ExpectedRegisteredStreamerIdsOrError}, _} ->
+        error:{exception, {badmatch, ExpError}, _} ->
             true;
+        _:_ ->
+            false
+    end;
+compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, ExpectedRegisteredStreamerIds) ->
+    try
+        AllSteamerIds = ?erpc(atm_openfaas_result_streamer_registry:get_all(WorkflowExecutionId, TaskExecutionId)),
+        lists:sort(ExpectedRegisteredStreamerIds) =:= lists:sort(AllSteamerIds)
+    catch
         _:_:_ ->
             false
     end.
@@ -769,9 +779,9 @@ compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, ExpectedR
     boolean().
 compare_streamed_reports(WorkflowExecutionId, TaskExecutionId, ExpectedReports) ->
     try
-        CollectedReports = opw_test_rpc:insecure_call(krakow, node_cache, get, [
+        CollectedReports = ?erpc(node_cache:get(
             {stream_task_data_memory, WorkflowExecutionId, TaskExecutionId}, []
-        ]),
+        )),
         true = ExpectedReports =:= CollectedReports
     catch _:_:_ ->
         false
@@ -804,9 +814,9 @@ mocked_stream_task_data(WorkflowExecutionId, TaskExecutionId, TaskDataReport) ->
 -spec simulate_failure_of_next_report_processing(atm_workflow_execution:id(), atm_task_execution:id()) ->
     ok.
 simulate_failure_of_next_report_processing(WorkflowExecutionId, TaskExecutionId) ->
-    opw_test_rpc:call(krakow, node_cache, put, [
+    ?rpc(node_cache:put(
         {should_simulate_failure_of_next_report_processing, WorkflowExecutionId, TaskExecutionId}, true
-    ]).
+    )).
 
 
 %% @private
@@ -817,9 +827,9 @@ simulate_failure_of_next_report_processing(WorkflowExecutionId, TaskExecutionId)
 ) ->
     boolean().
 compare_result_stream_conclusion_status(WorkflowExecutionId, TaskExecutionId, ExpectedStatus) ->
-    ExpectedStatus =:= opw_test_rpc:insecure_call(krakow, node_cache, get, [
+    ExpectedStatus =:= ?rpc(node_cache:get(
         {result_stream_conclusion_status, WorkflowExecutionId, TaskExecutionId}, not_concluded
-    ]).
+    )).
 
 
 %% @private
@@ -874,7 +884,7 @@ end_per_suite(_Config) ->
 
 
 init_per_group(_Group, Config) ->
-    opw_test_rpc:set_env(krakow, openfaas_activity_feed_secret, ?CORRECT_SECRET),
+    opw_test_rpc:set_env(?PROVIDER_SELECTOR, openfaas_activity_feed_secret, ?CORRECT_SECRET),
     Workers = ?config(op_worker_nodes, Config),
     ok = test_utils:mock_new(Workers, [workflow_engine], [non_strict]), %@fixme change to strict during integration
     ok = test_utils:mock_expect(Workers, workflow_engine, stream_task_data, fun mocked_stream_task_data/3),
