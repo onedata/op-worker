@@ -941,6 +941,14 @@ unmock_workflow_execution_factory(Workers) ->
 mock_workflow_execution_handler_steps(Workers) ->
     test_utils:mock_new(Workers, atm_workflow_execution_handler, [passthrough, no_history]),
 
+    test_utils:mock_expect(Workers, atm_workflow_execution_handler, handle_task_results_processed_for_all_items, fun(
+        AtmWorkflowExecutionId,
+        _AtmWorkflowExecutionEnv,
+        AtmTaskExecutionId
+    ) ->
+        workflow_engine:report_task_data_streaming_concluded(AtmWorkflowExecutionId, AtmTaskExecutionId, success)
+    end),
+
     mock_workflow_execution_handler_step(Workers, prepare_lane, 3),
     mock_workflow_execution_handler_step(Workers, run_task_for_item, 6),
     mock_workflow_execution_handler_step(Workers, process_task_result_for_item, 5),

@@ -108,7 +108,10 @@
             }]
         },
         supplementary_lambdas = #{?ECHO_LAMBDA_ID => #{
-            ?ECHO_LAMBDA_REVISION_NUM => ?ECHO_LAMBDA_DRAFT(__ITERATED_ITEM_DATA_SPEC)
+            ?ECHO_LAMBDA_REVISION_NUM => ?ECHO_LAMBDA_DRAFT(
+                __ITERATED_ITEM_DATA_SPEC,
+                ?RAND_ELEMENT([return_value, file_pipe])
+            )
         }}
     }
 ).

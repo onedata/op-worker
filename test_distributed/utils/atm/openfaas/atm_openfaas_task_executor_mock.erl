@@ -24,6 +24,7 @@
 -include("onenv_test_utils.hrl").
 -include_lib("ctool/include/automation/automation.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 
 %% API
 -export([init/2, teardown/1]).
@@ -31,6 +32,7 @@
 
 
 -record(atm_openfaas_task_executor, {
+    node_cache_key :: binary(),
     workflow_execution_id :: atm_workflow_execution:id(),
     lane_index :: atm_lane_execution:index(),
     operation_spec :: atm_openfaas_operation_spec:record()
@@ -134,6 +136,7 @@ mock_create(Workers) ->
         ),
 
         #atm_openfaas_task_executor{
+            node_cache_key = ?RAND_STR(),
             workflow_execution_id = AtmWorkflowExecutionId,
             lane_index = AtmLaneIndex,
             operation_spec = AtmLambdaRevision#atm_lambda_revision.operation_spec
@@ -145,10 +148,20 @@ mock_create(Workers) ->
 %% @private
 -spec mock_initiate([node()]) -> ok.
 mock_initiate(Workers) ->
-    MockFun = fun(#atm_task_executor_initiation_ctx{
-        workflow_execution_ctx = AtmWorkflowExecutionCtx,
-        uncorrelated_results = AtmTaskExecutionUncorrelatedResultNames
-    }, AtmTaskExecutor) ->
+    MockFun = fun(
+        #atm_task_executor_initiation_ctx{
+            workflow_execution_ctx = AtmWorkflowExecutionCtx,
+            task_execution_id = AtmTaskExecutionId,
+            uncorrelated_results = AtmTaskExecutionUncorrelatedResultNames
+        },
+        AtmTaskExecutor
+    ) ->
+        save_task_execution_id(AtmTaskExecutionId, AtmTaskExecutor),
+        save_task_execution_uncorrelated_result_names(
+            AtmTaskExecutionUncorrelatedResultNames,
+            AtmTaskExecutor
+        ),
+
         AtmWorkflowExecutionId = atm_workflow_execution_ctx:get_workflow_execution_id(
             AtmWorkflowExecutionCtx
         ),
@@ -200,19 +213,30 @@ mock_is_in_readonly_mode(Workers) ->
 %% @private
 -spec mock_run([node()], module()) -> ok.
 mock_run(Workers, ModuleWithOpenfaasDockerMock) ->
-    MockFun = fun(AtmRunJobBatchCtx, Input, #atm_openfaas_task_executor{
+    MockFun = fun(AtmRunJobBatchCtx, Input, AtmTaskExecutor = #atm_openfaas_task_executor{
+        workflow_execution_id = AtmWorkflowExecutionId,
         operation_spec = #atm_openfaas_operation_spec{docker_image = DockerImage}
     }) ->
         spawn(fun() ->
-            Result = try
-                ModuleWithOpenfaasDockerMock:exec(DockerImage, Input)
+            AtmTaskExecutionId = get_task_execution_id(AtmTaskExecutor),
+            AtmTaskExecutionUncorrelatedResultNames = get_task_execution_uncorrelated_result_names(
+                AtmTaskExecutor
+            ),
+
+            Output = try
+                stream_task_data_if_any(
+                    AtmWorkflowExecutionId,
+                    AtmTaskExecutionId,
+                    AtmTaskExecutionUncorrelatedResultNames,
+                    ModuleWithOpenfaasDockerMock:exec(DockerImage, Input)
+                )
             catch Type:Reason:Stacktrace ->
                 errors:to_json(?atm_examine_error(Type, Reason, Stacktrace))
             end,
 
-            Response = case is_map(Result) of
-                true -> json_utils:encode(Result);
-                false -> Result
+            Response = case is_map(Output) of
+                true -> json_utils:encode(Output);
+                false -> Output
             end,
 
             CallbackUrl = atm_run_job_batch_ctx:get_forward_output_url(AtmRunJobBatchCtx),
@@ -222,6 +246,33 @@ mock_run(Workers, ModuleWithOpenfaasDockerMock) ->
         ok
     end,
     test_utils:mock_expect(Workers, ?MOCKED_MODULE, run, MockFun).
+
+
+%% @private
+-spec stream_task_data_if_any(
+    atm_workflow_execution:id(),
+    atm_task_execution:id(),
+    [automation:name()],
+    atm_task_executor:lambda_output()
+) ->
+    atm_task_executor:lambda_output().
+stream_task_data_if_any(_AtmWorkflowExecutionId, _AtmTaskExecutionId, [], Output) ->
+    Output;
+
+stream_task_data_if_any(
+    AtmWorkflowExecutionId,
+    AtmTaskExecutionId,
+    AtmTaskExecutionUncorrelatedResultNames,
+    #{<<"resultsBatch">> := ResultsBatch}
+) ->
+    #{<<"resultsBatch">> => lists:map(fun(Results) ->
+        workflow_engine:stream_task_data(
+            AtmWorkflowExecutionId,
+            AtmTaskExecutionId,
+            {chunk, maps:with(AtmTaskExecutionUncorrelatedResultNames, Results)}
+        ),
+        maps:without(AtmTaskExecutionUncorrelatedResultNames, Results)
+    end, ResultsBatch)}.
 
 
 %% @private
@@ -235,11 +286,13 @@ mock_version(Workers) ->
 -spec mock_db_encode([node()]) -> ok.
 mock_db_encode(Workers) ->
     MockFun = fun(#atm_openfaas_task_executor{
+        node_cache_key = NodeCacheKey,
         workflow_execution_id = AtmWorkflowExecutionId,
         lane_index = AtmLaneIndex,
         operation_spec = OperationSpec
     }, NestedRecordEncoder) ->
         #{
+            <<"nodeCacheKey">> => NodeCacheKey,
             <<"atmWorkflowExecutionId">> => AtmWorkflowExecutionId,
             <<"atmLaneIndex">> => AtmLaneIndex,
             <<"operationSpec">> => NestedRecordEncoder(OperationSpec, atm_openfaas_operation_spec)
@@ -252,14 +305,51 @@ mock_db_encode(Workers) ->
 -spec mock_db_decode([node()]) -> ok.
 mock_db_decode(Workers) ->
     MockFun = fun(#{
+        <<"nodeCacheKey">> := NodeCacheKey,
         <<"atmWorkflowExecutionId">> := AtmWorkflowExecutionId,
         <<"atmLaneIndex">> := AtmLaneIndex,
         <<"operationSpec">> := OperationSpecJson
     }, NestedRecordDecoder) ->
         #atm_openfaas_task_executor{
+            node_cache_key = NodeCacheKey,
             workflow_execution_id = AtmWorkflowExecutionId,
             lane_index = AtmLaneIndex,
             operation_spec = NestedRecordDecoder(OperationSpecJson, atm_openfaas_operation_spec)
         }
     end,
     test_utils:mock_expect(Workers, ?MOCKED_MODULE, db_decode, MockFun).
+
+
+%% @private
+-spec save_task_execution_id(atm_task_execution:id(), record()) -> ok.
+save_task_execution_id(AtmTaskExecutionId, #atm_openfaas_task_executor{
+    node_cache_key = NodeCacheKey
+}) ->
+    node_cache:put({NodeCacheKey, task_execution_id}, AtmTaskExecutionId).
+
+
+%% @private
+-spec get_task_execution_id(record()) -> atm_task_execution:id().
+get_task_execution_id(#atm_openfaas_task_executor{node_cache_key = NodeCacheKey}) ->
+    node_cache:get({NodeCacheKey, task_execution_id}).
+
+
+%% @private
+-spec save_task_execution_uncorrelated_result_names([automation:name()], record()) ->
+    ok.
+save_task_execution_uncorrelated_result_names(
+    AtmTaskExecutionUncorrelatedResultNames,
+    #atm_openfaas_task_executor{node_cache_key = NodeCacheKey}
+) ->
+    node_cache:put(
+        {NodeCacheKey, task_execution_uncorrelated_result_names},
+        AtmTaskExecutionUncorrelatedResultNames
+    ).
+
+
+%% @private
+-spec get_task_execution_uncorrelated_result_names(record()) -> [automation:name()].
+get_task_execution_uncorrelated_result_names(#atm_openfaas_task_executor{
+    node_cache_key = NodeCacheKey
+}) ->
+    node_cache:get({NodeCacheKey, task_execution_uncorrelated_result_names}).

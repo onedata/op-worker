@@ -31,7 +31,7 @@
 
 -define(ECHO_ARG_NAME, <<"value">>).
 
--define(ECHO_LAMBDA_DRAFT(__DATA_SPEC), #atm_lambda_revision_draft{
+-define(ECHO_LAMBDA_DRAFT(__DATA_SPEC, __RELAY_METHOD), #atm_lambda_revision_draft{
     operation_spec = #atm_openfaas_operation_spec_draft{
         docker_image = <<"test/echo">>
     },
@@ -43,9 +43,10 @@
     result_specs = [#atm_lambda_result_spec{
         name = ?ECHO_ARG_NAME,
         data_spec = __DATA_SPEC,
-        relay_method = return_value
+        relay_method = __RELAY_METHOD
     }]
 }).
+-define(ECHO_LAMBDA_DRAFT(__DATA_SPEC), ?ECHO_LAMBDA_DRAFT(__DATA_SPEC, return_value)).
 -define(INTEGER_ECHO_LAMBDA_DRAFT, ?ECHO_LAMBDA_DRAFT(#atm_data_spec{type = atm_integer_type})).
 
 -define(ECHO_LAMBDA_ID, <<"echo">>).
