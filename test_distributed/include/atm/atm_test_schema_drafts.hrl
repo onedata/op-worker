@@ -29,17 +29,19 @@
 -define(INTEGER_LIST_STORE_SCHEMA_DRAFT(__ID), ?INTEGER_LIST_STORE_SCHEMA_DRAFT(__ID, undefined)).
 
 
+-define(ECHO_ARG_NAME, <<"value">>).
+
 -define(ECHO_LAMBDA_DRAFT(__DATA_SPEC), #atm_lambda_revision_draft{
     operation_spec = #atm_openfaas_operation_spec_draft{
         docker_image = <<"test/echo">>
     },
     argument_specs = [#atm_lambda_argument_spec{
-        name = <<"value">>,
+        name = ?ECHO_ARG_NAME,
         data_spec = __DATA_SPEC,
         is_optional = false
     }],
     result_specs = [#atm_lambda_result_spec{
-        name = <<"value">>,
+        name = ?ECHO_ARG_NAME,
         data_spec = __DATA_SPEC,
         relay_method = return_value
     }]
@@ -49,26 +51,13 @@
 -define(ECHO_LAMBDA_ID, <<"echo">>).
 -define(ECHO_LAMBDA_REVISION_NUM, 1).
 
--define(ECHO_TASK_DRAFT(__ID, __TARGET_STORE_SCHEMA_ID, __TARGET_STORE_UPDATE_OPTIONS), #atm_task_schema_draft{
-    id = __ID,
-    lambda_id = ?ECHO_LAMBDA_ID,
-    lambda_revision_number = ?ECHO_LAMBDA_REVISION_NUM,
-    argument_mappings = [#atm_task_schema_argument_mapper{
-        argument_name = <<"value">>,
-        value_builder = #atm_task_argument_value_builder{
-            type = iterated_item,
-            recipe = undefined
-        }
-    }],
-    result_mappings = [#atm_task_schema_result_mapper{
-        result_name = <<"value">>,
-        store_schema_id = __TARGET_STORE_SCHEMA_ID,
-        store_content_update_options = __TARGET_STORE_UPDATE_OPTIONS
-    }]
+-define(ITERATED_ITEM_ARG_MAPPER(__ARG_NAME), #atm_task_schema_argument_mapper{
+    argument_name = __ARG_NAME,
+    value_builder = #atm_task_argument_value_builder{
+        type = iterated_item,
+        recipe = undefined
+    }
 }).
--define(ECHO_TASK_DRAFT(__TARGET_STORE_SCHEMA_ID, __TARGET_STORE_UPDATE_OPTIONS),
-    ?ECHO_TASK_DRAFT(?ATM_AUTOGENERATE, __TARGET_STORE_SCHEMA_ID, __TARGET_STORE_UPDATE_OPTIONS)
-).
 
 
 -endif.

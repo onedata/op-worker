@@ -37,6 +37,25 @@
 ]).
 
 
+-define(ECHO_ATM_LANE_SCHEMA_DRAFT, #atm_lane_schema_draft{
+    parallel_boxes = [#atm_parallel_box_schema_draft{tasks = [
+        #atm_task_schema_draft{
+            lambda_id = ?ECHO_LAMBDA_ID,
+            lambda_revision_number = ?ECHO_LAMBDA_REVISION_NUM,
+            argument_mappings = [?ITERATED_ITEM_ARG_MAPPER(?ECHO_ARG_NAME)],
+            result_mappings = [#atm_task_schema_result_mapper{
+                result_name = ?ECHO_ARG_NAME,
+                store_schema_id = <<"st_dst">>,
+                store_content_update_options = #atm_list_store_content_update_options{
+                    function = append
+                }
+            }]
+        }
+    ]}],
+    store_iterator_spec = #atm_store_iterator_spec_draft{store_schema_id = <<"st_src">>},
+    max_retries = ?RAND_INT(3, 6)
+}).
+
 -define(ECHO_1_LANE_ATM_WORKFLOW_SCHEMA_DRAFT, #atm_workflow_schema_dump_draft{
     name = <<"echo">>,
     revision_num = 1,
@@ -45,19 +64,12 @@
             ?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"st_src">>, [3, 9, 27]),
             ?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"st_dst">>)
         ],
-        lanes = [#atm_lane_schema_draft{
-            parallel_boxes = [#atm_parallel_box_schema_draft{tasks = [
-                ?ECHO_TASK_DRAFT(<<"st_dst">>, #atm_list_store_content_update_options{function = append})
-            ]}],
-            store_iterator_spec = #atm_store_iterator_spec_draft{store_schema_id = <<"st_src">>},
-            max_retries = ?RAND_INT(3, 6)
-        }]
+        lanes = [?ECHO_ATM_LANE_SCHEMA_DRAFT]
     },
     supplementary_lambdas = #{?ECHO_LAMBDA_ID => #{
         ?ECHO_LAMBDA_REVISION_NUM => ?INTEGER_ECHO_LAMBDA_DRAFT
     }}
 }).
-
 
 -define(ECHO_2_LANES_ATM_WORKFLOW_SCHEMA_DRAFT, #atm_workflow_schema_dump_draft{
     name = <<"echo">>,
@@ -68,20 +80,8 @@
             ?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"st_dst">>)
         ],
         lanes = [
-            #atm_lane_schema_draft{
-                parallel_boxes = [#atm_parallel_box_schema_draft{tasks = [
-                    ?ECHO_TASK_DRAFT(<<"st_dst">>, #atm_list_store_content_update_options{function = append})
-                ]}],
-                store_iterator_spec = #atm_store_iterator_spec_draft{store_schema_id = <<"st_src">>},
-                max_retries = ?RAND_INT(3, 6)
-            },
-            #atm_lane_schema_draft{
-                parallel_boxes = [#atm_parallel_box_schema_draft{tasks = [
-                    ?ECHO_TASK_DRAFT(<<"st_dst">>, #atm_list_store_content_update_options{function = append})
-                ]}],
-                store_iterator_spec = #atm_store_iterator_spec_draft{store_schema_id = <<"st_src">>},
-                max_retries = ?RAND_INT(3, 6)
-            }
+            ?ECHO_ATM_LANE_SCHEMA_DRAFT,
+            ?ECHO_ATM_LANE_SCHEMA_DRAFT
         ]
     },
     supplementary_lambdas = #{?ECHO_LAMBDA_ID => #{
@@ -340,7 +340,7 @@ atm_workflow_execution_cancel_in_aborting_status_after_lane_run_preparation_fail
                 },
                 handle_lane_execution_ended = #atm_step_mock_spec{
                     after_step_hook = fun(AtmMockCallCtx) ->
-                        % While atm workflow execution as whole has not yet transit to failed status
+                        % While atm workflow execution as whole has not yet transition to failed status
                         % (last step remaining) the current lane run did. At this point cancel
                         % is no longer possible (execution is treated as failed one)
                         ?assertThrow(
@@ -611,7 +611,7 @@ first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_4_test()
                             {true, atm_workflow_execution_exp_state_builder:expect_lane_run_aborting({2, 1}, ExpState)}
                         end,
                         after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState}) ->
-                            % failed lane preparing in advance always transit to interrupted status
+                            % failed lane preparing in advance always transition to interrupted status
                             {true, atm_workflow_execution_exp_state_builder:expect_lane_run_interrupted(
                                 {2, 1}, atm_workflow_execution_exp_state_builder:expect_all_tasks_skipped(
                                     {2, 1}, ExpState
@@ -884,7 +884,7 @@ first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_4_test() 
                             {true, atm_workflow_execution_exp_state_builder:expect_lane_run_aborting({2, 1}, ExpState)}
                         end,
                         after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState}) ->
-                            % failed lane preparing in advance always transit to interrupted status
+                            % failed lane preparing in advance always transition to interrupted status
                             {true, atm_workflow_execution_exp_state_builder:expect_lane_run_interrupted(
                                 {2, 1}, atm_workflow_execution_exp_state_builder:expect_all_tasks_skipped(
                                     {2, 1}, ExpState

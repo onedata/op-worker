@@ -54,7 +54,7 @@
 -export([init/1, teardown/1]).
 -export([run/1]).
 -export([cancel_workflow_execution/1]).
--export([browse_store/2]).
+-export([browse_store/2, browse_store/3]).
 
 -type step_name() ::
     prepare_lane |
@@ -249,19 +249,20 @@ cancel_workflow_execution(#atm_mock_call_ctx{
 
 
 -spec browse_store(automation:id(), mock_call_ctx()) -> json_utils:json_term().
-browse_store(AtmStoreSchemaId, #atm_mock_call_ctx{
+browse_store(AtmStoreSchemaId, AtmMockCallCtx) ->
+    browse_store(AtmStoreSchemaId, undefined, AtmMockCallCtx).
+
+
+-spec browse_store(automation:id(), undefined | atm_task_execution:id(), mock_call_ctx()) ->
+    json_utils:json_term().
+browse_store(AtmStoreSchemaId, AtmTaskExecutionId, AtmMockCallCtx = #atm_mock_call_ctx{
     provider = ProviderSelector,
     space = SpaceSelector,
     session_id = SessionId,
     workflow_execution_id = AtmWorkflowExecutionId
 }) ->
     SpaceId = oct_background:get_space_id(SpaceSelector),
-
-    {ok, #document{value = #atm_workflow_execution{store_registry = AtmStoreRegistry}}} = ?rpc(
-        ProviderSelector, atm_workflow_execution:get(AtmWorkflowExecutionId)
-    ),
-    AtmStoreId = maps:get(AtmStoreSchemaId, AtmStoreRegistry),
-
+    AtmStoreId = get_store_id(AtmStoreSchemaId, AtmTaskExecutionId, AtmMockCallCtx),
     ?rpc(ProviderSelector, browse_store(SessionId, SpaceId, AtmWorkflowExecutionId, AtmStoreId)).
 
 
@@ -610,13 +611,13 @@ get_exp_state_diff(
         ExpState1 = atm_workflow_execution_exp_state_builder:expect_task_items_in_processing_increased(
             AtmTaskExecutionId, length(ItemsBatch), ExpState0
         ),
-        ExpState2 = atm_workflow_execution_exp_state_builder:expect_task_moved_to_active_status_if_was_in_pending_status(
+        ExpState2 = atm_workflow_execution_exp_state_builder:expect_task_transitioned_to_active_status_if_was_in_pending_status(
             AtmTaskExecutionId, ExpState1
         ),
-        ExpState3 = atm_workflow_execution_exp_state_builder:expect_task_parallel_box_moved_to_active_status_if_was_in_pending_status(
+        ExpState3 = atm_workflow_execution_exp_state_builder:expect_task_parallel_box_transitioned_to_active_status_if_was_in_pending_status(
             AtmTaskExecutionId, ExpState2
         ),
-        ExpState4 = atm_workflow_execution_exp_state_builder:expect_task_lane_run_moved_to_active_status_if_was_in_enqueued_status(
+        ExpState4 = atm_workflow_execution_exp_state_builder:expect_task_lane_run_transitioned_to_active_status_if_was_in_enqueued_status(
             AtmTaskExecutionId, ExpState3
         ),
         {true, ExpState4}
@@ -662,7 +663,7 @@ get_exp_state_diff(
             (<<"active">>, [<<"finished">>]) -> <<"finished">>;
             (CurrentStatus, _) -> CurrentStatus
         end,
-        ExpState2 = atm_workflow_execution_exp_state_builder:expect_task_parallel_box_moved_to_inferred_status(
+        ExpState2 = atm_workflow_execution_exp_state_builder:expect_task_parallel_box_transitioned_to_inferred_status(
             AtmTaskExecutionId, InferStatusFun, ExpState1
         ),
         {true, ExpState2}
@@ -1111,6 +1112,44 @@ reply_to_execution_process({ExecutionProcPid, MRef}, Reply) ->
 
 
 %% @private
+-spec get_store_id(automation:id(), undefined | atm_task_execution:id(), mock_call_ctx()) ->
+    atm_store:id().
+get_store_id(?WORKFLOW_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID, _AtmTaskExecutionId, #atm_mock_call_ctx{
+    provider = ProviderSelector,
+    workflow_execution_id = AtmWorkflowExecutionId
+}) ->
+    {ok, #document{value = #atm_workflow_execution{system_audit_log_id = AtmStoreId}}} = ?rpc(
+        ProviderSelector, atm_workflow_execution:get(AtmWorkflowExecutionId)
+    ),
+    AtmStoreId;
+
+get_store_id(?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID, AtmTaskExecutionId, #atm_mock_call_ctx{
+    provider = ProviderSelector
+}) ->
+    {ok, #document{value = #atm_task_execution{system_audit_log_id = AtmStoreId}}} = ?rpc(
+        ProviderSelector, atm_task_execution:get(AtmTaskExecutionId)
+    ),
+    AtmStoreId;
+
+get_store_id(?CURRENT_TASK_TIME_SERIES_STORE_SCHEMA_ID, AtmTaskExecutionId, #atm_mock_call_ctx{
+    provider = ProviderSelector
+}) ->
+    {ok, #document{value = #atm_task_execution{time_series_store_id = AtmStoreId}}} = ?rpc(
+        ProviderSelector, atm_task_execution:get(AtmTaskExecutionId)
+    ),
+    AtmStoreId;
+
+get_store_id(AtmStoreSchemaId, _AtmTaskExecutionId, #atm_mock_call_ctx{
+    provider = ProviderSelector,
+    workflow_execution_id = AtmWorkflowExecutionId
+}) ->
+    {ok, #document{value = #atm_workflow_execution{store_registry = AtmStoreRegistry}}} = ?rpc(
+        ProviderSelector, atm_workflow_execution:get(AtmWorkflowExecutionId)
+    ),
+    maps:get(AtmStoreSchemaId, AtmStoreRegistry).
+
+
+%% @private
 -spec browse_store(session:id(), od_space:id(), atm_workflow_execution:id(), atm_store:id()) ->
     json_utils:json_term().
 browse_store(SessionId, SpaceId, AtmWorkflowExecutionId, AtmStoreId) ->
@@ -1142,5 +1181,9 @@ build_browse_opts(single_value) ->
 
 build_browse_opts(time_series) ->
     #atm_time_series_store_content_browse_options{
-        request = #atm_time_series_store_content_get_layout_req{}
+        request = #atm_time_series_store_content_get_slice_req{
+            layout = #{?ALL_TIME_SERIES => [?ALL_METRICS]},
+            start_timestamp = undefined,
+            window_limit = 10000000000000000000000000000000000000000000000000000
+        }
     }.

@@ -33,9 +33,18 @@
             ?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"st_dst">>)
         ],
         lanes = [#atm_lane_schema_draft{
-            parallel_boxes = [#atm_parallel_box_schema_draft{tasks = [
-                ?ECHO_TASK_DRAFT(<<"st_dst">>, #atm_list_store_content_update_options{function = append})
-            ]}],
+            parallel_boxes = [#atm_parallel_box_schema_draft{tasks = [#atm_task_schema_draft{
+                lambda_id = ?ECHO_LAMBDA_ID,
+                lambda_revision_number = ?ECHO_LAMBDA_REVISION_NUM,
+                argument_mappings = [?ITERATED_ITEM_ARG_MAPPER(?ECHO_ARG_NAME)],
+                result_mappings = [#atm_task_schema_result_mapper{
+                    result_name = ?ECHO_ARG_NAME,
+                    store_schema_id = <<"st_dst">>,
+                    store_content_update_options = #atm_list_store_content_update_options{
+                        function = append
+                    }
+                }]
+            }]}],
             store_iterator_spec = #atm_store_iterator_spec_draft{store_schema_id = <<"st_src">>}
         }]
     },

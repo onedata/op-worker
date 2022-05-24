@@ -71,7 +71,18 @@
     iterate_over_tree_forest_store_test/1,
     iterate_over_tree_forest_store_with_some_inaccessible_items_test/1,
     iterate_over_tree_forest_store_with_all_items_inaccessible_test/1,
-    iterate_over_empty_tree_forest_store_test/1
+    iterate_over_empty_tree_forest_store_test/1,
+
+    map_results_to_audit_log_store_test/1,
+    map_results_to_list_store_test/1,
+    map_results_to_range_store_test/1,
+    map_results_to_single_value_store_test/1,
+    map_results_to_time_series_store_test/1,
+    map_results_to_tree_forest_store_test/1,
+
+    map_results_to_workflow_audit_log_store_test/1,
+    map_results_to_task_audit_log_store_test/1,
+    map_results_to_task_time_series_store_test/1
 ]).
 
 groups() -> [
@@ -84,7 +95,7 @@ groups() -> [
     {scheduling_executable_workflow_schema_with_invalid_args_tests, [parallel], [
         schedule_atm_workflow_with_invalid_initial_store_content_test
     ]},
-    {execution_tests, [parallel], [
+    {preparation_tests, [parallel], [
         first_lane_run_preparation_failure_before_run_was_created_test,
         first_lane_run_preparation_failure_after_run_was_created_test,
 
@@ -101,14 +112,16 @@ groups() -> [
         first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_1_test,
         first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_2_test,
         first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_3_test,
-        first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_4_test,
-
+        first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_4_test
+    ]},
+    {cancellation_tests, [parallel], [
         cancel_scheduled_atm_workflow_execution_test,
         cancel_enqueued_atm_workflow_execution_test,
         cancel_active_atm_workflow_execution_test,
         cancel_finishing_atm_workflow_execution_test,
-        cancel_finished_atm_workflow_execution_test,
-
+        cancel_finished_atm_workflow_execution_test
+    ]},
+    {iteration_tests, [parallel], [
         iterate_over_list_store_test,
         iterate_over_list_store_with_some_inaccessible_items_test,
         iterate_over_list_store_with_all_items_inaccessible_test,
@@ -125,13 +138,28 @@ groups() -> [
         iterate_over_tree_forest_store_with_some_inaccessible_items_test,
         iterate_over_tree_forest_store_with_all_items_inaccessible_test,
         iterate_over_empty_tree_forest_store_test
+    ]},
+    {mapping_tests, [parallel], [
+        map_results_to_audit_log_store_test,
+        map_results_to_list_store_test,
+        map_results_to_range_store_test,
+        map_results_to_single_value_store_test,
+        map_results_to_time_series_store_test,
+        map_results_to_tree_forest_store_test,
+
+        map_results_to_workflow_audit_log_store_test,
+        map_results_to_task_audit_log_store_test,
+        map_results_to_task_time_series_store_test
     ]}
 ].
 
 all() -> [
     {group, scheduling_non_executable_workflow_schema_tests},
     {group, scheduling_executable_workflow_schema_with_invalid_args_tests},
-    {group, execution_tests}
+    {group, preparation_tests},
+    {group, cancellation_tests},
+    {group, iteration_tests},
+    {group, mapping_tests}
 ].
 
 
@@ -148,6 +176,7 @@ all() -> [
 -define(RUN_PREPARATION_TEST(), ?RUN_TEST(atm_workflow_execution_preparation_test_base)).
 -define(RUN_CANCELLATION_TEST(), ?RUN_TEST(atm_workflow_execution_cancellation_test_base)).
 -define(RUN_ITERATION_TEST(), ?RUN_TEST(atm_workflow_execution_iteration_test_base)).
+-define(RUN_MAPPING_TEST(), ?RUN_TEST(atm_workflow_execution_mapping_test_base)).
 
 
 %%%===================================================================
@@ -303,6 +332,42 @@ iterate_over_empty_tree_forest_store_test(_Config) ->
     ?RUN_ITERATION_TEST().
 
 
+map_results_to_audit_log_store_test(_Config) ->
+    ?RUN_MAPPING_TEST().
+
+
+map_results_to_list_store_test(_Config) ->
+    ?RUN_MAPPING_TEST().
+
+
+map_results_to_range_store_test(_Config) ->
+    ?RUN_MAPPING_TEST().
+
+
+map_results_to_single_value_store_test(_Config) ->
+    ?RUN_MAPPING_TEST().
+
+
+map_results_to_time_series_store_test(_Config) ->
+    ?RUN_MAPPING_TEST().
+
+
+map_results_to_tree_forest_store_test(_Config) ->
+    ?RUN_MAPPING_TEST().
+
+
+map_results_to_workflow_audit_log_store_test(_Config) ->
+    ?RUN_MAPPING_TEST().
+
+
+map_results_to_task_audit_log_store_test(_Config) ->
+    ?RUN_MAPPING_TEST().
+
+
+map_results_to_task_time_series_store_test(_Config) ->
+    ?RUN_MAPPING_TEST().
+
+
 %===================================================================
 % SetUp and TearDown functions
 %===================================================================
@@ -343,7 +408,12 @@ init_per_group(scheduling_executable_workflow_schema_with_invalid_args_tests, Co
     atm_openfaas_task_executor_mock:init(?PROVIDER_SELECTOR, atm_openfaas_docker_mock),
     Config;
 
-init_per_group(execution_tests, Config) ->
+init_per_group(TestGroup, Config) when
+    TestGroup =:= preparation_tests;
+    TestGroup =:= cancellation_tests;
+    TestGroup =:= iteration_tests;
+    TestGroup =:= mapping_tests
+->
     atm_openfaas_task_executor_mock:init(?PROVIDER_SELECTOR, atm_openfaas_docker_mock),
     atm_workflow_execution_test_runner:init(?PROVIDER_SELECTOR),
     Config.
@@ -356,7 +426,12 @@ end_per_group(scheduling_executable_workflow_schema_with_invalid_args_tests, Con
     atm_openfaas_task_executor_mock:teardown(?PROVIDER_SELECTOR),
     Config;
 
-end_per_group(execution_tests, Config) ->
+end_per_group(TestGroup, Config) when
+    TestGroup =:= preparation_tests;
+    TestGroup =:= cancellation_tests;
+    TestGroup =:= iteration_tests;
+    TestGroup =:= mapping_tests
+->
     atm_workflow_execution_test_runner:teardown(?PROVIDER_SELECTOR),
     atm_openfaas_task_executor_mock:teardown(?PROVIDER_SELECTOR),
     Config.
