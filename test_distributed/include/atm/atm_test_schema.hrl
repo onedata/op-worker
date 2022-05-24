@@ -74,8 +74,8 @@
     description = ?ATM_AUTOGENERATE :: ?ATM_AUTOGENERATE | automation:description(),
     type :: automation:store_type(),
     config :: atm_store_config:record(),
-    requires_initial_content :: boolean(),
-    default_initial_content :: undefined | json_utils:json_term()
+    requires_initial_content = false :: boolean(),
+    default_initial_content = undefined :: undefined | json_utils:json_term()
 }).
 
 -record(atm_lane_schema_draft, {
@@ -104,7 +104,8 @@
     argument_mappings :: [atm_task_schema_argument_mapper:record()],
     result_mappings :: [atm_task_schema_result_mapper:record()],
 
-    resource_spec_override = ?ATM_AUTOGENERATE :: ?ATM_AUTOGENERATE | undefined | atm_resource_spec:record()
+    resource_spec_override = ?ATM_AUTOGENERATE :: ?ATM_AUTOGENERATE | undefined | atm_resource_spec:record(),
+    time_series_store_config = undefined :: undefined | atm_time_series_store_config:record()
 }).
 
 -record(atm_store_iterator_spec_draft, {
