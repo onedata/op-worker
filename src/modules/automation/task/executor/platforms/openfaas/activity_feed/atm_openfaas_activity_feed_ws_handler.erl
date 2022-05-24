@@ -110,10 +110,10 @@ websocket_info(terminate, State) ->
     {stop, State};
 
 websocket_info(Msg, State) ->
-    case atm_openfaas_activity_feed_ws_connection:handle_info(Msg) of
-        {send_message, TextMessage} ->
+    case atm_openfaas_activity_feed_ws_connection:interpret_info_message(Msg) of
+        {reply, TextMessage} ->
             {reply, {text, TextMessage}, State};
-        ok ->
+        no_reply ->
             {ok, State}
     end.
 

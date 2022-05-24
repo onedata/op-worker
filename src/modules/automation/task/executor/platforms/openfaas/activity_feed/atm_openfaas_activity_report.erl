@@ -52,6 +52,8 @@ consume(ConnRef, HandlerState, #atm_openfaas_activity_report{type = atm_openfaas
 -spec handle_reporting_error(atm_openfaas_activity_feed_ws_handler:handler_state(), errors:error()) ->
     ok.
 handle_reporting_error(HandlerState, Error) ->
+    %% @TODO VFS-9388 add handshake messages to the protocol and identify the handling module
+    %% for each connection so that it can be called back
     atm_openfaas_result_stream_handler:handle_reporting_error_if_related(HandlerState, Error).
 
 %%%===================================================================

@@ -15,8 +15,8 @@
 
 -include_lib("ctool/include/logging.hrl").
 
--export([handle_info/1]).
--export([push_message/2]).
+-export([push_json_to_client/2]).
+-export([interpret_info_message/1]).
 
 
 %%%===================================================================
@@ -24,16 +24,17 @@
 %%%===================================================================
 
 
-%% @doc called from withing a connection process to handle received messages
--spec handle_info(term()) -> ok | {send_message, json_utils:json_term()}.
-handle_info({send_message, JsonMessage}) ->
-    {send_message, json_utils:encode(JsonMessage)};
-handle_info(Message) ->
-    ?warning("Unexpected message in ~p: ~p", [?MODULE, Message]).
-
-
 %% @doc called to request sending an asynchronous push message by a connection process
--spec push_message(atm_openfaas_activity_feed_ws_handler:connection_ref(), json_utils:json_term()) -> ok.
-push_message(ConnRef, JsonMessage) ->
-    ConnRef ! {send_message, JsonMessage},
+-spec push_json_to_client(atm_openfaas_activity_feed_ws_handler:connection_ref(), json_utils:json_term()) -> ok.
+push_json_to_client(ConnRef, JsonMessage) ->
+    ConnRef ! {push_json_to_client, JsonMessage},
     ok.
+
+
+%% @doc called from within a websocket connection process to identify received messages
+-spec interpret_info_message(term()) -> no_reply | {reply, binary()}.
+interpret_info_message({push_json_to_client, JsonMessage}) ->
+    {reply, json_utils:encode(JsonMessage)};
+interpret_info_message(Message) ->
+    ?warning("Unexpected message in ~p: ~p", [?MODULE, Message]),
+    no_reply.

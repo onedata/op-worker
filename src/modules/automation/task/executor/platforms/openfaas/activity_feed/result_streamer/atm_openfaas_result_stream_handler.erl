@@ -133,12 +133,12 @@ conclude(WorkflowExecutionId, TaskExecutionId) ->
         all_streamers_deregistered ->
             success;
         {active_result_streamers, ConnRefs} ->
-            FinalizationSignalJson = jsonable_record:to_json(
+            EncodedFinalizationSignalJson = jsonable_record:to_json(
                 #atm_openfaas_result_streamer_finalization_signal{},
                 atm_openfaas_result_streamer_finalization_signal
             ),
             lists:foreach(fun(ConnRef) ->
-                atm_openfaas_activity_feed_ws_connection:push_message(ConnRef, FinalizationSignalJson)
+                atm_openfaas_activity_feed_ws_connection:push_json_to_client(ConnRef, EncodedFinalizationSignalJson)
             end, ConnRefs),
             atm_openfaas_result_streamer_registry:await_deregistration_of_all_streamers()
     end.
