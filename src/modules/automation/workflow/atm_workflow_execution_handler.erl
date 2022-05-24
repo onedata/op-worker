@@ -239,7 +239,7 @@ process_task_result_for_item(
 
 -spec process_streamed_task_data(
     atm_workflow_execution:id(),
-    atm_workflow_execution_ctx:record(),
+    atm_workflow_execution_env:record(),
     atm_task_execution:id(),
     atm_task_executor:streamed_data()
 ) ->
