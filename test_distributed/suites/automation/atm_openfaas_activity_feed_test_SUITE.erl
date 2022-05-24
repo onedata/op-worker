@@ -371,6 +371,10 @@ result_streamer_stale_report_ignoring_test(_Config) ->
     send_result_streamer_registration_report(ClientBeta, WorkflowExecutionId, TaskExecutionId, ResultStreamerId),
     ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, [ResultStreamerId])),
 
+    %% make sure client alpha's chunk report does not happen before client beta registration
+    %% @TODO VFS-9388 this should not be needed when the protocol has ACK messages
+    timer:sleep(1000),
+
     % ClientAlpha has been replaced by ClientBeta during re-register
     % ClientGamma has been deregistered sometime in the past
     % in both cases, their reports should be ignored
