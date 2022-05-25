@@ -39,7 +39,8 @@
     handle_task_results_processed_for_all_items/3,
     handle_task_execution_ended/3,
 
-    report_items_processing_failed/3,
+    report_item_error/3,
+
     handle_lane_execution_ended/3,
 
     handle_workflow_execution_ended/2
@@ -239,7 +240,7 @@ process_task_result_for_item(
 
 -spec process_streamed_task_data(
     atm_workflow_execution:id(),
-    atm_workflow_execution_ctx:record(),
+    atm_workflow_execution_env:record(),
     atm_task_execution:id(),
     atm_task_executor:streamed_data()
 ) ->
@@ -266,12 +267,11 @@ process_streamed_task_data(
 ) ->
     ok.
 handle_task_results_processed_for_all_items(
-    _AtmWorkflowExecutionId,
+    AtmWorkflowExecutionId,
     _AtmWorkflowExecutionEnv,
-    _AtmTaskExecutionId
+    AtmTaskExecutionId
 ) ->
-    %% TODO ŁO flush
-    ok.
+    atm_openfaas_result_stream_handler:trigger_conclusion(AtmWorkflowExecutionId, AtmTaskExecutionId).
 
 
 -spec handle_task_execution_ended(
@@ -301,13 +301,13 @@ handle_task_execution_ended(_AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, At
     end.
 
 
--spec report_items_processing_failed(
+-spec report_item_error(
     atm_workflow_execution:id(),
     atm_workflow_execution_env:record(),
     automation:item()
 ) ->
     ok.
-report_items_processing_failed(_AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, ItemBatch) ->
+report_item_error(_AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, ItemBatch) ->
     AtmWorkflowExecutionAuth = atm_workflow_execution_env:acquire_auth(AtmWorkflowExecutionEnv),
 
     % NOTE: atm_store_api is bypassed for performance reasons. It is possible as list store update

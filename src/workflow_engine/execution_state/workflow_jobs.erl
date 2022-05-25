@@ -28,7 +28,7 @@
 -export([job_identifier_to_binary/1, binary_to_job_identifier/1, get_item_id/2, get_subject_id/3,
     get_task_details/2, get_processing_type/1, is_previous/2]).
 %% API used to check which tasks are finished for all items
--export([is_task_finished/2, build_tasks_tree/1]).
+-export([is_task_finished/2, is_task_finished/3, build_tasks_tree/1]).
 %% Test API
 -export([is_empty/1]).
 
@@ -268,6 +268,7 @@ prepare_next_parallel_box(
 has_ongoing_jobs(#workflow_jobs{ongoing = Ongoing}) ->
     not gb_sets:is_empty(Ongoing).
 
+
 %%%===================================================================
 %%% Functions returning/updating pending_async_jobs field
 %%%===================================================================
@@ -404,12 +405,13 @@ is_previous(#job_identifier{item_index = ItemIndex1}, #job_identifier{item_index
 %%%===================================================================
 
 -spec is_task_finished(jobs(), job_identifier()) -> boolean().
-is_task_finished(#workflow_jobs{tasks_tree = undefined}, _JobIdentifier) ->
+is_task_finished(Jobs, #job_identifier{parallel_box_index = BoxIndex, task_index = TaskIndex}) ->
+    is_task_finished(Jobs, BoxIndex, TaskIndex).
+
+-spec is_task_finished(jobs(), workflow_execution_state:index(), workflow_execution_state:index()) -> boolean().
+is_task_finished(#workflow_jobs{tasks_tree = undefined}, _BoxIndex, _TaskIndex) ->
     false;
-is_task_finished(
-    #workflow_jobs{tasks_tree = TasksTree},
-    #job_identifier{parallel_box_index = BoxIndex, task_index = TaskIndex}
-) ->
+is_task_finished(#workflow_jobs{tasks_tree = TasksTree}, BoxIndex, TaskIndex) ->
     case gb_trees:is_empty(TasksTree) of
         true ->
             true;

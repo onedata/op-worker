@@ -670,4 +670,4 @@ rm_file(UserId, FileGuid, RmProvider) ->
     RmNode = ?OCT_RAND_OP_NODE(RmProvider),
     UserSessId = oct_background:get_user_session_id(UserId, RmProvider),
 
-    ?assertMatch(ok, lfm_proxy:unlink(RmNode, UserSessId, ?FILE_REF(FileGuid))).
+    ?assertMatch(ok, lfm_proxy:rm_recursive(RmNode, UserSessId, ?FILE_REF(FileGuid))).

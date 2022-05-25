@@ -65,7 +65,7 @@ send_registration_report(ClientRef, WorkflowExecutionId, TaskExecutionId, Result
     ]).
 
 
--spec send_chunk_report(test_websocket_client:client_ref(), fixme:proper_type_during_integration()) ->
+-spec send_chunk_report(test_websocket_client:client_ref(), atm_openfaas_result_streamer_chunk_report:chunk()) ->
     ok.
 send_chunk_report(Client, Chunk) ->
     send_report(Client, [

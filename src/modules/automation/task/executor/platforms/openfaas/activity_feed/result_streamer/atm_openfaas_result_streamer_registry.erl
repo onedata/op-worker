@@ -180,7 +180,7 @@ claim_conclusion_orchestration(WorkflowExecutionId, TaskExecutionId, ConclusionO
 %% conclusion orchestrator.
 %% @end
 %%--------------------------------------------------------------------
--spec await_deregistration_of_all_streamers() -> fixme:proper_type_during_integration().
+-spec await_deregistration_of_all_streamers() -> workflow_engine:stream_closing_result().
 await_deregistration_of_all_streamers() ->
     receive
         last_streamer_has_deregistered ->

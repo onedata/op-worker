@@ -111,7 +111,7 @@ trigger_conclusion(WorkflowExecutionId, TaskExecutionId) ->
             {failure, ?ERROR_INTERNAL_SERVER_ERROR}
         end,
         catch atm_openfaas_result_streamer_registry:clear(WorkflowExecutionId, TaskExecutionId),
-        workflow_engine:report_result_streaming_concluded(WorkflowExecutionId, TaskExecutionId, StreamClosingResult)
+        workflow_engine:report_task_data_streaming_concluded(WorkflowExecutionId, TaskExecutionId, StreamClosingResult)
     end),
     ok.
 
@@ -120,7 +120,7 @@ trigger_conclusion(WorkflowExecutionId, TaskExecutionId) ->
 %%%===================================================================
 
 %% @private
--spec conclude(atm_workflow_execution:id(), atm_task_execution:id()) -> fixme:proper_type_during_integration().
+-spec conclude(atm_workflow_execution:id(), atm_task_execution:id()) -> workflow_engine:stream_closing_result().
 conclude(WorkflowExecutionId, TaskExecutionId) ->
     case atm_openfaas_result_streamer_registry:claim_conclusion_orchestration(WorkflowExecutionId, TaskExecutionId, self()) of
         no_streamers_ever_registered ->

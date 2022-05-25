@@ -129,24 +129,38 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Callback processing extra data provided while executing jobs.
-%% TODO WRITEME
+%% Callback reporting that at least one task for item has failed.
+%% NOTE: if any task for an item fails, this callback is executed exactly
+%% once after all tasks from parallel box are finished for the item.
+%% @end
+%%--------------------------------------------------------------------
+-callback report_item_error(
+    workflow_engine:execution_id(),
+    workflow_engine:execution_context(),
+    iterator:item()
+) ->
+    ok.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Callback processing streamed task data that was generated during execution of task for item but is not
+%% a result of this processing. It is called for every chunk of streamed task data produced for task.
 %% @end
 %%--------------------------------------------------------------------
 -callback process_streamed_task_data(
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
     workflow_engine:task_id(),
-    json_utils:json_map() | errors:error()  %% TODO type
+    workflow_engine:streamed_task_data()
 ) ->
-    ok | error.
+    handler_execution_result().
 
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Callback reporting that all jobs for task were executed and their
-%% outputs processed.
-%% TODO WRITEME
+%% Callback called after all jobs for task were executed and their
+%% outputs processed. It is executed only when task has data stream.
 %% @end
 %%--------------------------------------------------------------------
 -callback handle_task_results_processed_for_all_items(
@@ -159,36 +173,19 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Callback reporting that task has been executed for all items and all results
-%% were processed (including supplementary ones).
-%% This callback is usually executed once for each task. It is guaranteed
-%% that callback is called before call of handle_lane_execution_ended
-%% callback for task's lane.
+%% Callback reporting that all jobs for task were executed, their
+%% outputs processed and all streamed task data was processed (in case
+%% the task had data stream). This callback is executed once for each task.
+%% It is guaranteed that callback is called before call of
+%% handle_lane_execution_ended callback for task's lane.
 %% Warning: there is no guarantee that callbacks for tasks are called
 %% exactly the same order as the tasks were finished.
-%% Warning: when execution is cancelled, handler can be executed
-%% twice for single task.
 %% @end
 %%--------------------------------------------------------------------
 -callback handle_task_execution_ended(
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
     workflow_engine:task_id()
-) ->
-    ok.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Callback reporting that at least one task for item has failed.
-%% NOTE: if any task for an item fails, this callback is executed exactly
-%% once after all tasks from parallel box are finished for the item.
-%% @end
-%%--------------------------------------------------------------------
--callback report_items_processing_failed(
-    workflow_engine:execution_id(),
-    workflow_engine:execution_context(),
-    iterator:item()
 ) ->
     ok.
 

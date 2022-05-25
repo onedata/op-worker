@@ -101,6 +101,7 @@ get_models() -> [
     workflow_execution_state,
     workflow_cached_item,
     workflow_cached_async_result,
+    workflow_cached_task_data,
     workflow_iterator_snapshot,
     workflow_async_call_pool,
 

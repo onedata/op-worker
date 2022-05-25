@@ -702,7 +702,7 @@ compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, ExpectedR
 -spec compare_streamed_reports(
     atm_workflow_execution:id(),
     atm_task_execution:id(),
-    [fixme:proper_type_during_integration()]
+    [workflow_engine:streamed_task_data()]
 ) ->
     boolean().
 compare_streamed_reports(WorkflowExecutionId, TaskExecutionId, ExpectedReports) ->
@@ -721,7 +721,7 @@ compare_streamed_reports(WorkflowExecutionId, TaskExecutionId, ExpectedReports) 
 -spec mocked_stream_task_data(
     atm_workflow_execution:id(),
     atm_task_execution:id(),
-    fixme:proper_type_during_integration()
+    workflow_engine:streamed_task_data()
 ) ->
     ok.
 mocked_stream_task_data(WorkflowExecutionId, TaskExecutionId, TaskDataReport) ->
@@ -751,7 +751,7 @@ simulate_failure_of_next_report_processing(WorkflowExecutionId, TaskExecutionId)
 -spec compare_result_stream_conclusion_status(
     atm_workflow_execution:id(),
     atm_task_execution:id(),
-    not_concluded | fixme:proper_type_during_integration()
+    not_concluded | workflow_engine:stream_closing_result()
 ) ->
     boolean().
 compare_result_stream_conclusion_status(WorkflowExecutionId, TaskExecutionId, ExpectedStatus) ->
@@ -762,13 +762,13 @@ compare_result_stream_conclusion_status(WorkflowExecutionId, TaskExecutionId, Ex
 
 %% @private
 %% @doc this function is run on the op-worker node
--spec mocked_report_result_streaming_concluded(
+-spec mocked_report_task_data_streaming_concluded(
     atm_workflow_execution:id(),
     atm_task_execution:id(),
-    fixme:proper_type_during_integration()
+    workflow_engine:stream_closing_result()
 ) ->
     ok.
-mocked_report_result_streaming_concluded(WorkflowExecutionId, TaskExecutionId, StreamClosingResult) ->
+mocked_report_task_data_streaming_concluded(WorkflowExecutionId, TaskExecutionId, StreamClosingResult) ->
     node_cache:put({result_stream_conclusion_status, WorkflowExecutionId, TaskExecutionId}, StreamClosingResult).
 
 %%%===================================================================
@@ -789,9 +789,9 @@ end_per_suite(_Config) ->
 init_per_group(_Group, Config) ->
     atm_openfaas_activity_feed_client_mock:set_secret_on_provider(?PROVIDER_SELECTOR, ?CORRECT_SECRET),
     Workers = ?config(op_worker_nodes, Config),
-    ok = test_utils:mock_new(Workers, [workflow_engine], [non_strict]), %@fixme change to strict during integration
+    ok = test_utils:mock_new(Workers, [workflow_engine]),
     ok = test_utils:mock_expect(Workers, workflow_engine, stream_task_data, fun mocked_stream_task_data/3),
-    ok = test_utils:mock_expect(Workers, workflow_engine, report_result_streaming_concluded, fun mocked_report_result_streaming_concluded/3),
+    ok = test_utils:mock_expect(Workers, workflow_engine, report_task_data_streaming_concluded, fun mocked_report_task_data_streaming_concluded/3),
     Config.
 
 
