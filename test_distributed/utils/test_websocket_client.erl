@@ -13,6 +13,7 @@
 -module(test_websocket_client).
 -author("Lukasz Opiola").
 
+-export([connect/4]).
 -export([start/4]).
 -export([send/2]).
 
@@ -34,12 +35,18 @@
 %%% API
 %%%===================================================================
 
--spec start(oct_background:node_selector(), binary(), http_client:headers(), push_message_handler()) ->
+-spec connect(oct_background:node_selector(), binary(), http_client:headers(), push_message_handler()) ->
     {ok, client_ref()} | {error, term()}.
-start(NodeSelector, Path, Headers, PushMessageHandler) ->
+connect(NodeSelector, Path, Headers, PushMessageHandler) ->
     Url = binary_to_list(opw_test_rpc:call(NodeSelector, oneprovider, build_url, [wss, Path])),
-    Opts = [{cacerts, opw_test_rpc:get_cert_chain_ders(NodeSelector)}],
-    case websocket_client:start_link(Url, Headers, ?MODULE, [PushMessageHandler], Opts) of
+    TransportOpts = [{cacerts, opw_test_rpc:get_cert_chain_ders(NodeSelector)}],
+    start(Url, Headers, TransportOpts, PushMessageHandler).
+
+
+-spec start(binary(), http_client:headers(), proplists:proplist(), push_message_handler()) ->
+    {ok, client_ref()} | {error, term()}.
+start(Url, Headers, TransportOpts, PushMessageHandler) ->
+    case websocket_client:start_link(Url, Headers, ?MODULE, [PushMessageHandler], TransportOpts) of
         {ok, Pid} ->
             {ok, Pid};
         {error, Reason} ->

@@ -15,7 +15,7 @@
 
 
 %% API
--export([start/2]).
+-export([connect/2]).
 -export([send_pod_status_report/2]).
 -export([has_received_internal_server_error_push_message/1]).
 
@@ -24,10 +24,10 @@
 %%% API
 %%%===================================================================
 
--spec start(oct_background:node_selector(), undefined | binary()) ->
+-spec connect(oct_background:node_selector(), undefined | binary()) ->
     {ok, test_websocket_client:client_ref()} | {error, term()}.
-start(NodeSelector, BasicAuthorization) ->
-    atm_openfaas_activity_feed_client_mock:start(
+connect(NodeSelector, BasicAuthorization) ->
+    atm_openfaas_activity_feed_client_mock:connect(
         NodeSelector, pod_status_monitor, BasicAuthorization, fun handle_push_message/2
     ).
 

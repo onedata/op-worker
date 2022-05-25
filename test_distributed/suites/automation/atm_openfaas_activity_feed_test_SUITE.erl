@@ -500,10 +500,10 @@ connect(Type) ->
 %% @private
 -spec try_connect(atm_openfaas_activity_feed_ws_handler:client_type(), undefined | binary()) ->
     {ok, test_websocket_client:client_ref()} | {error, term()}.
-try_connect(pod_status_monitor, BasicAuthorization) ->
-    atm_openfaas_pod_status_monitor_mock:start(?PROVIDER_SELECTOR, BasicAuthorization);
+try_connect(k8s_events_monitor, BasicAuthorization) ->
+    atm_openfaas_k8s_events_monitor_mock:connect(?PROVIDER_SELECTOR, BasicAuthorization);
 try_connect(result_streamer, BasicAuthorization) ->
-    atm_openfaas_result_streamer_mock:start(?PROVIDER_SELECTOR, BasicAuthorization).
+    atm_openfaas_result_streamer_mock:connect(?PROVIDER_SELECTOR, BasicAuthorization).
 
 %%%===================================================================
 %%% Helper functions - function pod status

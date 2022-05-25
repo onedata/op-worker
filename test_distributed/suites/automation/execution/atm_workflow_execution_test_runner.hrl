@@ -90,6 +90,9 @@
 -define(ATM_WORKFLOW_EXECUTION_TEST_UTILS, [
     atm_openfaas_docker_mock,
     atm_openfaas_task_executor_mock,
+    atm_openfaas_result_streamer_mock,
+    atm_openfaas_activity_feed_client_mock,
+    test_websocket_client,
     atm_test_inventory,
     atm_workflow_execution_test_runner
 ]).
