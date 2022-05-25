@@ -20,7 +20,7 @@
 
 %% API
 -export([set_secret_on_provider/2]).
--export([start/3]).
+-export([start/4]).
 -export([send_text/2]).
 -export([send_report/3]).
 
@@ -34,14 +34,20 @@ set_secret_on_provider(NodeSelector, Secret) ->
     opw_test_rpc:set_env(NodeSelector, openfaas_activity_feed_secret, Secret).
 
 
--spec start(oct_background:node_selector(), undefined | binary(), test_websocket_client:push_message_handler()) ->
+-spec start(
+    oct_background:node_selector(),
+    atm_openfaas_activity_feed_ws_handler:client_type(),
+    undefined | binary(),
+    test_websocket_client:push_message_handler()
+) ->
     {ok, test_websocket_client:client_ref()} | {error, term()}.
-start(NodeSelector, BasicAuthorization, PushMessageHandler) ->
+start(NodeSelector, ClientType, BasicAuthorization, PushMessageHandler) ->
+    Path = string:replace(?OPENFAAS_ACTIVITY_FEED_WS_COWBOY_ROUTE, ":client_type", atom_to_list(ClientType)),
     Headers = case BasicAuthorization of
         undefined -> [];
         _ -> [{?HDR_AUTHORIZATION, <<"Basic ", BasicAuthorization/binary>>}]
     end,
-    test_websocket_client:start(NodeSelector, ?OPENFAAS_ACTIVITY_FEED_WS_PATH, Headers, PushMessageHandler).
+    test_websocket_client:start(NodeSelector, Path, Headers, PushMessageHandler).
 
 
 -spec send_text(test_websocket_client:client_ref(), binary()) -> ok.

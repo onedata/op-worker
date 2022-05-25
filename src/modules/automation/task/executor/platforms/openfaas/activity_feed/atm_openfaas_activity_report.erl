@@ -17,9 +17,7 @@
 
 -include("modules/automation/atm_execution.hrl").
 
-%% API
--export([consume/3]).
--export([handle_reporting_error/2]).
+
 %% jsonable_record callbacks
 -export([to_json/1, from_json/1]).
 
@@ -30,31 +28,6 @@
 -type batch() :: [atm_openfaas_function_pod_status_report:record() | atm_openfaas_result_streamer_report:record()].
 -export_type([type/0, batch/0]).
 
-
-%%%===================================================================
-%%% API
-%%%===================================================================
-
--spec consume(
-    atm_openfaas_activity_feed_ws_handler:connection_ref(),
-    atm_openfaas_activity_feed_ws_handler:handler_state(),
-    record()
-) -> atm_openfaas_activity_feed_ws_handler:handler_state().
-consume(_ConnRef, HandlerState, #atm_openfaas_activity_report{type = atm_openfaas_function_pod_status_report, batch = Batch}) ->
-    lists:foreach(fun atm_openfaas_function_activity_registry:consume_report/1, Batch),
-    HandlerState;
-consume(ConnRef, HandlerState, #atm_openfaas_activity_report{type = atm_openfaas_result_streamer_report, batch = Batch}) ->
-    lists:foldl(fun(Report, HandlerStateAcc) ->
-        atm_openfaas_result_stream_handler:consume_report(ConnRef, HandlerStateAcc, Report)
-    end, HandlerState, Batch).
-
-
--spec handle_reporting_error(atm_openfaas_activity_feed_ws_handler:handler_state(), errors:error()) ->
-    ok.
-handle_reporting_error(HandlerState, Error) ->
-    %% @TODO VFS-9388 add handshake messages to the protocol and identify the handling module
-    %% for each connection so that it can be called back
-    atm_openfaas_result_stream_handler:handle_reporting_error_if_related(HandlerState, Error).
 
 %%%===================================================================
 %%% jsonable_record callbacks

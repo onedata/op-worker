@@ -7,6 +7,9 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements a WebSocket server for the OpenFaaS activity feed.
+%%% Currently, two types of clients can connect to the server:
+%%%   * pod_status_monitor - sends reports with OpenFaaS pod status changes
+%%%   * result_streamer - sends reports with lambda results relayed via a file pipe
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_openfaas_activity_feed_ws_handler).
@@ -29,15 +32,17 @@
     terminate/3
 ]).
 
+-type client_type() :: pod_status_monitor | result_streamer.
+% the pid of the connection process
 -type connection_ref() :: pid().
 % state specific for the report handler, opaque to this module
 -type handler_state() :: term().
 -record(state, {
-    connection_ref :: connection_ref(),
-    handler_state = undefined :: handler_state()
+    handler_module :: module(),
+    handler_state :: handler_state()
 }).
 -type state() :: #state{}.
--export_type([connection_ref/0, handler_state/0, state/0]).
+-export_type([client_type/0, connection_ref/0, handler_state/0, state/0]).
 
 -define(AUTHORIZATION_SECRET_ENV_NAME, openfaas_activity_feed_secret).
 
@@ -50,19 +55,32 @@
 %%%===================================================================
 
 -spec init(Req :: cowboy_req:req(), Opts :: any()) ->
-    {ok | cowboy_websocket, cowboy_req:req(), undefined}.
+    {ok | cowboy_websocket, cowboy_req:req(), undefined | client_type()}.
 init(Req, []) ->
-    case is_authorized(Req) of
-        true ->
-            {cowboy_websocket, Req, undefined};
-        false ->
-            {ok, cowboy_req:reply(?HTTP_401_UNAUTHORIZED, Req), undefined}
+    case identify_client_type(Req) of
+        {error, ErrorCode} ->
+            {ok, cowboy_req:reply(ErrorCode, Req), undefined};
+        {ok, ClientType} ->
+            case is_authorized(Req) of
+                false ->
+                    {ok, cowboy_req:reply(?HTTP_401_UNAUTHORIZED, Req), undefined};
+                true ->
+                    {cowboy_websocket, Req, ClientType}
+            end
     end.
 
 
--spec websocket_init(any()) -> {ok, state()}.
-websocket_init(_) ->
-    {ok, #state{connection_ref = self()}}.
+-spec websocket_init(client_type()) -> {ok, state()}.
+websocket_init(ClientType) ->
+    {ok, #state{
+        handler_module = case ClientType of
+            pod_status_monitor ->
+                atm_openfaas_function_activity_registry;
+            result_streamer ->
+                atm_openfaas_result_stream_handler
+        end,
+        handler_state = undefined
+    }}.
 
 
 %%--------------------------------------------------------------------
@@ -138,6 +156,19 @@ terminate(_Reason, _Req, _State) ->
 %%%===================================================================
 
 %% @private
+-spec identify_client_type(cowboy_req:req()) -> {ok, client_type()} | {error, integer()}.
+identify_client_type(Req) ->
+    case cowboy_req:binding(client_type, Req, undefined) of
+        <<"pod_status_monitor">> ->
+            {ok, pod_status_monitor};
+        <<"result_streamer">> ->
+            {ok, result_streamer};
+        _ ->
+            {error, ?HTTP_404_NOT_FOUND}
+    end.
+
+
+%% @private
 -spec is_authorized(cowboy_req:req()) -> boolean().
 is_authorized(Req) ->
     % @TODO VFS-8615 Support different secret per OpenFaaS instance when op-worker
@@ -164,7 +195,7 @@ is_authorized(Req) ->
 %% @private
 -spec handle_text_message(binary(), state()) ->
     {ok, state()} | {reply, {text, binary()}, state()}.
-handle_text_message(Payload, #state{handler_state = HandlerState} = State) ->
+handle_text_message(Payload, #state{handler_module = HandlerModule, handler_state = HandlerState} = State) ->
     try
         ActivityReport = jsonable_record:from_json(json_utils:decode(Payload), atm_openfaas_activity_report),
         handle_activity_report(ActivityReport, State)
@@ -181,7 +212,7 @@ handle_text_message(Payload, #state{handler_state = HandlerState} = State) ->
             [Class, Reason, TrimmedPayload],
             Stacktrace
         ),
-        atm_openfaas_activity_report:handle_reporting_error(HandlerState, ?ERROR_BAD_MESSAGE(TrimmedPayload)),
+        HandlerModule:handle_error(?ERROR_BAD_MESSAGE(TrimmedPayload), HandlerState),
         {reply, {text, <<"Bad request: ", Payload/binary>>}, State}
     end.
 
@@ -189,9 +220,9 @@ handle_text_message(Payload, #state{handler_state = HandlerState} = State) ->
 %% @private
 -spec handle_activity_report(atm_openfaas_activity_report:record(), state()) ->
     {ok, state()} | {reply, {text, binary()}, state()}.
-handle_activity_report(ActivityReport, #state{connection_ref = ConnRef, handler_state = HandlerState} = State) ->
+handle_activity_report(ActivityReport, #state{handler_module = HandlerModule, handler_state = HandlerState} = State) ->
     try
-        NewHandlerState = atm_openfaas_activity_report:consume(ConnRef, HandlerState, ActivityReport),
+        NewHandlerState = HandlerModule:consume_activity_report(self(), ActivityReport, HandlerState),
         {ok, State#state{handler_state = NewHandlerState}}
     catch Class:Reason:Stacktrace ->
         ?error_stacktrace(
@@ -200,6 +231,6 @@ handle_activity_report(ActivityReport, #state{connection_ref = ConnRef, handler_
             [Class, Reason, ActivityReport],
             Stacktrace
         ),
-        atm_openfaas_activity_report:handle_reporting_error(HandlerState, ?ERROR_INTERNAL_SERVER_ERROR),
+        HandlerModule:handle_error(?ERROR_INTERNAL_SERVER_ERROR, HandlerState),
         {reply, {text, <<"Internal server error while processing the request">>}, State}
     end.

@@ -36,7 +36,8 @@
 -export([
     connectivity_test/1,
 
-    function_pod_status_lifecycle_test/1,
+    pod_status_monitor_lifecycle_test/1,
+    pod_status_monitor_error_handling_test/1,
 
     result_streamer_registration_deregistration_test/1,
     result_streamer_chunk_reporting_test/1,
@@ -58,7 +59,8 @@ groups() -> [
         connectivity_test
     ]},
     {parallel, [parallel], [
-        function_pod_status_lifecycle_test,
+        pod_status_monitor_lifecycle_test,
+        pod_status_monitor_error_handling_test,
 
         result_streamer_registration_deregistration_test,
         result_streamer_chunk_reporting_test,
@@ -103,7 +105,7 @@ all() -> [
 %%%===================================================================
 
 connectivity_test(_Config) ->
-    connectivity_test_base(k8s_events_monitor),
+    connectivity_test_base(pod_status_monitor),
     connectivity_test_base(result_streamer).
 
 connectivity_test_base(ClientType) ->
@@ -125,8 +127,8 @@ connectivity_test_base(ClientType) ->
     ?assertMatch({ok, _}, try_connect(ClientType, base64:encode(?CORRECT_SECRET))).
 
 
-function_pod_status_lifecycle_test(_Config) ->
-    Client = connect(k8s_events_monitor),
+pod_status_monitor_lifecycle_test(_Config) ->
+    Client = connect(pod_status_monitor),
     FunctionName = str_utils:rand_hex(10),
     {ok, ActivityRegistryId} = create_activity_registry(FunctionName),
 
@@ -168,6 +170,13 @@ function_pod_status_lifecycle_test(_Config) ->
             ?rpc(atm_openfaas_function_activity_registry:browse_pod_event_log(PodEventLogId, #{}))
         )
     end, PodStatusRegistry).
+
+
+pod_status_monitor_error_handling_test(_Config) ->
+    Client = connect(pod_status_monitor),
+    % a pod status monitor client may not send result streamer reports
+    atm_openfaas_result_streamer_mock:send_registration_report(Client, <<"a">>, <<"b">>, <<"c">>),
+    ?await(atm_openfaas_pod_status_monitor_mock:has_received_internal_server_error_push_message(Client)).
 
 
 result_streamer_registration_deregistration_test(_Config) ->
@@ -339,6 +348,10 @@ result_streamer_reregistration_test(_Config) ->
     atm_openfaas_result_streamer_mock:send_registration_report(ClientGamma, WorkflowExecutionId, TaskExecutionId, ResultStreamerId),
     ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, [ResultStreamerId])),
 
+    %% make sure client alpha's deregistration report does not happen before client gamma registration
+    %% @TODO VFS-9388 this should not be needed when the protocol has ACK messages
+    timer:sleep(1000),
+
     % a deregistration report from a previous incarnation of the result streamer should be ignored
     atm_openfaas_result_streamer_mock:send_deregistration_report(ClientAlpha),
     atm_openfaas_result_streamer_mock:send_deregistration_report(ClientBeta),
@@ -454,11 +467,15 @@ result_streamer_error_handling_test(_Config) ->
         ?ERROR_INTERNAL_SERVER_ERROR
     ])),
 
-    atm_openfaas_result_streamer_mock:send_text(ClientBeta, <<"1254321">>),
+    % a result streamer client may not send pod status reports
+    atm_openfaas_pod_status_monitor_mock:send_pod_status_report(ClientBeta, [
+        gen_pod_status_report(<<"a">>, <<"b">>),
+        gen_pod_status_report(<<"c">>, <<"d">>)
+    ]),
     ?await(compare_streamed_reports(WorkflowExecutionId, TaskExecutionId, [
         ?ERROR_BAD_MESSAGE(<<"bad-message">>),
         ?ERROR_INTERNAL_SERVER_ERROR,
-        ?ERROR_BAD_MESSAGE(<<"1254321">>)
+        ?ERROR_INTERNAL_SERVER_ERROR
     ])),
 
     % errors are streamed, but should not cause the stream to conclude by itself;
@@ -474,17 +491,17 @@ result_streamer_error_handling_test(_Config) ->
 %%%===================================================================
 
 %% @private
--spec connect(k8s_events_monitor | result_streamer) -> test_websocket_client:client_ref().
+-spec connect(atm_openfaas_activity_feed_ws_handler:client_type()) -> test_websocket_client:client_ref().
 connect(Type) ->
     {ok, Client} = try_connect(Type, base64:encode(?CORRECT_SECRET)),
     Client.
 
 
 %% @private
--spec try_connect(k8s_events_monitor | result_streamer, undefined | binary()) ->
+-spec try_connect(atm_openfaas_activity_feed_ws_handler:client_type(), undefined | binary()) ->
     {ok, test_websocket_client:client_ref()} | {error, term()}.
-try_connect(k8s_events_monitor, BasicAuthorization) ->
-    atm_openfaas_k8s_events_monitor_mock:start(?PROVIDER_SELECTOR, BasicAuthorization);
+try_connect(pod_status_monitor, BasicAuthorization) ->
+    atm_openfaas_pod_status_monitor_mock:start(?PROVIDER_SELECTOR, BasicAuthorization);
 try_connect(result_streamer, BasicAuthorization) ->
     atm_openfaas_result_streamer_mock:start(?PROVIDER_SELECTOR, BasicAuthorization).
 
@@ -522,7 +539,7 @@ submit_pod_status_reports(ClientRef, StatusChangeReports) ->
         rand:uniform(length(StatusChangeReports)),
         StatusChangeReports
     ),
-    atm_openfaas_k8s_events_monitor_mock:send_pod_status_report(ClientRef, RandomReportsSublist),
+    atm_openfaas_pod_status_monitor_mock:send_pod_status_report(ClientRef, RandomReportsSublist),
     submit_pod_status_reports(ClientRef, RemainingReports).
 
 

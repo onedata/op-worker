@@ -16,9 +16,11 @@
 -include("modules/automation/atm_execution.hrl").
 
 
+%% atm_openfaas_activity_report_handler callbacks
+-export([consume_activity_report/3]).
+-export([handle_error/2]).
+
 %% API
--export([consume_report/3]).
--export([handle_reporting_error_if_related/2]).
 -export([trigger_conclusion/2]).
 
 
@@ -33,68 +35,35 @@
 
 
 %%%===================================================================
-%%% API functions
+%%% atm_openfaas_activity_report_handler callbacks
 %%%===================================================================
 
--spec consume_report(
+-spec consume_activity_report(
     atm_openfaas_activity_feed_ws_handler:connection_ref(),
-    atm_openfaas_activity_feed_ws_handler:handler_state(),
-    atm_openfaas_result_streamer_report:record()
-) -> atm_openfaas_activity_feed_ws_handler:handler_state().
-consume_report(ConnRef, _HandlerState, #atm_openfaas_result_streamer_registration_report{
-    workflow_execution_id = WorkflowExecutionId,
-    task_execution_id = TaskExecutionId,
-    result_streamer_id = ResultStreamerId
-}) ->
-    atm_openfaas_result_streamer_registry:register(
-        WorkflowExecutionId, TaskExecutionId, ResultStreamerId, ConnRef
-    ),
-    #result_streamer_context{
-        workflow_execution_id = WorkflowExecutionId,
-        task_execution_id = TaskExecutionId,
-        result_streamer_id = ResultStreamerId
-    };
-consume_report(ConnRef, HandlerState, #atm_openfaas_result_streamer_chunk_report{chunk = Chunk}) ->
-    #result_streamer_context{
-        workflow_execution_id = WorkflowExecutionId,
-        task_execution_id = TaskExecutionId,
-        result_streamer_id = ResultStreamerId
-    } = HandlerState,
-    case atm_openfaas_result_streamer_registry:has(WorkflowExecutionId, TaskExecutionId, ResultStreamerId, ConnRef) of
-        false ->
-            % reports that are late (after deregistration) or from a previous incarnation of the streamer are
-            % ignored - such situation can only happen when there has been an anomaly and the stream will
-            % anyway conclude with failure, so no special handling of this situation is required
-            ?warning(
-                "Ignoring a stale report by result streamer ~s for workflow execution ~s and task execution ~s",
-                [ResultStreamerId, WorkflowExecutionId, TaskExecutionId]
-            );
-        true ->
-            ok = workflow_engine:stream_task_data(WorkflowExecutionId, TaskExecutionId, {chunk, Chunk})
-    end,
-    HandlerState;
-consume_report(ConnRef, HandlerState, #atm_openfaas_result_streamer_deregistration_report{}) ->
-    #result_streamer_context{
-        workflow_execution_id = WorkflowExecutionId,
-        task_execution_id = TaskExecutionId,
-        result_streamer_id = ResultStreamerId
-    } = HandlerState,
-    atm_openfaas_result_streamer_registry:deregister(
-        WorkflowExecutionId, TaskExecutionId, ResultStreamerId, ConnRef
-    ),
-    HandlerState.
+    atm_openfaas_activity_report:record(),
+    atm_openfaas_activity_feed_ws_handler:handler_state()
+) ->
+    atm_openfaas_activity_feed_ws_handler:handler_state().
+consume_activity_report(ConnRef, #atm_openfaas_activity_report{
+    type = atm_openfaas_result_streamer_report,
+    batch = Batch
+}, HandlerState) ->
+    lists:foldl(fun(Report, HandlerStateAcc) ->
+        consume_result_streamer_report(ConnRef, Report, HandlerStateAcc)
+    end, HandlerState, Batch).
 
 
--spec handle_reporting_error_if_related(atm_openfaas_activity_feed_ws_handler:handler_state(), errors:error()) ->
+-spec handle_error(errors:error(), atm_openfaas_activity_feed_ws_handler:handler_state()) ->
     ok.
-handle_reporting_error_if_related(#result_streamer_context{
+handle_error(Error, #result_streamer_context{
     workflow_execution_id = WorkflowExecutionId,
     task_execution_id = TaskExecutionId
-}, Error) ->
-    ok = workflow_engine:stream_task_data(WorkflowExecutionId, TaskExecutionId, Error);
-handle_reporting_error_if_related(_, _) ->
-    ok.
+}) ->
+    ok = workflow_engine:stream_task_data(WorkflowExecutionId, TaskExecutionId, Error).
 
+%%%===================================================================
+%%% API functions
+%%%===================================================================
 
 -spec trigger_conclusion(atm_workflow_execution:id(), atm_task_execution:id()) -> ok.
 trigger_conclusion(WorkflowExecutionId, TaskExecutionId) ->
@@ -118,6 +87,57 @@ trigger_conclusion(WorkflowExecutionId, TaskExecutionId) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%% @private
+-spec consume_result_streamer_report(
+    atm_openfaas_activity_feed_ws_handler:connection_ref(),
+    atm_openfaas_result_streamer_report:record(),
+    atm_openfaas_activity_feed_ws_handler:handler_state()
+) ->
+    atm_openfaas_activity_feed_ws_handler:handler_state().
+consume_result_streamer_report(ConnRef, #atm_openfaas_result_streamer_registration_report{
+    workflow_execution_id = WorkflowExecutionId,
+    task_execution_id = TaskExecutionId,
+    result_streamer_id = ResultStreamerId
+}, _HandlerState) ->
+    atm_openfaas_result_streamer_registry:register(
+        WorkflowExecutionId, TaskExecutionId, ResultStreamerId, ConnRef
+    ),
+    #result_streamer_context{
+        workflow_execution_id = WorkflowExecutionId,
+        task_execution_id = TaskExecutionId,
+        result_streamer_id = ResultStreamerId
+    };
+consume_result_streamer_report(ConnRef, #atm_openfaas_result_streamer_chunk_report{chunk = Chunk}, HandlerState) ->
+    #result_streamer_context{
+        workflow_execution_id = WorkflowExecutionId,
+        task_execution_id = TaskExecutionId,
+        result_streamer_id = ResultStreamerId
+    } = HandlerState,
+    case atm_openfaas_result_streamer_registry:has(WorkflowExecutionId, TaskExecutionId, ResultStreamerId, ConnRef) of
+        false ->
+            % reports that are late (after deregistration) or from a previous incarnation of the streamer are
+            % ignored - such situation can only happen when there has been an anomaly and the stream will
+            % anyway conclude with failure, so no special handling of this situation is required
+            ?warning(
+                "Ignoring a stale report by result streamer ~s for workflow execution ~s and task execution ~s",
+                [ResultStreamerId, WorkflowExecutionId, TaskExecutionId]
+            );
+        true ->
+            ok = workflow_engine:stream_task_data(WorkflowExecutionId, TaskExecutionId, {chunk, Chunk})
+    end,
+    HandlerState;
+consume_result_streamer_report(ConnRef, #atm_openfaas_result_streamer_deregistration_report{}, HandlerState) ->
+    #result_streamer_context{
+        workflow_execution_id = WorkflowExecutionId,
+        task_execution_id = TaskExecutionId,
+        result_streamer_id = ResultStreamerId
+    } = HandlerState,
+    atm_openfaas_result_streamer_registry:deregister(
+        WorkflowExecutionId, TaskExecutionId, ResultStreamerId, ConnRef
+    ),
+    HandlerState.
+
 
 %% @private
 -spec conclude(atm_workflow_execution:id(), atm_task_execution:id()) -> workflow_engine:stream_closing_result().

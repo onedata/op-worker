@@ -6,8 +6,9 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Simulates an external k8s-events-monitor client that connects via the OpenFaaS activity
-%%% feed to send pod status reports, using a WebSocket connection underneath.
+%%% Simulates an external openfaas-lambda-result-streamer client that
+%%% connects via the OpenFaaS activity feed to send reports with lambda
+%%% results relayed via a file pipe, using a WebSocket connection underneath.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_openfaas_result_streamer_mock).
@@ -34,7 +35,9 @@
 -spec start(oct_background:node_selector(), undefined | binary()) ->
     {ok, test_websocket_client:client_ref()} | {error, term()}.
 start(NodeSelector, BasicAuthorization) ->
-    atm_openfaas_activity_feed_client_mock:start(NodeSelector, BasicAuthorization, fun handle_push_message/2).
+    atm_openfaas_activity_feed_client_mock:start(
+        NodeSelector, result_streamer, BasicAuthorization, fun handle_push_message/2
+    ).
 
 
 -spec send_text(test_websocket_client:client_ref(), binary()) -> ok.
@@ -89,17 +92,14 @@ simulate_deregistration_failure(ClientRef) ->
 %%%===================================================================
 
 %% @private
-%% @doc Callback handling push messages received by the test_websocket_client. Currently, only one
-%% type of message is expected (finalization signal sent to result streamers).
-%% This callback is common for connections simulating k8s-event-monitor and openfaas-lambda-result-streamer,
-%% though the k8s-event-monitor does not expect any push messages.
+%% @doc Callback handling push messages received by the test_websocket_client.
 -spec handle_push_message(test_websocket_client:client_ref(), binary()) ->
     no_reply | {reply, binary()}.
 handle_push_message(_ClientRef, <<"Bad request: ", _/binary>>) ->
-    % this push message is received when a bad request is performed (result_streamer_error_handling_test)
+    % this push message is received when a bad request is performed
     no_reply;
 handle_push_message(_ClientRef, <<"Internal server error while processing the request">>) ->
-    % this push message is received when an error occurs during report processing (result_streamer_error_handling_test)
+    % this push message is received when an error occurs during report processing
     no_reply;
 handle_push_message(ClientRef, Payload) ->
     try
