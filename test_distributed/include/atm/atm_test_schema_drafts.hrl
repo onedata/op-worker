@@ -17,37 +17,46 @@
 -include("atm/atm_test_schema.hrl").
 
 
--define(ECHO_LAMBDA_DRAFT, #atm_lambda_revision_draft{
+-define(INTEGER_LIST_STORE_SCHEMA_DRAFT(__ID, __DEFAULT_INITIAL_CONTENT), #atm_store_schema_draft{
+    id = __ID,
+    type = list,
+    config = #atm_list_store_config{item_data_spec = #atm_data_spec{
+        type = atm_integer_type
+    }},
+    requires_initial_content = false,
+    default_initial_content = __DEFAULT_INITIAL_CONTENT
+}).
+-define(INTEGER_LIST_STORE_SCHEMA_DRAFT(__ID), ?INTEGER_LIST_STORE_SCHEMA_DRAFT(__ID, undefined)).
+
+
+-define(ECHO_ARG_NAME, <<"value">>).
+
+-define(ECHO_LAMBDA_DRAFT(__DATA_SPEC), #atm_lambda_revision_draft{
     operation_spec = #atm_openfaas_operation_spec_draft{
         docker_image = <<"test/echo">>
     },
     argument_specs = [#atm_lambda_argument_spec{
-        name = <<"val">>,
-        data_spec = #atm_data_spec{type = atm_integer_type},
+        name = ?ECHO_ARG_NAME,
+        data_spec = __DATA_SPEC,
         is_optional = false
     }],
     result_specs = [#atm_lambda_result_spec{
-        name = <<"val">>,
-        data_spec = #atm_data_spec{type = atm_integer_type},
+        name = ?ECHO_ARG_NAME,
+        data_spec = __DATA_SPEC,
         relay_method = return_value
     }]
 }).
+-define(INTEGER_ECHO_LAMBDA_DRAFT, ?ECHO_LAMBDA_DRAFT(#atm_data_spec{type = atm_integer_type})).
 
--define(ECHO_TASK_DRAFT(__TARGET_STORE_SCHEMA_ID, __TARGET_STORE_UPDATE_OPTIONS), #atm_task_schema_draft{
-    lambda_id = <<"echo">>,
-    lambda_revision_number = 1,
-    argument_mappings = [#atm_task_schema_argument_mapper{
-        argument_name = <<"val">>,
-        value_builder = #atm_task_argument_value_builder{
-            type = iterated_item,
-            recipe = undefined
-        }
-    }],
-    result_mappings = [#atm_task_schema_result_mapper{
-        result_name = <<"val">>,
-        store_schema_id = __TARGET_STORE_SCHEMA_ID,
-        store_content_update_options = __TARGET_STORE_UPDATE_OPTIONS
-    }]
+-define(ECHO_LAMBDA_ID, <<"echo">>).
+-define(ECHO_LAMBDA_REVISION_NUM, 1).
+
+-define(ITERATED_ITEM_ARG_MAPPER(__ARG_NAME), #atm_task_schema_argument_mapper{
+    argument_name = __ARG_NAME,
+    value_builder = #atm_task_argument_value_builder{
+        type = iterated_item,
+        recipe = undefined
+    }
 }).
 
 

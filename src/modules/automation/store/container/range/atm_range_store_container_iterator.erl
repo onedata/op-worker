@@ -35,8 +35,8 @@
 
 -record(atm_range_store_container_iterator, {
     current_num :: integer(),
-    start_num :: integer(),
-    end_num :: integer(),
+    inclusive_start :: integer(),
+    exclusive_end :: integer(),
     step :: integer()
 }).
 -type record() :: #atm_range_store_container_iterator{}.
@@ -53,10 +53,12 @@
 
 
 -spec build(integer(), integer(), integer()) -> record().
-build(Start, End, Step) ->
+build(InclusiveStart, ExclusiveEnd, Step) ->
     #atm_range_store_container_iterator{
-        current_num = Start,
-        start_num = Start, end_num = End, step = Step
+        current_num = InclusiveStart,
+        inclusive_start = InclusiveStart,
+        exclusive_end = ExclusiveEnd,
+        step = Step
     }.
 
 
@@ -73,13 +75,13 @@ build(Start, End, Step) ->
     {ok, [integer()], record()} | stop.
 get_next_batch(AtmWorkflowExecutionAuth, BatchSize, Record = #atm_range_store_container_iterator{
     current_num = CurrentNum,
-    end_num = End,
+    exclusive_end = ExclusiveEnd,
     step = Step
 }) ->
     RequestedEndNum = CurrentNum + (BatchSize - 1) * Step,
     Threshold = case Step > 0 of
-        true -> min(RequestedEndNum, End);
-        false -> max(RequestedEndNum, End)
+        true -> min(RequestedEndNum, ExclusiveEnd - 1);
+        false -> max(RequestedEndNum, ExclusiveEnd + 1)
     end,
     case lists:seq(CurrentNum, Threshold, Step) of
         [] ->
@@ -116,24 +118,29 @@ version() ->
     json_utils:json_term().
 db_encode(#atm_range_store_container_iterator{
     current_num = Current,
-    start_num = Start,
-    end_num = End,
+    inclusive_start = InclusiveStart,
+    exclusive_end = ExclusiveEnd,
     step = Step
 }, _NestedRecordEncoder) ->
-    #{<<"current">> => Current, <<"start">> => Start, <<"end">> => End, <<"step">> => Step}.
+    #{
+        <<"current">> => Current,
+        <<"inclusive_start">> => InclusiveStart,
+        <<"exclusive_end">> => ExclusiveEnd,
+        <<"step">> => Step
+    }.
 
 
 -spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
     record().
 db_decode(#{
     <<"current">> := Current,
-    <<"start">> := Start,
-    <<"end">> := End,
+    <<"inclusive_start">> := InclusiveStart,
+    <<"exclusive_end">> := ExclusiveEnd,
     <<"step">> := Step
 }, _NestedRecordDecoder) ->
     #atm_range_store_container_iterator{
         current_num = Current,
-        start_num = Start,
-        end_num = End,
+        inclusive_start = InclusiveStart,
+        exclusive_end = ExclusiveEnd,
         step = Step
     }.
