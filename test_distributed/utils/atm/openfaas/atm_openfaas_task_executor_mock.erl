@@ -42,7 +42,7 @@
 
 
 -define(OPENFAAS_FEED_CONN_SECRET, <<"884d387220ec1359e3199361dd45d328779efc9a">>).
--define(STREAMER_ID, 10).
+-define(STREAMER_ID, <<"10">>).
 
 -define(MOCKED_MODULE, atm_openfaas_task_executor).
 
@@ -217,7 +217,7 @@ init_result_streamer_if_task_has_any_uncorrelated_results(
     Path = string:replace(?OPENFAAS_ACTIVITY_FEED_WS_COWBOY_ROUTE, ":client_type", "result_streamer"),
     BasicAuthorization = base64:encode(?OPENFAAS_FEED_CONN_SECRET),
 
-    {ok, ResultStreamerRef} = atm_openfaas_result_streamer_mock:start(
+    {ok, ResultStreamerRef} = atm_openfaas_result_streamer_mock:connect_to_url(
         binary_to_list(oneprovider:build_url(wss, Path)),
         BasicAuthorization,
         [{cacerts, https_listener:get_cert_chain_ders()}]

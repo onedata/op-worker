@@ -20,8 +20,8 @@
 
 %% API
 -export([set_secret_on_provider/2]).
--export([connect/4]).
--export([start/4]).
+-export([connect_to_provider_node/4]).
+-export([connect_to_url/4]).
 -export([send_text/2]).
 -export([send_report/3]).
 
@@ -35,24 +35,29 @@ set_secret_on_provider(NodeSelector, Secret) ->
     opw_test_rpc:set_env(NodeSelector, openfaas_activity_feed_secret, Secret).
 
 
--spec connect(
+-spec connect_to_provider_node(
     oct_background:node_selector(),
     atm_openfaas_activity_feed_ws_handler:client_type(),
     undefined | binary(),
     test_websocket_client:push_message_handler()
 ) ->
     {ok, test_websocket_client:client_ref()} | {error, term()}.
-connect(NodeSelector, ClientType, BasicAuthorization, PushMessageHandler) ->
+connect_to_provider_node(NodeSelector, ClientType, BasicAuthorization, PushMessageHandler) ->
     Path = string:replace(?OPENFAAS_ACTIVITY_FEED_WS_COWBOY_ROUTE, ":client_type", atom_to_list(ClientType)),
     Headers = build_headers(BasicAuthorization),
-    test_websocket_client:connect(NodeSelector, Path, Headers, PushMessageHandler).
+    test_websocket_client:connect_to_provider_node(NodeSelector, Path, Headers, PushMessageHandler).
 
 
--spec start(binary(), undefined | binary(), proplists:proplist(), test_websocket_client:push_message_handler()) ->
+-spec connect_to_url(
+    binary(),
+    undefined | binary(),
+    proplists:proplist(),
+    test_websocket_client:push_message_handler()
+) ->
     {ok, test_websocket_client:client_ref()} | {error, term()}.
-start(Url, BasicAuthorization, TransportOpts, PushMessageHandler) ->
+connect_to_url(Url, BasicAuthorization, TransportOpts, PushMessageHandler) ->
     Headers = build_headers(BasicAuthorization),
-    test_websocket_client:start(Url, Headers, TransportOpts, PushMessageHandler).
+    test_websocket_client:connect_to_url(Url, Headers, TransportOpts, PushMessageHandler).
 
 
 %% @private

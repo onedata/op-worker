@@ -19,8 +19,8 @@
 
 
 %% API
--export([connect/2]).
--export([start/3]).
+-export([connect_to_provider_node/2]).
+-export([connect_to_url/3]).
 -export([send_text/2]).
 -export([send_report/2]).
 -export([send_registration_report/4]).
@@ -33,18 +33,18 @@
 %%% API
 %%%===================================================================
 
--spec connect(oct_background:node_selector(), undefined | binary()) ->
+-spec connect_to_provider_node(oct_background:node_selector(), undefined | binary()) ->
     {ok, test_websocket_client:client_ref()} | {error, term()}.
-connect(NodeSelector, BasicAuthorization) ->
-    atm_openfaas_activity_feed_client_mock:connect(
+connect_to_provider_node(NodeSelector, BasicAuthorization) ->
+    atm_openfaas_activity_feed_client_mock:connect_to_provider_node(
         NodeSelector, result_streamer, BasicAuthorization, fun handle_push_message/2
     ).
 
 
--spec start(oct_background:node_selector(), undefined | binary(), proplists:proplist()) ->
+-spec connect_to_url(binary(), undefined | binary(), proplists:proplist()) ->
     {ok, test_websocket_client:client_ref()} | {error, term()}.
-start(Url, BasicAuthorization, TransportOpts) ->
-    atm_openfaas_activity_feed_client_mock:start(
+connect_to_url(Url, BasicAuthorization, TransportOpts) ->
+    atm_openfaas_activity_feed_client_mock:connect_to_url(
         Url, BasicAuthorization, TransportOpts, fun handle_push_message/2
     ).
 

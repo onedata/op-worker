@@ -42,7 +42,7 @@
 
 -type id() :: binary().
 -type diff() :: datastore_doc:diff(record()).
--type record() :: #atm_openfaas_function_activity_registry{}. %@fixme do wywalenia
+-type record() :: #atm_openfaas_function_activity_registry{}.
 -type doc() :: datastore_doc:doc(record()).
 
 % identifier of a pod that executes an OpenFaaS function - each function can have
