@@ -156,7 +156,7 @@ get_all(WorkflowExecutionId, TaskExecutionId) ->
     conclusion_orchestrator()
 ) -> no_streamers_ever_registered | all_streamers_deregistered | {active_result_streamers, [result_streamer_id()]}.
 claim_conclusion_orchestration(WorkflowExecutionId, TaskExecutionId, ConclusionOrchestrator) ->
-    Diff = fun(Record = #atm_openfaas_result_streamer_registry{}) ->
+    Diff = fun(Record = #atm_openfaas_result_streamer_registry{conclusion_orchestrator = undefined}) ->
         {ok, Record#atm_openfaas_result_streamer_registry{
             conclusion_orchestrator = ConclusionOrchestrator
         }}

@@ -65,7 +65,10 @@ consume_report(ConnRef, HandlerState, #atm_openfaas_result_streamer_chunk_report
             % reports that are late (after deregistration) or from a previous incarnation of the streamer are
             % ignored - such situation can only happen when there has been an anomaly and the stream will
             % anyway conclude with failure, so no special handling of this situation is required
-            ok;
+            ?warning(
+                "Ignoring a stale report by result streamer ~s for workflow execution ~s and task execution ~s",
+                [ResultStreamerId, WorkflowExecutionId, TaskExecutionId]
+            );
         true ->
             ok = workflow_engine:stream_task_data(WorkflowExecutionId, TaskExecutionId, {chunk, Chunk})
     end,
@@ -100,7 +103,7 @@ trigger_conclusion(WorkflowExecutionId, TaskExecutionId) ->
             conclude(WorkflowExecutionId, TaskExecutionId)
         catch Class:Reason:Stacktrace ->
             ?error_stacktrace(
-                "Unexpected error while terminating task data stream for workflow execution ~s and task execution ~s~n"
+                "Unexpected error while concluding task data stream for workflow execution ~s and task execution ~s~n"
                 "Error was: ~w:~p",
                 [WorkflowExecutionId, TaskExecutionId, Class, Reason],
                 Stacktrace
@@ -130,12 +133,12 @@ conclude(WorkflowExecutionId, TaskExecutionId) ->
         all_streamers_deregistered ->
             success;
         {active_result_streamers, ConnRefs} ->
-            FinalizationSignalJson = jsonable_record:to_json(
+            EncodedFinalizationSignalJson = jsonable_record:to_json(
                 #atm_openfaas_result_streamer_finalization_signal{},
                 atm_openfaas_result_streamer_finalization_signal
             ),
             lists:foreach(fun(ConnRef) ->
-                atm_openfaas_activity_feed_ws_connection:push_message(ConnRef, FinalizationSignalJson)
+                atm_openfaas_activity_feed_ws_connection:push_json_to_client(ConnRef, EncodedFinalizationSignalJson)
             end, ConnRefs),
             atm_openfaas_result_streamer_registry:await_deregistration_of_all_streamers()
     end.
