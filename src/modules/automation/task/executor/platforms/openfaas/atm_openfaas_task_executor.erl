@@ -494,8 +494,8 @@ add_data_stream_annotations_if_required(FunctionDefinition, #initiation_ctx{
     }
 }) ->
     insert_function_annotations(FunctionDefinition, #{
-        <<"result_stream.openfaas.onedata.org/inject">> => <<"enabled">>,
-        <<"result_stream.openfaas.onedata.org/result_names">> => str_utils:join_binary(
+        <<"resultstream.openfaas.onedata.org/inject">> => <<"enabled">>,
+        <<"resultstream.openfaas.onedata.org/result_names">> => str_utils:join_binary(
             AtmTaskExecutionUncorrelatedResultNames, <<",">>
         )
     }).
