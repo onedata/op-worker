@@ -24,6 +24,7 @@
 %% API
 -export([validate_args/2, validate_user_ctx/2]).
 -export([default_admin_ctx/1]).
+-export([redact_confidential_data/2]).
 
 %% Onepanel RPC API
 -export([prepare_helper_args/2, prepare_user_ctx_params/2]).
@@ -95,7 +96,7 @@ prepare_user_ctx_params(?WEBDAV_HELPER_NAME = HelperName, Params) ->
 
 prepare_user_ctx_params(HelperName, Params) ->
     MappedParams = maps:fold(
-        fun (<<"rootUid">>, Value, Acc) -> Acc#{<<"uid">> => Value};
+        fun(<<"rootUid">>, Value, Acc) -> Acc#{<<"uid">> => Value};
             (<<"rootGid">>, Value, Acc) -> Acc#{<<"gid">> => Value};
             (Key, Value, Acc) -> Acc#{Key => Value}
         end, #{}, Params),
@@ -186,6 +187,18 @@ default_admin_ctx(HelperName) when
 
 default_admin_ctx(_) ->
     #{}.
+
+
+-spec redact_confidential_data(name(), args()) -> args().
+redact_confidential_data(HelperName, Params) ->
+    lists:foldl(fun(ParamName, Acc) ->
+        case maps:find(ParamName, Acc) of
+            error ->
+                Acc;
+            {ok, _ConfidentialValue} ->
+                maps:put(ParamName, <<"*****">>, Acc)
+        end
+    end, Params, confidential_params(HelperName)).
 
 %%%===================================================================
 %%% Requirements
@@ -288,10 +301,33 @@ expected_user_ctx_params(?XROOTD_HELPER_NAME) ->
 expected_user_ctx_params(?NULL_DEVICE_HELPER_NAME) ->
     [<<"uid">>, {optional, <<"gid">>}].
 
+
+%% @private
+-spec confidential_params(name()) -> [field()].
+confidential_params(?CEPH_HELPER_NAME) ->
+    [<<"key">>];
+confidential_params(?CEPHRADOS_HELPER_NAME) ->
+    [<<"key">>];
+confidential_params(?POSIX_HELPER_NAME) ->
+    [];
+confidential_params(?S3_HELPER_NAME) ->
+    [<<"secretKey">>];
+confidential_params(?SWIFT_HELPER_NAME) ->
+    [<<"password">>];
+confidential_params(?GLUSTERFS_HELPER_NAME) ->
+    [];
+confidential_params(?WEBDAV_HELPER_NAME) ->
+    [<<"credentials">>, <<"accessToken">>, <<"onedataAccessToken">>];
+confidential_params(?HTTP_HELPER_NAME) ->
+    [<<"credentials">>, <<"accessToken">>, <<"onedataAccessToken">>];
+confidential_params(?XROOTD_HELPER_NAME) ->
+    [<<"credentials">>];
+confidential_params(?NULL_DEVICE_HELPER_NAME) ->
+    [].
+
 %%%===================================================================
 %%% Internal helpers
 %%%===================================================================
-
 
 %%--------------------------------------------------------------------
 %% @private
