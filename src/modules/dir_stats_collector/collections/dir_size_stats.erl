@@ -36,12 +36,15 @@
 
 -include("modules/dir_stats_collector/dir_size_stats.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include_lib("cluster_worker/include/time_series/browsing.hrl").
 -include_lib("ctool/include/time_series/common.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 
 %% API
--export([get_stats/1, get_stats/2, get_stats_and_time_series_collection/1,
+-export([
+    get_stats/1, get_stats/2, 
+    browse_time_stats_collection/2,
     report_reg_file_size_changed/3,
     report_file_created/2, report_file_deleted/2,
     report_file_moved/4,
@@ -93,26 +96,18 @@ get_stats(Guid, StatNames) ->
     dir_stats_collector:get_stats(Guid, ?MODULE, StatNames).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns statistics collection (actual values of statistics) together with time series collection
-%% (mean values of statistics in chosen time windows).
-%% @end
-%%--------------------------------------------------------------------
--spec get_stats_and_time_series_collection(file_id:file_guid()) ->
-    {ok, {current_stats(), internal_stats()}} |
+-spec browse_time_stats_collection(file_id:file_guid(), ts_browse_request:record()) -> {ok, ts_browse_result:record()} |
     dir_stats_collector:collecting_status_error() | ?ERROR_INTERNAL_SERVER_ERROR.
-get_stats_and_time_series_collection(Guid) ->
+browse_time_stats_collection(Guid, BrowseRequest) ->
     case dir_stats_collector_config:is_collecting_active(file_id:guid_to_space_id(Guid)) of
         true ->
             case dir_stats_collector:flush_stats(Guid, ?MODULE) of
                 ok ->
                     Uuid = file_id:guid_to_uuid(Guid),
-                    case datastore_time_series_collection:get_slice(?CTX, Uuid, ?COMPLETE_LAYOUT, #{}) of
-                        {ok, Slice} ->
-                            {ok, {internal_stats_to_current_stats(Slice), internal_stats_to_time_stats(Slice)}};
-                        {error, not_found} ->
-                            {ok, {gen_empty_current_stats(Guid), gen_empty_time_stats(Guid)}}
+                    case datastore_time_series_collection:browse(?CTX, Uuid, BrowseRequest) of
+                        {ok, BrowseResult} -> {ok, internal_to_time_stats_browse_result(BrowseResult)};
+                        {error, not_found} -> {ok, gen_empty_time_stats_browse_result(BrowseRequest, Guid)};
+                        {error, _} = Error2 -> Error2
                     end;
                 {error, _} = Error ->
                     Error
@@ -319,6 +314,13 @@ time_stats_metric_composition() ->
 
 
 %% @private
+-spec gen_default_time_stats_layout(file_id:file_guid()) -> time_series_collection:layout().
+gen_default_time_stats_layout(Guid) ->
+    MetricNames = maps:keys(time_stats_metric_composition()),
+    maps_utils:generate_from_list(fun(TimeSeriesName) -> {TimeSeriesName, MetricNames} end, stat_names(Guid)).
+
+
+%% @private
 -spec internal_stats_to_current_stats(internal_stats()) -> current_stats().
 internal_stats_to_current_stats(InternalStats) ->
     maps:map(fun(_TimeSeriesName, #{?CURRENT_METRIC := Windows}) ->
@@ -338,9 +340,35 @@ internal_stats_to_time_stats(InternalStats) ->
 
 
 %% @private
+-spec internal_layout_to_time_stats_layout(time_series_collection:layout()) -> 
+    time_series_collection:layout().
+internal_layout_to_time_stats_layout(InternalLayout) ->
+    maps:map(fun(_TimeSeriesName, Metrics) ->
+        lists:delete(?CURRENT_METRIC, Metrics)
+    end, maps:without([?INCARNATION_TIME_SERIES], InternalLayout)).
+
+
+%% @private
 -spec internal_stats_to_incarnation(internal_stats()) -> non_neg_integer().
 internal_stats_to_incarnation(#{?INCARNATION_TIME_SERIES := #{?CURRENT_METRIC := []}}) -> 0;
 internal_stats_to_incarnation(#{?INCARNATION_TIME_SERIES := #{?CURRENT_METRIC := [{_Timestamp, Value}]}}) -> Value.
+
+
+%% @private
+-spec internal_to_time_stats_browse_result(ts_browse_result:record()) -> ts_browse_result:record().
+internal_to_time_stats_browse_result(#time_series_layout_result{layout = InternalLayout}) ->
+    #time_series_layout_result{layout = internal_layout_to_time_stats_layout(InternalLayout)};
+internal_to_time_stats_browse_result(#time_series_slice_result{slice = InternalStats}) ->
+    #time_series_slice_result{slice = internal_stats_to_time_stats(InternalStats)}.
+
+
+%% @private
+-spec gen_empty_time_stats_browse_result(ts_browse_request:record(), file_id:file_guid()) ->
+    ts_browse_result:record().
+gen_empty_time_stats_browse_result(#time_series_get_layout_request{}, Guid) ->
+    #time_series_layout_result{layout = gen_default_time_stats_layout(Guid)};
+gen_empty_time_stats_browse_result(#time_series_get_slice_request{}, Guid) ->
+    #time_series_slice_result{slice = gen_empty_time_stats(Guid)}.
 
 
 %% @private

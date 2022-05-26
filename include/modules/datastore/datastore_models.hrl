@@ -1011,9 +1011,8 @@
     % User who scheduled the traverse
     user_id :: od_user:id(),
     % Information needed to restart directory listing
-    use_listing_token = true :: boolean(),
-    last_name :: file_meta:name(),
-    last_tree :: od_provider:id(),
+    tune_for_large_continuous_listing :: boolean(),
+    pagination_token = undefined :: file_listing:pagination_token(),
     % Traverse task specific info
     child_dirs_job_generation_policy :: tree_traverse:child_dirs_job_generation_policy(),
     children_master_jobs_mode :: tree_traverse:children_master_jobs_mode(),

@@ -30,9 +30,8 @@
     user_id :: od_user:id(),
 
     % Fields used for directory listing
-    token = ?INITIAL_DATASTORE_LS_TOKEN :: file_meta:list_token(),
-    last_name = <<>> :: file_meta:list_last_name(),
-    last_tree = <<>> :: file_meta:list_last_tree(),
+    tune_for_large_continuous_listing :: boolean(),
+    pagination_token = undefined :: file_listing:pagination_token() | undefined,
     batch_size :: tree_traverse:batch_size(),
 
     % Traverse config

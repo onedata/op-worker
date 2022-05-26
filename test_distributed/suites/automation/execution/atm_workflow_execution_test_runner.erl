@@ -48,6 +48,7 @@
 -include("atm_workflow_execution_test_runner.hrl").
 -include("modules/automation/atm_execution.hrl").
 -include("onenv_test_utils.hrl").
+-include_lib("cluster_worker/include/time_series/browsing.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 
 %% API
@@ -1189,7 +1190,7 @@ build_browse_opts(single_value) ->
 
 build_browse_opts(time_series) ->
     #atm_time_series_store_content_browse_options{
-        request = #atm_time_series_store_content_get_slice_req{
+        request = #time_series_get_slice_request{
             layout = #{?ALL_TIME_SERIES => [?ALL_METRICS]},
             start_timestamp = undefined,
             window_limit = 10000000000000000000000000000000000000000000000000000

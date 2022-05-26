@@ -12,6 +12,7 @@
 -module(attr_req).
 -author("Tomasz Lichon").
 
+-include("modules/dir_stats_collector/dir_size_stats.hrl").
 -include("modules/fslogic/data_access_control.hrl").
 -include("modules/fslogic/file_details.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
@@ -38,6 +39,7 @@
     resolve_name_conflicts |
     allow_name_conflicts.
 
+
 -type compute_file_attr_opts() :: #{
     % Tells whether to calculate attr even if file was recently removed.
     allow_deleted_files => boolean(),
@@ -50,13 +52,13 @@
     % and conflicting files will be returned.
     name_conflicts_resolution_policy => name_conflicts_resolution_policy(),
 
-    % Tells whether replication status should be included in answer
+    % Tells whether replication status should be included in answer.
     include_replication_status => boolean(),
 
-    % Tells whether hardlink count should be included in answer
+    % Tells whether hardlink count should be included in answer.
     include_link_count => boolean(),
 
-    % Tells whether fields calculated using effective value should be included in answer
+    % Tells whether fields calculated using effective value should be included in answer.
     effective_values_references_limit => non_neg_integer() | infinity
 }.
 
@@ -161,7 +163,7 @@ get_file_details(UserCtx, FileCtx0) ->
 -spec get_file_details_insecure(user_ctx:ctx(), file_ctx:ctx(), compute_file_attr_opts()) ->
     fslogic_worker:fuse_response().
 get_file_details_insecure(UserCtx, FileCtx, Opts) ->
-    {FileAttr, FileDoc, _, FileCtx2} = resolve_file_attr(UserCtx, FileCtx, Opts),
+    {#file_attr{name = FileAttrName} = FileAttr, FileDoc, _, FileCtx2} = resolve_file_attr(UserCtx, FileCtx, Opts),
     {ok, ActivePermissionsType} = file_meta:get_active_perms_type(FileDoc),
 
     ReferencesLimit = maps:get(effective_values_references_limit, Opts, ?DEFAULT_REFERENCES_LIMIT),
@@ -180,24 +182,30 @@ get_file_details_insecure(UserCtx, FileCtx, Opts) ->
             {#{}, FileCtx2}
     end,
 
+    Uuid = file_ctx:get_logical_uuid_const(FileCtx2),
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = #file_details{
             file_attr = FileAttr,
-            symlink_value = case fslogic_uuid:is_symlink_uuid(file_ctx:get_logical_uuid_const(FileCtx)) of
+            symlink_value = case fslogic_uuid:is_symlink_uuid(Uuid) of
                 true ->
                     {ok, SymlinkValue} = file_meta_symlinks:readlink(FileDoc),
                     SymlinkValue;
                 false ->
                     undefined
             end,
-            index_startid = file_meta:get_name(FileDoc),
+            index_startid = file_listing:build_index(file_meta:get_name(FileDoc), file_meta:get_provider_id(FileDoc)),
             active_permissions_type = ActivePermissionsType,
             has_metadata = has_metadata(FileCtx3),
             eff_qos_membership = maps:get(effective_qos_membership, EffectiveValues, undefined),
             eff_dataset_membership = maps:get(effective_dataset_membership, EffectiveValues, undefined),
             eff_protection_flags = maps:get(effective_protection_flags, EffectiveValues, undefined),
-            recall_root_id = maps:get(effective_recall, EffectiveValues, undefined)
+            recall_root_id = maps:get(effective_recall, EffectiveValues, undefined),
+            conflicting_name = case {fslogic_uuid:is_space_dir_uuid(Uuid), file_meta:get_name(FileDoc)} of
+                {true, _} -> undefined;
+                {false, FileAttrName} -> undefined;
+                {false, ConflictingName} -> ConflictingName
+            end
         }
     }.
 
@@ -320,7 +328,7 @@ ensure_access_to_child(UserCtx, ParentFileCtx0, ChildName) ->
 -spec get_child_attr_insecure(user_ctx:ctx(), ParentFile :: file_ctx:ctx(),
     Name :: file_meta:name(), boolean(), boolean()) -> fslogic_worker:fuse_response().
 get_child_attr_insecure(UserCtx, ParentFileCtx, Name, IncludeReplicationStatus, IncludeLinkCount) ->
-    {ChildFileCtx, _NewParentFileCtx} = files_tree:get_child(ParentFileCtx, Name, UserCtx),
+    {ChildFileCtx, _NewParentFileCtx} = file_tree:get_child(ParentFileCtx, Name, UserCtx),
     Response = attr_req:get_file_attr(UserCtx, ChildFileCtx, IncludeReplicationStatus, IncludeLinkCount),
     ensure_proper_file_name(Response, Name).
 
@@ -443,7 +451,7 @@ resolve_file_attr(UserCtx, FileCtx, Opts) ->
     EffectiveType = file_meta:get_effective_type(FileDoc),
 
     {{ATime, CTime, MTime}, FileCtx3} = file_ctx:get_times(FileCtx2),
-    {ParentGuid, FileCtx4} = files_tree:get_parent_guid_if_not_root_dir(FileCtx3, UserCtx),
+    {ParentGuid, FileCtx4} = file_tree:get_parent_guid_if_not_root_dir(FileCtx3, UserCtx),
 
     {Mode, Uid, Gid, OwnerId, ProviderId, Shares, FileCtx5} = case ShareId of
         undefined -> get_private_attrs(UserCtx, FileCtx4, FileDoc);
@@ -457,6 +465,17 @@ resolve_file_attr(UserCtx, FileCtx, Opts) ->
             {?REGULAR_FILE_TYPE, true, _} ->
                 {RS, _, Ctx} = file_ctx:get_replication_status_and_size(FileCtx5),
                 {RS, undefined, Ctx};
+            {?DIRECTORY_TYPE, _, true} ->
+                case dir_size_stats:get_stats(file_ctx:get_logical_guid_const(FileCtx5), [?TOTAL_SIZE]) of
+                    {ok, #{?TOTAL_SIZE := S}} ->
+                        {undefined, S, FileCtx5};
+                    ?ERROR_NOT_FOUND ->
+                        {undefined, 0, FileCtx5};
+                    ?ERROR_DIR_STATS_DISABLED_FOR_SPACE ->
+                        {undefined, undefined, FileCtx5};
+                    ?ERROR_DIR_STATS_NOT_READY ->
+                        {undefined, undefined, FileCtx5}
+                end;
             {?SYMLINK_TYPE, _, true} ->
                 {ok, Symlink} = file_meta_symlinks:readlink(FileDoc),
                 {undefined, byte_size(Symlink), FileCtx5};

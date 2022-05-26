@@ -23,6 +23,7 @@
 -define(SPACE_ATM_MIDDLEWARE_HANDLER, space_atm_middleware_handler).
 -define(SPACE_DATASETS_MIDDLEWARE_HANDLER, space_datasets_middleware_handler).
 -define(SPACE_OZ_MIDDLEWARE_HANDLER, space_oz_middleware_handler).
+-define(SPACE_STATS_MIDDLEWARE_HANDLER, space_stats_middleware_handler).
 -define(SPACE_QOS_MIDDLEWARE_HANDLER, space_qos_middleware_handler).
 -define(SPACE_TRANSFERS_MIDDLEWARE_HANDLER, space_transfers_middleware_handler).
 -define(SPACE_VIEWS_MIDDLEWARE_HANDLER, space_views_middleware_handler).
@@ -56,6 +57,8 @@ resolve_handler(get, providers, private) -> ?SPACE_OZ_MIDDLEWARE_HANDLER;
 resolve_handler(get, transfers, private) -> ?SPACE_TRANSFERS_MIDDLEWARE_HANDLER;
 resolve_handler(get, transfers_active_channels, private) -> ?SPACE_TRANSFERS_MIDDLEWARE_HANDLER;
 resolve_handler(get, {transfers_throughput_charts, _}, private) -> ?SPACE_TRANSFERS_MIDDLEWARE_HANDLER;
+resolve_handler(get, dir_size_stats_config, private) -> ?SPACE_STATS_MIDDLEWARE_HANDLER;
+
 
 resolve_handler(get, available_qos_parameters, private) -> ?SPACE_QOS_MIDDLEWARE_HANDLER;
 resolve_handler(get, datasets, private) -> ?SPACE_DATASETS_MIDDLEWARE_HANDLER;
@@ -63,6 +66,7 @@ resolve_handler(get, datasets_details, private) -> ?SPACE_DATASETS_MIDDLEWARE_HA
 resolve_handler(get, atm_workflow_execution_summaries, private) -> ?SPACE_ATM_MIDDLEWARE_HANDLER;
 
 resolve_handler(update, {view, _}, private) -> ?SPACE_VIEWS_MIDDLEWARE_HANDLER;
+resolve_handler(update, dir_size_stats_config, private) -> ?SPACE_STATS_MIDDLEWARE_HANDLER;
 
 resolve_handler(delete, {view, _}, private) -> ?SPACE_VIEWS_MIDDLEWARE_HANDLER;
 resolve_handler(delete, {view_reduce_function, _}, private) -> ?SPACE_VIEWS_MIDDLEWARE_HANDLER;

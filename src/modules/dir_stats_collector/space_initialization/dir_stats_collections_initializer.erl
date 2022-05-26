@@ -49,7 +49,7 @@
     file_uuid :: file_meta:uuid(),
     space_id :: file_id:space_id(),
     collections_map :: collections_map(),
-    list_opts :: file_meta:list_opts()
+    list_opts :: file_listing:options()
 }).
 
 
@@ -132,7 +132,7 @@ start_dir_initialization(Guid, DataMap) ->
         file_uuid = FileUuid,
         space_id = SpaceId,
         collections_map = InitialCollectionsMap,
-        list_opts = #{token => ?INITIAL_DATASTORE_LS_TOKEN, size => ?BATCH_SIZE}
+        list_opts = #{tune_for_large_continuous_listing => true, limit => ?BATCH_SIZE}
     }.
 
 
@@ -144,13 +144,16 @@ continue_dir_initialization(#initialization_progress{
     collections_map = CollectionsMap,
     list_opts = ListOpts
 } = InitializationProgress) ->
-    {ok, Links, ListExtendedInfo} = file_meta:list_children(FileUuid, ListOpts),
+    {ok, Links, ListingPaginationToken} = file_listing:list(FileUuid, ListOpts),
     UpdatedCollectionsMap = init_batch(SpaceId, Links, CollectionsMap),
-    case ListExtendedInfo of
-        #{is_last := true} ->
+    case file_listing:is_finished(ListingPaginationToken) of
+        true ->
             {finish, UpdatedCollectionsMap};
         _ ->
-            NewListOpts = maps:merge(ListOpts, maps:remove(is_last, ListExtendedInfo)),
+            NewListOpts = #{
+                pagination_token => ListingPaginationToken,
+                limit => ?BATCH_SIZE
+            },
             {continue, InitializationProgress#initialization_progress{
                 collections_map = UpdatedCollectionsMap,
                 list_opts = NewListOpts

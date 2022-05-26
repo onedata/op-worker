@@ -706,7 +706,7 @@ get_children_attrs_test(Config) ->
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             DirKey = maps:get(DirPath, ExtraData),
-            extract_ok(lfm_proxy:get_children_attrs(W, SessId, DirKey, #{offset => 0, size => 100}))
+            extract_ok(lfm_proxy:get_children_attrs(W, SessId, DirKey, #{offset => 0, limit => 100, tune_for_large_continuous_listing => false}))
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir1">>}
@@ -731,7 +731,7 @@ get_children_details_test(Config) ->
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             DirKey = maps:get(DirPath, ExtraData),
-            extract_ok(lfm_proxy:get_children_details(W, SessId, DirKey, #{offset => 0, size => 100}))
+            extract_ok(lfm_proxy:get_children_details(W, SessId, DirKey, #{offset => 0, limit => 100, tune_for_large_continuous_listing => false}))
         end,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir1">>}

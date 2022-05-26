@@ -25,8 +25,6 @@
 %% API
 -export([rename/4]).
 
--define(DEFAULT_LS_BATCH_SIZE, op_worker:get_env(ls_batch_size, 5000)).
-
 %%%===================================================================
 %%% API functions
 %%%===================================================================
@@ -281,7 +279,7 @@ rename_file_on_flat_storage(UserCtx, SourceFileCtx0, FileType, TargetParentFileC
         ?DIRECTORY_TYPE -> ?add_subcontainer_mask
     end,
 
-    {SourceFileParentCtx, SourceFileCtx1} = files_tree:get_parent(
+    {SourceFileParentCtx, SourceFileCtx1} = file_tree:get_parent(
         SourceFileCtx0, UserCtx
     ),
     SourceFileCtx2 = fslogic_authz:ensure_authorized(
@@ -318,7 +316,7 @@ rename_file_on_flat_storage_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx
     SourceGuid = file_ctx:get_logical_guid_const(SourceFileCtx),
     {ParentDoc, TargetParentFileCtx2} = file_ctx:get_file_doc(TargetParentFileCtx),
     {SourceDoc, SourceFileCtx2} = file_ctx:get_file_doc(SourceFileCtx),
-    {SourceParentFileCtx, SourceFileCtx3} = files_tree:get_parent(SourceFileCtx2, UserCtx),
+    {SourceParentFileCtx, SourceFileCtx3} = file_tree:get_parent(SourceFileCtx2, UserCtx),
     {SourceParentDoc, SourceParentFileCtx2} = file_ctx:get_file_doc(SourceParentFileCtx),
     ok = case TargetGuid of
         undefined ->
@@ -402,7 +400,7 @@ rename_into_different_place_within_non_posix_space(_, _, _, _,
     TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) ->
     no_return() | #fuse_response{}.
 rename_file(UserCtx, SourceFileCtx0, TargetParentFileCtx0, TargetName) ->
-    {SourceFileParentCtx, SourceFileCtx1} = files_tree:get_parent(
+    {SourceFileParentCtx, SourceFileCtx1} = file_tree:get_parent(
         SourceFileCtx0, UserCtx
     ),
     SourceFileCtx2 = fslogic_authz:ensure_authorized(
@@ -432,7 +430,7 @@ rename_file(UserCtx, SourceFileCtx0, TargetParentFileCtx0, TargetName) ->
     TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) ->
     no_return() | #fuse_response{}.
 rename_dir(UserCtx, SourceFileCtx0, TargetParentFileCtx0, TargetName) ->
-    {SourceFileParentCtx, SourceFileCtx1} = files_tree:get_parent(
+    {SourceFileParentCtx, SourceFileCtx1} = file_tree:get_parent(
         SourceFileCtx0, UserCtx
     ),
     SourceFileCtx2 = fslogic_authz:ensure_authorized(
@@ -511,7 +509,7 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentCtx0, TargetNa
     FileUuid = file_ctx:get_logical_uuid_const(SourceFileCtx),
     {ParentDoc, TargetParentCtx2} = file_ctx:get_file_doc(TargetParentCtx),
     {SourceDoc, SourceFileCtx2} = file_ctx:get_file_doc(SourceFileCtx),
-    {SourceParentFileCtx, SourceFileCtx3} = files_tree:get_parent(SourceFileCtx2, UserCtx),
+    {SourceParentFileCtx, SourceFileCtx3} = file_tree:get_parent(SourceFileCtx2, UserCtx),
     {SourceParentDoc, SourceParentFileCtx2} = file_ctx:get_file_doc(SourceParentFileCtx),
     file_meta:rename(SourceDoc, SourceParentDoc, ParentDoc, TargetName),
 
@@ -546,16 +544,16 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentCtx0, TargetNa
 -spec rename_child_locations(user_ctx:ctx(), ParentFileCtx :: file_ctx:ctx(),
     ParentStorageFileId :: helpers:file_id()) -> [#file_renamed_entry{}].
 rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId) ->
-    ListOpts = #{token => ?INITIAL_DATASTORE_LS_TOKEN, size => ?DEFAULT_LS_BATCH_SIZE},
+    ListOpts = #{tune_for_large_continuous_listing => true},
     rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId, ListOpts, []).
 
 
 -spec rename_child_locations(user_ctx:ctx(), ParentFileCtx :: file_ctx:ctx(),
-    ParentStorageFileId :: helpers:file_id(), file_meta:list_opts(), [#file_renamed_entry{}]) ->
+    ParentStorageFileId :: helpers:file_id(), file_listing:options(), [#file_renamed_entry{}]) ->
     [#file_renamed_entry{}].
 rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId, ListOpts, ChildEntries) ->
     ParentGuid = file_ctx:get_logical_guid_const(ParentFileCtx),
-    {Children, ListExtendedInfo, ParentFileCtx2} = files_tree:get_children(ParentFileCtx, UserCtx, ListOpts),
+    {Children, ListingPaginationToken, ParentFileCtx2} = file_tree:list_children(ParentFileCtx, UserCtx, ListOpts),
     NewChildEntries = lists:flatten(lists:map(fun(ChildCtx) ->
         {ChildName, ChildCtx2} = file_ctx:get_aliased_name(ChildCtx, UserCtx),
         ChildStorageFileId = filename:join(ParentStorageFileId, ChildName),
@@ -574,12 +572,12 @@ rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId, ListOpts, Ch
         end
     end, Children)),
     AllChildEntries = ChildEntries ++ NewChildEntries,
-    case maps:get(is_last, ListExtendedInfo) of
+    case file_listing:is_finished(ListingPaginationToken) of
         true ->
             AllChildEntries;
         false ->
-            NewToken = maps:get(token, ListExtendedInfo),
-            rename_child_locations(UserCtx, ParentFileCtx2, ParentStorageFileId, ListOpts#{token => NewToken}, AllChildEntries)
+            rename_child_locations(UserCtx, ParentFileCtx2, ParentStorageFileId, 
+                ListOpts#{pagination_token => ListingPaginationToken}, AllChildEntries)
     end.
 
 %%--------------------------------------------------------------------
@@ -608,7 +606,7 @@ get_type(FileCtx) ->
     {file_meta:type(), ChildFileCtx :: file_ctx:ctx(), ParentFileCtx :: file_ctx:ctx()} |
     {undefined, undefined, ParentFileCtx :: file_ctx:ctx()}.
 get_child_type(ParentFileCtx, ChildName, UserCtx) ->
-    try files_tree:get_child(ParentFileCtx, ChildName, UserCtx) of
+    try file_tree:get_child(ParentFileCtx, ChildName, UserCtx) of
         {ChildCtx, ParentFileCtx2} ->
             {ChildType, ChildCtx2} = get_type(ChildCtx),
             {ChildType, ChildCtx2, ParentFileCtx2}

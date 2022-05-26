@@ -16,6 +16,7 @@
 -include("modules/dir_stats_collector/dir_size_stats.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include_lib("cluster_worker/include/time_series/browsing.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -262,9 +263,9 @@ test_with_race_base(Config, TestDirIdentifier, OnSpaceChildrenListed, ExpectedSp
     end,
     TestDirUuid = file_id:guid_to_uuid(TestDirGuid),
 
-    Tag = mock_file_meta(Config, TestDirUuid, 1000),
+    Tag = mock_file_listing(Config, TestDirUuid, 1000),
     enable(Config, existing_space),
-    execute_file_meta_list_hook(Tag, OnSpaceChildrenListed),
+    execute_file_listing_hook(Tag, OnSpaceChildrenListed),
 
     check_dir_stats(Config, op_worker_nodes, SpaceGuid, ExpectedSpaceStats),
     verify_collecting_status(Config, enabled).
@@ -277,12 +278,12 @@ race_with_file_adding_to_large_dir_test(Config) ->
     Structure = [{3, 2000}, {3, 3}],
     lfm_test_utils:create_files_tree(Worker, SessId, Structure, SpaceGuid),
 
-    Tag = mock_file_meta(Config, file_id:guid_to_uuid(SpaceGuid), 10),
+    Tag = mock_file_listing(Config, file_id:guid_to_uuid(SpaceGuid), 10),
     enable(Config, existing_space),
     OnSpaceChildrenListed = fun() ->
         lfm_test_utils:create_and_write_file(Worker, SessId, SpaceGuid, <<"test_raced_file">>, 0, {rand_content, 10})
     end,
-    execute_file_meta_list_hook(Tag, OnSpaceChildrenListed),
+    execute_file_listing_hook(Tag, OnSpaceChildrenListed),
 
     verify_collecting_status(Config, enabled),
     check_dir_stats(Config, op_worker_nodes, SpaceGuid, #{
@@ -474,7 +475,7 @@ verify_dir_on_provider_creating_files(Config, NodesSelector, Guid) ->
     SessId = lfm_test_utils:get_user1_session_id(Config, Worker),
 
     {ok, Children, _} = ?assertMatch({ok, _, _},
-        lfm_proxy:get_children_attrs(Worker, SessId, ?FILE_REF(Guid), #{offset => 0, size => 100000})),
+        lfm_proxy:get_children_attrs(Worker, SessId, ?FILE_REF(Guid), #{offset => 0, limit => 100000, tune_for_large_continuous_listing => false})),
 
     StatsForEmptyDir = #{
         ?REG_FILE_AND_LINK_COUNT => 0,
@@ -693,7 +694,7 @@ check_space_dir_values_map_and_time_series_collection(
 ) ->
     [Worker | _] = ?config(NodesSelector, Config),
     ?assertMatch(?ERROR_DIR_STATS_DISABLED_FOR_SPACE,
-        rpc:call(Worker, dir_size_stats, get_stats_and_time_series_collection, [SpaceGuid]));
+        rpc:call(Worker, dir_size_stats, get_stats, [SpaceGuid]));
 
 check_space_dir_values_map_and_time_series_collection(
     Config, NodesSelector, SpaceGuid, ExpectedCurrentStats, IsCollectionEmpty, CollectingStatus
@@ -703,8 +704,11 @@ check_space_dir_values_map_and_time_series_collection(
         initializing -> ?ATTEMPTS
     end,
     [Worker | _] = ?config(NodesSelector, Config),
-    {ok, {CurrentStats, TimeStats}} = ?assertMatch({ok, {_, _}},
-        rpc:call(Worker, dir_size_stats, get_stats_and_time_series_collection, [SpaceGuid]), Attempts),
+    {ok, CurrentStats} = ?assertMatch({ok, _}, rpc:call(Worker, dir_size_stats, get_stats, [SpaceGuid]), Attempts),
+    {ok, #time_series_layout_result{layout = TimeStatsLayout}} = ?assertMatch({ok, _}, 
+        rpc:call(Worker, dir_size_stats, browse_time_stats_collection, [SpaceGuid, #time_series_get_layout_request{}])),
+    {ok, #time_series_slice_result{slice = TimeStats}} = ?assertMatch({ok, _}, 
+        rpc:call(Worker, dir_size_stats, browse_time_stats_collection, [SpaceGuid, #time_series_get_slice_request{layout = TimeStatsLayout}]), Attempts),
 
     ?assertEqual(ExpectedCurrentStats, CurrentStats),
 
@@ -798,12 +802,12 @@ get_dir_update_time_stat(Worker, Guid) ->
     CollectorTime.
 
 
-mock_file_meta(Config, Uuid, SleepTime) ->
+mock_file_listing(Config, Uuid, SleepTime) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Master = self(),
     Tag = make_ref(),
-    ok = test_utils:mock_new(Worker, file_meta, [passthrough]),
-    ok = test_utils:mock_expect(Worker, file_meta, list_children, fun
+    ok = test_utils:mock_new(Worker, file_listing, [passthrough]),
+    ok = test_utils:mock_expect(Worker, file_listing, list, fun
         (FileUuid, ListOpts) when FileUuid =:= Uuid ->
             Ans = meck:passthrough([FileUuid, ListOpts]),
             Master ! {space_children_listed, Tag},
@@ -815,7 +819,7 @@ mock_file_meta(Config, Uuid, SleepTime) ->
     Tag.
 
 
-execute_file_meta_list_hook(Tag, Hook) ->
+execute_file_listing_hook(Tag, Hook) ->
     MessageReceived = receive
         {space_children_listed, Tag} ->
             Hook(),

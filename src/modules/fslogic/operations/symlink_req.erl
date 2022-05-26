@@ -114,7 +114,7 @@ resolve_symlink(SymlinkFileCtx, #resolution_ctx{
             resolve_symlink_path(RestTokens, SpaceDirCtx, NewResolutionCtx);
         PathTokens ->
             % relative path
-            {ParentCtx, _} = files_tree:get_parent(SymlinkFileCtx, UserCtx),
+            {ParentCtx, _} = file_tree:get_parent(SymlinkFileCtx, UserCtx),
             resolve_symlink_path(PathTokens, ParentCtx, NewResolutionCtx)
     end.
 
@@ -135,7 +135,7 @@ resolve_symlink_path([<<?PARENT_DIRECTORY>> | RestTokens], FileCtx, #resolution_
         true ->
             FileCtx;
         false ->
-            {ParentCtx, _} = files_tree:get_parent(FileCtx, UserCtx),
+            {ParentCtx, _} = file_tree:get_parent(FileCtx, UserCtx),
             ParentCtx
     end,
     resolve_symlink_path(RestTokens, NewFileCtx, ResolutionCtx);
@@ -143,7 +143,7 @@ resolve_symlink_path([<<?PARENT_DIRECTORY>> | RestTokens], FileCtx, #resolution_
 resolve_symlink_path([ChildName | RestTokens], FileCtx, #resolution_ctx{
     user_ctx = UserCtx
 } = ResolutionCtx) ->
-    {ChildCtx, _} = files_tree:get_child(FileCtx, ChildName, UserCtx),
+    {ChildCtx, _} = file_tree:get_child(FileCtx, ChildName, UserCtx),
 
     case file_ctx:is_symlink_const(ChildCtx) of
         true ->

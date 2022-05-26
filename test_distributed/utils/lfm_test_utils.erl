@@ -125,11 +125,11 @@ clean_space(CleaningWorker, AllWorkers, SpaceId, Attempts) ->
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     BatchSize = 1000,
     lists:foreach(fun(W) -> lfm_proxy:close_all(W) end, AllWorkers),
-    rm_recursive(CleaningWorker, ?ROOT_SESS_ID, SpaceGuid, <<>>, BatchSize, false),
+    rm_recursive(CleaningWorker, ?ROOT_SESS_ID, SpaceGuid, BatchSize, false),
     % TODO VFS-7064 remove below line after introducing link to trash directory
-    rm_recursive(CleaningWorker, ?ROOT_SESS_ID, fslogic_uuid:spaceid_to_trash_dir_guid(SpaceId), <<>>, BatchSize, false),
+    rm_recursive(CleaningWorker, ?ROOT_SESS_ID, fslogic_uuid:spaceid_to_trash_dir_guid(SpaceId), BatchSize, false),
     ArchivesDirGuid = file_id:pack_guid(?ARCHIVES_ROOT_DIR_UUID(SpaceId), SpaceId),
-    rm_recursive(CleaningWorker, ?ROOT_SESS_ID, ArchivesDirGuid, <<>>, BatchSize, true),
+    rm_recursive(CleaningWorker, ?ROOT_SESS_ID, ArchivesDirGuid, BatchSize, true),
     assert_space_and_trash_are_empty(AllWorkers, SpaceId, Attempts).
 
 assert_space_dir_empty(Workers, SpaceId, Attempts) ->
@@ -162,23 +162,32 @@ assert_space_and_trash_are_empty(Workers, SpaceId, Attempts) ->
 %%% Internal functions
 %%%===================================================================
 
-rm_recursive(Worker, SessId, DirGuid, BatchSize) ->
-    rm_recursive(Worker, SessId, DirGuid, <<>>, BatchSize, true).
+rm_recursive(Worker, SessId, DirGuid, BatchSize, DeleteDir) ->
+    rm_recursive(Worker, SessId, DirGuid, BatchSize, DeleteDir, #{tune_for_large_continuous_listing => true}).
 
-rm_recursive(Worker, SessId, DirGuid, Token, BatchSize, DeleteDir) ->
-    case lfm_proxy:get_children(Worker, SessId, ?FILE_REF(DirGuid), #{size => BatchSize, token => Token}) of
-        {ok, GuidsAndNames, #{token := Token2, is_last := IsLast}} ->
+rm_recursive(Worker, SessId, DirGuid, BatchSize, DeleteDir, BaseListOpts) ->
+    ListOpts = BaseListOpts#{limit => BatchSize},
+    case lfm_proxy:get_children(Worker, SessId, ?FILE_REF(DirGuid), ListOpts) of
+        {ok, GuidsAndNames, ListingPaginationToken} -> 
             case rm_files(Worker, SessId, GuidsAndNames, BatchSize) of
                 ok ->
-                    case IsLast of
-                        true when DeleteDir -> lfm_proxy:unlink(Worker, SessId, ?FILE_REF(DirGuid));
-                        true -> ok;
-                        false -> rm_recursive(Worker, SessId, DirGuid, Token2, BatchSize, DeleteDir)
+                    case file_listing:is_finished(ListingPaginationToken) of
+                        true when DeleteDir -> 
+                            lfm_proxy:unlink(Worker, SessId, ?FILE_REF(DirGuid));
+                        true -> 
+                            ok;
+                        false -> 
+                            NextListingOpts = #{pagination_token => ListingPaginationToken},
+                            rm_recursive(Worker, SessId, DirGuid, BatchSize, DeleteDir, NextListingOpts)
                     end;
                 Error ->
+                    ct:print("Error during space cleanup [rm_files]: ~p", [Error]),
                     Error
             end;
+        {error, enoent} -> 
+            ok;
         Error2 ->
+            ct:print("Error during space cleanup [get_children]: ~p", [Error2]),
             Error2
     end.
 
@@ -187,11 +196,11 @@ rm_files(Worker, SessId, GuidsAndPaths, BatchSize) ->
     Results = lists:map(fun({G, Name}) ->
         case Name =:= ?TRASH_DIR_NAME of
             true ->
-                rm_recursive(Worker, SessId, G, <<>>, BatchSize, false);
+                rm_recursive(Worker, SessId, G, BatchSize, false);
             false ->
                 case lfm_proxy:is_dir(Worker, SessId, ?FILE_REF(G)) of
                     true ->
-                        rm_recursive(Worker, SessId, G, BatchSize);
+                        rm_recursive(Worker, SessId, G, BatchSize, true);
                     false ->
                         lfm_proxy:unlink(Worker, SessId, ?FILE_REF(G));
                     {error, not_found} -> ok;

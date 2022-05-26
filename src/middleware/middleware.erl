@@ -79,6 +79,7 @@
 -export([handle/1, handle/2]).
 -export([is_authorized/2]).
 -export([client_to_string/1]).
+-export([load_known_atoms/0]).
 
 
 %%%===================================================================
@@ -160,6 +161,17 @@ is_authorized(#op_req{gri = GRI} = OpReq, VersionedEntity) ->
 client_to_string(?GUEST) -> "nobody (unauthenticated client)";
 client_to_string(?ROOT) -> "root";
 client_to_string(?USER(UId)) -> str_utils:format("user:~s", [UId]).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Loads atoms, that were found to be problematic (e.g. binary_to_existing_atom 
+%% is called before loading a module with such an atom).
+%% @end
+%%--------------------------------------------------------------------
+-spec load_known_atoms() -> [atom()].
+load_known_atoms() ->
+    [dir_size_stats_config].
 
 
 %%%===================================================================

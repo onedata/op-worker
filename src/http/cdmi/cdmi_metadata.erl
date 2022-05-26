@@ -339,7 +339,7 @@ prepare_cdmi_metadata(MetadataNames, FileRef, SessionId, Attrs, Prefix) ->
     session:id(), lfm:file_ref(), #file_attr{}) -> map().
 fill_cdmi_metadata(<<"cdmi_size">>, Metadata, _SessionId, _FileRef, Attrs) ->
     % TODO VFS-7288 clarify what should be written to cdmi_size for directories
-    Metadata#{<<"cdmi_size">> => integer_to_binary(Attrs#file_attr.size)};
+    Metadata#{<<"cdmi_size">> => integer_to_binary(utils:ensure_defined(Attrs#file_attr.size, 0))};
 fill_cdmi_metadata(<<"cdmi_atime">>, Metadata, _SessionId, _FileRef, Attrs) ->
     Metadata#{<<"cdmi_atime">> => time:seconds_to_iso8601(Attrs#file_attr.atime)};
 fill_cdmi_metadata(<<"cdmi_mtime">>, Metadata, _SessionId, _FileRef, Attrs) ->
