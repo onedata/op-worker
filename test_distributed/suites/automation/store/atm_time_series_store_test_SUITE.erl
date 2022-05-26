@@ -12,6 +12,7 @@
 -module(atm_time_series_store_test_SUITE).
 -author("Bartosz Walkowicz").
 
+-include("atm/atm_test_store.hrl").
 -include("modules/automation/atm_execution.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include("onenv_test_utils.hrl").
@@ -46,70 +47,6 @@ all() -> [
     {group, all_tests}
 ].
 
-
--define(WINDOW(__METRIC_CONFIG, __TIMESTAMP, __VALUE), #{
-    <<"value">> => __VALUE,
-    <<"timestamp">> => infer_window_timestamp(__TIMESTAMP, __METRIC_CONFIG)
-}).
-
--define(MAX_FILE_SIZE_TS_NAME, <<"max_file_size">>).
--define(MAX_FILE_SIZE_METRIC_NAME, ?MAX_FILE_SIZE_TS_NAME).
--define(MAX_FILE_SIZE_METRIC_CONFIG, #metric_config{
-    resolution = ?MONTH_RESOLUTION,
-    retention = 1,
-    aggregator = max
-}).
--define(MAX_FILE_SIZE_METRIC_WINDOW(__TIMESTAMP, __VALUE), ?WINDOW(
-    ?MAX_FILE_SIZE_METRIC_CONFIG, __TIMESTAMP, __VALUE
-)).
-
--define(MAX_FILE_SIZE_TS_SCHEMA, #atm_time_series_schema{
-    name_generator_type = exact,
-    name_generator = ?MAX_FILE_SIZE_TS_NAME,
-    unit = bytes,
-    metrics = #{?MAX_FILE_SIZE_TS_NAME => ?MAX_FILE_SIZE_METRIC_CONFIG}
-}).
-
--define(MINUTE_METRIC_NAME, <<"minute">>).
--define(MINUTE_METRIC_CONFIG, #metric_config{
-    resolution = ?MINUTE_RESOLUTION,
-    retention = 120,
-    aggregator = sum
-}).
--define(MINUTE_METRIC_WINDOW(__TIMESTAMP, __VALUE), ?WINDOW(
-    ?MINUTE_METRIC_CONFIG, __TIMESTAMP, __VALUE
-)).
-
--define(HOUR_METRIC_NAME, <<"hour">>).
--define(HOUR_METRIC_CONFIG, #metric_config{
-    resolution = ?HOUR_RESOLUTION,
-    retention = 48,
-    aggregator = sum
-}).
--define(HOUR_METRIC_WINDOW(__TIMESTAMP, __VALUE), ?WINDOW(
-    ?HOUR_METRIC_CONFIG, __TIMESTAMP, __VALUE
-)).
-
--define(DAY_METRIC_NAME, <<"day">>).
--define(DAY_METRIC_CONFIG, #metric_config{
-    resolution = ?DAY_RESOLUTION,
-    retention = 60,
-    aggregator = sum
-}).
--define(DAY_METRIC_WINDOW(__TIMESTAMP, __VALUE), ?WINDOW(
-    ?DAY_METRIC_CONFIG, __TIMESTAMP, __VALUE
-)).
-
--define(COUNT_TS_SCHEMA, #atm_time_series_schema{
-    name_generator_type = add_prefix,
-    name_generator = <<"count_">>,
-    unit = counts_per_sec,
-    metrics = #{
-        ?MINUTE_METRIC_NAME => ?MINUTE_METRIC_CONFIG,
-        ?HOUR_METRIC_NAME => ?HOUR_METRIC_CONFIG,
-        ?DAY_METRIC_NAME => ?DAY_METRIC_CONFIG
-    }
-}).
 
 -define(COUNTER_OF_ALL_COUNTS_TS_NAME, <<"counter_of_all_counts">>).
 -define(COUNTER_OF_ALL_COUNTS_TS_SCHEMA, #atm_time_series_schema{
@@ -279,9 +216,9 @@ manage_content_test(_Config) ->
     ExpWindows1 = #{
         ?MAX_FILE_SIZE_TS_NAME => #{?MAX_FILE_SIZE_METRIC_NAME => []},
         <<"count_mp3">> => #{
-            ?MINUTE_METRIC_NAME => [?MINUTE_METRIC_WINDOW(Timestamp1, 10)],
-            ?HOUR_METRIC_NAME => [?HOUR_METRIC_WINDOW(Timestamp1, 10)],
-            ?DAY_METRIC_NAME => [?DAY_METRIC_WINDOW(Timestamp1, 10)]
+            ?MINUTE_METRIC_NAME => [?EXP_MINUTE_METRIC_WINDOW(Timestamp1, 10)],
+            ?HOUR_METRIC_NAME => [?EXP_HOUR_METRIC_WINDOW(Timestamp1, 10)],
+            ?DAY_METRIC_NAME => [?EXP_DAY_METRIC_WINDOW(Timestamp1, 10)]
         },
         ?COUNTER_OF_ALL_COUNTS_TS_NAME => #{
             ?MINUTE_METRIC_NAME => [],
@@ -320,46 +257,46 @@ manage_content_test(_Config) ->
             ?MAX_FILE_SIZE_METRIC_NAME => [?MAX_FILE_SIZE_METRIC_WINDOW(Timestamp1, 2048)]
         },
         <<"count_cn_resources">> => #{
-            ?MINUTE_METRIC_NAME => [?MINUTE_METRIC_WINDOW(Timestamp1, 3)],
-            ?HOUR_METRIC_NAME => [?HOUR_METRIC_WINDOW(Timestamp1, 3)],
-            ?DAY_METRIC_NAME => [?DAY_METRIC_WINDOW(Timestamp1, 3)]
+            ?MINUTE_METRIC_NAME => [?EXP_MINUTE_METRIC_WINDOW(Timestamp1, 3)],
+            ?HOUR_METRIC_NAME => [?EXP_HOUR_METRIC_WINDOW(Timestamp1, 3)],
+            ?DAY_METRIC_NAME => [?EXP_DAY_METRIC_WINDOW(Timestamp1, 3)]
         },
         <<"count_count_ct_supplies">> => #{
-            ?MINUTE_METRIC_NAME => [?MINUTE_METRIC_WINDOW(Timestamp1, 0)],
-            ?HOUR_METRIC_NAME => [?HOUR_METRIC_WINDOW(Timestamp1, 0)],
-            ?DAY_METRIC_NAME => [?DAY_METRIC_WINDOW(Timestamp1, 0)]
+            ?MINUTE_METRIC_NAME => [?EXP_MINUTE_METRIC_WINDOW(Timestamp1, 0)],
+            ?HOUR_METRIC_NAME => [?EXP_HOUR_METRIC_WINDOW(Timestamp1, 0)],
+            ?DAY_METRIC_NAME => [?EXP_DAY_METRIC_WINDOW(Timestamp1, 0)]
         },
         <<"count_mp3">> => #{
             ?MINUTE_METRIC_NAME => [
-                ?MINUTE_METRIC_WINDOW(Timestamp3, 100),
-                ?MINUTE_METRIC_WINDOW(Timestamp1, 10),
-                ?MINUTE_METRIC_WINDOW(Timestamp2, 111)
+                ?EXP_MINUTE_METRIC_WINDOW(Timestamp3, 100),
+                ?EXP_MINUTE_METRIC_WINDOW(Timestamp1, 10),
+                ?EXP_MINUTE_METRIC_WINDOW(Timestamp2, 111)
             ],
             ?HOUR_METRIC_NAME => [
-                ?HOUR_METRIC_WINDOW(Timestamp1, 110),
-                ?HOUR_METRIC_WINDOW(Timestamp2, 111)
+                ?EXP_HOUR_METRIC_WINDOW(Timestamp1, 110),
+                ?EXP_HOUR_METRIC_WINDOW(Timestamp2, 111)
             ],
             ?DAY_METRIC_NAME => [
-                ?DAY_METRIC_WINDOW(Timestamp1, 221)
+                ?EXP_DAY_METRIC_WINDOW(Timestamp1, 221)
             ]
         },
         % the dispatch rule with "count_over_" prefix matcher is duplicated twice,
         % which should cause the measurement values to be doubled (each measurement is
         % inserted twice)
         <<"count_unicorns">> => #{
-            ?MINUTE_METRIC_NAME => [?MINUTE_METRIC_WINDOW(Timestamp1, 14)],
-            ?HOUR_METRIC_NAME => [?HOUR_METRIC_WINDOW(Timestamp1, 14)],
-            ?DAY_METRIC_NAME => [?DAY_METRIC_WINDOW(Timestamp1, 14)]
+            ?MINUTE_METRIC_NAME => [?EXP_MINUTE_METRIC_WINDOW(Timestamp1, 14)],
+            ?HOUR_METRIC_NAME => [?EXP_HOUR_METRIC_WINDOW(Timestamp1, 14)],
+            ?DAY_METRIC_NAME => [?EXP_DAY_METRIC_WINDOW(Timestamp1, 14)]
         },
         ?COUNTER_OF_ALL_COUNTS_TS_NAME => #{
             ?MINUTE_METRIC_NAME => [
-                ?MINUTE_METRIC_WINDOW(Timestamp1, 10)
+                ?EXP_MINUTE_METRIC_WINDOW(Timestamp1, 10)
             ],
             ?HOUR_METRIC_NAME => [
-                ?HOUR_METRIC_WINDOW(Timestamp1, 10)
+                ?EXP_HOUR_METRIC_WINDOW(Timestamp1, 10)
             ],
             ?DAY_METRIC_NAME => [
-                ?DAY_METRIC_WINDOW(Timestamp1, 10)
+                ?EXP_DAY_METRIC_WINDOW(Timestamp1, 10)
             ]
         }
     },
@@ -403,8 +340,8 @@ manage_content_test(_Config) ->
             ?MAX_FILE_SIZE_METRIC_NAME => [?MAX_FILE_SIZE_METRIC_WINDOW(Timestamp1, 2048)]
         },
         <<"count_cn_resources">> => #{
-            ?MINUTE_METRIC_NAME => [?MINUTE_METRIC_WINDOW(Timestamp1, 3)],
-            ?DAY_METRIC_NAME => [?DAY_METRIC_WINDOW(Timestamp1, 3)]
+            ?MINUTE_METRIC_NAME => [?EXP_MINUTE_METRIC_WINDOW(Timestamp1, 3)],
+            ?DAY_METRIC_NAME => [?EXP_DAY_METRIC_WINDOW(Timestamp1, 3)]
         }
     },
     ?assertEqual(
@@ -417,9 +354,9 @@ manage_content_test(_Config) ->
 
     ExpSliceWindows2 = #{
         <<"count_mp3">> => #{
-            ?MINUTE_METRIC_NAME => [?MINUTE_METRIC_WINDOW(Timestamp1, 10)],
-            ?HOUR_METRIC_NAME => [?HOUR_METRIC_WINDOW(Timestamp1, 110)],
-            ?DAY_METRIC_NAME => [?DAY_METRIC_WINDOW(Timestamp1, 221)]
+            ?MINUTE_METRIC_NAME => [?EXP_MINUTE_METRIC_WINDOW(Timestamp1, 10)],
+            ?HOUR_METRIC_NAME => [?EXP_HOUR_METRIC_WINDOW(Timestamp1, 110)],
+            ?DAY_METRIC_NAME => [?EXP_DAY_METRIC_WINDOW(Timestamp1, 221)]
         }
     },
     ?assertEqual(

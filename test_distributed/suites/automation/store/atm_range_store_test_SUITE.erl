@@ -144,10 +144,15 @@ iterate_test_base(ChunkSize, AtmRangeStoreInitialValue) ->
         store_schema_id = AtmStoreSchemaId,
         max_batch_size = ChunkSize
     })),
+
+    Step = maps:get(<<"step">>, AtmRangeStoreInitialValue, 1),
+    ExclusiveEnd = maps:get(<<"end">>, AtmRangeStoreInitialValue),
+    InclusiveEnd = case Step > 0 of
+        true -> ExclusiveEnd - 1;
+        false -> ExclusiveEnd + 1
+    end,
     ExpBatches = atm_store_test_utils:split_into_chunks(ChunkSize, [], lists:seq(
-        maps:get(<<"start">>, AtmRangeStoreInitialValue, 0),
-        maps:get(<<"end">>, AtmRangeStoreInitialValue),
-        maps:get(<<"step">>, AtmRangeStoreInitialValue, 1)
+        maps:get(<<"start">>, AtmRangeStoreInitialValue, 0), InclusiveEnd, Step
     )),
 
     assert_all_items_listed(AtmWorkflowExecutionEnv, Iterator, ExpBatches).
