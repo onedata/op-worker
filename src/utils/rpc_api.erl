@@ -62,6 +62,7 @@
     prepare_user_ctx_params/2,
     get_helper_args/1,
     get_helper_admin_ctx/1,
+    redact_confidential_helper_params/2,
     space_logic_get_storages/1,
     file_popularity_api_configure/2,
     file_popularity_api_get_configuration/1,
@@ -376,6 +377,12 @@ get_helper_args(Helper) ->
 -spec get_helper_admin_ctx(helpers:helper()) -> helper:user_ctx().
 get_helper_admin_ctx(Helper) ->
     helper:get_admin_ctx(Helper).
+
+
+-spec redact_confidential_helper_params(helper:name(), helper:args()) ->
+    helper:args().
+redact_confidential_helper_params(HelperName, Params) ->
+    helper_params:redact_confidential_data(HelperName, Params).
 
 
 -spec space_logic_get_storages(od_space:id()) -> {ok, [storage:id()]}.
