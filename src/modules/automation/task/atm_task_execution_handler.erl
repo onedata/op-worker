@@ -208,12 +208,17 @@ process_streamed_data(AtmWorkflowExecutionCtx, AtmTaskExecutionId, {chunk, Uncor
     {ok, #document{value = AtmTaskExecution}} = atm_task_execution:get(AtmTaskExecutionId),
 
     try
-        atm_task_execution_results:consume_results(
-            AtmWorkflowExecutionCtx,
-            uncorrelated,
-            AtmTaskExecution#atm_task_execution.uncorrelated_result_specs,
-            UncorrelatedResults
-        )
+        % @fixme consider refactoring
+        maps:foreach(fun(ResultName, ResultArray) ->
+            lists:foreach(fun(ResultValue) ->
+                atm_task_execution_results:consume_results(
+                    AtmWorkflowExecutionCtx,
+                    uncorrelated,
+                    AtmTaskExecution#atm_task_execution.uncorrelated_result_specs,
+                    #{ResultName => ResultValue}
+                )
+            end, ResultArray)
+        end, UncorrelatedResults)
     catch Type:Reason:Stacktrace ->
         handle_uncorrelated_results_processing_error(
             AtmWorkflowExecutionCtx,
