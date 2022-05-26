@@ -25,14 +25,14 @@
 
 % getters
 -export([get_id/1, get_creation_time/1, get_dataset_id/1, get_dataset_root_file_guid/1, get_space_id/1,
-    get_state/1, get_config/1, get_preserved_callback/1, get_purged_callback/1,
+    get_state/1, get_config/1, get_preserved_callback/1, get_deleted_callback/1,
     get_description/1, get_stats/1, get_root_dir_guid/1,
     get_data_dir_guid/1, get_parent_id/1, get_parent_doc/1, get_base_archive_id/1,
     get_related_dip_id/1, get_related_aip_id/1, is_finished/1
 ]).
 
 % setters
--export([mark_building/1, mark_purging/2,
+-export([mark_building/1, mark_deleting/2,
     mark_file_archived/2, mark_file_failed/1, mark_creation_finished/2,
     mark_preserved/1, mark_verification_failed/1,
     set_root_dir_guid/2, set_data_dir_guid/2, set_base_archive_id/2,
@@ -52,12 +52,12 @@
 %% #{
 %%     <<"description">> => description(),
 %%     <<"preservedCallback">> => callback(),
-%%     <<"purgedCallback">> => callback(),
+%%     <<"deletedCallback">> => callback(),
 %% }
 
 -type creator() :: od_user:id().
 
--type state() :: ?ARCHIVE_PENDING | ?ARCHIVE_BUILDING | ?ARCHIVE_PRESERVED | ?ARCHIVE_PURGING 
+-type state() :: ?ARCHIVE_PENDING | ?ARCHIVE_BUILDING | ?ARCHIVE_PRESERVED | ?ARCHIVE_DELETING 
     | ?ARCHIVE_FAILED | ?ARCHIVE_VERIFYING | ?ARCHIVE_VERIFICATION_FAILED.
 -type timestamp() :: time:seconds().
 -type description() :: binary().
@@ -90,7 +90,7 @@
 
 -spec create(dataset:id(), od_space:id(), creator(), config(), callback(), callback(), description(), archive:id() | undefined) ->
     {ok, doc()} | error().
-create(DatasetId, SpaceId, Creator, Config, PreservedCallback, PurgedCallback, Description, BaseArchiveId) ->
+create(DatasetId, SpaceId, Creator, Config, PreservedCallback, DeletedCallback, Description, BaseArchiveId) ->
     datastore_model:create(?CTX, #document{
         value = #archive{
             dataset_id = DatasetId,
@@ -99,7 +99,7 @@ create(DatasetId, SpaceId, Creator, Config, PreservedCallback, PurgedCallback, D
             state = ?ARCHIVE_PENDING,
             config = Config,
             preserved_callback = PreservedCallback,
-            purged_callback = PurgedCallback,
+            deleted_callback = DeletedCallback,
             description = Description,
             stats = archive_stats:empty(),
             base_archive_id = BaseArchiveId
@@ -156,12 +156,12 @@ modify_attrs(ArchiveId, Diff) when is_map(Diff) ->
     ?extract_ok(update(ArchiveId, fun(Archive = #archive{
         description = PrevDescription,
         preserved_callback = PrevPreservedCallback,
-        purged_callback = PrevPurgedCallback
+        deleted_callback = PrevDeletedCallback
     }) ->
         {ok, Archive#archive{
             description = utils:ensure_defined(maps:get(<<"description">>, Diff, undefined), PrevDescription),
             preserved_callback = utils:ensure_defined(maps:get(<<"preservedCallback">>, Diff, undefined), PrevPreservedCallback),
-            purged_callback = utils:ensure_defined(maps:get(<<"purgedCallback">>, Diff, undefined), PrevPurgedCallback)
+            deleted_callback = utils:ensure_defined(maps:get(<<"deletedCallback">>, Diff, undefined), PrevDeletedCallback)
         }}
     end)).
 
@@ -283,11 +283,11 @@ get_preserved_callback(#archive{preserved_callback = PreservedCallback}) ->
 get_preserved_callback(#document{value = Archive}) ->
     get_preserved_callback(Archive).
 
--spec get_purged_callback(record() | doc()) -> {ok, callback()}.
-get_purged_callback(#archive{purged_callback = PurgedCallback}) ->
-    {ok, PurgedCallback};
-get_purged_callback(#document{value = Archive}) ->
-    get_purged_callback(Archive).
+-spec get_deleted_callback(record() | doc()) -> {ok, callback()}.
+get_deleted_callback(#archive{deleted_callback = DeletedCallback}) ->
+    {ok, DeletedCallback};
+get_deleted_callback(#document{value = Archive}) ->
+    get_deleted_callback(Archive).
 
 -spec get_description(id() | record() | doc()) -> {ok, description()}.
 get_description(#archive{description = Description}) ->
@@ -362,7 +362,7 @@ get_related_aip_id(ArchiveId) ->
 
 -spec is_finished(record() | doc()) -> boolean().
 is_finished(#archive{state = State}) ->
-    lists:member(State, [?ARCHIVE_PRESERVED, ?ARCHIVE_FAILED, ?ARCHIVE_PURGING, 
+    lists:member(State, [?ARCHIVE_PRESERVED, ?ARCHIVE_FAILED, ?ARCHIVE_DELETING, 
         ?ARCHIVE_VERIFYING, ?ARCHIVE_VERIFICATION_FAILED]);
 is_finished(#document{value = Archive}) ->
     is_finished(Archive).
@@ -371,11 +371,11 @@ is_finished(#document{value = Archive}) ->
 %%% Setters for #archive record
 %%%===================================================================
 
--spec mark_purging(id(), callback()) -> {ok, doc()} | error().
-mark_purging(ArchiveId, Callback) ->
+-spec mark_deleting(id(), callback()) -> {ok, doc()} | error().
+mark_deleting(ArchiveId, Callback) ->
     update(ArchiveId, fun(Archive = #archive{
         state = PrevState,
-        purged_callback = PrevPurgedCallback,
+        deleted_callback = PrevDeletedCallback,
         parent = Parent
     }) ->
         case PrevState =:= ?ARCHIVE_PENDING
@@ -387,8 +387,8 @@ mark_purging(ArchiveId, Callback) ->
                 ?ERROR_POSIX(?EBUSY);
             false ->
                 {ok, Archive#archive{
-                    state = ?ARCHIVE_PURGING,
-                    purged_callback = utils:ensure_defined(Callback, PrevPurgedCallback)
+                    state = ?ARCHIVE_DELETING,
+                    deleted_callback = utils:ensure_defined(Callback, PrevDeletedCallback)
                 }}
         end
     end).
@@ -538,7 +538,7 @@ get_record_struct(1) ->
         {state, atom},
         {config, {custom, string, {persistent_record, encode, decode, archive_config}}},
         {preserved_callback, string},
-        {purged_callback, string},
+        {deleted_callback, string},
         {description, string},
         {root_dir_guid, string},
         {data_dir_guid, string},

@@ -199,9 +199,9 @@ all() -> [
 -define(TEST_DESCRIPTION2, <<"TEST DESCRIPTION2">>).
 -define(TEST_ARCHIVE_PRESERVED_CALLBACK1, <<"https://preserved1.org">>).
 -define(TEST_ARCHIVE_PRESERVED_CALLBACK2, <<"https://preserved1.org">>).
--define(TEST_ARCHIVE_PURGED_CALLBACK1, <<"https://purged1.org">>).
--define(TEST_ARCHIVE_PURGED_CALLBACK2, <<"https://purged2.org">>).
--define(TEST_ARCHIVE_PURGED_CALLBACK3, <<"https://purged3.org">>).
+-define(TEST_ARCHIVE_DELETED_CALLBACK1, <<"https://deleted1.org">>).
+-define(TEST_ARCHIVE_DELETED_CALLBACK2, <<"https://deleted2.org">>).
+-define(TEST_ARCHIVE_DELETED_CALLBACK3, <<"https://deleted3.org">>).
 
 -define(RAND_NAME(), str_utils:rand_hex(20)).
 -define(RAND_SIZE(), rand:uniform(50)).

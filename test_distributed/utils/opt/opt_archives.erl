@@ -17,7 +17,7 @@
     archive_dataset/5, archive_dataset/7,
     get_info/3,
     update/4,
-    purge/3, purge/4,
+    delete/3, delete/4,
     recall/5,
     cancel_recall/3,
     get_recall_details/3, get_recall_progress/3, browse_recall_log/4
@@ -84,10 +84,10 @@ archive_dataset(NodeSelector, SessionId, DatasetId, Config, Description) ->
 ) ->
     {ok, archive:id()} | errors:error().
 archive_dataset(
-    NodeSelector, SessionId, DatasetId, Config, PreservedCallback, PurgedCallback, Description
+    NodeSelector, SessionId, DatasetId, Config, PreservedCallback, DeletedCallback, Description
 ) ->
     ?CALL(NodeSelector, [
-        SessionId, DatasetId, Config, PreservedCallback, PurgedCallback, Description
+        SessionId, DatasetId, Config, PreservedCallback, DeletedCallback, Description
     ]).
 
 
@@ -103,15 +103,15 @@ update(NodeSelector, SessionId, ArchiveId, Diff) ->
     ?CALL(NodeSelector, [SessionId, ArchiveId, Diff]).
 
 
--spec purge(oct_background:node_selector(), session:id(), archive:id()) ->
+-spec delete(oct_background:node_selector(), session:id(), archive:id()) ->
     ok | errors:error().
-purge(NodeSelector, SessionId, ArchiveId) ->
-    purge(NodeSelector, SessionId, ArchiveId, undefined).
+delete(NodeSelector, SessionId, ArchiveId) ->
+    delete(NodeSelector, SessionId, ArchiveId, undefined).
 
 
--spec purge(oct_background:node_selector(), session:id(), archive:id(), archive:callback()) ->
+-spec delete(oct_background:node_selector(), session:id(), archive:id(), archive:callback()) ->
     ok | errors:error().
-purge(NodeSelector, SessionId, ArchiveId, CallbackUrl) ->
+delete(NodeSelector, SessionId, ArchiveId, CallbackUrl) ->
     ?CALL(NodeSelector, [SessionId, ArchiveId, CallbackUrl]).
 
 

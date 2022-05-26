@@ -32,7 +32,7 @@
     #archive_dataset{} |
     #get_archive_info{} |
     #update_archive{} |
-    #purge_archive{} |
+    #delete_archive{} |
     #recall_archive{} |
     #cancel_archive_recall{} | 
     #get_recall_details{} |

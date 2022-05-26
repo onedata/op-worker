@@ -69,9 +69,9 @@ routes() -> [
         method = 'GET',
         produces = [<<"application/json">>],
         b_gri = #b_gri{
-            type = op_qos,
-            id = ?BINDING(qid),
-            aspect = audit_log,
+            type = op_qos, 
+            id = ?BINDING(qid), 
+            aspect = audit_log, 
             scope = private
         }
     }},
