@@ -82,7 +82,9 @@
 
     map_results_to_workflow_audit_log_store_test/1,
     map_results_to_task_audit_log_store_test/1,
-    map_results_to_task_time_series_store_test/1
+    map_results_to_task_time_series_store_test/1,
+
+    fail_atm_workflow_execution_due_to_job_result_store_mapping_error/1
 ]).
 
 groups() -> [
@@ -150,6 +152,9 @@ groups() -> [
         map_results_to_workflow_audit_log_store_test,
         map_results_to_task_audit_log_store_test,
         map_results_to_task_time_series_store_test
+    ]},
+    {failure_tests, [parallel], [
+        fail_atm_workflow_execution_due_to_job_result_store_mapping_error
     ]}
 ].
 
@@ -159,7 +164,8 @@ all() -> [
     {group, preparation_tests},
     {group, cancellation_tests},
     {group, iteration_tests},
-    {group, mapping_tests}
+    {group, mapping_tests},
+    {group, failure_tests}
 ].
 
 
@@ -177,6 +183,7 @@ all() -> [
 -define(RUN_CANCELLATION_TEST(), ?RUN_TEST(atm_workflow_execution_cancellation_test_base)).
 -define(RUN_ITERATION_TEST(), ?RUN_TEST(atm_workflow_execution_iteration_test_base)).
 -define(RUN_MAPPING_TEST(), ?RUN_TEST(atm_workflow_execution_mapping_test_base)).
+-define(FAILURE_MAPPING_TEST(), ?RUN_TEST(atm_workflow_execution_failure_test_base)).
 
 
 %%%===================================================================
@@ -368,6 +375,10 @@ map_results_to_task_time_series_store_test(_Config) ->
     ?RUN_MAPPING_TEST().
 
 
+fail_atm_workflow_execution_due_to_job_result_store_mapping_error(_Config) ->
+    ?FAILURE_MAPPING_TEST().
+
+
 %===================================================================
 % SetUp and TearDown functions
 %===================================================================
@@ -412,7 +423,8 @@ init_per_group(TestGroup, Config) when
     TestGroup =:= preparation_tests;
     TestGroup =:= cancellation_tests;
     TestGroup =:= iteration_tests;
-    TestGroup =:= mapping_tests
+    TestGroup =:= mapping_tests;
+    TestGroup =:= failure_tests
 ->
     atm_openfaas_task_executor_mock:init(?PROVIDER_SELECTOR, atm_openfaas_docker_mock),
     atm_workflow_execution_test_runner:init(?PROVIDER_SELECTOR),
@@ -430,7 +442,8 @@ end_per_group(TestGroup, Config) when
     TestGroup =:= preparation_tests;
     TestGroup =:= cancellation_tests;
     TestGroup =:= iteration_tests;
-    TestGroup =:= mapping_tests
+    TestGroup =:= mapping_tests;
+    TestGroup =:= failure_tests
 ->
     atm_workflow_execution_test_runner:teardown(?PROVIDER_SELECTOR),
     atm_openfaas_task_executor_mock:teardown(?PROVIDER_SELECTOR),
