@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Tests of OpenFaaS activity feed, covering the WebSocket server
-%%% and the communication protocol. Tests integration with k8s-event-monitor
+%%% and the communication protocol. Tests integration with openfaas-pod-status-monitor
 %%% and openfaas-lambda-result-streamer by simulating the behaviour of these clients.
 %%% @end
 %%%-------------------------------------------------------------------
@@ -487,7 +487,7 @@ result_streamer_error_handling_test(_Config) ->
 
 %%%===================================================================
 %%% Helper functions - websocket connection
-%%% (simulating a k8s-event-monitor or openfaas-lambda-result-streamer)
+%%% (simulating a openfaas-pod-status-monitor or openfaas-lambda-result-streamer)
 %%%===================================================================
 
 %% @private
