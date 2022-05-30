@@ -21,7 +21,8 @@
 %% API
 -export([init/0, prepare_next_waiting_job/1, prepare_next_waiting_result/1, populate_with_jobs_for_item/4,
     pause_job/2, mark_ongoing_job_finished/2, register_failure/2,
-    register_async_job_finish/3, prepare_next_parallel_box/4, has_ongoing_jobs/1]).
+    register_async_job_finish/3, prepare_next_parallel_box/4,
+    get_identfiers_for_next_parallel_boxes/3, has_ongoing_jobs/1]).
 %% Functions returning/updating pending_async_jobs field
 -export([register_async_call/3, check_timeouts/1, reset_keepalive_timer/2]).
 %% Functions operating on job_identifier record
@@ -263,6 +264,29 @@ prepare_next_parallel_box(
                 tasks_tree = add_jobs_to_not_empty_task_tree(TasksTree, NewWaiting)
             }}
     end.
+
+-spec get_identfiers_for_next_parallel_boxes(job_identifier(), workflow_execution_state:boxes_map(), non_neg_integer()) ->
+    [job_identifier()].
+get_identfiers_for_next_parallel_boxes(#job_identifier{parallel_box_index = BoxCount}, _BoxesSpec, BoxCount) ->
+    [];
+get_identfiers_for_next_parallel_boxes(#job_identifier{
+    item_index = ItemIndex,
+    parallel_box_index = BoxIndex
+} = Identifier, BoxSpecs, BoxCount) ->
+    NextBoxIndex = BoxIndex + 1,
+    Tasks = maps:get(NextBoxIndex, BoxSpecs),
+    Identifiers = lists:map(fun(TaskIndex) ->
+        #job_identifier{
+            processing_type = ?JOB_PROCESSING,
+            item_index = ItemIndex,
+            parallel_box_index = NextBoxIndex,
+            task_index = TaskIndex
+        }
+    end, lists:seq(1, maps:size(Tasks))),
+    Identifiers ++ get_identfiers_for_next_parallel_boxes(
+        Identifier#job_identifier{parallel_box_index = NextBoxIndex}, BoxSpecs, BoxCount).
+
+
 
 -spec has_ongoing_jobs(jobs()) -> boolean().
 has_ongoing_jobs(#workflow_jobs{ongoing = Ongoing}) ->

@@ -38,6 +38,7 @@
     fail_the_only_task_in_box_test/1,
     fail_one_of_many_async_tasks_in_box_test/1,
     fail_one_of_many_async_tasks_in_workflow_with_streams_test/1,
+    fail_one_of_many_async_tasks_in_single_item_workflow_test/1,
     async_task_timeout_test/1,
     fail_result_processing_test/1,
     fail_task_before_prepare_in_advance_finish_test/1,
@@ -89,6 +90,7 @@ all() ->
         fail_the_only_task_in_box_test,
         fail_one_of_many_async_tasks_in_box_test,
         fail_one_of_many_async_tasks_in_workflow_with_streams_test,
+        fail_one_of_many_async_tasks_in_single_item_workflow_test,
         async_task_timeout_test,
         fail_result_processing_test,
         fail_task_before_prepare_in_advance_finish_test,
@@ -233,6 +235,14 @@ fail_one_of_many_async_tasks_in_workflow_with_streams_test(Config) ->
         test_manager_failure_key = fail_job,
         generator_options = ?EXEMPLARY_STREAMS2
     }, <<"3">>, <<"3_3_2">>).
+
+fail_one_of_many_async_tasks_in_single_item_workflow_test(Config) ->
+    failure_test_base(Config, #test_config{
+        task_type = async,
+        test_manager_failure_key = fail_job,
+        generator_options = #{item_count => 1},
+        verify_statistics_options = #{ignore_max_slots_check => true}
+    }, <<"3">>, <<"3_2_1">>, <<"1">>).
 
 async_task_timeout_test(Config) ->
     failure_test_base(Config, #test_config{
@@ -434,12 +444,14 @@ empty_workflow_execution_test_base(Config, BasicConfig) ->
         verify_statistics_options = #{is_empty => true}
     }).
 
+failure_test_base(Config, TestConfig, LaneId, TaskId) ->
+    failure_test_base(Config, TestConfig, LaneId, TaskId, <<"100">>).
+
 failure_test_base(Config, #test_config{
     test_manager_failure_key = ManagerKey,
     test_execution_manager_options = ManagerOptions,
     generator_options = GeneratorOptions
-} = BasicConfig, LaneId, TaskId) ->
-    Item = <<"100">>,
+} = BasicConfig, LaneId, TaskId, Item) ->
     single_execution_test_base(Config, BasicConfig#test_config{
         test_execution_manager_options = [{ManagerKey, {TaskId, Item}} | ManagerOptions],
         generator_options = GeneratorOptions#{finish_on_lane => LaneId},
