@@ -21,16 +21,16 @@
 -include("modules/automation/atm_execution.hrl").
 
 -export([
-    map_results_to_audit_log_store_test/0,
-    map_results_to_list_store_test/0,
-    map_results_to_range_store_test/0,
-    map_results_to_single_value_store_test/0,
-    map_results_to_time_series_store_test/0,
-    map_results_to_tree_forest_store_test/0,
+    map_results_to_audit_log_store/0,
+    map_results_to_list_store/0,
+    map_results_to_range_store/0,
+    map_results_to_single_value_store/0,
+    map_results_to_time_series_store/0,
+    map_results_to_tree_forest_store/0,
 
-    map_results_to_workflow_audit_log_store_test/0,
-    map_results_to_task_audit_log_store_test/0,
-    map_results_to_task_time_series_store_test/0
+    map_results_to_workflow_audit_log_store/0,
+    map_results_to_task_audit_log_store/0,
+    map_results_to_task_time_series_store/0
 ]).
 
 
@@ -144,7 +144,7 @@
 %%%===================================================================
 
 
-map_results_to_audit_log_store_test() ->
+map_results_to_audit_log_store() ->
     IteratedItemDataSpec = #atm_data_spec{type = atm_integer_type},
 
     map_results_to_global_store_test_base(#map_results_to_global_store_test_spec{
@@ -156,7 +156,7 @@ map_results_to_audit_log_store_test() ->
     }).
 
 
-map_results_to_list_store_test() ->
+map_results_to_list_store() ->
     IteratedItemDataSpec = #atm_data_spec{type = atm_string_type},
 
     map_results_to_global_store_test_base(#map_results_to_global_store_test_spec{
@@ -168,7 +168,7 @@ map_results_to_list_store_test() ->
     }).
 
 
-map_results_to_range_store_test() ->
+map_results_to_range_store() ->
     IteratedItems = lists_utils:generate(fun() ->
         #{
             <<"start">> => ?RAND_INT(0, 100),
@@ -186,7 +186,7 @@ map_results_to_range_store_test() ->
     }).
 
 
-map_results_to_single_value_store_test() ->
+map_results_to_single_value_store() ->
     IteratedItemDataSpec = #atm_data_spec{type = atm_object_type},
 
     map_results_to_global_store_test_base(#map_results_to_global_store_test_spec{
@@ -198,7 +198,7 @@ map_results_to_single_value_store_test() ->
     }).
 
 
-map_results_to_time_series_store_test() ->
+map_results_to_time_series_store() ->
     map_results_to_global_store_test_base(#map_results_to_global_store_test_spec{
         iterated_item_spec = ?ANY_MEASUREMENT_DATA_SPEC,
         iterated_items = gen_random_time_series_measurements(),
@@ -210,7 +210,7 @@ map_results_to_time_series_store_test() ->
     }).
 
 
-map_results_to_tree_forest_store_test() ->
+map_results_to_tree_forest_store() ->
     IteratedItemDataSpec = #atm_data_spec{type = atm_file_type},
     FileObjects = onenv_file_test_utils:create_and_sync_file_tree(
         user1, ?SPACE_SELECTOR, lists_utils:generate(fun() -> #file_spec{} end, 30)
@@ -258,7 +258,7 @@ map_results_to_global_store_test_base(#map_results_to_global_store_test_spec{
     }).
 
 
-map_results_to_workflow_audit_log_store_test() ->
+map_results_to_workflow_audit_log_store() ->
     IteratedItemDataSpec = #atm_data_spec{type = atm_object_type},
     IteratedItems = gen_random_object_list(),
     IteratedStoreSchemaDraft = ?ITERATED_LIST_STORE_SCHEMA_DRAFT(IteratedItemDataSpec, IteratedItems),
@@ -273,7 +273,7 @@ map_results_to_workflow_audit_log_store_test() ->
     }).
 
 
-map_results_to_task_audit_log_store_test() ->
+map_results_to_task_audit_log_store() ->
     IteratedItemDataSpec = #atm_data_spec{type = atm_object_type},
     IteratedItems = gen_random_object_list(),
     IteratedStoreSchemaDraft = ?ITERATED_LIST_STORE_SCHEMA_DRAFT(IteratedItemDataSpec, IteratedItems),
@@ -288,7 +288,7 @@ map_results_to_task_audit_log_store_test() ->
     }).
 
 
-map_results_to_task_time_series_store_test() ->
+map_results_to_task_time_series_store() ->
     IteratedItemDataSpec = ?ANY_MEASUREMENT_DATA_SPEC,
     IteratedItems = gen_random_time_series_measurements(),
     IteratedStoreSchemaDraft = ?ITERATED_LIST_STORE_SCHEMA_DRAFT(IteratedItemDataSpec, IteratedItems),

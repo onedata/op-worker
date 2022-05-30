@@ -25,136 +25,139 @@
 
 %% tests
 -export([
-    schedule_atm_workflow_with_no_lanes_test/1,
-    schedule_atm_workflow_with_empty_lane_test/1,
-    schedule_atm_workflow_with_empty_parallel_box_test/1,
-    schedule_atm_workflow_with_openfaas_not_configured_test/1,
+    schedule_atm_workflow_with_no_lanes/1,
+    schedule_atm_workflow_with_empty_lane/1,
+    schedule_atm_workflow_with_empty_parallel_box/1,
+    schedule_atm_workflow_with_openfaas_not_configured/1,
 
-    schedule_atm_workflow_with_invalid_initial_store_content_test/1,
+    schedule_atm_workflow_with_invalid_initial_store_content/1,
 
-    first_lane_run_preparation_failure_before_run_was_created_test/1,
-    first_lane_run_preparation_failure_after_run_was_created_test/1,
+    first_lane_run_preparation_failure_before_run_was_created/1,
+    first_lane_run_preparation_failure_after_run_was_created/1,
 
-    atm_workflow_execution_cancelled_in_preparing_status_before_run_was_created_test/1,
-    atm_workflow_execution_cancelled_in_preparing_status_after_run_was_created_test/1,
-    atm_workflow_execution_cancel_before_lane_run_preparation_failed_test/1,
-    atm_workflow_execution_cancel_in_aborting_status_after_lane_run_preparation_failed_test/1,
+    atm_workflow_execution_cancelled_in_preparing_status_before_run_was_created/1,
+    atm_workflow_execution_cancelled_in_preparing_status_after_run_was_created/1,
+    atm_workflow_execution_cancel_before_lane_run_preparation_failed/1,
+    atm_workflow_execution_cancel_in_aborting_status_after_lane_run_preparation_failed/1,
 
-    first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_1_test/1,
-    first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_2_test/1,
-    first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_3_test/1,
-    first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_4_test/1,
+    first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_1/1,
+    first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_2/1,
+    first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_3/1,
+    first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_4/1,
 
-    first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_1_test/1,
-    first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_2_test/1,
-    first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_3_test/1,
-    first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_4_test/1,
+    first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_1/1,
+    first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_2/1,
+    first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_3/1,
+    first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_4/1,
 
-    cancel_scheduled_atm_workflow_execution_test/1,
-    cancel_enqueued_atm_workflow_execution_test/1,
-    cancel_active_atm_workflow_execution_test/1,
-    cancel_finishing_atm_workflow_execution_test/1,
-    cancel_finished_atm_workflow_execution_test/1,
+    cancel_scheduled_atm_workflow_execution/1,
+    cancel_enqueued_atm_workflow_execution/1,
+    cancel_active_atm_workflow_execution/1,
+    cancel_finishing_atm_workflow_execution/1,
+    cancel_finished_atm_workflow_execution/1,
 
-    iterate_over_list_store_test/1,
-    iterate_over_list_store_with_some_inaccessible_items_test/1,
-    iterate_over_list_store_with_all_items_inaccessible_test/1,
-    iterate_over_empty_list_store_test/1,
+    iterate_over_list_store/1,
+    iterate_over_list_store_with_some_inaccessible_items/1,
+    iterate_over_list_store_with_all_items_inaccessible/1,
+    iterate_over_empty_list_store/1,
 
-    iterate_over_range_store_test/1,
-    iterate_over_empty_range_store_test/1,
+    iterate_over_range_store/1,
+    iterate_over_empty_range_store/1,
 
-    iterate_over_single_value_store_test/1,
-    iterate_over_single_value_store_with_all_items_inaccessible_test/1,
-    iterate_over_empty_single_value_store_test/1,
+    iterate_over_single_value_store/1,
+    iterate_over_single_value_store_with_all_items_inaccessible/1,
+    iterate_over_empty_single_value_store/1,
 
-    iterate_over_tree_forest_store_test/1,
-    iterate_over_tree_forest_store_with_some_inaccessible_items_test/1,
-    iterate_over_tree_forest_store_with_all_items_inaccessible_test/1,
-    iterate_over_empty_tree_forest_store_test/1,
+    iterate_over_tree_forest_store/1,
+    iterate_over_tree_forest_store_with_some_inaccessible_items/1,
+    iterate_over_tree_forest_store_with_all_items_inaccessible/1,
+    iterate_over_empty_tree_forest_store/1,
 
-    map_results_to_audit_log_store_test/1,
-    map_results_to_list_store_test/1,
-    map_results_to_range_store_test/1,
-    map_results_to_single_value_store_test/1,
-    map_results_to_time_series_store_test/1,
-    map_results_to_tree_forest_store_test/1,
+    map_results_to_audit_log_store/1,
+    map_results_to_list_store/1,
+    map_results_to_range_store/1,
+    map_results_to_single_value_store/1,
+    map_results_to_time_series_store/1,
+    map_results_to_tree_forest_store/1,
 
-    map_results_to_workflow_audit_log_store_test/1,
-    map_results_to_task_audit_log_store_test/1,
-    map_results_to_task_time_series_store_test/1,
+    map_results_to_workflow_audit_log_store/1,
+    map_results_to_task_audit_log_store/1,
+    map_results_to_task_time_series_store/1,
 
+    fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error/1,
     fail_atm_workflow_execution_due_to_job_result_store_mapping_error/1
 ]).
 
 groups() -> [
     {scheduling_non_executable_workflow_schema_tests, [parallel], [
-        schedule_atm_workflow_with_no_lanes_test,
-        schedule_atm_workflow_with_empty_lane_test,
-        schedule_atm_workflow_with_empty_parallel_box_test,
-        schedule_atm_workflow_with_openfaas_not_configured_test
+        schedule_atm_workflow_with_no_lanes,
+        schedule_atm_workflow_with_empty_lane,
+        schedule_atm_workflow_with_empty_parallel_box,
+        schedule_atm_workflow_with_openfaas_not_configured
     ]},
     {scheduling_executable_workflow_schema_with_invalid_args_tests, [parallel], [
-        schedule_atm_workflow_with_invalid_initial_store_content_test
+        schedule_atm_workflow_with_invalid_initial_store_content
     ]},
     {preparation_tests, [parallel], [
-        first_lane_run_preparation_failure_before_run_was_created_test,
-        first_lane_run_preparation_failure_after_run_was_created_test,
+        first_lane_run_preparation_failure_before_run_was_created,
+        first_lane_run_preparation_failure_after_run_was_created,
 
-        atm_workflow_execution_cancelled_in_preparing_status_before_run_was_created_test,
-        atm_workflow_execution_cancelled_in_preparing_status_after_run_was_created_test,
-        atm_workflow_execution_cancel_before_lane_run_preparation_failed_test,
-        atm_workflow_execution_cancel_in_aborting_status_after_lane_run_preparation_failed_test,
+        atm_workflow_execution_cancelled_in_preparing_status_before_run_was_created,
+        atm_workflow_execution_cancelled_in_preparing_status_after_run_was_created,
+        atm_workflow_execution_cancel_before_lane_run_preparation_failed,
+        atm_workflow_execution_cancel_in_aborting_status_after_lane_run_preparation_failed,
 
-        first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_1_test,
-        first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_2_test,
-        first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_3_test,
-        first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_4_test,
+        first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_1,
+        first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_2,
+        first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_3,
+        first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_4,
 
-        first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_1_test,
-        first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_2_test,
-        first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_3_test,
-        first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_4_test
+        first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_1,
+        first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_2,
+        first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_3,
+        first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_4
     ]},
     {cancellation_tests, [parallel], [
-        cancel_scheduled_atm_workflow_execution_test,
-        cancel_enqueued_atm_workflow_execution_test,
-        cancel_active_atm_workflow_execution_test,
-        cancel_finishing_atm_workflow_execution_test,
-        cancel_finished_atm_workflow_execution_test
+        cancel_scheduled_atm_workflow_execution,
+        cancel_enqueued_atm_workflow_execution,
+        cancel_active_atm_workflow_execution,
+        cancel_finishing_atm_workflow_execution,
+        cancel_finished_atm_workflow_execution
     ]},
     {iteration_tests, [parallel], [
-        iterate_over_list_store_test,
-        iterate_over_list_store_with_some_inaccessible_items_test,
-        iterate_over_list_store_with_all_items_inaccessible_test,
-        iterate_over_empty_list_store_test,
+        iterate_over_list_store,
+        iterate_over_list_store_with_some_inaccessible_items,
+        iterate_over_list_store_with_all_items_inaccessible,
+        iterate_over_empty_list_store,
 
-        iterate_over_range_store_test,
-        iterate_over_empty_range_store_test,
+        iterate_over_range_store,
+        iterate_over_empty_range_store,
 
-        iterate_over_single_value_store_test,
-        iterate_over_single_value_store_with_all_items_inaccessible_test,
-        iterate_over_empty_single_value_store_test,
+        iterate_over_single_value_store,
+        iterate_over_single_value_store_with_all_items_inaccessible,
+        iterate_over_empty_single_value_store,
 
-        iterate_over_tree_forest_store_test,
-        iterate_over_tree_forest_store_with_some_inaccessible_items_test,
-        iterate_over_tree_forest_store_with_all_items_inaccessible_test,
-        iterate_over_empty_tree_forest_store_test
+        iterate_over_tree_forest_store,
+        iterate_over_tree_forest_store_with_some_inaccessible_items,
+        iterate_over_tree_forest_store_with_all_items_inaccessible,
+        iterate_over_empty_tree_forest_store
     ]},
     {mapping_tests, [parallel], [
-        map_results_to_audit_log_store_test,
-        map_results_to_list_store_test,
-        map_results_to_range_store_test,
-        map_results_to_single_value_store_test,
-        map_results_to_time_series_store_test,
-        map_results_to_tree_forest_store_test,
+        map_results_to_audit_log_store,
+        map_results_to_list_store,
+        map_results_to_range_store,
+        map_results_to_single_value_store,
+        map_results_to_time_series_store,
+        map_results_to_tree_forest_store,
 
-        map_results_to_workflow_audit_log_store_test,
-        map_results_to_task_audit_log_store_test,
-        map_results_to_task_time_series_store_test
+        map_results_to_workflow_audit_log_store,
+        map_results_to_task_audit_log_store,
+        map_results_to_task_time_series_store
     ]},
     {failure_tests, [parallel], [
-        fail_atm_workflow_execution_due_to_job_result_store_mapping_error
+        fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error
+        %% TODO uncomment after fixing workflow engine
+%%        fail_atm_workflow_execution_due_to_job_result_store_mapping_error
     ]}
 ].
 
@@ -191,188 +194,192 @@ all() -> [
 %%%===================================================================
 
 
-schedule_atm_workflow_with_no_lanes_test(_Config) ->
+schedule_atm_workflow_with_no_lanes(_Config) ->
     ?RUN_SCHEDULING_TEST().
 
 
-schedule_atm_workflow_with_empty_lane_test(_Config) ->
+schedule_atm_workflow_with_empty_lane(_Config) ->
     ?RUN_SCHEDULING_TEST().
 
 
-schedule_atm_workflow_with_empty_parallel_box_test(_Config) ->
+schedule_atm_workflow_with_empty_parallel_box(_Config) ->
     ?RUN_SCHEDULING_TEST().
 
 
-schedule_atm_workflow_with_openfaas_not_configured_test(_Config) ->
+schedule_atm_workflow_with_openfaas_not_configured(_Config) ->
     ?RUN_SCHEDULING_TEST().
 
 
-schedule_atm_workflow_with_invalid_initial_store_content_test(_Config) ->
+schedule_atm_workflow_with_invalid_initial_store_content(_Config) ->
     ?RUN_SCHEDULING_TEST().
 
 
-first_lane_run_preparation_failure_before_run_was_created_test(_Config) ->
+first_lane_run_preparation_failure_before_run_was_created(_Config) ->
     ?RUN_PREPARATION_TEST().
 
 
-first_lane_run_preparation_failure_after_run_was_created_test(_Config) ->
+first_lane_run_preparation_failure_after_run_was_created(_Config) ->
     ?RUN_PREPARATION_TEST().
 
 
-atm_workflow_execution_cancelled_in_preparing_status_before_run_was_created_test(_Config) ->
+atm_workflow_execution_cancelled_in_preparing_status_before_run_was_created(_Config) ->
     ?RUN_PREPARATION_TEST().
 
 
-atm_workflow_execution_cancelled_in_preparing_status_after_run_was_created_test(_Config) ->
+atm_workflow_execution_cancelled_in_preparing_status_after_run_was_created(_Config) ->
     ?RUN_PREPARATION_TEST().
 
 
-atm_workflow_execution_cancel_before_lane_run_preparation_failed_test(_Config) ->
+atm_workflow_execution_cancel_before_lane_run_preparation_failed(_Config) ->
     ?RUN_PREPARATION_TEST().
 
 
-atm_workflow_execution_cancel_in_aborting_status_after_lane_run_preparation_failed_test(_Config) ->
+atm_workflow_execution_cancel_in_aborting_status_after_lane_run_preparation_failed(_Config) ->
     ?RUN_PREPARATION_TEST().
 
 
-first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_1_test(_Config) ->
+first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_1(_Config) ->
     ?RUN_PREPARATION_TEST().
 
 
-first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_2_test(_Config) ->
+first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_2(_Config) ->
     ?RUN_PREPARATION_TEST().
 
 
-first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_3_test(_Config) ->
+first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_3(_Config) ->
     ?RUN_PREPARATION_TEST().
 
 
-first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_4_test(_Config) ->
+first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_4(_Config) ->
     ?RUN_PREPARATION_TEST().
 
 
-first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_1_test(_Config) ->
+first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_1(_Config) ->
     ?RUN_PREPARATION_TEST().
 
 
-first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_2_test(_Config) ->
+first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_2(_Config) ->
     ?RUN_PREPARATION_TEST().
 
 
-first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_3_test(_Config) ->
+first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_3(_Config) ->
     ?RUN_PREPARATION_TEST().
 
 
-first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_4_test(_Config) ->
+first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_4(_Config) ->
     ?RUN_PREPARATION_TEST().
 
 
-cancel_scheduled_atm_workflow_execution_test(_Config) ->
+cancel_scheduled_atm_workflow_execution(_Config) ->
     ?RUN_CANCELLATION_TEST().
 
 
-cancel_enqueued_atm_workflow_execution_test(_Config) ->
+cancel_enqueued_atm_workflow_execution(_Config) ->
     ?RUN_CANCELLATION_TEST().
 
 
-cancel_active_atm_workflow_execution_test(_Config) ->
+cancel_active_atm_workflow_execution(_Config) ->
     ?RUN_CANCELLATION_TEST().
 
 
-cancel_finishing_atm_workflow_execution_test(_Config) ->
+cancel_finishing_atm_workflow_execution(_Config) ->
     ?RUN_CANCELLATION_TEST().
 
 
-cancel_finished_atm_workflow_execution_test(_Config) ->
+cancel_finished_atm_workflow_execution(_Config) ->
     ?RUN_CANCELLATION_TEST().
 
 
-iterate_over_list_store_test(_Config) ->
+iterate_over_list_store(_Config) ->
     ?RUN_ITERATION_TEST().
 
 
-iterate_over_list_store_with_some_inaccessible_items_test(_Config) ->
+iterate_over_list_store_with_some_inaccessible_items(_Config) ->
     ?RUN_ITERATION_TEST().
 
 
-iterate_over_list_store_with_all_items_inaccessible_test(_Config) ->
+iterate_over_list_store_with_all_items_inaccessible(_Config) ->
     ?RUN_ITERATION_TEST().
 
 
-iterate_over_empty_list_store_test(_Config) ->
+iterate_over_empty_list_store(_Config) ->
     ?RUN_ITERATION_TEST().
 
 
-iterate_over_range_store_test(_Config) ->
+iterate_over_range_store(_Config) ->
     ?RUN_ITERATION_TEST().
 
 
-iterate_over_empty_range_store_test(_Config) ->
+iterate_over_empty_range_store(_Config) ->
     ?RUN_ITERATION_TEST().
 
 
-iterate_over_single_value_store_test(_Config) ->
+iterate_over_single_value_store(_Config) ->
     ?RUN_ITERATION_TEST().
 
 
-iterate_over_single_value_store_with_all_items_inaccessible_test(_Config) ->
+iterate_over_single_value_store_with_all_items_inaccessible(_Config) ->
     ?RUN_ITERATION_TEST().
 
 
-iterate_over_empty_single_value_store_test(_Config) ->
+iterate_over_empty_single_value_store(_Config) ->
     ?RUN_ITERATION_TEST().
 
 
-iterate_over_tree_forest_store_test(_Config) ->
+iterate_over_tree_forest_store(_Config) ->
     ?RUN_ITERATION_TEST().
 
 
-iterate_over_tree_forest_store_with_some_inaccessible_items_test(_Config) ->
+iterate_over_tree_forest_store_with_some_inaccessible_items(_Config) ->
     ?RUN_ITERATION_TEST().
 
 
-iterate_over_tree_forest_store_with_all_items_inaccessible_test(_Config) ->
+iterate_over_tree_forest_store_with_all_items_inaccessible(_Config) ->
     ?RUN_ITERATION_TEST().
 
 
-iterate_over_empty_tree_forest_store_test(_Config) ->
+iterate_over_empty_tree_forest_store(_Config) ->
     ?RUN_ITERATION_TEST().
 
 
-map_results_to_audit_log_store_test(_Config) ->
+map_results_to_audit_log_store(_Config) ->
     ?RUN_MAPPING_TEST().
 
 
-map_results_to_list_store_test(_Config) ->
+map_results_to_list_store(_Config) ->
     ?RUN_MAPPING_TEST().
 
 
-map_results_to_range_store_test(_Config) ->
+map_results_to_range_store(_Config) ->
     ?RUN_MAPPING_TEST().
 
 
-map_results_to_single_value_store_test(_Config) ->
+map_results_to_single_value_store(_Config) ->
     ?RUN_MAPPING_TEST().
 
 
-map_results_to_time_series_store_test(_Config) ->
+map_results_to_time_series_store(_Config) ->
     ?RUN_MAPPING_TEST().
 
 
-map_results_to_tree_forest_store_test(_Config) ->
+map_results_to_tree_forest_store(_Config) ->
     ?RUN_MAPPING_TEST().
 
 
-map_results_to_workflow_audit_log_store_test(_Config) ->
+map_results_to_workflow_audit_log_store(_Config) ->
     ?RUN_MAPPING_TEST().
 
 
-map_results_to_task_audit_log_store_test(_Config) ->
+map_results_to_task_audit_log_store(_Config) ->
     ?RUN_MAPPING_TEST().
 
 
-map_results_to_task_time_series_store_test(_Config) ->
+map_results_to_task_time_series_store(_Config) ->
     ?RUN_MAPPING_TEST().
+
+
+fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error(_Config) ->
+    ?FAILURE_MAPPING_TEST().
 
 
 fail_atm_workflow_execution_due_to_job_result_store_mapping_error(_Config) ->

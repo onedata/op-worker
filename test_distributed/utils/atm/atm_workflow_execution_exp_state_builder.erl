@@ -95,10 +95,11 @@
 -type ctx() :: #exp_workflow_execution_state_ctx{}.
 
 -type task_registry() :: #{AtmTaskSchemaId :: automation:id() => atm_task_execution:id()}.
+-type task_selector() :: {atm_lane_execution:lane_run_selector(), automation:id(), automation:id()}.
 
 -type log_fun() :: fun((binary(), [term()]) -> ok).
 
--export_type([ctx/0]).
+-export_type([ctx/0, task_selector/0]).
 
 
 -define(JSON_PATH(__QUERY_BIN), binary:split(__QUERY_BIN, <<".">>, [global])).
@@ -355,8 +356,7 @@ expect_lane_run_num_set(AtmLaneRunSelector, RunNum, ExpStateCtx) ->
     update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx).
 
 
--spec get_task_selector(atm_task_execution:id(), ctx()) ->
-    {atm_lane_execution:lane_run_selector(), automation:id(), automation:id()}.
+-spec get_task_selector(atm_task_execution:id(), ctx()) -> task_selector().
 get_task_selector(AtmTaskExecutionId, #exp_workflow_execution_state_ctx{
     exp_task_execution_state_ctx_registry = ExpAtmTaskExecutionsRegistry
 }) ->
@@ -493,19 +493,19 @@ expect_task_lane_run_transitioned_to_active_status_if_was_in_enqueued_status(
 -spec expect_task_finished(atm_task_execution:id(), ctx()) ->
     ctx().
 expect_task_finished(AtmTaskExecutionId, ExpStateCtx) ->
-    expect_task_ended(AtmTaskExecutionId, <<"finished">>, ExpStateCtx).
+    expect_task_transitioned_to(AtmTaskExecutionId, <<"finished">>, ExpStateCtx).
 
 
 -spec expect_task_skipped(atm_task_execution:id(), ctx()) ->
     ctx().
 expect_task_skipped(AtmTaskExecutionId, ExpStateCtx) ->
-    expect_task_ended(AtmTaskExecutionId, <<"skipped">>, ExpStateCtx).
+    expect_task_transitioned_to(AtmTaskExecutionId, <<"skipped">>, ExpStateCtx).
 
 
 -spec expect_task_failed(atm_task_execution:id(), ctx()) ->
     ctx().
 expect_task_failed(AtmTaskExecutionId, ExpStateCtx) ->
-    expect_task_ended(AtmTaskExecutionId, <<"failed">>, ExpStateCtx).
+    expect_task_transitioned_to(AtmTaskExecutionId, <<"failed">>, ExpStateCtx).
 
 
 -spec expect_task_parallel_box_transitioned_to_inferred_status(
@@ -795,9 +795,9 @@ update_exp_parallel_box_execution_state(
 
 
 %% @private
--spec expect_task_ended(atm_task_execution:id(), binary(), ctx()) ->
+-spec expect_task_transitioned_to(atm_task_execution:id(), binary(), ctx()) ->
     ctx().
-expect_task_ended(AtmTaskExecutionId, EndedStatus, ExpStateCtx) ->
+expect_task_transitioned_to(AtmTaskExecutionId, EndedStatus, ExpStateCtx) ->
     ExpAtmTaskExecutionStateDiff = fun(ExpAtmTaskExecutionState) ->
         ExpAtmTaskExecutionState#{<<"status">> => EndedStatus}
     end,
