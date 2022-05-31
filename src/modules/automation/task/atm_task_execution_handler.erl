@@ -208,7 +208,6 @@ process_streamed_data(AtmWorkflowExecutionCtx, AtmTaskExecutionId, {chunk, Uncor
     {ok, #document{value = AtmTaskExecution}} = atm_task_execution:get(AtmTaskExecutionId),
 
     try
-        % @fixme consider refactoring
         maps:foreach(fun(ResultName, ResultArray) ->
             lists:foreach(fun(ResultValue) ->
                 atm_task_execution_results:consume_results(
