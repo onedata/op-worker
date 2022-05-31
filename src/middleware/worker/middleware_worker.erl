@@ -53,6 +53,9 @@
     #remove_dataset {} |
     #get_file_eff_dataset_summary{}.
 
+-type file_metadata_operations() ::
+    #get_file_distribution_request{}.
+
 -type qos_operation() ::
     #add_qos_entry{} |
     #get_qos_entry{} |
@@ -72,13 +75,14 @@
     archive_operation() |
     atm_operation() |
     dataset_operation() |
+    file_metadata_operations() |
     qos_operation() |
     share_operation() |
     transfer_operation().
 
 -export_type([
     archive_operation/0, atm_operation/0, dataset_operation/0,
-    qos_operation/0, transfer_operation/0,
+    file_metadata_operations/0, qos_operation/0, transfer_operation/0,
     operation/0
 ]).
 

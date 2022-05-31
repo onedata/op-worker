@@ -134,6 +134,12 @@ execute(UserCtx, FileCtx, #get_file_eff_dataset_summary{}) ->
     dataset_req:get_file_eff_summary(FileCtx, UserCtx);
 
 
+%% File metadata
+
+execute(UserCtx, FileCtx, #get_file_distribution_request{}) ->
+    distribution_req:get_file_distribution(UserCtx, FileCtx);
+
+
 %% QoS
 
 execute(UserCtx, FileCtx, #add_qos_entry{
