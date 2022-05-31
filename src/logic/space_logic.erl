@@ -34,7 +34,7 @@
 -export([assert_has_eff_privilege/3]).
 -export([is_owner/2]).
 -export([get_eff_groups/2, get_shares/2, get_local_storages/1,
-    get_local_supporting_storage/1, get_storages_by_provider/2,
+    get_local_supporting_storage/1, get_provider_storages/2, get_storages_by_provider/1,
     get_all_storage_ids/1, get_support_size/2]).
 -export([get_provider_ids/1, get_provider_ids/2]).
 -export([is_supported/2, is_supported/3]).
@@ -239,7 +239,7 @@ get_local_supporting_storage(SpaceId) ->
 %%--------------------------------------------------------------------
 -spec get_local_storages(od_space:id()) -> {ok, [storage:id()]} | errors:error().
 get_local_storages(SpaceId) ->
-    case get_storages_by_provider(SpaceId, oneprovider:get_id()) of
+    case get_provider_storages(SpaceId, oneprovider:get_id()) of
         {ok, ProviderStorages} -> {ok, maps:keys(ProviderStorages)};
         Error -> Error
     end.
@@ -251,16 +251,25 @@ get_local_storages(SpaceId) ->
 %% with storages supporting given space, belonging to ProviderId.
 %% @end
 %%--------------------------------------------------------------------
--spec get_storages_by_provider(od_space:id(), od_provider:id()) ->
+-spec get_provider_storages(od_space:id(), od_provider:id()) ->
     {ok, #{storage:id() => storage:access_type()}} | errors:error().
-get_storages_by_provider(SpaceId, ProviderId) when is_binary(SpaceId)->
-    % called by module to be mocked in tests
+get_provider_storages(SpaceId, ProviderId) when is_binary(SpaceId)->
+    case get_storages_by_provider(SpaceId) of
+        {ok, #{ProviderId := ProviderStorages}} ->
+            {ok, ProviderStorages};
+        {ok, _} ->
+            ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, ProviderId);
+        {error, _} = Error ->
+            Error
+    end.
+
+
+-spec get_storages_by_provider(od_space:id()) ->
+    {ok, #{od_provider:id() => #{storage:id() => storage:access_type()}}} | errors:error().
+get_storages_by_provider(SpaceId) when is_binary(SpaceId)->
     case space_logic:get(?ROOT_SESS_ID, SpaceId) of
-        {ok, #document{value = #od_space{storages_by_provider = StoragesByProvider} }} ->
-            case maps:get(ProviderId, StoragesByProvider, undefined) of
-                undefined -> ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, ProviderId);
-                StoragesToAccessType -> {ok, StoragesToAccessType}
-            end;
+        {ok, #document{value = #od_space{storages_by_provider = StoragesByProvider}}} ->
+            {ok, StoragesByProvider};
         {error, _} = Error ->
             Error
     end.
@@ -344,7 +353,7 @@ is_supported_by_storage(SpaceId, StorageId) ->
 %%--------------------------------------------------------------------
 -spec has_readonly_support_from(od_space:id(), od_provider:id()) -> boolean().
 has_readonly_support_from(SpaceId, ProviderId) ->
-    case get_storages_by_provider(SpaceId, ProviderId) of
+    case get_provider_storages(SpaceId, ProviderId) of
         {ok, ProviderStorages} when map_size(ProviderStorages) =:= 0 ->
             % if the map is empty, this provider does not support the space and has
             % no knowledge about other supports to determine if they are readonly

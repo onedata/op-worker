@@ -925,7 +925,7 @@ setup_preexisting_fulfilled_qos_causing_file_transfer(Config, SpaceId, FileCreat
 
 
 get_supporting_storages(Node, SpaceId, ProviderId) ->
-    {ok, ProviderSupports} = opw_test_rpc:call(Node, space_logic, get_storages_by_provider, [SpaceId, ProviderId]),
+    {ok, ProviderSupports} = opw_test_rpc:call(Node, space_logic, get_provider_storages, [SpaceId, ProviderId]),
     maps:keys(ProviderSupports).
 
 %%%===================================================================
