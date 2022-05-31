@@ -64,7 +64,7 @@
     item_id_to_report_error :: workflow_cached_item:id() | undefined,
     item_id_to_snapshot :: workflow_cached_item:id() | undefined,
     item_ids_to_delete :: [workflow_cached_item:id()],
-    task_status :: task_status()
+    task_statuses_to_report :: [{workflow_jobs:job_identifier(), task_status()}]
 }).
 -define(TASK_PROCESSED_REPORT(TaskStatus), {task_processed_report, TaskStatus}).
 -define(EXECUTION_CANCELLED_REPORT(ItemIdsToDelete, TaskIds), {execution_canceled_report, ItemIdsToDelete, TaskIds}).
@@ -266,18 +266,18 @@ report_execution_status_update(ExecutionId, JobIdentifier, UpdateType, Ans) ->
         _ -> Ans
     end,
 
-    {UpdatedDoc, ItemIdToReportError, ItemToReportError, TaskStatus} = case update(ExecutionId, fun(State) ->
+    {UpdatedDoc, ItemIdToReportError, ItemToReportError, TaskStatusesToReport} = case update(ExecutionId, fun(State) ->
         report_execution_status_update_internal(State, JobIdentifier, UpdateType, CachedAns)
     end) of
         {ok, Doc = #document{value = #workflow_execution_state{update_report = #items_processed_report{
             item_id_to_report_error = IdToReportError,
             item_id_to_snapshot = undefined,
             item_ids_to_delete = ItemIdsToDelete,
-            task_status = ReportedTaskStatus
+            task_statuses_to_report = ReportedTaskStatuses
         }}}} ->
             CachedItemToReportError = workflow_cached_item:get_item(IdToReportError),
             lists:foreach(fun workflow_cached_item:delete/1, ItemIdsToDelete),
-            {Doc, IdToReportError, CachedItemToReportError, ReportedTaskStatus};
+            {Doc, IdToReportError, CachedItemToReportError, ReportedTaskStatuses};
         {ok, Doc = #document{value = #workflow_execution_state{
             next_lane = #next_lane{
                 id = NextLaneId
@@ -288,7 +288,7 @@ report_execution_status_update(ExecutionId, JobIdentifier, UpdateType, Ans) ->
                 item_id_to_report_error = IdToReportError,
                 item_id_to_snapshot = ItemIdToSnapshot,
                 item_ids_to_delete = ItemIdsToDelete,
-                task_status = ReportedTaskStatus
+                task_statuses_to_report = ReportedTaskStatuses
             }
         }}} ->
             CachedItemToReportError = workflow_cached_item:get_item(IdToReportError),
@@ -296,19 +296,19 @@ report_execution_status_update(ExecutionId, JobIdentifier, UpdateType, Ans) ->
             workflow_iterator_snapshot:save(
                 ExecutionId, LaneIndex, LaneId, ItemIndex, IteratorToSave, NextLaneId),
             lists:foreach(fun workflow_cached_item:delete/1, ItemIdsToDelete),
-            {Doc, IdToReportError, CachedItemToReportError, ReportedTaskStatus};
+            {Doc, IdToReportError, CachedItemToReportError, ReportedTaskStatuses};
         {ok, Doc = #document{value = #workflow_execution_state{
             update_report = ?TASK_PROCESSED_REPORT(ReportedTaskStatus)
         }}} ->
-            {Doc, undefined, undefined, ReportedTaskStatus};
+            {Doc, undefined, undefined, [{JobIdentifier, ReportedTaskStatus}]};
         {ok, Doc} ->
-            {Doc, undefined, undefined, ongoing};
+            {Doc, undefined, undefined, []};
         ?WF_ERROR_JOB_NOT_FOUND ->
             ?debug("Result for not found job ~p of execution ~p", [JobIdentifier, ExecutionId]),
-            {?WF_ERROR_JOB_NOT_FOUND, undefined, undefined, undefined};
+            {?WF_ERROR_JOB_NOT_FOUND, undefined, undefined, []};
         ?ERROR_NOT_FOUND ->
             ?debug("Result for job ~p of ended execution ~p", [JobIdentifier, ExecutionId]),
-            {?WF_ERROR_JOB_NOT_FOUND, undefined, undefined, undefined}
+            {?WF_ERROR_JOB_NOT_FOUND, undefined, undefined, []}
     end,
 
     case UpdatedDoc of
@@ -317,7 +317,9 @@ report_execution_status_update(ExecutionId, JobIdentifier, UpdateType, Ans) ->
         _ ->
             maybe_report_item_error(UpdatedDoc, ItemIdToReportError, ItemToReportError),
             % TODO VFS-8456 - maybe execute notification handlers also on pool?
-            maybe_notify_task_execution_ended(UpdatedDoc, JobIdentifier, TaskStatus),
+            lists:foreach(fun({Identifier, TaskStatus}) ->
+                maybe_notify_task_execution_ended(UpdatedDoc, Identifier, TaskStatus)
+            end, TaskStatusesToReport),
 
             #document{value = #workflow_execution_state{
                 current_lane = #current_lane{parallel_box_specs = BoxSpecs}
@@ -723,10 +725,8 @@ maybe_report_item_error(#document{key = ExecutionId, value = #workflow_execution
     {ok, _} = update(ExecutionId, fun(State) -> remove_pending_callback(State, ItemIdToReportError) end),
     ok.
 
--spec maybe_notify_task_execution_ended(doc(), workflow_jobs:job_identifier(), task_status() | undefined) -> ok.
+-spec maybe_notify_task_execution_ended(doc(), workflow_jobs:job_identifier(), task_status()) -> ok.
 maybe_notify_task_execution_ended(_Doc, _JobIdentifier, ongoing) ->
-    ok;
-maybe_notify_task_execution_ended(_Doc, _JobIdentifier, undefined) ->
     ok;
 maybe_notify_task_execution_ended(#document{key = ExecutionId, value = #workflow_execution_state{
     handler = Handler,
@@ -1322,17 +1322,31 @@ prepare_next_parallel_box(State = #workflow_execution_state{
                         false -> undefined
                     end
             end,
-            State2 = State#workflow_execution_state{jobs = NewJobs},
-            TaskStatus = get_task_status(JobIdentifier, State2),
-            State3 = State2#workflow_execution_state{
-                iteration_state = NewIterationState,
+            State2 = State#workflow_execution_state{jobs = NewJobs, iteration_state = NewIterationState},
+            State3 = add_if_callback_is_pending(State2, ItemIdToReportError, ItemIdToReportError =/= undefined),
+
+            JobIdentifiersToCheck = case SuccessOrFailure of
+                ?SUCCESS ->
+                    [JobIdentifier];
+                ?FAILURE ->
+                    [JobIdentifier |
+                        workflow_jobs:get_identfiers_for_next_parallel_boxes(JobIdentifier, BoxSpecs, BoxCount)]
+            end,
+
+            TaskStatusesToReport = lists:map(fun(JobIdentifierToCheck) ->
+                {JobIdentifierToCheck, get_task_status(JobIdentifierToCheck, State3)}
+            end, JobIdentifiersToCheck),
+
+            State4 = lists:foldl(fun({Identifier, TaskStatus}, StateAcc) ->
+                add_if_callback_is_pending(StateAcc, Identifier, TaskStatus =/= ongoing)
+            end, State3, TaskStatusesToReport),
+
+            {ok, State4#workflow_execution_state{
                 update_report = #items_processed_report{lane_index = LaneIndex, lane_id = LaneId,
                     last_finished_item_index = ItemIndex,
                     item_id_to_report_error = ItemIdToReportError, item_id_to_snapshot = FinalItemIdToSnapshot,
-                    item_ids_to_delete = ItemIdsToDelete, task_status = TaskStatus}
-            },
-            State4 = add_if_callback_is_pending(State3, ItemIdToReportError, ItemIdToReportError =/= undefined),
-            {ok, add_if_callback_is_pending(State4, JobIdentifier, TaskStatus =/= ongoing)}
+                    item_ids_to_delete = ItemIdsToDelete, task_statuses_to_report = TaskStatusesToReport}
+            }}
     end.
 
 -spec prepare_next_streamed_task_data(state()) -> {ok, state()} | ?ERROR_NOT_FOUND.
