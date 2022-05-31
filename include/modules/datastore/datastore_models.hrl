@@ -433,7 +433,7 @@
     state :: archive:state(),
     config :: archive:config(),
     preserved_callback :: archive:callback(),
-    purged_callback :: archive:callback(),
+    deleted_callback :: archive:callback(),
     description :: archive:description(),
     % This directory is root for archive.
     % It has predefined uuid=?ARCHIVE_DIR_UUID(ArchiveId)
