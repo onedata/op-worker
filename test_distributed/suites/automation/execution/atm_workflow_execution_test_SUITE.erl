@@ -155,9 +155,8 @@ groups() -> [
         map_results_to_task_time_series_store
     ]},
     {failure_tests, [parallel], [
-        fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error
-        %% TODO uncomment after fixing workflow engine
-%%        fail_atm_workflow_execution_due_to_job_result_store_mapping_error
+        fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error,
+        fail_atm_workflow_execution_due_to_job_result_store_mapping_error
     ]}
 ].
 
