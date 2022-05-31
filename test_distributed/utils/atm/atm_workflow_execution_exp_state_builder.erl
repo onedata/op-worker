@@ -28,6 +28,7 @@
 -export([
     init/5,
 
+    expect_lane_run_automatic_retry_scheduled/2,
     expect_lane_run_started_preparing/2,
     expect_current_lane_run_started_preparing/2,
     expect_lane_run_started_preparing_in_advance/2,
@@ -36,6 +37,7 @@
     expect_lane_run_aborting/2,
     expect_lane_run_finished/2,
     expect_lane_run_failed/2,
+    expect_lane_run_failed/3,
     expect_lane_run_cancelled/2,
     expect_lane_run_interrupted/2,
     expect_lane_run_num_set/3,
@@ -44,11 +46,13 @@
     get_task_stats/2,
     expect_task_items_in_processing_increased/3,
     expect_task_items_moved_from_processing_to_processed/3,
+    expect_task_items_moved_from_processing_to_failed_and_processed/3,
     expect_task_transitioned_to_active_status_if_was_in_pending_status/2,
     expect_task_parallel_box_transitioned_to_active_status_if_was_in_pending_status/2,
     expect_task_lane_run_transitioned_to_active_status_if_was_in_enqueued_status/2,
     expect_task_finished/2,
     expect_task_skipped/2,
+    expect_task_failed/2,
     expect_task_parallel_box_transitioned_to_inferred_status/3,
     expect_all_tasks_skipped/2,
 
@@ -91,10 +95,11 @@
 -type ctx() :: #exp_workflow_execution_state_ctx{}.
 
 -type task_registry() :: #{AtmTaskSchemaId :: automation:id() => atm_task_execution:id()}.
+-type task_selector() :: {atm_lane_execution:lane_run_selector(), automation:id(), automation:id()}.
 
 -type log_fun() :: fun((binary(), [term()]) -> ok).
 
--export_type([ctx/0]).
+-export_type([ctx/0, task_selector/0]).
 
 
 -define(JSON_PATH(__QUERY_BIN), binary:split(__QUERY_BIN, <<".">>, [global])).
@@ -154,6 +159,34 @@ init(
             <<"finishTime">> => 0
         },
         exp_task_execution_state_ctx_registry = #{}
+    }.
+
+
+-spec expect_lane_run_automatic_retry_scheduled(atm_lane_execution:lane_run_selector(), ctx()) ->
+    ctx().
+expect_lane_run_automatic_retry_scheduled({AtmLaneSelector, _}, ExpStateCtx = #exp_workflow_execution_state_ctx{
+    exp_workflow_execution_state = ExpAtmWorkflowExecutionState0
+}) ->
+    AtmLaneIndex = resolve_lane_selector(AtmLaneSelector, ExpStateCtx),
+    Path = ?JSON_PATH("lanes.[~B].runs", [AtmLaneIndex - 1]),
+
+    {ok, PrevAtmLaneExecutionRuns = [FailedLaneRun | _]} = json_utils:query(
+        ExpAtmWorkflowExecutionState0, Path
+    ),
+    NewLaneRun = build_initial_regular_lane_run_exp_state(
+        maps:get(<<"runNumber">>, FailedLaneRun) + 1,
+        <<"scheduled">>,
+        <<"retry">>,
+        maps:get(<<"runNumber">>, FailedLaneRun),
+        maps:get(<<"exceptionStoreId">>, FailedLaneRun)
+    ),
+    {ok, ExpAtmWorkflowExecutionState1} = json_utils:insert(
+        ExpAtmWorkflowExecutionState0,
+        [NewLaneRun | PrevAtmLaneExecutionRuns],
+        Path
+    ),
+    ExpStateCtx#exp_workflow_execution_state_ctx{
+        exp_workflow_execution_state = ExpAtmWorkflowExecutionState1
     }.
 
 
@@ -281,9 +314,16 @@ expect_lane_run_finished(AtmLaneRunSelector, ExpStateCtx) ->
 -spec expect_lane_run_failed(atm_lane_execution:lane_run_selector(), ctx()) ->
     ctx().
 expect_lane_run_failed(AtmLaneRunSelector, ExpStateCtx) ->
+    expect_lane_run_failed(AtmLaneRunSelector, false, ExpStateCtx).
+
+
+-spec expect_lane_run_failed(atm_lane_execution:lane_run_selector(), boolean(), ctx()) ->
+    ctx().
+expect_lane_run_failed(AtmLaneRunSelector, IsRetriable, ExpStateCtx) ->
     ExpAtmLaneRunStateDiff = #{
         <<"status">> => <<"failed">>,
-        <<"isRerunable">> => true
+        <<"isRerunable">> => true,
+        <<"isRetriable">> => IsRetriable
     },
     update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx).
 
@@ -316,8 +356,7 @@ expect_lane_run_num_set(AtmLaneRunSelector, RunNum, ExpStateCtx) ->
     update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx).
 
 
--spec get_task_selector(atm_task_execution:id(), ctx()) ->
-    {atm_lane_execution:lane_run_selector(), automation:id(), automation:id()}.
+-spec get_task_selector(atm_task_execution:id(), ctx()) -> task_selector().
 get_task_selector(AtmTaskExecutionId, #exp_workflow_execution_state_ctx{
     exp_task_execution_state_ctx_registry = ExpAtmTaskExecutionsRegistry
 }) ->
@@ -369,6 +408,27 @@ expect_task_items_moved_from_processing_to_processed(AtmTaskExecutionId, Count, 
     }) ->
         ExpAtmTaskExecutionState#{
             <<"itemsInProcessing">> => IIP - Count,
+            <<"itemsProcessed">> => IP + Count
+        }
+    end,
+    update_task_execution_exp_state(AtmTaskExecutionId, ExpAtmTaskExecutionStateDiff, ExpStateCtx).
+
+
+-spec expect_task_items_moved_from_processing_to_failed_and_processed(
+    atm_task_execution:id(),
+    pos_integer(),
+    ctx()
+) ->
+    ctx().
+expect_task_items_moved_from_processing_to_failed_and_processed(AtmTaskExecutionId, Count, ExpStateCtx) ->
+    ExpAtmTaskExecutionStateDiff = fun(ExpAtmTaskExecutionState = #{
+        <<"itemsInProcessing">> := IIP,
+        <<"itemsFailed">> := IF,
+        <<"itemsProcessed">> := IP
+    }) ->
+        ExpAtmTaskExecutionState#{
+            <<"itemsInProcessing">> => IIP - Count,
+            <<"itemsFailed">> => IF + Count,
             <<"itemsProcessed">> => IP + Count
         }
     end,
@@ -433,13 +493,19 @@ expect_task_lane_run_transitioned_to_active_status_if_was_in_enqueued_status(
 -spec expect_task_finished(atm_task_execution:id(), ctx()) ->
     ctx().
 expect_task_finished(AtmTaskExecutionId, ExpStateCtx) ->
-    expect_task_ended(AtmTaskExecutionId, <<"finished">>, ExpStateCtx).
+    expect_task_transitioned_to(AtmTaskExecutionId, <<"finished">>, ExpStateCtx).
 
 
 -spec expect_task_skipped(atm_task_execution:id(), ctx()) ->
     ctx().
 expect_task_skipped(AtmTaskExecutionId, ExpStateCtx) ->
-    expect_task_ended(AtmTaskExecutionId, <<"skipped">>, ExpStateCtx).
+    expect_task_transitioned_to(AtmTaskExecutionId, <<"skipped">>, ExpStateCtx).
+
+
+-spec expect_task_failed(atm_task_execution:id(), ctx()) ->
+    ctx().
+expect_task_failed(AtmTaskExecutionId, ExpStateCtx) ->
+    expect_task_transitioned_to(AtmTaskExecutionId, <<"failed">>, ExpStateCtx).
 
 
 -spec expect_task_parallel_box_transitioned_to_inferred_status(
@@ -729,9 +795,9 @@ update_exp_parallel_box_execution_state(
 
 
 %% @private
--spec expect_task_ended(atm_task_execution:id(), binary(), ctx()) ->
+-spec expect_task_transitioned_to(atm_task_execution:id(), binary(), ctx()) ->
     ctx().
-expect_task_ended(AtmTaskExecutionId, EndedStatus, ExpStateCtx) ->
+expect_task_transitioned_to(AtmTaskExecutionId, EndedStatus, ExpStateCtx) ->
     ExpAtmTaskExecutionStateDiff = fun(ExpAtmTaskExecutionState) ->
         ExpAtmTaskExecutionState#{<<"status">> => EndedStatus}
     end,
@@ -839,14 +905,35 @@ build_timestamp_field_validator(ApproxTime) ->
 ) ->
     lane_run_state().
 build_initial_regular_lane_run_exp_state(ExpRunNum, ExpInitialStatus) ->
+    build_initial_regular_lane_run_exp_state(
+        ExpRunNum, ExpInitialStatus, <<"regular">>, undefined, undefined
+    ).
+
+
+%% @private
+-spec build_initial_regular_lane_run_exp_state(
+    undefined | atm_lane_execution:run_num(),
+    binary(),
+    binary(),
+    undefined | atm_lane_execution:run_num(),
+    undefined | atm_store:id()
+) ->
+    lane_run_state().
+build_initial_regular_lane_run_exp_state(
+    ExpRunNum,
+    ExpInitialStatus,
+    ExpRunType,
+    ExpOriginalRunNum,
+    ExpIteratedStoreId
+) ->
     #{
         <<"runNumber">> => utils:undefined_to_null(ExpRunNum),
-        <<"originRunNumber">> => null,
+        <<"originRunNumber">> => utils:undefined_to_null(ExpOriginalRunNum),
         <<"status">> => ExpInitialStatus,
-        <<"iteratedStoreId">> => null,
+        <<"iteratedStoreId">> => utils:undefined_to_null(ExpIteratedStoreId),
         <<"exceptionStoreId">> => null,
         <<"parallelBoxes">> => [],
-        <<"runType">> => <<"regular">>,
+        <<"runType">> => ExpRunType,
         <<"isRetriable">> => false,
         <<"isRerunable">> => false
     }.

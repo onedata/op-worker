@@ -62,6 +62,7 @@
     create_run |
     run_task_for_item |
     process_task_result_for_item |
+    process_streamed_task_data |
     report_item_error |
     handle_task_execution_ended |
     handle_lane_execution_ended |
@@ -953,6 +954,7 @@ mock_workflow_execution_handler_steps(Workers) ->
     mock_workflow_execution_handler_step(Workers, prepare_lane, 3),
     mock_workflow_execution_handler_step(Workers, run_task_for_item, 6),
     mock_workflow_execution_handler_step(Workers, process_task_result_for_item, 5),
+    mock_workflow_execution_handler_step(Workers, process_streamed_task_data, 4),
     mock_workflow_execution_handler_step(Workers, report_item_error, 3),
     mock_workflow_execution_handler_step(Workers, handle_task_execution_ended, 3),
     mock_workflow_execution_handler_step(Workers, handle_workflow_execution_ended, 2).

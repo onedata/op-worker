@@ -17,23 +17,23 @@
 -include("modules/automation/atm_execution.hrl").
 
 -export([
-    first_lane_run_preparation_failure_before_run_was_created_test/0,
-    first_lane_run_preparation_failure_after_run_was_created_test/0,
+    first_lane_run_preparation_failure_before_run_was_created/0,
+    first_lane_run_preparation_failure_after_run_was_created/0,
 
-    atm_workflow_execution_cancelled_in_preparing_status_before_run_was_created_test/0,
-    atm_workflow_execution_cancelled_in_preparing_status_after_run_was_created_test/0,
-    atm_workflow_execution_cancel_before_lane_run_preparation_failed_test/0,
-    atm_workflow_execution_cancel_in_aborting_status_after_lane_run_preparation_failed_test/0,
+    atm_workflow_execution_cancelled_in_preparing_status_before_run_was_created/0,
+    atm_workflow_execution_cancelled_in_preparing_status_after_run_was_created/0,
+    atm_workflow_execution_cancel_before_lane_run_preparation_failed/0,
+    atm_workflow_execution_cancel_in_aborting_status_after_lane_run_preparation_failed/0,
 
-    first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_1_test/0,
-    first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_2_test/0,
-    first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_3_test/0,
-    first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_4_test/0,
+    first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_1/0,
+    first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_2/0,
+    first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_3/0,
+    first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_4/0,
 
-    first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_1_test/0,
-    first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_2_test/0,
-    first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_3_test/0,
-    first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_4_test/0
+    first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_1/0,
+    first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_2/0,
+    first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_3/0,
+    first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_4/0
 ]).
 
 
@@ -95,7 +95,7 @@
 %%%===================================================================
 
 
-first_lane_run_preparation_failure_before_run_was_created_test() ->
+first_lane_run_preparation_failure_before_run_was_created() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         provider = ?PROVIDER_SELECTOR,
         user = ?USER_SELECTOR,
@@ -135,7 +135,7 @@ first_lane_run_preparation_failure_before_run_was_created_test() ->
     }).
 
 
-first_lane_run_preparation_failure_after_run_was_created_test() ->
+first_lane_run_preparation_failure_after_run_was_created() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         provider = ?PROVIDER_SELECTOR,
         user = ?USER_SELECTOR,
@@ -179,7 +179,7 @@ first_lane_run_preparation_failure_after_run_was_created_test() ->
     }).
 
 
-atm_workflow_execution_cancelled_in_preparing_status_before_run_was_created_test() ->
+atm_workflow_execution_cancelled_in_preparing_status_before_run_was_created() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         provider = ?PROVIDER_SELECTOR,
         user = ?USER_SELECTOR,
@@ -221,7 +221,7 @@ atm_workflow_execution_cancelled_in_preparing_status_before_run_was_created_test
     }).
 
 
-atm_workflow_execution_cancelled_in_preparing_status_after_run_was_created_test() ->
+atm_workflow_execution_cancelled_in_preparing_status_after_run_was_created() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         provider = ?PROVIDER_SELECTOR,
         user = ?USER_SELECTOR,
@@ -270,7 +270,7 @@ atm_workflow_execution_cancelled_in_preparing_status_after_run_was_created_test(
     }).
 
 
-atm_workflow_execution_cancel_before_lane_run_preparation_failed_test() ->
+atm_workflow_execution_cancel_before_lane_run_preparation_failed() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         provider = ?PROVIDER_SELECTOR,
         user = ?USER_SELECTOR,
@@ -319,7 +319,7 @@ atm_workflow_execution_cancel_before_lane_run_preparation_failed_test() ->
     }).
 
 
-atm_workflow_execution_cancel_in_aborting_status_after_lane_run_preparation_failed_test() ->
+atm_workflow_execution_cancel_in_aborting_status_after_lane_run_preparation_failed() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         provider = ?PROVIDER_SELECTOR,
         user = ?USER_SELECTOR,
@@ -369,7 +369,7 @@ atm_workflow_execution_cancel_in_aborting_status_after_lane_run_preparation_fail
 
 % Test what happens when first lane run fails (e.g. before lane run was created)
 % before the one preparing in advance started preparing
-first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_1_test() ->
+first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_1() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         provider = ?PROVIDER_SELECTOR,
         user = ?USER_SELECTOR,
@@ -420,7 +420,7 @@ first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_1_test()
 
 % Test what happens when first lane run fails (e.g. after lane run was created)
 % while the one preparing in advance started creating execution components
-first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_2_test() ->
+first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_2() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         provider = ?PROVIDER_SELECTOR,
         user = ?USER_SELECTOR,
@@ -502,7 +502,7 @@ first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_2_test()
 
 % Test what happens when first lane run fails (e.g. before lane run was created)
 % after lane run preparing in advance was enqueued (successfully finished preparation)
-first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_3_test() ->
+first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_3() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         provider = ?PROVIDER_SELECTOR,
         user = ?USER_SELECTOR,
@@ -561,7 +561,7 @@ first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_3_test()
 
 % Test what happens when first lane run fails (e.g. before lane run was created)
 % after lane run preparing in advance failed (e.g. before lane run was created)
-first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_4_test() ->
+first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_4() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         provider = ?PROVIDER_SELECTOR,
         user = ?USER_SELECTOR,
@@ -633,7 +633,7 @@ first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_4_test()
 
 % Test what happens when execution is cancelled (e.g. before first lane run was created)
 % before the one preparing in advance started preparing
-first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_1_test() ->
+first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_1() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         provider = ?PROVIDER_SELECTOR,
         user = ?USER_SELECTOR,
@@ -686,7 +686,7 @@ first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_1_test() 
 
 % Test what happens when execution is cancelled (e.g. after first lane run was created)
 % while the one preparing in advance started creating execution components
-first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_2_test() ->
+first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_2() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         provider = ?PROVIDER_SELECTOR,
         user = ?USER_SELECTOR,
@@ -771,7 +771,7 @@ first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_2_test() 
 
 % Test what happens when execution is cancelled (e.g. before first lane run was created)
 % after lane run preparing in advance was enqueued (successfully finished preparation)
-first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_3_test() ->
+first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_3() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         provider = ?PROVIDER_SELECTOR,
         user = ?USER_SELECTOR,
@@ -832,7 +832,7 @@ first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_3_test() 
 
 % Test what happens when execution is cancelled (e.g. before first lane run was created)
 % after lane run preparing in advance failed (e.g. before lane run was created)
-first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_4_test() ->
+first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_4() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         provider = ?PROVIDER_SELECTOR,
         user = ?USER_SELECTOR,

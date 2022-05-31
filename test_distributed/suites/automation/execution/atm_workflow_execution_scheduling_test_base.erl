@@ -16,11 +16,11 @@
 -include("atm/atm_test_schema_drafts.hrl").
 
 -export([
-    schedule_atm_workflow_with_no_lanes_test/0,
-    schedule_atm_workflow_with_empty_lane_test/0,
-    schedule_atm_workflow_with_empty_parallel_box_test/0,
-    schedule_atm_workflow_with_openfaas_not_configured_test/0,
-    schedule_atm_workflow_with_invalid_initial_store_content_test/0
+    schedule_atm_workflow_with_no_lanes/0,
+    schedule_atm_workflow_with_empty_lane/0,
+    schedule_atm_workflow_with_empty_parallel_box/0,
+    schedule_atm_workflow_with_openfaas_not_configured/0,
+    schedule_atm_workflow_with_invalid_initial_store_content/0
 ]).
 
 
@@ -59,7 +59,7 @@
 %%%===================================================================
 
 
-schedule_atm_workflow_with_no_lanes_test() ->
+schedule_atm_workflow_with_no_lanes() ->
     AtmWorkflowSchemaId = atm_test_inventory:add_workflow_schema(#atm_workflow_schema_dump_draft{
         name = <<"atm_workflow_with_no_lanes">>,
         revision_num = 1,
@@ -75,7 +75,7 @@ schedule_atm_workflow_with_no_lanes_test() ->
     ).
 
 
-schedule_atm_workflow_with_empty_lane_test() ->
+schedule_atm_workflow_with_empty_lane() ->
     AtmWorkflowSchemaId = atm_test_inventory:add_workflow_schema(#atm_workflow_schema_dump_draft{
         name = <<"atm_workflow_with_empty_lane">>,
         revision_num = 1,
@@ -100,7 +100,7 @@ schedule_atm_workflow_with_empty_lane_test() ->
     ).
 
 
-schedule_atm_workflow_with_empty_parallel_box_test() ->
+schedule_atm_workflow_with_empty_parallel_box() ->
     AtmWorkflowSchemaId = atm_test_inventory:add_workflow_schema(#atm_workflow_schema_dump_draft{
         name = <<"atm_workflow_with_empty_parallel_box">>,
         revision_num = 1,
@@ -127,7 +127,7 @@ schedule_atm_workflow_with_empty_parallel_box_test() ->
     ).
 
 
-schedule_atm_workflow_with_openfaas_not_configured_test() ->
+schedule_atm_workflow_with_openfaas_not_configured() ->
     AtmWorkflowSchemaId = atm_test_inventory:add_workflow_schema(
         ?EXECUTABLE_ATM_WORKFLOW_SCHEMA_DRAFT
     ),
@@ -141,7 +141,7 @@ schedule_atm_workflow_with_openfaas_not_configured_test() ->
 % NOTE: Only single example of store content type and initial content mismatch is checked
 % to assert overall behaviour (failure to schedule execution). More such combinations are
 % checked in respective store test suites.
-schedule_atm_workflow_with_invalid_initial_store_content_test() ->
+schedule_atm_workflow_with_invalid_initial_store_content() ->
     AtmWorkflowSchemaId = atm_test_inventory:add_workflow_schema(
         ?EXECUTABLE_ATM_WORKFLOW_SCHEMA_DRAFT
     ),

@@ -312,10 +312,12 @@ stream_task_data_if_task_has_any_uncorrelated_results(
     ResultStreamerRef = get_result_streamer_ref(AtmTaskExecutor),
 
     #{<<"resultsBatch">> => lists:map(fun(Results) ->
-        atm_openfaas_result_streamer_mock:send_chunk_report(
-            ResultStreamerRef,
+        Chunk = maps:map(
+            % Wrap results in array to simulate sidecar - openfaas feed server batch optimization
+            fun(_ResultName, Value) -> [Value] end,
             maps:with(AtmTaskExecutionUncorrelatedResultNames, Results)
         ),
+        atm_openfaas_result_streamer_mock:send_chunk_report(ResultStreamerRef, Chunk),
         maps:without(AtmTaskExecutionUncorrelatedResultNames, Results)
     end, ResultsBatch)}.
 
