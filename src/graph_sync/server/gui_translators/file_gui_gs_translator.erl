@@ -190,47 +190,74 @@ translate_dataset_summary(#file_eff_dataset_summary{
     }.
 
 
--spec translate_distribution(file_id:file_guid(), [file_distribution()]) ->
+-spec translate_distribution(
+    file_id:file_guid(),
+    distribution_req:file_distribution_result()
+) ->
     distribution_per_provider().
-translate_distribution(FileGuid, PossiblyIncompleteDistribution) ->
-    {ok, #file_attr{size = FileSize}} = lfm:stat(?ROOT_SESS_ID, ?FILE_REF(FileGuid)),
-
+translate_distribution(FileGuid, #file_distribution_result{
+    distribution = #reg_file_distribution_result{
+        logical_size = FileSize,
+        blocks_per_storage = PossiblyIncompleteBlocksPerStorage
+    }
+}) ->
     %% @TODO VFS-9204 ultimately, location for each file should be created in each provider
-    %% and the list of providers in the distribution should always be complete -
-    %% for now, add placeholders with zero blocks for missing providers
+    %% and the list of storages in the distribution should always be complete -
+    %% for now, add placeholders with zero blocks for missing storages
     SpaceId = file_id:guid_to_space_id(FileGuid),
-    {ok, AllProviders} = space_logic:get_provider_ids(SpaceId),
-    IncludedProviders = [P || #{<<"providerId">> := P} <- PossiblyIncompleteDistribution],
-    MissingProviders = lists_utils:subtract(AllProviders, IncludedProviders),
-    ComplementedDistribution = lists:foldl(fun(ProviderId, Acc) ->
-        NoBlocksEntryForProvider = #{
-            <<"providerId">> => ProviderId,
-            <<"blocks">> => [],
-            <<"totalBlocksSize">> => 0
-        },
-        [NoBlocksEntryForProvider | Acc]
-    end, PossiblyIncompleteDistribution, MissingProviders),
+    {ok, AllStorageIds} = space_logic:get_all_storage_ids(SpaceId),
+    IncludedStorages = maps:keys(PossiblyIncompleteBlocksPerStorage),
+    MissingStorages = lists_utils:subtract(AllStorageIds, IncludedStorages),
 
-    DistributionMap = lists:foldl(fun(#{
-        <<"providerId">> := ProviderId,
-        <<"blocks">> := Blocks,
-        <<"totalBlocksSize">> := TotalBlocksSize
-    }, Acc) ->
+    ComplementedBlocksPerStorage = lists:foldl(fun(StorageId, Acc) ->
+        Acc#{StorageId => []}
+    end, PossiblyIncompleteBlocksPerStorage, MissingStorages),
+
+    DistributionMap = maps:map(fun(_StorageId, FileBlocksOnStorage) ->
+        {Blocks, TotalBlocksSize} = lists:mapfoldl(
+            fun(#file_block{offset = O, size = S}, SizeAcc) -> {[O, S], SizeAcc + S} end,
+            0,
+            FileBlocksOnStorage
+        ),
+
         Data = lists:foldl(fun({BarNum, Fill}, DataAcc) ->
             DataAcc#{integer_to_binary(BarNum) => Fill}
         end, #{}, interpolate_chunks(Blocks, FileSize)),
 
-        Acc#{ProviderId => #{
+        #{
             <<"chunksBarData">> => Data,
             <<"blocksPercentage">> => case FileSize of
                 0 -> 0;
-                undefined -> 0;
+                %% TODO can it be undefined?
                 _ -> TotalBlocksSize * 100.0 / FileSize
             end
-        }}
-    end, #{}, ComplementedDistribution),
+        }
+    end, ComplementedBlocksPerStorage),
 
-    #{<<"distributionPerProvider">> => DistributionMap}.
+    #{
+        %% TODO what about symlinks ?
+        <<"type">> => <<"REG">>,
+        <<"size">> => FileSize,
+        <<"distributionPerStorage">> => DistributionMap
+    };
+
+translate_distribution(_FileGuid, #file_distribution_result{
+    distribution = #dir_distribution_result{
+        logical_size = DirSize,
+        physical_size_per_storage = PhysicalSizePerStorage
+    }
+}) ->
+    #{
+        <<"type">> => <<"DIR">>,
+        <<"size">> => DirSize,
+        <<"distributionPerStorage">> => maps:map(fun(_StorageId, SizeOnStorage) ->
+            case DirSize of
+                0 -> 0;
+                %% TODO can it be undefined?
+                _ -> SizeOnStorage * 100.0 / DirSize
+            end
+        end, PhysicalSizePerStorage)
+    }.
 
 
 %%%===================================================================

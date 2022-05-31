@@ -939,7 +939,7 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = acl}}, _) ->
     ?lfm_check(lfm:get_acl(Auth#auth.session_id, ?FILE_REF(FileGuid)));
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = distribution}}, _) ->
-    ?lfm_check(lfm:get_file_distribution(Auth#auth.session_id, ?FILE_REF(FileGuid)));
+    {ok, mi_file_metadata:get_distribution(Auth#auth.session_id, ?FILE_REF(FileGuid))};
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = shares}}, _) ->
     {ok, FileAttrs} = ?lfm_check(lfm:stat(Auth#auth.session_id, ?FILE_REF(FileGuid))),
@@ -1299,14 +1299,14 @@ split_ts_browse_request_between_providers(SpaceId, #time_series_get_slice_reques
     maps:fold(fun
         (TimeSeriesName, Metrics, Acc) ->
             case choose_provider_storing_time_series_data(SpaceId, TimeSeriesName) of
+                unknown ->
+                    Acc;
                 ProviderId ->
                     #time_series_get_slice_request{layout = ProviderLayout} =
                         maps:get(ProviderId, Acc, #time_series_get_slice_request{layout = #{}}),
                     Acc#{ProviderId => Req#time_series_get_slice_request{
                         layout = ProviderLayout#{TimeSeriesName => Metrics}
-                    }};
-                unknown ->
-                    Acc
+                    }}
             end
     end, #{}, Layout).
 
