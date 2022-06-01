@@ -14,12 +14,12 @@
 
 
 -record(dir_distribution, {
-    logical_size = 0 :: non_neg_integer(),
+    logical_size = 0 :: file_meta:size(),
     physical_size_per_storage = #{} :: #{od_storage:id() => non_neg_integer()}
 }).
 
 -record(reg_distribution, {
-    logical_size = 0 :: non_neg_integer(),
+    logical_size = 0 :: file_meta:size(),
     blocks_per_storage = #{} :: #{od_storage:id() => fslogic_blocks:blocks()}
 }).
 
@@ -30,6 +30,7 @@
 -record(file_distribution_get_result, {
     distribution ::
         file_distribution:dir_distribution() |
+        file_distribution:symlink_distribution() |
         file_distribution:reg_distribution()
 }).
 

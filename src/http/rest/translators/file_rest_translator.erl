@@ -65,41 +65,8 @@ get_response(#gri{aspect = As}, Metadata) when
 ->
     ?OK_REPLY(Metadata);
 
-get_response(#gri{aspect = distribution}, #file_distribution_get_result{
-    distribution = #reg_distribution{
-        logical_size = FileSize,
-        blocks_per_storage = BlocksPerStorage
-    }
-}) ->
-    ?OK_REPLY(#{
-        %% TODO what about symlinks ?
-        <<"type">> => <<"REG">>,
-        <<"size">> => FileSize,
-        <<"blocksPerStorage">> => maps:map(fun(_StorageId, FileBlocksOnStorage) ->
-            {BlockList, TotalBlocksSize} = lists:mapfoldl(
-                fun(#file_block{offset = O, size = S}, SizeAcc) -> {[O, S], SizeAcc + S} end,
-                0,
-                FileBlocksOnStorage
-            ),
-
-            #{
-                <<"blocks">> => BlockList,
-                <<"totalBlocksSize">> => TotalBlocksSize
-            }
-        end, BlocksPerStorage)
-    });
-
-get_response(#gri{aspect = distribution}, #file_distribution_get_result{
-    distribution = #dir_distribution{
-        logical_size = DirSize,
-        physical_size_per_storage = PhysicalSizePerStorage
-    }
-}) ->
-    ?OK_REPLY(#{
-        <<"type">> => <<"DIR">>,
-        <<"size">> => DirSize,
-        <<"sizePerStorage">> => PhysicalSizePerStorage
-    });
+get_response(#gri{aspect = distribution}, FileDistributionGetResult) ->
+    ?OK_REPLY(file_distribution_get_result:to_json(rest, FileDistributionGetResult));
 
 get_response(#gri{aspect = dataset_summary}, #file_eff_dataset_summary{
     direct_dataset = DatasetId,
