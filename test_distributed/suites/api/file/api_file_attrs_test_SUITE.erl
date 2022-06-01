@@ -13,8 +13,11 @@
 -author("Bartosz Walkowicz").
 
 -include("api_file_test_utils.hrl").
+-include("modules/fslogic/file_distribution.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include("onenv_test_utils.hrl").
+-include("proto/oneclient/common_messages.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/http/headers.hrl").
@@ -65,6 +68,7 @@ all() -> [
 ].
 
 
+-define(BLOCK(__OFFSET, __SIZE), #file_block{offset = __OFFSET, size = __SIZE}).
 -define(ATTEMPTS, 30).
 
 
@@ -742,12 +746,21 @@ build_set_mode_prepare_gs_args_fun(FileGuid, Scope) ->
 %%%===================================================================
 
 
+get_storage_id(SpaceId, ProviderId) ->
+    {ok, Storages} = ?rpc(krakow, space_logic:get_provider_storages(SpaceId, ProviderId)),
+    hd(maps:keys(Storages)).
+
+
 get_file_distribution_test(Config) ->
     P1Id = oct_background:get_provider_id(krakow),
     [P1Node] = oct_background:get_provider_nodes(krakow),
 
     P2Id = oct_background:get_provider_id(paris),
     [P2Node] = oct_background:get_provider_nodes(paris),
+
+    SpaceId = oct_background:get_space_id(space_krk_par),
+    P1StorageId = get_storage_id(SpaceId, P1Id),
+    P2StorageId = get_storage_id(SpaceId, P2Id),
 
     SpaceOwnerSessIdP1 = oct_background:get_user_session_id(user2, krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
@@ -761,33 +774,31 @@ get_file_distribution_test(Config) ->
     file_test_utils:await_sync(P2Node, FileGuid),
 
     lfm_test_utils:write_file(P1Node, UserSessIdP1, FileGuid, 0, {rand_content, 20}),
-    ExpDist1 = [#{
-        <<"providerId">> => P1Id,
-        <<"blocks">> => [[0, 20]],
-        <<"totalBlocksSize">> => 20
-    }],
+    ExpDist1 = #file_distribution_get_result{distribution = #reg_distribution{
+        logical_size = 20,
+        blocks_per_storage = #{
+            P1StorageId => [?BLOCK(0, 20)],
+            P2StorageId => []
+        }
+    }},
     wait_for_file_location_sync(P2Node, UserSessIdP2, FileGuid, ExpDist1),
     get_distribution_test_base(FileType, FileGuid, ShareId, ExpDist1, Config),
 
     % Write another block to file on P2 and check returned distribution
 
     lfm_test_utils:write_file(P2Node, UserSessIdP2, FileGuid, 30, {rand_content, 20}),
-    ExpDist2 = [
-        #{
-            <<"providerId">> => P1Id,
-            <<"blocks">> => [[0, 20]],
-            <<"totalBlocksSize">> => 20
-        },
-        #{
-            <<"providerId">> => P2Id,
-            <<"blocks">> => [[30, 20]],
-            <<"totalBlocksSize">> => 20
+    ExpDist2 = #file_distribution_get_result{distribution = #reg_distribution{
+        logical_size = 50,
+        blocks_per_storage = #{
+            P1StorageId => [?BLOCK(0, 20)],
+            P2StorageId => [?BLOCK(30, 20)]
         }
-    ],
+    }},
     wait_for_file_location_sync(P1Node, UserSessIdP1, FileGuid, ExpDist2),
     get_distribution_test_base(FileType, FileGuid, ShareId, ExpDist2, Config).
 
 
+%% TODO test with dir stats enabled
 get_dir_distribution_test(Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
@@ -802,7 +813,10 @@ get_dir_distribution_test(Config) ->
     {ok, ShareId} = opt_shares:create(P1Node, SpaceOwnerSessIdP1, ?FILE_REF(DirGuid), <<"share">>),
     file_test_utils:await_sync(P2Node, DirGuid),
 
-    ExpDist = [],
+    ExpDist = #file_distribution_get_result{distribution = #dir_distribution{
+        logical_size = 0,
+        physical_size_per_storage = #{}
+    }},
     wait_for_file_location_sync(P2Node, UserSessIdP2, DirGuid, ExpDist),
     get_distribution_test_base(FileType, DirGuid, ShareId, ExpDist, Config),
 
@@ -821,34 +835,23 @@ get_dir_distribution_test(Config) ->
 
 %% @private
 wait_for_file_location_sync(Node, SessId, FileGuid, ExpDistribution) ->
-    SortedExpDistribution = lists:usort(ExpDistribution),
-
-    GetDistFun = fun() ->
-        case lfm_proxy:get_file_distribution(Node, SessId, ?FILE_REF(FileGuid)) of
-            {ok, Dist} -> {ok, lists:usort(Dist)};
-            {error, _} = Error -> Error
-        end
-    end,
-    ?assertMatch({ok, SortedExpDistribution}, GetDistFun(), ?ATTEMPTS).
+    ?assertEqual(
+        ExpDistribution,
+        ?rpc(Node, mi_file_metadata:get_distribution(SessId, ?FILE_REF(FileGuid))),
+        ?ATTEMPTS
+    ).
 
 
 %% @private
 get_distribution_test_base(FileType, FileGuid, ShareId, ExpDistribution, Config) ->
-    Providers = ?config(op_worker_nodes, Config),
-    SortedExpDistribution = lists:usort(ExpDistribution),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
+    ExpRestDistribution = file_distribution_get_result:to_json(rest, ExpDistribution),
     ValidateRestSuccessfulCallFun = fun(_TestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
-        ?assertEqual({?HTTP_200_OK, SortedExpDistribution}, {RespCode, lists:usort(RespBody)})
+        ?assertEqual({?HTTP_200_OK, ExpRestDistribution}, {RespCode, RespBody})
     end,
 
-    ExpGsDistribution = rpc:call(
-        lists_utils:random_element(Providers),
-        file_gui_gs_translator,
-        translate_distribution,
-        [FileGuid, SortedExpDistribution]
-    ),
-
+    ExpGsDistribution = file_distribution_get_result:to_json(gs, ExpDistribution),
     CreateValidateGsSuccessfulCallFun = fun(Type) ->
         ExpGsResponse = ExpGsDistribution#{
             <<"gri">> => gri:serialize(#gri{
@@ -879,8 +882,10 @@ get_distribution_test_base(FileType, FileGuid, ShareId, ExpDistribution, Config)
                     validate_result_fun = CreateValidateGsSuccessfulCallFun(op_file)
                 }
             ],
-            data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
-                FileGuid, ShareId, undefined
+            data_spec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
+                api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+                    FileGuid, ShareId, undefined
+                )
             )
         }
     ])).
