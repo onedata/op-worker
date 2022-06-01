@@ -27,7 +27,7 @@
 -export([is_openfaas_available/0, assert_openfaas_available/0, get_activity_registry_id/1]).
 
 %% atm_task_executor callbacks
--export([create/4, initiate/4, teardown/2, delete/1, is_in_readonly_mode/1, run/3]).
+-export([create/4, initiate/2, teardown/2, delete/1, is_in_readonly_mode/1, run/3]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -48,7 +48,7 @@
 -type openfaas_config() :: #openfaas_config{}.
 
 -record(initiation_ctx, {
-    workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
+    task_executor_initiation_ctx :: atm_task_executor:initiation_ctx(),
     resource_spec :: atm_resource_spec:record(),
     openfaas_config :: openfaas_config(),
     executor :: record()
@@ -120,16 +120,15 @@ create(AtmWorkflowExecutionCtx, _AtmLaneIndex, _AtmTaskSchema, AtmLambdaRevision
     }.
 
 
--spec initiate(
-    atm_workflow_execution_ctx:record(),
-    atm_task_schema:record(),
-    atm_lambda_revision:record(),
-    record()
-) ->
+-spec initiate(atm_task_executor:initiation_ctx(), record()) ->
     workflow_engine:task_spec() | no_return().
-initiate(AtmWorkflowExecutionCtx, AtmTaskSchema, AtmLambdaRevision, AtmTaskExecutor) ->
+initiate(AtmTaskExecutorInitiationCtx = #atm_task_executor_initiation_ctx{
+    task_schema = AtmTaskSchema,
+    lambda_revision = AtmLambdaRevision,
+    uncorrelated_results = AtmTaskExecutionUncorrelatedResultNames
+}, AtmTaskExecutor) ->
     InitiationCtx = #initiation_ctx{
-        workflow_execution_ctx = AtmWorkflowExecutionCtx,
+        task_executor_initiation_ctx = AtmTaskExecutorInitiationCtx,
         resource_spec = select_resource_spec(AtmTaskSchema, AtmLambdaRevision),
         openfaas_config = get_openfaas_config(),
         executor = AtmTaskExecutor
@@ -140,7 +139,10 @@ initiate(AtmWorkflowExecutionCtx, AtmTaskSchema, AtmLambdaRevision, AtmTaskExecu
     end,
     await_function_readiness(InitiationCtx),
 
-    #{type => async}.
+    #{
+        type => async,
+        data_stream_enabled => not lists_utils:is_empty(AtmTaskExecutionUncorrelatedResultNames)
+    }.
 
 
 -spec teardown(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
@@ -162,10 +164,10 @@ is_in_readonly_mode(#atm_openfaas_task_executor{operation_spec = #atm_openfaas_o
     Readonly.
 
 
--spec run(atm_job_ctx:record(), atm_task_executor:lambda_input(), record()) ->
+-spec run(atm_run_job_batch_ctx:record(), atm_task_executor:lambda_input(), record()) ->
     ok | no_return().
-run(AtmJobCtx, LambdaInput, AtmTaskExecutor) ->
-    schedule_function_execution(AtmJobCtx, LambdaInput, AtmTaskExecutor).
+run(AtmRunJobBatchCtx, LambdaInput, AtmTaskExecutor) ->
+    schedule_function_execution(AtmRunJobBatchCtx, LambdaInput, AtmTaskExecutor).
 
 
 %%%===================================================================
@@ -341,7 +343,9 @@ register_function(#initiation_ctx{openfaas_config = OpenfaasConfig} = Initiation
 %% @private
 -spec log_function_registering(initiation_ctx()) -> ok.
 log_function_registering(#initiation_ctx{
-    workflow_execution_ctx = AtmWorkflowExecutionCtx,
+    task_executor_initiation_ctx = #atm_task_executor_initiation_ctx{
+        workflow_execution_ctx = AtmWorkflowExecutionCtx
+    },
     executor = #atm_openfaas_task_executor{
         function_name = FunctionName,
         operation_spec = #atm_openfaas_operation_spec{docker_image = DockerImage}
@@ -357,7 +361,9 @@ log_function_registering(#initiation_ctx{
 %% @private
 -spec log_function_registered(initiation_ctx()) -> ok.
 log_function_registered(#initiation_ctx{
-    workflow_execution_ctx = AtmWorkflowExecutionCtx,
+    task_executor_initiation_ctx = #atm_task_executor_initiation_ctx{
+        workflow_execution_ctx = AtmWorkflowExecutionCtx
+    },
     executor = #atm_openfaas_task_executor{function_name = FunctionName}
 }) ->
     AtmWorkflowExecutionLogger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
@@ -384,8 +390,9 @@ prepare_function_definition(InitiationCtx = #initiation_ctx{
     },
     FullDefinition1 = add_default_properties(BaseDefinition),
     FullDefinition2 = add_resources_properties(FullDefinition1, InitiationCtx),
-    FullDefinition3 = add_function_name_annotation(FullDefinition2, FunctionName),
-    add_oneclient_annotations_if_necessary(FullDefinition3, InitiationCtx).
+    FullDefinition3 = add_function_ctx_annotations(FullDefinition2, InitiationCtx),
+    FullDefinition4 = add_data_stream_annotations_if_required(FullDefinition3, InitiationCtx),
+    add_oneclient_annotations_if_required(FullDefinition4, InitiationCtx).
 
 
 %% @private
@@ -439,24 +446,9 @@ add_resources_properties(FunctionDefinition, #initiation_ctx{resource_spec = #at
         encode_if_defined(EphemeralStorageLimit)
     ),
 
-    maps:update_with(
-        <<"annotations">>,
-        fun(Annotations) -> json_utils:merge([Annotations, EphemeralStorageAnnotations]) end,
-        EphemeralStorageAnnotations,
-        FunctionDefinition#{<<"requests">> => Requests, <<"limits">> => Limits2}
-    ).
-
-
-%% @private
--spec add_function_name_annotation(json_utils:json_map(), function_name()) ->
-    json_utils:json_map().
-add_function_name_annotation(FunctionDefinition, FunctionName) ->
-    FunctionNameAnnotation = #{<<"function.openfaas.onedata.org/name">> => FunctionName},
-    maps:update_with(
-        <<"annotations">>,
-        fun(Annotations) -> maps:merge(Annotations, FunctionNameAnnotation) end,
-        FunctionNameAnnotation,
-        FunctionDefinition
+    insert_function_annotations(
+        FunctionDefinition#{<<"requests">> => Requests, <<"limits">> => Limits2},
+        EphemeralStorageAnnotations
     ).
 
 
@@ -467,16 +459,62 @@ encode_if_defined(Value) -> str_utils:to_binary(Value).
 
 
 %% @private
--spec add_oneclient_annotations_if_necessary(json_utils:json_map(), initiation_ctx()) ->
+-spec add_function_ctx_annotations(json_utils:json_map(), initiation_ctx()) ->
     json_utils:json_map().
-add_oneclient_annotations_if_necessary(FunctionDefinition, #initiation_ctx{
+add_function_ctx_annotations(FunctionDefinition, #initiation_ctx{
+    task_executor_initiation_ctx = #atm_task_executor_initiation_ctx{
+        workflow_execution_ctx = AtmWorkflowExecutionCtx,
+        task_execution_id = AtmTaskExecutionId
+    },
+    executor = #atm_openfaas_task_executor{function_name = FunctionName}
+}) ->
+    AtmWorkflowExecutionId = atm_workflow_execution_ctx:get_workflow_execution_id(
+        AtmWorkflowExecutionCtx
+    ),
+    insert_function_annotations(FunctionDefinition, #{
+        <<"function.openfaas.onedata.org/workflow_execution_id">> => AtmWorkflowExecutionId,
+        <<"function.openfaas.onedata.org/task_execution_id">> => AtmTaskExecutionId,
+        <<"function.openfaas.onedata.org/name">> => FunctionName
+    }).
+
+
+%% @private
+-spec add_data_stream_annotations_if_required(json_utils:json_map(), initiation_ctx()) ->
+    json_utils:json_map().
+add_data_stream_annotations_if_required(FunctionDefinition, #initiation_ctx{
+    task_executor_initiation_ctx = #atm_task_executor_initiation_ctx{
+        uncorrelated_results = []
+    }
+}) ->
+    FunctionDefinition;
+
+add_data_stream_annotations_if_required(FunctionDefinition, #initiation_ctx{
+    task_executor_initiation_ctx = #atm_task_executor_initiation_ctx{
+        uncorrelated_results = AtmTaskExecutionUncorrelatedResultNames
+    }
+}) ->
+    insert_function_annotations(FunctionDefinition, #{
+        <<"resultstream.openfaas.onedata.org/inject">> => <<"enabled">>,
+        <<"resultstream.openfaas.onedata.org/result_names">> => str_utils:join_binary(
+            AtmTaskExecutionUncorrelatedResultNames, <<",">>
+        )
+    }).
+
+
+%% @private
+-spec add_oneclient_annotations_if_required(json_utils:json_map(), initiation_ctx()) ->
+    json_utils:json_map().
+add_oneclient_annotations_if_required(FunctionDefinition, #initiation_ctx{
     executor = #atm_openfaas_task_executor{operation_spec = #atm_openfaas_operation_spec{
         docker_execution_options = #atm_docker_execution_options{mount_oneclient = false}
     }}}
 ) ->
     FunctionDefinition;
-add_oneclient_annotations_if_necessary(FunctionDefinition, #initiation_ctx{
-    workflow_execution_ctx = AtmWorkflowExecutionCtx,
+
+add_oneclient_annotations_if_required(FunctionDefinition, #initiation_ctx{
+    task_executor_initiation_ctx = #atm_task_executor_initiation_ctx{
+        workflow_execution_ctx = AtmWorkflowExecutionCtx
+    },
     executor = AtmTaskExecutor = #atm_openfaas_task_executor{
         operation_spec = #atm_openfaas_operation_spec{
             docker_execution_options = #atm_docker_execution_options{
@@ -497,7 +535,7 @@ add_oneclient_annotations_if_necessary(FunctionDefinition, #initiation_ctx{
     )),
     OneclientImage = get_oneclient_image(),
 
-    OneclientMountRelatedAnnotations = #{
+    insert_function_annotations(FunctionDefinition, #{
         <<"oneclient.openfaas.onedata.org/inject">> => <<"enabled">>,
         <<"oneclient.openfaas.onedata.org/image">> => OneclientImage,
         <<"oneclient.openfaas.onedata.org/space_id">> => SpaceId,
@@ -510,11 +548,7 @@ add_oneclient_annotations_if_necessary(FunctionDefinition, #initiation_ctx{
             true -> tokens:confine(AccessToken, #cv_data_readonly{});
             false -> AccessToken
         end
-    },
-
-    maps:update_with(<<"annotations">>, fun(Annotations) ->
-        json_utils:merge([Annotations, OneclientMountRelatedAnnotations])
-    end, OneclientMountRelatedAnnotations, FunctionDefinition).
+    }).
 
 
 %% @private
@@ -527,6 +561,18 @@ get_oneclient_image() ->
         OneclientImage ->
             str_utils:to_binary(OneclientImage)
     end.
+
+
+%% @private
+-spec insert_function_annotations(json_utils:json_map(), json_utils:json_map()) ->
+    json_utils:json_map().
+insert_function_annotations(FunctionDefinition, NewFunctionAnnotations) ->
+    maps:update_with(
+        <<"annotations">>,
+        fun(Annotations) -> maps:merge(Annotations, NewFunctionAnnotations) end,
+        NewFunctionAnnotations,
+        FunctionDefinition
+    ).
 
 
 %% @private
@@ -573,7 +619,9 @@ await_function_readiness(#initiation_ctx{
 %% @private
 -spec log_function_ready(initiation_ctx()) -> ok.
 log_function_ready(#initiation_ctx{
-    workflow_execution_ctx = AtmWorkflowExecutionCtx,
+    task_executor_initiation_ctx = #atm_task_executor_initiation_ctx{
+        workflow_execution_ctx = AtmWorkflowExecutionCtx
+    },
     executor = #atm_openfaas_task_executor{function_name = FunctionName}
 }) ->
     AtmWorkflowExecutionLogger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
@@ -584,12 +632,12 @@ log_function_ready(#initiation_ctx{
 
 %% @private
 -spec schedule_function_execution(
-    atm_job_ctx:record(),
+    atm_run_job_batch_ctx:record(),
     atm_task_executor:lambda_input(),
     record()
 ) ->
     ok | no_return().
-schedule_function_execution(AtmJobCtx, LambdaInput, #atm_openfaas_task_executor{
+schedule_function_execution(AtmRunJobBatchCtx, LambdaInput, #atm_openfaas_task_executor{
     function_name = FunctionName
 }) ->
     OpenfaasConfig = get_openfaas_config(),
@@ -598,7 +646,7 @@ schedule_function_execution(AtmJobCtx, LambdaInput, #atm_openfaas_task_executor{
     ),
     AuthHeaders = get_basic_auth_header(OpenfaasConfig),
     AllHeaders = AuthHeaders#{
-        <<"X-Callback-Url">> => atm_job_ctx:get_report_result_url(AtmJobCtx)
+        <<"X-Callback-Url">> => atm_run_job_batch_ctx:get_forward_output_url(AtmRunJobBatchCtx)
     },
 
     case http_client:post(Endpoint, AllHeaders, json_utils:encode(LambdaInput)) of

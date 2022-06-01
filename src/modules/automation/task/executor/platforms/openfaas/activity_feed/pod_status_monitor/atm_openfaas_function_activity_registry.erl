@@ -21,6 +21,8 @@
 -module(atm_openfaas_function_activity_registry).
 -author("Lukasz Opiola").
 
+-behaviour(atm_openfaas_activity_report_handler).
+
 -include("modules/automation/atm_execution.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
@@ -29,8 +31,11 @@
 -export([ensure_for_function/1]).
 -export([delete/1]).
 -export([get/1]).
--export([consume_report/1]).
 -export([browse_pod_event_log/2]).
+
+%% atm_openfaas_activity_report_handler callbacks
+-export([consume_activity_report/3]).
+-export([handle_error/2]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_version/0, get_record_struct/1]).
@@ -103,14 +108,6 @@ get(RegistryId) ->
     end.
 
 
--spec consume_report(atm_openfaas_function_activity_report:record()) -> ok.
-consume_report(#atm_openfaas_function_activity_report{
-    type = atm_openfaas_function_pod_status_report,
-    batch = Batch
-}) ->
-    lists:foreach(fun consume_pod_status_report/1, Batch).
-
-
 -spec browse_pod_event_log(infinite_log:log_id(), json_infinite_log_model:listing_opts()) ->
     {ok, json_infinite_log_model:browse_result()} | {error, term()}.
 browse_pod_event_log(LogId, ListingOpts) ->
@@ -131,6 +128,29 @@ browse_pod_event_log(LogId, ListingOpts) ->
                 end, LogEntries)
             end, Data)}
     end.
+
+%%%===================================================================
+%%% atm_openfaas_activity_report_handler callbacks
+%%%===================================================================
+
+-spec consume_activity_report(
+    atm_openfaas_activity_feed_ws_handler:connection_ref(),
+    atm_openfaas_activity_report:record(),
+    atm_openfaas_activity_feed_ws_handler:handler_state()
+) ->
+    atm_openfaas_activity_feed_ws_handler:handler_state().
+consume_activity_report(_ConnRef, #atm_openfaas_activity_report{
+    type = atm_openfaas_function_pod_status_report,
+    batch = Batch
+}, HandlerState) ->
+    lists:foreach(fun consume_pod_status_report/1, Batch),
+    HandlerState.
+
+
+-spec handle_error(errors:error(), atm_openfaas_activity_feed_ws_handler:handler_state()) ->
+    ok.
+handle_error(_Error, _HandlerState) ->
+    ok.
 
 %%%===================================================================
 %%% Datastore callbacks
@@ -181,6 +201,15 @@ gen_registry_id(FunctionName) ->
 -spec gen_pod_event_log_id(id(), pod_id()) -> infinite_log:log_id().
 gen_pod_event_log_id(RegistryId, PodId) ->
     datastore_key:adjacent_from_digest([PodId], RegistryId).
+
+
+%% @private
+-spec ensure_pod_event_log(infinite_log:log_id()) -> ok.
+ensure_pod_event_log(LogId) ->
+    case json_infinite_log_model:create(LogId, #{}) of
+        ok -> ok;
+        {error, already_exists} -> ok
+    end.
 
 
 %% @private
@@ -240,15 +269,6 @@ consume_pod_status_report(#atm_openfaas_function_pod_status_report{
         {error, not_found} ->
             ensure_pod_event_log(PodEventLogId),
             ok = json_infinite_log_model:append(PodEventLogId, EventData)
-    end.
-
-
-%% @private
--spec ensure_pod_event_log(infinite_log:log_id()) -> ok.
-ensure_pod_event_log(LogId) ->
-    case json_infinite_log_model:create(LogId, #{}) of
-        ok -> ok;
-        {error, already_exists} -> ok
     end.
 
 

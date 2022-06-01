@@ -23,12 +23,13 @@
 
 -behaviour(persistent_record).
 
+-include("modules/automation/atm_execution.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/automation/automation.hrl").
 
 %% API
--export([create/4, initiate/4, teardown/2, delete/1, get_type/1, is_in_readonly_mode/1, run/3]).
+-export([create/4, initiate/2, teardown/2, delete/1, get_type/1, is_in_readonly_mode/1, run/3]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -37,8 +38,10 @@
 -type model() :: atm_openfaas_task_executor.
 -type record() :: atm_openfaas_task_executor:record().
 
--type args() :: json_utils:json_map().
--type results() :: errors:error() | json_utils:json_map().
+-type initiation_ctx() :: #atm_task_executor_initiation_ctx{}.
+
+-type job_args() :: json_utils:json_map().
+-type job_results() :: json_utils:json_map() | errors:error().
 
 %% Below types format can't be expressed directly in type spec due to dialyzer
 %% limitations in specifying individual maps keys in case of binaries.
@@ -46,15 +49,18 @@
 
 -type lambda_input() :: json_utils:json_map().
 %% #{
-%%      <<"argsBatch">> := [args()],
+%%      <<"argsBatch">> := [job_args()],
 %%      <<"ctx">> := #{<<"heartbeatUrl">> := binary()}
 %% }
--type lambda_output() :: json_utils:json_map().
+-type lambda_output() :: json_utils:json_map() | errors:error().
 %% #{
-%%      <<"resultsBatch">> := [results()]
+%%      <<"resultsBatch">> := [job_results()]
 %% }
 
--export_type([args/0, results/0, lambda_input/0, lambda_output/0]).
+-type streamed_data() :: {chunk, json_utils:json_map()} | errors:error().
+
+-export_type([initiation_ctx/0]).
+-export_type([job_args/0, job_results/0, lambda_input/0, lambda_output/0, streamed_data/0]).
 
 -export_type([model/0, record/0]).
 
@@ -72,13 +78,7 @@
 ) ->
     record() | no_return().
 
--callback initiate(
-    atm_workflow_execution_ctx:record(),
-    atm_task_schema:record(),
-    atm_lambda_revision:record(),
-    record()
-) ->
-    workflow_engine:task_spec() | no_return().
+-callback initiate(initiation_ctx(), record()) -> workflow_engine:task_spec() | no_return().
 
 -callback teardown(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
 
@@ -86,7 +86,7 @@
 
 -callback is_in_readonly_mode(record()) -> boolean().
 
--callback run(atm_job_ctx:record(), lambda_input(), record()) ->
+-callback run(atm_run_job_batch_ctx:record(), lambda_input(), record()) ->
     ok | no_return().
 
 
@@ -110,16 +110,10 @@ create(AtmWorkflowExecutionCtx, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision =
     Model:create(AtmWorkflowExecutionCtx, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision).
 
 
--spec initiate(
-    atm_workflow_execution_ctx:record(),
-    atm_task_schema:record(),
-    atm_lambda_revision:record(),
-    record()
-) ->
-    workflow_engine:task_spec() | no_return().
-initiate(AtmWorkflowExecutionCtx, AtmTaskSchema, AtmLambdaRevision, AtmTaskExecutor) ->
+-spec initiate(initiation_ctx(), record()) -> workflow_engine:task_spec() | no_return().
+initiate(AtmTaskExecutorInitiationCtx, AtmTaskExecutor) ->
     Model = utils:record_type(AtmTaskExecutor),
-    Model:initiate(AtmWorkflowExecutionCtx, AtmTaskSchema, AtmLambdaRevision, AtmTaskExecutor).
+    Model:initiate(AtmTaskExecutorInitiationCtx, AtmTaskExecutor).
 
 
 -spec teardown(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
@@ -145,11 +139,11 @@ is_in_readonly_mode(AtmTaskExecutor) ->
     Model:is_in_readonly_mode(AtmTaskExecutor).
 
 
--spec run(atm_job_ctx:record(), lambda_input(), record()) ->
+-spec run(atm_run_job_batch_ctx:record(), lambda_input(), record()) ->
     ok | no_return().
-run(AtmJobCtx, LambdaInput, AtmTaskExecutor) ->
+run(AtmRunJobBatchCtx, LambdaInput, AtmTaskExecutor) ->
     Model = utils:record_type(AtmTaskExecutor),
-    Model:run(AtmJobCtx, LambdaInput, AtmTaskExecutor).
+    Model:run(AtmRunJobBatchCtx, LambdaInput, AtmTaskExecutor).
 
 
 %%%===================================================================

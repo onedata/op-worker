@@ -17,11 +17,11 @@
 -include("modules/automation/atm_execution.hrl").
 
 -export([
-    cancel_scheduled_atm_workflow_execution_test/0,
-    cancel_enqueued_atm_workflow_execution_test/0,
-    cancel_active_atm_workflow_execution_test/0,
-    cancel_finishing_atm_workflow_execution_test/0,
-    cancel_finished_atm_workflow_execution_test/0
+    cancel_scheduled_atm_workflow_execution/0,
+    cancel_enqueued_atm_workflow_execution/0,
+    cancel_active_atm_workflow_execution/0,
+    cancel_finishing_atm_workflow_execution/0,
+    cancel_finished_atm_workflow_execution/0
 ]).
 
 
@@ -93,7 +93,7 @@
 %%%===================================================================
 
 
-cancel_scheduled_atm_workflow_execution_test() ->
+cancel_scheduled_atm_workflow_execution() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         provider = ?PROVIDER_SELECTOR,
         user = ?USER_SELECTOR,
@@ -138,7 +138,7 @@ cancel_scheduled_atm_workflow_execution_test() ->
     }).
 
 
-cancel_enqueued_atm_workflow_execution_test() ->
+cancel_enqueued_atm_workflow_execution() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         provider = ?PROVIDER_SELECTOR,
         user = ?USER_SELECTOR,
@@ -239,7 +239,7 @@ cancel_enqueued_atm_workflow_execution_test() ->
     }).
 
 
-cancel_active_atm_workflow_execution_test() ->
+cancel_active_atm_workflow_execution() ->
     ItemCount = 100,
 
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
@@ -256,7 +256,7 @@ cancel_active_atm_workflow_execution_test() ->
                     prepare_lane = #atm_step_mock_spec{
                         defer_after = {prepare_lane, after_step, {2, 1}}
                     },
-                    process_item = #atm_step_mock_spec{
+                    run_task_for_item = #atm_step_mock_spec{
                         before_step_hook = fun(AtmMockCallCtx) ->
                             atm_workflow_execution_test_runner:cancel_workflow_execution(AtmMockCallCtx)
                         end,
@@ -352,7 +352,7 @@ cancel_active_atm_workflow_execution_test() ->
     }).
 
 
-cancel_finishing_atm_workflow_execution_test() ->
+cancel_finishing_atm_workflow_execution() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         provider = ?PROVIDER_SELECTOR,
         user = ?USER_SELECTOR,
@@ -384,7 +384,7 @@ cancel_finishing_atm_workflow_execution_test() ->
     }).
 
 
-cancel_finished_atm_workflow_execution_test() ->
+cancel_finished_atm_workflow_execution() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         provider = ?PROVIDER_SELECTOR,
         user = ?USER_SELECTOR,

@@ -60,8 +60,9 @@
 -type step_name() ::
     prepare_lane |
     create_run |
-    process_item |
-    process_result |
+    run_task_for_item |
+    process_task_result_for_item |
+    process_streamed_task_data |
     report_item_error |
     handle_task_execution_ended |
     handle_lane_execution_ended |
@@ -596,13 +597,13 @@ get_exp_state_diff(
     end;
 
 get_exp_state_diff(
-    #mock_call_report{step = process_item, timing = before_step},
+    #mock_call_report{step = run_task_for_item, timing = before_step},
     #atm_step_mock_spec{before_step_exp_state_diff = default}
 ) ->
     ?NO_DIFF;
 
 get_exp_state_diff(
-    #mock_call_report{step = process_item, timing = after_step},
+    #mock_call_report{step = run_task_for_item, timing = after_step},
     #atm_step_mock_spec{after_step_exp_state_diff = default}
 ) ->
     fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0, call_args = [
@@ -625,13 +626,13 @@ get_exp_state_diff(
     end;
 
 get_exp_state_diff(
-    #mock_call_report{step = process_result, timing = before_step},
+    #mock_call_report{step = process_task_result_for_item, timing = before_step},
     #atm_step_mock_spec{before_step_exp_state_diff = default}
 ) ->
     ?NO_DIFF;
 
 get_exp_state_diff(
-    #mock_call_report{step = process_result, timing = after_step},
+    #mock_call_report{step = process_task_result_for_item, timing = after_step},
     #atm_step_mock_spec{after_step_exp_state_diff = default}
 ) ->
     fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0, call_args = [
@@ -942,9 +943,18 @@ unmock_workflow_execution_factory(Workers) ->
 mock_workflow_execution_handler_steps(Workers) ->
     test_utils:mock_new(Workers, atm_workflow_execution_handler, [passthrough, no_history]),
 
+    test_utils:mock_expect(Workers, atm_workflow_execution_handler, handle_task_results_processed_for_all_items, fun(
+        AtmWorkflowExecutionId,
+        _AtmWorkflowExecutionEnv,
+        AtmTaskExecutionId
+    ) ->
+        workflow_engine:report_task_data_streaming_concluded(AtmWorkflowExecutionId, AtmTaskExecutionId, success)
+    end),
+
     mock_workflow_execution_handler_step(Workers, prepare_lane, 3),
-    mock_workflow_execution_handler_step(Workers, process_item, 6),
-    mock_workflow_execution_handler_step(Workers, process_result, 5),
+    mock_workflow_execution_handler_step(Workers, run_task_for_item, 6),
+    mock_workflow_execution_handler_step(Workers, process_task_result_for_item, 5),
+    mock_workflow_execution_handler_step(Workers, process_streamed_task_data, 4),
     mock_workflow_execution_handler_step(Workers, report_item_error, 3),
     mock_workflow_execution_handler_step(Workers, handle_task_execution_ended, 3),
     mock_workflow_execution_handler_step(Workers, handle_workflow_execution_ended, 2).
@@ -1119,7 +1129,7 @@ get_store_id(?WORKFLOW_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID, _AtmTaskExecutionId, #a
     provider = ProviderSelector,
     workflow_execution_id = AtmWorkflowExecutionId
 }) ->
-    {ok, #document{value = #atm_workflow_execution{system_audit_log_id = AtmStoreId}}} = ?rpc(
+    {ok, #document{value = #atm_workflow_execution{system_audit_log_store_id = AtmStoreId}}} = ?rpc(
         ProviderSelector, atm_workflow_execution:get(AtmWorkflowExecutionId)
     ),
     AtmStoreId;
@@ -1127,7 +1137,7 @@ get_store_id(?WORKFLOW_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID, _AtmTaskExecutionId, #a
 get_store_id(?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID, AtmTaskExecutionId, #atm_mock_call_ctx{
     provider = ProviderSelector
 }) ->
-    {ok, #document{value = #atm_task_execution{system_audit_log_id = AtmStoreId}}} = ?rpc(
+    {ok, #document{value = #atm_task_execution{system_audit_log_store_id = AtmStoreId}}} = ?rpc(
         ProviderSelector, atm_task_execution:get(AtmTaskExecutionId)
     ),
     AtmStoreId;

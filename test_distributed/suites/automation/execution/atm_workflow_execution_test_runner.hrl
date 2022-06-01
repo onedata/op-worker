@@ -56,8 +56,9 @@
     prepare_lane = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
     create_run = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
 
-    process_item = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
-    process_result = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
+    run_task_for_item = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
+    process_task_result_for_item = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
+    process_streamed_task_data = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
     report_item_error = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
 
     handle_task_execution_ended = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
@@ -90,6 +91,9 @@
 -define(ATM_WORKFLOW_EXECUTION_TEST_UTILS, [
     atm_openfaas_docker_mock,
     atm_openfaas_task_executor_mock,
+    atm_openfaas_result_streamer_mock,
+    atm_openfaas_activity_feed_client_mock,
+    test_websocket_client,
     atm_test_inventory,
     atm_workflow_execution_test_runner
 ]).

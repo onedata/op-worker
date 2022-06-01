@@ -164,6 +164,8 @@ handle(Request) ->
 %%--------------------------------------------------------------------
 -spec cleanup() -> ok.
 cleanup() ->
+    % @TODO VFS-9402 move this to the node manager plugin callback before default workers stop
+    gs_channel_service:terminate_internal_service(),
     ok.
 
 

@@ -31,8 +31,10 @@
     ?ACTIVE_STATUS |
     ?FINISHED_STATUS | ?FAILED_STATUS | ?SKIPPED_STATUS.
 
+-type aborting_reason() :: failure.
+
 -export_type([id/0, record/0, doc/0, diff/0]).
--export_type([status/0]).
+-export_type([status/0, aborting_reason/0]).
 
 
 % get ctx via module call to allow mocking in ct tests
@@ -104,11 +106,14 @@ get_record_struct(1) ->
         {argument_specs, [{custom, string, {
             persistent_record, encode, decode, atm_task_execution_argument_spec
         }}]},
-        {result_specs, [{custom, string, {
+        {job_result_specs, [{custom, string, {
+            persistent_record, encode, decode, atm_task_execution_result_spec
+        }}]},
+        {supplementary_result_specs, [{custom, string, {
             persistent_record, encode, decode, atm_task_execution_result_spec
         }}]},
 
-        {system_audit_log_id, string},
+        {system_audit_log_store_id, string},
         {time_series_store_id, string},
 
         {status, atom},
