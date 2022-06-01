@@ -27,7 +27,7 @@
     race_with_subtree_adding_test/1, race_with_subtree_filling_with_data_test/1,
     race_with_file_adding_to_large_dir_test/1,
     multiple_status_change_test/1, adding_file_when_disabled_test/1,
-    restart_test/1, parallel_write_test/2]).
+    restart_test/1, parallel_write_test/4]).
 -export([init/1, init_and_enable_for_new_space/1, teardown/1, teardown/3]).
 -export([verify_dir_on_provider_creating_files/3]).
 % TODO VFS-9148 - extend tests
@@ -394,7 +394,7 @@ restart_test(Config) ->
     verify_collecting_status(Config, disabled).
 
 
-parallel_write_test(Config, SleepOnWrite) ->
+parallel_write_test(Config, SleepOnWrite, InitialFileSize, OverrideInitialBytes) ->
     enable(Config, new_space),
     [Worker | _] = ?config(?PROVIDER_CREATING_FILES_NODES_SELECTOR, Config),
     SessId = lfm_test_utils:get_user1_session_id(Config, Worker),
@@ -408,47 +408,56 @@ parallel_write_test(Config, SleepOnWrite) ->
     }, true, enabled),
 
     % Create files and fill using 100 processes (spawn is hidden in pmap)
-    lfm_test_utils:create_files_tree(Worker, SessId, [{5, 20}], SpaceGuid),
+    lfm_test_utils:create_files_tree(Worker, SessId, [{5, 20}], SpaceGuid, InitialFileSize),
     WriteAnswers = lists_utils:pmap(fun(N) ->
         FileNum = N div 5 + 1,
         ChunkNum = N rem 5,
 
         case SleepOnWrite of
-            true -> timer:sleep(timer:seconds(16 - ChunkNum * 4));
+            true -> timer:sleep(timer:seconds(20 - ChunkNum * 4));
             false -> ok
         end,
 
-        write_to_file(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR, [], [FileNum], 1000, ChunkNum * 1000)
+        Offset = case OverrideInitialBytes of
+            true -> ChunkNum * 1000;
+            false -> InitialFileSize + ChunkNum * 1000
+        end,
+        write_to_file(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR, [], [FileNum], 1000, Offset)
     end, lists:seq(0, 99)),
     ?assert(lists:all(fun(Ans) -> Ans =:= ok end, WriteAnswers)),
+
+    FileSize = case OverrideInitialBytes of
+        true -> 5000;
+        false -> InitialFileSize + 5000
+    end,
 
     % Check stats on both providers
     check_dir_stats(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR, SpaceGuid, #{
         ?REG_FILE_AND_LINK_COUNT => 20,
         ?DIR_COUNT => 5,
-        ?TOTAL_SIZE => 100000,
-        ?TOTAL_SIZE_ON_STORAGE(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR) => 100000
+        ?TOTAL_SIZE => 20 * FileSize,
+        ?TOTAL_SIZE_ON_STORAGE(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR) => 20 * FileSize
     }),
     check_dir_stats(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR, SpaceGuid, #{
         ?REG_FILE_AND_LINK_COUNT => 20,
         ?DIR_COUNT => 5,
-        ?TOTAL_SIZE => 100000,
+        ?TOTAL_SIZE => 20 * FileSize,
         ?TOTAL_SIZE_ON_STORAGE(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR) => 0
     }),
 
     % Read files using 20 processes (spawn is hidden in pmap)
     ReadAnswers = lists_utils:pmap(fun(FileNum) ->
-        Bytes = read_from_file(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR, [], [FileNum], 5000),
+        Bytes = read_from_file(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR, [], [FileNum], FileSize),
         byte_size(Bytes)
     end, lists:seq(1, 20)),
-    ?assert(lists:all(fun(Ans) -> Ans =:= 5000 end, ReadAnswers)),
+    ?assert(lists:all(fun(Ans) -> Ans =:= FileSize end, ReadAnswers)),
 
     % Check stats after reading
     check_dir_stats(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR, SpaceGuid, #{
         ?REG_FILE_AND_LINK_COUNT => 20,
         ?DIR_COUNT => 5,
-        ?TOTAL_SIZE => 100000,
-        ?TOTAL_SIZE_ON_STORAGE(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR) => 100000
+        ?TOTAL_SIZE => 20 * FileSize,
+        ?TOTAL_SIZE_ON_STORAGE(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR) => 20 * FileSize
     }),
 
     clean_space_and_verify_stats(Config).
