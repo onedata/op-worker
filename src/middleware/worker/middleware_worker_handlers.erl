@@ -13,6 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("middleware/middleware.hrl").
+-include("modules/fslogic/file_distribution.hrl").
 
 %% API
 -export([execute/3]).
@@ -136,8 +137,8 @@ execute(UserCtx, FileCtx, #get_file_eff_dataset_summary{}) ->
 
 %% File metadata
 
-execute(UserCtx, FileCtx, #get_file_distribution_request{}) ->
-    distribution_req:get_file_distribution(UserCtx, FileCtx);
+execute(UserCtx, FileCtx, #file_distribution_get_request{}) ->
+    file_distribution:get_file_distribution(UserCtx, FileCtx);
 
 
 %% QoS

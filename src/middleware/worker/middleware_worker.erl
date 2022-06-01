@@ -18,6 +18,7 @@
 
 -include("global_definitions.hrl").
 -include("middleware/middleware.hrl").
+-include("modules/fslogic/file_distribution.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -54,7 +55,7 @@
     #get_file_eff_dataset_summary{}.
 
 -type file_metadata_operations() ::
-    #get_file_distribution_request{}.
+    #file_distribution_get_request{}.
 
 -type qos_operation() ::
     #add_qos_entry{} |

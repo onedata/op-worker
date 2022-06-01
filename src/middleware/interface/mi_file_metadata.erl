@@ -12,7 +12,7 @@
 -module(mi_file_metadata).
 -author("Bartosz Walkowicz").
 
--include("middleware/middleware.hrl").
+-include("modules/fslogic/file_distribution.hrl").
 
 %% API
 -export([get_distribution/2]).
@@ -24,7 +24,7 @@
 
 
 -spec get_distribution(session:id(), lfm:file_key()) ->
-    distribution_req:file_distribution_result() | no_return().
+    file_distribution:get_result() | no_return().
 get_distribution(SessionId, FileKey) ->
     FileGuid = lfm_file_key:resolve_file_key(SessionId, FileKey, do_not_resolve_symlink),
-    middleware_worker:check_exec(SessionId, FileGuid, #get_file_distribution_request{}).
+    middleware_worker:check_exec(SessionId, FileGuid, #file_distribution_get_request{}).

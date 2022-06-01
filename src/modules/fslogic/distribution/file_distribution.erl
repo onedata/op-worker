@@ -6,15 +6,15 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module is responsible for handing requests concerning file distribution.
+%%% Module responsible for performing operations on file distribution.
 %%% @end
 %%%--------------------------------------------------------------------
--module(distribution_req).
+-module(file_distribution).
 -author("Bartosz Walkowicz").
 
--include("middleware/middleware.hrl").
 -include("modules/dir_stats_collector/dir_size_stats.hrl").
 -include("modules/fslogic/data_access_control.hrl").
+-include("modules/fslogic/file_distribution.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("cluster_worker/include/time_series/browsing.hrl").
@@ -22,13 +22,16 @@
 %% API
 -export([get_file_distribution/2]).
 
--type dir_distribution_result() :: #dir_distribution_result{}.
--type reg_file_distribution_result() :: #reg_file_distribution_result{}.
--type file_distribution_result() :: #file_distribution_result{}.
+
+-type dir_distribution() :: #dir_distribution{}.
+-type reg_distribution() :: #reg_distribution{}.
+
+-type get_request() :: #file_distribution_get_request{}.
+-type get_result() :: #file_distribution_get_result{}.
 
 -export_type([
-    dir_distribution_result/0, reg_file_distribution_result/0,
-    file_distribution_result/0
+    dir_distribution/0, reg_distribution/0,
+    get_request/0, get_result/0
 ]).
 
 
@@ -38,16 +41,22 @@
 
 
 -spec get_file_distribution(user_ctx:ctx(), file_ctx:ctx()) ->
-    {ok, file_distribution_result()}.
+    {ok, get_result()}.
 get_file_distribution(UserCtx, FileCtx0) ->
     FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
     FileCtx2 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx1,
         [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_metadata_mask)]
     ),
-    {ok, #file_distribution_result{distribution = case file_ctx:is_dir(FileCtx2) of
-        {true, FileCtx3} -> get_dir_distribution(UserCtx, FileCtx3);
-        {false, FileCtx3} -> get_reg_file_distribution(FileCtx3)
+
+    {ok, #file_distribution_get_result{distribution = case file_ctx:get_type(FileCtx2) of
+        {?DIRECTORY_TYPE, FileCtx3} ->
+            get_dir_distribution(UserCtx, FileCtx3);
+        {?SYMLINK_TYPE, FileCtx3} ->
+            %% TODO what about symlinks ?
+            get_dir_distribution(UserCtx, FileCtx3);
+        {_, FileCtx3} ->
+            get_reg_distribution(FileCtx3)
     end}}.
 
 
@@ -56,39 +65,21 @@ get_file_distribution(UserCtx, FileCtx0) ->
 %%%===================================================================
 
 
-%% TODO what about symlinks ?
 %% @private
--spec get_reg_file_distribution(file_ctx:ctx()) -> reg_file_distribution_result().
-get_reg_file_distribution(FileCtx0) ->
-    {FileSize, FileCtx1} = file_ctx:get_file_size(FileCtx0),
-    {FileLocationDocs, _FileCtx2} = file_ctx:get_file_location_docs(FileCtx1),
-
-    FileBlocksPerStorage = lists:foldl(fun(FileLocationDoc, Acc) ->
-        StorageId = FileLocationDoc#document.value#file_location.storage_id,
-        Acc#{StorageId => fslogic_location_cache:get_blocks(FileLocationDoc)}
-    end, #{}, FileLocationDocs),
-
-    #reg_file_distribution_result{
-        logical_size = FileSize,
-        blocks_per_storage = FileBlocksPerStorage
-    }.
-
-
-%% @private
--spec get_dir_distribution(user_ctx:ctx(), file_ctx:ctx()) -> dir_distribution_result().
+-spec get_dir_distribution(user_ctx:ctx(), file_ctx:ctx()) -> dir_distribution().
 get_dir_distribution(UserCtx, FileCtx0) ->
     SessionId = user_ctx:get_session_id(UserCtx),
     FileRef = ?FILE_REF(file_ctx:get_logical_guid_const(FileCtx0)),
 
-    maps:fold(fun(ProviderId, Req, DirDistributionAcc) ->
-        case lfm:browse_dir_stats(SessionId, FileRef, ProviderId, Req) of
+    maps:fold(fun(ProviderId, DirStatsGetReq, DirDistributionAcc) ->
+        case lfm:browse_dir_stats(SessionId, FileRef, ProviderId, DirStatsGetReq) of
             {ok, #time_series_slice_result{slice = ProviderStats}} ->
                 maps:fold(fun update_dir_distribution/3, DirDistributionAcc, ProviderStats);
             {error, _} ->
-                % TODO ignore statistics that could not be obtained or return error?
+                % TODO VFS-9435 add information about errors
                 DirDistributionAcc
         end
-    end, #dir_distribution_result{}, build_get_dir_stats_requests(FileCtx0)).
+    end, #dir_distribution{}, build_get_dir_stats_requests(FileCtx0)).
 
 
 %% @private
@@ -117,21 +108,37 @@ build_get_dir_stats_requests(FileCtx) ->
 %% @private
 -spec update_dir_distribution(
     time_series_collection:time_series_name(),
-    % TODO ŁO/MW Is it possible to receive empty list?
-    [non_neg_integer()],
-    dir_distribution_result()
+    [non_neg_integer()],  % TODO ŁO/MW Is it possible to receive other format?
+    dir_distribution()
 ) ->
-    dir_distribution_result().
-update_dir_distribution(?TOTAL_SIZE, [TotalSize], DirDistribution = #dir_distribution_result{
+    dir_distribution().
+update_dir_distribution(?TOTAL_SIZE, [TotalSize], DirDistribution = #dir_distribution{
     logical_size = LogicalSize
 }) ->
-    DirDistribution#dir_distribution_result{logical_size = max(TotalSize, LogicalSize)};
+    DirDistribution#dir_distribution{logical_size = max(TotalSize, LogicalSize)};
 
-update_dir_distribution(?SIZE_ON_STORAGE(StorageId), [PhysicalSize], DirDistribution = #dir_distribution_result{
+update_dir_distribution(?SIZE_ON_STORAGE(StorageId), [PhysicalSize], DirDistribution = #dir_distribution{
     logical_size = LogicalSize,
     physical_size_per_storage = PhysicalSizePerStorage
 }) ->
-    DirDistribution#dir_distribution_result{
+    DirDistribution#dir_distribution{
         logical_size = max(PhysicalSize, LogicalSize),
         physical_size_per_storage = PhysicalSizePerStorage#{StorageId => PhysicalSize}
+    }.
+
+
+%% @private
+-spec get_reg_distribution(file_ctx:ctx()) -> reg_distribution().
+get_reg_distribution(FileCtx0) ->
+    {FileSize, FileCtx1} = file_ctx:get_file_size(FileCtx0),
+    {FileLocationDocs, _FileCtx2} = file_ctx:get_file_location_docs(FileCtx1),
+
+    FileBlocksPerStorage = lists:foldl(fun(FileLocationDoc, Acc) ->
+        StorageId = FileLocationDoc#document.value#file_location.storage_id,
+        Acc#{StorageId => fslogic_location_cache:get_blocks(FileLocationDoc)}
+    end, #{}, FileLocationDocs),
+
+    #reg_distribution{
+        logical_size = FileSize,
+        blocks_per_storage = FileBlocksPerStorage
     }.

@@ -16,6 +16,7 @@
 
 -include("middleware/middleware.hrl").
 -include("modules/fslogic/file_details.hrl").
+-include("modules/fslogic/file_distribution.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -192,11 +193,11 @@ translate_dataset_summary(#file_eff_dataset_summary{
 
 -spec translate_distribution(
     file_id:file_guid(),
-    distribution_req:file_distribution_result()
+    file_distribution:get_result()
 ) ->
     distribution_per_provider().
-translate_distribution(FileGuid, #file_distribution_result{
-    distribution = #reg_file_distribution_result{
+translate_distribution(FileGuid, #file_distribution_get_result{
+    distribution = #reg_distribution{
         logical_size = FileSize,
         blocks_per_storage = PossiblyIncompleteBlocksPerStorage
     }
@@ -241,8 +242,8 @@ translate_distribution(FileGuid, #file_distribution_result{
         <<"distributionPerStorage">> => DistributionMap
     };
 
-translate_distribution(_FileGuid, #file_distribution_result{
-    distribution = #dir_distribution_result{
+translate_distribution(_FileGuid, #file_distribution_get_result{
+    distribution = #dir_distribution{
         logical_size = DirSize,
         physical_size_per_storage = PhysicalSizePerStorage
     }

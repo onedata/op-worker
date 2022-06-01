@@ -159,30 +159,6 @@
 
 
 %%%===================================================================
-%%% File metadata related operations available in middleware_worker
-%%%===================================================================
-
-
--record(get_file_distribution_request, {}).
-
--record(file_distribution_result, {
-    distribution ::
-        distribution_req:dir_distribution_result() |
-        distribution_req:reg_file_distribution_result()
-}).
-
--record(dir_distribution_result, {
-    logical_size = 0 :: non_neg_integer(),
-    physical_size_per_storage = #{} :: #{od_storage:id() => non_neg_integer()}
-}).
-
--record(reg_file_distribution_result, {
-    logical_size = 0 :: non_neg_integer(),
-    blocks_per_storage = #{} :: #{od_storage:id() => fslogic_blocks:blocks()}
-}).
-
-
-%%%===================================================================
 %%% QoS related operations available in middleware_worker
 %%%===================================================================
 

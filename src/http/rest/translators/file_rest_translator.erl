@@ -15,6 +15,7 @@
 
 -include("http/rest.hrl").
 -include("middleware/middleware.hrl").
+-include("modules/fslogic/file_distribution.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 
 -export([create_response/4, get_response/2]).
@@ -64,8 +65,8 @@ get_response(#gri{aspect = As}, Metadata) when
 ->
     ?OK_REPLY(Metadata);
 
-get_response(#gri{aspect = distribution}, #file_distribution_result{
-    distribution = #reg_file_distribution_result{
+get_response(#gri{aspect = distribution}, #file_distribution_get_result{
+    distribution = #reg_distribution{
         logical_size = FileSize,
         blocks_per_storage = BlocksPerStorage
     }
@@ -88,8 +89,8 @@ get_response(#gri{aspect = distribution}, #file_distribution_result{
         end, BlocksPerStorage)
     });
 
-get_response(#gri{aspect = distribution}, #file_distribution_result{
-    distribution = #dir_distribution_result{
+get_response(#gri{aspect = distribution}, #file_distribution_get_result{
+    distribution = #dir_distribution{
         logical_size = DirSize,
         physical_size_per_storage = PhysicalSizePerStorage
     }
