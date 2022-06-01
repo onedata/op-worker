@@ -43,23 +43,29 @@
 
 
 -spec to_json(gs | rest, file_distribution:get_result()) -> json_utils:json_map().
-to_json(gs, #file_distribution_get_result{distribution = #dir_distribution{
-    logical_size = DirSize,
-    physical_size_per_storage = PhysicalSizePerStorage
+to_json(_, #file_distribution_get_result{distribution = #dir_distribution{
+    distribution_per_provider = DistributionPerProvider
 }}) ->
     #{
         <<"type">> => atom_to_binary(?DIRECTORY_TYPE),
-        <<"size">> => DirSize,
-        <<"distributionPerStorage">> => maps:map(fun(_StorageId, SizeOnStorage) ->
-            case DirSize of
-                0 -> 0;
-                %% TODO can it be undefined? If no statistics are available probably yes?
-                _ -> SizeOnStorage * 100.0 / DirSize
-            end
-        end, PhysicalSizePerStorage)
+        <<"distributionPerProvider">> => maps:map(fun
+            (_ProviderId, Error = {error, _}) ->
+                errors:to_json(Error);
+
+            (_ProviderId, #provider_dir_distribution{
+                logical_size = LogicalDirSize,
+                physical_size_per_storage = PhysicalDirSizePerStorage
+            }) ->
+                #{
+                    <<"logicalSize">> => utils:undefined_to_null(LogicalDirSize),
+                    <<"distributionPerStorage">> => maps:map(fun(_StorageId, PhysicalSize) ->
+                        utils:undefined_to_null(PhysicalSize)
+                    end, PhysicalDirSizePerStorage)
+                }
+        end, DistributionPerProvider)
     };
 
-to_json(gs, #file_distribution_get_result{distribution = #symlink_distribution{}}) ->
+to_json(_, #file_distribution_get_result{distribution = #symlink_distribution{}}) ->
     %% TODO add any more info?
     #{
         <<"type">> => atom_to_binary(?SYMLINK_TYPE),
@@ -68,63 +74,49 @@ to_json(gs, #file_distribution_get_result{distribution = #symlink_distribution{}
 
 to_json(gs, #file_distribution_get_result{distribution = #reg_distribution{
     logical_size = FileSize,
-    blocks_per_storage = FileBlocksPerStorage
+    blocks_per_provider = FileBlocksPerProvider
 }}) ->
-    DistributionMap = maps:map(fun(_StorageId, FileBlocksOnStorage) ->
-        {Blocks, TotalBlocksSize} = get_blocks_summary(FileBlocksOnStorage),
+    DistributionMap = maps:map(fun(_ProviderId, FileBlocksPerStorage) ->
+        maps:map(fun(_StorageId, FileBlocksOnStorage) ->
+            {Blocks, TotalBlocksSize} = get_blocks_summary(FileBlocksOnStorage),
 
-        Data = lists:foldl(fun({BarNum, Fill}, DataAcc) ->
-            DataAcc#{integer_to_binary(BarNum) => Fill}
-        end, #{}, interpolate_chunks(Blocks, FileSize)),
+            Data = lists:foldl(fun({BarNum, Fill}, DataAcc) ->
+                DataAcc#{integer_to_binary(BarNum) => Fill}
+            end, #{}, interpolate_chunks(Blocks, FileSize)),
 
-        #{
-            <<"chunksBarData">> => Data,
-            <<"blocksPercentage">> => case FileSize of
-                0 -> 0;
-                %% TODO MW can it be undefined?
-                _ -> TotalBlocksSize * 100.0 / FileSize
-            end
-        }
-    end, FileBlocksPerStorage),
+            #{
+                <<"chunksBarData">> => Data,
+                <<"blocksPercentage">> => case FileSize of
+                    0 -> 0;
+                    _ -> TotalBlocksSize * 100.0 / FileSize
+                end
+            }
+        end, FileBlocksPerStorage)
+    end, FileBlocksPerProvider),
 
     #{
         <<"type">> => atom_to_binary(?REGULAR_FILE_TYPE),
         <<"size">> => FileSize,
-        <<"distributionPerStorage">> => DistributionMap
-    };
-
-to_json(rest, #file_distribution_get_result{distribution = #dir_distribution{
-    logical_size = DirSize,
-    physical_size_per_storage = PhysicalSizePerStorage
-}}) ->
-    #{
-        <<"type">> => atom_to_binary(?DIRECTORY_TYPE),
-        <<"size">> => DirSize,
-        <<"sizePerStorage">> => PhysicalSizePerStorage
-    };
-
-to_json(rest, #file_distribution_get_result{distribution = #symlink_distribution{}}) ->
-    %% TODO add any more info?
-    #{
-        <<"type">> => atom_to_binary(?SYMLINK_TYPE),
-        <<"size">> => 0
+        <<"distribution">> => DistributionMap
     };
 
 to_json(rest, #file_distribution_get_result{distribution = #reg_distribution{
     logical_size = FileSize,
-    blocks_per_storage = FileBlocksPerStorage
+    blocks_per_provider = FileBlocksPerProvider
 }}) ->
     #{
         <<"type">> => atom_to_binary(?REGULAR_FILE_TYPE),
         <<"size">> => FileSize,
-        <<"blocksPerStorage">> => maps:map(fun(_StorageId, FileBlocksOnStorage) ->
-            {BlockList, TotalBlocksSize} = get_blocks_summary(FileBlocksOnStorage),
+        <<"blocks">> => maps:map(fun(_ProviderId, FileBlocksPerStorage) ->
+            maps:map(fun(_StorageId, FileBlocksOnStorage) ->
+                {BlockList, TotalBlocksSize} = get_blocks_summary(FileBlocksOnStorage),
 
-            #{
-                <<"blocks">> => BlockList,
-                <<"totalBlocksSize">> => TotalBlocksSize
-            }
-        end, FileBlocksPerStorage)
+                #{
+                    <<"blocks">> => BlockList,
+                    <<"totalBlocksSize">> => TotalBlocksSize
+                }
+            end, FileBlocksPerStorage)
+        end, FileBlocksPerProvider)
     }.
 
 

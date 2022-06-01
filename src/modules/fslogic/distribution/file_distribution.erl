@@ -23,7 +23,9 @@
 -export([get_file_distribution/2]).
 
 
+-type provider_dir_distribution() :: #provider_dir_distribution{}.
 -type dir_distribution() :: #dir_distribution{}.
+
 -type symlink_distribution() :: #symlink_distribution{}.
 -type reg_distribution() :: #reg_distribution{}.
 
@@ -31,7 +33,9 @@
 -type get_result() :: #file_distribution_get_result{}.
 
 -export_type([
-    dir_distribution/0, symlink_distribution/0, reg_distribution/0,
+    provider_dir_distribution/0, dir_distribution/0,
+    symlink_distribution/0,
+    reg_distribution/0,
     get_request/0, get_result/0
 ]).
 
@@ -70,60 +74,66 @@ get_dir_distribution(UserCtx, FileCtx0) ->
     SessionId = user_ctx:get_session_id(UserCtx),
     FileRef = ?FILE_REF(file_ctx:get_logical_guid_const(FileCtx0)),
 
-    maps:fold(fun(ProviderId, DirStatsGetReq, DirDistributionAcc) ->
+    DistributionPerProvider = maps:fold(fun(ProviderId, DirStatsGetReq, DistributionPerProviderAcc) ->
         case lfm:browse_dir_stats(SessionId, FileRef, ProviderId, DirStatsGetReq) of
             {ok, #time_series_slice_result{slice = ProviderStats}} ->
-                maps:fold(fun update_dir_distribution/3, DirDistributionAcc, ProviderStats);
-            {error, _} ->
-                % TODO VFS-9435 add information about errors
-                DirDistributionAcc
+                DistributionPerProviderAcc#{
+                    ProviderId => build_provider_dir_distribution(ProviderStats)
+                };
+            {error, Errno} ->
+                DistributionPerProviderAcc#{ProviderId => ?ERROR_POSIX(Errno)}
         end
-    end, #dir_distribution{}, build_get_dir_stats_requests(FileCtx0)).
+    end, #{}, build_get_dir_stats_requests(FileCtx0)),
+
+    #dir_distribution{distribution_per_provider = DistributionPerProvider}.
 
 
 %% @private
 -spec build_get_dir_stats_requests(file_ctx:ctx()) ->
     #{oneprovider:id() => ts_browse_request:record()}.
 build_get_dir_stats_requests(FileCtx) ->
-    ThisProviderId = oneprovider:get_id(),
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     {ok, StoragesByProvider} = space_logic:get_storages_by_provider(SpaceId),
 
     maps:fold(fun(ProviderId, SupportingStorages, Acc) ->
         ProviderDirStatsLayout = maps:fold(fun(StorageId, _, LayoutAcc) ->
             LayoutAcc#{?SIZE_ON_STORAGE(StorageId) => [?MONTH_METRIC]}
-        end, #{}, SupportingStorages),
+        end, #{?TOTAL_SIZE => [?MONTH_METRIC]}, SupportingStorages),
 
         Acc#{ProviderId => #time_series_get_slice_request{
-            layout = case ProviderId of
-                ThisProviderId -> ProviderDirStatsLayout#{?TOTAL_SIZE => [?MONTH_METRIC]};
-                _ -> ProviderDirStatsLayout
-            end,
+            layout = ProviderDirStatsLayout,
             window_limit = 1
         }}
     end, #{}, StoragesByProvider).
 
 
 %% @private
--spec update_dir_distribution(
-    time_series_collection:time_series_name(),
-    [non_neg_integer()],  % TODO ŁO/MW Is it possible to receive other format?
-    dir_distribution()
-) ->
-    dir_distribution().
-update_dir_distribution(?TOTAL_SIZE, [TotalSize], DirDistribution = #dir_distribution{
-    logical_size = LogicalSize
-}) ->
-    DirDistribution#dir_distribution{logical_size = max(TotalSize, LogicalSize)};
+-spec build_provider_dir_distribution(time_series_collection:slice()) ->
+    provider_dir_distribution().
+build_provider_dir_distribution(ProviderDirStats) ->
+    #provider_dir_distribution{
+        logical_size = get_dir_size(?TOTAL_SIZE, ProviderDirStats),
+        physical_size_per_storage = lists:foldl(fun
+            (TSName = ?SIZE_ON_STORAGE(StorageId), Acc) ->
+                Acc#{StorageId => get_dir_size(TSName, ProviderDirStats)};
 
-update_dir_distribution(?SIZE_ON_STORAGE(StorageId), [PhysicalSize], DirDistribution = #dir_distribution{
-    logical_size = LogicalSize,
-    physical_size_per_storage = PhysicalSizePerStorage
-}) ->
-    DirDistribution#dir_distribution{
-        logical_size = max(PhysicalSize, LogicalSize),
-        physical_size_per_storage = PhysicalSizePerStorage#{StorageId => PhysicalSize}
+            (_, Acc) ->
+                Acc
+        end, #{}, maps:keys(ProviderDirStats))
     }.
+
+
+%% @private
+-spec get_dir_size(
+    time_series_collection:time_series_name(),
+    time_series_collection:slice()
+) ->
+    undefined | non_neg_integer().
+get_dir_size(DirSizeTSName, ProviderDirStats) ->
+    case maps:get(DirSizeTSName, ProviderDirStats) of
+        #{?MONTH_METRIC := [{_Timestamp, Value}]} -> Value;
+        _ -> undefined
+    end.
 
 
 %% @private
@@ -139,24 +149,32 @@ get_reg_distribution(FileCtx0) ->
     {FileSize, FileCtx1} = file_ctx:get_file_size(FileCtx0),
     {FileLocationDocs, FileCtx2} = file_ctx:get_file_location_docs(FileCtx1),
 
-    FileBlocksPerStorage0 = lists:foldl(fun(FileLocationDoc, Acc) ->
-        StorageId = FileLocationDoc#document.value#file_location.storage_id,
-        Acc#{StorageId => fslogic_location_cache:get_blocks(FileLocationDoc)}
-    end, #{}, FileLocationDocs),
-
     %% @TODO VFS-9204 ultimately, location for each file should be created in each provider
     %% and the list of storages in the distribution should always be complete -
     %% for now, add placeholders with zero blocks for missing storages
     SpaceId = file_ctx:get_space_id_const(FileCtx2),
-    {ok, AllSupportingStorageIds} = space_logic:get_all_storage_ids(SpaceId),
+    {ok, StorageIdsByProvider} = space_logic:get_storages_by_provider(SpaceId),
+    EmptyFileBlocksPerProvider = maps:map(fun(_ProviderId, ProviderStorages) ->
+        maps:map(fun(_StorageId, _) -> [] end, ProviderStorages)
+    end, StorageIdsByProvider),
 
-    FileBlocksPerStorage1 = lists:foldl(
-        fun(StorageId, Acc) -> Acc#{StorageId => []} end,
-        FileBlocksPerStorage0,
-        lists_utils:subtract(AllSupportingStorageIds, maps:keys(FileBlocksPerStorage0))
-    ),
+    ActualFileBlocksPerProvider = lists:foldl(fun(
+        FileLocationDoc = #document{value = #file_location{
+            provider_id = ProviderId,
+            storage_id = StorageId
+        }},
+        FileBlockPerProviderAcc
+    ) ->
+        FileBlocks = fslogic_location_cache:get_blocks(FileLocationDoc),
+
+        maps:update_with(
+            ProviderId,
+            fun(FileBlocksPerStorage) -> FileBlocksPerStorage#{StorageId => FileBlocks} end,
+            FileBlockPerProviderAcc
+        )
+    end, EmptyFileBlocksPerProvider, FileLocationDocs),
 
     #reg_distribution{
         logical_size = FileSize,
-        blocks_per_storage = FileBlocksPerStorage1
+        blocks_per_provider = ActualFileBlocksPerProvider
     }.

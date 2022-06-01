@@ -451,6 +451,7 @@ get_file_location(SessId, FileKey) ->
     ?run(lfm_files:get_file_location(SessId, FileKey)).
 
 
+%% TODO VFS-9461 Remove deprecated lfm:get_file_distribution used only in tests
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns block map for a file.
