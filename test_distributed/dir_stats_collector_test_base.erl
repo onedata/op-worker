@@ -27,7 +27,7 @@
     race_with_subtree_adding_test/1, race_with_subtree_filling_with_data_test/1,
     race_with_file_adding_to_large_dir_test/1,
     multiple_status_change_test/1, adding_file_when_disabled_test/1,
-    restart_test/1, parallel_write_test/1]).
+    restart_test/1, parallel_write_test/2]).
 -export([init/1, init_and_enable_for_new_space/1, teardown/1, teardown/3]).
 -export([verify_dir_on_provider_creating_files/3]).
 % TODO VFS-9148 - extend tests
@@ -394,7 +394,7 @@ restart_test(Config) ->
     verify_collecting_status(Config, disabled).
 
 
-parallel_write_test(Config) ->
+parallel_write_test(Config, SleepOnWrite) ->
     enable(Config, new_space),
     [Worker | _] = ?config(?PROVIDER_CREATING_FILES_NODES_SELECTOR, Config),
     SessId = lfm_test_utils:get_user1_session_id(Config, Worker),
@@ -412,6 +412,12 @@ parallel_write_test(Config) ->
     WriteAnswers = lists_utils:pmap(fun(N) ->
         FileNum = N div 5 + 1,
         ChunkNum = N rem 5,
+
+        case SleepOnWrite of
+            true -> timer:sleep(timer:seconds(16 - ChunkNum * 4));
+            false -> ok
+        end,
+
         write_to_file(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR, [], [FileNum], 1000, ChunkNum * 1000)
     end, lists:seq(0, 99)),
     ?assert(lists:all(fun(Ans) -> Ans =:= ok end, WriteAnswers)),
