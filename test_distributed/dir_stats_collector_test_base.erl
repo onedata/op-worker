@@ -397,7 +397,9 @@ restart_test(Config) ->
 parallel_write_test(Config, SleepOnWrite, InitialFileSize, OverrideInitialBytes) ->
     enable(Config, new_space),
     [Worker | _] = ?config(?PROVIDER_CREATING_FILES_NODES_SELECTOR, Config),
+    [WorkerProvider2 | _] = ?config(?PROVIDER_DELETING_FILES_NODES_SELECTOR, Config),
     SessId = lfm_test_utils:get_user1_session_id(Config, Worker),
+    SessIdProvider2 = lfm_test_utils:get_user1_session_id(Config, WorkerProvider2),
     SpaceGuid = lfm_test_utils:get_user1_first_space_guid(Config),
 
     check_space_dir_values_map_and_time_series_collection(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR, SpaceGuid, #{
@@ -447,6 +449,15 @@ parallel_write_test(Config, SleepOnWrite, InitialFileSize, OverrideInitialBytes)
 
     % Read files using 20 processes (spawn is hidden in pmap)
     ReadAnswers = lists_utils:pmap(fun(FileNum) ->
+        % Check blocks visibility on reading provider before reading from file
+        GetBlocks = fun() ->
+            FileGuid = resolve_guid(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR, [], [FileNum]),
+            {ok, Distribution} =
+                lfm_proxy:get_file_distribution(WorkerProvider2, SessIdProvider2, #file_ref{guid = FileGuid}),
+            lists:sort(lists:map(fun(#{<<"blocks">> := ProviderBlocks}) -> ProviderBlocks end, Distribution))
+        end,
+        ?assertEqual([[], [[0,5010]]], GetBlocks(), ?ATTEMPTS),
+
         Bytes = read_from_file(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR, [], [FileNum], FileSize),
         byte_size(Bytes)
     end, lists:seq(1, 20)),
