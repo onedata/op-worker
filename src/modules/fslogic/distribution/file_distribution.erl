@@ -24,13 +24,14 @@
 
 
 -type dir_distribution() :: #dir_distribution{}.
+-type symlink_distribution() :: #symlink_distribution{}.
 -type reg_distribution() :: #reg_distribution{}.
 
 -type get_request() :: #file_distribution_get_request{}.
 -type get_result() :: #file_distribution_get_result{}.
 
 -export_type([
-    dir_distribution/0, reg_distribution/0,
+    dir_distribution/0, symlink_distribution/0, reg_distribution/0,
     get_request/0, get_result/0
 ]).
 
@@ -49,14 +50,12 @@ get_file_distribution(UserCtx, FileCtx0) ->
         [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_metadata_mask)]
     ),
 
-    {ok, #file_distribution_get_result{distribution = case file_ctx:get_type(FileCtx2) of
-        {?DIRECTORY_TYPE, FileCtx3} ->
-            get_dir_distribution(UserCtx, FileCtx3);
-        {?SYMLINK_TYPE, FileCtx3} ->
-            %% TODO what about symlinks ?
-            get_dir_distribution(UserCtx, FileCtx3);
-        {_, FileCtx3} ->
-            get_reg_distribution(FileCtx3)
+    {FileType, FileCtx3} = file_ctx:get_type(FileCtx2),
+
+    {ok, #file_distribution_get_result{distribution = case FileType of
+        ?DIRECTORY_TYPE -> get_dir_distribution(UserCtx, FileCtx3);
+        ?SYMLINK_TYPE -> get_symlink_distribution(FileCtx3);
+        _ -> get_reg_distribution(FileCtx3)
     end}}.
 
 
@@ -128,17 +127,36 @@ update_dir_distribution(?SIZE_ON_STORAGE(StorageId), [PhysicalSize], DirDistribu
 
 
 %% @private
+-spec get_symlink_distribution(file_ctx:ctx()) -> symlink_distribution().
+get_symlink_distribution(_FileCtx) ->
+    %% TODO what should be part of symlink distribution? logical_size = 0 always? list of storage ids supporting space?
+    #symlink_distribution{}.
+
+
+%% @private
 -spec get_reg_distribution(file_ctx:ctx()) -> reg_distribution().
 get_reg_distribution(FileCtx0) ->
     {FileSize, FileCtx1} = file_ctx:get_file_size(FileCtx0),
-    {FileLocationDocs, _FileCtx2} = file_ctx:get_file_location_docs(FileCtx1),
+    {FileLocationDocs, FileCtx2} = file_ctx:get_file_location_docs(FileCtx1),
 
-    FileBlocksPerStorage = lists:foldl(fun(FileLocationDoc, Acc) ->
+    FileBlocksPerStorage0 = lists:foldl(fun(FileLocationDoc, Acc) ->
         StorageId = FileLocationDoc#document.value#file_location.storage_id,
         Acc#{StorageId => fslogic_location_cache:get_blocks(FileLocationDoc)}
     end, #{}, FileLocationDocs),
 
+    %% @TODO VFS-9204 ultimately, location for each file should be created in each provider
+    %% and the list of storages in the distribution should always be complete -
+    %% for now, add placeholders with zero blocks for missing storages
+    SpaceId = file_ctx:get_space_id_const(FileCtx2),
+    {ok, AllSupportingStorageIds} = space_logic:get_all_storage_ids(SpaceId),
+
+    FileBlocksPerStorage1 = lists:foldl(
+        fun(StorageId, Acc) -> Acc#{StorageId => []} end,
+        FileBlocksPerStorage0,
+        lists_utils:subtract(AllSupportingStorageIds, maps:keys(FileBlocksPerStorage0))
+    ),
+
     #reg_distribution{
         logical_size = FileSize,
-        blocks_per_storage = FileBlocksPerStorage
+        blocks_per_storage = FileBlocksPerStorage1
     }.

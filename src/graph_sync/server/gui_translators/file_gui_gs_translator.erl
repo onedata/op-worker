@@ -196,24 +196,12 @@ translate_dataset_summary(#file_eff_dataset_summary{
     file_distribution:get_result()
 ) ->
     distribution_per_provider().
-translate_distribution(FileGuid, #file_distribution_get_result{
+translate_distribution(_FileGuid, #file_distribution_get_result{
     distribution = #reg_distribution{
         logical_size = FileSize,
-        blocks_per_storage = PossiblyIncompleteBlocksPerStorage
+        blocks_per_storage = FileBlocksPerStorage
     }
 }) ->
-    %% @TODO VFS-9204 ultimately, location for each file should be created in each provider
-    %% and the list of storages in the distribution should always be complete -
-    %% for now, add placeholders with zero blocks for missing storages
-    SpaceId = file_id:guid_to_space_id(FileGuid),
-    {ok, AllStorageIds} = space_logic:get_all_storage_ids(SpaceId),
-    IncludedStorages = maps:keys(PossiblyIncompleteBlocksPerStorage),
-    MissingStorages = lists_utils:subtract(AllStorageIds, IncludedStorages),
-
-    ComplementedBlocksPerStorage = lists:foldl(fun(StorageId, Acc) ->
-        Acc#{StorageId => []}
-    end, PossiblyIncompleteBlocksPerStorage, MissingStorages),
-
     DistributionMap = maps:map(fun(_StorageId, FileBlocksOnStorage) ->
         {Blocks, TotalBlocksSize} = lists:mapfoldl(
             fun(#file_block{offset = O, size = S}, SizeAcc) -> {[O, S], SizeAcc + S} end,
@@ -229,11 +217,11 @@ translate_distribution(FileGuid, #file_distribution_get_result{
             <<"chunksBarData">> => Data,
             <<"blocksPercentage">> => case FileSize of
                 0 -> 0;
-                %% TODO can it be undefined?
+                %% TODO MW can it be undefined?
                 _ -> TotalBlocksSize * 100.0 / FileSize
             end
         }
-    end, ComplementedBlocksPerStorage),
+    end, FileBlocksPerStorage),
 
     #{
         %% TODO what about symlinks ?
@@ -254,7 +242,7 @@ translate_distribution(_FileGuid, #file_distribution_get_result{
         <<"distributionPerStorage">> => maps:map(fun(_StorageId, SizeOnStorage) ->
             case DirSize of
                 0 -> 0;
-                %% TODO can it be undefined?
+                %% TODO MW can it be undefined?
                 _ -> SizeOnStorage * 100.0 / DirSize
             end
         end, PhysicalSizePerStorage)

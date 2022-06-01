@@ -23,6 +23,8 @@
     blocks_per_storage = #{} :: #{od_storage:id() => fslogic_blocks:blocks()}
 }).
 
+-record(symlink_distribution, {}).
+
 -record(file_distribution_get_request, {}).
 
 -record(file_distribution_get_result, {
