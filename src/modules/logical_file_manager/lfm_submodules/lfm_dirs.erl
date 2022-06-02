@@ -193,25 +193,28 @@ browse_dir_stats(SessId, FileKey, ProviderId, BrowseRequest) ->
         context_guid = Guid,
         provider_request = #browse_dir_stats{request = BrowseRequest}
     },
-    
-    Res = case {oneprovider:is_self(ProviderId), connection:is_provider_connected(ProviderId)} of
-        {true, _} ->
-            {ok, R} = worker_proxy:call(
+
+    Res = case oneprovider:is_self(ProviderId) of
+        true ->
+            worker_proxy:call(
                 {id, fslogic_worker, file_id:guid_to_uuid(Guid)},
-                {provider_request, SessId, Req}),
-            R;
-        {false, true} ->
-            % Provider is always allowed to read dir statistics of other providers.
-            %% @TODO VFS-9435 - let fslogic_worker handle routing between providers
-            fslogic_remote:route(user_ctx:new(?ROOT_SESS_ID), ProviderId, Req);
-        {false, false} ->
-            {error, ?EAGAIN}
+                {provider_request, SessId, Req}
+            );
+        false ->
+            case connection:is_provider_connected(ProviderId) of
+                true ->
+                    % Provider is always allowed to read dir statistics of other providers.
+                    %% @TODO VFS-9435 - let fslogic_worker handle routing between providers
+                    {ok, fslogic_remote:route(user_ctx:new(?ROOT_SESS_ID), ProviderId, Req)};
+                false ->
+                    {error, ?EAGAIN}
+            end
     end,
     
     case Res of
-        #provider_response{status = #status{code = ?OK}, provider_response = #dir_stats_result{result = Result}} ->
+        {ok, #provider_response{status = #status{code = ?OK}, provider_response = #dir_stats_result{result = Result}}} ->
             {ok, Result};
-        #provider_response{status = #status{code = Error}} ->
+        {ok, #provider_response{status = #status{code = Error}}} ->
             {error, Error};
         {error, _} = Error ->
             Error

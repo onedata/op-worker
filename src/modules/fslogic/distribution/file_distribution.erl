@@ -74,16 +74,14 @@ get_dir_distribution(UserCtx, FileCtx0) ->
     SessionId = user_ctx:get_session_id(UserCtx),
     FileRef = ?FILE_REF(file_ctx:get_logical_guid_const(FileCtx0)),
 
-    DistributionPerProvider = maps:fold(fun(ProviderId, DirStatsGetReq, DistributionPerProviderAcc) ->
+    DistributionPerProvider = maps:map(fun(ProviderId, DirStatsGetReq) ->
         case lfm:browse_dir_stats(SessionId, FileRef, ProviderId, DirStatsGetReq) of
             {ok, #time_series_slice_result{slice = ProviderStats}} ->
-                DistributionPerProviderAcc#{
-                    ProviderId => build_provider_dir_distribution(ProviderStats)
-                };
+                build_provider_dir_distribution(ProviderStats);
             {error, Errno} ->
-                DistributionPerProviderAcc#{ProviderId => ?ERROR_POSIX(Errno)}
+                ?ERROR_POSIX(Errno)
         end
-    end, #{}, build_get_dir_stats_requests(FileCtx0)),
+    end, build_get_dir_stats_requests(FileCtx0)),
 
     #dir_distribution{distribution_per_provider = DistributionPerProvider}.
 
@@ -95,16 +93,16 @@ build_get_dir_stats_requests(FileCtx) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     {ok, StoragesByProvider} = space_logic:get_storages_by_provider(SpaceId),
 
-    maps:fold(fun(ProviderId, SupportingStorages, Acc) ->
+    maps:map(fun(_ProviderId, SupportingStorages) ->
         ProviderDirStatsLayout = maps:fold(fun(StorageId, _, LayoutAcc) ->
             LayoutAcc#{?SIZE_ON_STORAGE(StorageId) => [?MONTH_METRIC]}
         end, #{?TOTAL_SIZE => [?MONTH_METRIC]}, SupportingStorages),
 
-        Acc#{ProviderId => #time_series_get_slice_request{
+        #time_series_get_slice_request{
             layout = ProviderDirStatsLayout,
             window_limit = 1
-        }}
-    end, #{}, StoragesByProvider).
+        }
+    end, StoragesByProvider).
 
 
 %% @private
