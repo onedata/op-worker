@@ -1307,7 +1307,7 @@ lfm_get_details(Config) ->
     ?assertMatch({ok, _}, O11),
     {ok, Handle11} = O11,
 
-    Index1 = file_listing:build_index(<<"space_id2">>, ?GET_DOMAIN_BIN(W)),
+    Index1 = file_listing:build_index(<<"space_id2">>),
     ?assertMatch({ok, #file_details{
         file_attr = #file_attr{name = <<"space_name2">>, size = undefined},
         index_startid = Index1,
