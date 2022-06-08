@@ -1303,37 +1303,46 @@ get_path_before_deletion(#file_ctx{path_before_deletion = PathBeforeDeletion}) -
 
 -spec resolve_and_cache_path(ctx(), file_meta:path_type()) -> {file_meta:uuid() | file_meta:name(), ctx()}.
 resolve_and_cache_path(FileCtx, PathType) ->
-    {#document{
-        key = Uuid,
-        value = #file_meta{
-            type = FileType,
-            name = Filename
-        },
-        scope = SpaceId
-    } = Doc, FileCtx2} = get_file_doc_including_deleted(FileCtx),
-
-    case FileType of
-        ?DIRECTORY_TYPE ->
-            case paths_cache:get(SpaceId, Doc, PathType) of
-                {ok, Path} ->
-                    {Path, FileCtx2};
-                {error, {file_meta_missing, _MissingUuid}} = Error ->
-                    throw(Error)
-            end;
-        _ ->
-            {ok, ParentUuid} = file_meta:get_parent_uuid(Doc),
-            {ok, ParentDoc} = file_meta:get_including_deleted(ParentUuid),
-            case paths_cache:get(SpaceId, ParentDoc, PathType) of
-                {ok, Path} ->
-                    FilenameOrUuid = case PathType of
-                        ?CANONICAL_PATH -> Filename;
-                        ?UUID_BASED_PATH -> Uuid
-                    end,
-                    {filename:join(Path, FilenameOrUuid), FileCtx2};
-                {error, {file_meta_missing, _MissingUuid}} = Error ->
-                    throw(Error)
+    try get_file_doc_including_deleted(FileCtx) of
+        {#document{
+            key = Uuid,
+            value = #file_meta{
+                type = FileType,
+                name = Filename
+            },
+            scope = SpaceId
+        } = Doc, FileCtx2} ->
+            case FileType of
+                ?DIRECTORY_TYPE ->
+                    case paths_cache:get(SpaceId, Doc, PathType) of
+                        {ok, Path} ->
+                            {Path, FileCtx2};
+                        {error, {file_meta_missing, _MissingUuid}} = Error ->
+                            throw(Error)
+                    end;
+                _ ->
+                    {ok, ParentUuid} = file_meta:get_parent_uuid(Doc),
+                    case file_meta:get_including_deleted(ParentUuid) of
+                        {ok, ParentDoc} ->
+                            case paths_cache:get(SpaceId, ParentDoc, PathType) of
+                                {ok, Path} ->
+                                    FilenameOrUuid = case PathType of
+                                        ?CANONICAL_PATH -> Filename;
+                                        ?UUID_BASED_PATH -> Uuid
+                                    end,
+                                    {filename:join(Path, FilenameOrUuid), FileCtx2};
+                                {error, {file_meta_missing, _MissingUuid}} = Error ->
+                                    throw(Error)
+                            end;
+                        {error, not_found} ->
+                            throw({error, {file_meta_missing, ParentUuid}})
+                    end
             end
+    catch
+        _:{badmatch, {error, not_found}} ->
+            throw({error, {file_meta_missing, file_ctx:get_logical_uuid_const(FileCtx)}})
     end.
+
 
 %%--------------------------------------------------------------------
 %% @private

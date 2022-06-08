@@ -22,7 +22,7 @@
 -export([get_user1_session_id/2, get_user1_first_space_id/1, get_user1_first_space_guid/1, get_user1_first_space_name/1,
     get_user1_first_storage_id/2]).
 -export([create_file/4, create_file/5, write_file/4, write_file/5, create_and_write_file/6, read_file/4]).
--export([create_files_tree/4]).
+-export([create_files_tree/4, create_files_tree/5]).
 -export([clean_space/3, clean_space/4, assert_space_and_trash_are_empty/3, assert_space_dir_empty/3]).
 
 % TODO VFS-7215 - merge this module with file_ops_test_utils
@@ -113,7 +113,11 @@ read_file(Worker, SessId, FileGuid, Size) ->
 
 
 create_files_tree(Worker, SessId, Structure, RootGuid) ->
-    create_files_tree(Worker, SessId, Structure, RootGuid, <<"dir">>, <<"file">>, [], []).
+    create_files_tree(Worker, SessId, Structure, RootGuid, 0).
+
+
+create_files_tree(Worker, SessId, Structure, RootGuid, FileSize) ->
+    create_files_tree(Worker, SessId, Structure, RootGuid, FileSize, <<"dir">>, <<"file">>, [], []).
 
 
 clean_space(Workers, SpaceId, Attempts) ->
@@ -217,15 +221,15 @@ rm_files(Worker, SessId, GuidsAndPaths, BatchSize) ->
 
 
 
-create_files_tree(_Worker, _SessId, [], _RootGuid, _DirPrefix, _FilePrefix, DirGuids, FileGuids) ->
+create_files_tree(_Worker, _SessId, [], _RootGuid, _FileSize, _DirPrefix, _FilePrefix, DirGuids, FileGuids) ->
     {DirGuids, FileGuids};
-create_files_tree(Worker, SessId, [{DirsCount, FilesCount} | Rest], RootGuid, DirPrefix, FilePrefix,
+create_files_tree(Worker, SessId, [{DirsCount, FilesCount} | Rest], RootGuid, FileSize, DirPrefix, FilePrefix,
     DirGuids, FileGuids
 ) ->
     NewDirGuids = create_dirs(Worker, SessId, RootGuid, DirPrefix, DirsCount),
-    NewFileGuids = create_files(Worker, SessId, RootGuid, FilePrefix, FilesCount),
+    NewFileGuids = create_files(Worker, SessId, RootGuid, FilePrefix, FileSize, FilesCount),
     lists:foldl(fun(ChildDirGuid, {DirGuidsAcc, FileGuidsAcc}) ->
-        create_files_tree(Worker, SessId, Rest, ChildDirGuid, DirPrefix, FilePrefix, DirGuidsAcc, FileGuidsAcc)
+        create_files_tree(Worker, SessId, Rest, ChildDirGuid, FileSize, DirPrefix, FilePrefix, DirGuidsAcc, FileGuidsAcc)
     end, {DirGuids ++ NewDirGuids, FileGuids ++ NewFileGuids}, NewDirGuids).
 
 
@@ -236,9 +240,13 @@ create_dirs(Worker, SessId, ParentGuid, DirPrefix, DirsCount) ->
     end).
 
 
-create_files(Worker, SessId, ParentGuid, FilePrefix, FilesCount) ->
+create_files(Worker, SessId, ParentGuid, FilePrefix, FileSize, FilesCount) ->
     create_children(FilePrefix, FilesCount, fun(ChildFileName) ->
         {ok, {Guid, Handle}} = lfm_proxy:create_and_open(Worker, SessId, ParentGuid, ChildFileName, ?DEFAULT_FILE_MODE),
+        case FileSize > 0 of
+            true -> ?assertMatch({ok, _}, lfm_proxy:write(Worker, Handle, 0, crypto:strong_rand_bytes(FileSize)));
+            false -> ok
+        end,
         ok = lfm_proxy:close(Worker, Handle),
         Guid
     end).

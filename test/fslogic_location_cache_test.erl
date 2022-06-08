@@ -178,6 +178,11 @@ get_overlapping_sequence_template(InputBlockProducer) ->
             fslogic_location_cache:get_overlapping_blocks_sequence(?KEY, [InputBlock]))
     end, lists:seq(1, 5)).
 
+get_overlapping_complementary_to_a_coherent_whole_test() ->
+    TestBlocks = gen_test_blocks(2),
+    InputBlocks = [?BLOCK(13, 7), ?BLOCK(23, 7)],
+    ?assertEqual([{InputBlocks, TestBlocks}], fslogic_location_cache:get_overlapping_blocks_sequence(?KEY, InputBlocks)).
+
 get_not_overlapping_sequence_test() ->
     TestBlocks = gen_test_blocks(2),
     #file_block{offset = Offset} = lists:nth(1, TestBlocks),
