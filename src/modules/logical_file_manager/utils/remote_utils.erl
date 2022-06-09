@@ -19,6 +19,7 @@
 
 %% API
 -export([call_fslogic/5, call_fslogic/4]).
+-export([execute_on_provider/4]).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -83,4 +84,30 @@ call_fslogic(SessId, proxyio_request, Request = #proxyio_request{
             {error, Code};
         {ok, #status{code = Code}} ->
             {error, Code}
+    end.
+
+
+%% @TODO VFS-9435 - let fslogic_worker handle routing between providers
+-spec execute_on_provider(oneprovider:id(), fslogic_worker:provider_request(), session:id(), file_id:file_guid()) ->
+    {ok, provider_response_type()} | {error, term()}.
+execute_on_provider(ProviderId, Req, SessId, Guid) ->
+    Res = case {oneprovider:is_self(ProviderId), connection:is_provider_connected(ProviderId)} of
+        {true, _} ->
+            worker_proxy:call(
+                {id, fslogic_worker, file_id:guid_to_uuid(Guid)},
+                {provider_request, SessId, Req}
+            );
+        {false, true} ->
+            {ok, fslogic_remote:route(user_ctx:new(?ROOT_SESS_ID), ProviderId, Req)};
+        {false, false} ->
+            {error, ?EAGAIN}
+    end,
+    
+    case Res of
+        {ok, #provider_response{status = #status{code = ?OK}, provider_response = ProviderResponse}} ->
+            {ok, ProviderResponse};
+        {ok, #provider_response{status = #status{code = Error}}} ->
+            {error, Error};
+        {error, _} = Error ->
+            Error
     end.

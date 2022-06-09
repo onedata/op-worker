@@ -27,7 +27,7 @@
     get_children/3,
     get_children_attrs/5,
     get_children_details/3,
-    browse_stats/3
+    browse_time_stats/3, browse_current_stats/3
 ]).
 
 -type map_child_fun() :: fun((user_ctx:ctx(), file_ctx:ctx(), attr_req:compute_file_attr_opts()) ->
@@ -151,13 +151,28 @@ get_children_details(UserCtx, FileCtx0, ListOpts) ->
     get_children_details_insecure(UserCtx, FileCtx2, ListOpts, CanonicalChildrenWhiteList).
 
 
--spec browse_stats(user_ctx:ctx(), file_ctx:ctx(), ts_browse_request:record()) -> 
+-spec browse_time_stats(user_ctx:ctx(), file_ctx:ctx(), ts_browse_request:record()) -> 
     fslogic_worker:provider_response().
-browse_stats(_UserCtx, FileCtx, BrowseRequest) ->
+browse_time_stats(_UserCtx, FileCtx, BrowseRequest) ->
     Guid = file_ctx:get_logical_guid_const(FileCtx),
     case dir_size_stats:browse_time_stats_collection(Guid, BrowseRequest) of
         {ok, BrowseResult} ->
-            ?PROVIDER_OK_RESP(#dir_stats_result{result = BrowseResult});
+            ?PROVIDER_OK_RESP(#dir_time_stats_result{result = BrowseResult});
+        ?ERROR_DIR_STATS_DISABLED_FOR_SPACE ->
+            %% TODO VFS-7208 pass errors after introducing API errors to fslogic
+            #provider_response{status = #status{code = ?ENOTSUP}};
+        ?ERROR_DIR_STATS_NOT_READY ->
+            #provider_response{status = #status{code = ?EBUSY}}
+    end.
+
+
+-spec browse_current_stats(user_ctx:ctx(), file_ctx:ctx(), dir_stats_collection:stats_selector()) ->
+    fslogic_worker:provider_response().
+browse_current_stats(_UserCtx, FileCtx, StatNames) ->
+    Guid = file_ctx:get_logical_guid_const(FileCtx),
+    case dir_size_stats:get_stats(Guid, StatNames) of
+        {ok, BrowseResult} ->
+            ?PROVIDER_OK_RESP(#dir_current_stats_result{result = BrowseResult});
         ?ERROR_DIR_STATS_DISABLED_FOR_SPACE ->
             %% TODO VFS-7208 pass errors after introducing API errors to fslogic
             #provider_response{status = #status{code = ?ENOTSUP}};

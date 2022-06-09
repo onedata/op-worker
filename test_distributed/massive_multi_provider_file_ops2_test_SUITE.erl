@@ -177,7 +177,7 @@ blocks_suiting_test(Config0) ->
     % Verify initial data distribution
     ExpectedDistribution = [[], [[0,5],[65,30]], [[5,5],[95,205]], [[10,10]], [[20,20]], [[40,25]]],
     GetDistFun = fun() ->
-        {ok, Distribution} = lfm_proxy:get_file_distribution(Worker1, SessId(Worker1), {path, File}),
+        {ok, Distribution} = opt_file_metadata:get_distribution_deprecated(Worker1, SessId(Worker1), {path, File}),
         DistBlocks = lists:map(fun(#{<<"blocks">> := Blocks}) -> Blocks end, Distribution),
         lists:sort(DistBlocks)
     end,
@@ -295,7 +295,7 @@ check_read(Worker, SessId, File, Handle, Offset, Size, ExpectedRequests) ->
     ?assertEqual(ExpectedRequests, lists:sort(Requests)),
 
     % Verify data distribution
-    {ok, Distribution} = ?assertMatch({ok, _}, lfm_proxy:get_file_distribution(Worker, SessId(Worker), {path, File})),
+    {ok, Distribution} = ?assertMatch({ok, _}, opt_file_metadata:get_distribution_deprecated(Worker, SessId(Worker), {path, File})),
     ProvId = rpc:call(Worker, oneprovider, get_id, []),
     [#{<<"blocks">> := Blocks}] = ?assertMatch([_],
         lists:filter(fun(#{<<"providerId">> := Id}) -> Id =:= ProvId end, Distribution)),

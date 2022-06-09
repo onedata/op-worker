@@ -1036,7 +1036,7 @@ get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = dir_size_stats}, data = 
     BrowseRequest = ts_browse_request:from_json(Data),
     ProviderRequests = split_ts_browse_request_between_providers(file_id:guid_to_space_id(Guid), BrowseRequest),
     FinalResult = maps:fold(fun(ProviderId, Req, Acc) ->
-        case lfm:browse_dir_stats(Auth#auth.session_id, #file_ref{guid = Guid}, ProviderId, Req) of
+        case lfm:browse_dir_time_stats(Auth#auth.session_id, #file_ref{guid = Guid}, ProviderId, Req) of
             {ok, Result} ->
                 merge_ts_browse_results(Acc, Result);
             {error, _} ->

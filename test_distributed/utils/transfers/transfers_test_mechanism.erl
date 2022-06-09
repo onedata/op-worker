@@ -969,7 +969,7 @@ assert_file_distribution(Expected, Node, SessId, FileGuid, CounterRef, Attempts)
     Expected2 = lists:sort(Expected),
     execute_in_worker(fun() ->
         ?assertMatch(Expected2, begin
-            {ok, Distribution} = lfm_proxy:get_file_distribution(Node, SessId, ?FILE_REF(FileGuid)),
+            {ok, Distribution} = opt_file_metadata:get_distribution_deprecated(Node, SessId, ?FILE_REF(FileGuid)),
             lists:sort(Distribution)
         end, Attempts),
         countdown_server:decrease(Node, CounterRef, FileGuid)

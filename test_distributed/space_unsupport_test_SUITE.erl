@@ -571,7 +571,7 @@ check_distribution(Workers, SessId, Desc, Guid) ->
     end, ExpectedDistribution),
     lists:foreach(fun(Worker) ->
     ?assertEqual({ok, ExpectedDistributionSorted}, 
-            lfm_proxy:get_file_distribution(Worker, SessId(Worker), ?FILE_REF(Guid)), ?ATTEMPTS
+            opt_file_metadata:get_distribution_deprecated(Worker, SessId(Worker), ?FILE_REF(Guid)), ?ATTEMPTS
         )
     end, Workers).
 

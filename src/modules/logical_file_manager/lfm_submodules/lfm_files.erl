@@ -37,7 +37,7 @@
     get_file_location/2, read_symlink/2, fsync/1, fsync/3, write/3,
     write_without_events/3, read/3, read/4, check_size_and_read/3, read_without_events/3,
     read_without_events/4, silent_read/3, silent_read/4,
-    truncate/3, release/1, get_file_distribution/2
+    truncate/3, release/1, get_local_file_distribution/3
 ]).
 
 -compile({no_auto_import, [unlink/1]}).
@@ -565,25 +565,18 @@ truncate(SessId, FileKey, Size) ->
 %% Returns block map for a file.
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_distribution(session:id(), lfm:file_key()) ->
-    {ok, Blocks :: [[non_neg_integer()]]} | lfm:error_reply().
-get_file_distribution(SessId, FileKey) ->
+-spec get_local_file_distribution(session:id(), lfm:file_key(), oneprovider:id()) ->
+    {ok, #file_distribution{}} | lfm:error_reply().
+get_local_file_distribution(SessId, FileKey, ProviderId) ->
     FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
+    
+    Req = #provider_request{
+        context_guid = FileGuid,
+        provider_request = #get_file_distribution{}
+    },
+    
+    remote_utils:execute_on_provider(ProviderId, Req, SessId, FileGuid).
 
-    remote_utils:call_fslogic(SessId, provider_request, FileGuid,
-        #get_file_distribution{},
-        fun(#file_distribution{provider_file_distributions = Distributions}) ->
-            {ok, lists:map(fun(#provider_file_distribution{provider_id = ProviderId, blocks = Blocks}) ->
-                {BlockList, TotalBlocksSize} = lists:mapfoldl(fun(#file_block{offset = O, size = S}, SizeAcc) ->
-                    {[O, S], SizeAcc + S}
-                end, 0, Blocks),
-                #{
-                    <<"providerId">> => ProviderId,
-                    <<"blocks">> => BlockList,
-                    <<"totalBlocksSize">> => TotalBlocksSize
-                }
-            end, Distributions)}
-        end).
 
 %%%===================================================================
 %%% Internal functions

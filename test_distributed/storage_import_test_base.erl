@@ -171,7 +171,7 @@
 
 -define(assertBlocks(Worker, SessionId, ExpectedDistribution, FileGuid),
     ?assertEqual(lists:sort(ExpectedDistribution), begin
-        case lfm_proxy:get_file_distribution(Worker, SessionId, ?FILE_REF(FileGuid)) of
+        case opt_file_metadata:get_distribution_deprecated(Worker, SessionId, ?FILE_REF(FileGuid)) of
             {ok, __FileBlocks} -> lists:sort(__FileBlocks);
             Error -> Error
         end

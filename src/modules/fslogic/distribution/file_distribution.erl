@@ -23,9 +23,11 @@
 -export([get_file_distribution/2]).
 
 
+-type storage_dir_size() :: #storage_dir_size{}.
 -type provider_dir_distribution() :: #provider_dir_distribution{}.
--type dir_distribution() :: #dir_distribution{}.
+-type provider_reg_distribution() :: #file_distribution{}.
 
+-type dir_distribution() :: #dir_distribution{}.
 -type symlink_distribution() :: #symlink_distribution{}.
 -type reg_distribution() :: #reg_distribution{}.
 
@@ -35,7 +37,7 @@
 -export_type([
     provider_dir_distribution/0, dir_distribution/0,
     symlink_distribution/0,
-    reg_distribution/0,
+    provider_reg_distribution/0, reg_distribution/0,
     get_request/0, get_result/0
 ]).
 
@@ -59,7 +61,7 @@ get_file_distribution(UserCtx, FileCtx0) ->
     {ok, #file_distribution_get_result{distribution = case FileType of
         ?DIRECTORY_TYPE -> get_dir_distribution(UserCtx, FileCtx3);
         ?SYMLINK_TYPE -> get_symlink_distribution(FileCtx3);
-        _ -> get_reg_distribution(FileCtx3)
+        _ -> get_reg_distribution(UserCtx, FileCtx3)
     end}}.
 
 
@@ -74,34 +76,28 @@ get_dir_distribution(UserCtx, FileCtx0) ->
     SessionId = user_ctx:get_session_id(UserCtx),
     FileRef = ?FILE_REF(file_ctx:get_logical_guid_const(FileCtx0)),
 
-    DistributionPerProvider = maps:map(fun(ProviderId, DirStatsGetReq) ->
-        case lfm:browse_dir_stats(SessionId, FileRef, ProviderId, DirStatsGetReq) of
-            {ok, #time_series_slice_result{slice = ProviderStats}} ->
+    DistributionPerProvider = maps:map(fun(ProviderId, StatNames) ->
+        case lfm:browse_dir_current_stats(SessionId, FileRef, ProviderId, StatNames) of
+            {ok, ProviderStats} ->
                 build_provider_dir_distribution(ProviderStats);
             {error, Errno} ->
                 ?ERROR_POSIX(Errno)
         end
-    end, build_get_dir_stats_requests(FileCtx0)),
+    end, build_get_dir_stat_names(FileCtx0)),
 
     #dir_distribution{distribution_per_provider = DistributionPerProvider}.
 
 
 %% @private
--spec build_get_dir_stats_requests(file_ctx:ctx()) ->
-    #{oneprovider:id() => ts_browse_request:record()}.
-build_get_dir_stats_requests(FileCtx) ->
+-spec build_get_dir_stat_names(file_ctx:ctx()) -> dir_stats_collection:stats_selector().
+build_get_dir_stat_names(FileCtx) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     {ok, StoragesByProvider} = space_logic:get_storages_by_provider(SpaceId),
 
     maps:map(fun(_ProviderId, SupportingStorages) ->
-        ProviderDirStatsLayout = maps:fold(fun(StorageId, _, LayoutAcc) ->
-            LayoutAcc#{?SIZE_ON_STORAGE(StorageId) => [?MONTH_METRIC]}
-        end, #{?TOTAL_SIZE => [?MONTH_METRIC]}, SupportingStorages),
-
-        #time_series_get_slice_request{
-            layout = ProviderDirStatsLayout,
-            window_limit = 1
-        }
+        maps:fold(fun(StorageId, _, Acc) ->
+            [?SIZE_ON_STORAGE(StorageId) | Acc]
+        end, [<<"total_size">>], SupportingStorages)
     end, StoragesByProvider).
 
 
@@ -110,11 +106,10 @@ build_get_dir_stats_requests(FileCtx) ->
     provider_dir_distribution().
 build_provider_dir_distribution(ProviderDirStats) ->
     #provider_dir_distribution{
-        logical_size = get_dir_size(?TOTAL_SIZE, ProviderDirStats),
+        logical_size = maps:get(?TOTAL_SIZE, ProviderDirStats),
         physical_size_per_storage = lists:foldl(fun
             (TSName = ?SIZE_ON_STORAGE(StorageId), Acc) ->
-                Acc#{StorageId => get_dir_size(TSName, ProviderDirStats)};
-
+                Acc#{StorageId => maps:get(TSName, ProviderDirStats)};
             (_, Acc) ->
                 Acc
         end, #{}, maps:keys(ProviderDirStats))
@@ -122,57 +117,30 @@ build_provider_dir_distribution(ProviderDirStats) ->
 
 
 %% @private
--spec get_dir_size(
-    time_series_collection:time_series_name(),
-    time_series_collection:slice()
-) ->
-    undefined | non_neg_integer().
-get_dir_size(DirSizeTSName, ProviderDirStats) ->
-    case maps:get(DirSizeTSName, ProviderDirStats) of
-        #{?MONTH_METRIC := [{_Timestamp, Value}]} -> Value;
-        _ -> undefined
-    end.
-
-
-%% @private
 -spec get_symlink_distribution(file_ctx:ctx()) -> symlink_distribution().
-get_symlink_distribution(_FileCtx) ->
-    %% TODO what should be part of symlink distribution? logical_size = 0 always? list of storage ids supporting space?
-    #symlink_distribution{}.
+get_symlink_distribution(FileCtx) ->
+    {ok, StoragesByProvider} = space_logic:get_storages_by_provider(file_ctx:get_space_id_const(FileCtx)),
+    #symlink_distribution{
+        storages_per_provider = maps:map(fun(_ProviderId, ProviderStorages) ->
+            maps:keys(ProviderStorages)
+        end, StoragesByProvider)
+    }.
 
 
 %% @private
--spec get_reg_distribution(file_ctx:ctx()) -> reg_distribution().
-get_reg_distribution(FileCtx0) ->
-    {FileSize, FileCtx1} = file_ctx:get_file_size(FileCtx0),
-    {FileLocationDocs, FileCtx2} = file_ctx:get_file_location_docs(FileCtx1),
-
-    %% @TODO VFS-9204 ultimately, location for each file should be created in each provider
-    %% and the list of storages in the distribution should always be complete -
-    %% for now, add placeholders with zero blocks for missing storages
-    SpaceId = file_ctx:get_space_id_const(FileCtx2),
-    {ok, StorageIdsByProvider} = space_logic:get_storages_by_provider(SpaceId),
-    EmptyFileBlocksPerProvider = maps:map(fun(_ProviderId, ProviderStorages) ->
-        maps:map(fun(_StorageId, _) -> [] end, ProviderStorages)
-    end, StorageIdsByProvider),
-
-    ActualFileBlocksPerProvider = lists:foldl(fun(
-        FileLocationDoc = #document{value = #file_location{
-            provider_id = ProviderId,
-            storage_id = StorageId
-        }},
-        FileBlockPerProviderAcc
-    ) ->
-        FileBlocks = fslogic_location_cache:get_blocks(FileLocationDoc),
-
-        maps:update_with(
-            ProviderId,
-            fun(FileBlocksPerStorage) -> FileBlocksPerStorage#{StorageId => FileBlocks} end,
-            FileBlockPerProviderAcc
-        )
-    end, EmptyFileBlocksPerProvider, FileLocationDocs),
-
-    #reg_distribution{
-        logical_size = FileSize,
-        blocks_per_provider = ActualFileBlocksPerProvider
-    }.
+-spec get_reg_distribution(user_ctx:ctx(), file_ctx:ctx()) -> reg_distribution().
+get_reg_distribution(UserCtx, FileCtx) ->
+    SessionId = user_ctx:get_session_id(UserCtx),
+    FileRef = ?FILE_REF(file_ctx:get_logical_guid_const(FileCtx)),
+    {ok, Providers} = space_logic:get_provider_ids(file_ctx:get_space_id_const(FileCtx)),
+    
+    %% @TODO VFS-9498 - Compile file distribution knowledge based on version vectors
+    #reg_distribution{blocks_per_provider = lists:foldl(fun(ProviderId, Acc) ->
+        Distribution = case lfm:get_local_file_distribution(SessionId, FileRef, ProviderId) of
+            {ok, ProviderDistribution} ->
+                ProviderDistribution;
+            {error, _} = Error ->
+                Error
+        end,
+        Acc#{ProviderId => Distribution}
+    end, #{}, Providers)}.

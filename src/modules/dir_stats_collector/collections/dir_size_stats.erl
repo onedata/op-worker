@@ -64,6 +64,7 @@
 -type time_stats() :: time_series_collection:slice().
 -type internal_stats() :: time_series_collection:slice().
 
+-export_type([current_stats/0]).
 
 -define(CTX, #{
     model => ?MODULE

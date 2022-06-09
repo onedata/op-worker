@@ -689,8 +689,10 @@ handle_provider_request(UserCtx, #remove_metadata{type = Type}, FileCtx) ->
     metadata_req:remove_metadata(UserCtx, FileCtx, Type);
 handle_provider_request(UserCtx, #check_perms{flag = Flag}, FileCtx) ->
     permission_req:check_perms(UserCtx, FileCtx, Flag);
-handle_provider_request(UserCtx, #browse_dir_stats{request = BrowseRequest}, FileCtx) ->
-    dir_req:browse_stats(UserCtx, FileCtx, BrowseRequest).
+handle_provider_request(UserCtx, #browse_time_dir_stats{request = BrowseRequest}, FileCtx) ->
+    dir_req:browse_time_stats(UserCtx, FileCtx, BrowseRequest);
+handle_provider_request(UserCtx, #browse_current_dir_stats{stat_names = StatNames}, FileCtx) ->
+    dir_req:browse_current_stats(UserCtx, FileCtx, StatNames).
 
 
 %%--------------------------------------------------------------------

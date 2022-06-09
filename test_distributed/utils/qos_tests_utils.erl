@@ -675,7 +675,7 @@ assert_file_distribution(Providers, {FileName, FileContent, ExpectedFileDistribu
         ),
         Node = oct_background:get_random_provider_node(Provider),
 
-        FileLocationsSorted = case lfm_proxy:get_file_distribution(Node, SessId, ?FILE_REF(FileGuid)) of
+        FileLocationsSorted = case opt_file_metadata:get_distribution_deprecated(Node, SessId, ?FILE_REF(FileGuid)) of
             {ok, FileLocations} ->
                 lists:sort(FileLocations);
             Error ->

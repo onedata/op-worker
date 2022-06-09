@@ -38,10 +38,10 @@ end, __Distributions))).
 
 -define(assertDistribution(Worker, SessionId, ExpectedDistribution, FileGuid, Attempts),
     ?assertEqual(?normalizeDistribution(ExpectedDistribution), try
-        {ok, __FileBlocks} = lfm_proxy:get_file_distribution(Worker, SessionId, ?FILE_REF(FileGuid)),
+        {ok, __FileBlocks} = opt_file_metadata:get_distribution_deprecated(Worker, SessionId, ?FILE_REF(FileGuid)),
         lists:sort(__FileBlocks)
     catch
-        _:_ ->
+        E:T ->
             error
     end, Attempts)).
 

@@ -184,11 +184,12 @@ forcefully_started_autocleaning_should_return_error_when_autocleaning_is_disable
     ?assertEqual(?ERROR_AUTO_CLEANING_DISABLED, force_start(W, ?SPACE_ID)).
 
 autocleaning_should_not_evict_file_replica_when_it_is_not_replicated(Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
+    [W1, W2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?SESSION(W1, Config),
     FileName = ?FILE_NAME,
     Size = 10,
     DomainP1 = ?GET_DOMAIN_BIN(W1),
+    DomainP2 = ?GET_DOMAIN_BIN(W2),
     enable_file_popularity(W1, ?SPACE_ID),
     configure_autocleaning(W1, ?SPACE_ID, #{
         enabled => true,
@@ -196,7 +197,7 @@ autocleaning_should_not_evict_file_replica_when_it_is_not_replicated(Config) ->
         threshold => Size - 1
     }),
     Guid = write_file(W1, SessId, ?FILE_PATH(FileName), Size),
-    ?assertDistribution(W1, SessId, ?DIST(DomainP1, Size), Guid),
+    ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [Size, 0]), Guid),
     ?assertOneOfReports({ok, #{
         released_bytes := 0,
         bytes_to_release := Size,
@@ -379,7 +380,7 @@ autocleaning_should_evict_file_replicas_until_it_reaches_configured_target(Confi
 
     enable_file_popularity(W1, ?SPACE_ID),
     lists:foreach(fun(G) ->
-        ?assertDistribution(W1, SessId, ?DIST(DomainP2, FileSize), G),
+        ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [0, FileSize]), G),
         schedule_file_replication(W1, SessId, G, DomainP1)
     end, Guids),
 
@@ -724,7 +725,7 @@ cancel_autocleaning_run(Config) ->
 
     enable_file_popularity(W1, ?SPACE_ID),
     lists:foreach(fun(G) ->
-        ?assertDistribution(W1, SessId, ?DIST(DomainP2, FileSize), G),
+        ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [0, FileSize]), G),
         schedule_file_replication(W1, SessId, G, DomainP1)
     end, Guids),
 
@@ -801,7 +802,7 @@ time_warp_test(Config) ->
 
     enable_file_popularity(W1, ?SPACE_ID),
     lists:foreach(fun(G) ->
-        ?assertDistribution(W1, SessId, ?DIST(DomainP2, FileSize), G),
+        ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [0, FileSize]), G),
         schedule_file_replication(W1, SessId, G, DomainP1)
     end, Guids),
 

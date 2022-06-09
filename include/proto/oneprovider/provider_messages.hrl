@@ -82,8 +82,12 @@
     type :: custom_metadata:type()
 }).
 
--record(browse_dir_stats, {
+-record(browse_time_dir_stats, {
     request :: ts_browse_request:record()
+}).
+
+-record(browse_current_dir_stats, {
+    stat_names = [] :: dir_stats_collection:stats_selector()
 }).
 
 -type provider_request_type() ::
@@ -93,7 +97,7 @@
     #get_cdmi_completion_status{} | #set_cdmi_completion_status{} |
     #get_mimetype{} | #set_mimetype{} | #get_file_path{} |
     #get_metadata{} | #remove_metadata{} | #set_metadata{} |
-    #get_file_distribution{} | #browse_dir_stats{}.
+    #get_file_distribution{} | #browse_time_dir_stats{} | #browse_current_dir_stats{}.
 
 -record(transfer_encoding, {
     value :: binary()
@@ -111,13 +115,14 @@
     value :: binary()
 }).
 
--record(provider_file_distribution, {
-    provider_id :: oneprovider:id(),
+-record(storage_file_distribution, {
+    storage_id :: storage:id(),
     blocks :: [#file_block{}]
 }).
 
 -record(file_distribution, {
-    provider_file_distributions :: [#provider_file_distribution{}]
+    logical_size = 0 :: file_meta:size(),
+    blocks_per_storage :: [#storage_file_distribution{}]
 }).
 
 -record(metadata, {
@@ -164,14 +169,18 @@
     related_dip_id :: undefined | archive:id()
 }).
 
--record(dir_stats_result, {
+-record(dir_time_stats_result, {
     result :: ts_browse_result:record()
+}).
+
+-record(dir_current_stats_result, {
+    result :: dir_size_stats:current_stats()
 }).
 
 -type provider_response_type() ::
     #transfer_encoding{} | #cdmi_completion_status{} | #mimetype{} | #acl{} |
     #dir{} | #file_path{} | #file_distribution{} | #metadata{} |
-    #dataset_info{} | #file_eff_dataset_summary{} | #archive_info{} | #dir_stats_result{} | 
+    #dataset_info{} | #file_eff_dataset_summary{} | #archive_info{} | #dir_time_stats_result{} | #dir_current_stats_result{} | 
     undefined.
 
 -record(provider_request, {

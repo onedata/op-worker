@@ -176,7 +176,7 @@ restart_test_base(Config, RestartFun, RestartType) ->
         ?assertMatch({ok, [
             #{<<"blocks">> := [[0, FileSize]], <<"totalBlocksSize">> := FileSize},
             #{<<"blocks">> := [[0, FileSize]], <<"totalBlocksSize">> := FileSize}
-        ]}, lfm_proxy:get_file_distribution(WorkerP2, UpdatedSessIdP2, ?FILE_REF(File)), Attempts)
+        ]}, opt_file_metadata:get_distribution_deprecated(WorkerP2, UpdatedSessIdP2, ?FILE_REF(File)), Attempts)
     end, FilesToCheckDistribution),
 
     ok.

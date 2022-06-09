@@ -591,7 +591,7 @@ replication_job_should_fail(Config) ->
         <<"blocks">> := [[0, TestDataSize]],
         <<"providerId">> := ProviderId2,
         <<"totalBlocksSize">> := TestDataSize
-    }]}, lfm_proxy:get_file_distribution(W1, SessId, ?FILE_REF(Guid)), ?ATTEMPTS),
+    }]}, opt_file_metadata:get_distribution_deprecated(W1, SessId, ?FILE_REF(Guid)), ?ATTEMPTS),
     ?assertEqual(?ERROR_POSIX(?EROFS), opt_transfers:schedule_file_replication(W1, SessId, ?FILE_REF(Guid), ProviderId1)).
 
 
@@ -636,7 +636,7 @@ migration_job_should_fail(Config) ->
         <<"blocks">> := [[0, TestDataSize]],
         <<"providerId">> := ProviderId2,
         <<"totalBlocksSize">> := TestDataSize
-    }]}, lfm_proxy:get_file_distribution(W1, SessId, ?FILE_REF(Guid)), ?ATTEMPTS),
+    }]}, opt_file_metadata:get_distribution_deprecated(W1, SessId, ?FILE_REF(Guid)), ?ATTEMPTS),
     ?assertEqual(?ERROR_POSIX(?EROFS), opt_transfers:schedule_file_replica_eviction(W1, SessId, ?FILE_REF(Guid), ProviderId2, ProviderId1)).
 
 %%%===================================================================

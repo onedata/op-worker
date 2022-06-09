@@ -18,6 +18,7 @@
 -include("modules/logical_file_manager/lfm.hrl").
 -include("onenv_test_utils.hrl").
 -include("proto/oneclient/common_messages.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/http/headers.hrl").
@@ -40,10 +41,11 @@
     set_file_mode_test/1,
     set_mode_on_provider_not_supporting_space_test/1,
 
-    get_file_distribution_test/1,
+    get_reg_file_distribution_test/1,
     get_dir_distribution_1_test/1,
     get_dir_distribution_2_test/1,
     get_dir_distribution_3_test/1,
+    get_symlink_distribution_test/1,
 
     test_for_hardlink_between_files_test/1
 ]).
@@ -58,8 +60,9 @@ groups() -> [
 
         set_file_mode_test,
         set_mode_on_provider_not_supporting_space_test,
-
-        get_file_distribution_test,
+    
+        get_symlink_distribution_test,
+        get_reg_file_distribution_test,
 
         test_for_hardlink_between_files_test
     ]},
@@ -754,7 +757,7 @@ build_set_mode_prepare_gs_args_fun(FileGuid, Scope) ->
 %%%===================================================================
 
 
-get_file_distribution_test(Config) ->
+get_reg_file_distribution_test(Config) ->
     P1Id = oct_background:get_provider_id(krakow),
     [P1Node] = oct_background:get_provider_nodes(krakow),
 
@@ -778,10 +781,19 @@ get_file_distribution_test(Config) ->
 
     lfm_test_utils:write_file(P1Node, UserSessIdP1, FileGuid, 0, {rand_content, 20}),
     ExpDist1 = #file_distribution_get_result{distribution = #reg_distribution{
-        logical_size = 20,
         blocks_per_provider = #{
-            P1Id => #{P1StorageId => [?BLOCK(0, 20)]},
-            P2Id => #{P2StorageId => []}
+            P1Id => #file_distribution{
+                logical_size = 20,
+                blocks_per_storage = [
+                    #storage_file_distribution{storage_id = P1StorageId, blocks = [?BLOCK(0, 20)]}
+                ]
+            },
+            P2Id => #file_distribution{
+                logical_size = 20,
+                blocks_per_storage = [
+                    #storage_file_distribution{storage_id = P2StorageId, blocks = []}
+                ]
+            }
         }
     }},
     wait_for_file_location_sync(P2Node, UserSessIdP2, FileGuid, ExpDist1),
@@ -791,10 +803,15 @@ get_file_distribution_test(Config) ->
 
     lfm_test_utils:write_file(P2Node, UserSessIdP2, FileGuid, 30, {rand_content, 20}),
     ExpDist2 = #file_distribution_get_result{distribution = #reg_distribution{
-        logical_size = 50,
         blocks_per_provider = #{
-            P1Id => #{P1StorageId => [?BLOCK(0, 20)]},
-            P2Id => #{P2StorageId => [?BLOCK(30, 20)]}
+            P1Id => #file_distribution{
+                logical_size = 50,
+                blocks_per_storage = [#storage_file_distribution{storage_id = P1StorageId, blocks = [?BLOCK(0, 20)]}]
+            },
+            P2Id => #file_distribution{
+                logical_size = 50,
+                blocks_per_storage = [#storage_file_distribution{storage_id = P2StorageId, blocks = [?BLOCK(30, 20)]}]
+            }
         }
     }},
     wait_for_file_location_sync(P1Node, UserSessIdP1, FileGuid, ExpDist2),
@@ -863,12 +880,12 @@ get_dir_distribution_2_test(Config) ->
     ExpDist1 = #file_distribution_get_result{distribution = #dir_distribution{
         distribution_per_provider = #{
             P1Id => #provider_dir_distribution{
-                logical_size = undefined,
-                physical_size_per_storage = #{P1StorageId => undefined}
+                logical_size = 0,
+                physical_size_per_storage = #{P1StorageId => 0}
             },
             P2Id => #provider_dir_distribution{
-                logical_size = undefined,
-                physical_size_per_storage = #{P2StorageId => undefined}
+                logical_size = 0,
+                physical_size_per_storage = #{P2StorageId => 0}
             }
         }
     }},
@@ -918,8 +935,8 @@ get_dir_distribution_3_test(Config) ->
     ExpDist1 = #file_distribution_get_result{distribution = #dir_distribution{
         distribution_per_provider = #{
             P1Id => #provider_dir_distribution{
-                logical_size = undefined,
-                physical_size_per_storage = #{P1StorageId => undefined}
+                logical_size = 0,
+                physical_size_per_storage = #{P1StorageId => 0}
             },
             P2Id => ?ERROR_POSIX(?ENOTSUP)
         }
@@ -944,6 +961,38 @@ get_dir_distribution_3_test(Config) ->
     }},
     wait_for_file_location_sync(krakow, UserSessIdP1, DirGuid, ExpDist2),
     get_distribution_test_base(FileType, DirGuid, ShareId, ExpDist2, Config).
+
+
+get_symlink_distribution_test(Config) ->
+    FileType = <<"sym">>,
+    
+    SpaceId = oct_background:get_space_id(space_krk_par),
+    P1Id = oct_background:get_provider_id(krakow),
+    P1StorageId = get_storage_id(SpaceId, P1Id),
+    P2Id = oct_background:get_provider_id(paris),
+    P2StorageId = get_storage_id(SpaceId, P2Id),
+    
+    #object{guid = SymGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
+        user3, space_krk_par, #symlink_spec{symlink_value = <<"abcd">>, shares = [#share_spec{}]}
+    ),
+    
+    ExpDist = #file_distribution_get_result{distribution = #symlink_distribution{
+        logical_size = 0,
+        storages_per_provider = #{
+            P1Id => [P1StorageId],
+            P2Id => [P2StorageId]
+        }
+    }},
+    ClientSpec = #client_spec{
+        correct = [
+            user2, % space owner - doesn't need any perms
+            user3, % files owner (see fun create_shared_file/1)
+            user4  % any user is allowed to see symlinks distribution (as symlink always has 777 posix perms)
+        ],
+        unauthorized = [nobody],
+        forbidden_not_in_space = [user1]
+    },
+    get_distribution_test_base(FileType, SymGuid, ShareId, ExpDist, Config, ClientSpec).
 
 
 %% @private
@@ -1001,8 +1050,14 @@ wait_for_file_location_sync(ProviderSelector, SessId, FileGuid, ExpDistribution)
     ).
 
 
+
 %% @private
 get_distribution_test_base(FileType, FileGuid, ShareId, ExpDistribution, Config) ->
+    get_distribution_test_base(FileType, FileGuid, ShareId, ExpDistribution, Config, ?CLIENT_SPEC_FOR_SPACE_KRK_PAR).
+
+
+%% @private
+get_distribution_test_base(FileType, FileGuid, ShareId, ExpDistribution, Config, ClientSpec) ->
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
     ExpRestDistribution = file_distribution_get_result:to_json(rest, ExpDistribution),
@@ -1026,7 +1081,7 @@ get_distribution_test_base(FileType, FileGuid, ShareId, ExpDistribution, Config)
     ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = ?config(op_worker_nodes, Config),
-            client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR,
+            client_spec = ClientSpec,
             scenario_templates = [
                 #scenario_template{
                     name = <<"Get distribution for ", FileType/binary, " using /data/FileId/distribution rest endpoint">>,

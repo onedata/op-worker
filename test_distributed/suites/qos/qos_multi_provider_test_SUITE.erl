@@ -350,7 +350,7 @@ reconcile_with_links_race_test_base(Depth, RecordsToBlock) ->
     CheckDistributionFun = fun(ExpectedWorkersDistribution) ->
         lists:foreach(fun(Provider) ->
             ?assertEqual({ok, ExpectedDistributionFun(ExpectedWorkersDistribution)},
-                lfm_proxy:get_file_distribution(oct_background:get_random_provider_node(Provider), 
+                opt_file_metadata:get_distribution_deprecated(oct_background:get_random_provider_node(Provider), 
                     ?SESS_ID(Provider), ?FILE_REF(Guid)), ?ATTEMPTS
             )
         end, Providers)

@@ -463,7 +463,7 @@ replicate_file_smaller_than_quota_should_not_fail(Config) ->
     {ok, Guid} = create_file(P1, SessId(P1), f(<<"space3">>, File1)),
     ?assertMatch({ok, _}, write_to_file(P1, SessId(P1), f(<<"space3">>, File1), 0, crypto:strong_rand_bytes(20))),
     ?assertMatch({ok, [#{<<"totalBlocksSize">> := 20}]},
-        lfm_proxy:get_file_distribution(P2, SessId(P2), ?FILE_REF(Guid)), ?ATTEMPTS),
+        opt_file_metadata:get_distribution_deprecated(P2, SessId(P2), ?FILE_REF(Guid)), ?ATTEMPTS),
 
     {ok, Tid} = opt_transfers:schedule_file_replication(P1, SessId(P1), ?FILE_REF(Guid), ?GET_DOMAIN_BIN(P2)),
 
@@ -473,7 +473,7 @@ replicate_file_smaller_than_quota_should_not_fail(Config) ->
     ?assertEqual(true, lists:member(Tid, list_ended_transfers(P1, <<"space_id3">>)), ?ATTEMPTS),
 
     ?assertMatch({ok, [#{<<"totalBlocksSize">> := 20}, #{<<"totalBlocksSize">> := 20}]},
-        lfm_proxy:get_file_distribution(P2, SessId(P2), ?FILE_REF(Guid)), ?ATTEMPTS),
+        opt_file_metadata:get_distribution_deprecated(P2, SessId(P2), ?FILE_REF(Guid)), ?ATTEMPTS),
 
     ok = fsync(P2, SessId(P2), f(<<"space3">>, File1)),
     ?assertEqual(20, current_size(P1, <<"space_id3">>), ?ATTEMPTS),
@@ -508,7 +508,7 @@ replicate_file_bigger_than_quota_should_fail(Config) ->
     end, lists:seq(0, FileSize-1, ?GB)),
     ?assertMatch(
         {ok, [#{<<"totalBlocksSize">> := FileSize}]},
-        lfm_proxy:get_file_distribution(P2, SessId(P2), ?FILE_REF(Guid)),
+        opt_file_metadata:get_distribution_deprecated(P2, SessId(P2), ?FILE_REF(Guid)),
         ?ATTEMPTS
     ),
     {ok, Tid} = opt_transfers:schedule_file_replication(P1, SessId(P1), ?FILE_REF(Guid), ?GET_DOMAIN_BIN(P2)),
@@ -539,7 +539,7 @@ replication_of_file_bigger_than_support_should_fail(Config) ->
     {ok, Guid} = create_file(P2, SessId(P2), f(SpaceName, File1)),
     ?assertMatch({ok, _}, write_to_file(P2, SessId(P2), f(SpaceName, File1), 0, crypto:strong_rand_bytes(FileSize))),
     ?assertMatch({ok, [#{<<"totalBlocksSize">> := FileSize}]},
-        lfm_proxy:get_file_distribution(P1, SessId(P1), ?FILE_REF(Guid)), ?ATTEMPTS),
+        opt_file_metadata:get_distribution_deprecated(P1, SessId(P1), ?FILE_REF(Guid)), ?ATTEMPTS),
 
     ?assertMatch(?ERROR_POSIX(?ENOSPC), opt_transfers:schedule_file_replication(P1, SessId(P1), ?FILE_REF(Guid), ?GET_DOMAIN_BIN(P1))),
     ?assertMatch(?ERROR_POSIX(?ENOSPC), opt_transfers:schedule_file_replication(P2, SessId(P2), ?FILE_REF(Guid), ?GET_DOMAIN_BIN(P1))).
@@ -553,7 +553,7 @@ migration_of_file_bigger_than_support_should_fail(Config) ->
     {ok, Guid} = create_file(P2, SessId(P2), f(SpaceName, File1)),
     ?assertMatch({ok, _}, write_to_file(P2, SessId(P2), f(SpaceName, File1), 0, crypto:strong_rand_bytes(FileSize))),
     ?assertMatch({ok, [#{<<"totalBlocksSize">> := FileSize}]},
-        lfm_proxy:get_file_distribution(P1, SessId(P1), ?FILE_REF(Guid)), ?ATTEMPTS),
+        opt_file_metadata:get_distribution_deprecated(P1, SessId(P1), ?FILE_REF(Guid)), ?ATTEMPTS),
 
     ?assertMatch(?ERROR_POSIX(?ENOSPC), opt_transfers:schedule_file_replica_eviction(P1, SessId(P1), ?FILE_REF(Guid), ?GET_DOMAIN_BIN(P2),
         ?GET_DOMAIN_BIN(P1)
@@ -571,7 +571,7 @@ onf_replication_of_file_bigger_than_support_should_fail(Config) ->
     {ok, Guid} = create_file(P2, SessId(P2), f(SpaceName, File1)),
     ?assertMatch({ok, _}, write_to_file(P2, SessId(P2), f(SpaceName, File1), 0, crypto:strong_rand_bytes(FileSize))),
     ?assertMatch({ok, [#{<<"totalBlocksSize">> := FileSize}]},
-        lfm_proxy:get_file_distribution(P1, SessId(P1), ?FILE_REF(Guid)), ?ATTEMPTS),
+        opt_file_metadata:get_distribution_deprecated(P1, SessId(P1), ?FILE_REF(Guid)), ?ATTEMPTS),
 
     {ok, H} = ?assertMatch({ok, _}, lfm_proxy:open(P1, SessId(P1), ?FILE_REF(Guid), read), ?ATTEMPTS),
     ?assertMatch({error, ?ENOSPC}, lfm_proxy:read(P1, H, 0, FileSize)).

@@ -169,19 +169,26 @@ get_file_distribution(UserCtx, FileCtx0) ->
 %%--------------------------------------------------------------------
 -spec get_file_distribution_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
     provider_response().
-get_file_distribution_insecure(_UserCtx, FileCtx) ->
-    {Locations, _FileCtx2} = file_ctx:get_file_location_docs(FileCtx),
-    ProviderDistributions = lists:map(fun(#document{
-        value = #file_location{provider_id = ProviderId}
-    } = FL) ->
-        #provider_file_distribution{
-            provider_id = ProviderId,
-            blocks = fslogic_location_cache:get_blocks(FL)
-        }
-    end, Locations),
+get_file_distribution_insecure(_UserCtx, FileCtx0) ->
+    {FileSize, FileCtx1} = file_ctx:get_file_size(FileCtx0),
+    {Location, FileCtx2} = file_ctx:get_local_file_location_doc(FileCtx1),
+    ProviderDistributions = lists:map(fun 
+        (#document{value = #file_location{storage_id = StorageId}} = FL) ->
+            #storage_file_distribution{
+                storage_id = StorageId,
+                blocks = fslogic_location_cache:get_blocks(FL)
+            };
+        (undefined) -> 
+            {ok, StorageId} = space_logic:get_local_supporting_storage(file_ctx:get_space_id_const(FileCtx2)),
+            #storage_file_distribution{
+                storage_id = StorageId,
+                blocks = []
+            }
+    end, [Location]),
     #provider_response{
         status = #status{code = ?OK},
         provider_response = #file_distribution{
-            provider_file_distributions = ProviderDistributions
+            logical_size = FileSize,
+            blocks_per_storage = ProviderDistributions
         }
     }.

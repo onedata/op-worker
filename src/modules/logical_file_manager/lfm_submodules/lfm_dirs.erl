@@ -25,7 +25,7 @@
     get_children_details/3,
     get_children_count/2,
     get_files_recursively/3,
-    browse_dir_stats/4
+    browse_dir_time_stats/4, browse_dir_current_stats/4
 ]).
 
 
@@ -185,37 +185,35 @@ get_files_recursively(SessId, FileKey, Options) ->
         end).
 
 
--spec browse_dir_stats(session:id(), lfm:file_key(), oneprovider:id(), ts_browse_request:record()) ->
+-spec browse_dir_time_stats(session:id(), lfm:file_key(), oneprovider:id(), ts_browse_request:record()) ->
     {ok, ts_browse_result:record()} | {error, term()}.
-browse_dir_stats(SessId, FileKey, ProviderId, BrowseRequest) ->
+browse_dir_time_stats(SessId, FileKey, ProviderId, BrowseRequest) ->
     Guid = lfm_file_key:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
     Req = #provider_request{
         context_guid = Guid,
-        provider_request = #browse_dir_stats{request = BrowseRequest}
+        provider_request = #browse_time_dir_stats{request = BrowseRequest}
     },
-
-    Res = case oneprovider:is_self(ProviderId) of
-        true ->
-            worker_proxy:call(
-                {id, fslogic_worker, file_id:guid_to_uuid(Guid)},
-                {provider_request, SessId, Req}
-            );
-        false ->
-            case connection:is_provider_connected(ProviderId) of
-                true ->
-                    % Provider is always allowed to read dir statistics of other providers.
-                    %% @TODO VFS-9435 - let fslogic_worker handle routing between providers
-                    {ok, fslogic_remote:route(user_ctx:new(?ROOT_SESS_ID), ProviderId, Req)};
-                false ->
-                    {error, ?EAGAIN}
-            end
-    end,
     
-    case Res of
-        {ok, #provider_response{status = #status{code = ?OK}, provider_response = #dir_stats_result{result = Result}}} ->
+    case remote_utils:execute_on_provider(ProviderId, Req, SessId, Guid) of
+        {ok, #dir_time_stats_result{result = Result}} ->
             {ok, Result};
-        {ok, #provider_response{status = #status{code = Error}}} ->
-            {error, Error};
+        {error, _} = Error ->
+            Error
+    end.
+
+
+-spec browse_dir_current_stats(session:id(), lfm:file_key(), oneprovider:id(), dir_stats_collection:stats_selector()) ->
+    {ok, dir_size_stats:current_stats()} | {error, term()}.
+browse_dir_current_stats(SessId, FileKey, ProviderId, StatNames) ->
+    Guid = lfm_file_key:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
+    Req = #provider_request{
+        context_guid = Guid,
+        provider_request = #browse_current_dir_stats{stat_names = StatNames}
+    },
+    
+    case remote_utils:execute_on_provider(ProviderId, Req, SessId, Guid) of
+        {ok, #dir_current_stats_result{result = Result}} ->
+            {ok, Result};
         {error, _} = Error ->
             Error
     end.

@@ -13,9 +13,14 @@
 -define(FILE_DISTRIBUTION_HRL, 1).
 
 
+-record(storage_dir_size, {
+    storage_id:: storage:id(),
+    physical_size :: undefined | non_neg_integer()
+}).
+
 -record(provider_dir_distribution, {
     logical_size :: undefined | file_meta:size(),
-    physical_size_per_storage = #{} :: #{od_storage:id() => undefined | non_neg_integer()}
+    physical_size_per_storage = [] :: file_distribution:storage_dir_size()
 }).
 
 -record(dir_distribution, {
@@ -25,11 +30,13 @@
 }).
 
 -record(reg_distribution, {
-    logical_size = 0 :: file_meta:size(),
-    blocks_per_provider = #{} :: #{od_provider:id() => #{od_storage:id() => fslogic_blocks:blocks()}}
+    blocks_per_provider = #{} :: #{od_provider:id() => file_distribution:provider_reg_distribution() | {errors:error()}}
 }).
 
--record(symlink_distribution, {}).
+-record(symlink_distribution, {
+    logical_size = 0 :: 0, % symlink has always 0 logical size
+    storages_per_provider = #{} :: #{oneprovider:id() => [storage:id()]}
+}).
 
 -record(file_distribution_get_request, {}).
 

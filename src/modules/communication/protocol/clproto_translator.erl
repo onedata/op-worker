@@ -923,11 +923,17 @@ translate_from_protobuf(#'RemoveMetadata'{type = Type}) ->
     #remove_metadata{
         type = binary_to_existing_atom(Type, utf8)
     };
-translate_from_protobuf(#'BrowseDirStats'{
+translate_from_protobuf(#'BrowseTimeDirStats'{
     serialized_request = SerializedBrowseRequest
 }) ->
-    #browse_dir_stats{
+    #browse_time_dir_stats{
         request = binary_to_term(SerializedBrowseRequest)
+    };
+translate_from_protobuf(#'BrowseCurrentDirStats'{
+    stat_names = StatNames
+}) ->
+    #browse_current_dir_stats{
+        stat_names = StatNames
     };
 translate_from_protobuf(#'ProviderResponse'{
     status = Status,
@@ -961,20 +967,22 @@ translate_from_protobuf(#'Acl'{value = Value}) ->
     #acl{value = acl:from_json(json_utils:decode(Value), cdmi)};
 translate_from_protobuf(#'FilePath'{value = Value}) ->
     #file_path{value = Value};
-translate_from_protobuf(#'ProviderFileDistribution'{
-    provider_id = ProviderId,
+translate_from_protobuf(#'StorageFileDistribution'{
+    storage_id = StorageId,
     blocks = Blocks
 }) ->
-    #provider_file_distribution{
-        provider_id = ProviderId,
+    #storage_file_distribution{
+        storage_id = StorageId,
         blocks = lists:map(fun translate_from_protobuf/1, Blocks)
     };
 translate_from_protobuf(#'FileDistribution'{
-    provider_file_distributions = ProtoDistributions
+    blocks_per_storage = ProtoDistributions,
+    logical_size = LogicalSize
 }) ->
     Distributions = lists:map(fun translate_from_protobuf/1, ProtoDistributions),
     #file_distribution{
-        provider_file_distributions = Distributions
+        logical_size = LogicalSize,
+        blocks_per_storage = Distributions
     };
 translate_from_protobuf(#'Metadata'{
     type = <<"json">>,
@@ -994,8 +1002,10 @@ translate_from_protobuf(#'Metadata'{
     };
 translate_from_protobuf(#'CheckPerms'{flag = Flag}) ->
     #check_perms{flag = open_flag_translate_from_protobuf(Flag)};
-translate_from_protobuf(#'DirStatsResponse'{serialized_response = SerializedResult}) ->
-    #dir_stats_result{result = binary_to_term(SerializedResult)};
+translate_from_protobuf(#'DirTimeStatsResponse'{serialized_response = SerializedResult}) ->
+    #dir_time_stats_result{result = binary_to_term(SerializedResult)};
+translate_from_protobuf(#'DirCurrentStatsResponse'{encoded_response = EncodedResponse}) ->
+    #dir_current_stats_result{result = json_utils:decode(EncodedResponse)};
 
 
 %% DBSYNC
@@ -1956,11 +1966,17 @@ translate_to_protobuf(#remove_metadata{type = Type}) ->
     {remove_metadata, #'RemoveMetadata'{
         type = atom_to_binary(Type, utf8)
     }};
-translate_to_protobuf(#browse_dir_stats{
+translate_to_protobuf(#browse_time_dir_stats{
     request = BrowseRequest
 }) ->
-    {browse_dir_stats, #'BrowseDirStats'{
+    {browse_time_dir_stats, #'BrowseTimeDirStats'{
         serialized_request = term_to_binary(BrowseRequest)
+    }};
+translate_to_protobuf(#browse_current_dir_stats{
+    stat_names = StatNames
+}) ->
+    {browse_current_dir_stats, #'BrowseCurrentDirStats'{
+        stat_names = StatNames
     }};
 
 translate_to_protobuf(#provider_response{
@@ -1994,20 +2010,22 @@ translate_to_protobuf(#acl{value = Value}) ->
     };
 translate_to_protobuf(#file_path{value = Value}) ->
     {file_path, #'FilePath'{value = Value}};
-translate_to_protobuf(#provider_file_distribution{
-    provider_id = ProviderId,
+translate_to_protobuf(#storage_file_distribution{
+    storage_id = StorageId,
     blocks = Blocks
 }) ->
-    #'ProviderFileDistribution'{
-        provider_id = ProviderId,
+    #'StorageFileDistribution'{
+        storage_id = StorageId,
         blocks = lists:map(fun translate_to_protobuf/1, Blocks)
     };
 translate_to_protobuf(#file_distribution{
-    provider_file_distributions = Distributions
+    logical_size = LogicalSize,
+    blocks_per_storage = Distributions
 }) ->
     TranslatedDistributions = lists:map(fun translate_to_protobuf/1, Distributions),
     {file_distribution, #'FileDistribution'{
-        provider_file_distributions = TranslatedDistributions
+        logical_size = LogicalSize,
+        blocks_per_storage = TranslatedDistributions
     }};
 translate_to_protobuf(#metadata{
     type = json,
@@ -2029,11 +2047,17 @@ translate_to_protobuf(#check_perms{flag = Flag}) ->
     {check_perms, #'CheckPerms'{
         flag = open_flag_translate_to_protobuf(Flag)
     }};
-translate_to_protobuf(#dir_stats_result{
-    result = DirStatsResult
+translate_to_protobuf(#dir_time_stats_result{
+    result = DirTimeStatsResult
 }) ->
-    {dir_stats_response, #'DirStatsResponse'{
-        serialized_response = term_to_binary(DirStatsResult)
+    {dir_time_stats_response, #'DirTimeStatsResponse'{
+        serialized_response = term_to_binary(DirTimeStatsResult)
+    }};
+translate_to_protobuf(#dir_current_stats_result{
+    result = DirCurrentStatsResult
+}) ->
+    {dir_current_stats_response, #'DirCurrentStatsResponse'{
+        encoded_response = json_utils:encode(DirCurrentStatsResult)
     }};
 
 
