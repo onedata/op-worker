@@ -26,7 +26,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/2, handle/2]).
+-export([start_link/2, handle/2, handle_session_termination/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -131,6 +131,12 @@ handle(Manager, Request, RetryCounter) ->
             handle(Manager, Request, RetryCounter - 1)
     end.
 
+
+-spec handle_session_termination(pid()) -> ok.
+handle_session_termination(Manager) ->
+    call_manager(Manager, handle_session_termination).
+
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -174,6 +180,16 @@ init([MgrSup, SessId]) ->
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_call(ping_stream_sup, _From, #state{streams_sup = StmsSup} = State) ->
     event_stream_sup:ping(StmsSup),
+    {reply, ok, State};
+handle_call(handle_session_termination, _From, #state{} = State) ->
+    case get_collection_keys_from_memory(subscriptions) of
+        {ok, Subscriptions} ->
+            lists:foreach(fun(SubId) ->
+                cancel_subscription(#subscription_cancellation{id = SubId}, State, termination)
+            end, Subscriptions);
+        error ->
+            ok
+    end,
     {reply, ok, State};
 handle_call(Request, _From, State) ->
     Retries = op_worker:get_env(event_manager_retries, 1),
@@ -437,33 +453,8 @@ handle_in_process({remote_subscription, ProviderId, Sub}, #state{} = State) ->
     add_subscription(Sub, State),
     cache_provider(Sub, ProviderId);
 
-handle_in_process(#subscription_cancellation{id = SubId} = Request, #state{session_id = SessId}) ->
-    case get_from_memory(subscriptions, SubId) of
-        {ok, StmKey} ->
-            case get_from_memory(streams, StmKey) of
-                {ok, Stm} ->
-                    ok = event_stream:send(Stm, {remove_subscription, SubId}),
-                    remove_from_memory(subscriptions, SubId),
-                    {FileGuid, ProviderId} = get_and_clean_subscription_cache(SubId),
-
-                    Self = oneprovider:get_id_or_undefined(),
-                    case is_binary(ProviderId) andalso ProviderId =/= Self of
-                        true ->
-                            % Cancel subscription also on remote provider
-                            % Spawn as sending request could block manager for long time
-                            spawn(fun() ->
-                                stream_to_provider(Request, ProviderId, SessId, FileGuid, undefined)
-                            end),
-                            ok;
-                        false ->
-                            ok
-                    end;
-                _ ->
-                    ok
-            end;
-        _ ->
-            ok
-    end;
+handle_in_process(#subscription_cancellation{} = Request, #state{} = State) ->
+    cancel_subscription(Request, State, request);
 
 handle_in_process(#event{} = Evt, _State) ->
     handle_event(Evt, self(), false);
@@ -492,6 +483,48 @@ add_subscription(#subscription{id = Id} = Sub, #state{} = State) ->
             add_to_memory(streams, StmKey, Stm)
     end,
     add_to_memory(subscriptions, Id, StmKey).
+
+
+%% @private
+-spec cancel_subscription(#subscription_cancellation{}, #state{}, CancellationReason :: request | termination) -> ok.
+cancel_subscription(#subscription_cancellation{id = SubId} = Request, #state{session_id = SessId}, CancellationReason) ->
+    case get_from_memory(subscriptions, SubId) of
+        {ok, StmKey} ->
+            case get_from_memory(streams, StmKey) of
+                {ok, Stm} ->
+                    case CancellationReason of
+                        request -> ok = event_stream:send(Stm, {remove_subscription, SubId});
+                        % Ignore stream errors on termination
+                        termination -> event_stream:send(Stm, {remove_subscription, SubId})
+                    end,
+                    remove_from_memory(subscriptions, SubId),
+                    {FileGuid, ProviderId} = get_and_clean_subscription_cache(SubId),
+
+                    Self = oneprovider:get_id_or_undefined(),
+                    case is_binary(ProviderId) andalso ProviderId =/= Self of
+                        true ->
+                            case CancellationReason of
+                                request ->
+                                    % Cancel subscription also on remote provider
+                                    % Spawn as sending request could block manager for long time
+                                    spawn(fun() ->
+                                        stream_to_provider(Request, ProviderId, SessId, FileGuid, undefined)
+                                    end);
+                                termination ->
+                                    % Sync request sending to block session termination
+                                    % (messages cannot be send after session termination)
+                                    stream_to_provider(Request, ProviderId, SessId, FileGuid, undefined)
+                            end,
+                            ok;
+                        false ->
+                            ok
+                    end;
+                _ ->
+                    ok
+            end;
+        _ ->
+            ok
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -589,17 +622,21 @@ cache_provider(#subscription{id = Id} = Sub, Provider) ->
         undefined ->
             ok;
         {file, FileGuid} ->
-            add_to_memory(guid_to_provider, FileGuid, Provider),
+            cache_guid_to_provider(FileGuid, Provider),
             add_to_memory(sub_to_guid, Id, FileGuid)
     end.
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Removes from cache information about provider that handles request
-%% connected with guid.
-%% @end
-%%--------------------------------------------------------------------
+-spec cache_guid_to_provider(file_id:file_guid(), provider()) -> ok.
+cache_guid_to_provider(FileGuid, Provider) ->
+    case get_from_memory(guid_to_provider, FileGuid) of
+        {ok, {Provider, SubCount}} ->
+            add_to_memory(guid_to_provider, FileGuid, {Provider, SubCount + 1});
+        error ->
+            add_to_memory(guid_to_provider, FileGuid, {Provider, 1})
+    end.
+
+%% @private
 -spec get_and_clean_subscription_cache(subscription:id()) ->
     {file_id:file_guid() | undefined, oneprovider:id() | undefined}.
 get_and_clean_subscription_cache(SubId) ->
@@ -607,8 +644,11 @@ get_and_clean_subscription_cache(SubId) ->
         {ok, FileGuid} ->
             remove_from_memory(sub_to_guid, SubId),
             case get_from_memory(guid_to_provider, FileGuid) of
-                {ok, Provider} ->
+                {ok, {Provider, 1}} ->
                     remove_from_memory(guid_to_provider, FileGuid),
+                    {FileGuid, Provider};
+                {ok, {Provider, SubCount}} ->
+                    add_to_memory(guid_to_provider, FileGuid, {Provider, SubCount - 1}),
                     {FileGuid, Provider};
                 _ ->
                     {FileGuid, undefined}
@@ -740,6 +780,14 @@ get_from_memory(DataType, Key) ->
 -spec get_from_memory(Manager :: pid(), data_type(), term()) -> {ok, term()} | error.
 get_from_memory(Manager, DataType, Key) ->
     ets_state:get_from_collection(?STATE_ID, Manager, DataType, Key).
+
+%% @private
+-spec get_collection_keys_from_memory(data_type()) -> {ok, list()} | error.
+get_collection_keys_from_memory(DataType) ->
+    case ets_state:get_collection(?STATE_ID, self(), DataType) of
+        {ok, Collection} -> {ok, maps:keys(Collection)};
+        error -> error
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
