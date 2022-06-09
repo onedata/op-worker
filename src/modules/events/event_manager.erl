@@ -301,7 +301,7 @@ get_provider(Request, Manager) ->
             self;
         {file, FileGuid} -> % TODO VFS-7448 - test production of events for hardlinks
             case get_from_memory(Manager, guid_to_provider, FileGuid) of
-                {ok, ID} ->
+                {ok, {ID, _SubCount}} ->
                     ID;
                 _ ->
                     case ets_state:get(session, Manager, session_id) of
