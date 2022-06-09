@@ -83,7 +83,7 @@
     readdir_plus_should_work_with_zero_offset/1,
     readdir_plus_should_work_with_non_zero_offset/1,
     readdir_plus_should_work_with_size_greater_than_dir_size/1,
-    readdir_should_work_with_token/4,
+    readdir_should_work_with_token/3,
     readdir_should_work_with_startid/1,
     get_children_details_should_return_empty_result_for_empty_dir/1,
     get_children_details_should_return_empty_result_zero_size/1,
@@ -450,26 +450,21 @@ readdir_plus_should_work_with_size_greater_than_dir_size(Config) ->
     {MainDirPath, Files} = generate_dir(Config, 5),
     verify_attrs(Config, MainDirPath, Files, 10, 5).
 
-readdir_should_work_with_token(Config, DirSize, Type, InitialToken) ->
+readdir_should_work_with_token(Config, DirSize, Type) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {MainDirPath, Files} = generate_dir(Config, DirSize),
     VerifyFun = case Type of
         readdir_plus -> fun verify_attrs_with_token/8;
         readdir -> fun verify_with_token/8
     end,
-    Token = VerifyFun(Config, MainDirPath, Files, max(0, min(DirSize - 0, 3)), 3, 0, false, InitialToken),
+    Token = VerifyFun(Config, MainDirPath, Files, max(0, min(DirSize - 0, 3)), 3, 0, false, undefined),
     {ok, FoldCacheDefaultTimeout} = erpc:call(Worker, application, get_env, [?CLUSTER_WORKER_APP_NAME, fold_cache_timeout]),
-    case InitialToken of
-        ?INITIAL_API_LS_TOKEN ->
-            ok = erpc:call(Worker, application, set_env, [?CLUSTER_WORKER_APP_NAME, fold_cache_timeout, 0]);
-        _ ->
-            % only API listing token supports continued listing after datastore token expiration
-            ok
-    end,
+    ok = erpc:call(Worker, application, set_env, [?CLUSTER_WORKER_APP_NAME, fold_cache_timeout, 0]),
+    
     Token2 = VerifyFun(Config, MainDirPath, Files, max(0, min(DirSize - 3, 3)), 3, 3, false, Token),
     timer:sleep(timer:seconds(5)), % wait for flush of expired tokens
     
-    % restore default fold cache timeout so next token does not expire
+    % restore default fold cache timeout so next datastore token does not expire
     ok = erpc:call(Worker, application, set_env, [?CLUSTER_WORKER_APP_NAME, fold_cache_timeout, FoldCacheDefaultTimeout]),
     
     Token3 = VerifyFun(Config, MainDirPath, Files, max(0, min(DirSize - 6, 3)), 3, 6, false, Token2),
@@ -518,6 +513,7 @@ get_children_details_should_work_with_size_greater_than_dir_size(Config) ->
     verify_details(Config, MainDirPath, Files, 5, 0, 10).
 
 get_children_details_should_work_with_startid(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
     {MainDirPath, Files} = generate_dir(Config, 10),
 
     % list all files in chunks (use 0 offset for each chunk)
@@ -525,12 +521,12 @@ get_children_details_should_work_with_startid(Config) ->
     StartId2 = verify_details(Config, MainDirPath, Files, 3, 4, 0, 4, StartId1),
     StartId3 = verify_details(Config, MainDirPath, Files, 6, 3, 0, 3, StartId2),
     StartId4 = verify_details(Config, MainDirPath, Files, 8, 2, 0, 3, StartId3),
-    ?assertEqual(lists:last(Files), StartId4),
+    ?assertEqual(file_listing:build_index(lists:last(Files), ?GET_DOMAIN_BIN(W)), StartId4),
 
     % test ls with startid and positive offset
     StartId5 = verify_details(Config, MainDirPath, Files, 4, 2, 4, 2, undefined),
     StartId6 = verify_details(Config, MainDirPath, Files, 7, 3, 2, 4, StartId5),
-    ?assertEqual(lists:last(Files), StartId6),
+    ?assertEqual(file_listing:build_index(lists:last(Files), ?GET_DOMAIN_BIN(W)), StartId6),
 
     % test ls with startid and offset beyond files num
     verify_details(Config, MainDirPath, Files, 0, 0, 20, 4, StartId5),
@@ -1311,16 +1307,18 @@ lfm_get_details(Config) ->
     ?assertMatch({ok, _}, O11),
     {ok, Handle11} = O11,
 
+    Index1 = file_listing:build_index(<<"space_id2">>),
     ?assertMatch({ok, #file_details{
-        file_attr = #file_attr{name = <<"space_name2">>, size = 0},
-        index_startid = <<"space_id2">>,
+        file_attr = #file_attr{name = <<"space_name2">>, size = undefined},
+        index_startid = Index1,
         active_permissions_type = posix,
         has_metadata = false
     }}, lfm_proxy:get_details(W, SessId1, {path, <<"/space_name2">>})),
 
+    Index2 = file_listing:build_index(<<"test5">>, ?GET_DOMAIN_BIN(W)),
     ?assertMatch({ok, #file_details{
         file_attr = #file_attr{name = <<"test5">>, size = 0},
-        index_startid = <<"test5">>,
+        index_startid = Index2,
         active_permissions_type = posix,
         has_metadata = false
     }}, lfm_proxy:get_details(W, SessId1, {path, <<"/space_name2/test5">>})),
@@ -1399,7 +1397,7 @@ lfm_cp_file(Config) ->
 
     % verify copied file
     ?assertMatch({ok, [{TargetGuid1, TargetFile1}], _},
-        lfm_proxy:get_children(W, SessId1, ?FILE_REF(TargetParentGuid1), #{offset => 0, size => 10})),
+        lfm_proxy:get_children(W, SessId1, ?FILE_REF(TargetParentGuid1), #{offset => 0, limit => 10, tune_for_large_continuous_listing => false})),
     ?assertMatch({ok, #file_attr{guid = TargetGuid1}},
         lfm_proxy:stat(W, SessId1, {path, TargetFilePath1})),
     {ok, Handle2} = lfm_proxy:open(W, SessId1, {path, TargetFilePath1}, read),
@@ -1411,7 +1409,8 @@ lfm_cp_file(Config) ->
 
     % verify copied file
     ?assertMatch({ok, [{TargetGuid2, TargetFile2}], _},
-        lfm_proxy:get_children(W, SessId1, ?FILE_REF(TargetParentGuid2), #{offset => 0, size => 10})),
+        lfm_proxy:get_children(W, SessId1, ?FILE_REF(TargetParentGuid2), #{offset => 0, limit => 10, tune_for_large_continuous_listing => false})),
+    
     ?assertMatch({ok, #file_attr{guid = TargetGuid2}},
         lfm_proxy:stat(W, SessId1, {path, TargetFilePath2})),
     {ok, Handle3} = lfm_proxy:open(W, SessId1, {path, TargetFilePath2}, read),
@@ -1452,7 +1451,7 @@ lfm_cp_empty_dir(Config) ->
 
     % verify copied dir
     ?assertMatch({ok, [{TargetGuid1, TargetDir1}], _},
-        lfm_proxy:get_children(W, SessId1, ?FILE_REF(TargetParentGuid1), #{offset => 0, size => 10})),
+        lfm_proxy:get_children(W, SessId1, ?FILE_REF(TargetParentGuid1), #{offset => 0, limit => 10, tune_for_large_continuous_listing => false})),
     ?assertMatch({ok, #file_attr{guid = TargetGuid1}},
         lfm_proxy:stat(W, SessId1, {path, TargetDirPath1})),
 
@@ -1461,7 +1460,7 @@ lfm_cp_empty_dir(Config) ->
 
     % verify copied dir
     ?assertMatch({ok, [{TargetGuid2, TargetDir2}], _},
-        lfm_proxy:get_children(W, SessId1, ?FILE_REF(TargetParentGuid2), #{offset => 0, size => 10})),
+        lfm_proxy:get_children(W, SessId1, ?FILE_REF(TargetParentGuid2), #{offset => 0, limit => 10, tune_for_large_continuous_listing => false})),
     ?assertMatch({ok, #file_attr{guid = TargetGuid2}},
         lfm_proxy:stat(W, SessId1, {path, TargetDirPath2})).
 
@@ -1509,7 +1508,7 @@ lfm_cp_dir_to_its_child_should_fail(Config) ->
 
 
 lfm_cp_dir(Config) ->
-    % In this test, environment variable `ls_batch_size`,
+    % In this test, environment variable `default_ls_batch_limit`,
     % which is responsible for size of children batches used when listing a directory,
     % is decreased to ensure that copying directory, which has more children
     % than size of a single batch, is performed correctly.
@@ -1551,20 +1550,20 @@ lfm_cp_dir(Config) ->
     {ok, TargetParentGuid1} = lfm_proxy:mkdir(W, SessId1, TargetParentPath1),
 
     % decrease batch_size to ensure that all files will be correctly copied
-    ok = test_utils:set_env(W, op_worker, ls_batch_size, 1),
+    ok = test_utils:set_env(W, op_worker, default_ls_batch_limit, 1),
 
     % copy to target
     {ok, TargetGuid1} = ?assertMatch({ok, _}, lfm_proxy:cp(W, SessId1, ?FILE_REF(DirGuid), {path, TargetParentPath1}, TargetDir1)),
 
     % verify copied dir
     ?assertMatch({ok, [{TargetGuid1, TargetDir1}], _},
-        lfm_proxy:get_children(W, SessId1, ?FILE_REF(TargetParentGuid1), #{offset => 0, size => 10})),
+        lfm_proxy:get_children(W, SessId1, ?FILE_REF(TargetParentGuid1), #{offset => 0, limit => 10, tune_for_large_continuous_listing => false})),
     ?assertMatch({ok, #file_attr{guid = TargetGuid1, mode = NewMode}},
         lfm_proxy:stat(W, SessId1, {path, TargetDirPath1})),
 
     % verify children of copied dir
     ?assertMatch({ok, [{_, Child1}, {_, Child2}], _},
-        lfm_proxy:get_children(W, SessId1, ?FILE_REF(TargetGuid1), #{offset => 0, size => 10})),
+        lfm_proxy:get_children(W, SessId1, ?FILE_REF(TargetGuid1), #{offset => 0, limit => 10, tune_for_large_continuous_listing => false})),
 
     ?assertMatch({ok, #file_attr{name = Child1}}, lfm_proxy:stat(W, SessId1, {path, TargetChildPath1})),
     ?assertMatch({ok, #file_attr{name = Child2}}, lfm_proxy:stat(W, SessId1, {path, TargetChildPath2})),
@@ -2485,7 +2484,7 @@ verify_attrs(Config, MainDirPath, Files, Limit, ExpectedSize, Offset) ->
     {SessId1, _UserId1} =
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
 
-    Ans = lfm_proxy:get_children_attrs(Worker, SessId1, {path, MainDirPath}, #{offset => Offset, size => Limit}),
+    Ans = lfm_proxy:get_children_attrs(Worker, SessId1, {path, MainDirPath}, #{offset => Offset, limit => Limit, tune_for_large_continuous_listing => false}),
     {ok, List, _} = ?assertMatch({ok, _, _}, Ans),
     ?assertEqual(ExpectedSize, length(List)),
 
@@ -2493,37 +2492,46 @@ verify_attrs(Config, MainDirPath, Files, Limit, ExpectedSize, Offset) ->
         ?assertEqual(F1#file_attr.name, F2)
     end, lists:zip(List, lists:sublist(Files, Offset + 1, ExpectedSize))).
 
-verify_attrs_with_token(Config, MainDirPath, Files, ExpectedSize, Limit, Offset, IsLast, Token) ->
+verify_attrs_with_token(Config, MainDirPath, Files, ExpectedSize, Limit, Offset, IsLast, PaginationToken) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     {SessId1, _UserId1} =
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    
+    BaseListOpts = case PaginationToken of
+        undefined -> #{tune_for_large_continuous_listing => true};
+        _ -> #{pagination_token => PaginationToken}
+    end,
 
-    Ans = lfm_proxy:get_children_attrs(Worker, SessId1, {path, MainDirPath}, #{size => Limit, token => Token}),
-    {ok, List, #{token := Token2, is_last := IL}} = ?assertMatch({ok, _, _}, Ans),
+    Ans = lfm_proxy:get_children_attrs(Worker, SessId1, {path, MainDirPath}, BaseListOpts#{limit => Limit}),
+    {ok, List, NextListingPaginationToken} = ?assertMatch({ok, _, _}, Ans),
     ?assertEqual(ExpectedSize, length(List)),
 
     lists:foreach(fun({F1, F2}) ->
         ?assertEqual(F1#file_attr.name, F2)
     end, lists:zip(List, lists:sublist(Files, Offset + 1, ExpectedSize))),
-    ?assertEqual(IsLast, IL),
-    Token2.
+    ?assertEqual(IsLast, file_listing:is_finished(NextListingPaginationToken)),
+    NextListingPaginationToken.
 
-verify_with_token(Config, MainDirPath, Files, ExpectedSize, Limit, Offset, IsLast, Token) ->
+verify_with_token(Config, MainDirPath, Files, ExpectedSize, Limit, Offset, IsLast, PaginationToken) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     {SessId1, _UserId1} =
         {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
 
-    Ans = lfm_proxy:get_children(Worker, SessId1, {path, MainDirPath}, #{size => Limit, token => Token}),
-    {ok, List, #{token := Token2, is_last := IL}} = ?assertMatch({ok, _, _}, Ans),
+    BaseListOpts = case PaginationToken of
+        undefined -> #{tune_for_large_continuous_listing => true};
+        _ -> #{pagination_token => PaginationToken}
+    end,
+    Ans = lfm_proxy:get_children(Worker, SessId1, {path, MainDirPath}, BaseListOpts#{limit => Limit}),
+    {ok, List, NextListingPaginationToken} = ?assertMatch({ok, _, _}, Ans),
     ?assertEqual(ExpectedSize, length(List)),
 
     lists:foreach(fun({{_, F1}, F2}) ->
         ?assertEqual(F1, F2)
     end, lists:zip(List, lists:sublist(Files, Offset + 1, ExpectedSize))),
-    ?assertEqual(IsLast, IL),
-    Token2.
+    ?assertEqual(IsLast, file_listing:is_finished(NextListingPaginationToken)),
+    NextListingPaginationToken.
 
 verify_with_startid(Config, MainDirPath, Files, FilesOffset, ExpectedSize, Offset, Limit, StartId) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -2533,8 +2541,9 @@ verify_with_startid(Config, MainDirPath, Files, FilesOffset, ExpectedSize, Offse
 
     Ans = lfm_proxy:get_children(Worker, SessId1, {path, MainDirPath}, #{
         offset => Offset,
-        size => Limit,
-        last_name => StartId
+        limit => Limit,
+        index => file_listing:build_index(StartId),
+        tune_for_large_continuous_listing => false
     }),
     {ok, List, _} = ?assertMatch({ok, _, _}, Ans),
     ?assertEqual(ExpectedSize, length(List)),
@@ -2554,7 +2563,7 @@ verify_with_startid(Config, MainDirPath, Files, FilesOffset, ExpectedSize, Offse
 verify_details(Config, MainDirPath, Files, ExpectedSize, Offset, Limit) ->
     verify_details(Config, MainDirPath, Files, Offset, ExpectedSize, Offset, Limit, undefined).
 
-verify_details(Config, MainDirPath, Files, FilesOffset, ExpectedSize, Offset, Limit, StartId) ->
+verify_details(Config, MainDirPath, Files, FilesOffset, ExpectedSize, Offset, Limit, Index) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     {SessId1, _UserId1} =
@@ -2562,7 +2571,8 @@ verify_details(Config, MainDirPath, Files, FilesOffset, ExpectedSize, Offset, Li
 
     {ok, List, _} = ?assertMatch(
         {ok, _, _},
-        lfm_proxy:get_children_details(Worker, SessId1, {path, MainDirPath}, #{offset => Offset, size => Limit, last_name => StartId})
+        lfm_proxy:get_children_details(Worker, SessId1, {path, MainDirPath}, 
+            #{offset => Offset, limit => Limit, index => Index, tune_for_large_continuous_listing => false, inclusive => true})
     ),
     ?assertEqual(ExpectedSize, length(List)),
 
@@ -2723,8 +2733,8 @@ end_per_testcase(Case, Config) when
 
 end_per_testcase(Case = lfm_cp_dir, Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
-    % set default value of ls_batch_size env
-    test_utils:set_env(W, op_worker, ls_batch_size, 5000),
+    % set default value of default_ls_batch_limit env
+    test_utils:set_env(W, op_worker, default_ls_batch_limit, 5000),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(readdir_should_work_with_token = Case, Config) ->

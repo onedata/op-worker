@@ -46,28 +46,21 @@
 }).
 
 -record(get_file_children, {
-    offset :: undefined | file_meta:list_offset(),
-    size :: file_meta:size(),
-    index_token = undefined :: undefined | dir_req:list_token(),
-    index_startid = undefined :: undefined | binary()
+    listing_options :: file_listing:options()
 }).
 
 -record(get_file_children_attrs, {
-    offset :: file_meta:list_offset(),
-    size :: file_meta:size(),
-    index_token :: undefined | dir_req:list_token(),
+    listing_options :: file_listing:options(),
     include_replication_status :: undefined | boolean(),
     include_link_count :: undefined | boolean()
 }).
 
 -record(get_file_children_details, {
-    offset :: file_meta:list_offset(),
-    size :: file_meta:size(),
-    index_startid = undefined :: undefined | binary()
+    listing_options :: file_listing:options()
 }).
 
 -record(get_recursive_file_list, {
-    options :: recursive_file_listing:options()
+    listing_options :: recursive_file_listing:options()
 }).
 
 -record(create_dir, {
@@ -265,19 +258,17 @@
 
 -record(file_children, {
     child_links :: [#child_link{}],
-    index_token :: binary(),
-    is_last :: boolean()
+    pagination_token :: file_listing:pagination_token()
 }).
 
 -record(file_children_attrs, {
     child_attrs :: [#file_attr{}],
-    index_token :: binary(),
-    is_last :: boolean()
+    pagination_token :: file_listing:pagination_token()
 }).
 
 -record(file_children_details, {
     child_details :: [#file_details{}],
-    is_last :: boolean()
+    pagination_token :: file_listing:pagination_token()
 }).
 
 -record(recursive_file_list, {

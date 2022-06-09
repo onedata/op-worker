@@ -150,7 +150,7 @@
     creation_time :: time:millis(),
     config :: archive:config(),
     preserved_callback :: archive:callback(),
-    purged_callback :: archive:callback(),
+    deleted_callback :: archive:callback(),
     description :: archive:description(),
     index :: archive_api:index(),
     stats :: archive_stats:record(),

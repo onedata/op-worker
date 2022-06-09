@@ -16,6 +16,7 @@
 -include("modules/dir_stats_collector/dir_size_stats.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include_lib("cluster_worker/include/time_series/browsing.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -26,7 +27,7 @@
     race_with_subtree_adding_test/1, race_with_subtree_filling_with_data_test/1,
     race_with_file_adding_to_large_dir_test/1,
     multiple_status_change_test/1, adding_file_when_disabled_test/1,
-    restart_test/1]).
+    restart_test/1, parallel_write_test/4]).
 -export([init/1, init_and_enable_for_new_space/1, teardown/1, teardown/3]).
 -export([verify_dir_on_provider_creating_files/3]).
 % TODO VFS-9148 - extend tests
@@ -63,8 +64,7 @@ basic_test(Config) ->
 
 multiprovider_test(Config) ->
     enable(Config, new_space),
-    SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(lfm_test_utils:get_user1_first_space_id(Config)),
 
     create_initial_file_tree_and_fill_files(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR, enabled),
 
@@ -115,17 +115,7 @@ multiprovider_test(Config) ->
         ?TOTAL_SIZE_ON_STORAGE(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR) => 1314
     }),
 
-    % Check if deletions of files are counted properly
-    [Worker2 | _] = ?config(?PROVIDER_DELETING_FILES_NODES_SELECTOR, Config),
-    lfm_test_utils:clean_space([Worker2], SpaceId, 30),
-    lists:foreach(fun(NodesSelector) ->
-        check_dir_stats(Config, NodesSelector, SpaceGuid, #{
-            ?REG_FILE_AND_LINK_COUNT => 0,
-            ?DIR_COUNT => 0,
-            ?TOTAL_SIZE => 0,
-            ?TOTAL_SIZE_ON_STORAGE(Config, NodesSelector) => 0
-        })
-    end, [?PROVIDER_DELETING_FILES_NODES_SELECTOR, ?PROVIDER_CREATING_FILES_NODES_SELECTOR]).
+    clean_space_and_verify_stats(Config).
 
 
 enabling_for_empty_space_test(Config) ->
@@ -262,9 +252,9 @@ test_with_race_base(Config, TestDirIdentifier, OnSpaceChildrenListed, ExpectedSp
     end,
     TestDirUuid = file_id:guid_to_uuid(TestDirGuid),
 
-    Tag = mock_file_meta(Config, TestDirUuid, 1000),
+    Tag = mock_file_listing(Config, TestDirUuid, 1000),
     enable(Config, existing_space),
-    execute_file_meta_list_hook(Tag, OnSpaceChildrenListed),
+    execute_file_listing_hook(Tag, OnSpaceChildrenListed),
 
     check_dir_stats(Config, op_worker_nodes, SpaceGuid, ExpectedSpaceStats),
     verify_collecting_status(Config, enabled).
@@ -277,12 +267,12 @@ race_with_file_adding_to_large_dir_test(Config) ->
     Structure = [{3, 2000}, {3, 3}],
     lfm_test_utils:create_files_tree(Worker, SessId, Structure, SpaceGuid),
 
-    Tag = mock_file_meta(Config, file_id:guid_to_uuid(SpaceGuid), 10),
+    Tag = mock_file_listing(Config, file_id:guid_to_uuid(SpaceGuid), 10),
     enable(Config, existing_space),
     OnSpaceChildrenListed = fun() ->
         lfm_test_utils:create_and_write_file(Worker, SessId, SpaceGuid, <<"test_raced_file">>, 0, {rand_content, 10})
     end,
-    execute_file_meta_list_hook(Tag, OnSpaceChildrenListed),
+    execute_file_listing_hook(Tag, OnSpaceChildrenListed),
 
     verify_collecting_status(Config, enabled),
     check_dir_stats(Config, op_worker_nodes, SpaceGuid, #{
@@ -404,6 +394,86 @@ restart_test(Config) ->
     verify_collecting_status(Config, disabled).
 
 
+parallel_write_test(Config, SleepOnWrite, InitialFileSize, OverrideInitialBytes) ->
+    enable(Config, new_space),
+    [Worker | _] = ?config(?PROVIDER_CREATING_FILES_NODES_SELECTOR, Config),
+    [WorkerProvider2 | _] = ?config(?PROVIDER_DELETING_FILES_NODES_SELECTOR, Config),
+    SessId = lfm_test_utils:get_user1_session_id(Config, Worker),
+    SessIdProvider2 = lfm_test_utils:get_user1_session_id(Config, WorkerProvider2),
+    SpaceGuid = lfm_test_utils:get_user1_first_space_guid(Config),
+
+    check_space_dir_values_map_and_time_series_collection(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR, SpaceGuid, #{
+        ?REG_FILE_AND_LINK_COUNT => 0,
+        ?DIR_COUNT => 0,
+        ?TOTAL_SIZE => 0,
+        ?TOTAL_SIZE_ON_STORAGE(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR) => 0
+    }, true, enabled),
+
+    % Create files and fill using 100 processes (spawn is hidden in pmap)
+    lfm_test_utils:create_files_tree(Worker, SessId, [{5, 20}], SpaceGuid, InitialFileSize),
+    WriteAnswers = lists_utils:pmap(fun(N) ->
+        FileNum = N div 5 + 1,
+        ChunkNum = N rem 5,
+
+        case SleepOnWrite of
+            true -> timer:sleep(timer:seconds(20 - ChunkNum * 4));
+            false -> ok
+        end,
+
+        Offset = case OverrideInitialBytes of
+            true -> ChunkNum * 1000;
+            false -> InitialFileSize + ChunkNum * 1000
+        end,
+        write_to_file(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR, [], [FileNum], 1000, Offset)
+    end, lists:seq(0, 99)),
+    ?assert(lists:all(fun(Ans) -> Ans =:= ok end, WriteAnswers)),
+
+    FileSize = case OverrideInitialBytes of
+        true -> 5000;
+        false -> InitialFileSize + 5000
+    end,
+
+    % Check stats on both providers
+    check_dir_stats(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR, SpaceGuid, #{
+        ?REG_FILE_AND_LINK_COUNT => 20,
+        ?DIR_COUNT => 5,
+        ?TOTAL_SIZE => 20 * FileSize,
+        ?TOTAL_SIZE_ON_STORAGE(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR) => 20 * FileSize
+    }),
+    check_dir_stats(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR, SpaceGuid, #{
+        ?REG_FILE_AND_LINK_COUNT => 20,
+        ?DIR_COUNT => 5,
+        ?TOTAL_SIZE => 20 * FileSize,
+        ?TOTAL_SIZE_ON_STORAGE(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR) => 0
+    }),
+
+    % Read files using 20 processes (spawn is hidden in pmap)
+    ReadAnswers = lists_utils:pmap(fun(FileNum) ->
+        % Check blocks visibility on reading provider before reading from file
+        GetBlocks = fun() ->
+            FileGuid = resolve_guid(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR, [], [FileNum]),
+            {ok, Distribution} =
+                lfm_proxy:get_file_distribution(WorkerProvider2, SessIdProvider2, #file_ref{guid = FileGuid}),
+            lists:sort(lists:map(fun(#{<<"blocks">> := ProviderBlocks}) -> ProviderBlocks end, Distribution))
+        end,
+        ?assertEqual([[], [[0, FileSize]]], GetBlocks(), ?ATTEMPTS),
+
+        Bytes = read_from_file(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR, [], [FileNum], FileSize),
+        byte_size(Bytes)
+    end, lists:seq(1, 20)),
+    ?assert(lists:all(fun(Ans) -> Ans =:= FileSize end, ReadAnswers)),
+
+    % Check stats after reading
+    check_dir_stats(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR, SpaceGuid, #{
+        ?REG_FILE_AND_LINK_COUNT => 20,
+        ?DIR_COUNT => 5,
+        ?TOTAL_SIZE => 20 * FileSize,
+        ?TOTAL_SIZE_ON_STORAGE(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR) => 20 * FileSize
+    }),
+
+    clean_space_and_verify_stats(Config).
+
+
 %%%===================================================================
 %%% Init and teardown
 %%%===================================================================
@@ -474,7 +544,7 @@ verify_dir_on_provider_creating_files(Config, NodesSelector, Guid) ->
     SessId = lfm_test_utils:get_user1_session_id(Config, Worker),
 
     {ok, Children, _} = ?assertMatch({ok, _, _},
-        lfm_proxy:get_children_attrs(Worker, SessId, ?FILE_REF(Guid), #{offset => 0, size => 100000})),
+        lfm_proxy:get_children_attrs(Worker, SessId, ?FILE_REF(Guid), #{offset => 0, limit => 100000, tune_for_large_continuous_listing => false})),
 
     StatsForEmptyDir = #{
         ?REG_FILE_AND_LINK_COUNT => 0,
@@ -693,7 +763,7 @@ check_space_dir_values_map_and_time_series_collection(
 ) ->
     [Worker | _] = ?config(NodesSelector, Config),
     ?assertMatch(?ERROR_DIR_STATS_DISABLED_FOR_SPACE,
-        rpc:call(Worker, dir_size_stats, get_stats_and_time_series_collection, [SpaceGuid]));
+        rpc:call(Worker, dir_size_stats, get_stats, [SpaceGuid]));
 
 check_space_dir_values_map_and_time_series_collection(
     Config, NodesSelector, SpaceGuid, ExpectedCurrentStats, IsCollectionEmpty, CollectingStatus
@@ -703,8 +773,11 @@ check_space_dir_values_map_and_time_series_collection(
         initializing -> ?ATTEMPTS
     end,
     [Worker | _] = ?config(NodesSelector, Config),
-    {ok, {CurrentStats, TimeStats}} = ?assertMatch({ok, {_, _}},
-        rpc:call(Worker, dir_size_stats, get_stats_and_time_series_collection, [SpaceGuid]), Attempts),
+    {ok, CurrentStats} = ?assertMatch({ok, _}, rpc:call(Worker, dir_size_stats, get_stats, [SpaceGuid]), Attempts),
+    {ok, #time_series_layout_result{layout = TimeStatsLayout}} = ?assertMatch({ok, _}, 
+        rpc:call(Worker, dir_size_stats, browse_time_stats_collection, [SpaceGuid, #time_series_get_layout_request{}])),
+    {ok, #time_series_slice_result{slice = TimeStats}} = ?assertMatch({ok, _}, 
+        rpc:call(Worker, dir_size_stats, browse_time_stats_collection, [SpaceGuid, #time_series_get_slice_request{layout = TimeStatsLayout}]), Attempts),
 
     ?assertEqual(ExpectedCurrentStats, CurrentStats),
 
@@ -742,10 +815,14 @@ read_from_file(Config, NodesSelector, DirConstructor, FileConstructor, BytesCoun
 
 
 write_to_file(Config, NodesSelector, DirConstructor, FileConstructor, BytesCount) ->
+    write_to_file(Config, NodesSelector, DirConstructor, FileConstructor, BytesCount, 0).
+
+
+write_to_file(Config, NodesSelector, DirConstructor, FileConstructor, BytesCount, Offset) ->
     [Worker | _] = ?config(NodesSelector, Config),
     SessId = lfm_test_utils:get_user1_session_id(Config, Worker),
     Guid = resolve_guid(Config, NodesSelector, DirConstructor, FileConstructor),
-    lfm_test_utils:write_file(Worker, SessId, Guid, {rand_content, BytesCount}).
+    lfm_test_utils:write_file(Worker, SessId, Guid, Offset, {rand_content, BytesCount}).
 
 
 resolve_guid(Config, NodesSelector, DirConstructor, FileConstructor) ->
@@ -798,12 +875,12 @@ get_dir_update_time_stat(Worker, Guid) ->
     CollectorTime.
 
 
-mock_file_meta(Config, Uuid, SleepTime) ->
+mock_file_listing(Config, Uuid, SleepTime) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     Master = self(),
     Tag = make_ref(),
-    ok = test_utils:mock_new(Worker, file_meta, [passthrough]),
-    ok = test_utils:mock_expect(Worker, file_meta, list_children, fun
+    ok = test_utils:mock_new(Worker, file_listing, [passthrough]),
+    ok = test_utils:mock_expect(Worker, file_listing, list, fun
         (FileUuid, ListOpts) when FileUuid =:= Uuid ->
             Ans = meck:passthrough([FileUuid, ListOpts]),
             Master ! {space_children_listed, Tag},
@@ -815,7 +892,7 @@ mock_file_meta(Config, Uuid, SleepTime) ->
     Tag.
 
 
-execute_file_meta_list_hook(Tag, Hook) ->
+execute_file_listing_hook(Tag, Hook) ->
     MessageReceived = receive
         {space_children_listed, Tag} ->
             Hook(),
@@ -844,3 +921,19 @@ execute_restart_hooks(Config) ->
 reset_restart_hooks(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     ?assertEqual(ok, rpc:call(Worker, node_cache, clear, [restart_hooks_status])).
+
+
+clean_space_and_verify_stats(Config) ->
+    [Worker2 | _] = ?config(?PROVIDER_DELETING_FILES_NODES_SELECTOR, Config),
+    SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+
+    lfm_test_utils:clean_space([Worker2], SpaceId, 30),
+    lists:foreach(fun(NodesSelector) ->
+        check_dir_stats(Config, NodesSelector, SpaceGuid, #{
+            ?REG_FILE_AND_LINK_COUNT => 0,
+            ?DIR_COUNT => 0,
+            ?TOTAL_SIZE => 0,
+            ?TOTAL_SIZE_ON_STORAGE(Config, NodesSelector) => 0
+        })
+    end, [?PROVIDER_DELETING_FILES_NODES_SELECTOR, ?PROVIDER_CREATING_FILES_NODES_SELECTOR]).

@@ -53,6 +53,17 @@ routes() -> [
             scope = private
         }
     }},
+    %% List files recursively
+    {<<"/data/:id/files">>, rest_handler, #rest_req{
+        method = 'GET',
+        produces = [<<"application/json">>],
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = files, 
+            scope = private
+        }
+    }},
     %% Download file content
     {<<"/data/:id/content">>, rest_handler, #rest_req{
         method = 'GET',
@@ -127,17 +138,6 @@ routes() -> [
             type = op_file, 
             id = ?OBJECTID_BINDING(id), 
             aspect = {hardlinks, ?OBJECTID_BINDING(hid)}, 
-            scope = private
-        }
-    }},
-    %% List regular files in subtree recursively
-    {<<"/data/:id/files">>, rest_handler, #rest_req{
-        method = 'GET',
-        produces = [<<"application/json">>],
-        b_gri = #b_gri{
-            type = op_file,
-            id = ?OBJECTID_BINDING(id),
-            aspect = files,
             scope = private
         }
     }},

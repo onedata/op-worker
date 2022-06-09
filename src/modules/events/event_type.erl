@@ -339,12 +339,12 @@ get_parent_connected_routing_key(Prefix, FileGuid, #{file_ctx := FileCtx, parent
             #event_routing_keys{file_ctx = FileCtx, main_key = <<Prefix/binary, Uuid/binary>>}
     end;
 get_parent_connected_routing_key(Prefix, FileGuid, #{file_ctx := FileCtx}) ->
-    {ParentGuid, _} = files_tree:get_parent_guid_if_not_root_dir(FileCtx, undefined),
+    {ParentGuid, _} = file_tree:get_parent_guid_if_not_root_dir(FileCtx, undefined),
     get_parent_connected_routing_key(Prefix, FileGuid, #{file_ctx => FileCtx, parent => ParentGuid});
 get_parent_connected_routing_key(Prefix, FileGuid, #{parent := Parent}) ->
     FileCtx = file_ctx:new_by_guid(FileGuid),
     get_parent_connected_routing_key(Prefix, FileGuid, #{file_ctx => FileCtx, parent => Parent});
 get_parent_connected_routing_key(Prefix, FileGuid, _) ->
     FileCtx = file_ctx:new_by_guid(FileGuid),
-    {ParentGuid, _} = files_tree:get_parent_guid_if_not_root_dir(FileCtx, undefined),
+    {ParentGuid, _} = file_tree:get_parent_guid_if_not_root_dir(FileCtx, undefined),
     get_parent_connected_routing_key(Prefix, FileGuid, #{file_ctx => FileCtx, parent => ParentGuid}).

@@ -24,10 +24,6 @@
 -export([create/1, get/2, update/1, delete/1]).
 
 
--define(MAX_LIST_LIMIT, 1000).
--define(DEFAULT_LIST_LIMIT, 1000).
-
-
 %%%===================================================================
 %%% middleware_handler callbacks
 %%%===================================================================

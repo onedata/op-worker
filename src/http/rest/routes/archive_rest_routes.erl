@@ -77,15 +77,15 @@ routes() -> [
             scope = private
         }
     }},
-    %% Purge archive
-    {<<"/archives/:aid/purge">>, rest_handler, #rest_req{
+    %% Delete archive
+    {<<"/archives/:aid/delete">>, rest_handler, #rest_req{
         method = 'POST',
         parse_body = as_json_params,
         consumes = [<<"application/json">>],
         b_gri = #b_gri{
             type = op_archive, 
             id = ?BINDING(aid), 
-            aspect = purge, 
+            aspect = delete, 
             scope = private
         }
     }},
@@ -98,6 +98,17 @@ routes() -> [
             type = op_archive, 
             id = ?BINDING(aid), 
             aspect = recall, 
+            scope = private
+        }
+    }},
+    %% Cancel an archive recall
+    {<<"/data/:id/recall/cancel">>, rest_handler, #rest_req{
+        method = 'POST',
+        produces = [<<"application/json">>],
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = cancel_archive_recall, 
             scope = private
         }
     }},

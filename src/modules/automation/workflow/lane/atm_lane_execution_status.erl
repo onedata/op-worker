@@ -31,7 +31,7 @@
 %%%                   started                               |                            |
 %%% =====================|==================================|============================|========
 %%%                      v                                  |                            |
-%%%  O             +-------------+         cancel           |                            |
+%%%  O             +-------------+    cancel or failure     |                            |
 %%%  N             |    ACTIVE   |--------------------------o                            |
 %%%  G             +-------------+              ____        |                            |
 %%%  O                |                cancel /      \      v                            |
@@ -176,7 +176,7 @@ handle_enqueued(AtmLaneRunSelector, AtmWorkflowExecutionId) ->
 -spec handle_aborting(
     atm_lane_execution:lane_run_selector(),
     atm_workflow_execution:id(),
-    cancel | failure
+    atm_lane_execution:run_aborting_reason()
 ) ->
     {ok, atm_workflow_execution:doc()} | errors:error().
 handle_aborting(AtmLaneRunSelector, AtmWorkflowExecutionId, Reason) ->

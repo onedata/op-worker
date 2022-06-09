@@ -19,7 +19,7 @@
 -author("Jakub Kudzia").
 
 -include("global_definitions.hrl").
--include("proto/oneclient/fuse_messages.hrl").
+-include("modules/fslogic/file_meta_forest.hrl").
 -include("modules/fslogic/fslogic_suffix.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 
@@ -45,12 +45,11 @@
 -type group() :: [internal_link()].
 -type fold_acc() :: term().
 -type fold_fun() :: fun((internal_link(), fold_acc()) -> {ok | stop, fold_acc()} | {error, term()}).
--type token_internal() :: datastore_links_iter:token().
 
 % Exported types
 -type offset() :: integer().
--type size() :: non_neg_integer().
--type token() :: binary().
+-type limit() :: non_neg_integer().
+-type datastore_list_token() :: datastore_links_iter:token().
 -type last_name() :: link_name().
 -type last_tree() :: tree_id().
 -type link() :: {link_name(), link_target()}.
@@ -58,30 +57,11 @@
 -type tree_ids() :: datastore_model:tree_ids().
 
 %% @formatter:off
--type list_opts() :: #{
-    % required keys
-    size := size(),
-    % one of: token, offset, last_name is required so that we know were to start listing
-    token => token(),
-    offset => offset(),
-    last_name => last_name(),
-    % optional keys
-    last_tree => last_tree()
-}.
+-type list_opts() :: datastore:fold_opts().
 
-% Map returned from listing functions, containing information
-% whether end of list has been reached and needed to list next batch
--type list_extended_info() :: #{
-    % guaranteed keys
-    is_last := boolean(),
-    % optional keys
-    token => token(),
-    last_name => link_name(),
-    last_tree => last_name()
-}.
-%% @formatter:on
+-type list_extended_info() :: #list_extended_info{}.
 
--export_type([link/0, offset/0, size/0, token/0, last_name/0, last_tree/0,
+-export_type([link/0, offset/0, limit/0, datastore_list_token/0, last_name/0, last_tree/0,
     list_opts/0, list_extended_info/0, tree_id/0, tree_ids/0
 ]).
 
@@ -91,7 +71,6 @@
 -define(LINK(FileName, FileUuid), {FileName, FileUuid}).
 
 -define(MINIMAL_TREE_ID_SUFFIX_LEN, 4).
--define(DEFAULT_LS_BATCH_SIZE, op_worker:get_env(ls_batch_size, 5000)).
 
 %%%===================================================================
 %%% API
@@ -148,14 +127,13 @@ delete_remote(ParentUuid, Scope, TreeId, FileName, Revision) ->
 
 -spec list(forest(), list_opts()) -> {ok, [link()], list_extended_info()} | {error, term()}.
 list(ParentUuid, Opts) ->
-    InternalOpts = sanitize_opts(Opts),
-    ExpectedSize = maps:get(size, InternalOpts),
+    ExpectedSize = maps:get(size, Opts),
     Result = fold(ParentUuid, fun(Link = #link{name = Name}, {ListAcc, ListedLinksCount}) ->
         case not (file_meta:is_hidden(Name) orelse file_meta:is_deletion_link(Name)) of
             true -> {ok, {[Link | ListAcc], ListedLinksCount + 1}};
             _ -> {ok, {ListAcc, ListedLinksCount + 1}}
         end
-    end, {[], 0}, InternalOpts),
+    end, {[], 0}, Opts),
 
     case Result of
         {{ok, {ReversedLinks, ListedLinksCount}}, NewToken} ->
@@ -169,9 +147,9 @@ list(ParentUuid, Opts) ->
 
 -spec list_whitelisted(forest(),list_opts(), [link_name()]) -> {ok, [link()], list_extended_info()} | {error, term()}.
 list_whitelisted(ParentUuid, Opts, SortedChildrenWhiteList) ->
-    Size = sanitize_size(Opts),
-    NonNegOffset = sanitize_offset(Opts, false),
-    LastName = sanitize_last_name(Opts),
+    Size = maps:get(size, Opts),
+    NonNegOffset = maps:get(offset, Opts, undefined),
+    LastName = maps:get(prev_link_name, Opts, undefined),
     FilteredChildrenWhiteList = case LastName of
         undefined ->
             SortedChildrenWhiteList;
@@ -191,9 +169,11 @@ list_whitelisted(ParentUuid, Opts, SortedChildrenWhiteList) ->
         case NonNegOffset < length(ValidLinks) of
             true ->
                 RequestedLinks = lists:sublist(ValidLinks, NonNegOffset + 1, Size),
-                {ok, tag_ambiguous(RequestedLinks), #{is_last => NonNegOffset + Size >= length(ValidLinks)}};
+                {ok, tag_ambiguous(RequestedLinks), #list_extended_info{
+                    is_finished = NonNegOffset + Size >= length(ValidLinks)
+                }};
             false ->
-                {ok, [], #{is_last => true}}
+                {ok, [], #list_extended_info{is_finished = true}}
         end
     catch
         throw:{error, _} = Error2 ->
@@ -269,24 +249,24 @@ fold(ParentUuid, Fun, AccIn, Opts) ->
 %% @private
 %% @doc
 %% Prepares result of list by tagging ambiguous file names and
-%% preparing list_extended_info() structure.
+%% preparing #list_extended_info{} structure.
 %% @end
 %%--------------------------------------------------------------------
--spec prepare_list_result([internal_link()], token_internal() | undefined, boolean()) ->
+-spec prepare_list_result([internal_link()], datastore_list_token() | undefined, boolean()) ->
     {ok, [link()], list_extended_info()}.
 prepare_list_result(ReversedLinks, TokenOrUndefined, ListedLessThanRequested) ->
     ExtendedInfo = case TokenOrUndefined of
-        #link_token{} = Token -> #{
-            token => encode_token(Token),
-            is_last => Token#link_token.is_last
+        #link_token{} = Token -> #list_extended_info{
+            datastore_token = Token,
+            is_finished = Token#link_token.is_last
         };
-        undefined -> #{
-            is_last => ListedLessThanRequested
+        undefined -> #list_extended_info{
+            is_finished = ListedLessThanRequested
         }
     end,
     ExtendedInfo2 = case ReversedLinks of
         [#link{name = Name, tree_id = Tree} | _] ->
-            ExtendedInfo#{last_name => Name, last_tree => Tree};
+            ExtendedInfo#list_extended_info{last_name = Name, last_tree = Tree};
         _ ->
             ExtendedInfo
     end,
@@ -372,126 +352,3 @@ tag_remote_files(#link{name = Name, target = FileUuid, tree_id = LocalTreeId}, L
 tag_remote_files(#link{name = Name, target = FileUuid, tree_id = RemoteTreeId}, _LocalTreeId, SuffixLength) ->
     Suffix = binary_part(RemoteTreeId, 0, min(SuffixLength, byte_size(RemoteTreeId))),
     ?LINK(?CONFLICTING_LOGICAL_FILE_NAME(Name, Suffix), FileUuid).
-
-
-%%%===================================================================
-%%% Internal functions for validating passed opts
-%%%===================================================================
-
--spec sanitize_opts(list_opts()) -> datastore_model:fold_opts().
-sanitize_opts(Opts) ->
-    InternalOpts1 = #{size => sanitize_size(Opts)},
-    InternalOpts2 = maps_utils:put_if_defined(InternalOpts1, token, sanitize_token(Opts)),
-    InternalOpts3 = maps_utils:put_if_defined(InternalOpts2, offset, sanitize_offset(Opts)),
-    InternalOpts4 = maps_utils:put_if_defined(InternalOpts3, prev_link_name, sanitize_last_name(Opts)),
-    InternalOpts5 = maps_utils:put_if_defined(InternalOpts4, prev_tree_id, sanitize_last_tree(Opts)),
-    validate_starting_opts(InternalOpts5).
-
-
--spec validate_starting_opts(datastore_model:fold_opts()) -> datastore_model:fold_opts().
-validate_starting_opts(InternalOpts) ->
-    % at least one of: offset, token, prev_link_name must be defined so that we know
-    % were to start listing
-    case map_size(maps:with([offset, token, prev_link_name], InternalOpts)) > 0 of
-        true ->
-            InternalOpts;
-        false ->
-            %%  TODO VFS-7208 uncomment after introducing API errors to fslogic
-            %% throw(?ERROR_MISSING_AT_LEAST_ONE_VALUE([offset, token, last_name])),
-            throw(?EINVAL)
-    end.
-
-
--spec sanitize_size(list_opts()) -> size().
-sanitize_size(Opts) ->
-    case maps:get(size, Opts, undefined) of
-        undefined ->
-            ?DEFAULT_LS_BATCH_SIZE;
-        Size when is_integer(Size) andalso Size >= 0 ->
-            Size;
-        %% TODO VFS-7208 uncomment after introducing API errors to fslogic
-        %% Size when is_integer(Size) ->
-        %%     throw(?ERROR_BAD_VALUE_TOO_LOW(size, 0));
-        _ ->
-            %% TODO VFS-7208 uncomment after introducing API errors to fslogic
-            %% throw(?ERROR_BAD_VALUE_INTEGER(size))
-            throw(?EINVAL)
-    end.
-
-
--spec sanitize_token(list_opts()) -> token_internal() | undefined.
-sanitize_token(Opts) ->
-    case maps:get(token, Opts, undefined) of
-        undefined -> undefined;
-        TokenBin -> decode_token(TokenBin)
-    end.
-
-
--spec sanitize_offset(list_opts()) -> offset() | undefined.
-sanitize_offset(Opts) ->
-    sanitize_offset(Opts, true).
-
--spec sanitize_offset(list_opts(), AllowNegative :: boolean()) -> offset() | undefined.
-sanitize_offset(Opts, AllowNegative) ->
-    case maps:get(offset, Opts, undefined) of
-        undefined -> undefined;
-        Offset when is_integer(Offset) ->
-            LastName = maps:get(last_name, Opts, undefined),
-            case {AllowNegative andalso LastName =/= undefined, Offset >= 0} of
-                {true, _} ->
-                    Offset;
-                {false, true} ->
-                    Offset;
-                {false, false} ->
-                    % if LastName is undefined, Offset cannot be negative
-                    %% throw(?ERROR_BAD_VALUE_TOO_LOW(size, 0));
-                    throw(?EINVAL)
-            end;
-        _ ->
-            %% TODO VFS-7208 uncomment after introducing API errors to fslogic
-            %% throw(?ERROR_BAD_VALUE_INTEGER(size))
-            throw(?EINVAL)
-    end.
-
-
--spec sanitize_last_name(list_opts()) -> last_name() | undefined.
-sanitize_last_name(Opts) ->
-    sanitize_binary(last_name, Opts).
-
-
--spec sanitize_last_tree(list_opts()) -> last_tree() | undefined.
-sanitize_last_tree(Opts) ->
-    sanitize_binary(last_tree, Opts).
-
-
--spec sanitize_binary(atom(), list_opts()) -> binary() | undefined.
-sanitize_binary(Key, Opts) ->
-    case maps:get(Key, Opts, undefined) of
-        undefined ->
-            undefined;
-        Binary when is_binary(Binary) ->
-            Binary;
-        _ ->
-            %% TODO VFS-7208 uncomment after introducing API errors to fslogic
-            %% throw(?ERROR_BAD_VALUE_BINARY(Key))
-            throw(?EINVAL)
-    end.
-
-
--spec encode_token(token_internal()) -> token().
-encode_token(#link_token{} = Token) ->
-    term_to_binary(Token).
-
-
--spec decode_token(undefined | token()) -> token_internal().
-decode_token(?INITIAL_DATASTORE_LS_TOKEN) ->
-    #link_token{};
-decode_token(TokenBin) ->
-    try
-        binary_to_term(TokenBin)
-    catch
-        _:_ ->
-            %% TODO VFS-7208 uncomment after introducing API errors to fslogic
-            %% throw(?ERROR_BAD_VALUE_BINARY(token))
-            throw(?EINVAL)
-    end.

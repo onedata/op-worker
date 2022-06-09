@@ -530,7 +530,7 @@ await_dir_links_sync(SyncProviders, UserId, DirGuid, ExpChildrenList) ->
 -spec ls(oct_background:entity_selector(), session:id(), file_id:file_guid()) ->
     {ok, [{file_id:file_guid(), file_meta:name()}]} | {error, term()}.
 ls(Node, SessId, Guid) ->
-    ls(Node, SessId, Guid, <<>>, []).
+    ls(Node, SessId, Guid, undefined, []).
 
 
 %% @private
@@ -538,18 +538,22 @@ ls(Node, SessId, Guid) ->
     node(),
     session:id(),
     file_id:file_guid(),
-    file_meta:list_token(),
+    file_listing:pagination_token() | undefined,
     [{file_id:file_guid(), file_meta:name()}]
 ) ->
     {ok, [{file_meta:name(), file_id:file_guid()}]} | {error, term()}.
-ls(Node, SessId, Guid, Token, ChildEntriesAcc) ->
-    case lfm_proxy:get_children(Node, SessId, ?FILE_REF(Guid), #{token => Token, size => ?LS_SIZE}) of
-        {ok, Children, ListExtendedInfo} ->
+ls(Node, SessId, Guid, NextPageToken, ChildEntriesAcc) ->
+    ListOpts = case NextPageToken of
+        undefined -> #{tune_for_large_continuous_listing => true};
+        _ -> #{pagination_token => NextPageToken}
+    end,
+    case lfm_proxy:get_children(Node, SessId, ?FILE_REF(Guid), ListOpts#{limit => ?LS_SIZE}) of
+        {ok, Children, ListingPaginationToken} ->
             AllChildEntries = ChildEntriesAcc ++ Children,
 
-            case maps:get(is_last, ListExtendedInfo) of
+            case file_listing:is_finished(ListingPaginationToken) of
                 true -> {ok, AllChildEntries};
-                false -> ls(Node, SessId, Guid, maps:get(token, ListExtendedInfo), AllChildEntries)
+                false -> ls(Node, SessId, Guid, ListingPaginationToken, AllChildEntries)
             end;
         Error ->
             Error
@@ -670,4 +674,4 @@ rm_file(UserId, FileGuid, RmProvider) ->
     RmNode = ?OCT_RAND_OP_NODE(RmProvider),
     UserSessId = oct_background:get_user_session_id(UserId, RmProvider),
 
-    ?assertMatch(ok, lfm_proxy:unlink(RmNode, UserSessId, ?FILE_REF(FileGuid))).
+    ?assertMatch(ok, lfm_proxy:rm_recursive(RmNode, UserSessId, ?FILE_REF(FileGuid))).

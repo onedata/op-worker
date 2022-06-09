@@ -79,10 +79,6 @@
     readdir_plus_should_work_with_zero_offset/1,
     readdir_plus_should_work_with_non_zero_offset/1,
     readdir_plus_should_work_with_size_greater_than_dir_size/1,
-    readdir_plus_should_work_with_token/1,
-    readdir_plus_should_work_with_token_not_full_batch/1,
-    readdir_should_work_with_token/1,
-    readdir_should_work_with_token_not_full_batch/1,
     readdir_plus_should_work_with_api_token/1,
     readdir_plus_should_work_with_api_token_not_full_batch/1,
     readdir_should_work_with_api_token/1,
@@ -174,12 +170,8 @@
     readdir_plus_should_work_with_zero_offset,
     readdir_plus_should_work_with_non_zero_offset,
     readdir_plus_should_work_with_size_greater_than_dir_size,
-    readdir_plus_should_work_with_token,
-    readdir_plus_should_work_with_token_not_full_batch,
     readdir_plus_should_work_with_api_token_not_full_batch,
     readdir_plus_should_work_with_api_token,
-    readdir_should_work_with_token,
-    readdir_should_work_with_token_not_full_batch,
     readdir_should_work_with_api_token,
     readdir_should_work_with_api_token_not_full_batch,
     readdir_should_work_with_startid,
@@ -431,36 +423,20 @@ readdir_plus_should_work_with_size_greater_than_dir_size(Config) ->
     lfm_files_test_base:readdir_plus_should_work_with_size_greater_than_dir_size(Config).
 
 
-readdir_plus_should_work_with_token(Config) ->
-    lfm_files_test_base:readdir_should_work_with_token(Config, 12, readdir_plus, ?INITIAL_DATASTORE_LS_TOKEN).
-
-
-readdir_plus_should_work_with_token_not_full_batch(Config) ->
-    lfm_files_test_base:readdir_should_work_with_token(Config, 10, readdir_plus, ?INITIAL_DATASTORE_LS_TOKEN).
-
-
 readdir_plus_should_work_with_api_token(Config) ->
-    lfm_files_test_base:readdir_should_work_with_token(Config, 12, readdir_plus, ?INITIAL_API_LS_TOKEN).
+    lfm_files_test_base:readdir_should_work_with_token(Config, 12, readdir_plus).
 
 
 readdir_plus_should_work_with_api_token_not_full_batch(Config) ->
-    lfm_files_test_base:readdir_should_work_with_token(Config, 10, readdir_plus, ?INITIAL_API_LS_TOKEN).
-
-
-readdir_should_work_with_token(Config) ->
-    lfm_files_test_base:readdir_should_work_with_token(Config, 12, readdir, ?INITIAL_DATASTORE_LS_TOKEN).
-
-
-readdir_should_work_with_token_not_full_batch(Config) ->
-    lfm_files_test_base:readdir_should_work_with_token(Config, 10, readdir, ?INITIAL_DATASTORE_LS_TOKEN).
+    lfm_files_test_base:readdir_should_work_with_token(Config, 10, readdir_plus).
 
 
 readdir_should_work_with_api_token(Config) ->
-    lfm_files_test_base:readdir_should_work_with_token(Config, 12, readdir, ?INITIAL_API_LS_TOKEN).
+    lfm_files_test_base:readdir_should_work_with_token(Config, 12, readdir).
 
 
 readdir_should_work_with_api_token_not_full_batch(Config) ->
-    lfm_files_test_base:readdir_should_work_with_token(Config, 10, readdir, ?INITIAL_API_LS_TOKEN).
+    lfm_files_test_base:readdir_should_work_with_token(Config, 10, readdir).
 
 
 readdir_should_work_with_startid(Config) ->
@@ -893,12 +869,12 @@ lfm_create_and_read_symlink(Config) ->
         {ok, #file_attr{type = ?SYMLINK_TYPE, size = LinkSize, fully_replicated = undefined, parent_guid = DirGuid}},
         lfm_proxy:stat(W, SessId, {path, Path})),
     ?assert(LinkAttrs2#file_attr.atime > LinkAttrs#file_attr.atime),
-    ?assertMatch({ok, [LinkAttrs2], _}, lfm_proxy:get_children_attrs(W, SessId, ?FILE_REF(DirGuid), #{offset => 0, size => 10})),
+    ?assertMatch({ok, [LinkAttrs2], _}, lfm_proxy:get_children_attrs(W, SessId, ?FILE_REF(DirGuid), #{offset => 0, limit => 10, tune_for_large_continuous_listing => false})),
 
     % Unlink and check if symlink is deleted
     ?assertEqual(ok, lfm_proxy:unlink(W, SessId, {path, Path})),
     ?assertEqual({error, enoent}, lfm_proxy:read_symlink(W, SessId, {path, Path})),
-    ?assertMatch({ok, [], _}, lfm_proxy:get_children_attrs(W, SessId, ?FILE_REF(DirGuid), #{offset => 0, size => 10})),
+    ?assertMatch({ok, [], _}, lfm_proxy:get_children_attrs(W, SessId, ?FILE_REF(DirGuid), #{offset => 0, limit => 10, tune_for_large_continuous_listing => false})),
 
     % Delete test dir
     ?assertMatch(ok, lfm_proxy:unlink(W, SessId, ?FILE_REF(DirGuid))),

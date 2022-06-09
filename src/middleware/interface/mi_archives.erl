@@ -21,7 +21,7 @@
     archive_dataset/6,
     get_info/2,
     update/3,
-    purge/3,
+    delete/3,
     recall/4,
     cancel_recall/2,
     get_recall_details/2,
@@ -61,7 +61,7 @@ list(SessionId, DatasetId, Opts, ListingMode) ->
     archive:description()
 ) ->
     archive:id() | no_return().
-archive_dataset(SessionId, DatasetId, Config, PreservedCallback, PurgedCallback, Description) ->
+archive_dataset(SessionId, DatasetId, Config, PreservedCallback, DeletedCallback, Description) ->
     SpaceGuid = dataset_id_to_space_guid(DatasetId),
 
     middleware_worker:check_exec(SessionId, SpaceGuid, #archive_dataset{
@@ -69,7 +69,7 @@ archive_dataset(SessionId, DatasetId, Config, PreservedCallback, PurgedCallback,
         config = Config,
         description = Description,
         preserved_callback = PreservedCallback,
-        purged_callback = PurgedCallback
+        deleted_callback = DeletedCallback
     }).
 
 
@@ -92,12 +92,12 @@ update(SessionId, ArchiveId, Diff) ->
     }).
 
 
--spec purge(session:id(), archive:id(), archive:callback()) ->
+-spec delete(session:id(), archive:id(), archive:callback()) ->
     ok | no_return().
-purge(SessionId, ArchiveId, CallbackUrl) ->
+delete(SessionId, ArchiveId, CallbackUrl) ->
     SpaceGuid = archive_id_to_space_guid(ArchiveId),
 
-    middleware_worker:check_exec(SessionId, SpaceGuid, #purge_archive{
+    middleware_worker:check_exec(SessionId, SpaceGuid, #delete_archive{
         id = ArchiveId,
         callback = CallbackUrl
     }).

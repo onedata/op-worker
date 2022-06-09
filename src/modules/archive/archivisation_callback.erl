@@ -20,13 +20,13 @@
 %% API
 -export([
     notify_preserved/3, notify_preservation_failed/4,
-    notify_purged/3
+    notify_deleted/3
 ]).
 
 -define(PRESERVATION, preservation).
--define(PURGING, purging).
+-define(DELETING, deleting).
 
--type operation() :: ?PRESERVATION | ?PURGING.
+-type operation() :: ?PRESERVATION | ?DELETING.
 -type error_description() :: binary() | null.
 
 -define(MAX_RETRIES, 30).
@@ -50,9 +50,9 @@ notify_preservation_failed(ArchiveId, DatasetId, CallbackUrl, ErrorDescription) 
     notify_archive_callback(ArchiveId, DatasetId, CallbackUrl, ?PRESERVATION, ErrorDescription).
 
 
--spec notify_purged(archive:id(), dataset:id(), archive:callback()) -> ok.
-notify_purged(ArchiveId, DatasetId, CallbackUrl) ->
-    notify_archive_callback(ArchiveId, DatasetId, CallbackUrl, ?PURGING, null).
+-spec notify_deleted(archive:id(), dataset:id(), archive:callback()) -> ok.
+notify_deleted(ArchiveId, DatasetId, CallbackUrl) ->
+    notify_archive_callback(ArchiveId, DatasetId, CallbackUrl, ?DELETING, null).
 
 %%%===================================================================
 %%% Internal functions

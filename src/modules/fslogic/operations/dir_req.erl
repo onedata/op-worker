@@ -19,12 +19,6 @@
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 
 
-%% @TODO VFS-8980 Create opaque structure for list opts
--type list_opts() :: file_listing:list_opts().
--type list_token() :: file_listing:list_token().
-
--export_type([list_token/0, list_opts/0]).
-
 %% API
 -export([
     mkdir/4,
@@ -61,12 +55,11 @@ mkdir(UserCtx, ParentFileCtx0, Name, Mode) ->
     mkdir_insecure(UserCtx, ParentFileCtx1, Name, Mode).
 
 
-
--spec get_children(user_ctx:ctx(), file_ctx:ctx(), list_opts()) ->
+-spec get_children(user_ctx:ctx(), file_ctx:ctx(), file_listing:options()) ->
     fslogic_worker:fuse_response().
 get_children(UserCtx, FileCtx0, ListOpts) ->
     ParentGuid = file_ctx:get_logical_guid_const(FileCtx0),
-    {ChildrenCtxs, ExtendedInfo, FileCtx1} = get_children_ctxs(
+    {ChildrenCtxs, ListingToken, FileCtx1} = get_children_ctxs(
         UserCtx, FileCtx0, ListOpts, ?OPERATIONS(?list_container_mask)),
     ChildrenNum = length(ChildrenCtxs),
 
@@ -103,17 +96,16 @@ get_children(UserCtx, FileCtx0, ListOpts) ->
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_children{
             child_links = ChildrenLinks,
-            index_token = maps:get(token, ExtendedInfo, undefined),
-            is_last = maps:get(is_last, ExtendedInfo)
+            pagination_token = ListingToken
         }
     }.
 
 
--spec get_children_ctxs(user_ctx:ctx(), file_ctx:ctx(), list_opts()
+-spec get_children_ctxs(user_ctx:ctx(), file_ctx:ctx(), file_listing:options()
 ) ->
     {
         ChildrenCtxs :: [file_ctx:ctx()],
-        ExtendedListInfo :: file_meta:list_extended_info(),
+        file_listing:pagination_token(),
         NewFileCtx :: file_ctx:ctx()
     }.
 get_children_ctxs(UserCtx, FileCtx0, ListOpts) ->
@@ -125,7 +117,7 @@ get_children_ctxs(UserCtx, FileCtx0, ListOpts) ->
 %% @equiv get_children_attrs_insecure/7 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_attrs(user_ctx:ctx(), file_ctx:ctx(), list_opts(), boolean(), boolean()) ->
+-spec get_children_attrs(user_ctx:ctx(), file_ctx:ctx(), file_listing:options(), boolean(), boolean()) ->
     fslogic_worker:fuse_response().
 get_children_attrs(UserCtx, FileCtx0, ListOpts, IncludeReplicationStatus, IncludeLinkCount) ->
     {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
@@ -145,7 +137,7 @@ get_children_attrs(UserCtx, FileCtx0, ListOpts, IncludeReplicationStatus, Includ
 %% @equiv get_children_details_insecure/6 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_details(user_ctx:ctx(), file_ctx:ctx(), list_opts()) ->
+-spec get_children_details(user_ctx:ctx(), file_ctx:ctx(), file_listing:options()) ->
     fslogic_worker:fuse_response().
 get_children_details(UserCtx, FileCtx0, ListOpts) ->
     {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
@@ -170,11 +162,11 @@ get_children_details(UserCtx, FileCtx0, ListOpts) ->
 %% TODO VFS-7149 untangle permissions_check and fslogic_worker
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_ctxs(user_ctx:ctx(), file_ctx:ctx(), list_opts(), data_access_control:requirement()
+-spec get_children_ctxs(user_ctx:ctx(), file_ctx:ctx(), file_listing:options(), data_access_control:requirement()
 ) ->
     {
         ChildrenCtxs :: [file_ctx:ctx()],
-        ExtendedListInfo :: file_meta:list_extended_info(),
+        file_listing:pagination_token(),
         NewFileCtx :: file_ctx:ctx()
     }.
 get_children_ctxs(UserCtx, FileCtx0, ListOpts, DirOperationsRequirements) ->
@@ -186,7 +178,7 @@ get_children_ctxs(UserCtx, FileCtx0, ListOpts, DirOperationsRequirements) ->
     {CanonicalChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
         UserCtx, FileCtx1, AccessRequirements
     ),
-    file_listing:list_children(UserCtx, FileCtx2, ListOpts, CanonicalChildrenWhiteList).
+    file_tree:list_children(FileCtx2, UserCtx, ListOpts, CanonicalChildrenWhiteList).
 
 
 %%--------------------------------------------------------------------
@@ -246,15 +238,15 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
 %% and allowed by CanonicalChildrenWhiteList.
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_attrs_insecure(user_ctx:ctx(), file_ctx:ctx(), list_opts(),
+-spec get_children_attrs_insecure(user_ctx:ctx(), file_ctx:ctx(), file_listing:options(),
     boolean(), boolean(), undefined | [file_meta:name()]
 ) ->
     fslogic_worker:fuse_response().
 get_children_attrs_insecure(
     UserCtx, FileCtx0, ListOpts, IncludeReplicationStatus, IncludeLinkCount, CanonicalChildrenWhiteList
 ) ->
-    {Children, ExtendedInfo, FileCtx1} = file_listing:list_children(
-        UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhiteList),
+    {Children, ListingToken, FileCtx1} = file_tree:list_children(
+        FileCtx0, UserCtx, ListOpts, CanonicalChildrenWhiteList),
     ChildrenAttrs = map_children(
         UserCtx,
         fun attr_req:get_file_attr_insecure/3,
@@ -268,8 +260,7 @@ get_children_attrs_insecure(
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_children_attrs{
             child_attrs = ChildrenAttrs,
-            index_token = maps:get(token, ExtendedInfo, undefined),
-            is_last = maps:get(is_last, ExtendedInfo)
+            pagination_token = ListingToken
         }
     }.
 
@@ -285,14 +276,14 @@ get_children_attrs_insecure(
 -spec get_children_details_insecure(
     user_ctx:ctx(),
     file_ctx:ctx(),
-    list_opts(),
+    file_listing:options(),
     undefined | [file_meta:name()]
 ) ->
     fslogic_worker:fuse_response().
 get_children_details_insecure(UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhiteList) ->
     file_ctx:is_user_root_dir_const(FileCtx0, UserCtx) andalso throw(?ENOTSUP),
-    {Children, ListExtendedInfo, FileCtx1} = file_listing:list_children(
-        UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhiteList
+    {Children, ListingToken, FileCtx1} = file_tree:list_children(
+        FileCtx0, UserCtx, ListOpts, CanonicalChildrenWhiteList
     ),
     ChildrenDetails = map_children(
         UserCtx,
@@ -305,7 +296,7 @@ get_children_details_insecure(UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhit
     #fuse_response{status = #status{code = ?OK},
         fuse_response = #file_children_details{
             child_details = ChildrenDetails,
-            is_last = maps:get(is_last, ListExtendedInfo)
+            pagination_token = ListingToken
         }
     }.
 

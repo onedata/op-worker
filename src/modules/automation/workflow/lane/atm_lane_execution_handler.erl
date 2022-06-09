@@ -55,7 +55,8 @@ prepare(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
         AtmLaneExecutionSpec
     catch Type:Reason:Stacktrace ->
         atm_lane_execution_status:handle_aborting(AtmLaneRunSelector, AtmWorkflowExecutionId, failure),
-        handle_ended(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
+        % Call via ?MODULE: to allow mocking in tests
+        ?MODULE:handle_ended(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
         throw(?atm_examine_error(Type, Reason, Stacktrace))
     end.
 
