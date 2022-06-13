@@ -30,6 +30,7 @@
 -include("proto/oneprovider/rtransfer_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("clproto/include/messages.hrl").
+-include_lib("cluster_worker/include/time_series/browsing.hrl").
 
 %% API
 -export([
@@ -923,11 +924,25 @@ translate_from_protobuf(#'RemoveMetadata'{type = Type}) ->
     #remove_metadata{
         type = binary_to_existing_atom(Type, utf8)
     };
+translate_from_protobuf(#'TimeSeriesGetLayoutRequest'{
+}) ->
+    #time_series_get_layout_request{
+    };
+translate_from_protobuf(#'TimeSeriesGetSliceRequest'{
+    encoded_layout = EncodedLayout,
+    start_timestamp = StartTimestamp,
+    window_limit = WindowLimit
+}) ->
+    #time_series_get_slice_request{
+        layout = json_utils:decode(EncodedLayout),
+        start_timestamp = StartTimestamp,
+        window_limit = WindowLimit
+    };
 translate_from_protobuf(#'BrowseTimeDirStats'{
-    serialized_request = SerializedBrowseRequest
+    request = TimeSeriesBrowseRequest
 }) ->
     #browse_time_dir_stats{
-        request = binary_to_term(SerializedBrowseRequest)
+        request = TimeSeriesBrowseRequest
     };
 translate_from_protobuf(#'BrowseCurrentDirStats'{
     stat_names = StatNames
@@ -1002,8 +1017,20 @@ translate_from_protobuf(#'Metadata'{
     };
 translate_from_protobuf(#'CheckPerms'{flag = Flag}) ->
     #check_perms{flag = open_flag_translate_from_protobuf(Flag)};
-translate_from_protobuf(#'DirTimeStatsResponse'{serialized_response = SerializedResult}) ->
-    #dir_time_stats_result{result = binary_to_term(SerializedResult)};
+translate_from_protobuf(#'TimeSeriesLayoutResult'{
+    encoded_layout = EncodedLayout
+}) ->
+    #time_series_layout_result{
+        layout = json_utils:decode(EncodedLayout)
+    };
+translate_from_protobuf(#'TimeSeriesSliceResult'{
+    encoded_slice = EncodedSlice
+}) ->
+    #time_series_slice_result{
+        slice = json_utils:decode(EncodedSlice)
+    };
+translate_from_protobuf(#'DirTimeStatsResponse'{response = TimeSeriesBrowseResult}) ->
+    #dir_time_stats_result{result = translate_from_protobuf(TimeSeriesBrowseResult)};
 translate_from_protobuf(#'DirCurrentStatsResponse'{encoded_response = EncodedResponse}) ->
     #dir_current_stats_result{result = json_utils:decode(EncodedResponse)};
 
@@ -1966,11 +1993,25 @@ translate_to_protobuf(#remove_metadata{type = Type}) ->
     {remove_metadata, #'RemoveMetadata'{
         type = atom_to_binary(Type, utf8)
     }};
+translate_to_protobuf(#time_series_get_layout_request{
+}) ->
+    {time_series_get_layout_request, #'TimeSeriesGetLayoutRequest'{
+    }};
+translate_to_protobuf(#time_series_get_slice_request{
+    layout = Layout,
+    start_timestamp = StartTimestamp,
+    window_limit = WindowLimit
+}) ->
+    {time_series_get_slice_request, #'TimeSeriesGetSliceRequest'{
+        encoded_layout = json_utils:encode(Layout),
+        start_timestamp = StartTimestamp,
+        window_limit = WindowLimit
+    }};
 translate_to_protobuf(#browse_time_dir_stats{
     request = BrowseRequest
 }) ->
     {browse_time_dir_stats, #'BrowseTimeDirStats'{
-        serialized_request = term_to_binary(BrowseRequest)
+        request = translate_to_protobuf(BrowseRequest)
     }};
 translate_to_protobuf(#browse_current_dir_stats{
     stat_names = StatNames
@@ -2047,11 +2088,23 @@ translate_to_protobuf(#check_perms{flag = Flag}) ->
     {check_perms, #'CheckPerms'{
         flag = open_flag_translate_to_protobuf(Flag)
     }};
+translate_to_protobuf(#time_series_layout_result{
+    layout = Layout
+}) ->
+    {time_series_layout_result, #'TimeSeriesLayoutResult'{
+        encoded_layout = json_utils:encode(Layout)
+    }};
+translate_to_protobuf(#time_series_slice_result{
+    slice = Slice
+}) ->
+    {time_series_slice_result, #'TimeSeriesSliceResult'{
+        encoded_slice = json_utils:encode(Slice)
+    }};
 translate_to_protobuf(#dir_time_stats_result{
     result = DirTimeStatsResult
 }) ->
     {dir_time_stats_response, #'DirTimeStatsResponse'{
-        serialized_response = term_to_binary(DirTimeStatsResult)
+        response = DirTimeStatsResult
     }};
 translate_to_protobuf(#dir_current_stats_result{
     result = DirCurrentStatsResult
