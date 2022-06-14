@@ -24,7 +24,7 @@
 
 
 %% API
--export([is_openfaas_available/0, assert_openfaas_available/0, get_activity_registry_id/1]).
+-export([is_openfaas_available/0, assert_openfaas_available/0, get_pod_status_registry_id/1]).
 
 %% atm_task_executor callbacks
 -export([create/4, initiate/2, teardown/2, delete/1, is_in_readonly_mode/1, run/3]).
@@ -36,7 +36,7 @@
 -record(atm_openfaas_task_executor, {
     function_name :: function_name(),
     operation_spec :: atm_openfaas_operation_spec:record(),
-    activity_registry :: atm_openfaas_function_activity_registry:id()
+    pod_status_registry :: atm_openfaas_function_pod_status_registry:id()
 }).
 -type record() :: #atm_openfaas_task_executor{}.
 
@@ -90,9 +90,9 @@ assert_openfaas_available() ->
     end.
 
 
--spec get_activity_registry_id(record()) -> atm_openfaas_function_activity_registry:id().
-get_activity_registry_id(#atm_openfaas_task_executor{activity_registry = ActivityRegistryId}) ->
-    ActivityRegistryId.
+-spec get_pod_status_registry_id(record()) -> atm_openfaas_function_pod_status_registry:id().
+get_pod_status_registry_id(#atm_openfaas_task_executor{pod_status_registry = PodStatusRegistryId}) ->
+    PodStatusRegistryId.
 
 
 %%%===================================================================
@@ -111,12 +111,12 @@ create(AtmWorkflowExecutionCtx, _AtmLaneIndex, _AtmTaskSchema, AtmLambdaRevision
     assert_openfaas_available(),
 
     FunctionName = build_function_name(AtmWorkflowExecutionCtx, AtmLambdaRevision),
-    {ok, ActivityRegistryId} = atm_openfaas_function_activity_registry:ensure_for_function(FunctionName),
+    {ok, PodStatusRegistryId} = atm_openfaas_function_pod_status_registry:ensure_for_function(FunctionName),
 
     #atm_openfaas_task_executor{
         function_name = FunctionName,
         operation_spec = AtmLambdaRevision#atm_lambda_revision.operation_spec,
-        activity_registry = ActivityRegistryId
+        pod_status_registry = PodStatusRegistryId
     }.
 
 
@@ -152,9 +152,9 @@ teardown(AtmWorkflowExecutionCtx, AtmTaskExecutor) ->
 
 -spec delete(record()) -> ok | no_return().
 delete(#atm_openfaas_task_executor{
-    activity_registry = ActivityRegistryId
+    pod_status_registry = PodStatusRegistryId
 }) ->
-    ok = atm_openfaas_function_activity_registry:delete(ActivityRegistryId).
+    ok = atm_openfaas_function_pod_status_registry:delete(PodStatusRegistryId).
 
 
 -spec is_in_readonly_mode(record()) -> boolean().
@@ -185,12 +185,12 @@ version() ->
 db_encode(#atm_openfaas_task_executor{
     function_name = FunctionName,
     operation_spec = OperationSpec,
-    activity_registry = ActivityRegistryId
+    pod_status_registry = PodStatusRegistryId
 }, NestedRecordEncoder) ->
     #{
         <<"functionName">> => FunctionName,
         <<"operationSpec">> => NestedRecordEncoder(OperationSpec, atm_openfaas_operation_spec),
-        <<"activityRegistryId">> => ActivityRegistryId
+        <<"podStatusRegistryId">> => PodStatusRegistryId
     }.
 
 
@@ -203,7 +203,7 @@ db_decode(#{
     #atm_openfaas_task_executor{
         function_name = FunctionName,
         operation_spec = NestedRecordDecoder(OperationSpecJson, atm_openfaas_operation_spec),
-        activity_registry = maps:get(<<"activityRegistryId">>, RecordJson, <<"unknown">>)
+        pod_status_registry = maps:get(<<"podStatusRegistryId">>, RecordJson, <<"unknown">>)
     }.
 
 

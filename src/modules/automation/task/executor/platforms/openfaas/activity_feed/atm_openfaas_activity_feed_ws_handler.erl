@@ -75,7 +75,7 @@ websocket_init(ClientType) ->
     {ok, #state{
         handler_module = case ClientType of
             pod_status_monitor ->
-                atm_openfaas_function_activity_registry;
+                atm_openfaas_function_pod_status_registry;
             result_streamer ->
                 atm_openfaas_result_stream_handler
         end,
@@ -194,7 +194,7 @@ is_authorized(Req) ->
 
 %% @private
 -spec handle_text_message(binary(), state()) ->
-    {ok, state()} | {reply, {text, binary()}, state()}.
+    {ok, state()} | {reply, [cow_ws:frame()], state()}.
 handle_text_message(Payload, #state{handler_module = HandlerModule, handler_state = HandlerState} = State) ->
     try
         ActivityReport = jsonable_record:from_json(json_utils:decode(Payload), atm_openfaas_activity_report),
@@ -212,18 +212,30 @@ handle_text_message(Payload, #state{handler_module = HandlerModule, handler_stat
             [Class, Reason, TrimmedPayload],
             Stacktrace
         ),
-        HandlerModule:handle_error(?ERROR_BAD_MESSAGE(TrimmedPayload), HandlerState),
-        {reply, {text, <<"Bad request: ", Payload/binary>>}, State}
+        HandlerModule:handle_error(self(), ?ERROR_BAD_MESSAGE(TrimmedPayload), HandlerState),
+        {reply, [{text, <<"Bad request: ", Payload/binary>>}], State}
     end.
 
 
 %% @private
 -spec handle_activity_report(atm_openfaas_activity_report:record(), state()) ->
-    {ok, state()} | {reply, {text, binary()}, state()}.
+    {ok, state()} | {reply, [cow_ws:frame()], state()}.
 handle_activity_report(ActivityReport, #state{handler_module = HandlerModule, handler_state = HandlerState} = State) ->
     try
-        NewHandlerState = HandlerModule:consume_activity_report(self(), ActivityReport, HandlerState),
-        {ok, State#state{handler_state = NewHandlerState}}
+        #atm_openfaas_activity_report{batch = Batch} = ActivityReport,
+        {Results, FinalHandlerState} = lists:mapfoldl(fun(ReportBody, HandlerStateAcc) ->
+            HandlerModule:consume_report(self(), ReportBody, HandlerStateAcc)
+        end, HandlerState, Batch),
+        ReplyFrames = lists:filtermap(fun
+            (no_reply) -> false;
+            ({reply_json, JsonTerm}) -> {true, {text, json_utils:encode(JsonTerm)}}
+        end, Results),
+        case ReplyFrames of
+            [] ->
+                {ok, State#state{handler_state = FinalHandlerState}};
+            _ ->
+                {reply, ReplyFrames, State#state{handler_state = FinalHandlerState}}
+        end
     catch Class:Reason:Stacktrace ->
         ?error_stacktrace(
             "Unexpected error when processing an openfaas activity report - ~w:~p~n"
@@ -231,6 +243,6 @@ handle_activity_report(ActivityReport, #state{handler_module = HandlerModule, ha
             [Class, Reason, ActivityReport],
             Stacktrace
         ),
-        HandlerModule:handle_error(?ERROR_INTERNAL_SERVER_ERROR, HandlerState),
-        {reply, {text, <<"Internal server error while processing the request">>}, State}
+        HandlerModule:handle_error(self(), ?ERROR_INTERNAL_SERVER_ERROR, HandlerState),
+        {reply, [{text, <<"Internal server error while processing the request">>}], State}
     end.

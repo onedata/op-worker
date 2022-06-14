@@ -47,7 +47,7 @@
 -spec resolve_handler(middleware:operation(), gri:aspect(), middleware:scope()) ->
     module() | no_return().
 resolve_handler(get, instance, private) -> ?MODULE;
-resolve_handler(get, openfaas_function_activity_registry, private) -> ?MODULE;
+resolve_handler(get, openfaas_function_pod_status_registry, private) -> ?MODULE;
 resolve_handler(get, {openfaas_function_pod_event_log, _}, private) -> ?MODULE;
 
 resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
@@ -66,7 +66,7 @@ resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
 -spec data_spec(middleware:req()) -> undefined | middleware_sanitizer:data_spec().
 data_spec(#op_req{operation = get, gri = #gri{aspect = Aspect}}) when
     Aspect =:= instance;
-    Aspect =:= openfaas_function_activity_registry
+    Aspect =:= openfaas_function_pod_status_registry
 ->
     undefined;
 data_spec(#op_req{operation = get, gri = #gri{aspect = {openfaas_function_pod_event_log, _}}}) -> #{
@@ -112,7 +112,7 @@ authorize(#op_req{operation = get, auth = Auth, gri = #gri{aspect = Aspect}}, #a
     workflow_execution_id = AtmWorkflowExecutionId
 }) when
     Aspect =:= instance;
-    Aspect =:= openfaas_function_activity_registry;
+    Aspect =:= openfaas_function_pod_status_registry;
     element(1, Aspect) =:= openfaas_function_pod_event_log
 ->
     atm_workflow_execution_middleware_plugin:has_access_to_workflow_execution_details(
@@ -128,7 +128,7 @@ authorize(#op_req{operation = get, auth = Auth, gri = #gri{aspect = Aspect}}, #a
 -spec validate(middleware:req(), middleware:entity()) -> ok | no_return().
 validate(#op_req{operation = get, gri = #gri{aspect = Aspect}}, _) when
     Aspect =:= instance;
-    Aspect =:= openfaas_function_activity_registry;
+    Aspect =:= openfaas_function_pod_status_registry;
     element(1, Aspect) =:= openfaas_function_pod_event_log
 ->
     % Doc was already fetched in 'fetch_entity' so space must be supported locally
@@ -154,26 +154,22 @@ create(_) ->
 get(#op_req{gri = #gri{aspect = instance, scope = private}}, AtmTaskExecution) ->
     {ok, AtmTaskExecution};
 
-get(#op_req{gri = #gri{aspect = openfaas_function_activity_registry, scope = private}}, AtmTaskExecution) ->
-    {ok, get_openfaas_function_activity_registry(AtmTaskExecution)};
+get(#op_req{gri = #gri{aspect = openfaas_function_pod_status_registry, scope = private}}, AtmTaskExecution) ->
+    {ok, get_openfaas_function_pod_status_registry(AtmTaskExecution)};
 
 get(#op_req{data = Data, gri = #gri{aspect = {openfaas_function_pod_event_log, PodId}}}, AtmTaskExecution) ->
-    #atm_openfaas_function_activity_registry{
-        pod_status_registry = PodStatusRegistry
-    } = get_openfaas_function_activity_registry(AtmTaskExecution),
+    PodStatusRegistry = get_openfaas_function_pod_status_registry(AtmTaskExecution),
 
-    atm_openfaas_function_pod_status_registry:has_summary(PodId, PodStatusRegistry) orelse throw(?ERROR_NOT_FOUND),
-
-    #atm_openfaas_function_pod_status_summary{
-        event_log = EventLogId
-    } = atm_openfaas_function_pod_status_registry:get_summary(PodId, PodStatusRegistry),
-
-    BrowseOpts = json_infinite_log_model:build_browse_opts(Data),
-
-    {ok, BrowseResult} = atm_openfaas_function_activity_registry:browse_pod_event_log(
-        EventLogId, BrowseOpts#{direction => ?BACKWARD}
-    ),
-    {ok, value, BrowseResult}.
+    case atm_openfaas_function_pod_status_registry:find_summary(PodId, PodStatusRegistry) of
+        error ->
+            ?ERROR_NOT_FOUND;
+        {ok, #atm_openfaas_function_pod_status_summary{event_log = EventLogId}} ->
+            BrowseOpts = json_infinite_log_model:build_browse_opts(Data),
+            {ok, BrowseResult} = atm_openfaas_function_pod_status_registry:browse_pod_event_log(
+                EventLogId, BrowseOpts#{direction => ?BACKWARD}
+            ),
+            {ok, value, BrowseResult}
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -202,12 +198,12 @@ delete(_) ->
 
 
 %% @private
--spec get_openfaas_function_activity_registry(atm_task_execution:record()) ->
-    atm_openfaas_function_activity_registry:record() | no_return().
-get_openfaas_function_activity_registry(#atm_task_execution{executor = Executor}) ->
+-spec get_openfaas_function_pod_status_registry(atm_task_execution:record()) ->
+    atm_openfaas_function_pod_status_registry:record() | no_return().
+get_openfaas_function_pod_status_registry(#atm_task_execution{executor = Executor}) ->
     case atm_task_executor:get_type(Executor) of
         atm_openfaas_task_executor ->
-            ActivityRegistryId = atm_openfaas_task_executor:get_activity_registry_id(Executor),
-            {ok, ActivityRegistry} = atm_openfaas_function_activity_registry:get(ActivityRegistryId),
-            ActivityRegistry
+            PodStatusRegistryId = atm_openfaas_task_executor:get_pod_status_registry_id(Executor),
+            {ok, PodStatusRegistry} = atm_openfaas_function_pod_status_registry:get(PodStatusRegistryId),
+            PodStatusRegistry
     end.

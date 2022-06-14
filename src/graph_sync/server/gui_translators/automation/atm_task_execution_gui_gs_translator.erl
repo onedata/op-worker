@@ -32,8 +32,9 @@ translate_value(#gri{aspect = {openfaas_function_pod_event_log, _}}, BrowseResul
 translate_resource(#gri{aspect = instance, scope = private}, AtmTaskExecution) ->
     translate_atm_task_execution(AtmTaskExecution);
 
-translate_resource(#gri{aspect = openfaas_function_activity_registry, scope = private}, ActivityRegistry) ->
-    translate_openfaas_function_activity_registry(ActivityRegistry).
+% fixme adjust GUI
+translate_resource(#gri{aspect = openfaas_function_pod_status_registry, scope = private}, PodStatusRegistry) ->
+    atm_openfaas_function_pod_status_registry:to_json(PodStatusRegistry).
 
 
 %%%===================================================================
@@ -71,14 +72,4 @@ translate_atm_task_execution(#atm_task_execution{
         <<"itemsInProcessing">> => ItemsInProcessing,
         <<"itemsProcessed">> => ItemsProcessed,
         <<"itemsFailed">> => ItemsFailed
-    }.
-
-
--spec translate_openfaas_function_activity_registry(atm_openfaas_function_activity_registry:record()) ->
-    gs_protocol:data().
-translate_openfaas_function_activity_registry(#atm_openfaas_function_activity_registry{
-    pod_status_registry = PodStatusRegistry
-}) ->
-    #{
-        <<"registry">> => jsonable_record:to_json(PodStatusRegistry, atm_openfaas_function_pod_status_registry)
     }.
