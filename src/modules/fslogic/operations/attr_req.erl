@@ -194,15 +194,6 @@ get_file_details_insecure(UserCtx, FileCtx, Opts) ->
                 false ->
                     undefined
             end,
-            index_startid = case file_ctx:is_space_dir_const(FileCtx) of
-                true -> 
-                    % As provider id in space doc is random (depends on which provider called `file_meta:make_space_exist/0`) 
-                    % use only space id in index (there are no conflicts on spaces between providers, so it is not a problem).
-                    file_listing:build_index(file_meta:get_name(FileDoc));
-                false -> 
-                    file_listing:build_index(
-                        file_meta:get_name(FileDoc), file_meta:get_provider_id(FileDoc))
-            end,
             active_permissions_type = ActivePermissionsType,
             has_metadata = has_metadata(FileCtx3),
             eff_qos_membership = maps:get(effective_qos_membership, EffectiveValues, undefined),
@@ -521,7 +512,16 @@ resolve_file_attr(UserCtx, FileCtx, Opts) ->
         provider_id = ProviderId,
         owner_id = OwnerId,
         fully_replicated = ReplicationStatus,
-        nlink = LinksCount
+        nlink = LinksCount,
+        listing_index = case file_ctx:is_space_dir_const(FileCtx) of
+            true ->
+                % As provider id in space doc is random (depends on which provider called `file_meta:make_space_exist/0`) 
+                % use only space id in index (there are no conflicts on spaces between providers, so it is not a problem).
+                file_listing:build_index(file_meta:get_name(FileDoc));
+            false ->
+                file_listing:build_index(
+                    file_meta:get_name(FileDoc), file_meta:get_provider_id(FileDoc))
+        end
     },
     {FileAttr, FileDoc, ConflictingFiles, FileCtx7}.
 

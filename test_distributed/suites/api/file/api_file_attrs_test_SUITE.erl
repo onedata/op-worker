@@ -47,6 +47,8 @@
     get_dir_distribution_2_test/1,
     get_dir_distribution_3_test/1,
     get_symlink_distribution_test/1,
+    
+    get_reg_file_storage_locations_test/1,
 
     test_for_hardlink_between_files_test/1,
     
@@ -67,6 +69,8 @@ groups() -> [
 
         get_symlink_distribution_test,
         get_reg_file_distribution_test,
+
+        get_reg_file_storage_locations_test,
 
         test_for_hardlink_between_files_test
     ]},
@@ -1288,6 +1292,138 @@ build_gather_historical_dir_size_stats_prepare_gs_args_fun(FileGuid, DefaultData
             data = maps:merge(DefaultData, Data2)
         }
     end.
+
+
+%%%===================================================================
+%%% Get file storage locations test functions
+%%%===================================================================
+
+
+get_reg_file_storage_locations_test(Config) ->
+    P1Id = oct_background:get_provider_id(krakow),
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    
+    P2Id = oct_background:get_provider_id(paris),
+    [P2Node] = oct_background:get_provider_nodes(paris),
+    
+    SpaceId = oct_background:get_space_id(space_krk_par),
+    P1StorageId = get_storage_id(SpaceId, P1Id),
+    P2StorageId = get_storage_id(SpaceId, P2Id),
+    
+    SpaceOwnerSessIdP1 = oct_background:get_user_session_id(user2, krakow),
+    UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
+    UserSessIdP2 = oct_background:get_user_session_id(user3, paris),
+    
+    FileType = <<"file">>,
+    FilePath = filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()]),
+    {ok, FileGuid} = lfm_test_utils:create_file(FileType, P1Node, UserSessIdP1, FilePath, 8#707),
+    FileUuid = file_id:guid_to_uuid(FileGuid),
+    {ok, ShareId} = opt_shares:create(P1Node, SpaceOwnerSessIdP1, ?FILE_REF(FileGuid), <<"share">>),
+    
+    lfm_test_utils:write_file(P1Node, UserSessIdP1, FileGuid, 0, {rand_content, 20}),
+    
+    {ok, FileLogicalPath} = lfm_proxy:get_file_path(P1Node, UserSessIdP1, FileGuid),
+    [_Sep, _SpaceName | PathTokens] = filename:split(FileLogicalPath),
+    FileStoragePath = filename:join([<<"/">>, SpaceId | PathTokens]),
+    ExpResult1 = #{
+        P1StorageId => FileStoragePath,
+        P2StorageId => null
+    },
+    assert_file_location_created(P2Node, FileUuid, P1Id),
+    get_storage_locations_test_base(FileGuid, ShareId, ExpResult1, Config),
+    
+    % Read file on the other provider and check file storage locations again.
+    
+    lfm_test_utils:read_file(P2Node, UserSessIdP2, FileGuid, 20),
+    assert_file_location_created(P1Node, FileUuid, P2Id),
+    ExpResult2 = #{
+        P1StorageId => FileStoragePath,
+        P2StorageId => FileStoragePath
+    },
+    get_storage_locations_test_base(FileGuid, ShareId, ExpResult2, Config).
+
+
+get_storage_locations_test_base(FileGuid, ShareId, ExpResult, Config) ->
+    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
+    
+    ValidateRestSuccessfulCallFun = fun(_TestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
+        ?assertEqual({?HTTP_200_OK, ExpResult}, {RespCode, RespBody})
+    end,
+    
+    CreateValidateGsSuccessfulCallFun = fun(Type) ->
+        ExpGsResponse = ExpResult#{
+            <<"gri">> => gri:serialize(#gri{
+                type = Type, id = FileGuid, aspect = storage_locations, scope = private
+            }),
+            <<"revision">> => 1
+        },
+        fun(_TestCtx, Result) ->
+            ?assertEqual({ok, ExpGsResponse}, Result)
+        end
+    end,
+    
+    ?assert(onenv_api_test_runner:run_tests([
+        #suite_spec{
+            target_nodes = ?config(op_worker_nodes, Config),
+            client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR,
+            scenario_templates = [
+                #scenario_template{
+                    name = <<"Get file storage locations for using /data/FileId/storage_locations rest endpoint">>,
+                    type = rest,
+                    prepare_args_fun = build_get_storage_locations_prepare_rest_args_fun(FileObjectId),
+                    validate_result_fun = ValidateRestSuccessfulCallFun
+                },
+                #scenario_template{
+                    name = <<"Get file storage locations using op_file gs api">>,
+                    type = gs,
+                    prepare_args_fun = build_get_storage_locations_prepare_gs_args_fun(FileGuid, private),
+                    validate_result_fun = CreateValidateGsSuccessfulCallFun(op_file)
+                }
+            ],
+            data_spec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
+                api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+                    FileGuid, ShareId, undefined
+                )
+            )
+        }
+    ])).
+
+
+%% @private
+-spec build_get_storage_locations_prepare_rest_args_fun(file_id:objectid()) ->
+    onenv_api_test_runner:prepare_args_fun().
+build_get_storage_locations_prepare_rest_args_fun(FileObjectId) ->
+    fun(#api_test_ctx{data = Data}) ->
+        {Id, _} = api_test_utils:maybe_substitute_bad_id(FileObjectId, Data),
+        
+        #rest_args{
+            method = get,
+            path = <<"data/", Id/binary, "/storage_locations">>
+        }
+    end.
+
+
+%% @private
+-spec build_get_storage_locations_prepare_gs_args_fun(file_id:file_guid(), gri:scope()) ->
+    onenv_api_test_runner:prepare_args_fun().
+build_get_storage_locations_prepare_gs_args_fun(FileGuid, Scope) ->
+    fun(#api_test_ctx{data = Data}) ->
+        {GriId, _} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data),
+        
+        #gs_args{
+            operation = get,
+            gri = #gri{type = op_file, id = GriId, aspect = storage_locations, scope = Scope}
+        }
+    end.
+
+
+%% @private
+-spec assert_file_location_created(node(), file_id:file_meta_uuid(), oneprovider:id()) -> 
+    {ok, file_location:doc()} | no_return().
+assert_file_location_created(Node, FileUuid, LocationProviderId) ->
+    ?assertMatch({ok, _}, opw_test_rpc:call(Node, fslogic_location_cache, get_location, [
+        file_location:id(FileUuid, LocationProviderId), FileUuid, false
+    ]), ?ATTEMPTS).
 
 
 %%%===================================================================

@@ -68,6 +68,11 @@ get_response(#gri{aspect = As}, Metadata) when
 get_response(#gri{id = Guid, aspect = distribution}, FileDistributionGetResult) ->
     ?OK_REPLY(file_distribution_gather_result:to_json(rest, FileDistributionGetResult, Guid));
 
+get_response(#gri{aspect = storage_locations}, StorageLocations) ->
+    ?OK_REPLY(maps:map(fun(_StorageId, StorageLocation) ->
+        utils:undefined_to_null(StorageLocation)
+    end, StorageLocations));
+
 get_response(#gri{aspect = dataset_summary}, #file_eff_dataset_summary{
     direct_dataset = DatasetId,
     eff_ancestor_datasets = EffAncestorDatasets,

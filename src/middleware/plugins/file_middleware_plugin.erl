@@ -69,7 +69,8 @@ file_attrs_to_json(#file_attr{
     shares = Shares,
     provider_id = ProviderId,
     owner_id = OwnerId,
-    nlink = HardlinksCount
+    nlink = HardlinksCount,
+    listing_index = ListingIndex
 }) ->
     {ok, ObjectId} = file_id:guid_to_objectid(Guid),
 
@@ -97,7 +98,8 @@ file_attrs_to_json(#file_attr{
         <<"shares">> => Shares,
         <<"provider_id">> => ProviderId,
         <<"owner_id">> => OwnerId,
-        <<"hardlinks_count">> => utils:undefined_to_null(HardlinksCount)
+        <<"hardlinks_count">> => utils:undefined_to_null(HardlinksCount),
+        <<"listing_index">> => ListingIndex
     }.
 
 
@@ -493,6 +495,7 @@ resolve_get_operation_handler(json_metadata, public) -> ?MODULE;         % REST/
 resolve_get_operation_handler(rdf_metadata, private) -> ?MODULE;         % REST/gs
 resolve_get_operation_handler(rdf_metadata, public) -> ?MODULE;          % REST/gs
 resolve_get_operation_handler(distribution, private) -> ?MODULE;         % REST/gs
+resolve_get_operation_handler(storage_locations, private) -> ?MODULE;
 resolve_get_operation_handler(acl, private) -> ?MODULE;
 resolve_get_operation_handler(shares, private) -> ?MODULE;               % gs only
 resolve_get_operation_handler(transfers, private) -> ?MODULE;
@@ -617,6 +620,7 @@ data_spec_get(#gri{aspect = rdf_metadata}) -> #{
 
 data_spec_get(#gri{aspect = As}) when
     As =:= distribution;
+    As =:= storage_locations;
     As =:= acl;
     As =:= shares;
     As =:= symlink_value;
@@ -708,6 +712,7 @@ authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= json_metadata;
     As =:= rdf_metadata;
     As =:= distribution;
+    As =:= storage_locations;
     As =:= acl;
     As =:= shares;
     As =:= dataset_summary;
@@ -758,6 +763,7 @@ validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= json_metadata;
     As =:= rdf_metadata;
     As =:= distribution;
+    As =:= storage_locations;
     As =:= acl;
     As =:= shares;
     As =:= transfers;
@@ -944,6 +950,9 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = acl}}, _) ->
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = distribution}}, _) ->
     {ok, mi_file_metadata:gather_distribution(Auth#auth.session_id, ?FILE_REF(FileGuid))};
+
+get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = storage_locations}}, _) ->
+    {ok, mi_file_metadata:get_storage_locations(Auth#auth.session_id, ?FILE_REF(FileGuid))};
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = shares}}, _) ->
     {ok, FileAttrs} = ?lfm_check(lfm:stat(Auth#auth.session_id, ?FILE_REF(FileGuid))),

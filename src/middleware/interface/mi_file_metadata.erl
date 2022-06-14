@@ -18,7 +18,8 @@
 %% API
 -export([
     gather_distribution/2,
-    gather_historical_dir_size_stats/3
+    gather_historical_dir_size_stats/3,
+    get_storage_locations/2
 ]).
 
 
@@ -41,3 +42,10 @@ gather_historical_dir_size_stats(SessionId, FileKey, Request) ->
     middleware_worker:check_exec(SessionId, FileGuid, #historical_dir_size_stats_gather_request{
         request = Request
     }).
+
+
+-spec get_storage_locations(session:id(), lfm:file_key()) ->
+    file_distribution:storage_locations() | no_return().
+get_storage_locations(SessionId, FileKey) ->
+    FileGuid = lfm_file_key:resolve_file_key(SessionId, FileKey, do_not_resolve_symlink),
+    middleware_worker:check_exec(SessionId, FileGuid, #file_storage_locations_get_request{}).
