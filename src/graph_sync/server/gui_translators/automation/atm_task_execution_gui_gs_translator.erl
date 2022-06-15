@@ -32,9 +32,10 @@ translate_value(#gri{aspect = {openfaas_function_pod_event_log, _}}, BrowseResul
 translate_resource(#gri{aspect = instance, scope = private}, AtmTaskExecution) ->
     translate_atm_task_execution(AtmTaskExecution);
 
-% fixme adjust GUI
 translate_resource(#gri{aspect = openfaas_function_pod_status_registry, scope = private}, PodStatusRegistry) ->
-    atm_openfaas_function_pod_status_registry:to_json(PodStatusRegistry).
+    #{
+        <<"registry">> => atm_openfaas_function_pod_status_registry:to_json(PodStatusRegistry)
+    }.
 
 
 %%%===================================================================
