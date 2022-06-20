@@ -73,7 +73,8 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = {openfaas_function_pod_ev
     optional => #{
         <<"index">> => {binary, any},
         <<"offset">> => {integer, any},
-        <<"limit">> => {integer, {between, 1, ?MAX_POD_EVENT_LOG_LIST_LIMIT}}
+        <<"limit">> => {integer, {between, 1, ?MAX_POD_EVENT_LOG_LIST_LIMIT}},
+        <<"direction">> => {atom, [?FORWARD, ?BACKWARD]}
     }
 }.
 
@@ -171,7 +172,7 @@ get(#op_req{data = Data, gri = #gri{aspect = {openfaas_function_pod_event_log, P
     BrowseOpts = json_infinite_log_model:build_browse_opts(Data),
 
     {ok, BrowseResult} = atm_openfaas_function_activity_registry:browse_pod_event_log(
-        EventLogId, BrowseOpts#{direction => ?BACKWARD}
+        EventLogId, BrowseOpts
     ),
     {ok, value, BrowseResult}.
 

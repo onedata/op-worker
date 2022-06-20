@@ -94,7 +94,7 @@ destroy(Id) ->
 -spec browse_content(id(), json_infinite_log_model:listing_opts()) ->
     {ok, json_infinite_log_model:browse_result()} | {error, term()}.
 browse_content(Id, Opts) ->
-    json_infinite_log_model:browse_content(Id, Opts#{direction => ?FORWARD}).
+    json_infinite_log_model:browse_content(Id, Opts).
 
 %%%===================================================================
 %%% Internal functions

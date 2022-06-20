@@ -19,6 +19,7 @@
 -include("middleware/middleware.hrl").
 -include("modules/datastore/qos.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include_lib("cluster_worker/include/modules/datastore/infinite_log.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
@@ -84,7 +85,8 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = audit_log}}) -> #{
         <<"index">> => {binary, any},
         <<"timestamp">> => {integer, {not_lower_than, 0}},
         <<"offset">> => {integer, any},
-        <<"limit">> => {integer, {between, 1, ?MAX_LIST_LIMIT}}
+        <<"limit">> => {integer, {between, 1, ?MAX_LIST_LIMIT}},
+        <<"direction">> => {atom, [?FORWARD, ?BACKWARD]}
     }
 };
 data_spec(#op_req{operation = get, gri = #gri{aspect = time_series_collections}}) ->
