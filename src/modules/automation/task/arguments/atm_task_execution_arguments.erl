@@ -38,16 +38,16 @@ build_specs(AtmLambdaArgSpecs, AtmTaskSchemaArgMappers) ->
 
 -spec construct_args(
     automation:item(),
-    atm_job_ctx:record(),
+    atm_run_job_batch_ctx:record(),
     [atm_task_execution_argument_spec:record()]
 ) ->
     json_utils:json_map() | no_return().
-construct_args(Item, AtmJobCtx, AtmTaskExecutionArgSpecs) ->
+construct_args(Item, AtmRunJobBatchCtx, AtmTaskExecutionArgSpecs) ->
     lists:foldl(fun(AtmTaskExecutionArgSpec, Args) ->
         ArgName = atm_task_execution_argument_spec:get_name(AtmTaskExecutionArgSpec),
         try
             Args#{ArgName => atm_task_execution_argument_spec:construct_arg(
-                Item, AtmJobCtx, AtmTaskExecutionArgSpec
+                Item, AtmRunJobBatchCtx, AtmTaskExecutionArgSpec
             )}
         catch Type:Reason:Stacktrace ->
             Error = ?atm_examine_error(Type, Reason, Stacktrace),

@@ -20,10 +20,11 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 
 % Callbacks
--export([prepare_lane/3, restart_lane/3, process_item/6, process_result/5, report_item_error/3,
+-export([prepare_lane/3, restart_lane/3, run_task_for_item/6, process_task_result_for_item/5, report_item_error/3,
+    handle_task_results_processed_for_all_items/3, process_streamed_task_data/4,
     handle_task_execution_ended/3, handle_lane_execution_ended/3, handle_workflow_execution_ended/2]).
 % API
--export([is_last_lane/1, get_ignored_lane_id/0, get_ignored_lane_predecessor_id/0]).
+-export([is_last_lane/1, get_ignored_lane_id/0, get_ignored_lane_predecessor_id/0, pack_task_id/3, decode_task_id/1]).
 
 -define(NEXT_LANE_ID(LaneId), integer_to_binary(binary_to_integer(LaneId) + 1)).
 -define(LAST_LANE_ID, <<"5">>).
@@ -36,8 +37,9 @@
 
 %% @formatter:off
 -type test_execution_context() :: #{
+    lane_index => workflow_execution_state:index(),
+    lane_id => workflow_engine:lane_id(),
     task_type => sync | async,
-    async_call_pools => [workflow_async_call_pool:id()] | undefined,
     lane_to_retry => workflow_engine:lane_id(),
     prepare_in_advance => boolean(),
     % while prepare_in_advance => true ensures that all lanes are prepared in advance, usage of following
@@ -49,7 +51,32 @@
                                                        % to be prepared in advance
 }.
 
--export_type([test_execution_context/0]).
+-type generator_options() :: #{
+    async_call_pools => [workflow_async_call_pool:id()] | undefined,
+    fail_iteration => ItemNum :: non_neg_integer(),
+    task_streams => #{LaneIndex :: workflow_execution_state:index() => #{
+        {ParallelBoxIndex :: workflow_execution_state:index(), TaskIndex :: workflow_execution_state:index()} => [
+            % Data is streamed for following items
+            workflow_test_iterator:item() | {workflow_test_iterator:item(), NumberOfChunks :: non_neg_integer()} |
+            % Data is streamed during handle_task_results_processed_for_all_items callback execution
+            handle_task_results_processed_for_all_items |
+            {handle_task_results_processed_for_all_items, NumberOfChunks :: non_neg_integer()}
+        ]
+    }},
+    item_count => non_neg_integer(),
+
+    % Options to be used constructing context (see test_execution_context() for description)
+    lane_index => workflow_execution_state:index(),
+    lane_id => workflow_engine:lane_id(),
+    task_type => sync | async,
+    lane_to_retry => workflow_engine:lane_id(),
+    prepare_in_advance => boolean(),
+    prepare_ignored_lane_in_advance => boolean(),
+    prepare_in_advance_out_of_order => {LaneId :: workflow_engine:lane_id(),
+        LaneIdOutOfOrder :: workflow_engine:lane_id()}
+}.
+
+-export_type([test_execution_context/0, generator_options/0]).
 %% @formatter:on
 
 %%%===================================================================
@@ -73,18 +100,28 @@ prepare_lane(_ExecutionId, ExecutionContext, ?IGNORED_LANE_ID = LaneId) ->
     }};
 prepare_lane(_ExecutionId, #{task_type := Type, async_call_pools := Pools} = ExecutionContext, LaneId) ->
     LaneIndex = binary_to_integer(LaneId),
+    TaskStreams = maps:get(LaneIndex, maps:get(task_streams, ExecutionContext, #{}), #{}),
     Boxes = lists:map(fun(BoxIndex) ->
         lists:foldl(fun(TaskIndex, TaskAcc) ->
-            TaskAcc#{<<(integer_to_binary(LaneIndex))/binary, "_",
-                (integer_to_binary(BoxIndex))/binary, "_", (integer_to_binary(TaskIndex))/binary>> =>
-            #{type => Type, async_call_pools => Pools, keepalive_timeout => 5}}
+            TaskAcc#{pack_task_id(LaneIndex, BoxIndex, TaskIndex) => #{
+                type => Type,
+                async_call_pools => Pools,
+                keepalive_timeout => 5,
+                data_stream_enabled => maps:is_key({BoxIndex, TaskIndex}, TaskStreams)
+            }}
         end, #{}, lists:seq(1, BoxIndex))
     end, lists:seq(1, LaneIndex)),
+
+    ItemCount = maps:get(item_count, ExecutionContext, 200),
+    Iterator = case maps:get(fail_iteration, ExecutionContext, undefined) of
+        undefined -> workflow_test_iterator:initialize(ItemCount);
+        ItemNumToFail -> workflow_test_iterator:initialize(ItemCount, ItemNumToFail)
+    end,
 
     LaneOptions = maps:get(lane_options, ExecutionContext, #{}),
     {ok, LaneOptions#{
         parallel_boxes => Boxes,
-        iterator => workflow_test_iterator:get_first(maps:get(items_count, ExecutionContext, 200)),
+        iterator => Iterator,
         execution_context => ExecutionContext#{
             lane_index => LaneIndex,
             lane_id => LaneId
@@ -102,7 +139,7 @@ restart_lane(ExecutionId, ExecutionContext, LaneId) ->
     prepare_lane(ExecutionId, ExecutionContext, LaneId).
 
 
--spec process_item(
+-spec run_task_for_item(
     workflow_engine:execution_id(),
     test_execution_context(),
     workflow_engine:task_id(),
@@ -111,7 +148,7 @@ restart_lane(ExecutionId, ExecutionContext, LaneId) ->
     workflow_handler:heartbeat_callback_id()
 ) ->
     workflow_handler:handler_execution_result().
-process_item(_ExecutionId, #{task_type := async}, _TaskId, Item, FinishCallback, _) ->
+run_task_for_item(_ExecutionId, #{task_type := async}, _TaskId, Item, FinishCallback, _) ->
     spawn(fun() ->
         timer:sleep(100), % TODO VFS-7784 - test with different sleep times
         Result = #{<<"result">> => <<"ok">>, <<"item">> => Item},
@@ -124,11 +161,11 @@ process_item(_ExecutionId, #{task_type := async}, _TaskId, Item, FinishCallback,
         end
     end),
     ok;
-process_item(_ExecutionId, _Context, _TaskId, _Item, _FinishCallback, _) ->
+run_task_for_item(_ExecutionId, _Context, _TaskId, _Item, _FinishCallback, _) ->
     ok.
 
 
--spec process_result(
+-spec process_task_result_for_item(
     workflow_engine:execution_id(),
     test_execution_context(),
     workflow_engine:task_id(),
@@ -136,9 +173,9 @@ process_item(_ExecutionId, _Context, _TaskId, _Item, _FinishCallback, _) ->
     workflow_handler:async_processing_result()
 ) ->
     workflow_handler:handler_execution_result().
-process_result(_, _, _, _, {error, _}) ->
+process_task_result_for_item(_, _, _, _, {error, _}) ->
     error;
-process_result(_, _, _, _, #{<<"result">> := Result}) ->
+process_task_result_for_item(_, _, _, _, #{<<"result">> := Result}) ->
     binary_to_atom(Result, utf8).
 
 
@@ -149,6 +186,29 @@ process_result(_, _, _, _, #{<<"result">> := Result}) ->
 ) ->
     ok.
 report_item_error(_, _, _) ->
+    ok.
+
+
+-spec process_streamed_task_data(
+    workflow_engine:execution_id(),
+    workflow_engine:execution_context(),
+    workflow_engine:task_id(),
+    workflow_engine:streamed_task_data()
+) ->
+    workflow_handler:handler_execution_result().
+process_streamed_task_data(_, _, _, error) ->
+    error;
+process_streamed_task_data(_, _, _, _) ->
+    ok.
+
+
+-spec handle_task_results_processed_for_all_items(
+    workflow_engine:execution_id(),
+    test_execution_context(),
+    workflow_engine:task_id()
+) ->
+    ok.
+handle_task_results_processed_for_all_items(_, _, _) ->
     ok.
 
 
@@ -232,6 +292,15 @@ get_ignored_lane_id() ->
 -spec get_ignored_lane_predecessor_id() -> workflow_engine:lane_id().
 get_ignored_lane_predecessor_id() ->
     ?IGNORED_LANE_PREDECESSOR_ID.
+
+pack_task_id(LaneIndex, BoxIndex, TaskIndex) ->
+    <<(integer_to_binary(LaneIndex))/binary, "_",
+        (integer_to_binary(BoxIndex))/binary, "_", (integer_to_binary(TaskIndex))/binary>>.
+
+decode_task_id(TaskId) ->
+    [LaneIndexBin, BoxIndexBin, TaskIndexBin] = binary:split(TaskId, <<"_">>, [global]),
+    {binary_to_integer(LaneIndexBin), binary_to_integer(BoxIndexBin), binary_to_integer(TaskIndexBin)}.
+
 
 %%%===================================================================
 %%% Internal functions

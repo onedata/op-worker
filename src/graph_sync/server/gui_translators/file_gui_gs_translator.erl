@@ -244,7 +244,7 @@ translate_file_details(#file_details{
     has_metadata = HasMetadata,
     eff_qos_membership = EffQosMembership,
     active_permissions_type = ActivePermissionsType,
-    index_startid = StartId,
+    index_startid = ListingIndex,
     eff_dataset_membership = EffDatasetMembership,
     eff_protection_flags = EffFileProtectionFlags,
     recall_root_id = RecallRootId,
@@ -261,7 +261,8 @@ translate_file_details(#file_details{
         provider_id = ProviderId,
         owner_id = OwnerId,
         nlink = NLink
-    }
+    },
+    conflicting_name = ConflictingName
 }, Scope) ->
     PosixPerms = list_to_binary(string:right(integer_to_list(Mode, 8), 3, $0)),
     {Type, Size} = case TypeAttr of
@@ -281,7 +282,7 @@ translate_file_details(#file_details{
         <<"hasMetadata">> => HasMetadata,
         <<"guid">> => FileGuid,
         <<"name">> => FileName,
-        <<"index">> => StartId,
+        <<"index">> => file_listing:encode_index(ListingIndex),
         <<"posixPermissions">> => PosixPerms,
         <<"parentId">> => ParentId,
         <<"mtime">> => MTime,
@@ -296,22 +297,21 @@ translate_file_details(#file_details{
         _ ->
             BasicPublicFields
     end,
-    PublicFields2 = case archivisation_tree:uuid_to_archive_id(file_id:guid_to_uuid(FileGuid)) of
-        undefined -> PublicFields;
-        ArchiveId -> PublicFields#{<<"archiveId">> => ArchiveId}
-    end,
+    PublicFields2 = maps_utils:put_if_defined(PublicFields, <<"archiveId">>, 
+        archivisation_tree:uuid_to_archive_id(file_id:guid_to_uuid(FileGuid))),
+    PublicFields3 = maps_utils:put_if_defined(PublicFields2, <<"conflictingName">>, ConflictingName),
     case {Scope, EffQosMembership} of
         {public, _} ->
-            PublicFields2;
+            PublicFields3;
         {private, undefined} -> % all or none effective fields are undefined
-            PublicFields2#{
+            PublicFields3#{
                 <<"hardlinksCount">> => utils:undefined_to_null(NLink),
                 <<"effProtectionFlags">> => [],
                 <<"providerId">> => ProviderId,
                 <<"ownerId">> => OwnerId
             };
         {private, _} ->
-            PublicFields2#{
+            PublicFields3#{
                 <<"hardlinksCount">> => utils:undefined_to_null(NLink),
                 <<"effProtectionFlags">> => file_meta:protection_flags_to_json(
                     EffFileProtectionFlags

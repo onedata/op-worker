@@ -513,6 +513,7 @@ get_children_details_should_work_with_size_greater_than_dir_size(Config) ->
     verify_details(Config, MainDirPath, Files, 5, 0, 10).
 
 get_children_details_should_work_with_startid(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
     {MainDirPath, Files} = generate_dir(Config, 10),
 
     % list all files in chunks (use 0 offset for each chunk)
@@ -520,12 +521,12 @@ get_children_details_should_work_with_startid(Config) ->
     StartId2 = verify_details(Config, MainDirPath, Files, 3, 4, 0, 4, StartId1),
     StartId3 = verify_details(Config, MainDirPath, Files, 6, 3, 0, 3, StartId2),
     StartId4 = verify_details(Config, MainDirPath, Files, 8, 2, 0, 3, StartId3),
-    ?assertEqual(lists:last(Files), StartId4),
+    ?assertEqual(file_listing:build_index(lists:last(Files), ?GET_DOMAIN_BIN(W)), StartId4),
 
     % test ls with startid and positive offset
     StartId5 = verify_details(Config, MainDirPath, Files, 4, 2, 4, 2, undefined),
     StartId6 = verify_details(Config, MainDirPath, Files, 7, 3, 2, 4, StartId5),
-    ?assertEqual(lists:last(Files), StartId6),
+    ?assertEqual(file_listing:build_index(lists:last(Files), ?GET_DOMAIN_BIN(W)), StartId6),
 
     % test ls with startid and offset beyond files num
     verify_details(Config, MainDirPath, Files, 0, 0, 20, 4, StartId5),
@@ -1306,16 +1307,18 @@ lfm_get_details(Config) ->
     ?assertMatch({ok, _}, O11),
     {ok, Handle11} = O11,
 
+    Index1 = file_listing:build_index(<<"space_id2">>),
     ?assertMatch({ok, #file_details{
         file_attr = #file_attr{name = <<"space_name2">>, size = undefined},
-        index_startid = <<"space_id2">>,
+        index_startid = Index1,
         active_permissions_type = posix,
         has_metadata = false
     }}, lfm_proxy:get_details(W, SessId1, {path, <<"/space_name2">>})),
 
+    Index2 = file_listing:build_index(<<"test5">>, ?GET_DOMAIN_BIN(W)),
     ?assertMatch({ok, #file_details{
         file_attr = #file_attr{name = <<"test5">>, size = 0},
-        index_startid = <<"test5">>,
+        index_startid = Index2,
         active_permissions_type = posix,
         has_metadata = false
     }}, lfm_proxy:get_details(W, SessId1, {path, <<"/space_name2/test5">>})),
@@ -2560,7 +2563,7 @@ verify_with_startid(Config, MainDirPath, Files, FilesOffset, ExpectedSize, Offse
 verify_details(Config, MainDirPath, Files, ExpectedSize, Offset, Limit) ->
     verify_details(Config, MainDirPath, Files, Offset, ExpectedSize, Offset, Limit, undefined).
 
-verify_details(Config, MainDirPath, Files, FilesOffset, ExpectedSize, Offset, Limit, StartId) ->
+verify_details(Config, MainDirPath, Files, FilesOffset, ExpectedSize, Offset, Limit, Index) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     {SessId1, _UserId1} =
@@ -2569,7 +2572,7 @@ verify_details(Config, MainDirPath, Files, FilesOffset, ExpectedSize, Offset, Li
     {ok, List, _} = ?assertMatch(
         {ok, _, _},
         lfm_proxy:get_children_details(Worker, SessId1, {path, MainDirPath}, 
-            #{offset => Offset, limit => Limit, index => file_listing:build_index(StartId), tune_for_large_continuous_listing => false})
+            #{offset => Offset, limit => Limit, index => Index, tune_for_large_continuous_listing => false, inclusive => true})
     ),
     ?assertEqual(ExpectedSize, length(List)),
 

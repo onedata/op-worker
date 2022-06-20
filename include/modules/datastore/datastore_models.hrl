@@ -433,7 +433,7 @@
     state :: archive:state(),
     config :: archive:config(),
     preserved_callback :: archive:callback(),
-    purged_callback :: archive:callback(),
+    deleted_callback :: archive:callback(),
     description :: archive:description(),
     % This directory is root for archive.
     % It has predefined uuid=?ARCHIVE_DIR_UUID(ArchiveId)
@@ -1098,11 +1098,15 @@
 
     schema_id :: automation:id(),
 
+    %% @see atm_task_executor.erl
     executor :: atm_task_executor:record(),
+    %% @see atm_task_execution_arguments.erl
     argument_specs :: [atm_task_execution_argument_spec:record()],
-    result_specs :: [atm_task_execution_result_spec:record()],
+    %% @see atm_task_execution_results.erl
+    item_related_result_specs :: [atm_task_execution_result_spec:record()],
+    uncorrelated_result_specs :: [atm_task_execution_result_spec:record()],
 
-    system_audit_log_id :: atm_store:id(),
+    system_audit_log_store_id :: atm_store:id(),
     time_series_store_id :: undefined | atm_store:id(),
 
     status :: atm_task_execution:status(),
@@ -1111,7 +1115,7 @@
     % otherwise getting document before update would be needed (to compare 2 docs).
     status_changed = false :: boolean(),
     % Flag used to differentiate reasons why task is aborting
-    aborting_reason = undefined :: undefined | cancel | failure,
+    aborting_reason = undefined :: undefined | atm_task_execution:aborting_reason(),
 
     items_in_processing = 0 :: non_neg_integer(),
     items_processed = 0 :: non_neg_integer(),
@@ -1145,7 +1149,7 @@
     lambda_snapshot_registry :: atm_workflow_execution:lambda_snapshot_registry(),
 
     store_registry :: atm_workflow_execution:store_registry(),
-    system_audit_log_id :: atm_store:id(),
+    system_audit_log_store_id :: atm_store:id(),
 
     % lane execution records are kept as values in map where keys are indices
     % (from 1 up to `lanes_count`) due to performance and convenience of use
@@ -1194,16 +1198,20 @@
     iterator :: iterator:iterator()
 }).
 
+-record(workflow_cached_task_data, {
+    data :: workflow_engine:streamed_task_data()
+}).
+
 -record(workflow_cached_async_result, {
     result :: workflow_handler:async_processing_result()
 }).
 
 -record(workflow_iterator_snapshot, {
     iterator :: iterator:iterator(),
-    lane_index = workflow_execution_state:index(),
+    lane_index :: workflow_execution_state:index(),
     lane_id :: workflow_engine:lane_id(),
     next_lane_id :: workflow_engine:lane_id() | undefined,
-    item_index = workflow_execution_state:index()
+    item_index :: workflow_execution_state:index()
 }).
 
 -record(workflow_engine_state, {
@@ -1213,6 +1221,7 @@
 }).
 
 -record(workflow_execution_state, {
+    engine_id :: workflow_engine:id(),
     handler :: workflow_handler:handler(),
     initial_context :: workflow_engine:execution_context(),
 
@@ -1230,7 +1239,9 @@
 
     iteration_state :: workflow_iteration_state:state() | undefined,
     prefetched_iteration_step :: workflow_execution_state:iteration_status(),
+    % TODO VFS-7788 jobs_registry
     jobs :: workflow_jobs:jobs() | undefined,
+    tasks_data_registry :: workflow_tasks_data_registry:registry() | undefined,
 
     % callbacks executed after update of record (have to be executed outside datastore tp process)
     % TODO VFS-7919 - consider keeping callbacks list from beginning

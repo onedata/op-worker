@@ -40,7 +40,7 @@
     schema_snapshot_id = undefined :: undefined | atm_workflow_schema_snapshot:id(),
     lambda_snapshot_registry = undefined :: undefined | atm_workflow_execution:lambda_snapshot_registry(),
     global_store_registry = undefined :: undefined | atm_workflow_execution:store_registry(),
-    workflow_audit_log_id = undefined :: undefined | atm_store:id(),
+    workflow_audit_log_store_id = undefined :: undefined | atm_store:id(),
     lanes = undefined :: undefined | #{atm_lane_execution:index() => atm_lane_execution:record()}
 }).
 -type execution_components() :: #execution_components{}.
@@ -140,7 +140,7 @@ delete_insecure(AtmWorkflowExecutionId) ->
             schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
             lambda_snapshot_registry = AtmLambdaSnapshotRegistry,
             store_registry = AtmGlobalStoreRegistry,
-            system_audit_log_id = AtmWorkflowAuditLogId,
+            system_audit_log_store_id = AtmWorkflowAuditLogStoreId,
             lanes = AtmLaneExecutions
         }
     }} = atm_workflow_execution:get(AtmWorkflowExecutionId),
@@ -149,7 +149,7 @@ delete_insecure(AtmWorkflowExecutionId) ->
         schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
         lambda_snapshot_registry = AtmLambdaSnapshotRegistry,
         global_store_registry = AtmGlobalStoreRegistry,
-        workflow_audit_log_id = AtmWorkflowAuditLogId,
+        workflow_audit_log_store_id = AtmWorkflowAuditLogStoreId,
         lanes = AtmLaneExecutions
     }),
     atm_workflow_execution:delete(AtmWorkflowExecutionId),
@@ -316,14 +316,14 @@ create_workflow_audit_log(CreationCtx = #creation_ctx{
     execution_components = ExecutionComponents
 }) ->
     {ok, #document{
-        key = AtmWorkflowAuditLogId,
+        key = AtmWorkflowAuditLogStoreId,
         value = #atm_store{
             container = AtmWorkflowAuditLogStoreContainer
         }
     }} = atm_store_api:create(
         AtmWorkflowExecutionAuth,
         undefined,
-        ?ATM_SYSTEM_AUDIT_LOG_SCHEMA(?WORKFLOW_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID)
+        ?ATM_SYSTEM_AUDIT_LOG_STORE_SCHEMA(?WORKFLOW_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID)
     ),
 
     CreationCtx#creation_ctx{
@@ -331,7 +331,7 @@ create_workflow_audit_log(CreationCtx = #creation_ctx{
             AtmWorkflowAuditLogStoreContainer, AtmWorkflowExecutionEnv
         ),
         execution_components = ExecutionComponents#execution_components{
-            workflow_audit_log_id = AtmWorkflowAuditLogId
+            workflow_audit_log_store_id = AtmWorkflowAuditLogStoreId
         }
     }.
 
@@ -385,7 +385,7 @@ create_workflow_execution_doc(#creation_ctx{
         schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
         lambda_snapshot_registry = AtmLambdaSnapshotRegistry,
         global_store_registry = AtmGlobalStoreRegistry,
-        workflow_audit_log_id = AtmWorkflowAuditLogId,
+        workflow_audit_log_store_id = AtmWorkflowAuditLogStoreId,
         lanes = AtmLaneExecutions
     }
 }) ->
@@ -401,7 +401,7 @@ create_workflow_execution_doc(#creation_ctx{
             lambda_snapshot_registry = AtmLambdaSnapshotRegistry,
 
             store_registry = AtmGlobalStoreRegistry,
-            system_audit_log_id = AtmWorkflowAuditLogId,
+            system_audit_log_store_id = AtmWorkflowAuditLogStoreId,
 
             lanes = AtmLaneExecutions,
             lanes_count = map_size(AtmLaneExecutions),
@@ -453,12 +453,12 @@ delete_execution_components(ExecutionComponents = #execution_components{
     });
 
 delete_execution_components(ExecutionComponents = #execution_components{
-    workflow_audit_log_id = AtmWorkflowAuditLogId
-}) when AtmWorkflowAuditLogId /= undefined ->
-    catch atm_store_api:delete(AtmWorkflowAuditLogId),
+    workflow_audit_log_store_id = AtmWorkflowAuditLogStoreId
+}) when AtmWorkflowAuditLogStoreId /= undefined ->
+    catch atm_store_api:delete(AtmWorkflowAuditLogStoreId),
 
     delete_execution_components(ExecutionComponents#execution_components{
-        workflow_audit_log_id = undefined
+        workflow_audit_log_store_id = undefined
     });
 
 delete_execution_components(ExecutionComponents = #execution_components{

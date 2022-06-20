@@ -191,7 +191,7 @@ create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, 
 
     FileDetails = #file_details{
         file_attr = FileAttrs,
-        index_startid = FileName,
+        index_startid = file_listing:build_index(FileName, FileAttrs#file_attr.provider_id),
         active_permissions_type = case HasAcl of
             true -> acl;
             false -> posix
@@ -394,7 +394,7 @@ file_details_to_gs_json(undefined, #file_details{
         provider_id = ProviderId,
         nlink = LinksCount
     },
-    index_startid = IndexStartId,
+    index_startid = Index,
     active_permissions_type = ActivePermissionsType,
     eff_protection_flags = EffFileProtectionFlags,
     eff_qos_membership = EffQosMembership,
@@ -411,7 +411,7 @@ file_details_to_gs_json(undefined, #file_details{
         <<"hasMetadata">> => HasMetadata,
         <<"guid">> => FileGuid,
         <<"name">> => FileName,
-        <<"index">> => IndexStartId,
+        <<"index">> => file_listing:encode_index(Index),
         <<"posixPermissions">> => list_to_binary(string:right(integer_to_list(Mode, 8), 3, $0)),
         <<"effProtectionFlags">> => file_meta:protection_flags_to_json(EffFileProtectionFlags),
         % For space dir gs returns null as parentId instead of user root dir
@@ -443,7 +443,7 @@ file_details_to_gs_json(ShareId, #file_details{
         mtime = MTime,
         shares = Shares
     },
-    index_startid = IndexStartId,
+    index_startid = Index,
     active_permissions_type = ActivePermissionsType,
     has_metadata = HasMetadata
 }) ->
@@ -457,7 +457,7 @@ file_details_to_gs_json(ShareId, #file_details{
         <<"hasMetadata">> => HasMetadata,
         <<"guid">> => file_id:guid_to_share_guid(FileGuid, ShareId),
         <<"name">> => FileName,
-        <<"index">> => IndexStartId,
+        <<"index">> => file_listing:encode_index(Index),
         <<"posixPermissions">> => list_to_binary(string:right(integer_to_list(Mode band 2#111, 8), 3, $0)),
         <<"parentId">> => case IsShareRoot of
             true -> null;

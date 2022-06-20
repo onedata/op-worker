@@ -143,7 +143,7 @@ reply_to_handler_mock(Sender, ManagerAcc, Options, #handler_call{
     function = Function, execution_id = ExecutionId, lane_id = LaneId, task_id = TaskId, item = Item
 }) ->
     case {Function, Options} of
-        {process_item, #{fail_job := {TaskId, Item}}} ->
+        {run_task_for_item, #{fail_job := {TaskId, Item}}} ->
             Sender ! fail_call,
             ManagerAcc;
         {handle_callback, #{timeout := {TaskId, Item}}} ->
@@ -152,7 +152,7 @@ reply_to_handler_mock(Sender, ManagerAcc, Options, #handler_call{
         {handle_callback, #{delay_call := {TaskId, Item}}} ->
             Sender ! delay_call,
             ManagerAcc;
-        {process_result, #{fail_result_processing := {TaskId, Item}}} ->
+        {process_task_result_for_item, #{fail_result_processing := {TaskId, Item}}} ->
             Sender ! fail_call,
             ManagerAcc;
         {prepare_lane, #{fail_lane_preparation := LaneId, {delay_lane_preparation, LaneId} := true}} ->
@@ -166,6 +166,12 @@ reply_to_handler_mock(Sender, ManagerAcc, Options, #handler_call{
             ManagerAcc;
         {prepare_lane, #{sleep_on_preparation := Value}} ->
             Sender ! {sleep, Value},
+            ManagerAcc;
+        {process_streamed_task_data, #{fail_task_data_processing := {TaskId, Item}}} ->
+            Sender ! fail_call,
+            ManagerAcc;
+        {handle_task_results_processed_for_all_items, #{fail_stream_termination := {TaskId, Item}}} ->
+            Sender ! fail_call,
             ManagerAcc;
         {Fun, #{cancel_execution := {Fun, TaskId, Item}}} ->
             CancelAns = rpc:call(node(Sender), workflow_engine, cancel_execution, [ExecutionId]),
@@ -289,11 +295,12 @@ mock_handlers(Workers, Manager) ->
             )
     end),
 
-    test_utils:mock_expect(Workers, workflow_test_handler, process_item,
+    test_utils:mock_expect(Workers, workflow_test_handler, run_task_for_item,
         fun(ExecutionId, #{lane_id := LaneId} = Context, TaskId, Item, FinishCallback, HeartbeatCallback) ->
+            maybe_stream_data(ExecutionId, TaskId, Context, Item),
             MockTemplate(
                 #handler_call{
-                    function = process_item,
+                    function = run_task_for_item,
                     execution_id = ExecutionId,
                     context =  Context,
                     lane_id = LaneId,
@@ -304,11 +311,11 @@ mock_handlers(Workers, Manager) ->
             )
         end),
 
-    test_utils:mock_expect(Workers, workflow_test_handler, process_result,
+    test_utils:mock_expect(Workers, workflow_test_handler, process_task_result_for_item,
         fun(ExecutionId, #{lane_id := LaneId} = Context, TaskId, Item, Result) ->
             MockTemplate(
                 #handler_call{
-                    function = process_result,
+                    function = process_task_result_for_item,
                     execution_id = ExecutionId,
                     context =  Context,
                     lane_id = LaneId,
@@ -332,6 +339,45 @@ mock_handlers(Workers, Manager) ->
                     item = Item
                 },
                 [ExecutionId, Context, Item]
+            )
+        end),
+
+
+    test_utils:mock_expect(Workers, workflow_test_handler, handle_task_results_processed_for_all_items,
+        fun(ExecutionId, #{lane_id := LaneId} = Context, TaskId) ->
+            Ans = MockTemplate(
+                #handler_call{
+                    function = handle_task_results_processed_for_all_items,
+                    execution_id = ExecutionId,
+                    context =  Context,
+                    lane_id = LaneId,
+                    task_id = TaskId,
+                    item = handle_task_results_processed_for_all_items
+                },
+                [ExecutionId, Context, TaskId]
+            ),
+
+            maybe_stream_data(ExecutionId, TaskId, Context, handle_task_results_processed_for_all_items),
+            case Ans of
+                ok -> workflow_engine:report_task_data_streaming_concluded(ExecutionId, TaskId, success);
+                _ -> workflow_engine:report_task_data_streaming_concluded(ExecutionId, TaskId, {failure, Ans})
+            end,
+            Ans
+        end),
+
+
+    test_utils:mock_expect(Workers, workflow_test_handler, process_streamed_task_data,
+        fun(ExecutionId, #{lane_id := LaneId} = Context, TaskId, Data) ->
+            MockTemplate(
+                #handler_call{
+                    function = process_streamed_task_data,
+                    execution_id = ExecutionId,
+                    context =  Context,
+                    lane_id = LaneId,
+                    task_id = TaskId,
+                    item = Data % item_id is used as data during test
+                },
+                [ExecutionId, Context, TaskId, Data]
             )
         end),
 
@@ -427,6 +473,22 @@ wait_for_lane_finish(ExecutionId, LaneId) ->
             ok
     end.
 
+maybe_stream_data(ExecutionId, TaskId, Context, StreamElementKey) ->
+    {LaneIndex, BoxIndex, TaskIndex} =
+        apply(meck_util:original_name(workflow_test_handler), decode_task_id, [TaskId]),
+    TaskStreams = kv_utils:get([task_streams, LaneIndex, {BoxIndex, TaskIndex}], Context, []),
+    % Task streams are specified as list of elements to be executed. Element can be specified using Id or
+    % tuple {Id, NumberOfCallsToBeExecuted}.
+    case lists:member(StreamElementKey, TaskStreams) of
+        true ->
+            workflow_engine:stream_task_data(ExecutionId, TaskId, StreamElementKey);
+        false ->
+            Repeats = proplists:get_value(StreamElementKey, TaskStreams, 0),
+            lists:foreach(fun(_) ->
+                workflow_engine:stream_task_data(ExecutionId, TaskId, StreamElementKey)
+            end, lists:seq(1, Repeats))
+    end.
+
 group_handler_calls_by_execution_id(ExecutionHistory) ->
     lists:foldl(fun(#handler_call{execution_id = ExecutionId} = HandlerCall, Acc) ->
         ChosenExecutionCalls = maps:get(ExecutionId, Acc, []),
@@ -477,9 +539,9 @@ get_expected(LaneId, PreparedInAdvanceLaneId, ExecutionId, InitialContext, LaneI
     end.
 
 get_items(Context, Iterator) ->
-    case iterator:get_next(Context, Iterator) of
+    case catch iterator:get_next(Context, Iterator) of
         {ok, NextItem, NextIterator} -> [NextItem | get_items(Context, NextIterator)];
-        stop -> []
+        _ -> []
     end.
 
 verify_lanes_execution_history([], Gathered, _Options) ->
@@ -500,8 +562,10 @@ verify_lanes_execution_history([{_, _, #{lane_index := LaneIndex, lane_id := Lan
 verify_lanes_execution_history([{TaskIds, ExpectedItems, LaneExecutionContext} | ExpectedTail],
     Gathered, Options) ->
     #{
+        lane_index := LaneIndex,
         lane_id := LaneId
     } = LaneExecutionContext,
+    TaskStreams = kv_utils:get([task_streams, LaneIndex], LaneExecutionContext, #{}),
 
     VerificationType = case Options of
         #{stop_on_lane := LaneId} -> skip_items_verification;
@@ -511,7 +575,7 @@ verify_lanes_execution_history([{TaskIds, ExpectedItems, LaneExecutionContext} |
         _ -> verify_all
     end,
 
-    LaneElementsCount = count_lane_elements(LaneExecutionContext, TaskIds, ExpectedItems, Options, VerificationType),
+    LaneElementsCount = count_lane_elements(LaneExecutionContext, TaskIds, ExpectedItems, Options),
     ct:print("Verify ~p history elements", [LaneElementsCount]),
 
     GatheredForLane = verify_prepare_lane_handler_calls_history(Gathered, LaneElementsCount, LaneExecutionContext),
@@ -546,19 +610,20 @@ verify_lanes_execution_history([{TaskIds, ExpectedItems, LaneExecutionContext} |
                 false ->
                     GatheredForLane2
             end,
-            GatheredForLane4 = verify_task_handlers(lists:reverse(GatheredForLane3), TaskIds, false),
+            GatheredForLane4 = verify_task_handlers(LaneIndex, lists:reverse(GatheredForLane3), TaskIds, TaskStreams),
+            GatheredForLane5 = verify_stream_processing(LaneIndex, GatheredForLane4, TaskStreams),
 
             Remaining = lists:foldl(fun(Item, Acc) ->
                 Filtered = lists:filtermap(fun(HandlerCall) -> HandlerCall#handler_call.item =:= Item end, Acc),
                 verify_item_execution_history(Item, TaskIds, Filtered, LaneExecutionContext, Options),
                 Acc -- Filtered
-            end, GatheredForLane4, ExpectedItems),
+            end, GatheredForLane5, ExpectedItems),
             ?assertEqual([], Remaining),
 
             verify_lanes_execution_history(NewExpected,
                 lists:sublist(Gathered, LaneElementsCount + 1, length(Gathered) - LaneElementsCount), Options);
         skip_items_verification ->
-            GatheredForLane2 = verify_task_handlers(GatheredForLane, TaskIds, true),
+            GatheredForLane2 = verify_task_handlers(LaneIndex, GatheredForLane, TaskIds, TaskStreams),
             [FirstNotFiltered | _] = lists:dropwhile(fun
                 (#handler_call{lane_id = Id, function = Function}) when Id =:= LaneId ->
                     Function =/= handle_lane_execution_ended;
@@ -578,7 +643,7 @@ verify_lanes_execution_history([{TaskIds, ExpectedItems, LaneExecutionContext} |
             end, Gathered),
             verify_lanes_execution_history(NewExpected, NewGathered, Options);
         expect_lane_finish ->
-            GatheredForLane2 = verify_task_handlers(GatheredForLane, TaskIds, false),
+            GatheredForLane2 = verify_task_handlers(LaneIndex, GatheredForLane, TaskIds, TaskStreams),
             ?assertMatch([
                 #handler_call{function = handle_lane_execution_ended, lane_id = LaneId, result = true},
                 #handler_call{function = handle_workflow_execution_ended}
@@ -632,31 +697,70 @@ verify_prepare_lane_handler_calls_history(Gathered, LaneElementsCount, #{lane_id
     ?assertEqual(LaneId, FirstForLane#handler_call.lane_id),
     GatheredForLane.
 
-verify_task_handlers(GatheredForLane, TaskIds, AllowDoubleCalls) ->
+verify_task_handlers(LaneIndex, GatheredForLane, TaskIds, TaskStreams) ->
     ReversedGatheredForLane = lists:reverse(GatheredForLane),
     TaskIdsList = lists:foldl(fun(CallsForBox, Acc) -> sets:to_list(CallsForBox) ++ Acc end, [], TaskIds),
-    DuplicatedCalls = case AllowDoubleCalls of
-        true -> TaskIdsList;
-        false -> []
-    end,
-    {RemainingTaskIdsList, _} = lists:foldl(fun
-        (#handler_call{function = handle_task_execution_ended, task_id = TaskId}, {TaskIdsListAcc, DuplicatedCallsAcc}) ->
-            case lists:member(TaskId, TaskIdsListAcc) of
-                true ->
-                    {TaskIdsListAcc -- [TaskId], DuplicatedCallsAcc};
-                false ->
-                    ?assert(lists:member(TaskId, DuplicatedCallsAcc)),
-                    {TaskIdsListAcc, DuplicatedCallsAcc -- [TaskId]}
-            end;
-        (#handler_call{task_id = TaskId}, {TaskIdsListAcc, _DuplicatedCallsAcc} = Acc) ->
+    StreamIds = lists:map(fun({BoxIndex, TaskIndex}) ->
+        workflow_test_handler:pack_task_id(LaneIndex, BoxIndex, TaskIndex)
+    end, maps:keys(TaskStreams)),
+    InitialAcc = #{
+        task_ids => TaskIdsList,
+        stream_ids => StreamIds
+    },
+    #{task_ids := RemainingTaskIdsList, stream_ids := RemainingStreamIds} = lists:foldl(fun
+        (#handler_call{function = handle_task_execution_ended, task_id = TaskId}, #{task_ids := TaskIdsListAcc} = Acc) ->
+            ?assert(lists:member(TaskId, TaskIdsListAcc)),
+            Acc#{task_ids => TaskIdsListAcc -- [TaskId]};
+        (#handler_call{function = handle_task_results_processed_for_all_items, task_id = TaskId}, #{
+            task_ids := TaskIdsListAcc,
+            stream_ids := StreamIds
+        } = Acc) ->
             ?assertNot(lists:member(TaskId, TaskIdsListAcc)),
+            ?assert(lists:member(TaskId, StreamIds)),
+            Acc#{stream_ids => StreamIds -- [TaskId]};
+        (#handler_call{function = process_streamed_task_data, task_id = TaskId}, #{
+            task_ids := TaskIdsListAcc
+        } = Acc) ->
+            ?assertNot(lists:member(TaskId, TaskIdsListAcc)),
+            Acc;
+        (#handler_call{task_id = TaskId}, #{task_ids := TaskIdsListAcc, stream_ids := StreamIds} = Acc) ->
+            ?assertNot(lists:member(TaskId, TaskIdsListAcc)),
+            ?assertNot(lists:member(TaskId, StreamIds)),
             Acc
-    end, {TaskIdsList, DuplicatedCalls}, ReversedGatheredForLane),
+    end, InitialAcc, ReversedGatheredForLane),
     ?assertEqual([], RemainingTaskIdsList),
+    ?assertEqual([], RemainingStreamIds),
 
     lists:filter(fun(#handler_call{function = Fun}) ->
-        Fun =/= handle_task_execution_ended
+        Fun =/= handle_task_execution_ended andalso Fun =/= handle_task_results_processed_for_all_items
     end, GatheredForLane).
+
+verify_stream_processing(LaneIndex, GatheredForLane, TaskStreams) ->
+    DataProcessingCallbackCallCount = maps:filtermap(fun
+        (_, []) ->
+            false;
+        (_, CallbackCalls) ->
+            {true, lists:foldl(fun
+                ({_, CallsCount}, Acc) -> Acc + CallsCount;
+                (_, Acc) -> Acc + 1
+            end, 0, CallbackCalls)}
+    end, TaskStreams),
+
+    RemainingDataProcessingCallbackCallCount = lists:foldl(fun
+        (#handler_call{function = process_streamed_task_data, task_id = TaskId}, Acc) ->
+            {LaneIndex, BoxIndex, TaskIndex} = workflow_test_handler:decode_task_id(TaskId),
+            TaskCallsCount = maps:get({BoxIndex, TaskIndex}, Acc, 0),
+            ?assert(TaskCallsCount > 0),
+            case TaskCallsCount of
+                1 -> maps:remove({BoxIndex, TaskIndex}, Acc);
+                _ -> Acc#{{BoxIndex, TaskIndex} => TaskCallsCount - 1}
+            end;
+        (_, Acc) ->
+            Acc
+    end, DataProcessingCallbackCallCount, GatheredForLane),
+    ?assertEqual(0, maps:size(RemainingDataProcessingCallbackCallCount)),
+
+    lists:filter(fun(#handler_call{function = Fun}) -> Fun =/= process_streamed_task_data end, GatheredForLane).
 
 % Helper function for verify_lanes_execution_history/3 that verifies history for single item
 verify_item_execution_history(_Item, ExpectedCalls, [], _LaneExecutionContext, _Options) ->
@@ -668,7 +772,7 @@ verify_item_execution_history(Item, [CallsForBox | ExpectedCalls], [HandlerCall 
     ?assertEqual(ExpectedLaneId, LaneId),
     ?assertEqual(Item, Item),
     SetElement = case Function of
-        process_item -> TaskId;
+        run_task_for_item -> TaskId;
         _ -> {Function, TaskId}
     end,
     ?assert(sets:is_element(SetElement, CallsForBox)),
@@ -681,10 +785,10 @@ verify_item_execution_history(Item, [CallsForBox | ExpectedCalls], [HandlerCall 
     end,
 
     NewCallsForBox = case {WorkflowType, Function} of
-        {async, process_item} when Ignore =/= ignore_callback_call ->
+        {async, run_task_for_item} when Ignore =/= ignore_callback_call ->
             sets:add_element({handle_callback, TaskId}, CallsForBox);
         {async, handle_callback} ->
-            sets:add_element({process_result, TaskId}, CallsForBox);
+            sets:add_element({process_task_result_for_item, TaskId}, CallsForBox);
         _ -> CallsForBox
     end,
     FinalCallsForBox = sets:del_element(SetElement, NewCallsForBox),
@@ -728,6 +832,9 @@ verify_execution_history_stats(Acc, WorkflowType, Options) ->
             % Restart callback is called before any pool slot is used
             ?assertEqual(0, MinPoolSlots),
             ?assertEqual(20, MaxPoolSlots);
+        {#{ignore_max_slots_check := true}, sync} ->
+            ?assertEqual(0, MaxAsyncSlots),
+            ?assertNotEqual(0, MinPoolSlots);
         {_, sync} ->
             ?assertEqual(0, MaxAsyncSlots),
             % Task processing is initialized after pool slots count is incremented
@@ -736,6 +843,8 @@ verify_execution_history_stats(Acc, WorkflowType, Options) ->
             ?assertEqual(20, MaxPoolSlots);
         {#{ignore_async_slots_check := true}, async} -> 
             ?assertEqual(20, MaxPoolSlots);
+        {#{ignore_max_slots_check := true}, async} ->
+            ok;
         {_, async} ->
             ?assertEqual(60, MaxAsyncSlots),
             % Do not check MinPoolSlots as any value is possible ('0' can appear in history because slots count is
@@ -839,29 +948,36 @@ verify_executions_started(Count) ->
 
 count_lane_elements(#{
     task_type := WorkflowType,
+    lane_index := LaneIndex,
     lane_id := LaneId,
     prepare_in_advance := PrepareInAdvance,
     is_lane_prepared := IsLanePrepared,
     should_prepare_next_lane := ShouldPrepareNextLane
-}, TaskIds, ExpectedItems, Options, VerificationType) ->
+} = LaneExecutionContext, TaskIds, ExpectedItems, Options) ->
     TasksPerItemCount = count_tasks(TaskIds),
     TasksCount = TasksPerItemCount * length(ExpectedItems),
+
+    TaskStreams = kv_utils:get([task_streams, LaneIndex], LaneExecutionContext, #{}),
+    TaskStreamCount = maps:size(TaskStreams),
 
     PrepareCallbacksCount = case {PrepareInAdvance, IsLanePrepared, ShouldPrepareNextLane} of
         {true, true, false} -> 0;
         {true, false, true} -> 2;
         _ -> 1
     end,
-    TaskCallbacksCount = case VerificationType of
-        skip_items_verification -> 2 * TasksPerItemCount; % callbacks for each task can be called two times
-        _ -> TasksPerItemCount
-    end,
-    NotificationsCount = TaskCallbacksCount + PrepareCallbacksCount + 1, % Notification for each task + prepare_lane
-                                                                         % callbacks + handle_lane_execution_ended
+    NotificationsCount = TasksPerItemCount + TaskStreamCount + PrepareCallbacksCount + 1, % Notification for each task + prepare_lane
+                                                                                          % callbacks + handle_lane_execution_ended
+
+    DataProcessingCallbackCallCount = maps:fold(fun(_, CallbackCalls, Acc) ->
+        lists:foldl(fun
+            ({_, CallsCount}, InternalAcc) -> InternalAcc + CallsCount;
+            (_, InternalAcc) -> InternalAcc + 1
+        end, Acc, CallbackCalls)
+    end, 0, TaskStreams),
 
     BasicLaneElementsCount = case WorkflowType of
-        sync -> TasksCount + NotificationsCount;
-        async -> 3 * TasksCount + NotificationsCount
+        sync -> TasksCount + NotificationsCount + DataProcessingCallbackCallCount;
+        async -> 3 * TasksCount + NotificationsCount + DataProcessingCallbackCallCount
     end,
 
     case {Options, WorkflowType} of

@@ -32,7 +32,7 @@
     #archive_dataset{} |
     #get_archive_info{} |
     #update_archive{} |
-    #purge_archive{} |
+    #delete_archive{} |
     #recall_archive{} |
     #cancel_archive_recall{} | 
     #get_recall_details{} |
@@ -164,6 +164,8 @@ handle(Request) ->
 %%--------------------------------------------------------------------
 -spec cleanup() -> ok.
 cleanup() ->
+    % @TODO VFS-9402 move this to the node manager plugin callback before default workers stop
+    gs_channel_service:terminate_internal_service(),
     ok.
 
 

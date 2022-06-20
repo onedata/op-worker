@@ -27,7 +27,7 @@
     race_with_subtree_adding_test/1, race_with_subtree_filling_with_data_test/1,
     race_with_file_adding_to_large_dir_test/1,
     multiple_status_change_test/1, adding_file_when_disabled_test/1,
-    restart_test/1]).
+    restart_test/1, parallel_write_test/4]).
 -export([init/1, init_and_enable_for_new_space/1, teardown/1, teardown/3]).
 -export([verify_dir_on_provider_creating_files/3]).
 % TODO VFS-9148 - extend tests
@@ -64,8 +64,7 @@ basic_test(Config) ->
 
 multiprovider_test(Config) ->
     enable(Config, new_space),
-    SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(lfm_test_utils:get_user1_first_space_id(Config)),
 
     create_initial_file_tree_and_fill_files(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR, enabled),
 
@@ -116,17 +115,7 @@ multiprovider_test(Config) ->
         ?TOTAL_SIZE_ON_STORAGE(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR) => 1314
     }),
 
-    % Check if deletions of files are counted properly
-    [Worker2 | _] = ?config(?PROVIDER_DELETING_FILES_NODES_SELECTOR, Config),
-    lfm_test_utils:clean_space([Worker2], SpaceId, 30),
-    lists:foreach(fun(NodesSelector) ->
-        check_dir_stats(Config, NodesSelector, SpaceGuid, #{
-            ?REG_FILE_AND_LINK_COUNT => 0,
-            ?DIR_COUNT => 0,
-            ?TOTAL_SIZE => 0,
-            ?TOTAL_SIZE_ON_STORAGE(Config, NodesSelector) => 0
-        })
-    end, [?PROVIDER_DELETING_FILES_NODES_SELECTOR, ?PROVIDER_CREATING_FILES_NODES_SELECTOR]).
+    clean_space_and_verify_stats(Config).
 
 
 enabling_for_empty_space_test(Config) ->
@@ -403,6 +392,86 @@ restart_test(Config) ->
     reset_restart_hooks(Config),
     execute_restart_hooks(Config),
     verify_collecting_status(Config, disabled).
+
+
+parallel_write_test(Config, SleepOnWrite, InitialFileSize, OverrideInitialBytes) ->
+    enable(Config, new_space),
+    [Worker | _] = ?config(?PROVIDER_CREATING_FILES_NODES_SELECTOR, Config),
+    [WorkerProvider2 | _] = ?config(?PROVIDER_DELETING_FILES_NODES_SELECTOR, Config),
+    SessId = lfm_test_utils:get_user1_session_id(Config, Worker),
+    SessIdProvider2 = lfm_test_utils:get_user1_session_id(Config, WorkerProvider2),
+    SpaceGuid = lfm_test_utils:get_user1_first_space_guid(Config),
+
+    check_space_dir_values_map_and_time_series_collection(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR, SpaceGuid, #{
+        ?REG_FILE_AND_LINK_COUNT => 0,
+        ?DIR_COUNT => 0,
+        ?TOTAL_SIZE => 0,
+        ?TOTAL_SIZE_ON_STORAGE(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR) => 0
+    }, true, enabled),
+
+    % Create files and fill using 100 processes (spawn is hidden in pmap)
+    lfm_test_utils:create_files_tree(Worker, SessId, [{5, 20}], SpaceGuid, InitialFileSize),
+    WriteAnswers = lists_utils:pmap(fun(N) ->
+        FileNum = N div 5 + 1,
+        ChunkNum = N rem 5,
+
+        case SleepOnWrite of
+            true -> timer:sleep(timer:seconds(20 - ChunkNum * 4));
+            false -> ok
+        end,
+
+        Offset = case OverrideInitialBytes of
+            true -> ChunkNum * 1000;
+            false -> InitialFileSize + ChunkNum * 1000
+        end,
+        write_to_file(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR, [], [FileNum], 1000, Offset)
+    end, lists:seq(0, 99)),
+    ?assert(lists:all(fun(Ans) -> Ans =:= ok end, WriteAnswers)),
+
+    FileSize = case OverrideInitialBytes of
+        true -> 5000;
+        false -> InitialFileSize + 5000
+    end,
+
+    % Check stats on both providers
+    check_dir_stats(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR, SpaceGuid, #{
+        ?REG_FILE_AND_LINK_COUNT => 20,
+        ?DIR_COUNT => 5,
+        ?TOTAL_SIZE => 20 * FileSize,
+        ?TOTAL_SIZE_ON_STORAGE(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR) => 20 * FileSize
+    }),
+    check_dir_stats(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR, SpaceGuid, #{
+        ?REG_FILE_AND_LINK_COUNT => 20,
+        ?DIR_COUNT => 5,
+        ?TOTAL_SIZE => 20 * FileSize,
+        ?TOTAL_SIZE_ON_STORAGE(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR) => 0
+    }),
+
+    % Read files using 20 processes (spawn is hidden in pmap)
+    ReadAnswers = lists_utils:pmap(fun(FileNum) ->
+        % Check blocks visibility on reading provider before reading from file
+        GetBlocks = fun() ->
+            FileGuid = resolve_guid(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR, [], [FileNum]),
+            {ok, Distribution} =
+                lfm_proxy:get_file_distribution(WorkerProvider2, SessIdProvider2, #file_ref{guid = FileGuid}),
+            lists:sort(lists:map(fun(#{<<"blocks">> := ProviderBlocks}) -> ProviderBlocks end, Distribution))
+        end,
+        ?assertEqual([[], [[0, FileSize]]], GetBlocks(), ?ATTEMPTS),
+
+        Bytes = read_from_file(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR, [], [FileNum], FileSize),
+        byte_size(Bytes)
+    end, lists:seq(1, 20)),
+    ?assert(lists:all(fun(Ans) -> Ans =:= FileSize end, ReadAnswers)),
+
+    % Check stats after reading
+    check_dir_stats(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR, SpaceGuid, #{
+        ?REG_FILE_AND_LINK_COUNT => 20,
+        ?DIR_COUNT => 5,
+        ?TOTAL_SIZE => 20 * FileSize,
+        ?TOTAL_SIZE_ON_STORAGE(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR) => 20 * FileSize
+    }),
+
+    clean_space_and_verify_stats(Config).
 
 
 %%%===================================================================
@@ -746,10 +815,14 @@ read_from_file(Config, NodesSelector, DirConstructor, FileConstructor, BytesCoun
 
 
 write_to_file(Config, NodesSelector, DirConstructor, FileConstructor, BytesCount) ->
+    write_to_file(Config, NodesSelector, DirConstructor, FileConstructor, BytesCount, 0).
+
+
+write_to_file(Config, NodesSelector, DirConstructor, FileConstructor, BytesCount, Offset) ->
     [Worker | _] = ?config(NodesSelector, Config),
     SessId = lfm_test_utils:get_user1_session_id(Config, Worker),
     Guid = resolve_guid(Config, NodesSelector, DirConstructor, FileConstructor),
-    lfm_test_utils:write_file(Worker, SessId, Guid, {rand_content, BytesCount}).
+    lfm_test_utils:write_file(Worker, SessId, Guid, Offset, {rand_content, BytesCount}).
 
 
 resolve_guid(Config, NodesSelector, DirConstructor, FileConstructor) ->
@@ -848,3 +921,19 @@ execute_restart_hooks(Config) ->
 reset_restart_hooks(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     ?assertEqual(ok, rpc:call(Worker, node_cache, clear, [restart_hooks_status])).
+
+
+clean_space_and_verify_stats(Config) ->
+    [Worker2 | _] = ?config(?PROVIDER_DELETING_FILES_NODES_SELECTOR, Config),
+    SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
+    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+
+    lfm_test_utils:clean_space([Worker2], SpaceId, 30),
+    lists:foreach(fun(NodesSelector) ->
+        check_dir_stats(Config, NodesSelector, SpaceGuid, #{
+            ?REG_FILE_AND_LINK_COUNT => 0,
+            ?DIR_COUNT => 0,
+            ?TOTAL_SIZE => 0,
+            ?TOTAL_SIZE_ON_STORAGE(Config, NodesSelector) => 0
+        })
+    end, [?PROVIDER_DELETING_FILES_NODES_SELECTOR, ?PROVIDER_CREATING_FILES_NODES_SELECTOR]).

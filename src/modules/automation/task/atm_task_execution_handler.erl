@@ -51,8 +51,9 @@
     teardown/2,
     set_run_num/2,
 
-    process_items_batch/5,
-    process_lambda_output/4,
+    run_job_batch/5,
+    process_job_batch_output/4,
+    process_streamed_data/3,
 
     handle_ended/1
 ]).
@@ -74,21 +75,34 @@ initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
         value = AtmTaskExecution = #atm_task_execution{
             workflow_execution_id = AtmWorkflowExecutionId,
             executor = AtmTaskExecutor,
-            system_audit_log_id = AtmSystemAuditLogId,
+            uncorrelated_result_specs = AtmTaskExecutionUncorrelatedResultSpecs,
+            system_audit_log_store_id = AtmSystemAuditLogStoreId,
             time_series_store_id = AtmTaskTSStoreId
         }
     } = ensure_atm_task_execution_doc(AtmTaskExecutionIdOrDoc),
 
-    {ok, #document{value = AtmWorkflowExecution}} = atm_workflow_execution:get(AtmWorkflowExecutionId),
+    {ok, #document{value = AtmWorkflowExecution}} = atm_workflow_execution:get(
+        AtmWorkflowExecutionId
+    ),
     AtmTaskSchema = get_task_schema(AtmTaskExecution, AtmWorkflowExecution),
-    AtmLambdaRevision = get_lambda_revision(AtmTaskSchema, AtmWorkflowExecution),
 
+    AtmTaskExecutorInitiationCtx = #atm_task_executor_initiation_ctx{
+        workflow_execution_ctx = AtmWorkflowExecutionCtx,
+        task_execution_id = AtmTaskExecutionId,
+        task_schema = AtmTaskSchema,
+        lambda_revision = get_lambda_revision(AtmTaskSchema, AtmWorkflowExecution),
+        uncorrelated_results = lists:map(
+            fun atm_task_execution_result_spec:get_name/1,
+            AtmTaskExecutionUncorrelatedResultSpecs
+        )
+    },
     AtmTaskExecutionSpec = atm_task_executor:initiate(
-        AtmWorkflowExecutionCtx, AtmTaskSchema, AtmLambdaRevision, AtmTaskExecutor
+        AtmTaskExecutorInitiationCtx,
+        AtmTaskExecutor
     ),
 
     {ok, #atm_store{container = AtmTaskAuditLogStoreContainer}} = atm_store_api:get(
-        AtmSystemAuditLogId
+        AtmSystemAuditLogStoreId
     ),
     AtmWorkflowExecutionEnvDiff = fun(Env0) ->
         Env1 = atm_workflow_execution_env:add_task_audit_log_store_container(
@@ -121,108 +135,139 @@ set_run_num(RunNum, AtmTaskExecutionId) ->
     ok.
 
 
--spec process_items_batch(
+-spec run_job_batch(
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id(),
     [automation:item()],
     binary(),
     binary()
 ) ->
-    ok | error | no_return().
-process_items_batch(
+    ok | error.
+run_job_batch(
     AtmWorkflowExecutionCtx,
     AtmTaskExecutionId,
-    ItemsBatch,
-    ReportResultUrl,
+    ItemBatch,
+    ForwardOutputUrl,
     HeartbeatUrl
 ) ->
-    #document{
-        value = #atm_task_execution{
-            executor = AtmTaskExecutor,
-            argument_specs = AtmTaskExecutionArgSpecs
-        }
-    } = update_items_in_processing(AtmTaskExecutionId, length(ItemsBatch)),
-
-    AtmJobCtx = atm_job_ctx:build(
-        AtmWorkflowExecutionCtx,
-        atm_task_executor:is_in_readonly_mode(AtmTaskExecutor),
-        ReportResultUrl
+    #document{value = AtmTaskExecution} = update_items_in_processing(
+        AtmTaskExecutionId, length(ItemBatch)
+    ),
+    AtmRunJobBatchCtx = atm_run_job_batch_ctx:build(
+        AtmWorkflowExecutionCtx, ForwardOutputUrl, HeartbeatUrl, AtmTaskExecution
     ),
 
     try
-        LambdaInput = #{
-            <<"ctx">> => #{<<"heartbeatUrl">> => HeartbeatUrl},
-            %% TODO VFS-8668 optimize argsBatch creation
-            <<"argsBatch">> => atm_parallel_runner:map(fun(Item) ->
-                atm_task_execution_arguments:construct_args(Item, AtmJobCtx, AtmTaskExecutionArgSpecs)
-            end, ItemsBatch)
-        },
-        atm_task_executor:run(AtmJobCtx, LambdaInput, AtmTaskExecutor)
+        atm_task_executor:run(
+            AtmRunJobBatchCtx,
+            build_lambda_input(AtmRunJobBatchCtx, ItemBatch, AtmTaskExecution),
+            AtmTaskExecution#atm_task_execution.executor
+        )
     catch Type:Reason:Stacktrace ->
-        Error = ?atm_examine_error(Type, Reason, Stacktrace),
-        process_lambda_output(AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemsBatch, Error)
+        handle_job_batch_processing_error(
+            AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemBatch,
+            ?atm_examine_error(Type, Reason, Stacktrace)
+        ),
+        error
     end.
 
 
--spec process_lambda_output(
+-spec process_job_batch_output(
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id(),
     [automation:item()],
-    errors:error() | atm_task_executor:lambda_output()
+    atm_task_executor:lambda_output()
 ) ->
-    ok | error | no_return().
-process_lambda_output(AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemsBatch, LambdaOutput) ->
-    case resolve_lambda_results(ItemsBatch, LambdaOutput) of
-        {ok, ResultsPerItem} ->
-            AnyErrorOccurred = lists:member(error, atm_parallel_runner:map(fun({Item, Result}) ->
-                process_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Result)
-            end, ResultsPerItem)),
+    ok | error.
+process_job_batch_output(AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemBatch, LambdaOutput) ->
+    case parse_lambda_output(ItemBatch, LambdaOutput) of
+        {ok, ResultsPerJob} ->
+            AnyErrorOccurred = lists:member(error, atm_parallel_runner:map(fun({Item, JobResults}) ->
+                process_job_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, JobResults)
+            end, ResultsPerJob)),
 
             case AnyErrorOccurred of
                 true -> error;
                 false -> ok
             end;
         Error = {error, _} ->
-            handle_batch_processing_error(
-                AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemsBatch, Error
+            handle_job_batch_processing_error(
+                AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemBatch, Error
             ),
             error
     end.
 
 
+-spec process_streamed_data(
+    atm_workflow_execution_ctx:record(),
+    atm_task_execution:id(),
+    atm_task_executor:streamed_data()
+) ->
+    ok | error.
+process_streamed_data(AtmWorkflowExecutionCtx, AtmTaskExecutionId, {chunk, UncorrelatedResults}) ->
+    {ok, #document{value = AtmTaskExecution}} = atm_task_execution:get(AtmTaskExecutionId),
+
+    try
+        maps:foreach(fun(ResultName, ResultArray) ->
+            lists:foreach(fun(ResultValue) ->
+                atm_task_execution_results:consume_results(
+                    AtmWorkflowExecutionCtx,
+                    uncorrelated,
+                    AtmTaskExecution#atm_task_execution.uncorrelated_result_specs,
+                    #{ResultName => ResultValue}
+                )
+            end, ResultArray)
+        end, UncorrelatedResults)
+    catch Type:Reason:Stacktrace ->
+        handle_uncorrelated_results_processing_error(
+            AtmWorkflowExecutionCtx,
+            AtmTaskExecutionId,
+            ?atm_examine_error(Type, Reason, Stacktrace)
+        ),
+        error
+    end;
+
+process_streamed_data(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Error = {error, _}) ->
+    handle_uncorrelated_results_processing_error(
+        AtmWorkflowExecutionCtx, AtmTaskExecutionId, Error
+    ),
+    error.
+
+
 -spec handle_ended(atm_task_execution:id()) -> ok.
 handle_ended(AtmTaskExecutionId) ->
     Diff = fun
-        (#atm_task_execution{status = ?PENDING_STATUS} = AtmTaskExecution) ->
+        (AtmTaskExecution = #atm_task_execution{status = ?PENDING_STATUS}) ->
             {ok, AtmTaskExecution#atm_task_execution{status = ?SKIPPED_STATUS}};
 
-        (#atm_task_execution{
+        (AtmTaskExecution = #atm_task_execution{
             status = ?ACTIVE_STATUS,
+            aborting_reason = AbortingReason,
             items_in_processing = ItemsInProcessing,
             items_processed = ItemsProcessed,
             items_failed = ItemsFailed
-        } = AtmTaskExecution) ->
+        }) ->
             % atm workflow execution may have been abruptly interrupted by e.g.
             % provider restart which resulted in stale `items_in_processing`
-            NewAtmTaskExecution = case ItemsFailed + ItemsInProcessing of
-                0 ->
-                    AtmTaskExecution#atm_task_execution{status = ?FINISHED_STATUS};
-                AllFailedItems ->
-                    AtmTaskExecution#atm_task_execution{
-                        status = ?FAILED_STATUS,
-                        items_in_processing = 0,
-                        items_processed = ItemsProcessed + ItemsInProcessing,
-                        items_failed = AllFailedItems
-                    }
-            end,
-            {ok, NewAtmTaskExecution};
+            UpdatedProcessedItems = ItemsProcessed + ItemsInProcessing,
+            UpdatedFailedItems = ItemsFailed + ItemsInProcessing,
+
+            {ok, AtmTaskExecution#atm_task_execution{
+                status = case {AbortingReason, UpdatedFailedItems} of
+                    {undefined, 0} -> ?FINISHED_STATUS;
+                    _ -> ?FAILED_STATUS
+                end,
+                items_in_processing = 0,
+                items_processed = UpdatedProcessedItems,
+                items_failed = UpdatedFailedItems
+            }};
 
         (_) ->
             {error, already_ended}
     end,
     case atm_task_execution:update(AtmTaskExecutionId, Diff) of
         {ok, #document{value = AtmTaskExecution} = AtmTaskExecutionDoc} ->
-            atm_store_api:freeze(AtmTaskExecution#atm_task_execution.system_audit_log_id),
+            atm_store_api:freeze(AtmTaskExecution#atm_task_execution.system_audit_log_store_id),
             handle_status_change(AtmTaskExecutionDoc);
         {error, already_ended} ->
             ok
@@ -282,18 +327,40 @@ get_lambda_revision(
 
 
 %% @private
--spec resolve_lambda_results(
+-spec build_lambda_input(
+    atm_run_job_batch_ctx:record(),
     [automation:item()],
-    errors:error() | atm_task_executor:lambda_output()
+    atm_task_execution:record()
 ) ->
-    {ok, [{automation:item(), atm_task_executor:results()}]} | errors:error().
-resolve_lambda_results(_ItemsBatch, Error = {error, _}) ->
+    json_utils:json_map().
+build_lambda_input(AtmRunJobBatchCtx, ItemBatch, #atm_task_execution{
+    argument_specs = AtmTaskExecutionArgSpecs
+}) ->
+    %% TODO VFS-8668 optimize argsBatch creation
+    ArgsBatch = atm_parallel_runner:map(fun(Item) ->
+        atm_task_execution_arguments:construct_args(
+            Item, AtmRunJobBatchCtx, AtmTaskExecutionArgSpecs
+        )
+    end, ItemBatch),
+
+    #{
+        <<"ctx">> => #{
+            <<"heartbeatUrl">> => atm_run_job_batch_ctx:get_heartbeat_url(AtmRunJobBatchCtx)
+        },
+        <<"argsBatch">> => ArgsBatch
+    }.
+
+
+%% @private
+-spec parse_lambda_output([automation:item()], atm_task_executor:lambda_output()) ->
+    {ok, [{automation:item(), atm_task_executor:job_results()}]} | errors:error().
+parse_lambda_output(_ItemBatch, Error = {error, _}) ->
     % Entire batch processing failed (e.g. timeout or malformed lambda response)
     Error;
 
-resolve_lambda_results(ItemsBatch, #{<<"resultsBatch">> := ResultsBatch}) when
+parse_lambda_output(ItemBatch, #{<<"resultsBatch">> := ResultsBatch}) when
     is_list(ResultsBatch),
-    length(ItemsBatch) == length(ResultsBatch)
+    length(ItemBatch) == length(ResultsBatch)
 ->
     {ok, lists:zipwith(fun
         (Item, Result) when is_map(Result) ->
@@ -303,9 +370,9 @@ resolve_lambda_results(ItemsBatch, #{<<"resultsBatch">> := ResultsBatch}) when
                 "Expected object with result names matching those defined in task schema. "
                 "Instead got: ~s", [json_utils:encode(Result)]
             ))}
-    end, ItemsBatch, ResultsBatch)};
+    end, ItemBatch, ResultsBatch)};
 
-resolve_lambda_results(_ItemsBatch, MalformedLambdaOutput) ->
+parse_lambda_output(_ItemBatch, MalformedLambdaOutput) ->
     ?ERROR_BAD_DATA(<<"lambdaOutput">>, str_utils:format_bin(
         "Expected '{\"resultsBatch\": [$LAMBDA_RESULTS_FOR_ITEM, ...]}' with "
         "$LAMBDA_RESULTS_FOR_ITEM object for each item in 'argsBatch' "
@@ -315,64 +382,74 @@ resolve_lambda_results(_ItemsBatch, MalformedLambdaOutput) ->
 
 
 %% @private
--spec handle_batch_processing_error(
+-spec handle_job_batch_processing_error(
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id(),
     [automation:item()],
     errors:error()
 ) ->
     ok.
-handle_batch_processing_error(AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemsBatch, Error) ->
-    update_items_failed_and_processed(AtmTaskExecutionId, length(ItemsBatch)),
+handle_job_batch_processing_error(
+    AtmWorkflowExecutionCtx,
+    AtmTaskExecutionId,
+    ItemBatch,
+    Error
+) ->
+    update_items_failed_and_processed(AtmTaskExecutionId, length(ItemBatch)),
 
     ErrorLog = #{
         <<"description">> => <<"Failed to process batch of items.">>,
-        <<"itemsBatch">> => ItemsBatch,
+        <<"itemBatch">> => ItemBatch,
         <<"reason">> => errors:to_json(Error)
     },
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
     atm_workflow_execution_logger:task_error(ErrorLog, Logger).
 
 
--spec process_results(
+-spec process_job_results(
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id(),
     automation:item(),
-    atm_task_executor:results()
+    atm_task_executor:job_results()
 ) ->
     ok | error | no_return().
-process_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, {error, _} = Error) ->
-    handle_item_processing_error(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Error),
+process_job_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, {error, _} = Error) ->
+    handle_job_processing_error(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Error),
     error;
 
-process_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, #{<<"exception">> := _} = Exception) ->
-    handle_item_processing_error(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Exception),
+process_job_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Exception = #{
+    <<"exception">> := _
+}) ->
+    handle_job_processing_error(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Exception),
     error;
 
-process_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Results) ->
-    {ok, #document{value = #atm_task_execution{
-        result_specs = AtmTaskExecutionResultSpecs
-    }}} = atm_task_execution:get(AtmTaskExecutionId),
+process_job_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, JobResults) ->
+    {ok, #document{value = AtmTaskExecution}} = atm_task_execution:get(AtmTaskExecutionId),
 
     try
-        atm_task_execution_results:consume_results(AtmWorkflowExecutionCtx, AtmTaskExecutionResultSpecs, Results),
+        atm_task_execution_results:consume_results(
+            AtmWorkflowExecutionCtx,
+            item_related,
+            AtmTaskExecution#atm_task_execution.item_related_result_specs,
+            JobResults
+        ),
         update_items_processed(AtmTaskExecutionId)
     catch Type:Reason:Stacktrace ->
         Error = ?atm_examine_error(Type, Reason, Stacktrace),
-        handle_item_processing_error(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Error),
+        handle_job_processing_error(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Error),
         error
     end.
 
 
 %% @private
--spec handle_item_processing_error(
+-spec handle_job_processing_error(
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id(),
     automation:item(),
     errors:error() | json_utils:json_map()
 ) ->
     ok.
-handle_item_processing_error(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Error) ->
+handle_job_processing_error(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Error) ->
     update_items_failed_and_processed(AtmTaskExecutionId),
 
     ErrorLog = case Error of
@@ -452,6 +529,75 @@ update_items_failed_and_processed(AtmTaskExecutionId, Inc) ->
         }}
     end),
     ok.
+
+
+%% @private
+-spec handle_uncorrelated_results_processing_error(
+    atm_workflow_execution_ctx:record(),
+    atm_task_execution:id(),
+    errors:error()
+) ->
+    ok.
+handle_uncorrelated_results_processing_error(
+    AtmWorkflowExecutionCtx,
+    AtmTaskExecutionId,
+    Error
+) ->
+    UpdateResult = atm_task_execution:update(AtmTaskExecutionId, fun
+        (AtmTaskExecution = #atm_task_execution{aborting_reason = undefined}) ->
+            {ok, AtmTaskExecution#atm_task_execution{aborting_reason = failure}};
+        (_) ->
+            {error, already_aborting}
+    end),
+
+    case UpdateResult of
+        {ok, #document{value = #atm_task_execution{
+            workflow_execution_id = AtmWorkflowExecutionId,
+            lane_index = AtmLaneIndex,
+            run_num = RunNum
+        }}} ->
+            log_uncorrelated_results_processing_error(
+                AtmWorkflowExecutionCtx,
+                AtmTaskExecutionId,
+                Error
+            ),
+            atm_lane_execution_status:handle_aborting(
+                {AtmLaneIndex, RunNum},
+                AtmWorkflowExecutionId,
+                failure
+            ),
+            ok;
+
+        {error, already_aborting} ->
+            ok
+    end.
+
+
+%% @private
+-spec log_uncorrelated_results_processing_error(
+    atm_workflow_execution_ctx:record(),
+    atm_task_execution:id(),
+    errors:error()
+) ->
+    ok.
+log_uncorrelated_results_processing_error(
+    AtmWorkflowExecutionCtx,
+    AtmTaskExecutionId,
+    Error
+) ->
+    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+
+    TaskLog = #{
+        <<"description">> => <<"Failed to process uncorrelated task results.">>,
+        <<"reason">> => errors:to_json(Error)
+    },
+    atm_workflow_execution_logger:task_critical(TaskLog, Logger),
+
+    atm_workflow_execution_logger:workflow_critical(
+        "Failed to process uncorrelated results for task '~s'.",
+        [AtmTaskExecutionId],
+        Logger
+    ).
 
 
 %%--------------------------------------------------------------------

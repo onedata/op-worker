@@ -37,11 +37,11 @@ execute(UserCtx, SpaceDirCtx, #archive_dataset{
     id = DatasetId,
     config = Config,
     preserved_callback = PreservedCallback,
-    purged_callback = PurgedCallback,
+    deleted_callback = DeletedCallback,
     description = Description
 }) ->
     dataset_req:create_archive(
-        SpaceDirCtx, DatasetId, Config, PreservedCallback, PurgedCallback, Description, UserCtx
+        SpaceDirCtx, DatasetId, Config, PreservedCallback, DeletedCallback, Description, UserCtx
     );
 
 execute(UserCtx, SpaceDirCtx, #get_archive_info{id = ArchiveId}) ->
@@ -50,8 +50,8 @@ execute(UserCtx, SpaceDirCtx, #get_archive_info{id = ArchiveId}) ->
 execute(UserCtx, SpaceDirCtx, #update_archive{id = ArchiveId, diff = Diff}) ->
     dataset_req:update_archive(SpaceDirCtx, ArchiveId, Diff, UserCtx);
 
-execute(UserCtx, SpaceDirCtx, #purge_archive{id = ArchiveId, callback = CallbackUrl}) ->
-    dataset_req:init_archive_purge(SpaceDirCtx, ArchiveId, CallbackUrl, UserCtx);
+execute(UserCtx, SpaceDirCtx, #delete_archive{id = ArchiveId, callback = CallbackUrl}) ->
+    dataset_req:init_archive_delete(SpaceDirCtx, ArchiveId, CallbackUrl, UserCtx);
 
 execute(UserCtx, SpaceDirCtx, #recall_archive{
     archive_id = ArchiveId, parent_directory_guid = ParentDirectoryGuid, target_filename = TargetName}

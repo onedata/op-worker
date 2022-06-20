@@ -38,7 +38,7 @@
     get_archive_info/1,
     modify_archive_description/1,
     get_dataset_archives/1,
-    init_archive_purge_test/1,
+    init_archive_delete_test/1,
     init_archive_recall_test/1,
     get_archive_recall_details_test/1,
     get_archive_recall_progress_test/1,
@@ -56,7 +56,7 @@ groups() -> [
         get_archive_info,
         modify_archive_description,
         get_dataset_archives,
-        init_archive_purge_test,
+        init_archive_delete_test,
         init_archive_recall_test,
         get_archive_recall_details_test,
         get_archive_recall_progress_test,
@@ -76,19 +76,19 @@ all() -> [
 
 -define(HTTP_SERVER_PORT, 8080).
 -define(ARCHIVE_PRESERVED_PATH, "/archive_preserved").
--define(ARCHIVE_PURGED_PATH, "/archive_purged").
+-define(ARCHIVE_DELETED_PATH, "/archive_deleted").
 
 -define(ARCHIVE_PRESERVED_CALLBACK_URL(), ?CALLBACK_URL(?ARCHIVE_PRESERVED_PATH)).
--define(ARCHIVE_PURGED_CALLBACK_URL(), ?CALLBACK_URL(?ARCHIVE_PURGED_PATH)).
+-define(ARCHIVE_DELETED_CALLBACK_URL(), ?CALLBACK_URL(?ARCHIVE_DELETED_PATH)).
 -define(CALLBACK_URL(Path), begin
     {ok, IpAddressBin} = ip_utils:to_binary(initializer:local_ip_v4()),
     str_utils:format_bin(<<"http://~s:~p~s">>, [IpAddressBin, ?HTTP_SERVER_PORT, Path])
 end).
 
 -define(CREATE_TEST_PROCESS, create_test_process).
--define(PURGE_TEST_PROCESS, purge_test_process).
+-define(DELETE_TEST_PROCESS, delete_test_process).
 -define(ARCHIVE_PERSISTED(ArchiveId, DatasetId), {archive_persisted, ArchiveId, DatasetId}).
--define(ARCHIVE_PURGED(ArchiveId, DatasetId), {archive_purged, ArchiveId, DatasetId}).
+-define(ARCHIVE_DELETED(ArchiveId, DatasetId), {archive_deleted, ArchiveId, DatasetId}).
 -define(SPACE, space_krk_par).
 
 %%%===================================================================
@@ -132,14 +132,14 @@ create_archive(_Config) ->
             ],
             data_spec = #data_spec{
                 required = [<<"datasetId">>],
-                optional = [<<"config">>, <<"description">>, <<"preservedCallback">>, <<"purgedCallback">>],
+                optional = [<<"config">>, <<"description">>, <<"preservedCallback">>, <<"deletedCallback">>],
                 correct_values = #{
                     <<"datasetId">> => [DatasetId],
                     % pick only 4 random out of all possible configs
                     <<"config">> => lists_utils:random_sublist(generate_all_valid_configs(), 4, 4),
                     <<"description">> => [<<"Test description">>],
                     <<"preservedCallback">> => [?ARCHIVE_PRESERVED_CALLBACK_URL()],
-                    <<"purgedCallback">> => [?ARCHIVE_PURGED_CALLBACK_URL()]
+                    <<"deletedCallback">> => [?ARCHIVE_DELETED_CALLBACK_URL()]
                 },
                 bad_values = [
                     {<<"datasetId">>, ?NON_EXISTENT_DATASET_ID, ?ERROR_FORBIDDEN},
@@ -156,7 +156,7 @@ create_archive(_Config) ->
                         ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"config.layout">>, ensure_binaries(?ARCHIVE_LAYOUTS))},
                     {<<"description">>, [123, 456], ?ERROR_BAD_VALUE_BINARY(<<"description">>)},
                     {<<"preservedCallback">>, <<"htp://wrong-url.org">>, ?ERROR_BAD_DATA(<<"preservedCallback">>)},
-                    {<<"purgedCallback">>, <<"htp://wrong-url.org">>, ?ERROR_BAD_DATA(<<"purgedCallback">>)}
+                    {<<"deletedCallback">>, <<"htp://wrong-url.org">>, ?ERROR_BAD_DATA(<<"deletedCallback">>)}
                 ]
             }
         }
@@ -244,10 +244,10 @@ build_create_archive_validate_gs_call_result_fun(MemRef) ->
         Config = archive_config:from_json(maps:get(<<"config">>, Data, #{})),
         Description = maps:get(<<"description">>, Data, ?DEFAULT_ARCHIVE_DESCRIPTION),
         PreservedCallback = maps:get(<<"preservedCallback">>, Data, undefined),
-        PurgedCallback = maps:get(<<"purgedCallback">>, Data, undefined),
+        DeletedCallback = maps:get(<<"deletedCallback">>, Data, undefined),
 
         ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId, ?ARCHIVE_BUILDING, Config,
-            Description, PreservedCallback, PurgedCallback, undefined),
+            Description, PreservedCallback, DeletedCallback, undefined),
         % state is removed from the map as it may be in pending, building or even preserved state when request is handled
         IgnoredKeys = [<<"state">>, <<"stats">>, <<"rootDir">>, <<"creationTime">>, <<"index">>, <<"baseArchive">>, <<"relatedDip">>],
         ExpArchiveData2 = maps:without(IgnoredKeys, ExpArchiveData),
@@ -282,7 +282,7 @@ build_verify_archive_created_fun(MemRef, Providers, AttachedDatasets, DetachedDa
             ConfigJson = maps:get(<<"config">>, Data, #{}),
             Description = maps:get(<<"description">>, Data, ?DEFAULT_ARCHIVE_DESCRIPTION),
             PreservedCallback = maps:get(<<"preservedCallback">>, Data, undefined),
-            PurgedCallback = maps:get(<<"purgedCallback">>, Data, undefined),
+            DeletedCallback = maps:get(<<"deletedCallback">>, Data, undefined),
             case PreservedCallback =/= undefined of
                 true -> await_archive_preserved_callback_called(ArchiveId, DatasetId);
                 false -> ok
@@ -290,7 +290,7 @@ build_verify_archive_created_fun(MemRef, Providers, AttachedDatasets, DetachedDa
             assert_dataset_lists(AttachedDatasets, DetachedDatasets),
             verify_archive(
                 UserId, Providers, ArchiveId, DatasetId, CreationTime, ConfigJson,
-                PreservedCallback, PurgedCallback, Description
+                PreservedCallback, DeletedCallback, Description
             );
         (expected_failure, _) ->
             assert_dataset_lists(AttachedDatasets, DetachedDatasets),
@@ -368,7 +368,7 @@ get_archive_info(_Config) ->
                             <<"description">> => Description,
                             <<"config">> => ConfigJson,
                             <<"preservedCallback">> => null,
-                            <<"purgedCallback">> => null,
+                            <<"deletedCallback">> => null,
                             <<"stats">> => #{
                                 <<"filesArchived">> => 1,
                                 <<"filesFailed">> => 0,
@@ -724,10 +724,10 @@ validate_listed_archives(ListingResult, Params, AllArchives, Format) ->
 
 
 %%%===================================================================
-%%% Init purge of archive test
+%%% Init delete of archive test
 %%%===================================================================
 
-init_archive_purge_test(_Config) ->
+init_archive_delete_test(_Config) ->
     Providers = [krakow, paris],
 
     #object{dataset = #dataset_object{
@@ -741,37 +741,37 @@ init_archive_purge_test(_Config) ->
     api_test_memory:set(MemRef, archive_objects, ArchiveObjects),
 
     maybe_detach_dataset(Providers, DatasetId),
-    true = register(?PURGE_TEST_PROCESS, self()),
+    true = register(?DELETE_TEST_PROCESS, self()),
 
     ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR(?EPERM),
-            verify_fun = build_verify_archive_purged_fun(MemRef, Providers, DatasetId),
+            verify_fun = build_verify_archive_deleted_fun(MemRef, Providers, DatasetId),
             scenario_templates = [
                 #scenario_template{
-                    name = <<"Init archive purge using REST API">>,
+                    name = <<"Init archive delete using REST API">>,
                     type = rest,
-                    prepare_args_fun = build_init_purge_archive_prepare_rest_args_fun(MemRef),
+                    prepare_args_fun = build_init_delete_archive_prepare_rest_args_fun(MemRef),
                     validate_result_fun = fun(_, {ok, RespCode, _, RespBody}) ->
                         ?assertEqual({?HTTP_204_NO_CONTENT, #{}}, {RespCode, RespBody})
                     end
                 },
                 #scenario_template{
-                    name = <<"Init archive purge using GS API">>,
+                    name = <<"Init archive delete using GS API">>,
                     type = gs,
-                    prepare_args_fun = build_init_purge_archive_prepare_gs_args_fun(MemRef),
+                    prepare_args_fun = build_init_delete_archive_prepare_gs_args_fun(MemRef),
                     validate_result_fun = fun(_, Result) -> ?assertEqual(ok, Result) end
                 }
             ],
             data_spec = #data_spec{
-                optional = [<<"purgedCallback">>],
+                optional = [<<"deletedCallback">>],
                 correct_values = #{
-                    <<"purgedCallback">> => [?ARCHIVE_PURGED_CALLBACK_URL()]
+                    <<"deletedCallback">> => [?ARCHIVE_DELETED_CALLBACK_URL()]
                 },
                 bad_values = [
                     {bad_id, ?NON_EXISTENT_ARCHIVE_ID, ?ERROR_NOT_FOUND},
-                    {<<"purgedCallback">>, <<"htp://wrong-url.org">>, ?ERROR_BAD_DATA(<<"purgedCallback">>)}
+                    {<<"deletedCallback">>, <<"htp://wrong-url.org">>, ?ERROR_BAD_DATA(<<"deletedCallback">>)}
                 ]
             }
         }
@@ -779,50 +779,50 @@ init_archive_purge_test(_Config) ->
 
 
 %% @private
--spec build_init_purge_archive_prepare_rest_args_fun(api_test_memory:mem_ref()) ->
+-spec build_init_delete_archive_prepare_rest_args_fun(api_test_memory:mem_ref()) ->
     onenv_api_test_runner:prepare_args_fun().
-build_init_purge_archive_prepare_rest_args_fun(MemRef) ->
+build_init_delete_archive_prepare_rest_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data0}) ->
         ArchiveObject = #archive_object{id = ArchiveId} = take_random_archive(MemRef),
         {Id, _} = api_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
-        api_test_memory:set(MemRef, archive_to_purge, ArchiveObject#archive_object{id = Id}),
+        api_test_memory:set(MemRef, archive_to_delete, ArchiveObject#archive_object{id = Id}),
 
         #rest_args{
             method = post,
             headers = #{?HDR_CONTENT_TYPE => <<"application/json">>},
-            path = <<"archives/", Id/binary, "/purge">>,
+            path = <<"archives/", Id/binary, "/delete">>,
             body = json_utils:encode(Data0)
         }
     end.
 
 
 %% @private
--spec build_init_purge_archive_prepare_gs_args_fun(api_test_memory:mem_ref()) ->
+-spec build_init_delete_archive_prepare_gs_args_fun(api_test_memory:mem_ref()) ->
     onenv_api_test_runner:prepare_args_fun().
-build_init_purge_archive_prepare_gs_args_fun(MemRef) ->
+build_init_delete_archive_prepare_gs_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data0}) ->
         ArchiveObject = #archive_object{id = ArchiveId} = take_random_archive(MemRef),
         {Id, _} = api_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
-        api_test_memory:set(MemRef, archive_to_purge, ArchiveObject#archive_object{id = Id}),
+        api_test_memory:set(MemRef, archive_to_delete, ArchiveObject#archive_object{id = Id}),
 
         #gs_args{
             operation = create,
-            gri = #gri{type = op_archive, id = Id, aspect = purge, scope = private},
+            gri = #gri{type = op_archive, id = Id, aspect = delete, scope = private},
             data = Data0
         }
     end.
 
 %% @private
--spec build_verify_archive_purged_fun(
+-spec build_verify_archive_deleted_fun(
     api_test_memory:mem_ref(),
     [oct_background:entity_selector()],
     dataset:id()
 ) ->
     onenv_api_test_runner:verify_fun().
-build_verify_archive_purged_fun(MemRef, Providers, DatasetId) ->
+build_verify_archive_deleted_fun(MemRef, Providers, DatasetId) ->
 
     fun(ExpResult, #api_test_ctx{data = Data}) ->
-        case api_test_memory:get(MemRef, archive_to_purge) of
+        case api_test_memory:get(MemRef, archive_to_delete) of
             #archive_object{id = ?NON_EXISTENT_ARCHIVE_ID} ->
                 ok;
             undefined ->
@@ -831,8 +831,8 @@ build_verify_archive_purged_fun(MemRef, Providers, DatasetId) ->
 
                 case ExpResult of
                     expected_success ->
-                        case maps:is_key(<<"purgedCallback">>, Data) of
-                            true -> await_archive_purged_callback_called(ArchiveId, DatasetId);
+                        case maps:is_key(<<"deletedCallback">>, Data) of
+                            true -> await_archive_deleted_callback_called(ArchiveId, DatasetId);
                             false -> ok
                         end;
                     expected_failure ->
@@ -861,14 +861,14 @@ build_verify_archive_purged_fun(MemRef, Providers, DatasetId) ->
     end.
 
 %% @private
--spec await_archive_purged_callback_called(archive:id(), dataset:id()) -> ok.
-await_archive_purged_callback_called(ArchiveId, DatasetId) ->
+-spec await_archive_deleted_callback_called(archive:id(), dataset:id()) -> ok.
+await_archive_deleted_callback_called(ArchiveId, DatasetId) ->
     Timeout = timer:seconds(?ATTEMPTS),
     receive
-        ?ARCHIVE_PURGED(ArchiveId, DatasetId) -> ok
+        ?ARCHIVE_DELETED(ArchiveId, DatasetId) -> ok
     after
         Timeout ->
-            ct:fail("Archive ~p not purged", [ArchiveId])
+            ct:fail("Archive ~p not deleted", [ArchiveId])
     end.
 
 
@@ -1170,7 +1170,7 @@ get_datasets_summary_for_archive_test(_Config) ->
     ok.
 verify_archive(
     UserId, Providers, ArchiveId, DatasetId, CreationTime, ConfigJson,
-    PreservedCallback, PurgedCallback, Description
+    PreservedCallback, DeletedCallback, Description
 ) ->
     lists:foreach(fun(Provider) ->
         Node = ?OCT_RAND_OP_NODE(Provider),
@@ -1188,7 +1188,7 @@ verify_archive(
             creation_time = CreationTime,
             config = Config,
             preserved_callback = PreservedCallback,
-            purged_callback = PurgedCallback,
+            deleted_callback = DeletedCallback,
             description = Description,
             index = archives_list:index(ArchiveId, CreationTime),
             stats = archive_stats:new(1, 0, 0)
@@ -1222,7 +1222,7 @@ list_archive_ids(Node, UserSessId, DatasetId, ListOpts) ->
 %% @private
 -spec build_archive_gs_instance(archive:id(), dataset:id(), archive:state(), archive:config(),
     archive:description(), archive:callback(), archive:callback(), file_id:file_guid()) -> json_utils:json_term().
-build_archive_gs_instance(ArchiveId, DatasetId, State, Config, Description, PreservedCallback, PurgedCallback,
+build_archive_gs_instance(ArchiveId, DatasetId, State, Config, Description, PreservedCallback, DeletedCallback,
     RootDirGuid
 ) ->
     BasicInfo = archive_gui_gs_translator:translate_archive_info(#archive_info{
@@ -1233,7 +1233,7 @@ build_archive_gs_instance(ArchiveId, DatasetId, State, Config, Description, Pres
         config = Config,
         description = Description,
         preserved_callback = PreservedCallback,
-        purged_callback = PurgedCallback,
+        deleted_callback = DeletedCallback,
         stats = archive_stats:new(1, 0, 0)
     }),
     maps:without([<<"creationTime">>, <<"index">>, <<"relatedDip">>], BasicInfo#{<<"revision">> => 1}).
@@ -1326,10 +1326,10 @@ do(#mod{method = "POST", request_uri = ?ARCHIVE_PRESERVED_PATH, entity_body = Bo
         #{<<"archiveId">> := ArchiveId, <<"datasetId">> := DatasetId} = json_utils:decode(Body),
         ?CREATE_TEST_PROCESS ! ?ARCHIVE_PERSISTED(ArchiveId, DatasetId)
     end);
-do(#mod{method = "POST", request_uri = ?ARCHIVE_PURGED_PATH, entity_body = Body}) ->
+do(#mod{method = "POST", request_uri = ?ARCHIVE_DELETED_PATH, entity_body = Body}) ->
     handle_callback_message(fun() ->
         #{<<"archiveId">> := ArchiveId,  <<"datasetId">> := DatasetId} = json_utils:decode(Body),
-        ?PURGE_TEST_PROCESS ! ?ARCHIVE_PURGED(ArchiveId, DatasetId)
+        ?DELETE_TEST_PROCESS ! ?ARCHIVE_DELETED(ArchiveId, DatasetId)
     end).
 
 

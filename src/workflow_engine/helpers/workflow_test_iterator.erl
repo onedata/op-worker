@@ -17,7 +17,7 @@
 -behaviour(persistent_record).
 
 %% API
--export([get_first/1]).
+-export([initialize/1, initialize/2]).
 %% Iterator API
 -export([get_next/2, forget_before/1, mark_exhausted/1]).
 %% Persistent record API
@@ -25,25 +25,33 @@
 
 -record(workflow_test_iterator, {
     item_number :: non_neg_integer(),
-    item_count :: non_neg_integer()
+    item_count :: non_neg_integer(),
+    fail_on_item = -1 :: integer() % -1 if iterator should not fail
 }).
 
 -type iterator() :: #workflow_test_iterator{}.
 -type item() :: binary().
+-export_type([item/0]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
--spec get_first(non_neg_integer()) -> iterator().
-get_first(ItemCount) ->
+-spec initialize(non_neg_integer()) -> iterator().
+initialize(ItemCount) ->
     #workflow_test_iterator{item_number = 1, item_count = ItemCount}.
+
+-spec initialize(non_neg_integer(), non_neg_integer()) -> iterator().
+initialize(ItemCount, FailOnItem) ->
+    #workflow_test_iterator{item_number = 1, item_count = ItemCount, fail_on_item = FailOnItem}.
 
 %%%===================================================================
 %%% Iterator API
 %%%===================================================================
 
 -spec get_next(workflow_engine:execution_context(), iterator()) -> {ok, item(), iterator()} | stop.
+get_next(_Context, #workflow_test_iterator{item_number = ItemNumber, fail_on_item = ItemNumber}) ->
+    throw(test_error);
 get_next(_Context, #workflow_test_iterator{item_number = ItemNumber, item_count = ItemCount})
     when ItemNumber > ItemCount ->
     stop;
@@ -63,13 +71,14 @@ mark_exhausted(_) ->
 %%%===================================================================
 
 -spec db_encode(jsonable_record:record(), persistent_record:nested_record_encoder()) -> json_utils:json_term().
-db_encode(#workflow_test_iterator{item_number = ItemNumber, item_count = ItemCount}, _) ->
-    jiffy:encode(#{<<"item_number">> => ItemNumber, <<"item_count">> => ItemCount}).
+db_encode(#workflow_test_iterator{item_number = ItemNumber, item_count = ItemCount, fail_on_item = FailOnItem}, _) ->
+    jiffy:encode(#{<<"item_number">> => ItemNumber, <<"item_count">> => ItemCount, <<"fail_on_item">> => FailOnItem}).
 
 -spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) -> jsonable_record:record().
 db_decode(Term, _) ->
-    #{<<"item_number">> := ItemNumber, <<"item_count">> := ItemCount} = jiffy:decode(Term, [return_maps]),
-    #workflow_test_iterator{item_number = ItemNumber, item_count = ItemCount}.
+    #{<<"item_number">> := ItemNumber, <<"item_count">> := ItemCount, <<"fail_on_item">> := FailOnItem} =
+        jiffy:decode(Term, [return_maps]),
+    #workflow_test_iterator{item_number = ItemNumber, item_count = ItemCount, fail_on_item = FailOnItem}.
 
 -spec version() -> persistent_record:record_version().
 version() ->

@@ -1636,7 +1636,10 @@ translate_to_protobuf(#file_attr{} = FileAttr) ->
         mtime = FileAttr#file_attr.mtime,
         ctime = FileAttr#file_attr.ctime,
         type = FileAttr#file_attr.type,
-        size = FileAttr#file_attr.size,
+        size = case FileAttr#file_attr.type of
+            ?DIRECTORY_TYPE -> utils:ensure_defined(FileAttr#file_attr.size, 0);
+            _ -> FileAttr#file_attr.size
+        end,
         provider_id = FileAttr#file_attr.provider_id,
         shares = FileAttr#file_attr.shares,
         owner_id = FileAttr#file_attr.owner_id,
