@@ -12,10 +12,13 @@
 -module(mi_file_metadata).
 -author("Bartosz Walkowicz").
 
--include("modules/fslogic/file_distribution.hrl").
+-include("middleware/middleware.hrl").
 
 %% API
--export([get_distribution/2]).
+-export([
+    gather_distribution/2,
+    gather_time_dir_size_stats/3
+]).
 
 
 %%%===================================================================
@@ -23,8 +26,17 @@
 %%%===================================================================
 
 
--spec get_distribution(session:id(), lfm:file_key()) ->
+-spec gather_distribution(session:id(), lfm:file_key()) ->
     file_distribution:get_result() | no_return().
-get_distribution(SessionId, FileKey) ->
+gather_distribution(SessionId, FileKey) ->
     FileGuid = lfm_file_key:resolve_file_key(SessionId, FileKey, do_not_resolve_symlink),
-    middleware_worker:check_exec(SessionId, FileGuid, #file_distribution_get_request{}).
+    middleware_worker:check_exec(SessionId, FileGuid, #file_distribution_gather_request{}).
+
+
+-spec gather_time_dir_size_stats(session:id(), lfm:file_key(), ts_browse_request:record()) ->
+    ts_browse_result:record() | no_return().
+gather_time_dir_size_stats(SessionId, FileKey, Request) ->
+    FileGuid = lfm_file_key:resolve_file_key(SessionId, FileKey, do_not_resolve_symlink),
+    middleware_worker:check_exec(SessionId, FileGuid, #dir_time_size_stats_gather_request{
+        request = Request
+    }).

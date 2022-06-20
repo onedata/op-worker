@@ -25,9 +25,11 @@
 -include("proto/oneclient/server_messages.hrl").
 -include("proto/oneprovider/dbsync_messages.hrl").
 -include("proto/oneprovider/dbsync_messages2.hrl").
+-include("proto/oneprovider/mi_interprovider_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include("proto/oneprovider/remote_driver_messages.hrl").
 -include("proto/oneprovider/rtransfer_messages.hrl").
+-include("modules/fslogic/file_distribution.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("clproto/include/messages.hrl").
 -include_lib("cluster_worker/include/time_series/browsing.hrl").
@@ -834,6 +836,95 @@ translate_from_protobuf(#'RemoteData'{data = Data}) ->
 translate_from_protobuf(#'RemoteWriteResult'{wrote = Wrote}) ->
     #remote_write_result{wrote = Wrote};
 
+%% Middleware inteprovider
+translate_from_protobuf(#'MiInterproviderRequest'{
+    file_guid = FileGuid,
+    operation = {_, Operation}
+}) ->
+    #mi_interprovider_request{
+        file_guid = FileGuid,
+        operation = translate_from_protobuf(Operation)
+    };
+translate_from_protobuf(#'BrowseLocalTimeDirSizeStats'{
+    request = {_, Request}
+}) ->
+    #browse_local_time_dir_size_stats{
+        request = translate_from_protobuf(Request)
+    };
+translate_from_protobuf(#'TimeSeriesGetLayoutRequest'{}) ->
+    #time_series_get_layout_request{};
+translate_from_protobuf(#'TimeSeriesGetSliceRequest'{
+    encoded_layout = EncodedLayout,
+    start_timestamp = StartTimestamp,
+    window_limit = WindowLimit
+}) ->
+    #time_series_get_slice_request{
+        layout = json_utils:decode(EncodedLayout),
+        start_timestamp = StartTimestamp,
+        window_limit = WindowLimit
+    };
+translate_from_protobuf(#'BrowseLocalCurrentDirSizeStats'{
+    stat_names = StatNames
+}) ->
+    #browse_local_current_dir_size_stats{
+        stat_names = StatNames
+    };
+translate_from_protobuf(#'LocalRegFileDistributionGetRequest'{}) ->
+    #local_reg_file_distribution_get_request{};
+
+translate_from_protobuf(#'MiInterproviderResponse'{
+    status = ok,
+    result = {_, Result}
+}) ->
+    #mi_interprovider_response{
+        status = ok,
+        result = translate_from_protobuf(Result)
+    };
+translate_from_protobuf(#'MiInterproviderResponse'{
+    status = error,
+    result = {error_json, ErrorAsJson}
+}) ->
+    #mi_interprovider_response{
+        status = error,
+        result = errors:from_json(json_utils:decode(ErrorAsJson))
+};
+translate_from_protobuf(#'LocalCurrentDirSizeStats'{
+    stats_as_json = StatsAsJson
+}) ->
+    #local_current_dir_size_stats{
+        stats = json_utils:decode(StatsAsJson)
+    };
+translate_from_protobuf(#'TimeSeriesLayoutResult'{
+    layout_as_json = LayoutAsJson
+}) ->
+    #time_series_layout_result{
+        layout = json_utils:decode(LayoutAsJson)
+    };
+translate_from_protobuf(#'TimeSeriesSliceResult'{
+    serialized_slice = SerializedSlice
+}) ->
+    #time_series_slice_result{
+        slice = binary_to_term(SerializedSlice)
+    };
+translate_from_protobuf(#'StorageRegDistribution'{
+    storage_id = StorageId,
+    blocks = Blocks
+}) ->
+    #storage_reg_distribution{
+        storage_id = StorageId,
+        blocks = lists:map(fun(Block) -> translate_from_protobuf(Block) end, Blocks)
+    };
+translate_from_protobuf(#'ProviderRegDistribution'{
+    logical_size = LogicalSize,
+    blocks_per_storage = BlocksPerStorage
+}) ->
+    #provider_reg_distribution{
+        logical_size = LogicalSize,
+        blocks_per_storage = lists:map(fun(StorageBlocks) ->
+            translate_from_protobuf(StorageBlocks)
+        end, BlocksPerStorage)
+    };
+
 
 %% PROVIDER
 translate_from_protobuf(#'ProviderRequest'{
@@ -901,7 +992,7 @@ translate_from_protobuf(#'FSync'{
         handle_id = HandleId
     };
 translate_from_protobuf(#'GetFileDistribution'{}) ->
-    #get_file_distribution{};
+    #get_file_distribution_summary{};
 translate_from_protobuf(#'ReadMetadata'{
     type = Type,
     query = Query,
@@ -923,32 +1014,6 @@ translate_from_protobuf(#'WriteMetadata'{
 translate_from_protobuf(#'RemoveMetadata'{type = Type}) ->
     #remove_metadata{
         type = binary_to_existing_atom(Type, utf8)
-    };
-translate_from_protobuf(#'TimeSeriesGetLayoutRequest'{
-}) ->
-    #time_series_get_layout_request{
-    };
-translate_from_protobuf(#'TimeSeriesGetSliceRequest'{
-    encoded_layout = EncodedLayout,
-    start_timestamp = StartTimestamp,
-    window_limit = WindowLimit
-}) ->
-    #time_series_get_slice_request{
-        layout = json_utils:decode(EncodedLayout),
-        start_timestamp = StartTimestamp,
-        window_limit = WindowLimit
-    };
-translate_from_protobuf(#'BrowseTimeDirStats'{
-    request = TimeSeriesBrowseRequest
-}) ->
-    #browse_time_dir_stats{
-        request = TimeSeriesBrowseRequest
-    };
-translate_from_protobuf(#'BrowseCurrentDirStats'{
-    stat_names = StatNames
-}) ->
-    #browse_current_dir_stats{
-        stat_names = StatNames
     };
 translate_from_protobuf(#'ProviderResponse'{
     status = Status,
@@ -982,22 +1047,20 @@ translate_from_protobuf(#'Acl'{value = Value}) ->
     #acl{value = acl:from_json(json_utils:decode(Value), cdmi)};
 translate_from_protobuf(#'FilePath'{value = Value}) ->
     #file_path{value = Value};
-translate_from_protobuf(#'StorageFileDistribution'{
-    storage_id = StorageId,
+translate_from_protobuf(#'ProviderDistributionSummary'{
+    provider_id = ProviderId,
     blocks = Blocks
 }) ->
-    #storage_file_distribution{
-        storage_id = StorageId,
+    #provider_distribution_summary{
+        provider_id = ProviderId,
         blocks = lists:map(fun translate_from_protobuf/1, Blocks)
     };
-translate_from_protobuf(#'FileDistribution'{
-    blocks_per_storage = ProtoDistributions,
-    logical_size = LogicalSize
+translate_from_protobuf(#'FileDistributionSummary'{
+    provider_file_distributions = ProtoDistributions
 }) ->
     Distributions = lists:map(fun translate_from_protobuf/1, ProtoDistributions),
-    #file_distribution{
-        logical_size = LogicalSize,
-        blocks_per_storage = Distributions
+    #file_distribution_summary{
+        provider_file_distributions = Distributions
     };
 translate_from_protobuf(#'Metadata'{
     type = <<"json">>,
@@ -1017,22 +1080,6 @@ translate_from_protobuf(#'Metadata'{
     };
 translate_from_protobuf(#'CheckPerms'{flag = Flag}) ->
     #check_perms{flag = open_flag_translate_from_protobuf(Flag)};
-translate_from_protobuf(#'TimeSeriesLayoutResult'{
-    encoded_layout = EncodedLayout
-}) ->
-    #time_series_layout_result{
-        layout = json_utils:decode(EncodedLayout)
-    };
-translate_from_protobuf(#'TimeSeriesSliceResult'{
-    encoded_slice = EncodedSlice
-}) ->
-    #time_series_slice_result{
-        slice = json_utils:decode(EncodedSlice)
-    };
-translate_from_protobuf(#'DirTimeStatsResponse'{response = TimeSeriesBrowseResult}) ->
-    #dir_time_stats_result{result = translate_from_protobuf(TimeSeriesBrowseResult)};
-translate_from_protobuf(#'DirCurrentStatsResponse'{encoded_response = EncodedResponse}) ->
-    #dir_current_stats_result{result = json_utils:decode(EncodedResponse)};
 
 
 %% DBSYNC
@@ -1900,6 +1947,94 @@ translate_to_protobuf(#remote_data{data = Data}) ->
 translate_to_protobuf(#remote_write_result{wrote = Wrote}) ->
     {remote_write_result, #'RemoteWriteResult'{wrote = Wrote}};
 
+%% Middleware interprovider
+translate_to_protobuf(#mi_interprovider_request{
+    file_guid = FileGuid,
+    operation = Operation
+}) ->
+    {mi_interprovider_request, #'MiInterproviderRequest'{
+        file_guid = FileGuid,
+        operation = translate_to_protobuf(Operation)
+    }};
+translate_to_protobuf(#browse_local_current_dir_size_stats{
+    stat_names = StatNames
+}) ->
+    {browse_local_current_dir_size_stats, #'BrowseLocalCurrentDirSizeStats'{
+        stat_names = StatNames
+    }};
+translate_to_protobuf(#browse_local_time_dir_size_stats{
+    request = Request
+}) ->
+    {browse_local_time_dir_size_stats, #'BrowseLocalTimeDirSizeStats'{
+        request = translate_to_protobuf(Request)
+    }};
+translate_to_protobuf(#time_series_get_layout_request{}) ->
+    {time_series_get_layout_request, #'TimeSeriesGetLayoutRequest'{}};
+translate_to_protobuf(#time_series_get_slice_request{
+    layout = Layout,
+    start_timestamp = StartTimestamp,
+    window_limit = WindowLimit
+}) ->
+    {time_series_get_slice_request, #'TimeSeriesGetSliceRequest'{
+        encoded_layout = json_utils:encode(Layout),
+        start_timestamp = StartTimestamp,
+        window_limit = WindowLimit
+    }};
+translate_to_protobuf(#local_reg_file_distribution_get_request{}) ->
+    {local_reg_file_distribution_get_request, #'LocalRegFileDistributionGetRequest'{}};
+
+translate_to_protobuf(#mi_interprovider_response{
+    status = ok,
+    result = Result
+}) ->
+    {mi_interprovider_response, #'MiInterproviderResponse'{
+        status = ok,
+        result = translate_to_protobuf(Result)
+    }};
+translate_to_protobuf(#mi_interprovider_response{
+    status = error,
+    result = Error
+}) ->
+    {mi_interprovider_response, #'MiInterproviderResponse'{
+        status = error,
+        result = {error_json, json_utils:encode(errors:to_json(Error))}
+    }};
+translate_to_protobuf(#local_current_dir_size_stats{
+    stats = Stats
+}) ->
+    {local_current_dir_size_stats, #'LocalCurrentDirSizeStats'{
+        stats_as_json = json_utils:encode(Stats)
+    }};
+translate_to_protobuf(#time_series_layout_result{
+    layout = Layout
+}) ->
+    {time_series_layout_result, #'TimeSeriesLayoutResult'{
+        layout_as_json = json_utils:encode(Layout)
+    }};
+translate_to_protobuf(#time_series_slice_result{
+    slice = Slice
+}) ->
+    {time_series_slice_result, #'TimeSeriesSliceResult'{
+        serialized_slice = term_to_binary(Slice)
+    }};
+translate_to_protobuf(#storage_reg_distribution{
+    storage_id = StorageId,
+    blocks = Blocks
+}) ->
+    #'StorageRegDistribution'{
+        storage_id = StorageId,
+        blocks = lists:map(fun(Block) -> translate_to_protobuf(Block) end, Blocks)
+    };
+translate_to_protobuf(#provider_reg_distribution{
+    logical_size = LogicalSize,
+    blocks_per_storage = BlocksPerStorage
+}) ->
+    {provider_reg_distribution, #'ProviderRegDistribution'{
+        logical_size = LogicalSize,
+        blocks_per_storage = lists:map(fun(StorageDistribution) -> 
+            translate_to_protobuf(StorageDistribution)
+        end, BlocksPerStorage)
+    }};
 
 %% PROVIDER
 translate_to_protobuf(#provider_request{
@@ -1968,7 +2103,7 @@ translate_to_protobuf(#fsync{
         data_only = DataOnly,
         handle_id = HandleId
     }};
-translate_to_protobuf(#get_file_distribution{}) ->
+translate_to_protobuf(#get_file_distribution_summary{}) ->
     {get_file_distribution, #'GetFileDistribution'{}};
 translate_to_protobuf(#get_metadata{
     type = Type,
@@ -1993,32 +2128,7 @@ translate_to_protobuf(#remove_metadata{type = Type}) ->
     {remove_metadata, #'RemoveMetadata'{
         type = atom_to_binary(Type, utf8)
     }};
-translate_to_protobuf(#time_series_get_layout_request{
-}) ->
-    {time_series_get_layout_request, #'TimeSeriesGetLayoutRequest'{
-    }};
-translate_to_protobuf(#time_series_get_slice_request{
-    layout = Layout,
-    start_timestamp = StartTimestamp,
-    window_limit = WindowLimit
-}) ->
-    {time_series_get_slice_request, #'TimeSeriesGetSliceRequest'{
-        encoded_layout = json_utils:encode(Layout),
-        start_timestamp = StartTimestamp,
-        window_limit = WindowLimit
-    }};
-translate_to_protobuf(#browse_time_dir_stats{
-    request = BrowseRequest
-}) ->
-    {browse_time_dir_stats, #'BrowseTimeDirStats'{
-        request = translate_to_protobuf(BrowseRequest)
-    }};
-translate_to_protobuf(#browse_current_dir_stats{
-    stat_names = StatNames
-}) ->
-    {browse_current_dir_stats, #'BrowseCurrentDirStats'{
-        stat_names = StatNames
-    }};
+
 
 translate_to_protobuf(#provider_response{
     status = Status,
@@ -2051,22 +2161,20 @@ translate_to_protobuf(#acl{value = Value}) ->
     };
 translate_to_protobuf(#file_path{value = Value}) ->
     {file_path, #'FilePath'{value = Value}};
-translate_to_protobuf(#storage_file_distribution{
-    storage_id = StorageId,
+translate_to_protobuf(#provider_distribution_summary{
+    provider_id = ProviderId,
     blocks = Blocks
 }) ->
-    #'StorageFileDistribution'{
-        storage_id = StorageId,
+    #'ProviderDistributionSummary'{
+        provider_id = ProviderId,
         blocks = lists:map(fun translate_to_protobuf/1, Blocks)
     };
-translate_to_protobuf(#file_distribution{
-    logical_size = LogicalSize,
-    blocks_per_storage = Distributions
+translate_to_protobuf(#file_distribution_summary{
+    provider_file_distributions = Distributions
 }) ->
     TranslatedDistributions = lists:map(fun translate_to_protobuf/1, Distributions),
-    {file_distribution, #'FileDistribution'{
-        logical_size = LogicalSize,
-        blocks_per_storage = TranslatedDistributions
+    {file_distribution, #'FileDistributionSummary'{
+        provider_file_distributions = TranslatedDistributions
     }};
 translate_to_protobuf(#metadata{
     type = json,
@@ -2087,30 +2195,6 @@ translate_to_protobuf(#metadata{
 translate_to_protobuf(#check_perms{flag = Flag}) ->
     {check_perms, #'CheckPerms'{
         flag = open_flag_translate_to_protobuf(Flag)
-    }};
-translate_to_protobuf(#time_series_layout_result{
-    layout = Layout
-}) ->
-    {time_series_layout_result, #'TimeSeriesLayoutResult'{
-        encoded_layout = json_utils:encode(Layout)
-    }};
-translate_to_protobuf(#time_series_slice_result{
-    slice = Slice
-}) ->
-    {time_series_slice_result, #'TimeSeriesSliceResult'{
-        encoded_slice = json_utils:encode(Slice)
-    }};
-translate_to_protobuf(#dir_time_stats_result{
-    result = DirTimeStatsResult
-}) ->
-    {dir_time_stats_response, #'DirTimeStatsResponse'{
-        response = DirTimeStatsResult
-    }};
-translate_to_protobuf(#dir_current_stats_result{
-    result = DirCurrentStatsResult
-}) ->
-    {dir_current_stats_response, #'DirCurrentStatsResponse'{
-        encoded_response = json_utils:encode(DirCurrentStatsResult)
     }};
 
 

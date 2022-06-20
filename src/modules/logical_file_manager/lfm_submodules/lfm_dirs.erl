@@ -24,8 +24,7 @@
     get_child_attr/3,
     get_children_details/3,
     get_children_count/2,
-    get_files_recursively/3,
-    browse_dir_time_stats/4, browse_dir_current_stats/4
+    get_files_recursively/3
 ]).
 
 
@@ -183,40 +182,6 @@ get_files_recursively(SessId, FileKey, Options) ->
         }) ->
             {ok, Result, InaccessiblePaths, PaginationToken}
         end).
-
-
--spec browse_dir_time_stats(session:id(), lfm:file_key(), oneprovider:id(), ts_browse_request:record()) ->
-    {ok, ts_browse_result:record()} | {error, term()}.
-browse_dir_time_stats(SessId, FileKey, ProviderId, BrowseRequest) ->
-    Guid = lfm_file_key:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
-    Req = #provider_request{
-        context_guid = Guid,
-        provider_request = #browse_time_dir_stats{request = BrowseRequest}
-    },
-    
-    case remote_utils:execute_on_provider(ProviderId, Req, SessId, Guid) of
-        {ok, #dir_time_stats_result{result = Result}} ->
-            {ok, Result};
-        {error, _} = Error ->
-            Error
-    end.
-
-
--spec browse_dir_current_stats(session:id(), lfm:file_key(), oneprovider:id(), dir_stats_collection:stats_selector()) ->
-    {ok, dir_size_stats:current_stats()} | {error, term()}.
-browse_dir_current_stats(SessId, FileKey, ProviderId, StatNames) ->
-    Guid = lfm_file_key:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
-    Req = #provider_request{
-        context_guid = Guid,
-        provider_request = #browse_current_dir_stats{stat_names = StatNames}
-    },
-    
-    case remote_utils:execute_on_provider(ProviderId, Req, SessId, Guid) of
-        {ok, #dir_current_stats_result{result = Result}} ->
-            {ok, Result};
-        {error, _} = Error ->
-            Error
-    end.
 
 
 %%%===================================================================

@@ -19,8 +19,10 @@
 -include("global_definitions.hrl").
 -include("middleware/middleware.hrl").
 -include("modules/fslogic/file_distribution.hrl").
+-include("proto/oneprovider/mi_interprovider_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("cluster_worker/include/time_series/browsing.hrl").
 
 %% API
 -export([check_exec/3, exec/3]).
@@ -55,7 +57,8 @@
     #get_file_eff_dataset_summary{}.
 
 -type file_metadata_operations() ::
-    #file_distribution_get_request{}.
+    #file_distribution_gather_request{} |
+    #dir_time_size_stats_gather_request{}.
 
 -type qos_operation() ::
     #add_qos_entry{} |
@@ -87,6 +90,21 @@
     operation/0
 ]).
 
+% NOTE: translated to protobuf
+-type interprovider_operation() ::
+    #local_reg_file_distribution_get_request{} |
+    #browse_local_current_dir_size_stats{} |
+    #browse_local_time_dir_size_stats{}.
+
+% NOTE: translated to protobuf
+-type interprovider_result() ::
+    #local_current_dir_size_stats{} |
+    #provider_reg_distribution{} |
+    #time_series_layout_result{} |
+    #time_series_slice_result{}.
+
+-export_type([interprovider_operation/0, interprovider_result/0]).
+
 
 -define(SHOULD_LOG_REQUESTS_ON_ERROR, application:get_env(
     ?CLUSTER_WORKER_APP_NAME, log_requests_on_error, false
@@ -109,7 +127,7 @@ check_exec(SessionId, FileGuid, Operation) ->
 
 
 %% TODO VFS-8753 handle selector (e.g. {file, <FileGuid>}, {space, <SpaceId>}, etc.) as 2nd argument
--spec exec(session:id(), file_id:file_guid(), operation()) ->
+-spec exec(session:id(), file_id:file_guid(), operation() | interprovider_operation()) ->
     ok | {ok, term()} | errors:error().
 exec(SessionId, FileGuid, Operation) ->
     worker_proxy:call(?MODULE, ?REQ(SessionId, FileGuid, Operation)).

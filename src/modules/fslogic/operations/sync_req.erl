@@ -35,8 +35,7 @@
 -export([
     synchronize_block/6,
     request_block_synchronization/6,
-    synchronize_block_and_compute_checksum/5,
-    get_file_distribution/2
+    synchronize_block_and_compute_checksum/5
 ]).
 
 
@@ -137,58 +136,5 @@ synchronize_block_and_compute_checksum(UserCtx, FileCtx,
         fuse_response = #sync_response{
             checksum = Checksum,
             file_location_changed = Ans#file_location_changed{file_location = FL#file_location{uuid = LogicalUuid}}
-        }
-    }.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% get_file_distribution_insecure/2 with permission checks.
-%% @end
-%%--------------------------------------------------------------------
--spec get_file_distribution(user_ctx:ctx(), file_ctx:ctx()) -> provider_response().
-get_file_distribution(UserCtx, FileCtx0) ->
-    FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
-    FileCtx2 = fslogic_authz:ensure_authorized(
-        UserCtx, FileCtx1,
-        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_metadata_mask)]
-    ),
-    get_file_distribution_insecure(UserCtx, FileCtx2).
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Gets distribution of file over providers' storages.
-%% @end
-%%--------------------------------------------------------------------
--spec get_file_distribution_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
-    provider_response().
-get_file_distribution_insecure(_UserCtx, FileCtx0) ->
-    {FileSize, FileCtx1} = file_ctx:get_file_size(FileCtx0),
-    {Location, FileCtx2} = file_ctx:get_local_file_location_doc(FileCtx1),
-    ProviderDistributions = lists:map(fun 
-        (#document{value = #file_location{storage_id = StorageId}} = FL) ->
-            #storage_file_distribution{
-                storage_id = StorageId,
-                blocks = fslogic_location_cache:get_blocks(FL)
-            };
-        (undefined) -> 
-            {ok, StorageId} = space_logic:get_local_supporting_storage(file_ctx:get_space_id_const(FileCtx2)),
-            #storage_file_distribution{
-                storage_id = StorageId,
-                blocks = []
-            }
-    end, [Location]),
-    #provider_response{
-        status = #status{code = ?OK},
-        provider_response = #file_distribution{
-            logical_size = FileSize,
-            blocks_per_storage = ProviderDistributions
         }
     }.

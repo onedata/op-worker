@@ -23,11 +23,10 @@
 -include("middleware/middleware.hrl").
 -include("modules/fslogic/acl.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
--include("modules/dir_stats_collector/dir_size_stats.hrl").
--include_lib("cluster_worker/include/time_series/browsing.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("cluster_worker/include/time_series/browsing.hrl").
 
 
 %% API
@@ -939,7 +938,7 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = acl}}, _) ->
     ?lfm_check(lfm:get_acl(Auth#auth.session_id, ?FILE_REF(FileGuid)));
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = distribution}}, _) ->
-    {ok, mi_file_metadata:get_distribution(Auth#auth.session_id, ?FILE_REF(FileGuid))};
+    {ok, mi_file_metadata:gather_distribution(Auth#auth.session_id, ?FILE_REF(FileGuid))};
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = shares}}, _) ->
     {ok, FileAttrs} = ?lfm_check(lfm:stat(Auth#auth.session_id, ?FILE_REF(FileGuid))),
@@ -1034,17 +1033,9 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = api_samples, scope =
 
 get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = dir_size_stats}, data = Data}, _) ->
     BrowseRequest = ts_browse_request:from_json(Data),
-    ProviderRequests = split_ts_browse_request_between_providers(file_id:guid_to_space_id(Guid), BrowseRequest),
-    FinalResult = maps:fold(fun(ProviderId, Req, Acc) ->
-        case lfm:browse_dir_time_stats(Auth#auth.session_id, #file_ref{guid = Guid}, ProviderId, Req) of
-            {ok, Result} ->
-                merge_ts_browse_results(Acc, Result);
-            {error, _} ->
-                % ignore statistics that could not be obtained
-                Acc
-        end
-    end, gen_empty_ts_browse_result(BrowseRequest), ProviderRequests),
-    {ok, value, FinalResult}.
+    {ok, value, mi_file_metadata:gather_time_dir_size_stats(
+        Auth#auth.session_id, ?FILE_REF(Guid), BrowseRequest)}.
+
 
 
 %%%===================================================================
@@ -1287,52 +1278,3 @@ create_file(SessionId, ParentGuid, Name, ?LINK_TYPE, TargetGuid) ->
     lfm:make_link(SessionId, ?FILE_REF(TargetGuid), ?FILE_REF(ParentGuid), Name);
 create_file(SessionId, ParentGuid, Name, ?SYMLINK_TYPE, TargetPath) ->
     lfm:make_symlink(SessionId, ?FILE_REF(ParentGuid), Name, TargetPath).
-
-
-%% @private
--spec split_ts_browse_request_between_providers(od_space:id(), ts_browse_request:record()) ->
-    #{oneprovider:id() => ts_browse_request:record()}.
-split_ts_browse_request_between_providers(SpaceId, #time_series_get_layout_request{} = Req) ->
-    {ok, Providers} = space_logic:get_provider_ids(SpaceId),
-    maps_utils:generate_from_list(fun(P) -> {P, Req} end, Providers);
-split_ts_browse_request_between_providers(SpaceId, #time_series_get_slice_request{layout = Layout} = Req) ->
-    maps:fold(fun
-        (TimeSeriesName, Metrics, Acc) ->
-            case choose_provider_storing_time_series_data(SpaceId, TimeSeriesName) of
-                unknown ->
-                    Acc;
-                ProviderId ->
-                    #time_series_get_slice_request{layout = ProviderLayout} =
-                        maps:get(ProviderId, Acc, #time_series_get_slice_request{layout = #{}}),
-                    Acc#{ProviderId => Req#time_series_get_slice_request{
-                        layout = ProviderLayout#{TimeSeriesName => Metrics}
-                    }}
-            end
-    end, #{}, Layout).
-
-
-%% @private
--spec choose_provider_storing_time_series_data(od_space:id(), dir_stats_collection:stat_name()) -> 
-    oneprovider:id() | unknown.
-choose_provider_storing_time_series_data(SpaceId, ?SIZE_ON_STORAGE(StorageId)) ->
-    case storage_logic:get_provider(StorageId, SpaceId) of
-        {ok, ProviderId} -> ProviderId;
-        {error, _} -> unknown
-    end;
-choose_provider_storing_time_series_data(_SpaceId, _TimeSeriesName) ->
-    oneprovider:get_id().
-
-
-%% @private
--spec merge_ts_browse_results(ts_browse_result:record(), ts_browse_result:record()) -> ts_browse_result:record().
-merge_ts_browse_results(#time_series_layout_result{layout = L1}, #time_series_layout_result{layout = L2}) ->
-    #time_series_layout_result{layout = maps:merge(L1, L2)};
-merge_ts_browse_results(#time_series_slice_result{slice = S1}, #time_series_slice_result{slice = S2}) ->
-    %% @TODO VFS-9435 - come up with a consistent way of handling disabled stats collecting on some providers
-    #time_series_slice_result{slice = maps:merge(S1, S2)}.
-
-
-%% @private
--spec gen_empty_ts_browse_result(ts_browse_request:record()) -> ts_browse_result:record().
-gen_empty_ts_browse_result(#time_series_get_layout_request{}) -> #time_series_layout_result{layout = #{}};
-gen_empty_ts_browse_result(#time_series_get_slice_request{}) -> #time_series_slice_result{slice = #{}}.

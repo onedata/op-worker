@@ -780,18 +780,18 @@ get_reg_file_distribution_test(Config) ->
     file_test_utils:await_sync(P2Node, FileGuid),
 
     lfm_test_utils:write_file(P1Node, UserSessIdP1, FileGuid, 0, {rand_content, 20}),
-    ExpDist1 = #file_distribution_get_result{distribution = #reg_distribution{
-        blocks_per_provider = #{
-            P1Id => #file_distribution{
+    ExpDist1 = #file_distribution_gather_result{distribution = #reg_distribution{
+        distribution_per_provider = #{
+            P1Id => #provider_reg_distribution{
                 logical_size = 20,
                 blocks_per_storage = [
-                    #storage_file_distribution{storage_id = P1StorageId, blocks = [?BLOCK(0, 20)]}
+                    #storage_reg_distribution{storage_id = P1StorageId, blocks = [?BLOCK(0, 20)]}
                 ]
             },
-            P2Id => #file_distribution{
+            P2Id => #provider_reg_distribution{
                 logical_size = 20,
                 blocks_per_storage = [
-                    #storage_file_distribution{storage_id = P2StorageId, blocks = []}
+                    #storage_reg_distribution{storage_id = P2StorageId, blocks = []}
                 ]
             }
         }
@@ -802,15 +802,15 @@ get_reg_file_distribution_test(Config) ->
     % Write another block to file on P2 and check returned distribution
 
     lfm_test_utils:write_file(P2Node, UserSessIdP2, FileGuid, 30, {rand_content, 20}),
-    ExpDist2 = #file_distribution_get_result{distribution = #reg_distribution{
-        blocks_per_provider = #{
-            P1Id => #file_distribution{
+    ExpDist2 = #file_distribution_gather_result{distribution = #reg_distribution{
+        distribution_per_provider = #{
+            P1Id => #provider_reg_distribution{
                 logical_size = 50,
-                blocks_per_storage = [#storage_file_distribution{storage_id = P1StorageId, blocks = [?BLOCK(0, 20)]}]
+                blocks_per_storage = [#storage_reg_distribution{storage_id = P1StorageId, blocks = [?BLOCK(0, 20)]}]
             },
-            P2Id => #file_distribution{
+            P2Id => #provider_reg_distribution{
                 logical_size = 50,
-                blocks_per_storage = [#storage_file_distribution{storage_id = P2StorageId, blocks = [?BLOCK(30, 20)]}]
+                blocks_per_storage = [#storage_reg_distribution{storage_id = P2StorageId, blocks = [?BLOCK(30, 20)]}]
             }
         }
     }},
@@ -841,10 +841,10 @@ get_dir_distribution_1_test(Config) ->
         }
     ),
 
-    ExpDist = #file_distribution_get_result{distribution = #dir_distribution{
+    ExpDist = #file_distribution_gather_result{distribution = #dir_distribution{
         distribution_per_provider = #{
-            oct_background:get_provider_id(krakow) => ?ERROR_POSIX(?ENOTSUP),
-            oct_background:get_provider_id(paris) => ?ERROR_POSIX(?ENOTSUP)
+            oct_background:get_provider_id(krakow) => ?ERROR_DIR_STATS_DISABLED_FOR_SPACE,
+            oct_background:get_provider_id(paris) => ?ERROR_DIR_STATS_DISABLED_FOR_SPACE
         }
     }},
     wait_for_file_location_sync(paris, UserSessIdP2, DirGuid, ExpDist),
@@ -877,7 +877,7 @@ get_dir_distribution_2_test(Config) ->
         user3, space_krk_par, #dir_spec{mode = 8#707, shares = [#share_spec{}]}
     ),
 
-    ExpDist1 = #file_distribution_get_result{distribution = #dir_distribution{
+    ExpDist1 = #file_distribution_gather_result{distribution = #dir_distribution{
         distribution_per_provider = #{
             P1Id => #provider_dir_distribution{
                 logical_size = 0,
@@ -895,7 +895,7 @@ get_dir_distribution_2_test(Config) ->
     {ok, FileGuid} = lfm_proxy:create(P2Node, UserSessIdP2, DirGuid, ?RAND_STR(), 8#707),
     lfm_test_utils:write_file(P2Node, UserSessIdP2, FileGuid, 30, {rand_content, 20}),
 
-    ExpDist2 = #file_distribution_get_result{distribution = #dir_distribution{
+    ExpDist2 = #file_distribution_gather_result{distribution = #dir_distribution{
         distribution_per_provider = #{
             P1Id => #provider_dir_distribution{
                 logical_size = 50,
@@ -932,13 +932,13 @@ get_dir_distribution_3_test(Config) ->
         user3, space_krk_par, #dir_spec{mode = 8#707, shares = [#share_spec{}]}
     ),
 
-    ExpDist1 = #file_distribution_get_result{distribution = #dir_distribution{
+    ExpDist1 = #file_distribution_gather_result{distribution = #dir_distribution{
         distribution_per_provider = #{
             P1Id => #provider_dir_distribution{
                 logical_size = 0,
                 physical_size_per_storage = #{P1StorageId => 0}
             },
-            P2Id => ?ERROR_POSIX(?ENOTSUP)
+            P2Id => ?ERROR_DIR_STATS_DISABLED_FOR_SPACE
         }
     }},
     wait_for_file_location_sync(paris, UserSessIdP2, DirGuid, ExpDist1),
@@ -950,13 +950,13 @@ get_dir_distribution_3_test(Config) ->
     lfm_test_utils:write_file(P1Node, UserSessIdP1, FileGuid, 5, {rand_content, 10}),
     lfm_test_utils:write_file(P2Node, UserSessIdP2, FileGuid, 30, {rand_content, 20}),
 
-    ExpDist2 = #file_distribution_get_result{distribution = #dir_distribution{
+    ExpDist2 = #file_distribution_gather_result{distribution = #dir_distribution{
         distribution_per_provider = #{
             P1Id => #provider_dir_distribution{
                 logical_size = 50,
                 physical_size_per_storage = #{P1StorageId => 10}
             },
-            P2Id => ?ERROR_POSIX(?ENOTSUP)
+            P2Id => ?ERROR_DIR_STATS_DISABLED_FOR_SPACE
         }
     }},
     wait_for_file_location_sync(krakow, UserSessIdP1, DirGuid, ExpDist2),
@@ -976,7 +976,7 @@ get_symlink_distribution_test(Config) ->
         user3, space_krk_par, #symlink_spec{symlink_value = <<"abcd">>, shares = [#share_spec{}]}
     ),
     
-    ExpDist = #file_distribution_get_result{distribution = #symlink_distribution{
+    ExpDist = #file_distribution_gather_result{distribution = #symlink_distribution{
         logical_size = 0,
         storages_per_provider = #{
             P1Id => [P1StorageId],
@@ -1045,7 +1045,7 @@ get_storage_id(SpaceId, ProviderId) ->
 wait_for_file_location_sync(ProviderSelector, SessId, FileGuid, ExpDistribution) ->
     ?assertEqual(
         ExpDistribution,
-        ?rpc(ProviderSelector, mi_file_metadata:get_distribution(SessId, ?FILE_REF(FileGuid))),
+        ?rpc(ProviderSelector, mi_file_metadata:gather_distribution(SessId, ?FILE_REF(FileGuid))),
         ?ATTEMPTS
     ).
 

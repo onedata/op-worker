@@ -222,4 +222,16 @@
     callback :: transfer:callback()
 }).
 
+
+%%%===================================================================
+%%% File metadata related operations available in middleware_worker
+%%%===================================================================
+
+-record(file_distribution_gather_request, {}).
+
+-record(dir_time_size_stats_gather_request, {
+    request :: ts_browse_request:record()
+}).
+
+
 -endif.

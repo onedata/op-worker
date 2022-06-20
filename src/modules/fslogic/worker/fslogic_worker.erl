@@ -650,8 +650,8 @@ handle_file_request(UserCtx, #fsync{
 %%--------------------------------------------------------------------
 -spec handle_provider_request(user_ctx:ctx(), provider_request_type(), file_ctx:ctx()) ->
     provider_response().
-handle_provider_request(UserCtx, #get_file_distribution{}, FileCtx) ->
-    sync_req:get_file_distribution(UserCtx, FileCtx);
+handle_provider_request(UserCtx, #get_file_distribution_summary{}, FileCtx) ->
+    file_distribution:get_deprecated_summary(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #get_parent{}, FileCtx) ->
     guid_req:get_parent(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #get_file_path{}, FileCtx) ->
@@ -688,11 +688,7 @@ handle_provider_request(UserCtx, #set_metadata{
 handle_provider_request(UserCtx, #remove_metadata{type = Type}, FileCtx) ->
     metadata_req:remove_metadata(UserCtx, FileCtx, Type);
 handle_provider_request(UserCtx, #check_perms{flag = Flag}, FileCtx) ->
-    permission_req:check_perms(UserCtx, FileCtx, Flag);
-handle_provider_request(UserCtx, #browse_time_dir_stats{request = BrowseRequest}, FileCtx) ->
-    dir_req:browse_time_stats(UserCtx, FileCtx, BrowseRequest);
-handle_provider_request(UserCtx, #browse_current_dir_stats{stat_names = StatNames}, FileCtx) ->
-    dir_req:browse_current_stats(UserCtx, FileCtx, StatNames).
+    permission_req:check_perms(UserCtx, FileCtx, Flag).
 
 
 %%--------------------------------------------------------------------

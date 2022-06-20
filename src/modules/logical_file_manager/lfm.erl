@@ -67,8 +67,7 @@
     silent_read/3,
     truncate/3,
     release/1, monitored_release/1,
-    get_file_location/2,
-    get_local_file_distribution/2, get_local_file_distribution/3
+    get_file_location/2
 ]).
 %% Directory specific operations
 -export([
@@ -79,9 +78,7 @@
     get_children_attrs/5,
     get_children_details/3,
     get_files_recursively/3,
-    get_children_count/2,
-    browse_dir_time_stats/4,
-    browse_dir_current_stats/4
+    get_children_count/2
 ]).
 %% Permissions related operations
 -export([
@@ -452,18 +449,6 @@ get_file_location(SessId, FileKey) ->
     ?run(lfm_files:get_file_location(SessId, FileKey)).
 
 
--spec get_local_file_distribution(session:id(), file_key()) ->
-    {ok, Blocks :: [[non_neg_integer()]]} | error_reply().
-get_local_file_distribution(SessId, FileKey) ->
-    get_local_file_distribution(SessId, FileKey, oneprovider:get_id()).
-    
-
--spec get_local_file_distribution(session:id(), file_key(), oneprovider:id()) ->
-    {ok, Blocks :: [[non_neg_integer()]]} | error_reply().
-get_local_file_distribution(SessId, FileKey, ProviderId) ->
-    ?run(lfm_files:get_local_file_distribution(SessId, FileKey, ProviderId)).
-
-
 %%%===================================================================
 %%% Directory specific operations
 %%%===================================================================
@@ -552,18 +537,6 @@ get_files_recursively(SessId, FileKey, Options) ->
     {ok, integer()} | error_reply().
 get_children_count(SessId, FileKey) ->
     ?run(lfm_dirs:get_children_count(SessId, FileKey)).
-
-
--spec browse_dir_time_stats(session:id(), file_key(), oneprovider:id(), ts_browse_request:record()) ->
-    {ok, ts_browse_result:record()} | {error, term()}.
-browse_dir_time_stats(SessId, FileKey, ProviderId, BrowseRequest) ->
-    ?run(lfm_dirs:browse_dir_time_stats(SessId, FileKey, ProviderId, BrowseRequest)).
-
-
--spec browse_dir_current_stats(session:id(), file_key(), oneprovider:id(), dir_stats_collection:stats_selector()) ->
-    {ok, dir_size_stats:current_stats()} | {error, term()}.
-browse_dir_current_stats(SessId, FileKey, ProviderId, StatNames) ->
-    ?run(lfm_dirs:browse_dir_current_stats(SessId, FileKey, ProviderId, StatNames)).
 
 
 %%%===================================================================

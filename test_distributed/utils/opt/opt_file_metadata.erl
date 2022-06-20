@@ -6,11 +6,14 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Utility functions for manipulating archives in CT tests.
+%%% Utility functions for manipulating file metadata in CT tests.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(opt_file_metadata).
 -author("Michal Stanisz").
+
+-include("modules/fslogic/file_distribution.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 
 -export([
     get_distribution_deprecated/3
@@ -34,9 +37,37 @@
 -spec get_distribution_deprecated(oct_background:node_selector(), session:id(), lfm:file_ref()) -> 
     json_utils:json_term().
 get_distribution_deprecated(NodeSelector, SessionId, FileRef) ->
-    case ?CALL(NodeSelector, get_distribution, [SessionId, FileRef]) of
+    case ?CALL(NodeSelector, gather_distribution, [SessionId, FileRef]) of
         {ok, Distribution} ->
-            {ok, file_distribution_get_result:to_json_deprecated(Distribution)};
+            {ok, to_json_deprecated(Distribution)};
         Other ->
             Other
     end.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+-spec to_json_deprecated(file_distribution:get_result()) -> json_utils:json_term().
+to_json_deprecated(#file_distribution_gather_result{distribution = #reg_distribution{distribution_per_provider = FileBlocksPerProvider}}) ->
+    maps:fold(fun(ProviderId, #provider_reg_distribution{blocks_per_storage = [#storage_reg_distribution{blocks = Blocks}]}, Acc) ->
+        {BlockList, TotalBlocksSize} = get_blocks_summary(Blocks),
+        [#{
+            <<"providerId">> => ProviderId,
+            <<"blocks">> => BlockList,
+            <<"totalBlocksSize">> => TotalBlocksSize
+        } | Acc]
+    end, [], FileBlocksPerProvider);
+to_json_deprecated(_) ->
+    [].
+
+
+-spec get_blocks_summary(fslogic_blocks:blocks()) -> 
+    {[{non_neg_integer(), integer()}], TotalBlockSize :: integer()}.
+get_blocks_summary(FileBlocks) ->
+    lists:mapfoldl(
+        fun(#file_block{offset = O, size = S}, SizeAcc) -> {[O, S], SizeAcc + S} end,
+        0,
+        FileBlocks
+    ).

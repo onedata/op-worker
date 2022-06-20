@@ -141,7 +141,7 @@
 -export([start_link/5, start_link/7, close/1]).
 -export([send_msg/2, send_keepalive/1]).
 -export([rebuild_rib/1]).
--export([is_provider_connected/1]).
+-export([is_connected_to_provider/1]).
 
 %% Private API
 -export([connect_with_provider/8]).
@@ -254,8 +254,8 @@ rebuild_rib(Pid) ->
     call_connection_process(Pid, ?REBUILD_RIB_MSG).
 
 
--spec is_provider_connected(oneprovider:id()) -> boolean().
-is_provider_connected(ProviderId) ->
+-spec is_connected_to_provider(oneprovider:id()) -> boolean().
+is_connected_to_provider(ProviderId) ->
     session:exists(session_utils:get_provider_session_id(outgoing, ProviderId)).
 
 
