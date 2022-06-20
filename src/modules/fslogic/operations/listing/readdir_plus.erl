@@ -6,10 +6,10 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Module providing utility functions used across modules responsible for file listing.
+%%% Module providing utility function for readdir plus related file listing operations.
 %%% @end
 %%%--------------------------------------------------------------------
--module(file_listing_utils).
+-module(readdir_plus).
 -author("Michal Stanisz").
 
 -include("global_definitions.hrl").
@@ -18,13 +18,12 @@
 -include("proto/oneclient/fuse_messages.hrl").
 
 -export([
-    map_entries/4,
-    extend_compute_attr_opts/2
+    gather_attributes/4
 ]).
 
--type entry_type() :: edge_entry | inner_entry.
+-type gather_attributes_fun(Entry, Attributes) :: fun((user_ctx:ctx(), Entry) -> Attributes).
 
--export_type([entry_type/0]).
+-export_type([gather_attributes_fun/2]).
 
 -define(MAX_MAP_CHILDREN_PROCESSES, application:get_env(
     ?APP_NAME, max_read_dir_plus_procs, 20
@@ -36,28 +35,32 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Calls MapFunctionInsecure for every passed entry in parallel and
-%% filters out entries for which it raised error (potentially docs not
+%% Calls GatherAttributesFun for every passed entry in parallel and
+%% filters out entries for which it raised an error (potentially docs not
 %% synchronized between providers or deleted files).
 %% @end
 %%--------------------------------------------------------------------
--spec map_entries(
+-spec gather_attributes(
     user_ctx:ctx(),
-    MapFunInsecure :: fun((user_ctx:ctx(), Entry, BaseOpts, entry_type()) -> Term),
+    gather_attributes_fun(Entry, Attributes),
     Entries :: [Entry],
-    BaseOpts
+    attr_req:compute_file_attr_opts()
 ) ->
-    [Term].
-map_entries(UserCtx, MapFunInsecure, Entries, BaseOpts) ->
+    [Attributes].
+gather_attributes(UserCtx, GatherAttributesFun, Entries, BaseOpts) ->
     EntriesNum = length(Entries),
     EnumeratedChildren = lists_utils:enumerate(Entries),
     FilterMapFun = fun({Num, Entry}) ->
         try
             Result = case Num == 1 orelse Num == EntriesNum of
                 true ->
-                    MapFunInsecure(UserCtx, Entry, BaseOpts, edge_entry);
+                    GatherAttributesFun(UserCtx, Entry, BaseOpts#{
+                        name_conflicts_resolution_policy => resolve_name_conflicts
+                    });
                 false ->
-                    MapFunInsecure(UserCtx, Entry, BaseOpts, inner_entry)
+                    GatherAttributesFun(UserCtx, Entry, BaseOpts#{
+                        name_conflicts_resolution_policy => allow_name_conflicts
+                    })
             end,
             {true, Result}
         catch _:_ ->
@@ -66,18 +69,3 @@ map_entries(UserCtx, MapFunInsecure, Entries, BaseOpts) ->
         end
     end,
     lists_utils:pfiltermap(FilterMapFun, EnumeratedChildren, ?MAX_MAP_CHILDREN_PROCESSES).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Other files than first and last don't need to resolve name
-%% conflicts (to check for collisions) as list_children
-%% (file_meta_forest:tag_ambiguous to be precise) already did it
-%% @end
-%%--------------------------------------------------------------------
--spec extend_compute_attr_opts(attr_req:compute_file_attr_opts(), entry_type()) -> 
-    attr_req:compute_file_attr_opts().
-extend_compute_attr_opts(Opts, edge_entry) ->
-    Opts#{name_conflicts_resolution_policy => resolve_name_conflicts};
-extend_compute_attr_opts(Opts, inner_entry) ->
-    Opts#{name_conflicts_resolution_policy => allow_name_conflicts}.

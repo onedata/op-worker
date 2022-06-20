@@ -135,8 +135,8 @@ list(UserCtx, FileCtx0, StartAfter, Limit, Prefix) ->
                 include_replication_status => false,
                 include_link_count => false
             },
-            MappedEntries = file_listing_utils:map_entries(
-                UserCtx, fun build_entry_from_internal_entry/4, Entries, ComputeAttrsOpts),
+            MappedEntries = readdir_plus:gather_attributes(
+                UserCtx, fun build_entry_from_internal_entry/3, Entries, ComputeAttrsOpts),
     
             #fuse_response{status = #status{code = ?OK},
                 fuse_response = #recursive_file_list{
@@ -257,14 +257,13 @@ infer_starting_file([PrefixToken | Tail], DirCtx, UserCtx, RevRelPathTokens) ->
 
 
 %% @private
--spec build_entry_from_internal_entry(user_ctx:ctx(), internal_entry(), attr_req:compute_file_attr_opts(), 
-    file_listing_utils:entry_type()) -> entry() | no_return().
-build_entry_from_internal_entry(UserCtx, {Path, FileCtx}, BaseOpts, EntryType) ->
-    ComputeAttrsOpts = file_listing_utils:extend_compute_attr_opts(BaseOpts, EntryType),
+-spec build_entry_from_internal_entry(user_ctx:ctx(), internal_entry(), attr_req:compute_file_attr_opts()) -> 
+    entry() | no_return().
+build_entry_from_internal_entry(UserCtx, {Path, FileCtx}, BaseOpts) ->
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = FileAttrs
-    } = attr_req:get_file_attr_insecure(UserCtx, FileCtx, ComputeAttrsOpts),
+    } = attr_req:get_file_attr_insecure(UserCtx, FileCtx, BaseOpts),
     {Path, FileAttrs}.
 
 

@@ -251,7 +251,7 @@ get_children_attrs_insecure(
         include_replication_status => IncludeReplicationStatus,
         include_link_count => IncludeLinkCount
     },
-    ChildrenAttrs = file_listing_utils:map_entries(
+    ChildrenAttrs = readdir_plus:gather_attributes(
         UserCtx,
         child_attrs_mapper(fun attr_req:get_file_attr_insecure/3),
         Children,
@@ -294,7 +294,7 @@ get_children_details_insecure(UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhit
         include_replication_status => false,
         include_link_count => true
     },
-    ChildrenDetails = file_listing_utils:map_entries(
+    ChildrenDetails = readdir_plus:gather_attributes(
         UserCtx,
         child_attrs_mapper(fun attr_req:get_file_details_insecure/3),
         Children,
@@ -311,13 +311,11 @@ get_children_details_insecure(UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhit
 
 %% @private
 -spec child_attrs_mapper(map_child_fun()) -> 
-    fun((user_ctx:ctx(), file_ctx:ctx(), attr_req:compute_file_attr_opts(), file_listing_utils:entry_type()) -> 
-        fslogic_worker:fuse_response_type()).
+    readdir_plus:gather_attributes_fun(file_ctx:ctx(), fslogic_worker:fuse_response_type()).
 child_attrs_mapper(AttrsMappingFun) ->
-    fun(UserCtx, ChildCtx, BaseOpts, EntryType) ->
-        ComputeAttrsOpts = file_listing_utils:extend_compute_attr_opts(BaseOpts, EntryType),
+    fun(UserCtx, ChildCtx, BaseOpts) ->
         #fuse_response{status = #status{code = ?OK}, fuse_response = Result} = 
-            AttrsMappingFun(UserCtx, ChildCtx, ComputeAttrsOpts),
+            AttrsMappingFun(UserCtx, ChildCtx, BaseOpts),
         Result
     end.
 
