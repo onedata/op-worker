@@ -27,6 +27,10 @@
 
 -export([
     dir_stats_collector_test/1,
+    dir_stats_collector_parallel_write_test/1,
+    dir_stats_collector_parallel_override_test/1,
+    dir_stats_collector_parallel_write_with_sleep_test/1,
+    dir_stats_collector_parallel_write_to_empty_file_test/1,
     create_on_different_providers_test/1,
     file_consistency_test/1,
     file_consistency_test_base/1,
@@ -60,6 +64,10 @@
 
 -define(TEST_CASES, [
     dir_stats_collector_test,
+    dir_stats_collector_parallel_write_test,
+    dir_stats_collector_parallel_override_test,
+    dir_stats_collector_parallel_write_with_sleep_test,
+    dir_stats_collector_parallel_write_to_empty_file_test,
     create_on_different_providers_test,
     file_consistency_test,
     concurrent_create_test,
@@ -762,14 +770,14 @@ read_dir_collisions_test(Config0) ->
     GetNamesFromGetChildrenAttrsFun = fun(Node, Offset, Limit) ->
         {ok, ChildrenAttrs, _} = ?assertMatch(
             {ok, _, _},
-            lfm_proxy:get_children_attrs(Node, SessionId(Node), ?FILE_REF(RootDirGuid), #{offset => Offset, size => Limit})
+            lfm_proxy:get_children_attrs(Node, SessionId(Node), ?FILE_REF(RootDirGuid), #{offset => Offset, limit => Limit, tune_for_large_continuous_listing => false})
         ),
         lists:map(fun(#file_attr{name = Name}) -> Name end, ChildrenAttrs)
     end,
     GetNamesFromGetChildrenDetailsFun = fun(Node, Offset, Limit) ->
         {ok, ChildrenDetails, _} = ?assertMatch(
             {ok, _, _},
-            lfm_proxy:get_children_details(Node, SessionId(Node), ?FILE_REF(RootDirGuid), #{offset => Offset, size => Limit})
+            lfm_proxy:get_children_details(Node, SessionId(Node), ?FILE_REF(RootDirGuid), #{offset => Offset, limit => Limit, tune_for_large_continuous_listing => false})
         ),
         lists:map(fun(#file_details{file_attr = #file_attr{name = Name}}) ->
             Name
@@ -1001,10 +1009,10 @@ list_children_recreated_remotely(Config0) ->
     {ok, G} = lfm_proxy:create(Worker1, SessId(Worker1), SpaceGuid, <<"file_name">>, undefined),
     {ok, _} = lfm_proxy:get_details(Worker1, SessId(Worker1), ?FILE_REF(G)),
     {ok, _, _} = lfm_proxy:get_children_details(Worker1, SessId(Worker1), ?FILE_REF(SpaceGuid),
-        #{offset => 0, size => 24}),
+        #{offset => 0, limit => 24, tune_for_large_continuous_listing => false}),
     {ok, _} = lfm_proxy:stat(Worker1, SessId(Worker1), ?FILE_REF(G)),
     {ok, _, _} = lfm_proxy:get_children_details(Worker1, SessId(Worker1), ?FILE_REF(SpaceGuid),
-        #{offset => -24, size => 24, last_name => <<"file_name">>}),
+        #{offset => -24, limit => 24, index => file_listing:build_index(<<"file_name">>), tune_for_large_continuous_listing => false}),
     {ok, H} = lfm_proxy:open(Worker1, SessId(Worker1), ?FILE_REF(G), write),
     {ok, _} = lfm_proxy:write(Worker1, H, 0, <<>>),
     ok = lfm_proxy:close(Worker1, H),
@@ -1012,31 +1020,31 @@ list_children_recreated_remotely(Config0) ->
 
     % Check on worker2
     {ok, _, _} = lfm_proxy:get_children_details(Worker2, SessId(Worker2), ?FILE_REF(SpaceGuid),
-        #{offset => -24, size => 24, last_name => <<"file_name">>}),
+        #{offset => -24, limit => 24, index => file_listing:build_index(<<"file_name">>), tune_for_large_continuous_listing => false}),
 
     % Delete file on worker2
     ?assertMatch({ok, _}, lfm_proxy:stat(Worker2, SessId(Worker2), ?FILE_REF(G)), 30),
     ok = lfm_proxy:rm_recursive(Worker2, SessId(Worker2), ?FILE_REF(G)),
     ?assertMatch({error, ?EINVAL}, lfm_proxy:get_children_details(Worker2, SessId(Worker2), ?FILE_REF(SpaceGuid),
-        #{offset => -24, size => 24})),
+        #{offset => -24, limit => 24, tune_for_large_continuous_listing => false})),
     ?assertMatch({ok, _, _}, lfm_proxy:get_children_details(Worker2, SessId(Worker2), ?FILE_REF(SpaceGuid),
-        #{offset => -24, size => 24, last_name => <<"file_name">>})),
+        #{offset => -24, limit => 24, index => file_listing:build_index(<<"file_name">>), tune_for_large_continuous_listing => false})),
     ?assertMatch({ok, _, _}, lfm_proxy:get_children_details(Worker2, SessId(Worker2), ?FILE_REF(SpaceGuid),
-        #{offset => 0, size => 24})),
+        #{offset => 0, limit => 24, tune_for_large_continuous_listing => false})),
     ?assertMatch({ok, _, _}, lfm_proxy:get_children_details(Worker2, SessId(Worker2), ?FILE_REF(SpaceGuid),
-        #{offset => 0, size => 24, last_name => <<"file_name">>})),
+        #{offset => 0, limit => 24, index => file_listing:build_index(<<"file_name">>), tune_for_large_continuous_listing => false})),
 
     % Recreate file on worker2
     {ok, NewG} = lfm_proxy:create(Worker2, SessId(Worker2), SpaceGuid, <<"file_name">>, undefined),
     {ok, _} = lfm_proxy:get_details(Worker2, SessId(Worker2), ?FILE_REF(NewG)),
     {ok, _, _} = lfm_proxy:get_children_details(Worker2, SessId(Worker2), ?FILE_REF(SpaceGuid),
-        #{offset => 0, size => 24}),
+        #{offset => 0, limit => 24, tune_for_large_continuous_listing => false}),
     {ok, _} = lfm_proxy:stat(Worker2, SessId(Worker2), ?FILE_REF(NewG)),
 
     % Another check on worker2
     % The bug appeared here (badmatch)
     {ok, _, _} = lfm_proxy:get_children_details(Worker2, SessId(Worker2), ?FILE_REF(SpaceGuid),
-        #{offset => -24, size => 24, last_name => <<"file_name">>}),
+        #{offset => -24, limit => 24, index => file_listing:build_index(<<"file_name">>), tune_for_large_continuous_listing => false}),
 
     {ok, H2} = lfm_proxy:open(Worker2, SessId(Worker2), ?FILE_REF(NewG), write),
     {ok, _} = lfm_proxy:write(Worker2, H2, 0, <<>>),
@@ -1181,6 +1189,30 @@ dir_stats_collector_test(Config0) ->
     UserId = <<"user1">>,
     Config = multi_provider_file_ops_test_base:extend_config(Config0, UserId, {4,0,0,2}, 60),
     dir_stats_collector_test_base:multiprovider_test(Config).
+
+
+dir_stats_collector_parallel_write_test(Config0) ->
+    UserId = <<"user1">>,
+    Config = multi_provider_file_ops_test_base:extend_config(Config0, UserId, {4,0,0,2}, 60),
+    dir_stats_collector_test_base:parallel_write_test(Config, false, 10, false).
+
+
+dir_stats_collector_parallel_override_test(Config0) ->
+    UserId = <<"user1">>,
+    Config = multi_provider_file_ops_test_base:extend_config(Config0, UserId, {4,0,0,2}, 60),
+    dir_stats_collector_test_base:parallel_write_test(Config, false, 10, true).
+
+
+dir_stats_collector_parallel_write_with_sleep_test(Config0) ->
+    UserId = <<"user1">>,
+    Config = multi_provider_file_ops_test_base:extend_config(Config0, UserId, {4,0,0,2}, 60),
+    dir_stats_collector_test_base:parallel_write_test(Config, true, 10, false).
+
+
+dir_stats_collector_parallel_write_to_empty_file_test(Config0) ->
+    UserId = <<"user1">>,
+    Config = multi_provider_file_ops_test_base:extend_config(Config0, UserId, {4,0,0,2}, 60),
+    dir_stats_collector_test_base:parallel_write_test(Config, true, 0, false).
 
 
 %%%===================================================================
@@ -1340,7 +1372,12 @@ init_per_testcase(truncate_on_storage_does_not_block_synchronizer = Case, Config
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, storage_driver),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
-init_per_testcase(dir_stats_collector_test = Case, Config) ->
+init_per_testcase(Case, Config) when
+    Case =:= dir_stats_collector_test;
+    Case =:= dir_stats_collector_parallel_write_test;
+    Case =:= dir_stats_collector_parallel_override_test;
+    Case =:= dir_stats_collector_parallel_write_with_sleep_test;
+    Case =:= dir_stats_collector_parallel_write_to_empty_file_test ->
     dir_stats_collector_test_base:init(init_per_testcase(?DEFAULT_CASE(Case), Config));
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 60}),
@@ -1377,7 +1414,12 @@ end_per_testcase(truncate_on_storage_does_not_block_synchronizer = Case, Config)
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, storage_driver),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
-end_per_testcase(dir_stats_collector_test = Case, Config) ->
+end_per_testcase(Case, Config) when
+    Case =:= dir_stats_collector_test;
+    Case =:= dir_stats_collector_parallel_write_test;
+    Case =:= dir_stats_collector_parallel_override_test;
+    Case =:= dir_stats_collector_parallel_write_with_sleep_test;
+    Case =:= dir_stats_collector_parallel_write_to_empty_file_test ->
     dir_stats_collector_test_base:teardown(Config),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(_Case, Config) ->

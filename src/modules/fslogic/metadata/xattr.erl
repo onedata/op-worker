@@ -60,7 +60,7 @@ get(UserCtx, FileCtx0, XattrName, true = Inherited) ->
         {ok, _} = Result ->
             Result;
         ?ERROR_NOT_FOUND ->
-            {ParentCtx, FileCtx1} = files_tree:get_parent(FileCtx0, UserCtx),
+            {ParentCtx, FileCtx1} = file_tree:get_parent(FileCtx0, UserCtx),
 
             case file_ctx:equals(FileCtx1, ParentCtx) of
                 true -> ?ERROR_NOT_FOUND;
@@ -169,7 +169,7 @@ list_direct_xattrs(FileCtx) ->
 -spec list_ancestor_xattrs(user_ctx:ctx(), file_ctx:ctx(), [custom_metadata:name()]) ->
     {ok, [custom_metadata:name()]} | {error, term()}.
 list_ancestor_xattrs(UserCtx, FileCtx0, GatheredXattrNames) ->
-    {ParentCtx, FileCtx1} = files_tree:get_parent(FileCtx0, UserCtx),
+    {ParentCtx, FileCtx1} = file_tree:get_parent(FileCtx0, UserCtx),
 
     case file_ctx:equals(FileCtx1, ParentCtx) of
         true ->

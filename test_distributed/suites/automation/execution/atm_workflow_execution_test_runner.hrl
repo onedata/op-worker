@@ -19,9 +19,11 @@
 
 -record(atm_mock_call_ctx, {
     provider :: oct_background:entity_selector(),
+    space :: oct_background:entity_selector(),
     session_id :: session:id(),
     workflow_execution_id :: atm_workflow_execution:id(),
     workflow_execution_exp_state :: atm_workflow_execution_exp_state_builder:exp_state(),
+    lane_count :: non_neg_integer(),
     current_lane_index :: atm_lane_execution:index(),
     current_run_num :: atm_lane_execution:run_num(),
     call_args :: [term()]
@@ -54,8 +56,9 @@
     prepare_lane = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
     create_run = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
 
-    process_item = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
-    process_result = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
+    run_task_for_item = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
+    process_task_result_for_item = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
+    process_streamed_task_data = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
     report_item_error = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
 
     handle_task_execution_ended = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
@@ -88,6 +91,9 @@
 -define(ATM_WORKFLOW_EXECUTION_TEST_UTILS, [
     atm_openfaas_docker_mock,
     atm_openfaas_task_executor_mock,
+    atm_openfaas_result_streamer_mock,
+    atm_openfaas_activity_feed_client_mock,
+    test_websocket_client,
     atm_test_inventory,
     atm_workflow_execution_test_runner
 ]).

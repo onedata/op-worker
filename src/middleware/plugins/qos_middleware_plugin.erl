@@ -49,8 +49,7 @@ resolve_handler(create, instance, private) -> ?MODULE;
 resolve_handler(get, instance, private) -> ?MODULE;
 resolve_handler(get, audit_log, private) -> ?MODULE;
 resolve_handler(get, time_series_collections, private) -> ?MODULE;
-resolve_handler(get, {time_series_collection, ?BYTES_STATS}, private) -> ?MODULE;
-resolve_handler(get, {time_series_collection, ?FILES_STATS}, private) -> ?MODULE;
+resolve_handler(get, {time_series_collection, _}, private) -> ?MODULE;
 
 resolve_handler(delete, instance, private) -> ?MODULE;
 

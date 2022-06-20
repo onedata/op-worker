@@ -22,7 +22,7 @@
 -define(ARCHIVE_PRESERVED, preserved).
 -define(ARCHIVE_FAILED, failed).
 -define(ARCHIVE_VERIFICATION_FAILED, verification_failed).
--define(ARCHIVE_PURGING, purging).
+-define(ARCHIVE_DELETING, deleting).
 
 
 % Macros defining possible layouts of files and directories in an archive

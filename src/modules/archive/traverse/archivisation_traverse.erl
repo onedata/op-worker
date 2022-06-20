@@ -233,13 +233,13 @@ do_master_job(Job = #tree_traverse{
     user_id = UserId,
     file_ctx = FileCtx,
     traverse_info = TraverseInfo,
-    token = ListingToken,
+    pagination_token = PaginationToken,
     relative_path = RelativePath
 },
     MasterJobArgs = #{task_id := TaskId}
 ) ->
     mark_building_if_first_job(Job),
-    IsFirstBatch = ListingToken =:= ?INITIAL_DATASTORE_LS_TOKEN,
+    IsFirstBatch = PaginationToken =:= undefined,
     {IsDir, FileCtx2} = file_ctx:is_dir(FileCtx),
 
     case IsDir of
@@ -251,12 +251,12 @@ do_master_job(Job = #tree_traverse{
                 false -> TraverseInfo
             end,
     
-            NewJobsPreprocessor = fun(SlaveJobs, MasterJobs, #{is_last := IsLast}, SubtreeProcessingStatus) ->
+            NewJobsPreprocessor = fun(SlaveJobs, MasterJobs, ListingToken, SubtreeProcessingStatus) ->
                 DirUuid = file_ctx:get_logical_uuid_const(FileCtx2),
                 ChildrenCount = length(SlaveJobs) + length(MasterJobs),
                 ok = archive_traverse_common:update_children_count(
                     ?POOL_NAME, TaskId, DirUuid, ChildrenCount),
-                case IsLast of
+                case file_listing:is_finished(ListingToken) of
                     false -> 
                         ok;
                     true ->
@@ -534,11 +534,11 @@ is_dataset_root(#tree_traverse{
 -spec is_first_job(tree_traverse:master_job()) -> boolean().
 is_first_job(Job = #tree_traverse{
     file_ctx = FileCtx,
-    token = ListingToken
+    pagination_token = PaginationToken
 }) ->
     {IsDir, _} = file_ctx:is_dir(FileCtx),
     is_dataset_root(Job) andalso (
-        (IsDir andalso (ListingToken =:= ?INITIAL_DATASTORE_LS_TOKEN))
+        (IsDir andalso (PaginationToken =:= undefined))
             orelse not IsDir
     ).
 

@@ -268,7 +268,7 @@ create_tag_manifests(ArchiveDirCtx, UserCtx) ->
     SessionId = user_ctx:get_session_id(UserCtx),
 
     AllTagFilesNamesAndChecksums = lists:map(fun(TagFileName) ->
-        {TagFileCtx, _} = files_tree:get_child(ArchiveDirCtx, TagFileName, UserCtx),
+        {TagFileCtx, _} = file_tree:get_child(ArchiveDirCtx, TagFileName, UserCtx),
         {TagFileName, file_checksum:calculate(TagFileCtx, UserCtx, ChecksumAlgorithms)}
     end, AllTagFileNames),
 

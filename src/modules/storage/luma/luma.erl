@@ -235,7 +235,7 @@ map_to_display_credentials(OwnerId, SpaceId, Storage) ->
                 [OwnerId, storage:get_id(Storage), Error, Reason],
                 Stacktrace
             ),
-            {error, ?EACCES}
+            {error, not_found}
     end.
 
 %%%===================================================================

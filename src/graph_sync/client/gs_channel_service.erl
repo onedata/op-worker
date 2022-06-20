@@ -27,6 +27,7 @@
 
 %% API
 -export([setup_internal_service/0]).
+-export([terminate_internal_service/0]).
 -export([is_connected/0]).
 -export([force_start_connection/0, force_terminate_connection/0, force_restart_connection/0]).
 -export([on_db_and_workers_ready/0]).
@@ -62,6 +63,11 @@ setup_internal_service() ->
         healthcheck_interval => ?GS_RECONNECT_BASE_INTERVAL,
         async_start => true
     }).
+
+
+-spec terminate_internal_service() -> ok.
+terminate_internal_service() ->
+    internal_services_manager:stop_service(?MODULE, ?GS_CHANNEL_SERVICE_NAME, ?GS_CHANNEL_SERVICE_NAME).
 
 
 %%--------------------------------------------------------------------

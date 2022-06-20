@@ -53,12 +53,22 @@ stop_pool() ->
     tree_traverse:stop(?MODULE).
 
 
--spec run(file_id:space_id(), non_neg_integer()) -> ok.
+-spec run(file_id:space_id(), non_neg_integer()) -> ok | ?ERROR_INTERNAL_SERVER_ERROR.
 run(SpaceId, Incarnation) ->
-    Options = #{task_id => gen_task_id(SpaceId, Incarnation)},
-    FileCtx = file_ctx:new_by_guid(fslogic_uuid:spaceid_to_space_dir_guid(SpaceId)),
-    {ok, _} = tree_traverse:run(?MODULE, FileCtx, Options),
-    ok.
+    try
+        Options = #{task_id => gen_task_id(SpaceId, Incarnation)},
+        FileCtx = file_ctx:new_by_guid(fslogic_uuid:spaceid_to_space_dir_guid(SpaceId)),
+        {ok, _} = tree_traverse:run(?MODULE, FileCtx, Options),
+        ok
+    catch
+        _:{badmatch, {error, not_found}} ->
+            % Space dir is not found - traverse is not needed
+            dir_stats_collector_config:report_collections_initialization_finished(SpaceId);
+        Error:Reason:Stacktrace ->
+            ?error_stacktrace("Error starting stats initialization traverse for space ~p (incarnation ~p): ~p:~p",
+                [SpaceId, Incarnation, Error, Reason], Stacktrace),
+            ?ERROR_INTERNAL_SERVER_ERROR
+    end.
 
 
 -spec cancel(file_id:space_id(), non_neg_integer()) -> ok.
@@ -76,7 +86,7 @@ cancel(SpaceId, Incarnation) ->
 -spec do_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()}.
 do_master_job(#tree_traverse{
-    last_name = <<>>, % Call dir_stats_collector only for first batch
+    pagination_token = undefined, % Call dir_stats_collector only for first batch
     file_ctx = FileCtx
 } = Job, MasterJobExtendedArgs) ->
     ok = dir_stats_collector:initialize_collections(file_ctx:get_logical_guid_const(FileCtx)),

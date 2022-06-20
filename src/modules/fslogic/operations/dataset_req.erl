@@ -36,7 +36,7 @@
     update_archive/4,
     get_archive_info/3,
     list_archives/5,
-    init_archive_purge/4,
+    init_archive_delete/4,
     init_archive_recall/5,
     cancel_archive_recall/3,
     get_archive_recall_details/3,
@@ -162,12 +162,12 @@ list_children_datasets(SpaceDirCtx, Dataset, Opts, ListingMode, UserCtx) ->
     user_ctx:ctx()
 ) ->
     {ok, archive:id()} | error().
-create_archive(SpaceDirCtx, DatasetId, Config, PreservedCallback, PurgedCallback, Description, UserCtx) ->
+create_archive(SpaceDirCtx, DatasetId, Config, PreservedCallback, DeletedCallback, Description, UserCtx) ->
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_MANAGE_DATASETS),
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_CREATE_ARCHIVES),
 
     archive_api:start_archivisation(
-        DatasetId, Config, PreservedCallback, PurgedCallback, Description, UserCtx
+        DatasetId, Config, PreservedCallback, DeletedCallback, Description, UserCtx
     ).
 
 
@@ -200,13 +200,13 @@ list_archives(SpaceDirCtx, DatasetId, Opts, ListingMode, UserCtx) ->
     archive_api:list_archives(DatasetId, Opts, ListingMode).
 
 
--spec init_archive_purge(file_ctx:ctx(), archive:id(), archive:callback(), user_ctx:ctx()) ->
+-spec init_archive_delete(file_ctx:ctx(), archive:id(), archive:callback(), user_ctx:ctx()) ->
     ok | error().
-init_archive_purge(SpaceDirCtx, ArchiveId, CallbackUrl, UserCtx) ->
+init_archive_delete(SpaceDirCtx, ArchiveId, CallbackUrl, UserCtx) ->
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_MANAGE_DATASETS),
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_REMOVE_ARCHIVES),
 
-    archive_api:purge(ArchiveId, CallbackUrl).
+    archive_api:delete(ArchiveId, CallbackUrl).
 
 
 -spec init_archive_recall(file_ctx:ctx(), archive:id(), file_id:file_guid(), file_meta:name() | undefined, 

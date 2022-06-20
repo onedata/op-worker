@@ -14,7 +14,7 @@
 -module(archive_verification_traverse).
 -author("Michal Stanisz").
 
--behavior(traverse_behaviour).
+-behaviour(traverse_behaviour).
 
 -include("tree_traverse.hrl").
 -include("modules/datastore/datastore_runner.hrl").
@@ -167,12 +167,12 @@ do_slave_job(#tree_traverse_slave{
     {ok, traverse:master_job_map()}.
 do_dir_master_job(#tree_traverse{user_id = UserId, file_ctx = FileCtx} = Job, MasterJobArgs) ->
     #{task_id := TaskId} = MasterJobArgs,
-    NewJobsPreprocessor = fun(SlaveJobs, MasterJobs, #{is_last := IsLast}, _SubtreeProcessingStatus) ->
+    NewJobsPreprocessor = fun(SlaveJobs, MasterJobs, ListingToken, _SubtreeProcessingStatus) ->
         DirUuid = file_ctx:get_logical_uuid_const(FileCtx),
         ChildrenCount = length(SlaveJobs) + length(MasterJobs),
         ok = archive_traverse_common:update_children_count(
             ?POOL_NAME, TaskId, DirUuid, ChildrenCount),
-        case IsLast of
+        case file_listing:is_finished(ListingToken) of
             false ->
                 ok;
             true ->

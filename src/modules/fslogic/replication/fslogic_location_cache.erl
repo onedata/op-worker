@@ -692,7 +692,10 @@ add_blocks_to_sequence(
                 CurrentHoleSize + 1};
         {true, false} ->
             % existing block is overlapping with input blocks - add to sequence and return
-            {BlocksToSplitIntoSequences, BlocksInCurrentSequence,
+            {NewBlocksToSplitIntoSequences, NewBlocksInCurrentSequence} = add_to_current_sequence_if_possible(
+                BlocksToSplitIntoSequences, BlocksInCurrentSequence, ExistingBlockEnd),
+
+            {NewBlocksToSplitIntoSequences, NewBlocksInCurrentSequence,
                     SkippedExistingBlocks ++ [#file_block{offset = ExistingBlockOffset, size = ExistingBlockSize}], [],
                 0};
         _ ->
@@ -701,3 +704,15 @@ add_blocks_to_sequence(
                 ExistingBlock, SkippedExistingBlocks,
                 CurrentHoleSize)
     end.
+
+
+-spec add_to_current_sequence_if_possible(blocks(), blocks(), non_neg_integer()) -> {blocks(), blocks()}.
+add_to_current_sequence_if_possible(
+    [Block, #file_block{offset = NextBlockOffset} | _] = [_ | BlocksToSplitIntoSequencesTail],
+    BlocksInCurrentSequence,
+    ExistingBlockEnd
+) when ExistingBlockEnd >= NextBlockOffset ->
+    add_to_current_sequence_if_possible(
+        BlocksToSplitIntoSequencesTail, [Block | BlocksInCurrentSequence], ExistingBlockEnd);
+add_to_current_sequence_if_possible(BlocksToSplitIntoSequences, BlocksInCurrentSequence, _ExistingBlockEnd) ->
+    {BlocksToSplitIntoSequences, BlocksInCurrentSequence}.

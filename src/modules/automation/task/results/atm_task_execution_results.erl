@@ -6,7 +6,18 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Helper module for constructing task execution result specs and values.
+%%% Module responsible for building task execution result specs and consuming
+%%% result values.
+%%% There are 2 types of task execution results:
+%%% - item related - mandatory results returned directly by lambda and associated
+%%%                  with items the lambda was called for. When their processing
+%%%                  fails their associated items are saved in lane run exception
+%%%                  store and after lane run failure the lane run can be retried.
+%%% - uncorrelated - optional/extra results relayed via alternative channels
+%%%                  e.g. asynchronously via websocket a.k.a. file pipe (may be
+%%%                  used for streaming logs or time series measurements in real
+%%%                  time). When their processing fails entire lane run should
+%%%                  fail with no possibility of retrying it.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_task_execution_results).
@@ -16,7 +27,13 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([build_specs/2, consume_results/3]).
+-export([
+    build_specs/2,
+    consume_results/4
+]).
+
+-type type() :: item_related | uncorrelated.
+-export_type([type/0]).
 
 
 %%%===================================================================
@@ -28,33 +45,46 @@
     [atm_lambda_result_spec:record()],
     [atm_task_schema_result_mapper:record()]
 ) ->
-    [atm_task_execution_result_spec:record()] | no_return().
+    {
+        ItemRelatedResultSpecs :: [atm_task_execution_result_spec:record()],
+        UncorrelatedResultSpecs :: [atm_task_execution_result_spec:record()]
+    }.
 build_specs(AtmLambdaResultSpecs, AtmTaskSchemaResultMappers) ->
     AtmTaskSchemaResultMappersGroupedPerName = group_atm_task_schema_result_mappers_by_name(
         AtmTaskSchemaResultMappers
     ),
 
-    lists:foldl(fun(AtmLambdaResultSpec = #atm_lambda_result_spec{name = Name}, Acc) ->
-        AtmTaskExecutionResultSpec = atm_task_execution_result_spec:build(
+    lists:foldl(fun(AtmLambdaResultSpec, {ItemRelatedResultSpecs, UncorrelatedResultSpecs}) ->
+        ResultName = AtmLambdaResultSpec#atm_lambda_result_spec.name,
+        ResultSpec = atm_task_execution_result_spec:build(
             AtmLambdaResultSpec,
-            maps:get(Name, AtmTaskSchemaResultMappersGroupedPerName, [])
+            maps:get(ResultName, AtmTaskSchemaResultMappersGroupedPerName, [])
         ),
-        [AtmTaskExecutionResultSpec | Acc]
-    end, [], lists:usort(fun order_atm_lambda_result_specs_by_name/2, AtmLambdaResultSpecs)).
+        case AtmLambdaResultSpec#atm_lambda_result_spec.relay_method of
+            return_value -> {[ResultSpec | ItemRelatedResultSpecs], UncorrelatedResultSpecs};
+            file_pipe -> {ItemRelatedResultSpecs, [ResultSpec | UncorrelatedResultSpecs]}
+        end
+    end, {[], []}, lists:usort(fun order_atm_lambda_result_specs_by_name/2, AtmLambdaResultSpecs)).
 
 
 -spec consume_results(
     atm_workflow_execution_ctx:record(),
+    type(),
     [atm_task_execution_result_spec:record()],
     json_utils:json_map()
 ) ->
     ok | no_return().
-consume_results(AtmWorkflowExecutionCtx, AtmTaskExecutionResultSpecs, Results) ->
-    lists:foreach(fun(AtmTaskExecutionResultSpec) ->
-        ResultName = atm_task_execution_result_spec:get_name(AtmTaskExecutionResultSpec),
-        ResultValue = maps:get(ResultName, Results, undefined),
-        consume_result(AtmWorkflowExecutionCtx, AtmTaskExecutionResultSpec, ResultName, ResultValue)
-    end, AtmTaskExecutionResultSpecs).
+consume_results(AtmWorkflowExecutionCtx, Type, ResultSpecs, ResultValues) ->
+    lists:foreach(fun(ResultSpec) ->
+        ResultName = atm_task_execution_result_spec:get_name(ResultSpec),
+
+        case maps:find(ResultName, ResultValues) of
+            {ok, ResultValue} ->
+                consume_result(AtmWorkflowExecutionCtx, ResultName, ResultSpec, ResultValue);
+            error ->
+                Type == item_related andalso throw(?ERROR_ATM_TASK_RESULT_MISSING(ResultName))
+        end
+    end, ResultSpecs).
 
 
 %%%===================================================================
@@ -88,25 +118,17 @@ group_atm_task_schema_result_mappers_by_name(AtmTaskSchemaResultMappers) ->
 %% @private
 -spec consume_result(
     atm_workflow_execution_ctx:record(),
+    automation:name(),
     atm_task_execution_result_spec:record(),
-    binary(),
-    undefined | json_utils:json_term()
+    json_utils:json_term()
 ) ->
     ok | no_return().
-consume_result(_AtmWorkflowExecutionCtx, _, <<"exception">>, _) ->
-    % TODO VFS-8248 rm case when 'exception' result will be forbidden
-    % 'exception' result is optional - if it is present it should be handled
-    % before code comes here and this case should never be called.
-    % Since it was, exception hasn't occurred.
-    ok;
-
-consume_result(_AtmWorkflowExecutionCtx, _AtmTaskExecutionResultSpec, ResultName, undefined) ->
-    throw(?ERROR_ATM_TASK_RESULT_MISSING(ResultName));
-
-consume_result(AtmWorkflowExecutionCtx, AtmTaskExecutionResultSpec, ResultName, ResultValue) ->
+consume_result(AtmWorkflowExecutionCtx, ResultName, ResultSpec, ResultValue) ->
     try
         atm_task_execution_result_spec:consume_result(
-            AtmWorkflowExecutionCtx, AtmTaskExecutionResultSpec, ResultValue
+            AtmWorkflowExecutionCtx,
+            ResultSpec,
+            ResultValue
         )
     catch Type:Reason:Stacktrace ->
         Error = ?atm_examine_error(Type, Reason, Stacktrace),

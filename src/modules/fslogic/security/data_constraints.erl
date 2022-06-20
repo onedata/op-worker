@@ -381,7 +381,7 @@ does_fulfill_guid_constraints(
                         FileCtx1, CacheKey, AllGuidConstraints, Timestamp
                     );
                 false ->
-                    {ParentCtx, FileCtx2} = files_tree:get_parent(FileCtx1, UserCtx),
+                    {ParentCtx, FileCtx2} = file_tree:get_parent(FileCtx1, UserCtx),
                     DoesParentFulfillGuidConstraints = does_fulfill_guid_constraints(
                         UserCtx, SerializedToken, ParentCtx,
                         AllGuidConstraints

@@ -127,7 +127,7 @@ get_record_struct(1) ->
         {lambda_snapshot_registry, #{string => string}},
 
         {store_registry, #{string => string}},
-        {system_audit_log_id, string},
+        {system_audit_log_store_id, string},
 
         {lanes, #{integer => {custom, string, {persistent_record, encode, decode, atm_lane_execution}}}},
         {lanes_count, integer},

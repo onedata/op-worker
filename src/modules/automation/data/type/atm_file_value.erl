@@ -34,11 +34,7 @@
 %% atm_data_compressor callbacks
 -export([compress/2, expand/3]).
 
--type list_opts() :: #{
-    last_name := file_meta:name(),
-    last_tree := file_meta:name(),
-    size => non_neg_integer()
-}.
+-type list_opts() :: file_listing:options().
 
 %%%===================================================================
 %%% atm_data_validator callbacks
@@ -76,7 +72,7 @@ assert_meets_constraints(AtmWorkflowExecutionAuth, #{<<"file_id">> := ObjectId} 
 list_children(AtmWorkflowExecutionAuth, Guid, ListOpts, BatchSize) ->
     SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
     try
-        list_children_unsafe(SessionId, Guid, ListOpts#{size => BatchSize})
+        list_children_unsafe(SessionId, Guid, ListOpts#{limit => BatchSize})
     catch _:Error ->
         Errno = datastore_runner:normalize_error(Error),
         case fslogic_errors:is_access_error(Errno) of
@@ -91,24 +87,29 @@ list_children(AtmWorkflowExecutionAuth, Guid, ListOpts, BatchSize) ->
 -spec initial_listing_options() -> list_opts().
 initial_listing_options() ->
     #{
-        last_name => <<>>,
-        last_tree => <<>>
+        tune_for_large_continuous_listing => false
     }.
 
 
 -spec encode_listing_options(list_opts()) -> json_utils:json_term().
-encode_listing_options(#{last_name := LastName, last_tree := LastTree}) ->
+encode_listing_options(#{tune_for_large_continuous_listing := Value}) ->
     #{
-        <<"last_name">> => LastName,
-        <<"last_tree">> => LastTree
+        <<"tune_for_large_continuous_listing">> => Value
+    };
+encode_listing_options(#{pagination_token := Token}) ->
+    #{
+        <<"pagination_token">> => file_listing:encode_pagination_token(Token)
     }.
 
 
 -spec decode_listing_options(json_utils:json_term()) -> list_opts().
-decode_listing_options(#{<<"last_name">> := LastName, <<"last_tree">> := LastTree}) ->
+decode_listing_options(#{<<"tune_for_large_continuous_listing">> := Value}) ->
     #{
-        last_name => LastName,
-        last_tree => LastTree
+        tune_for_large_continuous_listing => Value
+    };
+decode_listing_options(#{<<"pagination_token">> := EncodedToken}) ->
+    #{
+        pagination_token => file_listing:decode_pagination_token(EncodedToken)
     }.
 
 
@@ -195,7 +196,7 @@ list_children_unsafe(SessionId, Guid, ListOpts) ->
         {false, _Ctx} ->
             {[], [], #{}, true};
         {true, Ctx} ->
-            {Children, ExtendedListInfo, _Ctx1} = dir_req:get_children_ctxs(
+            {Children, ListingPaginationToken, _Ctx1} = dir_req:get_children_ctxs(
                 user_ctx:new(SessionId),
                 Ctx,
                 ListOpts),
@@ -211,7 +212,7 @@ list_children_unsafe(SessionId, Guid, ListOpts) ->
             {
                 lists:reverse(ReversedDirsAndNames), 
                 lists:reverse(ReversedFiles), 
-                maps:without([is_last], ExtendedListInfo), 
-                maps:get(is_last, ExtendedListInfo)
+                #{pagination_token => ListingPaginationToken},
+                file_listing:is_finished(ListingPaginationToken)
             }
     end.

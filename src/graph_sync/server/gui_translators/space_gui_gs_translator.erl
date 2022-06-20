@@ -58,7 +58,10 @@ translate_value(#gri{
             AtmWorkflowExecutionSummaries
         ),
         <<"isLast">> => IsLast
-    }.
+    };
+
+translate_value(#gri{aspect = dir_size_stats_config, scope = private}, Result) ->
+    Result.
 
 
 -spec translate_resource(gri:gri(), Data :: term()) ->

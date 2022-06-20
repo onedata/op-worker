@@ -64,7 +64,7 @@
 -type job() :: master_job() | slave_job().
 -type child_dirs_job_generation_policy () :: generate_master_jobs | generate_slave_and_master_jobs.
 -type children_master_jobs_mode() :: sync | async.
--type batch_size() :: file_meta:list_size().
+-type batch_size() :: file_listing:limit().
 -type traverse_info() :: map().
 % Symbolic links resolution policy: 
 %   * preserve - every symbolic link encountered during traverse is passed as is to the slave job; 
@@ -84,9 +84,8 @@
     % option determining whether slave jobs should be generated also for child directories.
     % NOTE: slave job for starting directory will never be generated.
     child_dirs_job_generation_policy => child_dirs_job_generation_policy(), 
-    % flag determining whether token should be used for iterating over file_meta links
-    % token shouldn't be used when links may be deleted from tree
-    use_listing_token => boolean(),
+    % Flag determining whether optimization will be used for iterating over files list (see file_listing for more details).
+    tune_for_large_continuous_listing => boolean(),
     % flag determining whether children master jobs are scheduled before slave jobs are processed
     children_master_jobs_mode => children_master_jobs_mode(),
     % With this option enabled, tree_traverse_status will be
@@ -111,7 +110,7 @@
     fun((
         slave_jobs(),
         master_jobs(),
-        file_meta:list_extended_info() | undefined,
+        file_listing:pagination_token() | undefined,
         SubtreeProcessingStatus :: tree_traverse_progress:status() | {error, term()}
     ) -> ok | {slave_jobs(), master_jobs()}).
 
@@ -174,10 +173,6 @@ run(Pool, FileCtx, UserId, Opts) ->
     TrackSubtreeStatus = maps:get(track_subtree_status, Opts, ?DEFAULT_TRACK_SUBTREE_STATUS),
     TraverseInfo = maps:get(traverse_info, Opts, #{}),
     TraverseInfo2 = TraverseInfo#{pool => Pool},
-    Token = case maps:get(use_listing_token, Opts, true) of
-        true -> ?INITIAL_DATASTORE_LS_TOKEN;
-        false -> undefined
-    end,
     SymlinksResolutionPolicy = maps:get(symlink_resolution_policy, Opts, preserve),
     {Filename, FileCtx2} = file_ctx:get_aliased_name(FileCtx, undefined),
     InitialRelativePath = maps:get(initial_relative_path, Opts, Filename),
@@ -204,7 +199,8 @@ run(Pool, FileCtx, UserId, Opts) ->
     Job = #tree_traverse{
         file_ctx = FileCtx3,
         user_id = UserId,
-        token = Token,
+        tune_for_large_continuous_listing = maps:get(tune_for_large_continuous_listing , Opts, true),
+        pagination_token = undefined,
         child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
         children_master_jobs_mode = ChildrenMasterJobsMode,
         track_subtree_status = TrackSubtreeStatus,
@@ -353,29 +349,24 @@ do_master_job_internal(?DIRECTORY_TYPE, Job, TaskId, NewJobsPreprocessor, UserCt
     case list_children(Job, UserCtx) of
         {error, ?EACCES} ->
             {ok, #{}};
-        {ok, {ChildrenCtxs, ListExtendedInfo, FileCtx3}} ->
-            LastName2 = maps:get(last_name, ListExtendedInfo, <<>>),
-            LastTree2 = maps:get(last_tree, ListExtendedInfo, <<>>),
-            Token2 = maps:get(token, ListExtendedInfo, undefined),
+        {ok, {ChildrenCtxs, ListingPaginationToken, FileCtx3}} ->
             {SlaveJobs, MasterJobs} = generate_children_jobs(Job, TaskId, ChildrenCtxs, UserCtx),
             ChildrenCount = length(SlaveJobs) + length(MasterJobs),
-            IsLast = maps:get(is_last, ListExtendedInfo),
-            SubtreeProcessingStatus = maybe_report_children_jobs_to_process(Job, TaskId, ChildrenCount, IsLast),
+            SubtreeProcessingStatus = maybe_report_children_jobs_to_process(
+                Job, TaskId, ChildrenCount, file_listing:is_finished(ListingPaginationToken)),
             {UpdatedSlaveJobs, UpdatedMasterJobs} = case 
-                NewJobsPreprocessor(SlaveJobs, MasterJobs, ListExtendedInfo, SubtreeProcessingStatus) 
+                NewJobsPreprocessor(SlaveJobs, MasterJobs, ListingPaginationToken, SubtreeProcessingStatus) 
             of
                 ok -> {SlaveJobs, MasterJobs};
                 {NewSlaveJobs, NewMasterJobs} -> 
                     {NewSlaveJobs, NewMasterJobs}
             end,
-            FinalMasterJobs = case IsLast of
+            FinalMasterJobs = case file_listing:is_finished(ListingPaginationToken) of
                 true ->
                     UpdatedMasterJobs;
                 false -> [Job#tree_traverse{
                     file_ctx = FileCtx3,
-                    token = Token2,
-                    last_name = LastName2,
-                    last_tree = LastTree2
+                    pagination_token = ListingPaginationToken
                 } | UpdatedMasterJobs]
             end,
             
@@ -434,21 +425,19 @@ delete_subtree_status_doc(TaskId, Uuid) ->
 %%%===================================================================
 
 -spec list_children(master_job(), user_ctx:ctx()) -> 
-    {ok, {[file_ctx:ctx()], file_meta:list_extended_info(), file_ctx:ctx()}} | {error, term()}.
+    {ok, {[file_ctx:ctx()], file_listing:pagination_token(), file_ctx:ctx()}} | {error, term()}.
 list_children(#tree_traverse{
     file_ctx = FileCtx,
-    token = Token,
-    last_name = LastName,
-    last_tree = LastTree,
+    pagination_token = PaginationToken,
+    tune_for_large_continuous_listing = TuneForLargeContinuousListing,
     batch_size = BatchSize
 }, UserCtx) ->
+    BaseListingOpts = case PaginationToken of
+        undefined -> #{tune_for_large_continuous_listing => TuneForLargeContinuousListing};
+        _ -> #{pagination_token => PaginationToken}
+    end,
     try
-        {ok, dir_req:get_children_ctxs(UserCtx, FileCtx, #{
-            size => BatchSize,
-            token => Token,
-            last_name => LastName,
-            last_tree => LastTree
-        })}
+        {ok, dir_req:get_children_ctxs(UserCtx, FileCtx, BaseListingOpts#{limit => BatchSize})}
     catch
         throw:?EACCES ->
             {error, ?EACCES}
@@ -547,9 +536,7 @@ maybe_report_children_jobs_to_process(_, _, _, _) ->
 -spec reset_list_options(master_job()) -> master_job().
 reset_list_options(Job) ->
     Job#tree_traverse{
-        token = ?INITIAL_DATASTORE_LS_TOKEN,
-        last_name = <<>>,
-        last_tree = <<>>
+        pagination_token = undefined
     }.
 
 

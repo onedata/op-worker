@@ -71,5 +71,5 @@ add_entry_to_manifest(ManifestFileCtx, UserCtx, FilePath, Checksum) ->
 
 -spec get_manifest_file_ctx(file_ctx:ctx(), user_ctx:ctx(), file_checksum:algorithm()) -> file_ctx:ctx().
 get_manifest_file_ctx(ArchiveRootDirCtx, UserCtx, Algorithm) ->
-    {ManifestFileCtx, _} = files_tree:get_child(ArchiveRootDirCtx, ?CHECKSUM_MANIFEST_FILE_NAME(Algorithm), UserCtx),
+    {ManifestFileCtx, _} = file_tree:get_child(ArchiveRootDirCtx, ?CHECKSUM_MANIFEST_FILE_NAME(Algorithm), UserCtx),
     ManifestFileCtx.

@@ -130,9 +130,9 @@ all() -> [
 -define(TEST_DESCRIPTION2, <<"TEST DESCRIPTION2">>).
 -define(TEST_ARCHIVE_PRESERVED_CALLBACK1, <<"https://preserved1.org">>).
 -define(TEST_ARCHIVE_PRESERVED_CALLBACK2, <<"https://preserved1.org">>).
--define(TEST_ARCHIVE_PURGED_CALLBACK1, <<"https://purged1.org">>).
--define(TEST_ARCHIVE_PURGED_CALLBACK2, <<"https://purged2.org">>).
--define(TEST_ARCHIVE_PURGED_CALLBACK3, <<"https://purged3.org">>).
+-define(TEST_ARCHIVE_DELETED_CALLBACK1, <<"https://deleted1.org">>).
+-define(TEST_ARCHIVE_DELETED_CALLBACK2, <<"https://deleted2.org">>).
+-define(TEST_ARCHIVE_DELETED_CALLBACK3, <<"https://deleted3.org">>).
 
 -define(RAND_NAME, str_utils:rand_hex(20)).
 -define(RAND_CONTENT(Size), crypto:strong_rand_bytes(Size)).
@@ -274,8 +274,8 @@ removal_of_not_empty_dataset_should_fail(_Config) ->
 
     ?assertEqual(?ERROR_POSIX(?ENOTEMPTY), opt_datasets:remove(P1Node, UserSessIdP1, DatasetId)),
 
-    ?assertEqual(ok, opt_archives:purge(P1Node, UserSessIdP1, ArchiveId)),
-    % wait till archive is purged
+    ?assertEqual(ok, opt_archives:delete(P1Node, UserSessIdP1, ArchiveId)),
+    % wait till archive is deleted
     ?assertMatch({ok, {[], true}},
         opt_archives:list(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10}), ?ATTEMPTS),
     ?assertEqual(ok, opt_datasets:remove(P1Node, UserSessIdP1, DatasetId)).
@@ -490,11 +490,11 @@ remove_archive_privileges_test(_Config) ->
     
         ozt_spaces:set_privileges(SpaceId, UserId2, AllPrivileges -- [Privilege]),
         % user2 cannot remove the archive
-        ?assertEqual(?ERROR_POSIX(?EPERM), opt_archives:purge(P1Node, User2SessIdP1, ArchiveId)),
+        ?assertEqual(?ERROR_POSIX(?EPERM), opt_archives:delete(P1Node, User2SessIdP1, ArchiveId)),
     
         ozt_spaces:set_privileges(SpaceId, UserId2, AllPrivileges),
         % user2 can now remove archive
-        ?assertEqual(ok, opt_archives:purge(P1Node, User2SessIdP1, ArchiveId))
+        ?assertEqual(ok, opt_archives:delete(P1Node, User2SessIdP1, ArchiveId))
 
     end, lists:zip(RequiredPrivileges, [ArchiveId1, ArchiveId2])).
 
@@ -515,7 +515,7 @@ simple_archive_crud_test_base(DatasetId, RootFileType, ExpSize) ->
 
     % create archive
     {ok, ArchiveId} = opt_archives:archive_dataset(P1Node, UserSessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG,
-        ?TEST_ARCHIVE_PRESERVED_CALLBACK1, ?TEST_ARCHIVE_PURGED_CALLBACK1, ?TEST_DESCRIPTION1),
+        ?TEST_ARCHIVE_PRESERVED_CALLBACK1, ?TEST_ARCHIVE_DELETED_CALLBACK1, ?TEST_DESCRIPTION1),
 
     ArchiveRootDirUuid = ?ARCHIVE_DIR_UUID(ArchiveId),
     ArchiveRootDirGuid = file_id:pack_guid(ArchiveRootDirUuid, SpaceId),
@@ -542,7 +542,7 @@ simple_archive_crud_test_base(DatasetId, RootFileType, ExpSize) ->
             follow_symlinks = false
         },
         preserved_callback = ?TEST_ARCHIVE_PRESERVED_CALLBACK1,
-        purged_callback = ?TEST_ARCHIVE_PURGED_CALLBACK1,
+        deleted_callback = ?TEST_ARCHIVE_DELETED_CALLBACK1,
         description = ?TEST_DESCRIPTION1,
         stats = archive_stats:new(ExpectedFilesArchived, 0, ExpSize)
     },
@@ -566,14 +566,14 @@ simple_archive_crud_test_base(DatasetId, RootFileType, ExpSize) ->
     % update archive
     ExpArchiveInfo2 = ExpArchiveInfo#archive_info{
         preserved_callback = ?TEST_ARCHIVE_PRESERVED_CALLBACK2,
-        purged_callback = ?TEST_ARCHIVE_PURGED_CALLBACK2,
+        deleted_callback = ?TEST_ARCHIVE_DELETED_CALLBACK2,
         description = ?TEST_DESCRIPTION2
     },
     ?assertEqual(ok,
         opt_archives:update(P2Node, UserSessIdP2, ArchiveId, #{
             <<"description">> => ?TEST_DESCRIPTION2,
             <<"preservedCallback">> => ?TEST_ARCHIVE_PRESERVED_CALLBACK2,
-            <<"purgedCallback">> => ?TEST_ARCHIVE_PURGED_CALLBACK2
+            <<"deletedCallback">> => ?TEST_ARCHIVE_DELETED_CALLBACK2
         })),
     ?assertMatch({ok, ExpArchiveInfo2},
         opt_archives:get_info(P2Node, UserSessIdP2, ArchiveId)),
@@ -581,7 +581,7 @@ simple_archive_crud_test_base(DatasetId, RootFileType, ExpSize) ->
         opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
 
     % remove archive
-    ok = opt_archives:purge(P1Node, UserSessIdP1, ArchiveId, ?TEST_ARCHIVE_PURGED_CALLBACK3),
+    ok = opt_archives:delete(P1Node, UserSessIdP1, ArchiveId, ?TEST_ARCHIVE_DELETED_CALLBACK3),
 
     % verify whether Archive has been removed in the local provider
     ?assertEqual(?ERROR_NOT_FOUND,

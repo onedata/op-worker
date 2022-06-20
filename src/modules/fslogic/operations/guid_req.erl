@@ -46,7 +46,7 @@ resolve_guid_by_relative_path(UserCtx, RootFileCtx, <<"">>) ->
 resolve_guid_by_relative_path(UserCtx, RootFileCtx, Path) ->
     PathTokens = binary:split(Path, <<"/">>, [global]),
     LeafFileCtx = lists:foldl(fun(PathToken, ParentCtx) ->
-        {ChildCtx, _} = files_tree:get_child(ParentCtx, PathToken, UserCtx),
+        {ChildCtx, _} = file_tree:get_child(ParentCtx, PathToken, UserCtx),
         ChildCtx
     end, RootFileCtx, PathTokens),
     resolve_guid(UserCtx, LeafFileCtx).
@@ -61,7 +61,7 @@ ensure_dir(UserCtx, RootFileCtx, Path, Mode) ->
     PathTokens = binary:split(Path, <<"/">>, [global]),
     LeafFileCtx = lists:foldl(fun(PathToken, ParentCtx) ->
         try
-            {ChildCtx, _} = files_tree:get_child(ParentCtx, PathToken, UserCtx),
+            {ChildCtx, _} = file_tree:get_child(ParentCtx, PathToken, UserCtx),
             ChildCtx
         catch throw:?ENOENT ->
             try 
@@ -72,7 +72,7 @@ ensure_dir(UserCtx, RootFileCtx, Path, Mode) ->
             catch Class:Reason ->
                 case datastore_runner:normalize_error(Reason) of
                     already_exists ->
-                        {Ctx, _} = files_tree:get_child(ParentCtx, PathToken, UserCtx),
+                        {Ctx, _} = file_tree:get_child(ParentCtx, PathToken, UserCtx),
                         Ctx;
                     _ ->
                         erlang:apply(erlang, Class, [Reason])
@@ -139,7 +139,7 @@ resolve_guid_insecure(_UserCtx, FileCtx) ->
 -spec get_parent_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
     fslogic_worker:provider_response().
 get_parent_insecure(UserCtx, FileCtx) ->
-    {ParentGuid, _FileCtx2} = files_tree:get_parent_guid_if_not_root_dir(FileCtx, UserCtx),
+    {ParentGuid, _FileCtx2} = file_tree:get_parent_guid_if_not_root_dir(FileCtx, UserCtx),
     #provider_response{
         status = #status{code = ?OK},
         provider_response = #dir{guid = ParentGuid}

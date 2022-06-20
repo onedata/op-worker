@@ -22,7 +22,7 @@
 -export([get_user1_session_id/2, get_user1_first_space_id/1, get_user1_first_space_guid/1, get_user1_first_space_name/1,
     get_user1_first_storage_id/2]).
 -export([create_file/4, create_file/5, write_file/4, write_file/5, create_and_write_file/6, read_file/4]).
--export([create_files_tree/4]).
+-export([create_files_tree/4, create_files_tree/5]).
 -export([clean_space/3, clean_space/4, assert_space_and_trash_are_empty/3, assert_space_dir_empty/3]).
 
 % TODO VFS-7215 - merge this module with file_ops_test_utils
@@ -113,7 +113,11 @@ read_file(Worker, SessId, FileGuid, Size) ->
 
 
 create_files_tree(Worker, SessId, Structure, RootGuid) ->
-    create_files_tree(Worker, SessId, Structure, RootGuid, <<"dir">>, <<"file">>, [], []).
+    create_files_tree(Worker, SessId, Structure, RootGuid, 0).
+
+
+create_files_tree(Worker, SessId, Structure, RootGuid, FileSize) ->
+    create_files_tree(Worker, SessId, Structure, RootGuid, FileSize, <<"dir">>, <<"file">>, [], []).
 
 
 clean_space(Workers, SpaceId, Attempts) ->
@@ -125,11 +129,11 @@ clean_space(CleaningWorker, AllWorkers, SpaceId, Attempts) ->
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
     BatchSize = 1000,
     lists:foreach(fun(W) -> lfm_proxy:close_all(W) end, AllWorkers),
-    rm_recursive(CleaningWorker, ?ROOT_SESS_ID, SpaceGuid, <<>>, BatchSize, false),
+    rm_recursive(CleaningWorker, ?ROOT_SESS_ID, SpaceGuid, BatchSize, false),
     % TODO VFS-7064 remove below line after introducing link to trash directory
-    rm_recursive(CleaningWorker, ?ROOT_SESS_ID, fslogic_uuid:spaceid_to_trash_dir_guid(SpaceId), <<>>, BatchSize, false),
+    rm_recursive(CleaningWorker, ?ROOT_SESS_ID, fslogic_uuid:spaceid_to_trash_dir_guid(SpaceId), BatchSize, false),
     ArchivesDirGuid = file_id:pack_guid(?ARCHIVES_ROOT_DIR_UUID(SpaceId), SpaceId),
-    rm_recursive(CleaningWorker, ?ROOT_SESS_ID, ArchivesDirGuid, <<>>, BatchSize, true),
+    rm_recursive(CleaningWorker, ?ROOT_SESS_ID, ArchivesDirGuid, BatchSize, true),
     assert_space_and_trash_are_empty(AllWorkers, SpaceId, Attempts).
 
 assert_space_dir_empty(Workers, SpaceId, Attempts) ->
@@ -162,23 +166,32 @@ assert_space_and_trash_are_empty(Workers, SpaceId, Attempts) ->
 %%% Internal functions
 %%%===================================================================
 
-rm_recursive(Worker, SessId, DirGuid, BatchSize) ->
-    rm_recursive(Worker, SessId, DirGuid, <<>>, BatchSize, true).
+rm_recursive(Worker, SessId, DirGuid, BatchSize, DeleteDir) ->
+    rm_recursive(Worker, SessId, DirGuid, BatchSize, DeleteDir, #{tune_for_large_continuous_listing => true}).
 
-rm_recursive(Worker, SessId, DirGuid, Token, BatchSize, DeleteDir) ->
-    case lfm_proxy:get_children(Worker, SessId, ?FILE_REF(DirGuid), #{size => BatchSize, token => Token}) of
-        {ok, GuidsAndNames, #{token := Token2, is_last := IsLast}} ->
+rm_recursive(Worker, SessId, DirGuid, BatchSize, DeleteDir, BaseListOpts) ->
+    ListOpts = BaseListOpts#{limit => BatchSize},
+    case lfm_proxy:get_children(Worker, SessId, ?FILE_REF(DirGuid), ListOpts) of
+        {ok, GuidsAndNames, ListingPaginationToken} -> 
             case rm_files(Worker, SessId, GuidsAndNames, BatchSize) of
                 ok ->
-                    case IsLast of
-                        true when DeleteDir -> lfm_proxy:unlink(Worker, SessId, ?FILE_REF(DirGuid));
-                        true -> ok;
-                        false -> rm_recursive(Worker, SessId, DirGuid, Token2, BatchSize, DeleteDir)
+                    case file_listing:is_finished(ListingPaginationToken) of
+                        true when DeleteDir -> 
+                            lfm_proxy:unlink(Worker, SessId, ?FILE_REF(DirGuid));
+                        true -> 
+                            ok;
+                        false -> 
+                            NextListingOpts = #{pagination_token => ListingPaginationToken},
+                            rm_recursive(Worker, SessId, DirGuid, BatchSize, DeleteDir, NextListingOpts)
                     end;
                 Error ->
+                    ct:print("Error during space cleanup [rm_files]: ~p", [Error]),
                     Error
             end;
+        {error, enoent} -> 
+            ok;
         Error2 ->
+            ct:print("Error during space cleanup [get_children]: ~p", [Error2]),
             Error2
     end.
 
@@ -187,11 +200,11 @@ rm_files(Worker, SessId, GuidsAndPaths, BatchSize) ->
     Results = lists:map(fun({G, Name}) ->
         case Name =:= ?TRASH_DIR_NAME of
             true ->
-                rm_recursive(Worker, SessId, G, <<>>, BatchSize, false);
+                rm_recursive(Worker, SessId, G, BatchSize, false);
             false ->
                 case lfm_proxy:is_dir(Worker, SessId, ?FILE_REF(G)) of
                     true ->
-                        rm_recursive(Worker, SessId, G, BatchSize);
+                        rm_recursive(Worker, SessId, G, BatchSize, true);
                     false ->
                         lfm_proxy:unlink(Worker, SessId, ?FILE_REF(G));
                     {error, not_found} -> ok;
@@ -208,15 +221,15 @@ rm_files(Worker, SessId, GuidsAndPaths, BatchSize) ->
 
 
 
-create_files_tree(_Worker, _SessId, [], _RootGuid, _DirPrefix, _FilePrefix, DirGuids, FileGuids) ->
+create_files_tree(_Worker, _SessId, [], _RootGuid, _FileSize, _DirPrefix, _FilePrefix, DirGuids, FileGuids) ->
     {DirGuids, FileGuids};
-create_files_tree(Worker, SessId, [{DirsCount, FilesCount} | Rest], RootGuid, DirPrefix, FilePrefix,
+create_files_tree(Worker, SessId, [{DirsCount, FilesCount} | Rest], RootGuid, FileSize, DirPrefix, FilePrefix,
     DirGuids, FileGuids
 ) ->
     NewDirGuids = create_dirs(Worker, SessId, RootGuid, DirPrefix, DirsCount),
-    NewFileGuids = create_files(Worker, SessId, RootGuid, FilePrefix, FilesCount),
+    NewFileGuids = create_files(Worker, SessId, RootGuid, FilePrefix, FileSize, FilesCount),
     lists:foldl(fun(ChildDirGuid, {DirGuidsAcc, FileGuidsAcc}) ->
-        create_files_tree(Worker, SessId, Rest, ChildDirGuid, DirPrefix, FilePrefix, DirGuidsAcc, FileGuidsAcc)
+        create_files_tree(Worker, SessId, Rest, ChildDirGuid, FileSize, DirPrefix, FilePrefix, DirGuidsAcc, FileGuidsAcc)
     end, {DirGuids ++ NewDirGuids, FileGuids ++ NewFileGuids}, NewDirGuids).
 
 
@@ -227,9 +240,13 @@ create_dirs(Worker, SessId, ParentGuid, DirPrefix, DirsCount) ->
     end).
 
 
-create_files(Worker, SessId, ParentGuid, FilePrefix, FilesCount) ->
+create_files(Worker, SessId, ParentGuid, FilePrefix, FileSize, FilesCount) ->
     create_children(FilePrefix, FilesCount, fun(ChildFileName) ->
         {ok, {Guid, Handle}} = lfm_proxy:create_and_open(Worker, SessId, ParentGuid, ChildFileName, ?DEFAULT_FILE_MODE),
+        case FileSize > 0 of
+            true -> ?assertMatch({ok, _}, lfm_proxy:write(Worker, Handle, 0, crypto:strong_rand_bytes(FileSize)));
+            false -> ok
+        end,
         ok = lfm_proxy:close(Worker, Handle),
         Guid
     end).

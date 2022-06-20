@@ -125,6 +125,7 @@ encode_callback_id(CallbackType, ExecutionId, EngineId, JobIdentifier) ->
         ?ATM_TASK_FINISHED_CALLBACK_PATH,
         (atom_to_binary(CallbackType, utf8))/binary, ?SEPARATOR,
         ExecutionId/binary, ?SEPARATOR,
+        % TODO VFS-7919 - workflow_scheduling state stores EngineId - it can be deleted from url
         EngineId/binary, ?SEPARATOR,
         (workflow_jobs:job_identifier_to_binary(JobIdentifier))/binary>>.
 

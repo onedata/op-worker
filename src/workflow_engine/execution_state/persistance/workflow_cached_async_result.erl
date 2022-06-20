@@ -21,7 +21,7 @@
 %% API
 -export([put/1, take/1]).
 
--type id() :: binary().
+-type id() :: datastore:key().
 -type result_ref() :: id() | ?ERROR_MALFORMED_DATA | ?ERROR_TIMEOUT.
 
 -export_type([result_ref/0]).

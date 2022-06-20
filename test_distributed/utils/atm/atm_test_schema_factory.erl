@@ -214,7 +214,8 @@ create_from_draft(#atm_task_schema_draft{
     argument_mappings = ArgMappings,
     result_mappings = ResultMappings,
 
-    resource_spec_override = PlaceholderOrResourceSpecOverride
+    resource_spec_override = PlaceholderOrResourceSpecOverride,
+    time_series_store_config = TimeSeriesStoreConfig
 }) ->
     #atm_task_schema{
         id = ensure_id(PlaceholderOrId),
@@ -230,7 +231,8 @@ create_from_draft(#atm_task_schema_draft{
                 lists_utils:random_element([undefined | atm_test_utils:example_resource_specs()]);
             ResourceSpecOverride ->
                 ResourceSpecOverride
-        end
+        end,
+        time_series_store_config = TimeSeriesStoreConfig
     };
 
 create_from_draft(#atm_store_iterator_spec_draft{
