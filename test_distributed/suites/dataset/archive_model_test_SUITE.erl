@@ -108,10 +108,10 @@ groups() -> [
 
 
 all() -> [
-    {group, time_mock_parallel_tests},
-    {group, parallel_tests},
-    {group, iterate_parallel_tests},
-    {group, sequential_tests}
+%%    {group, time_mock_parallel_tests},
+%%    {group, parallel_tests},
+    {group, iterate_parallel_tests}
+%%    {group, sequential_tests}
 ].
 
 -define(ATTEMPTS, 300).
@@ -280,35 +280,35 @@ removal_of_not_empty_dataset_should_fail(_Config) ->
         opt_archives:list(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10}), ?ATTEMPTS),
     ?assertEqual(ok, opt_datasets:remove(P1Node, UserSessIdP1, DatasetId)).
 
-iterate_over_100_archives_using_offset_and_limit_1(_Config) ->
-    iterate_over_archives_test_base(100, offset, 1).
+iterate_over_100_archives_using_offset_and_limit_1(Config) ->
+    iterate_over_archives_test_base(Config, offset, 1).
 
-iterate_over_100_archives_using_offset_and_limit_10(_Config) ->
-    iterate_over_archives_test_base(100, offset, 10).
+iterate_over_100_archives_using_offset_and_limit_10(Config) ->
+    iterate_over_archives_test_base(Config, offset, 10).
 
-iterate_over_100_archives_using_offset_and_limit_100(_Config) ->
-    iterate_over_archives_test_base(100, offset, 100).
+iterate_over_100_archives_using_offset_and_limit_100(Config) ->
+    iterate_over_archives_test_base(Config, offset, 100).
 
-iterate_over_100_archives_using_offset_and_limit_1000(_Config) ->
-    iterate_over_archives_test_base(100, offset, 1000).
+iterate_over_100_archives_using_offset_and_limit_1000(Config) ->
+    iterate_over_archives_test_base(Config, offset, 1000).
 
-iterate_over_100_archives_using_offset_and_limit_10000(_Config) ->
-    iterate_over_archives_test_base(100, offset, 10000).
+iterate_over_100_archives_using_offset_and_limit_10000(Config) ->
+    iterate_over_archives_test_base(Config, offset, 10000).
 
-iterate_over_100_archives_using_start_index_and_limit_1(_Config) ->
-    iterate_over_archives_test_base(100, start_index, 1).
+iterate_over_100_archives_using_start_index_and_limit_1(Config) ->
+    iterate_over_archives_test_base(Config, start_index, 1).
 
-iterate_over_100_archives_using_start_index_and_limit_10(_Config) ->
-    iterate_over_archives_test_base(100, start_index, 10).
+iterate_over_100_archives_using_start_index_and_limit_10(Config) ->
+    iterate_over_archives_test_base(Config, start_index, 10).
 
-iterate_over_100_archives_using_start_index_and_limit_100(_Config) ->
-    iterate_over_archives_test_base(100, start_index, 100).
+iterate_over_100_archives_using_start_index_and_limit_100(Config) ->
+    iterate_over_archives_test_base(Config, start_index, 100).
 
-iterate_over_100_archives_using_start_index_and_limit_1000(_Config) ->
-    iterate_over_archives_test_base(100, start_index, 1000).
+iterate_over_100_archives_using_start_index_and_limit_1000(Config) ->
+    iterate_over_archives_test_base(Config, start_index, 1000).
 
-iterate_over_100_archives_using_start_index_and_limit_10000(_Config) ->
-    iterate_over_archives_test_base(100, start_index, 10000).
+iterate_over_100_archives_using_start_index_and_limit_10000(Config) ->
+    iterate_over_archives_test_base(Config, start_index, 10000).
 
 %===================================================================
 % Sequential tests - tests which must be performed one after another
@@ -596,36 +596,18 @@ simple_archive_crud_test_base(DatasetId, RootFileType, ExpSize) ->
         opt_archives:list(P2Node, UserSessIdP2, DatasetId, #{offset => 0, limit => 10}), ?ATTEMPTS).
 
 
-iterate_over_archives_test_base(ArchiveCount, ListingMethod, Limit) ->
+iterate_over_archives_test_base(Config, ListingMethod, Limit) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-
-    #object{dataset = #dataset_object{
-        id = DatasetId,
-        archives = ArchiveObjects
-    }} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE,
-        #file_spec{dataset = #dataset_spec{archives = ArchiveCount}}),
-
-    lists_utils:pforeach(fun(#archive_object{id = ArchiveId, config = Config}) ->
-        ?assertMatch({ok, #archive_info{
-            state = ?ARCHIVE_PRESERVED,
-            config = Config
-        }}, opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS)
-    end, ArchiveObjects),
-
-    % sort archives by their indices
-    ExpArchiveIdsAndIndices = lists:sort(fun(A1, A2) ->
-        A1#archive_object.index =< A2#archive_object.index
-    end, ArchiveObjects),
-    ExpArchiveIds = [Id || {Id, _} <- ExpArchiveIdsAndIndices],
 
     ListingOpts = case ListingMethod of
         offset -> #{offset => 0, limit => Limit};
         start_index -> #{start_index => <<>>, limit => Limit}
     end,
 
+    ExpArchiveIds = ?config(exp_archive_ids, Config),
+    DatasetId = ?config(dataset_id, Config),
     check_if_all_archives_listed(ExpArchiveIds, P1Node, UserSessIdP1, DatasetId, ListingOpts).
-
 
 %===================================================================
 % SetUp and TearDown functions
@@ -645,12 +627,13 @@ end_per_suite(Config) ->
     oct_background:end_per_suite(),
     dir_stats_test_utils:enable_stats_counting(Config).
 
-init_per_group(Group, Config) when
-    Group =:= parallel_tests;
-    Group =:= iterate_parallel_tests
-->
+init_per_group(parallel_tests, Config) ->
     Config2 = oct_background:update_background_config(Config),
     lfm_proxy:init(Config2, false);
+init_per_group(iterate_parallel_tests, Config) ->
+    Config2 = oct_background:update_background_config(Config),
+    Config3 = prepare_archive_iteration_test_environment(Config2, 100),
+    lfm_proxy:init(Config3, false);
 init_per_group(_Group, Config) ->
     ok = time_test_utils:freeze_time(Config),
     Config2 = oct_background:update_background_config(Config),
@@ -701,3 +684,27 @@ update_opts(Opts = #{offset := Offset}, ListedArchives) ->
     Opts#{offset => Offset + length(ListedArchives)};
 update_opts(Opts = #{start_index := _}, ListedArchives) ->
     Opts#{start_index => element(1, lists:last(ListedArchives)), offset => 1}.
+
+prepare_archive_iteration_test_environment(Config, ArchiveCount) ->
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
+    
+    #object{dataset = #dataset_object{
+        id = DatasetId,
+        archives = ArchiveObjects
+    }} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE,
+        #file_spec{dataset = #dataset_spec{archives = ArchiveCount}}),
+    
+    lists_utils:pforeach(fun(#archive_object{id = ArchiveId, config = Config}) ->
+        ?assertMatch({ok, #archive_info{
+            state = ?ARCHIVE_PRESERVED,
+            config = Config
+        }}, opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS)
+    end, ArchiveObjects),
+    
+    % sort archives by their indices
+    ExpArchiveIdsAndIndices = lists:sort(fun(A1, A2) ->
+        A1#archive_object.index =< A2#archive_object.index
+    end, ArchiveObjects),
+    ExpArchiveIds = [Id || {Id, _} <- ExpArchiveIdsAndIndices],
+    [{exp_archive_ids, ExpArchiveIds}, {dataset_id, DatasetId} | Config].
