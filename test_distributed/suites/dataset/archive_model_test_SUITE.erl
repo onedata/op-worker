@@ -108,10 +108,10 @@ groups() -> [
 
 
 all() -> [
-%%    {group, time_mock_parallel_tests},
-%%    {group, parallel_tests},
-    {group, iterate_parallel_tests}
-%%    {group, sequential_tests}
+    {group, time_mock_parallel_tests},
+    {group, parallel_tests},
+    {group, iterate_parallel_tests},
+    {group, sequential_tests}
 ].
 
 -define(ATTEMPTS, 300).
