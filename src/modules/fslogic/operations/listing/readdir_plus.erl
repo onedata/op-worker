@@ -21,7 +21,8 @@
     gather_attributes/4
 ]).
 
--type gather_attributes_fun(Entry, Attributes) :: fun((user_ctx:ctx(), Entry) -> Attributes).
+-type gather_attributes_fun(Entry, Attributes) :: 
+    fun((user_ctx:ctx(), Entry, attr_req:compute_file_attr_opts()) -> Attributes).
 
 -export_type([gather_attributes_fun/2]).
 
@@ -43,7 +44,7 @@
 -spec gather_attributes(
     user_ctx:ctx(),
     gather_attributes_fun(Entry, Attributes),
-    Entries :: [Entry],
+    [Entry],
     attr_req:compute_file_attr_opts()
 ) ->
     [Attributes].

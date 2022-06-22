@@ -175,7 +175,7 @@ list_directory(UserCtx, DirCtx, InitialState, OriginalDirGuid) ->
 
 %% @private
 -spec list_non_dir_file(user_ctx:ctx(), file_ctx:ctx(), state()) ->
-    {[internal_entry()], [file_meta:path()], pagination_token()}.
+    {[internal_entry()], [file_meta:path()], undefined}.
 list_non_dir_file(UserCtx, FileCtx, InitialState) ->
     {EntryList, InaccessiblePaths} = case check_reg_file_access(UserCtx, FileCtx) of
         ok ->
