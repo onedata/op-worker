@@ -64,7 +64,7 @@ route_message(#client_message{
     message_id = MsgId,
     session_id = OriginSessId
 } = ClientMessage, SessionID) ->
-    % Spawn because send or subscription delegation can long time and block sequencer_in_stream
+    % Spawn because send or subscription delegation can last long time and block sequencer_in_stream
     spawn(fun() ->
         route_message(ClientMessage#client_message{message_id = undefined}, SessionID),
         communicator:send_to_oneclient(OriginSessId, #server_message{

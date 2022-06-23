@@ -31,6 +31,8 @@
 -type sequence_number() :: non_neg_integer().
 -type sequencer_manager_ref() :: pid() | session:id().
 
+-define(STREAM_ID_LIMIT, 4294967296).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -61,7 +63,7 @@ send_message(Msg, StmId, Ref) ->
 %%--------------------------------------------------------------------
 -spec binary_to_stream_id(binary()) -> stream_id().
 binary_to_stream_id(Binary) ->
-    erlang:phash2(Binary, 4294967296).
+    erlang:phash2(Binary, ?STREAM_ID_LIMIT).
 
 %%--------------------------------------------------------------------
 %% @doc

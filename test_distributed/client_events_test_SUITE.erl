@@ -689,48 +689,6 @@ rename_auth_filtering_test(Config) ->
         fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, <<"user1">>), -Seq2))),
     ok.
 
-%%sync_proxy_subscribe_on_dir_test(Config) ->
-%%    [Worker1, Worker2] = ?config(op_worker_nodes, Config),
-%%    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
-%%    SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker2)}}, Config),
-%%    AccessToken = ?config({access_token, <<"user1">>}, Config),
-%%    SpaceGuid = client_simulation_test_base:get_guid(Worker1, SessionId, <<"/space_name4">>),
-%%
-%%    {ok, {_, RootHandle}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(Worker2, <<"0">>, SpaceGuid,
-%%        generator:gen_name(), ?DEFAULT_DIR_PERMS)),
-%%    ?assertEqual(ok, lfm_proxy:close(Worker2, RootHandle)),
-%%
-%%    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
-%%    {ok, {Sock2, _}} = fuse_test_utils:connect_via_token(Worker2, [{active, true}], SessionId2, AccessToken),
-%%
-%%    Filename = generator:gen_name(),
-%%    Dirname = generator:gen_name(),
-%%
-%%    DirId = fuse_test_utils:create_directory(Sock2, SpaceGuid, Dirname),
-%%    Seq1 = get_seq(Config, <<"user1">>),
-%%    SubscriptionMessage = fuse_test_utils:generate_file_removed_subscription_message(0, Seq1, -Seq1, DirId),
-%%    {SubscriptionMessageId, FinalSubscriptionMessage} = fuse_test_utils:extend_message_with_msg_id(SubscriptionMessage),
-%%    ?assertEqual(ok, ssl:send(Sock, FinalSubscriptionMessage)),
-%%    {ok, SubscriptionRoutingKey} = subscription_type:get_routing_key(#file_removed_subscription{file_guid = DirId}),
-%%    ?assertMatch(#'ServerMessage'{
-%%        message_id = SubscriptionMessageId,
-%%        message_body = {status, #'Status'{code = ?OK}}
-%%    }, fuse_test_utils:receive_server_message()),
-%%    ?assertMatch({ok, [_]},
-%%        rpc:call(Worker2, subscription_manager, get_subscribers, [SubscriptionRoutingKey]), 10),
-%%
-%%    {FileGuid, HandleId} = fuse_test_utils:create_file(Sock2, DirId, Filename),
-%%    fuse_test_utils:close(Sock2, FileGuid, HandleId),
-%%
-%%    ?assertEqual(ok, lfm_proxy:unlink(Worker2, <<"0">>, ?FILE_REF(FileGuid))),
-%%    receive_events_and_check(file_removed, FileGuid),
-%%
-%%    ?assertEqual(ok, ssl:send(Sock,
-%%        fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, <<"user1">>), -Seq1))),
-%%    ?assertMatch({ok, []},
-%%        rpc:call(Worker2, subscription_manager, get_subscribers, [SubscriptionRoutingKey]), 10),
-%%    ?assertEqual(ok, ssl:close(Sock)),
-%%    ok.
 
 %%%===================================================================
 %%% SetUp and TearDown functions
