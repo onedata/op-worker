@@ -50,39 +50,44 @@ create(Id) ->
 -spec report_synchronization_started(id(), file_id:file_guid()) -> ok | {error, term()}.
 report_synchronization_started(Id, FileGuid) ->
     json_infinite_log_model:append(Id, #{
-        <<"status">> => <<"synchronization started">>,
+        <<"status">> => <<"scheduled">>,
         <<"severity">> => <<"info">>,
-        <<"fileId">> => file_guid_to_object_id(FileGuid)
+        <<"fileId">> => file_guid_to_object_id(FileGuid),
+        <<"description">> => <<"Remote replica differs, reconciliation started.">>
     }).
 
 
 -spec report_file_synchronized(id(), file_id:file_guid()) -> ok | {error, term()}.
 report_file_synchronized(Id, FileGuid) ->
     json_infinite_log_model:append(Id, #{
-        <<"status">> => <<"synchronized">>,
+        <<"status">> => <<"completed">>,
         <<"severity">> => <<"info">>,
-        <<"fileId">> => file_guid_to_object_id(FileGuid)
+        <<"fileId">> => file_guid_to_object_id(FileGuid),
+        <<"description">> => <<"Local replica reconciled.">>
     }).
 
 
 -spec report_file_synchronization_skipped(id(), file_id:file_guid(), Reason :: binary()) ->
     ok | {error, term()}.
-report_file_synchronization_skipped(Id, FileGuid, Reason) ->
+report_file_synchronization_skipped(Id, FileGuid, Description) ->
     json_infinite_log_model:append(Id, #{
-        <<"status">> => <<"synchronization skipped">>,
-        <<"reason">> => Reason,
+        <<"status">> => <<"skipped">>,
         <<"severity">> => <<"info">>,
-        <<"fileId">> => file_guid_to_object_id(FileGuid)
+        <<"fileId">> => file_guid_to_object_id(FileGuid),
+        <<"description">> => Description
     }).
 
 
 -spec report_file_synchronization_failed(id(), file_id:file_guid(), {error, term()}) -> ok | {error, term()}.
 report_file_synchronization_failed(Id, FileGuid, Error) ->
+    ErrorJson = errors:to_json(Error),
     json_infinite_log_model:append(Id, #{
-        <<"status">> => <<"synchronization failed">>,
+        <<"status">> => <<"failed">>,
         <<"severity">> => <<"error">>,
         <<"fileId">> => file_guid_to_object_id(FileGuid),
-        <<"reason">> => errors:to_json(Error)
+        <<"description">> => str_utils:format_bin("Failed to reconcile local replica: ~s", 
+            [maps:get(<<"description">>, ErrorJson)]),
+        <<"reason">> => ErrorJson
     }).
 
 
