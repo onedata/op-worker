@@ -1068,6 +1068,12 @@
 }).
 
 
+-record(space_support_state, {
+    accounting_status :: space_support_state:accounting_status(),
+    dir_stats_collector_config :: dir_stats_collector_config:record()
+}).
+
+
 -record(restart_hooks, {
     hooks = #{} :: restart_hooks:hooks()
 }).

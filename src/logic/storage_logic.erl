@@ -147,8 +147,8 @@ support_space(StorageId, SpaceSupportToken, SupportSize) ->
     ?ON_SUCCESS(?CREATE_RETURN_ID(Result), fun({ok, SpaceId}) ->
         provider_logic:force_fetch(),
         space_logic:force_fetch(SpaceId),
-        storage_logic:force_fetch(StorageId),
-        dir_stats_collector_config:init_for_empty_space(SpaceId)
+        storage_logic:force_fetch(StorageId)
+%%        dir_stats_collector_config:init_for_empty_space(SpaceId)  %% TODO
     end).
 
 

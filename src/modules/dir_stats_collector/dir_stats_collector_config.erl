@@ -51,6 +51,7 @@
 -module(dir_stats_collector_config).
 -author("Michal Wrzeszcz").
 
+-behaviour(persistent_record).
 
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -60,14 +61,12 @@
 %% API - getters
 -export([is_collecting_active/1, get_extended_collecting_status/1,
     get_last_status_change_timestamp_if_in_enabled_status/1, get_collecting_status_change_timestamps/1]).
-%% API - init/cleanup
--export([init_for_empty_space/1, clean/1]).
 %% API - collecting status changes
 -export([enable/1, disable/1,
     report_collections_initialization_finished/1, report_collectors_stopped/1]).
 
-%% datastore_model callbacks
--export([get_ctx/0, get_record_version/0, get_record_struct/1, upgrade_record/2]).
+%% persistent_record callbacks
+-export([version/0, db_encode/2, db_decode/2]).
 
 
 -type collecting_status() :: active_collecting_status() | disabled | collectors_stopping.
@@ -88,20 +87,15 @@
 -type status_change_timestamp() :: {collecting_status(), time:seconds()}.
 
 -type record() :: #dir_stats_collector_config{}.
--type diff_fun() :: datastore_doc:diff(record()).
--type ctx() :: datastore:ctx().
+-type diff_fun() :: fun((record()) -> {ok, record()} | {error, term()}).
 
 -export_type([collecting_status/0, active_collecting_status/0,
     extended_collecting_status/0, extended_active_collecting_status/0,
-    pending_status_transition/0, status_change_timestamp/0]).
+    pending_status_transition/0, status_change_timestamp/0,
+    record/0
+]).
 
 
--define(CTX, #{
-    model => ?MODULE,
-    memory_copies => all
-}).
-
--define(STATUS_FOR_NEW_SPACES, op_worker:get_env(dir_stats_collecting_status_for_new_spaces, disabled)).
 -define(MAX_HISTORY_SIZE, 50).
 -define(RESTART_HOOK_ID(SpaceId), <<"DIR_STATS_COLLECTOR_HOOK_", SpaceId/binary>>).
 
@@ -120,13 +114,13 @@ is_collecting_active(SpaceId) ->
 
 -spec get_extended_collecting_status(od_space:id()) -> extended_collecting_status().
 get_extended_collecting_status(SpaceId) ->
-    case datastore_model:get(?CTX, SpaceId) of
-        {ok, #document{value = #dir_stats_collector_config{
+    case get_config(SpaceId) of
+        {ok, #dir_stats_collector_config{
             collecting_status = collections_initialization,
             incarnation = Incarnation
-        }}} ->
+        }} ->
             {collections_initialization, Incarnation};
-        {ok, #document{value = #dir_stats_collector_config{collecting_status = Status}}} ->
+        {ok, #dir_stats_collector_config{collecting_status = Status}} ->
             Status;
         ?ERROR_NOT_FOUND ->
             disabled
@@ -136,18 +130,18 @@ get_extended_collecting_status(SpaceId) ->
 -spec get_last_status_change_timestamp_if_in_enabled_status(od_space:id()) ->
     {ok, time:seconds()} | dir_stats_collector:collecting_status_error().
 get_last_status_change_timestamp_if_in_enabled_status(SpaceId) ->
-    case datastore_model:get(?CTX, SpaceId) of
-        {ok, #document{value = #dir_stats_collector_config{
+    case get_config(SpaceId) of
+        {ok, #dir_stats_collector_config{
             collecting_status = enabled,
             collecting_status_change_timestamps = []
-        }}} ->
+        }} ->
             {ok, 0};
-        {ok, #document{value = #dir_stats_collector_config{
+        {ok, #dir_stats_collector_config{
             collecting_status = enabled,
             collecting_status_change_timestamps = [{enabled, Time} | _]
-        }}} ->
+        }} ->
             {ok, Time};
-        {ok, #document{value = #dir_stats_collector_config{collecting_status = collections_initialization}}} ->
+        {ok, #dir_stats_collector_config{collecting_status = collections_initialization}} ->
             ?ERROR_DIR_STATS_NOT_READY;
         {ok, _} ->
             ?ERROR_DIR_STATS_DISABLED_FOR_SPACE;
@@ -158,32 +152,12 @@ get_last_status_change_timestamp_if_in_enabled_status(SpaceId) ->
 
 -spec get_collecting_status_change_timestamps(od_space:id()) -> [status_change_timestamp()].
 get_collecting_status_change_timestamps(SpaceId) ->
-    case datastore_model:get(?CTX, SpaceId) of
-        {ok, #document{value = #dir_stats_collector_config{
-            collecting_status_change_timestamps = Timestamps
-        }}} ->
+    case get_config(SpaceId) of
+        {ok, #dir_stats_collector_config{collecting_status_change_timestamps = Timestamps}} ->
             Timestamps;
         ?ERROR_NOT_FOUND ->
             []
     end.
-
-
-%%%===================================================================
-%%% API - init/cleanup
-%%%===================================================================
-
--spec init_for_empty_space(od_space:id()) -> ok.
-init_for_empty_space(SpaceId) ->
-    {ok, _} = datastore_model:create(?CTX, #document{
-        key = SpaceId,
-        value = #dir_stats_collector_config{collecting_status = ?STATUS_FOR_NEW_SPACES}
-    }),
-    ok.
-
-
--spec clean(od_space:id()) -> ok.
-clean(SpaceId) ->
-    ok = datastore_model:delete(?CTX, SpaceId).
 
 
 %%%===================================================================
@@ -192,11 +166,6 @@ clean(SpaceId) ->
 
 -spec enable(od_space:id()) -> ok | ?ERROR_INTERNAL_SERVER_ERROR.
 enable(SpaceId) ->
-    NewRecord = #dir_stats_collector_config{
-        collecting_status = collections_initialization,
-        incarnation = 1
-    },
-
     Diff = fun
         (#dir_stats_collector_config{
             collecting_status = disabled, 
@@ -217,12 +186,12 @@ enable(SpaceId) ->
             {error, no_action_needed}
     end,
 
-    case update(SpaceId, Diff, NewRecord) of
-        {ok, #document{value = #dir_stats_collector_config{
+    case update_config(SpaceId, Diff) of
+        {ok, #dir_stats_collector_config{
             collecting_status = collections_initialization,
             incarnation = Incarnation,
             pending_status_transition = PendingTransition
-        }}} when PendingTransition =/= canceled ->
+        }} when PendingTransition =/= canceled ->
             run_initialization_traverse(SpaceId, Incarnation);
         {ok, _} ->
             ok;
@@ -233,7 +202,7 @@ enable(SpaceId) ->
 
 -spec disable(od_space:id()) -> ok.
 disable(SpaceId) ->
-    Diff = fun
+    ConfigDiff = fun
         (#dir_stats_collector_config{
             collecting_status = enabled
         } = Config) ->
@@ -248,6 +217,7 @@ disable(SpaceId) ->
         (#dir_stats_collector_config{}) ->
             {error, no_action_needed}
     end,
+    Condition = fun(#space_support_state{accounting_status = Status}) -> Status == disabled end,
 
     case restart_hooks:add_hook(
         ?RESTART_HOOK_ID(SpaceId), ?MODULE, report_collectors_stopped, [SpaceId], forbid_override
@@ -256,16 +226,16 @@ disable(SpaceId) ->
         {error, already_exists} -> ok
     end,
 
-    case update(SpaceId, Diff) of
-        {ok, #document{value = #dir_stats_collector_config{
+    case update_config_if_allowed(SpaceId, ConfigDiff, Condition) of
+        {ok, #dir_stats_collector_config{
             collecting_status = collectors_stopping,
             pending_status_transition = PendingTransition
-        }}} when PendingTransition =/= canceled ->
+        }} when PendingTransition =/= canceled ->
             dir_stats_collector:stop_collecting(SpaceId);
-        {ok, #document{value = #dir_stats_collector_config{
+        {ok, #dir_stats_collector_config{
             collecting_status = collections_initialization,
             incarnation = Incarnation
-        }}} ->
+        }} ->
             dir_stats_collections_initialization_traverse:cancel(SpaceId, Incarnation);
         {ok, _} ->
             ok;
@@ -296,10 +266,10 @@ report_collections_initialization_finished(SpaceId) ->
             {error, {wrong_status, Status}}
     end,
 
-    case update(SpaceId, Diff) of
-        {ok, #document{value = #dir_stats_collector_config{collecting_status = enabled}}} ->
+    case update_config(SpaceId, Diff) of
+        {ok, #dir_stats_collector_config{collecting_status = enabled}} ->
             ok;
-        {ok, #document{value = #dir_stats_collector_config{collecting_status = collectors_stopping}}} ->
+        {ok, #dir_stats_collector_config{collecting_status = collectors_stopping}} ->
             dir_stats_collector:stop_collecting(SpaceId);
         {error, {wrong_status, WrongStatus}} ->
             ?warning("Reporting space ~p enabling finished when space has status ~p", [SpaceId, WrongStatus]);
@@ -330,13 +300,13 @@ report_collectors_stopped(SpaceId) ->
             {error, {wrong_status, Status}}
     end,
 
-    case update(SpaceId, Diff) of
-        {ok, #document{value = #dir_stats_collector_config{collecting_status = disabled}}} ->
+    case update_config(SpaceId, Diff) of
+        {ok, #dir_stats_collector_config{collecting_status = disabled}} ->
             ok;
-        {ok, #document{value = #dir_stats_collector_config{
+        {ok, #dir_stats_collector_config{
             collecting_status = collections_initialization,
             incarnation = Incarnation
-        }}} ->
+        }} ->
             run_initialization_traverse(SpaceId, Incarnation),
             ok;
         % Log errors on debug as they can appear at node restart
@@ -348,55 +318,110 @@ report_collectors_stopped(SpaceId) ->
 
 
 %%%===================================================================
-%%% datastore_model callbacks
+%%% persistent_record callbacks
 %%%===================================================================
 
--spec get_ctx() -> ctx().
-get_ctx() ->
-    ?CTX.
+
+-spec version() -> persistent_record:record_version().
+version() ->
+    1.
 
 
--spec get_record_version() -> datastore_model:record_version().
-get_record_version() ->
-    2.
+-spec db_encode(record(), persistent_record:nested_record_encoder()) ->
+    json_utils:json_map().
+db_encode(#dir_stats_collector_config{
+    collecting_status = CollectingStatus,
+    incarnation = Incarnation,
+    pending_status_transition = PendingStatusTransition,
+    collecting_status_change_timestamps = CollectingStatusChangeTimestamps
+}, _NestedRecordEncoder) ->
+    #{
+        <<"collectingStatus">> => atom_to_binary(CollectingStatus, utf8),
+        <<"incarnation">> => Incarnation,
+        <<"pendingStatusTransition">> => atom_to_binary(PendingStatusTransition, utf8),
+        <<"collectingStatusChangeTimestamps">> => lists:map(fun({CollectingStatus, TimestampSec}) ->
+            [atom_to_binary(CollectingStatus, utf8), TimestampSec]
+        end, CollectingStatusChangeTimestamps)
+    }.
 
 
--spec get_record_struct(datastore_model:record_version()) -> datastore_model:record_struct().
-get_record_struct(1) ->
-    {record, [
-        {enabled, boolean}
-    ]};
-get_record_struct(2) ->
-    {record, [
-        {collecting_status, atom},
-        {incarnation, integer},
-        {pending_status_transition, atom},
-        {collecting_status_change_timestamps, [{atom, integer}]}
-    ]}.
-
-
--spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
-    {datastore_model:record_version(), datastore_model:record()}.
-upgrade_record(1, {?MODULE, IsEnabled}) ->
-    Status = case IsEnabled of
-        true -> enabled;
-        false -> disabled
-    end,
-    {2, {?MODULE, Status, 0, undefined, []}}.
+-spec db_decode(json_utils:json_map(), persistent_record:nested_record_decoder()) ->
+    record().
+db_decode(#{
+    <<"collectingStatus">> := CollectingStatusBin,
+    <<"incarnation">> := Incarnation,
+    <<"pendingStatusTransition">> := PendingStatusTransitionBin,
+    <<"collectingStatusChangeTimestamps">> := EncodedCollectingStatusChangeTimestamps
+}, _NestedRecordDecoder) ->
+    #dir_stats_collector_config{
+        collecting_status = binary_to_atom(CollectingStatusBin, utf8),
+        incarnation = Incarnation,
+        pending_status_transition = binary_to_atom(PendingStatusTransitionBin, utf8),
+        collecting_status_change_timestamps = lists:map(fun([CollectingStatusBin, TimestampSec]) ->
+            {binary_to_atom(CollectingStatusBin, utf8), TimestampSec}
+        end, EncodedCollectingStatusChangeTimestamps)
+    }.
 
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
--spec update(od_space:id(), diff_fun()) -> {ok, datastore_doc:doc(record())} | {error, term()}.
-update(SpaceId, Diff) ->
-    datastore_model:update(?CTX, SpaceId, diff_fun_with_timestamp_update(Diff)).
+
+%% @private
+-spec get_config(od_space:id()) -> {ok, record()} | errors:error().
+get_config(SpaceId) ->
+    case space_support_state:get(SpaceId) of
+        {ok, #document{value = #space_support_state{
+            dir_stats_collector_config = DirStatsCollectorConfig
+        }}} ->
+            {ok, DirStatsCollectorConfig};
+
+        ?ERROR_NOT_FOUND ->
+            ?ERROR_NOT_FOUND
+    end.
 
 
--spec update(od_space:id(), diff_fun(), record()) -> {ok, datastore_doc:doc(record())} | {error, term()}.
-update(SpaceId, Diff, Default) ->
-    datastore_model:update(?CTX, SpaceId, diff_fun_with_timestamp_update(Diff), Default).
+%% @private
+-spec update_config(od_space:id(), diff_fun()) -> {ok, record()} | {error, term()}.
+update_config(SpaceId, ConfigDiff) ->
+    update_config_if_allowed(SpaceId, ConfigDiff, fun(_) -> true end).
+
+
+%% @private
+-spec update_config_if_allowed(
+    od_space:id(),
+    diff_fun(),
+    fun((space_support_state:record()) -> boolean())
+) ->
+    {ok, record()} | {error, term()}.
+update_config_if_allowed(SpaceId, ConfigDiff, Condition) ->
+    ConfigDiffWithTimestampUpdate = diff_fun_with_timestamp_update(ConfigDiff),
+
+    SpaceSupportStateDiff = fun(SpaceSupportState = #space_support_state{
+        dir_stats_collector_config = Config
+    }) ->
+        case Condition(SpaceSupportState) of
+            true ->
+                case ConfigDiffWithTimestampUpdate(Config) of
+                    {ok, NewConfig} ->
+                        {ok, SpaceSupportState#space_support_state{
+                            dir_stats_collector_config = NewConfig
+                        }};
+                    {error, _} = Error ->
+                        Error
+                end;
+            false ->
+                ?ERROR_FORBIDDEN
+        end
+    end,
+
+    case space_support_state:update(SpaceId, SpaceSupportStateDiff) of
+        {ok, #document{value = #space_support_state{dir_stats_collector_config = Config}}} ->
+            {ok, Config};
+        {error, _} = Error ->
+            Error
+    end.
 
 
 -spec diff_fun_with_timestamp_update(diff_fun()) -> diff_fun().
@@ -432,17 +457,31 @@ run_initialization_traverse(SpaceId, Incarnation) ->
             ok;
         ?ERROR_INTERNAL_SERVER_ERROR ->
             Diff = fun
-                (#dir_stats_collector_config{collecting_status = collections_initialization} = Config) ->
-                    {ok, Config#dir_stats_collector_config{
-                        collecting_status = disabled,
-                        pending_status_transition = undefined
+                (SpaceSupportState = #space_support_state{
+                    dir_stats_collector_config = Config = #dir_stats_collector_config{
+                        collecting_status = collections_initialization
+                    }
+                }) ->
+                    {ok, SpaceSupportState#space_support_state{
+                        accounting_status = disabled,
+                        dir_stats_collector_config = Config#dir_stats_collector_config{
+                            collecting_status = disabled,
+                            pending_status_transition = undefined
+                        }
                     }};
-                (#dir_stats_collector_config{collecting_status = Status}) ->
+
+                (#space_support_state{dir_stats_collector_config = #dir_stats_collector_config{
+                    collecting_status = Status
+                }}) ->
                     {error, {wrong_status, Status}}
             end,
 
-            case update(SpaceId, Diff) of
-                {ok, #document{value = #dir_stats_collector_config{collecting_status = disabled}}} ->
+            case space_support_state:update(SpaceId, Diff) of
+                {ok, #document{value = #space_support_state{
+                    dir_stats_collector_config = #dir_stats_collector_config{
+                        collecting_status = disabled
+                    }
+                }}} ->
                     ok;
                 {error, {wrong_status, WrongStatus}} ->
                     ?warning("Reporting space ~p initialization traverse failure when space has status ~p",
