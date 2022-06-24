@@ -37,7 +37,7 @@ gen_key() ->
 %%--------------------------------------------------------------------
 -spec fslogic_ref_by_context_guid(file_id:file_guid()) -> module() | {id, module(), datastore:key()}.
 fslogic_ref_by_context_guid(ContextGuid) ->
-    case fslogic_uuid:is_space_dir_guid(ContextGuid) of
+    case fslogic_file_id:is_space_dir_guid(ContextGuid) of
         true -> fslogic_worker;
         _ -> {id, fslogic_worker, file_id:guid_to_uuid(ContextGuid)}
     end.

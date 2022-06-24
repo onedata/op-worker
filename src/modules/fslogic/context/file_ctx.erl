@@ -116,7 +116,7 @@
 %%--------------------------------------------------------------------
 -spec new_root_ctx() -> ctx().
 new_root_ctx() ->
-    new_by_guid(fslogic_uuid:root_dir_guid()).
+    new_by_guid(fslogic_file_id:root_dir_guid()).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -254,7 +254,7 @@ get_space_id_const(#file_ctx{space_id = SpaceId}) ->
 -spec get_space_dir_uuid_const(ctx()) -> file_meta:uuid().
 get_space_dir_uuid_const(FileCtx) ->
     SpaceId = get_space_id_const(FileCtx),
-    fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId).
+    fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -268,7 +268,7 @@ get_logical_guid_const(#file_ctx{guid = Guid}) ->
 -spec get_referenced_guid_const(ctx()) -> fslogic_worker:file_guid().
 get_referenced_guid_const(FileCtx) ->
     Uuid = get_logical_uuid_const(FileCtx),
-    case fslogic_uuid:ensure_referenced_uuid(Uuid) of
+    case fslogic_file_id:ensure_referenced_uuid(Uuid) of
         Uuid -> get_logical_guid_const(FileCtx);
         ReferencedUuid -> file_id:pack_guid(ReferencedUuid, get_space_id_const(FileCtx))
     end.
@@ -284,21 +284,21 @@ get_logical_uuid_const(#file_ctx{uuid = Uuid}) ->
 
 -spec get_referenced_uuid_const(ctx()) -> file_meta:uuid().
 get_referenced_uuid_const(FileCtx) ->
-    fslogic_uuid:ensure_referenced_uuid(get_logical_uuid_const(FileCtx)).
+    fslogic_file_id:ensure_referenced_uuid(get_logical_uuid_const(FileCtx)).
 
 -spec is_link_const(ctx()) -> boolean().
 is_link_const(FileCtx) ->
-    fslogic_uuid:is_link_uuid(get_logical_uuid_const(FileCtx)).
+    fslogic_file_id:is_link_uuid(get_logical_uuid_const(FileCtx)).
 
 %%--------------------------------------------------------------------
-%% @doc Creates new ctx if referenced uuid (see fslogic_uuid:ensure_referenced_uuid/1) is not
+%% @doc Creates new ctx if referenced uuid (see fslogic_file_id:ensure_referenced_uuid/1) is not
 %% equal to file uuid (ctx has been created for link and it is replaced with ctx of target file).
 %% @end
 %%--------------------------------------------------------------------
 -spec ensure_based_on_referenced_guid(ctx()) -> ctx().
 ensure_based_on_referenced_guid(FileCtx) ->
     Uuid = get_logical_uuid_const(FileCtx),
-    case fslogic_uuid:ensure_referenced_uuid(Uuid) of
+    case fslogic_file_id:ensure_referenced_uuid(Uuid) of
         Uuid -> FileCtx;
         ReferencedUuid -> new_by_uuid(ReferencedUuid, get_space_id_const(FileCtx))
     end.
@@ -355,7 +355,7 @@ get_logical_path(FileCtx, UserCtx) ->
 -spec get_file_doc(ctx()) -> {file_meta:doc(), ctx()}.
 get_file_doc(FileCtx = #file_ctx{file_doc = undefined}) ->
     Uuid = get_logical_uuid_const(FileCtx),
-    {ok, FileDoc} = case fslogic_uuid:is_share_root_dir_uuid(Uuid) of
+    {ok, FileDoc} = case fslogic_file_id:is_share_root_dir_uuid(Uuid) of
         true -> get_share_root_dir_doc(FileCtx, false);
         false -> file_meta:get({uuid, Uuid})
     end,
@@ -399,7 +399,7 @@ is_imported_storage(FileCtx = #file_ctx{is_imported_storage = ImportedStorage}) 
 -spec get_file_doc_including_deleted(ctx()) -> {file_meta:doc(), ctx()}.
 get_file_doc_including_deleted(FileCtx = #file_ctx{file_doc = undefined}) ->
     FileUuid = get_logical_uuid_const(FileCtx),
-    {ok, Doc} = case fslogic_uuid:is_share_root_dir_uuid(FileUuid) of
+    {ok, Doc} = case fslogic_file_id:is_share_root_dir_uuid(FileUuid) of
         true -> get_share_root_dir_doc(FileCtx, true);
         false -> file_meta:get_including_deleted(FileUuid)
     end,
@@ -422,7 +422,7 @@ get_file_doc_including_deleted(FileCtx = #file_ctx{file_doc = FileDoc}) ->
     {file_meta:doc(), ctx()} | {error, term()}.
 get_and_cache_file_doc_including_deleted(FileCtx = #file_ctx{file_doc = undefined}) ->
     FileUuid = get_logical_uuid_const(FileCtx),
-    Result = case fslogic_uuid:is_share_root_dir_uuid(FileUuid) of
+    Result = case fslogic_file_id:is_share_root_dir_uuid(FileUuid) of
         true -> get_share_root_dir_doc(FileCtx, true);
         false -> file_meta:get_including_deleted(FileUuid)
     end,
@@ -647,12 +647,12 @@ get_display_credentials(FileCtx = #file_ctx{display_credentials = DisplayCredent
 -spec get_times(ctx()) -> {times:times(), ctx()}.
 get_times(FileCtx = #file_ctx{times = undefined}) ->
     FileUuid = get_logical_uuid_const(FileCtx),
-    {ok, Times} = case fslogic_uuid:is_share_root_dir_uuid(FileUuid) of
+    {ok, Times} = case fslogic_file_id:is_share_root_dir_uuid(FileUuid) of
         true ->
             % Share root dir is virtual directory which does not have documents
             % like `file_meta` or `times` - in such case get times of share root
             % file
-            ShareId = fslogic_uuid:share_root_dir_uuid_to_shareid(FileUuid),
+            ShareId = fslogic_file_id:share_root_dir_uuid_to_shareid(FileUuid),
             {ok, #document{
                 value = #od_share{
                     root_file = RootFileShareGuid
@@ -1042,12 +1042,12 @@ is_file_ctx_const(_) ->
 
 -spec is_space_dir_const(ctx()) -> boolean().
 is_space_dir_const(#file_ctx{guid = Guid}) ->
-    fslogic_uuid:is_space_dir_guid(Guid).
+    fslogic_file_id:is_space_dir_guid(Guid).
 
 
 -spec is_trash_dir_const(ctx()) -> boolean().
 is_trash_dir_const(#file_ctx{guid = Guid}) ->
-    fslogic_uuid:is_trash_dir_guid(Guid).
+    fslogic_file_id:is_trash_dir_guid(Guid).
 
 
 -spec is_trash_dir_const(ctx(), file_meta:name()) -> boolean().
@@ -1058,17 +1058,17 @@ is_trash_dir_const(ParentCtx, Name) ->
 
 -spec is_share_root_dir_const(ctx()) -> boolean().
 is_share_root_dir_const(#file_ctx{guid = Guid}) ->
-    fslogic_uuid:is_share_root_dir_guid(Guid).
+    fslogic_file_id:is_share_root_dir_guid(Guid).
 
 
 -spec is_symlink_const(ctx()) -> boolean().
 is_symlink_const(FileCtx) ->
-    fslogic_uuid:is_symlink_uuid(get_logical_uuid_const(FileCtx)).
+    fslogic_file_id:is_symlink_uuid(get_logical_uuid_const(FileCtx)).
 
 
 -spec is_special_const(ctx()) -> boolean().
 is_special_const(#file_ctx{guid = Guid}) ->
-    fslogic_uuid:is_special_guid(Guid).
+    fslogic_file_id:is_special_guid(Guid).
 
 
 -spec assert_not_special_const(ctx()) -> ok.
@@ -1104,7 +1104,7 @@ is_user_root_dir_const(#file_ctx{canonical_path = <<"/">>}, _UserCtx) ->
     true;
 is_user_root_dir_const(#file_ctx{uuid = Uuid, canonical_path = undefined}, UserCtx) ->
     UserId = user_ctx:get_user_id(UserCtx),
-    UserRootDirUuid = fslogic_uuid:user_root_dir_uuid(UserId),
+    UserRootDirUuid = fslogic_file_id:user_root_dir_uuid(UserId),
     UserRootDirUuid == Uuid;
 is_user_root_dir_const(#file_ctx{}, _UserCtx) ->
     false.
@@ -1118,7 +1118,7 @@ is_user_root_dir_const(#file_ctx{}, _UserCtx) ->
 is_root_dir_const(#file_ctx{canonical_path = <<"/">>}) ->
     true;
 is_root_dir_const(#file_ctx{guid = Guid, canonical_path = undefined}) ->
-    fslogic_uuid:is_root_dir_guid(Guid);
+    fslogic_file_id:is_root_dir_guid(Guid);
 is_root_dir_const(#file_ctx{}) ->
     false.
 
@@ -1131,9 +1131,9 @@ is_root_dir_const(#file_ctx{}) ->
 file_exists_const(FileCtx = #file_ctx{file_doc = undefined}) ->
     FileUuid = get_logical_uuid_const(FileCtx),
 
-    case fslogic_uuid:is_share_root_dir_uuid(FileUuid) of
+    case fslogic_file_id:is_share_root_dir_uuid(FileUuid) of
         true ->
-            ShareId = fslogic_uuid:share_root_dir_uuid_to_shareid(FileUuid),
+            ShareId = fslogic_file_id:share_root_dir_uuid_to_shareid(FileUuid),
 
             case share_logic:get(?ROOT_SESS_ID, ShareId) of
                 {ok, _} -> true;

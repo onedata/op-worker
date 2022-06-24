@@ -238,8 +238,8 @@ all() ->
 harvest_space_doc_and_do_not_harvest_trash_doc(Config) ->
     [Worker, Worker2 | _] = ?config(op_worker_nodes, Config),
 
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_ID1),
-    TrashGuid = fslogic_uuid:spaceid_to_trash_dir_guid(?SPACE_ID1),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(?SPACE_ID1),
+    TrashGuid = fslogic_file_id:spaceid_to_trash_dir_guid(?SPACE_ID1),
     {ok, SpaceFileId} = file_id:guid_to_objectid(SpaceGuid),
     {ok, TrashFileId} = file_id:guid_to_objectid(TrashGuid),
 

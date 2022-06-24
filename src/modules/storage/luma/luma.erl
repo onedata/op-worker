@@ -224,7 +224,7 @@ map_to_display_credentials(OwnerId, SpaceId, undefined) ->
     {ok, luma_auto_feed:generate_posix_credentials(OwnerId, SpaceId)};
 map_to_display_credentials(OwnerId, SpaceId, Storage) ->
     try
-        case fslogic_uuid:is_space_owner(OwnerId) of
+        case fslogic_file_id:is_space_owner(OwnerId) of
             true -> map_space_owner_to_display_credentials(Storage, SpaceId);
             false -> map_normal_user_to_display_credentials(OwnerId, Storage, SpaceId)
         end
@@ -342,7 +342,7 @@ map_to_storage_credentials_internal(?ROOT_USER_ID, _SpaceId, Storage) ->
 map_to_storage_credentials_internal(UserId, SpaceId, Storage) ->
     try
         {ok, StorageData} = storage:get(Storage),
-        case fslogic_uuid:is_space_owner(UserId) of
+        case fslogic_file_id:is_space_owner(UserId) of
             true ->
                 map_space_owner_to_storage_credentials(StorageData, SpaceId);
             false ->
@@ -364,7 +364,7 @@ map_to_storage_credentials_internal(UserId, SpaceId, Storage) ->
 add_webdav_specific_fields(UserId, SessionId, StorageCredentials = #{
     <<"credentialsType">> := <<"oauth2">>
 }, Helper, LumaFeed) ->
-    {UserId2, SessionId2} = case fslogic_uuid:is_space_owner(UserId) of
+    {UserId2, SessionId2} = case fslogic_file_id:is_space_owner(UserId) of
         true ->
             % space owner uses helper admin_ctx
             {?ROOT_USER_ID, ?ROOT_SESS_ID};

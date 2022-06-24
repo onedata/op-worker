@@ -289,7 +289,7 @@ list_spaces(Config) ->
 
     % then
     ExpSpaces = lists:sort(lists:map(fun(SpaceId) ->
-        SpaceDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+        SpaceDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
         {ok, SpaceDirObjectId} = file_id:guid_to_objectid(SpaceDirGuid),
 
         #{
@@ -309,7 +309,7 @@ get_space(Config) ->
         rest_test_utils:request(WorkerP1, <<"spaces/space2">>, get, ?USER_1_AUTH_HEADERS(Config), [])),
 
     SpaceId = <<"space2">>,
-    SpaceDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     {ok, SpaceDirObjectId} = file_id:guid_to_objectid(SpaceDirGuid),
 
     % then

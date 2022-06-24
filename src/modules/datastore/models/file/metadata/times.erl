@@ -91,7 +91,7 @@ save(FileUuid, SpaceId, ATime, MTime, CTime) ->
 -spec save(doc()) -> {ok, doc()} | {error, term()}.
 save(#document{key = Key} = Doc) ->
     datastore_model:save(?CTX#{generated_key => true},
-        Doc#document{key = fslogic_uuid:ensure_referenced_uuid(Key)}).
+        Doc#document{key = fslogic_file_id:ensure_referenced_uuid(Key)}).
 
 -spec save_with_current_times(file_meta:uuid(), od_space:id()) -> {ok, time()} | {error, term()}.
 save_with_current_times(FileUuid, SpaceId) ->
@@ -110,7 +110,7 @@ save_with_current_times(FileUuid, SpaceId) ->
 -spec create_or_update(doc(), diff()) ->
     {ok, doc()} | {error, term()}.
 create_or_update(#document{key = Key, value = Default}, Diff) ->
-    datastore_model:update(?CTX, fslogic_uuid:ensure_referenced_uuid(Key), Diff, Default).
+    datastore_model:update(?CTX, fslogic_file_id:ensure_referenced_uuid(Key), Diff, Default).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -119,7 +119,7 @@ create_or_update(#document{key = Key, value = Default}, Diff) ->
 %%--------------------------------------------------------------------
 -spec get(key()) -> {ok, doc()} | {error, term()}.
 get(Uuid) ->
-    datastore_model:get(?CTX, fslogic_uuid:ensure_referenced_uuid(Uuid)).
+    datastore_model:get(?CTX, fslogic_file_id:ensure_referenced_uuid(Uuid)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -128,7 +128,7 @@ get(Uuid) ->
 %%--------------------------------------------------------------------
 -spec delete(key()) -> ok | {error, term()}.
 delete(FileUuid) ->
-    datastore_model:delete(?CTX, fslogic_uuid:ensure_referenced_uuid(FileUuid)).
+    datastore_model:delete(?CTX, fslogic_file_id:ensure_referenced_uuid(FileUuid)).
 
 
 %%%===================================================================

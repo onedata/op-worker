@@ -44,7 +44,7 @@ schedule_workflow_execution(
     AtmStoreInitialContentOverlay,
     CallbackUrl
 ) ->
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
 
     middleware_worker:check_exec(SessionId, SpaceGuid, #schedule_atm_workflow_execution{
         atm_workflow_schema_id = AtmWorkflowSchemaId,
@@ -93,4 +93,4 @@ atm_workflow_execution_id_to_space_guid(AtmWorkflowExecutionId) ->
     #atm_workflow_execution{space_id = SpaceId} = ?check(atm_workflow_execution_api:get(
         AtmWorkflowExecutionId
     )),
-    fslogic_uuid:spaceid_to_space_dir_guid(SpaceId).
+    fslogic_file_id:spaceid_to_space_dir_guid(SpaceId).

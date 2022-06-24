@@ -154,7 +154,7 @@ archive_dataset_attached_to_hardlink(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     SpaceId = oct_background:get_space_id(?SPACE),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     Size = 20,
     #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{
         content = ?RAND_CONTENT(Size)
@@ -313,7 +313,7 @@ iterate_over_100_archives_using_start_index_and_limit_10000(_Config) ->
 
 archive_dataset_attached_to_space_dir(_Config) ->
     SpaceId = oct_background:get_space_id(?SPACE),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     #dataset_object{id = DatasetId} = onenv_dataset_test_utils:set_up_and_sync_dataset(user1, SpaceGuid),
     simple_archive_crud_test_base(DatasetId, ?DIRECTORY_TYPE).
 

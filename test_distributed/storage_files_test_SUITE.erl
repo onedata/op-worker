@@ -1373,7 +1373,7 @@ clean_posix_storage_mountpoints(Worker, SpacesAndSupportingPosixStorageIds) ->
     end, SpacesAndSupportingPosixStorageIds).
 
 clean_posix_storage_mountpoint(Worker, SpaceId, StorageId) ->
-    SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
     ok = rpc:call(Worker, dir_location, delete, [SpaceUuid]),
     SDHandle = sd_test_utils:new_handle(Worker, SpaceId, <<"/">>, StorageId),
     sd_test_utils:recursive_rm(Worker, SDHandle, true),

@@ -73,7 +73,7 @@ all() -> ?ALL(?TEST_CASES).
     ?SPACE_ID4
 ]).
 
--define(SPACE_GUID(SpaceId), fslogic_uuid:spaceid_to_space_dir_guid(SpaceId)).
+-define(SPACE_GUID(SpaceId), fslogic_file_id:spaceid_to_space_dir_guid(SpaceId)).
 -define(SPACE_CTX(SpaceId), ?FILE_CTX(?SPACE_GUID(SpaceId))).
 -define(SPACE_STORAGE_CTX(Worker, SpaceId, IsImportedStorage), begin
     storage_file_ctx:new(space_storage_file_id(SpaceId, IsImportedStorage), SpaceId,

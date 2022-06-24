@@ -314,7 +314,7 @@ get_provider(Request, Manager) ->
 -spec get_provider(Request :: term(), session:id(), file_id:file_guid()) ->
     provider() | no_return().
 get_provider(_, SessId, FileGuid) ->
-    case fslogic_uuid:is_root_dir_guid(FileGuid) of
+    case fslogic_file_id:is_root_dir_guid(FileGuid) of
         true ->
             self;
         false ->

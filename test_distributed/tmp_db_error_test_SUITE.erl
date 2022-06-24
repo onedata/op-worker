@@ -43,7 +43,7 @@ db_error_test(Config) ->
     [User1 | _] = oct_background:get_provider_eff_users(krakow),
     SessId = oct_background:get_user_session_id(user1, krakow),
     [SpaceId | _] = oct_background:get_provider_supported_spaces(krakow),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
 
     % disable op_worker healthcheck in onepanel, so nodes are not started up automatically
     oct_environment:disable_panel_healthcheck(Config),

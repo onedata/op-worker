@@ -53,7 +53,7 @@ all() -> [
 
 archive_dataset_attached_to_space_dir(_Config) ->
     SpaceId = oct_background:get_space_id(?SPACE),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     #dataset_object{
         id = DatasetId,
         archives = [#archive_object{id = ArchiveId}]

@@ -171,7 +171,7 @@ assert_file_exists(#auth{session_id = SessionId}, FileGuid) ->
 has_access_to_file_space(?GUEST, _Guid) ->
     false;
 has_access_to_file_space(?USER(UserId) = Auth, Guid) ->
-    case fslogic_uuid:user_root_dir_guid(UserId) of
+    case fslogic_file_id:user_root_dir_guid(UserId) of
         Guid ->
             true;
         _ ->
@@ -191,7 +191,7 @@ has_access_to_file_space(?USER(UserId) = Auth, Guid) ->
     ok | no_return().
 assert_file_managed_locally(FileGuid) ->
     {FileUuid, SpaceId} = file_id:unpack_guid(FileGuid),
-    case fslogic_uuid:is_root_dir_uuid(FileUuid) of
+    case fslogic_file_id:is_root_dir_uuid(FileUuid) of
         true ->
             ok;
         false ->

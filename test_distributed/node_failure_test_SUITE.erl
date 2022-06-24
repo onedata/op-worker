@@ -95,7 +95,7 @@ test_base(Config, WorkerToKillP1, WorkerToKillP2) ->
     WorkersP1 = oct_background:get_provider_nodes(krakow),
     WorkersP2 = oct_background:get_provider_nodes(paris),
     [SpaceId | _] = oct_background:get_provider_supported_spaces(krakow),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     Attempts = 60,
 
     [WorkerToCheckP2] = WorkersP2 -- [WorkerToKillP2],

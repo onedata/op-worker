@@ -58,7 +58,7 @@ empty_references() ->
 -spec new_doc(file_meta:uuid(), file_meta:name(), file_meta:uuid(), od_space:id()) -> file_meta:doc().
 new_doc(FileUuid, FileName, ParentUuid, SpaceId) ->
     #document{
-        key = fslogic_uuid:gen_link_uuid(FileUuid),
+        key = fslogic_file_id:gen_link_uuid(FileUuid),
         value = #file_meta{
             name = FileName,
             type = ?LINK_TYPE,
@@ -118,7 +118,7 @@ count_references(Doc = #document{value = #file_meta{references = References}}) -
         false -> {ok, ReferencesCount + 1}
     end;
 count_references(Key) ->
-    case file_meta:get_including_deleted(fslogic_uuid:ensure_referenced_uuid(Key)) of
+    case file_meta:get_including_deleted(fslogic_file_id:ensure_referenced_uuid(Key)) of
         {ok, Doc} -> count_references(Doc);
         Other -> Other
     end.
@@ -141,7 +141,7 @@ list_references(Doc = #document{key = TargetKey, value = #file_meta{references =
         false -> {ok, [TargetKey | ReferencesList]}  
     end;
 list_references(Key) ->
-    case file_meta:get_including_deleted(fslogic_uuid:ensure_referenced_uuid(Key)) of
+    case file_meta:get_including_deleted(fslogic_file_id:ensure_referenced_uuid(Key)) of
         {ok, Doc} -> list_references(Doc);
         Other -> Other
     end.

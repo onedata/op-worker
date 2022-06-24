@@ -688,7 +688,7 @@ init_per_group(_Group, Config) ->
             DatasetInfo = #dataset_info{
                 id = DatasetId,
                 state = ?ATTACHED_DATASET,
-                root_file_guid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+                root_file_guid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
                 root_file_path = filename:join(["/", ?SPACE_KRK_PAR]),
                 root_file_type = ?DIRECTORY_TYPE,
                 creation_time = time_test_utils:get_frozen_time_seconds(),

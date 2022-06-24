@@ -55,7 +55,7 @@ get_routing_key(#file_attr_changed_event{file_attr = FileAttr}, RoutingCtx) ->
 get_routing_key(#file_location_changed_event{file_location = FileLocation}, _RoutingCtx) ->
     FileUuid = FileLocation#file_location.uuid,
     SpaceId = FileLocation#file_location.space_id,
-    {ok, References} = file_meta_hardlinks:list_references(fslogic_uuid:ensure_referenced_uuid(FileUuid)),
+    {ok, References} = file_meta_hardlinks:list_references(fslogic_file_id:ensure_referenced_uuid(FileUuid)),
     AdditionalKeys = lists:map(fun(Uuid) ->
         {{uuid, Uuid, SpaceId}, <<"file_location_changed.", Uuid/binary>>}
     end, References -- [FileUuid]),
@@ -68,7 +68,7 @@ get_routing_key(#file_location_changed_event{file_location = FileLocation}, _Rou
 get_routing_key(#file_perm_changed_event{file_guid = FileGuid}, _RoutingCtx) ->
     FileUuid = file_id:guid_to_uuid(FileGuid),
     SpaceId = file_id:guid_to_space_id(FileGuid),
-    {ok, References} = file_meta_hardlinks:list_references(fslogic_uuid:ensure_referenced_uuid(FileUuid)),
+    {ok, References} = file_meta_hardlinks:list_references(fslogic_file_id:ensure_referenced_uuid(FileUuid)),
     AdditionalKeys = lists:map(fun(Uuid) ->
         {{guid, file_id:pack_guid(Uuid, SpaceId)}, <<"file_perm_changed.", Uuid/binary>>}
     end, References -- [FileUuid]),

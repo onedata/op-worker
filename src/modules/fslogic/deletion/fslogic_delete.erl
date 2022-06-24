@@ -193,7 +193,7 @@ cleanup_opened_files() ->
             UserCtx = user_ctx:new(?ROOT_SESS_ID),
             lists:foreach(fun(#document{key = FileUuid} = Doc) ->
                 try
-                    FileGuid = fslogic_uuid:uuid_to_guid(FileUuid),
+                    FileGuid = fslogic_file_id:uuid_to_guid(FileUuid),
                     FileCtx = file_ctx:new_by_guid(FileGuid),
                     ok = remove_file(FileCtx, UserCtx, true, ?SPEC(?TWO_STEP_DEL_FIN, ?ALL_DOCS))
                 catch

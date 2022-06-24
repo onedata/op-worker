@@ -162,7 +162,7 @@ subscribe_on_user_root_test_base(Config, User, ExpectedAns) ->
 
     UserCtx = rpc:call(Worker1, user_ctx, new, [SessionId]),
     UserId = rpc:call(Worker1, user_ctx, get_user_id, [UserCtx]),
-    DirId = fslogic_uuid:user_root_dir_guid(UserId),
+    DirId = fslogic_file_id:user_root_dir_guid(UserId),
 
     {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
 
@@ -201,7 +201,7 @@ subscribe_on_new_space_test_base(Config, User, DomainUser, SpaceNum, ExpectedAns
 
     UserCtx = rpc:call(Worker1, user_ctx, new, [SessionId]),
     UserId = rpc:call(Worker1, user_ctx, get_user_id, [UserCtx]),
-    DirId = fslogic_uuid:user_root_dir_guid(UserId),
+    DirId = fslogic_file_id:user_root_dir_guid(UserId),
 
     {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
 

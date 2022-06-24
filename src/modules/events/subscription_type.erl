@@ -171,7 +171,7 @@ update_context(Object, _Ctx) ->
 -spec gen_routing_key_for_guid(binary(), fslogic_worker:file_guid()) -> subscription_manager:key().
 gen_routing_key_for_guid(Prefix, FileGuid) ->
     Uuid = file_id:guid_to_uuid(FileGuid),
-    case fslogic_uuid:is_user_root_dir_uuid(Uuid) of
+    case fslogic_file_id:is_user_root_dir_uuid(Uuid) of
         true ->
             % Change user's root uuid to main root dir uuid
             RootUuid = ?GLOBAL_ROOT_DIR_UUID,
