@@ -117,6 +117,7 @@ get(#op_req{gri = #gri{id = SpaceId, aspect = dir_size_stats_config}}, _) ->
         ?ERROR_DIR_STATS_DISABLED_FOR_SPACE -> {<<"disabled">>, undefined};
         ?ERROR_DIR_STATS_NOT_READY-> {<<"initializing">>, undefined}
     end,
+    %% TODO add accounting status
     {ok, value, maps_utils:remove_undefined(#{
         <<"statsCollectionStatus">> => Status,
         <<"since">> => Since

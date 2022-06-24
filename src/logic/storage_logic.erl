@@ -35,7 +35,7 @@
 -export([create_in_zone/4, create_in_zone/5, delete_in_zone/1]).
 -export([get/1, get_shared_data/2]).
 -export([force_fetch/1]).
--export([support_space/3]).
+-export([support_space/4]).
 -export([update_space_support_size/3]).
 -export([revoke_space_support/2]).
 -export([get_name_of_local_storage/1, get_name_of_remote_storage/2]).
@@ -134,9 +134,14 @@ force_fetch(StorageId) ->
     gs_client_worker:force_fetch_entity(#gri{type = od_storage, id = StorageId, aspect = instance}).
 
 
--spec support_space(storage:id(), tokens:serialized(), od_space:support_size()) ->
+-spec support_space(
+    storage:id(),
+    tokens:serialized(),
+    od_space:support_size(),
+    space_support_api:support_opts()
+) ->
     {ok, od_space:id()} | errors:error().
-support_space(StorageId, SpaceSupportToken, SupportSize) ->
+support_space(StorageId, SpaceSupportToken, SupportSize, SupportOpts) ->
     Data = #{<<"token">> => SpaceSupportToken, <<"size">> => SupportSize},
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
@@ -147,8 +152,8 @@ support_space(StorageId, SpaceSupportToken, SupportSize) ->
     ?ON_SUCCESS(?CREATE_RETURN_ID(Result), fun({ok, SpaceId}) ->
         provider_logic:force_fetch(),
         space_logic:force_fetch(SpaceId),
-        storage_logic:force_fetch(StorageId)
-%%        dir_stats_collector_config:init_for_empty_space(SpaceId)  %% TODO
+        storage_logic:force_fetch(StorageId),
+        space_support_api:init_support_state(SpaceId, SupportOpts)
     end).
 
 

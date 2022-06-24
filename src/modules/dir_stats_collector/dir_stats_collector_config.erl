@@ -243,6 +243,7 @@ disable(SpaceId) ->
             ok;
         ?ERROR_NOT_FOUND ->
             ?warning("Disabling space ~p without collector config document", [SpaceId])
+%%        ?ERROR_FORBIDDEN ->  %% TODO
     end.
 
 

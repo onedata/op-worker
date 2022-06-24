@@ -509,7 +509,7 @@ teardown(Config, SpaceId, CleanSpace) ->
     verify_collecting_status(Config, disabled),
 
     lists:foreach(fun(W) ->
-%%        ?assertEqual(ok, rpc:call(W, dir_stats_collector_config, clean, [SpaceId])),  %% TODO
+        ?assertEqual(ok, rpc:call(W, space_support_api, clean, [SpaceId])),
         delete_stats(W, SpaceGuid),
         lists:foreach(fun(Incarnation) ->
             % Clean traverse data (do not assert as not all tests use initialization traverses)
@@ -588,8 +588,7 @@ delete_stats(Worker, Guid) ->
 enable(Config, new_space) ->
     SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
     lists:foreach(fun(W) ->
-        ok
-%%        ?assertEqual(ok, rpc:call(W, dir_stats_collector_config, init_for_empty_space, [SpaceId]))  %% TODO
+        ?assertEqual(ok, rpc:call(W, space_support_api, init_support_state, [SpaceId, #{}]))
     end, initializer:get_different_domain_workers(Config));
 
 enable(Config, existing_space) ->

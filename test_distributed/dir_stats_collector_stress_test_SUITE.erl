@@ -130,7 +130,7 @@ init_per_testcase(stress_test = Case, Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, NewConfig),
     SpaceId = lfm_test_utils:get_user1_first_space_id(NewConfig),
     test_utils:set_env(Workers, op_worker, dir_stats_collecting_status_for_new_spaces, enabled),
-%%    ?assertEqual(ok, rpc:call(Worker, dir_stats_collector_config, init_for_empty_space, [SpaceId])),  %% TODO
+    ?assertEqual(ok, rpc:call(Worker, space_support_api, init_support_state, [SpaceId, #{}])),
     NewConfig;
 init_per_testcase(_Case, Config) ->
     Config.
