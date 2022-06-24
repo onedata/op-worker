@@ -112,14 +112,15 @@ get_response(#gri{aspect = archive_recall_progress}, ArchiveRecallProgress) ->
 
 
 %% @private
--spec translate_archive_recall_details(archive_recall:record()) -> map().
+-spec translate_archive_recall_details(archive_recall:record()) -> json_utils:json_map().
 translate_archive_recall_details(#archive_recall_details{
     archive_id = ArchiveId,
     dataset_id = DatasetId,
     start_timestamp = StartTimestamp,
     finish_timestamp = FinishTimestamp,
     total_file_count = TotalFileCount,
-    total_byte_size = TotalByteSize
+    total_byte_size = TotalByteSize,
+    last_error = LastError
 }) ->
     #{
         <<"archiveId">> => ArchiveId,
@@ -127,5 +128,9 @@ translate_archive_recall_details(#archive_recall_details{
         <<"startTime">> => utils:undefined_to_null(StartTimestamp),
         <<"finishTime">> => utils:undefined_to_null(FinishTimestamp),
         <<"totalFileCount">> => TotalFileCount,
-        <<"totalByteSize">> => TotalByteSize
+        <<"totalByteSize">> => TotalByteSize,
+        <<"lastError">> => case LastError of
+            undefined -> null;
+            _ -> json_utils:decode(LastError)
+        end
     }.
