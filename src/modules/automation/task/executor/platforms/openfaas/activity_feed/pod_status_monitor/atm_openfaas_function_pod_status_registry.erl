@@ -29,7 +29,7 @@
 -include("modules/datastore/datastore_runner.hrl").
 
 %% API
--export([ensure_for_function/1, get/1, delete/1]).
+-export([create_for_function/1, get/1, delete/1]).
 -export([to_json/1]).
 -export([find_summary/2, foreach_summary/2]).
 -export([browse_pod_event_log/2]).
@@ -64,9 +64,9 @@
 %%% API functions
 %%%===================================================================
 
--spec ensure_for_function(atm_openfaas_task_executor:function_name()) ->
+-spec create_for_function(atm_openfaas_task_executor:function_name()) ->
     {ok, id()} | {error, term()}.
-ensure_for_function(FunctionName) ->
+create_for_function(FunctionName) ->
     RegistryId = gen_registry_id(FunctionName),
     Doc = #document{
         key = RegistryId,
@@ -74,8 +74,6 @@ ensure_for_function(FunctionName) ->
     },
     case datastore_model:create(?CTX, Doc) of
         {ok, _} ->
-            {ok, RegistryId};
-        {error, already_exists} ->
             {ok, RegistryId};
         {error, _} = Error ->
             Error
@@ -98,7 +96,7 @@ delete(RegistryId) ->
 
     foreach_summary(fun(_PodId, PodStatusSummary) ->
         json_infinite_log_model:destroy(
-            PodStatusSummary#atm_openfaas_function_pod_status_summary.event_log
+            PodStatusSummary#atm_openfaas_function_pod_status_summary.event_log_id
         )
     end, PodStatusRegistry),
 
@@ -225,8 +223,8 @@ gen_pod_event_log_id(RegistryId, PodId) ->
 
 
 %% @private
--spec ensure_pod_event_log(infinite_log:log_id()) -> ok.
-ensure_pod_event_log(LogId) ->
+-spec ensure_pod_event_log_created(infinite_log:log_id()) -> ok.
+ensure_pod_event_log_created(LogId) ->
     case json_infinite_log_model:create(LogId, #{}) of
         ok -> ok;
         {error, already_exists} -> ok
@@ -256,7 +254,7 @@ consume_pod_status_report(#atm_openfaas_function_pod_status_report{
         ok ->
             ok;
         {error, not_found} ->
-            ensure_pod_event_log(PodEventLogId),
+            ensure_pod_event_log_created(PodEventLogId),
             ok = json_infinite_log_model:append(PodEventLogId, EventData)
     end.
 
@@ -279,7 +277,7 @@ apply_report_to_corresponding_summary(#atm_openfaas_function_pod_status_report{
         current_status = NewPodStatus,
         current_containers_readiness = ContainersReadiness,
         last_status_change_timestamp = EventTimestamp,
-        event_log = PodEventLogId
+        event_log_id = PodEventLogId
     },
     update_summary(PodId, fun(#atm_openfaas_function_pod_status_summary{
         current_status = PreviousPodStatus,

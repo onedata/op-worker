@@ -179,7 +179,7 @@ pod_status_monitor_lifecycle_test(_Config) ->
     ?assertEqual({error, not_found}, get_function_pod_status_registry(FunctionPodStatusRegistryId)),
 
     atm_openfaas_function_pod_status_registry:foreach_summary(fun(_PodId, #atm_openfaas_function_pod_status_summary{
-        event_log = PodEventLogId
+        event_log_id = PodEventLogId
     }) ->
         ?assertEqual(
             {error, not_found},
@@ -656,7 +656,7 @@ try_connect(result_streamer, BasicAuthorization) ->
 -spec create_function_pod_status_registry(atm_openfaas_task_executor:function_name()) ->
     {ok, atm_openfaas_function_pod_status_registry:id()} | {error, term()}.
 create_function_pod_status_registry(FunctionName) ->
-    ?rpc(atm_openfaas_function_pod_status_registry:ensure_for_function(FunctionName)).
+    ?rpc(atm_openfaas_function_pod_status_registry:create_for_function(FunctionName)).
 
 
 %% @private
@@ -749,7 +749,7 @@ verify_recorded_pod_status_changes(RegistryId, SubmittedReports) ->
 
     maps:foreach(fun(PodId, ExpectedReversedPodEventLogs) ->
         #atm_openfaas_function_pod_status_summary{
-            event_log = PodEventLogId
+            event_log_id = PodEventLogId
         } = get_pod_status_summary(RegistryId, PodId),
         ?assertEqual(
             {ok, #{

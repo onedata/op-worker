@@ -30,12 +30,14 @@
 -type id() :: binary().
 -type body() :: atm_openfaas_result_streamer_registration_report:record()
 | atm_openfaas_result_streamer_chunk_report:record()
+| atm_openfaas_result_streamer_invalid_data_report:record()
 | atm_openfaas_result_streamer_deregistration_report:record().
 
 -export_type([record/0, id/0, body/0]).
 
 -type type() :: atm_openfaas_result_streamer_registration_report
 | atm_openfaas_result_streamer_chunk_report
+| atm_openfaas_result_streamer_invalid_data_report
 | atm_openfaas_result_streamer_deregistration_report.
 
 

@@ -202,7 +202,8 @@ handle_text_message(Payload, #state{handler_module = HandlerModule, handler_stat
     catch Class:Reason:Stacktrace ->
         TrimmedPayload = case byte_size(Payload) > ?MAX_LOGGED_REQUEST_SIZE of
             true ->
-                binary:part(Payload, 0, ?MAX_LOGGED_REQUEST_SIZE);
+                Part = binary:part(Payload, 0, ?MAX_LOGGED_REQUEST_SIZE),
+                <<Part/binary, "... [truncated]">>;
             false ->
                 Payload
         end,

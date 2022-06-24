@@ -36,7 +36,7 @@
 -record(atm_openfaas_task_executor, {
     function_name :: function_name(),
     operation_spec :: atm_openfaas_operation_spec:record(),
-    pod_status_registry :: atm_openfaas_function_pod_status_registry:id()
+    pod_status_registry_id :: atm_openfaas_function_pod_status_registry:id()
 }).
 -type record() :: #atm_openfaas_task_executor{}.
 
@@ -91,7 +91,7 @@ assert_openfaas_available() ->
 
 
 -spec get_pod_status_registry_id(record()) -> atm_openfaas_function_pod_status_registry:id().
-get_pod_status_registry_id(#atm_openfaas_task_executor{pod_status_registry = PodStatusRegistryId}) ->
+get_pod_status_registry_id(#atm_openfaas_task_executor{pod_status_registry_id = PodStatusRegistryId}) ->
     PodStatusRegistryId.
 
 
@@ -111,12 +111,12 @@ create(AtmWorkflowExecutionCtx, _AtmLaneIndex, _AtmTaskSchema, AtmLambdaRevision
     assert_openfaas_available(),
 
     FunctionName = build_function_name(AtmWorkflowExecutionCtx, AtmLambdaRevision),
-    {ok, PodStatusRegistryId} = atm_openfaas_function_pod_status_registry:ensure_for_function(FunctionName),
+    {ok, PodStatusRegistryId} = atm_openfaas_function_pod_status_registry:create_for_function(FunctionName),
 
     #atm_openfaas_task_executor{
         function_name = FunctionName,
         operation_spec = AtmLambdaRevision#atm_lambda_revision.operation_spec,
-        pod_status_registry = PodStatusRegistryId
+        pod_status_registry_id = PodStatusRegistryId
     }.
 
 
@@ -152,7 +152,7 @@ teardown(AtmWorkflowExecutionCtx, AtmTaskExecutor) ->
 
 -spec delete(record()) -> ok | no_return().
 delete(#atm_openfaas_task_executor{
-    pod_status_registry = PodStatusRegistryId
+    pod_status_registry_id = PodStatusRegistryId
 }) ->
     ok = atm_openfaas_function_pod_status_registry:delete(PodStatusRegistryId).
 
@@ -185,7 +185,7 @@ version() ->
 db_encode(#atm_openfaas_task_executor{
     function_name = FunctionName,
     operation_spec = OperationSpec,
-    pod_status_registry = PodStatusRegistryId
+    pod_status_registry_id = PodStatusRegistryId
 }, NestedRecordEncoder) ->
     #{
         <<"functionName">> => FunctionName,
@@ -203,7 +203,7 @@ db_decode(#{
     #atm_openfaas_task_executor{
         function_name = FunctionName,
         operation_spec = NestedRecordDecoder(OperationSpecJson, atm_openfaas_operation_spec),
-        pod_status_registry = maps:get(<<"podStatusRegistryId">>, RecordJson, <<"unknown">>)
+        pod_status_registry_id = maps:get(<<"podStatusRegistryId">>, RecordJson, <<"unknown">>)
     }.
 
 

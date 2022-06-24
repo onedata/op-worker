@@ -33,10 +33,14 @@
     result_streamer_id :: atm_openfaas_result_streamer_registry:result_streamer_id()
 }).
 
--define(FINALIZATION_SIGNAL_JSON, jsonable_record:to_json(
+-define(FINALIZATION_SIGNAL_JSON(), jsonable_record:to_json(
     #atm_openfaas_result_streamer_finalization_signal{},
     atm_openfaas_result_streamer_push_message
 )).
+
+
+% NOTE: lager defaults to truncating messages at 4096 bytes
+-define(MAX_LOGGED_DATA_SIZE, 1024).
 
 
 %%%===================================================================
@@ -48,7 +52,7 @@
     atm_openfaas_activity_report:body(),
     atm_openfaas_activity_feed_ws_handler:handler_state()
 ) ->
-    {no_reply | {reply_json, json_utils:json_term()}, atm_openfaas_activity_feed_ws_handler:handler_state()}.
+    {{reply_json, json_utils:json_term()}, atm_openfaas_activity_feed_ws_handler:handler_state()}.
 consume_report(ConnRef, #atm_openfaas_result_streamer_report{
     id = ReportId,
     body = ReportBody
@@ -115,7 +119,7 @@ consume_result_streamer_report(ConnRef, ReportId, #atm_openfaas_result_streamer_
         stream_open ->
             ok;
         conclusion_ongoing ->
-            atm_openfaas_activity_feed_ws_connection:push_json_to_client(ConnRef, ?FINALIZATION_SIGNAL_JSON)
+            atm_openfaas_activity_feed_ws_connection:push_json_to_client(ConnRef, ?FINALIZATION_SIGNAL_JSON())
     end,
     #result_streamer_context{
         workflow_execution_id = WorkflowExecutionId,
@@ -136,7 +140,7 @@ consume_result_streamer_report(ConnRef, ReportId, #atm_openfaas_result_streamer_
         str_utils:format_bin(
             "Received invalid data for filePipe result with name '~s'.~n"
             "Base64 encoded data: ~s",
-            [ResultName, Base64EncodedData]
+            [ResultName, truncate_binary_for_logging(Base64EncodedData)]
         )
     ),
     handle_streamed_task_data(ConnRef, ReportId, Error, HandlerState),
@@ -176,8 +180,13 @@ handle_streamed_task_data(ConnRef, ReportId, StreamedTaskData, #result_streamer_
             % anyway conclude with failure, so no special handling of this situation is required
             ?warning(
                 "Ignoring a stale data from result streamer ~s for workflow execution ~s and task execution ~s~n"
-                "Data: ~p",
-                [ResultStreamerId, WorkflowExecutionId, TaskExecutionId, StreamedTaskData]
+                "Data: ~s",
+                [
+                    ResultStreamerId,
+                    WorkflowExecutionId,
+                    TaskExecutionId,
+                    truncate_binary_for_logging(str_utils:format_bin("~p", [StreamedTaskData]))
+                ]
             );
         duplicate ->
             ok;
@@ -203,9 +212,21 @@ conclude(WorkflowExecutionId, TaskExecutionId) ->
         all_streamers_deregistered ->
             success;
         {active_result_streamers, ConnRefs} ->
-            EncodedFinalizationSignalJson = ?FINALIZATION_SIGNAL_JSON,
+            EncodedFinalizationSignalJson = ?FINALIZATION_SIGNAL_JSON(),
             lists:foreach(fun(ConnRef) ->
                 atm_openfaas_activity_feed_ws_connection:push_json_to_client(ConnRef, EncodedFinalizationSignalJson)
             end, ConnRefs),
             atm_openfaas_result_streamer_registry:await_deregistration_of_all_streamers()
+    end.
+
+
+%% @private
+-spec truncate_binary_for_logging(binary()) -> binary().
+truncate_binary_for_logging(Data) ->
+    case byte_size(Data) > ?MAX_LOGGED_DATA_SIZE of
+        true ->
+            Part = binary:part(Data, 0, ?MAX_LOGGED_DATA_SIZE),
+            <<Part/binary, "... [truncated]">>;
+        false ->
+            Data
     end.

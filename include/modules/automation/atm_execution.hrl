@@ -117,7 +117,7 @@
     current_status :: atm_openfaas_function_pod_status_report:pod_status(),
     current_containers_readiness :: atm_openfaas_function_pod_status_report:containers_readiness(),
     last_status_change_timestamp :: atm_openfaas_function_pod_status_report:event_timestamp(),
-    event_log :: infinite_log:log_id()
+    event_log_id :: infinite_log:log_id()
 }).
 
 % Record carrying a generic result streamer report

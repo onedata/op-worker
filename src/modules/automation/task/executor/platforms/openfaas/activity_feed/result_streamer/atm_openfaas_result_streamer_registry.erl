@@ -8,6 +8,12 @@
 %%% @doc
 %%% In-memory registry of result streamers in the context of a specific task
 %%% execution within a specific workflow execution.
+%%% Keeps a history of already processed reports to avoid processing the same
+%%% report twice. A duplicated report can appear if a result streamer has
+%%% not seen the server's reportAck message due to a timeout, disconnection or
+%%% network error and sends the same report again to make sure it is processed.
+%%% Such duplicate is ignored by the server, but the reportAck is sent again so
+%%% that the streamer can recognize the report as processed.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_openfaas_result_streamer_registry).
@@ -37,6 +43,7 @@
 
 -record(streamer_state, {
     connection_ref :: atm_openfaas_activity_feed_ws_handler:connection_ref(),
+    % keeps records ids that were already processed to avoid processing the same report twice (duplicates)
     processed_reports = gb_sets:new() :: gb_sets:set(atm_openfaas_result_streamer_report:id())
 }).
 -type streamer_state() :: #streamer_state{}.
