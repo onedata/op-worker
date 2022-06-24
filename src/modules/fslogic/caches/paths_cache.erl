@@ -173,11 +173,11 @@ calculate_path_tokens_callback(PathType) ->
         },
         ParentValue, CalculationInfo
     ]) ->
-        case fslogic_uuid:is_root_dir_uuid(Uuid) of
+        case fslogic_file_id:is_root_dir_uuid(Uuid) of
             true ->
                 {ok, [<<"/">>], CalculationInfo};
             false ->
-                case fslogic_uuid:is_space_dir_uuid(Uuid) of
+                case fslogic_file_id:is_space_dir_uuid(Uuid) of
                     true ->
                         {ok, [<<"/">>, SpaceId], CalculationInfo};
                     false ->

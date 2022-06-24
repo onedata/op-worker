@@ -433,7 +433,7 @@ basic_data_types() -> [
 create_random_file_in_space_root_dir(ProviderSelector, AtmWorkflowExecutionAuth) ->
     SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
     SpaceId = atm_workflow_execution_auth:get_space_id(AtmWorkflowExecutionAuth),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
 
     case lists_utils:random_element([?REGULAR_FILE_TYPE, ?DIRECTORY_TYPE, ?SYMLINK_TYPE, ?LINK_TYPE]) of
         ?REGULAR_FILE_TYPE ->

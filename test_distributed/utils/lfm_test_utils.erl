@@ -44,7 +44,7 @@ get_user1_first_space_id(Config) ->
 
 
 get_user1_first_space_guid(Config) ->
-    fslogic_uuid:spaceid_to_space_dir_guid(get_user1_first_space_id(Config)).
+    fslogic_file_id:spaceid_to_space_dir_guid(get_user1_first_space_id(Config)).
 
 
 get_user1_first_space_name(Config) ->
@@ -126,18 +126,18 @@ clean_space(Workers, SpaceId, Attempts) ->
     clean_space(CleaningWorker, Workers2, SpaceId, Attempts).
 
 clean_space(CleaningWorker, AllWorkers, SpaceId, Attempts) ->
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     BatchSize = 1000,
     lists:foreach(fun(W) -> lfm_proxy:close_all(W) end, AllWorkers),
     rm_recursive(CleaningWorker, ?ROOT_SESS_ID, SpaceGuid, BatchSize, false),
     % TODO VFS-7064 remove below line after introducing link to trash directory
-    rm_recursive(CleaningWorker, ?ROOT_SESS_ID, fslogic_uuid:spaceid_to_trash_dir_guid(SpaceId), BatchSize, false),
+    rm_recursive(CleaningWorker, ?ROOT_SESS_ID, fslogic_file_id:spaceid_to_trash_dir_guid(SpaceId), BatchSize, false),
     ArchivesDirGuid = file_id:pack_guid(?ARCHIVES_ROOT_DIR_UUID(SpaceId), SpaceId),
     rm_recursive(CleaningWorker, ?ROOT_SESS_ID, ArchivesDirGuid, BatchSize, true),
     assert_space_and_trash_are_empty(AllWorkers, SpaceId, Attempts).
 
 assert_space_dir_empty(Workers, SpaceId, Attempts) ->
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     lists:foreach(fun(W) ->
         ?assertMatch({ok, []},
             % TODO VFS-7064 after introducing link to trash directory this function must be adapted
@@ -146,7 +146,7 @@ assert_space_dir_empty(Workers, SpaceId, Attempts) ->
 
 
 assert_space_and_trash_are_empty(Workers, SpaceId, Attempts) ->
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     lists:foreach(fun(W) ->
         case opw_test_rpc:supports_space(W, SpaceId) of
             true ->
@@ -154,7 +154,7 @@ assert_space_and_trash_are_empty(Workers, SpaceId, Attempts) ->
                     lfm_proxy:get_children(W, ?ROOT_SESS_ID, ?FILE_REF(SpaceGuid), 0, 100), Attempts),
                 % trash directory should be empty
                 ?assertMatch({ok, []},
-                    lfm_proxy:get_children(W, ?ROOT_SESS_ID, ?FILE_REF(fslogic_uuid:spaceid_to_trash_dir_guid(SpaceId)), 0, 100), Attempts);
+                    lfm_proxy:get_children(W, ?ROOT_SESS_ID, ?FILE_REF(fslogic_file_id:spaceid_to_trash_dir_guid(SpaceId)), 0, 100), Attempts);
                 % TODO VFS-7809 Check why sometimes after cleanup in tests, space capacity is not equal to 0
                 % ?assertEqual(0, opw_test_rpc:get_space_capacity_usage(W, SpaceId), Attempts);
             false ->

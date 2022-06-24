@@ -366,11 +366,11 @@ teardown_session(Worker, Config) ->
                     [dbsync_worker, <<"dbsync_in_stream", SpaceId/binary>>, SpaceId]),
                 rpc:call(Worker, internal_services_manager, stop_service,
                     [dbsync_worker, <<"dbsync_out_stream", SpaceId/binary>>, SpaceId]),
-                rpc:call(Worker, file_meta, delete, [fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)])
+                rpc:call(Worker, file_meta, delete, [fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId)])
             end, SpaceIds),
             Acc;
         ({{user_id, _}, UserId}, Acc) ->
-            rpc:call(Worker, file_meta, delete, [fslogic_uuid:user_root_dir_uuid(UserId)]),
+            rpc:call(Worker, file_meta, delete, [fslogic_file_id:user_root_dir_uuid(UserId)]),
             Acc;
         ({{fslogic_ctx, _}, _}, Acc) ->
             Acc;

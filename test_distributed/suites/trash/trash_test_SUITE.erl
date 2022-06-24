@@ -111,10 +111,10 @@ all() -> ?ALL([
 -define(SPACE_NAME2, oct_background:get_space_name(?SPACE2_PLACEHOLDER)).
 
 -define(SPACE_UUID, ?SPACE_UUID(?SPACE_ID1)).
--define(SPACE_UUID(SpaceId), fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)).
+-define(SPACE_UUID(SpaceId), fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId)).
 -define(SPACE_GUID, ?SPACE_GUID(?SPACE_ID1)).
--define(SPACE_GUID(SpaceId), fslogic_uuid:spaceid_to_space_dir_guid(SpaceId)).
--define(TRASH_DIR_GUID(SpaceId), fslogic_uuid:spaceid_to_trash_dir_guid(SpaceId)).
+-define(SPACE_GUID(SpaceId), fslogic_file_id:spaceid_to_space_dir_guid(SpaceId)).
+-define(TRASH_DIR_GUID(SpaceId), fslogic_file_id:spaceid_to_trash_dir_guid(SpaceId)).
 
 -define(ATTEMPTS, 300).
 -define(RAND_NAME(Prefix), <<Prefix/binary, (integer_to_binary(rand:uniform(1000)))/binary>>).

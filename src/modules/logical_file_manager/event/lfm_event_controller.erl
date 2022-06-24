@@ -37,7 +37,7 @@ flush_event_queue(SessionId, ProviderId, FileGuid) ->
             ok;
         false ->
             [Manager] = event:get_event_managers(SessionId),
-            RecvRef = event:flush(ProviderId, ensure_referenced_guid(FileGuid),
+            RecvRef = event:flush(ProviderId, fslogic_file_id:ensure_referenced_guid(FileGuid),
                 ?FILE_WRITTEN_SUB_ID, self(), Manager),
             receive_loop(RecvRef, Manager)
     end.
@@ -68,9 +68,3 @@ receive_loop(RecvRef, Manager) ->
                     {error, timeout}
             end
     end.
-
--spec ensure_referenced_guid(file_id:file_guid()) -> file_id:file_guid().
-ensure_referenced_guid(Guid) ->
-    {Uuid, SpaceId} = file_id:unpack_guid(Guid),
-    ReferencedUuid = fslogic_uuid:ensure_referenced_uuid(Uuid),
-    file_id:pack_guid(ReferencedUuid, SpaceId).

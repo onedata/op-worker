@@ -93,7 +93,7 @@ dbsync_trigger_should_not_create_local_file_location(Config) ->
     UserId = <<"user1">>,
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
     CTime = global_clock:timestamp_millis(),
-    SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+    SpaceDirUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
     FileMeta = #document{value = #file_meta{
         mode = 8#777,
         name = <<"file">>,
@@ -143,7 +143,7 @@ local_file_location_should_have_correct_uid_for_local_user(Config) ->
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     StorageDir = ?config({storage_dir, ?GET_DOMAIN(W1)}, Config),
     CTime = global_clock:timestamp_millis(),
-    SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+    SpaceDirUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
     FileMeta = #file_meta{
         mode = 8#777,
         name = <<"local_file_location_should_have_correct_uid_for_local_user">>,
@@ -208,7 +208,7 @@ local_file_location_should_be_chowned_when_missing_user_appears(Config) ->
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W1)}}, Config),
     StorageDir = ?config({storage_dir, ?GET_DOMAIN(W1)}, Config),
     CTime = global_clock:timestamp_millis(),
-    SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+    SpaceDirUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
     FileMeta = #file_meta{
         mode = 8#777,
         name = <<"local_file_location_should_be_chowned_when_missing_user_appears1">>,
@@ -1310,7 +1310,7 @@ bump_version(LocationDoc, N) when N > 0 ->
     bump_version(version_vector:bump_version(LocationDoc), N - 1).
 
 get_storage_file_id_by_uuid(Worker, FileUuid) ->
-    FileGuid = rpc:call(Worker, fslogic_uuid, uuid_to_guid, [FileUuid]),
+    FileGuid = rpc:call(Worker, fslogic_file_id, uuid_to_guid, [FileUuid]),
     FileCtx = rpc:call(Worker, file_ctx, new_by_guid, [FileGuid]),
     {StorageFileId, _} = rpc:call(Worker, file_ctx, get_storage_file_id, [FileCtx]),
     StorageFileId.

@@ -57,7 +57,7 @@ stop_pool() ->
 run(SpaceId, Incarnation) ->
     try
         Options = #{task_id => gen_task_id(SpaceId, Incarnation)},
-        FileCtx = file_ctx:new_by_guid(fslogic_uuid:spaceid_to_space_dir_guid(SpaceId)),
+        FileCtx = file_ctx:new_by_guid(fslogic_file_id:spaceid_to_space_dir_guid(SpaceId)),
         {ok, _} = tree_traverse:run(?MODULE, FileCtx, Options),
         ok
     catch
