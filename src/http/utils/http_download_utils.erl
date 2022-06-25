@@ -100,12 +100,12 @@ stream_file(SessionId, #file_attr{
                 Req0
             );
         Ranges ->
-            Req1 = ensure_content_type_header_set(FileName, Req0),
-
             case lfm:monitored_open(SessionId, {guid, FileGuid}, read) of
                 {ok, FileHandle} ->
                     try
                         ReadBlockSize = get_read_block_size(FileHandle),
+
+                        Req1 = set_response_headers(FileName, Req0),
 
                         stream_file_insecure(Ranges, #download_ctx{
                             file_size = FileSize,
@@ -121,12 +121,12 @@ stream_file(SessionId, #file_attr{
                                           "for user ~p - ~p:~p", [
                             FileGuid, UserId, Type, Reason
                         ]),
-                        http_req:send_error(Reason, Req1)
+                        http_req:send_error(Reason, Req0)
                     after
                         lfm:monitored_release(FileHandle)
                     end;
                 {error, Errno} ->
-                    http_req:send_error(?ERROR_POSIX(Errno), Req1)
+                    http_req:send_error(?ERROR_POSIX(Errno), Req0)
             end
     end.
 
@@ -160,6 +160,19 @@ stream_bytes_range(FileHandle, FileSize, Range, Req, EncodingFun, ReadBlockSize)
 -spec calculate_max_read_blocks_count(read_block_size()) -> non_neg_integer().
 calculate_max_read_blocks_count(ReadBlockSize) ->
     max(1, ?MAX_DOWNLOAD_BUFFER_SIZE div ReadBlockSize).
+
+
+%% @private
+-spec set_response_headers(file_meta:name(), cowboy_req:req()) -> cowboy_req:req().
+set_response_headers(FileName, Req0) ->
+    Req1 = ensure_content_type_header_set(FileName, Req0),
+    cowboy_req:set_resp_header(
+        <<"content-disposition">>,
+        <<"attachment; filename=\"", FileName/binary, "\"">>,
+        %% @todo VFS-2073 - check if needed
+        %% "filename*=UTF-8''", FileNameUrlEncoded/binary>>
+        Req1
+    ).
 
 
 %% @private
@@ -288,7 +301,7 @@ stream_bytes_range({From, To}, #download_ctx{
         {error, ?ENOSPC} ->
             % Translate POSIX error to something better understandable by user.
             throw(?ERROR_QUOTA_EXCEEDED);
-        Res -> 
+        Res ->
             ?check(Res)
     end,
 
