@@ -81,9 +81,9 @@
     on_deregister/0,
     get_op_worker_version/0,
     provider_logic_update/1,
-    support_space/3,
     support_space/4,
     get_space_support_opts/1,
+    update_space_support_opts/2,
     revoke_space_support/1,
     get_spaces/0,
     supports_space/1,
@@ -444,12 +444,6 @@ provider_logic_update(Data) ->
     provider_logic:update(Data).
 
 
--spec support_space(storage:id(), tokens:serialized(), SupportSize :: integer()) ->
-    {ok, od_space:id()} | errors:error().
-support_space(StorageId, Token, SupportSize) ->
-    support_space(StorageId, Token, SupportSize, #{}).
-
-
 -spec support_space(
     storage:id(),
     tokens:serialized(),
@@ -465,6 +459,12 @@ support_space(StorageId, Token, SupportSize, SupportOpts) ->
     {ok, space_support_api:support_opts()} | errors:error().
 get_space_support_opts(SpaceId) ->
     space_support_api:get_support_opts(SpaceId).
+
+
+-spec update_space_support_opts(od_space:id(), space_support_api:support_opts_diff()) ->
+    ok | errors:error().
+update_space_support_opts(SpaceId, SupportOptsDiff) ->
+    space_support_api:update_support_opts(SpaceId, SupportOptsDiff).
 
 
 -spec revoke_space_support(od_space:id()) -> ok | {error, term()}.

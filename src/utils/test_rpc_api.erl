@@ -160,9 +160,13 @@ supports_space(SpaceId) ->
     provider_logic:supports_space(SpaceId).
 
 
--spec support_space(storage:id(), tokens:serialized(), SupportSize :: integer()) -> {ok, od_space:id()} | errors:error().
+-spec support_space(storage:id(), tokens:serialized(), SupportSize :: integer()) ->
+    {ok, od_space:id()} | errors:error().
 support_space(StorageId, Token, SupportSize) ->
-    rpc_api:support_space(StorageId, Token, SupportSize).
+    rpc_api:support_space(StorageId, Token, SupportSize, #{
+        accounting_enabled => false,
+        dir_stats_enabled => false
+    }).
 
 
 -spec revoke_space_support(od_space:id()) -> ok | {error, term()}.

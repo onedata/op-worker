@@ -207,7 +207,7 @@ enable(SpaceId) ->
     end.
 
 
--spec disable(od_space:id()) -> ok.
+-spec disable(od_space:id()) -> ok | errors:error().
 disable(SpaceId) ->
     ConfigDiff = fun
         (#dir_stats_collector_config{
@@ -249,8 +249,9 @@ disable(SpaceId) ->
         {error, no_action_needed} ->
             ok;
         ?ERROR_NOT_FOUND ->
-            ?warning("Disabling space ~p without collector config document", [SpaceId])
-%%        ?ERROR_FORBIDDEN ->  %% TODO
+            ?warning("Disabling space ~p without collector config document", [SpaceId]);
+        ?ERROR_FORBIDDEN ->
+            ?ERROR_FORBIDDEN
     end.
 
 
