@@ -253,7 +253,10 @@ resupport_cleanup_test(Config) ->
     }, <<"secret">>, [])),
     
     % force cleanup by adding new support when remnants of previous one still exist
-    {ok, _} = rpc:call(Node, storage, support_space, [StorageId, Token, 10]),
+    {ok, _} = rpc:call(Node, storage, support_space, [StorageId, Token, 10, #{
+        accounting_enabled => false,
+        dir_stats_enabled => false
+    }]),
     
     ?assertEqual({error, not_found}, rpc:call(Node, storage_import_config, get, [SpaceId])),
     ?assertEqual({error, not_found}, rpc:call(Node, storage_import_monitoring, get, [SpaceId])),
@@ -285,7 +288,7 @@ init_per_testcase(resupport_cleanup_test, Config) ->
         StorageId = ?config({storage_id, ?GET_DOMAIN(Node)}, Config1),
         test_utils:mock_expect(Node, space_logic, get_local_supporting_storage, fun(_) -> {ok, StorageId} end)
     end, Nodes),
-    test_utils:mock_expect(Nodes, storage_logic, support_space, fun(_, _, _) ->  {ok, <<"space1">>} end),
+    test_utils:mock_expect(Nodes, storage_logic, support_space, fun(_, _, _, _) ->  {ok, <<"space1">>} end),
     test_utils:mock_expect(Nodes, storage_logic, is_imported, fun(_) ->  {ok, true} end),
     Config1;
 init_per_testcase(_, Config) ->

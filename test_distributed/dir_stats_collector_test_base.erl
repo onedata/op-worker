@@ -56,14 +56,15 @@
 
 basic_test(Config) ->
     % TODO VFS-8835 - test rename
-    enable(Config, new_space),
+    enable(Config),
+    verify_collecting_status(Config, enabled),
     create_initial_file_tree_and_fill_files(Config, op_worker_nodes, enabled),
     check_initial_dir_stats(Config, op_worker_nodes),
     check_update_times(Config, [op_worker_nodes]).
 
 
 multiprovider_test(Config) ->
-    enable(Config, new_space),
+    enable(Config),
     SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(lfm_test_utils:get_user1_first_space_id(Config)),
 
     create_initial_file_tree_and_fill_files(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR, enabled),
@@ -119,7 +120,7 @@ multiprovider_test(Config) ->
 
 
 enabling_for_empty_space_test(Config) ->
-    enable(Config, existing_space),
+    enable(Config),
     verify_collecting_status(Config, enabled),
     create_initial_file_tree_and_fill_files(Config, op_worker_nodes, initializing),
     check_initial_dir_stats(Config, op_worker_nodes),
@@ -128,7 +129,7 @@ enabling_for_empty_space_test(Config) ->
 
 enabling_for_not_empty_space_test(Config) ->
     create_initial_file_tree_and_fill_files(Config, op_worker_nodes, disabled),
-    enable(Config, existing_space),
+    enable(Config),
     verify_collecting_status(Config, enabled),
     check_initial_dir_stats(Config, op_worker_nodes),
     check_update_times(Config, [op_worker_nodes]).
@@ -141,7 +142,7 @@ enabling_large_dirs_test(Config) ->
     Structure = [{3, 2000}, {3, 300}],
     lfm_test_utils:create_files_tree(Worker, SessId, Structure, SpaceGuid),
 
-    enable(Config, existing_space),
+    enable(Config),
     verify_collecting_status(Config, enabled),
 
     check_dir_stats(Config, op_worker_nodes, SpaceGuid, #{
@@ -154,7 +155,7 @@ enabling_large_dirs_test(Config) ->
 
 enabling_during_writing_test(Config) ->
     create_initial_file_tree(Config, op_worker_nodes, disabled),
-    enable(Config, existing_space),
+    enable(Config),
     fill_files(Config, op_worker_nodes),
     check_initial_dir_stats(Config, op_worker_nodes),
     check_update_times(Config, [op_worker_nodes]).
@@ -253,7 +254,7 @@ test_with_race_base(Config, TestDirIdentifier, OnSpaceChildrenListed, ExpectedSp
     TestDirUuid = file_id:guid_to_uuid(TestDirGuid),
 
     Tag = mock_file_listing(Config, TestDirUuid, 1000),
-    enable(Config, existing_space),
+    enable(Config),
     execute_file_listing_hook(Tag, OnSpaceChildrenListed),
 
     check_dir_stats(Config, op_worker_nodes, SpaceGuid, ExpectedSpaceStats),
@@ -268,7 +269,7 @@ race_with_file_adding_to_large_dir_test(Config) ->
     lfm_test_utils:create_files_tree(Worker, SessId, Structure, SpaceGuid),
 
     Tag = mock_file_listing(Config, file_id:guid_to_uuid(SpaceGuid), 10),
-    enable(Config, existing_space),
+    enable(Config),
     OnSpaceChildrenListed = fun() ->
         lfm_test_utils:create_and_write_file(Worker, SessId, SpaceGuid, <<"test_raced_file">>, 0, {rand_content, 10})
     end,
@@ -286,9 +287,9 @@ race_with_file_adding_to_large_dir_test(Config) ->
 multiple_status_change_test(Config) ->
     create_initial_file_tree_and_fill_files(Config, op_worker_nodes, disabled),
 
-    enable(Config, existing_space),
-    enable(Config, existing_space),
-    enable(Config, existing_space),
+    enable(Config),
+    enable(Config),
+    enable(Config),
     verify_collecting_status(Config, enabled),
 
     disable(Config),
@@ -302,23 +303,23 @@ multiple_status_change_test(Config) ->
         Worker, dir_stats_collector_config, get_collecting_status_change_timestamps, [SpaceId]),
     StatusChanges = lists:map(
         fun({StatusChangeDescription, _Timestamp}) -> StatusChangeDescription end, StatusChangesWithTimestamps),
-    ExpectedStatusChanges = [disabled, collectors_stopping, enabled],
+    ExpectedStatusChanges = [disabled, collectors_stopping, enabled, collections_initialization],
     ?assertEqual(ExpectedStatusChanges, StatusChanges),
 
-    enable(Config, existing_space),
+    enable(Config),
     disable(Config),
     verify_collecting_status(Config, disabled),
 
-    enable(Config, existing_space),
+    enable(Config),
     disable(Config),
-    enable(Config, existing_space),
+    enable(Config),
     disable(Config),
-    enable(Config, existing_space),
-    enable(Config, existing_space),
+    enable(Config),
+    enable(Config),
     verify_collecting_status(Config, enabled),
 
     disable(Config),
-    enable(Config, existing_space),
+    enable(Config),
     verify_collecting_status(Config, enabled),
 
     check_initial_dir_stats(Config, op_worker_nodes),
@@ -331,10 +332,10 @@ multiple_status_change_test(Config) ->
     ?assertEqual(EnablingTime, EnablingTime2),
 
     disable(Config),
-    enable(Config, existing_space),
+    enable(Config),
     disable(Config),
     disable(Config),
-    enable(Config, existing_space),
+    enable(Config),
     disable(Config),
     verify_collecting_status(Config, disabled),
 
@@ -352,7 +353,7 @@ multiple_status_change_test(Config) ->
 
 adding_file_when_disabled_test(Config) ->
     create_initial_file_tree_and_fill_files(Config, op_worker_nodes, disabled),
-    enable(Config, existing_space),
+    enable(Config),
     verify_collecting_status(Config, enabled),
     check_initial_dir_stats(Config, op_worker_nodes),
 
@@ -363,7 +364,7 @@ adding_file_when_disabled_test(Config) ->
     SpaceGuid = lfm_test_utils:get_user1_first_space_guid(Config),
     lfm_test_utils:create_and_write_file(Worker, SessId, SpaceGuid, <<"test_file">>, 0, {rand_content, 10}),
 
-    enable(Config, existing_space),
+    enable(Config),
     verify_collecting_status(Config, enabled),
     check_dir_stats(Config, op_worker_nodes, SpaceGuid, #{
         ?REG_FILE_AND_LINK_COUNT => 364,
@@ -375,14 +376,14 @@ adding_file_when_disabled_test(Config) ->
 
 
 restart_test(Config) ->
-    enable(Config, new_space),
+    enable(Config),
 
     reset_restart_hooks(Config),
     hang_collectors_stopping(Config),
     execute_restart_hooks(Config),
     verify_collecting_status(Config, disabled),
 
-    enable(Config, existing_space),
+    enable(Config),
     verify_collecting_status(Config, enabled),
 
     hang_collectors_stopping(Config),
@@ -395,7 +396,7 @@ restart_test(Config) ->
 
 
 parallel_write_test(Config, SleepOnWrite, InitialFileSize, OverrideInitialBytes) ->
-    enable(Config, new_space),
+    enable(Config),
     [Worker | _] = ?config(?PROVIDER_CREATING_FILES_NODES_SELECTOR, Config),
     [WorkerProvider2 | _] = ?config(?PROVIDER_DELETING_FILES_NODES_SELECTOR, Config),
     SessId = lfm_test_utils:get_user1_session_id(Config, Worker),
@@ -480,20 +481,23 @@ parallel_write_test(Config, SleepOnWrite, InitialFileSize, OverrideInitialBytes)
 
 init(Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
-    {ok, DirStatsCollectingStatusForNewSpaces} =
-        test_utils:get_env(Worker, op_worker, dir_stats_collecting_status_for_new_spaces),
-    test_utils:set_env(Workers, op_worker, dir_stats_collecting_status_for_new_spaces, enabled),
-
     {ok, MinimalSyncRequest} = test_utils:get_env(Worker, op_worker, minimal_sync_request),
     test_utils:set_env(Workers, op_worker, minimal_sync_request, 1),
 
-    [{default_dir_stats_collecting_status_for_new_spaces, DirStatsCollectingStatusForNewSpaces},
-        {default_minimal_sync_request, MinimalSyncRequest} | Config].
+    SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
+    lists:foreach(fun(W) ->
+        rpc:call(W, space_support_api, init_support_state, [SpaceId, #{
+            accounting_enabled => false,
+            dir_stats_enabled => false
+        }])
+    end, Workers),
+
+    [{default_minimal_sync_request, MinimalSyncRequest} | Config].
 
 
 init_and_enable_for_new_space(Config) ->
     UpdatedConfig = init(Config),
-    enable(UpdatedConfig, new_space),
+    enable(UpdatedConfig),
     UpdatedConfig.
 
 
@@ -509,7 +513,7 @@ teardown(Config, SpaceId, CleanSpace) ->
     verify_collecting_status(Config, disabled),
 
     lists:foreach(fun(W) ->
-        ?assertEqual(ok, rpc:call(W, space_support_api, clean, [SpaceId])),
+        ?assertEqual(ok, rpc:call(W, space_support_api, clean_support_state, [SpaceId])),
         delete_stats(W, SpaceGuid),
         lists:foreach(fun(Incarnation) ->
             % Clean traverse data (do not assert as not all tests use initialization traverses)
@@ -524,10 +528,6 @@ teardown(Config, SpaceId, CleanSpace) ->
         true -> lfm_test_utils:clean_space(Workers, SpaceId, 30);
         false -> ok
     end,
-
-    DirStatsCollectingStatusForNewSpaces = ?config(default_dir_stats_collecting_status_for_new_spaces, Config),
-    test_utils:set_env(
-        Workers, op_worker, dir_stats_collecting_status_for_new_spaces, DirStatsCollectingStatusForNewSpaces),
 
     MinimalSyncRequest = ?config(default_minimal_sync_request, Config),
     test_utils:set_env(Workers, op_worker, minimal_sync_request, MinimalSyncRequest),
@@ -585,13 +585,7 @@ delete_stats(Worker, Guid) ->
     ?assertEqual(ok, rpc:call(Worker, dir_update_time_stats, delete_stats, [Guid])).
 
 
-enable(Config, new_space) ->
-    SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
-    lists:foreach(fun(W) ->
-        ?assertEqual(ok, rpc:call(W, space_support_api, init_support_state, [SpaceId, #{}]))
-    end, initializer:get_different_domain_workers(Config));
-
-enable(Config, existing_space) ->
+enable(Config) ->
     SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
     lists:foreach(fun(W) ->
         ?assertEqual(ok, rpc:call(W, dir_stats_collector_config, enable, [SpaceId]))

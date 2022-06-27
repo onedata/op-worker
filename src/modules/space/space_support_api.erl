@@ -36,12 +36,6 @@
 -export_type([support_opts/0, support_opts_diff/0]).
 
 
-%% TODO rm
--define(DEFAULT_DIR_STATS_COLLECTING_STATUS(), op_worker:get_env(
-    dir_stats_collecting_status_for_new_spaces, disabled
-)).
-
-
 %%%===================================================================
 %%% API
 %%%===================================================================
