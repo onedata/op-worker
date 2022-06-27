@@ -83,6 +83,7 @@
     provider_logic_update/1,
     support_space/3,
     support_space/4,
+    get_space_support_opts/1,
     revoke_space_support/1,
     get_spaces/0,
     supports_space/1,
@@ -458,6 +459,12 @@ support_space(StorageId, Token, SupportSize) ->
     {ok, od_space:id()} | errors:error().
 support_space(StorageId, Token, SupportSize, SupportOpts) ->
     storage:support_space(StorageId, Token, SupportSize, SupportOpts).
+
+
+-spec get_space_support_opts(od_space:id()) ->
+    {ok, space_support_api:support_opts()} | errors:error().
+get_space_support_opts(SpaceId) ->
+    space_support_api:get_support_opts(SpaceId).
 
 
 -spec revoke_space_support(od_space:id()) -> ok | {error, term()}.

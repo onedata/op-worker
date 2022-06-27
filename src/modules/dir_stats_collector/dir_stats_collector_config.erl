@@ -103,25 +103,32 @@
 %%% API - getters
 %%%===================================================================
 
--spec is_collecting_active(od_space:id()) -> boolean().
-is_collecting_active(SpaceId) ->
-    case get_extended_collecting_status(SpaceId) of
+-spec is_collecting_active(od_space:id() | record()) -> boolean().
+is_collecting_active(SpaceIdOrConfig) ->
+    case get_extended_collecting_status(SpaceIdOrConfig) of
         enabled -> true;
         {collections_initialization, _} -> true;
         _ -> false
     end.
 
 
--spec get_extended_collecting_status(od_space:id()) -> extended_collecting_status().
+-spec get_extended_collecting_status(od_space:id() | record()) ->
+    extended_collecting_status().
+get_extended_collecting_status(#dir_stats_collector_config{
+    collecting_status = collections_initialization,
+    incarnation = Incarnation
+}) ->
+    {collections_initialization, Incarnation};
+
+get_extended_collecting_status(#dir_stats_collector_config{
+    collecting_status = Status
+}) ->
+    Status;
+
 get_extended_collecting_status(SpaceId) ->
     case get_config(SpaceId) of
-        {ok, #dir_stats_collector_config{
-            collecting_status = collections_initialization,
-            incarnation = Incarnation
-        }} ->
-            {collections_initialization, Incarnation};
-        {ok, #dir_stats_collector_config{collecting_status = Status}} ->
-            Status;
+        {ok, Config} ->
+            get_extended_collecting_status(Config);
         ?ERROR_NOT_FOUND ->
             disabled
     end.

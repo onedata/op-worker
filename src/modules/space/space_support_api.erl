@@ -17,7 +17,11 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([init_support_state/2, clean_support_state/1]).
+-export([
+    init_support_state/2,
+    get_support_opts/1,
+    clean_support_state/1
+]).
 
 -type support_opts() :: #{
     accounting_enabled := boolean(),
@@ -61,6 +65,27 @@ init_support_state(SpaceId, SupportOpts = #{
         }
     }),
     ok.
+
+
+-spec get_support_opts(od_space:id()) -> {ok, support_opts()} | errors:error().
+get_support_opts(SpaceId) ->
+    case space_support_state:get(SpaceId) of
+        {ok, #document{value = #space_support_state{
+            accounting_status = AccountingStatus,
+            dir_stats_collector_config = DirStatsCollectorConfig
+        }}} ->
+            {ok, #{
+                accounting_enabled => case AccountingStatus of
+                    enabled -> true;
+                    disabled -> false
+                end,
+                dir_stats_enabled => dir_stats_collector_config:is_collecting_active(
+                    DirStatsCollectorConfig
+                )
+            }};
+        {error, not_found} ->
+            ?ERROR_NOT_FOUND
+    end.
 
 
 -spec clean_support_state(od_space:id()) -> ok.
