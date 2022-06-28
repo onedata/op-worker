@@ -30,7 +30,8 @@
 ]).
 -export([
     upgrade_from_20_02_1_space_strategies/1,
-    upgrade_from_20_02_1_storage_sync_monitoring/1
+    upgrade_from_20_02_1_storage_sync_monitoring/1,
+    upgrade_from_20_02_1_space_support_state/1
 ]).
 
 -define(SPACE1_ID, <<"space_id1">>).
@@ -364,6 +365,37 @@ upgrade_from_20_02_1_storage_sync_monitoring(Config) ->
     ?assertMatch({ok, SIMDoc3}, rpc:call(Worker, storage_import_monitoring, get, [SpaceId3])),
     ?assertMatch({ok, SIMDoc4}, rpc:call(Worker, storage_import_monitoring, get, [SpaceId4])),
     ?assertMatch({ok, SIMDoc5}, rpc:call(Worker, storage_import_monitoring, get, [SpaceId5])).
+
+
+upgrade_from_20_02_1_space_support_state(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SpaceSupportStateCtx = space_support_state:get_ctx(),
+
+    BuildExpSpaceSupportState = fun(SpaceId) ->
+        #document{
+            key = SpaceId,
+            value = #space_support_state{
+                accounting_status = disabled,
+                dir_stats_collector_config = #dir_stats_collector_config{collecting_status = disabled}
+            }
+        }
+    end,
+    SupportedSpaceIds = [
+        <<"space_id1">>, <<"space_id2">>, <<"space_id3">>, <<"space_id4">>, <<"space_id5">>
+    ],
+
+    % space_support_state should not exist before upgrade
+    lists:foreach(fun(SpaceId) ->
+        ?assertEqual({error, not_found}, get_doc(Worker, SpaceSupportStateCtx, SpaceId))
+    end, SupportedSpaceIds),
+
+    ?assertEqual({ok, 4}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [3])),
+
+    % space_support_state should be created for all supported spaces during upgrade
+    lists:foreach(fun(SpaceId) ->
+        ExpSpaceSupportState = BuildExpSpaceSupportState(SpaceId),
+        ?assertEqual({ok, ExpSpaceSupportState}, get_doc(Worker, SpaceSupportStateCtx, SpaceId))
+    end, SupportedSpaceIds).
 
 %%%===================================================================
 %%% Setup/teardown functions

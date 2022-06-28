@@ -17,6 +17,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
+-export([init_for_supported_spaces/0]).
 -export([
     init_support_state/2,
     get_support_opts/1,
@@ -39,6 +40,18 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+-spec init_for_supported_spaces() -> ok.
+init_for_supported_spaces() ->
+    {ok, SupportedSpaceIds} = provider_logic:get_spaces(),
+
+    lists:foreach(fun(SpaceId) ->
+        init_support_state(SpaceId, #{
+            accounting_enabled => false,
+            dir_stats_enabled => false
+        })
+    end, SupportedSpaceIds).
 
 
 -spec init_support_state(od_space:id(), support_opts()) -> ok.
