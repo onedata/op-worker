@@ -65,6 +65,9 @@
 
 -define(AWAIT_DEREGISTRATION_TIMEOUT, timer:seconds(60)).
 
+% This limit is imposed "just in case", to avoid too large memory consumption,
+% but in general streamers are not expected to submit this many reports.
+-define(PROCESSED_REPORT_HISTORY_SIZE_LIMIT, 5000000).
 
 %%%===================================================================
 %%% API functions
@@ -151,13 +154,19 @@ qualify_chunk_report(WorkflowExecutionId, TaskExecutionId, ResultStreamerId, Con
 mark_chunk_report_processed(WorkflowExecutionId, TaskExecutionId, ResultStreamerId, ReportId) ->
     Diff = fun(Registry = #atm_openfaas_result_streamer_registry{streamer_states = StreamerStates}) ->
         PreviousState = maps:get(ResultStreamerId, StreamerStates),
-        {ok, Registry#atm_openfaas_result_streamer_registry{
-            streamer_states = StreamerStates#{
-                ResultStreamerId => PreviousState#streamer_state{
-                    processed_reports = gb_sets:add_element(ReportId, PreviousState#streamer_state.processed_reports)
-                }
-            }
-        }}
+        PreviousProcessedReports = PreviousState#streamer_state.processed_reports,
+        case gb_sets:size(PreviousProcessedReports) >= ?PROCESSED_REPORT_HISTORY_SIZE_LIMIT of
+            true ->
+                {error, processed_report_history_too_large};
+            false ->
+                {ok, Registry#atm_openfaas_result_streamer_registry{
+                    streamer_states = StreamerStates#{
+                        ResultStreamerId => PreviousState#streamer_state{
+                            processed_reports = gb_sets:add_element(ReportId, PreviousProcessedReports)
+                        }
+                    }
+                }}
+        end
     end,
     ?extract_ok(datastore_model:update(?CTX, ?id(WorkflowExecutionId, TaskExecutionId), Diff)).
 
