@@ -476,7 +476,7 @@
     cancel_timestamp = undefined :: undefined | time:millis(),
     total_file_count :: non_neg_integer(),
     total_byte_size :: non_neg_integer(),
-    last_error :: undefined | binary()
+    last_error :: undefined | errors:as_json()
 }).
 
 % Model used for storing information associated with dataset.
