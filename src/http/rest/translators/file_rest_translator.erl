@@ -129,8 +129,5 @@ translate_archive_recall_details(#archive_recall_details{
         <<"finishTime">> => utils:undefined_to_null(FinishTimestamp),
         <<"totalFileCount">> => TotalFileCount,
         <<"totalByteSize">> => TotalByteSize,
-        <<"lastError">> => case LastError of
-            undefined -> null;
-            _ -> json_utils:decode(LastError)
-        end
+        <<"lastError">> => utils:undefined_to_null(LastError)
     }.

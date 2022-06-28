@@ -138,8 +138,8 @@ reconcile_qos_internal(FileCtx, Options) when is_list(Options) ->
                     LocalQosEntries = file_qos:get_locally_required_qos_entries(EffFileQos),
                     FileGuid = file_ctx:get_logical_guid_const(FileCtx),
                     lists:foreach(fun(QosEntryId) ->
-                        ok = qos_entry_audit_log:report_file_synchronization_skipped(QosEntryId, FileGuid, 
-                            <<"Remote replica differs, ignoring since the file has been deleted locally.">>)
+                        ok = qos_entry_audit_log:report_file_synchronization_skipped(
+                            QosEntryId, FileGuid, file_deleted_locally )
                     end, LocalQosEntries)
             end;
         undefined ->
@@ -156,7 +156,7 @@ report_synchronization_skipped(FileCtx) ->
             FileGuid = file_ctx:get_logical_guid_const(FileCtx),
             lists:foreach(fun(QosEntryId) ->
                 ok = qos_entry_audit_log:report_file_synchronization_skipped(
-                    QosEntryId, FileGuid, <<"Remote replica differs, reconciliation already in progress.">>)
+                    QosEntryId, FileGuid, reconciliation_already_in_progress)
             end, LocalQosEntries);
         _ ->
             ok

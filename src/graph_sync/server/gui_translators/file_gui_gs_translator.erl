@@ -350,10 +350,7 @@ translate_archive_recall_details(#archive_recall_details{
         <<"cancelTime">> => utils:undefined_to_null(CancelTimestamp),
         <<"totalFileCount">> => TargetFileCount,
         <<"totalByteSize">> => TargetByteSize,
-        <<"lastError">> => case LastError of
-            undefined -> null;
-            _ -> json_utils:decode(LastError)
-        end
+        <<"lastError">> => utils:undefined_to_null(LastError)
     }.
 
 

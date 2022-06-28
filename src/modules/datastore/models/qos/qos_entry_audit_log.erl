@@ -29,6 +29,7 @@
 ]).
 
 -type id() :: qos_entry:id().
+-type skip_reason() :: file_deleted_locally | reconciliation_already_in_progress.
 
 -export_type([id/0]).
 
@@ -67,14 +68,14 @@ report_file_synchronized(Id, FileGuid) ->
     }).
 
 
--spec report_file_synchronization_skipped(id(), file_id:file_guid(), Reason :: binary()) ->
+-spec report_file_synchronization_skipped(id(), file_id:file_guid(), skip_reason()) ->
     ok | {error, term()}.
-report_file_synchronization_skipped(Id, FileGuid, Description) ->
+report_file_synchronization_skipped(Id, FileGuid, Reason) ->
     json_infinite_log_model:append(Id, #{
         <<"status">> => <<"skipped">>,
         <<"severity">> => <<"info">>,
         <<"fileId">> => file_guid_to_object_id(FileGuid),
-        <<"description">> => Description
+        <<"description">> => skip_reason_to_description(Reason)
     }).
 
 
@@ -110,3 +111,11 @@ browse_content(Id, Opts) ->
 file_guid_to_object_id(FileGuid) ->
     {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
     ObjectId.
+
+
+%% @private
+-spec skip_reason_to_description(skip_reason()) -> binary().
+skip_reason_to_description(file_deleted_locally) ->
+    <<"Remote replica differs, ignoring since the file has been deleted locally.">>;
+skip_reason_to_description(reconciliation_already_in_progress) ->
+    <<"Remote replica differs, reconciliation already in progress.">>.
