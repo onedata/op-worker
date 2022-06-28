@@ -21,6 +21,7 @@
 
 -type file_descriptors() :: #{session:id() => non_neg_integer()}.
 
+%% @formatter:off
 % Graph Sync cache metadata, common for all od_* records (synchronized by
 % Graph Sync).
 -type cache_state() :: #{
@@ -31,6 +32,8 @@
     % connection identifier to verify if the cache is not outdated.
     connection_ref => pid()
 }.
+%% @formatter:on
+
 
 %%%===================================================================
 %%% Records synchronized via Graph Sync
@@ -233,9 +236,9 @@
 
 -record(od_atm_lambda, {
     revision_registry :: atm_lambda_revision_registry:record(),
-    
+
     atm_inventories = [] :: [od_atm_inventory:id()],
-    
+
     cache_state = #{} :: cache_state()
 }).
 
@@ -337,7 +340,7 @@
     % below counters are used to check whether all batches of given directory
     % were processed, as they are processed in parallel
     batches_to_process = 0 :: non_neg_integer(),
-    batches_processed = 0:: non_neg_integer(),
+    batches_processed = 0 :: non_neg_integer(),
     % below map contains new hashes, that will be used to update values in children_hashes
     % when counters batches_to_process == batches_processed
     hashes_to_update = #{} :: storage_sync_info:hashes(),
@@ -450,13 +453,13 @@
     % NOTE: all archive relations are optional and depend on options provided in config. 
     % Additionally related_aip and related_dip cannot be simultaneously set (not undefined), 
     % as one archive cannot be AIP and DIP at the same time.
-    
+
     % if archive has been created directly it has no parent archive
     % if archive has been created indirectly, this fields points to it's parent archive
     parent :: undefined | archive:id(),
     % id of archive that current one is based on if it is incremental
     base_archive_id :: undefined | archive:id(),
-    
+
     % Relations between dissemination information package (DIP) 
     % and archival information package (AIP) archives.
     related_aip = undefined :: undefined | archive:id(),
@@ -515,7 +518,7 @@
     subtask_id = undefined :: space_unsupport:subtask_id() | undefined,
     % Id of process waiting to be notified of task finish.
     % NOTE: should be updated after provider restart
-    slave_job_pid  = undefined :: pid() | undefined
+    slave_job_pid = undefined :: pid() | undefined
 }).
 
 %% Model that stores config of file-popularity mechanism per given space.
@@ -788,7 +791,7 @@
     space_id :: od_space:id(),
     storage_id :: storage:id(),
     iterator_module :: storage_traverse:iterator_type(),
-    offset = 0 ::  non_neg_integer(),
+    offset = 0 :: non_neg_integer(),
     batch_size :: non_neg_integer(),
     marker :: undefined | helpers:marker(),
     max_depth :: non_neg_integer(),
@@ -1179,15 +1182,19 @@
     values = #{} :: atm_tree_forest_iterator_queue:values(),
     last_pushed_value_index = 0 :: atm_tree_forest_iterator_queue:index(),
     highest_peeked_value_index = 0 :: atm_tree_forest_iterator_queue:index(),
-    discriminator = {0, <<>>} :: atm_tree_forest_iterator_queue:discriminator(), 
+    discriminator = {0, <<>>} :: atm_tree_forest_iterator_queue:discriminator(),
     last_pruned_node_num = 0 :: atm_tree_forest_iterator_queue:node_num(),
     max_values_per_node :: pos_integer() | undefined
 }).
 
-
--record(atm_openfaas_function_activity_registry, {
-    pod_status_registry :: atm_openfaas_function_pod_status_registry:record()
+% Record holding the registry of pod status changes for an OpenFaaS function
+%% @formatter:off
+-record(atm_openfaas_function_pod_status_registry, {
+    registry = #{} :: #{
+        atm_openfaas_function_pod_status_registry:pod_id() => atm_openfaas_function_pod_status_summary:record()
+    }
 }).
+%% @formatter:on
 
 %%%===================================================================
 %%% Workflow engine connected models

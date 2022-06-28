@@ -41,14 +41,17 @@
 
     result_streamer_registration_deregistration_test/1,
     result_streamer_chunk_reporting_test/1,
+    result_streamer_invalid_data_reporting_test/1,
     result_stream_conclusion_with_already_deregistered_streamers_test/1,
     result_stream_conclusion_with_still_registered_streamers_test/1,
     result_stream_conclusion_mixed_test/1,
     result_stream_conclusion_with_no_registered_streamers_test/1,
     result_stream_conclusion_timeout_test/1,
+    result_stream_registration_during_conclusion_test/1,
     result_streamer_reregistration_test/1,
     result_streamer_stale_report_ignoring_test/1,
     result_streamer_batch_handling_test/1,
+    result_streamer_duplicate_report_handling_test/1,
     result_streamer_error_handling_test/1
 ]).
 
@@ -64,14 +67,17 @@ groups() -> [
 
         result_streamer_registration_deregistration_test,
         result_streamer_chunk_reporting_test,
+        result_streamer_invalid_data_reporting_test,
         result_stream_conclusion_with_already_deregistered_streamers_test,
         result_stream_conclusion_with_still_registered_streamers_test,
         result_stream_conclusion_mixed_test,
         result_stream_conclusion_with_no_registered_streamers_test,
         result_stream_conclusion_timeout_test,
+        result_stream_registration_during_conclusion_test,
         result_streamer_reregistration_test,
         result_streamer_stale_report_ignoring_test,
         result_streamer_batch_handling_test,
+        result_streamer_duplicate_report_handling_test,
         result_streamer_error_handling_test
     ]}
 ].
@@ -96,6 +102,17 @@ all() -> [
 
 -define(STREAM_CHUNK_ALPHA, #{<<"a">> => [1, 2, 3], <<"b">> => [<<"a">>, <<"b">>, <<"c">>]}).
 -define(STREAM_CHUNK_BETA, #{<<"c">> => [9, 8, 7], <<"d">> => [<<"x">>, <<"y">>, <<"z">>]}).
+
+-define(INVALID_DATA_B64_PRIM, base64:encode(<<"&$*#$%">>)).
+-define(INVALID_DATA_B64_BIS, base64:encode(<<"{}';././<">>)).
+-define(EXP_INVALID_DATA_ERROR(ResultName, Base64EncodedData), ?ERROR_BAD_DATA(
+    <<"filePipeResult.", ResultName/binary>>,
+    str_utils:format_bin(
+        "Received invalid data for filePipe result with name '~s'.~n"
+        "Base64 encoded data: ~s",
+        [ResultName, Base64EncodedData]
+    )
+)).
 
 % @TODO VFS-8002 test if the activity registry is correctly created alongside a
 % workflow execution and clean up during its deletion.
@@ -130,44 +147,43 @@ connectivity_test_base(ClientType) ->
 pod_status_monitor_lifecycle_test(_Config) ->
     Client = connect(pod_status_monitor),
     FunctionName = str_utils:rand_hex(10),
-    {ok, ActivityRegistryId} = create_activity_registry(FunctionName),
+    {ok, FunctionPodStatusRegistryId} = create_function_pod_status_registry(FunctionName),
 
     PodAlpha = str_utils:rand_hex(10),
     PodBeta = str_utils:rand_hex(10),
     PodGamma = str_utils:rand_hex(10),
 
-    verify_recorded_pod_status_changes(ActivityRegistryId, []),
+    verify_recorded_pod_status_changes(FunctionPodStatusRegistryId, []),
 
     FirstStatusReport = gen_pod_status_report(FunctionName, PodAlpha),
     submit_pod_status_reports(Client, [FirstStatusReport]),
-    verify_recorded_pod_status_changes(ActivityRegistryId, [FirstStatusReport]),
+    verify_recorded_pod_status_changes(FunctionPodStatusRegistryId, [FirstStatusReport]),
 
     SecondStatusReport = gen_pod_status_report(FunctionName, PodAlpha),
     ThirdStatusReport = gen_pod_status_report(FunctionName, PodAlpha),
     submit_pod_status_reports(Client, [SecondStatusReport, ThirdStatusReport]),
-    verify_recorded_pod_status_changes(ActivityRegistryId, [FirstStatusReport, SecondStatusReport, ThirdStatusReport]),
+    verify_recorded_pod_status_changes(FunctionPodStatusRegistryId, [FirstStatusReport, SecondStatusReport, ThirdStatusReport]),
 
     FollowingReports = lists_utils:generate(fun() ->
         gen_pod_status_report(FunctionName, lists_utils:random_element([PodAlpha, PodBeta, PodGamma]))
     end, 200 + rand:uniform(500)),
 
     submit_pod_status_reports(Client, FollowingReports),
-    verify_recorded_pod_status_changes(ActivityRegistryId, [
+    verify_recorded_pod_status_changes(FunctionPodStatusRegistryId, [
         FirstStatusReport, SecondStatusReport, ThirdStatusReport | FollowingReports
     ]),
 
     % delete the registry and verify if everything is cleaned up
-    {ok, #atm_openfaas_function_activity_registry{
-        pod_status_registry = PodStatusRegistry
-    }} = ?assertMatch({ok, _}, get_activity_registry(ActivityRegistryId)),
-    ?assertEqual(ok, delete_activity_registry(ActivityRegistryId)),
-    ?assertEqual({error, not_found}, get_activity_registry(ActivityRegistryId)),
+    {ok, PodStatusRegistry} = ?assertMatch({ok, _}, get_function_pod_status_registry(FunctionPodStatusRegistryId)),
+    ?assertEqual(ok, delete_function_pod_status_registry(FunctionPodStatusRegistryId)),
+    ?assertEqual({error, not_found}, get_function_pod_status_registry(FunctionPodStatusRegistryId)),
+
     atm_openfaas_function_pod_status_registry:foreach_summary(fun(_PodId, #atm_openfaas_function_pod_status_summary{
-        event_log = PodEventLogId
+        event_log_id = PodEventLogId
     }) ->
         ?assertEqual(
             {error, not_found},
-            ?rpc(atm_openfaas_function_activity_registry:browse_pod_event_log(PodEventLogId, #{}))
+            ?rpc(atm_openfaas_function_pod_status_registry:browse_pod_event_log(PodEventLogId, #{}))
         )
     end, PodStatusRegistry).
 
@@ -175,7 +191,11 @@ pod_status_monitor_lifecycle_test(_Config) ->
 pod_status_monitor_error_handling_test(_Config) ->
     Client = connect(pod_status_monitor),
     % a pod status monitor client may not send result streamer reports
-    atm_openfaas_result_streamer_mock:send_registration_report(Client, <<"a">>, <<"b">>, <<"c">>),
+    atm_openfaas_result_streamer_mock:send_report(Client, #atm_openfaas_result_streamer_registration_report{
+        workflow_execution_id = <<"a">>,
+        task_execution_id = <<"b">>,
+        result_streamer_id = <<"c">>
+    }),
     ?await(atm_openfaas_pod_status_monitor_mock:has_received_internal_server_error_push_message(Client)).
 
 
@@ -184,28 +204,28 @@ result_streamer_registration_deregistration_test(_Config) ->
     {WorkflowExecutionId, TaskExecutionId} = {?RAND_STR(), ?RAND_STR()},
     {StreamerIdAlpha, StreamerIdBeta, StreamerIdGamma} = {?RAND_STR(), ?RAND_STR(), ?RAND_STR()},
 
-    atm_openfaas_result_streamer_mock:send_registration_report(ClientAlpha, WorkflowExecutionId, TaskExecutionId, StreamerIdAlpha),
+    atm_openfaas_result_streamer_mock:deliver_registration_report(ClientAlpha, WorkflowExecutionId, TaskExecutionId, StreamerIdAlpha),
     ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, [StreamerIdAlpha])),
 
-    atm_openfaas_result_streamer_mock:send_registration_report(ClientBeta, WorkflowExecutionId, TaskExecutionId, StreamerIdBeta),
+    atm_openfaas_result_streamer_mock:deliver_registration_report(ClientBeta, WorkflowExecutionId, TaskExecutionId, StreamerIdBeta),
     ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, [StreamerIdAlpha, StreamerIdBeta])),
 
     % registration should be idempotent
-    atm_openfaas_result_streamer_mock:send_registration_report(ClientBeta, WorkflowExecutionId, TaskExecutionId, StreamerIdBeta),
+    atm_openfaas_result_streamer_mock:deliver_registration_report(ClientBeta, WorkflowExecutionId, TaskExecutionId, StreamerIdBeta),
     ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, [StreamerIdAlpha, StreamerIdBeta])),
 
-    atm_openfaas_result_streamer_mock:send_deregistration_report(ClientBeta),
+    atm_openfaas_result_streamer_mock:deliver_deregistration_report(ClientBeta),
     ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, [StreamerIdAlpha])),
 
-    atm_openfaas_result_streamer_mock:send_registration_report(ClientGamma, WorkflowExecutionId, TaskExecutionId, StreamerIdGamma),
+    atm_openfaas_result_streamer_mock:deliver_registration_report(ClientGamma, WorkflowExecutionId, TaskExecutionId, StreamerIdGamma),
     ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, [StreamerIdAlpha, StreamerIdGamma])),
-    atm_openfaas_result_streamer_mock:send_deregistration_report(ClientAlpha),
-    atm_openfaas_result_streamer_mock:send_deregistration_report(ClientGamma),
+    atm_openfaas_result_streamer_mock:deliver_deregistration_report(ClientAlpha),
+    atm_openfaas_result_streamer_mock:deliver_deregistration_report(ClientGamma),
     ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, [])),
 
     % deregistration should be idempotent
-    atm_openfaas_result_streamer_mock:send_deregistration_report(ClientAlpha),
-    atm_openfaas_result_streamer_mock:send_deregistration_report(ClientGamma),
+    atm_openfaas_result_streamer_mock:deliver_deregistration_report(ClientAlpha),
+    atm_openfaas_result_streamer_mock:deliver_deregistration_report(ClientGamma),
     ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, [])).
 
 
@@ -213,21 +233,21 @@ result_streamer_chunk_reporting_test(_Config) ->
     Client = connect(result_streamer),
     {WorkflowExecutionId, TaskExecutionId, ResultStreamerId} = {?RAND_STR(), ?RAND_STR(), ?RAND_STR()},
 
-    atm_openfaas_result_streamer_mock:send_registration_report(Client, WorkflowExecutionId, TaskExecutionId, ResultStreamerId),
+    atm_openfaas_result_streamer_mock:deliver_registration_report(Client, WorkflowExecutionId, TaskExecutionId, ResultStreamerId),
 
-    atm_openfaas_result_streamer_mock:send_chunk_report(Client, ?STREAM_CHUNK_ALPHA),
+    atm_openfaas_result_streamer_mock:deliver_chunk_report(Client, ?STREAM_CHUNK_ALPHA),
     ?await(compare_streamed_reports(WorkflowExecutionId, TaskExecutionId, [
         {chunk, ?STREAM_CHUNK_ALPHA}
     ])),
 
-    atm_openfaas_result_streamer_mock:send_chunk_report(Client, ?STREAM_CHUNK_BETA),
+    atm_openfaas_result_streamer_mock:deliver_chunk_report(Client, ?STREAM_CHUNK_BETA),
     ?await(compare_streamed_reports(WorkflowExecutionId, TaskExecutionId, [
         {chunk, ?STREAM_CHUNK_ALPHA},
         {chunk, ?STREAM_CHUNK_BETA}
     ])),
 
-    atm_openfaas_result_streamer_mock:send_chunk_report(Client, ?STREAM_CHUNK_ALPHA),
-    atm_openfaas_result_streamer_mock:send_chunk_report(Client, ?STREAM_CHUNK_ALPHA),
+    atm_openfaas_result_streamer_mock:deliver_chunk_report(Client, ?STREAM_CHUNK_ALPHA),
+    atm_openfaas_result_streamer_mock:deliver_chunk_report(Client, ?STREAM_CHUNK_ALPHA),
     ?await(compare_streamed_reports(WorkflowExecutionId, TaskExecutionId, [
         {chunk, ?STREAM_CHUNK_ALPHA},
         {chunk, ?STREAM_CHUNK_BETA},
@@ -236,25 +256,53 @@ result_streamer_chunk_reporting_test(_Config) ->
     ])).
 
 
+result_streamer_invalid_data_reporting_test(_Config) ->
+    Client = connect(result_streamer),
+    {WorkflowExecutionId, TaskExecutionId, ResultStreamerId} = {?RAND_STR(), ?RAND_STR(), ?RAND_STR()},
+
+    atm_openfaas_result_streamer_mock:deliver_registration_report(Client, WorkflowExecutionId, TaskExecutionId, ResultStreamerId),
+
+    atm_openfaas_result_streamer_mock:deliver_invalid_data_report(Client, <<"prim">>, ?INVALID_DATA_B64_PRIM),
+    ?await(compare_streamed_reports(WorkflowExecutionId, TaskExecutionId, [
+        ?EXP_INVALID_DATA_ERROR(<<"prim">>, ?INVALID_DATA_B64_PRIM)
+    ])),
+
+    atm_openfaas_result_streamer_mock:deliver_invalid_data_report(Client, <<"bis">>, ?INVALID_DATA_B64_BIS),
+    atm_openfaas_result_streamer_mock:deliver_invalid_data_report(Client, <<"prim">>, ?INVALID_DATA_B64_PRIM),
+    ?await(compare_streamed_reports(WorkflowExecutionId, TaskExecutionId, [
+        ?EXP_INVALID_DATA_ERROR(<<"prim">>, ?INVALID_DATA_B64_PRIM),
+        ?EXP_INVALID_DATA_ERROR(<<"bis">>, ?INVALID_DATA_B64_BIS),
+        ?EXP_INVALID_DATA_ERROR(<<"prim">>, ?INVALID_DATA_B64_PRIM)
+    ])),
+
+    atm_openfaas_result_streamer_mock:deliver_invalid_data_report(Client, <<"prim">>, ?INVALID_DATA_B64_PRIM),
+    ?await(compare_streamed_reports(WorkflowExecutionId, TaskExecutionId, [
+        ?EXP_INVALID_DATA_ERROR(<<"prim">>, ?INVALID_DATA_B64_PRIM),
+        ?EXP_INVALID_DATA_ERROR(<<"bis">>, ?INVALID_DATA_B64_BIS),
+        ?EXP_INVALID_DATA_ERROR(<<"prim">>, ?INVALID_DATA_B64_PRIM),
+        ?EXP_INVALID_DATA_ERROR(<<"prim">>, ?INVALID_DATA_B64_PRIM)
+    ])).
+
+
 result_stream_conclusion_with_already_deregistered_streamers_test(_Config) ->
     {ClientAlpha, ClientBeta, ClientGamma} = {connect(result_streamer), connect(result_streamer), connect(result_streamer)},
     {WorkflowExecutionId, TaskExecutionId} = {?RAND_STR(), ?RAND_STR()},
     {StreamerIdAlpha, StreamerIdBeta, StreamerIdGamma} = {?RAND_STR(), ?RAND_STR(), ?RAND_STR()},
 
-    atm_openfaas_result_streamer_mock:send_registration_report(ClientAlpha, WorkflowExecutionId, TaskExecutionId, StreamerIdAlpha),
-    atm_openfaas_result_streamer_mock:send_registration_report(ClientBeta, WorkflowExecutionId, TaskExecutionId, StreamerIdBeta),
+    atm_openfaas_result_streamer_mock:deliver_registration_report(ClientAlpha, WorkflowExecutionId, TaskExecutionId, StreamerIdAlpha),
+    atm_openfaas_result_streamer_mock:deliver_registration_report(ClientBeta, WorkflowExecutionId, TaskExecutionId, StreamerIdBeta),
     ?assert(compare_result_stream_conclusion_status(WorkflowExecutionId, TaskExecutionId, not_concluded)),
 
-    atm_openfaas_result_streamer_mock:send_deregistration_report(ClientAlpha),
+    atm_openfaas_result_streamer_mock:deliver_deregistration_report(ClientAlpha),
     ?assert(compare_result_stream_conclusion_status(WorkflowExecutionId, TaskExecutionId, not_concluded)),
 
-    atm_openfaas_result_streamer_mock:send_registration_report(ClientGamma, WorkflowExecutionId, TaskExecutionId, StreamerIdGamma),
+    atm_openfaas_result_streamer_mock:deliver_registration_report(ClientGamma, WorkflowExecutionId, TaskExecutionId, StreamerIdGamma),
 
-    atm_openfaas_result_streamer_mock:send_deregistration_report(ClientGamma),
+    atm_openfaas_result_streamer_mock:deliver_deregistration_report(ClientGamma),
     ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, [StreamerIdBeta])),
     ?assert(compare_result_stream_conclusion_status(WorkflowExecutionId, TaskExecutionId, not_concluded)),
 
-    atm_openfaas_result_streamer_mock:send_deregistration_report(ClientBeta),
+    atm_openfaas_result_streamer_mock:deliver_deregistration_report(ClientBeta),
     ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, [])),
     % the task data stream is not concluded automatically, even if all steamers are deregistered;
     % it must be triggered implicitly
@@ -270,9 +318,9 @@ result_stream_conclusion_with_still_registered_streamers_test(_Config) ->
     {WorkflowExecutionId, TaskExecutionId} = {?RAND_STR(), ?RAND_STR()},
     {StreamerIdAlpha, StreamerIdBeta, StreamerIdGamma} = {?RAND_STR(), ?RAND_STR(), ?RAND_STR()},
 
-    atm_openfaas_result_streamer_mock:send_registration_report(ClientAlpha, WorkflowExecutionId, TaskExecutionId, StreamerIdAlpha),
-    atm_openfaas_result_streamer_mock:send_registration_report(ClientBeta, WorkflowExecutionId, TaskExecutionId, StreamerIdBeta),
-    atm_openfaas_result_streamer_mock:send_registration_report(ClientGamma, WorkflowExecutionId, TaskExecutionId, StreamerIdGamma),
+    atm_openfaas_result_streamer_mock:deliver_registration_report(ClientAlpha, WorkflowExecutionId, TaskExecutionId, StreamerIdAlpha),
+    atm_openfaas_result_streamer_mock:deliver_registration_report(ClientBeta, WorkflowExecutionId, TaskExecutionId, StreamerIdBeta),
+    atm_openfaas_result_streamer_mock:deliver_registration_report(ClientGamma, WorkflowExecutionId, TaskExecutionId, StreamerIdGamma),
     ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, [StreamerIdAlpha, StreamerIdBeta, StreamerIdGamma])),
 
     trigger_result_stream_conclusion(WorkflowExecutionId, TaskExecutionId),
@@ -285,14 +333,14 @@ result_stream_conclusion_mixed_test(_Config) ->
     {WorkflowExecutionId, TaskExecutionId} = {?RAND_STR(), ?RAND_STR()},
     {StreamerIdAlpha, StreamerIdBeta, StreamerIdGamma} = {?RAND_STR(), ?RAND_STR(), ?RAND_STR()},
 
-    atm_openfaas_result_streamer_mock:send_registration_report(ClientAlpha, WorkflowExecutionId, TaskExecutionId, StreamerIdAlpha),
-    atm_openfaas_result_streamer_mock:send_registration_report(ClientBeta, WorkflowExecutionId, TaskExecutionId, StreamerIdBeta),
-    atm_openfaas_result_streamer_mock:send_registration_report(ClientGamma, WorkflowExecutionId, TaskExecutionId, StreamerIdGamma),
+    atm_openfaas_result_streamer_mock:deliver_registration_report(ClientAlpha, WorkflowExecutionId, TaskExecutionId, StreamerIdAlpha),
+    atm_openfaas_result_streamer_mock:deliver_registration_report(ClientBeta, WorkflowExecutionId, TaskExecutionId, StreamerIdBeta),
+    atm_openfaas_result_streamer_mock:deliver_registration_report(ClientGamma, WorkflowExecutionId, TaskExecutionId, StreamerIdGamma),
     ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, [StreamerIdAlpha, StreamerIdBeta, StreamerIdGamma])),
 
     % ClientBeta is deregistered before conclusion, while the other two clients
     % should be prompted with a finalization signal
-    atm_openfaas_result_streamer_mock:send_deregistration_report(ClientBeta),
+    atm_openfaas_result_streamer_mock:deliver_deregistration_report(ClientBeta),
     ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, [StreamerIdAlpha, StreamerIdGamma])),
 
     trigger_result_stream_conclusion(WorkflowExecutionId, TaskExecutionId),
@@ -311,12 +359,12 @@ result_stream_conclusion_timeout_test(_Config) ->
     {WorkflowExecutionId, TaskExecutionId} = {?RAND_STR(), ?RAND_STR()},
     {StreamerIdAlpha, StreamerIdBeta, StreamerIdGamma} = {?RAND_STR(), ?RAND_STR(), ?RAND_STR()},
 
-    atm_openfaas_result_streamer_mock:send_registration_report(ClientAlpha, WorkflowExecutionId, TaskExecutionId, StreamerIdAlpha),
-    atm_openfaas_result_streamer_mock:send_registration_report(ClientBeta, WorkflowExecutionId, TaskExecutionId, StreamerIdBeta),
-    atm_openfaas_result_streamer_mock:send_registration_report(ClientGamma, WorkflowExecutionId, TaskExecutionId, StreamerIdGamma),
+    atm_openfaas_result_streamer_mock:deliver_registration_report(ClientAlpha, WorkflowExecutionId, TaskExecutionId, StreamerIdAlpha),
+    atm_openfaas_result_streamer_mock:deliver_registration_report(ClientBeta, WorkflowExecutionId, TaskExecutionId, StreamerIdBeta),
+    atm_openfaas_result_streamer_mock:deliver_registration_report(ClientGamma, WorkflowExecutionId, TaskExecutionId, StreamerIdGamma),
     ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, [StreamerIdAlpha, StreamerIdBeta, StreamerIdGamma])),
 
-    atm_openfaas_result_streamer_mock:simulate_deregistration_failure(ClientBeta),
+    atm_openfaas_result_streamer_mock:simulate_conclusion_failure(ClientBeta, true),
 
     trigger_result_stream_conclusion(WorkflowExecutionId, TaskExecutionId),
     ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, [StreamerIdBeta])),
@@ -325,7 +373,44 @@ result_stream_conclusion_timeout_test(_Config) ->
     ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, {error, not_found})),
 
     % sending a late deregistration report should be ignored
-    atm_openfaas_result_streamer_mock:send_deregistration_report(ClientBeta),
+    atm_openfaas_result_streamer_mock:deliver_deregistration_report(ClientBeta),
+    ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, {error, not_found})).
+
+
+result_stream_registration_during_conclusion_test(_Config) ->
+    {ClientAlpha, ClientBeta, ClientGamma} = {connect(result_streamer), connect(result_streamer), connect(result_streamer)},
+    {WorkflowExecutionId, TaskExecutionId} = {?RAND_STR(), ?RAND_STR()},
+    {StreamerIdAlpha, StreamerIdBeta, StreamerIdGamma} = {?RAND_STR(), ?RAND_STR(), ?RAND_STR()},
+
+    atm_openfaas_result_streamer_mock:deliver_registration_report(ClientAlpha, WorkflowExecutionId, TaskExecutionId, StreamerIdAlpha),
+    atm_openfaas_result_streamer_mock:deliver_registration_report(ClientBeta, WorkflowExecutionId, TaskExecutionId, StreamerIdBeta),
+    ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, [StreamerIdAlpha, StreamerIdBeta])),
+
+    atm_openfaas_result_streamer_mock:simulate_conclusion_failure(ClientAlpha, true),
+    atm_openfaas_result_streamer_mock:simulate_conclusion_failure(ClientBeta, true),
+
+    trigger_result_stream_conclusion(WorkflowExecutionId, TaskExecutionId),
+    % it is simulated that clients alpha and beta fail to deregister
+    ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, [StreamerIdAlpha, StreamerIdBeta])),
+
+    % it is possible to register during conclusion, but the client will immediately
+    % get a finalization signal from the server and should deregister
+    atm_openfaas_result_streamer_mock:deliver_registration_report(ClientGamma, WorkflowExecutionId, TaskExecutionId, StreamerIdGamma),
+    ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, [StreamerIdAlpha, StreamerIdBeta])),
+
+    atm_openfaas_result_streamer_mock:simulate_conclusion_failure(ClientAlpha, false),
+    % client alpha should no longer fail to deregister and should process the finalization
+    % signal that will be push during the below registration attempt
+    atm_openfaas_result_streamer_mock:deliver_registration_report(ClientAlpha, WorkflowExecutionId, TaskExecutionId, StreamerIdAlpha),
+    ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, [StreamerIdBeta])),
+
+    % as client beta has never deregistered, the stream should fail to conclude
+    ?awaitLong(compare_result_stream_conclusion_status(WorkflowExecutionId, TaskExecutionId, {failure, ?ERROR_TIMEOUT})),
+    % the registry should be cleaned even if there were conclusion errors
+    ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, {error, not_found})),
+
+    % sending a late deregistration report should be ignored
+    atm_openfaas_result_streamer_mock:deliver_deregistration_report(ClientBeta),
     ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, {error, not_found})).
 
 
@@ -335,31 +420,26 @@ result_streamer_reregistration_test(_Config) ->
     {ClientAlpha, ClientBeta, ClientGamma} = {connect(result_streamer), connect(result_streamer), connect(result_streamer)},
     {WorkflowExecutionId, TaskExecutionId, ResultStreamerId} = {?RAND_STR(), ?RAND_STR(), ?RAND_STR()},
 
-    atm_openfaas_result_streamer_mock:send_registration_report(ClientAlpha, WorkflowExecutionId, TaskExecutionId, ResultStreamerId),
+    atm_openfaas_result_streamer_mock:deliver_registration_report(ClientAlpha, WorkflowExecutionId, TaskExecutionId, ResultStreamerId),
     ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, [ResultStreamerId])),
 
-    atm_openfaas_result_streamer_mock:send_registration_report(ClientBeta, WorkflowExecutionId, TaskExecutionId, ResultStreamerId),
+    atm_openfaas_result_streamer_mock:deliver_registration_report(ClientBeta, WorkflowExecutionId, TaskExecutionId, ResultStreamerId),
     ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, [ResultStreamerId])),
 
     % registration should be idempotent
-    atm_openfaas_result_streamer_mock:send_registration_report(ClientBeta, WorkflowExecutionId, TaskExecutionId, ResultStreamerId),
+    atm_openfaas_result_streamer_mock:deliver_registration_report(ClientBeta, WorkflowExecutionId, TaskExecutionId, ResultStreamerId),
     ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, [ResultStreamerId])),
 
-    atm_openfaas_result_streamer_mock:send_registration_report(ClientGamma, WorkflowExecutionId, TaskExecutionId, ResultStreamerId),
+    atm_openfaas_result_streamer_mock:deliver_registration_report(ClientGamma, WorkflowExecutionId, TaskExecutionId, ResultStreamerId),
     ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, [ResultStreamerId])),
-
-    %% make sure client alpha's deregistration report does not happen before client gamma registration
-    %% @TODO VFS-9388 this should not be needed when the protocol has ACK messages
-    timer:sleep(1000),
 
     % a deregistration report from a previous incarnation of the result streamer should be ignored
-    atm_openfaas_result_streamer_mock:send_deregistration_report(ClientAlpha),
-    atm_openfaas_result_streamer_mock:send_deregistration_report(ClientBeta),
-    timer:sleep(5000),
+    atm_openfaas_result_streamer_mock:deliver_deregistration_report(ClientAlpha),
+    atm_openfaas_result_streamer_mock:deliver_deregistration_report(ClientBeta),
     ?assert(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, [ResultStreamerId])),
 
     % but deregistration from the current incarnation should work
-    atm_openfaas_result_streamer_mock:send_deregistration_report(ClientGamma),
+    atm_openfaas_result_streamer_mock:deliver_deregistration_report(ClientGamma),
     ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, [])),
 
     trigger_result_stream_conclusion(WorkflowExecutionId, TaskExecutionId),
@@ -375,31 +455,28 @@ result_streamer_stale_report_ignoring_test(_Config) ->
     {WorkflowExecutionId, TaskExecutionId} = {?RAND_STR(), ?RAND_STR()},
     {ResultStreamerId, DeregisteredResultStreamerId} = {?RAND_STR(), ?RAND_STR()},
 
-    atm_openfaas_result_streamer_mock:send_registration_report(ClientGamma, WorkflowExecutionId, TaskExecutionId, DeregisteredResultStreamerId),
+    atm_openfaas_result_streamer_mock:deliver_registration_report(ClientGamma, WorkflowExecutionId, TaskExecutionId, DeregisteredResultStreamerId),
     ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, [DeregisteredResultStreamerId])),
-    atm_openfaas_result_streamer_mock:send_deregistration_report(ClientGamma),
+    atm_openfaas_result_streamer_mock:deliver_deregistration_report(ClientGamma),
     ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, [])),
 
-    atm_openfaas_result_streamer_mock:send_registration_report(ClientAlpha, WorkflowExecutionId, TaskExecutionId, ResultStreamerId),
+    atm_openfaas_result_streamer_mock:deliver_registration_report(ClientAlpha, WorkflowExecutionId, TaskExecutionId, ResultStreamerId),
     ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, [ResultStreamerId])),
 
-    atm_openfaas_result_streamer_mock:send_registration_report(ClientBeta, WorkflowExecutionId, TaskExecutionId, ResultStreamerId),
+    atm_openfaas_result_streamer_mock:deliver_registration_report(ClientBeta, WorkflowExecutionId, TaskExecutionId, ResultStreamerId),
     ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, [ResultStreamerId])),
-
-    %% make sure client alpha's chunk report does not happen before client beta registration
-    %% @TODO VFS-9388 this should not be needed when the protocol has ACK messages
-    timer:sleep(1000),
 
     % ClientAlpha has been replaced by ClientBeta during re-register
     % ClientGamma has been deregistered sometime in the past
     % in both cases, their reports should be ignored
-    atm_openfaas_result_streamer_mock:send_chunk_report(ClientAlpha, ?STREAM_CHUNK_ALPHA),
-    atm_openfaas_result_streamer_mock:send_chunk_report(ClientGamma, ?STREAM_CHUNK_BETA),
-    timer:sleep(5000),
+    atm_openfaas_result_streamer_mock:deliver_chunk_report(ClientAlpha, ?STREAM_CHUNK_ALPHA),
+    atm_openfaas_result_streamer_mock:deliver_chunk_report(ClientGamma, ?STREAM_CHUNK_BETA),
+    atm_openfaas_result_streamer_mock:deliver_invalid_data_report(ClientAlpha, <<"a">>, ?INVALID_DATA_B64_PRIM),
+    atm_openfaas_result_streamer_mock:deliver_invalid_data_report(ClientGamma, <<"b">>, ?INVALID_DATA_B64_BIS),
     ?assert(compare_streamed_reports(WorkflowExecutionId, TaskExecutionId, [])),
 
     % report from active ClientBeta should be accepted
-    atm_openfaas_result_streamer_mock:send_chunk_report(ClientBeta, ?STREAM_CHUNK_BETA),
+    atm_openfaas_result_streamer_mock:deliver_chunk_report(ClientBeta, ?STREAM_CHUNK_BETA),
     ?await(compare_streamed_reports(WorkflowExecutionId, TaskExecutionId, [{chunk, ?STREAM_CHUNK_BETA}])).
 
 
@@ -407,7 +484,7 @@ result_streamer_batch_handling_test(_Config) ->
     Client = connect(result_streamer),
     {WorkflowExecutionId, TaskExecutionId, ResultStreamerId} = {?RAND_STR(), ?RAND_STR(), ?RAND_STR()},
 
-    atm_openfaas_result_streamer_mock:send_report(Client, [
+    atm_openfaas_result_streamer_mock:deliver_reports_with_bodies(Client, [
         #atm_openfaas_result_streamer_registration_report{
             workflow_execution_id = WorkflowExecutionId,
             task_execution_id = TaskExecutionId,
@@ -418,14 +495,22 @@ result_streamer_batch_handling_test(_Config) ->
             workflow_execution_id = WorkflowExecutionId,
             task_execution_id = TaskExecutionId,
             result_streamer_id = ResultStreamerId
+        },
+        #atm_openfaas_result_streamer_invalid_data_report{
+            result_name = <<"prim">>,
+            base_64_encoded_data = ?INVALID_DATA_B64_PRIM
         }
     ]),
     ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, [ResultStreamerId])),
     ?assert(compare_result_stream_conclusion_status(WorkflowExecutionId, TaskExecutionId, not_concluded)),
 
-    atm_openfaas_result_streamer_mock:send_report(Client, [
+    atm_openfaas_result_streamer_mock:deliver_reports_with_bodies(Client, [
         #atm_openfaas_result_streamer_chunk_report{chunk = ?STREAM_CHUNK_ALPHA},
         #atm_openfaas_result_streamer_chunk_report{chunk = ?STREAM_CHUNK_BETA},
+        #atm_openfaas_result_streamer_invalid_data_report{
+            result_name = <<"bis">>,
+            base_64_encoded_data = ?INVALID_DATA_B64_BIS
+        },
         #atm_openfaas_result_streamer_chunk_report{chunk = ?STREAM_CHUNK_ALPHA},
         #atm_openfaas_result_streamer_chunk_report{chunk = ?STREAM_CHUNK_BETA},
         #atm_openfaas_result_streamer_deregistration_report{}
@@ -433,8 +518,10 @@ result_streamer_batch_handling_test(_Config) ->
     ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, [])),
     ?await(compare_streamed_reports(WorkflowExecutionId, TaskExecutionId, [
         {chunk, ?STREAM_CHUNK_ALPHA},
+        ?EXP_INVALID_DATA_ERROR(<<"prim">>, ?INVALID_DATA_B64_PRIM),
         {chunk, ?STREAM_CHUNK_ALPHA},
         {chunk, ?STREAM_CHUNK_BETA},
+        ?EXP_INVALID_DATA_ERROR(<<"bis">>, ?INVALID_DATA_B64_BIS),
         {chunk, ?STREAM_CHUNK_ALPHA},
         {chunk, ?STREAM_CHUNK_BETA}
     ])),
@@ -445,14 +532,67 @@ result_streamer_batch_handling_test(_Config) ->
     ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, {error, not_found})).
 
 
+% regardless of the report type, if a report with given ID from given streamer has already been processed,
+% it is immediately acknowledged without processing (sending the same report should be idempotent)
+result_streamer_duplicate_report_handling_test(_Config) ->
+    Client = connect(result_streamer),
+    {WorkflowExecutionId, TaskExecutionId, ResultStreamerId} = {?RAND_STR(), ?RAND_STR(), ?RAND_STR()},
+
+    RegistrationReport = #atm_openfaas_result_streamer_report{
+        id = ?RAND_STR(),
+        body = #atm_openfaas_result_streamer_registration_report{
+            workflow_execution_id = WorkflowExecutionId,
+            task_execution_id = TaskExecutionId,
+            result_streamer_id = ResultStreamerId
+        }
+    },
+    atm_openfaas_result_streamer_mock:deliver_reports(Client, lists:duplicate(?RAND_INT(1, 10), RegistrationReport)),
+    ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, [ResultStreamerId])),
+
+    ChunkReportPrim = #atm_openfaas_result_streamer_report{
+        id = ?RAND_STR(),
+        body = #atm_openfaas_result_streamer_chunk_report{chunk = ?STREAM_CHUNK_ALPHA}
+    },
+    ChunkReportBis = #atm_openfaas_result_streamer_report{
+        id = ?RAND_STR(),
+        body = #atm_openfaas_result_streamer_chunk_report{chunk = ?STREAM_CHUNK_BETA}
+    },
+
+    atm_openfaas_result_streamer_mock:deliver_reports(Client, lists:duplicate(?RAND_INT(1, 10), ChunkReportPrim)),
+    ?await(compare_streamed_reports(WorkflowExecutionId, TaskExecutionId, [
+        {chunk, ?STREAM_CHUNK_ALPHA}
+    ])),
+
+    atm_openfaas_result_streamer_mock:deliver_reports(Client, lists_utils:shuffle(lists:flatten(
+        lists:duplicate(?RAND_INT(0, 10), ChunkReportPrim) ++ lists:duplicate(?RAND_INT(1, 10), ChunkReportBis)
+    ))),
+    ?await(compare_streamed_reports(WorkflowExecutionId, TaskExecutionId, [
+        {chunk, ?STREAM_CHUNK_ALPHA},
+        {chunk, ?STREAM_CHUNK_BETA}
+    ])),
+
+    atm_openfaas_result_streamer_mock:deliver_reports(Client, [ChunkReportPrim, ChunkReportBis]),
+    ?await(compare_streamed_reports(WorkflowExecutionId, TaskExecutionId, [
+        {chunk, ?STREAM_CHUNK_ALPHA},
+        {chunk, ?STREAM_CHUNK_BETA}
+    ])),
+
+    DeregistrationReport = #atm_openfaas_result_streamer_report{
+        id = ?RAND_STR(),
+        body = #atm_openfaas_result_streamer_deregistration_report{}
+    },
+    atm_openfaas_result_streamer_mock:deliver_reports(Client, lists:duplicate(?RAND_INT(1, 10), DeregistrationReport)),
+    ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, [])).
+
+
 result_streamer_error_handling_test(_Config) ->
     {ClientAlpha, ClientBeta, ClientGamma} = {connect(result_streamer), connect(result_streamer), connect(result_streamer)},
     {WorkflowExecutionId, TaskExecutionId} = {?RAND_STR(), ?RAND_STR()},
     {StreamerIdAlpha, StreamerIdBeta, StreamerIdGamma} = {?RAND_STR(), ?RAND_STR(), ?RAND_STR()},
 
-    atm_openfaas_result_streamer_mock:send_registration_report(ClientAlpha, WorkflowExecutionId, TaskExecutionId, StreamerIdAlpha),
-    atm_openfaas_result_streamer_mock:send_registration_report(ClientBeta, WorkflowExecutionId, TaskExecutionId, StreamerIdBeta),
-    atm_openfaas_result_streamer_mock:send_registration_report(ClientGamma, WorkflowExecutionId, TaskExecutionId, StreamerIdGamma),
+    atm_openfaas_result_streamer_mock:deliver_registration_report(ClientAlpha, WorkflowExecutionId, TaskExecutionId, StreamerIdAlpha),
+    atm_openfaas_result_streamer_mock:deliver_registration_report(ClientBeta, WorkflowExecutionId, TaskExecutionId, StreamerIdBeta),
+    atm_openfaas_result_streamer_mock:deliver_registration_report(ClientGamma, WorkflowExecutionId, TaskExecutionId, StreamerIdGamma),
     ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, [StreamerIdAlpha, StreamerIdBeta, StreamerIdGamma])),
 
     atm_openfaas_result_streamer_mock:send_text(ClientAlpha, <<"bad-message">>),
@@ -461,7 +601,10 @@ result_streamer_error_handling_test(_Config) ->
     ])),
 
     simulate_failure_of_next_report_processing(WorkflowExecutionId, TaskExecutionId),
-    atm_openfaas_result_streamer_mock:send_chunk_report(ClientGamma, ?STREAM_CHUNK_ALPHA),
+    atm_openfaas_result_streamer_mock:send_report(ClientGamma, #atm_openfaas_result_streamer_chunk_report{
+        chunk = ?STREAM_CHUNK_ALPHA
+    }),
+    ?await(atm_openfaas_result_streamer_mock:has_received_internal_server_error_push_message(ClientGamma)),
     ?await(compare_streamed_reports(WorkflowExecutionId, TaskExecutionId, [
         ?ERROR_BAD_MESSAGE(<<"bad-message">>),
         ?ERROR_INTERNAL_SERVER_ERROR
@@ -510,24 +653,24 @@ try_connect(result_streamer, BasicAuthorization) ->
 %%%===================================================================
 
 %% @private
--spec create_activity_registry(atm_openfaas_task_executor:function_name()) ->
-    {ok, atm_openfaas_function_activity_registry:id()} | {error, term()}.
-create_activity_registry(FunctionName) ->
-    ?rpc(atm_openfaas_function_activity_registry:ensure_for_function(FunctionName)).
+-spec create_function_pod_status_registry(atm_openfaas_task_executor:function_name()) ->
+    {ok, atm_openfaas_function_pod_status_registry:id()} | {error, term()}.
+create_function_pod_status_registry(FunctionName) ->
+    ?rpc(atm_openfaas_function_pod_status_registry:create_for_function(FunctionName)).
 
 
 %% @private
--spec get_activity_registry(atm_openfaas_function_activity_registry:id()) ->
-    {ok, atm_openfaas_function_activity_registry:record()} | {error, term()}.
-get_activity_registry(RegistryId) ->
-    ?rpc(atm_openfaas_function_activity_registry:get(RegistryId)).
+-spec get_function_pod_status_registry(atm_openfaas_function_pod_status_registry:id()) ->
+    {ok, atm_openfaas_function_pod_status_registry:record()} | {error, term()}.
+get_function_pod_status_registry(RegistryId) ->
+    ?rpc(atm_openfaas_function_pod_status_registry:get(RegistryId)).
 
 
 %% @private
--spec delete_activity_registry(atm_openfaas_function_activity_registry:id()) ->
+-spec delete_function_pod_status_registry(atm_openfaas_function_pod_status_registry:id()) ->
     ok | {error, term()}.
-delete_activity_registry(RegistryId) ->
-    ?rpc(atm_openfaas_function_activity_registry:delete(RegistryId)).
+delete_function_pod_status_registry(RegistryId) ->
+    ?rpc(atm_openfaas_function_pod_status_registry:delete(RegistryId)).
 
 
 -spec submit_pod_status_reports(test_websocket_client:client_ref(), [atm_openfaas_function_pod_status_report:record()]) -> ok.
@@ -545,7 +688,7 @@ submit_pod_status_reports(ClientRef, StatusChangeReports) ->
 
 %% @private
 -spec verify_recorded_pod_status_changes(
-    atm_openfaas_function_activity_registry:id(),
+    atm_openfaas_function_pod_status_registry:id(),
     [atm_openfaas_function_pod_status_report:record()]
 ) -> boolean().
 verify_recorded_pod_status_changes(RegistryId, SubmittedReports) ->
@@ -606,14 +749,14 @@ verify_recorded_pod_status_changes(RegistryId, SubmittedReports) ->
 
     maps:foreach(fun(PodId, ExpectedReversedPodEventLogs) ->
         #atm_openfaas_function_pod_status_summary{
-            event_log = PodEventLogId
+            event_log_id = PodEventLogId
         } = get_pod_status_summary(RegistryId, PodId),
         ?assertEqual(
             {ok, #{
                 <<"logEntries">> => lists:reverse(ExpectedReversedPodEventLogs),
                 <<"isLast">> => true
             }},
-            ?rpc(atm_openfaas_function_activity_registry:browse_pod_event_log(
+            ?rpc(atm_openfaas_function_pod_status_registry:browse_pod_event_log(
                 PodEventLogId, #{direction => ?FORWARD, limit => 1000}
             )),
             ?ATTEMPTS
@@ -623,15 +766,16 @@ verify_recorded_pod_status_changes(RegistryId, SubmittedReports) ->
 
 %% @private
 -spec get_pod_status_summary(
-    atm_openfaas_function_activity_registry:id(),
-    atm_openfaas_function_activity_registry:pod_id()
+    atm_openfaas_function_pod_status_registry:id(),
+    atm_openfaas_function_pod_status_registry:pod_id()
 ) ->
     atm_openfaas_function_pod_status_summary:record() | undefined.
 get_pod_status_summary(RegistryId, PodId) ->
-    case get_activity_registry(RegistryId) of
-        {ok, #atm_openfaas_function_activity_registry{pod_status_registry = PodStatusRegistry}} ->
+    case get_function_pod_status_registry(RegistryId) of
+        {ok, PodStatusRegistry} ->
             try
-                atm_openfaas_function_pod_status_registry:get_summary(PodId, PodStatusRegistry)
+                {ok, Summary} = atm_openfaas_function_pod_status_registry:find_summary(PodId, PodStatusRegistry),
+                Summary
             catch _:_ ->
                 undefined
             end;
@@ -643,7 +787,7 @@ get_pod_status_summary(RegistryId, PodId) ->
 %% @private
 -spec gen_pod_status_report(
     atm_openfaas_task_executor:function_name(),
-    atm_openfaas_function_activity_registry:pod_id()
+    atm_openfaas_function_pod_status_registry:pod_id()
 ) ->
     atm_openfaas_function_pod_status_report:record().
 gen_pod_status_report(FunctionName, PodId) ->
@@ -653,7 +797,7 @@ gen_pod_status_report(FunctionName, PodId) ->
     #atm_openfaas_function_pod_status_report{
         % Simulate the fact that reports may not arrive in order.
         % Still, the original timestamps from the reports should be returned
-        % during listing (which is checked in verify_recorded_activity/2).
+        % during listing (which is checked in verify_recorded_pod_status_changes/2).
         function_name = FunctionName,
         pod_id = PodId,
 

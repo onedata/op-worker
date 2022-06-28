@@ -49,7 +49,7 @@ has_received_internal_server_error_push_message(ClientRef) ->
 %% @private
 %% @doc Callback handling push messages received by the test_websocket_client.
 -spec handle_push_message(test_websocket_client:client_ref(), binary()) ->
-    no_reply | {reply, binary()}.
+    no_reply | {reply_text, binary()}.
 handle_push_message(ClientRef, <<"Internal server error while processing the request">>) ->
     % this push message is received when an error occurs during report processing
     node_cache:put({internal_server_error_received, ClientRef}, true),

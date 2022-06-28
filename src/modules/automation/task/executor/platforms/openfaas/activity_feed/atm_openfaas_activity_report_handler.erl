@@ -18,13 +18,17 @@
 %%%===================================================================
 
 
--callback consume_activity_report(
+-callback consume_report(
     atm_openfaas_activity_feed_ws_handler:connection_ref(),
-    atm_openfaas_activity_report:record(),
+    atm_openfaas_activity_report:body(),
     atm_openfaas_activity_feed_ws_handler:handler_state()
 ) ->
-    atm_openfaas_activity_feed_ws_handler:handler_state().
+    {no_reply | {reply_json, json_utils:json_term()}, atm_openfaas_activity_feed_ws_handler:handler_state()}.
 
 
--callback handle_error(errors:error(), atm_openfaas_activity_feed_ws_handler:handler_state()) ->
+-callback handle_error(
+    atm_openfaas_activity_feed_ws_handler:connection_ref(),
+    errors:error(),
+    atm_openfaas_activity_feed_ws_handler:handler_state()
+) ->
     ok.
