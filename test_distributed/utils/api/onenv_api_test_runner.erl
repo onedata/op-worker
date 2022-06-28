@@ -170,8 +170,8 @@ run_tests(SpecTemplates) ->
             throw:fail ->
                 false;
             Type:Reason:Stacktrace ->
-                ct:pal("Unexpected error while running test suite ~p:~p ~p", [
-                    Type, Reason, Stacktrace
+                ct:pal("Unexpected error while running test suite ~w:~p~nStacktrace: ~s", [
+                    Type, Reason, lager:pr_stacktrace(Stacktrace)
                 ]),
                 false
         end
