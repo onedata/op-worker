@@ -134,24 +134,32 @@ get_extended_collecting_status(SpaceId) ->
     end.
 
 
--spec get_last_status_change_timestamp_if_in_enabled_status(od_space:id()) ->
+-spec get_last_status_change_timestamp_if_in_enabled_status(od_space:id() | record()) ->
     {ok, time:seconds()} | dir_stats_collector:collecting_status_error().
+get_last_status_change_timestamp_if_in_enabled_status(#dir_stats_collector_config{
+    collecting_status = enabled,
+    collecting_status_change_timestamps = []
+}) ->
+    {ok, 0};
+
+get_last_status_change_timestamp_if_in_enabled_status(#dir_stats_collector_config{
+    collecting_status = enabled,
+    collecting_status_change_timestamps = [{enabled, Time} | _]
+}) ->
+    {ok, Time};
+
+get_last_status_change_timestamp_if_in_enabled_status(#dir_stats_collector_config{
+    collecting_status = collections_initialization
+}) ->
+    ?ERROR_DIR_STATS_NOT_READY;
+
+get_last_status_change_timestamp_if_in_enabled_status(#dir_stats_collector_config{}) ->
+    ?ERROR_DIR_STATS_DISABLED_FOR_SPACE;
+
 get_last_status_change_timestamp_if_in_enabled_status(SpaceId) ->
     case get_config(SpaceId) of
-        {ok, #dir_stats_collector_config{
-            collecting_status = enabled,
-            collecting_status_change_timestamps = []
-        }} ->
-            {ok, 0};
-        {ok, #dir_stats_collector_config{
-            collecting_status = enabled,
-            collecting_status_change_timestamps = [{enabled, Time} | _]
-        }} ->
-            {ok, Time};
-        {ok, #dir_stats_collector_config{collecting_status = collections_initialization}} ->
-            ?ERROR_DIR_STATS_NOT_READY;
-        {ok, _} ->
-            ?ERROR_DIR_STATS_DISABLED_FOR_SPACE;
+        {ok, Config} ->
+            get_last_status_change_timestamp_if_in_enabled_status(Config);
         ?ERROR_NOT_FOUND ->
             ?ERROR_DIR_STATS_DISABLED_FOR_SPACE
     end.

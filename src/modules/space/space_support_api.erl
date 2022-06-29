@@ -20,6 +20,7 @@
 -export([init_for_supported_spaces/0]).
 -export([
     init_support_state/2,
+    get_support_state/1,
     get_support_opts/1,
     update_support_opts/2,
     clean_support_state/1
@@ -73,13 +74,23 @@ init_support_state(SpaceId, SupportOpts = #{
     ok.
 
 
+-spec get_support_state(od_space:id()) -> {ok, space_support_state:record()} | errors:error().
+get_support_state(SpaceId) ->
+    case space_support_state:get(SpaceId) of
+        {ok, #document{value = SpaceSupportState}} ->
+            {ok, SpaceSupportState};
+        {error, not_found} ->
+            ?ERROR_NOT_FOUND
+    end.
+
+
 -spec get_support_opts(od_space:id()) -> {ok, support_opts()} | errors:error().
 get_support_opts(SpaceId) ->
-    case space_support_state:get(SpaceId) of
-        {ok, #document{value = #space_support_state{
+    case get_support_state(SpaceId) of
+        {ok, #space_support_state{
             accounting_status = AccountingStatus,
             dir_stats_collector_config = DirStatsCollectorConfig
-        }}} ->
+        }} ->
             {ok, #{
                 accounting_enabled => case AccountingStatus of
                     enabled -> true;
@@ -89,8 +100,8 @@ get_support_opts(SpaceId) ->
                     DirStatsCollectorConfig
                 )
             }};
-        {error, not_found} ->
-            ?ERROR_NOT_FOUND
+        {error, _} = Error ->
+            Error
     end.
 
 
