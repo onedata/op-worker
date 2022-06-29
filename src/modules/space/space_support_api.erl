@@ -84,22 +84,26 @@ get_support_state(SpaceId) ->
     end.
 
 
--spec get_support_opts(od_space:id()) -> {ok, support_opts()} | errors:error().
+-spec get_support_opts(od_space:id() | space_support_state:record()) ->
+    {ok, support_opts()} | errors:error().
+get_support_opts(#space_support_state{
+    accounting_status = AccountingStatus,
+    dir_stats_collector_config = DirStatsCollectorConfig
+}) ->
+    {ok, #{
+        accounting_enabled => case AccountingStatus of
+            enabled -> true;
+            disabled -> false
+        end,
+        dir_stats_enabled => dir_stats_collector_config:is_collecting_active(
+            DirStatsCollectorConfig
+        )
+    }};
+
 get_support_opts(SpaceId) ->
     case get_support_state(SpaceId) of
-        {ok, #space_support_state{
-            accounting_status = AccountingStatus,
-            dir_stats_collector_config = DirStatsCollectorConfig
-        }} ->
-            {ok, #{
-                accounting_enabled => case AccountingStatus of
-                    enabled -> true;
-                    disabled -> false
-                end,
-                dir_stats_enabled => dir_stats_collector_config:is_collecting_active(
-                    DirStatsCollectorConfig
-                )
-            }};
+        {ok, SpaceSupportState} ->
+            get_support_opts(SpaceSupportState);
         {error, _} = Error ->
             Error
     end.

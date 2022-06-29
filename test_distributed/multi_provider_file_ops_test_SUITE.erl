@@ -1377,7 +1377,8 @@ init_per_testcase(Case, Config) when
     Case =:= dir_stats_collector_parallel_write_test;
     Case =:= dir_stats_collector_parallel_override_test;
     Case =:= dir_stats_collector_parallel_write_with_sleep_test;
-    Case =:= dir_stats_collector_parallel_write_to_empty_file_test ->
+    Case =:= dir_stats_collector_parallel_write_to_empty_file_test
+->
     dir_stats_collector_test_base:init_and_enable_for_new_space(init_per_testcase(?DEFAULT_CASE(Case), Config));
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 60}),

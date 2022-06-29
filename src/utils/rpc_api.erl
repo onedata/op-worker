@@ -88,6 +88,7 @@
     get_spaces/0,
     supports_space/1,
     get_space_details/1,
+    get_space_dir_stats_collecting_status/1,
     get_provider_details/0,
     is_subdomain_delegated/0,
     set_delegated_subdomain/1,
@@ -505,6 +506,17 @@ get_space_details(SpaceId) ->
                 harvesters => Record#od_space.harvesters
             }};
         {error, Error} -> {error, Error}
+    end.
+
+
+-spec get_space_dir_stats_collecting_status(od_space:id()) ->
+    initializing | enabled | stopping | disabled.
+get_space_dir_stats_collecting_status(SpaceId) ->
+    case dir_stats_collector_config:get_extended_collecting_status(SpaceId) of
+        {collections_initialization, _} -> initializing;
+        enabled -> enabled;
+        collectors_stopping -> stopping;
+        disabled -> disabled
     end.
 
 
