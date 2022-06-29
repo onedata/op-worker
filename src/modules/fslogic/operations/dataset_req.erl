@@ -33,6 +33,7 @@
 %% Archives API
 -export([
     create_archive/7,
+    cancel_archivisation/3,
     update_archive/4,
     get_archive_info/3,
     list_archives/5,
@@ -171,6 +172,14 @@ create_archive(SpaceDirCtx, DatasetId, Config, PreservedCallback, DeletedCallbac
     ).
 
 
+-spec cancel_archivisation(file_ctx:ctx(), archive:id(), user_ctx:ctx()) -> ok | {error, term()}.
+cancel_archivisation(SpaceDirCtx, ArchiveId, UserCtx) ->
+    assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_MANAGE_DATASETS),
+    assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_CREATE_ARCHIVES),
+    
+    archive_api:cancel_archivisation(ArchiveId).
+
+
 -spec update_archive(file_ctx:ctx(), archive:id(), archive:diff(), user_ctx:ctx()) ->
     ok | error().
 update_archive(SpaceDirCtx, ArchiveId, Diff, UserCtx) ->
@@ -191,7 +200,7 @@ get_archive_info(SpaceDirCtx, ArchiveId, UserCtx) ->
     file_ctx:ctx(),
     dataset:id(),
     archives_list:opts(),
-    dataset_api:listing_mode(),
+    archive_api:listing_mode(),
     user_ctx:ctx()
 ) ->
     {ok, {archive_api:entries(), boolean()}} | error().

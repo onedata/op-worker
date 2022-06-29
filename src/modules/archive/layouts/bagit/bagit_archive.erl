@@ -134,7 +134,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([prepare/2, finalize/2, archive_file/6, archive_dir/4]).
+-export([prepare/2, finalize/2, archive_file/7, archive_dir/4]).
 
 
 %%%===================================================================
@@ -158,10 +158,10 @@ finalize(ArchiveDirCtx, UserCtx) ->
 
 
 -spec archive_file(archive:doc(), file_ctx:ctx(), file_ctx:ctx(), archive:doc() | undefined, 
-    file_meta:path(), user_ctx:ctx()) -> {ok, file_ctx:ctx()} | {error, term()}.
-archive_file(ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, ResolvedFilePath, UserCtx) ->
+    file_meta:path(), user_ctx:ctx(), file_copy:options()) -> {ok, file_ctx:ctx()} | {error, term()}.
+archive_file(ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, ResolvedFilePath, UserCtx, CopyOpts) ->
     case plain_archive:archive_regular_file(
-        ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, ResolvedFilePath, UserCtx
+        ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, ResolvedFilePath, UserCtx, CopyOpts
     ) of
         {ok, ArchivedFileCtx} ->
             {FileDoc, ArchivedFileCtx2} = file_ctx:get_file_doc(ArchivedFileCtx),

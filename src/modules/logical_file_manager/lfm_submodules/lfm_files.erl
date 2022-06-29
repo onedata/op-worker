@@ -183,7 +183,7 @@ ensure_dir(SessId, RelativeRootGuid, FilePath, Mode) ->
 
 
 -spec is_dir(session:id(), lfm:file_key()) ->
-    true | false | lfm:error_reply().
+    boolean() | lfm:error_reply().
 is_dir(SessId, FileKey) ->
     case lfm:stat(SessId, FileKey) of
         {ok, #file_attr{type = ?DIRECTORY_TYPE}} -> true;

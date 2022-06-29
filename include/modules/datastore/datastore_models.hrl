@@ -430,6 +430,7 @@
 % Model used for storing information concerning archive.
 % One documents is stored for one archive.
 -record(archive, {
+    archiving_provider :: oneprovider:id(),
     dataset_id :: dataset:id(),
     creation_time :: time:seconds(),
     creator :: archive:creator(),

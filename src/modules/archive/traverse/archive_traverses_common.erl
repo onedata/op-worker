@@ -10,13 +10,20 @@
 %%% traverse modules. 
 %%% @end
 %%%-------------------------------------------------------------------
--module(archive_traverse_common).
+-module(archive_traverses_common).
 -author("Michal Stanisz").
 
+-include("modules/dataset/archive.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
 -export([update_children_count/4, take_children_count/3]).
+-export([execute_unsafe_job/6]).
+-export([is_cancelled/1]).
+
+-type error_handler() :: fun((tree_traverse:id(), tree_traverse:job(), Error :: any(), Stacktrace :: list()) -> ok).
 
 %%%===================================================================
 %%% API functions
@@ -54,6 +61,36 @@ take_children_count(PoolName, TaskId, DirUuid) ->
         end
     )),
     binary_to_integer(ChildrenCount).
+
+
+-spec execute_unsafe_job(module(), atom(), [term()], tree_traverse:job(), tree_traverse:id(), error_handler()) ->
+    any() | error.
+execute_unsafe_job(Module, JobFunctionName, Options, Job, TaskId, ErrorCallback) ->
+    try
+        erlang:apply(Module, JobFunctionName, [Job | Options])
+    catch
+        _Class:{badmatch, {error, Reason}}:Stacktrace ->
+            ErrorCallback(TaskId, Job, ?ERROR_POSIX(Reason), Stacktrace),
+            error;
+        _Class:Reason:Stacktrace ->
+            ErrorCallback(TaskId, Job, Reason, Stacktrace),
+            error
+    end.
+
+
+-spec is_cancelled(archivisation_traverse_ctx:ctx() | archive:doc()) -> boolean() | {error, term()}.
+is_cancelled(#document{key = ArchiveId}) ->
+    case archive:get(ArchiveId) of
+        {ok, #document{value = #archive{state = State}}} ->
+            State == ?ARCHIVE_CANCELLING;
+        {error, _} = Error ->
+            Error
+    end;
+is_cancelled(ArchiveCtx) ->
+    case archive_traverse_ctx:get_archive_doc(ArchiveCtx) of
+        undefined -> false;
+        ArchiveDoc -> is_cancelled(ArchiveDoc)
+    end.
 
 %%%===================================================================
 %%% Internal functions

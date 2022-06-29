@@ -1,0 +1,491 @@
+%%%-------------------------------------------------------------------
+%%% @author Jakub Kudzia, Michal Stanisz
+%%% @copyright (C) 2021 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%-------------------------------------------------------------------
+%%% @doc
+%%% This module is responsible for performing dataset archivisation during archivisation traverse
+%%% (see `archivisation_traverse` for more details).
+%%% @end
+%%%-------------------------------------------------------------------
+-module(archivisation_traverse_logic).
+-author("Michal Stanisz").
+-author("Jakub Kudzia").
+
+-include("tree_traverse.hrl").
+-include("modules/dataset/archive.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
+
+
+%% API
+-export([
+    mark_building_if_first_job/1, 
+    mark_finished_and_propagate_up/5, 
+    handle_nested_dataset_and_do_archive/4,
+    initialize_archive_dir/3,
+    save_dir_checksum_metadata/3
+]).
+
+-type id() :: archivisation_traverse:id().
+-type info() :: archivisation_traverse:info().
+-type docs_map() :: archivisation_traverse:docs_map().
+-type ctx() :: archivisation_traverse_ctx:ctx().
+
+-define(COPY_OPTIONS(ArchiveId), #{
+    recursive => false,
+    on_write_callback => fun(_BytesCopied) ->
+        %% @TODO VFS-8937 - Update archive bytes copied continuously
+        case archive:get(ArchiveId) of
+            {ok, #document{value = #archive{state = ?ARCHIVE_CANCELLING}}} -> abort;
+            _ -> continue
+        end
+    end
+}).
+
+
+%%%===================================================================
+%%% API functions
+%%%===================================================================
+
+-spec mark_building_if_first_job(tree_traverse:master_job()) -> ok.
+mark_building_if_first_job(Job = #tree_traverse{traverse_info = #{
+    aip_ctx := AipArchiveCtx,
+    dip_ctx := DipArchiveCtx
+}}) ->
+    case is_first_job(Job) of
+        true ->
+            ok = archive:mark_building(archive_traverse_ctx:get_archive_doc(AipArchiveCtx)),
+            case archive_traverse_ctx:get_archive_doc(DipArchiveCtx) of
+                undefined -> ok;
+                DipArchiveDoc ->
+                    ok = archive:mark_building(DipArchiveDoc)
+            end;
+        false ->
+            ok
+    end.
+
+
+-spec mark_finished_and_propagate_up(file_ctx:ctx(), user_ctx:ctx(), info(), id(),
+    file_meta:uuid()) -> ok.
+mark_finished_and_propagate_up(CurrentFileCtx, UserCtx, TraverseInfo, TaskId, SourceMasterUuid) ->
+    NextTraverseInfoOrUndefined =
+        mark_finished_if_current_archive_is_rooted_in_current_file(
+            CurrentFileCtx, UserCtx, TraverseInfo),
+    case NextTraverseInfoOrUndefined of
+        undefined ->
+            ok;
+        NextTraverseInfo ->
+            propagate_finished_up(CurrentFileCtx, UserCtx, NextTraverseInfo, TaskId, SourceMasterUuid)
+    end.
+
+
+-spec handle_nested_dataset_and_do_archive(file_ctx:ctx(), file_meta:path(), user_ctx:ctx(),
+    info()) -> info().
+handle_nested_dataset_and_do_archive(FileCtx, ResolvedFilePath, UserCtx, TraverseInfo = #{
+    aip_ctx := AipArchiveCtx,
+    dip_ctx := DipArchiveCtx,
+    base_archive_doc := BaseArchiveDoc,
+    initial_archive_docs := InitialArchiveDocs
+}) ->
+    AipArchiveDoc = archive_traverse_ctx:get_archive_doc(AipArchiveCtx),
+    {ok, Config} = archive:get_config(AipArchiveDoc),
+    CreateNestedArchives = archive_config:should_create_nested_archives(Config),
+    % check if there is dataset attached to current directory
+    % if true, create a nested archive associated with the dataset
+    NestedDatasetId = case CreateNestedArchives of
+        true -> get_nested_dataset_id_if_attached(FileCtx, AipArchiveDoc);
+        false -> undefined
+    end,
+    ShouldCreateNestedArchive = NestedDatasetId =/= undefined,
+    
+    {AipArchiveCtx2, DipArchiveCtx2, FinalBaseArchiveDoc} = case ShouldCreateNestedArchive of
+        true -> initialize_nested_archive(NestedDatasetId, UserCtx, TraverseInfo);
+        false -> {AipArchiveCtx, DipArchiveCtx, BaseArchiveDoc}
+    end,
+    {FinalAipArchiveCtx, FinalDipArchiveCtx} = do_archive(FileCtx, ResolvedFilePath, AipArchiveCtx2, DipArchiveCtx2,
+        FinalBaseArchiveDoc, InitialArchiveDocs, UserCtx),
+    
+    ShouldCreateNestedArchive andalso symlink_nested_archive(AipArchiveCtx, FinalAipArchiveCtx, UserCtx),
+    ShouldCreateNestedArchive andalso symlink_nested_archive(DipArchiveCtx, FinalDipArchiveCtx, UserCtx),
+    TraverseInfo#{
+        aip_ctx => archive_traverse_ctx:ensure_guid_in_ctx(FinalAipArchiveCtx),
+        dip_ctx => archive_traverse_ctx:ensure_guid_in_ctx(FinalDipArchiveCtx),
+        base_archive_doc => FinalBaseArchiveDoc
+    }.
+
+
+-spec initialize_archive_dir(archive:doc() | archive:id(), dataset:id(), user_ctx:ctx()) ->
+    {ok, archive:doc()}.
+initialize_archive_dir(ArchiveId, DatasetId, UserCtx) when is_binary(ArchiveId) ->
+    {ok, ArchiveDoc} = archive:get(ArchiveId),
+    initialize_archive_dir(ArchiveDoc, DatasetId, UserCtx);
+initialize_archive_dir(ArchiveDoc, DatasetId, UserCtx) ->
+    {ok, ArchiveDoc2} = create_archive_root_dir(ArchiveDoc, DatasetId, UserCtx),
+    create_archive_data_dir(ArchiveDoc2, UserCtx).
+
+
+-spec save_dir_checksum_metadata(file_ctx:ctx() | undefined, user_ctx:ctx(), non_neg_integer()) ->
+    ok.
+save_dir_checksum_metadata(undefined, _, _) ->
+    ok;
+save_dir_checksum_metadata(FileCtx, UserCtx, TotalChildrenCount) ->
+    archivisation_checksum:dir_calculate_and_save(FileCtx, UserCtx, TotalChildrenCount).
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+-spec create_archive_root_dir(archive:doc(), dataset:id(), user_ctx:ctx()) -> {ok, archive:doc()}.
+create_archive_root_dir(ArchiveDoc, DatasetId, UserCtx) ->
+    {ok, ArchiveId} = archive:get_id(ArchiveDoc),
+    {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
+    UserId = user_ctx:get_user_id(UserCtx),
+    {ok, ArchiveRootDirUuid} = archivisation_tree:create_archive_dir(
+        ArchiveId, DatasetId, SpaceId, UserId),
+    ArchiveRootDirGuid = file_id:pack_guid(ArchiveRootDirUuid, SpaceId),
+    archive:set_root_dir_guid(ArchiveId, ArchiveRootDirGuid).
+
+
+-spec create_archive_data_dir(archive:doc(), user_ctx:ctx()) -> {ok, archive:doc()}.
+create_archive_data_dir(ArchiveDoc, UserCtx) ->
+    {ok, ArchiveRootDirGuid} = archive:get_root_dir_guid(ArchiveDoc),
+    ArchiveRootDirCtx = file_ctx:new_by_guid(ArchiveRootDirGuid),
+    DataDirGuid = case is_bagit(ArchiveDoc) of
+        true ->
+            {ok, DataDirCtx} = bagit_archive:prepare(ArchiveRootDirCtx, UserCtx),
+            save_dir_checksum_metadata(DataDirCtx, UserCtx, 1),
+            file_ctx:get_logical_guid_const(DataDirCtx);
+        false ->
+            save_dir_checksum_metadata(ArchiveRootDirCtx, UserCtx, 1),
+            ArchiveRootDirGuid
+    end,
+    archive:set_data_dir_guid(ArchiveDoc, DataDirGuid).
+
+
+-spec get_nested_dataset_id_if_attached(file_ctx:ctx(), archive:doc()) -> dataset:id() | undefined.
+get_nested_dataset_id_if_attached(FileCtx, ParentArchiveDoc) ->
+    {FileDoc, _FileCtx2} = file_ctx:get_file_doc(FileCtx),
+    {ok, ParentDatasetId} = archive:get_dataset_id(ParentArchiveDoc),
+    case file_meta_dataset:get_id_if_attached(FileDoc) of
+        undefined -> undefined;
+        ParentDatasetId -> undefined;
+        DatasetId -> DatasetId
+    end.
+
+
+-spec initialize_nested_archive(dataset:id(), user_ctx:ctx(), info()) -> 
+    {Aip :: ctx(), Dip :: ctx(), archive:doc()}.
+initialize_nested_archive(NestedDatasetId, UserCtx, #{
+    aip_ctx := AipArchiveCtx,
+    dip_ctx := DipArchiveCtx,
+    scheduled_dataset_base_archive_doc := ScheduledDatasetBaseArchiveDoc
+}) ->
+    AipNestedArchiveCtx = create_and_prepare_nested_archive_dir(
+        NestedDatasetId, AipArchiveCtx, UserCtx, aip),
+    DipNestedArchiveCtx = create_and_prepare_nested_archive_dir(
+        NestedDatasetId, DipArchiveCtx, UserCtx, dip),
+    
+    NestedBaseArchiveDoc = case ScheduledDatasetBaseArchiveDoc /= undefined of
+        true ->
+            incremental_archive:find_base_for_nested_archive(
+                archive_traverse_ctx:get_archive_doc(AipNestedArchiveCtx), ScheduledDatasetBaseArchiveDoc, UserCtx);
+        false ->
+            undefined
+    end,
+    {ok, NestedAipArchiveDoc2} = archive:set_base_archive_id(archive_traverse_ctx:get_archive_doc(
+        AipNestedArchiveCtx), NestedBaseArchiveDoc),
+    {ok, NestedDipArchiveDoc2} = case archive_traverse_ctx:get_archive_doc(DipNestedArchiveCtx) of
+        undefined -> {ok, undefined};
+        NestedDipDoc -> archive:set_base_archive_id(NestedDipDoc, NestedBaseArchiveDoc)
+    end,
+    AipNestedArchiveCtx2 =
+        archive_traverse_ctx:set_archive_doc(AipNestedArchiveCtx, NestedAipArchiveDoc2),
+    DipNestedArchiveCtx2 =
+        archive_traverse_ctx:set_archive_doc(DipNestedArchiveCtx, NestedDipArchiveDoc2),
+    
+    {FinalAipArchiveCtx, FinalDipArchiveCtx} = set_aip_dip_relation(
+        AipNestedArchiveCtx2, DipNestedArchiveCtx2),
+    {FinalAipArchiveCtx, FinalDipArchiveCtx, NestedBaseArchiveDoc}.
+
+
+-spec symlink_nested_archive(Parent :: ctx(), Nested :: ctx(), user_ctx:ctx()) -> ok.
+symlink_nested_archive(ParentArchiveCtx, NestedArchiveCtx, UserCtx) ->
+    case archive_traverse_ctx:get_parent_file_ctx(ParentArchiveCtx) of
+        undefined -> ok;
+        TargetParentFileCtx -> make_symlink(
+            archive_traverse_ctx:get_parent_file_ctx(NestedArchiveCtx), TargetParentFileCtx, UserCtx)
+    end.
+
+
+-spec create_and_prepare_nested_archive_dir(dataset:id(), ctx(), user_ctx:ctx(), dip | aip) ->
+    ctx().
+create_and_prepare_nested_archive_dir(DatasetId, ParentArchiveCtx, UserCtx, Type) ->
+    case archive_traverse_ctx:get_archive_doc(ParentArchiveCtx) of
+        undefined ->
+            ParentArchiveCtx;
+        ParentArchiveDoc ->
+            {ok, SpaceId} = archive:get_space_id(ParentArchiveDoc),
+            {ok, ParentArchiveId} = archive:get_id(ParentArchiveDoc),
+            {ok, NestedArchiveDoc} = archive:create_nested(DatasetId, ParentArchiveDoc),
+            {ok, ArchiveId} = archive:get_id(NestedArchiveDoc),
+            {ok, Timestamp} = archive:get_creation_time(NestedArchiveDoc),
+            case Type of
+                dip -> ok;
+                aip -> archives_list:add(DatasetId, SpaceId, ArchiveId, Timestamp)
+            end,
+            archives_forest:add(ParentArchiveId, SpaceId, ArchiveId),
+            {ok, NestedArchiveDoc2} = initialize_archive_dir(NestedArchiveDoc, DatasetId, UserCtx),
+            {ok, NestedArchiveDataDirGuid} = archive:get_data_dir_guid(NestedArchiveDoc2),
+            archive_traverse_ctx:build(NestedArchiveDoc2, NestedArchiveDataDirGuid)
+    end.
+
+
+-spec set_aip_dip_relation(Aip :: ctx(), Dip :: ctx()) -> {Aip :: ctx(), Dip :: ctx()}.
+set_aip_dip_relation(AipArchiveCtx, DipArchiveCtx) ->
+    {ok, NestedAipArchiveId} = archive:get_id(archive_traverse_ctx:get_archive_doc(AipArchiveCtx)),
+    {ok, NestedDipArchiveId} = case archive_traverse_ctx:get_archive_doc(DipArchiveCtx) of
+        undefined -> {ok, undefined};
+        NestedDipArchiveDoc -> archive:get_id(NestedDipArchiveDoc)
+    end,
+    {ok, UpdatedAipArchiveDoc} = archive:set_related_dip(
+        archive_traverse_ctx:get_archive_doc(AipArchiveCtx), NestedDipArchiveId),
+    {ok, UpdatedDipArchiveDoc} = case archive_traverse_ctx:get_archive_doc(DipArchiveCtx) of
+        undefined -> {ok, undefined};
+        DipNestedArchiveDoc -> archive:set_related_aip(DipNestedArchiveDoc, NestedAipArchiveId)
+    end,
+    {
+        archive_traverse_ctx:set_archive_doc(AipArchiveCtx, UpdatedAipArchiveDoc),
+        archive_traverse_ctx:set_archive_doc(DipArchiveCtx, UpdatedDipArchiveDoc)
+    }.
+
+
+-spec propagate_finished_up(file_ctx:ctx(), user_ctx:ctx(), info(), id(), file_meta:uuid()) -> ok.
+propagate_finished_up(FileCtx, UserCtx, TraverseInfo, TaskId, SourceMasterUuid) ->
+    #{scheduled_dataset_root_guid := ScheduledDatasetRootGuid} = TraverseInfo,
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
+    case FileGuid =:= ScheduledDatasetRootGuid of
+        true ->
+            ok;
+        false ->
+            SpaceId = file_ctx:get_space_id_const(FileCtx),
+            ParentStatus = tree_traverse:report_child_processed(TaskId, SourceMasterUuid),
+            case ParentStatus of
+                ?SUBTREE_PROCESSED(NextSubtreeRoot) ->
+                    SourceMasterFileCtx = file_ctx:new_by_uuid(SourceMasterUuid, SpaceId),
+                    mark_finished_and_propagate_up(
+                        SourceMasterFileCtx, UserCtx, TraverseInfo, TaskId, NextSubtreeRoot);
+                ?SUBTREE_NOT_PROCESSED ->
+                    ok
+            end
+    end.
+
+
+-spec mark_finished_if_current_archive_is_rooted_in_current_file(file_ctx:ctx(), user_ctx:ctx(),
+    info()) -> info() | undefined.
+mark_finished_if_current_archive_is_rooted_in_current_file(CurrentFileCtx, UserCtx, #{
+    aip_ctx := AipArchiveCtx,
+    dip_ctx := DipArchiveCtx
+} = TraverseInfo) ->
+    case is_archive_rooted_in_current_file(CurrentFileCtx, TraverseInfo) of
+        true ->
+            TraverseInfo#{
+                aip_ctx => finalize_archive(AipArchiveCtx, UserCtx),
+                dip_ctx => finalize_archive(DipArchiveCtx, UserCtx)
+            };
+        false ->
+            TraverseInfo
+    end.
+
+
+-spec finalize_archive(ctx(), user_ctx:ctx()) -> ctx().
+finalize_archive(ArchiveCtx, UserCtx) ->
+    case archive_traverse_ctx:get_archive_doc(ArchiveCtx) of
+        undefined -> 
+            ArchiveCtx;
+        CurrentDoc ->
+            NestedArchiveStats = archive_api:get_nested_archives_stats(CurrentDoc),
+            mark_finished(CurrentDoc, UserCtx, NestedArchiveStats),
+            {ok, ParentDocOrUndefined} = case CurrentDoc of
+                undefined -> {ok, undefined};
+                _ -> archive:get_parent_doc(CurrentDoc)
+            end,
+            archive_traverse_ctx:set_archive_doc(ArchiveCtx, ParentDocOrUndefined)
+    end.
+
+
+-spec mark_finished(archive:doc() | undefined, user_ctx:ctx(), archive_stats:record()) -> ok.
+mark_finished(undefined, _UserCtx, _NestedArchiveStats) ->
+    ok;
+mark_finished(ArchiveDoc, UserCtx, NestedArchiveStats) ->
+    case is_bagit(ArchiveDoc) of
+        true ->
+            case archive_traverses_common:is_cancelled(ArchiveDoc) of
+                true -> ok;
+                false ->
+                    {ok, ArchiveRootDirCtx} = archive:get_root_dir_ctx(ArchiveDoc),
+                    bagit_archive:finalize(ArchiveRootDirCtx, UserCtx)
+            end;
+        false -> ok
+    end,
+    ok = archive:mark_creation_finished(ArchiveDoc, NestedArchiveStats).
+
+
+-spec do_archive(file_ctx:ctx(), file_meta:path(), ctx(), ctx(),
+    archive:doc() | undefined, docs_map(), user_ctx:ctx()) -> {ctx(), ctx()}.
+do_archive(FileCtx, ResolvedFilePath, AipArchiveCtx, DipArchiveCtx, BaseArchiveDoc,
+    InitialArchiveDocs, UserCtx
+) ->
+    {IsDir, FileCtx2} = file_ctx:is_dir(FileCtx),
+    {FinalAipTargetParent, FinalDipTargetParent} = case IsDir of
+        true ->
+            {
+                archive_dir(AipArchiveCtx, FileCtx2, ResolvedFilePath, UserCtx),
+                archive_dir(DipArchiveCtx, FileCtx2, ResolvedFilePath, UserCtx)
+            };
+        false ->
+            archive_file_and_mark_finished(FileCtx2, AipArchiveCtx, DipArchiveCtx,
+                BaseArchiveDoc, InitialArchiveDocs, ResolvedFilePath, UserCtx)
+    end,
+    {
+        archive_traverse_ctx:set_target_parent(AipArchiveCtx, FinalAipTargetParent),
+        archive_traverse_ctx:set_target_parent(DipArchiveCtx, FinalDipTargetParent)
+    }.
+
+
+-spec archive_dir(ctx(), file_ctx:ctx(), file_meta:path(), user_ctx:ctx()) ->
+    file_ctx:ctx().
+archive_dir(ArchiveCtx, FileCtx, ResolvedFilePath, UserCtx) ->
+    case archive_traverse_ctx:get_archive_doc(ArchiveCtx) of
+        undefined -> 
+            undefined;
+        ArchiveDoc ->
+            DirName = filename:basename(ResolvedFilePath),
+            DirGuid = file_ctx:get_logical_guid_const(FileCtx),
+            TargetParentGuid = file_ctx:get_logical_guid_const(
+                archive_traverse_ctx:get_parent_file_ctx(ArchiveCtx)),
+            % only directory is copied therefore recursive=false is passed to copy function
+            {ok, CopyGuid, _} = file_copy:copy(user_ctx:get_session_id(UserCtx), DirGuid, TargetParentGuid,
+                DirName, #{recursive => false}),
+            ArchivedFileCtx = file_ctx:new_by_guid(CopyGuid),
+            case is_bagit(ArchiveDoc) of
+                false -> ok;
+                true -> bagit_archive:archive_dir(ArchiveDoc, ResolvedFilePath, ArchivedFileCtx, UserCtx)
+            end,
+            ArchivedFileCtx
+    end.
+
+
+-spec archive_file_and_mark_finished(file_ctx:ctx(), ctx(), ctx(),
+    archive:doc() | undefined, docs_map(), file_meta:path(), user_ctx:ctx()) ->
+    {file_ctx:ctx(), file_ctx:ctx() | undefined}.
+archive_file_and_mark_finished(FileCtx, AipArchiveCtx, DipArchiveCtx, BaseArchiveDoc,
+    InitialArchiveDocs, ResolvedFilePath, UserCtx
+) ->
+    {ok, ArchiveFileCtx} = archive_file(FileCtx, AipArchiveCtx, BaseArchiveDoc, 
+        maps:get(aip, InitialArchiveDocs), ResolvedFilePath, UserCtx
+    ),
+    {ok, DipArchiveFileCtx} = dip_archive_file(FileCtx, ArchiveFileCtx, DipArchiveCtx,
+        maps:get(dip, InitialArchiveDocs), UserCtx),
+    {FileSize, _} = file_ctx:get_file_size(ArchiveFileCtx),
+    ok = archive:mark_file_archived(archive_traverse_ctx:get_archive_doc(AipArchiveCtx), FileSize),
+    case archive_traverse_ctx:get_archive_doc(DipArchiveCtx) of
+        undefined -> ok;
+        DipArchiveDoc -> archive:mark_file_archived(DipArchiveDoc, FileSize)
+    end,
+    {ArchiveFileCtx, DipArchiveFileCtx}.
+
+
+-spec archive_file(file_ctx:ctx(), ctx(), archive:doc(), archive:doc(), file_meta:path(), user_ctx:ctx()) -> 
+    {ok, file_ctx:ctx()} | {error, term()}.
+archive_file(FileCtx, ArchiveCtx, BaseArchiveDoc, InitialAipDoc, ResolvedFilePath, UserCtx) ->
+    CurrentArchiveDoc = archive_traverse_ctx:get_archive_doc(ArchiveCtx),
+    TargetParentCtx = archive_traverse_ctx:get_parent_file_ctx(ArchiveCtx),
+    case {file_ctx:is_symlink_const(FileCtx), is_bagit(CurrentArchiveDoc)} of
+        {false, false} ->
+            plain_archive:archive_regular_file(CurrentArchiveDoc, FileCtx, TargetParentCtx,
+                BaseArchiveDoc, ResolvedFilePath, UserCtx, ?COPY_OPTIONS(CurrentArchiveDoc#document.key));
+        {false, true} ->
+            bagit_archive:archive_file(CurrentArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc,
+                ResolvedFilePath, UserCtx, ?COPY_OPTIONS(CurrentArchiveDoc#document.key));
+        {true, _} ->
+            % bagit archive does not store any additional data for symlinks
+            plain_archive:archive_symlink(FileCtx, TargetParentCtx, InitialAipDoc, UserCtx)
+    end.
+
+
+-spec dip_archive_file(file_ctx:ctx(), file_ctx:ctx(), ctx(), archive:doc(), user_ctx:ctx()) ->
+    {ok, file_ctx:ctx() | undefined}.
+dip_archive_file(OriginalFileCtx, ArchivedFileCtx, DipArchiveCtx, InitialDipDoc, UserCtx) ->
+    case {archive_traverse_ctx:get_parent_file_ctx(DipArchiveCtx), file_ctx:is_symlink_const(OriginalFileCtx)} of
+        {undefined, _} ->
+            {ok, undefined};
+        {DipTargetParentCtx, true} ->
+            plain_archive:archive_symlink(OriginalFileCtx, DipTargetParentCtx, InitialDipDoc, UserCtx);
+        {DipTargetParentCtx, false} ->
+            {FileName, _} = file_ctx:get_aliased_name(ArchivedFileCtx, UserCtx),
+            {ok, #file_attr{guid = LinkGuid}} = lfm:make_link(
+                user_ctx:get_session_id(UserCtx),
+                #file_ref{guid = file_ctx:get_logical_guid_const(ArchivedFileCtx)},
+                #file_ref{guid = file_ctx:get_logical_guid_const(DipTargetParentCtx)},
+                FileName
+            ),
+            {ok, file_ctx:new_by_guid(LinkGuid)}
+    end.
+
+
+-spec make_symlink(file_ctx:ctx(), file_ctx:ctx(), user_ctx:ctx()) -> ok.
+make_symlink(TargetCtx, ParentCtx, UserCtx) ->
+    SpaceId = file_ctx:get_space_id_const(TargetCtx),
+    SpaceIdPrefix = ?SYMLINK_SPACE_ID_ABS_PATH_PREFIX(SpaceId),
+    {FileName, TargetCtx2} = file_ctx:get_aliased_name(TargetCtx, UserCtx),
+    {TargetCanonicalPath, _} = file_ctx:get_canonical_path(TargetCtx2),
+    [_Sep, _SpaceId | Rest] = filename:split(TargetCanonicalPath),
+    SymlinkValue = filename:join([SpaceIdPrefix | Rest]),
+    ParentGuid = file_ctx:get_logical_guid_const(ParentCtx),
+    {ok, _} = lfm:make_symlink(user_ctx:get_session_id(UserCtx), ?FILE_REF(ParentGuid),
+        FileName, SymlinkValue),
+    ok.
+
+
+-spec is_bagit(archive:doc()) -> boolean().
+is_bagit(ArchiveDoc) ->
+    {ok, Config} = archive:get_config(ArchiveDoc),
+    archive_config:get_layout(Config) =:= ?ARCHIVE_BAGIT_LAYOUT.
+
+
+-spec is_dataset_root(tree_traverse:job()) -> boolean().
+is_dataset_root(#tree_traverse{
+    file_ctx = FileCtx,
+    traverse_info = #{scheduled_dataset_root_guid := ScheduledDatasetRootGuid}
+}) ->
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
+    FileGuid =:= ScheduledDatasetRootGuid.
+
+
+-spec is_first_job(tree_traverse:master_job()) -> boolean().
+is_first_job(Job = #tree_traverse{
+    file_ctx = FileCtx,
+    pagination_token = PaginationToken
+}) ->
+    {IsDir, _} = file_ctx:is_dir(FileCtx),
+    is_dataset_root(Job) andalso (
+        (IsDir andalso (PaginationToken =:= undefined))
+            orelse not IsDir
+    ).
+
+
+-spec is_archive_rooted_in_current_file(file_ctx:ctx(), info()) -> boolean().
+is_archive_rooted_in_current_file(CurrentFileCtx, #{
+    scheduled_dataset_root_guid := ScheduledDatasetRootGuid,
+    aip_ctx := AipArchiveCtx
+}) ->
+    CurrentAipDoc = archive_traverse_ctx:get_archive_doc(AipArchiveCtx),
+    {ok, CurrentArchiveRootGuid} = archive:get_dataset_root_file_guid(CurrentAipDoc),
+    {ok, Config} = archive:get_config(CurrentAipDoc),
+    CreateNestedArchives = archive_config:should_create_nested_archives(Config),
+    CurrentFileGuid = file_ctx:get_logical_guid_const(CurrentFileCtx),
+    CurrentFileGuid =:= ScheduledDatasetRootGuid orelse
+        (CurrentFileGuid =:= CurrentArchiveRootGuid andalso CreateNestedArchives).

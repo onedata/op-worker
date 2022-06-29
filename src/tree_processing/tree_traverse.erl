@@ -45,7 +45,8 @@
 % Getters API
 -export([get_traverse_info/1, set_traverse_info/2, get_task/2, get_sync_info/0]).
 %% Behaviour callbacks
--export([do_master_job/2, do_master_job/3, update_job_progress/6, get_job/1, get_sync_info/1, get_timestamp/0]).
+-export([do_master_job/2, do_master_job/3, do_aborted_master_job/2, update_job_progress/6, 
+    get_job/1, get_sync_info/1, get_timestamp/0]).
 
 %% Tracking subtree progress status API
 -export([report_child_processed/2, delete_subtree_status_doc/2]).
@@ -294,6 +295,21 @@ do_master_job(Job, #{task_id := TaskId}, NewJobsPreprocessor) ->
             {ok, #{}}
     end.
 
+-spec do_aborted_master_job(master_job(), traverse:master_job_extended_args()) ->
+    {ok, traverse:master_job_map(), undefined | NextSubtreeRoot :: file_meta:uuid()}.
+do_aborted_master_job(#tree_traverse{track_subtree_status = true} = Job, MasterJobArgs) ->
+    #{task_id := TaskId} = MasterJobArgs,
+    #tree_traverse{file_ctx = FileCtx} = Job,
+    SubtreeProcessingStatus = tree_traverse_progress:report_children_to_process(
+        TaskId, file_ctx:get_logical_uuid_const(FileCtx), 0, true),
+    case SubtreeProcessingStatus of
+        ?SUBTREE_PROCESSED(NextSubtreeRoot) ->
+            {ok, #{}, NextSubtreeRoot};
+        ?SUBTREE_NOT_PROCESSED ->
+            {ok, #{}, undefined}
+    end;
+do_aborted_master_job(#tree_traverse{track_subtree_status = false} = _Job, _MasterJobArgs) ->
+    {ok, #{}, undefined}.
 
 %%--------------------------------------------------------------------
 %% @doc

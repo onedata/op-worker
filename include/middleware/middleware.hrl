@@ -57,6 +57,10 @@
     description :: archive:description()
 }).
 
+-record(cancel_archivisation, {
+    id :: archive:id()
+}).
+
 -record(get_archive_info, {
     id :: archive:id()
 }).

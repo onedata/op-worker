@@ -44,6 +44,9 @@ execute(UserCtx, SpaceDirCtx, #archive_dataset{
         SpaceDirCtx, DatasetId, Config, PreservedCallback, DeletedCallback, Description, UserCtx
     );
 
+execute(UserCtx, SpaceDirCtx, #cancel_archivisation{id = ArchiveId}) ->
+    dataset_req:cancel_archivisation(SpaceDirCtx, ArchiveId, UserCtx);
+
 execute(UserCtx, SpaceDirCtx, #get_archive_info{id = ArchiveId}) ->
     dataset_req:get_archive_info(SpaceDirCtx, ArchiveId, UserCtx);
 

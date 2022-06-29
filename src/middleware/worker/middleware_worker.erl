@@ -30,6 +30,7 @@
 -type archive_operation() ::
     #list_archives{} |
     #archive_dataset{} |
+    #cancel_archivisation{} |
     #get_archive_info{} |
     #update_archive{} |
     #delete_archive{} |

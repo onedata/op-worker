@@ -28,19 +28,20 @@
     get_state/1, get_config/1, get_preserved_callback/1, get_deleted_callback/1,
     get_description/1, get_stats/1, get_root_dir_guid/1,
     get_data_dir_guid/1, get_parent_id/1, get_parent_doc/1, get_base_archive_id/1,
-    get_related_dip_id/1, get_related_aip_id/1, is_finished/1
+    get_related_dip_id/1, get_related_aip_id/1, 
+    is_finished/1, is_building/1
 ]).
 
 % setters
 -export([mark_building/1, mark_deleting/2,
     mark_file_archived/2, mark_file_failed/1, mark_creation_finished/2,
-    mark_preserved/1, mark_verification_failed/1,
+    mark_preserved/1, mark_verification_failed/1, mark_cancelling/1, mark_cancelled/1,
     set_root_dir_guid/2, set_data_dir_guid/2, set_base_archive_id/2,
     set_related_dip/2, set_related_aip/2
 ]).
 
 %% datastore_model callbacks
--export([get_ctx/0, get_record_version/0, get_record_struct/1]).
+-export([get_ctx/0, get_record_version/0, get_record_struct/1, resolve_conflict/3]).
 
 -compile([{no_auto_import, [get/1]}]).
 
@@ -58,7 +59,8 @@
 -type creator() :: od_user:id().
 
 -type state() :: ?ARCHIVE_PENDING | ?ARCHIVE_BUILDING | ?ARCHIVE_PRESERVED | ?ARCHIVE_DELETING 
-    | ?ARCHIVE_FAILED | ?ARCHIVE_VERIFYING | ?ARCHIVE_VERIFICATION_FAILED.
+    | ?ARCHIVE_FAILED | ?ARCHIVE_VERIFYING | ?ARCHIVE_VERIFICATION_FAILED | ?ARCHIVE_CANCELLING 
+    | ?ARCHIVE_CANCELLED.
 -type timestamp() :: time:seconds().
 -type description() :: binary().
 -type callback() :: http_client:url() | undefined.
@@ -93,6 +95,7 @@
 create(DatasetId, SpaceId, Creator, Config, PreservedCallback, DeletedCallback, Description, BaseArchiveId) ->
     datastore_model:create(?CTX, #document{
         value = #archive{
+            archiving_provider = oneprovider:get_id(),
             dataset_id = DatasetId,
             creation_time = global_clock:timestamp_seconds(),
             creator = Creator,
@@ -231,8 +234,10 @@ find_file(ArchiveDoc, RelativeFilePath, UserCtx) ->
 %%% Getters for #archive record
 %%%===================================================================
 
--spec get_id(doc()) -> {ok, id()}.
+-spec get_id(doc() | id()) -> {ok, id()}.
 get_id(#document{key = ArchiveId}) ->
+    {ok, ArchiveId};
+get_id(ArchiveId) ->
     {ok, ArchiveId}.
 
 -spec get_creation_time(record() | doc()) -> {ok, timestamp()}.
@@ -309,11 +314,7 @@ get_root_dir_guid(#archive{root_dir_guid = RootDirGuid}) ->
 get_root_dir_guid(#document{value = Archive}) ->
     get_root_dir_guid(Archive).
 
--spec get_data_dir_guid
-    (record() | doc() | id()) -> {ok, file_id:file_guid()};
-    (undefined) -> {ok, undefined}.
-get_data_dir_guid(undefined) -> 
-    {ok, undefined};
+-spec get_data_dir_guid(record() | doc() | id()) -> {ok, file_id:file_guid()}.
 get_data_dir_guid(#archive{data_dir_guid = DataDirGuid}) -> 
     {ok, DataDirGuid};
 get_data_dir_guid(#document{value = Archive}) -> 
@@ -363,9 +364,15 @@ get_related_aip_id(ArchiveId) ->
 -spec is_finished(record() | doc()) -> boolean().
 is_finished(#archive{state = State}) ->
     lists:member(State, [?ARCHIVE_PRESERVED, ?ARCHIVE_FAILED, ?ARCHIVE_DELETING, 
-        ?ARCHIVE_VERIFYING, ?ARCHIVE_VERIFICATION_FAILED]);
+        ?ARCHIVE_VERIFICATION_FAILED, ?ARCHIVE_CANCELLED]);
 is_finished(#document{value = Archive}) ->
     is_finished(Archive).
+
+-spec is_building(record() | doc()) -> boolean().
+is_building(#archive{state = State}) ->
+    lists:member(State, [?ARCHIVE_PENDING, ?ARCHIVE_BUILDING]);
+is_building(#document{value = Archive}) ->
+    is_building(Archive).
 
 %%%===================================================================
 %%% Setters for #archive record
@@ -405,21 +412,24 @@ mark_building(ArchiveDocOrId) ->
 
 -spec mark_creation_finished(id() | doc(), archive_stats:record()) -> ok.
 mark_creation_finished(ArchiveDocOrId, NestedArchivesStats) ->
-    UpdateResult = update(ArchiveDocOrId, fun(Archive = #archive{stats = CurrentStats}) ->
-        AggregatedStats = archive_stats:sum(CurrentStats, NestedArchivesStats),
-        {ok, Archive#archive{
-            state = case AggregatedStats#archive_stats.files_failed =:= 0 of
-                true -> ?ARCHIVE_VERIFYING;
-                false -> ?ARCHIVE_FAILED
-            end,
-            stats = AggregatedStats
-        }}
+    UpdateResult = update(ArchiveDocOrId, fun
+        (Archive = #archive{stats = CurrentStats, state = ?ARCHIVE_BUILDING}) ->
+            AggregatedStats = archive_stats:sum(CurrentStats, NestedArchivesStats),
+            {ok, Archive#archive{
+                state = case AggregatedStats#archive_stats.files_failed =:= 0 of
+                    true -> ?ARCHIVE_VERIFYING;
+                    false -> ?ARCHIVE_FAILED
+                end,
+                stats = AggregatedStats
+            }};
+        (Archive = #archive{state = ?ARCHIVE_CANCELLING}) ->
+            {ok, Archive#archive{state = ?ARCHIVE_CANCELLED}}
     end),
     case UpdateResult of
         {ok, #document{value = #archive{state = ?ARCHIVE_VERIFYING}} = Doc} ->
             archive_verification_traverse:block_archive_modification(Doc),
             archive_verification_traverse:start(Doc);
-        {ok, #document{value = #archive{state = ?ARCHIVE_FAILED}}} -> 
+        {ok, #document{value = #archive{}}} ->
             ok
     end.
 
@@ -427,11 +437,34 @@ mark_creation_finished(ArchiveDocOrId, NestedArchivesStats) ->
 -spec mark_preserved(id() | doc()) -> ok | error().
 mark_preserved(ArchiveDocOrId) ->
     ?extract_ok(update(ArchiveDocOrId, fun
-        (#archive{state = ?ARCHIVE_VERIFYING} = Archive) ->
+        (#archive{state = State} = Archive) when State =/= ?ARCHIVE_VERIFICATION_FAILED ->
             {ok, Archive#archive{state = ?ARCHIVE_PRESERVED}};
         (Archive) ->
             {ok, Archive}
     end)).
+
+
+-spec mark_cancelling(id() | doc()) -> ok | {error, cancel_not_needed} | error().
+mark_cancelling(ArchiveDocOrId) ->
+    ?extract_ok(update(ArchiveDocOrId, fun
+        (#archive{} = Archive) ->
+            case is_finished(Archive) of
+                true -> {error, cancel_not_needed};
+                false -> {ok, Archive#archive{state = ?ARCHIVE_CANCELLING}}
+            end
+    end)).
+
+
+-spec mark_cancelled(id() | doc()) -> ok | error().
+mark_cancelled(ArchiveDocOrId) ->
+    ?ok_if_not_found(?extract_ok(update(ArchiveDocOrId, fun
+        (#archive{} = Archive) ->
+            case is_finished(Archive) of
+                true -> {error, not_found}; % return error to not to generate redundant updates
+                false -> {ok, Archive#archive{state = ?ARCHIVE_CANCELLED}}
+            end
+    end))).
+
 
 
 -spec mark_verification_failed(id() | doc()) -> ok | error().
@@ -532,6 +565,7 @@ get_record_version() ->
 -spec get_record_struct(datastore_model:record_version()) -> datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
+        {archiving_provider, string},
         {dataset_id, string},
         {creation_time, integer},
         {creator, string},
@@ -548,3 +582,69 @@ get_record_struct(1) ->
         {related_dip, string},
         {related_aip, string}
     ]}.
+
+
+
+-spec resolve_conflict(datastore_model:ctx(), doc(), doc()) ->
+    {boolean(), doc()} | ignore | default.
+resolve_conflict(_Ctx, #document{value = RemoteValue} = RemoteDoc, #document{value = LocalValue} = LocalDoc) ->
+    % Only state field can be changed by any provider (set to ?ARCHIVE_CANCELLING). 
+    % All other changes are done by archiving provider.
+    
+    #document{revs = [LocalRev | _], mutators = [RemoteDocMutator]} = LocalDoc,
+    #document{revs = [RemoteRev | _]} = RemoteDoc,
+    
+    case datastore_rev:is_greater(RemoteRev, LocalRev) of
+        true ->
+            case resolve_conflict_remote_rev_greater(LocalValue, RemoteValue) of
+                {true, NewRecord} ->
+                    {true, RemoteDoc#document{value = NewRecord}};
+                remote ->
+                    {false, RemoteDoc}
+            end;
+        false ->
+            case resolve_conflict_local_rev_greater(LocalValue, RemoteValue, RemoteDocMutator) of
+                {true, NewRecord} ->
+                    {true, LocalDoc#document{value = NewRecord}};
+                ignore ->
+                    ignore
+            end
+    end.
+
+-spec resolve_conflict_remote_rev_greater(record(), record()) -> 
+    {true, record()} | remote.
+resolve_conflict_remote_rev_greater(
+    #archive{archiving_provider = ArchivingProviderId} = LocalValue,
+    #archive{state = RemoteState}
+) ->
+    LocalProviderId = oneprovider:get_id_or_undefined(),
+    case {ArchivingProviderId, is_finished(LocalValue), RemoteState} of
+        {LocalProviderId, false = _LocalFinished, ?ARCHIVE_CANCELLING} ->
+            {true, LocalValue#archive{state = ?ARCHIVE_CANCELLING}};
+        {LocalProviderId, _, _} ->
+            {true, LocalValue};
+        { _, _, _} ->
+            remote
+    end.
+
+-spec resolve_conflict_local_rev_greater(record(), record(), oneprovider:id()) -> 
+    {true, record()} | ignore.
+resolve_conflict_local_rev_greater(
+    #archive{archiving_provider = ArchivingProviderId, state = LocalState} = LocalValue,
+    #archive{state = RemoteState} = RemoteValue,
+    RemoteDocMutator
+) ->
+    case {ArchivingProviderId, {LocalState, is_finished(LocalValue)}, {RemoteState, is_finished(RemoteValue)}} of
+        {RemoteDocMutator, {?ARCHIVE_CANCELLING, _}, {_, false = _RemoteFinished}} ->
+            {true, RemoteValue#archive{state = ?ARCHIVE_CANCELLING}};
+        {RemoteDocMutator, _, _} ->
+            {true, RemoteValue};
+        {_, {?ARCHIVE_CANCELLING, _}, {?ARCHIVE_CANCELLING, _}} ->
+            ignore;
+        {_, {_, true = _LocalFinished}, _} ->
+            ignore;
+        {_, _, {?ARCHIVE_CANCELLING, _}} ->
+            {true, LocalValue#archive{state = ?ARCHIVE_CANCELLING}};
+        {_, _, _} ->
+            ignore
+    end.
