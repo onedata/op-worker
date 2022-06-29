@@ -16,6 +16,7 @@
 -behaviour(atm_task_executor).
 -behaviour(persistent_record).
 
+-include("http/gui_paths.hrl").
 -include("modules/automation/atm_execution.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 -include_lib("ctool/include/http/codes.hrl").
@@ -493,11 +494,17 @@ add_data_stream_annotations_if_required(FunctionDefinition, #initiation_ctx{
         uncorrelated_results = AtmTaskExecutionUncorrelatedResultNames
     }
 }) ->
+    Endpoint = oneprovider:build_url(wss, string:replace(
+        ?OPENFAAS_ACTIVITY_FEED_WS_COWBOY_ROUTE, ":client_type", "result_streamer"
+    )),
+
     insert_function_annotations(FunctionDefinition, #{
         <<"resultstream.openfaas.onedata.org/inject">> => <<"enabled">>,
         <<"resultstream.openfaas.onedata.org/result_names">> => str_utils:join_binary(
             AtmTaskExecutionUncorrelatedResultNames, <<",">>
-        )
+        ),
+        <<"resultstream.openfaas.onedata.org/secret">> => get_env(openfaas_activity_feed_secret),
+        <<"resultstream.openfaas.onedata.org/server_websocket_endpoint">> => Endpoint
     }).
 
 
