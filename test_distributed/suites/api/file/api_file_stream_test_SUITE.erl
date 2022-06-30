@@ -33,11 +33,8 @@
 
 -export([
     gui_download_file_test/1,
-    gui_download_file_test_base/1,
     gui_download_dir_test/1,
-    gui_download_dir_test_base/1,
     gui_download_multiple_files_test/1,
-    gui_download_multiple_files_test_base/1,
     gui_download_different_filetypes_test/1,
     gui_download_files_between_spaces_test/1,
     gui_download_incorrect_uuid_test/1,
@@ -47,6 +44,13 @@
     rest_download_file_at_path_test/1,
     rest_download_dir_test/1,
     rest_download_dir_at_path_test/1
+]).
+
+% Exported for performance tests
+-export([
+    gui_download_file_test_base/1,
+    gui_download_dir_test_base/1,
+    gui_download_multiple_files_test_base/1
 ]).
 
 groups() -> [
@@ -781,7 +785,7 @@ rest_download_file_test(Config) ->
     Content = ?RAND_CONTENT(FileSize),
     api_test_memory:set(MemRef, expected_content, Content),
     SetupFun = build_download_file_setup_fun(MemRef, #file_spec{mode = 8#604, content = Content, shares = [#share_spec{}]}),
-    ValidateCallResultFun = build_rest_download_file_validate_call_fun(MemRef, Config),
+    ValidateCallResultFun = build_rest_download_file_validate_call_fun(MemRef),
     VerifyFun = build_rest_download_file_verify_fun(MemRef, FileSize),
 
     AllRangesToTestNum = length(?ALL_RANGES_TO_TEST(FileSize)),
@@ -854,7 +858,7 @@ rest_download_file_at_path_test(Config) ->
         shares = [#share_spec{}],
         children = [#file_spec{mode = 8#604, content = Content, shares = [#share_spec{}]}]
     }),
-    ValidateCallResultFun = build_rest_download_file_validate_call_fun(MemRef, Config),
+    ValidateCallResultFun = build_rest_download_file_validate_call_fun(MemRef),
     VerifyFun = build_rest_download_file_verify_fun(MemRef, FileSize),
 
     AllRangesToTestNum = length(?ALL_RANGES_TO_TEST(FileSize)),
@@ -901,18 +905,24 @@ build_rest_download_file_at_path_prepare_args_fun(MemRef, TestMode) ->
     fun(#api_test_ctx{data = Data0}) ->
         SpaceId = oct_background:get_space_id(space_krk_par),
 
-        [#object{guid = DirGuid, name = DirName, children = [
-            #object{guid = FileGuid, name = FileName}
+        [#object{guid = DirGuid, name = ParentDirName, children = [
+            #object{guid = FileGuid, name = FileName} = TargetFileTreeObject
         ]}] = api_test_memory:get(MemRef, file_tree_object),
+
+        ExpectedDownloadedFileName = case TargetFileTreeObject of
+            #object{type = ?DIRECTORY_TYPE, name = DirName} -> <<DirName/binary, ".tar">>;
+            #object{name = FileName} -> FileName
+        end,
+        api_test_memory:set(MemRef, expected_downloaded_file_name, ExpectedDownloadedFileName),
 
         {ParentGuidOrSpaceId, Path} = case maps:get(<<"path">>, Data0, undefined) of
             filename_only_relative_to_parent_dir_placeholder ->
                 {DirGuid, FileName};
             directory_and_filename_relative_to_space_root_dir_placeholder ->
                 SpaceRootDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
-                {SpaceRootDirGuid, filepath_utils:join([DirName, FileName])};
+                {SpaceRootDirGuid, filepath_utils:join([ParentDirName, FileName])};
             directory_and_filename_relative_to_space_id_placeholder ->
-                {space_id, filepath_utils:join([DirName, FileName])};
+                {space_id, filepath_utils:join([ParentDirName, FileName])};
             undefined ->
                 {FileGuid, <<"">>}
         end,
@@ -952,12 +962,10 @@ build_rest_download_file_at_path_prepare_args_fun(MemRef, TestMode) ->
     end.
 
 
-
-
 rest_download_dir_test(Config) ->
     Providers = ?config(op_worker_nodes, Config),
-
     SpaceId = oct_background:get_space_id(space_krk_par),
+
     #object{guid = DirGuid, shares = [DirShareId]} =
         onenv_file_test_utils:create_and_sync_file_tree(
             user3, SpaceId, #dir_spec{shares = [#share_spec{}]}, krakow),
@@ -970,8 +978,9 @@ rest_download_dir_test(Config) ->
         #file_spec{content = ?RAND_CONTENT()}
     ]},
     SetupFun = build_download_file_setup_fun(MemRef, DirSpec),
-    ValidateCallResultFun = fun(#api_test_ctx{client = Client}, {ok, RespCode, _RespHeaders, RespBody}) ->
+    ValidateCallResultFun = fun(#api_test_ctx{client = Client}, {ok, RespCode, RespHeaders, RespBody}) ->
         ?assertEqual(?HTTP_200_OK, RespCode),
+        check_content_disposition_header(MemRef, RespHeaders),
         [FileTreeObject] = api_test_memory:get(MemRef, file_tree_object),
         User4Id = oct_background:get_user_id(user4),
         case {Client, api_test_memory:get(MemRef, test_mode)} of
@@ -1038,8 +1047,9 @@ rest_download_dir_at_path_test(_Config) ->
     ]},
     DirTreeSpec = #dir_spec{mode = 8#705, shares = [#share_spec{}], children = [TargetDirSpec]},
     SetupFun = build_download_file_setup_fun(MemRef, DirTreeSpec),
-    ValidateCallResultFun = fun(#api_test_ctx{client = Client}, {ok, RespCode, _RespHeaders, RespBody}) ->
+    ValidateCallResultFun = fun(#api_test_ctx{client = Client}, {ok, RespCode, RespHeaders, RespBody}) ->
         ?assertEqual(?HTTP_200_OK, RespCode),
+        check_content_disposition_header(MemRef, RespHeaders),
         [#object{children = [DirObject]}] = api_test_memory:get(MemRef, file_tree_object),
         User4Id = oct_background:get_user_id(user4),
         case {Client, api_test_memory:get(MemRef, test_mode)} of
@@ -1084,7 +1094,6 @@ rest_download_dir_at_path_test(_Config) ->
         }
     ])).
 
-
 %%%===================================================================
 %%% REST download spec functions
 %%%===================================================================
@@ -1096,7 +1105,14 @@ build_rest_download_prepare_args_fun(MemRef, TestMode) ->
     fun(#api_test_ctx{data = Data0}) ->
         api_test_memory:set(MemRef, test_mode, TestMode),
         api_test_memory:set(MemRef, follow_symlinks, maps:get(<<"follow_symlinks">>, Data0, true)),
-        [#object{guid = Guid, shares = Shares}] = api_test_memory:get(MemRef, file_tree_object),
+        [#object{guid = Guid, shares = Shares} = FileTreeObject] = api_test_memory:get(MemRef, file_tree_object),
+
+        ExpectedDownloadedFileName = case FileTreeObject of
+            #object{type = ?DIRECTORY_TYPE, name = DirName} -> <<DirName/binary, ".tar">>;
+            #object{name = FileName} -> FileName
+        end,
+        api_test_memory:set(MemRef, expected_downloaded_file_name, ExpectedDownloadedFileName),
+
         FileGuid = case TestMode of
             normal_mode ->
                 api_test_memory:set(MemRef, scope, private),
@@ -1127,20 +1143,18 @@ build_rest_download_prepare_args_fun(MemRef, TestMode) ->
 
 
 %% @private
--spec build_rest_download_file_validate_call_fun(
-    api_test_memory:mem_ref(),
-    onenv_api_test_runner:ct_config()
-) ->
+-spec build_rest_download_file_validate_call_fun(api_test_memory:mem_ref()) ->
     onenv_api_test_runner:validate_call_result_fun().
-build_rest_download_file_validate_call_fun(MemRef, _Config) ->
+build_rest_download_file_validate_call_fun(MemRef) ->
     fun(#api_test_ctx{data = Data}, {ok, RespCode, RespHeaders, RespBody}) ->
         ExpContent = api_test_memory:get(MemRef, expected_content),
         FileSize = size(ExpContent),
         FileSizeBin = integer_to_binary(FileSize),
-        case maps:get(<<"range">>, Data, undefined) of
+        Successful = case maps:get(<<"range">>, Data, undefined) of
             undefined ->
                 ?assertEqual(?HTTP_200_OK, RespCode),
-                ?assertEqual(ExpContent, RespBody);
+                ?assertEqual(ExpContent, RespBody),
+                true;
 
             {_, ?HTTP_206_PARTIAL_CONTENT, [{RangeStart, RangeLen}]} ->
                 ExpContentRange = str_utils:format_bin("bytes ~B-~B/~B", [
@@ -1150,7 +1164,8 @@ build_rest_download_file_validate_call_fun(MemRef, _Config) ->
 
                 ?assertEqual(?HTTP_206_PARTIAL_CONTENT, RespCode),
                 ?assertMatch(#{?HDR_CONTENT_RANGE := ExpContentRange}, RespHeaders),
-                ?assertEqual(ExpPartialContent, RespBody);
+                ?assertEqual(ExpPartialContent, RespBody),
+                true;
 
             {_, ?HTTP_206_PARTIAL_CONTENT, Ranges} ->
                 ?assertEqual(?HTTP_206_PARTIAL_CONTENT, RespCode),
@@ -1176,13 +1191,16 @@ build_rest_download_file_validate_call_fun(MemRef, _Config) ->
                 ExpPartialContent = str_utils:join_binary(lists:flatten([
                     Parts, <<"\r\n--", Boundary/binary, "--">>
                 ])),
-                ?assertEqual(ExpPartialContent, RespBody);
+                ?assertEqual(ExpPartialContent, RespBody),
+                true;
 
             {_, ?HTTP_416_RANGE_NOT_SATISFIABLE} ->
                 ?assertEqual(?HTTP_416_RANGE_NOT_SATISFIABLE, RespCode),
                 ?assertMatch(#{?HDR_CONTENT_RANGE := <<"bytes */", FileSizeBin/binary>>}, RespHeaders),
-                ?assertEqual(<<>>, RespBody)
-        end
+                ?assertEqual(<<>>, RespBody),
+                false
+        end,
+        Successful andalso check_content_disposition_header(MemRef, RespHeaders)
     end.
 
 
@@ -1454,6 +1472,16 @@ check_symlink(_MemRef, CurrentPath, #object{name = Filename, symlink_value = Sym
 
 
 %% @private
+-spec check_content_disposition_header(api_test_memory:mem_ref(), http_client:headers()) ->
+    ok.
+check_content_disposition_header(MemRef, Headers) ->
+    ExpectedDownloadedFileName = api_test_memory:get(MemRef, expected_downloaded_file_name),
+    ?assert(maps:is_key(?HDR_CONTENT_DISPOSITION, Headers)),
+    ExpHeader = <<"attachment; filename=\"", ExpectedDownloadedFileName/binary, "\"">>,
+    ?assertEqual(ExpHeader, maps:get(?HDR_CONTENT_DISPOSITION, Headers)).
+
+
+%% @private
 -spec unpack_tarball(binary()) -> binary().
 unpack_tarball(Bytes) ->
     % use os:cmd instead of erl_tar:extract, as the later does not allow for relative symlinks in tarball
@@ -1566,9 +1594,9 @@ init_per_suite(Config) ->
                         end
                     end),
                 ok = test_utils:mock_expect(OpNode, file_download_utils, download_tarball,
-                    fun(Id, SessionId, FileAttrs, FollowSymlinks, Req) ->
+                    fun(Id, SessionId, FileAttrs, TarballName, FollowSymlinks, Req) ->
                         case ErrorFun(FileAttrs, Req) of
-                            passthrough -> meck:passthrough([Id, SessionId, FileAttrs, FollowSymlinks, Req]);
+                            passthrough -> meck:passthrough([Id, SessionId, FileAttrs, TarballName, FollowSymlinks, Req]);
                             Res -> Res
                         end
                     end)

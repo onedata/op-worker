@@ -64,7 +64,7 @@ handle(<<"POST">>, InitialReq) ->
                     reply_with_error(Error, Req);
                 Type:Message:Stacktrace ->
                     ?error_stacktrace(
-                        "Error while processing file upload from user ~p - ~p:~p",
+                        "Error while processing file upload from user ~s~nError was: ~w:~p",
                         [UserId, Type, Message],
                         Stacktrace
                     ),

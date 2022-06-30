@@ -74,7 +74,7 @@ send_text(ClientRef, Message) ->
 -spec send_report(
     test_websocket_client:client_ref(),
     atm_openfaas_activity_report:type(),
-    atm_openfaas_result_streamer_report:batch()
+    [atm_openfaas_result_streamer_report:record()]
 ) ->
     ok.
 send_report(ClientRef, Type, Batch) ->
