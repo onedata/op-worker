@@ -11,7 +11,7 @@
 %%% TODO VFS-8936 - consider usage of internal services.
 %%% @end
 %%%-------------------------------------------------------------------
--module(dir_stats_collector_worker).
+-module(dir_stats_service_worker).
 -author("Michal Wrzeszcz").
 
 

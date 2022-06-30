@@ -17,7 +17,6 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([init_for_supported_spaces/0]).
 -export([
     init_support_state/2,
     get_support_state/1,
@@ -25,14 +24,16 @@
     update_support_opts/2,
     clean_support_state/1
 ]).
+% Cluster upgrade API
+-export([init_support_state_for_all_supported_spaces/0]).
 
 -type support_opts() :: #{
     accounting_enabled := boolean(),
-    dir_stats_enabled := boolean()
+    dir_stats_service_enabled := boolean()
 }.
 -type support_opts_diff() :: #{
     accounting_enabled => boolean(),
-    dir_stats_enabled => boolean()
+    dir_stats_service_enabled => boolean()
 }.
 
 -export_type([support_opts/0, support_opts_diff/0]).
@@ -43,22 +44,10 @@
 %%%===================================================================
 
 
--spec init_for_supported_spaces() -> ok.
-init_for_supported_spaces() ->
-    {ok, SupportedSpaceIds} = provider_logic:get_spaces(),
-
-    lists:foreach(fun(SpaceId) ->
-        init_support_state(SpaceId, #{
-            accounting_enabled => false,
-            dir_stats_enabled => false
-        })
-    end, SupportedSpaceIds).
-
-
 -spec init_support_state(od_space:id(), support_opts()) -> ok.
 init_support_state(SpaceId, SupportOpts = #{
     accounting_enabled := AccountingEnabled,
-    dir_stats_enabled := DirStatsEnabled
+    dir_stats_service_enabled := DirStatsServiceEnabled
 }) ->
     assert_valid_support_opts(SupportOpts),
 
@@ -66,8 +55,8 @@ init_support_state(SpaceId, SupportOpts = #{
         key = SpaceId,
         value = #space_support_state{
             accounting_status = infer_status(AccountingEnabled),
-            dir_stats_collector_config = #dir_stats_collector_config{
-                collecting_status = infer_status(DirStatsEnabled)
+            dir_stats_service_config = #dir_stats_service_config{
+                collecting_status = infer_status(DirStatsServiceEnabled)
             }
         }
     }),
@@ -88,15 +77,15 @@ get_support_state(SpaceId) ->
     {ok, support_opts()} | errors:error().
 get_support_opts(#space_support_state{
     accounting_status = AccountingStatus,
-    dir_stats_collector_config = DirStatsCollectorConfig
+    dir_stats_service_config = DirStatsServiceConfig
 }) ->
     {ok, #{
         accounting_enabled => case AccountingStatus of
             enabled -> true;
             disabled -> false
         end,
-        dir_stats_enabled => dir_stats_collector_config:is_collecting_active(
-            DirStatsCollectorConfig
+        dir_stats_service_enabled => dir_stats_service_config:is_collecting_active(
+            DirStatsServiceConfig
         )
     }};
 
@@ -123,18 +112,18 @@ update_support_opts(SpaceId, SupportOptsDiff = #{accounting_enabled := Accountin
 
     case space_support_state:update(SpaceId, UpdateAccountingStatusDiff) of
         {ok, #document{value = #space_support_state{accounting_status = enabled}}} ->
-            dir_stats_collector_config:enable(SpaceId);
+            dir_stats_service_config:enable(SpaceId);
         {ok, _} ->
             update_support_opts(SpaceId, maps:remove(accounting_enabled, SupportOptsDiff));
         {error, no_change} ->
             update_support_opts(SpaceId, maps:remove(accounting_enabled, SupportOptsDiff))
     end;
 
-update_support_opts(SpaceId, #{dir_stats_enabled := true}) ->
-    dir_stats_collector_config:enable(SpaceId);
+update_support_opts(SpaceId, #{dir_stats_service_enabled := true}) ->
+    dir_stats_service_config:enable(SpaceId);
 
-update_support_opts(SpaceId, #{dir_stats_enabled := false}) ->
-    dir_stats_collector_config:disable(SpaceId);
+update_support_opts(SpaceId, #{dir_stats_service_enabled := false}) ->
+    dir_stats_service_config:disable(SpaceId);
 
 update_support_opts(_SpaceId, _SupportOptsDiff) ->
     ok.
@@ -146,6 +135,23 @@ clean_support_state(SpaceId) ->
 
 
 %%%===================================================================
+%%% Cluster upgrade API
+%%%===================================================================
+
+
+-spec init_support_state_for_all_supported_spaces() -> ok.
+init_support_state_for_all_supported_spaces() ->
+    {ok, SupportedSpaceIds} = provider_logic:get_spaces(),
+
+    lists:foreach(fun(SpaceId) ->
+        init_support_state(SpaceId, #{
+            accounting_enabled => false,
+            dir_stats_service_enabled => false
+        })
+    end, SupportedSpaceIds).
+
+
+%%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
@@ -154,10 +160,10 @@ clean_support_state(SpaceId) ->
 -spec assert_valid_support_opts(support_opts()) -> ok | no_return().
 assert_valid_support_opts(#{
     accounting_enabled := true,
-    dir_stats_enabled := false
+    dir_stats_service_enabled := false
 }) ->
     throw(?ERROR_BAD_DATA(
-        <<"dirStatsEnabled">>,
+        <<"dirStatsServiceEnabled">>,
         <<"Collecting directory statistics can not be disabled when accounting is enabled.">>
     ));
 

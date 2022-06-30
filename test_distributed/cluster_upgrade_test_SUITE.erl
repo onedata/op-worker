@@ -376,7 +376,7 @@ upgrade_from_20_02_1_space_support_state(Config) ->
             key = SpaceId,
             value = #space_support_state{
                 accounting_status = disabled,
-                dir_stats_collector_config = #dir_stats_collector_config{collecting_status = disabled}
+                dir_stats_service_config = #dir_stats_service_config{collecting_status = disabled}
             }
         }
     end,
@@ -390,6 +390,7 @@ upgrade_from_20_02_1_space_support_state(Config) ->
     end, SupportedSpaceIds),
 
     ?assertEqual({ok, 4}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [3])),
+    ?assertEqual({ok, 5}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [4])),
 
     % space_support_state should be created for all supported spaces during upgrade
     lists:foreach(fun(SpaceId) ->

@@ -1053,24 +1053,24 @@
 }).
 
 
--record(dir_stats_collector_config, {
-    collecting_status :: dir_stats_collector_config:collecting_status(),
+-record(dir_stats_service_config, {
+    collecting_status :: dir_stats_service_config:collecting_status(),
 
     % incarnation is incremented every time when collecting_status is changed to collections_initialization ;
     % it is used to evaluate if collection is outdated (see dir_stats_collection_behaviour:acquire/1)
     incarnation = 0 :: non_neg_integer(),
 
     % information about next status transition that is expected to be executed after ongoing transition is finished
-    pending_status_transition :: dir_stats_collector_config:pending_status_transition(),
+    pending_status_transition :: dir_stats_service_config:pending_status_transition(),
 
     % timestamps of collecting status changes that allow verification when historic statistics were trustworthy
-    collecting_status_change_timestamps = [] :: [dir_stats_collector_config:status_change_timestamp()]
+    collecting_status_change_timestamps = [] :: [dir_stats_service_config:status_change_timestamp()]
 }).
 
 
 -record(space_support_state, {
     accounting_status :: space_support_state:accounting_status(),
-    dir_stats_collector_config :: dir_stats_collector_config:record()
+    dir_stats_service_config :: dir_stats_service_config:record()
 }).
 
 

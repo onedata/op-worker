@@ -255,7 +255,7 @@ resupport_cleanup_test(Config) ->
     % force cleanup by adding new support when remnants of previous one still exist
     {ok, _} = rpc:call(Node, storage, support_space, [StorageId, Token, 10, #{
         accounting_enabled => false,
-        dir_stats_enabled => false
+        dir_stats_service_enabled => false
     }]),
     
     ?assertEqual({error, not_found}, rpc:call(Node, storage_import_config, get, [SpaceId])),

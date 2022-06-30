@@ -153,7 +153,7 @@ upgrade_cluster(3) ->
     await_zone_connection_and_run(fun storage_import:migrate_storage_sync_monitoring/0),
     {ok, 4};
 upgrade_cluster(4) ->
-    await_zone_connection_and_run(fun space_support_api:init_for_supported_spaces/0),
+    await_zone_connection_and_run(fun space_support_api:init_support_state_for_all_supported_spaces/0),
     {ok, 5}.
 
 %%--------------------------------------------------------------------

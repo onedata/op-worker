@@ -83,7 +83,7 @@ get_record_version() ->
 get_record_struct(1) ->
     {record, [
         {accounting_status, atom},
-        {dir_stats_collector_config, {custom, string, {
-            persistent_record, encode, decode, dir_stats_collector_config
+        {dir_stats_service_config, {custom, string, {
+            persistent_record, encode, decode, dir_stats_service_config
         }}}
     ]}.

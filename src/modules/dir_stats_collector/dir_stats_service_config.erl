@@ -6,12 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Model storing dir_stats_collector configuration for each space.
-%%% For all space supports granted by providers in versions
-%%% 21.02.0-alpha25 or newer, collecting status is determined by the value
-%%% of dir_stats_collecting_status_for_new_spaces environment variable
-%%% at the moment of space support granting by provider. For other spaces
-%%% collecting status is disabled.
+%%% Record storing dir_stats_service configuration as part of space_support_state
+%%% model.
 %%%
 %%% Collecting status can be changed using enable/1 and
 %%% disable/1 API functions. In such a case, status is not changed
@@ -48,7 +44,7 @@
 %%%
 %%% @end
 %%%-------------------------------------------------------------------
--module(dir_stats_collector_config).
+-module(dir_stats_service_config).
 -author("Michal Wrzeszcz").
 
 -behaviour(persistent_record).
@@ -86,7 +82,7 @@
 
 -type status_change_timestamp() :: {collecting_status(), time:seconds()}.
 
--type record() :: #dir_stats_collector_config{}.
+-type record() :: #dir_stats_service_config{}.
 -type diff_fun() :: fun((record()) -> {ok, record()} | {error, term()}).
 
 -export_type([collecting_status/0, active_collecting_status/0,
@@ -114,13 +110,13 @@ is_collecting_active(SpaceIdOrConfig) ->
 
 -spec get_extended_collecting_status(od_space:id() | record()) ->
     extended_collecting_status().
-get_extended_collecting_status(#dir_stats_collector_config{
+get_extended_collecting_status(#dir_stats_service_config{
     collecting_status = collections_initialization,
     incarnation = Incarnation
 }) ->
     {collections_initialization, Incarnation};
 
-get_extended_collecting_status(#dir_stats_collector_config{
+get_extended_collecting_status(#dir_stats_service_config{
     collecting_status = Status
 }) ->
     Status;
@@ -136,24 +132,24 @@ get_extended_collecting_status(SpaceId) ->
 
 -spec get_last_status_change_timestamp_if_in_enabled_status(od_space:id() | record()) ->
     {ok, time:seconds()} | dir_stats_collector:collecting_status_error().
-get_last_status_change_timestamp_if_in_enabled_status(#dir_stats_collector_config{
+get_last_status_change_timestamp_if_in_enabled_status(#dir_stats_service_config{
     collecting_status = enabled,
     collecting_status_change_timestamps = []
 }) ->
     {ok, 0};
 
-get_last_status_change_timestamp_if_in_enabled_status(#dir_stats_collector_config{
+get_last_status_change_timestamp_if_in_enabled_status(#dir_stats_service_config{
     collecting_status = enabled,
     collecting_status_change_timestamps = [{enabled, Time} | _]
 }) ->
     {ok, Time};
 
-get_last_status_change_timestamp_if_in_enabled_status(#dir_stats_collector_config{
+get_last_status_change_timestamp_if_in_enabled_status(#dir_stats_service_config{
     collecting_status = collections_initialization
 }) ->
     ?ERROR_DIR_STATS_NOT_READY;
 
-get_last_status_change_timestamp_if_in_enabled_status(#dir_stats_collector_config{}) ->
+get_last_status_change_timestamp_if_in_enabled_status(#dir_stats_service_config{}) ->
     ?ERROR_DIR_STATS_DISABLED_FOR_SPACE;
 
 get_last_status_change_timestamp_if_in_enabled_status(SpaceId) ->
@@ -168,7 +164,7 @@ get_last_status_change_timestamp_if_in_enabled_status(SpaceId) ->
 -spec get_collecting_status_change_timestamps(od_space:id()) -> [status_change_timestamp()].
 get_collecting_status_change_timestamps(SpaceId) ->
     case get_config(SpaceId) of
-        {ok, #dir_stats_collector_config{collecting_status_change_timestamps = Timestamps}} ->
+        {ok, #dir_stats_service_config{collecting_status_change_timestamps = Timestamps}} ->
             Timestamps;
         ?ERROR_NOT_FOUND ->
             []
@@ -182,27 +178,27 @@ get_collecting_status_change_timestamps(SpaceId) ->
 -spec enable(od_space:id()) -> ok | ?ERROR_INTERNAL_SERVER_ERROR.
 enable(SpaceId) ->
     Diff = fun
-        (#dir_stats_collector_config{
+        (#dir_stats_service_config{
             collecting_status = disabled, 
             incarnation = PrevIncarnation
         } = Config) ->
-            {ok, Config#dir_stats_collector_config{
+            {ok, Config#dir_stats_service_config{
                 collecting_status = collections_initialization,
                 incarnation = PrevIncarnation + 1
             }};
-        (#dir_stats_collector_config{
+        (#dir_stats_service_config{
             collecting_status = collectors_stopping, 
             pending_status_transition = PendingTransition
         } = Config) when PendingTransition =:= undefined ; PendingTransition =:= canceled ->
-            {ok, Config#dir_stats_collector_config{pending_status_transition = enable}};
-        (#dir_stats_collector_config{pending_status_transition = disable} = Config) ->
-            {ok, Config#dir_stats_collector_config{pending_status_transition = canceled}};
-        (#dir_stats_collector_config{}) ->
+            {ok, Config#dir_stats_service_config{pending_status_transition = enable}};
+        (#dir_stats_service_config{pending_status_transition = disable} = Config) ->
+            {ok, Config#dir_stats_service_config{pending_status_transition = canceled}};
+        (#dir_stats_service_config{}) ->
             {error, no_action_needed}
     end,
 
     case update_config(SpaceId, Diff) of
-        {ok, #dir_stats_collector_config{
+        {ok, #dir_stats_service_config{
             collecting_status = collections_initialization,
             incarnation = Incarnation,
             pending_status_transition = PendingTransition
@@ -218,18 +214,18 @@ enable(SpaceId) ->
 -spec disable(od_space:id()) -> ok | errors:error().
 disable(SpaceId) ->
     ConfigDiff = fun
-        (#dir_stats_collector_config{
+        (#dir_stats_service_config{
             collecting_status = enabled
         } = Config) ->
-            {ok, Config#dir_stats_collector_config{collecting_status = collectors_stopping}};
-        (#dir_stats_collector_config{
+            {ok, Config#dir_stats_service_config{collecting_status = collectors_stopping}};
+        (#dir_stats_service_config{
             collecting_status = collections_initialization,
             pending_status_transition = PendingTransition
         } = Config) when PendingTransition =:= undefined ; PendingTransition =:= canceled ->
-            {ok, Config#dir_stats_collector_config{pending_status_transition = disable}};
-        (#dir_stats_collector_config{pending_status_transition = enable} = Config) ->
-            {ok, Config#dir_stats_collector_config{pending_status_transition = canceled}};
-        (#dir_stats_collector_config{}) ->
+            {ok, Config#dir_stats_service_config{pending_status_transition = disable}};
+        (#dir_stats_service_config{pending_status_transition = enable} = Config) ->
+            {ok, Config#dir_stats_service_config{pending_status_transition = canceled}};
+        (#dir_stats_service_config{}) ->
             {error, no_action_needed}
     end,
     Condition = fun(#space_support_state{accounting_status = Status}) -> Status == disabled end,
@@ -242,12 +238,12 @@ disable(SpaceId) ->
     end,
 
     case update_config_if_allowed(SpaceId, ConfigDiff, Condition) of
-        {ok, #dir_stats_collector_config{
+        {ok, #dir_stats_service_config{
             collecting_status = collectors_stopping,
             pending_status_transition = PendingTransition
         }} when PendingTransition =/= canceled ->
             dir_stats_collector:stop_collecting(SpaceId);
-        {ok, #dir_stats_collector_config{
+        {ok, #dir_stats_service_config{
             collecting_status = collections_initialization,
             incarnation = Incarnation
         }} ->
@@ -257,7 +253,7 @@ disable(SpaceId) ->
         {error, no_action_needed} ->
             ok;
         ?ERROR_NOT_FOUND ->
-            ?warning("Disabling space ~p without collector config document", [SpaceId]);
+            ?warning("Disabling space ~p without dir stats service config document", [SpaceId]);
         ?ERROR_FORBIDDEN ->
             ?ERROR_FORBIDDEN
     end.
@@ -266,61 +262,61 @@ disable(SpaceId) ->
 -spec report_collections_initialization_finished(od_space:id()) -> ok.
 report_collections_initialization_finished(SpaceId) ->
     Diff = fun
-        (#dir_stats_collector_config{
+        (#dir_stats_service_config{
             collecting_status = collections_initialization,
             pending_status_transition = disable
         } = Config) ->
-            {ok, Config#dir_stats_collector_config{
+            {ok, Config#dir_stats_service_config{
                 collecting_status = collectors_stopping,
                 pending_status_transition = undefined
             }};
-        (#dir_stats_collector_config{collecting_status = collections_initialization} = Config) ->
-            {ok, Config#dir_stats_collector_config{
+        (#dir_stats_service_config{collecting_status = collections_initialization} = Config) ->
+            {ok, Config#dir_stats_service_config{
                 collecting_status = enabled,
                 pending_status_transition = undefined
             }};
-        (#dir_stats_collector_config{collecting_status = Status}) ->
+        (#dir_stats_service_config{collecting_status = Status}) ->
             {error, {wrong_status, Status}}
     end,
 
     case update_config(SpaceId, Diff) of
-        {ok, #dir_stats_collector_config{collecting_status = enabled}} ->
+        {ok, #dir_stats_service_config{collecting_status = enabled}} ->
             ok;
-        {ok, #dir_stats_collector_config{collecting_status = collectors_stopping}} ->
+        {ok, #dir_stats_service_config{collecting_status = collectors_stopping}} ->
             dir_stats_collector:stop_collecting(SpaceId);
         {error, {wrong_status, WrongStatus}} ->
             ?warning("Reporting space ~p enabling finished when space has status ~p", [SpaceId, WrongStatus]);
         ?ERROR_NOT_FOUND ->
-            ?warning("Reporting space ~p enabling finished when space has no collector config document", [SpaceId])
+            ?warning("Reporting space ~p enabling finished when space has no dir stats service config document", [SpaceId])
     end.
 
 
 -spec report_collectors_stopped(od_space:id()) -> ok.
 report_collectors_stopped(SpaceId) ->
     Diff = fun
-        (#dir_stats_collector_config{
+        (#dir_stats_service_config{
             collecting_status = collectors_stopping,
             pending_status_transition = enable,
             incarnation = Incarnation
         } = Config) ->
-            {ok, Config#dir_stats_collector_config{
+            {ok, Config#dir_stats_service_config{
                 collecting_status = collections_initialization,
                 incarnation = Incarnation + 1,
                 pending_status_transition = undefined
             }};
-        (#dir_stats_collector_config{collecting_status = collectors_stopping} = Config) ->
-            {ok, Config#dir_stats_collector_config{
+        (#dir_stats_service_config{collecting_status = collectors_stopping} = Config) ->
+            {ok, Config#dir_stats_service_config{
                 collecting_status = disabled,
                 pending_status_transition = undefined
             }};
-        (#dir_stats_collector_config{collecting_status = Status}) ->
+        (#dir_stats_service_config{collecting_status = Status}) ->
             {error, {wrong_status, Status}}
     end,
 
     case update_config(SpaceId, Diff) of
-        {ok, #dir_stats_collector_config{collecting_status = disabled}} ->
+        {ok, #dir_stats_service_config{collecting_status = disabled}} ->
             ok;
-        {ok, #dir_stats_collector_config{
+        {ok, #dir_stats_service_config{
             collecting_status = collections_initialization,
             incarnation = Incarnation
         }} ->
@@ -330,7 +326,7 @@ report_collectors_stopped(SpaceId) ->
         {error, {wrong_status, WrongStatus}} ->
             ?debug("Reporting space ~p disabling finished when space has status ~p", [SpaceId, WrongStatus]);
         ?ERROR_NOT_FOUND ->
-            ?debug("Reporting space ~p disabling finished when space has no collector config document", [SpaceId])
+            ?debug("Reporting space ~p disabling finished when space has no dir stats service config document", [SpaceId])
     end.
 
 
@@ -346,7 +342,7 @@ version() ->
 
 -spec db_encode(record(), persistent_record:nested_record_encoder()) ->
     json_utils:json_map().
-db_encode(#dir_stats_collector_config{
+db_encode(#dir_stats_service_config{
     collecting_status = CollectingStatus,
     incarnation = Incarnation,
     pending_status_transition = PendingStatusTransition,
@@ -370,7 +366,7 @@ db_decode(#{
     <<"pendingStatusTransition">> := PendingStatusTransitionBin,
     <<"collectingStatusChangeTimestamps">> := EncodedCollectingStatusChangeTimestamps
 }, _NestedRecordDecoder) ->
-    #dir_stats_collector_config{
+    #dir_stats_service_config{
         collecting_status = binary_to_atom(CollectingStatusBin, utf8),
         incarnation = Incarnation,
         pending_status_transition = binary_to_atom(PendingStatusTransitionBin, utf8),
@@ -390,9 +386,9 @@ db_decode(#{
 get_config(SpaceId) ->
     case space_support_state:get(SpaceId) of
         {ok, #document{value = #space_support_state{
-            dir_stats_collector_config = DirStatsCollectorConfig
+            dir_stats_service_config = DirStatsServiceConfig
         }}} ->
-            {ok, DirStatsCollectorConfig};
+            {ok, DirStatsServiceConfig};
 
         ?ERROR_NOT_FOUND ->
             ?ERROR_NOT_FOUND
@@ -416,14 +412,14 @@ update_config_if_allowed(SpaceId, ConfigDiff, Condition) ->
     ConfigDiffWithTimestampUpdate = diff_fun_with_timestamp_update(ConfigDiff),
 
     SpaceSupportStateDiff = fun(SpaceSupportState = #space_support_state{
-        dir_stats_collector_config = Config
+        dir_stats_service_config = Config
     }) ->
         case Condition(SpaceSupportState) of
             true ->
                 case ConfigDiffWithTimestampUpdate(Config) of
                     {ok, NewConfig} ->
                         {ok, SpaceSupportState#space_support_state{
-                            dir_stats_collector_config = NewConfig
+                            dir_stats_service_config = NewConfig
                         }};
                     {error, _} = Error ->
                         Error
@@ -434,7 +430,7 @@ update_config_if_allowed(SpaceId, ConfigDiff, Condition) ->
     end,
 
     case space_support_state:update(SpaceId, SpaceSupportStateDiff) of
-        {ok, #document{value = #space_support_state{dir_stats_collector_config = Config}}} ->
+        {ok, #document{value = #space_support_state{dir_stats_service_config = Config}}} ->
             {ok, Config};
         {error, _} = Error ->
             Error
@@ -443,13 +439,13 @@ update_config_if_allowed(SpaceId, ConfigDiff, Condition) ->
 
 -spec diff_fun_with_timestamp_update(diff_fun()) -> diff_fun().
 diff_fun_with_timestamp_update(Diff) ->
-    fun(#dir_stats_collector_config{collecting_status = Status} = Config) ->
+    fun(#dir_stats_service_config{collecting_status = Status} = Config) ->
         case Diff(Config) of
-            {ok, #dir_stats_collector_config{
+            {ok, #dir_stats_service_config{
                 collecting_status = NewStatus,
                 collecting_status_change_timestamps = Timestamps
             } = NewConfig} when NewStatus =/= Status ->
-                {ok, NewConfig#dir_stats_collector_config{
+                {ok, NewConfig#dir_stats_service_config{
                     collecting_status_change_timestamps = update_timestamps(NewStatus, Timestamps)
                 }};
             Other ->
@@ -475,19 +471,19 @@ run_initialization_traverse(SpaceId, Incarnation) ->
         ?ERROR_INTERNAL_SERVER_ERROR ->
             Diff = fun
                 (SpaceSupportState = #space_support_state{
-                    dir_stats_collector_config = Config = #dir_stats_collector_config{
+                    dir_stats_service_config = Config = #dir_stats_service_config{
                         collecting_status = collections_initialization
                     }
                 }) ->
                     {ok, SpaceSupportState#space_support_state{
                         accounting_status = disabled,
-                        dir_stats_collector_config = Config#dir_stats_collector_config{
+                        dir_stats_service_config = Config#dir_stats_service_config{
                             collecting_status = disabled,
                             pending_status_transition = undefined
                         }
                     }};
 
-                (#space_support_state{dir_stats_collector_config = #dir_stats_collector_config{
+                (#space_support_state{dir_stats_service_config = #dir_stats_service_config{
                     collecting_status = Status
                 }}) ->
                     {error, {wrong_status, Status}}
@@ -495,7 +491,7 @@ run_initialization_traverse(SpaceId, Incarnation) ->
 
             case space_support_state:update(SpaceId, Diff) of
                 {ok, #document{value = #space_support_state{
-                    dir_stats_collector_config = #dir_stats_collector_config{
+                    dir_stats_service_config = #dir_stats_service_config{
                         collecting_status = disabled
                     }
                 }}} ->
@@ -505,7 +501,7 @@ run_initialization_traverse(SpaceId, Incarnation) ->
                         [SpaceId, WrongStatus]);
                 ?ERROR_NOT_FOUND ->
                     ?warning("Reporting space ~p initialization traverse failure when "
-                        "space has no collector config document", [SpaceId])
+                        "space has no dir stats service config document", [SpaceId])
             end,
 
             ?ERROR_INTERNAL_SERVER_ERROR

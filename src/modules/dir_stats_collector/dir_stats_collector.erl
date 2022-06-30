@@ -93,7 +93,7 @@
     initialization_timer_ref :: reference() | undefined,
 
     % Space status is initialized on first request for any dir in space
-    space_collecting_statuses = #{} :: #{od_space:id() => dir_stats_collector_config:extended_active_collecting_status()}
+    space_collecting_statuses = #{} :: #{od_space:id() => dir_stats_service_config:extended_active_collecting_status()}
 }).
 
 -record(cached_dir_stats, {
@@ -107,7 +107,7 @@
 
     % Field used to store information about collecting status to enable special requests handling during collection
     % initialization (when space collecting is changed to enabled for not empty space - see dir_stats_collector_config)
-    collecting_status :: dir_stats_collector_config:active_collecting_status(),
+    collecting_status :: dir_stats_service_config:active_collecting_status(),
     initialization_data :: dir_stats_collections_initializer:initialization_data() | undefined
 }).
 
@@ -173,7 +173,7 @@
 -spec get_stats(file_id:file_guid(), dir_stats_collection:type(), dir_stats_collection:stats_selector()) ->
     {ok, dir_stats_collection:collection()} | error().
 get_stats(Guid, CollectionType, StatNames) ->
-    case dir_stats_collector_config:get_extended_collecting_status(file_id:guid_to_space_id(Guid)) of
+    case dir_stats_service_config:get_extended_collecting_status(file_id:guid_to_space_id(Guid)) of
         enabled ->
             Request = #dsc_get_request{
                 guid = Guid,
@@ -191,7 +191,7 @@ get_stats(Guid, CollectionType, StatNames) ->
 -spec update_stats_of_dir(file_id:file_guid(), dir_stats_collection:type(), dir_stats_collection:collection()) ->
     ok | ?ERROR_INTERNAL_SERVER_ERROR.
 update_stats_of_dir(Guid, CollectionType, CollectionUpdate) ->
-    case dir_stats_collector_config:is_collecting_active(file_id:guid_to_space_id(Guid)) of
+    case dir_stats_service_config:is_collecting_active(file_id:guid_to_space_id(Guid)) of
         true ->
             update_stats_of_dir(Guid, external, CollectionType, CollectionUpdate);
         false ->
@@ -208,7 +208,7 @@ update_stats_of_parent(Guid, CollectionType, CollectionUpdate) ->
 -spec update_stats_of_parent(file_id:file_guid(), dir_stats_collection:type(), dir_stats_collection:collection(),
     add_hook | return_error) -> ok | ?ERROR_NOT_FOUND | ?ERROR_INTERNAL_SERVER_ERROR.
 update_stats_of_parent(Guid, CollectionType, CollectionUpdate, ParentErrorHandlingMethod) ->
-    case dir_stats_collector_config:is_collecting_active(file_id:guid_to_space_id(Guid)) of
+    case dir_stats_service_config:is_collecting_active(file_id:guid_to_space_id(Guid)) of
         true ->
             case get_parent(Guid) of
                 {ok, ParentGuid} ->
@@ -232,7 +232,7 @@ update_stats_of_parent(Guid, CollectionType, CollectionUpdate, ParentErrorHandli
 -spec update_stats_of_nearest_dir(file_id:file_guid(), dir_stats_collection:type(), dir_stats_collection:collection()) ->
     ok | ?ERROR_INTERNAL_SERVER_ERROR.
 update_stats_of_nearest_dir(Guid, CollectionType, CollectionUpdate) ->
-    case dir_stats_collector_config:is_collecting_active(file_id:guid_to_space_id(Guid)) of
+    case dir_stats_service_config:is_collecting_active(file_id:guid_to_space_id(Guid)) of
         true ->
             {FileUuid, SpaceId} = file_id:unpack_guid(Guid),
             case file_meta:get_including_deleted(FileUuid) of
@@ -255,7 +255,7 @@ update_stats_of_nearest_dir(Guid, CollectionType, CollectionUpdate) ->
 -spec flush_stats(file_id:file_guid(), dir_stats_collection:type()) ->
     ok | collecting_status_error() | ?ERROR_INTERNAL_SERVER_ERROR.
 flush_stats(Guid, CollectionType) ->
-    case dir_stats_collector_config:get_extended_collecting_status(file_id:guid_to_space_id(Guid)) of
+    case dir_stats_service_config:get_extended_collecting_status(file_id:guid_to_space_id(Guid)) of
         enabled -> request_flush(Guid, CollectionType, prune_inactive);
         {collections_initialization, _} -> ?ERROR_DIR_STATS_NOT_READY;
         _ -> ?ERROR_DIR_STATS_DISABLED_FOR_SPACE
@@ -267,7 +267,7 @@ delete_stats(Guid, CollectionType) ->
     % TODO VFS-9204 - delete only for directories
     % TODO VFS-9204 - delete collection when collecting was enabled in past
     % TODO VFS-9204 - delete from collector memory for collections_initialization status
-    case dir_stats_collector_config:is_collecting_active(file_id:guid_to_space_id(Guid)) of
+    case dir_stats_service_config:is_collecting_active(file_id:guid_to_space_id(Guid)) of
         true ->
             case request_flush(Guid, CollectionType, prune_flushed) of
                 ok -> CollectionType:delete(Guid);
@@ -305,7 +305,7 @@ stop_collecting(SpaceId) ->
                     [?FUNCTION_NAME, ErrorAns, BadNodes])
         end,
 
-        dir_stats_collector_config:report_collectors_stopped(SpaceId)
+        dir_stats_service_config:report_collectors_stopped(SpaceId)
     end),
     ok.
 
@@ -731,7 +731,7 @@ ensure_space_collecting_statuses_up_to_date(#state{
             IsAnyInitializing = maps:get(SpaceId, IsAnyInitializingInSpaceMap, false),
             case
                 (not IsAnyInitializing) andalso
-                dir_stats_collector_config:get_extended_collecting_status(SpaceId) =:= enabled
+                dir_stats_service_config:get_extended_collecting_status(SpaceId) =:= enabled
             of
                 true -> enabled;
                 false -> collections_initialization
@@ -965,11 +965,11 @@ get_parent(Doc, SpaceId) ->
 
 %% @private
 -spec acquire_space_collecting_status(od_space:id(), state()) ->
-    {dir_stats_collector_config:extended_collecting_status(), state()}.
+    {dir_stats_service_config:extended_collecting_status(), state()}.
 acquire_space_collecting_status(SpaceId, #state{space_collecting_statuses = CollectingStatuses} = State) ->
     case maps:get(SpaceId, CollectingStatuses, undefined) of
         undefined ->
-            case dir_stats_collector_config:get_extended_collecting_status(SpaceId) of
+            case dir_stats_service_config:get_extended_collecting_status(SpaceId) of
                 enabled ->
                     {enabled, State#state{space_collecting_statuses = CollectingStatuses#{SpaceId => enabled}}};
                 {collections_initialization, _} = Status ->

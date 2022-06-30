@@ -166,7 +166,7 @@ supports_space(SpaceId) ->
 support_space(StorageId, Token, SupportSize) ->
     support_space(StorageId, Token, SupportSize, #{
         accounting_enabled => false,
-        dir_stats_enabled => false
+        dir_stats_service_enabled => false
     }).
 
 

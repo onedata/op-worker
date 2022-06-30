@@ -7039,7 +7039,7 @@ init_per_testcase(Case, Config)
     orelse Case =:= create_subfiles_import_many2_test
     orelse Case =:= append_file_update_test ->
 
-    init_per_testcase(default, dir_stats_collector_test_base:init_and_enable_for_new_space(Config));
+    init_per_testcase(default, dir_stats_collector_test_base:init(Config, true));
 
 init_per_testcase(delete_many_subfiles_test, Config) ->
     Config2 = [
@@ -7047,7 +7047,7 @@ init_per_testcase(delete_many_subfiles_test, Config) ->
             detect_deletions => true,
             detect_modifications => false}} | Config
     ],
-    init_per_testcase(default, dir_stats_collector_test_base:init_and_enable_for_new_space(Config2));
+    init_per_testcase(default, dir_stats_collector_test_base:init(Config2, true));
 
 init_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),

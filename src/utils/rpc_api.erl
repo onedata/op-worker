@@ -456,18 +456,6 @@ support_space(StorageId, Token, SupportSize, SupportOpts) ->
     storage:support_space(StorageId, Token, SupportSize, SupportOpts).
 
 
--spec get_space_support_opts(od_space:id()) ->
-    {ok, space_support_api:support_opts()} | errors:error().
-get_space_support_opts(SpaceId) ->
-    space_support_api:get_support_opts(SpaceId).
-
-
--spec update_space_support_opts(od_space:id(), space_support_api:support_opts_diff()) ->
-    ok | errors:error().
-update_space_support_opts(SpaceId, SupportOptsDiff) ->
-    space_support_api:update_support_opts(SpaceId, SupportOptsDiff).
-
-
 -spec revoke_space_support(od_space:id()) -> ok | {error, term()}.
 revoke_space_support(SpaceId) ->
     {ok, StorageIds} = space_logic:get_local_storages(SpaceId),
@@ -509,10 +497,16 @@ get_space_details(SpaceId) ->
     end.
 
 
+-spec get_space_support_opts(od_space:id()) ->
+    {ok, space_support_api:support_opts()} | errors:error().
+get_space_support_opts(SpaceId) ->
+    space_support_api:get_support_opts(SpaceId).
+
+
 -spec get_space_dir_stats_collecting_status(od_space:id()) ->
     initializing | enabled | stopping | disabled.
 get_space_dir_stats_collecting_status(SpaceId) ->
-    case dir_stats_collector_config:get_extended_collecting_status(SpaceId) of
+    case dir_stats_service_config:get_extended_collecting_status(SpaceId) of
         {collections_initialization, _} -> initializing;
         enabled -> enabled;
         collectors_stopping -> stopping;
@@ -571,6 +565,12 @@ update_space_support_size(SpaceId, NewSupportSize) ->
     {ok, StorageIds} = space_logic:get_local_storages(SpaceId),
     StorageId = hd(StorageIds),
     storage:update_space_support_size(StorageId, SpaceId, NewSupportSize).
+
+
+-spec update_space_support_opts(od_space:id(), space_support_api:support_opts_diff()) ->
+    ok | errors:error().
+update_space_support_opts(SpaceId, SupportOptsDiff) ->
+    space_support_api:update_support_opts(SpaceId, SupportOptsDiff).
 
 
 -spec update_subdomain_delegation_ips() -> ok | error.
