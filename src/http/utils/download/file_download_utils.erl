@@ -93,7 +93,6 @@ download_tarball(BulkDownloadId, SessionId, FileAttrsList, TarballName, FollowSy
     cowboy_req:req().
 download_single_regular_file(SessionId, #file_attr{
     guid = FileGuid,
-    name = FileName,
     size = FileSize
 }, FileName, OnSuccessCallback, Req0) ->
     case http_parser:parse_range_header(Req0, FileSize) of
@@ -164,7 +163,7 @@ build_content_range_header_value({RangeStart, RangeEnd}, FileSize) ->
 
 
 %% @private
--spec stream_file_internal(undefined | [http_parser:bytes_range()], lfm:handle(), file_meta:size(), 
+-spec stream_file_internal(undefined | [http_parser:bytes_range()], lfm:handle(), file_meta:size(),
     cowboy_req:req()) -> {binary(), cowboy_req:req()}.
 stream_file_internal(undefined, FileHandle, FileSize, Req) ->
     stream_whole_file(FileHandle, FileSize, Req);
@@ -175,9 +174,9 @@ stream_file_internal(Ranges, FileHandle, FileSize, Req) ->
 
 
 %% @private
--spec stream_whole_file(lfm:handle(), file_meta:size(), cowboy_req:req()) -> 
+-spec stream_whole_file(lfm:handle(), file_meta:size(), cowboy_req:req()) ->
     {undefined, cowboy_req:req()}.
-stream_whole_file(FileHandle, FileSize, Req0) -> 
+stream_whole_file(FileHandle, FileSize, Req0) ->
     Req1 = http_streamer:init_stream(
         ?HTTP_200_OK,
         #{?HDR_CONTENT_LENGTH => integer_to_binary(FileSize)},
@@ -211,13 +210,13 @@ stream_one_ranged_body({RangeStart, RangeEnd} = Range, FileHandle, FileSize, Req
 stream_multipart_ranged_body(Ranges, FileHandle, FileSize, Req0) ->
     Boundary = cow_multipart:boundary(),
     ContentType = cowboy_req:resp_header(?HDR_CONTENT_TYPE, Req0),
-    
+
     Req1 = http_streamer:init_stream(
         ?HTTP_206_PARTIAL_CONTENT,
         #{?HDR_CONTENT_TYPE => <<"multipart/byteranges; boundary=", Boundary/binary>>},
         Req0
     ),
-    
+
     StreamingCtx = http_streamer:build_ctx(FileHandle, FileSize),
     lists:foreach(fun(Range) ->
         NextPartHead = cow_multipart:first_part(Boundary, [
@@ -227,7 +226,7 @@ stream_multipart_ranged_body(Ranges, FileHandle, FileSize, Req0) ->
         http_streamer:send_data_chunk(NextPartHead, Req1),
         http_streamer:stream_bytes_range(StreamingCtx, Range, Req1)
     end, Ranges),
-    
+
     {Boundary, Req1}.
 
 
