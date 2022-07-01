@@ -106,7 +106,7 @@ report_cancel_started(Id) ->
 -spec report_error(id(), json_utils:json_term()) -> ok | {error, term()}.
 report_error(Id, ErrorJson) ->
     ?extract_ok(datastore_model:update(?CTX, Id, fun(ArchiveRecall) ->
-        {ok, ArchiveRecall#archive_recall_details{last_error = json_utils:encode(ErrorJson)}}
+        {ok, ArchiveRecall#archive_recall_details{last_error = ErrorJson}}
     end)).
 
 
@@ -135,7 +135,7 @@ get_record_struct(1) ->
         {cancel_timestamp, integer},
         {total_files, integer},
         {total_bytes, integer},
-        {last_error, binary}
+        {last_error, {custom, json, {json_utils, encode, decode}}}
     ]}.
 
 

@@ -340,7 +340,7 @@ get_qos_entry_audit_log(Config) ->
             data_spec = #data_spec{
                 optional = [<<"timestamp">>, <<"offset">>],
                 correct_values = #{
-                    <<"timestamp">> => [0],
+                    <<"timestamp">> => [7967656156000], % some time in the future
                     <<"offset">> => [0]
                 },
                 bad_values = [
@@ -666,18 +666,20 @@ validate_result_fun_rest(_MemRef, qos_audit_log) ->
                     <<"index">> := _,
                     <<"timestamp">> := _,
                     <<"content">> := #{
-                        <<"status">> := <<"synchronization started">>,
+                        <<"status">> := <<"completed">>,
                         <<"severity">> := <<"info">>,
-                        <<"fileId">> := _
+                        <<"fileId">> := _,
+                        <<"description">> := <<"Local replica reconciled.">>
                     }
                 },
                 #{
                     <<"index">> := _,
                     <<"timestamp">> := _,
                     <<"content">> := #{
-                        <<"status">> := <<"synchronized">>,
+                        <<"status">> := <<"scheduled">>,
                         <<"severity">> := <<"info">>,
-                        <<"fileId">> := _
+                        <<"fileId">> := _,
+                        <<"description">> := <<"Remote replica differs, reconciliation started.">>
                     }
                 }
             ]

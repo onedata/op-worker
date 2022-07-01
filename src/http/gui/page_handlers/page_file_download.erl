@@ -140,75 +140,43 @@ handle_http_download(FileDownloadCode, SessionId, FileGuids, FollowSymlinks, Req
     case {FileAttrsList, FollowSymlinks} of
         {{error, Errno}, _} ->
             http_req:send_error(?ERROR_POSIX(Errno), Req3);
-        {[#file_attr{type = ?DIRECTORY_TYPE} = Attr], _} ->
-            Req4 = set_dir_content_disposition_header(Attr, Req3),
+        {[#file_attr{type = ?DIRECTORY_TYPE, guid = Guid, name = FileName} = Attr], _} ->
+            TargetName = case archivisation_tree:uuid_to_archive_id(file_id:guid_to_uuid(Guid)) of
+                undefined ->
+                    FileName;
+                ArchiveId ->
+                    archivisation_tree:get_filename_for_download(ArchiveId)
+            end,
             file_download_utils:download_tarball(
-                FileDownloadCode, SessionId, FileAttrsList, FollowSymlinks, Req4
+                FileDownloadCode, SessionId, FileAttrsList, <<TargetName/binary, ".tar">>, FollowSymlinks, Req3
             );
-        {[#file_attr{name = FileName, type = ?REGULAR_FILE_TYPE} = Attr], _} ->
-            Req4 = set_content_disposition_header(normalize_filename(FileName), Req3),
+        {[#file_attr{type = ?REGULAR_FILE_TYPE} = Attr], _} ->
             file_download_utils:download_single_file(
-                SessionId, Attr, fun() -> file_download_code:remove(FileDownloadCode) end, Req4
+                SessionId, Attr, fun() -> file_download_code:remove(FileDownloadCode) end, Req3
             );
-        {[#file_attr{name = FileName, type = ?SYMLINK_TYPE, guid = Guid}], true} ->
+        {[#file_attr{type = ?SYMLINK_TYPE, guid = Guid, name = SymlinkName}], true} ->
             case lfm:stat(SessionId, ?FILE_REF(Guid, true)) of
                 {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
-                    Req4 = set_content_disposition_header(<<(normalize_filename(FileName))/binary, ".tar">>, Req3),
                     file_download_utils:download_tarball(
-                        FileDownloadCode, SessionId, FileAttrsList, FollowSymlinks, Req4
+                        FileDownloadCode, SessionId, FileAttrsList, <<SymlinkName/binary, ".tar">>, FollowSymlinks, Req3
                     );
                 {ok, #file_attr{} = ResolvedAttr} ->
-                    Req4 = set_content_disposition_header(normalize_filename(FileName), Req3),
                     file_download_utils:download_single_file(
-                        SessionId, ResolvedAttr, fun() -> file_download_code:remove(FileDownloadCode) end, Req4
+                        SessionId, ResolvedAttr, SymlinkName,
+                        fun() -> file_download_code:remove(FileDownloadCode) end,
+                        Req3
                     );
                 {error, Errno} ->
                     http_req:send_error(?ERROR_POSIX(Errno), Req3)
             end;
-        {[#file_attr{name = FileName, type = ?SYMLINK_TYPE} = Attr], false} ->
-            Req4 = set_content_disposition_header(normalize_filename(FileName), Req3),
+        {[#file_attr{type = ?SYMLINK_TYPE} = Attr], false} ->
             file_download_utils:download_single_file(
-                SessionId, Attr, fun() -> file_download_code:remove(FileDownloadCode) end, Req4
+                SessionId, Attr, fun() -> file_download_code:remove(FileDownloadCode) end, Req3
             );
         _ ->
             Timestamp = integer_to_binary(global_clock:timestamp_seconds()),
-            Req4 = set_content_disposition_header(<<"onedata-download-", Timestamp/binary, ".tar">>, Req3),
+            TarballName = <<"onedata-download-", Timestamp/binary, ".tar">>,
             file_download_utils:download_tarball(
-                FileDownloadCode, SessionId, FileAttrsList, FollowSymlinks, Req4
+                FileDownloadCode, SessionId, FileAttrsList, TarballName, FollowSymlinks, Req3
             )
-    end.
-
-
-%% @private
--spec set_dir_content_disposition_header(lfm_attrs:file_attributes(), cowboy_req:req()) -> cowboy_req:req().
-set_dir_content_disposition_header(#file_attr{guid = Guid, name = FileName}, Req) ->
-   FinalFileName = case archivisation_tree:uuid_to_archive_id(file_id:guid_to_uuid(Guid)) of
-       undefined ->
-           FileName;
-       ArchiveId ->
-           archivisation_tree:get_filename_for_download(ArchiveId)
-    end,
-    set_content_disposition_header(<<(normalize_filename(FinalFileName))/binary, ".tar">>, Req).
-
-
-%% @private
--spec set_content_disposition_header(file_meta:name(), cowboy_req:req()) -> cowboy_req:req().
-set_content_disposition_header(Filename, Req) ->
-    %% @todo VFS-2073 - check if needed
-    %% FileNameUrlEncoded = http_utils:url_encode(FileName),
-    cowboy_req:set_resp_header(
-        ?HDR_CONTENT_DISPOSITION,
-        <<"attachment; filename=\"", Filename/binary, "\"">>,
-        %% @todo VFS-2073 - check if needed
-        %% "filename*=UTF-8''", FileNameUrlEncoded/binary>>
-        Req
-    ).
-
-
-%% @private
--spec normalize_filename(file_meta:name()) -> file_meta:name().
-normalize_filename(Filename) ->
-    case re:run(Filename, <<"^ *$">>, [{capture, none}]) of
-        match -> <<"_">>;
-        nomatch -> Filename
     end.

@@ -222,7 +222,7 @@ init_result_streamer_if_task_has_any_uncorrelated_results(
         BasicAuthorization,
         [{cacerts, https_listener:get_cert_chain_ders()}]
     ),
-    atm_openfaas_result_streamer_mock:send_registration_report(
+    atm_openfaas_result_streamer_mock:deliver_registration_report(
         ResultStreamerRef, AtmWorkflowExecutionId, AtmTaskExecutionId, ?STREAMER_ID
     ),
     save_result_streamer_ref(ResultStreamerRef, AtmTaskExecutor).
@@ -317,7 +317,7 @@ stream_task_data_if_task_has_any_uncorrelated_results(
             fun(_ResultName, Value) -> [Value] end,
             maps:with(AtmTaskExecutionUncorrelatedResultNames, Results)
         ),
-        atm_openfaas_result_streamer_mock:send_chunk_report(ResultStreamerRef, Chunk),
+        atm_openfaas_result_streamer_mock:deliver_chunk_report(ResultStreamerRef, Chunk),
         maps:without(AtmTaskExecutionUncorrelatedResultNames, Results)
     end, ResultsBatch)}.
 
