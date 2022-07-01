@@ -82,7 +82,7 @@ restart_test_base(Config, RestartFun, RestartType) ->
     [WorkerP1] = oct_background:get_provider_nodes(krakow),
     [WorkerP2] = oct_background:get_provider_nodes(paris),
     [SpaceId | _] = oct_background:get_provider_supported_spaces(krakow),
-    SpaceGuid = rpc:call(WorkerP1, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
+    SpaceGuid = rpc:call(WorkerP1, fslogic_file_id, spaceid_to_space_dir_guid, [SpaceId]),
     User1 = oct_background:to_entity_id(user1),
     SessId = fun(P) -> test_config:get_user_session_id_on_provider(Config, User1, P) end,
     SessIdP1 = SessId(P1),

@@ -957,7 +957,7 @@ get_parent(Guid) ->
 -spec get_parent(file_meta:doc(), od_space:id()) -> file_id:file_guid() | root_dir.
 get_parent(Doc, SpaceId) ->
     {ok, ParentUuid} = file_meta:get_parent_uuid(Doc),
-    case fslogic_uuid:is_root_dir_uuid(ParentUuid) of
+    case fslogic_file_id:is_root_dir_uuid(ParentUuid) of
         true -> root_dir;
         false -> file_id:pack_guid(ParentUuid, SpaceId)
     end.

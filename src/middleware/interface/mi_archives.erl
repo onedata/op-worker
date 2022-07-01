@@ -155,10 +155,10 @@ browse_recall_log(SessionId, FileGuid, BrowseOpts) ->
 %% @private
 -spec dataset_id_to_space_guid(dataset:id()) -> file_id:file_guid() | no_return().
 dataset_id_to_space_guid(DatasetId) ->
-    fslogic_uuid:spaceid_to_space_dir_guid(?check(dataset:get_space_id(DatasetId))).
+    fslogic_file_id:spaceid_to_space_dir_guid(?check(dataset:get_space_id(DatasetId))).
 
 
 %% @private
 -spec archive_id_to_space_guid(archive:id()) -> fslogic_worker:file_guid() | no_return().
 archive_id_to_space_guid(ArchiveId) ->
-    fslogic_uuid:spaceid_to_space_dir_guid(?check(archive:get_space_id(ArchiveId))).
+    fslogic_file_id:spaceid_to_space_dir_guid(?check(archive:get_space_id(ArchiveId))).

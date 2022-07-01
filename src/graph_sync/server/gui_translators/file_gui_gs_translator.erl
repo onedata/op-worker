@@ -271,7 +271,7 @@ translate_file_details(#file_details{
         ?SYMLINK_TYPE -> {<<"SYMLNK">>, SizeAttr}
     end,
     IsRootDir = case file_id:guid_to_share_id(FileGuid) of
-        undefined -> fslogic_uuid:is_space_dir_guid(FileGuid);
+        undefined -> fslogic_file_id:is_space_dir_guid(FileGuid);
         ShareId -> lists:member(ShareId, Shares)
     end,
     ParentId = case IsRootDir of

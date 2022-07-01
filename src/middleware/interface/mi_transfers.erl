@@ -58,7 +58,7 @@ schedule_view_transfer(
     SessionId, SpaceId, ViewName, QueryViewParams,
     ReplicatingProviderId, EvictingProviderId, Callback
 ) ->
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
 
     middleware_worker:check_exec(SessionId, SpaceGuid, #schedule_view_transfer{
         replicating_provider_id = ReplicatingProviderId,

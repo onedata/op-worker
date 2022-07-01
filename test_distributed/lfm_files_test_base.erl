@@ -424,7 +424,7 @@ lfm_ensure_dir(Config) ->
     },
     Filename = generator:gen_name(),
     [{SpaceId, _SpaceName} | _] = ?config({spaces, UserId1}, Config),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     
     lists_utils:pforeach(fun(_) ->
         ?assertMatch({ok, _}, lfm_proxy:ensure_dir(W, SessId1, SpaceGuid, filename:join([Filename, Filename, Filename]), ?DEFAULT_DIR_MODE))
@@ -559,7 +559,7 @@ get_recursive_file_list(Config) ->
     check_list_recursive_start_after(Worker, SessId1, MainDirGuid, AllExpectedFiles),
     
     AllExpectedFilesInSpace = lists:map(fun({Guid, Path}) -> {Guid, filename:join([MainDirName, Path])} end, AllExpectedFiles),
-    SpaceDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(file_id:guid_to_space_id(MainDirGuid)),
+    SpaceDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(file_id:guid_to_space_id(MainDirGuid)),
     % use MainDirName prefix so this listing is independent of other files in space
     check_list_recursive_start_after(Worker, SessId1, SpaceDirGuid, MainDirName, AllExpectedFilesInSpace),
     
@@ -1817,12 +1817,12 @@ create_share_dir(Config) ->
     % User root dir can not be shared
     ?assertMatch(
         ?ERROR_POSIX(?EPERM),
-        opt_shares:create(W, SessId, ?FILE_REF(fslogic_uuid:user_root_dir_guid(UserId)), <<"share_name">>)
+        opt_shares:create(W, SessId, ?FILE_REF(fslogic_file_id:user_root_dir_guid(UserId)), <<"share_name">>)
     ),
     % But space dir can
     ?assertMatch(
         {ok, <<_/binary>>},
-        opt_shares:create(W, SessId, ?FILE_REF(fslogic_uuid:spaceid_to_space_dir_guid(SpaceId)), <<"share_name">>)
+        opt_shares:create(W, SessId, ?FILE_REF(fslogic_file_id:spaceid_to_space_dir_guid(SpaceId)), <<"share_name">>)
     ),
     % As well as normal directory
     {ok, ShareId1} = ?assertMatch(
@@ -1894,7 +1894,7 @@ share_getattr(Config) ->
     ProviderId = ?GET_DOMAIN_BIN(W),
     OwnerSessId = ?config({session_id, {UserId, ?GET_DOMAIN(W)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, UserId}, Config),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     DirPath = <<SpaceName/binary, "/share_dir2">>,
     {ok, DirGuid} = lfm_proxy:mkdir(W, OwnerSessId, DirPath, 8#704),
     {ok, ShareId1} = opt_shares:create(W, OwnerSessId, ?FILE_REF(DirGuid), <<"share_name">>),
@@ -1942,7 +1942,7 @@ share_get_parent(Config) ->
     SessId = ?config({session_id, {UserId, ?GET_DOMAIN(W)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, UserId}, Config),
 
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     DirPath = <<SpaceName/binary, "/share_get_parent">>,
     {ok, DirGuid} = lfm_proxy:mkdir(W, SessId, DirPath, 8#707),
     {ok, FileGuid} = lfm_proxy:create(W, SessId, <<DirPath/binary, "/file">>, 8#700),

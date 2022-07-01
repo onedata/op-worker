@@ -242,13 +242,13 @@ get_parent_internal(FileCtx, UserCtx) ->
     end,
 
     Parent = case {
-        fslogic_uuid:is_root_dir_uuid(ParentUuid),
+        fslogic_file_id:is_root_dir_uuid(ParentUuid),
         IsShareRootFile,
         (UserCtx =/= undefined andalso user_ctx:is_in_open_handle_mode(UserCtx))
     } of
         {_, true, true} ->
             % Share root file shall point to virtual share root dir in open handle mode
-            ShareRootDirUuid = fslogic_uuid:shareid_to_share_root_dir_uuid(ShareId),
+            ShareRootDirUuid = fslogic_file_id:shareid_to_share_root_dir_uuid(ShareId),
             file_ctx:new_by_uuid(ShareRootDirUuid, SpaceId, ShareId);
         {true, false, _} ->
             case ParentUuid =:= ?GLOBAL_ROOT_DIR_UUID
@@ -261,13 +261,13 @@ get_parent_internal(FileCtx, UserCtx) ->
                             FileCtx2;
                         false ->
                             UserId = user_ctx:get_user_id(UserCtx),
-                            file_ctx:new_by_guid(fslogic_uuid:user_root_dir_guid(UserId))
+                            file_ctx:new_by_guid(fslogic_file_id:user_root_dir_guid(UserId))
                     end;
                 _ ->
-                    file_ctx:new_by_guid(fslogic_uuid:root_dir_guid())
+                    file_ctx:new_by_guid(fslogic_file_id:root_dir_guid())
             end;
         {true, true, _} ->
-            case fslogic_uuid:is_space_dir_uuid(FileUuid) of
+            case fslogic_file_id:is_space_dir_uuid(FileUuid) of
                 true ->
                     FileCtx2;
                 false ->
@@ -303,10 +303,10 @@ get_user_root_dir_child(UserCtx, UserRootDirCtx, Name) ->
 
     ChildGuid = case user_logic:get_space_by_name(SessId, UserDoc, Name) of
         {true, SpaceId} ->
-            fslogic_uuid:spaceid_to_space_dir_guid(SpaceId);
+            fslogic_file_id:spaceid_to_space_dir_guid(SpaceId);
         false ->
             case user_ctx:is_root(UserCtx) of
-                true -> fslogic_uuid:spaceid_to_space_dir_guid(Name);
+                true -> fslogic_file_id:spaceid_to_space_dir_guid(Name);
                 false -> throw(?ENOENT)
             end
     end,
@@ -348,7 +348,7 @@ get_user_root_dir_children(UserCtx, UserRootDirCtx, ListOpts, SpaceWhiteList) ->
                 Limit
             ),
             lists:map(fun({SpaceName, SpaceId}) ->
-                SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+                SpaceDirUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
                 file_ctx:new_by_uuid(SpaceDirUuid, SpaceId, undefined, SpaceName)
             end, SpacesChunk);
         false ->
@@ -367,7 +367,7 @@ get_space_share_child(SpaceDirCtx, Name, UserCtx) ->
 
     case lists:member(Name, Shares) of
         true ->
-            ChildUuid = fslogic_uuid:shareid_to_share_root_dir_uuid(Name),
+            ChildUuid = fslogic_file_id:shareid_to_share_root_dir_uuid(Name),
             {file_ctx:new_by_uuid(ChildUuid, SpaceId, Name), SpaceDirCtx};
         false ->
             throw(?ENOENT)
@@ -410,7 +410,7 @@ get_space_open_handle_shares(UserCtx, SpaceDirCtx, ListOpts, ShareWhiteList) ->
     Children = case Offset < length(FilteredShares) of
         true ->
             lists:map(fun(ShareId) ->
-                ShareDirUuid = fslogic_uuid:shareid_to_share_root_dir_uuid(ShareId),
+                ShareDirUuid = fslogic_file_id:shareid_to_share_root_dir_uuid(ShareId),
                 file_ctx:new_by_uuid(ShareDirUuid, SpaceId, ShareId, ShareId)
             end, lists:sublist(lists:sort(FilteredShares), Offset + 1, Limit));
         false ->

@@ -1003,7 +1003,7 @@ list_children_recreated_remotely(Config0) ->
     [Worker2 | _] = ?config(workers2, Config),
     SessId = ?config(session, Config),
     SpaceId = <<"space1">>,
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
 
     % Upload file on worker1
     {ok, G} = lfm_proxy:create(Worker1, SessId(Worker1), SpaceGuid, <<"file_name">>, undefined),
@@ -1101,7 +1101,7 @@ truncate_on_storage_does_not_block_synchronizer(Config0) ->
     Workers = ?config(op_worker_nodes, Config),
     SessId = ?config(session, Config),
     SpaceId = <<"space1">>,
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     FileContent = <<"xxx">>,
     FileSize = byte_size(FileContent),
 
@@ -1151,7 +1151,7 @@ recreate_file_on_storage(Config0) ->
     Workers = ?config(op_worker_nodes, Config),
     SessId = ?config(session, Config),
     SpaceId = <<"space1">>,
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     FileContent = <<"xxx">>,
     FileSize = byte_size(FileContent),
 

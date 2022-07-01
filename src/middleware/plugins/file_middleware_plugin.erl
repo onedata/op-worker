@@ -997,8 +997,8 @@ get(#op_req{auth = ?USER(_UserId, SessId), data = Data, gri = #gri{id = FileGuid
     end;
 
 get(#op_req{gri = #gri{id = FirstGuid, aspect = {hardlinks, SecondGuid}}}, _) ->
-    FirstReferencedUuid = fslogic_uuid:ensure_referenced_uuid(file_id:guid_to_uuid(FirstGuid)),
-    SecondReferencedUuid = fslogic_uuid:ensure_referenced_uuid(file_id:guid_to_uuid(SecondGuid)),
+    FirstReferencedUuid = fslogic_file_id:ensure_referenced_uuid(file_id:guid_to_uuid(FirstGuid)),
+    SecondReferencedUuid = fslogic_file_id:ensure_referenced_uuid(file_id:guid_to_uuid(SecondGuid)),
     case SecondReferencedUuid of
         FirstReferencedUuid -> {ok, #{}};
         _ -> ?ERROR_NOT_FOUND

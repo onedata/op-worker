@@ -53,9 +53,9 @@ all() -> ?ALL([
 -define(SPACE_PLACEHOLDER, space1).
 -define(SPACE_ID, oct_background:get_space_id(?SPACE_PLACEHOLDER)).
 -define(SPACE_UUID, ?SPACE_UUID(?SPACE_ID)).
--define(SPACE_UUID(SpaceId), fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)).
+-define(SPACE_UUID(SpaceId), fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId)).
 -define(SPACE_GUID, ?SPACE_GUID(?SPACE_ID)).
--define(SPACE_GUID(SpaceId), fslogic_uuid:spaceid_to_space_dir_guid(SpaceId)).
+-define(SPACE_GUID(SpaceId), fslogic_file_id:spaceid_to_space_dir_guid(SpaceId)).
 -define(ATTEMPTS, 30).
 -define(RAND_DIR_NAME, <<"dir_", (integer_to_binary(rand:uniform(1000)))/binary>>).
 

@@ -57,7 +57,7 @@ get_configuration_test(Config) ->
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
     UserId = ?config({user_id, <<"user1">>}, Config),
 
-    UserRootGuid = fslogic_uuid:user_root_dir_guid(UserId),
+    UserRootGuid = fslogic_file_id:user_root_dir_guid(UserId),
 
     ?assertMatch(#configuration{subscriptions = [_ | _], root_guid = UserRootGuid},
         ?fcm_req(Worker, get_configuration, [SessId])).

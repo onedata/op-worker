@@ -10,7 +10,7 @@
 %%% Trash is a special directory where files are moved as a result
 %%% of fslogic #move_to_trash operation.
 %%% Trash directory is created for each space, it has
-%%% a predefined uuid (see fslogic_uuid) and a predefined name.
+%%% a predefined uuid (see fslogic_file_id) and a predefined name.
 %%% Trash directory is child of a space directory.
 %%%
 %%% TODO VFS-7064 below paragraph will be true after adding link from space directory to trash in 21.02
@@ -47,8 +47,8 @@
 
 -spec create(od_space:id()) -> ok.
 create(SpaceId) ->
-    SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-    TrashDoc = file_meta:new_doc(fslogic_uuid:spaceid_to_trash_dir_uuid(SpaceId),
+    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
+    TrashDoc = file_meta:new_doc(fslogic_file_id:spaceid_to_trash_dir_uuid(SpaceId),
         ?TRASH_DIR_NAME, ?DIRECTORY_TYPE, ?DEFAULT_DIR_MODE, ?SPACE_OWNER_ID(SpaceId),
         SpaceUuid, SpaceId
     ),
@@ -72,7 +72,7 @@ move_to_trash(FileCtx, UserCtx) ->
     {FileDoc, FileCtx5} = file_ctx:get_file_doc(FileCtx4),
     % files moved to trash are direct children of trash directory
     % they names are suffixed with Uuid to avoid conflicts
-    TrashUuid = fslogic_uuid:spaceid_to_trash_dir_uuid(SpaceId),
+    TrashUuid = fslogic_file_id:spaceid_to_trash_dir_uuid(SpaceId),
     % TODO VFS-7133 save original parent after extending file_meta in 21.02 !!!
     file_qos:cleanup_reference_related_documents(FileCtx5),
     ok = qos_bounded_cache:invalidate_on_all_nodes(SpaceId),

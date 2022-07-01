@@ -161,7 +161,7 @@ execute_stage(#space_unsupport_job{stage = init, space_id = SpaceId}) ->
 
 execute_stage(#space_unsupport_job{stage = replicate, subtask_id = undefined} = Job) ->
     #space_unsupport_job{space_id = SpaceId, storage_id = StorageId} = Job,
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     Expression = <<?QOS_ANY_STORAGE, "\\ storageId = ", StorageId/binary>>,
     QosEntryId = mi_qos:add_qos_entry(?ROOT_SESS_ID, ?FILE_REF(SpaceGuid), Expression, 1, internal),
     NewJob = Job#space_unsupport_job{subtask_id = QosEntryId},

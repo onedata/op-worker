@@ -29,7 +29,7 @@
 -spec new_doc(file_meta:name(), file_meta:uuid(), od_space:id(), od_user:id(), symlink()) -> file_meta:doc().
 new_doc(Name, ParentUuid, SpaceId, Owner, Link) ->
     #document{
-        key = fslogic_uuid:gen_symlink_uuid(),
+        key = fslogic_file_id:gen_symlink_uuid(),
         value = #file_meta{
             name = Name,
             type = ?SYMLINK_TYPE,

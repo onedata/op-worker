@@ -782,6 +782,6 @@ is_harvested_model(_) -> false.
 
 -spec is_uuid_restricted(file_meta:uuid()) -> boolean().
 is_uuid_restricted(Uuid) ->
-    fslogic_uuid:is_trash_dir_uuid(Uuid) orelse
+    fslogic_file_id:is_trash_dir_uuid(Uuid) orelse
         archivisation_tree:is_special_uuid(Uuid) orelse 
             archivisation_tree:uuid_to_archive_id(Uuid) =/= undefined.
