@@ -23,6 +23,7 @@
 -include("middleware/middleware.hrl").
 -include("modules/fslogic/acl.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include_lib("cluster_worker/include/modules/datastore/infinite_log.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -660,7 +661,8 @@ data_spec_get(#gri{aspect = archive_recall_log}) -> #{
         <<"index">> => {binary, any},
         <<"timestamp">> => {integer, {not_lower_than, 0}},
         <<"offset">> => {integer, any},
-        <<"limit">> => {integer, {between, 1, 1000}}
+        <<"limit">> => {integer, {between, 1, 1000}},
+        <<"direction">> => {atom, [?FORWARD, ?BACKWARD]}
     }
 };
 
@@ -995,8 +997,8 @@ get(#op_req{auth = ?USER(_UserId, SessId), data = Data, gri = #gri{id = FileGuid
     end;
 
 get(#op_req{gri = #gri{id = FirstGuid, aspect = {hardlinks, SecondGuid}}}, _) ->
-    FirstReferencedUuid = fslogic_uuid:ensure_referenced_uuid(file_id:guid_to_uuid(FirstGuid)),
-    SecondReferencedUuid = fslogic_uuid:ensure_referenced_uuid(file_id:guid_to_uuid(SecondGuid)),
+    FirstReferencedUuid = fslogic_file_id:ensure_referenced_uuid(file_id:guid_to_uuid(FirstGuid)),
+    SecondReferencedUuid = fslogic_file_id:ensure_referenced_uuid(file_id:guid_to_uuid(SecondGuid)),
     case SecondReferencedUuid of
         FirstReferencedUuid -> {ok, #{}};
         _ -> ?ERROR_NOT_FOUND

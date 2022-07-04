@@ -479,7 +479,7 @@ invalidate_dataset_eff_cache_if_needed(
 invalidate_qos_bounded_cache_if_moved_to_trash(
     #document{key = Uuid, value = #file_meta{parent_uuid = NewParentUuid}, scope = SpaceId}, #document{value = #file_meta{parent_uuid = PrevParentUuid}
 }) ->
-    case PrevParentUuid =/= NewParentUuid andalso fslogic_uuid:is_trash_dir_uuid(NewParentUuid) of
+    case PrevParentUuid =/= NewParentUuid andalso fslogic_file_id:is_trash_dir_uuid(NewParentUuid) of
         true ->
             % the file has been moved to trash
             FileCtx = file_ctx:new_by_uuid(Uuid, SpaceId),

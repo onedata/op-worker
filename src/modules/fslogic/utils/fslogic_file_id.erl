@@ -11,7 +11,7 @@
 %%% which link points (or simply file uuid for regular file).
 %%% @end
 %%%--------------------------------------------------------------------
--module(fslogic_uuid).
+-module(fslogic_file_id).
 -author("Tomasz Lichon").
 
 -include("modules/fslogic/fslogic_common.hrl").
@@ -29,7 +29,7 @@
 -export([is_share_root_dir_uuid/1, is_share_root_dir_guid/1]).
 -export([uuid_to_path/2, uuid_to_guid/1]).
 -export([is_space_owner/1, unpack_space_owner/1]).
--export([gen_link_uuid/1, is_link_uuid/1, ensure_referenced_uuid/1]).
+-export([gen_link_uuid/1, is_link_uuid/1, ensure_referenced_uuid/1, ensure_referenced_guid/1]).
 -export([gen_symlink_uuid/0, is_symlink_uuid/1, is_symlink_guid/1]).
 
 -define(USER_ROOT_PREFIX, "userRoot_").
@@ -242,6 +242,13 @@ ensure_referenced_uuid(Uuid) ->
     Uuid.
 
 
+-spec ensure_referenced_guid(file_id:file_guid()) -> file_id:file_guid().
+ensure_referenced_guid(Guid) ->
+    {Uuid, SpaceId} = file_id:unpack_guid(Guid),
+    ReferencedUuid = ensure_referenced_uuid(Uuid),
+    file_id:pack_guid(ReferencedUuid, SpaceId).
+
+
 -spec gen_symlink_uuid() -> file_meta:uuid().
 gen_symlink_uuid() ->
     RandPart = datastore_key:new(),
@@ -274,7 +281,7 @@ gen_path(Entry, SessionId, Tokens) ->
     {ok, #document{key = Uuid, value = #file_meta{name = Name}} = Doc} = file_meta:get(Entry),
     case file_meta:get_parent(Doc) of
         {ok, #document{key = ?GLOBAL_ROOT_DIR_UUID}} ->
-            SpaceId = fslogic_uuid:space_dir_uuid_to_spaceid(Uuid),
+            SpaceId = fslogic_file_id:space_dir_uuid_to_spaceid(Uuid),
             {ok, SpaceName} = space_logic:get_name(SessionId, SpaceId),
             {ok, filepath_utils:join([<<?DIRECTORY_SEPARATOR>>, SpaceName | Tokens])};
         {ok, #document{key = ParentUuid}} ->

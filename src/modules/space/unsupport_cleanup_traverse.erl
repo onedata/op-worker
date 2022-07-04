@@ -55,7 +55,7 @@
 -spec start(od_space:id(), storage:id()) -> {ok, task_id()}.
 start(SpaceId, StorageId) ->
     TaskId = gen_id(SpaceId, StorageId),
-    SpaceDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     Options = #{
         task_id => TaskId,
         batch_size => ?TRAVERSE_BATCH_SIZE,

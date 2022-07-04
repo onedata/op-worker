@@ -145,7 +145,7 @@ file_meta_change_replicated(SpaceId, #document{
     deleted = Del2
 } = LinkDoc) when Del1 or Del2 ->
     ?debug("file_meta_change_replicated: deleted hardlink file_meta ~p", [FileUuid]),
-    case file_meta:get_including_deleted(fslogic_uuid:ensure_referenced_uuid(FileUuid)) of
+    case file_meta:get_including_deleted(fslogic_file_id:ensure_referenced_uuid(FileUuid)) of
         {ok, ReferencedDoc} ->
             {ok, MergedDoc} = file_meta_hardlinks:merge_link_and_file_doc(LinkDoc, ReferencedDoc),
             FileCtx = file_ctx:new_by_doc(MergedDoc, SpaceId),
@@ -180,7 +180,7 @@ file_meta_change_replicated(SpaceId, #document{
     value = #file_meta{type = ?LINK_TYPE}
 } = LinkDoc) ->
     ?debug("file_meta_change_replicated: changed hardlink file_meta ~p", [FileUuid]),
-    case file_meta:get_including_deleted(fslogic_uuid:ensure_referenced_uuid(FileUuid)) of
+    case file_meta:get_including_deleted(fslogic_file_id:ensure_referenced_uuid(FileUuid)) of
         {ok, ReferencedDoc} ->
             {ok, MergedDoc} = file_meta_hardlinks:merge_link_and_file_doc(LinkDoc, ReferencedDoc),
             FileCtx = file_ctx:new_by_doc(MergedDoc, SpaceId),

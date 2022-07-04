@@ -94,7 +94,7 @@ chown_or_defer_on_posix_compatible_storage(FileCtx) ->
     {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
     OwnerUserId = file_meta:get_owner(FileDoc),
     % space_owner is a virtual user therefore we don't check whether it exists in Onezone
-    case fslogic_uuid:is_space_owner(OwnerUserId)of
+    case fslogic_file_id:is_space_owner(OwnerUserId)of
         true ->
             chown_file(FileCtx2, OwnerUserId);
         false ->
@@ -209,5 +209,5 @@ get_record_struct(2) ->
 -spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
     {datastore_model:record_version(), datastore_model:record()}.
 upgrade_record(1, {?MODULE, Uuids}) ->
-    Guids = lists:map(fun fslogic_uuid:uuid_to_guid/1, Uuids),
+    Guids = lists:map(fun fslogic_file_id:uuid_to_guid/1, Uuids),
     {2, #files_to_chown{file_guids = Guids}}.

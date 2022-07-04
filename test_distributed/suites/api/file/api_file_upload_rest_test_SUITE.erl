@@ -503,7 +503,7 @@ create_file_at_path_with_create_parents_in_parallel_test(_Config) ->
     Filename = generator:gen_name(),
     RelativePath = filename:join([Filename, Filename, Filename]),
     SpaceId = oct_background:get_space_id(space_krk_par),
-    {ok, SpaceObjectId} = file_id:guid_to_objectid(fslogic_uuid:spaceid_to_space_dir_guid(SpaceId)),
+    {ok, SpaceObjectId} = file_id:guid_to_objectid(fslogic_file_id:spaceid_to_space_dir_guid(SpaceId)),
     RestPath = str_utils:join_as_binaries([<<"data">>, SpaceObjectId, <<"path">>, RelativePath], <<"/">>),
     RestPathWithParams = http_utils:append_url_parameters(RestPath, #{<<"create_parents">> => true, <<"update_existing">> => true}),
     HeadersWithAuth = [rest_test_utils:user_token_header(oct_background:get_user_access_token(user2))],

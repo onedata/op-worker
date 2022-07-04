@@ -186,7 +186,7 @@ assert_archives_root_dir_exists(Node, SessionId, SpaceId, Attempts) ->
     ArchivesRootUuid = ?ARCHIVES_ROOT_DIR_UUID(SpaceId),
     ArchivesRootGuid = file_id:pack_guid(ArchivesRootUuid, SpaceId),
     ArchivesRootDirName = ?ARCHIVES_ROOT_DIR_NAME,
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
 
     ?assertMatch({ok, #file_attr{
         guid = ArchivesRootGuid,
@@ -446,11 +446,5 @@ assert_incremental_archive_links(Node, SessionId, BaseArchiveId, Guid, ModifiedF
 
 
 extract_base_archive_id(Node, SessionId, Guid) ->
-    {ok, Path} = lfm_proxy:get_file_path(Node, SessionId, ensure_referenced_guid(Guid)),
+    {ok, Path} = lfm_proxy:get_file_path(Node, SessionId, fslogic_file_id:ensure_referenced_guid(Guid)),
     archivisation_tree:extract_archive_id(Path).
-
-
-ensure_referenced_guid(Guid) ->
-    {Uuid, SpaceId} = file_id:unpack_guid(Guid),
-    ReferencedUuid = fslogic_uuid:ensure_referenced_uuid(Uuid),
-    file_id:pack_guid(ReferencedUuid, SpaceId).

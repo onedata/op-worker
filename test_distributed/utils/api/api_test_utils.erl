@@ -416,7 +416,7 @@ file_details_to_gs_json(undefined, #file_details{
         <<"effProtectionFlags">> => file_meta:protection_flags_to_json(EffFileProtectionFlags),
         % For space dir gs returns null as parentId instead of user root dir
         % (gui doesn't know about user root dir)
-        <<"parentId">> => case fslogic_uuid:is_space_dir_guid(FileGuid) of
+        <<"parentId">> => case fslogic_file_id:is_space_dir_guid(FileGuid) of
             true -> null;
             false -> ParentGuid
         end,

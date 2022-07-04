@@ -768,6 +768,6 @@ exec(Worker, Fun, Timeout) ->
 uuid_to_file_ref(W, {uuid, Uuid}) ->
     ?FILE_REF(uuid_to_file_ref(W, Uuid));
 uuid_to_file_ref(W, Uuid) when is_binary(Uuid) ->
-    rpc:call(W, fslogic_uuid, uuid_to_guid, [Uuid]);
+    rpc:call(W, fslogic_file_id, uuid_to_guid, [Uuid]);
 uuid_to_file_ref(_, Other) ->
     Other.

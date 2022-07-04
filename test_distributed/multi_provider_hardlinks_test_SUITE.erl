@@ -270,8 +270,8 @@ make_and_verify_link(Config, FileGuid, SpaceGuid, AttrToVerify) ->
 
 verify_link_attrs(LinkName, LinkAttr, FileAttr, SpaceGuid) ->
     ?assertNotEqual(FileAttr#file_attr.guid, LinkAttr#file_attr.guid),
-    ?assert(fslogic_uuid:is_link_uuid(file_id:guid_to_uuid(LinkAttr#file_attr.guid))),
-    ?assertNot(fslogic_uuid:is_link_uuid(file_id:guid_to_uuid(FileAttr#file_attr.guid))),
+    ?assert(fslogic_file_id:is_link_uuid(file_id:guid_to_uuid(LinkAttr#file_attr.guid))),
+    ?assertNot(fslogic_file_id:is_link_uuid(file_id:guid_to_uuid(FileAttr#file_attr.guid))),
     ?assertEqual(LinkName, LinkAttr#file_attr.name),
     ?assertEqual(SpaceGuid, LinkAttr#file_attr.parent_guid),
 

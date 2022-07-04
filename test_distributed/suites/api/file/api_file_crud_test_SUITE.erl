@@ -89,7 +89,7 @@ get_file_instance_test(_Config) ->
     ExpJsonFileDetails = file_details_to_gs_json(undefined, FileDetails),
 
     SpaceId = oct_background:get_space_id(space_krk_par),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     SpaceDetails = get_space_dir_details(paris, SpaceGuid, ?SPACE_KRK_PAR),
     ExpJsonSpaceDetails = file_details_to_gs_json(undefined, SpaceDetails),
 
@@ -167,7 +167,7 @@ get_shared_file_instance_test(_Config) ->
     ExpJsonShareRootFileDetails = file_details_to_gs_json(FileShareId1, FileDetailsWithShares),
 
     SpaceId = oct_background:get_space_id(space_krk_par),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     SpaceShareId = api_test_utils:share_file_and_sync_file_attrs(P1, SpaceOwnerSessId, Providers, SpaceGuid),
     ShareSpaceGuid = file_id:guid_to_share_guid(SpaceGuid, SpaceShareId),
 
@@ -596,7 +596,7 @@ build_delete_instance_at_path_test_prepare_rest_args_fun(MemRef, TopDirGuid, Top
             filename_only_relative_to_parent_dir_placeholder ->
                 {TopDirGuid, RootFileName};
             directory_and_filename_relative_to_space_root_dir_placeholder ->
-                SpaceRootDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+                SpaceRootDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
                 {SpaceRootDirGuid, filepath_utils:join([TopDirName, RootFileName])};
             directory_and_filename_relative_to_space_id_placeholder ->
                 {space_id, filepath_utils:join([TopDirName, RootFileName])};

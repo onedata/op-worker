@@ -22,7 +22,7 @@
 
 
 -type client_ref() :: pid().
--type push_message_handler() :: fun((client_ref(), json_utils:json_term()) -> no_reply | {reply, json_utils:json_term()}).
+-type push_message_handler() :: fun((client_ref(), json_utils:json_term()) -> no_reply | {reply_text, json_utils:json_term()}).
 -export_type([client_ref/0, push_message_handler/0]).
 
 -record(state, {
@@ -30,6 +30,9 @@
 }).
 
 -type state() :: no_state.
+
+-define(HEARTBEAT_INTERVAL, timer:seconds(30)).
+
 
 %%%===================================================================
 %%% API
@@ -56,8 +59,13 @@ connect_to_url(Url, Headers, TransportOpts, PushMessageHandler) ->
 
 -spec send(client_ref(), binary()) -> ok.
 send(ClientRef, Message) ->
-    ClientRef ! {send, Message},
-    ok.
+    ClientRef ! {send, self(), Message},
+    receive
+        {send_confirmation, ClientRef} ->
+            ok
+    after 60000 ->
+        error(timeout)
+    end.
 
 %%%===================================================================
 %%% websocket client API
@@ -65,6 +73,7 @@ send(ClientRef, Message) ->
 
 -spec init([push_message_handler()], websocket_req:req()) -> {ok, state()}.
 init([PushMessageHandler], _) ->
+    erlang:send_after(?HEARTBEAT_INTERVAL, self(), do_heartbeat),
     {ok, #state{push_message_handler = PushMessageHandler}}.
 
 
@@ -89,7 +98,7 @@ websocket_handle({text, Payload}, _, State = #state{push_message_handler = PushM
         case PushMessageHandler(self(), Payload) of
             no_reply ->
                 {ok, State};
-            {reply, Reply} ->
+            {reply_text, Reply} ->
                 {reply, {text, Reply}, State}
         end
     catch
@@ -120,7 +129,12 @@ websocket_handle(Message, _, State) ->
     {ok, state()} |
     {reply, websocket_req:frame(), state()} |
     {close, Reply :: binary(), state()}.
-websocket_info({send, Data}, _, State) ->
+websocket_info(do_heartbeat, _, State) ->
+    erlang:send_after(?HEARTBEAT_INTERVAL, self(), do_heartbeat),
+    {reply, ping, State};
+
+websocket_info({send, CallerPid, Data}, _, State) ->
+    CallerPid ! {send_confirmation, self()},
     {reply, {text, Data}, State};
 
 websocket_info(terminate, _, State) ->

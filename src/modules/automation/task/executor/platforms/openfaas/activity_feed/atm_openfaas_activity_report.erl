@@ -25,8 +25,8 @@
 -export_type([record/0]).
 
 -type type() :: atm_openfaas_function_pod_status_report | atm_openfaas_result_streamer_report.
--type batch() :: [atm_openfaas_function_pod_status_report:record() | atm_openfaas_result_streamer_report:record()].
--export_type([type/0, batch/0]).
+-type body() :: atm_openfaas_function_pod_status_report:record() | atm_openfaas_result_streamer_report:record().
+-export_type([type/0, body/0]).
 
 
 %%%===================================================================

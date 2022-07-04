@@ -20,7 +20,7 @@
 %% API
 -export([send_message/3]).
 -export([communicate_with_sequencer_manager/2,
-    communicate_with_sequencer_manager/3, term_to_stream_id/1]).
+    communicate_with_sequencer_manager/3, binary_to_stream_id/1]).
 
 %% Test API
 -export([open_stream/1, close_stream/2]).
@@ -30,6 +30,8 @@
 -type stream_id() :: non_neg_integer().
 -type sequence_number() :: non_neg_integer().
 -type sequencer_manager_ref() :: pid() | session:id().
+
+-define(STREAM_ID_LIMIT, 4294967296).
 
 %%%===================================================================
 %%% API
@@ -59,10 +61,9 @@ send_message(Msg, StmId, Ref) ->
 %% Generates stream id based on
 %% @end
 %%--------------------------------------------------------------------
--spec term_to_stream_id(term()) -> stream_id().
-term_to_stream_id(Term) ->
-    Binary = term_to_binary(Term),
-    erlang:phash2(Binary, 4294967296).
+-spec binary_to_stream_id(binary()) -> stream_id().
+binary_to_stream_id(Binary) ->
+    erlang:phash2(Binary, ?STREAM_ID_LIMIT).
 
 %%--------------------------------------------------------------------
 %% @doc

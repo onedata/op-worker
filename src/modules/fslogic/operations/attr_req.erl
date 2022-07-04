@@ -187,7 +187,7 @@ get_file_details_insecure(UserCtx, FileCtx, Opts) ->
         status = #status{code = ?OK},
         fuse_response = #file_details{
             file_attr = FileAttr,
-            symlink_value = case fslogic_uuid:is_symlink_uuid(Uuid) of
+            symlink_value = case fslogic_file_id:is_symlink_uuid(Uuid) of
                 true ->
                     {ok, SymlinkValue} = file_meta_symlinks:readlink(FileDoc),
                     SymlinkValue;
@@ -209,7 +209,7 @@ get_file_details_insecure(UserCtx, FileCtx, Opts) ->
             eff_dataset_membership = maps:get(effective_dataset_membership, EffectiveValues, undefined),
             eff_protection_flags = maps:get(effective_protection_flags, EffectiveValues, undefined),
             recall_root_id = maps:get(effective_recall, EffectiveValues, undefined),
-            conflicting_name = case {fslogic_uuid:is_space_dir_uuid(Uuid), file_meta:get_name(FileDoc)} of
+            conflicting_name = case {fslogic_file_id:is_space_dir_uuid(Uuid), file_meta:get_name(FileDoc)} of
                 {true, _} -> undefined;
                 {false, FileAttrName} -> undefined;
                 {false, ConflictingName} -> ConflictingName
@@ -410,7 +410,7 @@ update_times_insecure(UserCtx, FileCtx, ATime, MTime, CTime) ->
     % TODO VFS-7139: This is temporary solution to be removed after fixing oneclient
     SessId = user_ctx:get_session_id(UserCtx),
     catch lfm_event_controller:flush_event_queue(
-        SessId, oneprovider:get_id(), file_ctx:get_logical_uuid_const(FileCtx)),
+        SessId, oneprovider:get_id(), file_ctx:get_logical_guid_const(FileCtx)),
 
     TimesDiff1 = fun
         (Times = #times{}) when ATime == undefined -> Times;

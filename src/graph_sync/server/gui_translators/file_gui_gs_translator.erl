@@ -271,7 +271,7 @@ translate_file_details(#file_details{
         ?SYMLINK_TYPE -> {<<"SYMLNK">>, SizeAttr}
     end,
     IsRootDir = case file_id:guid_to_share_id(FileGuid) of
-        undefined -> fslogic_uuid:is_space_dir_guid(FileGuid);
+        undefined -> fslogic_file_id:is_space_dir_guid(FileGuid);
         ShareId -> lists:member(ShareId, Shares)
     end,
     ParentId = case IsRootDir of
@@ -350,10 +350,7 @@ translate_archive_recall_details(#archive_recall_details{
         <<"cancelTime">> => utils:undefined_to_null(CancelTimestamp),
         <<"totalFileCount">> => TargetFileCount,
         <<"totalByteSize">> => TargetByteSize,
-        <<"lastError">> => case LastError of
-            undefined -> null;
-            _ -> json_utils:decode(LastError)
-        end
+        <<"lastError">> => utils:undefined_to_null(LastError)
     }.
 
 

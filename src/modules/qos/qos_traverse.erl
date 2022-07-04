@@ -307,7 +307,7 @@ synchronize_file_for_entries_insecure(TaskId, UserCtx, FileCtx, QosEntries) ->
     FileBlock = #file_block{offset = 0, size = Size},
     Uuid = file_ctx:get_logical_uuid_const(FileCtx),
     TransferId = ?QOS_TRANSFER_ID(TaskId, Uuid),
-    IsSymlink = fslogic_uuid:is_symlink_uuid(Uuid),
+    IsSymlink = fslogic_file_id:is_symlink_uuid(Uuid),
     
     lists:foreach(fun(QosEntry) -> 
         qos_entry:add_transfer_to_list(QosEntry, TransferId) 
@@ -338,9 +338,10 @@ synchronize_file_for_entries_insecure(TaskId, UserCtx, FileCtx, QosEntries) ->
             % QoS entry was deleted, so there is no need to report to audit log
             ?debug("QoS file synchronization failed due to cancellation");
         {error, _} = Error ->
-            ok = report_file_failed_for_entries(QosEntries, FileCtx2, Error),
+            NormalizedError = normalize_error(Error),
+            ok = report_file_failed_for_entries(QosEntries, FileCtx2, NormalizedError),
             ok = qos_status:report_file_transfer_failure(FileCtx2, QosEntries),
-            ?error("Error during QoS file synchronization: ~p", [Error])
+            ?error("Error during QoS file synchronization: ~p", [NormalizedError])
     end.
 
 
@@ -406,3 +407,12 @@ transfer_id_to_file_uuid(TransferId) ->
         [_TaskId, FileUuid] -> {ok, FileUuid};
         _ -> error
     end.
+
+
+%% @private
+-spec normalize_error({error, any()}) -> errors:error().
+normalize_error({error, <<"quota exceeded">>}) ->
+    ?ERROR_QUOTA_EXCEEDED;
+normalize_error(Error) ->
+    Error.
+

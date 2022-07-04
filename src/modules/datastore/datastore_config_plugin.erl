@@ -112,7 +112,7 @@ get_models() -> [
     atm_lambda_snapshot,
     atm_workflow_execution,
     atm_tree_forest_iterator_queue,
-    atm_openfaas_function_activity_registry,
+    atm_openfaas_function_pod_status_registry,
     atm_openfaas_result_streamer_registry,
     atm_time_series_store_container,
 

@@ -91,7 +91,7 @@ find_direct_parent_and_sync_file(StorageFileCtx, Info) ->
 sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
     SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
     FileName = storage_file_ctx:get_file_name_const(StorageFileCtx),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     SpaceCtx = file_ctx:new_by_guid(SpaceGuid),
     ParentUuid = file_ctx:get_logical_uuid_const(ParentCtx),
     IsManualImport = maps:get(manual, Info, false),
@@ -247,7 +247,7 @@ find_direct_parent_and_ensure_all_parents_exist(StorageFileCtx, Info = #{space_s
             {ok, Info};
         false ->
             SpaceId = storage_file_ctx:get_space_id_const(StorageFileCtx),
-            SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+            SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
             ParentCtx = file_ctx:new_by_guid(SpaceGuid),
             % ParentCtx may not be associated with direct parent of the file.
             % This is caused by the fact that on object storages, file structure is flat

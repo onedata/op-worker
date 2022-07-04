@@ -36,7 +36,7 @@ resolve_file_key(SessionId, FileKey, DefaultSymlinkResolutionPolicy) ->
     {ok, Guid} = ensure_guid(SessionId, FileKey),
     ShouldResolveSymlink = should_resolve_symlink(FileKey, DefaultSymlinkResolutionPolicy),
 
-    case ShouldResolveSymlink andalso fslogic_uuid:is_symlink_guid(Guid) of
+    case ShouldResolveSymlink andalso fslogic_file_id:is_symlink_guid(Guid) of
         true ->
             Result = remote_utils:call_fslogic(
                 SessionId,
