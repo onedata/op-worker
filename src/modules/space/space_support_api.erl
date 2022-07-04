@@ -55,8 +55,8 @@ init_support_state(SpaceId, SupportOpts = #{
         key = SpaceId,
         value = #space_support_state{
             accounting_status = infer_status(AccountingEnabled),
-            dir_stats_service_config = #dir_stats_service_config{
-                collecting_status = infer_status(DirStatsServiceEnabled)
+            dir_stats_service_state = #dir_stats_service_state{
+                status = infer_status(DirStatsServiceEnabled)
             }
         }
     }),
@@ -77,14 +77,14 @@ get_support_state(SpaceId) ->
     {ok, support_opts()} | errors:error().
 get_support_opts(#space_support_state{
     accounting_status = AccountingStatus,
-    dir_stats_service_config = DirStatsServiceConfig
+    dir_stats_service_state = DirStatsServiceConfig
 }) ->
     {ok, #{
         accounting_enabled => case AccountingStatus of
             enabled -> true;
             disabled -> false
         end,
-        dir_stats_service_enabled => dir_stats_service_config:is_collecting_active(
+        dir_stats_service_enabled => dir_stats_service_state:is_active(
             DirStatsServiceConfig
         )
     }};
@@ -112,7 +112,7 @@ update_support_opts(SpaceId, SupportOptsDiff = #{accounting_enabled := Accountin
 
     case space_support_state:update(SpaceId, UpdateAccountingStatusDiff) of
         {ok, #document{value = #space_support_state{accounting_status = enabled}}} ->
-            dir_stats_service_config:enable(SpaceId);
+            dir_stats_service_state:enable(SpaceId);
         {ok, _} ->
             update_support_opts(SpaceId, maps:remove(accounting_enabled, SupportOptsDiff));
         {error, no_change} ->
@@ -120,10 +120,10 @@ update_support_opts(SpaceId, SupportOptsDiff = #{accounting_enabled := Accountin
     end;
 
 update_support_opts(SpaceId, #{dir_stats_service_enabled := true}) ->
-    dir_stats_service_config:enable(SpaceId);
+    dir_stats_service_state:enable(SpaceId);
 
 update_support_opts(SpaceId, #{dir_stats_service_enabled := false}) ->
-    dir_stats_service_config:disable(SpaceId);
+    dir_stats_service_state:disable(SpaceId);
 
 update_support_opts(_SpaceId, _SupportOptsDiff) ->
     ok.

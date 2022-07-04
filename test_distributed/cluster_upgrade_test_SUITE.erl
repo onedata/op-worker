@@ -376,7 +376,7 @@ upgrade_from_20_02_1_space_support_state(Config) ->
             key = SpaceId,
             value = #space_support_state{
                 accounting_status = disabled,
-                dir_stats_service_config = #dir_stats_service_config{collecting_status = disabled}
+                dir_stats_service_state = #dir_stats_service_state{status = disabled}
             }
         }
     end,

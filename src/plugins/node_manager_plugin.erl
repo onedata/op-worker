@@ -164,7 +164,7 @@ upgrade_cluster(4) ->
 -spec custom_workers() ->
     [{atom(), [any()]} | {singleton, atom(), [any()]} | {atom(), [any()], list()}].
 custom_workers() -> filter_disabled_workers([
-    {dir_stats_collector_worker, [
+    {dir_stats_service_worker, [
         {supervisor_flags, pes:get_root_supervisor_flags(dir_stats_collector)},
         {supervisor_children_spec, pes:get_root_supervisor_child_specs(dir_stats_collector)}
     ]},

@@ -63,7 +63,7 @@ run(SpaceId, Incarnation) ->
     catch
         _:{badmatch, {error, not_found}} ->
             % Space dir is not found - traverse is not needed
-            dir_stats_service_config:report_collections_initialization_finished(SpaceId);
+            dir_stats_service_state:report_collections_initialization_finished(SpaceId);
         Error:Reason:Stacktrace ->
             ?error_stacktrace("Error starting stats initialization traverse for space ~p (incarnation ~p): ~p:~p",
                 [SpaceId, Incarnation, Error, Reason], Stacktrace),
@@ -115,7 +115,7 @@ get_job(DocOrId) ->
 
 -spec task_finished(tree_traverse:id(), traverse:pool()) -> ok.
 task_finished(TaskId, _PoolName) ->
-    dir_stats_service_config:report_collections_initialization_finished(get_space_id(TaskId)).
+    dir_stats_service_state:report_collections_initialization_finished(get_space_id(TaskId)).
 
 
 -spec task_canceled(tree_traverse:id(), traverse:pool()) -> ok.

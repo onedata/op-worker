@@ -114,8 +114,8 @@ create(_) ->
 get(#op_req{gri = #gri{id = SpaceId, aspect = dir_stats_config}}, _) ->
     {ok, SpaceSupportState} = space_support_api:get_support_state(SpaceId),
     {ok, SpaceSupportOpts} = space_support_api:get_support_opts(SpaceSupportState),
-    {Status, Since} = case dir_stats_service_config:get_last_status_change_timestamp_if_in_enabled_status(
-        SpaceSupportState#space_support_state.dir_stats_service_config
+    {Status, Since} = case dir_stats_service_state:get_last_status_change_timestamp_if_in_enabled_status(
+        SpaceSupportState#space_support_state.dir_stats_service_state
     ) of
         {ok, Timestamp} -> {<<"enabled">>, Timestamp};
         ?ERROR_DIR_STATS_DISABLED_FOR_SPACE -> {<<"disabled">>, undefined};
@@ -136,8 +136,8 @@ get(#op_req{gri = #gri{id = SpaceId, aspect = dir_stats_config}}, _) ->
 -spec update(middleware:req()) -> middleware:update_result().
 update(#op_req{gri = #gri{id = SpaceId, aspect = dir_stats_config}, data = Data}) ->
     case maps:get(<<"dirStatsEnabled">>, Data) of
-        true -> dir_stats_service_config:enable(SpaceId);
-        false -> dir_stats_service_config:disable(SpaceId)
+        true -> dir_stats_service_state:enable(SpaceId);
+        false -> dir_stats_service_state:disable(SpaceId)
     end.
 
 

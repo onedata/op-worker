@@ -88,7 +88,7 @@
     get_spaces/0,
     supports_space/1,
     get_space_details/1,
-    get_space_dir_stats_collecting_status/1,
+    get_space_dir_stats_service_status/1,
     get_provider_details/0,
     is_subdomain_delegated/0,
     set_delegated_subdomain/1,
@@ -503,15 +503,10 @@ get_space_support_opts(SpaceId) ->
     space_support_api:get_support_opts(SpaceId).
 
 
--spec get_space_dir_stats_collecting_status(od_space:id()) ->
-    initializing | enabled | stopping | disabled.
-get_space_dir_stats_collecting_status(SpaceId) ->
-    case dir_stats_service_config:get_extended_collecting_status(SpaceId) of
-        {collections_initialization, _} -> initializing;
-        enabled -> enabled;
-        collectors_stopping -> stopping;
-        disabled -> disabled
-    end.
+-spec get_space_dir_stats_service_status(od_space:id()) ->
+    dir_stats_service_state:status().
+get_space_dir_stats_service_status(SpaceId) ->
+    dir_stats_service_state:get_status(SpaceId).
 
 
 %%--------------------------------------------------------------------

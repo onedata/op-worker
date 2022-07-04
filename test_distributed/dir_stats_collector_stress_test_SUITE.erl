@@ -80,8 +80,8 @@ many_files_creation_tree_test_base(Config) ->
                 ExpectedDirStats ->
                     ct:print("Space dir stats verified"),
                     SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
-                    ?assertEqual(ok, rpc:call(Worker, dir_stats_service_config, disable, [SpaceId])),
-                    ?assertEqual(ok, rpc:call(Worker, dir_stats_service_config, enable, [SpaceId])),
+                    ?assertEqual(ok, rpc:call(Worker, dir_stats_service_state, disable, [SpaceId])),
+                    ?assertEqual(ok, rpc:call(Worker, dir_stats_service_state, enable, [SpaceId])),
                     put(stress_phase, calculate_stats),
                     PhaseAns;
                 _ ->

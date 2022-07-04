@@ -300,10 +300,10 @@ multiple_status_change_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
     StatusChangesWithTimestamps = rpc:call(
-        Worker, dir_stats_service_config, get_collecting_status_change_timestamps, [SpaceId]),
+        Worker, dir_stats_service_state, get_status_change_timestamps, [SpaceId]),
     StatusChanges = lists:map(
         fun({StatusChangeDescription, _Timestamp}) -> StatusChangeDescription end, StatusChangesWithTimestamps),
-    ExpectedStatusChanges = [disabled, collectors_stopping, enabled, collections_initialization],
+    ExpectedStatusChanges = [disabled, stopping, enabled, initializing],
     ?assertEqual(ExpectedStatusChanges, StatusChanges),
 
     enable(Config),
@@ -326,9 +326,9 @@ multiple_status_change_test(Config) ->
     check_update_times(Config, [op_worker_nodes]),
 
     {ok, EnablingTime} = ?assertMatch({ok, _},
-        rpc:call(Worker, dir_stats_service_config, get_last_status_change_timestamp_if_in_enabled_status, [SpaceId])),
+        rpc:call(Worker, dir_stats_service_state, get_last_status_change_timestamp_if_in_enabled_status, [SpaceId])),
     [{_, EnablingTime2} | _] = rpc:call(
-        Worker, dir_stats_service_config, get_collecting_status_change_timestamps, [SpaceId]),
+        Worker, dir_stats_service_state, get_status_change_timestamps, [SpaceId]),
     ?assertEqual(EnablingTime, EnablingTime2),
 
     disable(Config),
@@ -340,7 +340,7 @@ multiple_status_change_test(Config) ->
     verify_collecting_status(Config, disabled),
 
     StatusChangesWithTimestamps2 = rpc:call(
-        Worker, dir_stats_service_config, get_collecting_status_change_timestamps, [SpaceId]),
+        Worker, dir_stats_service_state, get_status_change_timestamps, [SpaceId]),
     [{_, LastChangeTime} | _] = StatusChangesWithTimestamps2,
     lists:foldl(fun({_, Timestamp}, TimestampToCompare) ->
         ?assert(TimestampToCompare >= Timestamp),
@@ -348,7 +348,7 @@ multiple_status_change_test(Config) ->
     end, LastChangeTime, StatusChangesWithTimestamps2),
 
     ?assertEqual(?ERROR_DIR_STATS_DISABLED_FOR_SPACE,
-        rpc:call(Worker, dir_stats_service_config, get_last_status_change_timestamp_if_in_enabled_status, [SpaceId])).
+        rpc:call(Worker, dir_stats_service_state, get_last_status_change_timestamp_if_in_enabled_status, [SpaceId])).
 
 
 adding_file_when_disabled_test(Config) ->
@@ -379,16 +379,16 @@ restart_test(Config) ->
     enable(Config),
 
     reset_restart_hooks(Config),
-    hang_collectors_stopping(Config),
+    hang_stopping(Config),
     execute_restart_hooks(Config),
     verify_collecting_status(Config, disabled),
 
     enable(Config),
     verify_collecting_status(Config, enabled),
 
-    hang_collectors_stopping(Config),
+    hang_stopping(Config),
     execute_restart_hooks(Config),
-    verify_collecting_status(Config, collectors_stopping), % restarts hooks have been executed once so they have no effect
+    verify_collecting_status(Config, stopping), % restarts hooks have been executed once so they have no effect
 
     reset_restart_hooks(Config),
     execute_restart_hooks(Config),
@@ -586,14 +586,14 @@ delete_stats(Worker, Guid) ->
 enable(Config) ->
     SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
     lists:foreach(fun(W) ->
-        ?assertEqual(ok, rpc:call(W, dir_stats_service_config, enable, [SpaceId]))
+        ?assertEqual(ok, rpc:call(W, dir_stats_service_state, enable, [SpaceId]))
     end, initializer:get_different_domain_workers(Config)).
 
 
 disable(Config) ->
     SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
     lists:foreach(fun(W) ->
-        ?assertEqual(ok, rpc:call(W, dir_stats_service_config, disable, [SpaceId]))
+        ?assertEqual(ok, rpc:call(W, dir_stats_service_state, disable, [SpaceId]))
     end, initializer:get_different_domain_workers(Config)).
 
 
@@ -601,7 +601,7 @@ verify_collecting_status(Config, ExpectedStatus) ->
     SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
     lists:foreach(fun(W) ->
         ?assertEqual(ExpectedStatus,
-            rpc:call(W, dir_stats_service_config, get_extended_collecting_status, [SpaceId]), ?ATTEMPTS)
+            rpc:call(W, dir_stats_service_state, get_extended_status, [SpaceId]), ?ATTEMPTS)
     end, initializer:get_different_domain_workers(Config)).
 
 
@@ -895,14 +895,14 @@ execute_file_listing_hook(Tag, Hook) ->
     ?assertEqual(ok, MessageReceived).
 
 
-hang_collectors_stopping(Config) ->
+hang_stopping(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     ok = test_utils:mock_new(Worker, dir_stats_collector, [passthrough]),
     ok = test_utils:mock_expect(Worker, dir_stats_collector, stop_collecting, fun(_SpaceId) -> ok end),
     
     disable(Config),
     test_utils:mock_unload(Worker, [dir_stats_collector]),
-    verify_collecting_status(Config, collectors_stopping).
+    verify_collecting_status(Config, stopping).
 
 
 execute_restart_hooks(Config) ->
