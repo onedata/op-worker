@@ -27,8 +27,8 @@ CHANGELOG
     and number of files/directories in subdirectories can be viewed as
     well as how this values change in time.
 -   **VFS-9120** Fixed uid/gid encoding to use unsigned int32 rather
-    than signed int32, so that it now aligns with POSIX uid\_t and
-    gid\_t types.
+    than signed int32, so that it now aligns with POSIX uid_t and gid_t
+    types.
 -   **VFS-9054** Improved connection closing in Oneclient.
 -   **VFS-9051** Added new files endpoint which allow to list all
     non-directory files (i.e regular files, symbolic links and
@@ -52,6 +52,7 @@ CHANGELOG
     pointing outside it.
 -   **VFS-8598** Web GUI: improved presentation of state of archives
     being built and deleted.
+-   **VFS-8045** Web GUI: added QoS audit log view.
 -   **VFS-7631** Web GUI: added presentation of source file path in
     dataset browser.
 
