@@ -432,7 +432,7 @@ update_helper(StorageId, UpdateFun) ->
     id(),
     tokens:serialized(),
     od_space:support_size(),
-    space_support_api:support_opts()
+    space_support_state_api:support_opts()
 ) ->
     {ok, od_space:id()} | errors:error().
 support_space(StorageId, SerializedToken, SupportSize, SupportOpts) ->
@@ -531,7 +531,7 @@ on_space_unsupported(SpaceId, StorageId) ->
     space_unsupport:cleanup_local_documents(SpaceId, StorageId),
     auto_storage_import_worker:notify_space_unsupported(SpaceId),
     main_harvesting_stream:space_unsupported(SpaceId),
-    space_support_api:clean_support_state(SpaceId).
+    space_support_state_api:clean_support_state(SpaceId).
 
 
 %% @private

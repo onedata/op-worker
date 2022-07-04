@@ -138,7 +138,7 @@ force_fetch(StorageId) ->
     storage:id(),
     tokens:serialized(),
     od_space:support_size(),
-    space_support_api:support_opts()
+    space_support_state_api:support_opts()
 ) ->
     {ok, od_space:id()} | errors:error().
 support_space(StorageId, SpaceSupportToken, SupportSize, SupportOpts) ->
@@ -153,7 +153,7 @@ support_space(StorageId, SpaceSupportToken, SupportSize, SupportOpts) ->
         provider_logic:force_fetch(),
         space_logic:force_fetch(SpaceId),
         storage_logic:force_fetch(StorageId),
-        space_support_api:init_support_state(SpaceId, SupportOpts)
+        space_support_state_api:init_support_state(SpaceId, SupportOpts)
     end).
 
 

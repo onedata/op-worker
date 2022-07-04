@@ -449,7 +449,7 @@ provider_logic_update(Data) ->
     storage:id(),
     tokens:serialized(),
     SupportSize :: integer(),
-    space_support_api:support_opts()
+    space_support_state_api:support_opts()
 ) ->
     {ok, od_space:id()} | errors:error().
 support_space(StorageId, Token, SupportSize, SupportOpts) ->
@@ -498,9 +498,9 @@ get_space_details(SpaceId) ->
 
 
 -spec get_space_support_opts(od_space:id()) ->
-    {ok, space_support_api:support_opts()} | errors:error().
+    {ok, space_support_state_api:support_opts()} | errors:error().
 get_space_support_opts(SpaceId) ->
-    space_support_api:get_support_opts(SpaceId).
+    space_support_state_api:get_support_opts(SpaceId).
 
 
 -spec get_space_dir_stats_service_status(od_space:id()) ->
@@ -562,10 +562,10 @@ update_space_support_size(SpaceId, NewSupportSize) ->
     storage:update_space_support_size(StorageId, SpaceId, NewSupportSize).
 
 
--spec update_space_support_opts(od_space:id(), space_support_api:support_opts_diff()) ->
+-spec update_space_support_opts(od_space:id(), space_support_state_api:support_opts_diff()) ->
     ok | errors:error().
 update_space_support_opts(SpaceId, SupportOptsDiff) ->
-    space_support_api:update_support_opts(SpaceId, SupportOptsDiff).
+    space_support_state_api:update_support_opts(SpaceId, SupportOptsDiff).
 
 
 -spec update_subdomain_delegation_ips() -> ok | error.

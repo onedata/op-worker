@@ -9,7 +9,7 @@
 %%% API module for performing operations on space support state.
 %%% @end
 %%%-------------------------------------------------------------------
--module(space_support_api).
+-module(space_support_state_api).
 -author("Bartosz Walkowicz").
 
 -include("modules/datastore/datastore_models.hrl").
@@ -144,6 +144,8 @@ init_support_state_for_all_supported_spaces() ->
     {ok, SupportedSpaceIds} = provider_logic:get_spaces(),
 
     lists:foreach(fun(SpaceId) ->
+        space_support_state:delete(SpaceId),
+
         init_support_state(SpaceId, #{
             accounting_enabled => false,
             dir_stats_service_enabled => false

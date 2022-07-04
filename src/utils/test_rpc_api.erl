@@ -174,7 +174,7 @@ support_space(StorageId, Token, SupportSize) ->
     storage:id(),
     tokens:serialized(),
     SupportSize :: integer(),
-    space_support_api:support_opts()
+    space_support_state_api:support_opts()
 ) ->
     {ok, od_space:id()} | errors:error().
 support_space(StorageId, Token, SupportSize, SupportOpts) ->
@@ -182,7 +182,7 @@ support_space(StorageId, Token, SupportSize, SupportOpts) ->
 
 
 -spec get_space_support_opts(od_space:id()) ->
-    {ok, space_support_api:support_opts()} | errors:error().
+    {ok, space_support_state_api:support_opts()} | errors:error().
 get_space_support_opts(SpaceId) ->
     rpc_api:get_space_support_opts(SpaceId).
 

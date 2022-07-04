@@ -490,7 +490,7 @@ init(Config, DirStatsEnabled) ->
 
     SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
     lists:foreach(fun(W) ->
-        rpc:call(W, space_support_api, init_support_state, [SpaceId, #{
+        rpc:call(W, space_support_state_api, init_support_state, [SpaceId, #{
             accounting_enabled => false,
             dir_stats_service_enabled => DirStatsEnabled
         }])
@@ -511,7 +511,7 @@ teardown(Config, SpaceId, CleanSpace) ->
     verify_collecting_status(Config, disabled),
 
     lists:foreach(fun(W) ->
-        ?assertEqual(ok, rpc:call(W, space_support_api, clean_support_state, [SpaceId])),
+        ?assertEqual(ok, rpc:call(W, space_support_state_api, clean_support_state, [SpaceId])),
         delete_stats(W, SpaceGuid),
         lists:foreach(fun(Incarnation) ->
             % Clean traverse data (do not assert as not all tests use initialization traverses)
