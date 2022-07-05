@@ -116,19 +116,8 @@ maybe_sync_first_file_block(SessionId, FileGuid) ->
     cowboy_req:req().
 handle_http_download(SessionId, FileGuid, OnSuccessCallback, Req0) ->
     case lfm:stat(SessionId, {guid, FileGuid}) of
-        {ok, #file_attr{name = FileName} = FileAttrs} ->
-            %% @todo VFS-2073 - check if needed
-            %% FileNameUrlEncoded = http_utils:url_encode(FileName),
-            Req1 = cowboy_req:set_resp_header(
-                <<"content-disposition">>,
-                <<"attachment; filename=\"", FileName/binary, "\"">>,
-                %% @todo VFS-2073 - check if needed
-                %% "filename*=UTF-8''", FileNameUrlEncoded/binary>>
-                Req0
-            ),
-            http_download_utils:stream_file(
-                SessionId, FileAttrs, OnSuccessCallback, Req1
-            );
+        {ok, FileAttrs} ->
+            http_download_utils:stream_file(SessionId, FileAttrs, OnSuccessCallback, Req0);
         {error, Errno} ->
             http_req:send_error(?ERROR_POSIX(Errno), Req0)
     end.
