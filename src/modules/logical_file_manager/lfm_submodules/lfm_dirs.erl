@@ -14,7 +14,6 @@
 -include("global_definitions.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
--include("proto/oneprovider/provider_messages.hrl").
 
 %% API
 -export([

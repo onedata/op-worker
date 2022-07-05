@@ -43,23 +43,15 @@ get_provider_to_route([ProviderId | _]) ->
     fslogic_worker:response().
 route(UserCtx, ProviderId, Request) ->
     ?debug("Rerouting ~p ~p", [ProviderId, Request]),
-
-    Msg = case user_ctx:is_root(UserCtx) of
-        true ->
-            #client_message{
-                message_body = Request,
-                effective_session_id = ?ROOT_SESS_ID
-            };
-        false ->
-            EffSessionId = user_ctx:get_session_id(UserCtx),
-            Credentials = user_ctx:get_credentials(UserCtx),
-            #client_message{
-                message_body = Request,
-                effective_session_id = EffSessionId,
-                effective_client_tokens = auth_manager:get_client_tokens(Credentials),
-                effective_session_mode = user_ctx:get_session_mode(UserCtx)
-            }
-    end,
+    
+    EffSessionId = user_ctx:get_session_id(UserCtx),
+    Credentials = user_ctx:get_credentials(UserCtx),
+    Msg = #client_message{
+        message_body = Request,
+        effective_session_id = EffSessionId,
+        effective_client_tokens = auth_manager:get_client_tokens(Credentials),
+        effective_session_mode = user_ctx:get_session_mode(UserCtx)
+    },
     SessionId = session_utils:get_provider_session_id(outgoing, ProviderId),
     {ok, #server_message{
         message_body = MsgBody

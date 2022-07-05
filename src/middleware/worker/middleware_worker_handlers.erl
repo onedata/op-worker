@@ -13,7 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("middleware/middleware.hrl").
--include("proto/oneprovider/mi_interprovider_messages.hrl").
+-include("proto/oneprovider/provider_rpc_messages.hrl").
 
 %% API
 -export([execute/3]).
@@ -28,7 +28,7 @@
 -spec execute(
     user_ctx:ctx(), 
     file_ctx:ctx(), 
-    middleware_worker:operation() | middleware_worker:interprovider_operation()
+    middleware_worker:operation()
 ) ->
     ok | {ok, term()} | no_return().
 execute(UserCtx, SpaceDirCtx, #list_archives{
@@ -144,8 +144,8 @@ execute(UserCtx, FileCtx, #get_file_eff_dataset_summary{}) ->
 execute(UserCtx, FileCtx, #file_distribution_gather_request{}) ->
     file_distribution:gather(UserCtx, FileCtx);
 
-execute(UserCtx, FileCtx, #dir_time_size_stats_gather_request{request = Request}) ->
-    {ok, dir_size_stats_req:gather(UserCtx, FileCtx, Request)};
+execute(UserCtx, FileCtx, #historical_dir_size_stats_gather_request{request = Request}) ->
+    {ok, dir_size_stats_req:gather_historical(UserCtx, FileCtx, Request)};
 
 %% QoS
 
@@ -201,18 +201,4 @@ execute(UserCtx, FileCtx, #schedule_view_transfer{
         ReplicatingProviderId, EvictingProviderId,
         ViewName, QueryViewParams,
         Callback
-    );
-
-%% Interprovider communication
-
-execute(_UserCtx, FileCtx, #local_reg_file_distribution_get_request{}) ->
-    {ok, local_reg_file_distribution:get(FileCtx)};
-
-execute(_UserCtx, FileCtx, #browse_local_current_dir_size_stats{stat_names = StatNames}) ->
-    case dir_size_stats:get_stats(file_ctx:get_logical_guid_const(FileCtx), StatNames) of
-        {ok, Stats} -> {ok, #local_current_dir_size_stats{stats = Stats}};
-        {error, _} = Error -> Error
-    end;
-
-execute(_UserCtx, FileCtx, #browse_local_time_dir_size_stats{request = Request}) ->
-    dir_size_stats:browse_time_stats_collection(file_ctx:get_logical_guid_const(FileCtx), Request).
+    ).

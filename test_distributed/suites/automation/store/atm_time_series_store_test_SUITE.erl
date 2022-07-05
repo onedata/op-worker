@@ -429,11 +429,11 @@ infer_window_timestamp(Time, #metric_config{resolution = Resolution}) ->
     time_series_collection:layout().
 get_layout(AtmWorkflowExecutionAuth, AtmStoreId) ->
     BrowseOpts = #atm_time_series_store_content_browse_options{
-        request = #time_series_get_layout_request{}
+        request = #time_series_layout_get_request{}
     },
 
     #atm_time_series_store_content_browse_result{
-        result = #time_series_layout_result{
+        result = #time_series_layout_get_result{
             layout = Layout
         }
     } = ?rpc(atm_store_api:browse_content(
@@ -477,7 +477,7 @@ get_slice(AtmWorkflowExecutionAuth, AtmStoreId, Layout, StartTimestamp) ->
     #{time_series_collection:time_series_id() => #{ts_metric:id() => [ts_windows:value()]}}.
 get_slice(AtmWorkflowExecutionAuth, AtmStoreId, Layout, StartTimestamp, WindowLimit) ->
     BrowseOpts = #atm_time_series_store_content_browse_options{
-        request = #time_series_get_slice_request{
+        request = #time_series_slice_get_request{
             layout = Layout,
             start_timestamp = StartTimestamp,
             window_limit = WindowLimit

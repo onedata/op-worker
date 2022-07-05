@@ -229,7 +229,7 @@
 
 -record(file_distribution_gather_request, {}).
 
--record(dir_time_size_stats_gather_request, {
+-record(historical_dir_size_stats_gather_request, {
     request :: ts_browse_request:record()
 }).
 

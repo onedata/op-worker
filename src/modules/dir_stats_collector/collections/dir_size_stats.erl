@@ -18,12 +18,12 @@
 %%%
 %%% This module offers two types of statistics in its API:
 %%%   * current_stats() - a collection with current values for each statistic,
-%%%   * time_stats() - time series collection slice showing the changes of stats in time.
+%%%   * historical_stats() - time series collection slice showing the changes of stats in time.
 %%% Internally, both collections are kept in the same underlying persistent
 %%% time series collection - internal_stats(). The current statistics are stored
 %%% in the special ?CURRENT_METRIC. Additionally, the internal_stats() hold dir stats
 %%% incarnation info in a separate time series. The internal_stats() are properly
-%%% trimmed into current_stats() and/or time_stats() when these collections are retrieved.
+%%% trimmed into current_stats() and/or historical_stats() when these collections are retrieved.
 %%%
 %%% @end
 %%%-------------------------------------------------------------------
@@ -44,7 +44,7 @@
 %% API
 -export([
     get_stats/1, get_stats/2, 
-    browse_time_stats_collection/2,
+    browse_historical_stats_collection/2,
     report_reg_file_size_changed/3,
     report_file_created/2, report_file_deleted/2,
     report_file_moved/4,
@@ -61,7 +61,7 @@
 
 %% see the module doc
 -type current_stats() :: dir_stats_collection:collection().
--type time_stats() :: time_series_collection:slice().
+-type historical_stats() :: time_series_collection:slice().
 -type internal_stats() :: time_series_collection:slice().
 
 -export_type([current_stats/0]).
@@ -97,17 +97,17 @@ get_stats(Guid, StatNames) ->
     dir_stats_collector:get_stats(Guid, ?MODULE, StatNames).
 
 
--spec browse_time_stats_collection(file_id:file_guid(), ts_browse_request:record()) -> {ok, ts_browse_result:record()} |
+-spec browse_historical_stats_collection(file_id:file_guid(), ts_browse_request:record()) -> {ok, ts_browse_result:record()} |
     dir_stats_collector:collecting_status_error() | ?ERROR_INTERNAL_SERVER_ERROR.
-browse_time_stats_collection(Guid, BrowseRequest) ->
+browse_historical_stats_collection(Guid, BrowseRequest) ->
     case dir_stats_collector_config:is_collecting_active(file_id:guid_to_space_id(Guid)) of
         true ->
             case dir_stats_collector:flush_stats(Guid, ?MODULE) of
                 ok ->
                     Uuid = file_id:guid_to_uuid(Guid),
                     case datastore_time_series_collection:browse(?CTX, Uuid, BrowseRequest) of
-                        {ok, BrowseResult} -> {ok, internal_to_time_stats_browse_result(BrowseResult)};
-                        {error, not_found} -> {ok, gen_empty_time_stats_browse_result(BrowseRequest, Guid)};
+                        {ok, BrowseResult} -> {ok, internal_to_historical_stats_browse_result(BrowseResult)};
+                        {error, not_found} -> {ok, gen_empty_historical_stats_browse_result(BrowseRequest, Guid)};
                         {error, _} = Error2 -> Error2
                     end;
                 {error, _} = Error ->
@@ -264,7 +264,7 @@ internal_stats_config(Guid) ->
         (?INCARNATION_TIME_SERIES) ->
             {?INCARNATION_TIME_SERIES, current_metric_composition()};
         (StatName) ->
-            {StatName, maps:merge(time_stats_metric_composition(), current_metric_composition())}
+            {StatName, maps:merge(historical_stats_metric_composition(), current_metric_composition())}
     end, [?INCARNATION_TIME_SERIES | stat_names(Guid)]).
 
 
@@ -288,8 +288,8 @@ current_metric_composition() ->
 
 
 %% @private
--spec time_stats_metric_composition() -> time_series:metric_composition().
-time_stats_metric_composition() ->
+-spec historical_stats_metric_composition() -> time_series:metric_composition().
+historical_stats_metric_composition() ->
     #{
         ?MINUTE_METRIC => #metric_config{
             resolution = ?MINUTE_RESOLUTION,
@@ -315,9 +315,9 @@ time_stats_metric_composition() ->
 
 
 %% @private
--spec gen_default_time_stats_layout(file_id:file_guid()) -> time_series_collection:layout().
-gen_default_time_stats_layout(Guid) ->
-    MetricNames = maps:keys(time_stats_metric_composition()),
+-spec gen_default_historical_stats_layout(file_id:file_guid()) -> time_series_collection:layout().
+gen_default_historical_stats_layout(Guid) ->
+    MetricNames = maps:keys(historical_stats_metric_composition()),
     maps_utils:generate_from_list(fun(TimeSeriesName) -> {TimeSeriesName, MetricNames} end, stat_names(Guid)).
 
 
@@ -333,17 +333,17 @@ internal_stats_to_current_stats(InternalStats) ->
 
 
 %% @private
--spec internal_stats_to_time_stats(internal_stats()) -> time_stats().
-internal_stats_to_time_stats(InternalStats) ->
+-spec internal_stats_to_historical_stats(internal_stats()) -> historical_stats().
+internal_stats_to_historical_stats(InternalStats) ->
     maps:map(fun(_TimeSeriesName, WindowsPerMetric) ->
         maps:without([?CURRENT_METRIC], WindowsPerMetric)
     end, maps:without([?INCARNATION_TIME_SERIES], InternalStats)).
 
 
 %% @private
--spec internal_layout_to_time_stats_layout(time_series_collection:layout()) -> 
+-spec internal_layout_to_historical_stats_layout(time_series_collection:layout()) -> 
     time_series_collection:layout().
-internal_layout_to_time_stats_layout(InternalLayout) ->
+internal_layout_to_historical_stats_layout(InternalLayout) ->
     maps:map(fun(_TimeSeriesName, Metrics) ->
         lists:delete(?CURRENT_METRIC, Metrics)
     end, maps:without([?INCARNATION_TIME_SERIES], InternalLayout)).
@@ -356,20 +356,20 @@ internal_stats_to_incarnation(#{?INCARNATION_TIME_SERIES := #{?CURRENT_METRIC :=
 
 
 %% @private
--spec internal_to_time_stats_browse_result(ts_browse_result:record()) -> ts_browse_result:record().
-internal_to_time_stats_browse_result(#time_series_layout_result{layout = InternalLayout}) ->
-    #time_series_layout_result{layout = internal_layout_to_time_stats_layout(InternalLayout)};
-internal_to_time_stats_browse_result(#time_series_slice_result{slice = InternalStats}) ->
-    #time_series_slice_result{slice = internal_stats_to_time_stats(InternalStats)}.
+-spec internal_to_historical_stats_browse_result(ts_browse_result:record()) -> ts_browse_result:record().
+internal_to_historical_stats_browse_result(#time_series_layout_get_result{layout = InternalLayout}) ->
+    #time_series_layout_get_result{layout = internal_layout_to_historical_stats_layout(InternalLayout)};
+internal_to_historical_stats_browse_result(#time_series_slice_get_result{slice = InternalStats}) ->
+    #time_series_slice_get_result{slice = internal_stats_to_historical_stats(InternalStats)}.
 
 
 %% @private
--spec gen_empty_time_stats_browse_result(ts_browse_request:record(), file_id:file_guid()) ->
+-spec gen_empty_historical_stats_browse_result(ts_browse_request:record(), file_id:file_guid()) ->
     ts_browse_result:record().
-gen_empty_time_stats_browse_result(#time_series_get_layout_request{}, Guid) ->
-    #time_series_layout_result{layout = gen_default_time_stats_layout(Guid)};
-gen_empty_time_stats_browse_result(#time_series_get_slice_request{}, Guid) ->
-    #time_series_slice_result{slice = gen_empty_time_stats(Guid)}.
+gen_empty_historical_stats_browse_result(#time_series_layout_get_request{}, Guid) ->
+    #time_series_layout_get_result{layout = gen_default_historical_stats_layout(Guid)};
+gen_empty_historical_stats_browse_result(#time_series_slice_get_request{}, Guid) ->
+    #time_series_slice_get_result{slice = gen_empty_historical_stats(Guid)}.
 
 
 %% @private
@@ -379,9 +379,9 @@ gen_empty_current_stats(Guid) ->
 
 
 %% @private
--spec gen_empty_time_stats(file_id:file_guid()) -> time_stats().
-gen_empty_time_stats(Guid) ->
-    MetricNames = maps:keys(time_stats_metric_composition()),
+-spec gen_empty_historical_stats(file_id:file_guid()) -> historical_stats().
+gen_empty_historical_stats(Guid) ->
+    MetricNames = maps:keys(historical_stats_metric_composition()),
     maps_utils:generate_from_list(fun(TimeSeriesName) ->
         {TimeSeriesName, maps_utils:generate_from_list(fun(MetricName) ->
             {MetricName, []}

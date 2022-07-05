@@ -19,7 +19,6 @@
 -include("global_definitions.hrl").
 -include("middleware/middleware.hrl").
 -include("modules/fslogic/file_distribution.hrl").
--include("proto/oneprovider/mi_interprovider_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("cluster_worker/include/time_series/browsing.hrl").
@@ -58,7 +57,7 @@
 
 -type file_metadata_operations() ::
     #file_distribution_gather_request{} |
-    #dir_time_size_stats_gather_request{}.
+    #historical_dir_size_stats_gather_request{}.
 
 -type qos_operation() ::
     #add_qos_entry{} |
@@ -90,26 +89,6 @@
     operation/0
 ]).
 
-% NOTE: translated to protobuf
--type interprovider_operation() ::
-    #local_reg_file_distribution_get_request{} |
-    #browse_local_current_dir_size_stats{} |
-    #browse_local_time_dir_size_stats{}.
-
-% NOTE: translated to protobuf
--type interprovider_result() ::
-    #local_current_dir_size_stats{} |
-    #provider_reg_distribution{} |
-    #time_series_layout_result{} |
-    #time_series_slice_result{}.
-
--export_type([interprovider_operation/0, interprovider_result/0]).
-
-
--define(SHOULD_LOG_REQUESTS_ON_ERROR, application:get_env(
-    ?CLUSTER_WORKER_APP_NAME, log_requests_on_error, false
-)).
-
 -define(REQ(__SESSION_ID, __FILE_GUID, __OPERATION),
     {middleware_request, __SESSION_ID, __FILE_GUID, __OPERATION}
 ).
@@ -127,7 +106,7 @@ check_exec(SessionId, FileGuid, Operation) ->
 
 
 %% TODO VFS-8753 handle selector (e.g. {file, <FileGuid>}, {space, <SpaceId>}, etc.) as 2nd argument
--spec exec(session:id(), file_id:file_guid(), operation() | interprovider_operation()) ->
+-spec exec(session:id(), file_id:file_guid(), operation()) ->
     ok | {ok, term()} | errors:error().
 exec(SessionId, FileGuid, Operation) ->
     worker_proxy:call(?MODULE, ?REQ(SessionId, FileGuid, Operation)).
@@ -173,7 +152,7 @@ handle(?REQ(SessionId, FileGuid, Operation)) ->
 
         middleware_worker_handlers:execute(UserCtx, FileCtx, Operation)
     catch Type:Reason:Stacktrace ->
-        handle_error(Type, Reason, Stacktrace, SessionId, Operation)
+        error_utils:handle_error(Type, Reason, Stacktrace, SessionId, Operation)
     end;
 
 handle(Request) ->
@@ -212,61 +191,4 @@ assert_file_access_not_in_share_mode(FileGuid) ->
     case file_id:is_share_guid(FileGuid) of
         true -> throw(?ERROR_POSIX(?EPERM));
         false -> ok
-    end.
-
-
-%% @private
--spec handle_error(
-    Type :: atom(),
-    Reason :: term(),
-    Stacktrace :: list(),
-    session:id(),
-    operation()
-) ->
-    errors:error().
-handle_error(throw, Reason, _Stacktrace, _SessionId, _Request) ->
-    infer_error(Reason);
-
-handle_error(_Type, Reason, Stacktrace, SessionId, Request) ->
-    Error = infer_error(Reason),
-
-    {LogFormat, LogFormatArgs} = case ?SHOULD_LOG_REQUESTS_ON_ERROR of
-        true ->
-            MF = "Cannot process request ~p for session ~p due to: ~p caused by ~p",
-            FA = [lager:pr(Request, ?MODULE), SessionId, Error, Reason],
-            {MF, FA};
-        false ->
-            MF = "Cannot process request for session ~p due to: ~p caused by ~p",
-            FA = [SessionId, Error, Reason],
-            {MF, FA}
-    end,
-
-    case Error of
-        ?ERROR_UNEXPECTED_ERROR(_) ->
-            ?error_stacktrace(LogFormat, LogFormatArgs, Stacktrace);
-        _ ->
-            ?debug_stacktrace(LogFormat, LogFormatArgs, Stacktrace)
-    end,
-
-    Error.
-
-
-%% @private
--spec infer_error(term()) -> errors:error().
-infer_error({badmatch, Error}) ->
-    infer_error(Error);
-
-infer_error({error, Reason} = Error) ->
-    case ordsets:is_element(Reason, ?ERROR_CODES) of
-        true -> ?ERROR_POSIX(Reason);
-        false -> Error
-    end;
-
-infer_error(Reason) ->
-    case ordsets:is_element(Reason, ?ERROR_CODES) of
-        true ->
-            ?ERROR_POSIX(Reason);
-        false ->
-            %% TODO VFS-8614 replace unexpected error with internal server error
-            ?ERROR_UNEXPECTED_ERROR(str_utils:rand_hex(5))
     end.

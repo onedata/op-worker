@@ -50,8 +50,9 @@ get_distribution_deprecated(NodeSelector, SessionId, FileRef) ->
 %%%===================================================================
 
 -spec to_json_deprecated(file_distribution:get_result()) -> json_utils:json_term().
-to_json_deprecated(#file_distribution_gather_result{distribution = #reg_distribution{distribution_per_provider = FileBlocksPerProvider}}) ->
-    maps:fold(fun(ProviderId, #provider_reg_distribution{blocks_per_storage = [#storage_reg_distribution{blocks = Blocks}]}, Acc) ->
+to_json_deprecated(#file_distribution_gather_result{distribution = #reg_distribution_gather_result{distribution_per_provider = FileBlocksPerProvider}}) ->
+    maps:fold(fun(ProviderId, #provider_reg_distribution_get_result{blocks_per_storage = BlocksPerStorage}, Acc) ->
+        [Blocks] = maps:values(BlocksPerStorage),
         {BlockList, TotalBlocksSize} = get_blocks_summary(Blocks),
         [#{
             <<"providerId">> => ProviderId,

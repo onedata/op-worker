@@ -6,10 +6,11 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Module responsible for performing operations on local regular file distribution.
+%%% Module responsible for performing operations on regular file distribution 
+%%% in scope of single provider.
 %%% @end
 %%%--------------------------------------------------------------------
--module(local_reg_file_distribution).
+-module(provider_reg_distribution).
 -author("Michal Stanisz").
 
 -include("modules/datastore/datastore_models.hrl").
@@ -23,25 +24,19 @@
 %%% API
 %%%===================================================================
 
--spec get(file_ctx:ctx()) -> file_distribution:provider_reg_distribution().
+-spec get(file_ctx:ctx()) -> {ok, file_distribution:provider_reg_distribution()}.
 get(FileCtx0) ->
     {FileSize, FileCtx1} = file_ctx:get_file_size(FileCtx0),
     {Location, FileCtx2} = file_ctx:get_local_file_location_doc(FileCtx1),
     StorageDistribution = case Location of
         #document{value = #file_location{storage_id = StorageId}} = FL ->
-            #storage_reg_distribution{
-                storage_id = StorageId,
-                blocks = fslogic_location_cache:get_blocks(FL)
-            };
+            #{StorageId => fslogic_location_cache:get_blocks(FL)};
         undefined ->
             SpaceId = file_ctx:get_space_id_const(FileCtx2), 
             {ok, StorageId} = space_logic:get_local_supporting_storage(SpaceId),
-            #storage_reg_distribution{
-                storage_id = StorageId,
-                blocks = []
-            }
+            #{StorageId => []}
     end,
-    #provider_reg_distribution{
+    {ok, #provider_reg_distribution_get_result{
         logical_size = FileSize,
-        blocks_per_storage = [StorageDistribution]
-    }.
+        blocks_per_storage = StorageDistribution
+    }}.

@@ -64,9 +64,6 @@
 -record(get_file_path, {
 }).
 
--record(get_file_distribution_summary, {
-}).
-
 -record(get_metadata, {
     type :: custom_metadata:type(),
     query = [] :: custom_metadata:query(),
@@ -88,8 +85,7 @@
     #get_transfer_encoding{} | #set_transfer_encoding{} |
     #get_cdmi_completion_status{} | #set_cdmi_completion_status{} |
     #get_mimetype{} | #set_mimetype{} | #get_file_path{} |
-    #get_metadata{} | #remove_metadata{} | #set_metadata{} |
-    #get_file_distribution_summary{}.
+    #get_metadata{} | #remove_metadata{} | #set_metadata{}.
 
 -record(transfer_encoding, {
     value :: binary()
@@ -105,15 +101,6 @@
 
 -record(file_path, {
     value :: binary()
-}).
-
--record(provider_distribution_summary, {
-    provider_id :: oneprovider:id(),
-    blocks :: [#file_block{}]
-}).
-
--record(file_distribution_summary, {
-    provider_file_distributions = [] :: [#provider_distribution_summary{}]
 }).
 
 -record(metadata, {
@@ -160,19 +147,10 @@
     related_dip_id :: undefined | archive:id()
 }).
 
--record(dir_time_stats_result, {
-    result :: ts_browse_result:record()
-}).
-
--record(dir_current_stats_result, {
-    result :: dir_size_stats:current_stats()
-}).
-
 -type provider_response_type() ::
     #transfer_encoding{} | #cdmi_completion_status{} | #mimetype{} | #acl{} |
-    #dir{} | #file_path{} | #file_distribution_summary{} | #metadata{} |
-    #dataset_info{} | #file_eff_dataset_summary{} | #archive_info{} | #dir_time_stats_result{} | #dir_current_stats_result{} | 
-    undefined.
+    #dir{} | #file_path{}| #metadata{} | #dataset_info{} | #file_eff_dataset_summary{} | 
+    #archive_info{} | undefined.
 
 -record(provider_request, {
     context_guid :: fslogic_worker:file_guid(),

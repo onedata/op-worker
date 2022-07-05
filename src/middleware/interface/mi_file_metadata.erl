@@ -6,7 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Interface for managing file metadata (requests are delegated to middleware_worker).
+%%% Interface for managing file metadata (requests are delegated to middleware_worker). 
+%%% @TODO VFS-9578 - Move locally managed file metadata operations to middleware worker
 %%% @end
 %%%-------------------------------------------------------------------
 -module(mi_file_metadata).
@@ -17,7 +18,7 @@
 %% API
 -export([
     gather_distribution/2,
-    gather_time_dir_size_stats/3
+    gather_historical_dir_size_stats/3
 ]).
 
 
@@ -33,10 +34,10 @@ gather_distribution(SessionId, FileKey) ->
     middleware_worker:check_exec(SessionId, FileGuid, #file_distribution_gather_request{}).
 
 
--spec gather_time_dir_size_stats(session:id(), lfm:file_key(), ts_browse_request:record()) ->
+-spec gather_historical_dir_size_stats(session:id(), lfm:file_key(), ts_browse_request:record()) ->
     ts_browse_result:record() | no_return().
-gather_time_dir_size_stats(SessionId, FileKey, Request) ->
+gather_historical_dir_size_stats(SessionId, FileKey, Request) ->
     FileGuid = lfm_file_key:resolve_file_key(SessionId, FileKey, do_not_resolve_symlink),
-    middleware_worker:check_exec(SessionId, FileGuid, #dir_time_size_stats_gather_request{
+    middleware_worker:check_exec(SessionId, FileGuid, #historical_dir_size_stats_gather_request{
         request = Request
     }).

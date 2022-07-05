@@ -13,18 +13,12 @@
 -define(FILE_DISTRIBUTION_HRL, 1).
 
 
--record(storage_dir_size, {
-    storage_id:: storage:id(),
-    % `undefined` physical size means that file was not yet created on this storage.
-    physical_size :: undefined | non_neg_integer()
+-record(provider_dir_distribution_get_result, {
+    logical_size :: file_meta:size(),
+    physical_size_per_storage = #{} :: #{storage:id()  => file_distribution:dir_physical_size()}
 }).
 
--record(provider_dir_distribution, {
-    logical_size :: undefined | file_meta:size(),
-    physical_size_per_storage = [] :: [file_distribution:storage_dir_size()]
-}).
-
--record(dir_distribution, {
+-record(dir_distribution_gather_result, {
     distribution_per_provider = #{} :: #{
         od_provider:id() => file_distribution:provider_dir_distribution() | errors:error()
     }
@@ -32,25 +26,19 @@
 
 
 % NOTE: translated to protobuf
--record(storage_reg_distribution, {
-    storage_id :: storage:id(),
-    blocks :: fslogic_blocks:blocks()
-}).
-
-% NOTE: translated to protobuf
--record(provider_reg_distribution, {
+-record(provider_reg_distribution_get_result, {
     logical_size = 0 :: file_meta:size(),
-    blocks_per_storage :: [file_distribution:storage_reg_distribution()]
+    blocks_per_storage = #{} :: #{storage:id() => fslogic_blocks:blocks()}
 }).
 
--record(reg_distribution, {
+-record(reg_distribution_gather_result, {
     distribution_per_provider = #{} :: #{
         od_provider:id() => file_distribution:provider_reg_distribution() | errors:error()
     }
 }).
 
 
--record(symlink_distribution, {
+-record(symlink_distribution_get_result, {
     logical_size = 0 :: 0, % symlink has always 0 logical size
     storages_per_provider = #{} :: #{oneprovider:id() => [storage:id()]}
 }).

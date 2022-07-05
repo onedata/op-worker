@@ -650,8 +650,6 @@ handle_file_request(UserCtx, #fsync{
 %%--------------------------------------------------------------------
 -spec handle_provider_request(user_ctx:ctx(), provider_request_type(), file_ctx:ctx()) ->
     provider_response().
-handle_provider_request(UserCtx, #get_file_distribution_summary{}, FileCtx) ->
-    file_distribution:get_deprecated_summary(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #get_parent{}, FileCtx) ->
     guid_req:get_parent(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #get_file_path{}, FileCtx) ->

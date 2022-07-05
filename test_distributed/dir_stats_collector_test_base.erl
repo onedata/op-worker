@@ -774,10 +774,10 @@ check_space_dir_values_map_and_time_series_collection(
     end,
     [Worker | _] = ?config(NodesSelector, Config),
     {ok, CurrentStats} = ?assertMatch({ok, _}, rpc:call(Worker, dir_size_stats, get_stats, [SpaceGuid]), Attempts),
-    {ok, #time_series_layout_result{layout = TimeStatsLayout}} = ?assertMatch({ok, _}, 
-        rpc:call(Worker, dir_size_stats, browse_time_stats_collection, [SpaceGuid, #time_series_get_layout_request{}])),
-    {ok, #time_series_slice_result{slice = TimeStats}} = ?assertMatch({ok, _}, 
-        rpc:call(Worker, dir_size_stats, browse_time_stats_collection, [SpaceGuid, #time_series_get_slice_request{layout = TimeStatsLayout}]), Attempts),
+    {ok, #time_series_layout_get_result{layout = TimeStatsLayout}} = ?assertMatch({ok, _}, 
+        rpc:call(Worker, dir_size_stats, browse_historical_stats_collection, [SpaceGuid, #time_series_layout_get_request{}])),
+    {ok, #time_series_slice_get_result{slice = TimeStats}} = ?assertMatch({ok, _}, 
+        rpc:call(Worker, dir_size_stats, browse_historical_stats_collection, [SpaceGuid, #time_series_slice_get_request{layout = TimeStatsLayout}]), Attempts),
 
     ?assertEqual(ExpectedCurrentStats, CurrentStats),
 

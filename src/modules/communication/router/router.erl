@@ -19,7 +19,7 @@
 -include("proto/oneclient/proxyio_messages.hrl").
 -include("proto/oneprovider/dbsync_messages.hrl").
 -include("proto/oneprovider/dbsync_messages2.hrl").
--include("proto/oneprovider/mi_interprovider_messages.hrl").
+-include("proto/oneprovider/provider_rpc_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include("proto/oneprovider/remote_driver_messages.hrl").
 -include("proto/oneprovider/rtransfer_messages.hrl").
@@ -253,13 +253,14 @@ answer_or_delegate(#client_message{
         message_body = #rtransfer_nodes_ips{nodes = IpsAndPorts}
     }};
 
-answer_or_delegate(Msg = #client_message{
+answer_or_delegate(#client_message{
     message_id = MsgId,
-    message_body = #mi_interprovider_request{file_guid = FileGuid, operation = Operation}
+    message_body = #provider_rpc_request{file_guid = FileGuid, request = Request}
 }, _) ->
-    SessId = effective_session_id(Msg),
-    
-    mi_interprovider_communicator:exec(MsgId, SessId, FileGuid, Operation);
+    {ok, #server_message{
+        message_id = MsgId,
+        message_body = provider_rpc_worker:exec(FileGuid, Request)
+    }};
 
 answer_or_delegate(Msg = #client_message{
     message_body = FuseRequest = #fuse_request{

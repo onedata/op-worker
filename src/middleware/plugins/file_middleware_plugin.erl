@@ -1035,7 +1035,7 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = api_samples, scope =
 
 get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = dir_size_stats}, data = Data}, _) ->
     BrowseRequest = ts_browse_request:from_json(Data),
-    {ok, value, mi_file_metadata:gather_time_dir_size_stats(
+    {ok, value, mi_file_metadata:gather_historical_dir_size_stats(
         Auth#auth.session_id, ?FILE_REF(Guid), BrowseRequest)}.
 
 

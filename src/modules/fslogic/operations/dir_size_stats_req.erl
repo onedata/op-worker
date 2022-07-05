@@ -15,20 +15,20 @@
 
 -include("modules/fslogic/data_access_control.hrl").
 -include("modules/dir_stats_collector/dir_size_stats.hrl").
--include("proto/oneprovider/mi_interprovider_messages.hrl").
+-include("proto/oneprovider/provider_rpc_messages.hrl").
 -include_lib("cluster_worker/include/time_series/browsing.hrl").
 
 %% API
--export([gather/3]).
+-export([gather_historical/3]).
 
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
--spec gather(user_ctx:ctx(), file_ctx:ctx(), ts_browse_request:record()) ->
+-spec gather_historical(user_ctx:ctx(), file_ctx:ctx(), ts_browse_request:record()) ->
     ts_browse_result:record().
-gather(UserCtx, FileCtx0, BrowseRequest) ->
+gather_historical(UserCtx, FileCtx0, BrowseRequest) ->
     FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
     FileCtx2 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx1,
@@ -48,8 +48,8 @@ gather_insecure(FileCtx, BrowseRequest) ->
     Guid = file_ctx:get_logical_guid_const(FileCtx),
     ProviderRequests = split_ts_browse_request_between_providers(
         file_id:guid_to_space_id(Guid), BrowseRequest),
-    ResultsPerProvider = mi_interprovider_communicator:gather(Guid, maps:map(fun(_ProviderId, Req) ->
-        #browse_local_time_dir_size_stats{request = Req}
+    ResultsPerProvider = provider_rpc:gather(Guid, maps:map(fun(_ProviderId, Req) ->
+        #provider_historical_dir_size_stats_browse_request{request = Req}
     end, ProviderRequests)),
     
     maps:fold(fun
@@ -64,18 +64,18 @@ gather_insecure(FileCtx, BrowseRequest) ->
 %% @private
 -spec split_ts_browse_request_between_providers(od_space:id(), ts_browse_request:record()) ->
     #{oneprovider:id() => ts_browse_request:record()}.
-split_ts_browse_request_between_providers(SpaceId, #time_series_get_layout_request{} = Req) ->
+split_ts_browse_request_between_providers(SpaceId, #time_series_layout_get_request{} = Req) ->
     {ok, Providers} = space_logic:get_provider_ids(SpaceId),
     maps_utils:generate_from_list(fun(P) -> {P, Req} end, Providers);
-split_ts_browse_request_between_providers(SpaceId, #time_series_get_slice_request{layout = Layout} = Req) ->
+split_ts_browse_request_between_providers(SpaceId, #time_series_slice_get_request{layout = Layout} = Req) ->
     maps:fold(fun(TimeSeriesName, Metrics, Acc) ->
         case choose_provider_storing_time_series_data(SpaceId, TimeSeriesName) of
             unknown ->
                 Acc;
             ProviderId ->
-                #time_series_get_slice_request{layout = ProviderLayout} =
-                    maps:get(ProviderId, Acc, #time_series_get_slice_request{layout = #{}}),
-                Acc#{ProviderId => Req#time_series_get_slice_request{
+                #time_series_slice_get_request{layout = ProviderLayout} =
+                    maps:get(ProviderId, Acc, #time_series_slice_get_request{layout = #{}}),
+                Acc#{ProviderId => Req#time_series_slice_get_request{
                     layout = ProviderLayout#{TimeSeriesName => Metrics}
                 }}
         end
@@ -96,13 +96,13 @@ choose_provider_storing_time_series_data(_SpaceId, _TimeSeriesName) ->
 
 %% @private
 -spec merge_ts_browse_results(ts_browse_result:record(), ts_browse_result:record()) -> ts_browse_result:record().
-merge_ts_browse_results(#time_series_layout_result{layout = L1}, #time_series_layout_result{layout = L2}) ->
-    #time_series_layout_result{layout = maps:merge(L1, L2)};
-merge_ts_browse_results(#time_series_slice_result{slice = S1}, #time_series_slice_result{slice = S2}) ->
-    #time_series_slice_result{slice = maps:merge(S1, S2)}.
+merge_ts_browse_results(#time_series_layout_get_result{layout = L1}, #time_series_layout_get_result{layout = L2}) ->
+    #time_series_layout_get_result{layout = maps:merge(L1, L2)};
+merge_ts_browse_results(#time_series_slice_get_result{slice = S1}, #time_series_slice_get_result{slice = S2}) ->
+    #time_series_slice_get_result{slice = maps:merge(S1, S2)}.
 
 
 %% @private
 -spec gen_empty_ts_browse_result(ts_browse_request:record()) -> ts_browse_result:record().
-gen_empty_ts_browse_result(#time_series_get_layout_request{}) -> #time_series_layout_result{layout = #{}};
-gen_empty_ts_browse_result(#time_series_get_slice_request{}) -> #time_series_slice_result{slice = #{}}.
+gen_empty_ts_browse_result(#time_series_layout_get_request{}) -> #time_series_layout_get_result{layout = #{}};
+gen_empty_ts_browse_result(#time_series_slice_get_request{}) -> #time_series_slice_get_result{slice = #{}}.

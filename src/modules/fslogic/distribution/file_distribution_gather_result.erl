@@ -9,7 +9,7 @@
 %%% Module responsible for performing operations on file distribution get result.
 %%% @end
 %%%--------------------------------------------------------------------
--module(file_distribution_get_result).
+-module(file_distribution_gather_result).
 -author("Bartosz Walkowicz").
 
 -include("modules/dir_stats_collector/dir_size_stats.hrl").
@@ -20,7 +20,7 @@
 -include_lib("cluster_worker/include/time_series/browsing.hrl").
 
 %% API
--export([to_json/2]).
+-export([to_json/3]).
 
 
 -type block() :: {Offset :: non_neg_integer(), Size :: integer()}.
@@ -42,21 +42,23 @@
 %%%===================================================================
 
 
--spec to_json(gs | rest, file_distribution:get_result()) -> json_utils:json_map().
-to_json(_, #file_distribution_gather_result{distribution = #dir_distribution{
+-spec to_json(gs | rest, file_distribution:get_result(), file_id:file_guid()) -> 
+    json_utils:json_map().
+to_json(_, #file_distribution_gather_result{distribution = #dir_distribution_gather_result{
     distribution_per_provider = DistributionPerProvider
-}}) ->
+}}, Guid) ->
     #{
         <<"type">> => atom_to_binary(?DIRECTORY_TYPE),
         <<"distributionPerProvider">> => maps:map(fun
-            (_ProviderId, Error = {error, _}) ->
-                errors:to_json(Error);
+            (ProviderId, {error, _} = Error) ->
+                build_error_response(Error, Guid, ProviderId);
 
-            (_ProviderId, #provider_dir_distribution{
+            (_ProviderId, #provider_dir_distribution_get_result{
                 logical_size = LogicalDirSize,
                 physical_size_per_storage = PhysicalDirSizePerStorage
             }) ->
                 #{
+                    <<"success">> => true,
                     <<"logicalSize">> => utils:undefined_to_null(LogicalDirSize),
                     <<"distributionPerStorage">> => maps:map(fun(_StorageId, PhysicalSize) ->
                         utils:undefined_to_null(PhysicalSize)
@@ -65,39 +67,44 @@ to_json(_, #file_distribution_gather_result{distribution = #dir_distribution{
         end, DistributionPerProvider)
     };
 
-to_json(_, #file_distribution_gather_result{distribution = #symlink_distribution{
+to_json(_, #file_distribution_gather_result{distribution = #symlink_distribution_get_result{
     storages_per_provider = StoragesPerProvider
-}}) ->
+}}, _Guid) ->
     #{
         <<"type">> => atom_to_binary(?SYMLINK_TYPE),
         <<"storages">> => StoragesPerProvider,
         <<"size">> => 0
     };
 
-to_json(gs, #file_distribution_gather_result{distribution = #reg_distribution{
+to_json(gs, #file_distribution_gather_result{distribution = #reg_distribution_gather_result{
     distribution_per_provider = FileBlocksPerProvider
-}}) ->
-    DistributionMap = maps:map(fun(_ProviderId, #provider_reg_distribution{logical_size = LogicalSize, blocks_per_storage = BlocksPerStorage}) ->
-        PerStorage = lists:foldl(fun(#storage_reg_distribution{storage_id = StorageId, blocks = BlocksOnStorage}, Acc) ->
-            {Blocks, TotalBlocksSize} = get_blocks_summary(BlocksOnStorage),
+}}, Guid) ->
+    DistributionMap = maps:map(fun
+        (ProviderId, {error, _} = Error) ->
+            build_error_response(Error, Guid, ProviderId);
+    
+        (_ProviderId, #provider_reg_distribution_get_result{logical_size = LogicalSize, blocks_per_storage = BlocksPerStorage}) ->
+            PerStorage = maps:fold(fun(StorageId, BlocksOnStorage, Acc) ->
+                {Blocks, TotalBlocksSize} = get_blocks_summary(BlocksOnStorage),
 
-            Data = lists:foldl(fun({BarNum, Fill}, DataAcc) ->
-                DataAcc#{integer_to_binary(BarNum) => Fill}
-            end, #{}, interpolate_chunks(Blocks, LogicalSize)),
+                Data = lists:foldl(fun({BarNum, Fill}, DataAcc) ->
+                    DataAcc#{integer_to_binary(BarNum) => Fill}
+                end, #{}, interpolate_chunks(Blocks, LogicalSize)),
 
-            Acc#{StorageId => #{
-                <<"physicalSize">> => TotalBlocksSize,
-                <<"chunksBarData">> => Data,
-                <<"blocksPercentage">> => case LogicalSize of
-                    0 -> 0;
-                    _ -> TotalBlocksSize * 100.0 / LogicalSize
-                end
-            }}
-        end, #{}, BlocksPerStorage),
-        #{
-            <<"logicalSize">> => LogicalSize,
-            <<"distributionPerStorage">> => PerStorage
-        }
+                Acc#{StorageId => #{
+                    <<"physicalSize">> => TotalBlocksSize,
+                    <<"chunksBarData">> => Data,
+                    <<"blocksPercentage">> => case LogicalSize of
+                        0 -> 0;
+                        _ -> TotalBlocksSize * 100.0 / LogicalSize
+                    end
+                }}
+            end, #{}, BlocksPerStorage),
+            #{
+                <<"success">> => true,
+                <<"logicalSize">> => LogicalSize,
+                <<"distributionPerStorage">> => PerStorage
+            }
     end, FileBlocksPerProvider),
 
     #{
@@ -105,17 +112,17 @@ to_json(gs, #file_distribution_gather_result{distribution = #reg_distribution{
         <<"distributionPerProvider">> => DistributionMap
     };
 
-to_json(rest, #file_distribution_gather_result{distribution = #reg_distribution{
+to_json(rest, #file_distribution_gather_result{distribution = #reg_distribution_gather_result{
     distribution_per_provider = FileBlocksPerProvider
-}}) ->
+}}, Guid) ->
     #{
         <<"type">> => atom_to_binary(?REGULAR_FILE_TYPE),
         <<"distributionPerProvider">> => maps:map(fun
-            (_ProviderId, {error, _} = Error) ->
-                errors:to_json(Error);
+            (ProviderId, {error, _} = Error) ->
+                build_error_response(Error, Guid, ProviderId);
             
-            (_ProviderId, #provider_reg_distribution{logical_size = LogicalSize, blocks_per_storage = BlocksPerStorage}) ->
-                PerStorage = lists:foldl(fun(#storage_reg_distribution{storage_id = StorageId, blocks = Blocks}, Acc) ->
+            (_ProviderId, #provider_reg_distribution_get_result{logical_size = LogicalSize, blocks_per_storage = BlocksPerStorage}) ->
+                PerStorage = maps:fold(fun(StorageId, Blocks, Acc) ->
                     
                     {BlockList, TotalBlocksSize} = get_blocks_summary(Blocks),
 
@@ -125,6 +132,7 @@ to_json(rest, #file_distribution_gather_result{distribution = #reg_distribution{
                     }}
                 end, #{}, BlocksPerStorage),
                 #{
+                    <<"success">> => true,
                     <<"logicalSize">> => LogicalSize,
                     <<"distributionPerStorage">> => PerStorage
                 }
@@ -145,6 +153,17 @@ get_blocks_summary(FileBlocks) ->
         FileBlocks
     ).
 
+
+-spec build_error_response({error, term()}, file_id:file_guid(), oneprovider:id()) ->
+    #{storage:id() => errors:as_json()}.
+build_error_response(Error, Guid, ProviderId) ->
+    SpaceId = file_id:guid_to_space_id(Guid),
+    {ok, StoragesMap} = space_logic:get_provider_storages(SpaceId, ProviderId),
+    ErrorJson = errors:to_json(Error),
+    #{
+        <<"success">> => false,
+        <<"perStorage">> => maps:map(fun(_StorageId, _) -> ErrorJson end, StoragesMap)
+    }.
 
 %%--------------------------------------------------------------------
 %% @private
