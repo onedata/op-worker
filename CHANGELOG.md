@@ -6,9 +6,6 @@ CHANGELOG
 
 ### 21.02.0-alpha26
 
--   **VFS-9415** Improved display of sensitive storage config details in
-    Onepanel GUI to show censored values instead of hiding them
-    completely.
 -   **VFS-9342** Added automation task execution Id annotation to
     function registered in OpenFaaS service.
 -   **VFS-9337** Implemented first version of \"filePipe\" relay method
