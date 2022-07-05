@@ -57,7 +57,7 @@ resolve_handler(get, providers, private) -> ?SPACE_OZ_MIDDLEWARE_HANDLER;
 resolve_handler(get, transfers, private) -> ?SPACE_TRANSFERS_MIDDLEWARE_HANDLER;
 resolve_handler(get, transfers_active_channels, private) -> ?SPACE_TRANSFERS_MIDDLEWARE_HANDLER;
 resolve_handler(get, {transfers_throughput_charts, _}, private) -> ?SPACE_TRANSFERS_MIDDLEWARE_HANDLER;
-resolve_handler(get, dir_stats_config, private) -> ?SPACE_STATS_MIDDLEWARE_HANDLER;
+resolve_handler(get, dir_stats_service_state, private) -> ?SPACE_STATS_MIDDLEWARE_HANDLER;
 
 
 resolve_handler(get, available_qos_parameters, private) -> ?SPACE_QOS_MIDDLEWARE_HANDLER;
@@ -66,7 +66,7 @@ resolve_handler(get, datasets_details, private) -> ?SPACE_DATASETS_MIDDLEWARE_HA
 resolve_handler(get, atm_workflow_execution_summaries, private) -> ?SPACE_ATM_MIDDLEWARE_HANDLER;
 
 resolve_handler(update, {view, _}, private) -> ?SPACE_VIEWS_MIDDLEWARE_HANDLER;
-resolve_handler(update, dir_stats_config, private) -> ?SPACE_STATS_MIDDLEWARE_HANDLER;
+resolve_handler(update, dir_stats_service_state, private) -> ?SPACE_STATS_MIDDLEWARE_HANDLER;
 
 resolve_handler(delete, {view, _}, private) -> ?SPACE_VIEWS_MIDDLEWARE_HANDLER;
 resolve_handler(delete, {view_reduce_function, _}, private) -> ?SPACE_VIEWS_MIDDLEWARE_HANDLER;

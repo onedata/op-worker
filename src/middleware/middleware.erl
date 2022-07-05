@@ -171,7 +171,7 @@ client_to_string(?USER(UId)) -> str_utils:format("user:~s", [UId]).
 %%--------------------------------------------------------------------
 -spec load_known_atoms() -> [atom()].
 load_known_atoms() ->
-    [dir_stats_config].
+    [dir_stats_service_state].
 
 
 %%%===================================================================

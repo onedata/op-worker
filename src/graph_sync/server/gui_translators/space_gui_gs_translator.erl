@@ -60,7 +60,7 @@ translate_value(#gri{
         <<"isLast">> => IsLast
     };
 
-translate_value(#gri{aspect = dir_stats_config, scope = private}, Result) ->
+translate_value(#gri{aspect = dir_stats_service_state, scope = private}, Result) ->
     Result.
 
 

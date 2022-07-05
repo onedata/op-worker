@@ -34,12 +34,12 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec data_spec(middleware:req()) -> undefined | middleware_sanitizer:data_spec().
-data_spec(#op_req{operation = get, gri = #gri{aspect = dir_stats_config}}) ->
+data_spec(#op_req{operation = get, gri = #gri{aspect = dir_stats_service_state}}) ->
     undefined;
 
-data_spec(#op_req{operation = update, gri = #gri{aspect = dir_stats_config}}) -> #{
+data_spec(#op_req{operation = update, gri = #gri{aspect = dir_stats_service_state}}) -> #{
     required => #{
-        <<"dirStatsEnabled">> => {boolean, any}
+        <<"dirStatsServiceEnabled">> => {boolean, any}
     }
 }.
 
@@ -65,13 +65,13 @@ authorize(#op_req{auth = ?GUEST}, _) ->
 
 authorize(#op_req{operation = get, auth = ?USER(UserId, SessionId), gri = #gri{
     id = SpaceId,
-    aspect = dir_stats_config
+    aspect = dir_stats_service_state
 }}, _) ->
     space_logic:has_eff_user(SessionId, SpaceId, UserId);
 
 authorize(#op_req{operation = update, auth = ?USER(UserId), gri = #gri{
     id = SpaceId,
-    aspect = dir_stats_config
+    aspect = dir_stats_service_state
 }}, _) ->
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_UPDATE).
 
@@ -84,13 +84,13 @@ authorize(#op_req{operation = update, auth = ?USER(UserId), gri = #gri{
 -spec validate(middleware:req(), middleware:entity()) -> ok | no_return().
 validate(#op_req{operation = get, gri = #gri{
     id = SpaceId,
-    aspect = dir_stats_config
+    aspect = dir_stats_service_state
 }}, _QosEntry) ->
     middleware_utils:assert_space_supported_locally(SpaceId);
 
 validate(#op_req{operation = update, gri = #gri{
     id = SpaceId,
-    aspect = dir_stats_config
+    aspect = dir_stats_service_state
 }}, _) ->
     middleware_utils:assert_space_supported_locally(SpaceId).
 
@@ -111,7 +111,7 @@ create(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
-get(#op_req{gri = #gri{id = SpaceId, aspect = dir_stats_config}}, _) ->
+get(#op_req{gri = #gri{id = SpaceId, aspect = dir_stats_service_state}}, _) ->
     {ok, SpaceSupportState} = space_support_state_api:get_support_state(SpaceId),
     {ok, SpaceSupportOpts} = space_support_state_api:get_support_opts(SpaceSupportState),
     {Status, Since} = case dir_stats_service_state:get_last_status_change_timestamp_if_in_enabled_status(
@@ -123,7 +123,7 @@ get(#op_req{gri = #gri{id = SpaceId, aspect = dir_stats_config}}, _) ->
     end,
     {ok, value, maps_utils:remove_undefined(#{
         <<"accountingEnabled">> => maps:get(accounting_enabled, SpaceSupportOpts),
-        <<"dirStatsCollectingStatus">> => Status,
+        <<"dirStatsServiceStatus">> => Status,
         <<"since">> => Since
     })}.
 
@@ -134,8 +134,8 @@ get(#op_req{gri = #gri{id = SpaceId, aspect = dir_stats_config}}, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec update(middleware:req()) -> middleware:update_result().
-update(#op_req{gri = #gri{id = SpaceId, aspect = dir_stats_config}, data = Data}) ->
-    case maps:get(<<"dirStatsEnabled">>, Data) of
+update(#op_req{gri = #gri{id = SpaceId, aspect = dir_stats_service_state}, data = Data}) ->
+    case maps:get(<<"dirStatsServiceEnabled">>, Data) of
         true -> dir_stats_service_state:enable(SpaceId);
         false -> dir_stats_service_state:disable(SpaceId)
     end.

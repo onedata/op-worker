@@ -35,7 +35,7 @@
 %%% the idle timeout.
 %%%
 %%% Typically dir_stats_collector is used when collecting is enabled
-%%% (see dir_stats_collector_config). However, it is also used by
+%%% (see dir_stats_service_state). However, it is also used by
 %%% dir_stats_collections_initialization_traverse which initializes
 %%% collections for all directories. In such a case, it uses helper module
 %%% dir_stats_collections_initializer as collections initialization requires
@@ -106,7 +106,7 @@
     parent :: file_id:file_guid() | root_dir | undefined, % resolved and stored upon first access to this field,
 
     % Field used to store information about collecting status to enable special requests handling during collection
-    % initialization (when space collecting is changed to enabled for not empty space - see dir_stats_collector_config)
+    % initialization (when space collecting is changed to enabled for not empty space - see dir_stats_service_state)
     collecting_status :: dir_stats_service_state:active_status(),
     initialization_data :: dir_stats_collections_initializer:initialization_data() | undefined
 }).
@@ -152,7 +152,7 @@
 -define(FLUSH_INTERVAL_MILLIS, 5000).
 -define(CACHED_DIR_STATS_INACTIVITY_PERIOD, 10000). % stats that are already flushed and not used for this period
                                                     % are removed from the cache
--define(SUPERVISOR_NAME, dir_stats_collector_worker_sup).
+-define(SUPERVISOR_NAME, dir_stats_service_worker_sup).
 
 -define(SCHEDULED_FLUSH, scheduled_flush).
 % When initialization of directory fails (e.g. as a result of race) or request to not initialized collection appears,

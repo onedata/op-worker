@@ -10,9 +10,9 @@
 %%% space.
 %%%
 %%% NOTE: Collections initialization traverses are used by
-%%%       dir_stats_collector_config to change collecting statuses.
+%%%       dir_stats_service_state to change collecting statuses.
 %%%       They should not be used directly by any other module than
-%%%       dir_stats_collector_config.
+%%%       dir_stats_service_state.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(dir_stats_collections_initialization_traverse).
@@ -120,7 +120,7 @@ task_finished(TaskId, _PoolName) ->
 
 -spec task_canceled(tree_traverse:id(), traverse:pool()) -> ok.
 task_canceled(TaskId, PoolName) ->
-    % NOTE - task should be canceled using dir_stats_collector_config:disable/1 so information about
+    % NOTE - task should be canceled using dir_stats_service_state:disable/1 so information about
     % cancellation is already present in config - notification about finish is enough to handle cancellation.
     task_finished(TaskId, PoolName).
 
