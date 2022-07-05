@@ -346,6 +346,12 @@ CHANGELOG
     Onepanel GUI to show censored values instead of hiding them
     completely.
 
+### 20.02.17
+
+-   **VFS-9415** Improved display of sensitive storage config details in
+    Onepanel GUI to show censored values instead of hiding them
+    completely.
+
 ### 20.02.16
 
 -   **VFS-9119** Introduced a temporary fix for uid/gid encoding of
