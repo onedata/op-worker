@@ -39,7 +39,7 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = dir_stats_service_state}}
 
 data_spec(#op_req{operation = update, gri = #gri{aspect = dir_stats_service_state}}) -> #{
     required => #{
-        <<"dirStatsServiceEnabled">> => {boolean, any}
+        <<"enabled">> => {boolean, any}
     }
 }.
 
@@ -122,8 +122,8 @@ get(#op_req{gri = #gri{id = SpaceId, aspect = dir_stats_service_state}}, _) ->
         ?ERROR_DIR_STATS_NOT_READY-> {<<"initializing">>, undefined}
     end,
     {ok, value, maps_utils:remove_undefined(#{
-        <<"accountingEnabled">> => maps:get(accounting_enabled, SpaceSupportOpts),
-        <<"dirStatsServiceStatus">> => Status,
+        <<"enforcedByAccounting">> => maps:get(accounting_enabled, SpaceSupportOpts),
+        <<"status">> => Status,
         <<"since">> => Since
     })}.
 
@@ -135,7 +135,7 @@ get(#op_req{gri = #gri{id = SpaceId, aspect = dir_stats_service_state}}, _) ->
 %%--------------------------------------------------------------------
 -spec update(middleware:req()) -> middleware:update_result().
 update(#op_req{gri = #gri{id = SpaceId, aspect = dir_stats_service_state}, data = Data}) ->
-    case maps:get(<<"dirStatsServiceEnabled">>, Data) of
+    case maps:get(<<"enabled">>, Data) of
         true -> dir_stats_service_state:enable(SpaceId);
         false -> dir_stats_service_state:disable(SpaceId)
     end.
