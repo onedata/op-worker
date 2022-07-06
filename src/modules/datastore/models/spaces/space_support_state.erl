@@ -82,7 +82,7 @@ get_record_version() ->
 -spec get_record_struct(datastore_model:record_version()) -> datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
-        {accounting_status, atom},
+        {accounting_enabled, boolean},
         {dir_stats_service_state, {custom, string, {
             persistent_record, encode, decode, dir_stats_service_state
         }}}

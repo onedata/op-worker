@@ -243,7 +243,7 @@ disable(SpaceId) ->
         (#dir_stats_service_state{}) ->
             {error, no_action_needed}
     end,
-    Condition = fun(#space_support_state{accounting_status = Status}) -> Status == disabled end,
+    Condition = fun(#space_support_state{accounting_enabled = Enabled}) -> not Enabled end,
 
     case restart_hooks:add_hook(
         ?RESTART_HOOK_ID(SpaceId), ?MODULE, report_collectors_stopped, [SpaceId], forbid_override
@@ -491,7 +491,7 @@ run_initialization_traverse(SpaceId, Incarnation) ->
                     }
                 }) ->
                     {ok, SpaceSupportState#space_support_state{
-                        accounting_status = disabled,
+                        accounting_enabled = false,
                         dir_stats_service_state = State#dir_stats_service_state{
                             status = disabled,
                             pending_status_transition = undefined

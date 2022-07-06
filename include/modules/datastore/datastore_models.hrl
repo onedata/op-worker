@@ -1069,7 +1069,7 @@
 
 
 -record(space_support_state, {
-    accounting_status :: space_support_state:accounting_status(),
+    accounting_enabled :: boolean(),
     dir_stats_service_state :: dir_stats_service_state:record()
 }).
 

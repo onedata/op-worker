@@ -27,6 +27,7 @@
 % Cluster upgrade API
 -export([init_support_state_for_all_supported_spaces/0]).
 
+%% TODO VFS-9587 replace opts with support parameters in oz
 -type support_opts() :: #{
     accounting_enabled := boolean(),
     dir_stats_service_enabled := boolean()
@@ -54,7 +55,7 @@ init_support_state(SpaceId, SupportOpts = #{
     {ok, _} = space_support_state:create(#document{
         key = SpaceId,
         value = #space_support_state{
-            accounting_status = infer_status(AccountingEnabled),
+            accounting_enabled = AccountingEnabled,
             dir_stats_service_state = #dir_stats_service_state{
                 status = infer_status(DirStatsServiceEnabled)
             }
@@ -76,17 +77,12 @@ get_support_state(SpaceId) ->
 -spec get_support_opts(od_space:id() | space_support_state:record()) ->
     {ok, support_opts()} | errors:error().
 get_support_opts(#space_support_state{
-    accounting_status = AccountingStatus,
-    dir_stats_service_state = DirStatsServiceConfig
+    accounting_enabled = AccountingEnabled,
+    dir_stats_service_state = DirStatsServiceState
 }) ->
     {ok, #{
-        accounting_enabled => case AccountingStatus of
-            enabled -> true;
-            disabled -> false
-        end,
-        dir_stats_service_enabled => dir_stats_service_state:is_active(
-            DirStatsServiceConfig
-        )
+        accounting_enabled => AccountingEnabled,
+        dir_stats_service_enabled => dir_stats_service_state:is_active(DirStatsServiceState)
     }};
 
 get_support_opts(SpaceId) ->
@@ -99,19 +95,18 @@ get_support_opts(SpaceId) ->
 
 
 -spec update_support_opts(od_space:id(), support_opts_diff()) -> ok | errors:error().
-update_support_opts(SpaceId, SupportOptsDiff = #{accounting_enabled := AccountingEnabled}) ->
+update_support_opts(SpaceId, SupportOptsDiff = #{accounting_enabled := NewAccountingEnabled}) ->
     assert_valid_support_opts(SupportOptsDiff),
 
-    NewAccountingStatus = infer_status(AccountingEnabled),
     UpdateAccountingStatusDiff = fun
-        (#space_support_state{accounting_status = Status}) when Status =:= NewAccountingStatus ->
+        (#space_support_state{accounting_enabled = Enabled}) when Enabled =:= NewAccountingEnabled ->
             {error, no_change};
         (SpaceSupportState) ->
-            {ok, SpaceSupportState#space_support_state{accounting_status = NewAccountingStatus}}
+            {ok, SpaceSupportState#space_support_state{accounting_enabled = NewAccountingEnabled}}
     end,
 
     case space_support_state:update(SpaceId, UpdateAccountingStatusDiff) of
-        {ok, #document{value = #space_support_state{accounting_status = enabled}}} ->
+        {ok, #document{value = #space_support_state{accounting_enabled = true}}} ->
             dir_stats_service_state:enable(SpaceId);
         {ok, _} ->
             update_support_opts(SpaceId, maps:remove(accounting_enabled, SupportOptsDiff));
