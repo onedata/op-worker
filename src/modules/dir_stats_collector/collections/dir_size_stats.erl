@@ -99,7 +99,7 @@ get_stats(Guid, StatNames) ->
 -spec browse_time_stats_collection(file_id:file_guid(), ts_browse_request:record()) -> {ok, ts_browse_result:record()} |
     dir_stats_collector:collecting_status_error() | ?ERROR_INTERNAL_SERVER_ERROR.
 browse_time_stats_collection(Guid, BrowseRequest) ->
-    case dir_stats_collector_config:is_collecting_active(file_id:guid_to_space_id(Guid)) of
+    case dir_stats_service_state:is_active(file_id:guid_to_space_id(Guid)) of
         true ->
             case dir_stats_collector:flush_stats(Guid, ?MODULE) of
                 ok ->
@@ -142,7 +142,7 @@ report_file_deleted(_, Guid) ->
 
 -spec report_file_moved(file_meta:type(), file_id:file_guid(), file_id:file_guid(), file_id:file_guid()) -> ok.
 report_file_moved(?DIRECTORY_TYPE, FileGuid, SourceParentGuid, TargetParentGuid) ->
-    case dir_stats_collector_config:is_collecting_active(file_id:guid_to_space_id(FileGuid)) of
+    case dir_stats_service_state:is_active(file_id:guid_to_space_id(FileGuid)) of
         true ->
             {ok, Collection} = get_stats(FileGuid),
             update_stats(TargetParentGuid, Collection),

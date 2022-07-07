@@ -45,7 +45,8 @@
     {1, ?LINE_19_02},
     {2, ?LINE_20_02(<<"0-beta3">>)},
     {3, ?LINE_20_02(<<"1">>)},
-    {4, op_worker:get_release_version()}
+    {4, ?LINE_21_02(<<"alpha26">>)},
+    {5, op_worker:get_release_version()}
 ]).
 -define(OLDEST_UPGRADABLE_CLUSTER_GENERATION, 3).
 
@@ -150,7 +151,10 @@ before_cluster_upgrade() ->
 upgrade_cluster(3) ->
     await_zone_connection_and_run(fun storage_import:migrate_space_strategies/0),
     await_zone_connection_and_run(fun storage_import:migrate_storage_sync_monitoring/0),
-    {ok, 4}.
+    {ok, 4};
+upgrade_cluster(4) ->
+    await_zone_connection_and_run(fun space_support_state_api:init_support_state_for_all_supported_spaces/0),
+    {ok, 5}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -160,7 +164,7 @@ upgrade_cluster(3) ->
 -spec custom_workers() ->
     [{atom(), [any()]} | {singleton, atom(), [any()]} | {atom(), [any()], list()}].
 custom_workers() -> filter_disabled_workers([
-    {dir_stats_collector_worker, [
+    {dir_stats_service_worker, [
         {supervisor_flags, pes:get_root_supervisor_flags(dir_stats_collector)},
         {supervisor_children_spec, pes:get_root_supervisor_child_specs(dir_stats_collector)}
     ]},

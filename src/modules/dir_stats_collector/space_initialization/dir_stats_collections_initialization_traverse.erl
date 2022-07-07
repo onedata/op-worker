@@ -10,9 +10,9 @@
 %%% space.
 %%%
 %%% NOTE: Collections initialization traverses are used by
-%%%       dir_stats_collector_config to change collecting statuses.
+%%%       dir_stats_service_state to change collecting statuses.
 %%%       They should not be used directly by any other module than
-%%%       dir_stats_collector_config.
+%%%       dir_stats_service_state.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(dir_stats_collections_initialization_traverse).
@@ -63,7 +63,7 @@ run(SpaceId, Incarnation) ->
     catch
         _:{badmatch, {error, not_found}} ->
             % Space dir is not found - traverse is not needed
-            dir_stats_collector_config:report_collections_initialization_finished(SpaceId);
+            dir_stats_service_state:report_collections_initialization_finished(SpaceId);
         Error:Reason:Stacktrace ->
             ?error_stacktrace("Error starting stats initialization traverse for space ~p (incarnation ~p): ~p:~p",
                 [SpaceId, Incarnation, Error, Reason], Stacktrace),
@@ -115,12 +115,12 @@ get_job(DocOrId) ->
 
 -spec task_finished(tree_traverse:id(), traverse:pool()) -> ok.
 task_finished(TaskId, _PoolName) ->
-    dir_stats_collector_config:report_collections_initialization_finished(get_space_id(TaskId)).
+    dir_stats_service_state:report_collections_initialization_finished(get_space_id(TaskId)).
 
 
 -spec task_canceled(tree_traverse:id(), traverse:pool()) -> ok.
 task_canceled(TaskId, PoolName) ->
-    % NOTE - task should be canceled using dir_stats_collector_config:disable/1 so information about
+    % NOTE - task should be canceled using dir_stats_service_state:disable/1 so information about
     % cancellation is already present in config - notification about finish is enough to handle cancellation.
     task_finished(TaskId, PoolName).
 

@@ -81,11 +81,14 @@
     on_deregister/0,
     get_op_worker_version/0,
     provider_logic_update/1,
-    support_space/3,
+    support_space/4,
+    get_space_support_opts/1,
+    update_space_support_opts/2,
     revoke_space_support/1,
     get_spaces/0,
     supports_space/1,
     get_space_details/1,
+    get_space_dir_stats_service_status/1,
     get_provider_details/0,
     is_subdomain_delegated/0,
     set_delegated_subdomain/1,
@@ -442,10 +445,15 @@ provider_logic_update(Data) ->
     provider_logic:update(Data).
 
 
--spec support_space(storage:id(), tokens:serialized(), SupportSize :: integer()) ->
+-spec support_space(
+    storage:id(),
+    tokens:serialized(),
+    SupportSize :: integer(),
+    space_support_state_api:support_opts()
+) ->
     {ok, od_space:id()} | errors:error().
-support_space(StorageId, Token, SupportSize) ->
-    storage:support_space(StorageId, Token, SupportSize).
+support_space(StorageId, Token, SupportSize, SupportOpts) ->
+    storage:support_space(StorageId, Token, SupportSize, SupportOpts).
 
 
 -spec revoke_space_support(od_space:id()) -> ok | {error, term()}.
@@ -487,6 +495,18 @@ get_space_details(SpaceId) ->
             }};
         {error, Error} -> {error, Error}
     end.
+
+
+-spec get_space_support_opts(od_space:id()) ->
+    {ok, space_support_state_api:support_opts()} | errors:error().
+get_space_support_opts(SpaceId) ->
+    space_support_state_api:get_support_opts(SpaceId).
+
+
+-spec get_space_dir_stats_service_status(od_space:id()) ->
+    dir_stats_service_state:status().
+get_space_dir_stats_service_status(SpaceId) ->
+    dir_stats_service_state:get_status(SpaceId).
 
 
 %%--------------------------------------------------------------------
@@ -540,6 +560,12 @@ update_space_support_size(SpaceId, NewSupportSize) ->
     {ok, StorageIds} = space_logic:get_local_storages(SpaceId),
     StorageId = hd(StorageIds),
     storage:update_space_support_size(StorageId, SpaceId, NewSupportSize).
+
+
+-spec update_space_support_opts(od_space:id(), space_support_state_api:support_opts_diff()) ->
+    ok | errors:error().
+update_space_support_opts(SpaceId, SupportOptsDiff) ->
+    space_support_state_api:update_support_opts(SpaceId, SupportOptsDiff).
 
 
 -spec update_subdomain_delegation_ips() -> ok | error.
