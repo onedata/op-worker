@@ -4,6 +4,55 @@ Release notes for project op-worker
 CHANGELOG
 ---------
 
+### 21.02.0-alpha26
+
+-   **VFS-9342** Added automation task execution Id annotation to
+    function registered in OpenFaaS service.
+-   **VFS-9337** Implemented first version of \"filePipe\" relay method
+    for automation lambdas, allowing streaming of results via a file
+    located inside the container where the lambda is executed.
+-   **VFS-9235** Web GUI: added an input field in file browser for
+    scrolling the list to a file or directory using its name prefix.
+-   **VFS-9207** Web GUI: Enforced loading fonts from server to avoid
+    incorrect local fonts in browser.
+-   **VFS-9200** Changed name generation algorithm for functions
+    registered in OpenFaaS so that they are unique for each task
+    (previously if tasks used the same lambda only one function was
+    registered).
+-   **VFS-9122** It is now possible to enable directory size and
+    capacity statistics collection. Thanks to this, size of directory
+    and number of files/directories in subdirectories can be viewed as
+    well as how this values change in time.
+-   **VFS-9120** Fixed uid/gid encoding to use unsigned int32 rather
+    than signed int32, so that it now aligns with POSIX uid_t and gid_t
+    types.
+-   **VFS-9054** Improved connection closing in Oneclient.
+-   **VFS-9051** Added new files endpoint which allow to list all
+    non-directory files (i.e regular files, symbolic links and
+    hardlinks) in given top directory recursively. Files are listed
+    lexicographically ordered by path.
+-   **VFS-9036** Web GUI: Added showing time series charts in executed
+    automation workflows.
+-   **VFS-9028** Web GUI: added archive properties modal with support
+    for changing archive description.
+-   **VFS-9026** Added option \--message-trace-log to enable logging of
+    protobuf messages with the server.
+-   **VFS-9023** Web GUI: added \"stop recall\" feature and improved
+    presentation of remote provider recall process.
+-   **VFS-9022** It is now possible to cancel ongoing archive recalls.
+-   **VFS-9021** Web GUI: added recall error log view.
+-   **VFS-9019** Added support for automation time series store.
+-   **VFS-8935** Allow enabling statistics collecting for not empty
+    spaces.
+-   **VFS-8914** Web GUI: redesigned and extended file datasets panel.
+-   **VFS-8654** Web GUI: added support for symbolic links in an archive
+    pointing outside it.
+-   **VFS-8598** Web GUI: improved presentation of state of archives
+    being built and deleted.
+-   **VFS-8045** Web GUI: added QoS audit log view.
+-   **VFS-7631** Web GUI: added presentation of source file path in
+    dataset browser.
+
 ### 21.02.0-alpha25
 
 -   **VFS-8951** Extended directory children listing REST API -
@@ -290,6 +339,12 @@ CHANGELOG
 -   **VFS-6566** Improved UX and fixed minor issues in share views.
     Fixed inability to open share hosted by Oneprovider 19.02.x using
     Onezone 20.02.x.
+
+### 20.02.17
+
+-   **VFS-9415** Improved display of sensitive storage config details in
+    Onepanel GUI to show censored values instead of hiding them
+    completely.
 
 ### 20.02.17
 

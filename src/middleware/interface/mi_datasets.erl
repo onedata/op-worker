@@ -40,7 +40,7 @@
 ) ->
     {dataset_api:entries(), boolean()} | no_return().
 list_top_datasets(SessionId, SpaceId, State, Opts, ListingMode) ->
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
 
     middleware_worker:check_exec(SessionId, SpaceGuid, #list_top_datasets{
         state = State,
@@ -126,4 +126,4 @@ get_file_eff_summary(SessionId, FileKey) ->
 %% @private
 -spec dataset_id_to_space_guid(dataset:id()) -> file_id:file_guid() | no_return().
 dataset_id_to_space_guid(DatasetId) ->
-    fslogic_uuid:spaceid_to_space_dir_guid(?check(dataset:get_space_id(DatasetId))).
+    fslogic_file_id:spaceid_to_space_dir_guid(?check(dataset:get_space_id(DatasetId))).

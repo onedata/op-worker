@@ -434,8 +434,7 @@ fsync(SessId, FileKey, ProviderId) ->
         true ->
             ok; % flush also flushes events for provider
         _ ->
-            lfm_event_controller:flush_event_queue(SessId, ProviderId,
-                file_id:guid_to_uuid(FileGuid))
+            lfm_event_controller:flush_event_queue(SessId, ProviderId, FileGuid)
     end,
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #fsync{data_only = false}, fun(_) -> ok end

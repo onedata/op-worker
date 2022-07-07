@@ -121,9 +121,9 @@ data_access_caveats_test(Config) ->
     FileOwnerUserSessId = ?config({session_id, {FileOwner, ?GET_DOMAIN(W)}}, Config),
 
     UserId = <<"user2">>,
-    UserRootDir = fslogic_uuid:user_root_dir_guid(UserId),
-    Space1RootDir = fslogic_uuid:spaceid_to_space_dir_guid(<<"space1">>),
-    Space3RootDir = fslogic_uuid:spaceid_to_space_dir_guid(<<"space3">>),
+    UserRootDir = fslogic_file_id:user_root_dir_guid(UserId),
+    Space1RootDir = fslogic_file_id:spaceid_to_space_dir_guid(<<"space1">>),
+    Space3RootDir = fslogic_file_id:spaceid_to_space_dir_guid(<<"space3">>),
 
     ScenarioName = ?SCENARIO_NAME,
     DirName = <<ScenarioName/binary, "1">>,
@@ -349,10 +349,10 @@ data_access_caveats_ancestors_test(Config) ->
 
     UserId = <<"user3">>,
     UserSessId = ?config({session_id, {UserId, ?GET_DOMAIN(W)}}, Config),
-    UserRootDir = fslogic_uuid:user_root_dir_guid(UserId),
+    UserRootDir = fslogic_file_id:user_root_dir_guid(UserId),
 
     SpaceName = <<"space2">>,
-    SpaceRootDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceName),
+    SpaceRootDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceName),
 
     InaccessibleFileName = <<"inaccessible_file">>,
 
@@ -448,10 +448,10 @@ data_access_caveats_ancestors_test2(Config) ->
 
     UserId = <<"user3">>,
     UserSessId = ?config({session_id, {UserId, ?GET_DOMAIN(W)}}, Config),
-    UserRootDir = fslogic_uuid:user_root_dir_guid(UserId),
+    UserRootDir = fslogic_file_id:user_root_dir_guid(UserId),
 
     SpaceName = <<"space2">>,
-    SpaceRootDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceName),
+    SpaceRootDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceName),
 
     RootDirName = ?SCENARIO_NAME,
     {ok, RootDirGuid} = lfm_proxy:mkdir(W, UserSessId, SpaceRootDirGuid, RootDirName, 8#777),
@@ -526,10 +526,10 @@ data_access_caveats_cache_test(Config) ->
 
     UserId = <<"user3">>,
     UserSessId = ?config({session_id, {UserId, ?GET_DOMAIN(W)}}, Config),
-    UserRootDir = fslogic_uuid:user_root_dir_guid(UserId),
+    UserRootDir = fslogic_file_id:user_root_dir_guid(UserId),
 
     SpaceName = <<"space2">>,
-    SpaceRootDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceName),
+    SpaceRootDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceName),
 
     RootDirName = ?SCENARIO_NAME,
     {ok, RootDirGuid} = lfm_proxy:mkdir(W, UserSessId, SpaceRootDirGuid, RootDirName, 8#777),
@@ -1273,7 +1273,7 @@ set_perms_test(Config) ->
     AssertProperStorageAttrsFun(8#555),
 
     % but even space owner cannot perform write operation on space dir
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(<<"space1">>),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(<<"space1">>),
     ?assertMatch({error, ?EPERM}, lfm_proxy:set_perms(W, SpaceOwnerSessId, ?FILE_REF(SpaceGuid), 8#000)),
     ?assertMatch({error, ?EPERM}, lfm_proxy:set_perms(W, SpaceOwnerSessId, ?FILE_REF(SpaceGuid), 8#555)),
     ?assertMatch({error, ?EPERM}, lfm_proxy:set_perms(W, SpaceOwnerSessId, ?FILE_REF(SpaceGuid), 8#777)),

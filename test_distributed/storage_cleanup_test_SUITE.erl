@@ -822,7 +822,7 @@ end_per_testcase(_Case, Config) ->
 
 cleanup_space(Config, SpaceId) ->
     [W2, W1 | _] = ?config(op_worker_nodes, Config),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     cleanup_space_children(W1, ?ROOT_SESS_ID, SpaceGuid, 1000),
     cleanup_space_children(W2, ?ROOT_SESS_ID, SpaceGuid, 1000),
     ?assertEqual({ok, []}, lfm_proxy:get_children(W1, ?ROOT_SESS_ID, ?FILE_REF(SpaceGuid), 0, 1)),

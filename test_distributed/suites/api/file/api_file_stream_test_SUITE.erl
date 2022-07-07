@@ -385,7 +385,7 @@ gui_download_tarball_with_hardlinks_test(Config) ->
     SetupFun = fun() ->
         #object{guid = DirGuid, children = [#object{guid = FileGuid, content = Content}] = Children} = DirObject =
             onenv_file_test_utils:create_and_sync_file_tree(user3, SpaceId, Spec, krakow),
-        SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+        SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
         {ok, LinkObject1} = make_hardlink(Config, FileGuid, SpaceGuid),
         {ok, LinkObject2} = make_hardlink(Config, FileGuid, DirGuid),
         api_test_memory:set(MemRef, file_tree_object, [
@@ -919,7 +919,7 @@ build_rest_download_file_at_path_prepare_args_fun(MemRef, TestMode) ->
             filename_only_relative_to_parent_dir_placeholder ->
                 {DirGuid, FileName};
             directory_and_filename_relative_to_space_root_dir_placeholder ->
-                SpaceRootDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+                SpaceRootDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
                 {SpaceRootDirGuid, filepath_utils:join([ParentDirName, FileName])};
             directory_and_filename_relative_to_space_id_placeholder ->
                 {space_id, filepath_utils:join([ParentDirName, FileName])};

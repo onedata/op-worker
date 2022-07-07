@@ -64,7 +64,7 @@ basic_test(Config) ->
 
 multiprovider_test(Config) ->
     enable(Config, new_space),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(lfm_test_utils:get_user1_first_space_id(Config)),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(lfm_test_utils:get_user1_first_space_id(Config)),
 
     create_initial_file_tree_and_fill_files(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR, enabled),
 
@@ -503,7 +503,7 @@ teardown(Config) ->
 
 teardown(Config, SpaceId, CleanSpace) ->
     Workers = ?config(op_worker_nodes, Config),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
 
     disable(Config),
     verify_collecting_status(Config, disabled),
@@ -926,7 +926,7 @@ reset_restart_hooks(Config) ->
 clean_space_and_verify_stats(Config) ->
     [Worker2 | _] = ?config(?PROVIDER_DELETING_FILES_NODES_SELECTOR, Config),
     SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
 
     lfm_test_utils:clean_space([Worker2], SpaceId, 30),
     lists:foreach(fun(NodesSelector) ->

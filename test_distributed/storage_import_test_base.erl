@@ -1025,7 +1025,7 @@ create_remote_dir_import_race_test(Config) ->
     Ctx = rpc:call(W2, file_meta, get_ctx, []),
     TreeId = rpc:call(W2, oneprovider, get_id, []),
     FileUuid = datastore_key:new(),
-    SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(?SPACE_ID),
+    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(?SPACE_ID),
     {ok, _} = rpc:call(W2, datastore_model, add_links,
         [Ctx#{scope => ?SPACE_ID}, SpaceUuid, TreeId, {?TEST_DIR, FileUuid}]),
     ?assertMatch({ok, _, _}, get_link(W1, SpaceUuid, ?TEST_DIR), ?ATTEMPTS),
@@ -1086,7 +1086,7 @@ create_remote_file_import_race_test(Config) ->
     Ctx = rpc:call(W2, file_meta, get_ctx, []),
     TreeId = rpc:call(W2, oneprovider, get_id, []),
     FileUuid = datastore_key:new(),
-    SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(?SPACE_ID),
+    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(?SPACE_ID),
     {ok, _} = rpc:call(W2, datastore_model, add_links,
         [Ctx#{scope => ?SPACE_ID}, SpaceUuid, TreeId, {?TEST_FILE1, FileUuid}]),
     ?assertMatch({ok, _, _}, get_link(W1, SpaceUuid, ?TEST_FILE1), ?ATTEMPTS),
@@ -1481,7 +1481,7 @@ remote_delete_file_reimport_race_test_base(Config, StorageType, CreatingNode) ->
     ?assertMatch({ok, ?TEST_DATA}, lfm_proxy:read(ReplicatingNode, Handle2, 0, 10), ?ATTEMPTS),
 
     % pretend that only synchronization of deletion of link has happened
-    SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(?SPACE_ID),
+    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(?SPACE_ID),
     {FileUuid, _} = file_id:unpack_guid(FileGuid),
     remove_link(W2, SpaceUuid, ?TEST_FILE1, FileUuid),
 
@@ -6382,7 +6382,7 @@ clean_storage(Worker, Storage, ImportedStorage) ->
 
 clean_space(Config) ->
     [W, W2 | _] = ?config(op_worker_nodes, Config),
-    SpaceGuid = rpc:call(W, fslogic_uuid, spaceid_to_space_dir_guid, [?SPACE_ID]),
+    SpaceGuid = rpc:call(W, fslogic_file_id, spaceid_to_space_dir_guid, [?SPACE_ID]),
     lfm_proxy:close_all(W),
     {ok, Children} = lfm_proxy:get_children(W, ?ROOT_SESS_ID, ?FILE_REF(SpaceGuid), 0, 10000),
     Attempts = 5 * ?ATTEMPTS,
@@ -6803,7 +6803,7 @@ close_if_applicable(Node, Handle, _) ->
     ok = lfm_proxy:close(Node, Handle).
 
 get_space_guid() ->
-    fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_ID).
+    fslogic_file_id:spaceid_to_space_dir_guid(?SPACE_ID).
 
 %===================================================================
 % SetUp and TearDown functions
@@ -7110,13 +7110,13 @@ end_per_testcase(force_stop_test, Config) ->
 
 end_per_testcase(create_remote_dir_import_race_test, Config) ->
     [_W1, W2| _] = ?config(op_worker_nodes, Config),
-    SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(?SPACE_ID),
+    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(?SPACE_ID),
     remove_link(W2, SpaceUuid, ?TEST_DIR),
     end_per_testcase(default, Config);
 
 end_per_testcase(create_remote_file_import_race_test, Config) ->
     [_W1, W2| _] = ?config(op_worker_nodes, Config),
-    SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(?SPACE_ID),
+    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(?SPACE_ID),
     remove_link(W2, SpaceUuid, ?TEST_FILE1),
     end_per_testcase(default, Config);
 

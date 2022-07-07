@@ -108,7 +108,7 @@ resolve_symlink(SymlinkFileCtx, #resolution_ctx{
             % is part of the share is done by checking ?TRAVERSE_ANCESTORS permissions
             % in 'resolve' function.
             ShareId = file_ctx:get_share_id_const(SymlinkFileCtx),
-            SpaceDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+            SpaceDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
             SpaceDirShareGuid = file_id:guid_to_share_guid(SpaceDirGuid, ShareId),
             SpaceDirCtx = file_ctx:new_by_guid(SpaceDirShareGuid),
             resolve_symlink_path(RestTokens, SpaceDirCtx, NewResolutionCtx);

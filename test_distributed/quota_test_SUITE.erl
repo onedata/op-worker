@@ -647,7 +647,7 @@ events_sent_test_base(Config, SpaceId, SupportingProvider) ->
     SessId = ?config({session_id, {User, ?GET_DOMAIN(P1)}}, Config),
 
     SpaceSize = available_size(SupportingProvider, SpaceId),
-    RootGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    RootGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
 
     {ok, {Conn, SessId}} = fuse_test_utils:connect_as_user(Config, P1, User, [{active, true}]),
     SubId = rpc:call(P1, subscription,  generate_id, [<<"quota_exceeded">>]),

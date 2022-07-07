@@ -182,7 +182,7 @@ build_create_view_transfer_setup_fun(TransferType, MemRef, SrcNode, DstNode, Use
             view_id => ViewId,
             exp_transfer => ExpTransfer#{
                 space_id => ?SPACE_2,
-                file_uuid => fslogic_uuid:spaceid_to_space_dir_uuid(?SPACE_2),
+                file_uuid => fslogic_file_id:spaceid_to_space_dir_uuid(?SPACE_2),
                 path => RootDirPath
             },
             files_to_transfer => FilesToTransfer,

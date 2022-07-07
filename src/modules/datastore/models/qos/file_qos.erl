@@ -265,7 +265,7 @@ qos_membership(UuidOrDoc) ->
 get_direct_qos_entries(#document{key = Uuid}) ->
     get_direct_qos_entries(Uuid);
 get_direct_qos_entries(Uuid) ->
-    case get(fslogic_uuid:ensure_referenced_uuid(Uuid)) of
+    case get(fslogic_file_id:ensure_referenced_uuid(Uuid)) of
         {ok, #document{value = #file_qos{qos_entries = QosEntries}}} -> QosEntries;
         _ -> []
     end.
@@ -382,7 +382,7 @@ get_effective(#document{} = FileDoc, OriginalParentDoc) ->
         ([_, {error, _} = Error, _CalculationInfo]) ->
             Error;
         ([#document{key = Uuid, value = #file_meta{}}, ParentEffQos, CalculationInfo]) ->
-            case fslogic_uuid:is_trash_dir_uuid(Uuid) of
+            case fslogic_file_id:is_trash_dir_uuid(Uuid) of
                 true ->
                     % qos cannot be set on trash directory
                     {ok, #effective_file_qos{in_trash = true}, CalculationInfo};

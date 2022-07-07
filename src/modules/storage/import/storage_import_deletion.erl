@@ -355,7 +355,7 @@ maybe_delete_file_and_update_counters(FileCtx, SpaceId, StorageId) ->
         {IsStorageFileCreated, FileCtx3} = file_ctx:is_storage_file_created(FileCtx2),
         {StorageFileId, FileCtx4} = file_ctx:get_storage_file_id(FileCtx3),
         Uuid = file_ctx:get_logical_uuid_const(FileCtx3),
-        IsNotSymlink = not fslogic_uuid:is_symlink_uuid(Uuid),
+        IsNotSymlink = not fslogic_file_id:is_symlink_uuid(Uuid),
         {FileDoc, FileCtx5} = file_ctx:get_file_doc_including_deleted(FileCtx4),
         {ok, ProtectionFlags} = dataset_eff_cache:get_eff_file_protection_flags(FileDoc),
         IsProtected = ProtectionFlags =/= ?no_flags_mask,

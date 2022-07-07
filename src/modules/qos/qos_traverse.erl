@@ -307,7 +307,7 @@ synchronize_file_for_entries_insecure(TaskId, UserCtx, FileCtx, QosEntries) ->
     FileBlock = #file_block{offset = 0, size = Size},
     Uuid = file_ctx:get_logical_uuid_const(FileCtx),
     TransferId = ?QOS_TRANSFER_ID(TaskId, Uuid),
-    IsSymlink = fslogic_uuid:is_symlink_uuid(Uuid),
+    IsSymlink = fslogic_file_id:is_symlink_uuid(Uuid),
     
     lists:foreach(fun(QosEntry) -> 
         qos_entry:add_transfer_to_list(QosEntry, TransferId) 

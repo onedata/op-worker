@@ -309,7 +309,7 @@ reconcile_with_links_and_file_meta_race_nested_file_test(_Config) ->
 reconcile_with_links_race_test_base(Depth, RecordsToBlock) ->
     [Provider1, Provider2 | _] = Providers = oct_background:get_provider_ids(),
     SpaceId = oct_background:get_space_id(?SPACE_PLACEHOLDER),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     P1Node = oct_background:get_random_provider_node(Provider1),
     P2Node = oct_background:get_random_provider_node(Provider2),
     

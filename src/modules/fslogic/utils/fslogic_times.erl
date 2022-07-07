@@ -102,7 +102,7 @@ update_mtime_ctime(FileCtx, CurrentTime) ->
 -spec update_times_and_emit(file_ctx:ctx(), times:diff()) -> ok.
 update_times_and_emit(FileCtx, TimesDiff) ->
     FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
-    case fslogic_uuid:is_share_root_dir_uuid(FileUuid) of
+    case fslogic_file_id:is_share_root_dir_uuid(FileUuid) of
         true ->
             ok;
         false ->

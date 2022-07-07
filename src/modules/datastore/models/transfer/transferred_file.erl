@@ -345,7 +345,7 @@ resolve_conflict(_Ctx, NewDoc, PrevDoc) ->
 -spec file_guid_to_id(fslogic_worker:file_guid()) -> id().
 file_guid_to_id(FileGuid) ->
     % TODO VFS-7443 - test transfers of hardlinks - is it possoble to have hardlink uuid in this module?
-    fslogic_uuid:ensure_referenced_uuid(file_id:guid_to_uuid(FileGuid)).
+    fslogic_file_id:ensure_referenced_uuid(file_id:guid_to_uuid(FileGuid)).
 
 
 %% @private

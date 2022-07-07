@@ -26,7 +26,7 @@
     get_attr_changed_reference_based_prefix/0, get_replica_status_reference_based_prefix/0]).
 
 -type aggregation_key() :: term().
--type ctx() :: undefined | {file, file_ctx:ctx()}.
+-type ctx() :: undefined | {file, file_id:file_guid()}.
 -type routing_ctx() :: #{
     file_ctx => file_ctx:ctx(),
     % allows explicit setting of parent e.g. when file is moved and old parent should be used
@@ -55,7 +55,7 @@ get_routing_key(#file_attr_changed_event{file_attr = FileAttr}, RoutingCtx) ->
 get_routing_key(#file_location_changed_event{file_location = FileLocation}, _RoutingCtx) ->
     FileUuid = FileLocation#file_location.uuid,
     SpaceId = FileLocation#file_location.space_id,
-    {ok, References} = file_meta_hardlinks:list_references(fslogic_uuid:ensure_referenced_uuid(FileUuid)),
+    {ok, References} = file_meta_hardlinks:list_references(fslogic_file_id:ensure_referenced_uuid(FileUuid)),
     AdditionalKeys = lists:map(fun(Uuid) ->
         {{uuid, Uuid, SpaceId}, <<"file_location_changed.", Uuid/binary>>}
     end, References -- [FileUuid]),
@@ -68,7 +68,7 @@ get_routing_key(#file_location_changed_event{file_location = FileLocation}, _Rou
 get_routing_key(#file_perm_changed_event{file_guid = FileGuid}, _RoutingCtx) ->
     FileUuid = file_id:guid_to_uuid(FileGuid),
     SpaceId = file_id:guid_to_space_id(FileGuid),
-    {ok, References} = file_meta_hardlinks:list_references(fslogic_uuid:ensure_referenced_uuid(FileUuid)),
+    {ok, References} = file_meta_hardlinks:list_references(fslogic_file_id:ensure_referenced_uuid(FileUuid)),
     AdditionalKeys = lists:map(fun(Uuid) ->
         {{guid, file_id:pack_guid(Uuid, SpaceId)}, <<"file_perm_changed.", Uuid/binary>>}
     end, References -- [FileUuid]),
@@ -199,19 +199,19 @@ get_aggregation_key(#monitoring_event{type = #rtransfer_statistics{} = Type}) ->
 get_context(#event{type = Type}) ->
     get_context(Type);
 get_context(#file_read_event{file_guid = FileGuid}) ->
-    {file, file_ctx:new_by_guid(FileGuid)};
+    {file, FileGuid};
 get_context(#file_written_event{file_guid = FileGuid}) ->
-    {file, file_ctx:new_by_guid(FileGuid)};
+    {file, FileGuid};
 get_context(#file_attr_changed_event{file_attr = FileAttr}) ->
-    {file, file_ctx:new_by_guid(FileAttr#file_attr.guid)};
+    {file, FileAttr#file_attr.guid};
 get_context(#file_location_changed_event{file_location = FileLocation}) ->
     {file, file_ctx:new_by_uuid(FileLocation#file_location.uuid, FileLocation#file_location.space_id)};
 get_context(#file_perm_changed_event{file_guid = FileGuid}) ->
-    {file, file_ctx:new_by_guid(FileGuid)};
+    {file, FileGuid};
 get_context(#file_removed_event{file_guid = FileGuid}) ->
-    {file, file_ctx:new_by_guid(FileGuid)};
+    {file, FileGuid};
 get_context(#file_renamed_event{top_entry = Entry}) ->
-    {file, file_ctx:new_by_guid(Entry#file_renamed_entry.old_guid)};
+    {file, Entry#file_renamed_entry.old_guid};
 get_context(_) ->
     undefined.
 

@@ -55,7 +55,7 @@ create_rrd(SpaceId, MonitoringId, StateBuffer, CreationTime) ->
             {ok, RRDFile} = read_rrd_from_file(TmpPath),
             RRDSize = byte_size(RRDFile),
 
-            SpaceDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+            SpaceDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
             RRDDirName = file_meta:hidden_file_name(?RRD_DIR),
             RRDFileName = monitoring_state:encode_id(MonitoringId),
             RRDDirGuid =

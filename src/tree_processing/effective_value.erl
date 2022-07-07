@@ -134,7 +134,7 @@ get_or_calculate(Cache, FileDoc, CalculateCallback) ->
 get_or_calculate(Cache, #document{key = DocKey} = FileDoc, CalculateCallback, Options) ->
     % use_referenced_key option should be used only for file for which function is called, set false for ancestors
     {Key, Options2} = case maps:get(use_referenced_key, Options, false) of
-        true -> {fslogic_uuid:ensure_referenced_uuid(DocKey), Options#{use_referenced_key => false}};
+        true -> {fslogic_file_id:ensure_referenced_uuid(DocKey), Options#{use_referenced_key => false}};
         false -> {DocKey, Options}
     end,
 
@@ -185,7 +185,7 @@ get_or_calculate_internal(Cache, Key, FileDoc, CalculateCallback, Options) ->
             ShouldProcessMultipleRefs = (MergeCallback =/= undefined)
                 andalso (file_meta:get_effective_type(FileDoc) =:= ?REGULAR_FILE_TYPE),
 
-            case {fslogic_uuid:is_space_dir_uuid(Key), fslogic_uuid:is_root_dir_uuid(Key), ShouldProcessMultipleRefs} of
+            case {fslogic_file_id:is_space_dir_uuid(Key), fslogic_file_id:is_root_dir_uuid(Key), ShouldProcessMultipleRefs} of
                 {false, false, false} ->
                     get_or_calculate_single_reference(Cache, Key, FileDoc, CalculateCallback, Options);
                 {false, false, true} ->
@@ -230,7 +230,7 @@ get_or_calculate_multiple_references(Cache, Key, #document{key = DocKey} = FileD
         {ok, MergedValue, MergeCalculationInfo} = OkAns ->
             {ok, CalculatedValue, CalculationInfo} = case maps:get(force_execution_on_referenced_key, Options, false) of
                 true ->
-                    INodeKey = fslogic_uuid:ensure_referenced_uuid(Key),
+                    INodeKey = fslogic_file_id:ensure_referenced_uuid(Key),
                     case lists:member(INodeKey, [DocKey | References]) of
                         true ->
                             OkAns;
@@ -369,7 +369,7 @@ get_parent(Key, _FileDoc) ->
 -spec get_references(file_meta:doc()) -> [file_meta:doc()].
 get_references(#document{key = DocKey} = FileDoc) ->
     %% @TODO VFS-7555 Use Doc for listing references after it is allowed
-    {ok, References} = case fslogic_uuid:ensure_referenced_uuid(DocKey) of
+    {ok, References} = case fslogic_file_id:ensure_referenced_uuid(DocKey) of
         DocKey -> file_meta_hardlinks:list_references(FileDoc);
         ReferencedUuid -> file_meta_hardlinks:list_references(ReferencedUuid)
     end,
