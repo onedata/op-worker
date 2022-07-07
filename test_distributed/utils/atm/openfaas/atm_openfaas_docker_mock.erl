@@ -32,6 +32,12 @@ exec(?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_1, #{<<"argsBatch">> := ArgsBatc
     #{<<"resultsBatch">> => lists:map(fun
         (#{<<"value">> := #{<<"tsName">> := <<"size">>}}) -> #{};
         (Arg) -> Arg
+    end, ArgsBatch)};
+
+exec(?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_2, #{<<"argsBatch">> := ArgsBatch}) ->
+    #{<<"resultsBatch">> => lists:map(fun
+        (#{<<"value">> := #{<<"tsName">> := <<"size">>}}) -> #{<<"value">> => 10};
+        (Arg) -> Arg
     end, ArgsBatch)}.
 
 
