@@ -23,6 +23,8 @@
 -define(FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_1, <<"test/failing_echo_measurements_1">>).
 % Failing by returning integer in case of size metric measurement as an argument
 -define(FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_2, <<"test/failing_echo_measurements_2">>).
+% Failing by returning custom exception
+-define(FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_3, <<"test/failing_echo_measurements_3">>).
 
 
 -define(INTEGER_LIST_STORE_SCHEMA_DRAFT(__ID, __DEFAULT_INITIAL_CONTENT), #atm_store_schema_draft{

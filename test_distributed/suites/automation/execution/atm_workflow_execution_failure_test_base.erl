@@ -21,7 +21,8 @@
     fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error/0,
     fail_atm_workflow_execution_due_to_job_result_store_mapping_error/0,
     fail_atm_workflow_execution_due_to_job_missing_required_results_error/0,
-    fail_atm_workflow_execution_due_to_incorrect_result_type_error/0
+    fail_atm_workflow_execution_due_to_incorrect_result_type_error/0,
+    fail_atm_workflow_execution_due_to_lambda_exception/0
 ]).
 
 
@@ -175,11 +176,21 @@
     }]
 }).
 
+-define(JOB_FAILING_WORKFLOW_SCHEMA_DRAFT(__FAILING_LAMBDA_DRAFT), ?FAILING_WORKFLOW_SCHEMA_DRAFT(
+    gen_time_series_measurements(),
+    ?FAILING_TASK_SCHEMA_DRAFT(
+        [?ITERATED_ITEM_ARG_MAPPER(?ECHO_ARG_NAME)],
+        [?TARGET_STORE_RESULT_MAPPER(?CORRECT_ATM_TIME_SERIES_DISPATCH_RULES)]
+    ),
+    __FAILING_LAMBDA_DRAFT
+)).
+
 
 -record(fail_atm_workflow_execution_test_spec, {
     testcase_id :: term(),
     atm_workflow_schema_draft :: atm_test_schema_factory:atm_workflow_schema_dump_draft(),
-    filter_out_not_failed_items_in_t1_fun :: fun(([automation:item()]) -> [automation:item()]),
+    filter_out_not_failed_items_in_t1_fun = fun filter_out_not_size_measurements/1
+        :: fun(([automation:item()]) -> [automation:item()]),
     build_t1_exp_error_logs_fun %% TODO VFS-9452 check audit log entries
 }).
 -type fail_atm_workflow_execution_test_spec() :: #fail_atm_workflow_execution_test_spec{}.
@@ -344,36 +355,36 @@ uncorrelated_result_expect_t3_ended(AtmTask3ExecutionId, ExpState) ->
 fail_atm_workflow_execution_due_to_job_result_store_mapping_error() ->
     job_failure_atm_workflow_execution_test_base(#fail_atm_workflow_execution_test_spec{
         testcase_id = ?FUNCTION_NAME,
-        atm_workflow_schema_draft = ?FAILING_WORKFLOW_SCHEMA_DRAFT(
-            gen_time_series_measurements(),
-            ?FAILING_MEASUREMENT_STORE_MAPPING_TASK_SCHEMA_DRAFT,
+        atm_workflow_schema_draft = ?JOB_FAILING_WORKFLOW_SCHEMA_DRAFT(
             ?ECHO_LAMBDA_DRAFT(?ANY_MEASUREMENT_DATA_SPEC)
-        ),
-        filter_out_not_failed_items_in_t1_fun = fun filter_out_not_size_measurements/1
+        )
     }).
 
 
 fail_atm_workflow_execution_due_to_job_missing_required_results_error() ->
     job_failure_atm_workflow_execution_test_base(#fail_atm_workflow_execution_test_spec{
         testcase_id = ?FUNCTION_NAME,
-        atm_workflow_schema_draft = ?FAILING_WORKFLOW_SCHEMA_DRAFT(
-            gen_time_series_measurements(),
-            ?FAILING_MEASUREMENT_STORE_MAPPING_TASK_SCHEMA_DRAFT,
+        atm_workflow_schema_draft = ?JOB_FAILING_WORKFLOW_SCHEMA_DRAFT(
             ?FAILING_ECHO_MEASUREMENTS_LAMBDA_DRAFT(?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_1)
-        ),
-        filter_out_not_failed_items_in_t1_fun = fun filter_out_not_size_measurements/1
+        )
     }).
 
 
 fail_atm_workflow_execution_due_to_incorrect_result_type_error() ->
     job_failure_atm_workflow_execution_test_base(#fail_atm_workflow_execution_test_spec{
         testcase_id = ?FUNCTION_NAME,
-        atm_workflow_schema_draft = ?FAILING_WORKFLOW_SCHEMA_DRAFT(
-            gen_time_series_measurements(),
-            ?FAILING_MEASUREMENT_STORE_MAPPING_TASK_SCHEMA_DRAFT,
+        atm_workflow_schema_draft = ?JOB_FAILING_WORKFLOW_SCHEMA_DRAFT(
             ?FAILING_ECHO_MEASUREMENTS_LAMBDA_DRAFT(?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_2)
-        ),
-        filter_out_not_failed_items_in_t1_fun = fun filter_out_not_size_measurements/1
+        )
+    }).
+
+
+fail_atm_workflow_execution_due_to_lambda_exception() ->
+    job_failure_atm_workflow_execution_test_base(#fail_atm_workflow_execution_test_spec{
+        testcase_id = ?FUNCTION_NAME,
+        atm_workflow_schema_draft = ?JOB_FAILING_WORKFLOW_SCHEMA_DRAFT(
+            ?FAILING_ECHO_MEASUREMENTS_LAMBDA_DRAFT(?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_3)
+        )
     }).
 
 
