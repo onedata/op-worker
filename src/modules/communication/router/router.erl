@@ -255,11 +255,11 @@ answer_or_delegate(#client_message{
 
 answer_or_delegate(#client_message{
     message_id = MsgId,
-    message_body = #provider_rpc_request{file_guid = FileGuid, request = Request}
+    message_body = #provider_rpc_call{} = ProviderRpcCall
 }, _) ->
     {ok, #server_message{
         message_id = MsgId,
-        message_body = provider_rpc_worker:exec(FileGuid, Request)
+        message_body = provider_rpc_worker:exec(ProviderRpcCall)
     }};
 
 answer_or_delegate(Msg = #client_message{

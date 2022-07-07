@@ -668,6 +668,9 @@ data_spec_get(#gri{aspect = archive_recall_log}) -> #{
 };
 
 data_spec_get(#gri{aspect = dir_size_stats}) -> #{
+    required => #{
+        id => {binary, guid}
+    },
     % for this aspect data is sanitized in `get` function, but all possible parameters 
     % still have to be specified so they are not removed during sanitization
     optional => #{

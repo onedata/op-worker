@@ -66,17 +66,18 @@ gather(FileGuid, ProviderRequests) ->
 -spec call(oneprovider:id(), file_id:file_guid(), request()) -> 
     {ok, result()} | errors:error().
 call(ProviderId, FileGuid, Request) ->
+    ProviderRpcCall = #provider_rpc_call{
+        file_guid = FileGuid,
+        request = Request
+    },
     ReceivedRes = case oneprovider:is_self(ProviderId) of
         true ->
-            provider_rpc_worker:exec(FileGuid, Request);
+            provider_rpc_worker:exec(ProviderRpcCall);
         false ->
             case connection:find_outgoing_session(ProviderId) of
                 {ok, SessId} ->
                     Message = #client_message{
-                        message_body = #provider_rpc_request{
-                            file_guid = FileGuid,
-                            request = Request
-                        }
+                        message_body = ProviderRpcCall
                     },
                     case communicator:communicate_with_provider(SessId, Message) of
                         {ok, #server_message{message_body = MessageBody}} -> MessageBody;
@@ -87,9 +88,9 @@ call(ProviderId, FileGuid, Request) ->
             end
     end,
     case ReceivedRes of
-        #provider_rpc_result{result = ProviderResult, status = ok} ->
+        #provider_rpc_response{result = ProviderResult, status = ok} ->
             {ok, ProviderResult};
-        #provider_rpc_result{result = Error, status = error} ->
+        #provider_rpc_response{result = Error, status = error} ->
             Error;
         {error, _} = Error ->
             Error

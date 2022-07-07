@@ -20,6 +20,7 @@
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("cluster_worker/include/time_series/browsing.hrl").
 
 %% API
 -export([
@@ -63,8 +64,23 @@ translate_value(#gri{aspect = download_url}, URL) ->
 translate_value(#gri{aspect = api_samples, scope = public}, ApiSamples) ->
     ApiSamples;
 
-translate_value(#gri{aspect = dir_size_stats}, TSBrowseResult) ->
-    ts_browse_result:to_json(TSBrowseResult).
+translate_value(#gri{aspect = dir_size_stats}, #time_series_layout_get_result{} = TSBrowseResult) ->
+    ts_browse_result:to_json(TSBrowseResult);
+translate_value(#gri{aspect = dir_size_stats}, #time_series_slice_get_result{slice = Slice}) ->
+    %% @TODO VFS-9589 - use ts_browse_result:to_json/1 after average metric aggregator is introduced
+    #{
+        <<"windows">> => tsc_structure:map(fun(_TimeSeriesName, _MetricName, Windows) ->
+            lists:map(fun({Timestamp, Value}) ->
+                #{
+                    <<"timestamp">> => Timestamp,
+                    <<"value">> => case Value of
+                        {_Count, Aggregated} -> Aggregated;
+                        Aggregated -> Aggregated
+                    end
+                }
+            end, Windows)
+        end, Slice)
+    }.
 
 
 -spec translate_resource(gri:gri(), Data :: term()) ->

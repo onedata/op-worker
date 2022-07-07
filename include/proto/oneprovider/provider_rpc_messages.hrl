@@ -18,12 +18,12 @@
 %%% Generic provider RPC messages
 %%%===================================================================
 
--record(provider_rpc_request, {
+-record(provider_rpc_call, {
     file_guid :: file_id:file_guid(),
     request :: provider_rpc:request()
 }).
 
--record(provider_rpc_result, {
+-record(provider_rpc_response, {
     status :: ok | error,
     result :: provider_rpc:result() | errors:error()
 }).

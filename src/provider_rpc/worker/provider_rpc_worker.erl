@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module acts as limitless processes pool handling provider RPC requests.
-%%% Requests concerning entities in spaces not supported by this provider are rejected).
+%%% Requests concerning entities in spaces not supported by this provider are rejected.
 %%% NOTE: All requests/results records are translated to protobuf.
 %%% @end
 %%%-------------------------------------------------------------------
@@ -25,7 +25,7 @@
 -include_lib("cluster_worker/include/time_series/browsing.hrl").
 
 %% API
--export([exec/2]).
+-export([exec/1]).
 
 %% worker_plugin_behaviour callbacks
 -export([init/1, handle/1, cleanup/0]).
@@ -43,21 +43,17 @@
 
 -export_type([request/0, result/0]).
 
--define(REQ(__FILE_GUID, __REQUEST),
-    {provider_rpc_request, __FILE_GUID, __REQUEST}
-).
-
--type internal_message() :: {provider_rpc_request, session:id(), file_id:file_guid(), request()}.
+-type call() :: #provider_rpc_call{}.
+-type response() :: #provider_rpc_response{}.
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
 
--spec exec(file_id:file_guid(), request() | request()) ->
-    ok | {ok, term()} | errors:error().
-exec(FileGuid, Request) ->
-    worker_proxy:call(?MODULE, ?REQ(FileGuid, Request)).
+-spec exec(call()) -> response().
+exec(Call) ->
+    worker_proxy:call(?MODULE, Call).
 
 
 %%%===================================================================
@@ -81,7 +77,7 @@ init(_Args) ->
 %% {@link worker_plugin_behaviour} callback handle/1.
 %% @end
 %%--------------------------------------------------------------------
--spec handle(ping | healthcheck | internal_message()) ->
+-spec handle(ping | healthcheck | call()) ->
     pong | ok | {ok, term()} | errors:error().
 handle(ping) ->
     pong;
@@ -89,19 +85,19 @@ handle(ping) ->
 handle(healthcheck) ->
     ok;
 
-handle(?REQ(FileGuid, Request)) ->
+handle(#provider_rpc_call{file_guid = FileGuid, request = Request}) ->
     try
         middleware_utils:assert_file_managed_locally(FileGuid),
         FileCtx = file_ctx:new_by_guid(FileGuid),
 
         case provider_rpc_handlers:execute(FileCtx, Request) of
             {ok, Result} ->
-                #provider_rpc_result{result = Result, status = ok};
+                #provider_rpc_response{result = Result, status = ok};
             {error, _} = Error ->
-                #provider_rpc_result{result = Error, status = error}
+                #provider_rpc_response{result = Error, status = error}
         end
     catch Type:Reason:Stacktrace ->
-        error_utils:handle_error(Type, Reason, Stacktrace, ?ROOT_SESS_ID, Request)
+        request_error_handler:handle(Type, Reason, Stacktrace, ?ROOT_SESS_ID, Request)
     end;
 
 handle(Request) ->
@@ -115,6 +111,4 @@ handle(Request) ->
 %%--------------------------------------------------------------------
 -spec cleanup() -> ok.
 cleanup() ->
-    % @TODO VFS-9402 move this to the node manager plugin callback before default workers stop
-    gs_channel_service:terminate_internal_service(),
     ok.

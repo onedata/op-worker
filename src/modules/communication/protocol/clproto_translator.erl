@@ -837,11 +837,11 @@ translate_from_protobuf(#'RemoteWriteResult'{wrote = Wrote}) ->
     #remote_write_result{wrote = Wrote};
 
 %% Provider RPC
-translate_from_protobuf(#'ProviderRpcRequest'{
+translate_from_protobuf(#'ProviderRpcCall'{
     file_guid = FileGuid,
     operation = {_, Request}
 }) ->
-    #provider_rpc_request{
+    #provider_rpc_call{
         file_guid = FileGuid,
         request = translate_from_protobuf(Request)
     };
@@ -854,7 +854,7 @@ translate_from_protobuf(#'ProviderHistoricalDirSizeStatsBrowseRequest'{
 translate_from_protobuf(#'TimeSeriesLayoutGetRequest'{}) ->
     #time_series_layout_get_request{};
 translate_from_protobuf(#'TimeSeriesSliceGetRequest'{
-    encoded_layout = EncodedLayout,
+    layout_as_json = EncodedLayout,
     start_timestamp = StartTimestamp,
     window_limit = WindowLimit
 }) ->
@@ -872,19 +872,19 @@ translate_from_protobuf(#'ProviderCurrentDirSizeStatsBrowseRequest'{
 translate_from_protobuf(#'ProviderRegDistributionGetRequest'{}) ->
     #provider_reg_distribution_get_request{};
 
-translate_from_protobuf(#'ProviderRpcResult'{
+translate_from_protobuf(#'ProviderRpcResponse'{
     status = ok,
     result = {_, Result}
 }) ->
-    #provider_rpc_result{
+    #provider_rpc_response{
         status = ok,
         result = translate_from_protobuf(Result)
     };
-translate_from_protobuf(#'ProviderRpcResult'{
+translate_from_protobuf(#'ProviderRpcResponse'{
     status = error,
     result = {error_json, ErrorAsJson}
 }) ->
-    #provider_rpc_result{
+    #provider_rpc_response{
         status = error,
         result = errors:from_json(json_utils:decode(ErrorAsJson))
 };
@@ -1922,11 +1922,11 @@ translate_to_protobuf(#remote_write_result{wrote = Wrote}) ->
     {remote_write_result, #'RemoteWriteResult'{wrote = Wrote}};
 
 %% Provider RPC
-translate_to_protobuf(#provider_rpc_request{
+translate_to_protobuf(#provider_rpc_call{
     file_guid = FileGuid,
     request = Request
 }) ->
-    {provider_rpc_request, #'ProviderRpcRequest'{
+    {provider_rpc_call, #'ProviderRpcCall'{
         file_guid = FileGuid,
         operation = translate_to_protobuf(Request)
     }};
@@ -1950,26 +1950,26 @@ translate_to_protobuf(#time_series_slice_get_request{
     window_limit = WindowLimit
 }) ->
     {time_series_slice_get_request, #'TimeSeriesSliceGetRequest'{
-        encoded_layout = json_utils:encode(Layout),
+        layout_as_json = json_utils:encode(Layout),
         start_timestamp = StartTimestamp,
         window_limit = WindowLimit
     }};
 translate_to_protobuf(#provider_reg_distribution_get_request{}) ->
     {provider_reg_distribution_get_request, #'ProviderRegDistributionGetRequest'{}};
 
-translate_to_protobuf(#provider_rpc_result{
+translate_to_protobuf(#provider_rpc_response{
     status = ok,
     result = Result
 }) ->
-    {provider_rpc_result, #'ProviderRpcResult'{
+    {provider_rpc_response, #'ProviderRpcResponse'{
         status = ok,
         result = translate_to_protobuf(Result)
     }};
-translate_to_protobuf(#provider_rpc_result{
+translate_to_protobuf(#provider_rpc_response{
     status = error,
     result = Error
 }) ->
-    {provider_rpc_result, #'ProviderRpcResult'{
+    {provider_rpc_response, #'ProviderRpcResponse'{
         status = error,
         result = {error_json, json_utils:encode(errors:to_json(Error))}
     }};

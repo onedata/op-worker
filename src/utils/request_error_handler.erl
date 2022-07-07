@@ -6,11 +6,11 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc 
-%%% Module containing utility functions concerning errors handling 
+%%% Module containing utility functions concerning request errors handling 
 %%% in Oneprovider.
 %%% @end
 %%%-------------------------------------------------------------------
--module(error_utils).
+-module(request_error_handler).
 -author("Michał Stanisz").
 
 -include("global_definitions.hrl").
@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([handle_error/5]).
+-export([handle/5]).
 
 -define(SHOULD_LOG_REQUESTS_ON_ERROR, application:get_env(
     ?CLUSTER_WORKER_APP_NAME, log_requests_on_error, false
@@ -30,7 +30,7 @@
 
 
 %% @private
--spec handle_error(
+-spec handle(
     Type :: atom(),
     Reason :: term(),
     Stacktrace :: list(),
@@ -38,19 +38,19 @@
     Request :: term()
 ) ->
     errors:error().
-handle_error(throw, Reason, _Stacktrace, _SessionId, _Request) ->
+handle(throw, Reason, _Stacktrace, _SessionId, _Request) ->
     infer_error(Reason);
 
-handle_error(_Type, Reason, Stacktrace, SessionId, Request) ->
+handle(_Type, Reason, Stacktrace, SessionId, Request) ->
     Error = infer_error(Reason),
 
     {LogFormat, LogFormatArgs} = case ?SHOULD_LOG_REQUESTS_ON_ERROR of
         true ->
-            MF = "Cannot process request ~p for session ~p due to: ~p caused by ~p",
+            MF = "Cannot process request:~n~p~nfor session: ~p~ndue to: ~p~ncaused by ~p",
             FA = [lager:pr(Request, ?MODULE), SessionId, Error, Reason],
             {MF, FA};
         false ->
-            MF = "Cannot process request for session ~p due to: ~p caused by ~p",
+            MF = "Cannot process request for session: ~p~ndue to: ~p~ncaused by ~p",
             FA = [SessionId, Error, Reason],
             {MF, FA}
     end,

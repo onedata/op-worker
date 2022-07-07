@@ -6,7 +6,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Module responsible for performing operations on file distribution get result.
+%%% Module responsible for performing operations on file distribution gather result.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(file_distribution_gather_result).

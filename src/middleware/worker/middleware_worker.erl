@@ -152,7 +152,7 @@ handle(?REQ(SessionId, FileGuid, Operation)) ->
 
         middleware_worker_handlers:execute(UserCtx, FileCtx, Operation)
     catch Type:Reason:Stacktrace ->
-        error_utils:handle_error(Type, Reason, Stacktrace, SessionId, Operation)
+        request_error_handler:handle(Type, Reason, Stacktrace, SessionId, Operation)
     end;
 
 handle(Request) ->
