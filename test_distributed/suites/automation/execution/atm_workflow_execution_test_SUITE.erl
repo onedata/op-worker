@@ -85,7 +85,8 @@
     map_results_to_task_time_series_store/1,
 
     fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error/1,
-    fail_atm_workflow_execution_due_to_job_result_store_mapping_error/1
+    fail_atm_workflow_execution_due_to_job_result_store_mapping_error/1,
+    fail_atm_workflow_execution_due_to_job_missing_required_results_error/1
 ]).
 
 groups() -> [
@@ -156,7 +157,8 @@ groups() -> [
     ]},
     {failure_tests, [parallel], [
         fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error,
-        fail_atm_workflow_execution_due_to_job_result_store_mapping_error
+        fail_atm_workflow_execution_due_to_job_result_store_mapping_error,
+        fail_atm_workflow_execution_due_to_job_missing_required_results_error
     ]}
 ].
 
@@ -385,6 +387,10 @@ fail_atm_workflow_execution_due_to_job_result_store_mapping_error(_Config) ->
     ?FAILURE_MAPPING_TEST().
 
 
+fail_atm_workflow_execution_due_to_job_missing_required_results_error(_Config) ->
+    ?FAILURE_MAPPING_TEST().
+
+
 %===================================================================
 % SetUp and TearDown functions
 %===================================================================
@@ -399,7 +405,11 @@ init_per_suite(Config) ->
         [{?LOAD_MODULES, ModulesToLoad} | Config],
         #onenv_test_config{
             onenv_scenario = "1op",
-            envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}],
+            envs = [{op_worker, op_worker, [
+                {fuse_session_grace_period_seconds, 24 * 60 * 60},
+                {atm_workflow_engine_slots_count, 100000},
+                {atm_workflow_engine_async_calls_limit, 100000}
+            ]}],
             posthook = fun(NewConfig) ->
                 atm_test_inventory:init_per_suite(?PROVIDER_SELECTOR, user1),
                 atm_test_inventory:add_member(?USER_SELECTOR),

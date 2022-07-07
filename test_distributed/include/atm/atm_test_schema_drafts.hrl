@@ -17,6 +17,12 @@
 -include("atm/atm_test_schema.hrl").
 
 
+-define(ECHO_DOCKER_IMAGE_ID, <<"test/echo">>).
+
+% Failing by not returning result if size metric measurements are present in arguments
+-define(FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_1, <<"test/failing_echo_measurements_1">>).
+
+
 -define(INTEGER_LIST_STORE_SCHEMA_DRAFT(__ID, __DEFAULT_INITIAL_CONTENT), #atm_store_schema_draft{
     id = __ID,
     type = list,
@@ -33,7 +39,7 @@
 
 -define(ECHO_LAMBDA_DRAFT(__DATA_SPEC, __RELAY_METHOD), #atm_lambda_revision_draft{
     operation_spec = #atm_openfaas_operation_spec_draft{
-        docker_image = <<"test/echo">>
+        docker_image = ?ECHO_DOCKER_IMAGE_ID
     },
     argument_specs = [#atm_lambda_argument_spec{
         name = ?ECHO_ARG_NAME,

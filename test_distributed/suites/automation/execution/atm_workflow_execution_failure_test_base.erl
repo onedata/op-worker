@@ -19,7 +19,8 @@
 
 -export([
     fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error/0,
-    fail_atm_workflow_execution_due_to_job_result_store_mapping_error/0
+    fail_atm_workflow_execution_due_to_job_result_store_mapping_error/0,
+    fail_atm_workflow_execution_due_to_job_missing_required_results_error/0
 ]).
 
 
@@ -157,11 +158,28 @@
     ])]
 )).
 
+-define(FAILING_ECHO_MEASUREMENTS_LAMBDA_DRAFT(__FAILING_DOCKER_IMAGE_ID), #atm_lambda_revision_draft{
+    operation_spec = #atm_openfaas_operation_spec_draft{
+        docker_image = __FAILING_DOCKER_IMAGE_ID
+    },
+    argument_specs = [#atm_lambda_argument_spec{
+        name = ?ECHO_ARG_NAME,
+        data_spec = ?ANY_MEASUREMENT_DATA_SPEC,
+        is_optional = false
+    }],
+    result_specs = [#atm_lambda_result_spec{
+        name = ?ECHO_ARG_NAME,
+        data_spec = ?ANY_MEASUREMENT_DATA_SPEC,
+        relay_method = return_value
+    }]
+}).
+
 
 -record(fail_atm_workflow_execution_test_spec, {
-    atm_workflow_schema_draft,
-    filter_t1_not_failed_items_fun,
-    build_t1_exp_error_logs_fun
+    testcase_id :: term(),
+    atm_workflow_schema_draft :: atm_test_schema_factory:atm_workflow_schema_dump_draft(),
+    filter_out_not_failed_items_in_t1_fun :: fun(([automation:item()]) -> [automation:item()]),
+    build_t1_exp_error_logs_fun %% TODO VFS-9452 check audit log entries
 }).
 -type fail_atm_workflow_execution_test_spec() :: #fail_atm_workflow_execution_test_spec{}.
 
@@ -324,17 +342,25 @@ uncorrelated_result_expect_t3_ended(AtmTask3ExecutionId, ExpState) ->
 
 fail_atm_workflow_execution_due_to_job_result_store_mapping_error() ->
     job_failure_atm_workflow_execution_test_base(#fail_atm_workflow_execution_test_spec{
+        testcase_id = ?FUNCTION_NAME,
         atm_workflow_schema_draft = ?FAILING_WORKFLOW_SCHEMA_DRAFT(
             gen_time_series_measurements(),
             ?FAILING_MEASUREMENT_STORE_MAPPING_TASK_SCHEMA_DRAFT,
             ?ECHO_LAMBDA_DRAFT(?ANY_MEASUREMENT_DATA_SPEC)
         ),
-        filter_t1_not_failed_items_fun = fun(Measurements) ->
-            lists:filter(
-                fun(Measurement) -> maps:get(<<"tsName">>, Measurement) == <<"size">> end,
-                Measurements
-            )
-        end
+        filter_out_not_failed_items_in_t1_fun = fun filter_out_not_size_measurements/1
+    }).
+
+
+fail_atm_workflow_execution_due_to_job_missing_required_results_error() ->
+    job_failure_atm_workflow_execution_test_base(#fail_atm_workflow_execution_test_spec{
+        testcase_id = ?FUNCTION_NAME,
+        atm_workflow_schema_draft = ?FAILING_WORKFLOW_SCHEMA_DRAFT(
+            gen_time_series_measurements(),
+            ?FAILING_MEASUREMENT_STORE_MAPPING_TASK_SCHEMA_DRAFT,
+            ?FAILING_ECHO_MEASUREMENTS_LAMBDA_DRAFT(?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_1)
+        ),
+        filter_out_not_failed_items_in_t1_fun = fun filter_out_not_size_measurements/1
     }).
 
 
@@ -342,18 +368,23 @@ fail_atm_workflow_execution_due_to_job_result_store_mapping_error() ->
 -spec job_failure_atm_workflow_execution_test_base(fail_atm_workflow_execution_test_spec()) ->
     ok.
 job_failure_atm_workflow_execution_test_base(#fail_atm_workflow_execution_test_spec{
+    testcase_id = TestcaseId,
     atm_workflow_schema_draft = AtmWorkflowSchemaDraft,
-    filter_t1_not_failed_items_fun = FilterNotFailedItemsFun
+    filter_out_not_failed_items_in_t1_fun = FilterOutNotFailedItemsFun
 }) ->
     % TODO VFS-9452 - check task audit log for failed item entries
     AtmLaneRunTestSpec = #atm_lane_run_execution_test_spec{
         process_task_result_for_item = #atm_step_mock_spec{
             after_step_exp_state_diff = fun(MockCallCtx) ->
-                job_failure_expect_task_items_processed(FilterNotFailedItemsFun, MockCallCtx)
+                job_failure_expect_task_items_processed(
+                    TestcaseId, FilterOutNotFailedItemsFun, MockCallCtx
+                )
             end
         },
         handle_task_execution_ended = #atm_step_mock_spec{
-            after_step_exp_state_diff = fun job_failure_expect_task_execution_ended/1
+            after_step_exp_state_diff = fun(MockCallCtx) ->
+                job_failure_expect_task_execution_ended(TestcaseId, MockCallCtx)
+            end
         }
     },
 
@@ -404,11 +435,12 @@ job_failure_atm_workflow_execution_test_base(#fail_atm_workflow_execution_test_s
 
 %% @private
 -spec job_failure_expect_task_items_processed(
+    term(),
     fun(([automation:item()]) -> [automation:item()]),
     atm_workflow_execution_test_runner:mock_call_ctx()
 ) ->
     atm_workflow_execution_test_runner:exp_state_diff().
-job_failure_expect_task_items_processed(FilterNotFailedItemsFun, #atm_mock_call_ctx{
+job_failure_expect_task_items_processed(TestcaseId, FilterOutNotFailedItemsFun, #atm_mock_call_ctx{
     workflow_execution_exp_state = ExpState0,
     call_args = [
         _AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId,
@@ -422,14 +454,14 @@ job_failure_expect_task_items_processed(FilterNotFailedItemsFun, #atm_mock_call_
     ),
     {true, case TaskSelector of
         {_, _, ?ATM_TASK1_SCHEMA_ID} ->
-            FailedItemCount = case FilterNotFailedItemsFun(ItemBatch) of
+            FailedItemCount = case FilterOutNotFailedItemsFun(ItemBatch) of
                 [] ->
                     % Batch can be processed further (by following parallel boxes)
                     % only if no item from batch fails (limitation of workflow engine)
-                    inc_epx_items_processed_by_t3(element(1, TaskSelector), ItemCount),
+                    inc_epx_items_processed_by_t3(TestcaseId, element(1, TaskSelector), ItemCount),
                     0;
                 FailedItems ->
-                    record_failed_item_batch_for_t1(TaskSelector, FailedItems),
+                    record_failed_item_batch_for_t1(TestcaseId, TaskSelector, FailedItems),
                     length(FailedItems)
             end,
             ExpState1 = atm_workflow_execution_exp_state_builder:expect_task_items_moved_from_processing_to_failed_and_processed(
@@ -446,9 +478,12 @@ job_failure_expect_task_items_processed(FilterNotFailedItemsFun, #atm_mock_call_
 
 
 %% @private
--spec job_failure_expect_task_execution_ended(atm_workflow_execution_test_runner:mock_call_ctx()) ->
+-spec job_failure_expect_task_execution_ended(
+    term(),
+    atm_workflow_execution_test_runner:mock_call_ctx()
+) ->
     atm_workflow_execution_test_runner:exp_state_diff().
-job_failure_expect_task_execution_ended(#atm_mock_call_ctx{
+job_failure_expect_task_execution_ended(TestcaseId, #atm_mock_call_ctx{
     workflow_execution_exp_state = ExpState,
     call_args = [_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId]
 }) ->
@@ -458,7 +493,7 @@ job_failure_expect_task_execution_ended(#atm_mock_call_ctx{
         {_, _, ?ATM_TASK2_SCHEMA_ID} ->
             job_failure_expect_t2_finished(AtmTaskExecutionId, ExpState);
         {_, _, ?ATM_TASK3_SCHEMA_ID} ->
-            job_failure_expect_t3_ended(AtmTaskExecutionId, ExpState)
+            job_failure_expect_t3_ended(TestcaseId, AtmTaskExecutionId, ExpState)
     end}.
 
 
@@ -506,15 +541,16 @@ job_failure_expect_pb1_changed_status(AtmTaskExecutionId, ExpState) ->
 
 %% @private
 -spec job_failure_expect_t3_ended(
+    term(),
     atm_task_execution:id(),
     atm_workflow_execution_test_runner:exp_state()
 ) ->
     atm_workflow_execution_test_runner:exp_state().
-job_failure_expect_t3_ended(AtmTask3ExecutionId, ExpState) ->
+job_failure_expect_t3_ended(TestcaseId, AtmTask3ExecutionId, ExpState) ->
     TaskSelector = atm_workflow_execution_exp_state_builder:get_task_selector(
         AtmTask3ExecutionId, ExpState
     ),
-    ExpItemsProcessed = get_exp_items_processed_by_t3(TaskSelector),
+    ExpItemsProcessed = get_exp_items_processed_by_t3(TestcaseId, TaskSelector),
 
     ?assertEqual(
         {0, 0, ExpItemsProcessed},
@@ -536,31 +572,37 @@ job_failure_expect_t3_ended(AtmTask3ExecutionId, ExpState) ->
 
 %% @private
 -spec record_failed_item_batch_for_t1(
+    term(),
     atm_workflow_execution_exp_state_builder:task_selector(),
     [automation:item()]
 ) ->
     ok.
-record_failed_item_batch_for_t1(TaskSelector, FailedItems) ->
-    Key = {TaskSelector, failed_items},
+record_failed_item_batch_for_t1(TestcaseId, TaskSelector, FailedItems) ->
+    Key = {TestcaseId, TaskSelector, failed_items},
     node_cache:put(Key, [FailedItems | node_cache:get(Key, [])]).
 
 
 %% @private
 -spec inc_epx_items_processed_by_t3(
+    term(),
     atm_lane_execution:lane_run_selector(),
     pos_integer()
 ) ->
     ok.
-inc_epx_items_processed_by_t3(AtmLaneRunSelector, Count) ->
-    Key = {{AtmLaneRunSelector, ?ATM_PARALLEL_BOX2_SCHEMA_ID, ?ATM_TASK3_SCHEMA_ID}, exp_items_processed},
+inc_epx_items_processed_by_t3(TestcaseId, AtmLaneRunSelector, Count) ->
+    Task3Selector = {AtmLaneRunSelector, ?ATM_PARALLEL_BOX2_SCHEMA_ID, ?ATM_TASK3_SCHEMA_ID},
+    Key = {TestcaseId, Task3Selector, exp_items_processed},
     node_cache:put(Key, Count + node_cache:get(Key, 0)).
 
 
 %% @private
--spec get_exp_items_processed_by_t3(atm_workflow_execution_exp_state_builder:task_selector()) ->
+-spec get_exp_items_processed_by_t3(
+    term(),
+    atm_workflow_execution_exp_state_builder:task_selector()
+) ->
     pos_integer().
-get_exp_items_processed_by_t3(Task3Selector) ->
-    node_cache:get({Task3Selector, exp_items_processed}, 0).
+get_exp_items_processed_by_t3(TestcaseId, Task3Selector) ->
+    node_cache:get({TestcaseId, Task3Selector, exp_items_processed}, 0).
 
 
 %%%===================================================================
@@ -578,3 +620,12 @@ gen_time_series_measurements() ->
             <<"value">> => ?RAND_INT(10000000)
         }
     end, 40).
+
+
+%% @private
+-spec filter_out_not_size_measurements([automation:item()]) -> [automation:item()].
+filter_out_not_size_measurements(Measurements) ->
+    lists:filter(
+        fun(Measurement) -> maps:get(<<"tsName">>, Measurement) == <<"size">> end,
+        Measurements
+    ).
