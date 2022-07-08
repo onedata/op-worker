@@ -1226,14 +1226,14 @@ gather_historical_dir_size_stats_slice_test(Config) ->
         required = [<<"layout">>],
         optional = [
             <<"mode">>, 
-%%            <<"startTimestamp">>, % fixme
+            <<"startTimestamp">>,
             <<"windowLimit">>
         ],
         correct_values = #{
             <<"mode">> => [<<"slice">>],
             <<"layout">> => [Layout],
             <<"windowLimit">> => [1, 8],
-            <<"startTimestamp">> => [1]
+            <<"startTimestamp">> => [7967656156000] % some time in the future
         },
         bad_values = [
             {<<"mode">>, mode, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"mode">>, [<<"layout">>, <<"slice">>])},
