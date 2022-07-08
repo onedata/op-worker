@@ -587,11 +587,18 @@ replication_job_should_fail(Config) ->
     lfm_proxy:close(W2, Handle),
 
     ?assertMatch({ok, #file_attr{size = TestDataSize}}, lfm_proxy:stat(W1, SessId, ?FILE_REF(Guid)), ?ATTEMPTS),
-    ?assertMatch({ok, [#{
-        <<"blocks">> := [[0, TestDataSize]],
-        <<"providerId">> := ProviderId2,
-        <<"totalBlocksSize">> := TestDataSize
-    }]}, opt_file_metadata:get_distribution_deprecated(W1, SessId, ?FILE_REF(Guid)), ?ATTEMPTS),
+    ?assertMatch({ok, [
+        #{
+            <<"blocks">> := [],
+            <<"providerId">> := ProviderId1,
+            <<"totalBlocksSize">> := 0
+        },
+        #{
+            <<"blocks">> := [[0, TestDataSize]],
+            <<"providerId">> := ProviderId2,
+            <<"totalBlocksSize">> := TestDataSize
+        }
+    ]}, opt_file_metadata:get_distribution_deprecated(W1, SessId, ?FILE_REF(Guid)), ?ATTEMPTS),
     ?assertEqual(?ERROR_POSIX(?EROFS), opt_transfers:schedule_file_replication(W1, SessId, ?FILE_REF(Guid), ProviderId1)).
 
 
@@ -610,6 +617,11 @@ eviction_job_should_succeed(Config) ->
     lfm_proxy:close(W2, H),
 
     ?assertDistribution(W1, SessId, ?DISTS([ProviderId1, ProviderId2], [TestDataSize, TestDataSize]), Guid, ?ATTEMPTS),
+    % Ensure that evicting provider has knowledge of remote provider blocks (through dbsync), 
+    % as otherwise it will skip eviction.
+    % @TODO VFS-VFS-9498 not needed after replica_deletion uses fetched file location instead of dbsynced
+    ?assertEqual({ok, [[0, TestDataSize]]},
+        opt_file_metadata:get_local_knowledge_of_remote_provider_blocks(W1, Guid, ProviderId2), ?ATTEMPTS),
     ?assertMatch({ok, _}, opt_transfers:schedule_file_replica_eviction(W1, SessId, ?FILE_REF(Guid), ProviderId1, undefined)),
 
     % whole file on W1 should be invalidated
@@ -632,11 +644,18 @@ migration_job_should_fail(Config) ->
     lfm_proxy:close(W2, Handle),
 
     ?assertMatch({ok, #file_attr{size = TestDataSize}}, lfm_proxy:stat(W1, SessId, ?FILE_REF(Guid)), ?ATTEMPTS),
-    ?assertMatch({ok, [#{
-        <<"blocks">> := [[0, TestDataSize]],
-        <<"providerId">> := ProviderId2,
-        <<"totalBlocksSize">> := TestDataSize
-    }]}, opt_file_metadata:get_distribution_deprecated(W1, SessId, ?FILE_REF(Guid)), ?ATTEMPTS),
+    ?assertMatch({ok, [
+        #{
+            <<"blocks">> := [],
+            <<"providerId">> := ProviderId1,
+            <<"totalBlocksSize">> := 0
+        },
+        #{
+            <<"blocks">> := [[0, TestDataSize]],
+            <<"providerId">> := ProviderId2,
+            <<"totalBlocksSize">> := TestDataSize
+        }
+    ]}, opt_file_metadata:get_distribution_deprecated(W1, SessId, ?FILE_REF(Guid)), ?ATTEMPTS),
     ?assertEqual(?ERROR_POSIX(?EROFS), opt_transfers:schedule_file_replica_eviction(W1, SessId, ?FILE_REF(Guid), ProviderId2, ProviderId1)).
 
 %%%===================================================================

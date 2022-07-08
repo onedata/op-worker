@@ -454,7 +454,7 @@ parallel_write_test(Config, SleepOnWrite, InitialFileSize, OverrideInitialBytes)
         GetBlocks = fun() ->
             FileGuid = resolve_guid(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR, [], [FileNum]),
             {ok, Distribution} =
-                lfm_proxy:get_file_distribution(WorkerProvider2, SessIdProvider2, #file_ref{guid = FileGuid}),
+                opt_file_metadata:get_distribution_deprecated(WorkerProvider2, SessIdProvider2, #file_ref{guid = FileGuid}),
             lists:sort(lists:map(fun(#{<<"blocks">> := ProviderBlocks}) -> ProviderBlocks end, Distribution))
         end,
         ?assertEqual([[], [[0, FileSize]]], GetBlocks(), ?ATTEMPTS),

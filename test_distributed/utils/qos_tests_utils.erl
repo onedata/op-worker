@@ -203,28 +203,41 @@ create_and_open(Node, SessId, ParentGuid, Filename, {hardlink, FileToLinkGuid}) 
 
 
 fill_in_expected_distribution(ExpectedDistribution, FileContent) ->
-    lists:map(fun(ProviderDistributionOrId) ->
+    NotEmptyDistributionMap = lists:foldl(fun(ProviderDistributionOrId, Acc) ->
         case is_map(ProviderDistributionOrId) of
             true ->
                 ProviderDistribution = ProviderDistributionOrId,
+                ProviderId = maps:get(<<"providerId">>, ProviderDistribution),
                 case maps:is_key(<<"blocks">>, ProviderDistribution) of
                     true ->
-                        ProviderDistribution;
+                        Acc#{ProviderId => ProviderDistribution};
                     _ ->
-                        ProviderDistribution#{
-                            <<"blocks">> => [[0, size(FileContent)]],
-                            <<"totalBlocksSize">> => size(FileContent)
+                        Acc#{
+                            ProviderId => #{
+                                <<"providerId">> => ProviderId,
+                                <<"blocks">> => [[0, size(FileContent)]],
+                                <<"totalBlocksSize">> => size(FileContent)
+                            }
                         }
                 end;
             false ->
                 ProviderId = ProviderDistributionOrId,
-                #{
-                    <<"providerId">> => ProviderId,
-                    <<"blocks">> => [[0, size(FileContent)]],
-                    <<"totalBlocksSize">> => size(FileContent)
+                Acc#{
+                    ProviderId => #{
+                        <<"providerId">> => ProviderId,
+                        <<"blocks">> => [[0, size(FileContent)]],
+                        <<"totalBlocksSize">> => size(FileContent)
+                    }
                 }
         end
-    end, ExpectedDistribution).
+    end, #{}, ExpectedDistribution),
+    lists:map(fun(ProviderId) ->
+        maps:get(ProviderId, NotEmptyDistributionMap, #{
+            <<"providerId">> => ProviderId,
+            <<"blocks">> => [],
+            <<"totalBlocksSize">> => 0
+        })
+    end, oct_background:get_provider_ids()).
 
 
 get_guid(Path, #{files := FilesGuidsAndPaths, dirs := DirsGuidsAndPaths}) ->
@@ -621,7 +634,7 @@ get_effective_qos_by_lfm(Node, SessionId, FileGuid) ->
 assert_distribution_in_dir_structure(undefined, _) ->
     true;
 
-assert_distribution_in_dir_structure( #test_dir_structure{
+assert_distribution_in_dir_structure(#test_dir_structure{
     assertion_providers = ProvidersOrUndef,
     dir_structure = ExpectedDirStructure
 }, GuidsAndPaths) ->
@@ -675,14 +688,14 @@ assert_file_distribution(Providers, {FileName, FileContent, ExpectedFileDistribu
         ),
         Node = oct_background:get_random_provider_node(Provider),
 
-        FileLocationsSorted = case opt_file_metadata:get_distribution_deprecated(Node, SessId, ?FILE_REF(FileGuid)) of
+        FileDistributionSorted = case opt_file_metadata:get_distribution_deprecated(Node, SessId, ?FILE_REF(FileGuid)) of
             {ok, FileLocations} ->
                 lists:sort(FileLocations);
             Error ->
                 Error
         end,
 
-        case {FileLocationsSorted == ExpectedDistributionSorted, PrintError} of
+        case {FileDistributionSorted == ExpectedDistributionSorted, PrintError} of
             {false, false} ->
                 false;
             {false, true} ->
@@ -690,7 +703,7 @@ assert_file_distribution(Providers, {FileName, FileContent, ExpectedFileDistribu
                     "Wrong file distribution for ~p on node ~p. ~n"
                     "Expected: ~p~n"
                     "Got: ~p~n",
-                    [FilePath, Node, ExpectedDistributionSorted, FileLocationsSorted]),
+                    [FilePath, Node, ExpectedDistributionSorted, FileDistributionSorted]),
                     false;
             {true, _} ->
                 Res

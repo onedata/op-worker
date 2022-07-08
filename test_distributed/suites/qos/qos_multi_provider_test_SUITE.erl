@@ -339,7 +339,10 @@ reconcile_with_links_race_test_base(Depth, RecordsToBlock) ->
             #{
                 <<"providerId">> => P,
                 <<"totalBlocksSize">> => TotalBlocksSize,
-                <<"blocks">> => [[0, TotalBlocksSize]]
+                <<"blocks">> => case TotalBlocksSize of
+                    0 -> [];
+                    _ -> [[0, TotalBlocksSize]]
+                end
             }
         end, List),
         lists:sort(fun(#{<<"providerId">> := ProviderIdA}, #{<<"providerId">> := ProviderIdB}) ->
@@ -370,21 +373,21 @@ reconcile_with_links_race_test_base(Depth, RecordsToBlock) ->
     mock_fslogic_authz_ensure_authorized(oct_background:get_provider_nodes(Provider2)),
     save_not_matching_docs(P2Node, ?FUNCTION_NAME, Filters),
     
-    CheckDistributionFun([{Provider1, Size}]),
+    CheckDistributionFun([{Provider1, Size}, {Provider2, 0}]),
     
     save_matching_docs(P2Node, ?FUNCTION_NAME, [{qos_entry, QosEntryId}]),
     lists:foreach(fun(Provider) ->
         ?assertEqual({ok, ?FULFILLED_QOS_STATUS}, opt_qos:check_qos_status(
             oct_background:get_random_provider_node(Provider), ?SESS_ID(Provider), QosEntryId), ?ATTEMPTS)
     end, Providers),
-    CheckDistributionFun([{Provider1, Size}]),
+    CheckDistributionFun([{Provider1, Size}, {Provider2, 0}]),
     
     save_matching_docs(P2Node, ?FUNCTION_NAME, [{links, links_forest, LinksKey}]),
     case lists:member(file_meta, RecordsToBlock) of
         false ->
             CheckDistributionFun([{Provider1, Size}, {Provider2, Size}]);
         true ->
-            CheckDistributionFun([{Provider1, Size}]),
+            CheckDistributionFun([{Provider1, Size}, {Provider2, 0}]),
             save_matching_docs(P2Node, ?FUNCTION_NAME, [{file_meta, file_id:guid_to_uuid(ParentGuid)}]),
             CheckDistributionFun([{Provider1, Size}, {Provider2, Size}])
     end.

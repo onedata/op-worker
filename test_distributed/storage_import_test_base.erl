@@ -6041,6 +6041,11 @@ should_not_sync_file_during_replication(Config) ->
     ok = lfm_proxy:close(W2, FileHandle),
     ?assertBlocks(W1, SessId, [
         #{
+            <<"blocks">> => [],
+            <<"providerId">> => ?GET_DOMAIN_BIN(W1),
+            <<"totalBlocksSize">> => 0
+        },
+        #{
             <<"blocks">> => [[0, ?TEST_DATA_SIZE]],
             <<"providerId">> => ?GET_DOMAIN_BIN(W2),
             <<"totalBlocksSize">> => ?TEST_DATA_SIZE

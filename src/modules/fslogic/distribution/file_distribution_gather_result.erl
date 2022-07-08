@@ -23,7 +23,7 @@
 -export([to_json/3]).
 
 
--type block() :: {Offset :: non_neg_integer(), Size :: integer()}.
+-type block() :: [integer()]. % 2 element list in format [Offset :: non_neg_integer(), Size :: integer()].
 
 % For below types description see interpolate_chunks fun doc
 -type chunks_bar_entry() :: {BarNum :: non_neg_integer(), Fill :: non_neg_integer()}.

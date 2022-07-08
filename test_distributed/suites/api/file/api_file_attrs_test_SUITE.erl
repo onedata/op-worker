@@ -1005,7 +1005,7 @@ get_symlink_distribution_test(Config) ->
     ok.
 enable_dir_stats_collecting_for_space(ProviderPlaceholder, SpacePlaceholder) ->
     SpaceId = oct_background:get_space_id(SpacePlaceholder),
-    ?rpc(ProviderPlaceholder, dir_stats_collector_config:enable(SpaceId)),
+    ?rpc(ProviderPlaceholder,  dir_stats_service_state:enable(SpaceId)),
     await_dir_stats_collecting_status(ProviderPlaceholder, SpaceId, enabled).
 
 
@@ -1017,7 +1017,7 @@ enable_dir_stats_collecting_for_space(ProviderPlaceholder, SpacePlaceholder) ->
     ok.
 disable_dir_stats_collecting_for_space(ProviderPlaceholder, SpacePlaceholder) ->
     SpaceId = oct_background:get_space_id(SpacePlaceholder),
-    ?rpc(ProviderPlaceholder, dir_stats_collector_config:disable(SpaceId)),
+    ?rpc(ProviderPlaceholder, dir_stats_service_state:disable(SpaceId)),
     await_dir_stats_collecting_status(ProviderPlaceholder, SpaceId, disabled).
 
 
@@ -1031,7 +1031,7 @@ disable_dir_stats_collecting_for_space(ProviderPlaceholder, SpacePlaceholder) ->
 await_dir_stats_collecting_status(ProviderPlaceholder, SpaceId, Status) ->
     ?assertEqual(
         Status,
-        ?rpc(ProviderPlaceholder, dir_stats_collector_config:get_extended_collecting_status(SpaceId)),
+        ?rpc(ProviderPlaceholder, dir_stats_service_state:get_extended_status(SpaceId)),
         ?ATTEMPTS
     ).
 
@@ -1199,20 +1199,21 @@ gather_historical_dir_size_stats_slice_test(Config) ->
         krakow
     ),
     Metrics = lists_utils:random_sublist([?DAY_METRIC, ?HOUR_METRIC, ?MINUTE_METRIC, ?MONTH_METRIC]),
-    Layout = #{
+    TimeSeries = lists_utils:random_sublist([?DIR_COUNT, ?REG_FILE_AND_LINK_COUNT, ?TOTAL_SIZE, ?SIZE_ON_STORAGE(P1StorageId), ?SIZE_ON_STORAGE(P2StorageId)]),
+    Layout = maps:with(TimeSeries, #{
         ?DIR_COUNT => Metrics,
         ?REG_FILE_AND_LINK_COUNT => Metrics,
         ?TOTAL_SIZE => Metrics,
         ?SIZE_ON_STORAGE(P1StorageId) => Metrics,
         ?SIZE_ON_STORAGE(P2StorageId) => Metrics
-    },
-    ExpSlice = #{
+    }),
+    ExpSlice = maps:with(TimeSeries, #{
         ?DIR_COUNT => lists:foldl(fun(Metric, Acc) -> Acc#{Metric => [#{<<"value">> => 1}]} end, #{}, Metrics),
         ?REG_FILE_AND_LINK_COUNT => lists:foldl(fun(Metric, Acc) -> Acc#{Metric => [#{<<"value">> => 2}]} end, #{}, Metrics),
         ?SIZE_ON_STORAGE(P1StorageId) => lists:foldl(fun(Metric, Acc) -> Acc#{Metric => [#{<<"value">> => 24}]} end, #{}, Metrics),
         ?SIZE_ON_STORAGE(P2StorageId) => lists:foldl(fun(Metric, Acc) -> Acc#{Metric => [#{<<"value">> => 0}]} end, #{}, Metrics),
         ?TOTAL_SIZE => lists:foldl(fun(Metric, Acc) -> Acc#{Metric => [#{<<"value">> => 24}]} end, #{}, Metrics)
-    },
+    }),
     await_dir_stats_collecting_status(krakow, SpaceId, enabled),
     await_dir_stats_collecting_status(paris, SpaceId, enabled),
     ValidateGsSuccessfulCallFun = fun(_TestCtx, Result) ->

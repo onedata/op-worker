@@ -222,7 +222,7 @@ autocleaning_should_evict_file_replica_when_it_is_replicated(Config) ->
     }),
 
     % read file on W1 to replicate it
-    ?assertDistribution(W1, SessId, ?DISTS([DomainP2], [Size]), Guid),
+    ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [0, Size]), Guid),
     read_file(W1, SessId, Guid, Size),
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [0, Size]), Guid),
     ?assertOneOfReports({ok, #{
@@ -242,7 +242,7 @@ periodical_autocleaning_should_evict_file_replica_when_it_is_replicated(Config) 
     DomainP2 = ?GET_DOMAIN_BIN(W2),
     enable_file_popularity(W1, ?SPACE_ID),
     Guid = write_file(W1, SessId, ?FILE_PATH(FileName), Size),
-    ?assertDistribution(W2, SessId2, ?DISTS([DomainP1], [Size]), Guid),
+    ?assertDistribution(W2, SessId2, ?DISTS([DomainP1, DomainP2], [Size, 0]), Guid),
     % read file on W2 to replicate it
     read_file(W2, SessId2, Guid, Size),
 
@@ -272,11 +272,16 @@ forcefully_started_autocleaning_should_evict_file_replica_when_it_is_replicated(
     DomainP2 = ?GET_DOMAIN_BIN(W2),
     enable_file_popularity(W1, ?SPACE_ID),
     Guid = write_file(W1, SessId, ?FILE_PATH(FileName), Size),
-    ?assertDistribution(W2, SessId2, ?DISTS([DomainP1], [Size]), Guid),
+    ?assertDistribution(W2, SessId2, ?DISTS([DomainP1, DomainP2], [Size, 0]), Guid),
     % read file on W2 to replicate it
     read_file(W2, SessId2, Guid, Size),
 
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [Size, Size]), Guid),
+    % Ensure that evicting provider has knowledge of remote provider blocks (through dbsync), 
+    % as otherwise it will skip eviction.
+    % @TODO VFS-VFS-9498 not needed after replica_deletion uses fetched file location instead of dbsynced
+    ?assertEqual({ok, [[0, Size]]}, 
+        opt_file_metadata:get_local_knowledge_of_remote_provider_blocks(W1, Guid, DomainP2), ?ATTEMPTS),
     ?assertFilesInView(W1, ?SPACE_ID, [Guid]),
     ?assertEqual(Size, current_size(W1, ?SPACE_ID), ?ATTEMPTS),
     configure_autocleaning(W1, ?SPACE_ID, #{
@@ -312,7 +317,7 @@ autocleaning_should_evict_file_replica_replicated_by_job(Config) ->
         target => 0,
         threshold => Size - 1
     }),
-    ?assertDistribution(W1, SessId, ?DISTS([DomainP2], [Size]), Guid),
+    ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [0, Size]), Guid),
     schedule_file_replication(W1, SessId, Guid, ProviderId1),
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [Size, Size]), Guid),
     ?assertEqual(Size, current_size(W1, ?SPACE_ID), ?ATTEMPTS),
@@ -341,7 +346,7 @@ autocleaning_should_evict_file_replica_replicated_by_qos(Config) ->
         target => 0,
         threshold => Size - 1
     }),
-    ?assertDistribution(W1, SessId, ?DISTS([DomainP2], [Size]), Guid),
+    ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [0, Size]), Guid),
     {ok, QosEntryId} = opt_qos:add_qos_entry(W1, SessId, ?FILE_REF(Guid), <<"providerId=", ProviderId1/binary>>, 1),
     ?assertMatch({ok, {#{QosEntryId := _}, _}}, opt_qos:get_effective_file_qos(W1, SessId, ?FILE_REF(Guid))),
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [Size, Size]), Guid),
@@ -399,7 +404,7 @@ autocleaning_should_evict_file_replicas_until_it_reaches_configured_target(Confi
     ?assertEqual(FilesNum * FileSize, current_size(W1, ?SPACE_ID), ?ATTEMPTS),
     % "On the fly" replication of the ExtraFile will cause occupancy
     % to exceed the Threshold.
-    ?assertDistribution(W1, SessId, ?DISTS([DomainP2], [ExtraFileSize]), EG),
+    ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [0, ExtraFileSize]), EG),
     read_file(W1, SessId, EG, ExtraFileSize),
     {ok, [ARId]} = ?assertMatch({ok, [_]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
     ?assertRunFinished(W1, ARId),
@@ -433,7 +438,7 @@ autocleaning_should_evict_file_replica_when_it_satisfies_all_enabled_rules(Confi
     Guid = write_file(W2, SessId2, ?FILE_PATH(FileName), Size),
 
     % read file on W1 to replicate it
-    ?assertDistribution(W1, SessId, ?DISTS([DomainP2], [Size]), Guid),
+    ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [0, Size]), Guid),
     read_file(W1, SessId, Guid, Size),
 
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [0, Size]), Guid),
@@ -578,10 +583,15 @@ restart_autocleaning_run_test(Config) ->
     Guid = write_file(W1, SessId, ?FILE_PATH(FileName), Size),
 
     % replicate file to W2
-    ?assertDistribution(W2, SessId2, ?DISTS([DomainP1], [Size]), Guid),
+    ?assertDistribution(W2, SessId2, ?DISTS([DomainP1, DomainP2], [Size, 0]), Guid),
     schedule_file_replication(W2, SessId2, Guid, DomainP2),
 
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [Size, Size]), Guid),
+    % Ensure that evicting provider has knowledge of remote provider blocks (through dbsync), 
+    % as otherwise it will skip eviction.
+    % @TODO VFS-VFS-9498 not needed after replica_deletion uses fetched file location instead of dbsynced
+    ?assertEqual({ok, [[0, Size]]},
+        opt_file_metadata:get_local_knowledge_of_remote_provider_blocks(W1, Guid, DomainP2), ?ATTEMPTS),
     ?assertFilesInView(W1, ?SPACE_ID, [Guid]),
     ?assertEqual(Size, current_size(W1, ?SPACE_ID), ?ATTEMPTS),
     % pretend that there is stalled autocleaning_run
@@ -640,7 +650,7 @@ autocleaning_should_evict_file_when_it_is_old_enough(Config) ->
             max_monthly_moving_average => ?RULE_SETTING(1)
     }},
     ok = configure_autocleaning(W1, ?SPACE_ID, ACConfig),
-    ?assertDistribution(W1, SessId, ?DISTS([DomainP2], [Size]), Guid),
+    ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [0, Size]), Guid),
     schedule_file_replication(W1, SessId, Guid, DomainP1),
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [Size, Size]), Guid),
     ?assertOneOfReports({ok, #{
@@ -685,7 +695,7 @@ autocleaning_should_not_evict_opened_file_replica(Config) ->
             max_monthly_moving_average => ?RULE_SETTING(1)
     }}),
 
-    ?assertDistribution(W1, SessId, ?DISTS([DomainP2], [Size]), Guid),
+    ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [0, Size]), Guid),
     % read file to be replicated and leave it opened
     {ok, H} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, ?FILE_REF(Guid), read), ?ATTEMPTS),
     {ok, _} = ?assertMatch({ok, _}, lfm_proxy:read(W1, H, 0, Size), ?ATTEMPTS),
@@ -744,7 +754,7 @@ cancel_autocleaning_run(Config) ->
     ?assertEqual(FilesNum * FileSize, current_size(W1, ?SPACE_ID), ?ATTEMPTS),
     % "On the fly" replication of the ExtraFile will cause occupancy
     % to exceed the Threshold.
-    ?assertDistribution(W1, SessId, ?DISTS([DomainP2], [ExtraFileSize]), EG),
+    ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [0, ExtraFileSize]), EG),
     read_file(W1, SessId, EG, ExtraFileSize),
     {ok, [ARId]} = ?assertMatch({ok, [_]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
 
@@ -825,7 +835,7 @@ time_warp_test(Config) ->
     % "On the fly" replication of the ExtraFile will cause occupancy
     % to exceed the Threshold.
 
-    ?assertDistribution(W1, SessId, ?DISTS([DomainP2], [ExtraFileSize]), EG),
+    ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [0, ExtraFileSize]), EG),
     read_file(W1, SessId, EG, ExtraFileSize),
     {ok, [ARId]} = ?assertMatch({ok, [_]}, list(W1, ?SPACE_ID), ?ATTEMPTS),
 
@@ -943,7 +953,7 @@ autocleaning_should_not_evict_file_replica_when_it_does_not_satisfy_one_rule_tes
     enable_file_popularity(W1, ?SPACE_ID),
     ok = configure_autocleaning(W1, ?SPACE_ID, ACConfig),
     Guid = write_file(W2, SessId2, ?FILE_PATH(FileName), Size),
-    ?assertDistribution(W1, SessId, ?DISTS([DomainP2], [Size]), Guid),
+    ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [0, Size]), Guid),
     schedule_file_replication(W1, SessId, Guid, DomainP1),
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [Size, Size]), Guid),
     ?assertOneOfReports({ok, #{

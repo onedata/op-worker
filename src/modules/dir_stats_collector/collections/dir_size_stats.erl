@@ -97,8 +97,8 @@ get_stats(Guid, StatNames) ->
     dir_stats_collector:get_stats(Guid, ?MODULE, StatNames).
 
 
--spec browse_historical_stats_collection(file_id:file_guid(), ts_browse_request:record()) -> {ok, ts_browse_result:record()} |
-    dir_stats_collector:collecting_status_error() | ?ERROR_INTERNAL_SERVER_ERROR.
+-spec browse_historical_stats_collection(file_id:file_guid(), ts_browse_request:record()) -> 
+    {ok, ts_browse_result:record()} | dir_stats_collector:collecting_status_error() | ?ERROR_INTERNAL_SERVER_ERROR.
 browse_historical_stats_collection(Guid, BrowseRequest) ->
     case dir_stats_service_state:is_active(file_id:guid_to_space_id(Guid)) of
         true ->

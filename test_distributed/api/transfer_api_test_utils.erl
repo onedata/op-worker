@@ -228,11 +228,11 @@ rerun_transfer(Node, TransferId) ->
 
 
 build_create_transfer_verify_fun(replication, MemRef, Node, _UserId, SrcProvider, DstProvider, _Config) ->
-    build_crate_replication_verify_fun(MemRef, Node, SrcProvider, DstProvider);
+    build_create_replication_verify_fun(MemRef, Node, SrcProvider, DstProvider);
 build_create_transfer_verify_fun(eviction, MemRef, Node, _UserId, SrcProvider, DstProvider, _Config) ->
-    build_crate_eviction_verify_fun(MemRef, Node, SrcProvider, DstProvider);
+    build_create_eviction_verify_fun(MemRef, Node, SrcProvider, DstProvider);
 build_create_transfer_verify_fun(migration, MemRef, Node, _UserId, SrcProvider, DstProvider, _Config) ->
-    build_crate_migration_verify_fun(MemRef, Node, SrcProvider, DstProvider).
+    build_create_migration_verify_fun(MemRef, Node, SrcProvider, DstProvider).
 
 
 %%%===================================================================
@@ -281,9 +281,11 @@ sync_files_between_nodes(eviction, SrcNode, DstNode, Files) ->
     % Wait until file_distribution contains entries for both nodes
     % Otherwise some of them could be omitted from eviction (if data
     % replicas don't exist on other providers eviction for file is skipped).
-    file_test_utils:await_distribution(SrcNode, Files, [
-        {SrcNode, ?BYTES_NUM}, {DstNode, ?BYTES_NUM}
-    ]);
+    % @TODO VFS-VFS-9498 use await_distribution after replica_deletion uses fetched file location instead of dbsynced
+    lists:foreach(fun(Guid) ->
+        DestProviderId = opw_test_rpc:get_provider_id(DstNode),
+        ?assertMatch({ok, [0, ?BYTES_NUM]}, opt_file_metadata:get_local_knowledge_of_remote_provider_blocks(SrcNode, Guid, DestProviderId))
+    end, utils:ensure_list(Files));
 
 sync_files_between_nodes(_TransferType, _SrcNode, DstNode, Files) ->
     lists:foreach(fun(Guid) ->
@@ -374,7 +376,7 @@ get_exp_transfer_stats(migration, <<"dir">>, SrcNode, DstNode, FilesToTransferNu
 
 
 %% @private
-build_crate_replication_verify_fun(MemRef, Node, SrcProvider, DstProvider) ->
+build_create_replication_verify_fun(MemRef, Node, SrcProvider, DstProvider) ->
     fun
         (expected_failure, _) ->
             #{
@@ -384,7 +386,7 @@ build_crate_replication_verify_fun(MemRef, Node, SrcProvider, DstProvider) ->
 
             file_test_utils:await_distribution(
                 Node, _AllFiles = OtherFiles ++ FilesToTransfer,
-                [{SrcProvider, ?BYTES_NUM}]
+                [{SrcProvider, ?BYTES_NUM}, {DstProvider, 0}]
             );
         (expected_success, _) ->
             #{
@@ -394,7 +396,7 @@ build_crate_replication_verify_fun(MemRef, Node, SrcProvider, DstProvider) ->
 
             file_test_utils:await_distribution(
                 Node, OtherFiles,
-                [{SrcProvider, ?BYTES_NUM}]
+                [{SrcProvider, ?BYTES_NUM}, {DstProvider, 0}]
             ),
             file_test_utils:await_distribution(
                 Node, FilesToTransfer,
@@ -404,7 +406,7 @@ build_crate_replication_verify_fun(MemRef, Node, SrcProvider, DstProvider) ->
 
 
 %% @private
-build_crate_eviction_verify_fun(MemRef, Node, SrcProvider, DstProvider) ->
+build_create_eviction_verify_fun(MemRef, Node, SrcProvider, DstProvider) ->
     fun
         (expected_failure, _) ->
             #{
@@ -434,7 +436,7 @@ build_crate_eviction_verify_fun(MemRef, Node, SrcProvider, DstProvider) ->
 
 
 %% @private
-build_crate_migration_verify_fun(MemRef, Node, SrcProvider, DstProvider) ->
+build_create_migration_verify_fun(MemRef, Node, SrcProvider, DstProvider) ->
     fun
         (expected_failure, _) ->
             #{
@@ -444,7 +446,7 @@ build_crate_migration_verify_fun(MemRef, Node, SrcProvider, DstProvider) ->
 
             file_test_utils:await_distribution(
                 Node, _AllFiles = FilesToTransfer ++ OtherFiles,
-                [{SrcProvider, ?BYTES_NUM}]
+                [{SrcProvider, ?BYTES_NUM}, {DstProvider, 0}]
             );
         (expected_success, _) ->
             #{
@@ -454,7 +456,7 @@ build_crate_migration_verify_fun(MemRef, Node, SrcProvider, DstProvider) ->
 
             file_test_utils:await_distribution(
                 Node, OtherFiles,
-                [{SrcProvider, ?BYTES_NUM}]
+                [{SrcProvider, ?BYTES_NUM}, {DstProvider, 0}]
             ),
             file_test_utils:await_distribution(
                 Node, FilesToTransfer,

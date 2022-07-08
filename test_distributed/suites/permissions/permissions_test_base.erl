@@ -1198,6 +1198,7 @@ get_file_distribution_test(Config) ->
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(opt_file_metadata:get_distribution_deprecated(W, SessId, FileKey))
         end,
+        returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end

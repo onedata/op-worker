@@ -156,10 +156,10 @@ blocks_suiting_test(Config0) ->
     Config = multi_provider_file_ops_test_base:extend_config(Config0, User, {6,0,0,1}, Attempts),
     SessId = ?config(session, Config),
     SpaceName = <<"space9">>,
-    [Worker1, Worker2, Worker3, Worker4, Worker5, Worker6] = ?config(op_worker_nodes, Config0),
+    [Worker1, Worker2, Worker3, Worker4, Worker5, Worker6] = Workers = ?config(op_worker_nodes, Config0),
 
     File = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
-    ?assertMatch({ok, _}, lfm_proxy:create(Worker1, SessId(Worker1), File)),
+    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker1, SessId(Worker1), File)),
 
     multi_provider_file_ops_test_base:verify(Config, fun(W) ->
         ?assertMatch({ok, #file_attr{type = ?REGULAR_FILE_TYPE}},
@@ -177,8 +177,9 @@ blocks_suiting_test(Config0) ->
     % Verify initial data distribution
     ExpectedDistribution = [[], [[0,5],[65,30]], [[5,5],[95,205]], [[10,10]], [[20,20]], [[40,25]]],
     GetDistFun = fun() ->
-        {ok, Distribution} = opt_file_metadata:get_distribution_deprecated(Worker1, SessId(Worker1), {path, File}),
-        DistBlocks = lists:map(fun(#{<<"blocks">> := Blocks}) -> Blocks end, Distribution),
+        DistBlocks = lists:map(fun(W) ->
+            opt_file_metadata:get_local_knowledge_of_remote_provider_blocks(Worker1, FileGuid, ?GET_DOMAIN_BIN(W))
+        end, Workers),
         lists:sort(DistBlocks)
     end,
     ?assertEqual(ExpectedDistribution, GetDistFun(), Attempts),

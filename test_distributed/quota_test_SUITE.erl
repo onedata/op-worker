@@ -462,7 +462,7 @@ replicate_file_smaller_than_quota_should_not_fail(Config) ->
 
     {ok, Guid} = create_file(P1, SessId(P1), f(<<"space3">>, File1)),
     ?assertMatch({ok, _}, write_to_file(P1, SessId(P1), f(<<"space3">>, File1), 0, crypto:strong_rand_bytes(20))),
-    ?assertMatch({ok, [#{<<"totalBlocksSize">> := 20}]},
+    ?assertMatch({ok, [#{<<"totalBlocksSize">> := 20}, #{<<"totalBlocksSize">> := 0}]},
         opt_file_metadata:get_distribution_deprecated(P2, SessId(P2), ?FILE_REF(Guid)), ?ATTEMPTS),
 
     {ok, Tid} = opt_transfers:schedule_file_replication(P1, SessId(P1), ?FILE_REF(Guid), ?GET_DOMAIN_BIN(P2)),
@@ -507,7 +507,7 @@ replicate_file_bigger_than_quota_should_fail(Config) ->
             write_to_file(P1, SessId(P1), f(<<"space5">>, File1), Offset, crypto:strong_rand_bytes(?GB)))
     end, lists:seq(0, FileSize-1, ?GB)),
     ?assertMatch(
-        {ok, [#{<<"totalBlocksSize">> := FileSize}]},
+        {ok, [#{<<"totalBlocksSize">> := FileSize}, #{<<"totalBlocksSize">> := 0}]},
         opt_file_metadata:get_distribution_deprecated(P2, SessId(P2), ?FILE_REF(Guid)),
         ?ATTEMPTS
     ),
@@ -538,7 +538,7 @@ replication_of_file_bigger_than_support_should_fail(Config) ->
 
     {ok, Guid} = create_file(P2, SessId(P2), f(SpaceName, File1)),
     ?assertMatch({ok, _}, write_to_file(P2, SessId(P2), f(SpaceName, File1), 0, crypto:strong_rand_bytes(FileSize))),
-    ?assertMatch({ok, [#{<<"totalBlocksSize">> := FileSize}]},
+    ?assertMatch({ok, [#{<<"totalBlocksSize">> := 0}, #{<<"totalBlocksSize">> := FileSize}]},
         opt_file_metadata:get_distribution_deprecated(P1, SessId(P1), ?FILE_REF(Guid)), ?ATTEMPTS),
 
     ?assertMatch(?ERROR_POSIX(?ENOSPC), opt_transfers:schedule_file_replication(P1, SessId(P1), ?FILE_REF(Guid), ?GET_DOMAIN_BIN(P1))),
@@ -552,7 +552,7 @@ migration_of_file_bigger_than_support_should_fail(Config) ->
 
     {ok, Guid} = create_file(P2, SessId(P2), f(SpaceName, File1)),
     ?assertMatch({ok, _}, write_to_file(P2, SessId(P2), f(SpaceName, File1), 0, crypto:strong_rand_bytes(FileSize))),
-    ?assertMatch({ok, [#{<<"totalBlocksSize">> := FileSize}]},
+    ?assertMatch({ok, [#{<<"totalBlocksSize">> := 0}, #{<<"totalBlocksSize">> := FileSize}]},
         opt_file_metadata:get_distribution_deprecated(P1, SessId(P1), ?FILE_REF(Guid)), ?ATTEMPTS),
 
     ?assertMatch(?ERROR_POSIX(?ENOSPC), opt_transfers:schedule_file_replica_eviction(P1, SessId(P1), ?FILE_REF(Guid), ?GET_DOMAIN_BIN(P2),
@@ -570,7 +570,7 @@ onf_replication_of_file_bigger_than_support_should_fail(Config) ->
 
     {ok, Guid} = create_file(P2, SessId(P2), f(SpaceName, File1)),
     ?assertMatch({ok, _}, write_to_file(P2, SessId(P2), f(SpaceName, File1), 0, crypto:strong_rand_bytes(FileSize))),
-    ?assertMatch({ok, [#{<<"totalBlocksSize">> := FileSize}]},
+    ?assertMatch({ok, [#{<<"totalBlocksSize">> := 0}, #{<<"totalBlocksSize">> := FileSize}]},
         opt_file_metadata:get_distribution_deprecated(P1, SessId(P1), ?FILE_REF(Guid)), ?ATTEMPTS),
 
     {ok, H} = ?assertMatch({ok, _}, lfm_proxy:open(P1, SessId(P1), ?FILE_REF(Guid), read), ?ATTEMPTS),
