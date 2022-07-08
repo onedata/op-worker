@@ -1165,8 +1165,15 @@ gather_historical_dir_size_stats_layout_test(Config) ->
     ValidateGsSuccessfulCallFun = fun(_TestCtx, Result) ->
         ?assertEqual({ok, ExpLayout}, Result)
     end,
+    DataSpec = #data_spec{
+        optional = [<<"mode">>],
+        correct_values = #{<<"mode">> => [<<"layout">>]},
+        bad_values = [
+            {<<"mode">>, mode, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"mode">>, [<<"layout">>, <<"slice">>])}
+        ]
+    },
     gather_historical_dir_size_stats_test_base(
-        DirGuid, ShareId, ValidateGsSuccessfulCallFun, Config, #{<<"mode">> => <<"layout">>}).
+        DirGuid, ShareId, ValidateGsSuccessfulCallFun, Config, DataSpec, #{}).
 
 
 gather_historical_dir_size_stats_slice_test(Config) ->
@@ -1191,38 +1198,20 @@ gather_historical_dir_size_stats_slice_test(Config) ->
         },
         krakow
     ),
-    Metrics = [?DAY_METRIC, ?MONTH_METRIC],
-    Options = #{
-        <<"mode">> => <<"slice">>,
-        <<"layout">> => #{
-            ?DIR_COUNT => Metrics,
-            ?REG_FILE_AND_LINK_COUNT => Metrics,
-            ?TOTAL_SIZE => Metrics,
-            ?SIZE_ON_STORAGE(P1StorageId) => Metrics,
-            ?SIZE_ON_STORAGE(P2StorageId) => Metrics
-        }
+    Metrics = lists_utils:random_sublist([?DAY_METRIC, ?HOUR_METRIC, ?MINUTE_METRIC, ?MONTH_METRIC]),
+    Layout = #{
+        ?DIR_COUNT => Metrics,
+        ?REG_FILE_AND_LINK_COUNT => Metrics,
+        ?TOTAL_SIZE => Metrics,
+        ?SIZE_ON_STORAGE(P1StorageId) => Metrics,
+        ?SIZE_ON_STORAGE(P2StorageId) => Metrics
     },
     ExpSlice = #{
-        ?DIR_COUNT => #{
-            ?DAY_METRIC => [#{<<"value">> => 1}],
-            ?MONTH_METRIC => [#{<<"value">> => 1}]
-        },
-        ?REG_FILE_AND_LINK_COUNT => #{
-            ?DAY_METRIC => [#{<<"value">> => 2}],
-            ?MONTH_METRIC => [#{<<"value">> => 2}]
-        },
-        ?SIZE_ON_STORAGE(P1StorageId) => #{
-            ?DAY_METRIC => [#{<<"value">> => 24}],
-            ?MONTH_METRIC => [#{<<"value">> => 24}]
-        },
-        ?SIZE_ON_STORAGE(P2StorageId) => #{
-            ?DAY_METRIC => [#{<<"value">> => 0}],
-            ?MONTH_METRIC => [#{<<"value">> => 0}]
-        },
-        ?TOTAL_SIZE => #{
-            ?DAY_METRIC => [#{<<"value">> => 24}],
-            ?MONTH_METRIC => [#{<<"value">> => 24}]
-        }
+        ?DIR_COUNT => lists:foldl(fun(Metric, Acc) -> Acc#{Metric => [#{<<"value">> => 1}]} end, #{}, Metrics),
+        ?REG_FILE_AND_LINK_COUNT => lists:foldl(fun(Metric, Acc) -> Acc#{Metric => [#{<<"value">> => 2}]} end, #{}, Metrics),
+        ?SIZE_ON_STORAGE(P1StorageId) => lists:foldl(fun(Metric, Acc) -> Acc#{Metric => [#{<<"value">> => 24}]} end, #{}, Metrics),
+        ?SIZE_ON_STORAGE(P2StorageId) => lists:foldl(fun(Metric, Acc) -> Acc#{Metric => [#{<<"value">> => 0}]} end, #{}, Metrics),
+        ?TOTAL_SIZE => lists:foldl(fun(Metric, Acc) -> Acc#{Metric => [#{<<"value">> => 24}]} end, #{}, Metrics)
     },
     await_dir_stats_collecting_status(krakow, SpaceId, enabled),
     await_dir_stats_collecting_status(paris, SpaceId, enabled),
@@ -1233,11 +1222,36 @@ gather_historical_dir_size_stats_slice_test(Config) ->
         end, maps:get(<<"windows">> , ResultWindows)),
         ?assertEqual(ExpSlice, ResultWithoutTimestamps)
     end,
-    gather_historical_dir_size_stats_test_base(DirGuid, ShareId, ValidateGsSuccessfulCallFun, Config, Options).
+    DataSpec = #data_spec{
+        required = [<<"layout">>],
+        optional = [
+            <<"mode">>, 
+%%            <<"startTimestamp">>, % fixme
+            <<"windowLimit">>
+        ],
+        correct_values = #{
+            <<"mode">> => [<<"slice">>],
+            <<"layout">> => [Layout],
+            <<"windowLimit">> => [1, 8],
+            <<"startTimestamp">> => [1]
+        },
+        bad_values = [
+            {<<"mode">>, mode, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"mode">>, [<<"layout">>, <<"slice">>])},
+            {<<"layout">>, 8, {?ERROR_BAD_VALUE_JSON(<<"layout">>)}},
+            {<<"windowLimit">>, 0, {?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"windowLimit">>, 1, 1000)}},
+            {<<"windowLimit">>, 8888, {?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"windowLimit">>, 1, 1000)}},
+            {<<"windowLimit">>, atom, {?ERROR_BAD_VALUE_INTEGER(<<"windowLimit">>)}},
+            {<<"startTimestamp">>, -1, {?ERROR_BAD_VALUE_TOO_LOW(<<"startTimestamp">>, 0)}},
+            {<<"startTimestamp">>, atom, {?ERROR_BAD_VALUE_INTEGER(<<"startTimestamp">>)}}
+        ]
+    },
+    gather_historical_dir_size_stats_test_base(DirGuid, ShareId, ValidateGsSuccessfulCallFun, Config, DataSpec, 
+        #{<<"mode">> => <<"slice">>} % add mode to data, when it is left out, as when it is omitted `layout` mode is assumed
+    ).
 
 
 %% @private
-gather_historical_dir_size_stats_test_base(FileGuid, ShareId, ValidateGsSuccessfulCallFun, Config, Options) ->
+gather_historical_dir_size_stats_test_base(FileGuid, ShareId, ValidateGsSuccessfulCallFun, Config, DataSpec, DefaultData) ->
     
     ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
@@ -1247,13 +1261,13 @@ gather_historical_dir_size_stats_test_base(FileGuid, ShareId, ValidateGsSuccessf
                 #scenario_template{
                     name = <<"Get dir size stats using op_file gs api">>,
                     type = gs,
-                    prepare_args_fun = build_gather_historical_dir_size_stats_prepare_gs_args_fun(FileGuid, Options),
+                    prepare_args_fun = build_gather_historical_dir_size_stats_prepare_gs_args_fun(FileGuid, DefaultData),
                     validate_result_fun = ValidateGsSuccessfulCallFun
                 }
             ],
             data_spec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
                 api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
-                    FileGuid, ShareId, undefined
+                    FileGuid, ShareId, DataSpec
                 )
             )
         }
@@ -1264,14 +1278,14 @@ gather_historical_dir_size_stats_test_base(FileGuid, ShareId, ValidateGsSuccessf
 %% @private
 -spec build_gather_historical_dir_size_stats_prepare_gs_args_fun(file_id:file_guid(), map()) ->
     onenv_api_test_runner:prepare_args_fun().
-build_gather_historical_dir_size_stats_prepare_gs_args_fun(FileGuid, Options) ->
+build_gather_historical_dir_size_stats_prepare_gs_args_fun(FileGuid, DefaultData) ->
     fun(#api_test_ctx{data = Data}) ->
-        {GriId, _} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data),
+        {GriId, Data2} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data),
         
         #gs_args{
             operation = get,
             gri = #gri{type = op_file, id = GriId, aspect = dir_size_stats},
-            data = Options
+            data = maps:merge(DefaultData, Data2)
         }
     end.
 

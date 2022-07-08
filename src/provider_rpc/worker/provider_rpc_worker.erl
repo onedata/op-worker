@@ -78,7 +78,7 @@ init(_Args) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(ping | healthcheck | call()) ->
-    pong | ok | {ok, term()} | errors:error().
+    pong | ok | response() | errors:error().
 handle(ping) ->
     pong;
 

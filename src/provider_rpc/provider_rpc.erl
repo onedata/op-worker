@@ -72,7 +72,7 @@ call(ProviderId, FileGuid, Request) ->
     },
     ReceivedRes = case oneprovider:is_self(ProviderId) of
         true ->
-            provider_rpc_worker:exec(ProviderRpcCall);
+            provider_rpc_worker:handle(ProviderRpcCall);
         false ->
             case connection:find_outgoing_session(ProviderId) of
                 {ok, SessId} ->
