@@ -23,8 +23,10 @@
 -define(FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_1, <<"test/failing_echo_measurements_1">>).
 % Failing by returning integer in case of size metric measurement as an argument
 -define(FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_2, <<"test/failing_echo_measurements_2">>).
+-define(FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_2_RET_VALUE, 10).
 % Failing by returning custom exception
 -define(FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_3, <<"test/failing_echo_measurements_3">>).
+-define(FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_3_EXCEPTION, <<"too hot to do any thinking!!!">>).
 % Failing by lambda error
 -define(FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_4, <<"test/failing_echo_measurements_4">>).
 
