@@ -43,10 +43,13 @@ exec(?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_2, #{<<"argsBatch">> := ArgsBatc
 exec(?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_3, #{<<"argsBatch">> := ArgsBatch}) ->
     #{<<"resultsBatch">> => lists:map(fun
         (#{<<"value">> := #{<<"tsName">> := <<"size">>}}) ->
-            #{<<"exception">> => <<"too hot to do any thinging!!!">>};
+            #{<<"exception">> => <<"too hot to do any thinking!!!">>};
         (Arg) ->
             Arg
-    end, ArgsBatch)}.
+    end, ArgsBatch)};
+
+exec(?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_4, _) ->
+    <<"Illegal instruction: kor damp -.-">>.
 
 
 %%%===================================================================
