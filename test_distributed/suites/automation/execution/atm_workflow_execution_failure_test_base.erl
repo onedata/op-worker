@@ -20,6 +20,7 @@
 -export([
     fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error/0,
     fail_atm_workflow_execution_due_to_incorrect_const_arg_type_error/0,
+    fail_atm_workflow_execution_due_to_incorrect_iterated_item_query_arg_error/0,
     fail_atm_workflow_execution_due_to_job_result_store_mapping_error/0,
     fail_atm_workflow_execution_due_to_job_missing_required_results_error/0,
     fail_atm_workflow_execution_due_to_incorrect_result_type_error/0,
@@ -401,6 +402,40 @@ fail_atm_workflow_execution_due_to_incorrect_const_arg_type_error() ->
                 <<"reason">> => errors:to_json(?ERROR_ATM_TASK_ARG_MAPPING_FAILED(
                     ?ECHO_ARG_NAME, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(
                         IncorrectConst, atm_time_series_measurement_type
+                    )
+                ))
+            }
+        end
+    }).
+
+
+fail_atm_workflow_execution_due_to_incorrect_iterated_item_query_arg_error() ->
+    IteratedItemQuery = [<<"NonexistendField">>],
+
+    job_failure_atm_workflow_execution_test_base(arg_error, #fail_atm_workflow_execution_test_spec{
+        testcase_id = ?FUNCTION_NAME,
+        atm_workflow_schema_draft = ?FAILING_WORKFLOW_SCHEMA_DRAFT(
+            gen_time_series_measurements(),
+            ?FAILING_TASK_SCHEMA_DRAFT(
+                [#atm_task_schema_argument_mapper{
+                    argument_name = ?ECHO_ARG_NAME,
+                    value_builder = #atm_task_argument_value_builder{
+                        type = iterated_item,
+                        recipe = IteratedItemQuery
+                    }
+                }],
+                [?TARGET_STORE_RESULT_MAPPER(?CORRECT_ATM_TIME_SERIES_DISPATCH_RULES)]
+            ),
+            ?ECHO_LAMBDA_DRAFT(?ANY_MEASUREMENT_DATA_SPEC)
+        ),
+        filter_out_not_failed_items_in_t1_fun = fun(Items) -> Items end,
+        build_t1_exp_error_log_content_fun = fun(ItemBatch) ->
+            #{
+                <<"description">> => <<"Failed to process batchs of items.">>,
+                <<"itemBatch">> => ItemBatch,
+                <<"reason">> => errors:to_json(?ERROR_ATM_TASK_ARG_MAPPING_FAILED(
+                    ?ECHO_ARG_NAME, ?ERROR_ATM_TASK_ARG_MAPPER_ITERATED_ITEM_QUERY_FAILED(
+                        hd(ItemBatch), IteratedItemQuery
                     )
                 ))
             }
