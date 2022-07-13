@@ -21,6 +21,7 @@
     fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error/0,
     fail_atm_workflow_execution_due_to_incorrect_const_arg_type_error/0,
     fail_atm_workflow_execution_due_to_incorrect_iterated_item_query_arg_error/0,
+    fail_atm_workflow_execution_due_to_empty_single_value_store_arg_error/0,
     fail_atm_workflow_execution_due_to_job_result_store_mapping_error/0,
     fail_atm_workflow_execution_due_to_job_missing_required_results_error/0,
     fail_atm_workflow_execution_due_to_incorrect_result_type_error/0,
@@ -53,6 +54,7 @@
     }
 ]).
 
+-define(SINGLE_VALUE_STORE_SCHEMA_ID, <<"single_store_id">>).
 -define(ITERATED_STORE_SCHEMA_ID, <<"store_store_id">>).
 -define(TARGET_STORE_SCHEMA_ID, <<"target_store_id">>).
 
@@ -100,6 +102,12 @@
         revision_num = 1,
         revision = #atm_workflow_schema_revision_draft{
             stores = [
+                #atm_store_schema_draft{
+                    id = ?SINGLE_VALUE_STORE_SCHEMA_ID,
+                    type = single_value,
+                    config = #atm_single_value_store_config{item_data_spec = ?ANY_MEASUREMENT_DATA_SPEC},
+                    requires_initial_content = false
+                },
                 #atm_store_schema_draft{
                     id = ?ITERATED_STORE_SCHEMA_ID,
                     type = list,
@@ -150,6 +158,28 @@
     }
 ).
 
+-define(JOB_FAILING_DUE_TO_ARG_MAPPING_WORKFLOW_SCHEMA_DRAFT(__FAILING_ARG_TASK_MAPPER),
+    ?FAILING_WORKFLOW_SCHEMA_DRAFT(
+        gen_time_series_measurements(),
+        ?FAILING_TASK_SCHEMA_DRAFT(
+            [__FAILING_ARG_TASK_MAPPER],
+            [?TARGET_STORE_RESULT_MAPPER(?CORRECT_ATM_TIME_SERIES_DISPATCH_RULES)]
+        ),
+        ?ECHO_LAMBDA_DRAFT(?ANY_MEASUREMENT_DATA_SPEC)
+    )
+).
+
+-define(JOB_FAILING_DUE_TO_RESULT_MAPPING_WORKFLOW_SCHEMA_DRAFT(__FAILING_DOCKER_IMAGE_ID),
+    ?FAILING_WORKFLOW_SCHEMA_DRAFT(
+        gen_time_series_measurements(),
+        ?FAILING_TASK_SCHEMA_DRAFT(
+            [?ITERATED_ITEM_ARG_MAPPER(?ECHO_ARG_NAME)],
+            [?TARGET_STORE_RESULT_MAPPER(?CORRECT_ATM_TIME_SERIES_DISPATCH_RULES)]
+        ),
+        ?FAILING_ECHO_MEASUREMENTS_LAMBDA_DRAFT(__FAILING_DOCKER_IMAGE_ID)
+    )
+).
+
 -define(MISSING_TS_NAME_GENERATOR, <<"missing_generator">>).
 -define(FAILING_MEASUREMENT_STORE_MAPPING_TASK_SCHEMA_DRAFT, ?FAILING_TASK_SCHEMA_DRAFT(
     [?ITERATED_ITEM_ARG_MAPPER(?ECHO_ARG_NAME)],
@@ -179,15 +209,6 @@
         relay_method = return_value
     }]
 }).
-
--define(JOB_FAILING_WORKFLOW_SCHEMA_DRAFT(__FAILING_LAMBDA_DRAFT), ?FAILING_WORKFLOW_SCHEMA_DRAFT(
-    gen_time_series_measurements(),
-    ?FAILING_TASK_SCHEMA_DRAFT(
-        [?ITERATED_ITEM_ARG_MAPPER(?ECHO_ARG_NAME)],
-        [?TARGET_STORE_RESULT_MAPPER(?CORRECT_ATM_TIME_SERIES_DISPATCH_RULES)]
-    ),
-    __FAILING_LAMBDA_DRAFT
-)).
 
 -define(EXP_ERROR_ATM_MEASUREMENT_DISPATCH_FAILED, ?ERROR_ATM_TASK_RESULT_MAPPING_FAILED(
     <<"value">>, ?ERROR_ATM_TASK_RESULT_DISPATCH_FAILED(
@@ -380,19 +401,14 @@ fail_atm_workflow_execution_due_to_incorrect_const_arg_type_error() ->
 
     job_failure_atm_workflow_execution_test_base(arg_error, #fail_atm_workflow_execution_test_spec{
         testcase_id = ?FUNCTION_NAME,
-        atm_workflow_schema_draft = ?FAILING_WORKFLOW_SCHEMA_DRAFT(
-            gen_time_series_measurements(),
-            ?FAILING_TASK_SCHEMA_DRAFT(
-                [#atm_task_schema_argument_mapper{
-                    argument_name = ?ECHO_ARG_NAME,
-                    value_builder = #atm_task_argument_value_builder{
-                        type = const,
-                        recipe = IncorrectConst
-                    }
-                }],
-                [?TARGET_STORE_RESULT_MAPPER(?CORRECT_ATM_TIME_SERIES_DISPATCH_RULES)]
-            ),
-            ?ECHO_LAMBDA_DRAFT(?ANY_MEASUREMENT_DATA_SPEC)
+        atm_workflow_schema_draft = ?JOB_FAILING_DUE_TO_ARG_MAPPING_WORKFLOW_SCHEMA_DRAFT(
+            #atm_task_schema_argument_mapper{
+                argument_name = ?ECHO_ARG_NAME,
+                value_builder = #atm_task_argument_value_builder{
+                    type = const,
+                    recipe = IncorrectConst
+                }
+            }
         ),
         filter_out_not_failed_items_in_t1_fun = fun(Items) -> Items end,
         build_t1_exp_error_log_content_fun = fun(ItemBatch) ->
@@ -414,28 +430,50 @@ fail_atm_workflow_execution_due_to_incorrect_iterated_item_query_arg_error() ->
 
     job_failure_atm_workflow_execution_test_base(arg_error, #fail_atm_workflow_execution_test_spec{
         testcase_id = ?FUNCTION_NAME,
-        atm_workflow_schema_draft = ?FAILING_WORKFLOW_SCHEMA_DRAFT(
-            gen_time_series_measurements(),
-            ?FAILING_TASK_SCHEMA_DRAFT(
-                [#atm_task_schema_argument_mapper{
-                    argument_name = ?ECHO_ARG_NAME,
-                    value_builder = #atm_task_argument_value_builder{
-                        type = iterated_item,
-                        recipe = IteratedItemQuery
-                    }
-                }],
-                [?TARGET_STORE_RESULT_MAPPER(?CORRECT_ATM_TIME_SERIES_DISPATCH_RULES)]
-            ),
-            ?ECHO_LAMBDA_DRAFT(?ANY_MEASUREMENT_DATA_SPEC)
+        atm_workflow_schema_draft = ?JOB_FAILING_DUE_TO_ARG_MAPPING_WORKFLOW_SCHEMA_DRAFT(
+            #atm_task_schema_argument_mapper{
+                argument_name = ?ECHO_ARG_NAME,
+                value_builder = #atm_task_argument_value_builder{
+                    type = iterated_item,
+                    recipe = IteratedItemQuery
+                }
+            }
         ),
         filter_out_not_failed_items_in_t1_fun = fun(Items) -> Items end,
         build_t1_exp_error_log_content_fun = fun(ItemBatch) ->
             #{
-                <<"description">> => <<"Failed to process batchs of items.">>,
+                <<"description">> => <<"Failed to process batch of items.">>,
                 <<"itemBatch">> => ItemBatch,
                 <<"reason">> => errors:to_json(?ERROR_ATM_TASK_ARG_MAPPING_FAILED(
                     ?ECHO_ARG_NAME, ?ERROR_ATM_TASK_ARG_MAPPER_ITERATED_ITEM_QUERY_FAILED(
                         hd(ItemBatch), IteratedItemQuery
+                    )
+                ))
+            }
+        end
+    }).
+
+
+fail_atm_workflow_execution_due_to_empty_single_value_store_arg_error() ->
+    job_failure_atm_workflow_execution_test_base(arg_error, #fail_atm_workflow_execution_test_spec{
+        testcase_id = ?FUNCTION_NAME,
+        atm_workflow_schema_draft = ?JOB_FAILING_DUE_TO_ARG_MAPPING_WORKFLOW_SCHEMA_DRAFT(
+            #atm_task_schema_argument_mapper{
+                argument_name = ?ECHO_ARG_NAME,
+                value_builder = #atm_task_argument_value_builder{
+                    type = single_value_store_content,
+                    recipe = ?SINGLE_VALUE_STORE_SCHEMA_ID
+                }
+            }
+        ),
+        filter_out_not_failed_items_in_t1_fun = fun(Items) -> Items end,
+        build_t1_exp_error_log_content_fun = fun(ItemBatch) ->
+            #{
+                <<"description">> => <<"Failed to process batch of items.">>,
+                <<"itemBatch">> => ItemBatch,
+                <<"reason">> => errors:to_json(?ERROR_ATM_TASK_ARG_MAPPING_FAILED(
+                    ?ECHO_ARG_NAME, ?ERROR_ATM_STORE_CONTENT_NOT_SET(
+                        ?SINGLE_VALUE_STORE_SCHEMA_ID
                     )
                 ))
             }
@@ -466,8 +504,8 @@ fail_atm_workflow_execution_due_to_job_result_store_mapping_error() ->
 fail_atm_workflow_execution_due_to_job_missing_required_results_error() ->
     job_failure_atm_workflow_execution_test_base(result_error, #fail_atm_workflow_execution_test_spec{
         testcase_id = ?FUNCTION_NAME,
-        atm_workflow_schema_draft = ?JOB_FAILING_WORKFLOW_SCHEMA_DRAFT(
-            ?FAILING_ECHO_MEASUREMENTS_LAMBDA_DRAFT(?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_1)
+        atm_workflow_schema_draft = ?JOB_FAILING_DUE_TO_RESULT_MAPPING_WORKFLOW_SCHEMA_DRAFT(
+            ?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_1
         ),
         build_t1_exp_error_log_content_fun = fun(ItemBatch) ->
             lists:map(fun(Item) ->
@@ -484,8 +522,8 @@ fail_atm_workflow_execution_due_to_job_missing_required_results_error() ->
 fail_atm_workflow_execution_due_to_incorrect_result_type_error() ->
     job_failure_atm_workflow_execution_test_base(result_error, #fail_atm_workflow_execution_test_spec{
         testcase_id = ?FUNCTION_NAME,
-        atm_workflow_schema_draft = ?JOB_FAILING_WORKFLOW_SCHEMA_DRAFT(
-            ?FAILING_ECHO_MEASUREMENTS_LAMBDA_DRAFT(?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_2)
+        atm_workflow_schema_draft = ?JOB_FAILING_DUE_TO_RESULT_MAPPING_WORKFLOW_SCHEMA_DRAFT(
+            ?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_2
         ),
         build_t1_exp_error_log_content_fun = fun(ItemBatch) ->
             lists:map(fun(Item) ->
@@ -507,8 +545,8 @@ fail_atm_workflow_execution_due_to_incorrect_result_type_error() ->
 fail_atm_workflow_execution_due_to_lambda_exception() ->
     job_failure_atm_workflow_execution_test_base(result_error, #fail_atm_workflow_execution_test_spec{
         testcase_id = ?FUNCTION_NAME,
-        atm_workflow_schema_draft = ?JOB_FAILING_WORKFLOW_SCHEMA_DRAFT(
-            ?FAILING_ECHO_MEASUREMENTS_LAMBDA_DRAFT(?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_3)
+        atm_workflow_schema_draft = ?JOB_FAILING_DUE_TO_RESULT_MAPPING_WORKFLOW_SCHEMA_DRAFT(
+            ?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_3
         ),
         build_t1_exp_error_log_content_fun = fun(ItemBatch) ->
             lists:map(fun(Item) ->
@@ -525,8 +563,8 @@ fail_atm_workflow_execution_due_to_lambda_exception() ->
 fail_atm_workflow_execution_due_to_lambda_error() ->
     job_failure_atm_workflow_execution_test_base(result_error, #fail_atm_workflow_execution_test_spec{
         testcase_id = ?FUNCTION_NAME,
-        atm_workflow_schema_draft = ?JOB_FAILING_WORKFLOW_SCHEMA_DRAFT(
-            ?FAILING_ECHO_MEASUREMENTS_LAMBDA_DRAFT(?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_4)
+        atm_workflow_schema_draft = ?JOB_FAILING_DUE_TO_RESULT_MAPPING_WORKFLOW_SCHEMA_DRAFT(
+            ?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_4
         ),
         filter_out_not_failed_items_in_t1_fun = fun(Items) -> Items end,
         build_t1_exp_error_log_content_fun = fun(ItemBatch) ->

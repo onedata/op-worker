@@ -87,6 +87,7 @@
     fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error/1,
     fail_atm_workflow_execution_due_to_incorrect_const_arg_type_error/1,
     fail_atm_workflow_execution_due_to_incorrect_iterated_item_query_arg_error/1,
+    fail_atm_workflow_execution_due_to_empty_single_value_store_arg_error/1,
     fail_atm_workflow_execution_due_to_job_result_store_mapping_error/1,
     fail_atm_workflow_execution_due_to_job_missing_required_results_error/1,
     fail_atm_workflow_execution_due_to_incorrect_result_type_error/1,
@@ -164,6 +165,7 @@ groups() -> [
         fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error,
         fail_atm_workflow_execution_due_to_incorrect_const_arg_type_error,
         fail_atm_workflow_execution_due_to_incorrect_iterated_item_query_arg_error,
+        fail_atm_workflow_execution_due_to_empty_single_value_store_arg_error,
         fail_atm_workflow_execution_due_to_job_result_store_mapping_error,
         fail_atm_workflow_execution_due_to_job_missing_required_results_error,
         fail_atm_workflow_execution_due_to_incorrect_result_type_error,
@@ -173,12 +175,12 @@ groups() -> [
 ].
 
 all() -> [
-%%    {group, scheduling_non_executable_workflow_schema_tests},
-%%    {group, scheduling_executable_workflow_schema_with_invalid_args_tests},
-%%    {group, preparation_tests},
-%%    {group, cancellation_tests},
-%%    {group, iteration_tests},
-%%    {group, mapping_tests},
+    {group, scheduling_non_executable_workflow_schema_tests},
+    {group, scheduling_executable_workflow_schema_with_invalid_args_tests},
+    {group, preparation_tests},
+    {group, cancellation_tests},
+    {group, iteration_tests},
+    {group, mapping_tests},
     {group, failure_tests}
 ].
 
@@ -398,6 +400,10 @@ fail_atm_workflow_execution_due_to_incorrect_const_arg_type_error(_Config) ->
 
 
 fail_atm_workflow_execution_due_to_incorrect_iterated_item_query_arg_error(_Config) ->
+    ?FAILURE_MAPPING_TEST().
+
+
+fail_atm_workflow_execution_due_to_empty_single_value_store_arg_error(_Config) ->
     ?FAILURE_MAPPING_TEST().
 
 
