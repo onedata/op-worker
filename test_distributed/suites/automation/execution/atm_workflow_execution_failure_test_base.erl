@@ -187,6 +187,17 @@
     __FAILING_LAMBDA_DRAFT
 )).
 
+-define(EXP_ERROR_ATM_MEASUREMENT_DISPATCH_FAILED, ?ERROR_ATM_TASK_RESULT_MAPPING_FAILED(
+    <<"value">>, ?ERROR_ATM_TASK_RESULT_DISPATCH_FAILED(
+        ?TARGET_STORE_SCHEMA_ID,
+        ?ERROR_BAD_DATA(<<"dispatchRules">>, str_utils:format_bin(
+            "Time series name generator '~s' specified in one of the dispatch rules "
+            "does not reference any defined time series schema",
+            [?MISSING_TS_NAME_GENERATOR]
+        ))
+    )
+)).
+
 
 -record(fail_atm_workflow_execution_test_spec, {
     testcase_id :: term(),
@@ -214,7 +225,6 @@ fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error() ->
         )
     end,
 
-    % TODO VFS-9452 - check task audit log for failed item entries
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         provider = ?PROVIDER_SELECTOR,
         user = ?USER_SELECTOR,
@@ -272,12 +282,20 @@ fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error() ->
     atm_workflow_execution_test_runner:mock_call_ctx()
 ) ->
     atm_workflow_execution_test_runner:exp_state_diff().
-uncorrelated_result_failure_expect_task_execution_ended(#atm_mock_call_ctx{
+uncorrelated_result_failure_expect_task_execution_ended(AtmMockCallCtx = #atm_mock_call_ctx{
     workflow_execution_exp_state = ExpState,
     call_args = [_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId]
 }) ->
     {true, case atm_workflow_execution_exp_state_builder:get_task_selector(AtmTaskExecutionId, ExpState) of
         {_, _, ?ATM_TASK1_SCHEMA_ID} ->
+            ExpTaskLog = #{
+                <<"description">> => <<"Failed to process uncorrelated task results.">>,
+                <<"reason">> => errors:to_json(?EXP_ERROR_ATM_MEASUREMENT_DISPATCH_FAILED)
+            },
+            ?assert(lists:member(ExpTaskLog, get_audit_log_contents(
+                AtmTaskExecutionId, AtmMockCallCtx
+            ))),
+
             uncorrelated_result_expect_t1_failed(AtmTaskExecutionId, ExpState);
         {_, _, ?ATM_TASK2_SCHEMA_ID} ->
             uncorrelated_result_expect_t2_ended(AtmTaskExecutionId, ExpState);
@@ -367,16 +385,7 @@ fail_atm_workflow_execution_due_to_job_result_store_mapping_error() ->
                 #{
                     <<"description">> => <<"Failed to process item.">>,
                     <<"item">> => Item,
-                    <<"reason">> => errors:to_json(?ERROR_ATM_TASK_RESULT_MAPPING_FAILED(
-                        <<"value">>, ?ERROR_ATM_TASK_RESULT_DISPATCH_FAILED(
-                            ?TARGET_STORE_SCHEMA_ID,
-                            ?ERROR_BAD_DATA(<<"dispatchRules">>, str_utils:format_bin(
-                                "Time series name generator '~s' specified in one of the dispatch rules "
-                                "does not reference any defined time series schema",
-                                [?MISSING_TS_NAME_GENERATOR]
-                            ))
-                        )
-                    ))
+                    <<"reason">> => errors:to_json(?EXP_ERROR_ATM_MEASUREMENT_DISPATCH_FAILED)
                 }
             end, ItemBatch)
         end
