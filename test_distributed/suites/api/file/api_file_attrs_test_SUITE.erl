@@ -1199,15 +1199,14 @@ gather_historical_dir_size_stats_slice_test(Config) ->
         krakow
     ),
     Metrics = lists_utils:random_sublist([?DAY_METRIC, ?HOUR_METRIC, ?MINUTE_METRIC, ?MONTH_METRIC]),
-    TimeSeries = lists_utils:random_sublist([?DIR_COUNT, ?REG_FILE_AND_LINK_COUNT, ?TOTAL_SIZE, ?SIZE_ON_STORAGE(P1StorageId), ?SIZE_ON_STORAGE(P2StorageId)]),
-    Layout = maps:with(TimeSeries, #{
+    Layout = maps_utils:random_submap(#{
         ?DIR_COUNT => Metrics,
         ?REG_FILE_AND_LINK_COUNT => Metrics,
         ?TOTAL_SIZE => Metrics,
         ?SIZE_ON_STORAGE(P1StorageId) => Metrics,
         ?SIZE_ON_STORAGE(P2StorageId) => Metrics
     }),
-    ExpSlice = maps:with(TimeSeries, #{
+    ExpSlice = maps:with(maps:keys(Layout), #{
         ?DIR_COUNT => lists:foldl(fun(Metric, Acc) -> Acc#{Metric => [#{<<"value">> => 1}]} end, #{}, Metrics),
         ?REG_FILE_AND_LINK_COUNT => lists:foldl(fun(Metric, Acc) -> Acc#{Metric => [#{<<"value">> => 2}]} end, #{}, Metrics),
         ?SIZE_ON_STORAGE(P1StorageId) => lists:foldl(fun(Metric, Acc) -> Acc#{Metric => [#{<<"value">> => 24}]} end, #{}, Metrics),

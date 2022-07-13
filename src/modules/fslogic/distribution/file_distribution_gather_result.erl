@@ -61,7 +61,7 @@ to_json(_, #file_distribution_gather_result{distribution = #dir_distribution_gat
                     <<"success">> => true,
                     <<"logicalSize">> => utils:undefined_to_null(LogicalDirSize),
                     <<"distributionPerStorage">> => maps:map(fun(_StorageId, PhysicalSize) ->
-                        utils:undefined_to_null(PhysicalSize)
+                        #{<<"physicalSize">> => utils:undefined_to_null(PhysicalSize)}
                     end, PhysicalDirSizePerStorage)
                 }
         end, DistributionPerProvider)
@@ -72,8 +72,12 @@ to_json(_, #file_distribution_gather_result{distribution = #symlink_distribution
 }}, _Guid) ->
     #{
         <<"type">> => atom_to_binary(?SYMLINK_TYPE),
-        <<"storages">> => StoragesPerProvider,
-        <<"size">> => 0
+        <<"distributionPerProvider">> => maps:map(fun(_ProviderId, StoragesList) ->
+            lists:foldl(fun(StorageId, Acc) ->
+                Acc#{StorageId => #{<<"physicalSize">> => 0}}
+            end, #{}, StoragesList)
+        end, StoragesPerProvider),
+        <<"logicalSize">> => 0
     };
 
 to_json(gs, #file_distribution_gather_result{distribution = #reg_distribution_gather_result{
@@ -97,7 +101,8 @@ to_json(gs, #file_distribution_gather_result{distribution = #reg_distribution_ga
                     <<"blocksPercentage">> => case LogicalSize of
                         0 -> 0;
                         _ -> TotalBlocksSize * 100.0 / LogicalSize
-                    end
+                    end,
+                    <<"blockCount">> => length(Blocks)
                 }}
             end, #{}, BlocksPerStorage),
             #{
@@ -162,7 +167,7 @@ build_error_response(Error, Guid, ProviderId) ->
     ErrorJson = errors:to_json(Error),
     #{
         <<"success">> => false,
-        <<"perStorage">> => maps:map(fun(_StorageId, _) -> ErrorJson end, StoragesMap)
+        <<"errorPerStorage">> => maps:map(fun(_StorageId, _) -> ErrorJson end, StoragesMap)
     }.
 
 %%--------------------------------------------------------------------
