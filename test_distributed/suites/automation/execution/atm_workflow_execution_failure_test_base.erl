@@ -471,22 +471,46 @@ job_failure_atm_workflow_execution_test_base(#fail_atm_workflow_execution_test_s
     filter_out_not_failed_items_in_t1_fun = FilterOutNotFailedItemsFun,
     build_t1_exp_error_log_content_fun = BuildT1ExpErrorLogContentFun
 }) ->
-    AtmLaneRunTestSpec = #atm_lane_run_execution_test_spec{
-        process_task_result_for_item = #atm_step_mock_spec{
-            after_step_exp_state_diff = fun(MockCallCtx) ->
-                job_failure_expect_task_items_processed(
-                    TestcaseId, FilterOutNotFailedItemsFun, MockCallCtx
-                )
-            end
-        },
-        handle_task_execution_ended = #atm_step_mock_spec{
-            after_step_exp_state_diff = fun(MockCallCtx) ->
-                job_failure_expect_task_execution_ended(
-                    TestcaseId, BuildT1ExpErrorLogContentFun, MockCallCtx
-                )
-            end
+    BuildAtmLaneRunTestSpecFun = fun({AtmLaneSelector, RunNum} = AtmLaneRunSelector, IsLastExpLaneRun) ->
+        #atm_lane_run_execution_test_spec{
+            selector = AtmLaneRunSelector,
+            process_task_result_for_item = #atm_step_mock_spec{
+                after_step_exp_state_diff = fun(MockCallCtx) ->
+                    job_failure_expect_task_items_processed(
+                        TestcaseId, FilterOutNotFailedItemsFun, MockCallCtx
+                    )
+                end
+            },
+            handle_task_execution_ended = #atm_step_mock_spec{
+                after_step_exp_state_diff = fun(MockCallCtx) ->
+                    job_failure_expect_task_execution_ended(
+                        TestcaseId, BuildT1ExpErrorLogContentFun, MockCallCtx
+                    )
+                end
+            },
+            handle_lane_execution_ended = #atm_step_mock_spec{
+                after_step_exp_state_diff = fun(AtmMockCallCtx = #atm_mock_call_ctx{
+                    workflow_execution_exp_state = ExpState0
+                }) ->
+                    % Assert all items from prev lane run exception store were processed
+                    check_iterated_items(TestcaseId, AtmLaneRunSelector, AtmMockCallCtx),
+                    check_exception_store_content(TestcaseId, AtmLaneRunSelector, AtmMockCallCtx),
+
+                    ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_failed(
+                        AtmLaneRunSelector, true, ExpState0
+                    ),
+                    {true, case IsLastExpLaneRun of
+                        true ->
+                            ExpState1;
+                        false ->
+                            atm_workflow_execution_exp_state_builder:expect_lane_run_automatic_retry_scheduled(
+                                {AtmLaneSelector, RunNum + 1}, ExpState1
+                            )
+                    end}
+                end
+            }
         }
-    },
+    end,
 
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         provider = ?PROVIDER_SELECTOR,
@@ -497,41 +521,9 @@ job_failure_atm_workflow_execution_test_base(#fail_atm_workflow_execution_test_s
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,
             lane_runs = [
-                AtmLaneRunTestSpec#atm_lane_run_execution_test_spec{
-                    selector = {1, 1},
-                    handle_lane_execution_ended = #atm_step_mock_spec{
-                        after_step_exp_state_diff = fun(AtmMockCallCtx = #atm_mock_call_ctx{
-                            workflow_execution_exp_state = ExpState0
-                        }) ->
-                            check_exception_store_content(TestcaseId, {1, 1}, AtmMockCallCtx),
-                            ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_failed({1, 1}, true, ExpState0),
-                            {true, atm_workflow_execution_exp_state_builder:expect_lane_run_automatic_retry_scheduled({1, 2}, ExpState1)}
-                        end
-                    }
-                },
-                AtmLaneRunTestSpec#atm_lane_run_execution_test_spec{
-                    selector = {1, 2},
-                    handle_lane_execution_ended = #atm_step_mock_spec{
-                        after_step_exp_state_diff = fun(AtmMockCallCtx = #atm_mock_call_ctx{
-                            workflow_execution_exp_state = ExpState0
-                        }) ->
-                            check_exception_store_content(TestcaseId, {1, 2}, AtmMockCallCtx),
-                            ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_failed({1, 2}, true, ExpState0),
-                            {true, atm_workflow_execution_exp_state_builder:expect_lane_run_automatic_retry_scheduled({1, 3}, ExpState1)}
-                        end
-                    }
-                },
-                AtmLaneRunTestSpec#atm_lane_run_execution_test_spec{
-                    selector = {1, 3},
-                    handle_lane_execution_ended = #atm_step_mock_spec{
-                        after_step_exp_state_diff = fun(AtmMockCallCtx = #atm_mock_call_ctx{
-                            workflow_execution_exp_state = ExpState
-                        }) ->
-                            check_exception_store_content(TestcaseId, {1, 3}, AtmMockCallCtx),
-                            {true, atm_workflow_execution_exp_state_builder:expect_lane_run_failed({1, 3}, true, ExpState)}
-                        end
-                    }
-                }
+                BuildAtmLaneRunTestSpecFun({1, 1}, false),
+                BuildAtmLaneRunTestSpecFun({1, 2}, false),
+                BuildAtmLaneRunTestSpecFun({1, 3}, true)
             ],
             handle_workflow_execution_ended = #atm_step_mock_spec{
                 after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
@@ -563,6 +555,8 @@ job_failure_expect_task_items_processed(TestcaseId, FilterOutNotFailedItemsFun, 
     ),
     {true, case TaskSelector of
         {AtmLaneRunSelector, _, ?ATM_TASK1_SCHEMA_ID} ->
+            record_items_processed(TestcaseId, AtmLaneRunSelector, ItemBatch),
+
             FailedItemCount = case FilterOutNotFailedItemsFun(ItemBatch) of
                 [] ->
                     % Batch can be processed further (by following parallel boxes)
@@ -634,33 +628,6 @@ get_audit_log_contents(AtmTaskExecutionId, AtmMockCallCtx) ->
         ?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID, AtmTaskExecutionId, AtmMockCallCtx
     ),
     lists:map(fun(#{<<"value">> := #{<<"content">> := LogContent}}) -> LogContent end, Logs).
-
-
-%% @private
--spec check_exception_store_content(
-    term(),
-    atm_lane_execution:lane_run_selector(),
-    atm_workflow_execution_test_runner:mock_call_ctx()
-) ->
-    ok | no_return().
-check_exception_store_content(TestcaseId, AtmLaneRunSelector, AtmMockCallCtx) ->
-    ?assertEqual(
-        lists:sort(get_exp_exception_store_content(TestcaseId, AtmLaneRunSelector)),
-        lists:sort(get_exception_store_content(AtmLaneRunSelector, AtmMockCallCtx))
-    ).
-
-
-%% @private
--spec get_exception_store_content(
-    atm_lane_execution:lane_run_selector(),
-    atm_workflow_execution_test_runner:mock_call_ctx()
-) ->
-    [automation:item()].
-get_exception_store_content(AtmLaneRunSelector, AtmMockCallCtx) ->
-    #{<<"items">> := Items, <<"isLast">> := true} = atm_workflow_execution_test_runner:browse_store(
-        exception_store, AtmLaneRunSelector, AtmMockCallCtx
-    ),
-    lists:map(fun(#{<<"value">> := Content}) -> Content end, Items).
 
 
 %% @private
@@ -737,6 +704,58 @@ job_failure_expect_t3_ended(TestcaseId, AtmTask3ExecutionId, ExpState) ->
 
 
 %% @private
+-spec check_iterated_items(
+    term(),
+    atm_lane_execution:lane_run_selector(),
+    atm_workflow_execution_test_runner:mock_call_ctx()
+) ->
+    ok | no_return().
+check_iterated_items(TestcaseId, {1, 1} = AtmLaneRunSelector, AtmMockCallCtx) ->
+    #{<<"items">> := Items, <<"isLast">> := true} = atm_workflow_execution_test_runner:browse_store(
+        ?ITERATED_STORE_SCHEMA_ID, undefined, AtmMockCallCtx
+    ),
+    SrcStoreContent = lists:sort(lists:map(fun(#{<<"value">> := Value}) -> Value end, Items)),
+
+    ?assertEqual(
+        SrcStoreContent,
+        lists:sort(get_all_processed_items(TestcaseId, AtmLaneRunSelector))
+    );
+
+check_iterated_items(TestcaseId, {AtmLaneSelector, RunNum} = AtmLaneRunSelector, AtmMockCallCtx) ->
+    ?assertEqual(
+        lists:sort(get_all_processed_items(TestcaseId, AtmLaneRunSelector)),
+        lists:sort(get_exception_store_content({AtmLaneSelector, RunNum - 1}, AtmMockCallCtx))
+    ).
+
+
+%% @private
+-spec check_exception_store_content(
+    term(),
+    atm_lane_execution:lane_run_selector(),
+    atm_workflow_execution_test_runner:mock_call_ctx()
+) ->
+    ok | no_return().
+check_exception_store_content(TestcaseId, AtmLaneRunSelector, AtmMockCallCtx) ->
+    ?assertEqual(
+        lists:sort(get_exp_exception_store_content(TestcaseId, AtmLaneRunSelector)),
+        lists:sort(get_exception_store_content(AtmLaneRunSelector, AtmMockCallCtx))
+    ).
+
+
+%% @private
+-spec get_exception_store_content(
+    atm_lane_execution:lane_run_selector(),
+    atm_workflow_execution_test_runner:mock_call_ctx()
+) ->
+    [automation:item()].
+get_exception_store_content(AtmLaneRunSelector, AtmMockCallCtx) ->
+    #{<<"items">> := Items, <<"isLast">> := true} = atm_workflow_execution_test_runner:browse_store(
+        exception_store, AtmLaneRunSelector, AtmMockCallCtx
+    ),
+    lists:map(fun(#{<<"value">> := Content}) -> Content end, Items).
+
+
+%% @private
 -spec record_failed_item_batch_for_t1(
     term(),
     atm_workflow_execution_exp_state_builder:task_selector(),
@@ -756,6 +775,22 @@ record_failed_item_batch_for_t1(TestcaseId, TaskSelector, FailedItemBatch) ->
     ok.
 get_all_failed_item_batches_for_t1(TestcaseId, TaskSelector) ->
     Key = {TestcaseId, TaskSelector, failed_item_batch},
+    node_cache:get(Key, []).
+
+
+%% @private
+-spec record_items_processed(term(), atm_lane_execution:lane_run_selector(), [automation:item()]) ->
+    ok.
+record_items_processed(TestcaseId, AtmLaneRunSelector, ItemsProcessed) ->
+    Key = {TestcaseId, AtmLaneRunSelector, items_processed},
+    node_cache:put(Key, ItemsProcessed ++ node_cache:get(Key, [])).
+
+
+%% @private
+-spec get_all_processed_items(term(), atm_lane_execution:lane_run_selector()) ->
+    [automation:id()].
+get_all_processed_items(TestcaseId, AtmLaneRunSelector) ->
+    Key = {TestcaseId, AtmLaneRunSelector, items_processed},
     node_cache:get(Key, []).
 
 
