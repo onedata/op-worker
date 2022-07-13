@@ -85,6 +85,7 @@
     map_results_to_task_time_series_store/1,
 
     fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error/1,
+    fail_atm_workflow_execution_due_to_incorrect_const_arg_type_error/1,
     fail_atm_workflow_execution_due_to_job_result_store_mapping_error/1,
     fail_atm_workflow_execution_due_to_job_missing_required_results_error/1,
     fail_atm_workflow_execution_due_to_incorrect_result_type_error/1,
@@ -160,6 +161,7 @@ groups() -> [
     ]},
     {failure_tests, [parallel], [
         fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error,
+        fail_atm_workflow_execution_due_to_incorrect_const_arg_type_error,
         fail_atm_workflow_execution_due_to_job_result_store_mapping_error,
         fail_atm_workflow_execution_due_to_job_missing_required_results_error,
         fail_atm_workflow_execution_due_to_incorrect_result_type_error,
@@ -386,6 +388,10 @@ map_results_to_task_time_series_store(_Config) ->
 
 
 fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error(_Config) ->
+    ?FAILURE_MAPPING_TEST().
+
+
+fail_atm_workflow_execution_due_to_incorrect_const_arg_type_error(_Config) ->
     ?FAILURE_MAPPING_TEST().
 
 
