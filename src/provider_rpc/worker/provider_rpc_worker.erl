@@ -53,7 +53,8 @@
 
 -spec exec(call()) -> response().
 exec(Call) ->
-    worker_proxy:call(?MODULE, Call).
+    {ok, Response} = worker_proxy:call(?MODULE, Call),
+    Response.
 
 
 %%%===================================================================
@@ -78,7 +79,7 @@ init(_Args) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(ping | healthcheck | call()) ->
-    pong | ok | response() | {error, term()}.
+    pong | ok | {ok, response()} | {error, term()}.
 handle(ping) ->
     pong;
 
@@ -92,12 +93,15 @@ handle(#provider_rpc_call{file_guid = FileGuid, request = Request}) ->
 
         case provider_rpc_handlers:execute(FileCtx, Request) of
             {ok, Result} ->
-                #provider_rpc_response{result = Result, status = ok};
+                {ok, #provider_rpc_response{result = Result, status = ok}};
             {error, _} = Error ->
-                #provider_rpc_response{result = Error, status = error}
+                {ok, #provider_rpc_response{result = Error, status = error}}
         end
     catch Type:Reason:Stacktrace ->
-        request_error_handler:handle(Type, Reason, Stacktrace, ?ROOT_SESS_ID, Request)
+        #provider_rpc_response{
+            result = request_error_handler:handle(Type, Reason, Stacktrace, ?ROOT_SESS_ID, Request),
+            status = error
+        }
     end;
 
 handle(Request) ->

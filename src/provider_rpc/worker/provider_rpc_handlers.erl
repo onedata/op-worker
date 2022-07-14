@@ -25,7 +25,7 @@
 
 
 -spec execute(file_ctx:ctx(), provider_rpc_worker:request()) -> 
-    {ok, provider_rpc_worker:result()} | {errors:error()}.
+    {ok, provider_rpc_worker:result()} | errors:error().
 execute(FileCtx, #provider_reg_distribution_get_request{}) ->
     provider_reg_distribution:get(FileCtx);
 

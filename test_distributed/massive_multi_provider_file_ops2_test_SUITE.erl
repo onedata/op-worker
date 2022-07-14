@@ -178,7 +178,10 @@ blocks_suiting_test(Config0) ->
     ExpectedDistribution = [[], [[0,5],[65,30]], [[5,5],[95,205]], [[10,10]], [[20,20]], [[40,25]]],
     GetDistFun = fun() ->
         DistBlocks = lists:map(fun(W) ->
-            opt_file_metadata:get_local_knowledge_of_remote_provider_blocks(Worker1, FileGuid, ?GET_DOMAIN_BIN(W))
+            case opt_file_metadata:get_local_knowledge_of_remote_provider_blocks(Worker1, FileGuid, ?GET_DOMAIN_BIN(W)) of
+                {ok, Blocks} -> Blocks;
+                {error, _} = Error  -> Error
+            end
         end, Workers),
         lists:sort(DistBlocks)
     end,

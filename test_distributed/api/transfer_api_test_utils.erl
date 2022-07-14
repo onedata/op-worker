@@ -284,7 +284,7 @@ sync_files_between_nodes(eviction, SrcNode, DstNode, Files) ->
     % @TODO VFS-VFS-9498 use await_distribution after replica_deletion uses fetched file location instead of dbsynced
     lists:foreach(fun(Guid) ->
         DestProviderId = opw_test_rpc:get_provider_id(DstNode),
-        ?assertMatch({ok, [0, ?BYTES_NUM]}, opt_file_metadata:get_local_knowledge_of_remote_provider_blocks(SrcNode, Guid, DestProviderId))
+        ?assertMatch({ok, [[0, ?BYTES_NUM]]}, opt_file_metadata:get_local_knowledge_of_remote_provider_blocks(SrcNode, Guid, DestProviderId), ?ATTEMPTS)
     end, utils:ensure_list(Files));
 
 sync_files_between_nodes(_TransferType, _SrcNode, DstNode, Files) ->

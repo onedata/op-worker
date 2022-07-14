@@ -6051,6 +6051,11 @@ should_not_sync_file_during_replication(Config) ->
             <<"totalBlocksSize">> => ?TEST_DATA_SIZE
         }
     ], FileGuid),
+    
+    % @TODO VFS-VFS-9498 not needed after file replication uses fetched file location instead of dbsynced
+    TestDataSize = ?TEST_DATA_SIZE,
+    ?assertMatch({ok, [[0, TestDataSize]]}, 
+        opt_file_metadata:get_local_knowledge_of_remote_provider_blocks(W1, FileGuid, ?GET_DOMAIN_BIN(W2)), ?ATTEMPTS),
 
     enable_initial_scan(Config, ?SPACE_ID),
     enable_continuous_scans(Config, ?SPACE_ID),

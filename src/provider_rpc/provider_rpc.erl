@@ -80,7 +80,7 @@ call(ProviderId, FileGuid, Request) ->
                         message_body = ProviderRpcCall
                     },
                     case communicator:communicate_with_provider(SessId, Message) of
-                        {ok, #server_message{message_body = MessageBody}} -> MessageBody;
+                        {ok, #server_message{message_body = MessageBody}} -> {ok, MessageBody};
                         {error, _} = CommunicatorError -> CommunicatorError
                     end;
                 error ->
@@ -88,9 +88,9 @@ call(ProviderId, FileGuid, Request) ->
             end
     end,
     case ReceivedRes of
-        #provider_rpc_response{result = ProviderResult, status = ok} ->
+        {ok, #provider_rpc_response{result = ProviderResult, status = ok}} ->
             {ok, ProviderResult};
-        #provider_rpc_response{result = Error, status = error} ->
+        {ok, #provider_rpc_response{result = Error, status = error}} ->
             Error;
         {error, _} = Error ->
             Error
