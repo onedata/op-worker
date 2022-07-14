@@ -132,8 +132,8 @@ to_json(rest, #file_distribution_gather_result{distribution = #reg_distribution_
                     {BlockList, TotalBlocksSize} = get_blocks_summary(Blocks),
 
                     Acc#{StorageId => #{
-                        <<"blocks">> => BlockList, 
-                        <<"totalBlocksSize">> => TotalBlocksSize
+                        <<"physicalSize">> => TotalBlocksSize,
+                        <<"blocks">> => BlockList
                     }}
                 end, #{}, BlocksPerStorage),
                 #{

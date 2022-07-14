@@ -79,7 +79,7 @@ init(_Args) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle(ping | healthcheck | call()) ->
-    pong | ok | {ok, response()} | {error, term()}.
+    pong | ok | {ok, response()}.
 handle(ping) ->
     pong;
 
@@ -98,10 +98,10 @@ handle(#provider_rpc_call{file_guid = FileGuid, request = Request}) ->
                 {ok, #provider_rpc_response{result = Error, status = error}}
         end
     catch Type:Reason:Stacktrace ->
-        #provider_rpc_response{
+        {ok, #provider_rpc_response{
             result = request_error_handler:handle(Type, Reason, Stacktrace, ?ROOT_SESS_ID, Request),
             status = error
-        }
+        }}
     end;
 
 handle(Request) ->
