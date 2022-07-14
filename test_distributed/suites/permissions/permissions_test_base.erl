@@ -1625,6 +1625,7 @@ get_transfer_encoding_test(Config) ->
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(opt_cdmi:get_transfer_encoding(W, SessId, FileKey))
         end,
+        returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end
@@ -1650,6 +1651,7 @@ set_transfer_encoding_test(Config) ->
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(opt_cdmi:set_transfer_encoding(W, SessId, FileKey, <<"base64">>))
         end,
+        returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end
@@ -1677,6 +1679,7 @@ get_cdmi_completion_status_test(Config) ->
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(opt_cdmi:get_cdmi_completion_status(W, SessId, FileKey))
         end,
+        returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end
@@ -1702,6 +1705,7 @@ set_cdmi_completion_status_test(Config) ->
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(opt_cdmi:set_cdmi_completion_status(W, SessId, FileKey, <<"Completed">>))
         end,
+        returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end
@@ -1729,6 +1733,7 @@ get_mimetype_test(Config) ->
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(opt_cdmi:get_mimetype(W, SessId, FileKey))
         end,
+        returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end
@@ -1754,6 +1759,7 @@ set_mimetype_test(Config) ->
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(opt_cdmi:set_mimetype(W, SessId, FileKey, <<"mimetype">>))
         end,
+        returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end
