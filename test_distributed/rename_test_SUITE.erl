@@ -493,9 +493,9 @@ attributes_retaining_test(Config) ->
     lists:foreach(
         fun({Guid, Ace}) ->
             ?assertEqual(ok, lfm_proxy:set_acl(W1, SessId1, ?FILE_REF(Guid), [Ace])),
-            ?assertEqual(ok, lfm_proxy:set_mimetype(W1, SessId1, ?FILE_REF(Guid), Mimetype)),
-            ?assertEqual(ok, lfm_proxy:set_transfer_encoding(W1, SessId1, ?FILE_REF(Guid), TransferEncoding)),
-            ?assertEqual(ok, lfm_proxy:set_cdmi_completion_status(W1, SessId1, ?FILE_REF(Guid), CompletionStatus)),
+            ?assertEqual(ok, opt_cdmi:set_mimetype(W1, SessId1, ?FILE_REF(Guid), Mimetype)),
+            ?assertEqual(ok, opt_cdmi:set_transfer_encoding(W1, SessId1, ?FILE_REF(Guid), TransferEncoding)),
+            ?assertEqual(ok, opt_cdmi:set_cdmi_completion_status(W1, SessId1, ?FILE_REF(Guid), CompletionStatus)),
             lists:foreach(
                 fun(Xattr) ->
                     ?assertEqual(ok, lfm_proxy:set_xattr(W1, SessId1, ?FILE_REF(Guid), Xattr))
@@ -518,9 +518,10 @@ attributes_retaining_test(Config) ->
     lists:foreach(
         fun({Path, Ace, Worker}) ->
             SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
-            ?assertEqual({ok, [Ace]}, lfm_proxy:get_acl(Worker, SessId, {path, Path})),
-            ?assertEqual({ok, Mimetype}, lfm_proxy:get_mimetype(Worker, SessId, {path, Path})),
-            ?assertEqual({ok, TransferEncoding}, lfm_proxy:get_transfer_encoding(Worker, SessId, {path, Path})),
+            {ok, Guid} = lfm_proxy:resolve_guid(Worker, SessId, Path),
+            ?assertEqual({ok, [Ace]}, lfm_proxy:get_acl(Worker, SessId, ?FILE_REF(Guid))),
+            ?assertEqual({ok, Mimetype}, opt_cdmi:get_mimetype(Worker, SessId, ?FILE_REF(Guid))),
+            ?assertEqual({ok, TransferEncoding}, opt_cdmi:get_transfer_encoding(Worker, SessId, ?FILE_REF(Guid))),
             lists:foreach(
                 fun(#xattr{name = XattrName} = Xattr) ->
                     ?assertEqual({ok, Xattr}, lfm_proxy:get_xattr(Worker, SessId, {path, Path}, XattrName))

@@ -44,6 +44,14 @@
     #cancel_atm_workflow_execution{} |
     #repeat_atm_workflow_execution{}.
 
+-type cdmi_operation() ::
+    #transfer_encoding_get_request{} |
+    #transfer_encoding_set_request{} |
+    #cdmi_completion_status_get_request{} |
+    #cdmi_completion_status_set_request{} |
+    #mimetype_get_request{} |
+    #mimetype_set_request{}.
+
 -type dataset_operation() ::
     #list_top_datasets{} |
     #list_children_datasets{} |
@@ -71,13 +79,15 @@
 -type operation() ::
     archive_operation() |
     atm_operation() |
+    cdmi_operation() |
     dataset_operation() |
     qos_operation() |
     share_operation() |
     transfer_operation().
 
 -export_type([
-    archive_operation/0, atm_operation/0, dataset_operation/0,
+    archive_operation/0, atm_operation/0,
+    cdmi_operation/0, dataset_operation/0,
     qos_operation/0, transfer_operation/0,
     operation/0
 ]).
