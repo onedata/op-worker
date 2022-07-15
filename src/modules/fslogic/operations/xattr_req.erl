@@ -84,26 +84,26 @@ get_xattr_internal(UserCtx, FileCtx, ?ACL_KEY, _Inherited) ->
 
 get_xattr_internal(UserCtx, FileCtx, ?MIMETYPE_KEY, _Inherited) ->
     case cdmi_metadata_req:get_mimetype(UserCtx, FileCtx) of
-        ?PROVIDER_OK_RESP(#mimetype{value = Mimetype}) ->
+        {ok, Mimetype} ->
             ?FUSE_OK_RESP(?XATTR(?MIMETYPE_KEY, Mimetype));
-        #provider_response{} = ErrorResponse ->
-            provider_to_fuse_response(ErrorResponse)
+        ?ERROR_POSIX(Errno) ->
+            #fuse_response{status = #status{code = Errno}}
     end;
 
 get_xattr_internal(UserCtx, FileCtx, ?TRANSFER_ENCODING_KEY, _Inherited) ->
     case cdmi_metadata_req:get_transfer_encoding(UserCtx, FileCtx) of
-        ?PROVIDER_OK_RESP(#transfer_encoding{value = Encoding}) ->
+        {ok, Encoding} ->
             ?FUSE_OK_RESP(?XATTR(?TRANSFER_ENCODING_KEY, Encoding));
-        #provider_response{} = ErrorResponse ->
-            provider_to_fuse_response(ErrorResponse)
+        ?ERROR_POSIX(Errno) ->
+            #fuse_response{status = #status{code = Errno}}
     end;
 
 get_xattr_internal(UserCtx, FileCtx, ?CDMI_COMPLETION_STATUS_KEY, _Inherited) ->
     case cdmi_metadata_req:get_cdmi_completion_status(UserCtx, FileCtx) of
-        ?PROVIDER_OK_RESP(#cdmi_completion_status{value = Completion}) ->
+        {ok, Completion} ->
             ?FUSE_OK_RESP(?XATTR(?CDMI_COMPLETION_STATUS_KEY, Completion));
-        #provider_response{} = ErrorResponse ->
-            provider_to_fuse_response(ErrorResponse)
+        ?ERROR_POSIX(Errno) ->
+            #fuse_response{status = #status{code = Errno}}
     end;
 
 get_xattr_internal(_UserCtx, _FileCtx, <<?CDMI_PREFIX_STR, _/binary>>, _) ->
@@ -154,17 +154,17 @@ set_xattr_internal(UserCtx, FileCtx, ?XATTR(?ACL_KEY, Acl), _Create, _Replace) -
     ));
 
 set_xattr_internal(UserCtx, FileCtx, ?XATTR(?MIMETYPE_KEY, Mimetype), Create, Replace) ->
-    provider_to_fuse_response(cdmi_metadata_req:set_mimetype(
+    set_cdmi_metadata_result_to_fuse_response(cdmi_metadata_req:set_mimetype(
         UserCtx, FileCtx, Mimetype, Create, Replace
     ));
 
 set_xattr_internal(UserCtx, FileCtx, ?XATTR(?TRANSFER_ENCODING_KEY, Encoding), Create, Replace) ->
-    provider_to_fuse_response(cdmi_metadata_req:set_transfer_encoding(
+    set_cdmi_metadata_result_to_fuse_response(cdmi_metadata_req:set_transfer_encoding(
         UserCtx, FileCtx, Encoding, Create, Replace
     ));
 
 set_xattr_internal(UserCtx, FileCtx, ?XATTR(?CDMI_COMPLETION_STATUS_KEY, Completion), Create, Replace) ->
-    provider_to_fuse_response(cdmi_metadata_req:set_cdmi_completion_status(
+    set_cdmi_metadata_result_to_fuse_response(cdmi_metadata_req:set_cdmi_completion_status(
         UserCtx, FileCtx, Completion, Create, Replace
     ));
 
@@ -223,6 +223,15 @@ remove_xattr_internal(UserCtx, FileCtx0, XattrName) ->
     fslogic_worker:fuse_response().
 provider_to_fuse_response(#provider_response{status = Status}) ->
     #fuse_response{status = Status}.
+
+
+%% @private
+-spec set_cdmi_metadata_result_to_fuse_response(ok | errors:error()) ->
+    fslogic_worker:fuse_response().
+set_cdmi_metadata_result_to_fuse_response(ok) ->
+    #fuse_response{status = #status{code = ?OK}};
+set_cdmi_metadata_result_to_fuse_response(?ERROR_POSIX(Errno)) ->
+    #fuse_response{status = #status{code = Errno}}.
 
 
 %% @private

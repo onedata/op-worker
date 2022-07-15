@@ -1614,7 +1614,7 @@ get_transfer_encoding_test(Config) ->
             name = <<"file1">>,
             perms = [?read_attributes],
             on_create = fun(FileOwnerSessId, Guid) ->
-                lfm_proxy:set_transfer_encoding(W, FileOwnerSessId, ?FILE_REF(Guid), <<"base64">>),
+                opt_cdmi:set_transfer_encoding(W, FileOwnerSessId, ?FILE_REF(Guid), <<"base64">>),
                 ?FILE_REF(Guid)
             end
         }],
@@ -1623,8 +1623,9 @@ get_transfer_encoding_test(Config) ->
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:get_transfer_encoding(W, SessId, FileKey))
+            extract_ok(opt_cdmi:get_transfer_encoding(W, SessId, FileKey))
         end,
+        returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end
@@ -1648,8 +1649,9 @@ set_transfer_encoding_test(Config) ->
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:set_transfer_encoding(W, SessId, FileKey, <<"base64">>))
+            extract_ok(opt_cdmi:set_transfer_encoding(W, SessId, FileKey, <<"base64">>))
         end,
+        returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end
@@ -1666,7 +1668,7 @@ get_cdmi_completion_status_test(Config) ->
             name = <<"file1">>,
             perms = [?read_attributes],
             on_create = fun(FileOwnerSessId, Guid) ->
-                lfm_proxy:set_cdmi_completion_status(W, FileOwnerSessId, ?FILE_REF(Guid), <<"Completed">>),
+                opt_cdmi:set_cdmi_completion_status(W, FileOwnerSessId, ?FILE_REF(Guid), <<"Completed">>),
                 ?FILE_REF(Guid)
             end
         }],
@@ -1675,8 +1677,9 @@ get_cdmi_completion_status_test(Config) ->
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:get_cdmi_completion_status(W, SessId, FileKey))
+            extract_ok(opt_cdmi:get_cdmi_completion_status(W, SessId, FileKey))
         end,
+        returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end
@@ -1700,8 +1703,9 @@ set_cdmi_completion_status_test(Config) ->
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:set_cdmi_completion_status(W, SessId, FileKey, <<"Completed">>))
+            extract_ok(opt_cdmi:set_cdmi_completion_status(W, SessId, FileKey, <<"Completed">>))
         end,
+        returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end
@@ -1718,7 +1722,7 @@ get_mimetype_test(Config) ->
             name = <<"file1">>,
             perms = [?read_attributes],
             on_create = fun(FileOwnerSessId, Guid) ->
-                lfm_proxy:set_mimetype(W, FileOwnerSessId, ?FILE_REF(Guid), <<"mimetype">>),
+                opt_cdmi:set_mimetype(W, FileOwnerSessId, ?FILE_REF(Guid), <<"mimetype">>),
                 ?FILE_REF(Guid)
             end
         }],
@@ -1727,8 +1731,9 @@ get_mimetype_test(Config) ->
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:get_mimetype(W, SessId, FileKey))
+            extract_ok(opt_cdmi:get_mimetype(W, SessId, FileKey))
         end,
+        returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end
@@ -1752,8 +1757,9 @@ set_mimetype_test(Config) ->
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:set_mimetype(W, SessId, FileKey, <<"mimetype">>))
+            extract_ok(opt_cdmi:set_mimetype(W, SessId, FileKey, <<"mimetype">>))
         end,
+        returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end

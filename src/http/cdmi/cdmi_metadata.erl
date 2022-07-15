@@ -41,6 +41,14 @@
     <<"cdmi_mtime">>, <<"cdmi_owner">>, ?ACL_XATTR_NAME
 ]).
 
+-define(GET_METADATA(__CALL, __DEFAULT_VALUE),
+    try
+        __CALL
+    catch throw:?ERROR_POSIX(?ENOATTR) ->
+        __DEFAULT_VALUE
+    end
+).
+
 
 %%%===================================================================
 %%% API
@@ -163,14 +171,10 @@ prepare_metadata(SessionId, FileRef, Prefix, Attrs) ->
 %%--------------------------------------------------------------------
 -spec get_mimetype(session:id(), lfm:file_ref()) -> binary().
 get_mimetype(SessionId, FileRef) ->
-    case lfm:get_mimetype(SessionId, FileRef) of
-        {ok, Value} ->
-            Value;
-        {error, ?ENOATTR} ->
-            ?MIMETYPE_DEFAULT_VALUE;
-        {error, Errno} ->
-            throw(?ERROR_POSIX(Errno))
-    end.
+    ?GET_METADATA(
+        mi_cdmi:get_mimetype(SessionId, FileRef),
+        ?MIMETYPE_DEFAULT_VALUE
+    ).
 
 
 %%--------------------------------------------------------------------
@@ -181,14 +185,10 @@ get_mimetype(SessionId, FileRef) ->
 %%--------------------------------------------------------------------
 -spec get_encoding(session:id(), lfm:file_ref()) -> binary().
 get_encoding(SessionId, FileRef) ->
-    case lfm:get_transfer_encoding(SessionId, FileRef) of
-        {ok, Value} ->
-            Value;
-        {error, ?ENOATTR} ->
-            ?ENCODING_DEFAULT_VALUE;
-        {error, Errno} ->
-            throw(?ERROR_POSIX(Errno))
-    end.
+    ?GET_METADATA(
+        mi_cdmi:get_transfer_encoding(SessionId, FileRef),
+        ?ENCODING_DEFAULT_VALUE
+    ).
 
 
 %%--------------------------------------------------------------------
@@ -200,14 +200,10 @@ get_encoding(SessionId, FileRef) ->
 %%--------------------------------------------------------------------
 -spec get_cdmi_completion_status(session:id(), lfm:file_ref()) -> binary().
 get_cdmi_completion_status(SessionId, FileRef) ->
-    case lfm:get_cdmi_completion_status(SessionId, FileRef) of
-        {ok, Value} ->
-            Value;
-        {error, ?ENOATTR} ->
-            ?COMPLETION_STATUS_DEFAULT_VALUE;
-        {error, Errno} ->
-            throw(?ERROR_POSIX(Errno))
-    end.
+    ?GET_METADATA(
+        mi_cdmi:get_cdmi_completion_status(SessionId, FileRef),
+        ?COMPLETION_STATUS_DEFAULT_VALUE
+    ).
 
 
 %%--------------------------------------------------------------------
@@ -218,7 +214,7 @@ get_cdmi_completion_status(SessionId, FileRef) ->
 update_mimetype(_SessionId, _FileRef, undefined) ->
     ok;
 update_mimetype(SessionId, FileRef, Mimetype) ->
-    ?lfm_check(lfm:set_mimetype(SessionId, FileRef, Mimetype)).
+    mi_cdmi:set_mimetype(SessionId, FileRef, Mimetype).
 
 
 %%--------------------------------------------------------------------
@@ -229,7 +225,7 @@ update_mimetype(SessionId, FileRef, Mimetype) ->
 update_encoding(_SessionId, _FileRef, undefined) ->
     ok;
 update_encoding(SessionId, FileRef, Encoding) ->
-    ?lfm_check(lfm:set_transfer_encoding(SessionId, FileRef, Encoding)).
+    mi_cdmi:set_transfer_encoding(SessionId, FileRef, Encoding).
 
 
 %%--------------------------------------------------------------------
@@ -244,7 +240,7 @@ update_cdmi_completion_status(SessionId, FileRef, CompletionStatus) when
     CompletionStatus =:= <<"Processing">>;
     CompletionStatus =:= <<"Error">>
 ->
-    ?lfm_check(lfm:set_cdmi_completion_status(SessionId, FileRef, CompletionStatus)).
+    mi_cdmi:set_cdmi_completion_status(SessionId, FileRef, CompletionStatus).
 
 
 %%--------------------------------------------------------------------

@@ -662,18 +662,6 @@ handle_provider_request(UserCtx, #set_acl{acl = #acl{value = Acl}}, FileCtx) ->
     acl_req:set_acl(UserCtx, FileCtx, Acl);
 handle_provider_request(UserCtx, #remove_acl{}, FileCtx) ->
     acl_req:remove_acl(UserCtx, FileCtx);
-handle_provider_request(UserCtx, #get_transfer_encoding{}, FileCtx) ->
-    cdmi_metadata_req:get_transfer_encoding(UserCtx, FileCtx);
-handle_provider_request(UserCtx, #set_transfer_encoding{value = Value}, FileCtx) ->
-    cdmi_metadata_req:set_transfer_encoding(UserCtx, FileCtx, Value, false, false);
-handle_provider_request(UserCtx, #get_cdmi_completion_status{}, FileCtx) ->
-    cdmi_metadata_req:get_cdmi_completion_status(UserCtx, FileCtx);
-handle_provider_request(UserCtx, #set_cdmi_completion_status{value = Value}, FileCtx) ->
-    cdmi_metadata_req:set_cdmi_completion_status(UserCtx, FileCtx, Value, false, false);
-handle_provider_request(UserCtx, #get_mimetype{}, FileCtx) ->
-    cdmi_metadata_req:get_mimetype(UserCtx, FileCtx);
-handle_provider_request(UserCtx, #set_mimetype{value = Value}, FileCtx) ->
-    cdmi_metadata_req:set_mimetype(UserCtx, FileCtx, Value, false, false);
 handle_provider_request(UserCtx, #get_metadata{
     type = Type,
     query = Query,
