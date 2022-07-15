@@ -51,7 +51,7 @@ exec(?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_3, #{<<"argsBatch">> := ArgsBatc
     end, ArgsBatch)};
 
 exec(?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_4, _) ->
-    <<"Illegal instruction: kor damp -.-">>.
+    <<"signal: illegal instruction (core dumped)\n">>.
 
 
 %%%===================================================================
