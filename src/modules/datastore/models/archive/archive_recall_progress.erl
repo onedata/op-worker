@@ -184,7 +184,7 @@ supported_metrics() -> #{
 
 %% @private
 -spec get_counters_current_value(id()) ->
-    {ok, #{time_series_collection:time_series_name() => non_neg_integer()}} | {error, term()}.
+    {ok, #{time_series:name() => non_neg_integer()}} | {error, term()}.
 get_counters_current_value(Id) ->
     case datastore_time_series_collection:get_slice(
         ?CTX, ?TSC_ID(Id), #{?ALL_TIME_SERIES => [?TOTAL_METRIC]}, #{window_limit => 1}

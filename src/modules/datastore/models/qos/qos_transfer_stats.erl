@@ -151,7 +151,7 @@ supported_metrics() -> #{
 
 
 %% @private
--spec config_with_time_series([time_series_collection:time_series_name()]) -> time_series_collection:config().
+-spec config_with_time_series([time_series:name()]) -> time_series_collection:config().
 config_with_time_series(TimeSeriesNames) ->
     maps_utils:generate_from_list(fun(TimeSeriesName) ->
         {TimeSeriesName, supported_metrics()}
