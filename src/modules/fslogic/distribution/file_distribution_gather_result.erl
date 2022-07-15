@@ -58,10 +58,11 @@ to_json(_, #file_distribution_gather_result{distribution = #dir_distribution_gat
                 physical_size_per_storage = PhysicalDirSizePerStorage
             }) ->
                 #{
-                    <<"success">> => true,
                     <<"logicalSize">> => utils:undefined_to_null(LogicalDirSize),
-                    <<"distributionPerStorage">> => maps:map(fun(_StorageId, PhysicalSize) ->
-                        #{<<"physicalSize">> => utils:undefined_to_null(PhysicalSize)}
+                    <<"distributionPerStorage">> => maps:map(fun(_StorageId, PhysicalSize) -> #{
+                        <<"success">> => true,
+                        <<"physicalSize">> => utils:undefined_to_null(PhysicalSize)
+                    }
                     end, PhysicalDirSizePerStorage)
                 }
         end, DistributionPerProvider)
@@ -96,6 +97,7 @@ to_json(gs, #file_distribution_gather_result{distribution = #reg_distribution_ga
                 end, #{}, interpolate_chunks(Blocks, LogicalSize)),
 
                 Acc#{StorageId => #{
+                    <<"success">> => true,
                     <<"physicalSize">> => TotalBlocksSize,
                     <<"chunksBarData">> => Data,
                     <<"blocksPercentage">> => case LogicalSize of
@@ -106,7 +108,6 @@ to_json(gs, #file_distribution_gather_result{distribution = #reg_distribution_ga
                 }}
             end, #{}, BlocksPerStorage),
             #{
-                <<"success">> => true,
                 <<"logicalSize">> => LogicalSize,
                 <<"distributionPerStorage">> => PerStorage
             }
@@ -132,12 +133,12 @@ to_json(rest, #file_distribution_gather_result{distribution = #reg_distribution_
                     {BlockList, TotalBlocksSize} = get_blocks_summary(Blocks),
 
                     Acc#{StorageId => #{
+                        <<"success">> => true,
                         <<"physicalSize">> => TotalBlocksSize,
                         <<"blocks">> => BlockList
                     }}
                 end, #{}, BlocksPerStorage),
                 #{
-                    <<"success">> => true,
                     <<"logicalSize">> => LogicalSize,
                     <<"distributionPerStorage">> => PerStorage
                 }
@@ -160,14 +161,17 @@ get_blocks_summary(FileBlocks) ->
 
 
 -spec build_error_response({error, term()}, file_id:file_guid(), oneprovider:id()) ->
-    #{storage:id() => errors:as_json()}.
+    json_utils:json_term().
 build_error_response(Error, Guid, ProviderId) ->
     SpaceId = file_id:guid_to_space_id(Guid),
     {ok, StoragesMap} = space_logic:get_provider_storages(SpaceId, ProviderId),
     ErrorJson = errors:to_json(Error),
     #{
-        <<"success">> => false,
-        <<"errorPerStorage">> => maps:map(fun(_StorageId, _) -> ErrorJson end, StoragesMap)
+        <<"distributionPerStorage">> => maps:map(fun(_StorageId, _) -> #{
+            <<"success">> => false,
+            <<"error">> => ErrorJson 
+        }
+        end, StoragesMap)
     }.
 
 %%--------------------------------------------------------------------
