@@ -3094,6 +3094,7 @@ zz_Request_next_build:
               bamboo.buildNumber: '2'      
   - script: *always-successful
   requirements: *requirements
+  artifact-subscriptions: []
 Coverage report:
   key: CR
   other: *common-opts
