@@ -982,6 +982,12 @@ assert_file_visible(Node, SessId, FileGuid, CounterRef, Attempts) ->
 assert_file_distribution(Expected, Node, SessId, FileGuid, CounterRef, Attempts) ->
     Expected2 = lists:sort(Expected),
     execute_in_worker(fun() ->
+        lists_utils:pforeach(fun
+            (#{<<"blocks">> := []}) -> 
+                ok;
+            (#{<<"providerId">> := ProviderId, <<"blocks">> := ExpectedBlocks}) ->
+                ?assertMatch({ok, ExpectedBlocks}, opt_file_metadata:get_local_knowledge_of_remote_provider_blocks(Node, FileGuid, ProviderId), Attempts)
+        end, Expected),
         ?assertMatch(Expected2, begin
             {ok, Distribution} = opt_file_metadata:get_distribution_deprecated(Node, SessId, ?FILE_REF(FileGuid)),
             lists:sort(Distribution)

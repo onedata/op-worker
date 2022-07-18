@@ -164,7 +164,7 @@ transfers_should_be_ordered_by_timestamps(Config) ->
             DomainP1 => #{
                 <<"distributionPerStorage">> => #{
                     StorageP1 =>
-                        #{<<"blocks">> => [[0, S]], <<"totalBlocksSize">> => S}
+                        #{<<"blocks">> => [[0, S]], <<"physicalSize">> => S}
                 },
                 <<"logicalSize">> => S, 
                 <<"success">> => true
@@ -172,7 +172,7 @@ transfers_should_be_ordered_by_timestamps(Config) ->
             DomainP2 => #{
                 <<"distributionPerStorage">> => #{
                     StorageP2 =>
-                        #{<<"blocks">> => [],  <<"totalBlocksSize">> => 0}
+                        #{<<"blocks">> => [],  <<"physicalSize">> => 0}
                 },
                 <<"logicalSize">> => S,
                 <<"success">> => true
