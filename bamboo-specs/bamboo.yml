@@ -327,6 +327,10 @@ Build:
       scripts:
       - tar -czf op_worker.tar.gz op_worker/
       description: Package
+      conditions: 
+      - variable:
+          matches:
+            bamboo.buildNumber: '.{1,}'
   - script:
       <<: *run-script
       scripts:
