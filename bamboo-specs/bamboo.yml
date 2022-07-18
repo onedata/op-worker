@@ -235,7 +235,11 @@ stages:
     - workflow_scheduling
     - workflow_scheduling_cancellation_and_restart
     - xrootd_helper
-    - zz_Request_next_build
+- Request-next-build:
+    manual: false
+    final: true
+    jobs:
+    - zz_Request_next_build    
 - Coverage report:
     manual: false
     final: false
