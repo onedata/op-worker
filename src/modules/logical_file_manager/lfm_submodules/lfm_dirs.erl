@@ -14,6 +14,7 @@
 -include("global_definitions.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 
 %% API
 -export([
@@ -170,11 +171,11 @@ get_children_count(SessId, FileKey) ->
 get_files_recursively(SessId, FileKey, Options) ->
     FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, resolve_symlink),
     
-    remote_utils:call_fslogic(SessId, file_request, FileGuid,
+    remote_utils:call_fslogic(SessId, provider_request, FileGuid,
         #get_recursive_file_list{
             listing_options = Options
         },
-        fun(#recursive_file_list{
+        fun(#recursive_listing_result{
             entries = Result,
             inaccessible_paths = InaccessiblePaths,
             pagination_token = PaginationToken

@@ -26,7 +26,8 @@
     get_children_ctxs/3,
     get_children/3,
     get_children_attrs/5,
-    get_children_details/3
+    get_children_details/3,
+    list_recursively/3
 ]).
 
 -type map_child_fun() :: fun((user_ctx:ctx(), file_ctx:ctx(), attr_req:compute_file_attr_opts()) ->
@@ -149,6 +150,14 @@ get_children_details(UserCtx, FileCtx0, ListOpts) ->
     ),
     get_children_details_insecure(UserCtx, FileCtx2, ListOpts, CanonicalChildrenWhiteList).
 
+
+-spec list_recursively(user_ctx:ctx(), file_ctx:ctx(), recursive_file_listing:options()) ->
+    fslogic_worker:provider_response().
+list_recursively(UserCtx, FileCtx, ListOpts) ->
+    #provider_response{status = #status{code = ?OK},
+        provider_response = recursive_file_listing:list(UserCtx, FileCtx, ListOpts)
+    }.
+    
 
 %%%===================================================================
 %%% Internal functions
