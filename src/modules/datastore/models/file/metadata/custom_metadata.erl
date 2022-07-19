@@ -41,6 +41,7 @@
 -type transfer_encoding() :: binary(). % <<"utf-8">> | <<"base64">>
 -type cdmi_completion_status() :: binary(). % <<"Completed">> | <<"Processing">> | <<"Error">>
 -type mimetype() :: binary().
+-type cdmi_metadata() :: transfer_encoding() | cdmi_completion_status() | mimetype().
 
 -type name() :: binary().
 -type value() :: binary() | rdf() | json_utils:json_term().
@@ -51,7 +52,7 @@
 
 -export_type([
     type/0, metadata/0, rdf/0, query/0,
-    transfer_encoding/0, cdmi_completion_status/0, mimetype/0,
+    transfer_encoding/0, cdmi_completion_status/0, mimetype/0, cdmi_metadata/0,
     name/0, value/0,
     record/0, doc/0, diff/0
 ]).
