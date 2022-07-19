@@ -469,7 +469,8 @@ build_tasks_tree(Jobs) ->
 
 -spec has_item(job_identifier() | workflow_execution_state:index(), jobs_set() | items_set()) -> boolean().
 has_item(JobIdentifier = #job_identifier{item_index = ItemIndex}, Tree) ->
-    case gb_sets:next(gb_sets:iterator_from(JobIdentifier#job_identifier{task_index = 1}, Tree)) of
+    IdentifierToStart = JobIdentifier#job_identifier{task_index = 1, processing_type = ?ASYNC_RESULT_PROCESSING},
+    case gb_sets:next(gb_sets:iterator_from(IdentifierToStart, Tree)) of
         {#job_identifier{item_index = ItemIndex}, _NextIterator} -> true;
         _ -> false
     end;
