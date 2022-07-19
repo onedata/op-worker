@@ -19,6 +19,8 @@
 %% CRUD API
 -export([create/1, create/2, delete/1]).
 -export([append/2, browse/2]).
+%% Iterator API
+-export([iterator_start_index/0, iterator_get_next_batch/3]).
 
 
 -type id() :: json_infinite_log_model:id().
@@ -85,14 +87,7 @@ append(Id, #audit_log_append_request{
 -spec browse(id(), audit_log_browse_opts:opts()) ->
     {ok, browse_result()} | errors:error().
 browse(Id, BrowseOpts) ->
-    ListingPostprocessor = fun({IndexBin, {Timestamp, Entry}}) ->
-        Entry#{
-            <<"index">> => IndexBin,
-            <<"timestamp">> => Timestamp
-        }
-    end,
-
-    case json_infinite_log_model:list_and_postprocess(Id, BrowseOpts, ListingPostprocessor) of
+    case json_infinite_log_model:list_and_postprocess(Id, BrowseOpts, gen_listing_postprocessor()) of
         {ok, {ProgressMarker, EntrySeries}} ->
             {ok, #{
                 <<"logEntries">> => EntrySeries,
@@ -100,4 +95,45 @@ browse(Id, BrowseOpts) ->
             }};
         {error, not_found} ->
             ?ERROR_NOT_FOUND
+    end.
+
+
+%%%===================================================================
+%%% Iterator API
+%%%===================================================================
+
+
+-spec iterator_start_index() -> audit_log_browse_opts:index().
+iterator_start_index() ->
+    json_infinite_log_model:default_start_index(exclusive).
+
+
+-spec iterator_get_next_batch(pos_integer(), id(), audit_log_browse_opts:index()) ->
+    {ok, [entry()], audit_log_browse_opts:index()} | stop.
+iterator_get_next_batch(BatchSize, Id, LastListedIndex) ->
+    {ok, {ProgressMarker, Entries}} = json_infinite_log_model:list_and_postprocess(
+        Id,
+        #{start_from => {index_exclusive, LastListedIndex}, limit => BatchSize},
+        gen_listing_postprocessor()
+    ),
+
+    case {Entries, ProgressMarker} of
+        {[], done} -> stop;
+        _ -> {ok, Entries, element(1, lists:last(Entries))}
+    end.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec gen_listing_postprocessor() -> json_infinite_log_model:listing_postprocessor(entry()).
+gen_listing_postprocessor() ->
+    fun({IndexBin, {Timestamp, Entry}}) ->
+        Entry#{
+            <<"index">> => IndexBin,
+            <<"timestamp">> => Timestamp
+        }
     end.

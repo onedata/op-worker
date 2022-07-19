@@ -194,8 +194,6 @@ example_configs() ->
         )}
     end, [
         atm_array_type,
-        atm_dataset_type,
-        atm_file_type,
         atm_integer_type,
         atm_object_type,
         atm_range_type,
@@ -285,10 +283,10 @@ build_content_update_options(UpdateFun) ->
     [atm_value:expanded()].
 get_content(AtmWorkflowExecutionAuth, AtmStoreId) ->
     BrowseOpts = build_content_browse_options(#{<<"limit">> => 1000}),
-    #atm_audit_log_store_content_browse_result{
-        logs = Logs,
-        is_last = true
-    } = ?rpc(?PROVIDER_SELECTOR, atm_store_api:browse_content(
+    #atm_audit_log_store_content_browse_result{result = #{
+        <<"logEntries">> => Logs,
+        <<"isLast">> => true
+    }} = ?rpc(?PROVIDER_SELECTOR, atm_store_api:browse_content(
         AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId
     )),
     lists:map(fun({_, {ok, Item}}) -> Item end, Logs).
@@ -304,10 +302,13 @@ build_content_browse_options(OptsJson) ->
 
 
 %% @private
--spec build_content_browse_result([atm_store_container_infinite_log_backend:entry()], boolean()) ->
+-spec build_content_browse_result([audit_log:entry()], boolean()) ->
     atm_audit_log_store_content_browse_result:record().
 build_content_browse_result(Entries, IsLast) ->
-    #atm_audit_log_store_content_browse_result{logs = Entries, is_last = IsLast}.
+    #atm_audit_log_store_content_browse_result{result = #{
+        <<"logEntries">> => Entries,
+        <<"isLast">> => IsLast
+    }}.
 
 
 %===================================================================

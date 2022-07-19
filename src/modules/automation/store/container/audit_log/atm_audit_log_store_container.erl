@@ -99,11 +99,8 @@ get_iterated_item_data_spec(_) ->
 
 
 -spec acquire_iterator(record()) -> atm_audit_log_store_container_iterator:record().
-acquire_iterator(#atm_audit_log_store_container{
-    config = #atm_audit_log_store_config{log_content_data_spec = LogContentDataSpec},
-    backend_id = BackendId
-}) ->
-    atm_audit_log_store_container_iterator:build(LogContentDataSpec, BackendId).
+acquire_iterator(#atm_audit_log_store_container{backend_id = BackendId}) ->
+    atm_audit_log_store_container_iterator:build(BackendId).
 
 
 -spec browse_content(record(), content_browse_req()) ->
