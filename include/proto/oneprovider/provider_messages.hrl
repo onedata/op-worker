@@ -40,27 +40,6 @@
     flag :: fslogic_worker:open_flag()
 }).
 
--record(get_transfer_encoding, {
-}).
-
--record(set_transfer_encoding, {
-    value :: binary()
-}).
-
--record(get_cdmi_completion_status, {
-}).
-
--record(set_cdmi_completion_status, {
-    value :: binary()
-}).
-
--record(get_mimetype, {
-}).
-
--record(set_mimetype, {
-    value :: binary()
-}).
-
 -record(get_file_path, {
 }).
 
@@ -82,22 +61,9 @@
 -type provider_request_type() ::
     #get_parent{} |
     #get_acl{} | #set_acl{} | #remove_acl{} | #check_perms{} |
-    #get_transfer_encoding{} | #set_transfer_encoding{} |
-    #get_cdmi_completion_status{} | #set_cdmi_completion_status{} |
-    #get_mimetype{} | #set_mimetype{} | #get_file_path{} |
+    #get_file_path{} |
     #get_metadata{} | #remove_metadata{} | #set_metadata{}.
 
--record(transfer_encoding, {
-    value :: binary()
-}).
-
--record(cdmi_completion_status, {
-    value :: binary()
-}).
-
--record(mimetype, {
-    value :: binary()
-}).
 
 -record(file_path, {
     value :: binary()
@@ -148,8 +114,7 @@
 }).
 
 -type provider_response_type() ::
-    #transfer_encoding{} | #cdmi_completion_status{} | #mimetype{} | #acl{} |
-    #dir{} | #file_path{}| #metadata{} | #dataset_info{} | #file_eff_dataset_summary{} | 
+    #acl{} | #dir{} | #file_path{}| #metadata{} | #dataset_info{} | #file_eff_dataset_summary{} | 
     #archive_info{} | undefined.
 
 -record(provider_request, {

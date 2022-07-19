@@ -960,18 +960,6 @@ translate_from_protobuf(#'GetAcl'{}) ->
     #get_acl{};
 translate_from_protobuf(#'SetAcl'{acl = Acl}) ->
     #set_acl{acl = translate_from_protobuf(Acl)};
-translate_from_protobuf(#'GetTransferEncoding'{}) ->
-    #get_transfer_encoding{};
-translate_from_protobuf(#'SetTransferEncoding'{value = Value}) ->
-    #set_transfer_encoding{value = Value};
-translate_from_protobuf(#'GetCdmiCompletionStatus'{}) ->
-    #get_cdmi_completion_status{};
-translate_from_protobuf(#'SetCdmiCompletionStatus'{value = Value}) ->
-    #set_cdmi_completion_status{value = Value};
-translate_from_protobuf(#'GetMimetype'{}) ->
-    #get_mimetype{};
-translate_from_protobuf(#'SetMimetype'{value = Value}) ->
-    #set_mimetype{value = Value};
 translate_from_protobuf(#'GetFilePath'{}) ->
     #get_file_path{};
 translate_from_protobuf(#'FSync'{
@@ -1026,12 +1014,6 @@ translate_from_protobuf(#'Xattr'{
     };
 translate_from_protobuf(#'XattrList'{names = Names}) ->
     #xattr_list{names = Names};
-translate_from_protobuf(#'TransferEncoding'{value = Value}) ->
-    #transfer_encoding{value = Value};
-translate_from_protobuf(#'CdmiCompletionStatus'{value = Value}) ->
-    #cdmi_completion_status{value = Value};
-translate_from_protobuf(#'Mimetype'{value = Value}) ->
-    #mimetype{value = Value};
 translate_from_protobuf(#'Acl'{value = Value}) ->
     #acl{value = acl:from_json(json_utils:decode(Value), cdmi)};
 translate_from_protobuf(#'FilePath'{value = Value}) ->
@@ -2048,18 +2030,6 @@ translate_to_protobuf(#get_acl{}) ->
 translate_to_protobuf(#set_acl{acl = Acl}) ->
     {_, PAcl} = translate_to_protobuf(Acl),
     {set_acl, #'SetAcl'{acl = PAcl}};
-translate_to_protobuf(#get_transfer_encoding{}) ->
-    {get_transfer_encoding, #'GetTransferEncoding'{}};
-translate_to_protobuf(#set_transfer_encoding{value = Value}) ->
-    {set_transfer_encoding, #'SetTransferEncoding'{value = Value}};
-translate_to_protobuf(#get_cdmi_completion_status{}) ->
-    {get_cdmi_completion_status, #'GetCdmiCompletionStatus'{}};
-translate_to_protobuf(#set_cdmi_completion_status{value = Value}) ->
-    {set_cdmi_completion_status, #'SetCdmiCompletionStatus'{value = Value}};
-translate_to_protobuf(#get_mimetype{}) ->
-    {get_mimetype, #'GetMimetype'{}};
-translate_to_protobuf(#set_mimetype{value = Value}) ->
-    {set_mimetype, #'SetMimetype'{value = Value}};
 translate_to_protobuf(#get_file_path{}) ->
     {get_file_path, #'GetFilePath'{}};
 translate_to_protobuf(#fsync{
@@ -2114,12 +2084,6 @@ translate_to_protobuf(#xattr{
     }};
 translate_to_protobuf(#xattr_list{names = Names}) ->
     {xattr_list, #'XattrList'{names = Names}};
-translate_to_protobuf(#transfer_encoding{value = Value}) ->
-    {transfer_encoding, #'TransferEncoding'{value = Value}};
-translate_to_protobuf(#cdmi_completion_status{value = Value}) ->
-    {cdmi_completion_status, #'CdmiCompletionStatus'{value = Value}};
-translate_to_protobuf(#mimetype{value = Value}) ->
-    {mimetype, #'Mimetype'{value = Value}};
 translate_to_protobuf(#acl{value = Value}) ->
     {acl, #'Acl'{
         value = json_utils:encode(acl:to_json(Value, cdmi))}

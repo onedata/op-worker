@@ -61,10 +61,6 @@
 
     get_acl/3, set_acl/4, remove_acl/3,
 
-    get_transfer_encoding/3, set_transfer_encoding/4,
-    get_cdmi_completion_status/3, set_cdmi_completion_status/4,
-    get_mimetype/3, set_mimetype/4,
-
     has_custom_metadata/3,
     get_metadata/6, set_metadata/6, remove_metadata/4
 ]).
@@ -648,48 +644,6 @@ set_acl(Worker, SessId, FileKey, EntityList) ->
     ok | lfm:error_reply().
 remove_acl(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:remove_acl(SessId, uuid_to_file_ref(Worker, FileKey))).
-
-
-%%%===================================================================
-%%% CDMI related operations
-%%%===================================================================
-
-
--spec get_transfer_encoding(node(), session:id(), lfm:file_key() | file_meta:uuid()) ->
-    {ok, custom_metadata:transfer_encoding()} | lfm:error_reply().
-get_transfer_encoding(Worker, SessId, FileKey) ->
-    ?EXEC(Worker, lfm:get_transfer_encoding(SessId, uuid_to_file_ref(Worker, FileKey))).
-
-
--spec set_transfer_encoding(node(), session:id(), lfm:file_key() | file_meta:uuid(), custom_metadata:transfer_encoding()) ->
-    ok | lfm:error_reply().
-set_transfer_encoding(Worker, SessId, FileKey, Encoding) ->
-    ?EXEC(Worker, lfm:set_transfer_encoding(SessId, uuid_to_file_ref(Worker, FileKey), Encoding)).
-
-
--spec get_cdmi_completion_status(node(), session:id(), lfm:file_key() | file_meta:uuid()) ->
-    {ok, custom_metadata:cdmi_completion_status()} | lfm:error_reply().
-get_cdmi_completion_status(Worker, SessId, FileKey) ->
-    ?EXEC(Worker, lfm:get_cdmi_completion_status(SessId, uuid_to_file_ref(Worker, FileKey))).
-
-
--spec set_cdmi_completion_status(node(), session:id(),
-    lfm:file_key() | file_meta:uuid(), custom_metadata:cdmi_completion_status()) ->
-    ok | lfm:error_reply().
-set_cdmi_completion_status(Worker, SessId, FileKey, CompletionStatus) ->
-    ?EXEC(Worker, lfm:set_cdmi_completion_status(SessId, uuid_to_file_ref(Worker, FileKey), CompletionStatus)).
-
-
--spec get_mimetype(node(), session:id(), lfm:file_key() | file_meta:uuid()) ->
-    {ok, custom_metadata:mimetype()} | lfm:error_reply().
-get_mimetype(Worker, SessId, FileKey) ->
-    ?EXEC(Worker, lfm:get_mimetype(SessId, uuid_to_file_ref(Worker, FileKey))).
-
-
--spec set_mimetype(node(), session:id(), lfm:file_key() | file_meta:uuid(), custom_metadata:mimetype()) ->
-    ok | lfm:error_reply().
-set_mimetype(Worker, SessId, FileKey, Mimetype) ->
-    ?EXEC(Worker, lfm:set_mimetype(SessId, uuid_to_file_ref(Worker, FileKey), Mimetype)).
 
 
 %%%===================================================================
