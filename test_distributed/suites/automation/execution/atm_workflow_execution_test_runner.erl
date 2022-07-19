@@ -1176,7 +1176,7 @@ browse_store(SessionId, SpaceId, AtmWorkflowExecutionId, AtmStoreId) ->
 
 %% @private
 build_browse_opts(audit_log) ->
-    #atm_audit_log_store_content_browse_options{listing_opts = ?INFINITE_LOG_BASED_STORES_LISTING_OPTS};
+    #atm_audit_log_store_content_browse_options{browse_opts = ?INFINITE_LOG_BASED_STORES_LISTING_OPTS};
 
 build_browse_opts(list) ->
     #atm_list_store_content_browse_options{listing_opts = ?INFINITE_LOG_BASED_STORES_LISTING_OPTS};

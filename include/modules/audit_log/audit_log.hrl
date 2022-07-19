@@ -9,8 +9,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 
--ifndef(AUDIT_LGO_HRL).
--define(AUDIT_LGO_HRL, 1).
+-ifndef(AUDIT_LOG_HRL).
+-define(AUDIT_LOG_HRL, 1).
 
 
 -define(SYSTEM_ENTRY_SOURCE, <<"system">>).

@@ -208,12 +208,11 @@
 }).
 
 -record(atm_audit_log_store_content_browse_options, {
-    listing_opts :: atm_store_container_infinite_log_backend:timestamp_aware_listing_opts()
+    browse_opts :: audit_log_browse_opts:opts()
 }).
 
 -record(atm_audit_log_store_content_browse_result, {
-    logs :: [atm_store_container_infinite_log_backend:entry()],
-    is_last :: boolean()
+    result :: audit_log:browse_result()
 }).
 
 -record(atm_list_store_content_browse_options, {
