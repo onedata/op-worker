@@ -656,15 +656,8 @@ data_spec_get(#gri{aspect = download_url}) -> #{
     optional => #{<<"follow_symlinks">> => {boolean, any}}
 };
 
-data_spec_get(#gri{aspect = archive_recall_log}) -> #{
-    optional => #{
-        <<"index">> => {binary, any},
-        <<"timestamp">> => {integer, {not_lower_than, 0}},
-        <<"offset">> => {integer, any},
-        <<"limit">> => {integer, {between, 1, 1000}},
-        <<"direction">> => {atom, [?FORWARD, ?BACKWARD]}
-    }
-};
+data_spec_get(#gri{aspect = archive_recall_log}) ->
+    audit_log_browse_opts:json_spec();
 
 data_spec_get(#gri{aspect = dir_size_stats}) -> #{
     % for this aspect data is sanitized in `get` function, but all possible parameters 
@@ -1026,7 +1019,7 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = archive_recall_progr
     {ok, mi_archives:get_recall_progress(Auth#auth.session_id, FileGuid)};
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = archive_recall_log}, data = Data}, _) ->
-    BrowseOpts = json_infinite_log_model:build_browse_opts(Data),
+    BrowseOpts = audit_log_browse_opts:from_json(Data),
     {ok, mi_archives:browse_recall_log(Auth#auth.session_id, FileGuid, BrowseOpts)};
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = api_samples, scope = public}}, _) ->

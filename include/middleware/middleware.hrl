@@ -92,7 +92,7 @@
 
 -record(browse_recall_log, {
     id :: archive_recall:id(),
-    options :: json_infinite_log_model:listing_opts()
+    options :: audit_log_browse_opts:opts()
 }).
 
 
