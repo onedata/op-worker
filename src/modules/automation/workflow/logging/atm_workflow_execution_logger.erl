@@ -16,6 +16,7 @@
 -module(atm_workflow_execution_logger).
 -author("Bartosz Walkowicz").
 
+-include("modules/audit_log/audit_log.hrl").
 -include("modules/automation/atm_execution.hrl").
 
 %% API
@@ -55,7 +56,7 @@
 -type severity() :: binary().
 
 -type log_content() :: binary() | json_utils:json_map().
--type log() :: json_utils:json_map().
+-type log() :: json_utils:json_map() | audit_log:append_request().
 
 -record(atm_workflow_execution_logger, {
     atm_workflow_execution_auth :: atm_workflow_execution_auth:record(),
@@ -306,9 +307,18 @@ workflow_append_system_log(LogContent, Severity, AtmWorkflowExecutionLogger) ->
 %% @private
 -spec ensure_system_audit_log_object(log_content(), severity()) -> log().
 ensure_system_audit_log_object(LogContent, Severity) when is_map(LogContent) ->
-    LogContent#{<<"severity">> => Severity};
-ensure_system_audit_log_object(LogContent, Severity) when is_binary(LogContent) ->
-    #{<<"severity">> => Severity, <<"content">> => #{<<"description">> => LogContent}}.
+    #audit_log_append_request{
+        severity = Severity,
+        source = ?SYSTEM_ENTRY_SOURCE,
+        content = LogContent
+    };
+
+ensure_system_audit_log_object(LogMsg, Severity) when is_binary(LogMsg) ->
+    #audit_log_append_request{
+        severity = Severity,
+        source = ?SYSTEM_ENTRY_SOURCE,
+        content = #{<<"content">> => #{<<"description">> => LogMsg}}
+    }.
 
 
 %% @private

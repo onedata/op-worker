@@ -166,8 +166,9 @@ browse_by_timestamp_test(_Config) ->
                 {ok, #{
                     <<"content">> => #{<<"value">> => Index + 1},
                     <<"timestamp">> => FirstTimestamp + Index,
-                    <<"severity">> => <<"info">>}
-                }
+                    <<"severity">> => <<"info">>,
+                    <<"source">> => ?USER_ENTRY_SOURCE
+                }}
             }
         end, lists:seq(StartIndex, min(StartIndex + Limit - 1, ItemsNum - 1))),
 
@@ -265,7 +266,8 @@ input_item_to_exp_store_item(_AtmWorkflowExecutionAuth, InputItem, _ItemDataSpec
             false -> ?INFO_ENTRY_SEVERITY
         end,
         <<"timestamp">> => time_test_utils:get_frozen_time_millis(),
-        <<"index">> => integer_to_binary(Index)
+        <<"index">> => integer_to_binary(Index),
+        <<"source">> => ?USER_ENTRY_SOURCE
     }.
 
 

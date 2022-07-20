@@ -208,7 +208,7 @@ get_log_content_data_spec(#atm_audit_log_store_container{
 -spec sanitize_append_requests(
     atm_workflow_execution_auth:record(),
     atm_data_spec:record(),
-    [json_utils:json_term()]
+    [json_utils:json_term() | audit_log:append_request()]
 ) ->
     [audit_log:append_request()] | no_return().
 sanitize_append_requests(AtmWorkflowExecutionAuth, LogContentDataSpec, ItemsArray) when is_list(ItemsArray) ->
@@ -230,7 +230,7 @@ sanitize_append_requests(_AtmWorkflowExecutionAuth, _LogContentDataSpec, Item) -
 -spec sanitize_append_request(
     atm_workflow_execution_auth:record(),
     atm_data_spec:record(),
-    json_utils:json_term()
+    json_utils:json_term() | audit_log:append_request()
 ) ->
     audit_log:append_request() | no_return().
 sanitize_append_request(AtmWorkflowExecutionAuth, LogContentDataSpec, Item) ->
@@ -240,28 +240,37 @@ sanitize_append_request(AtmWorkflowExecutionAuth, LogContentDataSpec, Item) ->
     Request.
 
 
-%% TODO differentiate user and system log source
 %% @private
--spec build_audit_log_append_request(json_utils:json_term()) ->
+-spec build_audit_log_append_request(json_utils:json_term() | audit_log:append_request()) ->
     audit_log:append_request().
+build_audit_log_append_request(#audit_log_append_request{} = AppendRequest) ->
+    AppendRequest;
+
 build_audit_log_append_request(#{<<"content">> := LogContent, <<"severity">> := Severity}) ->
     #audit_log_append_request{
         severity = normalize_severity(Severity),
+        source = ?USER_ENTRY_SOURCE,
         content = LogContent
     };
+
 build_audit_log_append_request(#{<<"content">> := LogContent}) ->
     #audit_log_append_request{
         severity = ?INFO_ENTRY_SEVERITY,
+        source = ?USER_ENTRY_SOURCE,
         content = LogContent
     };
+
 build_audit_log_append_request(#{<<"severity">> := Severity} = Object) ->
     #audit_log_append_request{
         severity = normalize_severity(Severity),
+        source = ?USER_ENTRY_SOURCE,
         content = maps:without([<<"severity">>], Object)
     };
+
 build_audit_log_append_request(LogContent) ->
     #audit_log_append_request{
         severity = ?INFO_ENTRY_SEVERITY,
+        source = ?USER_ENTRY_SOURCE,
         content = LogContent
     }.
 
