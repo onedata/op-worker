@@ -105,6 +105,27 @@ execute(UserCtx, _SpaceDirCtx, #repeat_atm_workflow_execution{
     );
 
 
+%% CDMI
+
+execute(UserCtx, FileCtx, #transfer_encoding_get_request{}) ->
+    cdmi_metadata_req:get_transfer_encoding(UserCtx, FileCtx);
+
+execute(UserCtx, FileCtx, #transfer_encoding_set_request{value = Encoding}) ->
+    cdmi_metadata_req:set_transfer_encoding(UserCtx, FileCtx, Encoding, false, false);
+
+execute(UserCtx, FileCtx, #cdmi_completion_status_get_request{}) ->
+    cdmi_metadata_req:get_cdmi_completion_status(UserCtx, FileCtx);
+
+execute(UserCtx, FileCtx, #cdmi_completion_status_set_request{value = CompletionStatus}) ->
+    cdmi_metadata_req:set_cdmi_completion_status(UserCtx, FileCtx, CompletionStatus, false, false);
+
+execute(UserCtx, FileCtx, #mimetype_get_request{}) ->
+    cdmi_metadata_req:get_mimetype(UserCtx, FileCtx);
+
+execute(UserCtx, FileCtx, #mimetype_set_request{value = CompletionStatus}) ->
+    cdmi_metadata_req:set_mimetype(UserCtx, FileCtx, CompletionStatus, false, false);
+
+
 %% Datasets
 
 execute(UserCtx, SpaceDirCtx, #list_top_datasets{state = State, opts = Opts, mode = ListingMode}) ->

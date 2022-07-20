@@ -101,15 +101,6 @@
     get_xattr/4,
     remove_xattr/3
 ]).
-%% CDMI related operations
--export([
-    get_transfer_encoding/2,
-    set_transfer_encoding/3,
-    get_cdmi_completion_status/2,
-    set_cdmi_completion_status/3,
-    get_mimetype/2,
-    set_mimetype/3
-]).
 
 %% Utility functions
 -export([check_result/1]).
@@ -642,59 +633,6 @@ get_xattr(SessId, FileKey, XattrName, Inherited) ->
     ok | error_reply().
 remove_xattr(SessId, FileKey, XattrName) ->
     ?run(lfm_attrs:remove_xattr(SessId, FileKey, XattrName)).
-
-
-%%%===================================================================
-%%% CDMI related operations
-%%%===================================================================
-
-
--spec get_transfer_encoding(session:id(), file_key()) ->
-    {ok, custom_metadata:transfer_encoding()} | error_reply().
-get_transfer_encoding(SessId, FileKey) ->
-    ?run(lfm_attrs:get_transfer_encoding(SessId, FileKey)).
-
-
--spec set_transfer_encoding(session:id(), file_key(), custom_metadata:transfer_encoding()) ->
-    ok | error_reply().
-set_transfer_encoding(SessId, FileKey, Encoding) ->
-    ?run(lfm_attrs:set_transfer_encoding(SessId, FileKey, Encoding)).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns completion status, which tells if the file is under modification by
-%% cdmi at the moment.
-%% @end
-%%--------------------------------------------------------------------
--spec get_cdmi_completion_status(session:id(), file_key()) ->
-    {ok, custom_metadata:cdmi_completion_status()} | error_reply().
-get_cdmi_completion_status(SessId, FileKey) ->
-    ?run(lfm_attrs:get_cdmi_completion_status(SessId, FileKey)).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Sets completion status, which tells if the file is under modification by
-%% cdmi at the moment.
-%% @end
-%%--------------------------------------------------------------------
--spec set_cdmi_completion_status(session:id(), file_key(), custom_metadata:cdmi_completion_status()) ->
-    ok | error_reply().
-set_cdmi_completion_status(SessId, FileKey, CompletionStatus) ->
-    ?run(lfm_attrs:set_cdmi_completion_status(SessId, FileKey, CompletionStatus)).
-
-
--spec get_mimetype(session:id(), file_key()) ->
-    {ok, custom_metadata:mimetype()} | error_reply().
-get_mimetype(SessId, FileKey) ->
-    ?run(lfm_attrs:get_mimetype(SessId, FileKey)).
-
-
--spec set_mimetype(session:id(), file_key(), custom_metadata:mimetype()) ->
-    ok | error_reply().
-set_mimetype(SessId, FileKey, Mimetype) ->
-    ?run(lfm_attrs:set_mimetype(SessId, FileKey, Mimetype)).
 
 
 %%%===================================================================
