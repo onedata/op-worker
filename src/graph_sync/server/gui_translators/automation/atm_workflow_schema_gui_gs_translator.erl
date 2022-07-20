@@ -29,12 +29,14 @@
 translate_resource(#gri{aspect = instance, scope = private}, #od_atm_workflow_schema{
     name = AtmWorkflowSchemaName,
     summary = AtmWorkflowSchemaSummary,
-    revision_registry = RevisionRegistry
+    revision_registry = RevisionRegistry,
+    compatible = IsExecutable
 }) ->
     #{
         <<"name">> => AtmWorkflowSchemaName,
         <<"summary">> => AtmWorkflowSchemaSummary,
         <<"revisionRegistry">> => jsonable_record:to_json(
             RevisionRegistry, atm_workflow_schema_revision_registry
-        )
+        ),
+        <<"isExecutable">> => IsExecutable
     }.
