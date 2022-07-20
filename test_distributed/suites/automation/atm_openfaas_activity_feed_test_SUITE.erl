@@ -14,6 +14,7 @@
 -module(atm_openfaas_activity_feed_test_SUITE).
 -author("Lukasz Opiola").
 
+-include("modules/audit_log/audit_log.hrl").
 -include("modules/automation/atm_execution.hrl").
 -include("onenv_test_utils.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -734,6 +735,10 @@ verify_recorded_pod_status_changes(RegistryId, SubmittedReports) ->
     }, LogsByPodAcc) ->
         EventData = #{
             <<"timestamp">> => EventTimestamp,
+            <<"severity">> => case EventType of
+                <<"warning">> -> ?WARNING_ENTRY_SEVERITY;
+                _ -> ?INFO_ENTRY_SEVERITY
+            end,
             <<"content">> => #{
                 <<"type">> => EventType,
                 <<"reason">> => EventReason,
