@@ -16,12 +16,8 @@
 -include_lib("cluster_worker/include/modules/datastore/infinite_log.hrl").
 
 %% API
--export([
-    sanitize/1,
-
-    json_spec/0,
-    from_json/1
-]).
+-export([sanitize/1]).
+-export([json_spec/0, from_json/1]).
 
 
 -define(MAX_LISTING_LIMIT, 1000).

@@ -143,7 +143,7 @@ update_content(Record, #atm_store_content_update_req{
 
 -spec delete(record()) -> ok.
 delete(#atm_audit_log_store_container{backend_id = BackendId}) ->
-    audit_log:delete(BackendId).
+    ok = audit_log:delete(BackendId).
 
 
 %%%===================================================================
@@ -286,5 +286,5 @@ extend_audit_log(AppendRequests, Record) ->
 append_to_audit_log(AppendRequest, Record = #atm_audit_log_store_container{
     backend_id = BackendId
 }) ->
-    audit_log:append(BackendId, AppendRequest),
+    ok = audit_log:append(BackendId, AppendRequest),
     Record.

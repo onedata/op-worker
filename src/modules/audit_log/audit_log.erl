@@ -20,7 +20,7 @@
 -export([create/1, create/2, delete/1]).
 -export([append/2, browse/2]).
 %% Iterator API
--export([iterator_start_index/0, iterator_get_next_batch/3]).
+-export([new_iterator/0, next_batch/3]).
 
 
 -type id() :: json_infinite_log_model:id().
@@ -47,9 +47,12 @@
 %% }
 -type browse_result() :: json_utils:json_map().
 
+-opaque iterator() :: audit_log_browse_opts:index().
+
 -export_type([id/0]).
 -export_type([entry_source/0, entry_severity/0, entry/0]).
 -export_type([append_request/0, browse_result/0]).
+-export_type([iterator/0]).
 
 
 %%%===================================================================
@@ -87,7 +90,7 @@ append(Id, #audit_log_append_request{
 -spec browse(id(), audit_log_browse_opts:opts()) ->
     {ok, browse_result()} | errors:error().
 browse(Id, BrowseOpts) ->
-    case json_infinite_log_model:list_and_postprocess(Id, BrowseOpts, gen_listing_postprocessor()) of
+    case json_infinite_log_model:list_and_postprocess(Id, BrowseOpts, fun listing_postprocessor/1) of
         {ok, {ProgressMarker, EntrySeries}} ->
             {ok, #{
                 <<"logEntries">> => EntrySeries,
@@ -103,18 +106,18 @@ browse(Id, BrowseOpts) ->
 %%%===================================================================
 
 
--spec iterator_start_index() -> audit_log_browse_opts:index().
-iterator_start_index() ->
+-spec new_iterator() -> iterator().
+new_iterator() ->
     json_infinite_log_model:default_start_index(exclusive).
 
 
--spec iterator_get_next_batch(pos_integer(), id(), audit_log_browse_opts:index()) ->
-    {ok, [entry()], audit_log_browse_opts:index()} | stop.
-iterator_get_next_batch(BatchSize, Id, LastListedIndex) ->
+-spec next_batch(pos_integer(), id(), iterator()) ->
+    {ok, [entry()], iterator()} | stop.
+next_batch(BatchSize, Id, LastListedIndex) ->
     {ok, {ProgressMarker, Entries}} = json_infinite_log_model:list_and_postprocess(
         Id,
         #{start_from => {index_exclusive, LastListedIndex}, limit => BatchSize},
-        gen_listing_postprocessor()
+        fun listing_postprocessor/1
     ),
 
     case {Entries, ProgressMarker} of
@@ -129,11 +132,9 @@ iterator_get_next_batch(BatchSize, Id, LastListedIndex) ->
 
 
 %% @private
--spec gen_listing_postprocessor() -> json_infinite_log_model:listing_postprocessor(entry()).
-gen_listing_postprocessor() ->
-    fun({IndexBin, {Timestamp, Entry}}) ->
-        Entry#{
-            <<"index">> => IndexBin,
-            <<"timestamp">> => Timestamp
-        }
-    end.
+-spec listing_postprocessor(json_infinite_log_model:entry()) -> entry().
+listing_postprocessor({IndexBin, {Timestamp, Entry}}) ->
+    Entry#{
+        <<"index">> => IndexBin,
+        <<"timestamp">> => Timestamp
+    }.

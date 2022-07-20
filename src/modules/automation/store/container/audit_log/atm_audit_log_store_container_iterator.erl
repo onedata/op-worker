@@ -30,7 +30,7 @@
 
 -record(atm_audit_log_store_container_iterator, {
     backend_id :: audit_log:id(),
-    last_listed_index = audit_log:iterator_start_index() :: audit_log_browse_opts:index()
+    audit_log_iterator = audit_log:new_iterator() :: audit_log:iterator()
 }).
 -type record() :: #atm_audit_log_store_container_iterator{}.
 
@@ -60,25 +60,25 @@ build(BackendId) ->
     {ok, [atm_value:expanded()], record()} | stop.
 get_next_batch(_AtmWorkflowExecutionAuth, BatchSize, Record = #atm_audit_log_store_container_iterator{
     backend_id = BackendId,
-    last_listed_index = LastListedIndex
+    audit_log_iterator = AuditLogIterator
 }) ->
-    case audit_log:iterator_get_next_batch(BatchSize, BackendId, LastListedIndex) of
+    case audit_log:next_batch(BatchSize, BackendId, AuditLogIterator) of
         stop ->
             stop;
-        {ok, Entries, NewLastListedIndex} ->
+        {ok, Entries, NewAuditLogIterator} ->
             {ok, Entries, Record#atm_audit_log_store_container_iterator{
-                last_listed_index = NewLastListedIndex
+                audit_log_iterator = NewAuditLogIterator
             }}
     end.
 
 
 -spec forget_before(record()) -> ok.
-forget_before(_AtmStoreContainerIterator) ->
+forget_before(_Record) ->
     ok.
 
 
 -spec mark_exhausted(record()) -> ok.
-mark_exhausted(_AtmStoreContainerIterator) ->
+mark_exhausted(_Record) ->
     ok.
 
 
@@ -96,18 +96,21 @@ version() ->
     json_utils:json_term().
 db_encode(#atm_audit_log_store_container_iterator{
     backend_id = BackendId,
-    last_listed_index = LastListedIndex
+    audit_log_iterator = AuditLogIterator
 }, _NestedRecordEncoder) ->
     #{
         <<"backendId">> => BackendId,
-        <<"lastListedIndex">> => LastListedIndex
+        <<"auditLogIterator">> => AuditLogIterator
     }.
 
 
 -spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
     record().
-db_decode(JsonRecord = #{<<"backendId">> := BackendId}, _NestedRecordDecoder) ->
+db_decode(
+    #{<<"backendId">> := BackendId, <<"auditLogIterator">> := AuditLogIterator},
+    _NestedRecordDecoder
+) ->
     #atm_audit_log_store_container_iterator{
         backend_id = BackendId,
-        last_listed_index = maps:get(<<"lastListedIndex">>, JsonRecord, <<"-1">>)
+        audit_log_iterator = AuditLogIterator
     }.
