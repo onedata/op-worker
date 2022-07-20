@@ -122,7 +122,7 @@ next_batch(BatchSize, Id, LastListedIndex) ->
 
     case {Entries, ProgressMarker} of
         {[], done} -> stop;
-        _ -> {ok, Entries, element(1, lists:last(Entries))}
+        _ -> {ok, Entries, maps:get(<<"index">>, lists:last(Entries))}
     end.
 
 

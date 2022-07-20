@@ -12,9 +12,11 @@
 -module(atm_audit_log_store_test_SUITE).
 -author("Lukasz Opiola").
 
+-include("modules/audit_log/audit_log.hrl").
 -include("modules/automation/atm_execution.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include("onenv_test_utils.hrl").
+-include_lib("cluster_worker/include/modules/datastore/infinite_log.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 
@@ -77,7 +79,7 @@ update_content_test(_Config) ->
         store_configs => example_configs(),
         get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
         input_item_formatter => fun input_item_formatter/1,
-        input_item_to_exp_store_item => fun input_item_to_exp_store_item/3,
+        input_item_to_exp_store_item => fun input_item_to_exp_store_item/4,
         build_content_update_options => fun build_content_update_options/1,
         get_content => fun get_content/2
     }).
@@ -88,7 +90,7 @@ iterator_test(_Config) ->
         store_configs => example_configs(),
         get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
         input_item_formatter => fun input_item_formatter/1,
-        input_item_to_exp_store_item => fun input_item_to_exp_store_item/3,
+        input_item_to_exp_store_item => fun input_item_to_exp_store_item/4,
         randomly_remove_entity_referenced_by_item => fun randomly_remove_entity_referenced_by_item/3
     }).
 
@@ -98,7 +100,7 @@ browse_by_index_test(_Config) ->
         store_configs => example_configs(),
         get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
         input_item_formatter => fun input_item_formatter/1,
-        input_item_to_exp_store_item => fun input_item_to_exp_store_item/3,
+        input_item_to_exp_store_item => fun input_item_to_exp_store_item/4,
         randomly_remove_entity_referenced_by_item => fun randomly_remove_entity_referenced_by_item/3,
         build_content_browse_options => fun build_content_browse_options/1,
         build_content_browse_result => fun build_content_browse_result/2
@@ -110,7 +112,7 @@ browse_by_offset_test(_Config) ->
         store_configs => example_configs(),
         get_input_item_generator_seed_data_spec => fun get_input_item_generator_seed_data_spec/1,
         input_item_formatter => fun input_item_formatter/1,
-        input_item_to_exp_store_item => fun input_item_to_exp_store_item/3,
+        input_item_to_exp_store_item => fun input_item_to_exp_store_item/4,
         randomly_remove_entity_referenced_by_item => fun randomly_remove_entity_referenced_by_item/3,
         build_content_browse_options => fun build_content_browse_options/1,
         build_content_browse_result => fun build_content_browse_result/2
@@ -131,7 +133,8 @@ browse_by_timestamp_test(_Config) ->
         AtmWorkflowExecutionAuth, undefined, AtmStoreSchema
     ))),
 
-    ItemsNum = rand:uniform(1000),
+%%    ItemsNum = rand:uniform(1000),
+    ItemsNum = rand:uniform(10),
     ContentUpdateOpts = build_content_update_options(append),
     [FirstTimestamp | _] = lists:map(fun(Index) ->
         Timestamp = time_test_utils:get_frozen_time_millis(),
@@ -188,17 +191,29 @@ browse_by_timestamp_test(_Config) ->
 %% @private
 -spec example_configs() -> [atm_single_value_store_config:record()].
 example_configs() ->
-    lists:map(fun(LogContentDataType) ->
-        #atm_audit_log_store_config{log_content_data_spec = atm_store_test_utils:example_data_spec(
-            LogContentDataType
-        )}
-    end, [
-        atm_array_type,
+    SupportedStaticBasicTypes = [
         atm_integer_type,
+        atm_string_type,
         atm_object_type,
         atm_range_type,
-        atm_string_type,
         atm_time_series_measurement_type
+    ],
+
+    lists:flatten([
+        #atm_audit_log_store_config{log_content_data_spec = #atm_data_spec{
+            type = atm_array_type,
+            value_constraints = #{
+                item_data_spec => atm_store_test_utils:example_data_spec(?RAND_ELEMENT(
+                    SupportedStaticBasicTypes
+                ))
+            }
+        }},
+
+        lists:map(fun(LogContentDataType) ->
+            #atm_audit_log_store_config{log_content_data_spec = atm_store_test_utils:example_data_spec(
+                LogContentDataType
+            )}
+        end, SupportedStaticBasicTypes)
     ]).
 
 
@@ -214,7 +229,7 @@ get_input_item_generator_seed_data_spec(#atm_audit_log_store_config{
 %% @private
 -spec input_item_formatter(atm_value:expanded()) -> atm_value:expanded().
 input_item_formatter(LogContent) ->
-    Severity = lists_utils:random_element([str_utils:rand_hex(16) | ?LOGGER_SEVERITY_LEVELS]),
+    Severity = lists_utils:random_element([str_utils:rand_hex(16) | ?ENTRY_SEVERITY_LEVELS]),
 
     case rand:uniform(5) of
         1 when is_map(LogContent) -> LogContent#{<<"severity">> => Severity};
@@ -228,29 +243,29 @@ input_item_formatter(LogContent) ->
 -spec input_item_to_exp_store_item(
     atm_workflow_execution_auth:record(),
     atm_value:expanded(),
-    atm_store:id()
+    atm_store:id(),
+    Index :: non_neg_integer()
 ) ->
     atm_value:expanded().
-input_item_to_exp_store_item(AtmWorkflowExecutionAuth, InputItem, ItemDataSpec) ->
+input_item_to_exp_store_item(_AtmWorkflowExecutionAuth, InputItem, _ItemDataSpec, Index) ->
     LogContent = case InputItem of
         #{<<"content">> := LC} -> LC;
         #{<<"severity">> := _} = Object -> maps:without([<<"severity">>], Object);
         _ -> InputItem
     end,
     Severity = case is_map(InputItem) of
-        true -> maps:get(<<"severity">>, InputItem, ?LOGGER_INFO);
-        false -> ?LOGGER_INFO
+        true -> maps:get(<<"severity">>, InputItem, ?INFO_ENTRY_SEVERITY);
+        false -> ?INFO_ENTRY_SEVERITY
     end,
 
     #{
-        <<"content">> => atm_store_test_utils:compress_and_expand_data(
-            ?PROVIDER_SELECTOR, AtmWorkflowExecutionAuth, LogContent, ItemDataSpec
-        ),
-        <<"severity">> => case lists:member(Severity, ?LOGGER_SEVERITY_LEVELS) of
+        <<"content">> => LogContent,
+        <<"severity">> => case lists:member(Severity, ?ENTRY_SEVERITY_LEVELS) of
             true -> Severity;
-            false -> ?LOGGER_INFO
+            false -> ?INFO_ENTRY_SEVERITY
         end,
-        <<"timestamp">> => time_test_utils:get_frozen_time_millis()
+        <<"timestamp">> => time_test_utils:get_frozen_time_millis(),
+        <<"index">> => integer_to_binary(Index)
     }.
 
 
@@ -284,12 +299,12 @@ build_content_update_options(UpdateFun) ->
 get_content(AtmWorkflowExecutionAuth, AtmStoreId) ->
     BrowseOpts = build_content_browse_options(#{<<"limit">> => 1000}),
     #atm_audit_log_store_content_browse_result{result = #{
-        <<"logEntries">> => Logs,
-        <<"isLast">> => true
+        <<"logEntries">> := Logs,
+        <<"isLast">> := true
     }} = ?rpc(?PROVIDER_SELECTOR, atm_store_api:browse_content(
         AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId
     )),
-    lists:map(fun({_, {ok, Item}}) -> Item end, Logs).
+    Logs.
 
 
 %% @private
@@ -297,7 +312,8 @@ get_content(AtmWorkflowExecutionAuth, AtmStoreId) ->
     atm_audit_log_store_content_browse_options:record().
 build_content_browse_options(OptsJson) ->
     atm_audit_log_store_content_browse_options:sanitize(OptsJson#{
-        <<"type">> => <<"auditLogStoreContentBrowseOptions">>
+        <<"type">> => <<"auditLogStoreContentBrowseOptions">>,
+        <<"direction">> => str_utils:to_binary(?FORWARD)
     }).
 
 
@@ -306,7 +322,9 @@ build_content_browse_options(OptsJson) ->
     atm_audit_log_store_content_browse_result:record().
 build_content_browse_result(Entries, IsLast) ->
     #atm_audit_log_store_content_browse_result{result = #{
-        <<"logEntries">> => Entries,
+        <<"logEntries">> => lists:map(fun({Index, {ok, Entry}}) ->
+            Entry#{<<"index">> => Index}
+        end, Entries),
         <<"isLast">> => IsLast
     }}.
 
