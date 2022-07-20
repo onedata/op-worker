@@ -13,6 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("middleware/middleware.hrl").
+-include("proto/oneprovider/provider_rpc_messages.hrl").
 
 %% API
 -export([execute/3]).
@@ -24,7 +25,11 @@
 
 %% Archives
 
--spec execute(user_ctx:ctx(), file_ctx:ctx(), middleware_worker:operation()) ->
+-spec execute(
+    user_ctx:ctx(), 
+    file_ctx:ctx(), 
+    middleware_worker:operation()
+) ->
     ok | {ok, term()} | no_return().
 execute(UserCtx, SpaceDirCtx, #list_archives{
     dataset_id = DatasetId,
@@ -154,6 +159,14 @@ execute(UserCtx, SpaceDirCtx, #remove_dataset{id = DatasetId}) ->
 execute(UserCtx, FileCtx, #get_file_eff_dataset_summary{}) ->
     dataset_req:get_file_eff_summary(FileCtx, UserCtx);
 
+
+%% File metadata
+
+execute(UserCtx, FileCtx, #file_distribution_gather_request{}) ->
+    file_distribution:gather(UserCtx, FileCtx);
+
+execute(UserCtx, FileCtx, #historical_dir_size_stats_gather_request{request = Request}) ->
+    {ok, dir_size_stats_req:gather_historical(UserCtx, FileCtx, Request)};
 
 %% QoS
 

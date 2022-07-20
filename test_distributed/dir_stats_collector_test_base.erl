@@ -400,7 +400,6 @@ parallel_write_test(Config, SleepOnWrite, InitialFileSize, OverrideInitialBytes)
     [Worker | _] = ?config(?PROVIDER_CREATING_FILES_NODES_SELECTOR, Config),
     [WorkerProvider2 | _] = ?config(?PROVIDER_DELETING_FILES_NODES_SELECTOR, Config),
     SessId = lfm_test_utils:get_user1_session_id(Config, Worker),
-    SessIdProvider2 = lfm_test_utils:get_user1_session_id(Config, WorkerProvider2),
     SpaceGuid = lfm_test_utils:get_user1_first_space_guid(Config),
 
     check_space_dir_values_map_and_time_series_collection(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR, SpaceGuid, #{
@@ -451,13 +450,15 @@ parallel_write_test(Config, SleepOnWrite, InitialFileSize, OverrideInitialBytes)
     % Read files using 20 processes (spawn is hidden in pmap)
     ReadAnswers = lists_utils:pmap(fun(FileNum) ->
         % Check blocks visibility on reading provider before reading from file
+        FileGuid = resolve_guid(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR, [], [FileNum]),
         GetBlocks = fun() ->
-            FileGuid = resolve_guid(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR, [], [FileNum]),
-            {ok, Distribution} =
-                lfm_proxy:get_file_distribution(WorkerProvider2, SessIdProvider2, #file_ref{guid = FileGuid}),
-            lists:sort(lists:map(fun(#{<<"blocks">> := ProviderBlocks}) -> ProviderBlocks end, Distribution))
+            % @TODO VFS-VFS-9498 use distribution after replication uses fetched file location instead of dbsynced
+            case opt_file_metadata:get_local_knowledge_of_remote_provider_blocks(WorkerProvider2, FileGuid, opw_test_rpc:get_provider_id(Worker)) of
+                {ok, Blocks} -> Blocks;
+                {error, _} = Error -> Error
+            end
         end,
-        ?assertEqual([[], [[0, FileSize]]], GetBlocks(), ?ATTEMPTS),
+        ?assertEqual([[0, FileSize]], GetBlocks(), ?ATTEMPTS),
 
         Bytes = read_from_file(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR, [], [FileNum], FileSize),
         byte_size(Bytes)
@@ -766,10 +767,10 @@ check_space_dir_values_map_and_time_series_collection(
     end,
     [Worker | _] = ?config(NodesSelector, Config),
     {ok, CurrentStats} = ?assertMatch({ok, _}, rpc:call(Worker, dir_size_stats, get_stats, [SpaceGuid]), Attempts),
-    {ok, #time_series_layout_result{layout = TimeStatsLayout}} = ?assertMatch({ok, _}, 
-        rpc:call(Worker, dir_size_stats, browse_time_stats_collection, [SpaceGuid, #time_series_get_layout_request{}])),
-    {ok, #time_series_slice_result{slice = TimeStats}} = ?assertMatch({ok, _}, 
-        rpc:call(Worker, dir_size_stats, browse_time_stats_collection, [SpaceGuid, #time_series_get_slice_request{layout = TimeStatsLayout}]), Attempts),
+    {ok, #time_series_layout_get_result{layout = TimeStatsLayout}} = ?assertMatch({ok, _}, 
+        rpc:call(Worker, dir_size_stats, browse_historical_stats_collection, [SpaceGuid, #time_series_layout_get_request{}])),
+    {ok, #time_series_slice_get_result{slice = TimeStats}} = ?assertMatch({ok, _}, 
+        rpc:call(Worker, dir_size_stats, browse_historical_stats_collection, [SpaceGuid, #time_series_slice_get_request{layout = TimeStatsLayout}]), Attempts),
 
     ?assertEqual(ExpectedCurrentStats, CurrentStats),
 

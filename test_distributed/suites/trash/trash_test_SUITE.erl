@@ -333,6 +333,11 @@ schedule_eviction_transfer_on_space_evicts_trash(_Config) ->
     P2Id = oct_background:get_provider_id(paris),
 
     ?assertDistribution(P1Node, UserSessIdP1, ?DISTS([P1Id, P2Id], [Size, Size]), FileGuid, ?ATTEMPTS),
+    % Ensure that evicting provider has knowledge of remote provider blocks (through dbsync), 
+    % as otherwise it will skip eviction.
+    % @TODO VFS-VFS-9498 not needed after replica_deletion uses fetched file location instead of dbsynced
+    ?assertEqual({ok, [[0, Size]]},
+        opt_file_metadata:get_local_knowledge_of_remote_provider_blocks(P1Node, FileGuid, P2Id), ?ATTEMPTS),
 
     % evict whole space
     {ok, TransferId} = ?assertMatch({ok, _},

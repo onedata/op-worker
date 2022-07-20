@@ -506,7 +506,11 @@ await_file_distribution_sync(CreationProvider, SyncProviders, UserId, #object{
     lists:foreach(fun(SyncProvider) ->
         SessId = oct_background:get_user_session_id(UserId, SyncProvider),
         SyncNode = ?OCT_RAND_OP_NODE(SyncProvider),
-        ?assertDistribution(SyncNode, SessId, ?DIST(CreationProvider, byte_size(Content)), Guid, ?ATTEMPTS)
+        ?assertDistribution(SyncNode, SessId, 
+            ?DISTS(
+                [CreationProvider | SyncProviders], 
+                [byte_size(Content) | lists:duplicate(length(SyncProviders), 0)]
+            ), Guid, ?ATTEMPTS)
     end, SyncProviders).
 
 

@@ -1196,8 +1196,9 @@ get_file_distribution_test(Config) ->
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:get_file_distribution(W, SessId, FileKey))
+            extract_ok(opt_file_metadata:get_distribution_deprecated(W, SessId, FileKey))
         end,
+        returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end

@@ -602,7 +602,7 @@ build_update_file_content_setup_fun(MemRef, Content) ->
 
         lfm_test_utils:write_file(P1Node, UserSessIdP1, FileGuid, Content),
         file_test_utils:await_size(P2Node, FileGuid, FileSize),
-        file_test_utils:await_distribution(Providers, FileGuid, [{P1Node, FileSize}]),
+        file_test_utils:await_distribution(Providers, FileGuid, [{P1Node, FileSize}, {P2Node, 0}]),
 
         api_test_memory:set(MemRef, file_guid, FileGuid)
     end.
@@ -653,7 +653,7 @@ build_update_file_content_verify_fun(MemRef, OriginalFileContent) ->
     fun
         (expected_failure, _) ->
             FileGuid = api_test_memory:get(MemRef, file_guid),
-            file_test_utils:await_distribution(AllProviders, FileGuid, [{P1Node, OriginalFileSize}]);
+            file_test_utils:await_distribution(AllProviders, FileGuid, [{P1Node, OriginalFileSize}, {P2Node, 0}]);
         (expected_success, #api_test_ctx{node = UpdateNode, data = Data}) ->
             FileGuid = api_test_memory:get(MemRef, file_guid),
             Offset = maps:get(<<"offset">>, Data, undefined),
@@ -683,6 +683,7 @@ verify_file_content_update(
 ) ->
     OriginalFileSize = byte_size(OriginalContent),
     DataSentSize = byte_size(DataSent),
+    [OtherNode] = oct_background:get_all_providers_nodes() -- [CreationNode],
 
     case Offset of
         undefined ->
@@ -691,7 +692,7 @@ verify_file_content_update(
 
             ExpDist = case UpdateNode == CreationNode of
                 true ->
-                    [{UpdateNode, DataSentSize}];
+                    [{UpdateNode, DataSentSize}, {OtherNode, 0}];
                 false ->
                     [{CreationNode, 0}, {UpdateNode, DataSentSize}]
             end,
@@ -706,12 +707,12 @@ verify_file_content_update(
                 true ->
                     case Offset =< OriginalFileSize of
                         true ->
-                            [{CreationNode, max(OriginalFileSize, Offset + DataSentSize)}];
+                            [{CreationNode, max(OriginalFileSize, Offset + DataSentSize)}, {OtherNode, 0}];
                         false ->
                             [{CreationNode, fslogic_blocks:consolidate([
                                 #file_block{offset = 0, size = OriginalFileSize},
                                 #file_block{offset = Offset, size = DataSentSize}
-                            ])}]
+                            ])}, {OtherNode, 0}]
                     end;
                 false ->
                     case Offset + DataSentSize < OriginalFileSize of

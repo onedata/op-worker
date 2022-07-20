@@ -79,7 +79,7 @@
 -export([equals/2]).
 -export([assert_not_readonly_target_storage_const/2]).
 
-%% Functions that do not modify context but does not have _const suffix and return context.
+%% Functions that do not modify context but do not have _const suffix and return context.
 % TODO VFS-6119 missing _const suffix in function name
 -export([get_local_file_location_doc/1, get_local_file_location_doc/2]).
 

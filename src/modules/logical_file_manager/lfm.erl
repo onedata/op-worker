@@ -67,8 +67,7 @@
     silent_read/3,
     truncate/3,
     release/1, monitored_release/1,
-    get_file_location/2,
-    get_file_distribution/2
+    get_file_location/2
 ]).
 %% Directory specific operations
 -export([
@@ -439,17 +438,6 @@ monitored_release(FileHandle) ->
     {ok, file_location:record()} | lfm:error_reply().
 get_file_location(SessId, FileKey) ->
     ?run(lfm_files:get_file_location(SessId, FileKey)).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns block map for a file.
-%% @end
-%%--------------------------------------------------------------------
--spec get_file_distribution(session:id(), file_key()) ->
-    {ok, Blocks :: [[non_neg_integer()]]} | error_reply().
-get_file_distribution(SessId, FileKey) ->
-    ?run(lfm_files:get_file_distribution(SessId, FileKey)).
 
 
 %%%===================================================================

@@ -43,9 +43,6 @@
 -record(get_file_path, {
 }).
 
--record(get_file_distribution, {
-}).
-
 -record(get_metadata, {
     type :: custom_metadata:type(),
     query = [] :: custom_metadata:query(),
@@ -65,21 +62,11 @@
     #get_parent{} |
     #get_acl{} | #set_acl{} | #remove_acl{} | #check_perms{} |
     #get_file_path{} |
-    #get_metadata{} | #remove_metadata{} | #set_metadata{} |
-    #get_file_distribution{}.
+    #get_metadata{} | #remove_metadata{} | #set_metadata{}.
 
 
 -record(file_path, {
     value :: binary()
-}).
-
--record(provider_file_distribution, {
-    provider_id :: oneprovider:id(),
-    blocks :: [#file_block{}]
-}).
-
--record(file_distribution, {
-    provider_file_distributions :: [#provider_file_distribution{}]
 }).
 
 -record(metadata, {
@@ -127,9 +114,8 @@
 }).
 
 -type provider_response_type() ::
-    #acl{} | #dir{} | #file_path{} | #file_distribution{} | #metadata{} |
-    #dataset_info{} | #file_eff_dataset_summary{} | #archive_info{} |
-    undefined.
+    #acl{} | #dir{} | #file_path{}| #metadata{} | #dataset_info{} | #file_eff_dataset_summary{} | 
+    #archive_info{} | undefined.
 
 -record(provider_request, {
     context_guid :: fslogic_worker:file_guid(),

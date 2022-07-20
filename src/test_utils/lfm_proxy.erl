@@ -62,9 +62,7 @@
     get_acl/3, set_acl/4, remove_acl/3,
 
     has_custom_metadata/3,
-    get_metadata/6, set_metadata/6, remove_metadata/4,
-
-    get_file_distribution/3
+    get_metadata/6, set_metadata/6, remove_metadata/4
 ]).
 
 -define(EXEC(Worker, Function),
@@ -679,17 +677,6 @@ set_metadata(Worker, SessId, FileKey, Type, Value, Query) ->
     custom_metadata:type()) -> ok.
 remove_metadata(Worker, SessId, FileKey, Type) ->
     ?EXEC(Worker, lfm:remove_metadata(SessId, FileKey, Type)).
-
-
-%%%===================================================================
-%%% Transfer related operations
-%%%===================================================================
-
-
--spec get_file_distribution(node(), session:id(), lfm:file_key()) ->
-    {ok, list()}.
-get_file_distribution(Worker, SessId, FileKey) ->
-    ?EXEC(Worker, lfm:get_file_distribution(SessId, FileKey)).
 
 
 %%%===================================================================
