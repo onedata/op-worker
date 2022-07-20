@@ -92,9 +92,11 @@ translate_resource(#gri{aspect = distribution, scope = private, id = Guid}, Dist
     file_distribution_gather_result:to_json(gs, Distribution, Guid);
 
 translate_resource(#gri{aspect = storage_locations, scope = private}, StorageLocations) ->
-    maps:map(fun(_StorageId, StorageLocation) -> 
-        utils:undefined_to_null(StorageLocation)
-    end, StorageLocations);
+    #{
+        <<"locationsPerStorage">> => maps:map(fun(_StorageId, StorageLocation) -> 
+            utils:undefined_to_null(StorageLocation)
+        end, StorageLocations)
+    };
 
 translate_resource(#gri{aspect = acl, scope = private}, Acl) ->
     try

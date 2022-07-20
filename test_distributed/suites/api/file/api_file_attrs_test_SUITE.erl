@@ -1351,11 +1351,12 @@ get_storage_locations_test_base(FileGuid, ShareId, ExpResult, Config) ->
     end,
     
     CreateValidateGsSuccessfulCallFun = fun(Type) ->
-        ExpGsResponse = ExpResult#{
+        ExpGsResponse = #{
             <<"gri">> => gri:serialize(#gri{
                 type = Type, id = FileGuid, aspect = storage_locations, scope = private
             }),
-            <<"revision">> => 1
+            <<"revision">> => 1,
+            <<"locationsPerStorage">> => ExpResult
         },
         fun(_TestCtx, Result) ->
             ?assertEqual({ok, ExpGsResponse}, Result)
