@@ -325,8 +325,8 @@ update_summary(PodId, Diff, Default, Record = #atm_openfaas_function_pod_status_
 build_append_request(EventTimestamp, EventType, EventReason, EventMessage) ->
     #audit_log_append_request{
         severity = case EventType of
-            <<"Warning">> -> ?WARNING_ENTRY_SEVERITY;
-            _ -> ?INFO_ENTRY_SEVERITY
+            <<"Warning">> -> ?WARNING_AUDIT_LOG_SEVERITY;
+            _ -> ?INFO_AUDIT_LOG_SEVERITY
         end,
         content = #{
             <<"timestamp">> => EventTimestamp,

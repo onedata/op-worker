@@ -13,29 +13,29 @@
 -define(AUDIT_LOG_HRL, 1).
 
 
--define(SYSTEM_ENTRY_SOURCE, <<"system">>).
--define(USER_ENTRY_SOURCE, <<"user">>).
+-define(SYSTEM_AUDIT_LOG_ENTRY_SOURCE, <<"system">>).
+-define(USER_AUDIT_LOG_ENTRY_SOURCE, <<"user">>).
 
 
--define(DEBUG_ENTRY_SEVERITY, <<"debug">>).
--define(INFO_ENTRY_SEVERITY, <<"info">>).
--define(NOTICE_ENTRY_SEVERITY, <<"notice">>).
--define(WARNING_ENTRY_SEVERITY, <<"warning">>).
--define(ALERT_ENTRY_SEVERITY, <<"alert">>).
--define(ERROR_ENTRY_SEVERITY, <<"error">>).
--define(CRITICAL_ENTRY_SEVERITY, <<"critical">>).
--define(EMERGENCY_ENTRY_SEVERITY, <<"emergency">>).
+-define(DEBUG_AUDIT_LOG_SEVERITY, <<"debug">>).
+-define(INFO_AUDIT_LOG_SEVERITY, <<"info">>).
+-define(NOTICE_AUDIT_LOG_SEVERITY, <<"notice">>).
+-define(WARNING_AUDIT_LOG_SEVERITY, <<"warning">>).
+-define(ALERT_AUDIT_LOG_SEVERITY, <<"alert">>).
+-define(ERROR_AUDIT_LOG_SEVERITY, <<"error">>).
+-define(CRITICAL_AUDIT_LOG_SEVERITY, <<"critical">>).
+-define(EMERGENCY_AUDIT_LOG_SEVERITY, <<"emergency">>).
 
--define(ENTRY_SEVERITY_LEVELS, [
-    ?DEBUG_ENTRY_SEVERITY, ?INFO_ENTRY_SEVERITY, ?NOTICE_ENTRY_SEVERITY,
-    ?WARNING_ENTRY_SEVERITY, ?ALERT_ENTRY_SEVERITY,
-    ?ERROR_ENTRY_SEVERITY, ?CRITICAL_ENTRY_SEVERITY, ?EMERGENCY_ENTRY_SEVERITY
+-define(AUDIT_LOG_SEVERITY_LEVELS, [
+    ?DEBUG_AUDIT_LOG_SEVERITY, ?INFO_AUDIT_LOG_SEVERITY, ?NOTICE_AUDIT_LOG_SEVERITY,
+    ?WARNING_AUDIT_LOG_SEVERITY, ?ALERT_AUDIT_LOG_SEVERITY,
+    ?ERROR_AUDIT_LOG_SEVERITY, ?CRITICAL_AUDIT_LOG_SEVERITY, ?EMERGENCY_AUDIT_LOG_SEVERITY
 ]).
 
 
 -record(audit_log_append_request, {
-    severity = ?INFO_ENTRY_SEVERITY :: audit_log:entry_severity(),
-    source = ?SYSTEM_ENTRY_SOURCE :: audit_log:entry_source(),
+    severity = ?INFO_AUDIT_LOG_SEVERITY :: audit_log:entry_severity(),
+    source = ?SYSTEM_AUDIT_LOG_ENTRY_SOURCE :: audit_log:entry_source(),
     content :: json_utils:json_term()
 }).
 

@@ -309,15 +309,15 @@ workflow_append_system_log(LogContent, Severity, AtmWorkflowExecutionLogger) ->
 ensure_system_audit_log_object(LogContent, Severity) when is_map(LogContent) ->
     #audit_log_append_request{
         severity = Severity,
-        source = ?SYSTEM_ENTRY_SOURCE,
+        source = ?SYSTEM_AUDIT_LOG_ENTRY_SOURCE,
         content = LogContent
     };
 
 ensure_system_audit_log_object(LogMsg, Severity) when is_binary(LogMsg) ->
     #audit_log_append_request{
         severity = Severity,
-        source = ?SYSTEM_ENTRY_SOURCE,
-        content = #{<<"content">> => #{<<"description">> => LogMsg}}
+        source = ?SYSTEM_AUDIT_LOG_ENTRY_SOURCE,
+        content = #{<<"description">> => LogMsg}
     }.
 
 

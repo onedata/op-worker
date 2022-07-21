@@ -17,7 +17,7 @@
 
 %% API
 -export([sanitize/1]).
--export([json_spec/0, from_json/1]).
+-export([json_data_spec/0, from_json/1]).
 
 
 -define(MAX_LISTING_LIMIT, 1000).
@@ -45,12 +45,12 @@
 
 -spec sanitize(json_utils:json_map()) -> opts().
 sanitize(Data) ->
-    SanitizedData = middleware_sanitizer:sanitize_data(Data, json_spec()),
+    SanitizedData = middleware_sanitizer:sanitize_data(Data, json_data_spec()),
     from_json(SanitizedData).
 
 
--spec json_spec() -> middleware_sanitizer:data_spec().
-json_spec() ->
+-spec json_data_spec() -> middleware_sanitizer:data_spec().
+json_data_spec() ->
     #{optional => #{
         <<"index">> => {binary, fun(IndexBin) ->
             try

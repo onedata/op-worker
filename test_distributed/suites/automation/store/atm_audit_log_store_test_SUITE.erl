@@ -167,7 +167,7 @@ browse_by_timestamp_test(_Config) ->
                     <<"content">> => #{<<"value">> => Index + 1},
                     <<"timestamp">> => FirstTimestamp + Index,
                     <<"severity">> => <<"info">>,
-                    <<"source">> => ?USER_ENTRY_SOURCE
+                    <<"source">> => ?USER_AUDIT_LOG_ENTRY_SOURCE
                 }}
             }
         end, lists:seq(StartIndex, min(StartIndex + Limit - 1, ItemsNum - 1))),
@@ -230,7 +230,7 @@ get_input_item_generator_seed_data_spec(#atm_audit_log_store_config{
 %% @private
 -spec input_item_formatter(atm_value:expanded()) -> atm_value:expanded().
 input_item_formatter(LogContent) ->
-    Severity = lists_utils:random_element([str_utils:rand_hex(16) | ?ENTRY_SEVERITY_LEVELS]),
+    Severity = lists_utils:random_element([str_utils:rand_hex(16) | ?AUDIT_LOG_SEVERITY_LEVELS]),
 
     case rand:uniform(5) of
         1 when is_map(LogContent) -> LogContent#{<<"severity">> => Severity};
@@ -255,19 +255,19 @@ input_item_to_exp_store_item(_AtmWorkflowExecutionAuth, InputItem, _ItemDataSpec
         _ -> InputItem
     end,
     Severity = case is_map(InputItem) of
-        true -> maps:get(<<"severity">>, InputItem, ?INFO_ENTRY_SEVERITY);
-        false -> ?INFO_ENTRY_SEVERITY
+        true -> maps:get(<<"severity">>, InputItem, ?INFO_AUDIT_LOG_SEVERITY);
+        false -> ?INFO_AUDIT_LOG_SEVERITY
     end,
 
     #{
         <<"content">> => LogContent,
-        <<"severity">> => case lists:member(Severity, ?ENTRY_SEVERITY_LEVELS) of
+        <<"severity">> => case lists:member(Severity, ?AUDIT_LOG_SEVERITY_LEVELS) of
             true -> Severity;
-            false -> ?INFO_ENTRY_SEVERITY
+            false -> ?INFO_AUDIT_LOG_SEVERITY
         end,
         <<"timestamp">> => time_test_utils:get_frozen_time_millis(),
         <<"index">> => integer_to_binary(Index),
-        <<"source">> => ?USER_ENTRY_SOURCE
+        <<"source">> => ?USER_AUDIT_LOG_ENTRY_SOURCE
     }.
 
 

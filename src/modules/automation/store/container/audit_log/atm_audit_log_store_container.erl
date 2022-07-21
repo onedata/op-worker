@@ -248,40 +248,31 @@ build_audit_log_append_request(#audit_log_append_request{} = AppendRequest) ->
 
 build_audit_log_append_request(#{<<"content">> := LogContent, <<"severity">> := Severity}) ->
     #audit_log_append_request{
-        severity = normalize_severity(Severity),
-        source = ?USER_ENTRY_SOURCE,
+        severity = audit_log:normalize_severity(Severity),
+        source = ?USER_AUDIT_LOG_ENTRY_SOURCE,
         content = LogContent
     };
 
 build_audit_log_append_request(#{<<"content">> := LogContent}) ->
     #audit_log_append_request{
-        severity = ?INFO_ENTRY_SEVERITY,
-        source = ?USER_ENTRY_SOURCE,
+        severity = ?INFO_AUDIT_LOG_SEVERITY,
+        source = ?USER_AUDIT_LOG_ENTRY_SOURCE,
         content = LogContent
     };
 
 build_audit_log_append_request(#{<<"severity">> := Severity} = Object) ->
     #audit_log_append_request{
-        severity = normalize_severity(Severity),
-        source = ?USER_ENTRY_SOURCE,
+        severity = audit_log:normalize_severity(Severity),
+        source = ?USER_AUDIT_LOG_ENTRY_SOURCE,
         content = maps:without([<<"severity">>], Object)
     };
 
 build_audit_log_append_request(LogContent) ->
     #audit_log_append_request{
-        severity = ?INFO_ENTRY_SEVERITY,
-        source = ?USER_ENTRY_SOURCE,
+        severity = ?INFO_AUDIT_LOG_SEVERITY,
+        source = ?USER_AUDIT_LOG_ENTRY_SOURCE,
         content = LogContent
     }.
-
-
-%% @private
--spec normalize_severity(any()) -> binary().
-normalize_severity(ProvidedSeverity) ->
-    case lists:member(ProvidedSeverity, ?ENTRY_SEVERITY_LEVELS) of
-        true -> ProvidedSeverity;
-        false -> ?INFO_ENTRY_SEVERITY
-    end.
 
 
 %% @private

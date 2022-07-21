@@ -81,7 +81,7 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
 data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
     undefined;
 data_spec(#op_req{operation = get, gri = #gri{aspect = audit_log}}) ->
-    audit_log_browse_opts:json_spec();
+    audit_log_browse_opts:json_data_spec();
 data_spec(#op_req{operation = get, gri = #gri{aspect = time_series_collections}}) ->
     undefined;
 %% @TODO VFS-9176 Align QoS transfer stats API with time series API

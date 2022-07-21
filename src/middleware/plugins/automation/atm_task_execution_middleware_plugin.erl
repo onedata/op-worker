@@ -70,7 +70,7 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = Aspect}}) when
 ->
     undefined;
 data_spec(#op_req{operation = get, gri = #gri{aspect = {openfaas_function_pod_event_log, _}}}) ->
-    audit_log_browse_opts:json_spec().
+    audit_log_browse_opts:json_data_spec().
 
 
 %%--------------------------------------------------------------------

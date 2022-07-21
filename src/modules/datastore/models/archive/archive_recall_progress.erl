@@ -112,7 +112,7 @@ report_file_finished(Id) ->
 -spec report_error(id(), json_utils:json_term()) -> ok | {error, term()}.
 report_error(Id, ErrorJson) ->
     audit_log:append(?ERROR_LOG_ID(Id), #audit_log_append_request{
-        severity = ?ERROR_ENTRY_SEVERITY,
+        severity = ?ERROR_AUDIT_LOG_SEVERITY,
         content = ErrorJson
     }),
     datastore_time_series_collection:consume_measurements(?CTX, ?TSC_ID(Id), #{

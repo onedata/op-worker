@@ -657,7 +657,7 @@ data_spec_get(#gri{aspect = download_url}) -> #{
 };
 
 data_spec_get(#gri{aspect = archive_recall_log}) ->
-    audit_log_browse_opts:json_spec();
+    audit_log_browse_opts:json_data_spec();
 
 data_spec_get(#gri{aspect = dir_size_stats}) -> #{
     % for this aspect data is sanitized in `get` function, but all possible parameters 

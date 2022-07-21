@@ -52,7 +52,7 @@ create(Id) ->
 -spec report_synchronization_started(id(), file_id:file_guid()) -> ok | {error, term()}.
 report_synchronization_started(Id, FileGuid) ->
     audit_log:append(Id, #audit_log_append_request{
-        severity = ?INFO_ENTRY_SEVERITY,
+        severity = ?INFO_AUDIT_LOG_SEVERITY,
         content = #{
             <<"status">> => <<"scheduled">>,
             <<"fileId">> => file_guid_to_object_id(FileGuid),
@@ -64,7 +64,7 @@ report_synchronization_started(Id, FileGuid) ->
 -spec report_file_synchronized(id(), file_id:file_guid()) -> ok | {error, term()}.
 report_file_synchronized(Id, FileGuid) ->
     audit_log:append(Id, #audit_log_append_request{
-        severity = ?INFO_ENTRY_SEVERITY,
+        severity = ?INFO_AUDIT_LOG_SEVERITY,
         content = #{
             <<"status">> => <<"completed">>,
             <<"fileId">> => file_guid_to_object_id(FileGuid),
@@ -77,7 +77,7 @@ report_file_synchronized(Id, FileGuid) ->
     ok | {error, term()}.
 report_file_synchronization_skipped(Id, FileGuid, Reason) ->
     audit_log:append(Id, #audit_log_append_request{
-        severity = ?INFO_ENTRY_SEVERITY,
+        severity = ?INFO_AUDIT_LOG_SEVERITY,
         content = #{
             <<"status">> => <<"skipped">>,
             <<"fileId">> => file_guid_to_object_id(FileGuid),
@@ -91,7 +91,7 @@ report_file_synchronization_failed(Id, FileGuid, Error) ->
     ErrorJson = errors:to_json(Error),
 
     audit_log:append(Id, #audit_log_append_request{
-        severity = ?ERROR_ENTRY_SEVERITY,
+        severity = ?ERROR_AUDIT_LOG_SEVERITY,
         content = #{
             <<"status">> => <<"failed">>,
             <<"fileId">> => file_guid_to_object_id(FileGuid),

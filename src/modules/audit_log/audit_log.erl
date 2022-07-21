@@ -18,6 +18,7 @@
 
 %% CRUD API
 -export([create/1, create/2, delete/1]).
+-export([normalize_severity/1]).
 -export([append/2, browse/2]).
 %% Iterator API
 -export([new_iterator/0, next_batch/3]).
@@ -25,14 +26,14 @@
 
 -type id() :: json_infinite_log_model:id().
 
--type entry_source() :: binary().    %% ?SYSTEM_ENTRY_SOURCE | ?USER_ENTRY_SOURCE
--type entry_severity() :: binary().  %% see ?ENTRY_SEVERITY_LEVELS
+-type entry_source() :: binary().    %% ?SYSTEM_AUDIT_LOG_ENTRY_SOURCE | ?USER_AUDIT_LOG_ENTRY_SOURCE
+-type entry_severity() :: binary().  %% see ?AUDIT_LOG_SEVERITY_LEVELS
 
-%% entry in a format suitable for external APIs (ready to be encoded to json)
+%% entry() typespec (impossible to define in pure erlang due to binary keys):
 %% #{
 %%     <<"index">> := audit_log_browse_opts:index(),
 %%     <<"timestamp">> := audit_log_browse_opts:timestamp_millis(),
-%%     <<"source">> => entry_source()
+%%     <<"source">> => entry_source()  // [default: system]
 %%     <<"severity">> := entry_severity(),
 %%     <<"content">> := json_utils:json_map()
 %% }
@@ -40,7 +41,7 @@
 
 -type append_request() :: #audit_log_append_request{}.
 
-%% browse_result in a format suitable for external APIs (ready to be encoded to json)
+%% browse_result() typespec (impossible to define in pure erlang due to binary keys):
 %% #{
 %%     <<"isLast">> := boolean(),
 %%     <<"logEntries">> := [entry()]
@@ -75,6 +76,14 @@ delete(Id) ->
     json_infinite_log_model:destroy(Id).
 
 
+-spec normalize_severity(binary()) -> entry_severity().
+normalize_severity(ProvidedSeverity) ->
+    case lists:member(ProvidedSeverity, ?AUDIT_LOG_SEVERITY_LEVELS) of
+        true -> ProvidedSeverity;
+        false -> ?INFO_AUDIT_LOG_SEVERITY
+    end.
+
+
 -spec append(id(), append_request()) -> ok | {error, term()}.
 append(Id, #audit_log_append_request{
     severity = Severity,
@@ -84,7 +93,7 @@ append(Id, #audit_log_append_request{
     json_infinite_log_model:append(Id, maps_utils:put_if_defined(#{
         <<"severity">> => Severity,
         <<"content">> => Content
-    }, <<"source">>, Source, ?SYSTEM_ENTRY_SOURCE)).
+    }, <<"source">>, Source, ?SYSTEM_AUDIT_LOG_ENTRY_SOURCE)).
 
 
 -spec browse(id(), audit_log_browse_opts:opts()) ->

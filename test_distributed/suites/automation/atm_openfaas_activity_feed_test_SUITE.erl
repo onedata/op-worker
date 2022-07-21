@@ -736,8 +736,8 @@ verify_recorded_pod_status_changes(RegistryId, SubmittedReports) ->
         EventData = #{
             <<"timestamp">> => EventTimestamp,
             <<"severity">> => case EventType of
-                <<"warning">> -> ?WARNING_ENTRY_SEVERITY;
-                _ -> ?INFO_ENTRY_SEVERITY
+                <<"warning">> -> ?WARNING_AUDIT_LOG_SEVERITY;
+                _ -> ?INFO_AUDIT_LOG_SEVERITY
             end,
             <<"content">> => #{
                 <<"type">> => EventType,
