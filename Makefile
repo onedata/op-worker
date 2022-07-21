@@ -40,7 +40,7 @@ get-deps:
 	$(REBAR) get-deps
 
 upgrade:
-	$(REBAR) upgrade
+	$(REBAR) upgrade --all
 
 compile:
 	$(REBAR) compile
