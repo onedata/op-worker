@@ -20,7 +20,7 @@
     schedule_atm_workflow_with_empty_lane/0,
     schedule_atm_workflow_with_empty_parallel_box/0,
 
-    schedule_not_compatible_atm_workflow/0,
+    schedule_incompatible_atm_workflow/0,
     schedule_atm_workflow_with_openfaas_not_configured/0,
     schedule_atm_workflow_with_invalid_initial_store_content/0
 ]).
@@ -131,7 +131,7 @@ schedule_atm_workflow_with_empty_parallel_box() ->
     ).
 
 
-schedule_not_compatible_atm_workflow() ->
+schedule_incompatible_atm_workflow() ->
     AtmWorkflowSchemaId = atm_test_inventory:add_workflow_schema(
         ?EXECUTABLE_ATM_WORKFLOW_SCHEMA_DRAFT
     ),

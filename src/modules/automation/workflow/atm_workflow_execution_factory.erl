@@ -185,11 +185,11 @@ fetch_executable_lambdas_with_referenced_revisions(SessionId, AtmWorkflowSchemaR
         {ok, AtmLambdaDoc = #document{
             value = AtmLambda = #od_atm_lambda{
                 revision_registry = AtmLambdaRevisionRegistry,
-                compatible = IsExecutable
+                compatible = IsCompatible
             }
         }} = atm_lambda_logic:get(SessionId, AtmLambdaId),
 
-        IsExecutable orelse throw(?ERROR_NOT_SUPPORTED),
+        IsCompatible orelse throw(?ERROR_NOT_SUPPORTED),
 
         AtmLambdaWithReferencedRevisions = AtmLambda#od_atm_lambda{
             revision_registry = atm_lambda_revision_registry:with(
