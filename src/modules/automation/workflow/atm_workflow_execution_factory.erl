@@ -80,7 +80,7 @@ create(
     {ok, #document{value = AtmWorkflowSchema} = AtmWorkflowSchemaDoc} = atm_workflow_schema_logic:get(
         SessionId, AtmWorkflowSchemaId
     ),
-    AtmWorkflowSchema#od_atm_workflow_schema.compatible orelse throw(?ERROR_FORBIDDEN),  %% TODO custom error?
+    AtmWorkflowSchema#od_atm_workflow_schema.compatible orelse throw(?ERROR_NOT_SUPPORTED),
 
     {ok, AtmWorkflowSchemaRevision} = atm_workflow_schema_logic:get_revision(
         AtmWorkflowSchemaRevisionNum, AtmWorkflowSchemaDoc
@@ -189,7 +189,7 @@ fetch_executable_lambdas_with_referenced_revisions(SessionId, AtmWorkflowSchemaR
             }
         }} = atm_lambda_logic:get(SessionId, AtmLambdaId),
 
-        IsExecutable orelse throw(?ERROR_FORBIDDEN),  %% TODO custom error?
+        IsExecutable orelse throw(?ERROR_NOT_SUPPORTED),
 
         AtmLambdaWithReferencedRevisions = AtmLambda#od_atm_lambda{
             revision_registry = atm_lambda_revision_registry:with(

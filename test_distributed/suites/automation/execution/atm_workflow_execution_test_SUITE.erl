@@ -28,6 +28,7 @@
     schedule_atm_workflow_with_no_lanes/1,
     schedule_atm_workflow_with_empty_lane/1,
     schedule_atm_workflow_with_empty_parallel_box/1,
+    schedule_not_compatible_atm_workflow/1,
     schedule_atm_workflow_with_openfaas_not_configured/1,
 
     schedule_atm_workflow_with_invalid_initial_store_content/1,
@@ -100,6 +101,7 @@ groups() -> [
         schedule_atm_workflow_with_no_lanes,
         schedule_atm_workflow_with_empty_lane,
         schedule_atm_workflow_with_empty_parallel_box,
+        schedule_not_compatible_atm_workflow,
         schedule_atm_workflow_with_openfaas_not_configured
     ]},
     {scheduling_executable_workflow_schema_with_invalid_args_tests, [parallel], [
@@ -216,6 +218,10 @@ schedule_atm_workflow_with_empty_lane(_Config) ->
 
 
 schedule_atm_workflow_with_empty_parallel_box(_Config) ->
+    ?RUN_SCHEDULING_TEST().
+
+
+schedule_not_compatible_atm_workflow(_Config) ->
     ?RUN_SCHEDULING_TEST().
 
 

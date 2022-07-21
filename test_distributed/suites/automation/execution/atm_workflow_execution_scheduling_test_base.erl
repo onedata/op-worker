@@ -19,6 +19,8 @@
     schedule_atm_workflow_with_no_lanes/0,
     schedule_atm_workflow_with_empty_lane/0,
     schedule_atm_workflow_with_empty_parallel_box/0,
+
+    schedule_not_compatible_atm_workflow/0,
     schedule_atm_workflow_with_openfaas_not_configured/0,
     schedule_atm_workflow_with_invalid_initial_store_content/0
 ]).
@@ -52,6 +54,8 @@
         ?ECHO_LAMBDA_REVISION_NUM => ?INTEGER_ECHO_LAMBDA_DRAFT
     }}
 }).
+
+-define(rpc(__CALL), ?rpc(?PROVIDER_SELECTOR, __CALL)).
 
 
 %%%===================================================================
@@ -127,6 +131,23 @@ schedule_atm_workflow_with_empty_parallel_box() ->
     ).
 
 
+schedule_not_compatible_atm_workflow() ->
+    AtmWorkflowSchemaId = atm_test_inventory:add_workflow_schema(
+        ?EXECUTABLE_ATM_WORKFLOW_SCHEMA_DRAFT
+    ),
+    AtmLambdaId = atm_workflow_schema_query:run(
+        atm_test_inventory:get_workflow_schema_revision(1, AtmWorkflowSchemaId),
+        [lanes, 1, parallel_boxes, 1, tasks, 1, lambda_id]
+    ),
+
+    patch_workflow_schema_compatibility(AtmWorkflowSchemaId, false),
+    ?assertThrow(?ERROR_NOT_SUPPORTED, try_to_schedule_workflow_execution(AtmWorkflowSchemaId, 1)),
+
+    patch_workflow_schema_compatibility(AtmWorkflowSchemaId, true),
+    patch_lambda_compatibility(AtmLambdaId, false),
+    ?assertThrow(?ERROR_NOT_SUPPORTED, try_to_schedule_workflow_execution(AtmWorkflowSchemaId, 1)).
+
+
 schedule_atm_workflow_with_openfaas_not_configured() ->
     AtmWorkflowSchemaId = atm_test_inventory:add_workflow_schema(
         ?EXECUTABLE_ATM_WORKFLOW_SCHEMA_DRAFT
@@ -163,6 +184,42 @@ schedule_atm_workflow_with_invalid_initial_store_content() ->
 %===================================================================
 % Internal functions
 %===================================================================
+
+
+%% @private
+-spec patch_workflow_schema_compatibility(od_atm_workflow_schema:id(), boolean()) ->
+    {ok, od_atm_workflow_schema:doc()}.
+patch_workflow_schema_compatibility(AtmWorkflowSchemaId, IsCompatible) ->
+    SessionId = oct_background:get_user_session_id(?USER_SELECTOR, ?PROVIDER_SELECTOR),
+
+    % enforce record pulled and cached in op
+    {ok, Doc} = ?assertMatch({ok, _}, ?rpc(atm_workflow_schema_logic:get(SessionId, AtmWorkflowSchemaId))),
+
+    Diff = fun(Schema) -> {ok, Schema#od_atm_workflow_schema{compatible = IsCompatible}} end,
+    ?rpc(od_atm_workflow_schema:update_cache(AtmWorkflowSchemaId, Diff, Doc)),
+
+    ?assertMatch(
+        {ok, #document{value = #od_atm_workflow_schema{compatible = IsCompatible}}},
+        ?rpc(atm_workflow_schema_logic:get(SessionId, AtmWorkflowSchemaId))
+    ).
+
+
+%% @private
+-spec patch_lambda_compatibility(od_atm_lambda:id(), boolean()) ->
+    {ok, od_atm_lambda:doc()}.
+patch_lambda_compatibility(AtmLambdaId, IsCompatible) ->
+    SessionId = oct_background:get_user_session_id(?USER_SELECTOR, ?PROVIDER_SELECTOR),
+
+    % enforce record pulled and cached in op
+    {ok, Doc} = ?assertMatch({ok, _}, ?rpc(atm_lambda_logic:get(SessionId, AtmLambdaId))),
+
+    Diff = fun(Lambda) -> {ok, Lambda#od_atm_lambda{compatible = IsCompatible}} end,
+    ?rpc(od_atm_lambda:update_cache(AtmLambdaId, Diff, Doc)),
+
+    ?assertMatch(
+        {ok, #document{value = #od_atm_lambda{compatible = IsCompatible}}},
+        ?rpc(atm_lambda_logic:get(SessionId, AtmLambdaId))
+    ).
 
 
 %% @private
