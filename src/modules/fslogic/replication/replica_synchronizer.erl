@@ -1558,8 +1558,13 @@ flush_blocks_list(AllBlocks, ExcludeSessions, Flush) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec flush_stats(#state{}, boolean()) -> #state{}.
-flush_stats(#state{cached_stats = Stats} = State, _) when map_size(Stats) == 0 ->
-    State;
+flush_stats(#state{cached_stats = Stats} = State, CancelTimer) when map_size(Stats) == 0 ->
+    case CancelTimer of
+        true ->
+            cancel_caching_stats_timer(State);
+        false ->
+            State
+    end;
 flush_stats(#state{
     space_id = SpaceId,
     transfer_id_to_stats_callback_module = TidToStatsCallback
