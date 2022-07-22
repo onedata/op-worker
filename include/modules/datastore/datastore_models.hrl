@@ -17,6 +17,7 @@
 -include("modules/storage/luma/luma.hrl").
 -include("modules/fslogic/file_attr.hrl").
 -include("workflow_engine.hrl").
+-include_lib("ctool/include/space_support/support_parameters.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_models.hrl").
 
 -type file_descriptors() :: #{session:id() => non_neg_integer()}.
@@ -126,6 +127,8 @@
     shares = [] :: [od_share:id()],
 
     harvesters = [] :: [od_harvester:id()],
+
+    support_parameters_registry = #support_parameters_registry{} :: support_parameters_registry:record(),
 
     cache_state = #{} :: cache_state()
 }).

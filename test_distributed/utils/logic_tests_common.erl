@@ -515,6 +515,7 @@ mock_graph_get(GRI = #gri{type = od_space, id = SpaceId, aspect = instance}, Aut
                 protected -> ?SPACE_PROTECTED_DATA_VALUE(SpaceId);
                 private -> ?SPACE_PRIVATE_DATA_VALUE(SpaceId)
             end,
+            ct:print("Data: ~p", [Data]),
             {ok, #gs_resp_graph{data_format = resource, data = Data}};
         false ->
             ?ERROR_FORBIDDEN
