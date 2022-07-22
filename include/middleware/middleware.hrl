@@ -120,6 +120,30 @@
 
 
 %%%===================================================================
+%%% CDMI related operations available in middleware_worker
+%%%===================================================================
+
+
+-record(transfer_encoding_get_request, {}).
+
+-record(transfer_encoding_set_request, {
+    value :: binary()
+}).
+
+-record(cdmi_completion_status_get_request, {}).
+
+-record(cdmi_completion_status_set_request, {
+    value :: binary()
+}).
+
+-record(mimetype_get_request, {}).
+
+-record(mimetype_set_request, {
+    value :: binary()
+}).
+
+
+%%%===================================================================
 %%% Datasets related operations available in middleware_worker
 %%%===================================================================
 
@@ -221,5 +245,17 @@
     query_view_params :: transfer:query_view_params(),
     callback :: transfer:callback()
 }).
+
+
+%%%===================================================================
+%%% File metadata related operations available in middleware_worker
+%%%===================================================================
+
+-record(file_distribution_gather_request, {}).
+
+-record(historical_dir_size_stats_gather_request, {
+    request :: ts_browse_request:record()
+}).
+
 
 -endif.

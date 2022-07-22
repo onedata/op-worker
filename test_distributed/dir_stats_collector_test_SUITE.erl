@@ -122,6 +122,8 @@ end_per_suite(Config) ->
     lfm_files_test_base:end_per_suite(Config).
 
 
+init_per_testcase(Case = basic_test, Config) ->
+    dir_stats_collector_test_base:init(lfm_files_test_base:init_per_testcase(Case, Config), true);
 init_per_testcase(Case, Config) ->
     dir_stats_collector_test_base:init(lfm_files_test_base:init_per_testcase(Case, Config)).
 

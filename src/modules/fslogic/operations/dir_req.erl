@@ -16,6 +16,7 @@
 -include("modules/fslogic/data_access_control.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 
 

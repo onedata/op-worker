@@ -104,7 +104,10 @@
 ]).
 
 all() ->
-    ?ALL(?TEST_CASES, ?PERFORMANCE_TEST_CASES).
+    ?ALL(
+        ?TEST_CASES
+%%        ?PERFORMANCE_TEST_CASES
+    ).
 
 %%%===================================================================
 %%% Test functions
@@ -1377,8 +1380,9 @@ init_per_testcase(Case, Config) when
     Case =:= dir_stats_collector_parallel_write_test;
     Case =:= dir_stats_collector_parallel_override_test;
     Case =:= dir_stats_collector_parallel_write_with_sleep_test;
-    Case =:= dir_stats_collector_parallel_write_to_empty_file_test ->
-    dir_stats_collector_test_base:init(init_per_testcase(?DEFAULT_CASE(Case), Config));
+    Case =:= dir_stats_collector_parallel_write_to_empty_file_test
+->
+    dir_stats_collector_test_base:init(init_per_testcase(?DEFAULT_CASE(Case), Config), true);
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 60}),
     lfm_proxy:init(Config).

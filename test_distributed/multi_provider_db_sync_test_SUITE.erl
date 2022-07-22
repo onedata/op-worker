@@ -232,7 +232,7 @@ verify_sparse_file(W, SessId, FileGuid, FileSize, ExpectedBlocks, ReadFile) when
     lists:foreach(fun({ProviderId, Blocks}) ->
         BlocksSize = lists:foldl(fun([_, Size], Acc) -> Acc + Size end, 0, Blocks),
         GetProviderBlocks = fun() ->
-            case lfm_proxy:get_file_distribution(W, SessId, ?FILE_REF(FileGuid)) of
+            case opt_file_metadata:get_distribution_deprecated(W, SessId, ?FILE_REF(FileGuid)) of
                 {ok, Distribution} ->
                     lists:filter(fun(#{<<"providerId">> := Id}) -> ProviderId =:= Id end, Distribution);
                 Other ->

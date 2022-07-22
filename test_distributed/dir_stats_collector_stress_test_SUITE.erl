@@ -80,8 +80,8 @@ many_files_creation_tree_test_base(Config) ->
                 ExpectedDirStats ->
                     ct:print("Space dir stats verified"),
                     SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
-                    ?assertEqual(ok, rpc:call(Worker, dir_stats_collector_config, disable, [SpaceId])),
-                    ?assertEqual(ok, rpc:call(Worker, dir_stats_collector_config, enable, [SpaceId])),
+                    ?assertEqual(ok, rpc:call(Worker, dir_stats_service_state, disable, [SpaceId])),
+                    ?assertEqual(ok, rpc:call(Worker, dir_stats_service_state, enable, [SpaceId])),
                     put(stress_phase, calculate_stats),
                     PhaseAns;
                 _ ->
@@ -129,8 +129,10 @@ init_per_testcase(stress_test = Case, Config) ->
     NewConfig = files_stress_test_base:init_per_testcase(Case, Config),
     [Worker | _] = Workers = ?config(op_worker_nodes, NewConfig),
     SpaceId = lfm_test_utils:get_user1_first_space_id(NewConfig),
-    test_utils:set_env(Workers, op_worker, dir_stats_collecting_status_for_new_spaces, enabled),
-    ?assertEqual(ok, rpc:call(Worker, dir_stats_collector_config, init_for_empty_space, [SpaceId])),
+    ?assertEqual(ok, rpc:call(Worker, space_support_state_api, init_support_state, [SpaceId, #{
+        accounting_enabled => false,
+        dir_stats_service_enabled => true
+    }])),
     NewConfig;
 init_per_testcase(_Case, Config) ->
     Config.

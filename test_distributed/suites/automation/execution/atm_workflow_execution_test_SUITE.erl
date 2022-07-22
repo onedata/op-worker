@@ -28,6 +28,7 @@
     schedule_atm_workflow_with_no_lanes/1,
     schedule_atm_workflow_with_empty_lane/1,
     schedule_atm_workflow_with_empty_parallel_box/1,
+    schedule_incompatible_atm_workflow/1,
     schedule_atm_workflow_with_openfaas_not_configured/1,
 
     schedule_atm_workflow_with_invalid_initial_store_content/1,
@@ -85,7 +86,14 @@
     map_results_to_task_time_series_store/1,
 
     fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error/1,
-    fail_atm_workflow_execution_due_to_job_result_store_mapping_error/1
+    fail_atm_workflow_execution_due_to_incorrect_const_arg_type_error/1,
+    fail_atm_workflow_execution_due_to_incorrect_iterated_item_query_arg_error/1,
+    fail_atm_workflow_execution_due_to_empty_single_value_store_arg_error/1,
+    fail_atm_workflow_execution_due_to_job_result_store_mapping_error/1,
+    fail_atm_workflow_execution_due_to_job_missing_required_results_error/1,
+    fail_atm_workflow_execution_due_to_incorrect_result_type_error/1,
+    fail_atm_workflow_execution_due_to_lambda_exception/1,
+    fail_atm_workflow_execution_due_to_lambda_error/1
 ]).
 
 groups() -> [
@@ -93,6 +101,7 @@ groups() -> [
         schedule_atm_workflow_with_no_lanes,
         schedule_atm_workflow_with_empty_lane,
         schedule_atm_workflow_with_empty_parallel_box,
+        schedule_incompatible_atm_workflow,
         schedule_atm_workflow_with_openfaas_not_configured
     ]},
     {scheduling_executable_workflow_schema_with_invalid_args_tests, [parallel], [
@@ -156,7 +165,14 @@ groups() -> [
     ]},
     {failure_tests, [parallel], [
         fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error,
-        fail_atm_workflow_execution_due_to_job_result_store_mapping_error
+        fail_atm_workflow_execution_due_to_incorrect_const_arg_type_error,
+        fail_atm_workflow_execution_due_to_incorrect_iterated_item_query_arg_error,
+        fail_atm_workflow_execution_due_to_empty_single_value_store_arg_error,
+        fail_atm_workflow_execution_due_to_job_result_store_mapping_error,
+        fail_atm_workflow_execution_due_to_job_missing_required_results_error,
+        fail_atm_workflow_execution_due_to_incorrect_result_type_error,
+        fail_atm_workflow_execution_due_to_lambda_exception,
+        fail_atm_workflow_execution_due_to_lambda_error
     ]}
 ].
 
@@ -202,6 +218,10 @@ schedule_atm_workflow_with_empty_lane(_Config) ->
 
 
 schedule_atm_workflow_with_empty_parallel_box(_Config) ->
+    ?RUN_SCHEDULING_TEST().
+
+
+schedule_incompatible_atm_workflow(_Config) ->
     ?RUN_SCHEDULING_TEST().
 
 
@@ -381,7 +401,35 @@ fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error(_Conf
     ?FAILURE_MAPPING_TEST().
 
 
+fail_atm_workflow_execution_due_to_incorrect_const_arg_type_error(_Config) ->
+    ?FAILURE_MAPPING_TEST().
+
+
+fail_atm_workflow_execution_due_to_incorrect_iterated_item_query_arg_error(_Config) ->
+    ?FAILURE_MAPPING_TEST().
+
+
+fail_atm_workflow_execution_due_to_empty_single_value_store_arg_error(_Config) ->
+    ?FAILURE_MAPPING_TEST().
+
+
 fail_atm_workflow_execution_due_to_job_result_store_mapping_error(_Config) ->
+    ?FAILURE_MAPPING_TEST().
+
+
+fail_atm_workflow_execution_due_to_job_missing_required_results_error(_Config) ->
+    ?FAILURE_MAPPING_TEST().
+
+
+fail_atm_workflow_execution_due_to_incorrect_result_type_error(_Config) ->
+    ?FAILURE_MAPPING_TEST().
+
+
+fail_atm_workflow_execution_due_to_lambda_exception(_Config) ->
+    ?FAILURE_MAPPING_TEST().
+
+
+fail_atm_workflow_execution_due_to_lambda_error(_Config) ->
     ?FAILURE_MAPPING_TEST().
 
 
@@ -399,7 +447,11 @@ init_per_suite(Config) ->
         [{?LOAD_MODULES, ModulesToLoad} | Config],
         #onenv_test_config{
             onenv_scenario = "1op",
-            envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}],
+            envs = [{op_worker, op_worker, [
+                {fuse_session_grace_period_seconds, 24 * 60 * 60},
+                {atm_workflow_engine_slots_count, 100000},
+                {atm_workflow_engine_async_calls_limit, 100000}
+            ]}],
             posthook = fun(NewConfig) ->
                 atm_test_inventory:init_per_suite(?PROVIDER_SELECTOR, user1),
                 atm_test_inventory:add_member(?USER_SELECTOR),

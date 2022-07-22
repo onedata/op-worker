@@ -27,6 +27,7 @@
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("cluster_worker/include/time_series/browsing.hrl").
 
 
 %% API
@@ -667,6 +668,9 @@ data_spec_get(#gri{aspect = archive_recall_log}) -> #{
 };
 
 data_spec_get(#gri{aspect = dir_size_stats}) -> #{
+    required => #{
+        id => {binary, guid}
+    },
     % for this aspect data is sanitized in `get` function, but all possible parameters 
     % still have to be specified so they are not removed during sanitization
     optional => #{
@@ -939,7 +943,7 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = acl}}, _) ->
     ?lfm_check(lfm:get_acl(Auth#auth.session_id, ?FILE_REF(FileGuid)));
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = distribution}}, _) ->
-    ?lfm_check(lfm:get_file_distribution(Auth#auth.session_id, ?FILE_REF(FileGuid)));
+    {ok, mi_file_metadata:gather_distribution(Auth#auth.session_id, ?FILE_REF(FileGuid))};
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = shares}}, _) ->
     {ok, FileAttrs} = ?lfm_check(lfm:stat(Auth#auth.session_id, ?FILE_REF(FileGuid))),
@@ -1032,9 +1036,11 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = archive_recall_log},
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = api_samples, scope = public}}, _) ->
     {ok, value, public_file_api_samples:generate_for(Auth#auth.session_id, FileGuid)};
 
-get(#op_req{gri = #gri{id = Guid, aspect = dir_size_stats}, data = Data}, _) ->
-    TSBrowseRequest = ts_browse_request:from_json(Data),
-    {ok, value, ?check(dir_size_stats:browse_time_stats_collection(Guid, TSBrowseRequest))}.
+get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = dir_size_stats}, data = Data}, _) ->
+    BrowseRequest = ts_browse_request:from_json(Data),
+    {ok, value, mi_file_metadata:gather_historical_dir_size_stats(
+        Auth#auth.session_id, ?FILE_REF(Guid), BrowseRequest)}.
+
 
 
 %%%===================================================================

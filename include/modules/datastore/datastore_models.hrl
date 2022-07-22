@@ -238,6 +238,7 @@
     revision_registry :: atm_lambda_revision_registry:record(),
 
     atm_inventories = [] :: [od_atm_inventory:id()],
+    compatible :: boolean(),
 
     cache_state = #{} :: cache_state()
 }).
@@ -249,6 +250,7 @@
     revision_registry :: atm_workflow_schema_revision_registry:record(),
 
     atm_inventory :: od_atm_inventory:id(),
+    compatible :: boolean(),
 
     cache_state = #{} :: cache_state()
 }).
@@ -1053,18 +1055,24 @@
 }).
 
 
--record(dir_stats_collector_config, {
-    collecting_status :: dir_stats_collector_config:collecting_status(),
+-record(dir_stats_service_state, {
+    status :: dir_stats_service_state:status(),
 
-    % incarnation is incremented every time when collecting_status is changed to collections_initialization ;
+    % incarnation is incremented every time when status is changed to initializing ;
     % it is used to evaluate if collection is outdated (see dir_stats_collection_behaviour:acquire/1)
     incarnation = 0 :: non_neg_integer(),
 
     % information about next status transition that is expected to be executed after ongoing transition is finished
-    pending_status_transition :: dir_stats_collector_config:pending_status_transition(),
+    pending_status_transition :: dir_stats_service_state:pending_status_transition(),
 
-    % timestamps of collecting status changes that allow verification when historic statistics were trustworthy
-    collecting_status_change_timestamps = [] :: [dir_stats_collector_config:status_change_timestamp()]
+    % timestamps of status changes that allow verification when historic statistics were trustworthy
+    status_change_timestamps = [] :: [dir_stats_service_state:status_change_timestamp()]
+}).
+
+
+-record(space_support_state, {
+    accounting_enabled :: boolean(),
+    dir_stats_service_state :: dir_stats_service_state:record()
 }).
 
 

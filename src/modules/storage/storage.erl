@@ -57,7 +57,7 @@
     update_helper/2]).
 
 %%% Support related functions
--export([support_space/3, update_space_support_size/3, revoke_space_support/2]).
+-export([support_space/4, update_space_support_size/3, revoke_space_support/2]).
 -export([supports_any_space/1]).
 
 % exported for initializer and env_up escripts
@@ -428,12 +428,17 @@ update_helper(StorageId, UpdateFun) ->
 %%% Support related functions
 %%%===================================================================
 
--spec support_space(id(), tokens:serialized(), od_space:support_size()) ->
+-spec support_space(
+    id(),
+    tokens:serialized(),
+    od_space:support_size(),
+    space_support_state_api:support_opts()
+) ->
     {ok, od_space:id()} | errors:error().
-support_space(StorageId, SerializedToken, SupportSize) ->
+support_space(StorageId, SerializedToken, SupportSize, SupportOpts) ->
     case validate_support_request(SerializedToken) of
         ok ->
-            case storage_logic:support_space(StorageId, SerializedToken, SupportSize) of
+            case storage_logic:support_space(StorageId, SerializedToken, SupportSize, SupportOpts) of
                 {ok, SpaceId} ->
                     on_space_supported(SpaceId, StorageId),
                     {ok, SpaceId};
@@ -526,7 +531,7 @@ on_space_unsupported(SpaceId, StorageId) ->
     space_unsupport:cleanup_local_documents(SpaceId, StorageId),
     auto_storage_import_worker:notify_space_unsupported(SpaceId),
     main_harvesting_stream:space_unsupported(SpaceId),
-    dir_stats_collector_config:clean(SpaceId).
+    space_support_state_api:clean_support_state(SpaceId).
 
 
 %% @private
