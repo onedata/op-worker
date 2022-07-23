@@ -14,11 +14,16 @@
 -author("Bartosz Walkowicz").
 
 -include("middleware/middleware.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 
 %% API
 -export([
     gather_distribution/2,
-    gather_historical_dir_size_stats/3
+    gather_historical_dir_size_stats/3,
+
+    set_custom_metadata/5,
+    get_custom_metadata/5,
+    remove_custom_metadata/3
 ]).
 
 
@@ -31,6 +36,7 @@
     file_distribution:get_result() | no_return().
 gather_distribution(SessionId, FileKey) ->
     FileGuid = lfm_file_key:resolve_file_key(SessionId, FileKey, do_not_resolve_symlink),
+
     middleware_worker:check_exec(SessionId, FileGuid, #file_distribution_gather_request{}).
 
 
@@ -38,6 +44,7 @@ gather_distribution(SessionId, FileKey) ->
     ts_browse_result:record() | no_return().
 gather_historical_dir_size_stats(SessionId, FileKey, Request) ->
     FileGuid = lfm_file_key:resolve_file_key(SessionId, FileKey, do_not_resolve_symlink),
+
     middleware_worker:check_exec(SessionId, FileGuid, #historical_dir_size_stats_gather_request{
         request = Request
     }).

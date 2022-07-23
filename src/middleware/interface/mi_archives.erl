@@ -45,7 +45,7 @@
 list(SessionId, DatasetId, Opts, ListingMode) ->
     SpaceGuid = dataset_id_to_space_guid(DatasetId),
 
-    middleware_worker:check_exec(SessionId, SpaceGuid, #list_archives{
+    middleware_worker:check_exec(SessionId, SpaceGuid, #archives_list_request{
         dataset_id = DatasetId,
         opts = Opts,
         mode = utils:ensure_defined(ListingMode, ?BASIC_INFO)
@@ -64,7 +64,7 @@ list(SessionId, DatasetId, Opts, ListingMode) ->
 archive_dataset(SessionId, DatasetId, Config, PreservedCallback, DeletedCallback, Description) ->
     SpaceGuid = dataset_id_to_space_guid(DatasetId),
 
-    middleware_worker:check_exec(SessionId, SpaceGuid, #archive_dataset{
+    middleware_worker:check_exec(SessionId, SpaceGuid, #dataset_archive_request{
         id = DatasetId,
         config = Config,
         description = Description,
@@ -78,7 +78,7 @@ archive_dataset(SessionId, DatasetId, Config, PreservedCallback, DeletedCallback
 get_info(SessionId, ArchiveId) ->
     SpaceGuid = archive_id_to_space_guid(ArchiveId),
 
-    middleware_worker:check_exec(SessionId, SpaceGuid, #get_archive_info{id = ArchiveId}).
+    middleware_worker:check_exec(SessionId, SpaceGuid, #archive_info_get_request{id = ArchiveId}).
 
 
 -spec update(session:id(), archive:id(), archive:diff()) ->
@@ -86,7 +86,7 @@ get_info(SessionId, ArchiveId) ->
 update(SessionId, ArchiveId, Diff) ->
     SpaceGuid = archive_id_to_space_guid(ArchiveId),
 
-    middleware_worker:check_exec(SessionId, SpaceGuid, #update_archive{
+    middleware_worker:check_exec(SessionId, SpaceGuid, #archive_update_request{
         id = ArchiveId,
         diff = Diff
     }).
@@ -97,7 +97,7 @@ update(SessionId, ArchiveId, Diff) ->
 delete(SessionId, ArchiveId, CallbackUrl) ->
     SpaceGuid = archive_id_to_space_guid(ArchiveId),
 
-    middleware_worker:check_exec(SessionId, SpaceGuid, #delete_archive{
+    middleware_worker:check_exec(SessionId, SpaceGuid, #archive_delete_request{
         id = ArchiveId,
         callback = CallbackUrl
     }).
@@ -108,7 +108,7 @@ delete(SessionId, ArchiveId, CallbackUrl) ->
 recall(SessionId, ArchiveId, ParentDirectoryGuid, TargetFilename) ->
     SpaceGuid = archive_id_to_space_guid(ArchiveId),
     
-    middleware_worker:check_exec(SessionId, SpaceGuid, #recall_archive{
+    middleware_worker:check_exec(SessionId, SpaceGuid, #archive_recall_request{
         archive_id = ArchiveId,
         parent_directory_guid = ParentDirectoryGuid,
         target_filename = TargetFilename
@@ -117,7 +117,7 @@ recall(SessionId, ArchiveId, ParentDirectoryGuid, TargetFilename) ->
 
 -spec cancel_recall(session:id(), file_id:file_guid()) -> ok | no_return().
 cancel_recall(SessionId, FileGuid) ->
-    middleware_worker:check_exec(SessionId, FileGuid, #cancel_archive_recall{
+    middleware_worker:check_exec(SessionId, FileGuid, #archive_recall_cancel_request{
         id = file_id:guid_to_uuid(FileGuid)
     }).
 
@@ -125,7 +125,7 @@ cancel_recall(SessionId, FileGuid) ->
 -spec get_recall_details(session:id(), file_id:file_guid()) -> 
     archive_recall:record() | no_return().
 get_recall_details(SessionId, FileGuid) ->
-    middleware_worker:check_exec(SessionId, FileGuid, #get_recall_details{
+    middleware_worker:check_exec(SessionId, FileGuid, #archive_recall_details_get_request{
         id = file_id:guid_to_uuid(FileGuid)
     }).
 
@@ -133,7 +133,7 @@ get_recall_details(SessionId, FileGuid) ->
 -spec get_recall_progress(session:id(), file_id:file_guid()) ->
     archive_recall:recall_progress_map() | no_return().
 get_recall_progress(SessionId, FileGuid) ->
-    middleware_worker:check_exec(SessionId, FileGuid, #get_recall_progress{
+    middleware_worker:check_exec(SessionId, FileGuid, #archive_recall_progress_get_request{
         id = file_id:guid_to_uuid(FileGuid)
     }).
 
@@ -141,7 +141,7 @@ get_recall_progress(SessionId, FileGuid) ->
 -spec browse_recall_log(session:id(), file_id:file_guid(), json_infinite_log_model:listing_opts()) ->
     json_infinite_log_model:browse_result() | no_return().
 browse_recall_log(SessionId, FileGuid, BrowseOpts) ->
-    middleware_worker:check_exec(SessionId, FileGuid, #browse_recall_log{
+    middleware_worker:check_exec(SessionId, FileGuid, #archive_recall_log_browse_request{
         id = file_id:guid_to_uuid(FileGuid),
         options = BrowseOpts
     }).

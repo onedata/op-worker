@@ -30,21 +30,21 @@
 -export([init/1, handle/1, cleanup/0]).
 
 -type archive_operation() ::
-    #list_archives{} |
-    #archive_dataset{} |
-    #get_archive_info{} |
-    #update_archive{} |
-    #delete_archive{} |
-    #recall_archive{} |
-    #cancel_archive_recall{} | 
-    #get_recall_details{} |
-    #get_recall_progress{} |
-    #browse_recall_log{}.
+    #archives_list_request{} |
+    #dataset_archive_request{} |
+    #archive_info_get_request{} |
+    #archive_update_request{} |
+    #archive_delete_request{} |
+    #archive_recall_request{} |
+    #archive_recall_cancel_request{} |
+    #archive_recall_details_get_request{} |
+    #archive_recall_progress_get_request{} |
+    #archive_recall_log_browse_request{}.
 
 -type atm_operation() ::
-    #schedule_atm_workflow_execution{} |
-    #cancel_atm_workflow_execution{} |
-    #repeat_atm_workflow_execution{}.
+    #atm_workflow_execution_schedule_request{} |
+    #atm_workflow_execution_cancel_request{} |
+    #atm_workflow_execution_repeat_request{}.
 
 -type cdmi_operation() ::
     #transfer_encoding_get_request{} |
@@ -55,32 +55,32 @@
     #mimetype_set_request{}.
 
 -type dataset_operation() ::
-    #list_top_datasets{} |
-    #list_children_datasets{} |
-    #establish_dataset{} |
-    #get_dataset_info{} |
-    #update_dataset{} |
-    #remove_dataset {} |
-    #get_file_eff_dataset_summary{}.
+    #top_datasets_list_request{} |
+    #children_datasets_list_request{} |
+    #dataset_establish_request{} |
+    #dataset_info_get_request{} |
+    #dataset_update_request{} |
+    #dataset_remove_request {} |
+    #file_eff_dataset_summary_get_request{}.
 
 -type file_metadata_operations() ::
     #file_distribution_gather_request{} |
     #historical_dir_size_stats_gather_request{}.
 
 -type qos_operation() ::
-    #add_qos_entry{} |
-    #get_qos_entry{} |
-    #remove_qos_entry{} |
-    #get_effective_file_qos{} |
-    #check_qos_status{}.
+    #qos_entry_add_request{} |
+    #qos_entry_get_request{} |
+    #qos_entry_remove_request{} |
+    #effective_file_qos_get_request{} |
+    #qos_status_check_request{}.
 
 -type share_operation() ::
-    #create_share{} |
-    #remove_share{}.
+    #share_create_request{} |
+    #share_remove_request{}.
 
 -type transfer_operation() ::
-    #schedule_file_transfer{} |
-    #schedule_view_transfer{}.
+    #file_transfer_schedule_request{} |
+    #view_transfer_schedule_request{}.
 
 -type operation() ::
     archive_operation() |
