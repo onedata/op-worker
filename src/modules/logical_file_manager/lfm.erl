@@ -91,10 +91,6 @@
 %% Custom metadata related operations
 -export([
     has_custom_metadata/2,
-    set_metadata/5,
-    get_metadata/5,
-    remove_metadata/3,
-
     list_xattr/4,
     set_xattr/3,
     set_xattr/5,
@@ -573,36 +569,6 @@ remove_acl(SessId, FileKey) ->
 -spec has_custom_metadata(session:id(), file_key()) -> {ok, boolean()} | error_reply().
 has_custom_metadata(SessId, FileKey) ->
     ?run(lfm_attrs:has_custom_metadata(SessId, FileKey)).
-
-
--spec set_metadata(
-    session:id(),
-    file_key(),
-    custom_metadata:type(),
-    custom_metadata:value(),
-    custom_metadata:query()
-) ->
-    ok | error_reply().
-set_metadata(SessId, FileKey, Type, Value, Query) ->
-    ?run(lfm_attrs:set_metadata(SessId, FileKey, Type, Value, Query)).
-
-
--spec get_metadata(
-    session:id(),
-    file_key(),
-    custom_metadata:type(),
-    custom_metadata:query(),
-    boolean()
-) ->
-    {ok, custom_metadata:value()} | error_reply().
-get_metadata(SessId, FileKey, Type, Query, Inherited) ->
-    ?run(lfm_attrs:get_metadata(SessId, FileKey, Type, Query, Inherited)).
-
-
--spec remove_metadata(session:id(), file_key(), custom_metadata:type()) ->
-    ok | error_reply().
-remove_metadata(SessId, FileKey, Type) ->
-    ?run(lfm_attrs:remove_metadata(SessId, FileKey, Type)).
 
 
 -spec list_xattr(session:id(), file_key(), boolean(), boolean()) ->

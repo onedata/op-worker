@@ -151,12 +151,12 @@ set_file_rdf_metadata_on_provider_not_supporting_space_test(_Config) ->
 
 %% @private
 get_rdf(Node, FileGuid) ->
-    lfm_proxy:get_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), rdf, [], false).
+    opt_file_metadata:get_custom_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), rdf, [], false).
 
 
 %% @private
 remove_rdf(Node, FileGuid) ->
-    lfm_proxy:remove_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), rdf).
+    opt_file_metadata:remove_custom_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), rdf).
 
 
 %%%===================================================================
@@ -393,12 +393,12 @@ set_file_json_metadata_on_provider_not_supporting_space_test(_Config) ->
 
 %% @private
 get_json(Node, FileGuid) ->
-    lfm_proxy:get_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), json, [], false).
+    opt_file_metadata:get_custom_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), json, [], false).
 
 
 %% @private
 remove_json(Node, FileGuid) ->
-    lfm_proxy:remove_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), json).
+    opt_file_metadata:remove_custom_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), json).
 
 
 %%%===================================================================

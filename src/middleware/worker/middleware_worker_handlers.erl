@@ -13,7 +13,8 @@
 -author("Bartosz Walkowicz").
 
 -include("middleware/middleware.hrl").
--include("proto/oneprovider/provider_rpc_messages.hrl").
+-include("proto/oneprovider/provider_rpc_messages.hrl").  %% TODO
+-include("proto/oneprovider/provider_messages.hrl").  %% TODO
 
 %% API
 -export([execute/3]).
@@ -161,6 +162,22 @@ execute(UserCtx, FileCtx, #file_eff_dataset_summary_get_request{}) ->
 
 
 %% File metadata
+
+execute(UserCtx, FileCtx, #custom_metadata_get_request{
+    type = Type,
+    query = Query,
+    inherited = Inherited
+}) ->
+    metadata_req:get_metadata(UserCtx, FileCtx, Type, Query, Inherited);
+
+execute(UserCtx, FileCtx, #custom_metadata_set_request{
+    metadata = #metadata{type = Type, value = Value},
+    query = Query
+}) ->
+    metadata_req:set_metadata(UserCtx, FileCtx, Type, Value, Query, false, false);
+
+execute(UserCtx, FileCtx, #custom_metadata_remove_request{type = Type}) ->
+    metadata_req:remove_metadata(UserCtx, FileCtx, Type);
 
 execute(UserCtx, FileCtx, #file_distribution_gather_request{}) ->
     file_distribution:gather(UserCtx, FileCtx);

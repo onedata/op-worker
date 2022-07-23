@@ -64,6 +64,9 @@
     #file_eff_dataset_summary_get_request{}.
 
 -type file_metadata_operations() ::
+    #custom_metadata_get_request{} |
+    #custom_metadata_set_request{} |
+    #custom_metadata_remove_request{} |
     #file_distribution_gather_request{} |
     #historical_dir_size_stats_gather_request{}.
 
@@ -98,6 +101,10 @@
     file_metadata_operations/0, 
     qos_operation/0, transfer_operation/0,
     operation/0
+]).
+
+-define(OPERATIONS_AVAILABLE_IN_SHARE_MODE, [
+    custom_metadata_get_request
 ]).
 
 -define(REQ(__SESSION_ID, __FILE_GUID, __OPERATION),
@@ -154,14 +161,24 @@ handle(healthcheck) ->
 
 handle(?REQ(SessionId, FileGuid, Operation)) ->
     try
-        UserCtx = user_ctx:new(SessionId),
-        assert_user_not_in_open_handle_mode(UserCtx),
-
-        middleware_utils:assert_file_managed_locally(FileGuid),
-        assert_file_access_not_in_share_mode(FileGuid),
         FileCtx = file_ctx:new_by_guid(FileGuid),
 
-        middleware_worker_handlers:execute(UserCtx, FileCtx, Operation)
+        UserCtx0 = user_ctx:new(SessionId),
+        assert_user_not_in_open_handle_mode(UserCtx0),
+
+        UserCtx1 = case file_ctx:get_share_id_const(FileCtx) of
+            undefined ->
+                UserCtx0;
+            _ShareId ->
+                case is_operation_available_in_share_mode(Operation) of
+                    true -> ensure_guest_ctx(UserCtx0);
+                    false -> throw(?ERROR_POSIX(?EPERM))
+                end
+        end,
+
+        middleware_utils:assert_file_managed_locally(FileGuid),
+
+        middleware_worker_handlers:execute(UserCtx1, FileCtx, Operation)
     catch Type:Reason:Stacktrace ->
         request_error_handler:handle(Type, Reason, Stacktrace, SessionId, Operation)
     end;
@@ -197,9 +214,21 @@ assert_user_not_in_open_handle_mode(UserCtx) ->
 
 
 %% @private
--spec assert_file_access_not_in_share_mode(file_id:file_guid()) -> ok | no_return().
-assert_file_access_not_in_share_mode(FileGuid) ->
-    case file_id:is_share_guid(FileGuid) of
-        true -> throw(?ERROR_POSIX(?EPERM));
-        false -> ok
+-spec is_operation_available_in_share_mode(operation()) -> boolean().
+is_operation_available_in_share_mode(Operation) ->
+    lists:member(get_operation_name(Operation), ?OPERATIONS_AVAILABLE_IN_SHARE_MODE).
+
+
+%% @private
+-spec get_operation_name(operation()) -> atom().
+get_operation_name(Request) ->
+    element(1, Request).
+
+
+%% @private
+-spec ensure_guest_ctx(user_ctx:ctx()) -> user_ctx:ctx().
+ensure_guest_ctx(UserCtx) ->
+    case user_ctx:is_guest(UserCtx) of
+        true -> UserCtx;
+        false -> user_ctx:new(?GUEST_SESS_ID)
     end.

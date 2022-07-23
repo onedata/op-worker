@@ -155,7 +155,7 @@ get_file_rdf_metadata_on_provider_not_supporting_space_test(_Config) ->
 
     SpaceId = oct_background:get_space_id(space_krk),
     {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
-    lfm_proxy:set_metadata(P1Node, SessIdP1, ?FILE_REF(FileGuid), rdf, ?RDF_METADATA_1, []),
+    opt_file_metadata:set_custom_metadata(P1Node, SessIdP1, ?FILE_REF(FileGuid), rdf, ?RDF_METADATA_1, []),
 
     GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id) end,
 
@@ -410,7 +410,7 @@ get_file_json_metadata_on_provider_not_supporting_space_test(_Config) ->
 
     SpaceId = oct_background:get_space_id(space_krk),
     {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
-    lfm_proxy:set_metadata(P1Node, SessIdP1, ?FILE_REF(FileGuid), json, ?JSON_METADATA_2, []),
+    opt_file_metadata:set_custom_metadata(P1Node, SessIdP1, ?FILE_REF(FileGuid), json, ?JSON_METADATA_2, []),
 
     GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id) end,
 

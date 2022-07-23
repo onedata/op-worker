@@ -14,22 +14,67 @@
 -author("Bartosz Walkowicz").
 
 -include("middleware/middleware.hrl").
--include("proto/oneprovider/provider_messages.hrl").
+-include("proto/oneprovider/provider_messages.hrl").  %% TODO
 
 %% API
 -export([
-    gather_distribution/2,
-    gather_historical_dir_size_stats/3,
-
     set_custom_metadata/5,
     get_custom_metadata/5,
-    remove_custom_metadata/3
+    remove_custom_metadata/3,
+
+    gather_distribution/2,
+    gather_historical_dir_size_stats/3
 ]).
 
 
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+-spec set_custom_metadata(
+    session:id(),
+    lfm:file_key(),
+    custom_metadata:type(),
+    custom_metadata:value(),
+    custom_metadata:query()
+) ->
+    ok | no_return().
+set_custom_metadata(SessionId, FileKey, Type, Value, Query) ->
+    FileGuid = lfm_file_key:resolve_file_key(SessionId, FileKey, resolve_symlink),
+
+    middleware_worker:check_exec(SessionId, FileGuid, #custom_metadata_set_request{
+        query = Query,
+        metadata = #metadata{type = Type, value = Value}
+    }).
+
+
+-spec get_custom_metadata(
+    session:id(),
+    lfm:file_key(),
+    custom_metadata:type(),
+    custom_metadata:query(),
+    boolean()
+) ->
+    custom_metadata:value() | no_return().
+get_custom_metadata(SessionId, FileKey, Type, Query, Inherited) ->
+    FileGuid = lfm_file_key:resolve_file_key(SessionId, FileKey, resolve_symlink),
+
+    middleware_worker:check_exec(SessionId, FileGuid, #custom_metadata_get_request{
+        type = Type,
+        query = Query,
+        inherited = Inherited
+    }).
+
+
+-spec remove_custom_metadata(session:id(), lfm:file_key(), custom_metadata:type()) ->
+    ok | no_return().
+remove_custom_metadata(SessionId, FileKey, Type) ->
+    FileGuid = lfm_file_key:resolve_file_key(SessionId, FileKey, resolve_symlink),
+
+    middleware_worker:check_exec(SessionId, FileGuid, #custom_metadata_remove_request{
+        type = Type
+    }).
 
 
 -spec gather_distribution(session:id(), lfm:file_key()) ->

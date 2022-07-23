@@ -251,6 +251,22 @@
 %%% File metadata related operations available in middleware_worker
 %%%===================================================================
 
+
+-record(custom_metadata_get_request, {
+    type :: custom_metadata:type(),
+    query = [] :: custom_metadata:query(),
+    inherited = false :: boolean()
+}).
+
+-record(custom_metadata_set_request, {
+    metadata :: custom_metadata:metadata(),
+    query = [] :: custom_metadata:query()
+}).
+
+-record(custom_metadata_remove_request, {
+    type :: custom_metadata:type()
+}).
+
 -record(file_distribution_gather_request, {}).
 
 -record(historical_dir_size_stats_gather_request, {

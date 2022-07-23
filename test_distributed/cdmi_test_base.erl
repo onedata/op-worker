@@ -19,6 +19,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/file_attr.hrl").
 -include("modules/fslogic/metadata.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("proto/common/credentials.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -2136,12 +2137,13 @@ get_xattrs(Config, Path) ->
 set_json_metadata(Config, Path, JsonTerm) ->
     [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    ok = lfm_proxy:set_metadata(WorkerP1, SessionId, {path, absolute_binary_path(Path)}, json, JsonTerm, []).
+    ok = opt_file_metadata:set_custom_metadata(WorkerP1, SessionId, {path, absolute_binary_path(Path)}, json, JsonTerm, []).
 
 get_json_metadata(Config, Path) ->
     [_WorkerP1, WorkerP2] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
-    lfm_proxy:get_metadata(WorkerP2, SessionId, {path, absolute_binary_path(Path)}, json, [], false).
+    {ok, FileGuid} = lfm_proxy:resolve_guid(WorkerP2, SessionId, absolute_binary_path(Path)),
+    opt_file_metadata:get_custom_metadata(WorkerP2, SessionId, ?FILE_REF(FileGuid), json, [], false).
 
 
 absolute_binary_path(Path) ->

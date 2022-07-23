@@ -12,6 +12,7 @@
 -author("Jakub Kudzia").
 
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("rest_test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -154,25 +155,48 @@ all() -> ?ALL(?TEST_CASES).
     end)(Worker, SessId, FilePath, Xattrs, Attempts)
 ).
 
+-define(resolvePath(Worker, SessId, FilePath),
+    element(2, {ok, _} = lfm_proxy:resolve_guid(Worker, SessId, FilePath))
+).
 -define(assertJsonMetadata(Worker, SessId, FilePath, JSON, Attempts),
     (fun
         (__Worker, __SessId, __FilePath, __JSON, __Attempts) when map_size(__JSON) =:= 0 ->
-            ?assertMatch({error, ?ENODATA},
-                lfm_proxy:get_metadata(__Worker, __SessId, {path, __FilePath}, json, [], false), __Attempts);
+            FileRef = ?FILE_REF(?resolvePath(__Worker, __SessId, __FilePath)),
+
+            ?assertMatch(
+                ?ERROR_POSIX(?ENODATA),
+                opt_file_metadata:get_custom_metadata(__Worker, __SessId, FileRef, json, [], false),
+                __Attempts
+            );
         (__Worker, __SessId, __FilePath, __JSON, __Attempts) ->
-            ?assertMatch({ok, __JSON},
-                lfm_proxy:get_metadata(__Worker, __SessId, {path, __FilePath}, json, [], false), __Attempts)
+            FileRef = ?FILE_REF(?resolvePath(__Worker, __SessId, __FilePath)),
+
+            ?assertMatch(
+                {ok, __JSON},
+                opt_file_metadata:get_custom_metadata(__Worker, __SessId, FileRef, json, [], false),
+                __Attempts
+            )
     end)(Worker, SessId, FilePath, JSON, Attempts)
 ).
 
 -define(assertRdfMetadata(Worker, SessId, FilePath, RDF, Attempts),
     (fun
         (__Worker, __SessId, __FilePath, <<>>, __Attempts) ->
-            ?assertMatch({error, ?ENODATA},
-                lfm_proxy:get_metadata(__Worker, __SessId, {path, __FilePath}, rdf, [], false), __Attempts);
+            FileRef = ?FILE_REF(?resolvePath(__Worker, __SessId, __FilePath)),
+
+            ?assertMatch(
+                ?ERROR_POSIX(?ENODATA),
+                opt_file_metadata:get_custom_metadata(__Worker, __SessId, FileRef, rdf, [], false),
+                __Attempts
+            );
         (__Worker, __SessId, __FilePath, __RDF, __Attempts) ->
-            ?assertMatch({ok, __RDF},
-                lfm_proxy:get_metadata(__Worker, __SessId, {path, __FilePath}, rdf, [], false), __Attempts)
+            FileRef = ?FILE_REF(?resolvePath(__Worker, __SessId, __FilePath)),
+
+            ?assertMatch(
+                {ok, __RDF},
+                opt_file_metadata:get_custom_metadata(__Worker, __SessId, FileRef, rdf, [], false),
+                __Attempts
+            )
     end)(Worker, SessId, FilePath, RDF, Attempts)
 ).
 

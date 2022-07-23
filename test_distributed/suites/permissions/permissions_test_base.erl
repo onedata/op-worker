@@ -1777,7 +1777,7 @@ get_metadata_test(Config) ->
             name = <<"file1">>,
             perms = [?read_metadata],
             on_create = fun(FileOwnerSessId, Guid) ->
-                lfm_proxy:set_metadata(W, FileOwnerSessId, ?FILE_REF(Guid), json, <<"VAL">>, []),
+                opt_file_metadata:set_custom_metadata(W, FileOwnerSessId, ?FILE_REF(Guid), json, <<"VAL">>, []),
                 ?FILE_REF(Guid)
             end
         }],
@@ -1788,8 +1788,9 @@ get_metadata_test(Config) ->
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:get_metadata(W, SessId, FileKey, json, [], false))
+            extract_ok(opt_file_metadata:get_custom_metadata(W, SessId, FileKey, json, [], false))
         end,
+        returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end
@@ -1813,8 +1814,9 @@ set_metadata_test(Config) ->
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:set_metadata(W, SessId, FileKey, json, <<"VAL">>, []))
+            extract_ok(opt_file_metadata:set_custom_metadata(W, SessId, FileKey, json, <<"VAL">>, []))
         end,
+        returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end
@@ -1831,7 +1833,7 @@ remove_metadata_test(Config) ->
             name = <<"file1">>,
             perms = [?write_metadata],
             on_create = fun(FileOwnerSessId, Guid) ->
-                lfm_proxy:set_metadata(W, FileOwnerSessId, ?FILE_REF(Guid), json, <<"VAL">>, []),
+                opt_file_metadata:set_custom_metadata(W, FileOwnerSessId, ?FILE_REF(Guid), json, <<"VAL">>, []),
                 ?FILE_REF(Guid)
             end
         }],
@@ -1842,8 +1844,9 @@ remove_metadata_test(Config) ->
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:remove_metadata(W, SessId, FileKey, json))
+            extract_ok(opt_file_metadata:remove_custom_metadata(W, SessId, FileKey, json))
         end,
+        returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end
