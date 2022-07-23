@@ -43,26 +43,10 @@
 -record(get_file_path, {
 }).
 
--record(get_metadata, {
-    type :: custom_metadata:type(),
-    query = [] :: custom_metadata:query(),
-    inherited = false :: boolean()
-}).
-
--record(set_metadata, {
-    metadata :: custom_metadata:metadata(),
-    query = [] :: custom_metadata:query()
-}).
-
--record(remove_metadata, {
-    type :: custom_metadata:type()
-}).
-
 -type provider_request_type() ::
     #get_parent{} |
     #get_acl{} | #set_acl{} | #remove_acl{} | #check_perms{} |
-    #get_file_path{} |
-    #get_metadata{} | #remove_metadata{} | #set_metadata{}.
+    #get_file_path{}.
 
 
 -record(file_path, {
