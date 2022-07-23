@@ -13,7 +13,6 @@
 -author("Bartosz Walkowicz").
 
 -include("middleware/middleware.hrl").
--include("proto/oneprovider/provider_rpc_messages.hrl").  %% TODO
 -include("proto/oneprovider/provider_messages.hrl").  %% TODO
 
 %% API

@@ -221,8 +221,8 @@ is_operation_available_in_share_mode(Operation) ->
 
 %% @private
 -spec get_operation_name(operation()) -> atom().
-get_operation_name(Request) ->
-    element(1, Request).
+get_operation_name(Operation) ->
+    element(1, Operation).
 
 
 %% @private

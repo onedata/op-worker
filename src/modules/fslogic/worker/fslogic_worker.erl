@@ -104,7 +104,6 @@
 
     list_xattr,
     get_xattr,
-    get_metadata,
 
     % Opening file is available but only in 'read' mode
     open_file,

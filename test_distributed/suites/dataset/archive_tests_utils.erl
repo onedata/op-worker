@@ -336,7 +336,7 @@ assert_json_metadata_copied(Node, SessionId, SourceGuid, TargetGuid, Attempts) -
         {ok, SourceJson} ->
             ?assertEqual({ok, SourceJson},
                 opt_file_metadata:get_custom_metadata(Node, SessionId, ?FILE_REF(TargetGuid), json, [], false), Attempts);
-        {error, ?ENODATA} ->
+        ?ERROR_POSIX(?ENODATA) ->
             ok
     end.
 

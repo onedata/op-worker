@@ -704,7 +704,7 @@ get_empty_json(Config) ->
     Path = <<"/space_name1/t6_file">>,
     {ok, Guid} = lfm_proxy:create(Worker, SessId, Path),
 
-    ?assertEqual({error, ?ENOATTR}, opt_file_metadata:get_custom_metadata(Worker, SessId, ?FILE_REF(Guid), json, [], false)).
+    ?assertEqual(?ERROR_POSIX(?ENOATTR), opt_file_metadata:get_custom_metadata(Worker, SessId, ?FILE_REF(Guid), json, [], false)).
 
 get_empty_rdf(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -712,7 +712,7 @@ get_empty_rdf(Config) ->
     Path = <<"/space_name1/t6_file">>,
     {ok, Guid} = lfm_proxy:create(Worker, SessId, Path),
 
-    ?assertEqual({error, ?ENOATTR}, opt_file_metadata:get_custom_metadata(Worker, SessId, ?FILE_REF(Guid), rdf, [], false)).
+    ?assertEqual(?ERROR_POSIX(?ENOATTR), opt_file_metadata:get_custom_metadata(Worker, SessId, ?FILE_REF(Guid), rdf, [], false)).
 
 has_custom_metadata_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),

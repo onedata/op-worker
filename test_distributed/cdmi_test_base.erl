@@ -2135,9 +2135,10 @@ get_xattrs(Config, Path) ->
         end, Xattrs).
 
 set_json_metadata(Config, Path, JsonTerm) ->
-    [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
-    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
-    ok = opt_file_metadata:set_custom_metadata(WorkerP1, SessionId, {path, absolute_binary_path(Path)}, json, JsonTerm, []).
+    [_WorkerP1, WorkerP2] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
+    {ok, FileGuid} = lfm_proxy:resolve_guid(WorkerP2, SessionId, absolute_binary_path(Path)),
+    ok = opt_file_metadata:set_custom_metadata(WorkerP2, SessionId, ?FILE_REF(FileGuid), json, JsonTerm, []).
 
 get_json_metadata(Config, Path) ->
     [_WorkerP1, WorkerP2] = ?config(op_worker_nodes, Config),
