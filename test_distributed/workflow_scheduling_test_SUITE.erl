@@ -32,6 +32,7 @@
     single_async_workflow_with_streams_execution_test/1,
     prepare_in_advance_test/1,
     heartbeat_test/1,
+    waiting_for_initial_heartbeat_test/1,
     long_prepare_in_advance_test/1,
 
     fail_the_only_task_in_lane_test/1,
@@ -84,6 +85,7 @@ all() ->
         single_async_workflow_with_streams_execution_test,
         prepare_in_advance_test,
         heartbeat_test,
+        waiting_for_initial_heartbeat_test,
         long_prepare_in_advance_test,
 
         fail_the_only_task_in_lane_test,
@@ -204,6 +206,12 @@ heartbeat_test(Config) ->
     single_execution_test_base(Config, #test_config{
         task_type = async,
         test_execution_manager_options = [{delay_call, {<<"3_2_2">>, <<"100">>}}]
+    }).
+
+waiting_for_initial_heartbeat_test(Config) ->
+    single_execution_test_base(Config, #test_config{
+        task_type = async,
+        test_execution_manager_options = [{delay_call, {<<"3_2_2">>, <<"100">>, timer:seconds(8)}}]
     }).
 
 long_prepare_in_advance_test(Config) ->

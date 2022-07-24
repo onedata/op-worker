@@ -24,7 +24,7 @@
     register_async_job_finish/3, prepare_next_parallel_box/4,
     get_identfiers_for_next_parallel_boxes/3, has_ongoing_jobs/1]).
 %% Functions returning/updating pending_async_jobs field
--export([register_async_call/3, check_timeouts/1, reset_keepalive_timer/2]).
+-export([register_async_call/4, check_timeouts/1, reset_keepalive_timer/2]).
 %% Functions operating on job_identifier record
 -export([job_identifier_to_binary/1, binary_to_job_identifier/1, get_item_id/2, get_subject_id/3,
     get_task_details/2, get_processing_type/1, is_previous/2]).
@@ -43,7 +43,7 @@
 
 % Internal record used to control timeouts of jobs that are processed asynchronously
 -record(async_job_timer, {
-    keepalive_timer :: countdown_timer:instance(),
+    keepalive_timer :: countdown_timer:instance() | undefined,
     % max allowed time between heartbeats to assume the async process is still alive
     keepalive_timeout :: time:seconds()
 }).
@@ -297,15 +297,20 @@ has_ongoing_jobs(#workflow_jobs{ongoing = Ongoing}) ->
 %%% Functions returning/updating pending_async_jobs field
 %%%===================================================================
 
--spec register_async_call(jobs(), job_identifier(), time:seconds()) -> jobs().
-register_async_call(Jobs = #workflow_jobs{
+-spec register_async_call(workflow_engine:id(), jobs(), job_identifier(), time:seconds()) -> jobs().
+register_async_call(EngineId, Jobs = #workflow_jobs{
     pending_async_jobs = AsyncCalls,
     raced_results = Unidentified
 }, JobIdentifier, KeepaliveTimeout) ->
     case maps:get(JobIdentifier, Unidentified, undefined) of
         undefined ->
+            KeepaliveTimer = case workflow_engine:get_first_heartbeat_timeout(EngineId) of
+                infinity -> undefined;
+                undefined -> countdown_timer:start_seconds(KeepaliveTimeout);
+                Timeout -> countdown_timer:start_seconds(Timeout)
+            end,
             NewAsyncCalls = AsyncCalls#{JobIdentifier => #async_job_timer{
-                keepalive_timer = countdown_timer:start_seconds(KeepaliveTimeout),
+                keepalive_timer = KeepaliveTimer,
                 keepalive_timeout = KeepaliveTimeout
             }},
             Jobs#workflow_jobs{pending_async_jobs = NewAsyncCalls};
@@ -322,7 +327,7 @@ check_timeouts(Jobs = #workflow_jobs{
     CheckAns = maps:fold(
         fun(JobIdentifier, AsyncJobTimer, {ExtendedTimeoutsAcc, ExpiredJobsAcc} = Acc) ->
             #async_job_timer{keepalive_timer = Timer} = AsyncJobTimer,
-            case countdown_timer:is_expired(Timer) of
+            case Timer =/= undefined andalso countdown_timer:is_expired(Timer) of
                 true ->
                     % TODO VFS-7788 - check if task is expired (do it outside tp process)
 %%                    case task_executor:check_ongoing_item_processing(TaskId, Ref) of

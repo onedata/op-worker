@@ -74,12 +74,17 @@ init_per_suite(Config) ->
         % TODO VFS-7784 - uncomment when workflow_test_handler is moved to test directory
         % {?LOAD_MODULES, [?MODULE, workflow_test_handler]},
         {?LOAD_MODULES, [?MODULE]},
-        {?ENV_UP_POSTHOOK, Posthook} | Config].
+        {?ENV_UP_POSTHOOK, Posthook} | Config
+    ].
 
 end_per_suite(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, [oneprovider]).
 
+init_per_testcase(waiting_for_initial_heartbeat_test = Case, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    rpc:call(Worker, workflow_engine, set_first_heartbeat_timeout, [?ENGINE_ID, 20]),
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     Manager = spawn(fun start_test_execution_manager/0),
@@ -88,6 +93,10 @@ init_per_testcase(_, Config) ->
     mock_handlers(Workers, Manager),
     [{test_execution_manager, Manager} | Config].
 
+end_per_testcase(waiting_for_initial_heartbeat_test = Case, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    rpc:call(Worker, workflow_engine, set_first_heartbeat_timeout, [?ENGINE_ID, undefined]),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(_, Config) ->
     ?config(test_execution_manager, Config) ! stop,
     Workers = ?config(op_worker_nodes, Config),
@@ -123,7 +132,7 @@ test_execution_manager_loop(#{execution_history := History} = Acc, ProcWaitingFo
         stop ->
             ok
     after
-        15000 ->
+        20000 ->
             case ProcWaitingForAns of
                 undefined ->
                     test_execution_manager_loop(Acc, ProcWaitingForAns, Options);
@@ -150,7 +159,10 @@ reply_to_handler_mock(Sender, ManagerAcc, Options, #handler_call{
             Sender ! fail_call,
             ManagerAcc;
         {handle_callback, #{delay_call := {TaskId, Item}}} ->
-            Sender ! delay_call,
+            Sender ! {delay_call, 0},
+            ManagerAcc;
+        {handle_callback, #{delay_call := {TaskId, Item, InitialSleepTime}}} ->
+            Sender ! {delay_call, InitialSleepTime},
             ManagerAcc;
         {process_task_result_for_item, #{fail_result_processing := {TaskId, Item}}} ->
             Sender ! fail_call,
@@ -447,17 +459,18 @@ mock_handlers(Workers, Manager) ->
         receive
             history_saved ->
                 apply(meck_util:original_name(workflow_engine_callback_handler), handle_callback, [CallbackId, Result]);
-            delay_call ->
+            {delay_call, InitialSleepTime} ->
                 spawn(fun() ->
+                    timer:sleep(InitialSleepTime),
                     lists:foreach(fun(_) ->
                         HeartbeatCallbackId = apply(meck_util:original_name(workflow_engine_callback_handler),
                             prepare_heartbeat_callback_id, [ExecutionId, EngineId, JobIdentifier]),
                         apply(meck_util:original_name(workflow_engine_callback_handler),
                             handle_callback, [HeartbeatCallbackId, undefined]),
                         timer:sleep(timer:seconds(3))
-                    end, lists:seq(1,5))
+                    end, lists:seq(1,6))
                 end),
-                timer:sleep(timer:seconds(10)),
+                timer:sleep(timer:seconds(15)),
                 apply(meck_util:original_name(workflow_engine_callback_handler), handle_callback, [CallbackId, Result]);
             fail_call ->
                 ok
