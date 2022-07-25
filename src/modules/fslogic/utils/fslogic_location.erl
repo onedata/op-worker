@@ -54,7 +54,6 @@ create_doc(FileCtx, StorageFileCreated, GeneratedKey) ->
         {ok, _LocId} ->
             FileCtx5 = file_ctx:set_file_location(FileCtx4, LocId),
             dir_size_stats:report_reg_file_size_changed(file_ctx:get_referenced_guid_const(FileCtx), total, Size),
-            fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx5, true, []),
             {{ok, Location}, FileCtx5};
         {error, already_exists} = Error ->
             {Error, FileCtx4}
