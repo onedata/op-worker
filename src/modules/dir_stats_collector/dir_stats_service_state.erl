@@ -91,7 +91,7 @@
 -type diff_fun() :: fun((record()) -> {ok, record()} | {error, term()}).
 
 -export_type([
-    status/0, active_status/0,
+    active_status/0,
     extended_status/0, extended_active_status/0,
     pending_status_transition/0, status_change_timestamp/0,
     record/0
