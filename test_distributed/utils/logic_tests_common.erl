@@ -367,6 +367,8 @@ mock_graph_create(#gri{type = od_handle, id = undefined, aspect = instance}, #au
 mock_graph_create(#gri{type = od_space, id = _, aspect = harvest_metadata}, undefined, _Data) ->
     {ok, #gs_resp_graph{data_format = undefined}}.
 
+mock_graph_update(#gri{type = od_space, id = _, aspect = support_parameters}, undefined, Data) ->
+    {ok, #gs_resp_graph{}};
 mock_graph_update(#gri{type = od_share, id = _ShareId, aspect = instance}, #auth_override{client_auth = {token, _}}, Data) ->
     NameArgCheck = case maps:find(<<"name">>, Data) of
         error ->
@@ -515,7 +517,6 @@ mock_graph_get(GRI = #gri{type = od_space, id = SpaceId, aspect = instance}, Aut
                 protected -> ?SPACE_PROTECTED_DATA_VALUE(SpaceId);
                 private -> ?SPACE_PRIVATE_DATA_VALUE(SpaceId)
             end,
-            ct:print("Data: ~p", [Data]),
             {ok, #gs_resp_graph{data_format = resource, data = Data}};
         false ->
             ?ERROR_FORBIDDEN

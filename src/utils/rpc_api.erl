@@ -504,7 +504,7 @@ get_space_support_opts(SpaceId) ->
 
 
 -spec get_space_dir_stats_service_status(od_space:id()) ->
-    dir_stats_service_state:status().
+    support_parameters:dir_stats_service_status().
 get_space_dir_stats_service_status(SpaceId) ->
     dir_stats_service_state:get_status(SpaceId).
 

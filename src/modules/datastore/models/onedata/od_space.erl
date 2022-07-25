@@ -81,6 +81,7 @@ run_after(update, _, {ok, Doc}) ->
 run_after(_Function, _Args, Result) ->
     Result.
 
+%% @TODO VFS-9664 Add hook to reconcile the state of dir stats service upon remote changes
 -spec run_after(doc()) -> {ok, doc()}.
 run_after(Doc = #document{key = SpaceId, value = #od_space{harvesters = Harvesters} = Space}) ->
     case space_logic:is_supported(Space, oneprovider:get_id()) of
