@@ -239,7 +239,7 @@ stages:
     manual: false
     final: true
     jobs:
-    - zz_Request_next_build    
+    - Request_next_build    
 - Coverage report:
     manual: false
     final: false
@@ -337,10 +337,10 @@ Build:
       - |-
         echo ./op_worker/bamboos/artifacts/push_artifact.py --hostname ${bamboo.artifactRepoHostname} --port ${bamboo.artifactRepoPort} \
             --username ${bamboo.artifactRepoUsername} --branch ${bamboo.planRepository.branchName} --plan ${bamboo.planRepository.name} \
-            --artifact op_worker.tar.gz
+            --artifact-name op_worker.tar.gz
         ./op_worker/bamboos/artifacts/push_artifact.py --hostname ${bamboo.artifactRepoHostname} --port ${bamboo.artifactRepoPort} \
             --username ${bamboo.artifactRepoUsername} --branch ${bamboo.planRepository.branchName} --plan ${bamboo.planRepository.name} \
-            --artifact op_worker.tar.gz
+            --artifact-name op_worker.tar.gz
       description: Push artifact
   final-tasks:
   - script: &clear-env
@@ -435,16 +435,16 @@ _Unit Test:
         cd op_worker
         make submodules
         ARTIFACT="eunit.tar.gz"
-        echo ./bamboos/artifacts/pull_named_artifact.py --hostname ${bamboo.artifactRepoHostname} --port ${bamboo.artifactRepoPort} \
+        echo ./bamboos/artifacts/pull_artifact.py --hostname ${bamboo.artifactRepoHostname} --port ${bamboo.artifactRepoPort} \
             --username ${bamboo.artifactRepoUsername} --branch ${bamboo.branchSrc} --plan ${bamboo.planRepository.name} \
-            --artifact ${ARTIFACT}
-        ./bamboos/artifacts/pull_named_artifact.py --hostname ${bamboo.artifactRepoHostname} --port ${bamboo.artifactRepoPort} \
+            --artifact-name ${ARTIFACT}
+        ./bamboos/artifacts/pull_artifact.py --hostname ${bamboo.artifactRepoHostname} --port ${bamboo.artifactRepoPort} \
             --username ${bamboo.artifactRepoUsername} --branch ${bamboo.branchSrc} --plan ${bamboo.planRepository.name} \
-            --artifact ${ARTIFACT}
+            --artifact-name ${ARTIFACT}
         tar zxf ${ARTIFACT}
         touch test/eunit_results/TEST-*.xml
       description: Pull eunit artifact and unpack it
-      conditions: &cond-build2
+      conditions: &cond-build2-3
         - variable:
             matches:
               bamboo.buildNumber: '2|3'
@@ -468,12 +468,12 @@ _Unit Test:
       - |-
         ARTIFACT=eunit.tar.gz
         tar czf ${ARTIFACT} test/eunit_results/TEST-*.xml
-        echo ./bamboos/artifacts/push_named_artifact.py --hostname ${bamboo.artifactRepoHostname} --port ${bamboo.artifactRepoPort} \
+        echo ./bamboos/artifacts/push_artifact.py --hostname ${bamboo.artifactRepoHostname} --port ${bamboo.artifactRepoPort} \
             --username ${bamboo.artifactRepoUsername} --branch ${bamboo.planRepository.branchName} --plan ${bamboo.planRepository.name} \
-            --artifact ${ARTIFACT}
-        ./bamboos/artifacts/push_named_artifact.py --hostname ${bamboo.artifactRepoHostname} --port ${bamboo.artifactRepoPort} \
+            --artifact-name ${ARTIFACT}
+        ./bamboos/artifacts/push_artifact.py --hostname ${bamboo.artifactRepoHostname} --port ${bamboo.artifactRepoPort} \
             --username ${bamboo.artifactRepoUsername} --branch ${bamboo.planRepository.branchName} --plan ${bamboo.planRepository.name} \
-            --artifact ${ARTIFACT}
+            --artifact-name ${ARTIFACT}
       description: Pack and push eunit artifact
   - script: *clear-env
   artifacts:
@@ -484,7 +484,7 @@ _Unit Test:
     required: false
   requirements: *requirements
   artifact-subscriptions: *op-worker
-api_archive: &ct-onenv-api-dataset-job
+api_archive: &ct-onenv-job
   key: APIARC
   other: *common-opts
   tasks:
@@ -503,26 +503,26 @@ api_archive: &ct-onenv-api-dataset-job
         cd op_worker
         make submodules
         ARTIFACT="surefire_${bamboo_shortJobName}.tar.gz"
-        echo ./bamboos/artifacts/pull_named_artifact.py --hostname ${bamboo.artifactRepoHostname} --port ${bamboo.artifactRepoPort} \
+        echo ./bamboos/artifacts/pull_artifact.py --hostname ${bamboo.artifactRepoHostname} --port ${bamboo.artifactRepoPort} \
             --username ${bamboo.artifactRepoUsername} --branch ${bamboo.branchSrc} --plan ${bamboo.planRepository.name} \
-            --artifact surefire_${bamboo.shortJobName}.tar.gz
-        ./bamboos/artifacts/pull_named_artifact.py --hostname ${bamboo.artifactRepoHostname} --port ${bamboo.artifactRepoPort} \
+            --artifact-name surefire_${bamboo.shortJobName}.tar.gz
+        ./bamboos/artifacts/pull_artifact.py --hostname ${bamboo.artifactRepoHostname} --port ${bamboo.artifactRepoPort} \
             --username ${bamboo.artifactRepoUsername} --branch ${bamboo.branchSrc} --plan ${bamboo.planRepository.name} \
-            --artifact ${ARTIFACT}
+            --artifact-name ${ARTIFACT}
         tar zxf ${ARTIFACT}
         touch test_distributed/logs/*/surefire.xml
       description: Pull surefire artifact and unpack it
-      conditions: *cond-build2
+      conditions: *cond-build2-3
   - script: *unpack
   - script: &download-artifacts
       <<: *run-script-working-dir
       scripts:
       - one-env/onenv pull_artifacts --hostname ${bamboo.artifactRepoHostname} --port ${bamboo.artifactRepoPort} --path .. branchConfig.yaml
       description: Download artifacts
-  - script: &run-ct-onenv-api-dataset
+  - script: &run-ct-onenv
       <<: *run-script-working-dir
       scripts:
-      - ./ct_onenv.py --suite suites/api/dataset/${bamboo.shortJobName}_test_SUITE --cover --path-to-sources ..
+      - ./ct_onenv.py --suite ${bamboo.shortJobName} --cover --path-to-sources ..
       description: Run CT onenv tests
   final-tasks: &final-tasks
   - test-parser: &test-parser
@@ -544,12 +544,12 @@ api_archive: &ct-onenv-api-dataset-job
       scripts:
       - |-
         tar czf surefire_${bamboo.shortJobName}.tar.gz test_distributed/logs/*/surefire.xml
-        echo ./bamboos/artifacts/push_named_artifact.py --hostname ${bamboo.artifactRepoHostname} --port ${bamboo.artifactRepoPort} \
+        echo ./bamboos/artifacts/push_artifact.py --hostname ${bamboo.artifactRepoHostname} --port ${bamboo.artifactRepoPort} \
             --username ${bamboo.artifactRepoUsername} --branch ${bamboo.planRepository.branchName} --plan ${bamboo.planRepository.name} \
-            --artifact surefire_${bamboo.shortJobName}.tar.gz
-        ./bamboos/artifacts/push_named_artifact.py --hostname ${bamboo.artifactRepoHostname} --port ${bamboo.artifactRepoPort} \
+            --artifact-name surefire_${bamboo.shortJobName}.tar.gz
+        ./bamboos/artifacts/push_artifact.py --hostname ${bamboo.artifactRepoHostname} --port ${bamboo.artifactRepoPort} \
             --username ${bamboo.artifactRepoUsername} --branch ${bamboo.planRepository.branchName} --plan ${bamboo.planRepository.name} \
-            --artifact surefire_${bamboo.shortJobName}.tar.gz
+            --artifact-name surefire_${bamboo.shortJobName}.tar.gz
       description: Pack and push surefire artifact
   - script:
       <<: *run-script
@@ -573,219 +573,159 @@ api_archive: &ct-onenv-api-dataset-job
   requirements: &minikube
   - minikube
   artifact-subscriptions: *op-worker
+  
 api_dataset_crud:
-  <<: *ct-onenv-api-dataset-job
+  <<: *ct-onenv-job
   key: APIDATASETCRUD
   artifacts:
   - <<: *cover_ct
     name: cover_ct_api_dataset_crud.tar.gz
   - *ct_logs
   
-api_dataset_tree: &ct-onenv-dataset-job
-  <<: *ct-onenv-api-dataset-job
+api_dataset_tree:
+  <<: *ct-onenv-job
   key: APIDATASETTREE
   artifacts:
   - <<: *cover_ct
     name: cover_ct_api_dataset_tree.tar.gz
   - *ct_logs
-  requirements: *minikube
-  artifact-subscriptions: *op-worker
-api_file_attrs: &ct-onenv-api-file-job
-  <<: *ct-onenv-api-dataset-job
+
+api_file_attrs:
+  <<: *ct-onenv-job
   key: FILDAPI
-  tasks:
-  - checkout: *fake-checkout
-  - script: *clear-env
-  - script: *restart-minikube
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *download-artifacts
-  - script: &run-ct-onenv-api-file 
-      <<: *run-ct-onenv-api-dataset
-      scripts:
-      - ./ct_onenv.py --suite suites/api/file/${bamboo.shortJobName}_test_SUITE --cover --path-to-sources ..
   artifacts:
   - <<: *cover_ct
     name: cover_ct_api_file_attrs.tar.gz
   - *ct_logs
+  
 api_file_crud:
-  <<: *ct-onenv-api-file-job
+  <<: *ct-onenv-job
   key: FILCRUDAPI
   artifacts:
   - <<: *cover_ct
     name: cover_ct_api_file_crud.tar.gz
   - *ct_logs
+  
 api_file_ls:
-  <<: *ct-onenv-api-file-job
+  <<: *ct-onenv-job
   key: FILLSAPI
   artifacts:
   - <<: *cover_ct
     name: cover_ct_api_file_ls.tar.gz
   - *ct_logs
+  
 api_file_metadata_delete:
-  <<: *ct-onenv-api-file-job
+  <<: *ct-onenv-job
   key: FILMETRMAPI
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *clear-env
-  - script: *restart-minikube
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *download-artifacts
-  - script: *run-ct-onenv-api-file
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_api_file_metadata_delete.tar.gz
   - *ct_logs
-  requirements: *minikube
-  artifact-subscriptions: *op-worker
+  
 api_file_metadata_get:
-  <<: *ct-onenv-api-file-job
+  <<: *ct-onenv-job
   key: FILMDAPI
   artifacts:
   - <<: *cover_ct
     name: cover_ct_api_file_metadata_get.tar.gz
   - *ct_logs
-  requirements:
-  - minikube
-  - onedata
-  artifact-subscriptions: *op-worker
+  
 api_file_metadata_set:
-  <<: *ct-onenv-api-file-job
+  <<: *ct-onenv-job
   key: FILMETSETAPI
   artifacts:
   - <<: *cover_ct
     name: cover_ct_api_file_metadata_set.tar.gz
   - *ct_logs
-  requirements: *minikube
-  artifact-subscriptions: *op-worker
+  
 api_file_stream:
-  <<: *ct-onenv-api-file-job
+  <<: *ct-onenv-job
   key: FILSTREAMAPI
   artifacts:
   - <<: *cover_ct
     name: cover_ct_api_file_stream.tar.gz
   - *ct_logs
-  requirements: *minikube
-  artifact-subscriptions: *op-worker
+  
 api_file_upload_gui:
-  <<: *ct-onenv-api-file-job
+  <<: *ct-onenv-job
   key: APIFILEUPLOADGUI
   artifacts:
   - <<: *cover_ct
     name: cover_ct_api_file_upload_gui.tar.gz
   - *ct_logs
-  requirements:
-  - os-agent
-  - minikube
-  artifact-subscriptions: *op-worker
+  
 api_file_upload_rest:
-  <<: *ct-onenv-api-file-job
+  <<: *ct-onenv-job
   key: FILUPLOADAPI
   artifacts:
   - <<: *cover_ct
     name: cover_ct_api_file_upload_rest.tar.gz
   - *ct_logs
-  requirements: *minikube
-  artifact-subscriptions: *op-worker
-api_samples: &ct-onenv-api-job
+  
+api_samples:
+  <<: *ct-onenv-job
   key: ASA
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *clear-env
-  - script: *restart-minikube
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *download-artifacts
-  - script: &run-ct-onenv-api
-      <<: *run-ct-onenv-api-dataset
-      scripts:
-      - ./ct_onenv.py --suite suites/api/${bamboo.shortJobName}_test_SUITE --cover --path-to-sources ..
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_api_samples.tar.gz
   - *ct_logs
-  requirements: *minikube
-  artifact-subscriptions: *op-worker
+  
 api_share:
-  <<: *ct-onenv-api-job
+  <<: *ct-onenv-job
   key: SHARAPI
   artifacts:
   - <<: *cover_ct
     name: cover_ct_api_share.tar.gz
   - *ct_logs
-  requirements: *minikube
-  artifact-subscriptions: *op-worker
+  
 api_storage:
-  <<: *ct-onenv-api-job
+  <<: *ct-onenv-job
   key: AST
   artifacts:
   - <<: *cover_ct
     name: cover_ct_api_storage.tar.gz
   - *ct_logs
-  requirements: *minikube
-  artifact-subscriptions: *op-worker
+  
 archive: &ct-onenv-dataset-job
+  <<: *ct-onenv-job
   key: ARC
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *clear-env
-  - script: *restart-minikube
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *download-artifacts
-  - script: &run-ct-onenv-dataset
-      <<: *run-ct-onenv-api-dataset
-      scripts:
-      - ./ct_onenv.py --suite suites/dataset/${bamboo.shortJobName}_test_SUITE --cover --path-to-sources ..
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_archive.tar.gz
   - *ct_logs
-  requirements: *minikube
-  artifact-subscriptions: *op-worker
+  
 archive_bagit_sequential:
-  <<: *ct-onenv-dataset-job
+  <<: *ct-onenv-job
   key: ABS
   artifacts:
   - <<: *cover_ct
     name: cover_ct_archive_bagit_sequential.tar.gz
   - *ct_logs
-  requirements: *minikube
-  artifact-subscriptions: *op-worker
+  
 archive_model:
-  <<: *ct-onenv-dataset-job
+  <<: *ct-onenv-job
   key: ARMOD
   artifacts:
   - <<: *cover_ct
     name: cover_ct_archive_model.tar.gz
   - *ct_logs
-  requirements: *minikube
-  artifact-subscriptions: *op-worker
+  
 archive_recall:
-  <<: *ct-onenv-dataset-job
+  <<: *ct-onenv-job
   key: ARREC
   artifacts:
   - <<: *cover_ct
     name: cover_ct_archive_recall.tar.gz
   - *ct_logs
-  requirements: *minikube
-  artifact-subscriptions: *op-worker
+
 archive_sequential:
-  <<: *ct-onenv-dataset-job
+  <<: *ct-onenv-job
   key: ARS
   artifacts:
   - <<: *cover_ct
     name: cover_ct_archive_sequential.tar.gz
   - *ct_logs
-  requirements: *minikube
-  artifact-subscriptions: *op-worker
+
 archivestorage_helper: &ct-job
   key: AR
   description: Archive storage S3 helper test
@@ -797,7 +737,7 @@ archivestorage_helper: &ct-job
   - script: &run-ct
       <<: *run-script-working-dir
       scripts:
-      - ./ct_run.py --suite ${bamboo.shortJobName}_test_SUITE --cover
+      - ./ct_run.py --suite ${bamboo.shortJobName} --cover
       description: Run CT
   final-tasks: *final-tasks
   artifacts:
@@ -806,377 +746,195 @@ archivestorage_helper: &ct-job
   - *ct_logs
   requirements: *requirements
   artifact-subscriptions: *op-worker
-atm_audit_log_store: &ct-onenv-automation-store-job
+  
+atm_audit_log_store:
+  <<: *ct-onenv-job
   key: AALS
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *clear-env
-  - script: *restart-minikube
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *download-artifacts
-  - script: &run-ct-onenv-automation-store
-      <<: *run-script-working-dir
-      scripts:
-      - ./ct_onenv.py --suite suites/automation/store/${bamboo.shortJobName}_test_SUITE --cover --path-to-sources ..
-      description: Run CT onenv tests
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_atm_audit_log_store.tar.gz
   - *ct_logs
-  requirements: *minikube
-  artifact-subscriptions: *op-worker
+
 atm_list_store:
-  <<: *ct-onenv-automation-store-job
+  <<: *ct-onenv-job
   key: ATMLST
   artifacts:
   - <<: *cover_ct
     name: cover_ct_atm_list_store.tar.gz
   - *ct_logs
-  requirements: *minikube
-  artifact-subscriptions: *op-worker
-atm_openfaas_activity_feed: &ct-onenv-automation-job
+
+atm_openfaas_activity_feed:
+  <<: *ct-onenv-job
   key: AOAF
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *clear-env
-  - script: *restart-minikube
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *download-artifacts
-  - script: &run-ct-onenv-automation
-      <<: *run-ct-onenv-automation-store
-      scripts:
-      - ./ct_onenv.py --suite suites/automation/${bamboo.shortJobName}_test_SUITE --cover --path-to-sources ..
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_atm_openfaas_activity_feed.tar.gz
   - *ct_logs
-  requirements: *minikube
-  artifact-subscriptions: *op-worker
+
 atm_range_store:
+  <<: *ct-onenv-job
   key: ATMRST
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *clear-env
-  - script: *restart-minikube
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *download-artifacts
-  - script: *run-ct-onenv-automation-store
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_atm_range_store.tar.gz
   - *ct_logs
-  requirements: *minikube
-  artifact-subscriptions: *op-worker
+
 atm_single_value_store:
+  <<: *ct-onenv-job
   key: ATMSVST
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *clear-env
-  - script: *restart-minikube
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *download-artifacts
-  - script: *run-ct-onenv-automation-store
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_atm_single_value_store.tar.gz
   - *ct_logs
-  requirements: *minikube
-  artifact-subscriptions: *op-worker
+
 atm_time_series_store:
+  <<: *ct-onenv-job
   key: ATMTSSTEST
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *clear-env
-  - script: *restart-minikube
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *download-artifacts
-  - script: *run-ct-onenv-automation-store
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_atm_time_series_store.tar.gz
   - *ct_logs
-  requirements: *minikube
-  artifact-subscriptions: *op-worker
+
 atm_tree_forest_store:
+  <<: *ct-onenv-job
   key: ATMTFST
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *clear-env
-  - script: *restart-minikube
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *download-artifacts
-  - script: *run-ct-onenv-automation-store
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_atm_tree_forest_store.tar.gz
   - *ct_logs
-  requirements: *minikube
-  artifact-subscriptions: *op-worker
+
 atm_value:
-  <<: *ct-onenv-automation-job
+  <<: *ct-onenv-job
   key: ATMVALUE
   artifacts:
   - <<: *cover_ct
     name: cover_ct_atm_value.tar.gz
   - *ct_logs
-atm_workflow_execution: &ct-onenv-automation-execution-job
+  
+atm_workflow_execution:
+  <<: *ct-onenv-job
   key: ATMWFEXEC
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *clear-env
-  - script: *restart-minikube
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *download-artifacts
-  - script: &run-ct-onenv-automation-execution
-      <<: *run-ct-onenv-automation
-      scripts:
-      - ./ct_onenv.py --suite suites/automation/execution/${bamboo.shortJobName}_test_SUITE --cover --path-to-sources ..
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_atm_workflow_execution.tar.gz
   - *ct_logs
-  requirements: *minikube
-  artifact-subscriptions: *op-worker
+
 atm_workflow_executions_collection:
-  <<: *ct-onenv-automation-job
+  <<: *ct-onenv-job
   key: ATMWFEXECCOLLECTION
   artifacts:
   - <<: *cover_ct
     name: cover_ct_atm_workflow_executions_collection.tar.gz
   - *ct_logs
-  requirements: *minikube
-  artifact-subscriptions: *op-worker
+
 autocleaning:
   <<: *ct-job
   key: AUT
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_autocleaning.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+  
 cdmi:
   <<: *ct-job
   key: CDMI
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_cdmi.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 ceph_helper:
   <<: *ct-job
   key: CE
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_ceph_helper.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 cephrados_helper:
   <<: *ct-job
   key: CEP
   description: CephRados helper integration test
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_cephrados_helper.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 client_events:
   <<: *ct-job
   key: CLIEVE
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_client_events.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 cluster_upgrade:
   <<: *ct-job
   key: CLUS
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_cluster_upgrade.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 connection:
   <<: *ct-job
   key: CON
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_connection.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 connection_layer:
   <<: *ct-job
   key: CONLAYER
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_connection_layer.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 connection_manager:
+  <<: *ct-onenv-job
   key: CONMANAGER
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *clear-env
-  - script: *restart-minikube
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *download-artifacts
-  - script: &run-ct-onenv-connection
-      <<: *run-ct-onenv-api-dataset
-      scripts:
-      - ./ct_onenv.py --suite suites/connection/${bamboo.shortJobName}_test_SUITE --cover --path-to-sources ..
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_connection_manager.tar.gz
   - *ct_logs
-  requirements: *minikube
-  artifact-subscriptions: *op-worker
+
 dataset:
-  <<: *ct-onenv-dataset-job
+  <<: *ct-onenv-job
   key: DATSET
   artifacts:
   - <<: *cover_ct
     name: cover_ct_dataset.tar.gz
   - *ct_logs
-  requirements: *minikube
-  artifact-subscriptions: *op-worker
+
 datasets_structure:
-  <<: *ct-onenv-dataset-job
+  <<: *ct-onenv-job
   key: DATSTRUCT
   artifacts:
   - <<: *cover_ct
     name: cover_ct_datasets_structure.tar.gz
   - *ct_logs
-  requirements: *minikube
-  artifact-subscriptions: *op-worker
+
 datastore_remote_driver:
   <<: *ct-job
   key: DRD
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_datastore_remote_driver.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 dbsync:
   <<: *ct-job
   key: DBSYN
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_dbsync.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 dbsync_changes_requesting:
   <<: *ct-job
   key: DCR
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_dbsync_changes_requesting.tar.gz
@@ -1185,900 +943,454 @@ dbsync_changes_requesting:
   - os-agent
   - system.docker.executable
   - onedata
-  artifact-subscriptions: *op-worker
+  
 dbsync_changes_requesting_with_errors:
   <<: *ct-job
   key: DCRWE
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_dbsync_changes_requesting_with_errors.tar.gz
   - *ct_logs
   requirements: *os-agent
-  artifact-subscriptions: *op-worker
+
 dir_stats_collector:
   <<: *ct-job
   key: DSC
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_dir_stats_collector.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 event_manager:
   <<: *ct-job
   key: EVMG
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_event_manager.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 event_stream:
   <<: *ct-job
   key: EVSTR
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_event_stream.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 events:
   <<: *ct-job
   key: EV
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_events.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 events_performance:
   <<: *ct-job
   key: EVPERF
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_events_performance.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 events_reliability:
   <<: *ct-job
   key: EVREL
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_events_reliability.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 events_reliability_2op:
   <<: *ct-job
   key: EVREL2OP
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_events_reliability_2op.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 file_deletion:
   <<: *ct-job
   key: FILEDEL
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_file_deletion.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 file_lifecycle:
   <<: *ct-job
   key: FIL
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_file_lifecycle.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 file_popularity:
   <<: *ct-job
   key: FPOP
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_file_popularity.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 file_registration:
   <<: *ct-job
   key: FILREG
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_file_registration.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 fslogic_req:
   <<: *ct-job
   key: FSLOG
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_fslogic_req.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 glusterfs_helper:
   <<: *ct-job
   key: GLUS
   description: GlusterFS helper test
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_glusterfs_helper.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
-gs_atm_inventory_logic: &ct-graph_sync-job
+
+gs_atm_inventory_logic:
   <<: *ct-job
   key: GSAT
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: &run-ct-graph_sync
-      <<: *run-ct
-      scripts:
-      - ./ct_run.py --suite suites/graph_sync/${bamboo.shortJobName}_test_SUITE --cover
   artifacts:
   - <<: *cover_ct
     name: cover_ct_gs_atm_inventory_logic.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 gs_atm_lambda_logic:
-  <<: *ct-graph_sync-job
+  <<: *ct-job
   key: GALL
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct-graph_sync
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_gs_atm_lambda_logic.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 gs_atm_workflow_schema_logic:
+  <<: *ct-job
   key: GAWSL
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct-graph_sync
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_gs_atm_workflow_schema_logic.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 gs_channel:
-  <<: *ct-graph_sync-job
+  <<: *ct-job
   key: GSCHAN
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct-graph_sync
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_gs_channel.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 gs_cluster_logic:
-  <<: *ct-graph_sync-job
+  <<: *ct-job
   key: CL
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct-graph_sync
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_gs_cluster_logic.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 gs_group_logic:
-  <<: *ct-graph_sync-job
+  <<: *ct-job
   key: GROUP
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct-graph_sync
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_gs_group_logic.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 gs_handle_logic:
-  <<: *ct-graph_sync-job
+  <<: *ct-job
   key: HAN
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct-graph_sync
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_gs_handle_logic.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 gs_handle_service_logic:
-  <<: *ct-graph_sync-job
+  <<: *ct-job
   key: HSL
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct-graph_sync
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_gs_handle_service_logic.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 gs_harvester_logic:
-  <<: *ct-graph_sync-job
+  <<: *ct-job
   key: HARLOG
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct-graph_sync
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_gs_harvester_logic.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 gs_provider_logic:
-  <<: *ct-graph_sync-job
+  <<: *ct-job
   key: PROV
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct-graph_sync
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_gs_provider_logic.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 gs_share_logic:
-  <<: *ct-graph_sync-job
+  <<: *ct-job
   key: SHAR
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct-graph_sync
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_gs_share_logic.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 gs_space_logic:
-  <<: *ct-graph_sync-job
+  <<: *ct-job
   key: SPAC
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct-graph_sync
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_gs_space_logic.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 gs_storage_logic:
-  <<: *ct-graph_sync-job
+  <<: *ct-job
   key: STLO
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct-graph_sync
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_gs_storage_logic.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 gs_token_logic:
-  <<: *ct-graph_sync-job
+  <<: *ct-job
   key: TOK
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct-graph_sync
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_gs_token_logic.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 gs_user_logic:
-  <<: *ct-graph_sync-job
+  <<: *ct-job
   key: US
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct-graph_sync
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_gs_user_logic.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
-gs_zone_connection: &ct-onenv-graph_sync-job
+
+gs_zone_connection:
+  <<: *ct-onenv-job
   key: ZON
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *clear-env
-  - script: *restart-minikube
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *download-artifacts
-  - script: &run-ct-onenv-graph_sync
-      <<: *run-ct-onenv-api-dataset
-      scripts:
-      - ./ct_onenv.py --suite suites/graph_sync/${bamboo.shortJobName}_test_SUITE --cover --path-to-sources ..
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_gs_zone_connection.tar.gz
   - *ct_logs
-  requirements:
-  - os-agent
-  - system.docker.executable
-  - onedata
-  artifact-subscriptions: *op-worker
+  requirements: *os-agent
+  
 harvesting:
   <<: *ct-job
   key: HAR
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_harvesting.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 harvesting_custom_metadata:
   <<: *ct-job
   key: HCM
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_harvesting_custom_metadata.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 harvesting_stream:
   <<: *ct-job
   key: HARMNG
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_harvesting_stream.tar.gz
   - *ct_logs
   requirements: *os-agent
-  artifact-subscriptions: *op-worker
+
 idp_access_token:
   <<: *ct-job
   key: IAT
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_idp_access_token.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 lfm_attrs:
   <<: *ct-job
   key: LFMATTR
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_lfm_attrs.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 lfm_files_posix:
   <<: *ct-job
   key: LFMFIL
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_lfm_files_posix.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 lfm_files_s3:
   <<: *ct-job
   key: LFMFS3
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_lfm_files_s3.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
-lfm_symlinks_resolution: &ct-onenv-lfm-job
+
+lfm_symlinks_resolution:
+  <<: *ct-onenv-job
   key: LFMSYMLINKRESOLUTION
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *clear-env
-  - script: *restart-minikube
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *download-artifacts
-  - script: &run-ct-onenv-lfm
-      <<: *run-ct-onenv-api-dataset
-      scripts:
-      - ./ct_onenv.py --suite suites/lfm/${bamboo.shortJobName}_test_SUITE --cover --path-to-sources ..
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_lfm_symlinks_resolution.tar.gz
   - *ct_logs
-  requirements: *minikube
-  artifact-subscriptions: *op-worker
+
 luma:
   <<: *ct-job
   key: LUMA
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_luma.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 massive_multi_provider_file_ops2:
   <<: *ct-job
   key: MAS2
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_massive_multi_provider_file_ops2.tar.gz
   - *ct_logs
   requirements: *os-agent
-  artifact-subscriptions: *op-worker
+
 massive_multi_provider_file_ops:
   <<: *ct-job
   key: MAS
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_massive_multi_provider_file_ops.tar.gz
   - *ct_logs
   requirements: *os-agent
-  artifact-subscriptions: *op-worker
+
 memory_pools_cleanup:
   <<: *ct-job
   key: MEM
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_memory_pools_cleanup.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 model_file_meta:
   <<: *ct-job
   key: MO
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_model_file_meta.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 monitoring:
   <<: *ct-job
   key: MON
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_monitoring.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 multi_provider_cdmi:
   <<: *ct-job
   key: MULTIPROVCDMI
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_multi_provider_cdmi.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 multi_provider_changes_rest:
   <<: *ct-job
   key: MUL
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_multi_provider_changes_rest.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 multi_provider_db_sync:
   <<: *ct-job
   key: MULPDBS
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_multi_provider_db_sync.tar.gz
   - *ct_logs
   requirements: *os-agent
-  artifact-subscriptions: *op-worker
+
 multi_provider_file_ops:
   <<: *ct-job
   key: MULTIFOPS
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_multi_provider_file_ops.tar.gz
   - *ct_logs
   requirements: *os-agent
-  artifact-subscriptions: *op-worker
+
 multi_provider_hardlinks:
   <<: *ct-job
   key: MPH
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_multi_provider_hardlinks.tar.gz
   - *ct_logs
   requirements: *os-agent
-  artifact-subscriptions: *op-worker
+
 multi_provider_proxy:
   <<: *ct-job
   key: MULPPROX
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_multi_provider_proxy.tar.gz
   - *ct_logs
   requirements: *os-agent
-  artifact-subscriptions: *op-worker
+
 multi_provider_rest:
   <<: *ct-job
   key: MULREST
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_multi_provider_rest.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 multi_provider_view_rest:
   <<: *ct-job
   key: MULIDX
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_multi_provider_view_rest.tar.gz
   - *ct_logs
   requirements: *os-agent
-  artifact-subscriptions: *op-worker
+
 multiple_workflow_scheduling:
   <<: *ct-job
   key: MWS
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_multiple_workflow_scheduling.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 nfs_helper:
   <<: *ct-job
   key: NFSHEL
   description: NFS helper test
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_nfs_helper.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
-node_failure: &ct-onenv-job
+
+node_failure:
+  <<: *ct-onenv-job
   key: NOD
-  other: *common-opts
-  tasks:
-  - script: *clear-env
-  - script: *restart-minikube
-  - script: *unpack
-  - script: *pull-surefire
-  - checkout: *fake-checkout
-  - script: *download-artifacts
-  - script: &run-ct-onenv
-      <<: *run-ct-onenv-api-dataset
-      scripts:
-      - ./ct_onenv.py --suite ${bamboo.shortJobName}_test_SUITE --cover --path-to-sources ..
   final-tasks:
   - test-parser: *test-parser
   - script: *save-cover-results
@@ -2097,10 +1409,8 @@ node_failure: &ct-onenv-job
   - <<: *cover_ct
     name: cover_ct_node_failure.tar.gz
   - *ct_logs
-  requirements:
-  - os-agent
-  - minikube
-  artifact-subscriptions: *op-worker
+  requirements: *os-agent
+  
 nulldevice_helper:
   <<: *ct-job
   key: NUL
@@ -2109,41 +1419,24 @@ nulldevice_helper:
   - <<: *cover_ct
     name: cover_ct_nulldevice_helper.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 performance_2_provider:
   <<: *ct-job
   key: P2P
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_performance_2_provider.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
-permissions_posix: &ct-permissions-job
+
+permissions_posix:
   <<: *ct-job
   key: PERMPOSIX
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: &run-ct-permissions
-      <<: *run-ct
-      scripts:
-      - ./ct_run.py --suite suites/permissions/${bamboo.shortJobName}_test_SUITE --cover
   artifacts:
   - <<: *cover_ct
     name: cover_ct_permissions_posix.tar.gz
   - *ct_logs
   requirements: *os-agent
-  artifact-subscriptions: *op-worker
+
 permissions_s3:
   <<: *ct-permissions-job
   key: PERMS3
@@ -2152,707 +1445,347 @@ permissions_s3:
     name: cover_ct_permissions_s3.tar.gz
   - *ct_logs
   requirements: *os-agent
-  artifact-subscriptions: *op-worker
+
 posix_helper:
   <<: *ct-job
   key: HELP
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_posix_helper.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 provider_connection:
   <<: *ct-job
   key: PROVCON
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_provider_connection.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 qos: &ct-onenv-qos-job
+  <<: *ct-onenv-job
   key: QOS
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *clear-env
-  - script: *restart-minikube
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *download-artifacts
-  - script: &run-ct-onenv-qos
-      <<: *run-ct-onenv-api-dataset
-      scripts:
-      - ./ct_onenv.py --suite suites/qos/${bamboo.shortJobName}_test_SUITE --cover --path-to-sources ..
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_qos.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
-qos_api: &ct-api-job
+
+qos_api:
+  <<: *ct-job
   key: QOSAPI
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: &run-ct-api
-      <<: *run-ct
-      scripts:
-      - ./ct_run.py --suite api/${bamboo.shortJobName}_test_SUITE --cover
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_qos_api.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 qos_multi_provider:
-  <<: *ct-onenv-qos-job
+  <<: *ct-onenv-job
   key: MULQ
   artifacts:
   - <<: *cover_ct
     name: cover_ct_qos_multi_provider.tar.gz
   - *ct_logs
-  requirements:
-  - os-agent
-  - system.docker.executable
-  - onedata
-  artifact-subscriptions: *op-worker
+  requirements: *os-agent
+  
 qos_multi_provider_single_file:
-  <<: *ct-onenv-qos-job
+  <<: *ct-onenv-job
   key: SFQOS
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *clear-env
-  - script: *restart-minikube
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *download-artifacts
-  - script: *run-ct-onenv-qos
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_qos_multi_provider_single_file.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 qos_replica_protection:
-  <<: *ct-onenv-qos-job
+  <<: *ct-onenv-job
   key: QRP
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *clear-env
-  - script: *restart-minikube
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *download-artifacts
-  - script: *run-ct-onenv-qos
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_qos_replica_protection.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 qos_status:
-  <<: *ct-onenv-qos-job
+  <<: *ct-onenv-job
   key: QOSTA
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *clear-env
-  - script: *restart-minikube
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *download-artifacts
-  - script: *run-ct-onenv-qos
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_qos_status.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 qos_status_reconciliation:
-  <<: *ct-onenv-qos-job
+  <<: *ct-onenv-job
   key: QSR
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *clear-env
-  - script: *restart-minikube
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *download-artifacts
-  - script: *run-ct-onenv-qos
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_qos_status_reconciliation.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 quota:
   <<: *ct-job
   key: QU
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_quota.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 readonly_storage:
   <<: *ct-job
   key: ROST
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_readonly_storage.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 rename:
   <<: *ct-job
   key: RE
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_rename.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 replica_deletion:
   <<: *ct-job
   key: REPDEL
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_replica_deletion.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 replica_eviction_transfers_rest:
   <<: *ct-job
   key: REPEVREST
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_replica_eviction_transfers_rest.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 replica_migration_transfers_rest:
   <<: *ct-job
   key: REPMIGREST
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_replica_migration_transfers_rest.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 replication:
   <<: *ct-job
   key: REP
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_replication.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 replication_transfers_rest:
   <<: *ct-job
   key: REPREST
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_replication_transfers_rest.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 rest:
   <<: *ct-job
   key: RES
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_rest.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 reverse_luma:
   <<: *ct-job
   key: REV
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_reverse_luma.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 s3_helper:
   <<: *ct-job
   key: S3HEL
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_s3_helper.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 sequencer:
   <<: *ct-job
   key: SEQ
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_sequencer.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 sequencer_in_stream:
   <<: *ct-job
   key: SEQINSTR
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_sequencer_in_stream.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 sequencer_manager:
   <<: *ct-job
   key: SEQMG
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_sequencer_manager.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 sequencer_out_stream:
   <<: *ct-job
   key: SEQOUTSTR
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_sequencer_out_stream.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 sequencer_performance:
   <<: *ct-job
   key: SEQPERF
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_sequencer_performance.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 session_manager:
   <<: *ct-job
   key: SESMG
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_session_manager.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
-session_offline: &ct-onenv-session-job
+
+session_offline:
+  <<: *ct-onenv-job
   key: SESSOFFLINE
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *clear-env
-  - script: *restart-minikube
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *download-artifacts
-  - script: &run-ct-onenv-session
-      <<: *run-ct-onenv-api-dataset
-      scripts:
-      - ./ct_onenv.py --suite suites/session/${bamboo.shortJobName}_test_SUITE --cover --path-to-sources ..
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_session_offline.tar.gz
   - *ct_logs
-  requirements: *minikube
-  artifact-subscriptions: *op-worker
+
 session_watcher:
   <<: *ct-job
   key: SESWTCH
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: &run-ct-session
-      <<: *run-ct
-      scripts:
-      - ./ct_run.py --suite suites/session/${bamboo.shortJobName}_test_SUITE --cover
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_session_watcher.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+  
 single_node_failure:
+  <<: *ct-onenv-job
   key: SNF
-  other: *common-opts
-  tasks:
-  - script: *clear-env
-  - script: *restart-minikube
-  - script: *unpack
-  - script: *pull-surefire
-  - checkout: *fake-checkout
-  - script: *download-artifacts
-  - script: *run-ct-onenv
-  final-tasks:
-  - test-parser: *test-parser
-  - script: *save-cover-results
-  - script: *push-surefire
-  - script: *pack-logs-cp-sources
-  - script: *clear-env-working-dir
   artifacts:
   - <<: *cover_ct
     name: cover_ct_single_node_failure.tar.gz
   - *ct_logs
-  requirements: *minikube
-  artifact-subscriptions: *op-worker
+
 space_unsupport:
+  <<: *ct-job
   key: SPUN
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_space_unsupport.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 storage_cleanup:
+  <<: *ct-job
   key: STCL
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_storage_cleanup.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 storage_files:
+  <<: *ct-job
   key: STFILES
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_storage_files.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 storage_import:
+  <<: *ct-job
   key: STORIMP
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_storage_import.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 storage_import_delete_and_links:
+  <<: *ct-job
   key: SIDL
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_storage_import_delete_and_links.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 storage_import_deletion:
+  <<: *ct-job
   key: STORIMPDEL
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_storage_import_deletion.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 storage_import_s3:
+  <<: *ct-job
   key: STORIMPS3
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_storage_import_s3.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 storage_import_update:
+  <<: *ct-job
   key: SIU
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_storage_import_update.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 storage_import_update_s3:
+  <<: *ct-job
   key: SIUS3
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_storage_import_update_s3.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 storage_req:
+  <<: *ct-job
   key: FUS
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_storage_req.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 storage_sync_links:
+  <<: *ct-job
   key: SSL
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_storage_sync_links.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 storage_traverse:
+  <<: *ct-job
   key: STTR
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_storage_traverse.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 swift_helper:
+  <<: *ct-job
   key: SWIHEL
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_swift_helper.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 tmp_db_error:
+  <<: *ct-onenv-job
   key: TMPDBER
-  other: *common-opts
-  tasks:
-  - script: *clear-env
-  - script: *restart-minikube
-  - script: *unpack
-  - script: *pull-surefire
-  - checkout: *fake-checkout
-  - script: *download-artifacts
-  - script: *run-ct-onenv
   final-tasks:
   - test-parser: *test-parser
   - script: *save-cover-results
@@ -2865,220 +1798,113 @@ tmp_db_error:
   - <<: *cover_ct
     name: cover_ct_tmp_db_error.tar.gz
   - *ct_logs
-  requirements: *minikube
-  artifact-subscriptions: *op-worker
+
 transfer_create_api:
+  <<: *ct-job
   key: TRANCREATE
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct-api
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_transfer_create_api.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 transfer_get_api:
+  <<: *ct-job
   key: TRANGETAPI
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct-api
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_transfer_get_api.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 transfer_stats:
+  <<: *ct-job
   key: TRAN
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_transfer_stats.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 transfers_restart:
+  <<: *ct-onenv-job
   key: TRRST
-  other: *common-opts
-  tasks:
-  - script: *clear-env
-  - script: *restart-minikube
-  - script: *unpack
-  - script: *pull-surefire
-  - checkout: *fake-checkout
-  - script: *download-artifacts
-  - script: *run-ct-onenv
-  final-tasks:
-  - test-parser: *test-parser
-  - script: *pack-logs-cp-sources
-  - script: *push-surefire
-  - script: *clear-env-working-dir
   artifacts:
   - <<: *cover_ct
     name: cover_ct_transfers_restart.tar.gz
-  requirements: *minikube
-  artifact-subscriptions: *op-worker
+  - *ct_logs
+
 trash:
+  <<: *ct-onenv-job
   key: TRASH
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *clear-env
-  - script: *restart-minikube
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *download-artifacts
-  - script: &run-ct-onenv-trash
-      <<: *run-ct-onenv-api-dataset
-      scripts:
-      - ./ct_onenv.py --suite suites/trash/${bamboo.shortJobName}_test_SUITE --cover --path-to-sources ..
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_trash.tar.gz
   - *ct_logs
-  requirements: *minikube
-  artifact-subscriptions: *op-worker
+
 tree_deletion_traverse:
+  <<: *ct-onenv-job
   key: TDT
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *clear-env
-  - script: *restart-minikube
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *download-artifacts
-  - script: *run-ct-onenv-trash
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_tree_deletion_traverse.tar.gz
   - *ct_logs
-  requirements: *minikube
-  artifact-subscriptions: *op-worker
+
 user_auth:
+  <<: *ct-job
   key: USERAUTH
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_user_auth.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 view:
+  <<: *ct-job
   key: INDEX
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_view.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 webdav_helper:
+  <<: *ct-job
   key: WEB
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_webdav_helper.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 webdav_token:
+  <<: *ct-job
   key: WDT
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_webdav_token.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 workflow_scheduling:
+  <<: *ct-job
   key: WSCH
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_workflow_scheduling.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 workflow_scheduling_cancellation_and_restart:
+  <<: *ct-job
   key: WSCR
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_workflow_scheduling_cancellation_and_restart.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
+
 xrootd_helper:
+  <<: *ct-job
   key: XROOT
   description: Test XRootD helper
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *pull-surefire
-  - script: *run-ct
-  final-tasks: *final-tasks
   artifacts:
   - <<: *cover_ct
     name: cover_ct_xrootd_helper.tar.gz
   - *ct_logs
-  requirements: *requirements
-  artifact-subscriptions: *op-worker
-zz_Request_next_build:
+
+Request_next_build:
   key: ZREQN
   description: Request next build 
   other: *common-opts
