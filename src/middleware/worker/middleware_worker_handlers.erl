@@ -13,7 +13,6 @@
 -author("Bartosz Walkowicz").
 
 -include("middleware/middleware.hrl").
--include("proto/oneprovider/provider_messages.hrl").  %% TODO
 
 %% API
 -export([execute/3]).
@@ -170,8 +169,9 @@ execute(UserCtx, FileCtx, #custom_metadata_get_request{
     metadata_req:get_metadata(UserCtx, FileCtx, Type, Query, Inherited);
 
 execute(UserCtx, FileCtx, #custom_metadata_set_request{
-    metadata = #metadata{type = Type, value = Value},
-    query = Query
+    type = Type,
+    query = Query,
+    value = Value
 }) ->
     metadata_req:set_metadata(UserCtx, FileCtx, Type, Value, Query, false, false);
 

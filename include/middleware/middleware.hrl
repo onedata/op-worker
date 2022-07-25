@@ -259,8 +259,9 @@
 }).
 
 -record(custom_metadata_set_request, {
-    metadata :: custom_metadata:metadata(),
-    query = [] :: custom_metadata:query()
+    type :: custom_metadata:type(),
+    query = [] :: custom_metadata:query(),
+    value :: term()
 }).
 
 -record(custom_metadata_remove_request, {

@@ -14,7 +14,6 @@
 -author("Bartosz Walkowicz").
 
 -include("middleware/middleware.hrl").
--include("proto/oneprovider/provider_messages.hrl").  %% TODO
 
 %% API
 -export([
@@ -44,8 +43,9 @@ set_custom_metadata(SessionId, FileKey, Type, Value, Query) ->
     FileGuid = lfm_file_key:resolve_file_key(SessionId, FileKey, resolve_symlink),
 
     middleware_worker:check_exec(SessionId, FileGuid, #custom_metadata_set_request{
+        type = Type,
         query = Query,
-        metadata = #metadata{type = Type, value = Value}
+        value = Value
     }).
 
 

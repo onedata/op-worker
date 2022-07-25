@@ -53,11 +53,6 @@
     value :: binary()
 }).
 
--record(metadata, {
-    type :: custom_metadata:type(),
-    value :: term()
-}).
-
 -record(dataset_info, {
     id :: dataset:id(),
     state :: dataset:state(),
@@ -98,7 +93,7 @@
 }).
 
 -type provider_response_type() ::
-    #acl{} | #dir{} | #file_path{}| #metadata{} | #dataset_info{} | #file_eff_dataset_summary{} | 
+    #acl{} | #dir{} | #file_path{}| #dataset_info{} | #file_eff_dataset_summary{} |
     #archive_info{} | undefined.
 
 -record(provider_request, {
