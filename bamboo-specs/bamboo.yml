@@ -686,7 +686,7 @@ api_storage:
     name: cover_ct_api_storage.tar.gz
   - *ct_logs
   
-archive: &ct-onenv-dataset-job
+archive:
   <<: *ct-onenv-job
   key: ARC
   artifacts:
@@ -1438,7 +1438,7 @@ permissions_posix:
   requirements: *os-agent
 
 permissions_s3:
-  <<: *ct-permissions-job
+  <<: *ct-job
   key: PERMS3
   artifacts:
   - <<: *cover_ct
@@ -1462,7 +1462,7 @@ provider_connection:
     name: cover_ct_provider_connection.tar.gz
   - *ct_logs
 
-qos: &ct-onenv-qos-job
+qos:
   <<: *ct-onenv-job
   key: QOS
   artifacts:
