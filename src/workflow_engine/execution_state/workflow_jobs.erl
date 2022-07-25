@@ -304,7 +304,7 @@ register_async_call(EngineId, Jobs = #workflow_jobs{
 }, JobIdentifier, KeepaliveTimeout) ->
     case maps:get(JobIdentifier, Unidentified, undefined) of
         undefined ->
-            KeepaliveTimer = case workflow_engine:get_first_heartbeat_timeout(EngineId) of
+            KeepaliveTimer = case workflow_engine:get_enqueuing_timeout(EngineId) of
                 infinity -> undefined;
                 undefined -> countdown_timer:start_seconds(KeepaliveTimeout);
                 Timeout -> countdown_timer:start_seconds(Timeout)

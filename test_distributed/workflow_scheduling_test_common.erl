@@ -81,9 +81,9 @@ end_per_suite(Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, [oneprovider]).
 
-init_per_testcase(waiting_for_initial_heartbeat_test = Case, Config) ->
+init_per_testcase(async_task_enqueuing_test = Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    rpc:call(Worker, workflow_engine, set_first_heartbeat_timeout, [?ENGINE_ID, 20]),
+    rpc:call(Worker, workflow_engine, set_enqueuing_timeout, [?ENGINE_ID, 20]),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
@@ -93,9 +93,9 @@ init_per_testcase(_, Config) ->
     mock_handlers(Workers, Manager),
     [{test_execution_manager, Manager} | Config].
 
-end_per_testcase(waiting_for_initial_heartbeat_test = Case, Config) ->
+end_per_testcase(async_task_enqueuing_test = Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    rpc:call(Worker, workflow_engine, set_first_heartbeat_timeout, [?ENGINE_ID, undefined]),
+    rpc:call(Worker, workflow_engine, set_enqueuing_timeout, [?ENGINE_ID, undefined]),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(_, Config) ->
     ?config(test_execution_manager, Config) ! stop,

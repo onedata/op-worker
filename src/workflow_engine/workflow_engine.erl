@@ -29,9 +29,9 @@
 -export([report_execution_status_update/5, get_async_call_pools/1, trigger_job_scheduling/1,
     call_handler/5, call_handle_task_execution_ended_for_all_tasks/4,
     call_handle_task_results_processed_for_all_items_for_all_tasks/4, call_handlers_for_cancelled_lane/5,
-    get_first_heartbeat_timeout/1]).
+    get_enqueuing_timeout/1]).
 %% Test API
--export([set_first_heartbeat_timeout/2]).
+-export([set_enqueuing_timeout/2]).
 
 %% Functions exported for internal_services engine - do not call directly
 -export([init_service/2, takeover_service/3]).
@@ -60,7 +60,9 @@
     slots_limit => non_neg_integer(),
     workflow_async_call_pools_to_use => [{workflow_async_call_pool:id(), SlotsLimit :: non_neg_integer()}],
     default_keepalive_timeout => time:seconds(),
-    first_heatbeat_timeout => time:seconds() | infinity,
+    enqueuing_timeout => time:seconds() | infinity, % async task can be enqueued after calling process_task_result_for_item
+                                                    % (depending on workflow_handler implementation) ; in such a case,
+                                                    % first heartbeat (or result) should appear before enqueuing_timeout
     init_workflow_timeout_server => {true, workflow_timeout_monitor:check_period()} | false
 }.
 
@@ -277,9 +279,9 @@ call_handlers_for_cancelled_lane(ExecutionId, Handler, Context, LaneId, TaskIds)
                 [LaneId, ExecutionId, Other])
     end.
 
--spec get_first_heartbeat_timeout(id()) -> time:seconds() | infinity | undefined.
-get_first_heartbeat_timeout(EngineId) ->
-    node_cache:get({first_heatbeat_timeout, EngineId}, undefined).
+-spec get_enqueuing_timeout(id()) -> time:seconds() | infinity | undefined.
+get_enqueuing_timeout(EngineId) ->
+    node_cache:get({enqueuing_timeout, EngineId}, undefined).
 
 %%%===================================================================
 %%% Internal functions
@@ -296,7 +298,7 @@ init_service(Id, Options) ->
                 KeepaliveTimeout -> set_default_keepalive_timeout(Id, KeepaliveTimeout)
             end,
 
-            set_first_heartbeat_timeout(Id, maps:get(first_heatbeat_timeout, Options, undefined)),
+            set_enqueuing_timeout(Id, maps:get(enqueuing_timeout, Options, undefined)),
 
             AsyncCallPools = maps:get(workflow_async_call_pools_to_use, Options,
                 [{?DEFAULT_ASYNC_CALL_POOL_ID, ?DEFAULT_CALLS_LIMIT}]),
@@ -489,9 +491,9 @@ get_default_keepalive_timeout(EngineId) ->
 set_default_keepalive_timeout(Id, Timeout) ->
     put_value_in_cache(Id, default_keepalive_timeout, Timeout).
 
--spec set_first_heartbeat_timeout(id(), time:seconds() | infinity | undefined) -> ok.
-set_first_heartbeat_timeout(Id, Timeout) ->
-    put_value_in_cache(Id, first_heatbeat_timeout, Timeout).
+-spec set_enqueuing_timeout(id(), time:seconds() | infinity | undefined) -> ok.
+set_enqueuing_timeout(Id, Timeout) ->
+    put_value_in_cache(Id, enqueuing_timeout, Timeout).
 
 -spec put_value_in_cache(id(), atom(), term()) -> ok.
 put_value_in_cache(Id, Name, Value) ->
