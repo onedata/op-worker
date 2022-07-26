@@ -921,7 +921,7 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = json_me
     FilterType = maps:get(<<"filter_type">>, Data, undefined),
     Filter = maps:get(<<"filter">>, Data, undefined),
 
-    FilterList = case {FilterType, Filter} of
+    Query = case {FilterType, Filter} of
         {undefined, _} ->
             [];
         {<<"keypath">>, undefined} ->
@@ -930,14 +930,12 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = json_me
             binary:split(Filter, <<".">>, [global])
     end,
 
-    Result = mi_file_metadata:get_custom_metadata(SessionId, FileRef, json, FilterList, Inherited),
-    {ok, value, Result};
+    {ok, value, mi_file_metadata:get_custom_metadata(SessionId, FileRef, json, Query, Inherited)};
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = rdf_metadata}}, _) ->
     FileRef = ?FILE_REF(FileGuid, maps:get(<<"resolve_symlink">>, Data, true)),
 
-    Result = mi_file_metadata:get_custom_metadata(Auth#auth.session_id, FileRef, rdf, [], false),
-    {ok, value, Result};
+    {ok, value, mi_file_metadata:get_custom_metadata(Auth#auth.session_id, FileRef, rdf, [], false)};
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = acl}}, _) ->
     ?lfm_check(lfm:get_acl(Auth#auth.session_id, ?FILE_REF(FileGuid)));

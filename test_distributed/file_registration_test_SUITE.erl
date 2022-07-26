@@ -155,13 +155,13 @@ all() -> ?ALL(?TEST_CASES).
     end)(Worker, SessId, FilePath, Xattrs, Attempts)
 ).
 
--define(resolvePath(Worker, SessId, FilePath),
-    element(2, {ok, _} = lfm_proxy:resolve_guid(Worker, SessId, FilePath))
+-define(resolveFileRef(Worker, SessId, FilePath),
+    ?FILE_REF(element(2, {ok, _} = lfm_proxy:resolve_guid(Worker, SessId, FilePath)))
 ).
 -define(assertJsonMetadata(Worker, SessId, FilePath, JSON, Attempts),
     (fun
         (__Worker, __SessId, __FilePath, __JSON, __Attempts) when map_size(__JSON) =:= 0 ->
-            FileRef = ?FILE_REF(?resolvePath(__Worker, __SessId, __FilePath)),
+            FileRef = ?resolveFileRef(__Worker, __SessId, __FilePath),
 
             ?assertMatch(
                 ?ERROR_POSIX(?ENODATA),
@@ -169,7 +169,7 @@ all() -> ?ALL(?TEST_CASES).
                 __Attempts
             );
         (__Worker, __SessId, __FilePath, __JSON, __Attempts) ->
-            FileRef = ?FILE_REF(?resolvePath(__Worker, __SessId, __FilePath)),
+            FileRef = ?resolveFileRef(__Worker, __SessId, __FilePath),
 
             ?assertMatch(
                 {ok, __JSON},
@@ -182,7 +182,7 @@ all() -> ?ALL(?TEST_CASES).
 -define(assertRdfMetadata(Worker, SessId, FilePath, RDF, Attempts),
     (fun
         (__Worker, __SessId, __FilePath, <<>>, __Attempts) ->
-            FileRef = ?FILE_REF(?resolvePath(__Worker, __SessId, __FilePath)),
+            FileRef = ?resolveFileRef(__Worker, __SessId, __FilePath),
 
             ?assertMatch(
                 ?ERROR_POSIX(?ENODATA),
@@ -190,7 +190,7 @@ all() -> ?ALL(?TEST_CASES).
                 __Attempts
             );
         (__Worker, __SessId, __FilePath, __RDF, __Attempts) ->
-            FileRef = ?FILE_REF(?resolvePath(__Worker, __SessId, __FilePath)),
+            FileRef = ?resolveFileRef(__Worker, __SessId, __FilePath),
 
             ?assertMatch(
                 {ok, __RDF},

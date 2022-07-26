@@ -786,7 +786,7 @@ run_open_handle_mode_scenarios(ScenariosRootDirPath, #perms_test_spec{
                 files_owner_session_id = FileOwnerUserSessId,
                 executioner_session_id = ExecutionerSessId
             });
-        _ ->
+        false ->
             % If operation is not available in share/public mode then operation
             % should be rejected even if all permissions are granted
             set_full_perms(PermsType, Node, AllFiles),

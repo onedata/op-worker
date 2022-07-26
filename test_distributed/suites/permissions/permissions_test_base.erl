@@ -1146,7 +1146,7 @@ get_file_guid_test(Config) ->
         files = [#file{name = <<"file1">>}],
         available_in_readonly_mode = true,
         available_in_share_mode = inapplicable,
-        available_in_open_handle_mode = inapplicable,
+        available_in_open_handle_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, _ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             extract_ok(lfm_proxy:resolve_guid(W, SessId, FilePath))
@@ -2048,7 +2048,7 @@ get_qos_entry_test(Config) ->
         }],
         available_in_readonly_mode = true,
         available_in_share_mode = inapplicable,
-        available_in_open_handle_mode = inapplicable,
+        available_in_open_handle_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             QosEntryId = maps:get(FilePath, ExtraData),
@@ -2078,7 +2078,7 @@ remove_qos_entry_test(Config) ->
         }],
         available_in_readonly_mode = false,
         available_in_share_mode = inapplicable,
-        available_in_open_handle_mode = inapplicable,
+        available_in_open_handle_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             QosEntryId = maps:get(FilePath, ExtraData),
@@ -2108,7 +2108,7 @@ get_effective_file_qos_test(Config) ->
         }],
         available_in_readonly_mode = true,
         available_in_share_mode = inapplicable,
-        available_in_open_handle_mode = inapplicable,
+        available_in_open_handle_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
@@ -2138,7 +2138,7 @@ check_qos_fulfillment_test(Config) ->
         }],
         available_in_readonly_mode = true,
         available_in_share_mode = inapplicable,
-        available_in_open_handle_mode = inapplicable,
+        available_in_open_handle_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             QosEntryId = maps:get(FilePath, ExtraData),

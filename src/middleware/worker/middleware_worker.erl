@@ -162,23 +162,11 @@ handle(healthcheck) ->
 handle(?REQ(SessionId, FileGuid, Operation)) ->
     try
         FileCtx = file_ctx:new_by_guid(FileGuid),
-
-        UserCtx0 = user_ctx:new(SessionId),
-        assert_user_not_in_open_handle_mode(UserCtx0),
-
-        UserCtx1 = case file_ctx:get_share_id_const(FileCtx) of
-            undefined ->
-                UserCtx0;
-            _ShareId ->
-                case is_operation_available_in_share_mode(Operation) of
-                    true -> ensure_guest_ctx(UserCtx0);
-                    false -> throw(?ERROR_POSIX(?EPERM))
-                end
-        end,
+        UserCtx = infer_user_ctx(SessionId, FileCtx, Operation),
 
         middleware_utils:assert_file_managed_locally(FileGuid),
 
-        middleware_worker_handlers:execute(UserCtx1, FileCtx, Operation)
+        middleware_worker_handlers:execute(UserCtx, FileCtx, Operation)
     catch Type:Reason:Stacktrace ->
         request_error_handler:handle(Type, Reason, Stacktrace, SessionId, Operation)
     end;
@@ -205,11 +193,36 @@ cleanup() ->
 
 
 %% @private
+-spec infer_user_ctx(session:id(), file_ctx:ctx(), operation()) ->
+    user_ctx:ctx() | no_return().
+infer_user_ctx(SessionId, FileCtx, Operation) ->
+    UserCtx = user_ctx:new(SessionId),
+
+    assert_user_not_in_open_handle_mode(UserCtx),
+    ensure_guest_ctx_in_case_of_share_mode(UserCtx, FileCtx, Operation).
+
+
+%% @private
 -spec assert_user_not_in_open_handle_mode(user_ctx:ctx()) -> ok | no_return().
 assert_user_not_in_open_handle_mode(UserCtx) ->
     case user_ctx:is_in_open_handle_mode(UserCtx) of
         true -> throw(?ERROR_POSIX(?EPERM));
         false -> ok
+    end.
+
+
+%% @private
+-spec ensure_guest_ctx_in_case_of_share_mode(user_ctx:ctx(), file_ctx:ctx(), operation()) ->
+    user_ctx:ctx() | no_return().
+ensure_guest_ctx_in_case_of_share_mode(UserCtx, FileCtx, Operation) ->
+    case file_ctx:get_share_id_const(FileCtx) of
+        undefined ->
+            UserCtx;
+        _ShareId ->
+            case is_operation_available_in_share_mode(Operation) of
+                true -> ensure_guest_ctx(UserCtx);
+                false -> throw(?ERROR_POSIX(?EPERM))
+            end
     end.
 
 

@@ -189,7 +189,7 @@ delete_metadata_test_base(
                     FileGuid, ShareId, DataSpec
                 ),
                 case MetadataType of
-                    <<"xattrs">> -> DataSpec;
+                    <<"xattrs">> -> DataSpec1;
                     _ -> api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(DataSpec1)
                 end
             end
