@@ -435,7 +435,7 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = json
             binary:split(Filter, <<".">>, [global])
     end,
 
-    ?lfm_check(lfm:set_metadata(SessionId, FileRef, json, JSON, FilterList));
+    mi_file_metadata:set_custom_metadata(SessionId, FileRef, json, JSON, FilterList);
 
 create(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = rdf_metadata}}) ->
     SessionId = Auth#auth.session_id,
@@ -443,7 +443,7 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = rdf_
 
     Rdf = maps:get(<<"metadata">>, Data),
 
-    ?lfm_check(lfm:set_metadata(SessionId, FileRef, rdf, Rdf, []));
+    mi_file_metadata:set_custom_metadata(SessionId, FileRef, rdf, Rdf, []);
 
 create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = register_file}}) ->
     SpaceId = maps:get(<<"spaceId">>, Data),
@@ -921,7 +921,7 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = json_me
     FilterType = maps:get(<<"filter_type">>, Data, undefined),
     Filter = maps:get(<<"filter">>, Data, undefined),
 
-    FilterList = case {FilterType, Filter} of
+    Query = case {FilterType, Filter} of
         {undefined, _} ->
             [];
         {<<"keypath">>, undefined} ->
@@ -930,14 +930,12 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = json_me
             binary:split(Filter, <<".">>, [global])
     end,
 
-    {ok, Result} = ?lfm_check(lfm:get_metadata(SessionId, FileRef, json, FilterList, Inherited)),
-    {ok, value, Result};
+    {ok, value, mi_file_metadata:get_custom_metadata(SessionId, FileRef, json, Query, Inherited)};
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = rdf_metadata}}, _) ->
     FileRef = ?FILE_REF(FileGuid, maps:get(<<"resolve_symlink">>, Data, true)),
 
-    {ok, Result} = ?lfm_check(lfm:get_metadata(Auth#auth.session_id, FileRef, rdf, [], false)),
-    {ok, value, Result};
+    {ok, value, mi_file_metadata:get_custom_metadata(Auth#auth.session_id, FileRef, rdf, [], false)};
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = acl}}, _) ->
     ?lfm_check(lfm:get_acl(Auth#auth.session_id, ?FILE_REF(FileGuid)));
@@ -1215,11 +1213,11 @@ delete(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = xatt
 
 delete(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = json_metadata}}) ->
     FileRef = ?FILE_REF(FileGuid, maps:get(<<"resolve_symlink">>, Data, true)),
-    ?lfm_check(lfm:remove_metadata(Auth#auth.session_id, FileRef, json));
+    mi_file_metadata:remove_custom_metadata(Auth#auth.session_id, FileRef, json);
 
 delete(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = rdf_metadata}}) ->
     FileRef = ?FILE_REF(FileGuid, maps:get(<<"resolve_symlink">>, Data, true)),
-    ?lfm_check(lfm:remove_metadata(Auth#auth.session_id, FileRef, rdf)).
+    mi_file_metadata:remove_custom_metadata(Auth#auth.session_id, FileRef, rdf).
 
 
 %%%===================================================================

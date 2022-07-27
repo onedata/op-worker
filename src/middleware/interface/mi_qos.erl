@@ -56,7 +56,7 @@ add_qos_entry(SessionId, FileKey, RawExpression, ReplicasNum, EntryType) ->
     end,
     FileGuid = lfm_file_key:resolve_file_key(SessionId, FileKey, do_not_resolve_symlink),
 
-    middleware_worker:check_exec(SessionId, FileGuid, #add_qos_entry{
+    middleware_worker:check_exec(SessionId, FileGuid, #qos_entry_add_request{
         expression = Expression,
         replicas_num = ReplicasNum,
         entry_type = EntryType
@@ -67,7 +67,7 @@ add_qos_entry(SessionId, FileKey, RawExpression, ReplicasNum, EntryType) ->
 get_effective_file_qos(SessionId, FileKey) ->
     FileGuid = lfm_file_key:resolve_file_key(SessionId, FileKey, do_not_resolve_symlink),
 
-    middleware_worker:check_exec(SessionId, FileGuid, #get_effective_file_qos{}).
+    middleware_worker:check_exec(SessionId, FileGuid, #effective_file_qos_get_request{}).
 
 
 -spec get_qos_entry(session:id(), qos_entry:id()) ->
@@ -75,14 +75,14 @@ get_effective_file_qos(SessionId, FileKey) ->
 get_qos_entry(SessionId, QosEntryId) ->
     FileGuid = qos_entry_id_id_to_file_guid(QosEntryId),
 
-    middleware_worker:check_exec(SessionId, FileGuid, #get_qos_entry{id = QosEntryId}).
+    middleware_worker:check_exec(SessionId, FileGuid, #qos_entry_get_request{id = QosEntryId}).
 
 
 -spec remove_qos_entry(session:id(), qos_entry:id()) -> ok | no_return().
 remove_qos_entry(SessionId, QosEntryId) ->
     FileGuid = qos_entry_id_id_to_file_guid(QosEntryId),
 
-    middleware_worker:check_exec(SessionId, FileGuid, #remove_qos_entry{id = QosEntryId}).
+    middleware_worker:check_exec(SessionId, FileGuid, #qos_entry_remove_request{id = QosEntryId}).
 
 
 -spec check_qos_status(session:id(), qos_entry:id() | [qos_entry:id()]) ->
@@ -106,7 +106,7 @@ check_qos_status(SessionId, QosEntryId, undefined) ->
 check_qos_status(SessionId, QosEntryId, FileKey) ->
     FileGuid = lfm_file_key:resolve_file_key(SessionId, FileKey, do_not_resolve_symlink),
 
-    middleware_worker:check_exec(SessionId, FileGuid, #check_qos_status{qos_id = QosEntryId}).
+    middleware_worker:check_exec(SessionId, FileGuid, #qos_status_check_request{qos_id = QosEntryId}).
 
 
 %%%===================================================================

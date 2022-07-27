@@ -13,7 +13,6 @@
 -author("Bartosz Walkowicz").
 
 -include("middleware/middleware.hrl").
--include("proto/oneprovider/provider_rpc_messages.hrl").
 
 %% API
 -export([execute/3]).
@@ -31,14 +30,14 @@
     middleware_worker:operation()
 ) ->
     ok | {ok, term()} | no_return().
-execute(UserCtx, SpaceDirCtx, #list_archives{
+execute(UserCtx, SpaceDirCtx, #archives_list_request{
     dataset_id = DatasetId,
     opts = Opts,
     mode = ListingMode
 }) ->
     dataset_req:list_archives(SpaceDirCtx, DatasetId, Opts, ListingMode, UserCtx);
 
-execute(UserCtx, SpaceDirCtx, #archive_dataset{
+execute(UserCtx, SpaceDirCtx, #dataset_archive_request{
     id = DatasetId,
     config = Config,
     preserved_callback = PreservedCallback,
@@ -49,36 +48,36 @@ execute(UserCtx, SpaceDirCtx, #archive_dataset{
         SpaceDirCtx, DatasetId, Config, PreservedCallback, DeletedCallback, Description, UserCtx
     );
 
-execute(UserCtx, SpaceDirCtx, #get_archive_info{id = ArchiveId}) ->
+execute(UserCtx, SpaceDirCtx, #archive_info_get_request{id = ArchiveId}) ->
     dataset_req:get_archive_info(SpaceDirCtx, ArchiveId, UserCtx);
 
-execute(UserCtx, SpaceDirCtx, #update_archive{id = ArchiveId, diff = Diff}) ->
+execute(UserCtx, SpaceDirCtx, #archive_update_request{id = ArchiveId, diff = Diff}) ->
     dataset_req:update_archive(SpaceDirCtx, ArchiveId, Diff, UserCtx);
 
-execute(UserCtx, SpaceDirCtx, #delete_archive{id = ArchiveId, callback = CallbackUrl}) ->
+execute(UserCtx, SpaceDirCtx, #archive_delete_request{id = ArchiveId, callback = CallbackUrl}) ->
     dataset_req:init_archive_delete(SpaceDirCtx, ArchiveId, CallbackUrl, UserCtx);
 
-execute(UserCtx, SpaceDirCtx, #recall_archive{
+execute(UserCtx, SpaceDirCtx, #archive_recall_request{
     archive_id = ArchiveId, parent_directory_guid = ParentDirectoryGuid, target_filename = TargetName}
 ) ->
     dataset_req:init_archive_recall(SpaceDirCtx, ArchiveId, ParentDirectoryGuid, TargetName, UserCtx);
 
-execute(UserCtx, FileCtx, #cancel_archive_recall{id = Id}) ->
+execute(UserCtx, FileCtx, #archive_recall_cancel_request{id = Id}) ->
     dataset_req:cancel_archive_recall(FileCtx, Id, UserCtx);
 
-execute(UserCtx, FileCtx, #get_recall_details{id = Id}) ->
+execute(UserCtx, FileCtx, #archive_recall_details_get_request{id = Id}) ->
     dataset_req:get_archive_recall_details(FileCtx, Id, UserCtx);
 
-execute(UserCtx, FileCtx, #get_recall_progress{id = Id}) ->
+execute(UserCtx, FileCtx, #archive_recall_progress_get_request{id = Id}) ->
     dataset_req:get_archive_recall_progress(FileCtx, Id, UserCtx);
 
-execute(UserCtx, FileCtx, #browse_recall_log{id = Id, options = Options}) ->
+execute(UserCtx, FileCtx, #archive_recall_log_browse_request{id = Id, options = Options}) ->
     dataset_req:browse_archive_recall_log(FileCtx, Id, UserCtx, Options);
 
 
 %% Automation
 
-execute(UserCtx, SpaceDirCtx, #schedule_atm_workflow_execution{
+execute(UserCtx, SpaceDirCtx, #atm_workflow_execution_schedule_request{
     atm_workflow_schema_id = AtmWorkflowSchemaId,
     atm_workflow_schema_revision_num = AtmWorkflowSchemaRevisionNum,
     store_initial_content_overlay = AtmStoreInitialContentOverlay,
@@ -90,12 +89,12 @@ execute(UserCtx, SpaceDirCtx, #schedule_atm_workflow_execution{
         AtmStoreInitialContentOverlay, CallbackUrl
     )};
 
-execute(_UserCtx, _SpaceDirCtx, #cancel_atm_workflow_execution{
+execute(_UserCtx, _SpaceDirCtx, #atm_workflow_execution_cancel_request{
     atm_workflow_execution_id = AtmWorkflowExecutionId
 }) ->
     ok = atm_workflow_execution_api:cancel(AtmWorkflowExecutionId);
 
-execute(UserCtx, _SpaceDirCtx, #repeat_atm_workflow_execution{
+execute(UserCtx, _SpaceDirCtx, #atm_workflow_execution_repeat_request{
     type = Type,
     atm_workflow_execution_id = AtmWorkflowExecutionId,
     atm_lane_run_selector = AtmLaneRunSelector
@@ -128,24 +127,24 @@ execute(UserCtx, FileCtx, #mimetype_set_request{value = CompletionStatus}) ->
 
 %% Datasets
 
-execute(UserCtx, SpaceDirCtx, #list_top_datasets{state = State, opts = Opts, mode = ListingMode}) ->
+execute(UserCtx, SpaceDirCtx, #top_datasets_list_request{state = State, opts = Opts, mode = ListingMode}) ->
     SpaceId = file_ctx:get_space_id_const(SpaceDirCtx),
     dataset_req:list_top_datasets(SpaceId, State, Opts, ListingMode, UserCtx);
 
-execute(UserCtx, SpaceDirCtx, #list_children_datasets{
+execute(UserCtx, SpaceDirCtx, #children_datasets_list_request{
     id = DatasetId,
     opts = Opts,
     mode = ListingMode
 }) ->
     dataset_req:list_children_datasets(SpaceDirCtx, DatasetId, Opts, ListingMode, UserCtx);
 
-execute(UserCtx, FileCtx, #establish_dataset{protection_flags = ProtectionFlags}) ->
+execute(UserCtx, FileCtx, #dataset_establish_request{protection_flags = ProtectionFlags}) ->
     dataset_req:establish(FileCtx, ProtectionFlags, UserCtx);
 
-execute(UserCtx, SpaceDirCtx, #get_dataset_info{id = DatasetId}) ->
+execute(UserCtx, SpaceDirCtx, #dataset_info_get_request{id = DatasetId}) ->
     dataset_req:get_info(SpaceDirCtx, DatasetId, UserCtx);
 
-execute(UserCtx, SpaceDirCtx, #update_dataset{
+execute(UserCtx, SpaceDirCtx, #dataset_update_request{
     id = DatasetId,
     state = NewState,
     flags_to_set = FlagsToSet,
@@ -153,14 +152,31 @@ execute(UserCtx, SpaceDirCtx, #update_dataset{
 }) ->
     dataset_req:update(SpaceDirCtx, DatasetId, NewState, FlagsToSet, FlagsToUnset, UserCtx);
 
-execute(UserCtx, SpaceDirCtx, #remove_dataset{id = DatasetId}) ->
+execute(UserCtx, SpaceDirCtx, #dataset_remove_request{id = DatasetId}) ->
     dataset_req:remove(SpaceDirCtx, DatasetId, UserCtx);
 
-execute(UserCtx, FileCtx, #get_file_eff_dataset_summary{}) ->
+execute(UserCtx, FileCtx, #file_eff_dataset_summary_get_request{}) ->
     dataset_req:get_file_eff_summary(FileCtx, UserCtx);
 
 
 %% File metadata
+
+execute(UserCtx, FileCtx, #custom_metadata_get_request{
+    type = Type,
+    query = Query,
+    inherited = Inherited
+}) ->
+    metadata_req:get_metadata(UserCtx, FileCtx, Type, Query, Inherited);
+
+execute(UserCtx, FileCtx, #custom_metadata_set_request{
+    type = Type,
+    query = Query,
+    value = Value
+}) ->
+    metadata_req:set_metadata(UserCtx, FileCtx, Type, Value, Query, false, false);
+
+execute(UserCtx, FileCtx, #custom_metadata_remove_request{type = Type}) ->
+    metadata_req:remove_metadata(UserCtx, FileCtx, Type);
 
 execute(UserCtx, FileCtx, #file_distribution_gather_request{}) ->
     file_distribution:gather(UserCtx, FileCtx);
@@ -170,36 +186,36 @@ execute(UserCtx, FileCtx, #historical_dir_size_stats_gather_request{request = Re
 
 %% QoS
 
-execute(UserCtx, FileCtx, #add_qos_entry{
+execute(UserCtx, FileCtx, #qos_entry_add_request{
     expression = Expression,
     replicas_num = ReplicasNum,
     entry_type = EntryType
 }) ->
     qos_req:add_qos_entry(UserCtx, FileCtx, Expression, ReplicasNum, EntryType);
 
-execute(UserCtx, FileCtx, #get_effective_file_qos{}) ->
+execute(UserCtx, FileCtx, #effective_file_qos_get_request{}) ->
     qos_req:get_effective_file_qos(UserCtx, FileCtx);
 
-execute(UserCtx, FileCtx, #get_qos_entry{id = QosEntryId}) ->
+execute(UserCtx, FileCtx, #qos_entry_get_request{id = QosEntryId}) ->
     qos_req:get_qos_entry(UserCtx, FileCtx, QosEntryId);
 
-execute(UserCtx, FileCtx, #remove_qos_entry{id = QosEntryId}) ->
+execute(UserCtx, FileCtx, #qos_entry_remove_request{id = QosEntryId}) ->
     qos_req:remove_qos_entry(UserCtx, FileCtx, QosEntryId);
 
-execute(UserCtx, FileCtx, #check_qos_status{qos_id = QosEntryId}) ->
+execute(UserCtx, FileCtx, #qos_status_check_request{qos_id = QosEntryId}) ->
     qos_req:check_status(UserCtx, FileCtx, QosEntryId);
 
 %% Shares
 
-execute(UserCtx, FileCtx, #create_share{name = Name, description = Description}) ->
+execute(UserCtx, FileCtx, #share_create_request{name = Name, description = Description}) ->
     share_req:create_share(UserCtx, FileCtx, Name, Description);
 
-execute(UserCtx, FileCtx, #remove_share{share_id = ShareId}) ->
+execute(UserCtx, FileCtx, #share_remove_request{share_id = ShareId}) ->
     share_req:remove_share(UserCtx, FileCtx, ShareId);
 
 %% Transfers
 
-execute(UserCtx, FileCtx, #schedule_file_transfer{
+execute(UserCtx, FileCtx, #file_transfer_schedule_request{
     replicating_provider_id = ReplicatingProviderId,
     evicting_provider_id = EvictingProviderId,
     callback = Callback
@@ -210,7 +226,7 @@ execute(UserCtx, FileCtx, #schedule_file_transfer{
         Callback
     );
 
-execute(UserCtx, FileCtx, #schedule_view_transfer{
+execute(UserCtx, FileCtx, #view_transfer_schedule_request{
     replicating_provider_id = ReplicatingProviderId,
     evicting_provider_id = EvictingProviderId,
     view_name = ViewName,

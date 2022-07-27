@@ -61,8 +61,7 @@
 
     get_acl/3, set_acl/4, remove_acl/3,
 
-    has_custom_metadata/3,
-    get_metadata/6, set_metadata/6, remove_metadata/4
+    has_custom_metadata/3
 ]).
 
 -define(EXEC(Worker, Function),
@@ -655,28 +654,6 @@ remove_acl(Worker, SessId, FileKey) ->
     {ok, boolean()}.
 has_custom_metadata(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:has_custom_metadata(SessId, FileKey)).
-
-
--spec get_metadata(node(), session:id(), lfm:file_key(),
-    custom_metadata:type(), custom_metadata:query(), boolean()
-) ->
-    {ok, custom_metadata:value()}.
-get_metadata(Worker, SessId, FileKey, Type, Query, Inherited) ->
-    ?EXEC(Worker, lfm:get_metadata(SessId, FileKey, Type, Query, Inherited)).
-
-
--spec set_metadata(node(), session:id(), lfm:file_key(),
-    custom_metadata:type(), custom_metadata:value(), custom_metadata:query()
-) ->
-    ok.
-set_metadata(Worker, SessId, FileKey, Type, Value, Query) ->
-    ?EXEC(Worker, lfm:set_metadata(SessId, FileKey, Type, Value, Query)).
-
-
--spec remove_metadata(node(), session:id(), lfm:file_key(),
-    custom_metadata:type()) -> ok.
-remove_metadata(Worker, SessId, FileKey, Type) ->
-    ?EXEC(Worker, lfm:remove_metadata(SessId, FileKey, Type)).
 
 
 %%%===================================================================
