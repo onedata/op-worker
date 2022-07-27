@@ -5,7 +5,7 @@ HELPERS_DIR ?= ../_build/default/lib/helpers
 ERTS_INCLUDE_DIR ?= $(shell erl -noshell -s init stop -eval "io:format(\"~s/erts-~s/include/\", [code:root_dir(), erlang:system_info(version)]).")
 
 LDFLAGS += -shared -Wl,-rpath -Wl,\$$ORIGIN/helpers/lib -L $(HELPERS_DIR)/priv/lib \
-	-lhelpers $(shell pkg-config --libs botan-1.10 tbb fuse3) -laws-cpp-sdk-s3 \
+	-lhelpers $(shell pkg-config --libs botan-2 tbb fuse3) -laws-cpp-sdk-s3 \
 	-laws-cpp-sdk-core -laws-c-event-stream -laws-checksums -laws-c-common -lcurl \
 	-lrados -lradosstriper -lSwift -lPocoUtil -lPocoXML \
 	-lPocoNet -lPocoFoundation -lpthread -lfolly -Wl,--whole-archive -lfizz -lproxygen -lwangle -lsodium \
@@ -27,7 +27,7 @@ CXXFLAGS += -fPIC -std=c++14 -O3 -Wall -D_FILE_OFFSET_BITS=64 -DASIO_STANDALONE 
     -DWITH_CEPH=1 -DWITH_S3=1 -DWITH_SWIFT=1 -DWITH_GLUSTERFS=1 -DWITH_WEBDAV=1 \
     -DWITH_XROOTD=1 -DWITH_NFS=1 \
     -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DFUSE_USE_VERSION=34 \
-    $(shell pkg-config --cflags botan-1.10 tbb fuse3) \
+    $(shell pkg-config --cflags botan-2 tbb fuse3) \
     -isystem $(HELPERS_DIR)/priv/include -isystem $(HELPERS_DIR)/deps/cppmetrics \
     -isystem $(HELPERS_DIR)/deps/spdlog -isystem $(ERTS_INCLUDE_DIR)
 
