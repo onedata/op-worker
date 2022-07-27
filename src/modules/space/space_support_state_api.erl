@@ -20,7 +20,6 @@
 -export([
     init_support_state/2,
     get_support_state/1,
-    get_support_opts/1,
     update_support_opts/2,
     clean_support_state/1
 ]).
@@ -36,8 +35,6 @@
     accounting_enabled => boolean(),
     dir_stats_service_enabled => boolean()
 }.
-
--export_type([support_opts/0, support_opts_diff/0]).
 
 
 %%%===================================================================
@@ -71,26 +68,6 @@ get_support_state(SpaceId) ->
             {ok, SpaceSupportState};
         {error, not_found} ->
             ?ERROR_NOT_FOUND
-    end.
-
-
--spec get_support_opts(od_space:id() | space_support_state:record()) ->
-    {ok, support_opts()} | errors:error().
-get_support_opts(#space_support_state{
-    accounting_enabled = AccountingEnabled,
-    dir_stats_service_state = DirStatsServiceState
-}) ->
-    {ok, #{
-        accounting_enabled => AccountingEnabled,
-        dir_stats_service_enabled => dir_stats_service_state:is_active(DirStatsServiceState)
-    }};
-
-get_support_opts(SpaceId) ->
-    case get_support_state(SpaceId) of
-        {ok, SpaceSupportState} ->
-            get_support_opts(SpaceSupportState);
-        {error, _} = Error ->
-            Error
     end.
 
 

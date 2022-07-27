@@ -306,15 +306,8 @@ get_support_size(SpaceId, ProviderId) ->
     {ok, support_parameters:record()} | errors:error().
 get_support_parameters(SpaceId, ProviderId) ->
     case get(?ROOT_SESS_ID, SpaceId) of
-        {ok, #document{value = #od_space{support_parameters_registry = #support_parameters_registry{
-            registry = SupportParametersRegistry
-        }}}} ->
-            case maps:get(ProviderId, SupportParametersRegistry, undefined) of
-                undefined ->
-                    ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, ProviderId);
-                SupportParameters ->
-                    {ok, SupportParameters}
-            end;
+        {ok, #document{value = #od_space{support_parameters_registry = SupportParametersRegistry}}} ->
+            {ok, support_parameters_registry:get_entry(ProviderId, SupportParametersRegistry)};
         {error, _} = Error ->
             Error
     end.
