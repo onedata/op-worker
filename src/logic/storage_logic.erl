@@ -138,22 +138,26 @@ force_fetch(StorageId) ->
     storage:id(),
     tokens:serialized(),
     od_space:support_size(),
-    space_support_state_api:support_opts()
+    support_parameters:record()
 ) ->
     {ok, od_space:id()} | errors:error().
-support_space(StorageId, SpaceSupportToken, SupportSize, SupportOpts) ->
-    Data = #{<<"token">> => SpaceSupportToken, <<"size">> => SupportSize},
+support_space(StorageId, SpaceSupportToken, SupportSize, SupportParameters) ->
     Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = create,
         gri = #gri{type = od_storage, id = StorageId, aspect = support},
-        data = Data
+        data = #{
+            <<"token">> => SpaceSupportToken,
+            <<"size">> => SupportSize,
+            <<"spaceSupportParameters">> => jsonable_record:to_json(
+                SupportParameters, support_parameters
+            )
+        }
     }),
 
     ?ON_SUCCESS(?CREATE_RETURN_ID(Result), fun({ok, SpaceId}) ->
         provider_logic:force_fetch(),
         space_logic:force_fetch(SpaceId),
-        storage_logic:force_fetch(StorageId),
-        space_support_state_api:init_support_state(SpaceId, SupportOpts)
+        storage_logic:force_fetch(StorageId)
     end).
 
 

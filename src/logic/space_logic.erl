@@ -35,7 +35,7 @@
 -export([is_owner/2]).
 -export([get_eff_groups/2, get_shares/2, get_local_storages/1,
     get_local_supporting_storage/1, get_provider_storages/2, get_storages_by_provider/1,
-    get_all_storage_ids/1, get_support_size/2]).
+    get_all_storage_ids/1, get_support_size/2, get_support_parameters/2]).
 -export([get_provider_ids/1, get_provider_ids/2]).
 -export([update_support_parameters/2]).
 -export([is_supported/2, is_supported/3]).
@@ -296,6 +296,24 @@ get_support_size(SpaceId, ProviderId) ->
                     ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, ProviderId);
                 SupportSize ->
                     {ok, SupportSize}
+            end;
+        {error, _} = Error ->
+            Error
+    end.
+
+
+-spec get_support_parameters(od_space:id(), od_provider:id()) ->
+    {ok, support_parameters:record()} | errors:error().
+get_support_parameters(SpaceId, ProviderId) ->
+    case get(?ROOT_SESS_ID, SpaceId) of
+        {ok, #document{value = #od_space{support_parameters_registry = #support_parameters_registry{
+            registry = SupportParametersRegistry
+        }}}} ->
+            case maps:get(ProviderId, SupportParametersRegistry, undefined) of
+                undefined ->
+                    ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, ProviderId);
+                SupportParameters ->
+                    {ok, SupportParameters}
             end;
         {error, _} = Error ->
             Error
