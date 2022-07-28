@@ -13,21 +13,37 @@
 -module(archive_traverses_common).
 -author("Michal Stanisz").
 
+-include("tree_traverse.hrl").
 -include("modules/dataset/archive.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% API
+-export([do_master_job/3]).
 -export([update_children_count/4, take_children_count/3]).
 -export([execute_unsafe_job/6]).
 -export([is_cancelled/1]).
 
--type error_handler() :: fun((tree_traverse:id(), tree_traverse:job(), Error :: any(), Stacktrace :: list()) -> ok).
+-type error_handler(T) :: fun((tree_traverse:id(), tree_traverse:job(), Error :: any(), Stacktrace :: list()) -> T).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
+
+-spec do_master_job(tree_traverse:master_job(), traverse:master_job_extended_args(), 
+    error_handler({ok, traverse:master_job_map()})) -> {ok, traverse:master_job_map()}.
+do_master_job(Job = #tree_traverse{file_ctx = FileCtx}, MasterJobArgs = #{task_id := TaskId}, ErrorHandler) ->
+    {IsDir, FileCtx2} = file_ctx:is_dir(FileCtx),
+    
+    {Module, Function} = case IsDir of
+        true -> {?MODULE, do_dir_master_job_unsafe};
+        false -> {tree_traverse, do_master_job}
+    end,
+    UpdatedJob = Job#tree_traverse{file_ctx = FileCtx2},
+    archive_traverses_common:execute_unsafe_job(
+        Module, Function, [MasterJobArgs], UpdatedJob, TaskId, ErrorHandler).
+
 
 -spec update_children_count(tree_traverse:pool(), tree_traverse:id(), file_meta:uuid(), non_neg_integer()) ->
     ok.
@@ -63,18 +79,16 @@ take_children_count(PoolName, TaskId, DirUuid) ->
     binary_to_integer(ChildrenCount).
 
 
--spec execute_unsafe_job(module(), atom(), [term()], tree_traverse:job(), tree_traverse:id(), error_handler()) ->
-    any() | error.
-execute_unsafe_job(Module, JobFunctionName, Options, Job, TaskId, ErrorCallback) ->
+-spec execute_unsafe_job(module(), atom(), [term()], tree_traverse:job(), tree_traverse:id(), error_handler(T)) ->
+    T.
+execute_unsafe_job(Module, JobFunctionName, Options, Job, TaskId, ErrorHandler) ->
     try
         erlang:apply(Module, JobFunctionName, [Job | Options])
     catch
         _Class:{badmatch, {error, Reason}}:Stacktrace ->
-            ErrorCallback(TaskId, Job, ?ERROR_POSIX(Reason), Stacktrace),
-            error;
+            ErrorHandler(TaskId, Job, ?ERROR_POSIX(Reason), Stacktrace);
         _Class:Reason:Stacktrace ->
-            ErrorCallback(TaskId, Job, Reason, Stacktrace),
-            error
+            ErrorHandler(TaskId, Job, Reason, Stacktrace)
     end.
 
 

@@ -173,29 +173,21 @@ update_job_progress(Id, Job, Pool, TaskId, Status) ->
 
 -spec do_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()}.
-do_master_job(#tree_traverse{file_ctx = FileCtx} = Job, MasterJobArgs = #{task_id := TaskId}) ->
-    {IsDir, FileCtx2} = file_ctx:is_dir(FileCtx),
-    {Module, Function} = case IsDir of
-        true -> {?MODULE, do_dir_master_job_unsafe};
-        false -> {tree_traverse, do_master_job}
+do_master_job(Job, MasterJobArgs) ->
+    ErrorHandler = fun(TaskId, Job, Reason, Stacktrace) ->
+        report_error(TaskId, Job, Reason, Stacktrace),
+        {ok, #{}} % unexpected error logged by report_error - no jobs can be created
     end,
-    UpdatedJob = Job#tree_traverse{file_ctx = FileCtx2},
-    JobResult = archive_traverses_common:execute_unsafe_job(
-        Module, Function, [MasterJobArgs], UpdatedJob, TaskId, fun report_error/4),
-    case JobResult of
-        error -> {ok, #{}}; % unexpected error logged by execute_unsafe_job - no jobs can be created
-        Other -> Other
-    end.
+    archive_traverses_common:do_master_job(Job, MasterJobArgs, ErrorHandler).
 
 
 -spec do_slave_job(tree_traverse:slave_job(), id()) -> ok.
 do_slave_job(Job, TaskId) ->
-    JobResult = archive_traverses_common:execute_unsafe_job(
-        ?MODULE, do_slave_job_unsafe, [TaskId], Job, TaskId, fun report_error/4),
-    case JobResult of
-        ok -> ok;
-        error -> ok % error should be logged and saved, continue recall
-    end.
+    ErrorHandler = fun(TaskId, Job, Reason, Stacktrace) ->
+        report_error(TaskId, Job, Reason, Stacktrace)
+    end,
+    archive_traverses_common:execute_unsafe_job(
+        ?MODULE, do_slave_job_unsafe, [TaskId], Job, TaskId, ErrorHandler).
 
 %%%===================================================================
 %%% Internal functions

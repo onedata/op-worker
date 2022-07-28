@@ -162,43 +162,32 @@ update_job_progress(Id, Job, Pool, TaskId, Status) ->
 
 -spec do_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()}.
-do_master_job(Job = #tree_traverse{file_ctx = FileCtx, user_id = UserId}, MasterJobArgs = #{task_id := TaskId}) ->
+do_master_job(Job, MasterJobArgs) ->
     archivisation_traverse_logic:mark_building_if_first_job(Job),
-    {IsDir, FileCtx2} = file_ctx:is_dir(FileCtx),
-
-    {Module, Function} = case IsDir of
-        true -> {?MODULE, do_dir_master_job_unsafe};
-        false -> {tree_traverse, do_master_job}
+    ErrorHandler = fun(TaskId, Job, Reason, Stacktrace) ->
+        report_error(TaskId, #tree_traverse{user_id = UserId} = Job, Reason, Stacktrace),
+        {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId),
+        do_aborted_master_job(Job, MasterJobArgs, UserCtx)
     end,
-    UpdatedJob = Job#tree_traverse{file_ctx = FileCtx2},
-    JobResult = archive_traverses_common:execute_unsafe_job(
-        Module, Function, [MasterJobArgs], UpdatedJob, TaskId, fun report_error/4),
-    case JobResult of
-        error ->
-            {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId),
-            do_aborted_master_job(Job, MasterJobArgs, UserCtx);
-        Other ->
-            Other
-    end.
+    archive_traverses_common:do_master_job(Job, MasterJobArgs, ErrorHandler).
 
 
 -spec do_slave_job(tree_traverse:slave_job(), id()) -> ok.
-do_slave_job(#tree_traverse_slave{
-    user_id = UserId,
-    file_ctx = FileCtx,
-    master_job_uuid = MasterJobUuid,
-    traverse_info = TraverseInfo
-} = Job, TaskId) ->
-    JobResult = archive_traverses_common:execute_unsafe_job(
-        ?MODULE, do_slave_job_unsafe, [TaskId], Job, TaskId, fun report_error/4),
-    case JobResult of
-        ok -> 
-            ok;
-        error -> 
-            {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId),
-            archivisation_traverse_logic:mark_finished_and_propagate_up(
-                FileCtx, UserCtx, TraverseInfo, TaskId, MasterJobUuid)
-    end.
+do_slave_job(Job, TaskId) ->
+    ErrorHandler = fun(TaskId, Job, Reason, Stacktrace) ->
+        #tree_traverse_slave{
+            file_ctx = FileCtx, 
+            user_id = UserId, 
+            traverse_info = TraverseInfo, 
+            master_job_uuid = MasterJobUuid
+        } = Job,
+        report_error(TaskId, Job, Reason, Stacktrace),
+        {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId),
+        archivisation_traverse_logic:mark_finished_and_propagate_up(
+            FileCtx, UserCtx, TraverseInfo, TaskId, MasterJobUuid)
+    end,
+    archive_traverses_common:execute_unsafe_job(
+        ?MODULE, do_slave_job_unsafe, [TaskId], Job, TaskId, ErrorHandler).
 
 %%%===================================================================
 %%% Internal traverse functions
