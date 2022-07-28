@@ -330,7 +330,6 @@ get_provider_ids(SessionId, SpaceId) ->
     end.
 
 
-%% @TODO VFS-9664 Use this endpoint to update space parameters in global Onezone space model
 -spec update_support_parameters(od_space:id(), support_parameters:record()) ->
     ok | errors:error().
 update_support_parameters(SpaceId, SupportParametersOverlay) ->

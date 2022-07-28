@@ -94,7 +94,7 @@ create(_) ->
 %%--------------------------------------------------------------------
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
 get(#op_req{gri = #gri{id = SpaceId, aspect = dir_stats_service_state}}, _) ->
-    {ok, value, case dir_stats_service_state:get_state(SpaceId) of
+    {ok, value, case dir_stats_service_state:get(SpaceId) of
         {ok, DirStatsServiceState} ->
             translate_dir_stats_service_state(DirStatsServiceState);
         ?ERROR_NOT_FOUND ->

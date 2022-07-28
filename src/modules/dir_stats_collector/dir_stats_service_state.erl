@@ -53,7 +53,7 @@
 
 %% API - getters
 -export([
-    get_state/1,
+    get/1,
     is_active/1,
     get_status/1,
     get_extended_status/1,
@@ -71,6 +71,8 @@
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_version/0, get_record_struct/1]).
+
+-compile({no_auto_import, [get/1]}).
 
 
 % update requests can be generated only for active statuses
@@ -113,8 +115,8 @@
 %%%===================================================================
 
 
--spec get_state(od_space:id()) -> {ok, record()} | errors:error().
-get_state(SpaceId) ->
+-spec get(od_space:id()) -> {ok, record()} | errors:error().
+get(SpaceId) ->
     case datastore_model:get(?CTX, SpaceId) of
         {ok, #document{value = DirStatsServiceState}} ->
             {ok, DirStatsServiceState};
@@ -155,7 +157,7 @@ get_extended_status(#dir_stats_service_state{
     Status;
 
 get_extended_status(SpaceId) ->
-    case get_state(SpaceId) of
+    case get(SpaceId) of
         {ok, State} ->
             get_extended_status(State);
         ?ERROR_NOT_FOUND ->
@@ -186,7 +188,7 @@ get_last_status_change_timestamp_if_in_enabled_status(#dir_stats_service_state{}
     ?ERROR_DIR_STATS_DISABLED_FOR_SPACE;
 
 get_last_status_change_timestamp_if_in_enabled_status(SpaceId) ->
-    case get_state(SpaceId) of
+    case get(SpaceId) of
         {ok, State} ->
             get_last_status_change_timestamp_if_in_enabled_status(State);
         ?ERROR_NOT_FOUND ->
@@ -196,7 +198,7 @@ get_last_status_change_timestamp_if_in_enabled_status(SpaceId) ->
 
 -spec get_status_change_timestamps(od_space:id()) -> [status_change_timestamp()].
 get_status_change_timestamps(SpaceId) ->
-    case get_state(SpaceId) of
+    case get(SpaceId) of
         {ok, #dir_stats_service_state{status_change_timestamps = Timestamps}} ->
             Timestamps;
         ?ERROR_NOT_FOUND ->
@@ -225,23 +227,13 @@ handle_space_support_parameters_change(SpaceId, #support_parameters{
     dir_stats_service_enabled = true,
     dir_stats_service_status = initializing
 }) ->
-    case get_status(SpaceId) of
-        initializing -> ok;
-        enabled -> report_status_change_to_oz(SpaceId, enabled);
-        stopping -> enable(SpaceId);
-        disabled -> enable(SpaceId)
-    end;
+    enable(SpaceId);
 
 handle_space_support_parameters_change(SpaceId, #support_parameters{
     dir_stats_service_enabled = false,
     dir_stats_service_status = stopping
 }) ->
-    case get_status(SpaceId) of
-        initializing -> disable(SpaceId);
-        enabled -> disable(SpaceId);
-        stopping -> ok;
-        disabled -> report_status_change_to_oz(SpaceId, disabled)
-    end;
+    disable(SpaceId);
 
 handle_space_support_parameters_change(_SpaceId, _SpaceSupportParameters) ->
     % no change occurred
@@ -255,6 +247,8 @@ enable(SpaceId) ->
         incarnation = 1
     },
     Diff = fun
+        (#dir_stats_service_state{status = enabled}) ->
+            {error, already_enabled};
         (#dir_stats_service_state{
             status = disabled,
             incarnation = PrevIncarnation
@@ -283,6 +277,8 @@ enable(SpaceId) ->
             run_initialization_traverse(SpaceId, Incarnation);
         {ok, _} ->
             ok;
+        {error, already_enabled} ->
+            report_status_change_to_oz(SpaceId, enabled);
         {error, no_action_needed} ->
             ok
     end.
@@ -291,6 +287,8 @@ enable(SpaceId) ->
 -spec disable(od_space:id()) -> ok | errors:error().
 disable(SpaceId) ->
     Diff = fun
+        (#dir_stats_service_state{status = disabled}) ->
+            {error, already_disabled};
         (#dir_stats_service_state{
             status = enabled
         } = State) ->
@@ -326,6 +324,8 @@ disable(SpaceId) ->
             dir_stats_collections_initialization_traverse:cancel(SpaceId, Incarnation);
         {ok, _} ->
             ok;
+        {error, already_disabled} ->
+            report_status_change_to_oz(SpaceId, disabled);
         {error, no_action_needed} ->
             ok;
         ?ERROR_NOT_FOUND ->
@@ -479,10 +479,31 @@ run_initialization_traverse(SpaceId, Incarnation) ->
         ok ->
             ok;
         ?ERROR_INTERNAL_SERVER_ERROR ->
-            %% TODO MW czy to tak ma być ??
-            space_logic:update_support_parameters(SpaceId, #support_parameters{
-                dir_stats_service_enabled = false
-            }),
+            Diff = fun
+                (State = #dir_stats_service_state{status = initializing}) ->
+                    {ok, State#dir_stats_service_state{
+                        status = disabled,
+                        pending_status_transition = undefined
+                    }};
+
+                (#dir_stats_service_state{status = Status}) ->
+                    {error, {wrong_status, Status}}
+            end,
+
+            case update(SpaceId, Diff) of
+                {ok, #document{value = #dir_stats_service_state{status = disabled}}} ->
+                    space_logic:update_support_parameters(SpaceId, #support_parameters{
+                        accounting_enabled = false,
+                        dir_stats_service_enabled = false,
+                        dir_stats_service_status = disabled
+                    });
+                {error, {wrong_status, WrongStatus}} ->
+                    ?warning("Reporting space ~p initialization traverse failure when space has status ~p",
+                        [SpaceId, WrongStatus]);
+                ?ERROR_NOT_FOUND ->
+                    ?warning("Reporting space ~p initialization traverse failure when "
+                    "space has no dir stats service state document", [SpaceId])
+            end,
             ?ERROR_INTERNAL_SERVER_ERROR
     end.
 
