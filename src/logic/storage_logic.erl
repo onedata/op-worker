@@ -148,9 +148,7 @@ support_space(StorageId, SpaceSupportToken, SupportSize, SupportParameters) ->
         data = #{
             <<"token">> => SpaceSupportToken,
             <<"size">> => SupportSize,
-            <<"spaceSupportParameters">> => jsonable_record:to_json(
-                SupportParameters, support_parameters
-            )
+            <<"spaceSupportParameters">> => jsonable_record:to_json(SupportParameters)
         }
     }),
 

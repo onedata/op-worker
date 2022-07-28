@@ -47,29 +47,29 @@
 -module(dir_stats_service_state).
 -author("Michal Wrzeszcz").
 
--behaviour(persistent_record).
-
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
-
 %% API - getters
 -export([
+    get_state/1,
     is_active/1,
     get_status/1,
     get_extended_status/1,
     get_last_status_change_timestamp_if_in_enabled_status/1,
     get_status_change_timestamps/1
 ]).
+%% API - cleanup
+-export([clean/1]).
 %% API - collecting status changes
 -export([
     enable/1, disable/1,
     report_collections_initialization_finished/1, report_collectors_stopped/1
 ]).
 
-%% persistent_record callbacks
--export([version/0, db_encode/2, db_decode/2]).
+%% datastore_model callbacks
+-export([get_ctx/0, get_record_version/0, get_record_struct/1]).
 
 
 % update requests can be generated only for active statuses
@@ -88,7 +88,9 @@
 -type status_change_timestamp() :: {support_parameters:dir_stats_service_status(), time:seconds()}.
 
 -type record() :: #dir_stats_service_state{}.
--type diff_fun() :: fun((record()) -> {ok, record()} | {error, term()}).
+-type doc() :: datastore_doc:doc(record()).
+-type diff() :: datastore_doc:diff(record()).
+-type ctx() :: datastore:ctx().
 
 -export_type([
     active_status/0,
@@ -97,6 +99,10 @@
     record/0
 ]).
 
+-define(CTX, #{
+    model => ?MODULE,
+    memory_copies => all
+}).
 
 -define(MAX_HISTORY_SIZE, 50).
 -define(RESTART_HOOK_ID(SpaceId), <<"DIR_STATS_COLLECTOR_HOOK_", SpaceId/binary>>).
@@ -104,6 +110,18 @@
 %%%===================================================================
 %%% API - getters
 %%%===================================================================
+
+
+-spec get_state(od_space:id()) -> {ok, record()} | errors:error().
+get_state(SpaceId) ->
+    case datastore_model:get(?CTX, SpaceId) of
+        {ok, #document{value = DirStatsServiceState}} ->
+            {ok, DirStatsServiceState};
+
+        {error, not_found} ->
+            ?ERROR_NOT_FOUND
+    end.
+
 
 -spec is_active(od_space:id() | record()) -> boolean().
 is_active(SpaceIdOrState) ->
@@ -186,11 +204,26 @@ get_status_change_timestamps(SpaceId) ->
 
 
 %%%===================================================================
+%%% API - init/cleanup
+%%%===================================================================
+
+
+-spec clean(od_space:id()) -> ok.
+clean(SpaceId) ->
+    ok = datastore_model:delete(?CTX, SpaceId).
+
+
+%%%===================================================================
 %%% API - collecting status changes
 %%%===================================================================
 
+
 -spec enable(od_space:id()) -> ok | ?ERROR_INTERNAL_SERVER_ERROR.
 enable(SpaceId) ->
+    NewRecord = #dir_stats_service_state{
+        status = initializing,
+        incarnation = 1
+    },
     Diff = fun
         (#dir_stats_service_state{
             status = disabled,
@@ -211,12 +244,12 @@ enable(SpaceId) ->
             {error, no_action_needed}
     end,
 
-    case update_state(SpaceId, Diff) of
-        {ok, #dir_stats_service_state{
+    case update(SpaceId, Diff, NewRecord) of
+        {ok, #document{value = #dir_stats_service_state{
             status = initializing,
             incarnation = Incarnation,
             pending_status_transition = PendingTransition
-        }} when PendingTransition =/= canceled ->
+        }}} when PendingTransition =/= canceled ->
             run_initialization_traverse(SpaceId, Incarnation);
         {ok, _} ->
             ok;
@@ -227,7 +260,7 @@ enable(SpaceId) ->
 
 -spec disable(od_space:id()) -> ok | errors:error().
 disable(SpaceId) ->
-    StateDiff = fun
+    Diff = fun
         (#dir_stats_service_state{
             status = enabled
         } = State) ->
@@ -242,7 +275,6 @@ disable(SpaceId) ->
         (#dir_stats_service_state{}) ->
             {error, no_action_needed}
     end,
-    Condition = fun(#space_support_state{accounting_enabled = Enabled}) -> not Enabled end,
 
     case restart_hooks:add_hook(
         ?RESTART_HOOK_ID(SpaceId), ?MODULE, report_collectors_stopped, [SpaceId], forbid_override
@@ -251,16 +283,16 @@ disable(SpaceId) ->
         {error, already_exists} -> ok
     end,
 
-    case update_state_if_allowed(SpaceId, StateDiff, Condition) of
-        {ok, #dir_stats_service_state{
+    case update(SpaceId, Diff) of
+        {ok, #document{value = #dir_stats_service_state{
             status = stopping,
             pending_status_transition = PendingTransition
-        }} when PendingTransition =/= canceled ->
+        }}} when PendingTransition =/= canceled ->
             dir_stats_collector:stop_collecting(SpaceId);
-        {ok, #dir_stats_service_state{
+        {ok, #document{value = #dir_stats_service_state{
             status = initializing,
             incarnation = Incarnation
-        }} ->
+        }}} ->
             dir_stats_collections_initialization_traverse:cancel(SpaceId, Incarnation);
         {ok, _} ->
             ok;
@@ -293,10 +325,10 @@ report_collections_initialization_finished(SpaceId) ->
             {error, {wrong_status, Status}}
     end,
 
-    case update_state(SpaceId, Diff) of
-        {ok, #dir_stats_service_state{status = enabled}} ->
+    case update(SpaceId, Diff) of
+        {ok, #document{value = #dir_stats_service_state{status = enabled}}} ->
             ok;
-        {ok, #dir_stats_service_state{status = stopping}} ->
+        {ok, #document{value = #dir_stats_service_state{status = stopping}}} ->
             dir_stats_collector:stop_collecting(SpaceId);
         {error, {wrong_status, WrongStatus}} ->
             ?warning("Reporting space ~p enabling finished when space has status ~p", [SpaceId, WrongStatus]);
@@ -327,13 +359,13 @@ report_collectors_stopped(SpaceId) ->
             {error, {wrong_status, Status}}
     end,
 
-    case update_state(SpaceId, Diff) of
-        {ok, #dir_stats_service_state{status = disabled}} ->
+    case update(SpaceId, Diff) of
+        {ok, #document{value = #dir_stats_service_state{status = disabled}}} ->
             ok;
-        {ok, #dir_stats_service_state{
+        {ok, #document{value = #dir_stats_service_state{
             status = initializing,
             incarnation = Incarnation
-        }} ->
+        }}} ->
             run_initialization_traverse(SpaceId, Incarnation),
             ok;
         % Log errors on debug as they can appear at node restart
@@ -345,49 +377,28 @@ report_collectors_stopped(SpaceId) ->
 
 
 %%%===================================================================
-%%% persistent_record callbacks
+%%% datastore_model callbacks
 %%%===================================================================
 
 
--spec version() -> persistent_record:record_version().
-version() ->
+-spec get_ctx() -> ctx().
+get_ctx() ->
+    ?CTX.
+
+
+-spec get_record_version() -> datastore_model:record_version().
+get_record_version() ->
     1.
 
 
--spec db_encode(record(), persistent_record:nested_record_encoder()) ->
-    json_utils:json_map().
-db_encode(#dir_stats_service_state{
-    status = Status,
-    incarnation = Incarnation,
-    pending_status_transition = PendingStatusTransition,
-    status_change_timestamps = StatusChangeTimestamps
-}, _NestedRecordEncoder) ->
-    #{
-        <<"status">> => atom_to_binary(Status, utf8),
-        <<"incarnation">> => Incarnation,
-        <<"pendingStatusTransition">> => atom_to_binary(PendingStatusTransition, utf8),
-        <<"collectingStatusChangeTimestamps">> => lists:map(fun({CollectingStatus, TimestampSec}) ->
-            [atom_to_binary(CollectingStatus, utf8), TimestampSec]
-        end, StatusChangeTimestamps)
-    }.
-
-
--spec db_decode(json_utils:json_map(), persistent_record:nested_record_decoder()) ->
-    record().
-db_decode(#{
-    <<"status">> := StatusBin,
-    <<"incarnation">> := Incarnation,
-    <<"pendingStatusTransition">> := PendingStatusTransitionBin,
-    <<"collectingStatusChangeTimestamps">> := EncodedStatusChangeTimestamps
-}, _NestedRecordDecoder) ->
-    #dir_stats_service_state{
-        status = binary_to_atom(StatusBin, utf8),
-        incarnation = Incarnation,
-        pending_status_transition = binary_to_atom(PendingStatusTransitionBin, utf8),
-        status_change_timestamps = lists:map(fun([CollectingStatusBin, TimestampSec]) ->
-            {binary_to_atom(CollectingStatusBin, utf8), TimestampSec}
-        end, EncodedStatusChangeTimestamps)
-    }.
+-spec get_record_struct(datastore_model:record_version()) -> datastore_model:record_struct().
+get_record_struct(1) ->
+    {record, [
+        {status, atom},
+        {incarnation, integer},
+        {pending_status_transition, atom},
+        {collecting_status_change_timestamps, [{atom, integer}]}
+    ]}.
 
 
 %%%===================================================================
@@ -395,63 +406,17 @@ db_decode(#{
 %%%===================================================================
 
 
-%% @private
--spec get_state(od_space:id()) -> {ok, record()} | errors:error().
-get_state(SpaceId) ->
-    case space_support_state:get(SpaceId) of
-        {ok, #document{value = #space_support_state{
-            dir_stats_service_state = DirStatsServiceState
-        }}} ->
-            {ok, DirStatsServiceState};
-
-        ?ERROR_NOT_FOUND ->
-            ?ERROR_NOT_FOUND
-    end.
+-spec update(od_space:id(), diff()) -> {ok, doc()} | {error, term()}.
+update(SpaceId, Diff) ->
+    datastore_model:update(?CTX, SpaceId, diff_fun_with_timestamp_update(Diff)).
 
 
-%% @private
--spec update_state(od_space:id(), diff_fun()) -> {ok, record()} | {error, term()}.
-update_state(SpaceId, StateDiff) ->
-    update_state_if_allowed(SpaceId, StateDiff, fun(_) -> true end).
+-spec update(od_space:id(), diff(), record()) -> {ok, doc()} | {error, term()}.
+update(SpaceId, Diff, Default) ->
+    datastore_model:update(?CTX, SpaceId, diff_fun_with_timestamp_update(Diff), Default).
 
 
-%% @private
--spec update_state_if_allowed(
-    od_space:id(),
-    diff_fun(),
-    fun((space_support_state:record()) -> boolean())
-) ->
-    {ok, record()} | {error, term()}.
-update_state_if_allowed(SpaceId, StateDiff, Condition) ->
-    StateDiffWithTimestampUpdate = diff_fun_with_timestamp_update(StateDiff),
-
-    SpaceSupportStateDiff = fun(SpaceSupportState = #space_support_state{
-        dir_stats_service_state = State
-    }) ->
-        case Condition(SpaceSupportState) of
-            true ->
-                case StateDiffWithTimestampUpdate(State) of
-                    {ok, NewState} ->
-                        {ok, SpaceSupportState#space_support_state{
-                            dir_stats_service_state = NewState
-                        }};
-                    {error, _} = Error ->
-                        Error
-                end;
-            false ->
-                ?ERROR_FORBIDDEN
-        end
-    end,
-
-    case space_support_state:update(SpaceId, SpaceSupportStateDiff) of
-        {ok, #document{value = #space_support_state{dir_stats_service_state = State}}} ->
-            {ok, State};
-        {error, _} = Error ->
-            Error
-    end.
-
-
--spec diff_fun_with_timestamp_update(diff_fun()) -> diff_fun().
+-spec diff_fun_with_timestamp_update(diff()) -> diff().
 diff_fun_with_timestamp_update(Diff) ->
     fun(#dir_stats_service_state{status = Status} = State) ->
         case Diff(State) of
@@ -485,31 +450,18 @@ run_initialization_traverse(SpaceId, Incarnation) ->
             ok;
         ?ERROR_INTERNAL_SERVER_ERROR ->
             Diff = fun
-                (SpaceSupportState = #space_support_state{
-                    dir_stats_service_state = State = #dir_stats_service_state{
-                        status = initializing
-                    }
-                }) ->
-                    {ok, SpaceSupportState#space_support_state{
-                        accounting_enabled = false,
-                        dir_stats_service_state = State#dir_stats_service_state{
-                            status = disabled,
-                            pending_status_transition = undefined
-                        }
+                (State = #dir_stats_service_state{status = initializing}) ->
+                    {ok, State#dir_stats_service_state{
+                        status = disabled,
+                        pending_status_transition = undefined
                     }};
 
-                (#space_support_state{dir_stats_service_state = #dir_stats_service_state{
-                    status = Status
-                }}) ->
+                (#dir_stats_service_state{status = Status}) ->
                     {error, {wrong_status, Status}}
             end,
 
-            case space_support_state:update(SpaceId, Diff) of
-                {ok, #document{value = #space_support_state{
-                    dir_stats_service_state = #dir_stats_service_state{
-                        status = disabled
-                    }
-                }}} ->
+            case update(SpaceId, Diff) of
+                {ok, #document{value = #dir_stats_service_state{status = disabled}}} ->
                     ok;
                 {error, {wrong_status, WrongStatus}} ->
                     ?warning("Reporting space ~p initialization traverse failure when space has status ~p",

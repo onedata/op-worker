@@ -94,9 +94,10 @@ create(_) ->
 %%--------------------------------------------------------------------
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
 get(#op_req{gri = #gri{id = SpaceId, aspect = dir_stats_service_state}}, _) ->
-    {ok, SpaceSupportState} = space_support_state_api:get_support_state(SpaceId),
-    DirStatsServiceState = SpaceSupportState#space_support_state.dir_stats_service_state,
-
+    DirStatsServiceState = case dir_stats_service_state:get_state(SpaceId) of
+        {ok, State} -> State;
+        {error, _} = Error -> throw(Error)
+    end,
     Status = dir_stats_service_state:get_status(DirStatsServiceState),
     Since = case dir_stats_service_state:get_last_status_change_timestamp_if_in_enabled_status(
         DirStatsServiceState

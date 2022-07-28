@@ -1073,12 +1073,6 @@
 }).
 
 
--record(space_support_state, {
-    accounting_enabled :: boolean(),
-    dir_stats_service_state :: dir_stats_service_state:record()
-}).
-
-
 -record(restart_hooks, {
     hooks = #{} :: restart_hooks:hooks()
 }).
