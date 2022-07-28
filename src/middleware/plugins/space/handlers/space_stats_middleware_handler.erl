@@ -94,20 +94,12 @@ create(_) ->
 %%--------------------------------------------------------------------
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
 get(#op_req{gri = #gri{id = SpaceId, aspect = dir_stats_service_state}}, _) ->
-    DirStatsServiceState = case dir_stats_service_state:get_state(SpaceId) of
-        {ok, State} -> State;
-        {error, _} = Error -> throw(Error)
-    end,
-    Status = dir_stats_service_state:get_status(DirStatsServiceState),
-    Since = case dir_stats_service_state:get_last_status_change_timestamp_if_in_enabled_status(
-        DirStatsServiceState
-    ) of
-        {ok, Timestamp} -> Timestamp;
-        ?ERROR_DIR_STATS_DISABLED_FOR_SPACE -> undefined;
-        ?ERROR_DIR_STATS_NOT_READY-> undefined
-    end,
-
-    {ok, value, maps_utils:remove_undefined(#{<<"status">> => Status, <<"since">> => Since})}.
+    {ok, value, case dir_stats_service_state:get_state(SpaceId) of
+        {ok, DirStatsServiceState} ->
+            translate_dir_stats_service_state(DirStatsServiceState);
+        ?ERROR_NOT_FOUND ->
+            #{<<"status">> => disabled}
+    end}.
 
 
 %%--------------------------------------------------------------------
@@ -128,3 +120,23 @@ update(_) ->
 -spec delete(middleware:req()) -> middleware:delete_result().
 delete(_) ->
     ?ERROR_NOT_SUPPORTED.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec translate_dir_stats_service_state(dir_stats_service_state:record()) ->
+    json_utils:json_map().
+translate_dir_stats_service_state(DirStatsServiceState) ->
+    Json = #{<<"status">> => dir_stats_service_state:get_status(DirStatsServiceState)},
+
+    case dir_stats_service_state:get_last_status_change_timestamp_if_in_enabled_status(
+        DirStatsServiceState
+    ) of
+        {ok, Timestamp} -> Json#{<<"since">> => Timestamp};
+        ?ERROR_DIR_STATS_DISABLED_FOR_SPACE -> Json;
+        ?ERROR_DIR_STATS_NOT_READY-> Json
+    end.

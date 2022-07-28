@@ -28,7 +28,7 @@
     race_with_file_adding_to_large_dir_test/1,
     multiple_status_change_test/1, adding_file_when_disabled_test/1,
     restart_test/1, parallel_write_test/4]).
--export([init/1, init/2, teardown/1, teardown/3]).
+-export([init/1, init_and_enable_for_new_space/1, teardown/1, teardown/3]).
 -export([verify_dir_on_provider_creating_files/3]).
 % TODO VFS-9148 - extend tests
 
@@ -481,23 +481,16 @@ parallel_write_test(Config, SleepOnWrite, InitialFileSize, OverrideInitialBytes)
 %%%===================================================================
 
 init(Config) ->
-    init(Config, false).
-
-
-init(Config, DirStatsEnabled) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
     {ok, MinimalSyncRequest} = test_utils:get_env(Worker, op_worker, minimal_sync_request),
     test_utils:set_env(Workers, op_worker, minimal_sync_request, 1),
-
-    SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
-    lists:foreach(fun(W) ->
-        rpc:call(W, space_support_state_api, init_support_state, [SpaceId, #{
-            accounting_enabled => false,
-            dir_stats_service_enabled => DirStatsEnabled
-        }])
-    end, Workers),
-
     [{default_minimal_sync_request, MinimalSyncRequest} | Config].
+
+
+init_and_enable_for_new_space(Config) ->
+    UpdatedConfig = init(Config),
+    enable(UpdatedConfig),
+    UpdatedConfig.
 
 
 teardown(Config) ->

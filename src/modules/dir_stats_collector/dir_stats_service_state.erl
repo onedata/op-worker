@@ -64,6 +64,7 @@
 -export([clean/1]).
 %% API - collecting status changes
 -export([
+    handle_space_support_parameters_change/2,
     enable/1, disable/1,
     report_collections_initialization_finished/1, report_collectors_stopped/1
 ]).
@@ -218,6 +219,35 @@ clean(SpaceId) ->
 %%%===================================================================
 
 
+-spec handle_space_support_parameters_change(od_space:id(), support_parameters:record()) ->
+    ok.
+handle_space_support_parameters_change(SpaceId, #support_parameters{
+    dir_stats_service_enabled = true,
+    dir_stats_service_status = initializing
+}) ->
+    case get_status(SpaceId) of
+        initializing -> ok;
+        enabled -> report_status_change_to_oz(SpaceId, enabled);
+        stopping -> enable(SpaceId);
+        disabled -> enable(SpaceId)
+    end;
+
+handle_space_support_parameters_change(SpaceId, #support_parameters{
+    dir_stats_service_enabled = false,
+    dir_stats_service_status = stopping
+}) ->
+    case get_status(SpaceId) of
+        initializing -> disable(SpaceId);
+        enabled -> disable(SpaceId);
+        stopping -> ok;
+        disabled -> report_status_change_to_oz(SpaceId, disabled)
+    end;
+
+handle_space_support_parameters_change(_SpaceId, _SpaceSupportParameters) ->
+    % no change occurred
+    ok.
+
+
 -spec enable(od_space:id()) -> ok | ?ERROR_INTERNAL_SERVER_ERROR.
 enable(SpaceId) ->
     NewRecord = #dir_stats_service_state{
@@ -327,7 +357,7 @@ report_collections_initialization_finished(SpaceId) ->
 
     case update(SpaceId, Diff) of
         {ok, #document{value = #dir_stats_service_state{status = enabled}}} ->
-            ok;
+            report_status_change_to_oz(SpaceId, enabled);
         {ok, #document{value = #dir_stats_service_state{status = stopping}}} ->
             dir_stats_collector:stop_collecting(SpaceId);
         {error, {wrong_status, WrongStatus}} ->
@@ -361,7 +391,7 @@ report_collectors_stopped(SpaceId) ->
 
     case update(SpaceId, Diff) of
         {ok, #document{value = #dir_stats_service_state{status = disabled}}} ->
-            ok;
+            report_status_change_to_oz(SpaceId, disabled);
         {ok, #document{value = #dir_stats_service_state{
             status = initializing,
             incarnation = Incarnation
@@ -449,27 +479,18 @@ run_initialization_traverse(SpaceId, Incarnation) ->
         ok ->
             ok;
         ?ERROR_INTERNAL_SERVER_ERROR ->
-            Diff = fun
-                (State = #dir_stats_service_state{status = initializing}) ->
-                    {ok, State#dir_stats_service_state{
-                        status = disabled,
-                        pending_status_transition = undefined
-                    }};
-
-                (#dir_stats_service_state{status = Status}) ->
-                    {error, {wrong_status, Status}}
-            end,
-
-            case update(SpaceId, Diff) of
-                {ok, #document{value = #dir_stats_service_state{status = disabled}}} ->
-                    ok;
-                {error, {wrong_status, WrongStatus}} ->
-                    ?warning("Reporting space ~p initialization traverse failure when space has status ~p",
-                        [SpaceId, WrongStatus]);
-                ?ERROR_NOT_FOUND ->
-                    ?warning("Reporting space ~p initialization traverse failure when "
-                        "space has no dir stats service state document", [SpaceId])
-            end,
-
+            %% TODO MW czy to tak ma być ??
+            space_logic:update_support_parameters(SpaceId, #support_parameters{
+                dir_stats_service_enabled = false
+            }),
             ?ERROR_INTERNAL_SERVER_ERROR
     end.
+
+
+%% @private
+-spec report_status_change_to_oz(od_space:id(), support_parameters:dir_stats_service_status()) ->
+    ok | no_return().
+report_status_change_to_oz(SpaceId, NewStatus) ->
+    ok = space_logic:update_support_parameters(SpaceId, #support_parameters{
+        dir_stats_service_status = NewStatus
+    }).

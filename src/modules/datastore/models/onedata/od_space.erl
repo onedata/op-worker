@@ -83,8 +83,13 @@ run_after(_Function, _Args, Result) ->
 
 %% @TODO VFS-9664 Add hook to reconcile the state of dir stats service upon remote changes
 -spec run_after(doc()) -> {ok, doc()}.
-run_after(Doc = #document{key = SpaceId, value = #od_space{harvesters = Harvesters} = Space}) ->
-    case space_logic:is_supported(Space, oneprovider:get_id()) of
+run_after(Doc = #document{key = SpaceId, value = Space = #od_space{
+    harvesters = Harvesters,
+    support_parameters_registry = SupportParametersRegistry
+}}) ->
+    ProviderId = oneprovider:get_id(),
+
+    case space_logic:is_supported(Space, ProviderId) of
         false ->
             ok;
         true ->
@@ -95,7 +100,11 @@ run_after(Doc = #document{key = SpaceId, value = #od_space{harvesters = Harveste
             % run asynchronously as this requires the space record, which will be cached
             % only after run_after finishes (running synchronously could cause an infinite loop)
             spawn(main_harvesting_stream, revise_space_harvesters, [SpaceId, Harvesters]),
-            ok = dbsync_worker:start_streams([SpaceId])
+            ok = dbsync_worker:start_streams([SpaceId]),
+            ok = dir_stats_service_state:handle_space_support_parameters_change(
+                SpaceId,
+                support_parameters_registry:get_entry(ProviderId, SupportParametersRegistry)
+            )
     end,
     {ok, Doc}.
 
