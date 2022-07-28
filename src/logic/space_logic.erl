@@ -334,11 +334,19 @@ get_provider_ids(SessionId, SpaceId) ->
 -spec update_support_parameters(od_space:id(), support_parameters:record()) ->
     ok | errors:error().
 update_support_parameters(SpaceId, SupportParametersOverlay) ->
-    gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+    Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = update,
-        gri = #gri{type = od_space, id = SpaceId, aspect = support_parameters, scope = private},
+        gri = #gri{
+            type = od_space,
+            id = SpaceId,
+            aspect = {support_parameters, oneprovider:get_id()},
+            scope = private
+        },
         data = jsonable_record:to_json(SupportParametersOverlay, support_parameters)
-    }).
+    }),
+    ?ON_SUCCESS(Result, fun(_) ->
+        space_logic:force_fetch(SpaceId)
+    end).
 
 
 -spec is_supported(od_space:doc() | od_space:record(), od_provider:id()) ->
