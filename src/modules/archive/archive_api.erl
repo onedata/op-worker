@@ -378,7 +378,7 @@ cancel_single_archive(ArchiveDocOrId) ->
         ok ->
             {ok, TaskId} = archive:get_id(ArchiveDocOrId),
             ok = ?ok_if_not_found(archive_verification_traverse:cancel(TaskId));
-        {error, cancel_not_needed} ->
+        {error, already_finished} ->
             ok;
         {error, _} = Error ->
             Error

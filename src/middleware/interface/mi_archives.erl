@@ -79,7 +79,7 @@ archive_dataset(SessionId, DatasetId, Config, PreservedCallback, DeletedCallback
 cancel_archivisation(SessionId, ArchiveId) ->
     SpaceGuid = archive_id_to_space_guid(ArchiveId),
     
-    middleware_worker:check_exec(SessionId, SpaceGuid, #cancel_archivisation{id = ArchiveId}).
+    middleware_worker:check_exec(SessionId, SpaceGuid, #archivisation_cancel_request{id = ArchiveId}).
 
 
 -spec get_info(session:id(), archive:id()) ->

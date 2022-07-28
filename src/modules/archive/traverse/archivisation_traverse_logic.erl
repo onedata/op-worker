@@ -23,7 +23,7 @@
 -export([
     mark_building_if_first_job/1, 
     mark_finished_and_propagate_up/5, 
-    handle_nested_dataset_and_do_archive/4,
+    handle_file/4,
     initialize_archive_dir/3,
     save_dir_checksum_metadata/3
 ]).
@@ -70,20 +70,14 @@ mark_building_if_first_job(Job = #tree_traverse{traverse_info = #{
 -spec mark_finished_and_propagate_up(file_ctx:ctx(), user_ctx:ctx(), info(), id(),
     file_meta:uuid()) -> ok.
 mark_finished_and_propagate_up(CurrentFileCtx, UserCtx, TraverseInfo, TaskId, SourceMasterUuid) ->
-    NextTraverseInfoOrUndefined =
-        mark_finished_if_current_archive_is_rooted_in_current_file(
-            CurrentFileCtx, UserCtx, TraverseInfo),
-    case NextTraverseInfoOrUndefined of
-        undefined ->
-            ok;
-        NextTraverseInfo ->
-            propagate_finished_up(CurrentFileCtx, UserCtx, NextTraverseInfo, TaskId, SourceMasterUuid)
-    end.
+    NextTraverseInfo = mark_finished_if_current_archive_is_rooted_in_current_file(
+        CurrentFileCtx, UserCtx, TraverseInfo),
+    propagate_finished_up(CurrentFileCtx, UserCtx, NextTraverseInfo, TaskId, SourceMasterUuid).
 
 
--spec handle_nested_dataset_and_do_archive(file_ctx:ctx(), file_meta:path(), user_ctx:ctx(),
+-spec handle_file(file_ctx:ctx(), file_meta:path(), user_ctx:ctx(),
     info()) -> info().
-handle_nested_dataset_and_do_archive(FileCtx, ResolvedFilePath, UserCtx, TraverseInfo = #{
+handle_file(FileCtx, ResolvedFilePath, UserCtx, TraverseInfo = #{
     aip_ctx := AipArchiveCtx,
     dip_ctx := DipArchiveCtx,
     base_archive_doc := BaseArchiveDoc,
@@ -91,10 +85,9 @@ handle_nested_dataset_and_do_archive(FileCtx, ResolvedFilePath, UserCtx, Travers
 }) ->
     AipArchiveDoc = archive_traverse_ctx:get_archive_doc(AipArchiveCtx),
     {ok, Config} = archive:get_config(AipArchiveDoc),
-    CreateNestedArchives = archive_config:should_create_nested_archives(Config),
     % check if there is dataset attached to current directory
     % if true, create a nested archive associated with the dataset
-    NestedDatasetId = case CreateNestedArchives of
+    NestedDatasetId = case archive_config:is_nested_archives_creation_enabled(Config) of
         true -> get_nested_dataset_id_if_attached(FileCtx, AipArchiveDoc);
         false -> undefined
     end,
@@ -110,8 +103,8 @@ handle_nested_dataset_and_do_archive(FileCtx, ResolvedFilePath, UserCtx, Travers
     ShouldCreateNestedArchive andalso symlink_nested_archive(AipArchiveCtx, FinalAipArchiveCtx, UserCtx),
     ShouldCreateNestedArchive andalso symlink_nested_archive(DipArchiveCtx, FinalDipArchiveCtx, UserCtx),
     TraverseInfo#{
-        aip_ctx => archive_traverse_ctx:ensure_guid_in_ctx(FinalAipArchiveCtx),
-        dip_ctx => archive_traverse_ctx:ensure_guid_in_ctx(FinalDipArchiveCtx),
+        aip_ctx => archive_traverse_ctx:ensure_persistable(FinalAipArchiveCtx),
+        dip_ctx => archive_traverse_ctx:ensure_persistable(FinalDipArchiveCtx),
         base_archive_doc => FinalBaseArchiveDoc
     }.
 
@@ -213,10 +206,10 @@ initialize_nested_archive(NestedDatasetId, UserCtx, #{
 
 -spec symlink_nested_archive(Parent :: ctx(), Nested :: ctx(), user_ctx:ctx()) -> ok.
 symlink_nested_archive(ParentArchiveCtx, NestedArchiveCtx, UserCtx) ->
-    case archive_traverse_ctx:get_parent_file_ctx(ParentArchiveCtx) of
+    case archive_traverse_ctx:get_target_parent(ParentArchiveCtx) of
         undefined -> ok;
         TargetParentFileCtx -> make_symlink(
-            archive_traverse_ctx:get_parent_file_ctx(NestedArchiveCtx), TargetParentFileCtx, UserCtx)
+            archive_traverse_ctx:get_target_parent(NestedArchiveCtx), TargetParentFileCtx, UserCtx)
     end.
 
 
@@ -284,7 +277,7 @@ propagate_finished_up(FileCtx, UserCtx, TraverseInfo, TaskId, SourceMasterUuid) 
 
 
 -spec mark_finished_if_current_archive_is_rooted_in_current_file(file_ctx:ctx(), user_ctx:ctx(),
-    info()) -> info() | undefined.
+    info()) -> info().
 mark_finished_if_current_archive_is_rooted_in_current_file(CurrentFileCtx, UserCtx, #{
     aip_ctx := AipArchiveCtx,
     dip_ctx := DipArchiveCtx
@@ -308,10 +301,7 @@ finalize_archive(ArchiveCtx, UserCtx) ->
         CurrentDoc ->
             NestedArchiveStats = archive_api:get_nested_archives_stats(CurrentDoc),
             mark_finished(CurrentDoc, UserCtx, NestedArchiveStats),
-            {ok, ParentDocOrUndefined} = case CurrentDoc of
-                undefined -> {ok, undefined};
-                _ -> archive:get_parent_doc(CurrentDoc)
-            end,
+            {ok, ParentDocOrUndefined} = archive:get_parent_doc(CurrentDoc),
             archive_traverse_ctx:set_archive_doc(ArchiveCtx, ParentDocOrUndefined)
     end.
 
@@ -365,7 +355,7 @@ archive_dir(ArchiveCtx, FileCtx, ResolvedFilePath, UserCtx) ->
             DirName = filename:basename(ResolvedFilePath),
             DirGuid = file_ctx:get_logical_guid_const(FileCtx),
             TargetParentGuid = file_ctx:get_logical_guid_const(
-                archive_traverse_ctx:get_parent_file_ctx(ArchiveCtx)),
+                archive_traverse_ctx:get_target_parent(ArchiveCtx)),
             % only directory is copied therefore recursive=false is passed to copy function
             {ok, CopyGuid, _} = file_copy:copy(user_ctx:get_session_id(UserCtx), DirGuid, TargetParentGuid,
                 DirName, #{recursive => false}),
@@ -384,10 +374,10 @@ archive_dir(ArchiveCtx, FileCtx, ResolvedFilePath, UserCtx) ->
 archive_file_and_mark_finished(FileCtx, AipArchiveCtx, DipArchiveCtx, BaseArchiveDoc,
     InitialArchiveDocs, ResolvedFilePath, UserCtx
 ) ->
-    {ok, ArchiveFileCtx} = archive_file(FileCtx, AipArchiveCtx, BaseArchiveDoc, 
+    {ok, ArchiveFileCtx} = archive_reg_file(FileCtx, AipArchiveCtx, BaseArchiveDoc, 
         maps:get(aip, InitialArchiveDocs), ResolvedFilePath, UserCtx
     ),
-    {ok, DipArchiveFileCtx} = dip_archive_file(FileCtx, ArchiveFileCtx, DipArchiveCtx,
+    {ok, DipArchiveFileCtx} = dip_archive_reg_file(FileCtx, ArchiveFileCtx, DipArchiveCtx,
         maps:get(dip, InitialArchiveDocs), UserCtx),
     {FileSize, _} = file_ctx:get_file_size(ArchiveFileCtx),
     ok = archive:mark_file_archived(archive_traverse_ctx:get_archive_doc(AipArchiveCtx), FileSize),
@@ -398,11 +388,11 @@ archive_file_and_mark_finished(FileCtx, AipArchiveCtx, DipArchiveCtx, BaseArchiv
     {ArchiveFileCtx, DipArchiveFileCtx}.
 
 
--spec archive_file(file_ctx:ctx(), ctx(), archive:doc(), archive:doc(), file_meta:path(), user_ctx:ctx()) -> 
+-spec archive_reg_file(file_ctx:ctx(), ctx(), archive:doc(), archive:doc(), file_meta:path(), user_ctx:ctx()) -> 
     {ok, file_ctx:ctx()} | {error, term()}.
-archive_file(FileCtx, ArchiveCtx, BaseArchiveDoc, InitialAipDoc, ResolvedFilePath, UserCtx) ->
+archive_reg_file(FileCtx, ArchiveCtx, BaseArchiveDoc, InitialAipDoc, ResolvedFilePath, UserCtx) ->
     CurrentArchiveDoc = archive_traverse_ctx:get_archive_doc(ArchiveCtx),
-    TargetParentCtx = archive_traverse_ctx:get_parent_file_ctx(ArchiveCtx),
+    TargetParentCtx = archive_traverse_ctx:get_target_parent(ArchiveCtx),
     case {file_ctx:is_symlink_const(FileCtx), is_bagit(CurrentArchiveDoc)} of
         {false, false} ->
             plain_archive:archive_regular_file(CurrentArchiveDoc, FileCtx, TargetParentCtx,
@@ -416,10 +406,10 @@ archive_file(FileCtx, ArchiveCtx, BaseArchiveDoc, InitialAipDoc, ResolvedFilePat
     end.
 
 
--spec dip_archive_file(file_ctx:ctx(), file_ctx:ctx(), ctx(), archive:doc(), user_ctx:ctx()) ->
+-spec dip_archive_reg_file(file_ctx:ctx(), file_ctx:ctx(), ctx(), archive:doc(), user_ctx:ctx()) ->
     {ok, file_ctx:ctx() | undefined}.
-dip_archive_file(OriginalFileCtx, ArchivedFileCtx, DipArchiveCtx, InitialDipDoc, UserCtx) ->
-    case {archive_traverse_ctx:get_parent_file_ctx(DipArchiveCtx), file_ctx:is_symlink_const(OriginalFileCtx)} of
+dip_archive_reg_file(OriginalFileCtx, ArchivedFileCtx, DipArchiveCtx, InitialDipDoc, UserCtx) ->
+    case {archive_traverse_ctx:get_target_parent(DipArchiveCtx), file_ctx:is_symlink_const(OriginalFileCtx)} of
         {undefined, _} ->
             {ok, undefined};
         {DipTargetParentCtx, true} ->
@@ -485,7 +475,7 @@ is_archive_rooted_in_current_file(CurrentFileCtx, #{
     CurrentAipDoc = archive_traverse_ctx:get_archive_doc(AipArchiveCtx),
     {ok, CurrentArchiveRootGuid} = archive:get_dataset_root_file_guid(CurrentAipDoc),
     {ok, Config} = archive:get_config(CurrentAipDoc),
-    CreateNestedArchives = archive_config:should_create_nested_archives(Config),
+    CreateNestedArchives = archive_config:is_nested_archives_creation_enabled(Config),
     CurrentFileGuid = file_ctx:get_logical_guid_const(CurrentFileCtx),
     CurrentFileGuid =:= ScheduledDatasetRootGuid orelse
         (CurrentFileGuid =:= CurrentArchiveRootGuid andalso CreateNestedArchives).

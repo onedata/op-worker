@@ -170,7 +170,8 @@ do_slave_job(Job, TaskId) ->
     JobResult = archive_traverses_common:execute_unsafe_job(
         ?MODULE, do_slave_job_unsafe, [TaskId], Job, TaskId, fun report_error/4),
     case JobResult of
-        ok -> ok;
+        ok -> 
+            ok;
         error ->
             archive:mark_verification_failed(TaskId),
             cancel(TaskId)

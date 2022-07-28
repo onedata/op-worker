@@ -449,7 +449,7 @@ mark_cancelling(ArchiveDocOrId) ->
     ?extract_ok(update(ArchiveDocOrId, fun
         (#archive{} = Archive) ->
             case is_finished(Archive) of
-                true -> {error, cancel_not_needed};
+                true -> {error, already_finished};
                 false -> {ok, Archive#archive{state = ?ARCHIVE_CANCELLING}}
             end
     end)).
@@ -457,13 +457,13 @@ mark_cancelling(ArchiveDocOrId) ->
 
 -spec mark_cancelled(id() | doc()) -> ok | error().
 mark_cancelled(ArchiveDocOrId) ->
-    ?ok_if_not_found(?extract_ok(update(ArchiveDocOrId, fun
+    ?ok_if_no_change(?ok_if_not_found(?extract_ok(update(ArchiveDocOrId, fun
         (#archive{} = Archive) ->
             case is_finished(Archive) of
-                true -> {error, not_found}; % return error to not to generate redundant updates
+                true -> {error, no_change};
                 false -> {ok, Archive#archive{state = ?ARCHIVE_CANCELLED}}
             end
-    end))).
+    end)))).
 
 
 
@@ -562,6 +562,7 @@ get_ctx() ->
 get_record_version() ->
     1.
 
+
 -spec get_record_struct(datastore_model:record_version()) -> datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
@@ -582,7 +583,6 @@ get_record_struct(1) ->
         {related_dip, string},
         {related_aip, string}
     ]}.
-
 
 
 -spec resolve_conflict(datastore_model:ctx(), doc(), doc()) ->
@@ -611,6 +611,7 @@ resolve_conflict(_Ctx, #document{value = RemoteValue} = RemoteDoc, #document{val
             end
     end.
 
+
 -spec resolve_conflict_remote_rev_greater(record(), record()) -> 
     {true, record()} | remote.
 resolve_conflict_remote_rev_greater(
@@ -626,6 +627,7 @@ resolve_conflict_remote_rev_greater(
         { _, _, _} ->
             remote
     end.
+
 
 -spec resolve_conflict_local_rev_greater(record(), record(), oneprovider:id()) -> 
     {true, record()} | ignore.

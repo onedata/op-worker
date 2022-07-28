@@ -20,9 +20,9 @@
 %% API
 -export([
     build/1, build/2,
-    get_parent_file_ctx/1, get_archive_doc/1,
+    get_target_parent/1, get_archive_doc/1,
     set_target_parent/2, set_archive_doc/2,
-    ensure_guid_in_ctx/1
+    ensure_persistable/1
 ]).
 
 -record(archive_traverse_ctx, {
@@ -55,12 +55,12 @@ build(ArchiveDoc, ArchiveTargetParent) ->
     }.
 
 
--spec get_parent_file_ctx(ctx()) -> file_ctx:ctx() | undefined.
-get_parent_file_ctx(#archive_traverse_ctx{target_parent = undefined}) ->
+-spec get_target_parent(ctx()) -> file_ctx:ctx() | undefined.
+get_target_parent(#archive_traverse_ctx{target_parent = undefined}) ->
     undefined;
-get_parent_file_ctx(#archive_traverse_ctx{target_parent = Guid}) when is_binary(Guid) ->
+get_target_parent(#archive_traverse_ctx{target_parent = Guid}) when is_binary(Guid) ->
     file_ctx:new_by_guid(Guid);
-get_parent_file_ctx(#archive_traverse_ctx{target_parent = FileCtx})->
+get_target_parent(#archive_traverse_ctx{target_parent = FileCtx})->
     FileCtx.
 
 
@@ -74,16 +74,16 @@ set_archive_doc(Ctx, NewDoc) ->
     Ctx#archive_traverse_ctx{current_archive_doc = NewDoc}.
 
 
--spec set_target_parent(ctx(), file_ctx:ctx() | file_id:file_guid()) -> ctx().
+-spec set_target_parent(ctx(), file_ctx:ctx() | undefined) -> ctx().
 set_target_parent(Ctx, NewParent) ->
     Ctx#archive_traverse_ctx{target_parent = NewParent}.
 
 
--spec ensure_guid_in_ctx(ctx()) -> ctx().
-ensure_guid_in_ctx(#archive_traverse_ctx{target_parent = undefined} = ArchiveCtx) ->
+-spec ensure_persistable(ctx()) -> ctx().
+ensure_persistable(#archive_traverse_ctx{target_parent = undefined} = ArchiveCtx) ->
     ArchiveCtx;
-ensure_guid_in_ctx(#archive_traverse_ctx{target_parent = Guid} = ArchiveCtx) when is_binary(Guid) ->
+ensure_persistable(#archive_traverse_ctx{target_parent = Guid} = ArchiveCtx) when is_binary(Guid) ->
     ArchiveCtx;
-ensure_guid_in_ctx(#archive_traverse_ctx{target_parent = FileCtx} = ArchiveCtx) ->
+ensure_persistable(#archive_traverse_ctx{target_parent = FileCtx} = ArchiveCtx) ->
     ArchiveCtx#archive_traverse_ctx{target_parent = file_ctx:get_logical_guid_const(FileCtx)}.
 

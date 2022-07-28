@@ -12,9 +12,10 @@
 %%% When archive is configured to include a DIP archive this traverse 
 %%% can create 2 archives in parallel (AIP, which is created always, 
 %%% and optionally DIP).
-%%% TaskId of a traverse is the same as the id of the id of the initial AIP archive.
+%%% TaskId of a traverse is the same as the id of the initial AIP archive.
 %%% When an archive is cancelled its related archive (DIP for AIP and AIP for DIP) is 
-%%% cancelled as well. In case of nested archives, if one was already started, then it is 
+%%% cancelled as well. In case of nested archives, if one was already started, then 
+%%% it is NOT cancelled.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(archivisation_traverse).
@@ -221,7 +222,7 @@ do_dir_master_job_unsafe(Job = #tree_traverse{
         false ->
             IsFirstBatch = PaginationToken =:= undefined,
             TraverseInfo2 = case IsFirstBatch of
-                true -> archivisation_traverse_logic:handle_nested_dataset_and_do_archive(
+                true -> archivisation_traverse_logic:handle_file(
                     FileCtx, RelativePath, UserCtx, TraverseInfo);
                 false -> TraverseInfo
             end,
@@ -246,7 +247,7 @@ do_slave_job_unsafe(#tree_traverse_slave{
     {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId),
     TraverseInfo2 = case archive_traverses_common:is_cancelled(AipCtx) of
         true -> TraverseInfo;
-        false -> archivisation_traverse_logic:handle_nested_dataset_and_do_archive(
+        false -> archivisation_traverse_logic:handle_file(
             FileCtx, RelativePath, UserCtx, TraverseInfo)
     end,
     archivisation_traverse_logic:mark_finished_and_propagate_up(
@@ -372,10 +373,10 @@ save_dir_checksum(TaskId, DirUuid, UserCtx, TraverseInfo) ->
     TotalChildrenCount = archive_traverses_common:take_children_count(
         ?POOL_NAME, TaskId, DirUuid),
     archivisation_traverse_logic:save_dir_checksum_metadata(
-        archive_traverse_ctx:get_parent_file_ctx(maps:get(aip_ctx, TraverseInfo)),
+        archive_traverse_ctx:get_target_parent(maps:get(aip_ctx, TraverseInfo)),
         UserCtx, TotalChildrenCount),
     archivisation_traverse_logic:save_dir_checksum_metadata(
-        archive_traverse_ctx:get_parent_file_ctx(maps:get(dip_ctx, TraverseInfo)),
+        archive_traverse_ctx:get_target_parent(maps:get(dip_ctx, TraverseInfo)),
         UserCtx, TotalChildrenCount).
 
 
@@ -426,4 +427,4 @@ init_archive(ArchiveDoc, UserCtx) ->
     {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
     {ok, ArchiveDoc2} = archivisation_traverse_logic:initialize_archive_dir(
         ArchiveDoc, DatasetId, UserCtx),
-    archive_traverse_ctx:ensure_guid_in_ctx(archive_traverse_ctx:build(ArchiveDoc2)).
+    archive_traverse_ctx:ensure_persistable(archive_traverse_ctx:build(ArchiveDoc2)).
