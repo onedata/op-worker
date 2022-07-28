@@ -532,7 +532,7 @@ create_qos_entry(Worker, SessId, FileGuid, Expression) ->
     opt_qos:add_qos_entry(Worker, SessId(Worker), ?FILE_REF(FileGuid), Expression, 1).
 
 create_custom_metadata(Worker, SessId, FileGuid) ->
-    lfm_proxy:set_metadata(Worker, SessId(Worker), ?FILE_REF(FileGuid), json,
+    opt_file_metadata:set_custom_metadata(Worker, SessId(Worker), ?FILE_REF(FileGuid), json,
         #{<<"key">> => <<"value">>}, []).
 
 create_replication(Worker, SessId, FileGuid, TargetWorker) ->
@@ -558,6 +558,15 @@ create_view(Worker, SpaceId, TargetWorker) ->
     ok = rpc:call(Worker, index, save, [SpaceId, <<"view_name">>, ViewFunction, undefined,
         [], false, [?GET_DOMAIN_BIN(TargetWorker)]]).
 
+check_distribution(Workers, SessId, [], Guid) ->
+    ExpectedDistribution = lists:map(fun(W) ->
+        #{
+            <<"providerId">> => ?GET_DOMAIN_BIN(W),
+            <<"totalBlocksSize">> => 0,
+            <<"blocks">> => []
+        }
+    end, Workers),
+    check_expected_distribution(Workers, SessId, ExpectedDistribution, Guid);
 check_distribution(Workers, SessId, Desc, Guid) ->
     ExpectedDistribution = lists:map(fun({W, TotalBlocksSize}) ->
         #{
@@ -566,12 +575,16 @@ check_distribution(Workers, SessId, Desc, Guid) ->
             <<"blocks">> => [[0, TotalBlocksSize]]
         }
     end, Desc),
+    check_expected_distribution(Workers, SessId, ExpectedDistribution, Guid).
+
+
+check_expected_distribution(Workers, SessId, ExpectedDistribution, Guid)  ->
     ExpectedDistributionSorted = lists:sort(fun(#{<<"providerId">> := ProviderIdA}, #{<<"providerId">> := ProviderIdB}) ->
         ProviderIdA =< ProviderIdB
     end, ExpectedDistribution),
     lists:foreach(fun(Worker) ->
-    ?assertEqual({ok, ExpectedDistributionSorted}, 
-            lfm_proxy:get_file_distribution(Worker, SessId(Worker), ?FILE_REF(Guid)), ?ATTEMPTS
+        ?assertEqual({ok, ExpectedDistributionSorted}, 
+            opt_file_metadata:get_distribution_deprecated(Worker, SessId(Worker), ?FILE_REF(Guid)), ?ATTEMPTS
         )
     end, Workers).
 

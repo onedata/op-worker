@@ -18,8 +18,10 @@
 
 -include("global_definitions.hrl").
 -include("middleware/middleware.hrl").
+-include("modules/fslogic/file_distribution.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("cluster_worker/include/time_series/browsing.hrl").
 
 %% API
 -export([check_exec/3, exec/3]).
@@ -28,65 +30,83 @@
 -export([init/1, handle/1, cleanup/0]).
 
 -type archive_operation() ::
-    #list_archives{} |
-    #archive_dataset{} |
+    #archives_list_request{} |
+    #dataset_archive_request{} |
     #archivisation_cancel_request{} |
-    #get_archive_info{} |
-    #update_archive{} |
-    #delete_archive{} |
-    #recall_archive{} |
-    #cancel_archive_recall{} | 
-    #get_recall_details{} |
-    #get_recall_progress{} |
-    #browse_recall_log{}.
+    #archive_info_get_request{} |
+    #archive_update_request{} |
+    #archive_delete_request{} |
+    #archive_recall_request{} |
+    #archive_recall_cancel_request{} |
+    #archive_recall_details_get_request{} |
+    #archive_recall_progress_get_request{} |
+    #archive_recall_log_browse_request{}.
 
 -type atm_operation() ::
-    #schedule_atm_workflow_execution{} |
-    #cancel_atm_workflow_execution{} |
-    #repeat_atm_workflow_execution{}.
+    #atm_workflow_execution_schedule_request{} |
+    #atm_workflow_execution_cancel_request{} |
+    #atm_workflow_execution_repeat_request{}.
+
+-type cdmi_operation() ::
+    #transfer_encoding_get_request{} |
+    #transfer_encoding_set_request{} |
+    #cdmi_completion_status_get_request{} |
+    #cdmi_completion_status_set_request{} |
+    #mimetype_get_request{} |
+    #mimetype_set_request{}.
 
 -type dataset_operation() ::
-    #list_top_datasets{} |
-    #list_children_datasets{} |
-    #establish_dataset{} |
-    #get_dataset_info{} |
-    #update_dataset{} |
-    #remove_dataset {} |
-    #get_file_eff_dataset_summary{}.
+    #top_datasets_list_request{} |
+    #children_datasets_list_request{} |
+    #dataset_establish_request{} |
+    #dataset_info_get_request{} |
+    #dataset_update_request{} |
+    #dataset_remove_request {} |
+    #file_eff_dataset_summary_get_request{}.
+
+-type file_metadata_operations() ::
+    #custom_metadata_get_request{} |
+    #custom_metadata_set_request{} |
+    #custom_metadata_remove_request{} |
+    #file_distribution_gather_request{} |
+    #historical_dir_size_stats_gather_request{}.
 
 -type qos_operation() ::
-    #add_qos_entry{} |
-    #get_qos_entry{} |
-    #remove_qos_entry{} |
-    #get_effective_file_qos{} |
-    #check_qos_status{}.
+    #qos_entry_add_request{} |
+    #qos_entry_get_request{} |
+    #qos_entry_remove_request{} |
+    #effective_file_qos_get_request{} |
+    #qos_status_check_request{}.
 
 -type share_operation() ::
-    #create_share{} |
-    #remove_share{}.
+    #share_create_request{} |
+    #share_remove_request{}.
 
 -type transfer_operation() ::
-    #schedule_file_transfer{} |
-    #schedule_view_transfer{}.
+    #file_transfer_schedule_request{} |
+    #view_transfer_schedule_request{}.
 
 -type operation() ::
     archive_operation() |
     atm_operation() |
+    cdmi_operation() |
     dataset_operation() |
+    file_metadata_operations() |
     qos_operation() |
     share_operation() |
     transfer_operation().
 
 -export_type([
-    archive_operation/0, atm_operation/0, dataset_operation/0,
+    archive_operation/0, atm_operation/0,
+    cdmi_operation/0, dataset_operation/0,
+    file_metadata_operations/0, 
     qos_operation/0, transfer_operation/0,
     operation/0
 ]).
 
-
--define(SHOULD_LOG_REQUESTS_ON_ERROR, application:get_env(
-    ?CLUSTER_WORKER_APP_NAME, log_requests_on_error, false
-)).
+-define(OPERATIONS_AVAILABLE_IN_SHARE_MODE, [
+    custom_metadata_get_request
+]).
 
 -define(REQ(__SESSION_ID, __FILE_GUID, __OPERATION),
     {middleware_request, __SESSION_ID, __FILE_GUID, __OPERATION}
@@ -142,16 +162,14 @@ handle(healthcheck) ->
 
 handle(?REQ(SessionId, FileGuid, Operation)) ->
     try
-        UserCtx = user_ctx:new(SessionId),
-        assert_user_not_in_open_handle_mode(UserCtx),
+        FileCtx = file_ctx:new_by_guid(FileGuid),
+        UserCtx = infer_user_ctx(SessionId, FileCtx, Operation),
 
         middleware_utils:assert_file_managed_locally(FileGuid),
-        assert_file_access_not_in_share_mode(FileGuid),
-        FileCtx = file_ctx:new_by_guid(FileGuid),
 
         middleware_worker_handlers:execute(UserCtx, FileCtx, Operation)
     catch Type:Reason:Stacktrace ->
-        handle_error(Type, Reason, Stacktrace, SessionId, Operation)
+        request_error_handler:handle(Type, Reason, Stacktrace, SessionId, Operation)
     end;
 
 handle(Request) ->
@@ -176,6 +194,16 @@ cleanup() ->
 
 
 %% @private
+-spec infer_user_ctx(session:id(), file_ctx:ctx(), operation()) ->
+    user_ctx:ctx() | no_return().
+infer_user_ctx(SessionId, FileCtx, Operation) ->
+    UserCtx = user_ctx:new(SessionId),
+
+    assert_user_not_in_open_handle_mode(UserCtx),
+    ensure_guest_ctx_in_case_of_share_mode(UserCtx, FileCtx, Operation).
+
+
+%% @private
 -spec assert_user_not_in_open_handle_mode(user_ctx:ctx()) -> ok | no_return().
 assert_user_not_in_open_handle_mode(UserCtx) ->
     case user_ctx:is_in_open_handle_mode(UserCtx) of
@@ -185,66 +213,36 @@ assert_user_not_in_open_handle_mode(UserCtx) ->
 
 
 %% @private
--spec assert_file_access_not_in_share_mode(file_id:file_guid()) -> ok | no_return().
-assert_file_access_not_in_share_mode(FileGuid) ->
-    case file_id:is_share_guid(FileGuid) of
-        true -> throw(?ERROR_POSIX(?EPERM));
-        false -> ok
+-spec ensure_guest_ctx_in_case_of_share_mode(user_ctx:ctx(), file_ctx:ctx(), operation()) ->
+    user_ctx:ctx() | no_return().
+ensure_guest_ctx_in_case_of_share_mode(UserCtx, FileCtx, Operation) ->
+    case file_ctx:get_share_id_const(FileCtx) of
+        undefined ->
+            UserCtx;
+        _ShareId ->
+            case is_operation_available_in_share_mode(Operation) of
+                true -> ensure_guest_ctx(UserCtx);
+                false -> throw(?ERROR_POSIX(?EPERM))
+            end
     end.
 
 
 %% @private
--spec handle_error(
-    Type :: atom(),
-    Reason :: term(),
-    Stacktrace :: list(),
-    session:id(),
-    operation()
-) ->
-    errors:error().
-handle_error(throw, Reason, _Stacktrace, _SessionId, _Request) ->
-    infer_error(Reason);
-
-handle_error(_Type, Reason, Stacktrace, SessionId, Request) ->
-    Error = infer_error(Reason),
-
-    {LogFormat, LogFormatArgs} = case ?SHOULD_LOG_REQUESTS_ON_ERROR of
-        true ->
-            MF = "Cannot process request ~p for session ~p due to: ~p caused by ~p",
-            FA = [lager:pr(Request, ?MODULE), SessionId, Error, Reason],
-            {MF, FA};
-        false ->
-            MF = "Cannot process request for session ~p due to: ~p caused by ~p",
-            FA = [SessionId, Error, Reason],
-            {MF, FA}
-    end,
-
-    case Error of
-        ?ERROR_UNEXPECTED_ERROR(_) ->
-            ?error_stacktrace(LogFormat, LogFormatArgs, Stacktrace);
-        _ ->
-            ?debug_stacktrace(LogFormat, LogFormatArgs, Stacktrace)
-    end,
-
-    Error.
+-spec is_operation_available_in_share_mode(operation()) -> boolean().
+is_operation_available_in_share_mode(Operation) ->
+    lists:member(get_operation_name(Operation), ?OPERATIONS_AVAILABLE_IN_SHARE_MODE).
 
 
 %% @private
--spec infer_error(term()) -> errors:error().
-infer_error({badmatch, Error}) ->
-    infer_error(Error);
+-spec get_operation_name(operation()) -> atom().
+get_operation_name(Operation) ->
+    element(1, Operation).
 
-infer_error({error, Reason} = Error) ->
-    case ordsets:is_element(Reason, ?ERROR_CODES) of
-        true -> ?ERROR_POSIX(Reason);
-        false -> Error
-    end;
 
-infer_error(Reason) ->
-    case ordsets:is_element(Reason, ?ERROR_CODES) of
-        true ->
-            ?ERROR_POSIX(Reason);
-        false ->
-            %% TODO VFS-8614 replace unexpected error with internal server error
-            ?ERROR_UNEXPECTED_ERROR(str_utils:rand_hex(5))
+%% @private
+-spec ensure_guest_ctx(user_ctx:ctx()) -> user_ctx:ctx().
+ensure_guest_ctx(UserCtx) ->
+    case user_ctx:is_guest(UserCtx) of
+        true -> UserCtx;
+        false -> user_ctx:new(?GUEST_SESS_ID)
     end.

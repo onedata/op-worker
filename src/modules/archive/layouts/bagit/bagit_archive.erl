@@ -238,11 +238,10 @@ save_checksums_and_archive_custom_metadata(CurrentArchiveDoc, UserCtx, ArchivedF
 archive_metadata(ArchiveDirCtx, UserCtx, RelativeFilePath, ArchivedFileCtx) ->
     SessionId = user_ctx:get_session_id(UserCtx),
     ArchiveFileGuid = file_ctx:get_logical_guid_const(ArchivedFileCtx),
-    JsonMetadata = case lfm:get_metadata(SessionId, ?FILE_REF(ArchiveFileGuid), json, [], false) of
-        {ok, JM} ->
-            JM;
-        {error, ?ENODATA} ->
-            undefined
+    JsonMetadata = try
+        mi_file_metadata:get_custom_metadata(SessionId, ?FILE_REF(ArchiveFileGuid), json, [], false)
+    catch throw:?ERROR_POSIX(?ENODATA) ->
+        undefined
     end,
     bagit_metadata:add_entry(ArchiveDirCtx, UserCtx, RelativeFilePath, JsonMetadata).
 

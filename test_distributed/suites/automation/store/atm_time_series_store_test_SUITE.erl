@@ -164,18 +164,18 @@ manage_content_test(_Config) ->
     AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
     AtmStoreSchema = build_store_schema(?ATM_STORE_CONFIG),
     SortedCountTSMetricNames = lists:sort([?MINUTE_METRIC_NAME, ?HOUR_METRIC_NAME, ?DAY_METRIC_NAME]),
-
+    
     AtmStoreId = create_store(AtmWorkflowExecutionAuth, AtmStoreSchema),
     ExpLayout0 = #{
         ?MAX_FILE_SIZE_TS_NAME => [?MAX_FILE_SIZE_METRIC_NAME],
         ?COUNTER_OF_ALL_COUNTS_TS_NAME => SortedCountTSMetricNames
     },
     ?assertEqual(ExpLayout0, get_layout(AtmWorkflowExecutionAuth, AtmStoreId)),
-
+    
     ContentUpdateOpts = #atm_time_series_store_content_update_options{
         dispatch_rules = ?DISPATCH_RULES
     },
-
+    
     % Assert that only valid measurements are accepted
     lists:foreach(fun({InvalidData, ExpError}) ->
         ?assertThrow(ExpError, ?erpc(atm_store_api:update_content(
@@ -205,7 +205,7 @@ manage_content_test(_Config) ->
             )
         }
     ]),
-
+    
     % Timestamps of other measurements will be calculated based on Timestamp1 so to
     % ensure correctness during execution it is set to the 3rd hour from beginning of day window
     Timestamp1 = infer_window_timestamp(?NOW(), ?DAY_METRIC_CONFIG) + 3 * ?HOUR_RESOLUTION + 1,
@@ -231,7 +231,7 @@ manage_content_test(_Config) ->
     ))),
     ?assertEqual(ExpLayout1, get_layout(AtmWorkflowExecutionAuth, AtmStoreId)),
     ?assertEqual(ExpWindows1, get_slice(AtmWorkflowExecutionAuth, AtmStoreId, ExpLayout1)),
-
+    
     Timestamp2 = Timestamp1 - 3601,
     Timestamp3 = Timestamp1 + 120,
     Measurements2 = [
@@ -305,7 +305,7 @@ manage_content_test(_Config) ->
     ))),
     ?assertEqual(ExpLayout2, get_layout(AtmWorkflowExecutionAuth, AtmStoreId)),
     ?assertEqual(ExpWindows2, get_slice(AtmWorkflowExecutionAuth, AtmStoreId, ExpLayout2)),
-
+    
     % Assert operation is atomic (it it fails no metric should be modified)
     InvalidContentUpdateOpts = #atm_time_series_store_content_update_options{
         dispatch_rules = [
@@ -333,7 +333,7 @@ manage_content_test(_Config) ->
     ))),
     ?assertEqual(ExpLayout2, get_layout(AtmWorkflowExecutionAuth, AtmStoreId)),
     ?assertEqual(ExpWindows2, get_slice(AtmWorkflowExecutionAuth, AtmStoreId, ExpLayout2)),
-
+    
     % Test slices
     ExpSliceWindows1 = #{
         ?MAX_FILE_SIZE_TS_NAME => #{
@@ -351,7 +351,7 @@ manage_content_test(_Config) ->
             <<"count_cn_resources">> => [?MINUTE_METRIC_NAME, ?DAY_METRIC_NAME]
         })
     ),
-
+    
     ExpSliceWindows2 = #{
         <<"count_mp3">> => #{
             ?MINUTE_METRIC_NAME => [?EXP_MINUTE_METRIC_WINDOW(Timestamp1, 10)],
@@ -429,11 +429,11 @@ infer_window_timestamp(Time, #metric_config{resolution = Resolution}) ->
     time_series_collection:layout().
 get_layout(AtmWorkflowExecutionAuth, AtmStoreId) ->
     BrowseOpts = #atm_time_series_store_content_browse_options{
-        request = #time_series_get_layout_request{}
+        request = #time_series_layout_get_request{}
     },
 
     #atm_time_series_store_content_browse_result{
-        result = #time_series_layout_result{
+        result = #time_series_layout_get_result{
             layout = Layout
         }
     } = ?rpc(atm_store_api:browse_content(
@@ -477,7 +477,7 @@ get_slice(AtmWorkflowExecutionAuth, AtmStoreId, Layout, StartTimestamp) ->
     #{time_series_collection:time_series_id() => #{ts_metric:id() => [ts_windows:value()]}}.
 get_slice(AtmWorkflowExecutionAuth, AtmStoreId, Layout, StartTimestamp, WindowLimit) ->
     BrowseOpts = #atm_time_series_store_content_browse_options{
-        request = #time_series_get_slice_request{
+        request = #time_series_slice_get_request{
             layout = Layout,
             start_timestamp = StartTimestamp,
             window_limit = WindowLimit

@@ -634,6 +634,11 @@ qos_eviction_protection_test_base(Config, TestSpec) ->
     Filename = generator:gen_name(),
     QosSpec = create_basic_qos_test_spec(DirStructureType, Filename),
     {GuidsAndPaths, _} = qos_tests_utils:fulfill_qos_test_base(QosSpec),
+    
+    % @TODO VFS-VFS-9498 not needed after replica_deletion uses fetched file location instead of dbsynced
+    % Ensure that evicting provider has knowledge of remote provider blocks (through dbsync), 
+    % as otherwise it will skip eviction.
+    assert_initial_local_blocks_knowledge(oct_background:get_random_provider_node(EvictingProvider), GuidsAndPaths),
 
     case NewQosParamsPerProvider of
         undefined ->
@@ -667,7 +672,7 @@ qos_eviction_protection_test_base(Config, TestSpec) ->
         true -> Provider1;
         false -> Provider2
     end,
-
+    
     transfers_test_mechanism:run_test(
         Config1, #transfer_test_spec{
             setup = #setup{
@@ -727,7 +732,13 @@ qos_autocleaning_protection_test_base(_Config, TestSpec) ->
 
     ok = opw_test_rpc:call(RunNode, file_popularity_api, enable, [SpaceId]),
     QosSpec = create_basic_qos_test_spec(DirStructureType, Name),
-    {_GuidsAndPaths, _} = qos_tests_utils:fulfill_qos_test_base(QosSpec),
+    {GuidsAndPaths, _} = qos_tests_utils:fulfill_qos_test_base(QosSpec),
+    
+    % @TODO VFS-VFS-9498 not needed after replica_deletion uses fetched file location instead of dbsynced
+    % Ensure that evicting provider has knowledge of remote provider blocks (through dbsync), 
+    % as otherwise it will skip eviction.
+    assert_initial_local_blocks_knowledge(RunNode, GuidsAndPaths),
+    ?assert(opw_test_rpc:call(RunNode, space_quota, current_size, [SpaceId]) > 0, ?ATTEMPTS),
 
     Configuration =  #{
         enabled => true,
@@ -851,3 +862,13 @@ create_basic_qos_test_spec(DirStructureType, QosFilename) ->
             dir_structure = DirStructureAfter
         }
     }.
+
+
+assert_initial_local_blocks_knowledge(Node, GuidsAndPaths) ->
+    [QosTargetProvider, FileCreationProvider, _] = oct_background:get_provider_ids(),
+    lists_utils:pforeach(fun({Guid, _Path}) ->
+        lists_utils:pforeach(fun(P) ->
+            ?assertMatch({ok, [_ | _]}, opt_file_metadata:get_local_knowledge_of_remote_provider_blocks(
+                Node, Guid, P), ?ATTEMPTS)
+        end, [QosTargetProvider, FileCreationProvider])
+    end, maps:get(files, GuidsAndPaths)).

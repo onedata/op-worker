@@ -227,7 +227,7 @@ flush_stats(SpaceId, TransferId, BytesPerProvider) ->
         {ok, FileUuid} ->       
             QosEntries = get_file_local_qos_entries(SpaceId, FileUuid),
             BytesPerStorage = maps:fold(fun(ProviderId, Value, AccMap) ->
-                {ok, StoragesMap} = space_logic:get_storages_by_provider(SpaceId, ProviderId),
+                {ok, StoragesMap} = space_logic:get_provider_storages(SpaceId, ProviderId),
                 %% @TODO VFS-5497 No longer true after allowing to support one space with many storages on one provider
                 [StorageId | _] = maps:keys(StoragesMap),
                 AccMap#{StorageId => Value}

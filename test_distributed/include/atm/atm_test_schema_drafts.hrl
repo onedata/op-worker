@@ -17,6 +17,21 @@
 -include("atm/atm_test_schema.hrl").
 
 
+-define(ECHO_DOCKER_IMAGE_ID, <<"test/echo">>).
+
+% Failing by not returning result if size metric measurements are present in arguments
+-define(FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_1, <<"test/failing_echo_measurements_1">>).
+% Failing by returning integer in case of size metric measurement as an argument
+-define(FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_2, <<"test/failing_echo_measurements_2">>).
+-define(FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_2_RET_VALUE, 10).
+% Failing by returning custom exception
+-define(FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_3, <<"test/failing_echo_measurements_3">>).
+-define(FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_3_EXCEPTION, <<"too hot to do any thinking!!!">>).
+% Failing by lambda error
+-define(FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_4, <<"test/failing_echo_measurements_4">>).
+-define(FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_4_ERROR_MSG, <<"signal: illegal instruction (core dumped)\n">>).
+
+
 -define(INTEGER_LIST_STORE_SCHEMA_DRAFT(__ID, __DEFAULT_INITIAL_CONTENT), #atm_store_schema_draft{
     id = __ID,
     type = list,
@@ -33,7 +48,7 @@
 
 -define(ECHO_LAMBDA_DRAFT(__DATA_SPEC, __RELAY_METHOD), #atm_lambda_revision_draft{
     operation_spec = #atm_openfaas_operation_spec_draft{
-        docker_image = <<"test/echo">>
+        docker_image = ?ECHO_DOCKER_IMAGE_ID
     },
     argument_specs = [#atm_lambda_argument_spec{
         name = ?ECHO_ARG_NAME,

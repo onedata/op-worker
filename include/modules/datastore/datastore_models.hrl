@@ -238,6 +238,7 @@
     revision_registry :: atm_lambda_revision_registry:record(),
 
     atm_inventories = [] :: [od_atm_inventory:id()],
+    compatible :: boolean(),
 
     cache_state = #{} :: cache_state()
 }).
@@ -249,6 +250,7 @@
     revision_registry :: atm_workflow_schema_revision_registry:record(),
 
     atm_inventory :: od_atm_inventory:id(),
+    compatible :: boolean(),
 
     cache_state = #{} :: cache_state()
 }).

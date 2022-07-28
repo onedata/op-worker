@@ -1558,7 +1558,9 @@ flush_blocks_list(AllBlocks, ExcludeSessions, Flush) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec flush_stats(#state{}, boolean()) -> #state{}.
-flush_stats(#state{cached_stats = Stats} = State, _) when map_size(Stats) == 0 ->
+flush_stats(#state{cached_stats = Stats} = State, true = _CancelTimer) when map_size(Stats) == 0 ->
+    cancel_caching_stats_timer(State);
+flush_stats(#state{cached_stats = Stats} = State, false = _CancelTimer) when map_size(Stats) == 0 ->
     State;
 flush_stats(#state{
     space_id = SpaceId,

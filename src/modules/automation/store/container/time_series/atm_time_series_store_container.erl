@@ -129,7 +129,7 @@ acquire_iterator(#atm_time_series_store_container{}) ->
     atm_time_series_store_content_browse_result:record() | no_return().
 browse_content(Record, #atm_store_content_browse_req{
     options = #atm_time_series_store_content_browse_options{
-        request = #time_series_get_layout_request{} = BrowseRequest
+        request = #time_series_layout_get_request{} = BrowseRequest
     }
 }) ->
     {ok, LayoutResult} = datastore_time_series_collection:browse(
@@ -141,7 +141,7 @@ browse_content(Record, #atm_store_content_browse_req{
 
 browse_content(Record, #atm_store_content_browse_req{
     options = #atm_time_series_store_content_browse_options{
-        request = #time_series_get_slice_request{} = BrowseRequest
+        request = #time_series_slice_get_request{} = BrowseRequest
     }
 }) ->
     case datastore_time_series_collection:browse(

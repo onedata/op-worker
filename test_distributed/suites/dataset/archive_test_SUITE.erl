@@ -531,7 +531,7 @@ archive_dataset_attached_to_hardlink_test_base(Layout, IncludeDip) ->
     {ok, #file_attr{guid = LinkGuid}} =
         lfm_proxy:make_link(P1Node, UserSessIdP1, ?FILE_REF(FileGuid), ?FILE_REF(SpaceGuid), ?RAND_NAME()),
     Json = ?RAND_JSON_METADATA(),
-    ok = lfm_proxy:set_metadata(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid), json, Json, []),
+    ok = opt_file_metadata:set_custom_metadata(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid), json, Json, []),
     UserId = oct_background:get_user_id(?USER1),
     onenv_file_test_utils:await_file_metadata_sync(oct_background:get_space_supporting_providers(?SPACE), UserId, #object{
         guid = LinkGuid,
@@ -736,7 +736,7 @@ simple_incremental_archive_test_base(Layout, Modifications) ->
             ok = lfm_proxy:close(Node, H),
             ?FILE_IN_BASE_ARCHIVE_NAME;
         (metadata) ->
-            ok = lfm_proxy:set_metadata(Node, SessionId, #file_ref{guid = ChildGuid}, json, ?RAND_JSON_METADATA(), []),
+            ok = opt_file_metadata:set_custom_metadata(Node, SessionId, #file_ref{guid = ChildGuid}, json, ?RAND_JSON_METADATA(), []),
             ?FILE_IN_BASE_ARCHIVE_NAME;
         (new_file) ->
             Name = ?RAND_NAME(),
@@ -847,7 +847,7 @@ modify_preserved_archive_test_base(Layout) ->
     ?assertEqual({error, eperm}, lfm_proxy:unlink(Node, ?ROOT_SESS_ID, #file_ref{guid = FileGuid})),
     ?assertEqual({error, eperm},lfm_proxy:create(Node, ?ROOT_SESS_ID, DirGuid, FileName, ?DEFAULT_FILE_MODE)),
     ?assertEqual({error, eperm}, lfm_proxy:open(Node, ?ROOT_SESS_ID, #file_ref{guid = FileGuid}, write)),
-    ?assertEqual({error, eperm}, lfm_proxy:set_metadata(Node, ?ROOT_SESS_ID, #file_ref{guid = FileGuid}, json, ?RAND_JSON_METADATA(), [])),
+    ?assertEqual(?ERROR_POSIX(?EPERM), opt_file_metadata:set_custom_metadata(Node, ?ROOT_SESS_ID, #file_ref{guid = FileGuid}, json, ?RAND_JSON_METADATA(), [])),
     ?assertEqual({error, eperm}, lfm_proxy:rm_recursive(Node, ?ROOT_SESS_ID, #file_ref{guid = DirGuid})).
 
 
@@ -862,14 +862,14 @@ verification_modify_file_base(Layout) ->
 
 verification_modify_file_metadata_base(Layout) ->
     ModificationFun = fun(Node, _DirGuid, FileGuid, _FileName, _Content, _Metadata) ->
-        ok = lfm_proxy:set_metadata(Node, ?ROOT_SESS_ID, #file_ref{guid = FileGuid}, json, ?RAND_JSON_METADATA(), [])
+        ok = opt_file_metadata:set_custom_metadata(Node, ?ROOT_SESS_ID, #file_ref{guid = FileGuid}, json, ?RAND_JSON_METADATA(), [])
     end,
     simple_verification_test_base(Layout, ModificationFun).
 
 
 verification_modify_dir_metadata_base(Layout) ->
     ModificationFun = fun(Node, DirGuid, _FileGuid, _FileName, _Content, _Metadata) ->
-        ok = lfm_proxy:set_metadata(Node, ?ROOT_SESS_ID, #file_ref{guid = DirGuid}, json, ?RAND_JSON_METADATA(), [])
+        ok = opt_file_metadata:set_custom_metadata(Node, ?ROOT_SESS_ID, #file_ref{guid = DirGuid}, json, ?RAND_JSON_METADATA(), [])
     end,
     simple_verification_test_base(Layout, ModificationFun).
 
@@ -895,7 +895,7 @@ verification_recreate_file_base(Layout) ->
         {ok, H} = lfm_proxy:open(Node, ?ROOT_SESS_ID, #file_ref{guid = NewFileGuid}, write),
         {ok, _} = lfm_proxy:write(Node, H, 0, Content),
         ok = lfm_proxy:close(Node, H),
-        ok = lfm_proxy:set_metadata(Node, ?ROOT_SESS_ID, #file_ref{guid = NewFileGuid}, json, Metadata, [])
+        ok = opt_file_metadata:set_custom_metadata(Node, ?ROOT_SESS_ID, #file_ref{guid = NewFileGuid}, json, Metadata, [])
     end,
     simple_verification_test_base(Layout, ModificationFun).
 

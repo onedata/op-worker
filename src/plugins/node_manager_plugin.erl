@@ -193,7 +193,8 @@ custom_workers() -> filter_disabled_workers([
         {supervisor_children_spec, harvesting_worker:supervisor_children_spec()}
     ]},
     {qos_worker, []},
-    {middleware_worker, []}
+    {middleware_worker, []},
+    {provider_rpc_worker, []}
 ]).
 
 %%--------------------------------------------------------------------
