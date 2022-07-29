@@ -46,9 +46,9 @@ routes() -> [
         method = 'GET',
         produces = [<<"application/json">>],
         b_gri = #b_gri{
-            type = op_file,
-            id = ?OBJECTID_BINDING(id),
-            aspect = storage_locations,
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = storage_locations, 
             scope = private
         }
     }}

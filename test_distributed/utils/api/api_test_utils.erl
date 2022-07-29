@@ -489,7 +489,8 @@ file_attrs_to_json(undefined, #file_attr{
     shares = Shares,
     provider_id = ProviderId,
     owner_id = OwnerId,
-    nlink = HardlinksCount
+    nlink = HardlinksCount,
+    listing_index = ListingIndex
 }) ->
     {ok, ObjectId} = file_id:guid_to_objectid(Guid),
     
@@ -517,7 +518,8 @@ file_attrs_to_json(undefined, #file_attr{
         <<"shares">> => Shares,
         <<"provider_id">> => ProviderId,
         <<"owner_id">> => OwnerId,
-        <<"hardlinks_count">> => utils:undefined_to_null(HardlinksCount)
+        <<"hardlinks_count">> => utils:undefined_to_null(HardlinksCount),
+        <<"listing_index">> => ListingIndex
     };
 file_attrs_to_json(ShareId, #file_attr{
     guid = FileGuid,
