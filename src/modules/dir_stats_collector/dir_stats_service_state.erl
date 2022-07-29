@@ -221,6 +221,7 @@ clean(SpaceId) ->
 %%%===================================================================
 
 
+%% TODO VFS-9680 handle edge cases when changing space support parameters
 -spec handle_space_support_parameters_change(od_space:id(), support_parameters:record()) ->
     ok.
 handle_space_support_parameters_change(SpaceId, #support_parameters{
