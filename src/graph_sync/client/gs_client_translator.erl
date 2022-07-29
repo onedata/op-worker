@@ -313,7 +313,8 @@ translate(#gri{type = od_atm_lambda, id = Id, aspect = instance, scope = private
                 maps:get(<<"revisionRegistry">>, Result), atm_lambda_revision_registry
             ),
 
-            atm_inventories = maps:get(<<"atmInventories">>, Result)
+            atm_inventories = maps:get(<<"atmInventories">>, Result),
+            compatible = maps:get(<<"compatible">>, Result, true)
         }
     };
 
@@ -328,7 +329,8 @@ translate(#gri{type = od_atm_workflow_schema, id = Id, aspect = instance, scope 
                 maps:get(<<"revisionRegistry">>, Result), atm_workflow_schema_revision_registry
             ),
 
-            atm_inventory = maps:get(<<"atmInventoryId">>, Result)
+            atm_inventory = maps:get(<<"atmInventoryId">>, Result),
+            compatible = maps:get(<<"compatible">>, Result, true)
         }
     };
 

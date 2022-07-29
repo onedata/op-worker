@@ -59,8 +59,12 @@ on_file_location_change(FileCtx, ChangedLocationDoc = #document{
                                 try
                                     case fslogic_location:create_doc(FileCtx4, false, false) of
                                         {{ok, _}, FileCtx5} ->
+                                            fslogic_event_emitter:emit_file_attr_changed_with_replication_status(
+                                                FileCtx5, true, []),
                                             on_file_location_change(FileCtx5, ChangedLocationDoc);
                                         {{error, already_exists}, FileCtx5} ->
+                                            fslogic_event_emitter:emit_file_attr_changed_with_replication_status(
+                                                FileCtx5, true, []),
                                             on_file_location_change(FileCtx5, ChangedLocationDoc)
                                     end
                                 catch

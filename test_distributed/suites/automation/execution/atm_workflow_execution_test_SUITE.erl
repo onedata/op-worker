@@ -28,6 +28,7 @@
     schedule_atm_workflow_with_no_lanes/1,
     schedule_atm_workflow_with_empty_lane/1,
     schedule_atm_workflow_with_empty_parallel_box/1,
+    schedule_incompatible_atm_workflow/1,
     schedule_atm_workflow_with_openfaas_not_configured/1,
 
     schedule_atm_workflow_with_invalid_initial_store_content/1,
@@ -96,16 +97,17 @@
 ]).
 
 groups() -> [
-    {scheduling_non_executable_workflow_schema_tests, [parallel], [
+    {scheduling_non_executable_workflow_schema_tests, [sequence], [
         schedule_atm_workflow_with_no_lanes,
         schedule_atm_workflow_with_empty_lane,
         schedule_atm_workflow_with_empty_parallel_box,
+        schedule_incompatible_atm_workflow,
         schedule_atm_workflow_with_openfaas_not_configured
     ]},
-    {scheduling_executable_workflow_schema_with_invalid_args_tests, [parallel], [
+    {scheduling_executable_workflow_schema_with_invalid_args_tests, [sequence], [
         schedule_atm_workflow_with_invalid_initial_store_content
     ]},
-    {preparation_tests, [parallel], [
+    {preparation_tests, [sequence], [
         first_lane_run_preparation_failure_before_run_was_created,
         first_lane_run_preparation_failure_after_run_was_created,
 
@@ -124,14 +126,14 @@ groups() -> [
         first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_3,
         first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_4
     ]},
-    {cancellation_tests, [parallel], [
+    {cancellation_tests, [sequence], [
         cancel_scheduled_atm_workflow_execution,
         cancel_enqueued_atm_workflow_execution,
         cancel_active_atm_workflow_execution,
         cancel_finishing_atm_workflow_execution,
         cancel_finished_atm_workflow_execution
     ]},
-    {iteration_tests, [parallel], [
+    {iteration_tests, [sequence], [
         iterate_over_list_store,
         iterate_over_list_store_with_some_inaccessible_items,
         iterate_over_list_store_with_all_items_inaccessible,
@@ -149,7 +151,7 @@ groups() -> [
         iterate_over_tree_forest_store_with_all_items_inaccessible,
         iterate_over_empty_tree_forest_store
     ]},
-    {mapping_tests, [parallel], [
+    {mapping_tests, [sequence], [
         map_results_to_audit_log_store,
         map_results_to_list_store,
         map_results_to_range_store,
@@ -161,7 +163,7 @@ groups() -> [
         map_results_to_task_audit_log_store,
         map_results_to_task_time_series_store
     ]},
-    {failure_tests, [parallel], [
+    {failure_tests, [sequence], [
         fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error,
         fail_atm_workflow_execution_due_to_incorrect_const_arg_type_error,
         fail_atm_workflow_execution_due_to_incorrect_iterated_item_query_arg_error,
@@ -216,6 +218,10 @@ schedule_atm_workflow_with_empty_lane(_Config) ->
 
 
 schedule_atm_workflow_with_empty_parallel_box(_Config) ->
+    ?RUN_SCHEDULING_TEST().
+
+
+schedule_incompatible_atm_workflow(_Config) ->
     ?RUN_SCHEDULING_TEST().
 
 

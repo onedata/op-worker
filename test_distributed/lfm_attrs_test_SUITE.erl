@@ -671,9 +671,9 @@ create_and_query_view(Config) ->
     {ok, FileId1} = file_id:guid_to_objectid(Guid1),
     {ok, FileId2} = file_id:guid_to_objectid(Guid2),
     {ok, FileId3} = file_id:guid_to_objectid(Guid3),
-    ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid1), json, MetaBlue, [])),
-    ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid2), json, MetaRed, [])),
-    ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid3), json, MetaBlue, [])),
+    ?assertEqual(ok, opt_file_metadata:set_custom_metadata(Worker, SessId, ?FILE_REF(Guid1), json, MetaBlue, [])),
+    ?assertEqual(ok, opt_file_metadata:set_custom_metadata(Worker, SessId, ?FILE_REF(Guid2), json, MetaRed, [])),
+    ?assertEqual(ok, opt_file_metadata:set_custom_metadata(Worker, SessId, ?FILE_REF(Guid3), json, MetaBlue, [])),
     ok = rpc:call(Worker, index, save, [SpaceId, ViewName, ViewFunction, undefined, [], false, [ProviderId]]),
     ?assertMatch({ok, [ViewName]}, rpc:call(Worker, index, list, [SpaceId])),
     FinalCheck = fun() ->
@@ -704,7 +704,7 @@ get_empty_json(Config) ->
     Path = <<"/space_name1/t6_file">>,
     {ok, Guid} = lfm_proxy:create(Worker, SessId, Path),
 
-    ?assertEqual({error, ?ENOATTR}, lfm_proxy:get_metadata(Worker, SessId, ?FILE_REF(Guid), json, [], false)).
+    ?assertEqual(?ERROR_POSIX(?ENOATTR), opt_file_metadata:get_custom_metadata(Worker, SessId, ?FILE_REF(Guid), json, [], false)).
 
 get_empty_rdf(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -712,7 +712,7 @@ get_empty_rdf(Config) ->
     Path = <<"/space_name1/t6_file">>,
     {ok, Guid} = lfm_proxy:create(Worker, SessId, Path),
 
-    ?assertEqual({error, ?ENOATTR}, lfm_proxy:get_metadata(Worker, SessId, ?FILE_REF(Guid), rdf, [], false)).
+    ?assertEqual(?ERROR_POSIX(?ENOATTR), opt_file_metadata:get_custom_metadata(Worker, SessId, ?FILE_REF(Guid), rdf, [], false)).
 
 has_custom_metadata_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -722,15 +722,15 @@ has_custom_metadata_test(Config) ->
 
     % json
     ?assertEqual({ok, false}, lfm_proxy:has_custom_metadata(Worker, SessId, ?FILE_REF(Guid))),
-    ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), json, #{}, [])),
+    ?assertEqual(ok, opt_file_metadata:set_custom_metadata(Worker, SessId, ?FILE_REF(Guid), json, #{}, [])),
     ?assertEqual({ok, true}, lfm_proxy:has_custom_metadata(Worker, SessId, ?FILE_REF(Guid))),
-    ?assertEqual(ok, lfm_proxy:remove_metadata(Worker, SessId, ?FILE_REF(Guid), json)),
+    ?assertEqual(ok, opt_file_metadata:remove_custom_metadata(Worker, SessId, ?FILE_REF(Guid), json)),
 
     % rdf
     ?assertEqual({ok, false}, lfm_proxy:has_custom_metadata(Worker, SessId, ?FILE_REF(Guid))),
-    ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), rdf, <<"<xml>">>, [])),
+    ?assertEqual(ok, opt_file_metadata:set_custom_metadata(Worker, SessId, ?FILE_REF(Guid), rdf, <<"<xml>">>, [])),
     ?assertEqual({ok, true}, lfm_proxy:has_custom_metadata(Worker, SessId, ?FILE_REF(Guid))),
-    ?assertEqual(ok, lfm_proxy:remove_metadata(Worker, SessId, ?FILE_REF(Guid), rdf)),
+    ?assertEqual(ok, opt_file_metadata:remove_custom_metadata(Worker, SessId, ?FILE_REF(Guid), rdf)),
 
     % xattr
     ?assertEqual({ok, false}, lfm_proxy:has_custom_metadata(Worker, SessId, ?FILE_REF(Guid))),

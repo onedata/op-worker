@@ -532,7 +532,7 @@ create_qos_entry(Worker, SessId, FileGuid, Expression) ->
     opt_qos:add_qos_entry(Worker, SessId(Worker), ?FILE_REF(FileGuid), Expression, 1).
 
 create_custom_metadata(Worker, SessId, FileGuid) ->
-    lfm_proxy:set_metadata(Worker, SessId(Worker), ?FILE_REF(FileGuid), json,
+    opt_file_metadata:set_custom_metadata(Worker, SessId(Worker), ?FILE_REF(FileGuid), json,
         #{<<"key">> => <<"value">>}, []).
 
 create_replication(Worker, SessId, FileGuid, TargetWorker) ->
