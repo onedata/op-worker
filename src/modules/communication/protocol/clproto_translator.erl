@@ -652,7 +652,8 @@ translate_from_protobuf(#'FileAttr'{} = FileAttr) ->
         shares = FileAttr#'FileAttr'.shares,
         owner_id = FileAttr#'FileAttr'.owner_id,
         fully_replicated = FileAttr#'FileAttr'.fully_replicated,
-        nlink = FileAttr#'FileAttr'.nlink
+        nlink = FileAttr#'FileAttr'.nlink,
+        listing_index = FileAttr#'FileAttr'.listing_index
     };
 translate_from_protobuf(#'FileChildren'{
     child_links = FileEntries,
@@ -1692,7 +1693,8 @@ translate_to_protobuf(#file_attr{} = FileAttr) ->
         shares = FileAttr#file_attr.shares,
         owner_id = FileAttr#file_attr.owner_id,
         fully_replicated = FileAttr#file_attr.fully_replicated,
-        nlink = FileAttr#file_attr.nlink
+        nlink = FileAttr#file_attr.nlink,
+        listing_index = FileAttr#file_attr.listing_index
     }};
 translate_to_protobuf(#file_children{
     child_links = FileEntries,

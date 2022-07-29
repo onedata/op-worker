@@ -42,9 +42,9 @@
 -type record() :: #file_location{}.
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
--type file_id() :: helpers:file_id().
+-type storage_location() :: helpers:file_id().
 
--export_type([id/0, doc/0, diff/0, record/0, file_id/0]).
+-export_type([id/0, doc/0, diff/0, record/0, storage_location/0]).
 
 -define(CTX, #{
     model => ?MODULE,

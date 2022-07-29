@@ -13,7 +13,7 @@
  {<<"certifi">>,{pkg,<<"certifi">>,<<"2.6.1">>},2},
  {<<"clproto">>,
   {git,"ssh://git@git.onedata.org:7999/vfs/clproto.git",
-       {ref,"c5527f452a6208445790aaf33fe3640ef2fbe895"}},
+       {ref,"23a6a8f3deeed40a1f1ca1abc8839ac80dddbf30"}},
   0},
  {<<"cluster_manager">>,
   {raw,"ssh://git@git.onedata.org:7999/vfs/cluster-manager.git",
