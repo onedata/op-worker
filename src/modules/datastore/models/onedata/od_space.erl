@@ -83,10 +83,7 @@ run_after(_Function, _Args, Result) ->
 
 
 -spec run_after(doc()) -> {ok, doc()}.
-run_after(Doc = #document{key = SpaceId, value = Space = #od_space{
-    harvesters = Harvesters,
-    support_parameters_registry = SupportParametersRegistry
-}}) ->
+run_after(Doc = #document{key = SpaceId, value = Space = #od_space{harvesters = Harvesters}}) ->
     ProviderId = oneprovider:get_id(),
 
     case space_logic:is_supported(Space, ProviderId) of
@@ -101,10 +98,7 @@ run_after(Doc = #document{key = SpaceId, value = Space = #od_space{
             % only after run_after finishes (running synchronously could cause an infinite loop)
             spawn(main_harvesting_stream, revise_space_harvesters, [SpaceId, Harvesters]),
             ok = dbsync_worker:start_streams([SpaceId]),
-            ok = dir_stats_service_state:handle_space_support_parameters_change(
-                SpaceId,
-                support_parameters_registry:get_entry(ProviderId, SupportParametersRegistry)
-            )
+            ok = handle_space_support_parameters_change(ProviderId, Doc)
     end,
     {ok, Doc}.
 
@@ -130,3 +124,28 @@ get_ctx() ->
 -spec get_posthooks() -> [datastore_hooks:posthook()].
 get_posthooks() ->
     [fun run_after/3].
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec handle_space_support_parameters_change(oneprovider:id(), doc()) ->
+    ok | no_return().
+handle_space_support_parameters_change(ProviderId, #document{key = SpaceId, value = #od_space{
+    support_parameters_registry = SupportParametersRegistry
+}}) ->
+    SupportParameters = try
+        support_parameters_registry:get_entry(ProviderId, SupportParametersRegistry)
+    catch _:_ ->
+        % possible race when revoking space in oz when support parameters were already
+        % removed but provider is still visible as supporting this space
+        #support_parameters{
+            accounting_enabled = false,
+            dir_stats_service_enabled = false,
+            dir_stats_service_status = disabled
+        }
+    end,
+    dir_stats_service_state:handle_space_support_parameters_change(SpaceId, SupportParameters).

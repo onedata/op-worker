@@ -482,6 +482,7 @@ parallel_write_test(Config, SleepOnWrite, InitialFileSize, OverrideInitialBytes)
 
 init(Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
+
     {ok, MinimalSyncRequest} = test_utils:get_env(Worker, op_worker, minimal_sync_request),
     test_utils:set_env(Workers, op_worker, minimal_sync_request, 1),
     [{default_minimal_sync_request, MinimalSyncRequest} | Config].
@@ -490,6 +491,7 @@ init(Config) ->
 init_and_enable_for_new_space(Config) ->
     UpdatedConfig = init(Config),
     enable(UpdatedConfig),
+    verify_collecting_status(Config, enabled),
     UpdatedConfig.
 
 
