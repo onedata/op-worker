@@ -39,18 +39,18 @@
 
 all() -> [
     basic_test,
-    enabling_for_empty_space_test,
-    enabling_for_not_empty_space_test,
-    enabling_large_dirs_test,
-    enabling_during_writing_test,
-    race_with_file_adding_test,
-    race_with_file_writing_test,
-    race_with_subtree_adding_test,
-    race_with_subtree_filling_with_data_test,
-    race_with_file_adding_to_large_dir_test,
-    multiple_status_change_test,
-    adding_file_when_disabled_test,
-    restart_test
+%%    enabling_for_empty_space_test,
+%%    enabling_for_not_empty_space_test,
+%%    enabling_large_dirs_test,
+%%    enabling_during_writing_test,
+%%    race_with_file_adding_test,
+%%    race_with_file_writing_test,
+%%    race_with_subtree_adding_test,
+%%    race_with_subtree_filling_with_data_test,
+%%    race_with_file_adding_to_large_dir_test,
+    multiple_status_change_test
+%%    adding_file_when_disabled_test,
+%%    restart_test
 ].
 
 

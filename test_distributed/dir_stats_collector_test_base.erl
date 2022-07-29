@@ -57,8 +57,8 @@
 basic_test(Config) ->
     % TODO VFS-8835 - test rename
     enable(Config),
-    create_initial_file_tree_and_fill_files(Config, op_worker_nodes, enabled),
     verify_collecting_status(Config, enabled),
+    create_initial_file_tree_and_fill_files(Config, op_worker_nodes, enabled),
     check_initial_dir_stats(Config, op_worker_nodes),
     check_update_times(Config, [op_worker_nodes]).
 
@@ -303,7 +303,7 @@ multiple_status_change_test(Config) ->
         Worker, dir_stats_service_state, get_status_change_timestamps, [SpaceId]),
     StatusChanges = lists:map(
         fun({StatusChangeDescription, _Timestamp}) -> StatusChangeDescription end, StatusChangesWithTimestamps),
-    ExpectedStatusChanges = [disabled, stopping, enabled, initializing],
+    ExpectedStatusChanges = [disabled, stopping, enabled],
     ?assertEqual(ExpectedStatusChanges, StatusChanges),
 
     enable(Config),
@@ -761,7 +761,7 @@ check_space_dir_values_map_and_time_series_collection(
         initializing -> ?ATTEMPTS
     end,
     [Worker | _] = ?config(NodesSelector, Config),
-    {ok, CurrentStats} = ?assertMatch({ok, _}, rpc:call(Worker, dir_size_stats, get_stats, [SpaceGuid]), Attempts),
+    {ok, CurrentStats} = ?assertMatch({ok, _}, rpc:call(Worker, dir_size_stats, get_stats, [SpaceGuid]), ?ATTEMPTS),
     {ok, #time_series_layout_get_result{layout = TimeStatsLayout}} = ?assertMatch({ok, _}, 
         rpc:call(Worker, dir_size_stats, browse_historical_stats_collection, [SpaceGuid, #time_series_layout_get_request{}])),
     {ok, #time_series_slice_get_result{slice = TimeStats}} = ?assertMatch({ok, _}, 
@@ -770,11 +770,7 @@ check_space_dir_values_map_and_time_series_collection(
     ?assertEqual(ExpectedCurrentStats, CurrentStats),
 
     case {IsCollectionEmpty, CollectingStatus} of
-        {true, enabled} ->
-            maps:foreach(fun(_TimeSeriesName, WindowsPerMetric) ->
-                ?assertEqual(lists:duplicate(4, []), maps:values(WindowsPerMetric))
-            end, TimeStats);
-        {true, initializing} ->
+        {true, _} when CollectingStatus == initializing; CollectingStatus == enabled ->
             maps:foreach(fun(_TimeSeriesName, WindowsPerMetric) ->
                 ?assertEqual(lists:duplicate(4, 0),
                     lists:map(fun([{_Timestamp, Value}]) -> Value end, maps:values(WindowsPerMetric)))
