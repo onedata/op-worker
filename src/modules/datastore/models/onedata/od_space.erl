@@ -98,7 +98,11 @@ run_after(Doc = #document{key = SpaceId, value = Space = #od_space{harvesters = 
             % only after run_after finishes (running synchronously could cause an infinite loop)
             spawn(main_harvesting_stream, revise_space_harvesters, [SpaceId, Harvesters]),
             ok = dbsync_worker:start_streams([SpaceId]),
-            ok = handle_space_support_parameters_change(ProviderId, Doc)
+
+            critical_section:run({handle_space_support_parameters_change, SpaceId}, fun() ->
+                {ok, CurrentDoc} = space_logic:get(?ROOT_SESS_ID, SpaceId),
+                ok = handle_space_support_parameters_change(ProviderId, CurrentDoc)
+            end)
     end,
     {ok, Doc}.
 
