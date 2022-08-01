@@ -3,6 +3,6 @@ default: develop
 
 branches:
   # Specification of branches from which sources for components will be pulled.
-  oz-worker: current_branch
+  oz-worker: feature/VFS-9615-move-provider-support-opts-to-onezone  # todo remove
   op-worker: current_branch
   onepanel: current_branch

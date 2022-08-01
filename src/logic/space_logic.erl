@@ -35,7 +35,7 @@
 -export([is_owner/2]).
 -export([get_eff_groups/2, get_shares/2, get_local_storages/1,
     get_local_supporting_storage/1, get_provider_storages/2, get_storages_by_provider/1,
-    get_all_storage_ids/1, get_support_size/2]).
+    get_all_storage_ids/1, get_support_size/2, get_support_parameters/2]).
 -export([get_provider_ids/1, get_provider_ids/2]).
 -export([update_support_parameters/2]).
 -export([is_supported/2, is_supported/3]).
@@ -302,6 +302,17 @@ get_support_size(SpaceId, ProviderId) ->
     end.
 
 
+-spec get_support_parameters(od_space:id(), od_provider:id()) ->
+    {ok, support_parameters:record()} | errors:error().
+get_support_parameters(SpaceId, ProviderId) ->
+    case get(?ROOT_SESS_ID, SpaceId) of
+        {ok, #document{value = #od_space{support_parameters_registry = SupportParametersRegistry}}} ->
+            {ok, support_parameters_registry:get_entry(ProviderId, SupportParametersRegistry)};
+        {error, _} = Error ->
+            Error
+    end.
+
+
 -spec get_provider_ids(od_space:id()) ->
     {ok, [od_provider:id()]} | errors:error().
 get_provider_ids(SpaceId) ->
@@ -319,15 +330,22 @@ get_provider_ids(SessionId, SpaceId) ->
     end.
 
 
-%% @TODO VFS-9664 Use this endpoint to update space parameters in global Onezone space model
 -spec update_support_parameters(od_space:id(), support_parameters:record()) ->
     ok | errors:error().
 update_support_parameters(SpaceId, SupportParametersOverlay) ->
-    gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+    Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
         operation = update,
-        gri = #gri{type = od_space, id = SpaceId, aspect = support_parameters, scope = private},
+        gri = #gri{
+            type = od_space,
+            id = SpaceId,
+            aspect = {support_parameters, oneprovider:get_id()},
+            scope = private
+        },
         data = jsonable_record:to_json(SupportParametersOverlay, support_parameters)
-    }).
+    }),
+    ?ON_SUCCESS(Result, fun(_) ->
+        space_logic:force_fetch(SpaceId)
+    end).
 
 
 -spec is_supported(od_space:doc() | od_space:record(), od_provider:id()) ->

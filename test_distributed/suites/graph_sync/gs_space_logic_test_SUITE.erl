@@ -408,7 +408,12 @@ convenience_functions_test(Config) ->
 update_support_parameters_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
 
-    SpaceGriMatcher = #gri{type = od_space, id = ?SPACE_1, aspect = support_parameters, scope = private},
+    SpaceGriMatcher = #gri{
+        type = od_space,
+        id = ?SPACE_1,
+        aspect = {support_parameters, rpc:call(Node, oneprovider, get_id, [])},
+        scope = private
+    },
     GraphCalls = logic_tests_common:count_reqs(Config, graph, SpaceGriMatcher),
 
     SupportParametersOverlay = #support_parameters{
