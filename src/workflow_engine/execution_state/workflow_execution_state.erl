@@ -1048,10 +1048,11 @@ check_timeouts_internal(State = #workflow_execution_state{
     handler_execution_or_cached_async_result()
 ) -> {ok, state()} | ?WF_ERROR_JOB_NOT_FOUND.
 report_execution_status_update_internal(State = #workflow_execution_state{
+    engine_id = EngineId,
     jobs = Jobs
 }, JobIdentifier, ?ASYNC_CALL_STARTED, {ok, KeepaliveTimeout}) ->
     {ok, State#workflow_execution_state{
-        jobs = workflow_jobs:register_async_call(Jobs, JobIdentifier, KeepaliveTimeout)}};
+        jobs = workflow_jobs:register_async_call(EngineId, Jobs, JobIdentifier, KeepaliveTimeout)}};
 report_execution_status_update_internal(State = #workflow_execution_state{
     jobs = Jobs
 }, JobIdentifier, ?ASYNC_CALL_ENDED, CachedResultId) ->

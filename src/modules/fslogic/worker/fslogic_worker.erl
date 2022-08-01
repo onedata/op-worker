@@ -104,7 +104,6 @@
 
     list_xattr,
     get_xattr,
-    get_metadata,
 
     % Opening file is available but only in 'read' mode
     open_file,
@@ -660,19 +659,6 @@ handle_provider_request(UserCtx, #set_acl{acl = #acl{value = Acl}}, FileCtx) ->
     acl_req:set_acl(UserCtx, FileCtx, Acl);
 handle_provider_request(UserCtx, #remove_acl{}, FileCtx) ->
     acl_req:remove_acl(UserCtx, FileCtx);
-handle_provider_request(UserCtx, #get_metadata{
-    type = Type,
-    query = Query,
-    inherited = Inherited
-}, FileCtx) ->
-    metadata_req:get_metadata(UserCtx, FileCtx, Type, Query, Inherited);
-handle_provider_request(UserCtx, #set_metadata{
-    metadata = #metadata{type = Type, value = Value},
-    query = Query
-}, FileCtx) ->
-    metadata_req:set_metadata(UserCtx, FileCtx, Type, Value, Query, false, false);
-handle_provider_request(UserCtx, #remove_metadata{type = Type}, FileCtx) ->
-    metadata_req:remove_metadata(UserCtx, FileCtx, Type);
 handle_provider_request(UserCtx, #check_perms{flag = Flag}, FileCtx) ->
     permission_req:check_perms(UserCtx, FileCtx, Flag).
 

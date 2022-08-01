@@ -32,7 +32,7 @@
     custom_metadata:query(),
     Inherited :: boolean()
 ) ->
-    fslogic_worker:provider_response().
+    {ok, custom_metadata:value()} | errors:error().
 get_metadata(UserCtx, FileCtx0, Type, Query, Inherited) ->
     FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
 
@@ -41,13 +41,8 @@ get_metadata(UserCtx, FileCtx0, Type, Query, Inherited) ->
         rdf -> xattr:get(UserCtx, FileCtx1, ?RDF_METADATA_KEY, Inherited)
     end,
     case Result of
-        {ok, Value} ->
-            #provider_response{
-                status = #status{code = ?OK},
-                provider_response = #metadata{type = Type, value = Value}
-            };
-        ?ERROR_NOT_FOUND ->
-            #provider_response{status = #status{code = ?ENOATTR}}
+        {ok, Value} -> {ok, Value};
+        {error, not_found} -> ?ERROR_POSIX(?ENOATTR)
     end.
 
 
@@ -60,28 +55,26 @@ get_metadata(UserCtx, FileCtx0, Type, Query, Inherited) ->
     Create :: boolean(),
     Replace :: boolean()
 ) ->
-    fslogic_worker:provider_response().
+    ok.
 set_metadata(UserCtx, FileCtx0, json, Value, Query, Create, Replace) ->
     file_ctx:assert_not_trash_dir_const(FileCtx0),
     FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
     {ok, _} = json_metadata:set(UserCtx, FileCtx1, Value, Query, Create, Replace),
-    #provider_response{status = #status{code = ?OK}};
+    ok;
 set_metadata(UserCtx, FileCtx0, rdf, Value, _, Create, Replace) ->
     file_ctx:assert_not_trash_dir_const(FileCtx0),
     FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
     {ok, _} = xattr:set(UserCtx, FileCtx1, ?RDF_METADATA_KEY, Value, Create, Replace),
-    #provider_response{status = #status{code = ?OK}}.
+    ok.
 
 
 -spec remove_metadata(user_ctx:ctx(), file_ctx:ctx(), custom_metadata:type()) ->
-    fslogic_worker:provider_response().
+    ok.
 remove_metadata(UserCtx, FileCtx0, json) ->
     file_ctx:assert_not_trash_dir_const(FileCtx0),
     FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
-    ok = json_metadata:remove(UserCtx, FileCtx1),
-    #provider_response{status = #status{code = ?OK}};
+    ok = json_metadata:remove(UserCtx, FileCtx1);
 remove_metadata(UserCtx, FileCtx0, rdf) ->
     file_ctx:assert_not_trash_dir_const(FileCtx0),
     FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
-    ok = xattr:remove(UserCtx, FileCtx1, ?RDF_METADATA_KEY),
-    #provider_response{status = #status{code = ?OK}}.
+    ok = xattr:remove(UserCtx, FileCtx1, ?RDF_METADATA_KEY).

@@ -184,9 +184,15 @@ delete_metadata_test_base(
                 }
             ],
             randomly_select_scenarios = RandomlySelectScenario,
-            data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
-                FileGuid, ShareId, DataSpec
-            )
+            data_spec = begin
+                DataSpec1 = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+                    FileGuid, ShareId, DataSpec
+                ),
+                case MetadataType of
+                    <<"xattrs">> -> DataSpec1;
+                    _ -> api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(DataSpec1)
+                end
+            end
         },
 
         #scenario_spec{
@@ -251,7 +257,7 @@ build_verify_fun(preset_initial_metadata, FileGuid, MetadataType, ExpMetadata, N
         (expected_success, _) ->
             lists:foreach(fun(Node) ->
                 ?assertMatch(
-                    {error, ?ENODATA},
+                    ?ERROR_POSIX(?ENODATA),
                     api_test_utils:get_metadata(Node, FileGuid, MetadataType),
                     ?ATTEMPTS
                 )
@@ -262,7 +268,7 @@ build_verify_fun(no_initial_metadata, FileGuid, MetadataType, _ExpMetadata, Node
     fun(_, _) ->
         lists:foreach(fun(Node) ->
             ?assertMatch(
-                {error, ?ENODATA},
+                ?ERROR_POSIX(?ENODATA),
                 api_test_utils:get_metadata(Node, FileGuid, MetadataType),
                 ?ATTEMPTS
             )

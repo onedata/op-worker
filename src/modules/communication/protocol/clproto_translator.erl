@@ -970,28 +970,6 @@ translate_from_protobuf(#'FSync'{
         data_only = DataOnly,
         handle_id = HandleId
     };
-translate_from_protobuf(#'ReadMetadata'{
-    type = Type,
-    query = Query,
-    inherited = Inherited
-}) ->
-    #get_metadata{
-        type = binary_to_existing_atom(Type, utf8),
-        query = Query,
-        inherited = Inherited
-    };
-translate_from_protobuf(#'WriteMetadata'{
-    metadata = Metadata,
-    query = Query
-}) ->
-    #set_metadata{
-        metadata = translate_from_protobuf(Metadata),
-        query = Query
-    };
-translate_from_protobuf(#'RemoveMetadata'{type = Type}) ->
-    #remove_metadata{
-        type = binary_to_existing_atom(Type, utf8)
-    };
 translate_from_protobuf(#'ProviderResponse'{
     status = Status,
     provider_response = {_, ProviderResponse}
@@ -1018,22 +996,6 @@ translate_from_protobuf(#'Acl'{value = Value}) ->
     #acl{value = acl:from_json(json_utils:decode(Value), cdmi)};
 translate_from_protobuf(#'FilePath'{value = Value}) ->
     #file_path{value = Value};
-translate_from_protobuf(#'Metadata'{
-    type = <<"json">>,
-    value = Json
-}) ->
-    #metadata{
-        type = json,
-        value = json_utils:decode(Json)
-    };
-translate_from_protobuf(#'Metadata'{
-    type = <<"rdf">>,
-    value = Rdf
-}) ->
-    #metadata{
-        type = rdf,
-        value = Rdf
-    };
 translate_from_protobuf(#'CheckPerms'{flag = Flag}) ->
     #check_perms{flag = open_flag_translate_from_protobuf(Flag)};
 
@@ -2040,29 +2002,6 @@ translate_to_protobuf(#fsync{
         data_only = DataOnly,
         handle_id = HandleId
     }};
-translate_to_protobuf(#get_metadata{
-    type = Type,
-    query = Query,
-    inherited = Inherited
-}) ->
-    {read_metadata, #'ReadMetadata'{
-        type = atom_to_binary(Type, utf8),
-        query = Query,
-        inherited = Inherited
-    }};
-translate_to_protobuf(#set_metadata{
-    metadata = Metadata,
-    query = Query
-}) ->
-    {_, MetadataProto} = translate_to_protobuf(Metadata),
-    {write_metadata, #'WriteMetadata'{
-        metadata = MetadataProto,
-        query = Query
-    }};
-translate_to_protobuf(#remove_metadata{type = Type}) ->
-    {remove_metadata, #'RemoveMetadata'{
-        type = atom_to_binary(Type, utf8)
-    }};
 
 
 translate_to_protobuf(#provider_response{
@@ -2090,22 +2029,6 @@ translate_to_protobuf(#acl{value = Value}) ->
     };
 translate_to_protobuf(#file_path{value = Value}) ->
     {file_path, #'FilePath'{value = Value}};
-translate_to_protobuf(#metadata{
-    type = json,
-    value = Json
-}) ->
-    {metadata, #'Metadata'{
-        type = <<"json">>,
-        value = json_utils:encode(Json)
-    }};
-translate_to_protobuf(#metadata{
-    type = rdf,
-    value = Rdf
-}) ->
-    {metadata, #'Metadata'{
-        type = <<"rdf">>,
-        value = Rdf
-    }};
 translate_to_protobuf(#check_perms{flag = Flag}) ->
     {check_perms, #'CheckPerms'{
         flag = open_flag_translate_to_protobuf(Flag)

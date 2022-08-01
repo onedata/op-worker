@@ -332,11 +332,11 @@ assert_content_copied_internal(Node, SourceHandle, TargetHandle, Offset, Attempt
 
 
 assert_json_metadata_copied(Node, SessionId, SourceGuid, TargetGuid, Attempts) ->
-    case lfm_proxy:get_metadata(Node, SessionId, ?FILE_REF(SourceGuid), json, [], false) of
+    case opt_file_metadata:get_custom_metadata(Node, SessionId, ?FILE_REF(SourceGuid), json, [], false) of
         {ok, SourceJson} ->
             ?assertEqual({ok, SourceJson},
-                lfm_proxy:get_metadata(Node, SessionId, ?FILE_REF(TargetGuid), json, [], false), Attempts);
-        {error, ?ENODATA} ->
+                opt_file_metadata:get_custom_metadata(Node, SessionId, ?FILE_REF(TargetGuid), json, [], false), Attempts);
+        ?ERROR_POSIX(?ENODATA) ->
             ok
     end.
 

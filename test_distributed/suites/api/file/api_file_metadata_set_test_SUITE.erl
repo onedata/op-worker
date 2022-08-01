@@ -72,15 +72,17 @@ set_file_rdf_metadata_test(Config) ->
     Providers = ?config(op_worker_nodes, Config),
     {FileType, _FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(8#707),
 
-    DataSpec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
-        FileGuid, ShareId, #data_spec{
-            required = [<<"metadata">>],
-            correct_values = #{
-                <<"metadata">> => [
-                    ?RDF_METADATA_1, ?RDF_METADATA_2, ?RDF_METADATA_3, ?RDF_METADATA_4
-                ]
+    DataSpec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
+        api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+            FileGuid, ShareId, #data_spec{
+                required = [<<"metadata">>],
+                correct_values = #{
+                    <<"metadata">> => [
+                        ?RDF_METADATA_1, ?RDF_METADATA_2, ?RDF_METADATA_3, ?RDF_METADATA_4
+                    ]
+                }
             }
-        }
+        )
     ),
 
     % Setting rdf should always succeed for correct clients
@@ -88,7 +90,7 @@ set_file_rdf_metadata_test(Config) ->
 
     VerifyEnvFun = fun
         (expected_failure, #api_test_ctx{node = TestNode}) ->
-            ?assertMatch({error, ?ENODATA}, get_rdf(TestNode, FileGuid), ?ATTEMPTS),
+            ?assertMatch(?ERROR_POSIX(?ENODATA), get_rdf(TestNode, FileGuid), ?ATTEMPTS),
             true;
         (expected_success, #api_test_ctx{node = TestNode, data = #{<<"metadata">> := Metadata}}) ->
             lists:foreach(fun(Node) ->
@@ -102,7 +104,7 @@ set_file_rdf_metadata_test(Config) ->
                     ?assertMatch(ok, remove_rdf(TestNode, FileGuid)),
                     % Wait for removal to be synced between providers.
                     lists:foreach(fun(Node) ->
-                        ?assertMatch({error, ?ENODATA}, get_rdf(Node, FileGuid), ?ATTEMPTS)
+                        ?assertMatch(?ERROR_POSIX(?ENODATA), get_rdf(Node, FileGuid), ?ATTEMPTS)
                     end, Providers);
                 false ->
                     ok
@@ -135,7 +137,7 @@ set_file_rdf_metadata_on_provider_not_supporting_space_test(_Config) ->
     GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id) end,
 
     VerifyEnvFun = fun(_, _) ->
-        ?assertMatch({error, ?ENODATA}, get_rdf(P1Node, FileGuid), ?ATTEMPTS),
+        ?assertMatch(?ERROR_POSIX(?ENODATA), get_rdf(P1Node, FileGuid), ?ATTEMPTS),
         true
     end,
 
@@ -151,12 +153,12 @@ set_file_rdf_metadata_on_provider_not_supporting_space_test(_Config) ->
 
 %% @private
 get_rdf(Node, FileGuid) ->
-    lfm_proxy:get_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), rdf, [], false).
+    opt_file_metadata:get_custom_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), rdf, [], false).
 
 
 %% @private
 remove_rdf(Node, FileGuid) ->
-    lfm_proxy:remove_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), rdf).
+    opt_file_metadata:remove_custom_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), rdf).
 
 
 %%%===================================================================
@@ -170,43 +172,45 @@ set_file_json_metadata_test(Config) ->
 
     ExampleJson = #{<<"attr1">> => [0, 1, <<"val">>]},
 
-    DataSpec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
-        FileGuid, ShareId, #data_spec{
-            required = [<<"metadata">>],
-            optional = QsParams = [<<"filter_type">>, <<"filter">>],
-            correct_values = #{
-                <<"metadata">> => [ExampleJson],
-                <<"filter_type">> => [<<"keypath">>],
-                <<"filter">> => [
-                    <<"[1]">>,                  % Test creating placeholder array for nonexistent
-                                                % previously json
-                    <<"[1].attr1.[1]">>,        % Test setting attr in existing array
-                    <<"[1].attr1.[2].attr22">>, % Test error when trying to set subjson to binary
-                                                % (<<"val">> in ExampleJson)
-                    <<"[1].attr1.[5]">>,        % Test setting attr beyond existing array
-                    <<"[1].attr2.[2]">>         % Test setting attr in nonexistent array
+    DataSpec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
+        api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+            FileGuid, ShareId, #data_spec{
+                required = [<<"metadata">>],
+                optional = QsParams = [<<"filter_type">>, <<"filter">>],
+                correct_values = #{
+                    <<"metadata">> => [ExampleJson],
+                    <<"filter_type">> => [<<"keypath">>],
+                    <<"filter">> => [
+                        <<"[1]">>,                  % Test creating placeholder array for nonexistent
+                                                    % previously json
+                        <<"[1].attr1.[1]">>,        % Test setting attr in existing array
+                        <<"[1].attr1.[2].attr22">>, % Test error when trying to set subjson to binary
+                                                    % (<<"val">> in ExampleJson)
+                        <<"[1].attr1.[5]">>,        % Test setting attr beyond existing array
+                        <<"[1].attr2.[2]">>         % Test setting attr in nonexistent array
+                    ]
+                },
+                bad_values = [
+                    % invalid json error can be returned only for rest (invalid json is send as
+                    % body without modification) and not gs (#{<<"metadata">> => some_binary} is send,
+                    % so no matter what that some_binary is it will be treated as string)
+                    {<<"metadata">>, <<"aaa">>, {rest_handler, ?ERROR_BAD_VALUE_JSON(<<"metadata">>)}},
+                    {<<"metadata">>, <<"{">>, {rest_handler, ?ERROR_BAD_VALUE_JSON(<<"metadata">>)}},
+                    {<<"metadata">>, <<"{\"aaa\": aaa}">>, {rest_handler,
+                        ?ERROR_BAD_VALUE_JSON(<<"metadata">>)}},
+
+                    {<<"filter_type">>, <<"dummy">>,
+                        ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"filter_type">>, [<<"keypath">>])},
+
+                    % Below differences between error returned by rest and gs are results of sending
+                    % parameters via qs in REST, so they lost their original type and are cast to binary
+                    {<<"filter_type">>, 100, {rest,
+                        ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"filter_type">>, [<<"keypath">>])}},
+                    {<<"filter_type">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"filter_type">>)}},
+                    {<<"filter">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"filter">>)}}
                 ]
-            },
-            bad_values = [
-                % invalid json error can be returned only for rest (invalid json is send as
-                % body without modification) and not gs (#{<<"metadata">> => some_binary} is send,
-                % so no matter what that some_binary is it will be treated as string)
-                {<<"metadata">>, <<"aaa">>, {rest_handler, ?ERROR_BAD_VALUE_JSON(<<"metadata">>)}},
-                {<<"metadata">>, <<"{">>, {rest_handler, ?ERROR_BAD_VALUE_JSON(<<"metadata">>)}},
-                {<<"metadata">>, <<"{\"aaa\": aaa}">>, {rest_handler,
-                    ?ERROR_BAD_VALUE_JSON(<<"metadata">>)}},
-
-                {<<"filter_type">>, <<"dummy">>,
-                    ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"filter_type">>, [<<"keypath">>])},
-
-                % Below differences between error returned by rest and gs are results of sending
-                % parameters via qs in REST, so they lost their original type and are cast to binary
-                {<<"filter_type">>, 100, {rest,
-                    ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"filter_type">>, [<<"keypath">>])}},
-                {<<"filter_type">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"filter_type">>)}},
-                {<<"filter">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"filter">>)}}
-            ]
-        }
+            }
+        )
     ),
 
     GetRequestFilterArg = fun(#api_test_ctx{data = Data}) ->
@@ -238,7 +242,7 @@ set_file_json_metadata_test(Config) ->
 
     VerifyEnvFun = fun
         (expected_failure, #api_test_ctx{node = TestNode}) ->
-            ?assertMatch({error, ?ENODATA}, get_json(TestNode, FileGuid), ?ATTEMPTS),
+            ?assertMatch(?ERROR_POSIX(?ENODATA), get_json(TestNode, FileGuid), ?ATTEMPTS),
             true;
         (expected_success, #api_test_ctx{node = TestNode} = TestCtx) ->
             FilterOrError = GetRequestFilterArg(TestCtx),
@@ -252,7 +256,7 @@ set_file_json_metadata_test(Config) ->
                 ?ERROR_MISSING_REQUIRED_VALUE(_) ->
                     % Test failed to set json because of specifying
                     % filter_type without specifying filter
-                    {error, ?ENODATA};
+                    ?ERROR_POSIX(?ENODATA);
                 {ok, [<<"[1]">>]} ->
                     {ok, [null, ExampleJson]};
                 {ok, [<<"[1]">>, <<"attr1">>, <<"[1]">>]} ->
@@ -294,7 +298,7 @@ set_file_json_metadata_test(Config) ->
                     % rather than above one as that will be the result of setting ExampleJson
                     % with attr1.[5] filter and no prior json set)
                     lists:foreach(fun(Node) ->
-                        ?assertMatch({error, ?ENODATA}, get_json(Node, FileGuid), ?ATTEMPTS)
+                        ?assertMatch(?ERROR_POSIX(?ENODATA), get_json(Node, FileGuid), ?ATTEMPTS)
                     end, Providers);
                 _ ->
                     ok
@@ -316,21 +320,23 @@ set_file_primitive_json_metadata_test(Config) ->
     Providers = ?config(op_worker_nodes, Config),
     {FileType, _FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(8#707),
 
-    DataSpec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
-        FileGuid, ShareId, #data_spec{
-            required = [<<"metadata">>],
-            correct_values = #{<<"metadata">> => [
-                <<"{}">>, <<"[]">>, <<"true">>, <<"0">>, <<"0.1">>,
-                <<"null">>, <<"\"string\"">>
-            ]}
-        }
+    DataSpec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
+        api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+            FileGuid, ShareId, #data_spec{
+                required = [<<"metadata">>],
+                correct_values = #{<<"metadata">> => [
+                    <<"{}">>, <<"[]">>, <<"true">>, <<"0">>, <<"0.1">>,
+                    <<"null">>, <<"\"string\"">>
+                ]}
+            }
+        )
     ),
 
     GetExpCallResultFun = fun(_TestCtx) -> ok end,
 
     VerifyEnvFun = fun
         (expected_failure, #api_test_ctx{node = TestNode}) ->
-            ?assertMatch({error, ?ENODATA}, get_json(TestNode, FileGuid), ?ATTEMPTS),
+            ?assertMatch(?ERROR_POSIX(?ENODATA), get_json(TestNode, FileGuid), ?ATTEMPTS),
             true;
         (expected_success, #api_test_ctx{node = TestNode, data = #{<<"metadata">> := Metadata}}) ->
             ExpMetadata = json_utils:decode(Metadata),
@@ -344,7 +350,7 @@ set_file_primitive_json_metadata_test(Config) ->
                     % tests for next clients can start from setting rather then updating metadata
                     ?assertMatch(ok, remove_json(TestNode, FileGuid)),
                     lists:foreach(fun(Node) ->
-                        ?assertMatch({error, ?ENODATA}, get_json(Node, FileGuid), ?ATTEMPTS)
+                        ?assertMatch(?ERROR_POSIX(?ENODATA), get_json(Node, FileGuid), ?ATTEMPTS)
                     end, Providers);
                 _ ->
                     ok
@@ -377,7 +383,7 @@ set_file_json_metadata_on_provider_not_supporting_space_test(_Config) ->
     GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id) end,
 
     VerifyEnvFun = fun(_, _) ->
-        ?assertMatch({error, ?ENODATA}, get_json(P1Node, FileGuid), ?ATTEMPTS),
+        ?assertMatch(?ERROR_POSIX(?ENODATA), get_json(P1Node, FileGuid), ?ATTEMPTS),
         true
     end,
 
@@ -393,12 +399,12 @@ set_file_json_metadata_on_provider_not_supporting_space_test(_Config) ->
 
 %% @private
 get_json(Node, FileGuid) ->
-    lfm_proxy:get_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), json, [], false).
+    opt_file_metadata:get_custom_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), json, [], false).
 
 
 %% @private
 remove_json(Node, FileGuid) ->
-    lfm_proxy:remove_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), json).
+    opt_file_metadata:remove_custom_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), json).
 
 
 %%%===================================================================
