@@ -49,10 +49,10 @@
 
     mkdir/3, mkdir/4, mkdir/5,
     get_children/4, get_children/5,
-    get_children_attrs/4,
+    get_children_attrs/4, get_children_attrs/5,
     get_child_attr/4,
     get_children_details/4,
-    get_files_recursively/4,
+    get_files_recursively/5,
 
     get_xattr/4, get_xattr/5,
     set_xattr/4, set_xattr/6,
@@ -145,10 +145,10 @@ stat(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:stat(SessId, uuid_to_file_ref(Worker, FileKey))).
 
 
--spec stat(node(), session:id(), lfm:file_key() | file_meta:uuid(), boolean()) ->
+-spec stat(node(), session:id(), lfm:file_key() | file_meta:uuid(), [attr_req:optional_attr()]) ->
     {ok, lfm_attrs:file_attributes()} | lfm:error_reply().
-stat(Worker, SessId, FileKey, IncludeLinksCount) ->
-    ?EXEC(Worker, lfm:stat(SessId, uuid_to_file_ref(Worker, FileKey), IncludeLinksCount)).
+stat(Worker, SessId, FileKey, OptionalAttrs) ->
+    ?EXEC(Worker, lfm:stat(SessId, uuid_to_file_ref(Worker, FileKey), OptionalAttrs)).
 
 
 -spec resolve_symlink(node(), session:id(), lfm:file_key() | file_meta:uuid()) ->
@@ -557,6 +557,13 @@ get_children_attrs(Worker, SessId, FileKey, ListOpts) ->
     ?EXEC(Worker, lfm:get_children_attrs(SessId, uuid_to_file_ref(Worker, FileKey), ListOpts)).
 
 
+-spec get_children_attrs(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path(),
+    file_listing:options(), [attr_req:optional_attr()]) -> 
+    {ok, [#file_attr{}], file_listing:pagination_token()} | lfm:error_reply().
+get_children_attrs(Worker, SessId, FileKey, ListOpts, OptionalAttrs) ->
+    ?EXEC(Worker, lfm:get_children_attrs(SessId, uuid_to_file_ref(Worker, FileKey), ListOpts, OptionalAttrs)).
+
+
 -spec get_child_attr(node(), session:id(), fslogic_worker:file_guid(), file_meta:name()) ->
     {ok, lfm_attrs:file_attributes()} | lfm:error_reply().
 get_child_attr(Worker, SessId, ParentGuid, ChildName) ->
@@ -573,11 +580,12 @@ get_children_details(Worker, SessId, FileKey, ListOpts) ->
     node(),
     session:id(),
     lfm:file_key(),
-    recursive_file_listing:options()
+    recursive_file_listing:options(),
+    [attr_req:optional_attr()]
 ) ->
     {ok, [recursive_file_listing:entry()], [file_meta:path()], recursive_file_listing:pagination_token()} | lfm:error_reply().
-get_files_recursively(Worker, SessId, FileKey, Options) ->
-    ?EXEC(Worker, lfm:get_files_recursively(SessId, uuid_to_file_ref(Worker, FileKey), Options)).
+get_files_recursively(Worker, SessId, FileKey, Options, OptionalAttrs) ->
+    ?EXEC(Worker, lfm:get_files_recursively(SessId, uuid_to_file_ref(Worker, FileKey), Options, OptionalAttrs)).
 
 
 %%%===================================================================

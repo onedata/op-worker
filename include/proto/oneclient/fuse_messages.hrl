@@ -29,8 +29,7 @@
 }).
 
 -record(get_file_attr, {
-    include_replication_status :: undefined | boolean(),
-    include_link_count :: undefined | boolean()
+    optional_attrs = [] :: [attr_req:optional_attr()]
 }).
 
 -record(get_file_references, {
@@ -41,8 +40,7 @@
 
 -record(get_child_attr, {
     name :: file_meta:name(),
-    include_replication_status :: undefined | boolean(),
-    include_link_count :: undefined | boolean()
+    optional_attrs = [] :: [attr_req:optional_attr()]
 }).
 
 -record(get_file_children, {
@@ -51,8 +49,7 @@
 
 -record(get_file_children_attrs, {
     listing_options :: file_listing:options(),
-    include_replication_status :: undefined | boolean(),
-    include_link_count :: undefined | boolean()
+    optional_attrs = [] :: [attr_req:optional_attr()]
 }).
 
 -record(get_file_children_details, {
@@ -60,7 +57,8 @@
 }).
 
 -record(get_recursive_file_list, {
-    listing_options :: recursive_file_listing:options()
+    listing_options :: recursive_file_listing:options(),
+    optional_attrs = [] :: [attr_req:optional_attr()]
 }).
 
 -record(create_dir, {

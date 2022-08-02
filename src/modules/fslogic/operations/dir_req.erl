@@ -25,7 +25,7 @@
     mkdir/4,
     get_children_ctxs/3,
     get_children/3,
-    get_children_attrs/5,
+    get_children_attrs/4,
     get_children_details/3
 ]).
 
@@ -116,9 +116,9 @@ get_children_ctxs(UserCtx, FileCtx0, ListOpts) ->
 %% @equiv get_children_attrs_insecure/7 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_attrs(user_ctx:ctx(), file_ctx:ctx(), file_listing:options(), boolean(), boolean()) ->
+-spec get_children_attrs(user_ctx:ctx(), file_ctx:ctx(), file_listing:options(), [attr_req:optional_attr()]) ->
     fslogic_worker:fuse_response().
-get_children_attrs(UserCtx, FileCtx0, ListOpts, IncludeReplicationStatus, IncludeLinkCount) ->
+get_children_attrs(UserCtx, FileCtx0, ListOpts, OptionalAttrs) ->
     {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
     AccessRequirements = case IsDir of
         true -> [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?list_container_mask)];
@@ -128,7 +128,7 @@ get_children_attrs(UserCtx, FileCtx0, ListOpts, IncludeReplicationStatus, Includ
         UserCtx, FileCtx1, AccessRequirements
     ),
     get_children_attrs_insecure(
-        UserCtx, FileCtx2, ListOpts, IncludeReplicationStatus, IncludeLinkCount, CanonicalChildrenWhiteList
+        UserCtx, FileCtx2, ListOpts, OptionalAttrs, CanonicalChildrenWhiteList
     ).
 
 
@@ -211,7 +211,6 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
         #fuse_response{fuse_response = FileAttr} =
             attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
                 allow_deleted_files => false,
-                include_size => false,
                 name_conflicts_resolution_policy => allow_name_conflicts
             }),
         FileAttr2 = FileAttr#file_attr{size = 0},
@@ -238,23 +237,25 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_children_attrs_insecure(user_ctx:ctx(), file_ctx:ctx(), file_listing:options(),
-    boolean(), boolean(), undefined | [file_meta:name()]
+    [attr_req:optional_attr()], undefined | [file_meta:name()]
 ) ->
     fslogic_worker:fuse_response().
 get_children_attrs_insecure(
-    UserCtx, FileCtx0, ListOpts, IncludeReplicationStatus, IncludeLinkCount, CanonicalChildrenWhiteList
+    UserCtx, FileCtx0, ListOpts, OptionalAttrs, CanonicalChildrenWhiteList
 ) ->
     {Children, ListingToken, FileCtx1} = file_tree:list_children(
         FileCtx0, UserCtx, ListOpts, CanonicalChildrenWhiteList),
     ComputeAttrsOpts = #{
         allow_deleted_files => false,
-        include_size => true,
-        include_replication_status => IncludeReplicationStatus,
-        include_link_count => IncludeLinkCount
+        include_optional_attrs => OptionalAttrs
     },
+    GetAttrFun = case file_attr:should_fetch_xattrs(OptionalAttrs) of
+        {true, _} -> fun attr_req:get_file_attr/3;
+        false -> fun attr_req:get_file_attr_insecure/3
+    end,
     ChildrenAttrs = readdir_plus:gather_attributes(
         UserCtx,
-        child_attrs_mapper(fun attr_req:get_file_attr_insecure/3),
+        child_attrs_mapper(GetAttrFun),
         Children,
         ComputeAttrsOpts
     ),
@@ -289,17 +290,11 @@ get_children_details_insecure(UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhit
     {Children, ListingToken, FileCtx1} = file_tree:list_children(
         FileCtx0, UserCtx, ListOpts, CanonicalChildrenWhiteList
     ),
-    ComputeAttrsOpts = #{
-        allow_deleted_files => false,
-        include_size => true,
-        include_replication_status => false,
-        include_link_count => true
-    },
     ChildrenDetails = readdir_plus:gather_attributes(
         UserCtx,
-        child_attrs_mapper(fun attr_req:get_file_details_insecure/3),
+        child_attrs_mapper(fun(U, F, _Opts) -> attr_req:get_file_details_insecure(U, F) end),
         Children,
-        ComputeAttrsOpts
+        #{}
     ),
     fslogic_times:update_atime(FileCtx1),
     #fuse_response{status = #status{code = ?OK},

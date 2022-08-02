@@ -23,7 +23,7 @@
 %% API
 -export([list/4, get/4, set/6, remove/3]).
 %% Protected API - for use only by *_req.erl modules
--export([list_xattrs_insecure/4]).
+-export([list_insecure/4, get_all_direct_insecure/1]).
 
 
 %%%===================================================================
@@ -43,7 +43,7 @@ list(UserCtx, FileCtx0, IncludeInherited, ShowInternal) ->
         UserCtx, FileCtx0,
         [?TRAVERSE_ANCESTORS]
     ),
-    list_xattrs_insecure(UserCtx, FileCtx1, IncludeInherited, ShowInternal).
+    list_insecure(UserCtx, FileCtx1, IncludeInherited, ShowInternal).
 
 
 -spec get(
@@ -107,14 +107,14 @@ remove(UserCtx, FileCtx0, XattrName) ->
 
 
 %% @private
--spec list_xattrs_insecure(
+-spec list_insecure(
     user_ctx:ctx(),
     file_ctx:ctx(),
     IncludeInherited :: boolean(),
     ShowInternal :: boolean()
 ) ->
     {ok, [custom_metadata:name()]}.
-list_xattrs_insecure(UserCtx, FileCtx, IncludeInherited, ShowInternal) ->
+list_insecure(UserCtx, FileCtx, IncludeInherited, ShowInternal) ->
     {ok, DirectXattrs} = list_direct_xattrs(FileCtx),
     AllXattrs = case IncludeInherited of
         true ->
@@ -128,24 +128,21 @@ list_xattrs_insecure(UserCtx, FileCtx, IncludeInherited, ShowInternal) ->
             DirectXattrs
     end,
 
-    FilteredXattrs = case ShowInternal of
-        true ->
-            % acl is kept in file_meta instead of custom_metadata
-            % but is still treated as metadata so ?ACL_KEY
-            % is added to listing if active perms type for
-            % file is acl. Otherwise, to keep backward compatibility,
-            % it is omitted.
-            case file_ctx:get_active_perms_type(FileCtx, ignore_deleted) of
-                {acl, _} ->
-                    [?ACL_KEY | AllXattrs];
-                _ ->
-                    AllXattrs
-            end;
-        false ->
-            lists:filter(fun(Key) -> not is_internal_xattr(Key) end, AllXattrs)
-    end,
-    {ok, FilteredXattrs}.
+    {ok, filter(FileCtx, AllXattrs, ShowInternal)}.
 
+
+%% @private
+-spec get_all_direct_insecure(file_ctx:ctx()) ->
+    {ok, #{custom_metadata:name() => custom_metadata:value()}} | {error, term()}.
+get_all_direct_insecure(FileCtx) ->
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
+    case custom_metadata:get_all_xattrs(FileUuid) of
+        {ok, AllXattrsWithValues} ->
+            XattrsToReturn = filter(FileCtx, maps:keys(AllXattrsWithValues), false),
+            {ok, maps:with(XattrsToReturn, AllXattrsWithValues)};
+        {error, _} = Error ->
+            Error
+    end.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -209,3 +206,21 @@ is_internal_xattr(XattrName) ->
 -spec is_cdmi_xattr(custom_metadata:name()) -> boolean().
 is_cdmi_xattr(XattrName) ->
     str_utils:binary_starts_with(XattrName, ?CDMI_PREFIX).
+
+
+%% @private
+-spec filter(file_ctx:ctx(), [custom_metadata:name()], boolean()) -> [custom_metadata:name()].
+filter(FileCtx, AllXattrs, _ShowInternal = true) ->
+    % acl is kept in file_meta instead of custom_metadata
+    % but is still treated as metadata so ?ACL_KEY
+    % is added to listing if active perms type for
+    % file is acl. Otherwise, to keep backward compatibility,
+    % it is omitted.
+    case file_ctx:get_active_perms_type(FileCtx, ignore_deleted) of
+        {acl, _} ->
+            [?ACL_KEY | AllXattrs];
+        _ ->
+            AllXattrs
+    end;
+filter(_FileCtx, AllXattrs, _ShowInternal = false) ->
+    lists:filter(fun(Key) -> not is_internal_xattr(Key) end, AllXattrs).

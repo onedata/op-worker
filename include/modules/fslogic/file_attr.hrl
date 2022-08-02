@@ -34,7 +34,8 @@
     provider_id :: od_provider:id(),
     owner_id :: od_user:id(),
     fully_replicated :: undefined | boolean(),
-    nlink :: undefined | non_neg_integer()
+    nlink :: undefined | non_neg_integer(),
+    xattrs = #{} :: #{custom_metadata:name() => custom_metadata:value()}
 }).
 
 -record(xattr, {

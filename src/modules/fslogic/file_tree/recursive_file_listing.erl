@@ -30,7 +30,7 @@
 
 %% API
 -export([
-    list/3
+    list/4
 ]).
 
 -type prefix() :: binary().
@@ -93,23 +93,23 @@
 %%%===================================================================
 
 
--spec list(user_ctx:ctx(), file_ctx:ctx(), options())-> fslogic_worker:fuse_response().
-list(_UserCtx, _FileCtx, #{pagination_token := _, start_after := _}) ->
+-spec list(user_ctx:ctx(), file_ctx:ctx(), options(), [attr_req:optional_attr()])-> fslogic_worker:fuse_response().
+list(_UserCtx, _FileCtx, #{pagination_token := _, start_after := _}, _OptionalAttrs) ->
     %% TODO VFS-7208 introduce conflicting options error after introducing API errors to fslogic
     throw(?EINVAL);
-list(UserCtx, FileCtx, #{pagination_token := PaginationToken} = Options) ->
+list(UserCtx, FileCtx, #{pagination_token := PaginationToken} = Options, OptionalAttrs) ->
     {TokenRootGuid, StartAfter} = unpack_pagination_token(PaginationToken), 
     Limit = maps:get(limit, Options, ?LIST_RECURSIVE_BATCH_SIZE),
     Prefix = maps:get(prefix, Options, ?DEFAULT_PREFIX),
     case file_ctx:get_logical_guid_const(FileCtx) of
-        TokenRootGuid -> list(UserCtx, FileCtx, StartAfter, Limit, Prefix);
+        TokenRootGuid -> list(UserCtx, FileCtx, StartAfter, Limit, Prefix, OptionalAttrs);
         _ -> throw(?EINVAL) % requested listing of other dir than token's origin
     end;
-list(UserCtx, FileCtx, Options) ->
+list(UserCtx, FileCtx, Options, OptionalAttrs) ->
     StartAfter = maps:get(start_after_path, Options, ?DEFAULT_START_AFTER_PATH),
     Limit = maps:get(limit, Options, ?LIST_RECURSIVE_BATCH_SIZE),
     Prefix = maps:get(prefix, Options, ?DEFAULT_PREFIX),
-    list(UserCtx, FileCtx, StartAfter, Limit, Prefix).
+    list(UserCtx, FileCtx, StartAfter, Limit, Prefix, OptionalAttrs).
 
 
 %%%===================================================================
@@ -117,9 +117,9 @@ list(UserCtx, FileCtx, Options) ->
 %%%===================================================================
 
 %% @private
--spec list(user_ctx:ctx(), file_ctx:ctx(), file_meta:path(), limit(), prefix())-> 
+-spec list(user_ctx:ctx(), file_ctx:ctx(), file_meta:path(), limit(), prefix(), [attr_req:optional_attr()])-> 
     fslogic_worker:fuse_response().
-list(UserCtx, FileCtx0, StartAfter, Limit, Prefix) ->
+list(UserCtx, FileCtx0, StartAfter, Limit, Prefix, OptionalAttrs) ->
     case prepare_initial_listing_state(UserCtx, FileCtx0, StartAfter, Limit, Prefix) of
         {ok, FileToListCtx, InitialState} ->
             {Entries, InaccessiblePaths, PaginationToken} = case file_ctx:is_dir(FileToListCtx) of
@@ -131,9 +131,7 @@ list(UserCtx, FileCtx0, StartAfter, Limit, Prefix) ->
     
             ComputeAttrsOpts = #{
                 allow_deleted_files => false,
-                include_size => true,
-                include_replication_status => false,
-                include_link_count => false
+                include_optional_attrs => OptionalAttrs
             },
             MappedEntries = readdir_plus:gather_attributes(
                 UserCtx, fun build_entry_from_internal_entry/3, Entries, ComputeAttrsOpts),
@@ -260,10 +258,14 @@ infer_starting_file([PrefixToken | Tail], DirCtx, UserCtx, RevRelPathTokens) ->
 -spec build_entry_from_internal_entry(user_ctx:ctx(), internal_entry(), attr_req:compute_file_attr_opts()) -> 
     entry() | no_return().
 build_entry_from_internal_entry(UserCtx, {Path, FileCtx}, BaseOpts) ->
+    GetAttrFun = case file_attr:should_fetch_xattrs(maps:get(include_optional_attrs, BaseOpts)) of
+        {true, _} -> fun attr_req:get_file_attr/3;
+        false -> fun attr_req:get_file_attr_insecure/3
+    end,
     #fuse_response{
         status = #status{code = ?OK},
         fuse_response = FileAttrs
-    } = attr_req:get_file_attr_insecure(UserCtx, FileCtx, BaseOpts),
+    } = GetAttrFun(UserCtx, FileCtx, BaseOpts),
     {Path, FileAttrs}.
 
 

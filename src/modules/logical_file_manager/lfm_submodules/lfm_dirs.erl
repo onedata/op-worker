@@ -19,11 +19,11 @@
 -export([
     mkdir/3, mkdir/4,
     get_children/3,
-    get_children_attrs/5,
+    get_children_attrs/4,
     get_child_attr/3,
     get_children_details/3,
     get_children_count/2,
-    get_files_recursively/3
+    get_files_recursively/4
 ]).
 
 
@@ -94,16 +94,15 @@ get_children(SessId, FileKey, ListingOpts) ->
 %% starting with Offset-th entry and up to Limit of entries.
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_attrs(session:id(), lfm:file_key(), file_listing:options(), boolean(), boolean()) ->
+-spec get_children_attrs(session:id(), lfm:file_key(), file_listing:options(), [attr_req:optional_attr()]) ->
     {ok, [#file_attr{}], file_listing:pagination_token()} | lfm:error_reply().
-get_children_attrs(SessId, FileKey, ListingOpts, IncludeReplicationStatus, IncludeHardlinkCount) ->
+get_children_attrs(SessId, FileKey, ListingOpts, OptionalAttrs) ->
     FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, resolve_symlink),
 
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #get_file_children_attrs{
             listing_options = ListingOpts,
-            include_replication_status = IncludeReplicationStatus,
-            include_link_count = IncludeHardlinkCount
+            optional_attrs = OptionalAttrs
         },
         fun(#file_children_attrs{
             child_attrs = Attrs,
@@ -164,15 +163,17 @@ get_children_count(SessId, FileKey) ->
 -spec get_files_recursively(
     session:id(), 
     lfm:file_key(), 
-    recursive_file_listing:options()
+    recursive_file_listing:options(),
+    [attr_req:optional_attr()]
 ) ->
     {ok, [recursive_file_listing:entry()], [file_meta:path()], recursive_file_listing:pagination_token()}.
-get_files_recursively(SessId, FileKey, Options) ->
+get_files_recursively(SessId, FileKey, Options, OptionalAttrs) ->
     FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, resolve_symlink),
     
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #get_recursive_file_list{
-            listing_options = Options
+            listing_options = Options,
+            optional_attrs = OptionalAttrs
         },
         fun(#recursive_file_list{
             entries = Result,

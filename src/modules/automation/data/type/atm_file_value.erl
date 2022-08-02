@@ -135,7 +135,7 @@ expand(AtmWorkflowExecutionAuth, Guid, _ValueConstraints) ->
     SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
 
     case lfm:stat(SessionId, ?FILE_REF(Guid)) of
-        {ok, FileAttrs} -> {ok, file_middleware_plugin:file_attrs_to_json(FileAttrs)};
+        {ok, FileAttrs} -> {ok, readdir_plus:file_attrs_to_json(FileAttrs)};
         {error, Errno} -> ?ERROR_POSIX(Errno)
     end.
 
