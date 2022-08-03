@@ -34,7 +34,6 @@
 % Metadata types
 -type type() :: json | rdf.
 -type rdf() :: binary().
--type metadata() :: #metadata{}.
 -type query() :: json_utils:query().
 
 % Cdmi metadata/attributes
@@ -51,7 +50,7 @@
 -type diff() :: datastore_doc:diff(record()).
 
 -export_type([
-    type/0, metadata/0, rdf/0, query/0,
+    type/0, rdf/0, query/0,
     transfer_encoding/0, cdmi_completion_status/0, mimetype/0, cdmi_metadata/0,
     name/0, value/0,
     record/0, doc/0, diff/0

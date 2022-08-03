@@ -294,7 +294,7 @@ changes_stream_json_metadata_test(Config) ->
     % when
     spawn(fun() ->
         timer:sleep(500),
-        lfm_proxy:set_metadata(WorkerP1, SessionId, ?FILE_REF(FileGuid), json, OnedataJson, [])
+        opt_file_metadata:set_custom_metadata(WorkerP1, SessionId, ?FILE_REF(FileGuid), json, OnedataJson, [])
     end),
 
     ChangesSpec = #{<<"customMetadata">> => #{

@@ -456,7 +456,7 @@ await_file_metadata_sync(SyncProviders, UserId, #object{guid = Guid, metadata = 
 await_json_metadata_sync(_SyncNode, _SessId, _FileGuid, undefined) ->
     ok;
 await_json_metadata_sync(SyncNode, SessId, FileGuid, ExpJson) ->
-    ?assertEqual({ok, ExpJson}, lfm_proxy:get_metadata(SyncNode, SessId, ?FILE_REF(FileGuid), json, [], false), ?ATTEMPTS),
+    ?assertEqual({ok, ExpJson}, opt_file_metadata:get_custom_metadata(SyncNode, SessId, ?FILE_REF(FileGuid), json, [], false), ?ATTEMPTS),
     ok.
 
 
@@ -465,7 +465,7 @@ await_json_metadata_sync(SyncNode, SessId, FileGuid, ExpJson) ->
 await_rdf_metadata_sync(_SyncNode, _SessId, _FileGuid, undefined) ->
     ok;
 await_rdf_metadata_sync(SyncNode, SessId, FileGuid, ExpRdf) ->
-    ?assertEqual({ok, ExpRdf}, lfm_proxy:get_metadata(SyncNode, SessId, ?FILE_REF(FileGuid), rdf, [], false), ?ATTEMPTS),
+    ?assertEqual({ok, ExpRdf}, opt_file_metadata:get_custom_metadata(SyncNode, SessId, ?FILE_REF(FileGuid), rdf, [], false), ?ATTEMPTS),
     ok.
 
 
@@ -506,7 +506,11 @@ await_file_distribution_sync(CreationProvider, SyncProviders, UserId, #object{
     lists:foreach(fun(SyncProvider) ->
         SessId = oct_background:get_user_session_id(UserId, SyncProvider),
         SyncNode = ?OCT_RAND_OP_NODE(SyncProvider),
-        ?assertDistribution(SyncNode, SessId, ?DIST(CreationProvider, byte_size(Content)), Guid, ?ATTEMPTS)
+        ?assertDistribution(SyncNode, SessId, 
+            ?DISTS(
+                [CreationProvider | SyncProviders], 
+                [byte_size(Content) | lists:duplicate(length(SyncProviders), 0)]
+            ), Guid, ?ATTEMPTS)
     end, SyncProviders).
 
 
@@ -636,13 +640,13 @@ create_metadata(Node, SessId, FileGuid, #metadata_spec{
 %% @private
 -spec create_json_metadata(node(), session:id(), file_id:file_guid(), json_utils:json_term()) -> ok.
 create_json_metadata(Node, SessionId, FileGuid, Json) ->
-    ?assertEqual(ok, lfm_proxy:set_metadata(Node, SessionId, ?FILE_REF(FileGuid), json, Json, [])).
+    ?assertEqual(ok, opt_file_metadata:set_custom_metadata(Node, SessionId, ?FILE_REF(FileGuid), json, Json, [])).
 
 
 %% @private
 -spec create_rdf_metadata(node(), session:id(), file_id:file_guid(), binary()) -> ok.
 create_rdf_metadata(Node, SessionId, FileGuid, Rdf) ->
-    ?assertEqual(ok, lfm_proxy:set_metadata(Node, SessionId, ?FILE_REF(FileGuid), rdf, Rdf, [])).
+    ?assertEqual(ok, opt_file_metadata:set_custom_metadata(Node, SessionId, ?FILE_REF(FileGuid), rdf, Rdf, [])).
 
 
 %% @private

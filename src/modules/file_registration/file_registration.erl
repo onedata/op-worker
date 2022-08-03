@@ -318,8 +318,7 @@ maybe_set_xattrs(UserCtx, FileCtx, Xattrs) ->
 maybe_set_json_metadata(_UserCtx, _FileCtx, JSON) when map_size(JSON) =:= 0 ->
     ok;
 maybe_set_json_metadata(UserCtx, FileCtx, JSON) ->
-    metadata_req:set_metadata(UserCtx, FileCtx, json, JSON, [], false, false),
-    ok.
+    metadata_req:set_metadata(UserCtx, FileCtx, json, JSON, [], false, false).
 
 
 -spec maybe_set_rdf_metadata(user_ctx:ctx(), file_ctx:ctx(), binary()) -> ok.
@@ -327,8 +326,7 @@ maybe_set_rdf_metadata(_UserCtx, _FileCtx, <<>>) ->
     ok;
 maybe_set_rdf_metadata(UserCtx, FileCtx, EncodedRdf) ->
     RDF = base64:decode(EncodedRdf),
-    metadata_req:set_metadata(UserCtx, FileCtx, rdf, RDF, [], false, false),
-    ok.
+    metadata_req:set_metadata(UserCtx, FileCtx, rdf, RDF, [], false, false).
 
 
 -spec fill_in_missing_stat_fields(storage_file_ctx:ctx(), helpers:stat(), spec()) -> storage_file_ctx:ctx().

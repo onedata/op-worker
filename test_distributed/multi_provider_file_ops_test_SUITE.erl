@@ -104,7 +104,10 @@
 ]).
 
 all() ->
-    ?ALL(?TEST_CASES, ?PERFORMANCE_TEST_CASES).
+    ?ALL(
+        ?TEST_CASES
+%%        ?PERFORMANCE_TEST_CASES
+    ).
 
 %%%===================================================================
 %%% Test functions
