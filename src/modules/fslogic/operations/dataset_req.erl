@@ -242,7 +242,7 @@ get_archive_recall_progress(FileCtx, RecallId, UserCtx) ->
 
 
 -spec browse_archive_recall_log(file_ctx:ctx(), archive_recall:id(), user_ctx:ctx(), 
-    json_infinite_log_model:listing_opts()) -> {ok, json_infinite_log_model:browse_result()} | error().
+    audit_log_browse_opts:opts()) -> {ok, audit_log:browse_result()} | error().
 browse_archive_recall_log(FileCtx, RecallId, UserCtx, Options) ->
     fslogic_authz:ensure_authorized(UserCtx, FileCtx, [?TRAVERSE_ANCESTORS]),
     

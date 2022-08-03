@@ -665,9 +665,9 @@ validate_result_fun_rest(_MemRef, qos_audit_log) ->
                 #{
                     <<"index">> := _,
                     <<"timestamp">> := _,
+                    <<"severity">> := <<"info">>,
                     <<"content">> := #{
                         <<"status">> := <<"completed">>,
-                        <<"severity">> := <<"info">>,
                         <<"fileId">> := _,
                         <<"description">> := <<"Local replica reconciled.">>
                     }
@@ -675,9 +675,9 @@ validate_result_fun_rest(_MemRef, qos_audit_log) ->
                 #{
                     <<"index">> := _,
                     <<"timestamp">> := _,
+                    <<"severity">> := <<"info">>,
                     <<"content">> := #{
                         <<"status">> := <<"scheduled">>,
-                        <<"severity">> := <<"info">>,
                         <<"fileId">> := _,
                         <<"description">> := <<"Remote replica differs, reconciliation started.">>
                     }
