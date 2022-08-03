@@ -12,10 +12,10 @@
 -module(atm_audit_log_store_test_SUITE).
 -author("Lukasz Opiola").
 
--include("modules/audit_log/audit_log.hrl").
 -include("modules/automation/atm_execution.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include("onenv_test_utils.hrl").
+-include_lib("cluster_worker/include/audit_log.hrl").
 -include_lib("cluster_worker/include/modules/datastore/infinite_log.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").

@@ -24,10 +24,10 @@
 
 -behaviour(atm_openfaas_activity_report_handler).
 
--include("modules/audit_log/audit_log.hrl").
 -include("modules/automation/atm_execution.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
+-include_lib("cluster_worker/include/audit_log.hrl").
 
 %% API
 -export([create_for_function/1, get/1, delete/1]).

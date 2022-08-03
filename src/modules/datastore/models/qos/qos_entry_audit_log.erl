@@ -13,9 +13,9 @@
 -module(qos_entry_audit_log).
 -author("Michal Stanisz").
 
--include("modules/audit_log/audit_log.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("cluster_worker/include/audit_log.hrl").
 -include_lib("cluster_worker/include/modules/datastore/infinite_log.hrl").
 
 %% API

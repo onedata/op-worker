@@ -20,9 +20,9 @@
 -module(archive_recall_progress).
 -author("Michal Stanisz").
 
--include("modules/audit_log/audit_log.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
+-include_lib("cluster_worker/include/audit_log.hrl").
 -include_lib("cluster_worker/include/modules/datastore/infinite_log.hrl").
 -include_lib("ctool/include/time_series/common.hrl").
 

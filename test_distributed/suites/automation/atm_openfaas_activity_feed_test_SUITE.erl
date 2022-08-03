@@ -14,9 +14,9 @@
 -module(atm_openfaas_activity_feed_test_SUITE).
 -author("Lukasz Opiola").
 
--include("modules/audit_log/audit_log.hrl").
 -include("modules/automation/atm_execution.hrl").
 -include("onenv_test_utils.hrl").
+-include_lib("cluster_worker/include/audit_log.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/test/assertions.hrl").

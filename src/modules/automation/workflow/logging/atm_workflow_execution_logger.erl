@@ -16,8 +16,8 @@
 -module(atm_workflow_execution_logger).
 -author("Bartosz Walkowicz").
 
--include("modules/audit_log/audit_log.hrl").
 -include("modules/automation/atm_execution.hrl").
+-include_lib("cluster_worker/include/audit_log.hrl").
 
 %% API
 -export([build/3]).
