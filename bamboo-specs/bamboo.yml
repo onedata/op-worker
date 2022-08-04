@@ -306,7 +306,7 @@ Build:
         make submodules
         cd ..
       description: Init submodules
-      conditions: &cond-normal 
+      conditions: 
       - variable:
           matches:
             bamboo.buildNumber: '[4-9]|.{2,}'
@@ -427,7 +427,7 @@ _Unit Test:
             ./make.py -r ${bamboo.agentWorkingDirectory} eunit-with-cover
         fi
       description: Run EUnit
-  - script: &pull-eunit
+  - script:
       <<: *run-script
       scripts:
       - |-
@@ -462,7 +462,7 @@ _Unit Test:
       ignore-time: 'false'
       test-results: op_worker/test/eunit_results/TEST-*.xml
       description: Parse test results
-  - script: &push-eunit
+  - script:
       <<: *run-script-working-dir
       scripts:
       - |-
@@ -490,7 +490,7 @@ api_archive: &ct-onenv-job
   tasks:
   - checkout: *fake-checkout
   - script: *clear-env
-  - script: &restart-minikube
+  - script:
       <<: *run-script
       scripts:
       - sudo ${HOME}/restart_minikube.sh
@@ -514,12 +514,12 @@ api_archive: &ct-onenv-job
       description: Pull surefire artifact and unpack it
       conditions: *cond-build2-3
   - script: *unpack
-  - script: &download-artifacts
+  - script:
       <<: *run-script-working-dir
       scripts:
       - one-env/onenv pull_artifacts --hostname ${bamboo.artifactRepoHostname} --port ${bamboo.artifactRepoPort} --path .. branchConfig.yaml
       description: Download artifacts
-  - script: &run-ct-onenv
+  - script:
       <<: *run-script-working-dir
       scripts:
       - ./ct_onenv.py --suite ${bamboo.shortJobName} --cover --path-to-sources ..
@@ -570,7 +570,7 @@ api_archive: &ct-onenv-job
     pattern: ct_logs_${bamboo.shortJobName}.tar.gz
     shared: false
     required: false
-  requirements: &minikube
+  requirements:
   - minikube
   artifact-subscriptions: *op-worker
   
@@ -734,7 +734,7 @@ archivestorage_helper: &ct-job
   - checkout: *fake-checkout
   - script: *unpack
   - script: *pull-surefire
-  - script: &run-ct
+  - script:
       <<: *run-script-working-dir
       scripts:
       - ./ct_run.py --suite ${bamboo.shortJobName} --cover
@@ -1402,7 +1402,7 @@ node_failure:
         cp sources_info.yaml op_worker/test_distributed/logs/
         tar -mczf ct_logs_${bamboo.shortJobName}.tar.gz op_worker/test_distributed/logs/
       description: Pack logs
-  - script: &clear-env-working-dir
+  - script:
       <<: *clear-env
       working-dir: op_worker
   artifacts:
@@ -1921,6 +1921,7 @@ Request_next_build:
   - script: *always-successful
   requirements: *requirements
   artifact-subscriptions: []
+
 Coverage report:
   key: CR
   other: *common-opts
