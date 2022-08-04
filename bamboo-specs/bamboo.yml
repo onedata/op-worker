@@ -250,7 +250,7 @@ Copy-quarantine:
   other: &common-opts
     clean-working-dir: true
     all-other-apps:
-      custom:
+      custom: 
         auto: {}
         buildHangingConfig.enabled: 'false'
   tasks:
@@ -258,12 +258,12 @@ Copy-quarantine:
       conditions:
       - variable:
           exists: fake.var
-  - script: &run-script-copy-quarantine 
+  - script: &run-script-on-third-build 
       interpreter: BINSH_OR_CMDEXE
       scripts:
       - |-
-        echo curl 10.87.23.72:3080/cgi-bin/quarantine-copy-v2?${bamboo_planSrc}+${bamboo_planKey}
-        curl 10.87.23.72:3080/cgi-bin/quarantine-copy-v2?${bamboo_planSrc}+${bamboo_planKey}
+        echo curl 10.87.23.72:3080/cgi-bin/quarantine-copy?${bamboo_planSrc}+${bamboo_planKey}
+        curl 10.87.23.72:3080/cgi-bin/quarantine-copy?${bamboo_planSrc}+${bamboo_planKey}
       description: Copy quarantined test cases
       conditions: &cond-build3
       - variable:
@@ -281,7 +281,7 @@ Terminate-build:
   - checkout: *fake-checkout       
   - script: *always-successful
   - script:
-      <<: *run-script-copy-quarantine
+      <<: *run-script-on-third-build
       scripts:
       - |-
         echo Terminating build...
@@ -522,7 +522,7 @@ api_archive: &ct-onenv-job
   - script:
       <<: *run-script-working-dir
       scripts:
-      - ./ct_onenv.py --suite ${bamboo.shortJobName} --cover --path-to-sources ..
+      - ./ct_onenv.py --suite ${bamboo.shortJobName} --path-to-sources ..
       description: Run CT onenv tests
   final-tasks: &final-tasks
   - test-parser: &test-parser
@@ -737,7 +737,7 @@ archivestorage_helper: &ct-job
   - script:
       <<: *run-script-working-dir
       scripts:
-      - ./ct_run.py --suite ${bamboo.shortJobName} --cover
+      - ./ct_run.py --suite ${bamboo.shortJobName}
       description: Run CT
   final-tasks: *final-tasks
   artifacts:
