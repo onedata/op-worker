@@ -769,13 +769,13 @@ check_space_dir_values_map_and_time_series_collection(
 
     ?assertEqual(ExpectedCurrentStats, CurrentStats),
 
-    case {IsCollectionEmpty, CollectingStatus} of
-        {true, _} when CollectingStatus == initializing; CollectingStatus == enabled ->
+    case IsCollectionEmpty of
+        true ->
             maps:foreach(fun(_TimeSeriesName, WindowsPerMetric) ->
                 ?assertEqual(lists:duplicate(4, 0),
                     lists:map(fun([{_Timestamp, Value}]) -> Value end, maps:values(WindowsPerMetric)))
             end, TimeStats);
-        {false, _} ->
+        false ->
             maps:foreach(fun(_TimeSeriesName, WindowsPerMetric) ->
                 ?assertEqual(4, maps:size(WindowsPerMetric))
             end, TimeStats)

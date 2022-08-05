@@ -18,6 +18,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 -type id() :: binary().
 -type record() :: #od_space{}.
@@ -99,9 +100,14 @@ run_after(Doc = #document{key = SpaceId, value = Space = #od_space{harvesters = 
             spawn(main_harvesting_stream, revise_space_harvesters, [SpaceId, Harvesters]),
             ok = dbsync_worker:start_streams([SpaceId]),
 
+            % Guard against various races when toggling support parameters in oz
             critical_section:run({handle_space_support_parameters_change, SpaceId}, fun() ->
-                {ok, CurrentDoc} = space_logic:get(?ROOT_SESS_ID, SpaceId),
-                ok = handle_space_support_parameters_change(ProviderId, CurrentDoc)
+                case space_logic:get(?ROOT_SESS_ID, SpaceId) of
+                    {ok, CurrentDoc} ->
+                        ok = handle_space_support_parameters_change(ProviderId, CurrentDoc);
+                    ?ERROR_NOT_FOUND ->
+                        ok
+                end
             end)
     end,
     {ok, Doc}.
