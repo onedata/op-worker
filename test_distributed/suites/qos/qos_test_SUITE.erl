@@ -265,22 +265,21 @@ qos_audit_log_base_test(ExpectedStatus, Type) ->
     FilePath = filename:join([?SPACE_PATH1, generator:gen_name()]),
     {RootGuid, FileIds} = prepare_audit_log_test_env(Type, Node, ?SESS_ID(ProviderId), FilePath),
     {ok, QosEntryId} = opt_qos:add_qos_entry(Node, ?SESS_ID(ProviderId), ?FILE_REF(RootGuid), <<"providerId=", ProviderId/binary>>, 1),
-    BaseExpected = case ExpectedStatus of
+    {BaseExpectedContent, ExpectedSeverity} = case ExpectedStatus of
         <<"completed">> ->
-            #{
-                <<"severity">> => <<"info">>,
-                <<"description">> => <<"Local replica reconciled.">>
-            };
+            {#{<<"description">> => <<"Local replica reconciled.">>}, <<"info">>};
         <<"failed">> ->
-            #{
-                <<"severity">> => <<"error">>,
-                % error mocked in init_per_testcase
-                <<"reason">> => #{
-                    <<"description">> => <<"Operation failed with POSIX error: enoent.">>,
-                    <<"details">> => #{<<"errno">> => <<"enoent">>},
-                    <<"id">> => <<"posix">>
+            {
+                #{
+                    % error mocked in init_per_testcase
+                    <<"reason">> => #{
+                        <<"description">> => <<"Operation failed with POSIX error: enoent.">>,
+                        <<"details">> => #{<<"errno">> => <<"enoent">>},
+                        <<"id">> => <<"posix">>
+                    },
+                    <<"description">> => <<"Failed to reconcile local replica: Operation failed with POSIX error: enoent.">>
                 },
-                <<"description">> => <<"Failed to reconcile local replica: Operation failed with POSIX error: enoent.">>
+                <<"error">>
             }
     end,
     SortFun = fun(#{<<"content">> := #{<<"fileId">> := FileIdA}}, #{<<"content">> := #{<<"fileId">> := FileIdB}}) ->
@@ -290,8 +289,8 @@ qos_audit_log_base_test(ExpectedStatus, Type) ->
         [
             #{
                 <<"timestamp">> => Timestamp,
+                <<"severity">> => <<"info">>,
                 <<"content">> => #{
-                    <<"severity">> => <<"info">>,
                     <<"status">> => <<"scheduled">>,
                     <<"fileId">> => ObjectId,
                     <<"description">> => <<"Remote replica differs, reconciliation started.">>
@@ -299,7 +298,8 @@ qos_audit_log_base_test(ExpectedStatus, Type) ->
             },
             #{
                 <<"timestamp">> => Timestamp,
-                <<"content">> => BaseExpected#{
+                <<"severity">> => ExpectedSeverity,
+                <<"content">> => BaseExpectedContent#{
                     <<"fileId">> => ObjectId,
                     <<"status">> => ExpectedStatus
                 }

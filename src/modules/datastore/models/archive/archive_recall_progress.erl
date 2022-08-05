@@ -22,6 +22,7 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
+-include_lib("cluster_worker/include/audit_log.hrl").
 -include_lib("cluster_worker/include/modules/datastore/infinite_log.hrl").
 -include_lib("ctool/include/time_series/common.hrl").
 
@@ -76,9 +77,7 @@
 -spec create(id()) -> ok | {error, term()}.
 create(Id) ->
     try
-        ok = json_infinite_log_model:create(?ERROR_LOG_ID(Id), #{
-            
-        }),
+        ok = audit_log:create(?ERROR_LOG_ID(Id), #{}),
         ok = create_tsc(Id)
     catch _:{badmatch, Error} ->
         delete(Id),
@@ -89,7 +88,7 @@ create(Id) ->
 -spec delete(id()) -> ok | {error, term()}.
 delete(Id) ->
     datastore_time_series_collection:delete(?CTX, ?TSC_ID(Id)),
-    json_infinite_log_model:destroy(?ERROR_LOG_ID(Id)).
+    audit_log:delete(?ERROR_LOG_ID(Id)).
 
 
 -spec get(id()) -> {ok, recall_progress_map()}.
@@ -97,10 +96,10 @@ get(Id) ->
     get_counters_current_value(Id).
 
 
--spec browse_error_log(id(), json_infinite_log_model:listing_opts()) ->
-    {ok, json_infinite_log_model:browse_result()} | {error, term()}.
+-spec browse_error_log(id(), audit_log_browse_opts:opts()) ->
+    {ok, audit_log:browse_result()} | {error, term()}.
 browse_error_log(Id, Options) ->
-    json_infinite_log_model:browse_content(?ERROR_LOG_ID(Id), Options).
+    audit_log:browse(?ERROR_LOG_ID(Id), Options).
 
 
 -spec report_file_finished(id()) -> ok | {error, term()}.
@@ -112,7 +111,10 @@ report_file_finished(Id) ->
 
 -spec report_error(id(), json_utils:json_term()) -> ok | {error, term()}.
 report_error(Id, ErrorJson) ->
-    json_infinite_log_model:append(?ERROR_LOG_ID(Id), ErrorJson),
+    audit_log:append(?ERROR_LOG_ID(Id), #audit_log_append_request{
+        severity = ?ERROR_AUDIT_LOG_SEVERITY,
+        content = ErrorJson
+    }),
     datastore_time_series_collection:consume_measurements(?CTX, ?TSC_ID(Id), #{
         ?FAILED_FILES_TS => #{?ALL_METRICS => [{?NOW(), 1}]}}
     ).

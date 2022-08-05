@@ -31,14 +31,5 @@
 
 
 -spec to_json(record()) -> json_utils:json_map().
-to_json(#atm_audit_log_store_content_browse_result{
-    logs = Logs,
-    is_last = IsLast
-}) ->
-    #{
-        <<"logs">> => lists:map(
-            fun atm_store_container_infinite_log_backend:entry_to_json/1,
-            Logs
-        ),
-        <<"isLast">> => IsLast
-    }.
+to_json(#atm_audit_log_store_content_browse_result{result = BrowseResult}) ->
+    BrowseResult.
