@@ -1391,11 +1391,11 @@ nfs_helper:
 node_failure:
   <<: *ct-onenv-job
   key: NOD
-  final-tasks:
+  final-tasks: &final-tasks-pack-logs
   - test-parser: *test-parser
   - script: *save-cover-results
   - script: *push-surefire
-  - script: &pack-logs-cp-sources
+  - script:
       <<: *run-script
       scripts:
       - |-
@@ -1786,14 +1786,7 @@ swift_helper:
 tmp_db_error:
   <<: *ct-onenv-job
   key: TMPDBER
-  final-tasks:
-  - test-parser: *test-parser
-  - script: *save-cover-results
-  - script: *push-surefire
-  - script: *pack-logs-cp-sources
-  - script:
-      <<: *clear-env
-      working-dir: op_worker
+  final-tasks: *final-tasks-pack-logs
   artifacts:
   - <<: *cover_ct
     name: cover_ct_tmp_db_error.tar.gz
@@ -1913,7 +1906,6 @@ Request_next_build:
   - script:
       description: Request next build
       scripts:
-        # - curl 10.87.23.72:3080/cgi-bin/run-build-after?${bamboo_planKey}+${bamboo_planKey}-${bamboo_buildNumber}
         - curl 10.87.23.72:3080/cgi-bin/run-build?${bamboo_planKey}
       conditions:
         - variable:
