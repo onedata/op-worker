@@ -1913,7 +1913,8 @@ Request_next_build:
   - script:
       description: Request next build
       scripts:
-        - curl 10.87.23.72:3080/cgi-bin/run-build-after?${bamboo_planKey}+${bamboo_planKey}-${bamboo_buildNumber}
+        # - curl 10.87.23.72:3080/cgi-bin/run-build-after?${bamboo_planKey}+${bamboo_planKey}-${bamboo_buildNumber}
+        - curl 10.87.23.72:3080/cgi-bin/run-build?${bamboo_planKey}
       conditions:
         - variable:
             matches:
