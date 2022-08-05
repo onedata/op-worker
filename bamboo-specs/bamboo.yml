@@ -2130,9 +2130,11 @@ Coverage report:
   - artifact: cover_ct_storage_sync_links.tar.gz
   - artifact: cover_ct_storage_traverse.tar.gz
   - artifact: cover_ct_swift_helper.tar.gz
+  - artifact: cover_ct_tmp_db_error.tar.gz
   - artifact: cover_ct_transfer_create_api.tar.gz
   - artifact: cover_ct_transfer_get_api.tar.gz
   - artifact: cover_ct_transfer_stats.tar.gz
+  - artifact: cover_ct_transfers_restart.tar.gz
   - artifact: cover_ct_trash.tar.gz
   - artifact: cover_ct_tree_deletion_traverse.tar.gz
   - artifact: cover_ct_user_auth.tar.gz
