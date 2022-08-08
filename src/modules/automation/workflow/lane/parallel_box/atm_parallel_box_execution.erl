@@ -20,6 +20,7 @@
 -export([
     create_all/1, create/3,
     initiate_all/2, initiate/2,
+    abort_all/3, abort/3,
     ensure_all_ended/1,
     teardown_all/2, teardown/2,
     delete_all/1, delete/1
@@ -104,7 +105,7 @@ create(AtmLaneExecutionRunCreationArgs, AtmParallelBoxIndex, #atm_parallel_box_s
 
     #atm_parallel_box_execution{
         schema_id = AtmParallelBoxSchemaId,
-        status = infer_status_from_task_statuses(maps:values(AtmTaskExecutionStatuses)),
+        status = infer_status(?PENDING_STATUS, maps:values(AtmTaskExecutionStatuses)),
         task_registry = AtmTaskExecutionRegistry,
         task_statuses = AtmTaskExecutionStatuses
     }.
@@ -162,6 +163,28 @@ initiate(AtmWorkflowExecutionCtx, #atm_parallel_box_execution{
             fun(Env) -> AtmWorkflowExecutionEnvDiff(AtmWorkflowExecutionEnvDiffAcc(Env)) end
         }
     end, {#{}, fun(Env) -> Env end}, AtmTaskExecutionsInitiationResult).
+
+
+-spec abort_all(
+    atm_workflow_execution_ctx:record(),
+    atm_task_execution:aborting_reason(),
+    [record()]
+) ->
+    ok.
+abort_all(AtmWorkflowExecutionCtx, Reason, AtmParallelBoxExecutions) ->
+    lists:foreach(fun(AtmParallelBoxExecution) ->
+        abort(AtmWorkflowExecutionCtx, Reason, AtmParallelBoxExecution)
+    end, AtmParallelBoxExecutions).
+
+
+-spec abort(atm_workflow_execution_ctx:record(), atm_task_execution:aborting_reason(), record()) ->
+    ok.
+abort(AtmWorkflowExecutionCtx, Reason, #atm_parallel_box_execution{
+    task_registry = AtmTaskExecutionRegistry
+}) ->
+    lists:foreach(fun(AtmTaskExecutionId) ->
+        catch atm_task_execution_handler:abort(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Reason)
+    end, maps:values(AtmTaskExecutionRegistry)).
 
 
 -spec ensure_all_ended([record()]) -> ok | no_return().

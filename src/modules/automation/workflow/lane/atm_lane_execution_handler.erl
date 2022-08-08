@@ -19,6 +19,7 @@
 %% API
 -export([
     prepare/3,
+    abort/3,
     handle_ended/3
 ]).
 
@@ -58,6 +59,26 @@ prepare(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
         % Call via ?MODULE: to allow mocking in tests
         ?MODULE:handle_ended(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
         throw(?atm_examine_error(Type, Reason, Stacktrace))
+    end.
+
+
+-spec abort(
+    atm_lane_execution:lane_run_selector(),
+    atm_lane_execution:run_aborting_reason(),
+    atm_workflow_execution_ctx:record()
+) ->
+    ok | no_return().
+abort(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx) ->
+    AtmWorkflowExecutionId = atm_workflow_execution_ctx:get_workflow_execution_id(
+        AtmWorkflowExecutionCtx
+    ),
+    case atm_lane_execution_status:handle_aborting(AtmLaneRunSelector, AtmWorkflowExecutionId, Reason) of
+        {ok, #document{value = AtmWorkflowExecution}} ->
+            abort_parallel_boxes(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecution),
+            workflow_engine:cancel_execution(AtmWorkflowExecutionId);
+
+        {error, _} = Error ->
+            Error
     end.
 
 
@@ -181,6 +202,33 @@ get_iterator_spec(AtmLaneRunSelector, AtmWorkflowExecution = #atm_workflow_execu
     end, MaxBatchSize, lists:usort(AtmLambdas)),
 
     AtmStoreIteratorSpec#atm_store_iterator_spec{max_batch_size = NewMaxBatchSize}.
+
+
+%% @private
+-spec abort_parallel_boxes(
+    atm_lane_execution:lane_run_selector(),
+    atm_lane_execution:run_aborting_reason(),
+    atm_workflow_execution_ctx:record(),
+    atm_workflow_execution:record()
+) ->
+    ok | no_return().
+abort_parallel_boxes(
+    AtmLaneRunSelector,
+    AtmLaneRunAbortingReason,
+    AtmWorkflowExecutionCtx,
+    AtmWorkflowExecution
+) ->
+    AtmTaskExecutionAbortingReason = case AtmLaneRunAbortingReason of
+        failure -> interrupt;
+        Reason -> Reason
+    end,
+    {ok, AtmLaneRun} = atm_lane_execution:get_run(AtmLaneRunSelector, AtmWorkflowExecution),
+
+    atm_parallel_box_execution:abort_all(
+        AtmWorkflowExecutionCtx,
+        AtmTaskExecutionAbortingReason,
+        AtmLaneRun#atm_lane_execution_run.parallel_boxes
+    ).
 
 
 %% @private

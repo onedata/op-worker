@@ -48,6 +48,7 @@
 %% API
 -export([
     initiate/2,
+    abort/3,
     teardown/2,
     set_run_num/2,
 
@@ -79,6 +80,21 @@ initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
     AtmWorkflowExecutionEnvDiff = gen_atm_workflow_execution_env_diff(AtmTaskExecutionDoc),
 
     {AtmTaskExecutionSpec, AtmWorkflowExecutionEnvDiff}.
+
+
+-spec abort(
+    atm_workflow_execution_ctx:record(),
+    atm_task_execution:id(),
+    atm_task_execution:aborting_reason()
+) ->
+    ok | no_return().
+abort(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Reason) ->
+    case atm_task_execution_status:handle_aborting(AtmTaskExecutionId, Reason) of
+        {ok, #document{value = #atm_task_execution{executor = AtmTaskExecutor}}} ->
+            atm_task_executor:abort(AtmWorkflowExecutionCtx, AtmTaskExecutor);
+        {error, already_ended} ->
+            ok
+    end.
 
 
 -spec teardown(atm_workflow_execution_ctx:record(), atm_task_execution:id()) ->
@@ -479,22 +495,13 @@ handle_uncorrelated_results_processing_error(
     Error
 ) ->
     case atm_task_execution_status:handle_aborting(AtmTaskExecutionId, failure) of
-        {ok, #document{value = #atm_task_execution{
-            workflow_execution_id = AtmWorkflowExecutionId,
-            lane_index = AtmLaneIndex,
-            run_num = RunNum
-        }}} ->
+        {ok, #document{value = #atm_task_execution{lane_index = AtmLaneIndex, run_num = RunNum}}} ->
             log_uncorrelated_results_processing_error(
-                AtmWorkflowExecutionCtx,
-                AtmTaskExecutionId,
-                Error
+                AtmWorkflowExecutionCtx, AtmTaskExecutionId, Error
             ),
-            atm_lane_execution_status:handle_aborting(     %% TODO
-                {AtmLaneIndex, RunNum},
-                AtmWorkflowExecutionId,
-                failure
-            ),
-            ok;
+            atm_lane_execution_handler:abort(
+                {AtmLaneIndex, RunNum}, failure, AtmWorkflowExecutionCtx
+            );
 
         {error, already_ended} ->
             ok
