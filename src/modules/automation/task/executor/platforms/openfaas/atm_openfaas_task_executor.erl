@@ -28,7 +28,15 @@
 -export([is_openfaas_available/0, assert_openfaas_available/0, get_pod_status_registry_id/1]).
 
 %% atm_task_executor callbacks
--export([create/4, initiate/2, teardown/2, delete/1, is_in_readonly_mode/1, run/3]).
+-export([
+    create/4,
+    initiate/2,
+    abort/2,
+    teardown/2,
+    delete/1,
+    is_in_readonly_mode/1,
+    run/3
+]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -144,6 +152,11 @@ initiate(AtmTaskExecutorInitiationCtx = #atm_task_executor_initiation_ctx{
         type => async,
         data_stream_enabled => not lists_utils:is_empty(AtmTaskExecutionUncorrelatedResultNames)
     }.
+
+
+-spec abort(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
+abort(AtmWorkflowExecutionCtx, AtmTaskExecutor) ->
+    remove_function(AtmWorkflowExecutionCtx, AtmTaskExecutor).
 
 
 -spec teardown(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().

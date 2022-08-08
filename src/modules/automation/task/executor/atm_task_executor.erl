@@ -29,7 +29,16 @@
 -include_lib("ctool/include/automation/automation.hrl").
 
 %% API
--export([create/4, initiate/2, teardown/2, delete/1, get_type/1, is_in_readonly_mode/1, run/3]).
+-export([
+    create/4,
+    initiate/2,
+    abort/2,
+    teardown/2,
+    delete/1,
+    get_type/1,
+    is_in_readonly_mode/1,
+    run/3
+]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -80,6 +89,8 @@
 
 -callback initiate(initiation_ctx(), record()) -> workflow_engine:task_spec() | no_return().
 
+-callback abort(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
+
 -callback teardown(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
 
 -callback delete(record()) -> ok | no_return().
@@ -114,6 +125,12 @@ create(AtmWorkflowExecutionCtx, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision =
 initiate(AtmTaskExecutorInitiationCtx, AtmTaskExecutor) ->
     Model = utils:record_type(AtmTaskExecutor),
     Model:initiate(AtmTaskExecutorInitiationCtx, AtmTaskExecutor).
+
+
+-spec abort(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
+abort(AtmWorkflowExecutionCtx, AtmTaskExecutor) ->
+    Model = utils:record_type(AtmTaskExecutor),
+    Model:abort(AtmWorkflowExecutionCtx, AtmTaskExecutor).
 
 
 -spec teardown(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
