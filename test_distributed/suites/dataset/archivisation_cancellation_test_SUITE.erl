@@ -6,10 +6,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Tests of archive cancellation mechanism.
+%%% Tests of archivisation cancellation mechanism.
 %%% @end
 %%%-------------------------------------------------------------------
--module(archive_cancellation_test_SUITE).
+-module(archivisation_cancellation_test_SUITE).
 -author("Michał Stanisz").
 
 
@@ -108,7 +108,6 @@ groups() -> [
 all() -> [
     {group, cancel_tests}
 ].
-
 
 -define(ATTEMPTS, 60).
 

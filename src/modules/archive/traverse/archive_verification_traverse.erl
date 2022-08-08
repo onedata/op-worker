@@ -144,25 +144,25 @@ update_job_progress(Id, Job, Pool, TaskId, Status) ->
 
 -spec do_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()}.
-do_master_job(Job, MasterJobArgs) ->
-    ErrorHandler = fun(TaskId, Job, Reason, Stacktrace) ->
+do_master_job(InitialJob, MasterJobArgs = #{task_id := TaskId}) ->
+    ErrorHandler = fun(Job, Reason, Stacktrace) ->
         report_error(TaskId, Job, Reason, Stacktrace),
         archive:mark_verification_failed(TaskId),
         cancel(TaskId),
         {ok, #{}} % unexpected error logged by report_error - no jobs can be created
     end,
-    archive_traverses_common:do_master_job(Job, MasterJobArgs, ErrorHandler).
+    archive_traverses_common:do_master_job(?MODULE, InitialJob, MasterJobArgs, ErrorHandler).
 
 
 -spec do_slave_job(tree_traverse:slave_job(), id()) -> ok.
-do_slave_job(Job, TaskId) ->
-    ErrorHandler = fun(TaskId, Job, Reason, Stacktrace) ->
+do_slave_job(InitialJob, TaskId) ->
+    ErrorHandler = fun(Job, Reason, Stacktrace) ->
         report_error(TaskId, Job, Reason, Stacktrace),
         archive:mark_verification_failed(TaskId),
         cancel(TaskId)
     end,
     archive_traverses_common:execute_unsafe_job(
-        ?MODULE, do_slave_job_unsafe, [TaskId], Job, TaskId, ErrorHandler).
+        ?MODULE, do_slave_job_unsafe, [TaskId], InitialJob, ErrorHandler).
 
 
 %%%===================================================================

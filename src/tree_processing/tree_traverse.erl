@@ -124,7 +124,7 @@
 
 -export_type([id/0, pool/0, job/0, master_job/0, slave_job/0, child_dirs_job_generation_policy/0,
     children_master_jobs_mode/0, batch_size/0, traverse_info/0, symlink_resolution_policy/0, 
-    encountered_files_set/0, new_jobs_preprocessor/0]).
+    encountered_files_set/0, new_jobs_preprocessor/0, run_options/0]).
 
 %%%===================================================================
 %%% Main API

@@ -162,19 +162,19 @@ update_job_progress(Id, Job, Pool, TaskId, Status) ->
 
 -spec do_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()}.
-do_master_job(Job, MasterJobArgs) ->
-    archivisation_traverse_logic:mark_building_if_first_job(Job),
-    ErrorHandler = fun(TaskId, Job, Reason, Stacktrace) ->
+do_master_job(InitialJob, MasterJobArgs = #{task_id := TaskId}) ->
+    archivisation_traverse_logic:mark_building_if_first_job(InitialJob),
+    ErrorHandler = fun(Job, Reason, Stacktrace) ->
         report_error(TaskId, #tree_traverse{user_id = UserId} = Job, Reason, Stacktrace),
         {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId),
         do_aborted_master_job(Job, MasterJobArgs, UserCtx)
     end,
-    archive_traverses_common:do_master_job(Job, MasterJobArgs, ErrorHandler).
+    archive_traverses_common:do_master_job(?MODULE, InitialJob, MasterJobArgs, ErrorHandler).
 
 
 -spec do_slave_job(tree_traverse:slave_job(), id()) -> ok.
-do_slave_job(Job, TaskId) ->
-    ErrorHandler = fun(TaskId, Job, Reason, Stacktrace) ->
+do_slave_job(InitialJob, TaskId) ->
+    ErrorHandler = fun(Job, Reason, Stacktrace) ->
         #tree_traverse_slave{
             file_ctx = FileCtx, 
             user_id = UserId, 
@@ -187,7 +187,7 @@ do_slave_job(Job, TaskId) ->
             FileCtx, UserCtx, TraverseInfo, TaskId, MasterJobUuid)
     end,
     archive_traverses_common:execute_unsafe_job(
-        ?MODULE, do_slave_job_unsafe, [TaskId], Job, TaskId, ErrorHandler).
+        ?MODULE, do_slave_job_unsafe, [TaskId], InitialJob, ErrorHandler).
 
 %%%===================================================================
 %%% Internal traverse functions
@@ -303,9 +303,9 @@ build_traverse_opts(ArchiveDoc, DatasetRootCtx, UserCtx) ->
     
     {FileLogicalPath, DatasetRootCtx2} = file_ctx:get_logical_path(DatasetRootCtx, UserCtx),
     FollowSymlinks = archive_config:should_follow_symlinks(Config),
-    StartFileGuid = case FollowSymlinks of
+    StartFileCtx = case FollowSymlinks of
         true -> resolve_symlink(DatasetRootCtx2, UserCtx);
-        false -> file_ctx:get_logical_guid_const(DatasetRootCtx2)
+        false -> DatasetRootCtx2
     end,
     
     %% @TODO VFS-8882 - use preserve/follow_external in API
@@ -318,11 +318,12 @@ build_traverse_opts(ArchiveDoc, DatasetRootCtx, UserCtx) ->
         task_id => ArchiveId,
         track_subtree_status => true,
         children_master_jobs_mode => async,
-        traverse_info => build_initial_traverse_info(ArchiveDoc, Config, StartFileGuid, UserCtx),
+        traverse_info => build_initial_traverse_info(
+            ArchiveDoc, Config, file_ctx:get_logical_guid_const(StartFileCtx), UserCtx),
         symlink_resolution_policy => SymlinksResolutionPolicy,
         initial_relative_path => FileLogicalPath,
         additional_data => build_additional_data(ArchiveDoc)
-    }, DatasetRootCtx2}.
+    }, StartFileCtx}.
 
 
 -spec build_initial_traverse_info(archive:doc(), archive:config(), file_id:file_guid(), user_ctx:ctx()) ->
@@ -337,8 +338,8 @@ build_initial_traverse_info(ArchiveDoc, Config, StartFileGuid, UserCtx) ->
         scheduled_dataset_base_archive_doc => BaseArchiveDoc,
         scheduled_dataset_root_guid => StartFileGuid,
         initial_archive_docs => #{
-            aip => archive_traverse_ctx:get_archive_doc(AipCtx),
-            dip => archive_traverse_ctx:get_archive_doc(DipCtx)
+            aip => archivisation_traverse_ctx:get_archive_doc(AipCtx),
+            dip => archivisation_traverse_ctx:get_archive_doc(DipCtx)
         },
         aip_ctx => AipCtx,
         dip_ctx => DipCtx
@@ -362,15 +363,15 @@ save_dir_checksum(TaskId, DirUuid, UserCtx, TraverseInfo) ->
     TotalChildrenCount = archive_traverses_common:take_children_count(
         ?POOL_NAME, TaskId, DirUuid),
     archivisation_traverse_logic:save_dir_checksum_metadata(
-        archive_traverse_ctx:get_target_parent(maps:get(aip_ctx, TraverseInfo)),
+        archivisation_traverse_ctx:get_target_parent(maps:get(aip_ctx, TraverseInfo)),
         UserCtx, TotalChildrenCount),
     archivisation_traverse_logic:save_dir_checksum_metadata(
-        archive_traverse_ctx:get_target_parent(maps:get(dip_ctx, TraverseInfo)),
+        archivisation_traverse_ctx:get_target_parent(maps:get(dip_ctx, TraverseInfo)),
         UserCtx, TotalChildrenCount).
 
 
 %% @TODO VFS-7923 Unify all symlinks resolution across op_worker
--spec resolve_symlink(file_ctx:ctx(), user_ctx:ctx()) -> file_id:file_guid().
+-spec resolve_symlink(file_ctx:ctx(), user_ctx:ctx()) -> file_ctx:ctx().
 resolve_symlink(FileCtx, UserCtx) ->
     SessionId = user_ctx:get_session_id(UserCtx),
     case file_ctx:is_symlink_const(FileCtx) of
@@ -378,18 +379,18 @@ resolve_symlink(FileCtx, UserCtx) ->
             {ok, ResolvedGuid} = lfm:resolve_symlink(SessionId, #file_ref{
                 guid = file_ctx:get_logical_guid_const(FileCtx)
             }),
-            ResolvedGuid;
+            file_ctx:new_by_guid(ResolvedGuid);
         _ ->
-            file_ctx:get_logical_guid_const(FileCtx)
+            FileCtx
     end.
 
 
 -spec job_to_error_info(tree_traverse:job()) -> {archive:doc(), file_id:file_guid()}.
 job_to_error_info(#tree_traverse{traverse_info = #{aip_ctx := AipCtx}, file_ctx = FileCtx}) -> 
-    ArchiveDoc = archive_traverse_ctx:get_archive_doc(AipCtx),
+    ArchiveDoc = archivisation_traverse_ctx:get_archive_doc(AipCtx),
     {ArchiveDoc, file_ctx:get_logical_guid_const(FileCtx)};
 job_to_error_info(#tree_traverse_slave{traverse_info = #{aip_ctx := AipCtx}, file_ctx = FileCtx}) ->
-    ArchiveDoc = archive_traverse_ctx:get_archive_doc(AipCtx),
+    ArchiveDoc = archivisation_traverse_ctx:get_archive_doc(AipCtx),
     {ArchiveDoc, file_ctx:get_logical_guid_const(FileCtx)}.
 
 
@@ -406,9 +407,9 @@ get_base_archive_doc(ArchiveDoc, Config) ->
     end.
 
 
--spec init_archive(archive:doc() | archive:id(), user_ctx:ctx()) -> archive_traverse_ctx:ctx().
+-spec init_archive(archive:doc() | archive:id(), user_ctx:ctx()) -> archivisation_traverse_ctx:ctx().
 init_archive(undefined, _UserCtx) ->
-    archive_traverse_ctx:build(undefined);
+    archivisation_traverse_ctx:init_for_new_traverse(undefined);
 init_archive(ArchiveId, UserCtx) when is_binary(ArchiveId) ->
     {ok, ArchiveDoc} = archive:get(ArchiveId),
     init_archive(ArchiveDoc, UserCtx);
@@ -416,4 +417,4 @@ init_archive(ArchiveDoc, UserCtx) ->
     {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
     {ok, ArchiveDoc2} = archivisation_traverse_logic:initialize_archive_dir(
         ArchiveDoc, DatasetId, UserCtx),
-    archive_traverse_ctx:ensure_persistable(archive_traverse_ctx:build(ArchiveDoc2)).
+    archivisation_traverse_ctx:init_for_new_traverse(ArchiveDoc2).

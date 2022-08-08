@@ -438,9 +438,7 @@
     creator :: archive:creator(),
     state :: archive:state(),
     config :: archive:config(),
-    preserved_callback :: archive:callback(),
-    deleted_callback :: archive:callback(),
-    description :: archive:description(),
+    modifiable_fields :: archive:modifiable_fields(),
     % This directory is root for archive.
     % It has predefined uuid=?ARCHIVE_DIR_UUID(ArchiveId)
     % See archivisation_tree.erl for more info.

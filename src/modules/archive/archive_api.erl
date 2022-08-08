@@ -351,7 +351,7 @@ remove_single_archive(ArchiveId, UserCtx) ->
 
 
 %% @private
--spec cancel_archivisation(archive:doc()) -> ok | {error, term()}.
+-spec cancel_archivisation(archive:doc() | archive:id()) -> ok | {error, term()}.
 cancel_archivisation(ArchiveDoc = #document{value = #archive{related_dip = undefined, related_aip = RelatedAip}}) ->
     cancel_archivisations(ArchiveDoc, RelatedAip);
 cancel_archivisation(ArchiveDoc = #document{value = #archive{related_aip = undefined, related_dip = RelatedDip}}) ->
