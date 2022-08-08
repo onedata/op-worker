@@ -173,6 +173,7 @@ handle_enqueued(AtmLaneRunSelector, AtmWorkflowExecutionId) ->
     ?extract_doc(atm_workflow_execution_status:handle_lane_enqueued(AtmWorkflowExecutionId, Diff)).
 
 
+%% TODO ensure not called directly but via atm_lane_execution_handler:abort
 -spec handle_aborting(
     atm_lane_execution:lane_run_selector(),
     atm_workflow_execution:id(),
@@ -191,9 +192,9 @@ handle_aborting(AtmLaneRunSelector, AtmWorkflowExecutionId, Reason) ->
                 {ok, Run#atm_lane_execution_run{status = ?ABORTING_STATUS, aborting_reason = Reason}};
 
             (#atm_lane_execution_run{status = ?ABORTING_STATUS, aborting_reason = PrevReason} = Run) ->
-                FinalReason = case {PrevReason, Reason} of
-                    {failure, cancel} -> cancel;
-                    _ -> PrevReason
+                FinalReason = case should_overwrite_aborting_reason(PrevReason, Reason) of
+                    true -> Reason;
+                    false -> PrevReason
                 end,
                 {ok, Run#atm_lane_execution_run{aborting_reason = FinalReason}};
 
@@ -286,6 +287,26 @@ handle_manual_repeat(RepeatType, {AtmLaneSelector, _} = AtmLaneRunSelector, AtmW
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec should_overwrite_aborting_reason(
+    atm_lane_execution:run_aborting_reason(),
+    atm_lane_execution:run_aborting_reason()
+) ->
+    boolean().
+should_overwrite_aborting_reason(PrevReason, NewReason) ->
+    aborting_reason_priority(NewReason) > aborting_reason_priority(PrevReason).
+
+
+%% @private
+-spec aborting_reason_priority(atm_lane_execution:run_aborting_reason()) ->
+    non_neg_integer().
+aborting_reason_priority(pause) -> 0;
+aborting_reason_priority(interrupt) -> 1;
+aborting_reason_priority(failure) -> 2;
+aborting_reason_priority(cancel) -> 3;
+aborting_reason_priority(crush) -> 4.
 
 
 %% @private

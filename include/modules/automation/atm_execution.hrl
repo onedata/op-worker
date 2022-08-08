@@ -271,12 +271,13 @@
 -define(ENQUEUED_STATUS, enqueued).
 -define(PENDING_STATUS, pending).
 -define(ACTIVE_STATUS, active).
--define(ABORTING_STATUS, aborting).
+-define(ABORTING_STATUS, aborting).   %% TODO change aborting to stopping?
 -define(FINISHED_STATUS, finished).
 -define(CANCELLED_STATUS, cancelled).
 -define(FAILED_STATUS, failed).
 -define(INTERRUPTED_STATUS, interrupted).
 -define(PAUSED_STATUS, paused).
+-define(CRUSHED_STATUS, crushed).
 -define(SKIPPED_STATUS, skipped).
 
 

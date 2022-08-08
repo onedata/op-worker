@@ -49,11 +49,15 @@
 -type run_selector() :: current | run_num().
 
 -type run_status() ::
+    % waiting
     ?SCHEDULED_STATUS | ?PREPARING_STATUS | ?ENQUEUED_STATUS |
+    % ongoing
     ?ACTIVE_STATUS | ?ABORTING_STATUS |
-    ?FINISHED_STATUS | ?CANCELLED_STATUS | ?FAILED_STATUS | ?INTERRUPTED_STATUS.
+    % ended
+    ?FINISHED_STATUS |
+    ?CRUSHED_STATUS | ?CANCELLED_STATUS | ?FAILED_STATUS | ?INTERRUPTED_STATUS | ?PAUSED_STATUS.
 
--type run_aborting_reason() :: cancel | failure.
+-type run_aborting_reason() :: crush | cancel | failure | interrupt | pause.
 
 -type run_diff() :: fun((run()) -> {ok, run()} | {error, term()}).
 -type run() :: #atm_lane_execution_run{}.
