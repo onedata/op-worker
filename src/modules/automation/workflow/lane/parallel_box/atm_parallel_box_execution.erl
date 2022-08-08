@@ -222,29 +222,34 @@ set_tasks_run_num(RunNum, AtmParallelBoxExecutions) ->
 -spec update_task_status(atm_task_execution:id(), atm_task_execution:status(), record()) ->
     {ok, record()} | {error, term()}.
 update_task_status(AtmTaskExecutionId, NewStatus, #atm_parallel_box_execution{
+    status = AtmParallelBoxExecutionStatus,
     task_statuses = AtmTaskExecutionStatuses
 } = AtmParallelBoxExecution) ->
-    AtmTaskExecutionStatus = maps:get(AtmTaskExecutionId, AtmTaskExecutionStatuses),
+    CurrentStatus = maps:get(AtmTaskExecutionId, AtmTaskExecutionStatuses),
 
-    case atm_task_execution_status:is_transition_allowed(AtmTaskExecutionStatus, NewStatus) of
+    case atm_task_execution_status:is_transition_allowed(CurrentStatus, NewStatus) of
         true ->
             NewAtmTaskExecutionStatuses = AtmTaskExecutionStatuses#{
                 AtmTaskExecutionId => NewStatus
             },
             {ok, AtmParallelBoxExecution#atm_parallel_box_execution{
-                status = infer_status_from_task_statuses(maps:values(NewAtmTaskExecutionStatuses)),
+                status = infer_status(
+                    AtmParallelBoxExecutionStatus,
+                    maps:values(NewAtmTaskExecutionStatuses)
+                ),
                 task_statuses = NewAtmTaskExecutionStatuses
             }};
         false ->
-            ?ERROR_ATM_INVALID_STATUS_TRANSITION(AtmTaskExecutionStatus, NewStatus)
+            ?ERROR_ATM_INVALID_STATUS_TRANSITION(CurrentStatus, NewStatus)
     end.
 
 
 -spec gather_statuses([record()]) -> [status()].
 gather_statuses(AtmParallelBoxExecutions) ->
-    lists:map(fun(#atm_parallel_box_execution{status = Status}) ->
-        Status
-    end, AtmParallelBoxExecutions).
+    lists:map(
+        fun(#atm_parallel_box_execution{status = Status}) -> Status end,
+        AtmParallelBoxExecutions
+    ).
 
 
 -spec to_json(record()) -> json_utils:json_term().
@@ -298,10 +303,10 @@ db_decode(#{
 }, _NestedRecordDecoder) ->
     #atm_parallel_box_execution{
         schema_id = AtmParallelBoxSchemaId,
-        status = binary_to_atom(AtmParallelBoxExecutionStatusBin, utf8),
+        status = binary_to_existing_atom(AtmParallelBoxExecutionStatusBin, utf8),
         task_registry = AtmTaskExecutionRegistry,
         task_statuses = maps:map(fun(_AtmTaskExecutionId, AtmTaskExecutionStatusBin) ->
-            binary_to_atom(AtmTaskExecutionStatusBin, utf8)
+            binary_to_existing_atom(AtmTaskExecutionStatusBin, utf8)
         end, AtmTaskExecutionStatusesJson)
     }.
 
@@ -349,23 +354,27 @@ is_ended(#atm_parallel_box_execution{status = AtmParallelBoxExecutionStatus}) ->
 
 
 %% @private
--spec infer_status_from_task_statuses([atm_task_execution:status()]) -> status().
-infer_status_from_task_statuses(AtmTaskExecutionStatuses) ->
-    case lists:usort(AtmTaskExecutionStatuses) of
+-spec infer_status(atm_task_execution:status(), [atm_task_execution:status()]) ->
+    status().
+infer_status(CurrentStatus, AtmTaskExecutionStatuses) ->
+    PossibleNewStatus = case lists:usort(AtmTaskExecutionStatuses) of
         [Status] ->
             Status;
         UniqueStatuses ->
-            [LowestStatusPresent | _] = lists:dropwhile(
-                fun(Status) -> not lists:member(Status, UniqueStatuses) end,
-                [?ACTIVE_STATUS, ?PENDING_STATUS, ?FAILED_STATUS, ?FINISHED_STATUS]
-            ),
+            hd(lists:dropwhile(fun(Status) -> not lists:member(Status, UniqueStatuses) end, [
+                ?ABORTING_STATUS, ?ACTIVE_STATUS, ?PENDING_STATUS,
+                ?CANCELLED_STATUS, ?FAILED_STATUS, ?INTERRUPTED_STATUS,
+                ?PAUSED_STATUS, ?FINISHED_STATUS
+            ]))
+    end,
 
-            case LowestStatusPresent of
-                ?PENDING_STATUS ->
-                    % Some tasks must have ended execution while others are still
-                    % pending - overall parallel box status is active
-                    ?ACTIVE_STATUS;
-                Status ->
-                    Status
-            end
+    case atm_task_execution_status:is_transition_allowed(CurrentStatus, PossibleNewStatus) of
+        true ->
+            PossibleNewStatus;
+        false ->
+            % possible when status is not changing or in case of races (e.g.
+            % aborting task ended while some other task has not been marked
+            % as aborting yet and as such is still active - overall status
+            % should remain as aborting rather than regressing to active)
+            CurrentStatus
     end.

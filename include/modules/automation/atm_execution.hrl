@@ -123,7 +123,7 @@
 % Record carrying a generic result streamer report
 -record(atm_openfaas_result_streamer_report, {
     id :: atm_openfaas_result_streamer_report:id(),
-    body = atm_openfaas_result_streamer_report:body()
+    body :: atm_openfaas_result_streamer_report:body()
 }).
 
 % Record carrying a status report of a lambda result streamer of type 'registration'
