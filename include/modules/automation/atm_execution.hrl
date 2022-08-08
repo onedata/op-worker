@@ -276,6 +276,7 @@
 -define(CANCELLED_STATUS, cancelled).
 -define(FAILED_STATUS, failed).
 -define(INTERRUPTED_STATUS, interrupted).
+-define(PAUSED_STATUS, paused).
 -define(SKIPPED_STATUS, skipped).
 
 

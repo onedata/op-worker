@@ -27,11 +27,15 @@
 -type diff() :: datastore_doc:diff(record()).
 
 -type status() ::
+    % waiting
     ?PENDING_STATUS |
-    ?ACTIVE_STATUS |
-    ?FINISHED_STATUS | ?FAILED_STATUS | ?SKIPPED_STATUS.
+    % ongoing
+    ?ACTIVE_STATUS | ?ABORTING_STATUS |
+    % ended
+    ?FINISHED_STATUS | ?SKIPPED_STATUS |
+    ?CANCELLED_STATUS | ?FAILED_STATUS | ?INTERRUPTED_STATUS | ?PAUSED_STATUS.
 
--type aborting_reason() :: failure.
+-type aborting_reason() :: cancel | failure | interrupt | pause.
 
 -export_type([id/0, record/0, doc/0, diff/0]).
 -export_type([status/0, aborting_reason/0]).
