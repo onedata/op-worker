@@ -24,7 +24,7 @@
 -export([
     init_engine/0,
     start/3,
-    cancel/1,
+    cancel/2,
     repeat/4
 ]).
 
@@ -97,14 +97,18 @@ start(UserCtx, AtmWorkflowExecutionEnv, #document{
     }).
 
 
--spec cancel(atm_workflow_execution:id()) -> ok | errors:error().
-cancel(AtmWorkflowExecutionId) ->
-    case atm_lane_execution_status:handle_aborting({current, current}, AtmWorkflowExecutionId, cancel) of
-        {ok, _} ->
-            workflow_engine:cancel_execution(AtmWorkflowExecutionId);
-        {error, _} = Error ->
-            Error
-    end.
+-spec cancel(user_ctx:ctx(), atm_workflow_execution:id()) -> ok | errors:error().
+cancel(UserCtx, AtmWorkflowExecutionId) ->
+    {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:get(AtmWorkflowExecutionId),
+    AtmWorkflowExecutionEnv = acquire_global_env(AtmWorkflowExecutionDoc),
+    SpaceId = atm_workflow_execution_env:get_space_id(AtmWorkflowExecutionEnv),
+
+    AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(
+        undefined,
+        atm_workflow_execution_auth:build(SpaceId, AtmWorkflowExecutionId, UserCtx),
+        AtmWorkflowExecutionEnv
+    ),
+    atm_lane_execution_handler:abort({current, current}, cancel, AtmWorkflowExecutionCtx).
 
 
 -spec repeat(
@@ -130,7 +134,7 @@ repeat(UserCtx, Type, AtmLaneRunSelector, AtmWorkflowExecutionId) ->
                 id => AtmWorkflowExecutionId,
                 workflow_handler => ?MODULE,
                 force_clean_execution => true,
-                execution_context => acquire_env(AtmWorkflowExecutionDoc),
+                execution_context => acquire_global_env(AtmWorkflowExecutionDoc),
                 first_lane_id => {CurrentAtmLaneIndex, CurrentRunNum},
                 next_lane_id => case CurrentAtmLaneIndex < AtmLanesCount of
                     true -> {CurrentAtmLaneIndex + 1, current};
@@ -442,8 +446,8 @@ unfreeze_global_stores(#document{value = #atm_workflow_execution{
 
 
 %% @private
--spec acquire_env(atm_workflow_execution:doc()) -> atm_workflow_execution_env:record().
-acquire_env(#document{key = AtmWorkflowExecutionId, value = #atm_workflow_execution{
+-spec acquire_global_env(atm_workflow_execution:doc()) -> atm_workflow_execution_env:record().
+acquire_global_env(#document{key = AtmWorkflowExecutionId, value = #atm_workflow_execution{
     space_id = SpaceId,
     incarnation = AtmWorkflowExecutionIncarnation,
     store_registry = AtmGlobalStoreRegistry,

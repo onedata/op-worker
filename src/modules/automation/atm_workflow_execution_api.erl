@@ -46,7 +46,7 @@
     list/4,
     schedule/6,
     get/1, get_summary/2,
-    cancel/1,
+    cancel/2,
     repeat/4,
     terminate_not_ended/1,
     purge_all/0
@@ -177,9 +177,9 @@ get_summary(AtmWorkflowExecutionId, #atm_workflow_execution{
     }.
 
 
--spec cancel(atm_workflow_execution:id()) -> ok | errors:error().
-cancel(AtmWorkflowExecutionId) ->
-    atm_workflow_execution_handler:cancel(AtmWorkflowExecutionId).
+-spec cancel(user_ctx:ctx(), atm_workflow_execution:id()) -> ok | errors:error().
+cancel(UserCtx, AtmWorkflowExecutionId) ->
+    atm_workflow_execution_handler:cancel(UserCtx, AtmWorkflowExecutionId).
 
 
 -spec repeat(
