@@ -62,7 +62,7 @@ get_next(AtmWorkflowExecutionEnv, AtmStoreIterator = #atm_store_iterator{
     spec = #atm_store_iterator_spec{max_batch_size = Size},
     container_iterator = ContainerIterator
 }) ->
-    AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(undefined, AtmWorkflowExecutionEnv),
+    AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(AtmWorkflowExecutionEnv),
     AtmWorkflowExecutionAuth = atm_workflow_execution_ctx:get_auth(AtmWorkflowExecutionCtx),
 
     case get_next_internal(AtmWorkflowExecutionAuth, ContainerIterator, Size) of

@@ -138,15 +138,18 @@ initiate_all(AtmWorkflowExecutionCtx, AtmParallelBoxExecutions) ->
 
 -spec initiate(atm_workflow_execution_ctx:record(), record()) ->
     {workflow_engine:parallel_box_spec(), atm_workflow_execution_env:diff()} | no_return().
-initiate(AtmWorkflowExecutionCtx, #atm_parallel_box_execution{
+initiate(AtmWorkflowExecutionCtx0, #atm_parallel_box_execution{
     task_registry = AtmTaskExecutionRegistry
 }) ->
     AtmTaskExecutionsInitiationResult = atm_parallel_runner:map(fun(
         {AtmTaskSchemaId, AtmTaskExecutionId}
     ) ->
+        AtmWorkflowExecutionCtx1 = atm_workflow_execution_ctx:set_processed_task_id(
+            AtmTaskExecutionId, AtmWorkflowExecutionCtx0
+        ),
         try
             {AtmTaskExecutionId, atm_task_execution_handler:initiate(
-                AtmWorkflowExecutionCtx, AtmTaskExecutionId
+                AtmWorkflowExecutionCtx1, AtmTaskExecutionId
             )}
         catch Type:Reason:Stacktrace ->
             Error = ?atm_examine_error(Type, Reason, Stacktrace),
@@ -179,11 +182,14 @@ abort_all(AtmWorkflowExecutionCtx, Reason, AtmParallelBoxExecutions) ->
 
 -spec abort(atm_workflow_execution_ctx:record(), atm_task_execution:aborting_reason(), record()) ->
     ok.
-abort(AtmWorkflowExecutionCtx, Reason, #atm_parallel_box_execution{
+abort(AtmWorkflowExecutionCtx0, Reason, #atm_parallel_box_execution{
     task_registry = AtmTaskExecutionRegistry
 }) ->
     lists:foreach(fun(AtmTaskExecutionId) ->
-        catch atm_task_execution_handler:abort(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Reason)
+        AtmWorkflowExecutionCtx1 = atm_workflow_execution_ctx:set_processed_task_id(
+            AtmTaskExecutionId, AtmWorkflowExecutionCtx0
+        ),
+        catch atm_task_execution_handler:abort(AtmWorkflowExecutionCtx1, AtmTaskExecutionId, Reason)
     end, maps:values(AtmTaskExecutionRegistry)).
 
 
@@ -200,11 +206,14 @@ teardown_all(AtmWorkflowExecutionCtx, AtmParallelBoxExecutions) ->
 
 
 -spec teardown(atm_workflow_execution_ctx:record(), record()) -> ok.
-teardown(AtmWorkflowExecutionCtx, #atm_parallel_box_execution{
+teardown(AtmWorkflowExecutionCtx0, #atm_parallel_box_execution{
     task_registry = AtmTaskExecutionRegistry
 }) ->
     lists:foreach(fun(AtmTaskExecutionId) ->
-        catch atm_task_execution_handler:teardown(AtmWorkflowExecutionCtx, AtmTaskExecutionId)
+        AtmWorkflowExecutionCtx1 = atm_workflow_execution_ctx:set_processed_task_id(
+            AtmTaskExecutionId, AtmWorkflowExecutionCtx0
+        ),
+        catch atm_task_execution_handler:teardown(AtmWorkflowExecutionCtx1, AtmTaskExecutionId)
     end, maps:values(AtmTaskExecutionRegistry)).
 
 

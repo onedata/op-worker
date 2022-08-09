@@ -17,7 +17,10 @@
 -include("modules/automation/atm_execution.hrl").
 
 %% API
--export([acquire/2]).
+-export([
+    acquire/1, acquire/2, acquire/3,
+    set_processed_task_id/2
+]).
 -export([
     get_workflow_execution_id/1,
     get_workflow_execution_incarnation/1,
@@ -33,9 +36,8 @@
 
 -record(atm_workflow_execution_ctx, {
     workflow_execution_auth :: atm_workflow_execution_auth:record(),
-    workflow_execution_logger :: atm_workflow_execution_logger:record(),
     workflow_execution_env :: atm_workflow_execution_env:record(),
-    task_time_series_store_id :: undefined | atm_store:id()
+    processed_task_id :: undefined | atm_task_execution:id()
 }).
 -type record() :: #atm_workflow_execution_ctx{}.
 
@@ -47,26 +49,35 @@
 %%%===================================================================
 
 
+-spec acquire(atm_workflow_execution_env:record()) -> record() | no_return().
+acquire(AtmWorkflowExecutionEnv) ->
+    acquire(undefined, AtmWorkflowExecutionEnv).
+
+
 -spec acquire(undefined | atm_task_execution:id(), atm_workflow_execution_env:record()) ->
     record() | no_return().
 acquire(AtmTaskExecutionId, AtmWorkflowExecutionEnv) ->
     AtmWorkflowExecutionAuth = atm_workflow_execution_env:acquire_auth(AtmWorkflowExecutionEnv),
+    acquire(AtmTaskExecutionId, AtmWorkflowExecutionAuth, AtmWorkflowExecutionEnv).
 
+
+-spec acquire(
+    undefined | atm_task_execution:id(),
+    atm_workflow_execution_auth:record(),
+    atm_workflow_execution_env:record()
+) ->
+    record() | no_return().
+acquire(AtmTaskExecutionId, AtmWorkflowExecutionAuth, AtmWorkflowExecutionEnv) ->
     #atm_workflow_execution_ctx{
         workflow_execution_auth = AtmWorkflowExecutionAuth,
-        workflow_execution_logger = atm_workflow_execution_env:acquire_logger(
-            AtmTaskExecutionId, AtmWorkflowExecutionAuth, AtmWorkflowExecutionEnv
-        ),
         workflow_execution_env = AtmWorkflowExecutionEnv,
-        task_time_series_store_id = case AtmTaskExecutionId of
-            undefined ->
-                undefined;
-            _ ->
-                atm_workflow_execution_env:get_task_time_series_store_id(
-                    AtmTaskExecutionId, AtmWorkflowExecutionEnv
-                )
-        end
+        processed_task_id = AtmTaskExecutionId
     }.
+
+
+-spec set_processed_task_id(undefined | atm_task_execution:id(), record()) -> record().
+set_processed_task_id(AtmTaskExecutionId, Record) ->
+    Record#atm_workflow_execution_ctx{processed_task_id = AtmTaskExecutionId}.
 
 
 -spec get_workflow_execution_id(record()) -> atm_workflow_execution:id().
@@ -94,8 +105,14 @@ get_auth(#atm_workflow_execution_ctx{workflow_execution_auth = AtmWorkflowExecut
 
 
 -spec get_logger(record()) -> atm_workflow_execution_logger:record().
-get_logger(#atm_workflow_execution_ctx{workflow_execution_logger = AtmWorkflowExecutionLogger}) ->
-    AtmWorkflowExecutionLogger.
+get_logger(#atm_workflow_execution_ctx{
+    workflow_execution_auth = AtmWorkflowExecutionAuth,
+    workflow_execution_env = AtmWorkflowExecutionEnv,
+    processed_task_id = AtmTaskExecutionId
+}) ->
+    atm_workflow_execution_env:build_logger(
+        AtmTaskExecutionId, AtmWorkflowExecutionAuth, AtmWorkflowExecutionEnv
+    ).
 
 
 -spec is_global_store(atm_store:id(), record()) -> boolean().
@@ -115,7 +132,13 @@ get_global_store_id(AtmStoreSchemaId, #atm_workflow_execution_ctx{
 
 
 -spec get_task_time_series_store_id(record()) -> undefined | atm_store:id().
+get_task_time_series_store_id(#atm_workflow_execution_ctx{processed_task_id = undefined}) ->
+    undefined;
+
 get_task_time_series_store_id(#atm_workflow_execution_ctx{
-    task_time_series_store_id = AtmTaskTSStoreId
+    processed_task_id = AtmTaskExecutionId,
+    workflow_execution_env = AtmWorkflowExecutionEnv
 }) ->
-    AtmTaskTSStoreId.
+    atm_workflow_execution_env:get_task_time_series_store_id(
+        AtmTaskExecutionId, AtmWorkflowExecutionEnv
+    ).
