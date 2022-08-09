@@ -88,6 +88,9 @@ init([SpaceId, ProviderId]) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: state()} |
     {stop, Reason :: term(), NewState :: state()}.
+handle_call(terminate, From, State) ->
+    gen_server:reply(From, ok),
+    {stop, normal, State};
 handle_call(Request, _From, #state{} = State) ->
     ?log_bad_request(Request),
     {noreply, State}.

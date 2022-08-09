@@ -83,6 +83,8 @@ init([SpaceId]) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: state()} |
     {stop, Reason :: term(), NewState :: state()}.
+handle_call({reset_provider_stream, ProviderId}, _From, State) ->
+    {reply, ok, reset_provider_stream(ProviderId, State)};
 handle_call(Request, _From, #state{} = State) ->
     ?log_bad_request(Request),
     {noreply, State}.
@@ -212,6 +214,25 @@ forward_changes_batch(ProviderId, Since, Until, Timestamp, Docs, State = #state{
             ok
     end,
 
+    State2.
+
+%% @private
+-spec reset_provider_stream(od_provider:id(), state()) -> state().
+reset_provider_stream(ProviderId, State = #state{
+    space_id = SpaceId,
+    workers = Workers
+}) ->
+    State2 = case maps:find(ProviderId, Workers) of
+        {ok, Worker} ->
+            gen_server:call(Worker, terminate, infinity),
+            State#state{
+                workers = maps:remove(ProviderId, Workers)
+            };
+        error ->
+            State
+    end,
+
+    dbsync_state:set_seq_and_timestamp(SpaceId, ProviderId, 1, 0),
     State2.
 
 %%--------------------------------------------------------------------

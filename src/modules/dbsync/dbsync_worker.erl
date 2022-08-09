@@ -25,6 +25,7 @@
 %% API
 -export([supervisor_flags/0, get_on_demand_changes_stream_id/2,
     start_streams/0, start_streams/1]).
+-export([reset_provider_stream/2]).
 
 %% Internal services API
 -export([start_in_stream/1, stop_in_stream/1, start_out_stream/1, stop_out_stream/1]).
@@ -147,6 +148,14 @@ start_streams(Spaces) ->
 -spec get_on_demand_changes_stream_id(od_space:id(), od_provider:id()) -> binary().
 get_on_demand_changes_stream_id(SpaceId, ProviderId) ->
     <<SpaceId/binary, "_", ProviderId/binary>>.
+
+
+-spec reset_provider_stream(od_space:id(), od_provider:id()) -> ok.
+reset_provider_stream(SpaceId, ProviderId) ->
+    Name = {dbsync_in_stream, SpaceId},
+    gen_server:cast(
+        {global, Name}, {reset_provider_stream, ProviderId}
+    ).
 
 %%%===================================================================
 %%% Internal services API
