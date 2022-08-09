@@ -296,7 +296,7 @@ report_error(TaskId, Job, Reason, Stacktrace) ->
 
 
 -spec build_traverse_opts(archive:doc(), file_ctx:ctx(), user_ctx:ctx()) ->
-    tree_traverse:run_options().
+    {tree_traverse:run_options(), file_ctx:ctx()}.
 build_traverse_opts(ArchiveDoc, DatasetRootCtx, UserCtx) ->
     {ok, ArchiveId} = archive:get_id(ArchiveDoc),
     {ok, Config} = archive:get_config(ArchiveDoc),

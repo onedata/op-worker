@@ -158,24 +158,20 @@ finalize(ArchiveDirCtx, UserCtx) ->
 
 
 -spec archive_file(archive:doc(), file_ctx:ctx(), file_ctx:ctx(), archive:doc() | undefined, 
-    file_meta:path(), user_ctx:ctx(), file_copy:options()) -> {ok, file_ctx:ctx()} | {error, term()}.
+    file_meta:path(), user_ctx:ctx(), file_copy:options()) -> {ok, file_ctx:ctx()}.
 archive_file(ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, ResolvedFilePath, UserCtx, CopyOpts) ->
-    case plain_archive:archive_regular_file(
+    {ok, ArchivedFileCtx} =  plain_archive:archive_regular_file(
         ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, ResolvedFilePath, UserCtx, CopyOpts
-    ) of
-        {ok, ArchivedFileCtx} ->
-            {FileDoc, ArchivedFileCtx2} = file_ctx:get_file_doc(ArchivedFileCtx),
-            case file_meta:get_effective_type(FileDoc) =:= ?REGULAR_FILE_TYPE of
-                true ->
-                    save_checksums_and_archive_custom_metadata(
-                        ArchiveDoc, UserCtx, ArchivedFileCtx2, ResolvedFilePath);
-                false ->
-                    ok
-            end,
-            {ok, ArchivedFileCtx};
-        {error, _} = Error ->
-            Error
-    end.
+    ),
+    {FileDoc, ArchivedFileCtx2} = file_ctx:get_file_doc(ArchivedFileCtx),
+    case file_meta:get_effective_type(FileDoc) =:= ?REGULAR_FILE_TYPE of
+        true ->
+            save_checksums_and_archive_custom_metadata(
+                ArchiveDoc, UserCtx, ArchivedFileCtx2, ResolvedFilePath);
+        false ->
+            ok
+    end,
+    {ok, ArchivedFileCtx}.
 
 
 -spec archive_dir(archive:doc(), file_meta:path(), file_ctx:ctx(), user_ctx:ctx()) -> ok.

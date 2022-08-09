@@ -408,7 +408,7 @@ is_building(#document{value = Archive}) ->
 mark_deleting(ArchiveId, Callback) ->
     update(ArchiveId, fun(Archive = #archive{
         state = PrevState,
-        modifiable_fields = #modifiable_fields{
+        modifiable_fields = ModifiableFields = #modifiable_fields{
             deleted_callback = PrevDeletedCallback
         },
         parent = Parent
@@ -423,7 +423,7 @@ mark_deleting(ArchiveId, Callback) ->
             false ->
                 {ok, Archive#archive{
                     state = ?ARCHIVE_DELETING,
-                    modifiable_fields = #modifiable_fields{
+                    modifiable_fields = ModifiableFields#modifiable_fields{
                         deleted_callback = utils:ensure_defined(Callback, PrevDeletedCallback)
                     }
                 }}

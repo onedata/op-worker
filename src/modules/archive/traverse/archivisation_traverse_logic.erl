@@ -172,7 +172,7 @@ get_nested_dataset_id_if_attached(FileCtx, ParentArchiveDoc) ->
 
 
 -spec initialize_nested_archive(dataset:id(), user_ctx:ctx(), info()) -> 
-    {Aip :: ctx(), Dip :: ctx(), archive:doc()}.
+    {Aip :: ctx(), Dip :: ctx(), archive:doc() | undefined}.
 initialize_nested_archive(NestedDatasetId, UserCtx, #{
     aip_ctx := AipArchiveCtx,
     dip_ctx := DipArchiveCtx,
@@ -388,7 +388,7 @@ archive_file_and_mark_finished(FileCtx, AipArchiveCtx, DipArchiveCtx, BaseArchiv
 
 
 -spec archive_reg_file(file_ctx:ctx(), ctx(), archive:doc(), archive:doc(), file_meta:path(), user_ctx:ctx()) -> 
-    {ok, file_ctx:ctx()} | {error, term()}.
+    {ok, file_ctx:ctx()}.
 archive_reg_file(FileCtx, ArchiveCtx, BaseArchiveDoc, InitialAipDoc, ResolvedFilePath, UserCtx) ->
     CurrentArchiveDoc = archivisation_traverse_ctx:get_archive_doc(ArchiveCtx),
     TargetParentCtx = file_ctx:new_by_guid(archivisation_traverse_ctx:get_target_parent(ArchiveCtx)),
