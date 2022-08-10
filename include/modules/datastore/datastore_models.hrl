@@ -1059,7 +1059,7 @@
 
 
 -record(dir_stats_service_state, {
-    status :: support_parameters:dir_stats_service_status(),
+    status :: dir_stats_service_state:status(),
 
     % incarnation is incremented every time when status is changed to initializing ;
     % it is used to evaluate if collection is outdated (see dir_stats_collection_behaviour:acquire/1)

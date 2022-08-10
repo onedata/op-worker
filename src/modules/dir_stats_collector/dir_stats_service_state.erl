@@ -75,6 +75,7 @@
 -compile({no_auto_import, [get/1]}).
 
 
+-type status() :: active_status() | disabled | stopping.
 % update requests can be generated only for active statuses
 -type active_status() :: enabled | initializing.
 % extended status includes information about incarnation - it is used
@@ -88,7 +89,7 @@
 % transition to `enabled` or `disabled` status was expected but another API call canceled transition before it started.
 -type pending_status_transition() :: enable | disable | canceled | undefined.
 
--type status_change_timestamp() :: {support_parameters:dir_stats_service_status(), time:seconds()}.
+-type status_change_timestamp() :: {status(), time:seconds()}.
 
 -type record() :: #dir_stats_service_state{}.
 -type doc() :: datastore_doc:doc(record()).
@@ -96,7 +97,7 @@
 -type ctx() :: datastore:ctx().
 
 -export_type([
-    active_status/0,
+    status/0, active_status/0,
     extended_status/0, extended_active_status/0,
     pending_status_transition/0, status_change_timestamp/0,
     record/0
@@ -135,7 +136,7 @@ is_active(SpaceIdOrState) ->
     end.
 
 
--spec get_status(od_space:id() | record()) -> support_parameters:dir_stats_service_status().
+-spec get_status(od_space:id() | record()) -> status().
 get_status(SpaceIdOrState) ->
     case get_extended_status(SpaceIdOrState) of
         {initializing, _} -> initializing;
@@ -464,7 +465,7 @@ diff_fun_with_timestamp_update(Diff) ->
     end.
 
 
--spec update_timestamps(support_parameters:dir_stats_service_status(), [status_change_timestamp()]) ->
+-spec update_timestamps(status(), [status_change_timestamp()]) ->
     [status_change_timestamp()].
 update_timestamps(NewStatus, Timestamps) ->
     NewTimestamps = [{NewStatus, global_clock:timestamp_seconds()} | Timestamps],

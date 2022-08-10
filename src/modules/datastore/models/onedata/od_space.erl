@@ -100,7 +100,9 @@ run_after(Doc = #document{key = SpaceId, value = Space = #od_space{harvesters = 
             spawn(main_harvesting_stream, revise_space_harvesters, [SpaceId, Harvesters]),
             ok = dbsync_worker:start_streams([SpaceId]),
 
-            % Guard against various races when toggling support parameters in oz
+            % Guard against various races when toggling support parameters in oz % (datastore
+            % posthooks can be executed in different order than datastore functions which
+            % trigger them)
             critical_section:run({handle_space_support_parameters_change, SpaceId}, fun() ->
                 case space_logic:get(?ROOT_SESS_ID, SpaceId) of
                     {ok, CurrentDoc} ->
