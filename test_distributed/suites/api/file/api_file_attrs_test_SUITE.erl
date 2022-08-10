@@ -1322,17 +1322,17 @@ get_reg_file_storage_locations_test(Config, StorageType) ->
     P1StorageId = get_storage_id(SpaceId, P1Id),
     P2StorageId = get_storage_id(SpaceId, P2Id),
     
-    SpaceOwnerSessIdP1 = oct_background:get_user_session_id(user2, krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
     UserSessIdP2 = oct_background:get_user_session_id(user3, paris),
     
-    #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(
-        user3, fslogic_file_id:spaceid_to_space_dir_guid(SpaceId), #file_spec{mode = 8#707}, krakow
+    #object{guid = FileGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
+        user3, fslogic_file_id:spaceid_to_space_dir_guid(SpaceId), #file_spec{
+            shares = [#share_spec{}],
+            mode = 8#707,
+            content = crypto:strong_rand_bytes(20)
+        }, krakow
     ),
     FileUuid = file_id:guid_to_uuid(FileGuid),
-    {ok, ShareId} = opt_shares:create(P1Node, SpaceOwnerSessIdP1, ?FILE_REF(FileGuid), <<"share">>),
-    
-    lfm_test_utils:write_file(P1Node, UserSessIdP1, FileGuid, 0, {rand_content, 20}),
     
     {ok, FilePath} = lfm_proxy:get_file_path(P1Node, UserSessIdP1, FileGuid),
     [_Sep, _SpaceName | PathTokens] = filename:split(FilePath),
@@ -1368,7 +1368,7 @@ get_storage_locations_test_base(FileGuid, ShareId, ExpResult, Config) ->
         ?assertEqual({?HTTP_200_OK, ExpResult}, {RespCode, RespBody})
     end,
     
-    CreateValidateGsSuccessfulCallFun = fun(_TestCtx, Result) ->
+    ValidateGsSuccessfulCallFun = fun(_TestCtx, Result) ->
         ExpGsResponse = #{
             <<"gri">> => gri:serialize(#gri{
                 type = op_file, id = FileGuid, aspect = storage_locations, scope = private
@@ -1394,7 +1394,7 @@ get_storage_locations_test_base(FileGuid, ShareId, ExpResult, Config) ->
                     name = <<"Get file storage locations using op_file gs api">>,
                     type = gs,
                     prepare_args_fun = build_get_storage_locations_prepare_gs_args_fun(FileGuid, private),
-                    validate_result_fun = CreateValidateGsSuccessfulCallFun
+                    validate_result_fun = ValidateGsSuccessfulCallFun
                 }
             ],
             data_spec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(

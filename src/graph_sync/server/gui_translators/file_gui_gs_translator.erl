@@ -203,7 +203,7 @@ translate_file_details(#file_details{
         provider_id = ProviderId,
         owner_id = OwnerId,
         nlink = NLink,
-        listing_index = ListingIndex
+        index = ListingIndex
     },
     conflicting_name = ConflictingName
 }, Scope) ->

@@ -486,7 +486,7 @@ get_space_dir_details(Node, SpaceDirGuid, SpaceName, ParentGuid) ->
     #file_details{
         file_attr = SpaceAttrs#file_attr{
             name = SpaceName, parent_guid = ParentGuid, 
-            listing_index = file_listing:build_index(file_id:guid_to_space_id(SpaceDirGuid))
+            index = file_listing:build_index(file_id:guid_to_space_id(SpaceDirGuid))
         },
         active_permissions_type = posix,
         eff_protection_flags = ?no_flags_mask,

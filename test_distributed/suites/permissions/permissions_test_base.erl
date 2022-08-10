@@ -1235,9 +1235,15 @@ gather_historical_dir_size_stats_test(Config) ->
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
         root_dir_name = ?SCENARIO_NAME,
-        files = [#file{
-            name = <<"file1">>,
-            perms = [?read_metadata]
+        files = [#dir{
+            name = <<"dir1">>,
+            perms = [?read_metadata],
+            children = [
+                #file{
+                    name = <<"file1">>,
+                    perms = []
+                }
+            ]
         }],
         posix_requires_space_privs = [?SPACE_READ_DATA],
         acl_requires_space_privs = [?SPACE_READ_DATA],

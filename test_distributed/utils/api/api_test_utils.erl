@@ -392,7 +392,7 @@ file_details_to_gs_json(undefined, #file_details{
         owner_id = OwnerId,
         provider_id = ProviderId,
         nlink = LinksCount,
-        listing_index = Index
+        index = Index
     },
     active_permissions_type = ActivePermissionsType,
     eff_protection_flags = EffFileProtectionFlags,
@@ -441,7 +441,7 @@ file_details_to_gs_json(ShareId, #file_details{
         size = Size,
         mtime = MTime,
         shares = Shares,
-        listing_index = Index
+        index = Index
     },
     active_permissions_type = ActivePermissionsType,
     has_metadata = HasMetadata
@@ -490,7 +490,7 @@ file_attrs_to_json(undefined, #file_attr{
     provider_id = ProviderId,
     owner_id = OwnerId,
     nlink = HardlinksCount,
-    listing_index = ListingIndex
+    index = Index
 }) ->
     {ok, ObjectId} = file_id:guid_to_objectid(Guid),
     
@@ -519,7 +519,7 @@ file_attrs_to_json(undefined, #file_attr{
         <<"provider_id">> => ProviderId,
         <<"owner_id">> => OwnerId,
         <<"hardlinks_count">> => utils:undefined_to_null(HardlinksCount),
-        <<"listing_index">> => ListingIndex
+        <<"index">> => Index
     };
 file_attrs_to_json(ShareId, #file_attr{
     guid = FileGuid,

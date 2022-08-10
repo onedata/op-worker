@@ -1309,14 +1309,14 @@ lfm_get_details(Config) ->
 
     Index1 = file_listing:build_index(<<"space_id2">>),
     ?assertMatch({ok, #file_details{
-        file_attr = #file_attr{name = <<"space_name2">>, size = undefined, listing_index = Index1},
+        file_attr = #file_attr{name = <<"space_name2">>, size = undefined, index = Index1},
         active_permissions_type = posix,
         has_metadata = false
     }}, lfm_proxy:get_details(W, SessId1, {path, <<"/space_name2">>})),
 
     Index2 = file_listing:build_index(<<"test5">>, ?GET_DOMAIN_BIN(W)),
     ?assertMatch({ok, #file_details{
-        file_attr = #file_attr{name = <<"test5">>, size = 0, listing_index = Index2},
+        file_attr = #file_attr{name = <<"test5">>, size = 0, index = Index2},
         active_permissions_type = posix,
         has_metadata = false
     }}, lfm_proxy:get_details(W, SessId1, {path, <<"/space_name2/test5">>})),
@@ -2581,7 +2581,7 @@ verify_details(Config, MainDirPath, Files, FilesOffset, ExpectedSize, Offset, Li
     case List of
         [_ | _] ->
             LastFile = lists:last(List),
-            LastFile#file_details.file_attr#file_attr.listing_index;
+            LastFile#file_details.file_attr#file_attr.index;
         _ ->
             undefined
     end.

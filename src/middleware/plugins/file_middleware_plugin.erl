@@ -70,7 +70,7 @@ file_attrs_to_json(#file_attr{
     provider_id = ProviderId,
     owner_id = OwnerId,
     nlink = HardlinksCount,
-    listing_index = ListingIndex
+    index = Index
 }) ->
     {ok, ObjectId} = file_id:guid_to_objectid(Guid),
 
@@ -99,7 +99,7 @@ file_attrs_to_json(#file_attr{
         <<"provider_id">> => ProviderId,
         <<"owner_id">> => OwnerId,
         <<"hardlinks_count">> => utils:undefined_to_null(HardlinksCount),
-        <<"listing_index">> => ListingIndex
+        <<"index">> => Index
     }.
 
 

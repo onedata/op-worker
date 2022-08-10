@@ -513,7 +513,7 @@ resolve_file_attr(UserCtx, FileCtx, Opts) ->
         owner_id = OwnerId,
         fully_replicated = ReplicationStatus,
         nlink = LinksCount,
-        listing_index = case file_ctx:is_space_dir_const(FileCtx) of
+        index = case file_ctx:is_space_dir_const(FileCtx) of
             true ->
                 % As provider id in space doc is random (depends on which provider called `file_meta:make_space_exist/0`) 
                 % use only space id in index (there are no conflicts on spaces between providers, so it is not a problem).
