@@ -25,6 +25,7 @@
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
+-include_lib("cluster_worker/include/time_series/browsing.hrl").
 
 -export([
     init_per_suite/1, end_per_suite/1,
@@ -60,6 +61,8 @@
     get_file_attr_test/1,
     get_file_details_test/1,
     get_file_distribution_test/1,
+    gather_historical_dir_size_stats_test/1,
+    get_file_storage_locations_test/1,
 
     set_perms_test/1,
     check_read_perms_test/1,
@@ -1218,6 +1221,61 @@ get_file_distribution_test(Config) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(opt_file_metadata:get_distribution_deprecated(W, SessId, FileKey))
+        end,
+        returned_errors = api_errors,
+        final_ownership_check = fun(TestCaseRootDirPath) ->
+            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
+        end
+    }, Config).
+
+
+gather_historical_dir_size_stats_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    
+    permissions_test_runner:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir_name = ?SCENARIO_NAME,
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?read_metadata]
+        }],
+        posix_requires_space_privs = [?SPACE_READ_DATA],
+        acl_requires_space_privs = [?SPACE_READ_DATA],
+        available_in_readonly_mode = true,
+        available_in_share_mode = false,
+        available_in_open_handle_mode = false,
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileKey = maps:get(FilePath, ExtraData),
+            extract_ok(opt_file_metadata:gather_historical_dir_size_stats(
+                W, SessId, FileKey, #time_series_layout_get_request{}))
+        end,
+        returned_errors = api_errors,
+        final_ownership_check = fun(TestCaseRootDirPath) ->
+            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
+        end
+    }, Config).
+
+
+get_file_storage_locations_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    
+    permissions_test_runner:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir_name = ?SCENARIO_NAME,
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?read_metadata]
+        }],
+        posix_requires_space_privs = [?SPACE_READ_DATA],
+        acl_requires_space_privs = [?SPACE_READ_DATA],
+        available_in_readonly_mode = true,
+        available_in_share_mode = false,
+        available_in_open_handle_mode = false,
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileKey = maps:get(FilePath, ExtraData),
+            extract_ok(opt_file_metadata:get_storage_locations(W, SessId, FileKey))
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->

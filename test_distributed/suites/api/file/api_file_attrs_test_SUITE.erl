@@ -48,7 +48,8 @@
     get_dir_distribution_3_test/1,
     get_symlink_distribution_test/1,
     
-    get_reg_file_storage_locations_test/1,
+    get_reg_file_storage_locations_test_posix/1,
+    get_reg_file_storage_locations_test_s3/1,
 
     test_for_hardlink_between_files_test/1,
     
@@ -69,8 +70,9 @@ groups() -> [
 
         get_symlink_distribution_test,
         get_reg_file_distribution_test,
-
-        get_reg_file_storage_locations_test,
+    
+        get_reg_file_storage_locations_test_posix,
+        get_reg_file_storage_locations_test_s3,
 
         test_for_hardlink_between_files_test
     ]},
@@ -1298,15 +1300,25 @@ build_gather_historical_dir_size_stats_prepare_gs_args_fun(FileGuid, DefaultData
 %%% Get file storage locations test functions
 %%%===================================================================
 
+get_reg_file_storage_locations_test_posix(Config) ->
+    get_reg_file_storage_locations_test(Config, posix).
 
-get_reg_file_storage_locations_test(Config) ->
+
+get_reg_file_storage_locations_test_s3(Config) ->
+    get_reg_file_storage_locations_test(Config, s3).
+
+
+get_reg_file_storage_locations_test(Config, StorageType) ->
     P1Id = oct_background:get_provider_id(krakow),
     [P1Node] = oct_background:get_provider_nodes(krakow),
     
     P2Id = oct_background:get_provider_id(paris),
     [P2Node] = oct_background:get_provider_nodes(paris),
     
-    SpaceId = oct_background:get_space_id(space_krk_par),
+    SpaceId = case StorageType of
+        posix -> oct_background:get_space_id(space_krk_par);
+        s3 -> oct_background:get_space_id(space_s3)
+    end,
     P1StorageId = get_storage_id(SpaceId, P1Id),
     P2StorageId = get_storage_id(SpaceId, P2Id),
     
@@ -1314,17 +1326,23 @@ get_reg_file_storage_locations_test(Config) ->
     UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
     UserSessIdP2 = oct_background:get_user_session_id(user3, paris),
     
-    FileType = <<"file">>,
-    FilePath = filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()]),
-    {ok, FileGuid} = lfm_test_utils:create_file(FileType, P1Node, UserSessIdP1, FilePath, 8#707),
+    #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(
+        user3, fslogic_file_id:spaceid_to_space_dir_guid(SpaceId), #file_spec{mode = 8#707}, krakow
+    ),
     FileUuid = file_id:guid_to_uuid(FileGuid),
     {ok, ShareId} = opt_shares:create(P1Node, SpaceOwnerSessIdP1, ?FILE_REF(FileGuid), <<"share">>),
     
     lfm_test_utils:write_file(P1Node, UserSessIdP1, FileGuid, 0, {rand_content, 20}),
     
-    {ok, FileLogicalPath} = lfm_proxy:get_file_path(P1Node, UserSessIdP1, FileGuid),
-    [_Sep, _SpaceName | PathTokens] = filename:split(FileLogicalPath),
-    FileStoragePath = filename:join([<<"/">>, SpaceId | PathTokens]),
+    {ok, FilePath} = lfm_proxy:get_file_path(P1Node, UserSessIdP1, FileGuid),
+    [_Sep, _SpaceName | PathTokens] = filename:split(FilePath),
+    FileStoragePath = case StorageType of
+        posix -> 
+            filename:join([<<"/">>, SpaceId | PathTokens]);
+        s3 -> 
+            <<A:1/binary, B:1/binary, C:1/binary, _/binary>> = FileUuid,
+            filename:join([<<"/">>, SpaceId, A, B, C, FileUuid])
+    end,
     ExpResult1 = #{
         P1StorageId => FileStoragePath,
         P2StorageId => null
@@ -1350,17 +1368,15 @@ get_storage_locations_test_base(FileGuid, ShareId, ExpResult, Config) ->
         ?assertEqual({?HTTP_200_OK, ExpResult}, {RespCode, RespBody})
     end,
     
-    CreateValidateGsSuccessfulCallFun = fun(Type) ->
+    CreateValidateGsSuccessfulCallFun = fun(_TestCtx, Result) ->
         ExpGsResponse = #{
             <<"gri">> => gri:serialize(#gri{
-                type = Type, id = FileGuid, aspect = storage_locations, scope = private
+                type = op_file, id = FileGuid, aspect = storage_locations, scope = private
             }),
             <<"revision">> => 1,
             <<"locationsPerStorage">> => ExpResult
         },
-        fun(_TestCtx, Result) ->
-            ?assertEqual({ok, ExpGsResponse}, Result)
-        end
+        ?assertEqual({ok, ExpGsResponse}, Result)
     end,
     
     ?assert(onenv_api_test_runner:run_tests([
@@ -1369,7 +1385,7 @@ get_storage_locations_test_base(FileGuid, ShareId, ExpResult, Config) ->
             client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR,
             scenario_templates = [
                 #scenario_template{
-                    name = <<"Get file storage locations for using /data/FileId/storage_locations rest endpoint">>,
+                    name = <<"Get file storage locations using /data/FileId/storage_locations rest endpoint">>,
                     type = rest,
                     prepare_args_fun = build_get_storage_locations_prepare_rest_args_fun(FileObjectId),
                     validate_result_fun = ValidateRestSuccessfulCallFun
@@ -1378,7 +1394,7 @@ get_storage_locations_test_base(FileGuid, ShareId, ExpResult, Config) ->
                     name = <<"Get file storage locations using op_file gs api">>,
                     type = gs,
                     prepare_args_fun = build_get_storage_locations_prepare_gs_args_fun(FileGuid, private),
-                    validate_result_fun = CreateValidateGsSuccessfulCallFun(op_file)
+                    validate_result_fun = CreateValidateGsSuccessfulCallFun
                 }
             ],
             data_spec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(

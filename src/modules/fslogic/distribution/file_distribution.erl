@@ -39,7 +39,7 @@
 -type get_result() :: #file_distribution_gather_result{}.
 
 -type storage_locations() :: #{
-    storage:id() => file_location:storage_location()
+    storage:id() => file_location:storage_file_id()
 }.
 
 -export_type([
