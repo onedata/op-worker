@@ -16,6 +16,7 @@
 -behaviour(workflow_handler).
 
 -include("modules/automation/atm_execution.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include("workflow_engine.hrl").
 -include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -43,7 +44,9 @@
 
     handle_lane_execution_ended/3,
 
-    handle_workflow_execution_ended/2
+    handle_workflow_execution_ended/2,
+
+    handle_exception/5
 ]).
 
 
@@ -203,8 +206,6 @@ run_task_for_item(
     AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(
         AtmTaskExecutionId, AtmWorkflowExecutionEnv
     ),
-    % NOTE: no try..catch needed as exceptions are caught in 'atm_task_execution_handler'
-    % and treated as item processing errors
     atm_task_execution_handler:run_job_batch(
         AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemBatch,
         ForwardOutputUrl, HeartbeatUrl
@@ -235,8 +236,6 @@ process_task_result_for_item(
     AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(
         AtmTaskExecutionId, AtmWorkflowExecutionEnv
     ),
-    % NOTE: no try..catch needed as exceptions are caught in 'atm_task_execution_handler'
-    % and treated as item processing errors
     atm_task_execution_handler:process_job_batch_output(
         AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemBatch, LambdaOutput
     ).
@@ -258,7 +257,6 @@ process_streamed_task_data(
     AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(
         AtmTaskExecutionId, AtmWorkflowExecutionEnv
     ),
-    % NOTE: no try..catch needed as exceptions are caught in 'atm_task_execution_handler'
     atm_task_execution_handler:process_streamed_data(
         AtmWorkflowExecutionCtx, AtmTaskExecutionId, StreamedData
     ).
@@ -284,25 +282,8 @@ handle_task_results_processed_for_all_items(
     atm_task_execution:id()
 ) ->
     ok.
-handle_task_execution_ended(_AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId) ->
-    AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(
-        AtmTaskExecutionId, AtmWorkflowExecutionEnv
-    ),
-
-    try
-        ok = atm_task_execution_handler:handle_ended(AtmTaskExecutionId)
-    catch Type:Reason:Stacktrace ->
-        LogContent = #{
-            <<"description">> => str_utils:format_bin(
-                "Unexpected failure when handling end procedures for task execution '~s'.",
-                [AtmTaskExecutionId]
-            ),
-            <<"reason">> => errors:to_json(?atm_examine_error(Type, Reason, Stacktrace))
-        },
-        Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-        atm_workflow_execution_logger:task_warning(LogContent, Logger),
-        atm_workflow_execution_logger:workflow_warning(LogContent, Logger)
-    end.
+handle_task_execution_ended(_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId) ->
+    atm_task_execution_handler:handle_ended(AtmTaskExecutionId).
 
 
 -spec report_item_error(
@@ -337,22 +318,9 @@ report_item_error(_AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, ItemBatch) -
 handle_lane_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneRunSelector) ->
     AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(AtmWorkflowExecutionEnv),
 
-    try
-        atm_lane_execution_handler:handle_ended(
-            AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
-        )
-    catch Type:Reason:Stacktrace ->
-        LogContent = #{
-            <<"description">> => str_utils:format_bin(
-                "Unexpected failure when handling end procedures for current run of lane number ~B.",
-                [element(1, AtmLaneRunSelector)]
-            ),
-            <<"reason">> => errors:to_json(?atm_examine_error(Type, Reason, Stacktrace))
-        },
-        Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-        atm_workflow_execution_logger:workflow_critical(LogContent, Logger),
-        ?END_EXECUTION
-    end.
+    atm_lane_execution_handler:handle_ended(
+        AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
+    ).
 
 
 -spec handle_workflow_execution_ended(
@@ -362,33 +330,84 @@ handle_lane_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, Atm
     ok.
 handle_workflow_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv) ->
     AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(AtmWorkflowExecutionEnv),
+    end_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx).
 
-    try
-        {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:get(AtmWorkflowExecutionId),
-        ensure_all_lane_executions_ended(AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx),
-        freeze_global_stores(AtmWorkflowExecutionDoc),
 
-        atm_workflow_execution_session:terminate(AtmWorkflowExecutionId),
+-spec handle_exception(
+    atm_workflow_execution:id(),
+    atm_workflow_execution_env:record(),
+    throw | error | exit,
+    term(),
+    list()
+) ->
+    ?END_EXECUTION.
+handle_exception(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, Type, Reason, Stacktrace) ->
+    AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(
+        undefined,
+        % user session may no longer be available (e.g. session expiration caused exception) -
+        % use provider root session just to abort execution
+        get_root_workflow_execution_auth(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv),
+        AtmWorkflowExecutionEnv
+    ),
 
-        {ok, EndedAtmWorkflowExecutionDoc} = atm_workflow_execution_status:handle_ended(
-            AtmWorkflowExecutionId
-        ),
-        notify_ended(EndedAtmWorkflowExecutionDoc)
-    catch Type:Reason:Stacktrace ->
-        LogContent = #{
-            <<"description">> => <<
-                "Unexpected failure when handling end procedures for workflow execution."
-            >>,
-            <<"reason">> => errors:to_json(?atm_examine_error(Type, Reason, Stacktrace))
-        },
-        Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-        atm_workflow_execution_logger:workflow_emergency(LogContent, Logger)
-    end.
+    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+    log_exception(Logger, Type, Reason, Stacktrace),
+
+    AbortingReason = case Type of
+        throw -> interrupt;
+        _ -> crush
+    end,
+    atm_lane_execution_handler:abort({current, current}, AbortingReason, AtmWorkflowExecutionCtx),
+    end_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
+
+    ?END_EXECUTION.
 
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec acquire_global_env(atm_workflow_execution:doc()) -> atm_workflow_execution_env:record().
+acquire_global_env(#document{key = AtmWorkflowExecutionId, value = #atm_workflow_execution{
+    space_id = SpaceId,
+    incarnation = AtmWorkflowExecutionIncarnation,
+    store_registry = AtmGlobalStoreRegistry,
+    system_audit_log_store_id = AtmWorkflowAuditLogStoreId
+}}) ->
+    Env = atm_workflow_execution_env:build(
+        SpaceId, AtmWorkflowExecutionId, AtmWorkflowExecutionIncarnation, AtmGlobalStoreRegistry
+    ),
+
+    AtmWorkflowAuditLogStoreContainer = case atm_store_api:get(AtmWorkflowAuditLogStoreId) of
+        {ok, #atm_store{container = Container}} ->
+            Container;
+        ?ERROR_NOT_FOUND ->
+            undefined
+    end,
+    atm_workflow_execution_env:set_workflow_audit_log_store_container(
+        AtmWorkflowAuditLogStoreContainer, Env
+    ).
+
+
+%% @private
+-spec end_workflow_execution(
+    atm_workflow_execution:id(),
+    atm_workflow_execution_ctx:record()
+) ->
+    ok.
+end_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
+    {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:get(AtmWorkflowExecutionId),
+    ensure_all_lane_executions_ended(AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx),
+    freeze_global_stores(AtmWorkflowExecutionDoc),
+
+    atm_workflow_execution_session:terminate(AtmWorkflowExecutionId),
+
+    {ok, EndedAtmWorkflowExecutionDoc} = atm_workflow_execution_status:handle_ended(
+        AtmWorkflowExecutionId
+    ),
+    notify_ended(EndedAtmWorkflowExecutionDoc).
 
 
 %% @private
@@ -442,29 +461,6 @@ unfreeze_global_stores(#document{value = #atm_workflow_execution{
     lists:foreach(
         fun(AtmStoreId) -> atm_store_api:unfreeze(AtmStoreId) end,
         maps:values(AtmStoreRegistry)
-    ).
-
-
-%% @private
--spec acquire_global_env(atm_workflow_execution:doc()) -> atm_workflow_execution_env:record().
-acquire_global_env(#document{key = AtmWorkflowExecutionId, value = #atm_workflow_execution{
-    space_id = SpaceId,
-    incarnation = AtmWorkflowExecutionIncarnation,
-    store_registry = AtmGlobalStoreRegistry,
-    system_audit_log_store_id = AtmWorkflowAuditLogStoreId
-}}) ->
-    Env = atm_workflow_execution_env:build(
-        SpaceId, AtmWorkflowExecutionId, AtmWorkflowExecutionIncarnation, AtmGlobalStoreRegistry
-    ),
-
-    AtmWorkflowAuditLogStoreContainer = case atm_store_api:get(AtmWorkflowAuditLogStoreId) of
-        {ok, #atm_store{container = Container}} ->
-            Container;
-        ?ERROR_NOT_FOUND ->
-            undefined
-    end,
-    atm_workflow_execution_env:set_workflow_audit_log_store_container(
-        AtmWorkflowAuditLogStoreContainer, Env
     ).
 
 
@@ -536,3 +532,47 @@ send_notification(CallbackUrl, Headers, Payload) ->
         {error, _} = Error ->
             Error
     end.
+
+
+%% @private
+-spec get_root_workflow_execution_auth(
+    atm_workflow_execution:id(),
+    atm_workflow_execution_env:record()
+) ->
+    atm_workflow_execution_auth:record().
+get_root_workflow_execution_auth(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv) ->
+    atm_workflow_execution_auth:build(
+        atm_workflow_execution_env:get_space_id(AtmWorkflowExecutionEnv),
+        AtmWorkflowExecutionId,
+        ?ROOT_SESS_ID
+    ).
+
+
+%% @private
+-spec log_exception(
+    atm_workflow_execution_logger:record(),
+    throw | error | exit,
+    term(),
+    list()
+) ->
+    ok.
+log_exception(Logger, throw, {session_acquisition_failed, Error}, _Stacktrace) ->
+    LogContent = #{
+        <<"description">> => "Failed to acquire user session.",
+        <<"reason">> => errors:to_json(Error)
+    },
+    atm_workflow_execution_logger:workflow_critical(LogContent, Logger);
+
+log_exception(Logger, throw, Reason, _Stacktrace) ->
+    LogContent = #{
+        <<"description">> => "Unexpected error occured.",
+        <<"reason">> => errors:to_json(Reason)
+    },
+    atm_workflow_execution_logger:workflow_critical(LogContent, Logger);
+
+log_exception(Logger, Type, Reason, Stacktrace) ->
+    LogContent = #{
+        <<"description">> => "Unexpected error occured.",
+        <<"reason">> => errors:to_json(?atm_examine_error(Type, Reason, Stacktrace))
+    },
+    atm_workflow_execution_logger:workflow_emergency(LogContent, Logger).

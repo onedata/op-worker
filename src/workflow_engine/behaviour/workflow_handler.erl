@@ -215,3 +215,20 @@
     workflow_engine:execution_context()
 ) ->
     ok.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Callback called when uncaught exception was raised from any callback.
+%% While it is called all other callbacks processing is put on hold.
+%% Depending on exception handling execution is either resumed or aborted.
+%% @end
+%%--------------------------------------------------------------------
+-callback handle_exception(
+    workflow_engine:execution_id(),
+    workflow_engine:execution_context(),
+    throw | error | exit,
+    term(),
+    list()
+) ->
+    ok | ?END_EXECUTION.

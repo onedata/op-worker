@@ -134,31 +134,25 @@ run_job_batch(
 ) ->
     ItemsNum = length(ItemBatch),
 
-    case atm_task_execution_status:handle_items_in_processing(AtmTaskExecutionId, ItemsNum) of
-        {ok, #document{value = AtmTaskExecution = #atm_task_execution{
+    {ok, #document{
+        value = AtmTaskExecution = #atm_task_execution{
             executor = AtmTaskExecutor
-        }}} ->
-            AtmRunJobBatchCtx = atm_run_job_batch_ctx:build(
-                AtmWorkflowExecutionCtx, ForwardOutputUrl, HeartbeatUrl, AtmTaskExecution
-            ),
-            LambdaInput = build_lambda_input(AtmRunJobBatchCtx, ItemBatch, AtmTaskExecution),
+        }
+    }} = atm_task_execution_status:handle_items_in_processing(AtmTaskExecutionId, ItemsNum),
 
-            try
-                atm_task_executor:run(AtmRunJobBatchCtx, LambdaInput, AtmTaskExecutor)
-            catch Type:Reason:Stacktrace ->
-                handle_job_batch_processing_error(
-                    AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemBatch,
-                    ?atm_examine_error(Type, Reason, Stacktrace)
-                ),
-                error
-            end;
+    AtmRunJobBatchCtx = atm_run_job_batch_ctx:build(
+        AtmWorkflowExecutionCtx, ForwardOutputUrl, HeartbeatUrl, AtmTaskExecution
+    ),
+    LambdaInput = build_lambda_input(AtmRunJobBatchCtx, ItemBatch, AtmTaskExecution),
 
-        {error, aborting} ->
-            error;  %% TODO
-
-        {error, already_ended} ->
-            %% TODO return ok | error | aborted instead of throw ?
-            throw(?ERROR_ATM_TASK_EXECUTION_ENDED)
+    try
+        atm_task_executor:run(AtmRunJobBatchCtx, LambdaInput, AtmTaskExecutor)
+    catch Type:Reason:Stacktrace ->
+        handle_job_batch_processing_error(
+            AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemBatch,
+            ?atm_examine_error(Type, Reason, Stacktrace)
+        ),
+        error
     end.
 
 

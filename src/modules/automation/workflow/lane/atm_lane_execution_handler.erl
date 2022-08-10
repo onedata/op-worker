@@ -78,7 +78,7 @@ abort(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx) ->
             workflow_engine:cancel_execution(AtmWorkflowExecutionId);
 
         {error, _} = Error ->
-            Error
+            throw(Error)
     end.
 
 
