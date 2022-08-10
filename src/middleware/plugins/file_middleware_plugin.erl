@@ -574,7 +574,7 @@ data_spec_get(#gri{aspect = files, scope = Sc}) -> #{
         <<"token">> => {binary, any},
         <<"prefix">> => {binary, any},
         <<"start_after">> => {binary, any},
-        <<"list_directories">> => {boolean, any},
+        <<"include_directories">> => {boolean, any},
         <<"attribute">> => {any, case Sc of
             public -> [<<"path">> | ?PUBLIC_BASIC_ATTRIBUTES];
             private -> [<<"path">> | ?PRIVATE_BASIC_ATTRIBUTES]
@@ -865,7 +865,7 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = files}}
         pagination_token => maps:get(<<"token">>, Data, undefined),
         start_after_path => maps:get(<<"start_after">>, Data, undefined),
         prefix => maps:get(<<"prefix">>, Data, undefined),
-        list_directories => maps:get(<<"list_directories">>, Data, undefined)
+        include_directories => maps:get(<<"include_directories">>, Data, undefined)
     }),
     RequestedAttributes = utils:ensure_list(maps:get(<<"attribute">>, Data, ?DEFAULT_RECURSIVE_FILE_LIST_ATTRIBUTES)),
     {ok, Result, InaccessiblePaths, NextPageToken} =

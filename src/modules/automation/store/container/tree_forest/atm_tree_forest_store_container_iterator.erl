@@ -28,7 +28,7 @@
 -export([build/2]).
 
 % atm_store_container_iterator callbacks
--export([get_next_batch/3, forget_before/1, mark_exhausted/1]).
+-export([get_next_batch/3]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -53,8 +53,8 @@
 
 
 -callback list_tree(
-    tree_pagination_token() | undefined, 
     atm_workflow_execution_auth:record(), 
+    tree_pagination_token() | undefined, 
     atm_value:compressed(), 
     atm_store_container_iterator:batch_size()
 ) -> 
@@ -89,16 +89,6 @@ get_next_batch(AtmWorkflowExecutionAuth, BatchSize, Record) ->
     get_next_batch(AtmWorkflowExecutionAuth, BatchSize, Record, []).
 
 
--spec forget_before(record()) -> ok.
-forget_before(_) ->
-    ok.
-
-
--spec mark_exhausted(record()) -> ok.
-mark_exhausted(_) ->
-    ok.
-
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -118,20 +108,24 @@ get_next_batch(
     AtmWorkflowExecutionAuth,
     BatchSize,
     Record = #atm_tree_forest_store_container_iterator{
-        tree_pagination_token = undefined, 
-        item_data_spec = ItemDataSpec
+        tree_pagination_token = undefined
     },
     ForestAcc
 ) ->
-    #atm_tree_forest_store_container_iterator{roots_iterator = ListIterator} = Record,
+    #atm_tree_forest_store_container_iterator{
+        roots_iterator = ListIterator, 
+        item_data_spec = ItemDataSpec
+    } = Record,
     case atm_list_store_container_iterator:get_next_batch(AtmWorkflowExecutionAuth, 1, ListIterator) of
         {ok, [CurrentTreeRootExpanded], NextRootsIterator} ->
             CurrentTreeRoot = atm_value:compress(CurrentTreeRootExpanded, ItemDataSpec),
-            UpdatedRecord = Record#atm_tree_forest_store_container_iterator{
+            NextTreeRecord = Record#atm_tree_forest_store_container_iterator{
                 current_tree_root = CurrentTreeRoot,
                 roots_iterator = NextRootsIterator
             },
-            list_tree(AtmWorkflowExecutionAuth, BatchSize, UpdatedRecord, ForestAcc);
+            {TreeAcc, UpdatedRecord} = list_tree(AtmWorkflowExecutionAuth, BatchSize, NextTreeRecord),
+            get_next_batch(
+                AtmWorkflowExecutionAuth, BatchSize - length(TreeAcc), UpdatedRecord, TreeAcc ++ ForestAcc);
         {ok, [], NextRootsIterator} ->
             UpdatedRecord = Record#atm_tree_forest_store_container_iterator{
                 roots_iterator = NextRootsIterator,
@@ -146,17 +140,18 @@ get_next_batch(
     end;
 
 get_next_batch(AtmWorkflowExecutionAuth, BatchSize, Record, ForestAcc) ->
-    list_tree(AtmWorkflowExecutionAuth, BatchSize, Record, ForestAcc).
+    {TreeAcc, UpdatedRecord} = list_tree(AtmWorkflowExecutionAuth, BatchSize, Record),
+    get_next_batch(
+        AtmWorkflowExecutionAuth, BatchSize - length(TreeAcc), UpdatedRecord, TreeAcc ++ ForestAcc).
 
 
 %% @private
 -spec list_tree(
     atm_workflow_execution_auth:record(),
     atm_store_container_iterator:batch_size(),
-    record(),
-    [atm_value:compressed()]
+    record()
 ) ->
-    {ok, [atm_value:compressed()], record()} | stop.
+    {[atm_value:compressed()], record()}.
 list_tree(
     AtmWorkflowExecutionAuth,
     BatchSize,
@@ -164,16 +159,14 @@ list_tree(
         callback_module = Module,
         tree_pagination_token = PaginationToken,
         current_tree_root = CurrentTreeRoot
-    } = Record,
-    ForestAcc
+    } = Record
 ) ->
     {TreeAcc, NextPaginationToken} = Module:list_tree(
         PaginationToken, AtmWorkflowExecutionAuth, CurrentTreeRoot, BatchSize),
     UpdatedRecord = Record#atm_tree_forest_store_container_iterator{
         tree_pagination_token = NextPaginationToken
     },
-    get_next_batch(
-        AtmWorkflowExecutionAuth, BatchSize - length(TreeAcc), UpdatedRecord, TreeAcc ++ ForestAcc).
+    {TreeAcc, UpdatedRecord}.
 
 
 %%%===================================================================

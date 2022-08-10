@@ -66,13 +66,13 @@ assert_meets_constraints(AtmWorkflowExecutionAuth, #{<<"file_id">> := ObjectId} 
 %%%===================================================================
 
 -spec list_tree(
-    recursive_file_listing:pagination_token() | undefined,
     atm_workflow_execution_auth:record(),
+    recursive_file_listing:pagination_token() | undefined,
     atm_value:compressed(),
     atm_store_container_iterator:batch_size()
 ) ->
     {[atm_value:expanded()], recursive_file_listing:pagination_token() | undefined}.
-list_tree(PrevToken, AtmWorkflowExecutionAuth, CompressedRoot, BatchSize) ->
+list_tree(AtmWorkflowExecutionAuth, PrevToken, CompressedRoot, BatchSize) ->
     list_internal(AtmWorkflowExecutionAuth, CompressedRoot,
         maps_utils:remove_undefined(#{
             limit => BatchSize, 
@@ -115,7 +115,7 @@ expand(AtmWorkflowExecutionAuth, Guid, _ValueConstraints) ->
 
 %% @private
 -spec list_internal(atm_workflow_execution_auth:record(), atm_value:compressed(), recursive_file_listing:options()) ->
-    {[atm_value:expanded()], recursive_dataset_listing:pagination_token() | undefined}.
+    {[atm_value:expanded()], recursive_file_listing:pagination_token() | undefined}.
 list_internal(AtmWorkflowExecutionAuth, CompressedRoot, Opts) ->
     UserCtx = user_ctx:new(atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth)),
     FileCtx = file_ctx:new_by_guid(CompressedRoot),

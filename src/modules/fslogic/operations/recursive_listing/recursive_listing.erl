@@ -6,12 +6,12 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module is responsible for listing recursively objects in subtree of given root object. 
-%%% Objects are listed lexicographically ordered by path. Listed path is relative to given root object.
-%%% This module operates on concept of traversable and non-traversable objects:
-%%%  - traversable object is an object that by itself is a root to a non-trivial tree 
+%%% This module is responsible for listing recursively nodes in subtree of given root node. 
+%%% Nodes are listed lexicographically ordered by path. Listed path is relative to given root node.
+%%% This module operates on concept of branching and non-branching nodes:
+%%%  - branching node is an node that by itself is a root to a non-trivial tree 
 %%%    (e.g. directory, dataset);
-%%%  - non-traversable object is any other object, i.e object that do not contain any subtree 
+%%%  - non-branching node is any other node, i.e node that do not contain any subtree 
 %%%    that can be listed (e.g regular files).
 %%%
 %%% All paths user does not have access to are returned under `inaccessible_paths` key.
@@ -19,11 +19,11 @@
 %%%     * limit - maximum number of entries that will be returned in a single request. 
 %%%               For this value both `entries` and `inaccessible_paths` are calculated;
 %%%     * start_after - determines starting point of listing i.e. listing will start from 
-%%%                     the first object path lexicographically larger and listing will continue 
+%%%                     the first node path lexicographically larger and listing will continue 
 %%%                     until all subtree is listed/limit is reached;
-%%%     * prefix - only objects with paths that begin with this value will be returned;
-%%%     * include_traversable - when set to true traversable objects entries will be included 
-%%%                             in result, by default only non-traversable objects are listed;
+%%%     * prefix - only nodes with paths that begin with this value will be returned;
+%%%     * include_branching - when set to true branching nodes entries will be included 
+%%%                           in result; by default only non-branching nodes are listed;
 %%% @end
 %%%--------------------------------------------------------------------
 -module(recursive_listing).
@@ -38,52 +38,52 @@
 -type prefix() :: binary().
 -type pagination_token() :: binary().
 -type limit() :: non_neg_integer().
--type result_entry() :: {path(), object()}.
+-type result_entry() :: {node_path(), tree_node()}.
 -type progress_marker() :: more | done.
 
 -record(state, {
     %% values provided in options (unchanged during listing)
     
-    % callback module that implements `recursive_listing_behaviour`
+    % module that implements behaviour callbacks
     module :: module(),
-    % required for checking whether object, that is to be appended to result, is not pointed by 
-    % a start_after_path (listing should start AFTER object with this path).
-    start_after_path :: path(),   
+    % required for checking whether node, that is to be appended to result, is not pointed by 
+    % a start_after_path (listing should start AFTER node with this path).
+    start_after_path :: node_path(),   
     prefix = <<>> :: prefix(),
     
-    % depth of listing root object relative to space root
-    root_object_depth :: non_neg_integer(),
-    include_traversable :: boolean(),
+    % depth of listing root node relative to space root
+    root_node_depth :: non_neg_integer(),
+    include_branching :: boolean(),
     
     %% values that are modified during listing
     
-    % number of objects that are still required to be listed
+    % number of nodes that are still required to be listed
     limit :: limit(),
-    % tokens of start_after_path trimmed to be relative to currently listed object
-    relative_start_after_path_tokens :: [name()],
-    % name of last listed objecy, when in subtree pointed by start_after_path
-    last_start_after_token :: name(),
-    % absolute path tokens to currently processed traversable object
-    current_object_path_tokens :: [name()],
-    % id of parent of currently listed object
-    parent_id :: object_id(),
-    % false if any children batch of current object was listed
+    % tokens of start_after_path trimmed to be relative to currently listed node
+    relative_start_after_path_tokens :: [node_name()],
+    % name of last listed node, when in subtree pointed by start_after_path
+    last_start_after_token :: node_name(),
+    % absolute path tokens to currently processed branching node
+    current_node_path_tokens :: [node_name()],
+    % id of parent of currently listed node
+    parent_id :: node_id(),
+    % false if any children batch of current node was listed
     is_first_batch = true :: boolean()
 }).
 
 -record(list_result, {
     entries = [] :: [result_entry()],
-    inaccessible_paths = [] :: [path()]
+    inaccessible_paths = [] :: [node_path()]
 }).
 
 % For detailed options description see module doc.
 -type options() :: #{
     % NOTE: pagination_token and start_after_path are mutually exclusive
     pagination_token => pagination_token(),
-    start_after_path => path(),
+    start_after_path => node_path(),
     prefix => prefix(),
     limit => limit(),
-    include_traversable => boolean()
+    include_branching => boolean()
 }.
 
 -type state() :: #state{}.
@@ -93,44 +93,70 @@
 -export_type([prefix/0, pagination_token/0, limit/0, options/0, result_entry/0, record/0]).
 
 % behaviour types
--type object() :: any().
--type object_id() :: binary().
--type name() :: binary().
--type path() :: binary().
--type object_listing_opts() :: any().
+-type tree_node() :: any().
+-type node_id() :: binary().
+-type node_name() :: binary(). % value from which result path is built
+-type node_path() :: binary().
+-type node_listing_state() :: any(). % value passed as is to node listing callbacks
 
--export_type([object/0, object_id/0, name/0, path/0, object_listing_opts/0]).
+-export_type([tree_node/0, node_id/0, node_name/0, node_path/0, node_listing_state/0]).
 
 -define(LIST_RECURSIVE_BATCH_SIZE, 1000).
 -define(DEFAULT_PREFIX, <<>>).
 -define(DEFAULT_START_AFTER_PATH, <<>>).
--define(DEFAULT_INCLUDE_TRAVERSABLE, false).
+-define(DEFAULT_INCLUDE_BRANCHING, false).
+
+
+%%%===================================================================
+%%% Node callbacks
+%%%===================================================================
+
+-callback is_branching_node(tree_node()) -> {boolean(), tree_node()}.
+
+-callback get_node_id(tree_node()) -> node_id().
+
+-callback get_node_name(tree_node(), user_ctx:ctx() | undefined) -> {node_name(), tree_node()}.
+
+% NOTE: callback used only in listing initialization process.
+-callback get_node_path(tree_node()) -> {node_path(), tree_node()}.
+
+% NOTE: callback used only in listing initialization process.
+-callback get_parent_id(tree_node(), user_ctx:ctx()) -> node_id().
+
+-callback init_node_listing_state(node_name(), limit(), boolean(), node_id()) -> 
+    node_listing_state().
+
+-callback list_children(tree_node(), node_listing_state(), user_ctx:ctx()) ->
+    {ok, [tree_node()], node_listing_state(), tree_node()} | no_access.
+
+-callback is_node_listing_finished(node_listing_state()) -> boolean().
+
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
--spec list(module(), user_ctx:ctx(), object(), options()) -> record() | no_return().
-list(_Module, _UserCtx, _Object, #{pagination_token := _, start_after := _}) ->
+-spec list(module(), user_ctx:ctx(), tree_node(), options()) -> record() | no_return().
+list(_Module, _UserCtx, _Node, #{pagination_token := _, start_after := _}) ->
     %% TODO VFS-7208 introduce conflicting options error after introducing API errors to fslogic
     throw(?EINVAL);
-list(Module, UserCtx, Object, #{pagination_token := PaginationToken} = Options) ->
+list(Module, UserCtx, Node, #{pagination_token := PaginationToken} = Options) ->
     {TokenRootId, StartAfter} = unpack_pagination_token(PaginationToken), 
-    case Module:get_object_id(Object) of
+    case Module:get_node_id(Node) of
         TokenRootId -> 
             Options2 = maps:remove(pagination_token, Options#{start_after_path => StartAfter}),
-            list(Module, UserCtx, Object, Options2);
+            list(Module, UserCtx, Node, Options2);
         _ -> 
-            throw(?EINVAL) % requested listing of other object than token's origin
+            throw(?EINVAL) % requested listing of other node than token's origin
     end;
-list(Module, UserCtx, RootObject, Options) ->
-    case prepare_initial_listing_state(Module, UserCtx, RootObject, Options) of
-        {ok, ObjectToList, InitialState} ->
-            {Entries, InaccessiblePaths, PaginationToken} = case Module:is_traversable_object(ObjectToList) of
-                {true, ObjectToList2} ->
-                    list_traversable_object(UserCtx, ObjectToList2, InitialState, Module:get_object_id(RootObject));
-                {false, ObjectToList2} ->
-                    list_non_traversable_object(UserCtx, ObjectToList2, InitialState)
+list(Module, UserCtx, RootNode, Options) ->
+    case prepare_initial_listing_state(Module, UserCtx, RootNode, Options) of
+        {ok, NodeToList, InitialState} ->
+            {Entries, InaccessiblePaths, PaginationToken} = case Module:is_branching_node(NodeToList) of
+                {true, NodeToList2} ->
+                    list_branching_node(UserCtx, NodeToList2, InitialState, Module:get_node_id(RootNode));
+                {false, NodeToList2} ->
+                    list_non_branching_node(UserCtx, NodeToList2, InitialState)
             end,
             #recursive_listing_result{
                 entries = Entries,
@@ -142,7 +168,7 @@ list(Module, UserCtx, RootObject, Options) ->
                 inaccessible_paths = [],
                 entries = []
             };
-        {error, ?EACCES, Path} ->
+        {no_access, Path} ->
             #recursive_listing_result{
                 inaccessible_paths = [Path],
                 entries = []
@@ -155,34 +181,35 @@ list(Module, UserCtx, RootObject, Options) ->
 %%%===================================================================
 
 %% @private
--spec prepare_initial_listing_state(module(), user_ctx:ctx(), object(), options()) -> 
-    {ok, object(), state()} | nothing_to_list | {error, ?EACCES, path()}.
-prepare_initial_listing_state(Module, UserCtx, RootObject, Options) ->
+-spec prepare_initial_listing_state(module(), user_ctx:ctx(), tree_node(), options()) -> 
+    {ok, tree_node(), state()} | nothing_to_list | {no_access, node_path()}.
+prepare_initial_listing_state(Module, UserCtx, RootNode, Options) ->
     #{
-        start_after_path := GivenStartAfter, limit := Limit, prefix := Prefix, include_traversable := IncludeTraversable
+        start_after_path := GivenStartAfter, limit := Limit, 
+        prefix := Prefix, include_branching := IncludeBranching
     } = put_defaults(Options),
     PrefixTokens = filename:split(Prefix),
-    ParentId = Module:get_parent_id(RootObject, UserCtx),
-    case infer_starting_object(Module, PrefixTokens, RootObject, ParentId, UserCtx, []) of
-        {ok, ObjectToList, LastPrefixToken} ->
+    ParentId = Module:get_parent_id(RootNode, UserCtx),
+    case infer_starting_node(Module, PrefixTokens, RootNode, ParentId, UserCtx, []) of
+        {ok, NodeToList, LastPrefixToken} ->
             case infer_start_after(GivenStartAfter, Prefix, LastPrefixToken) of
                 {ok, FinalStartAfter} ->
-                    {ObjectPath, ObjectToList1} = Module:get_object_path(ObjectToList),
-                    [_, SpaceId | ObjectPathTokens] = filename:split(ObjectPath),
-                    {RootObjectPath, _RootObject2} = Module:get_object_path(RootObject),
-                    [_, SpaceId | RootObjectPathTokens] = filename:split(RootObjectPath),
-                    {ok, ObjectToList1, #state{
+                    {NodePath, NodeToList1} = Module:get_node_path(NodeToList),
+                    [_, SpaceId | NodePathTokens] = filename:split(NodePath),
+                    {RootNodePath, _RootNode2} = Module:get_node_path(RootNode),
+                    [_, SpaceId | RootNodePathTokens] = filename:split(RootNodePath),
+                    {ok, NodeToList1, #state{
                         module = Module,
-                        % use original start after, so when prefix points to existing object it is not ignored
+                        % use original start after, so when prefix points to existing node it is not ignored
                         start_after_path = GivenStartAfter, 
                         relative_start_after_path_tokens = filename:split(FinalStartAfter),
                         limit = Limit,
-                        include_traversable = IncludeTraversable,
-                        current_object_path_tokens = [SpaceId | ObjectPathTokens],
-                        last_start_after_token = filename:basename(ObjectPath),
-                        parent_id = Module:get_object_id(ObjectToList1),
+                        include_branching = IncludeBranching,
+                        current_node_path_tokens = [SpaceId | NodePathTokens],
+                        last_start_after_token = filename:basename(NodePath),
+                        parent_id = Module:get_node_id(NodeToList1),
                         prefix = Prefix,
-                        root_object_depth = length(RootObjectPathTokens) + 1,
+                        root_node_depth = length(RootNodePathTokens) + 1,
                         is_first_batch = true
                     }};
                 nothing_to_list ->
@@ -200,39 +227,39 @@ put_defaults(Options) ->
         start_after_path => maps:get(start_after_path, Options, ?DEFAULT_START_AFTER_PATH),
         limit => maps:get(limit, Options, ?LIST_RECURSIVE_BATCH_SIZE),
         prefix => maps:get(prefix, Options, ?DEFAULT_PREFIX),
-        include_traversable => maps:get(include_traversable, Options, ?DEFAULT_INCLUDE_TRAVERSABLE)
+        include_branching => maps:get(include_branching, Options, ?DEFAULT_INCLUDE_BRANCHING)
     }.
     
 
 %% @private
--spec infer_starting_object(module(), [name()], object(), binary(), user_ctx:ctx(), [name()]) -> 
-    {ok, object(), name()} | nothing_to_list | {error, ?EACCES, path()}.
-infer_starting_object(_Module, [], Object, _ParentId, _UserCtx, _RevRelPathTokens) ->
-    {ok, Object, <<>>};
-infer_starting_object(_Module, [PrefixToken], Object, _ParentId, _UserCtx, _RevRelPathTokens) ->
-    % no need to check object access, as it will be checked during actual listing
-    {ok, Object, PrefixToken};
-infer_starting_object(Module, [PrefixToken | Tail], Object, ParentId, UserCtx, RevRelPathTokens) ->
-    Opts = Module:build_listing_opts(PrefixToken, 1, false, ParentId),
-    case Module:list_children_with_access_check(Object, Opts, UserCtx) of
-        {ok, [NextObject], _E, _Object2} ->
-            case Module:get_object_name(NextObject, UserCtx) of
-                {PrefixToken, NextObject2} -> 
-                    ObjectId = Module:get_object_id(NextObject2),
-                    infer_starting_object(
-                        Module, Tail, NextObject2, ObjectId, UserCtx, [PrefixToken | RevRelPathTokens]);
+-spec infer_starting_node(module(), [node_name()], tree_node(), binary(), user_ctx:ctx(), [node_name()]) -> 
+    {ok, tree_node(), node_name()} | nothing_to_list | {no_access, node_path()}.
+infer_starting_node(_Module, [], Node, _ParentId, _UserCtx, _RevRelPathTokens) ->
+    {ok, Node, <<>>};
+infer_starting_node(_Module, [PrefixToken], Node, _ParentId, _UserCtx, _RevRelPathTokens) ->
+    % no need to check node access, as it will be checked during actual listing
+    {ok, Node, PrefixToken};
+infer_starting_node(Module, [PrefixToken | Tail], Node, ParentId, UserCtx, RevRelPathTokens) ->
+    Opts = Module:init_node_listing_state(PrefixToken, 1, false, ParentId),
+    case Module:list_children(Node, Opts, UserCtx) of
+        {ok, [NextNode], _E, _Node2} ->
+            case Module:get_node_name(NextNode, UserCtx) of
+                {PrefixToken, NextNode2} -> 
+                    NodeId = Module:get_node_id(NextNode2),
+                    infer_starting_node(
+                        Module, Tail, NextNode2, NodeId, UserCtx, [PrefixToken | RevRelPathTokens]);
                 _ -> 
                     nothing_to_list
             end;
-        {ok, [], _E, _Object2} ->
+        {ok, [], _E, _Node2} ->
             nothing_to_list;
-        {error, ?EACCES} ->
-            {error, ?EACCES, build_path(lists:reverse(RevRelPathTokens))}
+        no_access ->
+            {no_access, build_path(lists:reverse(RevRelPathTokens))}
     end.
 
 
 %% @private
--spec infer_start_after(path(), prefix(), name()) -> {ok, path()} | nothing_to_list.
+-spec infer_start_after(node_path(), prefix(), node_name()) -> {ok, node_path()} | nothing_to_list.
 infer_start_after(GivenStartAfter, Prefix, LastPrefixToken) ->
     PrefixTokens = filename:split(Prefix),
     case {PrefixTokens, GivenStartAfter =< Prefix} of
@@ -248,7 +275,7 @@ infer_start_after(GivenStartAfter, Prefix, LastPrefixToken) ->
                 {true, RelStartAfter} ->
                     case str_utils:binary_starts_with(RelStartAfter, LastPrefixToken) of
                         true -> {ok, RelStartAfter};
-                        false -> nothing_to_list % start after is larger than any object path that could possibly match prefix
+                        false -> nothing_to_list % start after is larger than any node path that could possibly match prefix
                     end;
                 false ->
                     nothing_to_list
@@ -261,75 +288,77 @@ infer_start_after(GivenStartAfter, Prefix, LastPrefixToken) ->
 %%%===================================================================
 
 %% @private
--spec list_traversable_object(user_ctx:ctx(), object(), state(), object_id()) ->
-    {[result_entry()], [path()], pagination_token()}.
-list_traversable_object(UserCtx, Object, InitialState, RootObjectId) ->
+-spec list_branching_node(user_ctx:ctx(), tree_node(), state(), node_id()) ->
+    {[result_entry()], [node_path()], pagination_token()}.
+list_branching_node(UserCtx, Node, InitialState, RootNodeId) ->
     {ProgressMarker, #list_result{entries = Entries, inaccessible_paths = InaccessiblePaths}} =
-        process_current_traversable_object(UserCtx, Object, InitialState),
-    % use root object id to build token, as this is the actual object, that was requested
-    PaginationToken = build_pagination_token(Entries, InaccessiblePaths, RootObjectId, ProgressMarker),
+        process_current_branching_node(UserCtx, Node, InitialState),
+    % use root node id to build token, as this is the actual node, that was requested
+    PaginationToken = build_pagination_token(Entries, InaccessiblePaths, RootNodeId, ProgressMarker),
     {Entries, InaccessiblePaths, PaginationToken}.
 
 
 %% @private
--spec list_non_traversable_object(user_ctx:ctx(), object(), state()) ->
-    {[result_entry()], [path()], undefined}.
-list_non_traversable_object(UserCtx, Object, #state{module = Module} = State) ->
-    {EntryList, InaccessiblePaths} = case Module:check_access(Object, UserCtx) of
-        ok ->
-            {build_result_object_entry_list(State, Object, <<>>), []};
-        {error, ?EACCES} ->
+-spec list_non_branching_node(user_ctx:ctx(), tree_node(), state()) ->
+    {[result_entry()], [node_path()], undefined}.
+list_non_branching_node(UserCtx, Node, #state{module = Module, parent_id = ParentId} = State) ->
+    Opts = Module:init_node_listing_state(undefined, 1, false, ParentId),
+    % call listing just to check access
+    {EntryList, InaccessiblePaths} = case Module:list_children(Node, Opts, UserCtx) of
+        {ok, _, _, _} ->
+            {build_result_node_entry_list(State, Node, <<>>), []};
+        no_access ->
             {[], [<<".">>]}
     end,
     {EntryList, InaccessiblePaths, undefined}.
 
 
 %% @private
--spec process_current_traversable_object(user_ctx:ctx(), object(), state()) ->
+-spec process_current_branching_node(user_ctx:ctx(), tree_node(), state()) ->
     {progress_marker(), result()}.
-process_current_traversable_object(_UserCtx, _Object, #state{limit = Limit}) when Limit =< 0 ->
+process_current_branching_node(_UserCtx, _Node, #state{limit = Limit}) when Limit =< 0 ->
     {more, #list_result{}};
-process_current_traversable_object(UserCtx, Object, State) ->
-    Path = build_current_traversable_object_rel_path(State),
-    % Traversable objects with path that not match given prefix, but is a prefix of this given prefix must be listed, 
-    % as they are ancestor objects to objects matching this given prefix. Needs to be checked as listing 
-    % starting object never matches prefix, as it is a parent object to prefix last path token).
-    IsAncestorObject = case Path of
-        <<".">> -> true; % listing root object
+process_current_branching_node(UserCtx, Node, State) ->
+    Path = build_current_branching_node_rel_path(State),
+    % branching nodes with path that not match given prefix, but is a prefix of this given prefix must be listed, 
+    % as they are ancestor nodes to nodes matching this given prefix. Needs to be checked as listing 
+    % starting node never matches prefix, as it is a parent node to prefix last path token).
+    IsAncestorNode = case Path of
+        <<".">> -> true; % listing root node
         _ -> str_utils:binary_starts_with(State#state.prefix, Path)
     end,
-    case matches_prefix(Path, State) orelse IsAncestorObject of
+    case matches_prefix(Path, State) orelse IsAncestorNode of
         true ->
-            {ListOpts, UpdatedState} = init_current_traversable_object_processing(State),
-            process_current_traversable_object_in_batches(UserCtx, Object, ListOpts, UpdatedState, #list_result{});
+            {ListOpts, UpdatedState} = init_current_branching_node_processing(State),
+            process_current_branching_node_in_batches(UserCtx, Node, ListOpts, UpdatedState, #list_result{});
         false ->
             {done, #list_result{}}
     end.
 
 
 %% @private
--spec process_current_traversable_object_in_batches(user_ctx:ctx(), object(), object_listing_opts(), state(), result()) -> 
+-spec process_current_branching_node_in_batches(user_ctx:ctx(), tree_node(), node_listing_state(), state(), result()) -> 
     {progress_marker(), result()}.
-process_current_traversable_object_in_batches(UserCtx, Object, ListOpts, #state{module = Module} = State, AccListResult) ->
-    #state{limit = Limit} = State,
-    {Children, UpdatedAccListResult, NextListOpts, IsInaccessible, Object2} = 
-        case Module:list_children_with_access_check(Object, ListOpts, UserCtx) of
+process_current_branching_node_in_batches(UserCtx, Node, NodeListingState, State, AccListResult) ->
+    #state{limit = Limit, module = Module} = State,
+    {Children, UpdatedAccListResult, NextListOpts, IsInaccessible, Node2} = 
+        case Module:list_children(Node, NodeListingState, UserCtx) of
             {ok, C, LO, O} -> 
-                {C, append_traversable_object(State, O, AccListResult), LO, false, O};
-            {error, ?EACCES} ->
-                {[], result_append_inaccessible_path(State, AccListResult), undefined, true, Object}
+                {C, append_branching_node(State, O, AccListResult), LO, false, O};
+            no_access ->
+                {[], result_append_inaccessible_path(State, AccListResult), undefined, true, Node}
         end,
     
-    {Res, FinalProcessedObjectCount} = lists_utils:foldl_while(fun(ChildObject, {TmpResult, ProcessedObjectCount}) ->
-        {Marker, SubtreeResult} = process_subtree(UserCtx, ChildObject, State#state{
+    {Res, FinalProcessedNodeCount} = lists_utils:foldl_while(fun(ChildNode, {TmpResult, ProcessedNodeCount}) ->
+        {Marker, SubtreeResult} = process_subtree(UserCtx, ChildNode, State#state{
             limit = Limit - result_length(TmpResult)
         }),
         ResToReturn = merge_results(TmpResult, SubtreeResult),
-        ObjectProcessedIncrement = case Marker of
+        NodeProcessedIncrement = case Marker of
             done -> 1;
             more -> 0
         end,
-        ToReturn = {ResToReturn, ProcessedObjectCount + ObjectProcessedIncrement},
+        ToReturn = {ResToReturn, ProcessedNodeCount + NodeProcessedIncrement},
         case result_length(ResToReturn) >= Limit of
             true -> {halt, ToReturn};
             false -> {cont, ToReturn}
@@ -340,17 +369,17 @@ process_current_traversable_object_in_batches(UserCtx, Object, ListOpts, #state{
     case ResultLength > Limit of
         true -> 
             ?critical(
-                "Listed more entries than requested in recursive listing of object: ~p~n"
+                "Listed more entries than requested in recursive listing of node: ~p~n"
                 "state: ~p~noptions: ~p~nlimit: ~p, listed: ~p", 
-                [Module:get_object_id(Object), State, ListOpts, Limit, ResultLength]),
+                [Module:get_node_id(Node), State, NodeListingState, Limit, ResultLength]),
             throw(?ERROR_INTERNAL_SERVER_ERROR);
         _ -> 
             ok
     end, 
     
-    case {ResultLength, IsInaccessible orelse Module:is_listing_finished(NextListOpts)} of
+    case {ResultLength, IsInaccessible orelse Module:is_node_listing_finished(NextListOpts)} of
         {Limit, IsFinished} ->
-            ProgressMarker = case IsFinished and (FinalProcessedObjectCount == length(Children)) of
+            ProgressMarker = case IsFinished and (FinalProcessedNodeCount == length(Children)) of
                 true -> done;
                 false -> more
             end,
@@ -362,29 +391,29 @@ process_current_traversable_object_in_batches(UserCtx, Object, ListOpts, #state{
                 limit = Limit - result_length(Res), 
                 is_first_batch = false
             },
-            process_current_traversable_object_in_batches(UserCtx, Object2, NextListOpts, UpdatedState, Res)
+            process_current_branching_node_in_batches(UserCtx, Node2, NextListOpts, UpdatedState, Res)
     end.
     
 
 %% @private
--spec process_subtree(user_ctx:ctx(), object(), state()) ->
+-spec process_subtree(user_ctx:ctx(), tree_node(), state()) ->
     {progress_marker(), result()}.
-process_subtree(_UserCtx, _Object, #state{limit = 0}) ->
+process_subtree(_UserCtx, _Node, #state{limit = 0}) ->
     {more, #list_result{}};
-process_subtree(UserCtx, Object, #state{current_object_path_tokens = CurrentPathTokens, module = Module} = State) ->
-    {Name, Object2} = Module:get_object_name(Object, UserCtx),
-    case Module:is_traversable_object(Object2) of
-        {true, Object3} ->
-            {ProgressMarker, NextChildrenRes} = process_current_traversable_object(UserCtx, Object,
+process_subtree(UserCtx, Node, #state{current_node_path_tokens = CurrentPathTokens, module = Module} = State) ->
+    {Name, Node2} = Module:get_node_name(Node, UserCtx),
+    case Module:is_branching_node(Node2) of
+        {true, Node3} ->
+            {ProgressMarker, NextChildrenRes} = process_current_branching_node(UserCtx, Node,
                 State#state{
-                    current_object_path_tokens = CurrentPathTokens ++ [Name],
-                    parent_id = Module:get_object_id(Object3)
+                    current_node_path_tokens = CurrentPathTokens ++ [Name],
+                    parent_id = Module:get_node_id(Node3)
                 }
             ),
             {ProgressMarker, NextChildrenRes};
-        {false, Object3} ->
-            UpdatedState = State#state{current_object_path_tokens = CurrentPathTokens},
-            {done, #list_result{entries = build_result_object_entry_list(UpdatedState, Object3, Name)}}
+        {false, Node3} ->
+            UpdatedState = State#state{current_node_path_tokens = CurrentPathTokens},
+            {done, #list_result{entries = build_result_node_entry_list(UpdatedState, Node3, Name)}}
     end.
 
 
@@ -393,56 +422,59 @@ process_subtree(UserCtx, Object, #state{current_object_path_tokens = CurrentPath
 %%%===================================================================
     
 %% @private
--spec init_current_traversable_object_processing(state()) -> {object_listing_opts(), state()}.
-init_current_traversable_object_processing(#state{relative_start_after_path_tokens = []} = State) ->
-    {#{tune_for_large_continuous_listing => true}, State};
-init_current_traversable_object_processing(#state{
+-spec init_current_branching_node_processing(state()) -> {node_listing_state(), state()}.
+init_current_branching_node_processing(#state{relative_start_after_path_tokens = []} = State) ->
+    #state{module = Module, parent_id = ParentId} = State,
+    {Module:init_node_listing_state(undefined, ?LIST_RECURSIVE_BATCH_SIZE, true, ParentId), State};
+init_current_branching_node_processing(#state{
     module = Module,
     relative_start_after_path_tokens = [CurrentStartAfterToken | NextStartAfterTokens],
     last_start_after_token = LastStartAfterToken,
-    current_object_path_tokens = CurrentPathTokens,
+    current_node_path_tokens = CurrentPathTokens,
     parent_id = ParentId
 } = State) ->
-    InitialOpts = Module:build_listing_opts(undefined, ?LIST_RECURSIVE_BATCH_SIZE, true, ParentId),
     %% As long as the currently processed path is within the start_after_path, we can start
-    %% listing from the specific object name (CurrentStartAfterToken), as all names lexicographically
-    %% smaller should not be included in the results. Otherwise, the whole traversable object should 
+    %% listing from the specific node name (CurrentStartAfterToken), as all names lexicographically
+    %% smaller should not be included in the results. Otherwise, the whole branching node should 
     %% be listed and processed.
     case lists:last(CurrentPathTokens) == LastStartAfterToken of
         true ->
-            ListingOpts = Module:build_listing_opts(CurrentStartAfterToken, ?LIST_RECURSIVE_BATCH_SIZE, true, ParentId),
+            NodeListingState = Module:init_node_listing_state(
+                CurrentStartAfterToken, ?LIST_RECURSIVE_BATCH_SIZE, true, ParentId),
             UpdatedState = State#state{
                 relative_start_after_path_tokens = NextStartAfterTokens, 
                 last_start_after_token = CurrentStartAfterToken
             },
-            {ListingOpts, UpdatedState};
+            {NodeListingState, UpdatedState};
         _ ->
-            {InitialOpts, State#state{relative_start_after_path_tokens = []}}
+            NodeListingState = Module:init_node_listing_state(
+                undefined, ?LIST_RECURSIVE_BATCH_SIZE, true, ParentId),
+            {NodeListingState, State#state{relative_start_after_path_tokens = []}}
     end.
 
 
 %% @private
--spec build_result_object_entry_list(state(), object(), name()) -> 
+-spec build_result_node_entry_list(state(), tree_node(), node_name()) -> 
     [result_entry()].
-build_result_object_entry_list(#state{start_after_path = StartAfterPath} = State, Object, Name) ->
-    case build_rel_path_in_current_object_with_prefix_check(State, Name) of
+build_result_node_entry_list(#state{start_after_path = StartAfterPath} = State, Node, Name) ->
+    case build_rel_path_in_current_node_with_prefix_check(State, Name) of
         false -> [];
         {true, StartAfterPath} -> [];
-        {true, Path} -> [{Path, Object}]
+        {true, Path} -> [{Path, Node}]
     end.
 
 
 %% @private
--spec build_current_traversable_object_rel_path_with_prefix_check(state()) -> {true, path()} | false.
-build_current_traversable_object_rel_path_with_prefix_check(State) ->
-    build_rel_path_in_current_object_with_prefix_check(State, <<>>).
+-spec build_current_branching_node_rel_path_with_prefix_check(state()) -> {true, node_path()} | false.
+build_current_branching_node_rel_path_with_prefix_check(State) ->
+    build_rel_path_in_current_node_with_prefix_check(State, <<>>).
 
 
 %% @private
--spec build_rel_path_in_current_object_with_prefix_check(state(), name()) -> 
-    {true, path()} | false.
-build_rel_path_in_current_object_with_prefix_check(State, Name) ->
-    Path = build_rel_path_in_current_object(State, Name),
+-spec build_rel_path_in_current_node_with_prefix_check(state(), node_name()) -> 
+    {true, node_path()} | false.
+build_rel_path_in_current_node_with_prefix_check(State, Name) ->
+    Path = build_rel_path_in_current_node(State, Name),
     case matches_prefix(Path, State) of
         true -> {true, Path};
         false -> false
@@ -450,25 +482,25 @@ build_rel_path_in_current_object_with_prefix_check(State, Name) ->
 
 
 %% @private
--spec matches_prefix(path(), state()) -> boolean().
+-spec matches_prefix(node_path(), state()) -> boolean().
 matches_prefix(Path, #state{prefix = Prefix}) ->
     str_utils:binary_starts_with(Path, Prefix).
 
 
 %% @private
--spec build_current_traversable_object_rel_path(state()) -> path().
-build_current_traversable_object_rel_path(State) ->
-    build_rel_path_in_current_object(State, <<>>).
+-spec build_current_branching_node_rel_path(state()) -> node_path().
+build_current_branching_node_rel_path(State) ->
+    build_rel_path_in_current_node(State, <<>>).
 
 
 %% @private
--spec build_rel_path_in_current_object(state(), name()) -> path().
-build_rel_path_in_current_object(#state{current_object_path_tokens = CurrentPathTokens, root_object_depth = Depth}, Name) ->
+-spec build_rel_path_in_current_node(state(), node_name()) -> node_path().
+build_rel_path_in_current_node(#state{current_node_path_tokens = CurrentPathTokens, root_node_depth = Depth}, Name) ->
     build_path(lists:sublist(CurrentPathTokens ++ [Name], Depth + 1, length(CurrentPathTokens))).
 
 
 %% @private
--spec build_path([name()]) -> path().
+-spec build_path([node_name()]) -> node_path().
 build_path([]) ->
     <<".">>;
 build_path([<<>>]) ->
@@ -478,11 +510,11 @@ build_path(Tokens) ->
 
 
 %% @private
--spec build_pagination_token([result_entry()], [path()], object_id(), progress_marker()) ->
+-spec build_pagination_token([result_entry()], [node_path()], node_id(), progress_marker()) ->
     pagination_token() | undefined.
 build_pagination_token(_, _, _, _ProgressMarker = done) -> undefined;
 build_pagination_token([], [], _, _) -> undefined;
-build_pagination_token(Entries, InaccessiblePaths, RootObjectId, _ProgressMarker = more) ->
+build_pagination_token(Entries, InaccessiblePaths, RootNodeId, _ProgressMarker = more) ->
     StartAfter = case {InaccessiblePaths, Entries} of
         {[], _} ->
             {T, _} = lists:last(Entries),
@@ -493,24 +525,24 @@ build_pagination_token(Entries, InaccessiblePaths, RootObjectId, _ProgressMarker
             {T, _} = lists:last(Entries),
             max(T, lists:last(InaccessiblePaths))
     end,
-    pack_pagination_token(RootObjectId, StartAfter).
+    pack_pagination_token(RootNodeId, StartAfter).
 
 
 %% @private
--spec pack_pagination_token(object_id(), path()) -> pagination_token().
-pack_pagination_token(ObjectId, StartAfter) ->
+-spec pack_pagination_token(node_id(), node_path()) -> pagination_token().
+pack_pagination_token(NodeId, StartAfter) ->
     mochiweb_base64url:encode(json_utils:encode(#{
-        <<"objectId">> => ObjectId, 
+        <<"nodeId">> => NodeId, 
         <<"startAfter">> => StartAfter
     })).
 
 
 %% @private
--spec unpack_pagination_token(pagination_token()) -> {object_id(), path()} | no_return().
+-spec unpack_pagination_token(pagination_token()) -> {node_id(), node_path()} | no_return().
 unpack_pagination_token(Token) ->
     try json_utils:decode(mochiweb_base64url:decode(Token)) of
-        #{<<"objectId">> := ObjectId, <<"startAfter">> := StartAfter} ->
-            {ObjectId, StartAfter};
+        #{<<"nodeId">> := NodeId, <<"startAfter">> := StartAfter} ->
+            {NodeId, StartAfter};
         _ ->
             throw({error, ?EINVAL})
     catch _:_ ->
@@ -525,7 +557,7 @@ unpack_pagination_token(Token) ->
 -spec result_append_inaccessible_path(state(), result()) -> result().
 result_append_inaccessible_path(State, Result) ->
     StartAfterPath = State#state.start_after_path,
-    case build_current_traversable_object_rel_path_with_prefix_check(State) of
+    case build_current_branching_node_rel_path_with_prefix_check(State) of
         false -> Result;
         {true, StartAfterPath} -> Result;
         {true, Path} -> merge_results(Result, #list_result{inaccessible_paths = [Path]})
@@ -551,25 +583,25 @@ merge_results(
 
 
 %% @private
--spec append_traversable_object(state(), object(), result()) -> result().
-append_traversable_object(
-    #state{include_traversable = true, is_first_batch = true} = State, 
-    Object, 
+-spec append_branching_node(state(), tree_node(), result()) -> result().
+append_branching_node(
+    #state{include_branching = true, is_first_batch = true} = State, 
+    Node, 
     ListResult
 ) ->
     #list_result{entries = Entries} = ListResult,
-    case {build_current_traversable_object_rel_path_with_prefix_check(State), State#state.start_after_path} of
+    case {build_current_branching_node_rel_path_with_prefix_check(State), State#state.start_after_path} of
         {{true, <<".">> = Path}, <<>>} -> 
-            ListResult#list_result{entries = Entries ++ [{Path, Object}]};
+            ListResult#list_result{entries = Entries ++ [{Path, Node}]};
         {{true, <<".">>}, _StartAfter} -> 
             ListResult;
         {{true, Path}, StartAfter} ->
             case Path =< StartAfter of
                 true -> ListResult;
-                false -> ListResult#list_result{entries = Entries ++ [{Path, Object}]}
+                false -> ListResult#list_result{entries = Entries ++ [{Path, Node}]}
             end;
         {false, _} ->
             ListResult
     end;
-append_traversable_object(_State, _Object, ListResult) ->
+append_branching_node(_State, _Node, ListResult) ->
     ListResult.

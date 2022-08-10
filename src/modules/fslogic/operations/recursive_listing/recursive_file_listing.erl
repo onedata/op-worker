@@ -25,34 +25,34 @@
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--behaviour(recursive_listing_behaviour).
+-behaviour(recursive_listing).
 
 %% API
 -export([list/3]).
 
 %% `recursive_listing_behaviour` callbacks
 -export([
-    is_traversable_object/1,
-    get_object_id/1,  get_object_path/1, get_object_name/2, get_parent_id/2,
-    build_listing_opts/4,
-    check_access/2, list_children_with_access_check/3,
-    is_listing_finished/1
+    is_branching_node/1,
+    get_node_id/1, get_node_name/2, get_node_path/1, get_parent_id/2,
+    init_node_listing_state/4,
+    list_children/3,
+    is_node_listing_finished/1
 ]).
 
 
--type object_id() :: file_id:file_guid().
--type object() :: file_ctx:ctx().
--type name() :: file_meta:name().
--type path() :: file_meta:path().
--type object_listing_opts() :: file_listing:options().
--type entry() :: {file_meta:path(), lfm_attrs:file_attributes()}.
+-type node_id() :: file_id:file_guid().
+-type tree_node() :: file_ctx:ctx().
+-type node_name() :: file_meta:node_name().
+-type node_path() :: file_meta:node_path().
+-type node_listing_state() :: file_listing:options().
+-type entry() :: {file_meta:node_path(), lfm_attrs:file_attributes()}.
 -type result() :: recursive_listing:record().
 
 % For detailed options description see module doc.
 -type options() :: #{
     % NOTE: pagination_token and start_after_path are mutually exclusive
     pagination_token => pagination_token(),
-    start_after_path => path(),
+    start_after_path => node_path(),
     prefix => recursive_listing:prefix(),
     limit => recursive_listing:limit(),
     include_directories => boolean()
@@ -67,11 +67,10 @@
 
 -spec list(user_ctx:ctx(), file_ctx:ctx(), options()) -> result().
 list(UserCtx, FileCtx, ListOpts) ->
-    FinalListOpts = maps:remove(
+    FinalListOpts = kv_utils:rename_entry_unchecked(
         include_directories, 
-        maps_utils:put_if_defined(ListOpts, include_traversable, 
-            maps:get(include_directories, ListOpts, undefined)
-        )
+        include_branching,
+        ListOpts
     ),
     #recursive_listing_result{
         entries = Entries
@@ -88,30 +87,30 @@ list(UserCtx, FileCtx, ListOpts) ->
 
 
 %%%===================================================================
-%%% `recursive_listing_behaviour` callbacks
+%%% `recursive_listing` callbacks
 %%%===================================================================
 
--spec is_traversable_object(object()) -> {boolean(), object()}.
-is_traversable_object(FileCtx) ->
+-spec is_branching_node(tree_node()) -> {boolean(), tree_node()}.
+is_branching_node(FileCtx) ->
     file_ctx:is_dir(FileCtx).
 
 
--spec get_object_id(object()) -> object_id().
-get_object_id(FileCtx) ->
+-spec get_node_id(tree_node()) -> node_id().
+get_node_id(FileCtx) ->
     file_ctx:get_logical_guid_const(FileCtx).
 
 
--spec get_object_name(object(), user_ctx:ctx() | undefined) -> {name(), object()}.
-get_object_name(FileCtx, UserCtx) ->
+-spec get_node_name(tree_node(), user_ctx:ctx() | undefined) -> {node_name(), tree_node()}.
+get_node_name(FileCtx, UserCtx) ->
     file_ctx:get_aliased_name(FileCtx, UserCtx).
 
 
--spec get_object_path(object()) -> {path(), object()}.
-get_object_path(FileCtx) ->
+-spec get_node_path(tree_node()) -> {node_path(), tree_node()}.
+get_node_path(FileCtx) ->
     file_ctx:get_canonical_path(FileCtx).
 
 
--spec get_parent_id(object(), user_ctx:ctx()) -> object_id().
+-spec get_parent_id(tree_node(), user_ctx:ctx()) -> node_id().
 get_parent_id(FileCtx, UserCtx) ->
     {ParentCtx, _} = file_tree:get_parent(FileCtx, UserCtx),
     case file_ctx:equals(ParentCtx, FileCtx) of
@@ -120,11 +119,11 @@ get_parent_id(FileCtx, UserCtx) ->
     end.
 
 
--spec build_listing_opts(name(), recursive_listing:limit(), boolean(), object_id()) -> 
-    object_listing_opts().
-build_listing_opts(undefined, Limit, IsContinuous, _ParentGuid) ->
+-spec init_node_listing_state(node_name(), recursive_listing:limit(), boolean(), node_id()) -> 
+    node_listing_state().
+init_node_listing_state(undefined, Limit, IsContinuous, _ParentGuid) ->
     #{limit => Limit, tune_for_large_continuous_listing => IsContinuous};
-build_listing_opts(StartFileName, Limit, IsContinuous, ParentGuid) ->
+init_node_listing_state(StartFileName, Limit, IsContinuous, ParentGuid) ->
     ParentUuid = file_id:guid_to_uuid(ParentGuid),
     BaseOpts = #{limit => Limit, tune_for_large_continuous_listing => IsContinuous},
     ListingOpts = case file_meta:get_child_uuid_and_tree_id(ParentUuid, StartFileName) of
@@ -140,39 +139,24 @@ build_listing_opts(StartFileName, Limit, IsContinuous, ParentGuid) ->
     maps:merge(BaseOpts, ListingOpts).
 
 
--spec check_access(object(), user_ctx:ctx()) -> ok | {error, ?EACCES}.
-check_access(FileCtx, UserCtx) ->
+-spec list_children(tree_node(), node_listing_state(), user_ctx:ctx()) ->
+    {ok, [tree_node()], node_listing_state(), tree_node()} | no_access.
+list_children(FileCtx, ListOpts, UserCtx) ->
     try
-        {CanonicalChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
-            UserCtx, FileCtx, [?TRAVERSE_ANCESTORS]
-        ),
-        % throws on lack of access
-        _ = file_tree:list_children(FileCtx2, UserCtx, #{
-            limit => 1,
-            tune_for_large_continuous_listing => false
-        }, CanonicalChildrenWhiteList),
-        ok
+        {CanonicalChildrenWhiteList, FileCtx2} = case file_ctx:is_dir(FileCtx) of
+            {true, Ctx} -> check_dir_access(UserCtx, Ctx);
+            {false, Ctx} -> check_non_dir_access(UserCtx, Ctx)
+        end,
+        {Children, PaginationToken, FileCtx3} = file_tree:list_children(
+            FileCtx2, UserCtx, ListOpts, CanonicalChildrenWhiteList),
+        {ok, Children, #{pagination_token => PaginationToken}, FileCtx3}
     catch throw:?EACCES ->
-        {error, ?EACCES}
+        no_access
     end.
 
 
--spec list_children_with_access_check(object(), object_listing_opts(), user_ctx:ctx()) ->
-    {ok, [object()], object_listing_opts(), object()} | {error, ?EACCES}.
-list_children_with_access_check(DirCtx, ListOpts, UserCtx) ->
-    try
-        {CanonicalChildrenWhiteList, DirCtx2} = fslogic_authz:ensure_authorized_readdir(
-            UserCtx, DirCtx, [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?list_container_mask)]),
-        {Children, PaginationToken, DirCtx3} = file_tree:list_children(
-            DirCtx2, UserCtx, ListOpts, CanonicalChildrenWhiteList),
-        {ok, Children, #{pagination_token => PaginationToken}, DirCtx3}
-    catch throw:?EACCES ->
-        {error, ?EACCES}
-    end.
-
-
--spec is_listing_finished(object_listing_opts()) -> boolean().
-is_listing_finished(#{pagination_token := PaginationToken}) ->
+-spec is_node_listing_finished(node_listing_state()) -> boolean().
+is_node_listing_finished(#{pagination_token := PaginationToken}) ->
     file_listing:is_finished(PaginationToken).
 
 %%%===================================================================
@@ -180,7 +164,7 @@ is_listing_finished(#{pagination_token := PaginationToken}) ->
 %%%===================================================================
 
 %% @private
--spec map_result_entry(user_ctx:ctx(), {path(), object()}, attr_req:compute_file_attr_opts()) -> 
+-spec map_result_entry(user_ctx:ctx(), {node_path(), tree_node()}, attr_req:compute_file_attr_opts()) -> 
     entry() | no_return().
 map_result_entry(UserCtx, {Path, FileCtx}, BaseOpts) ->
     #fuse_response{
@@ -188,3 +172,18 @@ map_result_entry(UserCtx, {Path, FileCtx}, BaseOpts) ->
         fuse_response = FileAttrs
     } = attr_req:get_file_attr_insecure(UserCtx, FileCtx, BaseOpts),
     {Path, FileAttrs}.
+
+
+%% @private
+-spec check_dir_access(user_ctx:ctx(), file_ctx:ctx()) ->
+    {undefined | [file_meta:node_name()], file_ctx:ctx()}.
+check_dir_access(UserCtx, DirCtx) ->
+    fslogic_authz:ensure_authorized_readdir(UserCtx, DirCtx, 
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?list_container_mask)]).
+
+
+%% @private
+-spec check_non_dir_access(user_ctx:ctx(), file_ctx:ctx()) -> 
+    {undefined | [file_meta:node_name()], file_ctx:ctx()}.
+check_non_dir_access(UserCtx, FileCtx) ->
+    fslogic_authz:ensure_authorized_readdir(UserCtx, FileCtx, [?TRAVERSE_ANCESTORS]).

@@ -355,7 +355,6 @@ check_iterator_listing(ProviderSelector, AtmWorkflowExecutionEnv, Iterator, Expe
         return_iterators ->
             [{Iterator, ExpectedList}] ++ check_iterator_listing(ProviderSelector, AtmWorkflowExecutionEnv, NewIterator, NewExpectedList, ReturnStrategy, Type);
         _ ->
-            ok = ?rpc(ProviderSelector, iterator:forget_before(Iterator)),
             check_iterator_listing(ProviderSelector, AtmWorkflowExecutionEnv, NewIterator, NewExpectedList, ReturnStrategy, Type)
     end.
 

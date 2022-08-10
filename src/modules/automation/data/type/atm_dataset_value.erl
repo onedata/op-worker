@@ -20,7 +20,6 @@
 -include("modules/automation/atm_execution.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
--include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% atm_data_validator callbacks
@@ -56,13 +55,13 @@ assert_meets_constraints(AtmWorkflowExecutionAuth, Value, _ValueConstraints) ->
 
 
 -spec list_tree(
-    recursive_dataset_listing:pagination_token() | undefined,
     atm_workflow_execution_auth:record(),
+    recursive_dataset_listing:pagination_token() | undefined,
     atm_value:compressed(),
     atm_store_container_iterator:batch_size()
 ) ->
     {[atm_value:expanded()], recursive_dataset_listing:pagination_token() | undefined}.
-list_tree(PrevToken, AtmWorkflowExecutionAuth, CompressedRoot, BatchSize) ->
+list_tree(AtmWorkflowExecutionAuth, PrevToken, CompressedRoot, BatchSize) ->
     list_internal(AtmWorkflowExecutionAuth, CompressedRoot, 
         maps_utils:remove_undefined(#{limit => BatchSize, pagination_token => PrevToken})
     ).
@@ -107,8 +106,12 @@ list_internal(AtmWorkflowExecutionAuth, CompressedRoot, Opts) ->
             dataset_utils:dataset_info_to_json(DatasetInfo) 
         end, Entries),
         {MappedEntries, PaginationToken}
-    catch _:_ ->
-        {[], undefined}
+    catch _:Error ->
+        case datastore_runner:normalize_error(Error) of
+            not_found -> {[], undefined};
+            ?EPERM -> {[], undefined};
+            _ -> error(Error)
+        end
     end.
 
 
