@@ -815,9 +815,8 @@ get_file_location_with_filled_gaps(FileCtx) ->
 get_file_location_with_filled_gaps(FileCtx, ReqRange)
     when is_list(ReqRange) orelse ReqRange == undefined ->
     % get locations
-    {Locations, FileCtx2} = get_file_location_docs(FileCtx),
-    {FileLocationDoc, FileCtx3} =
-        get_or_create_local_file_location_doc(FileCtx2),
+    {Locations, FileCtx2} = get_file_location_docs(set_is_dir(FileCtx, true)),
+    {FileLocationDoc, FileCtx3} = get_or_create_local_file_location_doc(FileCtx2),
     {fslogic_location:get_local_blocks_and_fill_location_gaps(ReqRange, FileLocationDoc, Locations,
         get_uuid_const(FileCtx3)), FileCtx3};
 get_file_location_with_filled_gaps(FileCtx, ReqRange) ->

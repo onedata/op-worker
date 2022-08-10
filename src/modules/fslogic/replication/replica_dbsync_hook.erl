@@ -117,6 +117,7 @@ update_outdated_local_location_replica(FileCtx,
             ok;
         {NewDoc, FileCtx2, ChangedBlocks} ->
             {ok, FileCtx3} = maybe_truncate_file_on_storage(FileCtx2, OldSize, NewSize),
+            % !!!!
             {Location, FileCtx4} = file_ctx:get_file_location_with_filled_gaps(FileCtx3, ChangedBlocks),
             {Offset, Size} = fslogic_location_cache:get_blocks_range(Location, ChangedBlocks),
             ok = fslogic_cache:cache_location_change([], {Location, Offset, Size}), % to use notify_block_change_if_necessary when ready

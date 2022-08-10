@@ -371,7 +371,7 @@ delete_doc(Key) ->
         _ ->
             ok
     end,
-    
+
     delete_local_blocks(Key),
 
     delete_local_blocks(Key),
@@ -900,7 +900,10 @@ apply_size_change(Key, FileUuid) ->
             ok;
         Changes ->
             try
-                {ok, UserId} = file_location:get_owner_id(FileUuid),
+                UserId = case file_location:get_owner_id(FileUuid) of
+                    {ok, Id} -> Id;
+                    {error,not_found} -> undefined
+                end,
                 lists:foreach(fun({SpaceId, ChangeSize}) ->
                     space_quota:apply_size_change_and_maybe_emit(SpaceId, ChangeSize),
                     monitoring_event_emitter:emit_storage_used_updated(
