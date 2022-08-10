@@ -153,9 +153,7 @@ get_on_demand_changes_stream_id(SpaceId, ProviderId) ->
 -spec reset_provider_stream(od_space:id(), od_provider:id()) -> ok.
 reset_provider_stream(SpaceId, ProviderId) ->
     Name = {dbsync_in_stream, SpaceId},
-    gen_server:cast(
-        {global, Name}, {reset_provider_stream, ProviderId}
-    ).
+    gen_server:call({global, Name}, {reset_provider_stream, ProviderId}, infinity).
 
 %%%===================================================================
 %%% Internal services API
