@@ -21,6 +21,7 @@
 -export([
     handle_items_in_processing/2,
     handle_item_processed/1,
+    handle_items_dequeued/2,
     handle_items_failed/2,
 
     handle_aborting/2,
@@ -97,6 +98,23 @@ handle_item_processed(AtmTaskExecutionId) ->
         }}
     end),
     ok.
+
+
+-spec handle_items_dequeued(atm_task_execution:id(), pos_integer()) ->
+    {ok, atm_task_execution:doc()} | {error, not_aborting}.
+handle_items_dequeued(AtmTaskExecutionId, ItemsNum) ->
+    atm_task_execution:update(AtmTaskExecutionId, fun
+        (AtmTaskExecution = #atm_task_execution{
+            status = ?ABORTING_STATUS,
+            items_in_processing = ItemsInProcessing
+        }) ->
+            {ok, AtmTaskExecution#atm_task_execution{
+                items_in_processing = ItemsInProcessing - ItemsNum
+            }};
+
+        (_) ->
+            {error, not_aborting}
+    end).
 
 
 -spec handle_items_failed(atm_task_execution:id(), pos_integer()) -> ok.

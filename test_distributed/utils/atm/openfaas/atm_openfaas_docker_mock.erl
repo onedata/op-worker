@@ -24,7 +24,7 @@
 
 
 -spec exec(DockerImage :: binary(), atm_task_executor:lambda_input()) ->
-    atm_task_executor:lambda_output().
+    json_utils:json_map().
 exec(?ECHO_DOCKER_IMAGE_ID, #{<<"argsBatch">> := ArgsBatch}) ->
     #{<<"resultsBatch">> => ArgsBatch};
 

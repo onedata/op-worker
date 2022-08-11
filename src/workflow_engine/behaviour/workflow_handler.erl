@@ -104,7 +104,7 @@
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
     workflow_engine:task_id(),
-    workflow_jobs:job_identifier(),  %% TODO make it binary
+    workflow_jobs:job_identifier(),  %% TODO MW make it binary
     iterator:item()
 ) ->
     handler_execution_result().

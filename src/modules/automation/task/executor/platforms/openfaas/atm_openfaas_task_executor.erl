@@ -686,7 +686,7 @@ build_job_output_url(#atm_lambda_input{
     workflow_execution_id = AtmWorkflowExecutionId,
     job_batch_id = AtmJobBatchId
 }) ->
-    atm_openfaas_task_callback_handler:build_job_output_url(AtmWorkflowExecutionId, AtmJobBatchId).
+    atm_openfaas_task_callback_handler:build_job_batch_output_url(AtmWorkflowExecutionId, AtmJobBatchId).
 
 
 %% @private
@@ -695,7 +695,7 @@ build_job_heartbeat_url(#atm_lambda_input{
     workflow_execution_id = AtmWorkflowExecutionId,
     job_batch_id = AtmJobBatchId
 }) ->
-    atm_openfaas_task_callback_handler:build_job_heartbeat_url(AtmWorkflowExecutionId, AtmJobBatchId).
+    atm_openfaas_task_callback_handler:build_job_batch_heartbeat_url(AtmWorkflowExecutionId, AtmJobBatchId).
 
 
 %% @private

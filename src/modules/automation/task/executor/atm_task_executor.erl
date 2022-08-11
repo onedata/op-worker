@@ -49,25 +49,22 @@
 
 -type initiation_ctx() :: #atm_task_executor_initiation_ctx{}.
 
--type job_batch_id() :: binary().
-
 -type job_args() :: json_utils:json_map().
 -type job_results() :: json_utils:json_map() | errors:error().
 
+-type job_batch_id() :: binary().
+
 -type lambda_input() :: #atm_lambda_input{}.
-%% Below types format can't be expressed directly in type spec due to dialyzer
-%% limitations in specifying individual maps keys in case of binaries.
-%% Instead it is shown below their declaration.
--type lambda_output() :: json_utils:json_map() | errors:error().
-%% #{
-%%      <<"resultsBatch">> := [job_results()]
-%% }
+-type lambda_output() :: #atm_lambda_output{}.
+
+-type job_batch_result() :: {ok, lambda_output()} | {error, dequeued} | errors:error().
 
 -type streamed_data() :: {chunk, json_utils:json_map()} | errors:error().
 
 -export_type([initiation_ctx/0]).
--export_type([job_batch_id/0, job_args/0, job_results/0]).
--export_type([lambda_input/0, lambda_output/0, streamed_data/0]).
+-export_type([job_args/0, job_results/0]).
+-export_type([job_batch_id/0, lambda_input/0, lambda_output/0, job_batch_result/0]).
+-export_type([streamed_data/0]).
 
 -export_type([model/0, record/0]).
 

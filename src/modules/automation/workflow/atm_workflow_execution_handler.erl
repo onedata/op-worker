@@ -215,27 +215,18 @@ run_task_for_item(
     atm_workflow_execution_env:record(),
     atm_task_execution:id(),
     [automation:item()],
-    atm_task_executor:lambda_output()
+    atm_task_executor:job_batch_result()
 ) ->
     ok | error.
 process_task_result_for_item(
-    AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId,
-    ItemBatch, LambdaOutputDecodingError = ?ERROR_BAD_MESSAGE(_)
-) ->
-    process_task_result_for_item(
-        AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId,
-        ItemBatch, ?ERROR_BAD_DATA(<<"lambdaOutput">>, LambdaOutputDecodingError)
-    );
-
-process_task_result_for_item(
     _AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId,
-    ItemBatch, LambdaOutput
+    ItemBatch, JobBatchResult
 ) ->
     AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(
         AtmTaskExecutionId, AtmWorkflowExecutionEnv
     ),
-    atm_task_execution_handler:process_job_batch_output(
-        AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemBatch, LambdaOutput
+    atm_task_execution_handler:process_job_batch_result(
+        AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemBatch, JobBatchResult
     ).
 
 

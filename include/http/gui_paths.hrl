@@ -59,6 +59,6 @@
 -define(ATM_JOB_HEARTBEAT_CALLBACK_PATH, "/automation/workflow/executions/:wf_exec_id/jobs/:jid/hearteat").
 
 
--define(ATM_TASK_FINISHED_CALLBACK_PATH, "/tasks/").  %% TODO rm
+-define(ATM_TASK_FINISHED_CALLBACK_PATH, "/tasks/").  %% TODO MW rm
 
 -endif.

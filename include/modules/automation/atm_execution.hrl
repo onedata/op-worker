@@ -96,6 +96,11 @@
     args_batch :: [atm_task_executor:job_args()]
 }).
 
+%% Record used as an return value from lambda call
+-record(atm_lambda_output, {
+    results_batch :: [atm_task_executor:job_results()]
+}).
+
 
 % Record carrying an activity report of an OpenFaaS function
 -record(atm_openfaas_activity_report, {

@@ -294,15 +294,15 @@ mock_run(Workers, ModuleWithOpenfaasDockerMock) ->
 -spec stream_task_data_if_task_has_any_uncorrelated_results(
     record(),
     [automation:name()],
-    atm_task_executor:lambda_output()
+    atm_task_executor:job_batch_result()
 ) ->
-    atm_task_executor:lambda_output().
+    atm_task_executor:job_batch_result().
 stream_task_data_if_task_has_any_uncorrelated_results(
     _AtmTaskExecutor,
     [],
     Output
 ) ->
-    Output;
+    Output;  %% TODO fix
 
 stream_task_data_if_task_has_any_uncorrelated_results(
     AtmTaskExecutor,

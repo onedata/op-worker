@@ -53,7 +53,7 @@
     set_run_num/2,
 
     run_job_batch/4,
-    process_job_batch_output/4,
+    process_job_batch_result/4,
     process_streamed_data/3,
 
     handle_ended/1
@@ -152,15 +152,15 @@ run_job_batch(
     end.
 
 
--spec process_job_batch_output(
+-spec process_job_batch_result(
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id(),
     [automation:item()],
-    atm_task_executor:lambda_output()
+    atm_task_executor:job_batch_result()
 ) ->
     ok | error.
-process_job_batch_output(AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemBatch, LambdaOutput) ->
-    case parse_lambda_output(ItemBatch, LambdaOutput) of
+process_job_batch_result(AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemBatch, JobBatchResult) ->
+    case parse_job_batch_result(ItemBatch, JobBatchResult) of
         {ok, ResultsPerJob} ->
             AnyErrorOccurred = lists:member(error, atm_parallel_runner:map(fun({Item, JobResults}) ->
                 process_job_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, JobResults)
@@ -356,14 +356,13 @@ build_lambda_input(AtmJobBatchId, AtmRunJobBatchCtx, ItemBatch, #atm_task_execut
 
 
 %% @private
--spec parse_lambda_output([automation:item()], atm_task_executor:lambda_output()) ->
+-spec parse_job_batch_result([automation:item()], atm_task_executor:job_batch_result()) ->
     {ok, [{automation:item(), atm_task_executor:job_results()}]} | errors:error().
-parse_lambda_output(_ItemBatch, Error = {error, _}) ->
+parse_job_batch_result(_ItemBatch, Error = {error, _}) ->
     % Entire batch processing failed (e.g. timeout or malformed lambda response)
     Error;
 
-parse_lambda_output(ItemBatch, #{<<"resultsBatch">> := ResultsBatch}) when
-    is_list(ResultsBatch),
+parse_job_batch_result(ItemBatch, {ok, #atm_lambda_output{results_batch = ResultsBatch}}) when
     length(ItemBatch) == length(ResultsBatch)
 ->
     {ok, lists:zipwith(fun
@@ -376,12 +375,10 @@ parse_lambda_output(ItemBatch, #{<<"resultsBatch">> := ResultsBatch}) when
             ))}
     end, ItemBatch, ResultsBatch)};
 
-parse_lambda_output(_ItemBatch, MalformedLambdaOutput) ->
-    ?ERROR_BAD_DATA(<<"lambdaOutput">>, str_utils:format_bin(
-        "Expected '{\"resultsBatch\": [$LAMBDA_RESULTS_FOR_ITEM, ...]}' with "
-        "$LAMBDA_RESULTS_FOR_ITEM object for each item in 'argsBatch' "
-        "provided to lambda. Instead got: ~s",
-        [json_utils:encode(MalformedLambdaOutput)]
+parse_job_batch_result(_ItemBatch, {ok, #atm_lambda_output{results_batch = ResultsBatch}}) ->
+    ?ERROR_BAD_DATA(<<"lambdaOutput.resultsBatch">>, str_utils:format_bin(
+        "Expected array with object for each item in 'argsBatch' provided to lambda. "
+        "Instead got: ~s", [json_utils:encode(ResultsBatch)]
     )).
 
 
@@ -393,6 +390,23 @@ parse_lambda_output(_ItemBatch, MalformedLambdaOutput) ->
     errors:error()
 ) ->
     ok.
+handle_job_batch_processing_error(
+    AtmWorkflowExecutionCtx,
+    AtmTaskExecutionId,
+    ItemBatch,
+    {error, dequeued}
+) ->
+    case atm_task_execution_status:handle_items_dequeued(AtmTaskExecutionId, length(ItemBatch)) of
+        {ok, _} ->
+            ok;
+        {error, not_aborting} ->
+            % TODO if not happening when aborting - treat it as any other error
+            handle_job_batch_processing_error(
+                AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemBatch,
+                {error, interrupted}  %% TODO error
+            )
+    end;
+
 handle_job_batch_processing_error(
     AtmWorkflowExecutionCtx,
     AtmTaskExecutionId,
