@@ -56,8 +56,6 @@
 
 basic_test(Config) ->
     % TODO VFS-8835 - test rename
-    enable(Config),
-    verify_collecting_status(Config, enabled),
     create_initial_file_tree_and_fill_files(Config, op_worker_nodes, enabled),
     check_initial_dir_stats(Config, op_worker_nodes),
     check_update_times(Config, [op_worker_nodes]).
