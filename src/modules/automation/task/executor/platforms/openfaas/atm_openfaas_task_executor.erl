@@ -181,7 +181,7 @@ is_in_readonly_mode(#atm_openfaas_task_executor{operation_spec = #atm_openfaas_o
 -spec run(atm_run_job_batch_ctx:record(), atm_task_executor:lambda_input(), record()) ->
     ok | no_return().
 run(AtmRunJobBatchCtx, LambdaInput, AtmTaskExecutor) ->
-    schedule_function_execution(AtmRunJobBatchCtx, LambdaInput, AtmTaskExecutor).
+    schedule_function_execution(LambdaInput, AtmTaskExecutor).
 
 
 %%%===================================================================
@@ -651,25 +651,17 @@ log_function_ready(#initiation_ctx{
 
 
 %% @private
--spec schedule_function_execution(
-    atm_run_job_batch_ctx:record(),
-    atm_task_executor:lambda_input(),
-    record()
-) ->
+-spec schedule_function_execution(atm_task_executor:lambda_input(), record()) ->
     ok | no_return().
-schedule_function_execution(AtmRunJobBatchCtx, LambdaInput, #atm_openfaas_task_executor{
+schedule_function_execution(LambdaInput, #atm_openfaas_task_executor{
     function_name = FunctionName
 }) ->
     OpenfaasConfig = get_openfaas_config(),
-    Endpoint = get_openfaas_endpoint(
-        OpenfaasConfig, <<"/async-function/", FunctionName/binary>>
-    ),
+    Endpoint = get_openfaas_endpoint(OpenfaasConfig, <<"/async-function/", FunctionName/binary>>),
     AuthHeaders = get_basic_auth_header(OpenfaasConfig),
-    AllHeaders = AuthHeaders#{
-        <<"X-Callback-Url">> => atm_run_job_batch_ctx:get_forward_output_url(AtmRunJobBatchCtx)
-    },
+    AllHeaders = AuthHeaders#{<<"X-Callback-Url">> => build_job_output_url(LambdaInput)},
 
-    case http_client:post(Endpoint, AllHeaders, json_utils:encode(LambdaInput)) of
+    case http_client:post(Endpoint, AllHeaders, encode_lambda_input(LambdaInput)) of
         {ok, ?HTTP_202_ACCEPTED, _, _} ->
             ok;
         {ok, ?HTTP_500_INTERNAL_SERVER_ERROR, _RespHeaders, ErrorReason} ->
@@ -677,6 +669,33 @@ schedule_function_execution(AtmRunJobBatchCtx, LambdaInput, #atm_openfaas_task_e
         _ ->
             throw(?ERROR_ATM_OPENFAAS_QUERY_FAILED)
     end.
+
+
+%% @private
+-spec encode_lambda_input(atm_task_executor:lambda_input()) -> binary().
+encode_lambda_input(LambdaInput = #atm_lambda_input{args_batch = ArgsBatch}) ->
+    json_utils:encode(#{
+        <<"ctx">> => #{<<"heartbeatUrl">> => build_job_heartbeat_url(LambdaInput)},
+        <<"argsBatch">> => ArgsBatch
+    }).
+
+
+%% @private
+-spec build_job_output_url(atm_task_executor:lambda_input()) -> binary().
+build_job_output_url(#atm_lambda_input{
+    workflow_execution_id = AtmWorkflowExecutionId,
+    job_batch_id = AtmJobBatchId
+}) ->
+    atm_openfaas_task_callback_handler:build_job_output_url(AtmWorkflowExecutionId, AtmJobBatchId).
+
+
+%% @private
+-spec build_job_heartbeat_url(atm_task_executor:lambda_input()) -> binary().
+build_job_heartbeat_url(#atm_lambda_input{
+    workflow_execution_id = AtmWorkflowExecutionId,
+    job_batch_id = AtmJobBatchId
+}) ->
+    atm_openfaas_task_callback_handler:build_job_heartbeat_url(AtmWorkflowExecutionId, AtmJobBatchId).
 
 
 %% @private

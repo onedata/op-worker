@@ -52,7 +52,7 @@
     teardown/2,
     set_run_num/2,
 
-    run_job_batch/5,
+    run_job_batch/4,
     process_job_batch_output/4,
     process_streamed_data/3,
 
@@ -120,17 +120,15 @@ set_run_num(RunNum, AtmTaskExecutionId) ->
 -spec run_job_batch(
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id(),
-    [automation:item()],
-    binary(),
-    binary()
+    atm_task_executor:job_batch_id(),
+    [automation:item()]
 ) ->
     ok | error.
 run_job_batch(
     AtmWorkflowExecutionCtx,
     AtmTaskExecutionId,
-    ItemBatch,
-    ForwardOutputUrl,
-    HeartbeatUrl
+    AtmJobBatchId,
+    ItemBatch
 ) ->
     ItemsNum = length(ItemBatch),
 
@@ -140,10 +138,8 @@ run_job_batch(
         }
     }} = atm_task_execution_status:handle_items_in_processing(AtmTaskExecutionId, ItemsNum),
 
-    AtmRunJobBatchCtx = atm_run_job_batch_ctx:build(
-        AtmWorkflowExecutionCtx, ForwardOutputUrl, HeartbeatUrl, AtmTaskExecution
-    ),
-    LambdaInput = build_lambda_input(AtmRunJobBatchCtx, ItemBatch, AtmTaskExecution),
+    AtmRunJobBatchCtx = atm_run_job_batch_ctx:build(AtmWorkflowExecutionCtx, AtmTaskExecution),
+    LambdaInput = build_lambda_input(AtmJobBatchId, AtmRunJobBatchCtx, ItemBatch, AtmTaskExecution),
 
     try
         atm_task_executor:run(AtmRunJobBatchCtx, LambdaInput, AtmTaskExecutor)
@@ -338,10 +334,11 @@ gen_atm_workflow_execution_env_diff(#document{
 -spec build_lambda_input(
     atm_run_job_batch_ctx:record(),
     [automation:item()],
+    atm_task_executor:job_batch_id(),
     atm_task_execution:record()
 ) ->
-    json_utils:json_map().
-build_lambda_input(AtmRunJobBatchCtx, ItemBatch, #atm_task_execution{
+    atm_task_executor:lambda_input().
+build_lambda_input(AtmJobBatchId, AtmRunJobBatchCtx, ItemBatch, #atm_task_execution{
     argument_specs = AtmTaskExecutionArgSpecs
 }) ->
     %% TODO VFS-8668 optimize argsBatch creation
@@ -351,11 +348,10 @@ build_lambda_input(AtmRunJobBatchCtx, ItemBatch, #atm_task_execution{
         )
     end, ItemBatch),
 
-    #{
-        <<"ctx">> => #{
-            <<"heartbeatUrl">> => atm_run_job_batch_ctx:get_heartbeat_url(AtmRunJobBatchCtx)
-        },
-        <<"argsBatch">> => ArgsBatch
+    #atm_lambda_input{
+        workflow_execution_id = atm_run_job_batch_ctx:get_workflow_execution_id(AtmRunJobBatchCtx),
+        job_batch_id = AtmJobBatchId,
+        args_batch = ArgsBatch
     }.
 
 

@@ -34,7 +34,7 @@
     prepare_lane/3,
     restart_lane/3,
 
-    run_task_for_item/6,
+    run_task_for_item/5,
     process_task_result_for_item/5,
     process_streamed_task_data/4,
     handle_task_results_processed_for_all_items/3,
@@ -194,21 +194,19 @@ restart_lane(_, _, _) ->
     atm_workflow_execution:id(),
     atm_workflow_execution_env:record(),
     atm_task_execution:id(),
-    [automation:item()],
-    binary(),
-    binary()
+    atm_task_executor:job_batch_id(),
+    [automation:item()]
 ) ->
     ok | error.
 run_task_for_item(
     _AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId,
-    ItemBatch, ForwardOutputUrl, HeartbeatUrl
+    AtmJobBatchId, ItemBatch
 ) ->
     AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(
         AtmTaskExecutionId, AtmWorkflowExecutionEnv
     ),
     atm_task_execution_handler:run_job_batch(
-        AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemBatch,
-        ForwardOutputUrl, HeartbeatUrl
+        AtmWorkflowExecutionCtx, AtmTaskExecutionId, AtmJobBatchId, ItemBatch
     ).
 
 

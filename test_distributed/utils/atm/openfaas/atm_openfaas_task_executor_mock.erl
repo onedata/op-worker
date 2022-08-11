@@ -281,7 +281,7 @@ mock_run(Workers, ModuleWithOpenfaasDockerMock) ->
                 false -> Output
             end,
 
-            CallbackUrl = atm_run_job_batch_ctx:get_forward_output_url(AtmRunJobBatchCtx),
+            CallbackUrl = atm_run_job_batch_ctx:get_forward_output_url(AtmRunJobBatchCtx),  %% TODO
             http_client:post(CallbackUrl, #{}, Response)
         end),
 

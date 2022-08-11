@@ -37,10 +37,6 @@
 %% Endpoint used to connect as a client to protocol endpoint
 -define(CLIENT_PROTOCOL_PATH, "/clproto").
 
-% TODO VFS-7628 make openfaas respond to https
-%% Endpoint used as callback for Openfaas
--define(ATM_TASK_FINISHED_CALLBACK_PATH, "/tasks/").
-
 %% Protocol name for HTTP upgrade headers on client protocol endpoint
 -define(CLIENT_PROTOCOL_UPGRADE_NAME, "clproto").
 
@@ -56,5 +52,13 @@
 
 % WebSocket endpoint for reporting activity in OpenFaaS (e.g. pod status changes or 'file_pipe' lambda results)
 -define(OPENFAAS_ACTIVITY_FEED_WS_COWBOY_ROUTE, "/automation/openfaas/activity_feed/:client_type").
+
+% TODO VFS-7628 make openfaas respond to https
+%% Endpoint used as callback for Openfaas
+-define(ATM_JOB_OUTPUT_CALLBACK_PATH, "/automation/workflow/executions/:wf_exec_id/jobs/:jid/output").
+-define(ATM_JOB_HEARTBEAT_CALLBACK_PATH, "/automation/workflow/executions/:wf_exec_id/jobs/:jid/hearteat").
+
+
+-define(ATM_TASK_FINISHED_CALLBACK_PATH, "/tasks/").  %% TODO rm
 
 -endif.

@@ -104,9 +104,8 @@
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
     workflow_engine:task_id(),
-    iterator:item(),
-    finished_callback_id(),
-    heartbeat_callback_id()
+    workflow_jobs:job_identifier(),  %% TODO make it binary
+    iterator:item()
 ) ->
     handler_execution_result().
 

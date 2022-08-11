@@ -89,6 +89,14 @@
     uncorrelated_results :: [automation:name()]
 }).
 
+%% Record used as an argument for lambda call
+-record(atm_lambda_input, {
+    workflow_execution_id :: atm_workflow_execution:id(),
+    job_batch_id :: atm_task_executor:job_batch_id(),
+    args_batch :: [atm_task_executor:job_args()]
+}).
+
+
 % Record carrying an activity report of an OpenFaaS function
 -record(atm_openfaas_activity_report, {
     type :: atm_openfaas_activity_report:type(),
