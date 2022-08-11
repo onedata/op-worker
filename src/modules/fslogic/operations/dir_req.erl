@@ -16,6 +16,7 @@
 -include("modules/fslogic/data_access_control.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
 
 
@@ -28,10 +29,8 @@
     get_children_details/3
 ]).
 
-
--define(MAX_MAP_CHILDREN_PROCESSES, application:get_env(
-    ?APP_NAME, max_read_dir_plus_procs, 20
-)).
+-type map_child_fun() :: fun((user_ctx:ctx(), file_ctx:ctx(), attr_req:compute_file_attr_opts()) ->
+    fslogic_worker:fuse_response()) | no_return().
 
 %%%===================================================================
 %%% API
@@ -247,12 +246,17 @@ get_children_attrs_insecure(
 ) ->
     {Children, ListingToken, FileCtx1} = file_tree:list_children(
         FileCtx0, UserCtx, ListOpts, CanonicalChildrenWhiteList),
-    ChildrenAttrs = map_children(
+    ComputeAttrsOpts = #{
+        allow_deleted_files => false,
+        include_size => true,
+        include_replication_status => IncludeReplicationStatus,
+        include_link_count => IncludeLinkCount
+    },
+    ChildrenAttrs = readdir_plus:gather_attributes(
         UserCtx,
-        fun attr_req:get_file_attr_insecure/3,
+        child_attrs_mapper(fun attr_req:get_file_attr_insecure/3),
         Children,
-        IncludeReplicationStatus,
-        IncludeLinkCount
+        ComputeAttrsOpts
     ),
 
     fslogic_times:update_atime(FileCtx1),
@@ -285,12 +289,17 @@ get_children_details_insecure(UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhit
     {Children, ListingToken, FileCtx1} = file_tree:list_children(
         FileCtx0, UserCtx, ListOpts, CanonicalChildrenWhiteList
     ),
-    ChildrenDetails = map_children(
+    ComputeAttrsOpts = #{
+        allow_deleted_files => false,
+        include_size => true,
+        include_replication_status => false,
+        include_link_count => true
+    },
+    ChildrenDetails = readdir_plus:gather_attributes(
         UserCtx,
-        fun attr_req:get_file_details_insecure/3,
+        child_attrs_mapper(fun attr_req:get_file_details_insecure/3),
         Children,
-        false,
-        true
+        ComputeAttrsOpts
     ),
     fslogic_times:update_atime(FileCtx1),
     #fuse_response{status = #status{code = ?OK},
@@ -301,56 +310,13 @@ get_children_details_insecure(UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhit
     }.
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Calls MapFunctionInsecure for every passed children in parallel and
-%% filters out children for which it raised error (potentially docs not
-%% synchronized between providers or deleted files).
-%% @end
-%%--------------------------------------------------------------------
--spec map_children(
-    UserCtx,
-    MapFunInsecure :: fun((UserCtx, ChildCtx :: file_ctx:ctx(), attr_req:compute_file_attr_opts()) ->
-        fslogic_worker:fuse_response()),
-    Children :: [file_ctx:ctx()],
-    IncludeReplicationStatus :: boolean(),
-    IncludeLinkCount :: boolean()
-) ->
-    [fuse_response_type()] when UserCtx :: user_ctx:ctx().
-map_children(UserCtx, MapFunInsecure, Children, IncludeReplicationStatus, IncludeLinkCount) ->
-    ChildrenNum = length(Children),
-    EnumeratedChildren = lists_utils:enumerate(Children),
-    ComputeFileAttrOpts = #{
-        allow_deleted_files => false,
-        include_size => true
-    },
-    FilterMapFun = fun({Num, ChildCtx}) ->
-        try
-            #fuse_response{
-                status = #status{code = ?OK},
-                fuse_response = Result
-            } = case Num == 1 orelse Num == ChildrenNum of
-                true ->
-                    MapFunInsecure(UserCtx, ChildCtx, ComputeFileAttrOpts#{
-                        name_conflicts_resolution_policy => resolve_name_conflicts,
-                        include_replication_status => IncludeReplicationStatus,
-                        include_link_count => IncludeLinkCount
-                    });
-                false ->
-                    % Other files than first and last don't need to resolve name
-                    % conflicts (to check for collisions) as list_children
-                    % (file_meta:tag_children to be precise) already did it
-                    MapFunInsecure(UserCtx, ChildCtx, ComputeFileAttrOpts#{
-                        name_conflicts_resolution_policy => allow_name_conflicts,
-                        include_replication_status => IncludeReplicationStatus,
-                        include_link_count => IncludeLinkCount
-                    })
-            end,
-            {true, Result}
-        catch _:_ ->
-            % File can be not synchronized with other provider
-            false
-        end
-    end,
-    lists_utils:pfiltermap(FilterMapFun, EnumeratedChildren, ?MAX_MAP_CHILDREN_PROCESSES).
+-spec child_attrs_mapper(map_child_fun()) -> 
+    readdir_plus:gather_attributes_fun(file_ctx:ctx(), fslogic_worker:fuse_response_type()).
+child_attrs_mapper(AttrsMappingFun) ->
+    fun(UserCtx, ChildCtx, BaseOpts) ->
+        #fuse_response{status = #status{code = ?OK}, fuse_response = Result} = 
+            AttrsMappingFun(UserCtx, ChildCtx, BaseOpts),
+        Result
+    end.
+

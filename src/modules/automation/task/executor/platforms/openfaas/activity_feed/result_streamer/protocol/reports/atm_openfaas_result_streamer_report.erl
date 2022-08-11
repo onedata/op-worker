@@ -25,14 +25,20 @@
 %% jsonable_record callbacks
 -export([to_json/1, from_json/1]).
 
--type type() :: atm_openfaas_result_streamer_registration_report
-| atm_openfaas_result_streamer_chunk_report
-| atm_openfaas_result_streamer_deregistration_report.
--type record() :: atm_openfaas_result_streamer_registration_report:record()
+-type record() :: #atm_openfaas_result_streamer_report{}.
+% client-generated identifier of a specific report
+-type id() :: binary().
+-type body() :: atm_openfaas_result_streamer_registration_report:record()
 | atm_openfaas_result_streamer_chunk_report:record()
+| atm_openfaas_result_streamer_invalid_data_report:record()
 | atm_openfaas_result_streamer_deregistration_report:record().
 
--export_type([type/0, record/0]).
+-export_type([record/0, id/0, body/0]).
+
+-type type() :: atm_openfaas_result_streamer_registration_report
+| atm_openfaas_result_streamer_chunk_report
+| atm_openfaas_result_streamer_invalid_data_report
+| atm_openfaas_result_streamer_deregistration_report.
 
 
 %%%===================================================================
@@ -41,17 +47,24 @@
 
 -spec to_json(record()) -> json_utils:json_term().
 to_json(Record) ->
-    RecordType = utils:record_type(Record),
+    Body = Record#atm_openfaas_result_streamer_report.body,
+    BodyRecordType = utils:record_type(Body),
     maps:merge(
-        #{<<"type">> => type_to_json(RecordType)},
-        jsonable_record:to_json(Record, RecordType)
+        #{
+            <<"id">> => Record#atm_openfaas_result_streamer_report.id,
+            <<"type">> => type_to_json(BodyRecordType)
+        },
+        jsonable_record:to_json(Body, BodyRecordType)
     ).
 
 
 -spec from_json(json_utils:json_term()) -> record().
 from_json(RecordJson) ->
-    RecordType = type_from_json(maps:get(<<"type">>, RecordJson)),
-    jsonable_record:from_json(RecordJson, RecordType).
+    BodyRecordType = type_from_json(maps:get(<<"type">>, RecordJson)),
+    #atm_openfaas_result_streamer_report{
+        id = maps:get(<<"id">>, RecordJson),
+        body = jsonable_record:from_json(RecordJson, BodyRecordType)
+    }.
 
 %%%===================================================================
 %%% Internal functions
@@ -61,6 +74,7 @@ from_json(RecordJson) ->
 -spec type_to_json(type()) -> json_utils:json_term().
 type_to_json(atm_openfaas_result_streamer_registration_report) -> <<"registration">>;
 type_to_json(atm_openfaas_result_streamer_chunk_report) -> <<"chunk">>;
+type_to_json(atm_openfaas_result_streamer_invalid_data_report) -> <<"invalidData">>;
 type_to_json(atm_openfaas_result_streamer_deregistration_report) -> <<"deregistration">>.
 
 
@@ -68,4 +82,5 @@ type_to_json(atm_openfaas_result_streamer_deregistration_report) -> <<"deregistr
 -spec type_from_json(json_utils:json_term()) -> type().
 type_from_json(<<"registration">>) -> atm_openfaas_result_streamer_registration_report;
 type_from_json(<<"chunk">>) -> atm_openfaas_result_streamer_chunk_report;
+type_from_json(<<"invalidData">>) -> atm_openfaas_result_streamer_invalid_data_report;
 type_from_json(<<"deregistration">>) -> atm_openfaas_result_streamer_deregistration_report.

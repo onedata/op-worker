@@ -230,31 +230,31 @@ qos_cleanup_test(_Config) ->
 %%%===================================================================
 
 qos_audit_log_successful_synchronization(_Config) ->
-    qos_audit_log_base_test(<<"synchronized">>, single_file).
+    qos_audit_log_base_test(<<"completed">>, single_file).
 
 
 qos_audit_log_transfer_error(_Config) ->
     % error mocked in init_per_testcase
-    qos_audit_log_base_test(<<"synchronization failed">>, single_file).
+    qos_audit_log_base_test(<<"failed">>, single_file).
 
 
 qos_audit_log_failure(_Config) ->
     % error mocked in init_per_testcase
-    qos_audit_log_base_test(<<"synchronization failed">>, single_file).
+    qos_audit_log_base_test(<<"failed">>, single_file).
 
 
 effective_qos_audit_log_successful_synchronization(_Config) ->
-    qos_audit_log_base_test(<<"synchronized">>, effective).
+    qos_audit_log_base_test(<<"completed">>, effective).
 
 
 effective_qos_audit_log_transfer_error(_Config) ->
     % error mocked in init_per_testcase
-    qos_audit_log_base_test(<<"synchronization failed">>, effective).
+    qos_audit_log_base_test(<<"failed">>, effective).
 
 
 effective_qos_audit_log_failure(_Config) ->
     % error mocked in init_per_testcase
-    qos_audit_log_base_test(<<"synchronization failed">>, effective).
+    qos_audit_log_base_test(<<"failed">>, effective).
 
 
 qos_audit_log_base_test(ExpectedStatus, Type) ->
@@ -265,18 +265,21 @@ qos_audit_log_base_test(ExpectedStatus, Type) ->
     FilePath = filename:join([?SPACE_PATH1, generator:gen_name()]),
     {RootGuid, FileIds} = prepare_audit_log_test_env(Type, Node, ?SESS_ID(ProviderId), FilePath),
     {ok, QosEntryId} = opt_qos:add_qos_entry(Node, ?SESS_ID(ProviderId), ?FILE_REF(RootGuid), <<"providerId=", ProviderId/binary>>, 1),
-    BaseExpected = case ExpectedStatus of
-        <<"synchronized">> ->
-            #{<<"severity">> => <<"info">>};
-        <<"synchronization failed">> ->
-            #{
-                <<"severity">> => <<"error">>,
-                % error mocked in init_per_testcase
-                <<"reason">> => #{
-                    <<"description">> => <<"Operation failed with POSIX error: enoent.">>,
-                    <<"details">> => #{<<"errno">> => <<"enoent">>},
-                    <<"id">> => <<"posix">>
-                }
+    {BaseExpectedContent, ExpectedSeverity} = case ExpectedStatus of
+        <<"completed">> ->
+            {#{<<"description">> => <<"Local replica reconciled.">>}, <<"info">>};
+        <<"failed">> ->
+            {
+                #{
+                    % error mocked in init_per_testcase
+                    <<"reason">> => #{
+                        <<"description">> => <<"Operation failed with POSIX error: enoent.">>,
+                        <<"details">> => #{<<"errno">> => <<"enoent">>},
+                        <<"id">> => <<"posix">>
+                    },
+                    <<"description">> => <<"Failed to reconcile local replica: Operation failed with POSIX error: enoent.">>
+                },
+                <<"error">>
             }
     end,
     SortFun = fun(#{<<"content">> := #{<<"fileId">> := FileIdA}}, #{<<"content">> := #{<<"fileId">> := FileIdB}}) ->
@@ -286,15 +289,17 @@ qos_audit_log_base_test(ExpectedStatus, Type) ->
         [
             #{
                 <<"timestamp">> => Timestamp,
+                <<"severity">> => <<"info">>,
                 <<"content">> => #{
-                    <<"severity">> => <<"info">>,
-                    <<"status">> => <<"synchronization started">>,
-                    <<"fileId">> => ObjectId
+                    <<"status">> => <<"scheduled">>,
+                    <<"fileId">> => ObjectId,
+                    <<"description">> => <<"Remote replica differs, reconciliation started.">>
                 }
             },
             #{
                 <<"timestamp">> => Timestamp,
-                <<"content">> => BaseExpected#{
+                <<"severity">> => ExpectedSeverity,
+                <<"content">> => BaseExpectedContent#{
                     <<"fileId">> => ObjectId,
                     <<"status">> => ExpectedStatus
                 }

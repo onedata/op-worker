@@ -154,7 +154,7 @@ await_distribution(Nodes, Files, ExpSizeOrBlocksPerProvider) ->
     end, ExpSizeOrBlocksPerProvider)),
 
     FetchDistributionFun = fun(Node, FileGuid) ->
-        {ok, Distribution} = lfm_proxy:get_file_distribution(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid)),
+        {ok, Distribution} = opt_file_metadata:get_distribution_deprecated(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid)),
         lists:sort(Distribution)
     end,
 

@@ -90,7 +90,6 @@ get_models() -> [
     tree_traverse_progress,
     dir_size_stats,
     dir_update_time_stats,
-    dir_stats_collector_config,
     restart_hooks,
     dataset,
     bulk_download_task,
@@ -112,13 +111,14 @@ get_models() -> [
     atm_lambda_snapshot,
     atm_workflow_execution,
     atm_tree_forest_iterator_queue,
-    atm_openfaas_function_activity_registry,
+    atm_openfaas_function_pod_status_registry,
     atm_openfaas_result_streamer_registry,
     atm_time_series_store_container,
 
     %% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 21.02.*.
     space_strategies,
-    storage_sync_monitoring
+    storage_sync_monitoring,
+    space_support_state
 ].
 
 %%--------------------------------------------------------------------

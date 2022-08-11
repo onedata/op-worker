@@ -401,7 +401,7 @@ correct_file_on_storage_is_deleted_test_base(Config, DeleteNewFileFirst) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
     SpaceId = <<"space1">>,
-    ParentGuid = rpc:call(Worker, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
+    ParentGuid = rpc:call(Worker, fslogic_file_id, spaceid_to_space_dir_guid, [SpaceId]),
     FileName = generator:gen_name(),
     FilePath = filepath_utils:join([<<"/">>, SpaceId, FileName]),
     
@@ -455,7 +455,7 @@ init_per_testcase(Case, Config) when
 ->
 
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, [fslogic_uuid, file_ctx, fslogic_delete, file_meta],
+    test_utils:mock_new(Worker, [fslogic_file_id, file_ctx, fslogic_delete, file_meta],
         [passthrough]),
 
     test_utils:mock_expect(Worker, fslogic_delete, handle_release_of_deleted_file,

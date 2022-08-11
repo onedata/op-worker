@@ -43,7 +43,8 @@
 
     connect_as_user/4,
 
-    generate_msg_id/0
+    generate_msg_id/0,
+    extend_message_with_msg_id/1
 ]).
 -export([connect_and_upgrade_proto/2]).
 -export([receive_server_message/0, receive_server_message/1, receive_server_message/2]).
@@ -146,6 +147,13 @@ generate_msg_id() ->
     end,
     put(msg_id_generator, ID),
     ID.
+
+
+extend_message_with_msg_id(EncodedMsg) ->
+    Message = messages:decode_msg(EncodedMsg, 'ClientMessage'),
+    MsgId = ?MSG_ID,
+    {MsgId, messages:encode_msg(Message#'ClientMessage'{message_id = MsgId})}.
+
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -340,7 +340,7 @@ apply_or_run_locally(Uuid, InCacheFun, ApplyOnCacheFun, FallbackFun) ->
 -spec apply_if_alive_no_check(file_meta:uuid(), term()) ->
     term().
 apply_if_alive_no_check(Uuid, FunOrMsg) ->
-    ReferencedUuid = fslogic_uuid:ensure_referenced_uuid(Uuid),
+    ReferencedUuid = fslogic_file_id:ensure_referenced_uuid(Uuid),
     Node = datastore_key:any_responsible_node(ReferencedUuid),
     rpc:call(Node, ?MODULE, apply_if_alive_internal, [ReferencedUuid, FunOrMsg]).
 
@@ -366,7 +366,7 @@ apply_no_check(FileCtx, FunOrMsg) ->
 -spec apply_or_run_locally_no_check(file_meta:uuid(), fun(() -> term()), fun(() -> term())) ->
     term().
 apply_or_run_locally_no_check(Uuid, Fun, FallbackFun) ->
-    ReferencedUuid = fslogic_uuid:ensure_referenced_uuid(Uuid),
+    ReferencedUuid = fslogic_file_id:ensure_referenced_uuid(Uuid),
     Node = datastore_key:any_responsible_node(ReferencedUuid),
     rpc:call(Node, ?MODULE, apply_or_run_locally_internal, [ReferencedUuid, Fun, FallbackFun]).
 
@@ -1558,7 +1558,9 @@ flush_blocks_list(AllBlocks, ExcludeSessions, Flush) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec flush_stats(#state{}, boolean()) -> #state{}.
-flush_stats(#state{cached_stats = Stats} = State, _) when map_size(Stats) == 0 ->
+flush_stats(#state{cached_stats = Stats} = State, true = _CancelTimer) when map_size(Stats) == 0 ->
+    cancel_caching_stats_timer(State);
+flush_stats(#state{cached_stats = Stats} = State, false = _CancelTimer) when map_size(Stats) == 0 ->
     State;
 flush_stats(#state{
     space_id = SpaceId,

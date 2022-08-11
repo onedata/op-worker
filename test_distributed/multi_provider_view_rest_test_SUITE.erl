@@ -760,9 +760,9 @@ query_spatial_view(Config) ->
     {ok, Guid1} = lfm_proxy:create(WorkerP1, SessionId, Path1),
     {ok, Guid2} = lfm_proxy:create(WorkerP1, SessionId, Path2),
     {ok, Guid3} = lfm_proxy:create(WorkerP1, SessionId, Path3),
-    ok = lfm_proxy:set_metadata(WorkerP1, SessionId, ?FILE_REF(Guid1), json, #{<<"type">> => <<"Point">>, <<"coordinates">> => [5.1, 10.22]}, [<<"loc">>]),
-    ok = lfm_proxy:set_metadata(WorkerP1, SessionId, ?FILE_REF(Guid2), json, #{<<"type">> => <<"Point">>, <<"coordinates">> => [0, 0]}, [<<"loc">>]),
-    ok = lfm_proxy:set_metadata(WorkerP1, SessionId, ?FILE_REF(Guid3), json, #{<<"type">> => <<"Point">>, <<"coordinates">> => [10, 5]}, [<<"loc">>]),
+    ok = opt_file_metadata:set_custom_metadata(WorkerP1, SessionId, ?FILE_REF(Guid1), json, #{<<"type">> => <<"Point">>, <<"coordinates">> => [5.1, 10.22]}, [<<"loc">>]),
+    ok = opt_file_metadata:set_custom_metadata(WorkerP1, SessionId, ?FILE_REF(Guid2), json, #{<<"type">> => <<"Point">>, <<"coordinates">> => [0, 0]}, [<<"loc">>]),
+    ok = opt_file_metadata:set_custom_metadata(WorkerP1, SessionId, ?FILE_REF(Guid3), json, #{<<"type">> => <<"Point">>, <<"coordinates">> => [10, 5]}, [<<"loc">>]),
 
     ?assertMatch(ok, create_view_via_rest(
         Config, WorkerP1, SpaceId, ViewName,
@@ -791,7 +791,7 @@ querying_spatial_view_with_wrong_function_should_fail(Config) ->
 
     Path1 = filename:join(["/", SpaceName, "file1"]),
     {ok, Guid1} = lfm_proxy:create(WorkerP1, SessionId, Path1),
-    ok = lfm_proxy:set_metadata(WorkerP1, SessionId, ?FILE_REF(Guid1), json, #{<<"type">> => <<"Point">>, <<"coordinates">> => [5.1, 10.22]}, [<<"loc">>]),
+    ok = opt_file_metadata:set_custom_metadata(WorkerP1, SessionId, ?FILE_REF(Guid1), json, #{<<"type">> => <<"Point">>, <<"coordinates">> => [5.1, 10.22]}, [<<"loc">>]),
 
     ?assertMatch(ok, create_view_via_rest(
         Config, WorkerP1, SpaceId, ViewName,

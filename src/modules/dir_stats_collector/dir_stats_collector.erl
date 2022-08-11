@@ -35,7 +35,7 @@
 %%% the idle timeout.
 %%%
 %%% Typically dir_stats_collector is used when collecting is enabled
-%%% (see dir_stats_collector_config). However, it is also used by
+%%% (see dir_stats_service_state). However, it is also used by
 %%% dir_stats_collections_initialization_traverse which initializes
 %%% collections for all directories. In such a case, it uses helper module
 %%% dir_stats_collections_initializer as collections initialization requires
@@ -93,7 +93,7 @@
     initialization_timer_ref :: reference() | undefined,
 
     % Space status is initialized on first request for any dir in space
-    space_collecting_statuses = #{} :: #{od_space:id() => dir_stats_collector_config:extended_active_collecting_status()}
+    space_collecting_statuses = #{} :: #{od_space:id() => dir_stats_service_state:extended_active_status()}
 }).
 
 -record(cached_dir_stats, {
@@ -106,8 +106,8 @@
     parent :: file_id:file_guid() | root_dir | undefined, % resolved and stored upon first access to this field,
 
     % Field used to store information about collecting status to enable special requests handling during collection
-    % initialization (when space collecting is changed to enabled for not empty space - see dir_stats_collector_config)
-    collecting_status :: dir_stats_collector_config:active_collecting_status(),
+    % initialization (when space collecting is changed to enabled for not empty space - see dir_stats_service_state)
+    collecting_status :: dir_stats_service_state:active_status(),
     initialization_data :: dir_stats_collections_initializer:initialization_data() | undefined
 }).
 
@@ -141,7 +141,7 @@
 -type cached_dir_stats_key() :: {file_id:file_guid(), dir_stats_collection:type()}.
 -type cached_dir_stats() :: #cached_dir_stats{}.
 
--type dir_status() :: flushed | unflushed | collections_initialization.
+-type dir_status() :: flushed | unflushed | initializing.
 -type pruning_strategy() :: prune_flushed | prune_inactive.
 
 -type collecting_status_error() :: ?ERROR_DIR_STATS_NOT_READY | ?ERROR_DIR_STATS_DISABLED_FOR_SPACE.
@@ -152,7 +152,7 @@
 -define(FLUSH_INTERVAL_MILLIS, 5000).
 -define(CACHED_DIR_STATS_INACTIVITY_PERIOD, 10000). % stats that are already flushed and not used for this period
                                                     % are removed from the cache
--define(SUPERVISOR_NAME, dir_stats_collector_worker_sup).
+-define(SUPERVISOR_NAME, dir_stats_service_worker_sup).
 
 -define(SCHEDULED_FLUSH, scheduled_flush).
 % When initialization of directory fails (e.g. as a result of race) or request to not initialized collection appears,
@@ -173,7 +173,7 @@
 -spec get_stats(file_id:file_guid(), dir_stats_collection:type(), dir_stats_collection:stats_selector()) ->
     {ok, dir_stats_collection:collection()} | error().
 get_stats(Guid, CollectionType, StatNames) ->
-    case dir_stats_collector_config:get_extended_collecting_status(file_id:guid_to_space_id(Guid)) of
+    case dir_stats_service_state:get_extended_status(file_id:guid_to_space_id(Guid)) of
         enabled ->
             Request = #dsc_get_request{
                 guid = Guid,
@@ -181,7 +181,7 @@ get_stats(Guid, CollectionType, StatNames) ->
                 stat_names = StatNames
             },
             call_designated_node(Guid, submit_and_await, [?MODULE, Guid, Request]);
-        {collections_initialization, _} ->
+        {initializing, _} ->
             ?ERROR_DIR_STATS_NOT_READY;
         _ ->
             ?ERROR_DIR_STATS_DISABLED_FOR_SPACE
@@ -191,7 +191,7 @@ get_stats(Guid, CollectionType, StatNames) ->
 -spec update_stats_of_dir(file_id:file_guid(), dir_stats_collection:type(), dir_stats_collection:collection()) ->
     ok | ?ERROR_INTERNAL_SERVER_ERROR.
 update_stats_of_dir(Guid, CollectionType, CollectionUpdate) ->
-    case dir_stats_collector_config:is_collecting_active(file_id:guid_to_space_id(Guid)) of
+    case dir_stats_service_state:is_active(file_id:guid_to_space_id(Guid)) of
         true ->
             update_stats_of_dir(Guid, external, CollectionType, CollectionUpdate);
         false ->
@@ -208,7 +208,7 @@ update_stats_of_parent(Guid, CollectionType, CollectionUpdate) ->
 -spec update_stats_of_parent(file_id:file_guid(), dir_stats_collection:type(), dir_stats_collection:collection(),
     add_hook | return_error) -> ok | ?ERROR_NOT_FOUND | ?ERROR_INTERNAL_SERVER_ERROR.
 update_stats_of_parent(Guid, CollectionType, CollectionUpdate, ParentErrorHandlingMethod) ->
-    case dir_stats_collector_config:is_collecting_active(file_id:guid_to_space_id(Guid)) of
+    case dir_stats_service_state:is_active(file_id:guid_to_space_id(Guid)) of
         true ->
             case get_parent(Guid) of
                 {ok, ParentGuid} ->
@@ -232,7 +232,7 @@ update_stats_of_parent(Guid, CollectionType, CollectionUpdate, ParentErrorHandli
 -spec update_stats_of_nearest_dir(file_id:file_guid(), dir_stats_collection:type(), dir_stats_collection:collection()) ->
     ok | ?ERROR_INTERNAL_SERVER_ERROR.
 update_stats_of_nearest_dir(Guid, CollectionType, CollectionUpdate) ->
-    case dir_stats_collector_config:is_collecting_active(file_id:guid_to_space_id(Guid)) of
+    case dir_stats_service_state:is_active(file_id:guid_to_space_id(Guid)) of
         true ->
             {FileUuid, SpaceId} = file_id:unpack_guid(Guid),
             case file_meta:get_including_deleted(FileUuid) of
@@ -255,9 +255,9 @@ update_stats_of_nearest_dir(Guid, CollectionType, CollectionUpdate) ->
 -spec flush_stats(file_id:file_guid(), dir_stats_collection:type()) ->
     ok | collecting_status_error() | ?ERROR_INTERNAL_SERVER_ERROR.
 flush_stats(Guid, CollectionType) ->
-    case dir_stats_collector_config:get_extended_collecting_status(file_id:guid_to_space_id(Guid)) of
+    case dir_stats_service_state:get_extended_status(file_id:guid_to_space_id(Guid)) of
         enabled -> request_flush(Guid, CollectionType, prune_inactive);
-        {collections_initialization, _} -> ?ERROR_DIR_STATS_NOT_READY;
+        {initializing, _} -> ?ERROR_DIR_STATS_NOT_READY;
         _ -> ?ERROR_DIR_STATS_DISABLED_FOR_SPACE
     end.
 
@@ -267,7 +267,7 @@ delete_stats(Guid, CollectionType) ->
     % TODO VFS-9204 - delete only for directories
     % TODO VFS-9204 - delete collection when collecting was enabled in past
     % TODO VFS-9204 - delete from collector memory for collections_initialization status
-    case dir_stats_collector_config:is_collecting_active(file_id:guid_to_space_id(Guid)) of
+    case dir_stats_service_state:is_active(file_id:guid_to_space_id(Guid)) of
         true ->
             case request_flush(Guid, CollectionType, prune_flushed) of
                 ok -> CollectionType:delete(Guid);
@@ -305,7 +305,7 @@ stop_collecting(SpaceId) ->
                     [?FUNCTION_NAME, ErrorAns, BadNodes])
         end,
 
-        dir_stats_collector_config:report_collectors_stopped(SpaceId)
+        dir_stats_service_state:report_collectors_stopped(SpaceId)
     end),
     ok.
 
@@ -389,7 +389,7 @@ handle_call(#dsc_get_request{
         } ->
             {dir_stats_collection:with_all(StatNames, CurrentStats), UpdatedState};
         {
-            {ok, #cached_dir_stats{current_stats = _CurrentStats, collecting_status = collections_initialization}},
+            {ok, #cached_dir_stats{current_stats = _CurrentStats, collecting_status = initializing}},
             UpdatedState
         } ->
             {?ERROR_DIR_STATS_NOT_READY, UpdatedState};
@@ -408,7 +408,7 @@ handle_call(?INITIALIZE_COLLECTIONS(Guid), State) ->
     {InitializationDataMap, UpdatedState} = lists:foldl(fun(CollectionType, {InitializationDataMapAcc, StateAcc}) ->
         case reset_last_used_timer(Guid, CollectionType, StateAcc) of
             {{ok, #cached_dir_stats{
-                collecting_status = collections_initialization,
+                collecting_status = initializing,
                 initialization_data = InitializationData
             }}, UpdatedStateAcc} ->
                 {InitializationDataMapAcc#{CollectionType => InitializationData}, UpdatedStateAcc};
@@ -457,7 +457,7 @@ handle_cast(#dsc_update_request{
     case UpdateAns of
         {?ERROR_DIR_STATS_DISABLED_FOR_SPACE, UpdatedState} ->
             UpdatedState;
-        {{ok, #cached_dir_stats{collecting_status = collections_initialization}}, UpdatedState} ->
+        {{ok, #cached_dir_stats{collecting_status = initializing}}, UpdatedState} ->
             abort_collection_initialization(Guid, CollectionType, UpdatedState);
         {_, UpdatedState} ->
             ensure_flush_scheduled(UpdatedState#state{has_unflushed_changes = true})
@@ -499,7 +499,7 @@ update_stats_of_dir(Guid, UpdateType, CollectionType, CollectionUpdate) ->
 -spec update_collection_in_cache(dir_stats_collection:type(), update_type(), dir_stats_collection:collection(),
     cached_dir_stats()) -> cached_dir_stats().
 update_collection_in_cache(CollectionType, internal = _UpdateType, CollectionUpdate, #cached_dir_stats{
-    collecting_status = collections_initialization,
+    collecting_status = initializing,
     initialization_data = InitializationData
 } = CachedDirStats) ->
     CachedDirStats#cached_dir_stats{
@@ -508,7 +508,7 @@ update_collection_in_cache(CollectionType, internal = _UpdateType, CollectionUpd
     };
 
 update_collection_in_cache(CollectionType, external = UpdateType, CollectionUpdate, #cached_dir_stats{
-    collecting_status = collections_initialization,
+    collecting_status = initializing,
     initialization_data = InitializationData
 } = CachedDirStats) ->
     case dir_stats_collections_initializer:are_stats_ready(InitializationData) of
@@ -600,7 +600,7 @@ flush_cached_dir_stats({_, CollectionType} = CachedDirStatsKey, PruningStrategy,
                 false ->
                     {ok, State}
             end;
-        collections_initialization ->
+        initializing ->
             case dir_stats_collections_initializer:are_stats_ready(InitializationData) of
                 true ->
                     UpdatedState = update_cached_dir_stats(
@@ -617,7 +617,7 @@ flush_cached_dir_stats({_, CollectionType} = CachedDirStatsKey, PruningStrategy,
 start_collections_initialization_for_all_cached_dirs(#state{dir_stats_cache = DirStatsCache} = State) ->
     InitializationDataMaps = maps:fold(fun
         ({Guid, CollectionType} = _CachedDirStatsKey, #cached_dir_stats{
-            collecting_status = collections_initialization,
+            collecting_status = initializing,
             initialization_data = InitializationData
         }, Acc) ->
             InitializationDataMap = maps:get(Guid, Acc, #{}),
@@ -723,18 +723,18 @@ ensure_space_collecting_statuses_up_to_date(#state{
     IsAnyInitializingInSpaceMap = maps:fold(fun({Guid, _}, #cached_dir_stats{collecting_status = Status}, Acc) ->
         SpaceId = file_id:guid_to_space_id(Guid),
         IsAnyInitializingInSpace = maps:get(SpaceId, Acc, false),
-        Acc#{SpaceId => IsAnyInitializingInSpace orelse Status =:= collections_initialization}
+        Acc#{SpaceId => IsAnyInitializingInSpace orelse Status =:= initializing}
     end, #{}, DirStatsCache),
 
     UpdatedSpaceCollectingStatuses = maps:map(fun
-        (SpaceId, collections_initialization) ->
+        (SpaceId, initializing) ->
             IsAnyInitializing = maps:get(SpaceId, IsAnyInitializingInSpaceMap, false),
             case
                 (not IsAnyInitializing) andalso
-                dir_stats_collector_config:get_extended_collecting_status(SpaceId) =:= enabled
+                dir_stats_service_state:get_extended_status(SpaceId) =:= enabled
             of
                 true -> enabled;
-                false -> collections_initialization
+                false -> initializing
             end;
         (_SpaceId, SpaceCollectingStatus) ->
             SpaceCollectingStatus
@@ -760,8 +760,8 @@ get_dir_status(#cached_dir_stats{
         0 -> flushed;
         _ -> unflushed
     end;
-get_dir_status(#cached_dir_stats{collecting_status = collections_initialization}) ->
-    collections_initialization.
+get_dir_status(#cached_dir_stats{collecting_status = initializing}) ->
+    initializing.
 
 
 %% @private
@@ -785,7 +785,7 @@ save_and_propagate_cached_dir_stats({Guid, CollectionType} = _CachedDirStatsKey,
     {CollectingStatus, State2} = acquire_space_collecting_status(file_id:guid_to_space_id(Guid), State),
     try
         case CollectingStatus of
-            {collections_initialization, Incarnation} ->
+            {initializing, Incarnation} ->
                 CollectionType:save(Guid, CurrentStats, Incarnation);
             _ ->
                 CollectionType:save(Guid, CurrentStats, current)
@@ -848,17 +848,17 @@ update_in_cache(Guid, CollectionType, Diff, #state{dir_stats_cache = DirStatsCac
                         collecting_status = enabled,
                         current_stats = Stats
                     }, State2};
-                {{collections_initialization, Incarnation}, State2} ->
+                {{initializing, Incarnation}, State2} ->
                     {#cached_dir_stats{
                         collecting_status = enabled,
                         current_stats = Stats
                     }, State2};
                 % Collection incarnation is not equal to current incarnation - collection
                 % is outdated - initialize it once more
-                {{collections_initialization, _}, State2} ->
+                {{initializing, _}, State2} ->
                     {
                         #cached_dir_stats{
-                            collecting_status = collections_initialization,
+                            collecting_status = initializing,
                             initialization_data = dir_stats_collections_initializer:new_initialization_data()
                         },
                         ensure_flush_scheduled(ensure_initialization_scheduled(
@@ -957,7 +957,7 @@ get_parent(Guid) ->
 -spec get_parent(file_meta:doc(), od_space:id()) -> file_id:file_guid() | root_dir.
 get_parent(Doc, SpaceId) ->
     {ok, ParentUuid} = file_meta:get_parent_uuid(Doc),
-    case fslogic_uuid:is_root_dir_uuid(ParentUuid) of
+    case fslogic_file_id:is_root_dir_uuid(ParentUuid) of
         true -> root_dir;
         false -> file_id:pack_guid(ParentUuid, SpaceId)
     end.
@@ -965,14 +965,14 @@ get_parent(Doc, SpaceId) ->
 
 %% @private
 -spec acquire_space_collecting_status(od_space:id(), state()) ->
-    {dir_stats_collector_config:extended_collecting_status(), state()}.
+    {dir_stats_service_state:extended_status(), state()}.
 acquire_space_collecting_status(SpaceId, #state{space_collecting_statuses = CollectingStatuses} = State) ->
     case maps:get(SpaceId, CollectingStatuses, undefined) of
         undefined ->
-            case dir_stats_collector_config:get_extended_collecting_status(SpaceId) of
+            case dir_stats_service_state:get_extended_status(SpaceId) of
                 enabled ->
                     {enabled, State#state{space_collecting_statuses = CollectingStatuses#{SpaceId => enabled}}};
-                {collections_initialization, _} = Status ->
+                {initializing, _} = Status ->
                     {Status, State#state{space_collecting_statuses = CollectingStatuses#{SpaceId => Status}}};
                 Status ->
                     {Status, State} % race with status changing - do not cache

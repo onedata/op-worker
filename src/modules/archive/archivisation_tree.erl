@@ -153,7 +153,7 @@ create_dataset_archives_dir(DatasetId, SpaceId) ->
 
 -spec create_archives_root_dir(od_space:id()) -> {ok, file_meta:uuid()}.
 create_archives_root_dir(SpaceId) ->
-    SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
     ArchivesRootDirUuid = ?ARCHIVES_ROOT_DIR_UUID(SpaceId),
     ArchivesRootDirDoc = file_meta:new_doc(
         ArchivesRootDirUuid, ?ARCHIVES_ROOT_DIR_NAME,

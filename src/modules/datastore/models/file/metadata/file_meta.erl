@@ -244,13 +244,13 @@ get_including_deleted(?GLOBAL_ROOT_DIR_UUID) ->
         }
     }};
 get_including_deleted(Uuid) ->
-    case fslogic_uuid:is_link_uuid(Uuid) of
+    case fslogic_file_id:is_link_uuid(Uuid) of
         true ->
             % When hardlink document is requested it is merged using document
             % representing hardlink and document representing target file
             case datastore_model:get(?CTX#{include_deleted => true}, Uuid) of
                 {ok, LinkDoc} ->
-                    FileUuid = fslogic_uuid:ensure_referenced_uuid(Uuid),
+                    FileUuid = fslogic_file_id:ensure_referenced_uuid(Uuid),
                     case datastore_model:get(?CTX#{include_deleted => true}, FileUuid) of
                         {ok, FileDoc} -> file_meta_hardlinks:merge_link_and_file_doc(LinkDoc, FileDoc);
                         Error2 -> Error2
@@ -329,7 +329,7 @@ delete_without_link(FileUuid) ->
 
 -spec delete_doc_if_not_special(uuid()) -> ok.
 delete_doc_if_not_special(FileUuid) ->
-    case fslogic_uuid:is_special_uuid(FileUuid) of
+    case fslogic_file_id:is_special_uuid(FileUuid) of
         true -> ok;
         false -> delete_without_link(FileUuid)
     end.
@@ -559,8 +559,8 @@ get_ancestors(FileUuid, Acc) ->
 -spec get_scope_id(entry()) -> {ok, ScopeId :: od_space:id() | undefined} | {error, term()}.
 get_scope_id(#document{key = FileUuid, value = #file_meta{is_scope = true}, scope = <<>>}) ->
     % scope has not been set yet
-    case fslogic_uuid:is_space_dir_uuid(FileUuid) of
-        true -> {ok, fslogic_uuid:space_dir_uuid_to_spaceid(FileUuid)};
+    case fslogic_file_id:is_space_dir_uuid(FileUuid) of
+        true -> {ok, fslogic_file_id:space_dir_uuid_to_spaceid(FileUuid)};
         false -> {ok, ?ROOT_DIR_SCOPE}
     end;
 get_scope_id(#document{value = #file_meta{is_scope = false}, scope = <<>>}) ->
@@ -622,7 +622,7 @@ setup_onedata_user(UserId, EffSpaces) ->
                 make_space_exist(SpaceId)
             end, EffSpaces),
 
-            FileUuid = fslogic_uuid:user_root_dir_uuid(UserId),
+            FileUuid = fslogic_file_id:user_root_dir_uuid(UserId),
             case create({uuid, ?GLOBAL_ROOT_DIR_UUID},
                 #document{
                     key = FileUuid,
@@ -706,7 +706,7 @@ get_shares(#file_meta{shares = Shares}) ->
 %%--------------------------------------------------------------------
 -spec make_space_exist(SpaceId :: od_space:id()) -> ok | no_return().
 make_space_exist(SpaceId) ->
-    SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+    SpaceDirUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
     FileDoc = #document{
         key = SpaceDirUuid,
         value = #file_meta{
@@ -755,7 +755,7 @@ new_doc(FileUuid, FileName, FileType, Mode, Owner, ParentUuid, SpaceId) ->
 
 -spec new_share_root_dir_doc(uuid(), od_space:id()) -> doc().
 new_share_root_dir_doc(ShareRootDirUuid, SpaceId) ->
-    ShareId = fslogic_uuid:share_root_dir_uuid_to_shareid(ShareRootDirUuid),
+    ShareId = fslogic_file_id:share_root_dir_uuid_to_shareid(ShareRootDirUuid),
 
     #document{
         key = ShareRootDirUuid,
@@ -765,7 +765,7 @@ new_share_root_dir_doc(ShareRootDirUuid, SpaceId) ->
             is_scope = false,
             mode = ?DEFAULT_SHARE_ROOT_DIR_PERMS,
             owner = ?ROOT_USER_ID,
-            parent_uuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+            parent_uuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
             provider_id = oneprovider:get_id(),
             deleted = case share_logic:get(?ROOT_SESS_ID, ShareId) of
                 {ok, _} -> false;

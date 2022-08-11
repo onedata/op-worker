@@ -171,7 +171,7 @@
 
 -define(assertBlocks(Worker, SessionId, ExpectedDistribution, FileGuid),
     ?assertEqual(lists:sort(ExpectedDistribution), begin
-        case lfm_proxy:get_file_distribution(Worker, SessionId, ?FILE_REF(FileGuid)) of
+        case opt_file_metadata:get_distribution_deprecated(Worker, SessionId, ?FILE_REF(FileGuid)) of
             {ok, __FileBlocks} -> lists:sort(__FileBlocks);
             Error -> Error
         end
@@ -1025,7 +1025,7 @@ create_remote_dir_import_race_test(Config) ->
     Ctx = rpc:call(W2, file_meta, get_ctx, []),
     TreeId = rpc:call(W2, oneprovider, get_id, []),
     FileUuid = datastore_key:new(),
-    SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(?SPACE_ID),
+    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(?SPACE_ID),
     {ok, _} = rpc:call(W2, datastore_model, add_links,
         [Ctx#{scope => ?SPACE_ID}, SpaceUuid, TreeId, {?TEST_DIR, FileUuid}]),
     ?assertMatch({ok, _, _}, get_link(W1, SpaceUuid, ?TEST_DIR), ?ATTEMPTS),
@@ -1086,7 +1086,7 @@ create_remote_file_import_race_test(Config) ->
     Ctx = rpc:call(W2, file_meta, get_ctx, []),
     TreeId = rpc:call(W2, oneprovider, get_id, []),
     FileUuid = datastore_key:new(),
-    SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(?SPACE_ID),
+    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(?SPACE_ID),
     {ok, _} = rpc:call(W2, datastore_model, add_links,
         [Ctx#{scope => ?SPACE_ID}, SpaceUuid, TreeId, {?TEST_FILE1, FileUuid}]),
     ?assertMatch({ok, _, _}, get_link(W1, SpaceUuid, ?TEST_FILE1), ?ATTEMPTS),
@@ -1481,7 +1481,7 @@ remote_delete_file_reimport_race_test_base(Config, StorageType, CreatingNode) ->
     ?assertMatch({ok, ?TEST_DATA}, lfm_proxy:read(ReplicatingNode, Handle2, 0, 10), ?ATTEMPTS),
 
     % pretend that only synchronization of deletion of link has happened
-    SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(?SPACE_ID),
+    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(?SPACE_ID),
     {FileUuid, _} = file_id:unpack_guid(FileGuid),
     remove_link(W2, SpaceUuid, ?TEST_FILE1, FileUuid),
 
@@ -6041,11 +6041,21 @@ should_not_sync_file_during_replication(Config) ->
     ok = lfm_proxy:close(W2, FileHandle),
     ?assertBlocks(W1, SessId, [
         #{
+            <<"blocks">> => [],
+            <<"providerId">> => ?GET_DOMAIN_BIN(W1),
+            <<"totalBlocksSize">> => 0
+        },
+        #{
             <<"blocks">> => [[0, ?TEST_DATA_SIZE]],
             <<"providerId">> => ?GET_DOMAIN_BIN(W2),
             <<"totalBlocksSize">> => ?TEST_DATA_SIZE
         }
     ], FileGuid),
+    
+    % @TODO VFS-VFS-9498 not needed after file replication uses fetched file location instead of dbsynced
+    TestDataSize = ?TEST_DATA_SIZE,
+    ?assertMatch({ok, [[0, TestDataSize]]}, 
+        opt_file_metadata:get_local_knowledge_of_remote_provider_blocks(W1, FileGuid, ?GET_DOMAIN_BIN(W2)), ?ATTEMPTS),
 
     enable_initial_scan(Config, ?SPACE_ID),
     enable_continuous_scans(Config, ?SPACE_ID),
@@ -6382,7 +6392,7 @@ clean_storage(Worker, Storage, ImportedStorage) ->
 
 clean_space(Config) ->
     [W, W2 | _] = ?config(op_worker_nodes, Config),
-    SpaceGuid = rpc:call(W, fslogic_uuid, spaceid_to_space_dir_guid, [?SPACE_ID]),
+    SpaceGuid = rpc:call(W, fslogic_file_id, spaceid_to_space_dir_guid, [?SPACE_ID]),
     lfm_proxy:close_all(W),
     {ok, Children} = lfm_proxy:get_children(W, ?ROOT_SESS_ID, ?FILE_REF(SpaceGuid), 0, 10000),
     Attempts = 5 * ?ATTEMPTS,
@@ -6803,7 +6813,7 @@ close_if_applicable(Node, Handle, _) ->
     ok = lfm_proxy:close(Node, Handle).
 
 get_space_guid() ->
-    fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_ID).
+    fslogic_file_id:spaceid_to_space_dir_guid(?SPACE_ID).
 
 %===================================================================
 % SetUp and TearDown functions
@@ -7039,7 +7049,7 @@ init_per_testcase(Case, Config)
     orelse Case =:= create_subfiles_import_many2_test
     orelse Case =:= append_file_update_test ->
 
-    init_per_testcase(default, dir_stats_collector_test_base:init_and_enable_for_new_space(Config));
+    init_per_testcase(default, dir_stats_collector_test_base:init(Config, true));
 
 init_per_testcase(delete_many_subfiles_test, Config) ->
     Config2 = [
@@ -7047,7 +7057,7 @@ init_per_testcase(delete_many_subfiles_test, Config) ->
             detect_deletions => true,
             detect_modifications => false}} | Config
     ],
-    init_per_testcase(default, dir_stats_collector_test_base:init_and_enable_for_new_space(Config2));
+    init_per_testcase(default, dir_stats_collector_test_base:init(Config2, true));
 
 init_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
@@ -7110,13 +7120,13 @@ end_per_testcase(force_stop_test, Config) ->
 
 end_per_testcase(create_remote_dir_import_race_test, Config) ->
     [_W1, W2| _] = ?config(op_worker_nodes, Config),
-    SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(?SPACE_ID),
+    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(?SPACE_ID),
     remove_link(W2, SpaceUuid, ?TEST_DIR),
     end_per_testcase(default, Config);
 
 end_per_testcase(create_remote_file_import_race_test, Config) ->
     [_W1, W2| _] = ?config(op_worker_nodes, Config),
-    SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(?SPACE_ID),
+    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(?SPACE_ID),
     remove_link(W2, SpaceUuid, ?TEST_FILE1),
     end_per_testcase(default, Config);
 

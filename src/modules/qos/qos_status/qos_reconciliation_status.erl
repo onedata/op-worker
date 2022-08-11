@@ -106,7 +106,7 @@ report_file_deleted(FileCtx, #document{key = QosEntryId} = QosEntryDoc, Original
     %% TODO VFS-7133 take original parent uuid from file_meta doc
     UuidBasedPath2 = case filepath_utils:split(UuidBasedPath) of
         Tokens = [<<"/">>, SpaceId, Token | Rest] ->
-            case fslogic_uuid:is_trash_dir_uuid(Token) andalso OriginalRootParentCtx =/= undefined of
+            case fslogic_file_id:is_trash_dir_uuid(Token) andalso OriginalRootParentCtx =/= undefined of
                 true ->
                     {OriginalParentUuidBasedPath, _} = file_ctx:get_uuid_based_path(OriginalRootParentCtx),
                     filename:join([OriginalParentUuidBasedPath | Rest]);

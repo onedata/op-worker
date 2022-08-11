@@ -593,11 +593,16 @@ log_uncorrelated_results_processing_error(
     },
     atm_workflow_execution_logger:task_critical(TaskLog, Logger),
 
-    atm_workflow_execution_logger:workflow_critical(
-        "Failed to process uncorrelated results for task '~s'.",
-        [AtmTaskExecutionId],
-        Logger
-    ).
+    WorkflowLog = #{
+        <<"description">> => str_utils:format_bin(
+            "Failed to process uncorrelated results for task '~s'.",
+            [AtmTaskExecutionId]
+        ),
+        <<"referencedComponents">> => #{
+            <<"tasks">> => [AtmTaskExecutionId]
+        }
+    },
+    atm_workflow_execution_logger:workflow_critical(WorkflowLog, Logger).
 
 
 %%--------------------------------------------------------------------

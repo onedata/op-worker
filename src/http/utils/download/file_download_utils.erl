@@ -21,9 +21,11 @@
 
 %% API
 -export([
-    download_single_file/3, download_single_file/4,
-    download_tarball/5
+    download_single_file/3, download_single_file/4, download_single_file/5,
+    download_tarball/6
 ]).
+
+-type on_success_callback() :: fun(() -> ok).
 
 
 %%%===================================================================
@@ -36,35 +38,43 @@ download_single_file(SessionId, FileAttrs, Req) ->
     download_single_file(SessionId, FileAttrs, fun() -> ok end, Req).
 
 
+-spec download_single_file(session:id(), lfm_attrs:file_attributes(), on_success_callback(), cowboy_req:req()) ->
+    cowboy_req:req().
+download_single_file(SessionId, FileAttrs, OnSuccessCallback, Req) ->
+    download_single_file(SessionId, FileAttrs, FileAttrs#file_attr.name, OnSuccessCallback, Req).
+
+
 -spec download_single_file(
     session:id(),
     lfm_attrs:file_attributes(),
-    OnSuccessCallback :: fun(() -> ok),
+    file_meta:name(),
+    on_success_callback(),
     cowboy_req:req()
 ) ->
     cowboy_req:req().
-download_single_file(SessionId, #file_attr{type = ?REGULAR_FILE_TYPE} = FileAttr, OnSuccessCallback, Req0) ->
-    download_single_regular_file(SessionId, FileAttr, OnSuccessCallback, Req0);
-download_single_file(SessionId, #file_attr{type = ?SYMLINK_TYPE} = FileAttr, OnSuccessCallback, Req0) ->
-    download_single_symlink(SessionId, FileAttr, OnSuccessCallback, Req0).
+download_single_file(SessionId, #file_attr{type = ?REGULAR_FILE_TYPE} = FileAttr, FileName, OnSuccessCallback, Req0) ->
+    download_single_regular_file(SessionId, FileAttr, FileName, OnSuccessCallback, Req0);
+download_single_file(SessionId, #file_attr{type = ?SYMLINK_TYPE} = FileAttr, FileName, OnSuccessCallback, Req0) ->
+    download_single_symlink(SessionId, FileAttr, FileName, OnSuccessCallback, Req0).
 
 
 -spec download_tarball(
     bulk_download:id(),
     session:id(),
     [lfm_attrs:file_attributes()],
+    file_meta:name(),
     boolean(),
     cowboy_req:req()
 ) ->
     cowboy_req:req().
-download_tarball(BulkDownloadId, SessionId, FileAttrsList, FollowSymlinks, Req0) ->
+download_tarball(BulkDownloadId, SessionId, FileAttrsList, TarballName, FollowSymlinks, Req0) ->
     case http_parser:parse_range_header(Req0, unknown) of
         undefined ->
-            stream_whole_tarball(BulkDownloadId, SessionId, FileAttrsList, FollowSymlinks, Req0);
+            stream_whole_tarball(BulkDownloadId, SessionId, FileAttrsList, TarballName, FollowSymlinks, Req0);
         [{0, unknown}] ->
-            stream_whole_tarball(BulkDownloadId, SessionId, FileAttrsList, FollowSymlinks, Req0);
+            stream_whole_tarball(BulkDownloadId, SessionId, FileAttrsList, TarballName, FollowSymlinks, Req0);
         Range ->
-            stream_partial_tarball(BulkDownloadId, Req0, Range)
+            stream_partial_tarball(BulkDownloadId, TarballName, Range, Req0)
     end.
 
 
@@ -76,15 +86,15 @@ download_tarball(BulkDownloadId, SessionId, FileAttrsList, FollowSymlinks, Req0)
 -spec download_single_regular_file(
     session:id(),
     lfm_attrs:file_attributes(),
-    OnSuccessCallback :: fun(() -> ok),
+    file_meta:name(),
+    on_success_callback(),
     cowboy_req:req()
 ) ->
     cowboy_req:req().
 download_single_regular_file(SessionId, #file_attr{
     guid = FileGuid,
-    name = FileName,
     size = FileSize
-}, OnSuccessCallback, Req0) ->
+}, FileName, OnSuccessCallback, Req0) ->
     case http_parser:parse_range_header(Req0, FileSize) of
         invalid ->
             cowboy_req:reply(
@@ -93,28 +103,28 @@ download_single_regular_file(SessionId, #file_attr{
                 Req0
             );
         Ranges ->
-            Req1 = ensure_content_type_header_set(FileName, Req0),
-
             case lfm:monitored_open(SessionId, ?FILE_REF(FileGuid), read) of
                 {ok, FileHandle} ->
                     try
-                        {Boundary, Req2} = stream_file_internal(Ranges, FileHandle, FileSize, Req1),
+                        Req1 = ensure_content_type_header_set(FileName, Req0),
+                        Req2 = set_content_disposition_header(FileName, Req1),
+                        {Boundary, Req3} = stream_file_internal(Ranges, FileHandle, FileSize, Req2),
                         execute_on_success_callback(FileGuid, OnSuccessCallback),
-                        http_streamer:close_stream(Boundary, Req2),
-                        Req2
-                    catch Type:Reason:Stacktrace ->
+                        http_streamer:close_stream(Boundary, Req3),
+                        Req3
+                    catch Class:Reason:Stacktrace ->
                         {ok, UserId} = session:get_user_id(SessionId),
                         ?error_stacktrace(
-                            "Error while processing file (~p) download for user ~p - ~p:~p",
-                            [FileGuid, UserId, Type, Reason],
+                            "Error while processing file (~s) download for user ~s~nError was: ~w:~p",
+                            [FileGuid, UserId, Class, Reason],
                             Stacktrace
                         ),
-                        http_req:send_error(Reason, Req1)
+                        http_req:send_error(Reason, Req0)
                     after
                         lfm:monitored_release(FileHandle)
                     end;
                 {error, Errno} ->
-                    http_req:send_error(?ERROR_POSIX(Errno), Req1)
+                    http_req:send_error(?ERROR_POSIX(Errno), Req0)
             end
     end.
 
@@ -123,22 +133,24 @@ download_single_regular_file(SessionId, #file_attr{
 -spec download_single_symlink(
     session:id(),
     lfm_attrs:file_attributes(),
-    OnSuccessCallback :: fun(() -> ok),
+    file_meta:name(),
+    on_success_callback(),
     cowboy_req:req()
 ) ->
     cowboy_req:req().
-download_single_symlink(SessionId, #file_attr{guid = Guid}, OnSuccessCallback, Req0) ->
+download_single_symlink(SessionId, #file_attr{guid = Guid}, FileName, OnSuccessCallback, Req0) ->
     case lfm:read_symlink(SessionId, ?FILE_REF(Guid, false)) of
         {ok, LinkPath} ->
-            Req1 = http_streamer:init_stream(
+            Req1 = set_content_disposition_header(FileName, Req0),
+            Req2 = http_streamer:init_stream(
                 ?HTTP_200_OK,
                 #{?HDR_CONTENT_LENGTH => integer_to_binary(byte_size(LinkPath))},
-                Req0
+                Req1
             ),
-            http_streamer:send_data_chunk(LinkPath, Req1),
+            http_streamer:send_data_chunk(LinkPath, Req2),
             execute_on_success_callback(Guid, OnSuccessCallback),
-            http_streamer:close_stream(undefined, Req1),
-            Req1;
+            http_streamer:close_stream(undefined, Req2),
+            Req2;
         {error, Errno} ->
             http_req:send_error(?ERROR_POSIX(Errno), Req0)
     end.
@@ -151,7 +163,7 @@ build_content_range_header_value({RangeStart, RangeEnd}, FileSize) ->
 
 
 %% @private
--spec stream_file_internal(undefined | [http_parser:bytes_range()], lfm:handle(), file_meta:size(), 
+-spec stream_file_internal(undefined | [http_parser:bytes_range()], lfm:handle(), file_meta:size(),
     cowboy_req:req()) -> {binary(), cowboy_req:req()}.
 stream_file_internal(undefined, FileHandle, FileSize, Req) ->
     stream_whole_file(FileHandle, FileSize, Req);
@@ -162,9 +174,9 @@ stream_file_internal(Ranges, FileHandle, FileSize, Req) ->
 
 
 %% @private
--spec stream_whole_file(lfm:handle(), file_meta:size(), cowboy_req:req()) -> 
+-spec stream_whole_file(lfm:handle(), file_meta:size(), cowboy_req:req()) ->
     {undefined, cowboy_req:req()}.
-stream_whole_file(FileHandle, FileSize, Req0) -> 
+stream_whole_file(FileHandle, FileSize, Req0) ->
     Req1 = http_streamer:init_stream(
         ?HTTP_200_OK,
         #{?HDR_CONTENT_LENGTH => integer_to_binary(FileSize)},
@@ -198,13 +210,13 @@ stream_one_ranged_body({RangeStart, RangeEnd} = Range, FileHandle, FileSize, Req
 stream_multipart_ranged_body(Ranges, FileHandle, FileSize, Req0) ->
     Boundary = cow_multipart:boundary(),
     ContentType = cowboy_req:resp_header(?HDR_CONTENT_TYPE, Req0),
-    
+
     Req1 = http_streamer:init_stream(
         ?HTTP_206_PARTIAL_CONTENT,
         #{?HDR_CONTENT_TYPE => <<"multipart/byteranges; boundary=", Boundary/binary>>},
         Req0
     ),
-    
+
     StreamingCtx = http_streamer:build_ctx(FileHandle, FileSize),
     lists:foreach(fun(Range) ->
         NextPartHead = cow_multipart:first_part(Boundary, [
@@ -214,38 +226,50 @@ stream_multipart_ranged_body(Ranges, FileHandle, FileSize, Req0) ->
         http_streamer:send_data_chunk(NextPartHead, Req1),
         http_streamer:stream_bytes_range(StreamingCtx, Range, Req1)
     end, Ranges),
-    
+
     {Boundary, Req1}.
 
 
 %% @private
--spec stream_whole_tarball(bulk_download:id(), session:id(), [lfm_attrs:file_attributes()], 
-    boolean(), cowboy_req:req()) -> cowboy_req:req().
-stream_whole_tarball(_BulkDownloadId, _SessionId, [], _FollowSymlinks, Req0) ->
+-spec stream_whole_tarball(
+    bulk_download:id(),
+    session:id(),
+    [lfm_attrs:file_attributes()],
+    file_meta:name(),
+    boolean(),
+    cowboy_req:req()
+) -> cowboy_req:req().
+stream_whole_tarball(_BulkDownloadId, _SessionId, [], _TarballName, _FollowSymlinks, Req0) ->
     % can happen when requested download from the beginning and download 
     % code has expired but bulk download still allowed for resume
     http_req:send_error(?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"code">>), Req0);
-stream_whole_tarball(BulkDownloadId, SessionId, FileAttrsList, FollowSymlinks, Req0) ->
-    Req1 = http_streamer:init_stream(?HTTP_200_OK, Req0),
-    ok = bulk_download:run(BulkDownloadId, FileAttrsList, SessionId, FollowSymlinks, Req1),
-    http_streamer:close_stream(undefined, Req1),
-    Req1.
+stream_whole_tarball(BulkDownloadId, SessionId, FileAttrsList, TarballName, FollowSymlinks, Req0) ->
+    Req1 = set_content_disposition_header(TarballName, Req0),
+    Req2 = http_streamer:init_stream(?HTTP_200_OK, Req1),
+    ok = bulk_download:run(BulkDownloadId, FileAttrsList, SessionId, FollowSymlinks, Req2),
+    http_streamer:close_stream(undefined, Req2),
+    Req2.
 
 
 %% @private
--spec stream_partial_tarball(bulk_download:id(), cowboy_req:req(), [http_parser:bytes_range()] | invalid) -> 
+-spec stream_partial_tarball(
+    bulk_download:id(),
+    file_meta:name(),
+    [http_parser:bytes_range()] | invalid, cowboy_req:req()
+) ->
     cowboy_req:req().
-stream_partial_tarball(BulkDownloadId, Req0, [{RangeBegin, unknown}]) ->
+stream_partial_tarball(BulkDownloadId, TarballName, [{RangeBegin, unknown}], Req0) ->
     case bulk_download:is_offset_allowed(BulkDownloadId, RangeBegin) of
         true ->
-            Req1 = http_streamer:init_stream(?HTTP_206_PARTIAL_CONTENT, Req0),
-            ok = bulk_download:continue(BulkDownloadId, RangeBegin, Req1),
-            http_streamer:close_stream(undefined, Req1),
-            Req1;
+            Req1 = set_content_disposition_header(TarballName, Req0),
+            Req2 = http_streamer:init_stream(?HTTP_206_PARTIAL_CONTENT, Req1),
+            ok = bulk_download:continue(BulkDownloadId, RangeBegin, Req2),
+            http_streamer:close_stream(undefined, Req2),
+            Req2;
         false ->
             cowboy_req:stream_reply(?HTTP_416_RANGE_NOT_SATISFIABLE, #{?HDR_CONTENT_RANGE => <<"bytes */*">>}, Req0)
     end;
-stream_partial_tarball(_BulkDownloadId, Req0, _InvalidRange) ->
+stream_partial_tarball(_BulkDownloadId, _TarballName, _InvalidRange, Req0) ->
     cowboy_req:stream_reply(?HTTP_416_RANGE_NOT_SATISFIABLE, #{?HDR_CONTENT_RANGE => <<"bytes */*">>}, Req0).
 
 
@@ -262,11 +286,35 @@ ensure_content_type_header_set(FileName, Req) ->
 
 
 %% @private
--spec execute_on_success_callback(fslogic_worker:file_guid(), OnSuccessCallback :: fun(() -> ok)) -> ok.
+-spec execute_on_success_callback(fslogic_worker:file_guid(), on_success_callback()) -> ok.
 execute_on_success_callback(Guid, OnSuccessCallback) ->
     try
         ok = OnSuccessCallback()
     catch Type:Reason ->
         ?warning("Failed to execute file download successfully finished callback for file (~p) "
                  "due to ~p:~p", [Guid, Type, Reason])
+    end.
+
+
+%% @private
+-spec set_content_disposition_header(file_meta:name(), cowboy_req:req()) -> cowboy_req:req().
+set_content_disposition_header(FileName, Req) ->
+    NormalizedFileName = normalize_filename(FileName),
+    %% @todo VFS-2073 - check if needed
+    %% FileNameUrlEncoded = http_utils:url_encode(FileName),
+    cowboy_req:set_resp_header(
+        ?HDR_CONTENT_DISPOSITION,
+        <<"attachment; filename=\"", NormalizedFileName/binary, "\"">>,
+        %% @todo VFS-2073 - check if needed
+        %% "filename*=UTF-8''", FileNameUrlEncoded/binary>>
+        Req
+    ).
+
+
+%% @private
+-spec normalize_filename(file_meta:name()) -> file_meta:name().
+normalize_filename(FileName) ->
+    case re:run(FileName, <<"^ *$">>, [{capture, none}]) of
+        match -> <<"_">>;
+        nomatch -> FileName
     end.

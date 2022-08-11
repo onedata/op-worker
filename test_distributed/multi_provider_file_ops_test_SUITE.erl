@@ -27,6 +27,7 @@
 
 -export([
     dir_stats_collector_test/1,
+    transfer_after_enabling_stats_test/1,
     dir_stats_collector_parallel_write_test/1,
     dir_stats_collector_parallel_override_test/1,
     dir_stats_collector_parallel_write_with_sleep_test/1,
@@ -64,6 +65,7 @@
 
 -define(TEST_CASES, [
     dir_stats_collector_test,
+    transfer_after_enabling_stats_test,
     dir_stats_collector_parallel_write_test,
     dir_stats_collector_parallel_override_test,
     dir_stats_collector_parallel_write_with_sleep_test,
@@ -104,7 +106,10 @@
 ]).
 
 all() ->
-    ?ALL(?TEST_CASES, ?PERFORMANCE_TEST_CASES).
+    ?ALL(
+        ?TEST_CASES
+%%        ?PERFORMANCE_TEST_CASES
+    ).
 
 %%%===================================================================
 %%% Test functions
@@ -1003,7 +1008,7 @@ list_children_recreated_remotely(Config0) ->
     [Worker2 | _] = ?config(workers2, Config),
     SessId = ?config(session, Config),
     SpaceId = <<"space1">>,
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
 
     % Upload file on worker1
     {ok, G} = lfm_proxy:create(Worker1, SessId(Worker1), SpaceGuid, <<"file_name">>, undefined),
@@ -1101,7 +1106,7 @@ truncate_on_storage_does_not_block_synchronizer(Config0) ->
     Workers = ?config(op_worker_nodes, Config),
     SessId = ?config(session, Config),
     SpaceId = <<"space1">>,
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     FileContent = <<"xxx">>,
     FileSize = byte_size(FileContent),
 
@@ -1151,7 +1156,7 @@ recreate_file_on_storage(Config0) ->
     Workers = ?config(op_worker_nodes, Config),
     SessId = ?config(session, Config),
     SpaceId = <<"space1">>,
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     FileContent = <<"xxx">>,
     FileSize = byte_size(FileContent),
 
@@ -1189,6 +1194,12 @@ dir_stats_collector_test(Config0) ->
     UserId = <<"user1">>,
     Config = multi_provider_file_ops_test_base:extend_config(Config0, UserId, {4,0,0,2}, 60),
     dir_stats_collector_test_base:multiprovider_test(Config).
+
+
+transfer_after_enabling_stats_test(Config0) ->
+    UserId = <<"user1">>,
+    Config = multi_provider_file_ops_test_base:extend_config(Config0, UserId, {4,0,0,2}, 60),
+    dir_stats_collector_test_base:transfer_after_enabling_test(Config).
 
 
 dir_stats_collector_parallel_write_test(Config0) ->
@@ -1377,8 +1388,11 @@ init_per_testcase(Case, Config) when
     Case =:= dir_stats_collector_parallel_write_test;
     Case =:= dir_stats_collector_parallel_override_test;
     Case =:= dir_stats_collector_parallel_write_with_sleep_test;
-    Case =:= dir_stats_collector_parallel_write_to_empty_file_test ->
-    dir_stats_collector_test_base:init(init_per_testcase(?DEFAULT_CASE(Case), Config));
+    Case =:= dir_stats_collector_parallel_write_to_empty_file_test
+->
+    dir_stats_collector_test_base:init(init_per_testcase(?DEFAULT_CASE(Case), Config), true);
+init_per_testcase(transfer_after_enabling_stats_test = Case, Config) ->
+    dir_stats_collector_test_base:init(init_per_testcase(?DEFAULT_CASE(Case), Config), false);
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 60}),
     lfm_proxy:init(Config).
@@ -1416,6 +1430,7 @@ end_per_testcase(truncate_on_storage_does_not_block_synchronizer = Case, Config)
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(Case, Config) when
     Case =:= dir_stats_collector_test;
+    Case =:= transfer_after_enabling_stats_test;
     Case =:= dir_stats_collector_parallel_write_test;
     Case =:= dir_stats_collector_parallel_override_test;
     Case =:= dir_stats_collector_parallel_write_with_sleep_test;

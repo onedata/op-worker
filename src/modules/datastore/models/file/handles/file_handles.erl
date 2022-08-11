@@ -53,7 +53,7 @@
 
 -spec is_file_opened(key()) -> boolean().
 is_file_opened(FileUuid) ->
-    case datastore_model:get(?CTX, fslogic_uuid:ensure_referenced_uuid(FileUuid)) of
+    case datastore_model:get(?CTX, fslogic_file_id:ensure_referenced_uuid(FileUuid)) of
         {ok, #document{value = #file_handles{descriptors = Fds}}} ->
             maps:size(Fds) =/= 0;
         {error, not_found} ->
@@ -67,7 +67,7 @@ is_file_opened(FileUuid) ->
 %%--------------------------------------------------------------------
 -spec delete(key()) -> ok | {error, term()}.
 delete(Key) ->
-    datastore_model:delete(?CTX, fslogic_uuid:ensure_referenced_uuid(Key)).
+    datastore_model:delete(?CTX, fslogic_file_id:ensure_referenced_uuid(Key)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -251,7 +251,7 @@ is_used_by_session(FileCtx, SessId) ->
 %%--------------------------------------------------------------------
 -spec get_creation_handle(key()) -> {ok, creation_handle()} | {error, term()}.
 get_creation_handle(Key) ->
-    case datastore_model:get(?CTX, fslogic_uuid:ensure_referenced_uuid(Key)) of
+    case datastore_model:get(?CTX, fslogic_file_id:ensure_referenced_uuid(Key)) of
         {ok, #document{value = #file_handles{creation_handle = Handle}}} -> {ok, Handle};
         Other -> Other
     end.

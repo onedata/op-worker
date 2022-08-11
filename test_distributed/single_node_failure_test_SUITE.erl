@@ -108,7 +108,7 @@ create_initial_data_structure(Config) ->
         oct_background:get_user_session_id(user1, P)
     end,
     [SpaceId | _] = oct_background:get_provider_supported_spaces(krakow),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
 
     ConflictingDirName = generator:gen_name(),
     {ok, P1DirGuid} =
@@ -228,7 +228,7 @@ prepare_files(InitialData, TestData) ->
     SessId1 = kv_utils:get([session_ids, P1], InitialData),
     SessId2 = kv_utils:get([session_ids, P2], InitialData),
     SpaceId = kv_utils:get(space_id, InitialData),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     P1DirGuid = kv_utils:get([test_dirs, P1], InitialData),
     P2DirGuid = kv_utils:get([test_dirs, P2], InitialData),
 
@@ -273,7 +273,7 @@ prepare_auto_cleaning(InitialData, TestData) ->
     [FailingNode | _] = oct_background:get_provider_nodes(FailingProvider),
     SpaceId = kv_utils:get(space_id, InitialData),
     SessId = kv_utils:get([session_ids, FailingProvider], InitialData),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     FileSize = 5,
 
     enable_file_popularity(FailingNode, SpaceId),
@@ -304,7 +304,7 @@ prepare_replication_transfer(InitialData, TestData) ->
     SpaceId = kv_utils:get(space_id, InitialData),
     SessIdFailingProvider = kv_utils:get([session_ids, FailingProvider], InitialData),
     SessIdHealthyProvider = kv_utils:get([session_ids, HealthyProvider], InitialData),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     FileSize = 10,
 
     FileGuid = file_ops_test_utils:create_file(HealthyNode, SessIdHealthyProvider, SpaceGuid, generator:gen_name(), FileSize),
@@ -328,7 +328,7 @@ prepare_eviction_transfer(InitialData, TestData) ->
     SpaceId = kv_utils:get(space_id, InitialData),
     SessIdFailingProvider = kv_utils:get([session_ids, FailingProvider], InitialData),
     SessIdHealthyProvider = kv_utils:get([session_ids, HealthyProvider], InitialData),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     FileSize = 10,
 
     FileGuid = file_ops_test_utils:create_file(HealthyNode, SessIdHealthyProvider, SpaceGuid, generator:gen_name(), FileSize),
@@ -361,7 +361,7 @@ prepare_outgoing_migration_transfer(InitialData, TestData) ->
     SpaceId = kv_utils:get(space_id, InitialData),
     SessIdFailingProvider = kv_utils:get([session_ids, FailingProvider], InitialData),
     SessIdHealthyProvider = kv_utils:get([session_ids, HealthyProvider], InitialData),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     FileSize = 10,
 
     FileGuid = file_ops_test_utils:create_file(FailingNode, SessIdFailingProvider, SpaceGuid, generator:gen_name(), FileSize),
@@ -391,7 +391,7 @@ prepare_incoming_migration_transfer(InitialData, TestData) ->
     SpaceId = kv_utils:get(space_id, InitialData),
     SessIdFailingProvider = kv_utils:get([session_ids, FailingProvider], InitialData),
     SessIdHealthyProvider = kv_utils:get([session_ids, HealthyProvider], InitialData),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     FileSize = 10,
 
     FileGuid = file_ops_test_utils:create_file(HealthyNode, SessIdHealthyProvider, SpaceGuid, generator:gen_name(), FileSize),
@@ -419,7 +419,7 @@ prepare_incoming_migration_transfer(InitialData, TestData) ->
 
 verify_files(InitialData, TestData) ->
     SpaceId = kv_utils:get(space_id, InitialData),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     FailingProvider = kv_utils:get(failing_provider, InitialData),
     HealthyProvider = kv_utils:get(healthy_provider, InitialData),
     SessIdFailingProvider = kv_utils:get([session_ids, FailingProvider], InitialData),

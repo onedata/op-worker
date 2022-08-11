@@ -141,6 +141,7 @@
 -export([start_link/5, start_link/7, close/1]).
 -export([send_msg/2, send_keepalive/1]).
 -export([rebuild_rib/1]).
+-export([find_outgoing_session/1]).
 
 %% Private API
 -export([connect_with_provider/8]).
@@ -251,6 +252,15 @@ send_keepalive(Pid) ->
 -spec rebuild_rib(pid()) -> ok | error().
 rebuild_rib(Pid) ->
     call_connection_process(Pid, ?REBUILD_RIB_MSG).
+
+
+-spec find_outgoing_session(oneprovider:id()) -> {ok, session:id()} | error.
+find_outgoing_session(ProviderId) ->
+    SessionId = session_utils:get_provider_session_id(outgoing, ProviderId),
+    case session:exists(SessionId) of
+        true -> {ok, SessionId};
+        false -> error
+    end.
 
 
 %%%===================================================================

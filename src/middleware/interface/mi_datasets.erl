@@ -40,9 +40,9 @@
 ) ->
     {dataset_api:entries(), boolean()} | no_return().
 list_top_datasets(SessionId, SpaceId, State, Opts, ListingMode) ->
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
 
-    middleware_worker:check_exec(SessionId, SpaceGuid, #list_top_datasets{
+    middleware_worker:check_exec(SessionId, SpaceGuid, #top_datasets_list_request{
         state = State,
         opts = Opts,
         mode = utils:ensure_defined(ListingMode, ?BASIC_INFO)
@@ -59,7 +59,7 @@ list_top_datasets(SessionId, SpaceId, State, Opts, ListingMode) ->
 list_children_datasets(SessionId, DatasetId, Opts, ListingMode) ->
     SpaceGuid = dataset_id_to_space_guid(DatasetId),
 
-    middleware_worker:check_exec(SessionId, SpaceGuid, #list_children_datasets{
+    middleware_worker:check_exec(SessionId, SpaceGuid, #children_datasets_list_request{
         id = DatasetId,
         opts = Opts,
         mode = utils:ensure_defined(ListingMode, ?BASIC_INFO)
@@ -71,7 +71,7 @@ list_children_datasets(SessionId, DatasetId, Opts, ListingMode) ->
 establish(SessionId, FileKey, ProtectionFlags) ->
     FileGuid = lfm_file_key:resolve_file_key(SessionId, FileKey, do_not_resolve_symlink),
 
-    middleware_worker:check_exec(SessionId, FileGuid, #establish_dataset{
+    middleware_worker:check_exec(SessionId, FileGuid, #dataset_establish_request{
         protection_flags = ProtectionFlags
     }).
 
@@ -81,7 +81,7 @@ establish(SessionId, FileKey, ProtectionFlags) ->
 get_info(SessionId, DatasetId) ->
     SpaceGuid = dataset_id_to_space_guid(DatasetId),
 
-    middleware_worker:check_exec(SessionId, SpaceGuid, #get_dataset_info{id = DatasetId}).
+    middleware_worker:check_exec(SessionId, SpaceGuid, #dataset_info_get_request{id = DatasetId}).
 
 
 -spec update(
@@ -95,7 +95,7 @@ get_info(SessionId, DatasetId) ->
 update(SessionId, DatasetId, NewState, FlagsToSet, FlagsToUnset) ->
     SpaceGuid = dataset_id_to_space_guid(DatasetId),
 
-    middleware_worker:check_exec(SessionId, SpaceGuid, #update_dataset{
+    middleware_worker:check_exec(SessionId, SpaceGuid, #dataset_update_request{
         id = DatasetId,
         state = NewState,
         flags_to_set = FlagsToSet,
@@ -107,7 +107,7 @@ update(SessionId, DatasetId, NewState, FlagsToSet, FlagsToUnset) ->
 remove(SessionId, DatasetId) ->
     SpaceGuid = dataset_id_to_space_guid(DatasetId),
 
-    middleware_worker:check_exec(SessionId, SpaceGuid, #remove_dataset{id = DatasetId}).
+    middleware_worker:check_exec(SessionId, SpaceGuid, #dataset_remove_request{id = DatasetId}).
 
 
 -spec get_file_eff_summary(session:id(), lfm:file_key()) ->
@@ -115,7 +115,7 @@ remove(SessionId, DatasetId) ->
 get_file_eff_summary(SessionId, FileKey) ->
     FileGuid = lfm_file_key:resolve_file_key(SessionId, FileKey, do_not_resolve_symlink),
 
-    middleware_worker:check_exec(SessionId, FileGuid, #get_file_eff_dataset_summary{}).
+    middleware_worker:check_exec(SessionId, FileGuid, #file_eff_dataset_summary_get_request{}).
 
 
 %%%===================================================================
@@ -126,4 +126,4 @@ get_file_eff_summary(SessionId, FileKey) ->
 %% @private
 -spec dataset_id_to_space_guid(dataset:id()) -> file_id:file_guid() | no_return().
 dataset_id_to_space_guid(DatasetId) ->
-    fslogic_uuid:spaceid_to_space_dir_guid(?check(dataset:get_space_id(DatasetId))).
+    fslogic_file_id:spaceid_to_space_dir_guid(?check(dataset:get_space_id(DatasetId))).

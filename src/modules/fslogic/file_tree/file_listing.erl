@@ -155,8 +155,11 @@ decode_index(EncodedIndex) ->
 is_finished(#pagination_token{progress_marker = ProgressMarker}) -> ProgressMarker == done.
 
 
--spec get_last_listed_filename(pagination_token()) -> file_meta:name().
-get_last_listed_filename(#pagination_token{last_index = #list_index{file_name = Name}}) -> Name.
+-spec get_last_listed_filename(pagination_token()) -> file_meta:name() | undefined.
+get_last_listed_filename(#pagination_token{last_index = #list_index{file_name = Name}}) -> 
+    Name;
+get_last_listed_filename(#pagination_token{last_index = undefined}) -> 
+    undefined.
 
 
 -spec infer_pagination_token([any()], file_meta:name() | undefined, limit()) -> 

@@ -18,7 +18,7 @@
 -include_lib("clproto/include/messages.hrl").
 
 %% API
--export([load_msg_defs/0]).
+-export([load_msg_defs/0]). 
 -export([deserialize_client_message/2, serialize_server_message/2]).
 -export([deserialize_server_message/2, serialize_client_message/2]).
 

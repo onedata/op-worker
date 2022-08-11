@@ -340,7 +340,7 @@ get_qos_entry_audit_log(Config) ->
             data_spec = #data_spec{
                 optional = [<<"timestamp">>, <<"offset">>],
                 correct_values = #{
-                    <<"timestamp">> => [0],
+                    <<"timestamp">> => [7967656156000], % some time in the future
                     <<"offset">> => [0]
                 },
                 bad_values = [
@@ -665,19 +665,21 @@ validate_result_fun_rest(_MemRef, qos_audit_log) ->
                 #{
                     <<"index">> := _,
                     <<"timestamp">> := _,
+                    <<"severity">> := <<"info">>,
                     <<"content">> := #{
-                        <<"status">> := <<"synchronization started">>,
-                        <<"severity">> := <<"info">>,
-                        <<"fileId">> := _
+                        <<"status">> := <<"completed">>,
+                        <<"fileId">> := _,
+                        <<"description">> := <<"Local replica reconciled.">>
                     }
                 },
                 #{
                     <<"index">> := _,
                     <<"timestamp">> := _,
+                    <<"severity">> := <<"info">>,
                     <<"content">> := #{
-                        <<"status">> := <<"synchronized">>,
-                        <<"severity">> := <<"info">>,
-                        <<"fileId">> := _
+                        <<"status">> := <<"scheduled">>,
+                        <<"fileId">> := _,
+                        <<"description">> := <<"Remote replica differs, reconciliation started.">>
                     }
                 }
             ]
@@ -925,7 +927,7 @@ setup_preexisting_fulfilled_qos_causing_file_transfer(Config, SpaceId, FileCreat
 
 
 get_supporting_storages(Node, SpaceId, ProviderId) ->
-    {ok, ProviderSupports} = opw_test_rpc:call(Node, space_logic, get_storages_by_provider, [SpaceId, ProviderId]),
+    {ok, ProviderSupports} = opw_test_rpc:call(Node, space_logic, get_provider_storages, [SpaceId, ProviderId]),
     maps:keys(ProviderSupports).
 
 %%%===================================================================

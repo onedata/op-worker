@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Record expressing the push message sent to lambda result streamers to
+%%% Record expressing a push message sent to lambda result streamers to
 %%% cue their finalization (flushing of all results and deregistering).
 %%% The record is not persistable, but is encoded to JSON on the activity feed channel.
 %%% @end
@@ -24,7 +24,6 @@
 -type record() :: #atm_openfaas_result_streamer_finalization_signal{}.
 -export_type([record/0]).
 
-%@TODO VFS-9388 "polymorphic" resultStreamerPushMessage with "type" discriminator
 
 %%%===================================================================
 %%% jsonable_record callbacks
@@ -32,9 +31,9 @@
 
 -spec to_json(record()) -> json_utils:json_term().
 to_json(#atm_openfaas_result_streamer_finalization_signal{}) ->
-    #{<<"type">> => <<"finalizationSignal">>}.
+    #{}.
 
 
 -spec from_json(json_utils:json_term()) -> record().
-from_json(#{<<"type">> := <<"finalizationSignal">>}) ->
+from_json(#{}) ->
     #atm_openfaas_result_streamer_finalization_signal{}.

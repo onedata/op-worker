@@ -72,7 +72,7 @@ local_id(FileUuid) ->
 %%--------------------------------------------------------------------
 -spec id(file_meta:uuid(), od_provider:id()) -> file_location:id().
 id(Uuid, ProviderId) ->
-    FileUuid = fslogic_uuid:ensure_referenced_uuid(Uuid),
+    FileUuid = fslogic_file_id:ensure_referenced_uuid(Uuid),
     datastore_key:build_adjacent(ProviderId, FileUuid).
 
 

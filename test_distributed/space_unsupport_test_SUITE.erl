@@ -66,7 +66,7 @@ all() -> [
 replicate_stage_test(Config) ->
     [Worker1, Worker2] = Workers = ?config(op_worker_nodes, Config),
     SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_ID),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(?SPACE_ID),
     StorageId = initializer:get_supporting_storage_id(Worker1, ?SPACE_ID),
     
     {{DirGuid, _}, {G1, _}, {G2, _}} = create_files_and_dirs(Worker1, SessId),
@@ -102,7 +102,7 @@ replicate_stage_test(Config) ->
 replicate_stage_persistence_test(Config) ->
     [Worker1, _Worker2] = ?config(op_worker_nodes, Config),
     SessId = fun(Worker) -> ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config) end,
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_ID),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(?SPACE_ID),
     StorageId = initializer:get_supporting_storage_id(Worker1, ?SPACE_ID),
     
     % Create new QoS entry representing entry created before provider restart.
@@ -372,7 +372,7 @@ init_per_testcase(overall_test, Config) ->
     init_per_testcase(default, Config);
 init_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_ID),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(?SPACE_ID),
     lists:foreach(fun(Worker) ->
         ?assertEqual({ok, []}, lfm_proxy:get_children(Worker, <<"0">>, ?FILE_REF(SpaceGuid), 0, 10), ?ATTEMPTS),
         assert_space_on_storage_cleaned_up(Worker, initializer:get_supporting_storage_id(Worker, ?SPACE_ID), ?SPACE_ID)
@@ -517,7 +517,7 @@ get_keys(mnesia_driver, MemoryDriverCtx) ->
 -define(filename(Name, Num), <<Name/binary,(integer_to_binary(Num))/binary>>).
 
 create_files_and_dirs(Worker, SessId) ->
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(?SPACE_ID),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(?SPACE_ID),
     Name = generator:gen_name(),
     {ok, DirGuid} = lfm_proxy:mkdir(Worker, SessId(Worker), SpaceGuid, ?filename(Name, 0), ?DEFAULT_DIR_PERMS),
     {ok, {G1, H1}} = lfm_proxy:create_and_open(Worker, SessId(Worker), DirGuid, ?filename(Name, 1), ?DEFAULT_FILE_PERMS),
@@ -532,7 +532,7 @@ create_qos_entry(Worker, SessId, FileGuid, Expression) ->
     opt_qos:add_qos_entry(Worker, SessId(Worker), ?FILE_REF(FileGuid), Expression, 1).
 
 create_custom_metadata(Worker, SessId, FileGuid) ->
-    lfm_proxy:set_metadata(Worker, SessId(Worker), ?FILE_REF(FileGuid), json,
+    opt_file_metadata:set_custom_metadata(Worker, SessId(Worker), ?FILE_REF(FileGuid), json,
         #{<<"key">> => <<"value">>}, []).
 
 create_replication(Worker, SessId, FileGuid, TargetWorker) ->
@@ -558,6 +558,15 @@ create_view(Worker, SpaceId, TargetWorker) ->
     ok = rpc:call(Worker, index, save, [SpaceId, <<"view_name">>, ViewFunction, undefined,
         [], false, [?GET_DOMAIN_BIN(TargetWorker)]]).
 
+check_distribution(Workers, SessId, [], Guid) ->
+    ExpectedDistribution = lists:map(fun(W) ->
+        #{
+            <<"providerId">> => ?GET_DOMAIN_BIN(W),
+            <<"totalBlocksSize">> => 0,
+            <<"blocks">> => []
+        }
+    end, Workers),
+    check_expected_distribution(Workers, SessId, ExpectedDistribution, Guid);
 check_distribution(Workers, SessId, Desc, Guid) ->
     ExpectedDistribution = lists:map(fun({W, TotalBlocksSize}) ->
         #{
@@ -566,12 +575,16 @@ check_distribution(Workers, SessId, Desc, Guid) ->
             <<"blocks">> => [[0, TotalBlocksSize]]
         }
     end, Desc),
+    check_expected_distribution(Workers, SessId, ExpectedDistribution, Guid).
+
+
+check_expected_distribution(Workers, SessId, ExpectedDistribution, Guid)  ->
     ExpectedDistributionSorted = lists:sort(fun(#{<<"providerId">> := ProviderIdA}, #{<<"providerId">> := ProviderIdB}) ->
         ProviderIdA =< ProviderIdB
     end, ExpectedDistribution),
     lists:foreach(fun(Worker) ->
-    ?assertEqual({ok, ExpectedDistributionSorted}, 
-            lfm_proxy:get_file_distribution(Worker, SessId(Worker), ?FILE_REF(Guid)), ?ATTEMPTS
+        ?assertEqual({ok, ExpectedDistributionSorted}, 
+            opt_file_metadata:get_distribution_deprecated(Worker, SessId(Worker), ?FILE_REF(Guid)), ?ATTEMPTS
         )
     end, Workers).
 

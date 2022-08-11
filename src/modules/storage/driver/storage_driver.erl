@@ -752,7 +752,7 @@ run_with_helper_handle(FallbackStrategy, #sd_handle{
 } = SDHandle, Fun, SufficientAccessType) ->
     case helpers_runner:run_and_handle_error(SDHandle, Fun, SufficientAccessType) of
         {error, Errno} = Error when Errno == ?EACCES orelse Errno == ?EPERM ->
-            IsSpaceDir = fslogic_uuid:is_space_dir_uuid(FileUuid),
+            IsSpaceDir = fslogic_file_id:is_space_dir_uuid(FileUuid),
             IsSpaceOwner = session:is_space_owner(SessionId, SpaceId),
 
             case IsSpaceOwner andalso not IsSpaceDir of

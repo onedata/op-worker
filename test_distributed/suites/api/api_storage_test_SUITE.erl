@@ -52,7 +52,7 @@ get_shared_storage_test(_Config) ->
     lists:foreach(fun(ProviderSelector) ->
         ProviderId = oct_background:get_provider_id(ProviderSelector),
         {ok, SupportingStorages} = opw_test_rpc:call(
-            ProviderSelector, space_logic, get_storages_by_provider, [SpaceId, ProviderId]
+            ProviderSelector, space_logic, get_provider_storages, [SpaceId, ProviderId]
         ),
         lists:foreach(fun(StorageId) ->
             StorageName = opw_test_rpc:call(ProviderSelector, storage, fetch_name_of_local_storage, [StorageId]),

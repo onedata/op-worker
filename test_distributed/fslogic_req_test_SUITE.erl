@@ -93,8 +93,8 @@ fslogic_get_file_attr_test_base(Config, CheckReplicationStatus) ->
     {SessId1, UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     {SessId2, UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user2">>}, Config)},
 
-    UserRootGuid1 = fslogic_uuid:user_root_dir_guid(UserId1),
-    UserRootGuid2 = fslogic_uuid:user_root_dir_guid(UserId2),
+    UserRootGuid1 = fslogic_file_id:user_root_dir_guid(UserId1),
+    UserRootGuid2 = fslogic_file_id:user_root_dir_guid(UserId2),
 
     FileName =  generator:gen_name(),
     FilePath = <<"/space_name1/", FileName/binary>>,
@@ -189,10 +189,10 @@ fslogic_get_file_children_attrs_test(Config) ->
     {SessId3, UserId3} = {?config({session_id, {<<"user3">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user3">>}, Config)},
     {SessId4, UserId4} = {?config({session_id, {<<"user4">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user4">>}, Config)},
 
-    UserRootGuid1 = fslogic_uuid:user_root_dir_guid(UserId1),
-    UserRootGuid2 = fslogic_uuid:user_root_dir_guid(UserId2),
-    UserRootGuid3 = fslogic_uuid:user_root_dir_guid(UserId3),
-    UserRootGuid4 = fslogic_uuid:user_root_dir_guid(UserId4),
+    UserRootGuid1 = fslogic_file_id:user_root_dir_guid(UserId1),
+    UserRootGuid2 = fslogic_file_id:user_root_dir_guid(UserId2),
+    UserRootGuid3 = fslogic_file_id:user_root_dir_guid(UserId3),
+    UserRootGuid4 = fslogic_file_id:user_root_dir_guid(UserId4),
 
     ValidateReadDirPlus = fun({SessId, Path, AttrsList}) ->
         #fuse_response{fuse_response = #guid{guid = FileGuid}} =
@@ -302,8 +302,8 @@ fslogic_get_child_attr_test(Config) ->
     {SessId1, UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     {SessId2, UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user2">>}, Config)},
 
-    UserRootGuid1 = fslogic_uuid:user_root_dir_guid(UserId1),
-    UserRootGuid2 = fslogic_uuid:user_root_dir_guid(UserId2),
+    UserRootGuid1 = fslogic_file_id:user_root_dir_guid(UserId1),
+    UserRootGuid2 = fslogic_file_id:user_root_dir_guid(UserId2),
 
     lists:foreach(fun({SessId, Name, Mode, UID, ParentGuid, ChildName}) ->
         ?assertMatch(#fuse_response{status = #status{code = ?OK},

@@ -253,18 +253,18 @@ set_and_sync_metadata(Nodes, FileGuid, MetadataType, Metadata) ->
 
 -spec set_metadata(node(), file_id:file_guid(), metadata_type(), term()) -> ok.
 set_metadata(Node, FileGuid, <<"rdf">>, Metadata) ->
-    lfm_proxy:set_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), rdf, Metadata, []);
+    opt_file_metadata:set_custom_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), rdf, Metadata, []);
 set_metadata(Node, FileGuid, <<"json">>, Metadata) ->
-    lfm_proxy:set_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), json, Metadata, []);
+    opt_file_metadata:set_custom_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), json, Metadata, []);
 set_metadata(Node, FileGuid, <<"xattrs">>, Metadata) ->
     set_xattrs(Node, FileGuid, Metadata).
 
 
 -spec get_metadata(node(), file_id:file_guid(), metadata_type()) -> {ok, term()}.
 get_metadata(Node, FileGuid, <<"rdf">>) ->
-    lfm_proxy:get_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), rdf, [], false);
+    opt_file_metadata:get_custom_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), rdf, [], false);
 get_metadata(Node, FileGuid, <<"json">>) ->
-    lfm_proxy:get_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), json, [], false);
+    opt_file_metadata:get_custom_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), json, [], false);
 get_metadata(Node, FileGuid, <<"xattrs">>) ->
     get_xattrs(Node, FileGuid).
 
@@ -323,13 +323,13 @@ randomly_set_metadata(Nodes, FileGuid) ->
         1 ->
             FileKey = ?FILE_REF(FileGuid),
             RandNode = lists_utils:random_element(Nodes),
-            ?assertMatch(ok, lfm_proxy:set_metadata(
+            ?assertMatch(ok, opt_file_metadata:set_custom_metadata(
                 RandNode, ?ROOT_SESS_ID, FileKey, rdf, ?RDF_METADATA_1, []
             ), ?ATTEMPTS),
             lists:foreach(fun(Node) ->
                 ?assertMatch(
                     {ok, _},
-                    lfm_proxy:get_metadata(Node, ?ROOT_SESS_ID, FileKey, rdf, [], false),
+                    opt_file_metadata:get_custom_metadata(Node, ?ROOT_SESS_ID, FileKey, rdf, [], false),
                     ?ATTEMPTS
                 )
             end, Nodes),
@@ -416,7 +416,7 @@ file_details_to_gs_json(undefined, #file_details{
         <<"effProtectionFlags">> => file_meta:protection_flags_to_json(EffFileProtectionFlags),
         % For space dir gs returns null as parentId instead of user root dir
         % (gui doesn't know about user root dir)
-        <<"parentId">> => case fslogic_uuid:is_space_dir_guid(FileGuid) of
+        <<"parentId">> => case fslogic_file_id:is_space_dir_guid(FileGuid) of
             true -> null;
             false -> ParentGuid
         end,

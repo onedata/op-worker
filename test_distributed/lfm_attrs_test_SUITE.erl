@@ -671,9 +671,9 @@ create_and_query_view(Config) ->
     {ok, FileId1} = file_id:guid_to_objectid(Guid1),
     {ok, FileId2} = file_id:guid_to_objectid(Guid2),
     {ok, FileId3} = file_id:guid_to_objectid(Guid3),
-    ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid1), json, MetaBlue, [])),
-    ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid2), json, MetaRed, [])),
-    ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid3), json, MetaBlue, [])),
+    ?assertEqual(ok, opt_file_metadata:set_custom_metadata(Worker, SessId, ?FILE_REF(Guid1), json, MetaBlue, [])),
+    ?assertEqual(ok, opt_file_metadata:set_custom_metadata(Worker, SessId, ?FILE_REF(Guid2), json, MetaRed, [])),
+    ?assertEqual(ok, opt_file_metadata:set_custom_metadata(Worker, SessId, ?FILE_REF(Guid3), json, MetaBlue, [])),
     ok = rpc:call(Worker, index, save, [SpaceId, ViewName, ViewFunction, undefined, [], false, [ProviderId]]),
     ?assertMatch({ok, [ViewName]}, rpc:call(Worker, index, list, [SpaceId])),
     FinalCheck = fun() ->
@@ -704,7 +704,7 @@ get_empty_json(Config) ->
     Path = <<"/space_name1/t6_file">>,
     {ok, Guid} = lfm_proxy:create(Worker, SessId, Path),
 
-    ?assertEqual({error, ?ENOATTR}, lfm_proxy:get_metadata(Worker, SessId, ?FILE_REF(Guid), json, [], false)).
+    ?assertEqual(?ERROR_POSIX(?ENOATTR), opt_file_metadata:get_custom_metadata(Worker, SessId, ?FILE_REF(Guid), json, [], false)).
 
 get_empty_rdf(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -712,7 +712,7 @@ get_empty_rdf(Config) ->
     Path = <<"/space_name1/t6_file">>,
     {ok, Guid} = lfm_proxy:create(Worker, SessId, Path),
 
-    ?assertEqual({error, ?ENOATTR}, lfm_proxy:get_metadata(Worker, SessId, ?FILE_REF(Guid), rdf, [], false)).
+    ?assertEqual(?ERROR_POSIX(?ENOATTR), opt_file_metadata:get_custom_metadata(Worker, SessId, ?FILE_REF(Guid), rdf, [], false)).
 
 has_custom_metadata_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -722,15 +722,15 @@ has_custom_metadata_test(Config) ->
 
     % json
     ?assertEqual({ok, false}, lfm_proxy:has_custom_metadata(Worker, SessId, ?FILE_REF(Guid))),
-    ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), json, #{}, [])),
+    ?assertEqual(ok, opt_file_metadata:set_custom_metadata(Worker, SessId, ?FILE_REF(Guid), json, #{}, [])),
     ?assertEqual({ok, true}, lfm_proxy:has_custom_metadata(Worker, SessId, ?FILE_REF(Guid))),
-    ?assertEqual(ok, lfm_proxy:remove_metadata(Worker, SessId, ?FILE_REF(Guid), json)),
+    ?assertEqual(ok, opt_file_metadata:remove_custom_metadata(Worker, SessId, ?FILE_REF(Guid), json)),
 
     % rdf
     ?assertEqual({ok, false}, lfm_proxy:has_custom_metadata(Worker, SessId, ?FILE_REF(Guid))),
-    ?assertEqual(ok, lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), rdf, <<"<xml>">>, [])),
+    ?assertEqual(ok, opt_file_metadata:set_custom_metadata(Worker, SessId, ?FILE_REF(Guid), rdf, <<"<xml>">>, [])),
     ?assertEqual({ok, true}, lfm_proxy:has_custom_metadata(Worker, SessId, ?FILE_REF(Guid))),
-    ?assertEqual(ok, lfm_proxy:remove_metadata(Worker, SessId, ?FILE_REF(Guid), rdf)),
+    ?assertEqual(ok, opt_file_metadata:remove_custom_metadata(Worker, SessId, ?FILE_REF(Guid), rdf)),
 
     % xattr
     ?assertEqual({ok, false}, lfm_proxy:has_custom_metadata(Worker, SessId, ?FILE_REF(Guid))),
@@ -742,7 +742,7 @@ has_custom_metadata_test(Config) ->
 resolve_guid_of_root_should_return_root_guid(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {SessId, UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
-    RootGuid = rpc:call(Worker, fslogic_uuid, user_root_dir_guid, [UserId]),
+    RootGuid = rpc:call(Worker, fslogic_file_id, user_root_dir_guid, [UserId]),
 
     ?assertEqual({ok, RootGuid}, lfm_proxy:resolve_guid(Worker, SessId, <<"/">>)).
 
@@ -750,7 +750,7 @@ resolve_guid_of_space_should_return_space_guid(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {SessId, _UserId} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    SpaceDirGuid = rpc:call(Worker, fslogic_uuid, spaceid_to_space_dir_guid, [SpaceId]),
+    SpaceDirGuid = rpc:call(Worker, fslogic_file_id, spaceid_to_space_dir_guid, [SpaceId]),
 
     ?assertEqual({ok, SpaceDirGuid}, lfm_proxy:resolve_guid(Worker, SessId, <<"/", SpaceName/binary>>)).
 
@@ -873,7 +873,7 @@ do_not_overwrite_space_dir_attrs_on_make_space_exist_test(Config) ->
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
 
     [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
 
     {ok, ShareId} = opt_shares:create(Worker, SessId, ?FILE_REF(SpaceGuid), <<"szer">>),
     {ok, SpaceAttrs} = ?assertMatch(
@@ -892,7 +892,7 @@ listing_file_attrs_should_work_properly_in_open_handle_mode(Config) ->
 
     User = <<"user1">>,
     [{SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
 
     NormalSessId = ?config({session_id, {User, ?GET_DOMAIN(Worker)}}, Config),
 
@@ -930,7 +930,7 @@ listing_file_attrs_should_work_properly_in_open_handle_mode(Config) ->
     ),
 
     BuildShareRootDirFun = fun(ShareId) ->
-        file_id:pack_share_guid(fslogic_uuid:shareid_to_share_root_dir_uuid(ShareId), SpaceId, ShareId)
+        file_id:pack_share_guid(fslogic_file_id:shareid_to_share_root_dir_uuid(ShareId), SpaceId, ShareId)
     end,
 
     SpaceShareId = <<"spaceshare">>,

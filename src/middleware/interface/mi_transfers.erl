@@ -37,7 +37,7 @@
 schedule_file_transfer(SessionId, FileKey, ReplicatingProviderId, EvictingProviderId, Callback) ->
     FileGuid = lfm_file_key:resolve_file_key(SessionId, FileKey, do_not_resolve_symlink),
 
-    middleware_worker:check_exec(SessionId, FileGuid, #schedule_file_transfer{
+    middleware_worker:check_exec(SessionId, FileGuid, #file_transfer_schedule_request{
         replicating_provider_id = ReplicatingProviderId,
         evicting_provider_id = EvictingProviderId,
         callback = Callback
@@ -58,9 +58,9 @@ schedule_view_transfer(
     SessionId, SpaceId, ViewName, QueryViewParams,
     ReplicatingProviderId, EvictingProviderId, Callback
 ) ->
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
 
-    middleware_worker:check_exec(SessionId, SpaceGuid, #schedule_view_transfer{
+    middleware_worker:check_exec(SessionId, SpaceGuid, #view_transfer_schedule_request{
         replicating_provider_id = ReplicatingProviderId,
         evicting_provider_id = EvictingProviderId,
         view_name = ViewName,

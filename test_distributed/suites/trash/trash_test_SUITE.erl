@@ -111,10 +111,10 @@ all() -> ?ALL([
 -define(SPACE_NAME2, oct_background:get_space_name(?SPACE2_PLACEHOLDER)).
 
 -define(SPACE_UUID, ?SPACE_UUID(?SPACE_ID1)).
--define(SPACE_UUID(SpaceId), fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)).
+-define(SPACE_UUID(SpaceId), fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId)).
 -define(SPACE_GUID, ?SPACE_GUID(?SPACE_ID1)).
--define(SPACE_GUID(SpaceId), fslogic_uuid:spaceid_to_space_dir_guid(SpaceId)).
--define(TRASH_DIR_GUID(SpaceId), fslogic_uuid:spaceid_to_trash_dir_guid(SpaceId)).
+-define(SPACE_GUID(SpaceId), fslogic_file_id:spaceid_to_space_dir_guid(SpaceId)).
+-define(TRASH_DIR_GUID(SpaceId), fslogic_file_id:spaceid_to_trash_dir_guid(SpaceId)).
 
 -define(ATTEMPTS, 300).
 -define(RAND_NAME(Prefix), <<Prefix/binary, (integer_to_binary(rand:uniform(1000)))/binary>>).
@@ -219,18 +219,18 @@ set_metadata_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     JSON = #{<<"key">> => <<"value">>},
-    ?assertMatch({error, ?EPERM},
-        lfm_proxy:set_metadata(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), json, JSON, [])).
+    ?assertMatch(?ERROR_POSIX(?EPERM),
+        opt_file_metadata:set_custom_metadata(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), json, JSON, [])).
 
 set_cdmi_metadata_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-    ?assertMatch({error, ?EPERM},
-        lfm_proxy:set_mimetype(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), <<"mimetype">>)),
-    ?assertMatch({error, ?EPERM},
-        lfm_proxy:set_cdmi_completion_status(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), <<"COMPLETED">>)),
-    ?assertMatch({error, ?EPERM},
-        lfm_proxy:set_transfer_encoding(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), <<"base64">>)).
+    ?assertMatch(?ERROR_POSIX(?EPERM),
+        opt_cdmi:set_mimetype(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), <<"mimetype">>)),
+    ?assertMatch(?ERROR_POSIX(?EPERM),
+        opt_cdmi:set_cdmi_completion_status(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), <<"COMPLETED">>)),
+    ?assertMatch(?ERROR_POSIX(?EPERM),
+        opt_cdmi:set_transfer_encoding(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), <<"base64">>)).
 
 create_share_from_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
@@ -247,8 +247,8 @@ add_qos_entry_for_trash_dir_is_forbidden(_Config) ->
 remove_metadata_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-    ?assertMatch({error, ?EPERM},
-        lfm_proxy:remove_metadata(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), json)).
+    ?assertMatch(?ERROR_POSIX(?EPERM),
+        opt_file_metadata:remove_custom_metadata(P1Node, UserSessIdP1, ?FILE_REF(?TRASH_DIR_GUID(?SPACE_ID1)), json)).
 
 schedule_replication_transfer_on_trash_dir_is_forbidden(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
@@ -333,6 +333,11 @@ schedule_eviction_transfer_on_space_evicts_trash(_Config) ->
     P2Id = oct_background:get_provider_id(paris),
 
     ?assertDistribution(P1Node, UserSessIdP1, ?DISTS([P1Id, P2Id], [Size, Size]), FileGuid, ?ATTEMPTS),
+    % Ensure that evicting provider has knowledge of remote provider blocks (through dbsync), 
+    % as otherwise it will skip eviction.
+    % @TODO VFS-VFS-9498 not needed after replica_deletion uses fetched file location instead of dbsynced
+    ?assertEqual({ok, [[0, Size]]},
+        opt_file_metadata:get_local_knowledge_of_remote_provider_blocks(P1Node, FileGuid, P2Id), ?ATTEMPTS),
 
     % evict whole space
     {ok, TransferId} = ?assertMatch({ok, _},

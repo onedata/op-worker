@@ -60,7 +60,7 @@ translate_value(#gri{
         <<"isLast">> => IsLast
     };
 
-translate_value(#gri{aspect = dir_size_stats_config, scope = private}, Result) ->
+translate_value(#gri{aspect = dir_stats_service_state, scope = private}, Result) ->
     Result.
 
 
@@ -73,7 +73,7 @@ translate_resource(#gri{id = SpaceId, aspect = instance, scope = private}, Space
         true ->
             RootDirGRI = gri:serialize(#gri{
                 type = op_file,
-                id = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+                id = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
                 aspect = instance,
                 scope = private
             }),

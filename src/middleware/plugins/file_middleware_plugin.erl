@@ -23,9 +23,11 @@
 -include("middleware/middleware.hrl").
 -include("modules/fslogic/acl.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include_lib("cluster_worker/include/modules/datastore/infinite_log.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("cluster_worker/include/time_series/browsing.hrl").
 
 
 %% API
@@ -433,7 +435,7 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = json
             binary:split(Filter, <<".">>, [global])
     end,
 
-    ?lfm_check(lfm:set_metadata(SessionId, FileRef, json, JSON, FilterList));
+    mi_file_metadata:set_custom_metadata(SessionId, FileRef, json, JSON, FilterList);
 
 create(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = rdf_metadata}}) ->
     SessionId = Auth#auth.session_id,
@@ -441,7 +443,7 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = rdf_
 
     Rdf = maps:get(<<"metadata">>, Data),
 
-    ?lfm_check(lfm:set_metadata(SessionId, FileRef, rdf, Rdf, []));
+    mi_file_metadata:set_custom_metadata(SessionId, FileRef, rdf, Rdf, []);
 
 create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = register_file}}) ->
     SpaceId = maps:get(<<"spaceId">>, Data),
@@ -655,16 +657,13 @@ data_spec_get(#gri{aspect = download_url}) -> #{
     optional => #{<<"follow_symlinks">> => {boolean, any}}
 };
 
-data_spec_get(#gri{aspect = archive_recall_log}) -> #{
-    optional => #{
-        <<"index">> => {binary, any},
-        <<"timestamp">> => {integer, {not_lower_than, 0}},
-        <<"offset">> => {integer, any},
-        <<"limit">> => {integer, {between, 1, 1000}}
-    }
-};
+data_spec_get(#gri{aspect = archive_recall_log}) ->
+    audit_log_browse_opts:json_data_spec();
 
 data_spec_get(#gri{aspect = dir_size_stats}) -> #{
+    required => #{
+        id => {binary, guid}
+    },
     % for this aspect data is sanitized in `get` function, but all possible parameters 
     % still have to be specified so they are not removed during sanitization
     optional => #{
@@ -915,7 +914,7 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = json_me
     FilterType = maps:get(<<"filter_type">>, Data, undefined),
     Filter = maps:get(<<"filter">>, Data, undefined),
 
-    FilterList = case {FilterType, Filter} of
+    Query = case {FilterType, Filter} of
         {undefined, _} ->
             [];
         {<<"keypath">>, undefined} ->
@@ -924,20 +923,18 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = json_me
             binary:split(Filter, <<".">>, [global])
     end,
 
-    {ok, Result} = ?lfm_check(lfm:get_metadata(SessionId, FileRef, json, FilterList, Inherited)),
-    {ok, value, Result};
+    {ok, value, mi_file_metadata:get_custom_metadata(SessionId, FileRef, json, Query, Inherited)};
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = rdf_metadata}}, _) ->
     FileRef = ?FILE_REF(FileGuid, maps:get(<<"resolve_symlink">>, Data, true)),
 
-    {ok, Result} = ?lfm_check(lfm:get_metadata(Auth#auth.session_id, FileRef, rdf, [], false)),
-    {ok, value, Result};
+    {ok, value, mi_file_metadata:get_custom_metadata(Auth#auth.session_id, FileRef, rdf, [], false)};
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = acl}}, _) ->
     ?lfm_check(lfm:get_acl(Auth#auth.session_id, ?FILE_REF(FileGuid)));
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = distribution}}, _) ->
-    ?lfm_check(lfm:get_file_distribution(Auth#auth.session_id, ?FILE_REF(FileGuid)));
+    {ok, mi_file_metadata:gather_distribution(Auth#auth.session_id, ?FILE_REF(FileGuid))};
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = shares}}, _) ->
     {ok, FileAttrs} = ?lfm_check(lfm:stat(Auth#auth.session_id, ?FILE_REF(FileGuid))),
@@ -995,8 +992,8 @@ get(#op_req{auth = ?USER(_UserId, SessId), data = Data, gri = #gri{id = FileGuid
     end;
 
 get(#op_req{gri = #gri{id = FirstGuid, aspect = {hardlinks, SecondGuid}}}, _) ->
-    FirstReferencedUuid = fslogic_uuid:ensure_referenced_uuid(file_id:guid_to_uuid(FirstGuid)),
-    SecondReferencedUuid = fslogic_uuid:ensure_referenced_uuid(file_id:guid_to_uuid(SecondGuid)),
+    FirstReferencedUuid = fslogic_file_id:ensure_referenced_uuid(file_id:guid_to_uuid(FirstGuid)),
+    SecondReferencedUuid = fslogic_file_id:ensure_referenced_uuid(file_id:guid_to_uuid(SecondGuid)),
     case SecondReferencedUuid of
         FirstReferencedUuid -> {ok, #{}};
         _ -> ?ERROR_NOT_FOUND
@@ -1024,15 +1021,17 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = archive_recall_progr
     {ok, mi_archives:get_recall_progress(Auth#auth.session_id, FileGuid)};
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = archive_recall_log}, data = Data}, _) ->
-    BrowseOpts = json_infinite_log_model:build_browse_opts(Data),
+    BrowseOpts = audit_log_browse_opts:from_json(Data),
     {ok, mi_archives:browse_recall_log(Auth#auth.session_id, FileGuid, BrowseOpts)};
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = api_samples, scope = public}}, _) ->
     {ok, value, public_file_api_samples:generate_for(Auth#auth.session_id, FileGuid)};
 
-get(#op_req{gri = #gri{id = Guid, aspect = dir_size_stats}, data = Data}, _) ->
-    TSBrowseRequest = ts_browse_request:from_json(Data),
-    {ok, value, ?check(dir_size_stats:browse_time_stats_collection(Guid, TSBrowseRequest))}.
+get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = dir_size_stats}, data = Data}, _) ->
+    BrowseRequest = ts_browse_request:from_json(Data),
+    {ok, value, mi_file_metadata:gather_historical_dir_size_stats(
+        Auth#auth.session_id, ?FILE_REF(Guid), BrowseRequest)}.
+
 
 
 %%%===================================================================
@@ -1207,11 +1206,11 @@ delete(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = xatt
 
 delete(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = json_metadata}}) ->
     FileRef = ?FILE_REF(FileGuid, maps:get(<<"resolve_symlink">>, Data, true)),
-    ?lfm_check(lfm:remove_metadata(Auth#auth.session_id, FileRef, json));
+    mi_file_metadata:remove_custom_metadata(Auth#auth.session_id, FileRef, json);
 
 delete(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = rdf_metadata}}) ->
     FileRef = ?FILE_REF(FileGuid, maps:get(<<"resolve_symlink">>, Data, true)),
-    ?lfm_check(lfm:remove_metadata(Auth#auth.session_id, FileRef, rdf)).
+    mi_file_metadata:remove_custom_metadata(Auth#auth.session_id, FileRef, rdf).
 
 
 %%%===================================================================

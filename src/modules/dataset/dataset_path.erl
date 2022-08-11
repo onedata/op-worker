@@ -29,12 +29,12 @@
 get(SpaceId, Uuid) ->
     {ok, DatasetPath} = paths_cache:get_uuid_based(SpaceId, Uuid),
     [Sep, SpaceId | Tail] = filename:split(DatasetPath),
-    {ok, filename:join([Sep, fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId) | Tail])}.
+    {ok, filename:join([Sep, fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId) | Tail])}.
 
 
 -spec get_space_path(od_space:id()) -> {ok, dataset:path()}.
 get_space_path(SpaceId) ->
-    get(SpaceId, fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId)).
+    get(SpaceId, fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId)).
 
 
 -spec to_id(dataset:path()) -> dataset:id().

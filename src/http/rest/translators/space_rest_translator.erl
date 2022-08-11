@@ -45,7 +45,7 @@ get_response(#gri{id = SpaceId, aspect = instance, scope = private}, #od_space{
     name = Name,
     providers = ProvidersIds
 }) ->
-    SpaceDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     {ok, SpaceDirObjectId} = file_id:guid_to_objectid(SpaceDirGuid),
 
     Providers = lists:map(fun(ProviderId) ->

@@ -868,21 +868,35 @@ assert_files_visible_on_all_nodes(Config, AssertionNodes, User, Attempts, Timetr
 assert_files_distribution_on_all_nodes(_Config, _AssertionNodes, _User, undefined, _AssertDistributionForFiles, _Attempts, _Timetrap) ->
     ok;
 assert_files_distribution_on_all_nodes(Config, AssertionNodes, User, ExpectedDistribution, AssertDistributionForFiles, Attempts, Timetrap) ->
-    % Deduce expected block size automatically based on expected blocks
-    ExpectedDistributionWithBlockSize = lists:map(fun(Distribution) ->
-        Distribution#{
-            <<"totalBlocksSize">> => lists:foldl(fun([_Offset, Size], SizeAcc) ->
-                SizeAcc + Size
-            end, 0, maps:get(<<"blocks">>, Distribution))
-        }
-    end, ExpectedDistribution),
-
+    FinalExpectedDistribution = fill_expected_distribution(Config, ExpectedDistribution),
     NodesToCounterIds = lists:foldl(fun(AssertionNode, NodesToCounterIdsAcc) ->
-        CounterId = cast_files_distribution_assertion(Config, AssertionNode, User, ExpectedDistributionWithBlockSize, 
+        CounterId = cast_files_distribution_assertion(Config, AssertionNode, User, FinalExpectedDistribution, 
             AssertDistributionForFiles, Attempts),
         NodesToCounterIdsAcc#{AssertionNode => CounterId}
     end, #{}, AssertionNodes),
     countdown_server:await_all(NodesToCounterIds, Timetrap).
+
+fill_expected_distribution(Config, ExpectedDistribution) ->
+    Workers = ?config(op_worker_nodes, Config),
+    NotEmptyDistributionMap = lists:foldl(fun(Distribution, Acc) ->
+        ProviderId = maps:get(<<"providerId">>, Distribution),
+        Acc#{ProviderId =>
+            Distribution#{
+                % Deduce expected block size automatically based on expected blocks
+                <<"totalBlocksSize">> => lists:foldl(fun([_Offset, Size], SizeAcc) ->
+                    SizeAcc + Size
+                end, 0, maps:get(<<"blocks">>, Distribution))
+            }
+        }
+    end, #{}, ExpectedDistribution),
+    lists:map(fun(Worker) ->
+        ProviderId = opw_test_rpc:call(Worker, oneprovider, get_id, []),
+        maps:get(ProviderId, NotEmptyDistributionMap, #{
+            <<"providerId">> => ProviderId,
+            <<"blocks">> => [],
+            <<"totalBlocksSize">> => 0
+        })
+    end, Workers).
 
 cast_files_distribution_assertion(Config, Node, User, Expected, AssertDistributionForFiles, Attempts) ->
     FileGuidsAndPaths = ?config(?FILES_KEY, Config),
@@ -968,8 +982,14 @@ assert_file_visible(Node, SessId, FileGuid, CounterRef, Attempts) ->
 assert_file_distribution(Expected, Node, SessId, FileGuid, CounterRef, Attempts) ->
     Expected2 = lists:sort(Expected),
     execute_in_worker(fun() ->
+        lists_utils:pforeach(fun
+            (#{<<"blocks">> := []}) -> 
+                ok;
+            (#{<<"providerId">> := ProviderId, <<"blocks">> := ExpectedBlocks}) ->
+                ?assertMatch({ok, ExpectedBlocks}, opt_file_metadata:get_local_knowledge_of_remote_provider_blocks(Node, FileGuid, ProviderId), Attempts)
+        end, Expected),
         ?assertMatch(Expected2, begin
-            {ok, Distribution} = lfm_proxy:get_file_distribution(Node, SessId, ?FILE_REF(FileGuid)),
+            {ok, Distribution} = opt_file_metadata:get_distribution_deprecated(Node, SessId, ?FILE_REF(FileGuid)),
             lists:sort(Distribution)
         end, Attempts),
         countdown_server:decrease(Node, CounterRef, FileGuid)
@@ -996,7 +1016,7 @@ maybe_create_root_dir(Node, RootDirectory, SessionId, SpaceId) ->
     end.
 
 space_guid(SpaceId) ->
-    fslogic_uuid:spaceid_to_space_dir_guid(SpaceId).
+    fslogic_file_id:spaceid_to_space_dir_guid(SpaceId).
 
 validate_root_directory(Path = <<"/", _>>) ->
     throw({absolute_root_path, Path});

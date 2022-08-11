@@ -92,7 +92,7 @@
 % Record carrying an activity report of an OpenFaaS function
 -record(atm_openfaas_activity_report, {
     type :: atm_openfaas_activity_report:type(),
-    batch :: atm_openfaas_activity_report:batch()
+    batch :: [atm_openfaas_activity_report:body()]
 }).
 
 % Record carrying a status report of a pod that executes given OpenFaaS function
@@ -100,7 +100,7 @@
 % to build atm_openfaas_function_pod_status_summary
 -record(atm_openfaas_function_pod_status_report, {
     function_name :: atm_openfaas_task_executor:function_name(),
-    pod_id :: atm_openfaas_function_activity_registry:pod_id(),
+    pod_id :: atm_openfaas_function_pod_status_registry:pod_id(),
 
     pod_status :: atm_openfaas_function_pod_status_report:pod_status(),
     containers_readiness :: atm_openfaas_function_pod_status_report:containers_readiness(),
@@ -111,23 +111,19 @@
     event_message :: atm_openfaas_function_pod_status_report:event_message()
 }).
 
-% Record holding the registry of pod status changes for an OpenFaaS function
-% (part of function activity registry)
-%% @formatter:off
--record(atm_openfaas_function_pod_status_registry, {
-    registry :: #{
-        atm_openfaas_function_activity_registry:pod_id() => atm_openfaas_function_pod_status_summary:record()
-    }
-}).
-%% @formatter:on
-
 % Record holding the summary of status changes for a single pod of an OpenFaaS function
 % (single entry in the atm_openfaas_function_pod_status_registry)
 -record(atm_openfaas_function_pod_status_summary, {
     current_status :: atm_openfaas_function_pod_status_report:pod_status(),
     current_containers_readiness :: atm_openfaas_function_pod_status_report:containers_readiness(),
     last_status_change_timestamp :: atm_openfaas_function_pod_status_report:event_timestamp(),
-    event_log :: infinite_log:log_id()
+    event_log_id :: infinite_log:log_id()
+}).
+
+% Record carrying a generic result streamer report
+-record(atm_openfaas_result_streamer_report, {
+    id :: atm_openfaas_result_streamer_report:id(),
+    body = atm_openfaas_result_streamer_report:body()
 }).
 
 % Record carrying a status report of a lambda result streamer of type 'registration'
@@ -142,8 +138,20 @@
     chunk :: atm_openfaas_result_streamer_chunk_report:chunk()
 }).
 
+% Record carrying a status report of a lambda result streamer of type 'invalidData'
+-record(atm_openfaas_result_streamer_invalid_data_report, {
+    result_name :: automation:name(),
+    base_64_encoded_data :: binary()
+}).
+
 % Record carrying a status report of a lambda result streamer of type 'deregistration'
 -record(atm_openfaas_result_streamer_deregistration_report, {
+}).
+
+% Record expressing the push message sent to lambda result streamers to
+% acknowledge that a result streamer report has been processed
+-record(atm_openfaas_result_streamer_report_ack, {
+    id :: atm_openfaas_result_streamer_report:id()
 }).
 
 % Record expressing the push message sent to lambda result streamers to
@@ -200,12 +208,11 @@
 }).
 
 -record(atm_audit_log_store_content_browse_options, {
-    listing_opts :: atm_store_container_infinite_log_backend:timestamp_aware_listing_opts()
+    browse_opts :: audit_log_browse_opts:opts()
 }).
 
 -record(atm_audit_log_store_content_browse_result, {
-    logs :: [atm_store_container_infinite_log_backend:entry()],
-    is_last :: boolean()
+    result :: audit_log:browse_result()
 }).
 
 -record(atm_list_store_content_browse_options, {
@@ -248,7 +255,7 @@
 
 -record(atm_store_content_update_req, {
     workflow_execution_auth :: atm_workflow_execution_auth:record(),
-    argument :: atm_value:expanded(),
+    argument :: atm_value:expanded() | audit_log:append_request(),
     options :: atm_store_content_update_options:record()
 }).
 

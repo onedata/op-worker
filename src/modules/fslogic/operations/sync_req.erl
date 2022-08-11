@@ -35,8 +35,7 @@
 -export([
     synchronize_block/6,
     request_block_synchronization/6,
-    synchronize_block_and_compute_checksum/5,
-    get_file_distribution/2
+    synchronize_block_and_compute_checksum/5
 ]).
 
 
@@ -137,51 +136,5 @@ synchronize_block_and_compute_checksum(UserCtx, FileCtx,
         fuse_response = #sync_response{
             checksum = Checksum,
             file_location_changed = Ans#file_location_changed{file_location = FL#file_location{uuid = LogicalUuid}}
-        }
-    }.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% get_file_distribution_insecure/2 with permission checks.
-%% @end
-%%--------------------------------------------------------------------
--spec get_file_distribution(user_ctx:ctx(), file_ctx:ctx()) -> provider_response().
-get_file_distribution(UserCtx, FileCtx0) ->
-    FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
-    FileCtx2 = fslogic_authz:ensure_authorized(
-        UserCtx, FileCtx1,
-        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_metadata_mask)]
-    ),
-    get_file_distribution_insecure(UserCtx, FileCtx2).
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Gets distribution of file over providers' storages.
-%% @end
-%%--------------------------------------------------------------------
--spec get_file_distribution_insecure(user_ctx:ctx(), file_ctx:ctx()) ->
-    provider_response().
-get_file_distribution_insecure(_UserCtx, FileCtx) ->
-    {Locations, _FileCtx2} = file_ctx:get_file_location_docs(FileCtx),
-    ProviderDistributions = lists:map(fun(#document{
-        value = #file_location{provider_id = ProviderId}
-    } = FL) ->
-        #provider_file_distribution{
-            provider_id = ProviderId,
-            blocks = fslogic_location_cache:get_blocks(FL)
-        }
-    end, Locations),
-    #provider_response{
-        status = #status{code = ?OK},
-        provider_response = #file_distribution{
-            provider_file_distributions = ProviderDistributions
         }
     }.

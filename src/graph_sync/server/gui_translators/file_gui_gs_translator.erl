@@ -16,55 +16,19 @@
 
 -include("middleware/middleware.hrl").
 -include("modules/fslogic/file_details.hrl").
+-include("modules/fslogic/file_distribution.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("cluster_worker/include/time_series/browsing.hrl").
 
 %% API
 -export([
     translate_value/2,
     translate_resource/2,
 
-    translate_dataset_summary/1,
-    translate_distribution/2
+    translate_dataset_summary/1
 ]).
-
-% For below types description see interpolate_chunks fun doc
--type chunks_bar_entry() :: {BarNum :: non_neg_integer(), Fill :: non_neg_integer()}.
--type chunks_bar_data() :: [chunks_bar_entry()].
--type file_size() :: non_neg_integer().
-
--type file_distribution() :: #{binary() => term()}.
-%% Full file_distribution format can't be expressed directly in type spec due to
-%% dialyzer limitations in specifying concrete binaries. Instead it is shown
-%% below:
-%%
-%% %{
-%%      <<"providerId">> := od_provider:id(),
-%%      <<"blocks">> := fslogic_blocks:blocks(),
-%%      <<"totalBlocksSize">> := non_neg_integer()
-%% }
--type distribution_per_provider() :: #{binary() => term()}.
-%% Full file_distribution format can't be expressed directly in type spec due to
-%% dialyzer limitations in specifying concrete binaries. Instead it is shown
-%% below:
-%%
-%% %{
-%%      <<"distributionPerProvider">> := #{
-%%          od_provider:id() => #{
-%%              <<"chunksBarData">> := #{
-%%                  non_neg_integer() := non_neg_integer()   % see chunks_bar_data()
-%%              },
-%%              <<"blocksPercentage">> := number(),
-%%          }
-%%      }
-%% }
-
--define(CHUNKS_BAR_WIDTH, 320).
-
--ifdef(TEST).
--export([interpolate_chunks/2]).
--endif.
 
 
 %%%===================================================================
@@ -100,8 +64,23 @@ translate_value(#gri{aspect = download_url}, URL) ->
 translate_value(#gri{aspect = api_samples, scope = public}, ApiSamples) ->
     ApiSamples;
 
-translate_value(#gri{aspect = dir_size_stats}, TSBrowseResult) ->
-    ts_browse_result:to_json(TSBrowseResult).
+translate_value(#gri{aspect = dir_size_stats}, #time_series_layout_get_result{} = TSBrowseResult) ->
+    ts_browse_result:to_json(TSBrowseResult);
+translate_value(#gri{aspect = dir_size_stats}, #time_series_slice_get_result{slice = Slice}) ->
+    %% @TODO VFS-9589 - use ts_browse_result:to_json/1 after average metric aggregator is introduced
+    #{
+        <<"windows">> => tsc_structure:map(fun(_TimeSeriesName, _MetricName, Windows) ->
+            lists:map(fun({Timestamp, Value}) ->
+                #{
+                    <<"timestamp">> => Timestamp,
+                    <<"value">> => case Value of
+                        {_Count, Aggregated} -> Aggregated;
+                        Aggregated -> Aggregated
+                    end
+                }
+            end, Windows)
+        end, Slice)
+    }.
 
 
 -spec translate_resource(gri:gri(), Data :: term()) ->
@@ -109,8 +88,8 @@ translate_value(#gri{aspect = dir_size_stats}, TSBrowseResult) ->
 translate_resource(#gri{aspect = instance, scope = Scope}, FileDetails) ->
     translate_file_details(FileDetails, Scope);
 
-translate_resource(#gri{aspect = distribution, id = FileGuid, scope = private}, Distribution) ->
-    translate_distribution(FileGuid, Distribution);
+translate_resource(#gri{aspect = distribution, scope = private, id = Guid}, Distribution) ->
+    file_distribution_gather_result:to_json(gs, Distribution, Guid);
 
 translate_resource(#gri{aspect = acl, scope = private}, Acl) ->
     try
@@ -190,49 +169,6 @@ translate_dataset_summary(#file_eff_dataset_summary{
     }.
 
 
--spec translate_distribution(file_id:file_guid(), [file_distribution()]) ->
-    distribution_per_provider().
-translate_distribution(FileGuid, PossiblyIncompleteDistribution) ->
-    {ok, #file_attr{size = FileSize}} = lfm:stat(?ROOT_SESS_ID, ?FILE_REF(FileGuid)),
-
-    %% @TODO VFS-9204 ultimately, location for each file should be created in each provider
-    %% and the list of providers in the distribution should always be complete -
-    %% for now, add placeholders with zero blocks for missing providers
-    SpaceId = file_id:guid_to_space_id(FileGuid),
-    {ok, AllProviders} = space_logic:get_provider_ids(SpaceId),
-    IncludedProviders = [P || #{<<"providerId">> := P} <- PossiblyIncompleteDistribution],
-    MissingProviders = lists_utils:subtract(AllProviders, IncludedProviders),
-    ComplementedDistribution = lists:foldl(fun(ProviderId, Acc) ->
-        NoBlocksEntryForProvider = #{
-            <<"providerId">> => ProviderId,
-            <<"blocks">> => [],
-            <<"totalBlocksSize">> => 0
-        },
-        [NoBlocksEntryForProvider | Acc]
-    end, PossiblyIncompleteDistribution, MissingProviders),
-
-    DistributionMap = lists:foldl(fun(#{
-        <<"providerId">> := ProviderId,
-        <<"blocks">> := Blocks,
-        <<"totalBlocksSize">> := TotalBlocksSize
-    }, Acc) ->
-        Data = lists:foldl(fun({BarNum, Fill}, DataAcc) ->
-            DataAcc#{integer_to_binary(BarNum) => Fill}
-        end, #{}, interpolate_chunks(Blocks, FileSize)),
-
-        Acc#{ProviderId => #{
-            <<"chunksBarData">> => Data,
-            <<"blocksPercentage">> => case FileSize of
-                0 -> 0;
-                undefined -> 0;
-                _ -> TotalBlocksSize * 100.0 / FileSize
-            end
-        }}
-    end, #{}, ComplementedDistribution),
-
-    #{<<"distributionPerProvider">> => DistributionMap}.
-
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -271,7 +207,7 @@ translate_file_details(#file_details{
         ?SYMLINK_TYPE -> {<<"SYMLNK">>, SizeAttr}
     end,
     IsRootDir = case file_id:guid_to_share_id(FileGuid) of
-        undefined -> fslogic_uuid:is_space_dir_guid(FileGuid);
+        undefined -> fslogic_file_id:is_space_dir_guid(FileGuid);
         ShareId -> lists:member(ShareId, Shares)
     end,
     ParentId = case IsRootDir of
@@ -350,10 +286,7 @@ translate_archive_recall_details(#archive_recall_details{
         <<"cancelTime">> => utils:undefined_to_null(CancelTimestamp),
         <<"totalFileCount">> => TargetFileCount,
         <<"totalByteSize">> => TargetByteSize,
-        <<"lastError">> => case LastError of
-            undefined -> null;
-            _ -> json_utils:decode(LastError)
-        end
+        <<"lastError">> => utils:undefined_to_null(LastError)
     }.
 
 
@@ -363,103 +296,3 @@ translate_membership(?NONE_MEMBERSHIP) -> <<"none">>;
 translate_membership(?DIRECT_MEMBERSHIP) -> <<"direct">>;
 translate_membership(?ANCESTOR_MEMBERSHIP) -> <<"ancestor">>;
 translate_membership(?DIRECT_AND_ANCESTOR_MEMBERSHIP) -> <<"directAndAncestor">>.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Interpolates file chunks to ?CHUNKS_BAR_WIDTH values between 0 and 100,
-%% meaning how many percent of data in given block is held by a provider.
-%% If the FileSize is below ?CHUNKS_BAR_WIDTH, it is scaled to a bigger
-%% one before applying interpolation logic, together with the blocks.
-%% Output is a proplist, where Key means the number of the bar and Value
-%% means percentage of data in the segment held by the provider. Adjacent
-%% bars with the same percentage are merged into one, i.e.
-%%         instead of: [{0,33}, {1,33}, {2,33}, {3,33}, {4,50}, {5,0}, ...]
-%% the output will be: [{0,33}, {4,50}, {5,0}, ...]
-%% @end
-%%--------------------------------------------------------------------
--spec interpolate_chunks(Blocks :: [[non_neg_integer()]], file_size() | undefined) ->
-    chunks_bar_data().
-interpolate_chunks([], _) ->
-    [{0, 0}];
-interpolate_chunks(_, 0) ->
-    [{0, 0}];
-interpolate_chunks(Blocks, FileSize) when FileSize < ?CHUNKS_BAR_WIDTH ->
-    interpolate_chunks(
-        [[O * ?CHUNKS_BAR_WIDTH, S * ?CHUNKS_BAR_WIDTH] || [O, S] <- Blocks],
-        FileSize * ?CHUNKS_BAR_WIDTH
-    );
-interpolate_chunks(Blocks, FileSize) ->
-    interpolate_chunks(
-        lists:reverse(Blocks),
-        FileSize,
-        ?CHUNKS_BAR_WIDTH - 1,
-        0,
-        []
-    ).
-
-
-% Macros for more concise code, depending on variables in below functions.
--define(bar_start, floor(FileSize / ?CHUNKS_BAR_WIDTH * BarNum)).
--define(bar_end, floor(FileSize / ?CHUNKS_BAR_WIDTH * (BarNum + 1))).
--define(bar_size, (?bar_end - ?bar_start)).
-
-%% @private
--spec interpolate_chunks(
-    ReversedBlocks :: [[non_neg_integer()]], % File blocks passed to this fun should be in reverse order
-    file_size(),
-    BarNum :: non_neg_integer(),
-    BytesAcc :: non_neg_integer(),
-    chunks_bar_data()
-) ->
-    chunks_bar_data().
-interpolate_chunks([], _FileSize, -1, _BytesAcc, ResChunks) ->
-    ResChunks;
-interpolate_chunks([], _FileSize, _BarNum, 0, ResChunks) ->
-    merge_chunks({0, 0}, ResChunks);
-interpolate_chunks([], FileSize, BarNum, BytesAcc, ResChunks) ->
-    Fill = round(BytesAcc * 100 / ?bar_size),
-    interpolate_chunks(
-        [],
-        ?bar_start,
-        BarNum - 1,
-        0,
-        merge_chunks({BarNum, Fill}, ResChunks)
-    );
-interpolate_chunks([[Offset, Size] | PrevBlocks], FileSize, BarNum, BytesAcc, ResChunks) when ?bar_start < Offset ->
-    interpolate_chunks(PrevBlocks, FileSize, BarNum, BytesAcc + Size, ResChunks);
-interpolate_chunks([[Offset, Size] | PrevBlocks], FileSize, BarNum, BytesAcc, ResChunks) when Offset + Size > ?bar_start ->
-    SizeInBar = Offset + Size - ?bar_start,
-    Fill = round((BytesAcc + SizeInBar) * 100 / ?bar_size),
-    interpolate_chunks(
-        [[Offset, Size - SizeInBar] | PrevBlocks],
-        FileSize,
-        BarNum - 1,
-        0,
-        merge_chunks({BarNum, Fill}, ResChunks)
-    );
-interpolate_chunks([[Offset, Size] | PrevBlocks], FileSize, BarNum, BytesAcc, ResChunks) -> % Offset + Size =< ?bar_start
-    Fill = round(BytesAcc * 100 / ?bar_size),
-    interpolate_chunks(
-        [[Offset, Size] | PrevBlocks],
-        FileSize,
-        BarNum - 1,
-        0,
-        merge_chunks({BarNum, Fill}, ResChunks)
-    ).
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Merges adjacent chunks with the same fill value,
-%% otherwise prepends the new chunk.
-%% @end
-%%--------------------------------------------------------------------
--spec merge_chunks(chunks_bar_entry(), chunks_bar_data()) ->
-    chunks_bar_data().
-merge_chunks({BarNum, Fill}, [{_, Fill} | Tail]) ->
-    [{BarNum, Fill} | Tail];
-merge_chunks({BarNum, Fill}, Result) ->
-    [{BarNum, Fill} | Result].

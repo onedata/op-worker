@@ -105,12 +105,12 @@ increment_open(FileCtx) ->
 
 -spec get(file_meta:uuid()) -> {ok, doc()} | {error, term()}.
 get(FileUuid) ->
-    datastore_model:get(?CTX, fslogic_uuid:ensure_referenced_uuid(FileUuid)).
+    datastore_model:get(?CTX, fslogic_file_id:ensure_referenced_uuid(FileUuid)).
 
 
 -spec delete(file_meta:uuid()) -> ok | {error, term()}.
 delete(FileUuid) ->
-    datastore_model:delete(?CTX, fslogic_uuid:ensure_referenced_uuid(FileUuid)).
+    datastore_model:delete(?CTX, fslogic_file_id:ensure_referenced_uuid(FileUuid)).
 
 
 -spec get_or_default(file_ctx:ctx()) -> {ok, doc()} | {error, term()}.
@@ -136,7 +136,7 @@ get_or_default(FileCtx) ->
 
 -spec update(file_meta:uuid(), datastore_model:diff()) -> {ok, record()} | {error, term()}.
 update(FileUuid, Diff) ->
-    datastore_model:update(?CTX, fslogic_uuid:ensure_referenced_uuid(FileUuid), Diff).
+    datastore_model:update(?CTX, fslogic_file_id:ensure_referenced_uuid(FileUuid), Diff).
 
 
 %%%===================================================================
