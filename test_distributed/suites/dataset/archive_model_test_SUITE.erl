@@ -67,6 +67,15 @@
 ]).
 
 groups() -> [
+    {sequential_tests, [sequential], [
+        % NOTE: this test should be run first, as any failure in space cleanup will fail it
+        archive_dataset_attached_to_space_dir, 
+        time_warp_test,
+        create_archive_privileges_test,
+        view_archive_privileges_test,
+        remove_archive_privileges_test,
+        archive_dataset_many_times
+    ]},
     {time_mock_parallel_tests, [parallel], [
         % these tests has been moved to separate group so that
         % mocking time does not interfere with other tests
@@ -85,6 +94,7 @@ groups() -> [
     {iterate_parallel_tests, [parallel], [
         % these tests has been moved to separate group so that creation of 
         % so many archives does not block archive traverse pool for other tests
+        % (all archives for this test group are created in init_per_group)
         iterate_over_100_archives_using_offset_and_limit_1,
         iterate_over_100_archives_using_offset_and_limit_10,
         iterate_over_100_archives_using_offset_and_limit_100,
@@ -95,23 +105,15 @@ groups() -> [
         iterate_over_100_archives_using_start_index_and_limit_100,
         iterate_over_100_archives_using_start_index_and_limit_1000,
         iterate_over_100_archives_using_start_index_and_limit_10000
-    ]},
-    {sequential_tests, [sequential], [
-        archive_dataset_attached_to_space_dir,
-        time_warp_test,
-        create_archive_privileges_test,
-        view_archive_privileges_test,
-        remove_archive_privileges_test,
-        archive_dataset_many_times
     ]}
 ].
 
 
 all() -> [
+    {group, sequential_tests},
     {group, time_mock_parallel_tests},
     {group, parallel_tests},
-    {group, iterate_parallel_tests},
-    {group, sequential_tests}
+    {group, iterate_parallel_tests}
 ].
 
 -define(ATTEMPTS, 300).

@@ -207,7 +207,7 @@ rm_files(Worker, SessId, GuidsAndPaths, BatchSize) ->
                         rm_recursive(Worker, SessId, G, BatchSize, true);
                     false ->
                         lfm_proxy:unlink(Worker, SessId, ?FILE_REF(G));
-                    {error, not_found} -> ok;
+                    {error, enoent} -> ok;
                     Error -> Error
                 end
         end

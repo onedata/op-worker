@@ -48,7 +48,7 @@
 -type opts() :: #{
     offset => offset(),
     start_index => index(),
-    limit => limit()
+    limit := limit()
 }.
 
 %%%===================================================================
