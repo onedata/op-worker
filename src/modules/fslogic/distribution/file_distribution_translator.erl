@@ -6,10 +6,10 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Module responsible for performing operations on file distribution gather result.
+%%% Module responsible for performing translations of file distribution related objects.
 %%% @end
 %%%--------------------------------------------------------------------
--module(file_distribution_gather_result).
+-module(file_distribution_translator).
 -author("Bartosz Walkowicz").
 
 -include("modules/dir_stats_collector/dir_size_stats.hrl").
@@ -20,7 +20,10 @@
 -include_lib("cluster_worker/include/time_series/browsing.hrl").
 
 %% API
--export([to_json/3]).
+-export([
+    gather_result_to_json/3,
+    storage_locations_to_json/1
+]).
 
 
 -type block() :: [integer()]. % 2 element list in format [Offset :: non_neg_integer(), Size :: integer()].
@@ -42,9 +45,9 @@
 %%%===================================================================
 
 
--spec to_json(gs | rest, file_distribution:get_result(), file_id:file_guid()) -> 
+-spec gather_result_to_json(gs | rest, file_distribution:get_result(), file_id:file_guid()) -> 
     json_utils:json_map().
-to_json(_, #file_distribution_gather_result{distribution = #dir_distribution_gather_result{
+gather_result_to_json(_, #file_distribution_gather_result{distribution = #dir_distribution_gather_result{
     distribution_per_provider = DistributionPerProvider
 }}, Guid) ->
     #{
@@ -68,7 +71,7 @@ to_json(_, #file_distribution_gather_result{distribution = #dir_distribution_gat
         end, DistributionPerProvider)
     };
 
-to_json(_, #file_distribution_gather_result{distribution = #symlink_distribution_get_result{
+gather_result_to_json(_, #file_distribution_gather_result{distribution = #symlink_distribution_get_result{
     storages_per_provider = StoragesPerProvider
 }}, _Guid) ->
     #{
@@ -83,7 +86,7 @@ to_json(_, #file_distribution_gather_result{distribution = #symlink_distribution
                } end, StoragesPerProvider)
     };
 
-to_json(gs, #file_distribution_gather_result{distribution = #reg_distribution_gather_result{
+gather_result_to_json(gs, #file_distribution_gather_result{distribution = #reg_distribution_gather_result{
     distribution_per_provider = FileBlocksPerProvider
 }}, Guid) ->
     DistributionMap = maps:map(fun
@@ -120,7 +123,7 @@ to_json(gs, #file_distribution_gather_result{distribution = #reg_distribution_ga
         <<"distributionPerProvider">> => DistributionMap
     };
 
-to_json(rest, #file_distribution_gather_result{distribution = #reg_distribution_gather_result{
+gather_result_to_json(rest, #file_distribution_gather_result{distribution = #reg_distribution_gather_result{
     distribution_per_provider = FileBlocksPerProvider
 }}, Guid) ->
     #{
@@ -145,6 +148,19 @@ to_json(rest, #file_distribution_gather_result{distribution = #reg_distribution_
                     <<"distributionPerStorage">> => PerStorage
                 }
             end, FileBlocksPerProvider)
+    }.
+
+
+-spec storage_locations_to_json(file_distribution:storage_locations()) -> json_utils:json_term().
+storage_locations_to_json(StorageLocations) -> 
+    #{
+        <<"locationsPerProvider">> => maps:map(fun(_ProviderId, LocationsPerStorage) ->
+            #{
+                <<"locationsPerStorage">> => maps:map(fun(_StorageId, Value) ->
+                    utils:undefined_to_null(Value) 
+                end, LocationsPerStorage)
+            }
+        end, StorageLocations)
     }.
 
 %%%===================================================================

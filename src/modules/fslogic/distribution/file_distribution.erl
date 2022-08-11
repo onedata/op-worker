@@ -22,7 +22,7 @@
 %% API
 -export([
     gather/2,
-    get_file_storage_locations/2]).
+    get_storage_locations/2]).
 
 % `undefined` physical size means that file was not yet created on this storage.
 -type dir_physical_size() :: undefined | non_neg_integer().
@@ -39,7 +39,9 @@
 -type get_result() :: #file_distribution_gather_result{}.
 
 -type storage_locations() :: #{
-    storage:id() => file_location:storage_file_id()
+    provider:id() => #{
+        storage:id() => file_location:storage_file_id()
+    }
 }.
 
 -export_type([
@@ -76,9 +78,9 @@ gather(UserCtx, FileCtx0) ->
     end}}.
 
 
--spec get_file_storage_locations(user_ctx:ctx(), file_ctx:ctx()) -> 
+-spec get_storage_locations(user_ctx:ctx(), file_ctx:ctx()) -> 
     {ok, storage_locations()} | errors:error().
-get_file_storage_locations(UserCtx, FileCtx0) ->
+get_storage_locations(UserCtx, FileCtx0) ->
     FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
     FileCtx2 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx1,
@@ -187,14 +189,14 @@ get_reg_storage_locations(FileCtx) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     
     {ok, StoragesByProvider} = space_logic:get_storages_by_provider(SpaceId),
-    maps:fold(fun(ProviderId, SupportingStorages, PartialStorageLocations) ->
+    maps:map(fun(ProviderId, SupportingStorages) ->
         LocId = file_location:id(FileUuid, ProviderId),
-        maps:merge(maps:map(fun(_StorageId, _) ->
+        maps:map(fun(_StorageId, _) ->
             case fslogic_location_cache:get_location(LocId, FileUuid, false) of
                 {ok, #document{value = #file_location{file_id = StorageFileId}}} ->
                     StorageFileId;
                 {error, not_found} ->
                     undefined
             end
-        end, SupportingStorages), PartialStorageLocations)
-    end, #{}, StoragesByProvider).
+        end, SupportingStorages)
+    end, StoragesByProvider).

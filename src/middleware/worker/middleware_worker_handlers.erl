@@ -185,7 +185,7 @@ execute(UserCtx, FileCtx, #historical_dir_size_stats_gather_request{request = Re
     {ok, dir_size_stats_req:gather_historical(UserCtx, FileCtx, Request)};
 
 execute(UserCtx, FileCtx, #file_storage_locations_get_request{}) ->
-    file_distribution:get_file_storage_locations(UserCtx, FileCtx);
+    file_distribution:get_storage_locations(UserCtx, FileCtx);
 
 
 %% QoS

@@ -428,7 +428,7 @@ get_user_root_dir_children_test(_Config) ->
         )}
     end,
     GetAllSpacesInfoFun = fun(Node) ->
-        [GetSpaceInfoFun(space_krk, Node), GetSpaceInfoFun(space_krk_par, Node)]
+        [GetSpaceInfoFun(space_krk, Node), GetSpaceInfoFun(space_krk_par, Node), GetSpaceInfoFun(space_s3, Node)]
     end,
 
     ?assert(onenv_api_test_runner:run_tests([

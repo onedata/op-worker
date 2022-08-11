@@ -1251,14 +1251,14 @@ gather_historical_dir_size_stats_test(Config) ->
         available_in_share_mode = false,
         available_in_open_handle_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
-            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FilePath = <<TestCaseRootDirPath/binary, "/dir1">>,
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(opt_file_metadata:gather_historical_dir_size_stats(
                 W, SessId, FileKey, #time_series_layout_get_request{}))
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
-            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
+            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir1">>}
         end
     }, Config).
 

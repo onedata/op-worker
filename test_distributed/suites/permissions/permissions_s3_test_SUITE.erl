@@ -118,6 +118,8 @@ all() -> [
     get_file_attr_test,
     get_file_details_test,
     get_file_distribution_test,
+    gather_historical_dir_size_stats_test,
+    get_file_storage_locations_test,
 
     set_perms_test,
     check_read_perms_test,

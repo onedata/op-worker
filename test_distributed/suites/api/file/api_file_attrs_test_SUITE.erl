@@ -86,8 +86,8 @@ groups() -> [
 ].
 
 all() -> [
-    {group, parallel_tests},
-    {group, sequential_tests}
+    {group, parallel_tests}
+%%    {group, sequential_tests}
 ].
 
 
@@ -1068,12 +1068,12 @@ get_distribution_test_base(FileType, FileGuid, ShareId, ExpDistribution, Config)
 get_distribution_test_base(FileType, FileGuid, ShareId, ExpDistribution, Config, ClientSpec) ->
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
-    ExpRestDistribution = opw_test_rpc:call(krakow, file_distribution_gather_result, to_json, [rest, ExpDistribution, FileGuid]),
+    ExpRestDistribution = opw_test_rpc:call(krakow, file_distribution_translator, gather_result_to_json, [rest, ExpDistribution, FileGuid]),
     ValidateRestSuccessfulCallFun = fun(_TestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
         ?assertEqual({?HTTP_200_OK, ExpRestDistribution}, {RespCode, RespBody})
     end,
     
-    ExpGsDistribution = opw_test_rpc:call(krakow, file_distribution_gather_result, to_json, [gs, ExpDistribution, FileGuid]),
+    ExpGsDistribution = opw_test_rpc:call(krakow, file_distribution_translator, gather_result_to_json, [gs, ExpDistribution, FileGuid]),
     CreateValidateGsSuccessfulCallFun = fun(Type) ->
         ExpGsResponse = ExpGsDistribution#{
             <<"gri">> => gri:serialize(#gri{
@@ -1344,8 +1344,18 @@ get_reg_file_storage_locations_test(Config, StorageType) ->
             filename:join([<<"/">>, SpaceId, A, B, C, FileUuid])
     end,
     ExpResult1 = #{
-        P1StorageId => FileStoragePath,
-        P2StorageId => null
+        <<"locationsPerProvider">> => #{
+            P1Id => #{
+                <<"locationsPerStorage">> => #{
+                    P1StorageId => FileStoragePath
+                }           
+            },
+            P2Id => #{
+                <<"locationsPerStorage">> => #{
+                    P2StorageId => null
+                }
+            }
+        }
     },
     assert_file_location_created(P2Node, FileUuid, P1Id),
     get_storage_locations_test_base(FileGuid, ShareId, ExpResult1, Config),
@@ -1355,8 +1365,18 @@ get_reg_file_storage_locations_test(Config, StorageType) ->
     lfm_test_utils:read_file(P2Node, UserSessIdP2, FileGuid, 20),
     assert_file_location_created(P1Node, FileUuid, P2Id),
     ExpResult2 = #{
-        P1StorageId => FileStoragePath,
-        P2StorageId => FileStoragePath
+        <<"locationsPerProvider">> => #{
+            P1Id => #{
+                <<"locationsPerStorage">> => #{
+                    P1StorageId => FileStoragePath
+                }
+            },
+            P2Id => #{
+                <<"locationsPerStorage">> => #{
+                    P2StorageId => FileStoragePath
+                }
+            }
+        }
     },
     get_storage_locations_test_base(FileGuid, ShareId, ExpResult2, Config).
 
@@ -1369,12 +1389,11 @@ get_storage_locations_test_base(FileGuid, ShareId, ExpResult, Config) ->
     end,
     
     ValidateGsSuccessfulCallFun = fun(_TestCtx, Result) ->
-        ExpGsResponse = #{
+        ExpGsResponse = ExpResult#{
             <<"gri">> => gri:serialize(#gri{
                 type = op_file, id = FileGuid, aspect = storage_locations, scope = private
             }),
-            <<"revision">> => 1,
-            <<"locationsPerStorage">> => ExpResult
+            <<"revision">> => 1
         },
         ?assertEqual({ok, ExpGsResponse}, Result)
     end,
@@ -1454,10 +1473,12 @@ init_per_suite(Config) ->
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}],
         posthook = fun(NewConfig) ->
             User3Id = oct_background:get_user_id(user3),
-            SpaceId = oct_background:get_space_id(space_krk_par),
-            ozw_test_rpc:space_set_user_privileges(SpaceId, User3Id, [
-                ?SPACE_MANAGE_SHARES | privileges:space_member()
-            ]),
+            lists:foreach(fun(SpacePlaceholder) ->
+                SpaceId = oct_background:get_space_id(SpacePlaceholder),
+                ozw_test_rpc:space_set_user_privileges(SpaceId, User3Id, [
+                    ?SPACE_MANAGE_SHARES | privileges:space_member()
+                ])
+            end, [space_krk_par, space_s3]),
             NewConfig
         end
     }).
