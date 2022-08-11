@@ -703,7 +703,7 @@ resolve_conflict_local_rev_greater(
     end,
     case {Result, is_modifiable_fields_conflict(LocalValue, RemoteValue)} of
         {ignore, true} ->
-            LocalValue#archive{modifiable_fields = resolve_modifiable_fields_conflict(LocalValue, RemoteValue)};
+            {true, LocalValue#archive{modifiable_fields = resolve_modifiable_fields_conflict(LocalValue, RemoteValue)}};
         {{true, UpdatedValue}, true} ->
             {true, UpdatedValue#archive{modifiable_fields = resolve_modifiable_fields_conflict(LocalValue, RemoteValue)}};
         _ ->
