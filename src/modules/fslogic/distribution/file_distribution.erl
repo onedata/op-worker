@@ -39,7 +39,7 @@
 -type get_result() :: #file_distribution_gather_result{}.
 
 -type storage_locations() :: #{
-    provider:id() => #{
+    od_provider:id() => #{
         storage:id() => file_location:storage_file_id()
     }
 }.
