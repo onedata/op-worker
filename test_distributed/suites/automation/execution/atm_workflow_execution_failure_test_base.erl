@@ -844,10 +844,10 @@ job_failure_expect_task_execution_ended(
 ) ->
     [automation:item()].
 get_audit_log_contents(AtmTaskExecutionId, AtmMockCallCtx) ->
-    #{<<"logs">> := Logs, <<"isLast">> := true} = atm_workflow_execution_test_runner:browse_store(
+    #{<<"logEntries">> := Logs, <<"isLast">> := true} = atm_workflow_execution_test_runner:browse_store(
         ?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID, AtmTaskExecutionId, AtmMockCallCtx
     ),
-    lists:map(fun(#{<<"value">> := #{<<"content">> := LogContent}}) -> LogContent end, Logs).
+    lists:map(fun(#{<<"content">> := LogContent}) -> LogContent end, Logs).
 
 
 %% @private
