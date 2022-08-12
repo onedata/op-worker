@@ -230,4 +230,4 @@
     term(),
     list()
 ) ->
-    ok | ?END_EXECUTION.
+    ?END_EXECUTION.

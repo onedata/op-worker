@@ -90,6 +90,9 @@ initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
     ok | no_return().
 abort(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Reason) ->
     case atm_task_execution_status:handle_aborting(AtmTaskExecutionId, Reason) of
+        {ok, _} when Reason =:= pause ->
+            % ongoing jobs shouldn't be abruptly interrupted when execution is paused
+            ok;
         {ok, #document{value = #atm_task_execution{executor = AtmTaskExecutor}}} ->
             atm_task_executor:abort(AtmWorkflowExecutionCtx, AtmTaskExecutor);
         {error, already_ended} ->
@@ -400,10 +403,10 @@ handle_job_batch_processing_error(
         {ok, _} ->
             ok;
         {error, not_aborting} ->
-            % TODO if not happening when aborting - treat it as any other error
+            %% TODO if not happening when aborting - treat it as any other error
             handle_job_batch_processing_error(
                 AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemBatch,
-                {error, interrupted}  %% TODO error
+                {error, interrupted}
             )
     end;
 
