@@ -627,22 +627,21 @@ resolve_conflict(_Ctx, #document{value = RemoteValue} = RemoteDoc, #document{val
     
     #document{revs = [LocalRev | _], mutators = [RemoteDocMutator], deleted = LocalDeleted} = LocalDoc,
     #document{revs = [RemoteRev | _], deleted = RemoteDeleted} = RemoteDoc,
-    IsDeleted = LocalDeleted or RemoteDeleted,
     
     case datastore_rev:is_greater(RemoteRev, LocalRev) of
         true ->
-            case {IsDeleted, resolve_conflict_remote_rev_greater(LocalValue, RemoteValue)} of
+            case {LocalDeleted, resolve_conflict_remote_rev_greater(LocalValue, RemoteValue)} of
                 {true, _} ->
-                    {false, RemoteDoc#document{deleted = true}};
+                    {true, RemoteDoc#document{deleted = true}};
                 {false, {true, NewRecord}} ->
                     {true, RemoteDoc#document{value = NewRecord}};
                 {false, remote} ->
                     {false, RemoteDoc}
             end;
         false ->
-            case {IsDeleted, resolve_conflict_local_rev_greater(LocalValue, RemoteValue, RemoteDocMutator)} of
+            case {RemoteDeleted, resolve_conflict_local_rev_greater(LocalValue, RemoteValue, RemoteDocMutator)} of
                 {true, _} ->
-                    {false, LocalDoc#document{deleted = true}};
+                    {true, LocalDoc#document{deleted = true}};
                 {false, {true, NewRecord}} ->
                     {true, LocalDoc#document{value = NewRecord}};
                 {false, ignore} ->
