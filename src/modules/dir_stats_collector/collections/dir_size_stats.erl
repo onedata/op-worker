@@ -227,7 +227,7 @@ init_child(Guid) ->
                 ?DIRECTORY_TYPE ->
                     EmptyCurrentStats#{?DIR_COUNT => 1};
                 _ ->
-                    {FileSizes, _} = file_ctx:get_file_size_summary(file_ctx:new_by_guid(Guid)),
+                    {FileSizes, _} = file_ctx:prepare_file_size_summary(file_ctx:new_by_guid(Guid)),
                     lists:foldl(fun
                         ({total, Size}, Acc) -> Acc#{?TOTAL_SIZE => Size};
                         ({StorageId, Size}, Acc) -> Acc#{?SIZE_ON_STORAGE(StorageId) => Size}

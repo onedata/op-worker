@@ -382,13 +382,13 @@ gen_random_time_series_measurements() ->
 ) ->
     ok.
 assert_exp_target_store_content(audit_log, SrcListStoreContent, #{
-    <<"logs">> := Logs,
+    <<"logEntries">> := Logs,
     <<"isLast">> := true
 }) ->
     LogContents = lists:sort(lists:map(
         fun(#{<<"content">> := LogContent}) -> LogContent end,
-        extract_value_from_infinite_log_entry(Logs))
-    ),
+        Logs
+    )),
     ?assertEqual(lists:sort(SrcListStoreContent), LogContents);
 
 assert_exp_target_store_content(list, SrcListStoreContent, #{

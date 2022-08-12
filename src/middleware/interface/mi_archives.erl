@@ -147,8 +147,8 @@ get_recall_progress(SessionId, FileGuid) ->
     }).
 
 
--spec browse_recall_log(session:id(), file_id:file_guid(), json_infinite_log_model:listing_opts()) ->
-    json_infinite_log_model:browse_result() | no_return().
+-spec browse_recall_log(session:id(), file_id:file_guid(), audit_log_browse_opts:opts()) ->
+    audit_log:browse_result() | no_return().
 browse_recall_log(SessionId, FileGuid, BrowseOpts) ->
     middleware_worker:check_exec(SessionId, FileGuid, #archive_recall_log_browse_request{
         id = file_id:guid_to_uuid(FileGuid),

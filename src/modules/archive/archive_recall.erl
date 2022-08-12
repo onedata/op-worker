@@ -111,8 +111,8 @@ get_details(Id) ->
     archive_recall_details:get(Id).
 
 
--spec browse_log(id(), json_infinite_log_model:listing_opts()) -> 
-    {ok, json_infinite_log_model:browse_result()} | {error, term()}.
+-spec browse_log(id(), audit_log_browse_opts:opts()) ->
+    {ok, audit_log:browse_result()} | {error, term()}.
 browse_log(Id, Options) ->
     archive_recall_progress:browse_error_log(Id, Options).
 
