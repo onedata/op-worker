@@ -64,9 +64,9 @@
     handle_lane_enqueued/2,
     handle_lane_aborting/3,
     handle_lane_task_status_change/2,
+    handle_ended/1,
     handle_manual_lane_repeat/2
 ]).
--export([handle_ended/1]).
 
 
 % Function taking as argument entire atm_workflow_execution record, modifying lane run
@@ -259,8 +259,11 @@ status_to_phase(?SCHEDULED_STATUS) -> ?WAITING_PHASE;
 status_to_phase(?ACTIVE_STATUS) -> ?ONGOING_PHASE;
 status_to_phase(?ABORTING_STATUS) -> ?ONGOING_PHASE;
 status_to_phase(?FINISHED_STATUS) -> ?ENDED_PHASE;
+status_to_phase(?CRUSHED_STATUS) -> ?ENDED_PHASE;
 status_to_phase(?CANCELLED_STATUS) -> ?ENDED_PHASE;
-status_to_phase(?FAILED_STATUS) -> ?ENDED_PHASE.
+status_to_phase(?FAILED_STATUS) -> ?ENDED_PHASE;
+status_to_phase(?INTERRUPTED_STATUS) -> ?ENDED_PHASE;
+status_to_phase(?PAUSED_STATUS) -> ?ENDED_PHASE.
 
 
 %% @private

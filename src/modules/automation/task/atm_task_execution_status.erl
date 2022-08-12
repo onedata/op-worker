@@ -39,6 +39,7 @@
 is_transition_allowed(?PENDING_STATUS, ?ACTIVE_STATUS) -> true;
 is_transition_allowed(?PENDING_STATUS, ?SKIPPED_STATUS) -> true;
 is_transition_allowed(?ACTIVE_STATUS, ?FINISHED_STATUS) -> true;
+is_transition_allowed(?ACTIVE_STATUS, ?FAILED_STATUS) -> true;
 is_transition_allowed(?ACTIVE_STATUS, ?ABORTING_STATUS) -> true;
 is_transition_allowed(?ABORTING_STATUS, ?CANCELLED_STATUS) -> true;
 is_transition_allowed(?ABORTING_STATUS, ?FAILED_STATUS) -> true;
@@ -58,7 +59,7 @@ is_ended(_) -> false.
 
 
 -spec handle_items_in_processing(atm_task_execution:id(), pos_integer()) ->
-    {ok, atm_task_execution:doc()} | {error, aborting} | {error, already_ended}.
+    {ok, atm_task_execution:doc()} | {error, task_aborting} | {error, task_ended}.
 handle_items_in_processing(AtmTaskExecutionId, ItemsNum) ->
     apply_diff(AtmTaskExecutionId, fun
         (AtmTaskExecution = #atm_task_execution{
@@ -79,10 +80,10 @@ handle_items_in_processing(AtmTaskExecutionId, ItemsNum) ->
             }};
 
         (#atm_task_execution{status = ?ABORTING_STATUS}) ->
-            {error, aborting};
+            {error, task_aborting};
 
         (_) ->
-            {error, already_ended}
+            {error, task_ended}
     end).
 
 
@@ -101,7 +102,7 @@ handle_item_processed(AtmTaskExecutionId) ->
 
 
 -spec handle_items_dequeued(atm_task_execution:id(), pos_integer()) ->
-    {ok, atm_task_execution:doc()} | {error, not_aborting}.
+    {ok, atm_task_execution:doc()} | {error, task_not_aborting}.
 handle_items_dequeued(AtmTaskExecutionId, ItemsNum) ->
     atm_task_execution:update(AtmTaskExecutionId, fun
         (AtmTaskExecution = #atm_task_execution{
@@ -113,7 +114,7 @@ handle_items_dequeued(AtmTaskExecutionId, ItemsNum) ->
             }};
 
         (_) ->
-            {error, not_aborting}
+            {error, task_not_aborting}
     end).
 
 
@@ -137,7 +138,7 @@ handle_items_failed(AtmTaskExecutionId, ItemsNum) ->
     atm_task_execution:id(),
     atm_task_execution:aborting_reason()
 ) ->
-    {ok, atm_task_execution:doc()} | {error, already_ended}.
+    {ok, atm_task_execution:doc()} | {error, task_ended}.
 handle_aborting(AtmTaskExecutionId, Reason) ->
     apply_diff(AtmTaskExecutionId, fun
         (AtmTaskExecution = #atm_task_execution{status = ?PENDING_STATUS}) ->
@@ -161,12 +162,12 @@ handle_aborting(AtmTaskExecutionId, Reason) ->
             }};
 
         (_) ->
-            {error, already_ended}
+            {error, task_ended}
     end).
 
 
 -spec handle_ended(atm_task_execution:id()) ->
-    {ok, atm_task_execution:doc()} | {error, already_ended}.
+    {ok, atm_task_execution:doc()} | {error, task_ended}.
 handle_ended(AtmTaskExecutionId) ->
     apply_diff(AtmTaskExecutionId, fun
         (AtmTaskExecution = #atm_task_execution{status = ?PENDING_STATUS}) ->
@@ -204,7 +205,7 @@ handle_ended(AtmTaskExecutionId) ->
             }};
 
         (_) ->
-            {error, already_ended}
+            {error, task_ended}
     end).
 
 

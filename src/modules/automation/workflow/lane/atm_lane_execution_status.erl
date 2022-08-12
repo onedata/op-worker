@@ -109,11 +109,14 @@ status_to_phase(?ENQUEUED_STATUS) -> ?WAITING_PHASE;
 status_to_phase(?ACTIVE_STATUS) -> ?ONGOING_PHASE;
 status_to_phase(?ABORTING_STATUS) -> ?ONGOING_PHASE;
 status_to_phase(?FINISHED_STATUS) -> ?ENDED_PHASE;
+status_to_phase(?CRUSHED_STATUS) -> ?ENDED_PHASE;
 status_to_phase(?CANCELLED_STATUS) -> ?ENDED_PHASE;
 status_to_phase(?FAILED_STATUS) -> ?ENDED_PHASE;
-status_to_phase(?INTERRUPTED_STATUS) -> ?ENDED_PHASE.
+status_to_phase(?INTERRUPTED_STATUS) -> ?ENDED_PHASE;
+status_to_phase(?PAUSED_STATUS) -> ?ENDED_PHASE.
 
 
+%% TODO check overall status of workflow - in case of crush no repeat can be made?
 -spec can_manual_lane_run_repeat_be_scheduled(
     atm_workflow_execution:repeat_type(),
     atm_lane_execution:run()
@@ -129,7 +132,9 @@ can_manual_lane_run_repeat_be_scheduled(retry, #atm_lane_execution_run{
 can_manual_lane_run_repeat_be_scheduled(rerun, #atm_lane_execution_run{status = Status}) when
     Status =:= ?FINISHED_STATUS;
     Status =:= ?CANCELLED_STATUS;
-    Status =:= ?FAILED_STATUS
+    Status =:= ?FAILED_STATUS;
+    Status =:= ?INTERRUPTED_STATUS;  %% TODO can interrupted lane prepared in advance be reruned?
+    Status =:= ?PAUSED_STATUS        %% TODO if any run is reruned/retried when the current one is paused should cause it to transit into cancelled ?
 ->
     true;
 can_manual_lane_run_repeat_be_scheduled(_, _) ->
@@ -347,7 +352,7 @@ end_currently_executed_lane_run(AtmWorkflowExecution) ->
         ->
             % Provider must have been restarted as otherwise it is not possible to
             % transition from waiting phase to ended phase directly
-            {ok, Run#atm_lane_execution_run{status = ?FAILED_STATUS}};
+            {ok, Run#atm_lane_execution_run{status = ?INTERRUPTED_STATUS}};
 
         (#atm_lane_execution_run{status = ?ACTIVE_STATUS} = Run) ->
             AtmParallelBoxExecutionStatuses = atm_parallel_box_execution:gather_statuses(
@@ -361,8 +366,11 @@ end_currently_executed_lane_run(AtmWorkflowExecution) ->
 
         (#atm_lane_execution_run{status = ?ABORTING_STATUS} = Run) ->
             EndedStatus = case Run#atm_lane_execution_run.aborting_reason of
+                crush -> ?CRUSHED_STATUS;
                 cancel -> ?CANCELLED_STATUS;
-                failure -> ?FAILED_STATUS
+                failure -> ?FAILED_STATUS;
+                interrupt -> ?INTERRUPTED_STATUS;
+                pause -> ?PAUSED_STATUS
             end,
             {ok, Run#atm_lane_execution_run{status = EndedStatus}};
 

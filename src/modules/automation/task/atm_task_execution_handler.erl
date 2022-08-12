@@ -95,7 +95,7 @@ abort(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Reason) ->
             ok;
         {ok, #document{value = #atm_task_execution{executor = AtmTaskExecutor}}} ->
             atm_task_executor:abort(AtmWorkflowExecutionCtx, AtmTaskExecutor);
-        {error, already_ended} ->
+        {error, task_ended} ->
             ok
     end.
 
@@ -126,7 +126,7 @@ set_run_num(RunNum, AtmTaskExecutionId) ->
     atm_task_executor:job_batch_id(),
     [automation:item()]
 ) ->
-    ok | error.
+    ok | {error, running_item_failed} | {error, task_aborting} | {error, task_ended}.
 run_job_batch(
     AtmWorkflowExecutionCtx,
     AtmTaskExecutionId,
@@ -134,24 +134,26 @@ run_job_batch(
     ItemBatch
 ) ->
     ItemsNum = length(ItemBatch),
+    case atm_task_execution_status:handle_items_in_processing(AtmTaskExecutionId, ItemsNum) of
+        {ok, #document{value = AtmTaskExecution}} ->
+            AtmRunJobBatchCtx = atm_run_job_batch_ctx:build(AtmWorkflowExecutionCtx, AtmTaskExecution),
 
-    {ok, #document{
-        value = AtmTaskExecution = #atm_task_execution{
-            executor = AtmTaskExecutor
-        }
-    }} = atm_task_execution_status:handle_items_in_processing(AtmTaskExecutionId, ItemsNum),
+            try
+                atm_task_executor:run(
+                    AtmRunJobBatchCtx,
+                    build_lambda_input(AtmJobBatchId, AtmRunJobBatchCtx, ItemBatch, AtmTaskExecution),
+                    AtmTaskExecution#atm_task_execution.executor
+                )
+            catch Type:Reason:Stacktrace ->
+                handle_job_batch_processing_error(
+                    AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemBatch,
+                    ?atm_examine_error(Type, Reason, Stacktrace)
+                ),
+                {error, running_item_failed}
+            end;
 
-    AtmRunJobBatchCtx = atm_run_job_batch_ctx:build(AtmWorkflowExecutionCtx, AtmTaskExecution),
-    LambdaInput = build_lambda_input(AtmJobBatchId, AtmRunJobBatchCtx, ItemBatch, AtmTaskExecution),
-
-    try
-        atm_task_executor:run(AtmRunJobBatchCtx, LambdaInput, AtmTaskExecutor)
-    catch Type:Reason:Stacktrace ->
-        handle_job_batch_processing_error(
-            AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemBatch,
-            ?atm_examine_error(Type, Reason, Stacktrace)
-        ),
-        error
+        {error, _} = Error ->
+            Error
     end.
 
 
@@ -222,7 +224,7 @@ handle_ended(AtmTaskExecutionId) ->
     case atm_task_execution_status:handle_ended(AtmTaskExecutionId) of
         {ok, #document{value = AtmTaskExecution}} ->
             freeze_stores(AtmTaskExecution);
-        {error, already_ended} ->
+        {error, task_ended} ->
             ok
     end.
 
@@ -397,16 +399,16 @@ handle_job_batch_processing_error(
     AtmWorkflowExecutionCtx,
     AtmTaskExecutionId,
     ItemBatch,
-    {error, dequeued}
+    {error, dequeued}  %% TODO error
 ) ->
     case atm_task_execution_status:handle_items_dequeued(AtmTaskExecutionId, length(ItemBatch)) of
         {ok, _} ->
             ok;
-        {error, not_aborting} ->
+        {error, task_not_aborting} ->
             %% TODO if not happening when aborting - treat it as any other error
             handle_job_batch_processing_error(
                 AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemBatch,
-                {error, interrupted}
+                {error, interrupted}  %% TODO error
             )
     end;
 
@@ -510,7 +512,7 @@ handle_uncorrelated_results_processing_error(
                 {AtmLaneIndex, RunNum}, failure, AtmWorkflowExecutionCtx
             );
 
-        {error, already_ended} ->
+        {error, task_ended} ->
             ok
     end.
 
