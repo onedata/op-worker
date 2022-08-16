@@ -19,6 +19,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/file_attr.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -35,7 +36,7 @@
     traverse_cancel_test/1, external_traverse_cancel_test/1, traverse_external_cancel_test/1,
     queued_traverse_cancel_test/1, queued_traverse_external_cancel_test/1, traverse_restart_test/1,
     multiple_traverse_test/1, external_multiple_traverse_test/1, mixed_multiple_traverse_test/1,
-    db_sync_basic_opts_with_errors_test/1
+    db_sync_basic_opts_with_errors_test/1, resynchronization_test/1
 ]).
 
 %% Pool callbacks
@@ -43,7 +44,7 @@
     on_cancel_init/2, task_canceled/2, task_finished/2]).
 
 -define(TEST_CASES, [
-    db_sync_basic_opts_test, db_sync_many_ops_test, db_sync_distributed_modification_test,
+    resynchronization_test, db_sync_basic_opts_test, db_sync_many_ops_test, db_sync_distributed_modification_test,
     multi_space_test, rtransfer_test, rtransfer_multisource_test, rtransfer_blocking_test,
     traverse_test, external_traverse_test, traverse_cancel_test, external_traverse_cancel_test,
     traverse_external_cancel_test, queued_traverse_cancel_test, queued_traverse_external_cancel_test,
@@ -577,6 +578,49 @@ multiple_traverse_test_base(Config, StartTaskWorkers, DirName) ->
         end
     end, Workers).
 
+
+resynchronization_test(Config) ->
+    [Worker1, Worker2, Worker3] = ?config(op_worker_nodes, Config),
+    SessId1 = lfm_test_utils:get_user1_session_id(Config, Worker1),
+    SessId2 = lfm_test_utils:get_user1_session_id(Config, Worker2),
+    SessId3 = lfm_test_utils:get_user1_session_id(Config, Worker3),
+    SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
+    SpaceGuid = lfm_test_utils:get_user1_first_space_guid(Config),
+    Structure = [{3, 3}, {3, 3}],
+
+    test_utils:mock_expect(Worker1, dbsync_changes, apply, fun(_Doc) -> ok end),
+
+    {ok, Worker2Root} = ?assertMatch({ok, _},
+        lfm_proxy:mkdir(Worker2, SessId2, SpaceGuid, <<"resynchronization_test_dir2">>, 8#777)),
+    {Worker2Dirs, Worker2Files} = lfm_test_utils:create_files_tree(Worker2, SessId2, Structure, Worker2Root),
+
+    {ok, Worker3Root} = ?assertMatch({ok, _},
+        lfm_proxy:mkdir(Worker3, SessId3, SpaceGuid, <<"resynchronization_test_dir3">>, 8#777)),
+    {Worker3Dirs, Worker3Files} = lfm_test_utils:create_files_tree(Worker3, SessId3, Structure, Worker3Root),
+
+    % Sleep to allow synchronization of documents with mocked apply function
+    timer:sleep(timer:seconds(60)),
+    ?assertEqual(ok, test_utils:mock_unload(Worker1, dbsync_changes)),
+
+    lists:foreach(fun(Guid) ->
+        ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(Worker1, SessId1, ?FILE_REF(Guid)))
+    end, Worker2Dirs ++ Worker2Files ++ Worker3Dirs ++ Worker3Files),
+
+    Provider2Id = rpc:call(Worker2, oneprovider, get_id_or_undefined, []),
+    ?assertEqual(ok, rpc:call(Worker1, dbsync_worker, reset_provider_stream, [SpaceId, Provider2Id])),
+    lists:foreach(fun(Guid) ->
+        ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessId1, ?FILE_REF(Guid)), 60)
+    end, Worker2Dirs ++ Worker2Files),
+    lists:foreach(fun(Guid) ->
+        ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(Worker1, SessId1, ?FILE_REF(Guid)))
+    end, Worker3Dirs ++ Worker3Files),
+
+    ?assertEqual(ok, rpc:call(Worker1, dbsync_worker, resynchronize_all, [SpaceId, Provider2Id])),
+    lists:foreach(fun(Guid) ->
+        ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessId1, ?FILE_REF(Guid)), 60)
+    end, Worker2Dirs ++ Worker2Files ++ Worker3Dirs ++ Worker3Files).
+
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -603,6 +647,10 @@ init_per_testcase(Case, Config) when
 init_per_testcase(db_sync_basic_opts_with_errors_test = Case, Config) ->
     MockedConfig = multi_provider_file_ops_test_base:mock_sync_and_rtransfer_errors(Config),
     init_per_testcase(?DEFAULT_CASE(Case), MockedConfig);
+init_per_testcase(resynchronization_test = Case, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Worker, [dbsync_changes]),
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 60}),
     lfm_proxy:init(Config).
@@ -623,6 +671,10 @@ end_per_testcase(rtransfer_blocking_test, Config) ->
     lfm_proxy:teardown(Config);
 end_per_testcase(db_sync_basic_opts_with_errors_test = Case, Config) ->
     multi_provider_file_ops_test_base:unmock_sync_and_rtransfer_errors(Config),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+end_per_testcase(resynchronization_test = Case, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Worker, [dbsync_changes]),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).

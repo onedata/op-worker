@@ -59,7 +59,7 @@
     is_active/1,
     get_status/1,
     get_extended_status/1,
-    get_last_status_change_timestamp_if_in_enabled_status/1,
+    get_last_initialization_timestamp_if_in_enabled_status/1,
     get_status_change_timestamps/1
 ]).
 %% API - collecting status changes
@@ -145,32 +145,38 @@ get_extended_status(SpaceId) ->
     end.
 
 
--spec get_last_status_change_timestamp_if_in_enabled_status(od_space:id() | record()) ->
+-spec get_last_initialization_timestamp_if_in_enabled_status(od_space:id() | record()) ->
     {ok, time:seconds()} | dir_stats_collector:collecting_status_error().
-get_last_status_change_timestamp_if_in_enabled_status(#dir_stats_service_state{
+get_last_initialization_timestamp_if_in_enabled_status(#dir_stats_service_state{
     status = enabled,
     status_change_timestamps = []
 }) ->
     {ok, 0};
 
-get_last_status_change_timestamp_if_in_enabled_status(#dir_stats_service_state{
+get_last_initialization_timestamp_if_in_enabled_status(#dir_stats_service_state{
     status = enabled,
-    status_change_timestamps = [{enabled, Time} | _]
+    status_change_timestamps = [_]
+}) ->
+    {ok, 0};
+
+get_last_initialization_timestamp_if_in_enabled_status(#dir_stats_service_state{
+    status = enabled,
+    status_change_timestamps = [{enabled, _}, {initializing, Time} | _]
 }) ->
     {ok, Time};
 
-get_last_status_change_timestamp_if_in_enabled_status(#dir_stats_service_state{
+get_last_initialization_timestamp_if_in_enabled_status(#dir_stats_service_state{
     status = initializing
 }) ->
     ?ERROR_DIR_STATS_NOT_READY;
 
-get_last_status_change_timestamp_if_in_enabled_status(#dir_stats_service_state{}) ->
+get_last_initialization_timestamp_if_in_enabled_status(#dir_stats_service_state{}) ->
     ?ERROR_DIR_STATS_DISABLED_FOR_SPACE;
 
-get_last_status_change_timestamp_if_in_enabled_status(SpaceId) ->
+get_last_initialization_timestamp_if_in_enabled_status(SpaceId) ->
     case get_state(SpaceId) of
         {ok, State} ->
-            get_last_status_change_timestamp_if_in_enabled_status(State);
+            get_last_initialization_timestamp_if_in_enabled_status(State);
         ?ERROR_NOT_FOUND ->
             ?ERROR_DIR_STATS_DISABLED_FOR_SPACE
     end.

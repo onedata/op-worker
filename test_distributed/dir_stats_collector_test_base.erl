@@ -345,7 +345,7 @@ multiple_status_change_test(Config) ->
     check_update_times(Config, [op_worker_nodes]),
 
     {ok, EnablingTime} = ?assertMatch({ok, _},
-        rpc:call(Worker, dir_stats_service_state, get_last_status_change_timestamp_if_in_enabled_status, [SpaceId])),
+        rpc:call(Worker, dir_stats_service_state, get_last_initialization_timestamp_if_in_enabled_status, [SpaceId])),
     [{_, EnablingTime2} | _] = rpc:call(
         Worker, dir_stats_service_state, get_status_change_timestamps, [SpaceId]),
     ?assertEqual(EnablingTime, EnablingTime2),
@@ -367,7 +367,7 @@ multiple_status_change_test(Config) ->
     end, LastChangeTime, StatusChangesWithTimestamps2),
 
     ?assertEqual(?ERROR_DIR_STATS_DISABLED_FOR_SPACE,
-        rpc:call(Worker, dir_stats_service_state, get_last_status_change_timestamp_if_in_enabled_status, [SpaceId])).
+        rpc:call(Worker, dir_stats_service_state, get_last_initialization_timestamp_if_in_enabled_status, [SpaceId])).
 
 
 adding_file_when_disabled_test(Config) ->

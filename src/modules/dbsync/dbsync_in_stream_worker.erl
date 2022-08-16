@@ -16,6 +16,7 @@
 -behaviour(gen_server).
 
 -include("global_definitions.hrl").
+-include("modules/dbsync/dbsync.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -166,8 +167,12 @@ handle_info(request_changes, State = #state{
             MaxSize = application:get_env(?APP_NAME,
                 dbsync_changes_max_request_size, 1000000),
             Until2 = min(Until, Seq + MaxSize),
+            {FinalUntil, IncludedMutators} = case dbsync_state:get_resynchronization_params(SpaceId, ProviderId) of
+                undefined -> {Until2, ?ALL_EXCEPT_SENDER};
+                {FinalSeq, Mutators} -> {min(FinalSeq, Until2), Mutators}
+            end,
             dbsync_communicator:request_changes(
-                ProviderId, SpaceId, Seq, Until2
+                ProviderId, SpaceId, Seq, FinalUntil, IncludedMutators
             ),
             {noreply, schedule_changes_request(State#state{
                 changes_request_ref = undefined

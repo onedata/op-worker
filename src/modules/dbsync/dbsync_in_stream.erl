@@ -36,6 +36,9 @@
 
 -type msg_id_history() :: queue:queue(binary()).
 -type state() :: #state{}.
+-type mutators() :: [od_provider:id()]. % NOTE: special id values are defined in dbsync.hrl
+-type reset_params() :: {FinalSeq :: couchbase_changes:seq(), IncludedMutators :: mutators()}.
+-export_type([mutators/0, reset_params/0]).
 
 %%%===================================================================
 %%% API
@@ -83,8 +86,8 @@ init([SpaceId]) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: state()} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_call({reset_provider_stream, ProviderId}, _From, State) ->
-    {reply, ok, reset_provider_stream(ProviderId, State)};
+handle_call({resynchronize, ProviderId, IncludedMutators}, _From, State) ->
+    {reply, ok, resynchronize(ProviderId, IncludedMutators, State)};
 handle_call(Request, _From, #state{} = State) ->
     ?log_bad_request(Request),
     {noreply, State}.
@@ -217,8 +220,8 @@ forward_changes_batch(ProviderId, Since, Until, Timestamp, Docs, State = #state{
     State2.
 
 %% @private
--spec reset_provider_stream(od_provider:id(), state()) -> state().
-reset_provider_stream(ProviderId, State = #state{
+-spec resynchronize(od_provider:id(), mutators(), state()) -> state().
+resynchronize(ProviderId, IncludedMutators, State = #state{
     space_id = SpaceId,
     workers = Workers
 }) ->
@@ -232,7 +235,7 @@ reset_provider_stream(ProviderId, State = #state{
             State
     end,
 
-    dbsync_state:set_seq_and_timestamp(SpaceId, ProviderId, 1, 0),
+    dbsync_state:resynchronize_stream(SpaceId, ProviderId, IncludedMutators),
     State2.
 
 %%--------------------------------------------------------------------
