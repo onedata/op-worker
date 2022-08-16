@@ -1011,7 +1011,9 @@ get_symlink_distribution_test(Config) ->
     ok.
 enable_dir_stats_collecting_for_space(ProviderPlaceholder, SpacePlaceholder) ->
     SpaceId = oct_background:get_space_id(SpacePlaceholder),
-    ?rpc(ProviderPlaceholder,  dir_stats_service_state:enable(SpaceId)),
+    ?rpc(ProviderPlaceholder, space_logic:update_support_parameters(SpaceId, #support_parameters{
+        dir_stats_service_enabled = true
+    })),
     await_dir_stats_collecting_status(ProviderPlaceholder, SpaceId, enabled).
 
 
@@ -1023,7 +1025,9 @@ enable_dir_stats_collecting_for_space(ProviderPlaceholder, SpacePlaceholder) ->
     ok.
 disable_dir_stats_collecting_for_space(ProviderPlaceholder, SpacePlaceholder) ->
     SpaceId = oct_background:get_space_id(SpacePlaceholder),
-    ?rpc(ProviderPlaceholder, dir_stats_service_state:disable(SpaceId)),
+    ?rpc(ProviderPlaceholder, space_logic:update_support_parameters(SpaceId, #support_parameters{
+        dir_stats_service_enabled = false
+    })),
     await_dir_stats_collecting_status(ProviderPlaceholder, SpaceId, disabled).
 
 

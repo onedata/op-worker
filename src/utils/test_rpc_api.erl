@@ -41,7 +41,7 @@
     get_space_providers/1,
     supports_space/1,
     support_space/3, support_space/4,
-    get_space_support_opts/1,
+    get_space_support_parameters/1,
     revoke_space_support/1,
 
     get_provider_id/0,
@@ -164,9 +164,9 @@ supports_space(SpaceId) ->
 -spec support_space(storage:id(), tokens:serialized(), SupportSize :: integer()) ->
     {ok, od_space:id()} | errors:error().
 support_space(StorageId, Token, SupportSize) ->
-    support_space(StorageId, Token, SupportSize, #{
-        accounting_enabled => false,
-        dir_stats_service_enabled => false
+    support_space(StorageId, Token, SupportSize, #support_parameters{
+        accounting_enabled = false,
+        dir_stats_service_enabled = false
     }).
 
 
@@ -174,17 +174,17 @@ support_space(StorageId, Token, SupportSize) ->
     storage:id(),
     tokens:serialized(),
     SupportSize :: integer(),
-    space_support_state_api:support_opts()
+    support_parameters:record()
 ) ->
     {ok, od_space:id()} | errors:error().
-support_space(StorageId, Token, SupportSize, SupportOpts) ->
-    rpc_api:support_space(StorageId, Token, SupportSize, SupportOpts).
+support_space(StorageId, Token, SupportSize, Supportparameters) ->
+    rpc_api:support_space(StorageId, Token, SupportSize, Supportparameters).
 
 
--spec get_space_support_opts(od_space:id()) ->
-    {ok, space_support_state_api:support_opts()} | errors:error().
-get_space_support_opts(SpaceId) ->
-    rpc_api:get_space_support_opts(SpaceId).
+-spec get_space_support_parameters(od_space:id()) ->
+    {ok, support_parameters:record()} | errors:error().
+get_space_support_parameters(SpaceId) ->
+    rpc_api:get_space_support_parameters(SpaceId).
 
 
 -spec revoke_space_support(od_space:id()) -> ok | {error, term()}.

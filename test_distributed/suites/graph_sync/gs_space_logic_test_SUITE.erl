@@ -23,6 +23,7 @@
     mixed_get_test/1,
     subscribe_test/1,
     convenience_functions_test/1,
+    update_support_parameters_test/1,
     harvest_metadata_test/1,
     confined_access_token_test/1
 ]).
@@ -33,6 +34,7 @@ all() -> ?ALL([
     mixed_get_test,
     subscribe_test,
     convenience_functions_test,
+    update_support_parameters_test,
     harvest_metadata_test,
     confined_access_token_test
 ]).
@@ -103,7 +105,7 @@ get_protected_data_test(Config) ->
     User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
     % User 3 does not have access to the space
     User3Sess = logic_tests_common:get_user_session(Config, ?USER_3),
-    
+
     SpaceGriMatcher = #gri{type = od_space, id = ?SPACE_1, aspect = instance, _ = '_'},
     GraphCalls = logic_tests_common:count_reqs(Config, graph, SpaceGriMatcher),
     ?assertMatch(
@@ -156,7 +158,7 @@ mixed_get_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
 
     User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
-    
+
     SpaceGriMatcher = #gri{type = od_space, id = ?SPACE_1, aspect = instance, _ = '_'},
     GraphCalls = logic_tests_common:count_reqs(Config, graph, SpaceGriMatcher),
     UnsubCalls = logic_tests_common:count_reqs(Config, unsub, SpaceGriMatcher),
@@ -203,7 +205,7 @@ subscribe_test(Config) ->
     Space1ProtectedData = ?SPACE_PROTECTED_DATA_VALUE(?SPACE_1),
     Space1PrivateGRI = #gri{type = od_space, id = ?SPACE_1, aspect = instance, scope = private},
     Space1PrivateData = ?SPACE_PRIVATE_DATA_VALUE(?SPACE_1),
-    
+
     SpaceGriMatcher = #gri{type = od_space, id = ?SPACE_1, aspect = instance, _ = '_'},
     GraphCalls = logic_tests_common:count_reqs(Config, graph, SpaceGriMatcher),
 
@@ -291,7 +293,7 @@ convenience_functions_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
 
     User1Sess = logic_tests_common:get_user_session(Config, ?USER_1),
-    
+
     SpaceGriMatcher = #gri{type = od_space, id = ?SPACE_1, aspect = instance, _ = '_'},
     GraphCalls = logic_tests_common:count_reqs(Config, graph, SpaceGriMatcher),
 
@@ -403,9 +405,37 @@ convenience_functions_test(Config) ->
     ok.
 
 
+update_support_parameters_test(Config) ->
+    [Node | _] = ?config(op_worker_nodes, Config),
+
+    SpaceGriMatcher = #gri{
+        type = od_space,
+        id = ?SPACE_1,
+        aspect = {support_parameters, rpc:call(Node, oneprovider, get_id, [])},
+        scope = private
+    },
+    GraphCalls = logic_tests_common:count_reqs(Config, graph, SpaceGriMatcher),
+
+    SupportParametersOverlay = #support_parameters{
+        accounting_enabled = ?RAND_BOOL(),
+        dir_stats_service_enabled = ?RAND_BOOL(),
+        dir_stats_service_status = ?RAND_ELEMENT(support_parameters:all_dir_stats_service_statuses())
+    },
+
+    ?assertMatch(ok, rpc:call(Node, space_logic, update_support_parameters, [
+        ?SPACE_1, SupportParametersOverlay
+    ])),
+    ?assertEqual(GraphCalls + 1, logic_tests_common:count_reqs(Config, graph, SpaceGriMatcher)),
+
+    ?assertMatch(ok, rpc:call(Node, space_logic, update_support_parameters, [
+        ?SPACE_1, SupportParametersOverlay
+    ])),
+    ?assertEqual(GraphCalls + 2, logic_tests_common:count_reqs(Config, graph, SpaceGriMatcher)).
+
+
 harvest_metadata_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
-    
+
     SpaceGriMatcher = #gri{type = od_space, id = ?SPACE_1, aspect = harvest_metadata, _ = '_'},
     GraphCalls = logic_tests_common:count_reqs(Config, graph, SpaceGriMatcher),
 
