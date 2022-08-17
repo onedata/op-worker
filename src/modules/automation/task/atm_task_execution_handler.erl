@@ -48,7 +48,7 @@
 %% API
 -export([
     initiate/2,
-    abort/3,
+    stop/3,
     teardown/2,
     set_run_num/2,
 
@@ -82,14 +82,14 @@ initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
     {AtmTaskExecutionSpec, AtmWorkflowExecutionEnvDiff}.
 
 
--spec abort(
+-spec stop(
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id(),
-    atm_task_execution:aborting_reason()
+    atm_task_execution:stopping_reason()
 ) ->
     ok | no_return().
-abort(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Reason) ->
-    case atm_task_execution_status:handle_aborting(AtmTaskExecutionId, Reason) of
+stop(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Reason) ->
+    case atm_task_execution_status:handle_stopping(AtmTaskExecutionId, Reason) of
         {ok, _} when Reason =:= pause ->
             % ongoing jobs shouldn't be abruptly interrupted when execution is paused
             ok;
@@ -126,7 +126,7 @@ set_run_num(RunNum, AtmTaskExecutionId) ->
     atm_task_executor:job_batch_id(),
     [automation:item()]
 ) ->
-    ok | {error, running_item_failed} | {error, task_aborting} | {error, task_ended}.
+    ok | {error, running_item_failed} | {error, task_stopping} | {error, task_ended}.
 run_job_batch(
     AtmWorkflowExecutionCtx,
     AtmTaskExecutionId,
@@ -404,8 +404,8 @@ handle_job_batch_processing_error(
     case atm_task_execution_status:handle_items_dequeued(AtmTaskExecutionId, length(ItemBatch)) of
         {ok, _} ->
             ok;
-        {error, task_not_aborting} ->
-            %% TODO if not happening when aborting - treat it as any other error
+        {error, task_not_stopping} ->
+            %% TODO if not happening when stopping - treat it as any other error
             handle_job_batch_processing_error(
                 AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemBatch,
                 {error, interrupted}  %% TODO error
@@ -503,12 +503,12 @@ handle_uncorrelated_results_processing_error(
     AtmTaskExecutionId,
     Error
 ) ->
-    case atm_task_execution_status:handle_aborting(AtmTaskExecutionId, failure) of
+    case atm_task_execution_status:handle_stopping(AtmTaskExecutionId, failure) of
         {ok, #document{value = #atm_task_execution{lane_index = AtmLaneIndex, run_num = RunNum}}} ->
             log_uncorrelated_results_processing_error(
                 AtmWorkflowExecutionCtx, AtmTaskExecutionId, Error
             ),
-            atm_lane_execution_handler:abort(
+            atm_lane_execution_handler:stop(
                 {AtmLaneIndex, RunNum}, failure, AtmWorkflowExecutionCtx
             );
 

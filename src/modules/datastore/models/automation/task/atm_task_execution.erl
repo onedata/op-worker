@@ -30,15 +30,15 @@
     % waiting
     ?PENDING_STATUS |
     % ongoing
-    ?ACTIVE_STATUS | ?ABORTING_STATUS |
+    ?ACTIVE_STATUS | ?STOPPING_STATUS |
     % ended
     ?FINISHED_STATUS | ?SKIPPED_STATUS |
     ?CANCELLED_STATUS | ?FAILED_STATUS | ?INTERRUPTED_STATUS | ?PAUSED_STATUS.
 
--type aborting_reason() :: cancel | failure | interrupt | pause.
+-type stopping_reason() :: cancel | failure | interrupt | pause.
 
 -export_type([id/0, record/0, doc/0, diff/0]).
--export_type([status/0, aborting_reason/0]).
+-export_type([status/0, stopping_reason/0]).
 
 
 % get ctx via module call to allow mocking in ct tests

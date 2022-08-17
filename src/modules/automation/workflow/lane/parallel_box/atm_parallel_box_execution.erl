@@ -20,7 +20,7 @@
 -export([
     create_all/1, create/3,
     initiate_all/2, initiate/2,
-    abort_all/3, abort/3,
+    stop_all/3, stop/3,
     ensure_all_ended/1,
     teardown_all/2, teardown/2,
     delete_all/1, delete/1
@@ -168,28 +168,28 @@ initiate(AtmWorkflowExecutionCtx0, #atm_parallel_box_execution{
     end, {#{}, fun(Env) -> Env end}, AtmTaskExecutionsInitiationResult).
 
 
--spec abort_all(
+-spec stop_all(
     atm_workflow_execution_ctx:record(),
-    atm_task_execution:aborting_reason(),
+    atm_task_execution:stopping_reason(),
     [record()]
 ) ->
     ok.
-abort_all(AtmWorkflowExecutionCtx, Reason, AtmParallelBoxExecutions) ->
+stop_all(AtmWorkflowExecutionCtx, Reason, AtmParallelBoxExecutions) ->
     lists:foreach(fun(AtmParallelBoxExecution) ->
-        abort(AtmWorkflowExecutionCtx, Reason, AtmParallelBoxExecution)
+        stop(AtmWorkflowExecutionCtx, Reason, AtmParallelBoxExecution)
     end, AtmParallelBoxExecutions).
 
 
--spec abort(atm_workflow_execution_ctx:record(), atm_task_execution:aborting_reason(), record()) ->
+-spec stop(atm_workflow_execution_ctx:record(), atm_task_execution:stopping_reason(), record()) ->
     ok.
-abort(AtmWorkflowExecutionCtx0, Reason, #atm_parallel_box_execution{
+stop(AtmWorkflowExecutionCtx0, Reason, #atm_parallel_box_execution{
     task_registry = AtmTaskExecutionRegistry
 }) ->
     lists:foreach(fun(AtmTaskExecutionId) ->
         AtmWorkflowExecutionCtx1 = atm_workflow_execution_ctx:configure_processed_task_id(
             AtmTaskExecutionId, AtmWorkflowExecutionCtx0
         ),
-        catch atm_task_execution_handler:abort(AtmWorkflowExecutionCtx1, AtmTaskExecutionId, Reason)
+        catch atm_task_execution_handler:stop(AtmWorkflowExecutionCtx1, AtmTaskExecutionId, Reason)
     end, maps:values(AtmTaskExecutionRegistry)).
 
 
@@ -394,7 +394,7 @@ infer_status(CurrentStatus, AtmTaskExecutionStatuses) ->
             Status;
         UniqueStatuses ->
             hd(lists:dropwhile(fun(Status) -> not lists:member(Status, UniqueStatuses) end, [
-                ?ABORTING_STATUS, ?ACTIVE_STATUS, ?PENDING_STATUS,
+                ?STOPPING_STATUS, ?ACTIVE_STATUS, ?PENDING_STATUS,
                 ?CANCELLED_STATUS, ?FAILED_STATUS, ?INTERRUPTED_STATUS,
                 ?PAUSED_STATUS, ?FINISHED_STATUS
             ]))
@@ -405,8 +405,8 @@ infer_status(CurrentStatus, AtmTaskExecutionStatuses) ->
             PossibleNewStatus;
         false ->
             % possible when status is not changing or in case of races (e.g.
-            % aborting task ended while some other task has not been marked
-            % as aborting yet and as such is still active - overall status
-            % should remain as aborting rather than regressing to active)
+            % stopping task ended while some other task has not been marked
+            % as stopping yet and as such is still active - overall status
+            % should remain as stopping rather than regressing to active)
             CurrentStatus
     end.

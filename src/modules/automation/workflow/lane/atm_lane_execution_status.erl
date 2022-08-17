@@ -80,7 +80,7 @@
 -export([
     handle_preparing/2,
     handle_enqueued/2,
-    handle_aborting/3,
+    handle_stopping/3,
     handle_task_status_change/5,
     handle_ended/2,
 
@@ -107,7 +107,7 @@ status_to_phase(?SCHEDULED_STATUS) -> ?WAITING_PHASE;
 status_to_phase(?PREPARING_STATUS) -> ?WAITING_PHASE;
 status_to_phase(?ENQUEUED_STATUS) -> ?WAITING_PHASE;
 status_to_phase(?ACTIVE_STATUS) -> ?ONGOING_PHASE;
-status_to_phase(?ABORTING_STATUS) -> ?ONGOING_PHASE;
+status_to_phase(?STOPPING_STATUS) -> ?ONGOING_PHASE;
 status_to_phase(?FINISHED_STATUS) -> ?ENDED_PHASE;
 status_to_phase(?CRUSHED_STATUS) -> ?ENDED_PHASE;
 status_to_phase(?CANCELLED_STATUS) -> ?ENDED_PHASE;
@@ -124,7 +124,7 @@ status_to_phase(?PAUSED_STATUS) -> ?ENDED_PHASE.
     boolean().
 can_manual_lane_run_repeat_be_scheduled(retry, #atm_lane_execution_run{
     status = ?FAILED_STATUS,
-    aborting_reason = undefined
+    stopping_reason = undefined
 }) ->
     % lane run can be retried only if all items finished execution but some
     % of them failed (direct transition from ?ACTIVE_STATUS to ?FAILED_STATUS)
@@ -178,14 +178,14 @@ handle_enqueued(AtmLaneRunSelector, AtmWorkflowExecutionId) ->
     ?extract_doc(atm_workflow_execution_status:handle_lane_enqueued(AtmWorkflowExecutionId, Diff)).
 
 
-%% TODO ensure not called directly but via atm_lane_execution_handler:abort
--spec handle_aborting(
+%% TODO ensure not called directly but via atm_lane_execution_handler:stop
+-spec handle_stopping(
     atm_lane_execution:lane_run_selector(),
     atm_workflow_execution:id(),
-    atm_lane_execution:run_aborting_reason()
+    atm_lane_execution:run_stopping_reason()
 ) ->
     {ok, atm_workflow_execution:doc()} | errors:error().
-handle_aborting(AtmLaneRunSelector, AtmWorkflowExecutionId, Reason) ->
+handle_stopping(AtmLaneRunSelector, AtmWorkflowExecutionId, Reason) ->
     Diff = fun(AtmWorkflowExecution) ->
         atm_lane_execution:update_run(AtmLaneRunSelector, fun
             (#atm_lane_execution_run{status = Status} = Run) when
@@ -194,20 +194,20 @@ handle_aborting(AtmLaneRunSelector, AtmWorkflowExecutionId, Reason) ->
                 Status =:= ?ENQUEUED_STATUS;
                 Status =:= ?ACTIVE_STATUS
             ->
-                {ok, Run#atm_lane_execution_run{status = ?ABORTING_STATUS, aborting_reason = Reason}};
+                {ok, Run#atm_lane_execution_run{status = ?STOPPING_STATUS, stopping_reason = Reason}};
 
-            (#atm_lane_execution_run{status = ?ABORTING_STATUS, aborting_reason = PrevReason} = Run) ->
-                FinalReason = case should_overwrite_aborting_reason(PrevReason, Reason) of
+            (#atm_lane_execution_run{status = ?STOPPING_STATUS, stopping_reason = PrevReason} = Run) ->
+                FinalReason = case should_overwrite_stopping_reason(PrevReason, Reason) of
                     true -> Reason;
                     false -> PrevReason
                 end,
-                {ok, Run#atm_lane_execution_run{aborting_reason = FinalReason}};
+                {ok, Run#atm_lane_execution_run{stopping_reason = FinalReason}};
 
             (#atm_lane_execution_run{status = EndedStatus}) ->
-                ?ERROR_ATM_INVALID_STATUS_TRANSITION(EndedStatus, ?ABORTING_STATUS)
+                ?ERROR_ATM_INVALID_STATUS_TRANSITION(EndedStatus, ?STOPPING_STATUS)
         end, AtmWorkflowExecution)
     end,
-    atm_workflow_execution_status:handle_lane_aborting(AtmLaneRunSelector, AtmWorkflowExecutionId, Diff).
+    atm_workflow_execution_status:handle_lane_stopping(AtmLaneRunSelector, AtmWorkflowExecutionId, Diff).
 
 
 -spec handle_task_status_change(
@@ -295,23 +295,23 @@ handle_manual_repeat(RepeatType, {AtmLaneSelector, _} = AtmLaneRunSelector, AtmW
 
 
 %% @private
--spec should_overwrite_aborting_reason(
-    atm_lane_execution:run_aborting_reason(),
-    atm_lane_execution:run_aborting_reason()
+-spec should_overwrite_stopping_reason(
+    atm_lane_execution:run_stopping_reason(),
+    atm_lane_execution:run_stopping_reason()
 ) ->
     boolean().
-should_overwrite_aborting_reason(PrevReason, NewReason) ->
-    aborting_reason_priority(NewReason) > aborting_reason_priority(PrevReason).
+should_overwrite_stopping_reason(PrevReason, NewReason) ->
+    stopping_reason_priority(NewReason) > stopping_reason_priority(PrevReason).
 
 
 %% @private
--spec aborting_reason_priority(atm_lane_execution:run_aborting_reason()) ->
+-spec stopping_reason_priority(atm_lane_execution:run_stopping_reason()) ->
     non_neg_integer().
-aborting_reason_priority(pause) -> 0;
-aborting_reason_priority(interrupt) -> 1;
-aborting_reason_priority(failure) -> 2;
-aborting_reason_priority(cancel) -> 3;
-aborting_reason_priority(crush) -> 4.
+stopping_reason_priority(pause) -> 0;
+stopping_reason_priority(interrupt) -> 1;
+stopping_reason_priority(failure) -> 2;
+stopping_reason_priority(cancel) -> 3;
+stopping_reason_priority(crush) -> 4.
 
 
 %% @private
@@ -324,12 +324,12 @@ handle_currently_executed_lane_run_ended(AtmWorkflowExecution1 = #atm_workflow_e
     {ok, AtmWorkflowExecution2} = end_currently_executed_lane_run(AtmWorkflowExecution1),
 
     {ok, CurrentRun = #atm_lane_execution_run{
-        aborting_reason = AbortingReason,
+        stopping_reason = StoppingReason,
         status = Status
     }} = atm_lane_execution:get_run({current, current}, AtmWorkflowExecution2),
 
     case Status of
-        ?FAILED_STATUS when AbortingReason == undefined ->
+        ?FAILED_STATUS when StoppingReason == undefined ->
             % lane run can be automatically retried only if all items finished execution but
             % some of them failed (direct transition from ?ACTIVE_STATUS to ?FAILED_STATUS)
             try_to_schedule_automatic_current_lane_run_retry(CurrentRun, AtmWorkflowExecution2);
@@ -339,6 +339,7 @@ handle_currently_executed_lane_run_ended(AtmWorkflowExecution1 = #atm_workflow_e
             {ok, AtmWorkflowExecution2}
     end.
 
+% TODO in case of repeat when latest run was paused - transit it to cancelled
 
 %% @private
 -spec end_currently_executed_lane_run(atm_workflow_execution:record()) ->
@@ -364,8 +365,8 @@ end_currently_executed_lane_run(AtmWorkflowExecution) ->
             end,
             {ok, Run#atm_lane_execution_run{status = EndedStatus}};
 
-        (#atm_lane_execution_run{status = ?ABORTING_STATUS} = Run) ->
-            EndedStatus = case Run#atm_lane_execution_run.aborting_reason of
+        (#atm_lane_execution_run{status = ?STOPPING_STATUS} = Run) ->
+            EndedStatus = case Run#atm_lane_execution_run.stopping_reason of
                 crush -> ?CRUSHED_STATUS;
                 cancel -> ?CANCELLED_STATUS;
                 failure -> ?FAILED_STATUS;

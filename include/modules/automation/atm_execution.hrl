@@ -55,7 +55,7 @@
 
     status :: atm_lane_execution:run_status(),
     % Flag used to differentiate reasons why lane execution run is aborting
-    aborting_reason = undefined :: undefined | atm_lane_execution:run_aborting_reason(),
+    stopping_reason = undefined :: undefined | atm_lane_execution:run_stopping_reason(),
 
     iterated_store_id = undefined :: undefined | atm_store:id(),
     exception_store_id = undefined :: undefined | atm_store:id(),
@@ -284,7 +284,7 @@
 -define(ENQUEUED_STATUS, enqueued).
 -define(PENDING_STATUS, pending).
 -define(ACTIVE_STATUS, active).
--define(ABORTING_STATUS, aborting).   %% TODO change aborting to stopping?
+-define(STOPPING_STATUS, stopping).
 -define(FINISHED_STATUS, finished).
 -define(CANCELLED_STATUS, cancelled).
 -define(FAILED_STATUS, failed).

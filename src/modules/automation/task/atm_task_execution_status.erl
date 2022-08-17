@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2021 ACK CYFRONET AGH
+%%% @copyright (C) 2022 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -24,7 +24,7 @@
     handle_items_dequeued/2,
     handle_items_failed/2,
 
-    handle_aborting/2,
+    handle_stopping/2,
     handle_ended/1
 ]).
 
@@ -38,13 +38,20 @@
     boolean().
 is_transition_allowed(?PENDING_STATUS, ?ACTIVE_STATUS) -> true;
 is_transition_allowed(?PENDING_STATUS, ?SKIPPED_STATUS) -> true;
+
 is_transition_allowed(?ACTIVE_STATUS, ?FINISHED_STATUS) -> true;
 is_transition_allowed(?ACTIVE_STATUS, ?FAILED_STATUS) -> true;
-is_transition_allowed(?ACTIVE_STATUS, ?ABORTING_STATUS) -> true;
-is_transition_allowed(?ABORTING_STATUS, ?CANCELLED_STATUS) -> true;
-is_transition_allowed(?ABORTING_STATUS, ?FAILED_STATUS) -> true;
-is_transition_allowed(?ABORTING_STATUS, ?INTERRUPTED_STATUS) -> true;
-is_transition_allowed(?ABORTING_STATUS, ?PAUSED_STATUS) -> true;
+is_transition_allowed(?ACTIVE_STATUS, ?STOPPING_STATUS) -> true;
+is_transition_allowed(?STOPPING_STATUS, ?CANCELLED_STATUS) -> true;
+is_transition_allowed(?STOPPING_STATUS, ?FAILED_STATUS) -> true;
+is_transition_allowed(?STOPPING_STATUS, ?INTERRUPTED_STATUS) -> true;
+is_transition_allowed(?STOPPING_STATUS, ?PAUSED_STATUS) -> true;
+
+is_transition_allowed(?SKIPPED_STATUS, ?PENDING_STATUS) -> true;
+is_transition_allowed(?CANCELLED_STATUS, ?PENDING_STATUS) -> true;
+is_transition_allowed(?INTERRUPTED_STATUS, ?PENDING_STATUS) -> true;
+is_transition_allowed(?PAUSED_STATUS, ?PENDING_STATUS) -> true;
+
 is_transition_allowed(_, _) -> false.
 
 
@@ -59,7 +66,7 @@ is_ended(_) -> false.
 
 
 -spec handle_items_in_processing(atm_task_execution:id(), pos_integer()) ->
-    {ok, atm_task_execution:doc()} | {error, task_aborting} | {error, task_ended}.
+    {ok, atm_task_execution:doc()} | {error, task_stopping} | {error, task_ended}.
 handle_items_in_processing(AtmTaskExecutionId, ItemsNum) ->
     apply_diff(AtmTaskExecutionId, fun
         (AtmTaskExecution = #atm_task_execution{
@@ -79,8 +86,8 @@ handle_items_in_processing(AtmTaskExecutionId, ItemsNum) ->
                 items_in_processing = CurrentItemsInProcessingNum + ItemsNum
             }};
 
-        (#atm_task_execution{status = ?ABORTING_STATUS}) ->
-            {error, task_aborting};
+        (#atm_task_execution{status = ?STOPPING_STATUS}) ->
+            {error, task_stopping};
 
         (_) ->
             {error, task_ended}
@@ -89,7 +96,7 @@ handle_items_in_processing(AtmTaskExecutionId, ItemsNum) ->
 
 -spec handle_item_processed(atm_task_execution:id()) -> ok.
 handle_item_processed(AtmTaskExecutionId) ->
-    {ok, _} = atm_task_execution:update(AtmTaskExecutionId, fun(#atm_task_execution{
+    {ok, _} = apply_diff(AtmTaskExecutionId, fun(#atm_task_execution{
         items_in_processing = ItemsInProcessing,
         items_processed = ItemsProcessed
     } = AtmTaskExecution) ->
@@ -102,11 +109,11 @@ handle_item_processed(AtmTaskExecutionId) ->
 
 
 -spec handle_items_dequeued(atm_task_execution:id(), pos_integer()) ->
-    {ok, atm_task_execution:doc()} | {error, task_not_aborting}.
+    {ok, atm_task_execution:doc()} | {error, task_not_stopping}.
 handle_items_dequeued(AtmTaskExecutionId, ItemsNum) ->
-    atm_task_execution:update(AtmTaskExecutionId, fun
+    apply_diff(AtmTaskExecutionId, fun
         (AtmTaskExecution = #atm_task_execution{
-            status = ?ABORTING_STATUS,
+            status = ?STOPPING_STATUS,
             items_in_processing = ItemsInProcessing
         }) ->
             {ok, AtmTaskExecution#atm_task_execution{
@@ -114,13 +121,13 @@ handle_items_dequeued(AtmTaskExecutionId, ItemsNum) ->
             }};
 
         (_) ->
-            {error, task_not_aborting}
+            {error, task_not_stopping}
     end).
 
 
 -spec handle_items_failed(atm_task_execution:id(), pos_integer()) -> ok.
 handle_items_failed(AtmTaskExecutionId, ItemsNum) ->
-    {ok, _} = atm_task_execution:update(AtmTaskExecutionId, fun(#atm_task_execution{
+    {ok, _} = apply_diff(AtmTaskExecutionId, fun(#atm_task_execution{
         items_in_processing = ItemsInProcessing,
         items_processed = ItemsProcessed,
         items_failed = ItemsFailed
@@ -134,28 +141,28 @@ handle_items_failed(AtmTaskExecutionId, ItemsNum) ->
     ok.
 
 
--spec handle_aborting(
+-spec handle_stopping(
     atm_task_execution:id(),
-    atm_task_execution:aborting_reason()
+    atm_task_execution:stopping_reason()
 ) ->
     {ok, atm_task_execution:doc()} | {error, task_ended}.
-handle_aborting(AtmTaskExecutionId, Reason) ->
+handle_stopping(AtmTaskExecutionId, Reason) ->
     apply_diff(AtmTaskExecutionId, fun
         (AtmTaskExecution = #atm_task_execution{status = ?PENDING_STATUS}) ->
             {ok, AtmTaskExecution#atm_task_execution{status = ?SKIPPED_STATUS}};
 
         (AtmTaskExecution = #atm_task_execution{status = ?ACTIVE_STATUS}) ->
             {ok, AtmTaskExecution#atm_task_execution{
-                status = ?ABORTING_STATUS,
-                aborting_reason = Reason
+                status = ?STOPPING_STATUS,
+                stopping_reason = Reason
             }};
 
         (AtmTaskExecution = #atm_task_execution{
-            status = ?ABORTING_STATUS,
-            aborting_reason = PrevReason
+            status = ?STOPPING_STATUS,
+            stopping_reason = PrevReason
         }) ->
             {ok, AtmTaskExecution#atm_task_execution{
-                aborting_reason = case should_overwrite_aborting_reason(PrevReason, Reason) of
+                stopping_reason = case should_overwrite_stopping_reason(PrevReason, Reason) of
                     true -> Reason;
                     false -> PrevReason
                 end
@@ -181,8 +188,8 @@ handle_ended(AtmTaskExecutionId) ->
             {ok, AtmTaskExecution#atm_task_execution{status = ?FAILED_STATUS}};
 
         (AtmTaskExecution = #atm_task_execution{
-            status = ?ABORTING_STATUS,
-            aborting_reason = AbortingReason,
+            status = ?STOPPING_STATUS,
+            stopping_reason = StoppingReason,
             items_in_processing = ItemsInProcessing,
             items_processed = ItemsProcessed,
             items_failed = ItemsFailed
@@ -193,7 +200,7 @@ handle_ended(AtmTaskExecutionId) ->
             UpdatedFailedItems = ItemsFailed + ItemsInProcessing,
 
             {ok, AtmTaskExecution#atm_task_execution{
-                status = case AbortingReason of
+                status = case StoppingReason of
                     pause -> ?PAUSED_STATUS;
                     interrupt -> ?INTERRUPTED_STATUS;
                     failure -> ?FAILED_STATUS;
@@ -215,22 +222,22 @@ handle_ended(AtmTaskExecutionId) ->
 
 
 %% @private
--spec should_overwrite_aborting_reason(
-    atm_task_execution:aborting_reason(),
-    atm_task_execution:aborting_reason()
+-spec should_overwrite_stopping_reason(
+    atm_task_execution:stopping_reason(),
+    atm_task_execution:stopping_reason()
 ) ->
     boolean().
-should_overwrite_aborting_reason(PrevReason, NewReason) ->
-    aborting_reason_priority(NewReason) > aborting_reason_priority(PrevReason).
+should_overwrite_stopping_reason(PrevReason, NewReason) ->
+    stopping_reason_priority(NewReason) > stopping_reason_priority(PrevReason).
 
 
 %% @private
--spec aborting_reason_priority(atm_task_execution:aborting_reason()) ->
+-spec stopping_reason_priority(atm_task_execution:stopping_reason()) ->
     non_neg_integer().
-aborting_reason_priority(pause) -> 0;
-aborting_reason_priority(interrupt) -> 1;
-aborting_reason_priority(failure) -> 2;
-aborting_reason_priority(cancel) -> 3.
+stopping_reason_priority(pause) -> 0;
+stopping_reason_priority(interrupt) -> 1;
+stopping_reason_priority(failure) -> 2;
+stopping_reason_priority(cancel) -> 3.
 
 
 %% @private

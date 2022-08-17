@@ -19,7 +19,7 @@
 %% API
 -export([
     prepare/3,
-    abort/3,
+    stop/3,
     handle_ended/3
 ]).
 
@@ -55,26 +55,26 @@ prepare(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
 
         AtmLaneExecutionSpec
     catch Type:Reason:Stacktrace ->
-        atm_lane_execution_status:handle_aborting(AtmLaneRunSelector, AtmWorkflowExecutionId, failure),
+        atm_lane_execution_status:handle_stopping(AtmLaneRunSelector, AtmWorkflowExecutionId, failure),
         % Call via ?MODULE: to allow mocking in tests
         ?MODULE:handle_ended(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
         throw(?atm_examine_error(Type, Reason, Stacktrace))
     end.
 
 
--spec abort(
+-spec stop(
     atm_lane_execution:lane_run_selector(),
-    atm_lane_execution:run_aborting_reason(),
+    atm_lane_execution:run_stopping_reason(),
     atm_workflow_execution_ctx:record()
 ) ->
     ok | no_return().
-abort(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx) ->
+stop(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx) ->
     AtmWorkflowExecutionId = atm_workflow_execution_ctx:get_workflow_execution_id(
         AtmWorkflowExecutionCtx
     ),
-    case atm_lane_execution_status:handle_aborting(AtmLaneRunSelector, AtmWorkflowExecutionId, Reason) of
+    case atm_lane_execution_status:handle_stopping(AtmLaneRunSelector, AtmWorkflowExecutionId, Reason) of
         {ok, #document{value = AtmWorkflowExecution}} ->
-            abort_parallel_boxes(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecution),
+            stop_parallel_boxes(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecution),
             workflow_engine:cancel_execution(AtmWorkflowExecutionId);
 
         {error, _} = Error ->
@@ -205,29 +205,29 @@ get_iterator_spec(AtmLaneRunSelector, AtmWorkflowExecution = #atm_workflow_execu
 
 
 %% @private
--spec abort_parallel_boxes(
+-spec stop_parallel_boxes(
     atm_lane_execution:lane_run_selector(),
-    atm_lane_execution:run_aborting_reason(),
+    atm_lane_execution:run_stopping_reason(),
     atm_workflow_execution_ctx:record(),
     atm_workflow_execution:record()
 ) ->
     ok | no_return().
-abort_parallel_boxes(
+stop_parallel_boxes(
     AtmLaneRunSelector,
-    AtmLaneRunAbortingReason,
+    AtmLaneRunStoppingReason,
     AtmWorkflowExecutionCtx,
     AtmWorkflowExecution
 ) ->
-    AtmTaskExecutionAbortingReason = case AtmLaneRunAbortingReason of
+    AtmTaskExecutionStoppingReason = case AtmLaneRunStoppingReason of
         failure -> interrupt;
         crush -> interrupt;
         Reason -> Reason
     end,
     {ok, AtmLaneRun} = atm_lane_execution:get_run(AtmLaneRunSelector, AtmWorkflowExecution),
 
-    atm_parallel_box_execution:abort_all(
+    atm_parallel_box_execution:stop_all(
         AtmWorkflowExecutionCtx,
-        AtmTaskExecutionAbortingReason,
+        AtmTaskExecutionStoppingReason,
         AtmLaneRun#atm_lane_execution_run.parallel_boxes
     ).
 

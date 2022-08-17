@@ -373,7 +373,7 @@ cancel_finishing_atm_workflow_execution() ->
                             % (last step remaining) the current lane run did. At this point cancel
                             % is no longer possible (execution is treated as successfully ended)
                             ?assertThrow(
-                                ?ERROR_ATM_INVALID_STATUS_TRANSITION(?FINISHED_STATUS, ?ABORTING_STATUS),
+                                ?ERROR_ATM_INVALID_STATUS_TRANSITION(?FINISHED_STATUS, ?STOPPING_STATUS),
                                 atm_workflow_execution_test_runner:cancel_workflow_execution(AtmMockCallCtx)
                             )
                         end

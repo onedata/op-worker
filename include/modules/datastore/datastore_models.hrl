@@ -1125,8 +1125,8 @@
     % when updating doc). It is necessary due to limitation of datastore as
     % otherwise getting document before update would be needed (to compare 2 docs).
     status_changed = false :: boolean(),
-    % Flag used to differentiate reasons why task is aborting
-    aborting_reason = undefined :: undefined | atm_task_execution:aborting_reason(),
+    % Flag used to differentiate reasons why task is stopping
+    stopping_reason = undefined :: undefined | atm_task_execution:stopping_reason(),
 
     items_in_processing = 0 :: non_neg_integer(),
     items_processed = 0 :: non_neg_integer(),

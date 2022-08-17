@@ -52,12 +52,12 @@
     % waiting
     ?SCHEDULED_STATUS | ?PREPARING_STATUS | ?ENQUEUED_STATUS |
     % ongoing
-    ?ACTIVE_STATUS | ?ABORTING_STATUS |
+    ?ACTIVE_STATUS | ?STOPPING_STATUS |
     % ended
     ?FINISHED_STATUS |
     ?CRUSHED_STATUS | ?CANCELLED_STATUS | ?FAILED_STATUS | ?INTERRUPTED_STATUS | ?PAUSED_STATUS.
 
--type run_aborting_reason() :: crush | cancel | failure | interrupt | pause.
+-type run_stopping_reason() :: crush | cancel | failure | interrupt | pause.
 
 -type run_diff() :: fun((run()) -> {ok, run()} | {error, term()}).
 -type run() :: #atm_lane_execution_run{}.
@@ -65,7 +65,7 @@
 %% TODO VFS-8660 replace tuple with record
 -type lane_run_selector() :: {selector(), run_selector()}.
 
--export_type([index/0, selector/0, run_aborting_reason/0, diff/0, record/0]).
+-export_type([index/0, selector/0, run_stopping_reason/0, diff/0, record/0]).
 -export_type([run_num/0, run_selector/0, run_status/0, run_diff/0, run/0]).
 -export_type([lane_run_selector/0]).
 
@@ -301,7 +301,7 @@ encode_run(NestedRecordEncoder, #atm_lane_execution_run{
     run_num = RunNum,
     origin_run_num = OriginRunNum,
     status = Status,
-    aborting_reason = AbortingReason,
+    stopping_reason = StoppingReason,
     iterated_store_id = IteratedStoreId,
     exception_store_id = ExceptionStoreId,
     parallel_boxes = AtmParallelBoxExecutions
@@ -314,9 +314,9 @@ encode_run(NestedRecordEncoder, #atm_lane_execution_run{
         end, AtmParallelBoxExecutions)
     },
     EncodedRun2 = maps_utils:put_if_defined(EncodedRun1, <<"originRunNum">>, OriginRunNum),
-    EncodedRun3 = case AbortingReason of
+    EncodedRun3 = case StoppingReason of
         undefined -> EncodedRun2;
-        _ -> EncodedRun2#{<<"abortingReason">> => atom_to_binary(AbortingReason, utf8)}
+        _ -> EncodedRun2#{<<"stoppingReason">> => atom_to_binary(StoppingReason, utf8)}
     end,
     EncodedRun4 = maps_utils:put_if_defined(EncodedRun3, <<"iteratedStoreId">>, IteratedStoreId),
     maps_utils:put_if_defined(EncodedRun4, <<"exceptionStoreId">>, ExceptionStoreId).
@@ -348,9 +348,9 @@ decode_run(NestedRecordDecoder, EncodedRun = #{
         run_num = RunNum,
         origin_run_num = maps:get(<<"originRunNum">>, EncodedRun, undefined),
         status = binary_to_atom(StatusBin, utf8),
-        aborting_reason = case maps:get(<<"abortingReason">>, EncodedRun, undefined) of
+        stopping_reason = case maps:get(<<"stoppingReason">>, EncodedRun, undefined) of
             undefined -> undefined;
-            EncodedAbortingReason -> binary_to_atom(EncodedAbortingReason, utf8)
+            EncodedStoppingReason -> binary_to_atom(EncodedStoppingReason, utf8)
         end,
         iterated_store_id = maps:get(<<"iteratedStoreId">>, EncodedRun, undefined),
         exception_store_id = maps:get(<<"exceptionStoreId">>, EncodedRun, undefined),

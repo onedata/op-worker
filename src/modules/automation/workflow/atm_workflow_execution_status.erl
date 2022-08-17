@@ -48,8 +48,8 @@
 %%% copied from last executed lane run which works because:
 %%% 1) if last lane run successfully finished than all previous lane runs must
 %%%    have also successfully finished.
-%%% 2) if last lane run aborted (due to cancel or failure) than entire workflow
-%%%    execution is aborted with the same reason.
+%%% 2) if last lane run stopped (due to cancel or failure) than entire workflow
+%%%    execution is stopped with the same reason.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_workflow_execution_status).
@@ -62,7 +62,7 @@
 -export([
     handle_lane_preparing/3,
     handle_lane_enqueued/2,
-    handle_lane_aborting/3,
+    handle_lane_stopping/3,
     handle_lane_task_status_change/2,
     handle_ended/1,
     handle_manual_lane_repeat/2
@@ -109,7 +109,7 @@ handle_lane_preparing(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmLaneRunDiff
         (Record = #atm_workflow_execution{status = ?ACTIVE_STATUS}) ->
             AtmLaneRunDiff(Record);
 
-        (#atm_workflow_execution{status = ?ABORTING_STATUS}) ->
+        (#atm_workflow_execution{status = ?STOPPING_STATUS}) ->
             ?ERROR_ATM_WORKFLOW_EXECUTION_ABORTING;
 
         (#atm_workflow_execution{status = _EndedStatus}) ->
@@ -135,7 +135,7 @@ handle_lane_enqueued(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
         ->
             AtmLaneRunDiff(Record);
 
-        (#atm_workflow_execution{status = ?ABORTING_STATUS}) ->
+        (#atm_workflow_execution{status = ?STOPPING_STATUS}) ->
             ?ERROR_ATM_WORKFLOW_EXECUTION_ABORTING;
 
         (#atm_workflow_execution{status = _EndedStatus}) ->
@@ -143,25 +143,25 @@ handle_lane_enqueued(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
     end).
 
 
--spec handle_lane_aborting(
+-spec handle_lane_stopping(
     atm_lane_execution:lane_run_selector(),
     atm_workflow_execution:id(),
     lane_run_diff()
 ) ->
     {ok, atm_workflow_execution:doc()} | errors:error().
-handle_lane_aborting(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmLaneRunDiff) ->
+handle_lane_stopping(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmLaneRunDiff) ->
     Diff = fun
         (Record = #atm_workflow_execution{status = Status}) when
             Status == ?SCHEDULED_STATUS;
             Status == ?ACTIVE_STATUS;
-            Status == ?ABORTING_STATUS
+            Status == ?STOPPING_STATUS
         ->
             UpdateResult = AtmLaneRunDiff(Record),
 
             case {atm_lane_execution:is_current_lane_run(AtmLaneRunSelector, Record), UpdateResult} of
                 {true, {ok, NewRecord}} ->
                     {ok, set_times_on_phase_transition(NewRecord#atm_workflow_execution{
-                        status = ?ABORTING_STATUS
+                        status = ?STOPPING_STATUS
                     })};
                 _ ->
                     UpdateResult
@@ -257,7 +257,7 @@ handle_manual_lane_repeat(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
     atm_workflow_execution:phase().
 status_to_phase(?SCHEDULED_STATUS) -> ?WAITING_PHASE;
 status_to_phase(?ACTIVE_STATUS) -> ?ONGOING_PHASE;
-status_to_phase(?ABORTING_STATUS) -> ?ONGOING_PHASE;
+status_to_phase(?STOPPING_STATUS) -> ?ONGOING_PHASE;
 status_to_phase(?FINISHED_STATUS) -> ?ENDED_PHASE;
 status_to_phase(?CRUSHED_STATUS) -> ?ENDED_PHASE;
 status_to_phase(?CANCELLED_STATUS) -> ?ENDED_PHASE;

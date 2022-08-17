@@ -209,7 +209,7 @@ terminate_not_ended(SpaceId) ->
                 value = #atm_workflow_execution{
                     incarnation = AtmWorkflowIncarnation
                 }
-            }} = atm_lane_execution_status:handle_aborting(
+            }} = atm_lane_execution_status:handle_stopping(
                 {current, current}, AtmWorkflowExecutionId, failure
             ),
 

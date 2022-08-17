@@ -111,7 +111,7 @@ cancel(UserCtx, AtmWorkflowExecutionId) ->
         atm_workflow_execution_auth:build(SpaceId, AtmWorkflowExecutionId, UserCtx),
         AtmWorkflowExecutionEnv
     ),
-    atm_lane_execution_handler:abort({current, current}, cancel, AtmWorkflowExecutionCtx).
+    atm_lane_execution_handler:stop({current, current}, cancel, AtmWorkflowExecutionCtx).
 
 
 -spec repeat(
@@ -197,7 +197,7 @@ restart_lane(_, _, _) ->
     atm_task_executor:job_batch_id(),
     [automation:item()]
 ) ->
-    ok | {error, running_item_failed} | {error, task_aborting} | {error, task_ended}.
+    ok | {error, running_item_failed} | {error, task_stopping} | {error, task_ended}.
 run_task_for_item(
     _AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId,
     AtmJobBatchId, ItemBatch
@@ -334,7 +334,7 @@ handle_exception(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, Type, Reason, 
     AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(
         undefined,
         % user session may no longer be available (e.g. session expiration caused exception) -
-        % use provider root session just to abort execution
+        % use provider root session just to stop execution
         get_root_workflow_execution_auth(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv),
         AtmWorkflowExecutionEnv
     ),
@@ -342,11 +342,11 @@ handle_exception(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, Type, Reason, 
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
     log_exception(Logger, Type, Reason, Stacktrace),
 
-    AbortingReason = case Type of
+    StoppingReason = case Type of
         throw -> interrupt;
         _ -> crush
     end,
-    atm_lane_execution_handler:abort({current, current}, AbortingReason, AtmWorkflowExecutionCtx),
+    atm_lane_execution_handler:stop({current, current}, StoppingReason, AtmWorkflowExecutionCtx),
     end_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
 
     ?END_EXECUTION.

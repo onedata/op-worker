@@ -344,7 +344,7 @@ atm_workflow_execution_cancel_in_aborting_status_after_lane_run_preparation_fail
                         % (last step remaining) the current lane run did. At this point cancel
                         % is no longer possible (execution is treated as failed one)
                         ?assertThrow(
-                            ?ERROR_ATM_INVALID_STATUS_TRANSITION(?FAILED_STATUS, ?ABORTING_STATUS),
+                            ?ERROR_ATM_INVALID_STATUS_TRANSITION(?FAILED_STATUS, ?STOPPING_STATUS),
                             atm_workflow_execution_test_runner:cancel_workflow_execution(AtmMockCallCtx)
                         )
                     end,
