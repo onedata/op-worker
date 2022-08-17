@@ -68,7 +68,8 @@
     #custom_metadata_set_request{} |
     #custom_metadata_remove_request{} |
     #file_distribution_gather_request{} |
-    #historical_dir_size_stats_gather_request{}.
+    #historical_dir_size_stats_gather_request{} |
+    #file_storage_locations_get_request{}.
 
 -type qos_operation() ::
     #qos_entry_add_request{} |

@@ -191,7 +191,6 @@ create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, 
 
     FileDetails = #file_details{
         file_attr = FileAttrs,
-        index_startid = file_listing:build_index(FileName, FileAttrs#file_attr.provider_id),
         active_permissions_type = case HasAcl of
             true -> acl;
             false -> posix
@@ -392,9 +391,9 @@ file_details_to_gs_json(undefined, #file_details{
         shares = Shares,
         owner_id = OwnerId,
         provider_id = ProviderId,
-        nlink = LinksCount
+        nlink = LinksCount,
+        index = Index
     },
-    index_startid = Index,
     active_permissions_type = ActivePermissionsType,
     eff_protection_flags = EffFileProtectionFlags,
     eff_qos_membership = EffQosMembership,
@@ -441,9 +440,9 @@ file_details_to_gs_json(ShareId, #file_details{
         mode = Mode,
         size = Size,
         mtime = MTime,
-        shares = Shares
+        shares = Shares,
+        index = Index
     },
-    index_startid = Index,
     active_permissions_type = ActivePermissionsType,
     has_metadata = HasMetadata
 }) ->
@@ -490,7 +489,8 @@ file_attrs_to_json(undefined, #file_attr{
     shares = Shares,
     provider_id = ProviderId,
     owner_id = OwnerId,
-    nlink = HardlinksCount
+    nlink = HardlinksCount,
+    index = Index
 }) ->
     {ok, ObjectId} = file_id:guid_to_objectid(Guid),
     
@@ -518,7 +518,8 @@ file_attrs_to_json(undefined, #file_attr{
         <<"shares">> => Shares,
         <<"provider_id">> => ProviderId,
         <<"owner_id">> => OwnerId,
-        <<"hardlinks_count">> => utils:undefined_to_null(HardlinksCount)
+        <<"hardlinks_count">> => utils:undefined_to_null(HardlinksCount),
+        <<"index">> => Index
     };
 file_attrs_to_json(ShareId, #file_attr{
     guid = FileGuid,
