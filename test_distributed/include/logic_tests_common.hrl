@@ -22,7 +22,7 @@
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/privileges.hrl").
--include_lib("ctool/include/space_support/support_stage.hrl").
+-include_lib("ctool/include/space_support/support_parameters.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 
@@ -123,6 +123,14 @@
 -define(SPACE_HARVESTERS(__Space), [?HARVESTER_1, ?HARVESTER_2]).
 -define(SPACE_STORAGES_VALUE(__Space), #{?STORAGE_1 => 1000000000, ?STORAGE_2 => 1000000000}).
 -define(SPACE_STORAGES_MATCHER(__Space), #{?STORAGE_1 := 1000000000, ?STORAGE_2 := 1000000000}).
+-define(SPACE_SUPPORT_PARAMETERS_REGISTRY_VALUE(__Space), jsonable_record:to_json(#support_parameters_registry{registry = #{
+    ?PROVIDER_1 => #support_parameters{accounting_enabled = true, dir_stats_service_enabled = true, dir_stats_service_status = initializing},
+    ?PROVIDER_2 => #support_parameters{accounting_enabled = false, dir_stats_service_enabled = false, dir_stats_service_status = disabled}
+}}, support_parameters_registry)).
+-define(SPACE_SUPPORT_PARAMETERS_REGISTRY_MATCHER(__Space), #support_parameters_registry{registry = #{
+    ?PROVIDER_1 := #support_parameters{accounting_enabled = true, dir_stats_service_enabled = true, dir_stats_service_status = initializing},
+    ?PROVIDER_2 := #support_parameters{accounting_enabled = false, dir_stats_service_enabled = false, dir_stats_service_status = disabled}
+}}).
 
 % Mocked share data
 -define(SHARE_NAME(__Share), __Share).
@@ -497,7 +505,8 @@ end).
     providers = ?SPACE_PROVIDERS_MATCHER(__Space),
     shares = ?SPACE_SHARES(__Space),
     harvesters = ?SPACE_HARVESTERS(__Space),
-    storages = ?SPACE_STORAGES_MATCHER(__Space)
+    storages = ?SPACE_STORAGES_MATCHER(__Space),
+    support_parameters_registry = ?SPACE_SUPPORT_PARAMETERS_REGISTRY_MATCHER(__Space)
 }}).
 -define(SPACE_PROTECTED_DATA_MATCHER(__Space), #document{key = __Space, value = #od_space{
     name = ?SPACE_NAME(__Space),
@@ -506,9 +515,10 @@ end).
     eff_users = #{},
     direct_groups = #{},
     eff_groups = #{},
-    providers = #{},
+    providers = ?SPACE_PROVIDERS_MATCHER(__Space),
     shares = [],
-    harvesters = []
+    harvesters = [],
+    support_parameters_registry = ?SPACE_SUPPORT_PARAMETERS_REGISTRY_MATCHER(__Space)
 }}).
 
 
@@ -667,7 +677,8 @@ end).
     <<"revision">> => 1,
     <<"gri">> => gri:serialize(#gri{type = od_space, id = __SpaceId, aspect = instance, scope = protected}),
     <<"name">> => ?SPACE_NAME(__SpaceId),
-    <<"providers">> => ?SPACE_PROVIDERS_VALUE(__SpaceId)
+    <<"providers">> => ?SPACE_PROVIDERS_VALUE(__SpaceId),
+    <<"supportParametersRegistry">> => ?SPACE_SUPPORT_PARAMETERS_REGISTRY_VALUE(__SpaceId)
 }).
 -define(SPACE_PRIVATE_DATA_VALUE(__SpaceId), begin
     (?SPACE_PROTECTED_DATA_VALUE(__SpaceId))#{
@@ -681,7 +692,6 @@ end).
         <<"effectiveGroups">> => ?SPACE_EFF_GROUPS_VALUE(__SpaceId),
 
         <<"storages">> => ?SPACE_STORAGES_VALUE(__SpaceId),
-        <<"providers">> => ?SPACE_PROVIDERS_VALUE(__SpaceId),
         <<"shares">> => ?SPACE_SHARES(__SpaceId),
         <<"harvesters">> => ?SPACE_HARVESTERS(__SpaceId)
     }

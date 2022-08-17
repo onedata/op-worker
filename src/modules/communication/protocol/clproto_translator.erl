@@ -655,6 +655,7 @@ translate_from_protobuf(#'FileAttr'{} = FileAttr) ->
         owner_id = FileAttr#'FileAttr'.owner_id,
         fully_replicated = FileAttr#'FileAttr'.fully_replicated,
         nlink = FileAttr#'FileAttr'.nlink,
+        index = file_listing:decode_index(FileAttr#'FileAttr'.index),
         xattrs = Xattrs
     };
 translate_from_protobuf(#'FileChildren'{
@@ -1665,7 +1666,7 @@ translate_to_protobuf(#file_attr{} = FileAttr) ->
         owner_id = FileAttr#file_attr.owner_id,
         fully_replicated = FileAttr#file_attr.fully_replicated,
         nlink = FileAttr#file_attr.nlink,
-        listing_index = <<>>,
+        index = file_listing:encode_index(FileAttr#file_attr.index),
         xattrs = Xattrs
     }};
 translate_to_protobuf(#file_children{

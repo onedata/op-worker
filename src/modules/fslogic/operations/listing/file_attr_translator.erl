@@ -41,6 +41,7 @@ file_attrs_to_json(#file_attr{
     provider_id = ProviderId,
     owner_id = OwnerId,
     nlink = HardlinksCount,
+    index = Index,
     xattrs = Xattrs
 }) ->
     {ok, ObjectId} = file_id:guid_to_objectid(Guid),
@@ -69,7 +70,8 @@ file_attrs_to_json(#file_attr{
         <<"shares">> => Shares,
         <<"provider_id">> => ProviderId,
         <<"owner_id">> => OwnerId,
-        <<"hardlinks_count">> => utils:undefined_to_null(HardlinksCount)
+        <<"hardlinks_count">> => utils:undefined_to_null(HardlinksCount),
+        <<"index">> => Index
     },
     maps:fold(fun(XattrName, XattrValue, Acc) ->
         Acc#{<<"xattr.", XattrName/binary>> => utils:undefined_to_null(XattrValue)}

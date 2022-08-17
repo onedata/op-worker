@@ -69,14 +69,8 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = Aspect}}) when
     Aspect =:= openfaas_function_pod_status_registry
 ->
     undefined;
-data_spec(#op_req{operation = get, gri = #gri{aspect = {openfaas_function_pod_event_log, _}}}) -> #{
-    optional => #{
-        <<"index">> => {binary, any},
-        <<"offset">> => {integer, any},
-        <<"limit">> => {integer, {between, 1, ?MAX_POD_EVENT_LOG_LIST_LIMIT}},
-        <<"direction">> => {atom, [?FORWARD, ?BACKWARD]}
-    }
-}.
+data_spec(#op_req{operation = get, gri = #gri{aspect = {openfaas_function_pod_event_log, _}}}) ->
+    audit_log_browse_opts:json_data_spec().
 
 
 %%--------------------------------------------------------------------
@@ -165,7 +159,7 @@ get(#op_req{data = Data, gri = #gri{aspect = {openfaas_function_pod_event_log, P
         error ->
             ?ERROR_NOT_FOUND;
         {ok, #atm_openfaas_function_pod_status_summary{event_log_id = EventLogId}} ->
-            BrowseOpts = json_infinite_log_model:build_browse_opts(Data),
+            BrowseOpts = audit_log_browse_opts:from_json(Data),
             {ok, BrowseResult} = atm_openfaas_function_pod_status_registry:browse_pod_event_log(
                 EventLogId, BrowseOpts
             ),

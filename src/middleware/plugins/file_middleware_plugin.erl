@@ -437,6 +437,7 @@ resolve_get_operation_handler(json_metadata, public) -> ?MODULE;         % REST/
 resolve_get_operation_handler(rdf_metadata, private) -> ?MODULE;         % REST/gs
 resolve_get_operation_handler(rdf_metadata, public) -> ?MODULE;          % REST/gs
 resolve_get_operation_handler(distribution, private) -> ?MODULE;         % REST/gs
+resolve_get_operation_handler(storage_locations, private) -> ?MODULE;
 resolve_get_operation_handler(acl, private) -> ?MODULE;
 resolve_get_operation_handler(shares, private) -> ?MODULE;               % gs only
 resolve_get_operation_handler(transfers, private) -> ?MODULE;
@@ -561,6 +562,7 @@ data_spec_get(#gri{aspect = rdf_metadata}) -> #{
 
 data_spec_get(#gri{aspect = As}) when
     As =:= distribution;
+    As =:= storage_locations;
     As =:= acl;
     As =:= shares;
     As =:= symlink_value;
@@ -601,15 +603,8 @@ data_spec_get(#gri{aspect = download_url}) -> #{
     optional => #{<<"follow_symlinks">> => {boolean, any}}
 };
 
-data_spec_get(#gri{aspect = archive_recall_log}) -> #{
-    optional => #{
-        <<"index">> => {binary, any},
-        <<"timestamp">> => {integer, {not_lower_than, 0}},
-        <<"offset">> => {integer, any},
-        <<"limit">> => {integer, {between, 1, 1000}},
-        <<"direction">> => {atom, [?FORWARD, ?BACKWARD]}
-    }
-};
+data_spec_get(#gri{aspect = archive_recall_log}) ->
+    audit_log_browse_opts:json_data_spec();
 
 data_spec_get(#gri{aspect = dir_size_stats}) -> #{
     required => #{
@@ -652,6 +647,7 @@ authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= json_metadata;
     As =:= rdf_metadata;
     As =:= distribution;
+    As =:= storage_locations;
     As =:= acl;
     As =:= shares;
     As =:= dataset_summary;
@@ -702,6 +698,7 @@ validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= json_metadata;
     As =:= rdf_metadata;
     As =:= distribution;
+    As =:= storage_locations;
     As =:= acl;
     As =:= shares;
     As =:= transfers;
@@ -885,6 +882,9 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = acl}}, _) ->
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = distribution}}, _) ->
     {ok, mi_file_metadata:gather_distribution(Auth#auth.session_id, ?FILE_REF(FileGuid))};
 
+get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = storage_locations}}, _) ->
+    {ok, mi_file_metadata:get_storage_locations(Auth#auth.session_id, ?FILE_REF(FileGuid))};
+
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = shares}}, _) ->
     {ok, FileAttrs} = ?lfm_check(lfm:stat(Auth#auth.session_id, ?FILE_REF(FileGuid))),
     {ok, FileAttrs#file_attr.shares};
@@ -970,7 +970,7 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = archive_recall_progr
     {ok, mi_archives:get_recall_progress(Auth#auth.session_id, FileGuid)};
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = archive_recall_log}, data = Data}, _) ->
-    BrowseOpts = json_infinite_log_model:build_browse_opts(Data),
+    BrowseOpts = audit_log_browse_opts:from_json(Data),
     {ok, mi_archives:browse_recall_log(Auth#auth.session_id, FileGuid, BrowseOpts)};
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = api_samples, scope = public}}, _) ->
