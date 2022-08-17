@@ -14,6 +14,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("proto/oneprovider/dbsync_messages2.hrl").
 -include("global_definitions.hrl").
+-include("modules/dbsync/dbsync.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -354,7 +355,8 @@ changes_request_should_be_handled(Config) ->
             Request = #changes_request2{
                 space_id = SpaceId,
                 since = 1,
-                until = 2
+                until = 2,
+                included_mutators = ?ALL_EXCEPT_SENDER
             },
             ?call(Worker, ProviderId, Request),
             Children = rpc:call(Worker, supervisor, which_children, [

@@ -344,11 +344,12 @@ multiple_status_change_test(Config) ->
     check_initial_dir_stats(Config, op_worker_nodes),
     check_update_times(Config, [op_worker_nodes]),
 
-    {ok, EnablingTime} = ?assertMatch({ok, _},
+    {ok, InitializationTime} = ?assertMatch({ok, _},
         rpc:call(Worker, dir_stats_service_state, get_last_initialization_timestamp_if_in_enabled_status, [SpaceId])),
-    [{_, EnablingTime2} | _] = rpc:call(
+    [{_, EnablingTime2}, {_, InitializationTime2} | _] = rpc:call(
         Worker, dir_stats_service_state, get_status_change_timestamps, [SpaceId]),
-    ?assertEqual(EnablingTime, EnablingTime2),
+    ?assertEqual(InitializationTime, InitializationTime2),
+    ?assert(EnablingTime2 >= InitializationTime),
 
     disable(Config),
     enable(Config),
