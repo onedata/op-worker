@@ -28,7 +28,7 @@
     race_with_file_adding_to_large_dir_test/1,
     multiple_status_change_test/1, adding_file_when_disabled_test/1,
     restart_test/1, parallel_write_test/4]).
--export([init/2, teardown/1, teardown/3]).
+-export([init/1, init_and_enable_for_new_space/1, teardown/1, teardown/3]).
 -export([verify_dir_on_provider_creating_files/3]).
 % TODO VFS-9148 - extend tests
 
@@ -45,7 +45,7 @@
         _ -> BytesWritten
     end
 ).
--define(TOTAL_SIZE_ON_STORAGE_KEY(Config, NodesSelector), 
+-define(TOTAL_SIZE_ON_STORAGE_KEY(Config, NodesSelector),
     ?SIZE_ON_STORAGE((lfm_test_utils:get_user1_first_storage_id(Config, NodesSelector)))).
 
 -define(ATTEMPTS, 60).
@@ -122,7 +122,7 @@ transfer_after_enabling_test(Config) ->
     SessId = lfm_test_utils:get_user1_session_id(Config, WorkerCreatingFiles),
     SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(lfm_test_utils:get_user1_first_space_id(Config)),
-    
+
     ?assertEqual(ok, rpc:call(WorkerCreatingFiles, dir_stats_service_state, enable, [SpaceId])),
     ?assertEqual(enabled,
         rpc:call(WorkerCreatingFiles, dir_stats_service_state, get_extended_status, [SpaceId]), ?ATTEMPTS),
@@ -322,7 +322,7 @@ multiple_status_change_test(Config) ->
         Worker, dir_stats_service_state, get_status_change_timestamps, [SpaceId]),
     StatusChanges = lists:map(
         fun({StatusChangeDescription, _Timestamp}) -> StatusChangeDescription end, StatusChangesWithTimestamps),
-    ExpectedStatusChanges = [disabled, stopping, enabled, initializing],
+    ExpectedStatusChanges = [disabled, stopping, enabled],
     ?assertEqual(ExpectedStatusChanges, StatusChanges),
 
     enable(Config),
@@ -499,20 +499,19 @@ parallel_write_test(Config, SleepOnWrite, InitialFileSize, OverrideInitialBytes)
 %%% Init and teardown
 %%%===================================================================
 
-init(Config, DirStatsEnabled) ->
+init(Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
+
     {ok, MinimalSyncRequest} = test_utils:get_env(Worker, op_worker, minimal_sync_request),
     test_utils:set_env(Workers, op_worker, minimal_sync_request, 1),
-
-    SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
-    lists:foreach(fun(W) ->
-        rpc:call(W, space_support_state_api, init_support_state, [SpaceId, #{
-            accounting_enabled => false,
-            dir_stats_service_enabled => DirStatsEnabled
-        }])
-    end, Workers),
-
     [{default_minimal_sync_request, MinimalSyncRequest} | Config].
+
+
+init_and_enable_for_new_space(Config) ->
+    UpdatedConfig = init(Config),
+    enable(UpdatedConfig),
+    verify_collecting_status(Config, enabled),
+    UpdatedConfig.
 
 
 teardown(Config) ->
@@ -527,7 +526,7 @@ teardown(Config, SpaceId, CleanSpace) ->
     verify_collecting_status(Config, disabled),
 
     lists:foreach(fun(W) ->
-        ?assertEqual(ok, rpc:call(W, space_support_state_api, clean_support_state, [SpaceId])),
+        ?assertEqual(ok, rpc:call(W, dir_stats_service_state, clean, [SpaceId])),
         delete_stats(W, SpaceGuid),
         lists:foreach(fun(Incarnation) ->
             % Clean traverse data (do not assert as not all tests use initialization traverses)
@@ -785,7 +784,7 @@ check_space_dir_values_map_and_time_series_collection(
         initializing -> ?ATTEMPTS
     end,
     [Worker | _] = ?config(NodesSelector, Config),
-    {ok, CurrentStats} = ?assertMatch({ok, _}, rpc:call(Worker, dir_size_stats, get_stats, [SpaceGuid]), Attempts),
+    {ok, CurrentStats} = ?assertMatch({ok, _}, rpc:call(Worker, dir_size_stats, get_stats, [SpaceGuid]), ?ATTEMPTS),
     {ok, #time_series_layout_get_result{layout = TimeStatsLayout}} = ?assertMatch({ok, _}, 
         rpc:call(Worker, dir_size_stats, browse_historical_stats_collection, [SpaceGuid, #time_series_layout_get_request{}])),
     {ok, #time_series_slice_get_result{slice = TimeStats}} = ?assertMatch({ok, _}, 
@@ -793,17 +792,13 @@ check_space_dir_values_map_and_time_series_collection(
 
     ?assertEqual(ExpectedCurrentStats, CurrentStats),
 
-    case {IsCollectionEmpty, CollectingStatus} of
-        {true, enabled} ->
-            maps:foreach(fun(_TimeSeriesName, WindowsPerMetric) ->
-                ?assertEqual(lists:duplicate(4, []), maps:values(WindowsPerMetric))
-            end, TimeStats);
-        {true, initializing} ->
+    case IsCollectionEmpty of
+        true ->
             maps:foreach(fun(_TimeSeriesName, WindowsPerMetric) ->
                 ?assertEqual(lists:duplicate(4, 0),
                     lists:map(fun([{_Timestamp, Value}]) -> Value end, maps:values(WindowsPerMetric)))
             end, TimeStats);
-        {false, _} ->
+        false ->
             maps:foreach(fun(_TimeSeriesName, WindowsPerMetric) ->
                 ?assertEqual(4, maps:size(WindowsPerMetric))
             end, TimeStats)
