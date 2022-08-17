@@ -6,16 +6,16 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% Module providing translation functions for readdir plus.
+%%% Module providing translation functions for file attr.
 %%% @end
 %%%--------------------------------------------------------------------
--module(readdir_plus_translator).
+-module(file_attr_translator).
 -author("Michal Stanisz").
 
 -include("global_definitions.hrl").
 
 -export([
-    file_attrs_to_json/1, file_attrs_to_json/2,
+    to_json/1, to_json/2,
     build_optional_attrs_opt/1,
     select_attrs/2
 ]).
@@ -24,8 +24,8 @@
 %%% API
 %%%===================================================================
 
--spec file_attrs_to_json(lfm_attrs:file_attributes()) -> json_utils:json_map().
-file_attrs_to_json(#file_attr{
+-spec to_json(lfm_attrs:file_attributes()) -> json_utils:json_map().
+to_json(#file_attr{
     guid = Guid,
     name = Name,
     mode = Mode,
@@ -78,9 +78,9 @@ file_attrs_to_json(#file_attr{
     end, BaseJson, Xattrs).
 
 
--spec file_attrs_to_json(lfm_attrs:file_attributes(), [binary()]) -> json_utils:json_map().
-file_attrs_to_json(FileAttrs, RequestedAttributes) ->
-    select_attrs(file_attrs_to_json(FileAttrs), RequestedAttributes).
+-spec to_json(lfm_attrs:file_attributes(), [binary()]) -> json_utils:json_map().
+to_json(FileAttrs, RequestedAttributes) ->
+    select_attrs(to_json(FileAttrs), RequestedAttributes).
 
 
 -spec build_optional_attrs_opt([binary()]) -> [attr_req:optional_attr()].

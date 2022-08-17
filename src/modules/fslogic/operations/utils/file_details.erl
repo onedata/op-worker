@@ -55,7 +55,6 @@ resolve(UserCtx, FileCtx) ->
     #file_details{
         file_attr = FileAttr,
         symlink_value = resolve_symlink_value(FileDoc, Uuid),
-        index_startid = resolve_index_startid(FileCtx3, FileDoc),
         active_permissions_type = ActivePermissionsType,
         has_metadata = has_metadata(FileCtx3),
         eff_qos_membership = maps:get(effective_qos_membership, EffectiveValues, undefined),
@@ -116,20 +115,6 @@ calculate_effective_values(FileCtx) ->
         effective_protection_flags => EffectiveProtectionFlags,
         effective_recall => EffectiveRecallRootGuid
     }, FileCtx3}.
-
-
-%% @private
--spec resolve_index_startid(file_ctx:ctx(), file_meta:doc()) -> file_listing:index().
-resolve_index_startid(FileCtx, FileDoc) ->
-    case file_ctx:is_space_dir_const(FileCtx) of
-        true ->
-            % As provider id in space doc is random (depends on which provider called `file_meta:make_space_exist/0`) 
-            % use only space id in index (there are no conflicts on spaces between providers, so it is not a problem).
-            file_listing:build_index(file_meta:get_name(FileDoc));
-        false ->
-            file_listing:build_index(
-                file_meta:get_name(FileDoc), file_meta:get_provider_id(FileDoc))
-    end.
 
 
 %% @private

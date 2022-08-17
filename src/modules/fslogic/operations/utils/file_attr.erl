@@ -116,6 +116,7 @@ resolve(UserCtx, FileCtx, Opts) ->
         owner_id = OwnerId,
         fully_replicated = ReplicationStatus,
         nlink = resolve_link_count(FileCtx7, ShareId, OptionalAttrs),
+        index = resolve_index(FileCtx7, FileDoc),
         xattrs = resolve_xattrs(FileCtx7, OptionalAttrs)
     },
     {FileAttr, FileDoc, ConflictingFiles, FileCtx7}.
@@ -259,6 +260,20 @@ resolve_link_count(FileCtx, ShareId, OptionalAttrs) ->
             LinkCount;
         _ -> 
             undefined
+    end.
+
+
+%% @private
+-spec resolve_index(file_ctx:ctx(), file_meta:doc()) -> file_listing:index().
+resolve_index(FileCtx, FileDoc) ->
+    case file_ctx:is_space_dir_const(FileCtx) of
+        true ->
+            % As provider id in space doc is random (depends on which provider called `file_meta:make_space_exist/0`) 
+            % use only space id in index (there are no conflicts on spaces between providers, so it is not a problem).
+            file_listing:build_index(file_meta:get_name(FileDoc));
+        false ->
+            file_listing:build_index(
+                file_meta:get_name(FileDoc), file_meta:get_provider_id(FileDoc))
     end.
 
 

@@ -761,11 +761,11 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = childre
             end,
             {lists:map(ItemToJson, Children), ReturnedListingPaginationToken};
         _ ->
-            OptionalAttrs = readdir_plus_translator:build_optional_attrs_opt(RequestedAttributes),
+            OptionalAttrs = file_attr_translator:build_optional_attrs_opt(RequestedAttributes),
             {ok, Children, ReturnedListingPaginationToken} = 
-                ?lfm_check(lfm:get_children_attrs( SessionId, ?FILE_REF(FileGuid), ListingOpts, OptionalAttrs)),
+                ?lfm_check(lfm:get_children_attrs(SessionId, ?FILE_REF(FileGuid), ListingOpts, OptionalAttrs)),
             ItemToJson = fun(FileAttr) ->
-                readdir_plus_translator:file_attrs_to_json(FileAttr, RequestedAttributes)
+                file_attr_translator:to_json(FileAttr, RequestedAttributes)
             end,
             {lists:map(ItemToJson, Children), ReturnedListingPaginationToken}
     end,
@@ -803,12 +803,12 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = files}}
         prefix => maps:get(<<"prefix">>, Data, undefined)
     }),
     RequestedAttributes = utils:ensure_list(maps:get(<<"attribute">>, Data, ?DEFAULT_RECURSIVE_FILE_LIST_ATTRIBUTES)),
-    OptionalAttrs = readdir_plus_translator:build_optional_attrs_opt(RequestedAttributes),
+    OptionalAttrs = file_attr_translator:build_optional_attrs_opt(RequestedAttributes),
     {ok, Result, InaccessiblePaths, NextPageToken} =
         ?lfm_check(lfm:get_files_recursively(SessionId, ?FILE_REF(FileGuid), Options, OptionalAttrs)),
     JsonResult = lists:map(fun({Path, Attrs}) ->
-        JsonAttrs = readdir_plus_translator:file_attrs_to_json(Attrs),
-        readdir_plus_translator:select_attrs(JsonAttrs#{<<"path">> => Path}, RequestedAttributes)
+        JsonAttrs = file_attr_translator:to_json(Attrs),
+        file_attr_translator:select_attrs(JsonAttrs#{<<"path">> => Path}, RequestedAttributes)
     end, Result),
     {ok, value, {JsonResult, InaccessiblePaths, NextPageToken}};
 
@@ -822,10 +822,10 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = attrs, 
         Attr ->
             [Attr]
     end,
-    OptionalAttrs = readdir_plus_translator:build_optional_attrs_opt(RequestedAttributes),
+    OptionalAttrs = file_attr_translator:build_optional_attrs_opt(RequestedAttributes),
     {ok, FileAttrs} = ?lfm_check(lfm:stat(Auth#auth.session_id, ?FILE_REF(FileGuid), OptionalAttrs)),
 
-    {ok, value, readdir_plus_translator:file_attrs_to_json(FileAttrs, RequestedAttributes)};
+    {ok, value, file_attr_translator:to_json(FileAttrs, RequestedAttributes)};
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = xattrs}}, _) ->
     SessionId = Auth#auth.session_id,
