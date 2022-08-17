@@ -9,9 +9,9 @@
 %%% This module contains functions that handle atm task execution status
 %%% transitions according (with some exceptions described below) to following
 %%% state machine:
-%%%
-%%%                                           <WAITING PHASE (initiation)>
-%%%
+%%%                                   |
+%%%                                   |       <WAITING PHASE (initiation)>
+%%%                                   v
 %%%                                +-----------+                       resuming execution
 %%%            --------------------|  PENDING  | <--------------------------------------------------------
 %%%          /                     +-----------+                                                           \
@@ -27,38 +27,33 @@
 %%%         |            |  ACTIVE  | ---------------------> |  STOPPING  | <--                             |
 %%%         |            +----------+                        +------------+                                 |
 %%%         |                  |                                   |                                        |
-%%%         |         ending task execution               ending task execution                             |
-%%%         |            with all items            ------------- due to --------------------                |
+%%%         |         ending task execution                        |                                        |
+%%%         |            with all items           ending task execution with ^stopping reason               |
 %%%         |               processed            /            /           \                  \              |
-%%%         |           /              \     failure         /             \             user pausing       |
-%%%         |      successfully       else     |           user            abrupt      entire execution     |
-%%%         |           |               |      |       cancellation     interruption          |             |
+%%%         |           /              \       1*            /             \                 4*             |
+%%%         |      successfully       else     |            2*              3*                |             |
+%%%         |           |               |      |            |                |                |             |
 %%%         |           |               |      |            |                |                |             |
 %%% ========|===========|===============|======|============|================|================|=============|======
 %%%         |           |               |      |            |                |                |             |
 %%%         |           |               |      |            |                |                |             |
 %%%         v           v               v      v            v                V                v             |
-%%%   +-----------+   +----------+    +----------+    +-----------+    +-------------+    +--------+        |
-%%%   |  SKIPPED  |   | FINISHED |    |  FAILED  |    | CANCELLED |    | INTERRUPTED |    | PAUSED |        |
-%%%   +-----------+   +----------+    +----------+    +-----------+    +-------------+    +--------+        |
+%%%   +-----------+   +----------+     +--------+    +-------------+    +-----------+        +--------+     |
+%%%   |  SKIPPED  |   | FINISHED |     | FAILED |    | INTERRUPTED |    | CANCELLED |        | PAUSED |     |  %% TODO pause -> cancel
+%%%   +-----------+   +----------+     +--------+    +-------------+    +-----------+        +--------+     |
 %%%          \                                              |                |                |             |
 %%%           \                                             |                |                |            /
-%%%             ------------------------------------------------------------------------------------------
+%%%             --------------------------------------------o----------------o----------------o-----------
 %%%
 %%%                                              <ENDED PHASE (teardown)>
 %%%
-%%% ^stopping - task execution can be stopped while not all items were processed due to:
-%%%  1) user cancelling entire automation workflow execution.
-%%%  2) user pausing entire automation workflow execution.
-%%%  3) failure severe enough to cause stopping of entire automation workflow execution
-%%%     (e.g. error when processing uncorrelated results).
-%%%  4) abrupt interruption when no failure in this task occurred but some other component (e.g task
-%%%     or external service like OpenFaaS) has failed and entire automation workflow execution
-%%%     is being stopped.
-%%%
-%%% Stopping execution may take some time. During it other reason for stopping may appear and
-%%% override current reason (e.g. user cancels already failing workflow) -
-%%% see fun stopping_reason_priority/1 for stopping reason priorities.
+%%% ^stopping - common step when halting execution due to:
+%%% 1* - failure severe enough to cause stopping of entire automation workflow execution
+%%%      (e.g. error when processing uncorrelated results).
+%%% 2* - abrupt interruption when some other component (e.g task or external service like OpenFaaS)
+%%%      has failed and entire automation workflow execution is being stopped.
+%%% 3* - user cancelling entire automation workflow execution.
+%%% 4* - user pausing entire automation workflow execution.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_task_execution_status).
@@ -100,7 +95,7 @@ is_transition_allowed(?STOPPING_STATUS, ?PAUSED_STATUS) -> true;
 
 is_transition_allowed(?SKIPPED_STATUS, ?PENDING_STATUS) -> true;
 is_transition_allowed(?CANCELLED_STATUS, ?PENDING_STATUS) -> true;
-is_transition_allowed(?INTERRUPTED_STATUS, ?PENDING_STATUS) -> true;
+is_transition_allowed(?INTERRUPTED_STATUS, ?PENDING_STATUS) -> true;  %% TODO pause -> cancel
 is_transition_allowed(?PAUSED_STATUS, ?PENDING_STATUS) -> true;
 
 is_transition_allowed(_, _) -> false.

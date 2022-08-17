@@ -9,57 +9,72 @@
 %%% This module contains functions that handle atm lane execution run status
 %%% transitions according (with some exceptions described below) to following
 %%% state machine:
-%%%
-%%%               +-------------+   cancel or failure
-%%%               |  SCHEDULED  |------------------------
-%%%  W            +-------------+                         \
-%%%  A                   |                                 \
-%%%  I                   v                                  |
-%%%  T            +-------------+    cancel or failure      |
-%%%  I            |  PREPARING  |-------------------------  |
-%%%  N            +-------------+                          \|
-%%%  G                   |                                  o
-%%%      ready to execute (all associated                   |
-%%%  P   documents created and initiated)                   |
-%%%  H                   v                                  |
-%%%  A            +-------------+          cancel           |
-%%%  S            |   ENQUEUED  |---------------------------o
-%%%  E            +-------------+                           |
-%%%                      |    \_____________________________|__________________________
-%%%                      |                                  |                           \
-%%%        first task within atm lane run                   |                            |
-%%%                   started                               |                            |
-%%% =====================|==================================|============================|========
-%%%                      v                                  |                            |
-%%%  O             +-------------+    cancel or failure     |                            |
-%%%  N             |    ACTIVE   |--------------------------o                            |
-%%%  G             +-------------+              ____        |                            |
-%%%  O                |                cancel /      \      v                            |
-%%%  I                |            (overrides \     +-------------+                      |
-%%%  N     ending lane execution     failure)   --->|   ABORTING  |----------------------o
-%%%  G            run with                          +-------------+                      |
-%%%              /       \                            |                                  |
-%%%  P          /         \                           |                                  |
-%%%  H         /           \            ending lane execution run while                  |
-%%%  A        /             \                  aborting due to                           |
-%%%  S      else     any parallel box          /             \              ending lane execution run when
-%%%  E       |          ended with          failure        cancel                preparing in advance
-%%%          |            failure            /                |                          |
-%%% =========|=================|============/=================|==========================|========
-%%%          |                 |           /                  |                          |
-%%%  E       |                 |          /                   |                          |
-%%%  N       v                 v         v                    v                          |
-%%%  D    +-------------+     +-------------+          +-------------+                   |
-%%%  E    |   FINISHED  |     |   FAILED    |          |  CANCELLED  |                   |
-%%%  D    +-------------+     +-------------+          +-------------+                   |
-%%%                                                                                      |
-%%%  P                                                                                   v
-%%%  H                                                                            +-------------+
-%%%  A                                                                            | INTERRUPTED |
-%%%  S                                                                            +-------------+
+%%%                                      |
+%%%                                      v
+%%%                               +-------------+       ^stopping
+%%%                               |  SCHEDULED  |-----------------------
+%%%                               +-------------+                        \
+%%% W  +------------+                    |                                \         %% TODO resuming -> aborting
+%%% A  |  RESUMING  |                    |                                 \
+%%% I  +------------+                    v                                  o
+%%% T    ^        |               +-------------+       ^stopping           |
+%%% I    |        |               |  PREPARING  |-------------------------  |
+%%% N    |        |               +-------------+                          \|
+%%% G    |        |                      |                                  o
+%%%      |        |        ready to execute (all associated                 |
+%%% P    |        |        documents created and initiated)                 |
+%%% H    |        |                      |                                  |
+%%% A    |        |                      v                                  |
+%%% S    |         \              +-------------+         ^stopping         |
+%%% E    |           -----------> |   ENQUEUED  |---------------------------o
+%%%      |                        +-------------+                           |
+%%%      |                               |                                  |
+%%%      |                               |                                  |
+%%%      |                 first task within atm lane run                   |
+%%%      |                            started                               |
+%%% =====|===============================|==================================|=================================
+%%%      |                               |                                  |
+%%%      |                               v                                  |
+%%%  O   |                         +-------------+        ^stopping         |
+%%%  N   |                ---------|    ACTIVE   |--------------------------o
+%%%  G   |              /          +-------------+                          |       ____
+%%%  O   |             |                                                    v     /      \ overriding ^stopping
+%%%  I   |             |                                             +-------------+     /        reason
+%%%  N   |   ending lane execution                                   |   STOPPING  | <--
+%%%  G   |         run with                                          +-------------+
+%%%      |          /    \                                                |
+%%%  P   |         /      \                                               |
+%%%  H   |        /        \                 ending lane run execution with ^stopping reason
+%%%  A   |       /          \              /           /              |         \            \
+%%%  S   |    else    any parallel box    1*          2*              3*         4*           5*
+%%%  E   |      |        ended with      /           /                |           \            \
+%%%      |      |         failure       /           /                 |            \            \
+%%% =====|======|============|=========/===========/==================|=============\============\==========
+%%%      |      |            |        /           /                   |              \            \
+%%%  E   |      |            |       /           /                    |               \            \
+%%%  N   |      v            v      v           v                     v                v            v
+%%%  D   |  +----------+    +--------+    +-----------+          +----------+    +-------------+    +-----------+
+%%%  E   |  | FINISHED |    | FAILED |    | CANCELLED |          |  PAUSED  |    | INTERRUPTED |    |  CRUSHED  |   %% TODO pause -> cancel
+%%%  D   |  +----------+    +--------+    +-----------+          +----------+    +-------------+    +-----------+
+%%%      |                                      |                     |                 |
+%%%  P    \                                     |                     |                /
+%%%  H      ------------------------------------o---------------------o---------------
+%%%  A              resuming execution
+%%%  S
 %%%  E
 %%%
-%%% There are 2 exceptions to above diagram:
+%%% ^stopping - common step when halting execution due to:
+%%% 1* - failure severe enough to cause stopping of entire automation workflow execution
+%%%      (e.g. error when processing uncorrelated results).
+%%% 2* - user cancelling entire automation workflow execution.
+%%% 3* - user pausing entire automation workflow execution.
+%%% 4* - abrupt interruption when some other component (e.g user offline session expired)
+%%%      has failed and entire automation workflow execution is being stopped.
+%%% 5* - unhandled exception occurred.
+%%%
+%%% TODO WRITE ABOUT LANE PREPARING IN ADVANCE
+%%% TODO RM INTERRUPTED LANE RUN PREPARED IN ADVANCE
+%%% There are 2 exceptions to above diagram: TODO REWRITE
 %%% 1) provider restart - atm lane execution run is forcefully ended as failed (or interrupted
 %%%    in case of lanes preparing in advance) disregarding status it had before restart.
 %%% 2) interrupted atm lane execution run when preparing in advance if previous lane run
@@ -133,8 +148,8 @@ can_manual_lane_run_repeat_be_scheduled(rerun, #atm_lane_execution_run{status = 
     Status =:= ?FINISHED_STATUS;
     Status =:= ?CANCELLED_STATUS;
     Status =:= ?FAILED_STATUS;
-    Status =:= ?INTERRUPTED_STATUS;  %% TODO can interrupted lane prepared in advance be reruned?
-    Status =:= ?PAUSED_STATUS        %% TODO if any run is reruned/retried when the current one is paused should cause it to transit into cancelled ?
+    Status =:= ?INTERRUPTED_STATUS;
+    Status =:= ?PAUSED_STATUS
 ->
     true;
 can_manual_lane_run_repeat_be_scheduled(_, _) ->
@@ -178,7 +193,6 @@ handle_enqueued(AtmLaneRunSelector, AtmWorkflowExecutionId) ->
     ?extract_doc(atm_workflow_execution_status:handle_lane_enqueued(AtmWorkflowExecutionId, Diff)).
 
 
-%% TODO ensure not called directly but via atm_lane_execution_handler:stop
 -spec handle_stopping(
     atm_lane_execution:lane_run_selector(),
     atm_workflow_execution:id(),
@@ -286,6 +300,7 @@ handle_manual_repeat(RepeatType, {AtmLaneSelector, _} = AtmLaneRunSelector, AtmW
                 Error
         end
     end,
+    % TODO in case of repeat when latest run was paused - transit it to cancelled
     atm_workflow_execution_status:handle_manual_lane_repeat(AtmWorkflowExecutionId, Diff).
 
 
@@ -339,7 +354,6 @@ handle_currently_executed_lane_run_ended(AtmWorkflowExecution1 = #atm_workflow_e
             {ok, AtmWorkflowExecution2}
     end.
 
-% TODO in case of repeat when latest run was paused - transit it to cancelled
 
 %% @private
 -spec end_currently_executed_lane_run(atm_workflow_execution:record()) ->
