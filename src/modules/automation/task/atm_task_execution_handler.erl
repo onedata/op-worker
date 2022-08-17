@@ -6,37 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module handles the task execution process according to following
-%%% state machine:
-%%%
-%%%                      <WAITING PHASE (initiation)>
-%%%     +-----------+
-%%%     |  PENDING  |---------------------------------------
-%%%     +-----------+                                        \
-%%%           |                               ending task execution with no item
-%%%  first item scheduled to process               ever scheduled to process
-%%%           |                                               |
-%%% ==========|===============================================|===============
-%%%           v               <ONGOING PHASE>                 |
-%%%         +-----------+                                     |
-%%%         |   ACTIVE  |                                     |
-%%%         +-----------+                                     |
-%%%                   |                                       |
-%%%                   |                                       |
-%%%        ending task execution with                         |
-%%%             /                \                            |
-%%%            /                  \                           |
-%%%  all items successfully      else                         |
-%%%        processed               |                          |
-%%%           |                    |                          |
-%%% ==========|====================|==========================|===============
-%%%           |           <ENDED PHASE (teardown)>            |
-%%%           |                    |                          |
-%%%           v                    v                          v
-%%%     +-----------+        +-----------+              +-----------+
-%%%     |  FINISHED |        |   FAILED  |              |  SKIPPED  |
-%%%     +-----------+        +-----------+              +-----------+
-%%%
+%%% This module handles the task execution process (for information about
+%%% state machine @see 'atm_task_execution_status.erl').
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_task_execution_handler).

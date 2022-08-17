@@ -6,8 +6,59 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module provides utility functions for management of automation
-%%% task execution status.
+%%% This module contains functions that handle atm task execution status
+%%% transitions according (with some exceptions described below) to following
+%%% state machine:
+%%%
+%%%                                           <WAITING PHASE (initiation)>
+%%%
+%%%                                +-----------+                       resuming execution
+%%%            --------------------|  PENDING  | <--------------------------------------------------------
+%%%          /                     +-----------+                                                           \
+%%%  ending task execution               |                                                                  |
+%%%    with no item ever            first item                                                              |
+%%%   scheduled to process      scheduled to process                                                        |
+%%%         |                   /                                                                           |
+%%% ========|==================/============================================================================|=====
+%%%         |                  |                    <ONGOING PHASE>                                         |
+%%%         |                  |                                           ____                             |
+%%%         |                  v                                         /      \ overriding ^stopping      |
+%%%         |            +----------+       ^stopping        +------------+     /       reason              |
+%%%         |            |  ACTIVE  | ---------------------> |  STOPPING  | <--                             |
+%%%         |            +----------+                        +------------+                                 |
+%%%         |                  |                                   |                                        |
+%%%         |         ending task execution               ending task execution                             |
+%%%         |            with all items            ------------- due to --------------------                |
+%%%         |               processed            /            /           \                  \              |
+%%%         |           /              \     failure         /             \             user pausing       |
+%%%         |      successfully       else     |           user            abrupt      entire execution     |
+%%%         |           |               |      |       cancellation     interruption          |             |
+%%%         |           |               |      |            |                |                |             |
+%%% ========|===========|===============|======|============|================|================|=============|======
+%%%         |           |               |      |            |                |                |             |
+%%%         |           |               |      |            |                |                |             |
+%%%         v           v               v      v            v                V                v             |
+%%%   +-----------+   +----------+    +----------+    +-----------+    +-------------+    +--------+        |
+%%%   |  SKIPPED  |   | FINISHED |    |  FAILED  |    | CANCELLED |    | INTERRUPTED |    | PAUSED |        |
+%%%   +-----------+   +----------+    +----------+    +-----------+    +-------------+    +--------+        |
+%%%          \                                              |                |                |             |
+%%%           \                                             |                |                |            /
+%%%             ------------------------------------------------------------------------------------------
+%%%
+%%%                                              <ENDED PHASE (teardown)>
+%%%
+%%% ^stopping - task execution can be stopped while not all items were processed due to:
+%%%  1) user cancelling entire automation workflow execution.
+%%%  2) user pausing entire automation workflow execution.
+%%%  3) failure severe enough to cause stopping of entire automation workflow execution
+%%%     (e.g. error when processing uncorrelated results).
+%%%  4) abrupt interruption when no failure in this task occurred but some other component (e.g task
+%%%     or external service like OpenFaaS) has failed and entire automation workflow execution
+%%%     is being stopped.
+%%%
+%%% Stopping execution may take some time. During it other reason for stopping may appear and
+%%% override current reason (e.g. user cancels already failing workflow) -
+%%% see fun stopping_reason_priority/1 for stopping reason priorities.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_task_execution_status).
