@@ -645,7 +645,7 @@ resolve_conflict(_Ctx, #document{value = RemoteValue} = RemoteDoc, #document{val
             case {RemoteDeleted, resolve_conflict_local_rev_greater(LocalValue, RemoteValue, RemoteDocMutator)} of
                 {true, _} ->
                     case LocalDeleted of
-                        true -> {false, LocalDoc};
+                        true -> ignore;
                         false -> {true, LocalDoc#document{deleted = true}}
                     end;
                 {false, {true, NewRecord}} ->
