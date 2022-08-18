@@ -435,14 +435,13 @@
 % Model used for storing information concerning archive.
 % One documents is stored for one archive.
 -record(archive, {
+    archiving_provider :: oneprovider:id(),
     dataset_id :: dataset:id(),
     creation_time :: time:seconds(),
     creator :: archive:creator(),
     state :: archive:state(),
     config :: archive:config(),
-    preserved_callback :: archive:callback(),
-    deleted_callback :: archive:callback(),
-    description :: archive:description(),
+    modifiable_fields :: archive:modifiable_fields(),
     % This directory is root for archive.
     % It has predefined uuid=?ARCHIVE_DIR_UUID(ArchiveId)
     % See archivisation_tree.erl for more info.
