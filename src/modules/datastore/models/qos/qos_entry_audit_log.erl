@@ -21,10 +21,10 @@
 %% API
 -export([
     create/1,
-    report_synchronization_started/2,
-    report_file_synchronized/2,
-    report_file_synchronization_skipped/3,
-    report_file_synchronization_failed/3,
+    report_synchronization_started/3,
+    report_file_synchronized/3,
+    report_file_synchronization_skipped/4,
+    report_file_synchronization_failed/4,
     destroy/1,
     browse_content/2
 ]).
@@ -49,45 +49,51 @@ create(Id) ->
     }).
 
 
--spec report_synchronization_started(id(), file_id:file_guid()) -> ok | {error, term()}.
-report_synchronization_started(Id, FileGuid) ->
+-spec report_synchronization_started(id(), file_id:file_guid(), file_meta:path()) -> 
+    ok | {error, term()}.
+report_synchronization_started(Id, FileGuid, FilePath) ->
     audit_log:append(Id, #audit_log_append_request{
         severity = ?INFO_AUDIT_LOG_SEVERITY,
         content = #{
             <<"status">> => <<"scheduled">>,
             <<"fileId">> => file_guid_to_object_id(FileGuid),
-            <<"description">> => <<"Remote replica differs, reconciliation started.">>
+            <<"description">> => <<"Remote replica differs, reconciliation started.">>,
+            <<"path">> => FilePath
         }
     }).
 
 
--spec report_file_synchronized(id(), file_id:file_guid()) -> ok | {error, term()}.
-report_file_synchronized(Id, FileGuid) ->
+-spec report_file_synchronized(id(), file_id:file_guid(), file_meta:path()) -> 
+    ok | {error, term()}.
+report_file_synchronized(Id, FileGuid, FilePath) ->
     audit_log:append(Id, #audit_log_append_request{
         severity = ?INFO_AUDIT_LOG_SEVERITY,
         content = #{
             <<"status">> => <<"completed">>,
             <<"fileId">> => file_guid_to_object_id(FileGuid),
-            <<"description">> => <<"Local replica reconciled.">>
+            <<"description">> => <<"Local replica reconciled.">>,
+            <<"path">> => FilePath
         }
     }).
 
 
--spec report_file_synchronization_skipped(id(), file_id:file_guid(), skip_reason()) ->
+-spec report_file_synchronization_skipped(id(), file_id:file_guid(), file_meta:path(), skip_reason()) ->
     ok | {error, term()}.
-report_file_synchronization_skipped(Id, FileGuid, Reason) ->
+report_file_synchronization_skipped(Id, FileGuid, FilePath, Reason) ->
     audit_log:append(Id, #audit_log_append_request{
         severity = ?INFO_AUDIT_LOG_SEVERITY,
         content = #{
             <<"status">> => <<"skipped">>,
             <<"fileId">> => file_guid_to_object_id(FileGuid),
-            <<"description">> => skip_reason_to_description(Reason)
+            <<"description">> => skip_reason_to_description(Reason),
+            <<"path">> => FilePath
         }
     }).
 
 
--spec report_file_synchronization_failed(id(), file_id:file_guid(), {error, term()}) -> ok | {error, term()}.
-report_file_synchronization_failed(Id, FileGuid, Error) ->
+-spec report_file_synchronization_failed(id(), file_id:file_guid(), file_meta:path(), {error, term()}) -> 
+    ok | {error, term()}.
+report_file_synchronization_failed(Id, FileGuid, FilePath, Error) ->
     ErrorJson = errors:to_json(Error),
 
     audit_log:append(Id, #audit_log_append_request{
@@ -99,7 +105,8 @@ report_file_synchronization_failed(Id, FileGuid, Error) ->
                 "Failed to reconcile local replica: ~s",
                 [maps:get(<<"description">>, ErrorJson)]
             ),
-            <<"reason">> => ErrorJson
+            <<"reason">> => ErrorJson,
+            <<"path">> => FilePath
         }
     }).
 
