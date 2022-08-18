@@ -12,15 +12,15 @@
 %%%                                      |
 %%%                                      v
 %%%                               +-------------+       ^stopping
-%%%                               |  SCHEDULED  |-----------------------
-%%%                               +-------------+                        \
-%%% W  +------------+                    |                                \         %% TODO resuming -> aborting
-%%% A  |  RESUMING  |                    |                                 \
-%%% I  +------------+                    v                                  o
+%%%                               |  SCHEDULED  |------------------------
+%%%                               +-------------+                         \
+%%% W  +------------+                    |              ^stopping          \
+%%% A  |  RESUMING  | -------------------|----------------------------------o
+%%% I  +------------+                    v                                  |
 %%% T    ^        |               +-------------+       ^stopping           |
-%%% I    |        |               |  PREPARING  |-------------------------  |
-%%% N    |        |               +-------------+                          \|
-%%% G    |        |                      |                                  o
+%%% I    |        |               |  PREPARING  |---------------------------o
+%%% N    |        |               +-------------+                           |
+%%% G    |        |                      |                                  |
 %%%      |        |        ready to execute (all associated                 |
 %%% P    |        |        documents created and initiated)                 |
 %%% H    |        |                      |                                  |
@@ -29,11 +29,9 @@
 %%% E    |           -----------> |   ENQUEUED  |---------------------------o
 %%%      |                        +-------------+                           |
 %%%      |                               |                                  |
-%%%      |                               |                                  |
 %%%      |                 first task within atm lane run                   |
 %%%      |                            started                               |
 %%% =====|===============================|==================================|=================================
-%%%      |                               |                                  |
 %%%      |                               v                                  |
 %%%  O   |                         +-------------+        ^stopping         |
 %%%  N   |                ---------|    ACTIVE   |--------------------------o
@@ -54,7 +52,7 @@
 %%%  E   |      |            |       /           /                    |               \            \
 %%%  N   |      v            v      v           v                     v                v            v
 %%%  D   |  +----------+    +--------+    +-----------+          +----------+    +-------------+    +-----------+
-%%%  E   |  | FINISHED |    | FAILED |    | CANCELLED |          |  PAUSED  |    | INTERRUPTED |    |  CRUSHED  |   %% TODO pause -> cancel
+%%%  E   |  | FINISHED |    | FAILED |    | CANCELLED |          |  PAUSED  |    | INTERRUPTED |    |  CRUSHED  |   %% TODO pause -> cancel/stopping?
 %%%  D   |  +----------+    +--------+    +-----------+          +----------+    +-------------+    +-----------+
 %%%      |                                      |                     |                 |
 %%%  P    \                                     |                     |                /
@@ -72,13 +70,11 @@
 %%%      has failed and entire automation workflow execution is being stopped.
 %%% 5* - unhandled exception occurred.
 %%%
-%%% TODO WRITE ABOUT LANE PREPARING IN ADVANCE
-%%% TODO RM INTERRUPTED LANE RUN PREPARED IN ADVANCE
-%%% There are 2 exceptions to above diagram: TODO REWRITE
-%%% 1) provider restart - atm lane execution run is forcefully ended as failed (or interrupted
-%%%    in case of lanes preparing in advance) disregarding status it had before restart.
-%%% 2) interrupted atm lane execution run when preparing in advance if previous lane run
-%%%    finished successfully - INTERRUPTED status is changed to FAILED as this run effectively
+%%% There are some exceptions to above diagram:
+%%% 1) atm lane execution run prepared in advance is always marked as INTERRUPTED
+%%%    if workflow execution ends before reaching it.
+%%% 2) interrupted lane run when preparing in advance if previous lane run finished
+%%%    successfully - INTERRUPTED status is changed to FAILED as this run effectively
 %%%    becomes the point of workflow execution failure at which it can be rerun.
 %%% @end
 %%%-------------------------------------------------------------------
@@ -300,7 +296,7 @@ handle_manual_repeat(RepeatType, {AtmLaneSelector, _} = AtmLaneRunSelector, AtmW
                 Error
         end
     end,
-    % TODO in case of repeat when latest run was paused - transit it to cancelled
+    % TODO in case of repeat when latest run was paused - transit it to cancelled?
     atm_workflow_execution_status:handle_manual_lane_repeat(AtmWorkflowExecutionId, Diff).
 
 

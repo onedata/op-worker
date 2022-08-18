@@ -210,8 +210,7 @@ handle_ended(AtmWorkflowExecutionId) ->
         {ok, #atm_lane_execution_run{status = Status}} = atm_lane_execution:get_run(
             {current, current}, Record
         ),
-        NewRecord = ensure_run_num_set_for_lane_runs_prepared_in_advance(Record),
-        {ok, set_times_on_phase_transition(NewRecord#atm_workflow_execution{status = Status})}
+        {ok, set_times_on_phase_transition(Record#atm_workflow_execution{status = Status})}
     end,
 
     Result = {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:update(
@@ -322,26 +321,3 @@ has_phase_transition_occurred(#atm_workflow_execution{
         {SamePhase, SamePhase} -> false;
         {PrevPhase, CurrentPhase} -> {true, PrevPhase, CurrentPhase}
     end.
-
-
-%% @private
--spec ensure_run_num_set_for_lane_runs_prepared_in_advance(atm_workflow_execution:record()) ->
-    atm_workflow_execution:record().
-ensure_run_num_set_for_lane_runs_prepared_in_advance(Record0 = #atm_workflow_execution{
-    current_lane_index = CurrentAtmLaneIndex,
-    current_run_num = CurrentRunNum,
-    lanes_count = AtmLanesCount
-}) ->
-    AtmLaneRunDiff = fun
-        (#atm_lane_execution_run{run_num = undefined} = Run) ->
-            {ok, Run#atm_lane_execution_run{run_num = CurrentRunNum}};
-        (_) ->
-            {error, already_set}
-    end,
-
-    lists:foldl(fun(AtmLaneIndex, Record1) ->
-        case atm_lane_execution:update_run({AtmLaneIndex, current}, AtmLaneRunDiff, Record1) of
-            {ok, Record2} -> Record2;
-            {error, _} -> Record1
-        end
-    end, Record0, lists:seq(CurrentAtmLaneIndex + 1, AtmLanesCount)).

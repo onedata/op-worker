@@ -9,43 +9,43 @@
 %%% This module contains functions that handle atm task execution status
 %%% transitions according (with some exceptions described below) to following
 %%% state machine:
-%%%                                   |
-%%%                                   |       <WAITING PHASE (initiation)>
-%%%                                   v
-%%%                                +-----------+                       resuming execution
-%%%            --------------------|  PENDING  | <--------------------------------------------------------
-%%%          /                     +-----------+                                                           \
-%%%  ending task execution               |                                                                  |
-%%%    with no item ever            first item                                                              |
-%%%   scheduled to process      scheduled to process                                                        |
-%%%         |                   /                                                                           |
-%%% ========|==================/============================================================================|=====
-%%%         |                  |                    <ONGOING PHASE>                                         |
-%%%         |                  |                                           ____                             |
-%%%         |                  v                                         /      \ overriding ^stopping      |
-%%%         |            +----------+       ^stopping        +------------+     /       reason              |
-%%%         |            |  ACTIVE  | ---------------------> |  STOPPING  | <--                             |
-%%%         |            +----------+                        +------------+                                 |
-%%%         |                  |                                   |                                        |
-%%%         |         ending task execution                        |                                        |
-%%%         |            with all items           ending task execution with ^stopping reason               |
-%%%         |               processed            /            /           \                  \              |
-%%%         |           /              \       1*            /             \                 4*             |
-%%%         |      successfully       else     |            2*              3*                |             |
-%%%         |           |               |      |            |                |                |             |
-%%%         |           |               |      |            |                |                |             |
-%%% ========|===========|===============|======|============|================|================|=============|======
-%%%         |           |               |      |            |                |                |             |
-%%%         |           |               |      |            |                |                |             |
-%%%         v           v               v      v            v                V                v             |
-%%%   +-----------+   +----------+     +--------+    +-------------+    +-----------+        +--------+     |
-%%%   |  SKIPPED  |   | FINISHED |     | FAILED |    | INTERRUPTED |    | CANCELLED |        | PAUSED |     |  %% TODO pause -> cancel
-%%%   +-----------+   +----------+     +--------+    +-------------+    +-----------+        +--------+     |
-%%%          \                                              |                |                |             |
-%%%           \                                             |                |                |            /
-%%%             --------------------------------------------o----------------o----------------o-----------
+%%%                                       |      <WAITING PHASE (initiation)>
+%%%           resuming execution          v
+%%%     ------------------------------> +-----------+
+%%%   /                                 |  PENDING  |
+%%%  |              ------------------- +-----------+
+%%%  |            /                           |
+%%%  |    ending task execution               |
+%%%  |      with no item ever            first item
+%%%  |     scheduled to process      scheduled to process
+%%%  |           |                   /
+%%% =|===========|==================/==========================================================================
+%%%  |           |                  |                   <ONGOING PHASE>
+%%%  |           |                  |                                           ____
+%%%  |           |                  v                                         /      \ overriding ^stopping
+%%%  |           |            +----------+       ^stopping        +------------+     /       reason
+%%%  |           |            |  ACTIVE  | ---------------------> |  STOPPING  | <--
+%%%  |           |            +----------+                        +------------+
+%%%  |           |                  |                                   |
+%%%  |           |         ending task execution                        |
+%%%  |           |            with all items           ending task execution with ^stopping reason
+%%%  |           |               processed            /            /           \                  \
+%%%  |           |           /              \       1*            /             \                 4*
+%%%  |           |      successfully       else     |            2*              3*                |
+%%%  |           |           |               |      |            |                |                |
+%%%  |           |           |               |      |            |                |                |
+%%% =|===========|===========|===============|======|============|================|================|===========
+%%%  |           |           |               |      |            |                |                |
+%%%  |           |           |               |      |            |                |                |
+%%%  |           v           v               v      v            v                V                v
+%%%  |     +-----------+   +----------+     +--------+    +-------------+    +-----------+        +--------+
+%%%  |     |  SKIPPED  |   | FINISHED |     | FAILED |    | INTERRUPTED |    | CANCELLED |        | PAUSED |     %% TODO pause -> cancel/stopping?
+%%%  |     +-----------+   +----------+     +--------+    +-------------+    +-----------+        +--------+
+%%%  |           |                                              |                |                 |
+%%%   \          |                                              |                |                /
+%%%     --------------------------------------------------------o----------------o---------------
 %%%
-%%%                                              <ENDED PHASE (teardown)>
+%%%                                                  <ENDED PHASE (teardown)>
 %%%
 %%% ^stopping - common step when halting execution due to:
 %%% 1* - failure severe enough to cause stopping of entire automation workflow execution
@@ -93,12 +93,7 @@ is_transition_allowed(?STOPPING_STATUS, ?FAILED_STATUS) -> true;
 is_transition_allowed(?STOPPING_STATUS, ?INTERRUPTED_STATUS) -> true;
 is_transition_allowed(?STOPPING_STATUS, ?PAUSED_STATUS) -> true;
 
-is_transition_allowed(?SKIPPED_STATUS, ?PENDING_STATUS) -> true;
-is_transition_allowed(?CANCELLED_STATUS, ?PENDING_STATUS) -> true;
-is_transition_allowed(?INTERRUPTED_STATUS, ?PENDING_STATUS) -> true;  %% TODO pause -> cancel
-is_transition_allowed(?PAUSED_STATUS, ?PENDING_STATUS) -> true;
-
-is_transition_allowed(_, _) -> false.
+is_transition_allowed(_, _) -> false.  %% TODO pause -> cancel/stopping?
 
 
 -spec is_ended(atm_task_execution:status()) -> boolean().

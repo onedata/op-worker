@@ -202,11 +202,9 @@ run_task_for_item(
     _AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId,
     AtmJobBatchId, ItemBatch
 ) ->
-    AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(
-        AtmTaskExecutionId, AtmWorkflowExecutionEnv
-    ),
     atm_task_execution_handler:run_job_batch(
-        AtmWorkflowExecutionCtx, AtmTaskExecutionId, AtmJobBatchId, ItemBatch
+        atm_workflow_execution_ctx:acquire(AtmTaskExecutionId, AtmWorkflowExecutionEnv),
+        AtmTaskExecutionId, AtmJobBatchId, ItemBatch
     ).
 
 
@@ -222,11 +220,9 @@ process_task_result_for_item(
     _AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId,
     ItemBatch, JobBatchResult
 ) ->
-    AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(
-        AtmTaskExecutionId, AtmWorkflowExecutionEnv
-    ),
     atm_task_execution_handler:process_job_batch_result(
-        AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemBatch, JobBatchResult
+        atm_workflow_execution_ctx:acquire(AtmTaskExecutionId, AtmWorkflowExecutionEnv),
+        AtmTaskExecutionId, ItemBatch, JobBatchResult
     ).
 
 
@@ -243,11 +239,9 @@ process_streamed_task_data(
     AtmTaskExecutionId,
     StreamedData
 ) ->
-    AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(
-        AtmTaskExecutionId, AtmWorkflowExecutionEnv
-    ),
     atm_task_execution_handler:process_streamed_data(
-        AtmWorkflowExecutionCtx, AtmTaskExecutionId, StreamedData
+        atm_workflow_execution_ctx:acquire(AtmTaskExecutionId, AtmWorkflowExecutionEnv),
+        AtmTaskExecutionId, StreamedData
     ).
 
 
@@ -305,10 +299,9 @@ report_item_error(_AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, ItemBatch) -
 ) ->
     workflow_handler:lane_ended_callback_result().
 handle_lane_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneRunSelector) ->
-    AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(AtmWorkflowExecutionEnv),
-
     atm_lane_execution_handler:handle_ended(
-        AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
+        AtmLaneRunSelector, AtmWorkflowExecutionId,
+        atm_workflow_execution_ctx:acquire(AtmWorkflowExecutionEnv)
     ).
 
 
@@ -387,9 +380,12 @@ acquire_global_env(#document{key = AtmWorkflowExecutionId, value = #atm_workflow
 ) ->
     ok.
 end_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
-    {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:get(AtmWorkflowExecutionId),
-    ensure_all_lane_executions_ended(AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx),
-    freeze_global_stores(AtmWorkflowExecutionDoc),
+    {ok, AtmWorkflowExecutionDoc0} = atm_workflow_execution:get(AtmWorkflowExecutionId),
+    ensure_all_lane_runs_ended(AtmWorkflowExecutionDoc0, AtmWorkflowExecutionCtx),
+    {ok, AtmWorkflowExecutionDoc1} = delete_all_lane_runs_prepared_in_advance(
+        AtmWorkflowExecutionDoc0
+    ),
+    freeze_global_stores(AtmWorkflowExecutionDoc1),
 
     atm_workflow_execution_session:terminate(AtmWorkflowExecutionId),
 
@@ -400,12 +396,12 @@ end_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
 
 
 %% @private
--spec ensure_all_lane_executions_ended(
+-spec ensure_all_lane_runs_ended(
     atm_workflow_execution:doc(),
     atm_workflow_execution_ctx:record()
 ) ->
     ok.
-ensure_all_lane_executions_ended(#document{
+ensure_all_lane_runs_ended(#document{
     key = AtmWorkflowExecutionId,
     value = AtmWorkflowExecution = #atm_workflow_execution{
         lanes_count = AtmLanesCount,
@@ -429,6 +425,44 @@ ensure_all_lane_executions_ended(#document{
                 ok
         end
     end, lists:seq(CurrentAtmLaneIndex, AtmLanesCount)).
+
+
+%% @private
+-spec delete_all_lane_runs_prepared_in_advance(atm_workflow_execution:doc()) ->
+    ok.
+delete_all_lane_runs_prepared_in_advance(#document{
+    key = AtmWorkflowExecutionId,
+    value = AtmWorkflowExecution = #atm_workflow_execution{
+        lanes_count = AtmLanesCount,
+        current_lane_index = CurrentAtmLaneIndex,
+        current_run_num = CurrentRunNum
+    }
+}) ->
+    NewAtmWorkflowExecution = lists_utils:foldl_while(fun(AtmLaneIndex, AtmWorkflowExecutionAcc) ->
+        Diff = fun
+            (AtmLaneExecution = #atm_lane_execution{runs = [
+                AtmLaneRunPreparedInAdvance = #atm_lane_execution_run{run_num = RunNum}
+                | PreviousLaneRuns
+            ]}) when
+                RunNum =:= undefined;
+                RunNum =:= CurrentRunNum
+            ->
+                atm_lane_execution_factory:delete_run(AtmLaneRunPreparedInAdvance),
+                {ok, AtmLaneExecution#atm_lane_execution{runs = PreviousLaneRuns}};
+
+            (_) ->
+                ?ERROR_NOT_FOUND
+        end,
+        case atm_lane_execution:update(AtmLaneIndex, Diff, AtmWorkflowExecutionAcc) of
+            {ok, NewAtmWorkflowExecutionAcc} -> {cont, NewAtmWorkflowExecutionAcc};
+            ?ERROR_NOT_FOUND -> {halt, AtmWorkflowExecutionAcc}
+        end
+    end, AtmWorkflowExecution, lists:seq(CurrentAtmLaneIndex + 1, AtmLanesCount)),
+
+    atm_workflow_execution:update(
+        AtmWorkflowExecutionId,
+        fun(_) -> {ok, NewAtmWorkflowExecution} end
+    ).
 
 
 %% @private
