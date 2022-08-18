@@ -48,7 +48,7 @@
     get/1, get_summary/2,
     cancel/2,
     repeat/4,
-    terminate_not_ended/1,
+    on_provider_restart/1,
     purge_all/0
 ]).
 
@@ -202,22 +202,10 @@ repeat(UserCtx, Type, AtmLaneRunSelector, AtmWorkflowExecutionId) ->
 %% stale (processes handling execution no longer exists) workflows.
 %% @end
 %%--------------------------------------------------------------------
-terminate_not_ended(SpaceId) ->
+on_provider_restart(SpaceId) ->
     TerminateFun = fun(AtmWorkflowExecutionId) ->
         try
-            {ok, #document{
-                value = #atm_workflow_execution{
-                    incarnation = AtmWorkflowIncarnation
-                }
-            %% TODO call atm_lane_execution_handler:stop
-            }} = atm_lane_execution_status:handle_stopping(
-                {current, current}, AtmWorkflowExecutionId, failure
-            ),
-
-            atm_workflow_execution_handler:handle_workflow_execution_ended(
-                AtmWorkflowExecutionId,
-                atm_workflow_execution_env:build(SpaceId, AtmWorkflowExecutionId, AtmWorkflowIncarnation)
-            )
+            atm_workflow_execution_handler:on_provider_restart(AtmWorkflowExecutionId)
         catch Type:Reason:Stacktrace ->
             ?atm_examine_error(Type, Reason, Stacktrace)
         end

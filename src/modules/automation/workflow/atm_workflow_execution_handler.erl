@@ -28,6 +28,7 @@
     cancel/2,
     repeat/4
 ]).
+-export([on_provider_restart/1]).
 
 % workflow_handler callbacks
 -export([
@@ -146,6 +147,28 @@ repeat(UserCtx, Type, AtmLaneRunSelector, AtmWorkflowExecutionId) ->
             });
         {error, _} = Error ->
             Error
+    end.
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Terminates specified workflow execution.
+%% This function should be called only after provider restart to terminate
+%% stale (processes handling execution no longer exists) workflows.
+%% @end
+%%--------------------------------------------------------------------
+-spec on_provider_restart(atm_workflow_execution:id()) -> ok | no_return().
+on_provider_restart(AtmWorkflowExecutionId) ->
+    {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:get(AtmWorkflowExecutionId),
+    AtmWorkflowExecutionEnv = acquire_global_env(AtmWorkflowExecutionDoc),
+
+    try
+        AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(AtmWorkflowExecutionEnv),
+        ok = atm_lane_execution_handler:stop({current, current}, interrupt, AtmWorkflowExecutionCtx),
+        end_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx)
+        %% TODO VFS-9532 resume execution if ended status == interrupted
+    catch throw:{session_acquisition_failed, _} = Reason ->
+        handle_exception(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, throw, Reason, [])
     end.
 
 

@@ -730,7 +730,7 @@ periodical_spaces_autocleaning_check() ->
 terminate_stale_atm_workflow_executions() ->
     try provider_logic:get_spaces() of
         {ok, SpaceIds} ->
-            lists:foreach(fun atm_workflow_execution_api:terminate_not_ended/1, SpaceIds);
+            lists:foreach(fun atm_workflow_execution_api:on_provider_restart/1, SpaceIds);
         ?ERROR_UNREGISTERED_ONEPROVIDER ->
             schedule_stale_atm_workflow_executions_termination();
         ?ERROR_NO_CONNECTION_TO_ONEZONE ->
