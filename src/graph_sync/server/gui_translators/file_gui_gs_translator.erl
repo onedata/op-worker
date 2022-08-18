@@ -89,7 +89,10 @@ translate_resource(#gri{aspect = instance, scope = Scope}, FileDetails) ->
     translate_file_details(FileDetails, Scope);
 
 translate_resource(#gri{aspect = distribution, scope = private, id = Guid}, Distribution) ->
-    file_distribution_gather_result:to_json(gs, Distribution, Guid);
+    file_distribution_translator:gather_result_to_json(gs, Distribution, Guid);
+
+translate_resource(#gri{aspect = storage_locations, scope = private}, StorageLocations) ->
+    file_distribution_translator:storage_locations_to_json(StorageLocations);
 
 translate_resource(#gri{aspect = acl, scope = private}, Acl) ->
     try
@@ -180,7 +183,6 @@ translate_file_details(#file_details{
     has_metadata = HasMetadata,
     eff_qos_membership = EffQosMembership,
     active_permissions_type = ActivePermissionsType,
-    index_startid = ListingIndex,
     eff_dataset_membership = EffDatasetMembership,
     eff_protection_flags = EffFileProtectionFlags,
     recall_root_id = RecallRootId,
@@ -196,7 +198,8 @@ translate_file_details(#file_details{
         shares = Shares,
         provider_id = ProviderId,
         owner_id = OwnerId,
-        nlink = NLink
+        nlink = NLink,
+        index = ListingIndex
     },
     conflicting_name = ConflictingName
 }, Scope) ->

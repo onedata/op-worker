@@ -1390,9 +1390,11 @@ init_per_testcase(Case, Config) when
     Case =:= dir_stats_collector_parallel_write_with_sleep_test;
     Case =:= dir_stats_collector_parallel_write_to_empty_file_test
 ->
-    dir_stats_collector_test_base:init(init_per_testcase(?DEFAULT_CASE(Case), Config), true);
+    dir_stats_collector_test_base:init_and_enable_for_new_space(init_per_testcase(
+        ?DEFAULT_CASE(Case), Config
+    ));
 init_per_testcase(transfer_after_enabling_stats_test = Case, Config) ->
-    dir_stats_collector_test_base:init(init_per_testcase(?DEFAULT_CASE(Case), Config), false);
+    dir_stats_collector_test_base:init(init_per_testcase(?DEFAULT_CASE(Case), Config));
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 60}),
     lfm_proxy:init(Config).

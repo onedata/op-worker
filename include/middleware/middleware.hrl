@@ -278,5 +278,6 @@
     request :: ts_browse_request:record()
 }).
 
+-record(file_storage_locations_get_request, {}).
 
 -endif.

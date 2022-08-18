@@ -428,7 +428,7 @@ get_user_root_dir_children_test(_Config) ->
         )}
     end,
     GetAllSpacesInfoFun = fun(Node) ->
-        [GetSpaceInfoFun(space_krk, Node), GetSpaceInfoFun(space_krk_par, Node)]
+        [GetSpaceInfoFun(space_krk, Node), GetSpaceInfoFun(space_krk_par, Node), GetSpaceInfoFun(space_s3, Node)]
     end,
 
     ?assert(onenv_api_test_runner:run_tests([
@@ -484,8 +484,10 @@ get_space_dir_details(Node, SpaceDirGuid, SpaceName, ParentGuid) ->
         {ok, _}, file_test_utils:get_attrs(Node, SpaceDirGuid), ?ATTEMPTS
     ),
     #file_details{
-        file_attr = SpaceAttrs#file_attr{name = SpaceName, parent_guid = ParentGuid},
-        index_startid = file_id:guid_to_space_id(SpaceDirGuid),
+        file_attr = SpaceAttrs#file_attr{
+            name = SpaceName, parent_guid = ParentGuid, 
+            index = file_listing:build_index(file_id:guid_to_space_id(SpaceDirGuid))
+        },
         active_permissions_type = posix,
         eff_protection_flags = ?no_flags_mask,
         eff_qos_membership = ?NONE_MEMBERSHIP,
