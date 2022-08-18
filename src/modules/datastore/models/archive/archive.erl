@@ -632,7 +632,10 @@ resolve_conflict(_Ctx, #document{value = RemoteValue} = RemoteDoc, #document{val
         true ->
             case {LocalDeleted, resolve_conflict_remote_rev_greater(LocalValue, RemoteValue)} of
                 {true, _} ->
-                    {true, RemoteDoc#document{deleted = true}};
+                    case RemoteDeleted of
+                        true -> {false, RemoteDoc};
+                        false -> {true, RemoteDoc#document{deleted = true}}
+                    end;
                 {false, {true, NewRecord}} ->
                     {true, RemoteDoc#document{value = NewRecord}};
                 {false, remote} ->
@@ -641,7 +644,10 @@ resolve_conflict(_Ctx, #document{value = RemoteValue} = RemoteDoc, #document{val
         false ->
             case {RemoteDeleted, resolve_conflict_local_rev_greater(LocalValue, RemoteValue, RemoteDocMutator)} of
                 {true, _} ->
-                    {true, LocalDoc#document{deleted = true}};
+                    case LocalDeleted of
+                        true -> {false, LocalDoc};
+                        false -> {true, LocalDoc#document{deleted = true}}
+                    end;
                 {false, {true, NewRecord}} ->
                     {true, LocalDoc#document{value = NewRecord}};
                 {false, ignore} ->
