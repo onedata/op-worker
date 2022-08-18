@@ -277,6 +277,7 @@
 
 -define(WAITING_PHASE, waiting).
 -define(ONGOING_PHASE, ongoing).
+-define(SUSPENDED_PHASE, suspended).
 -define(ENDED_PHASE, ended).
 
 -define(SCHEDULED_STATUS, scheduled).
