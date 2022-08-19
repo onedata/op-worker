@@ -32,6 +32,7 @@
 -type archive_operation() ::
     #archives_list_request{} |
     #dataset_archive_request{} |
+    #archivisation_cancel_request{} |
     #archive_info_get_request{} |
     #archive_update_request{} |
     #archive_delete_request{} |
@@ -68,7 +69,8 @@
     #custom_metadata_set_request{} |
     #custom_metadata_remove_request{} |
     #file_distribution_gather_request{} |
-    #historical_dir_size_stats_gather_request{}.
+    #historical_dir_size_stats_gather_request{} |
+    #file_storage_locations_get_request{}.
 
 -type qos_operation() ::
     #qos_entry_add_request{} |

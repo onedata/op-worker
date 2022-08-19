@@ -41,6 +41,7 @@
 -include("modules/dataset/archive.hrl").
 -include("modules/dataset/dataset.hrl").
 -include("modules/dataset/archivisation_tree.hrl").
+-include("modules/datastore/datastore_runner.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/data_access_control.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
@@ -48,7 +49,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([start_archivisation/6, recall/4, cancel_recall/1, update_archive/2, get_archive_info/1,
+-export([start_archivisation/6, cancel_archivisation/1, recall/4, cancel_recall/1, update_archive/2, get_archive_info/1,
     list_archives/3, delete/2, get_nested_archives_stats/1, get_aggregated_stats/1]).
 
 %% Exported for use in tests
@@ -262,10 +263,10 @@ get_nested_archives_stats(ArchiveId, Token, NestedArchiveStatsAccIn) when is_bin
 -spec get_aggregated_stats(archive:doc() | archive:id()) -> {ok, archive_stats:record()}.
 get_aggregated_stats(ArchiveDoc = #document{}) ->
     {ok, ArchiveStats} = archive:get_stats(ArchiveDoc),
-    case archive:is_finished(ArchiveDoc) of
-        true ->
-            {ok, ArchiveStats};
+    case archive:is_building(ArchiveDoc) of
         false ->
+            {ok, ArchiveStats};
+        true ->
             {ok, ArchiveId} = archive:get_id(ArchiveDoc),
             NestedArchivesStats = get_nested_archives_stats(ArchiveId),
             {ok, archive_stats:sum(ArchiveStats, NestedArchivesStats)}
@@ -367,6 +368,41 @@ unblock_archive(ArchiveId) ->
     case archive:get(ArchiveId) of
         {ok, ArchiveDoc} -> unblock_archive(ArchiveDoc);
         ?ERROR_NOT_FOUND -> ok
+    end.
+
+
+%% @private
+-spec cancel_archivisation(archive:doc() | archive:id()) -> ok | {error, term()}.
+cancel_archivisation(ArchiveDoc = #document{value = #archive{related_dip = undefined, related_aip = RelatedAip}}) ->
+    cancel_archivisations(ArchiveDoc, RelatedAip);
+cancel_archivisation(ArchiveDoc = #document{value = #archive{related_aip = undefined, related_dip = RelatedDip}}) ->
+    cancel_archivisations(ArchiveDoc, RelatedDip);
+cancel_archivisation(ArchiveId) ->
+    case archive:get(ArchiveId) of
+        {ok, ArchiveDoc} -> cancel_archivisation(ArchiveDoc);
+        ?ERROR_NOT_FOUND -> ok;
+        {error, _} = Error -> Error
+    end.
+
+
+%% @private
+-spec cancel_archivisations(archive:doc(), archive:id()) -> ok | {error, term()}.
+cancel_archivisations(ArchiveDoc, RelatedArchiveId) ->
+    RelatedArchiveId =/= undefined andalso cancel_single_archive(RelatedArchiveId),
+    cancel_single_archive(ArchiveDoc).
+
+
+%% @private
+-spec cancel_single_archive(archive:doc() | archive:id()) -> ok | {error, term()}.
+cancel_single_archive(ArchiveDocOrId) ->
+    case archive:mark_cancelling(ArchiveDocOrId) of
+        ok ->
+            {ok, TaskId} = archive:get_id(ArchiveDocOrId),
+            ok = ?ok_if_not_found(archive_verification_traverse:cancel(TaskId));
+        {error, already_finished} ->
+            ok;
+        {error, _} = Error ->
+            Error
     end.
 
 

@@ -57,6 +57,10 @@
     description :: archive:description()
 }).
 
+-record(archivisation_cancel_request, {
+    id :: archive:id()
+}).
+
 -record(archive_info_get_request, {
     id :: archive:id()
 }).
@@ -274,5 +278,6 @@
     request :: ts_browse_request:record()
 }).
 
+-record(file_storage_locations_get_request, {}).
 
 -endif.

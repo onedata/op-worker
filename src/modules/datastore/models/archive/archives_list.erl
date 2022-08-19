@@ -39,7 +39,7 @@
 -type tree_id() :: od_provider:id().
 -type forest() :: binary(). % ?FOREST(DatasetId)
 -type index() :: link_name().
--type entry() :: {link_name(), link_target()}.
+-type entry() :: {index(), link_target()}.
 -type offset() :: integer().
 -type limit() :: pos_integer().
 

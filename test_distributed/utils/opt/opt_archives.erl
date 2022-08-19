@@ -15,6 +15,7 @@
 -export([
     list/4, list/5,
     archive_dataset/5, archive_dataset/7,
+    cancel_archivisation/3,
     get_info/3,
     update/4,
     delete/3, delete/4,
@@ -53,8 +54,8 @@ list(NodeSelector, SessionId, DatasetId, Opts) ->
     oct_background:node_selector(),
     session:id(),
     dataset:id(),
-    dataset_api:listing_opts(),
-    undefined | dataset_api:listing_mode()
+    archives_list:listing_opts(),
+    undefined | archive_api:listing_mode()
 ) ->
     {ok, {archive_api:entries(), boolean()}} | errors:error().
 list(NodeSelector, SessionId, DatasetId, Opts, ListingMode) ->
@@ -89,6 +90,12 @@ archive_dataset(
     ?CALL(NodeSelector, [
         SessionId, DatasetId, Config, PreservedCallback, DeletedCallback, Description
     ]).
+
+
+-spec cancel_archivisation(oct_background:node_selector(), session:id(), archive:id()) ->
+    {ok, archive_api:info()} | errors:error().
+cancel_archivisation(NodeSelector, SessionId, ArchiveId) ->
+    ?CALL(NodeSelector, [SessionId, ArchiveId]).
 
 
 -spec get_info(oct_background:node_selector(), session:id(), archive:id()) ->

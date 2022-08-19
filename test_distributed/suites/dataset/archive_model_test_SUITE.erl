@@ -131,7 +131,7 @@ all() -> [
 -define(TEST_DESCRIPTION1, <<"TEST DESCRIPTION">>).
 -define(TEST_DESCRIPTION2, <<"TEST DESCRIPTION2">>).
 -define(TEST_ARCHIVE_PRESERVED_CALLBACK1, <<"https://preserved1.org">>).
--define(TEST_ARCHIVE_PRESERVED_CALLBACK2, <<"https://preserved1.org">>).
+-define(TEST_ARCHIVE_PRESERVED_CALLBACK2, <<"https://preserved2.org">>).
 -define(TEST_ARCHIVE_DELETED_CALLBACK1, <<"https://deleted1.org">>).
 -define(TEST_ARCHIVE_DELETED_CALLBACK2, <<"https://deleted2.org">>).
 -define(TEST_ARCHIVE_DELETED_CALLBACK3, <<"https://deleted3.org">>).

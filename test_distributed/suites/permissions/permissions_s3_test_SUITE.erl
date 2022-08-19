@@ -48,6 +48,8 @@
     get_file_attr_test/1,
     get_file_details_test/1,
     get_file_distribution_test/1,
+    gather_historical_dir_size_stats_test/1,
+    get_file_storage_locations_test/1,
 
     set_perms_test/1,
     check_read_perms_test/1,
@@ -116,6 +118,8 @@ all() -> [
     get_file_attr_test,
     get_file_details_test,
     get_file_distribution_test,
+    gather_historical_dir_size_stats_test,
+    get_file_storage_locations_test,
 
     set_perms_test,
     check_read_perms_test,
@@ -259,6 +263,14 @@ get_file_details_test(Config) ->
 
 get_file_distribution_test(Config) ->
     permissions_test_base:get_file_distribution_test(Config).
+
+
+gather_historical_dir_size_stats_test(Config) ->
+    permissions_test_base:gather_historical_dir_size_stats_test(Config).
+
+
+get_file_storage_locations_test(Config) ->
+    permissions_test_base:get_file_storage_locations_test(Config).
 
 
 set_perms_test(Config) ->
