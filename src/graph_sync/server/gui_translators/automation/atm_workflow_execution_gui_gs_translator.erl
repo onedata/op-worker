@@ -46,7 +46,7 @@ translate_resource(#gri{aspect = summary, scope = private}, AtmWorkflowExecution
 
 -spec translate_atm_workflow_execution(atm_workflow_execution:record()) ->
     json_utils:json_map().
-translate_atm_workflow_execution(#atm_workflow_execution{
+translate_atm_workflow_execution(AtmWorkflowExecution = #atm_workflow_execution{
     space_id = SpaceId,
     atm_inventory_id = AtmInventoryId,
 
@@ -57,7 +57,6 @@ translate_atm_workflow_execution(#atm_workflow_execution{
     store_registry = AtmStoreRegistry,
     system_audit_log_store_id = AtmWorkflowAuditLogStoreId,
 
-    lanes = AtmLaneExecutions,
     lanes_count = AtmLanesCount,
 
     status = Status,
@@ -87,7 +86,7 @@ translate_atm_workflow_execution(#atm_workflow_execution{
         <<"systemAuditLogId">> => utils:undefined_to_null(AtmWorkflowAuditLogStoreId),
 
         <<"lanes">> => lists:map(
-            fun(LaneIndex) -> atm_lane_execution:to_json(maps:get(LaneIndex, AtmLaneExecutions)) end,
+            fun(AtmLaneIndex) -> atm_lane_execution:to_json(AtmLaneIndex, AtmWorkflowExecution) end,
             lists:seq(1, AtmLanesCount)
         ),
 

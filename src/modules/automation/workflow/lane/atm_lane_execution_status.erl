@@ -86,7 +86,7 @@
 %% API
 -export([
     status_to_phase/1,
-    can_manual_lane_run_repeat_be_scheduled/2
+    can_manual_lane_run_repeat_be_scheduled/3
 ]).
 -export([
     handle_preparing/2,
@@ -127,29 +127,22 @@ status_to_phase(?INTERRUPTED_STATUS) -> ?ENDED_PHASE;
 status_to_phase(?PAUSED_STATUS) -> ?ENDED_PHASE.
 
 
-%% TODO check overall status of workflow - in case of crush no repeat can be made?
 -spec can_manual_lane_run_repeat_be_scheduled(
     atm_workflow_execution:repeat_type(),
-    atm_lane_execution:run()
+    atm_lane_execution:run(),
+    atm_workflow_execution:record()
 ) ->
     boolean().
-can_manual_lane_run_repeat_be_scheduled(retry, #atm_lane_execution_run{
-    status = ?FAILED_STATUS,
-    stopping_reason = undefined
-}) ->
-    % lane run can be retried only if all items finished execution but some
-    % of them failed (direct transition from ?ACTIVE_STATUS to ?FAILED_STATUS)
-    true;
-can_manual_lane_run_repeat_be_scheduled(rerun, #atm_lane_execution_run{status = Status}) when
-    Status =:= ?FINISHED_STATUS;
-    Status =:= ?CANCELLED_STATUS;
-    Status =:= ?FAILED_STATUS;
-    Status =:= ?INTERRUPTED_STATUS;
-    Status =:= ?PAUSED_STATUS
-->
-    true;
-can_manual_lane_run_repeat_be_scheduled(_, _) ->
-    false.
+can_manual_lane_run_repeat_be_scheduled(_, _, #atm_workflow_execution{status = ?CRUSHED_STATUS}) ->
+    false;
+
+can_manual_lane_run_repeat_be_scheduled(RepeatType, Run, AtmWorkflowExecution) ->
+    case atm_workflow_execution_status:infer_phase(AtmWorkflowExecution) of
+        ?ENDED_PHASE ->
+            is_lane_run_repeatable(RepeatType, Run);
+        _ ->
+            false
+    end.
 
 
 -spec handle_preparing(atm_lane_execution:lane_run_selector(), atm_workflow_execution:id()) ->
@@ -303,6 +296,29 @@ handle_manual_repeat(RepeatType, {AtmLaneSelector, _} = AtmLaneRunSelector, AtmW
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec is_lane_run_repeatable(
+    atm_workflow_execution:repeat_type(),
+    atm_lane_execution:run()
+) ->
+    boolean().
+is_lane_run_repeatable(retry, #atm_lane_execution_run{
+    status = ?FAILED_STATUS,
+    stopping_reason = undefined
+}) ->
+    % lane run can be retried only if all items finished execution but some
+    % of them failed (direct transition from ?ACTIVE_STATUS to ?FAILED_STATUS)
+    true;
+is_lane_run_repeatable(rerun, #atm_lane_execution_run{status = Status}) when
+    Status =:= ?FINISHED_STATUS;
+    Status =:= ?CANCELLED_STATUS;
+    Status =:= ?FAILED_STATUS
+->
+    true;
+is_lane_run_repeatable(_, _) ->
+    false.
 
 
 %% @private
@@ -463,7 +479,7 @@ handle_prepared_in_advance_lane_run_ended(AtmLaneRunSelector, AtmWorkflowExecuti
 ) ->
     {ok, atm_workflow_execution:record()} | errors:error().
 try_to_schedule_manual_lane_run_repeat(RepeatType, AtmLaneSelector, Run, AtmWorkflowExecution) ->
-    case can_manual_lane_run_repeat_be_scheduled(RepeatType, Run) of
+    case can_manual_lane_run_repeat_be_scheduled(RepeatType, Run, AtmWorkflowExecution) of
         true ->
             schedule_manual_lane_run_repeat(RepeatType, AtmLaneSelector, Run, AtmWorkflowExecution);
         false when RepeatType == rerun ->

@@ -1023,10 +1023,9 @@ assert_task_execution_expectations(#exp_workflow_execution_state_ctx{
 %% @private
 -spec atm_workflow_execution_to_json(atm_workflow_execution:record()) ->
     workflow_execution_state().
-atm_workflow_execution_to_json(#atm_workflow_execution{
+atm_workflow_execution_to_json(AtmWorkflowExecution = #atm_workflow_execution{
     space_id = SpaceId,
 
-    lanes = AtmLaneExecutions,
     lanes_count = AtmLanesCount,
 
     status = Status,
@@ -1039,7 +1038,7 @@ atm_workflow_execution_to_json(#atm_workflow_execution{
         <<"spaceId">> => SpaceId,
 
         <<"lanes">> => lists:map(
-            fun(LaneIndex) -> atm_lane_execution:to_json(maps:get(LaneIndex, AtmLaneExecutions)) end,
+            fun(AtmLaneIndex) -> atm_lane_execution:to_json(AtmLaneIndex, AtmWorkflowExecution) end,
             lists:seq(1, AtmLanesCount)
         ),
 

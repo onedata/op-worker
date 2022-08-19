@@ -33,7 +33,7 @@
     update_run/3, update_run/4
 ]).
 -export([get/2, update/3]).
--export([to_json/1]).
+-export([to_json/2]).
 
 %% persistent_record callbacks
 -export([version/0, upgrade_encoded_record/2, db_encode/2, db_decode/2]).
@@ -198,20 +198,23 @@ update(AtmLaneSelector, Diff, AtmWorkflowExecution = #atm_workflow_execution{
     end.
 
 
--spec to_json(record()) -> json_utils:json_map().
-to_json(#atm_lane_execution{schema_id = AtmLaneSchemaId, runs = Runs}) ->
+-spec to_json(selector(), atm_workflow_execution:record()) -> json_utils:json_map().
+to_json(AtmLaneSelector, AtmWorkflowExecution) ->
+    AtmLaneExecution = get(AtmLaneSelector, AtmWorkflowExecution),
+
     {RunsJson, _} = lists:mapfoldr(fun(#atm_lane_execution_run{run_num = RunNum} = Run, RunsPerNum) ->
-        {run_to_json(Run, RunsPerNum), RunsPerNum#{RunNum => Run}}
-    end, #{}, Runs),
+        {run_to_json(Run, RunsPerNum, AtmWorkflowExecution), RunsPerNum#{RunNum => Run}}
+    end, #{}, AtmLaneExecution#atm_lane_execution.runs),
 
     #{
-        <<"schemaId">> => AtmLaneSchemaId,
+        <<"schemaId">> => AtmLaneExecution#atm_lane_execution.schema_id,
         <<"runs">> => RunsJson
     }.
 
 
 %% @private
--spec run_to_json(run(), #{run_num() => run()}) -> json_utils:json_map().
+-spec run_to_json(run(), #{run_num() => run()}, atm_workflow_execution:record()) ->
+    json_utils:json_map().
 run_to_json(Run = #atm_lane_execution_run{
     run_num = RunNum,
     origin_run_num = OriginRunNum,
@@ -219,7 +222,7 @@ run_to_json(Run = #atm_lane_execution_run{
     iterated_store_id = IteratedStoreId,
     exception_store_id = ExceptionStoreId,
     parallel_boxes = AtmParallelBoxExecutions
-}, RunsPerNum) ->
+}, RunsPerNum, AtmWorkflowExecution) ->
     #{
         <<"runNumber">> => utils:undefined_to_null(RunNum),
         <<"originRunNumber">> => utils:undefined_to_null(OriginRunNum),
@@ -242,10 +245,10 @@ run_to_json(Run = #atm_lane_execution_run{
                 end
         end,
         <<"isRetriable">> => atm_lane_execution_status:can_manual_lane_run_repeat_be_scheduled(
-            retry, Run
+            retry, Run, AtmWorkflowExecution
         ),
         <<"isRerunable">> => atm_lane_execution_status:can_manual_lane_run_repeat_be_scheduled(
-            rerun, Run
+            rerun, Run, AtmWorkflowExecution
         )
     }.
 
