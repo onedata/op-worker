@@ -14,61 +14,71 @@
 %%%                               +-------------+       ^stopping
 %%%                               |  SCHEDULED  |------------------------
 %%%                               +-------------+                         \
-%%% W  +------------+                    |              ^stopping          \
-%%% A  |  RESUMING  | -------------------|----------------------------------o
-%%% I  +------------+                    v                                  |
-%%% T    ^        |               +-------------+       ^stopping           |
-%%% I    |        |               |  PREPARING  |---------------------------o
-%%% N    |        |               +-------------+                           |
+%%%    +------------+                    |              ^stopping          \
+%%%    |  RESUMING  | -------------------|----------------------------------o
+%%%    +------------+                    v                                  |
+%%% W    ^        |               +-------------+       ^stopping           |
+%%% A    |        |               |  PREPARING  |---------------------------o
+%%% I    |        |               +-------------+                           |
+%%% T    |        |                      |                                  |
+%%% I    |        |        ready to execute (all associated                 |
+%%% N    |        |        documents created and initiated)                 |
 %%% G    |        |                      |                                  |
-%%%      |        |        ready to execute (all associated                 |
-%%% P    |        |        documents created and initiated)                 |
-%%% H    |        |                      |                                  |
-%%% A    |        |                      v                                  |
-%%% S    |         \              +-------------+         ^stopping         |
-%%% E    |           -----------> |   ENQUEUED  |---------------------------o
+%%%      |        |                      v                                  |
+%%%      |         \              +-------------+         ^stopping         |
+%%%      |           -----------> |   ENQUEUED  |---------------------------o
 %%%      |                        +-------------+                           |
 %%%      |                               |                                  |
 %%%      |                 first task within atm lane run                   |
 %%%      |                            started                               |
-%%% =====|===============================|==================================|=================================
+%%% =====|===============================|==================================|================================
 %%%      |                               v                                  |
-%%%  O   |                         +-------------+        ^stopping         |
-%%%  N   |                ---------|    ACTIVE   |--------------------------o
-%%%  G   |              /          +-------------+                          |       ____
+%%%      |                         +-------------+        ^stopping         |
+%%%      |                ---------|    ACTIVE   |--------------------------o
+%%%      |              /          +-------------+                          |       ____
 %%%  O   |             |                                                    v     /      \ overriding ^stopping
-%%%  I   |             |                                             +-------------+     /        reason
-%%%  N   |   ending lane execution                                   |   STOPPING  | <--
-%%%  G   |         run with                                          +-------------+
-%%%      |          /    \                                                |
-%%%  P   |         /      \                                               |
-%%%  H   |        /        \                 ending lane run execution with ^stopping reason
-%%%  A   |       /          \              /           /              |         \            \
-%%%  S   |    else    any parallel box    1*          2*              3*         4*           5*
-%%%  E   |      |        ended with      /           /                |           \            \
-%%%      |      |         failure       /           /                 |            \            \
-%%% =====|======|============|=========/===========/==================|=============\============\==========
-%%%      |      |            |        /           /                   |              \            \
-%%%  E   |      |            |       /           /                    |               \            \
-%%%  N   |      v            v      v           v                     v                v            v
-%%%  D   |  +----------+    +--------+    +-----------+          +----------+    +-------------+    +-----------+
-%%%  E   |  | FINISHED |    | FAILED |    | CANCELLED |          |  PAUSED  |    | INTERRUPTED |    |  CRUSHED  |   %% TODO pause -> cancel/stopping?
-%%%  D   |  +----------+    +--------+    +-----------+          +----------+    +-------------+    +-----------+
-%%%      |                                      |                     |                 |
-%%%  P    \                                     |                     |                /
-%%%  H      ------------------------------------o---------------------o---------------
-%%%  A              resuming execution
-%%%  S
-%%%  E
+%%%  N   |             |                                             +-------------+     /        reason
+%%%  G   |   ending lane execution                                   |   STOPPING  | <--
+%%%  O   |         run with                                          +-------------+ <-------------------
+%%%  I   |          /    \                                                |                               \
+%%%  N   |         /      \                                               |                               |
+%%%  G   |        /        \                   ending lane run execution with ^stopping reason            |
+%%%      |       /          \                 /        |           |          |            |              |
+%%%      |    else    any parallel box       1*       2*          3*         4*           5*              |
+%%%      |      |        ended with         /          |           |          |            |              |
+%%%      |      |         failure          /           |           |          |            |              |
+%%% =====|======|============|============/============|===========|==========|============|==============|==
+%%%      |      |            |           /             |           |          |            |              |
+%%%  S   |      |            |          /              |           |          |            |              2*
+%%%  U   |      |            |         /               |           |          |            v              |
+%%%  S   |      |            |        /                |           |          |           +----------+    |
+%%%  P   |      |            |       /                 |           |          |           |  PAUSED  | ---o
+%%%  E   |      |            |      |                  |           |          |           +----------+    |
+%%%  N   |      |            |      |                  |           |          v                 |         |
+%%%  D   |      |            |      |                  |           |    +-------------+         |        /
+%%%  E   |      |            |      |                  |           |    | INTERRUPTED | --------|-------
+%%%  D   |      |            |      |                  |           |    +-------------+         |
+%%%      |      |            |      |                  |           |          |                 |
+%%%  ====|======|============|======|==================|===========|==========|=================|============
+%%%      |      |            |      |                  |           |          |                 |
+%%%      |      |            |      |                  |           |          |                 |
+%%%  E   |      v            v      v                  v           v          |                 |
+%%%  N   |  +----------+    +--------+       +-----------+    +-----------+   |                 |
+%%%  D   |  | FINISHED |    | FAILED |       | CANCELLED |    |  CRUSHED  |   |                 |
+%%%  E   |  +----------+    +--------+       +-----------+    +-----------+   |                 |
+%%%  D   |                                             |                      |                 |
+%%%       \                                            |                      |                /
+%%%         -------------------------------------------o----------------------o---------------
+%%%                                         resuming execution
 %%%
 %%% ^stopping - common step when halting execution due to:
 %%% 1* - failure severe enough to cause stopping of entire automation workflow execution
 %%%      (e.g. error when processing uncorrelated results).
 %%% 2* - user cancelling entire automation workflow execution.
-%%% 3* - user pausing entire automation workflow execution.
+%%% 3* - unhandled exception occurred.
 %%% 4* - abrupt interruption when some other component (e.g user offline session expired)
 %%%      has failed and entire automation workflow execution is being stopped.
-%%% 5* - unhandled exception occurred.
+%%% 5* - user pausing entire automation workflow execution.
 %%%
 %%% There are some exceptions to above diagram:
 %%% 1) atm lane execution run prepared in advance is always marked as INTERRUPTED
@@ -111,20 +121,25 @@
 %%% API
 %%%===================================================================
 
+%% TODO pause -> cancel/stopping?
+
 
 -spec status_to_phase(atm_lane_execution:run_status()) ->
     atm_workflow_execution:phase().
 status_to_phase(?SCHEDULED_STATUS) -> ?WAITING_PHASE;
 status_to_phase(?PREPARING_STATUS) -> ?WAITING_PHASE;
 status_to_phase(?ENQUEUED_STATUS) -> ?WAITING_PHASE;
+
 status_to_phase(?ACTIVE_STATUS) -> ?ONGOING_PHASE;
 status_to_phase(?STOPPING_STATUS) -> ?ONGOING_PHASE;
+
+status_to_phase(?INTERRUPTED_STATUS) -> ?SUSPENDED_PHASE;
+status_to_phase(?PAUSED_STATUS) -> ?SUSPENDED_PHASE;        %% TODO handle suspended phase
+
 status_to_phase(?FINISHED_STATUS) -> ?ENDED_PHASE;
 status_to_phase(?CRUSHED_STATUS) -> ?ENDED_PHASE;
 status_to_phase(?CANCELLED_STATUS) -> ?ENDED_PHASE;
-status_to_phase(?FAILED_STATUS) -> ?ENDED_PHASE;
-status_to_phase(?INTERRUPTED_STATUS) -> ?ENDED_PHASE;
-status_to_phase(?PAUSED_STATUS) -> ?ENDED_PHASE.
+status_to_phase(?FAILED_STATUS) -> ?ENDED_PHASE.
 
 
 -spec can_manual_lane_run_repeat_be_scheduled(
