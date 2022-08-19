@@ -64,8 +64,13 @@ stop(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Reason) ->
         {ok, _} when Reason =:= pause ->
             % ongoing jobs shouldn't be abruptly interrupted when execution is paused
             ok;
+
         {ok, #document{value = #atm_task_execution{executor = AtmTaskExecutor}}} ->
             atm_task_executor:abort(AtmWorkflowExecutionCtx, AtmTaskExecutor);
+
+        {error, task_stopping} ->
+            ok;
+
         {error, task_ended} ->
             ok
     end.
@@ -482,6 +487,9 @@ handle_uncorrelated_results_processing_error(
             atm_lane_execution_handler:stop(
                 {AtmLaneIndex, RunNum}, failure, AtmWorkflowExecutionCtx
             );
+
+        {error, task_stopping} ->
+            ok;
 
         {error, task_ended} ->
             ok

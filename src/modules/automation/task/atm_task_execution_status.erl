@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2022 ACK CYFRONET AGH
+%%% @copyright (C) 2021-2022 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
@@ -9,8 +9,8 @@
 %%% This module contains functions that handle atm task execution status
 %%% transitions according (with some exceptions described below) to following
 %%% state machine:
-%%%                                       |      <WAITING PHASE (initiation)>
-%%%           resuming execution          v
+%%%                                           |
+%%%           resuming execution              v
 %%%     ------------------------------> +-----------+
 %%%   /                                 |  PENDING  |
 %%%  |              ------------------- +-----------+
@@ -19,8 +19,6 @@
 %%%  |      with no item ever            first item
 %%%  |     scheduled to process      scheduled to process
 %%%  |           |                   /
-%%% =|===========|==================/==========================================================================
-%%%  |           |                  |                   <ONGOING PHASE>
 %%%  |           |                  |                                           ____
 %%%  |           |                  v                                         /      \ overriding ^stopping
 %%%  |           |            +----------+       ^stopping        +------------+     /       reason
@@ -28,32 +26,26 @@
 %%%  |           |            +----------+                        +------------+
 %%%  |           |                  |                                   |
 %%%  |           |         ending task execution                        |
-%%%  |           |            with all items           ending task execution with ^stopping reason
-%%%  |           |               processed            /            /           \                  \
-%%%  |           |           /              \       1*            /             \                 4*
-%%%  |           |      successfully       else     |            2*              3*                |
-%%%  |           |           |               |      |            |                |                |
-%%%  |           |           |               |      |            |                |                |
-%%% =|===========|===========|===============|======|============|================|================|===========
-%%%  |           |           |               |      |            |                |                |
-%%%  |           |           |               |      |            |                |                |
-%%%  |           v           v               v      v            v                V                v
-%%%  |     +-----------+   +----------+     +--------+    +-------------+    +-----------+        +--------+
-%%%  |     |  SKIPPED  |   | FINISHED |     | FAILED |    | INTERRUPTED |    | CANCELLED |        | PAUSED |     %% TODO pause -> cancel/stopping?
-%%%  |     +-----------+   +----------+     +--------+    +-------------+    +-----------+        +--------+
-%%%  |           |                                              |                |                 |
-%%%   \          |                                              |                |                /
-%%%     --------------------------------------------------------o----------------o---------------
-%%%
-%%%                                                  <ENDED PHASE (teardown)>
+%%%  |           |            with all items            ending task execution with ^stopping reason
+%%%  |           |               processed            /            /                \               \
+%%%  |           |           /              \       1*            /                  \               4*
+%%%  |           |      successfully       else     |            2*                  3*               \
+%%%  |           |           |               |      |            |                    |                |
+%%%  |           v           v               v      v            v                    v                v
+%%%  |     +-----------+   +----------+     +--------+   +-------------+    2*    +--------+    4*    +-----------+
+%%%  |     |  SKIPPED  |   | FINISHED |     | FAILED |   | INTERRUPTED | <------- | PAUSED | -------> | CANCELLED |
+%%%  |     +-----------+   +----------+     +--------+   +-------------+          +--------+          +-----------+
+%%%  |           |                                              |                      |                     |
+%%%   \          |                                              |                      |                    /
+%%%     ---------o----------------------------------------------o----------------------o-------------------
 %%%
 %%% ^stopping - common step when halting execution due to:
 %%% 1* - failure severe enough to cause stopping of entire automation workflow execution
 %%%      (e.g. error when processing uncorrelated results).
 %%% 2* - abrupt interruption when some other component (e.g task or external service like OpenFaaS)
 %%%      has failed and entire automation workflow execution is being stopped.
-%%% 3* - user cancelling entire automation workflow execution.
-%%% 4* - user pausing entire automation workflow execution.
+%%% 3* - user pausing entire automation workflow execution.
+%%% 4* - user cancelling entire automation workflow execution.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_task_execution_status).
@@ -88,12 +80,20 @@ is_transition_allowed(?PENDING_STATUS, ?SKIPPED_STATUS) -> true;
 is_transition_allowed(?ACTIVE_STATUS, ?FINISHED_STATUS) -> true;
 is_transition_allowed(?ACTIVE_STATUS, ?FAILED_STATUS) -> true;
 is_transition_allowed(?ACTIVE_STATUS, ?STOPPING_STATUS) -> true;
-is_transition_allowed(?STOPPING_STATUS, ?CANCELLED_STATUS) -> true;
 is_transition_allowed(?STOPPING_STATUS, ?FAILED_STATUS) -> true;
 is_transition_allowed(?STOPPING_STATUS, ?INTERRUPTED_STATUS) -> true;
 is_transition_allowed(?STOPPING_STATUS, ?PAUSED_STATUS) -> true;
+is_transition_allowed(?STOPPING_STATUS, ?CANCELLED_STATUS) -> true;
 
-is_transition_allowed(_, _) -> false.  %% TODO pause -> cancel/stopping?
+is_transition_allowed(?PAUSED_STATUS, ?INTERRUPTED_STATUS) -> true;
+is_transition_allowed(?PAUSED_STATUS, ?CANCELLED_STATUS) -> true;
+
+is_transition_allowed(?SKIPPED_STATUS, ?PENDING_STATUS) -> true;
+is_transition_allowed(?INTERRUPTED_STATUS, ?PENDING_STATUS) -> true;
+is_transition_allowed(?PAUSED_STATUS, ?PENDING_STATUS) -> true;
+is_transition_allowed(?CANCELLED_STATUS, ?PENDING_STATUS) -> true;
+
+is_transition_allowed(_, _) -> false.
 
 
 -spec is_ended(atm_task_execution:status()) -> boolean().
@@ -186,7 +186,7 @@ handle_items_failed(AtmTaskExecutionId, ItemsNum) ->
     atm_task_execution:id(),
     atm_task_execution:stopping_reason()
 ) ->
-    {ok, atm_task_execution:doc()} | {error, task_ended}.
+    {ok, atm_task_execution:doc()} | {error, task_stopping} | {error, task_ended}.
 handle_stopping(AtmTaskExecutionId, Reason) ->
     apply_diff(AtmTaskExecutionId, fun
         (AtmTaskExecution = #atm_task_execution{status = ?PENDING_STATUS}) ->
@@ -202,11 +202,21 @@ handle_stopping(AtmTaskExecutionId, Reason) ->
             status = ?STOPPING_STATUS,
             stopping_reason = PrevReason
         }) ->
+            case should_overwrite_stopping_reason(PrevReason, Reason) of
+                true -> {ok, AtmTaskExecution#atm_task_execution{stopping_reason = Reason}};
+                false -> {error, task_stopping}
+            end;
+
+        (AtmTaskExecution = #atm_task_execution{status = ?PAUSED_STATUS}) when Reason =:= interrupt ->
             {ok, AtmTaskExecution#atm_task_execution{
-                stopping_reason = case should_overwrite_stopping_reason(PrevReason, Reason) of
-                    true -> Reason;
-                    false -> PrevReason
-                end
+                status = ?INTERRUPTED_STATUS,
+                stopping_reason = Reason
+            }};
+
+        (AtmTaskExecution = #atm_task_execution{status = ?PAUSED_STATUS}) when Reason =:= cancel ->
+            {ok, AtmTaskExecution#atm_task_execution{
+                status = ?CANCELLED_STATUS,
+                stopping_reason = Reason
             }};
 
         (_) ->
