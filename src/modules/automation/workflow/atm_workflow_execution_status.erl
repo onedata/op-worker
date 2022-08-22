@@ -9,47 +9,72 @@
 %%% This module contains functions that handle atm workflow execution status
 %%% transitions according to following state machine:
 %%%
-%%%  W
-%%%  A         +-----------+
-%%%  I         | SCHEDULED |------------------------------
-%%%  T         +-----------+                               \
-%%%  I               |                                      |
-%%%  N    first lane run transitions                        |
-%%%  G        to preparing status                           |
-%%%                  |                                      |
-%%% =================|======================================|=================
-%%%                  v                                      |
-%%%            +-----------+                                |
-%%%            |   ACTIVE  |--------------------------------o
-%%%            +-----------+                                |
-%%%                       \                    currently executed lane run
-%%%                        \                     failed or was cancelled
-%%%  O                      \                               |
-%%%  N                       \                              v
-%%%  G                        \                       +-----------+
-%%%  O                         \                      |  ABORTING |
-%%%  I                          \                     +-----------+
-%%%  N                           \                  /
-%%%  G                        last executed lane run
-%%%                          /          |           \
-%%%                         /           |            \
-%%%                        /            |             \
-%%%         successfully finished     failed      was cancelled
-%%%                      /              |                \
-%%% ====================/===============|=================\===================
-%%%                    /                |                  \
-%%%  E                v                 v                   v
-%%%  N     +-----------+           +-----------+           +-----------+
-%%%  D     |  FINISHED |           |   FAILED  |           | CANCELLED |
-%%%  E     +-----------+           +-----------+           +-----------+
-%%%  D
+%%%                                      |
+%%%                                      v
+%%% W                             +-------------+
+%%% A      ---------------------> |  SCHEDULED  |-------------------------
+%%% I    /                        +-------------+                          \
+%%% T  +------------+                    |                                  |
+%%% I  |  RESUMING  |        first lane run transitions                     |
+%%% N  +------------+            to preparing status                        |
+%%% G    ^        \                      |                ^stopping         |
+%%%      |          ---------------------|----------------------------------o
+%%%      |                               |                                  |
+%%% =====|===============================|==================================|================================
+%%%      |                               v                                  |
+%%%      |                         +-------------+        ^stopping         |
+%%%      |                ---------|    ACTIVE   |--------------------------o
+%%%      |              /          +-------------+                          |       ____
+%%%  O   |             |                                                    v     /      \ overriding ^stopping
+%%%  N   |             |                                             +-------------+     /        reason
+%%%  G   |  ending last lane execution                               |   STOPPING  | <--
+%%%  O   |         run with                                          +-------------+ <-------------------
+%%%  I   |          /    \                                                |                               \
+%%%  N   |         /      \                                               |                               |
+%%%  G   |        /        \                 ending last lane run execution with ^stopping reason         |
+%%%      |       /          \                 /        |           |          |               |           |
+%%%      |    else    any parallel box       1*       2*          3*         4*              5*           |
+%%%      |      |        ended with         /          |           |          |               |           |
+%%%      |      |         failure          /           |           |          |               |           |
+%%% =====|======|============|============/============|===========|==========|===============|===========|==
+%%%      |      |            |           /             |           |          |               |           |
+%%%  S   |      |            |          /              |           |          |               |           2*
+%%%  U   |      |            |         /               |           |          |               v           |
+%%%  S   |      |            |        /                |           |          |           +----------+    |
+%%%  P   |      |            |       /                 |           |          |           |  PAUSED  | ---o
+%%%  E   |      |            |      |                  |           |          |           +----------+    |
+%%%  N   |      |            |      |                  |           |          v                 |         |
+%%%  D   |      |            |      |                  |           |    +-------------+         |        /
+%%%  E   |      |            |      |                  |           |    | INTERRUPTED | --------|-------
+%%%  D   |      |            |      |                  |           |    +-------------+         |
+%%%      |      |            |      |                  |           |          |                 |
+%%%  ====|======|============|======|==================|===========|==========|=================|============
+%%%      |      |            |      |                  |           |          |                 |
+%%%      |      |            |      |                  |           |          |                 |
+%%%  E   |      v            v      v                  v           v          |                 |
+%%%  N   |  +----------+    +--------+       +-----------+    +-----------+   |                 |
+%%%  D   |  | FINISHED |    | FAILED |       | CANCELLED |    |  CRUSHED  |   |                 |
+%%%  E   |  +----------+    +--------+       +-----------+    +-----------+   |                 |
+%%%  D   |                                             |                      |                 |
+%%%       \                                            |                      |                /
+%%%         -------------------------------------------o----------------------o---------------
+%%%                                         resuming execution
 %%%
-%%% Note: When transition to ended phase occurs the workflow execution status is
+%%% ^stopping - common step when halting execution due to:
+%%% 1* - failure severe enough to cause stopping of entire automation workflow execution
+%%%      (e.g. error when processing task uncorrelated results).
+%%% 2* - user cancelling entire automation workflow execution.
+%%% 3* - unhandled exception occurred.
+%%% 4* - abrupt interruption when some other component (e.g user offline session expired)
+%%%      has failed and entire automation workflow execution is being stopped.
+%%% 5* - user pausing entire automation workflow execution.
+%%%
+%%% NOTE: When transition to ended phase occurs the workflow execution status is
 %%% copied from last executed lane run which works because:
 %%% 1) if last lane run successfully finished than all previous lane runs must
 %%%    have also successfully finished.
-%%% 2) if last lane run stopped (due to cancel or failure) than entire workflow
-%%%    execution is stopped with the same reason.
+%%% 2) if last lane run stopped then entire workflow execution is stopped with
+%%%    the same reason.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_workflow_execution_status).
@@ -58,7 +83,10 @@
 -include("modules/automation/atm_execution.hrl").
 
 %% API
--export([infer_phase/1]).
+-export([
+    infer_phase/1,
+    status_to_phase/1
+]).
 -export([
     handle_lane_preparing/3,
     handle_lane_enqueued/2,
@@ -84,6 +112,22 @@
 -spec infer_phase(atm_workflow_execution:record()) -> atm_workflow_execution:phase().
 infer_phase(#atm_workflow_execution{status = Status}) ->
     status_to_phase(Status).
+
+
+-spec status_to_phase(atm_workflow_execution:status()) ->
+    atm_workflow_execution:phase().
+status_to_phase(?SCHEDULED_STATUS) -> ?WAITING_PHASE;
+
+status_to_phase(?ACTIVE_STATUS) -> ?ONGOING_PHASE;
+status_to_phase(?STOPPING_STATUS) -> ?ONGOING_PHASE;
+
+status_to_phase(?INTERRUPTED_STATUS) -> ?SUSPENDED_PHASE;
+status_to_phase(?PAUSED_STATUS) -> ?SUSPENDED_PHASE;
+
+status_to_phase(?FINISHED_STATUS) -> ?ENDED_PHASE;
+status_to_phase(?CRUSHED_STATUS) -> ?ENDED_PHASE;
+status_to_phase(?CANCELLED_STATUS) -> ?ENDED_PHASE;
+status_to_phase(?FAILED_STATUS) -> ?ENDED_PHASE.
 
 
 -spec handle_lane_preparing(
@@ -185,10 +229,9 @@ handle_lane_stopping(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmLaneRunDiff)
 handle_lane_task_status_change(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
     Diff = fun(Record) ->
         case infer_phase(Record) of
-            ?ENDED_PHASE ->
-                ?ERROR_ATM_WORKFLOW_EXECUTION_ENDED;
-            _ ->
-                AtmLaneRunDiff(Record)
+            ?SUSPENDED_PHASE -> ?ERROR_ATM_WORKFLOW_EXECUTION_ENDED;
+            ?ENDED_PHASE -> ?ERROR_ATM_WORKFLOW_EXECUTION_ENDED;
+            _ -> AtmLaneRunDiff(Record)
         end
     end,
 
@@ -252,25 +295,12 @@ handle_manual_lane_repeat(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
 
 
 %% @private
--spec status_to_phase(atm_workflow_execution:status()) ->
-    atm_workflow_execution:phase().
-status_to_phase(?SCHEDULED_STATUS) -> ?WAITING_PHASE;
-status_to_phase(?ACTIVE_STATUS) -> ?ONGOING_PHASE;
-status_to_phase(?STOPPING_STATUS) -> ?ONGOING_PHASE;
-status_to_phase(?FINISHED_STATUS) -> ?ENDED_PHASE;
-status_to_phase(?CRUSHED_STATUS) -> ?ENDED_PHASE;
-status_to_phase(?CANCELLED_STATUS) -> ?ENDED_PHASE;
-status_to_phase(?FAILED_STATUS) -> ?ENDED_PHASE;
-status_to_phase(?INTERRUPTED_STATUS) -> ?ENDED_PHASE;
-status_to_phase(?PAUSED_STATUS) -> ?ENDED_PHASE.
-
-
-%% @private
 -spec set_times_on_phase_transition(atm_workflow_execution:record()) ->
     atm_workflow_execution:record().
 set_times_on_phase_transition(AtmWorkflowExecution = #atm_workflow_execution{
     schedule_time = ScheduleTime,
-    start_time = StartTime
+    start_time = StartTime,
+    suspend_time = SuspendTime
 }) ->
     case has_phase_transition_occurred(AtmWorkflowExecution) of
         {true, ?WAITING_PHASE, ?ENDED_PHASE} ->
@@ -281,9 +311,17 @@ set_times_on_phase_transition(AtmWorkflowExecution = #atm_workflow_execution{
             AtmWorkflowExecution#atm_workflow_execution{
                 start_time = global_clock:monotonic_timestamp_seconds(ScheduleTime)
             };
+        {true, ?ONGOING_PHASE, ?SUSPENDED_PHASE} ->
+            AtmWorkflowExecution#atm_workflow_execution{
+                suspend_time = global_clock:monotonic_timestamp_seconds(StartTime)
+            };
         {true, ?ONGOING_PHASE, ?ENDED_PHASE} ->
             AtmWorkflowExecution#atm_workflow_execution{
                 finish_time = global_clock:monotonic_timestamp_seconds(StartTime)
+            };
+        {true, ?SUSPENDED_PHASE, ?ENDED_PHASE} ->
+            AtmWorkflowExecution#atm_workflow_execution{
+                finish_time = global_clock:monotonic_timestamp_seconds(SuspendTime)
             };
         false ->
             AtmWorkflowExecution
@@ -300,12 +338,15 @@ ensure_in_proper_phase_tree(#document{value = AtmWorkflowExecution} = AtmWorkflo
         {true, ?WAITING_PHASE, ?ONGOING_PHASE} ->
             atm_ongoing_workflow_executions:add(AtmWorkflowExecutionDoc),
             atm_waiting_workflow_executions:delete(AtmWorkflowExecutionDoc);
+        {true, ?ONGOING_PHASE, ?SUSPENDED_PHASE} ->
+            atm_suspended_workflow_executions:add(AtmWorkflowExecutionDoc),
+            atm_ongoing_workflow_executions:delete(AtmWorkflowExecutionDoc);
         {true, ?ONGOING_PHASE, ?ENDED_PHASE} ->
             atm_ended_workflow_executions:add(AtmWorkflowExecutionDoc),
             atm_ongoing_workflow_executions:delete(AtmWorkflowExecutionDoc);
-        {true, ?ENDED_PHASE, ?WAITING_PHASE} ->
-            atm_waiting_workflow_executions:add(AtmWorkflowExecutionDoc),
-            atm_ended_workflow_executions:delete(AtmWorkflowExecutionDoc);
+        {true, ?SUSPENDED_PHASE, ?ENDED_PHASE} ->
+            atm_ended_workflow_executions:add(AtmWorkflowExecutionDoc),
+            atm_suspended_workflow_executions:delete(AtmWorkflowExecutionDoc);
         false ->
             ok
     end.

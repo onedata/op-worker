@@ -157,6 +157,7 @@ get_summary(AtmWorkflowExecutionId, #atm_workflow_execution{
     status = AtmWorkflowExecutionStatus,
     schedule_time = ScheduleTime,
     start_time = StartTime,
+    suspend_time = SuspendTime,
     finish_time = FinishTime
 }) ->
     {ok, #document{
@@ -173,6 +174,7 @@ get_summary(AtmWorkflowExecutionId, #atm_workflow_execution{
         status = AtmWorkflowExecutionStatus,
         schedule_time = ScheduleTime,
         start_time = StartTime,
+        suspend_time = SuspendTime,
         finish_time = FinishTime
     }.
 
@@ -255,6 +257,8 @@ list_basic_entries(SpaceId, ?WAITING_PHASE, ListingOpts) ->
     atm_waiting_workflow_executions:list(SpaceId, ListingOpts);
 list_basic_entries(SpaceId, ?ONGOING_PHASE, ListingOpts) ->
     atm_ongoing_workflow_executions:list(SpaceId, ListingOpts);
+list_basic_entries(SpaceId, ?SUSPENDED_PHASE, ListingOpts) ->
+    atm_suspended_workflow_executions:list(SpaceId, ListingOpts);
 list_basic_entries(SpaceId, ?ENDED_PHASE, ListingOpts) ->
     atm_ended_workflow_executions:list(SpaceId, ListingOpts).
 

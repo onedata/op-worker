@@ -55,6 +55,7 @@ get_response(#gri{id = AtmWorkflowExecutionId}, AtmWorkflowExecution = #atm_work
 
     schedule_time = ScheduleTime,
     start_time = StartTime,
+    suspend_time = SuspendTime,
     finish_time = FinishTime,
 
     lambda_snapshot_registry = AtmLambdaSnapshotRegistry,
@@ -75,6 +76,7 @@ get_response(#gri{id = AtmWorkflowExecutionId}, AtmWorkflowExecution = #atm_work
 
         <<"scheduleTime">> => ScheduleTime,
         <<"startTime">> => StartTime,
+        <<"suspendTime">> => SuspendTime,
         <<"finishTime">> => FinishTime,
 
         <<"lambdaSnapshotRegistry">> => AtmLambdaSnapshotRegistry,

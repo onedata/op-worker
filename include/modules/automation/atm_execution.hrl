@@ -31,6 +31,7 @@
 
     schedule_time :: atm_workflow_execution:timestamp(),
     start_time :: atm_workflow_execution:timestamp(),
+    suspend_time :: atm_workflow_execution:timestamp(),
     finish_time :: atm_workflow_execution:timestamp()
 }).
 

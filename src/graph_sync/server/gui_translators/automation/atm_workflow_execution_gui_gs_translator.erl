@@ -63,6 +63,7 @@ translate_atm_workflow_execution(AtmWorkflowExecution = #atm_workflow_execution{
 
     schedule_time = ScheduleTime,
     start_time = StartTime,
+    suspend_time = SuspendTime,
     finish_time = FinishTime
 }) ->
     #{
@@ -94,6 +95,7 @@ translate_atm_workflow_execution(AtmWorkflowExecution = #atm_workflow_execution{
 
         <<"scheduleTime">> => ScheduleTime,
         <<"startTime">> => StartTime,
+        <<"suspendTime">> => SuspendTime,
         <<"finishTime">> => FinishTime
     }.
 
@@ -111,6 +113,7 @@ translate_atm_workflow_execution_summary(#atm_workflow_execution_summary{
 
     schedule_time = ScheduleTime,
     start_time = StartTime,
+    suspend_time = SuspendTime,
     finish_time = FinishTime
 }) ->
     #{
@@ -135,5 +138,6 @@ translate_atm_workflow_execution_summary(#atm_workflow_execution_summary{
 
         <<"scheduleTime">> => ScheduleTime,
         <<"startTime">> => StartTime,
+        <<"suspendTime">> => SuspendTime,
         <<"finishTime">> => FinishTime
     }.

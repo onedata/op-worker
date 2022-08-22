@@ -34,7 +34,7 @@
 %% (origin run + manual repeats)
 -type incarnation() :: non_neg_integer().
 
--type phase() :: ?WAITING_PHASE | ?ONGOING_PHASE | ?ENDED_PHASE.
+-type phase() :: ?WAITING_PHASE | ?ONGOING_PHASE | ?SUSPENDED_PHASE | ?ENDED_PHASE.
 
 -type status() ::
     % waiting
@@ -145,5 +145,6 @@ get_record_struct(1) ->
 
         {schedule_time, integer},
         {start_time, integer},
+        {suspend_time, integer},
         {finish_time, integer}
     ]}.

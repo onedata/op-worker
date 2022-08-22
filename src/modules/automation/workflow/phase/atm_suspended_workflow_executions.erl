@@ -45,10 +45,10 @@ list(SpaceId, AtmInventoryIds, ListingOpts) ->
 add(#document{key = AtmWorkflowExecutionId, value = #atm_workflow_execution{
     space_id = SpaceId,
     atm_inventory_id = AtmInventoryId,
-    finish_time = FinishTime
+    suspend_time = SuspendTime
 }}) ->
     atm_workflow_executions_forest:add(
-        ?FOREST(SpaceId), AtmInventoryId, AtmWorkflowExecutionId, FinishTime
+        ?FOREST(SpaceId), AtmInventoryId, AtmWorkflowExecutionId, SuspendTime
     ).
 
 
@@ -56,8 +56,8 @@ add(#document{key = AtmWorkflowExecutionId, value = #atm_workflow_execution{
 delete(#document{key = AtmWorkflowExecutionId, value = #atm_workflow_execution{
     space_id = SpaceId,
     atm_inventory_id = AtmInventoryId,
-    finish_time = FinishTime
+    suspend_time = SuspendTime
 }}) ->
     atm_workflow_executions_forest:delete(
-        ?FOREST(SpaceId), AtmInventoryId, AtmWorkflowExecutionId, FinishTime
+        ?FOREST(SpaceId), AtmInventoryId, AtmWorkflowExecutionId, SuspendTime
     ).
