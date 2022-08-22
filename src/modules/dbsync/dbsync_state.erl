@@ -13,6 +13,7 @@
 -module(dbsync_state).
 -author("Krzysztof Trzepla").
 
+-include("modules/dbsync/dbsync.hrl").
 -include("modules/datastore/datastore_models.hrl").
 
 %% API
@@ -25,6 +26,8 @@
 -define(CTX, #{model => ?MODULE}).
 
 -type state() :: #dbsync_state{}.
+-type resynchronization_params() :: #resynchronization_params{}.
+-export_type([resynchronization_params/0]).
 
 %%%===================================================================
 %%% API
@@ -102,7 +105,10 @@ resynchronize_stream(SpaceId, ProviderId, IncludedMutators) ->
         {CurrentSeq, _} = maps:get(ProviderId, Seq, {1, 0}),
         {ok, State#dbsync_state{
             seq = maps:put(ProviderId, {1, 0}, Seq),
-            resynchronization_params = maps:put(ProviderId, {CurrentSeq, IncludedMutators}, Params)
+            resynchronization_params = maps:put(ProviderId, #resynchronization_params{
+                final_seq = CurrentSeq,
+                included_mutators = IncludedMutators
+            }, Params)
         }}
     end,
 
@@ -113,8 +119,7 @@ resynchronize_stream(SpaceId, ProviderId, IncludedMutators) ->
     end.
 
 
--spec get_resynchronization_params(od_space:id(), od_provider:id()) ->
-    {couchbase_changes:seq(), dbsync_in_stream:mutators()} | undefined.
+-spec get_resynchronization_params(od_space:id(), od_provider:id()) -> resynchronization_params() | undefined.
 get_resynchronization_params(SpaceId, ProviderId) ->
     case datastore_model:get(?CTX, SpaceId) of
         {ok, #document{value = #dbsync_state{resynchronization_params = Params}}} ->
@@ -132,15 +137,15 @@ get_resynchronization_params(SpaceId, ProviderId) ->
 set_seq_and_timestamp_internal(
     #dbsync_state{seq = SeqMap, resynchronization_params = Params} = State,
     ProviderId,
-    NeqSeq,
+    NewSeq,
     Timestamp
 ) ->
     UpdatedParams = case maps:get(ProviderId, Params, undefined) of
-        {FinalSeq, _} when NeqSeq >= FinalSeq -> maps:remove(ProviderId, Params);
+        {FinalSeq, _} when NewSeq >= FinalSeq -> maps:remove(ProviderId, Params);
         _ -> Params
     end,
     State#dbsync_state{
-        seq = maps:put(ProviderId, {NeqSeq, Timestamp}, SeqMap),
+        seq = maps:put(ProviderId, {NewSeq, Timestamp}, SeqMap),
         resynchronization_params = UpdatedParams
     }.
 
@@ -175,7 +180,10 @@ get_record_struct(2) ->
 get_record_struct(3) ->
     {record, [
         {seq, #{string => {integer, integer}}},
-        {resynchronization_params, #{string => {integer, [string]}}}
+        {resynchronization_params, #{string => {record, [
+            {final_seq, integer},
+            {included_mutators, [string]}
+        ]}}}
     ]}.
 
 %%--------------------------------------------------------------------

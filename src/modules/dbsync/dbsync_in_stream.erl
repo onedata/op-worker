@@ -37,8 +37,7 @@
 -type msg_id_history() :: queue:queue(binary()).
 -type state() :: #state{}.
 -type mutators() :: [od_provider:id()]. % NOTE: special id values are defined in dbsync.hrl
--type reset_params() :: {FinalSeq :: couchbase_changes:seq(), IncludedMutators :: mutators()}.
--export_type([mutators/0, reset_params/0]).
+-export_type([mutators/0]).
 
 %%%===================================================================
 %%% API

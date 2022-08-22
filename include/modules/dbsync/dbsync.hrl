@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Macros used in modules connected to dbsync.
+%%% Macros and records used in modules connected to dbsync.
 %%% @end
 %%%-------------------------------------------------------------------
 
@@ -15,6 +15,11 @@
 
 % Special values for dbsync_in_stream.mutators() type
 -define(ALL_MUTATORS, [<<"all">>]).
--define(ALL_EXCEPT_SENDER, [<<"all_except_sender">>]).
+-define(ALL_MUTATORS_EXCEPT_SENDER, [<<"all_mutators_except_sender">>]).
+
+-record(resynchronization_params, {
+  final_seq :: couchbase_changes:seq(),
+  included_mutators :: dbsync_in_stream:mutators()
+}).
 
 -endif.

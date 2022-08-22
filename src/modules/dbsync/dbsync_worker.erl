@@ -8,6 +8,14 @@
 %%% @doc
 %%% This module is responsible for monitoring and restarting DBSync streams
 %%% and routing messages to them.
+%%%
+%%% The module provides also API for streams resynchronization. Stream
+%%% resynchronization sets sequence counter for particular stream/provider
+%%% pair to 0 forcing resend of medata by chosen provider. It is possible
+%%% to choose which metadata should be resent (e.g., mutated only by sender
+%%% or by any provider).
+%%% NOTE: information about resynchronization is saved in dbsync_state so
+%%% restart of provider does not abort resynchronization.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(dbsync_worker).
@@ -26,6 +34,7 @@
 %% API
 -export([supervisor_flags/0, get_on_demand_changes_stream_id/2,
     start_streams/0, start_streams/1]).
+%% Resynchronization API
 -export([reset_provider_stream/2, resynchronize_all/2, resynchronize/3]).
 
 %% Internal services API
@@ -151,6 +160,10 @@ get_on_demand_changes_stream_id(SpaceId, ProviderId) ->
     <<SpaceId/binary, "_", ProviderId/binary>>.
 
 
+%%%===================================================================
+%%% Resynchronization API
+%%%===================================================================
+
 -spec reset_provider_stream(od_space:id(), od_provider:id()) -> ok.
 reset_provider_stream(SpaceId, ProviderId) ->
     resynchronize(SpaceId, ProviderId, [ProviderId]).
@@ -163,8 +176,7 @@ resynchronize_all(SpaceId, ProviderId) ->
 
 -spec resynchronize(od_space:id(), od_provider:id(), dbsync_in_stream:mutators()) -> ok.
 resynchronize(SpaceId, ProviderId, IncludedMutators) ->
-    Name = {dbsync_in_stream, SpaceId},
-    gen_server:call({global, Name}, {resynchronize, ProviderId, IncludedMutators}, infinity).
+    gen_server:call({global, ?IN_STREAM_ID(SpaceId)}, {resynchronize, ProviderId, IncludedMutators}, infinity).
 
 
 %%%===================================================================
@@ -243,10 +255,9 @@ handle_changes_batch(ProviderId, MsgId, #changes_batch{
     timestamp = Timestamp,
     compressed_docs = CompressedDocs
 }) ->
-    Name = {dbsync_in_stream, SpaceId},
     Docs = dbsync_utils:uncompress(CompressedDocs),
     gen_server:cast(
-        {global, Name}, {changes_batch, MsgId, ProviderId, Since, Until, Timestamp, Docs}
+        {global, ?IN_STREAM_ID(SpaceId)}, {changes_batch, MsgId, ProviderId, Since, Until, Timestamp, Docs}
     ).
 
 %%--------------------------------------------------------------------
@@ -286,7 +297,7 @@ handle_changes_request(ProviderId, #changes_request2{
                 FilteringOptions = case IncludedMutators of
                     ?ALL_MUTATORS ->
                         [];
-                    ?ALL_EXCEPT_SENDER -> [{except_mutator, ProviderId}]; % TODO VFS-6652 - restults in different seq numbers/timestamps
+                    ?ALL_MUTATORS_EXCEPT_SENDER -> [{except_mutator, ProviderId}]; % TODO VFS-6652 - restults in different seq numbers/timestamps
                                                                           % seen by different providers
                     _ ->
                         [{filter, fun

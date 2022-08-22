@@ -772,7 +772,7 @@
 %% Model that holds synchronization state for a space
 -record(dbsync_state, {
     seq = #{} :: #{od_provider:id() => {couchbase_changes:seq(), datastore_doc:timestamp()}},
-    resynchronization_params = #{} :: #{od_provider:id() => dbsync_in_stream:reset_params()}
+    resynchronization_params = #{} :: #{od_provider:id() => dbsync_state:resynchronization_params()}
 }).
 
 %% Model that holds state entries for DBSync worker

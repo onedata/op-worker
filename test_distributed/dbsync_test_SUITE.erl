@@ -356,7 +356,7 @@ changes_request_should_be_handled(Config) ->
                 space_id = SpaceId,
                 since = 1,
                 until = 2,
-                included_mutators = ?ALL_EXCEPT_SENDER
+                included_mutators = ?ALL_MUTATORS_EXCEPT_SENDER
             },
             ?call(Worker, ProviderId, Request),
             Children = rpc:call(Worker, supervisor, which_children, [
