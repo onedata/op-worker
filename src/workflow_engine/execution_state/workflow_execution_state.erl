@@ -259,14 +259,14 @@ prepare_next_job(ExecutionId) ->
     workflow_jobs:job_identifier(),
     workflow_engine:processing_stage(),
     workflow_engine:processing_result()
-) -> workflow_engine:task_spec() | ?WF_ERROR_JOB_NOT_FOUND.
+) -> {ok, workflow_engine:id(), workflow_engine:task_spec()} | ?WF_ERROR_JOB_NOT_FOUND.
 report_execution_status_update(ExecutionId, JobIdentifier, UpdateType, Ans) ->
     CachedAns = case UpdateType of
         ?ASYNC_CALL_ENDED -> workflow_cached_async_result:put(Ans);
         _ -> Ans
     end,
 
-    {UpdatedDoc, ItemIdToReportError, ItemToReportError, TaskStatusesToReport} = case update(ExecutionId, fun(State) ->
+    {UpdatedDocOrError, ItemIdToReportError, ItemToReportError, TaskStatusesToReport} = case update(ExecutionId, fun(State) ->
         report_execution_status_update_internal(State, JobIdentifier, UpdateType, CachedAns)
     end) of
         {ok, Doc = #document{value = #workflow_execution_state{update_report = #items_processed_report{
@@ -303,6 +303,7 @@ report_execution_status_update(ExecutionId, JobIdentifier, UpdateType, Ans) ->
             {Doc, undefined, undefined, [{JobIdentifier, ReportedTaskStatus}]};
         {ok, Doc} ->
             {Doc, undefined, undefined, []};
+        % Possible errors when result of async task that ended with timeout appeared
         ?WF_ERROR_JOB_NOT_FOUND ->
             ?debug("Result for not found job ~p of execution ~p", [JobIdentifier, ExecutionId]),
             {?WF_ERROR_JOB_NOT_FOUND, undefined, undefined, []};
@@ -311,10 +312,10 @@ report_execution_status_update(ExecutionId, JobIdentifier, UpdateType, Ans) ->
             {?WF_ERROR_JOB_NOT_FOUND, undefined, undefined, []}
     end,
 
-    case UpdatedDoc of
+    case UpdatedDocOrError of
         ?WF_ERROR_JOB_NOT_FOUND ->
             ?WF_ERROR_JOB_NOT_FOUND; % Error occurred - no task can be connected to result
-        _ ->
+        #document{value = #workflow_execution_state{engine_id = EngineId}} = UpdatedDoc ->
             maybe_report_item_error(UpdatedDoc, ItemIdToReportError, ItemToReportError),
             % TODO VFS-8456 - maybe execute notification handlers also on pool?
             lists:foreach(fun({Identifier, TaskStatus}) ->
@@ -325,7 +326,7 @@ report_execution_status_update(ExecutionId, JobIdentifier, UpdateType, Ans) ->
                 current_lane = #current_lane{parallel_box_specs = BoxSpecs}
             }} = UpdatedDoc,
             {_TaskId, TaskSpec} = workflow_jobs:get_task_details(JobIdentifier, BoxSpecs),
-            TaskSpec
+            {ok, EngineId, TaskSpec}
     end.
 
 -spec report_lane_execution_prepared(

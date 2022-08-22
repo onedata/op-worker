@@ -26,7 +26,7 @@
 %% Functions returning/updating pending_async_jobs field
 -export([register_async_call/4, check_timeouts/1, reset_keepalive_timer/2]).
 %% Functions operating on job_identifier record
--export([job_identifier_to_binary/1, binary_to_job_identifier/1, get_item_id/2, get_subject_id/3,
+-export([encode_job_identifier/1, decode_job_identifier/1, get_item_id/2, get_subject_id/3,
     get_task_details/2, get_processing_type/1, is_previous/2]).
 %% API used to check which tasks are finished for all items
 -export([is_task_finished/2, is_task_finished/3, build_tasks_tree/1]).
@@ -74,6 +74,7 @@
 }).
 
 -type job_identifier() :: #job_identifier{}.
+-type encoded_job_identifier() :: binary().
 -type jobs_set() :: gb_sets:set(job_identifier()).
 -type items_set() :: sets:set(workflow_execution_state:index()).
 -type pending_async_jobs() :: #{job_identifier() => #async_job_timer{}}.
@@ -87,7 +88,7 @@
 -define(ITERATION_FINISHED, iteration_finished).
 -type results_iterator() :: gb_sets:iter(job_identifier()) | ?ITERATION_FINISHED.
 
--export_type([job_identifier/0, jobs/0, item_processing_result/0]).
+-export_type([job_identifier/0, encoded_job_identifier/0, jobs/0, item_processing_result/0]).
 
 -define(SEPARATOR, "_").
 -define(OPERATION_UNSUPPORTED, operation_unsupported).
@@ -372,8 +373,8 @@ reset_keepalive_timer(Jobs = #workflow_jobs{pending_async_jobs = AsyncCalls}, Jo
 %%% Functions operating on job_identifier record
 %%%===================================================================
 
--spec job_identifier_to_binary(job_identifier()) -> binary().
-job_identifier_to_binary(#job_identifier{
+-spec encode_job_identifier(job_identifier()) -> encoded_job_identifier().
+encode_job_identifier(#job_identifier{
     processing_type = ?JOB_PROCESSING,
     item_index = ItemIndex,
     parallel_box_index = BoxIndex,
@@ -382,11 +383,11 @@ job_identifier_to_binary(#job_identifier{
     <<(integer_to_binary(ItemIndex))/binary, ?SEPARATOR,
         (integer_to_binary(BoxIndex))/binary, ?SEPARATOR,
         (integer_to_binary(TaskIndex))/binary>>;
-job_identifier_to_binary(#job_identifier{processing_type = ?ASYNC_RESULT_PROCESSING}) ->
+encode_job_identifier(#job_identifier{processing_type = ?ASYNC_RESULT_PROCESSING}) ->
     throw(?OPERATION_UNSUPPORTED).
 
--spec binary_to_job_identifier(binary()) -> job_identifier().
-binary_to_job_identifier(Binary) ->
+-spec decode_job_identifier(encoded_job_identifier()) -> job_identifier().
+decode_job_identifier(Binary) ->
     [ItemIndexBin, BoxIndexBin, TaskIndexBin] = binary:split(Binary, <<?SEPARATOR>>, [global, trim_all]),
     #job_identifier{
         processing_type = ?JOB_PROCESSING,

@@ -25,8 +25,9 @@
 %% API
 -export([init/1, init/2, execute_workflow/2, cancel_execution/1, cleanup_execution/1]).
 -export([stream_task_data/3, report_task_data_streaming_concluded/3]).
+-export([report_async_task_result/3, report_async_task_heartbeat/2]).
 %% Framework internal API
--export([report_execution_status_update/5, get_async_call_pools/1, trigger_job_scheduling/1,
+-export([get_async_call_pools/1, trigger_job_scheduling/1,
     call_handler/5, call_handle_task_execution_ended_for_all_tasks/4,
     call_handle_task_results_processed_for_all_items_for_all_tasks/4, call_handlers_for_cancelled_lane/5,
     get_enqueuing_timeout/1]).
@@ -169,6 +170,18 @@ cleanup_execution(ExecutionId) ->
     workflow_iterator_snapshot:cleanup(ExecutionId).
 
 
+-spec report_async_task_result(execution_id(), workflow_jobs:encoded_job_identifier(), processing_result()) -> ok.
+report_async_task_result(ExecutionId, EncodedJobIdentifier, Result) ->
+    JobIdentifier = workflow_jobs:decode_job_identifier(EncodedJobIdentifier),
+    report_execution_status_update(ExecutionId, ?ASYNC_CALL_ENDED, JobIdentifier, Result).
+
+
+-spec report_async_task_heartbeat(execution_id(), workflow_jobs:encoded_job_identifier()) -> ok.
+report_async_task_heartbeat(ExecutionId, EncodedJobIdentifier) ->
+    JobIdentifier = workflow_jobs:decode_job_identifier(EncodedJobIdentifier),
+    workflow_timeout_monitor:report_heartbeat(ExecutionId, JobIdentifier).
+
+
 -spec stream_task_data(workflow_engine:execution_id(), workflow_engine:task_id(), streamed_task_data()) -> ok.
 stream_task_data(ExecutionId, TaskId, TaskData) ->
     {ok, EngineId} = workflow_execution_state:report_new_streamed_task_data(ExecutionId, TaskId, TaskData),
@@ -186,34 +199,39 @@ report_task_data_streaming_concluded(ExecutionId, TaskId, Result) ->
 %%% Framework internal API - to be called only by other workflow_engine modules
 %%%===================================================================
 
--spec report_execution_status_update(execution_id(), id(), processing_stage(),
-    workflow_jobs:job_identifier(), handler_execution_result()) -> ok.
-report_execution_status_update(ExecutionId, EngineId, ReportType, JobIdentifier, Ans) ->
-    TaskSpec = workflow_execution_state:report_execution_status_update(ExecutionId, JobIdentifier, ReportType, Ans),
+-spec report_execution_status_update(execution_id(), processing_stage(),
+    workflow_jobs:job_identifier(), processing_result()) -> ok.
+report_execution_status_update(ExecutionId, ReportType, JobIdentifier, Ans) ->
+    StatusUpdateAns = workflow_execution_state:report_execution_status_update(ExecutionId, JobIdentifier, ReportType, Ans),
 
-    DecrementSlotsUsage = case {ReportType, Ans} of
-        {?ASYNC_CALL_ENDED, _} -> true;
-        {?ASYNC_CALL_STARTED, error} -> true;
-        _ -> false
-    end,
+    case StatusUpdateAns of
+        {ok, EngineId, TaskSpec} ->
+            DecrementSlotsUsage = case {ReportType, Ans} of
+                {?ASYNC_CALL_ENDED, _} -> true;
+                {?ASYNC_CALL_STARTED, error} -> true;
+                _ -> false
+            end,
 
-    case DecrementSlotsUsage of
-        true when TaskSpec =/= ?WF_ERROR_JOB_NOT_FOUND ->
-            % TODO VFS-7788 - support multiple pools
-            case get_async_call_pools(TaskSpec) of
-                [CallPoolId] -> workflow_async_call_pool:decrement_slot_usage(CallPoolId);
-                _ -> ok
+            case DecrementSlotsUsage of
+                true ->
+                    % TODO VFS-7788 - support multiple pools
+                    case get_async_call_pools(TaskSpec) of
+                        [CallPoolId] -> workflow_async_call_pool:decrement_slot_usage(CallPoolId);
+                        _ -> ok
+                    end;
+                _ ->
+                    ok
+            end,
+
+            case ReportType of
+                ?ASYNC_CALL_ENDED ->
+                    % Asynchronous job finish - it has no slot acquired
+                    trigger_job_scheduling(EngineId, ?TAKE_UP_FREE_SLOTS);
+                _ ->
+                    trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
             end;
-        _ ->
+        ?WF_ERROR_JOB_NOT_FOUND ->
             ok
-    end,
-
-    case ReportType of
-        ?ASYNC_CALL_ENDED ->
-            % Asynchronous job finish - it has no slot acquired
-            trigger_job_scheduling(EngineId, ?TAKE_UP_FREE_SLOTS);
-        _ ->
-            trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
     end.
 
 -spec get_async_call_pools(task_spec()) -> [workflow_async_call_pool:id()].
@@ -541,14 +559,9 @@ process_item(EngineId, ExecutionId, ExecutionSpec = #execution_spec{
         #{type := TaskType} = TaskSpec,
         {ReportType, FinalAns} = case TaskType of
             sync ->
-                {?SYNC_CALL, process_item(ExecutionId, ExecutionSpec, <<>>, <<>>)};
+                {?SYNC_CALL, process_item(ExecutionId, ExecutionSpec)};
             async ->
-                FinishCallback = workflow_engine_callback_handler:prepare_finish_callback_id(
-                    ExecutionId, EngineId, JobIdentifier),
-                HeartbeatCallback = workflow_engine_callback_handler:prepare_heartbeat_callback_id(
-                    ExecutionId, EngineId, JobIdentifier),
-
-                case process_item(ExecutionId, ExecutionSpec, FinishCallback, HeartbeatCallback) of
+                case process_item(ExecutionId, ExecutionSpec) of
                     ok ->
                         DefaultTimeout = get_default_keepalive_timeout(EngineId),
                         AnsWithTimeout = {ok, maps:get(keepalive_timeout, TaskSpec, DefaultTimeout)},
@@ -558,7 +571,7 @@ process_item(EngineId, ExecutionId, ExecutionSpec = #execution_spec{
                 end
         end,
 
-        report_execution_status_update(ExecutionId, EngineId, ReportType, JobIdentifier, FinalAns)
+        report_execution_status_update(ExecutionId, ReportType, JobIdentifier, FinalAns)
     catch
         Error:Reason:Stacktrace  ->
             ?error_stacktrace(
@@ -569,22 +582,18 @@ process_item(EngineId, ExecutionId, ExecutionSpec = #execution_spec{
             trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
     end.
 
--spec process_item(
-    execution_id(),
-    execution_spec(),
-    workflow_handler:finished_callback_id(),
-    workflow_handler:heartbeat_callback_id()
-) -> workflow_handler:handler_execution_result().
+-spec process_item(execution_id(), execution_spec()) -> workflow_handler:handler_execution_result().
 process_item(ExecutionId, #execution_spec{
     handler = Handler,
     context = ExecutionContext,
     task_id = TaskId,
+    job_identifier = JobIdentifier,
     subject_id = ItemId
-}, FinishCallback, HeartbeatCallback) ->
+}) ->
     Item = workflow_cached_item:get_item(ItemId),
+    EncodedJobIdentifier = workflow_jobs:encode_job_identifier(JobIdentifier),
     try
-        Handler:run_task_for_item(ExecutionId, ExecutionContext, TaskId, Item,
-            FinishCallback, HeartbeatCallback)
+        Handler:run_task_for_item(ExecutionId, ExecutionContext, TaskId, EncodedJobIdentifier, Item)
     catch
         Error:Reason:Stacktrace  ->
             % TODO VFS-7788 - use callbacks to get human readable information about item and task
@@ -621,7 +630,7 @@ process_result(EngineId, ExecutionId, #execution_spec{
                 ),
                 error
         end,
-        report_execution_status_update(ExecutionId, EngineId, ?ASYNC_RESULT_PROCESSED, JobIdentifier, ProcessedResult)
+        report_execution_status_update(ExecutionId, ?ASYNC_RESULT_PROCESSED, JobIdentifier, ProcessedResult)
     catch
         Error2:Reason2:Stacktrace2  ->
             ?error_stacktrace(

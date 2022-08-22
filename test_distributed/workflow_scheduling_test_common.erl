@@ -100,7 +100,7 @@ end_per_testcase(async_task_enqueuing_test = Case, Config) ->
 end_per_testcase(_, Config) ->
     ?config(test_execution_manager, Config) ! stop,
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, [workflow_test_handler, workflow_engine_callback_handler]).
+    test_utils:mock_unload(Workers, [workflow_test_handler, workflow_engine]).
 
 %%%===================================================================
 %%% Test execution manager helper functions
@@ -229,7 +229,7 @@ set_test_execution_manager_options(Config, Options) ->
 
 
 mock_handlers(Workers, Manager) ->
-    test_utils:mock_new(Workers, [workflow_test_handler, workflow_engine_callback_handler]),
+    test_utils:mock_new(Workers, [workflow_test_handler, workflow_engine]),
 
     MockTemplateWithDelayOrFail = fun(HandlerCallReport, PassthroughArgs, DelayFun, OnFailFun) ->
         Manager ! {handler_call, self(), HandlerCallReport},
@@ -441,9 +441,8 @@ mock_handlers(Workers, Manager) ->
 
     % Warning: do not use MockTemplate as meck:passthrough does not work when 2 mocks work within one process
     % (it is possible for handle_callback mock)
-    test_utils:mock_expect(Workers, workflow_engine_callback_handler, handle_callback, fun(CallbackId, Result) ->
-        {_CallbackType, ExecutionId, EngineId, JobIdentifier} =
-            workflow_engine_callback_handler:decode_callback_id(CallbackId),
+    test_utils:mock_expect(Workers, workflow_engine, report_async_task_result, fun(ExecutionId, EncodedJobIdentifier, Result) ->
+        JobIdentifier = workflow_jobs:decode_job_identifier(EncodedJobIdentifier),
         {_, _, TaskId} = workflow_execution_state:get_result_processing_data(ExecutionId, JobIdentifier),
         Item = workflow_cached_item:get_item(workflow_execution_state:get_item_id(ExecutionId, JobIdentifier)),
         #{lane_id := LaneId} = workflow_execution_state:get_current_lane_context(ExecutionId),
@@ -458,20 +457,20 @@ mock_handlers(Workers, Manager) ->
 
         receive
             history_saved ->
-                apply(meck_util:original_name(workflow_engine_callback_handler), handle_callback, [CallbackId, Result]);
+                apply(meck_util:original_name(workflow_engine), report_async_task_result,
+                    [ExecutionId, EncodedJobIdentifier, Result]);
             {delay_call, InitialSleepTime} ->
                 spawn(fun() ->
                     timer:sleep(InitialSleepTime),
                     lists:foreach(fun(_) ->
-                        HeartbeatCallbackId = apply(meck_util:original_name(workflow_engine_callback_handler),
-                            prepare_heartbeat_callback_id, [ExecutionId, EngineId, JobIdentifier]),
-                        apply(meck_util:original_name(workflow_engine_callback_handler),
-                            handle_callback, [HeartbeatCallbackId, undefined]),
+                        apply(meck_util:original_name(workflow_engine),
+                            report_async_task_heartbeat, [ExecutionId, EncodedJobIdentifier]),
                         timer:sleep(timer:seconds(3))
                     end, lists:seq(1,6))
                 end),
                 timer:sleep(timer:seconds(15)),
-                apply(meck_util:original_name(workflow_engine_callback_handler), handle_callback, [CallbackId, Result]);
+                apply(meck_util:original_name(workflow_engine), report_async_task_result,
+                    [ExecutionId, EncodedJobIdentifier, Result]);
             fail_call ->
                 ok
         end

@@ -20,7 +20,7 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 
 % Callbacks
--export([prepare_lane/3, restart_lane/3, run_task_for_item/6, process_task_result_for_item/5, report_item_error/3,
+-export([prepare_lane/3, restart_lane/3, run_task_for_item/5, process_task_result_for_item/5, report_item_error/3,
     handle_task_results_processed_for_all_items/3, process_streamed_task_data/4,
     handle_task_execution_ended/3, handle_lane_execution_ended/3, handle_workflow_execution_ended/2]).
 % API
@@ -143,25 +143,18 @@ restart_lane(ExecutionId, ExecutionContext, LaneId) ->
     workflow_engine:execution_id(),
     test_execution_context(),
     workflow_engine:task_id(),
-    iterator:item(),
-    workflow_handler:finished_callback_id(),
-    workflow_handler:heartbeat_callback_id()
+    workflow_jobs:encoded_job_identifier(),
+    iterator:item()
 ) ->
     workflow_handler:handler_execution_result().
-run_task_for_item(_ExecutionId, #{task_type := async}, _TaskId, Item, FinishCallback, _) ->
+run_task_for_item(ExecutionId, #{task_type := async}, _TaskId, EncodedJobIdentifier, Item) ->
     spawn(fun() ->
         timer:sleep(100), % TODO VFS-7784 - test with different sleep times
         Result = #{<<"result">> => <<"ok">>, <<"item">> => Item},
-        case binary_to_integer(Item) =< 10 of
-            true ->
-                % Use http_client only for part of items as it is much slower than direct `handle_callback` call
-                http_client:put(FinishCallback, #{}, json_utils:encode(Result));
-            false ->
-                workflow_engine_callback_handler:handle_callback(FinishCallback, Result)
-        end
+        workflow_engine:report_async_task_result(ExecutionId, EncodedJobIdentifier, Result)
     end),
     ok;
-run_task_for_item(_ExecutionId, _Context, _TaskId, _Item, _FinishCallback, _) ->
+run_task_for_item(_ExecutionId, _Context, _TaskId, _EncodedJobIdentifier, _Item) ->
     ok.
 
 
