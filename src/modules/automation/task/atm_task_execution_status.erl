@@ -54,7 +54,7 @@
 -include("modules/automation/atm_execution.hrl").
 
 %% API
--export([is_transition_allowed/2, is_ended/1]).
+-export([is_transition_allowed/2, is_running/1]).
 
 -export([
     handle_items_in_processing/2,
@@ -96,14 +96,11 @@ is_transition_allowed(?CANCELLED_STATUS, ?PENDING_STATUS) -> true;
 is_transition_allowed(_, _) -> false.
 
 
--spec is_ended(atm_task_execution:status()) -> boolean().
-is_ended(?FINISHED_STATUS) -> true;
-is_ended(?SKIPPED_STATUS) -> true;
-is_ended(?CANCELLED_STATUS) -> true;
-is_ended(?FAILED_STATUS) -> true;
-is_ended(?INTERRUPTED_STATUS) -> true;
-is_ended(?PAUSED_STATUS) -> true;
-is_ended(_) -> false.
+-spec is_running(atm_task_execution:status()) -> boolean().   %% TODO reviewers rename to is_stopped? stopped for both suspended and ended ?
+is_running(?PENDING_STATUS) -> true;
+is_running(?ACTIVE_STATUS) -> true;
+is_running(?STOPPING_STATUS) -> true;
+is_running(_) -> false.
 
 
 -spec handle_items_in_processing(atm_task_execution:id(), pos_integer()) ->

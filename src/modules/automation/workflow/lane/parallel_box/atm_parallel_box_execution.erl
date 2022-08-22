@@ -195,7 +195,7 @@ stop(AtmWorkflowExecutionCtx0, Reason, #atm_parallel_box_execution{
 
 -spec ensure_all_ended([record()]) -> ok | no_return().
 ensure_all_ended(AtmParallelBoxExecutions) ->
-    pforeach_not_ended_task(fun atm_task_execution_handler:handle_ended/1, AtmParallelBoxExecutions).
+    pforeach_running_task(fun atm_task_execution_handler:handle_ended/1, AtmParallelBoxExecutions).
 
 
 -spec teardown_all(atm_workflow_execution_ctx:record(), [record()]) -> ok.
@@ -351,38 +351,38 @@ db_decode(#{
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% Executes given Callback for each not ended task. Specified function
+%% Executes given Callback for each running task. Specified function
 %% must take into account possible race conditions when task transition to
-%% ended phase just right before Callback is called.
+%% suspended or ended phase just right before Callback is called.
 %% @end
 %%--------------------------------------------------------------------
--spec pforeach_not_ended_task(
+-spec pforeach_running_task(
     fun((atm_task_execution:id()) -> ok | {error, term()}),
     [atm_task_execution:id()]
 ) ->
     ok | no_return().
-pforeach_not_ended_task(Callback, AtmParallelBoxExecutions) ->
+pforeach_running_task(Callback, AtmParallelBoxExecutions) ->
     atm_parallel_runner:foreach(fun(Record = #atm_parallel_box_execution{
         task_statuses = AtmTaskExecutionStatuses
     }) ->
-        case is_ended(Record) of
+        case is_running(Record) of
             true ->
-                ok;
-            false ->
                 atm_parallel_runner:foreach(fun({AtmTaskExecutionId, AtmTaskExecutionStatus}) ->
-                    case atm_task_execution_status:is_ended(AtmTaskExecutionStatus) of
-                        true -> ok;
-                        false -> Callback(AtmTaskExecutionId)
+                    case atm_task_execution_status:is_running(AtmTaskExecutionStatus) of
+                        true -> Callback(AtmTaskExecutionId);
+                        false -> ok
                     end
-                end, maps:to_list(AtmTaskExecutionStatuses))
+                end, maps:to_list(AtmTaskExecutionStatuses));
+            false ->
+                ok
         end
     end, AtmParallelBoxExecutions).
 
 
 %% @private
--spec is_ended(record()) -> boolean().
-is_ended(#atm_parallel_box_execution{status = AtmParallelBoxExecutionStatus}) ->
-    atm_task_execution_status:is_ended(AtmParallelBoxExecutionStatus).
+-spec is_running(record()) -> boolean().
+is_running(#atm_parallel_box_execution{status = AtmParallelBoxExecutionStatus}) ->
+    atm_task_execution_status:is_running(AtmParallelBoxExecutionStatus).
 
 
 %% @private
