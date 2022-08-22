@@ -231,8 +231,13 @@ delete(ArchiveId, CallbackUrl) ->
 
 
 -spec remove_archive_recursive(archive:doc() | archive:id()) -> ok.
-remove_archive_recursive(ArchiveDocOrId) ->
-    remove_archive_recursive(ArchiveDocOrId, #link_token{}).
+remove_archive_recursive(#document{} = ArchiveDoc) ->
+    remove_archive_recursive(ArchiveDoc, #link_token{});
+remove_archive_recursive(ArchiveId) ->
+    case archive:get(ArchiveId) of
+        {ok, ArchiveDoc} -> remove_archive_recursive(ArchiveDoc);
+        ?ERROR_NOT_FOUND -> ok
+    end.
 
 
 -spec get_nested_archives_stats(archive:id() | archive:doc()) -> archive_stats:record().
@@ -275,12 +280,12 @@ get_aggregated_stats(ArchiveId) ->
 %%%===================================================================
 
 %% @private
--spec remove_archive_recursive(archive:doc() | archive:id(), archives_forest:token()) -> ok.
-remove_archive_recursive(ArchiveDocOrId, Token) ->
-    {ok, ArchiveId} = case ArchiveDocOrId of
-        #document{} = ArchiveDoc -> archive:get_id(ArchiveDoc);
-        ArchiveId0 when is_binary(ArchiveId0) -> {ok, ArchiveId0}
-    end,
+-spec remove_archive_recursive(archive:doc(), archives_forest:token()) -> ok.
+remove_archive_recursive(ArchiveDoc, Token) ->
+    % parent archives must be unblocked first because otherwise hardlinks in children 
+    % archives would still have effective permission flags protecting them from being deleted.
+    ok = unblock_related_archives(ArchiveDoc),
+    {ok, ArchiveId} = archive:get_id(ArchiveDoc),
     case archives_forest:list(ArchiveId, Token, ?BATCH_SIZE) of
         {ok, ChildrenArchives, Token2} ->
             lists:foreach(fun(ChildArchiveId) ->
@@ -288,31 +293,25 @@ remove_archive_recursive(ArchiveDocOrId, Token) ->
             end, ChildrenArchives),
             case Token2#link_token.is_last of
                 true ->
-                    remove_archive(ArchiveDocOrId);
+                    remove_archive(ArchiveDoc);
                 false ->
-                    remove_archive_recursive(ArchiveDocOrId, Token2)
+                    remove_archive_recursive(ArchiveDoc, Token2)
             end;
         {error, not_found} ->
             ok
     end.
-
+    
 
 %% @private
--spec remove_archive(archive:doc() | archive:id()) -> ok | error().
+-spec remove_archive(archive:doc()) -> ok | error().
 remove_archive(ArchiveDoc = #document{value = #archive{related_dip = undefined, related_aip = RelatedAip}}) ->
     remove_archives(ArchiveDoc, RelatedAip);
 remove_archive(ArchiveDoc = #document{value = #archive{related_aip = undefined, related_dip = RelatedDip}}) ->
-    remove_archives(ArchiveDoc, RelatedDip);
-remove_archive(ArchiveId) ->
-    case archive:get(ArchiveId) of
-        {ok, ArchiveDoc} -> remove_archive(ArchiveDoc);
-        ?ERROR_NOT_FOUND -> ok;
-        {error, _} = Error -> Error
-    end.
+    remove_archives(ArchiveDoc, RelatedDip).
 
 
 %% @private
--spec remove_archives(archive:id() | archive:doc(), archive:id() | undefined) -> ok | error().
+-spec remove_archives(archive:doc(), archive:id() | undefined) -> ok | error().
 remove_archives(Archive, RelatedArchive) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
     ok = remove_single_archive(Archive, UserCtx),
@@ -325,7 +324,6 @@ remove_single_archive(undefined, _UserCtx) ->
     ok;
 remove_single_archive(ArchiveDoc = #document{}, UserCtx) ->
     {ok, ArchiveId} = archive:get_id(ArchiveDoc),
-    ok = archive_verification_traverse:unblock_archive_modification(ArchiveDoc),
     case archive:delete(ArchiveId) of
         ok ->
             {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
@@ -345,8 +343,31 @@ remove_single_archive(ArchiveDoc = #document{}, UserCtx) ->
 remove_single_archive(ArchiveId, UserCtx) ->
     case archive:get(ArchiveId) of
         {ok, ArchiveDoc} -> remove_single_archive(ArchiveDoc, UserCtx);
-        ?ERROR_NOT_FOUND -> ok;
-        {error, _} = Error -> Error
+        ?ERROR_NOT_FOUND -> ok
+    end.
+
+
+%% @private
+-spec unblock_related_archives(archive:doc()) -> ok.
+unblock_related_archives(#document{value = #archive{
+    related_aip = RelatedAip,
+    related_dip = RelatedDip
+}} = ArchiveDoc) ->
+    ok = unblock_archive(ArchiveDoc),
+    ok = unblock_archive(RelatedAip),
+    ok = unblock_archive(RelatedDip).
+
+
+%% @private
+-spec unblock_archive(archive:doc() | archive:id() | undefined) -> ok.
+unblock_archive(undefined) ->
+    ok;
+unblock_archive(#document{} = ArchiveDoc) ->
+    archive_verification_traverse:unblock_archive_modification(ArchiveDoc);
+unblock_archive(ArchiveId) ->
+    case archive:get(ArchiveId) of
+        {ok, ArchiveDoc} -> unblock_archive(ArchiveDoc);
+        ?ERROR_NOT_FOUND -> ok
     end.
 
 
