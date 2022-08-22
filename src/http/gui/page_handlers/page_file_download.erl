@@ -140,7 +140,7 @@ handle_http_download(FileDownloadCode, SessionId, FileGuids, FollowSymlinks, Req
     case {FileAttrsList, FollowSymlinks} of
         {{error, Errno}, _} ->
             http_req:send_error(?ERROR_POSIX(Errno), Req3);
-        {[#file_attr{type = ?DIRECTORY_TYPE, guid = Guid, name = FileName} = Attr], _} ->
+        {[#file_attr{type = ?DIRECTORY_TYPE, guid = Guid, name = FileName}], _} ->
             TargetName = case archivisation_tree:uuid_to_archive_id(file_id:guid_to_uuid(Guid)) of
                 undefined ->
                     FileName;

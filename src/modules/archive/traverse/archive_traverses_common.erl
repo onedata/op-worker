@@ -10,17 +10,73 @@
 %%% traverse modules. 
 %%% @end
 %%%-------------------------------------------------------------------
--module(archive_traverse_common).
+-module(archive_traverses_common).
 -author("Michal Stanisz").
 
+-include("tree_traverse.hrl").
+-include("modules/dataset/archive.hrl").
+-include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
+-include_lib("ctool/include/errors.hrl").
 
 %% API
+-export([do_master_job/4]).
 -export([update_children_count/4, take_children_count/3]).
+-export([execute_unsafe_job/5]).
+-export([is_cancelled/1]).
+
+-type error_handler(T) :: fun((tree_traverse:job(), Error :: any(), Stacktrace :: list()) -> T).
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
+
+-spec do_master_job(module(), tree_traverse:master_job(), traverse:master_job_extended_args(), 
+    error_handler({ok, traverse:master_job_map()})) -> {ok, traverse:master_job_map()}.
+do_master_job(
+    TraverseModule, 
+    Job = #tree_traverse{file_ctx = FileCtx}, 
+    MasterJobArgs,
+    ErrorHandler
+) ->
+    {IsDir, FileCtx2} = file_ctx:is_dir(FileCtx),
+    
+    {Module, Function} = case IsDir of
+        true -> {TraverseModule, do_dir_master_job_unsafe};
+        false -> {tree_traverse, do_master_job}
+    end,
+    UpdatedJob = Job#tree_traverse{file_ctx = FileCtx2},
+    archive_traverses_common:execute_unsafe_job(
+        Module, Function, [MasterJobArgs], UpdatedJob, ErrorHandler).
+
+
+-spec execute_unsafe_job(module(), atom(), [term()], tree_traverse:job(), error_handler(T)) ->
+    T.
+execute_unsafe_job(Module, JobFunctionName, Options, Job, ErrorHandler) ->
+    try
+        erlang:apply(Module, JobFunctionName, [Job | Options])
+    catch
+        _Class:{badmatch, {error, Reason}}:Stacktrace ->
+            ErrorHandler(Job, ?ERROR_POSIX(Reason), Stacktrace);
+        _Class:Reason:Stacktrace ->
+            ErrorHandler(Job, Reason, Stacktrace)
+    end.
+
+
+-spec is_cancelled(archivisation_traverse_ctx:ctx() | archive:doc()) -> boolean() | {error, term()}.
+is_cancelled(#document{key = ArchiveId}) ->
+    case archive:get(ArchiveId) of
+        {ok, #document{value = #archive{state = State}}} ->
+            State == ?ARCHIVE_CANCELLING;
+        {error, _} = Error ->
+            Error
+    end;
+is_cancelled(ArchiveCtx) ->
+    case archivisation_traverse_ctx:get_archive_doc(ArchiveCtx) of
+        undefined -> false;
+        ArchiveDoc -> is_cancelled(ArchiveDoc)
+    end.
+
 
 -spec update_children_count(tree_traverse:pool(), tree_traverse:id(), file_meta:uuid(), non_neg_integer()) ->
     ok.

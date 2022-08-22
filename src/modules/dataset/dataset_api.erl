@@ -113,30 +113,21 @@ update(DatasetDoc, NewState, FlagsToSet, FlagsToUnset) ->
 
 
 -spec remove(dataset:id() | dataset:doc()) -> ok | error().
-remove(Doc = #document{key = DatasetId}) ->
+remove(#document{key = DatasetId}) ->
+    % fetch doc again in critical section to avoid races with dataset state change
+    remove(DatasetId);
+remove(DatasetId) when is_binary(DatasetId) ->
     ?CRITICAL_SECTION(DatasetId, fun() ->
         case archives_list:is_empty(DatasetId) of
             true ->
-                ok = remove_from_datasets_structure(Doc),
-                {ok, SpaceId} = dataset:get_space_id(Doc),
-                ok = dataset:delete(DatasetId),
-                {ok, Uuid} = dataset:get_root_file_uuid(Doc),
-                InvalidateDatasetsOnly = case file_meta:get(Uuid) of
-                    {ok, FileMetaDoc} ->
-                        ProtectionFlags = file_meta:get_protection_flags(FileMetaDoc),
-                        not ?has_any_flags(ProtectionFlags, ?DATA_PROTECTION bor ?METADATA_PROTECTION);
-                    _ ->
-                        false
-                end,
-                ok = file_meta_dataset:remove(Uuid),
-                dataset_eff_cache:invalidate_on_all_nodes(SpaceId, InvalidateDatasetsOnly);
+                case dataset:get(DatasetId) of
+                    {ok, Doc} -> remove_unsafe(Doc);
+                    {error, not_found} -> ok
+                end;
             false ->
                 {error, ?ENOTEMPTY}
         end
-    end);
-remove(DatasetId) when is_binary(DatasetId) ->
-    {ok, Doc} = dataset:get(DatasetId),
-    remove(Doc).
+    end).
 
 
 -spec move_if_applicable(file_meta:doc(), file_meta:doc()) -> ok.
@@ -262,6 +253,23 @@ get_associated_file_ctx(DatasetDoc) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+-spec remove_unsafe(dataset:doc()) -> ok.
+remove_unsafe(#document{key = DatasetId} = Doc) ->
+    ok = remove_from_datasets_structure(Doc),
+    {ok, SpaceId} = dataset:get_space_id(Doc),
+    ok = dataset:delete(DatasetId),
+    {ok, Uuid} = dataset:get_root_file_uuid(Doc),
+    InvalidateDatasetsOnly = case file_meta:get(Uuid) of
+        {ok, FileMetaDoc} ->
+            ProtectionFlags = file_meta:get_protection_flags(FileMetaDoc),
+            not ?has_any_flags(ProtectionFlags, ?DATA_PROTECTION bor ?METADATA_PROTECTION);
+        _ ->
+            false
+    end,
+    ok = file_meta_dataset:remove(Uuid),
+    dataset_eff_cache:invalidate_on_all_nodes(SpaceId, InvalidateDatasetsOnly).
+
 
 -spec reattach(dataset:id(), data_access_control:bitmask(), data_access_control:bitmask()) -> ok | error().
 reattach(DatasetId, FlagsToSet, FlagsToUnset) ->

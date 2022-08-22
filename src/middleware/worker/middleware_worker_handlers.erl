@@ -48,6 +48,9 @@ execute(UserCtx, SpaceDirCtx, #dataset_archive_request{
         SpaceDirCtx, DatasetId, Config, PreservedCallback, DeletedCallback, Description, UserCtx
     );
 
+execute(UserCtx, SpaceDirCtx, #archivisation_cancel_request{id = ArchiveId}) ->
+    dataset_req:cancel_archivisation(SpaceDirCtx, ArchiveId, UserCtx);
+
 execute(UserCtx, SpaceDirCtx, #archive_info_get_request{id = ArchiveId}) ->
     dataset_req:get_archive_info(SpaceDirCtx, ArchiveId, UserCtx);
 
@@ -183,6 +186,10 @@ execute(UserCtx, FileCtx, #file_distribution_gather_request{}) ->
 
 execute(UserCtx, FileCtx, #historical_dir_size_stats_gather_request{request = Request}) ->
     {ok, dir_size_stats_req:gather_historical(UserCtx, FileCtx, Request)};
+
+execute(UserCtx, FileCtx, #file_storage_locations_get_request{}) ->
+    file_distribution:get_storage_locations(UserCtx, FileCtx);
+
 
 %% QoS
 

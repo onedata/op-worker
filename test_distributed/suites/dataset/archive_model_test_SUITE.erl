@@ -67,6 +67,15 @@
 ]).
 
 groups() -> [
+    {sequential_tests, [sequential], [
+        % NOTE: this test should be run first, as any failure in space cleanup will fail it
+        archive_dataset_attached_to_space_dir, 
+        time_warp_test,
+        create_archive_privileges_test,
+        view_archive_privileges_test,
+        remove_archive_privileges_test,
+        archive_dataset_many_times
+    ]},
     {time_mock_parallel_tests, [parallel], [
         % these tests has been moved to separate group so that
         % mocking time does not interfere with other tests
@@ -80,7 +89,12 @@ groups() -> [
         archive_of_detached_dataset_should_be_accessible,
         archive_of_dataset_associated_with_deleted_file_should_be_accessible,
         archive_reattached_dataset,
-        removal_of_not_empty_dataset_should_fail,
+        removal_of_not_empty_dataset_should_fail
+    ]},
+    {iterate_parallel_tests, [parallel], [
+        % these tests has been moved to separate group so that creation of 
+        % so many archives does not block archive traverse pool for other tests
+        % (all archives for this test group are created in init_per_group)
         iterate_over_100_archives_using_offset_and_limit_1,
         iterate_over_100_archives_using_offset_and_limit_10,
         iterate_over_100_archives_using_offset_and_limit_100,
@@ -91,22 +105,15 @@ groups() -> [
         iterate_over_100_archives_using_start_index_and_limit_100,
         iterate_over_100_archives_using_start_index_and_limit_1000,
         iterate_over_100_archives_using_start_index_and_limit_10000
-    ]},
-    {sequential_tests, [sequential], [
-        archive_dataset_attached_to_space_dir,
-        time_warp_test,
-        create_archive_privileges_test,
-        view_archive_privileges_test,
-        remove_archive_privileges_test,
-        archive_dataset_many_times
     ]}
 ].
 
 
 all() -> [
+    {group, sequential_tests},
     {group, time_mock_parallel_tests},
     {group, parallel_tests},
-    {group, sequential_tests}
+    {group, iterate_parallel_tests}
 ].
 
 -define(ATTEMPTS, 300).
@@ -124,7 +131,7 @@ all() -> [
 -define(TEST_DESCRIPTION1, <<"TEST DESCRIPTION">>).
 -define(TEST_DESCRIPTION2, <<"TEST DESCRIPTION2">>).
 -define(TEST_ARCHIVE_PRESERVED_CALLBACK1, <<"https://preserved1.org">>).
--define(TEST_ARCHIVE_PRESERVED_CALLBACK2, <<"https://preserved1.org">>).
+-define(TEST_ARCHIVE_PRESERVED_CALLBACK2, <<"https://preserved2.org">>).
 -define(TEST_ARCHIVE_DELETED_CALLBACK1, <<"https://deleted1.org">>).
 -define(TEST_ARCHIVE_DELETED_CALLBACK2, <<"https://deleted2.org">>).
 -define(TEST_ARCHIVE_DELETED_CALLBACK3, <<"https://deleted3.org">>).
@@ -275,35 +282,35 @@ removal_of_not_empty_dataset_should_fail(_Config) ->
         opt_archives:list(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10}), ?ATTEMPTS),
     ?assertEqual(ok, opt_datasets:remove(P1Node, UserSessIdP1, DatasetId)).
 
-iterate_over_100_archives_using_offset_and_limit_1(_Config) ->
-    iterate_over_archives_test_base(100, offset, 1).
+iterate_over_100_archives_using_offset_and_limit_1(Config) ->
+    iterate_over_archives_test_base(Config, offset, 1).
 
-iterate_over_100_archives_using_offset_and_limit_10(_Config) ->
-    iterate_over_archives_test_base(100, offset, 10).
+iterate_over_100_archives_using_offset_and_limit_10(Config) ->
+    iterate_over_archives_test_base(Config, offset, 10).
 
-iterate_over_100_archives_using_offset_and_limit_100(_Config) ->
-    iterate_over_archives_test_base(100, offset, 100).
+iterate_over_100_archives_using_offset_and_limit_100(Config) ->
+    iterate_over_archives_test_base(Config, offset, 100).
 
-iterate_over_100_archives_using_offset_and_limit_1000(_Config) ->
-    iterate_over_archives_test_base(100, offset, 1000).
+iterate_over_100_archives_using_offset_and_limit_1000(Config) ->
+    iterate_over_archives_test_base(Config, offset, 1000).
 
-iterate_over_100_archives_using_offset_and_limit_10000(_Config) ->
-    iterate_over_archives_test_base(100, offset, 10000).
+iterate_over_100_archives_using_offset_and_limit_10000(Config) ->
+    iterate_over_archives_test_base(Config, offset, 10000).
 
-iterate_over_100_archives_using_start_index_and_limit_1(_Config) ->
-    iterate_over_archives_test_base(100, start_index, 1).
+iterate_over_100_archives_using_start_index_and_limit_1(Config) ->
+    iterate_over_archives_test_base(Config, start_index, 1).
 
-iterate_over_100_archives_using_start_index_and_limit_10(_Config) ->
-    iterate_over_archives_test_base(100, start_index, 10).
+iterate_over_100_archives_using_start_index_and_limit_10(Config) ->
+    iterate_over_archives_test_base(Config, start_index, 10).
 
-iterate_over_100_archives_using_start_index_and_limit_100(_Config) ->
-    iterate_over_archives_test_base(100, start_index, 100).
+iterate_over_100_archives_using_start_index_and_limit_100(Config) ->
+    iterate_over_archives_test_base(Config, start_index, 100).
 
-iterate_over_100_archives_using_start_index_and_limit_1000(_Config) ->
-    iterate_over_archives_test_base(100, start_index, 1000).
+iterate_over_100_archives_using_start_index_and_limit_1000(Config) ->
+    iterate_over_archives_test_base(Config, start_index, 1000).
 
-iterate_over_100_archives_using_start_index_and_limit_10000(_Config) ->
-    iterate_over_archives_test_base(100, start_index, 10000).
+iterate_over_100_archives_using_start_index_and_limit_10000(Config) ->
+    iterate_over_archives_test_base(Config, start_index, 10000).
 
 %===================================================================
 % Sequential tests - tests which must be performed one after another
@@ -394,16 +401,16 @@ create_archive_privileges_test(_Config) ->
         opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
 
     lists:foreach(fun(Privilege) ->
-
-        ensure_privilege_revoked(P1Node, SpaceId, UserId2, Privilege, AllPrivileges),
+    
+        ozt_spaces:set_privileges(SpaceId, UserId2, AllPrivileges -- [Privilege]),
         % user2 cannot create archive
         ?assertEqual(?ERROR_POSIX(?EPERM),
             opt_archives:archive_dataset(P1Node, User2SessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
         % user2 cannot modify an existing archive either
         ?assertEqual(?ERROR_POSIX(?EPERM),
             opt_archives:update(P1Node, User2SessIdP1, ArchiveId, #{<<"description">> => ?TEST_DESCRIPTION2})),
-
-        ensure_privilege_assigned(P1Node, SpaceId, UserId2, Privilege, AllPrivileges),
+    
+        ozt_spaces:set_privileges(SpaceId, UserId2, AllPrivileges),
         % user2 can now create archive
 
         {ok, ArchiveId2} = ?assertMatch({ok, _},
@@ -438,7 +445,7 @@ view_archive_privileges_test(_Config) ->
     AllPrivileges = privileges:from_list([?SPACE_VIEW_ARCHIVES | privileges:space_member()]),
 
     % assign user only space_member privileges
-    ensure_privilege_revoked(P1Node, SpaceId, UserId2, ?SPACE_VIEW_ARCHIVES, AllPrivileges),
+    ozt_spaces:set_privileges(SpaceId, UserId2, AllPrivileges -- [?SPACE_VIEW_ARCHIVES]),
 
     % user2 cannot fetch archive info
     ?assertEqual(?ERROR_POSIX(?EPERM),
@@ -448,7 +455,7 @@ view_archive_privileges_test(_Config) ->
         opt_archives:list(P1Node, User2SessIdP1, DatasetId, #{offset => 0, limit => 10})),
 
     % assign user2 privilege to view archives
-    ensure_privilege_assigned(P1Node, SpaceId, UserId2, ?SPACE_VIEW_ARCHIVES, AllPrivileges),
+    ozt_spaces:set_privileges(SpaceId, UserId2, AllPrivileges),
 
     % now user2 should be able to fetch archive info
     ?assertMatch({ok, _},
@@ -482,12 +489,12 @@ remove_archive_privileges_test(_Config) ->
     AllPrivileges = privileges:from_list(RequiredPrivileges ++ privileges:space_member()),
 
     lists:foreach(fun({Privilege, ArchiveId}) ->
-
-        ensure_privilege_revoked(P1Node, SpaceId, UserId2, Privilege, AllPrivileges),
+    
+        ozt_spaces:set_privileges(SpaceId, UserId2, AllPrivileges -- [Privilege]),
         % user2 cannot remove the archive
         ?assertEqual(?ERROR_POSIX(?EPERM), opt_archives:delete(P1Node, User2SessIdP1, ArchiveId)),
-
-        ensure_privilege_assigned(P1Node, SpaceId, UserId2, Privilege, AllPrivileges),
+    
+        ozt_spaces:set_privileges(SpaceId, UserId2, AllPrivileges),
         % user2 can now remove archive
         ?assertEqual(ok, opt_archives:delete(P1Node, User2SessIdP1, ArchiveId))
 
@@ -591,36 +598,18 @@ simple_archive_crud_test_base(DatasetId, RootFileType, ExpSize) ->
         opt_archives:list(P2Node, UserSessIdP2, DatasetId, #{offset => 0, limit => 10}), ?ATTEMPTS).
 
 
-iterate_over_archives_test_base(ArchiveCount, ListingMethod, Limit) ->
+iterate_over_archives_test_base(Config, ListingMethod, Limit) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
-
-    #object{dataset = #dataset_object{
-        id = DatasetId,
-        archives = ArchiveObjects
-    }} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE,
-        #file_spec{dataset = #dataset_spec{archives = ArchiveCount}}),
-
-    lists_utils:pforeach(fun(#archive_object{id = ArchiveId, config = Config}) ->
-        ?assertMatch({ok, #archive_info{
-            state = ?ARCHIVE_PRESERVED,
-            config = Config
-        }}, opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS)
-    end, ArchiveObjects),
-
-    % sort archives by their indices
-    ExpArchiveIdsAndIndices = lists:sort(fun(A1, A2) ->
-        A1#archive_object.index =< A2#archive_object.index
-    end, ArchiveObjects),
-    ExpArchiveIds = [Id || {Id, _} <- ExpArchiveIdsAndIndices],
 
     ListingOpts = case ListingMethod of
         offset -> #{offset => 0, limit => Limit};
         start_index -> #{start_index => <<>>, limit => Limit}
     end,
 
+    ExpArchiveIds = ?config(exp_archive_ids, Config),
+    DatasetId = ?config(dataset_id, Config),
     check_if_all_archives_listed(ExpArchiveIds, P1Node, UserSessIdP1, DatasetId, ListingOpts).
-
 
 %===================================================================
 % SetUp and TearDown functions
@@ -643,6 +632,10 @@ end_per_suite(Config) ->
 init_per_group(parallel_tests, Config) ->
     Config2 = oct_background:update_background_config(Config),
     lfm_proxy:init(Config2, false);
+init_per_group(iterate_parallel_tests, Config) ->
+    Config2 = oct_background:update_background_config(Config),
+    Config3 = prepare_archive_iteration_test_environment(Config2, 100),
+    lfm_proxy:init(Config3, false);
 init_per_group(_Group, Config) ->
     ok = time_test_utils:freeze_time(Config),
     Config2 = oct_background:update_background_config(Config),
@@ -694,18 +687,26 @@ update_opts(Opts = #{offset := Offset}, ListedArchives) ->
 update_opts(Opts = #{start_index := _}, ListedArchives) ->
     Opts#{start_index => element(1, lists:last(ListedArchives)), offset => 1}.
 
-has_eff_privilege(Node, SpaceId, UserId, Privilege) ->
-    rpc:call(Node, space_logic, has_eff_privilege, [SpaceId, UserId, Privilege]).
-
-ensure_privilege_revoked(Node, SpaceId, UserId, Privilege, AllPrivileges) ->
-    % assign AllPrivileges with Privilege missing
-    Privileges = privileges:from_list(AllPrivileges -- [Privilege]),
-    ozw_test_rpc:space_set_user_privileges(SpaceId, UserId, Privileges),
-    % wait till information is synced from onezone
-    ?assertMatch(false, has_eff_privilege(Node, SpaceId, UserId, Privilege), ?ATTEMPTS).
-
-ensure_privilege_assigned(Node, SpaceId, UserId, Privilege, AllPrivileges) ->
-    % assign user AllPrivileges
-    ozw_test_rpc:space_set_user_privileges(SpaceId, UserId, AllPrivileges),
-    % wait till information is synced from onezone
-    ?assertMatch(true, has_eff_privilege(Node, SpaceId, UserId, Privilege), ?ATTEMPTS).
+prepare_archive_iteration_test_environment(Config, ArchiveCount) ->
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
+    
+    #object{dataset = #dataset_object{
+        id = DatasetId,
+        archives = ArchiveObjects
+    }} = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE,
+        #file_spec{dataset = #dataset_spec{archives = ArchiveCount}}),
+    
+    lists_utils:pforeach(fun(#archive_object{id = ArchiveId, config = Config}) ->
+        ?assertMatch({ok, #archive_info{
+            state = ?ARCHIVE_PRESERVED,
+            config = Config
+        }}, opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS)
+    end, ArchiveObjects),
+    
+    % sort archives by their indices
+    ExpArchiveIdsAndIndices = lists:sort(fun(A1, A2) ->
+        A1#archive_object.index =< A2#archive_object.index
+    end, ArchiveObjects),
+    ExpArchiveIds = [Id || {Id, _} <- ExpArchiveIdsAndIndices],
+    [{exp_archive_ids, ExpArchiveIds}, {dataset_id, DatasetId} | Config].
