@@ -25,7 +25,7 @@
 -export([
     init_engine/0,
     start/3,
-    cancel/2,
+    stop/3,
     repeat/4
 ]).
 -export([on_provider_restart/1]).
@@ -101,8 +101,13 @@ start(UserCtx, AtmWorkflowExecutionEnv, #document{
     }).
 
 
--spec cancel(user_ctx:ctx(), atm_workflow_execution:id()) -> ok | errors:error().
-cancel(UserCtx, AtmWorkflowExecutionId) ->
+-spec stop(
+    user_ctx:ctx(),
+    atm_workflow_execution:id(),
+    cancel | pause
+) ->
+    ok | errors:error().
+stop(UserCtx, AtmWorkflowExecutionId, Reason) ->
     {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:get(AtmWorkflowExecutionId),
     AtmWorkflowExecutionEnv = acquire_global_env(AtmWorkflowExecutionDoc),
     SpaceId = atm_workflow_execution_env:get_space_id(AtmWorkflowExecutionEnv),
@@ -112,7 +117,14 @@ cancel(UserCtx, AtmWorkflowExecutionId) ->
         atm_workflow_execution_auth:build(SpaceId, AtmWorkflowExecutionId, UserCtx),
         AtmWorkflowExecutionEnv
     ),
-    atm_lane_execution_handler:stop({current, current}, cancel, AtmWorkflowExecutionCtx).
+    case atm_lane_execution_handler:stop({current, current}, Reason, AtmWorkflowExecutionCtx) of
+        stopping ->
+            ok;
+        stopped ->
+            % atm workflow execution was stopped and there are no active processes handling it
+            % (e.g. cancelling already suspended execution) - end procedures must be called manually
+            end_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx)
+    end.
 
 
 -spec repeat(
@@ -164,7 +176,7 @@ on_provider_restart(AtmWorkflowExecutionId) ->
 
     try
         AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(AtmWorkflowExecutionEnv),
-        ok = atm_lane_execution_handler:stop({current, current}, interrupt, AtmWorkflowExecutionCtx),
+        atm_lane_execution_handler:stop({current, current}, interrupt, AtmWorkflowExecutionCtx),
         end_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx)
         %% TODO VFS-9532 resume execution if ended status == interrupted
     catch throw:{session_acquisition_failed, _} = Reason ->
@@ -437,6 +449,8 @@ ensure_all_lane_runs_ended(#document{
         case atm_lane_execution:get_run(AtmLaneRunSelector, AtmWorkflowExecution) of
             {ok, #atm_lane_execution_run{status = Status}} ->
                 case atm_lane_execution_status:status_to_phase(Status) of
+                    ?SUSPENDED_PHASE ->
+                        ok;
                     ?ENDED_PHASE ->
                         ok;
                     _ ->

@@ -55,7 +55,7 @@ prepare(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
 
         AtmLaneExecutionSpec
     catch Type:Reason:Stacktrace ->
-        atm_lane_execution_status:handle_stopping(AtmLaneRunSelector, AtmWorkflowExecutionId, failure),
+        stop(AtmLaneRunSelector, failure, AtmWorkflowExecutionCtx),
         % Call via ?MODULE: to allow mocking in tests
         ?MODULE:handle_ended(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
         throw(?atm_examine_error(Type, Reason, Stacktrace))
@@ -67,15 +67,35 @@ prepare(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     atm_lane_execution:run_stopping_reason(),
     atm_workflow_execution_ctx:record()
 ) ->
-    ok | no_return().
+    stopping | stopped | no_return().
 stop(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx) ->
     AtmWorkflowExecutionId = atm_workflow_execution_ctx:get_workflow_execution_id(
         AtmWorkflowExecutionCtx
     ),
     case atm_lane_execution_status:handle_stopping(AtmLaneRunSelector, AtmWorkflowExecutionId, Reason) of
-        {ok, #document{value = AtmWorkflowExecution}} ->
-            stop_parallel_boxes(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecution),
-            workflow_engine:cancel_execution(AtmWorkflowExecutionId);
+        {ok, AtmWorkflowExecutionDoc = #document{value = #atm_workflow_execution{
+            prev_status = PrevStatus
+        }}} ->
+            case atm_workflow_execution_status:status_to_phase(PrevStatus) of
+                ?SUSPENDED_PHASE ->
+                    stop_suspended(
+                        AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecutionDoc
+                    );
+                _ ->
+                    stop_running(
+                        AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecutionDoc
+                    )
+            end;
+
+        {error, stopping} when Reason =:= cancel; Reason =:= pause ->
+            % ignore user trying to stop already stopping execution
+            stopping;
+
+        {error, stopping} ->
+            % repeat stopping procedure just in case if previously it wasn't finished
+            % (e.g. provider abrupt shutdown and restart)
+            {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:get(AtmWorkflowExecutionId),
+            stop_running(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecutionDoc);
 
         {error, _} = Error ->
             throw(Error)
@@ -99,6 +119,8 @@ handle_ended(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
     {ok, NextLaneRun} = atm_lane_execution:get_run({current, current}, NextAtmWorkflowExecution),
 
     case atm_lane_execution_status:status_to_phase(NextLaneRun#atm_lane_execution_run.status) of
+        ?SUSPENDED_PHASE ->
+            ?END_EXECUTION;
         ?ENDED_PHASE ->
             ?END_EXECUTION;
         _ ->
@@ -202,6 +224,42 @@ get_iterator_spec(AtmLaneRunSelector, AtmWorkflowExecution = #atm_workflow_execu
     end, MaxBatchSize, lists:usort(AtmLambdas)),
 
     AtmStoreIteratorSpec#atm_store_iterator_spec{max_batch_size = NewMaxBatchSize}.
+
+
+%% @private
+-spec stop_suspended(
+    atm_lane_execution:lane_run_selector(),
+    atm_lane_execution:run_stopping_reason(),
+    atm_workflow_execution_ctx:record(),
+    atm_workflow_execution:doc()
+) ->
+    stopped.
+stop_suspended(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, #document{
+    key = AtmWorkflowExecutionId,
+    value = AtmWorkflowExecution
+}) ->
+    stop_parallel_boxes(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecution),
+    % execution was suspended == there was no active process handling it and manual handle_ended
+    % call is necessary
+    atm_lane_execution_status:handle_ended(AtmLaneRunSelector, AtmWorkflowExecutionId),
+    stopped.
+
+
+%% @private
+-spec stop_running(
+    atm_lane_execution:lane_run_selector(),
+    atm_lane_execution:run_stopping_reason(),
+    atm_workflow_execution_ctx:record(),
+    atm_workflow_execution:doc()
+) ->
+    stopping.
+stop_running(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, #document{
+    key = AtmWorkflowExecutionId,
+    value = AtmWorkflowExecution
+}) ->
+    stop_parallel_boxes(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecution),
+    workflow_engine:cancel_execution(AtmWorkflowExecutionId),
+    stopping.
 
 
 %% @private

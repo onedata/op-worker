@@ -121,8 +121,6 @@
 %%% API
 %%%===================================================================
 
-%% TODO pause -> cancel/stopping?
-
 
 -spec status_to_phase(atm_lane_execution:run_status()) ->
     atm_workflow_execution:phase().
@@ -134,7 +132,7 @@ status_to_phase(?ACTIVE_STATUS) -> ?ONGOING_PHASE;
 status_to_phase(?STOPPING_STATUS) -> ?ONGOING_PHASE;
 
 status_to_phase(?INTERRUPTED_STATUS) -> ?SUSPENDED_PHASE;
-status_to_phase(?PAUSED_STATUS) -> ?SUSPENDED_PHASE;        %% TODO handle suspended phase
+status_to_phase(?PAUSED_STATUS) -> ?SUSPENDED_PHASE;
 
 status_to_phase(?FINISHED_STATUS) -> ?ENDED_PHASE;
 status_to_phase(?CRUSHED_STATUS) -> ?ENDED_PHASE;
@@ -153,10 +151,8 @@ can_manual_lane_run_repeat_be_scheduled(_, _, #atm_workflow_execution{status = ?
 
 can_manual_lane_run_repeat_be_scheduled(RepeatType, Run, AtmWorkflowExecution) ->
     case atm_workflow_execution_status:infer_phase(AtmWorkflowExecution) of
-        ?ENDED_PHASE ->
-            is_lane_run_repeatable(RepeatType, Run);
-        _ ->
-            false
+        ?ENDED_PHASE -> is_lane_run_repeatable(RepeatType, Run);
+        _ -> false
     end.
 
 
@@ -202,7 +198,7 @@ handle_enqueued(AtmLaneRunSelector, AtmWorkflowExecutionId) ->
     atm_workflow_execution:id(),
     atm_lane_execution:run_stopping_reason()
 ) ->
-    {ok, atm_workflow_execution:doc()} | errors:error().
+    {ok, atm_workflow_execution:doc()} | {error, stopping} | errors:error().
 handle_stopping(AtmLaneRunSelector, AtmWorkflowExecutionId, Reason) ->
     Diff = fun(AtmWorkflowExecution) ->
         atm_lane_execution:update_run(AtmLaneRunSelector, fun
@@ -215,11 +211,16 @@ handle_stopping(AtmLaneRunSelector, AtmWorkflowExecutionId, Reason) ->
                 {ok, Run#atm_lane_execution_run{status = ?STOPPING_STATUS, stopping_reason = Reason}};
 
             (#atm_lane_execution_run{status = ?STOPPING_STATUS, stopping_reason = PrevReason} = Run) ->
-                FinalReason = case should_overwrite_stopping_reason(PrevReason, Reason) of
-                    true -> Reason;
-                    false -> PrevReason
-                end,
-                {ok, Run#atm_lane_execution_run{stopping_reason = FinalReason}};
+                case should_overwrite_stopping_reason(PrevReason, Reason) of
+                    true -> {ok, Run#atm_lane_execution_run{stopping_reason = Reason}};
+                    false -> {error, stopping}
+                end;
+
+            (#atm_lane_execution_run{status = Status} = Run) when
+                (Status =:= ?INTERRUPTED_STATUS orelse Status =:= ?PAUSED_STATUS),
+                Reason =:= cancel
+            ->
+                {ok, Run#atm_lane_execution_run{status = ?STOPPING_STATUS, stopping_reason = Reason}};
 
             (#atm_lane_execution_run{status = EndedStatus}) ->
                 ?ERROR_ATM_INVALID_STATUS_TRANSITION(EndedStatus, ?STOPPING_STATUS)
@@ -304,7 +305,6 @@ handle_manual_repeat(RepeatType, {AtmLaneSelector, _} = AtmLaneRunSelector, AtmW
                 Error
         end
     end,
-    % TODO in case of repeat when latest run was paused - transit it to cancelled?
     atm_workflow_execution_status:handle_manual_lane_repeat(AtmWorkflowExecutionId, Diff).
 
 
