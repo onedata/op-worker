@@ -40,6 +40,7 @@
 -export([flush_stats/3]).
 
 -type id() :: qos_traverse_req:id().
+-type slave_job() :: tree_traverse:slave_job().
 -type transfer_id() :: binary().
 
 -export_type([id/0]).
@@ -201,18 +202,17 @@ do_master_job(Job = #tree_traverse{file_ctx = FileCtx}, MasterJobArgs = #{task_i
 %% @end
 %%--------------------------------------------------------------------
 -spec do_slave_job(tree_traverse:slave_job(), id()) -> ok.
-do_slave_job(#tree_traverse_slave{file_ctx = FileCtx}, TaskId) ->
+do_slave_job(Job, TaskId) ->
     % TODO VFS-6137: add space check and optionally choose other storage
-    UserCtx = user_ctx:new(?ROOT_SESS_ID),
 
     {ok, #{<<"task_type">> := TaskType} = AdditionalData} = 
         traverse_task:get_additional_data(?POOL_NAME, TaskId),
     
     case TaskType of
         <<"traverse">> -> 
-            slave_job_traverse(TaskId, UserCtx, FileCtx, AdditionalData);
+            slave_job_traverse(TaskId, Job, AdditionalData);
         <<"reconcile">> ->
-            slave_job_reconcile(TaskId, UserCtx, FileCtx)
+            slave_job_reconcile(TaskId, Job)
     end.
 
 
@@ -261,53 +261,54 @@ get_file_local_qos_entries(SpaceId, FileUuidOrDoc) ->
     end.
 
 %% @private
--spec slave_job_traverse(id(), user_ctx:ctx(), file_ctx:ctx(), traverse:additional_data()) -> ok.
-slave_job_traverse(TaskId, UserCtx, FileCtx, AdditionalData) ->
+-spec slave_job_traverse(id(), slave_job(), traverse:additional_data()) -> ok.
+slave_job_traverse(TaskId, #tree_traverse_slave{file_ctx = FileCtx} = Job, AdditionalData) ->
     #{<<"qos_entry_id">> := QosEntryId} = AdditionalData,
     % start transfer only for existing entries
     QosEntries = case qos_entry:get(QosEntryId) of
         {ok, _} -> [QosEntryId];
         ?ERROR_NOT_FOUND -> []
     end,
-    ok = synchronize_file_for_entries(TaskId, UserCtx, FileCtx, QosEntries),
+    ok = synchronize_file_for_entries(TaskId, Job, QosEntries),
     {ParentFileCtx, FileCtx2} = file_tree:get_parent(FileCtx, undefined),
     ok = qos_status:report_traverse_finished_for_file(TaskId, FileCtx2, ParentFileCtx).
 
 
 %% @private
--spec slave_job_reconcile(id(), user_ctx:ctx(), file_ctx:ctx()) -> ok.
-slave_job_reconcile(TaskId, UserCtx, FileCtx) ->
+-spec slave_job_reconcile(id(), slave_job()) -> ok.
+slave_job_reconcile(TaskId, #tree_traverse_slave{file_ctx = FileCtx} = Job) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     {FileDoc, FileCtx1} = file_ctx:get_file_doc(FileCtx),
     QosEntries = get_file_local_qos_entries(SpaceId, FileDoc),
-    ok = synchronize_file_for_entries(TaskId, UserCtx, FileCtx1, QosEntries).
+    ok = synchronize_file_for_entries(
+        TaskId, Job#tree_traverse_slave{file_ctx = FileCtx1}, QosEntries).
 
 
 %% @private
--spec synchronize_file_for_entries(id(), user_ctx:ctx(), file_ctx:ctx(), [qos_entry:id()]) ->
+-spec synchronize_file_for_entries(id(), slave_job(), [qos_entry:id()]) ->
     ok.
-synchronize_file_for_entries(_TaskId, _UserCtx, _FileCtx, []) ->
+synchronize_file_for_entries(_TaskId, _Job, []) ->
     ok;
-synchronize_file_for_entries(TaskId, UserCtx, FileCtx, QosEntries) ->
+synchronize_file_for_entries(TaskId, #tree_traverse_slave{file_ctx = FileCtx} = Job, QosEntries) ->
     try
-        synchronize_file_for_entries_insecure(TaskId, UserCtx, FileCtx, QosEntries)
+        synchronize_file_for_entries_insecure(TaskId, Job, QosEntries)
     catch Class:Reason:Stacktrace ->
         ?error_stacktrace("Unexpected error during QoS synchronization for file ~p: ~p", 
             [file_ctx:get_logical_uuid_const(FileCtx), {Class, Reason}], Stacktrace),
-        ok = qos_status:report_file_transfer_failure(FileCtx, QosEntries),
         ok = report_file_failed_for_entries(QosEntries, FileCtx, Reason)
     end.
 
 
 %% @private
--spec synchronize_file_for_entries_insecure(id(), user_ctx:ctx(), file_ctx:ctx(), [qos_entry:id()]) -> 
+-spec synchronize_file_for_entries_insecure(id(), slave_job(), [qos_entry:id()]) -> 
     ok.
-synchronize_file_for_entries_insecure(TaskId, UserCtx, FileCtx, QosEntries) ->
+synchronize_file_for_entries_insecure(TaskId, #tree_traverse_slave{file_ctx = FileCtx}, QosEntries) ->
     {Size, FileCtx2} = file_ctx:get_file_size(FileCtx),
     FileBlock = #file_block{offset = 0, size = Size},
     Uuid = file_ctx:get_logical_uuid_const(FileCtx),
     TransferId = ?QOS_TRANSFER_ID(TaskId, Uuid),
     IsSymlink = fslogic_file_id:is_symlink_uuid(Uuid),
+    UserCtx = user_ctx:new(?ROOT_SESS_ID),
     
     lists:foreach(fun(QosEntry) -> 
         qos_entry:add_transfer_to_list(QosEntry, TransferId) 
@@ -340,7 +341,6 @@ synchronize_file_for_entries_insecure(TaskId, UserCtx, FileCtx, QosEntries) ->
         {error, _} = Error ->
             NormalizedError = normalize_error(Error),
             ok = report_file_failed_for_entries(QosEntries, FileCtx2, NormalizedError),
-            ok = qos_status:report_file_transfer_failure(FileCtx2, QosEntries),
             ?error("Error during QoS file synchronization: ~p", [NormalizedError])
     end.
 
@@ -349,7 +349,7 @@ synchronize_file_for_entries_insecure(TaskId, UserCtx, FileCtx, QosEntries) ->
 -spec report_file_synchronization_started_for_entries([qos_entry:id()], file_ctx:ctx()) -> ok.
 report_file_synchronization_started_for_entries(QosEntries, FileCtx) ->
     report_to_audit_log(
-        QosEntries, FileCtx, [], fun qos_entry_audit_log:report_synchronization_started/2).
+        QosEntries, FileCtx, [], fun qos_entry_audit_log:report_synchronization_started/3).
 
 
 %% @private
@@ -358,23 +358,25 @@ report_file_synchronized_for_entries(QosEntries, FileCtx) ->
     {StorageId, FileCtx2} = file_ctx:get_storage_id(FileCtx),
     report_transfer_stats(QosEntries, ?FILES_STATS, #{StorageId => 1}),
     report_to_audit_log(
-        QosEntries, FileCtx2, [], fun qos_entry_audit_log:report_file_synchronized/2).
+        QosEntries, FileCtx2, [], fun qos_entry_audit_log:report_file_synchronized/3).
 
 
 %% @private
 -spec report_file_failed_for_entries([qos_entry:id()], file_ctx:ctx(), {error, term()}) -> ok.
 report_file_failed_for_entries(QosEntries, FileCtx, Error) ->
+    ok = qos_status:report_file_transfer_failure(FileCtx, QosEntries),
     report_to_audit_log(
-        QosEntries, FileCtx, [Error], fun qos_entry_audit_log:report_file_synchronization_failed/3).
+        QosEntries, FileCtx, [Error], fun qos_entry_audit_log:report_file_synchronization_failed/4).
 
 
 %% @private
 -spec report_to_audit_log([qos_entry:id()], file_ctx:ctx(), [term()], fun((...) -> ok)) -> ok.
 report_to_audit_log(QosEntries, FileCtx, Args, ReportFun) ->
     FileGuid = file_ctx:get_logical_guid_const(FileCtx),
+    {LogicalPath, _} = file_ctx:get_logical_path(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
     lists:foreach(fun(QosEntryId) ->
         % ignore not found errors, as audit log could have been deleted along with QoS entry
-        ok = ?ok_if_not_found(erlang:apply(ReportFun, [QosEntryId, FileGuid | Args]))
+        ok = ?ok_if_not_found(erlang:apply(ReportFun, [QosEntryId, FileGuid, LogicalPath | Args]))
     end, QosEntries).
 
 

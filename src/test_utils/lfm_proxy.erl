@@ -260,7 +260,7 @@ cp(Worker, SessId, FileKey, TargetParentKey, TargetName) ->
 
 
 -spec is_dir(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path()) ->
-    ok | lfm:error_reply().
+    boolean() | lfm:error_reply().
 is_dir(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:is_dir(SessId, uuid_to_file_ref(Worker, FileKey))).
 
