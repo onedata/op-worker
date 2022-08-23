@@ -26,7 +26,8 @@
     init_engine/0,
     start/3,
     stop/3,
-    repeat/4
+    repeat/4,
+    resume/2
 ]).
 -export([on_provider_restart/1]).
 
@@ -156,6 +157,24 @@ repeat(UserCtx, Type, AtmLaneRunSelector, AtmWorkflowExecutionId) ->
                     true -> {CurrentAtmLaneIndex + 1, current};
                     false -> undefined
                 end
+            });
+        {error, _} = Error ->
+            Error
+    end.
+
+
+-spec resume(user_ctx:ctx(), atm_workflow_execution:id()) ->
+    ok | errors:error().
+resume(UserCtx, AtmWorkflowExecutionId) ->
+    case atm_lane_execution_status:handle_resume({current, current}, AtmWorkflowExecutionId) of
+        {ok, AtmWorkflowExecutionDoc} ->
+            unfreeze_global_stores(AtmWorkflowExecutionDoc),
+            ok = atm_workflow_execution_session:init(AtmWorkflowExecutionId, UserCtx),
+
+            workflow_engine:execute_workflow(?ATM_WORKFLOW_EXECUTION_ENGINE, #{
+                id => AtmWorkflowExecutionId,
+                workflow_handler => ?MODULE,
+                execution_context => acquire_global_env(AtmWorkflowExecutionDoc)
             });
         {error, _} = Error ->
             Error

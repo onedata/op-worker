@@ -50,7 +50,7 @@
 
 -type run_status() ::
     % waiting
-    ?SCHEDULED_STATUS | ?PREPARING_STATUS | ?ENQUEUED_STATUS |
+    ?RESUMING_STATUS | ?SCHEDULED_STATUS | ?PREPARING_STATUS | ?ENQUEUED_STATUS |
     % ongoing
     ?ACTIVE_STATUS | ?STOPPING_STATUS |
     % ended

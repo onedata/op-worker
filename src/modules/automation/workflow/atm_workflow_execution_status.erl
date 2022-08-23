@@ -314,7 +314,7 @@ handle_resume(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
             });
 
         (_) ->
-            ?ERROR_ATM_WORKFLOW_EXECUTION_NOT_ENDED  %% TODO add not resumable error
+            ?ERROR_ATM_WORKFLOW_EXECUTION_NOT_ENDED  %% TODO add not resumable error ??
     end,
 
     case atm_workflow_execution:update(AtmWorkflowExecutionId, Diff) of
