@@ -308,7 +308,7 @@ mock_handlers(Workers, Manager) ->
     end),
 
     test_utils:mock_expect(Workers, workflow_test_handler, run_task_for_item,
-        fun(ExecutionId, #{lane_id := LaneId} = Context, TaskId, Item, FinishCallback, HeartbeatCallback) ->
+        fun(ExecutionId, #{lane_id := LaneId} = Context, TaskId, EncodedJobIdentifier, Item) ->
             maybe_stream_data(ExecutionId, TaskId, Context, Item),
             MockTemplate(
                 #handler_call{
@@ -319,7 +319,7 @@ mock_handlers(Workers, Manager) ->
                     task_id = TaskId,
                     item = Item
                 },
-                [ExecutionId, Context, TaskId, Item, FinishCallback, HeartbeatCallback]
+                [ExecutionId, Context, TaskId, EncodedJobIdentifier, Item]
             )
         end),
 

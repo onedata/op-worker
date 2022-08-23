@@ -22,7 +22,7 @@
 
 %% API
 -export([init/6, restart_from_snapshot/6, cancel/1, cleanup/1, prepare_next_job/1,
-    report_execution_status_update/4, report_lane_execution_prepared/4, report_limit_reached_error/2,
+    report_execution_status_update/4, report_lane_execution_prepared/5, report_limit_reached_error/2,
     report_new_streamed_task_data/3, report_streamed_task_data_processed/4, mark_all_streamed_task_data_received/3,
     check_timeouts/1, reset_keepalive_timer/2, get_result_processing_data/2]).
 %% Test API
@@ -80,8 +80,8 @@
 -define(WF_ERROR_LANE_CHANGED, {error, lane_changed}).
 -define(WF_ERROR_LANE_EXECUTION_CANCELLED(Handler, CancelledLaneId, CancelledLaneContext, TaskIds),
     {error, {lane_execution_cancelled, Handler, CancelledLaneId, CancelledLaneContext, TaskIds}}).
--define(WF_ERROR_NO_CACHED_ITEMS(LaneIndex, ItemIndex, IterationStep, Context),
-    {error, {no_cached_items, LaneIndex, ItemIndex, IterationStep, Context}}).
+-define(WF_ERROR_NO_CACHED_ITEMS(LaneIndex, ItemIndex, IterationStep, Handler, Context),
+    {error, {no_cached_items, LaneIndex, ItemIndex, IterationStep, Handler, Context}}).
 -define(WF_ERROR_NOTHING_CHANGED, {error, nothing_changed}).
 -define(WF_ERROR_ITERATION_FAILED, {error, iteration_failed}).
 -define(WF_ERROR_CURRENT_LANE, {error, current_lane}).
@@ -182,12 +182,13 @@ restart_from_snapshot(ExecutionId, EngineId, Handler, Context, InitialLaneId, In
                             next_lane = #next_lane{id = NextLaneId}}
                         },
                         {ok, _} = datastore_model:save(?CTX, Doc),
-                        case finish_lane_preparation(ExecutionId, LaneSpec#{iterator => Iterator}) of
+                        case finish_lane_preparation(Handler, ExecutionId, LaneSpec#{iterator => Iterator}) of
                             {ok, _, _, _} ->
                                 ok;
                             ?WF_ERROR_LANE_ALREADY_PREPARED ->
                                 ok;
                             ?WF_ERROR_PREPARATION_FAILED ->
+                                % TODO - jakie callbacki zawolac?
                                 cleanup(ExecutionId),
                                 ?WF_ERROR_PREPARATION_FAILED
                         end;
@@ -197,8 +198,8 @@ restart_from_snapshot(ExecutionId, EngineId, Handler, Context, InitialLaneId, In
             catch
                 Error:Reason:Stacktrace ->
                     ?error_stacktrace(
-                        "Unexpected error restarting lane ~p (id ~p, execution ~p): ~p:~p",
-                        [LaneIndex, LaneId, ExecutionId, Error, Reason],
+                        "Unexpected error restarting lane ~p (id ~p, execution ~p, handler ~p): ~p:~p",
+                        [LaneIndex, LaneId, ExecutionId, Handler, Error, Reason],
                         Stacktrace
                     ),
                     ?WF_ERROR_PREPARATION_FAILED
@@ -330,25 +331,26 @@ report_execution_status_update(ExecutionId, JobIdentifier, UpdateType, Ans) ->
     end.
 
 -spec report_lane_execution_prepared(
+    workflow_handler:handler(),
     workflow_engine:execution_id(),
     workflow_engine:lane_id(),
     workflow_engine:preparation_mode(),
     workflow_handler:prepare_lane_result()
 ) -> ok.
-report_lane_execution_prepared(ExecutionId, _LaneId, ?PREPARE_CURRENT, {ok, LaneSpec}) ->
-    case finish_lane_preparation(ExecutionId, LaneSpec) of
+report_lane_execution_prepared(Handler, ExecutionId, _LaneId, ?PREPARE_CURRENT, {ok, LaneSpec}) ->
+    case finish_lane_preparation(Handler, ExecutionId, LaneSpec) of
         {ok, #current_lane{index = LaneIndex, id = LaneId}, IteratorToSave, NextLaneId} ->
             workflow_iterator_snapshot:save(ExecutionId, LaneIndex, LaneId, 0, IteratorToSave, NextLaneId);
         ?WF_ERROR_LANE_ALREADY_PREPARED -> ok;
         ?WF_ERROR_PREPARATION_FAILED -> ok
     end;
-report_lane_execution_prepared(ExecutionId, LaneId, ?PREPARE_IN_ADVANCE, {ok, LaneSpec} = Ans) ->
+report_lane_execution_prepared(Handler, ExecutionId, LaneId, ?PREPARE_IN_ADVANCE, {ok, LaneSpec} = Ans) ->
     case update(ExecutionId, fun(State) -> finish_lane_preparation_in_advance(State, LaneId, LaneSpec) end) of
         {ok, _} -> ok;
         ?WF_ERROR_UNKNOWN_LANE -> ok;
-        ?WF_ERROR_CURRENT_LANE -> report_lane_execution_prepared(ExecutionId, LaneId, ?PREPARE_CURRENT, Ans)
+        ?WF_ERROR_CURRENT_LANE -> report_lane_execution_prepared(Handler, ExecutionId, LaneId, ?PREPARE_CURRENT, Ans)
     end;
-report_lane_execution_prepared(ExecutionId, LaneId, LaneType, error) ->
+report_lane_execution_prepared(_Handler, ExecutionId, LaneId, LaneType, error) ->
     case update(ExecutionId, fun(State) -> handle_lane_preparation_failure(State, LaneId, LaneType) end) of
         {ok, _} -> ok;
         ?WF_ERROR_UNKNOWN_LANE -> ok
@@ -459,12 +461,13 @@ get_result_processing_data(ExecutionId, JobIdentifier) ->
 %%%===================================================================
 
 -spec finish_lane_preparation(
+    workflow_handler:handler(),
     workflow_engine:execution_id(),
     workflow_engine:lane_spec()
 ) ->
     {ok, current_lane(), iterator:iterator(), workflow_engine:lane_id() | undefined} |
     ?WF_ERROR_PREPARATION_FAILED | ?WF_ERROR_LANE_ALREADY_PREPARED.
-finish_lane_preparation(ExecutionId,
+finish_lane_preparation(Handler, ExecutionId,
     #{
         parallel_boxes := Boxes,
         iterator := Iterator,
@@ -485,7 +488,7 @@ finish_lane_preparation(ExecutionId,
                 BoxesAcc#{BoxIndex => Tasks}
             end, #{}, lists_utils:enumerate(Boxes)),
 
-            NextIterationStep = get_next_iterator(LaneExecutionContext, Iterator, ExecutionId),
+            NextIterationStep = get_next_iterator(Handler, LaneExecutionContext, Iterator, ExecutionId),
             FailureCountToCancel = maps:get(failure_count_to_cancel, LaneSpec, undefined),
             case update(ExecutionId, fun(State) ->
                 finish_lane_preparation_internal(State, BoxesMap, LaneExecutionContext, NextIterationStep, FailureCountToCancel)
@@ -554,21 +557,22 @@ prepare_next_job_for_current_lane(ExecutionId) ->
     case update(ExecutionId, fun prepare_next_waiting_job/1) of
         {ok, #document{value = State}} ->
             handle_state_update_after_job_preparation(ExecutionId, State);
-        ?WF_ERROR_NO_CACHED_ITEMS(LaneIndex, ItemIndex, IterationStep, Context) ->
-            prepare_next_job_using_iterator(ExecutionId, ItemIndex, IterationStep, LaneIndex, Context);
+        ?WF_ERROR_NO_CACHED_ITEMS(LaneIndex, ItemIndex, IterationStep, Handler, Context) ->
+            prepare_next_job_using_iterator(ExecutionId, ItemIndex, IterationStep, LaneIndex, Handler, Context);
         {error, _} = Error ->
             Error
     end.
 
 -spec prepare_next_job_using_iterator(workflow_engine:execution_id(), index(), iteration_status(),
-    index(), workflow_engine:execution_context()) -> {ok, workflow_engine:execution_spec()} | no_items_error() |
+    index(), workflow_handler:handler(), workflow_engine:execution_context()) ->
+    {ok, workflow_engine:execution_spec()} | no_items_error() |
     ?WF_ERROR_LANE_EXECUTION_CANCELLED(
         workflow_handler:handler(), workflow_engine:lane_id(),
         workflow_engine:execution_context(), [workflow_engine:task_id()]
     ) | ?EXECUTION_CANCELLED_WITH_OPEN_STREAMS_REPORT(
         workflow_handler:handler(), workflow_engine:execution_context(), [workflow_engine:task_id()]
     ) | ?ERROR_NOT_FOUND.
-prepare_next_job_using_iterator(ExecutionId, ItemIndex, CurrentIterationStep, LaneIndex, Context) ->
+prepare_next_job_using_iterator(ExecutionId, ItemIndex, CurrentIterationStep, LaneIndex, Handler, Context) ->
     NextIterationStep = case CurrentIterationStep of
         undefined ->
             undefined;
@@ -577,7 +581,7 @@ prepare_next_job_using_iterator(ExecutionId, ItemIndex, CurrentIterationStep, La
         {_, CurrentIterator} ->
             % TODO VFS-7787 return (to engine) item instead of item_id in this case (engine must read from cache when we have item here)
             % Maybe generate item_id using index (there will be no need to translate job to datastore key)?
-            get_next_iterator(Context, CurrentIterator, ExecutionId)
+            get_next_iterator(Handler, Context, CurrentIterator, ExecutionId)
     end,
 
     ParallelBoxToStart = 1, % TODO VFS-7788 - get ParallelBoxToStart from iterator
@@ -657,7 +661,7 @@ handle_state_update_after_job_preparation(ExecutionId, #workflow_execution_state
                         lane_spec = LaneSpec
                     })
                 }}} ->
-                    report_lane_execution_prepared(ExecutionId, LaneId, ?PREPARE_CURRENT, {ok, LaneSpec}),
+                    report_lane_execution_prepared(Handler, ExecutionId, LaneId, ?PREPARE_CURRENT, {ok, LaneSpec}),
                     prepare_next_job_for_current_lane(ExecutionId);
                 {ok, #document{value = #workflow_execution_state{
                     execution_status = ?PREPARING,
@@ -753,9 +757,9 @@ update(ExecutionId, UpdateFun) ->
         UpdateFun(State#workflow_execution_state{update_report = undefined})
     end).
 
--spec get_next_iterator(workflow_engine:execution_context(), iterator:iterator(), workflow_engine:execution_id()) ->
-    iteration_status().
-get_next_iterator(Context, Iterator, ExecutionId) ->
+-spec get_next_iterator(workflow_handler:handler(), workflow_engine:execution_context(),
+    iterator:iterator(), workflow_engine:execution_id()) -> iteration_status().
+get_next_iterator(Handler, Context, Iterator, ExecutionId) ->
     try
         case iterator:get_next(Context, Iterator) of
             {ok, NextItem, NextIterator} ->
@@ -765,10 +769,10 @@ get_next_iterator(Context, Iterator, ExecutionId) ->
         end
     catch
         Error:Reason:Stacktrace ->
-            ?error_stacktrace(
-                "Unexpected error getting next iterator (execution ~p): ~p:~p",
-                [ExecutionId, Error, Reason],
-                Stacktrace
+            workflow_engine:handle_exception(
+                ExecutionId, Context, Handler,
+                "Unexpected error getting next iterator", [],
+                Error, Reason, Stacktrace
             ),
             ?WF_ERROR_ITERATION_FAILED
     end.
@@ -1066,7 +1070,8 @@ report_execution_status_update_internal(State, JobIdentifier, _UpdateType, Ans) 
 
 -spec prepare_next_waiting_job(state()) ->
     {ok, state()} | no_items_error() |
-    ?WF_ERROR_NO_CACHED_ITEMS(index(), index(), iteration_status(), workflow_engine:execution_context()).
+    ?WF_ERROR_NO_CACHED_ITEMS(index(), index(), iteration_status(),
+        workflow_handler:handler(), workflow_engine:execution_context()).
 prepare_next_waiting_job(State = #workflow_execution_state{
     execution_status = ?NOT_PREPARED
 }) ->
@@ -1087,6 +1092,7 @@ prepare_next_waiting_job(#workflow_execution_state{
 } = State) when FailureCountToCancel =/= undefined andalso FailedJobCount >= FailureCountToCancel ->
     prepare_next_waiting_job(State#workflow_execution_state{execution_status = ?EXECUTION_CANCELLED});
 prepare_next_waiting_job(State = #workflow_execution_state{
+    handler = Handler,
     execution_status = ?EXECUTING,
     jobs = Jobs,
     iteration_state = IterationState,
@@ -1112,7 +1118,7 @@ prepare_next_waiting_job(State = #workflow_execution_state{
                         undefined -> % iteration has finished
                             handle_no_waiting_items_error(State, Error);
                         ItemIndex ->
-                            ?WF_ERROR_NO_CACHED_ITEMS(LaneIndex, ItemIndex, PrefetchedIterationStep, Context)
+                            ?WF_ERROR_NO_CACHED_ITEMS(LaneIndex, ItemIndex, PrefetchedIterationStep, Handler, Context)
                     end
             end
     end;

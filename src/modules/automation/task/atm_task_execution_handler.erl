@@ -313,9 +313,9 @@ gen_atm_workflow_execution_env_diff(#document{
 
 %% @private
 -spec build_lambda_input(
+    atm_task_executor:job_batch_id(),
     atm_run_job_batch_ctx:record(),
     [automation:item()],
-    atm_task_executor:job_batch_id(),
     atm_task_execution:record()
 ) ->
     atm_task_executor:lambda_input().

@@ -22,7 +22,7 @@
 % Callbacks
 -export([prepare_lane/3, restart_lane/3, run_task_for_item/5, process_task_result_for_item/5, report_item_error/3,
     handle_task_results_processed_for_all_items/3, process_streamed_task_data/4,
-    handle_task_execution_ended/3, handle_lane_execution_ended/3, handle_workflow_execution_ended/2]).
+    handle_task_execution_ended/3, handle_lane_execution_ended/3, handle_workflow_execution_ended/2, handle_exception/5]).
 % API
 -export([is_last_lane/1, get_ignored_lane_id/0, get_ignored_lane_predecessor_id/0, pack_task_id/3, decode_task_id/1]).
 
@@ -146,7 +146,7 @@ restart_lane(ExecutionId, ExecutionContext, LaneId) ->
     workflow_jobs:encoded_job_identifier(),
     iterator:item()
 ) ->
-    workflow_handler:handler_execution_result().
+    ok.
 run_task_for_item(ExecutionId, #{task_type := async}, _TaskId, EncodedJobIdentifier, Item) ->
     spawn(fun() ->
         timer:sleep(100), % TODO VFS-7784 - test with different sleep times
@@ -268,6 +268,18 @@ handle_lane_execution_ended(_ExecutionId, ExecutionContext, LaneId) ->
     ok.
 handle_workflow_execution_ended(_, _) ->
     ok.
+
+
+- spec handle_exception(
+    workflow_engine:execution_id(),
+    workflow_engine:execution_context(),
+    throw | error | exit,
+    term(),
+    list()
+) ->
+    ?END_EXECUTION.
+handle_exception(_, _, _, _, _) ->
+    ?END_EXECUTION.
 
 
 %%%===================================================================

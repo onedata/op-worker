@@ -44,7 +44,8 @@
 -type handler() :: module().
 -type async_processing_basic_result() :: term().
 -type async_processing_result() :: async_processing_basic_result() | ?ERROR_MALFORMED_DATA | ?ERROR_TIMEOUT.
--type handler_execution_result() :: ok | error.
+-type handler_execution_result() :: ok | error. % NOTE - run_task_for_item can return {error, _} what is
+                                                % translated to error.
 -type prepare_lane_result() :: {ok, workflow_engine:lane_spec()} | error.
 -type lane_ended_callback_result() :: ?CONTINUE(workflow_engine:lane_id(), workflow_engine:lane_id()) |
     ?END_EXECUTION. % engine does not distinguish reason of execution finish - ?END_EXECUTION is returned
@@ -107,7 +108,7 @@
     workflow_jobs:encoded_job_identifier(),
     iterator:item()
 ) ->
-    handler_execution_result().
+    ok | {error, running_item_failed} | {error, task_stopping} | {error, task_ended}.
 
 
 %%--------------------------------------------------------------------

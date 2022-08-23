@@ -466,7 +466,7 @@ ensure_all_lane_runs_ended(#document{
 
 %% @private
 -spec delete_all_lane_runs_prepared_in_advance(atm_workflow_execution:doc()) ->
-    ok.
+    {ok, atm_workflow_execution:doc()}.
 delete_all_lane_runs_prepared_in_advance(#document{
     key = AtmWorkflowExecutionId,
     value = AtmWorkflowExecution = #atm_workflow_execution{
