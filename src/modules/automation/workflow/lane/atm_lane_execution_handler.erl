@@ -126,6 +126,8 @@ resume(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
             AtmLaneRun#atm_lane_execution_run.parallel_boxes
         ),
 
+        %% TODO transition to enqueued status ??
+
         {ok, #{
             execution_context => AtmWorkflowExecutionEnvDiff(AtmWorkflowExecutionEnv),
             parallel_boxes => AtmParallelBoxExecutionSpecs

@@ -38,7 +38,7 @@
 
 -type status() ::
     % waiting
-    ?SCHEDULED_STATUS |
+    ?RESUMING_STATUS | ?SCHEDULED_STATUS |
     % ongoing
     ?ACTIVE_STATUS | ?STOPPING_STATUS |
     % ended
