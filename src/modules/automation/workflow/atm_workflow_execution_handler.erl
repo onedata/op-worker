@@ -196,23 +196,11 @@ on_provider_restart(AtmWorkflowExecutionId) ->
 ) ->
     {ok, workflow_engine:lane_spec()} | error.
 prepare_lane(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneRunSelector) ->
-    AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(AtmWorkflowExecutionEnv),
-
-    try
-        {ok, atm_lane_execution_handler:prepare(
-            AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
-        )}
-    catch Type:Reason:Stacktrace ->
-        LogContent = #{
-            <<"description">> => str_utils:format_bin("Failed to prepare next run of lane number ~B.", [
-                element(1, AtmLaneRunSelector)
-            ]),
-            <<"reason">> => errors:to_json(?atm_examine_error(Type, Reason, Stacktrace))
-        },
-        Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-        atm_workflow_execution_logger:workflow_critical(LogContent, Logger),
-        error
-    end.
+    atm_lane_execution_handler:prepare(
+        AtmLaneRunSelector,
+        AtmWorkflowExecutionId,
+        atm_workflow_execution_ctx:acquire(AtmWorkflowExecutionEnv)
+    ).
 
 
 -spec restart_lane(
@@ -220,9 +208,13 @@ prepare_lane(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneRunSelector
     atm_workflow_execution_env:record(),
     atm_lane_execution:lane_run_selector()
 ) ->
-    error.
-restart_lane(_, _, _) ->
-    error.
+    {ok, workflow_engine:lane_spec()} | error.
+restart_lane(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneRunSelector) ->
+    atm_lane_execution_handler:resume(
+        AtmLaneRunSelector,
+        AtmWorkflowExecutionId,
+        atm_workflow_execution_ctx:acquire(AtmWorkflowExecutionEnv)
+    ).
 
 
 -spec run_task_for_item(

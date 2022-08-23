@@ -63,7 +63,8 @@
     handle_items_failed/2,
 
     handle_stopping/2,
-    handle_ended/1
+    handle_ended/1,
+    handle_resume/1
 ]).
 
 
@@ -260,6 +261,29 @@ handle_ended(AtmTaskExecutionId) ->
             }};
 
         (_) ->
+            {error, task_ended}
+    end).
+
+
+-spec handle_resume(atm_task_execution:id()) ->
+    {ok, atm_task_execution:doc()} | {error, task_ended}.
+handle_resume(AtmTaskExecutionId) ->
+    apply_diff(AtmTaskExecutionId, fun
+        (AtmTaskExecution = #atm_task_execution{status = Status}) when
+            Status =:= ?SKIPPED_STATUS;
+            Status =:= ?INTERRUPTED_STATUS;
+            Status =:= ?PAUSED_STATUS;
+            Status =:= ?CANCELLED_STATUS
+        ->
+            {ok, AtmTaskExecution#atm_task_execution{
+                status = ?PENDING_STATUS,
+                stopping_reason = undefined
+            }};
+
+        (#atm_task_execution{status = Status}) when
+            Status =:= ?FINISHED_STATUS;
+            Status =:= ?FAILED_STATUS
+        ->
             {error, task_ended}
     end).
 
