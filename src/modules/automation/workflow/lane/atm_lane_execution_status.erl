@@ -105,7 +105,8 @@
     handle_task_status_change/5,
     handle_ended/2,
 
-    handle_manual_repeat/3
+    handle_manual_repeat/3,
+    handle_resume/2
 ]).
 
 
@@ -184,7 +185,10 @@ handle_preparing(AtmLaneRunSelector, AtmWorkflowExecutionId) ->
 handle_enqueued(AtmLaneRunSelector, AtmWorkflowExecutionId) ->
     Diff = fun(AtmWorkflowExecution) ->
         atm_lane_execution:update_run(AtmLaneRunSelector, fun
-            (#atm_lane_execution_run{status = ?PREPARING_STATUS} = Run) ->
+            (#atm_lane_execution_run{status = Status} = Run) when
+                Status =:= ?PREPARING_STATUS;
+                Status =:= ?RESUMING_STATUS
+            ->
                 {ok, Run#atm_lane_execution_run{status = ?ENQUEUED_STATUS}};
             (#atm_lane_execution_run{status = Status}) ->
                 ?ERROR_ATM_INVALID_STATUS_TRANSITION(Status, ?PREPARING_STATUS)
@@ -306,6 +310,28 @@ handle_manual_repeat(RepeatType, {AtmLaneSelector, _} = AtmLaneRunSelector, AtmW
         end
     end,
     atm_workflow_execution_status:handle_manual_lane_repeat(AtmWorkflowExecutionId, Diff).
+
+
+-spec handle_resume(atm_lane_execution:lane_run_selector(), atm_workflow_execution:id()) ->
+    {ok, atm_workflow_execution:doc()} | errors:error().
+handle_resume(AtmLaneRunSelector, AtmWorkflowExecutionId) ->
+    Diff = fun(AtmWorkflowExecution) ->
+        atm_lane_execution:update_run(AtmLaneRunSelector, fun
+            (#atm_lane_execution_run{status = Status} = Run) when
+                Status =:= ?INTERRUPTED_STATUS;
+                Status =:= ?PAUSED_STATUS;
+                Status =:= ?CANCELLED_STATUS
+            ->
+                {ok, Run#atm_lane_execution_run{
+                    status = ?RESUMING_STATUS,
+                    stopping_reason = undefined
+                }};
+
+            (#atm_lane_execution_run{status = Status}) ->
+                ?ERROR_ATM_INVALID_STATUS_TRANSITION(Status, ?RESUMING_STATUS)
+        end, AtmWorkflowExecution)
+    end,
+    atm_workflow_execution_status:handle_resume(AtmWorkflowExecutionId, Diff).
 
 
 %%%===================================================================

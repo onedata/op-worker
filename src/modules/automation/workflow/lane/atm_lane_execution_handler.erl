@@ -121,12 +121,12 @@ resume(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
             AtmStore#atm_store.container,
             atm_workflow_execution_ctx:get_env(AtmWorkflowExecutionCtx)
         ),
+
         {AtmParallelBoxExecutionSpecs, AtmWorkflowExecutionEnvDiff} = atm_parallel_box_execution:resume_all(
             AtmWorkflowExecutionCtx,
             AtmLaneRun#atm_lane_execution_run.parallel_boxes
         ),
-
-        %% TODO transition to enqueued status ??
+        atm_lane_execution_status:handle_enqueued(AtmLaneRunSelector, AtmWorkflowExecutionId),
 
         {ok, #{
             execution_context => AtmWorkflowExecutionEnvDiff(AtmWorkflowExecutionEnv),
