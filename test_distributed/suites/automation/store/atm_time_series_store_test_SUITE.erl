@@ -49,7 +49,7 @@ all() -> [
 
 
 -define(COUNTER_OF_ALL_COUNTS_TS_NAME, <<"counter_of_all_counts">>).
--define(COUNTER_OF_ALL_COUNTS_TS_SCHEMA, #atm_time_series_schema{
+-define(COUNTER_OF_ALL_COUNTS_TS_SCHEMA, #time_series_schema{
     name_generator_type = exact,
     name_generator = ?COUNTER_OF_ALL_COUNTS_TS_NAME,
     unit = none,
@@ -60,11 +60,15 @@ all() -> [
     }
 }).
 
--define(ATM_STORE_CONFIG, #atm_time_series_store_config{schemas = [
-    ?MAX_FILE_SIZE_TS_SCHEMA,
-    ?COUNT_TS_SCHEMA,
-    ?COUNTER_OF_ALL_COUNTS_TS_SCHEMA
-]}).
+-define(ATM_STORE_CONFIG, #atm_time_series_store_config{
+    time_series_collection_schema = #time_series_collection_schema{
+        time_series_schemas = [
+            ?MAX_FILE_SIZE_TS_SCHEMA,
+            ?COUNT_TS_SCHEMA,
+            ?COUNTER_OF_ALL_COUNTS_TS_SCHEMA
+        ]
+    }
+}).
 
 -define(DISPATCH_RULES, [
     #atm_time_series_dispatch_rule{
