@@ -618,7 +618,9 @@ resynchronization_test(Config) ->
     ?assertEqual(ok, rpc:call(Worker1, dbsync_worker, resynchronize_all, [SpaceId, Provider2Id])),
     lists:foreach(fun(Guid) ->
         ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessId1, ?FILE_REF(Guid)), 60)
-    end, Worker2Dirs ++ Worker2Files ++ Worker3Dirs ++ Worker3Files).
+    end, Worker2Dirs ++ Worker2Files ++ Worker3Dirs ++ Worker3Files),
+
+    ?assertEqual(undefined, rpc:call(Worker1, dbsync_state, get_resynchronization_params, [SpaceId, Provider2Id])).
 
 
 %%%===================================================================

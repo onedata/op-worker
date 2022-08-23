@@ -11,7 +11,7 @@
 %%%
 %%% The module provides also API for streams resynchronization. Stream
 %%% resynchronization sets sequence counter for particular stream/provider
-%%% pair to 0 forcing resend of medata by chosen provider. It is possible
+%%% pair to 0 forcing resend of metadata by chosen provider. It is possible
 %%% to choose which metadata should be resent (e.g., mutated only by sender
 %%% or by any provider).
 %%% NOTE: information about resynchronization is saved in dbsync_state so

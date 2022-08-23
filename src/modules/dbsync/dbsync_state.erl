@@ -106,7 +106,7 @@ resynchronize_stream(SpaceId, ProviderId, IncludedMutators) ->
         {ok, State#dbsync_state{
             seq = maps:put(ProviderId, {1, 0}, Seq),
             resynchronization_params = maps:put(ProviderId, #resynchronization_params{
-                final_seq = CurrentSeq,
+                target_seq = CurrentSeq,
                 included_mutators = IncludedMutators
             }, Params)
         }}
@@ -141,7 +141,7 @@ set_seq_and_timestamp_internal(
     Timestamp
 ) ->
     UpdatedParams = case maps:get(ProviderId, Params, undefined) of
-        {FinalSeq, _} when NewSeq >= FinalSeq -> maps:remove(ProviderId, Params);
+        #resynchronization_params{target_seq = TargetSeq} when NewSeq >= TargetSeq -> maps:remove(ProviderId, Params);
         _ -> Params
     end,
     State#dbsync_state{
@@ -181,7 +181,7 @@ get_record_struct(3) ->
     {record, [
         {seq, #{string => {integer, integer}}},
         {resynchronization_params, #{string => {record, [
-            {final_seq, integer},
+            {target_seq, integer},
             {included_mutators, [string]}
         ]}}}
     ]}.

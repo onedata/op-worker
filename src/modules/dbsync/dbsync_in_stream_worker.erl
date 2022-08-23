@@ -170,8 +170,8 @@ handle_info(request_changes, State = #state{
             {FinalUntil, IncludedMutators} = case dbsync_state:get_resynchronization_params(SpaceId, ProviderId) of
                 undefined ->
                     {Until2, ?ALL_MUTATORS_EXCEPT_SENDER};
-                #resynchronization_params{final_seq = FinalSeq, included_mutators = Mutators} ->
-                    {min(FinalSeq, Until2), Mutators}
+                #resynchronization_params{target_seq = TargetSeq, included_mutators = Mutators} ->
+                    {min(TargetSeq, Until2), Mutators}
             end,
             dbsync_communicator:request_changes(
                 ProviderId, SpaceId, Seq, FinalUntil, IncludedMutators

@@ -36,7 +36,8 @@
 
 -type msg_id_history() :: queue:queue(binary()).
 -type state() :: #state{}.
--type mutators() :: [od_provider:id()]. % NOTE: special id values are defined in dbsync.hrl
+-type mutators() :: [binary() | od_provider:id()]. % NOTE: special id values (values that are not provider ids)
+                                                   %       are defined in dbsync.hrl
 -export_type([mutators/0]).
 
 %%%===================================================================
