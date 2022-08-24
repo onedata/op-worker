@@ -16,6 +16,7 @@
 -behaviour(gen_server).
 
 -include("global_definitions.hrl").
+-include("modules/dbsync/dbsync.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -88,6 +89,9 @@ init([SpaceId, ProviderId]) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: state()} |
     {stop, Reason :: term(), NewState :: state()}.
+handle_call(terminate, From, State) ->
+    gen_server:reply(From, ok),
+    {stop, normal, State};
 handle_call(Request, _From, #state{} = State) ->
     ?log_bad_request(Request),
     {noreply, State}.
@@ -163,8 +167,14 @@ handle_info(request_changes, State = #state{
             MaxSize = application:get_env(?APP_NAME,
                 dbsync_changes_max_request_size, 1000000),
             Until2 = min(Until, Seq + MaxSize),
+            {FinalUntil, IncludedMutators} = case dbsync_state:get_resynchronization_params(SpaceId, ProviderId) of
+                undefined ->
+                    {Until2, ?ALL_MUTATORS_EXCEPT_SENDER};
+                #resynchronization_params{target_seq = TargetSeq, included_mutators = Mutators} ->
+                    {min(TargetSeq, Until2), Mutators}
+            end,
             dbsync_communicator:request_changes(
-                ProviderId, SpaceId, Seq, Until2
+                ProviderId, SpaceId, Seq, FinalUntil, IncludedMutators
             ),
             {noreply, schedule_changes_request(State#state{
                 changes_request_ref = undefined
