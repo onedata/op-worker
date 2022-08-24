@@ -124,7 +124,8 @@ stop(UserCtx, AtmWorkflowExecutionId, Reason) ->
         stopped ->
             % atm workflow execution was stopped and there are no active processes handling it
             % (e.g. cancelling already suspended execution) - end procedures must be called manually
-            end_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx)
+            end_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
+            ok
     end.
 
 
@@ -183,7 +184,8 @@ resume(UserCtx, AtmWorkflowExecutionId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Terminates specified workflow execution.
+%% Terminates specified workflow execution and resumes it if possible (if
+%% execution was stopping already no resume will be performed).
 %% This function should be called only after provider restart to terminate
 %% stale (processes handling execution no longer exists) workflows.
 %% @end
@@ -196,8 +198,15 @@ on_provider_restart(AtmWorkflowExecutionId) ->
     try
         AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(AtmWorkflowExecutionEnv),
         atm_lane_execution_handler:stop({current, current}, interrupt, AtmWorkflowExecutionCtx),
-        end_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx)
-        %% TODO VFS-9532 resume execution if ended status == interrupted
+        case end_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) of
+            #document{value = #atm_workflow_execution{status = ?INTERRUPTED_STATUS}} ->
+                UserCtx = atm_workflow_execution_auth:get_user_ctx(atm_workflow_execution_ctx:get_auth(
+                    AtmWorkflowExecutionCtx
+                )),
+                resume(UserCtx, AtmWorkflowExecutionId);
+            _ ->
+                ok
+        end
     catch throw:{session_acquisition_failed, _} = Reason ->
         handle_exception(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, throw, Reason, [])
     end.
@@ -358,7 +367,8 @@ handle_lane_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, Atm
     ok.
 handle_workflow_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv) ->
     AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(AtmWorkflowExecutionEnv),
-    end_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx).
+    end_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
+    ok.
 
 
 -spec handle_exception(
@@ -424,7 +434,7 @@ acquire_global_env(#document{key = AtmWorkflowExecutionId, value = #atm_workflow
     atm_workflow_execution:id(),
     atm_workflow_execution_ctx:record()
 ) ->
-    ok.
+    atm_workflow_execution:doc().
 end_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     {ok, AtmWorkflowExecutionDoc0} = atm_workflow_execution:get(AtmWorkflowExecutionId),
     ensure_all_lane_runs_ended(AtmWorkflowExecutionDoc0, AtmWorkflowExecutionCtx),
@@ -438,7 +448,8 @@ end_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     {ok, EndedAtmWorkflowExecutionDoc} = atm_workflow_execution_status:handle_ended(
         AtmWorkflowExecutionId
     ),
-    notify_ended(EndedAtmWorkflowExecutionDoc).
+    notify_ended(EndedAtmWorkflowExecutionDoc),
+    EndedAtmWorkflowExecutionDoc.
 
 
 %% @private

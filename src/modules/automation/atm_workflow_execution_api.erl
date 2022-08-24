@@ -211,7 +211,9 @@ repeat(UserCtx, Type, AtmLaneRunSelector, AtmWorkflowExecutionId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Terminates all waiting and ongoing workflow executions for given space.
+%% Terminates all waiting and ongoing workflow executions for given space and
+%% resumes those that were interrupted (if execution was already stopping
+%% before provider shutdown - no resume will be made).
 %% This function should be called only after provider restart to terminate
 %% stale (processes handling execution no longer exists) workflows.
 %% @end
