@@ -143,34 +143,21 @@ authorize(#op_req{operation = create, auth = ?USER(UserId), data = Data, gri = #
     SpaceId = maps:get(<<"spaceId">>, Data),
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_SCHEDULE_ATM_WORKFLOW_EXECUTIONS);
 
-authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
-    aspect = cancel
-}}, #atm_workflow_execution{user_id = CreatorUserId, space_id = SpaceId}) ->
-    UserId == CreatorUserId orelse space_logic:has_eff_privilege(
-        SpaceId, UserId, ?SPACE_CANCEL_ATM_WORKFLOW_EXECUTIONS
-    );
-
-authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
-    aspect = pause
-}}, #atm_workflow_execution{user_id = CreatorUserId, space_id = SpaceId}) ->
-    UserId == CreatorUserId orelse space_logic:has_eff_privilege(
-        SpaceId, UserId, ?SPACE_CANCEL_ATM_WORKFLOW_EXECUTIONS      %% TODO privs??
-    );
-
-authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
-    aspect = resume
-}}, #atm_workflow_execution{user_id = CreatorUserId, space_id = SpaceId}) ->
-    UserId == CreatorUserId orelse space_logic:has_eff_privilege(
-        SpaceId, UserId, ?SPACE_SCHEDULE_ATM_WORKFLOW_EXECUTIONS      %% TODO privs??
-    );
-
-authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
-    aspect = Aspect
-}}, #atm_workflow_execution{space_id = SpaceId}) when
+authorize(
+    #op_req{operation = create, auth = ?USER(UserId), gri = #gri{aspect = Aspect}},
+    #atm_workflow_execution{user_id = CreatorUserId, space_id = SpaceId}
+) when
+    Aspect =:= cancel;
+    Aspect =:= pause;
+    Aspect =:= resume;
     Aspect =:= retry;
     Aspect =:= rerun
 ->
-    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_SCHEDULE_ATM_WORKFLOW_EXECUTIONS);
+    RequiredPrivilege = case UserId =:= CreatorUserId of
+        true -> ?SPACE_SCHEDULE_ATM_WORKFLOW_EXECUTIONS;
+        false -> ?SPACE_CANCEL_ATM_WORKFLOW_EXECUTIONS      %% TODO cancel -> manage
+    end,
+    space_logic:has_eff_privilege(SpaceId, UserId, RequiredPrivilege);
 
 authorize(#op_req{operation = get, auth = Auth, gri = #gri{aspect = instance}}, AtmWorkflowExecution) ->
     has_access_to_workflow_execution_details(Auth, AtmWorkflowExecution);

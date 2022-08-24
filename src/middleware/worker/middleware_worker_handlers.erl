@@ -102,7 +102,7 @@ execute(UserCtx, _SpaceDirCtx, #atm_workflow_execution_pause_request{
 }) ->
     ok = atm_workflow_execution_api:pause(UserCtx, AtmWorkflowExecutionId);
 
-execute(UserCtx, _SpaceDirCtx, #atm_workflow_execution_cancel_request{
+execute(UserCtx, _SpaceDirCtx, #atm_workflow_execution_resume_request{
     atm_workflow_execution_id = AtmWorkflowExecutionId
 }) ->
     ok = atm_workflow_execution_api:resume(UserCtx, AtmWorkflowExecutionId);
