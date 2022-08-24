@@ -47,6 +47,8 @@
     module() | no_return().
 resolve_handler(create, instance, private) -> ?MODULE;
 resolve_handler(create, cancel, private) -> ?MODULE;
+resolve_handler(create, pause, private) -> ?MODULE;
+resolve_handler(create, resume, private) -> ?MODULE;
 resolve_handler(create, retry, private) -> ?MODULE;
 resolve_handler(create, rerun, private) -> ?MODULE;
 
@@ -79,8 +81,14 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) ->
             <<"callback">> => {binary, fun(Callback) -> url_utils:is_valid(Callback) end}
         }
     };
-data_spec(#op_req{operation = create, gri = #gri{aspect = cancel}}) ->
+
+data_spec(#op_req{operation = create, gri = #gri{aspect = Aspect}}) when
+    Aspect =:= cancel;
+    Aspect =:= pause;
+    Aspect =:= resume
+->
     undefined;
+
 data_spec(#op_req{operation = create, gri = #gri{aspect = Aspect}}) when
     Aspect =:= retry;
     Aspect =:= rerun
@@ -143,6 +151,20 @@ authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
     );
 
 authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
+    aspect = pause
+}}, #atm_workflow_execution{user_id = CreatorUserId, space_id = SpaceId}) ->
+    UserId == CreatorUserId orelse space_logic:has_eff_privilege(
+        SpaceId, UserId, ?SPACE_CANCEL_ATM_WORKFLOW_EXECUTIONS      %% TODO privs??
+    );
+
+authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
+    aspect = resume
+}}, #atm_workflow_execution{user_id = CreatorUserId, space_id = SpaceId}) ->
+    UserId == CreatorUserId orelse space_logic:has_eff_privilege(
+        SpaceId, UserId, ?SPACE_SCHEDULE_ATM_WORKFLOW_EXECUTIONS      %% TODO privs??
+    );
+
+authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
     aspect = Aspect
 }}, #atm_workflow_execution{space_id = SpaceId}) when
     Aspect =:= retry;
@@ -171,6 +193,8 @@ validate(#op_req{operation = create, data = Data, gri = #gri{aspect = instance}}
 
 validate(#op_req{operation = create, gri = #gri{aspect = Aspect}}, _) when
     Aspect =:= cancel;
+    Aspect =:= pause;
+    Aspect =:= resume;
     Aspect =:= retry;
     Aspect =:= rerun
 ->
@@ -207,6 +231,18 @@ create(#op_req{auth = ?USER(_UserId, SessionId), gri = #gri{
     aspect = cancel
 }}) ->
     mi_atm:cancel_workflow_execution(SessionId, AtmWorkflowExecutionId);
+
+create(#op_req{auth = ?USER(_UserId, SessionId), gri = #gri{
+    id = AtmWorkflowExecutionId,
+    aspect = pause
+}}) ->
+    mi_atm:pause_workflow_execution(SessionId, AtmWorkflowExecutionId);
+
+create(#op_req{auth = ?USER(_UserId, SessionId), gri = #gri{
+    id = AtmWorkflowExecutionId,
+    aspect = resume
+}}) ->
+    mi_atm:resume_workflow_execution(SessionId, AtmWorkflowExecutionId);
 
 create(#op_req{auth = ?USER(_UserId, SessionId), data = Data, gri = #gri{
     id = AtmWorkflowExecutionId,

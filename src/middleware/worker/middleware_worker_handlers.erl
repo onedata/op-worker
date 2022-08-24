@@ -97,6 +97,16 @@ execute(UserCtx, _SpaceDirCtx, #atm_workflow_execution_cancel_request{
 }) ->
     ok = atm_workflow_execution_api:cancel(UserCtx, AtmWorkflowExecutionId);
 
+execute(UserCtx, _SpaceDirCtx, #atm_workflow_execution_pause_request{
+    atm_workflow_execution_id = AtmWorkflowExecutionId
+}) ->
+    ok = atm_workflow_execution_api:pause(UserCtx, AtmWorkflowExecutionId);
+
+execute(UserCtx, _SpaceDirCtx, #atm_workflow_execution_cancel_request{
+    atm_workflow_execution_id = AtmWorkflowExecutionId
+}) ->
+    ok = atm_workflow_execution_api:resume(UserCtx, AtmWorkflowExecutionId);
+
 execute(UserCtx, _SpaceDirCtx, #atm_workflow_execution_repeat_request{
     type = Type,
     atm_workflow_execution_id = AtmWorkflowExecutionId,
