@@ -100,6 +100,8 @@ apply(Doc = #document{value = Value, scope = SpaceId, seq = Seq}) ->
                                 ok
                         end,
                         Doc2;
+                    {error, already_exists} ->
+                        Doc;
                     {error, ignored} ->
                         undefined
                 end
@@ -143,6 +145,8 @@ links_save(Model, RoutingKey, Doc = #document{key = Key}) ->
     case datastore_router:route(save, [Ctx3, Key, Doc]) of
         {ok, Doc2} ->
             Doc2;
+        {error, already_exists} ->
+            Doc;
         {error, ignored} ->
             undefined
     end.
@@ -251,6 +255,8 @@ save_links_mask(Ctx, Doc = #document{key = Key,
     case datastore_router:route(save, [Ctx#{routing_key => RoutingKey}, Key, Doc]) of
         {ok, Doc2} ->
             Doc2;
+        {error, already_exists} ->
+            Doc;
         {error, ignored} ->
             undefined
     end.
