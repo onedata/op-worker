@@ -117,17 +117,20 @@ archive_symlink(FileCtx, TargetParentCtx, ArchiveDoc, UserCtx) ->
     {ok, ArchiveDataGuid} = archive:get_data_dir_guid(ArchiveDoc),
     {ok, SymlinkPath} = lfm:read_symlink(user_ctx:get_session_id(UserCtx),
         ?FILE_REF(file_ctx:get_logical_guid_const(FileCtx))),
-    {DatasetCanonicalPath, _DatasetFileCtx} = file_ctx:get_canonical_path(
-        file_ctx:new_by_uuid(DatasetId, SpaceId)),
-    {ArchiveDataCanonicalPath, _ArchiveFileCtx} = file_ctx:get_canonical_path(
-        file_ctx:new_by_guid(ArchiveDataGuid)),
-    [_Sep, _SpaceId | DatasetPathTokens] = filename:split(DatasetCanonicalPath),
-    [_Sep, _SpaceId | ArchivePathTokens] = filename:split(ArchiveDataCanonicalPath),
+    {DatasetLogicalPath, _DatasetFileCtx} = file_ctx:get_logical_path(
+        file_ctx:new_by_uuid(DatasetId, SpaceId), UserCtx),
+    {ArchiveDataLogicalPath, _ArchiveFileCtx} = file_ctx:get_logical_path(
+        file_ctx:new_by_guid(ArchiveDataGuid), UserCtx),
+    [_Sep, SpaceName | DatasetPathTokens] = filename:split(DatasetLogicalPath),
+    [_, _SpaceName | ArchivePathTokens] = filename:split(ArchiveDataLogicalPath),
     [SpaceIdPrefix | SymlinkPathTokens] = filename:split(SymlinkPath),
     FinalSymlinkValue = case lists:prefix(DatasetPathTokens, SymlinkPathTokens) of
         true ->
             RelativePathTokens = SymlinkPathTokens -- DatasetPathTokens,
-            DatasetName = lists:last(DatasetPathTokens),
+            DatasetName = case DatasetPathTokens of
+                [] -> SpaceName; % dataset established on space dir
+                _ -> lists:last(DatasetPathTokens)
+            end,
             filename:join([SpaceIdPrefix] ++ ArchivePathTokens ++ [DatasetName] ++ RelativePathTokens);
         _ ->
             SymlinkPath
