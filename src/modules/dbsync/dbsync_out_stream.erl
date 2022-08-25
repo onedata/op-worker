@@ -294,16 +294,14 @@ schedule_docs_handling(State = #state{handling_ref = Ref}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_doc_change(datastore:doc(), filter(), state()) -> state().
-handle_doc_change(#document{seq = Seq} = Doc, Filter,
-    State = #state{until = Until}) when Seq >= Until ->
+handle_doc_change(#document{seq = Seq} = Doc, Filter, State = #state{until = Until}) when Seq >= Until ->
     case Filter(Doc) of
         true -> aggregate_change(Doc, State);
         false -> State#state{until = Seq + 1}
     end;
-handle_doc_change(#document{seq = Seq} = Doc, _Filter,
-    State = #state{until = Until}) ->
+handle_doc_change(#document{seq = Seq} = Doc, _Filter, State = #state{until = Until}) ->
     ?error("Received change with old sequence ~p. Expected sequences"
-    " greater than or equal to ~p~n~p", [Seq, Until, Doc]),
+    " greater than or equal to ~p~nDoc: ~p~nLast change: ~p", [Seq, Until, Doc, get_last_change(State)]),
     State.
 
 %% @private
@@ -314,3 +312,10 @@ get_batch_timestamp([#document{timestamp = null} | _]) ->
     undefined;
 get_batch_timestamp([#document{timestamp = Timestamp} | _]) ->
     Timestamp.
+
+%% @private
+-spec get_last_change(state()) -> datastore:doc() | undefined.
+get_last_change(#state{changes = [LastChange | _]}) ->
+    LastChange;
+get_last_change(_) ->
+    undefined.
