@@ -15,6 +15,7 @@
 
 
 -include_lib("ctool/include/automation/automation.hrl").
+-include_lib("ctool/include/time_series/common.hrl").
 
 
 -define(EXP_WINDOW(__METRIC_CONFIG, __TIMESTAMP, __VALUE), #{
@@ -33,7 +34,7 @@
     ?MAX_FILE_SIZE_METRIC_CONFIG, __TIMESTAMP, __VALUE
 )).
 
--define(MAX_FILE_SIZE_TS_SCHEMA, #atm_time_series_schema{
+-define(MAX_FILE_SIZE_TS_SCHEMA, #time_series_schema{
     name_generator_type = exact,
     name_generator = ?MAX_FILE_SIZE_TS_NAME,
     unit = bytes,
@@ -71,7 +72,7 @@
 )).
 
 -define(COUNT_TS_NAME_GENERATOR, <<"count_">>).
--define(COUNT_TS_SCHEMA, #atm_time_series_schema{
+-define(COUNT_TS_SCHEMA, #time_series_schema{
     name_generator_type = add_prefix,
     name_generator = ?COUNT_TS_NAME_GENERATOR,
     unit = counts_per_sec,

@@ -79,14 +79,20 @@ get_slice(QosEntryId, Type, SliceLayout, ListWindowsOptions) ->
 -spec report(qos_entry:id(), type(), #{od_storage:id() => non_neg_integer()}) ->
     ok | {error, term()}.
 report(QosEntryId, Type, ValuesPerStorage) ->
+    Timestamp = ?NOW(),
+    ConsumeSpecWithoutTotal = maps_utils:map_key_value(fun(StorageId, Value) ->
+        {?QOS_STORAGE_TIME_SERIES_NAME(StorageId), #{?ALL_METRICS => [{Timestamp, Value}]}}
+    end, ValuesPerStorage),
+
     TotalValue = maps:fold(fun(_Key, Value, Acc) ->
         Acc + Value
     end, 0, ValuesPerStorage),
-    CompleteValuesPerStorage = ValuesPerStorage#{?QOS_TOTAL_TIME_SERIES_NAME => TotalValue},
-    Timestamp = ?NOW(),
-    ConsumeSpec = maps:map(fun(_TSName, Value) -> #{?ALL_METRICS => [{Timestamp, Value}]} end, CompleteValuesPerStorage),
+    ConsumeSpec = ConsumeSpecWithoutTotal#{
+        ?QOS_TOTAL_TIME_SERIES_NAME => #{
+            ?ALL_METRICS => [{Timestamp, TotalValue}]
+        }
+    },
     consume_measurements(?COLLECTION_ID(QosEntryId, Type), ConsumeSpec, ?MAX_CONSUME_MEASUREMENTS_RETRIES).
-
 
 %%%===================================================================
 %%% Internal functions
