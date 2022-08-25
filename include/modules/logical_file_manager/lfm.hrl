@@ -26,7 +26,7 @@
 -define(PUBLIC_BASIC_ATTRIBUTES, [
     <<"file_id">>, <<"parent_id">>, <<"name">>, <<"mode">>,
     <<"atime">>, <<"mtime">>, <<"ctime">>,
-    <<"type">>, <<"size">>, <<"shares">>
+    <<"type">>, <<"size">>, <<"shares">>, <<"index">>
 ]).
 
 -record(file_ref, {
