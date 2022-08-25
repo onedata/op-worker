@@ -185,12 +185,12 @@ reply_to_handler_mock(Sender, ManagerAcc, Options, #handler_call{
         {handle_task_results_processed_for_all_items, #{fail_stream_termination := {TaskId, Item}}} ->
             Sender ! fail_call,
             ManagerAcc;
-        {Fun, #{cancel_execution := {Fun, TaskId, Item}}} ->
-            CancelAns = rpc:call(node(Sender), workflow_engine, cancel_execution, [ExecutionId]),
+        {Fun, #{init_cancel_procedure := {Fun, TaskId, Item}}} ->
+            CancelAns = rpc:call(node(Sender), workflow_engine, init_cancel_procedure, [ExecutionId]),
             Sender ! history_saved,
             ManagerAcc#{cancel_ans => CancelAns};
-        {Fun, #{cancel_execution := {Fun, LaneId}}} ->
-            CancelAns = rpc:call(node(Sender), workflow_engine, cancel_execution, [ExecutionId]),
+        {Fun, #{init_cancel_procedure := {Fun, LaneId}}} ->
+            CancelAns = rpc:call(node(Sender), workflow_engine, init_cancel_procedure, [ExecutionId]),
             Sender ! history_saved,
             ManagerAcc#{cancel_ans => CancelAns};
         {handle_lane_execution_ended, #{fail_execution_ended_handler := LaneId}} ->

@@ -23,7 +23,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([init/1, init/2, execute_workflow/2, cancel_execution/1, cleanup_execution/1]).
+-export([init/1, init/2, execute_workflow/2, init_cancel_procedure/1, finish_cancel_procedure/1, cleanup_execution/1]).
 -export([stream_task_data/3, report_task_data_streaming_concluded/3]).
 -export([report_async_task_result/3, report_async_task_heartbeat/2]).
 %% Framework internal API
@@ -161,9 +161,17 @@ execute_workflow(EngineId, ExecutionSpec) ->
             ok
     end.
 
--spec cancel_execution(execution_id()) -> ok.
-cancel_execution(ExecutionId) ->
-    workflow_execution_state:cancel(ExecutionId).
+-spec init_cancel_procedure(execution_id()) -> ok.
+init_cancel_procedure(ExecutionId) ->
+    % TODO - czy ja mam czekac az sie pending callbacks wykonaja?
+    workflow_execution_state:init_cancel(ExecutionId).
+
+-spec finish_cancel_procedure(execution_id()) -> ok.
+finish_cancel_procedure(ExecutionId) ->
+    case workflow_execution_state:finish_cancel(ExecutionId) of
+        {ok, EngineId} -> trigger_job_scheduling(EngineId);
+        ?WF_ERROR_CANCEL_NOT_INITIALIZED -> ok
+    end.
 
 -spec cleanup_execution(execution_id()) -> ok.
 cleanup_execution(ExecutionId) ->

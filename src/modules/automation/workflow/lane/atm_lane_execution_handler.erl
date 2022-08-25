@@ -258,7 +258,7 @@ stop_running(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, #document{
     value = AtmWorkflowExecution
 }) ->
     stop_parallel_boxes(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecution),
-    workflow_engine:cancel_execution(AtmWorkflowExecutionId),
+    workflow_engine:init_cancel_procedure(AtmWorkflowExecutionId),
     stopping.
 
 

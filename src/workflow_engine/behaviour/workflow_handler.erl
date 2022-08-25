@@ -11,7 +11,7 @@
 %%% workflow_engine:execute_workflow/2 function is called.
 %%% Name of module implementing callback is provided to workflow engine as an
 %%% argument to execute_workflow/2 function. The execution can be cancelled
-%%% either by calling workflow_engine:cancel_execution/1 function (external cancel)
+%%% either by calling workflow_engine:init_cancel_procedure/1 function (external cancel)
 %%% or by workflow engine as a result or error (internal cancel when number of
 %%% callbacks' errors is greater than failure_count_to_cancel lane parameter).
 %%% Workflow execution ends when handle_lane_execution_ended callback returns

@@ -121,6 +121,7 @@
 -define(WF_ERROR_RACE_CONDITION, {error, race_condition}).
 -define(WF_ERROR_ITEM_PROCESSING_ENDED(Item, SuccessOrFailure),
     {error, {item_processing_ended, Item, SuccessOrFailure}}).
+-define(WF_ERROR_CANCEL_NOT_INITIALIZED, {error, cancel_not_initialized}).
 
 % errors returned by workflow_async_call_pool to control workflow_engine
 -define(WF_ERROR_LIMIT_REACHED, {error, limit_reached}).
