@@ -21,12 +21,12 @@
     <<"storage_user_id">>, <<"storage_group_id">>,
     <<"atime">>, <<"mtime">>, <<"ctime">>,
     <<"type">>, <<"size">>, <<"shares">>,
-    <<"provider_id">>, <<"owner_id">>, <<"hardlinks_count">>
+    <<"provider_id">>, <<"owner_id">>, <<"hardlinks_count">>, <<"index">>
 ]).
 -define(PUBLIC_BASIC_ATTRIBUTES, [
     <<"file_id">>, <<"parent_id">>, <<"name">>, <<"mode">>,
     <<"atime">>, <<"mtime">>, <<"ctime">>,
-    <<"type">>, <<"size">>, <<"shares">>
+    <<"type">>, <<"size">>, <<"shares">>, <<"index">>
 ]).
 
 -record(file_ref, {
