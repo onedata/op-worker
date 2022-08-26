@@ -895,14 +895,17 @@ apply_size_change(Key, FileUuid) ->
             ok;
         Changes ->
             try
-                {ok, UserId} = file_location:get_owner_id(FileUuid),
+                UserIdOrUndefined = case file_location:get_owner_id(FileUuid) of
+                    {ok, Id} -> Id;
+                    {error,not_found} -> undefined
+                end,
                 lists:foreach(fun({{SpaceId, StorageId}, ChangeSize}) ->
                     % TODO VFS-8835 - cache parent when rename works properly
                     dir_size_stats:report_reg_file_size_changed(
                         file_id:pack_guid(FileUuid, SpaceId), {on_storage, StorageId}, ChangeSize),
                     space_quota:apply_size_change_and_maybe_emit(SpaceId, ChangeSize),
                     monitoring_event_emitter:emit_storage_used_updated(
-                        SpaceId, UserId, ChangeSize)
+                        SpaceId, UserIdOrUndefined, ChangeSize)
                 end, Changes),
 
                 put({?SIZE_CHANGES, Key}, []),

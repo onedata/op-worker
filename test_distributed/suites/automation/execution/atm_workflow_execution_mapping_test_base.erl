@@ -47,10 +47,14 @@
     default_initial_content = __INITIAL_CONTENT
 }).
 
--define(ATM_TIME_SERIES_STORE_CONFIG, #atm_time_series_store_config{schemas = [
-    ?MAX_FILE_SIZE_TS_SCHEMA,
-    ?COUNT_TS_SCHEMA
-]}).
+-define(ATM_TIME_SERIES_STORE_CONFIG, #atm_time_series_store_config{
+    time_series_collection_schema = #time_series_collection_schema{
+        time_series_schemas = [
+            ?MAX_FILE_SIZE_TS_SCHEMA,
+            ?COUNT_TS_SCHEMA
+        ]
+    }
+}).
 -define(ATM_TIME_SERIES_DISPATCH_RULES, [
     #atm_time_series_dispatch_rule{
         measurement_ts_name_matcher_type = has_prefix,

@@ -20,7 +20,7 @@
 
 %% API
 -export([send/2, forward/1, broadcast/4]).
--export([request_changes/4, send_changes/6, broadcast_changes/5]).
+-export([request_changes/5, send_changes/6, broadcast_changes/5]).
 
 -type changes_batch() :: #changes_batch{}.
 -type changes_request() :: #changes_request2{}.
@@ -131,13 +131,16 @@ broadcast(SpaceId, MsgId, Msg, Opts) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec request_changes(od_provider:id(), od_space:id(),
-    couchbase_changes:since(), couchbase_changes:until()) ->
+    couchbase_changes:since(), couchbase_changes:until(),
+    dbsync_in_stream:mutators()
+) ->
     ok | {error, Reason :: term()}.
-request_changes(ProviderId, SpaceId, Since, Until) ->
+request_changes(ProviderId, SpaceId, Since, Until, IncludedMutators) ->
     dbsync_communicator:send(ProviderId, #changes_request2{
         space_id = SpaceId,
         since = Since,
-        until = Until
+        until = Until,
+        included_mutators = IncludedMutators
     }).
 
 %%--------------------------------------------------------------------

@@ -119,13 +119,15 @@ stop(UserCtx, AtmWorkflowExecutionId, Reason) ->
         AtmWorkflowExecutionEnv
     ),
     case atm_lane_execution_handler:stop({current, current}, Reason, AtmWorkflowExecutionCtx) of
-        stopping ->
+        {ok, stopping} ->
             ok;
-        stopped ->
+        {ok, stopped} ->
             % atm workflow execution was stopped and there are no active processes handling it
             % (e.g. cancelling already suspended execution) - end procedures must be called manually
             end_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
-            ok
+            ok;
+        {error, _} = Error ->
+            Error
     end.
 
 

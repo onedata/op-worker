@@ -99,7 +99,7 @@ file_attrs_to_json(#file_attr{
         <<"provider_id">> => ProviderId,
         <<"owner_id">> => OwnerId,
         <<"hardlinks_count">> => utils:undefined_to_null(HardlinksCount),
-        <<"index">> => Index
+        <<"index">> => file_listing:encode_index(Index)
     }.
 
 

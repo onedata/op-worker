@@ -153,9 +153,9 @@ authorize(
     Aspect =:= retry;
     Aspect =:= rerun
 ->
-    RequiredPrivilege = case UserId =:= CreatorUserId of
-        true -> ?SPACE_SCHEDULE_ATM_WORKFLOW_EXECUTIONS;
-        false -> ?SPACE_CANCEL_ATM_WORKFLOW_EXECUTIONS      %% TODO cancel -> manage
+    RequiredPrivilege = case UserId of
+        CreatorUserId -> ?SPACE_SCHEDULE_ATM_WORKFLOW_EXECUTIONS;
+        _ -> ?SPACE_MANAGE_ATM_WORKFLOW_EXECUTIONS
     end,
     space_logic:has_eff_privilege(SpaceId, UserId, RequiredPrivilege);
 
