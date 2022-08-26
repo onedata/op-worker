@@ -211,11 +211,12 @@ repeat(UserCtx, Type, AtmLaneRunSelector, AtmWorkflowExecutionId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Terminates all waiting and ongoing workflow executions for given space and
-%% resumes those that were interrupted (if execution was already stopping
-%% before provider shutdown - no resume will be made).
-%% This function should be called only after provider restart to terminate
+%% This function should be called only after provider restart to handle
 %% stale (processes handling execution no longer exists) workflows.
+%% All waiting and ongoing workflow executions for given space are:
+%% a) terminated as ?CRASHED/?CANCELLED/?FAILED if execution was already stopping
+%% b) terminated as ?INTERRUPTED otherwise (running execution was interrupted by
+%%    provider shutdown). Such executions will be resumed.
 %% @end
 %%--------------------------------------------------------------------
 on_provider_restart(SpaceId) ->

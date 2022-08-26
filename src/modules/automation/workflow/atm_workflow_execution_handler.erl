@@ -186,10 +186,12 @@ resume(UserCtx, AtmWorkflowExecutionId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Terminates specified workflow execution and resumes it if possible (if
-%% execution was stopping already no resume will be performed).
-%% This function should be called only after provider restart to terminate
-%% stale (processes handling execution no longer exists) workflows.
+%% This function should be called only after provider restart to handle
+%% stale (processes handling execution no longer exists) workflow.
+%% Specified workflow execution is:
+%% a) terminated as ?CRASHED/?CANCELLED/?FAILED if execution was already stopping
+%% b) terminated as ?INTERRUPTED otherwise (running execution was interrupted by
+%%    provider shutdown). In such case, it will be resumed.
 %% @end
 %%--------------------------------------------------------------------
 -spec on_provider_restart(atm_workflow_execution:id()) -> ok | no_return().
