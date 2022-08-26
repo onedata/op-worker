@@ -112,7 +112,7 @@ create(AtmLaneExecutionRunCreationArgs, AtmParallelBoxIndex, #atm_parallel_box_s
 
     #atm_parallel_box_execution{
         schema_id = AtmParallelBoxSchemaId,
-        status = infer_status(?PENDING_STATUS, maps:values(AtmTaskExecutionStatuses)),
+        status = ?PENDING_STATUS,
         task_registry = AtmTaskExecutionRegistry,
         task_statuses = AtmTaskExecutionStatuses
     }.
@@ -208,7 +208,7 @@ update_task_status(AtmTaskExecutionId, NewStatus, #atm_parallel_box_execution{
                 AtmTaskExecutionId => NewStatus
             },
             {ok, AtmParallelBoxExecution#atm_parallel_box_execution{
-                status = infer_status(
+                status = infer_new_status_from_task_statuses(
                     AtmParallelBoxExecutionStatus,
                     maps:values(NewAtmTaskExecutionStatuses)
                 ),
@@ -406,9 +406,9 @@ is_running(#atm_parallel_box_execution{status = AtmParallelBoxExecutionStatus}) 
 
 
 %% @private
--spec infer_status(atm_task_execution:status(), [atm_task_execution:status()]) ->
+-spec infer_new_status_from_task_statuses(atm_task_execution:status(), [atm_task_execution:status()]) ->
     status().
-infer_status(CurrentStatus, AtmTaskExecutionStatuses) ->
+infer_new_status_from_task_statuses(CurrentStatus, AtmTaskExecutionStatuses) ->
     PossibleNewStatus = case lists:usort(AtmTaskExecutionStatuses) of
         [Status] ->
             Status;

@@ -418,16 +418,12 @@ acquire_global_env(#document{key = AtmWorkflowExecutionId, value = #atm_workflow
     store_registry = AtmGlobalStoreRegistry,
     system_audit_log_store_id = AtmWorkflowAuditLogStoreId
 }}) ->
+    {ok, #atm_store{container = AtmWorkflowAuditLogStoreContainer}} = atm_store_api:get(
+        AtmWorkflowAuditLogStoreId
+    ),
     Env = atm_workflow_execution_env:build(
         SpaceId, AtmWorkflowExecutionId, AtmWorkflowExecutionIncarnation, AtmGlobalStoreRegistry
     ),
-
-    AtmWorkflowAuditLogStoreContainer = case atm_store_api:get(AtmWorkflowAuditLogStoreId) of
-        {ok, #atm_store{container = Container}} ->
-            Container;
-        ?ERROR_NOT_FOUND ->
-            undefined
-    end,
     atm_workflow_execution_env:set_workflow_audit_log_store_container(
         AtmWorkflowAuditLogStoreContainer, Env
     ).

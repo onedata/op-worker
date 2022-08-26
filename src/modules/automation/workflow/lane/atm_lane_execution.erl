@@ -53,9 +53,10 @@
     ?RESUMING_STATUS | ?SCHEDULED_STATUS | ?PREPARING_STATUS | ?ENQUEUED_STATUS |
     % ongoing
     ?ACTIVE_STATUS | ?STOPPING_STATUS |
+    % suspended
+    ?INTERRUPTED_STATUS | ?PAUSED_STATUS |
     % ended
-    ?FINISHED_STATUS |
-    ?CRASHED_STATUS | ?CANCELLED_STATUS | ?FAILED_STATUS | ?INTERRUPTED_STATUS | ?PAUSED_STATUS.
+    ?FINISHED_STATUS | ?CRASHED_STATUS | ?CANCELLED_STATUS | ?FAILED_STATUS.
 
 -type run_stopping_reason() :: crash | cancel | failure | interrupt | pause.
 

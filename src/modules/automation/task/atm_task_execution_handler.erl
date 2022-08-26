@@ -63,10 +63,12 @@ initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
 stop(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Reason) ->
     case atm_task_execution_status:handle_stopping(AtmTaskExecutionId, Reason) of
         {ok, _} when Reason =:= pause ->
-            % ongoing jobs shouldn't be abruptly interrupted when execution is paused
+            % when execution is paused, ongoing jobs aren't abruptly stopped (the
+            % execution engine will wait for them before transitioning to paused status)
             ok;
 
         {ok, #document{value = #atm_task_execution{executor = AtmTaskExecutor}}} ->
+            % for other reasons than pause, ongoing jobs are immediately aborted
             atm_task_executor:abort(AtmWorkflowExecutionCtx, AtmTaskExecutor);
 
         {error, task_stopping} ->
@@ -122,8 +124,8 @@ run_job_batch(
     AtmJobBatchId,
     ItemBatch
 ) ->
-    ItemsNum = length(ItemBatch),
-    case atm_task_execution_status:handle_items_in_processing(AtmTaskExecutionId, ItemsNum) of
+    ItemCount = length(ItemBatch),
+    case atm_task_execution_status:handle_items_in_processing(AtmTaskExecutionId, ItemCount) of
         {ok, #document{value = AtmTaskExecution}} ->
             AtmRunJobBatchCtx = atm_run_job_batch_ctx:build(AtmWorkflowExecutionCtx, AtmTaskExecution),
 
@@ -390,7 +392,7 @@ handle_job_batch_processing_error(
     ItemBatch,
     {error, dequeued}  %% TODO error
 ) ->
-    case atm_task_execution_status:handle_items_dequeued(AtmTaskExecutionId, length(ItemBatch)) of
+    case atm_task_execution_status:handle_items_withdrawn(AtmTaskExecutionId, length(ItemBatch)) of
         {ok, _} ->
             ok;
         {error, task_not_stopping} ->
@@ -546,13 +548,7 @@ log_uncorrelated_results_processing_error(
 -spec freeze_stores(atm_task_execution:record()) -> ok.
 freeze_stores(#atm_task_execution{
     system_audit_log_store_id = AtmSystemAuditLogStoreId,
-    time_series_store_id = undefined
-}) ->
-    atm_store_api:freeze(AtmSystemAuditLogStoreId);
-
-freeze_stores(#atm_task_execution{
-    system_audit_log_store_id = AtmSystemAuditLogStoreId,
     time_series_store_id = AtmTSStoreId
 }) ->
-    atm_store_api:freeze(AtmSystemAuditLogStoreId),
-    atm_store_api:freeze(AtmTSStoreId).
+    AtmTSStoreId /= undefined andalso atm_store_api:freeze(AtmTSStoreId),
+    atm_store_api:freeze(AtmSystemAuditLogStoreId).

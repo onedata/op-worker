@@ -59,7 +59,7 @@
 -export([
     handle_items_in_processing/2,
     handle_item_processed/1,
-    handle_items_dequeued/2,
+    handle_items_withdrawn/2,
     handle_items_failed/2,
 
     handle_stopping/2,
@@ -106,7 +106,7 @@ is_running(_) -> false.
 
 -spec handle_items_in_processing(atm_task_execution:id(), pos_integer()) ->
     {ok, atm_task_execution:doc()} | {error, task_stopping} | {error, task_ended}.
-handle_items_in_processing(AtmTaskExecutionId, ItemsNum) ->
+handle_items_in_processing(AtmTaskExecutionId, ItemCount) ->
     apply_diff(AtmTaskExecutionId, fun
         (AtmTaskExecution = #atm_task_execution{
             status = ?PENDING_STATUS,
@@ -114,7 +114,7 @@ handle_items_in_processing(AtmTaskExecutionId, ItemsNum) ->
         }) ->
             {ok, AtmTaskExecution#atm_task_execution{
                 status = ?ACTIVE_STATUS,
-                items_in_processing = ItemsNum
+                items_in_processing = ItemCount
             }};
 
         (AtmTaskExecution = #atm_task_execution{
@@ -122,7 +122,7 @@ handle_items_in_processing(AtmTaskExecutionId, ItemsNum) ->
             items_in_processing = CurrentItemsInProcessingNum
         }) ->
             {ok, AtmTaskExecution#atm_task_execution{
-                items_in_processing = CurrentItemsInProcessingNum + ItemsNum
+                items_in_processing = CurrentItemsInProcessingNum + ItemCount
             }};
 
         (#atm_task_execution{status = ?STOPPING_STATUS}) ->
@@ -147,16 +147,16 @@ handle_item_processed(AtmTaskExecutionId) ->
     ok.
 
 
--spec handle_items_dequeued(atm_task_execution:id(), pos_integer()) ->
+-spec handle_items_withdrawn(atm_task_execution:id(), pos_integer()) ->
     {ok, atm_task_execution:doc()} | {error, task_not_stopping}.
-handle_items_dequeued(AtmTaskExecutionId, ItemsNum) ->
+handle_items_withdrawn(AtmTaskExecutionId, ItemCount) ->
     apply_diff(AtmTaskExecutionId, fun
         (AtmTaskExecution = #atm_task_execution{
             status = ?STOPPING_STATUS,
             items_in_processing = ItemsInProcessing
         }) ->
             {ok, AtmTaskExecution#atm_task_execution{
-                items_in_processing = ItemsInProcessing - ItemsNum
+                items_in_processing = ItemsInProcessing - ItemCount
             }};
 
         (_) ->
@@ -165,16 +165,16 @@ handle_items_dequeued(AtmTaskExecutionId, ItemsNum) ->
 
 
 -spec handle_items_failed(atm_task_execution:id(), pos_integer()) -> ok.
-handle_items_failed(AtmTaskExecutionId, ItemsNum) ->
+handle_items_failed(AtmTaskExecutionId, ItemCount) ->
     {ok, _} = apply_diff(AtmTaskExecutionId, fun(#atm_task_execution{
         items_in_processing = ItemsInProcessing,
         items_processed = ItemsProcessed,
         items_failed = ItemsFailed
     } = AtmTaskExecution) ->
         {ok, AtmTaskExecution#atm_task_execution{
-            items_in_processing = ItemsInProcessing - ItemsNum,
-            items_processed = ItemsProcessed + ItemsNum,
-            items_failed = ItemsFailed + ItemsNum
+            items_in_processing = ItemsInProcessing - ItemCount,
+            items_processed = ItemsProcessed + ItemCount,
+            items_failed = ItemsFailed + ItemCount
         }}
     end),
     ok.
