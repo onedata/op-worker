@@ -18,6 +18,8 @@
 -export([
     schedule_workflow_execution/6,
     cancel_workflow_execution/2,
+    pause_workflow_execution/2,
+    resume_workflow_execution/2,
     repeat_workflow_execution/4
 ]).
 
@@ -60,6 +62,26 @@ cancel_workflow_execution(SessionId, AtmWorkflowExecutionId) ->
     SpaceGuid = atm_workflow_execution_id_to_space_guid(AtmWorkflowExecutionId),
 
     middleware_worker:check_exec(SessionId, SpaceGuid, #atm_workflow_execution_cancel_request{
+        atm_workflow_execution_id = AtmWorkflowExecutionId
+    }).
+
+
+-spec pause_workflow_execution(session:id(), atm_workflow_execution:id()) ->
+    ok | no_return().
+pause_workflow_execution(SessionId, AtmWorkflowExecutionId) ->
+    SpaceGuid = atm_workflow_execution_id_to_space_guid(AtmWorkflowExecutionId),
+
+    middleware_worker:check_exec(SessionId, SpaceGuid, #atm_workflow_execution_pause_request{
+        atm_workflow_execution_id = AtmWorkflowExecutionId
+    }).
+
+
+-spec resume_workflow_execution(session:id(), atm_workflow_execution:id()) ->
+    ok | no_return().
+resume_workflow_execution(SessionId, AtmWorkflowExecutionId) ->
+    SpaceGuid = atm_workflow_execution_id_to_space_guid(AtmWorkflowExecutionId),
+
+    middleware_worker:check_exec(SessionId, SpaceGuid, #atm_workflow_execution_resume_request{
         atm_workflow_execution_id = AtmWorkflowExecutionId
     }).
 

@@ -20,6 +20,7 @@
 -export([
     initiate/2,
     stop/3,
+    resume/2,
     teardown/2,
     set_run_num/2,
 
@@ -73,6 +74,18 @@ stop(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Reason) ->
 
         {error, task_ended} ->
             ok
+    end.
+
+
+-spec resume(atm_workflow_execution_ctx:record(), atm_task_execution:id()) ->
+    false | {true, {workflow_engine:task_spec(), atm_workflow_execution_env:diff()}} | no_return().
+resume(AtmWorkflowExecutionCtx, AtmTaskExecutionId) ->
+    case atm_task_execution_status:handle_resume(AtmTaskExecutionId) of
+        {ok, AtmTaskExecutionDoc} ->
+            {true, initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionDoc)};
+
+        {error, task_ended} ->
+            false
     end.
 
 
@@ -484,7 +497,7 @@ handle_uncorrelated_results_processing_error(
             log_uncorrelated_results_processing_error(
                 AtmWorkflowExecutionCtx, AtmTaskExecutionId, Error
             ),
-            atm_lane_execution_handler:stop(
+            {ok, _} = atm_lane_execution_handler:stop(
                 {AtmLaneIndex, RunNum}, failure, AtmWorkflowExecutionCtx
             ),
             ok;

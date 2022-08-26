@@ -26,7 +26,8 @@
     init_engine/0,
     start/3,
     stop/3,
-    repeat/4
+    repeat/4,
+    resume/2
 ]).
 -export([on_provider_restart/1]).
 
@@ -118,12 +119,15 @@ stop(UserCtx, AtmWorkflowExecutionId, Reason) ->
         AtmWorkflowExecutionEnv
     ),
     case atm_lane_execution_handler:stop({current, current}, Reason, AtmWorkflowExecutionCtx) of
-        stopping ->
+        {ok, stopping} ->
             ok;
-        stopped ->
+        {ok, stopped} ->
             % atm workflow execution was stopped and there are no active processes handling it
             % (e.g. cancelling already suspended execution) - end procedures must be called manually
-            end_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx)
+            end_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
+            ok;
+        {error, _} = Error ->
+            Error
     end.
 
 
@@ -162,11 +166,32 @@ repeat(UserCtx, Type, AtmLaneRunSelector, AtmWorkflowExecutionId) ->
     end.
 
 
+-spec resume(user_ctx:ctx(), atm_workflow_execution:id()) ->
+    ok | errors:error().
+resume(UserCtx, AtmWorkflowExecutionId) ->
+    case atm_lane_execution_status:handle_resume({current, current}, AtmWorkflowExecutionId) of
+        {ok, AtmWorkflowExecutionDoc} ->
+            unfreeze_global_stores(AtmWorkflowExecutionDoc),
+            ok = atm_workflow_execution_session:init(AtmWorkflowExecutionId, UserCtx),
+
+            workflow_engine:execute_workflow(?ATM_WORKFLOW_EXECUTION_ENGINE, #{
+                id => AtmWorkflowExecutionId,
+                workflow_handler => ?MODULE,
+                execution_context => acquire_global_env(AtmWorkflowExecutionDoc)
+            });
+        {error, _} = Error ->
+            Error
+    end.
+
+
 %%--------------------------------------------------------------------
 %% @doc
-%% Terminates specified workflow execution.
-%% This function should be called only after provider restart to terminate
-%% stale (processes handling execution no longer exists) workflows.
+%% This function should be called only after provider restart to handle
+%% stale (processes handling execution no longer exists) workflow.
+%% Specified workflow execution is:
+%% a) terminated as ?CRASHED/?CANCELLED/?FAILED if execution was already stopping
+%% b) terminated as ?INTERRUPTED otherwise (running execution was interrupted by
+%%    provider shutdown). In such case, it will be resumed.
 %% @end
 %%--------------------------------------------------------------------
 -spec on_provider_restart(atm_workflow_execution:id()) -> ok | no_return().
@@ -177,8 +202,15 @@ on_provider_restart(AtmWorkflowExecutionId) ->
     try
         AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(AtmWorkflowExecutionEnv),
         atm_lane_execution_handler:stop({current, current}, interrupt, AtmWorkflowExecutionCtx),
-        end_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx)
-        %% TODO VFS-9532 resume execution if ended status == interrupted
+        case end_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) of
+            #document{value = #atm_workflow_execution{status = ?INTERRUPTED_STATUS}} ->
+                UserCtx = atm_workflow_execution_auth:get_user_ctx(atm_workflow_execution_ctx:get_auth(
+                    AtmWorkflowExecutionCtx
+                )),
+                resume(UserCtx, AtmWorkflowExecutionId);
+            _ ->
+                ok
+        end
     catch throw:{session_acquisition_failed, _} = Reason ->
         handle_exception(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, throw, Reason, [])
     end.
@@ -196,23 +228,11 @@ on_provider_restart(AtmWorkflowExecutionId) ->
 ) ->
     {ok, workflow_engine:lane_spec()} | error.
 prepare_lane(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneRunSelector) ->
-    AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(AtmWorkflowExecutionEnv),
-
-    try
-        {ok, atm_lane_execution_handler:prepare(
-            AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
-        )}
-    catch Type:Reason:Stacktrace ->
-        LogContent = #{
-            <<"description">> => str_utils:format_bin("Failed to prepare next run of lane number ~B.", [
-                element(1, AtmLaneRunSelector)
-            ]),
-            <<"reason">> => errors:to_json(?atm_examine_error(Type, Reason, Stacktrace))
-        },
-        Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-        atm_workflow_execution_logger:workflow_critical(LogContent, Logger),
-        error
-    end.
+    atm_lane_execution_handler:prepare(
+        AtmLaneRunSelector,
+        AtmWorkflowExecutionId,
+        atm_workflow_execution_ctx:acquire(AtmWorkflowExecutionEnv)
+    ).
 
 
 -spec restart_lane(
@@ -220,9 +240,13 @@ prepare_lane(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneRunSelector
     atm_workflow_execution_env:record(),
     atm_lane_execution:lane_run_selector()
 ) ->
-    error.
-restart_lane(_, _, _) ->
-    error.
+    {ok, workflow_engine:lane_spec()} | error.
+restart_lane(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneRunSelector) ->
+    atm_lane_execution_handler:resume(
+        AtmLaneRunSelector,
+        AtmWorkflowExecutionId,
+        atm_workflow_execution_ctx:acquire(AtmWorkflowExecutionEnv)
+    ).
 
 
 -spec run_task_for_item(
@@ -347,7 +371,8 @@ handle_lane_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, Atm
     ok.
 handle_workflow_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv) ->
     AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(AtmWorkflowExecutionEnv),
-    end_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx).
+    end_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
+    ok.
 
 
 -spec handle_exception(
@@ -413,7 +438,7 @@ acquire_global_env(#document{key = AtmWorkflowExecutionId, value = #atm_workflow
     atm_workflow_execution:id(),
     atm_workflow_execution_ctx:record()
 ) ->
-    ok.
+    atm_workflow_execution:doc().
 end_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     {ok, AtmWorkflowExecutionDoc0} = atm_workflow_execution:get(AtmWorkflowExecutionId),
     ensure_all_lane_runs_ended(AtmWorkflowExecutionDoc0, AtmWorkflowExecutionCtx),
@@ -427,7 +452,8 @@ end_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     {ok, EndedAtmWorkflowExecutionDoc} = atm_workflow_execution_status:handle_ended(
         AtmWorkflowExecutionId
     ),
-    notify_ended(EndedAtmWorkflowExecutionDoc).
+    notify_ended(EndedAtmWorkflowExecutionDoc),
+    EndedAtmWorkflowExecutionDoc.
 
 
 %% @private

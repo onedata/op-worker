@@ -726,7 +726,7 @@ periodical_spaces_autocleaning_check() ->
             ?error_stacktrace("Unable to trigger spaces auto-cleaning check due to: ~p", [{Error2, Reason}], Stacktrace)
     end.
 
--spec terminate_stale_atm_workflow_executions() -> ok.
+-spec terminate_stale_atm_workflow_executions() -> ok.   %% TODO rename to report_provider_restart...
 terminate_stale_atm_workflow_executions() ->
     try provider_logic:get_spaces() of
         {ok, SpaceIds} ->

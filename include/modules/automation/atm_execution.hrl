@@ -281,6 +281,7 @@
 -define(SUSPENDED_PHASE, suspended).
 -define(ENDED_PHASE, ended).
 
+-define(RESUMING_STATUS, resuming).
 -define(SCHEDULED_STATUS, scheduled).
 -define(PREPARING_STATUS, preparing).
 -define(ENQUEUED_STATUS, enqueued).

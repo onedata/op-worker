@@ -70,6 +70,8 @@
 -define(FILES_STATS, <<"files">>).
 
 -define(QOS_TOTAL_TIME_SERIES_NAME, <<"total">>).
+-define(QOS_STORAGE_TIME_SERIES_NAME(StorageId), <<"st_", StorageId/binary>>).
+
 -define(QOS_MINUTE_METRIC_NAME, <<"minute">>).
 -define(QOS_HOUR_METRIC_NAME, <<"hour">>).
 -define(QOS_DAY_METRIC_NAME, <<"day">>).
