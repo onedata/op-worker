@@ -397,7 +397,7 @@ handle_exception(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, Type, Reason, 
 
     StoppingReason = case Type of
         throw -> interrupt;
-        _ -> crush
+        _ -> crash
     end,
     atm_lane_execution_handler:stop({current, current}, StoppingReason, AtmWorkflowExecutionCtx),
     end_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),

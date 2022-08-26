@@ -55,9 +55,9 @@
     ?ACTIVE_STATUS | ?STOPPING_STATUS |
     % ended
     ?FINISHED_STATUS |
-    ?CRUSHED_STATUS | ?CANCELLED_STATUS | ?FAILED_STATUS | ?INTERRUPTED_STATUS | ?PAUSED_STATUS.
+    ?CRASHED_STATUS | ?CANCELLED_STATUS | ?FAILED_STATUS | ?INTERRUPTED_STATUS | ?PAUSED_STATUS.
 
--type run_stopping_reason() :: crush | cancel | failure | interrupt | pause.
+-type run_stopping_reason() :: crash | cancel | failure | interrupt | pause.
 
 -type run_diff() :: fun((run()) -> {ok, run()} | {error, term()}).
 -type run() :: #atm_lane_execution_run{}.

@@ -342,7 +342,7 @@ stop_parallel_boxes(
 ) ->
     AtmTaskExecutionStoppingReason = case AtmLaneRunStoppingReason of
         failure -> interrupt;
-        crush -> interrupt;
+        crash -> interrupt;
         Reason -> Reason
     end,
     {ok, AtmLaneRun} = atm_lane_execution:get_run(AtmLaneRunSelector, AtmWorkflowExecution),

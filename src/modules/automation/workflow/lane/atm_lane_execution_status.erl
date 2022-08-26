@@ -64,7 +64,7 @@
 %%%      |      |            |      |                  |           |          |                 |
 %%%  E   |      v            v      v                  v           v          |                 |
 %%%  N   |  +----------+    +--------+       +-----------+    +-----------+   |                 |
-%%%  D   |  | FINISHED |    | FAILED |       | CANCELLED |    |  CRUSHED  |   |                 |
+%%%  D   |  | FINISHED |    | FAILED |       | CANCELLED |    |  CRASHED  |   |                 |
 %%%  E   |  +----------+    +--------+       +-----------+    +-----------+   |                 |
 %%%  D   |                                             |                      |                 |
 %%%       \                                            |                      |                /
@@ -137,7 +137,7 @@ status_to_phase(?INTERRUPTED_STATUS) -> ?SUSPENDED_PHASE;
 status_to_phase(?PAUSED_STATUS) -> ?SUSPENDED_PHASE;
 
 status_to_phase(?FINISHED_STATUS) -> ?ENDED_PHASE;
-status_to_phase(?CRUSHED_STATUS) -> ?ENDED_PHASE;
+status_to_phase(?CRASHED_STATUS) -> ?ENDED_PHASE;
 status_to_phase(?CANCELLED_STATUS) -> ?ENDED_PHASE;
 status_to_phase(?FAILED_STATUS) -> ?ENDED_PHASE.
 
@@ -148,7 +148,7 @@ status_to_phase(?FAILED_STATUS) -> ?ENDED_PHASE.
     atm_workflow_execution:record()
 ) ->
     boolean().
-can_manual_lane_run_repeat_be_scheduled(_, _, #atm_workflow_execution{status = ?CRUSHED_STATUS}) ->
+can_manual_lane_run_repeat_be_scheduled(_, _, #atm_workflow_execution{status = ?CRASHED_STATUS}) ->
     false;
 
 can_manual_lane_run_repeat_be_scheduled(RepeatType, Run, AtmWorkflowExecution) ->
@@ -380,7 +380,7 @@ stopping_reason_priority(pause) -> 0;
 stopping_reason_priority(interrupt) -> 1;
 stopping_reason_priority(failure) -> 2;
 stopping_reason_priority(cancel) -> 3;
-stopping_reason_priority(crush) -> 4.
+stopping_reason_priority(crash) -> 4.
 
 
 %% @private
@@ -435,7 +435,7 @@ end_currently_executed_lane_run(AtmWorkflowExecution) ->
 
         (#atm_lane_execution_run{status = ?STOPPING_STATUS} = Run) ->
             EndedStatus = case Run#atm_lane_execution_run.stopping_reason of
-                crush -> ?CRUSHED_STATUS;
+                crash -> ?CRASHED_STATUS;
                 cancel -> ?CANCELLED_STATUS;
                 failure -> ?FAILED_STATUS;
                 interrupt -> ?INTERRUPTED_STATUS;

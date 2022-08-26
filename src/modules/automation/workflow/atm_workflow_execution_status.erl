@@ -53,7 +53,7 @@
 %%%      |      |            |      |                  |           |          |                 |
 %%%  E   |      v            v      v                  v           v          |                 |
 %%%  N   |  +----------+    +--------+       +-----------+    +-----------+   |                 |
-%%%  D   |  | FINISHED |    | FAILED |       | CANCELLED |    |  CRUSHED  |   |                 |
+%%%  D   |  | FINISHED |    | FAILED |       | CANCELLED |    |  CRASHED  |   |                 |
 %%%  E   |  +----------+    +--------+       +-----------+    +-----------+   |                 |
 %%%  D   |                                             |                      |                 |
 %%%       \                                            |                      |                /
@@ -127,7 +127,7 @@ status_to_phase(?INTERRUPTED_STATUS) -> ?SUSPENDED_PHASE;
 status_to_phase(?PAUSED_STATUS) -> ?SUSPENDED_PHASE;
 
 status_to_phase(?FINISHED_STATUS) -> ?ENDED_PHASE;
-status_to_phase(?CRUSHED_STATUS) -> ?ENDED_PHASE;
+status_to_phase(?CRASHED_STATUS) -> ?ENDED_PHASE;
 status_to_phase(?CANCELLED_STATUS) -> ?ENDED_PHASE;
 status_to_phase(?FAILED_STATUS) -> ?ENDED_PHASE.
 

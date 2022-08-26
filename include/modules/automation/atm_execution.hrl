@@ -293,7 +293,7 @@
 -define(FAILED_STATUS, failed).
 -define(INTERRUPTED_STATUS, interrupted).
 -define(PAUSED_STATUS, paused).
--define(CRUSHED_STATUS, crushed).
+-define(CRASHED_STATUS, crashed).
 -define(SKIPPED_STATUS, skipped).
 
 

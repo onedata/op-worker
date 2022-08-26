@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Module handling heartbeats and job batch results sent by tasks
-%%% executed on OpenFaaS service.
+%%% executed by OpenFaaS service.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_openfaas_task_callback_handler).
