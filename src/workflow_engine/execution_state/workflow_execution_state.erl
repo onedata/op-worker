@@ -57,6 +57,7 @@
     callbacks_to_execute = [] :: [callback_to_exectute()]
 }).
 -define(EXECUTION_CANCELLED(CallCount), #execution_cancelled{call_count = CallCount}).
+-define(PREPARATION_CANCELLED(CallCount), {preparation_cancelled, CallCount}).
 
 
 % Macros and records used to provide additional information about document update procedure
@@ -109,7 +110,7 @@
 -type doc() :: datastore_doc:doc(state()).
 
 -type execution_status() :: ?NOT_PREPARED | ?PREPARING | ?PREPARED_IN_ADVANCE | ?PREPARATION_FAILED |
-    ?PREPARATION_CANCELLED | ?EXECUTING | #execution_cancelled{} | ?EXECUTION_ENDED |
+    ?PREPARATION_CANCELLED(non_neg_integer()) | ?EXECUTING | #execution_cancelled{} | ?EXECUTION_ENDED |
     ?WAITING_FOR_NEXT_LANE_PREPARATION_END.
 -type next_lane_preparation_status() :: ?NOT_PREPARED | ?PREPARING | ?PREPARED_IN_ADVANCE | ?PREPARATION_FAILED.
 % TODO VFS-7919 better type name
@@ -199,14 +200,9 @@ restart_from_snapshot(ExecutionId, EngineId, Handler, Context, InitialLaneId, In
                         },
                         {ok, _} = datastore_model:save(?CTX, Doc),
                         case finish_lane_preparation(Handler, ExecutionId, LaneSpec#{iterator => Iterator}) of
-                            {ok, _, _, _} ->
-                                ok;
-                            ?WF_ERROR_LANE_ALREADY_PREPARED ->
-                                ok;
-                            ?WF_ERROR_PREPARATION_FAILED ->
-                                % TODO - jakie callbacki zawolac?
-                                cleanup(ExecutionId),
-                                ?WF_ERROR_PREPARATION_FAILED
+                            {ok, _, _, _} -> ok;
+                            ?WF_ERROR_LANE_ALREADY_PREPARED -> ok;
+                            ?WF_ERROR_PREPARATION_FAILED -> ok
                         end;
                     error ->
                         ?WF_ERROR_PREPARATION_FAILED
@@ -517,8 +513,8 @@ finish_lane_preparation(Handler, ExecutionId,
                 {ok, #document{value = #workflow_execution_state{
                     current_lane = CurrentLane,
                     next_lane = #next_lane{id = NextLaneId}
-                } = UpdatedState}} when NextIterationStep =:= undefined ->
-                    call_callbacks_for_empty_lane(ExecutionId, UpdatedState),
+                }} = UpdatedDoc} when NextIterationStep =:= undefined ->
+                    call_callbacks_for_empty_lane(UpdatedDoc, ?CALLBACKS_ON_EMPTY_LANE_SELECTOR),
                     {ok, CurrentLane, Iterator, NextLaneId};
                 {ok, #document{value = #workflow_execution_state{
                     current_lane = CurrentLane,
@@ -531,11 +527,11 @@ finish_lane_preparation(Handler, ExecutionId,
             end
     end.
 
--spec call_callbacks_for_empty_lane(workflow_engine:execution_id(), state()) -> ok.
-call_callbacks_for_empty_lane(ExecutionId, State = #workflow_execution_state{
+-spec call_callbacks_for_empty_lane(doc(), callback_selector()) -> ok.
+call_callbacks_for_empty_lane(#document{key = ExecutionId, value = #workflow_execution_state{
     handler = Handler,
     current_lane = #current_lane{execution_context = Context, parallel_box_specs = BoxesMap}
-}) ->
+} = State}, CallbackSelector) ->
     TaskIds = get_task_ids(BoxesMap),
     TaskIdsWithStreams = get_task_ids_with_streams(State),
     workflow_engine:call_handle_task_results_processed_for_all_items_for_all_tasks(
@@ -544,7 +540,7 @@ call_callbacks_for_empty_lane(ExecutionId, State = #workflow_execution_state{
         TaskIds -- TaskIdsWithStreams),
 
     {ok, _} = update(ExecutionId, fun(StateToUpdate) ->
-        remove_pending_callback(StateToUpdate, ?CALLBACKS_ON_EMPTY_LANE_SELECTOR)
+        remove_pending_callback(StateToUpdate, CallbackSelector)
     end),
     ok.
 
@@ -860,9 +856,10 @@ set_current_lane(#workflow_execution_state{
 
 -spec handle_execution_cancel_init(state()) -> {ok, state()}.
 handle_execution_cancel_init(#workflow_execution_state{execution_status = ?PREPARING} = State) ->
-    {ok, State#workflow_execution_state{execution_status = ?PREPARATION_CANCELLED}};
+    {ok, State#workflow_execution_state{execution_status = ?PREPARATION_CANCELLED(1)}};
+handle_execution_cancel_init(#workflow_execution_state{execution_status = ?PREPARATION_CANCELLED(Counter)} = State) ->
+    {ok, State#workflow_execution_state{execution_status = ?PREPARATION_CANCELLED(Counter + 1)}};
 handle_execution_cancel_init(#workflow_execution_state{execution_status = ?PREPARATION_FAILED} = State) ->
-    % TODO - jak teraz cancelujemy?
     % TODO VFS-7787 Return error to prevent document update
     {ok, State};
 handle_execution_cancel_init(#workflow_execution_state{execution_status = ?EXECUTION_CANCELLED(Counter) = Status} = State) ->
@@ -915,12 +912,11 @@ handle_lane_preparation_failure(_State, _LaneId, ?PREPARE_IN_ADVANCE) ->
     iteration_status(), non_neg_integer()) -> {ok, state()} | ?WF_ERROR_LANE_ALREADY_PREPARED.
 finish_lane_preparation_internal(
     #workflow_execution_state{
-        execution_status = ?PREPARATION_CANCELLED,
+        execution_status = ?PREPARATION_CANCELLED(CallCount),
         current_lane = #current_lane{parallel_box_specs = undefined} = CurrentLane
     } = State, BoxesMap, LaneExecutionContext, PrefetchedIterationStep, _FailureCountToCancel) ->
-    % TODO - jak to handlujemy? czy napewno tak?
     {ok, State#workflow_execution_state{
-        execution_status = ?EXECUTION_CANCELLED(0),
+        execution_status = ?EXECUTION_CANCELLED(CallCount),
         current_lane = CurrentLane#current_lane{execution_context = LaneExecutionContext, parallel_box_specs = BoxesMap},
         iteration_state = workflow_iteration_state:init(),
         prefetched_iteration_step = PrefetchedIterationStep,
@@ -937,19 +933,21 @@ finish_lane_preparation_internal(
         parallel_box_specs = BoxesMap,
         failure_count_to_cancel = FailureCountToCancel
     },
-    PendingCallbacks = case PrefetchedIterationStep of
-        undefined -> [?CALLBACKS_ON_EMPTY_LANE_SELECTOR];
-        _ -> []
+    State2 = case PrefetchedIterationStep of
+        undefined ->
+            add_if_callback_is_pending(State,
+                fun call_callbacks_for_empty_lane/2, ?CALLBACKS_ON_EMPTY_LANE_SELECTOR, [], true);
+        _ ->
+            State
     end,
-% TODO - czy tu cos zmieniamy? a moze olewamy cancel?
-    {ok, State#workflow_execution_state{
+
+    {ok, State2#workflow_execution_state{
         execution_status = ?EXECUTING,
         current_lane = UpdatedCurrentLane,
         iteration_state = workflow_iteration_state:init(),
         prefetched_iteration_step = PrefetchedIterationStep,
         jobs = workflow_jobs:init(),
-        tasks_data_registry = workflow_tasks_data_registry:empty(),
-        pending_callbacks = PendingCallbacks
+        tasks_data_registry = workflow_tasks_data_registry:empty()
     }};
 finish_lane_preparation_internal(_State, _BoxesMap, _LaneExecutionContext,
     _PrefetchedIterationStep, _FailureCountToCancel) ->
@@ -1102,7 +1100,6 @@ check_timeouts_internal(State = #workflow_execution_state{
     workflow_engine:processing_stage(),
     handler_execution_or_cached_async_result()
 ) -> {ok, state()} | ?WF_ERROR_JOB_NOT_FOUND.
-% TODO - zabezpieczyc przed wolaniem callbacku w stanie cancelled??
 report_execution_status_update_internal(State = #workflow_execution_state{
     engine_id = EngineId,
     jobs = Jobs
@@ -1182,7 +1179,7 @@ prepare_next_waiting_job(#workflow_execution_state{
 }) ->
     ?WF_ERROR_NO_WAITING_ITEMS;
 prepare_next_waiting_job(#workflow_execution_state{
-    execution_status = ?PREPARATION_CANCELLED
+    execution_status = ?PREPARATION_CANCELLED(_)
 }) ->
     ?WF_ERROR_NO_WAITING_ITEMS;
 prepare_next_waiting_job(#workflow_execution_state{
@@ -1220,7 +1217,7 @@ prepare_next_waiting_job(State = #workflow_execution_state{
 }) ->
     {ok, State#workflow_execution_state{
         execution_status = Status#execution_cancelled{callbacks_to_execute = []},
-        pending_callbacks = lists:map(fun({_, CallbackSelector, _}) -> CallbackSelector end, Callbacks), % TODO - mapowac na id
+        pending_callbacks = lists:map(fun({_, CallbackSelector, _}) -> CallbackSelector end, Callbacks),
         update_report = ?EXECUTE_DELAYED_CALLBACKS(lists:reverse(Callbacks))
     }};
 prepare_next_waiting_job(State = #workflow_execution_state{

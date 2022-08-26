@@ -65,7 +65,6 @@
 -define(PREPARING, preparing).
 -define(PREPARED_IN_ADVANCE, prepared_in_advance).
 -define(PREPARATION_FAILED, preparation_failed).
--define(PREPARATION_CANCELLED, preparation_cancelled).
 
 -define(EXECUTING, executing).
 -define(EXECUTION_CANCELLED, execution_cancelled).
