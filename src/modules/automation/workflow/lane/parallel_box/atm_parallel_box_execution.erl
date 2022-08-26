@@ -37,8 +37,8 @@
 -type creation_args() :: #atm_parallel_box_execution_creation_args{}.
 
 -type setup_task_fun() :: fun((atm_task_execution:id()) ->
-    false |
-    {true, {workflow_engine:task_spec(), atm_workflow_execution_env:diff()}} |
+    ignored |
+    {ok, {workflow_engine:task_spec(), atm_workflow_execution_env:diff()}} |
     no_return()
 ).
 
@@ -134,7 +134,7 @@ initiate_all(AtmWorkflowExecutionCtx, AtmParallelBoxExecutions) ->
     ok.
 stop_all(AtmWorkflowExecutionCtx0, Reason, AtmParallelBoxExecutions) ->
     Callback = fun(AtmWorkflowExecutionCtx1, AtmTaskExecutionId) ->
-        atm_task_execution_handler:stop(AtmWorkflowExecutionCtx1, AtmTaskExecutionId, Reason)
+        catch atm_task_execution_handler:stop(AtmWorkflowExecutionCtx1, AtmTaskExecutionId, Reason)
     end,
     foreach_task(AtmWorkflowExecutionCtx0, AtmParallelBoxExecutions, Callback).
 
@@ -153,12 +153,11 @@ ensure_all_ended(AtmParallelBoxExecutions) ->
 
 
 -spec teardown_all(atm_workflow_execution_ctx:record(), [record()]) -> ok.
-teardown_all(AtmWorkflowExecutionCtx, AtmParallelBoxExecutions) ->
-    foreach_task(
-        AtmWorkflowExecutionCtx,
-        AtmParallelBoxExecutions,
-        fun atm_task_execution_handler:teardown/2
-    ).
+teardown_all(AtmWorkflowExecutionCtx0, AtmParallelBoxExecutions) ->
+    Callback = fun(AtmWorkflowExecutionCtx1, AtmTaskExecutionId) ->
+        catch atm_task_execution_handler:teardown(AtmWorkflowExecutionCtx1, AtmTaskExecutionId)
+    end,
+    foreach_task(AtmWorkflowExecutionCtx0, AtmParallelBoxExecutions, Callback).
 
 
 -spec delete_all([record()]) -> ok.
@@ -338,7 +337,7 @@ setup(#atm_parallel_box_execution{task_registry = AtmTaskExecutionRegistry}, Set
 
     lists:foldl(fun
         (
-            {AtmTaskExecutionId, {true, {AtmTaskExecutionSpec, AtmWorkflowExecutionEnvDiff}}},
+            {AtmTaskExecutionId, {ok, {AtmTaskExecutionSpec, AtmWorkflowExecutionEnvDiff}}},
             {AtmParallelBoxExecutionSpec, AtmWorkflowExecutionEnvDiffAcc}
         ) ->
             {
@@ -346,7 +345,7 @@ setup(#atm_parallel_box_execution{task_registry = AtmTaskExecutionRegistry}, Set
                 fun(Env) -> AtmWorkflowExecutionEnvDiff(AtmWorkflowExecutionEnvDiffAcc(Env)) end
             };
 
-        ({_AtmTaskExecutionId, false}, Acc) ->
+        ({_AtmTaskExecutionId, ignored}, Acc) ->
             Acc
     end, {#{}, fun(Env) -> Env end}, AtmTaskExecutionsInitiationResult).
 
@@ -364,7 +363,7 @@ foreach_task(AtmWorkflowExecutionCtx0, AtmParallelBoxExecutions, Callback) ->
             AtmWorkflowExecutionCtx1 = atm_workflow_execution_ctx:configure_processed_task_id(
                 AtmTaskExecutionId, AtmWorkflowExecutionCtx0
             ),
-            catch Callback(AtmWorkflowExecutionCtx1, AtmTaskExecutionId)
+            Callback(AtmWorkflowExecutionCtx1, AtmTaskExecutionId)
         end, maps:values(AtmTaskExecutionRegistry))
     end, AtmParallelBoxExecutions).
 

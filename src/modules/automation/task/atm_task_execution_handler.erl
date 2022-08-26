@@ -497,7 +497,7 @@ handle_uncorrelated_results_processing_error(
             log_uncorrelated_results_processing_error(
                 AtmWorkflowExecutionCtx, AtmTaskExecutionId, Error
             ),
-            atm_lane_execution_handler:stop(
+            {ok, _} = atm_lane_execution_handler:stop(
                 {AtmLaneIndex, RunNum}, failure, AtmWorkflowExecutionCtx
             ),
             ok;

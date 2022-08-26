@@ -519,7 +519,7 @@ file_attrs_to_json(undefined, #file_attr{
         <<"provider_id">> => ProviderId,
         <<"owner_id">> => OwnerId,
         <<"hardlinks_count">> => utils:undefined_to_null(HardlinksCount),
-        <<"index">> => Index
+        <<"index">> => file_listing:encode_index(Index)
     };
 file_attrs_to_json(ShareId, #file_attr{
     guid = FileGuid,
@@ -531,7 +531,8 @@ file_attrs_to_json(ShareId, #file_attr{
     mtime = Mtime,
     atime = Atime,
     ctime = Ctime,
-    shares = Shares
+    shares = Shares,
+    index = Index
 }) ->
     {ok, ObjectId} = file_id:guid_to_objectid(file_id:guid_to_share_guid(FileGuid, ShareId)),
     IsShareRoot = lists:member(ShareId, Shares),
@@ -557,7 +558,8 @@ file_attrs_to_json(ShareId, #file_attr{
         <<"shares">> => case IsShareRoot of
             true -> [ShareId];
             false -> []
-        end
+        end,
+        <<"index">> => file_listing:encode_index(Index)
     }.
 
 %%--------------------------------------------------------------------

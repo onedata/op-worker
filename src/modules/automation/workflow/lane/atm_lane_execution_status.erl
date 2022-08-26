@@ -125,6 +125,7 @@
 
 -spec status_to_phase(atm_lane_execution:run_status()) ->
     atm_workflow_execution:phase().
+status_to_phase(?RESUMING_STATUS) -> ?WAITING_PHASE;
 status_to_phase(?SCHEDULED_STATUS) -> ?WAITING_PHASE;
 status_to_phase(?PREPARING_STATUS) -> ?WAITING_PHASE;
 status_to_phase(?ENQUEUED_STATUS) -> ?WAITING_PHASE;
