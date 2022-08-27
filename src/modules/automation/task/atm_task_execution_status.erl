@@ -105,7 +105,7 @@ is_running(_) -> false.
 
 
 -spec handle_items_in_processing(atm_task_execution:id(), pos_integer()) ->
-    {ok, atm_task_execution:doc()} | {error, task_stopping} | {error, task_ended}.
+    {ok, atm_task_execution:doc()} | {error, task_already_stopping} | {error, task_already_ended}.
 handle_items_in_processing(AtmTaskExecutionId, ItemCount) ->
     apply_diff(AtmTaskExecutionId, fun
         (AtmTaskExecution = #atm_task_execution{
@@ -126,10 +126,10 @@ handle_items_in_processing(AtmTaskExecutionId, ItemCount) ->
             }};
 
         (#atm_task_execution{status = ?STOPPING_STATUS}) ->
-            {error, task_stopping};
+            {error, task_already_stopping};
 
         (_) ->
-            {error, task_ended}
+            {error, task_already_ended}
     end).
 
 
@@ -184,7 +184,7 @@ handle_items_failed(AtmTaskExecutionId, ItemCount) ->
     atm_task_execution:id(),
     atm_task_execution:stopping_reason()
 ) ->
-    {ok, atm_task_execution:doc()} | {error, task_stopping} | {error, task_ended}.
+    {ok, atm_task_execution:doc()} | {error, task_already_stopping} | {error, task_already_ended}.
 handle_stopping(AtmTaskExecutionId, Reason) ->
     apply_diff(AtmTaskExecutionId, fun
         (AtmTaskExecution = #atm_task_execution{status = ?PENDING_STATUS}) ->
@@ -202,7 +202,7 @@ handle_stopping(AtmTaskExecutionId, Reason) ->
         }) ->
             case should_overwrite_stopping_reason(PrevReason, Reason) of
                 true -> {ok, AtmTaskExecution#atm_task_execution{stopping_reason = Reason}};
-                false -> {error, task_stopping}
+                false -> {error, task_already_stopping}
             end;
 
         (AtmTaskExecution = #atm_task_execution{status = ?PAUSED_STATUS}) when Reason =:= interrupt ->
@@ -218,12 +218,12 @@ handle_stopping(AtmTaskExecutionId, Reason) ->
             }};
 
         (_) ->
-            {error, task_ended}
+            {error, task_already_ended}
     end).
 
 
 -spec handle_ended(atm_task_execution:id()) ->
-    {ok, atm_task_execution:doc()} | {error, task_ended}.
+    {ok, atm_task_execution:doc()} | {error, task_already_ended}.
 handle_ended(AtmTaskExecutionId) ->
     apply_diff(AtmTaskExecutionId, fun
         (AtmTaskExecution = #atm_task_execution{status = ?PENDING_STATUS}) ->
@@ -261,12 +261,12 @@ handle_ended(AtmTaskExecutionId) ->
             }};
 
         (_) ->
-            {error, task_ended}
+            {error, task_already_ended}
     end).
 
 
 -spec handle_resume(atm_task_execution:id()) ->
-    {ok, atm_task_execution:doc()} | {error, task_ended}.
+    {ok, atm_task_execution:doc()} | {error, task_already_ended}.
 handle_resume(AtmTaskExecutionId) ->
     apply_diff(AtmTaskExecutionId, fun
         (AtmTaskExecution = #atm_task_execution{status = Status}) when
@@ -284,7 +284,7 @@ handle_resume(AtmTaskExecutionId) ->
             Status =:= ?FINISHED_STATUS;
             Status =:= ?FAILED_STATUS
         ->
-            {error, task_ended}
+            {error, task_already_ended}
     end).
 
 

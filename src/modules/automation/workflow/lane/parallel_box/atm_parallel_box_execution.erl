@@ -122,7 +122,7 @@ create(AtmLaneExecutionRunCreationArgs, AtmParallelBoxIndex, #atm_parallel_box_s
     {[workflow_engine:parallel_box_spec()], atm_workflow_execution_env:diff()} | no_return().
 initiate_all(AtmWorkflowExecutionCtx, AtmParallelBoxExecutions) ->
     setup_all(AtmParallelBoxExecutions, fun(AtmTaskExecutionId) ->
-        {true, atm_task_execution_handler:initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionId)}
+        {ok, atm_task_execution_handler:initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionId)}
     end).
 
 

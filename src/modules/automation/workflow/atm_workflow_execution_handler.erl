@@ -256,7 +256,7 @@ restart_lane(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneRunSelector
     atm_task_executor:job_batch_id(),
     [automation:item()]
 ) ->
-    ok | {error, running_item_failed} | {error, task_stopping} | {error, task_ended}.
+    ok | {error, running_item_failed} | {error, task_already_stopping} | {error, task_already_ended}.
 run_task_for_item(
     _AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmTaskExecutionId,
     AtmJobBatchId, ItemBatch

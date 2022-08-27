@@ -67,8 +67,8 @@ init(Req0, State = #{type := output}) ->
     {Body, Req1} = read_body(Req0),
     Result = case cowboy_req:header(<<"x-function-status">>, Req1) of
         <<"200">> -> decode_lambda_output(Body);
-        <<"404">> -> {error, dequeued};     %% TODO
-        <<"500">> -> {error, interrupted}   %% TODO
+        <<"404">> -> ?ERROR_ATM_JOB_BATCH_WITHDRAWN(trim_body(Body));
+        <<"500">> -> ?ERROR_ATM_JOB_BATCH_CRASHED(trim_body(Body))
     end,
 
     workflow_engine:report_execution_status_update(

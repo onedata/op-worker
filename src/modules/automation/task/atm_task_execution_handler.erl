@@ -71,23 +71,23 @@ stop(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Reason) ->
             % for other reasons than pause, ongoing jobs are immediately aborted
             atm_task_executor:abort(AtmWorkflowExecutionCtx, AtmTaskExecutor);
 
-        {error, task_stopping} ->
+        {error, task_already_stopping} ->
             ok;
 
-        {error, task_ended} ->
+        {error, task_already_ended} ->
             ok
     end.
 
 
 -spec resume(atm_workflow_execution_ctx:record(), atm_task_execution:id()) ->
-    false | {true, {workflow_engine:task_spec(), atm_workflow_execution_env:diff()}} | no_return().
+    ignored | {ok, {workflow_engine:task_spec(), atm_workflow_execution_env:diff()}} | no_return().
 resume(AtmWorkflowExecutionCtx, AtmTaskExecutionId) ->
     case atm_task_execution_status:handle_resume(AtmTaskExecutionId) of
         {ok, AtmTaskExecutionDoc} ->
-            {true, initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionDoc)};
+            {ok, initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionDoc)};
 
-        {error, task_ended} ->
-            false
+        {error, task_already_ended} ->
+            ignored
     end.
 
 
@@ -117,7 +117,7 @@ set_run_num(RunNum, AtmTaskExecutionId) ->
     atm_task_executor:job_batch_id(),
     [automation:item()]
 ) ->
-    ok | {error, running_item_failed} | {error, task_stopping} | {error, task_ended}.
+    ok | {error, running_item_failed} | {error, task_already_stopping} | {error, task_already_ended}.
 run_job_batch(
     AtmWorkflowExecutionCtx,
     AtmTaskExecutionId,
@@ -215,7 +215,7 @@ handle_ended(AtmTaskExecutionId) ->
     case atm_task_execution_status:handle_ended(AtmTaskExecutionId) of
         {ok, #document{value = AtmTaskExecution}} ->
             freeze_stores(AtmTaskExecution);
-        {error, task_ended} ->
+        {error, task_already_ended} ->
             ok
     end.
 
@@ -390,16 +390,16 @@ handle_job_batch_processing_error(
     AtmWorkflowExecutionCtx,
     AtmTaskExecutionId,
     ItemBatch,
-    {error, dequeued}  %% TODO error
+    ?ERROR_ATM_JOB_BATCH_WITHDRAWN(Reason)
 ) ->
     case atm_task_execution_status:handle_items_withdrawn(AtmTaskExecutionId, length(ItemBatch)) of
         {ok, _} ->
             ok;
         {error, task_not_stopping} ->
-            %% TODO if not happening when stopping - treat it as any other error
+            % items withdrawal caused not by stopping execution is treated as error
             handle_job_batch_processing_error(
                 AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemBatch,
-                {error, interrupted}  %% TODO error
+                ?ERROR_ATM_JOB_BATCH_CRASHED(Reason)
             )
     end;
 
@@ -504,10 +504,10 @@ handle_uncorrelated_results_processing_error(
             ),
             ok;
 
-        {error, task_stopping} ->
+        {error, task_already_stopping} ->
             ok;
 
-        {error, task_ended} ->
+        {error, task_already_ended} ->
             ok
     end.
 

@@ -50,7 +50,7 @@
     pause/2,
     resume/2,
     repeat/4,
-    on_provider_restart/1,
+    report_provider_restart/1,
     purge_all/0
 ]).
 
@@ -219,8 +219,8 @@ repeat(UserCtx, Type, AtmLaneRunSelector, AtmWorkflowExecutionId) ->
 %%    provider shutdown). Such executions will be resumed.
 %% @end
 %%--------------------------------------------------------------------
-on_provider_restart(SpaceId) ->
-    TerminateFun = fun(AtmWorkflowExecutionId) ->
+report_provider_restart(SpaceId) ->
+    CallbackFun = fun(AtmWorkflowExecutionId) ->
         try
             atm_workflow_execution_handler:on_provider_restart(AtmWorkflowExecutionId)
         catch Type:Reason:Stacktrace ->
@@ -228,8 +228,8 @@ on_provider_restart(SpaceId) ->
         end
     end,
 
-    foreach_atm_workflow_execution(TerminateFun, SpaceId, ?WAITING_PHASE),
-    foreach_atm_workflow_execution(TerminateFun, SpaceId, ?ONGOING_PHASE).
+    foreach_atm_workflow_execution(CallbackFun, SpaceId, ?WAITING_PHASE),
+    foreach_atm_workflow_execution(CallbackFun, SpaceId, ?ONGOING_PHASE).
 
 
 %%--------------------------------------------------------------------
