@@ -203,7 +203,7 @@ handle_enqueued(AtmLaneRunSelector, AtmWorkflowExecutionId) ->
     atm_workflow_execution:id(),
     atm_lane_execution:run_stopping_reason()
 ) ->
-    {ok, atm_workflow_execution:doc()} | {error, stopping} | errors:error().
+    {ok, atm_workflow_execution:doc()} | {error, already_stopping} | errors:error().
 handle_stopping(AtmLaneRunSelector, AtmWorkflowExecutionId, Reason) ->
     Diff = fun(AtmWorkflowExecution) ->
         atm_lane_execution:update_run(AtmLaneRunSelector, fun
@@ -218,7 +218,7 @@ handle_stopping(AtmLaneRunSelector, AtmWorkflowExecutionId, Reason) ->
             (#atm_lane_execution_run{status = ?STOPPING_STATUS, stopping_reason = PrevReason} = Run) ->
                 case should_overwrite_stopping_reason(PrevReason, Reason) of
                     true -> {ok, Run#atm_lane_execution_run{stopping_reason = Reason}};
-                    false -> {error, stopping}
+                    false -> {error, already_stopping}
                 end;
 
             (#atm_lane_execution_run{status = Status} = Run) when
@@ -414,14 +414,14 @@ handle_currently_executed_lane_run_ended(AtmWorkflowExecution1 = #atm_workflow_e
     {ok, atm_workflow_execution:record()} | errors:error().
 end_currently_executed_lane_run(AtmWorkflowExecution) ->
     atm_lane_execution:update_run({current, current}, fun
-        (#atm_lane_execution_run{status = Status} = Run) when
+        (#atm_lane_execution_run{status = Status}) when
+            Status =:= ?RESUMING_STATUS;
             Status =:= ?SCHEDULED_STATUS;
             Status =:= ?PREPARING_STATUS;
             Status =:= ?ENQUEUED_STATUS
         ->
-            % Provider must have been restarted as otherwise it is not possible to
-            % transition from waiting phase to ended phase directly
-            {ok, Run#atm_lane_execution_run{status = ?INTERRUPTED_STATUS}};
+            % it is not possible to transition directly to ended/suspended phase
+            ?ERROR_ATM_INVALID_STATUS_TRANSITION(Status, ?INTERRUPTED_STATUS);
 
         (#atm_lane_execution_run{status = ?ACTIVE_STATUS} = Run) ->
             AtmParallelBoxExecutionStatuses = atm_parallel_box_execution:gather_statuses(

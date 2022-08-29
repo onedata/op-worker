@@ -18,17 +18,18 @@
 
 %% API
 -export([
-    initiate/2,
+    start/2,
     stop/3,
     resume/2,
-    teardown/2,
+
     set_run_num/2,
 
     run_job_batch/4,
     process_job_batch_result/4,
     process_streamed_data/3,
 
-    handle_ended/1
+    handle_ended/1,
+    teardown/2
 ]).
 
 
@@ -37,21 +38,14 @@
 %%%===================================================================
 
 
--spec initiate(
+-spec start(
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id() | atm_task_execution:doc()
 ) ->
     {workflow_engine:task_spec(), atm_workflow_execution_env:diff()} | no_return().
-initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
+start(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
     AtmTaskExecutionDoc = ensure_atm_task_execution_doc(AtmTaskExecutionIdOrDoc),
-
-    AtmTaskExecutionSpec = atm_task_executor:initiate(
-        build_atm_task_executor_initiation_ctx(AtmWorkflowExecutionCtx, AtmTaskExecutionDoc),
-        AtmTaskExecutionDoc#document.value#atm_task_execution.executor
-    ),
-    AtmWorkflowExecutionEnvDiff = gen_atm_workflow_execution_env_diff(AtmTaskExecutionDoc),
-
-    {AtmTaskExecutionSpec, AtmWorkflowExecutionEnvDiff}.
+    initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionDoc).
 
 
 -spec stop(
@@ -83,23 +77,13 @@ stop(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Reason) ->
     ignored | {ok, {workflow_engine:task_spec(), atm_workflow_execution_env:diff()}} | no_return().
 resume(AtmWorkflowExecutionCtx, AtmTaskExecutionId) ->
     case atm_task_execution_status:handle_resume(AtmTaskExecutionId) of
-        {ok, AtmTaskExecutionDoc} ->
+        {ok, AtmTaskExecutionDoc = #document{value = AtmTaskExecution}} ->
+            unfreeze_stores(AtmTaskExecution),
             {ok, initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionDoc)};
 
         {error, task_already_ended} ->
             ignored
     end.
-
-
--spec teardown(atm_workflow_execution_ctx:record(), atm_task_execution:id()) ->
-    ok | no_return().
-teardown(AtmWorkflowExecutionCtx, AtmTaskExecutionId) ->
-    AtmTaskExecutionDoc = ensure_atm_task_execution_doc(AtmTaskExecutionId),
-
-    atm_task_executor:teardown(
-        AtmWorkflowExecutionCtx,
-        AtmTaskExecutionDoc#document.value#atm_task_execution.executor
-    ).
 
 
 -spec set_run_num(atm_lane_execution:run_num(), atm_task_execution:id()) ->
@@ -220,6 +204,17 @@ handle_ended(AtmTaskExecutionId) ->
     end.
 
 
+-spec teardown(atm_workflow_execution_ctx:record(), atm_task_execution:id()) ->
+    ok | no_return().
+teardown(AtmWorkflowExecutionCtx, AtmTaskExecutionId) ->
+    AtmTaskExecutionDoc = ensure_atm_task_execution_doc(AtmTaskExecutionId),
+
+    atm_task_executor:teardown(
+        AtmWorkflowExecutionCtx,
+        AtmTaskExecutionDoc#document.value#atm_task_execution.executor
+    ).
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -233,6 +228,19 @@ ensure_atm_task_execution_doc(#document{value = #atm_task_execution{}} = AtmTask
 ensure_atm_task_execution_doc(AtmTaskExecutionId) ->
     {ok, AtmTaskExecutionDoc = #document{}} = atm_task_execution:get(AtmTaskExecutionId),
     AtmTaskExecutionDoc.
+
+
+%% @private
+-spec initiate(atm_workflow_execution_ctx:record(), atm_task_execution:doc()) ->
+    {workflow_engine:task_spec(), atm_workflow_execution_env:diff()} | no_return().
+initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionDoc) ->
+    AtmTaskExecutionSpec = atm_task_executor:initiate(
+        build_atm_task_executor_initiation_ctx(AtmWorkflowExecutionCtx, AtmTaskExecutionDoc),
+        AtmTaskExecutionDoc#document.value#atm_task_execution.executor
+    ),
+    AtmWorkflowExecutionEnvDiff = gen_atm_workflow_execution_env_diff(AtmTaskExecutionDoc),
+
+    {AtmTaskExecutionSpec, AtmWorkflowExecutionEnvDiff}.
 
 
 %% @private
@@ -552,3 +560,13 @@ freeze_stores(#atm_task_execution{
 }) ->
     AtmTSStoreId /= undefined andalso atm_store_api:freeze(AtmTSStoreId),
     atm_store_api:freeze(AtmSystemAuditLogStoreId).
+
+
+%% @private
+-spec unfreeze_stores(atm_task_execution:record()) -> ok.
+unfreeze_stores(#atm_task_execution{
+    system_audit_log_store_id = AtmSystemAuditLogStoreId,
+    time_series_store_id = AtmTSStoreId
+}) ->
+    AtmTSStoreId /= undefined andalso atm_store_api:unfreeze(AtmTSStoreId),
+    atm_store_api:unfreeze(AtmSystemAuditLogStoreId).

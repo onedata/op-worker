@@ -19,7 +19,7 @@
 %% API
 -export([
     create_all/1, create/3,
-    initiate_all/2,
+    start_all/2,
     stop_all/3,
     resume_all/2,
     ensure_all_ended/1,
@@ -36,7 +36,7 @@
 
 -type creation_args() :: #atm_parallel_box_execution_creation_args{}.
 
--type setup_task_fun() :: fun((atm_task_execution:id()) ->
+-type initiate_task_fun() :: fun((atm_task_execution:id()) ->
     ignored |
     {ok, {workflow_engine:task_spec(), atm_workflow_execution_env:diff()}} |
     no_return()
@@ -118,11 +118,11 @@ create(AtmLaneExecutionRunCreationArgs, AtmParallelBoxIndex, #atm_parallel_box_s
     }.
 
 
--spec initiate_all(atm_workflow_execution_ctx:record(), [record()]) ->
+-spec start_all(atm_workflow_execution_ctx:record(), [record()]) ->
     {[workflow_engine:parallel_box_spec()], atm_workflow_execution_env:diff()} | no_return().
-initiate_all(AtmWorkflowExecutionCtx, AtmParallelBoxExecutions) ->
-    setup_all(AtmParallelBoxExecutions, fun(AtmTaskExecutionId) ->
-        {ok, atm_task_execution_handler:initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionId)}
+start_all(AtmWorkflowExecutionCtx, AtmParallelBoxExecutions) ->
+    initiate_all(AtmParallelBoxExecutions, fun(AtmTaskExecutionId) ->
+        {ok, atm_task_execution_handler:start(AtmWorkflowExecutionCtx, AtmTaskExecutionId)}
     end).
 
 
@@ -142,7 +142,7 @@ stop_all(AtmWorkflowExecutionCtx0, Reason, AtmParallelBoxExecutions) ->
 -spec resume_all(atm_workflow_execution_ctx:record(), [record()]) ->
     {[workflow_engine:parallel_box_spec()], atm_workflow_execution_env:diff()} | no_return().
 resume_all(AtmWorkflowExecutionCtx, AtmParallelBoxExecutions) ->
-    setup_all(AtmParallelBoxExecutions, fun(AtmTaskExecutionId) ->
+    initiate_all(AtmParallelBoxExecutions, fun(AtmTaskExecutionId) ->
         atm_task_execution_handler:resume(AtmWorkflowExecutionCtx, AtmTaskExecutionId)
     end).
 
@@ -291,17 +291,17 @@ db_decode(#{
 %%%===================================================================
 
 
--spec setup_all([record()], setup_task_fun()) ->
+-spec initiate_all([record()], initiate_task_fun()) ->
     {[workflow_engine:parallel_box_spec()], atm_workflow_execution_env:diff()} | no_return().
-setup_all(AtmParallelBoxExecutions, SetupTaskFun) ->
+initiate_all(AtmParallelBoxExecutions, InitiateTaskFun) ->
     AtmParallelBoxesInitiationResult = atm_parallel_runner:map(fun(#atm_parallel_box_execution{
         schema_id = AtmParallelBoxSchemaId
     } = AtmParallelBoxExecution) ->
         try
-            setup(AtmParallelBoxExecution, SetupTaskFun)
+            initiate(AtmParallelBoxExecution, InitiateTaskFun)
         catch Type:Reason:Stacktrace ->
             Error = ?atm_examine_error(Type, Reason, Stacktrace),
-            throw(?ERROR_ATM_PARALLEL_BOX_EXECUTION_INITIATION_FAILED(AtmParallelBoxSchemaId, Error))  %% TODO initiate -> setup ??
+            throw(?ERROR_ATM_PARALLEL_BOX_EXECUTION_INITIATION_FAILED(AtmParallelBoxSchemaId, Error))
         end
     end, AtmParallelBoxExecutions),
 
@@ -321,17 +321,17 @@ setup_all(AtmParallelBoxExecutions, SetupTaskFun) ->
 
 
 %% @private
--spec setup(record(), setup_task_fun()) ->
+-spec initiate(record(), initiate_task_fun()) ->
     {workflow_engine:parallel_box_spec(), atm_workflow_execution_env:diff()} | no_return().
-setup(#atm_parallel_box_execution{task_registry = AtmTaskExecutionRegistry}, SetupTaskFun) ->
+initiate(#atm_parallel_box_execution{task_registry = AtmTaskExecutionRegistry}, InitiateTaskFun) ->
     AtmTaskExecutionsInitiationResult = atm_parallel_runner:map(fun(
         {AtmTaskSchemaId, AtmTaskExecutionId}
     ) ->
         try
-            {AtmTaskExecutionId, SetupTaskFun(AtmTaskExecutionId)}
+            {AtmTaskExecutionId, InitiateTaskFun(AtmTaskExecutionId)}
         catch Type:Reason:Stacktrace ->
             Error = ?atm_examine_error(Type, Reason, Stacktrace),
-            throw(?ERROR_ATM_TASK_EXECUTION_INITIATION_FAILED(AtmTaskSchemaId, Error))  %% TODO initiate -> setup ??
+            throw(?ERROR_ATM_TASK_EXECUTION_INITIATION_FAILED(AtmTaskSchemaId, Error))
         end
     end, maps:to_list(AtmTaskExecutionRegistry)),
 

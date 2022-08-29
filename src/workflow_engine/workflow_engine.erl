@@ -85,7 +85,7 @@
 -type parallel_box_spec() :: #{task_id() => task_spec()}.
 -type lane_spec() :: #{
     parallel_boxes := [parallel_box_spec()],
-    iterator := iterator:iterator(),
+    iterator => iterator:iterator(),
     execution_context := execution_context(),
     failure_count_to_cancel => non_neg_integer()
 }.
