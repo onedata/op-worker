@@ -75,8 +75,8 @@ all() ->
     lane_id :: workflow_engine:lane_id(),
     test_execution_manager_option ::
         {workflow_scheduling_test_common:test_manager_task_failure_key(), workflow_engine:task_id()} |
-        {init_cancel_procedure, prepare_lane, workflow_engine:lane_id()} |
-        {init_cancel_procedure, run_task_for_item | report_async_task_result |
+        {cancel_execution, prepare_lane, workflow_engine:lane_id()} |
+        {cancel_execution, run_task_for_item | report_async_task_result |
         process_task_result_for_item, workflow_engine:task_id()} |
         {fail_stream_termination, {workflow_engine:task_id(), handle_task_results_processed_for_all_items}},
     generator_options = #{} :: workflow_test_handler:generator_options()
@@ -90,13 +90,13 @@ all() ->
 sync_workflow_external_cancel_during_execution_of_the_only_task_of_lane_test(Config) ->
     cancel_and_restart_test_base(Config, #test_config{
         lane_id = <<"1">>,
-        test_execution_manager_option = {init_cancel_procedure, run_task_for_item, <<"1_1_1">>}
+        test_execution_manager_option = {cancel_execution, run_task_for_item, <<"1_1_1">>}
     }).
 
 sync_workflow_external_cancel_test(Config) ->
     cancel_and_restart_test_base(Config, #test_config{
         lane_id = <<"3">>,
-        test_execution_manager_option = {init_cancel_procedure, run_task_for_item, <<"3_3_1">>}
+        test_execution_manager_option = {cancel_execution, run_task_for_item, <<"3_3_1">>}
     }).
 
 async_workflow_with_prepare_in_advance_external_cancel_test(Config) ->
@@ -104,7 +104,7 @@ async_workflow_with_prepare_in_advance_external_cancel_test(Config) ->
         task_type = async,
         prepare_in_advance = true,
         lane_id = <<"3">>,
-        test_execution_manager_option = {init_cancel_procedure, run_task_for_item, <<"3_3_2">>}
+        test_execution_manager_option = {cancel_execution, run_task_for_item, <<"3_3_2">>}
     }).
 
 async_workflow_external_cancel_during_report_async_task_result_test(Config) ->
@@ -112,14 +112,14 @@ async_workflow_external_cancel_during_report_async_task_result_test(Config) ->
         task_type = async,
         prepare_in_advance = true,
         lane_id = <<"1">>,
-        test_execution_manager_option = {init_cancel_procedure, report_async_task_result, <<"1_1_1">>}
+        test_execution_manager_option = {cancel_execution, report_async_task_result, <<"1_1_1">>}
     }).
 
 async_workflow_external_cancel_during_result_processing_test(Config) ->
     cancel_and_restart_test_base(Config, #test_config{
         task_type = async,
         lane_id = <<"3">>,
-        test_execution_manager_option = {init_cancel_procedure, process_task_result_for_item, <<"3_2_1">>}
+        test_execution_manager_option = {cancel_execution, process_task_result_for_item, <<"3_2_1">>}
     }).
 
 internal_cancel_caused_by_sync_job_error_test(Config) ->
@@ -153,14 +153,14 @@ internal_cancel_caused_by_result_processing_timeout_test(Config) ->
 external_cancel_during_lane_prepare_test(Config) ->
     cancel_and_restart_test_base(Config, #test_config{
         lane_id = <<"3">>,
-        test_execution_manager_option = {init_cancel_procedure, prepare_lane, <<"3">>}
+        test_execution_manager_option = {cancel_execution, prepare_lane, <<"3">>}
     }).
 
 external_cancel_during_lane_prepare_in_advance_test(Config) ->
     cancel_and_restart_test_base(Config, #test_config{
         prepare_in_advance = true,
         lane_id = <<"2">>,
-        test_execution_manager_option = {init_cancel_procedure, prepare_lane, <<"3">>}
+        test_execution_manager_option = {cancel_execution, prepare_lane, <<"3">>}
     }).
 
 internal_cancel_caused_by_async_job_timeout_before_prepare_in_advance_finish_test(Config) ->
@@ -176,7 +176,7 @@ async_workflow_with_streams_external_cancel(Config) ->
     cancel_and_restart_test_base(Config, #test_config{
         task_type = async,
         lane_id = <<"3">>,
-        test_execution_manager_option = {init_cancel_procedure, run_task_for_item, <<"3_2_1">>},
+        test_execution_manager_option = {cancel_execution, run_task_for_item, <<"3_2_1">>},
         generator_options = ?EXEMPLARY_STREAMS
     }).
 
@@ -185,7 +185,7 @@ async_workflow_with_streams_and_prepare_in_advance_external_cancel(Config) ->
         task_type = async,
         prepare_in_advance = true,
         lane_id = <<"3">>,
-        test_execution_manager_option = {init_cancel_procedure, run_task_for_item, <<"3_2_1">>},
+        test_execution_manager_option = {cancel_execution, run_task_for_item, <<"3_2_1">>},
         generator_options = ?EXEMPLARY_STREAMS
     }).
 
@@ -195,7 +195,7 @@ async_workflow_with_streams_and_long_lasting_prepare_in_advance_external_cancel(
         task_type = async,
         prepare_in_advance = true,
         lane_id = <<"3">>,
-        test_execution_manager_option = {init_cancel_procedure, run_task_for_item, <<"3_2_1">>},
+        test_execution_manager_option = {cancel_execution, run_task_for_item, <<"3_2_1">>},
         generator_options = ?EXEMPLARY_STREAMS
     }).
 
@@ -287,16 +287,16 @@ cancel_and_restart_test_base(Config, #test_config{
 
     [Worker | _] = ?config(op_worker_nodes, Config),
     LaneOptions = case TestExecutionManagerOption of
-        {init_cancel_procedure, _, _} -> #{};
+        {cancel_execution, _, _} -> #{};
         _ -> #{failure_count_to_cancel => 1}
     end,
     #{id := ExecutionId} = WorkflowExecutionSpec = workflow_scheduling_test_common:gen_workflow_execution_spec(
         TaskType, PrepareInAdvance, GeneratorOptions#{lane_options => LaneOptions}),
     {TestExecutionManagerOptionKey, TestExecutionManagerOptionValue} = case TestExecutionManagerOption of
-        {init_cancel_procedure, prepare_lane, LaneIdToCancel} ->
-            {init_cancel_procedure, {prepare_lane, LaneIdToCancel}};
-        {init_cancel_procedure, Function, Item} ->
-            {init_cancel_procedure, {Function, Item, <<"100">>}};
+        {cancel_execution, prepare_lane, LaneIdToCancel} ->
+            {cancel_execution, {prepare_lane, LaneIdToCancel}};
+        {cancel_execution, Function, Item} ->
+            {cancel_execution, {Function, Item, <<"100">>}};
         {_Key, {_TaskId, _Itme}} ->
             TestExecutionManagerOption;
         {Key, TaskId} ->
@@ -310,17 +310,17 @@ cancel_and_restart_test_base(Config, #test_config{
     #{execution_history := ExecutionHistory} = ExtendedHistoryStats =
         workflow_scheduling_test_common:get_task_execution_history(Config),
     case TestExecutionManagerOption of
-        init_cancel_procedure -> ?assertMatch(#{cancel_ans := ok}, ExtendedHistoryStats);
+        cancel_execution -> ?assertMatch(#{cancel_ans := ok}, ExtendedHistoryStats);
         _ -> ok
     end,
     workflow_scheduling_test_common:verify_execution_history_stats(
         ExtendedHistoryStats, TaskType, #{ignore_async_slots_check => true}),
 
     case TestExecutionManagerOption of
-        {init_cancel_procedure, prepare_lane, LaneId} ->
+        {cancel_execution, prepare_lane, LaneId} ->
             workflow_scheduling_test_common:verify_execution_history(
                 WorkflowExecutionSpec, ExecutionHistory, #{expect_lane_finish => LaneId});
-        {init_cancel_procedure, _, _} ->
+        {cancel_execution, _, _} ->
             workflow_scheduling_test_common:verify_execution_history(
                 WorkflowExecutionSpec, ExecutionHistory, #{stop_on_lane => LaneId});
         {FailureType, {FailedTaskId, FailedItem}} ->

@@ -23,7 +23,8 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([init/1, init/2, execute_workflow/2, init_cancel_procedure/1, finish_cancel_procedure/1, cleanup_execution/1]).
+-export([init/1, init/2, execute_workflow/2, cleanup_execution/1,
+    init_cancel_procedure/1, wait_for_pending_callbacks/1, finish_cancel_procedure/1]).
 -export([stream_task_data/3, report_task_data_streaming_concluded/3]).
 -export([report_async_task_result/3, report_async_task_heartbeat/2]).
 %% Framework internal API
@@ -161,9 +162,26 @@ execute_workflow(EngineId, ExecutionSpec) ->
             ok
     end.
 
+
+-spec cleanup_execution(execution_id()) -> ok.
+cleanup_execution(ExecutionId) ->
+    workflow_iterator_snapshot:cleanup(ExecutionId).
+
+
 -spec init_cancel_procedure(execution_id()) -> ok.
 init_cancel_procedure(ExecutionId) ->
     workflow_execution_state:init_cancel(ExecutionId).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Function used to wait until all pending callbacks are finished for execution.
+%% To be used together with init_cancel_procedure to prevent races during cancel procedure.
+%% Warning: Cannot be called from the inside of callback as it results in deadlock.
+%% @end
+%%--------------------------------------------------------------------
+-spec wait_for_pending_callbacks(execution_id()) -> ok.
+wait_for_pending_callbacks(ExecutionId) ->
+    workflow_execution_state:wait_for_pending_callbacks(ExecutionId).
 
 -spec finish_cancel_procedure(execution_id()) -> ok.
 finish_cancel_procedure(ExecutionId) ->
@@ -171,10 +189,6 @@ finish_cancel_procedure(ExecutionId) ->
         {ok, EngineId} -> trigger_job_scheduling(EngineId);
         ?WF_ERROR_CANCEL_NOT_INITIALIZED -> ok
     end.
-
--spec cleanup_execution(execution_id()) -> ok.
-cleanup_execution(ExecutionId) ->
-    workflow_iterator_snapshot:cleanup(ExecutionId).
 
 
 -spec report_async_task_result(execution_id(), workflow_jobs:encoded_job_identifier(), processing_result()) -> ok.

@@ -21,7 +21,8 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([init/6, restart_from_snapshot/6, init_cancel/1, finish_cancel/1, handle_exception/4, cleanup/1, prepare_next_job/1,
+-export([init/6, restart_from_snapshot/6, init_cancel/1, finish_cancel/1, wait_for_pending_callbacks/1,
+    handle_exception/4, cleanup/1, prepare_next_job/1,
     report_execution_status_update/4, report_lane_execution_prepared/5, report_limit_reached_error/2,
     report_new_streamed_task_data/3, report_streamed_task_data_processed/4, mark_all_streamed_task_data_received/3,
     check_timeouts/1, reset_keepalive_timer/2, get_result_processing_data/2]).
@@ -230,13 +231,25 @@ restart_from_snapshot(ExecutionId, EngineId, Handler, Context, InitialLaneId, In
 -spec init_cancel(workflow_engine:execution_id()) -> ok.
 init_cancel(ExecutionId) ->
     {ok, _} = update(ExecutionId, fun handle_execution_cancel_init/1),
-    wait_for_pending_callbacks(ExecutionId).
+    ok.
 
 -spec finish_cancel(workflow_engine:execution_id()) -> {ok, workflow_engine:id()} | ?WF_ERROR_CANCEL_NOT_INITIALIZED.
 finish_cancel(ExecutionId) ->
     case update(ExecutionId, fun handle_execution_cancel_finish/1) of
         {ok, #document{value = #workflow_execution_state{engine_id = EngineId}}} -> {ok, EngineId};
         ?WF_ERROR_CANCEL_NOT_INITIALIZED -> ?WF_ERROR_CANCEL_NOT_INITIALIZED
+    end.
+
+-spec wait_for_pending_callbacks(workflow_engine:execution_id()) -> ok.
+wait_for_pending_callbacks(ExecutionId) ->
+    case datastore_model:get(?CTX, ExecutionId) of
+        {ok, #document{value = #workflow_execution_state{pending_callbacks = []}}} ->
+            ok;
+        {ok, _} ->
+            timer:sleep(200),
+            wait_for_pending_callbacks(ExecutionId);
+        ?ERROR_NOT_FOUND ->
+            ok
     end.
 
 -spec handle_exception(workflow_engine:execution_id(), throw | error | exit, term(), list()) -> ok.
@@ -410,7 +423,7 @@ report_streamed_task_data_processed(ExecutionId, TaskId, CachedTaskDataId, Handl
         execution_status = Status,
         update_report = ?TASK_PROCESSED_REPORT(TaskStatus)
     }} = Doc} =
-        update(ExecutionId, fun(State) when HandlerExecutionResult =:= ok ->
+        update(ExecutionId, fun(State) ->
             % Engine does not analyse result. If stream processing fails, upper layer
             % is responsible for cancelling workflow.
             {ok, mark_task_data_processed(TaskId, CachedTaskDataId, State)}
@@ -482,18 +495,6 @@ get_result_processing_data(ExecutionId, JobIdentifier) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
--spec wait_for_pending_callbacks(workflow_engine:execution_id()) -> ok.
-wait_for_pending_callbacks(ExecutionId) ->
-    case datastore_model:get(?CTX, ExecutionId) of
-        {ok, #document{value = #workflow_execution_state{pending_callbacks = []}}} ->
-            ok;
-        {ok, _} ->
-            timer:sleep(200),
-            wait_for_pending_callbacks(ExecutionId);
-        ?ERROR_NOT_FOUND ->
-            ok
-    end.
 
 -spec finish_lane_preparation(
     workflow_handler:handler(),

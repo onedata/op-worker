@@ -180,17 +180,37 @@ reply_to_handler_mock(Sender, ManagerAcc, Options, #handler_call{
             Sender ! {sleep, Value},
             ManagerAcc;
         {process_streamed_task_data, #{fail_task_data_processing := {TaskId, Item}}} ->
+            rpc:call(node(Sender), workflow_engine, init_cancel_procedure, [ExecutionId]),
+            rpc:call(node(Sender), workflow_engine, finish_cancel_procedure, [ExecutionId]),
             Sender ! fail_call,
             ManagerAcc;
         {handle_task_results_processed_for_all_items, #{fail_stream_termination := {TaskId, Item}}} ->
+            rpc:call(node(Sender), workflow_engine, init_cancel_procedure, [ExecutionId]),
+            rpc:call(node(Sender), workflow_engine, finish_cancel_procedure, [ExecutionId]),
             Sender ! fail_call,
             ManagerAcc;
         {Fun, #{init_cancel_procedure := {Fun, TaskId, Item}}} ->
             CancelAns = rpc:call(node(Sender), workflow_engine, init_cancel_procedure, [ExecutionId]),
             Sender ! history_saved,
             ManagerAcc#{cancel_ans => CancelAns};
+        {Fun, #{cancel_execution := {Fun, TaskId, Item}}} ->
+            CancelAns = rpc:call(node(Sender), workflow_engine, init_cancel_procedure, [ExecutionId]),
+            spawn(fun() ->
+                timer:sleep(rand:uniform(5000)),
+                rpc:call(node(Sender), workflow_engine, finish_cancel_procedure, [ExecutionId])
+            end),
+            Sender ! history_saved,
+            ManagerAcc#{cancel_ans => CancelAns};
         {Fun, #{init_cancel_procedure := {Fun, LaneId}}} ->
             CancelAns = rpc:call(node(Sender), workflow_engine, init_cancel_procedure, [ExecutionId]),
+            Sender ! history_saved,
+            ManagerAcc#{cancel_ans => CancelAns};
+        {Fun, #{cancel_execution := {Fun, LaneId}}} ->
+            CancelAns = rpc:call(node(Sender), workflow_engine, init_cancel_procedure, [ExecutionId]),
+            spawn(fun() ->
+                timer:sleep(rand:uniform(5000)),
+                rpc:call(node(Sender), workflow_engine, finish_cancel_procedure, [ExecutionId])
+                  end),
             Sender ! history_saved,
             ManagerAcc#{cancel_ans => CancelAns};
         {handle_lane_execution_ended, #{fail_execution_ended_handler := LaneId}} ->
