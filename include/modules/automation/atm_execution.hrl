@@ -173,6 +173,13 @@
 -record(atm_openfaas_result_streamer_finalization_signal, {
 }).
 
+% Record expressing OpenFaaS service configuration
+-record(atm_openfaas_config, {
+    url :: binary(),
+    basic_auth :: binary(),
+    function_namespace :: binary(),
+    activity_feed_secret :: binary()
+}).
 
 %% Atm data types related macros
 

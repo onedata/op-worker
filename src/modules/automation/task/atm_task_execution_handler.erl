@@ -115,7 +115,6 @@ run_job_batch(
 
             try
                 atm_task_executor:run(
-                    AtmRunJobBatchCtx,
                     build_lambda_input(AtmJobBatchId, AtmRunJobBatchCtx, ItemBatch, AtmTaskExecution),
                     AtmTaskExecution#atm_task_execution.executor
                 )
