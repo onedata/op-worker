@@ -25,7 +25,7 @@
 
 
 %% API
--export([is_openfaas_available/0, assert_openfaas_available/0, get_pod_status_registry_id/1]).
+-export([get_pod_status_registry_id/1]).
 
 %% atm_task_executor callbacks
 -export([
@@ -76,22 +76,6 @@
 %%%===================================================================
 
 
--spec is_openfaas_available() -> boolean().
-is_openfaas_available() ->
-    case check_openfaas_availability() of
-        ok -> true;
-        {error, _} -> false
-    end.
-
-
--spec assert_openfaas_available() -> ok | no_return().
-assert_openfaas_available() ->
-    case check_openfaas_availability() of
-        ok -> ok;
-        {error, _} = Error -> throw(Error)
-    end.
-
-
 -spec get_pod_status_registry_id(record()) -> atm_openfaas_function_pod_status_registry:id().
 get_pod_status_registry_id(#atm_openfaas_task_executor{pod_status_registry_id = PodStatusRegistryId}) ->
     PodStatusRegistryId.
@@ -110,7 +94,7 @@ get_pod_status_registry_id(#atm_openfaas_task_executor{pod_status_registry_id = 
 ) ->
     record() | no_return().
 create(AtmWorkflowExecutionCtx, _AtmLaneIndex, _AtmTaskSchema, AtmLambdaRevision) ->
-    assert_openfaas_available(),
+    atm_openfaas_monitor:assert_openfaas_available(),
 
     FunctionName = build_function_name(AtmWorkflowExecutionCtx, AtmLambdaRevision),
     {ok, PodStatusRegistryId} = atm_openfaas_function_pod_status_registry:create_for_function(FunctionName),
@@ -217,34 +201,6 @@ db_decode(#{
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-
-%% @private
--spec check_openfaas_availability() -> ok | {error, term()}.
-check_openfaas_availability() ->
-    {ok, Result} = node_cache:acquire(?FUNCTION_NAME, fun() ->
-        HealthcheckResult = try
-            OpenfaasConfig = atm_openfaas_config:get(),
-
-            % /healthz is proper Openfaas endpoint defined in their swagger:
-            % https://raw.githubusercontent.com/openfaas/faas/master/api-docs/swagger.yml
-            Endpoint = atm_openfaas_config:get_openfaas_endpoint(OpenfaasConfig, <<"/healthz">>),
-            Headers = atm_openfaas_config:get_basic_auth_header(OpenfaasConfig),
-
-            case http_client:get(Endpoint, Headers) of
-                {ok, ?HTTP_200_OK, _RespHeaders, _RespBody} ->
-                    ok;
-                {ok, ?HTTP_500_INTERNAL_SERVER_ERROR, _RespHeaders, ErrorReason} ->
-                    ?ERROR_ATM_OPENFAAS_QUERY_FAILED(ErrorReason);
-                _ ->
-                    ?ERROR_ATM_OPENFAAS_UNREACHABLE
-            end
-        catch Type:Reason:Stacktrace ->
-            ?atm_examine_error(Type, Reason, Stacktrace)
-        end,
-        {ok, HealthcheckResult, ?HEALTHCHECK_CACHE_TTL_SECONDS}
-    end),
-    Result.
 
 
 %% @private
