@@ -18,7 +18,7 @@
 -include_lib("ctool/include/http/codes.hrl").
 
 %% API
--export([spec/0, whereis/0, start_link/0]).
+-export([spec/0, start_link/0]).
 -export([is_openfaas_available/0, assert_openfaas_available/0]).
 
 %% gen_server callbacks
@@ -46,11 +46,6 @@ spec() -> #{
     type => worker,
     modules => [?MODULE]
 }.
-
-
--spec whereis() -> pid() | undefined.
-whereis() ->
-    global:whereis_name(?MODULE).
 
 
 -spec start_link() -> {ok, pid()} | {error, term()}.
