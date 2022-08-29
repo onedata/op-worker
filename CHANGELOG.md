@@ -4,6 +4,8 @@ Release notes for project op-worker
 CHANGELOG
 ---------
 
+### 20.02.18
+
 ### 20.02.17
 
 -   **VFS-9415** Improved display of sensitive storage config details in
