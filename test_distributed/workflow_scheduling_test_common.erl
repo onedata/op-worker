@@ -155,13 +155,13 @@ reply_to_handler_mock(Sender, ManagerAcc, Options, #handler_call{
         {run_task_for_item, #{fail_job := {TaskId, Item}}} ->
             Sender ! fail_call,
             ManagerAcc;
-        {handle_callback, #{timeout := {TaskId, Item}}} ->
+        {report_async_task_result, #{timeout := {TaskId, Item}}} ->
             Sender ! fail_call,
             ManagerAcc;
-        {handle_callback, #{delay_call := {TaskId, Item}}} ->
+        {report_async_task_result, #{delay_call := {TaskId, Item}}} ->
             Sender ! {delay_call, 0},
             ManagerAcc;
-        {handle_callback, #{delay_call := {TaskId, Item, InitialSleepTime}}} ->
+        {report_async_task_result, #{delay_call := {TaskId, Item, InitialSleepTime}}} ->
             Sender ! {delay_call, InitialSleepTime},
             ManagerAcc;
         {process_task_result_for_item, #{fail_result_processing := {TaskId, Item}}} ->
@@ -440,15 +440,27 @@ mock_handlers(Workers, Manager) ->
             )
     end),
 
+    test_utils:mock_expect(Workers, workflow_test_handler, handle_exception, fun
+        (ExecutionId, Context, ErrorType, Reason, Stacktrace) ->
+            MockTemplate(
+                #handler_call{
+                    function = handle_exception,
+                    execution_id = ExecutionId,
+                    context =  Context
+                },
+                [ExecutionId, Context, ErrorType, Reason, Stacktrace]
+            )
+    end),
+
     % Warning: do not use MockTemplate as meck:passthrough does not work when 2 mocks work within one process
-    % (it is possible for handle_callback mock)
+    % (it is possible for report_async_task_result mock)
     test_utils:mock_expect(Workers, workflow_engine, report_async_task_result, fun(ExecutionId, EncodedJobIdentifier, Result) ->
         JobIdentifier = workflow_jobs:decode_job_identifier(EncodedJobIdentifier),
         {_, _, TaskId} = workflow_execution_state:get_result_processing_data(ExecutionId, JobIdentifier),
         Item = workflow_cached_item:get_item(workflow_execution_state:get_item_id(ExecutionId, JobIdentifier)),
         #{lane_id := LaneId} = workflow_execution_state:get_current_lane_context(ExecutionId),
         Manager ! {handler_call, self(), #handler_call{
-            function = handle_callback,
+            function = report_async_task_result,
             execution_id = ExecutionId,
             lane_id = LaneId,
             task_id = TaskId,
@@ -585,6 +597,7 @@ verify_lanes_execution_history([{TaskIds, ExpectedItems, LaneExecutionContext} |
         #{restart_lane := LaneId} -> skip_items_verification;
         #{expect_empty_items_list := LaneId} -> expect_empty_items_list;
         #{expect_lane_finish := LaneId} -> expect_lane_finish;
+        #{expect_exception := LaneId} -> expect_exception;
         _ -> verify_all
     end,
 
@@ -661,6 +674,20 @@ verify_lanes_execution_history([{TaskIds, ExpectedItems, LaneExecutionContext} |
                 #handler_call{function = handle_lane_execution_ended, lane_id = LaneId, result = true},
                 #handler_call{function = handle_workflow_execution_ended}
             ], GatheredForLane2);
+        expect_exception ->
+            Filtered = lists:filter(fun
+                (#handler_call{lane_id = Id, function = Function}) when Id =:= LaneId ->
+                    Function =/= run_task_for_item andalso Function =/= report_async_task_result andalso
+                        Function =/= process_streamed_task_data;
+                (_) ->
+                    true
+            end, GatheredForLane),
+            ?assertMatch([#handler_call{function = handle_exception}], Filtered),
+            [FirstGatheredForLane | _] = GatheredForLane,
+            FilteredGathered = lists:dropwhile(fun(HandlerCall) ->
+                HandlerCall =/= FirstGatheredForLane
+            end, Gathered),
+            ?assertEqual([], FilteredGathered -- GatheredForLane);
         expect_empty_items_list ->
             ?assertMatch([#handler_call{function = handle_workflow_execution_ended}], GatheredForLane)
     end.
@@ -799,8 +826,8 @@ verify_item_execution_history(Item, [CallsForBox | ExpectedCalls], [HandlerCall 
 
     NewCallsForBox = case {WorkflowType, Function} of
         {async, run_task_for_item} when Ignore =/= ignore_callback_call ->
-            sets:add_element({handle_callback, TaskId}, CallsForBox);
-        {async, handle_callback} ->
+            sets:add_element({report_async_task_result, TaskId}, CallsForBox);
+        {async, report_async_task_result} ->
             sets:add_element({process_task_result_for_item, TaskId}, CallsForBox);
         _ -> CallsForBox
     end,

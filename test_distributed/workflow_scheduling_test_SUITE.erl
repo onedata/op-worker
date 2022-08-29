@@ -471,11 +471,13 @@ failure_test_base(Config, #test_config{
 
 iteration_failure_test_base(Config, #test_config{
     verify_statistics_options = VerifyStatsOptions,
-    generator_options = GeneratorOptions
+    generator_options = GeneratorOptions,
+    verify_history_options = VerifyHistoryOptions
 } = BasicConfig, LaneId, ItemNum) ->
     single_execution_test_base(Config, BasicConfig#test_config{
         verify_statistics_options = VerifyStatsOptions#{ignore_max_slots_check => true},
-        generator_options = GeneratorOptions#{fail_iteration => ItemNum, finish_on_lane => LaneId}
+        generator_options = GeneratorOptions#{fail_iteration => ItemNum, finish_on_lane => LaneId},
+        verify_history_options = VerifyHistoryOptions#{expect_exception => LaneId}
     }).
 
 lane_failure_test_base(Config, #test_config{

@@ -24,7 +24,7 @@
     sync_workflow_external_cancel_during_execution_of_the_only_task_of_lane_test/1,
     sync_workflow_external_cancel_test/1,
     async_workflow_with_prepare_in_advance_external_cancel_test/1,
-    async_workflow_external_cancel_during_handle_callback_test/1,
+    async_workflow_external_cancel_during_report_async_task_result_test/1,
     async_workflow_external_cancel_during_result_processing_test/1,
     internal_cancel_caused_by_sync_job_error_test/1,
     internal_cancel_caused_by_async_job_error_test/1,
@@ -49,7 +49,7 @@ all() ->
         sync_workflow_external_cancel_during_execution_of_the_only_task_of_lane_test,
         sync_workflow_external_cancel_test,
         async_workflow_with_prepare_in_advance_external_cancel_test,
-        async_workflow_external_cancel_during_handle_callback_test,
+        async_workflow_external_cancel_during_report_async_task_result_test,
         async_workflow_external_cancel_during_result_processing_test,
         internal_cancel_caused_by_sync_job_error_test,
         internal_cancel_caused_by_async_job_error_test,
@@ -76,7 +76,7 @@ all() ->
     test_execution_manager_option ::
         {workflow_scheduling_test_common:test_manager_task_failure_key(), workflow_engine:task_id()} |
         {init_cancel_procedure, prepare_lane, workflow_engine:lane_id()} |
-        {init_cancel_procedure, run_task_for_item | handle_callback |
+        {init_cancel_procedure, run_task_for_item | report_async_task_result |
         process_task_result_for_item, workflow_engine:task_id()} |
         {fail_stream_termination, {workflow_engine:task_id(), handle_task_results_processed_for_all_items}},
     generator_options = #{} :: workflow_test_handler:generator_options()
@@ -107,12 +107,12 @@ async_workflow_with_prepare_in_advance_external_cancel_test(Config) ->
         test_execution_manager_option = {init_cancel_procedure, run_task_for_item, <<"3_3_2">>}
     }).
 
-async_workflow_external_cancel_during_handle_callback_test(Config) ->
+async_workflow_external_cancel_during_report_async_task_result_test(Config) ->
     cancel_and_restart_test_base(Config, #test_config{
         task_type = async,
         prepare_in_advance = true,
         lane_id = <<"1">>,
-        test_execution_manager_option = {init_cancel_procedure, handle_callback, <<"1_1_1">>}
+        test_execution_manager_option = {init_cancel_procedure, report_async_task_result, <<"1_1_1">>}
     }).
 
 async_workflow_external_cancel_during_result_processing_test(Config) ->

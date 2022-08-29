@@ -69,7 +69,10 @@
 -define(EXECUTING, executing).
 -define(EXECUTION_CANCELLED, execution_cancelled).
 -define(EXECUTION_ENDED, execution_ended).
--define(WAITING_FOR_NEXT_LANE_PREPARATION_END, waiting_for_next_lane_preparation_end).
+-define(EXECUTION_ENDED(HasExceptionAppeared), {execution_ended, HasExceptionAppeared}).
+-define(EXECUTION_ENDED_WITH_EXCEPTION, execution_ended_with_exception).
+-define(WAITING_FOR_NEXT_LANE_PREPARATION_END(HasExceptionAppeared),
+    {waiting_for_next_lane_preparation_end, HasExceptionAppeared}).
 
 %%%===================================================================
 %%% Macros used to describe processing of parallel box's jobs
@@ -101,7 +104,7 @@
 -record(execution_ended, {
     handler :: workflow_handler:handler(),
     context :: workflow_engine:execution_context(),
-    reason = ?EXECUTION_ENDED :: ?EXECUTION_ENDED | ?EXECUTION_CANCELLED,
+    reason = ?EXECUTION_ENDED :: ?EXECUTION_ENDED | ?EXECUTION_CANCELLED | ?EXECUTION_ENDED_WITH_EXCEPTION,
     callbacks_data :: {workflow_engine:lane_id(), workflow_engine:execution_context(), [workflow_engine:task_id()]} |
         undefined
 }).
