@@ -21,7 +21,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([init/6, restart_from_snapshot/6, init_cancel/1, finish_cancel/1, cleanup/1, prepare_next_job/1,
+-export([init/6, restart_from_snapshot/6, init_cancel/1, finish_cancel/1, handle_exception/4, cleanup/1, prepare_next_job/1,
     report_execution_status_update/4, report_lane_execution_prepared/5, report_limit_reached_error/2,
     report_new_streamed_task_data/3, report_streamed_task_data_processed/4, mark_all_streamed_task_data_received/3,
     check_timeouts/1, reset_keepalive_timer/2, get_result_processing_data/2]).
@@ -49,6 +49,8 @@
 
 
 -record(execution_cancelled, {
+    cancel_type = on_lane_execution :: on_lane_execution | on_lane_prepare,
+    has_exception_appeared = false :: boolean(),
     % Calls count is incremented when cancel is initialized and decremented when it is
     % marked as finished. Workflow can be finished only when calls count is decremented to 0
     call_count :: non_neg_integer(),
@@ -57,7 +59,7 @@
     callbacks_to_execute = [] :: [callback_to_exectute()]
 }).
 -define(EXECUTION_CANCELLED(CallCount), #execution_cancelled{call_count = CallCount}).
--define(PREPARATION_CANCELLED(CallCount), {preparation_cancelled, CallCount}).
+-define(PREPARATION_CANCELLED(CallCount), #execution_cancelled{cancel_type = on_lane_prepare, call_count = CallCount}).
 
 
 % Macros and records used to provide additional information about document update procedure
@@ -110,8 +112,7 @@
 -type doc() :: datastore_doc:doc(state()).
 
 -type execution_status() :: ?NOT_PREPARED | ?PREPARING | ?PREPARED_IN_ADVANCE | ?PREPARATION_FAILED |
-    ?PREPARATION_CANCELLED(non_neg_integer()) | ?EXECUTING | #execution_cancelled{} | ?EXECUTION_ENDED |
-    ?WAITING_FOR_NEXT_LANE_PREPARATION_END.
+    ?EXECUTING | #execution_cancelled{} | ?EXECUTION_ENDED | ?WAITING_FOR_NEXT_LANE_PREPARATION_END.
 -type next_lane_preparation_status() :: ?NOT_PREPARED | ?PREPARING | ?PREPARED_IN_ADVANCE | ?PREPARATION_FAILED.
 % TODO VFS-7919 better type name
 -type handler_execution_or_cached_async_result() ::
@@ -145,8 +146,10 @@
 -define(CALLBACKS_ON_CANCEL_SELECTOR, callbacks_on_cancel).
 -define(CALLBACKS_ON_STREAMS_CANCEL_SELECTOR, callbacks_on_stream_cancel).
 -define(CALLBACKS_ON_EMPTY_LANE_SELECTOR, callbacks_on_empty_lane).
+-define(CALLBACK_ON_EXCEPTION, callback_on_exception).
 -type callback_selector() :: workflow_jobs:job_identifier() | workflow_engine:task_id() | workflow_cached_item:id() |
-    ?CALLBACKS_ON_CANCEL_SELECTOR | ?CALLBACKS_ON_STREAMS_CANCEL_SELECTOR | ?CALLBACKS_ON_EMPTY_LANE_SELECTOR.
+    ?CALLBACKS_ON_CANCEL_SELECTOR | ?CALLBACKS_ON_STREAMS_CANCEL_SELECTOR | ?CALLBACKS_ON_EMPTY_LANE_SELECTOR |
+    ?CALLBACK_ON_EXCEPTION.
 -type callback_to_exectute() :: {function(), callback_selector(), Args:: list()}.
 
 -export_type([index/0, iteration_status/0, current_lane/0, next_lane/0, execution_status/0,
@@ -222,17 +225,21 @@ restart_from_snapshot(ExecutionId, EngineId, Handler, Context, InitialLaneId, In
 
 -spec init_cancel(workflow_engine:execution_id()) -> ok.
 init_cancel(ExecutionId) ->
-    {ok, _} = update(ExecutionId, fun(State) ->
-        handle_execution_cancel_init(State)
-    end),
-    ok.
+    {ok, _} = update(ExecutionId, fun handle_execution_cancel_init/1),
+    wait_for_pending_callbacks(ExecutionId).
 
 -spec finish_cancel(workflow_engine:execution_id()) -> {ok, workflow_engine:id()} | ?WF_ERROR_CANCEL_NOT_INITIALIZED.
 finish_cancel(ExecutionId) ->
-    case update(ExecutionId, fun(State) -> handle_execution_cancel_finish(State) end) of
+    case update(ExecutionId, fun handle_execution_cancel_finish/1) of
         {ok, #document{value = #workflow_execution_state{engine_id = EngineId}}} -> {ok, EngineId};
         ?WF_ERROR_CANCEL_NOT_INITIALIZED -> ?WF_ERROR_CANCEL_NOT_INITIALIZED
     end.
+
+-spec handle_exception(workflow_engine:execution_id(), throw | error | exit, term(), list()) -> ok.
+handle_exception(ExecutionId, ErrorType, Reason, Stacktrace) ->
+    {ok, _} = update(ExecutionId, fun(State) -> mark_exception_appeared(State, ErrorType, Reason, Stacktrace) end),
+    ok.
+
 
 -spec cleanup(workflow_engine:execution_id()) -> ok.
 cleanup(ExecutionId) ->
@@ -472,6 +479,18 @@ get_result_processing_data(ExecutionId, JobIdentifier) ->
 %%% Internal functions
 %%%===================================================================
 
+-spec wait_for_pending_callbacks(workflow_engine:execution_id()) -> ok.
+wait_for_pending_callbacks(ExecutionId) ->
+    case datastore_model:get(?CTX, ExecutionId) of
+        {ok, #document{value = #workflow_execution_state{pending_callbacks = []}}} ->
+            ok;
+        {ok, _} ->
+            timer:sleep(200),
+            wait_for_pending_callbacks(ExecutionId);
+        ?ERROR_NOT_FOUND ->
+            ok
+    end.
+
 -spec finish_lane_preparation(
     workflow_handler:handler(),
     workflow_engine:execution_id(),
@@ -567,8 +586,8 @@ get_task_ids(BoxesMap) ->
     ) | ?ERROR_NOT_FOUND.
 prepare_next_job_for_current_lane(ExecutionId) ->
     case update(ExecutionId, fun prepare_next_waiting_job/1) of
-        {ok, #document{value = State}} ->
-            handle_state_update_after_job_preparation(ExecutionId, State);
+        {ok, Doc} ->
+            handle_state_update_after_job_preparation(ExecutionId, Doc);
         ?WF_ERROR_NO_CACHED_ITEMS(LaneIndex, ItemIndex, IterationStep, Handler, Context) ->
             prepare_next_job_using_iterator(ExecutionId, ItemIndex, IterationStep, LaneIndex, Handler, Context);
         {error, _} = Error ->
@@ -600,8 +619,8 @@ prepare_next_job_using_iterator(ExecutionId, ItemIndex, CurrentIterationStep, La
     case update(ExecutionId, fun(State) ->
         handle_next_iteration_step(State, LaneIndex, ItemIndex, NextIterationStep, ParallelBoxToStart)
     end) of
-        {ok, #document{value = State}} ->
-            handle_state_update_after_job_preparation(ExecutionId, State);
+        {ok, Doc} ->
+            handle_state_update_after_job_preparation(ExecutionId, Doc);
         ?WF_ERROR_LANE_CHANGED ->
             maybe_delete_prefetched_iteration_step(NextIterationStep),
             prepare_next_job_for_current_lane(ExecutionId);
@@ -614,7 +633,7 @@ prepare_next_job_using_iterator(ExecutionId, ItemIndex, CurrentIterationStep, La
     end.
 
 
--spec handle_state_update_after_job_preparation(workflow_engine:execution_id(), state()) ->
+-spec handle_state_update_after_job_preparation(workflow_engine:execution_id(), doc()) ->
     {ok, workflow_engine:execution_spec()} | no_items_error() |
     ?PREPARE_LANE_EXECUTION(
         workflow_handler:handler(), workflow_engine:execution_context(),
@@ -625,7 +644,7 @@ prepare_next_job_using_iterator(ExecutionId, ItemIndex, CurrentIterationStep, La
     ) | ?EXECUTION_CANCELLED_WITH_OPEN_STREAMS_REPORT(
         workflow_handler:handler(), workflow_engine:execution_context(), [workflow_engine:task_id()]
     ) | ?ERROR_NOT_FOUND.
-handle_state_update_after_job_preparation(_ExecutionId, #workflow_execution_state{
+handle_state_update_after_job_preparation(_ExecutionId, #document{value = #workflow_execution_state{
     update_report = #job_prepared_report{
         job_identifier = JobIdentifier,
         task_id = TaskId,
@@ -634,7 +653,7 @@ handle_state_update_after_job_preparation(_ExecutionId, #workflow_execution_stat
     },
     handler = Handler,
     current_lane = #current_lane{execution_context = LaneContext}
-}) ->
+}}) ->
     {ok, #execution_spec{
         handler = Handler,
         context = LaneContext,
@@ -643,26 +662,26 @@ handle_state_update_after_job_preparation(_ExecutionId, #workflow_execution_stat
         subject_id = SubjectId,
         job_identifier = JobIdentifier
     }};
-handle_state_update_after_job_preparation(_ExecutionId, #workflow_execution_state{
+handle_state_update_after_job_preparation(_ExecutionId, #document{value = #workflow_execution_state{
     update_report = ?LANE_DESIGNATED_FOR_PREPARATION,
     handler = Handler,
     initial_context = ExecutionContext,
-    current_lane = #current_lane{id = LaneId}}
-) ->
+    current_lane = #current_lane{id = LaneId}
+}}) ->
     ?PREPARE_LANE_EXECUTION(Handler, ExecutionContext, LaneId, ?PREPARE_CURRENT);
-handle_state_update_after_job_preparation(_ExecutionId, #workflow_execution_state{
+handle_state_update_after_job_preparation(_ExecutionId, #document{value = #workflow_execution_state{
     update_report = ?LANE_DESIGNATED_FOR_PREPARATION_IN_ADVANCE,
     handler = Handler,
     initial_context = ExecutionContext,
     next_lane = #next_lane{id = LaneId}
-}) ->
+}}) ->
     ?PREPARE_LANE_EXECUTION(Handler, ExecutionContext, LaneId, ?PREPARE_IN_ADVANCE);
-handle_state_update_after_job_preparation(ExecutionId, #workflow_execution_state{
+handle_state_update_after_job_preparation(ExecutionId, #document{value = #workflow_execution_state{
     update_report = ?LANE_READY_TO_BE_FINISHED_REPORT(FinishedLaneId, LaneContext),
     handler = Handler,
     initial_context = ExecutionContext,
     next_lane_preparation_status = NextLaneStatus
-}) ->
+}}) ->
     case workflow_engine:call_handler(ExecutionId, LaneContext, Handler, handle_lane_execution_ended, [FinishedLaneId]) of
         ?CONTINUE(NextLaneId, LaneIdToBePreparedInAdvance) ->
             case update(ExecutionId, fun(State) -> set_current_lane(State, NextLaneId, LaneIdToBePreparedInAdvance) end) of
@@ -698,14 +717,14 @@ handle_state_update_after_job_preparation(ExecutionId, #workflow_execution_state
         _ ->
             ?WF_ERROR_EXECUTION_ENDED(#execution_ended{handler = Handler, context = ExecutionContext})
     end;
-handle_state_update_after_job_preparation(_ExecutionId, #workflow_execution_state{
+handle_state_update_after_job_preparation(_ExecutionId, #document{value = #workflow_execution_state{
     update_report = ?EXECUTION_CANCELLED_REPORT(ItemIdsToDelete, TaskIdsToFinish),
     current_lane = #current_lane{id = LaneId, execution_context = LaneContext},
     execution_status = ExecutionStatus,
     handler = Handler,
     initial_context = ExecutionContext,
     prefetched_iteration_step = PrefetchedIterationStep
-}) ->
+}}) ->
     lists:foreach(fun workflow_cached_item:delete/1, ItemIdsToDelete),
     case PrefetchedIterationStep of
         undefined -> ok;
@@ -720,29 +739,29 @@ handle_state_update_after_job_preparation(_ExecutionId, #workflow_execution_stat
             ?WF_ERROR_EXECUTION_ENDED(#execution_ended{handler = Handler, context = ExecutionContext,
                 reason = ?EXECUTION_CANCELLED, callbacks_data = {LaneId, LaneContext, TaskIdsToFinish}})
     end;
-handle_state_update_after_job_preparation(_ExecutionId, #workflow_execution_state{
+handle_state_update_after_job_preparation(_ExecutionId, #document{value = #workflow_execution_state{
     update_report = ?EXECUTION_CANCELLED_WITH_OPEN_STREAMS_REPORT(TaskIdsWithStreamsToFinish),
     current_lane = #current_lane{execution_context = LaneContext},
     handler = Handler
-}) ->
+}}) ->
     ?EXECUTION_CANCELLED_WITH_OPEN_STREAMS_REPORT(LaneContext, Handler, TaskIdsWithStreamsToFinish);
-handle_state_update_after_job_preparation(ExecutionId, Doc = #workflow_execution_state{
+handle_state_update_after_job_preparation(ExecutionId, Doc = #document{value = #workflow_execution_state{
     update_report = ?EXECUTE_DELAYED_CALLBACKS(Callbacks)
-}) ->
+}}) ->
     lists:foreach(fun({CallbackFun, CallbackSelector, CallbackArgs}) ->
         apply(CallbackFun, [Doc, CallbackSelector | CallbackArgs])
     end, Callbacks),
     prepare_next_job_for_current_lane(ExecutionId);
-handle_state_update_after_job_preparation(_ExecutionId, #workflow_execution_state{
+handle_state_update_after_job_preparation(_ExecutionId, #document{value = #workflow_execution_state{
     update_report = {error, _} = UpdateReport
-}) ->
+}}) ->
     UpdateReport.
 
 -spec maybe_report_item_error(doc(), workflow_cached_item:id() | undefined) -> ok.
 maybe_report_item_error(_Doc, undefined = _ItemIdToReportError) ->
     ok;
 maybe_report_item_error(
-    #document{value = #workflow_execution_state{execution_status = #execution_cancelled{call_count = Counter}}}, _
+    #document{value = #workflow_execution_state{execution_status = ?EXECUTION_CANCELLED(Counter)}}, _
 ) when Counter > 0 ->
     ok;
 maybe_report_item_error(#document{key = ExecutionId, value = #workflow_execution_state{
@@ -758,7 +777,7 @@ maybe_report_item_error(#document{key = ExecutionId, value = #workflow_execution
 maybe_notify_task_execution_ended(_Doc, _JobIdentifier, ongoing) ->
     ok;
 maybe_notify_task_execution_ended(
-    #document{value = #workflow_execution_state{execution_status = #execution_cancelled{call_count = Counter}}}, _, _
+    #document{value = #workflow_execution_state{execution_status = ?EXECUTION_CANCELLED(Counter)}}, _, _
 ) when Counter > 0 ->
     ok;
 maybe_notify_task_execution_ended(#document{key = ExecutionId, value = #workflow_execution_state{
@@ -779,9 +798,9 @@ maybe_notify_task_execution_ended(#document{value = #workflow_execution_state{
 handle_task_execution_ended(#document{key = ExecutionId, value = #workflow_execution_state{
     handler = Handler,
     current_lane = #current_lane{execution_context = Context}
-}}, CallbackId, TaskId) ->
+}}, CallbackSelector, TaskId) ->
     workflow_engine:call_handler(ExecutionId, Context, Handler, handle_task_execution_ended, [TaskId]),
-    {ok, _} = update(ExecutionId, fun(State) -> remove_pending_callback(State, CallbackId) end),
+    {ok, _} = update(ExecutionId, fun(State) -> remove_pending_callback(State, CallbackSelector) end),
     ok.
 
 -spec update(workflow_engine:execution_id(), update_fun()) -> {ok, doc()} | {error, term()}.
@@ -804,7 +823,7 @@ get_next_iterator(Handler, Context, Iterator, ExecutionId) ->
     catch
         Error:Reason:Stacktrace ->
             workflow_engine:handle_exception(
-                ExecutionId, Context, Handler,
+                ExecutionId, Handler,
                 "Unexpected error getting next iterator", [],
                 Error, Reason, Stacktrace
             ),
@@ -873,6 +892,41 @@ handle_execution_cancel_finish(#workflow_execution_state{execution_status = ?EXE
     {ok, State#workflow_execution_state{execution_status = Status#execution_cancelled{call_count = Counter - 1}}};
 handle_execution_cancel_finish(_State) ->
     ?WF_ERROR_CANCEL_NOT_INITIALIZED.
+
+-spec mark_exception_appeared(state(), throw | error | exit, term(), list()) -> {ok, state()}.
+mark_exception_appeared(
+    #workflow_execution_state{execution_status = #execution_cancelled{has_exception_appeared = true}} = State,
+    _ErrorType, _Reason, _Stacktrace
+) ->
+    {ok, State};
+mark_exception_appeared(
+    #workflow_execution_state{execution_status = ?EXECUTION_CANCELLED(_) = Status} = State,
+    ErrorType, Reason, Stacktrace
+) ->
+    {ok, State#workflow_execution_state{execution_status = Status#execution_cancelled{
+        has_exception_appeared = true,
+        callbacks_to_execute = [
+            {fun execute_exception_handler/5, ?CALLBACK_ON_EXCEPTION, [ErrorType, Reason, Stacktrace]}
+        ]
+    }}};
+mark_exception_appeared(State, ErrorType, Reason, Stacktrace) ->
+    {ok, State#workflow_execution_state{execution_status = #execution_cancelled{
+        call_count = 0,
+        has_exception_appeared = true,
+        callbacks_to_execute = [
+            {fun execute_exception_handler/5, ?CALLBACK_ON_EXCEPTION, [ErrorType, Reason, Stacktrace]}
+        ]
+    }}}.
+
+
+-spec execute_exception_handler(doc(), callback_selector(), throw | error | exit, term(), list()) -> ok.
+execute_exception_handler(#document{key = ExecutionId, value = #workflow_execution_state{
+    handler = Handler,
+    current_lane = #current_lane{execution_context = Context}
+}}, CallbackSelector, ErrorType, Reason, Stacktrace) ->
+    workflow_engine:execute_exception_handler(ExecutionId, Context, Handler, ErrorType, Reason, Stacktrace),
+    {ok, _} = update(ExecutionId, fun(State) -> remove_pending_callback(State, CallbackSelector) end),
+    ok.
 
 
 -spec handle_lane_preparation_failure(state(), workflow_engine:lane_id() | undefined,
@@ -1213,15 +1267,7 @@ prepare_next_waiting_job(#workflow_execution_state{
 }) ->
     ?WF_ERROR_EXECUTION_ENDED(#execution_ended{handler = Handler, context = Context});
 prepare_next_waiting_job(State = #workflow_execution_state{
-    execution_status = #execution_cancelled{call_count = 0, callbacks_to_execute = Callbacks} = Status
-}) ->
-    {ok, State#workflow_execution_state{
-        execution_status = Status#execution_cancelled{callbacks_to_execute = []},
-        pending_callbacks = lists:map(fun({_, CallbackSelector, _}) -> CallbackSelector end, Callbacks),
-        update_report = ?EXECUTE_DELAYED_CALLBACKS(lists:reverse(Callbacks))
-    }};
-prepare_next_waiting_job(State = #workflow_execution_state{
-    execution_status = ?EXECUTION_CANCELLED(0),
+    execution_status = #execution_cancelled{call_count = 0, callbacks_to_execute = []},
     jobs = Jobs,
     iteration_state = IterationState,
     current_lane = #current_lane{parallel_box_specs = BoxSpecs}
@@ -1241,6 +1287,15 @@ prepare_next_waiting_job(State = #workflow_execution_state{
         ?WF_ERROR_ITERATION_FINISHED ->
             verify_ongoing_when_execution_is_cancelled(?WF_ERROR_ITERATION_FINISHED, Jobs, State)
     end;
+prepare_next_waiting_job(State = #workflow_execution_state{
+    execution_status = #execution_cancelled{call_count = 0, callbacks_to_execute = Callbacks} = Status,
+    pending_callbacks = []
+}) ->
+    {ok, State#workflow_execution_state{
+        execution_status = Status#execution_cancelled{callbacks_to_execute = []},
+        pending_callbacks = lists:map(fun({_, CallbackSelector, _}) -> CallbackSelector end, Callbacks),
+        update_report = ?EXECUTE_DELAYED_CALLBACKS(lists:reverse(Callbacks))
+    }};
 prepare_next_waiting_job(#workflow_execution_state{
     execution_status = ?EXECUTION_CANCELLED(_)
 }) ->
@@ -1478,6 +1533,16 @@ mark_all_streamed_task_data_received_internal(TaskId, State = #workflow_executio
 -spec add_if_callback_is_pending(state(), function(), callback_selector(), list(), boolean()) -> state().
 add_if_callback_is_pending(
     #workflow_execution_state{
+        execution_status = #execution_cancelled{has_exception_appeared = true}
+    } = State,
+    _CallbackFun,
+    _CallbackSelector,
+    _CallbackArgs,
+    _IsCallbackPending
+) ->
+    State;
+add_if_callback_is_pending(
+    #workflow_execution_state{
         execution_status = #execution_cancelled{call_count = Counter, callbacks_to_execute = CallbacksList} = Status
     } = State,
     CallbackFun,
@@ -1636,7 +1701,7 @@ is_finished_and_cleaned(ExecutionId, LaneIndex) ->
             end;
         {ok, #document{value = #workflow_execution_state{
             current_lane = #current_lane{index = LaneIndex},
-            execution_status = ?EXECUTION_CANCELLED(_)
+            execution_status = ?EXECUTION_CANCELLED(0)
         } = Record}} ->
             is_canceled_execution_finished_and_cleaned(Record);
         {ok, #document{value = #workflow_execution_state{

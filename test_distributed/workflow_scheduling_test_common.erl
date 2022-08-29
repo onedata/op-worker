@@ -233,24 +233,25 @@ mock_handlers(Workers, Manager) ->
 
     MockTemplateWithDelayOrFail = fun(HandlerCallReport, PassthroughArgs, DelayFun, OnFailFun) ->
         Manager ! {handler_call, self(), HandlerCallReport},
+        #handler_call{function = Function} = HandlerCallReport,
         receive
             history_saved ->
-                meck:passthrough(PassthroughArgs);
+                apply(meck_util:original_name(workflow_test_handler), Function, PassthroughArgs);
             fail_call ->
                 OnFailFun(),
                 error;
             delay_call ->
                 DelayFun(),
-                meck:passthrough(PassthroughArgs);
+                apply(meck_util:original_name(workflow_test_handler), Function, PassthroughArgs);
             {sleep, Value} ->
                 timer:sleep(Value),
-                meck:passthrough(PassthroughArgs);
+                apply(meck_util:original_name(workflow_test_handler), Function, PassthroughArgs);
             delay_and_fail_call ->
                 DelayFun(),
                 OnFailFun(),
                 error;
             throw_error ->
-                meck:passthrough(PassthroughArgs),
+                apply(meck_util:original_name(workflow_test_handler), Function, PassthroughArgs),
                 throw(some_error)
         end
     end,
