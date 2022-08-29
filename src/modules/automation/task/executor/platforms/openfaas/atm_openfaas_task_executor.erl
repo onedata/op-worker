@@ -65,8 +65,6 @@
 -export_type([function_name/0]).
 
 
--define(HEALTHCHECK_CACHE_TTL_SECONDS, 15).
-
 -define(AWAIT_READINESS_RETRIES, 300).
 -define(AWAIT_READINESS_INTERVAL_SEC, 1).
 
