@@ -1,5 +1,5 @@
 # Used when specific branch for given repo does not exist.
-default: release/20.02.17
+default: release/20.02.18
 
 branches:
   # Specification of branches from which sources for components will be pulled.
