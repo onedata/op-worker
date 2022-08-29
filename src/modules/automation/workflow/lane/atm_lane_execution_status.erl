@@ -106,7 +106,7 @@
     handle_ended/2,
 
     handle_manual_repeat/3,
-    handle_resume/2
+    handle_resume/1
 ]).
 
 
@@ -313,11 +313,11 @@ handle_manual_repeat(RepeatType, {AtmLaneSelector, _} = AtmLaneRunSelector, AtmW
     atm_workflow_execution_status:handle_manual_lane_repeat(AtmWorkflowExecutionId, Diff).
 
 
--spec handle_resume(atm_lane_execution:lane_run_selector(), atm_workflow_execution:id()) ->
+-spec handle_resume(atm_workflow_execution:id()) ->
     {ok, atm_workflow_execution:doc()} | errors:error().
-handle_resume(AtmLaneRunSelector, AtmWorkflowExecutionId) ->
+handle_resume(AtmWorkflowExecutionId) ->
     Diff = fun(AtmWorkflowExecution) ->
-        atm_lane_execution:update_run(AtmLaneRunSelector, fun
+        atm_lane_execution:update_run({current, current}, fun
             (#atm_lane_execution_run{status = Status} = Run) when
                 Status =:= ?INTERRUPTED_STATUS;
                 Status =:= ?PAUSED_STATUS;

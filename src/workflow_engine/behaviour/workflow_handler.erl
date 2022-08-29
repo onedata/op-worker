@@ -82,7 +82,7 @@
 %% if resume should result in clean start
 %% @end
 %%--------------------------------------------------------------------
--callback restart_lane(
+-callback restart_lane(  %% TODO MW rename to resume
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
     workflow_engine:lane_id()

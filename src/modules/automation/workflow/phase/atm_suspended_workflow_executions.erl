@@ -6,7 +6,6 @@
 %%%--------------------------------------------------------------------
 %%% @doc
 %%% Module operating on collection of suspended automation workflow executions.
-%%% TODO add tests
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_suspended_workflow_executions).

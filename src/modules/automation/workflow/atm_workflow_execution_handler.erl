@@ -169,7 +169,7 @@ repeat(UserCtx, Type, AtmLaneRunSelector, AtmWorkflowExecutionId) ->
 -spec resume(user_ctx:ctx(), atm_workflow_execution:id()) ->
     ok | errors:error().
 resume(UserCtx, AtmWorkflowExecutionId) ->
-    case atm_lane_execution_status:handle_resume({current, current}, AtmWorkflowExecutionId) of
+    case atm_lane_execution_status:handle_resume(AtmWorkflowExecutionId) of
         {ok, AtmWorkflowExecutionDoc} ->
             unfreeze_global_stores(AtmWorkflowExecutionDoc),
             ok = atm_workflow_execution_session:init(AtmWorkflowExecutionId, UserCtx),
@@ -497,22 +497,22 @@ delete_all_lane_runs_prepared_in_advance(#document{
         current_run_num = CurrentRunNum
     }
 }) ->
-    NewAtmWorkflowExecution = lists_utils:foldl_while(fun(AtmLaneIndex, AtmWorkflowExecutionAcc) ->
-        Diff = fun
-            (AtmLaneExecution = #atm_lane_execution{runs = [
-                AtmLaneRunPreparedInAdvance = #atm_lane_execution_run{run_num = RunNum}
-                | PreviousLaneRuns
-            ]}) when
-                RunNum =:= undefined;
-                RunNum =:= CurrentRunNum
+    AtmLaneExecutionDiff = fun
+        (AtmLaneExecution = #atm_lane_execution{runs = [
+            AtmLaneRunPreparedInAdvance = #atm_lane_execution_run{run_num = RunNum}
+            | PreviousLaneRuns
+        ]}) when
+            RunNum =:= undefined;
+            RunNum =:= CurrentRunNum
             ->
-                atm_lane_execution_factory:delete_run(AtmLaneRunPreparedInAdvance),
-                {ok, AtmLaneExecution#atm_lane_execution{runs = PreviousLaneRuns}};
+            atm_lane_execution_factory:delete_run(AtmLaneRunPreparedInAdvance),
+            {ok, AtmLaneExecution#atm_lane_execution{runs = PreviousLaneRuns}};
 
-            (_) ->
-                ?ERROR_NOT_FOUND
-        end,
-        case atm_lane_execution:update(AtmLaneIndex, Diff, AtmWorkflowExecutionAcc) of
+        (_) ->
+            ?ERROR_NOT_FOUND
+    end,
+    NewAtmWorkflowExecution = lists_utils:foldl_while(fun(AtmLaneIndex, AtmWorkflowExecutionAcc) ->
+        case atm_lane_execution:update(AtmLaneIndex, AtmLaneExecutionDiff, AtmWorkflowExecutionAcc) of
             {ok, NewAtmWorkflowExecutionAcc} -> {cont, NewAtmWorkflowExecutionAcc};
             ?ERROR_NOT_FOUND -> {halt, AtmWorkflowExecutionAcc}
         end
@@ -654,7 +654,7 @@ log_exception(Logger, throw, Reason, _Stacktrace) ->
 
 log_exception(Logger, Type, Reason, Stacktrace) ->
     LogContent = #{
-        <<"description">> => "Unexpected error occured.",
+        <<"description">> => "Unexpected emergency occured.",
         <<"reason">> => errors:to_json(?atm_examine_error(Type, Reason, Stacktrace))
     },
     atm_workflow_execution_logger:workflow_emergency(LogContent, Logger).
