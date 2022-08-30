@@ -24,7 +24,7 @@
 -export([get_task_execution_history/1, set_test_execution_manager_option/3, set_test_execution_manager_options/2,
     group_handler_calls_by_execution_id/1]).
 %% Helper functions verifying execution history
--export([verify_execution_history/2, verify_execution_history/3, verify_empty_lane/2]).
+-export([verify_execution_history/2, verify_execution_history/3, verify_empty_lane/2, has_finish_callbacks_for_lane/2]).
 %% Helper functions history statistics
 -export([verify_execution_history_stats/2, verify_execution_history_stats/3]).
 %% Memory verification helper functions
@@ -48,7 +48,7 @@
 -type test_manager_task_failure_key() :: fail_job | fail_result_processing | timeout |
     fail_lane_preparation | fail_execution_ended_handler.
 -type lane_history_check_key() :: expect_empty_items_list | stop_on_lane |
-    delay_and_fail_lane_preparation_in_advance | fail_lane_preparation_in_advance.
+    delay_and_fail_lane_preparation_in_advance | fail_lane_preparation_in_advance | expect_exception.
 -export_type([test_manager_task_failure_key/0, lane_history_check_key/0]).
 
 %%%===================================================================
@@ -189,9 +189,17 @@ reply_to_handler_mock(Sender, ManagerAcc, Options, #handler_call{
             rpc:call(node(Sender), workflow_engine, finish_cancel_procedure, [ExecutionId]),
             Sender ! fail_call,
             ManagerAcc;
-        {Fun, #{init_cancel_procedure := {Fun, TaskId, Item}}} ->
+        {Fun, #{init_cancel_procedure := {Fun, TaskId, Item, CallsNum}}} ->
             CancelAns = rpc:call(node(Sender), workflow_engine, init_cancel_procedure, [ExecutionId]),
             Sender ! history_saved,
+            lists_utils:pforeach(fun(_) ->
+                timer:sleep(rand:uniform(5000)),
+                rpc:call(node(Sender), workflow_engine, init_cancel_procedure, [ExecutionId])
+            end, lists:seq(2, CallsNum)),
+            ManagerAcc#{cancel_ans => CancelAns};
+        {Fun, #{init_cancel_procedure_and_throw := {Fun, TaskId, Item}}} ->
+            CancelAns = rpc:call(node(Sender), workflow_engine, init_cancel_procedure, [ExecutionId]),
+            Sender ! throw_error,
             ManagerAcc#{cancel_ans => CancelAns};
         {Fun, #{cancel_execution := {Fun, TaskId, Item}}} ->
             CancelAns = rpc:call(node(Sender), workflow_engine, init_cancel_procedure, [ExecutionId]),
@@ -199,10 +207,6 @@ reply_to_handler_mock(Sender, ManagerAcc, Options, #handler_call{
                 timer:sleep(rand:uniform(5000)),
                 rpc:call(node(Sender), workflow_engine, finish_cancel_procedure, [ExecutionId])
             end),
-            Sender ! history_saved,
-            ManagerAcc#{cancel_ans => CancelAns};
-        {Fun, #{init_cancel_procedure := {Fun, LaneId}}} ->
-            CancelAns = rpc:call(node(Sender), workflow_engine, init_cancel_procedure, [ExecutionId]),
             Sender ! history_saved,
             ManagerAcc#{cancel_ans => CancelAns};
         {Fun, #{cancel_execution := {Fun, LaneId}}} ->
@@ -698,7 +702,7 @@ verify_lanes_execution_history([{TaskIds, ExpectedItems, LaneExecutionContext} |
             Filtered = lists:filter(fun
                 (#handler_call{lane_id = Id, function = Function}) when Id =:= LaneId ->
                     Function =/= run_task_for_item andalso Function =/= report_async_task_result andalso
-                        Function =/= process_streamed_task_data;
+                        Function =/= process_task_result_for_item andalso Function =/= process_streamed_task_data;
                 (_) ->
                     true
             end, GatheredForLane),
@@ -869,6 +873,15 @@ verify_item_execution_history(Item, [CallsForBox | ExpectedCalls], [HandlerCall 
 verify_empty_lane(ExecutionHistory, LaneId) ->
     ?assertMatch([#handler_call{function = prepare_lane, lane_id = LaneId},
         #handler_call{function = handle_workflow_execution_ended}], ExecutionHistory).
+
+has_finish_callbacks_for_lane(ExecutionHistory, LaneId) ->
+    lists:any(fun
+        (#handler_call{function = Fun, lane_id = Id}) when Id =:= LaneId ->
+            Fun =:= handle_workflow_execution_ended orelse Fun =:= handle_lane_execution_ended orelse
+                Fun =:= handle_task_execution_ended orelse Fun =:= handle_exception;
+        (_) ->
+            false
+    end, ExecutionHistory).
 
 %%%===================================================================
 %%% Helper functions history statistics

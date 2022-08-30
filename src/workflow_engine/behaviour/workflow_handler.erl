@@ -124,7 +124,6 @@
     iterator:item(),
     async_processing_result()
 ) ->
-    %% TODO MW intead of just 'error' this may return {error, _}: {error, running_item_failed} | {error, task_aborting} | {error, task_ended}
     handler_execution_result().
 
 
