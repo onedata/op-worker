@@ -151,12 +151,18 @@ get_children_details(UserCtx, FileCtx0, ListOpts) ->
     get_children_details_insecure(UserCtx, FileCtx2, ListOpts, CanonicalChildrenWhiteList).
 
 
--spec list_recursively(user_ctx:ctx(), file_ctx:ctx(), recursive_file_listing:options()) ->
+-spec list_recursively(user_ctx:ctx(), file_ctx:ctx(), recursive_file_node_listing:options()) ->
     fslogic_worker:provider_response().
-list_recursively(UserCtx, FileCtx, ListOpts) ->
-    #provider_response{status = #status{code = ?OK},
-        provider_response = recursive_file_listing:list(UserCtx, FileCtx, ListOpts)
-    }.
+list_recursively(UserCtx, FileCtx0, ListOpts) ->
+    {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
+    AccessRequirements = case IsDir of
+        true -> [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?list_container_mask)];
+        false -> [?TRAVERSE_ANCESTORS]
+    end,
+    {_CanonicalChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
+        UserCtx, FileCtx1, AccessRequirements
+    ),
+    list_recursively_insecure(UserCtx, FileCtx2, ListOpts).
     
 
 %%%===================================================================
@@ -319,6 +325,36 @@ get_children_details_insecure(UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhit
     }.
 
 
+-spec list_recursively_insecure(user_ctx:ctx(), file_ctx:ctx(), recursive_file_node_listing:options()) ->
+    fslogic_worker:provider_response().
+list_recursively_insecure(UserCtx, FileCtx, ListOpts) ->
+    FinalListOpts = kv_utils:move_found(
+        include_directories,
+        include_branching_nodes,
+        ListOpts
+    ),
+    #recursive_listing_result{
+        entries = Entries
+    } = Result = recursive_listing:list(recursive_file_node_listing, UserCtx, FileCtx, FinalListOpts),
+    ComputeAttrsOpts = #{
+        allow_deleted_files => false,
+        include_size => true,
+        include_replication_status => false,
+        include_link_count => false
+    },
+    MapperFun = fun(UserCtx, {Path, FileCtx}, BaseOpts) ->
+        #fuse_response{
+            status = #status{code = ?OK},
+            fuse_response = FileAttrs
+        } = attr_req:get_file_attr_insecure(UserCtx, FileCtx, BaseOpts),
+        {Path, FileAttrs}
+    end,
+    MappedEntries = readdir_plus:gather_attributes(UserCtx, MapperFun, Entries, ComputeAttrsOpts),
+    #provider_response{status = #status{code = ?OK},
+        provider_response = Result#recursive_listing_result{entries = MappedEntries}
+    }.
+
+
 %% @private
 -spec child_attrs_mapper(map_child_fun()) -> 
     readdir_plus:gather_attributes_fun(file_ctx:ctx(), fslogic_worker:fuse_response_type()).
@@ -328,4 +364,3 @@ child_attrs_mapper(AttrsMappingFun) ->
             AttrsMappingFun(UserCtx, ChildCtx, BaseOpts),
         Result
     end.
-

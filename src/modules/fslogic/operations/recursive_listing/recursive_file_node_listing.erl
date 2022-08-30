@@ -6,18 +6,19 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module is responsible for listing recursively non-directory files 
-%%% (i.e regular, symlinks and hardlinks) in subtree of given top directory. 
+%%% This module implements `recursive_listing_node_behaviour` behaviour callbacks to allow 
+%%% for recursive listing of file tree structure. 
 %%% Files are listed lexicographically ordered by path.
 %%% For each such file returns its file basic attributes (see file_attr.hrl) 
 %%% along with the path to the file relative to the top directory.
-%%% All directory paths user does not have access to are returned under `inaccessible_paths` key. 
-%%% 
+%%% All directory paths user does not have access to are returned under `inaccessible_paths` key.  
+%%%
+%%% By default only non-directory (i.e regular, symlinks and hardlinks) are listed.
 %%% When options `include_directories` is set to true directory entries will be included in result.
 %%% For other options description consult `recursive_listing` module doc.
 %%% @end
 %%%--------------------------------------------------------------------
--module(recursive_file_listing).
+-module(recursive_file_node_listing).
 -author("Michal Stanisz").
 
 -include("modules/fslogic/data_access_control.hrl").
@@ -25,17 +26,14 @@
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
--behaviour(recursive_listing).
+-behaviour(recursive_listing_node_behaviour).
 
-%% API
--export([list/3]).
-
-%% `recursive_listing_behaviour` callbacks
+%% `recursive_listing_node_behaviour` callbacks
 -export([
     is_branching_node/1,
-    get_node_id/1, get_node_name/2, get_node_path/1, get_parent_id/2,
-    init_node_listing_state/4,
-    list_children/3,
+    get_node_id/1, get_node_name/2, get_node_path_tokens/1, get_parent_id/2,
+    init_node_iterator/4,
+    get_next_batch/3,
     is_node_listing_finished/1
 ]).
 
@@ -44,9 +42,9 @@
 -type tree_node() :: file_ctx:ctx().
 -type node_name() :: file_meta:node_name().
 -type node_path() :: file_meta:node_path().
--type node_listing_state() :: file_listing:options().
--type entry() :: {file_meta:node_path(), lfm_attrs:file_attributes()}.
--type result() :: recursive_listing:record().
+-type node_iterator() :: file_listing:options().
+-type entry() :: recursive_listing:result_entry(node_path(), lfm_attrs:file_attributes()).
+-type result() :: recursive_listing:result(node_path(), entry()).
 
 % For detailed options description see module doc.
 -type options() :: #{
@@ -60,30 +58,6 @@
 -type pagination_token() :: recursive_listing:pagination_token().
 
 -export_type([result/0, entry/0, options/0, pagination_token/0]).
-
-%%%===================================================================
-%%% API
-%%%===================================================================
-
--spec list(user_ctx:ctx(), file_ctx:ctx(), options()) -> result().
-list(UserCtx, FileCtx, ListOpts) ->
-    FinalListOpts = kv_utils:rename_entry_unchecked(
-        include_directories, 
-        include_branching,
-        ListOpts
-    ),
-    #recursive_listing_result{
-        entries = Entries
-    } = Result = recursive_listing:list(?MODULE, UserCtx, FileCtx, FinalListOpts),
-    ComputeAttrsOpts = #{
-        allow_deleted_files => false,
-        include_size => true,
-        include_replication_status => false,
-        include_link_count => false
-    },
-    MappedEntries = readdir_plus:gather_attributes(
-        UserCtx, fun map_result_entry/3, Entries, ComputeAttrsOpts),
-    Result#recursive_listing_result{entries = MappedEntries}.
 
 
 %%%===================================================================
@@ -105,9 +79,11 @@ get_node_name(FileCtx, UserCtx) ->
     file_ctx:get_aliased_name(FileCtx, UserCtx).
 
 
--spec get_node_path(tree_node()) -> {node_path(), tree_node()}.
-get_node_path(FileCtx) ->
-    file_ctx:get_canonical_path(FileCtx).
+-spec get_node_path_tokens(tree_node()) -> {[node_name()], tree_node()}.
+get_node_path_tokens(FileCtx) ->
+    {Path, FileCtx1} = file_ctx:get_canonical_path(FileCtx),
+    [_Separator | PathTokens] = filename:split(Path),
+    {PathTokens, FileCtx1}.
 
 
 -spec get_parent_id(tree_node(), user_ctx:ctx()) -> node_id().
@@ -119,11 +95,11 @@ get_parent_id(FileCtx, UserCtx) ->
     end.
 
 
--spec init_node_listing_state(node_name(), recursive_listing:limit(), boolean(), node_id()) -> 
-    node_listing_state().
-init_node_listing_state(undefined, Limit, IsContinuous, _ParentGuid) ->
+-spec init_node_iterator(node_name(), recursive_listing:limit(), boolean(), node_id()) -> 
+    node_iterator().
+init_node_iterator(undefined, Limit, IsContinuous, _ParentGuid) ->
     #{limit => Limit, tune_for_large_continuous_listing => IsContinuous};
-init_node_listing_state(StartFileName, Limit, IsContinuous, ParentGuid) ->
+init_node_iterator(StartFileName, Limit, IsContinuous, ParentGuid) ->
     ParentUuid = file_id:guid_to_uuid(ParentGuid),
     BaseOpts = #{limit => Limit, tune_for_large_continuous_listing => IsContinuous},
     ListingOpts = case file_meta:get_child_uuid_and_tree_id(ParentUuid, StartFileName) of
@@ -139,9 +115,9 @@ init_node_listing_state(StartFileName, Limit, IsContinuous, ParentGuid) ->
     maps:merge(BaseOpts, ListingOpts).
 
 
--spec list_children(tree_node(), node_listing_state(), user_ctx:ctx()) ->
-    {ok, [tree_node()], node_listing_state(), tree_node()} | no_access.
-list_children(FileCtx, ListOpts, UserCtx) ->
+-spec get_next_batch(tree_node(), node_iterator(), user_ctx:ctx()) ->
+    {ok, [tree_node()], node_iterator(), tree_node()} | no_access.
+get_next_batch(FileCtx, ListOpts, UserCtx) ->
     try
         {CanonicalChildrenWhiteList, FileCtx2} = case file_ctx:is_dir(FileCtx) of
             {true, Ctx} -> check_dir_access(UserCtx, Ctx);
@@ -155,24 +131,13 @@ list_children(FileCtx, ListOpts, UserCtx) ->
     end.
 
 
--spec is_node_listing_finished(node_listing_state()) -> boolean().
+-spec is_node_listing_finished(node_iterator()) -> boolean().
 is_node_listing_finished(#{pagination_token := PaginationToken}) ->
     file_listing:is_finished(PaginationToken).
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-%% @private
--spec map_result_entry(user_ctx:ctx(), {node_path(), tree_node()}, attr_req:compute_file_attr_opts()) -> 
-    entry() | no_return().
-map_result_entry(UserCtx, {Path, FileCtx}, BaseOpts) ->
-    #fuse_response{
-        status = #status{code = ?OK},
-        fuse_response = FileAttrs
-    } = attr_req:get_file_attr_insecure(UserCtx, FileCtx, BaseOpts),
-    {Path, FileAttrs}.
-
 
 %% @private
 -spec check_dir_access(user_ctx:ctx(), file_ctx:ctx()) ->

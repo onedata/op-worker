@@ -56,11 +56,11 @@ assert_meets_constraints(AtmWorkflowExecutionAuth, Value, _ValueConstraints) ->
 
 -spec list_tree(
     atm_workflow_execution_auth:record(),
-    recursive_dataset_listing:pagination_token() | undefined,
+    recursive_dataset_node_listing:pagination_token() | undefined,
     atm_value:compressed(),
     atm_store_container_iterator:batch_size()
 ) ->
-    {[atm_value:expanded()], recursive_dataset_listing:pagination_token() | undefined}.
+    {[atm_value:expanded()], recursive_dataset_node_listing:pagination_token() | undefined}.
 list_tree(AtmWorkflowExecutionAuth, PrevToken, CompressedRoot, BatchSize) ->
     list_internal(AtmWorkflowExecutionAuth, CompressedRoot, 
         maps_utils:remove_undefined(#{limit => BatchSize, pagination_token => PrevToken})
@@ -94,14 +94,14 @@ expand(AtmWorkflowExecutionAuth, DatasetId, _ValueConstraints) ->
 %%%===================================================================
 
 %% @private
--spec list_internal(atm_workflow_execution_auth:record(), atm_value:compressed(), recursive_dataset_listing:options()) ->
-    {[atm_value:expanded()], recursive_dataset_listing:pagination_token() | undefined}.
+-spec list_internal(atm_workflow_execution_auth:record(), atm_value:compressed(), recursive_dataset_node_listing:options()) ->
+    {[atm_value:expanded()], recursive_dataset_node_listing:pagination_token() | undefined}.
 list_internal(AtmWorkflowExecutionAuth, CompressedRoot, Opts) ->
     UserCtx = user_ctx:new(atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth)),
     try
         SpaceId = atm_workflow_execution_auth:get_space_id(AtmWorkflowExecutionAuth),
         {ok, #recursive_listing_result{entries = Entries, pagination_token = PaginationToken}} =
-            dataset_req:list_datasets_recursively(SpaceId, CompressedRoot, Opts, UserCtx),
+            dataset_req:list_recursively(SpaceId, CompressedRoot, Opts, UserCtx),
         MappedEntries = lists:map(fun({_Path, DatasetInfo}) -> 
             dataset_utils:dataset_info_to_json(DatasetInfo) 
         end, Entries),
