@@ -51,6 +51,7 @@
     resume/2,
     repeat/4,
     report_provider_restart/1,
+    report_openfaas_down/2,
     purge_all/0
 ]).
 
@@ -219,10 +220,25 @@ repeat(UserCtx, Type, AtmLaneRunSelector, AtmWorkflowExecutionId) ->
 %%    provider shutdown). Such executions will be resumed.
 %% @end
 %%--------------------------------------------------------------------
+-spec report_provider_restart(od_space:id()) -> ok.
 report_provider_restart(SpaceId) ->
     CallbackFun = fun(AtmWorkflowExecutionId) ->
         try
             atm_workflow_execution_handler:on_provider_restart(AtmWorkflowExecutionId)
+        catch Type:Reason:Stacktrace ->
+            ?atm_examine_error(Type, Reason, Stacktrace)
+        end
+    end,
+
+    foreach_atm_workflow_execution(CallbackFun, SpaceId, ?WAITING_PHASE),
+    foreach_atm_workflow_execution(CallbackFun, SpaceId, ?ONGOING_PHASE).
+
+
+-spec report_openfaas_down(od_space:id(), errors:error()) -> ok.
+report_openfaas_down(SpaceId, Error) ->
+    CallbackFun = fun(AtmWorkflowExecutionId) ->
+        try
+            atm_workflow_execution_handler:on_openfaas_down(AtmWorkflowExecutionId, Error)
         catch Type:Reason:Stacktrace ->
             ?atm_examine_error(Type, Reason, Stacktrace)
         end
@@ -241,6 +257,7 @@ report_provider_restart(SpaceId) ->
 %% and as such should never be called after successful Oneprovider start.
 %% @end
 %%--------------------------------------------------------------------
+-spec purge_all() -> ok.
 purge_all() ->
     ?info("Starting atm_workflow_execution purge procedure..."),
 

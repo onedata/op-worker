@@ -49,6 +49,13 @@
     openfaas_status_check_grace_attempts, 5
 )).
 
+-define(REPORT_OPENFAAS_DOWN_TO_ATM_WORKFLOW_EXECUTION_LAYER,
+    report_openfaas_down_to_atm_workflow_execution_layer
+).
+-define(REPORT_OPENFAAS_DOWN_TO_ATM_WORKFLOW_EXECUTION_LAYER_DELAY, op_worker:get_env(
+    report_openfaas_down_to_atm_workflow_execution_layer_delay, 10000
+)).
+
 -define(SERVER, {global, ?MODULE}).
 
 
@@ -85,9 +92,7 @@ is_openfaas_available() ->
 assert_openfaas_available() ->
     case get_openfaas_status() of
         healthy -> ok;
-        unhealthy -> throw(?ERROR_ATM_OPENFAAS_UNHEALTHY);
-        unreachable -> throw(?ERROR_ATM_OPENFAAS_UNREACHABLE);
-        not_configured -> throw(?ERROR_ATM_OPENFAAS_NOT_CONFIGURED)
+        DownStatus -> throw(down_status_to_error(DownStatus))
     end.
 
 
@@ -160,7 +165,7 @@ handle_info(timeout, State = #state{status = CurrentStatus}) ->
 
     NewGraceAttempts = case infer_grace_attempts(NewStatus, State) of
         0 ->
-            %% TODO interrupt atm workflow executions
+            report_openfaas_down_to_atm_workflow_execution_layer(NewStatus),
             undefined;
         Attempts ->
             Attempts
@@ -168,6 +173,12 @@ handle_info(timeout, State = #state{status = CurrentStatus}) ->
 
     NewState = #state{status = NewStatus, grace_attempts = NewGraceAttempts},
     {noreply, NewState, timer:seconds(?STATUS_CHECK_INTERVAL_SECONDS)};
+
+handle_info(?REPORT_OPENFAAS_DOWN_TO_ATM_WORKFLOW_EXECUTION_LAYER, State = #state{
+    status = CurrentStatus
+}) ->
+    report_openfaas_down_to_atm_workflow_execution_layer(CurrentStatus),
+    {noreply, State, timer:seconds(?STATUS_CHECK_INTERVAL_SECONDS)};
 
 handle_info(Info, State) ->
     ?log_bad_request(Info),
@@ -204,6 +215,13 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec down_status_to_error(atm_openfaas_status:status()) -> errors:error().
+down_status_to_error(unhealthy) -> ?ERROR_ATM_OPENFAAS_UNHEALTHY;
+down_status_to_error(unreachable) -> ?ERROR_ATM_OPENFAAS_UNREACHABLE;
+down_status_to_error(not_configured) -> ?ERROR_ATM_OPENFAAS_NOT_CONFIGURED.
 
 
 %% @private
@@ -244,3 +262,41 @@ infer_grace_attempts(_NewStatus, #state{grace_attempts = undefined}) ->
 
 infer_grace_attempts(_NewStatus, #state{grace_attempts = GraceAttempts}) ->
     GraceAttempts - 1.
+
+
+%% @private
+-spec report_openfaas_down_to_atm_workflow_execution_layer(atm_openfaas_status:status()) ->
+    ok.
+report_openfaas_down_to_atm_workflow_execution_layer(Status) ->
+    try provider_logic:get_spaces() of
+        {ok, SpaceIds} ->
+            Error = down_status_to_error(Status),
+            lists:foreach(fun(SpaceId) ->
+                atm_workflow_execution_api:report_openfaas_down(SpaceId, Error)
+            end, SpaceIds);
+        ?ERROR_UNREGISTERED_ONEPROVIDER ->
+            schedule_provider_restart_report_to_atm_workflow_execution_layer();
+        ?ERROR_NO_CONNECTION_TO_ONEZONE ->
+            schedule_provider_restart_report_to_atm_workflow_execution_layer();
+        Error = {error, _} ->
+            ?error(
+                "Unable to report OpenFaaS down to atm workflow execution layer due to: ~p",
+                [Error]
+            )
+    catch Class:Reason:Stacktrace ->
+        ?error_stacktrace(
+            "Unable to report OpenFaaS down to atm workflow execution layer due to: ~p",
+            [{Class, Reason}],
+            Stacktrace
+        )
+    end.
+
+
+%% @private
+-spec schedule_provider_restart_report_to_atm_workflow_execution_layer() -> ok.
+schedule_provider_restart_report_to_atm_workflow_execution_layer() ->
+    erlang:send_after(
+        ?REPORT_OPENFAAS_DOWN_TO_ATM_WORKFLOW_EXECUTION_LAYER_DELAY,
+        self(),
+        ?REPORT_OPENFAAS_DOWN_TO_ATM_WORKFLOW_EXECUTION_LAYER
+    ).

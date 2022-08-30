@@ -29,7 +29,10 @@
     repeat/4,
     resume/2
 ]).
--export([on_provider_restart/1]).
+-export([
+    on_provider_restart/1,
+    on_openfaas_down/2
+]).
 
 % workflow_handler callbacks
 -export([
@@ -211,6 +214,29 @@ on_provider_restart(AtmWorkflowExecutionId) ->
             _ ->
                 ok
         end
+    catch throw:{session_acquisition_failed, _} = Reason ->
+        handle_exception(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, throw, Reason, [])
+    end.
+
+
+-spec on_openfaas_down(atm_workflow_execution:id(), errors:error()) ->
+    ok | no_return().
+on_openfaas_down(AtmWorkflowExecutionId, Error) ->
+    {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:get(AtmWorkflowExecutionId),
+    AtmWorkflowExecutionEnv = acquire_global_env(AtmWorkflowExecutionDoc),
+
+    try
+        AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(AtmWorkflowExecutionEnv),
+
+        Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+        LogContent = #{
+            <<"description">> => "OpenFaaS service ceased to be healthy.",
+            <<"reason">> => errors:to_json(Error)
+        },
+        atm_workflow_execution_logger:workflow_critical(LogContent, Logger),
+
+        atm_lane_execution_handler:stop({current, current}, interrupt, AtmWorkflowExecutionCtx),
+        end_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx)  %% TODO call to engine that no responses will be sent ??
     catch throw:{session_acquisition_failed, _} = Reason ->
         handle_exception(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, throw, Reason, [])
     end.
