@@ -778,11 +778,16 @@ maybe_report_item_error(
 maybe_report_item_error(#document{key = ExecutionId, value = #workflow_execution_state{
     handler = Handler,
     current_lane = #current_lane{execution_context = Context}
-}}, ItemIdToReportError) ->
+}} = Doc, ItemIdToReportError) ->
     Item = workflow_cached_item:get_item(ItemIdToReportError),
     workflow_engine:call_handler(ExecutionId, Context, Handler, report_item_error, [Item]),
+    delete_item_callback(Doc, ItemIdToReportError).
+
+-spec delete_item_callback(doc(), workflow_cached_item:id()) -> ok.
+delete_item_callback(#document{key = ExecutionId}, ItemIdToReportError) ->
+    workflow_cached_item:delete(ItemIdToReportError),
     {ok, _} = update(ExecutionId, fun(State) -> remove_pending_callback(State, ItemIdToReportError) end),
-    workflow_cached_item:delete(ItemIdToReportError).
+    ok.
 
 -spec maybe_notify_task_execution_ended(doc(), workflow_jobs:job_identifier(), task_status()) -> ok.
 maybe_notify_task_execution_ended(_Doc, _JobIdentifier, ongoing) ->
@@ -911,13 +916,15 @@ mark_exception_appeared(
 ) ->
     {ok, State};
 mark_exception_appeared(
-    #workflow_execution_state{execution_status = ?EXECUTION_CANCELLED(_) = Status} = State,
+    #workflow_execution_state{
+        execution_status = #execution_cancelled{callbacks_to_execute = Callbacks} = Status
+    } = State,
     ErrorType, Reason, Stacktrace
 ) ->
     {ok, State#workflow_execution_state{execution_status = Status#execution_cancelled{
         has_exception_appeared = true,
         callbacks_to_execute = [
-            {fun execute_exception_handler/5, ?CALLBACK_ON_EXCEPTION, [ErrorType, Reason, Stacktrace]}
+            {fun execute_exception_handler/5, ?CALLBACK_ON_EXCEPTION, [ErrorType, Reason, Stacktrace]} | Callbacks
         ]
     }}};
 mark_exception_appeared(State, ErrorType, Reason, Stacktrace) ->
@@ -1341,6 +1348,28 @@ prepare_next_waiting_job(State = #workflow_execution_state{
             end
     end;
 prepare_next_waiting_job(State = #workflow_execution_state{
+    execution_status = #execution_cancelled{
+        call_count = 0,
+        has_exception_appeared = true,
+        callbacks_to_execute = Callbacks
+    } = Status,
+    pending_callbacks = []
+}) ->
+    ReportItemErrorFun = fun maybe_report_item_error/2,
+    MappedCallbacks = lists:filtermap(fun
+        ({CallbackFun, CallbackSelector, CallbackArgs}) when CallbackFun =:= ReportItemErrorFun ->
+            {true, {fun delete_item_callback/2, CallbackSelector, CallbackArgs}};
+        ({_, ?CALLBACK_ON_EXCEPTION, _} = Callback) ->
+            {true, Callback};
+        (_) ->
+            false
+    end, Callbacks),
+    {ok, State#workflow_execution_state{
+        execution_status = Status#execution_cancelled{callbacks_to_execute = []},
+        pending_callbacks = lists:map(fun({_, CallbackSelector, _}) -> CallbackSelector end, Callbacks),
+        update_report = ?EXECUTE_DELAYED_CALLBACKS(lists:reverse(MappedCallbacks))
+    }};
+prepare_next_waiting_job(State = #workflow_execution_state{
     execution_status = #execution_cancelled{call_count = 0, callbacks_to_execute = Callbacks} = Status,
     pending_callbacks = []
 }) ->
@@ -1584,16 +1613,6 @@ mark_all_streamed_task_data_received_internal(TaskId, State = #workflow_executio
     }, fun handle_task_execution_ended/3, TaskId, [TaskId], TaskStatus =:= ended).
 
 -spec add_if_callback_is_pending(state(), function(), callback_selector(), list(), boolean()) -> state().
-add_if_callback_is_pending(
-    #workflow_execution_state{
-        execution_status = #execution_cancelled{has_exception_appeared = true}
-    } = State,
-    _CallbackFun,
-    _CallbackSelector,
-    _CallbackArgs,
-    _IsCallbackPending
-) ->
-    State;
 add_if_callback_is_pending(
     #workflow_execution_state{
         execution_status = #execution_cancelled{call_count = Counter, callbacks_to_execute = CallbacksList} = Status

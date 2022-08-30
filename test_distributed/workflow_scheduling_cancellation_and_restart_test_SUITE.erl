@@ -451,10 +451,8 @@ multiple_parallel_cancels_test_base(Config, #test_config{
     ?assertEqual([], ExecutionHistory2),
 
     rpc:call(Worker, workflow_engine, finish_cancel_procedure, [ExecutionId]),
-    #{execution_history := ExecutionHistory3} = ExtendedHistoryStats3 =
+    #{execution_history := ExecutionHistory3} =
         workflow_scheduling_test_common:get_task_execution_history(Config),
-    workflow_scheduling_test_common:verify_execution_history_stats(
-        ExtendedHistoryStats3, TaskType, #{ignore_async_slots_check => true}),
     workflow_scheduling_test_common:verify_execution_history(WorkflowExecutionSpec,
         ExecutionHistory ++ ExecutionHistory2 ++ ExecutionHistory3, VerifyHistoryOptions),
     workflow_scheduling_test_common:verify_memory(Config, InitialKeys, true),
