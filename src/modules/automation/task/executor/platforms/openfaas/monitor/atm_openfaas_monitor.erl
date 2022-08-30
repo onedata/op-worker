@@ -33,10 +33,20 @@
 ]).
 
 
--type state() :: undefined.
+-type grace_attempts() :: undefined | non_neg_integer().
 
--define(CHECK_STATUS_INTERVAL_SECONDS, op_worker:get_env(
+-record(state, {
+    status :: atm_openfaas_status:status(),
+    grace_attempts = undefined :: grace_attempts()
+}).
+-type state() :: #state{}.
+
+
+-define(STATUS_CHECK_INTERVAL_SECONDS, op_worker:get_env(
     openfaas_status_check_interval_seconds, 60
+)).
+-define(STATUS_CHECK_GRACE_ATTEMPTS, op_worker:get_env(
+    openfaas_status_check_grace_attempts, 5
 )).
 
 -define(SERVER, {global, ?MODULE}).
@@ -104,7 +114,7 @@ get_openfaas_status() ->
 init(_) ->
     process_flag(trap_exit, true),
     self() ! timeout,
-    {ok, undefined}.
+    {ok, #state{status = not_configured, grace_attempts = undefined}}.
 
 
 %%--------------------------------------------------------------------
@@ -144,9 +154,20 @@ handle_cast(Request, State) ->
 -spec handle_info(Info :: term(), state()) ->
     {noreply, NewState :: state(), non_neg_integer()} |
     {noreply, NewState :: state(), hibernate}.
-handle_info(timeout, State) ->
-    atm_openfaas_status:save(check_openfaas_status()),
-    {noreply, State, timer:seconds(?CHECK_STATUS_INTERVAL_SECONDS)};
+handle_info(timeout, State = #state{status = CurrentStatus}) ->
+    NewStatus = check_openfaas_status(),
+    NewStatus /= CurrentStatus andalso atm_openfaas_status:save(NewStatus),
+
+    NewGraceAttempts = case infer_grace_attempts(NewStatus, State) of
+        0 ->
+            %% TODO interrupt atm workflow executions
+            undefined;
+        Attempts ->
+            Attempts
+    end,
+
+    NewState = #state{status = NewStatus, grace_attempts = NewGraceAttempts},
+    {noreply, NewState, timer:seconds(?STATUS_CHECK_INTERVAL_SECONDS)};
 
 handle_info(Info, State) ->
     ?log_bad_request(Info),
@@ -207,3 +228,19 @@ check_openfaas_status() ->
     catch throw:?ERROR_ATM_OPENFAAS_NOT_CONFIGURED ->
         not_configured
     end.
+
+
+%% @private
+-spec infer_grace_attempts(atm_openfaas_status:status(), state()) ->
+    grace_attempts().
+infer_grace_attempts(healthy, _State) ->
+    undefined;
+
+infer_grace_attempts(_NewStatus, #state{status = healthy}) ->
+    max(0, ?STATUS_CHECK_GRACE_ATTEMPTS);
+
+infer_grace_attempts(_NewStatus, #state{grace_attempts = undefined}) ->
+    undefined;
+
+infer_grace_attempts(_NewStatus, #state{grace_attempts = GraceAttempts}) ->
+    GraceAttempts - 1.
