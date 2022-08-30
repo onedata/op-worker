@@ -6,7 +6,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% TODO WRITEME
+%%% Module responsible for monitoring status of OpenFaaS service.
+%%% If it's status transitions from 'healthy' to any other status and remains
+%%% as such for prolonged period of time (grace attempts) then OpenFaaS will
+%%% be considered as down. This will be reported to automation layer.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_openfaas_monitor).
@@ -293,7 +296,7 @@ report_openfaas_down_to_atm_workflow_execution_layer(Status) ->
 
 
 %% @private
--spec schedule_provider_restart_report_to_atm_workflow_execution_layer() -> ok.
+-spec schedule_provider_restart_report_to_atm_workflow_execution_layer() -> reference().
 schedule_provider_restart_report_to_atm_workflow_execution_layer() ->
     erlang:send_after(
         ?REPORT_OPENFAAS_DOWN_TO_ATM_WORKFLOW_EXECUTION_LAYER_DELAY,
