@@ -64,8 +64,6 @@
     last_start_after_token :: node_name(),
     % absolute path tokens to currently processed branching node
     current_node_path_tokens :: [node_name()],
-    % id of parent of currently listed node
-    parent_id :: node_id(),
     % false if any children batch of current node was listed
     is_first_batch = true :: boolean()
 }).
@@ -185,7 +183,6 @@ prepare_initial_listing_state(Module, UserCtx, RootNode, Options) ->
                         include_branching_nodes = IncludeBranching,
                         current_node_path_tokens = NodePathTokens,
                         last_start_after_token = lists:last(NodePathTokens),
-                        parent_id = Module:get_node_id(NodeToList1),
                         prefix = Prefix,
                         root_node_depth = length(RootNodePathTokens),
                         is_first_batch = true
@@ -374,8 +371,7 @@ process_child(UserCtx, Node, #state{current_node_path_tokens = CurrentPathTokens
         {true, Node3} ->
             {ProgressMarker, NextChildrenRes} = process_current_branching_node(UserCtx, Node,
                 State#state{
-                    current_node_path_tokens = CurrentPathTokens ++ [Name],
-                    parent_id = Module:get_node_id(Node3)
+                    current_node_path_tokens = CurrentPathTokens ++ [Name]
                 }
             ),
             {ProgressMarker, NextChildrenRes};
@@ -392,14 +388,13 @@ process_child(UserCtx, Node, #state{current_node_path_tokens = CurrentPathTokens
 %% @private
 -spec init_current_branching_node_processing(tree_node(), state()) -> {node_iterator(), state()}.
 init_current_branching_node_processing(Node, #state{relative_start_after_path_tokens = []} = State) ->
-    #state{module = Module, parent_id = ParentId} = State,
+    #state{module = Module} = State,
     {Module:init_node_iterator(Node, undefined, ?LIST_RECURSIVE_BATCH_SIZE), State};
 init_current_branching_node_processing(Node, #state{
     module = Module,
     relative_start_after_path_tokens = [CurrentStartAfterToken | NextStartAfterTokens],
     last_start_after_token = LastStartAfterToken,
-    current_node_path_tokens = CurrentPathTokens,
-    parent_id = ParentId
+    current_node_path_tokens = CurrentPathTokens
 } = State) ->
     %% As long as the currently processed path is within the start_after_path, we can start
     %% listing from the specific node name (CurrentStartAfterToken), as all names lexicographically

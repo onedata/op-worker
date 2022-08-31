@@ -26,7 +26,7 @@
 %% `recursive_listing_node_behaviour` callbacks
 -export([
     is_branching_node/1,
-    get_node_id/1, get_node_name/2, get_node_path_tokens/1, get_parent_id/2,
+    get_node_id/1, get_node_name/2, get_node_path_tokens/1,
     init_node_iterator/3,
     get_next_batch/2
 ]).
@@ -86,14 +86,6 @@ get_node_name(#dataset_info{root_file_path = RootFilePath} = DatasetInfo, _UserC
     {filename:basename(RootFilePath), DatasetInfo}.
 
 
--spec get_parent_id(tree_node(), user_ctx:ctx()) -> node_id().
-get_parent_id(#dataset_info{parent = ParentId}, _UserCtx) ->
-    case ParentId of
-        undefined -> <<>>;
-        _ -> ParentId
-    end.
-
-
 -spec init_node_iterator(tree_node(), node_name(), recursive_listing:limit()) -> 
     node_iterator().
 init_node_iterator(DatasetInfo, StartName, Limit) ->
@@ -101,7 +93,7 @@ init_node_iterator(DatasetInfo, StartName, Limit) ->
     StartIndex = datasets_structure:pack_entry_index(StartName, <<>>),
     #{
         node => DatasetInfo,
-        opts => #{limit => Limit, offset => 0, start_index => StartIndex, is_finished => false}
+        opts => #{limit => Limit, offset => 0, start_index => StartIndex}
     }.
 
 

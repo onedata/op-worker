@@ -32,9 +32,6 @@
 % NOTE: callback used only in listing initialization process.
 -callback get_node_path_tokens(tree_node()) -> {[node_name()], tree_node()}.
 
-% NOTE: callback used only in listing initialization process.
--callback get_parent_id(tree_node(), user_ctx:ctx()) -> node_id(). % fixme remove
-
 -callback init_node_iterator(tree_node(), node_name(), limit()) -> 
     node_iterator().
 

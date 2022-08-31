@@ -31,7 +31,7 @@
 %% `recursive_listing_node_behaviour` callbacks
 -export([
     is_branching_node/1,
-    get_node_id/1, get_node_name/2, get_node_path_tokens/1, get_parent_id/2,
+    get_node_id/1, get_node_name/2, get_node_path_tokens/1,
     init_node_iterator/3,
     get_next_batch/2
 ]).
@@ -77,24 +77,25 @@ get_node_id(FileCtx) ->
 
 
 -spec get_node_name(tree_node(), user_ctx:ctx() | undefined) -> {node_name(), tree_node()}.
-get_node_name(FileCtx, UserCtx) ->
-    file_ctx:get_aliased_name(FileCtx, UserCtx).
-
+get_node_name(FileCtx0, UserCtx) ->
+    {FileName, FileCtx1} = file_ctx:get_aliased_name(FileCtx0, UserCtx),
+    {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx1),
+    ProviderId = file_meta:get_provider_id(FileDoc),
+    {ok, ParentUuid} = file_meta:get_parent_uuid(FileDoc),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx2),
+    
+    case file_meta:check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, ProviderId) of
+        {conflicting, ExtendedName, _ConflictingFiles} ->
+            {ExtendedName, FileCtx2};
+        _ ->
+            {FileName, FileCtx2}
+    end.
 
 -spec get_node_path_tokens(tree_node()) -> {[node_name()], tree_node()}.
 get_node_path_tokens(FileCtx) ->
     {Path, FileCtx1} = file_ctx:get_canonical_path(FileCtx),
     [_Separator | PathTokens] = filename:split(Path),
     {PathTokens, FileCtx1}.
-
-
--spec get_parent_id(tree_node(), user_ctx:ctx()) -> node_id().
-get_parent_id(FileCtx, UserCtx) ->
-    {ParentCtx, _} = file_tree:get_parent(FileCtx, UserCtx),
-    case file_ctx:equals(ParentCtx, FileCtx) of
-        true -> <<>>;
-        false -> file_ctx:get_logical_guid_const(ParentCtx)
-    end.
 
 
 -spec init_node_iterator(tree_node(), node_name(), recursive_listing:limit()) -> 
