@@ -75,7 +75,8 @@ start(ArchiveDoc) ->
             UserId = user_ctx:get_user_id(UserCtx),
             Options = #{
                 task_id => TaskId,
-                children_master_jobs_mode => async
+                children_master_jobs_mode => async,
+                initial_relative_path => filename:join([<<"/">>, <<"archive_", TaskId/binary>>])
             },
             {ok, TaskId} = tree_traverse:run(
                 ?POOL_NAME, file_ctx:new_by_guid(DataFileGuid), UserId, Options),
@@ -146,10 +147,10 @@ update_job_progress(Id, Job, Pool, TaskId, Status) ->
     {ok, traverse:master_job_map()}.
 do_master_job(InitialJob, MasterJobArgs = #{task_id := TaskId}) ->
     ErrorHandler = fun(Job, Reason, Stacktrace) ->
-        report_error(TaskId, Job, Reason, Stacktrace),
-        archive:mark_verification_failed(TaskId),
-        cancel(TaskId),
-        {ok, #{}} % unexpected error logged by report_error - no jobs can be created
+        handle_error(TaskId, Job),
+        ?error_stacktrace("Unexpected error during verification of archive ~p:~n~p", 
+            [TaskId, Reason], Stacktrace),
+        {ok, #{}} % unexpected error - no jobs can be created
     end,
     archive_traverses_common:do_master_job(?MODULE, InitialJob, MasterJobArgs, ErrorHandler).
 
@@ -157,9 +158,9 @@ do_master_job(InitialJob, MasterJobArgs = #{task_id := TaskId}) ->
 -spec do_slave_job(tree_traverse:slave_job(), id()) -> ok.
 do_slave_job(InitialJob, TaskId) ->
     ErrorHandler = fun(Job, Reason, Stacktrace) ->
-        report_error(TaskId, Job, Reason, Stacktrace),
-        archive:mark_verification_failed(TaskId),
-        cancel(TaskId)
+        handle_error(TaskId, Job),
+        ?error_stacktrace("Unexpected error during verification of archive ~p:~n~p", 
+            [TaskId, Reason], Stacktrace)
     end,
     archive_traverses_common:execute_unsafe_job(
         ?MODULE, do_slave_job_unsafe, [TaskId], InitialJob, ErrorHandler).
@@ -173,28 +174,29 @@ do_slave_job(InitialJob, TaskId) ->
 do_slave_job_unsafe(#tree_traverse_slave{
     file_ctx = FileCtx,
     user_id = UserId
-}, TaskId) ->
+} = Job, TaskId) ->
     case file_ctx:is_symlink_const(FileCtx) of
         true ->
             ok;
         false ->
             {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId),
             case archivisation_checksum:has_file_changed(FileCtx, FileCtx, UserCtx) of
-                false ->
+                false -> 
                     ok;
-                _ ->
-                    archive:mark_verification_failed(TaskId),
-                    cancel(TaskId),
+                true ->
                     ?warning("Invalid checksum for file ~p in archive ~p",
-                        [file_ctx:get_logical_guid_const(FileCtx), TaskId])
+                        [file_ctx:get_logical_guid_const(FileCtx), TaskId]),
+                    handle_error(TaskId, Job)
             end
     end.
 
 
 -spec do_dir_master_job_unsafe(tree_traverse:master_job(), traverse:master_job_extended_args()) -> 
     {ok, traverse:master_job_map()}.
-do_dir_master_job_unsafe(#tree_traverse{user_id = UserId, file_ctx = FileCtx} = Job, MasterJobArgs) ->
-    #{task_id := TaskId} = MasterJobArgs,
+do_dir_master_job_unsafe(#tree_traverse{
+    user_id = UserId, 
+    file_ctx = FileCtx
+} = Job, #{task_id := TaskId} = MasterJobArgs) ->
     NewJobsPreprocessor = fun(SlaveJobs, MasterJobs, ListingToken, _SubtreeProcessingStatus) ->
         DirUuid = file_ctx:get_logical_uuid_const(FileCtx),
         ChildrenCount = length(SlaveJobs) + length(MasterJobs),
@@ -210,19 +212,28 @@ do_dir_master_job_unsafe(#tree_traverse{user_id = UserId, file_ctx = FileCtx} = 
                 case archivisation_checksum:has_dir_changed(
                     FileCtx, FileCtx, UserCtx, TotalChildrenCount)
                 of
-                    false ->
+                    false -> 
                         ok;
                     true ->
-                        archive:mark_verification_failed(TaskId),
-                        cancel(TaskId),
-                        ?warning("Invalid checksum for dir ~p in archive ~p",
-                            [file_ctx:get_logical_guid_const(FileCtx), TaskId])
+                        ?warning("Invalid checksum for dir ~p in archive ~p", 
+                            [file_ctx:get_logical_guid_const(FileCtx), TaskId]),
+                        handle_error(TaskId, Job)
                 end
         end
     end,
     tree_traverse:do_master_job(Job, MasterJobArgs, NewJobsPreprocessor).
 
 
--spec report_error(id(), tree_traverse:job(), Reason :: any(), Stacktrace :: list()) -> ok.
-report_error(TaskId, _Job, Reason, Stacktrace) ->
-    ?error_stacktrace("Unexpected error during verification of archive ~p:~n~p", [TaskId, Reason], Stacktrace).
+-spec handle_error(id(), tree_traverse:job()) -> ok.
+handle_error(TaskId, Job) ->
+    {FileGuid, FilePath} = job_to_error_info(Job),
+    archivisation_audit_log:report_file_verification_failed(TaskId, FileGuid, FilePath),
+    archive:mark_verification_failed(TaskId),
+    cancel(TaskId).
+
+
+-spec job_to_error_info(tree_traverse:job()) -> {file_id:file_guid(), file_meta:path()}.
+job_to_error_info(#tree_traverse{file_ctx = FileCtx, relative_path = Path}) ->
+    {file_ctx:get_logical_guid_const(FileCtx), Path};
+job_to_error_info(#tree_traverse_slave{file_ctx = FileCtx, relative_path = Path}) ->
+    {file_ctx:get_logical_guid_const(FileCtx), Path}.

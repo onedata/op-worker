@@ -107,7 +107,13 @@
     error_during_archivisation_slave_job/1,
     error_during_archivisation_master_job/1,
     error_during_verification_slave_job/1,
-    error_during_verification_master_job/1
+    error_during_verification_master_job/1,
+    
+    audit_log_test/1,
+    audit_log_failed_file_test/1,
+    audit_log_failed_dir_test/1,
+    audit_log_failed_file_verification_test/1,
+    audit_log_failed_dir_verification_test/1
 ]).
 
 groups() -> [
@@ -191,6 +197,13 @@ groups() -> [
         error_during_archivisation_master_job,
         error_during_verification_slave_job,
         error_during_verification_master_job
+    ]},
+    {audit_log_tests, [
+        audit_log_test,
+        audit_log_failed_file_test,
+        audit_log_failed_dir_test,
+        audit_log_failed_file_verification_test,
+        audit_log_failed_dir_verification_test
     ]}
 ].
 
@@ -198,13 +211,15 @@ groups() -> [
 all() -> [
     {group, parallel_tests},
     {group, verification_tests},
-    {group, errors_tests}
+    {group, errors_tests},
+    {group, audit_log_tests}
 ].
 
 
 -define(ATTEMPTS, 60).
 
 -define(SPACE, space_krk_par_p).
+-define(SPACE_BIN, <<"space_krk_par_p">>).
 -define(USER1, user1).
 
 -define(TEST_DESCRIPTION1, <<"TEST DESCRIPTION">>).
@@ -488,6 +503,29 @@ error_during_verification_master_job(_Config) ->
 
 
 %===================================================================
+% Audit log tests - can not be run in parallel as they use mocks.
+%===================================================================
+
+audit_log_test(_Config) ->
+    audit_log_test_base(?ARCHIVE_PRESERVED, undefined).
+
+audit_log_failed_file_test(_Config) ->
+    mock_job_function_error(archivisation_traverse, do_slave_job_unsafe),
+    audit_log_test_base(?ARCHIVE_FAILED, reg_file).
+
+audit_log_failed_dir_test(_Config) ->
+    mock_job_function_error(archivisation_traverse, do_dir_master_job_unsafe),
+    audit_log_test_base(?ARCHIVE_FAILED, dir).
+
+audit_log_failed_file_verification_test(_Config) ->
+    mock_job_function_error(archive_verification_traverse, do_slave_job_unsafe),
+    audit_log_test_base(?ARCHIVE_VERIFICATION_FAILED, reg_file).
+
+audit_log_failed_dir_verification_test(_Config) ->
+    mock_job_function_error(archive_verification_traverse, do_dir_master_job_unsafe),
+    audit_log_test_base(?ARCHIVE_VERIFICATION_FAILED, dir).
+
+%===================================================================
 % Test bases
 %===================================================================
 
@@ -498,7 +536,9 @@ archive_dataset_attached_to_dir_test_base(Layout, IncludeDip) ->
             id = DatasetId,
             archives = [#archive_object{id = ArchiveId}]
         }} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{
-            dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout, include_dip = IncludeDip}}]},
+            dataset = #dataset_spec{archives = [
+                #archive_spec{config = #archive_config{layout = Layout, include_dip = IncludeDip}}
+            ]},
             metadata = #metadata_spec{json = ?RAND_JSON_METADATA()}
     }),
     archive_simple_dataset_test_base(DirGuid, DatasetId, ArchiveId, 0, 0).
@@ -990,7 +1030,7 @@ nested_verification_test_base(Layout) ->
 
 errors_test_base(TraverseType, JobType) ->
     mock_error_requested_job(TraverseType, JobType),
-    #object{dataset = #dataset_object{ archives = [#archive_object{id = ArchiveId}]}} =
+    #object{dataset = #dataset_object{archives = [#archive_object{id = ArchiveId}]}} =
         onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{
             dataset = #dataset_spec{archives = 1},
             children = [#file_spec{}, #dir_spec{}]
@@ -1000,6 +1040,121 @@ errors_test_base(TraverseType, JobType) ->
         verification -> ?ARCHIVE_VERIFICATION_FAILED
     end,
     archive_tests_utils:assert_archive_state(ArchiveId, ExpectedState, ?ATTEMPTS).
+
+
+audit_log_test_base(ExpectedState, FailedFileType) ->
+    Timestamp = opw_test_rpc:call(oct_background:get_random_provider_node(krakow), global_clock, timestamp_millis, []),
+    #object{
+        guid = DirGuid,
+        name = DirName,
+        dataset = #dataset_object{archives = [#archive_object{id = ArchiveId}]},
+        children = [
+            #object{guid = ChildFileGuid, name = ChildFileName}
+        ]
+    } =
+        onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{
+            dataset = #dataset_spec{archives = [
+                #archive_spec{config = #archive_config{layout = ?ARCHIVE_PLAIN_LAYOUT}}
+            ]},
+            children = [#file_spec{}]
+        }, krakow),
+    archive_tests_utils:assert_archive_state(ArchiveId, ExpectedState, ?ATTEMPTS),
+    PathFun = fun(Tokens) ->
+        filename:join([<<"/">>, ?SPACE_BIN | Tokens])
+    end,
+    ArchivePathFun = fun(Tokens) ->
+        filename:join([<<"/">>, <<"archive_", ArchiveId/binary>> | Tokens])
+    end,
+    ArchivedFileGuidsFun = fun(ArchiveId) ->
+        Node = oct_background:get_random_provider_node(krakow),
+        SessId = oct_background:get_user_session_id(?USER1, krakow),
+        {ok, ArchiveDataDirGuid} = opw_test_rpc:call(krakow, archive, get_data_dir_guid, [ArchiveId]),
+        {ok, [{ArchivedDirGuid, _}]} = lfm_proxy:get_children(Node, SessId, ?FILE_REF(ArchiveDataDirGuid), 0, 1),
+        {ok, [{ArchivedChildFileGuid, _}]} = lfm_proxy:get_children(Node, SessId, ?FILE_REF(ArchivedDirGuid), 0, 1),
+        {ArchiveDataDirGuid, ArchivedChildFileGuid}
+    end,
+    
+    ExpectedLogsTemplates = case {ExpectedState, FailedFileType} of
+        {?ARCHIVE_PRESERVED, _} -> [
+            {ok, ChildFileGuid, PathFun([DirName, ChildFileName])},
+            {ok, DirGuid, PathFun([DirName])}
+        ];
+        {?ARCHIVE_FAILED, dir} -> [
+            {archivisation_failed, DirGuid, PathFun([DirName])}
+        ];
+        {?ARCHIVE_FAILED, reg_file} -> [
+            {archivisation_failed, ChildFileGuid, PathFun([DirName, ChildFileName])},
+            {ok, DirGuid, PathFun([DirName])}
+        ];
+        {?ARCHIVE_VERIFICATION_FAILED, dir} ->
+            {ArchiveDataDirGuid, _ArchivedChildFileGuid} = ArchivedFileGuidsFun(ArchiveId),
+            [
+                {ok, ChildFileGuid, PathFun([DirName, ChildFileName])},
+                {ok, DirGuid, PathFun([DirName])},
+                {verification_failed, ArchiveDataDirGuid, ArchivePathFun([])}
+            ];
+        {?ARCHIVE_VERIFICATION_FAILED, reg_file} ->
+            {_ArchiveDataDirGuid, ArchivedChildFileGuid} = ArchivedFileGuidsFun(ArchiveId),
+            [
+                {ok, ChildFileGuid, PathFun([DirName, ChildFileName])},
+                {ok, DirGuid, PathFun([DirName])},
+                {verification_failed, ArchivedChildFileGuid, ArchivePathFun([DirName, ChildFileName])}
+            ]
+    end,
+    GetAuditLogFun = fun() ->
+        case opw_test_rpc:call(krakow, qos_entry_audit_log, browse_content, [ArchiveId, #{}]) of
+            {ok, #{<<"isLast">> := IsLast, <<"logEntries">> := LogEntries}} ->
+                LogEntriesWithoutIndices = lists:map(fun(Entry) ->
+                    maps:remove(<<"index">>, Entry)
+                end, LogEntries),
+                {ok, {IsLast, LogEntriesWithoutIndices}};
+            {error, _} = Error ->
+                Error
+        end
+    end,
+    ExpectedLogs = lists:map(fun(Template) -> 
+        log_template_mapper(Timestamp, Template) 
+    end, ExpectedLogsTemplates),
+    ?assertMatch({ok, {true, ExpectedLogs}}, GetAuditLogFun()).
+
+
+log_template_mapper(Timestamp, {ok, Guid, Path}) ->
+    {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+    #{
+        <<"content">> => #{
+            <<"description">> => <<"File archivisation finished.">>,
+            <<"fileId">> => ObjectId,
+            <<"path">> => Path,
+            <<"startTimestamp">> => Timestamp},
+        <<"severity">> => <<"info">>,
+        <<"timestamp">> => Timestamp
+    };
+log_template_mapper(Timestamp, {archivisation_failed, Guid, Path}) ->
+    {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+    #{
+        <<"content">> => #{
+            <<"description">> => <<"File archivisation failed.">>,
+            <<"fileId">> => ObjectId,
+            <<"path">> => Path,
+            <<"reason">> => #{
+                <<"description">> => <<"Operation failed with POSIX error: enoent.">>,
+                <<"details">> => #{<<"errno">> => <<"enoent">>},
+                <<"id">> => <<"posix">>
+            }},
+        <<"severity">> => <<"error">>,
+        <<"timestamp">> => Timestamp
+    };
+log_template_mapper(Timestamp, {verification_failed, Guid, Path}) ->
+    {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+    #{
+        <<"content">> => #{
+            <<"description">> => <<"File verification failed.">>,
+            <<"fileId">> => ObjectId,
+            <<"path">> => Path
+        },
+        <<"severity">> => <<"error">>,
+        <<"timestamp">> => Timestamp
+    }.
 
 
 mock_error_requested_job(archivisation, slave_job) ->
@@ -1014,7 +1169,12 @@ mock_error_requested_job(verification, master_job) ->
 mock_job_function_error(Module, FunctionName) ->
     Nodes = oct_background:get_all_providers_nodes(),
     test_utils:mock_new(Nodes, Module),
-    test_utils:mock_expect(Nodes, Module, FunctionName, fun(_, _) -> error(unexpected_error) end).
+    {FunctionName, Arity} = lists:keyfind(FunctionName, 1, Module:module_info(exports)),
+    MockFun = case Arity of
+        2 -> fun(_, _) -> error(?ERROR_POSIX(?ENOENT)) end;
+        3 -> fun(_, _, _) -> error(?ERROR_POSIX(?ENOENT)) end
+    end,
+    test_utils:mock_expect(Nodes, Module, FunctionName, MockFun).
 
 %===================================================================
 % SetUp and TearDown functions
@@ -1035,11 +1195,15 @@ end_per_suite(Config) ->
     oct_background:end_per_suite(),
     dir_stats_test_utils:enable_stats_counting(Config).
 
+init_per_group(audit_log_tests, Config) ->
+    ok = clock_freezer_mock:setup_for_ct(oct_background:get_all_providers_nodes(), [global_clock]),
+    init_per_group(default, Config);
 init_per_group(_Group, Config) ->
     Config2 = oct_background:update_background_config(Config),
     lfm_proxy:init(Config2, false).
 
 end_per_group(_Group, Config) ->
+    clock_freezer_mock:teardown_for_ct(oct_background:get_all_providers_nodes()),
     lfm_proxy:teardown(Config).
 
 init_per_testcase(_Case, Config) ->
@@ -1047,5 +1211,5 @@ init_per_testcase(_Case, Config) ->
 
 end_per_testcase(_Case, _Config) ->
     test_utils:mock_unload(oct_background:get_all_providers_nodes(), archivisation_traverse),
-    test_utils:mock_unload(oct_background:get_all_providers_nodes(), archive_verification_traverse), 
+    test_utils:mock_unload(oct_background:get_all_providers_nodes(), archive_verification_traverse),
     ok.

@@ -1049,7 +1049,8 @@
     all_batches_listed = false :: boolean(),
     % Uuid of file that should be processed after current file's subtree is processed.
     % If undefined then current file's parent will be used.
-    next_subtree_root = undefined :: undefined | file_meta:uuid()
+    next_subtree_root = undefined :: undefined | file_meta:uuid(),
+    processing_start_timestamp :: time:millis()
 }).
 
 -record(dir_update_time_stats, {
