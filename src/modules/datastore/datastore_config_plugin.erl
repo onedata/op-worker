@@ -117,7 +117,7 @@ get_models() -> [
     %% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 21.02.*.
     space_strategies,
     storage_sync_monitoring,
-    space_support_state
+    dir_stats_service_state
 ].
 
 %%--------------------------------------------------------------------

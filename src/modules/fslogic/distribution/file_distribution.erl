@@ -20,8 +20,9 @@
 -include("proto/oneprovider/provider_rpc_messages.hrl").
 
 %% API
--export([gather/2]).
-
+-export([
+    gather/2,
+    get_storage_locations/2]).
 
 % `undefined` physical size means that file was not yet created on this storage.
 -type dir_physical_size() :: undefined | non_neg_integer().
@@ -37,6 +38,12 @@
 -type get_request() :: #file_distribution_gather_request{}.
 -type get_result() :: #file_distribution_gather_result{}.
 
+-type storage_locations() :: #{
+    od_provider:id() => #{
+        storage:id() => file_location:storage_file_id()
+    }
+}.
+
 -export_type([
     dir_physical_size/0,
     provider_dir_distribution/0, dir_distribution/0,
@@ -44,6 +51,8 @@
     symlink_distribution/0,
     get_request/0, get_result/0
 ]).
+
+-export_type([storage_locations/0]).
 
 
 %%%===================================================================
@@ -67,6 +76,23 @@ gather(UserCtx, FileCtx0) ->
         ?SYMLINK_TYPE -> build_symlink_distribution(FileCtx3);
         _ -> gather_reg_distribution(FileCtx3)
     end}}.
+
+
+-spec get_storage_locations(user_ctx:ctx(), file_ctx:ctx()) -> 
+    {ok, storage_locations()} | errors:error().
+get_storage_locations(UserCtx, FileCtx0) ->
+    FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
+    FileCtx2 = fslogic_authz:ensure_authorized(
+        UserCtx, FileCtx1,
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?read_metadata_mask)]
+    ),
+    {FileType, FileCtx3} = file_ctx:get_type(FileCtx2),
+    
+    case FileType of
+        ?DIRECTORY_TYPE -> ?ERROR_NOT_SUPPORTED;
+        ?SYMLINK_TYPE -> ?ERROR_NOT_SUPPORTED;
+        _ -> {ok, get_reg_storage_locations(FileCtx3)}
+    end.
 
 
 %%%===================================================================
@@ -154,3 +180,23 @@ gather_reg_distribution(FileCtx) ->
             end
         end, ProviderDistributions)
     }.
+
+
+%% @private
+-spec get_reg_storage_locations(file_ctx:ctx()) -> storage_locations().
+get_reg_storage_locations(FileCtx) ->
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    
+    {ok, StoragesByProvider} = space_logic:get_storages_by_provider(SpaceId),
+    maps:map(fun(ProviderId, SupportingStorages) ->
+        LocId = file_location:id(FileUuid, ProviderId),
+        maps:map(fun(_StorageId, _) ->
+            case fslogic_location_cache:get_location(LocId, FileUuid, false) of
+                {ok, #document{value = #file_location{file_id = StorageFileId}}} ->
+                    StorageFileId;
+                {error, not_found} ->
+                    undefined
+            end
+        end, SupportingStorages)
+    end, StoragesByProvider).

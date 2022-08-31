@@ -95,7 +95,7 @@
 create(_AtmWorkflowExecutionAuth, AtmStoreConfig, undefined) ->
     BackendId = datastore_key:new(),
     ok = datastore_time_series_collection:create(?CTX, BackendId, build_initial_ts_collection_config(
-        AtmStoreConfig#atm_time_series_store_config.schemas
+        AtmStoreConfig#atm_time_series_store_config.time_series_collection_schema
     )),
 
     #atm_time_series_store_container{
@@ -242,13 +242,13 @@ get_ctx() ->
 %% be created for other, dynamic generators).
 %% @end
 %%-------------------------------------------------------------------
--spec build_initial_ts_collection_config([atm_time_series_schema:record()]) ->
+-spec build_initial_ts_collection_config(time_series_collection_schema:record()) ->
     time_series_collection:config().
-build_initial_ts_collection_config(TSSchemas) ->
+build_initial_ts_collection_config(#time_series_collection_schema{time_series_schemas = TSSchemas}) ->
     lists:foldl(fun
-        (TSSchema = #atm_time_series_schema{name_generator_type = exact}, Acc) ->
-            TSName = TSSchema#atm_time_series_schema.name_generator,
-            TSConfig = TSSchema#atm_time_series_schema.metrics,
+        (TSSchema = #time_series_schema{name_generator_type = exact}, Acc) ->
+            TSName = TSSchema#time_series_schema.name_generator,
+            TSConfig = TSSchema#time_series_schema.metrics,
             Acc#{TSName => TSConfig};
         (_, Acc) ->
             Acc
@@ -263,7 +263,11 @@ build_initial_ts_collection_config(TSSchemas) ->
 ) ->
     record().
 consume_measurements(Measurements, DispatchRules, Record = #atm_time_series_store_container{
-    config = #atm_time_series_store_config{schemas = TSSchemas},
+    config = #atm_time_series_store_config{
+        time_series_collection_schema = #time_series_collection_schema{
+            time_series_schemas = TSSchemas
+        }
+    },
     backend_id = BackendId
 }) ->
     {ConsumeSpec, InvolvedCollectionConfig} = lists:foldl(fun(Measurement, {ConsumeSpecOuterAcc, InvolvedConfigOuterAcc}) ->
@@ -276,7 +280,7 @@ consume_measurements(Measurements, DispatchRules, Record = #atm_time_series_stor
             UpdatedConsumeSpec = kv_utils:update_with([TargetTSName, ?ALL_METRICS], fun(PreviousMeasurements) ->
                 [{Timestamp, Value} | PreviousMeasurements]
             end, [{Timestamp, Value}], ConsumeSpecInnerAcc),
-            {UpdatedConsumeSpec, InvolvedConfigInnerAcc#{TargetTSName => TSSchema#atm_time_series_schema.metrics}}
+            {UpdatedConsumeSpec, InvolvedConfigInnerAcc#{TargetTSName => TSSchema#time_series_schema.metrics}}
 
         end, {ConsumeSpecOuterAcc, InvolvedConfigOuterAcc}, MatchingDispatchRules)
     end, {#{}, #{}}, Measurements),

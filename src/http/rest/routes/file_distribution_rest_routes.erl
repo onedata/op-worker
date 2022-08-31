@@ -40,5 +40,16 @@ routes() -> [
             aspect = distribution, 
             scope = private
         }
+    }},
+    %% Get file storage locations
+    {<<"/data/:id/storage_locations">>, rest_handler, #rest_req{
+        method = 'GET',
+        produces = [<<"application/json">>],
+        b_gri = #b_gri{
+            type = op_file, 
+            id = ?OBJECTID_BINDING(id), 
+            aspect = storage_locations, 
+            scope = private
+        }
     }}
 ].

@@ -665,9 +665,9 @@ validate_result_fun_rest(_MemRef, qos_audit_log) ->
                 #{
                     <<"index">> := _,
                     <<"timestamp">> := _,
+                    <<"severity">> := <<"info">>,
                     <<"content">> := #{
                         <<"status">> := <<"completed">>,
-                        <<"severity">> := <<"info">>,
                         <<"fileId">> := _,
                         <<"description">> := <<"Local replica reconciled.">>
                     }
@@ -675,9 +675,9 @@ validate_result_fun_rest(_MemRef, qos_audit_log) ->
                 #{
                     <<"index">> := _,
                     <<"timestamp">> := _,
+                    <<"severity">> := <<"info">>,
                     <<"content">> := #{
                         <<"status">> := <<"scheduled">>,
-                        <<"severity">> := <<"info">>,
                         <<"fileId">> := _,
                         <<"description">> := <<"Remote replica differs, reconciliation started.">>
                     }
@@ -776,8 +776,8 @@ validate_result_fun_gs(MemRef, qos_time_series_collections) ->
                 };
             TransferringProviderId ->
                 #{
-                    ?BYTES_STATS => [?QOS_TOTAL_TIME_SERIES_NAME | get_supporting_storages(TargetNode, SpaceId, FileCreatingProviderId)],
-                    ?FILES_STATS => [?QOS_TOTAL_TIME_SERIES_NAME | get_supporting_storages(TargetNode, SpaceId, TransferringProviderId)]
+                    ?BYTES_STATS => [?QOS_TOTAL_TIME_SERIES_NAME | expected_transfer_stats_ts_names(TargetNode, SpaceId, FileCreatingProviderId)],
+                    ?FILES_STATS => [?QOS_TOTAL_TIME_SERIES_NAME | expected_transfer_stats_ts_names(TargetNode, SpaceId, TransferringProviderId)]
                 }
         end,
 
@@ -926,9 +926,9 @@ setup_preexisting_fulfilled_qos_causing_file_transfer(Config, SpaceId, FileCreat
     QosEntryId.
 
 
-get_supporting_storages(Node, SpaceId, ProviderId) ->
+expected_transfer_stats_ts_names(Node, SpaceId, ProviderId) ->
     {ok, ProviderSupports} = opw_test_rpc:call(Node, space_logic, get_provider_storages, [SpaceId, ProviderId]),
-    maps:keys(ProviderSupports).
+    [?QOS_STORAGE_TIME_SERIES_NAME(StorageId) || StorageId <- maps:keys(ProviderSupports)].
 
 %%%===================================================================
 %%% SetUp and TearDown functions

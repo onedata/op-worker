@@ -4,6 +4,34 @@ Release notes for project op-worker
 CHANGELOG
 ---------
 
+### 21.02.0-alpha27
+
+-   **VFS-9655** Web GUI: Added presentation of directories data
+    distribution.
+-   **VFS-9637** Web GUI: Improved and unified look of audit log
+    browsers.
+-   **VFS-9604** Web GUI: Moved file metadata settings from separate
+    modal to file info panel.
+-   **VFS-9534** Added Content-Disposition headers to the file download
+    REST endpoint.
+-   **VFS-9471** Added endpoint for retrievieng regular file location on
+    storages.
+-   **VFS-9420** Directory statistics and file/directory data
+    distribution is now presented in GUI from the point of view of each
+    supporting provider.
+-   **VFS-9418** Added accountingEnabled and dirStatsServiceEnabled
+    settings for space support.
+-   **VFS-9164** Web GUI: Added support for cancelling archive creation.
+-   **VFS-8948** Introduced the concept of time series dashboard specs -
+    structured recipes for transforming and displaying measurements in
+    charts, which can be organized into sections. Each time series
+    collection has a linked dashboard spec that will be used for
+    rendering the dashboard in GUI.
+-   **VFS-8903** Web GUI: Upgraded EmberJS to v3.4.
+-   **VFS-8836** It is now possible to cancel ongoing archivisation.
+-   **VFS-8716** Web GUI: Added complex data types editor to the
+    automation views.
+
 ### 21.02.0-alpha26
 
 -   **VFS-9342** Added automation task execution Id annotation to

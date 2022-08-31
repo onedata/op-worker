@@ -19,6 +19,7 @@
 -export([
     list/4,
     archive_dataset/6,
+    cancel_archivisation/2,
     get_info/2,
     update/3,
     delete/3,
@@ -71,6 +72,14 @@ archive_dataset(SessionId, DatasetId, Config, PreservedCallback, DeletedCallback
         preserved_callback = PreservedCallback,
         deleted_callback = DeletedCallback
     }).
+
+
+-spec cancel_archivisation(session:id(), archive:id()) ->
+    archive_api:info() | no_return().
+cancel_archivisation(SessionId, ArchiveId) ->
+    SpaceGuid = archive_id_to_space_guid(ArchiveId),
+    
+    middleware_worker:check_exec(SessionId, SpaceGuid, #archivisation_cancel_request{id = ArchiveId}).
 
 
 -spec get_info(session:id(), archive:id()) ->
@@ -138,8 +147,8 @@ get_recall_progress(SessionId, FileGuid) ->
     }).
 
 
--spec browse_recall_log(session:id(), file_id:file_guid(), json_infinite_log_model:listing_opts()) ->
-    json_infinite_log_model:browse_result() | no_return().
+-spec browse_recall_log(session:id(), file_id:file_guid(), audit_log_browse_opts:opts()) ->
+    audit_log:browse_result() | no_return().
 browse_recall_log(SessionId, FileGuid, BrowseOpts) ->
     middleware_worker:check_exec(SessionId, FileGuid, #archive_recall_log_browse_request{
         id = file_id:guid_to_uuid(FileGuid),

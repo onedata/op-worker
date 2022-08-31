@@ -46,6 +46,8 @@
     on_write_callback => callback()
 }.
 
+-export_type([options/0]).
+
 -define(DEFAULT_RECURSIVE_OPT, true).
 -define(DEFAULT_OVERWRITE_OPT, false).
 -define(DEFAULT_WRITE_CALLBACK_OPT, fun(_) -> continue end).

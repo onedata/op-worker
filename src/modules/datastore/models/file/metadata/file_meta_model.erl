@@ -374,7 +374,8 @@ upgrade_record(11, {?FILE_META_MODEL, Name, Type, Mode, ProtectionFlags, ACL, Ow
 %% TODO - VFS-5962 - delete when event emission is possible in dbsync_events.
 %% @end
 %%--------------------------------------------------------------------
--spec resolve_conflict(datastore_model:ctx(), file_meta:doc(), file_meta:doc()) -> default.
+-spec resolve_conflict(datastore_model:ctx(), file_meta:doc(), file_meta:doc()) -> 
+    default | {true, file_meta:doc()}.
 resolve_conflict(_Ctx,
     NewDoc = #document{
         key = Uuid,

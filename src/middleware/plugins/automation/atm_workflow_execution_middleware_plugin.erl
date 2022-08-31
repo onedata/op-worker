@@ -139,7 +139,7 @@ authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
     aspect = cancel
 }}, #atm_workflow_execution{user_id = CreatorUserId, space_id = SpaceId}) ->
     UserId == CreatorUserId orelse space_logic:has_eff_privilege(
-        SpaceId, UserId, ?SPACE_CANCEL_ATM_WORKFLOW_EXECUTIONS
+        SpaceId, UserId, ?SPACE_MANAGE_ATM_WORKFLOW_EXECUTIONS
     );
 
 authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{

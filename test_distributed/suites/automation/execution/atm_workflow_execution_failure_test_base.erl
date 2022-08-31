@@ -118,10 +118,14 @@
                 #atm_store_schema_draft{
                     id = ?TARGET_STORE_SCHEMA_ID,
                     type = time_series,
-                    config = #atm_time_series_store_config{schemas = [
-                        ?MAX_FILE_SIZE_TS_SCHEMA,
-                        ?COUNT_TS_SCHEMA
-                    ]},
+                    config = #atm_time_series_store_config{
+                        time_series_collection_schema = #time_series_collection_schema{
+                            time_series_schemas = [
+                                ?MAX_FILE_SIZE_TS_SCHEMA,
+                                ?COUNT_TS_SCHEMA
+                            ]
+                        }
+                    },
                     requires_initial_content = false,
                     default_initial_content = __ITERATED_CONTENT
                 }
@@ -844,10 +848,10 @@ job_failure_expect_task_execution_ended(
 ) ->
     [automation:item()].
 get_audit_log_contents(AtmTaskExecutionId, AtmMockCallCtx) ->
-    #{<<"logs">> := Logs, <<"isLast">> := true} = atm_workflow_execution_test_runner:browse_store(
+    #{<<"logEntries">> := Logs, <<"isLast">> := true} = atm_workflow_execution_test_runner:browse_store(
         ?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID, AtmTaskExecutionId, AtmMockCallCtx
     ),
-    lists:map(fun(#{<<"value">> := #{<<"content">> := LogContent}}) -> LogContent end, Logs).
+    lists:map(fun(#{<<"content">> := LogContent}) -> LogContent end, Logs).
 
 
 %% @private

@@ -121,7 +121,6 @@ invalidate_cache_and_reconcile(FileCtx) ->
     when Option :: ignore_missing_files.
 reconcile_qos_internal(FileCtx, Options) when is_list(Options) ->
     InodeUuid = file_ctx:get_referenced_uuid_const(FileCtx),
-    {StorageId, FileCtx1} = file_ctx:get_storage_id(FileCtx),
     case file_qos:get_effective(InodeUuid) of
         {error, {file_meta_missing, MissingUuid}} ->
             % new file_ctx will be generated when file_meta_posthook
@@ -132,14 +131,16 @@ reconcile_qos_internal(FileCtx, Options) when is_list(Options) ->
         {ok, EffFileQos} ->
             case file_qos:is_in_trash(EffFileQos) of
                 false ->
+                    {StorageId, FileCtx1} = file_ctx:get_storage_id(FileCtx),
                     QosEntriesToUpdate = file_qos:get_assigned_entries_for_storage(EffFileQos, StorageId),
                     ok = qos_traverse:reconcile_file_for_qos_entries(FileCtx1, QosEntriesToUpdate);
                 true ->
                     LocalQosEntries = file_qos:get_locally_required_qos_entries(EffFileQos),
-                    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
+                    {FileLogicalPath, FileCtx1} = file_ctx:get_logical_path(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
+                    FileGuid = file_ctx:get_logical_guid_const(FileCtx1),
                     lists:foreach(fun(QosEntryId) ->
                         ok = qos_entry_audit_log:report_file_synchronization_skipped(
-                            QosEntryId, FileGuid, file_deleted_locally )
+                            QosEntryId, FileGuid, FileLogicalPath, file_deleted_locally)
                     end, LocalQosEntries)
             end;
         undefined ->
@@ -153,10 +154,11 @@ report_synchronization_skipped(FileCtx) ->
     case file_qos:get_effective(InodeUuid) of
         {ok, EffFileQos} ->
             LocalQosEntries = file_qos:get_locally_required_qos_entries(EffFileQos),
-            FileGuid = file_ctx:get_logical_guid_const(FileCtx),
+            {FileLogicalPath, FileCtx1} = file_ctx:get_logical_path(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
+            FileGuid = file_ctx:get_logical_guid_const(FileCtx1),
             lists:foreach(fun(QosEntryId) ->
                 ok = qos_entry_audit_log:report_file_synchronization_skipped(
-                    QosEntryId, FileGuid, reconciliation_already_in_progress)
+                    QosEntryId, FileGuid, FileLogicalPath, reconciliation_already_in_progress)
             end, LocalQosEntries);
         _ ->
             ok

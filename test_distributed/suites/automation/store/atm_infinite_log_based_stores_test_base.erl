@@ -43,7 +43,8 @@
 -type input_item_to_exp_store_item() :: fun((
     atm_workflow_execution_auth:record(),
     atm_value:expanded(),
-    atm_store:id()
+    atm_store:id(),
+    Index :: non_neg_integer()
 ) ->
     atm_value:expanded()
 ).
@@ -211,8 +212,8 @@ update_content_test_base(#{
     GenValidInputItemFun = fun(AtmDataSpec) ->
         InputItemFormatterFun(gen_valid_data(AtmWorkflowExecutionAuth, AtmDataSpec))
     end,
-    PrepareExpStoreItemFun = fun(InputItem, AtmDataSpec) ->
-        InputItemToExpStoreItemFun(AtmWorkflowExecutionAuth, InputItem, AtmDataSpec)
+    PrepareExpStoreItemFun = fun(InputItem, AtmDataSpec, Index) ->
+        InputItemToExpStoreItemFun(AtmWorkflowExecutionAuth, InputItem, AtmDataSpec, Index)
     end,
 
     lists:foreach(fun(AtmStoreConfig) ->
@@ -223,9 +224,9 @@ update_content_test_base(#{
             1 -> undefined;
             2 -> [GenValidInputItemFun(InputItemGeneratorSeedDataSpec)]
         end,
-        InitialStoreContent = case InitialInputContent of
-            undefined -> [];
-            [InputItem] -> [PrepareExpStoreItemFun(InputItem, InputItemGeneratorSeedDataSpec)]
+        {InitialStoreContent, Offset} = case InitialInputContent of
+            undefined -> {[], 0};
+            [InputItem] -> {[PrepareExpStoreItemFun(InputItem, InputItemGeneratorSeedDataSpec, 0)], 1}
         end,
         {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
             AtmWorkflowExecutionAuth, InitialInputContent, AtmStoreSchema
@@ -235,7 +236,7 @@ update_content_test_base(#{
             AtmWorkflowExecutionAuth, InputItemGeneratorSeedDataSpec
         ),
         NewInputItem1 = InputItemFormatterFun(NewInputItemDataSeed1),
-        NewItem1 = PrepareExpStoreItemFun(NewInputItem1, InputItemGeneratorSeedDataSpec),
+        NewItem1 = PrepareExpStoreItemFun(NewInputItem1, InputItemGeneratorSeedDataSpec, Offset),
 
         % Assert append/extend with invalid arg(s) should fail
         InvalidInputItemDataSeed = gen_invalid_data(
@@ -297,8 +298,8 @@ update_content_test_base(#{
             BuildContentUpdateOptionsFun(extend),
             AtmStoreId
         ))),
-        NewItem2 = PrepareExpStoreItemFun(NewInputItem2, InputItemGeneratorSeedDataSpec),
-        NewItem3 = PrepareExpStoreItemFun(NewInputItem3, InputItemGeneratorSeedDataSpec),
+        NewItem2 = PrepareExpStoreItemFun(NewInputItem2, InputItemGeneratorSeedDataSpec, Offset + 1),
+        NewItem3 = PrepareExpStoreItemFun(NewInputItem3, InputItemGeneratorSeedDataSpec, Offset + 2),
         ExpStoreContent2 = ExpStoreContent1 ++ [NewItem2, NewItem3],
         ?assertEqual(ExpStoreContent2, GetContentFun(AtmWorkflowExecutionAuth, AtmStoreId))
 
@@ -327,9 +328,9 @@ iterator_test_base(#{
         AtmStoreSchema = atm_store_test_utils:build_store_schema(AtmStoreConfig, false),
         AtmDataSpec = GetInputItemGeneratorSeedDataSpecFun(AtmStoreConfig),
 
-        {InitialInputContent, ExpStoreContent} = lists:unzip(lists:map(fun(_) ->
+        {InitialInputContent, ExpStoreContent} = lists:unzip(lists:map(fun(Index) ->
             InputItem = InputItemFormatterFun(gen_valid_data(AtmWorkflowExecutionAuth, AtmDataSpec)),
-            Item = InputItemToExpStoreItemFun(AtmWorkflowExecutionAuth, InputItem, AtmDataSpec),
+            Item = InputItemToExpStoreItemFun(AtmWorkflowExecutionAuth, InputItem, AtmDataSpec, Index - 1),
             {InputItem, Item}
         end, lists:seq(1, ItemsCount))),
 
@@ -420,9 +421,9 @@ browse_content_test_base(BrowsingMethod, #{
             AtmWorkflowExecutionAuth, InitialInputContent, AtmStoreSchema
         ))),
 
-        Content = lists:map(fun(InputItem) ->
+        Content = lists:map(fun({Index, InputItem}) ->
             Item = InputItemToExpStoreItemFun(
-                AtmWorkflowExecutionAuth, InputItem, AtmDataSpec
+                AtmWorkflowExecutionAuth, InputItem, AtmDataSpec, Index - 1
             ),
             case RandomlyRemoveEntityReferencedByItemFun(
                 AtmWorkflowExecutionAuth, Item, AtmDataSpec
@@ -430,7 +431,7 @@ browse_content_test_base(BrowsingMethod, #{
                 {true, ExpError} -> ExpError;
                 false -> {ok, Item}
             end
-        end, InitialInputContent),
+        end, lists_utils:enumerate(InitialInputContent)),
 
         lists:foreach(fun(_) ->
             StartIndex = rand:uniform(Length),

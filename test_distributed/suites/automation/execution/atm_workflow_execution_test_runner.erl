@@ -144,10 +144,10 @@
 }).
 -type test_ctx() :: #test_ctx{}.
 
--define(AWAIT_OTHER_PARALLEL_PIPELINES_NEXT_STEP_INTERVAL, 100).
+-define(AWAIT_OTHER_PARALLEL_PIPELINES_NEXT_STEP_INTERVAL, 150).
 -define(TEST_HUNG_MAX_PROBES_NUM, 20).
 
--define(ASSERT_RETRIES, 30).
+-define(ASSERT_RETRIES, 45).
 
 -define(TEST_PROC_PID_KEY(__ATM_WORKFLOW_EXECUTION_ID),
     {atm_test_runner_process, __ATM_WORKFLOW_EXECUTION_ID}
@@ -305,8 +305,12 @@ monitor_workflow_execution(TestCtx0) ->
     after ?AWAIT_OTHER_PARALLEL_PIPELINES_NEXT_STEP_INTERVAL ->
         case TestCtx0#test_ctx.test_hung_probes_left of
             0 ->
+                PendingStepPhaseSelectors = lists:map(
+                    fun(#step_phase{selector = StepPhaseSelector}) -> StepPhaseSelector end,
+                    TestCtx0#test_ctx.pending_step_phases
+                ),
                 ct:pal("Automation workflow execution test hung after steps: ~p", [
-                    TestCtx0#test_ctx.executed_step_phases
+                    PendingStepPhaseSelectors ++ TestCtx0#test_ctx.executed_step_phases
                 ]),
                 ?assertEqual(success, failure);
             Num ->
@@ -1194,7 +1198,7 @@ browse_store(SessionId, SpaceId, AtmWorkflowExecutionId, AtmStoreId) ->
 
 %% @private
 build_browse_opts(audit_log) ->
-    #atm_audit_log_store_content_browse_options{listing_opts = ?INFINITE_LOG_BASED_STORES_LISTING_OPTS};
+    #atm_audit_log_store_content_browse_options{browse_opts = ?INFINITE_LOG_BASED_STORES_LISTING_OPTS};
 
 build_browse_opts(list) ->
     #atm_list_store_content_browse_options{listing_opts = ?INFINITE_LOG_BASED_STORES_LISTING_OPTS};
