@@ -201,6 +201,9 @@ reply_to_handler_mock(Sender, ManagerAcc, Options, #handler_call{
             CancelAns = rpc:call(node(Sender), workflow_engine, init_cancel_procedure, [ExecutionId]),
             Sender ! throw_error,
             ManagerAcc#{cancel_ans => CancelAns};
+        {Fun, #{throw_error := {Fun, TaskId, Item}}} ->
+            Sender ! throw_error,
+            ManagerAcc;
         {Fun, #{cancel_execution := {Fun, TaskId, Item}}} ->
             CancelAns = rpc:call(node(Sender), workflow_engine, init_cancel_procedure, [ExecutionId]),
             spawn(fun() ->
@@ -702,7 +705,8 @@ verify_lanes_execution_history([{TaskIds, ExpectedItems, LaneExecutionContext} |
             Filtered = lists:filter(fun
                 (#handler_call{lane_id = Id, function = Function}) when Id =:= LaneId ->
                     Function =/= run_task_for_item andalso Function =/= report_async_task_result andalso
-                        Function =/= process_task_result_for_item andalso Function =/= process_streamed_task_data;
+                        Function =/= process_task_result_for_item andalso Function =/= process_streamed_task_data andalso
+                        Function =/= report_item_error;
                 (_) ->
                     true
             end, GatheredForLane),

@@ -51,6 +51,9 @@
     fail_first_item_iteration_with_prepare_in_advance_test/1,
     fail_first_item_iteration_with_stream_test/1,
 
+    exception_during_run_task_test/1,
+    exception_during_processing_result_test/1,
+
     lane_preparation_failure_test/1,
     lane_preparation_in_advance_failure_test/1,
     fail_lane_preparation_before_prepare_in_advance_finish_test/1,
@@ -103,6 +106,9 @@ all() ->
         fail_first_item_iteration_test,
         fail_first_item_iteration_with_prepare_in_advance_test,
         fail_first_item_iteration_with_stream_test,
+
+        exception_during_run_task_test,
+        exception_during_processing_result_test,
 
         lane_preparation_failure_test,
         lane_preparation_in_advance_failure_test,
@@ -316,6 +322,15 @@ fail_first_item_iteration_with_stream_test(Config) ->
         generator_options = ?EXEMPLARY_EMPTY_STREAM
     }, <<"1">>, 1).
 
+
+%%%===================================================================
+
+exception_during_run_task_test(Config) ->
+    exception_test_base(Config, run_task_for_item).
+
+exception_during_processing_result_test(Config) ->
+    exception_test_base(Config, process_task_result_for_item).
+
 %%%===================================================================
 
 lane_preparation_failure_test(Config) ->
@@ -480,6 +495,17 @@ iteration_failure_test_base(Config, #test_config{
         verify_history_options = VerifyHistoryOptions#{expect_exception => LaneId}
     }).
 
+exception_test_base(Config, CallbackToThrow) ->
+    ExecutionHistory = single_execution_test_base(Config, #test_config{
+        task_type = async,
+        generator_options = ?EXEMPLARY_STREAMS,
+        test_execution_manager_options = [{throw_error, {CallbackToThrow, <<"3_3_2">>, <<"100">>}}],
+        verify_statistics_options = #{ignore_async_slots_check => true},
+        verify_history_options = #{expect_exception => <<"3">>}
+    }),
+
+    ?assertNot(workflow_scheduling_test_common:has_finish_callbacks_for_lane(ExecutionHistory, <<"3">>)).
+
 lane_failure_test_base(Config, #test_config{
     test_manager_failure_key = ManagerKey,
     test_execution_manager_options = ManagerOptions
@@ -517,7 +543,8 @@ single_execution_test_base(Config, #test_config{
     workflow_scheduling_test_common:verify_execution_history(
         WorkflowExecutionSpec, ExecutionHistory, VerifyHistoryOptions),
 
-    workflow_scheduling_test_common:verify_memory(Config, InitialKeys).
+    workflow_scheduling_test_common:verify_memory(Config, InitialKeys),
+    ExecutionHistory.
 
 
 %%%===================================================================
