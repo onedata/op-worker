@@ -27,21 +27,18 @@
 -export([
     is_branching_node/1,
     get_node_id/1, get_node_name/2, get_node_path_tokens/1, get_parent_id/2,
-    init_node_iterator/4,
-    get_next_batch/3,
-    is_node_listing_finished/1
+    init_node_iterator/3,
+    get_next_batch/2
 ]).
 
 -type node_id() :: binary(). % actually dataset:id(), but without undefined.
 -type tree_node() :: dataset_api:info().
 -type node_name() :: file_meta:node_name().
--type node_path() :: file_meta:node_path().
+-type node_path() :: file_meta:path().
 -type node_iterator() :: #{
-    offset => datasets_structure:offset(),
-    start_index => datasets_structure:index(),
-    limit => datasets_structure:limit(),
-    is_finished => boolean()
-}. % dataset_api:listing_opts() with additional is_finished field
+    node := tree_node(),
+    opts := dataset_api:listing_opts() 
+}.
 -type pagination_token() :: recursive_listing:pagination_token().
 -type entry() :: recursive_listing:result_entry(node_path(), tree_node()).
 -type result() :: recursive_listing:result(node_path(), entry()).
@@ -97,17 +94,20 @@ get_parent_id(#dataset_info{parent = ParentId}, _UserCtx) ->
     end.
 
 
--spec init_node_iterator(node_name(), recursive_listing:limit(), boolean(), node_id()) -> 
+-spec init_node_iterator(tree_node(), node_name(), recursive_listing:limit()) -> 
     node_iterator().
-init_node_iterator(StartName, Limit, _IsContinuous, _ParentGuid) ->
+init_node_iterator(DatasetInfo, StartName, Limit) ->
     %% @TODO VFS-9678 - properly handle listing datasets with name conflicts
     StartIndex = datasets_structure:pack_entry_index(StartName, <<>>),
-    #{limit => Limit, offset => 0, start_index => StartIndex, is_finished => false}.
+    #{
+        node => DatasetInfo,
+        opts => #{limit => Limit, offset => 0, start_index => StartIndex, is_finished => false}
+    }.
 
 
--spec get_next_batch(tree_node(), node_iterator(), user_ctx:ctx()) ->
-    {ok, [tree_node()], node_iterator(), tree_node()}.
-get_next_batch(#dataset_info{id = Id} = DatasetInfo, ListOpts, _UserCtx) ->
+-spec get_next_batch(node_iterator(), user_ctx:ctx()) ->
+    {more | done, [tree_node()], node_iterator(), tree_node()}.
+get_next_batch(#{node := #dataset_info{id = Id} = DatasetInfo, opts := ListOpts}, _UserCtx) ->
     % NOTE: no need to check access privileges as dataset listing is controlled only by space privs 
     % and should be checked on higher levels.
     {ok, {Children, IsLast}} = dataset_api:list_children_datasets(Id, ListOpts, ?EXTENDED_INFO),
@@ -118,10 +118,9 @@ get_next_batch(#dataset_info{id = Id} = DatasetInfo, ListOpts, _UserCtx) ->
             #dataset_info{index = Index} = lists:last(Children),
             Index
     end,
+    ProgressMarker = case IsLast of
+        true -> done;
+        false -> more
+    end,
     % set offset to 1 to ensure that listing is exclusive
-    {ok, Children, #{is_finished => IsLast, offset => 1, start_index => LastIndex}, DatasetInfo}.
-
-
--spec is_node_listing_finished(node_iterator()) -> boolean().
-is_node_listing_finished(#{is_finished := IsFinished}) ->
-    IsFinished.
+    {ProgressMarker, Children, #{offset => 1, start_index => LastIndex}, DatasetInfo}.

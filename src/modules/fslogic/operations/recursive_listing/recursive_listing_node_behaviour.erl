@@ -6,7 +6,8 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% 
+%%% Behaviour of single node during recursive listing. For more details 
+%%% consult `recursive_listing` module.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(recursive_listing_node_behaviour).
@@ -32,12 +33,10 @@
 -callback get_node_path_tokens(tree_node()) -> {[node_name()], tree_node()}.
 
 % NOTE: callback used only in listing initialization process.
--callback get_parent_id(tree_node(), user_ctx:ctx()) -> node_id().
+-callback get_parent_id(tree_node(), user_ctx:ctx()) -> node_id(). % fixme remove
 
--callback init_node_iterator(node_name(), limit(), boolean(), node_id()) -> 
+-callback init_node_iterator(tree_node(), node_name(), limit()) -> 
     node_iterator().
 
--callback get_next_batch(tree_node(), node_iterator(), user_ctx:ctx()) ->
-    {ok, [tree_node()], node_iterator(), tree_node()} | no_access.
-
--callback is_node_listing_finished(node_iterator()) -> boolean().
+-callback get_next_batch(node_iterator(), user_ctx:ctx()) ->
+    {more | done, [tree_node()], node_iterator(), tree_node()} | no_access.

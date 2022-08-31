@@ -14,8 +14,8 @@
 %%%  - non-branching node is any other node, i.e node that do not contain any subtree 
 %%%    that can be listed (e.g regular files).
 %%%
-% fixme it is assumed that there is access to root file
-%%% All paths user does not have access to are returned under `inaccessible_paths` key.
+%%% It is assumed that there is access to root node. All paths user does not have access to are 
+%%% returned under `inaccessible_paths` key.
 %%% Available options: 
 %%%     * limit - maximum number of entries that will be returned in a single request. 
 %%%               For this value both `entries` and `inaccessible_paths` are calculated;
@@ -170,8 +170,7 @@ prepare_initial_listing_state(Module, UserCtx, RootNode, Options) ->
         prefix := Prefix, include_branching_nodes := IncludeBranching
     } = put_defaults(Options),
     PrefixTokens = filename:split(Prefix),
-    ParentId = Module:get_parent_id(RootNode, UserCtx),
-    case infer_starting_node(Module, PrefixTokens, RootNode, ParentId, UserCtx, []) of
+    case infer_starting_node(Module, PrefixTokens, RootNode, UserCtx, []) of
         {ok, NodeToList, LastPrefixToken} ->
             case infer_start_after(GivenStartAfter, Prefix, LastPrefixToken) of
                 {ok, FinalStartAfter} ->
@@ -211,26 +210,25 @@ put_defaults(Options) ->
     
 
 %% @private
--spec infer_starting_node(module(), [node_name()], tree_node(), binary(), user_ctx:ctx(), [node_name()]) -> 
+-spec infer_starting_node(module(), [node_name()], tree_node(), user_ctx:ctx(), [node_name()]) -> 
     {ok, tree_node(), node_name()} | nothing_to_list | {no_access, node_path()}.
-infer_starting_node(_Module, [], Node, _ParentId, _UserCtx, _RevRelPathTokens) ->
+infer_starting_node(_Module, [], Node, _UserCtx, _RevRelPathTokens) ->
     {ok, Node, <<>>};
-infer_starting_node(_Module, [PrefixToken], Node, _ParentId, _UserCtx, _RevRelPathTokens) ->
+infer_starting_node(_Module, [PrefixToken], Node, _UserCtx, _RevRelPathTokens) ->
     % no need to check node access, as it will be checked during actual listing
     {ok, Node, PrefixToken};
-infer_starting_node(Module, [PrefixToken | Tail], Node, ParentId, UserCtx, RevRelPathTokens) ->
-    Opts = Module:init_node_iterator(PrefixToken, 1, false, ParentId),
-    case Module:get_next_batch(Node, Opts, UserCtx) of
-        {ok, [NextNode], _E, _Node2} ->
+infer_starting_node(Module, [PrefixToken | Tail], Node, UserCtx, RevRelPathTokens) ->
+    NodeIterator = Module:init_node_iterator(Node, PrefixToken, 1),
+    case Module:get_next_batch(NodeIterator, UserCtx) of
+        {_, [NextNode], _E, _Node2} ->
             case Module:get_node_name(NextNode, UserCtx) of
                 {PrefixToken, NextNode2} -> 
-                    NodeId = Module:get_node_id(NextNode2),
                     infer_starting_node(
-                        Module, Tail, NextNode2, NodeId, UserCtx, [PrefixToken | RevRelPathTokens]);
+                        Module, Tail, NextNode2, UserCtx, [PrefixToken | RevRelPathTokens]);
                 _ -> 
                     nothing_to_list
             end;
-        {ok, [], _E, _Node2} ->
+        {_, [], _E, _Node2} ->
             nothing_to_list;
         no_access ->
             {no_access, build_path(lists:reverse(RevRelPathTokens))}
@@ -293,7 +291,7 @@ process_current_branching_node(UserCtx, Node, State) ->
     end,
     case matches_prefix(Path, State) orelse IsAncestorNode of
         true ->
-            {ListOpts, UpdatedState} = init_current_branching_node_processing(State),
+            {ListOpts, UpdatedState} = init_current_branching_node_processing(Node, State),
             process_current_branching_node_in_batches(UserCtx, Node, ListOpts, UpdatedState, #result_accumulator{});
         false ->
             {done, #result_accumulator{}}
@@ -305,21 +303,25 @@ process_current_branching_node(UserCtx, Node, State) ->
     user_ctx:ctx(), tree_node(), node_iterator(), state(), accumulator()
 ) -> 
     {progress_marker(), accumulator()}.
-process_current_branching_node_in_batches(UserCtx, Node, NodeListingState, State, ResultAcc) ->
+process_current_branching_node_in_batches(UserCtx, Node, NodeIterator, State, ResultAcc) ->
     #state{limit = Limit, module = Module} = State,
-    {Children, UpdatedResultAcc, NextListOpts, IsInaccessible, Node2} = 
-        case Module:get_next_batch(Node, NodeListingState, UserCtx) of
-            {ok, C, LO, O} -> 
-                {C, append_branching_node(State, O, ResultAcc), LO, false, O};
+    {Children, UpdatedResultAcc, NextIterator, Node2} = 
+        case Module:get_next_batch(NodeIterator, UserCtx) of
+            {BatchProgressMarker, C, I, N} -> 
+                Iter = case BatchProgressMarker of
+                    done -> undefined;
+                    more -> I
+                end,
+                {C, append_branching_node(State, N, ResultAcc), Iter, N};
             no_access ->
-                {[], result_append_inaccessible_path(State, ResultAcc), undefined, true, Node}
+                {[], result_append_inaccessible_path(State, ResultAcc), undefined, Node}
         end,
     
     {Res, FinalProcessedNodeCount} = lists_utils:foldl_while(fun(ChildNode, {TmpResultAcc, ProcessedNodeCount}) ->
-        {Marker, ChildrenResultAcc} = process_children(UserCtx, ChildNode, State#state{
+        {Marker, ChildResultAcc} = process_child(UserCtx, ChildNode, State#state{
             limit = Limit - result_length(TmpResultAcc)
         }),
-        ResToReturn = merge_results(TmpResultAcc, ChildrenResultAcc),
+        ResToReturn = merge_results(TmpResultAcc, ChildResultAcc),
         NodeProcessedIncrement = case Marker of
             done -> 1;
             more -> 0
@@ -337,13 +339,13 @@ process_current_branching_node_in_batches(UserCtx, Node, NodeListingState, State
             ?critical(
                 "Listed more entries than requested in recursive listing of node: ~p~n"
                 "state: ~p~noptions: ~p~nlimit: ~p, listed: ~p", 
-                [Module:get_node_id(Node), State, NodeListingState, Limit, ResultLength]),
+                [Module:get_node_id(Node), State, NodeIterator, Limit, ResultLength]),
             throw(?ERROR_INTERNAL_SERVER_ERROR);
         _ -> 
             ok
     end, 
     
-    case {ResultLength, IsInaccessible orelse Module:is_node_listing_finished(NextListOpts)} of
+    case {ResultLength, NextIterator == undefined} of
         {Limit, IsFinished} ->
             ProgressMarker = case IsFinished and (FinalProcessedNodeCount == length(Children)) of
                 true -> done;
@@ -357,16 +359,16 @@ process_current_branching_node_in_batches(UserCtx, Node, NodeListingState, State
                 limit = Limit - result_length(Res), 
                 is_first_batch = false
             },
-            process_current_branching_node_in_batches(UserCtx, Node2, NextListOpts, UpdatedState, Res)
+            process_current_branching_node_in_batches(UserCtx, Node2, NextIterator, UpdatedState, Res)
     end.
     
 
 %% @private
--spec process_children(user_ctx:ctx(), tree_node(), state()) ->
+-spec process_child(user_ctx:ctx(), tree_node(), state()) ->
     {progress_marker(), accumulator()}.
-process_children(_UserCtx, _Node, #state{limit = 0}) -> % fixme name 
+process_child(_UserCtx, _Node, #state{limit = 0}) -> 
     {more, #result_accumulator{}};
-process_children(UserCtx, Node, #state{current_node_path_tokens = CurrentPathTokens, module = Module} = State) ->
+process_child(UserCtx, Node, #state{current_node_path_tokens = CurrentPathTokens, module = Module} = State) ->
     {Name, Node2} = Module:get_node_name(Node, UserCtx),
     case Module:is_branching_node(Node2) of
         {true, Node3} ->
@@ -388,11 +390,11 @@ process_children(UserCtx, Node, #state{current_node_path_tokens = CurrentPathTok
 %%%===================================================================
     
 %% @private
--spec init_current_branching_node_processing(state()) -> {node_iterator(), state()}.
-init_current_branching_node_processing(#state{relative_start_after_path_tokens = []} = State) ->
+-spec init_current_branching_node_processing(tree_node(), state()) -> {node_iterator(), state()}.
+init_current_branching_node_processing(Node, #state{relative_start_after_path_tokens = []} = State) ->
     #state{module = Module, parent_id = ParentId} = State,
-    {Module:init_node_iterator(undefined, ?LIST_RECURSIVE_BATCH_SIZE, true, ParentId), State};
-init_current_branching_node_processing(#state{
+    {Module:init_node_iterator(Node, undefined, ?LIST_RECURSIVE_BATCH_SIZE), State};
+init_current_branching_node_processing(Node, #state{
     module = Module,
     relative_start_after_path_tokens = [CurrentStartAfterToken | NextStartAfterTokens],
     last_start_after_token = LastStartAfterToken,
@@ -405,17 +407,17 @@ init_current_branching_node_processing(#state{
     %% be listed and processed.
     case lists:last(CurrentPathTokens) == LastStartAfterToken of
         true ->
-            NodeListingState = Module:init_node_iterator(
-                CurrentStartAfterToken, ?LIST_RECURSIVE_BATCH_SIZE, true, ParentId),
+            NodeIterator = Module:init_node_iterator(
+                Node, CurrentStartAfterToken, ?LIST_RECURSIVE_BATCH_SIZE),
             UpdatedState = State#state{
                 relative_start_after_path_tokens = NextStartAfterTokens, 
                 last_start_after_token = CurrentStartAfterToken
             },
-            {NodeListingState, UpdatedState};
+            {NodeIterator, UpdatedState};
         _ ->
-            NodeListingState = Module:init_node_iterator(
-                undefined, ?LIST_RECURSIVE_BATCH_SIZE, true, ParentId),
-            {NodeListingState, State#state{relative_start_after_path_tokens = []}}
+            NodeIterator = Module:init_node_iterator(
+                Node, undefined, ?LIST_RECURSIVE_BATCH_SIZE),
+            {NodeIterator, State#state{relative_start_after_path_tokens = []}}
     end.
 
 

@@ -32,9 +32,8 @@
 -export([
     is_branching_node/1,
     get_node_id/1, get_node_name/2, get_node_path_tokens/1, get_parent_id/2,
-    init_node_iterator/4,
-    get_next_batch/3,
-    is_node_listing_finished/1
+    init_node_iterator/3,
+    get_next_batch/2
 ]).
 
 
@@ -42,7 +41,10 @@
 -type tree_node() :: file_ctx:ctx().
 -type node_name() :: file_meta:node_name().
 -type node_path() :: file_meta:node_path().
--type node_iterator() :: file_listing:options().
+-type node_iterator() :: #{
+    node := tree_node(),
+    opts := file_listing:options()
+}.
 -type entry() :: recursive_listing:result_entry(node_path(), lfm_attrs:file_attributes()).
 -type result() :: recursive_listing:result(node_path(), entry()).
 
@@ -95,29 +97,35 @@ get_parent_id(FileCtx, UserCtx) ->
     end.
 
 
--spec init_node_iterator(node_name(), recursive_listing:limit(), boolean(), node_id()) -> 
+-spec init_node_iterator(tree_node(), node_name(), recursive_listing:limit()) -> 
     node_iterator().
-init_node_iterator(undefined, Limit, IsContinuous, _ParentGuid) ->
-    #{limit => Limit, tune_for_large_continuous_listing => IsContinuous};
-init_node_iterator(StartFileName, Limit, IsContinuous, ParentGuid) ->
-    ParentUuid = file_id:guid_to_uuid(ParentGuid),
-    BaseOpts = #{limit => Limit, tune_for_large_continuous_listing => IsContinuous},
-    ListingOpts = case file_meta:get_child_uuid_and_tree_id(ParentUuid, StartFileName) of
+init_node_iterator(FileCtx, undefined, Limit) ->
+    #{
+        node => FileCtx,
+        opts => #{limit => Limit, tune_for_large_continuous_listing => Limit =/= 1}
+    };
+init_node_iterator(FileCtx, StartFileName, Limit) ->
+    Uuid = file_ctx:get_logical_uuid_const(FileCtx),
+    BaseOpts = #{limit => Limit, tune_for_large_continuous_listing => Limit =/= 1},
+    ListingOpts = case file_meta:get_child_uuid_and_tree_id(Uuid, StartFileName) of
         {ok, _, TreeId} ->
             StartingIndex = file_listing:build_index(
                 file_meta:trim_filename_tree_id(StartFileName, TreeId), TreeId),
             #{index => StartingIndex, inclusive => true};
         _ ->
             StartingIndex = file_listing:build_index(file_meta:trim_filename_tree_id(
-                StartFileName, {all, ParentUuid})),
+                StartFileName, {all, Uuid})),
             #{index => StartingIndex}
     end,
-    maps:merge(BaseOpts, ListingOpts).
+    #{
+        node => FileCtx,
+        opts => maps:merge(BaseOpts, ListingOpts)
+    }.
 
 
--spec get_next_batch(tree_node(), node_iterator(), user_ctx:ctx()) ->
-    {ok, [tree_node()], node_iterator(), tree_node()} | no_access.
-get_next_batch(FileCtx, ListOpts, UserCtx) ->
+-spec get_next_batch(node_iterator(), user_ctx:ctx()) ->
+    {more | done, [tree_node()], node_iterator(), tree_node()} | no_access.
+get_next_batch(#{node := FileCtx, opts := ListOpts}, UserCtx) ->
     try
         {CanonicalChildrenWhiteList, FileCtx2} = case file_ctx:is_dir(FileCtx) of
             {true, Ctx} -> check_dir_access(UserCtx, Ctx);
@@ -125,15 +133,14 @@ get_next_batch(FileCtx, ListOpts, UserCtx) ->
         end,
         {Children, PaginationToken, FileCtx3} = file_tree:list_children(
             FileCtx2, UserCtx, ListOpts, CanonicalChildrenWhiteList),
-        {ok, Children, #{pagination_token => PaginationToken}, FileCtx3}
+            ProgressMarker = case file_listing:is_finished(PaginationToken) of
+                true -> done;
+                false -> more
+            end,
+            {ProgressMarker, Children, #{pagination_token => PaginationToken}, FileCtx3}
     catch throw:?EACCES ->
         no_access
     end.
-
-
--spec is_node_listing_finished(node_iterator()) -> boolean().
-is_node_listing_finished(#{pagination_token := PaginationToken}) ->
-    file_listing:is_finished(PaginationToken).
 
 %%%===================================================================
 %%% Internal functions
