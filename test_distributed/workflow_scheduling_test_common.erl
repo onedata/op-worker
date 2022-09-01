@@ -220,7 +220,7 @@ reply_to_handler_mock(Sender, ManagerAcc, Options, #handler_call{
             spawn(fun() ->
                 timer:sleep(rand:uniform(5000)),
                 rpc:call(node(Sender), workflow_engine, finish_cancel_procedure, [ExecutionId])
-                  end),
+            end),
             Sender ! history_saved,
             ManagerAcc#{cancel_ans => CancelAns};
         {handle_lane_execution_ended, #{fail_execution_ended_handler := LaneId}} ->

@@ -274,7 +274,8 @@ call_handler(ExecutionId, Context, Handler, Function, Args) ->
                 ExecutionId, Handler,
                 "Unexpected error in ~w (args: ~p)", [Function, Args],
                 Error, Reason, Stacktrace
-            )
+            ),
+            error
     end.
 
 -spec call_handle_task_execution_ended_for_all_tasks(
@@ -318,7 +319,7 @@ call_handlers_for_cancelled_lane(ExecutionId, Handler, Context, LaneId, TaskIds)
     end.
 
 -spec handle_exception(execution_id(), workflow_handler:handler(),
-    string(), list(), throw | error | exit, term(), list()) -> error.
+    string(), list(), throw | error | exit, term(), list()) -> ok.
 handle_exception(ExecutionId, Handler, Message, MessageArgs, ErrorType, Reason, Stacktrace) ->
     try
         ?error_stacktrace(
@@ -326,16 +327,14 @@ handle_exception(ExecutionId, Handler, Message, MessageArgs, ErrorType, Reason, 
             [Handler, ExecutionId | MessageArgs] ++ [ErrorType, Reason],
             Stacktrace
         ),
-        workflow_execution_state:handle_exception(ExecutionId, ErrorType, Reason, Stacktrace),
-        error
+        workflow_execution_state:handle_exception(ExecutionId, ErrorType, Reason, Stacktrace)
     catch
         ErrorType2:Reason2:Stacktrace2  ->
             ?critical_stacktrace(
                 "Unexpected error handling exception for workflow_handler ~w (execution ~s): ~w:~p",
                 [Handler, ExecutionId, ErrorType2, Reason2],
                 Stacktrace2
-            ),
-            error
+            )
     end.
 
 -spec execute_exception_handler(execution_id(), execution_context(), workflow_handler:handler(),
@@ -350,8 +349,7 @@ execute_exception_handler(ExecutionId, Context, Handler, ErrorType, Reason, Stac
                 "Unexpected error handling exception for workflow_handler ~w (execution ~s): ~w:~p",
                 [Handler, ExecutionId, ErrorType2, Reason2],
                 Stacktrace2
-            ),
-            ok
+            )
     end.
 
 
@@ -669,7 +667,8 @@ process_item(ExecutionId, #execution_spec{
                 ExecutionId, Handler,
                 "Unexpected error handling task ~p for item ~p (id ~p)", [TaskId, Item, ItemId],
                 Error, Reason, Stacktrace
-            )
+            ),
+            error
     end.
 
 -spec process_result(id(), execution_id(), execution_spec()) -> ok.
@@ -695,7 +694,8 @@ process_result(EngineId, ExecutionId, #execution_spec{
                     "Unexpected error processing task ~p result ~p (id ~p) for item ~p (id ~p)",
                     [TaskId, CachedResult, CachedResultId, CachedItem, ItemId],
                     Error, Reason, Stacktrace
-                )
+                ),
+                error
         end,
         report_execution_status_update(ExecutionId, ?ASYNC_RESULT_PROCESSED, JobIdentifier, ProcessedResult)
     catch

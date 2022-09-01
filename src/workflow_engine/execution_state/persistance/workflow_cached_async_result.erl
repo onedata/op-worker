@@ -57,8 +57,8 @@ take(Id) ->
 
 -spec delete(result_ref()) -> ok.
 delete(?ERROR_MALFORMED_DATA) ->
-    ?ERROR_MALFORMED_DATA;
+    ok;
 delete(?ERROR_TIMEOUT) ->
-    ?ERROR_TIMEOUT;
+    ok;
 delete(Id) ->
     ok = datastore_model:delete(?CTX, Id).

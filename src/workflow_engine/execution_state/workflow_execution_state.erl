@@ -437,7 +437,7 @@ report_new_streamed_task_data(ExecutionId, TaskId, TaskData) ->
 
 -spec report_streamed_task_data_processed(workflow_engine:execution_id(), workflow_engine:task_id(),
     workflow_cached_task_data:id(), workflow_handler:handler_execution_result()) -> ok.
-report_streamed_task_data_processed(ExecutionId, TaskId, CachedTaskDataId, HandlerExecutionResult) ->
+report_streamed_task_data_processed(ExecutionId, TaskId, CachedTaskDataId, _HandlerExecutionResult) ->
     {ok, #document{value = #workflow_execution_state{
         execution_status = Status,
         update_report = ?TASK_PROCESSED_REPORT(TaskStatus)
