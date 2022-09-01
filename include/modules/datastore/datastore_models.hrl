@@ -1202,7 +1202,9 @@
 }).
 %% @formatter:on
 
--record(atm_openfaas_status, {status :: atm_openfaas_status:status()}).
+-record(atm_openfaas_status_cache, {
+    status :: atm_openfaas_monitor:status()
+}).
 
 %%%===================================================================
 %%% Workflow engine connected models

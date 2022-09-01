@@ -92,7 +92,7 @@ get_pod_status_registry_id(#atm_openfaas_task_executor{pod_status_registry_id = 
 ) ->
     record() | no_return().
 create(AtmWorkflowExecutionCtx, _AtmLaneIndex, _AtmTaskSchema, AtmLambdaRevision) ->
-    atm_openfaas_monitor:assert_openfaas_available(),
+    atm_openfaas_monitor:assert_openfaas_healthy(),
 
     FunctionName = build_function_name(AtmWorkflowExecutionCtx, AtmLambdaRevision),
     {ok, PodStatusRegistryId} = atm_openfaas_function_pod_status_registry:create_for_function(FunctionName),
@@ -258,7 +258,7 @@ is_function_registered(#initiation_ctx{
     openfaas_config = OpenfaasConfig,
     executor = #atm_openfaas_task_executor{function_name = FunctionName}
 }) ->
-    Endpoint = atm_openfaas_config:get_openfaas_endpoint(
+    Endpoint = atm_openfaas_config:get_endpoint(
         OpenfaasConfig, <<"/system/function/", FunctionName/binary>>
     ),
     Headers = atm_openfaas_config:get_basic_auth_header(OpenfaasConfig),
@@ -280,7 +280,7 @@ is_function_registered(#initiation_ctx{
 register_function(#initiation_ctx{openfaas_config = OpenfaasConfig} = InitiationCtx) ->
     log_function_registering(InitiationCtx),
 
-    Endpoint = atm_openfaas_config:get_openfaas_endpoint(OpenfaasConfig, <<"/system/functions">>),
+    Endpoint = atm_openfaas_config:get_endpoint(OpenfaasConfig, <<"/system/functions">>),
     AuthHeaders = atm_openfaas_config:get_basic_auth_header(OpenfaasConfig),
     Payload = json_utils:encode(prepare_function_definition(InitiationCtx)),
 
@@ -544,7 +544,7 @@ await_function_readiness(#initiation_ctx{
     openfaas_config = OpenfaasConfig,
     executor = #atm_openfaas_task_executor{function_name = FunctionName}
 } = InitiationCtx, RetriesLeft) ->
-    Endpoint = atm_openfaas_config:get_openfaas_endpoint(
+    Endpoint = atm_openfaas_config:get_endpoint(
         OpenfaasConfig, <<"/system/function/", FunctionName/binary>>
     ),
     Headers = atm_openfaas_config:get_basic_auth_header(OpenfaasConfig),
@@ -591,7 +591,7 @@ schedule_function_execution(LambdaInput, #atm_openfaas_task_executor{
     function_name = FunctionName
 }) ->
     OpenfaasConfig = atm_openfaas_config:get(),
-    Endpoint = atm_openfaas_config:get_openfaas_endpoint(
+    Endpoint = atm_openfaas_config:get_endpoint(
         OpenfaasConfig, <<"/async-function/", FunctionName/binary>>
     ),
     AuthHeaders = atm_openfaas_config:get_basic_auth_header(OpenfaasConfig),
@@ -642,7 +642,7 @@ remove_function(AtmWorkflowExecutionCtx, #atm_openfaas_task_executor{
 }) ->
     OpenfaasConfig = atm_openfaas_config:get(),
 
-    Endpoint = atm_openfaas_config:get_openfaas_endpoint(OpenfaasConfig, <<"/system/functions">>),
+    Endpoint = atm_openfaas_config:get_endpoint(OpenfaasConfig, <<"/system/functions">>),
     AuthHeaders = atm_openfaas_config:get_basic_auth_header(OpenfaasConfig),
     Payload = json_utils:encode(#{<<"functionName">> => FunctionName}),
 

@@ -7,8 +7,8 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Module responsible for monitoring status of OpenFaaS service.
-%%% If it's status transitions from 'healthy' to any other status and remains
-%%% as such for prolonged period of time (grace attempts) then OpenFaaS will
+%%% If its status transitions from 'healthy' to any other status and remains
+%%% as such for prolonged period of time (grace attempts), then OpenFaaS will
 %%% be considered as down. This will be reported to automation layer.
 %%% @end
 %%%-------------------------------------------------------------------
@@ -23,8 +23,8 @@
 %% API
 -export([spec/0, start_link/0]).
 -export([
-    is_openfaas_available/0,
-    assert_openfaas_available/0,
+    is_openfaas_healthy/0,
+    assert_openfaas_healthy/0,
     get_openfaas_status/0
 ]).
 
@@ -36,13 +36,16 @@
 ]).
 
 
+-type status() :: not_configured | unreachable | unhealthy | healthy.
 -type grace_attempts() :: undefined | non_neg_integer().
 
 -record(state, {
-    status :: atm_openfaas_status:status(),
+    status :: status(),
     grace_attempts = undefined :: grace_attempts()
 }).
 -type state() :: #state{}.
+
+-export_type([status/0]).
 
 
 -define(STATUS_CHECK_INTERVAL_SECONDS, op_worker:get_env(
@@ -83,26 +86,26 @@ start_link() ->
     gen_server:start_link(?SERVER, ?MODULE, [], []).
 
 
--spec is_openfaas_available() -> boolean().
-is_openfaas_available() ->
+-spec is_openfaas_healthy() -> boolean().
+is_openfaas_healthy() ->
     case get_openfaas_status() of
         healthy -> true;
         _ -> false
     end.
 
 
--spec assert_openfaas_available() -> ok | no_return().
-assert_openfaas_available() ->
+-spec assert_openfaas_healthy() -> ok | no_return().
+assert_openfaas_healthy() ->
     case get_openfaas_status() of
         healthy -> ok;
         DownStatus -> throw(down_status_to_error(DownStatus))
     end.
 
 
--spec get_openfaas_status() -> atm_openfaas_status:status().
+-spec get_openfaas_status() -> status().
 get_openfaas_status() ->
-    case atm_openfaas_status:get() of
-        {ok, #document{value = #atm_openfaas_status{status = Status}}} -> Status;
+    case atm_openfaas_status_cache:get() of
+        {ok, #document{value = #atm_openfaas_status_cache{status = Status}}} -> Status;
         {error, not_found} -> not_configured
     end.
 
@@ -164,7 +167,7 @@ handle_cast(Request, State) ->
     {noreply, NewState :: state(), hibernate}.
 handle_info(timeout, State = #state{status = CurrentStatus}) ->
     NewStatus = check_openfaas_status(),
-    NewStatus /= CurrentStatus andalso atm_openfaas_status:save(NewStatus),
+    NewStatus /= CurrentStatus andalso atm_openfaas_status_cache:save(NewStatus),
 
     NewGraceAttempts = case infer_grace_attempts(NewStatus, State) of
         0 ->
@@ -221,21 +224,21 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 %% @private
--spec down_status_to_error(atm_openfaas_status:status()) -> errors:error().
+-spec down_status_to_error(status()) -> errors:error().
 down_status_to_error(unhealthy) -> ?ERROR_ATM_OPENFAAS_UNHEALTHY;
 down_status_to_error(unreachable) -> ?ERROR_ATM_OPENFAAS_UNREACHABLE;
 down_status_to_error(not_configured) -> ?ERROR_ATM_OPENFAAS_NOT_CONFIGURED.
 
 
 %% @private
--spec check_openfaas_status() -> atm_openfaas_status:status().
+-spec check_openfaas_status() -> status().
 check_openfaas_status() ->
     try
         OpenfaasConfig = atm_openfaas_config:get(),
 
         % /healthz is proper Openfaas endpoint defined in their swagger:
         % https://raw.githubusercontent.com/openfaas/faas/master/api-docs/swagger.yml
-        Endpoint = atm_openfaas_config:get_openfaas_endpoint(OpenfaasConfig, <<"/healthz">>),
+        Endpoint = atm_openfaas_config:get_endpoint(OpenfaasConfig, <<"/healthz">>),
         Headers = atm_openfaas_config:get_basic_auth_header(OpenfaasConfig),
 
         case http_client:get(Endpoint, Headers) of
@@ -252,8 +255,7 @@ check_openfaas_status() ->
 
 
 %% @private
--spec infer_grace_attempts(atm_openfaas_status:status(), state()) ->
-    grace_attempts().
+-spec infer_grace_attempts(NewStatus :: status(), state()) -> grace_attempts().
 infer_grace_attempts(healthy, _State) ->
     undefined;
 
@@ -268,8 +270,7 @@ infer_grace_attempts(_NewStatus, #state{grace_attempts = GraceAttempts}) ->
 
 
 %% @private
--spec report_openfaas_down_to_atm_workflow_execution_layer(atm_openfaas_status:status()) ->
-    ok.
+-spec report_openfaas_down_to_atm_workflow_execution_layer(status()) -> ok.
 report_openfaas_down_to_atm_workflow_execution_layer(Status) ->
     try provider_logic:get_spaces() of
         {ok, SpaceIds} ->
@@ -278,26 +279,26 @@ report_openfaas_down_to_atm_workflow_execution_layer(Status) ->
                 atm_workflow_execution_api:report_openfaas_down(SpaceId, Error)
             end, SpaceIds);
         ?ERROR_UNREGISTERED_ONEPROVIDER ->
-            schedule_provider_restart_report_to_atm_workflow_execution_layer();
+            schedule_openfaas_down_report_to_atm_workflow_execution_layer();
         ?ERROR_NO_CONNECTION_TO_ONEZONE ->
-            schedule_provider_restart_report_to_atm_workflow_execution_layer();
+            schedule_openfaas_down_report_to_atm_workflow_execution_layer();
         Error = {error, _} ->
             ?error(
                 "Unable to report OpenFaaS down to atm workflow execution layer due to: ~p",
                 [Error]
             )
-    catch Class:Reason:Stacktrace ->
+    catch Type:Reason:Stacktrace ->
         ?error_stacktrace(
-            "Unable to report OpenFaaS down to atm workflow execution layer due to: ~p",
-            [{Class, Reason}],
+            "Unable to report OpenFaaS down to atm workflow execution layer due to ~w:~p",
+            [Type, Reason],
             Stacktrace
         )
     end.
 
 
 %% @private
--spec schedule_provider_restart_report_to_atm_workflow_execution_layer() -> reference().
-schedule_provider_restart_report_to_atm_workflow_execution_layer() ->
+-spec schedule_openfaas_down_report_to_atm_workflow_execution_layer() -> reference().
+schedule_openfaas_down_report_to_atm_workflow_execution_layer() ->
     erlang:send_after(
         ?REPORT_OPENFAAS_DOWN_TO_ATM_WORKFLOW_EXECUTION_LAYER_DELAY,
         self(),

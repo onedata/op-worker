@@ -19,7 +19,7 @@
 -export([
     get/0,
 
-    get_openfaas_endpoint/2,
+    get_endpoint/2,
     get_basic_auth_header/1,
     get_function_namespace/1,
     get_activity_feed_secret/1,
@@ -53,8 +53,8 @@ get() ->
     }.
 
 
--spec get_openfaas_endpoint(record(), binary()) -> binary().
-get_openfaas_endpoint(#atm_openfaas_config{url = OpenfaasUrl}, Path) ->
+-spec get_endpoint(record(), binary()) -> binary().
+get_endpoint(#atm_openfaas_config{url = OpenfaasUrl}, Path) ->
     str_utils:format_bin("~s~s", [OpenfaasUrl, Path]).
 
 

@@ -6,10 +6,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Model for storing information about OpenFaaS service.
+%%% Model for caching information about OpenFaaS service status.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_openfaas_status).
+-module(atm_openfaas_status_cache).
 -author("Bartosz Walkowicz").
 
 -include("modules/automation/atm_execution.hrl").
@@ -22,12 +22,10 @@
 
 
 -type id() :: binary().
--type record() :: #atm_openfaas_status{}.
+-type record() :: #atm_openfaas_status_cache{}.
 -type doc() :: datastore_doc:doc(record()).
 
--type status() :: not_configured | unreachable | unhealthy | healthy.
-
--export_type([id/0, record/0, doc/0, status/0]).
+-export_type([id/0, record/0, doc/0]).
 
 
 -define(CTX, #{
@@ -43,9 +41,9 @@
 %%%===================================================================
 
 
--spec save(status()) -> {ok, doc()} | {error, term()}.
+-spec save(atm_openfaas_monitor:status()) -> {ok, doc()} | {error, term()}.
 save(Status) ->
-    datastore_model:save(?CTX, #document{key = ?ID, value = #atm_openfaas_status{
+    datastore_model:save(?CTX, #document{key = ?ID, value = #atm_openfaas_status_cache{
         status = Status
     }}).
 

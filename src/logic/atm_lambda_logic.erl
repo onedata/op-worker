@@ -74,4 +74,4 @@ assert_executable_revisions(RevisionNums, #document{value = AtmLambda}) ->
 -spec assert_executable_revision(atm_lambda_revision:record()) ->
     ok | no_return().
 assert_executable_revision(#atm_lambda_revision{operation_spec = #atm_openfaas_operation_spec{}}) ->
-    atm_openfaas_monitor:assert_openfaas_available().
+    atm_openfaas_monitor:assert_openfaas_healthy().
