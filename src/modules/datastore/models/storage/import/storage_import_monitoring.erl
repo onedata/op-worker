@@ -93,7 +93,7 @@
 
 
 -define(HISTOGRAM_LENGTH,
-    application:get_env(?APP_NAME, storage_import_histogram_length, 12)).
+    op_worker:get_env(storage_import_histogram_length, 12)).
 -define(MIN_HIST_SLOT, 60 div ?HISTOGRAM_LENGTH).
 -define(HOUR_HIST_SLOT, 3600 div ?HISTOGRAM_LENGTH).
 -define(DAY_HIST_SLOT, 86400 div ?HISTOGRAM_LENGTH).

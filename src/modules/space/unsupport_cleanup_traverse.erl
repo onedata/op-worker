@@ -18,7 +18,7 @@
 -module(unsupport_cleanup_traverse).
 -author("Michal Stanisz").
 
--behavior(traverse_behaviour).
+-behaviour(traverse_behaviour).
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
@@ -45,7 +45,7 @@
 -export_type([task_id/0]).
 
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
--define(TRAVERSE_BATCH_SIZE, application:get_env(?APP_NAME, unsupport_cleanup_traverse_batch_size, 40)).
+-define(TRAVERSE_BATCH_SIZE, op_worker:get_env(unsupport_cleanup_traverse_batch_size, 40)).
 
 
 %%%===================================================================
@@ -55,7 +55,7 @@
 -spec start(od_space:id(), storage:id()) -> {ok, task_id()}.
 start(SpaceId, StorageId) ->
     TaskId = gen_id(SpaceId, StorageId),
-    SpaceDirGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     Options = #{
         task_id => TaskId,
         batch_size => ?TRAVERSE_BATCH_SIZE,
@@ -75,9 +75,9 @@ start(SpaceId, StorageId) ->
 
 -spec init_pool() -> ok  | no_return().
 init_pool() ->
-    MasterJobsLimit = application:get_env(?APP_NAME, unsupport_cleanup_traverse_master_jobs_limit, 10),
-    SlaveJobsLimit = application:get_env(?APP_NAME, unsupport_cleanup_traverse_slave_jobs_limit, 20),
-    ParallelismLimit = application:get_env(?APP_NAME, unsupport_cleanup_traverse_parallelism_limit, 20),
+    MasterJobsLimit = op_worker:get_env(unsupport_cleanup_traverse_master_jobs_limit, 10),
+    SlaveJobsLimit = op_worker:get_env(unsupport_cleanup_traverse_slave_jobs_limit, 20),
+    ParallelismLimit = op_worker:get_env(unsupport_cleanup_traverse_parallelism_limit, 20),
     
     tree_traverse:init(?MODULE, MasterJobsLimit, SlaveJobsLimit, ParallelismLimit).
 
@@ -109,7 +109,7 @@ task_finished(TaskId, Pool) ->
     }} = traverse_task:get_additional_data(Pool, TaskId),
     space_unsupport:report_cleanup_traverse_finished(SpaceId, StorageId).
 
--spec get_job(traverse:job_id() | tree_traverse_job:doc()) ->
+-spec get_job(traverse:job_id()) ->
     {ok, tree_traverse:master_job(), traverse:pool(), task_id()}  | {error, term()}.
 get_job(DocOrID) ->
     tree_traverse:get_job(DocOrID).
@@ -129,7 +129,7 @@ do_master_job(Job = #tree_traverse{
 ) ->
     RemoveStorageFiles = maps:get(remove_storage_files, TraverseInfo),
 
-    BatchProcessingPrehook = fun(_SlaveJobs, _MasterJobs, _ListExtendedInfo, SubtreeProcessingStatus) ->
+    BatchProcessingPrehook = fun(_SlaveJobs, _MasterJobs, _ListingToken, SubtreeProcessingStatus) ->
         maybe_cleanup_dir(SubtreeProcessingStatus, TaskId, FileCtx, RemoveStorageFiles)
     end,
     tree_traverse:do_master_job(Job, MasterJobArgs, BatchProcessingPrehook).
@@ -157,7 +157,7 @@ gen_id(SpaceId, StorageId) ->
 -spec cleanup_dir(task_id(), file_ctx:ctx(), boolean()) -> ok.
 cleanup_dir(TaskId, FileCtx, RemoveStorageFiles) ->
     fslogic_delete:cleanup_file(FileCtx, RemoveStorageFiles),
-    tree_traverse:delete_subtree_status_doc(TaskId, file_ctx:get_uuid_const(FileCtx)),
+    tree_traverse:delete_subtree_status_doc(TaskId, file_ctx:get_logical_uuid_const(FileCtx)),
     case file_ctx:is_space_dir_const(FileCtx) of
         true -> ok;
         false -> file_processed(TaskId, FileCtx, RemoveStorageFiles)
@@ -168,14 +168,14 @@ cleanup_dir(TaskId, FileCtx, RemoveStorageFiles) ->
 -spec file_processed(task_id(), file_ctx:ctx(), boolean()) -> ok.
 file_processed(TaskId, FileCtx, RemoveStorageFiles) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
-    {ParentFileCtx, _FileCtx} = file_ctx:get_parent(FileCtx, UserCtx),
-    ParentUuid = file_ctx:get_uuid_const(ParentFileCtx),
+    {ParentFileCtx, _FileCtx} = file_tree:get_parent(FileCtx, UserCtx),
+    ParentUuid = file_ctx:get_logical_uuid_const(ParentFileCtx),
     ParentStatus = tree_traverse:report_child_processed(TaskId, ParentUuid),
     maybe_cleanup_dir(ParentStatus, TaskId, ParentFileCtx, RemoveStorageFiles).
 
 
 %% @private
 -spec maybe_cleanup_dir(tree_traverse_progress:status(), task_id(), file_ctx:ctx(), boolean()) -> ok.
-maybe_cleanup_dir(?SUBTREE_PROCESSED, TaskId, FileCtx, RemoveStorageFiles) ->
+maybe_cleanup_dir(?SUBTREE_PROCESSED(_), TaskId, FileCtx, RemoveStorageFiles) ->
     cleanup_dir(TaskId, FileCtx, RemoveStorageFiles);
 maybe_cleanup_dir(?SUBTREE_NOT_PROCESSED, _TaskId, _FileCtx, _RemoveStorageFiles) -> ok.

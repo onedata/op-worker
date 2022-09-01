@@ -6,7 +6,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Model tracking popularity of files
+%%% Model tracking popularity of files.
+%%% Note: this module operates on referenced uuids - all operations on hardlinks
+%%% are treated as operations on original file. Thus, popularity of all hardlinks
+%%% pointing particular file ale counted together.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_popularity).
@@ -17,8 +20,10 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([increment_open/1, get_or_default/1, update_size/2, delete/1, update/2,
+-export([increment_open/1, get_or_default/1, update_size/2, update_size/1, delete/1,
     get/1]).
+%% Test API
+-export([update/2]).
 
 %% datastore_model callbacks
 -export([get_record_struct/1, get_ctx/0, get_record_version/0, upgrade_record/2]).
@@ -42,19 +47,13 @@
 %%% API
 %%%===================================================================
 
-%%-------------------------------------------------------------------
-%% @private
-%% @doc
-%% Updated file's size
-%% @end
-%%-------------------------------------------------------------------
 -spec update_size(file_ctx:ctx(), non_neg_integer()) -> ok | {error, term()}.
 update_size(FileCtx, NewSize) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     case file_popularity_api:is_enabled(SpaceId) of
         true ->
-            FileUuid = file_ctx:get_uuid_const(FileCtx),
-            DefaultFilePopularity = empty_file_popularity(FileCtx),
+            FileUuid = file_ctx:get_referenced_uuid_const(FileCtx),
+            DefaultFilePopularity = empty_file_popularity(FileCtx, NewSize),
             DefaultToCreate = #document{
                 key = FileUuid,
                 value = DefaultFilePopularity#file_popularity{size = NewSize},
@@ -65,32 +64,34 @@ update_size(FileCtx, NewSize) ->
                     {ok, FilePopularity#file_popularity{size = NewSize}}
                 end, DefaultToCreate)
             of
-                {ok, _} ->
-                    ok;
+                {ok, _} -> ok;
                 Error -> Error
             end;
         false ->
             ok
     end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates file's popularity with information about open.
-%% @end
-%%--------------------------------------------------------------------
+
+-spec update_size(file_ctx:ctx()) -> ok | {error, term()}.
+update_size(FileCtx) ->
+    {LocalSize, FileCtx2} = file_ctx:get_local_storage_file_size(FileCtx),
+    update_size(FileCtx2, LocalSize).
+
+
 -spec increment_open(FileCtx :: file_ctx:ctx()) -> ok | {error, term()}.
 increment_open(FileCtx) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     case file_popularity_api:is_enabled(SpaceId) of
         true ->
-            FileUuid = file_ctx:get_uuid_const(FileCtx),
+            FileUuid = file_ctx:get_referenced_uuid_const(FileCtx),
+            {LocalSize, FileCtx2} = file_ctx:get_local_storage_file_size(FileCtx),
             Diff = fun(FilePopularity) ->
-                {ok, increase_popularity(FileCtx, FilePopularity)}
+                {ok, increase_popularity(FileCtx, LocalSize, FilePopularity)}
             end,
-            DefaultFilePopularity = empty_file_popularity(FileCtx),
+            DefaultFilePopularity = empty_file_popularity(FileCtx2, LocalSize),
             Default = #document{
                 key = FileUuid,
-                value = increase_popularity(FileCtx, DefaultFilePopularity),
+                value = increase_popularity(FileCtx2, LocalSize, DefaultFilePopularity),
                 scope = SpaceId
             },
             case datastore_model:update(?CTX, FileUuid, Diff, Default) of
@@ -101,52 +102,42 @@ increment_open(FileCtx) ->
             ok
     end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns file_popularity doc.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec get(file_meta:uuid()) -> {ok, doc()} | {error, term()}.
 get(FileUuid) ->
-    datastore_model:get(?CTX, FileUuid).
+    datastore_model:get(?CTX, fslogic_file_id:ensure_referenced_uuid(FileUuid)).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns file_popularity doc.
-%% @end
-%%--------------------------------------------------------------------
+
 -spec delete(file_meta:uuid()) -> ok | {error, term()}.
 delete(FileUuid) ->
-    datastore_model:delete(?CTX, FileUuid).
+    datastore_model:delete(?CTX, fslogic_file_id:ensure_referenced_uuid(FileUuid)).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns file_popularity doc.
-%% @end
-%%--------------------------------------------------------------------
--spec update(file_meta:uuid(), datastore_model:diff()) -> {ok, record()} | {error, term()}.
-update(FileUuid, Diff) ->
-    datastore_model:update(?CTX, FileUuid, Diff).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns file_popularity doc, or default doc if its not present.
-%% @end
-%%--------------------------------------------------------------------
 -spec get_or_default(file_ctx:ctx()) -> {ok, doc()} | {error, term()}.
 get_or_default(FileCtx) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
+    FileUuid = file_ctx:get_referenced_uuid_const(FileCtx),
     case file_popularity:get(FileUuid) of
         {ok, Doc} ->
             {ok, Doc};
         {error, not_found} ->
+            {LocalSize, FileCtx2} = file_ctx:get_local_storage_file_size(FileCtx),
             {ok, #document{
                 key = FileUuid,
-                value = empty_file_popularity(FileCtx)
+                value = empty_file_popularity(FileCtx2, LocalSize)
             }};
         Error ->
             Error
     end.
+
+
+%%%===================================================================
+%%% Test API
+%%%===================================================================
+
+-spec update(file_meta:uuid(), datastore_model:diff()) -> {ok, record()} | {error, term()}.
+update(FileUuid, Diff) ->
+    datastore_model:update(?CTX, fslogic_file_id:ensure_referenced_uuid(FileUuid), Diff).
+
 
 %%%===================================================================
 %%% Internal functions
@@ -157,20 +148,20 @@ get_or_default(FileCtx) ->
 %% Returns file_popularity record with zero popularity.
 %% @end
 %%--------------------------------------------------------------------
--spec empty_file_popularity(file_ctx:ctx()) -> record().
-empty_file_popularity(FileCtx) ->
+-spec empty_file_popularity(file_ctx:ctx(), non_neg_integer()) -> record().
+empty_file_popularity(FileCtx, LocalSize) ->
     HourlyHistogram = time_slot_histogram:new(?HOUR_TIME_WINDOW, ?HOUR_HISTOGRAM_SIZE),
     DailyHistogram = time_slot_histogram:new(?DAY_TIME_WINDOW, ?DAY_HISTOGRAM_SIZE),
     MonthlyHistogram = time_slot_histogram:new(?MONTH_TIME_WINDOW, ?MONTH_HISTOGRAM_SIZE),
-    histograms_to_file_popularity(HourlyHistogram, DailyHistogram, MonthlyHistogram, FileCtx).
+    histograms_to_file_popularity(HourlyHistogram, DailyHistogram, MonthlyHistogram, LocalSize, FileCtx).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns file_popularity record with popularity increased by one open
 %% @end
 %%--------------------------------------------------------------------
--spec increase_popularity(file_ctx:ctx(), record()) -> record().
-increase_popularity(FileCtx, FilePopularity) ->
+-spec increase_popularity(file_ctx:ctx(), non_neg_integer(), record()) -> record().
+increase_popularity(FileCtx, LocalSize, FilePopularity) ->
     {HourlyHistogram, DailyHistogram, MonthlyHistogram} =
         file_popularity_to_histograms(FilePopularity),
     CurrentTimestampHours = global_clock:timestamp_hours(),
@@ -178,6 +169,7 @@ increase_popularity(FileCtx, FilePopularity) ->
         increment_histogram(HourlyHistogram, CurrentTimestampHours),
         increment_histogram(DailyHistogram, CurrentTimestampHours),
         increment_histogram(MonthlyHistogram, CurrentTimestampHours),
+        LocalSize,
         FileCtx
     ).
 
@@ -190,11 +182,11 @@ increase_popularity(FileCtx, FilePopularity) ->
     HourlyHistogram :: time_slot_histogram:histogram(),
     DailyHistogram :: time_slot_histogram:histogram(),
     MonthlyHistogram :: time_slot_histogram:histogram(),
+    LocalSize :: non_neg_integer(),
     file_ctx:ctx()) -> record().
-histograms_to_file_popularity(HourlyHistogram, DailyHistogram, MonthlyHistogram, FileCtx) ->
-    {LocalSize, _FileCtx2} = file_ctx:get_local_storage_file_size(FileCtx),
+histograms_to_file_popularity(HourlyHistogram, DailyHistogram, MonthlyHistogram, LocalSize, FileCtx) ->
     #file_popularity{
-        file_uuid = file_ctx:get_uuid_const(FileCtx),
+        file_uuid = file_ctx:get_referenced_uuid_const(FileCtx),
         space_id = file_ctx:get_space_id_const(FileCtx),
         size = LocalSize,
         open_count = time_slot_histogram:get_sum(MonthlyHistogram),

@@ -12,6 +12,7 @@
 -author("Jakub Kudzia").
 
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -132,9 +133,9 @@ query_view_using_file_meta(Config) ->
     SpaceId = <<"space_id1">>,
     ViewName = ?view_name,
     ProviderId = ?GET_DOMAIN_BIN(Worker),
-    SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
-    TrashGuid = fslogic_uuid:spaceid_to_trash_dir_guid(SpaceId),
+    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+    TrashGuid = fslogic_file_id:spaceid_to_trash_dir_guid(SpaceId),
     {ok, CdmiId} = file_id:guid_to_objectid(SpaceGuid),
     {ok, TrashObjectId} = file_id:guid_to_objectid(TrashGuid),
     SimpleMapFunction = <<"
@@ -152,7 +153,7 @@ query_view_using_file_meta(Config) ->
             <<"value">> := #{
                 <<"name">> := ?TRASH_DIR_NAME,
                 <<"type">> := <<"DIR">>,
-                <<"mode">> := ?DEFAULT_DIR_PERMS,
+                <<"mode">> := ?DEFAULT_DIR_MODE,
                 <<"owner">> := SpaceOwnerId,
                 <<"provider_id">> := ProviderId,
                 <<"shares">> := [],
@@ -166,7 +167,7 @@ query_view_using_file_meta(Config) ->
             <<"value">> := #{
                 <<"name">> := ?SPACE_ID,
                 <<"type">> := <<"DIR">>,
-                <<"mode">> := ?DEFAULT_DIR_PERMS,
+                <<"mode">> := ?DEFAULT_DIR_MODE,
                 <<"owner">> := SpaceOwnerId,
                 <<"provider_id">> := ProviderId,
                 <<"shares">> := [],
@@ -181,7 +182,7 @@ query_view_using_times(Config) ->
     SpaceId = <<"space_id1">>,
     ViewName = ?view_name,
     ProviderId = ?GET_DOMAIN_BIN(Worker),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     {ok, CdmiId} = file_id:guid_to_objectid(SpaceGuid),
     SimpleMapFunction = <<"
         function(id, type, meta, ctx) {
@@ -219,19 +220,19 @@ query_view_using_custom_metadata(Config) ->
     SpaceId = <<"space_id1">>,
     ViewName = ?view_name,
     ProviderId = ?GET_DOMAIN_BIN(Worker),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     {ok, CdmiId} = file_id:guid_to_objectid(SpaceGuid),
     ProviderId = ?GET_DOMAIN_BIN(Worker),
 
     XattrName = <<"xattr_name">>,
     XattrValue = <<"xattr_value">>,
     Xattr = #xattr{name = XattrName, value = XattrValue},
-    lfm_proxy:set_xattr(Worker, ?SESS_ID(Worker), {guid, SpaceGuid}, Xattr),
+    lfm_proxy:set_xattr(Worker, ?SESS_ID(Worker), ?FILE_REF(SpaceGuid), Xattr),
 
     XattrName2 = <<"xattr_name2">>,
     XattrValue2 = <<"xattr_value2">>,
     Xattr2 = #xattr{name = XattrName2, value = XattrValue2},
-    lfm_proxy:set_xattr(Worker, ?SESS_ID(Worker), {guid, SpaceGuid}, Xattr2),
+    lfm_proxy:set_xattr(Worker, ?SESS_ID(Worker), ?FILE_REF(SpaceGuid), Xattr2),
 
     SimpleMapFunction = <<"
         function(id, type, meta, ctx) {
@@ -262,7 +263,7 @@ query_view_using_file_popularity(Config) ->
     FilePath = ?TEST_FILE(?SPACE_NAME),
     {ok, Guid} = lfm_proxy:create(Worker, SessionId, FilePath),
     Uuid = file_id:guid_to_uuid(Guid),
-    {ok, H} = lfm_proxy:open(Worker, SessionId, {guid, Guid}, write),
+    {ok, H} = lfm_proxy:open(Worker, SessionId, ?FILE_REF(Guid), write),
     lfm_proxy:write(Worker, H, 0, TestData),
     lfm_proxy:close(Worker, H),
 
@@ -298,7 +299,7 @@ query_view_and_emit_ctx(Config) ->
     SpaceId = <<"space_id1">>,
     ViewName = ?view_name,
     ProviderId = ?GET_DOMAIN_BIN(Worker),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     {ok, CdmiId} = file_id:guid_to_objectid(SpaceGuid),
     SimpleMapFunction = <<"
         function(id, type, meta, ctx) {
@@ -320,7 +321,7 @@ wrong_map_function(Config) ->
     SpaceId = <<"space_id1">>,
     ViewName = ?view_name,
     ProviderId = ?GET_DOMAIN_BIN(Worker),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     {ok, CdmiId} = file_id:guid_to_objectid(SpaceGuid),
     SimpleMapFunction = <<"
         function(_, _, _, _) {
@@ -334,7 +335,7 @@ emitting_null_key_in_map_function_should_return_empty_result(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     SpaceId = <<"space_id1">>,
     ViewName = ?view_name,
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     {ok, CdmiId} = file_id:guid_to_objectid(SpaceGuid),
     ProviderId = ?GET_DOMAIN_BIN(Worker),
     SimpleMapFunction = <<"

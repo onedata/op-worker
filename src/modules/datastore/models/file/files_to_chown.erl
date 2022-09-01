@@ -94,7 +94,7 @@ chown_or_defer_on_posix_compatible_storage(FileCtx) ->
     {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
     OwnerUserId = file_meta:get_owner(FileDoc),
     % space_owner is a virtual user therefore we don't check whether it exists in Onezone
-    case fslogic_uuid:is_space_owner(OwnerUserId)of
+    case fslogic_file_id:is_space_owner(OwnerUserId)of
         true ->
             chown_file(FileCtx2, OwnerUserId);
         false ->
@@ -120,8 +120,8 @@ chown_deferred_file(FileGuid) ->
         FileCtx = file_ctx:new_by_guid(FileGuid),
         chown_file(FileCtx)
     catch
-        _:Error ->
-            ?error_stacktrace("Cannot chown deferred file ~p due to error ~p", [FileGuid, Error])
+        _:Error:Stacktrace ->
+            ?error_stacktrace("Cannot chown deferred file ~p due to error ~p", [FileGuid, Error], Stacktrace)
     end.
 
 -spec chown_file(file_ctx:ctx()) -> file_ctx:ctx().
@@ -153,7 +153,8 @@ chown_file(FileCtx, OwnerId) ->
 %%--------------------------------------------------------------------
 -spec defer_chown(file_ctx:ctx(), od_user:id()) -> ok | {error, term()}.
 defer_chown(FileCtx, UserId) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    % TODO VFS-7442 - test with hardlinks
+    FileGuid = file_ctx:get_referenced_guid_const(FileCtx),
     UpdateFun = fun(FTC = #files_to_chown{file_guids = Guids}) ->
         case lists:member(FileGuid, Guids) of
             true -> {ok, FTC};
@@ -208,5 +209,5 @@ get_record_struct(2) ->
 -spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
     {datastore_model:record_version(), datastore_model:record()}.
 upgrade_record(1, {?MODULE, Uuids}) ->
-    Guids = lists:map(fun fslogic_uuid:uuid_to_guid/1, Uuids),
+    Guids = lists:map(fun fslogic_file_id:uuid_to_guid/1, Uuids),
     {2, #files_to_chown{file_guids = Guids}}.

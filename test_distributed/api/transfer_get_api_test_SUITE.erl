@@ -174,20 +174,19 @@ build_get_transfer_status_validate_rest_call_result_fun(TransferType, DataSource
         <<"userId">>, <<"rerunId">>, <<"spaceId">>, <<"callback">>,
 
         <<"replicatingProviderId">>, <<"evictingProviderId">>,
-        <<"transferStatus">>, <<"replicationStatus">>, <<"replicaEvictionStatus">>, <<"evictionStatus">>,
+        <<"transferStatus">>, <<"replicationStatus">>, <<"evictionStatus">>,
 
         <<"effectiveJobStatus">>, <<"effectiveJobTransferId">>,
 
         <<"filesToProcess">>, <<"filesProcessed">>,
-        <<"filesReplicated">>, <<"bytesReplicated">>,
-        <<"fileReplicasEvicted">>, <<"filesEvicted">>,
-        <<"failedFiles">>, <<"filesFailed">>,
+        <<"filesReplicated">>, <<"bytesReplicated">>, <<"filesEvicted">>,
+        <<"filesFailed">>,
 
         <<"scheduleTime">>, <<"startTime">>, <<"finishTime">>,
         <<"lastUpdate">>, <<"minHist">>, <<"hrHist">>, <<"dyHist">>, <<"mthHist">>
     ],
     AllFields = case DataSourceType of
-        file -> [<<"fileId">>, <<"path">>, <<"filePath">> | AlwaysPresentFields];
+        file -> [<<"fileId">>, <<"filePath">> | AlwaysPresentFields];
         view -> [<<"viewName">>, <<"queryViewParams">> | AlwaysPresentFields]
     end,
     AllFieldsSorted = lists:sort(AllFields),
@@ -231,7 +230,6 @@ assert_proper_constant_fields_in_get_status_rest_response(TransferType, DataSour
         file ->
             #{
                 <<"fileId">> => maps:get(root_file_cdmi_id, Env),
-                <<"path">> => maps:get(root_file_path, Env),
                 <<"filePath">> => maps:get(root_file_path, Env)
             };
         view ->
@@ -249,7 +247,6 @@ assert_proper_status_in_get_status_rest_response(ExpState, Env, #{
     <<"transferStatus">> := TransferStatus,
     <<"effectiveJobStatus">> := EffJobStatus,
     <<"replicationStatus">> := ReplicationStatus,
-    <<"replicaEvictionStatus">> := EvictionStatus,
     <<"evictionStatus">> := EvictionStatus
 }) ->
     #{
@@ -284,9 +281,7 @@ assert_proper_file_stats_in_get_status_rest_response(ExpState, Env, #{
     <<"filesProcessed">> := FilesProcessed,
     <<"filesReplicated">> := FilesReplicated,
     <<"bytesReplicated">> := BytesReplicated,
-    <<"fileReplicasEvicted">> := FilesEvicted,
     <<"filesEvicted">> := FilesEvicted,
-    <<"failedFiles">> := FailedFiles,
     <<"filesFailed">> := FailedFiles
 }) ->
     #{
@@ -391,6 +386,11 @@ build_get_transfer_status_validate_gs_call_result_fun(DataSourceType, ExpState, 
         <<"revision">> => 1,
 
         <<"userId">> => UserId,
+        <<"type">> => case {ReplicatingProvider, EvictingProvider} of
+            {_, undefined} -> <<"replication">>;
+            {undefined, _} -> <<"eviction">>;
+            {_, _} -> <<"migration">>
+        end,
         <<"replicatingProvider">> => case ReplicatingProvider of
             undefined -> null;
             _ -> ?PROVIDER_GRI_ID(ReplicatingProvider)
@@ -511,31 +511,30 @@ get_rerun_transfer_status(Config, TransferType, Env, RerunId, EffTransferId, Exp
 
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
-        NewConfig1 = [{space_storage_mock, false} | NewConfig],
-        NewConfig2 = initializer:setup_storage(NewConfig1),
+        NewConfig1 = initializer:setup_storage(NewConfig),
         lists:foreach(fun(Worker) ->
             % TODO VFS-6251
             test_utils:set_env(Worker, ?APP_NAME, dbsync_changes_broadcast_interval, timer:seconds(1)),
             test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_delay_ms, timer:seconds(1)),
-            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(1)), % TODO - change to 2 seconds
+            test_utils:set_env(Worker, ?CLUSTER_WORKER_APP_NAME, cache_to_disk_force_delay_ms, timer:seconds(2)),
             test_utils:set_env(Worker, ?APP_NAME, public_block_size_treshold, 0),
             test_utils:set_env(Worker, ?APP_NAME, public_block_percent_treshold, 0),
             test_utils:set_env(Worker, ?APP_NAME, rerun_transfers, false)
-        end, ?config(op_worker_nodes, NewConfig2)),
+        end, ?config(op_worker_nodes, NewConfig1)),
         ssl:start(),
-        hackney:start(),
-        NewConfig3 = initializer:create_test_users_and_spaces(
-            ?TEST_FILE(NewConfig2, "env_desc.json"),
-            NewConfig2
+        application:ensure_all_started(hackney),
+        NewConfig2 = initializer:create_test_users_and_spaces(
+            ?TEST_FILE(NewConfig1, "env_desc.json"),
+            NewConfig1
         ),
-        initializer:mock_auth_manager(NewConfig3, _CheckIfUserIsSupported = true),
-        NewConfig3
+        initializer:mock_auth_manager(NewConfig2, _CheckIfUserIsSupported = true),
+        NewConfig2
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, transfers_test_utils]} | Config].
 
 
 end_per_suite(Config) ->
-    hackney:stop(),
+    application:stop(hackney),
     ssl:stop(),
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:teardown_storage(Config).

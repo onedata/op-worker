@@ -95,7 +95,7 @@ test_base(Config, WorkerToKillP1, WorkerToKillP2) ->
     WorkersP1 = oct_background:get_provider_nodes(krakow),
     WorkersP2 = oct_background:get_provider_nodes(paris),
     [SpaceId | _] = oct_background:get_provider_supported_spaces(krakow),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     Attempts = 60,
 
     [WorkerToCheckP2] = WorkersP2 -- [WorkerToKillP2],
@@ -149,8 +149,6 @@ test_base(Config, WorkerToKillP1, WorkerToKillP2) ->
 %%%===================================================================
 
 init_per_suite(Config) ->
-    ssl:start(),
-    hackney:start(),
     oct_background:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "2op-2nodes",
         posthook = fun provider_onenv_test_utils:setup_sessions/1
@@ -163,8 +161,7 @@ end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).
 
 end_per_suite(_Config) ->
-    hackney:stop(),
-    ssl:stop().
+    oct_background:end_per_suite().
 
 %%%===================================================================
 %%% Internal functions

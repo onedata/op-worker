@@ -18,7 +18,7 @@
 -include_lib("clproto/include/messages.hrl").
 
 %% API
--export([load_msg_defs/0]).
+-export([load_msg_defs/0]). 
 -export([deserialize_client_message/2, serialize_server_message/2]).
 -export([deserialize_server_message/2, serialize_client_message/2]).
 
@@ -47,7 +47,8 @@ deserialize_client_message(Message, SessionId) ->
         message_stream = MsgStm,
         message_body = {_, MsgBody},
         proxy_session_id = EffSessionId,
-        proxy_session_macaroon = PToken
+        proxy_session_macaroon = PToken,
+        proxy_session_mode = PSessionMode
     } = enif_protobuf:decode(Message, 'ClientMessage'),
 
     {ok, DecodedId} = clproto_message_id:decode(MsgId),
@@ -55,6 +56,7 @@ deserialize_client_message(Message, SessionId) ->
     try
         Stream = clproto_translator:translate_from_protobuf(MsgStm),
         EffSessionAuth = clproto_translator:translate_from_protobuf(PToken),
+        EffSessionMode = clproto_translator:session_mode_translate_from_protobuf(PSessionMode),
         Body = clproto_translator:translate_from_protobuf(MsgBody),
 
         {ok, #client_message{
@@ -63,6 +65,7 @@ deserialize_client_message(Message, SessionId) ->
             session_id = SessionId,
             effective_session_id = EffSessionId,
             effective_client_tokens = EffSessionAuth,
+            effective_session_mode = EffSessionMode,
             message_body = Body
         }}
     catch
@@ -131,6 +134,7 @@ serialize_client_message(#client_message{
     message_stream = MsgStm,
     effective_session_id = EffSessionId,
     effective_client_tokens = Auth,
+    effective_session_mode = EffSessionMode,
     message_body = MsgBody
 }, VerifyMsg) ->
 
@@ -140,7 +144,8 @@ serialize_client_message(#client_message{
         message_stream = clproto_translator:translate_to_protobuf(MsgStm),
         message_body = clproto_translator:translate_to_protobuf(MsgBody),
         proxy_session_id = EffSessionId,
-        proxy_session_macaroon = clproto_translator:translate_to_protobuf(Auth)
+        proxy_session_macaroon = clproto_translator:translate_to_protobuf(Auth),
+        proxy_session_mode = clproto_translator:session_mode_translate_to_protobuf(EffSessionMode)
     },
 
     case VerifyMsg of

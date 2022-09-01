@@ -64,9 +64,9 @@ run_suite(Config, SuiteSpec) ->
     catch
         throw:fail ->
             false;
-        Type:Reason ->
-            ct:pal("Unexpected error while running test suite ~p:~p ~p", [
-                Type, Reason, erlang:get_stacktrace()
+        Type:Reason:Stacktrace ->
+            ct:pal("Unexpected error while running test suite ~w:~p~nStacktrace: ~s", [
+                Type, Reason, lager:pr_stacktrace(Stacktrace)
             ]),
             false
     end.
@@ -224,6 +224,11 @@ get_expected_malformed_data_error({error, _} = Error, _, _) ->
     Error;
 get_expected_malformed_data_error({error_fun, ErrorFun}, _, TestCaseCtx) ->
     ErrorFun(TestCaseCtx);
+get_expected_malformed_data_error(
+    {_ScenarioType, ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, provider_id_placeholder)}, _, #api_test_ctx{node = Node}
+) ->
+    ProviderId = opw_test_rpc:get_provider_id(Node),
+    ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, ProviderId);
 get_expected_malformed_data_error({_ScenarioType, {error, _} = ScenarioSpecificError}, _, _) ->
     ScenarioSpecificError;
 get_expected_malformed_data_error({_ScenarioType, {error_fun, ErrorFun}}, _, TestCaseCtx) ->
@@ -431,8 +436,8 @@ run_exp_error_testcase(
                 validate_error_result(ScenarioType, ExpError, RequestResult),
                 VerifyFun(expected_failure, TestCaseCtx),
                 true
-            catch T:R ->
-                log_failure(ScenarioName, TestCaseCtx, Args, ExpError, RequestResult, T, R),
+            catch T:R:Stacktrace->
+                log_failure(ScenarioName, TestCaseCtx, Args, ExpError, RequestResult, T, R, Stacktrace),
                 false
             end
     end.
@@ -463,8 +468,8 @@ run_exp_success_testcase(TargetNode, Client, DataSet, VerifyFun, SupportedClient
                         VerifyFun(expected_failure, TestCaseCtx)
                 end,
                 true
-            catch T:R ->
-                log_failure(ScenarioName, TestCaseCtx, Args, success, Result, T, R),
+            catch T:R:Stacktrace ->
+                log_failure(ScenarioName, TestCaseCtx, Args, success, Result, T, R, Stacktrace),
                 false
             end
     end.
@@ -512,7 +517,7 @@ validate_error_result(Type, ExpError, Result) when
 
 
 %% @private
-log_failure(ScenarioName, #api_test_ctx{node = TargetNode, client = Client}, Args, Expected, Got, ErrType, ErrReason) ->
+log_failure(ScenarioName, #api_test_ctx{node = TargetNode, client = Client}, Args, Expected, Got, ErrType, ErrReason, Stacktrace) ->
     ct:pal("~s test case failed:~n"
     "Node: ~p~n"
     "Client: ~p~n"
@@ -520,7 +525,7 @@ log_failure(ScenarioName, #api_test_ctx{node = TargetNode, client = Client}, Arg
     "Expected: ~p~n"
     "Got: ~p~n"
     "Error: ~p:~p~n"
-    "Stacktrace: ~p~n", [
+    "Stacktrace: ~s~n", [
         ScenarioName,
         TargetNode,
         aai:auth_to_printable(Client),
@@ -528,7 +533,7 @@ log_failure(ScenarioName, #api_test_ctx{node = TargetNode, client = Client}, Arg
         Expected,
         Got,
         ErrType, ErrReason,
-        erlang:get_stacktrace()
+        lager:pr_stacktrace(Stacktrace)
     ]).
 
 
@@ -633,14 +638,13 @@ bad_data_sets(#data_spec{
     end, BadValues).
 
 
-% Converts correct value spec into a value
+% Converts correct value spec into a list of correct values for given key
 get_correct_value(Key, #data_spec{correct_values = CorrectValues}) ->
-    case maps:get(Key, CorrectValues) of
-        Fun when is_function(Fun, 0) ->
-            Fun();
-        Value ->
-            Value
-    end.
+    CorrectValuesForKey = maps:get(Key, CorrectValues),
+    lists:map(fun
+        (Fun) when is_function(Fun, 0) -> Fun();
+        (Value) -> Value
+    end, CorrectValuesForKey).
 
 
 %%%===================================================================
@@ -807,7 +811,7 @@ make_rest_request(_Config, Node, Client, #rest_args{
 
     case http_client:request(Method, URL, HeadersWithAuth, Body, Opts) of
         {ok, RespCode, RespHeaders, RespBody} ->
-            case maps:get(<<"content-type">>, RespHeaders, undefined) of
+            case maps:get(?HDR_CONTENT_TYPE, RespHeaders, undefined) of
                 <<"application/json">> ->
                     {ok, RespCode, RespHeaders, json_utils:decode(RespBody)};
                 _ ->

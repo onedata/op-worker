@@ -53,7 +53,8 @@
     maybe_set_guid/4, set_guid/3,
     init_batch_counters/2,
     increase_batches_to_process/2, increase_batches_to_process/3,
-    mark_processed_batch/4, mark_processed_batch/7, mark_processed_batch/8
+    mark_processed_batch/4, mark_processed_batch/7, mark_processed_batch/8,
+    mark_protected_child_has_changed/2, set_any_protected_child_changed/3
 ]).
 
 % exported for CT tests
@@ -150,6 +151,18 @@ update_mtime(StorageFileId, SpaceId, Guid, NewMtime, StatTimestamp) ->
     end).
 
 
+-spec mark_protected_child_has_changed(helpers:file_id(), od_space:id()) -> ok | error().
+mark_protected_child_has_changed(StorageFileId, SpaceId) ->
+    set_any_protected_child_changed(StorageFileId, SpaceId, true).
+
+
+-spec set_any_protected_child_changed(helpers:file_id(), od_space:id(), boolean()) -> ok | error().
+set_any_protected_child_changed(StorageFileId, SpaceId, AnyProtectedChildChanged) ->
+    create_or_update(StorageFileId, SpaceId, fun(SSI) ->
+        {ok, SSI#storage_sync_info{any_protected_child_changed = AnyProtectedChildChanged}}
+    end).
+
+
 -spec increase_batches_to_process(helpers:file_id(), od_space:id()) -> ok.
 increase_batches_to_process(StorageFileId, SpaceId) ->
    increase_batches_to_process(StorageFileId, SpaceId, 1).
@@ -197,7 +210,8 @@ mark_processed_batch(StorageFileId, SpaceId, Guid, Mtime, Offset, BatchSize, Bat
         batches_processed = BatchesProcessed,
         batches_to_process = BatchesToProcess,
         children_hashes = ChildrenHashes,
-        hashes_to_update = HashesToUpdate
+        hashes_to_update = HashesToUpdate,
+        any_protected_child_changed = AnyProtectedChildChanged
     }) ->
         BatchesProcessed2 = BatchesProcessed + 1,
         HashesToUpdate2 = update_hashes_map(Offset, BatchSize, BatchHash, HashesToUpdate),
@@ -205,17 +219,19 @@ mark_processed_batch(StorageFileId, SpaceId, Guid, Mtime, Offset, BatchSize, Bat
             guid = Guid,
             batches_processed = BatchesProcessed2
         },
-        case UpdateHashesOnFinish and (BatchesProcessed2 =:= BatchesToProcess) of
-            true ->
+        case {UpdateHashesOnFinish and (BatchesProcessed2 =:= BatchesToProcess), AnyProtectedChildChanged} of
+            {true, false} ->
                 {ok, SSI2#storage_sync_info{
                     hashes_to_update = #{},
-                    children_hashes = maps:merge(ChildrenHashes, HashesToUpdate),
+                    children_hashes = maps:merge(ChildrenHashes, HashesToUpdate2),
                     mtime = utils:ensure_defined(Mtime, OldMtime)
                 }};
-            false ->
+            {false, false} ->
                 {ok, SSI2#storage_sync_info{
                     hashes_to_update = HashesToUpdate2
-                }}
+                }};
+            {_, true} ->
+                {ok, SSI2}
         end
     end).
 
@@ -246,7 +262,7 @@ default_doc(Key, Diff, SpaceId) ->
         scope = SpaceId
     }.
 
--spec update(helpers:file_id(), od_space:id(), diff()) -> ok | error().
+-spec update(helpers:file_id(), od_space:id(), diff()) -> {ok, doc()} | error().
 update(StorageFileId, SpaceId, Diff) ->
     Id = id(StorageFileId, SpaceId),
     datastore_model:update(?CTX, Id, Diff).
@@ -277,7 +293,7 @@ batch_key(Offset, Length) -> Offset div Length.
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    5.
+    6.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -330,6 +346,18 @@ get_record_struct(5) ->
         {batches_to_process, integer},
         {batches_processed, integer},
         {hashes_to_update, #{integer => binary}}
+    ]};
+get_record_struct(6) ->
+    {record, [
+        {guid, string},
+        {children_hashes, #{integer => binary}},
+        {mtime, integer},
+        {last_stat, integer},
+        {batches_to_process, integer},
+        {batches_processed, integer},
+        {hashes_to_update, #{integer => binary}},
+        % field any_protected_child_changed has been added in this version
+        {any_protected_child_changed, boolean}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -344,21 +372,27 @@ upgrade_record(1, {?MODULE, ChildrenAttrsHash, MTime}) ->
 upgrade_record(2, {?MODULE, ChildrenAttrsHash, MTime}) ->
     {3, {?MODULE, ChildrenAttrsHash, MTime, MTime + 1}};
 upgrade_record(3, {?MODULE, ChildrenAttrsHash, MTime, LastStat}) ->
-    {4, #storage_sync_info{
-        children_hashes = ChildrenAttrsHash,
-        mtime = MTime,
-        last_stat = LastStat,
-        batches_to_process = 0,
-        batches_processed = 0,
-        hashes_to_update = #{}
-    }};
+    {4, {?MODULE, ChildrenAttrsHash, MTime, LastStat, 0, 0, #{}}};
 upgrade_record(4, {?MODULE, ChildrenAttrsHash, MTime, LastStat, BatchesToProcess, BatchesProcessed, HashesToUpdate}) ->
-    {5, #storage_sync_info{
-        guid = undefined,
+    {5, {?MODULE,
+        % field guid has been added in this version
+        undefined,
+        ChildrenAttrsHash,
+        MTime,
+        LastStat,
+        BatchesToProcess,
+        BatchesProcessed,
+        HashesToUpdate
+    }};
+upgrade_record(5, {?MODULE, Guid, ChildrenAttrsHash, MTime, LastStat, BatchesToProcess, BatchesProcessed, HashesToUpdate}) ->
+    {6, #storage_sync_info{
+        guid = Guid,
         children_hashes = ChildrenAttrsHash,
         mtime = MTime,
         last_stat = LastStat,
         batches_to_process = BatchesToProcess,
         batches_processed = BatchesProcessed,
-        hashes_to_update = HashesToUpdate
+        hashes_to_update = HashesToUpdate,
+        % field any_protected_child_changed has been added in this version
+        any_protected_child_changed = false
     }}.

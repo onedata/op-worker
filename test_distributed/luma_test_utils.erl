@@ -39,9 +39,9 @@ run_test_for_all_storage_configs(TestCase, TestFun, Module, Config, StorageConfi
         try
             run_test(TestFun, Module, Config, StorageLumaConfig)
         catch
-            Error:Reason ->
+            Error:Reason:Stacktrace ->
                 ct:pal("Testcase \"~p\" failed for config ~p due to ~p:~p~nStacktrace: ~p",
-                    [TestCase, Name, Error, Reason, erlang:get_stacktrace()]
+                    [TestCase, Name, Error, Reason, Stacktrace]
                 ),
                 ct:fail("Failed testcase")
         end

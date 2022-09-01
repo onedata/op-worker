@@ -146,13 +146,11 @@ is_authorized(Req, State) ->
             % The user presented some authentication, but he is not supported
             % by this Oneprovider. Still, if the request concerned a shared
             % file, the user should be treated as a guest and served.
-            try resolve_gri_bindings(?GUEST_SESS_ID, State#state.rest_req#rest_req.b_gri, Req) of
+            case (catch resolve_gri_bindings(?GUEST_SESS_ID, State#state.rest_req#rest_req.b_gri, Req)) of
                 #gri{scope = public} ->
                     {true, Req, State#state{auth = ?GUEST}};
                 _ ->
                     {stop, http_req:send_error(Error, Req), State}
-            catch _:_ ->
-                {stop, http_req:send_error(Error, Req), State}
             end;
         {error, _} = Error ->
             {stop, http_req:send_error(Error, Req), State}
@@ -224,10 +222,10 @@ process_request(Req, #state{auth = #auth{session_id = SessionId} = Auth, rest_re
     catch
         throw:Error ->
             {stop, http_req:send_error(Error, Req), State};
-        Type:Message ->
+        Type:Message:Stacktrace ->
             ?error_stacktrace("Unexpected error in ~p:~p - ~p:~p", [
                 ?MODULE, ?FUNCTION_NAME, Type, Message
-            ]),
+            ], Stacktrace),
             NewReq = cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, Req),
             {stop, NewReq, State}
     end.
@@ -251,7 +249,7 @@ resolve_gri_bindings(SessionId, #b_gri{type = Tp, id = Id, aspect = As, scope = 
         {Atom, Asp} -> {Atom, resolve_bindings(SessionId, Asp, Req)};
         Atom -> Atom
     end,
-    ScBinding = case middleware_utils:is_shared_file_request(Tp, AsBinding, IdBinding) of
+    ScBinding = case middleware_utils:is_shared_file_request(Tp, AsBinding, Sc, IdBinding) of
         true -> public;
         false -> Sc
     end,
@@ -270,7 +268,19 @@ resolve_gri_bindings(SessionId, #b_gri{type = Tp, id = Id, aspect = As, scope = 
 resolve_bindings(_SessionId, ?BINDING(Key), Req) ->
     cowboy_req:binding(Key, Req);
 resolve_bindings(_SessionId, ?OBJECTID_BINDING(Key), Req) ->
-    middleware_utils:decode_object_id(cowboy_req:binding(Key, Req), Key);
+    SpaceIdOrObjectId = cowboy_req:binding(Key, Req),
+    try
+        middleware_utils:decode_object_id(SpaceIdOrObjectId, Key)
+    catch throw:?ERROR_BAD_VALUE_IDENTIFIER(Key) ->
+        {ok, SupportedSpaceIds} = provider_logic:get_spaces(),
+        case lists:member(SpaceIdOrObjectId, SupportedSpaceIds) of
+            true ->
+                fslogic_file_id:spaceid_to_space_dir_guid(SpaceIdOrObjectId);
+            false ->
+                ProviderId = oneprovider:get_id(),
+                throw(?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceIdOrObjectId, ProviderId))
+        end
+    end;
 resolve_bindings(SessionId, ?PATH_BINDING, Req) ->
     Path = filename:join([<<"/">> | cowboy_req:path_info(Req)]),
     {ok, Guid} = middleware_utils:resolve_file_path(SessionId, Path),
@@ -339,7 +349,10 @@ route_to_proper_handler(#op_req{operation = Operation, gri = #gri{
 }} = OpReq, Req) when
     (Operation == create andalso As == child);
     (Operation == create andalso As == content);
-    (Operation == get andalso As == content)
+    (Operation == get andalso As == content);
+    (Operation == create andalso As == file_at_path);
+    (Operation == get andalso As == file_at_path);
+    (Operation == delete andalso As == file_at_path)
 ->
     file_content_rest_handler:handle_request(OpReq, Req);
 route_to_proper_handler(OpReq, Req) ->

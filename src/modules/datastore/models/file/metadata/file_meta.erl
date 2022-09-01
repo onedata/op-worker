@@ -13,44 +13,43 @@
 -author("Rafal Slota").
 
 -include("global_definitions.hrl").
--include("proto/oneclient/fuse_messages.hrl").
--include("modules/fslogic/fslogic_common.hrl").
--include("modules/fslogic/fslogic_suffix.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
--include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
+-include("modules/dataset/dataset.hrl").
+-include("modules/fslogic/data_access_control.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/fslogic_suffix.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/onedata.hrl").
-
-%% How many processes shall be process single set_scope operation.
--define(SET_SCOPER_WORKERS, 25).
-
-%% How many entries shall be processed in one batch for set_scope operation.
--define(SET_SCOPE_BATCH_SIZE, 100).
 
 -export([save/1, create/2, save/2, get/1, exists/1, update/2]).
 -export([delete/1, delete_without_link/1]).
 -export([hidden_file_name/1, is_hidden/1, is_child_of_hidden_dir/1, is_deletion_link/1]).
 -export([add_share/2, remove_share/2, get_shares/1]).
+-export([get_protection_flags/1]).
 -export([get_parent/1, get_parent_uuid/1, get_provider_id/1]).
 -export([
-    get_uuid/1, get_child/2, get_child_uuid_and_tree_id/2, get_matching_child_uuids_with_tree_ids/3,
-    list_children/2, list_children_whitelisted/3
+    get_uuid/1, get_child/2, trim_filename_tree_id/2,
+    get_child_uuid_and_tree_id/2, get_matching_child_uuids_with_tree_ids/3
 ]).
 -export([get_name/1, set_name/2]).
--export([get_active_perms_type/1, update_mode/2, update_acl/2]).
+-export([
+    get_active_perms_type/1, update_mode/2,  update_acl/2,
+    update_protection_flags/3, protection_flags_to_json/1, protection_flags_from_json/1
+]).
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
-    make_space_exist/1, new_doc/6, new_doc/7, get_ancestors/1,
-    get_locations_by_uuid/1, rename/4, get_owner/1, get_type/1,
+    make_space_exist/1, new_doc/6, new_doc/7, new_share_root_dir_doc/2, get_ancestors/1,
+    get_locations_by_uuid/1, rename/4, get_owner/1, get_type/1, get_effective_type/1,
     get_mode/1]).
 -export([check_name_and_get_conflicting_files/1, check_name_and_get_conflicting_files/4, has_suffix/1, is_deleted/1]).
-% For tests
+
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
--export([get_record_version/0, get_record_struct/1, upgrade_record/2, resolve_conflict/3]).
+-export([get_record_version/0, get_record_struct/1, upgrade_record/2, resolve_conflict/3, on_remote_doc_created/2]).
 
--type doc() :: datastore:doc().
+-type doc() :: datastore_doc:doc(file_meta()).
 -type diff() :: datastore_doc:diff(file_meta()).
 -type uuid() :: datastore:key().
 -type path() :: binary().
@@ -58,7 +57,7 @@
 -type name() :: binary().
 -type uuid_or_path() :: {path, path()} | {uuid, uuid()}.
 -type entry() :: uuid_or_path() | doc().
--type type() :: ?REGULAR_FILE_TYPE | ?DIRECTORY_TYPE | ?SYMLINK_TYPE.
+-type type() :: ?REGULAR_FILE_TYPE | ?DIRECTORY_TYPE | ?SYMLINK_TYPE | ?LINK_TYPE.
 -type size() :: non_neg_integer().
 -type mode() :: non_neg_integer().
 -type time() :: non_neg_integer().
@@ -66,26 +65,13 @@
 -type posix_permissions() :: non_neg_integer().
 -type permissions_type() :: posix | acl.
 -type conflicts() :: [link()].
-
-
--type list_offset() :: file_meta_links:offset().
--type list_token() :: file_meta_links:token().
--type list_size() :: file_meta_links:size().
--type list_opts() :: file_meta_links:list_opts().
--type list_last_name() :: file_meta_links:last_name().
--type list_last_tree() :: file_meta_links:last_tree().
--type list_extended_info() :: file_meta_links:list_extended_info().
--type link() :: file_meta_links:link().
+-type path_type() :: ?CANONICAL_PATH | ?UUID_BASED_PATH.
+-type link() :: file_meta_forest:link().
 
 -export_type([
     doc/0, file_meta/0, uuid/0, path/0, uuid_based_path/0, name/0, uuid_or_path/0, entry/0,
     type/0, size/0, mode/0, time/0, posix_permissions/0, permissions_type/0,
-    conflicts/0
-]).
-
--export_type([
-    list_offset/0, list_size/0, list_token/0,
-    list_last_name/0, list_last_tree/0, list_opts/0, list_extended_info/0, link/0
+    conflicts/0, path_type/0, link/0
 ]).
 
 -define(CTX, #{
@@ -139,7 +125,7 @@ save(Doc, GeneratedKey) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create({uuid, ParentUuid :: uuid()}, doc()) ->
-    {ok, uuid()} | {error, term()}.
+    {ok, doc()} | {error, term()}.
 create(Parent, FileDoc) ->
     create(Parent, FileDoc, all).
 
@@ -168,13 +154,15 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{nam
             }
         },
         LocalTreeId = oneprovider:get_id(),
+        % Warning: if uuid exists, two files with same #file_meta{} will be created
+        % (names are checked for conflicts, not uuids)
         case file_meta:save(FileDoc3) of
             {ok, FileDocFinal = #document{key = FileUuid}} ->
-                case file_meta_links:check_and_add(ParentUuid, ParentScopeId, TreesToCheck, FileName, FileUuid) of
+                case file_meta_forest:check_and_add(ParentUuid, ParentScopeId, TreesToCheck, FileName, FileUuid) of
                     ok ->
                         {ok, FileDocFinal};
                     {error, already_exists} = Eexists ->
-                        case file_meta_links:get(ParentUuid, TreesToCheck, FileName) of
+                        case file_meta_forest:get(ParentUuid, TreesToCheck, FileName) of
                             {ok, Links} ->
                                 FileExists = lists:any(fun(#link{target = Uuid, tree_id = TreeId, rev = Rev}) ->
                                     Deleted = case get_including_deleted(Uuid) of
@@ -187,7 +175,7 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{nam
                                     end,
                                     case {Deleted, TreeId} of
                                         {true, LocalTreeId} ->
-                                            file_meta_links:delete_local(ParentUuid, ParentScopeId, FileName, Rev),
+                                            file_meta_forest:delete_local(ParentUuid, ParentScopeId, FileName, Rev),
                                             false;
                                         _ ->
                                             not Deleted
@@ -255,8 +243,23 @@ get_including_deleted(?GLOBAL_ROOT_DIR_UUID) ->
             parent_uuid = ?GLOBAL_ROOT_DIR_UUID
         }
     }};
-get_including_deleted(FileUuid) ->
-    datastore_model:get(?CTX#{include_deleted => true}, FileUuid).
+get_including_deleted(Uuid) ->
+    case fslogic_file_id:is_link_uuid(Uuid) of
+        true ->
+            % When hardlink document is requested it is merged using document
+            % representing hardlink and document representing target file
+            case datastore_model:get(?CTX#{include_deleted => true}, Uuid) of
+                {ok, LinkDoc} ->
+                    FileUuid = fslogic_file_id:ensure_referenced_uuid(Uuid),
+                    case datastore_model:get(?CTX#{include_deleted => true}, FileUuid) of
+                        {ok, FileDoc} -> file_meta_hardlinks:merge_link_and_file_doc(LinkDoc, FileDoc);
+                        Error2 -> Error2
+                    end;
+                Error -> Error
+            end;
+        false ->
+            datastore_model:get(?CTX#{include_deleted => true}, Uuid)
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -264,7 +267,7 @@ get_including_deleted(FileUuid) ->
 %% Updates file meta.
 %% @end
 %%--------------------------------------------------------------------
--spec update(uuid() | entry(), diff()) -> {ok, uuid()} | {error, term()}.
+-spec update(uuid() | entry(), diff()) -> {ok, doc()} | {error, term()}.
 update({uuid, FileUuid}, Diff) ->
     update(FileUuid, Diff);
 update(#document{value = #file_meta{}, key = Key}, Diff) ->
@@ -275,7 +278,7 @@ update({path, Path}, Diff) ->
         update(Doc, Diff)
     end);
 update(Key, Diff) ->
-    ?extract_key(datastore_model:update(?CTX, Key, Diff)).
+    datastore_model:update(?CTX, Key, Diff).
 
 
 %%--------------------------------------------------------------------
@@ -295,7 +298,7 @@ delete(#document{
     }
 }) ->
     ?run(begin
-        ok = file_meta_links:delete(ParentUuid, Scope, FileName, FileUuid),
+        ok = file_meta_forest:delete(ParentUuid, Scope, FileName, FileUuid),
         delete_without_link(FileUuid)
     end);
 delete({path, Path}) ->
@@ -326,7 +329,7 @@ delete_without_link(FileUuid) ->
 
 -spec delete_doc_if_not_special(uuid()) -> ok.
 delete_doc_if_not_special(FileUuid) ->
-    case fslogic_uuid:is_special_uuid(FileUuid) of
+    case fslogic_file_id:is_special_uuid(FileUuid) of
         true -> ok;
         false -> delete_without_link(FileUuid)
     end.
@@ -370,13 +373,33 @@ get_child(ParentUuid, Name) ->
     end.
 
 
+-spec trim_filename_tree_id(name(), {all, uuid()} | file_meta_forest:tree_id()) -> name().
+trim_filename_tree_id(Name, {all, ParentUuid}) ->
+    TreeIds = case file_meta_forest:get_trees(ParentUuid) of
+        {ok, T} -> T;
+        ?ERROR_NOT_FOUND -> []
+    end,
+    lists_utils:foldl_while(fun(TreeId, NameAcc) ->
+        case trim_filename_tree_id(NameAcc, TreeId) of
+            NameAcc -> {cont, NameAcc};
+            TrimmedName -> {halt, TrimmedName}
+        end
+    end, Name, TreeIds);
+trim_filename_tree_id(Name, TreeId) ->
+    Tokens = binary:split(Name, ?CONFLICTING_LOGICAL_FILE_SUFFIX_SEPARATOR, [global]),
+    case lists:reverse(Tokens) of
+        [TreeId | NameTokens] -> str_utils:join_binary(NameTokens, ?CONFLICTING_LOGICAL_FILE_SUFFIX_SEPARATOR);
+        _ -> Name
+    end.
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns parent child's UUID by Name and TreeId of a tree in which
 %% the link was found.
 %% @end
 %%--------------------------------------------------------------------
--spec get_child_uuid_and_tree_id(uuid(), name()) -> {ok, uuid(), file_meta_links:tree_ids()} | {error, term()}.
+-spec get_child_uuid_and_tree_id(uuid(), name()) -> {ok, uuid(), file_meta_forest:tree_ids()} | {error, term()}.
 get_child_uuid_and_tree_id(ParentUuid, Name) ->
     Tokens = binary:split(Name, ?CONFLICTING_LOGICAL_FILE_SUFFIX_SEPARATOR, [global]),
     case lists:reverse(Tokens) of
@@ -385,7 +408,7 @@ get_child_uuid_and_tree_id(ParentUuid, Name) ->
             SuffixSize = size(TreeIdSuffix),
             NameWithoutTreeSuffix = binary:part(
                 Name, 0, size(Name) - SuffixSize - size(?CONFLICTING_LOGICAL_FILE_SUFFIX_SEPARATOR)),
-            MatchingTreeIds = case file_meta_links:get_trees(ParentUuid) of
+            MatchingTreeIds = case file_meta_forest:get_trees(ParentUuid) of
                 {ok, TreeIds} ->
                     lists:filter(fun(TreeId) ->
                         case TreeId of
@@ -421,39 +444,15 @@ get_child_uuid_and_tree_id(ParentUuid, Name) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_matching_child_uuids_with_tree_ids(uuid(), datastore_links:tree_ids(), name()) ->
-    {ok, [{uuid(), file_meta_links:tree_ids()}]} | {error, term()}.
+    {ok, [{uuid(), file_meta_forest:tree_ids()}]} | {error, term()}.
 get_matching_child_uuids_with_tree_ids(ParentUuid, TreeIds, Name) ->
-    case file_meta_links:get(ParentUuid, TreeIds, Name) of
+    case file_meta_forest:get(ParentUuid, TreeIds, Name) of
         {ok, [#link{} | _] = Links} ->
             UuidsWithTreeIds = lists:map(fun(#link{target = FileUuid, tree_id = TreeId}) -> {FileUuid, TreeId} end, Links),
             {ok, UuidsWithTreeIds};
         {error, Reason} ->
             {error, Reason}
     end.
-
-
--spec list_children(entry(), list_opts()) ->
-    {ok, [link()], list_extended_info()} | {error, term()}.
-list_children(Entry, Opts) ->
-    ?run(begin
-        {ok, FileUuid} = get_uuid(Entry),
-        file_meta_links:list(FileUuid, Opts)
-    end).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Lists children of given #file_meta bounded by specified AllowedChildren
-%% and given options (NonNegOffset and Limit).
-%% @end
-%%--------------------------------------------------------------------
--spec list_children_whitelisted(entry(), list_opts(), [file_meta:name()]) ->
-    {ok, [link()], list_extended_info()} | {error, term()}.
-list_children_whitelisted(Entry, ListOpts, ChildrenWhiteList) ->
-    ?run(begin
-        {ok, FileUuid} = get_uuid(Entry),
-        file_meta_links:list_whitelisted(FileUuid, ListOpts, ChildrenWhiteList)
-    end).
 
 
 %%--------------------------------------------------------------------
@@ -488,16 +487,25 @@ get_locations_by_uuid(FileUuid) ->
 rename(SourceDoc, #document{key = SourceParentUuid}, #document{key = TargetParentUuid}, TargetName) ->
     rename(SourceDoc, SourceParentUuid, TargetParentUuid, TargetName);
 rename(SourceDoc, SourceParentUuid, TargetParentUuid, TargetName) ->
-    #document{key = FileUuid, value = #file_meta{name = FileName}, scope = Scope} = SourceDoc,
-    {ok, _} = file_meta:update(FileUuid, fun(FileMeta = #file_meta{}) ->
+    #document{
+        key = FileUuid,
+        value = #file_meta{name = FileName, type = Type},
+        scope = Scope
+    } = SourceDoc,
+    ok = file_meta_forest:add(TargetParentUuid, Scope, TargetName, FileUuid),
+    ok = file_meta_forest:delete(SourceParentUuid, Scope, FileName, FileUuid),
+    {ok, TargetDoc} = file_meta:update(FileUuid, fun(FileMeta = #file_meta{}) ->
         {ok, FileMeta#file_meta{
             name = TargetName,
             parent_uuid = TargetParentUuid
         }}
     end),
-    ok = file_meta_links:add(TargetParentUuid, Scope, TargetName, FileUuid),
-    ok = file_meta_links:delete(SourceParentUuid, Scope, FileName, FileUuid).
 
+    % TODO VFS-8835 - test if other mechanisms handle size change
+    dir_size_stats:report_file_moved(Type, file_id:pack_guid(FileUuid, Scope),
+        file_id:pack_guid(SourceParentUuid, Scope), file_id:pack_guid(TargetParentUuid, Scope)),
+
+    dataset_api:move_if_applicable(SourceDoc, TargetDoc).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -517,7 +525,7 @@ get_parent(Entry) ->
 %% Returns file's parent uuid.
 %% @end
 %%--------------------------------------------------------------------
--spec get_parent_uuid(entry()) -> {ok, datastore:key()} | {error, term()}.
+-spec get_parent_uuid(uuid() | entry()) -> {ok, uuid()} | {error, term()}.
 get_parent_uuid(Entry) ->
     ?run(begin
         {ok, #document{value = #file_meta{parent_uuid = ParentUuid}}} =
@@ -533,15 +541,14 @@ get_parent_uuid(Entry) ->
 %%--------------------------------------------------------------------
 -spec get_ancestors(uuid()) -> {ok, [uuid()]} | {error, term()}.
 get_ancestors(FileUuid) ->
-    ?run(begin
-        {ok, #document{key = Key}} = file_meta:get(FileUuid),
-        {ok, get_ancestors2(Key, [])}
-    end).
-get_ancestors2(?GLOBAL_ROOT_DIR_UUID, Acc) ->
-    Acc;
-get_ancestors2(FileUuid, Acc) ->
+    ?run(begin get_ancestors(FileUuid, []) end).
+
+-spec get_ancestors(uuid(), [uuid()]) -> {ok, [uuid()]} | {error, term()}.
+get_ancestors(?GLOBAL_ROOT_DIR_UUID, Acc) ->
+    {ok, Acc};
+get_ancestors(FileUuid, Acc) ->
     {ok, ParentUuid} = get_parent_uuid({uuid, FileUuid}),
-    get_ancestors2(ParentUuid, [ParentUuid | Acc]).
+    get_ancestors(ParentUuid, [ParentUuid | Acc]).
 
 
 %%--------------------------------------------------------------------
@@ -552,8 +559,8 @@ get_ancestors2(FileUuid, Acc) ->
 -spec get_scope_id(entry()) -> {ok, ScopeId :: od_space:id() | undefined} | {error, term()}.
 get_scope_id(#document{key = FileUuid, value = #file_meta{is_scope = true}, scope = <<>>}) ->
     % scope has not been set yet
-    case fslogic_uuid:is_space_dir_uuid(FileUuid) of
-        true -> {ok, fslogic_uuid:space_dir_uuid_to_spaceid(FileUuid)};
+    case fslogic_file_id:is_space_dir_uuid(FileUuid) of
+        true -> {ok, fslogic_file_id:space_dir_uuid_to_spaceid(FileUuid)};
         false -> {ok, ?ROOT_DIR_SCOPE}
     end;
 get_scope_id(#document{value = #file_meta{is_scope = false}, scope = <<>>}) ->
@@ -573,6 +580,14 @@ get_type(#file_meta{type = Type}) ->
     Type;
 get_type(#document{value = FileMeta}) ->
     get_type(FileMeta).
+
+-spec get_effective_type(file_meta() | doc()) -> type().
+get_effective_type(#file_meta{type = ?LINK_TYPE}) ->
+    ?REGULAR_FILE_TYPE;
+get_effective_type(#file_meta{type = Type}) ->
+    Type;
+get_effective_type(#document{value = FileMeta}) ->
+    get_effective_type(FileMeta).
 
 
 -spec get_owner(file_meta() | doc()) -> od_user:id().
@@ -607,7 +622,7 @@ setup_onedata_user(UserId, EffSpaces) ->
                 make_space_exist(SpaceId)
             end, EffSpaces),
 
-            FileUuid = fslogic_uuid:user_root_dir_uuid(UserId),
+            FileUuid = fslogic_file_id:user_root_dir_uuid(UserId),
             case create({uuid, ?GLOBAL_ROOT_DIR_UUID},
                 #document{
                     key = FileUuid,
@@ -631,10 +646,10 @@ setup_onedata_user(UserId, EffSpaces) ->
                 {error, already_exists} ->
                     ok
             end
-        catch Type:Message ->
+        catch Type:Message:Stacktrace ->
             ?error_stacktrace("Failed to setup user ~s - ~p:~p", [
                 UserId, Type, Message
-            ])
+            ], Stacktrace)
         end
     end).
 
@@ -644,12 +659,12 @@ setup_onedata_user(UserId, EffSpaces) ->
 %% Add shareId to file meta.
 %% @end
 %%--------------------------------------------------------------------
--spec add_share(file_ctx:ctx(), od_share:id()) -> {ok, uuid()}  | {error, term()}.
+-spec add_share(file_ctx:ctx(), od_share:id()) -> ok | {error, term()}.
 add_share(FileCtx, ShareId) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    update({uuid, FileUuid}, fun(FileMeta = #file_meta{shares = Shares}) ->
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
+    ?extract_ok(update({uuid, FileUuid}, fun(FileMeta = #file_meta{shares = Shares}) ->
         {ok, FileMeta#file_meta{shares = [ShareId | Shares]}}
-    end).
+    end)).
 
 
 %%--------------------------------------------------------------------
@@ -657,10 +672,10 @@ add_share(FileCtx, ShareId) ->
 %% Remove shareId from file meta.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_share(file_ctx:ctx(), od_share:id()) -> {ok, uuid()} | {error, term()}.
+-spec remove_share(file_ctx:ctx(), od_share:id()) -> ok | {error, term()}.
 remove_share(FileCtx, ShareId) ->
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    update({uuid, FileUuid}, fun(FileMeta = #file_meta{shares = Shares}) ->
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
+    ?extract_ok(update({uuid, FileUuid}, fun(FileMeta = #file_meta{shares = Shares}) ->
         Result = lists:foldl(fun(ShId, {IsMember, Acc}) ->
             case ShareId == ShId of
                 true -> {found, Acc};
@@ -674,7 +689,7 @@ remove_share(FileCtx, ShareId) ->
             {not_found, _} ->
                 {error, not_found}
         end
-    end).
+    end)).
 
 
 -spec get_shares(doc() | file_meta()) -> [od_share:id()].
@@ -689,16 +704,15 @@ get_shares(#file_meta{shares = Shares}) ->
 %% Creates file meta entry for space if not exists
 %% @end
 %%--------------------------------------------------------------------
--spec make_space_exist(SpaceId :: datastore:key()) -> ok | no_return().
+-spec make_space_exist(SpaceId :: od_space:id()) -> ok | no_return().
 make_space_exist(SpaceId) ->
-    CTime = global_clock:timestamp_seconds(),
-    SpaceDirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+    SpaceDirUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
     FileDoc = #document{
         key = SpaceDirUuid,
         value = #file_meta{
             name = SpaceId,
             type = ?DIRECTORY_TYPE,
-            mode = ?DEFAULT_DIR_PERMS,
+            mode = ?DEFAULT_DIR_MODE,
             owner = ?SPACE_OWNER_ID(SpaceId),
             is_scope = true,
             parent_uuid = ?GLOBAL_ROOT_DIR_UUID
@@ -706,12 +720,7 @@ make_space_exist(SpaceId) ->
     },
     case file_meta:create({uuid, ?GLOBAL_ROOT_DIR_UUID}, FileDoc) of
         {ok, _} ->
-            TimesDoc = #document{
-                key = SpaceDirUuid,
-                value = #times{mtime = CTime, atime = CTime, ctime = CTime},
-                scope = SpaceId
-            },
-            case times:save(TimesDoc) of
+            case times:save_with_current_times(SpaceDirUuid, SpaceId) of
                 {ok, _} -> ok;
                 {error, already_exists} -> ok
             end,
@@ -739,6 +748,29 @@ new_doc(FileUuid, FileName, FileType, Mode, Owner, ParentUuid, SpaceId) ->
             owner = Owner,
             parent_uuid = ParentUuid,
             provider_id = oneprovider:get_id()
+        },
+        scope = SpaceId
+    }.
+
+
+-spec new_share_root_dir_doc(uuid(), od_space:id()) -> doc().
+new_share_root_dir_doc(ShareRootDirUuid, SpaceId) ->
+    ShareId = fslogic_file_id:share_root_dir_uuid_to_shareid(ShareRootDirUuid),
+
+    #document{
+        key = ShareRootDirUuid,
+        value = #file_meta{
+            name = ShareId,
+            type = ?DIRECTORY_TYPE,
+            is_scope = false,
+            mode = ?DEFAULT_SHARE_ROOT_DIR_PERMS,
+            owner = ?ROOT_USER_ID,
+            parent_uuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
+            provider_id = oneprovider:get_id(),
+            deleted = case share_logic:get(?ROOT_SESS_ID, ShareId) of
+                {ok, _} -> false;
+                ?ERROR_NOT_FOUND -> true
+            end
         },
         scope = SpaceId
     }.
@@ -796,6 +828,13 @@ is_child_of_hidden_dir(Path) ->
     is_hidden(Parent).
 
 
+-spec get_protection_flags(file_meta() | doc()) -> data_access_control:bitmask().
+get_protection_flags(#document{value = FM}) ->
+    get_protection_flags(FM);
+get_protection_flags(#file_meta{protection_flags = ProtectionFlags}) ->
+    ProtectionFlags.
+
+
 -spec get_name(doc()) -> binary().
 get_name(#document{value = #file_meta{name = Name}}) ->
     Name.
@@ -828,11 +867,11 @@ get_active_perms_type(FileUuid) ->
     end.
 
 
--spec update_mode(uuid(), posix_permissions()) -> ok | {error, term()}.
+-spec update_mode(uuid(), posix_permissions()) -> {ok, doc()} | {error, term()}.
 update_mode(FileUuid, NewMode) ->
-    ?extract_ok(update({uuid, FileUuid}, fun(#file_meta{} = FileMeta) ->
+    update({uuid, FileUuid}, fun(#file_meta{} = FileMeta) ->
         {ok, FileMeta#file_meta{mode = NewMode}}
-    end)).
+    end).
 
 
 -spec update_acl(uuid(), acl:acl()) -> ok | {error, term()}.
@@ -840,6 +879,44 @@ update_acl(FileUuid, NewAcl) ->
     ?extract_ok(update({uuid, FileUuid}, fun(#file_meta{} = FileMeta) ->
         {ok, FileMeta#file_meta{acl = NewAcl}}
     end)).
+
+
+-spec update_protection_flags(uuid(), data_access_control:bitmask(), data_access_control:bitmask()) ->
+    ok | {error, nothing_changed} | {error, term()}.
+update_protection_flags(FileUuid, FlagsToSet, FlagsToUnset) ->
+    ?extract_ok(update({uuid, FileUuid}, fun(#file_meta{protection_flags = CurrFlags} = FileMeta) ->
+        NewFlags = ?set_flags(?reset_flags(CurrFlags, FlagsToUnset), FlagsToSet),
+        case NewFlags =:= CurrFlags of
+            true -> {error, nothing_changed};
+            false -> {ok, FileMeta#file_meta{protection_flags = NewFlags}}
+        end
+    end)).
+
+
+-spec protection_flags_to_json(data_access_control:bitmask()) -> [binary()].
+protection_flags_to_json(ProtectionFlags) ->
+    lists:filtermap(fun({FlagName, FlagMask}) ->
+        case ?has_all_flags(ProtectionFlags, FlagMask) of
+            true -> {true, FlagName};
+            false -> false
+        end
+    end, [
+        {?DATA_PROTECTION_BIN, ?DATA_PROTECTION},
+        {?METADATA_PROTECTION_BIN, ?METADATA_PROTECTION}
+    ]).
+
+
+-spec protection_flags_from_json([binary()]) -> data_access_control:bitmask().
+protection_flags_from_json(ProtectionFlagsJson) ->
+    lists:foldl(fun(ProtectionFlag, Bitmask) ->
+        ?set_flags(Bitmask, protection_flag_from_json(ProtectionFlag))
+    end, ?no_flags_mask, ProtectionFlagsJson).
+
+
+%% @private
+-spec protection_flag_from_json(binary()) -> data_access_control:bitmask().
+protection_flag_from_json(?DATA_PROTECTION_BIN) -> ?DATA_PROTECTION;
+protection_flag_from_json(?METADATA_PROTECTION_BIN) -> ?METADATA_PROTECTION.
 
 
 -spec check_name_and_get_conflicting_files(doc()) ->
@@ -867,7 +944,7 @@ check_name_and_get_conflicting_files(#document{
 -spec check_name_and_get_conflicting_files(uuid(), name(), uuid(), od_provider:id()) ->
     ok | {conflicting, ExtendedName :: name(), Conflicts :: conflicts()}.
 check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, FileProviderId) ->
-    file_meta_links:check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, FileProviderId).
+    file_meta_forest:check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, FileProviderId).
 
 
 %%--------------------------------------------------------------------
@@ -957,7 +1034,7 @@ is_valid_filename(FileName) when is_binary(FileName) ->
 
 %% @private
 -spec get_child_uuid_and_tree_id_for_name_without_suffix(uuid(), name()) ->
-    {ok, uuid(), file_meta_links:tree_ids()} | {error, term()}.
+    {ok, uuid(), file_meta_forest:tree_ids()} | {error, term()}.
 get_child_uuid_and_tree_id_for_name_without_suffix(ParentUuid, Name) ->
     case get_matching_child_uuids_with_tree_ids(ParentUuid, oneprovider:get_id(), Name) of
         {ok, [{Uuid, TreeId}]} ->
@@ -981,9 +1058,9 @@ get_child_uuid_and_tree_id_for_name_without_suffix(ParentUuid, Name) ->
 %% Sends event about space dir creation
 %% @end
 %%--------------------------------------------------------------------
--spec emit_space_dir_created(DirUuid :: uuid(), SpaceId :: datastore:key()) -> ok | no_return().
+-spec emit_space_dir_created(DirUuid :: uuid(), SpaceId :: od_space:id()) -> ok | no_return().
 emit_space_dir_created(DirUuid, SpaceId) ->
-    FileCtx = file_ctx:new_by_guid(file_id:pack_guid(DirUuid, SpaceId)),
+    FileCtx = file_ctx:new_by_uuid(DirUuid, SpaceId),
     #fuse_response{fuse_response = FileAttr} =
         attr_req:get_file_attr_insecure(user_ctx:new(?ROOT_SESS_ID), FileCtx, #{
             allow_deleted_files => false,
@@ -1014,7 +1091,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    10.
+    file_meta_model:get_record_version().
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1046,3 +1123,13 @@ upgrade_record(Version, Record) ->
 -spec resolve_conflict(datastore_model:ctx(), doc(), doc()) -> default.
 resolve_conflict(Ctx, Doc1, Doc2) ->
     file_meta_model:resolve_conflict(Ctx, Doc1, Doc2).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Function called when new record appears from remote provider.
+%% @end
+%%--------------------------------------------------------------------
+-spec on_remote_doc_created(datastore_model:ctx(), doc()) -> ok.
+on_remote_doc_created(Ctx, Doc) ->
+    file_meta_model:on_remote_doc_created(Ctx, Doc).

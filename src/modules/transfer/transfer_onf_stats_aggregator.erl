@@ -244,7 +244,7 @@ flush_stats(SpaceId, #state{cached_stats = StatsPerSpace} = State) ->
                 cached_stats = RestStatsPerSpace
             }),
 
-            case application:get_env(?APP_NAME, transfer_onf_stats_aggregator_gc, off) of
+            case op_worker:get_env(transfer_onf_stats_aggregator_gc, off) of
                 on ->
                     erlang:garbage_collect();
                 _ ->

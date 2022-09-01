@@ -14,6 +14,7 @@
 -ifndef(DISTRIBUTION_ASSERT_HRL).
 -define(DISTRIBUTION_ASSERT_HRL, 1).
 
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 
 -define(DIST(__ProviderId, __Size),
@@ -37,7 +38,7 @@ end, __Distributions))).
 
 -define(assertDistribution(Worker, SessionId, ExpectedDistribution, FileGuid, Attempts),
     ?assertEqual(?normalizeDistribution(ExpectedDistribution), try
-        {ok, __FileBlocks} = lfm_proxy:get_file_distribution(Worker, SessionId, {guid, FileGuid}),
+        {ok, __FileBlocks} = opt_file_metadata:get_distribution_deprecated(Worker, SessionId, ?FILE_REF(FileGuid)),
         lists:sort(__FileBlocks)
     catch
         _:_ ->

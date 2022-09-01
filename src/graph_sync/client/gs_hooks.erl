@@ -44,10 +44,10 @@ handle_connected_to_oz() ->
         _:{_, ?ERROR_NO_CONNECTION_TO_ONEZONE} ->
             ?warning("Connection lost while running on-connect-to-oz procedures"),
             error;
-        Class:Reason ->
+        Class:Reason:Stacktrace ->
             ?error_stacktrace("Failed to execute on-connect-to-oz procedures, disconnecting - ~w:~p", [
                 Class, Reason
-            ]),
+            ], Stacktrace),
             error
     end.
 
@@ -62,10 +62,10 @@ handle_connected_to_oz() ->
 handle_disconnected_from_oz() ->
     try
         on_disconnect_from_oz()
-    catch Class:Reason ->
+    catch Class:Reason:Stacktrace ->
         ?error_stacktrace("Failed to run on-disconnect-from-oz procedures - ~w:~p", [
             Class, Reason
-        ])
+        ], Stacktrace)
     end.
 
 
@@ -81,10 +81,10 @@ handle_deregistered_from_oz() ->
         ?notice("Provider has been deregistered - cleaning up credentials and config..."),
         on_deregister_from_oz(),
         ?notice("Oneprovider cleanup complete")
-    catch Class:Reason ->
+    catch Class:Reason:Stacktrace ->
         ?error_stacktrace("Failed to run on-deregister-from-oz procedures - ~w:~p", [
             Class, Reason
-        ])
+        ], Stacktrace)
     end.
 
 
@@ -99,10 +99,10 @@ handle_entity_deleted(GRI) ->
     try
         on_entity_deleted(GRI),
         ok
-    catch Class:Reason ->
+    catch Class:Reason:Stacktrace ->
         ?error_stacktrace("Failed to run on-entity-deleted procedures for ~ts - ~w:~p", [
             gri:serialize(GRI), Class, Reason
-        ])
+        ], Stacktrace)
     end.
 
 
@@ -110,28 +110,33 @@ handle_entity_deleted(GRI) ->
 %%% Callback implementations
 %%%===================================================================
 
+%% NOTE: these procedures are run on a single cluster node.
 %% @private
 -spec on_connect_to_oz() -> ok | no_return().
 on_connect_to_oz() ->
+    ok = restart_hooks:maybe_execute_hooks(),
     ok = gs_client_worker:enable_cache(),
     ok = oneprovider:set_up_service_in_onezone(),
     ok = provider_logic:update_subdomain_delegation_ips(),
     ok = auth_cache:report_oz_connection_start(),
-    ok = fslogic_worker:init_paths_caches(all),
+    ok = fslogic_worker:init_effective_caches(all),
     ok = main_harvesting_stream:revise_all_spaces(),
     ok = qos_bounded_cache:ensure_exists_for_all_spaces(),
     ok = rtransfer_config:add_storages(),
     ok = auto_storage_import_worker:notify_connection_to_oz(),
     ok = dbsync_worker:start_streams(),
-    ok = qos_worker:init_retry_failed_files().
+    ok = qos_worker:init_retry_failed_files(),
+    ok = qos_worker:init_traverse_pools().
 
 
+%% NOTE: these procedures are run on a single cluster node.
 %% @private
 -spec on_disconnect_from_oz() -> ok | no_return().
 on_disconnect_from_oz() ->
     ok = auth_cache:report_oz_connection_termination().
 
 
+%% NOTE: these procedures are run on a single cluster node.
 %% @private
 -spec on_deregister_from_oz() -> ok.
 on_deregister_from_oz() ->
@@ -142,6 +147,7 @@ on_deregister_from_oz() ->
     ok = gs_client_worker:force_terminate().
 
 
+%% NOTE: these procedures are run on a single cluster node.
 %% @private
 -spec on_entity_deleted(gri:gri()) -> ok | no_return().
 on_entity_deleted(#gri{type = od_provider, id = ProviderId, aspect = instance}) ->

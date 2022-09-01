@@ -27,6 +27,7 @@
 
 %% API
 -export([setup_internal_service/0]).
+-export([terminate_internal_service/0]).
 -export([is_connected/0]).
 -export([force_start_connection/0, force_terminate_connection/0, force_restart_connection/0]).
 -export([on_db_and_workers_ready/0]).
@@ -62,6 +63,11 @@ setup_internal_service() ->
         healthcheck_interval => ?GS_RECONNECT_BASE_INTERVAL,
         async_start => true
     }).
+
+
+-spec terminate_internal_service() -> ok.
+terminate_internal_service() ->
+    internal_services_manager:stop_service(?MODULE, ?GS_CHANNEL_SERVICE_NAME, ?GS_CHANNEL_SERVICE_NAME).
 
 
 %%--------------------------------------------------------------------
@@ -227,10 +233,14 @@ try_to_start_connection() ->
 start_gs_client_worker() ->
     case gs_client_worker:start() of
         ok ->
-            case node_manager:get_cluster_status() of
-                {error, cluster_not_ready} ->
-                    ?info("Deferring on-connect-to-oz procedures as the cluster is not ready yet");
-                {ok, _} ->
+            % The on connection procedures require operational db and workers, but
+            % the connection may be established before in order to perform an upgrade.
+            % In such case, the procedures are deferred and will be called
+            % when the 'on_db_and_workers_ready' callback fires.
+            case node_manager:are_db_and_workers_ready() of
+                false ->
+                    ?info("Deferring on-connect-to-oz procedures as DB and workers are not ready yet");
+                true ->
                     run_on_connect_to_oz_procedures()
             end;
         already_started ->
@@ -275,7 +285,7 @@ is_clock_sync_satisfied() ->
 %% @private
 -spec check_compatibility_with_onezone() -> boolean().
 check_compatibility_with_onezone() ->
-    case provider_logic:fetch_service_configuration(onezone) of
+    case provider_logic:get_service_configuration(onezone) of
         {ok, OzConfiguration} ->
             Resolver = compatibility:build_resolver(consistent_hashing:get_all_nodes(), oneprovider:trusted_ca_certs()),
             check_for_compatibility_registry_updates(Resolver, OzConfiguration),

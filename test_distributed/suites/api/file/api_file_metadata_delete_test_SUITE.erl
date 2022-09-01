@@ -16,12 +16,12 @@
 -include("api_file_test_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
--include_lib("ctool/include/http/codes.hrl").
 
 %% API
 -export([
-    all/0,
+    groups/0, all/0,
     init_per_suite/1, end_per_suite/1,
+    init_per_group/2, end_per_group/2,
     init_per_testcase/2, end_per_testcase/2
 ]).
 
@@ -38,14 +38,21 @@
     delete_file_xattrs/1
 ]).
 
+
+groups() -> [
+    {all_tests, [parallel], [
+        delete_file_rdf_metadata_with_rdf_set_test,
+        delete_file_rdf_metadata_without_rdf_set_test,
+
+        delete_file_json_metadata_with_json_set_test,
+        delete_file_json_metadata_without_json_set_test,
+
+        delete_file_xattrs
+    ]}
+].
+
 all() -> [
-    delete_file_rdf_metadata_with_rdf_set_test,
-    delete_file_rdf_metadata_without_rdf_set_test,
-
-    delete_file_json_metadata_with_json_set_test,
-    delete_file_json_metadata_without_json_set_test,
-
-    delete_file_xattrs
+    {group, all_tests}
 ].
 
 
@@ -177,9 +184,15 @@ delete_metadata_test_base(
                 }
             ],
             randomly_select_scenarios = RandomlySelectScenario,
-            data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
-                FileGuid, ShareId, DataSpec
-            )
+            data_spec = begin
+                DataSpec1 = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+                    FileGuid, ShareId, DataSpec
+                ),
+                case MetadataType of
+                    <<"xattrs">> -> DataSpec1;
+                    _ -> api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(DataSpec1)
+                end
+            end
         },
 
         #scenario_spec{
@@ -244,7 +257,7 @@ build_verify_fun(preset_initial_metadata, FileGuid, MetadataType, ExpMetadata, N
         (expected_success, _) ->
             lists:foreach(fun(Node) ->
                 ?assertMatch(
-                    {error, ?ENODATA},
+                    ?ERROR_POSIX(?ENODATA),
                     api_test_utils:get_metadata(Node, FileGuid, MetadataType),
                     ?ATTEMPTS
                 )
@@ -255,7 +268,7 @@ build_verify_fun(no_initial_metadata, FileGuid, MetadataType, _ExpMetadata, Node
     fun(_, _) ->
         lists:foreach(fun(Node) ->
             ?assertMatch(
-                {error, ?ENODATA},
+                ?ERROR_POSIX(?ENODATA),
                 api_test_utils:get_metadata(Node, FileGuid, MetadataType),
                 ?ATTEMPTS
             )
@@ -302,7 +315,7 @@ build_delete_metadata_prepare_rest_args_fun(MetadataType, FileGuid) ->
             method = delete,
             path = ?NEW_ID_METADATA_REST_PATH(FileId, MetadataType),
             headers = case MetadataType of
-                <<"xattrs">> -> #{<<"content-type">> => <<"application/json">>};
+                <<"xattrs">> -> #{?HDR_CONTENT_TYPE => <<"application/json">>};
                 _ -> #{}
             end,
             body = case Data1 of
@@ -330,10 +343,18 @@ end_per_suite(_Config) ->
     oct_background:end_per_suite().
 
 
-init_per_testcase(_Case, Config) ->
-    ct:timetrap({minutes, 30}),
-    lfm_proxy:init(Config).
+init_per_group(_Group, Config) ->
+    lfm_proxy:init(Config, false).
 
 
-end_per_testcase(_Case, Config) ->
+end_per_group(_Group, Config) ->
     lfm_proxy:teardown(Config).
+
+
+init_per_testcase(_Case, Config) ->
+    ct:timetrap({minutes, 10}),
+    Config.
+
+
+end_per_testcase(_Case, _Config) ->
+    ok.

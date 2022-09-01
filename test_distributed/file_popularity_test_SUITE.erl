@@ -15,10 +15,11 @@
 -behaviour(view_traverse).
 
 -include("global_definitions.hrl").
--include("modules/auth/acl.hrl").
+-include("lfm_test_utils.hrl").
+-include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/file_popularity/file_popularity_view.hrl").
--include("lfm_test_utils.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -117,7 +118,7 @@ query_should_return_file_when_file_has_been_opened(Config) ->
     FileName = <<"file">>,
     FilePath = ?FILE_PATH(FileName),
     {ok, G} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath),
-    {ok, H} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G}, read),
+    {ok, H} = lfm_proxy:open(W, ?SESSION(W, Config), ?FILE_REF(G), read),
     ok = lfm_proxy:close(W, H),
     {ok, FileId} = file_id:guid_to_objectid(G),
     ?assertMatch([{FileId, _}], query(W, ?SPACE_ID, #{}), ?ATTEMPTS).
@@ -248,21 +249,21 @@ query_should_return_files_sorted_by_increasing_avg_open_count_per_day(Config) ->
 
     % all files will have the same timestamp as the time is frozen
     {ok, G1} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath1),
-    {ok, H} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G1}, read),
+    {ok, H} = lfm_proxy:open(W, ?SESSION(W, Config), ?FILE_REF(G1), read),
     ok = lfm_proxy:close(W, H),
 
     {ok, G2} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath2),
-    {ok, H2} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G2}, read),
+    {ok, H2} = lfm_proxy:open(W, ?SESSION(W, Config), ?FILE_REF(G2), read),
     ok = lfm_proxy:close(W, H2),
-    {ok, H22} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G2}, read),
+    {ok, H22} = lfm_proxy:open(W, ?SESSION(W, Config), ?FILE_REF(G2), read),
     ok = lfm_proxy:close(W, H22),
 
     {ok, G3} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath3),
-    {ok, H3} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G3}, read),
+    {ok, H3} = lfm_proxy:open(W, ?SESSION(W, Config), ?FILE_REF(G3), read),
     ok = lfm_proxy:close(W, H3),
-    {ok, H32} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G3}, read),
+    {ok, H32} = lfm_proxy:open(W, ?SESSION(W, Config), ?FILE_REF(G3), read),
     ok = lfm_proxy:close(W, H32),
-    {ok, H33} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G3}, read),
+    {ok, H33} = lfm_proxy:open(W, ?SESSION(W, Config), ?FILE_REF(G3), read),
     ok = lfm_proxy:close(W, H33),
 
     {ok, FileId1} = file_id:guid_to_objectid(G1),
@@ -283,17 +284,17 @@ query_should_return_files_sorted_by_increasing_last_open_timestamp(Config) ->
 
     % simulate each next file being opened one hour after the previous one
     {ok, G1} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath1),
-    {ok, H1} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G1}, read), % 3 hours before query
+    {ok, H1} = lfm_proxy:open(W, ?SESSION(W, Config), ?FILE_REF(G1), read), % 3 hours before query
     ok = lfm_proxy:close(W, H1),
     time_test_utils:simulate_seconds_passing(3600),
 
     {ok, G2} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath2),
-    {ok, H2} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G2}, read), % 2 hours before query
+    {ok, H2} = lfm_proxy:open(W, ?SESSION(W, Config), ?FILE_REF(G2), read), % 2 hours before query
     ok = lfm_proxy:close(W, H2),
     time_test_utils:simulate_seconds_passing(3600),
 
     {ok, G3} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath3),
-    {ok, H3} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G3}, read), % 1 hour before query
+    {ok, H3} = lfm_proxy:open(W, ?SESSION(W, Config), ?FILE_REF(G3), read), % 1 hour before query
     ok = lfm_proxy:close(W, H3),
     time_test_utils:simulate_seconds_passing(3600),
 
@@ -315,17 +316,17 @@ time_warp_test(Config) ->
 
     % simulate each next file being opened one hour BEFORE the previous one (due to a time warp)
     {ok, G1} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath1),
-    {ok, H1} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G1}, read), % 1 hour before query
+    {ok, H1} = lfm_proxy:open(W, ?SESSION(W, Config), ?FILE_REF(G1), read), % 1 hour before query
     ok = lfm_proxy:close(W, H1),
     time_test_utils:simulate_seconds_passing(-3600),
 
     {ok, G2} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath2),
-    {ok, H2} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G2}, read), % 2 hours before query
+    {ok, H2} = lfm_proxy:open(W, ?SESSION(W, Config), ?FILE_REF(G2), read), % 2 hours before query
     ok = lfm_proxy:close(W, H2),
     time_test_utils:simulate_seconds_passing(-3600),
 
     {ok, G3} = lfm_proxy:create(W, ?SESSION(W, Config), FilePath3),
-    {ok, H3} = lfm_proxy:open(W, ?SESSION(W, Config), {guid, G3}, read), % 3 hour before query
+    {ok, H3} = lfm_proxy:open(W, ?SESSION(W, Config), ?FILE_REF(G3), read), % 3 hour before query
     ok = lfm_proxy:close(W, H3),
     time_test_utils:simulate_seconds_passing(-3600),
 
@@ -362,7 +363,7 @@ file_should_have_correct_popularity_value_base(Config, LastOpenW, AvgOpenW) ->
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
         application:start(ssl),
-        hackney:start(),
+        application:ensure_all_started(hackney),
         initializer:create_test_users_and_spaces(?TEST_FILE(NewConfig, "env_desc.json"), NewConfig)
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, ?MODULE]} | Config].
@@ -408,7 +409,7 @@ end_per_suite(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     stop_pool(W),
     initializer:clean_test_users_and_spaces_no_validate(Config),
-    hackney:stop(),
+    application:stop(hackney),
     application:stop(ssl).
 
 %%%===================================================================
@@ -442,7 +443,7 @@ run(SpaceId, Opts) ->
 %%%===================================================================
 
 start_collector(TestMasterPid) ->
-    register(?COLLECTOR, spawn_link(?MODULE, collector_loop, [TestMasterPid])).
+    register(?COLLECTOR, spawn(?MODULE, collector_loop, [TestMasterPid])).
 
 collector_loop(TestMaster) ->
     collector_loop(TestMaster, #{}).
@@ -513,7 +514,7 @@ open_and_close_file(Worker, SessId, Guid, Times) ->
     end, lists:seq(1, Times)).
 
 open_and_close_file(Worker, SessId, Guid) ->
-    {ok, H} = lfm_proxy:open(Worker, SessId, {guid, Guid}, read),
+    {ok, H} = lfm_proxy:open(Worker, SessId, ?FILE_REF(Guid), read),
     ok = lfm_proxy:close(Worker, H).
 
 popularity(LastOpen, LastOpenW, AvgOpen, AvgOpenW) ->

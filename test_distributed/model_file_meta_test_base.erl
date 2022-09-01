@@ -13,6 +13,7 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/file_meta_forest.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -21,6 +22,10 @@
 
 -define(call_with_time(N, F, A), ?call_with_time(N, file_meta, F, A)).
 -define(call_with_time(N, M, F, A), rpc:call(N, ?MODULE, exec_and_check_time, [M, F, A])).
+-define(path_to_uuid(Worker, Path), fun() ->
+    {ok, #document{key = Uuid}} = rpc:call(Worker, canonical_path, resolve, [Path]),
+    Uuid
+end()).
 
 -export([basic_operations_test_core/2, exec_and_check_time/3]).
 -export([list_children/4, list_children/7, list_children_using_token/3, list_children_using_token/4]).
@@ -51,7 +56,7 @@ basic_operations_test_core(Config, LastLevel) ->
     % Test
     RootUuid = <<>>,
     SpaceId = <<"Space 1">>,
-    Space1Uuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+    Space1Uuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
     {{ok, #document{key = Space1Uuid}}, CreateLevel1} = ?assertMatch(
         {{ok, _}, _},
         ?call_with_time(Worker2, create, [{uuid, RootUuid}, #document{key = Space1Uuid,
@@ -108,9 +113,9 @@ basic_operations_test_core(Config, LastLevel) ->
     #document{key = Level20Key} = UL20,
 
     space_info_mock(Workers, <<"Space 1">>),
-    {U30, GenPathLevel1} = ?call_with_time(Worker1, fslogic_uuid, uuid_to_path, [?ROOT_SESS_ID, Dir2File1Uuid]),
-    {U31, GenPathLevel2} = ?call_with_time(Worker2, fslogic_uuid, uuid_to_path, [?ROOT_SESS_ID, Dir2File2Uuid]),
-    {U32, GenPathLevel3} = ?call_with_time(Worker2, fslogic_uuid, uuid_to_path, [?ROOT_SESS_ID, Dir2File3Uuid]),
+    {U30, GenPathLevel1} = ?call_with_time(Worker1, fslogic_file_id, uuid_to_path, [?ROOT_SESS_ID, Dir2File1Uuid]),
+    {U31, GenPathLevel2} = ?call_with_time(Worker2, fslogic_file_id, uuid_to_path, [?ROOT_SESS_ID, Dir2File2Uuid]),
+    {U32, GenPathLevel3} = ?call_with_time(Worker2, fslogic_file_id, uuid_to_path, [?ROOT_SESS_ID, Dir2File3Uuid]),
     ?assertMatch(<<"/Space 1/dir2/file1">>, U30),
     ?assertMatch(<<"/Space 1/dir2/file2">>, U31),
     ?assertMatch(<<"/Space 1/dir2/file3">>, U32),
@@ -123,9 +128,9 @@ basic_operations_test_core(Config, LastLevel) ->
     ?assertMatch({ok, #document{key = Level20Key}}, A43),
 
 
-    {UL20_2, GenPathLevel20} = ?call_with_time(Worker2, fslogic_uuid, uuid_to_path, [?ROOT_SESS_ID, Level20Key]),
+    {UL20_2, GenPathLevel20} = ?call_with_time(Worker2, fslogic_file_id, uuid_to_path, [?ROOT_SESS_ID, Level20Key]),
     ?assertMatch(Level20Path, UL20_2),
-    test_utils:mock_unload(Workers, [space_logic, fslogic_uuid]),
+    test_utils:mock_unload(Workers, [space_logic, fslogic_file_id]),
 
     {_, GetScopeLevel0} = ?assertMatch(
         {{ok, <<>>}, _},
@@ -143,15 +148,15 @@ basic_operations_test_core(Config, LastLevel) ->
         ?call_with_time(Worker2, get_scope_id, [UL20])
     ),
 
-    ?assertMatch({ok, [{_, Space1Uuid}], #{}}, list_children(Worker1, <<"/">>, 0, 10)),
-    ?assertMatch({ok, [], #{}}, list_children(Worker1, <<"/Space 1/dir2/file3">>, 0, 10)),
+    ?assertMatch({ok, [{_, Space1Uuid}], #list_extended_info{}}, list_children(Worker1, <<"/">>, 0, 10)),
+    ?assertMatch({ok, [], #list_extended_info{}}, list_children(Worker1, <<"/Space 1/dir2/file3">>, 0, 10)),
 
-    {{A15, U15, #{}}, ListUuids20_100} = ?call_with_time(Worker1, list_children, [{path, <<"/Space 1/dir1">>}, #{offset => 0, size => 20}]),
-    {{A15_2, U15_2, #{}}, ListUuids100_100} = ?call_with_time(Worker1, list_children, [{path, <<"/Space 1/dir1">>}, #{offset => 0, size => 100}]),
-    {{A15_3, U15_3, #{}}, ListUuids1000_100} = ?call_with_time(Worker1, list_children, [{path, <<"/Space 1/dir1">>}, #{offset => 0, size => 1000}]),
-    {{A15_4, U15_4, #{}}, ListUuids1_100} = ?call_with_time(Worker1, list_children, [{path, <<"/Space 1/dir1">>}, #{offset => 0, size => 1}]),
-    {{A16, U16, #{}}, ListUuids50_60_100} = ?call_with_time(Worker1, list_children, [{path, <<"/Space 1/dir1">>}, #{offset => 50, size => 10}]),
-    {{AL20_4, UL20_4, #{}}, ListUuidsLevel20} = ?call_with_time(Worker1, list_children, [{path, Level20Path}, #{offset => 0, size => 1}]),
+    {{A15, U15, #list_extended_info{}}, ListUuids20_100} = ?call_with_time(Worker1, file_meta_forest, list, [?path_to_uuid(Worker1, <<"/Space 1/dir1">>), #{offset => 0, size => 20}]),
+    {{A15_2, U15_2, #list_extended_info{}}, ListUuids100_100} = ?call_with_time(Worker1, file_meta_forest, list, [?path_to_uuid(Worker1, <<"/Space 1/dir1">>), #{offset => 0, size => 100}]),
+    {{A15_3, U15_3, #list_extended_info{}}, ListUuids1000_100} = ?call_with_time(Worker1, file_meta_forest, list, [?path_to_uuid(Worker1, <<"/Space 1/dir1">>), #{offset => 0, size => 1000}]),
+    {{A15_4, U15_4, #list_extended_info{}}, ListUuids1_100} = ?call_with_time(Worker1, file_meta_forest, list, [?path_to_uuid(Worker1, <<"/Space 1/dir1">>), #{offset => 0, size => 1}]),
+    {{A16, U16, #list_extended_info{}}, ListUuids50_60_100} = ?call_with_time(Worker1, file_meta_forest, list, [?path_to_uuid(Worker1, <<"/Space 1/dir1">>), #{offset => 50, size => 10}]),
+    {{AL20_4, UL20_4, #list_extended_info{}}, ListUuidsLevel20} = ?call_with_time(Worker1, file_meta_forest, list, [?path_to_uuid(Worker1, Level20Path), #{offset => 0, size => 1}]),
 
     ?assertMatch({ok, _}, {A15, U15}),
     ?assertMatch({ok, _}, {A15_2, U15_2}),
@@ -176,7 +181,7 @@ basic_operations_test_core(Config, LastLevel) ->
     ?assertMatch(true, AE3),
     {AE4, ExistsTrueLevel20} = ?call_with_time(Worker1, exists, [{path, Level20Path}]),
     ?assertMatch(true, AE4),
-    ?assertMatch({ok, [_, _, _], #{}}, list_children(Worker1, <<"/Space 1/dir2">>, 0, 10)),
+    ?assertMatch({ok, [_, _, _], #list_extended_info{}}, list_children(Worker1, <<"/Space 1/dir2">>, 0, 10)),
 
     {AD1, DeleteOkPathLevel4} = ?call_with_time(Worker1, delete, [{path, <<"/Space 1/dir2/file1">>}]),
     ?assertMatch(ok, AD1),
@@ -190,7 +195,7 @@ basic_operations_test_core(Config, LastLevel) ->
     ?assertMatch(false, rpc:call(Worker1, file_meta, exists, [{path, <<"/Space 1/dir2/file1">>}])),
     ?assertMatch(false, rpc:call(Worker1, file_meta, exists, [{path, <<"/Space 1/dir2/file2">>}])),
 
-    ?assertMatch({ok, [{_Name, Dir2File3Uuid}], #{}}, list_children(Worker1, <<"/Space 1/dir2">>, 0, 10)),
+    ?assertMatch({ok, [{_Name, Dir2File3Uuid}], #list_extended_info{}}, list_children(Worker1, <<"/Space 1/dir2">>, 0, 10)),
 
     BigDirDel(0),
 
@@ -265,33 +270,42 @@ basic_operations_test_core(Config, LastLevel) ->
 %%%===================================================================
 
 list_children(Worker, ParentPath, Offset, Size) ->
-    rpc:call(Worker, file_meta, list_children, [{path, ParentPath}, #{offset => Offset, size => Size}]).
+    list_children_by_path(Worker, ParentPath, #{offset => Offset, size => Size}).
 
 list_children(Worker, ParentPath, Offset, Size, Token, LastName, LastTree) ->
-    rpc:call(Worker, file_meta, list_children, [{path, ParentPath}, #{
+    list_children_by_path(Worker, ParentPath, #{
         offset => Offset,
         size => Size,
         token => Token,
-        last_name => LastName,
-        last_tree => LastTree
-    }]).
+        prev_link_name => LastName,
+        prev_tree_id => LastTree
+    }).
 
 list_children_using_token(Worker, ParentPath, Size) ->
-    rpc:call(Worker, file_meta, list_children, [{path, ParentPath}, #{token => ?INITIAL_LS_TOKEN, size => Size}]).
+    list_children_by_path(Worker, ParentPath, #{token => #link_token{}, size => Size}).
 
 list_children_using_token(Worker, ParentPath, Size, Token) ->
-    rpc:call(Worker, file_meta, list_children, [{path, ParentPath}, #{token => Token, size => Size}]).
+    list_children_by_path(Worker, ParentPath, #{token => Token, size => Size}).
+
+list_children_by_path(Worker, Path, Opts) ->
+    case rpc:call(Worker, canonical_path, resolve, [Path]) of
+        {ok, #document{key = Uuid}} ->
+            rpc:call(Worker, file_meta_forest, list, [Uuid, Opts]);
+        Error ->
+            Error
+    end.
+    
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
 
 space_info_mock(Workers, SpaceName) ->
-    test_utils:mock_new(Workers, [space_logic, fslogic_uuid]),
+    test_utils:mock_new(Workers, [space_logic, fslogic_file_id]),
     test_utils:mock_expect(Workers, space_logic, get_name, fun(_, _) ->
         {ok, SpaceName}
     end),
-    test_utils:mock_expect(Workers, fslogic_uuid, space_dir_uuid_to_spaceid, fun(_) ->
+    test_utils:mock_expect(Workers, fslogic_file_id, space_dir_uuid_to_spaceid, fun(_) ->
         SpaceName %% Just return space name since space info mock ignores space id anyway
     end).
 

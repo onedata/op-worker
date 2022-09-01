@@ -15,6 +15,7 @@
 -include("api_test_runner.hrl").
 -include("middleware/middleware.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("transfers_test_mechanism.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -44,8 +45,8 @@
 
 create_file(Node, SessId, DirPath) ->
     FilePath = filename:join([DirPath, ?RANDOM_FILE_NAME()]),
-    {ok, FileGuid} = api_test_utils:create_file(<<"file">>, Node, SessId, FilePath, 8#777),
-    api_test_utils:fill_file_with_dummy_data(Node, SessId, FileGuid, ?BYTES_NUM),
+    {ok, FileGuid} = lfm_test_utils:create_file(<<"file">>, Node, SessId, FilePath, 8#777),
+    lfm_test_utils:write_file(Node, SessId, FileGuid, {rand_content, ?BYTES_NUM}),
     FileGuid.
 
 
@@ -89,14 +90,14 @@ build_create_file_transfer_setup_fun(TransferType, MemRef, SrcNode, DstNode, Use
 
         RootFileType = api_test_utils:randomly_choose_file_type_for_test(false),
         RootFilePath = filename:join(["/", ?SPACE_2, ?RANDOM_FILE_NAME()]),
-        {ok, RootFileGuid} = api_test_utils:create_file(
+        {ok, RootFileGuid} = lfm_test_utils:create_file(
             RootFileType, SrcNode, SessId1, RootFilePath, 8#777
         ),
         {ok, RootFileObjectId} = file_id:guid_to_objectid(RootFileGuid),
 
         FilesToTransfer = case RootFileType of
             <<"file">> ->
-                api_test_utils:fill_file_with_dummy_data(SrcNode, SessId1, RootFileGuid, ?BYTES_NUM),
+                lfm_test_utils:write_file(SrcNode, SessId1, RootFileGuid, {rand_content, ?BYTES_NUM}),
                 [RootFileGuid];
             <<"dir">> ->
                 lists:map(fun(_) ->
@@ -144,7 +145,7 @@ build_create_view_transfer_setup_fun(TransferType, MemRef, SrcNode, DstNode, Use
 
         FilesToTransfer = lists:map(fun(_) ->
             FileGuid = create_file(SrcNode, SessId1, RootDirPath),
-            ?assertMatch(ok, lfm_proxy:set_xattr(SrcNode, SessId1, {guid, FileGuid}, Xattr)),
+            ?assertMatch(ok, lfm_proxy:set_xattr(SrcNode, SessId1, ?FILE_REF(FileGuid), Xattr)),
             FileGuid
         end, lists:seq(1, FilesToTransferNum)),
 
@@ -181,7 +182,7 @@ build_create_view_transfer_setup_fun(TransferType, MemRef, SrcNode, DstNode, Use
             view_id => ViewId,
             exp_transfer => ExpTransfer#{
                 space_id => ?SPACE_2,
-                file_uuid => fslogic_uuid:spaceid_to_space_dir_uuid(?SPACE_2),
+                file_uuid => fslogic_file_id:spaceid_to_space_dir_uuid(?SPACE_2),
                 path => RootDirPath
             },
             files_to_transfer => FilesToTransfer,
@@ -227,11 +228,11 @@ rerun_transfer(Node, TransferId) ->
 
 
 build_create_transfer_verify_fun(replication, MemRef, Node, _UserId, SrcProvider, DstProvider, _Config) ->
-    build_crate_replication_verify_fun(MemRef, Node, SrcProvider, DstProvider);
+    build_create_replication_verify_fun(MemRef, Node, SrcProvider, DstProvider);
 build_create_transfer_verify_fun(eviction, MemRef, Node, _UserId, SrcProvider, DstProvider, _Config) ->
-    build_crate_eviction_verify_fun(MemRef, Node, SrcProvider, DstProvider);
+    build_create_eviction_verify_fun(MemRef, Node, SrcProvider, DstProvider);
 build_create_transfer_verify_fun(migration, MemRef, Node, _UserId, SrcProvider, DstProvider, _Config) ->
-    build_crate_migration_verify_fun(MemRef, Node, SrcProvider, DstProvider).
+    build_create_migration_verify_fun(MemRef, Node, SrcProvider, DstProvider).
 
 
 %%%===================================================================
@@ -270,19 +271,21 @@ sync_files_between_nodes(eviction, SrcNode, DstNode, Files) ->
     lists:foreach(fun(Guid) ->
         % Read file on DstNode to force rtransfer
         file_test_utils:await_sync(DstNode, Guid),
-        ExpContent = api_test_utils:read_file(SrcNode, ?ROOT_SESS_ID, Guid, ?BYTES_NUM),
+        ExpContent = lfm_test_utils:read_file(SrcNode, ?ROOT_SESS_ID, Guid, ?BYTES_NUM),
         ?assertMatch(
             ExpContent,
-            api_test_utils:read_file(DstNode, ?ROOT_SESS_ID, Guid, ?BYTES_NUM),
+            lfm_test_utils:read_file(DstNode, ?ROOT_SESS_ID, Guid, ?BYTES_NUM),
             ?ATTEMPTS
         )
     end, Files),
     % Wait until file_distribution contains entries for both nodes
     % Otherwise some of them could be omitted from eviction (if data
     % replicas don't exist on other providers eviction for file is skipped).
-    file_test_utils:await_distribution(SrcNode, Files, [
-        {SrcNode, ?BYTES_NUM}, {DstNode, ?BYTES_NUM}
-    ]);
+    % @TODO VFS-VFS-9498 use await_distribution after replica_deletion uses fetched file location instead of dbsynced
+    lists:foreach(fun(Guid) ->
+        DestProviderId = opw_test_rpc:get_provider_id(DstNode),
+        ?assertMatch({ok, [[0, ?BYTES_NUM]]}, opt_file_metadata:get_local_knowledge_of_remote_provider_blocks(SrcNode, Guid, DestProviderId), ?ATTEMPTS)
+    end, utils:ensure_list(Files));
 
 sync_files_between_nodes(_TransferType, _SrcNode, DstNode, Files) ->
     lists:foreach(fun(Guid) ->
@@ -373,7 +376,7 @@ get_exp_transfer_stats(migration, <<"dir">>, SrcNode, DstNode, FilesToTransferNu
 
 
 %% @private
-build_crate_replication_verify_fun(MemRef, Node, SrcProvider, DstProvider) ->
+build_create_replication_verify_fun(MemRef, Node, SrcProvider, DstProvider) ->
     fun
         (expected_failure, _) ->
             #{
@@ -383,7 +386,7 @@ build_crate_replication_verify_fun(MemRef, Node, SrcProvider, DstProvider) ->
 
             file_test_utils:await_distribution(
                 Node, _AllFiles = OtherFiles ++ FilesToTransfer,
-                [{SrcProvider, ?BYTES_NUM}]
+                [{SrcProvider, ?BYTES_NUM}, {DstProvider, 0}]
             );
         (expected_success, _) ->
             #{
@@ -393,7 +396,7 @@ build_crate_replication_verify_fun(MemRef, Node, SrcProvider, DstProvider) ->
 
             file_test_utils:await_distribution(
                 Node, OtherFiles,
-                [{SrcProvider, ?BYTES_NUM}]
+                [{SrcProvider, ?BYTES_NUM}, {DstProvider, 0}]
             ),
             file_test_utils:await_distribution(
                 Node, FilesToTransfer,
@@ -403,7 +406,7 @@ build_crate_replication_verify_fun(MemRef, Node, SrcProvider, DstProvider) ->
 
 
 %% @private
-build_crate_eviction_verify_fun(MemRef, Node, SrcProvider, DstProvider) ->
+build_create_eviction_verify_fun(MemRef, Node, SrcProvider, DstProvider) ->
     fun
         (expected_failure, _) ->
             #{
@@ -433,7 +436,7 @@ build_crate_eviction_verify_fun(MemRef, Node, SrcProvider, DstProvider) ->
 
 
 %% @private
-build_crate_migration_verify_fun(MemRef, Node, SrcProvider, DstProvider) ->
+build_create_migration_verify_fun(MemRef, Node, SrcProvider, DstProvider) ->
     fun
         (expected_failure, _) ->
             #{
@@ -443,7 +446,7 @@ build_crate_migration_verify_fun(MemRef, Node, SrcProvider, DstProvider) ->
 
             file_test_utils:await_distribution(
                 Node, _AllFiles = FilesToTransfer ++ OtherFiles,
-                [{SrcProvider, ?BYTES_NUM}]
+                [{SrcProvider, ?BYTES_NUM}, {DstProvider, 0}]
             );
         (expected_success, _) ->
             #{
@@ -453,7 +456,7 @@ build_crate_migration_verify_fun(MemRef, Node, SrcProvider, DstProvider) ->
 
             file_test_utils:await_distribution(
                 Node, OtherFiles,
-                [{SrcProvider, ?BYTES_NUM}]
+                [{SrcProvider, ?BYTES_NUM}, {DstProvider, 0}]
             ),
             file_test_utils:await_distribution(
                 Node, FilesToTransfer,
@@ -499,7 +502,7 @@ create_transfer(Type, DataSourceType, SrcNode, DstNode, UserId, QueryViewParams,
         operation = create,
         data = Data
     },
-    {ok, value, TransferId} = ?assertMatch(
+    {ok, resource, {#gri{id = TransferId}, _}} = ?assertMatch(
         {ok, _, _},
         rpc:call(SrcNode, middleware, handle, [Req])
     ),

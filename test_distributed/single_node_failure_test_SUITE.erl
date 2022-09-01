@@ -108,7 +108,7 @@ create_initial_data_structure(Config) ->
         oct_background:get_user_session_id(user1, P)
     end,
     [SpaceId | _] = oct_background:get_provider_supported_spaces(krakow),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
 
     ConflictingDirName = generator:gen_name(),
     {ok, P1DirGuid} =
@@ -119,7 +119,7 @@ create_initial_data_structure(Config) ->
     lists:foreach(fun(Dir) ->
         lists:foreach(fun({Worker, ProvId}) ->
             ?assertMatch({ok, #file_attr{type = ?DIRECTORY_TYPE}},
-                lfm_proxy:stat(Worker, SessId(ProvId), {guid, Dir}), 30)
+                lfm_proxy:stat(Worker, SessId(ProvId), ?FILE_REF(Dir)), 30)
         end, [{WorkerP1, P1}, {WorkerP2, P2}])
     end, [P1DirGuid, P2DirGuid]),
 
@@ -228,7 +228,7 @@ prepare_files(InitialData, TestData) ->
     SessId1 = kv_utils:get([session_ids, P1], InitialData),
     SessId2 = kv_utils:get([session_ids, P2], InitialData),
     SpaceId = kv_utils:get(space_id, InitialData),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     P1DirGuid = kv_utils:get([test_dirs, P1], InitialData),
     P2DirGuid = kv_utils:get([test_dirs, P2], InitialData),
 
@@ -273,7 +273,7 @@ prepare_auto_cleaning(InitialData, TestData) ->
     [FailingNode | _] = oct_background:get_provider_nodes(FailingProvider),
     SpaceId = kv_utils:get(space_id, InitialData),
     SessId = kv_utils:get([session_ids, FailingProvider], InitialData),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     FileSize = 5,
 
     enable_file_popularity(FailingNode, SpaceId),
@@ -304,14 +304,14 @@ prepare_replication_transfer(InitialData, TestData) ->
     SpaceId = kv_utils:get(space_id, InitialData),
     SessIdFailingProvider = kv_utils:get([session_ids, FailingProvider], InitialData),
     SessIdHealthyProvider = kv_utils:get([session_ids, HealthyProvider], InitialData),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     FileSize = 10,
 
     FileGuid = file_ops_test_utils:create_file(HealthyNode, SessIdHealthyProvider, SpaceGuid, generator:gen_name(), FileSize),
     ?assertDistribution(FailingNode, SessIdFailingProvider, ?DISTS([HealthyProvider], [FileSize]), FileGuid, ?ATTEMPTS),
 
     block_replication_transfer(FailingNode),
-    {ok, TransferId} = lfm_proxy:schedule_file_replication(FailingNode, SessIdFailingProvider, {guid, FileGuid}, FailingProvider),
+    {ok, TransferId} = opt_transfers:schedule_file_replication(FailingNode, SessIdFailingProvider, ?FILE_REF(FileGuid), FailingProvider),
     TestData#{
         replication => #{
             transfer_id => TransferId,
@@ -328,13 +328,13 @@ prepare_eviction_transfer(InitialData, TestData) ->
     SpaceId = kv_utils:get(space_id, InitialData),
     SessIdFailingProvider = kv_utils:get([session_ids, FailingProvider], InitialData),
     SessIdHealthyProvider = kv_utils:get([session_ids, HealthyProvider], InitialData),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     FileSize = 10,
 
     FileGuid = file_ops_test_utils:create_file(HealthyNode, SessIdHealthyProvider, SpaceGuid, generator:gen_name(), FileSize),
 
     % read file to replicate it to FailingProvider
-    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(FailingNode, SessIdFailingProvider, {guid, FileGuid}, read), ?ATTEMPTS),
+    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(FailingNode, SessIdFailingProvider, ?FILE_REF(FileGuid), read), ?ATTEMPTS),
     ?assertEqual({ok, FileSize}, try
         {ok, Content} = lfm_proxy:check_size_and_read(FailingNode, Handle, 0, 100),
         {ok, byte_size(Content)}
@@ -344,7 +344,7 @@ prepare_eviction_transfer(InitialData, TestData) ->
 
     block_eviction_transfer(FailingNode),
     {ok, TransferId} =
-        lfm_proxy:schedule_file_replica_eviction(FailingNode, SessIdFailingProvider, {guid, FileGuid}, FailingProvider, undefined),
+        opt_transfers:schedule_file_replica_eviction(FailingNode, SessIdFailingProvider, ?FILE_REF(FileGuid), FailingProvider, undefined),
     TestData#{
         eviction => #{
             transfer_id => TransferId,
@@ -361,14 +361,14 @@ prepare_outgoing_migration_transfer(InitialData, TestData) ->
     SpaceId = kv_utils:get(space_id, InitialData),
     SessIdFailingProvider = kv_utils:get([session_ids, FailingProvider], InitialData),
     SessIdHealthyProvider = kv_utils:get([session_ids, HealthyProvider], InitialData),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     FileSize = 10,
 
     FileGuid = file_ops_test_utils:create_file(FailingNode, SessIdFailingProvider, SpaceGuid, generator:gen_name(), FileSize),
     ?assertDistribution(HealthyNode, SessIdHealthyProvider, ?DISTS([FailingProvider], [FileSize]), FileGuid, ?ATTEMPTS),
 
     block_eviction_transfer(FailingNode),
-    {ok, TransferId} = lfm_proxy:schedule_file_replica_eviction(FailingNode, SessIdFailingProvider, {guid, FileGuid}, FailingProvider,
+    {ok, TransferId} = opt_transfers:schedule_file_replica_eviction(FailingNode, SessIdFailingProvider, ?FILE_REF(FileGuid), FailingProvider,
         HealthyProvider),
 
     ?assertMatch({ok, #document{value = #transfer{
@@ -391,14 +391,14 @@ prepare_incoming_migration_transfer(InitialData, TestData) ->
     SpaceId = kv_utils:get(space_id, InitialData),
     SessIdFailingProvider = kv_utils:get([session_ids, FailingProvider], InitialData),
     SessIdHealthyProvider = kv_utils:get([session_ids, HealthyProvider], InitialData),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     FileSize = 10,
 
     FileGuid = file_ops_test_utils:create_file(HealthyNode, SessIdHealthyProvider, SpaceGuid, generator:gen_name(), FileSize),
     ?assertDistribution(FailingNode, SessIdFailingProvider, ?DISTS([HealthyProvider], [FileSize]), FileGuid, ?ATTEMPTS),
 
     block_replication_transfer(FailingNode),
-    {ok, TransferId} = lfm_proxy:schedule_file_replica_eviction(FailingNode, SessIdFailingProvider, {guid, FileGuid}, HealthyProvider,
+    {ok, TransferId} = opt_transfers:schedule_file_replica_eviction(FailingNode, SessIdFailingProvider, ?FILE_REF(FileGuid), HealthyProvider,
         FailingProvider),
 
     ?assertMatch({ok, #document{value = #transfer{
@@ -419,7 +419,7 @@ prepare_incoming_migration_transfer(InitialData, TestData) ->
 
 verify_files(InitialData, TestData) ->
     SpaceId = kv_utils:get(space_id, InitialData),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     FailingProvider = kv_utils:get(failing_provider, InitialData),
     HealthyProvider = kv_utils:get(healthy_provider, InitialData),
     SessIdFailingProvider = kv_utils:get([session_ids, FailingProvider], InitialData),

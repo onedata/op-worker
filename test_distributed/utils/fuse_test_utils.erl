@@ -43,13 +43,15 @@
 
     connect_as_user/4,
 
-    generate_msg_id/0
+    generate_msg_id/0,
+    extend_message_with_msg_id/1
 ]).
 -export([connect_and_upgrade_proto/2]).
 -export([receive_server_message/0, receive_server_message/1, receive_server_message/2]).
 
 %% Fuse request messages
 -export([generate_create_file_message/3, generate_create_file_message/4,
+    generate_make_link_message/4,
     generate_create_dir_message/3, generate_delete_file_message/2,
     generate_open_file_message/2, generate_open_file_message/3, generate_release_message/3,
     generate_get_children_attrs_message/2, generate_get_children_message/2, generate_fsync_message/2]).
@@ -69,6 +71,7 @@
 -export([
     create_file/3, create_file/5, create_777_mode_file/3,
     delete_file/2,
+    make_link/4, make_link/5,
     create_directory/3, create_directory/4,
     open/2, open/3, open/4,
     close/3, close/4,
@@ -145,6 +148,13 @@ generate_msg_id() ->
     put(msg_id_generator, ID),
     ID.
 
+
+extend_message_with_msg_id(EncodedMsg) ->
+    Message = messages:decode_msg(EncodedMsg, 'ClientMessage'),
+    MsgId = ?MSG_ID,
+    {MsgId, messages:encode_msg(Message#'ClientMessage'{message_id = MsgId})}.
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Connect to given node using a providerId and token.
@@ -192,9 +202,10 @@ connect_as_client(Node, Nonce, Token, Version) ->
         message_body = {client_handshake_request, #'ClientHandshakeRequest'{
             session_id = Nonce,
             macaroon = Token,
-            version = Version
-        }
-        }},
+            version = Version,
+            session_mode = 'NORMAL'
+        }}
+    },
     RawMsg = messages:encode_msg(HandshakeMessage),
 
     % when
@@ -274,7 +285,8 @@ connect_via_token(Node, SocketOpts, Nonce, AccessToken) ->
         #'ClientHandshakeRequest'{
             session_id = Nonce,
             macaroon = #'Macaroon'{macaroon = AccessToken},
-            version = Version
+            version = Version,
+            session_mode = 'NORMAL'
         }
     }},
     HandshakeMessageRaw = messages:encode_msg(HandshakeMessage),
@@ -370,6 +382,16 @@ generate_create_file_message(RootGuid, MsgId, File, Mode) ->
             name = File,
             mode = Mode,
             flag = 'READ_WRITE'}
+        }}
+    },
+    generate_fuse_request_message(MsgId, FuseRequest).
+
+generate_make_link_message(FileGuid, MsgId, TargetParentGuid, Name) ->
+    FuseRequest = {file_request, #'FileRequest'{
+        context_guid = FileGuid,
+        file_request = {make_link, #'MakeLink'{
+            target_parent_uuid = TargetParentGuid,
+            target_name = Name}
         }}
     },
     generate_fuse_request_message(MsgId, FuseRequest).
@@ -539,6 +561,19 @@ create_777_mode_file(Sock, RootGuid, Filename) ->
 
 delete_file(Sock, FileGuid) ->
     ssl:send(Sock, fuse_test_utils:generate_delete_file_message(FileGuid, ?MSG_ID)).
+
+make_link(Sock, FileGuid, TargetParentGuid, Name) ->
+    make_link(Sock, FileGuid, TargetParentGuid, Name, ?MSG_ID).
+
+make_link(Sock, FileGuid, TargetParentGuid, Name, MsgId) ->
+    ok = ssl:send(Sock, fuse_test_utils:generate_make_link_message(FileGuid, MsgId, TargetParentGuid, Name)),
+    #'ServerMessage'{message_body = {fuse_response, #'FuseResponse'{
+        fuse_response = {file_attr, #'FileAttr'{uuid = LinkGuid}}
+    }}} = ?assertMatch(#'ServerMessage'{
+        message_body = {fuse_response, #'FuseResponse'{status = #'Status'{code = ok}}},
+        message_id = MsgId
+    }, fuse_test_utils:receive_server_message()),
+    LinkGuid.
 
 create_directory(Sock, RootGuid, Dirname) ->
     create_directory(Sock, RootGuid, Dirname, ?MSG_ID).

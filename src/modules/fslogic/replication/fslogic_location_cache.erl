@@ -21,9 +21,8 @@
 
 -type block() :: fslogic_blocks:block().
 -type blocks() :: fslogic_blocks:blocks().
--type blocks_tree() :: gb_sets:set(). % TODO - use gb_trees (it is faster)
+-type blocks_tree() :: gb_sets:set(). % TODO VFS-7395 use gb_trees (it is faster)
 -type stored_blocks() :: blocks() | blocks_tree(). % set only when used by blocks' cache
--type id() :: file_location:id().
 -type location() :: file_location:doc().
 -type location_or_record() :: location() | file_location:record().
 -type get_doc_opts() :: boolean() | skip_local_blocks |
@@ -55,7 +54,7 @@
 -export([get_location_size/2, get_blocks_range/1, get_blocks_range/2]).
 
 %% Max hole in sequence - see get_overlapping_blocks_sequence/2 function doc
--define(MAX_HOLE, application:get_env(?APP_NAME, overlapping_seqiences_max_hole, 5)).
+-define(MAX_HOLE, op_worker:get_env(overlapping_seqiences_max_hole, 5)).
 
 %%%===================================================================
 %%% Location getters/setters
@@ -165,7 +164,7 @@ cache_location(#document{key = Key, value = #file_location{uuid = Uuid, blocks =
 -spec update_location(file_meta:uuid(), file_location:id(), file_location:diff(),
     boolean()) -> {ok, file_location:doc()} | {error, term()}.
 update_location(FileUuid, LocId, Diff, ModifyBlocks) ->
-    % TODO 4743 - Cannot update local blocks with update
+    % TODO VFS-4743 - Cannot update local blocks with update
     replica_synchronizer:apply_or_run_locally(FileUuid, fun() ->
         case fslogic_cache:flush(LocId, ModifyBlocks) of
             ok ->
@@ -214,7 +213,7 @@ create_location(#document{key = Key, value = #file_location{uuid = Uuid}} = Doc,
                 case file_location:create(Doc, GeneratedKey) of
                     {ok, #document{key = Key, value = #file_location{blocks = Blocks}} = FileLocation} ->
                         fslogic_cache:cache_blocks(Key, Blocks),
-                        fslogic_cache:update_size(Key, fslogic_blocks:size(Blocks)),
+                        fslogic_cache:update_size(Doc, fslogic_blocks:size(Blocks)),
                         fslogic_cache:cache_doc(FileLocation);
                     Other ->
                         Other
@@ -358,7 +357,7 @@ set_blocks(#document{key = Key, value = FileLocation} = Doc, Blocks) ->
             CurrentBlocks = fslogic_cache:get_blocks(Key),
             SizeChange = fslogic_blocks:size(Blocks) - fslogic_blocks:size(CurrentBlocks),
             fslogic_cache:save_blocks(Key, Blocks),
-            fslogic_cache:update_size(Key, SizeChange),
+            fslogic_cache:update_size(Doc, SizeChange),
             fslogic_cache:mark_changed_blocks(Key),
             Doc
     end.
@@ -369,12 +368,12 @@ set_blocks(#document{key = Key, value = FileLocation} = Doc, Blocks) ->
 %% Clear blocks in location document.
 %% @end
 %%-------------------------------------------------------------------
--spec clear_blocks(file_ctx:ctx(), id()) -> location().
-clear_blocks(FileCtx, Key) ->
+-spec clear_blocks(file_ctx:ctx(), location()) -> ok.
+clear_blocks(FileCtx, #document{key = Key} = LocationDoc) ->
     replica_synchronizer:apply(FileCtx, fun() ->
         Blocks = fslogic_cache:get_blocks(Key),
         SizeChange = -1 * fslogic_blocks:size(Blocks),
-        fslogic_cache:update_size(Key, SizeChange),
+        fslogic_cache:update_size(LocationDoc, SizeChange),
         fslogic_cache:save_blocks(Key, []),
         fslogic_cache:mark_changed_blocks(Key),
         ok = fslogic_cache:flush(Key, true)
@@ -422,7 +421,7 @@ update_blocks(#document{key = LocID, value = FileLocation} = Doc, NewBlocks) ->
                 {gb_sets:add(B2, Acc), TmpSize + S, sets:add_element(B, TmpBlocksToSave)}
             end, {Blocks2, SizeChange, BlocksToSave2}, FilteredBlocks),
 
-            fslogic_cache:update_size(LocID, SizeChange2),
+            fslogic_cache:update_size(Doc, SizeChange2),
             fslogic_cache:save_blocks(LocID, Blocks3),
             fslogic_cache:mark_changed_blocks(LocID, BlocksToSave3, BlocksToDel2,
                 FilteredBlocks, OldBlocks -- Exclude),
@@ -693,7 +692,10 @@ add_blocks_to_sequence(
                 CurrentHoleSize + 1};
         {true, false} ->
             % existing block is overlapping with input blocks - add to sequence and return
-            {BlocksToSplitIntoSequences, BlocksInCurrentSequence,
+            {NewBlocksToSplitIntoSequences, NewBlocksInCurrentSequence} = add_to_current_sequence_if_possible(
+                BlocksToSplitIntoSequences, BlocksInCurrentSequence, ExistingBlockEnd),
+
+            {NewBlocksToSplitIntoSequences, NewBlocksInCurrentSequence,
                     SkippedExistingBlocks ++ [#file_block{offset = ExistingBlockOffset, size = ExistingBlockSize}], [],
                 0};
         _ ->
@@ -702,3 +704,15 @@ add_blocks_to_sequence(
                 ExistingBlock, SkippedExistingBlocks,
                 CurrentHoleSize)
     end.
+
+
+-spec add_to_current_sequence_if_possible(blocks(), blocks(), non_neg_integer()) -> {blocks(), blocks()}.
+add_to_current_sequence_if_possible(
+    [Block, #file_block{offset = NextBlockOffset} | _] = [_ | BlocksToSplitIntoSequencesTail],
+    BlocksInCurrentSequence,
+    ExistingBlockEnd
+) when ExistingBlockEnd >= NextBlockOffset ->
+    add_to_current_sequence_if_possible(
+        BlocksToSplitIntoSequencesTail, [Block | BlocksInCurrentSequence], ExistingBlockEnd);
+add_to_current_sequence_if_possible(BlocksToSplitIntoSequences, BlocksInCurrentSequence, _ExistingBlockEnd) ->
+    {BlocksToSplitIntoSequences, BlocksInCurrentSequence}.

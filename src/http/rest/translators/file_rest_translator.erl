@@ -15,6 +15,8 @@
 
 -include("http/rest.hrl").
 -include("middleware/middleware.hrl").
+-include("modules/fslogic/file_distribution.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 
 -export([create_response/4, get_response/2]).
 
@@ -45,32 +47,93 @@ create_response(#gri{aspect = register_file}, _, value, ObjectId) ->
 %%--------------------------------------------------------------------
 -spec get_response(gri:gri(), Resource :: term()) -> #rest_resp{}.
 get_response(#gri{aspect = As}, Result) when
-    As =:= object_id;
-    As =:= list
+    As =:= object_id
 ->
     ?OK_REPLY(Result);
-get_response(#gri{aspect = children}, {Children, IsLast}) ->
-    ?OK_REPLY(#{
-        <<"children">> => lists:map(fun({Guid, Name}) ->
-            {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-            #{
-                <<"id">> => ObjectId,
-                <<"name">> => Name
-            }
-        end, Children),
-        <<"isLast">> => IsLast
-    });
+
+get_response(#gri{aspect = As}, RdfMetadata) when
+    As =:= rdf_metadata;
+    As =:= symlink_value
+->
+    ?OK_REPLY({binary, RdfMetadata});
+
 get_response(#gri{aspect = As}, Metadata) when
     As =:= attrs;
+    As =:= qos_summary;
     As =:= xattrs;
     As =:= json_metadata
 ->
     ?OK_REPLY(Metadata);
-get_response(#gri{aspect = rdf_metadata}, RdfMetadata) ->
-    ?OK_REPLY({binary, RdfMetadata});
 
-get_response(#gri{aspect = As}, EffQosResp) when
-    As =:= distribution;
-    As =:= file_qos_summary
-->
-    ?OK_REPLY(EffQosResp).
+get_response(#gri{id = Guid, aspect = distribution}, FileDistributionGetResult) ->
+    ?OK_REPLY(file_distribution_translator:gather_result_to_json(rest, FileDistributionGetResult, Guid));
+
+get_response(#gri{aspect = storage_locations}, StorageLocations) ->
+    ?OK_REPLY(file_distribution_translator:storage_locations_to_json(StorageLocations));
+
+get_response(#gri{aspect = dataset_summary}, #file_eff_dataset_summary{
+    direct_dataset = DatasetId,
+    eff_ancestor_datasets = EffAncestorDatasets,
+    eff_protection_flags = EffProtectionFlags
+}) ->
+    ?OK_REPLY(#{
+        <<"directDataset">> => utils:undefined_to_null(DatasetId),
+        <<"effectiveAncestorDatasets">> => EffAncestorDatasets,
+        <<"effectiveProtectionFlags">> => file_meta:protection_flags_to_json(EffProtectionFlags)
+    });
+
+get_response(#gri{aspect = children}, {Children, IsLast, ReturnedToken}) ->
+    ?OK_REPLY(#{
+        <<"children">> => Children,
+        <<"nextPageToken">> => utils:undefined_to_null(ReturnedToken),
+        <<"isLast">> => IsLast
+    });
+
+get_response(#gri{aspect = files}, {FilesJson, InaccessiblePaths, NextPageToken}) ->
+    ?OK_REPLY(#{
+        <<"files">> => FilesJson,
+        <<"inaccessiblePaths">> => InaccessiblePaths,
+        <<"nextPageToken">> => utils:undefined_to_null(NextPageToken)
+    });
+
+get_response(#gri{aspect = hardlinks}, Hardlinks) ->
+    ?OK_REPLY(lists:map(fun(FileGuid) ->
+        {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
+        ObjectId
+    end, Hardlinks));
+
+get_response(#gri{aspect = {hardlinks, _}}, _Result) ->
+    ?NO_CONTENT_REPLY;
+
+get_response(#gri{aspect = archive_recall_details}, Result) ->
+    ?OK_REPLY(translate_archive_recall_details(Result));
+
+get_response(#gri{aspect = archive_recall_progress}, ArchiveRecallProgress) ->
+    ?OK_REPLY(ArchiveRecallProgress).
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec translate_archive_recall_details(archive_recall:record()) -> json_utils:json_map().
+translate_archive_recall_details(#archive_recall_details{
+    archive_id = ArchiveId,
+    dataset_id = DatasetId,
+    start_timestamp = StartTimestamp,
+    finish_timestamp = FinishTimestamp,
+    total_file_count = TotalFileCount,
+    total_byte_size = TotalByteSize,
+    last_error = LastError
+}) ->
+    #{
+        <<"archiveId">> => ArchiveId,
+        <<"datasetId">> => DatasetId,
+        <<"startTime">> => utils:undefined_to_null(StartTimestamp),
+        <<"finishTime">> => utils:undefined_to_null(FinishTimestamp),
+        <<"totalFileCount">> => TotalFileCount,
+        <<"totalByteSize">> => TotalByteSize,
+        <<"lastError">> => utils:undefined_to_null(LastError)
+    }.

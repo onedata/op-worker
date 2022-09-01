@@ -12,7 +12,7 @@
 -module(truncate_req).
 -author("Tomasz Lichon").
 
--include("modules/auth/acl.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -34,7 +34,7 @@
 truncate(UserCtx, FileCtx0, Size) ->
     FileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx0,
-        [traverse_ancestors, ?write_object]
+        [?TRAVERSE_ANCESTORS, ?OPERATIONS(?write_object_mask)]
     ),
     FileCtx2 = file_ctx:assert_not_readonly_storage(FileCtx1),
     truncate_insecure(UserCtx, FileCtx2, Size, true).
@@ -68,7 +68,7 @@ truncate_insecure(UserCtx, FileCtx1, Size, UpdateTimes, CreateFileIfNotExist) ->
                 {ok, Handle} ->
                     % Flush events queue to get proper file size
                     catch lfm_event_controller:flush_event_queue(
-                        SessId, oneprovider:get_id(), file_ctx:get_uuid_const(FileCtx3)),
+                        SessId, oneprovider:get_id(), file_ctx:get_logical_guid_const(FileCtx3)),
                     {CurrentSize, _} = file_ctx:get_file_size(FileCtx3),
                     case storage_driver:truncate(Handle, Size, CurrentSize) of
                         ok ->
@@ -110,7 +110,7 @@ truncate_insecure(UserCtx, FileCtx1, Size, UpdateTimes, CreateFileIfNotExist) ->
 log_warning(Module, Function, Error, FileCtx) ->
     {Path, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
     {StorageFileId, FileCtx3} = file_ctx:get_storage_file_id(FileCtx2),
-    Guid = file_ctx:get_guid_const(FileCtx3),
+    Guid = file_ctx:get_logical_guid_const(FileCtx3),
     ?warning("~p:~p on file {~p, ~p} with file_id ~p returned ~p", [
         Module, Function, Path, Guid, StorageFileId, Error
     ]).
@@ -120,10 +120,7 @@ log_warning(Module, Function, Error, FileCtx) ->
 -spec on_successful_truncate(file_ctx:ctx(), Size :: non_neg_integer(), UpdateTimes :: boolean()) ->
     fslogic_worker:fuse_response().
 on_successful_truncate(FileCtx, Size, UpdateTimes) ->
-    case file_popularity:update_size(FileCtx, Size) of
-        ok -> ok;
-        {error, not_found} -> ok
-    end,
+    ok = file_popularity:update_size(FileCtx, Size),
     case UpdateTimes of
         true ->
             fslogic_times:update_mtime_ctime(FileCtx);

@@ -20,5 +20,9 @@
 -define(extract_key(Result), datastore_runner:extract_key(Result)).
 -define(ok_if_not_found(Result), datastore_runner:ok_if_not_found(Result)).
 -define(ok_if_exists(Result), datastore_runner:ok_if_exists(Result)).
+-define(ok_if_no_change(Result), datastore_runner:ok_if_no_change(Result)).
+
+-define(get_field(Key, GetterFun),
+    datastore_runner:get_field(Key, ?MODULE, GetterFun)).
 
 -endif.

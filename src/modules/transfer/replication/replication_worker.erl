@@ -15,8 +15,8 @@
 -behaviour(gen_transfer_worker).
 
 -include("global_definitions.hrl").
--include("modules/auth/acl.hrl").
 -include("modules/datastore/transfer.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -33,7 +33,7 @@
 ]).
 
 -define(DEFAULT_REPLICATION_PRIORITY,
-    application:get_env(?APP_NAME, default_replication_priority, 224)
+    op_worker:get_env(default_replication_priority, 224)
 ).
 
 %%%===================================================================
@@ -58,9 +58,9 @@ enqueue_data_transfer(FileCtx, TransferParams) ->
 %% {@link transfer_worker_behaviour} callback required_permissions/0.
 %% @end
 %%--------------------------------------------------------------------
--spec required_permissions() -> [data_access_rights:requirement()].
+-spec required_permissions() -> [data_access_control:requirement()].
 required_permissions() ->
-    [traverse_ancestors, ?write_object].
+    [?TRAVERSE_ANCESTORS, ?OPERATIONS(?write_object_mask)].
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -69,7 +69,7 @@ required_permissions() ->
 %%--------------------------------------------------------------------
 -spec max_transfer_retries() -> non_neg_integer().
 max_transfer_retries() ->
-    application:get_env(?APP_NAME, max_file_replication_retries_per_file, 5).
+    op_worker:get_env(max_file_replication_retries_per_file, 5).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -78,7 +78,7 @@ max_transfer_retries() ->
 %%--------------------------------------------------------------------
 -spec view_querying_chunk_size() -> non_neg_integer().
 view_querying_chunk_size() ->
-    application:get_env(?APP_NAME, replication_by_view_batch, 1000).
+    op_worker:get_env(replication_by_view_batch, 1000).
 
 %%--------------------------------------------------------------------
 %% @doc

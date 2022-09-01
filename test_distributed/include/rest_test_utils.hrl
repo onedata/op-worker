@@ -13,8 +13,10 @@
 -ifndef(REST_TEST_UTILS_HRL).
 -define(REST_TEST_UTILS_HRL, 1).
 
+-include_lib("ctool/include/test/test_utils.hrl").
+
 -define(USER_TOKEN_HEADER(Config, User),
-    rest_test_utils:user_token_header(Config, User)
+    rest_test_utils:user_token_header(?config({access_token, User}, Config))
 ).
 
 -define(USER_AUTH_HEADERS(Config, User), ?USER_AUTH_HEADERS(Config, User, [])).

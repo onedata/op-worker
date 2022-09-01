@@ -19,6 +19,7 @@
 -include("proto/oneclient/proxyio_messages.hrl").
 -include("proto/oneprovider/dbsync_messages.hrl").
 -include("proto/oneprovider/dbsync_messages2.hrl").
+-include("proto/oneprovider/provider_rpc_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include("proto/oneprovider/remote_driver_messages.hrl").
 -include("proto/oneprovider/rtransfer_messages.hrl").
@@ -190,6 +191,9 @@ route_and_ignore_answer(#client_message{
         AccessToken, ConsumerToken
     ),
     ok;
+route_and_ignore_answer(#client_message{message_body = #close_session{}} = Msg) ->
+    incoming_session_watcher:report_session_close(effective_session_id(Msg)),
+    ok;
 route_and_ignore_answer(ClientMsg) ->
     event_router:route_message(ClientMsg).
 
@@ -247,6 +251,15 @@ answer_or_delegate(#client_message{
     {ok, #server_message{
         message_id = MsgId,
         message_body = #rtransfer_nodes_ips{nodes = IpsAndPorts}
+    }};
+
+answer_or_delegate(#client_message{
+    message_id = MsgId,
+    message_body = #provider_rpc_call{} = ProviderRpcCall
+}, _) ->
+    {ok, #server_message{
+        message_id = MsgId,
+        message_body = provider_rpc_worker:exec(ProviderRpcCall)
     }};
 
 answer_or_delegate(Msg = #client_message{

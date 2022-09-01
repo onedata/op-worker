@@ -15,12 +15,14 @@
 
 -include("api_file_test_utils.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 
 -export([
-    all/0,
+    groups/0, all/0,
     init_per_suite/1, end_per_suite/1,
+    init_per_group/2, end_per_group/2,
     init_per_testcase/2, end_per_testcase/2
 ]).
 
@@ -39,16 +41,22 @@
     set_file_xattrs_on_provider_not_supporting_space_test/1
 ]).
 
+groups() -> [
+    {all_tests, [parallel], [
+        set_file_rdf_metadata_test,
+        set_file_rdf_metadata_on_provider_not_supporting_space_test,
+
+        set_file_json_metadata_test,
+        set_file_primitive_json_metadata_test,
+        set_file_json_metadata_on_provider_not_supporting_space_test,
+
+        set_file_xattrs_test,
+        set_file_xattrs_on_provider_not_supporting_space_test
+    ]}
+].
+
 all() -> [
-    set_file_rdf_metadata_test,
-    set_file_rdf_metadata_on_provider_not_supporting_space_test,
-
-    set_file_json_metadata_test,
-    set_file_primitive_json_metadata_test,
-    set_file_json_metadata_on_provider_not_supporting_space_test,
-
-    set_file_xattrs_test,
-    set_file_xattrs_on_provider_not_supporting_space_test
+    {group, all_tests}
 ].
 
 
@@ -62,17 +70,19 @@ all() -> [
 
 set_file_rdf_metadata_test(Config) ->
     Providers = ?config(op_worker_nodes, Config),
-    {FileType, FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(8#707),
+    {FileType, _FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(8#707),
 
-    DataSpec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
-        FileGuid, ShareId, #data_spec{
-            required = [<<"metadata">>],
-            correct_values = #{
-                <<"metadata">> => [
-                    ?RDF_METADATA_1, ?RDF_METADATA_2, ?RDF_METADATA_3, ?RDF_METADATA_4
-                ]
+    DataSpec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
+        api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+            FileGuid, ShareId, #data_spec{
+                required = [<<"metadata">>],
+                correct_values = #{
+                    <<"metadata">> => [
+                        ?RDF_METADATA_1, ?RDF_METADATA_2, ?RDF_METADATA_3, ?RDF_METADATA_4
+                    ]
+                }
             }
-        }
+        )
     ),
 
     % Setting rdf should always succeed for correct clients
@@ -80,7 +90,7 @@ set_file_rdf_metadata_test(Config) ->
 
     VerifyEnvFun = fun
         (expected_failure, #api_test_ctx{node = TestNode}) ->
-            ?assertMatch({error, ?ENODATA}, get_rdf(TestNode, FileGuid), ?ATTEMPTS),
+            ?assertMatch(?ERROR_POSIX(?ENODATA), get_rdf(TestNode, FileGuid), ?ATTEMPTS),
             true;
         (expected_success, #api_test_ctx{node = TestNode, data = #{<<"metadata">> := Metadata}}) ->
             lists:foreach(fun(Node) ->
@@ -94,7 +104,7 @@ set_file_rdf_metadata_test(Config) ->
                     ?assertMatch(ok, remove_rdf(TestNode, FileGuid)),
                     % Wait for removal to be synced between providers.
                     lists:foreach(fun(Node) ->
-                        ?assertMatch({error, ?ENODATA}, get_rdf(Node, FileGuid), ?ATTEMPTS)
+                        ?assertMatch(?ERROR_POSIX(?ENODATA), get_rdf(Node, FileGuid), ?ATTEMPTS)
                     end, Providers);
                 false ->
                     ok
@@ -104,7 +114,7 @@ set_file_rdf_metadata_test(Config) ->
 
     set_metadata_test_base(
         <<"rdf">>,
-        FileType, FilePath, FileGuid, ShareId,
+        FileType, FileGuid, ShareId,
         build_set_metadata_validate_rest_call_fun(GetExpCallResultFun),
         build_set_metadata_validate_gs_call_fun(GetExpCallResultFun),
         VerifyEnvFun, Providers, ?CLIENT_SPEC_FOR_SPACE_KRK_PAR, DataSpec, _QsParams = [],
@@ -116,23 +126,24 @@ set_file_rdf_metadata_on_provider_not_supporting_space_test(_Config) ->
     P2Id = oct_background:get_provider_id(paris),
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
-    {FileType, FilePath, FileGuid, ShareId} = api_test_utils:create_shared_file_in_space_krk(),
+    SpaceId = oct_background:get_space_id(space_krk),
+    {FileType, _FilePath, FileGuid, ShareId} = api_test_utils:create_shared_file_in_space_krk(),
 
     DataSpec = #data_spec{
         required = [<<"metadata">>],
         correct_values = #{<<"metadata">> => [?RDF_METADATA_1]}
     },
 
-    GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id) end,
+    GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id) end,
 
     VerifyEnvFun = fun(_, _) ->
-        ?assertMatch({error, ?ENODATA}, get_rdf(P1Node, FileGuid), ?ATTEMPTS),
+        ?assertMatch(?ERROR_POSIX(?ENODATA), get_rdf(P1Node, FileGuid), ?ATTEMPTS),
         true
     end,
 
     set_metadata_test_base(
         <<"rdf">>,
-        FileType, FilePath, FileGuid, ShareId,
+        FileType, FileGuid, ShareId,
         build_set_metadata_validate_rest_call_fun(GetExpCallResultFun),
         build_set_metadata_validate_gs_call_fun(GetExpCallResultFun),
         VerifyEnvFun, [P2Node], ?CLIENT_SPEC_FOR_SPACE_KRK, DataSpec, _QsParams = [],
@@ -142,12 +153,12 @@ set_file_rdf_metadata_on_provider_not_supporting_space_test(_Config) ->
 
 %% @private
 get_rdf(Node, FileGuid) ->
-    lfm_proxy:get_metadata(Node, ?ROOT_SESS_ID, {guid, FileGuid}, rdf, [], false).
+    opt_file_metadata:get_custom_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), rdf, [], false).
 
 
 %% @private
 remove_rdf(Node, FileGuid) ->
-    lfm_proxy:remove_metadata(Node, ?ROOT_SESS_ID, {guid, FileGuid}, rdf).
+    opt_file_metadata:remove_custom_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), rdf).
 
 
 %%%===================================================================
@@ -157,49 +168,49 @@ remove_rdf(Node, FileGuid) ->
 
 set_file_json_metadata_test(Config) ->
     Providers = ?config(op_worker_nodes, Config),
-    {FileType, FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(8#707),
+    {FileType, _FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(8#707),
 
     ExampleJson = #{<<"attr1">> => [0, 1, <<"val">>]},
 
-    DataSpec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
-        FileGuid, ShareId, #data_spec{
-            required = [<<"metadata">>],
-            optional = QsParams = [<<"filter_type">>, <<"filter">>],
-            correct_values = #{
-                <<"metadata">> => [ExampleJson],
-                <<"filter_type">> => [<<"keypath">>],
-                <<"filter">> => [
-                    <<"[1]">>,                  % Test creating placeholder array for nonexistent
-                                                % previously json
-                    <<"[1].attr1.[1]">>,        % Test setting attr in existing array
-                    <<"[1].attr1.[2].attr22">>, % Test error when trying to set subjson to binary
-                                                % (<<"val">> in ExampleJson)
-                    <<"[1].attr1.[5]">>,        % Test setting attr beyond existing array
-                    <<"[1].attr2.[2]">>         % Test setting attr in nonexistent array
+    DataSpec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
+        api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+            FileGuid, ShareId, #data_spec{
+                required = [<<"metadata">>],
+                optional = QsParams = [<<"filter_type">>, <<"filter">>],
+                correct_values = #{
+                    <<"metadata">> => [ExampleJson],
+                    <<"filter_type">> => [<<"keypath">>],
+                    <<"filter">> => [
+                        <<"[1]">>,                  % Test creating placeholder array for nonexistent
+                                                    % previously json
+                        <<"[1].attr1.[1]">>,        % Test setting attr in existing array
+                        <<"[1].attr1.[2].attr22">>, % Test error when trying to set subjson to binary
+                                                    % (<<"val">> in ExampleJson)
+                        <<"[1].attr1.[5]">>,        % Test setting attr beyond existing array
+                        <<"[1].attr2.[2]">>         % Test setting attr in nonexistent array
+                    ]
+                },
+                bad_values = [
+                    % invalid json error can be returned only for rest (invalid json is send as
+                    % body without modification) and not gs (#{<<"metadata">> => some_binary} is send,
+                    % so no matter what that some_binary is it will be treated as string)
+                    {<<"metadata">>, <<"aaa">>, {rest_handler, ?ERROR_BAD_VALUE_JSON(<<"metadata">>)}},
+                    {<<"metadata">>, <<"{">>, {rest_handler, ?ERROR_BAD_VALUE_JSON(<<"metadata">>)}},
+                    {<<"metadata">>, <<"{\"aaa\": aaa}">>, {rest_handler,
+                        ?ERROR_BAD_VALUE_JSON(<<"metadata">>)}},
+
+                    {<<"filter_type">>, <<"dummy">>,
+                        ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"filter_type">>, [<<"keypath">>])},
+
+                    % Below differences between error returned by rest and gs are results of sending
+                    % parameters via qs in REST, so they lost their original type and are cast to binary
+                    {<<"filter_type">>, 100, {rest,
+                        ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"filter_type">>, [<<"keypath">>])}},
+                    {<<"filter_type">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"filter_type">>)}},
+                    {<<"filter">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"filter">>)}}
                 ]
-            },
-            bad_values = [
-                % invalid json error can be returned only for rest (invalid json is send as
-                % body without modification) and not gs (#{<<"metadata">> => some_binary} is send,
-                % so no matter what that some_binary is it will be treated as string)
-                {<<"metadata">>, <<"aaa">>, {rest_handler, ?ERROR_BAD_VALUE_JSON(<<"metadata">>)}},
-                {<<"metadata">>, <<"{">>, {rest_handler, ?ERROR_BAD_VALUE_JSON(<<"metadata">>)}},
-                {<<"metadata">>, <<"{\"aaa\": aaa}">>, {rest_handler,
-                    ?ERROR_BAD_VALUE_JSON(<<"metadata">>)}},
-
-                {<<"filter_type">>, <<"dummy">>,
-                    ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"filter_type">>, [<<"keypath">>])},
-
-                % Below differences between error returned by rest and gs are results of sending
-                % parameters via qs in REST, so they lost their original type and are cast to binary
-                {<<"filter_type">>, 100, {rest_with_file_path,
-                    ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"filter_type">>, [<<"keypath">>])}},
-                {<<"filter_type">>, 100, {rest,
-                    ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"filter_type">>, [<<"keypath">>])}},
-                {<<"filter_type">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"filter_type">>)}},
-                {<<"filter">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"filter">>)}}
-            ]
-        }
+            }
+        )
     ),
 
     GetRequestFilterArg = fun(#api_test_ctx{data = Data}) ->
@@ -231,7 +242,7 @@ set_file_json_metadata_test(Config) ->
 
     VerifyEnvFun = fun
         (expected_failure, #api_test_ctx{node = TestNode}) ->
-            ?assertMatch({error, ?ENODATA}, get_json(TestNode, FileGuid), ?ATTEMPTS),
+            ?assertMatch(?ERROR_POSIX(?ENODATA), get_json(TestNode, FileGuid), ?ATTEMPTS),
             true;
         (expected_success, #api_test_ctx{node = TestNode} = TestCtx) ->
             FilterOrError = GetRequestFilterArg(TestCtx),
@@ -245,7 +256,7 @@ set_file_json_metadata_test(Config) ->
                 ?ERROR_MISSING_REQUIRED_VALUE(_) ->
                     % Test failed to set json because of specifying
                     % filter_type without specifying filter
-                    {error, ?ENODATA};
+                    ?ERROR_POSIX(?ENODATA);
                 {ok, [<<"[1]">>]} ->
                     {ok, [null, ExampleJson]};
                 {ok, [<<"[1]">>, <<"attr1">>, <<"[1]">>]} ->
@@ -287,7 +298,7 @@ set_file_json_metadata_test(Config) ->
                     % rather than above one as that will be the result of setting ExampleJson
                     % with attr1.[5] filter and no prior json set)
                     lists:foreach(fun(Node) ->
-                        ?assertMatch({error, ?ENODATA}, get_json(Node, FileGuid), ?ATTEMPTS)
+                        ?assertMatch(?ERROR_POSIX(?ENODATA), get_json(Node, FileGuid), ?ATTEMPTS)
                     end, Providers);
                 _ ->
                     ok
@@ -297,7 +308,7 @@ set_file_json_metadata_test(Config) ->
 
     set_metadata_test_base(
         <<"json">>,
-        FileType, FilePath, FileGuid, ShareId,
+        FileType, FileGuid, ShareId,
         build_set_metadata_validate_rest_call_fun(GetExpCallResultFun),
         build_set_metadata_validate_gs_call_fun(GetExpCallResultFun),
         VerifyEnvFun, Providers, ?CLIENT_SPEC_FOR_SPACE_KRK_PAR, DataSpec, QsParams,
@@ -307,23 +318,25 @@ set_file_json_metadata_test(Config) ->
 
 set_file_primitive_json_metadata_test(Config) ->
     Providers = ?config(op_worker_nodes, Config),
-    {FileType, FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(8#707),
+    {FileType, _FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(8#707),
 
-    DataSpec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
-        FileGuid, ShareId, #data_spec{
-            required = [<<"metadata">>],
-            correct_values = #{<<"metadata">> => [
-                <<"{}">>, <<"[]">>, <<"true">>, <<"0">>, <<"0.1">>,
-                <<"null">>, <<"\"string\"">>
-            ]}
-        }
+    DataSpec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
+        api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+            FileGuid, ShareId, #data_spec{
+                required = [<<"metadata">>],
+                correct_values = #{<<"metadata">> => [
+                    <<"{}">>, <<"[]">>, <<"true">>, <<"0">>, <<"0.1">>,
+                    <<"null">>, <<"\"string\"">>
+                ]}
+            }
+        )
     ),
 
     GetExpCallResultFun = fun(_TestCtx) -> ok end,
 
     VerifyEnvFun = fun
         (expected_failure, #api_test_ctx{node = TestNode}) ->
-            ?assertMatch({error, ?ENODATA}, get_json(TestNode, FileGuid), ?ATTEMPTS),
+            ?assertMatch(?ERROR_POSIX(?ENODATA), get_json(TestNode, FileGuid), ?ATTEMPTS),
             true;
         (expected_success, #api_test_ctx{node = TestNode, data = #{<<"metadata">> := Metadata}}) ->
             ExpMetadata = json_utils:decode(Metadata),
@@ -337,7 +350,7 @@ set_file_primitive_json_metadata_test(Config) ->
                     % tests for next clients can start from setting rather then updating metadata
                     ?assertMatch(ok, remove_json(TestNode, FileGuid)),
                     lists:foreach(fun(Node) ->
-                        ?assertMatch({error, ?ENODATA}, get_json(Node, FileGuid), ?ATTEMPTS)
+                        ?assertMatch(?ERROR_POSIX(?ENODATA), get_json(Node, FileGuid), ?ATTEMPTS)
                     end, Providers);
                 _ ->
                     ok
@@ -347,7 +360,7 @@ set_file_primitive_json_metadata_test(Config) ->
 
     set_metadata_test_base(
         <<"json">>,
-        FileType, FilePath, FileGuid, ShareId,
+        FileType, FileGuid, ShareId,
         build_set_metadata_validate_rest_call_fun(GetExpCallResultFun),
         build_set_metadata_validate_gs_call_fun(GetExpCallResultFun),
         VerifyEnvFun, Providers, ?CLIENT_SPEC_FOR_SPACE_KRK_PAR, DataSpec, _QsParams = [],
@@ -359,23 +372,24 @@ set_file_json_metadata_on_provider_not_supporting_space_test(_Config) ->
     P2Id = oct_background:get_provider_id(paris),
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
-    {FileType, FilePath, FileGuid, ShareId} = api_test_utils:create_shared_file_in_space_krk(),
+    {FileType, _FilePath, FileGuid, ShareId} = api_test_utils:create_shared_file_in_space_krk(),
 
     DataSpec = #data_spec{
         required = [<<"metadata">>],
         correct_values = #{<<"metadata">> => [?JSON_METADATA_4]}
     },
 
-    GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id) end,
+    SpaceId = oct_background:get_space_id(space_krk),
+    GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id) end,
 
     VerifyEnvFun = fun(_, _) ->
-        ?assertMatch({error, ?ENODATA}, get_json(P1Node, FileGuid), ?ATTEMPTS),
+        ?assertMatch(?ERROR_POSIX(?ENODATA), get_json(P1Node, FileGuid), ?ATTEMPTS),
         true
     end,
 
     set_metadata_test_base(
         <<"json">>,
-        FileType, FilePath, FileGuid, ShareId,
+        FileType, FileGuid, ShareId,
         build_set_metadata_validate_rest_call_fun(GetExpCallResultFun),
         build_set_metadata_validate_gs_call_fun(GetExpCallResultFun),
         VerifyEnvFun, [P2Node], ?CLIENT_SPEC_FOR_SPACE_KRK, DataSpec, _QsParams = [],
@@ -385,12 +399,12 @@ set_file_json_metadata_on_provider_not_supporting_space_test(_Config) ->
 
 %% @private
 get_json(Node, FileGuid) ->
-    lfm_proxy:get_metadata(Node, ?ROOT_SESS_ID, {guid, FileGuid}, json, [], false).
+    opt_file_metadata:get_custom_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), json, [], false).
 
 
 %% @private
 remove_json(Node, FileGuid) ->
-    lfm_proxy:remove_metadata(Node, ?ROOT_SESS_ID, {guid, FileGuid}, json).
+    opt_file_metadata:remove_custom_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), json).
 
 
 %%%===================================================================
@@ -402,7 +416,7 @@ set_file_xattrs_test(Config) ->
     Providers = ?config(op_worker_nodes, Config),
     User2Id = oct_background:get_user_id(user2),
     User3Id = oct_background:get_user_id(user3),
-    {FileType, FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(8#707),
+    {FileType, _FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(8#707),
 
     DataSpec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
         FileGuid, ShareId, #data_spec{
@@ -461,7 +475,7 @@ set_file_xattrs_test(Config) ->
 
     set_metadata_test_base(
         <<"xattrs">>,
-        FileType, FilePath, FileGuid, ShareId,
+        FileType, FileGuid, ShareId,
         build_set_metadata_validate_rest_call_fun(GetExpCallResultFun),
         build_set_metadata_validate_gs_call_fun(GetExpCallResultFun),
         VerifyEnvFun, Providers, ?CLIENT_SPEC_FOR_SPACE_KRK_PAR, DataSpec, _QsParams = [],
@@ -473,14 +487,15 @@ set_file_xattrs_on_provider_not_supporting_space_test(_Config) ->
     P2Id = oct_background:get_provider_id(paris),
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
-    {FileType, FilePath, FileGuid, ShareId} = api_test_utils:create_shared_file_in_space_krk(),
+    SpaceId = oct_background:get_space_id(space_krk),
+    {FileType, _FilePath, FileGuid, ShareId} = api_test_utils:create_shared_file_in_space_krk(),
 
     DataSpec = #data_spec{
         required = [<<"metadata">>],
         correct_values = #{<<"metadata">> => [#{?XATTR_1_KEY => ?XATTR_1_VALUE}]}
     },
 
-    GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id) end,
+    GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id) end,
 
     VerifyEnvFun = fun(_, _) ->
         ?assertMatch({error, ?ENODATA}, get_xattr(P1Node, FileGuid, ?XATTR_1_KEY), ?ATTEMPTS),
@@ -489,7 +504,7 @@ set_file_xattrs_on_provider_not_supporting_space_test(_Config) ->
 
     set_metadata_test_base(
         <<"xattrs">>,
-        FileType, FilePath, FileGuid, ShareId,
+        FileType, FileGuid, ShareId,
         build_set_metadata_validate_rest_call_fun(GetExpCallResultFun),
         build_set_metadata_validate_gs_call_fun(GetExpCallResultFun),
         VerifyEnvFun, [P2Node], ?CLIENT_SPEC_FOR_SPACE_KRK, DataSpec, _QsParams = [],
@@ -514,7 +529,7 @@ assert_all_xattrs_set(Nodes, FileGuid, Xattrs) ->
 assert_no_xattrs_set(Node, FileGuid) ->
     ?assertMatch(
         {ok, []},
-        lfm_proxy:list_xattr(Node, ?ROOT_SESS_ID, {guid, FileGuid}, false, true)
+        lfm_proxy:list_xattr(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), false, true)
     ).
 
 
@@ -525,13 +540,13 @@ remove_xattrs(TestNode, Nodes, FileGuid, Xattrs) ->
     lists:foreach(fun({Key, _}) ->
         case Key of
             ?ACL_KEY ->
-                ?assertMatch(ok, lfm_proxy:remove_acl(TestNode, ?ROOT_SESS_ID, {guid, FileGuid}));
+                ?assertMatch(ok, lfm_proxy:remove_acl(TestNode, ?ROOT_SESS_ID, ?FILE_REF(FileGuid)));
             <<?CDMI_PREFIX_STR, _/binary>> ->
                 % Because cdmi attributes don't have api to remove them removal must be carried by
                 % calling custom_metadata directly
                 ?assertMatch(ok, rpc:call(TestNode, custom_metadata, remove_xattr, [FileUuid, Key]));
             _ ->
-                ?assertMatch(ok, lfm_proxy:remove_xattr(TestNode, ?ROOT_SESS_ID, {guid, FileGuid}, Key))
+                ?assertMatch(ok, lfm_proxy:remove_xattr(TestNode, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), Key))
         end,
         lists:foreach(fun(Node) ->
             ?assertMatch({error, ?ENODATA}, get_xattr(Node, FileGuid, Key), ?ATTEMPTS)
@@ -541,7 +556,7 @@ remove_xattrs(TestNode, Nodes, FileGuid, Xattrs) ->
 
 %% @private
 get_xattr(Node, FileGuid, XattrKey) ->
-    lfm_proxy:get_xattr(Node, ?ROOT_SESS_ID, {guid, FileGuid}, XattrKey).
+    lfm_proxy:get_xattr(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), XattrKey).
 
 
 %%%===================================================================
@@ -577,7 +592,7 @@ build_set_metadata_validate_gs_call_fun(GetExpResultFun) ->
 %% @private
 -spec set_metadata_test_base(
     MetadataType :: binary(),  %% <<"json">> | <<"rdf">> | <<"xattrs">>
-    api_test_utils:file_type(), file_meta:path(), file_id:file_guid(),
+    api_test_utils:file_type(), file_id:file_guid(),
     od_share:id(),
     ValidateRestCallResultFun :: onenv_api_test_runner:validate_call_result_fun(),
     ValidateGsCallResultFun :: onenv_api_test_runner:validate_call_result_fun(),
@@ -590,7 +605,7 @@ build_set_metadata_validate_gs_call_fun(GetExpResultFun) ->
 ) ->
     ok.
 set_metadata_test_base(
-    MetadataType, FileType, FilePath, FileGuid, ShareId,
+    MetadataType, FileType, FileGuid, ShareId,
     ValidateRestCallResultFun, ValidateGsCallResultFun, VerifyEnvFun,
     Providers, ClientSpec, DataSpec, QsParameters, RandomlySelectScenario
 ) ->
@@ -608,27 +623,7 @@ set_metadata_test_base(
                         MetadataType, FileType
                     ]),
                     type = rest,
-                    prepare_args_fun = build_set_metadata_prepare_new_id_rest_args_fun(
-                        MetadataType, FileObjectId, QsParameters
-                    ),
-                    validate_result_fun = ValidateRestCallResultFun
-                },
-                #scenario_template{
-                    name = str_utils:format("Set ~s metadata for ~s using deprecated path rest endpoint", [
-                        MetadataType, FileType
-                    ]),
-                    type = rest_with_file_path,
-                    prepare_args_fun = build_set_metadata_prepare_deprecated_path_rest_args_fun(
-                        MetadataType, FilePath, QsParameters
-                    ),
-                    validate_result_fun = ValidateRestCallResultFun
-                },
-                #scenario_template{
-                    name = str_utils:format("Set ~s metadata for ~s using deprecated id rest endpoint", [
-                        MetadataType, FileType
-                    ]),
-                    type = rest,
-                    prepare_args_fun = build_set_metadata_prepare_deprecated_id_rest_args_fun(
+                    prepare_args_fun = build_set_metadata_prepare_rest_args_fun(
                         MetadataType, FileObjectId, QsParameters
                     ),
                     validate_result_fun = ValidateRestCallResultFun
@@ -667,22 +662,7 @@ set_metadata_test_base(
 
 
 %% @private
-build_set_metadata_prepare_new_id_rest_args_fun(MetadataType, FileObjectId, QsParams) ->
-    build_set_metadata_prepare_rest_args_fun(new_id, MetadataType, FileObjectId, QsParams).
-
-
-%% @private
-build_set_metadata_prepare_deprecated_path_rest_args_fun(MetadataType, FilePath, QsParams) ->
-    build_set_metadata_prepare_rest_args_fun(deprecated_path, MetadataType, FilePath, QsParams).
-
-
-%% @private
-build_set_metadata_prepare_deprecated_id_rest_args_fun(MetadataType, FileObjectId, QsParams) ->
-    build_set_metadata_prepare_rest_args_fun(deprecated_id, MetadataType, FileObjectId, QsParams).
-
-
-%% @private
-build_set_metadata_prepare_rest_args_fun(Endpoint, MetadataType, ValidId, QsParams) ->
+build_set_metadata_prepare_rest_args_fun(MetadataType, ValidId, QsParams) ->
     fun(#api_test_ctx{data = Data0}) ->
         % 'metadata' is required key but it may not be present in Data in case of
         % missing required data test cases. Because it is send via http body and
@@ -694,17 +674,13 @@ build_set_metadata_prepare_rest_args_fun(Endpoint, MetadataType, ValidId, QsPara
             true ->
                 {Id, Data1} = api_test_utils:maybe_substitute_bad_id(ValidId, Data0),
 
-                RestPath = case Endpoint of
-                    new_id -> ?NEW_ID_METADATA_REST_PATH(Id, MetadataType);
-                    deprecated_path -> ?DEPRECATED_PATH_METADATA_REST_PATH(Id, MetadataType);
-                    deprecated_id -> ?DEPRECATED_ID_METADATA_REST_PATH(Id, MetadataType)
-                end,
+                RestPath = ?NEW_ID_METADATA_REST_PATH(Id, MetadataType),
 
                 #rest_args{
                     method = put,
                     headers = case MetadataType of
-                        <<"rdf">> -> #{<<"content-type">> => <<"application/rdf+xml">>};
-                        _ -> #{<<"content-type">> => <<"application/json">>}
+                        <<"rdf">> -> #{?HDR_CONTENT_TYPE => <<"application/rdf+xml">>};
+                        _ -> #{?HDR_CONTENT_TYPE => <<"application/json">>}
                     end,
                     path = http_utils:append_url_parameters(
                         RestPath,
@@ -765,13 +741,21 @@ end_per_suite(_Config) ->
     oct_background:end_per_suite().
 
 
-init_per_testcase(_Case, Config) ->
-    ct:timetrap({minutes, 30}),
-    lfm_proxy:init(Config).
+init_per_group(_Group, Config) ->
+    lfm_proxy:init(Config, false).
 
 
-end_per_testcase(_Case, Config) ->
+end_per_group(_Group, Config) ->
     lfm_proxy:teardown(Config).
+
+
+init_per_testcase(_Case, Config) ->
+    ct:timetrap({minutes, 10}),
+    Config.
+
+
+end_per_testcase(_Case, _Config) ->
+    ok.
 
 
 %%%===================================================================

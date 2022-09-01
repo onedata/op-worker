@@ -22,7 +22,7 @@
 %% API
 -export([
     request/5, request/6,
-    user_token_header/2,
+    user_token_header/1,
     assert_request_error/2,
     get_rest_error/1
 ]).
@@ -32,10 +32,10 @@
 %%%===================================================================
 
 request(Node, URL, Method, Headers, Body) ->
-    request(Node, URL, Method, Headers, Body, [{recv_timeout, 15000}]).
+    request(Node, URL, Method, Headers, Body, [{recv_timeout, 60000}]).
 
 request(Node, URL, Method, Headers, Body, Opts) ->
-    CaCerts = rpc:call(Node, https_listener, get_cert_chain_ders, []),
+    CaCerts = opw_test_rpc:call(Node, https_listener, get_cert_chain_ders, []),
     Opts2 = [{ssl_options, [{cacerts, CaCerts}]} | Opts],
     Headers2 = case is_map(Headers) of
         true -> Headers;
@@ -52,8 +52,7 @@ request(Node, URL, Method, Headers, Body, Opts) ->
             Other
     end.
 
-user_token_header(Config, User) ->
-    AccessToken = ?config({access_token, User}, Config),
+user_token_header(AccessToken) ->
     case rand:uniform(3) of
         1 -> {?HDR_X_AUTH_TOKEN, AccessToken};
         2 -> {?HDR_AUTHORIZATION, <<"Bearer ", AccessToken/binary>>};
@@ -113,10 +112,9 @@ get_rest_error(Error) ->
 rest_endpoint(Node) ->
     Port = case get(port) of
         undefined ->
-            {ok, P} = test_utils:get_env(Node, ?APP_NAME, https_server_port),
-            PStr = case P of
+            PStr = case opw_test_rpc:get_env(Node, https_server_port) of
                 443 -> <<"">>;
-                _ -> <<":", (integer_to_binary(P))/binary>>
+                P when is_integer(P) -> <<":", (integer_to_binary(P))/binary>>
             end,
             put(port, PStr),
             PStr;

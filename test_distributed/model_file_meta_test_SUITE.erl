@@ -13,6 +13,7 @@
 
 -include("global_definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/fslogic/file_meta_forest.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -63,8 +64,8 @@ rename_test(Config) ->
     RootUuid = <<>>,
     SpaceId = <<"Space 1">>,
     SpaceId2 = <<"Space 2">>,
-    SpaceDir1Uuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
-    SpaceDir2Uuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId2),
+    SpaceDir1Uuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
+    SpaceDir2Uuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId2),
     {ok, #document{key = Space1DirUuid}} = ?assertMatch({ok, _},
         rpc:call(Worker2, file_meta, create, [{uuid, RootUuid}, #document{key = SpaceDir1Uuid,
             value = #file_meta{name = SpaceId, is_scope = true}, scope = SpaceId}])),
@@ -124,7 +125,7 @@ list_test(Config) ->
     % create file tree
     RootUuid = <<>>,
     SpaceId = <<"Space list 1">>,
-    Space1DirUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+    Space1DirUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
     {ok, #document{key = Space1DirUuid}} = ?assertMatch({ok, _},
         rpc:call(Worker2, file_meta, create, [{uuid, RootUuid}, #document{key = Space1DirUuid,
             value = #file_meta{name = SpaceId , is_scope = true}}])),
@@ -137,50 +138,50 @@ list_test(Config) ->
     ?assertMatch({ok, _},
         rpc:call(Worker1, file_meta, create, [{uuid, D1DirUuid}, #document{value = #file_meta{name = <<"f3">>}}])),
 
-    ?assertMatch({ok, [{<<"f1">>, _}, {<<"f2">>, _}, {<<"f3">>, _}], #{}},
+    ?assertMatch({ok, [{<<"f1">>, _}, {<<"f2">>, _}, {<<"f3">>, _}], #list_extended_info{}},
         model_file_meta_test_base:list_children(Worker1, <<"/Space list 1/list_test_d1">>, 0, 100)),
 
-    ?assertMatch({ok, [{<<"f1">>, _}, {<<"f2">>, _}, {<<"f3">>, _}], #{token := _}},
+    ?assertMatch({ok, [{<<"f1">>, _}, {<<"f2">>, _}, {<<"f3">>, _}], #list_extended_info{datastore_token = #link_token{}}},
         model_file_meta_test_base:list_children_using_token(Worker1, <<"/Space list 1/list_test_d1">>, 100)),
 
     test_utils:set_env(Workers, ?CLUSTER_WORKER_APP_NAME, fold_cache_timeout, timer:seconds(5)),
-    {ok, _, #{token := T1}} = ?assertMatch({ok, [{<<"f1">>, _}], #{token := _}},
+    {ok, _, #list_extended_info{datastore_token = T1}} = ?assertMatch({ok, [{<<"f1">>, _}], #list_extended_info{datastore_token = #link_token{}}},
         model_file_meta_test_base:list_children_using_token(Worker1,  <<"/Space list 1/list_test_d1">>, 1)),
-    {ok, _, #{token := T2}} = ?assertMatch({ok, [{<<"f2">>, _}], #{token := _}},
+    {ok, _, #list_extended_info{datastore_token = T2}} = ?assertMatch({ok, [{<<"f2">>, _}], #list_extended_info{datastore_token = #link_token{}}},
         model_file_meta_test_base:list_children_using_token(Worker1, <<"/Space list 1/list_test_d1">>, 1, T1)),
-    ?assertMatch({ok, [{<<"f3">>, _}], #{token := _}},
+    ?assertMatch({ok, [{<<"f3">>, _}], #list_extended_info{datastore_token = #link_token{}}},
         model_file_meta_test_base:list_children_using_token(Worker1, <<"/Space list 1/list_test_d1">>, 1, T2)),
 
     % let the previous cache expire
     timer:sleep(timer:seconds(5)),
     test_utils:set_env(Workers, ?CLUSTER_WORKER_APP_NAME, fold_cache_timeout, 0),
-    {ok, _, #{token := T3}} = ?assertMatch({ok, [{<<"f1">>, _}], #{token := _}},
+    {ok, _, #list_extended_info{datastore_token = T3}} = ?assertMatch({ok, [{<<"f1">>, _}], #list_extended_info{datastore_token = #link_token{}}},
         model_file_meta_test_base:list_children_using_token(Worker1, <<"/Space list 1/list_test_d1">>, 1)),
     timer:sleep(timer:seconds(10)),
-    ?assertMatch({ok, [{<<"f2">>, _}], #{token := _}},
+    ?assertMatch({ok, [{<<"f2">>, _}], #list_extended_info{datastore_token = #link_token{}}},
         model_file_meta_test_base:list_children_using_token(Worker1, <<"/Space list 1/list_test_d1">>, 1, T3)),
 
-    {ok, _, #{token := _T4, last_name := LN, last_tree := LT}} = ?assertMatch({ok, [{<<"f1">>, _}], #{token := _}},
+    {ok, _, #list_extended_info{datastore_token = _T4, last_name = LN, last_tree = LT}} = ?assertMatch({ok, [{<<"f1">>, _}], #list_extended_info{datastore_token = #link_token{}}},
         model_file_meta_test_base:list_children_using_token(Worker1, <<"/Space list 1/list_test_d1">>, 1)),
     ?assertMatch({ok, _},
         rpc:call(Worker1, file_meta, create, [{uuid, D1DirUuid}, #document{value = #file_meta{name = <<"f0">>}}])),
     timer:sleep(timer:seconds(10)),
-    ?assertMatch({ok, [{<<"f2">>, _}], #{token := _}},
+    ?assertMatch({ok, [{<<"f2">>, _}], #list_extended_info{datastore_token = #link_token{}}},
         model_file_meta_test_base:list_children(Worker1, <<"/Space list 1/list_test_d1">>, 0, 1, T2, LN, LT)),
 
-    {ok, _, #{token := T5, last_name := LN2, last_tree := LT2}} = ?assertMatch({ok, [{<<"f0">>, _}], #{token := _}},
+    {ok, _, #list_extended_info{datastore_token = T5, last_name = LN2, last_tree = LT2}} = ?assertMatch({ok, [{<<"f0">>, _}], #list_extended_info{datastore_token = #link_token{}}},
         model_file_meta_test_base:list_children_using_token(Worker1, <<"/Space list 1/list_test_d1">>, 1)),
     ?assertMatch({ok, _},
         rpc:call(Worker1, file_meta, create, [{uuid, D1DirUuid}, #document{value = #file_meta{name = <<"f02">>}}])),
     timer:sleep(timer:seconds(10)),
-    ?assertMatch({ok, [{<<"f02">>, _}], #{token := _}},
+    ?assertMatch({ok, [{<<"f02">>, _}], #list_extended_info{datastore_token = #link_token{}}},
         model_file_meta_test_base:list_children(Worker1, <<"/Space list 1/list_test_d1">>, 0, 1, T5, LN2, LT2)),
 
-    {ok, _, #{token := T6, last_name := LN3, last_tree := LT3}} = ?assertMatch({ok, [{<<"f0">>, _}], #{token := _}},
+    {ok, _, #list_extended_info{datastore_token = T6, last_name = LN3, last_tree = LT3}} = ?assertMatch({ok, [{<<"f0">>, _}], #list_extended_info{datastore_token = #link_token{}}},
         model_file_meta_test_base:list_children_using_token(Worker1, <<"/Space list 1/list_test_d1">>, 1)),
     ?assertMatch({ok, _},
         rpc:call(Worker1, file_meta, create, [{uuid, D1DirUuid}, #document{value = #file_meta{name = <<"f01">>}}])),
-    ?assertMatch({ok, [{<<"f02">>, _}], #{token := _}},
+    ?assertMatch({ok, [{<<"f02">>, _}], #list_extended_info{datastore_token = #link_token{}}},
         model_file_meta_test_base:list_children(Worker1, <<"/Space list 1/list_test_d1">>, 0, 1, T6, LN3, LT3)),
     ok.
 

@@ -13,14 +13,22 @@
 -author("Bartosz Walkowicz").
 
 -include("api_file_test_utils.hrl").
+-include("modules/fslogic/file_distribution.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include("modules/dir_stats_collector/dir_size_stats.hrl").
+-include("onenv_test_utils.hrl").
+-include("proto/oneclient/common_messages.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
+-include_lib("ctool/include/http/headers.hrl").
+-include_lib("ctool/include/privileges.hrl").
 
 -export([
-    all/0,
+    groups/0, all/0,
     init_per_suite/1, end_per_suite/1,
+    init_per_group/2, end_per_group/2,
     init_per_testcase/2, end_per_testcase/2
 ]).
 
@@ -34,25 +42,56 @@
     set_file_mode_test/1,
     set_mode_on_provider_not_supporting_space_test/1,
 
-    get_file_distribution_test/1,
-    get_dir_distribution_test/1
+    get_reg_file_distribution_test/1,
+    get_dir_distribution_1_test/1,
+    get_dir_distribution_2_test/1,
+    get_dir_distribution_3_test/1,
+    get_symlink_distribution_test/1,
+    
+    get_reg_file_storage_locations_test_posix/1,
+    get_reg_file_storage_locations_test_s3/1,
+
+    test_for_hardlink_between_files_test/1,
+    
+    gather_historical_dir_size_stats_layout_test/1,
+    gather_historical_dir_size_stats_slice_test/1
 ]).
 
+groups() -> [
+    {parallel_tests, [parallel], [
+        get_file_attrs_test,
+        get_shared_file_attrs_test,
+        get_attrs_on_provider_not_supporting_space_test,
+
+        get_file_shares_test,
+
+        set_file_mode_test,
+        set_mode_on_provider_not_supporting_space_test,
+
+        get_symlink_distribution_test,
+        get_reg_file_distribution_test,
+    
+        get_reg_file_storage_locations_test_posix,
+        get_reg_file_storage_locations_test_s3,
+
+        test_for_hardlink_between_files_test
+    ]},
+    {sequential_tests, [sequential], [
+        get_dir_distribution_1_test,
+        get_dir_distribution_2_test,
+        get_dir_distribution_3_test,
+        gather_historical_dir_size_stats_layout_test,
+        gather_historical_dir_size_stats_slice_test
+    ]}
+].
+
 all() -> [
-    get_file_attrs_test,
-    get_shared_file_attrs_test,
-    get_attrs_on_provider_not_supporting_space_test,
-
-    get_file_shares_test,
-
-    set_file_mode_test,
-    set_mode_on_provider_not_supporting_space_test,
-
-    get_file_distribution_test,
-    get_dir_distribution_test
+    {group, parallel_tests},
+    {group, sequential_tests}
 ].
 
 
+-define(BLOCK(__OFFSET, __SIZE), #file_block{offset = __OFFSET, size = __SIZE}).
 -define(ATTEMPTS, 30).
 
 
@@ -60,15 +99,16 @@ all() -> [
 %%% Get attrs test functions
 %%%===================================================================
 
+
 get_file_attrs_test(Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
 
-    {FileType, FilePath, FileGuid, _ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(8#707),
+    {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(8#707),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
     {ok, FileAttrs} = file_test_utils:get_attrs(P2Node, FileGuid),
-    JsonAttrs = attrs_to_json(undefined, FileAttrs),
+    JsonAttrs = api_test_utils:file_attrs_to_json(undefined, FileAttrs),
 
     ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
@@ -87,19 +127,7 @@ get_file_attrs_test(Config) ->
                 #scenario_template{
                     name = <<"Get attrs from ", FileType/binary, " using /data/ rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = build_get_attrs_prepare_new_id_rest_args_fun(FileObjectId),
-                    validate_result_fun = build_get_attrs_validate_rest_call_fun(JsonAttrs, undefined)
-                },
-                #scenario_template{
-                    name = <<"Get attrs from ", FileType/binary, " using /files/ rest endpoint">>,
-                    type = rest_with_file_path,
-                    prepare_args_fun = build_get_attrs_prepare_deprecated_path_rest_args_fun(FilePath),
-                    validate_result_fun = build_get_attrs_validate_rest_call_fun(JsonAttrs, undefined)
-                },
-                #scenario_template{
-                    name = <<"Get attrs from ", FileType/binary, " using /files-id/ rest endpoint">>,
-                    type = rest,
-                    prepare_args_fun = build_get_attrs_prepare_deprecated_id_rest_args_fun(FileObjectId),
+                    prepare_args_fun = build_get_attrs_prepare_rest_args_fun(FileObjectId),
                     validate_result_fun = build_get_attrs_validate_rest_call_fun(JsonAttrs, undefined)
                 },
                 #scenario_template{
@@ -144,7 +172,7 @@ get_shared_file_attrs_test(_Config) ->
 
     FileType = api_test_utils:randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()]),
-    {ok, FileGuid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, FilePath, 8#707),
+    {ok, FileGuid} = lfm_test_utils:create_file(FileType, P1Node, UserSessIdP1, FilePath, 8#707),
 
     ShareId1 = api_test_utils:share_file_and_sync_file_attrs(P1Node, SpaceOwnerSessId, Providers, FileGuid),
     ShareId2 = api_test_utils:share_file_and_sync_file_attrs(P1Node, SpaceOwnerSessId, Providers, FileGuid),
@@ -157,7 +185,7 @@ get_shared_file_attrs_test(_Config) ->
         file_test_utils:get_attrs(P2Node, FileGuid),
         ?ATTEMPTS
     ),
-    JsonAttrs = attrs_to_json(ShareId1, FileAttrs),
+    JsonAttrs = api_test_utils:file_attrs_to_json(ShareId1, FileAttrs),
 
     ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
@@ -167,13 +195,7 @@ get_shared_file_attrs_test(_Config) ->
                 #scenario_template{
                     name = <<"Get attrs from shared ", FileType/binary, " using /data/ rest endpoint">>,
                     type = {rest_with_shared_guid, file_id:guid_to_space_id(FileGuid)},
-                    prepare_args_fun = build_get_attrs_prepare_new_id_rest_args_fun(ShareObjectId),
-                    validate_result_fun = build_get_attrs_validate_rest_call_fun(JsonAttrs, ShareId1)
-                },
-                #scenario_template{
-                    name = <<"Get attrs from shared ", FileType/binary, " using /files-id/ rest endpoint">>,
-                    type = {deprecated_rest_with_shared_guid, file_id:guid_to_space_id(FileGuid)},
-                    prepare_args_fun = build_get_attrs_prepare_deprecated_id_rest_args_fun(ShareObjectId),
+                    prepare_args_fun = build_get_attrs_prepare_rest_args_fun(ShareObjectId),
                     validate_result_fun = build_get_attrs_validate_rest_call_fun(JsonAttrs, ShareId1)
                 },
                 #scenario_template{
@@ -207,15 +229,16 @@ get_shared_file_attrs_test(_Config) ->
 get_attrs_on_provider_not_supporting_space_test(_Config) ->
     P2Id = oct_background:get_provider_id(paris),
     [P2Node] = oct_background:get_provider_nodes(paris),
-    {FileType, FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
+    SpaceId = oct_background:get_space_id(space_krk),
+    {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
     ValidateRestCallResultFun = fun(_, {ok, RespCode, _RespHeaders, RespBody}) ->
-        ExpError = ?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id)),
+        ExpError = ?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id)),
         ?assertEqual({?HTTP_400_BAD_REQUEST, ExpError}, {RespCode, RespBody})
     end,
     ValidateGsCallResultFun = fun(_, Result) ->
-        ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id), Result)
+        ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id), Result)
     end,
 
     ?assert(onenv_api_test_runner:run_tests([
@@ -226,19 +249,7 @@ get_attrs_on_provider_not_supporting_space_test(_Config) ->
                 #scenario_template{
                     name = <<"Get attrs from ", FileType/binary, " on provider not supporting user using /data/ rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = build_get_attrs_prepare_new_id_rest_args_fun(FileObjectId),
-                    validate_result_fun = ValidateRestCallResultFun
-                },
-                #scenario_template{
-                    name = <<"Get attrs from ", FileType/binary, " on provider not supporting user using /files/ rest endpoint">>,
-                    type = rest_with_file_path,
-                    prepare_args_fun = build_get_attrs_prepare_deprecated_path_rest_args_fun(FilePath),
-                    validate_result_fun = ValidateRestCallResultFun
-                },
-                #scenario_template{
-                    name = <<"Get attrs from ", FileType/binary, " on provider not supporting user using /files-id/ rest endpoint">>,
-                    type = rest,
-                    prepare_args_fun = build_get_attrs_prepare_deprecated_id_rest_args_fun(FileObjectId),
+                    prepare_args_fun = build_get_attrs_prepare_rest_args_fun(FileObjectId),
                     validate_result_fun = ValidateRestCallResultFun
                 },
                 #scenario_template{
@@ -252,66 +263,77 @@ get_attrs_on_provider_not_supporting_space_test(_Config) ->
     ])).
 
 
-%% @private
--spec attrs_to_json(od_share:id(), #file_attr{}) -> map().
-attrs_to_json(ShareId, #file_attr{
-    guid = Guid,
-    name = Name,
-    mode = Mode,
-    uid = Uid,
-    gid = Gid,
-    atime = ATime,
-    mtime = MTime,
-    ctime = CTime,
-    type = Type,
-    size = Size,
-    shares = Shares,
-    provider_id = ProviderId,
-    owner_id = OwnerId
-}) ->
-    PublicAttrs = #{
-        <<"name">> => Name,
-        <<"atime">> => ATime,
-        <<"mtime">> => MTime,
-        <<"ctime">> => CTime,
-        <<"type">> => case Type of
-            ?REGULAR_FILE_TYPE -> <<"reg">>;
-            ?DIRECTORY_TYPE -> <<"dir">>;
-            ?SYMLINK_TYPE -> <<"lnk">>
-        end,
-        <<"size">> => Size
-    },
-
-    case ShareId of
-        undefined ->
-            {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-
-            PublicAttrs#{
-                <<"file_id">> => ObjectId,
-                <<"mode">> => <<"0", (integer_to_binary(Mode, 8))/binary>>,
-                <<"storage_user_id">> => Uid,
-                <<"storage_group_id">> => Gid,
-                <<"shares">> => Shares,
-                <<"provider_id">> => ProviderId,
-                <<"owner_id">> => OwnerId
-            };
-        _ ->
-            ShareGuid = file_id:guid_to_share_guid(Guid, ShareId),
-            {ok, ShareObjectId} = file_id:guid_to_objectid(ShareGuid),
-
-            PublicAttrs#{
-                <<"file_id">> => ShareObjectId,
-                <<"mode">> => <<"0", (integer_to_binary(2#111 band Mode, 8))/binary>>,
-                <<"storage_user_id">> => ?SHARE_UID,
-                <<"storage_group_id">> => ?SHARE_GID,
-                <<"shares">> => case lists:member(ShareId, Shares) of
-                    true -> [ShareId];
-                    false -> []
-                end,
-                <<"provider_id">> => <<"unknown">>,
-                <<"owner_id">> => <<"unknown">>
+test_for_hardlink_between_files_test(_Config) ->
+    [ProviderNode] = oct_background:get_provider_nodes(krakow),
+    GenPathFun = fun() ->
+        filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()])
+    end,
+    UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
+    {ok, TargetGuid} = lfm_test_utils:create_file(<<"file">>, ProviderNode, UserSessIdP1, GenPathFun()),
+    {ok, NotAffiliatedGuid} = lfm_test_utils:create_file(<<"file">>, ProviderNode, UserSessIdP1, GenPathFun()),
+    {ok, #file_attr{guid = LinkGuid1}} = lfm_proxy:make_link(ProviderNode, UserSessIdP1, GenPathFun(), TargetGuid),
+    {ok, #file_attr{guid = LinkGuid2}} = lfm_proxy:make_link(ProviderNode, UserSessIdP1, GenPathFun(), TargetGuid),
+    
+    MemRef = api_test_memory:init(),
+    
+    ValidateResultFun = fun
+        (<<"invalid_guid">>, Result, _ExpectedOk, _ExpectedError, ExpectedBadValue) ->
+            ?assertEqual(ExpectedBadValue, Result);
+        (Guid, Result, ExpectedOk, ExpectedError, _ExpectedBadValue) ->
+            case lists:member(Guid, [TargetGuid, LinkGuid1, LinkGuid2]) of
+                true -> ?assertEqual(ExpectedOk, Result);
+                false -> ?assertEqual(ExpectedError, Result)
+            end
+    end,
+    
+    ValidateGsCallResultFun = fun
+        (_, Result) ->
+            MappedResult = case Result of
+                {ok, ResultMap} -> {ok, maps:without([<<"gri">>, <<"revision">>], ResultMap)};
+                _ -> Result
+            end, 
+            Guid = api_test_memory:get(MemRef, <<"guid">>),
+            ValidateResultFun(Guid, MappedResult, {ok, #{}}, ?ERROR_NOT_FOUND, ?ERROR_BAD_VALUE_IDENTIFIER(<<"guid">>))
+    end,
+    
+    ValidateRestCallResultFun = fun
+        (_, {ok, RespCode, _RespHeaders, _RespBody}) ->
+            Guid = api_test_memory:get(MemRef, <<"guid">>),
+            ValidateResultFun(Guid, RespCode, 204, 404, 400)
+    end,
+    
+    ?assert(onenv_api_test_runner:run_tests([
+        #suite_spec{
+            target_nodes = [ProviderNode],
+            client_spec = #client_spec{
+                correct = [
+                    user2,  % space owner - doesn't need any perms
+                    user3,  % files owner
+                    user4   % space member - should succeed as no perms are required
+                ]
+            },
+            scenario_templates = [
+                #scenario_template{
+                    name = <<"Test for hardlink between files using gs api">>,
+                    type = gs,
+                    prepare_args_fun = build_get_hardlink_relation_prepare_gs_args_fun(MemRef, TargetGuid),
+                    validate_result_fun = ValidateGsCallResultFun
+                },
+                #scenario_template{
+                    name = <<"Test for hardlink between files using rest api">>,
+                    type = rest,
+                    prepare_args_fun = build_get_hardlink_relation_prepare_rest_args_fun(MemRef, TargetGuid),
+                    validate_result_fun = ValidateRestCallResultFun
+                }
+            ],
+            data_spec = #data_spec{
+                optional = [<<"guid">>],
+                correct_values = #{
+                    <<"guid">> => [LinkGuid1, LinkGuid2, NotAffiliatedGuid, TargetGuid]
+                }
             }
-    end.
+        }
+    ])).
 
 
 %% @private
@@ -322,7 +344,7 @@ get_attrs_data_spec(normal_mode) ->
         correct_values = #{<<"attribute">> => ?PRIVATE_BASIC_ATTRIBUTES},
         bad_values = [
             {<<"attribute">>, true, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PRIVATE_BASIC_ATTRIBUTES)},
-            {<<"attribute">>, 10, {gs, ?ERROR_BAD_VALUE_BINARY(<<"attribute">>)}},
+            {<<"attribute">>, 10, {gs, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PRIVATE_BASIC_ATTRIBUTES)}},
             {<<"attribute">>, <<"NaN">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PRIVATE_BASIC_ATTRIBUTES)}
         ]
     };
@@ -332,7 +354,7 @@ get_attrs_data_spec(share_mode) ->
         correct_values = #{<<"attribute">> => ?PUBLIC_BASIC_ATTRIBUTES},
         bad_values = [
             {<<"attribute">>, true, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PUBLIC_BASIC_ATTRIBUTES)},
-            {<<"attribute">>, 10, {gs, ?ERROR_BAD_VALUE_BINARY(<<"attribute">>)}},
+            {<<"attribute">>, 10, {gs, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PUBLIC_BASIC_ATTRIBUTES)}},
             {<<"attribute">>, <<"NaN">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PUBLIC_BASIC_ATTRIBUTES)},
             {<<"attribute">>, <<"owner_id">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PUBLIC_BASIC_ATTRIBUTES)}
         ]
@@ -340,42 +362,15 @@ get_attrs_data_spec(share_mode) ->
 
 
 %% @private
--spec build_get_attrs_prepare_new_id_rest_args_fun(file_id:objectid()) ->
+-spec build_get_attrs_prepare_rest_args_fun(file_meta:path() | file_id:objectid()) ->
     onenv_api_test_runner:prepare_args_fun().
-build_get_attrs_prepare_new_id_rest_args_fun(FileObjectId) ->
-    build_get_attrs_prepare_rest_args_fun(new_id, FileObjectId).
-
-
-%% @private
--spec build_get_attrs_prepare_deprecated_path_rest_args_fun(file_meta:path()) ->
-    onenv_api_test_runner:prepare_args_fun().
-build_get_attrs_prepare_deprecated_path_rest_args_fun(FilePath) ->
-    build_get_attrs_prepare_rest_args_fun(deprecated_path, FilePath).
-
-
-%% @private
--spec build_get_attrs_prepare_deprecated_id_rest_args_fun(file_id:objectid()) ->
-    onenv_api_test_runner:prepare_args_fun().
-build_get_attrs_prepare_deprecated_id_rest_args_fun(FileObjectId) ->
-    build_get_attrs_prepare_rest_args_fun(deprecated_id, FileObjectId).
-
-
-%% @private
--spec build_get_attrs_prepare_rest_args_fun(
-    Endpoint :: new_id | deprecated_path | deprecated_id,
-    ValidId :: file_meta:path() | file_id:objectid()
-) ->
-    onenv_api_test_runner:prepare_args_fun().
-build_get_attrs_prepare_rest_args_fun(Endpoint, ValidId) ->
+build_get_attrs_prepare_rest_args_fun(ValidId) ->
     fun(#api_test_ctx{data = Data0}) ->
         Data1 = utils:ensure_defined(Data0, #{}),
         {Id, Data2} = api_test_utils:maybe_substitute_bad_id(ValidId, Data1),
 
-        RestPath = case Endpoint of
-            new_id -> <<"data/", Id/binary>>;
-            deprecated_path -> <<"metadata/attrs", Id/binary>>;
-            deprecated_id -> <<"metadata-id/attrs/", Id/binary>>
-        end,
+        RestPath = <<"data/", Id/binary>>,
+
         #rest_args{
             method = get,
             path = http_utils:append_url_parameters(
@@ -397,6 +392,44 @@ build_get_attrs_prepare_gs_args_fun(FileGuid, Scope) ->
             operation = get,
             gri = #gri{type = op_file, id = GriId, aspect = attrs, scope = Scope},
             data = Data1
+        }
+    end.
+
+
+%% @private
+-spec build_get_hardlink_relation_prepare_gs_args_fun(api_test_memory:mem_ref(), file_id:file_guid()) ->
+    onenv_api_test_runner:prepare_args_fun().
+build_get_hardlink_relation_prepare_gs_args_fun(MemRef, FileGuid) ->
+    fun(#api_test_ctx{data = Data0}) ->
+        {GriId, Data1} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data0),
+        Guid2 = maps:get(<<"guid">>, Data1, <<"invalid_guid">>),
+        api_test_memory:set(MemRef, <<"guid">>, Guid2),
+        
+        #gs_args{
+            operation = get,
+            gri = #gri{type = op_file, id = GriId, aspect = {hardlinks, Guid2}, scope = private},
+            data = undefined
+        }
+    end.
+
+
+%% @private
+-spec build_get_hardlink_relation_prepare_rest_args_fun(api_test_memory:mem_ref(), file_id:file_guid()) ->
+    onenv_api_test_runner:prepare_args_fun().
+build_get_hardlink_relation_prepare_rest_args_fun(MemRef, FileGuid) ->
+    fun(#api_test_ctx{data = Data0}) ->
+        Data1 = utils:ensure_defined(Data0, #{}),
+        {ok, ValidObjectId} = file_id:guid_to_objectid(FileGuid),
+        {Id, _Data2} = api_test_utils:maybe_substitute_bad_id(ValidObjectId, Data1),
+        Guid2 = maps:get(<<"guid">>, Data1, <<"invalid_guid">>),
+        {ok, ObjectId2} = file_id:guid_to_objectid(Guid2),
+        api_test_memory:set(MemRef, <<"guid">>, Guid2),
+        
+        RestPath = <<"data/", Id/binary, "/hardlinks/", ObjectId2/binary>>,
+        
+        #rest_args{
+            method = get,
+            path = RestPath
         }
     end.
 
@@ -539,7 +572,7 @@ set_file_mode_test(Config) ->
     User2Id = oct_background:get_user_id(user2),
     User3Id = oct_background:get_user_id(user3),
 
-    {FileType, FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(8#707),
+    {FileType, _FilePath, FileGuid, ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(8#707),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
     ShareGuid = file_id:guid_to_share_guid(FileGuid, ShareId),
 
@@ -587,19 +620,7 @@ set_file_mode_test(Config) ->
                 #scenario_template{
                     name = <<"Set mode for ", FileType/binary, " using /data/ rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = build_set_mode_prepare_new_id_rest_args_fun(FileObjectId),
-                    validate_result_fun = ValidateRestSuccessfulCallFun
-                },
-                #scenario_template{
-                    name = <<"Set mode for ", FileType/binary, " using /files/ rest endpoint">>,
-                    type = rest_with_file_path,
-                    prepare_args_fun = build_set_mode_prepare_deprecated_path_rest_args_fun(FilePath),
-                    validate_result_fun = ValidateRestSuccessfulCallFun
-                },
-                #scenario_template{
-                    name = <<"Set mode for ", FileType/binary, " using /files-id/ rest endpoint">>,
-                    type = rest,
-                    prepare_args_fun = build_set_mode_prepare_deprecated_id_rest_args_fun(FileObjectId),
+                    prepare_args_fun = build_set_mode_prepare_rest_args_fun(FileObjectId),
                     validate_result_fun = ValidateRestSuccessfulCallFun
                 },
                 #scenario_template{
@@ -640,18 +661,20 @@ set_mode_on_provider_not_supporting_space_test(_Config) ->
     P2Id = oct_background:get_provider_id(paris),
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
-    {FileType, FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
+
+    SpaceId = oct_background:get_space_id(space_krk),
+    {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
     DataSpec = set_mode_data_spec(),
     DataSpecWithoutBadValues = DataSpec#data_spec{bad_values = []},
 
     ValidateRestCallResultFun = fun(_, {ok, RespCode, _RespHeaders, RespBody}) ->
-        ExpError = ?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id)),
+        ExpError = ?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id)),
         ?assertEqual({?HTTP_400_BAD_REQUEST, ExpError}, {RespCode, RespBody})
     end,
     ValidateGsCallResultFun = fun(_, Result) ->
-        ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id), Result)
+        ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id), Result)
     end,
 
     VerifyFun = fun(_, _) ->
@@ -672,13 +695,7 @@ set_mode_on_provider_not_supporting_space_test(_Config) ->
                 #scenario_template{
                     name = <<"Set mode for ", FileType/binary, " on provider not supporting user using /data/ rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = build_set_mode_prepare_new_id_rest_args_fun(FileObjectId),
-                    validate_result_fun = ValidateRestCallResultFun
-                },
-                #scenario_template{
-                    name = <<"Set mode for ", FileType/binary, " on provider not supporting user using /files-id/ rest endpoint">>,
-                    type = rest,
-                    prepare_args_fun = build_set_mode_prepare_deprecated_id_rest_args_fun(FileObjectId),
+                    prepare_args_fun = build_set_mode_prepare_rest_args_fun(FileObjectId),
                     validate_result_fun = ValidateRestCallResultFun
                 },
                 #scenario_template{
@@ -690,16 +707,6 @@ set_mode_on_provider_not_supporting_space_test(_Config) ->
             ],
             randomly_select_scenarios = true,
             data_spec = DataSpecWithoutBadValues
-        },
-        #scenario_spec{
-            name = <<"Set mode for ", FileType/binary, " on provider not supporting user using /files/ rest endpoint">>,
-            type = rest_with_file_path,
-            target_nodes = [P2Node],
-            client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK,
-
-            prepare_args_fun = build_set_mode_prepare_deprecated_path_rest_args_fun(FilePath),
-            validate_result_fun = ValidateRestCallResultFun,
-            verify_fun = VerifyFun
         }
     ])).
 
@@ -721,42 +728,14 @@ set_mode_data_spec() ->
 
 
 %% @private
--spec build_set_mode_prepare_new_id_rest_args_fun(file_id:objectid()) ->
+-spec build_set_mode_prepare_rest_args_fun(file_meta:path() | file_id:objectid()) ->
     onenv_api_test_runner:prepare_args_fun().
-build_set_mode_prepare_new_id_rest_args_fun(FileObjectId) ->
-    build_set_mode_prepare_rest_args_fun(new_id, FileObjectId).
-
-
-%% @private
--spec build_set_mode_prepare_deprecated_path_rest_args_fun(file_meta:path()) ->
-    onenv_api_test_runner:prepare_args_fun().
-build_set_mode_prepare_deprecated_path_rest_args_fun(FilePath) ->
-    build_set_mode_prepare_rest_args_fun(deprecated_path, FilePath).
-
-
-%% @private
--spec build_set_mode_prepare_deprecated_id_rest_args_fun(file_id:objectid()) ->
-    onenv_api_test_runner:prepare_args_fun().
-build_set_mode_prepare_deprecated_id_rest_args_fun(FileObjectId) ->
-    build_set_mode_prepare_rest_args_fun(deprecated_id, FileObjectId).
-
-
-%% @private
--spec build_set_mode_prepare_rest_args_fun(
-    Endpoint :: new_id | deprecated_path | deprecated_id,
-    ValidId :: file_meta:path() | file_id:objectid()
-) ->
-    onenv_api_test_runner:prepare_args_fun().
-build_set_mode_prepare_rest_args_fun(Endpoint, ValidId) ->
+build_set_mode_prepare_rest_args_fun(ValidId) ->
     fun(#api_test_ctx{data = Data0}) ->
         {Id, Data1} = api_test_utils:maybe_substitute_bad_id(
             ValidId, utils:ensure_defined(Data0, #{})
         ),
-        RestPath = case Endpoint of
-            new_id -> <<"data/", Id/binary>>;
-            deprecated_path -> <<"metadata/attrs", Id/binary>>;
-            deprecated_id -> <<"metadata-id/attrs/", Id/binary>>
-        end,
+        RestPath = <<"data/", Id/binary>>,
 
         #rest_args{
             method = put,
@@ -764,7 +743,7 @@ build_set_mode_prepare_rest_args_fun(Endpoint, ValidId) ->
                 RestPath,
                 maps:with([<<"attribute">>], Data1)
             ),
-            headers = #{<<"content-type">> => <<"application/json">>},
+            headers = #{?HDR_CONTENT_TYPE => <<"application/json">>},
             body = json_utils:encode(Data1)
         }
     end.
@@ -790,12 +769,16 @@ build_set_mode_prepare_gs_args_fun(FileGuid, Scope) ->
 %%%===================================================================
 
 
-get_file_distribution_test(Config) ->
+get_reg_file_distribution_test(Config) ->
     P1Id = oct_background:get_provider_id(krakow),
     [P1Node] = oct_background:get_provider_nodes(krakow),
 
     P2Id = oct_background:get_provider_id(paris),
     [P2Node] = oct_background:get_provider_nodes(paris),
+
+    SpaceId = oct_background:get_space_id(space_krk_par),
+    P1StorageId = get_storage_id(SpaceId, P1Id),
+    P2StorageId = get_storage_id(SpaceId, P2Id),
 
     SpaceOwnerSessIdP1 = oct_background:get_user_session_id(user2, krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
@@ -803,100 +786,298 @@ get_file_distribution_test(Config) ->
 
     FileType = <<"file">>,
     FilePath = filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()]),
-    {ok, FileGuid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, FilePath, 8#707),
-    {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, {guid, FileGuid}, <<"share">>),
+    {ok, FileGuid} = lfm_test_utils:create_file(FileType, P1Node, UserSessIdP1, FilePath, 8#707),
+    {ok, ShareId} = opt_shares:create(P1Node, SpaceOwnerSessIdP1, ?FILE_REF(FileGuid), <<"share">>),
 
     file_test_utils:await_sync(P2Node, FileGuid),
 
-    api_test_utils:fill_file_with_dummy_data(P1Node, UserSessIdP1, FileGuid, 0, 20),
-    ExpDist1 = [#{
-        <<"providerId">> => P1Id,
-        <<"blocks">> => [[0, 20]],
-        <<"totalBlocksSize">> => 20
-    }],
+    lfm_test_utils:write_file(P1Node, UserSessIdP1, FileGuid, 0, {rand_content, 20}),
+    ExpDist1 = #file_distribution_gather_result{distribution = #reg_distribution_gather_result{
+        distribution_per_provider = #{
+            P1Id => #provider_reg_distribution_get_result{
+                logical_size = 20,
+                blocks_per_storage = #{P1StorageId => [?BLOCK(0, 20)]}
+            },
+            P2Id => #provider_reg_distribution_get_result{
+                logical_size = 20,
+                blocks_per_storage = #{P2StorageId => []}
+                
+            }
+        }
+    }},
     wait_for_file_location_sync(P2Node, UserSessIdP2, FileGuid, ExpDist1),
-    get_distribution_test_base(FileType, FilePath, FileGuid, ShareId, ExpDist1, Config),
+    get_distribution_test_base(FileType, FileGuid, ShareId, ExpDist1, Config),
 
     % Write another block to file on P2 and check returned distribution
 
-    api_test_utils:fill_file_with_dummy_data(P2Node, UserSessIdP2, FileGuid, 30, 20),
-    ExpDist2 = [
-        #{
-            <<"providerId">> => P1Id,
-            <<"blocks">> => [[0, 20]],
-            <<"totalBlocksSize">> => 20
-        },
-        #{
-            <<"providerId">> => P2Id,
-            <<"blocks">> => [[30, 20]],
-            <<"totalBlocksSize">> => 20
+    lfm_test_utils:write_file(P2Node, UserSessIdP2, FileGuid, 30, {rand_content, 20}),
+    ExpDist2 = #file_distribution_gather_result{distribution = #reg_distribution_gather_result{
+        distribution_per_provider = #{
+            P1Id => #provider_reg_distribution_get_result{
+                logical_size = 50,
+                blocks_per_storage = #{P1StorageId => [?BLOCK(0, 20)]}
+            },
+            P2Id => #provider_reg_distribution_get_result{
+                logical_size = 50,
+                blocks_per_storage = #{P2StorageId => [?BLOCK(30, 20)]}
+            }
         }
-    ],
+    }},
     wait_for_file_location_sync(P1Node, UserSessIdP1, FileGuid, ExpDist2),
-    get_distribution_test_base(FileType, FilePath, FileGuid, ShareId, ExpDist2, Config).
+    get_distribution_test_base(FileType, FileGuid, ShareId, ExpDist2, Config).
 
 
-get_dir_distribution_test(Config) ->
-    [P1Node] = oct_background:get_provider_nodes(krakow),
+get_dir_distribution_1_test(Config) ->
+    FileType = <<"dir">>,
+
+    disable_dir_stats_collecting_for_space(krakow, space_krk_par),
+    disable_dir_stats_collecting_for_space(paris, space_krk_par),
+
     [P2Node] = oct_background:get_provider_nodes(paris),
 
-    SpaceOwnerSessIdP1 = oct_background:get_user_session_id(user2, krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
     UserSessIdP2 = oct_background:get_user_session_id(user3, paris),
 
-    FileType = <<"dir">>,
-    DirPath = filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()]),
-    {ok, DirGuid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, DirPath, 8#707),
-    {ok, ShareId} = lfm_proxy:create_share(P1Node, SpaceOwnerSessIdP1, {guid, DirGuid}, <<"share">>),
-    file_test_utils:await_sync(P2Node, DirGuid),
-
-    ExpDist = [],
-    wait_for_file_location_sync(P2Node, UserSessIdP2, DirGuid, ExpDist),
-    get_distribution_test_base(FileType, DirPath, DirGuid, ShareId, ExpDist, Config),
-
-    % Create file in dir and assert that dir distribution hasn't changed
-
-    {ok, FileGuid} = api_test_utils:create_file(
-        <<"file">>, P2Node, UserSessIdP2,
-        filename:join([DirPath, ?RANDOM_FILE_NAME()]),
-        8#707
+    #object{
+        guid = DirGuid,
+        shares = [ShareId],
+        children = [#object{guid = FileGuid}]
+    } = onenv_file_test_utils:create_and_sync_file_tree(
+        user3, space_krk_par, #dir_spec{
+            mode = 8#707,
+            shares = [#share_spec{}],
+            children = [#file_spec{}]
+        }
     ),
-    api_test_utils:fill_file_with_dummy_data(P2Node, UserSessIdP2, FileGuid, 30, 20),
 
-    wait_for_file_location_sync(P1Node, UserSessIdP1, DirGuid, ExpDist),
-    get_distribution_test_base(FileType, DirPath, DirGuid, ShareId, ExpDist, Config).
+    ExpDist = #file_distribution_gather_result{distribution = #dir_distribution_gather_result{
+        distribution_per_provider = #{
+            oct_background:get_provider_id(krakow) => ?ERROR_DIR_STATS_DISABLED_FOR_SPACE,
+            oct_background:get_provider_id(paris) => ?ERROR_DIR_STATS_DISABLED_FOR_SPACE
+        }
+    }},
+    wait_for_file_location_sync(paris, UserSessIdP2, DirGuid, ExpDist),
+    get_distribution_test_base(FileType, DirGuid, ShareId, ExpDist, Config),
+
+    % Write to file in dir and assert that dir distribution hasn't changed
+    lfm_test_utils:write_file(P2Node, UserSessIdP2, FileGuid, 30, {rand_content, 20}),
+
+    wait_for_file_location_sync(krakow, UserSessIdP1, DirGuid, ExpDist),
+    get_distribution_test_base(FileType, DirGuid, ShareId, ExpDist, Config).
+
+
+get_dir_distribution_2_test(Config) ->
+    FileType = <<"dir">>,
+
+    enable_dir_stats_collecting_for_space(krakow, space_krk_par),
+    enable_dir_stats_collecting_for_space(paris, space_krk_par),
+
+    SpaceId = oct_background:get_space_id(space_krk_par),
+    P1Id = oct_background:get_provider_id(krakow),
+    P1StorageId = get_storage_id(SpaceId, P1Id),
+    P2Id = oct_background:get_provider_id(paris),
+    P2StorageId = get_storage_id(SpaceId, P2Id),
+
+    [P2Node] = oct_background:get_provider_nodes(paris),
+    UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
+    UserSessIdP2 = oct_background:get_user_session_id(user3, paris),
+
+    #object{guid = DirGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
+        user3, space_krk_par, #dir_spec{mode = 8#707, shares = [#share_spec{}]}
+    ),
+
+    ExpDist1 = #file_distribution_gather_result{distribution = #dir_distribution_gather_result{
+        distribution_per_provider = #{
+            P1Id => #provider_dir_distribution_get_result{
+                logical_size = 0,
+                physical_size_per_storage = #{P1StorageId => 0}
+            },
+            P2Id => #provider_dir_distribution_get_result{
+                logical_size = 0,
+                physical_size_per_storage = #{P2StorageId => 0}
+            }
+        }
+    }},
+    wait_for_file_location_sync(paris, UserSessIdP2, DirGuid, ExpDist1),
+    get_distribution_test_base(FileType, DirGuid, ShareId, ExpDist1, Config),
+
+    {ok, FileGuid} = lfm_proxy:create(P2Node, UserSessIdP2, DirGuid, ?RAND_STR(), 8#707),
+    lfm_test_utils:write_file(P2Node, UserSessIdP2, FileGuid, 30, {rand_content, 20}),
+
+    ExpDist2 = #file_distribution_gather_result{distribution = #dir_distribution_gather_result{
+        distribution_per_provider = #{
+            P1Id => #provider_dir_distribution_get_result{
+                logical_size = 50,
+                physical_size_per_storage = #{P1StorageId => 0}
+            },
+            P2Id => #provider_dir_distribution_get_result{
+                logical_size = 50,
+                physical_size_per_storage = #{P2StorageId => 20}
+            }
+        }
+    }},
+    wait_for_file_location_sync(krakow, UserSessIdP1, DirGuid, ExpDist2),
+    get_distribution_test_base(FileType, DirGuid, ShareId, ExpDist2, Config).
+
+
+get_dir_distribution_3_test(Config) ->
+    FileType = <<"dir">>,
+
+    enable_dir_stats_collecting_for_space(krakow, space_krk_par),
+    disable_dir_stats_collecting_for_space(paris, space_krk_par),
+
+    SpaceId = oct_background:get_space_id(space_krk_par),
+    P1Id = oct_background:get_provider_id(krakow),
+    P1StorageId = get_storage_id(SpaceId, P1Id),
+    P2Id = oct_background:get_provider_id(paris),
+
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
+
+    UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
+    UserSessIdP2 = oct_background:get_user_session_id(user3, paris),
+
+    #object{guid = DirGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
+        user3, space_krk_par, #dir_spec{mode = 8#707, shares = [#share_spec{}]}
+    ),
+
+    ExpDist1 = #file_distribution_gather_result{distribution = #dir_distribution_gather_result{
+        distribution_per_provider = #{
+            P1Id => #provider_dir_distribution_get_result{
+                logical_size = 0,
+                physical_size_per_storage = #{P1StorageId => 0}
+            },
+            P2Id => ?ERROR_DIR_STATS_DISABLED_FOR_SPACE
+        }
+    }},
+    wait_for_file_location_sync(paris, UserSessIdP2, DirGuid, ExpDist1),
+    get_distribution_test_base(FileType, DirGuid, ShareId, ExpDist1, Config),
+
+    #object{guid = FileGuid} = onenv_file_test_utils:create_and_sync_file_tree(
+        user3, DirGuid, #file_spec{}
+    ),
+    lfm_test_utils:write_file(P1Node, UserSessIdP1, FileGuid, 5, {rand_content, 10}),
+    lfm_test_utils:write_file(P2Node, UserSessIdP2, FileGuid, 30, {rand_content, 20}),
+
+    ExpDist2 = #file_distribution_gather_result{distribution = #dir_distribution_gather_result{
+        distribution_per_provider = #{
+            P1Id => #provider_dir_distribution_get_result{
+                logical_size = 50,
+                physical_size_per_storage = #{P1StorageId => 10}
+            },
+            P2Id => ?ERROR_DIR_STATS_DISABLED_FOR_SPACE
+        }
+    }},
+    wait_for_file_location_sync(krakow, UserSessIdP1, DirGuid, ExpDist2),
+    get_distribution_test_base(FileType, DirGuid, ShareId, ExpDist2, Config).
+
+
+get_symlink_distribution_test(Config) ->
+    FileType = <<"sym">>,
+    
+    SpaceId = oct_background:get_space_id(space_krk_par),
+    P1Id = oct_background:get_provider_id(krakow),
+    P1StorageId = get_storage_id(SpaceId, P1Id),
+    P2Id = oct_background:get_provider_id(paris),
+    P2StorageId = get_storage_id(SpaceId, P2Id),
+    
+    #object{guid = SymGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
+        user3, space_krk_par, #symlink_spec{symlink_value = <<"abcd">>, shares = [#share_spec{}]}
+    ),
+    
+    ExpDist = #file_distribution_gather_result{distribution = #symlink_distribution_get_result{
+        logical_size = 0,
+        storages_per_provider = #{
+            P1Id => [P1StorageId],
+            P2Id => [P2StorageId]
+        }
+    }},
+    ClientSpec = #client_spec{
+        correct = [
+            user2, % space owner - doesn't need any perms
+            user3, % files owner (see fun create_shared_file/1)
+            user4  % any user is allowed to see symlinks distribution (as symlink always has 777 posix perms)
+        ],
+        unauthorized = [nobody],
+        forbidden_not_in_space = [user1]
+    },
+    get_distribution_test_base(FileType, SymGuid, ShareId, ExpDist, Config, ClientSpec).
+
+%% @private
+-spec enable_dir_stats_collecting_for_space(
+    oct_background:entity_selector(),
+    oct_background:entity_selector()
+) ->
+    ok.
+enable_dir_stats_collecting_for_space(ProviderPlaceholder, SpacePlaceholder) ->
+    SpaceId = oct_background:get_space_id(SpacePlaceholder),
+    ?rpc(ProviderPlaceholder, space_logic:update_support_parameters(SpaceId, #support_parameters{
+        dir_stats_service_enabled = true
+    })),
+    await_dir_stats_collecting_status(ProviderPlaceholder, SpaceId, enabled).
 
 
 %% @private
-wait_for_file_location_sync(Node, SessId, FileGuid, ExpDistribution) ->
-    SortedExpDistribution = lists:usort(ExpDistribution),
-
-    GetDistFun = fun() ->
-        case lfm_proxy:get_file_distribution(Node, SessId, {guid, FileGuid}) of
-            {ok, Dist} -> {ok, lists:usort(Dist)};
-            {error, _} = Error -> Error
-        end
-    end,
-    ?assertMatch({ok, SortedExpDistribution}, GetDistFun(), ?ATTEMPTS).
+-spec disable_dir_stats_collecting_for_space(
+    oct_background:entity_selector(),
+    oct_background:entity_selector()
+) ->
+    ok.
+disable_dir_stats_collecting_for_space(ProviderPlaceholder, SpacePlaceholder) ->
+    SpaceId = oct_background:get_space_id(SpacePlaceholder),
+    ?rpc(ProviderPlaceholder, space_logic:update_support_parameters(SpaceId, #support_parameters{
+        dir_stats_service_enabled = false
+    })),
+    await_dir_stats_collecting_status(ProviderPlaceholder, SpaceId, disabled).
 
 
 %% @private
-get_distribution_test_base(FileType, FilePath, FileGuid, ShareId, ExpDistribution, Config) ->
-    Providers = ?config(op_worker_nodes, Config),
-    SortedExpDistribution = lists:usort(ExpDistribution),
+-spec await_dir_stats_collecting_status(
+    oct_background:entity_selector(),
+    od_space:id(),
+    dir_stats_collector_config:extended_collecting_status()
+) ->
+    ok.
+await_dir_stats_collecting_status(ProviderPlaceholder, SpaceId, Status) ->
+    ?assertEqual(
+        Status,
+        ?rpc(ProviderPlaceholder, dir_stats_service_state:get_extended_status(SpaceId)),
+        ?ATTEMPTS
+    ).
+
+
+%% @private
+-spec get_storage_id(od_space:id(), oneprovider:id()) -> od_storage:id().
+get_storage_id(SpaceId, ProviderId) ->
+    {ok, Storages} = ?rpc(krakow, space_logic:get_provider_storages(SpaceId, ProviderId)),
+    hd(maps:keys(Storages)).
+
+
+%% @private
+wait_for_file_location_sync(ProviderSelector, SessId, FileGuid, ExpDistribution) ->
+    ?assertEqual(
+        ExpDistribution,
+        ?rpc(ProviderSelector, mi_file_metadata:gather_distribution(SessId, ?FILE_REF(FileGuid))),
+        ?ATTEMPTS
+    ).
+
+
+
+%% @private
+get_distribution_test_base(FileType, FileGuid, ShareId, ExpDistribution, Config) ->
+    get_distribution_test_base(FileType, FileGuid, ShareId, ExpDistribution, Config, ?CLIENT_SPEC_FOR_SPACE_KRK_PAR).
+
+
+%% @private
+get_distribution_test_base(FileType, FileGuid, ShareId, ExpDistribution, Config, ClientSpec) ->
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
+    ExpRestDistribution = opw_test_rpc:call(krakow, file_distribution_translator, gather_result_to_json, [rest, ExpDistribution, FileGuid]),
     ValidateRestSuccessfulCallFun = fun(_TestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
-        ?assertEqual({?HTTP_200_OK, SortedExpDistribution}, {RespCode, lists:usort(RespBody)})
+        ?assertEqual({?HTTP_200_OK, ExpRestDistribution}, {RespCode, RespBody})
     end,
-
-    ExpGsDistribution = rpc:call(
-        lists_utils:random_element(Providers),
-        file_gui_gs_translator,
-        translate_distribution,
-        [FileGuid, SortedExpDistribution]
-    ),
-
+    
+    ExpGsDistribution = opw_test_rpc:call(krakow, file_distribution_translator, gather_result_to_json, [gs, ExpDistribution, FileGuid]),
     CreateValidateGsSuccessfulCallFun = fun(Type) ->
         ExpGsResponse = ExpGsDistribution#{
             <<"gri">> => gri:serialize(#gri{
@@ -912,7 +1093,7 @@ get_distribution_test_base(FileType, FilePath, FileGuid, ShareId, ExpDistributio
     ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = ?config(op_worker_nodes, Config),
-            client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR,
+            client_spec = ClientSpec,
             scenario_templates = [
                 #scenario_template{
                     name = <<"Get distribution for ", FileType/binary, " using /data/FileId/distribution rest endpoint">>,
@@ -925,31 +1106,12 @@ get_distribution_test_base(FileType, FilePath, FileGuid, ShareId, ExpDistributio
                     type = gs,
                     prepare_args_fun = build_get_distribution_prepare_gs_args_fun(FileGuid, private),
                     validate_result_fun = CreateValidateGsSuccessfulCallFun(op_file)
-                },
-
-                %% TEST DEPRECATED REPLICA ENDPOINTS
-
-                #scenario_template{
-                    name = <<"Get distribution for ", FileType/binary, " using /replicas/ rest endpoint">>,
-                    type = rest_with_file_path,
-                    prepare_args_fun = build_get_replicas_prepare_rest_args_fun(path, FilePath),
-                    validate_result_fun = ValidateRestSuccessfulCallFun
-                },
-                #scenario_template{
-                    name = <<"Get distribution for ", FileType/binary, " using /replicas-id/ rest endpoint">>,
-                    type = rest,
-                    prepare_args_fun = build_get_replicas_prepare_rest_args_fun(id, FileObjectId),
-                    validate_result_fun = ValidateRestSuccessfulCallFun
-                },
-                #scenario_template{
-                    name = <<"Get distribution for ", FileType/binary, " using op_replica gs api">>,
-                    type = gs,
-                    prepare_args_fun = build_get_replicas_prepare_gs_args_fun(FileGuid, private),
-                    validate_result_fun = CreateValidateGsSuccessfulCallFun(op_replica)
                 }
             ],
-            data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
-                FileGuid, ShareId, undefined
+            data_spec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
+                api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+                    FileGuid, ShareId, undefined
+                )
             )
         }
     ])).
@@ -982,39 +1144,326 @@ build_get_distribution_prepare_gs_args_fun(FileGuid, Scope) ->
         }
     end.
 
+%%%===================================================================
+%%% Gather historical dir size stats test functions
+%%%===================================================================
+
+gather_historical_dir_size_stats_layout_test(Config) ->
+    enable_dir_stats_collecting_for_space(krakow, space_krk_par),
+    enable_dir_stats_collecting_for_space(paris, space_krk_par),
+    
+    SpaceId = oct_background:get_space_id(space_krk_par),
+    P1Id = oct_background:get_provider_id(krakow),
+    P1StorageId = get_storage_id(SpaceId, P1Id),
+    P2Id = oct_background:get_provider_id(paris),
+    P2StorageId = get_storage_id(SpaceId, P2Id),
+    
+    #object{guid = DirGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
+        user3, space_krk_par, #dir_spec{mode = 8#707, shares = [#share_spec{}]}
+    ),
+    Metrics = [?DAY_METRIC, ?HOUR_METRIC, ?MINUTE_METRIC, ?MONTH_METRIC],
+    ExpLayout = #{
+        ?DIR_COUNT => Metrics,
+        ?REG_FILE_AND_LINK_COUNT => Metrics,
+        ?TOTAL_SIZE => Metrics,
+        ?SIZE_ON_STORAGE(P1StorageId) => Metrics,
+        ?SIZE_ON_STORAGE(P2StorageId) => Metrics
+    },
+    await_dir_stats_collecting_status(krakow, SpaceId, enabled),
+    await_dir_stats_collecting_status(paris, SpaceId, enabled),
+    
+    ValidateGsSuccessfulCallFun = fun(_TestCtx, Result) ->
+        ?assertEqual({ok, ExpLayout}, Result)
+    end,
+    DataSpec = #data_spec{
+        optional = [<<"mode">>],
+        correct_values = #{<<"mode">> => [<<"layout">>]},
+        bad_values = [
+            {<<"mode">>, mode, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"mode">>, [<<"layout">>, <<"slice">>])}
+        ]
+    },
+    gather_historical_dir_size_stats_test_base(
+        DirGuid, ShareId, ValidateGsSuccessfulCallFun, Config, DataSpec, #{}).
+
+
+gather_historical_dir_size_stats_slice_test(Config) ->
+    enable_dir_stats_collecting_for_space(krakow, space_krk_par),
+    enable_dir_stats_collecting_for_space(paris, space_krk_par),
+    
+    SpaceId = oct_background:get_space_id(space_krk_par),
+    P1Id = oct_background:get_provider_id(krakow),
+    P1StorageId = get_storage_id(SpaceId, P1Id),
+    P2Id = oct_background:get_provider_id(paris),
+    P2StorageId = get_storage_id(SpaceId, P2Id),
+    
+    #object{guid = DirGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
+        user3, space_krk_par, #dir_spec{
+            mode = 8#707,
+            shares = [#share_spec{}],
+            children = [
+                #file_spec{content = crypto:strong_rand_bytes(8)},
+                #file_spec{content = crypto:strong_rand_bytes(16)},
+                #dir_spec{}
+            ]
+        },
+        krakow
+    ),
+    Metrics = lists_utils:random_sublist([?DAY_METRIC, ?HOUR_METRIC, ?MINUTE_METRIC, ?MONTH_METRIC]),
+    Layout = maps_utils:random_submap(#{
+        ?DIR_COUNT => Metrics,
+        ?REG_FILE_AND_LINK_COUNT => Metrics,
+        ?TOTAL_SIZE => Metrics,
+        ?SIZE_ON_STORAGE(P1StorageId) => Metrics,
+        ?SIZE_ON_STORAGE(P2StorageId) => Metrics
+    }),
+    ExpSlice = maps:with(maps:keys(Layout), #{
+        ?DIR_COUNT => lists:foldl(fun(Metric, Acc) -> Acc#{Metric => [#{<<"value">> => 1}]} end, #{}, Metrics),
+        ?REG_FILE_AND_LINK_COUNT => lists:foldl(fun(Metric, Acc) -> Acc#{Metric => [#{<<"value">> => 2}]} end, #{}, Metrics),
+        ?SIZE_ON_STORAGE(P1StorageId) => lists:foldl(fun(Metric, Acc) -> Acc#{Metric => [#{<<"value">> => 24}]} end, #{}, Metrics),
+        ?SIZE_ON_STORAGE(P2StorageId) => lists:foldl(fun(Metric, Acc) -> Acc#{Metric => [#{<<"value">> => 0}]} end, #{}, Metrics),
+        ?TOTAL_SIZE => lists:foldl(fun(Metric, Acc) -> Acc#{Metric => [#{<<"value">> => 24}]} end, #{}, Metrics)
+    }),
+    await_dir_stats_collecting_status(krakow, SpaceId, enabled),
+    await_dir_stats_collecting_status(paris, SpaceId, enabled),
+    ValidateGsSuccessfulCallFun = fun(_TestCtx, Result) ->
+        {ok, ResultWindows} = ?assertMatch({ok, #{<<"windows">> := _}}, Result),
+        ResultWithoutTimestamps = tsc_structure:map(fun(_TimeSeriesName, _MetricsName, Windows) ->
+            lists:map(fun(Map) -> maps:remove(<<"timestamp">>, Map) end, Windows)
+        end, maps:get(<<"windows">> , ResultWindows)),
+        ?assertEqual(ExpSlice, ResultWithoutTimestamps)
+    end,
+    DataSpec = #data_spec{
+        required = [<<"layout">>],
+        optional = [
+            <<"mode">>, 
+            <<"startTimestamp">>,
+            <<"windowLimit">>
+        ],
+        correct_values = #{
+            <<"mode">> => [<<"slice">>],
+            <<"layout">> => [Layout],
+            <<"windowLimit">> => [1, 8],
+            <<"startTimestamp">> => [7967656156000] % some time in the future
+        },
+        bad_values = [
+            {<<"mode">>, mode, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"mode">>, [<<"layout">>, <<"slice">>])},
+            {<<"layout">>, 8, {?ERROR_BAD_VALUE_JSON(<<"layout">>)}},
+            {<<"windowLimit">>, 0, {?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"windowLimit">>, 1, 1000)}},
+            {<<"windowLimit">>, 8888, {?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"windowLimit">>, 1, 1000)}},
+            {<<"windowLimit">>, atom, {?ERROR_BAD_VALUE_INTEGER(<<"windowLimit">>)}},
+            {<<"startTimestamp">>, -1, {?ERROR_BAD_VALUE_TOO_LOW(<<"startTimestamp">>, 0)}},
+            {<<"startTimestamp">>, atom, {?ERROR_BAD_VALUE_INTEGER(<<"startTimestamp">>)}}
+        ]
+    },
+    gather_historical_dir_size_stats_test_base(DirGuid, ShareId, ValidateGsSuccessfulCallFun, Config, DataSpec, 
+        #{<<"mode">> => <<"slice">>} % add mode to data, when it is left out, as when it is omitted `layout` mode is assumed
+    ).
+
 
 %% @private
--spec build_get_replicas_prepare_rest_args_fun(
-    Endpoint :: id | path,
-    ValidId :: file_meta:path() | file_id:objectid()
-) ->
-    onenv_api_test_runner:prepare_args_fun().
-build_get_replicas_prepare_rest_args_fun(Endpoint, ValidId) ->
-    fun(#api_test_ctx{data = Data}) ->
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(ValidId, Data),
-
-        #rest_args{
-            method = get,
-            path = case Endpoint of
-                id -> <<"replicas-id/", Id/binary>>;
-                path -> <<"replicas", Id/binary>>
-            end
+gather_historical_dir_size_stats_test_base(FileGuid, ShareId, ValidateGsSuccessfulCallFun, Config, DataSpec, DefaultData) ->
+    
+    ?assert(onenv_api_test_runner:run_tests([
+        #suite_spec{
+            target_nodes = ?config(op_worker_nodes, Config),
+            client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR,
+            scenario_templates = [
+                #scenario_template{
+                    name = <<"Get dir size stats using op_file gs api">>,
+                    type = gs,
+                    prepare_args_fun = build_gather_historical_dir_size_stats_prepare_gs_args_fun(FileGuid, DefaultData),
+                    validate_result_fun = ValidateGsSuccessfulCallFun
+                }
+            ],
+            data_spec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
+                api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+                    FileGuid, ShareId, DataSpec
+                )
+            )
         }
-    end.
+    ])).
+
 
 
 %% @private
--spec build_get_replicas_prepare_gs_args_fun(file_id:file_guid(), gri:scope()) ->
+-spec build_gather_historical_dir_size_stats_prepare_gs_args_fun(file_id:file_guid(), map()) ->
     onenv_api_test_runner:prepare_args_fun().
-build_get_replicas_prepare_gs_args_fun(FileGuid, Scope) ->
+build_gather_historical_dir_size_stats_prepare_gs_args_fun(FileGuid, DefaultData) ->
     fun(#api_test_ctx{data = Data}) ->
-        {GriId, _} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data),
-
+        {GriId, Data2} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data),
+        
         #gs_args{
             operation = get,
-            gri = #gri{type = op_replica, id = GriId, aspect = distribution, scope = Scope}
+            gri = #gri{type = op_file, id = GriId, aspect = dir_size_stats},
+            data = maps:merge(DefaultData, Data2)
         }
     end.
+
+
+%%%===================================================================
+%%% Get file storage locations test functions
+%%%===================================================================
+
+get_reg_file_storage_locations_test_posix(Config) ->
+    get_reg_file_storage_locations_test(Config, posix).
+
+
+get_reg_file_storage_locations_test_s3(Config) ->
+    get_reg_file_storage_locations_test(Config, s3).
+
+
+get_reg_file_storage_locations_test(Config, StorageType) ->
+    P1Id = oct_background:get_provider_id(krakow),
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    
+    P2Id = oct_background:get_provider_id(paris),
+    [P2Node] = oct_background:get_provider_nodes(paris),
+    
+    SpaceId = case StorageType of
+        posix -> oct_background:get_space_id(space_krk_par);
+        s3 -> oct_background:get_space_id(space_s3)
+    end,
+    P1StorageId = get_storage_id(SpaceId, P1Id),
+    P2StorageId = get_storage_id(SpaceId, P2Id),
+    
+    UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
+    UserSessIdP2 = oct_background:get_user_session_id(user3, paris),
+    
+    #object{guid = FileGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
+        user3, fslogic_file_id:spaceid_to_space_dir_guid(SpaceId), #file_spec{
+            shares = [#share_spec{}],
+            mode = 8#707,
+            content = crypto:strong_rand_bytes(20)
+        }, krakow
+    ),
+    FileUuid = file_id:guid_to_uuid(FileGuid),
+    
+    {ok, FilePath} = lfm_proxy:get_file_path(P1Node, UserSessIdP1, FileGuid),
+    [_Sep, _SpaceName | PathTokens] = filename:split(FilePath),
+    FileStoragePath = case StorageType of
+        posix -> 
+            filename:join([<<"/">>, SpaceId | PathTokens]);
+        s3 -> 
+            <<A:1/binary, B:1/binary, C:1/binary, _/binary>> = FileUuid,
+            filename:join([<<"/">>, SpaceId, A, B, C, FileUuid])
+    end,
+    ExpResult1 = #{
+        <<"locationsPerProvider">> => #{
+            P1Id => #{
+                <<"locationsPerStorage">> => #{
+                    P1StorageId => FileStoragePath
+                }           
+            },
+            P2Id => #{
+                <<"locationsPerStorage">> => #{
+                    P2StorageId => null
+                }
+            }
+        }
+    },
+    assert_file_location_created(P2Node, FileUuid, P1Id),
+    get_storage_locations_test_base(FileGuid, ShareId, ExpResult1, Config),
+    
+    % Read file on the other provider and check file storage locations again.
+    
+    lfm_test_utils:read_file(P2Node, UserSessIdP2, FileGuid, 20),
+    assert_file_location_created(P1Node, FileUuid, P2Id),
+    ExpResult2 = #{
+        <<"locationsPerProvider">> => #{
+            P1Id => #{
+                <<"locationsPerStorage">> => #{
+                    P1StorageId => FileStoragePath
+                }
+            },
+            P2Id => #{
+                <<"locationsPerStorage">> => #{
+                    P2StorageId => FileStoragePath
+                }
+            }
+        }
+    },
+    get_storage_locations_test_base(FileGuid, ShareId, ExpResult2, Config).
+
+
+get_storage_locations_test_base(FileGuid, ShareId, ExpResult, Config) ->
+    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
+    
+    ValidateRestSuccessfulCallFun = fun(_TestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
+        ?assertEqual({?HTTP_200_OK, ExpResult}, {RespCode, RespBody})
+    end,
+    
+    ValidateGsSuccessfulCallFun = fun(_TestCtx, Result) ->
+        ExpGsResponse = ExpResult#{
+            <<"gri">> => gri:serialize(#gri{
+                type = op_file, id = FileGuid, aspect = storage_locations, scope = private
+            }),
+            <<"revision">> => 1
+        },
+        ?assertEqual({ok, ExpGsResponse}, Result)
+    end,
+    
+    ?assert(onenv_api_test_runner:run_tests([
+        #suite_spec{
+            target_nodes = ?config(op_worker_nodes, Config),
+            client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR,
+            scenario_templates = [
+                #scenario_template{
+                    name = <<"Get file storage locations using /data/FileId/storage_locations rest endpoint">>,
+                    type = rest,
+                    prepare_args_fun = build_get_storage_locations_prepare_rest_args_fun(FileObjectId),
+                    validate_result_fun = ValidateRestSuccessfulCallFun
+                },
+                #scenario_template{
+                    name = <<"Get file storage locations using op_file gs api">>,
+                    type = gs,
+                    prepare_args_fun = build_get_storage_locations_prepare_gs_args_fun(FileGuid, private),
+                    validate_result_fun = ValidateGsSuccessfulCallFun
+                }
+            ],
+            data_spec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
+                api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+                    FileGuid, ShareId, undefined
+                )
+            )
+        }
+    ])).
+
+
+%% @private
+-spec build_get_storage_locations_prepare_rest_args_fun(file_id:objectid()) ->
+    onenv_api_test_runner:prepare_args_fun().
+build_get_storage_locations_prepare_rest_args_fun(FileObjectId) ->
+    fun(#api_test_ctx{data = Data}) ->
+        {Id, _} = api_test_utils:maybe_substitute_bad_id(FileObjectId, Data),
+        
+        #rest_args{
+            method = get,
+            path = <<"data/", Id/binary, "/storage_locations">>
+        }
+    end.
+
+
+%% @private
+-spec build_get_storage_locations_prepare_gs_args_fun(file_id:file_guid(), gri:scope()) ->
+    onenv_api_test_runner:prepare_args_fun().
+build_get_storage_locations_prepare_gs_args_fun(FileGuid, Scope) ->
+    fun(#api_test_ctx{data = Data}) ->
+        {GriId, _} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data),
+        
+        #gs_args{
+            operation = get,
+            gri = #gri{type = op_file, id = GriId, aspect = storage_locations, scope = Scope}
+        }
+    end.
+
+
+%% @private
+-spec assert_file_location_created(node(), file_id:file_meta_uuid(), oneprovider:id()) -> 
+    {ok, file_location:doc()} | no_return().
+assert_file_location_created(Node, FileUuid, LocationProviderId) ->
+    ?assertMatch({ok, _}, opw_test_rpc:call(Node, fslogic_location_cache, get_location, [
+        file_location:id(FileUuid, LocationProviderId), FileUuid, false
+    ]), ?ATTEMPTS).
 
 
 %%%===================================================================
@@ -1025,7 +1474,17 @@ build_get_replicas_prepare_gs_args_fun(FileGuid, Scope) ->
 init_per_suite(Config) ->
     oct_background:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "api_tests",
-        envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}]
+        envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}],
+        posthook = fun(NewConfig) ->
+            User3Id = oct_background:get_user_id(user3),
+            lists:foreach(fun(SpacePlaceholder) ->
+                SpaceId = oct_background:get_space_id(SpacePlaceholder),
+                ozw_test_rpc:space_set_user_privileges(SpaceId, User3Id, [
+                    ?SPACE_MANAGE_SHARES | privileges:space_member()
+                ])
+            end, [space_krk_par, space_s3]),
+            NewConfig
+        end
     }).
 
 
@@ -1033,10 +1492,18 @@ end_per_suite(_Config) ->
     oct_background:end_per_suite().
 
 
+init_per_group(_Group, Config) ->
+    lfm_proxy:init(Config, false).
+
+
+end_per_group(_Group, Config) ->
+    lfm_proxy:teardown(Config).
+
+
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 10}),
-    lfm_proxy:init(Config).
+    Config.
 
 
-end_per_testcase(_Case, Config) ->
-    lfm_proxy:teardown(Config).
+end_per_testcase(_Case, _Config) ->
+    ok.

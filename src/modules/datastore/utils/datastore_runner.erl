@@ -16,7 +16,9 @@
 
 %% API
 -export([run_and_normalize_error/2]).
--export([extract_ok/1, extract_key/1, ok_if_not_found/1, ok_if_exists/1]).
+-export([extract_ok/1, extract_key/1, ok_if_not_found/1, ok_if_exists/1, ok_if_no_change/1]).
+-export([get_field/3]).
+-export([normalize_error/1]).
 
 %%%===================================================================
 %%% API
@@ -33,13 +35,13 @@ run_and_normalize_error(Fun, Module) ->
     try Fun() of
         Other -> Other
     catch
-        error:Reason ->
+        error:Reason:Stacktrace ->
             Reason2 = normalize_error(Reason),
             case Reason2 of
                 not_found ->
-                    ?debug_stacktrace("~p error: ~p", [Module, Reason2]);
+                    ?debug_stacktrace("~p error: ~p", [Module, Reason2], Stacktrace);
                 _ ->
-                    ?error_stacktrace("~p error: ~p", [Module, Reason2])
+                    ?error_stacktrace("~p error: ~p", [Module, Reason2], Stacktrace)
             end,
             {error, Reason2}
     end.
@@ -69,7 +71,7 @@ extract_key(Result) -> Result.
 %% @end
 %%--------------------------------------------------------------------
 -spec ok_if_not_found(T) -> ok | T.
-ok_if_not_found(?ERROR_NOT_FOUND) -> ok;
+ok_if_not_found({error, not_found}) -> ok;
 ok_if_not_found(Result) -> Result.
 
 %%--------------------------------------------------------------------
@@ -78,15 +80,25 @@ ok_if_not_found(Result) -> Result.
 %% @end
 %%--------------------------------------------------------------------
 -spec ok_if_exists(T) -> ok | T.
-ok_if_exists(?ERROR_ALREADY_EXISTS) -> ok;
+ok_if_exists({error, already_exists}) -> ok;
 ok_if_exists(Result) -> Result.
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
+
+-spec ok_if_no_change(T) -> ok | T.
+ok_if_no_change({error, no_change}) -> ok;
+ok_if_no_change(Result) -> Result.
+
+
+-spec get_field(datastore:key(), datastore_model:model(),
+    fun((datastore:doc()) -> {ok, FieldValue :: term()})) ->
+    {ok, FieldValue :: term()} | {error, term()}.
+get_field(Key, Model, GetterFun) ->
+    case Model:get(Key) of
+        {ok, Doc} -> GetterFun(Doc);
+        {error, _} = Error -> Error
+    end.
 
 %%--------------------------------------------------------------------
-%% @private
 %% @doc
 %% Returns just error reason for given error tuple
 %% @end

@@ -58,7 +58,8 @@ incremental_harvesting_test(Config) ->
     ]).
 incremental_harvesting_test_base(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    Result = files_stress_test_base:many_files_creation_tree_test_base(Config, false, true, true),
+    Result = files_stress_test_base:many_files_creation_tree_test_base(
+        Config, #{cache_guids => true, set_metadata => true}),
     RepNum = ?config(rep_num, Config),
     NewFiles = files_stress_test_base:get_param_value(files_saved, Result),
     NewDirs = files_stress_test_base:get_param_value(dirs_saved, Result),

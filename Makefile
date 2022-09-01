@@ -48,11 +48,11 @@ compile:
 inject-gui:
 	$(LIB_DIR)/gui/pull-gui.sh gui-image.conf
 
-helpers-deps: get-deps
-	make -C _build/default/lib/helpers submodules submodule=clproto
+submodules-in-deps: get-deps
+	make -C _build/default/lib/helpers submodules
 
 ## Generates a production release
-generate: helpers-deps template compile inject-gui
+generate: submodules-in-deps template inject-gui
 	$(REBAR) release $(OVERLAY_VARS)
 
 clean: relclean pkgclean
@@ -108,12 +108,12 @@ relclean:
 
 eunit:
 	$(REBAR) do eunit skip_deps=true --suite=${SUITES}
-## Rename all tests in order to remove duplicated names (add _(++i) suffix to each test)
+    ## Rename all tests in order to remove duplicated names (add _(++i) suffix to each test)
 	@for tout in `find test -name "TEST-*.xml"`; do awk '/testcase/{gsub("_[0-9]+\"", "_" ++i "\"")}1' $$tout > $$tout.tmp; mv $$tout.tmp $$tout; done
 
 eunit-with-cover:
 	$(REBAR) do eunit skip_deps=true --suite=${SUITES}, cover
-## Rename all tests in order to remove duplicated names (add _(++i) suffix to each test)
+    ## Rename all tests in order to remove duplicated names (add _(++i) suffix to each test)
 	@for tout in `find test -name "TEST-*.xml"`; do awk '/testcase/{gsub("_[0-9]+\"", "_" ++i "\"")}1' $$tout > $$tout.tmp; mv $$tout.tmp $$tout; done
 
 coverage:
@@ -126,7 +126,10 @@ coverage:
 
 # Dialyzes the project.
 dialyzer:
-	$(REBAR) dialyzer
+	@./bamboos/scripts/run-with-surefire-report.py \
+		--test-name Dialyze \
+		--report-path test/dialyzer_results/TEST-dialyzer.xml \
+		$(REBAR) dialyzer
 
 ##
 ## Packaging targets
@@ -145,7 +148,7 @@ package/$(PKG_ID).tar.gz:
 	rm -rf package/$(PKG_ID)
 	git archive --format=tar --prefix=$(PKG_ID)/ $(PKG_REVISION) | (cd package && tar -xf -)
 	git submodule foreach --recursive "git archive --prefix=$(PKG_ID)/\$$path/ \$$sha1 | (cd \$$toplevel/package && tar -xf -)"
-	${MAKE} -C package/$(PKG_ID) get-deps helpers-deps inject-gui
+	${MAKE} -C package/$(PKG_ID) get-deps submodules-in-deps inject-gui
 	for dep in package/$(PKG_ID) package/$(PKG_ID)/$(LIB_DIR)/*; do \
 	     echo "Processing dependency: `basename $${dep}`"; \
 	     vsn=`git --git-dir=$${dep}/.git describe --tags 2>/dev/null`; \
@@ -165,4 +168,8 @@ pkgclean:
 	rm -rf package
 
 codetag-tracker:
-	@echo "Skipping codetag-tracker for release version 20.02.*"
+	@./bamboos/scripts/run-with-surefire-report.py \
+		--test-name CodetagTracker \
+		--report-path test/codetag_tracker_results/TEST-codetag_tracker.xml \
+		./bamboos/scripts/codetag-tracker.sh --branch=${BRANCH} \
+		--excluded-dirs=node_package,gpb,helpers,gen_server_mock,rrdtool,rtransfer_link,locks

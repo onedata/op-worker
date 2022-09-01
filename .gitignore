@@ -23,11 +23,13 @@ rel/files/vm.args
 rel/vars.config
 
 /test/eunit_results
+test/dialyzer_results
+test/codetag_tracker_results
 /test_distributed/logs
 !/test_distributed/logs/.gitkeep
 /test_distributed/cover_tmp.spec
 test_coverage
-src/modules/qos/expression/qos_expression_*.erl
+qos_expression_*.erl
 
 # OS X
 .DS_Store

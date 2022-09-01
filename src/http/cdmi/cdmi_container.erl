@@ -14,12 +14,12 @@
 -author("Tomasz Lichon").
 -author("Bartosz Walkowicz").
 
+-include("modules/fslogic/file_attr.hrl").
 -include("middleware/middleware.hrl").
 -include("http/cdmi.hrl").
 -include("global_definitions.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/errors.hrl").
--include_lib("ctool/include/posix/file_attr.hrl").
 
 %% API
 -export([get_cdmi/2, put_cdmi/2, put_binary/2, delete_cdmi/2]).
@@ -80,13 +80,13 @@ put_cdmi(Req, #cdmi_req{
         % create directory
         {undefined, undefined, undefined} ->
             {ok, Guid} = cdmi_lfm:create_dir(SessId, Path),
-            cdmi_metadata:update_user_metadata(SessId, {guid, Guid}, Metadata),
+            cdmi_metadata:update_user_metadata(SessId, ?FILE_REF(Guid), Metadata),
             prepare_create_dir_cdmi_response(Req, CdmiReq, Guid);
         % update metadata
         {#file_attr{guid = FileGuid}, undefined, undefined} ->
             cdmi_metadata:update_user_metadata(
                 SessId,
-                {guid, FileGuid},
+                ?FILE_REF(FileGuid),
                 Metadata,
                 [MetadataName || {<<"metadata">>, MetadataName} <- Options]
             ),
@@ -94,12 +94,12 @@ put_cdmi(Req, #cdmi_req{
         % copy directory
         {undefined, CopyURI, undefined} ->
             {ok, Guid} = cdmi_lfm:cp(SessId, CopyURI, Path),
-            cdmi_metadata:update_user_metadata(SessId, {guid, Guid}, Metadata),
+            cdmi_metadata:update_user_metadata(SessId, ?FILE_REF(Guid), Metadata),
             prepare_create_dir_cdmi_response(Req, CdmiReq, Guid);
         % move directory
         {undefined, undefined, MoveURI} ->
             {ok, Guid} = cdmi_lfm:mv(SessId, MoveURI, Path),
-            cdmi_metadata:update_user_metadata(SessId, {guid, Guid}, Metadata),
+            cdmi_metadata:update_user_metadata(SessId, ?FILE_REF(Guid), Metadata),
             prepare_create_dir_cdmi_response(Req, CdmiReq, Guid)
     end.
 
@@ -127,7 +127,7 @@ delete_cdmi(Req, #cdmi_req{
     auth = ?USER(_UserId, SessionId),
     file_attrs = #file_attr{guid = Guid}
 } = CdmiReq) ->
-    ?check(lfm:rm_recursive(SessionId, {guid, Guid})),
+    ?lfm_check(lfm:rm_recursive(SessionId, ?FILE_REF(Guid))),
     {true, Req, CdmiReq}.
 
 
@@ -142,7 +142,7 @@ delete_cdmi(Req, #cdmi_req{
 prepare_create_dir_cdmi_response(Req1, #cdmi_req{
     auth = ?USER(_UserId, SessionId)
 } = CdmiReq, FileGuid) ->
-    {ok, Attrs} = ?check(lfm:stat(SessionId, {guid, FileGuid})),
+    {ok, Attrs} = ?lfm_check(lfm:stat(SessionId, ?FILE_REF(FileGuid))),
     CdmiReq2 = CdmiReq#cdmi_req{file_attrs = Attrs},
     Answer = get_directory_info(?DEFAULT_GET_DIR_OPTS, CdmiReq2),
     Req2 = cowboy_req:set_resp_body(json_utils:encode(Answer), Req1),
@@ -160,6 +160,8 @@ get_directory_info(RequestedInfo, #cdmi_req{
         parent_guid = ParentGuid
     } = Attrs
 }) ->
+    FileRef = ?FILE_REF(Guid),
+
     lists:foldl(fun
         (<<"objectType">>, Acc) ->
             Acc#{<<"objectType">> => <<"application/cdmi-container">>};
@@ -188,14 +190,14 @@ get_directory_info(RequestedInfo, #cdmi_req{
             Acc#{<<"completionStatus">> => <<"Complete">>};
         (<<"metadata">>, Acc) ->
             Acc#{<<"metadata">> => cdmi_metadata:prepare_metadata(
-                SessionId, {guid, Guid}, <<>>, Attrs
+                SessionId, FileRef, <<>>, Attrs
             )};
         ({<<"metadata">>, Prefix}, Acc) ->
             Acc#{<<"metadata">> => cdmi_metadata:prepare_metadata(
-                SessionId, {guid, Guid}, Prefix, Attrs
+                SessionId, FileRef, Prefix, Attrs
             )};
         (<<"childrenrange">>, Acc) ->
-            {ok, ChildNum} = ?check(lfm:get_children_count(SessionId, {guid, Guid})),
+            {ok, ChildNum} = ?lfm_check(lfm:get_children_count(SessionId, FileRef)),
             {From, To} = case lists:keyfind(<<"children">>, 1, RequestedInfo) of
                 {<<"children">>, Begin, End} ->
                     MaxChildren = ?MAX_CHILDREN_PER_REQUEST,
@@ -219,15 +221,19 @@ get_directory_info(RequestedInfo, #cdmi_req{
             Acc#{<<"childrenrange">> => BinaryRange};
         ({<<"children">>, From, To}, Acc) ->
             MaxChildren = ?MAX_CHILDREN_PER_REQUEST,
-            {ok, ChildNum} = ?check(lfm:get_children_count(SessionId, {guid, Guid})),
+            {ok, ChildNum} = ?lfm_check(lfm:get_children_count(SessionId, FileRef)),
             {From1, To1} = normalize_childrenrange(From, To, ChildNum, MaxChildren),
-            {ok, List, _} = ?check(lfm:get_children(SessionId, {guid, Guid}, #{offset => From1, size => To1 - From1 + 1})),
+            {ok, List, _} = ?lfm_check(lfm:get_children(SessionId, FileRef, #{
+                offset => From1, limit => To1 - From1 + 1, tune_for_large_continuous_listing => false
+            })),
             Acc#{<<"children">> => lists:map(fun({FileGuid, Name}) ->
                 distinguish_directories(SessionId, FileGuid, Name)
             end, List)};
         (<<"children">>, Acc) ->
             MaxChildren = ?MAX_CHILDREN_PER_REQUEST,
-            {ok, List, _} = ?check(lfm:get_children(SessionId, {guid, Guid}, #{offset => 0, size => MaxChildren + 1})),
+            {ok, List, _} = ?lfm_check(lfm:get_children(SessionId, FileRef, #{
+                offset => 0, limit => MaxChildren + 1, tune_for_large_continuous_listing => false
+            })),
             case length(List) > MaxChildren of
                 true ->
                     throw(?ERROR_BAD_VALUE_TOO_HIGH(<<"childrenrange">>, MaxChildren));
@@ -275,7 +281,7 @@ normalize_childrenrange(From, To, _ChildNum, MaxChildren) ->
 -spec distinguish_directories(session:id(), file_id:file_guid(),
     Name :: binary()) -> binary() | no_return().
 distinguish_directories(SessionId, Guid, Name) ->
-    case ?check(lfm:stat(SessionId, {guid, Guid})) of
+    case ?lfm_check(lfm:stat(SessionId, ?FILE_REF(Guid))) of
         {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
             filepath_utils:ensure_ends_with_slash(Name);
         {ok, _} ->

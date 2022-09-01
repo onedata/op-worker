@@ -13,6 +13,7 @@
 -author("Krzysztof Trzepla").
 
 -include("global_definitions.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/diagnostic_messages.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -56,7 +57,7 @@ get_configuration_test(Config) ->
     SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
     UserId = ?config({user_id, <<"user1">>}, Config),
 
-    UserRootGuid = fslogic_uuid:user_root_dir_guid(UserId),
+    UserRootGuid = fslogic_file_id:user_root_dir_guid(UserId),
 
     ?assertMatch(#configuration{subscriptions = [_ | _], root_guid = UserRootGuid},
         ?fcm_req(Worker, get_configuration, [SessId])).
@@ -149,7 +150,7 @@ verify_storage_test_file_test(Config) ->
 
     FilePath = <<"/space_name1/", (generator:gen_name())/binary>>,
     {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker, SessId, FilePath)),
-    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId, {guid, FileGuid}, write)),
+    {ok, Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Worker, SessId, ?FILE_REF(FileGuid), write)),
     ?assertMatch({ok, _}, lfm_proxy:write(Worker, Handle, 0, <<"test">>)),
     ?assertEqual(ok, lfm_proxy:close(Worker, Handle)),
 

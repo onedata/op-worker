@@ -44,7 +44,7 @@
 
 % Inactivity time (in seconds) after which the history of past transfers will
 % be erased.
--define(HISTORY_LIMIT, application:get_env(?APP_NAME, transfers_history_limit_per_file, 100)).
+-define(HISTORY_LIMIT, op_worker:get_env(transfers_history_limit_per_file, 100)).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -344,7 +344,8 @@ resolve_conflict(_Ctx, NewDoc, PrevDoc) ->
 %% @private
 -spec file_guid_to_id(fslogic_worker:file_guid()) -> id().
 file_guid_to_id(FileGuid) ->
-    file_id:guid_to_uuid(FileGuid).
+    % TODO VFS-7443 - test transfers of hardlinks - is it possoble to have hardlink uuid in this module?
+    fslogic_file_id:ensure_referenced_uuid(file_id:guid_to_uuid(FileGuid)).
 
 
 %% @private

@@ -35,11 +35,32 @@ translate_value(#gri{aspect = transfers}, #{<<"transfers">> := TransfersIds}) ->
         aspect = instance,
         scope = private
     }) end, TransfersIds)};
+
 translate_value(#gri{aspect = transfers_active_channels}, ActiveChannels) ->
     ActiveChannels;
+
 translate_value(#gri{aspect = {transfers_throughput_charts, _}}, Charts) ->
     Charts;
+
 translate_value(#gri{aspect = evaluate_qos_expression}, Result) ->
+    Result;
+
+translate_value(#gri{aspect = datasets_details, scope = private}, {Datasets, IsLast}) ->
+    dataset_gui_gs_translator:translate_datasets_details_list(Datasets, IsLast);
+
+translate_value(#gri{
+    aspect = atm_workflow_execution_summaries,
+    scope = private
+}, {AtmWorkflowExecutionSummaries, IsLast}) ->
+    #{
+        <<"list">> => lists:map(
+            fun atm_workflow_execution_gui_gs_translator:translate_atm_workflow_execution_summary/1,
+            AtmWorkflowExecutionSummaries
+        ),
+        <<"isLast">> => IsLast
+    };
+
+translate_value(#gri{aspect = dir_stats_service_state, scope = private}, Result) ->
     Result.
 
 
@@ -52,7 +73,7 @@ translate_resource(#gri{id = SpaceId, aspect = instance, scope = private}, Space
         true ->
             RootDirGRI = gri:serialize(#gri{
                 type = op_file,
-                id = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+                id = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
                 aspect = instance,
                 scope = private
             }),

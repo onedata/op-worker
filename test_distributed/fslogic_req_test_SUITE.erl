@@ -35,7 +35,6 @@
     fslogic_get_file_attr_test/1,
     fslogic_get_file_attr_with_replication_status_not_requested_test/1,
     fslogic_get_file_attr_with_replication_status_requested_test/1,
-    fslogic_file_attrs_with_too_big_uid_and_gid_encoding_test/1,
     fslogic_get_file_children_attrs_test/1,
     fslogic_get_file_children_attrs_with_replication_status_test/1,
     fslogic_get_child_attr_test/1,
@@ -54,7 +53,6 @@ all() ->
         fslogic_get_file_attr_test,
         fslogic_get_file_attr_with_replication_status_not_requested_test,
         fslogic_get_file_attr_with_replication_status_requested_test,
-        fslogic_file_attrs_with_too_big_uid_and_gid_encoding_test,
         fslogic_get_file_children_attrs_test,
         fslogic_get_file_children_attrs_with_replication_status_test,
         fslogic_get_child_attr_test,
@@ -95,8 +93,8 @@ fslogic_get_file_attr_test_base(Config, CheckReplicationStatus) ->
     {SessId1, UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     {SessId2, UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user2">>}, Config)},
 
-    UserRootGuid1 = fslogic_uuid:user_root_dir_guid(UserId1),
-    UserRootGuid2 = fslogic_uuid:user_root_dir_guid(UserId2),
+    UserRootGuid1 = fslogic_file_id:user_root_dir_guid(UserId1),
+    UserRootGuid2 = fslogic_file_id:user_root_dir_guid(UserId2),
 
     FileName =  generator:gen_name(),
     FilePath = <<"/space_name1/", FileName/binary>>,
@@ -139,10 +137,10 @@ fslogic_get_file_attr_test_base(Config, CheckReplicationStatus) ->
     end, [
         {SessId1, UserId1, 8#1755, 0, <<"/">>, undefined, ?DIRECTORY_TYPE},
         {SessId2, UserId2, 8#1755, 0, <<"/">>, undefined, ?DIRECTORY_TYPE},
-        {SessId1, <<"space_name1">>, ?DEFAULT_DIR_PERMS, 0, <<"/space_name1">>, UserRootGuid1, ?DIRECTORY_TYPE},
-        {SessId2, <<"space_name2">>, ?DEFAULT_DIR_PERMS, 0, <<"/space_name2">>, UserRootGuid2, ?DIRECTORY_TYPE},
-        {SessId1, <<"space_name3">>, ?DEFAULT_DIR_PERMS, 0, <<"/space_name3">>, UserRootGuid1, ?DIRECTORY_TYPE},
-        {SessId2, <<"space_name4">>, ?DEFAULT_DIR_PERMS, 0, <<"/space_name4">>, UserRootGuid2, ?DIRECTORY_TYPE},
+        {SessId1, <<"space_name1">>, ?DEFAULT_DIR_MODE, 0, <<"/space_name1">>, UserRootGuid1, ?DIRECTORY_TYPE},
+        {SessId2, <<"space_name2">>, ?DEFAULT_DIR_MODE, 0, <<"/space_name2">>, UserRootGuid2, ?DIRECTORY_TYPE},
+        {SessId1, <<"space_name3">>, ?DEFAULT_DIR_MODE, 0, <<"/space_name3">>, UserRootGuid1, ?DIRECTORY_TYPE},
+        {SessId2, <<"space_name4">>, ?DEFAULT_DIR_MODE, 0, <<"/space_name4">>, UserRootGuid2, ?DIRECTORY_TYPE},
         {SessId1, FileName, ?DEFAULT_FILE_PERMS, FileUid, FilePath, Space1Guid, ?REGULAR_FILE_TYPE}
     ]),
     ?assertMatch(
@@ -151,31 +149,6 @@ fslogic_get_file_attr_test_base(Config, CheckReplicationStatus) ->
     )),
 
     ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId1, {path, FilePath})).
-
-fslogic_file_attrs_with_too_big_uid_and_gid_encoding_test(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
-
-    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(
-        Worker, SessId, filename:join([<<"/space_name1">>, generator:gen_name()]))
-    ),
-    {ok, FileAttr} = lfm_proxy:stat(Worker, SessId, {guid, FileGuid}),
-
-    OriginalMsg = #server_message{message_body = #fuse_response{
-        status = #status{code = ?OK},
-        fuse_response = FileAttr#file_attr{uid = ?UID_MAX + 10, gid = ?UID_MAX + 10}
-    }},
-
-    ExpModifiedMsg = #server_message{message_body = #fuse_response{
-        status = #status{code = ?OK},
-        fuse_response = FileAttr#file_attr{uid = ?UID_MAX, gid = ?UID_MAX}
-    }},
-    {ok, Data} = rpc:call(Worker, clproto_serializer, serialize_server_message, [ExpModifiedMsg, false]),
-
-    ?assertEqual(
-        {ok, Data},
-        rpc:call(Worker, clproto_serializer, serialize_server_message, [OriginalMsg, false])
-    ).
 
 fslogic_get_file_children_attrs_with_replication_status_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -189,7 +162,10 @@ fslogic_get_file_children_attrs_with_replication_status_test(Config) ->
 
     #fuse_response{fuse_response = #file_children_attrs{child_attrs = ChildrenAttrs}} =
         ?assertMatch(#fuse_response{status = #status{code = ?OK}}, ?file_req(Worker, SessId, SpaceGuid,
-            #get_file_children_attrs{offset = 0, size = 1000, include_replication_status = true})),
+            #get_file_children_attrs{
+                listing_options = #{offset => 0, limit => 1000, tune_for_large_continuous_listing => false}, 
+                include_replication_status = true
+            })),
     ?assertMatch([_ | _], ChildrenAttrs),
 
     lists:foreach(fun
@@ -213,10 +189,10 @@ fslogic_get_file_children_attrs_test(Config) ->
     {SessId3, UserId3} = {?config({session_id, {<<"user3">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user3">>}, Config)},
     {SessId4, UserId4} = {?config({session_id, {<<"user4">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user4">>}, Config)},
 
-    UserRootGuid1 = fslogic_uuid:user_root_dir_guid(UserId1),
-    UserRootGuid2 = fslogic_uuid:user_root_dir_guid(UserId2),
-    UserRootGuid3 = fslogic_uuid:user_root_dir_guid(UserId3),
-    UserRootGuid4 = fslogic_uuid:user_root_dir_guid(UserId4),
+    UserRootGuid1 = fslogic_file_id:user_root_dir_guid(UserId1),
+    UserRootGuid2 = fslogic_file_id:user_root_dir_guid(UserId2),
+    UserRootGuid3 = fslogic_file_id:user_root_dir_guid(UserId3),
+    UserRootGuid4 = fslogic_file_id:user_root_dir_guid(UserId4),
 
     ValidateReadDirPlus = fun({SessId, Path, AttrsList}) ->
         #fuse_response{fuse_response = #guid{guid = FileGuid}} =
@@ -232,7 +208,9 @@ fslogic_get_file_children_attrs_test(Config) ->
                         {_, Attrs} = lists:foldl( %% foreach Offset
                             fun(_, {Offset, CurrentChildren}) ->
                                 Response = ?file_req(Worker, SessId, FileGuid,
-                                    #get_file_children_attrs{offset = Offset, size = Size}),
+                                    #get_file_children_attrs{
+                                        listing_options = #{offset => Offset, limit => Size, tune_for_large_continuous_listing => false}
+                                    }),
 
                                 ?assertMatch(#fuse_response{status = #status{code = ?OK}}, Response),
                                 #fuse_response{fuse_response = #file_children_attrs{
@@ -273,7 +251,7 @@ fslogic_get_file_children_attrs_test(Config) ->
 
     TestFun = fun({SessionId, Path, NameList, OwnersList, UserRootGuid}) ->
         Files = lists:map(fun({Name, Owner}) ->
-            {SessionId, Name, ?DEFAULT_DIR_PERMS, ?ROOT_UID, <<"/", Name/binary>>, Owner, UserRootGuid}
+            {SessionId, Name, ?DEFAULT_DIR_MODE, ?ROOT_UID, <<"/", Name/binary>>, Owner, UserRootGuid}
         end, lists:zip(NameList, OwnersList)),
 
         FilesAttrs = lists:map(fun({SessId, Name, Mode, UID, P, Owner, ParentGuid}) ->
@@ -324,8 +302,8 @@ fslogic_get_child_attr_test(Config) ->
     {SessId1, UserId1} = {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
     {SessId2, UserId2} = {?config({session_id, {<<"user2">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user2">>}, Config)},
 
-    UserRootGuid1 = fslogic_uuid:user_root_dir_guid(UserId1),
-    UserRootGuid2 = fslogic_uuid:user_root_dir_guid(UserId2),
+    UserRootGuid1 = fslogic_file_id:user_root_dir_guid(UserId1),
+    UserRootGuid2 = fslogic_file_id:user_root_dir_guid(UserId2),
 
     lists:foreach(fun({SessId, Name, Mode, UID, ParentGuid, ChildName}) ->
         ?assertMatch(#fuse_response{status = #status{code = ?OK},
@@ -335,10 +313,10 @@ fslogic_get_child_attr_test(Config) ->
             }
         }, ?file_req(Worker, SessId, ParentGuid, #get_child_attr{name = ChildName}))
     end, [
-        {SessId1, <<"space_name1">>, ?DEFAULT_DIR_PERMS, 0, UserRootGuid1, <<"space_name1">>},
-        {SessId2, <<"space_name2">>, ?DEFAULT_DIR_PERMS, 0, UserRootGuid2, <<"space_name2">>},
-        {SessId1, <<"space_name3">>, ?DEFAULT_DIR_PERMS, 0, UserRootGuid1, <<"space_name3">>},
-        {SessId2, <<"space_name4">>, ?DEFAULT_DIR_PERMS, 0, UserRootGuid2, <<"space_name4">>}
+        {SessId1, <<"space_name1">>, ?DEFAULT_DIR_MODE, 0, UserRootGuid1, <<"space_name1">>},
+        {SessId2, <<"space_name2">>, ?DEFAULT_DIR_MODE, 0, UserRootGuid2, <<"space_name2">>},
+        {SessId1, <<"space_name3">>, ?DEFAULT_DIR_MODE, 0, UserRootGuid1, <<"space_name3">>},
+        {SessId2, <<"space_name4">>, ?DEFAULT_DIR_MODE, 0, UserRootGuid2, <<"space_name4">>}
     ]),
     ?assertMatch(#fuse_response{status = #status{code = ?ENOENT}},
         ?file_req(Worker, SessId1, UserRootGuid1, #get_child_attr{name = <<"no such child">>})).
@@ -420,13 +398,15 @@ fslogic_read_dir_test(Config) ->
 
         ExpectedNames = lists:sort(NameList),
 
-        lists:foreach( %% Size
-            fun(Size) ->
+        lists:foreach( %% Limit
+            fun(Limit) ->
                 lists:foreach( %% Offset step
                     fun(OffsetStep) ->
                         {_, Names} = lists:foldl( %% foreach Offset
                             fun(_, {Offset, CurrentChildren}) ->
-                                Response = ?file_req(Worker, SessId, FileGuid, #get_file_children{offset = Offset, size = Size}),
+                                Response = ?file_req(Worker, SessId, FileGuid, #get_file_children{
+                                    listing_options = #{offset => Offset, limit => Limit, tune_for_large_continuous_listing => false}
+                                }),
 
                                 ?assertMatch(#fuse_response{status = #status{code = ?OK}}, Response),
                                 #fuse_response{fuse_response = #file_children{child_links = Links}} = Response,
@@ -436,13 +416,13 @@ fslogic_read_dir_test(Config) ->
                                         Name
                                     end, Links),
 
-                                ?assertEqual(min(max(0, length(ExpectedNames) - Offset), Size), length(RespNames)),
+                                ?assertEqual(min(max(0, length(ExpectedNames) - Offset), Limit), length(RespNames)),
 
                                 {Offset + OffsetStep, lists:usort(RespNames ++ CurrentChildren)}
                             end, {0, []}, lists:seq(1, 2 * round(length(ExpectedNames) / OffsetStep))),
 
                         ?assertMatch(ExpectedNames, lists:sort(lists:flatten(Names)))
-                    end, lists:seq(1, Size))
+                    end, lists:seq(1, Limit))
 
             end, lists:seq(1, length(ExpectedNames) + 1))
     end,
@@ -554,7 +534,7 @@ default_permissions_test(Config) ->
             lists:foreach(
                 fun(SessId) ->
                     Guid = get_guid_privileged(Worker, SessId, Path),
-                    ?assertMatch(#fuse_response{status = #status{code = ?EACCES}},
+                    ?assertMatch(#fuse_response{status = #status{code = ?EPERM}},
                         ?file_req(Worker, SessId, Guid, #create_dir{mode = 8#777, name = <<"test">>}))
                 end, SessIds)
 
@@ -604,7 +584,9 @@ default_permissions_test(Config) ->
                 fun(SessId) ->
                     Guid = get_guid_privileged(Worker, SessId, Path),
                     ?assertMatch(#fuse_response{status = #status{code = Code}},
-                        ?file_req(Worker, SessId, Guid, #get_file_children{offset = 0}))
+                        ?file_req(Worker, SessId, Guid, #get_file_children{
+                            listing_options = #{offset => 0, tune_for_large_continuous_listing => false}
+                        }))
                 end, SessIds);
         ({chmod, Path, Mode, SessIds, Code}) ->
             lists:foreach(
@@ -618,7 +600,7 @@ default_permissions_test(Config) ->
             {mkdir, <<"/space_name1">>, <<"test">>, 8#777, [SessId1], ?OK},
             {mkdir, <<"/space_name1/test">>, <<"test">>, 8#777, [SessId1], ?OK},
             {mkdir, <<"/space_name1/test/test">>, <<"test">>, 8#777, [SessId1], ?OK},
-            {mkdir, <<"/space_name1">>, ?TRASH_DIR_NAME, 8#777, [SessId1], ?EPERM}, % TODO-7064 change to EEXIST
+            {mkdir, <<"/space_name1">>, ?TRASH_DIR_NAME, 8#777, [SessId1], ?EPERM}, % TODO VFS-7064 change to EEXIST
             {get_attr, <<"/space_name1/test/test/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
             {get_attr, <<"/space_name1/test/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
             {get_attr, <<"/space_name1/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
@@ -627,7 +609,7 @@ default_permissions_test(Config) ->
             {delete, <<"/space_name1/test/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
             {delete, <<"/space_name1/test">>, [SessId2, SessId3, SessId4], ?ENOENT},
             {delete, <<"/space_name1">>, [SessId2, SessId3, SessId4], ?EPERM},
-            % TODO-7064 uncomment after adding link to trash directory
+            % TODO VFS-7064 uncomment after adding link to trash directory
             % {delete, filename:join([<<"/space_name1">>, ?TRASH_DIR_NAME]), [SessId1, SessId2, SessId3, SessId4], ?EPERM},
             {mkdir, <<"/space_name4">>, <<"test">>, 8#740, [SessId4], ?OK},
             {mkdir, <<"/space_name4/test">>, <<"test">>, 8#1770, [SessId4], ?OK},
@@ -645,7 +627,7 @@ default_permissions_test(Config) ->
             {chmod, <<"/space_name2">>, 8#123, [SessId1, SessId2], ?EPERM},
             {chmod, <<"/space_name3">>, 8#123, [SessId1, SessId2, SessId3], ?EPERM},
             {chmod, <<"/space_name4">>, 8#123, [SessId1, SessId2, SessId3, SessId4], ?EPERM},
-            % TODO-7064 uncomment after adding link to trash directory
+            % TODO VFS-7064 uncomment after adding link to trash directory
             % {chmod, filename:join([<<"/space_name1">>, ?TRASH_DIR_NAME]), 8#777, [SessId1], ?EPERM},
             {mkdir, <<"/space_name4">>, <<"test">>, 8#740, [SessId3], ?OK},
             {chmod, <<"/space_name4/test">>, 8#123, [SessId1, SessId2], ?EACCES},

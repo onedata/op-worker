@@ -19,7 +19,7 @@
 -export([get_routing_key/1, get_stream_key/1, get_stream/1, is_remote/1]).
 -export([get_context/1, update_context/2]).
 
--type ctx() :: undefined | {file, file_ctx:ctx()}.
+-type ctx() :: undefined | {file, file_id:file_guid()}.
 
 -export_type([ctx/0]).
 
@@ -114,17 +114,17 @@ is_remote(_) -> false.
 get_context(#subscription{type = Type}) ->
     get_context(Type);
 get_context(#file_attr_changed_subscription{file_guid = FileGuid}) ->
-    {file, file_ctx:new_by_guid(FileGuid)};
+    {file, FileGuid};
 get_context(#replica_status_changed_subscription{file_guid = FileGuid}) ->
-    {file, file_ctx:new_by_guid(FileGuid)};
+    {file, FileGuid};
 get_context(#file_location_changed_subscription{file_guid = FileGuid}) ->
-    {file, file_ctx:new_by_guid(FileGuid)};
+    {file, FileGuid};
 get_context(#file_perm_changed_subscription{file_guid = FileGuid}) ->
-    {file, file_ctx:new_by_guid(FileGuid)};
+    {file, FileGuid};
 get_context(#file_removed_subscription{file_guid = FileGuid}) ->
-    {file, file_ctx:new_by_guid(FileGuid)};
+    {file, FileGuid};
 get_context(#file_renamed_subscription{file_guid = FileGuid}) ->
-    {file, file_ctx:new_by_guid(FileGuid)};
+    {file, FileGuid};
 get_context(_) ->
     undefined.
 
@@ -138,22 +138,22 @@ get_context(_) ->
 update_context(#subscription{type = Type} = Sub, Ctx) ->
     Sub#subscription{type = update_context(Type, Ctx)};
 update_context(#file_attr_changed_subscription{} = Object, {file, FileCtx}) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     Object#file_attr_changed_subscription{file_guid = FileGuid};
 update_context(#replica_status_changed_subscription{} = Object, {file, FileCtx}) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     Object#replica_status_changed_subscription{file_guid = FileGuid};
 update_context(#file_location_changed_subscription{} = Object, {file, FileCtx}) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     Object#file_location_changed_subscription{file_guid = FileGuid};
 update_context(#file_perm_changed_subscription{} = Object, {file, FileCtx}) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     Object#file_perm_changed_subscription{file_guid = FileGuid};
 update_context(#file_removed_subscription{} = Object, {file, FileCtx}) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     Object#file_removed_subscription{file_guid = FileGuid};
 update_context(#file_renamed_subscription{} = Object, {file, FileCtx}) ->
-    FileGuid = file_ctx:get_guid_const(FileCtx),
+    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     Object#file_renamed_subscription{file_guid = FileGuid};
 update_context(Object, _Ctx) ->
     Object.
@@ -171,7 +171,7 @@ update_context(Object, _Ctx) ->
 -spec gen_routing_key_for_guid(binary(), fslogic_worker:file_guid()) -> subscription_manager:key().
 gen_routing_key_for_guid(Prefix, FileGuid) ->
     Uuid = file_id:guid_to_uuid(FileGuid),
-    case fslogic_uuid:is_user_root_dir_uuid(Uuid) of
+    case fslogic_file_id:is_user_root_dir_uuid(Uuid) of
         true ->
             % Change user's root uuid to main root dir uuid
             RootUuid = ?GLOBAL_ROOT_DIR_UUID,

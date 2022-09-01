@@ -14,6 +14,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/events/definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -279,7 +280,7 @@ end_per_testcase(_Case, Config) ->
 clear_state(Worker) ->
     {ok, Docs} = rpc:call(Worker, monitoring_state, list, []),
     lists:foreach(fun(#document{key = Id, value = #monitoring_state{rrd_guid = Guid}}) ->
-        lfm_proxy:unlink(Worker, ?ROOT_SESS_ID, {guid, Guid}),
+        lfm_proxy:unlink(Worker, ?ROOT_SESS_ID, ?FILE_REF(Guid)),
         ?assertMatch(ok, rpc:call(Worker, monitoring_state, delete, [Id]))
     end, Docs).
 

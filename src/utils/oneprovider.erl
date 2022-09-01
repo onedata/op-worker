@@ -24,7 +24,8 @@
 -export_type([id/0]).
 
 %% API
--export([get_domain/0, get_rest_endpoint/1, get_node_ip/0]).
+-export([get_domain/0, get_node_ip/0]).
+-export([build_url/1, build_url/2, build_rest_url/1]).
 -export([get_id/0, get_id_or_undefined/0, is_self/1, is_registered/0]).
 -export([trusted_ca_certs/0]).
 -export([get_oz_domain/0, replicate_oz_domain_to_node/1]).
@@ -42,11 +43,6 @@
 %%% API
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns the hostname of the node, based on its erlang node name.
-%% @end
-%%--------------------------------------------------------------------
 -spec get_domain() -> binary().
 get_domain() ->
     case provider_logic:get_domain() of
@@ -55,22 +51,27 @@ get_domain() ->
     end.
 
 
--spec get_rest_endpoint(binary() | string()) -> binary().
-get_rest_endpoint(Path) ->
-    Port = https_listener:port(),
-    Host = get_domain(),
-    str_utils:format_bin("https://~s:~B/api/v3/oneprovider/~s", [Host, Port, Path]).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns the IP of the node, retrieved from node_manager, which has
-%% acquired it by contacting OZ.
-%% @end
-%%--------------------------------------------------------------------
 -spec get_node_ip() -> inet:ip4_address().
 get_node_ip() ->
     node_manager:get_ip_address().
+
+
+-spec build_url(string() | binary()) -> binary().
+build_url(AbsolutePath) ->
+    build_url(https, AbsolutePath).
+
+-spec build_url(wss | https, string() | binary()) -> binary().
+build_url(Scheme, AbsolutePath) ->
+    Port = https_listener:port(),
+    Host = get_domain(),
+    str_utils:format_bin("~s://~s:~B~s", [Scheme, Host, Port, AbsolutePath]).
+
+
+-spec build_rest_url(binary() | [binary()]) -> binary().
+build_rest_url(AbsolutePath) when is_binary(AbsolutePath) ->
+    build_url(<<"/api/v3/oneprovider", AbsolutePath/binary>>);
+build_rest_url(PathTokens) when is_list(PathTokens) ->
+    build_rest_url(string:trim(filename:join([<<"/">> | PathTokens]), leading, [$/])).
 
 
 %%--------------------------------------------------------------------
@@ -205,8 +206,8 @@ set_up_service_in_onezone() ->
                 {error, _} = Error ->
                     ?alert(
                         "Oneprovider worker service could not be successfully set "
-                        "up in Onezone due to an error during GUI package upload: ~w. "
-                        "The Web GUI might be non-functional.",
+                        "up in Onezone due to an error during GUI package upload. "
+                        "The Web GUI might be non-functional.~nError was: ~p",
                         [Error]
                     )
             end
@@ -246,8 +247,8 @@ register_in_oz_dev(NodeList, ProviderName, Token) ->
         provider_auth:save(ProviderId, RootToken),
         {ok, ProviderId}
     catch
-        T:M ->
-            ?error_stacktrace("Cannot register in OZ - ~p:~p", [T, M]),
+        T:M:Stacktrace ->
+            ?error_stacktrace("Cannot register in OZ - ~p:~p", [T, M], Stacktrace),
             {error, M}
     end.
 

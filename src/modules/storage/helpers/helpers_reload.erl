@@ -35,7 +35,7 @@
 %%--------------------------------------------------------------------
 -spec refresh_helpers_by_storage(storage:id()) -> ok.
 refresh_helpers_by_storage(StorageId) ->
-    rpc:multicall(consistent_hashing:get_all_nodes(), ?MODULE, local_refresh_helpers, [StorageId]),
+    utils:rpc_multicall(consistent_hashing:get_all_nodes(), ?MODULE, local_refresh_helpers, [StorageId]),
     ok.
 
 
@@ -76,7 +76,7 @@ local_refresh_helpers(StorageId) ->
             end, HandlesSpaces)
         end, Sessions)
     catch Type:Error ->
-        StorageName = storage:fetch_name(StorageId),
+        StorageName = storage:fetch_name_of_local_storage(StorageId),
         ?error("Error updating active helper for storage ~tp with new args: ~p:~tp",
             [StorageName, Type, Error])
     end.

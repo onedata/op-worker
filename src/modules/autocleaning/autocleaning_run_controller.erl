@@ -166,7 +166,7 @@
 
 
 % batch size used to query the file_popularity_view
--define(BATCH_SIZE, application:get_env(?APP_NAME, autocleaning_view_batch_size, 1000)).
+-define(BATCH_SIZE, op_worker:get_env(autocleaning_view_batch_size, 1000)).
 -define(ID_SEPARATOR, <<"##">>).
 
 -define(UPDATE_DOC_COUNTERS_MAX_INTERVAL, timer:seconds(1)).
@@ -494,9 +494,9 @@ handle_cast(#message{type = MessageType, run_id = ARId}, State = #state{
     try
         handle_cast_internal(MessageType, State)
     catch
-        E:R ->
+        E:R:Stacktrace ->
             ?error_stacktrace("autocleaning_run_controller of run ~p failed unexpectedly due to ~p:~p",
-                [ARId, E, R]
+                [ARId, E, R], Stacktrace
             ),
             lists:foreach(fun(BatchNo) ->
                 cancel_replica_deletion_request(SpaceId, ARId, BatchNo)
@@ -655,6 +655,14 @@ maybe_stop_cleaning(State = #state{
     run_id = ARId,
     files_to_process = FilesToProcess,
     files_processed = FilesToProcess,
+    end_of_view_reached = true
+}) ->
+    stop(SpaceId, ARId),
+    State;
+maybe_stop_cleaning(State = #state{
+    space_id = SpaceId,
+    run_id = ARId,
+    run_cancelled = true,
     end_of_view_reached = true
 }) ->
     stop(SpaceId, ARId),

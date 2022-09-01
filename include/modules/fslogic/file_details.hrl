@@ -15,16 +15,24 @@
 -ifndef(FILE_DETAILS_HRL).
 -define(FILE_DETAILS_HRL, 1).
 
--include_lib("ctool/include/posix/file_attr.hrl").
+-include("modules/fslogic/file_attr.hrl").
 
 -record(file_details, {
     file_attr :: #file_attr{},
-    % StartId can be used to list dir children starting from this file
-    index_startid :: binary(),
+    symlink_value = undefined :: undefined | file_meta_symlinks:symlink(),
     active_permissions_type :: file_meta:permissions_type(),
     has_metadata :: boolean(),
-    has_direct_qos :: boolean(),
-    has_eff_qos :: boolean()
+    eff_qos_membership :: file_qos:membership() | undefined,
+    eff_dataset_membership :: dataset:membership() | undefined,
+    eff_protection_flags :: data_access_control:bitmask() | undefined,
+    recall_root_id :: file_id:file_guid() | undefined,
+    conflicting_name = undefined :: undefined | file_meta:name()
 }).
+
+% Macros defining types of membership
+-define(NONE_MEMBERSHIP, none).
+-define(DIRECT_MEMBERSHIP, direct).
+-define(ANCESTOR_MEMBERSHIP, ancestor).
+-define(DIRECT_AND_ANCESTOR_MEMBERSHIP, direct_and_ancestor).
 
 -endif.

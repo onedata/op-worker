@@ -56,7 +56,7 @@ get_configuration(SessId) ->
         {error, _} -> []
     end,
     #configuration{
-        root_guid = fslogic_uuid:user_root_dir_guid(UserId),
+        root_guid = fslogic_file_id:user_root_dir_guid(UserId),
         subscriptions = Subs,
         disabled_spaces = DisabledSpaces
     }.
@@ -99,7 +99,7 @@ create_storage_test_file(UserCtx, Guid, StorageId) ->
             ?error("Detecting storage ~p failed due to not existing space.", [StorageId]),
             throw(?ENOENT)
     end,
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     SpaceCtx = file_ctx:new_by_guid(SpaceGuid),
     UserId = user_ctx:get_user_id(UserCtx),
     SessionId = user_ctx:get_session_id(UserCtx),
@@ -142,8 +142,8 @@ create_storage_test_file(UserCtx, Guid, StorageId) ->
                     }
                 }
             catch
-                error:{badmatch, {error, Reason}} ->
-                    ?error_stacktrace("Detecting storage ~p failed due to ~p", [StorageId, Reason]),
+                error:{badmatch, {error, Reason}}:Stacktrace ->
+                    ?error_stacktrace("Detecting storage ~p failed due to ~p", [StorageId, Reason], Stacktrace),
                     #fuse_response{status = #status{code = Reason}}
             end;
         {error, Reason} ->

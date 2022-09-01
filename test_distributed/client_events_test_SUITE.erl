@@ -12,6 +12,8 @@
 -author("Michal Wrzeszcz").
 
 -include("fuse_test_utils.hrl").
+-include("modules/events/routing.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/event_messages.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include_lib("clproto/include/messages.hrl").
@@ -25,6 +27,9 @@
 
 -export([
     subscribe_on_dir_test/1,
+    sync_subscribe_on_dir_test/1,
+    proxy_subscribe_on_dir_test/1,
+    sync_proxy_subscribe_on_dir_test/1,
     subscribe_on_user_root_test/1,
     subscribe_on_user_root_filter_test/1,
     subscribe_on_new_space_test/1,
@@ -32,6 +37,7 @@
     events_on_conflicts_test/1,
     subscribe_on_replication_info_test/1,
     subscribe_on_replication_info_multiprovider_test/1,
+    events_for_hardlinks_test/1,
     attr_auth_filtering_test/1,
     location_auth_filtering_test/1,
     remove_auth_filtering_test/1,
@@ -41,6 +47,9 @@
 all() ->
     ?ALL([
         subscribe_on_dir_test,
+        sync_subscribe_on_dir_test,
+        proxy_subscribe_on_dir_test,
+        sync_proxy_subscribe_on_dir_test,
         subscribe_on_user_root_test,
         subscribe_on_user_root_filter_test,
         subscribe_on_new_space_test,
@@ -48,6 +57,7 @@ all() ->
         events_on_conflicts_test,
         subscribe_on_replication_info_test,
         subscribe_on_replication_info_multiprovider_test,
+        events_for_hardlinks_test,
         attr_auth_filtering_test,
         location_auth_filtering_test,
         remove_auth_filtering_test,
@@ -64,39 +74,77 @@ all() ->
 %%%===================================================================
 
 subscribe_on_dir_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    subscribe_on_dir_test_base(Config, <<"/space_name1">>, async, Worker).
+
+sync_subscribe_on_dir_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    subscribe_on_dir_test_base(Config, <<"/space_name1">>, sync, Worker).
+
+proxy_subscribe_on_dir_test(Config) ->
+    [_, Worker] = ?config(op_worker_nodes, Config),
+    subscribe_on_dir_test_base(Config, <<"/space_name4">>, async, Worker).
+
+sync_proxy_subscribe_on_dir_test(Config) ->
+    [_, Worker] = ?config(op_worker_nodes, Config),
+    subscribe_on_dir_test_base(Config, <<"/space_name4">>, sync, Worker).
+
+subscribe_on_dir_test_base(Config, SpaceName, SubscriptionType, EventProducingWorker) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    EventProducingWorkerSessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(EventProducingWorker)}}, Config),
     AccessToken = ?config({access_token, <<"user1">>}, Config),
-    SpaceGuid = client_simulation_test_base:get_guid(Worker1, SessionId, <<"/space_name1">>),
+    SpaceGuid = client_simulation_test_base:get_guid(Worker1, SessionId, SpaceName),
 
-    {ok, {_, RootHandle}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(Worker1, <<"0">>, SpaceGuid,
+    {ok, {_, RootHandle}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(EventProducingWorker, <<"0">>, SpaceGuid,
         generator:gen_name(), ?DEFAULT_DIR_PERMS)),
-    ?assertEqual(ok, lfm_proxy:close(Worker1, RootHandle)),
+    ?assertEqual(ok, lfm_proxy:close(EventProducingWorker, RootHandle)),
 
     {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
+    {ok, {EventProducingWorkerSock, _}} = fuse_test_utils:connect_via_token(
+        EventProducingWorker, [{active, true}], EventProducingWorkerSessionId, AccessToken),
 
     Filename = generator:gen_name(),
     Dirname = generator:gen_name(),
 
-    DirId = fuse_test_utils:create_directory(Sock, SpaceGuid, Dirname),
+    DirId = fuse_test_utils:create_directory(EventProducingWorkerSock, SpaceGuid, Dirname),
     Seq1 = get_seq(Config, <<"user1">>),
-    ?assertEqual(ok, ssl:send(Sock,
-        fuse_test_utils:generate_file_removed_subscription_message(0, Seq1, -Seq1, DirId))),
+    SubscriptionMessage = fuse_test_utils:generate_file_removed_subscription_message(0, Seq1, -Seq1, DirId),
     {ok, SubscriptionRoutingKey} = subscription_type:get_routing_key(#file_removed_subscription{file_guid = DirId}),
-    ?assertMatch({ok, [_]},
-        rpc:call(Worker1, subscription_manager, get_subscribers, [SubscriptionRoutingKey]), 10),
 
-    {FileGuid, HandleId} = fuse_test_utils:create_file(Sock, DirId, Filename),
-    fuse_test_utils:close(Sock, FileGuid, HandleId),
+    CheckAttempts = case SubscriptionType of
+        sync ->
+            {SubscriptionMessageId, FinalSubscriptionMessage} = fuse_test_utils:extend_message_with_msg_id(SubscriptionMessage),
+            ?assertEqual(ok, ssl:send(Sock, FinalSubscriptionMessage)),
+            ?assertMatch(#'ServerMessage'{
+                message_id = SubscriptionMessageId,
+                message_body = {status, #'Status'{code = ?OK}}
+            }, fuse_test_utils:receive_server_message()),
+            1;
+        async ->
+            ?assertEqual(ok, ssl:send(Sock, SubscriptionMessage)),
+            10
+    end,
 
-    ?assertEqual(ok, lfm_proxy:unlink(Worker1, <<"0">>, {guid, FileGuid})),
+    lists:foreach(fun(Worker) ->
+        ?assertMatch({ok, [_]},
+            rpc:call(Worker, subscription_manager, get_subscribers, [SubscriptionRoutingKey]), CheckAttempts)
+    end, lists:usort([Worker1, EventProducingWorker])),
+
+    {FileGuid, HandleId} = fuse_test_utils:create_file(EventProducingWorkerSock, DirId, Filename),
+    fuse_test_utils:close(EventProducingWorkerSock, FileGuid, HandleId),
+
+    ?assertEqual(ok, lfm_proxy:unlink(EventProducingWorker, <<"0">>, ?FILE_REF(FileGuid))),
     receive_events_and_check(file_removed, FileGuid),
 
     ?assertEqual(ok, ssl:send(Sock,
         fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, <<"user1">>), -Seq1))),
-    ?assertMatch({ok, []},
-        rpc:call(Worker1, subscription_manager, get_subscribers, [SubscriptionRoutingKey]), 10),
+    lists:foreach(fun(Worker) ->
+        ?assertMatch({ok, []},
+            rpc:call(Worker, subscription_manager, get_subscribers, [SubscriptionRoutingKey]), 10)
+    end, lists:usort([Worker1, EventProducingWorker])),
     ?assertEqual(ok, ssl:close(Sock)),
+    ?assertEqual(ok, ssl:close(EventProducingWorkerSock)),
     ok.
 
 subscribe_on_user_root_test(Config) ->
@@ -114,7 +162,7 @@ subscribe_on_user_root_test_base(Config, User, ExpectedAns) ->
 
     UserCtx = rpc:call(Worker1, user_ctx, new, [SessionId]),
     UserId = rpc:call(Worker1, user_ctx, get_user_id, [UserCtx]),
-    DirId = fslogic_uuid:user_root_dir_guid(UserId),
+    DirId = fslogic_file_id:user_root_dir_guid(UserId),
 
     {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
 
@@ -153,7 +201,7 @@ subscribe_on_new_space_test_base(Config, User, DomainUser, SpaceNum, ExpectedAns
 
     UserCtx = rpc:call(Worker1, user_ctx, new, [SessionId]),
     UserId = rpc:call(Worker1, user_ctx, get_user_id, [UserCtx]),
-    DirId = fslogic_uuid:user_root_dir_guid(UserId),
+    DirId = fslogic_file_id:user_root_dir_guid(UserId),
 
     {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
 
@@ -207,9 +255,9 @@ events_on_conflicts_test(Config) ->
 
     {FileGuid, HandleId} = fuse_test_utils:create_file(Sock, DirId, Filename),
     fuse_test_utils:close(Sock, FileGuid, HandleId),
-    ?assertMatch({ok, _}, lfm_proxy:mv(Worker1, SessionId, {guid, FileGuid},
+    ?assertMatch({ok, _}, lfm_proxy:mv(Worker1, SessionId, ?FILE_REF(FileGuid),
         <<"/space_name1/", Dirname/binary, "/", ?CONFLICTING_FILE_AFTER_RENAME_STR>>)),
-    ?assertEqual(ok, lfm_proxy:unlink(Worker1, SessionId, {guid, FileGuid})),
+    ?assertEqual(ok, lfm_proxy:unlink(Worker1, SessionId, ?FILE_REF(FileGuid))),
 
     % Events triggered by mv and unlink
     CheckList = receive_events_and_check(file_renamed, FileGuid),
@@ -251,9 +299,9 @@ subscribe_on_replication_info_test(Config) ->
     Seq1 = get_seq(Config, User),
     ?assertEqual(ok, ssl:send(Sock,
         fuse_test_utils:generate_replica_status_changed_subscription_message(0, Seq1, -Seq1, DirId, 500))),
-    ?assertMatch([{ok, []}, {ok, [_]}],
+    ?assertMatch({#event_subscribers{subscribers = []}, #event_subscribers{subscribers = [_]}},
         rpc:call(Worker1, subscription_manager, get_attr_event_subscribers, [FileGuid, undefined, true]), 10),
-    ?assertMatch([{ok, [_]}],
+    ?assertMatch({#event_subscribers{subscribers = []}, #event_subscribers{subscribers = [_]}},
         rpc:call(Worker1, subscription_manager, get_attr_event_subscribers, [FileGuid, undefined, false]), 10),
     rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed_with_replication_status,
         [file_ctx:new_by_guid(FileGuid), true, []]),
@@ -266,9 +314,9 @@ subscribe_on_replication_info_test(Config) ->
     Seq2 = get_seq(Config, User),
     ?assertEqual(ok, ssl:send(Sock,
         fuse_test_utils:generate_file_attr_changed_subscription_message(0, Seq2, -Seq2, DirId, 500))),
-    ?assertMatch([{ok, [_]}, {ok, [_]}],
+    ?assertMatch({#event_subscribers{subscribers = [_]}, #event_subscribers{subscribers =[_]}},
         rpc:call(Worker1, subscription_manager, get_attr_event_subscribers, [FileGuid, undefined, true]), 10),
-    ?assertMatch([{ok, [_]}],
+    ?assertMatch({#event_subscribers{subscribers = []}, #event_subscribers{subscribers = [_]}},
         rpc:call(Worker1, subscription_manager, get_attr_event_subscribers, [FileGuid, undefined, false]), 10),
     rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed_with_replication_status,
         [file_ctx:new_by_guid(FileGuid), true, []]),
@@ -286,9 +334,9 @@ subscribe_on_replication_info_test(Config) ->
     % Check if event is produced on subscription without replication status
     ?assertEqual(ok, ssl:send(Sock,
         fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, User), -Seq1))),
-    ?assertMatch([{ok, [_]}, {ok, []}],
+    ?assertMatch({#event_subscribers{subscribers = [_]}, #event_subscribers{subscribers = []}},
         rpc:call(Worker1, subscription_manager, get_attr_event_subscribers, [FileGuid, undefined, true]), 10),
-    ?assertMatch([{ok, []}],
+    ?assertMatch({#event_subscribers{subscribers = []}, #event_subscribers{subscribers = []}},
         rpc:call(Worker1, subscription_manager, get_attr_event_subscribers, [FileGuid, undefined, false]), 10),
     rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed_with_replication_status,
         [file_ctx:new_by_guid(FileGuid), true, []]),
@@ -302,7 +350,7 @@ subscribe_on_replication_info_test(Config) ->
     % Cleanup subscription
     ?assertEqual(ok, ssl:send(Sock,
         fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, User), -Seq2))),
-    ?assertMatch([{ok, []}, {ok, []}],
+    ?assertMatch({#event_subscribers{subscribers = []}, #event_subscribers{subscribers = []}},
         rpc:call(Worker1, subscription_manager, get_attr_event_subscribers, [FileGuid, undefined, true]), 10),
     ?assertEqual(ok, ssl:close(Sock)),
     ok.
@@ -331,15 +379,15 @@ subscribe_on_replication_info_multiprovider_test(Config) ->
     Seq1 = get_seq(Config, User),
     ?assertEqual(ok, ssl:send(Sock,
         fuse_test_utils:generate_replica_status_changed_subscription_message(0, Seq1, -Seq1, DirId, 500))),
-    ?assertMatch([{ok, []}, {ok, [_]}],
+    ?assertMatch({#event_subscribers{subscribers = []}, #event_subscribers{subscribers = [_]}},
         rpc:call(Worker1, subscription_manager, get_attr_event_subscribers, [FileGuid, undefined, true]), 10),
-    ?assertMatch([{ok, [_]}],
+    ?assertMatch({#event_subscribers{subscribers = []}, #event_subscribers{subscribers = [_]}},
         rpc:call(Worker1, subscription_manager, get_attr_event_subscribers, [FileGuid, undefined, false]), 10),
 
     % Prepare handles to edit file
-    ?assertMatch({ok, _}, lfm_proxy:stat(Worker2, SessionIdWorker2, {guid, FileGuid}), 30),
-    {ok, Worker1Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Worker1, SessionIdUser2, {guid, FileGuid}, rdwr)),
-    {ok, Worker2Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Worker2, SessionIdWorker2, {guid, FileGuid}, rdwr)),
+    ?assertMatch({ok, _}, lfm_proxy:stat(Worker2, SessionIdWorker2, ?FILE_REF(FileGuid)), 30),
+    {ok, Worker1Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Worker1, SessionIdUser2, ?FILE_REF(FileGuid), rdwr)),
+    {ok, Worker2Handle} = ?assertMatch({ok, _}, lfm_proxy:open(Worker2, SessionIdWorker2, ?FILE_REF(FileGuid), rdwr)),
 
     % Test status change after write on remote provider
     ?assertEqual({ok, 3}, lfm_proxy:write(Worker2, Worker2Handle, 0, <<"xxx">>)),
@@ -360,9 +408,9 @@ subscribe_on_replication_info_multiprovider_test(Config) ->
     Seq2 = get_seq(Config, User),
     ?assertEqual(ok, ssl:send(Sock,
         fuse_test_utils:generate_file_attr_changed_subscription_message(0, Seq2, -Seq2, DirId, 500))),
-    ?assertMatch([{ok, [_]}, {ok, [_]}],
+    ?assertMatch({#event_subscribers{subscribers = [_]}, #event_subscribers{subscribers = [_]}},
         rpc:call(Worker1, subscription_manager, get_attr_event_subscribers, [FileGuid, undefined, true]), 10),
-    ?assertMatch([{ok, [_]}],
+    ?assertMatch({#event_subscribers{subscribers = []}, #event_subscribers{subscribers = [_]}},
         rpc:call(Worker1, subscription_manager, get_attr_event_subscribers, [FileGuid, undefined, false]), 10),
 
     % Test status change after local write that does not change replication status
@@ -371,7 +419,7 @@ subscribe_on_replication_info_multiprovider_test(Config) ->
     receive_events_and_check({receive_replication_changed, undefined}, FileGuid),
 
     % Change status to verify read operations
-    ?assertMatch({ok, #file_attr{size = 9}}, lfm_proxy:stat(Worker2, SessionIdWorker2, {guid, FileGuid}), 30),
+    ?assertMatch({ok, #file_attr{size = 9}}, lfm_proxy:stat(Worker2, SessionIdWorker2, ?FILE_REF(FileGuid)), 30),
     ?assertEqual({ok, 3}, lfm_proxy:write(Worker2, Worker2Handle, 0, <<"xxx">>)),
     ?assertEqual(ok, lfm_proxy:fsync(Worker2, Worker2Handle)),
     receive_events_and_check({receive_replication_changed, false}, FileGuid),
@@ -389,7 +437,75 @@ subscribe_on_replication_info_multiprovider_test(Config) ->
     % Release handles
     ?assertEqual(ok, lfm_proxy:close(Worker1, Worker1Handle)),
     ?assertEqual(ok, lfm_proxy:close(Worker2, Worker2Handle)),
+
+    ?assertEqual(ok, ssl:send(Sock,
+        fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, <<"user1">>), -Seq1))),
+    ?assertEqual(ok, ssl:send(Sock,
+        fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, <<"user1">>), -Seq2))),
     ok.
+
+events_for_hardlinks_test(Config) ->
+    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
+    AccessToken = ?config({access_token, <<"user1">>}, Config),
+    SpaceGuid = client_simulation_test_base:get_guid(Worker1, SessionId, <<"/space_name1">>),
+    {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
+
+    FileDirId = fuse_test_utils:create_directory(Sock, SpaceGuid, generator:gen_name()),
+    DirWithLinkId = fuse_test_utils:create_directory(Sock, SpaceGuid, generator:gen_name()),
+
+    % Test subscription on link and emission on file
+    Seq1 = get_seq(Config, <<"user1">>),
+    ?assertEqual(ok, ssl:send(Sock,
+        fuse_test_utils:generate_file_attr_changed_subscription_message(0, Seq1, -Seq1, DirWithLinkId, 500))),
+    timer:sleep(1000), % sleep to be sure that subscription has been created
+
+    {FileGuid, HandleId} = fuse_test_utils:create_file(Sock, FileDirId, generator:gen_name()),
+    fuse_test_utils:close(Sock, FileGuid, HandleId),
+    LinkGuid = fuse_test_utils:make_link(Sock, FileGuid, DirWithLinkId, generator:gen_name()),
+    rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed, [file_ctx:new_by_guid(FileGuid), []]),
+
+    CheckList = receive_events_and_check(file_attr_changed, LinkGuid),
+    ?assertNot(lists:member({file_attr_changed, FileGuid}, CheckList)),
+    ?assertEqual(ok, ssl:send(Sock,
+        fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, <<"user1">>), -Seq1))),
+
+    % Test subscription on file and emission on link
+    Seq2 = get_seq(Config, <<"user1">>),
+    ?assertEqual(ok, ssl:send(Sock,
+        fuse_test_utils:generate_file_attr_changed_subscription_message(0, Seq2, -Seq2, FileDirId, 500))),
+    timer:sleep(1000), % sleep to be sure that subscription has been created
+    rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed, [file_ctx:new_by_guid(LinkGuid), []]),
+
+    CheckList2 = receive_events_and_check(file_attr_changed, FileGuid),
+    ?assertNot(lists:member({file_attr_changed, LinkGuid}, CheckList2)),
+
+    % Test subscription on both link and file
+    Seq3 = get_seq(Config, <<"user1">>),
+    ?assertEqual(ok, ssl:send(Sock,
+        fuse_test_utils:generate_file_attr_changed_subscription_message(0, Seq3, -Seq3, DirWithLinkId, 500))),
+    timer:sleep(1000), % sleep to be sure that subscription has been created
+
+    rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed, [file_ctx:new_by_guid(LinkGuid), []]),
+    CheckList3 = receive_events_and_check(file_attr_changed, FileGuid),
+    case lists:member({file_attr_changed, LinkGuid}, CheckList3) of
+        true -> ok; % Event has been already received with previous event
+        false -> receive_events_and_check(file_attr_changed, LinkGuid)
+    end,
+
+    rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed, [file_ctx:new_by_guid(FileGuid), []]),
+    CheckList4 = receive_events_and_check(file_attr_changed, FileGuid),
+    case lists:member({file_attr_changed, LinkGuid}, CheckList4) of
+        true -> ok; % Event has been already received with previous event
+        false -> receive_events_and_check(file_attr_changed, LinkGuid)
+    end,
+
+    ?assertEqual(ok, ssl:send(Sock,
+        fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, <<"user1">>), -Seq2))),
+    ?assertEqual(ok, ssl:send(Sock,
+        fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, <<"user1">>), -Seq3))),
+    ok.
+
 
 attr_auth_filtering_test(Config) ->
     [Worker1 | _] = ?config(op_worker_nodes, Config),
@@ -398,33 +514,70 @@ attr_auth_filtering_test(Config) ->
     SpaceGuid = client_simulation_test_base:get_guid(Worker1, SessionId, <<"/space_name1">>),
     {ok, {Sock, _}} = fuse_test_utils:connect_via_token(Worker1, [{active, true}], SessionId, AccessToken),
 
-    % Create file
+    % Create file and link
     FileDirId = fuse_test_utils:create_directory(Sock, SpaceGuid, generator:gen_name()),
+    DirWithLinkId = fuse_test_utils:create_directory(Sock, SpaceGuid, generator:gen_name()),
     {FileGuid, HandleId} = fuse_test_utils:create_file(Sock, FileDirId, generator:gen_name()),
     fuse_test_utils:close(Sock, FileGuid, HandleId),
+    LinkGuid = fuse_test_utils:make_link(Sock, FileGuid, DirWithLinkId, generator:gen_name()),
 
-    % Create subscription
+    % Create subscriptions
     Seq1 = get_seq(Config, <<"user1">>),
     ?assertEqual(ok, ssl:send(Sock,
-        fuse_test_utils:generate_file_attr_changed_subscription_message(0, Seq1, -Seq1, FileDirId, 500))),
+        fuse_test_utils:generate_file_attr_changed_subscription_message(0, Seq1, -Seq1, DirWithLinkId, 500))),
+    Seq2 = get_seq(Config, <<"user1">>),
+    ?assertEqual(ok, ssl:send(Sock,
+        fuse_test_utils:generate_file_attr_changed_subscription_message(0, Seq2, -Seq2, FileDirId, 500))),
     timer:sleep(1000), % sleep to be sure that subscription has been created
 
-    % Test if event appear
+    % Test if events appear
     rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed, [file_ctx:new_by_guid(FileGuid), []]),
-    receive_events_and_check(file_attr_changed, FileGuid),
+    CheckList = receive_events_and_check(file_attr_changed, FileGuid),
+    case lists:member({file_attr_changed, LinkGuid}, CheckList) of
+        true -> ok; % Event has been already received with previous event
+        false -> receive_events_and_check(file_attr_changed, LinkGuid)
+    end,
 
-    % Test if events are filtered
+    % Test if event for file is filtered
     make_guids_forbidden(Worker1, [FileGuid]),
     rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed, [file_ctx:new_by_guid(FileGuid), []]),
-    receive_events_and_check({not_received, file_attr_changed}, FileGuid),
+    CheckList2 = receive_events_and_check(file_attr_changed, LinkGuid),
+    ?assertNot(lists:member({file_attr_changed, FileGuid}, CheckList2)),
+    rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed, [file_ctx:new_by_guid(LinkGuid), []]),
+    CheckList3 = receive_events_and_check(file_attr_changed, LinkGuid),
+    ?assertNot(lists:member({file_attr_changed, FileGuid}, CheckList3)),
+
+    % Test if event for link is filtered
+    make_guids_forbidden(Worker1, [LinkGuid]),
+    rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed, [file_ctx:new_by_guid(FileGuid), []]),
+    CheckList4 = receive_events_and_check(file_attr_changed, FileGuid),
+    ?assertNot(lists:member({file_attr_changed, LinkGuid}, CheckList4)),
+    rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed, [file_ctx:new_by_guid(LinkGuid), []]),
+    CheckList5 = receive_events_and_check(file_attr_changed, FileGuid),
+    ?assertNot(lists:member({file_attr_changed, LinkGuid}, CheckList5)),
+
+    % Test if all events are filtered
+    make_guids_forbidden(Worker1, [FileGuid, LinkGuid]),
+    rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed, [file_ctx:new_by_guid(FileGuid), []]),
+    CheckList6 = receive_events_and_check({not_received, file_attr_changed}, FileGuid),
+    ?assertNot(lists:member({file_attr_changed, LinkGuid}, CheckList6)),
+    rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed, [file_ctx:new_by_guid(LinkGuid), []]),
+    CheckList7 = receive_events_and_check({not_received, file_attr_changed}, FileGuid),
+    ?assertNot(lists:member({file_attr_changed, LinkGuid}, CheckList7)),
 
     % Test if events appear after all tests
     make_guids_forbidden(Worker1, []),
-    rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed, [file_ctx:new_by_guid(FileGuid), []]),
-    receive_events_and_check(file_attr_changed, FileGuid),
+    rpc:call(Worker1, fslogic_event_emitter, emit_file_attr_changed, [file_ctx:new_by_guid(LinkGuid), []]),
+    CheckList8 = receive_events_and_check(file_attr_changed, FileGuid),
+    case lists:member({file_attr_changed, LinkGuid}, CheckList8) of
+        true -> ok; % Event has been already received with previous event
+        false -> receive_events_and_check(file_attr_changed, LinkGuid)
+    end,
 
     ?assertEqual(ok, ssl:send(Sock,
         fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, <<"user1">>), -Seq1))),
+    ?assertEqual(ok, ssl:send(Sock,
+        fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, <<"user1">>), -Seq2))),
     ok.
 
 
@@ -536,6 +689,7 @@ rename_auth_filtering_test(Config) ->
         fuse_test_utils:generate_subscription_cancellation_message(0, get_seq(Config, <<"user1">>), -Seq2))),
     ok.
 
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -550,8 +704,8 @@ init_per_suite(Config) ->
 
 init_per_testcase(events_on_conflicts_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Workers, file_meta_links),
-    test_utils:mock_expect(Workers, file_meta_links, get_all, fun
+    test_utils:mock_new(Workers, file_meta_forest),
+    test_utils:mock_expect(Workers, file_meta_forest, get_all, fun
         (Uuid, Name) when Name =:= ?CONFLICTING_FILE_NAME orelse Name =:= ?CONFLICTING_FILE_AFTER_RENAME ->
             case meck:passthrough([Uuid, Name]) of
                 {ok, List} -> {ok, [#link{name = Name, target = Uuid, tree_id = ?TEST_TREE_ID} | List]};
@@ -563,10 +717,10 @@ init_per_testcase(events_on_conflicts_test, Config) ->
     init_per_testcase(default, Config);
 init_per_testcase(Case, Config) when
     Case =:= attr_auth_filtering_test orelse
-        Case =:= location_auth_filtering_test orelse
-        Case =:= remove_auth_filtering_test orelse
-        Case =:= rename_auth_filtering_test
-    ->
+    Case =:= location_auth_filtering_test orelse
+    Case =:= remove_auth_filtering_test orelse
+    Case =:= rename_auth_filtering_test
+->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, data_constraints),
     test_utils:mock_expect(Workers, data_constraints, inspect, fun
@@ -583,14 +737,14 @@ init_per_testcase(_Case, Config) ->
 
 end_per_testcase(events_on_conflicts_test, Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_validate_and_unload(Workers, file_meta_links),
+    test_utils:mock_validate_and_unload(Workers, file_meta_forest),
     end_per_testcase(default, Config);
 end_per_testcase(Case, Config) when
     Case =:= attr_auth_filtering_test orelse
-        Case =:= location_auth_filtering_test orelse
-        Case =:= remove_auth_filtering_test orelse
-        Case =:= rename_auth_filtering_test
-    ->
+    Case =:= location_auth_filtering_test orelse
+    Case =:= remove_auth_filtering_test orelse
+    Case =:= rename_auth_filtering_test
+->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, data_constraints),
     end_per_testcase(default, Config);
@@ -606,6 +760,7 @@ end_per_suite(Config) ->
 %%% Internal functions
 %%%===================================================================
 
+% TODO VFS-8712 - verify multiple events during single call
 receive_events_and_check({not_received, Type}, Guid) ->
     {_, CheckList} = ?assertMatch({not_found, _}, receive_and_check_loop({Type, Guid})),
     CheckList;
@@ -664,7 +819,7 @@ seq_counter(Map) ->
 
 data_constraints_mock(FileCtx) ->
     ForbiddenGuids = op_worker:get_env(forbidden_guids, []),
-    case lists:member(file_ctx:get_guid_const(FileCtx), ForbiddenGuids) of
+    case lists:member(file_ctx:get_logical_guid_const(FileCtx), ForbiddenGuids) of
         true -> throw(?EACCES);
         false -> ok
     end.

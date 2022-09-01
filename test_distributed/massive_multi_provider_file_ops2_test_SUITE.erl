@@ -79,7 +79,7 @@ db_sync_basic_opts_test(Config) ->
     multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {4,2,0}, 120).
 
 db_sync_basic_opts_with_errors_test(Config) ->
-    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {4,2,0}, 120, false).
+    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {4,2,0}, 300, false).
 
 db_sync_many_ops_test(Config) ->
     ?PERFORMANCE(Config, ?performance_description("Tests working on dirs and files with db_sync")).
@@ -156,10 +156,10 @@ blocks_suiting_test(Config0) ->
     Config = multi_provider_file_ops_test_base:extend_config(Config0, User, {6,0,0,1}, Attempts),
     SessId = ?config(session, Config),
     SpaceName = <<"space9">>,
-    [Worker1, Worker2, Worker3, Worker4, Worker5, Worker6] = ?config(op_worker_nodes, Config0),
+    [Worker1, Worker2, Worker3, Worker4, Worker5, Worker6] = Workers = ?config(op_worker_nodes, Config0),
 
     File = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
-    ?assertMatch({ok, _}, lfm_proxy:create(Worker1, SessId(Worker1), File)),
+    {ok, FileGuid} = ?assertMatch({ok, _}, lfm_proxy:create(Worker1, SessId(Worker1), File)),
 
     multi_provider_file_ops_test_base:verify(Config, fun(W) ->
         ?assertMatch({ok, #file_attr{type = ?REGULAR_FILE_TYPE}},
@@ -177,8 +177,12 @@ blocks_suiting_test(Config0) ->
     % Verify initial data distribution
     ExpectedDistribution = [[], [[0,5],[65,30]], [[5,5],[95,205]], [[10,10]], [[20,20]], [[40,25]]],
     GetDistFun = fun() ->
-        {ok, Distribution} = lfm_proxy:get_file_distribution(Worker1, SessId(Worker1), {path, File}),
-        DistBlocks = lists:map(fun(#{<<"blocks">> := Blocks}) -> Blocks end, Distribution),
+        DistBlocks = lists:map(fun(W) ->
+            case opt_file_metadata:get_local_knowledge_of_remote_provider_blocks(Worker1, FileGuid, ?GET_DOMAIN_BIN(W)) of
+                {ok, Blocks} -> Blocks;
+                {error, _} = Error  -> Error
+            end
+        end, Workers),
         lists:sort(DistBlocks)
     end,
     ?assertEqual(ExpectedDistribution, GetDistFun(), Attempts),
@@ -251,6 +255,7 @@ init_per_testcase(file_consistency_test, Config) ->
     test_utils:mock_new(Workers, file_meta, [passthrough]),
     init_per_testcase(?DEFAULT_CASE(file_consistency_test), Config);
 init_per_testcase(db_sync_basic_opts_with_errors_test = Case, Config) ->
+    ct:timetrap({minutes, 60}),
     MockedConfig = multi_provider_file_ops_test_base:mock_sync_and_rtransfer_errors(Config),
     init_per_testcase(?DEFAULT_CASE(Case), MockedConfig);
 init_per_testcase(_Case, Config) ->
@@ -294,7 +299,7 @@ check_read(Worker, SessId, File, Handle, Offset, Size, ExpectedRequests) ->
     ?assertEqual(ExpectedRequests, lists:sort(Requests)),
 
     % Verify data distribution
-    {ok, Distribution} = ?assertMatch({ok, _}, lfm_proxy:get_file_distribution(Worker, SessId(Worker), {path, File})),
+    {ok, Distribution} = ?assertMatch({ok, _}, opt_file_metadata:get_distribution_deprecated(Worker, SessId(Worker), {path, File})),
     ProvId = rpc:call(Worker, oneprovider, get_id, []),
     [#{<<"blocks">> := Blocks}] = ?assertMatch([_],
         lists:filter(fun(#{<<"providerId">> := Id}) -> Id =:= ProvId end, Distribution)),

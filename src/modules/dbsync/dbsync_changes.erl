@@ -100,6 +100,8 @@ apply(Doc = #document{value = Value, scope = SpaceId, seq = Seq}) ->
                                 ok
                         end,
                         Doc2;
+                    {error, already_exists} ->
+                        Doc;
                     {error, ignored} ->
                         undefined
                 end
@@ -108,15 +110,15 @@ apply(Doc = #document{value = Value, scope = SpaceId, seq = Seq}) ->
         try
             dbsync_events:change_replicated(SpaceId, DocToHandle)
         catch
-            _:Reason_ ->
+            _:Reason_:Stacktrace ->
                 ?error_stacktrace("Change ~p post-processing failed due "
-                "to: ~p", [Doc, Reason_])
+                "to: ~p", [Doc, Reason_], Stacktrace)
         end,
         ok
     catch
-        _:Reason ->
+        _:Reason:Stacktrace2 ->
             ?error_stacktrace("Unable to apply change ~p due to: ~p",
-                [Doc, Reason]),
+                [Doc, Reason], Stacktrace2),
             {error, Seq, Reason}
     end.
 
@@ -143,6 +145,8 @@ links_save(Model, RoutingKey, Doc = #document{key = Key}) ->
     case datastore_router:route(save, [Ctx3, Key, Doc]) of
         {ok, Doc2} ->
             Doc2;
+        {error, already_exists} ->
+            Doc;
         {error, ignored} ->
             undefined
     end.
@@ -251,6 +255,8 @@ save_links_mask(Ctx, Doc = #document{key = Key,
     case datastore_router:route(save, [Ctx#{routing_key => RoutingKey}, Key, Doc]) of
         {ok, Doc2} ->
             Doc2;
+        {error, already_exists} ->
+            Doc;
         {error, ignored} ->
             undefined
     end.

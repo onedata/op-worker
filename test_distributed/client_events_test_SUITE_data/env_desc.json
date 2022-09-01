@@ -145,6 +145,19 @@
                         "supported_size": 1000000000
                     }
                 }
+            },
+            "space_id4": {
+                "displayed_name": "space_name4",
+                "users": [
+                    "user1"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "supported_size": 1000000000
+                    }
+                }
             }
         }
     }

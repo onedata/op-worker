@@ -12,6 +12,7 @@
 -author("Jakub Kudzia").
 
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include("rest_test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -103,13 +104,13 @@ all() -> ?ALL(?TEST_CASES).
 -define(ENCODED_RDF1, ?ENCODED_RDF(?RDF1)).
 -define(ENCODED_RDF2, ?ENCODED_RDF(?RDF2)).
 
--define(ATTEMPTS, 15).
+-define(ATTEMPTS, 30).
 
 -define(assertInLs(Worker, SessId, FilePath, Attempts), (
     fun(__Worker, __SessId, __FilePath, __Attempts) ->
         ?assertMatch(true, try
             __DirPath = filename:dirname(__FilePath),
-            {ok, __Children} = lfm_proxy:get_children(Worker, SessId, {path, __DirPath}, 0, 1000),
+            {ok, __Children} = lfm_proxy:get_children(Worker, SessId, {path, __DirPath}, 0, 10000),
             __ChildrenNames = [_N || {_G, _N} <- __Children],
             lists:member(filename:basename(__FilePath), __ChildrenNames)
         catch
@@ -154,25 +155,48 @@ all() -> ?ALL(?TEST_CASES).
     end)(Worker, SessId, FilePath, Xattrs, Attempts)
 ).
 
+-define(resolveFileRef(Worker, SessId, FilePath),
+    ?FILE_REF(element(2, {ok, _} = lfm_proxy:resolve_guid(Worker, SessId, FilePath)))
+).
 -define(assertJsonMetadata(Worker, SessId, FilePath, JSON, Attempts),
     (fun
         (__Worker, __SessId, __FilePath, __JSON, __Attempts) when map_size(__JSON) =:= 0 ->
-            ?assertMatch({error, ?ENODATA},
-                lfm_proxy:get_metadata(__Worker, __SessId, {path, __FilePath}, json, [], false), __Attempts);
+            FileRef = ?resolveFileRef(__Worker, __SessId, __FilePath),
+
+            ?assertMatch(
+                ?ERROR_POSIX(?ENODATA),
+                opt_file_metadata:get_custom_metadata(__Worker, __SessId, FileRef, json, [], false),
+                __Attempts
+            );
         (__Worker, __SessId, __FilePath, __JSON, __Attempts) ->
-            ?assertMatch({ok, __JSON},
-                lfm_proxy:get_metadata(__Worker, __SessId, {path, __FilePath}, json, [], false), __Attempts)
+            FileRef = ?resolveFileRef(__Worker, __SessId, __FilePath),
+
+            ?assertMatch(
+                {ok, __JSON},
+                opt_file_metadata:get_custom_metadata(__Worker, __SessId, FileRef, json, [], false),
+                __Attempts
+            )
     end)(Worker, SessId, FilePath, JSON, Attempts)
 ).
 
 -define(assertRdfMetadata(Worker, SessId, FilePath, RDF, Attempts),
     (fun
         (__Worker, __SessId, __FilePath, <<>>, __Attempts) ->
-            ?assertMatch({error, ?ENODATA},
-                lfm_proxy:get_metadata(__Worker, __SessId, {path, __FilePath}, rdf, [], false), __Attempts);
+            FileRef = ?resolveFileRef(__Worker, __SessId, __FilePath),
+
+            ?assertMatch(
+                ?ERROR_POSIX(?ENODATA),
+                opt_file_metadata:get_custom_metadata(__Worker, __SessId, FileRef, rdf, [], false),
+                __Attempts
+            );
         (__Worker, __SessId, __FilePath, __RDF, __Attempts) ->
-            ?assertMatch({ok, __RDF},
-                lfm_proxy:get_metadata(__Worker, __SessId, {path, __FilePath}, rdf, [], false), __Attempts)
+            FileRef = ?resolveFileRef(__Worker, __SessId, __FilePath),
+
+            ?assertMatch(
+                {ok, __RDF},
+                opt_file_metadata:get_custom_metadata(__Worker, __SessId, FileRef, rdf, [], false),
+                __Attempts
+            )
     end)(Worker, SessId, FilePath, RDF, Attempts)
 ).
 
@@ -603,10 +627,12 @@ register_many_files_test(Config) ->
         end),
         LogicalFilePath
     end, DestinationPaths),
-
+    
+    ?assertEqual({message_queue_len, LogicalFilesCount}, process_info(TestMaster, message_queue_len), ?ATTEMPTS),
+    
     verification_loop(LogicalFilePaths, fun(LogicalFilePath) ->
         % check whether file has been properly registered
-        ?assertFile(W1, SessId, LogicalFilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1, 60),
+        ?assertFile(W1, SessId, LogicalFilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1),
 
         % check whether file is visible on 2nd provider
         ?assertFile(W2, SessId2, LogicalFilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1, ?ATTEMPTS)
@@ -659,6 +685,8 @@ register_many_nested_files_test(Config) ->
         LogicalFilePath
     end, DestinationPaths),
 
+    ?assertEqual({message_queue_len, LogicalFilesCount}, process_info(TestMaster, message_queue_len), ?ATTEMPTS),
+    
     verification_loop(LogicalFilePaths, fun(LogicalFilePath) ->
         % check whether file has been properly registered
         ?assertFile(W1, SessId, LogicalFilePath, ?TEST_DATA, ?XATTRS, ?JSON1, ?RDF1),
@@ -675,7 +703,7 @@ register_many_nested_files_test(Config) ->
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
         ssl:start(),
-        hackney:start(),
+        application:ensure_all_started(hackney),
         initializer:disable_quota_limit(NewConfig),
         initializer:mock_provider_ids(NewConfig),
         NewConfig2 = multi_provider_file_ops_test_base:init_env(NewConfig),
@@ -690,10 +718,11 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:unload_quota_mocks(Config),
-    initializer:unmock_provider_ids(Config),
+    initializer:unmock_provider_ids(?config(op_worker_nodes, Config)),
     ssl:stop().
 
 init_per_testcase(_Case, Config) ->
+    ct:timetrap({minutes, 5}),
     lfm_proxy:init(Config).
 
 end_per_testcase(_Case, Config) ->

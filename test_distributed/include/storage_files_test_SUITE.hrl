@@ -45,7 +45,7 @@
 -define(EXTERNAL_FEED_LUMA_STORAGES, [?STORAGE_ID2, ?STORAGE_ID5, ?STORAGE_ID8]).
 
 -define(SPACE_NAME(SpaceId, Config), ?config(SpaceId, ?config(spaces, Config))).
--define(SPACE_GUID(SpaceId), fslogic_uuid:spaceid_to_space_dir_guid(SpaceId)).
+-define(SPACE_GUID(SpaceId), fslogic_file_id:spaceid_to_space_dir_guid(SpaceId)).
 
 -define(USER1, <<"user1">>).
 -define(USER2, <<"user2">>).

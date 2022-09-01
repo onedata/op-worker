@@ -6,6 +6,9 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc Model for holding files' times.
+%%% Note: this module operates on referenced uuids - all operations on hardlinks
+%%% are treated as operations on original file. Thus, all hardlinks pointing on
+%%% the same file share single times document.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(times).
@@ -20,8 +23,8 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([get_or_default/1, save/1, get/1, exists/1, delete/1, update/2, create/1,
-    create_or_update/2, save/5]).
+-export([get_or_default/1, get/1, create_or_update/2, delete/1,
+    save/1, save/5, save_with_current_times/2]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -36,7 +39,7 @@
 -type m_time() :: time().
 -type times() :: {a_time(), c_time(), m_time()}.
 
--export_type([time/0, a_time/0, c_time/0, m_time/0, times/0, diff/0]).
+-export_type([record/0, time/0, a_time/0, c_time/0, m_time/0, times/0, diff/0]).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -85,27 +88,18 @@ save(FileUuid, SpaceId, ATime, MTime, CTime) ->
 %% Saves permission cache.
 %% @end
 %%--------------------------------------------------------------------
--spec save(doc()) -> {ok, key()} | {error, term()}.
-save(Doc) ->
-    ?extract_key(datastore_model:save(?CTX#{generated_key => true}, Doc)).
+-spec save(doc()) -> {ok, doc()} | {error, term()}.
+save(#document{key = Key} = Doc) ->
+    datastore_model:save(?CTX#{generated_key => true},
+        Doc#document{key = fslogic_file_id:ensure_referenced_uuid(Key)}).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates permission cache.
-%% @end
-%%--------------------------------------------------------------------
--spec update(key(), diff()) -> {ok, key()} | {error, term()}.
-update(FileUuid, Diff) ->
-    ?extract_key(datastore_model:update(?CTX, FileUuid, Diff)).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Creates permission cache.
-%% @end
-%%--------------------------------------------------------------------
--spec create(doc()) -> {ok, key()} | {error, term()}.
-create(Doc) ->
-    ?extract_key(datastore_model:create(?CTX, Doc)).
+-spec save_with_current_times(file_meta:uuid(), od_space:id()) -> {ok, time()} | {error, term()}.
+save_with_current_times(FileUuid, SpaceId) ->
+    Time = global_clock:timestamp_seconds(),
+    case save(FileUuid, SpaceId, Time, Time, Time) of
+        ok -> {ok, Time};
+        Error -> Error
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -114,9 +108,9 @@ create(Doc) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec create_or_update(doc(), diff()) ->
-    {ok, key()} | {error, term()}.
+    {ok, doc()} | {error, term()}.
 create_or_update(#document{key = Key, value = Default}, Diff) ->
-    ?extract_key(datastore_model:update(?CTX, Key, Diff, Default)).
+    datastore_model:update(?CTX, fslogic_file_id:ensure_referenced_uuid(Key), Diff, Default).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -124,8 +118,8 @@ create_or_update(#document{key = Key, value = Default}, Diff) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get(key()) -> {ok, doc()} | {error, term()}.
-get(FileUuid) ->
-    datastore_model:get(?CTX, FileUuid).
+get(Uuid) ->
+    datastore_model:get(?CTX, fslogic_file_id:ensure_referenced_uuid(Uuid)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -134,17 +128,8 @@ get(FileUuid) ->
 %%--------------------------------------------------------------------
 -spec delete(key()) -> ok | {error, term()}.
 delete(FileUuid) ->
-    datastore_model:delete(?CTX, FileUuid).
+    datastore_model:delete(?CTX, fslogic_file_id:ensure_referenced_uuid(FileUuid)).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Checks whether permission cache exists.
-%% @end
-%%--------------------------------------------------------------------
--spec exists(key()) -> boolean().
-exists(FileUuid) ->
-    {ok, Exists} = datastore_model:exists(?CTX, FileUuid),
-    Exists.
 
 %%%===================================================================
 %%% datastore_model callbacks

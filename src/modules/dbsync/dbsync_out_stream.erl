@@ -224,7 +224,7 @@ aggregate_change(Doc = #document{seq = Seq}, State = #state{changes = Docs}) ->
         until = Seq + 1,
         changes = [Doc | Docs]
     },
-    Len = application:get_env(?APP_NAME, dbsync_changes_broadcast_batch_size, 100),
+    Len = op_worker:get_env(dbsync_changes_broadcast_batch_size, 100),
     case erlang:length(Docs) + 1 >= Len of
         true -> handle_changes(State2);
         false -> State2
@@ -243,7 +243,7 @@ handle_changes(State = #state{
     changes = Docs,
     handler = Handler
 }) ->
-    MinSize = application:get_env(?APP_NAME, dbsync_handler_spawn_size, 10),
+    MinSize = op_worker:get_env(dbsync_handler_spawn_size, 10),
     case length(Docs) >= MinSize of
         true ->
             spawn(fun() ->
@@ -260,7 +260,7 @@ handle_changes(State = #state{
             end
     end,
 
-    case application:get_env(?APP_NAME, dbsync_out_stream_gc, on) of
+    case op_worker:get_env(dbsync_out_stream_gc, on) of
         on ->
             erlang:garbage_collect();
         _ ->

@@ -50,7 +50,7 @@ all() ->
 rtransfer_stats_updates_test(Config) ->
     ?PERFORMANCE(Config, [
         {parameters, [
-            [{name, transfer_file_parts}, {value, 20000},
+            [{name, transfer_file_parts}, {value, 10000},
                 {description, "Numbers of parts of transfered file."}]
         ]},
         {description, "Check transfer stats updates and file location updates
@@ -80,7 +80,7 @@ end_per_suite(_Config) ->
 
 init_per_testcase(_Case, Config) ->
     ssl:start(),
-    hackney:start(),
+    application:ensure_all_started(hackney),
     initializer:disable_quota_limit(Config),
     ConfigWithSessionInfo = initializer:create_test_users_and_spaces(?TEST_FILE(Config, "env_desc.json"), Config),
     lfm_proxy:init(ConfigWithSessionInfo).
@@ -90,5 +90,5 @@ end_per_testcase(_Case, Config) ->
     %% TODO change for initializer:clean_test_users_and_spaces after resolving VFS-1811
     initializer:clean_test_users_and_spaces_no_validate(Config),
     initializer:unload_quota_mocks(Config),
-    hackney:stop(),
+    application:stop(hackney),
     ssl:stop().

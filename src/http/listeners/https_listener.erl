@@ -20,13 +20,13 @@
 -include_lib("gui/include/gui.hrl").
 
 % Listener config
--define(PORT, application:get_env(?APP_NAME, https_server_port, 443)).
--define(ACCEPTORS_NUM, application:get_env(?APP_NAME, https_acceptors, 100)).
--define(REQUEST_TIMEOUT, application:get_env(?APP_NAME, https_request_timeout, timer:minutes(5))).
--define(MAX_KEEPALIVE, application:get_env(?APP_NAME, https_max_keepalive, 30)).
+-define(PORT, op_worker:get_env(https_server_port, 443)).
+-define(ACCEPTORS_NUM, op_worker:get_env(https_acceptors, 100)).
+-define(REQUEST_TIMEOUT, op_worker:get_env(https_request_timeout, timer:minutes(5))).
+-define(MAX_KEEPALIVE, op_worker:get_env(https_max_keepalive, 30)).
 
 -define(ONEPANEL_CONNECT_OPTS, fun() -> [
-    {recv_timeout, timer:seconds(application:get_env(?APP_NAME, onepanel_proxy_recv_timeout_sec, 30))},
+    {recv_timeout, timer:seconds(op_worker:get_env(onepanel_proxy_recv_timeout_sec, 30))},
     {ssl_options, [
         {secure, only_verify_peercert},
         {cacerts, get_cert_chain_ders()}
@@ -112,15 +112,16 @@ get_cert_chain_ders() ->
 -spec gui_config() -> gui:gui_config().
 gui_config() ->
     % Get certs
-    {ok, KeyFile} = application:get_env(?APP_NAME, web_key_file),
-    {ok, CertFile} = application:get_env(?APP_NAME, web_cert_file),
-    ChainFile = application:get_env(?APP_NAME, web_cert_chain_file, undefined),
+    KeyFile = op_worker:get_env(web_key_file),
+    CertFile = op_worker:get_env(web_cert_file),
+    ChainFile = op_worker:get_env(web_cert_chain_file, undefined),
 
     CustomCowboyRoutes = lists:flatten([
         {?NAGIOS_PATH, nagios_handler, []},
         {?CLIENT_PROTOCOL_PATH, connection, []},
         {?PANEL_REST_PROXY_PATH ++ "[...]", http_port_forwarder, [9443, ?ONEPANEL_CONNECT_OPTS]},
         {?GUI_GRAPH_SYNC_WS_PATH, gs_ws_handler, [gui_gs_translator]},
+        {?OPENFAAS_ACTIVITY_FEED_WS_COWBOY_ROUTE, atm_openfaas_activity_feed_ws_handler, []},
         {?CDMI_ID_PATH, cdmi_handler, by_id},
         {?CDMI_PATH, cdmi_handler, by_path},
         rest_routes:routes()

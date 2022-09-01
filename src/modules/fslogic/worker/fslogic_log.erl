@@ -80,7 +80,7 @@ mask_data_in_message(Message) ->
 append_to_audit_log(Request, UserId, undefined) ->
     append_to_audit_log(Request, UserId, null, null, null);
 append_to_audit_log(Request, UserId, FileCtx) ->
-    Uuid = file_ctx:get_uuid_const(FileCtx),
+    Uuid = file_ctx:get_logical_uuid_const(FileCtx),
     ShareId = utils:undefined_to_null(file_ctx:get_share_id_const(FileCtx)),
     FilePath = try
         {Path, _} = file_ctx:get_canonical_path(FileCtx),

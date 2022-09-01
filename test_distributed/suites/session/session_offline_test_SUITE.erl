@@ -15,6 +15,7 @@
 -include("api_file_test_utils.hrl").
 -include("modules/auth/offline_access_manager.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
 
 -export([
@@ -72,13 +73,15 @@ offline_session_should_work_as_any_other_session_test(_Config) ->
 
     {ok, SessionId} = ?assertMatch({ok, _}, init_offline_session(JobId, UserCredentials)),
     SpaceKrkId = oct_background:get_space_id(space_krk),
-    SpaceKrkGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceKrkId),
-    UserRootDirGuid = fslogic_uuid:user_root_dir_guid(UserId),
+    SpaceKrkGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceKrkId),
+    UserRootDirGuid = fslogic_file_id:user_root_dir_guid(UserId),
 
-    ?assertMatch(
-        {ok, [{SpaceKrkGuid, _}]},
-        lfm_proxy:get_children(?NODE, SessionId, {guid, UserRootDirGuid}, 0, 100)
+    {ok, ListedSpaces} = ?assertMatch(
+        {ok, [_ | _]},
+        lfm_proxy:get_children(?NODE, SessionId, ?FILE_REF(UserRootDirGuid), 0, 100)
     ),
+    {ListedSpacesGuids, _} = lists:unzip(ListedSpaces),
+    ?assert(lists:member(SpaceKrkGuid, ListedSpacesGuids)),
 
     % Check that even in case of various environment situations everything is resolved
     % internally and session works properly (possibly after some time though)
@@ -87,7 +90,7 @@ offline_session_should_work_as_any_other_session_test(_Config) ->
 
         ?assertMatch(
             {ok, #file_attr{guid = SpaceKrkGuid}},
-            lfm_proxy:stat(?NODE, SessionId, {guid, SpaceKrkGuid}),
+            lfm_proxy:stat(?NODE, SessionId, ?FILE_REF(SpaceKrkGuid)),
             ?ATTEMPTS
         )
     end, [
@@ -368,8 +371,6 @@ get_offline_token_renewal_backoff_Intervals(Interval, Intervals) ->
 
 
 init_per_suite(Config) ->
-    ssl:start(),
-    hackney:start(),
     oct_background:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "1op",
         envs = [
@@ -383,8 +384,7 @@ init_per_suite(Config) ->
 
 
 end_per_suite(_Config) ->
-    hackney:stop(),
-    ssl:stop().
+    oct_background:end_per_suite().
 
 
 init_per_testcase(Case, Config) when

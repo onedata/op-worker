@@ -58,15 +58,16 @@ handle(<<"POST">>, InitialReq) ->
                 Req2 = handle_multipart_req(Req, Auth, #{}),
                 cowboy_req:reply(?HTTP_200_OK, Req2)
             catch
-                throw:upload_not_registered ->
+                throw:upload_not_authorized ->
                     reply_with_error(?ERROR_FORBIDDEN, Req);
                 throw:Error ->
                     reply_with_error(Error, Req);
-                Type:Message ->
-                    ?error_stacktrace("Error while processing file upload "
-                                      "from user ~p - ~p:~p", [
-                        UserId, Type, Message
-                    ]),
+                Type:Message:Stacktrace ->
+                    ?error_stacktrace(
+                        "Error while processing file upload from user ~s~nError was: ~w:~p",
+                        [UserId, Type, Message],
+                        Stacktrace
+                    ),
                     reply_with_error(?ERROR_INTERNAL_SERVER_ERROR, Req)
             end;
         {ok, ?GUEST} ->
@@ -84,7 +85,7 @@ handle(<<"POST">>, InitialReq) ->
 %% @private
 -spec handle_multipart_req(cowboy_req:req(), aai:auth(), map()) ->
     cowboy_req:req().
-handle_multipart_req(Req, Auth, Params) ->
+handle_multipart_req(Req, ?USER(_UserId, SessionId) = Auth, Params) ->
     case cowboy_req:read_part(Req) of
         {ok, Headers, Req2} ->
             case cow_multipart:form_data(Headers) of
@@ -98,6 +99,23 @@ handle_multipart_req(Req, Auth, Params) ->
                     handle_multipart_req(Req3, Auth, Params)
             end;
         {done, Req2} ->
+            SanitizedParams = middleware_sanitizer:sanitize_data(Params, #{
+                required => #{
+                    <<"guid">> => {binary, non_empty}
+                }
+            }),
+            FileGuid = maps:get(<<"guid">>, SanitizedParams),
+            % Fsync events to force size update in metadata
+            case lfm:fsync(SessionId, ?FILE_REF(FileGuid), oneprovider:get_id()) of
+                ok ->
+                    case file_popularity:update_size(file_ctx:new_by_guid(FileGuid)) of
+                        ok -> ok;
+                        Error -> ?warning("~p file_popularity update_size error: ~p", [?MODULE, Error])
+
+                    end;
+                FsyncError ->
+                    ?warning("~p fsync error: ~p", [?MODULE, FsyncError])
+            end,
             Req2
     end.
 
@@ -117,11 +135,11 @@ write_chunk(Req, ?USER(UserId, SessionId), Params) ->
     ChunkSize = maps:get(<<"resumableChunkSize">>, SanitizedParams),
     ChunkNumber = maps:get(<<"resumableChunkNumber">>, SanitizedParams),
 
-    assert_file_upload_registered(UserId, FileGuid),
+    authorize_chunk_upload(UserId, FileGuid),
 
     SpaceId = file_id:guid_to_space_id(FileGuid),
     Offset = ChunkSize * (ChunkNumber - 1),
-    {ok, FileHandle} = ?check(lfm:monitored_open(SessionId, {guid, FileGuid}, write)),
+    {ok, FileHandle} = ?lfm_check(lfm:monitored_open(SessionId, ?FILE_REF(FileGuid), write)),
 
     try
         file_upload_utils:upload_file(
@@ -134,12 +152,12 @@ write_chunk(Req, ?USER(UserId, SessionId), Params) ->
 
 
 %% @private
--spec assert_file_upload_registered(od_user:id(), file_id:file_guid()) ->
+-spec authorize_chunk_upload(od_user:id(), file_id:file_guid()) ->
     ok | no_return().
-assert_file_upload_registered(UserId, FileGuid) ->
-    case file_upload_manager:is_upload_registered(UserId, FileGuid) of
+authorize_chunk_upload(UserId, FileGuid) ->
+    case file_upload_manager:authorize_chunk_upload(UserId, FileGuid) of
         true -> ok;
-        false -> throw(upload_not_registered)
+        false -> throw(upload_not_authorized)
     end.
 
 
@@ -148,9 +166,9 @@ assert_file_upload_registered(UserId, FileGuid) ->
 read_body_opts(SpaceId) ->
     WriteBlockSize = file_upload_utils:get_preferable_write_block_size(SpaceId),
 
-    {ok, UploadWriteSize} = application:get_env(?APP_NAME, upload_write_size),
-    {ok, UploadReadTimeout} = application:get_env(?APP_NAME, upload_read_timeout),
-    {ok, UploadPeriod} = application:get_env(?APP_NAME, upload_read_period),
+    UploadWriteSize = op_worker:get_env(upload_write_size),
+    UploadReadTimeout = op_worker:get_env(upload_read_timeout),
+    UploadPeriod = op_worker:get_env(upload_read_period),
 
     #{
         % length is chunk size - how much the cowboy read

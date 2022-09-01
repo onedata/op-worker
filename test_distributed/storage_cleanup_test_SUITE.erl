@@ -15,6 +15,7 @@
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/fslogic_suffix.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -106,14 +107,14 @@ file_should_be_deleted_from_storage_after_deletion(Config) ->
     FilePath =  filename:join(["/", SpaceName, ?FILE_NAME]),
     % when
     {ok, FileGuid} = lfm_proxy:create(Worker, SessId, FilePath),
-    {ok, FileHandle} = lfm_proxy:open(Worker, SessId, {guid, FileGuid}, write),
+    {ok, FileHandle} = lfm_proxy:open(Worker, SessId, ?FILE_REF(FileGuid), write),
     {ok, _} = lfm_proxy:write(Worker, FileHandle, 0, ?TEST_DATA),
     ok = lfm_proxy:close(Worker, FileHandle),
     ?assertEqual({ok, ?TEST_DATA}, storage_test_utils:read_file(Worker, StorageFilePath)),
     ?assertMatch({ok, _}, storage_test_utils:read_file_info(Worker, StorageFilePath)),
 
     % and
-    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, {guid, FileGuid})),
+    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(FileGuid))),
 
     % then
     ?assertEqual({error, ?ENOENT}, storage_test_utils:read_file(Worker, StorageFilePath), ?ATTEMPTS),
@@ -133,14 +134,14 @@ file_should_be_truncated_on_storage_after_truncate(Config) ->
     {ok, FileGuid} = lfm_proxy:create(Worker, SessId, FilePath),
 
 
-    {ok, FileHandle} = lfm_proxy:open(Worker, SessId, {guid, FileGuid}, write),
+    {ok, FileHandle} = lfm_proxy:open(Worker, SessId, ?FILE_REF(FileGuid), write),
     {ok, _} = lfm_proxy:write(Worker, FileHandle, 0, ?TEST_DATA),
     ok = lfm_proxy:close(Worker, FileHandle),
     ?assertEqual({ok, ?TEST_DATA}, storage_test_utils:read_file(Worker, StorageFilePath)),
     ?assertMatch({ok, _}, storage_test_utils:read_file_info(Worker, StorageFilePath)),
 
     % and
-    ?assertEqual(ok, lfm_proxy:truncate(Worker, SessId, {guid, FileGuid}, TestDataSize2)),
+    ?assertEqual(ok, lfm_proxy:truncate(Worker, SessId, ?FILE_REF(FileGuid), TestDataSize2)),
 
     % then
     ?assertEqual({ok, TestData2}, storage_test_utils:read_file(Worker, StorageFilePath), ?ATTEMPTS),
@@ -159,7 +160,7 @@ directory_should_be_deleted_from_storage_after_deletion(Config) ->
     % when
     {ok, DirGuid} = lfm_proxy:mkdir(Worker, SessId, DirPath),
     {ok, FileGuid} = lfm_proxy:create(Worker, SessId, DirGuid, ?FILE_NAME, ?DEFAULT_FILE_PERMS),
-    {ok, FileHandle} = lfm_proxy:open(Worker, SessId, {guid, FileGuid}, write),
+    {ok, FileHandle} = lfm_proxy:open(Worker, SessId, ?FILE_REF(FileGuid), write),
     {ok, _} = lfm_proxy:write(Worker, FileHandle, 0, ?TEST_DATA),
     ok = lfm_proxy:close(Worker, FileHandle),
 
@@ -169,7 +170,7 @@ directory_should_be_deleted_from_storage_after_deletion(Config) ->
     ?assertMatch({ok, _}, storage_test_utils:read_file_info(Worker, StorageFilePath)),
 
     % and
-    ?assertEqual(ok, lfm_proxy:rm_recursive(Worker, SessId, {guid, DirGuid})),
+    ?assertEqual(ok, lfm_proxy:rm_recursive(Worker, SessId, ?FILE_REF(DirGuid))),
 
     % then
     ?assertEqual({error, ?ENOENT}, storage_test_utils:list_dir(Worker, StorageDirPath), ?ATTEMPTS),
@@ -189,7 +190,7 @@ empty_directory_should_be_deleted_from_storage_after_deletion(Config) ->
     % when
     {ok, DirGuid} = lfm_proxy:mkdir(Worker, SessId, DirPath),
     {ok, FileGuid} = lfm_proxy:create(Worker, SessId, DirGuid, ?FILE_NAME, ?DEFAULT_FILE_PERMS),
-    {ok, FileHandle} = lfm_proxy:open(Worker, SessId, {guid, FileGuid}, write),
+    {ok, FileHandle} = lfm_proxy:open(Worker, SessId, ?FILE_REF(FileGuid), write),
     {ok, _} = lfm_proxy:write(Worker, FileHandle, 0, ?TEST_DATA),
     ok = lfm_proxy:close(Worker, FileHandle),
     ?assertEqual({ok, ?TEST_DATA}, storage_test_utils:read_file(Worker, StorageFilePath)),
@@ -198,12 +199,12 @@ empty_directory_should_be_deleted_from_storage_after_deletion(Config) ->
     ?assertMatch({ok, _}, storage_test_utils:read_file_info(Worker, StorageDirPath)),
 
     % remove file to leave empty directory on storage
-    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, {guid, FileGuid})),
+    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(FileGuid))),
     ?assertEqual({ok, []}, storage_test_utils:list_dir(Worker, StorageDirPath)),
     ?assertEqual({error, ?ENOENT}, storage_test_utils:read_file(Worker, StorageFilePath), ?ATTEMPTS),
 
     % and
-    ?assertEqual(ok, lfm_proxy:rm_recursive(Worker, SessId, {guid, DirGuid})),
+    ?assertEqual(ok, lfm_proxy:rm_recursive(Worker, SessId, ?FILE_REF(DirGuid))),
 
     % then
     ?assertEqual({error, ?ENOENT}, storage_test_utils:list_dir(Worker, StorageDirPath), ?ATTEMPTS),
@@ -218,12 +219,12 @@ file_should_be_deleted_from_storage_after_releasing_handle(Config) ->
     FilePath =  filename:join(["/", SpaceName, ?FILE_NAME]),
     % when
     {ok, FileGuid} = lfm_proxy:create(Worker, SessId, FilePath),
-    {ok, FileHandle} = lfm_proxy:open(Worker, SessId, {guid, FileGuid}, write),
+    {ok, FileHandle} = lfm_proxy:open(Worker, SessId, ?FILE_REF(FileGuid), write),
     {ok, _} = lfm_proxy:write(Worker, FileHandle, 0, ?TEST_DATA),
     ?assertEqual({ok, ?TEST_DATA}, storage_test_utils:read_file(Worker, StorageFilePath)),
 
     % and
-    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, {guid, FileGuid})),
+    ?assertEqual(ok, lfm_proxy:unlink(Worker, SessId, ?FILE_REF(FileGuid))),
     ?assertEqual({ok, ?TEST_DATA}, storage_test_utils:read_file(Worker, StorageFilePath)),
     ok = lfm_proxy:close(Worker, FileHandle),
 
@@ -243,7 +244,7 @@ directory_should_be_deleted_from_storage_after_releasing_handle_to_its_child(Con
     % when
     {ok, DirGuid} = lfm_proxy:mkdir(Worker, SessId, DirPath),
     {ok, FileGuid} = lfm_proxy:create(Worker, SessId, DirGuid, ?FILE_NAME, ?DEFAULT_FILE_PERMS),
-    {ok, FileHandle} = lfm_proxy:open(Worker, SessId, {guid, FileGuid}, write),
+    {ok, FileHandle} = lfm_proxy:open(Worker, SessId, ?FILE_REF(FileGuid), write),
     {ok, _} = lfm_proxy:write(Worker, FileHandle, 0, ?TEST_DATA),
     ok = lfm_proxy:fsync(Worker, FileHandle),
     ?assertEqual({ok, [binary_to_list(?FILE_NAME)]}, storage_test_utils:list_dir(Worker, StorageDirPath)),
@@ -252,13 +253,13 @@ directory_should_be_deleted_from_storage_after_releasing_handle_to_its_child(Con
     ?assertMatch({ok, _}, storage_test_utils:read_file_info(Worker, StorageFilePath)),
 
     % and
-    ?assertEqual(ok, lfm_proxy:rm_recursive(Worker, SessId, {guid, DirGuid})),
+    ?assertEqual(ok, lfm_proxy:rm_recursive(Worker, SessId, ?FILE_REF(DirGuid))),
 
     % then
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(Worker, SessId, {guid, DirGuid}), ?ATTEMPTS),
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:get_children(Worker, SessId, {guid, DirGuid}, 0, 1), ?ATTEMPTS),
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(Worker, SessId, {guid, FileGuid}), ?ATTEMPTS),
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:open(Worker, SessId, {guid, FileGuid}, read), ?ATTEMPTS),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(Worker, SessId, ?FILE_REF(DirGuid)), ?ATTEMPTS),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:get_children(Worker, SessId, ?FILE_REF(DirGuid), 0, 1), ?ATTEMPTS),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(Worker, SessId, ?FILE_REF(FileGuid)), ?ATTEMPTS),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:open(Worker, SessId, ?FILE_REF(FileGuid), read), ?ATTEMPTS),
 
     ?assertEqual({ok, [binary_to_list(?FILE_NAME)]}, storage_test_utils:list_dir(Worker, StorageDirPath)),
     ?assertMatch({ok, _}, storage_test_utils:read_file_info(Worker, StorageDirPath)),
@@ -285,18 +286,18 @@ remote_replica_should_be_deleted_from_storage_after_deletion(Config) ->
 
     % when
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, FilePath),
-    {ok, FileHandle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
+    {ok, FileHandle} = lfm_proxy:open(WorkerP1, SessionId, ?FILE_REF(FileGuid), write),
     {ok, _} = lfm_proxy:write(WorkerP1, FileHandle, 0, ?TEST_DATA),
     ok = lfm_proxy:close(WorkerP1, FileHandle),
 
     % and
     {ok, FileHandle2} = ?assertMatch({ok, _},
-        lfm_proxy:open(WorkerP2, SessionId2, {guid, FileGuid}, read), ?ATTEMPTS),
+        lfm_proxy:open(WorkerP2, SessionId2, ?FILE_REF(FileGuid), read), ?ATTEMPTS),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(WorkerP2, FileHandle2, 0, ?TEST_DATA_LENGTH), ?ATTEMPTS),
     ?assertMatch({ok, ?TEST_DATA}, storage_test_utils:read_file(WorkerP2, StorageFilePath2), ?ATTEMPTS),
     ok = lfm_proxy:close(WorkerP2, FileHandle2),
-    ok = lfm_proxy:unlink(WorkerP1, SessionId, {guid, FileGuid}),
+    ok = lfm_proxy:unlink(WorkerP1, SessionId, ?FILE_REF(FileGuid)),
 
     %then
     ?assertMatch({error, ?ENOENT}, storage_test_utils:read_file_info(WorkerP2, StorageFilePath2), ?ATTEMPTS),
@@ -316,18 +317,18 @@ remote_replica_should_be_truncated_on_storage_after_truncate(Config) ->
 
     % when
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, FilePath),
-    {ok, FileHandle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
+    {ok, FileHandle} = lfm_proxy:open(WorkerP1, SessionId, ?FILE_REF(FileGuid), write),
     {ok, _} = lfm_proxy:write(WorkerP1, FileHandle, 0, ?TEST_DATA),
     ok = lfm_proxy:close(WorkerP1, FileHandle),
 
     % and
     {ok, FileHandle2} = ?assertMatch({ok, _},
-        lfm_proxy:open(WorkerP2, SessionId2, {guid, FileGuid}, read), ?ATTEMPTS),
+        lfm_proxy:open(WorkerP2, SessionId2, ?FILE_REF(FileGuid), read), ?ATTEMPTS),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(WorkerP2, FileHandle2, 0, ?TEST_DATA_LENGTH), ?ATTEMPTS),
     ?assertMatch({ok, ?TEST_DATA}, storage_test_utils:read_file(WorkerP2, StorageFilePath2), ?ATTEMPTS),
     ok = lfm_proxy:close(WorkerP2, FileHandle2),
-    ?assertEqual(ok, lfm_proxy:truncate(WorkerP1, SessionId, {guid, FileGuid}, TestDataSize2)),
+    ?assertEqual(ok, lfm_proxy:truncate(WorkerP1, SessionId, ?FILE_REF(FileGuid), TestDataSize2)),
 
     %then
     ?assertMatch({ok, TestData2}, storage_test_utils:read_file(WorkerP2, StorageFilePath2), ?ATTEMPTS),
@@ -347,13 +348,13 @@ remote_directory_replica_should_be_deleted_from_storage_after_deletion(Config) -
     % when
     {ok, DirGuid} = lfm_proxy:mkdir(WorkerP1, SessionId, DirPath),
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, DirGuid, ?FILE_NAME, ?DEFAULT_FILE_PERMS),
-    {ok, FileHandle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
+    {ok, FileHandle} = lfm_proxy:open(WorkerP1, SessionId, ?FILE_REF(FileGuid), write),
     {ok, _} = lfm_proxy:write(WorkerP1, FileHandle, 0, ?TEST_DATA),
     ok = lfm_proxy:close(WorkerP1, FileHandle),
 
     %and
     {ok, FileHandle2} = ?assertMatch({ok, _},
-        lfm_proxy:open(WorkerP2, SessionId2, {guid, FileGuid}, read), ?ATTEMPTS),
+        lfm_proxy:open(WorkerP2, SessionId2, ?FILE_REF(FileGuid), read), ?ATTEMPTS),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(WorkerP2, FileHandle2, 0, ?TEST_DATA_LENGTH), ?ATTEMPTS),
     ?assertMatch({ok, ?TEST_DATA}, storage_test_utils:read_file(WorkerP2, StorageFilePath2), ?ATTEMPTS),
@@ -361,7 +362,7 @@ remote_directory_replica_should_be_deleted_from_storage_after_deletion(Config) -
     ?assertEqual({ok, [binary_to_list(?FILE_NAME)]}, storage_test_utils:list_dir(WorkerP2, StorageDirPath2)),
     ?assertEqual({ok, ?TEST_DATA}, storage_test_utils:read_file(WorkerP2, StorageFilePath2)),
 
-    ?assertEqual(ok, lfm_proxy:rm_recursive(WorkerP1, SessionId, {guid, DirGuid})),
+    ?assertEqual(ok, lfm_proxy:rm_recursive(WorkerP1, SessionId, ?FILE_REF(DirGuid))),
 
     % then
     ?assertEqual({error, ?ENOENT}, storage_test_utils:list_dir(WorkerP2, StorageDirPath2), ?ATTEMPTS),
@@ -381,13 +382,13 @@ empty_remote_directory_replica_should_be_deleted_from_storage_after_deletion(Con
     {ok, DirGuid} = lfm_proxy:mkdir(WorkerP1, SessionId, DirPath),
     % create file so that directory will be created on storage
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, DirGuid, ?FILE_NAME, ?DEFAULT_FILE_PERMS),
-    {ok, FileHandle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
+    {ok, FileHandle} = lfm_proxy:open(WorkerP1, SessionId, ?FILE_REF(FileGuid), write),
     {ok, _} = lfm_proxy:write(WorkerP1, FileHandle, 0, ?TEST_DATA),
     ok = lfm_proxy:close(WorkerP1, FileHandle),
 
     %and
     {ok, FileHandle2} = ?assertMatch({ok, _},
-        lfm_proxy:open(WorkerP2, SessionId2, {guid, FileGuid}, read), ?ATTEMPTS),
+        lfm_proxy:open(WorkerP2, SessionId2, ?FILE_REF(FileGuid), read), ?ATTEMPTS),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(WorkerP2, FileHandle2, 0, ?TEST_DATA_LENGTH), ?ATTEMPTS),
     ?assertMatch({ok, ?TEST_DATA}, storage_test_utils:read_file(WorkerP2, StorageFilePath2), ?ATTEMPTS),
@@ -395,11 +396,11 @@ empty_remote_directory_replica_should_be_deleted_from_storage_after_deletion(Con
     ?assertEqual({ok, [binary_to_list(?FILE_NAME)]}, storage_test_utils:list_dir(WorkerP2, StorageDirPath2)),
     ?assertEqual({ok, ?TEST_DATA}, storage_test_utils:read_file(WorkerP2, StorageFilePath2)),
     % delete file to leave an empty directory on storage
-    ?assertEqual(ok, lfm_proxy:unlink(WorkerP1, SessionId, {guid, FileGuid})),
+    ?assertEqual(ok, lfm_proxy:unlink(WorkerP1, SessionId, ?FILE_REF(FileGuid))),
     ?assertEqual({error, ?ENOENT}, storage_test_utils:read_file(WorkerP2, StorageFilePath2), ?ATTEMPTS),
     ?assertEqual({error, ?ENOENT}, storage_test_utils:read_file_info(WorkerP2, StorageFilePath2), ?ATTEMPTS),
     % delete empty directory
-    ?assertEqual(ok, lfm_proxy:rm_recursive(WorkerP1, SessionId, {guid, DirGuid})),
+    ?assertEqual(ok, lfm_proxy:rm_recursive(WorkerP1, SessionId, ?FILE_REF(DirGuid))),
 
     % then
     ?assertEqual({error, ?ENOENT}, storage_test_utils:list_dir(WorkerP2, StorageDirPath2), ?ATTEMPTS),
@@ -417,24 +418,24 @@ replica_should_be_deleted_from_storage_after_releasing_handle_to_remotely_delete
 
     % when
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, FilePath),
-    {ok, FileHandle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
+    {ok, FileHandle} = lfm_proxy:open(WorkerP1, SessionId, ?FILE_REF(FileGuid), write),
     {ok, _} = lfm_proxy:write(WorkerP1, FileHandle, 0, ?TEST_DATA),
     ok = lfm_proxy:close(WorkerP1, FileHandle),
 
     % and
     {ok, FileHandle2} = ?assertMatch({ok, _},
-        lfm_proxy:open(WorkerP2, SessionId2, {guid, FileGuid}, read), ?ATTEMPTS),
+        lfm_proxy:open(WorkerP2, SessionId2, ?FILE_REF(FileGuid), read), ?ATTEMPTS),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(WorkerP2, FileHandle2, 0, ?TEST_DATA_LENGTH), ?ATTEMPTS),
     ?assertMatch({ok, ?TEST_DATA}, storage_test_utils:read_file(WorkerP2, StorageFilePath2), ?ATTEMPTS),
-    ok = lfm_proxy:unlink(WorkerP1, SessionId, {guid, FileGuid}),
+    ok = lfm_proxy:unlink(WorkerP1, SessionId, ?FILE_REF(FileGuid)),
 
     %then
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(WorkerP1, SessionId, {guid, FileGuid})),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(WorkerP1, SessionId, ?FILE_REF(FileGuid))),
     ?assertMatch({error, ?ENOENT}, storage_test_utils:read_file(WorkerP1, StorageFilePath1), ?ATTEMPTS),
 
     % ensure that unlinking file is synced
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(WorkerP2, SessionId2, {guid, FileGuid}), ?ATTEMPTS),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(WorkerP2, SessionId2, ?FILE_REF(FileGuid)), ?ATTEMPTS),
 
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(WorkerP2, FileHandle2, 0, ?TEST_DATA_LENGTH), ?ATTEMPTS),
@@ -459,30 +460,30 @@ parent_dir_of_replica_should_be_deleted_from_storage_after_releasing_handle_to_r
     % when
     {ok, DirGuid} = lfm_proxy:mkdir(WorkerP1, SessionId, DirPath),
     {ok, FileGuid} = lfm_proxy:create(WorkerP1, SessionId, FilePath),
-    {ok, FileHandle} = lfm_proxy:open(WorkerP1, SessionId, {guid, FileGuid}, write),
+    {ok, FileHandle} = lfm_proxy:open(WorkerP1, SessionId, ?FILE_REF(FileGuid), write),
     {ok, _} = lfm_proxy:write(WorkerP1, FileHandle, 0, ?TEST_DATA),
     ok = lfm_proxy:close(WorkerP1, FileHandle),
 
     % and
     {ok, FileHandle2} = ?assertMatch({ok, _},
-        lfm_proxy:open(WorkerP2, SessionId2, {guid, FileGuid}, read), ?ATTEMPTS),
+        lfm_proxy:open(WorkerP2, SessionId2, ?FILE_REF(FileGuid), read), ?ATTEMPTS),
     ?assertMatch({ok, ?TEST_DATA},
         lfm_proxy:read(WorkerP2, FileHandle2, 0, ?TEST_DATA_LENGTH), ?ATTEMPTS),
 
 
     % File is intentionally left opened on WorkerP2
     ?assertMatch({ok, ?TEST_DATA}, storage_test_utils:read_file(WorkerP2, StorageFilePath2), ?ATTEMPTS),
-    ok = lfm_proxy:rm_recursive(WorkerP1, SessionId, {guid, DirGuid}),
+    ok = lfm_proxy:rm_recursive(WorkerP1, SessionId, ?FILE_REF(DirGuid)),
 
     %then
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(WorkerP1, SessionId, {guid, DirGuid}), ?ATTEMPTS),
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(WorkerP1, SessionId, {guid, FileGuid}), ?ATTEMPTS),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(WorkerP1, SessionId, ?FILE_REF(DirGuid)), ?ATTEMPTS),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(WorkerP1, SessionId, ?FILE_REF(FileGuid)), ?ATTEMPTS),
     ?assertMatch({error, ?ENOENT}, storage_test_utils:list_dir(WorkerP1, StorageDirPath), ?ATTEMPTS),
     ?assertMatch({error, ?ENOENT}, storage_test_utils:read_file(WorkerP1, StorageFilePath1), ?ATTEMPTS),
 
     % ensure that directory was removed on 2nd provider
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(WorkerP2, SessionId2, {guid, DirGuid}), ?ATTEMPTS),
-    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(WorkerP2, SessionId2, {guid, FileGuid}), ?ATTEMPTS),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(WorkerP2, SessionId2, ?FILE_REF(DirGuid)), ?ATTEMPTS),
+    ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(WorkerP2, SessionId2, ?FILE_REF(FileGuid)), ?ATTEMPTS),
 
     % but not on it's storage as the file is still opened
     ?assertMatch({ok, ?TEST_DATA},
@@ -508,7 +509,7 @@ race_on_remote_deletion_of_parent_and_child(Config) ->
     % when
     {ok, DirGuid} = lfm_proxy:mkdir(Worker, SessId, DirPath),
     {ok, FileGuid} = lfm_proxy:create(Worker, SessId, DirGuid, ?FILE_NAME, ?DEFAULT_FILE_PERMS),
-    {ok, FileHandle} = lfm_proxy:open(Worker, SessId, {guid, FileGuid}, write),
+    {ok, FileHandle} = lfm_proxy:open(Worker, SessId, ?FILE_REF(FileGuid), write),
     {ok, _} = lfm_proxy:write(Worker, FileHandle, 0, ?TEST_DATA),
     ok = lfm_proxy:close(Worker, FileHandle),
     ?assertEqual({ok, [binary_to_list(?FILE_NAME)]}, storage_test_utils:list_dir(Worker, StorageDirPath)),
@@ -521,8 +522,8 @@ race_on_remote_deletion_of_parent_and_child(Config) ->
     {FileUuid, SpaceId} = file_id:unpack_guid(FileGuid),
 
     % pretend that files were deleted
-    ok = rpc:call(Worker, file_meta, delete, [FileUuid]),
-    ok = rpc:call(Worker, file_meta, delete, [DirUuid]),
+    ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [FileUuid])),
+    ?assertEqual(ok, rpc:call(Worker, file_meta, delete, [DirUuid])),
 
     % pretend that directory doc is synchronized before its child doc
     {ok, DirDoc} = rpc:call(Worker, file_meta, get_including_deleted, [DirUuid]),
@@ -575,8 +576,8 @@ suffix_in_metadata_and_storage_test(Config) ->
     Uuid = file_id:guid_to_uuid(Guid2),
     StorageFilePath2 = storage_test_utils:file_path(Worker1, SpaceId, ?CONFLICTING_STORAGE_FILE_NAME(FileName, Uuid)),
 
-    ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessionId1, {guid, Guid1}), ?ATTEMPTS),
-    ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessionId1, {guid, Guid2}), ?ATTEMPTS),
+    ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessionId1, ?FILE_REF(Guid1)), ?ATTEMPTS),
+    ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessionId1, ?FILE_REF(Guid2)), ?ATTEMPTS),
 
     ?assertEqual(2, length(ListDir(Worker1, SessionId1, SpacePath)), ?ATTEMPTS),
 
@@ -584,8 +585,8 @@ suffix_in_metadata_and_storage_test(Config) ->
     Content1 = <<"data_file1">>,
     Content2 = <<"data_file2">>,
 
-    {ok, Handle1} = lfm_proxy:open(Worker1, SessionId1, {guid, Guid1}, rdwr),
-    {ok, Handle2} = lfm_proxy:open(Worker1, SessionId1, {guid, Guid2}, rdwr),
+    {ok, Handle1} = lfm_proxy:open(Worker1, SessionId1, ?FILE_REF(Guid1), rdwr),
+    {ok, Handle2} = lfm_proxy:open(Worker1, SessionId1, ?FILE_REF(Guid2), rdwr),
 
     ExpectedStorageFileList =
         [binary_to_list(FileName), binary_to_list(?CONFLICTING_STORAGE_FILE_NAME(FileName, Uuid))],
@@ -603,7 +604,7 @@ suffix_in_metadata_and_storage_test(Config) ->
     ?assertMatch({ok, Content2}, storage_test_utils:read_file(Worker1, StorageFilePath2)),
 
     ?assertEqual(ok, lfm_proxy:close(Worker1, Handle1)),
-    ?assertEqual(ok, lfm_proxy:unlink(Worker1, SessionId1, {guid, Guid1})),
+    ?assertEqual(ok, lfm_proxy:unlink(Worker1, SessionId1, ?FILE_REF(Guid1))),
 
     [{_, Name}] = ListDir(Worker1, SessionId1, SpacePath),
     ?assertEqual(FileName, Name),
@@ -652,8 +653,8 @@ suffix_in_dir_metadata_test(Config) ->
         lists:sort(List -- StorageFiles)
     end,
 
-    ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessionId1, {guid, Guid1}), ?ATTEMPTS),
-    ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessionId1, {guid, Guid2}), ?ATTEMPTS),
+    ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessionId1, ?FILE_REF(Guid1)), ?ATTEMPTS),
+    ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessionId1, ?FILE_REF(Guid2)), ?ATTEMPTS),
 
     ?assertEqual(2, length(ListDir(Worker1, SessionId1, SpacePath)), ?ATTEMPTS),
     [{_, D1}, {_, D2}] = ListDir(Worker1, SessionId1, SpacePath),
@@ -662,8 +663,8 @@ suffix_in_dir_metadata_test(Config) ->
     Content1 = <<"data_file1">>,
     Content2 = <<"data_file2">>,
 
-    {ok, Handle1} = lfm_proxy:open(Worker1, SessionId1, {guid, Guid1}, rdwr),
-    {ok, Handle2} = lfm_proxy:open(Worker1, SessionId1, {guid, Guid2}, rdwr),
+    {ok, Handle1} = lfm_proxy:open(Worker1, SessionId1, ?FILE_REF(Guid1), rdwr),
+    {ok, Handle2} = lfm_proxy:open(Worker1, SessionId1, ?FILE_REF(Guid2), rdwr),
 
     ExpectedStorageFileList =
         [binary_to_list(FileName), binary_to_list(?CONFLICTING_STORAGE_FILE_NAME(FileName, Uuid))],
@@ -731,8 +732,8 @@ file_with_suffix_is_deleted_from_storage_after_deletion_base(Config, ReleaseBefo
     Uuid = file_id:guid_to_uuid(Guid2),
     StorageFilePath2 = storage_test_utils:file_path(Worker1, SpaceId, ?CONFLICTING_STORAGE_FILE_NAME(FileName, Uuid)),
 
-    ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessionId1, {guid, Guid1}), ?ATTEMPTS),
-    ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessionId1, {guid, Guid2}), ?ATTEMPTS),
+    ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessionId1, ?FILE_REF(Guid1)), ?ATTEMPTS),
+    ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessionId1, ?FILE_REF(Guid2)), ?ATTEMPTS),
 
     ?assertEqual(2, length(ListDir(Worker1, SessionId1, SpacePath)), ?ATTEMPTS),
 
@@ -740,8 +741,8 @@ file_with_suffix_is_deleted_from_storage_after_deletion_base(Config, ReleaseBefo
     Content1 = <<"data_file1">>,
     Content2 = <<"data_file2">>,
 
-    {ok, Handle1} = lfm_proxy:open(Worker1, SessionId1, {guid, Guid1}, rdwr),
-    {ok, Handle2} = lfm_proxy:open(Worker1, SessionId1, {guid, Guid2}, rdwr),
+    {ok, Handle1} = lfm_proxy:open(Worker1, SessionId1, ?FILE_REF(Guid1), rdwr),
+    {ok, Handle2} = lfm_proxy:open(Worker1, SessionId1, ?FILE_REF(Guid2), rdwr),
 
     ExpectedStorageFileList =
         [binary_to_list(FileName), binary_to_list(?CONFLICTING_STORAGE_FILE_NAME(FileName, Uuid))],
@@ -783,11 +784,10 @@ file_with_suffix_is_deleted_from_storage_after_deletion_base(Config, ReleaseBefo
 
 init_per_suite(Config) ->
     Posthook = fun(NewConfig) ->
-        NewConfig1 = [{space_storage_mock, false} | NewConfig],
-        NewConfig2 = initializer:setup_storage(NewConfig1),
-        initializer:mock_provider_ids(NewConfig2),
-        initializer:mock_auth_manager(NewConfig2),
-        multi_provider_file_ops_test_base:init_env(NewConfig2)
+        NewConfig1 = initializer:setup_storage(NewConfig),
+        initializer:mock_provider_ids(NewConfig1),
+        initializer:mock_auth_manager(NewConfig1),
+        multi_provider_file_ops_test_base:init_env(NewConfig1)
     end,
     [
         {?ENV_UP_POSTHOOK, Posthook},
@@ -798,7 +798,7 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     multi_provider_file_ops_test_base:teardown_env(Config),
     initializer:unmock_auth_manager(Config),
-    initializer:unmock_provider_ids(Config),
+    initializer:unmock_provider_ids(?config(op_worker_nodes, Config)),
     initializer:teardown_storage(Config).
 
 init_per_testcase(_Case, Config) ->
@@ -822,11 +822,11 @@ end_per_testcase(_Case, Config) ->
 
 cleanup_space(Config, SpaceId) ->
     [W2, W1 | _] = ?config(op_worker_nodes, Config),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     cleanup_space_children(W1, ?ROOT_SESS_ID, SpaceGuid, 1000),
     cleanup_space_children(W2, ?ROOT_SESS_ID, SpaceGuid, 1000),
-    ?assertEqual({ok, []}, lfm_proxy:get_children(W1, ?ROOT_SESS_ID, {guid, SpaceGuid}, 0, 1)),
-    ?assertEqual({ok, []}, lfm_proxy:get_children(W2, ?ROOT_SESS_ID, {guid, SpaceGuid}, 0, 1), ?ATTEMPTS).
+    ?assertEqual({ok, []}, lfm_proxy:get_children(W1, ?ROOT_SESS_ID, ?FILE_REF(SpaceGuid), 0, 1)),
+    ?assertEqual({ok, []}, lfm_proxy:get_children(W2, ?ROOT_SESS_ID, ?FILE_REF(SpaceGuid), 0, 1), ?ATTEMPTS).
 
 ensure_empty_storages(Config, SpaceId) ->
     Workers = ?config(op_worker_nodes, Config),
@@ -840,9 +840,9 @@ ensure_empty_storage(Worker, SpaceId) ->
     end, ?ATTEMPTS).
 
 cleanup_space_children(Worker, SessionId, SpaceGuid, BatchSize) ->
-    {ok, Children} = lfm_proxy:get_children(Worker, SessionId, {guid, SpaceGuid}, 0, BatchSize),
+    {ok, Children} = lfm_proxy:get_children(Worker, SessionId, ?FILE_REF(SpaceGuid), 0, BatchSize),
     lists:foreach(fun({G, _}) ->
-        lfm_proxy:rm_recursive(Worker, SessionId, {guid, G})
+        lfm_proxy:rm_recursive(Worker, SessionId, ?FILE_REF(G))
     end, Children),
     case length(Children) < BatchSize of
         true -> ok;

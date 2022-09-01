@@ -21,9 +21,9 @@
 -behaviour(gen_server).
 
 -include("global_definitions.hrl").
--include("modules/fslogic/fslogic_common.hrl").
--include("modules/auth/acl.hrl").
 -include("modules/datastore/transfer.hrl").
+-include("modules/fslogic/acl.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% gen_server callbacks
@@ -40,7 +40,6 @@
 -type state() :: #state{}.
 
 -define(DOC_ID_MISSING, doc_id_missing).
--define(DEFAULT_LS_BATCH_SIZE, application:get_env(?APP_NAME, ls_batch_size, 5000)).
 
 %%%===================================================================
 %%% Callbacks
@@ -52,7 +51,7 @@
 %% Callback called to get permissions required to check before starting transfer.
 %% @end
 %%--------------------------------------------------------------------
--callback required_permissions() -> [data_access_rights:requirement()].
+-callback required_permissions() -> [data_access_control:requirement()].
 
 
 %%--------------------------------------------------------------------
@@ -153,7 +152,7 @@ handle_cast(?TRANSFER_DATA_REQ(FileCtx, Params, Retries, NextRetryTimestamp), St
                     % todo VFS-4218 currently we ignore this case
                     {ok, _} = transfer:increment_files_processed_counter(TransferId);
                 {error, cancelled} ->
-                    {ok, _} = transfer:increment_files_failed_and_processed_counters(TransferId);
+                    {ok, _} = transfer:increment_files_processed_counter(TransferId);
                 {error, already_ended} ->
                     {ok, _} = transfer:increment_files_processed_counter(TransferId);
                 {error, _Reason} ->
@@ -262,10 +261,10 @@ transfer_data(State = #state{mod = Mod}, FileCtx0, Params, RetriesLeft) ->
             {error, already_ended};
         error:{badmatch, Error = {error, not_found}} ->
             maybe_retry(FileCtx0, Params, RetriesLeft, Error);
-        Error:Reason ->
+        Error:Reason:Stacktrace   ->
             ?error_stacktrace("Unexpected error ~p:~p during transfer ~p", [
                 Error, Reason, Params#transfer_params.transfer_id
-            ]),
+            ], Stacktrace),
             maybe_retry(FileCtx0, Params, RetriesLeft, {Error, Reason})
     end.
 
@@ -374,10 +373,7 @@ transfer_fs_subtree(State = #state{mod = Mod}, FileCtx, Params) ->
                 true ->
                     case file_ctx:is_dir(FileCtx) of
                         {true, FileCtx2} ->
-                            ListOpts = #{
-                                token => ?INITIAL_LS_TOKEN,
-                                size => ?DEFAULT_LS_BATCH_SIZE
-                            },
+                            ListOpts = #{tune_for_large_continuous_listing => true},
                             transfer_dir(State, FileCtx2, ListOpts, Params);
                         {false, FileCtx2} ->
                             Mod:transfer_regular_file(FileCtx2, Params)
@@ -391,25 +387,24 @@ transfer_fs_subtree(State = #state{mod = Mod}, FileCtx, Params) ->
 
 
 %% @private
--spec transfer_dir(state(), file_ctx:ctx(), file_meta:list_opts(), transfer_params()) ->
+-spec transfer_dir(state(), file_ctx:ctx(), file_listing:options(), transfer_params()) ->
     ok | {error, term()}.
 transfer_dir(State, FileCtx, ListOpts, TransferParams = #transfer_params{
     transfer_id = TransferId,
     user_ctx = UserCtx
 }) ->
-    {Children, ListExtendedInfo, FileCtx2} = file_ctx:get_file_children(FileCtx, UserCtx, ListOpts),
+    {Children, ListingPaginationToken, FileCtx2} = file_tree:list_children(FileCtx, UserCtx, ListOpts),
 
     Length = length(Children),
     transfer:increment_files_to_process_counter(TransferId, Length),
     enqueue_files_transfer(State, Children, TransferParams),
 
-    case maps:get(is_last, ListExtendedInfo) of
+    case file_listing:is_finished(ListingPaginationToken) of
         true ->
             transfer:increment_files_processed_counter(TransferId),
             ok;
         false ->
-            NewToken = maps:get(token, ListExtendedInfo),
-            transfer_dir(State, FileCtx2, ListOpts#{token => NewToken}, TransferParams)
+            transfer_dir(State, FileCtx2, #{pagination_token => ListingPaginationToken}, TransferParams)
     end.
 
 
@@ -461,7 +456,7 @@ transfer_files_from_view(State, FileCtx, Params, Chunk, LastDocId) ->
                 NewFileCtxs = lists:filtermap(fun(O) ->
                     try
                         {ok, G} = file_id:objectid_to_guid(O),
-                        NewFileCtx0 = file_ctx:new_by_guid(G),
+                        NewFileCtx0 = file_ctx:new_by_guid(G), % TODO VFS-7443 - maybe use referenced guid?
                         case file_ctx:file_exists_const(NewFileCtx0) of
                             true ->
                                 % TODO VFS-6386 Enable and test view transfer with dirs
@@ -479,13 +474,14 @@ transfer_files_from_view(State, FileCtx, Params, Chunk, LastDocId) ->
                                 false
                         end
                     catch
-                        Error:Reason ->
+                        Error:Reason:Stacktrace   ->
                             transfer:increment_files_failed_and_processed_counters(TransferId),
                             ?error_stacktrace(
                                 "Processing result of query view ~p "
                                 "in space ~p failed due to ~p:~p", [
                                     ViewName, SpaceId, Error, Reason
-                                ]
+                                ],
+                                Stacktrace  
                             ),
                             false
                     end

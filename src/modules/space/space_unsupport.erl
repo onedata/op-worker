@@ -25,6 +25,7 @@
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/datastore/qos.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -behaviour(traverse_behaviour).
@@ -59,9 +60,9 @@
 
 -spec init_pools() -> ok.
 init_pools() ->
-    MasterJobsLimit = application:get_env(?APP_NAME, space_unsupport_master_jobs_limit, 1),
-    SlaveJobsLimit = application:get_env(?APP_NAME, space_unsupport_slave_jobs_limit, 5),
-    ParallelismLimit = application:get_env(?APP_NAME, space_unsupport_parallelism_limit, 5),
+    MasterJobsLimit = op_worker:get_env(space_unsupport_master_jobs_limit, 1),
+    SlaveJobsLimit = op_worker:get_env(space_unsupport_slave_jobs_limit, 5),
+    ParallelismLimit = op_worker:get_env(space_unsupport_parallelism_limit, 5),
     traverse:init_pool(?POOL_NAME, MasterJobsLimit, SlaveJobsLimit, ParallelismLimit),
     unsupport_cleanup_traverse:init_pool().
 
@@ -160,17 +161,17 @@ execute_stage(#space_unsupport_job{stage = init, space_id = SpaceId}) ->
 
 execute_stage(#space_unsupport_job{stage = replicate, subtask_id = undefined} = Job) ->
     #space_unsupport_job{space_id = SpaceId, storage_id = StorageId} = Job,
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     Expression = <<?QOS_ANY_STORAGE, "\\ storageId = ", StorageId/binary>>,
-    {ok, QosEntryId} = lfm:add_qos_entry(?ROOT_SESS_ID, {guid, SpaceGuid}, Expression, 1, internal),
+    QosEntryId = mi_qos:add_qos_entry(?ROOT_SESS_ID, ?FILE_REF(SpaceGuid), Expression, 1, internal),
     NewJob = Job#space_unsupport_job{subtask_id = QosEntryId},
     space_unsupport_job:save(NewJob),
     execute_stage(NewJob);
 execute_stage(#space_unsupport_job{stage = replicate, subtask_id = QosEntryId} = _Job) ->
     %% @TODO Use subscription after resolving VFS-5647
     %% @TODO Insecure(fulfilling qos can fail - wait will never end) before resolving VFS-5737
-    wait(fun() -> lfm:check_qos_status(?ROOT_SESS_ID, QosEntryId) == {ok, ?FULFILLED} end),
-    lfm:remove_qos_entry(?ROOT_SESS_ID, QosEntryId);
+    wait(fun() -> (catch mi_qos:check_qos_status(?ROOT_SESS_ID, QosEntryId)) == ?FULFILLED_QOS_STATUS end),
+    mi_qos:remove_qos_entry(?ROOT_SESS_ID, QosEntryId);
 
 execute_stage(#space_unsupport_job{stage = cleanup_traverse, subtask_id = undefined} = Job) ->
     #space_unsupport_job{space_id = SpaceId, storage_id = StorageId} = Job,

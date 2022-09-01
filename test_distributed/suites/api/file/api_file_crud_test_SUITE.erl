@@ -13,6 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("api_file_test_utils.hrl").
+-include("modules/dataset/dataset.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/fslogic/file_details.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
@@ -21,8 +22,9 @@
 -include_lib("ctool/include/http/codes.hrl").
 
 -export([
-    all/0,
+    groups/0, all/0,
     init_per_suite/1, end_per_suite/1,
+    init_per_group/2, end_per_group/2,
     init_per_testcase/2, end_per_testcase/2
 ]).
 
@@ -35,19 +37,32 @@
     update_file_instance_on_provider_not_supporting_space_test/1,
 
     delete_file_instance_test/1,
+    delete_file_instance_at_path_test/1,
     delete_file_instance_on_provider_not_supporting_space_test/1
 ]).
 
+groups() -> [
+    {parallel, [parallel], [
+        get_file_instance_test,
+        get_file_instance_on_provider_not_supporting_space_test,
+
+        update_file_instance_test,
+        update_file_instance_on_provider_not_supporting_space_test,
+
+        delete_file_instance_test,
+        delete_file_instance_at_path_test,
+        delete_file_instance_on_provider_not_supporting_space_test
+    ]},
+    {sequential, [sequential], [
+        % Cannot be executed in parallel with get_file_instance_test as
+        % both tests check space dir shares and expect different results
+        get_shared_file_instance_test
+    ]}
+].
+
 all() -> [
-    get_file_instance_test,
-    get_shared_file_instance_test,
-    get_file_instance_on_provider_not_supporting_space_test,
-
-    update_file_instance_test,
-    update_file_instance_on_provider_not_supporting_space_test,
-
-    delete_file_instance_test,
-    delete_file_instance_on_provider_not_supporting_space_test
+    {group, parallel},
+    {group, sequential}
 ].
 
 
@@ -74,8 +89,8 @@ get_file_instance_test(_Config) ->
     ExpJsonFileDetails = file_details_to_gs_json(undefined, FileDetails),
 
     SpaceId = oct_background:get_space_id(space_krk_par),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
-    SpaceDetails = get_space_dir_details(P2Node, SpaceGuid, ?SPACE_KRK_PAR),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+    SpaceDetails = get_space_dir_details(paris, SpaceGuid, ?SPACE_KRK_PAR),
     ExpJsonSpaceDetails = file_details_to_gs_json(undefined, SpaceDetails),
 
     ClientSpec = #client_spec{
@@ -152,11 +167,11 @@ get_shared_file_instance_test(_Config) ->
     ExpJsonShareRootFileDetails = file_details_to_gs_json(FileShareId1, FileDetailsWithShares),
 
     SpaceId = oct_background:get_space_id(space_krk_par),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     SpaceShareId = api_test_utils:share_file_and_sync_file_attrs(P1, SpaceOwnerSessId, Providers, SpaceGuid),
     ShareSpaceGuid = file_id:guid_to_share_guid(SpaceGuid, SpaceShareId),
 
-    ShareSpaceDetails = get_space_dir_details(P2, SpaceGuid, ?SPACE_KRK_PAR),
+    ShareSpaceDetails = get_space_dir_details(paris, SpaceGuid, ?SPACE_KRK_PAR),
     ExpJsonShareSpaceDetails = file_details_to_gs_json(SpaceShareId, ShareSpaceDetails),
 
     ShareFileGuid = file_id:guid_to_share_guid(FileGuid, SpaceShareId),
@@ -204,10 +219,12 @@ get_shared_file_instance_test(_Config) ->
 get_file_instance_on_provider_not_supporting_space_test(_Config) ->
     P2Id = oct_background:get_provider_id(paris),
     [P2Node] = oct_background:get_provider_nodes(paris),
+
+    SpaceId = oct_background:get_space_id(space_krk),
     {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
 
     ValidateGsCallResultFun = fun(_, Result) ->
-        ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id), Result)
+        ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id), Result)
     end,
 
     ?assert(onenv_api_test_runner:run_tests([
@@ -270,18 +287,21 @@ build_get_instance_validate_gs_call_fun(ExpJsonDetails) ->
 
 
 %% @private
--spec get_space_dir_details(node(), file_id:file_guid(), od_space:name()) -> #file_details{}.
-get_space_dir_details(Node, SpaceDirGuid, SpaceName) ->
+-spec get_space_dir_details(oct_background:entity_selector(), file_id:file_guid(), od_space:name()) -> #file_details{}.
+get_space_dir_details(ProviderSelector, SpaceDirGuid, SpaceName) ->
     {ok, SpaceAttrs} = ?assertMatch(
-        {ok, _}, file_test_utils:get_attrs(Node, SpaceDirGuid), ?ATTEMPTS
+        {ok, _}, file_test_utils:get_attrs(oct_background:get_random_provider_node(ProviderSelector), SpaceDirGuid), ?ATTEMPTS
     ),
     #file_details{
-        file_attr = SpaceAttrs#file_attr{name = SpaceName},
-        index_startid = file_id:guid_to_space_id(SpaceDirGuid),
+        file_attr = SpaceAttrs#file_attr{
+            name = SpaceName, 
+            index = file_listing:build_index(file_id:guid_to_space_id(SpaceDirGuid))
+        },
         active_permissions_type = posix,
-        has_metadata = false,
-        has_direct_qos = false,
-        has_eff_qos = false
+        eff_protection_flags = ?no_flags_mask,
+        eff_qos_membership = ?NONE_MEMBERSHIP,
+        eff_dataset_membership = ?NONE_MEMBERSHIP,
+        has_metadata = false
     }.
 
 
@@ -347,6 +367,7 @@ update_file_instance_on_provider_not_supporting_space_test(_Config) ->
     P2Id = oct_background:get_provider_id(paris),
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
+    SpaceId = oct_background:get_space_id(space_krk),
     {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
 
     ?assert(onenv_api_test_runner:run_tests([
@@ -367,7 +388,7 @@ update_file_instance_on_provider_not_supporting_space_test(_Config) ->
             end,
             prepare_args_fun = build_update_file_instance_test_prepare_gs_args_fun(FileGuid, private),
             validate_result_fun = fun(_, Result) ->
-                ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id), Result)
+                ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id), Result)
             end,
             data_spec = update_file_instance_test_data_spec()
         }
@@ -495,10 +516,126 @@ delete_file_instance_test(Config) ->
     ])).
 
 
+delete_file_instance_at_path_test(Config) ->
+    [P1] = oct_background:get_provider_nodes(krakow),
+    [P2] = oct_background:get_provider_nodes(paris),
+    Providers = [P1, P2],
+
+    UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
+    SpaceOwnerSessId = oct_background:get_user_session_id(user2, krakow),
+
+    TopDirName = ?RANDOM_FILE_NAME(),
+    TopDirPath = filename:join(["/", ?SPACE_KRK_PAR, TopDirName]),
+    {ok, TopDirGuid} = lfm_proxy:mkdir(P1, UserSessIdP1, TopDirPath, 8#704),
+    TopDirShareId = api_test_utils:share_file_and_sync_file_attrs(P1, SpaceOwnerSessId, Providers, TopDirGuid),
+
+    FileType = api_test_utils:randomly_choose_file_type_for_test(),
+
+    DataSpec = #data_spec{
+        optional = [<<"path">>],
+        correct_values = #{
+            <<"path">> => [
+                filename_only_relative_to_parent_dir_placeholder,
+                directory_and_filename_relative_to_space_root_dir_placeholder,
+                directory_and_filename_relative_to_space_id_placeholder
+            ]
+        },
+        bad_values = [
+            {<<"path">>, <<"/a/b/\0null\0/">>, ?ERROR_BAD_VALUE_FILE_PATH},
+            {<<"path">>, nonexistent_path, ?ERROR_POSIX(?ENOENT)}
+        ]
+    },
+
+    MemRef = api_test_memory:init(),
+
+    ?assert(onenv_api_test_runner:run_tests([
+        #suite_spec{
+            target_nodes = Providers,
+            client_spec = #client_spec{
+                correct = [
+                    user2,  % space owner - doesn't need any perms
+                    user3
+                ],
+                unauthorized = [nobody],
+                forbidden_not_in_space = [user1],
+                forbidden_in_space = [{user4, ?ERROR_POSIX(?EACCES)}]  % forbidden by file perms
+            },
+
+            setup_fun = build_delete_instance_setup_fun(MemRef, TopDirPath, FileType),
+            verify_fun = build_delete_instance_verify_fun(MemRef, Config),
+
+            scenario_templates = [
+                #scenario_template{
+                    name = str_utils:format("Delete ~s at path instance using rest api", [FileType]),
+                    type = rest,
+                    prepare_args_fun = build_delete_instance_at_path_test_prepare_rest_args_fun(MemRef, TopDirGuid, TopDirName),
+                    validate_result_fun = fun(_, {ok, RespCode, _RespHeaders, _RespBody}) ->
+                        ?assertEqual(?HTTP_204_NO_CONTENT, RespCode)
+                    end
+                }
+            ],
+
+            data_spec = api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+                TopDirGuid, TopDirShareId, DataSpec
+            )
+        }
+    ])).
+
+
+%% @private
+-spec build_delete_instance_at_path_test_prepare_rest_args_fun(
+    api_test_memory:mem_ref(), file_id:file_guid(), file_meta:name()
+) ->
+    onenv_api_test_runner:prepare_args_fun().
+build_delete_instance_at_path_test_prepare_rest_args_fun(MemRef, TopDirGuid, TopDirName) ->
+    fun(#api_test_ctx{data = Data}) ->
+        SpaceId = oct_background:get_space_id(space_krk_par),
+
+        RootFileName = api_test_memory:get(MemRef, file_name),
+        RootFileGuid = api_test_memory:get(MemRef, file_guid),
+
+        {ParentGuidOrSpaceId, Path} = case maps:get(<<"path">>, Data, undefined) of
+            filename_only_relative_to_parent_dir_placeholder ->
+                {TopDirGuid, RootFileName};
+            directory_and_filename_relative_to_space_root_dir_placeholder ->
+                SpaceRootDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+                {SpaceRootDirGuid, filepath_utils:join([TopDirName, RootFileName])};
+            directory_and_filename_relative_to_space_id_placeholder ->
+                {space_id, filepath_utils:join([TopDirName, RootFileName])};
+            nonexistent_path ->
+                {space_id, ?RANDOM_FILE_NAME()};
+            undefined ->
+                {RootFileGuid, <<"">>};
+            CustomPath ->
+                {space_id, CustomPath}
+        end,
+
+        ParentId = case ParentGuidOrSpaceId of
+            space_id ->
+                SpaceId;
+            Guid ->
+                {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+                ObjectId
+        end,
+
+        DataWithoutPath = maps:remove(<<"path">>, Data),
+
+        {Id, _} = api_test_utils:maybe_substitute_bad_id(ParentId, DataWithoutPath),
+        RestPath = filepath_utils:join([<<"data">>, Id, <<"path">>, Path]),
+
+        #rest_args{
+            method = delete,
+            path = RestPath
+        }
+    end.
+
+
 delete_file_instance_on_provider_not_supporting_space_test(_Config) ->
     P2Id = oct_background:get_provider_id(paris),
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
+
+    SpaceId = oct_background:get_space_id(space_krk),
     {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
 
     ?assert(onenv_api_test_runner:run_tests([
@@ -512,7 +649,7 @@ delete_file_instance_on_provider_not_supporting_space_test(_Config) ->
 
             prepare_args_fun = build_delete_instance_test_prepare_gs_args_fun({guid, FileGuid}, private),
             validate_result_fun = fun(_, Result) ->
-                ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id), Result)
+                ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id), Result)
             end,
             verify_fun = fun(_, _) ->
                 ?assertMatch({ok, _}, file_test_utils:get_attrs(P1Node, FileGuid), ?ATTEMPTS),
@@ -536,8 +673,9 @@ build_delete_instance_setup_fun(MemRef, TopDirPath, FileType) ->
     SpaceOwnerSessIdP1 = oct_background:get_user_session_id(user2, krakow),
 
     fun() ->
-        Path = filename:join([TopDirPath, ?RANDOM_FILE_NAME()]),
-        {ok, RootFileGuid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, Path, 8#704),
+        RootFileName = ?RANDOM_FILE_NAME(),
+        Path = filename:join([TopDirPath, RootFileName]),
+        {ok, RootFileGuid} = lfm_test_utils:create_file(FileType, P1Node, UserSessIdP1, Path, 8#704),
         RootFileShares = case api_test_utils:randomly_create_share(P1Node, SpaceOwnerSessIdP1, RootFileGuid) of
             undefined -> [];
             ShareId -> [ShareId]
@@ -547,6 +685,7 @@ build_delete_instance_setup_fun(MemRef, TopDirPath, FileType) ->
             file_test_utils:get_attrs(P2Node, RootFileGuid),
             ?ATTEMPTS
         ),
+        api_test_memory:set(MemRef, file_name, RootFileName),
         api_test_memory:set(MemRef, file_guid, RootFileGuid),
 
         AllFiles = case FileType of
@@ -665,10 +804,18 @@ end_per_suite(_Config) ->
     oct_background:end_per_suite().
 
 
+init_per_group(_Group, Config) ->
+    lfm_proxy:init(Config, false).
+
+
+end_per_group(_Group, Config) ->
+    lfm_proxy:teardown(Config).
+
+
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 10}),
-    lfm_proxy:init(Config).
+    Config.
 
 
-end_per_testcase(_Case, Config) ->
-    lfm_proxy:teardown(Config).
+end_per_testcase(_Case, _Config) ->
+    ok.

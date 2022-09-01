@@ -48,6 +48,8 @@
     get_file_attr_test/1,
     get_file_details_test/1,
     get_file_distribution_test/1,
+    gather_historical_dir_size_stats_test/1,
+    get_file_storage_locations_test/1,
 
     set_perms_test/1,
     check_read_perms_test/1,
@@ -83,7 +85,6 @@
     get_effective_file_qos_test/1,
     check_qos_fulfillment_test/1,
 
-    permission_cache_test/1,
     multi_provider_permission_cache_test/1,
     expired_session_test/1
 ]).
@@ -117,6 +118,8 @@ all() -> [
     get_file_attr_test,
     get_file_details_test,
     get_file_distribution_test,
+    gather_historical_dir_size_stats_test,
+    get_file_storage_locations_test,
 
     set_perms_test,
     check_read_perms_test,
@@ -152,7 +155,6 @@ all() -> [
     get_effective_file_qos_test,
     check_qos_fulfillment_test,
 
-    permission_cache_test,
     multi_provider_permission_cache_test,
     expired_session_test
 ].
@@ -261,6 +263,14 @@ get_file_details_test(Config) ->
 
 get_file_distribution_test(Config) ->
     permissions_test_base:get_file_distribution_test(Config).
+
+
+gather_historical_dir_size_stats_test(Config) ->
+    permissions_test_base:gather_historical_dir_size_stats_test(Config).
+
+
+get_file_storage_locations_test(Config) ->
+    permissions_test_base:get_file_storage_locations_test(Config).
 
 
 set_perms_test(Config) ->
@@ -375,10 +385,6 @@ check_qos_fulfillment_test(Config) ->
     permissions_test_base:check_qos_fulfillment_test(Config).
 
 
-permission_cache_test(Config) ->
-    permissions_test_base:permission_cache_test(Config).
-
-
 multi_provider_permission_cache_test(Config) ->
     permissions_test_base:multi_provider_permission_cache_test(Config).
 
@@ -401,6 +407,7 @@ end_per_suite(Config) ->
 
 
 init_per_testcase(Case, Config) ->
+    ct:timetrap({minutes, 5}),
     permissions_test_base:init_per_testcase(Case, Config).
 
 

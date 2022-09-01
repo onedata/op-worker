@@ -28,7 +28,7 @@
 
 %% API
 -export([
-    create/2,
+    create/3,
     report_children_to_process/4,
     report_child_processed/2,
     report_last_batch/2,
@@ -39,14 +39,15 @@
 -export([
     get_ctx/0,
     get_record_struct/1,
-    get_record_version/0
+    get_record_version/0,
+    upgrade_record/2
 ]).
 
 -type id() :: datastore_model:key().
 -type record() :: #tree_traverse_progress{}.
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
--type status() :: ?SUBTREE_PROCESSED | ?SUBTREE_NOT_PROCESSED.
+-type status() :: ?SUBTREE_PROCESSED(NextSubtreeRoot :: file_meta:uuid()) | ?SUBTREE_NOT_PROCESSED.
 
 -export_type([status/0]).
 
@@ -58,17 +59,17 @@
 %%% API
 %%%===================================================================
 
--spec create(id(), file_meta:uuid()) -> ok | {error, term()}.
-create(TaskId, FileUuid) ->
+-spec create(id(), file_meta:uuid(), file_meta:uuid()) -> ok | {error, term()}.
+create(TaskId, FileUuid, ParentUuid) ->
     ?extract_ok(datastore_model:create(?CTX, #document{
         key = gen_id(TaskId, FileUuid),
-        value = #tree_traverse_progress{}
+        value = #tree_traverse_progress{next_subtree_root = ParentUuid}
     })).
 
 
 -spec report_children_to_process(id(), file_meta:uuid(), non_neg_integer(), boolean()) -> status().
-report_children_to_process(TaskId, FileUUid, ChildrenCount, AllBatchesListed) ->
-    update_and_check(TaskId, FileUUid, fun(#tree_traverse_progress{
+report_children_to_process(TaskId, FileUuid, ChildrenCount, AllBatchesListed) ->
+    update_and_check(TaskId, FileUuid, fun(#tree_traverse_progress{
         to_process = ToProcess,
         all_batches_listed = CurrentAllBatchesListed
     } = TTP) ->
@@ -112,11 +113,20 @@ update(TaskId, Uuid, UpdateFun) ->
 update_and_check(TaskId, Uuid, UpdateFun) ->
     case update(TaskId, Uuid, UpdateFun) of
         {ok, #document{value = #tree_traverse_progress{
+            next_subtree_root = NextSubtreeRoot,
             to_process = ToProcess,
             processed = ToProcess,
             all_batches_listed = true
         }}} ->
-            ?SUBTREE_PROCESSED;
+            case NextSubtreeRoot of
+                undefined ->
+                    case file_meta:get_parent_uuid(Uuid) of
+                        {ok, ParentUuid} -> ?SUBTREE_PROCESSED(ParentUuid);
+                        {error, _} = Error -> Error
+                    end;
+                _ ->
+                    ?SUBTREE_PROCESSED(NextSubtreeRoot)
+            end;
         {ok, _} ->
             ?SUBTREE_NOT_PROCESSED;
         Error ->
@@ -140,7 +150,7 @@ get_ctx() ->
 
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    1.
+    2.
 
 
 -spec get_record_struct(datastore_model:record_version()) ->
@@ -150,4 +160,28 @@ get_record_struct(1) ->
         {to_process, integer},
         {processed, integer},
         {all_batches_listed, boolean}
+    ]};
+get_record_struct(2) ->
+    {record, [
+        {to_process, integer},
+        {processed, integer},
+        {all_batches_listed, boolean},
+        {next_subtree_root, string} % new field
     ]}.
+
+
+-spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
+    {datastore_model:record_version(), datastore_model:record()}.
+upgrade_record(1, TreeTraverseProgress) ->
+    {tree_traverse_progress,
+        ToProcess,
+        Processed,
+        AllBatchesListed
+    } = TreeTraverseProgress,
+    
+    {2, #tree_traverse_progress{
+        to_process = ToProcess,
+        processed = Processed,
+        all_batches_listed = AllBatchesListed,
+        next_subtree_root = undefined
+    }}.

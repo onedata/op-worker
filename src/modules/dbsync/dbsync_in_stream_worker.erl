@@ -16,6 +16,7 @@
 -behaviour(gen_server).
 
 -include("global_definitions.hrl").
+-include("modules/dbsync/dbsync.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -88,6 +89,9 @@ init([SpaceId, ProviderId]) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: state()} |
     {stop, Reason :: term(), NewState :: state()}.
+handle_call(terminate, From, State) ->
+    gen_server:reply(From, ok),
+    {stop, normal, State};
 handle_call(Request, _From, #state{} = State) ->
     ?log_bad_request(Request),
     {noreply, State}.
@@ -163,8 +167,14 @@ handle_info(request_changes, State = #state{
             MaxSize = application:get_env(?APP_NAME,
                 dbsync_changes_max_request_size, 1000000),
             Until2 = min(Until, Seq + MaxSize),
+            {FinalUntil, IncludedMutators} = case dbsync_state:get_resynchronization_params(SpaceId, ProviderId) of
+                undefined ->
+                    {Until2, ?ALL_MUTATORS_EXCEPT_SENDER};
+                #resynchronization_params{target_seq = TargetSeq, included_mutators = Mutators} ->
+                    {min(TargetSeq, Until2), Mutators}
+            end,
             dbsync_communicator:request_changes(
-                ProviderId, SpaceId, Seq, Until2
+                ProviderId, SpaceId, Seq, FinalUntil, IncludedMutators
             ),
             {noreply, schedule_changes_request(State#state{
                 changes_request_ref = undefined
@@ -271,7 +281,7 @@ stash_changes_batch(Since, Until, Timestamp, Docs, State = #state{
     changes_stash = Stash,
     seq = Seq
 }) ->
-    Max = application:get_env(?APP_NAME, dbsync_changes_stash_max_size, 100000),
+    Max = op_worker:get_env(dbsync_changes_stash_max_size, 100000),
     case Until > Seq + Max of
         true ->
             case ets:first(Stash) of
@@ -301,7 +311,7 @@ apply_changes_batch(Since, Until, Timestamp, Docs, State) ->
     {Docs2, Timestamp2, Until2, State3} = prepare_batch(Docs, Timestamp, Until, State2),
     dbsync_changes:apply_batch(Docs2, {Since, Until2}, Timestamp2),
 
-    case application:get_env(?APP_NAME, dbsync_in_stream_worker_gc, on) of
+    case op_worker:get_env(dbsync_in_stream_worker_gc, on) of
         on ->
             erlang:garbage_collect();
         _ ->

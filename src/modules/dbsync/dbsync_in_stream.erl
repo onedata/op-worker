@@ -36,6 +36,9 @@
 
 -type msg_id_history() :: queue:queue(binary()).
 -type state() :: #state{}.
+-type mutators() :: [binary() | od_provider:id()]. % NOTE: special id values (values that are not provider ids)
+                                                   %       are defined in dbsync.hrl
+-export_type([mutators/0]).
 
 %%%===================================================================
 %%% API
@@ -83,6 +86,8 @@ init([SpaceId]) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: state()} |
     {stop, Reason :: term(), NewState :: state()}.
+handle_call({resynchronize, ProviderId, IncludedMutators}, _From, State) ->
+    {reply, ok, resynchronize(ProviderId, IncludedMutators, State)};
 handle_call(Request, _From, #state{} = State) ->
     ?log_bad_request(Request),
     {noreply, State}.
@@ -205,13 +210,32 @@ forward_changes_batch(ProviderId, Since, Until, Timestamp, Docs, State = #state{
             }
     end,
 
-    case application:get_env(?APP_NAME, dbsync_in_stream_gc, on) of
+    case op_worker:get_env(dbsync_in_stream_gc, on) of
         on ->
             erlang:garbage_collect();
         _ ->
             ok
     end,
 
+    State2.
+
+%% @private
+-spec resynchronize(od_provider:id(), mutators(), state()) -> state().
+resynchronize(ProviderId, IncludedMutators, State = #state{
+    space_id = SpaceId,
+    workers = Workers
+}) ->
+    State2 = case maps:find(ProviderId, Workers) of
+        {ok, Worker} ->
+            gen_server:call(Worker, terminate, infinity),
+            State#state{
+                workers = maps:remove(ProviderId, Workers)
+            };
+        error ->
+            State
+    end,
+
+    dbsync_state:resynchronize_stream(SpaceId, ProviderId, IncludedMutators),
     State2.
 
 %%--------------------------------------------------------------------
@@ -223,7 +247,7 @@ forward_changes_batch(ProviderId, Since, Until, Timestamp, Docs, State = #state{
 -spec save_msg_id(dbsync_communicator:msg_id(), msg_id_history()) ->
     msg_id_history().
 save_msg_id(MsgId, History) ->
-    MaxSize = application:get_env(?APP_NAME, dbsync_msg_id_history_len, 10000),
+    MaxSize = op_worker:get_env(dbsync_msg_id_history_len, 10000),
     History2 = queue:in(MsgId, History),
     case queue:len(History2) > MaxSize of
         true ->

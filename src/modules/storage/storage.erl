@@ -39,9 +39,13 @@
     get_id/1, get_block_size/1, get_helper/1, get_helper_name/1,
     get_luma_feed/1, get_luma_config/1
 ]).
--export([fetch_name/1, fetch_name_of_remote_storage/2, fetch_provider_id_of_remote_storage/2, 
-    fetch_qos_parameters_of_local_storage/1, fetch_qos_parameters_of_remote_storage/2]).
--export([should_skip_storage_detection/1, is_imported/1, is_posix_compatible/1, is_local_storage_readonly/1, is_storage_readonly/2]).
+-export([
+    fetch_shared_data/2,
+    fetch_name_of_local_storage/1, fetch_name_of_remote_storage/2,
+    fetch_provider_id_of_remote_storage/2,
+    fetch_qos_parameters_of_local_storage/1, fetch_qos_parameters_of_remote_storage/2
+]).
+-export([should_skip_storage_detection/1, is_imported/1, is_posix_compatible/1, is_local_storage_readonly/1, is_storage_readonly/2, is_archive/1]).
 -export([has_non_auto_luma_feed/1]).
 -export([is_local/1]).
 -export([verify_configuration/3]).
@@ -53,18 +57,8 @@
     update_helper/2]).
 
 %%% Support related functions
--export([support_space/3, update_space_support_size/3, revoke_space_support/2]).
+-export([support_space/4, update_space_support_size/3, revoke_space_support/2]).
 -export([supports_any_space/1]).
-
-%%% Upgrade from 19.02.*
--export([migrate_to_zone/0]).
-
-%%% Upgrade from 20.02.0-beta3
--export([migrate_imported_storages_to_zone/0]).
-
-%% Legacy datastore_model callbacks
--export([get_ctx/0]).
--export([get_record_version/0, get_record_struct/1, upgrade_record/2]).
 
 % exported for initializer and env_up escripts
 -export([on_storage_created/1]).
@@ -101,7 +95,7 @@
 -spec create(name(), helpers:helper(), luma_config(),
     imported(), readonly(), qos_parameters()) -> {ok, id()} | {error, term()}.
 create(Name, Helper, LumaConfig, ImportedStorage, Readonly, QosParameters) ->
-    case storage_logic:create_in_zone(Name, ImportedStorage, Readonly, QosParameters) of
+    Result = case storage_logic:create_in_zone(Name, ImportedStorage, Readonly, QosParameters) of
         {ok, Id} ->
             case storage_config:create(Id, Helper, LumaConfig) of
                 {ok, Id} ->
@@ -109,22 +103,31 @@ create(Name, Helper, LumaConfig, ImportedStorage, Readonly, QosParameters) ->
                     {ok, Id};
                 StorageConfigError ->
                     case storage_logic:delete_in_zone(Id) of
-                        ok -> ok;
-                        {error, _} = Error ->
-                            ?error("Could not revert creation of storage ~p in Onezone: ~p",
-                                [Id, Error])
+                        ok ->
+                            ok;
+                        {error, _} = DeleteError ->
+                            ?error("Could not revert creation of storage ~p in Onezone: ~p", [
+                                Id, DeleteError
+                            ])
                     end,
                     StorageConfigError
             end;
         StorageLogicError ->
             StorageLogicError
-    end.
+    end,
+    case Result of
+        {ok, StorageId} ->
+            ?notice("Successfully added storage '~ts' with Id: '~s'", [Name, StorageId]);
+        {error, _} = Error ->
+            ?error("Failed to add storage '~ts' due to: ~p", [Name, Error])
+    end,
+    Result.
 
 
 -spec get(id() | data()) -> {ok, data()} | {error, term()}.
 get(StorageId) when is_binary(StorageId) ->
     storage_config:get(StorageId);
-get(StorageData) ->
+get(StorageData = #document{}) ->
     {ok, StorageData}.
 
 
@@ -150,7 +153,7 @@ describe(StorageData) ->
     BaseWithLuma = maps:merge(Base, LumaConfigDescription),
     {ok, BaseWithLuma#{
         <<"id">> => StorageId,
-        <<"name">> => fetch_name(StorageId),
+        <<"name">> => fetch_name_of_local_storage(StorageId),
         <<"type">> => helper:get_name(Helper),
         <<"importedStorage">> => is_imported(StorageId),
         <<"readonly">> => is_local_storage_readonly(StorageId),
@@ -267,8 +270,14 @@ get_luma_config(StorageData) ->
     storage_config:get_luma_config(StorageData).
 
 
--spec fetch_name(id()) -> name().
-fetch_name(StorageId) when is_binary(StorageId) ->
+-spec fetch_shared_data(id(), od_space:id()) -> od_storage:doc().
+fetch_shared_data(StorageId, SpaceId) when is_binary(StorageId) ->
+    {ok, Data} = ?throw_on_error(storage_logic:get_shared_data(StorageId, SpaceId)),
+    Data.
+
+
+-spec fetch_name_of_local_storage(id()) -> name().
+fetch_name_of_local_storage(StorageId) when is_binary(StorageId) ->
     {ok, Name} = ?throw_on_error(storage_logic:get_name_of_local_storage(StorageId)),
     Name.
 
@@ -345,6 +354,12 @@ is_posix_compatible(StorageDataOrId) ->
     Helper = get_helper(StorageDataOrId),
     helper:is_posix_compatible(Helper).
 
+
+-spec is_archive(id() | data()) -> boolean().
+is_archive(StorageDataOrId) ->
+    Helper = get_helper(StorageDataOrId),
+    helper:is_archive_storage(Helper).
+
 %%%===================================================================
 %%% Functions to modify storage details
 %%%===================================================================
@@ -413,12 +428,17 @@ update_helper(StorageId, UpdateFun) ->
 %%% Support related functions
 %%%===================================================================
 
--spec support_space(id(), tokens:serialized(), od_space:support_size()) ->
+-spec support_space(
+    id(),
+    tokens:serialized(),
+    od_space:support_size(),
+    support_parameters:record()
+) ->
     {ok, od_space:id()} | errors:error().
-support_space(StorageId, SerializedToken, SupportSize) ->
+support_space(StorageId, SerializedToken, SupportSize, SupportParameters) ->
     case validate_support_request(SerializedToken) of
         ok ->
-            case storage_logic:support_space(StorageId, SerializedToken, SupportSize) of
+            case storage_logic:support_space(StorageId, SerializedToken, SupportSize, SupportParameters) of
                 {ok, SpaceId} ->
                     on_space_supported(SpaceId, StorageId),
                     {ok, SpaceId};
@@ -510,7 +530,8 @@ on_space_supported(SpaceId, StorageId) ->
 on_space_unsupported(SpaceId, StorageId) ->
     space_unsupport:cleanup_local_documents(SpaceId, StorageId),
     auto_storage_import_worker:notify_space_unsupported(SpaceId),
-    main_harvesting_stream:space_unsupported(SpaceId).
+    main_harvesting_stream:space_unsupported(SpaceId),
+    dir_stats_service_state:clean(SpaceId).
 
 
 %% @private
@@ -518,7 +539,7 @@ on_space_unsupported(SpaceId, StorageId) ->
 on_helper_changed(StorageId) ->
     fslogic_event_emitter:emit_helper_params_changed(StorageId),
     rtransfer_config:add_storage(StorageId),
-    rpc:multicall(consistent_hashing:get_all_nodes(), rtransfer_config, restart_link, []),
+    utils:rpc_multicall(consistent_hashing:get_all_nodes(), rtransfer_config, restart_link, []),
     helpers_reload:refresh_helpers_by_storage(StorageId).
 
 
@@ -562,313 +583,13 @@ sanitize_readonly_option(IdOrName, #{
     readonly := Readonly,
     importedStorage := Imported
 }) ->
-    case {ensure_boolean(Readonly), ensure_boolean(SkipStorageDetection), ensure_boolean(Imported)} of
+    case {
+        utils:to_boolean(Readonly),
+        utils:to_boolean(SkipStorageDetection),
+        utils:to_boolean(Imported)
+    } of
         {false, _, _} -> ok;
         {true, false, _} -> throw(?ERROR_BAD_VALUE_NOT_ALLOWED(skipStorageDetection, [true]));
         {true, true, false} -> throw(?ERROR_REQUIRES_IMPORTED_STORAGE(IdOrName));
         {true, true, true} -> ok
     end.
-
-
--spec ensure_boolean(binary() | boolean()) -> boolean().
-ensure_boolean(<<"true">>) -> true;
-ensure_boolean(<<"false">>) -> false;
-ensure_boolean(Boolean) when is_boolean(Boolean) -> Boolean.
-
-
-%%%===================================================================
-%%% Upgrade from 19.02.*
-%%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Migrates storages and spaces support data to Onezone.
-%% Removes obsolete space_storage and storage documents.
-%% Dedicated for upgrading Oneprovider from 19.02.* to 19.09.*.
-%% @end
-%%--------------------------------------------------------------------
--spec migrate_to_zone() -> ok.
-migrate_to_zone() ->
-    ?info("Starting storage migration procedure..."),
-    {ok, StorageDocs} = list_deprecated(),
-    lists:foreach(fun migrate_storage_docs/1, StorageDocs),
-
-    {ok, Spaces} = provider_logic:get_spaces(),
-    lists:foreach(fun migrate_space_support/1, Spaces),
-
-    % Remove virtual storage (with id equal to that of provider) in Onezone
-    case storage_logic:delete_in_zone(oneprovider:get_id()) of
-        ok -> ok;
-        ?ERROR_NOT_FOUND -> ok;
-        Error -> throw(Error)
-    end.
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Renames old `storage` record to `storage_config` and creates
-%% appropriate storages in Onezone.
-%% @end
-%%--------------------------------------------------------------------
--spec migrate_storage_docs(storage_config:doc()) -> ok.
-migrate_storage_docs(#document{key = StorageId, value = Storage = #storage{name = Name}}) ->
-    StorageConfigV1 = storage_config:migrate_to_storage_config_v1(Storage),
-    {_, StorageConfig} = datastore_versions:upgrade_record(1, storage_config, StorageConfigV1),
-    case storage_config:create(StorageId, StorageConfig) of
-        {ok, _} -> ok;
-        {error, already_exists} -> ok;
-        Error -> throw(Error)
-    end,
-    case provider_logic:has_storage(StorageId) of
-        true -> ok;
-        false ->
-            {ok, StorageId} = storage_logic:create_in_zone(Name, unknown, false, #{}, StorageId),
-            ?notice("Storage ~p created in Onezone", [StorageId])
-    end,
-    ok = delete_deprecated(StorageId).
-
-
-%% @private
--spec migrate_space_support(od_space:id()) -> ok.
-migrate_space_support(SpaceId) ->
-    case space_storage:get(SpaceId) of
-        {ok, SpaceStorage} ->
-            % so far space could have been supported by only one storage in given provider
-            [StorageId] = space_storage:get_storage_ids(SpaceStorage),
-            MiR = space_storage:get_mounted_in_root(SpaceStorage),
-
-            case space_logic:is_supported_by_storage(SpaceId, StorageId) of
-                true -> ok;
-                false ->
-                    case storage_logic:upgrade_legacy_support(StorageId, SpaceId) of
-                        ok -> ?notice("Support of space ~p by storage ~p upgraded in Onezone",
-                            [SpaceId, StorageId]);
-                        Error1 -> throw(Error1)
-                    end
-            end,
-            case storage_logic:is_imported(StorageId) of
-                {ok, <<"unknown">>} ->
-                    ok = storage_logic:set_imported(StorageId, lists:member(StorageId, MiR));
-                {ok, Value} ->
-                    ?info("Imported storage value of storage ~p is already set to ~p", [StorageId, Value])
-            end,
-            case space_storage:delete(SpaceId) of
-                ok -> ok;
-                ?ERROR_NOT_FOUND -> ok;
-                Error2 -> throw(Error2)
-            end;
-        ?ERROR_NOT_FOUND ->
-            ok
-    end,
-    ?notice("Support of space: ~p successfully migrated", [SpaceId]).
-
-
-%%%===================================================================
-%%% Upgrade from 20.02.0-beta3
-%%%===================================================================
-
--spec migrate_imported_storages_to_zone() -> ok.
-migrate_imported_storages_to_zone() ->
-    ?info("Starting imported storages migration procedure..."),
-    {ok, StorageIds} = provider_logic:get_storages(),
-    lists:foreach(fun(StorageId) ->
-        ImportedStorage = storage_config:is_imported_storage(StorageId),
-        storage_logic:set_imported(StorageId, ImportedStorage)
-    end, StorageIds),
-    ?notice("Imported storages migration procedure finished succesfully").
-
-
-%% @TODO VFS-5856 deprecated, included for upgrade procedure. Remove in next major release after 20.02.*.
-%%%===================================================================
-%% Deprecated API and datastore_model callbacks
-%%
-%% All functions below are deprecated. Previous `storage` model have
-%% been renamed to `storage_config` and this functions are needed to
-%% properly perform upgrade procedure.
-%%%===================================================================
-
--define(CTX, #{
-    model => ?MODULE,
-    fold_enabled => true,
-    memory_copies => all
-}).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Deletes storage.
-%% @end
-%%--------------------------------------------------------------------
--spec delete_deprecated(id()) -> ok | {error, term()}.
-delete_deprecated(StorageId) ->
-    datastore_model:delete(?CTX, StorageId).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns list of all records.
-%% @end
-%%--------------------------------------------------------------------
--spec list_deprecated() -> {ok, [datastore_doc:doc(#storage{})]} | {error, term()}.
-list_deprecated() ->
-    datastore_model:fold(?CTX, fun(Doc, Acc) -> {ok, [Doc | Acc]} end, []).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns model's context.
-%% @end
-%%--------------------------------------------------------------------
--spec get_ctx() -> datastore:ctx().
-get_ctx() ->
-    ?CTX.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns model's record version.
-%% @end
-%%--------------------------------------------------------------------
--spec get_record_version() -> datastore_model:record_version().
-get_record_version() ->
-    5.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns model's record structure in provided version.
-%% @end
-%%--------------------------------------------------------------------
--spec get_record_struct(datastore_model:record_version()) ->
-    datastore_model:record_struct().
-get_record_struct(1) ->
-    {record, [
-        {name, binary},
-        {helpers, [{record, [
-            {name, string},
-            {args, #{string => string}}
-        ]}]}
-    ]};
-get_record_struct(2) ->
-    {record, [
-        {name, string},
-        {helpers, [{record, [
-            {name, string},
-            {args, #{string => string}},
-            {admin_ctx, #{string => string}},
-            {insecure, boolean}
-        ]}]},
-        {readonly, boolean}
-    ]};
-get_record_struct(3) ->
-    {record, [
-        {name, string},
-        {helpers, [{record, [
-            {name, string},
-            {args, #{string => string}},
-            {admin_ctx, #{string => string}},
-            {insecure, boolean}
-        ]}]},
-        {readonly, boolean},
-        {luma_config, {record, [
-            {url, string},
-            {cache_timeout, integer},
-            {api_key, string}
-        ]}}
-    ]};
-get_record_struct(4) ->
-    {record, [
-        {name, string},
-        {helpers, [{record, [
-            {name, string},
-            {args, #{string => string}},
-            {admin_ctx, #{string => string}},
-            {insecure, boolean},
-            {extended_direct_io, boolean}
-        ]}]},
-        {readonly, boolean},
-        {luma_config, {record, [
-            {url, string},
-            {cache_timeout, integer},
-            {api_key, string}
-        ]}}
-    ]};
-get_record_struct(5) ->
-    {record, [
-        {name, string},
-        {helpers, [{record, [
-            {name, string},
-            {args, #{string => string}},
-            {admin_ctx, #{string => string}},
-            {insecure, boolean},
-            {extended_direct_io, boolean},
-            {storage_path_type, string}
-        ]}]},
-        {readonly, boolean},
-        {luma_config, {record, [
-            {url, string},
-            {api_key, string}
-        ]}}
-    ]}.
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Upgrades model's record from provided version to the next one.
-%% @end
-%%--------------------------------------------------------------------
--spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
-    {datastore_model:record_version(), datastore_model:record()}.
-upgrade_record(1, {storage, Name, Helpers}) ->
-    {2, {storage,
-        Name,
-        [{
-            helper,
-            helper:translate_name(HelperName),
-            maps:fold(fun(K, V, Args) ->
-                maps:put(helper:translate_arg_name(K), V, Args)
-            end, #{}, HelperArgs),
-            #{},
-            false
-        } || {_, HelperName, HelperArgs} <- Helpers],
-        false
-    }};
-upgrade_record(2, {_, Name, Helpers, Readonly}) ->
-    {3, {storage,
-        Name,
-        Helpers,
-        Readonly,
-        undefined
-    }};
-upgrade_record(3, {_, Name, Helpers, Readonly, LumaConfig}) ->
-    {4, {storage,
-        Name,
-        [{
-            helper,
-            HelperName,
-            HelperArgs,
-            AdminCtx,
-            Insecure,
-            false
-        } || {_, HelperName, HelperArgs, AdminCtx, Insecure} <- Helpers],
-        Readonly,
-        LumaConfig
-    }};
-upgrade_record(4, {_, Name, Helpers, Readonly, {luma_config, Url, _CacheTimeout, ApiKey}}) ->
-    {5, {storage,
-        Name,
-        [
-            {helper,
-                HelperName,
-                HelperArgs,
-                AdminCtx,
-                Insecure,
-                ExtendedDirectIO,
-                ?CANONICAL_STORAGE_PATH
-            } || {_, HelperName, HelperArgs, AdminCtx, Insecure,
-            ExtendedDirectIO} <- Helpers
-        ],
-        Readonly,
-        {luma_config, Url, ApiKey}
-    }}.

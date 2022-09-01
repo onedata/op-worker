@@ -263,10 +263,10 @@ stream_space_changes(Req, State) ->
     catch
         throw:Error ->
             {stop, http_req:send_error(Error, Req), State};
-        Type:Message ->
+        Type:Message:Stacktrace ->
             ?error_stacktrace("Unexpected error in ~p:process_request - ~p:~p", [
                 ?MODULE, Type, Message
-            ]),
+            ], Stacktrace),
             NewReq = cowboy_req:reply(?HTTP_500_INTERNAL_SERVER_ERROR, Req),
             {stop, NewReq, State}
     end.
@@ -540,11 +540,11 @@ stream_loop(Req, State = #{
             lists:foreach(fun(ChangedDoc) ->
                 try
                     send_change(Req, ChangedDoc, State)
-                catch Type:Reason ->
+                catch Type:Reason:Stacktrace ->
                     % Can appear when document connected with deleted file_meta appears
                     ?debug_stacktrace("Cannot stream change of ~p due to ~p:~p", [
                         ChangedDoc, Type, Reason
-                    ])
+                    ], Stacktrace)
                 end
             end, ChangedDocs),
             stream_loop(Req, State);
@@ -614,7 +614,7 @@ send_changes(Req, Seq, FileUuid, ChangedDoc, State) ->
                 end,
             FilePath =
                 try
-                    fslogic_uuid:uuid_to_path(?ROOT_SESS_ID, FileUuid)
+                    fslogic_file_id:uuid_to_path(?ROOT_SESS_ID, FileUuid)
                 catch
                     _:Error2 ->
                         ?debug("Cannot fetch Path for changes, error: ~p", [Error2]),
@@ -784,7 +784,7 @@ get_record_changes(Changed, FieldsNamesAndIndices, _Exists, #document{
             ({<<"name">>, _FieldIndex}, Acc) ->
                 Auth = maps:get(auth, State),
                 SpaceId = maps:get(space_id, State),
-                SpaceUuid = fslogic_uuid:spaceid_to_space_dir_uuid(SpaceId),
+                SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
                 Name = case FileUuid =:= SpaceUuid of
                     true ->
                         {ok, SpaceName} = space_logic:get_name(Auth, SpaceId),

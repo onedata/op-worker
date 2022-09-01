@@ -14,8 +14,8 @@
 -module(file_partial_ctx).
 -author("Tomasz Lichon").
 
--include("modules/auth/acl.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -65,7 +65,7 @@ new_by_logical_path(UserCtx, Path) ->
             case Tokens of
                 [<<"/">>] ->
                     UserId = user_ctx:get_user_id(UserCtx),
-                    UserRootDirGuid = fslogic_uuid:user_root_dir_guid(UserId),
+                    UserRootDirGuid = fslogic_file_id:user_root_dir_guid(UserId),
                     file_ctx:new_by_guid(UserRootDirGuid);
                 [<<"/">>, SpaceName | Rest] ->
                     SpaceId = get_space_id_from_user_spaces(SpaceName, UserCtx),
@@ -89,7 +89,7 @@ new_by_canonical_path(UserCtx, Path) ->
     {ok, Tokens} = filepath_utils:split_and_skip_dots(Path),
     case Tokens of
         [<<"/">>] ->
-            UserRootDirGuid = fslogic_uuid:user_root_dir_guid(UserId),
+            UserRootDirGuid = fslogic_file_id:user_root_dir_guid(UserId),
             file_ctx:new_by_guid(UserRootDirGuid);
         [<<"/">>, SpaceId | Rest] ->
             #file_partial_ctx{
@@ -110,7 +110,7 @@ get_parent(FilePartialCtx = #file_partial_ctx{
     ParentPartialCtx = new_by_canonical_path(UserCtx, filename:dirname(CanonicalPath)),
     {ParentPartialCtx, FilePartialCtx};
 get_parent(FileCtx, UserCtx) ->
-    file_ctx:get_parent(FileCtx, UserCtx).
+    file_tree:get_parent(FileCtx, UserCtx).
 
 %%--------------------------------------------------------------------
 %% @doc

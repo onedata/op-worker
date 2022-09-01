@@ -40,10 +40,10 @@ all() -> [
 db_error_test(Config) ->
     [Worker] = oct_background:get_provider_nodes(krakow),
     ProviderId = oct_background:get_provider_id(krakow),
-    [User1] = oct_background:get_provider_eff_users(krakow),
+    [User1 | _] = oct_background:get_provider_eff_users(krakow),
     SessId = oct_background:get_user_session_id(user1, krakow),
     [SpaceId | _] = oct_background:get_provider_supported_spaces(krakow),
-    SpaceGuid = fslogic_uuid:spaceid_to_space_dir_guid(SpaceId),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
 
     % disable op_worker healthcheck in onepanel, so nodes are not started up automatically
     oct_environment:disable_panel_healthcheck(Config),
@@ -113,11 +113,11 @@ test_read_operations_on_db_error(Worker, SessId, DirsAndFiles) ->
     file_ops_test_utils:test_read_operations_on_error(Worker, SessId, DirsAndFiles, ?EAGAIN).
 
 enable_db_error_emulation() ->
-    application:set_env(?APP_NAME, emulate_db_error, true).
+    op_worker:set_env(emulate_db_error, true).
 
 
 disable_db_error_emulation() ->
-    application:set_env(?APP_NAME, emulate_db_error, false).
+    op_worker:set_env(emulate_db_error, false).
 
 mock_cberl(Config) ->
     Workers = test_config:get_all_op_worker_nodes(Config),
@@ -126,7 +126,7 @@ mock_cberl(Config) ->
 
     Node = node(),
     GenericMock = fun(ArgsList) ->
-        case rpc:call(Node, application, get_env, [?APP_NAME, emulate_db_error, false]) of
+        case rpc:call(Node, op_worker, get_env, [emulate_db_error, false]) of
             true -> {error, etmpfail};
             false -> meck:passthrough(ArgsList)
         end

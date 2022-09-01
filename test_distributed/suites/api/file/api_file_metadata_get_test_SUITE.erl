@@ -14,12 +14,14 @@
 -author("Bartosz Walkowicz").
 
 -include("api_file_test_utils.hrl").
+-include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 
 -export([
-    all/0,
+    groups/0, all/0,
     init_per_suite/1, end_per_suite/1,
+    init_per_group/2, end_per_group/2,
     init_per_testcase/2, end_per_testcase/2
 ]).
 
@@ -46,24 +48,30 @@
     get_file_xattrs_on_provider_not_supporting_space_test/1
 ]).
 
+groups() -> [
+    {all_tests, [parallel], [
+        get_file_rdf_metadata_with_rdf_set_test,
+        get_file_rdf_metadata_without_rdf_set_test,
+        get_shared_file_rdf_metadata_with_rdf_set_test,
+        get_shared_file_rdf_metadata_without_rdf_set_test,
+        get_file_rdf_metadata_on_provider_not_supporting_space_test,
+
+        get_file_json_metadata_with_json_set_test,
+        get_file_json_metadata_without_json_set_test,
+        get_shared_file_json_metadata_with_json_set_test,
+        get_shared_file_json_metadata_without_json_set_test,
+        get_file_json_metadata_on_provider_not_supporting_space_test,
+
+        get_file_xattrs_with_xattrs_set_test,
+        get_file_xattrs_without_xattrs_set_test,
+        get_shared_file_xattrs_with_xattrs_set_test,
+        get_shared_file_xattrs_without_xattrs_set_test,
+        get_file_xattrs_on_provider_not_supporting_space_test
+    ]}
+].
+
 all() -> [
-    get_file_rdf_metadata_with_rdf_set_test,
-    get_file_rdf_metadata_without_rdf_set_test,
-    get_shared_file_rdf_metadata_with_rdf_set_test,
-    get_shared_file_rdf_metadata_without_rdf_set_test,
-    get_file_rdf_metadata_on_provider_not_supporting_space_test,
-
-    get_file_json_metadata_with_json_set_test,
-    get_file_json_metadata_without_json_set_test,
-    get_shared_file_json_metadata_with_json_set_test,
-    get_shared_file_json_metadata_without_json_set_test,
-    get_file_json_metadata_on_provider_not_supporting_space_test,
-
-    get_file_xattrs_with_xattrs_set_test,
-    get_file_xattrs_without_xattrs_set_test,
-    get_shared_file_xattrs_with_xattrs_set_test,
-    get_shared_file_xattrs_without_xattrs_set_test,
-    get_file_xattrs_on_provider_not_supporting_space_test
+    {group, all_tests}
 ].
 
 
@@ -103,7 +111,8 @@ get_rdf_metadata_test_base(SetRdfPolicy, TestMode, _Config) ->
 
     FileType = api_test_utils:randomly_choose_file_type_for_test(),
     FilePath = filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()]),
-    {ok, FileGuid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, FilePath, 8#707),
+    {ok, FileGuid} = lfm_test_utils:create_file(FileType, P1Node, UserSessIdP1, FilePath, 8#707),
+    SpaceId = oct_background:get_space_id(space_krk_par),
 
     GetExpCallResultFun = case SetRdfPolicy of
         set_rdf ->
@@ -124,14 +133,16 @@ get_rdf_metadata_test_base(SetRdfPolicy, TestMode, _Config) ->
     end,
     file_test_utils:await_sync(P2Node, FileGuid),
 
-    DataSpec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
-        FileGuid, ShareId, undefined
+    DataSpec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
+        api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+            FileGuid, ShareId, undefined
+        )
     ),
 
     get_metadata_test_base(
-        MetadataType, FileType, FilePath, FileGuid, ShareId,
-        build_get_metadata_validate_rest_call_fun(GetExpCallResultFun),
-        build_get_metadata_validate_gs_call_fun(GetExpCallResultFun),
+        MetadataType, FileType, FileGuid, ShareId,
+        build_get_metadata_validate_rest_call_fun(GetExpCallResultFun, SpaceId),
+        build_get_metadata_validate_gs_call_fun(GetExpCallResultFun, SpaceId),
         Providers, ClientSpec, DataSpec, _QsParams = [],
         _RandomlySelectScenario = false
     ).
@@ -144,16 +155,17 @@ get_file_rdf_metadata_on_provider_not_supporting_space_test(_Config) ->
 
     SessIdP1 = oct_background:get_user_session_id(user3, krakow),
 
-    {FileType, FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
-    lfm_proxy:set_metadata(P1Node, SessIdP1, {guid, FileGuid}, rdf, ?RDF_METADATA_1, []),
+    SpaceId = oct_background:get_space_id(space_krk),
+    {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
+    opt_file_metadata:set_custom_metadata(P1Node, SessIdP1, ?FILE_REF(FileGuid), rdf, ?RDF_METADATA_1, []),
 
-    GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id) end,
+    GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id) end,
 
     get_metadata_test_base(
         <<"rdf">>,
-        FileType, FilePath, FileGuid, undefined,
-        build_get_metadata_validate_rest_call_fun(GetExpCallResultFun, P2Node),
-        build_get_metadata_validate_gs_call_fun(GetExpCallResultFun, P2Node),
+        FileType, FileGuid, undefined,
+        build_get_metadata_validate_rest_call_fun(GetExpCallResultFun, P2Node, SpaceId),
+        build_get_metadata_validate_gs_call_fun(GetExpCallResultFun, P2Node, SpaceId),
         [P2Node], ?CLIENT_SPEC_FOR_SPACE_KRK, _DataSpec = undefined, _QsParams = [],
         _RandomlySelectScenario = false
     ).
@@ -183,9 +195,10 @@ get_shared_file_json_metadata_without_json_set_test(Config) ->
 %% @private
 get_json_metadata_test_base(SetDirectJsonPolicy, TestMode, Config) ->
     FileType = api_test_utils:randomly_choose_file_type_for_test(),
-    {FileLayer5Path, FileLayer5Guid, ShareId} = create_get_json_metadata_tests_env(
+    {_FileLayer5Path, FileLayer5Guid, ShareId} = create_get_json_metadata_tests_env(
         FileType, SetDirectJsonPolicy, TestMode
     ),
+    SpaceId = oct_background:get_space_id(space_krk_par),
 
     GetExpCallResultFun = create_get_json_call_exp_result_fun(
         ShareId, SetDirectJsonPolicy
@@ -207,40 +220,40 @@ get_json_metadata_test_base(SetDirectJsonPolicy, TestMode, Config) ->
             }
     end,
 
-    DataSpec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
-        FileLayer5Guid, ShareId, #data_spec{
-            optional = QsParams = [<<"inherited">>, <<"filter_type">>, <<"filter">>],
-            correct_values = #{
-                <<"inherited">> => [true, false],
-                <<"filter_type">> => [<<"keypath">>],
-                <<"filter">> => [
-                    <<"attr3.attr32">>, <<"attr3.[10]">>,
-                    <<"attr2.attr22.[2]">>, <<"attr2.attr22.[10]">>
-                ]
-            },
-            bad_values = [
-                {<<"inherited">>, -100, ?ERROR_BAD_VALUE_BOOLEAN(<<"inherited">>)},
-                {<<"inherited">>, <<"dummy">>, ?ERROR_BAD_VALUE_BOOLEAN(<<"inherited">>)},
-                {<<"filter_type">>, <<"dummy">>,
-                    ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"filter_type">>, [<<"keypath">>])},
+    DataSpec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
+        api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+            FileLayer5Guid, ShareId, #data_spec{
+                optional = QsParams = [<<"inherited">>, <<"filter_type">>, <<"filter">>],
+                correct_values = #{
+                    <<"inherited">> => [true, false],
+                    <<"filter_type">> => [<<"keypath">>],
+                    <<"filter">> => [
+                        <<"attr3.attr32">>, <<"attr3.[10]">>,
+                        <<"attr2.attr22.[2]">>, <<"attr2.attr22.[10]">>
+                    ]
+                },
+                bad_values = [
+                    {<<"inherited">>, -100, ?ERROR_BAD_VALUE_BOOLEAN(<<"inherited">>)},
+                    {<<"inherited">>, <<"dummy">>, ?ERROR_BAD_VALUE_BOOLEAN(<<"inherited">>)},
+                    {<<"filter_type">>, <<"dummy">>,
+                        ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"filter_type">>, [<<"keypath">>])},
 
-                % Below differences between error returned by rest and gs are results of sending
-                % parameters via qs in REST, so they lost their original type and are cast to binary
-                {<<"filter_type">>, 100, {rest_with_file_path,
-                    ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"filter_type">>, [<<"keypath">>])}},
-                {<<"filter_type">>, 100, {rest,
-                    ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"filter_type">>, [<<"keypath">>])}},
-                {<<"filter_type">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"filter_type">>)}},
-                {<<"filter">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"filter">>)}}
-            ]
-        }
+                    % Below differences between error returned by rest and gs are results of sending
+                    % parameters via qs in REST, so they lost their original type and are cast to binary
+                    {<<"filter_type">>, 100, {rest,
+                        ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"filter_type">>, [<<"keypath">>])}},
+                    {<<"filter_type">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"filter_type">>)}},
+                    {<<"filter">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"filter">>)}}
+                ]
+            }
+        )
     ),
 
     get_metadata_test_base(
         <<"json">>,
-        FileType, FileLayer5Path, FileLayer5Guid, ShareId,
-        build_get_metadata_validate_rest_call_fun(GetExpCallResultFun),
-        build_get_metadata_validate_gs_call_fun(GetExpCallResultFun),
+        FileType, FileLayer5Guid, ShareId,
+        build_get_metadata_validate_rest_call_fun(GetExpCallResultFun, SpaceId),
+        build_get_metadata_validate_gs_call_fun(GetExpCallResultFun, SpaceId),
         _Providers = ?config(op_worker_nodes, Config),
         ClientSpec, DataSpec, QsParams,
         _RandomlySelectScenario = true
@@ -295,7 +308,7 @@ create_get_json_metadata_tests_env(FileType, SetJsonPolicy, TestMode) ->
     end,
 
     FileLayer5Path = filename:join([DirLayer4Path, ?RANDOM_FILE_NAME()]),
-    {ok, FileLayer5Guid} = api_test_utils:create_file(FileType, P1Node, UserSessIdP1, FileLayer5Path),
+    {ok, FileLayer5Guid} = lfm_test_utils:create_file(FileType, P1Node, UserSessIdP1, FileLayer5Path),
     case SetJsonPolicy of
         set_direct_json ->
             api_test_utils:set_and_sync_metadata(Nodes, FileLayer5Guid, MetadataType, ?JSON_METADATA_5);
@@ -399,16 +412,17 @@ get_file_json_metadata_on_provider_not_supporting_space_test(_Config) ->
 
     SessIdP1 = oct_background:get_user_session_id(user3, krakow),
 
-    {FileType, FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
-    lfm_proxy:set_metadata(P1Node, SessIdP1, {guid, FileGuid}, json, ?JSON_METADATA_2, []),
+    SpaceId = oct_background:get_space_id(space_krk),
+    {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
+    opt_file_metadata:set_custom_metadata(P1Node, SessIdP1, ?FILE_REF(FileGuid), json, ?JSON_METADATA_2, []),
 
-    GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id) end,
+    GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id) end,
 
     get_metadata_test_base(
         <<"json">>,
-        FileType, FilePath, FileGuid, undefined,
-        build_get_metadata_validate_rest_call_fun(GetExpCallResultFun, P2Node),
-        build_get_metadata_validate_gs_call_fun(GetExpCallResultFun, P2Node),
+        FileType, FileGuid, undefined,
+        build_get_metadata_validate_rest_call_fun(GetExpCallResultFun, P2Node, SpaceId),
+        build_get_metadata_validate_gs_call_fun(GetExpCallResultFun, P2Node, SpaceId),
         [P2Node], ?CLIENT_SPEC_FOR_SPACE_KRK, _DataSpec = undefined, _QsParams = [],
         _RandomlySelectScenario = false
     ).
@@ -439,9 +453,10 @@ get_shared_file_xattrs_without_xattrs_set_test(Config) ->
 %% @private
 get_xattrs_test_base(SetDirectXattrsPolicy, TestMode, Config) ->
     FileType = api_test_utils:randomly_choose_file_type_for_test(),
-    {FileLayer3Path, FileLayer3Guid, ShareId} = create_get_xattrs_tests_env(
+    {_FileLayer3Path, FileLayer3Guid, ShareId} = create_get_xattrs_tests_env(
         FileType, SetDirectXattrsPolicy, TestMode
     ),
+    SpaceId = oct_background:get_space_id(space_krk_par),
     NotSetXattrKey = <<"not_set_xattr">>,
     GetExpCallResultFun = create_get_xattrs_call_exp_result_fun(
         ShareId, SetDirectXattrsPolicy, NotSetXattrKey
@@ -491,9 +506,9 @@ get_xattrs_test_base(SetDirectXattrsPolicy, TestMode, Config) ->
 
     get_metadata_test_base(
         <<"xattrs">>,
-        FileType, FileLayer3Path, FileLayer3Guid, ShareId,
-        build_get_metadata_validate_rest_call_fun(GetExpCallResultFun),
-        build_get_metadata_validate_gs_call_fun(GetExpCallResultFun),
+        FileType, FileLayer3Guid, ShareId,
+        build_get_metadata_validate_rest_call_fun(GetExpCallResultFun, SpaceId),
+        build_get_metadata_validate_gs_call_fun(GetExpCallResultFun, SpaceId),
         _Providers = ?config(op_worker_nodes, Config),
         ClientSpec, DataSpec, QsParams,
         _RandomlySelectScenario = true
@@ -535,7 +550,7 @@ create_get_xattrs_tests_env(FileType, SetXattrsPolicy, TestMode) ->
     end,
 
     FileLayer3Path = filename:join([DirLayer2Path, ?RANDOM_FILE_NAME()]),
-    {ok, FileLayer3Guid} = api_test_utils:create_file(
+    {ok, FileLayer3Guid} = lfm_test_utils:create_file(
         FileType, P1Node, UserSessIdP1, FileLayer3Path
     ),
     case SetXattrsPolicy of
@@ -711,16 +726,17 @@ get_file_xattrs_on_provider_not_supporting_space_test(_Config) ->
 
     SessIdP1 = oct_background:get_user_session_id(user3, krakow),
 
-    {FileType, FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
-    ?assertMatch(ok, lfm_proxy:set_xattr(P1Node, SessIdP1, {guid, FileGuid}, ?XATTR_1)),
+    SpaceId = oct_background:get_space_id(space_krk),
+    {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
+    ?assertMatch(ok, lfm_proxy:set_xattr(P1Node, SessIdP1, ?FILE_REF(FileGuid), ?XATTR_1)),
 
-    GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(P2Id) end,
+    GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id) end,
 
     get_metadata_test_base(
         <<"xattrs">>,
-        FileType, FilePath, FileGuid, undefined,
-        build_get_metadata_validate_rest_call_fun(GetExpCallResultFun, P2Node),
-        build_get_metadata_validate_gs_call_fun(GetExpCallResultFun, P2Node),
+        FileType, FileGuid, undefined,
+        build_get_metadata_validate_rest_call_fun(GetExpCallResultFun, P2Node, SpaceId),
+        build_get_metadata_validate_gs_call_fun(GetExpCallResultFun, P2Node, SpaceId),
         [P2Node], ?CLIENT_SPEC_FOR_SPACE_KRK, _DataSpec = undefined, _QsParams = [],
         _RandomlySelectScenario = false
     ).
@@ -732,16 +748,16 @@ get_file_xattrs_on_provider_not_supporting_space_test(_Config) ->
 
 
 %% @private
-build_get_metadata_validate_rest_call_fun(GetExpResultFun) ->
-    build_get_metadata_validate_rest_call_fun(GetExpResultFun, undefined).
+build_get_metadata_validate_rest_call_fun(GetExpResultFun, SpaceId) ->
+    build_get_metadata_validate_rest_call_fun(GetExpResultFun, undefined, SpaceId).
 
 
 %% @private
-build_get_metadata_validate_rest_call_fun(GetExpResultFun, ProvNotSuppSpace) ->
+build_get_metadata_validate_rest_call_fun(GetExpResultFun, ProvNotSuppSpace, SpaceId) ->
     fun
         (#api_test_ctx{node = TestNode}, {ok, RespCode, _, RespBody}) when TestNode == ProvNotSuppSpace ->
             ProvId = opw_test_rpc:get_provider_id(TestNode),
-            ExpError = ?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(ProvId)),
+            ExpError = ?REST_ERROR(?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, ProvId)),
             ?assertEqual({?HTTP_400_BAD_REQUEST, ExpError}, {RespCode, RespBody});
         (TestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
             case GetExpResultFun(TestCtx) of
@@ -755,16 +771,16 @@ build_get_metadata_validate_rest_call_fun(GetExpResultFun, ProvNotSuppSpace) ->
 
 
 %% @private
-build_get_metadata_validate_gs_call_fun(GetExpResultFun) ->
-    build_get_metadata_validate_gs_call_fun(GetExpResultFun, undefined).
+build_get_metadata_validate_gs_call_fun(GetExpResultFun, SpaceId) ->
+    build_get_metadata_validate_gs_call_fun(GetExpResultFun, undefined, SpaceId).
 
 
 %% @private
-build_get_metadata_validate_gs_call_fun(GetExpResultFun, ProvNotSuppSpace) ->
+build_get_metadata_validate_gs_call_fun(GetExpResultFun, ProvNotSuppSpace, SpaceId) ->
     fun
         (#api_test_ctx{node = TestNode}, Result) when TestNode == ProvNotSuppSpace ->
             ProvId = opw_test_rpc:get_provider_id(TestNode),
-            ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(ProvId), Result);
+            ?assertEqual(?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, ProvId), Result);
         (TestCtx, Result) ->
             case GetExpResultFun(TestCtx) of
                 {ok, ExpMetadata} ->
@@ -779,7 +795,6 @@ build_get_metadata_validate_gs_call_fun(GetExpResultFun, ProvNotSuppSpace) ->
 -spec get_metadata_test_base(
     api_test_utils:metadata_type(),
     api_test_utils:file_type(),
-    file_meta:path(),
     file_id:file_guid(),
     ShareId :: undefined | od_share:id(),
     ValidateRestCallResultFun :: onenv_api_test_runner:validate_call_result_fun(),
@@ -792,7 +807,7 @@ build_get_metadata_validate_gs_call_fun(GetExpResultFun, ProvNotSuppSpace) ->
 ) ->
     ok.
 get_metadata_test_base(
-    MetadataType, FileType, FilePath, FileGuid, _ShareId = undefined,
+    MetadataType, FileType, FileGuid, _ShareId = undefined,
     ValidateRestCallResultFun, ValidateGsCallResultFun,
     Providers, ClientSpec, DataSpec, QsParameters, RandomlySelectScenario
 ) ->
@@ -808,27 +823,7 @@ get_metadata_test_base(
                         MetadataType, FileType
                     ]),
                     type = rest,
-                    prepare_args_fun = build_get_metadata_create_prepare_new_id_rest_args_fun(
-                        MetadataType, FileObjectId, QsParameters
-                    ),
-                    validate_result_fun = ValidateRestCallResultFun
-                },
-                #scenario_template{
-                    name = str_utils:format("Get ~s metadata from ~s using deprecated path rest endpoint", [
-                        MetadataType, FileType
-                    ]),
-                    type = rest_with_file_path,
-                    prepare_args_fun = build_get_metadata_prepare_deprecated_path_rest_args_fun(
-                        MetadataType, FilePath, QsParameters
-                    ),
-                    validate_result_fun = ValidateRestCallResultFun
-                },
-                #scenario_template{
-                    name = str_utils:format("Get ~s metadata from ~s using deprecated id rest endpoint", [
-                        MetadataType, FileType
-                    ]),
-                    type = rest,
-                    prepare_args_fun = build_get_metadata_prepare_deprecated_id_rest_args_fun(
+                    prepare_args_fun = build_get_metadata_prepare_rest_args_fun(
                         MetadataType, FileObjectId, QsParameters
                     ),
                     validate_result_fun = ValidateRestCallResultFun
@@ -868,7 +863,7 @@ get_metadata_test_base(
         }
     ]));
 get_metadata_test_base(
-    MetadataType, FileType, _FilePath, FileGuid, ShareId,
+    MetadataType, FileType, FileGuid, ShareId,
     ValidateRestCallResultFun, ValidateGsCallResultFun,
     Providers, ClientSpec, DataSpec, QsParameters, RandomlySelectScenario
 ) ->
@@ -885,17 +880,7 @@ get_metadata_test_base(
                         MetadataType, FileType
                     ]),
                     type = {rest_with_shared_guid, file_id:guid_to_space_id(FileGuid)},
-                    prepare_args_fun = build_get_metadata_create_prepare_new_id_rest_args_fun(
-                        MetadataType, ShareFileObjectId, QsParameters
-                    ),
-                    validate_result_fun = ValidateRestCallResultFun
-                },
-                #scenario_template{
-                    name = str_utils:format("Get ~s metadata from shared ~s using deprecated id rest endpoint", [
-                        MetadataType, FileType
-                    ]),
-                    type = {deprecated_rest_with_shared_guid, file_id:guid_to_space_id(FileGuid)},
-                    prepare_args_fun = build_get_metadata_prepare_deprecated_id_rest_args_fun(
+                    prepare_args_fun = build_get_metadata_prepare_rest_args_fun(
                         MetadataType, ShareFileObjectId, QsParameters
                     ),
                     validate_result_fun = ValidateRestCallResultFun
@@ -930,31 +915,13 @@ get_metadata_test_base(
 
 
 %% @private
-build_get_metadata_create_prepare_new_id_rest_args_fun(MetadataType, FileObjectId, QsParams) ->
-    build_get_metadata_prepare_rest_args_fun(new_id, MetadataType, FileObjectId, QsParams).
-
-
-%% @private
-build_get_metadata_prepare_deprecated_path_rest_args_fun(MetadataType, FilePath, QsParams) ->
-    build_get_metadata_prepare_rest_args_fun(deprecated_path, MetadataType, FilePath, QsParams).
-
-
-%% @private
-build_get_metadata_prepare_deprecated_id_rest_args_fun(MetadataType, FileObjectId, QsParams) ->
-    build_get_metadata_prepare_rest_args_fun(deprecated_id, MetadataType, FileObjectId, QsParams).
-
-
-%% @private
-build_get_metadata_prepare_rest_args_fun(Endpoint, MetadataType, ValidId, QsParams) ->
+build_get_metadata_prepare_rest_args_fun(MetadataType, ValidId, QsParams) ->
     fun(#api_test_ctx{data = Data0}) ->
         Data1 = utils:ensure_defined(Data0, #{}),
         {Id, Data2} = api_test_utils:maybe_substitute_bad_id(ValidId, Data1),
 
-        Path = case Endpoint of
-            new_id -> ?NEW_ID_METADATA_REST_PATH(Id, MetadataType);
-            deprecated_path -> ?DEPRECATED_PATH_METADATA_REST_PATH(Id, MetadataType);
-            deprecated_id -> ?DEPRECATED_ID_METADATA_REST_PATH(Id, MetadataType)
-        end,
+        Path = ?NEW_ID_METADATA_REST_PATH(Id, MetadataType),
+
         #rest_args{
             method = get,
             path = http_utils:append_url_parameters(Path, maps:with(QsParams, Data2))
@@ -996,10 +963,18 @@ end_per_suite(_Config) ->
     oct_background:end_per_suite().
 
 
-init_per_testcase(_Case, Config) ->
-    ct:timetrap({minutes, 30}),
-    lfm_proxy:init(Config).
+init_per_group(_Group, Config) ->
+    lfm_proxy:init(Config, false).
 
 
-end_per_testcase(_Case, Config) ->
+end_per_group(_Group, Config) ->
     lfm_proxy:teardown(Config).
+
+
+init_per_testcase(_Case, Config) ->
+    ct:timetrap({minutes, 10}),
+    Config.
+
+
+end_per_testcase(_Case, _Config) ->
+    ok.

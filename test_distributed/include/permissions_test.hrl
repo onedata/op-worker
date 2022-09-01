@@ -12,7 +12,8 @@
 -ifndef(LFM_PERMISSIONS_TEST_HRL).
 -define(LFM_PERMISSIONS_TEST_HRL, 1).
 
--include("modules/auth/acl.hrl").
+-include("modules/fslogic/acl.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 
 -define(ALL_PERMS, [
     ?read_object,
@@ -127,12 +128,16 @@
     requires_traverse_ancestors = true :: boolean(),
 
     % Tells which space privileges are needed to perform `operation`
-    % in case of posix access mode
-    posix_requires_space_privs = [] :: owner | [privileges:space_privilege()],
+    % in case of posix access mode.
+    posix_requires_space_privs = [] ::
+        % only owner with specified privs can perform operation
+        {file_owner, [privileges:space_privilege()]} |
+        % any user with specified privs can perform
+        [privileges:space_privilege()],
 
     % Tells which space privileges are needed to perform `operation`
     % in case of acl access mode
-    acl_requires_space_privs = [] :: owner | [privileges:space_privilege()],
+    acl_requires_space_privs = [] :: [privileges:space_privilege()],
 
     % Description of environment (files and permissions on them) needed to
     % perform `operation`.
@@ -146,6 +151,9 @@
     % (can't be called via shared guid == no share mode).
     available_in_share_mode = false :: boolean() | inapplicable,
 
+    % Tells whether operation should work in open handle mode.
+    available_in_open_handle_mode = false :: boolean(),
+
     % Operation being tested. It will be called for various combinations of
     % either posix or acl permissions. It is expected to fail for combinations
     % not having all perms specified in `files` and space privileges and
@@ -157,10 +165,10 @@
     % - ShareId - Id only in case of share tests. Otherwise left as `undefined`,
     % - ExtraData - mapping of file path (for every file specified in `files`) to
     %               term returned from `on_create` #dir{} or #file{} fun.
-    %               If mentioned fun is left undefined then by default {guid, GUID} will
+    %               If mentioned fun is left undefined then by default ?FILE_REF(GUID) will
     %               be used.
     %               If `on_create` fun returns FileGuid it should be returned as
-    %               following tuple {guid, FileGuid}, which is required by framework.
+    %               following tuple ?FILE_REF(FileGuid), which is required by framework.
     operation :: fun((ExecutionerSessId :: binary(), TestCaseRootDirPath :: binary(), ExtraData :: map()) ->
         ok |
         {ok, term()} |
@@ -168,6 +176,11 @@
         {ok, term(), term(), term()} |
         {error, term()}
     ),
+
+    % Tells whether failed operation returns:
+    % - old 'errno_errors' in format {error, Errno} (e.g. {error, enoent}) - see errno.hrl
+    % - new 'api_errors' defined in errors.hrl
+    returned_errors = errno_errors :: errno_errors | api_errors,
 
     % Tells whether successfully executed operation should change ownership on underlying storage
     final_ownership_check = fun(_) -> skip end :: fun((TestCaseRootDirPath :: file_meta:path()) ->

@@ -109,14 +109,14 @@
 -define(TRANSFERS_KEY(QosEntryId), <<"transfer_qos_key_", QosEntryId/binary>>).
 -define(FAILED_FILES_KEY(SpaceId), <<"failed_files_qos_key_", SpaceId/binary>>).
 
--define(FOLD_LINKS_BATCH_SIZE, application:get_env(?APP_NAME, qos_fold_links_batch_size, 100)).
+-define(FOLD_LINKS_BATCH_SIZE, op_worker:get_env(qos_fold_links_batch_size, 100)).
 
 %%%===================================================================
 %%% Functions operating on document using datastore_model API
 %%%===================================================================
 
 -spec create(od_space:id(), file_meta:uuid(), qos_expression:expression(),
-    replicas_num(), type()) -> {ok, doc()} | {error, term()}.
+    replicas_num(), type()) -> {ok, id()} | {error, term()}.
 create(SpaceId, FileUuid, Expression, ReplicasNum, EntryType) ->
     create(SpaceId, FileUuid, Expression, ReplicasNum, EntryType, false, 
         qos_traverse_req:build_traverse_reqs(FileUuid, [])).
@@ -134,7 +134,7 @@ create(SpaceId, FileUuid, Expression, ReplicasNum, EntryType, Possible, Traverse
             ok = add_to_impossible_list(SpaceId, QosEntryId),
             {impossible, oneprovider:get_id()}
     end,
-    ?extract_key(datastore_model:create(?CTX, #document{key = QosEntryId, scope = SpaceId,
+    case ?extract_key(datastore_model:create(?CTX, #document{key = QosEntryId, scope = SpaceId,
         value = #qos_entry{
             file_uuid = FileUuid,
             expression = Expression,
@@ -143,7 +143,14 @@ create(SpaceId, FileUuid, Expression, ReplicasNum, EntryType, Possible, Traverse
             traverse_reqs = TraverseReqs,
             type = EntryType
         }
-    })).
+    })) of
+        {ok, QosEntryId} -> 
+            ok = qos_entry_audit_log:create(QosEntryId),
+            ok = qos_transfer_stats:ensure_exists(QosEntryId),
+            {ok, QosEntryId};
+        {error, _} = Error -> 
+            Error
+    end.
 
 
 -spec get(id()) -> {ok, doc()} | {error, term()}.
@@ -318,7 +325,7 @@ apply_to_all_impossible_in_space(SpaceId, Fun) ->
 
 -spec add_transfer_to_list(id(), qos_transfer_id()) -> ok | {error, term()}.
 add_transfer_to_list(QosEntryId, TransferId) ->
-    add_local_links(?TRANSFERS_KEY(QosEntryId), oneprovider:get_id(), {TransferId, TransferId}).
+    ?extract_ok(add_local_links(?TRANSFERS_KEY(QosEntryId), oneprovider:get_id(), {TransferId, TransferId})).
 
 -spec remove_transfer_from_list(id(), qos_transfer_id()) -> ok | {error, term()}.
 remove_transfer_from_list(QosEntryId, TransferId)  ->
@@ -331,7 +338,7 @@ apply_to_all_transfers(QosEntryId, Fun) ->
 
 -spec add_to_failed_files_list(od_space:id(), file_meta:uuid()) -> ok | {error, term()}.
 add_to_failed_files_list(SpaceId, FileUuid) ->
-    add_local_links(?FAILED_FILES_KEY(SpaceId), oneprovider:get_id(), {FileUuid, FileUuid}).
+    ?ok_if_exists(?extract_ok(add_local_links(?FAILED_FILES_KEY(SpaceId), oneprovider:get_id(), {FileUuid, FileUuid}))).
 
 -spec remove_from_failed_files_list(od_space:id(), file_meta:uuid()) -> ok | {error, term()}.
 remove_from_failed_files_list(SpaceId, FileUuid)  ->
