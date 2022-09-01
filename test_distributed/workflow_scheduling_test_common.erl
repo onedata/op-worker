@@ -173,6 +173,9 @@ reply_to_handler_mock(Sender, ManagerAcc, Options, #handler_call{
         {prepare_lane, #{fail_lane_preparation := LaneId}} ->
             Sender ! fail_call,
             ManagerAcc;
+        {prepare_lane, #{throw_error := LaneId}} ->
+            Sender ! throw_error,
+            ManagerAcc;
         {prepare_lane, #{{delay_lane_preparation, LaneId} := true}} ->
             Sender ! delay_call,
             ManagerAcc;

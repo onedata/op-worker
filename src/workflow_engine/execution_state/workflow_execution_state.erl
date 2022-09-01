@@ -50,7 +50,8 @@
 
 
 -record(execution_cancelled, {
-    cancel_type = on_lane_execution :: on_lane_execution | on_lane_prepare,
+    cancel_type = on_lane_execution :: on_lane_execution | on_lane_prepare |
+                                       when_waiting_on_next_lane_prepare | when_finishing_execution,
     has_exception_appeared = false :: boolean(),
     % Calls count is incremented when cancel is initialized and decremented when it is
     % marked as finished. Workflow can be finished only when calls count is decremented to 0
@@ -61,6 +62,10 @@
 }).
 -define(EXECUTION_CANCELLED(CallCount), #execution_cancelled{call_count = CallCount}).
 -define(PREPARATION_CANCELLED(CallCount), #execution_cancelled{cancel_type = on_lane_prepare, call_count = CallCount}).
+-define(WAITING_FOR_NEXT_LANE_PREPARATION_END(HasExceptionAppeared), #execution_cancelled{
+    cancel_type = when_waiting_on_next_lane_prepare, call_count = 0, has_exception_appeared = HasExceptionAppeared}).
+-define(EXECUTION_ENDED(HasExceptionAppeared), #execution_cancelled{
+    cancel_type = when_finishing_execution, call_count = 0, has_exception_appeared = HasExceptionAppeared}).
 
 
 % Macros and records used to provide additional information about document update procedure
@@ -116,7 +121,7 @@
 -type doc() :: datastore_doc:doc(state()).
 
 -type execution_status() :: ?NOT_PREPARED | ?PREPARING | ?PREPARED_IN_ADVANCE | ?PREPARATION_FAILED |
-    ?EXECUTING | #execution_cancelled{} | ?EXECUTION_ENDED(boolean()) | ?WAITING_FOR_NEXT_LANE_PREPARATION_END(boolean()).
+    ?EXECUTING | #execution_cancelled{}.
 -type next_lane_preparation_status() :: ?NOT_PREPARED | ?PREPARING | ?PREPARED_IN_ADVANCE | ?PREPARATION_FAILED.
 % TODO VFS-7919 better type name
 -type handler_execution_or_cached_async_result() ::
@@ -356,8 +361,14 @@ report_execution_status_update(ExecutionId, JobIdentifier, UpdateType, Ans) ->
 
     case UpdatedDocOrError of
         ?WF_ERROR_JOB_NOT_FOUND ->
+            case UpdateType of
+                ?ASYNC_CALL_ENDED ->
+                    workflow_cached_async_result:delete(CachedAns);
+                _ ->
+                    ok
+            end,
             ?WF_ERROR_JOB_NOT_FOUND; % Error occurred - no task can be connected to result
-        #document{value = #workflow_execution_state{engine_id = EngineId}} = UpdatedDoc ->
+        #document{value = #workflow_execution_state{engine_id = EngineId, execution_status = Status}} = UpdatedDoc ->
             maybe_report_item_error(UpdatedDoc, ItemIdToReportError),
             % TODO VFS-8456 - maybe execute notification handlers also on pool?
             lists:foreach(fun({Identifier, TaskStatus}) ->
@@ -368,6 +379,14 @@ report_execution_status_update(ExecutionId, JobIdentifier, UpdateType, Ans) ->
                 current_lane = #current_lane{parallel_box_specs = BoxSpecs}
             }} = UpdatedDoc,
             {_TaskId, TaskSpec} = workflow_jobs:get_task_details(JobIdentifier, BoxSpecs),
+
+            case {UpdateType, Status} of
+                {?ASYNC_CALL_ENDED, #execution_cancelled{has_exception_appeared = true}} ->
+                    workflow_cached_async_result:delete(CachedAns);
+                _ ->
+                    ok
+            end,
+
             {ok, EngineId, TaskSpec}
     end.
 
@@ -892,8 +911,6 @@ set_current_lane(#workflow_execution_state{
 -spec handle_execution_cancel_init(state()) -> {ok, state()}.
 handle_execution_cancel_init(#workflow_execution_state{execution_status = ?PREPARING} = State) ->
     {ok, State#workflow_execution_state{execution_status = ?PREPARATION_CANCELLED(1)}};
-handle_execution_cancel_init(#workflow_execution_state{execution_status = ?PREPARATION_CANCELLED(Counter) = Status} = State) ->
-    {ok, State#workflow_execution_state{execution_status = Status#execution_cancelled{call_count = Counter + 1}}};
 handle_execution_cancel_init(#workflow_execution_state{execution_status = ?PREPARATION_FAILED} = State) ->
     % TODO VFS-7787 Return error to prevent document update
     {ok, State};
@@ -951,26 +968,33 @@ execute_exception_handler(#document{key = ExecutionId, value = #workflow_executi
     workflow_engine:preparation_mode()) -> {ok, state()} | ?WF_ERROR_UNKNOWN_LANE.
 handle_lane_preparation_failure(
     #workflow_execution_state{
-        execution_status = #execution_cancelled{has_exception_appeared = true},
+        execution_status = #execution_cancelled{has_exception_appeared = true} = Status,
         next_lane_preparation_status = ?PREPARING
     } = State, _LaneId, ?PREPARE_CURRENT) ->
-    {ok, State#workflow_execution_state{execution_status = ?WAITING_FOR_NEXT_LANE_PREPARATION_END(true)}};
+    {ok, State#workflow_execution_state{
+        execution_status = Status#execution_cancelled{cancel_type = when_waiting_on_next_lane_prepare}
+    }};
 handle_lane_preparation_failure(
     #workflow_execution_state{
         next_lane_preparation_status = ?PREPARING
     } = State, _LaneId, ?PREPARE_CURRENT) ->
     {ok, State#workflow_execution_state{execution_status = ?WAITING_FOR_NEXT_LANE_PREPARATION_END(false)}};
+handle_lane_preparation_failure(
+    #workflow_execution_state{
+        execution_status = ?EXECUTION_CANCELLED(_)
+    } = State, _LaneId, ?PREPARE_CURRENT) ->
+    {ok, State};
 handle_lane_preparation_failure(State, _LaneId, ?PREPARE_CURRENT) ->
     {ok, State#workflow_execution_state{execution_status = ?PREPARATION_FAILED}};
 handle_lane_preparation_failure(
     #workflow_execution_state{
-        execution_status = ?WAITING_FOR_NEXT_LANE_PREPARATION_END(HasExceptionAppeared),
+        execution_status = #execution_cancelled{cancel_type = when_waiting_on_next_lane_prepare} = Status,
         next_lane = #next_lane{
             id = LaneId
         }
     } = State, LaneId, _LaneType) ->
     {ok, State#workflow_execution_state{
-        execution_status = ?EXECUTION_ENDED(HasExceptionAppeared),
+        execution_status = Status#execution_cancelled{cancel_type = when_finishing_execution},
         next_lane_preparation_status = ?PREPARATION_FAILED
     }};
 handle_lane_preparation_failure(
@@ -1035,13 +1059,13 @@ finish_lane_preparation_internal(_State, _BoxesMap, _LaneExecutionContext,
     {ok, state()} | ?WF_ERROR_CURRENT_LANE | ?WF_ERROR_UNKNOWN_LANE.
 finish_lane_preparation_in_advance(
     #workflow_execution_state{
-        execution_status = ?WAITING_FOR_NEXT_LANE_PREPARATION_END(HasExceptionAppeared),
+        execution_status = #execution_cancelled{cancel_type = when_waiting_on_next_lane_prepare} = Status,
         next_lane = #next_lane{
             id = LaneId
         } = Lane
     } = State, LaneId, LaneSpec) ->
     {ok, State#workflow_execution_state{
-        execution_status = ?EXECUTION_ENDED(HasExceptionAppeared),
+        execution_status = Status#execution_cancelled{cancel_type = when_finishing_execution},
         next_lane_preparation_status = ?PREPARED_IN_ADVANCE,
         next_lane = Lane#next_lane{
             lane_spec = LaneSpec

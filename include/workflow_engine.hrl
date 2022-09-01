@@ -69,10 +69,7 @@
 -define(EXECUTING, executing).
 -define(EXECUTION_CANCELLED, execution_cancelled).
 -define(EXECUTION_ENDED, execution_ended).
--define(EXECUTION_ENDED(HasExceptionAppeared), {execution_ended, HasExceptionAppeared}).
 -define(EXECUTION_ENDED_WITH_EXCEPTION, execution_ended_with_exception).
--define(WAITING_FOR_NEXT_LANE_PREPARATION_END(HasExceptionAppeared),
-    {waiting_for_next_lane_preparation_end, HasExceptionAppeared}).
 
 %%%===================================================================
 %%% Macros used to describe processing of parallel box's jobs

@@ -60,6 +60,8 @@
     long_lasting_lane_preparation_of_two_lanes_test/1,
     lane_execution_ended_handler_failure_test/1,
     lane_execution_ended_handler_failure_before_prepare_in_advance_finish_test/1,
+    lane_preparation_exception_test/1,
+    lane_preparation_in_advance_exception_test/1,
     
     execute_other_lane_than_the_one_prepared_in_advance_test/1,
     reuse_already_prepared_lane_test/1,
@@ -116,6 +118,8 @@ all() ->
         long_lasting_lane_preparation_of_two_lanes_test,
         lane_execution_ended_handler_failure_test,
         lane_execution_ended_handler_failure_before_prepare_in_advance_finish_test,
+        lane_preparation_exception_test,
+        lane_preparation_in_advance_exception_test,
 
         % TODO VFS-7784 - add test when lane is set to be prepared in advance twice
         % (callback should be called only once - test successful and failed execution)
@@ -372,6 +376,12 @@ lane_execution_ended_handler_failure_before_prepare_in_advance_finish_test(Confi
         test_execution_manager_options = [{{delay_lane_preparation, <<"4">>}, true}]
     }, stop_on_lane).
 
+lane_preparation_exception_test(Config) ->
+    lane_preparation_exception_test_base(Config, <<"3">>, false).
+
+lane_preparation_in_advance_exception_test(Config) ->
+    lane_preparation_exception_test_base(Config, <<"4">>, true).
+
 %%%===================================================================
 
 execute_other_lane_than_the_one_prepared_in_advance_test(Config) ->
@@ -515,6 +525,18 @@ lane_failure_test_base(Config, #test_config{
         test_execution_manager_options = [{ManagerKey, LaneId} | ManagerOptions],
         verify_history_options = #{VerifyOptionKey => LaneId}
     }).
+
+lane_preparation_exception_test_base(Config, LineToThrow, PrepareInAdvance) ->
+    ExecutionHistory = single_execution_test_base(Config, #test_config{
+        task_type = async,
+        prepare_in_advance = PrepareInAdvance,
+        generator_options = ?EXEMPLARY_STREAMS,
+        test_execution_manager_options = [{throw_error, LineToThrow}],
+        verify_statistics_options = #{ignore_async_slots_check => true},
+        verify_history_options = #{expect_exception => <<"3">>}
+    }),
+
+    ?assertNot(workflow_scheduling_test_common:has_finish_callbacks_for_lane(ExecutionHistory, <<"3">>)).
 
 execute_other_lane_than_the_one_prepared_in_advance_test_base(Config, BasicConfig) ->
     single_execution_test_base(Config, BasicConfig#test_config{prepare_in_advance = true}).
