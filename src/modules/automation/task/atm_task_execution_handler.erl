@@ -18,16 +18,18 @@
 
 %% API
 -export([
-    initiate/2,
+    start/2,
     stop/3,
-    teardown/2,
+    resume/2,
+
     set_run_num/2,
 
     run_job_batch/4,
     process_job_batch_result/4,
     process_streamed_data/3,
 
-    handle_ended/1
+    handle_ended/1,
+    teardown/2
 ]).
 
 
@@ -36,21 +38,14 @@
 %%%===================================================================
 
 
--spec initiate(
+-spec start(
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id() | atm_task_execution:doc()
 ) ->
     {workflow_engine:task_spec(), atm_workflow_execution_env:diff()} | no_return().
-initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
+start(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
     AtmTaskExecutionDoc = ensure_atm_task_execution_doc(AtmTaskExecutionIdOrDoc),
-
-    AtmTaskExecutionSpec = atm_task_executor:initiate(
-        build_atm_task_executor_initiation_ctx(AtmWorkflowExecutionCtx, AtmTaskExecutionDoc),
-        AtmTaskExecutionDoc#document.value#atm_task_execution.executor
-    ),
-    AtmWorkflowExecutionEnvDiff = gen_atm_workflow_execution_env_diff(AtmTaskExecutionDoc),
-
-    {AtmTaskExecutionSpec, AtmWorkflowExecutionEnvDiff}.
+    initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionDoc).
 
 
 -spec stop(
@@ -62,29 +57,33 @@ initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
 stop(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Reason) ->
     case atm_task_execution_status:handle_stopping(AtmTaskExecutionId, Reason) of
         {ok, _} when Reason =:= pause ->
-            % ongoing jobs shouldn't be abruptly interrupted when execution is paused
+            % when execution is paused, ongoing jobs aren't abruptly stopped (the
+            % execution engine will wait for them before transitioning to paused status)
             ok;
 
         {ok, #document{value = #atm_task_execution{executor = AtmTaskExecutor}}} ->
+            % for other reasons than pause, ongoing jobs are immediately aborted
             atm_task_executor:abort(AtmWorkflowExecutionCtx, AtmTaskExecutor);
 
-        {error, task_stopping} ->
+        {error, task_already_stopping} ->
             ok;
 
-        {error, task_ended} ->
+        {error, task_already_ended} ->
             ok
     end.
 
 
--spec teardown(atm_workflow_execution_ctx:record(), atm_task_execution:id()) ->
-    ok | no_return().
-teardown(AtmWorkflowExecutionCtx, AtmTaskExecutionId) ->
-    AtmTaskExecutionDoc = ensure_atm_task_execution_doc(AtmTaskExecutionId),
+-spec resume(atm_workflow_execution_ctx:record(), atm_task_execution:id()) ->
+    ignored | {ok, {workflow_engine:task_spec(), atm_workflow_execution_env:diff()}} | no_return().
+resume(AtmWorkflowExecutionCtx, AtmTaskExecutionId) ->
+    case atm_task_execution_status:handle_resume(AtmTaskExecutionId) of
+        {ok, AtmTaskExecutionDoc = #document{value = AtmTaskExecution}} ->
+            unfreeze_stores(AtmTaskExecution),
+            {ok, initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionDoc)};
 
-    atm_task_executor:teardown(
-        AtmWorkflowExecutionCtx,
-        AtmTaskExecutionDoc#document.value#atm_task_execution.executor
-    ).
+        {error, task_already_ended} ->
+            ignored
+    end.
 
 
 -spec set_run_num(atm_lane_execution:run_num(), atm_task_execution:id()) ->
@@ -102,15 +101,15 @@ set_run_num(RunNum, AtmTaskExecutionId) ->
     atm_task_executor:job_batch_id(),
     [automation:item()]
 ) ->
-    ok | {error, running_item_failed} | {error, task_stopping} | {error, task_ended}.
+    ok | {error, running_item_failed} | {error, task_already_stopping} | {error, task_already_ended}.
 run_job_batch(
     AtmWorkflowExecutionCtx,
     AtmTaskExecutionId,
     AtmJobBatchId,
     ItemBatch
 ) ->
-    ItemsNum = length(ItemBatch),
-    case atm_task_execution_status:handle_items_in_processing(AtmTaskExecutionId, ItemsNum) of
+    ItemCount = length(ItemBatch),
+    case atm_task_execution_status:handle_items_in_processing(AtmTaskExecutionId, ItemCount) of
         {ok, #document{value = AtmTaskExecution}} ->
             AtmRunJobBatchCtx = atm_run_job_batch_ctx:build(AtmWorkflowExecutionCtx, AtmTaskExecution),
 
@@ -200,9 +199,20 @@ handle_ended(AtmTaskExecutionId) ->
     case atm_task_execution_status:handle_ended(AtmTaskExecutionId) of
         {ok, #document{value = AtmTaskExecution}} ->
             freeze_stores(AtmTaskExecution);
-        {error, task_ended} ->
+        {error, task_already_ended} ->
             ok
     end.
+
+
+-spec teardown(atm_workflow_execution_ctx:record(), atm_task_execution:id()) ->
+    ok | no_return().
+teardown(AtmWorkflowExecutionCtx, AtmTaskExecutionId) ->
+    AtmTaskExecutionDoc = ensure_atm_task_execution_doc(AtmTaskExecutionId),
+
+    atm_task_executor:teardown(
+        AtmWorkflowExecutionCtx,
+        AtmTaskExecutionDoc#document.value#atm_task_execution.executor
+    ).
 
 
 %%%===================================================================
@@ -218,6 +228,19 @@ ensure_atm_task_execution_doc(#document{value = #atm_task_execution{}} = AtmTask
 ensure_atm_task_execution_doc(AtmTaskExecutionId) ->
     {ok, AtmTaskExecutionDoc = #document{}} = atm_task_execution:get(AtmTaskExecutionId),
     AtmTaskExecutionDoc.
+
+
+%% @private
+-spec initiate(atm_workflow_execution_ctx:record(), atm_task_execution:doc()) ->
+    {workflow_engine:task_spec(), atm_workflow_execution_env:diff()} | no_return().
+initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionDoc) ->
+    AtmTaskExecutionSpec = atm_task_executor:initiate(
+        build_atm_task_executor_initiation_ctx(AtmWorkflowExecutionCtx, AtmTaskExecutionDoc),
+        AtmTaskExecutionDoc#document.value#atm_task_execution.executor
+    ),
+    AtmWorkflowExecutionEnvDiff = gen_atm_workflow_execution_env_diff(AtmTaskExecutionDoc),
+
+    {AtmTaskExecutionSpec, AtmWorkflowExecutionEnvDiff}.
 
 
 %% @private
@@ -375,16 +398,16 @@ handle_job_batch_processing_error(
     AtmWorkflowExecutionCtx,
     AtmTaskExecutionId,
     ItemBatch,
-    {error, dequeued}  %% TODO error
+    ?ERROR_ATM_JOB_BATCH_WITHDRAWN(Reason)
 ) ->
-    case atm_task_execution_status:handle_items_dequeued(AtmTaskExecutionId, length(ItemBatch)) of
+    case atm_task_execution_status:handle_items_withdrawn(AtmTaskExecutionId, length(ItemBatch)) of
         {ok, _} ->
             ok;
         {error, task_not_stopping} ->
-            %% TODO if not happening when stopping - treat it as any other error
+            % items withdrawal caused not by stopping execution is treated as error
             handle_job_batch_processing_error(
                 AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemBatch,
-                {error, interrupted}  %% TODO error
+                ?ERROR_ATM_JOB_BATCH_CRASHED(Reason)
             )
     end;
 
@@ -484,15 +507,15 @@ handle_uncorrelated_results_processing_error(
             log_uncorrelated_results_processing_error(
                 AtmWorkflowExecutionCtx, AtmTaskExecutionId, Error
             ),
-            atm_lane_execution_handler:stop(
+            {ok, _} = atm_lane_execution_handler:stop(
                 {AtmLaneIndex, RunNum}, failure, AtmWorkflowExecutionCtx
             ),
             ok;
 
-        {error, task_stopping} ->
+        {error, task_already_stopping} ->
             ok;
 
-        {error, task_ended} ->
+        {error, task_already_ended} ->
             ok
     end.
 
@@ -533,13 +556,17 @@ log_uncorrelated_results_processing_error(
 -spec freeze_stores(atm_task_execution:record()) -> ok.
 freeze_stores(#atm_task_execution{
     system_audit_log_store_id = AtmSystemAuditLogStoreId,
-    time_series_store_id = undefined
+    time_series_store_id = AtmTSStoreId
 }) ->
-    atm_store_api:freeze(AtmSystemAuditLogStoreId);
+    AtmTSStoreId /= undefined andalso atm_store_api:freeze(AtmTSStoreId),
+    atm_store_api:freeze(AtmSystemAuditLogStoreId).
 
-freeze_stores(#atm_task_execution{
+
+%% @private
+-spec unfreeze_stores(atm_task_execution:record()) -> ok.
+unfreeze_stores(#atm_task_execution{
     system_audit_log_store_id = AtmSystemAuditLogStoreId,
     time_series_store_id = AtmTSStoreId
 }) ->
-    atm_store_api:freeze(AtmSystemAuditLogStoreId),
-    atm_store_api:freeze(AtmTSStoreId).
+    AtmTSStoreId /= undefined andalso atm_store_api:unfreeze(AtmTSStoreId),
+    atm_store_api:unfreeze(AtmSystemAuditLogStoreId).

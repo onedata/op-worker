@@ -53,7 +53,7 @@
 %%%      |      |            |      |                  |           |          |                 |
 %%%  E   |      v            v      v                  v           v          |                 |
 %%%  N   |  +----------+    +--------+       +-----------+    +-----------+   |                 |
-%%%  D   |  | FINISHED |    | FAILED |       | CANCELLED |    |  CRUSHED  |   |                 |
+%%%  D   |  | FINISHED |    | FAILED |       | CANCELLED |    |  CRASHED  |   |                 |
 %%%  E   |  +----------+    +--------+       +-----------+    +-----------+   |                 |
 %%%  D   |                                             |                      |                 |
 %%%       \                                            |                      |                /
@@ -93,7 +93,8 @@
     handle_lane_stopping/3,
     handle_lane_task_status_change/2,
     handle_ended/1,
-    handle_manual_lane_repeat/2
+    handle_manual_lane_repeat/2,
+    handle_resume/2
 ]).
 
 
@@ -116,6 +117,7 @@ infer_phase(#atm_workflow_execution{status = Status}) ->
 
 -spec status_to_phase(atm_workflow_execution:status()) ->
     atm_workflow_execution:phase().
+status_to_phase(?RESUMING_STATUS) -> ?WAITING_PHASE;
 status_to_phase(?SCHEDULED_STATUS) -> ?WAITING_PHASE;
 
 status_to_phase(?ACTIVE_STATUS) -> ?ONGOING_PHASE;
@@ -125,7 +127,7 @@ status_to_phase(?INTERRUPTED_STATUS) -> ?SUSPENDED_PHASE;
 status_to_phase(?PAUSED_STATUS) -> ?SUSPENDED_PHASE;
 
 status_to_phase(?FINISHED_STATUS) -> ?ENDED_PHASE;
-status_to_phase(?CRUSHED_STATUS) -> ?ENDED_PHASE;
+status_to_phase(?CRASHED_STATUS) -> ?ENDED_PHASE;
 status_to_phase(?CANCELLED_STATUS) -> ?ENDED_PHASE;
 status_to_phase(?FAILED_STATUS) -> ?ENDED_PHASE.
 
@@ -179,6 +181,11 @@ handle_lane_enqueued(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
         ->
             AtmLaneRunDiff(Record);
 
+        (Record = #atm_workflow_execution{status = ?RESUMING_STATUS}) ->
+            AtmLaneRunDiff(Record#atm_workflow_execution{
+                status = ?SCHEDULED_STATUS
+            });
+
         (#atm_workflow_execution{status = ?STOPPING_STATUS}) ->
             ?ERROR_ATM_WORKFLOW_EXECUTION_ABORTING;
 
@@ -196,9 +203,12 @@ handle_lane_enqueued(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
 handle_lane_stopping(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmLaneRunDiff) ->
     Diff = fun
         (Record = #atm_workflow_execution{status = Status}) when
+            Status == ?RESUMING_STATUS;
             Status == ?SCHEDULED_STATUS;
             Status == ?ACTIVE_STATUS;
-            Status == ?STOPPING_STATUS
+            Status == ?STOPPING_STATUS;
+            Status == ?INTERRUPTED_STATUS;
+            Status == ?PAUSED_STATUS
         ->
             UpdateResult = AtmLaneRunDiff(Record),
 
@@ -289,6 +299,33 @@ handle_manual_lane_repeat(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
     end.
 
 
+-spec handle_resume(atm_workflow_execution:id(), lane_run_diff()) ->
+    {ok, atm_workflow_execution:doc()} | errors:error().
+handle_resume(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
+    Diff = fun
+        (Record = #atm_workflow_execution{status = Status}) when
+            Status =:= ?INTERRUPTED_STATUS;
+            Status =:= ?PAUSED_STATUS;
+            Status =:= ?CANCELLED_STATUS
+        ->
+            AtmLaneRunDiff(Record#atm_workflow_execution{
+                status = ?RESUMING_STATUS,
+                schedule_time = global_clock:timestamp_seconds()
+            });
+
+        (_) ->
+            ?ERROR_ATM_WORKFLOW_EXECUTION_NOT_RESUMABLE
+    end,
+
+    case atm_workflow_execution:update(AtmWorkflowExecutionId, Diff) of
+        {ok, AtmWorkflowExecutionDoc} = Result ->
+            ensure_in_proper_phase_tree(AtmWorkflowExecutionDoc),
+            Result;
+        {error, _} = Error ->
+            Error
+    end.
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -319,9 +356,17 @@ set_times_on_phase_transition(AtmWorkflowExecution = #atm_workflow_execution{
             AtmWorkflowExecution#atm_workflow_execution{
                 finish_time = global_clock:monotonic_timestamp_seconds(StartTime)
             };
-        {true, ?SUSPENDED_PHASE, ?ENDED_PHASE} ->
+        {true, ?SUSPENDED_PHASE, ?ONGOING_PHASE} ->
             AtmWorkflowExecution#atm_workflow_execution{
-                finish_time = global_clock:monotonic_timestamp_seconds(SuspendTime)
+                start_time = global_clock:monotonic_timestamp_seconds(SuspendTime)
+            };
+        {true, ?SUSPENDED_PHASE, ?WAITING_PHASE} ->
+            AtmWorkflowExecution#atm_workflow_execution{
+                schedule_time = global_clock:monotonic_timestamp_seconds(SuspendTime)
+            };
+        {true, ?ENDED_PHASE, ?WAITING_PHASE} ->
+            AtmWorkflowExecution#atm_workflow_execution{
+                schedule_time = global_clock:monotonic_timestamp_seconds(SuspendTime)
             };
         false ->
             AtmWorkflowExecution
@@ -344,9 +389,15 @@ ensure_in_proper_phase_tree(#document{value = AtmWorkflowExecution} = AtmWorkflo
         {true, ?ONGOING_PHASE, ?ENDED_PHASE} ->
             atm_ended_workflow_executions:add(AtmWorkflowExecutionDoc),
             atm_ongoing_workflow_executions:delete(AtmWorkflowExecutionDoc);
-        {true, ?SUSPENDED_PHASE, ?ENDED_PHASE} ->
-            atm_ended_workflow_executions:add(AtmWorkflowExecutionDoc),
+        {true, ?SUSPENDED_PHASE, ?ONGOING_PHASE} ->
+            atm_ongoing_workflow_executions:add(AtmWorkflowExecutionDoc),
             atm_suspended_workflow_executions:delete(AtmWorkflowExecutionDoc);
+        {true, ?SUSPENDED_PHASE, ?WAITING_PHASE} ->
+            atm_waiting_workflow_executions:add(AtmWorkflowExecutionDoc),
+            atm_suspended_workflow_executions:delete(AtmWorkflowExecutionDoc);
+        {true, ?ENDED_PHASE, ?WAITING_PHASE} ->
+            atm_waiting_workflow_executions:add(AtmWorkflowExecutionDoc),
+            atm_ended_workflow_executions:delete(AtmWorkflowExecutionDoc);
         false ->
             ok
     end.

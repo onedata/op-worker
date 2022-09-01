@@ -7,7 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% Module handling heartbeats and job batch results sent by tasks
-%%% executed on OpenFaaS service.
+%%% executed by OpenFaaS service.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_openfaas_task_callback_handler).
@@ -64,11 +64,11 @@ build_job_batch_heartbeat_url(AtmWorkflowExecutionId, AtmJobBatchId) ->
 %%--------------------------------------------------------------------
 -spec init(cowboy_req:req(), any()) -> {ok, cowboy_req:req(), any()}.
 init(Req0, State = #{type := output}) ->
-    {Req1, Body} = read_body(Req0),
+    {Body, Req1} = read_body(Req0),
     Result = case cowboy_req:header(<<"x-function-status">>, Req1) of
         <<"200">> -> decode_lambda_output(Body);
-        <<"404">> -> {error, dequeued};     %% TODO
-        <<"500">> -> {error, interrupted}   %% TODO
+        <<"404">> -> ?ERROR_ATM_JOB_BATCH_WITHDRAWN(trim_body(Body));
+        <<"500">> -> ?ERROR_ATM_JOB_BATCH_CRASHED(trim_body(Body))
     end,
 
     workflow_engine:report_async_task_result(
@@ -119,29 +119,37 @@ decode_lambda_output(Body) ->
                 "Expected '{\"resultsBatch\": [$LAMBDA_RESULTS_FOR_ITEM, ...]}' with "
                 "$LAMBDA_RESULTS_FOR_ITEM object for each item in 'argsBatch' "
                 "provided to lambda. Instead got: ~s",
-                [json_utils:encode(Body)]       %% TODO trim body ??
+                [json_utils:encode(trim_body(Body))]
             ))
     catch _:_ ->
-        ?ERROR_BAD_DATA(<<"lambdaOutput">>, ?ERROR_BAD_MESSAGE(Body))  %% TODO trim body ??
+        ?ERROR_BAD_DATA(<<"lambdaOutput">>, ?ERROR_BAD_MESSAGE(trim_body(Body)))
     end.
 
 
 %% @private
--spec read_body(cowboy_req:req()) -> {cowboy_req:req(), binary()}.
+-spec read_body(cowboy_req:req()) -> {binary(), cowboy_req:req()}.
 read_body(Req) ->
     try
-        read_body_insecure(Req, <<>>)
+        read_body_insecure(<<>>, Req)
     catch _:_ ->
-        {Req, <<>>}
+        {<<>>, Req}
     end.
 
 
 %% @private
--spec read_body_insecure(cowboy_req:req(), binary()) -> {cowboy_req:req(), binary()}.
-read_body_insecure(Req0, Acc) ->
+-spec read_body_insecure(binary(), cowboy_req:req()) -> {binary(), cowboy_req:req()}.
+read_body_insecure(Acc, Req0) ->
     case cowboy_req:read_body(Req0) of
         {ok, Data, Req1} ->
-            {Req1, <<Acc/binary, Data/binary>>};
+            {<<Acc/binary, Data/binary>>, Req1};
         {more, Data, Req1} ->
-            read_body_insecure(Req1, <<Acc/binary, Data/binary>>)
+            read_body_insecure(<<Acc/binary, Data/binary>>, Req1)
     end.
+
+
+%% @private
+-spec trim_body(binary()) -> binary().
+trim_body(<<Data:1024/binary, _/binary>>) ->
+    <<Data/binary, "...">>;
+trim_body(Body) ->
+    Body.

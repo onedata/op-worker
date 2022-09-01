@@ -1097,12 +1097,14 @@ translate_from_protobuf(#'ChangesBatch'{
 translate_from_protobuf(#'ChangesRequest2'{
     space_id = SpaceId,
     since = Since,
-    until = Until
+    until = Until,
+    included_mutators = IncludedMutators
 }) ->
     #changes_request2{
         space_id = SpaceId,
         since = Since,
-        until = Until
+        until = Until,
+        included_mutators = IncludedMutators
     };
 
 
@@ -2123,7 +2125,8 @@ translate_to_protobuf(#changes_request2{} = CR) ->
     {changes_request, #'ChangesRequest2'{
         space_id = CR#'changes_request2'.space_id,
         since = CR#'changes_request2'.since,
-        until = CR#'changes_request2'.until
+        until = CR#'changes_request2'.until,
+        included_mutators = CR#'changes_request2'.included_mutators
     }};
 
 

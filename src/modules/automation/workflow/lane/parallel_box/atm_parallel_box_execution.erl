@@ -19,10 +19,11 @@
 %% API
 -export([
     create_all/1, create/3,
-    initiate_all/2, initiate/2,
-    stop_all/3, stop/3,
+    start_all/2,
+    stop_all/3,
+    resume_all/2,
     ensure_all_ended/1,
-    teardown_all/2, teardown/2,
+    teardown_all/2,
     delete_all/1, delete/1
 ]).
 -export([set_tasks_run_num/2, update_task_status/3]).
@@ -34,6 +35,12 @@
 
 
 -type creation_args() :: #atm_parallel_box_execution_creation_args{}.
+
+-type initiate_task_fun() :: fun((atm_task_execution:id()) ->
+    ignored |
+    {ok, {workflow_engine:task_spec(), atm_workflow_execution_env:diff()}} |
+    no_return()
+).
 
 -type status() :: atm_task_execution:status().
 
@@ -105,67 +112,18 @@ create(AtmLaneExecutionRunCreationArgs, AtmParallelBoxIndex, #atm_parallel_box_s
 
     #atm_parallel_box_execution{
         schema_id = AtmParallelBoxSchemaId,
-        status = infer_status(?PENDING_STATUS, maps:values(AtmTaskExecutionStatuses)),
+        status = ?PENDING_STATUS,
         task_registry = AtmTaskExecutionRegistry,
         task_statuses = AtmTaskExecutionStatuses
     }.
 
 
--spec initiate_all(atm_workflow_execution_ctx:record(), [record()]) ->
+-spec start_all(atm_workflow_execution_ctx:record(), [record()]) ->
     {[workflow_engine:parallel_box_spec()], atm_workflow_execution_env:diff()} | no_return().
-initiate_all(AtmWorkflowExecutionCtx, AtmParallelBoxExecutions) ->
-    AtmParallelBoxesInitiationResult = atm_parallel_runner:map(fun(#atm_parallel_box_execution{
-        schema_id = AtmParallelBoxSchemaId
-    } = AtmParallelBoxExecution) ->
-        try
-            initiate(AtmWorkflowExecutionCtx, AtmParallelBoxExecution)
-        catch Type:Reason:Stacktrace ->
-            Error = ?atm_examine_error(Type, Reason, Stacktrace),
-            throw(?ERROR_ATM_PARALLEL_BOX_EXECUTION_INITIATION_FAILED(AtmParallelBoxSchemaId, Error))
-        end
-    end, AtmParallelBoxExecutions),
-
-    lists:foldr(fun(
-        {AtmParallelBoxExecutionSpec, AtmWorkflowExecutionEnvDiff},
-        {AtmParallelBoxExecutionSpecsAcc, AtmWorkflowExecutionEnvDiffAcc}
-    ) ->
-        {
-            [AtmParallelBoxExecutionSpec | AtmParallelBoxExecutionSpecsAcc],
-            fun(Env) -> AtmWorkflowExecutionEnvDiff(AtmWorkflowExecutionEnvDiffAcc(Env)) end
-        }
-    end, {[], fun(Env) -> Env end}, AtmParallelBoxesInitiationResult).
-
-
--spec initiate(atm_workflow_execution_ctx:record(), record()) ->
-    {workflow_engine:parallel_box_spec(), atm_workflow_execution_env:diff()} | no_return().
-initiate(AtmWorkflowExecutionCtx0, #atm_parallel_box_execution{
-    task_registry = AtmTaskExecutionRegistry
-}) ->
-    AtmTaskExecutionsInitiationResult = atm_parallel_runner:map(fun(
-        {AtmTaskSchemaId, AtmTaskExecutionId}
-    ) ->
-        AtmWorkflowExecutionCtx1 = atm_workflow_execution_ctx:configure_processed_task_id(
-            AtmTaskExecutionId, AtmWorkflowExecutionCtx0
-        ),
-        try
-            {AtmTaskExecutionId, atm_task_execution_handler:initiate(
-                AtmWorkflowExecutionCtx1, AtmTaskExecutionId
-            )}
-        catch Type:Reason:Stacktrace ->
-            Error = ?atm_examine_error(Type, Reason, Stacktrace),
-            throw(?ERROR_ATM_TASK_EXECUTION_INITIATION_FAILED(AtmTaskSchemaId, Error))
-        end
-    end, maps:to_list(AtmTaskExecutionRegistry)),
-
-    lists:foldl(fun(
-        {AtmTaskExecutionId, {AtmTaskExecutionSpec, AtmWorkflowExecutionEnvDiff}},
-        {AtmParallelBoxExecutionSpec, AtmWorkflowExecutionEnvDiffAcc}
-    ) ->
-        {
-            AtmParallelBoxExecutionSpec#{AtmTaskExecutionId => AtmTaskExecutionSpec},
-            fun(Env) -> AtmWorkflowExecutionEnvDiff(AtmWorkflowExecutionEnvDiffAcc(Env)) end
-        }
-    end, {#{}, fun(Env) -> Env end}, AtmTaskExecutionsInitiationResult).
+start_all(AtmWorkflowExecutionCtx, AtmParallelBoxExecutions) ->
+    initiate_all(AtmParallelBoxExecutions, fun(AtmTaskExecutionId) ->
+        {ok, atm_task_execution_handler:start(AtmWorkflowExecutionCtx, AtmTaskExecutionId)}
+    end).
 
 
 -spec stop_all(
@@ -174,23 +132,19 @@ initiate(AtmWorkflowExecutionCtx0, #atm_parallel_box_execution{
     [record()]
 ) ->
     ok.
-stop_all(AtmWorkflowExecutionCtx, Reason, AtmParallelBoxExecutions) ->
-    lists:foreach(fun(AtmParallelBoxExecution) ->
-        stop(AtmWorkflowExecutionCtx, Reason, AtmParallelBoxExecution)
-    end, AtmParallelBoxExecutions).
-
-
--spec stop(atm_workflow_execution_ctx:record(), atm_task_execution:stopping_reason(), record()) ->
-    ok.
-stop(AtmWorkflowExecutionCtx0, Reason, #atm_parallel_box_execution{
-    task_registry = AtmTaskExecutionRegistry
-}) ->
-    lists:foreach(fun(AtmTaskExecutionId) ->
-        AtmWorkflowExecutionCtx1 = atm_workflow_execution_ctx:configure_processed_task_id(
-            AtmTaskExecutionId, AtmWorkflowExecutionCtx0
-        ),
+stop_all(AtmWorkflowExecutionCtx0, Reason, AtmParallelBoxExecutions) ->
+    Callback = fun(AtmWorkflowExecutionCtx1, AtmTaskExecutionId) ->
         catch atm_task_execution_handler:stop(AtmWorkflowExecutionCtx1, AtmTaskExecutionId, Reason)
-    end, maps:values(AtmTaskExecutionRegistry)).
+    end,
+    foreach_task(AtmWorkflowExecutionCtx0, AtmParallelBoxExecutions, Callback).
+
+
+-spec resume_all(atm_workflow_execution_ctx:record(), [record()]) ->
+    {[workflow_engine:parallel_box_spec()], atm_workflow_execution_env:diff()} | no_return().
+resume_all(AtmWorkflowExecutionCtx, AtmParallelBoxExecutions) ->
+    initiate_all(AtmParallelBoxExecutions, fun(AtmTaskExecutionId) ->
+        atm_task_execution_handler:resume(AtmWorkflowExecutionCtx, AtmTaskExecutionId)
+    end).
 
 
 -spec ensure_all_ended([record()]) -> ok | no_return().
@@ -199,22 +153,11 @@ ensure_all_ended(AtmParallelBoxExecutions) ->
 
 
 -spec teardown_all(atm_workflow_execution_ctx:record(), [record()]) -> ok.
-teardown_all(AtmWorkflowExecutionCtx, AtmParallelBoxExecutions) ->
-    lists:foreach(fun(AtmParallelBoxExecution) ->
-        teardown(AtmWorkflowExecutionCtx, AtmParallelBoxExecution)
-    end, AtmParallelBoxExecutions).
-
-
--spec teardown(atm_workflow_execution_ctx:record(), record()) -> ok.
-teardown(AtmWorkflowExecutionCtx0, #atm_parallel_box_execution{
-    task_registry = AtmTaskExecutionRegistry
-}) ->
-    lists:foreach(fun(AtmTaskExecutionId) ->
-        AtmWorkflowExecutionCtx1 = atm_workflow_execution_ctx:configure_processed_task_id(
-            AtmTaskExecutionId, AtmWorkflowExecutionCtx0
-        ),
+teardown_all(AtmWorkflowExecutionCtx0, AtmParallelBoxExecutions) ->
+    Callback = fun(AtmWorkflowExecutionCtx1, AtmTaskExecutionId) ->
         catch atm_task_execution_handler:teardown(AtmWorkflowExecutionCtx1, AtmTaskExecutionId)
-    end, maps:values(AtmTaskExecutionRegistry)).
+    end,
+    foreach_task(AtmWorkflowExecutionCtx0, AtmParallelBoxExecutions, Callback).
 
 
 -spec delete_all([record()]) -> ok.
@@ -265,7 +208,7 @@ update_task_status(AtmTaskExecutionId, NewStatus, #atm_parallel_box_execution{
                 AtmTaskExecutionId => NewStatus
             },
             {ok, AtmParallelBoxExecution#atm_parallel_box_execution{
-                status = infer_status(
+                status = infer_new_status_from_task_statuses(
                     AtmParallelBoxExecutionStatus,
                     maps:values(NewAtmTaskExecutionStatuses)
                 ),
@@ -348,6 +291,83 @@ db_decode(#{
 %%%===================================================================
 
 
+-spec initiate_all([record()], initiate_task_fun()) ->
+    {[workflow_engine:parallel_box_spec()], atm_workflow_execution_env:diff()} | no_return().
+initiate_all(AtmParallelBoxExecutions, InitiateTaskFun) ->
+    AtmParallelBoxesInitiationResult = atm_parallel_runner:map(fun(#atm_parallel_box_execution{
+        schema_id = AtmParallelBoxSchemaId
+    } = AtmParallelBoxExecution) ->
+        try
+            initiate(AtmParallelBoxExecution, InitiateTaskFun)
+        catch Type:Reason:Stacktrace ->
+            Error = ?atm_examine_error(Type, Reason, Stacktrace),
+            throw(?ERROR_ATM_PARALLEL_BOX_EXECUTION_INITIATION_FAILED(AtmParallelBoxSchemaId, Error))
+        end
+    end, AtmParallelBoxExecutions),
+
+    lists:foldr(fun
+        (
+            {AtmParallelBoxExecutionSpec, AtmWorkflowExecutionEnvDiff},
+            {AtmParallelBoxExecutionSpecsAcc, AtmWorkflowExecutionEnvDiffAcc}
+        ) when map_size(AtmParallelBoxExecutionSpec) > 0 ->
+            {
+                [AtmParallelBoxExecutionSpec | AtmParallelBoxExecutionSpecsAcc],
+                fun(Env) -> AtmWorkflowExecutionEnvDiff(AtmWorkflowExecutionEnvDiffAcc(Env)) end
+            };
+
+        (_, Acc) ->
+            Acc
+    end, {[], fun(Env) -> Env end}, AtmParallelBoxesInitiationResult).
+
+
+%% @private
+-spec initiate(record(), initiate_task_fun()) ->
+    {workflow_engine:parallel_box_spec(), atm_workflow_execution_env:diff()} | no_return().
+initiate(#atm_parallel_box_execution{task_registry = AtmTaskExecutionRegistry}, InitiateTaskFun) ->
+    AtmTaskExecutionsInitiationResult = atm_parallel_runner:map(fun(
+        {AtmTaskSchemaId, AtmTaskExecutionId}
+    ) ->
+        try
+            {AtmTaskExecutionId, InitiateTaskFun(AtmTaskExecutionId)}
+        catch Type:Reason:Stacktrace ->
+            Error = ?atm_examine_error(Type, Reason, Stacktrace),
+            throw(?ERROR_ATM_TASK_EXECUTION_INITIATION_FAILED(AtmTaskSchemaId, Error))
+        end
+    end, maps:to_list(AtmTaskExecutionRegistry)),
+
+    lists:foldl(fun
+        (
+            {AtmTaskExecutionId, {ok, {AtmTaskExecutionSpec, AtmWorkflowExecutionEnvDiff}}},
+            {AtmParallelBoxExecutionSpec, AtmWorkflowExecutionEnvDiffAcc}
+        ) ->
+            {
+                AtmParallelBoxExecutionSpec#{AtmTaskExecutionId => AtmTaskExecutionSpec},
+                fun(Env) -> AtmWorkflowExecutionEnvDiff(AtmWorkflowExecutionEnvDiffAcc(Env)) end
+            };
+
+        ({_AtmTaskExecutionId, ignored}, Acc) ->
+            Acc
+    end, {#{}, fun(Env) -> Env end}, AtmTaskExecutionsInitiationResult).
+
+
+%% @private
+-spec foreach_task(
+    atm_workflow_execution_ctx:record(),
+    [record()],
+    fun((atm_workflow_execution_ctx:record(), atm_task_execution:id()) -> ok)
+) ->
+    ok.
+foreach_task(AtmWorkflowExecutionCtx0, AtmParallelBoxExecutions, Callback) ->
+    lists:foreach(fun(#atm_parallel_box_execution{task_registry = AtmTaskExecutionRegistry}) ->
+        lists:foreach(fun(AtmTaskExecutionId) ->
+            AtmWorkflowExecutionCtx1 = atm_workflow_execution_ctx:configure_processed_task_id(
+                AtmTaskExecutionId, AtmWorkflowExecutionCtx0
+            ),
+            Callback(AtmWorkflowExecutionCtx1, AtmTaskExecutionId)
+        end, maps:values(AtmTaskExecutionRegistry))
+    end, AtmParallelBoxExecutions).
+
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -386,9 +406,9 @@ is_running(#atm_parallel_box_execution{status = AtmParallelBoxExecutionStatus}) 
 
 
 %% @private
--spec infer_status(atm_task_execution:status(), [atm_task_execution:status()]) ->
+-spec infer_new_status_from_task_statuses(atm_task_execution:status(), [atm_task_execution:status()]) ->
     status().
-infer_status(CurrentStatus, AtmTaskExecutionStatuses) ->
+infer_new_status_from_task_statuses(CurrentStatus, AtmTaskExecutionStatuses) ->
     PossibleNewStatus = case lists:usort(AtmTaskExecutionStatuses) of
         [Status] ->
             Status;

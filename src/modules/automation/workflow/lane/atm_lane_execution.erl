@@ -50,14 +50,15 @@
 
 -type run_status() ::
     % waiting
-    ?SCHEDULED_STATUS | ?PREPARING_STATUS | ?ENQUEUED_STATUS |
+    ?RESUMING_STATUS | ?SCHEDULED_STATUS | ?PREPARING_STATUS | ?ENQUEUED_STATUS |
     % ongoing
     ?ACTIVE_STATUS | ?STOPPING_STATUS |
+    % suspended
+    ?INTERRUPTED_STATUS | ?PAUSED_STATUS |
     % ended
-    ?FINISHED_STATUS |
-    ?CRUSHED_STATUS | ?CANCELLED_STATUS | ?FAILED_STATUS | ?INTERRUPTED_STATUS | ?PAUSED_STATUS.
+    ?FINISHED_STATUS | ?CRASHED_STATUS | ?CANCELLED_STATUS | ?FAILED_STATUS.
 
--type run_stopping_reason() :: crush | cancel | failure | interrupt | pause.
+-type run_stopping_reason() :: crash | cancel | failure | interrupt | pause.
 
 -type run_diff() :: fun((run()) -> {ok, run()} | {error, term()}).
 -type run() :: #atm_lane_execution_run{}.

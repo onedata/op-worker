@@ -57,7 +57,14 @@
 -type lambda_input() :: #atm_lambda_input{}.
 -type lambda_output() :: #atm_lambda_output{}.
 
--type job_batch_result() :: {ok, lambda_output()} | {error, dequeued} | errors:error().
+-type job_batch_result() ::
+    {ok, lambda_output()} |
+    % special error signaling that job execution has been rejected.
+    % It will be specially handled when stopping execution - items_in_processing
+    % counter will be decremented but overall job is not consider as failed.
+    % In any other case it will be treated as normal error.
+    ?ERROR_ATM_JOB_BATCH_WITHDRAWN(binary()) |
+    errors:error().
 
 -type streamed_data() :: {chunk, json_utils:json_map()} | errors:error().
 

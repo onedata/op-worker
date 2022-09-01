@@ -281,6 +281,7 @@
 -define(SUSPENDED_PHASE, suspended).
 -define(ENDED_PHASE, ended).
 
+-define(RESUMING_STATUS, resuming).
 -define(SCHEDULED_STATUS, scheduled).
 -define(PREPARING_STATUS, preparing).
 -define(ENQUEUED_STATUS, enqueued).
@@ -292,7 +293,7 @@
 -define(FAILED_STATUS, failed).
 -define(INTERRUPTED_STATUS, interrupted).
 -define(PAUSED_STATUS, paused).
--define(CRUSHED_STATUS, crushed).
+-define(CRASHED_STATUS, crashed).
 -define(SKIPPED_STATUS, skipped).
 
 
@@ -330,5 +331,12 @@
     end
 ).
 
+
+%% TODO mv to ctool
+
+
+-define(ERROR_ATM_JOB_BATCH_WITHDRAWN(__REASON), {error, {atm_job_batch_withdrawn, __REASON}}).
+-define(ERROR_ATM_JOB_BATCH_CRASHED(__REASON), {error, {atm_job_batch_crashed, __REASON}}).
+-define(ERROR_ATM_WORKFLOW_EXECUTION_NOT_RESUMABLE, {error, atm_workflow_execution_not_resumable}).
 
 -endif.

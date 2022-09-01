@@ -118,10 +118,14 @@
                 #atm_store_schema_draft{
                     id = ?TARGET_STORE_SCHEMA_ID,
                     type = time_series,
-                    config = #atm_time_series_store_config{schemas = [
-                        ?MAX_FILE_SIZE_TS_SCHEMA,
-                        ?COUNT_TS_SCHEMA
-                    ]},
+                    config = #atm_time_series_store_config{
+                        time_series_collection_schema = #time_series_collection_schema{
+                            time_series_schemas = [
+                                ?MAX_FILE_SIZE_TS_SCHEMA,
+                                ?COUNT_TS_SCHEMA
+                            ]
+                        }
+                    },
                     requires_initial_content = false,
                     default_initial_content = __ITERATED_CONTENT
                 }
