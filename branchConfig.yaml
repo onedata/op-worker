@@ -1,5 +1,5 @@
 # Used when specific branch for given repo does not exist.
-default: release/20.02.17
+default: release/20.02.18
 
 images:
   # Specification of branches from which docker images will be pulled.

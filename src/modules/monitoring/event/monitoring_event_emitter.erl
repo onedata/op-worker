@@ -31,7 +31,7 @@
 %% Send event informing subscribed client about storage usage update.
 %% @end
 %%--------------------------------------------------------------------
--spec emit_storage_used_updated(SpaceId :: od_space:id(), UserId :: od_user:id(),
+-spec emit_storage_used_updated(SpaceId :: od_space:id(), UserId :: od_user:id() | undefined,
     SizeDifference :: integer()) -> ok | {error, Reason :: term()}.
 emit_storage_used_updated(SpaceId, UserId, SizeDifference) ->
     Type = #storage_used_updated{
@@ -41,9 +41,9 @@ emit_storage_used_updated(SpaceId, UserId, SizeDifference) ->
     emit(#monitoring_event{type = Type#storage_used_updated{user_id = undefined}}),
     case UserId of
         ?ROOT_USER_ID -> ok;
-        ?GUEST_USER_ID -> ok; % todo store guest statistics
-        _ ->
-            emit(#monitoring_event{type = Type#storage_used_updated{user_id = UserId}})
+        ?GUEST_USER_ID -> ok; % TODO VFS-7343 store guest statistics
+        undefined -> ok; % race on dbsync - we do not know user of file yet
+        _ -> emit(#monitoring_event{type = Type#storage_used_updated{user_id = UserId}})
     end.
 
 

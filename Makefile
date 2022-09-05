@@ -163,3 +163,6 @@ package: check_distribution package/$(PKG_ID).tar.gz
 
 pkgclean:
 	rm -rf package
+
+codetag-tracker:
+	@echo "Skipping codetag-tracker for release version 20.02.*"
