@@ -302,10 +302,10 @@ process_current_branching_node(UserCtx, Node, State) ->
     {progress_marker(), accumulator()}.
 process_current_branching_node_in_batches(UserCtx, Node, NodeIterator, State, ResultAcc) ->
     #state{limit = Limit, module = Module} = State,
-    {BatchProgressMarker, ListedChildren, UpdatedResultAcc, NextIterator, UpdatedNode} = 
+    {ListingProgressMarker, ListedChildren, UpdatedResultAcc, NextIterator, UpdatedNode} = 
         case Module:get_next_batch(NodeIterator, UserCtx) of
-            {ProgressMarker, Batch, Iter, Node2} -> 
-                {ProgressMarker, Batch, append_branching_node(State, Node2, ResultAcc), Iter, Node2};
+            {PM, Batch, Iter, Node2} -> 
+                {PM, Batch, append_branching_node(State, Node2, ResultAcc), Iter, Node2};
             no_access ->
                 {done, [], result_append_inaccessible_path(State, ResultAcc), undefined, Node}
         end,
@@ -338,10 +338,10 @@ process_current_branching_node_in_batches(UserCtx, Node, NodeIterator, State, Re
             ok
     end, 
     
-    case {ResultLength, BatchProgressMarker} of
+    case {ResultLength, ListingProgressMarker} of
         {Limit, _} ->
             ProgressMarker = case 
-                (BatchProgressMarker == done) and (FinalProcessedChildrenCount == length(ListedChildren)) 
+                (ListingProgressMarker == done) and (FinalProcessedChildrenCount == length(ListedChildren)) 
             of
                 true -> done;
                 false -> more
