@@ -105,8 +105,12 @@ assert_openfaas_healthy() ->
 -spec get_openfaas_status() -> status().
 get_openfaas_status() ->
     case atm_openfaas_status_cache:get() of
-        {ok, #document{value = #atm_openfaas_status_cache{status = Status}}} -> Status;
-        {error, not_found} -> not_configured
+        {ok, #document{value = #atm_openfaas_status_cache{status = Status}}} ->
+            Status;
+        {error, not_found} ->
+            Status = check_openfaas_status(),
+            atm_openfaas_status_cache:save(Status),
+            Status
     end.
 
 

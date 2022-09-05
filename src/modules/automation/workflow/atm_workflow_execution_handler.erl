@@ -230,7 +230,7 @@ on_openfaas_down(AtmWorkflowExecutionId, Error) ->
 
         Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
         LogContent = #{
-            <<"description">> => "OpenFaaS service ceased to be healthy.",
+            <<"description">> => "OpenFaaS service is not healthy (see error reason).",
             <<"reason">> => errors:to_json(Error)
         },
         atm_workflow_execution_logger:workflow_critical(LogContent, Logger),
