@@ -226,22 +226,17 @@ build_function_name(AtmWorkflowExecutionCtx, #atm_lambda_revision{name = AtmLamb
     AtmWorkflowExecutionId = atm_workflow_execution_ctx:get_workflow_execution_id(
         AtmWorkflowExecutionCtx
     ),
-    Name = str_utils:format_bin("w~s-s~s-~s", [
+    % NOTE: end name with '-l' (for lambda) as a function name end marker.
+    % It is used by openfaas-pod-monitor when inferring function name from pod name
+    % (k8s adds its own suffix when generating pod name).
+    Name = str_utils:format_bin("w~s-s~s-~s-l", [
         binary:part(AtmWorkflowExecutionId, 0, min(size(AtmWorkflowExecutionId), 10)),
         % Generate random substring to ensure functions registered in OpenFaaS
         % are unique for each task despite e.g. using the same lambda
         str_utils:rand_hex(5),
-        binary:part(AtmLambdaRevisionName, 0, min(size(AtmLambdaRevisionName), 39))
+        binary:part(AtmLambdaRevisionName, 0, min(size(AtmLambdaRevisionName), 37))
     ]),
-    SanitizedName = << <<(sanitize_character(Char))/integer>> || <<Char>> <= Name>>,
-
-    case binary:last(SanitizedName) == $- of
-        true ->
-            TrimmedSanitizedName = binary:part(SanitizedName, 0, size(SanitizedName)-1),
-            <<TrimmedSanitizedName/binary, "x">>;
-        false ->
-            SanitizedName
-    end.
+    << <<(sanitize_character(Char))/integer>> || <<Char>> <= Name>>.
 
 
 %% @private
