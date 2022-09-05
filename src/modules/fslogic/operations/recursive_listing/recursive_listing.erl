@@ -302,19 +302,15 @@ process_current_branching_node(UserCtx, Node, State) ->
     {progress_marker(), accumulator()}.
 process_current_branching_node_in_batches(UserCtx, Node, NodeIterator, State, ResultAcc) ->
     #state{limit = Limit, module = Module} = State,
-    {Children, UpdatedResultAcc, NextIterator, Node2} = 
+    {BatchProgressMarker, ListedChildren, UpdatedResultAcc, NextIterator, UpdatedNode} = 
         case Module:get_next_batch(NodeIterator, UserCtx) of
-            {BatchProgressMarker, C, I, N} -> 
-                Iter = case BatchProgressMarker of
-                    done -> undefined;
-                    more -> I
-                end,
-                {C, append_branching_node(State, N, ResultAcc), Iter, N};
+            {ProgressMarker, Batch, Iter, Node2} -> 
+                {ProgressMarker, Batch, append_branching_node(State, Node2, ResultAcc), Iter, Node2};
             no_access ->
-                {[], result_append_inaccessible_path(State, ResultAcc), undefined, Node}
+                {done, [], result_append_inaccessible_path(State, ResultAcc), undefined, Node}
         end,
     
-    {Res, FinalProcessedNodeCount} = lists_utils:foldl_while(fun(ChildNode, {TmpResultAcc, ProcessedNodeCount}) ->
+    {Res, FinalProcessedChildrenCount} = lists_utils:foldl_while(fun(ChildNode, {TmpResultAcc, ProcessedNodeCount}) ->
         {Marker, ChildResultAcc} = process_child(UserCtx, ChildNode, State#state{
             limit = Limit - result_length(TmpResultAcc)
         }),
@@ -328,7 +324,7 @@ process_current_branching_node_in_batches(UserCtx, Node, NodeIterator, State, Re
             true -> {halt, ToReturn};
             false -> {cont, ToReturn}
         end
-    end, {UpdatedResultAcc, 0}, Children),
+    end, {UpdatedResultAcc, 0}, ListedChildren),
     
     ResultLength = result_length(Res),
     case ResultLength > Limit of
@@ -342,21 +338,23 @@ process_current_branching_node_in_batches(UserCtx, Node, NodeIterator, State, Re
             ok
     end, 
     
-    case {ResultLength, NextIterator == undefined} of
-        {Limit, IsFinished} ->
-            ProgressMarker = case IsFinished and (FinalProcessedNodeCount == length(Children)) of
+    case {ResultLength, BatchProgressMarker} of
+        {Limit, _} ->
+            ProgressMarker = case 
+                (BatchProgressMarker == done) and (FinalProcessedChildrenCount == length(ListedChildren)) 
+            of
                 true -> done;
                 false -> more
             end,
             {ProgressMarker, Res};
-        {_, true} ->
+        {_, done} ->
             {done, Res};
-        {_, false} ->
+        {_, more} ->
             UpdatedState = State#state{
                 limit = Limit - result_length(Res), 
                 is_first_batch = false
             },
-            process_current_branching_node_in_batches(UserCtx, Node2, NextIterator, UpdatedState, Res)
+            process_current_branching_node_in_batches(UserCtx, UpdatedNode, NextIterator, UpdatedState, Res)
     end.
     
 

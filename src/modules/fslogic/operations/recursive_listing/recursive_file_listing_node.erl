@@ -7,7 +7,7 @@
 %%%--------------------------------------------------------------------
 %%% @doc
 %%% This module implements `recursive_listing_node_behaviour` behaviour callbacks to allow 
-%%% for recursive listing of file tree structure. 
+%%% recursive listing of file tree structure. 
 %%% Files are listed lexicographically ordered by path.
 %%% For each such file returns its file basic attributes (see file_attr.hrl) 
 %%% along with the path to the file relative to the top directory.
@@ -18,7 +18,7 @@
 %%% For other options description consult `recursive_listing` module doc.
 %%% @end
 %%%--------------------------------------------------------------------
--module(recursive_file_node_listing).
+-module(recursive_file_listing_node).
 -author("Michal Stanisz").
 
 -include("modules/fslogic/data_access_control.hrl").

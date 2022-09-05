@@ -151,7 +151,7 @@ get_children_details(UserCtx, FileCtx0, ListOpts) ->
     get_children_details_insecure(UserCtx, FileCtx2, ListOpts, CanonicalChildrenWhiteList).
 
 
--spec list_recursively(user_ctx:ctx(), file_ctx:ctx(), recursive_file_node_listing:options()) ->
+-spec list_recursively(user_ctx:ctx(), file_ctx:ctx(), recursive_file_listing_node:options()) ->
     fslogic_worker:provider_response().
 list_recursively(UserCtx, FileCtx0, ListOpts) ->
     {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
@@ -325,7 +325,7 @@ get_children_details_insecure(UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhit
     }.
 
 
--spec list_recursively_insecure(user_ctx:ctx(), file_ctx:ctx(), recursive_file_node_listing:options()) ->
+-spec list_recursively_insecure(user_ctx:ctx(), file_ctx:ctx(), recursive_file_listing_node:options()) ->
     fslogic_worker:provider_response().
 list_recursively_insecure(UserCtx, FileCtx, ListOpts) ->
     FinalListOpts = kv_utils:move_found(
@@ -335,7 +335,7 @@ list_recursively_insecure(UserCtx, FileCtx, ListOpts) ->
     ),
     #recursive_listing_result{
         entries = Entries
-    } = Result = recursive_listing:list(recursive_file_node_listing, UserCtx, FileCtx, FinalListOpts),
+    } = Result = recursive_listing:list(recursive_file_listing_node, UserCtx, FileCtx, FinalListOpts),
     ComputeAttrsOpts = #{
         allow_deleted_files => false,
         include_size => true,

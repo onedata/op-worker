@@ -573,9 +573,9 @@ get_children_details(Worker, SessId, FileKey, ListOpts) ->
     node(),
     session:id(),
     lfm:file_key(),
-    recursive_file_node_listing:options()
+    recursive_file_listing_node:options()
 ) ->
-    {ok, [recursive_file_node_listing:entry()], [file_meta:path()], recursive_file_node_listing:pagination_token()} | lfm:error_reply().
+    {ok, [recursive_file_listing_node:entry()], [file_meta:path()], recursive_file_listing_node:pagination_token()} | lfm:error_reply().
 get_files_recursively(Worker, SessId, FileKey, Options) ->
     ?EXEC(Worker, lfm:get_files_recursively(SessId, uuid_to_file_ref(Worker, FileKey), Options)).
 

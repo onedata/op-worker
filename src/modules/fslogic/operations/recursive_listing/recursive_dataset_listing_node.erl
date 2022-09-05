@@ -7,13 +7,13 @@
 %%%--------------------------------------------------------------------
 %%% @doc 
 %%% This module implements `recursive_listing_node_behaviour` behaviour callbacks to allow 
-%%% for recursive listing of datasets tree structure. 
+%%% recursive listing of datasets tree structure. 
 %%% Datasets are listed lexicographically ordered by path.
 %%% For each such dataset returns dataset_info record along with the path to the dataset relative 
 %%% to the top dataset.
 %%% @end
 %%%--------------------------------------------------------------------
--module(recursive_dataset_node_listing).
+-module(recursive_dataset_listing_node).
 -author("Michal Stanisz").
 
 -include("modules/fslogic/data_access_control.hrl").
