@@ -49,7 +49,7 @@
 -type result() :: recursive_listing:result(node_path(), entry()).
 
 % For detailed options description see module doc.
--type options() :: #{
+-type options() :: #{ % fixme move to dir_req
     % NOTE: pagination_token and start_after_path are mutually exclusive
     pagination_token => pagination_token(),
     start_after_path => node_path(),
@@ -98,7 +98,7 @@ get_node_path_tokens(FileCtx) ->
     {PathTokens, FileCtx1}.
 
 
--spec init_node_iterator(tree_node(), node_name(), recursive_listing:limit()) -> 
+-spec init_node_iterator(tree_node(), node_name() | undefined, recursive_listing:limit()) -> 
     node_iterator().
 init_node_iterator(FileCtx, undefined, Limit) ->
     #{

@@ -110,6 +110,7 @@ list_internal(AtmWorkflowExecutionAuth, CompressedRoot, Opts) ->
         case datastore_runner:normalize_error(Error) of
             not_found -> {[], undefined};
             ?EPERM -> {[], undefined};
+            ?EACCES -> {[], undefined};
             _ -> error(Error)
         end
     end.

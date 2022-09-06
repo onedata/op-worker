@@ -162,7 +162,7 @@ list_tree(
     } = Record
 ) ->
     {TreeAcc, NextPaginationToken} = Module:list_tree(
-        PaginationToken, AtmWorkflowExecutionAuth, CurrentTreeRoot, BatchSize),
+        AtmWorkflowExecutionAuth, PaginationToken, CurrentTreeRoot, BatchSize),
     UpdatedRecord = Record#atm_tree_forest_store_container_iterator{
         tree_pagination_token = NextPaginationToken
     },

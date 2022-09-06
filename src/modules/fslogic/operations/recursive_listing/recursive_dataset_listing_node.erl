@@ -44,7 +44,7 @@
 -type result() :: recursive_listing:result(node_path(), entry()).
 
 % For detailed options description see `recursive_listing` module doc.
--type options() :: #{
+-type options() :: #{ % fixme move to dataset_req
     % NOTE: pagination_token and start_after_path are mutually exclusive
     pagination_token => pagination_token(),
     start_after_path => node_path(),
@@ -86,8 +86,13 @@ get_node_name(#dataset_info{root_file_path = RootFilePath} = DatasetInfo, _UserC
     {filename:basename(RootFilePath), DatasetInfo}.
 
 
--spec init_node_iterator(tree_node(), node_name(), recursive_listing:limit()) -> 
+-spec init_node_iterator(tree_node(), node_name() | undefined, recursive_listing:limit()) -> 
     node_iterator().
+init_node_iterator(DatasetInfo, undefined, Limit) ->
+    #{
+        node => DatasetInfo,
+        opts => #{limit => Limit, offset => 0}
+    };
 init_node_iterator(DatasetInfo, StartName, Limit) ->
     %% @TODO VFS-9678 - properly handle listing datasets with name conflicts
     StartIndex = datasets_structure:pack_entry_index(StartName, <<>>),

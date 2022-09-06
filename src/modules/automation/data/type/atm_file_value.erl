@@ -119,12 +119,21 @@ expand(AtmWorkflowExecutionAuth, Guid, _ValueConstraints) ->
 list_internal(AtmWorkflowExecutionAuth, CompressedRoot, Opts) ->
     UserCtx = user_ctx:new(atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth)),
     FileCtx = file_ctx:new_by_guid(CompressedRoot),
-    #provider_response{provider_response = #recursive_listing_result{
-        entries = Entries, pagination_token = PaginationToken}} = dir_req:list_recursively(UserCtx, FileCtx, Opts),
-    MappedEntries = lists:map(fun({_Path, FileAttrs}) ->
-        file_middleware_plugin:file_attrs_to_json(FileAttrs)
-    end, Entries),
-    {MappedEntries, PaginationToken}.
+    try
+        #provider_response{provider_response = #recursive_listing_result{
+            entries = Entries, pagination_token = PaginationToken}} = dir_req:list_recursively(UserCtx, FileCtx, Opts),
+        MappedEntries = lists:map(fun({_Path, FileAttrs}) ->
+            file_middleware_plugin:file_attrs_to_json(FileAttrs)
+        end, Entries),
+        {MappedEntries, PaginationToken}
+    catch _:Error ->
+        case datastore_runner:normalize_error(Error) of
+            not_found -> {[], undefined};
+            ?EPERM -> {[], undefined};
+            ?EACCES -> {[], undefined};
+            _ -> error(Error)
+        end
+    end.
 
 
 %% @private

@@ -32,7 +32,7 @@
 % NOTE: callback used only in listing initialization process.
 -callback get_node_path_tokens(tree_node()) -> {[node_name()], tree_node()}.
 
--callback init_node_iterator(tree_node(), node_name(), limit()) -> 
+-callback init_node_iterator(tree_node(), node_name() | undefined, limit()) -> 
     node_iterator().
 
 -callback get_next_batch(node_iterator(), user_ctx:ctx()) ->
