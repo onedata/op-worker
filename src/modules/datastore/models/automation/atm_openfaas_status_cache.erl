@@ -17,9 +17,6 @@
 %% API
 -export([save/1, get/0]).
 
-%% datastore_model callbacks
--export([get_record_struct/1, get_record_version/0]).
-
 
 -type id() :: binary().
 -type record() :: #atm_openfaas_status_cache{}.
@@ -51,21 +48,3 @@ save(Status) ->
 -spec get() -> {ok, doc()} | {error, term()}.
 get() ->
     datastore_model:get(?CTX, ?ID).
-
-
-%%%===================================================================
-%%% datastore_model callbacks
-%%%===================================================================
-
-
--spec get_record_version() -> datastore_model:record_version().
-get_record_version() ->
-    1.
-
-
--spec get_record_struct(datastore_model:record_version()) ->
-    datastore_model:record_struct().
-get_record_struct(1) ->
-    {record, [
-        {status, atom}
-    ]}.

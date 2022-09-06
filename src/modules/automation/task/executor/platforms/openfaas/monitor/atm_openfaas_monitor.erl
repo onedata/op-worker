@@ -9,7 +9,7 @@
 %%% Module responsible for monitoring status of OpenFaaS service.
 %%% If its status transitions from 'healthy' to any other status and remains
 %%% as such for prolonged period of time (grace attempts), then OpenFaaS will
-%%% be considered as down. This will be reported to automation layer.
+%%% be considered as down. This will be reported to atm workflow execution layer.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_openfaas_monitor).
@@ -18,15 +18,19 @@
 -behaviour(gen_server).
 
 -include("modules/automation/atm_execution.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 
 %% API
--export([spec/0, start_link/0]).
+-export([setup_internal_service/0, start_link/0]).
 -export([
     is_openfaas_healthy/0,
     assert_openfaas_healthy/0,
     get_openfaas_status/0
 ]).
+
+%% Internal Service callbacks
+-export([start_service/0, stop_service/0]).
 
 %% gen_server callbacks
 -export([
@@ -58,11 +62,13 @@
 -define(REPORT_OPENFAAS_DOWN_TO_ATM_WORKFLOW_EXECUTION_LAYER,
     report_openfaas_down_to_atm_workflow_execution_layer
 ).
--define(REPORT_OPENFAAS_DOWN_TO_ATM_WORKFLOW_EXECUTION_LAYER_DELAY, op_worker:get_env(
-    report_openfaas_down_to_atm_workflow_execution_layer_delay, 10000
+-define(REPORT_OPENFAAS_DOWN_TO_ATM_WORKFLOW_EXECUTION_RETRY_INTERVAL, op_worker:get_env(
+    report_openfaas_down_to_atm_workflow_execution_layer_retry_interval, 10000
 )).
 
 -define(SERVER, {global, ?MODULE}).
+
+-define(SERVICE_NAME, <<"atm-openfaas-monitor-watcher-service">>).
 
 
 %%%===================================================================
@@ -70,15 +76,12 @@
 %%%===================================================================
 
 
--spec spec() -> supervisor:child_spec().
-spec() -> #{
-    id => ?MODULE,
-    start => {?MODULE, start_link, []},
-    restart => permanent,
-    shutdown => timer:seconds(10),
-    type => worker,
-    modules => [?MODULE]
-}.
+-spec setup_internal_service() -> ok.
+setup_internal_service() ->
+    ok = internal_services_manager:start_service(?MODULE, ?SERVICE_NAME, ?SERVICE_NAME, #{
+        start_function => start_service,
+        stop_function => stop_service
+    }).
 
 
 -spec start_link() -> {ok, pid()} | {error, term()}.
@@ -108,10 +111,37 @@ get_openfaas_status() ->
         {ok, #document{value = #atm_openfaas_status_cache{status = Status}}} ->
             Status;
         {error, not_found} ->
-            Status = check_openfaas_status(),
-            atm_openfaas_status_cache:save(Status),
-            Status
+            check_openfaas_status()
     end.
+
+
+%%%===================================================================
+%%% Internal services API
+%%%===================================================================
+
+
+-spec start_service() -> ok | abort.
+start_service() ->
+    Spec = #{
+        id => ?MODULE,
+        start => {?MODULE, start_link, []},
+        restart => permanent,
+        shutdown => timer:seconds(10),
+        type => worker,
+        modules => [?MODULE]
+    },
+    case catch supervisor:start_child(?FSLOGIC_WORKER_SUP, Spec) of
+        {ok, _} ->
+            ok;
+        Error ->
+            ?debug("Failed to start atm_openfaas_monitor due to: ~p", [Error]),
+            abort
+    end.
+
+
+-spec stop_service() -> ok.
+stop_service() ->
+    ok = supervisor:terminate_child(?FSLOGIC_WORKER_SUP, ?MODULE).
 
 
 %%%===================================================================
@@ -128,8 +158,12 @@ get_openfaas_status() ->
 -spec init(Args :: term()) -> {ok, state()}.
 init(_) ->
     process_flag(trap_exit, true),
-    self() ! timeout,
-    {ok, #state{status = not_configured, grace_attempts = undefined}}.
+
+    Status = check_openfaas_status(),
+    atm_openfaas_status_cache:save(Status),
+
+    State = #state{status = Status, grace_attempts = undefined},
+    {ok, State, timer:seconds(?STATUS_CHECK_INTERVAL_SECONDS)}.
 
 
 %%--------------------------------------------------------------------
@@ -304,7 +338,7 @@ report_openfaas_down_to_atm_workflow_execution_layer(Status) ->
 -spec schedule_openfaas_down_report_to_atm_workflow_execution_layer() -> reference().
 schedule_openfaas_down_report_to_atm_workflow_execution_layer() ->
     erlang:send_after(
-        ?REPORT_OPENFAAS_DOWN_TO_ATM_WORKFLOW_EXECUTION_LAYER_DELAY,
+        ?REPORT_OPENFAAS_DOWN_TO_ATM_WORKFLOW_EXECUTION_RETRY_INTERVAL,
         self(),
         ?REPORT_OPENFAAS_DOWN_TO_ATM_WORKFLOW_EXECUTION_LAYER
     ).
