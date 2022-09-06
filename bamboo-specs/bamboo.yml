@@ -96,6 +96,7 @@ stages:
     - archive_recall
     - archive_sequential
     - archivestorage_helper
+    - archivisation_cancellation
     - atm_audit_log_store
     - atm_list_store
     - atm_openfaas_activity_feed
@@ -245,6 +246,7 @@ stages:
     final: false
     jobs:
     - Coverage report
+
 Copy-quarantine:
   key: COPQU
   other: &common-opts
@@ -274,6 +276,7 @@ Copy-quarantine:
       description: Always successful
       scripts:
         - true
+        
 Terminate-build:
   key: TERMB
   other: *common-opts
@@ -288,6 +291,7 @@ Terminate-build:
         false
       description: Terminate build
       conditions: *cond-build3
+      
 Build:
   key: BUILD
   other: *common-opts
@@ -357,6 +361,7 @@ Build:
   - system.docker.executable
   - onedata
   artifact-subscriptions: []
+  
 _Codetag Tracker:
   key: CT
   tasks:
@@ -376,10 +381,16 @@ _Codetag Tracker:
       working-dir: op_worker
       description: Codetag Tracker
   final-tasks:
+  - test-parser:
+      type: junit
+      ignore-time: 'false'
+      test-results: op_worker/test/codetag_tracker_results/TEST-*.xml
+      description: Parse test results
   - script: *clear-env
   requirements: *requirements
   artifact-subscriptions: &op-worker
   - artifact: op_worker.tar.gz
+    
 _Dialyze:
   key: DIAL
   other: *common-opts 
@@ -392,6 +403,11 @@ _Dialyze:
       - ./make.py --cpuset-cpus 0 dialyzer
       description: Dialyze
   final-tasks:
+  - test-parser:
+      type: junit
+      ignore-time: 'false'
+      test-results: op_worker/test/dialyzer_results/TEST-*.xml
+      description: Parse test results
   - script:
       <<: *run-script
       scripts:
@@ -402,6 +418,7 @@ _Dialyze:
   - script: *clear-env
   requirements: *requirements
   artifact-subscriptions: *op-worker
+  
 _Unit Test:
   key: UNIT
   other: *common-opts
@@ -484,6 +501,7 @@ _Unit Test:
     required: false
   requirements: *requirements
   artifact-subscriptions: *op-worker
+  
 api_archive: &ct-onenv-job
   key: APIARC
   other: *common-opts
@@ -747,6 +765,14 @@ archivestorage_helper: &ct-job
   requirements: *requirements
   artifact-subscriptions: *op-worker
   
+archivisation_cancellation:
+  <<: *ct-onenv-job
+  key: ARCC
+  artifacts:
+  - <<: *cover_ct
+    name: cover_ct_archivisation_cancellation.tar.gz
+  - *ct_logs
+
 atm_audit_log_store:
   <<: *ct-onenv-job
   key: AALS
