@@ -165,9 +165,9 @@ get_children_count(SessId, FileKey) ->
 -spec get_files_recursively(
     session:id(), 
     lfm:file_key(), 
-    recursive_file_listing_node:options()
+    dir_req:recursive_listing_opts()
 ) ->
-    {ok, [recursive_file_listing_node:entry()], [file_meta:path()], recursive_file_listing_node:pagination_token()}.
+    {ok, [recursive_file_listing_node:entry()], [file_meta:path()], recursive_listing:pagination_token()}.
 get_files_recursively(SessId, FileKey, Options) ->
     FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, resolve_symlink),
     

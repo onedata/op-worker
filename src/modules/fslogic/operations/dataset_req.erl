@@ -48,6 +48,15 @@
 
 -type error() :: {error, term()}.
 
+-type recursive_listing_opts() :: #{
+    % NOTE: pagination_token and start_after_path are mutually exclusive
+    pagination_token => recursive_listing:pagination_token(),
+    start_after_path => recursive_dataset_listing_node:node_path(),
+    prefix => recursive_listing:prefix(),
+    limit => recursive_listing:limit()
+}.
+
+-export_type([recursive_listing_opts/0]).
 
 %%%===================================================================
 %%% API functions
@@ -152,7 +161,7 @@ list_children_datasets(SpaceDirCtx, Dataset, Opts, ListingMode, UserCtx) ->
 -spec list_recursively(
     od_space:id(),
     dataset:id(),
-    dataset_api:listing_opts(),
+    recursive_listing_opts(),
     user_ctx:ctx()
 ) ->
     {ok, recursive_dataset_listing_node:result()} | error().

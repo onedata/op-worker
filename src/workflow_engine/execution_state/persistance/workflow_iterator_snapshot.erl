@@ -43,12 +43,6 @@
     workflow_engine:lane_id() | undefined
 ) -> ok.
 save(ExecutionId, LaneIndex, LaneId, ItemIndex, Iterator, NextLaneId) ->
-    {PrevLaneIndex, PrevIterator} = case ?MODULE:get(ExecutionId) of
-        {ok, #workflow_iterator_snapshot{lane_index = ReturnedLineIndex, iterator = ReturnedIterator}} ->
-            {ReturnedLineIndex, ReturnedIterator};
-        ?ERROR_NOT_FOUND ->
-            {undefined, undefined}
-    end,
     Record = #workflow_iterator_snapshot{lane_index = LaneIndex, lane_id = LaneId,
         item_index = ItemIndex, iterator = Iterator, next_lane_id = NextLaneId},
     Diff = fun

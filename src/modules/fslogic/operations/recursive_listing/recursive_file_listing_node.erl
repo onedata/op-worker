@@ -12,10 +12,6 @@
 %%% For each such file returns its file basic attributes (see file_attr.hrl) 
 %%% along with the path to the file relative to the top directory.
 %%% All directory paths user does not have access to are returned under `inaccessible_paths` key.  
-%%%
-%%% By default only non-directory (i.e regular, symlinks and hardlinks) are listed.
-%%% When options `include_directories` is set to true directory entries will be included in result.
-%%% For other options description consult `recursive_listing` module doc.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(recursive_file_listing_node).
@@ -48,19 +44,7 @@
 -type entry() :: recursive_listing:result_entry(node_path(), lfm_attrs:file_attributes()).
 -type result() :: recursive_listing:result(node_path(), entry()).
 
-% For detailed options description see module doc.
--type options() :: #{ % fixme move to dir_req
-    % NOTE: pagination_token and start_after_path are mutually exclusive
-    pagination_token => pagination_token(),
-    start_after_path => node_path(),
-    prefix => recursive_listing:prefix(),
-    limit => recursive_listing:limit(),
-    include_directories => boolean()
-}.
--type pagination_token() :: recursive_listing:pagination_token().
-
--export_type([result/0, entry/0, options/0, pagination_token/0]).
-
+-export_type([node_path/0, result/0, entry/0]).
 
 %%%===================================================================
 %%% `recursive_listing` callbacks
@@ -71,9 +55,9 @@ is_branching_node(FileCtx) ->
     file_ctx:is_dir(FileCtx).
 
 
--spec get_node_id(tree_node()) -> node_id().
+-spec get_node_id(tree_node()) -> {node_id(), tree_node()}.
 get_node_id(FileCtx) ->
-    file_ctx:get_logical_guid_const(FileCtx).
+    {file_ctx:get_logical_guid_const(FileCtx), FileCtx}.
 
 
 -spec get_node_name(tree_node(), user_ctx:ctx() | undefined) -> {node_name(), tree_node()}.
@@ -125,7 +109,7 @@ init_node_iterator(FileCtx, StartFileName, Limit) ->
 
 
 -spec get_next_batch(node_iterator(), user_ctx:ctx()) ->
-    {more | done, [tree_node()], node_iterator(), tree_node()} | no_access.
+    {more | done, [tree_node()], node_iterator()} | no_access.
 get_next_batch(#{node := FileCtx, opts := ListOpts}, UserCtx) ->
     try
         {CanonicalChildrenWhiteList, FileCtx2} = case file_ctx:is_dir(FileCtx) of
@@ -138,7 +122,10 @@ get_next_batch(#{node := FileCtx, opts := ListOpts}, UserCtx) ->
                 true -> done;
                 false -> more
             end,
-            {ProgressMarker, Children, #{pagination_token => PaginationToken}, FileCtx3}
+            {ProgressMarker, Children, #{
+                node => FileCtx3, 
+                opts => #{pagination_token => PaginationToken}}
+            }
     catch throw:?EACCES ->
         no_access
     end.

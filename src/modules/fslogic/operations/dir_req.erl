@@ -30,8 +30,19 @@
     list_recursively/3
 ]).
 
+-type recursive_listing_opts() :: #{
+    % NOTE: pagination_token and start_after_path are mutually exclusive
+    pagination_token => recursive_listing:pagination_token(),
+    start_after_path => recursive_file_listing_node:node_path(),
+    prefix => recursive_listing:prefix(),
+    limit => recursive_listing:limit(),
+    include_directories => boolean()
+}.
+
 -type map_child_fun() :: fun((user_ctx:ctx(), file_ctx:ctx(), attr_req:compute_file_attr_opts()) ->
     fslogic_worker:fuse_response()) | no_return().
+
+-export_type([recursive_listing_opts/0]).
 
 %%%===================================================================
 %%% API
@@ -151,7 +162,7 @@ get_children_details(UserCtx, FileCtx0, ListOpts) ->
     get_children_details_insecure(UserCtx, FileCtx2, ListOpts, CanonicalChildrenWhiteList).
 
 
--spec list_recursively(user_ctx:ctx(), file_ctx:ctx(), recursive_file_listing_node:options()) ->
+-spec list_recursively(user_ctx:ctx(), file_ctx:ctx(), recursive_listing_opts()) ->
     fslogic_worker:provider_response().
 list_recursively(UserCtx, FileCtx0, ListOpts) ->
     {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
@@ -325,7 +336,16 @@ get_children_details_insecure(UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhit
     }.
 
 
--spec list_recursively_insecure(user_ctx:ctx(), file_ctx:ctx(), recursive_file_listing_node:options()) ->
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Lists recursively files ordered by path lexicographically. 
+%%% By default only non-directory (i.e regular, symlinks and hardlinks) are listed.
+%%% When options `include_directories` is set to true directory entries will be included in result.
+%%% For more details consult `recursive_listing` and `recursive_file_listing_node` module doc.
+%% @end
+%%--------------------------------------------------------------------
+-spec list_recursively_insecure(user_ctx:ctx(), file_ctx:ctx(), recursive_listing_opts()) ->
     fslogic_worker:provider_response().
 list_recursively_insecure(UserCtx, FileCtx, ListOpts) ->
     FinalListOpts = kv_utils:move_found(

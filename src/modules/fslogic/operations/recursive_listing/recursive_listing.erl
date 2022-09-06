@@ -9,7 +9,7 @@
 %%% This module is responsible for listing recursively nodes in subtree of given root node. 
 %%% Nodes are listed lexicographically ordered by path. Listed path is relative to given root node.
 %%% This module operates on concept of branching and non-branching nodes:
-%%%  - branching node is an node that by itself is a root to a non-trivial tree 
+%%%  - branching node is a node that by itself is a root to a non-trivial tree 
 %%%    (e.g. directory, dataset);
 %%%  - non-branching node is any other node, i.e node that do not contain any subtree 
 %%%    that can be listed (e.g regular files).
@@ -17,14 +17,22 @@
 %%% It is assumed that there is access to root node. All paths user does not have access to are 
 %%% returned under `inaccessible_paths` key.
 %%% Available options: 
-%%%     * limit - maximum number of entries that will be returned in a single request. 
-%%%               For this value both `entries` and `inaccessible_paths` are calculated;
-%%%     * start_after - determines starting point of listing i.e. listing will start from 
-%%%                     the first node path lexicographically larger and listing will continue 
-%%%                     until all subtree is listed/limit is reached;
-%%%     * prefix - only nodes with paths that begin with this value will be returned;
-%%%     * include_branching_nodes - when set to true branching nodes entries will be included 
-%%%                           in result; by default only non-branching nodes are listed;
+%%%     * pagination_token
+%%%         determines the starting point for listing. The listing will start from the next page 
+%%%         (batch) of entries which follows the page previously obtained along with the 
+%%%         corresponding pagination_token. Cannot be provided alongside the start_after parameter;
+%%%     * start_after
+%%%         determines starting point of listing i.e. listing will start from the first node path 
+%%%         lexicographically larger and listing will continue until all subtree is listed/limit 
+%%%         is reached. Cannot be provided alongside the pagination_token parameter.
+%%%     * prefix
+%%%         only nodes with paths that begin with this value will be returned;
+%%%     * limit
+%%%         maximum number of entries that will be returned in a single request. 
+%%%         For this value both `entries` and `inaccessible_paths` are calculated;
+%%%     * include_branching_nodes
+%%%         when set to true branching nodes entries will be included in result; by default only 
+%%%         non-branching nodes are listed;
 %%% @end
 %%%--------------------------------------------------------------------
 -module(recursive_listing).
@@ -62,6 +70,8 @@
     relative_start_after_path_tokens :: [node_name()],
     % name of last listed node, when in subtree pointed by start_after_path
     last_start_after_token :: node_name(),
+    % currently processed tree node
+    current_node :: tree_node(),
     % absolute path tokens to currently processed branching node
     current_node_path_tokens :: [node_name()],
     % false if any children batch of current node was listed
@@ -97,7 +107,7 @@
 
 % behaviour types
 -type tree_node() :: any().
--type node_id() :: binary().
+-type node_id() :: binary(). % value used for checking correctness of pagination_token
 -type node_name() :: binary(). % value from which result path is built
 -type node_path() :: binary().
 -type node_iterator() :: any().
@@ -122,20 +132,25 @@ list(_Module, _UserCtx, _Node, #{pagination_token := _, start_after := _}) ->
 list(Module, UserCtx, Node, #{pagination_token := PaginationToken} = Options) ->
     {TokenRootId, StartAfter} = unpack_pagination_token(PaginationToken), 
     case Module:get_node_id(Node) of
-        TokenRootId -> 
+        {TokenRootId, Node2} -> 
             Options2 = maps:remove(pagination_token, Options#{start_after_path => StartAfter}),
-            list(Module, UserCtx, Node, Options2);
+            list(Module, UserCtx, Node2, Options2);
         _ -> 
             throw(?EINVAL) % requested listing of other node than token's origin
     end;
 list(Module, UserCtx, RootNode, Options) ->
     case prepare_initial_listing_state(Module, UserCtx, RootNode, Options) of
-        {ok, NodeToList, InitialState} ->
+        {ok, #state{current_node = NodeToList} = InitialState} ->
             {Entries, InaccessiblePaths, PaginationToken} = case Module:is_branching_node(NodeToList) of
                 {true, NodeToList2} ->
-                    list_branching_node(UserCtx, NodeToList2, InitialState, Module:get_node_id(RootNode));
+                    {ProgressMarker, E, IP} =
+                        list_branching_node(UserCtx, InitialState#state{current_node = NodeToList2}),
+                    % use root node id to build token, as this is the actual node, that was requested
+                    {RootNodeId, _} = Module:get_node_id(RootNode),
+                    {E, IP, build_pagination_token(E, IP, RootNodeId, ProgressMarker)};
                 {false, NodeToList2} ->
-                    {build_result_node_entry_list(InitialState, NodeToList2, <<>>), [], undefined}
+                    {build_result_node_entry_list(
+                        InitialState#state{current_node = NodeToList2}, <<>>), [], undefined}
             end,
             #recursive_listing_result{
                 entries = Entries,
@@ -161,7 +176,7 @@ list(Module, UserCtx, RootNode, Options) ->
 
 %% @private
 -spec prepare_initial_listing_state(module(), user_ctx:ctx(), tree_node(), options()) -> 
-    {ok, tree_node(), state()} | nothing_to_list | {no_access, node_path()}.
+    {ok, state()} | nothing_to_list | {no_access, node_path()}.
 prepare_initial_listing_state(Module, UserCtx, RootNode, Options) ->
     #{
         start_after_path := GivenStartAfter, limit := Limit, 
@@ -172,15 +187,16 @@ prepare_initial_listing_state(Module, UserCtx, RootNode, Options) ->
         {ok, NodeToList, LastPrefixToken} ->
             case infer_start_after(GivenStartAfter, Prefix, LastPrefixToken) of
                 {ok, FinalStartAfter} ->
-                    {NodePathTokens, NodeToList1} = Module:get_node_path_tokens(NodeToList),
+                    {NodePathTokens, NodeToList2} = Module:get_node_path_tokens(NodeToList),
                     {RootNodePathTokens, _RootNode2} = Module:get_node_path_tokens(RootNode),
-                    {ok, NodeToList1, #state{
+                    {ok, #state{
                         module = Module,
                         % use original start after, so when prefix points to existing node it is not ignored
                         start_after_path = GivenStartAfter, 
                         relative_start_after_path_tokens = filename:split(FinalStartAfter),
                         limit = Limit,
                         include_branching_nodes = IncludeBranching,
+                        current_node = NodeToList2,
                         current_node_path_tokens = NodePathTokens,
                         last_start_after_token = lists:last(NodePathTokens),
                         prefix = Prefix,
@@ -217,7 +233,7 @@ infer_starting_node(_Module, [PrefixToken], Node, _UserCtx, _RevRelPathTokens) -
 infer_starting_node(Module, [PrefixToken | Tail], Node, UserCtx, RevRelPathTokens) ->
     NodeIterator = Module:init_node_iterator(Node, PrefixToken, 1),
     case Module:get_next_batch(NodeIterator, UserCtx) of
-        {_, [NextNode], _E, _Node2} ->
+        {_, [NextNode], _Iterator} ->
             case Module:get_node_name(NextNode, UserCtx) of
                 {PrefixToken, NextNode2} -> 
                     infer_starting_node(
@@ -225,7 +241,7 @@ infer_starting_node(Module, [PrefixToken | Tail], Node, UserCtx, RevRelPathToken
                 _ -> 
                     nothing_to_list
             end;
-        {_, [], _E, _Node2} ->
+        {_, [], _Iterator} ->
             nothing_to_list;
         no_access ->
             {no_access, build_path(lists:reverse(RevRelPathTokens))}
@@ -262,22 +278,20 @@ infer_start_after(GivenStartAfter, Prefix, LastPrefixToken) ->
 %%%===================================================================
 
 %% @private
--spec list_branching_node(user_ctx:ctx(), tree_node(), state(), node_id()) ->
-    {[result_entry()], [node_path()], pagination_token()}.
-list_branching_node(UserCtx, Node, InitialState, RootNodeId) ->
+-spec list_branching_node(user_ctx:ctx(), state()) ->
+    {more | done, [result_entry()], [node_path()]}.
+list_branching_node(UserCtx, InitialState) ->
     {ProgressMarker, #result_accumulator{entries = Entries, inaccessible_paths = InaccessiblePaths}} =
-        process_current_branching_node(UserCtx, Node, InitialState),
-    % use root node id to build token, as this is the actual node, that was requested
-    PaginationToken = build_pagination_token(Entries, InaccessiblePaths, RootNodeId, ProgressMarker),
-    {Entries, InaccessiblePaths, PaginationToken}.
+        process_current_branching_node(UserCtx, InitialState),
+    {ProgressMarker, Entries, InaccessiblePaths}.
 
 
 %% @private
--spec process_current_branching_node(user_ctx:ctx(), tree_node(), state()) ->
+-spec process_current_branching_node(user_ctx:ctx(), state()) ->
     {progress_marker(), accumulator()}.
-process_current_branching_node(_UserCtx, _Node, #state{limit = Limit}) when Limit =< 0 ->
+process_current_branching_node(_UserCtx, #state{limit = Limit}) when Limit =< 0 ->
     {more, #result_accumulator{}};
-process_current_branching_node(UserCtx, Node, State) ->
+process_current_branching_node(UserCtx, State) ->
     Path = build_current_branching_node_rel_path(State),
     % branching nodes with path that not match given prefix, but is a prefix of this given prefix must be listed, 
     % as they are ancestor nodes to nodes matching this given prefix. Needs to be checked as listing 
@@ -288,8 +302,8 @@ process_current_branching_node(UserCtx, Node, State) ->
     end,
     case matches_prefix(Path, State) orelse IsAncestorNode of
         true ->
-            {ListOpts, UpdatedState} = init_current_branching_node_processing(Node, State),
-            process_current_branching_node_in_batches(UserCtx, Node, ListOpts, UpdatedState, #result_accumulator{});
+            {ListOpts, UpdatedState} = init_current_branching_node_processing(State),
+            process_current_branching_node_in_batches(UserCtx, ListOpts, UpdatedState, #result_accumulator{});
         false ->
             {done, #result_accumulator{}}
     end.
@@ -297,17 +311,17 @@ process_current_branching_node(UserCtx, Node, State) ->
 
 %% @private
 -spec process_current_branching_node_in_batches(
-    user_ctx:ctx(), tree_node(), node_iterator(), state(), accumulator()
+    user_ctx:ctx(), node_iterator(), state(), accumulator()
 ) -> 
     {progress_marker(), accumulator()}.
-process_current_branching_node_in_batches(UserCtx, Node, NodeIterator, State, ResultAcc) ->
+process_current_branching_node_in_batches(UserCtx, NodeIterator, State, ResultAcc) ->
     #state{limit = Limit, module = Module} = State,
-    {ListingProgressMarker, ListedChildren, UpdatedResultAcc, NextIterator, UpdatedNode} = 
+    {ListingProgressMarker, ListedChildren, UpdatedResultAcc, NextIterator} = 
         case Module:get_next_batch(NodeIterator, UserCtx) of
-            {PM, Batch, Iter, Node2} -> 
-                {PM, Batch, append_branching_node(State, Node2, ResultAcc), Iter, Node2};
+            {PM, Batch, Iter} -> 
+                {PM, Batch, append_branching_node(State, ResultAcc), Iter};
             no_access ->
-                {done, [], result_append_inaccessible_path(State, ResultAcc), undefined, Node}
+                {done, [], result_append_inaccessible_path(State, ResultAcc), undefined}
         end,
     
     {Res, FinalProcessedChildrenCount} = lists_utils:foldl_while(fun(ChildNode, {TmpResultAcc, ProcessedNodeCount}) ->
@@ -331,8 +345,7 @@ process_current_branching_node_in_batches(UserCtx, Node, NodeIterator, State, Re
         true -> 
             ?critical(
                 "Listed more entries than requested in recursive listing of node: ~p~n"
-                "state: ~p~noptions: ~p~nlimit: ~p, listed: ~p", 
-                [Module:get_node_id(Node), State, NodeIterator, Limit, ResultLength]),
+                "state: ~p~nlimit: ~p, listed: ~p", [NodeIterator, State, Limit, ResultLength]),
             throw(?ERROR_INTERNAL_SERVER_ERROR);
         _ -> 
             ok
@@ -354,7 +367,7 @@ process_current_branching_node_in_batches(UserCtx, Node, NodeIterator, State, Re
                 limit = Limit - result_length(Res), 
                 is_first_batch = false
             },
-            process_current_branching_node_in_batches(UserCtx, UpdatedNode, NextIterator, UpdatedState, Res)
+            process_current_branching_node_in_batches(UserCtx, NextIterator, UpdatedState, Res)
     end.
     
 
@@ -367,15 +380,16 @@ process_child(UserCtx, Node, #state{current_node_path_tokens = CurrentPathTokens
     {Name, Node2} = Module:get_node_name(Node, UserCtx),
     case Module:is_branching_node(Node2) of
         {true, Node3} ->
-            {ProgressMarker, NextChildrenRes} = process_current_branching_node(UserCtx, Node,
+            {ProgressMarker, NextChildrenRes} = process_current_branching_node(UserCtx,
                 State#state{
+                    current_node = Node3,
                     current_node_path_tokens = CurrentPathTokens ++ [Name]
                 }
             ),
             {ProgressMarker, NextChildrenRes};
         {false, Node3} ->
-            UpdatedState = State#state{current_node_path_tokens = CurrentPathTokens},
-            {done, #result_accumulator{entries = build_result_node_entry_list(UpdatedState, Node3, Name)}}
+            UpdatedState = State#state{current_node_path_tokens = CurrentPathTokens, current_node = Node3},
+            {done, #result_accumulator{entries = build_result_node_entry_list(UpdatedState, Name)}}
     end.
 
 
@@ -384,14 +398,15 @@ process_child(UserCtx, Node, #state{current_node_path_tokens = CurrentPathTokens
 %%%===================================================================
     
 %% @private
--spec init_current_branching_node_processing(tree_node(), state()) -> {node_iterator(), state()}.
-init_current_branching_node_processing(Node, #state{relative_start_after_path_tokens = []} = State) ->
-    #state{module = Module} = State,
+-spec init_current_branching_node_processing(state()) -> {node_iterator(), state()}.
+init_current_branching_node_processing(#state{relative_start_after_path_tokens = []} = State) ->
+    #state{module = Module, current_node = Node} = State,
     {Module:init_node_iterator(Node, undefined, ?LIST_RECURSIVE_BATCH_SIZE), State};
-init_current_branching_node_processing(Node, #state{
+init_current_branching_node_processing(#state{
     module = Module,
     relative_start_after_path_tokens = [CurrentStartAfterToken | NextStartAfterTokens],
     last_start_after_token = LastStartAfterToken,
+    current_node = Node,
     current_node_path_tokens = CurrentPathTokens
 } = State) ->
     %% As long as the currently processed path is within the start_after_path, we can start
@@ -415,9 +430,9 @@ init_current_branching_node_processing(Node, #state{
 
 
 %% @private
--spec build_result_node_entry_list(state(), tree_node(), node_name()) -> 
+-spec build_result_node_entry_list(state(), node_name()) -> 
     [result_entry()].
-build_result_node_entry_list(#state{start_after_path = StartAfterPath} = State, Node, Name) ->
+build_result_node_entry_list(#state{start_after_path = StartAfterPath, current_node = Node} = State, Name) ->
     case build_rel_path_in_current_node_with_prefix_check(State, Name) of
         false -> [];
         {true, StartAfterPath} -> [];
@@ -544,14 +559,14 @@ merge_results(
 
 
 %% @private
--spec append_branching_node(state(), tree_node(), accumulator()) -> accumulator().
+-spec append_branching_node(state(), accumulator()) -> accumulator().
 append_branching_node(
     #state{include_branching_nodes = true, is_first_batch = true} = State, 
-    Node,
     ResultAcc
 ) ->
+    #state{current_node = Node, start_after_path = StartAfterPath} = State, 
     #result_accumulator{entries = Entries} = ResultAcc,
-    case {build_current_branching_node_rel_path_with_prefix_check(State), State#state.start_after_path} of
+    case {build_current_branching_node_rel_path_with_prefix_check(State), StartAfterPath} of
         {{true, <<".">> = Path}, <<>>} -> 
             ResultAcc#result_accumulator{entries = Entries ++ [{Path, Node}]};
         {{true, <<".">>}, _StartAfter} ->
@@ -564,5 +579,5 @@ append_branching_node(
         {false, _} ->
             ResultAcc
     end;
-append_branching_node(_State, _Node, ListResult) ->
+append_branching_node(_State, ListResult) ->
     ListResult.

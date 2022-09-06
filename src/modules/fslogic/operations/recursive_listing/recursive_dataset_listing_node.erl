@@ -39,20 +39,10 @@
     node := tree_node(),
     opts := dataset_api:listing_opts() 
 }.
--type pagination_token() :: recursive_listing:pagination_token().
 -type entry() :: recursive_listing:result_entry(node_path(), tree_node()).
 -type result() :: recursive_listing:result(node_path(), entry()).
 
-% For detailed options description see `recursive_listing` module doc.
--type options() :: #{ % fixme move to dataset_req
-    % NOTE: pagination_token and start_after_path are mutually exclusive
-    pagination_token => pagination_token(),
-    start_after_path => node_path(),
-    prefix => recursive_listing:prefix(),
-    limit => recursive_listing:limit()
-}.
-
--export_type([result/0, pagination_token/0, options/0]).
+-export_type([node_path/0, result/0]).
 
 %%%===================================================================
 %%% `recursive_listing` callbacks
@@ -63,9 +53,9 @@ is_branching_node(DatasetInfo) ->
     {true, DatasetInfo}.
 
 
--spec get_node_id(tree_node()) -> node_id().
-get_node_id(#dataset_info{id = Id}) ->
-    Id.
+-spec get_node_id(tree_node()) -> {node_id(), tree_node()}.
+get_node_id(#dataset_info{id = Id} = DatasetInfo) ->
+    {Id, DatasetInfo}.
 
 
 -spec get_node_path_tokens(tree_node()) -> {[node_name()], tree_node()}.
@@ -119,5 +109,8 @@ get_next_batch(#{node := #dataset_info{id = Id} = DatasetInfo, opts := ListOpts}
         true -> done;
         false -> more
     end,
-    % set offset to 1 to ensure that listing is exclusive
-    {ProgressMarker, Children, #{offset => 1, start_index => LastIndex}, DatasetInfo}.
+    {ProgressMarker, Children, #{
+        node => DatasetInfo,
+        % set offset to 1 to ensure that listing is exclusive
+        opts => #{offset => 1, start_index => LastIndex}
+    }}.

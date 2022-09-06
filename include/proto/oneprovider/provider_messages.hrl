@@ -44,7 +44,7 @@
 }).
 
 -record(get_recursive_file_list, {
-    listing_options :: recursive_file_listing_node:options()
+    listing_options :: dir_req:recursive_listing_opts()
 }).
 
 -type provider_request_type() ::

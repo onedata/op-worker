@@ -56,11 +56,11 @@ assert_meets_constraints(AtmWorkflowExecutionAuth, Value, _ValueConstraints) ->
 
 -spec list_tree(
     atm_workflow_execution_auth:record(),
-    recursive_dataset_listing_node:pagination_token() | undefined,
+    recursive_listing:pagination_token() | undefined,
     atm_value:compressed(),
     atm_store_container_iterator:batch_size()
 ) ->
-    {[atm_value:expanded()], recursive_dataset_listing_node:pagination_token() | undefined}.
+    {[atm_value:expanded()], recursive_listing:pagination_token() | undefined}.
 list_tree(AtmWorkflowExecutionAuth, PrevToken, CompressedRoot, BatchSize) ->
     list_internal(AtmWorkflowExecutionAuth, CompressedRoot, 
         maps_utils:remove_undefined(#{limit => BatchSize, pagination_token => PrevToken})
@@ -94,8 +94,8 @@ expand(AtmWorkflowExecutionAuth, DatasetId, _ValueConstraints) ->
 %%%===================================================================
 
 %% @private
--spec list_internal(atm_workflow_execution_auth:record(), atm_value:compressed(), recursive_dataset_listing_node:options()) ->
-    {[atm_value:expanded()], recursive_dataset_listing_node:pagination_token() | undefined}.
+-spec list_internal(atm_workflow_execution_auth:record(), atm_value:compressed(), dataset_req:recursive_listing_opts()) ->
+    {[atm_value:expanded()], recursive_listing:pagination_token() | undefined}.
 list_internal(AtmWorkflowExecutionAuth, CompressedRoot, Opts) ->
     UserCtx = user_ctx:new(atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth)),
     try
