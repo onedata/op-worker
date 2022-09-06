@@ -198,7 +198,7 @@ iterate_over_empty_range_store() ->
             incarnation_num = 1,
             lane_runs = [#atm_lane_run_execution_test_spec{
                 selector = {1, 1},
-                handle_task_execution_ended = build_handle_task_execution_ended_mock_spec_for_skipped_tasks()
+                handle_task_execution_stopped = build_handle_task_execution_stopped_mock_spec_for_skipped_tasks()
             }]
         }]
     }).
@@ -327,8 +327,8 @@ iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(#iterate_
                         fun filter_out_everything_but_file_id_from_atm_file_value/1
                     )
                 },
-                handle_task_execution_ended = case ExpIteratedFiles of
-                    [] -> build_handle_task_execution_ended_mock_spec_for_skipped_tasks();
+                handle_task_execution_stopped = case ExpIteratedFiles of
+                    [] -> build_handle_task_execution_stopped_mock_spec_for_skipped_tasks();
                     _ -> #atm_step_mock_spec{}
                 end
             }]
@@ -356,9 +356,9 @@ create_initial_files() ->
 
 
 %% @private
--spec build_handle_task_execution_ended_mock_spec_for_skipped_tasks() ->
+-spec build_handle_task_execution_stopped_mock_spec_for_skipped_tasks() ->
     atm_execution_test_runner:step_mock_spec().
-build_handle_task_execution_ended_mock_spec_for_skipped_tasks() ->
+build_handle_task_execution_stopped_mock_spec_for_skipped_tasks() ->
     #atm_step_mock_spec{
         after_step_exp_state_diff = fun(#atm_mock_call_ctx{
             workflow_execution_exp_state = ExpState0,

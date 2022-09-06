@@ -13,6 +13,7 @@
 %%% to choose execution that should acquire free slot and
 %%% then workflow_execution_state to choose task and item to be
 %%% executed.
+%%% % TODO VFS-7919 - move all workflow_handler callback calls to separate module.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(workflow_engine).
@@ -29,7 +30,7 @@
 -export([report_async_task_result/3, report_async_task_heartbeat/2]).
 %% Framework internal API
 -export([get_async_call_pools/1, trigger_job_scheduling/1,
-    call_handler/5, call_handle_task_execution_ended_for_all_tasks/4,
+    call_handler/5, call_handle_task_execution_stopped_for_all_tasks/4,
     call_handle_task_results_processed_for_all_items_for_all_tasks/4, call_handlers_for_cancelled_lane/5,
     handle_exception/7, execute_exception_handler/6, get_enqueuing_timeout/1]).
 %% Test API
@@ -158,7 +159,7 @@ execute_workflow(EngineId, ExecutionSpec) ->
             workflow_engine_state:add_execution_id(EngineId, ExecutionId),
             trigger_job_scheduling(EngineId, ?TAKE_UP_FREE_SLOTS);
         ?WF_ERROR_PREPARATION_FAILED ->
-            call_handler(ExecutionId, Context, Handler, handle_workflow_execution_ended, []),
+            call_handler(ExecutionId, Context, Handler, handle_workflow_execution_stopped, []),
             ok
     end.
 
@@ -278,15 +279,15 @@ call_handler(ExecutionId, Context, Handler, Function, Args) ->
             error
     end.
 
--spec call_handle_task_execution_ended_for_all_tasks(
+-spec call_handle_task_execution_stopped_for_all_tasks(
     execution_id(),
     workflow_handler:handler(),
     execution_context(),
     [task_id()]
 ) -> ok.
-call_handle_task_execution_ended_for_all_tasks(ExecutionId, Handler, Context, TaskIds) ->
+call_handle_task_execution_stopped_for_all_tasks(ExecutionId, Handler, Context, TaskIds) ->
     lists:foreach(fun(TaskId) ->
-        call_handler(ExecutionId, Context, Handler, handle_task_execution_ended, [TaskId])
+        call_handler(ExecutionId, Context, Handler, handle_task_execution_stopped, [TaskId])
     end, TaskIds).
 
 -spec call_handle_task_results_processed_for_all_items_for_all_tasks(
@@ -308,13 +309,13 @@ call_handle_task_results_processed_for_all_items_for_all_tasks(ExecutionId, Hand
     [task_id()]
 ) -> ok.
 call_handlers_for_cancelled_lane(ExecutionId, Handler, Context, LaneId, TaskIds) ->
-    call_handle_task_execution_ended_for_all_tasks(ExecutionId, Handler, Context, TaskIds),
+    call_handle_task_execution_stopped_for_all_tasks(ExecutionId, Handler, Context, TaskIds),
 
-    case call_handler(ExecutionId, Context, Handler, handle_lane_execution_ended, [LaneId]) of
+    case call_handler(ExecutionId, Context, Handler, handle_lane_execution_stopped, [LaneId]) of
         ?END_EXECUTION ->
             ok;
         Other ->
-            ?error("Wrong return of handle_lane_execution_ended for cancelled lane ~p of execution ~p: ~p",
+            ?error("Wrong return of handle_lane_execution_stopped for cancelled lane ~p of execution ~p: ~p",
                 [LaneId, ExecutionId, Other])
     end.
 
@@ -506,10 +507,10 @@ handle_execution_ended(EngineId, ExecutionId, #execution_ended{
             case Reason of
                 % TODO VFS-7788 - fix race with workflow_iterator_snapshot:save (snapshot can be restored)
                 ?EXECUTION_ENDED ->
-                    call_handler(ExecutionId, Context, Handler, handle_workflow_execution_ended, []),
+                    call_handler(ExecutionId, Context, Handler, handle_workflow_execution_stopped, []),
                     workflow_iterator_snapshot:cleanup(ExecutionId);
                 ?EXECUTION_CANCELLED ->
-                    call_handler(ExecutionId, Context, Handler, handle_workflow_execution_ended, []),
+                    call_handler(ExecutionId, Context, Handler, handle_workflow_execution_stopped, []),
                     ok;
                 ?EXECUTION_ENDED_WITH_EXCEPTION ->
                     ok

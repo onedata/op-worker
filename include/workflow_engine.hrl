@@ -80,7 +80,7 @@
 
 %%%===================================================================
 %%% Macros describing possible results of
-%%% workflow_handler:handle_lane_execution_ended/3 callback
+%%% workflow_handler:handle_lane_execution_stopped/3 callback
 %%%===================================================================
 
 -define(CONTINUE(NextLaneId, LaneIdToBePreparedInAdvance), {continue, NextLaneId, LaneIdToBePreparedInAdvance}).

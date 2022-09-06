@@ -22,7 +22,7 @@
 -export([put/1, take/1, delete/1]).
 
 -type id() :: datastore:key().
--type result_ref() :: id() | ?ERROR_MALFORMED_DATA | ?ERROR_TIMEOUT.
+-type result_ref() :: id() | ?ERROR_TIMEOUT.
 
 -export_type([result_ref/0]).
 
@@ -36,8 +36,6 @@
 %%%===================================================================
 
 -spec put(workflow_handler:async_processing_result()) -> result_ref().
-put(?ERROR_MALFORMED_DATA) ->
-    ?ERROR_MALFORMED_DATA;
 put(?ERROR_TIMEOUT) ->
     ?ERROR_TIMEOUT;
 put(ProcessingResult) ->
@@ -46,8 +44,6 @@ put(ProcessingResult) ->
     Id.
 
 -spec take(result_ref()) -> workflow_handler:async_processing_result().
-take(?ERROR_MALFORMED_DATA) ->
-    ?ERROR_MALFORMED_DATA;
 take(?ERROR_TIMEOUT) ->
     ?ERROR_TIMEOUT;
 take(Id) ->
@@ -56,8 +52,6 @@ take(Id) ->
     ProcessingResult.
 
 -spec delete(result_ref()) -> ok.
-delete(?ERROR_MALFORMED_DATA) ->
-    ok;
 delete(?ERROR_TIMEOUT) ->
     ok;
 delete(Id) ->

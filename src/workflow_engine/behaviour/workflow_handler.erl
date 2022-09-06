@@ -11,10 +11,11 @@
 %%% workflow_engine:execute_workflow/2 function is called.
 %%% Name of module implementing callback is provided to workflow engine as an
 %%% argument to execute_workflow/2 function. The execution can be cancelled
-%%% either by calling workflow_engine:init_cancel_procedure/1 function (external cancel)
+%%% either by calling workflow_engine:init_cancel_procedure/1 function followed
+%%% by workflow_engine:finish_cancel_procedure/1 function call (external cancel)
 %%% or by workflow engine as a result or error (internal cancel when number of
 %%% callbacks' errors is greater than failure_count_to_cancel lane parameter).
-%%% Workflow execution ends when handle_lane_execution_ended callback returns
+%%% Workflow execution ends when handle_lane_execution_stopped callback returns
 %%% ?END_EXECUTION or as a result of external or internal cancellation.
 %%%
 %%% Execution of workflow consists of execution of lanes. Each lane consists
@@ -27,11 +28,11 @@
 %%% prepared by calling prepare_lane callback before any task is executed.
 %%% Lane can be prepared right before execution of task or be prepared in advance
 %%% during execution of previous lane. Lane to be executed and prepared in
-%%% advance are returned by handle_lane_execution_ended callback for previous lane.
+%%% advance are returned by handle_lane_execution_stopped callback for previous lane.
 %%% Thus, lane prepared in advance does not have to be always executed after
-%%% preparation as handle_lane_execution_ended for lane currently being executed can
+%%% preparation as handle_lane_execution_stopped for lane currently being executed can
 %%% ignore prepared in advance lane and return other lane to be executed next.
-%%% handle_lane_execution_ended callback can also return currently executed lane id
+%%% handle_lane_execution_stopped callback can also return currently executed lane id
 %%% to retry lane. In such a case lane is prepared for second time.
 %%% @end
 %%%--------------------------------------------------------------------
@@ -108,7 +109,7 @@
     workflow_jobs:encoded_job_identifier(),
     iterator:item()
 ) ->
-    ok | {error, running_item_failed} | {error, task_stopping} | {error, task_ended}.
+    ok | {error, running_item_failed} | {error, task_already_stopping} | {error, task_already_ended}.
 
 
 %%--------------------------------------------------------------------
@@ -177,12 +178,12 @@
 %% outputs processed and all streamed task data was processed (in case
 %% the task had data stream). This callback is executed once for each task.
 %% It is guaranteed that callback is called before call of
-%% handle_lane_execution_ended callback for task's lane.
+%% handle_lane_execution_stopped callback for task's lane.
 %% Warning: there is no guarantee that callbacks for tasks are called
 %% exactly the same order as the tasks were finished.
 %% @end
 %%--------------------------------------------------------------------
--callback handle_task_execution_ended(
+-callback handle_task_execution_stopped(
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
     workflow_engine:task_id()
@@ -196,7 +197,7 @@
 %% for all items. It will be called exactly once for lane.
 %% @end
 %%--------------------------------------------------------------------
--callback handle_lane_execution_ended(
+-callback handle_lane_execution_stopped(
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
     workflow_engine:lane_id()
@@ -210,7 +211,7 @@
 %% executed for all items. It will be called exactly once.
 %% @end
 %%--------------------------------------------------------------------
--callback handle_workflow_execution_ended(
+-callback handle_workflow_execution_stopped(
     workflow_engine:execution_id(),
     workflow_engine:execution_context()
 ) ->

@@ -1242,7 +1242,7 @@
     current_lane :: workflow_execution_state:current_lane(),
 
     % engine can prepare next lane in advance but it is not being executed until current lane is finished
-    % and workflow_handler:handle_lane_execution_ended/3 (called for current lane) confirms that next lane
+    % and workflow_handler:handle_lane_execution_stopped/3 (called for current lane) confirms that next lane
     % execution should start
     next_lane_preparation_status = ?NOT_PREPARED :: workflow_execution_state:next_lane_preparation_status(),
     next_lane :: workflow_execution_state:next_lane(),
