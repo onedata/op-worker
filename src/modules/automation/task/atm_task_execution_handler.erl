@@ -68,7 +68,7 @@ stop(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Reason) ->
         {error, task_already_stopping} ->
             ok;
 
-        {error, task_already_ended} ->
+        {error, task_already_stopped} ->
             ok
     end.
 
@@ -81,7 +81,7 @@ resume(AtmWorkflowExecutionCtx, AtmTaskExecutionId) ->
             unfreeze_stores(AtmTaskExecution),
             {ok, initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionDoc)};
 
-        {error, task_already_ended} ->
+        {error, task_already_stopped} ->
             ignored
     end.
 
@@ -101,7 +101,7 @@ set_run_num(RunNum, AtmTaskExecutionId) ->
     atm_task_executor:job_batch_id(),
     [automation:item()]
 ) ->
-    ok | {error, running_item_failed} | {error, task_already_stopping} | {error, task_already_ended}.
+    ok | {error, running_item_failed} | {error, task_already_stopping} | {error, task_already_stopped}.
 run_job_batch(
     AtmWorkflowExecutionCtx,
     AtmTaskExecutionId,
@@ -199,7 +199,7 @@ handle_ended(AtmTaskExecutionId) ->
     case atm_task_execution_status:handle_ended(AtmTaskExecutionId) of
         {ok, #document{value = AtmTaskExecution}} ->
             freeze_stores(AtmTaskExecution);
-        {error, task_already_ended} ->
+        {error, task_already_stopped} ->
             ok
     end.
 
@@ -515,7 +515,7 @@ handle_uncorrelated_results_processing_error(
         {error, task_already_stopping} ->
             ok;
 
-        {error, task_already_ended} ->
+        {error, task_already_stopped} ->
             ok
     end.
 

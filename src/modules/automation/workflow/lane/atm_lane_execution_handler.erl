@@ -163,7 +163,7 @@ resume(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     atm_workflow_execution:id(),
     atm_workflow_execution_ctx:record()
 ) ->
-    workflow_handler:lane_ended_callback_result() | no_return().
+    workflow_handler:lane_stopped_callback_result() | no_return().
 handle_ended(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     {IsRetryScheduled, NextAtmWorkflowExecution = #atm_workflow_execution{
         current_lane_index = NextAtmLaneIndex,

@@ -220,7 +220,7 @@ handle_task_execution_stopped(_, _, _) ->
     test_execution_context(),
     workflow_engine:lane_id()
 ) ->
-    workflow_handler:lane_ended_callback_result().
+    workflow_handler:lane_stopped_callback_result().
 handle_lane_execution_stopped(ExecutionId, #{
     lane_to_retry := ?IGNORED_LANE_PREDECESSOR_ID,
     prepare_ignored_lane_in_advance := true

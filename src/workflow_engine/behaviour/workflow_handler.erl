@@ -48,7 +48,7 @@
 -type handler_execution_result() :: ok | error. % NOTE - run_task_for_item can return {error, _} what is
                                                 % translated to error by workflow_engine.
 -type prepare_lane_result() :: {ok, workflow_engine:lane_spec()} | error.
--type lane_ended_callback_result() :: ?CONTINUE(workflow_engine:lane_id(), workflow_engine:lane_id()) |
+-type lane_stopped_callback_result() :: ?CONTINUE(workflow_engine:lane_id(), workflow_engine:lane_id()) |
     ?END_EXECUTION. % engine does not distinguish reason of execution finish - ?END_EXECUTION is returned
                        % if processed lane is last lane as well as on error
 % TODO VFS-7787 move following types to callback server:
@@ -56,7 +56,7 @@
 -type heartbeat_callback_id() :: binary().
 
 -export_type([handler/0, async_processing_result/0, handler_execution_result/0, prepare_lane_result/0,
-    lane_ended_callback_result/0, finished_callback_id/0, heartbeat_callback_id/0]).
+    lane_stopped_callback_result/0, finished_callback_id/0, heartbeat_callback_id/0]).
 
 %%%===================================================================
 %%% Callbacks descriptions
@@ -109,7 +109,7 @@
     workflow_jobs:encoded_job_identifier(),
     iterator:item()
 ) ->
-    ok | {error, running_item_failed} | {error, task_already_stopping} | {error, task_already_ended}.
+    ok | {error, running_item_failed} | {error, task_already_stopping} | {error, task_already_stopped}.
 
 
 %%--------------------------------------------------------------------
@@ -202,7 +202,7 @@
     workflow_engine:execution_context(),
     workflow_engine:lane_id()
 ) ->
-    lane_ended_callback_result().
+    lane_stopped_callback_result().
 
 
 %%--------------------------------------------------------------------
