@@ -57,12 +57,12 @@ other:
         duration: '1'
         buildsToKeep: '1'
 stages:
-- Copy-quarantine:
+- Quarantine hack - copy quarantine:
     manual: false
     final: false
     jobs:
-    - Copy-quarantine
-    - Terminate-build
+    - Quarantine_hack_copy_quarantine
+    - Quarantine_hack_terminate_build
 - Build:
     manual: false
     final: false
@@ -236,18 +236,18 @@ stages:
     - workflow_scheduling
     - workflow_scheduling_cancellation_and_restart
     - xrootd_helper
-- Request-next-build:
+- Quarantine hack - request next build:
     manual: false
     final: true
     jobs:
-    - Request_next_build    
+    - Quarantine_hack_request_next_build    
 - Coverage report:
     manual: false
     final: false
     jobs:
     - Coverage report
 
-Copy-quarantine:
+Quarantine_hack_copy_quarantine:
   key: COPQU
   other: &common-opts
     clean-working-dir: true
@@ -260,14 +260,17 @@ Copy-quarantine:
       conditions:
       - variable:
           exists: fake.var
-  - script: &run-script-on-third-build 
+  - script: &quarantine-hack-run-script-on-third-build 
       interpreter: BINSH_OR_CMDEXE
       scripts:
       - |-
+        # The script which copies the quarantined test cases resides on the bamboo server.
+        # For more details about the script look at https://git.onedata.org/projects/VFS/repos/bamboos/browse/bamboo-server/quarantine-copy.sh?at=refs%2Fheads%2Ffeature%2FVFS-9519-auto-quarantine-test-cases-for-new-branches
+        # The script is run indirectly by the CGI script used in the curl command.
         echo curl 10.87.23.72:3080/cgi-bin/quarantine-copy?${bamboo_planSrc}+${bamboo_planKey}
         curl 10.87.23.72:3080/cgi-bin/quarantine-copy?${bamboo_planSrc}+${bamboo_planKey}
       description: Copy quarantined test cases
-      conditions: &cond-build3
+      conditions: &quarantine-hack-cond-build3
       - variable:
           matches:
             bamboo.buildNumber: '3'
@@ -277,20 +280,20 @@ Copy-quarantine:
       scripts:
         - true
         
-Terminate-build:
+Quarantine_hack_terminate_build:
   key: TERMB
   other: *common-opts
   tasks:  
   - checkout: *fake-checkout       
   - script: *always-successful
   - script:
-      <<: *run-script-on-third-build
+      <<: *quarantine-hack-run-script-on-third-build
       scripts:
       - |-
         echo Terminating build...
         false
       description: Terminate build
-      conditions: *cond-build3
+      conditions: *quarantine-hack-cond-build3
       
 Build:
   key: BUILD
@@ -426,13 +429,6 @@ _Unit Test:
   - checkout: *fake-checkout
   - script: *unpack
   - script:
-      <<: *run-script
-      scripts:
-      - |-
-        docker pull onedata/builder
-        docker pull onedata/worker
-      description: Pull latest builder and worker
-  - script:
       <<: *run-script-working-dir
       scripts:
       - |-
@@ -461,7 +457,7 @@ _Unit Test:
         tar zxf ${ARTIFACT}
         touch test/eunit_results/TEST-*.xml
       description: Pull eunit artifact and unpack it
-      conditions: &cond-build2-3
+      conditions: &quarantine-hack-cond-build2-3
         - variable:
             matches:
               bamboo.buildNumber: '2|3'
@@ -513,7 +509,7 @@ api_archive: &ct-onenv-job
       scripts:
       - sudo ${HOME}/restart_minikube.sh
       description: Restart minikube
-  - script: &pull-surefire
+  - script: &quarantine-hack-pull-surefire
       <<: *run-script
       scripts:
       - |-
@@ -530,7 +526,7 @@ api_archive: &ct-onenv-job
         tar zxf ${ARTIFACT}
         touch test_distributed/logs/*/surefire.xml
       description: Pull surefire artifact and unpack it
-      conditions: *cond-build2-3
+      conditions: *quarantine-hack-cond-build2-3
   - script: *unpack
   - script:
       <<: *run-script-working-dir
@@ -751,7 +747,7 @@ archivestorage_helper: &ct-job
   tasks:
   - checkout: *fake-checkout
   - script: *unpack
-  - script: *pull-surefire
+  - script: *quarantine-hack-pull-surefire
   - script:
       <<: *run-script-working-dir
       scripts:
@@ -1923,7 +1919,7 @@ xrootd_helper:
     name: cover_ct_xrootd_helper.tar.gz
   - *ct_logs
 
-Request_next_build:
+Quarantine_hack_request_next_build:
   key: ZREQN
   description: Request next build 
   other: *common-opts
@@ -1932,6 +1928,9 @@ Request_next_build:
   - script:
       description: Request next build
       scripts:
+        # The script which requests the next build of a plan resides on the bamboo server.
+        # For more details about the script look at https://git.onedata.org/projects/VFS/repos/bamboos/browse/bamboo-server/run-build.sh?at=refs%2Fheads%2Ffeature%2FVFS-9519-auto-quarantine-test-cases-for-new-branches
+        # The script is run indirectly by the CGI script used in the curl command.
         - curl 10.87.23.72:3080/cgi-bin/run-build?${bamboo_planKey}
       conditions:
         - variable:
@@ -1948,7 +1947,7 @@ Coverage report:
   - checkout: *fake-checkout
   final-tasks:
   - script:
-      interpreter: BINSH_OR_CMDEXE
+      <<: *run-script
       scripts:
       - |
         tar -xzmf op_worker.tar.gz
@@ -1976,7 +1975,7 @@ Coverage report:
         fi
       description: Unpack
   - script:
-      interpreter: BINSH_OR_CMDEXE
+      <<: *run-script-with-working-dir
       scripts:
       - |-
         if bamboos/scripts/should-skip-coverage.sh; then
@@ -1986,10 +1985,9 @@ Coverage report:
         else
             ./make.py on_bamboo=true coverage
         fi
-      working-dir: op_worker
       description: Generate coverage reports
   - script:
-      interpreter: BINSH_OR_CMDEXE
+      <<: *run-script
       scripts:
       - tar -czf test_coverage.tar.gz op_worker/test_coverage
       description: Save coverage report
