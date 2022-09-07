@@ -1975,7 +1975,7 @@ Coverage report:
         fi
       description: Unpack
   - script:
-      <<: *run-script-with-working-dir
+      <<: *run-script-working-dir
       scripts:
       - |-
         if bamboos/scripts/should-skip-coverage.sh; then
