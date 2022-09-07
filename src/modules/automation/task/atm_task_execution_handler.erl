@@ -28,7 +28,7 @@
     process_job_batch_result/4,
     process_streamed_data/3,
 
-    handle_ended/1,
+    handle_stopped/1,
     teardown/2
 ]).
 
@@ -194,9 +194,9 @@ process_streamed_data(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Error = {erro
     error.
 
 
--spec handle_ended(atm_task_execution:id()) -> ok.
-handle_ended(AtmTaskExecutionId) ->
-    case atm_task_execution_status:handle_ended(AtmTaskExecutionId) of
+-spec handle_stopped(atm_task_execution:id()) -> ok.
+handle_stopped(AtmTaskExecutionId) ->
+    case atm_task_execution_status:handle_stopped(AtmTaskExecutionId) of
         {ok, #document{value = AtmTaskExecution}} ->
             freeze_stores(AtmTaskExecution);
         {error, task_already_stopped} ->

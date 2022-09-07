@@ -15,18 +15,18 @@
 %%%   /                                 |  PENDING  |
 %%%  |              ------------------- +-----------+
 %%%  |            /                           |
-%%%  |    ending task execution               |
+%%%  |   task execution stopped               |
 %%%  |      with no item ever            first item
 %%%  |     scheduled to process      scheduled to process
 %%%  |           |                   /
-%%%  |           |                  |                                           ____
-%%%  |           |                  v                                         /      \ overriding ^stopping
-%%%  |           |            +----------+       ^stopping        +------------+     /       reason
-%%%  |           |            |  ACTIVE  | ---------------------> |  STOPPING  | <--
-%%%  |           |            +----------+                        +------------+
-%%%  |           |                  |                                   |
-%%%  |           |         ending task execution                        |
-%%%  |           |            with all items            ending task execution with ^stopping reason
+%%%  |           |                  |                                              ____
+%%%  |           |                  v                                            /      \ overriding ^stopping
+%%%  |           |            +----------+       ^stopping           +------------+     /       reason
+%%%  |           |            |  ACTIVE  | ------------------------> |  STOPPING  | <--
+%%%  |           |            +----------+                           +------------+
+%%%  |           |                  |                                       |
+%%%  |           |        task execution stopped                            |
+%%%  |           |            with all items           task execution stopped due to ^stopping reason
 %%%  |           |               processed            /            /                \               \
 %%%  |           |           /              \       1*            /                  \               4*
 %%%  |           |      successfully       else     |            2*                  3*               \
@@ -39,7 +39,11 @@
 %%%   \          |                                              |                      |                    /
 %%%     ---------o----------------------------------------------o----------------------o-------------------
 %%%
-%%% ^stopping - common step when halting execution due to:
+%%% Task transition to STOPPING status when execution is halted and not all items were processed.
+%%% It is necessary as results for already scheduled ones must be awaited even if no more items are scheduled.
+%%% In case when all items were already processed, such intermediate transition is not needed and task can
+%%% be immediately stopped.
+%%% Possible reasons for ^stopping task execution when not all items were processed are as follows:
 %%% 1* - failure severe enough to cause stopping of entire automation workflow execution
 %%%      (e.g. error when processing uncorrelated results).
 %%% 2* - abrupt interruption when some other component (e.g task or external service like OpenFaaS)
@@ -63,7 +67,7 @@
     handle_items_failed/2,
 
     handle_stopping/2,
-    handle_ended/1,
+    handle_stopped/1,
     handle_resume/1
 ]).
 
@@ -97,7 +101,7 @@ is_transition_allowed(?CANCELLED_STATUS, ?PENDING_STATUS) -> true;
 is_transition_allowed(_, _) -> false.
 
 
--spec is_running(atm_task_execution:status()) -> boolean().   %% TODO reviewers rename to is_stopped? stopped for both suspended and ended ?
+-spec is_running(atm_task_execution:status()) -> boolean().
 is_running(?PENDING_STATUS) -> true;
 is_running(?ACTIVE_STATUS) -> true;
 is_running(?STOPPING_STATUS) -> true;
@@ -222,9 +226,9 @@ handle_stopping(AtmTaskExecutionId, Reason) ->
     end).
 
 
--spec handle_ended(atm_task_execution:id()) ->
+-spec handle_stopped(atm_task_execution:id()) ->
     {ok, atm_task_execution:doc()} | {error, task_already_stopped}.
-handle_ended(AtmTaskExecutionId) ->
+handle_stopped(AtmTaskExecutionId) ->
     apply_diff(AtmTaskExecutionId, fun
         (AtmTaskExecution = #atm_task_execution{status = ?PENDING_STATUS}) ->
             {ok, AtmTaskExecution#atm_task_execution{status = ?SKIPPED_STATUS}};

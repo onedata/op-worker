@@ -325,7 +325,7 @@ handle_task_results_processed_for_all_items(
 ) ->
     ok.
 handle_task_execution_stopped(_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId) ->
-    atm_task_execution_handler:handle_ended(AtmTaskExecutionId).
+    atm_task_execution_handler:handle_stopped(AtmTaskExecutionId).
 
 
 -spec report_item_error(
@@ -358,7 +358,7 @@ report_item_error(_AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, ItemBatch) -
 ) ->
     workflow_handler:lane_stopped_callback_result().
 handle_lane_execution_stopped(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneRunSelector) ->
-    atm_lane_execution_handler:handle_ended(
+    atm_lane_execution_handler:handle_stopped(
         AtmLaneRunSelector, AtmWorkflowExecutionId,
         atm_workflow_execution_ctx:acquire(AtmWorkflowExecutionEnv)
     ).
@@ -437,7 +437,7 @@ acquire_global_env(#document{key = AtmWorkflowExecutionId, value = #atm_workflow
     atm_workflow_execution:doc().
 end_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     {ok, AtmWorkflowExecutionDoc0} = atm_workflow_execution:get(AtmWorkflowExecutionId),
-    ensure_all_lane_runs_ended(AtmWorkflowExecutionDoc0, AtmWorkflowExecutionCtx),
+    ensure_all_lane_runs_stopped(AtmWorkflowExecutionDoc0, AtmWorkflowExecutionCtx),
     {ok, AtmWorkflowExecutionDoc1} = delete_all_lane_runs_prepared_in_advance(
         AtmWorkflowExecutionDoc0
     ),
@@ -445,20 +445,20 @@ end_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
 
     atm_workflow_execution_session:terminate(AtmWorkflowExecutionId),
 
-    {ok, EndedAtmWorkflowExecutionDoc} = atm_workflow_execution_status:handle_ended(
+    {ok, StoppedAtmWorkflowExecutionDoc} = atm_workflow_execution_status:handle_stopped(
         AtmWorkflowExecutionId
     ),
-    notify_ended(EndedAtmWorkflowExecutionDoc),
-    EndedAtmWorkflowExecutionDoc.
+    notify_stopped(StoppedAtmWorkflowExecutionDoc),
+    StoppedAtmWorkflowExecutionDoc.
 
 
 %% @private
--spec ensure_all_lane_runs_ended(
+-spec ensure_all_lane_runs_stopped(
     atm_workflow_execution:doc(),
     atm_workflow_execution_ctx:record()
 ) ->
     ok.
-ensure_all_lane_runs_ended(#document{
+ensure_all_lane_runs_stopped(#document{
     key = AtmWorkflowExecutionId,
     value = AtmWorkflowExecution = #atm_workflow_execution{
         lanes_count = AtmLanesCount,
@@ -476,7 +476,7 @@ ensure_all_lane_runs_ended(#document{
                     ?ENDED_PHASE ->
                         ok;
                     _ ->
-                        atm_lane_execution_handler:handle_ended(
+                        atm_lane_execution_handler:handle_stopped(
                             AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
                         )
                 end;
@@ -547,10 +547,10 @@ unfreeze_global_stores(#document{value = #atm_workflow_execution{
 
 
 %% @private
--spec notify_ended(atm_workflow_execution:doc()) -> ok.
-notify_ended(#document{value = #atm_workflow_execution{callback = undefined}}) ->
+-spec notify_stopped(atm_workflow_execution:doc()) -> ok.
+notify_stopped(#document{value = #atm_workflow_execution{callback = undefined}}) ->
     ok;
-notify_ended(#document{key = AtmWorkflowExecutionId, value = #atm_workflow_execution{
+notify_stopped(#document{key = AtmWorkflowExecutionId, value = #atm_workflow_execution{
     status = AtmWorkflowExecutionStatus,
     callback = CallbackUrl
 }}) ->

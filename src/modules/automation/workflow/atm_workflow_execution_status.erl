@@ -27,14 +27,14 @@
 %%%      |              /          +-------------+                          |       ____
 %%%  O   |             |                                                    v     /      \ overriding ^stopping
 %%%  N   |             |                                             +-------------+     /        reason
-%%%  G   |  ending last lane execution                               |   STOPPING  | <--
+%%%  G   |  last lane execution stopped                              |   STOPPING  | <--
 %%%  O   |         run with                                          +-------------+ <-------------------
 %%%  I   |          /    \                                                |                               \
 %%%  N   |         /      \                                               |                               |
-%%%  G   |        /        \                 ending last lane run execution with ^stopping reason         |
+%%%  G   |        /        \                last lane run execution stopped with ^stopping reason         |
 %%%      |       /          \                 /        |           |          |               |           |
 %%%      |    else    any parallel box       1*       2*          3*         4*              5*           |
-%%%      |      |        ended with         /          |           |          |               |           |
+%%%      |      |       stopped with        /          |           |          |               |           |
 %%%      |      |         failure          /           |           |          |               |           |
 %%% =====|======|============|============/============|===========|==========|===============|===========|==
 %%%      |      |            |           /             |           |          |               |           |
@@ -60,7 +60,11 @@
 %%%         -------------------------------------------o----------------------o---------------
 %%%                                         resuming execution
 %%%
-%%% ^stopping - common step when halting execution due to:
+%%% Workflow transition to STOPPING status when execution is halted and not all items were processed.
+%%% It is necessary as results for already scheduled ones must be awaited even if no more items are scheduled.
+%%% In case when all items were already processed, such intermediate transition is not needed and workflow can
+%%% be immediately stopped.
+%%% Possible reasons for ^stopping workflow execution when not all items were processed are as follows:
 %%% 1* - failure severe enough to cause stopping of entire automation workflow execution
 %%%      (e.g. error when processing task uncorrelated results).
 %%% 2* - user cancelling entire automation workflow execution.
@@ -69,7 +73,7 @@
 %%%      has failed and entire automation workflow execution is being stopped.
 %%% 5* - user pausing entire automation workflow execution.
 %%%
-%%% NOTE: When transition to ended phase occurs the workflow execution status is
+%%% NOTE: When atm workflow execution is stopped the workflow execution status is
 %%% copied from last executed lane run which works because:
 %%% 1) if last lane run successfully finished than all previous lane runs must
 %%%    have also successfully finished.
@@ -92,7 +96,7 @@
     handle_lane_enqueued/2,
     handle_lane_stopping/3,
     handle_lane_task_status_change/2,
-    handle_ended/1,
+    handle_stopped/1,
     handle_manual_lane_repeat/2,
     handle_resume/2
 ]).
@@ -158,7 +162,7 @@ handle_lane_preparing(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmLaneRunDiff
         (#atm_workflow_execution{status = ?STOPPING_STATUS}) ->
             ?ERROR_ATM_WORKFLOW_EXECUTION_ABORTING;
 
-        (#atm_workflow_execution{status = _EndedStatus}) ->
+        (#atm_workflow_execution{status = _StoppedStatus}) ->
             ?ERROR_ATM_WORKFLOW_EXECUTION_ENDED
     end,
 
@@ -189,7 +193,7 @@ handle_lane_enqueued(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
         (#atm_workflow_execution{status = ?STOPPING_STATUS}) ->
             ?ERROR_ATM_WORKFLOW_EXECUTION_ABORTING;
 
-        (#atm_workflow_execution{status = _EndedStatus}) ->
+        (#atm_workflow_execution{status = _StoppedStatus}) ->
             ?ERROR_ATM_WORKFLOW_EXECUTION_ENDED
     end).
 
@@ -221,7 +225,7 @@ handle_lane_stopping(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmLaneRunDiff)
                     UpdateResult
             end;
 
-        (#atm_workflow_execution{status = _EndedStatus}) ->
+        (#atm_workflow_execution{status = _StoppedStatus}) ->
             ?ERROR_ATM_WORKFLOW_EXECUTION_ENDED
     end,
 
@@ -239,7 +243,7 @@ handle_lane_stopping(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmLaneRunDiff)
 handle_lane_task_status_change(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
     Diff = fun(Record) ->
         case infer_phase(Record) of
-            ?SUSPENDED_PHASE -> ?ERROR_ATM_WORKFLOW_EXECUTION_ENDED;
+            ?SUSPENDED_PHASE -> ?ERROR_ATM_WORKFLOW_EXECUTION_ENDED;    %% TODO rename to STOPPED
             ?ENDED_PHASE -> ?ERROR_ATM_WORKFLOW_EXECUTION_ENDED;
             _ -> AtmLaneRunDiff(Record)
         end
@@ -256,9 +260,9 @@ handle_lane_task_status_change(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
     end.
 
 
--spec handle_ended(atm_workflow_execution:id()) ->
+-spec handle_stopped(atm_workflow_execution:id()) ->
     {ok, atm_workflow_execution:doc()} | no_return().
-handle_ended(AtmWorkflowExecutionId) ->
+handle_stopped(AtmWorkflowExecutionId) ->
     Diff = fun(Record) ->
         {ok, #atm_lane_execution_run{status = Status}} = atm_lane_execution:get_run(
             {current, current}, Record
