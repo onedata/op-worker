@@ -41,11 +41,11 @@
 
 
 -type status() :: not_configured | unreachable | unhealthy | healthy.
--type grace_attempts() :: undefined | non_neg_integer().
+-type condition() :: up | {falling, GraceAttemptsLeft :: non_neg_integer()} | down.
 
 -record(state, {
     status :: status(),
-    grace_attempts = undefined :: grace_attempts()
+    condition :: condition()
 }).
 -type state() :: #state{}.
 
@@ -68,7 +68,7 @@
 
 -define(SERVER, {global, ?MODULE}).
 
--define(SERVICE_NAME, <<"atm-openfaas-monitor-watcher-service">>).
+-define(SERVICE_NAME, <<"AtmOpenfaasMonitor">>).
 
 
 %%%===================================================================
@@ -107,7 +107,7 @@ assert_openfaas_healthy() ->
 
 -spec get_openfaas_status() -> status().
 get_openfaas_status() ->
-    case atm_openfaas_status_cache:get() of
+    case atm_openfaas_status_cache:get(?SERVICE_NAME) of
         {ok, #document{value = #atm_openfaas_status_cache{status = Status}}} ->
             Status;
         {error, not_found} ->
@@ -155,14 +155,17 @@ stop_service() ->
 %% Initializes the server.
 %% @end
 %%--------------------------------------------------------------------
--spec init(Args :: term()) -> {ok, state()}.
+-spec init(Args :: term()) -> {ok, state(), non_neg_integer()}.
 init(_) ->
     process_flag(trap_exit, true),
 
     Status = check_openfaas_status(),
-    atm_openfaas_status_cache:save(Status),
+    atm_openfaas_status_cache:save(?SERVICE_NAME, Status),
 
-    State = #state{status = Status, grace_attempts = undefined},
+    State = #state{status = Status, condition = case Status of
+        healthy -> up;
+        _ -> down
+    end},
     {ok, State, timer:seconds(?STATUS_CHECK_INTERVAL_SECONDS)}.
 
 
@@ -173,11 +176,10 @@ init(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_call(Request :: term(), From :: {pid(), Tag :: term()}, state()) ->
-    {reply, Reply :: term(), NewState :: state()} |
-    {reply, Reply :: term(), NewState :: state(), hibernate}.
+    {reply, Reply :: term(), NewState :: state()}.
 handle_call(Request, _From, State) ->
     ?log_bad_request(Request),
-    {reply, {error, wrong_request}, State, hibernate}.
+    {reply, {error, wrong_request}, State}.
 
 
 %%--------------------------------------------------------------------
@@ -187,11 +189,10 @@ handle_call(Request, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_cast(Request :: term(), state()) ->
-    {noreply, NewState :: state()} |
-    {noreply, NewState :: state(), hibernate}.
+    {noreply, NewState :: state()}.
 handle_cast(Request, State) ->
     ?log_bad_request(Request),
-    {noreply, State, hibernate}.
+    {noreply, State}.
 
 
 %%--------------------------------------------------------------------
@@ -201,21 +202,12 @@ handle_cast(Request, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_info(Info :: term(), state()) ->
-    {noreply, NewState :: state(), non_neg_integer()} |
-    {noreply, NewState :: state(), hibernate}.
+    {noreply, NewState :: state(), non_neg_integer()}.
 handle_info(timeout, State = #state{status = CurrentStatus}) ->
     NewStatus = check_openfaas_status(),
-    NewStatus /= CurrentStatus andalso atm_openfaas_status_cache:save(NewStatus),
+    NewStatus /= CurrentStatus andalso atm_openfaas_status_cache:save(?SERVICE_NAME, NewStatus),
 
-    NewGraceAttempts = case infer_grace_attempts(NewStatus, State) of
-        0 ->
-            report_openfaas_down_to_atm_workflow_execution_layer(NewStatus),
-            undefined;
-        Attempts ->
-            Attempts
-    end,
-
-    NewState = #state{status = NewStatus, grace_attempts = NewGraceAttempts},
+    NewState = #state{status = NewStatus, condition = infer_condition(NewStatus, State)},
     {noreply, NewState, timer:seconds(?STATUS_CHECK_INTERVAL_SECONDS)};
 
 handle_info(?REPORT_OPENFAAS_DOWN_TO_ATM_WORKFLOW_EXECUTION_LAYER, State = #state{
@@ -226,7 +218,7 @@ handle_info(?REPORT_OPENFAAS_DOWN_TO_ATM_WORKFLOW_EXECUTION_LAYER, State = #stat
 
 handle_info(Info, State) ->
     ?log_bad_request(Info),
-    {noreply, State, hibernate}.
+    {noreply, State}.
 
 
 %%--------------------------------------------------------------------
@@ -285,6 +277,7 @@ check_openfaas_status() ->
             {ok, ?HTTP_500_INTERNAL_SERVER_ERROR, _RespHeaders, _RespBody} ->
                 unhealthy;
             _ ->
+                ?warning("OpenFaaS service is unreachable (due to e.g. incorrect configuration)"),
                 unreachable
         end
     catch throw:?ERROR_ATM_OPENFAAS_NOT_CONFIGURED ->
@@ -293,18 +286,28 @@ check_openfaas_status() ->
 
 
 %% @private
--spec infer_grace_attempts(NewStatus :: status(), state()) -> grace_attempts().
-infer_grace_attempts(healthy, _State) ->
-    undefined;
+-spec infer_condition(NewStatus :: status(), state()) -> condition().
+infer_condition(healthy, _State) ->
+    up;
 
-infer_grace_attempts(_NewStatus, #state{status = healthy}) ->
-    max(0, ?STATUS_CHECK_GRACE_ATTEMPTS);
+infer_condition(NewStatus, #state{status = healthy}) ->
+    case max(0, ?STATUS_CHECK_GRACE_ATTEMPTS) of
+        0 ->
+            report_openfaas_down_to_atm_workflow_execution_layer(NewStatus),
+            down;
+        GraceAttempts ->
+            {falling, GraceAttempts - 1}
+    end;
 
-infer_grace_attempts(_NewStatus, #state{grace_attempts = undefined}) ->
-    undefined;
+infer_condition(NewStatus, #state{condition = {falling, 0}}) ->
+    report_openfaas_down_to_atm_workflow_execution_layer(NewStatus),
+    down;
 
-infer_grace_attempts(_NewStatus, #state{grace_attempts = GraceAttempts}) ->
-    GraceAttempts - 1.
+infer_condition(_NewStatus, #state{condition = {falling, GraceAttemptsLeft}}) ->
+    {falling, GraceAttemptsLeft - 1};
+
+infer_condition(_NewStatus, #state{condition = down}) ->
+    down.
 
 
 %% @private

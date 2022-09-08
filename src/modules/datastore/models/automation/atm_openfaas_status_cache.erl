@@ -15,7 +15,7 @@
 -include("modules/automation/atm_execution.hrl").
 
 %% API
--export([save/1, get/0]).
+-export([save/2, get/1]).
 
 
 -type id() :: binary().
@@ -30,7 +30,6 @@
     memory_copies => all,
     disc_driver => undefined
 }).
--define(ID, <<"AtmOpenFaaSServiceStatus">>).
 
 
 %%%===================================================================
@@ -38,13 +37,13 @@
 %%%===================================================================
 
 
--spec save(atm_openfaas_monitor:status()) -> {ok, doc()} | {error, term()}.
-save(Status) ->
-    datastore_model:save(?CTX, #document{key = ?ID, value = #atm_openfaas_status_cache{
+-spec save(id(), atm_openfaas_monitor:status()) -> {ok, doc()} | {error, term()}.
+save(Id, Status) ->
+    datastore_model:save(?CTX, #document{key = Id, value = #atm_openfaas_status_cache{
         status = Status
     }}).
 
 
--spec get() -> {ok, doc()} | {error, term()}.
-get() ->
-    datastore_model:get(?CTX, ?ID).
+-spec get(id()) -> {ok, doc()} | {error, term()}.
+get(Id) ->
+    datastore_model:get(?CTX, Id).
