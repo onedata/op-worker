@@ -65,12 +65,11 @@
 -define(PREPARING, preparing).
 -define(PREPARED_IN_ADVANCE, prepared_in_advance).
 -define(PREPARATION_FAILED, preparation_failed).
--define(PREPARATION_CANCELLED, preparation_cancelled).
 
 -define(EXECUTING, executing).
 -define(EXECUTION_CANCELLED, execution_cancelled).
 -define(EXECUTION_ENDED, execution_ended).
--define(WAITING_FOR_NEXT_LANE_PREPARATION_END, waiting_for_next_lane_preparation_end).
+-define(EXECUTION_ENDED_WITH_EXCEPTION, execution_ended_with_exception).
 
 %%%===================================================================
 %%% Macros used to describe processing of parallel box's jobs
@@ -81,7 +80,7 @@
 
 %%%===================================================================
 %%% Macros describing possible results of
-%%% workflow_handler:handle_lane_execution_ended/3 callback
+%%% workflow_handler:handle_lane_execution_stopped/3 callback
 %%%===================================================================
 
 -define(CONTINUE(NextLaneId, LaneIdToBePreparedInAdvance), {continue, NextLaneId, LaneIdToBePreparedInAdvance}).
@@ -102,7 +101,7 @@
 -record(execution_ended, {
     handler :: workflow_handler:handler(),
     context :: workflow_engine:execution_context(),
-    reason = ?EXECUTION_ENDED :: ?EXECUTION_ENDED | ?EXECUTION_CANCELLED,
+    reason = ?EXECUTION_ENDED :: ?EXECUTION_ENDED | ?EXECUTION_CANCELLED | ?EXECUTION_ENDED_WITH_EXCEPTION,
     callbacks_data :: {workflow_engine:lane_id(), workflow_engine:execution_context(), [workflow_engine:task_id()]} |
         undefined
 }).
@@ -121,6 +120,7 @@
 -define(WF_ERROR_RACE_CONDITION, {error, race_condition}).
 -define(WF_ERROR_ITEM_PROCESSING_ENDED(Item, SuccessOrFailure),
     {error, {item_processing_ended, Item, SuccessOrFailure}}).
+-define(WF_ERROR_CANCEL_NOT_INITIALIZED, {error, cancel_not_initialized}).
 
 % errors returned by workflow_async_call_pool to control workflow_engine
 -define(WF_ERROR_LIMIT_REACHED, {error, limit_reached}).

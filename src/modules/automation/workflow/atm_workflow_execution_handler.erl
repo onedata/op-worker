@@ -40,13 +40,13 @@
     process_task_result_for_item/5,
     process_streamed_task_data/4,
     handle_task_results_processed_for_all_items/3,
-    handle_task_execution_ended/3,
+    handle_task_execution_stopped/3,
 
     report_item_error/3,
 
-    handle_lane_execution_ended/3,
+    handle_lane_execution_stopped/3,
 
-    handle_workflow_execution_ended/2,
+    handle_workflow_execution_stopped/2,
 
     handle_exception/5
 ]).
@@ -318,13 +318,13 @@ handle_task_results_processed_for_all_items(
     atm_openfaas_result_stream_handler:trigger_conclusion(AtmWorkflowExecutionId, AtmTaskExecutionId).
 
 
--spec handle_task_execution_ended(
+-spec handle_task_execution_stopped(
     atm_workflow_execution:id(),
     atm_workflow_execution_env:record(),
     atm_task_execution:id()
 ) ->
     ok.
-handle_task_execution_ended(_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId) ->
+handle_task_execution_stopped(_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId) ->
     atm_task_execution_handler:handle_stopped(AtmTaskExecutionId).
 
 
@@ -351,25 +351,25 @@ report_item_error(_AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, ItemBatch) -
     ok.
 
 
--spec handle_lane_execution_ended(
+-spec handle_lane_execution_stopped(
     atm_workflow_execution:id(),
     atm_workflow_execution_env:record(),
     atm_lane_execution:lane_run_selector()
 ) ->
-    workflow_handler:lane_ended_callback_result().
-handle_lane_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneRunSelector) ->
+    workflow_handler:lane_stopped_callback_result().
+handle_lane_execution_stopped(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneRunSelector) ->
     atm_lane_execution_handler:handle_stopped(
         AtmLaneRunSelector, AtmWorkflowExecutionId,
         atm_workflow_execution_ctx:acquire(AtmWorkflowExecutionEnv)
     ).
 
 
--spec handle_workflow_execution_ended(
+-spec handle_workflow_execution_stopped(
     atm_workflow_execution:id(),
     atm_workflow_execution_env:record()
 ) ->
     ok.
-handle_workflow_execution_ended(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv) ->
+handle_workflow_execution_stopped(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv) ->
     AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(AtmWorkflowExecutionEnv),
     end_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
     ok.
@@ -488,7 +488,7 @@ ensure_all_lane_runs_stopped(#document{
 
 %% @private
 -spec delete_all_lane_runs_prepared_in_advance(atm_workflow_execution:doc()) ->
-    ok.
+    {ok, atm_workflow_execution:doc()}.
 delete_all_lane_runs_prepared_in_advance(#document{
     key = AtmWorkflowExecutionId,
     value = AtmWorkflowExecution = #atm_workflow_execution{

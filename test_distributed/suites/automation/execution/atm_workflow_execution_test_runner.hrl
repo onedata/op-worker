@@ -61,14 +61,14 @@
     process_streamed_task_data = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
     report_item_error = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
 
-    handle_task_execution_ended = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
-    handle_lane_execution_ended = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec()
+    handle_task_execution_stopped = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
+    handle_lane_execution_stopped = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec()
 }).
 
 -record(atm_workflow_execution_incarnation_test_spec, {
     incarnation_num :: atm_workflow_execution:incarnation(),
     lane_runs :: [atm_workflow_execution_test_runner:lane_run_test_spec()],
-    handle_workflow_execution_ended = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec()
+    handle_workflow_execution_stopped = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec()
 }).
 
 -record(atm_workflow_execution_test_spec, {

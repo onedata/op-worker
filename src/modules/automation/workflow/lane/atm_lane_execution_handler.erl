@@ -163,7 +163,7 @@ resume(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     atm_workflow_execution:id(),
     atm_workflow_execution_ctx:record()
 ) ->
-    workflow_handler:lane_ended_callback_result() | no_return().
+    workflow_handler:lane_stopped_callback_result() | no_return().
 handle_stopped(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     {IsRetryScheduled, NextAtmWorkflowExecution = #atm_workflow_execution{
         current_lane_index = NextAtmLaneIndex,
@@ -343,9 +343,9 @@ stop_running(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, #document{
     key = AtmWorkflowExecutionId,
     value = AtmWorkflowExecution
 }) ->
-    %% TODO MW first cancel/stop call
+    workflow_engine:init_cancel_procedure(AtmWorkflowExecutionId),
     stop_parallel_boxes(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecution),
-    workflow_engine:cancel_execution(AtmWorkflowExecutionId),  %% TODO MW second cancel/stop call
+    workflow_engine:finish_cancel_procedure(AtmWorkflowExecutionId),
     {ok, stopping}.
 
 
