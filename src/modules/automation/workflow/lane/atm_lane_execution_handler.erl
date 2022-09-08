@@ -54,9 +54,18 @@ prepare(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
 
         AtmLaneExecutionSpec
     catch Type:Reason:Stacktrace ->
-        atm_lane_execution_status:handle_aborting(AtmLaneRunSelector, AtmWorkflowExecutionId, failure),
-        % Call via ?MODULE: to allow mocking in tests
-        ?MODULE:handle_ended(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
+        case atm_lane_execution_status:handle_aborting(
+            AtmLaneRunSelector, AtmWorkflowExecutionId, failure
+        ) of
+            {ok, _} ->
+                % Call via ?MODULE: to allow mocking in tests
+                ?MODULE:handle_ended(
+                    AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
+                );
+            ?ERROR_NOT_FOUND ->
+                % failed to create lane run in advance
+                ok
+        end,
         throw(?atm_examine_error(Type, Reason, Stacktrace))
     end.
 

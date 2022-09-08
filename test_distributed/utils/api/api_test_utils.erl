@@ -191,7 +191,6 @@ create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, 
 
     FileDetails = #file_details{
         file_attr = FileAttrs,
-        index_startid = file_listing:build_index(FileName, FileAttrs#file_attr.provider_id),
         active_permissions_type = case HasAcl of
             true -> acl;
             false -> posix
@@ -253,18 +252,18 @@ set_and_sync_metadata(Nodes, FileGuid, MetadataType, Metadata) ->
 
 -spec set_metadata(node(), file_id:file_guid(), metadata_type(), term()) -> ok.
 set_metadata(Node, FileGuid, <<"rdf">>, Metadata) ->
-    lfm_proxy:set_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), rdf, Metadata, []);
+    opt_file_metadata:set_custom_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), rdf, Metadata, []);
 set_metadata(Node, FileGuid, <<"json">>, Metadata) ->
-    lfm_proxy:set_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), json, Metadata, []);
+    opt_file_metadata:set_custom_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), json, Metadata, []);
 set_metadata(Node, FileGuid, <<"xattrs">>, Metadata) ->
     set_xattrs(Node, FileGuid, Metadata).
 
 
 -spec get_metadata(node(), file_id:file_guid(), metadata_type()) -> {ok, term()}.
 get_metadata(Node, FileGuid, <<"rdf">>) ->
-    lfm_proxy:get_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), rdf, [], false);
+    opt_file_metadata:get_custom_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), rdf, [], false);
 get_metadata(Node, FileGuid, <<"json">>) ->
-    lfm_proxy:get_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), json, [], false);
+    opt_file_metadata:get_custom_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), json, [], false);
 get_metadata(Node, FileGuid, <<"xattrs">>) ->
     get_xattrs(Node, FileGuid).
 
@@ -323,13 +322,13 @@ randomly_set_metadata(Nodes, FileGuid) ->
         1 ->
             FileKey = ?FILE_REF(FileGuid),
             RandNode = lists_utils:random_element(Nodes),
-            ?assertMatch(ok, lfm_proxy:set_metadata(
+            ?assertMatch(ok, opt_file_metadata:set_custom_metadata(
                 RandNode, ?ROOT_SESS_ID, FileKey, rdf, ?RDF_METADATA_1, []
             ), ?ATTEMPTS),
             lists:foreach(fun(Node) ->
                 ?assertMatch(
                     {ok, _},
-                    lfm_proxy:get_metadata(Node, ?ROOT_SESS_ID, FileKey, rdf, [], false),
+                    opt_file_metadata:get_custom_metadata(Node, ?ROOT_SESS_ID, FileKey, rdf, [], false),
                     ?ATTEMPTS
                 )
             end, Nodes),
@@ -392,9 +391,9 @@ file_details_to_gs_json(undefined, #file_details{
         shares = Shares,
         owner_id = OwnerId,
         provider_id = ProviderId,
-        nlink = LinksCount
+        nlink = LinksCount,
+        index = Index
     },
-    index_startid = Index,
     active_permissions_type = ActivePermissionsType,
     eff_protection_flags = EffFileProtectionFlags,
     eff_qos_membership = EffQosMembership,
@@ -441,9 +440,9 @@ file_details_to_gs_json(ShareId, #file_details{
         mode = Mode,
         size = Size,
         mtime = MTime,
-        shares = Shares
+        shares = Shares,
+        index = Index
     },
-    index_startid = Index,
     active_permissions_type = ActivePermissionsType,
     has_metadata = HasMetadata
 }) ->
@@ -490,7 +489,8 @@ file_attrs_to_json(undefined, #file_attr{
     shares = Shares,
     provider_id = ProviderId,
     owner_id = OwnerId,
-    nlink = HardlinksCount
+    nlink = HardlinksCount,
+    index = Index
 }) ->
     {ok, ObjectId} = file_id:guid_to_objectid(Guid),
     
@@ -518,7 +518,8 @@ file_attrs_to_json(undefined, #file_attr{
         <<"shares">> => Shares,
         <<"provider_id">> => ProviderId,
         <<"owner_id">> => OwnerId,
-        <<"hardlinks_count">> => utils:undefined_to_null(HardlinksCount)
+        <<"hardlinks_count">> => utils:undefined_to_null(HardlinksCount),
+        <<"index">> => file_listing:encode_index(Index)
     };
 file_attrs_to_json(ShareId, #file_attr{
     guid = FileGuid,
@@ -530,7 +531,8 @@ file_attrs_to_json(ShareId, #file_attr{
     mtime = Mtime,
     atime = Atime,
     ctime = Ctime,
-    shares = Shares
+    shares = Shares,
+    index = Index
 }) ->
     {ok, ObjectId} = file_id:guid_to_objectid(file_id:guid_to_share_guid(FileGuid, ShareId)),
     IsShareRoot = lists:member(ShareId, Shares),
@@ -556,7 +558,8 @@ file_attrs_to_json(ShareId, #file_attr{
         <<"shares">> => case IsShareRoot of
             true -> [ShareId];
             false -> []
-        end
+        end,
+        <<"index">> => file_listing:encode_index(Index)
     }.
 
 %%--------------------------------------------------------------------

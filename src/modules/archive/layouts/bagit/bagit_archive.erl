@@ -134,7 +134,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([prepare/2, finalize/2, archive_file/6, archive_dir/4]).
+-export([prepare/2, finalize/2, archive_file/7, archive_dir/4]).
 
 
 %%%===================================================================
@@ -158,24 +158,20 @@ finalize(ArchiveDirCtx, UserCtx) ->
 
 
 -spec archive_file(archive:doc(), file_ctx:ctx(), file_ctx:ctx(), archive:doc() | undefined, 
-    file_meta:path(), user_ctx:ctx()) -> {ok, file_ctx:ctx()} | {error, term()}.
-archive_file(ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, ResolvedFilePath, UserCtx) ->
-    case plain_archive:archive_regular_file(
-        ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, ResolvedFilePath, UserCtx
-    ) of
-        {ok, ArchivedFileCtx} ->
-            {FileDoc, ArchivedFileCtx2} = file_ctx:get_file_doc(ArchivedFileCtx),
-            case file_meta:get_effective_type(FileDoc) =:= ?REGULAR_FILE_TYPE of
-                true ->
-                    save_checksums_and_archive_custom_metadata(
-                        ArchiveDoc, UserCtx, ArchivedFileCtx2, ResolvedFilePath);
-                false ->
-                    ok
-            end,
-            {ok, ArchivedFileCtx};
-        {error, _} = Error ->
-            Error
-    end.
+    file_meta:path(), user_ctx:ctx(), file_copy:options()) -> {ok, file_ctx:ctx()}.
+archive_file(ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, ResolvedFilePath, UserCtx, CopyOpts) ->
+    {ok, ArchivedFileCtx} =  plain_archive:archive_regular_file(
+        ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, ResolvedFilePath, UserCtx, CopyOpts
+    ),
+    {FileDoc, ArchivedFileCtx2} = file_ctx:get_file_doc(ArchivedFileCtx),
+    case file_meta:get_effective_type(FileDoc) =:= ?REGULAR_FILE_TYPE of
+        true ->
+            save_checksums_and_archive_custom_metadata(
+                ArchiveDoc, UserCtx, ArchivedFileCtx2, ResolvedFilePath);
+        false ->
+            ok
+    end,
+    {ok, ArchivedFileCtx}.
 
 
 -spec archive_dir(archive:doc(), file_meta:path(), file_ctx:ctx(), user_ctx:ctx()) -> ok.
@@ -238,11 +234,10 @@ save_checksums_and_archive_custom_metadata(CurrentArchiveDoc, UserCtx, ArchivedF
 archive_metadata(ArchiveDirCtx, UserCtx, RelativeFilePath, ArchivedFileCtx) ->
     SessionId = user_ctx:get_session_id(UserCtx),
     ArchiveFileGuid = file_ctx:get_logical_guid_const(ArchivedFileCtx),
-    JsonMetadata = case lfm:get_metadata(SessionId, ?FILE_REF(ArchiveFileGuid), json, [], false) of
-        {ok, JM} ->
-            JM;
-        {error, ?ENODATA} ->
-            undefined
+    JsonMetadata = try
+        mi_file_metadata:get_custom_metadata(SessionId, ?FILE_REF(ArchiveFileGuid), json, [], false)
+    catch throw:?ERROR_POSIX(?ENODATA) ->
+        undefined
     end,
     bagit_metadata:add_entry(ArchiveDirCtx, UserCtx, RelativeFilePath, JsonMetadata).
 

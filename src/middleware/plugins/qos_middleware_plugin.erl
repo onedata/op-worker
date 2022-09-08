@@ -80,15 +80,8 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
     undefined;
-data_spec(#op_req{operation = get, gri = #gri{aspect = audit_log}}) -> #{
-    optional => #{
-        <<"index">> => {binary, any},
-        <<"timestamp">> => {integer, {not_lower_than, 0}},
-        <<"offset">> => {integer, any},
-        <<"limit">> => {integer, {between, 1, ?MAX_LIST_LIMIT}},
-        <<"direction">> => {atom, [?FORWARD, ?BACKWARD]}
-    }
-};
+data_spec(#op_req{operation = get, gri = #gri{aspect = audit_log}}) ->
+    audit_log_browse_opts:json_data_spec();
 data_spec(#op_req{operation = get, gri = #gri{aspect = time_series_collections}}) ->
     undefined;
 %% @TODO VFS-9176 Align QoS transfer stats API with time series API
@@ -248,8 +241,8 @@ get(#op_req{auth = Auth, gri = #gri{id = QosEntryId, aspect = instance}}, QosEnt
     {ok, entry_to_details(QosEntry, Status, SpaceId)};
 
 get(#op_req{gri = #gri{id = QosEntryId, aspect = audit_log}, data = Data}, _QosEntry) ->
-    {ok, BrowseResult} = 
-        qos_entry_audit_log:browse_content(QosEntryId, json_infinite_log_model:build_browse_opts(Data)),
+    BrowseOpts = audit_log_browse_opts:from_json(Data),
+    {ok, BrowseResult} = qos_entry_audit_log:browse_content(QosEntryId, BrowseOpts),
     {ok, value, BrowseResult};
 
 get(#op_req{gri = #gri{id = QosEntryId, aspect = time_series_collections}}, _QosEntry) ->

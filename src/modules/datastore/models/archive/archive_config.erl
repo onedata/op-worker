@@ -24,7 +24,7 @@
 %% Getters
 -export([
     get_layout/1, is_incremental/1, get_incremental_based_on/1, 
-    should_include_dip/1, should_create_nested_archives/1, should_follow_symlinks/1
+    should_include_dip/1, is_nested_archives_creation_enabled/1, should_follow_symlinks/1
 ]).
 %% Setters
 -export([enforce_plain_layout/1]).
@@ -141,8 +141,8 @@ get_incremental_based_on(#archive_config{incremental = IncrementalConfig}) ->
     utils:null_to_undefined(maps:get(<<"basedOn">>, IncrementalConfig, undefined)).
 
 
--spec should_create_nested_archives(record()) -> boolean().
-should_create_nested_archives(#archive_config{create_nested_archives = CreateNestedArchives}) ->
+-spec is_nested_archives_creation_enabled(record()) -> boolean().
+is_nested_archives_creation_enabled(#archive_config{create_nested_archives = CreateNestedArchives}) ->
     CreateNestedArchives.
 
 

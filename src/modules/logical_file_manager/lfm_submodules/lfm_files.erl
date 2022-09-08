@@ -37,7 +37,7 @@
     get_file_location/2, read_symlink/2, fsync/1, fsync/3, write/3,
     write_without_events/3, read/3, read/4, check_size_and_read/3, read_without_events/3,
     read_without_events/4, silent_read/3, silent_read/4,
-    truncate/3, release/1, get_file_distribution/2
+    truncate/3, release/1
 ]).
 
 -compile({no_auto_import, [unlink/1]}).
@@ -183,7 +183,7 @@ ensure_dir(SessId, RelativeRootGuid, FilePath, Mode) ->
 
 
 -spec is_dir(session:id(), lfm:file_key()) ->
-    true | false | lfm:error_reply().
+    boolean() | lfm:error_reply().
 is_dir(SessId, FileKey) ->
     case lfm:stat(SessId, FileKey) of
         {ok, #file_attr{type = ?DIRECTORY_TYPE}} -> true;
@@ -557,31 +557,6 @@ truncate(SessId, FileKey, Size) ->
         #truncate{size = Size},
         fun(_) ->
             ok = lfm_event_emitter:emit_file_truncated(FileGuid, Size, SessId)
-        end).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns block map for a file.
-%% @end
-%%--------------------------------------------------------------------
--spec get_file_distribution(session:id(), lfm:file_key()) ->
-    {ok, Blocks :: [[non_neg_integer()]]} | lfm:error_reply().
-get_file_distribution(SessId, FileKey) ->
-    FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
-
-    remote_utils:call_fslogic(SessId, provider_request, FileGuid,
-        #get_file_distribution{},
-        fun(#file_distribution{provider_file_distributions = Distributions}) ->
-            {ok, lists:map(fun(#provider_file_distribution{provider_id = ProviderId, blocks = Blocks}) ->
-                {BlockList, TotalBlocksSize} = lists:mapfoldl(fun(#file_block{offset = O, size = S}, SizeAcc) ->
-                    {[O, S], SizeAcc + S}
-                end, 0, Blocks),
-                #{
-                    <<"providerId">> => ProviderId,
-                    <<"blocks">> => BlockList,
-                    <<"totalBlocksSize">> => TotalBlocksSize
-                }
-            end, Distributions)}
         end).
 
 

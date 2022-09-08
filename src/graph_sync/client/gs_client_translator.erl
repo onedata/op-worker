@@ -94,7 +94,8 @@ translate(#gri{type = od_space, id = Id, aspect = instance, scope = protected}, 
         key = Id,
         value = #od_space{
             name = maps:get(<<"name">>, Result),
-            providers = maps:get(<<"providers">>, Result)
+            providers = maps:get(<<"providers">>, Result),
+            support_parameters_registry = jsonable_record:from_json(maps:get(<<"supportParametersRegistry">>, Result), support_parameters_registry)
         }
     };
 
@@ -139,7 +140,9 @@ translate(#gri{type = od_space, id = SpaceId, aspect = instance, scope = private
 
             providers = maps:get(<<"providers">>, Result),
             shares = maps:get(<<"shares">>, Result),
-            harvesters = maps:get(<<"harvesters">>, Result)
+            harvesters = maps:get(<<"harvesters">>, Result),
+
+            support_parameters_registry = jsonable_record:from_json(maps:get(<<"supportParametersRegistry">>, Result), support_parameters_registry)
         }
     };
 
@@ -313,7 +316,8 @@ translate(#gri{type = od_atm_lambda, id = Id, aspect = instance, scope = private
                 maps:get(<<"revisionRegistry">>, Result), atm_lambda_revision_registry
             ),
 
-            atm_inventories = maps:get(<<"atmInventories">>, Result)
+            atm_inventories = maps:get(<<"atmInventories">>, Result),
+            compatible = maps:get(<<"compatible">>, Result, true)
         }
     };
 
@@ -328,7 +332,8 @@ translate(#gri{type = od_atm_workflow_schema, id = Id, aspect = instance, scope 
                 maps:get(<<"revisionRegistry">>, Result), atm_workflow_schema_revision_registry
             ),
 
-            atm_inventory = maps:get(<<"atmInventoryId">>, Result)
+            atm_inventory = maps:get(<<"atmInventoryId">>, Result),
+            compatible = maps:get(<<"compatible">>, Result, true)
         }
     };
 

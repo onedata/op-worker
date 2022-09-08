@@ -37,20 +37,7 @@
     get_xattr/4,
     remove_xattr/3
 ]).
--export([
-    get_transfer_encoding/2,
-    set_transfer_encoding/3,
-    get_cdmi_completion_status/2,
-    set_cdmi_completion_status/3,
-    get_mimetype/2,
-    set_mimetype/3
-]).
--export([
-    has_custom_metadata/2,
-    set_metadata/5,
-    get_metadata/5,
-    remove_metadata/3
-]).
+-export([has_custom_metadata/2]).
 
 -type success_callback() :: fun((term()) -> term()).
 
@@ -189,84 +176,6 @@ remove_xattr(SessId, FileKey, XattrName) ->
     call_xattr(SessId, FileKey, #remove_xattr{name = XattrName}, fun(_) -> ok end).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns encoding suitable for rest transfer.
-%% @end
-%%--------------------------------------------------------------------
--spec get_transfer_encoding(session:id(), lfm:file_key()) ->
-    {ok, custom_metadata:transfer_encoding()} | lfm:error_reply().
-get_transfer_encoding(SessId, FileKey) ->
-    call_cdmi(
-        SessId, FileKey,
-        #get_transfer_encoding{},
-        fun(#transfer_encoding{value = Val}) -> {ok, Val} end
-    ).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Sets encoding suitable for rest transfer.
-%% @end
-%%--------------------------------------------------------------------
--spec set_transfer_encoding(session:id(), lfm:file_key(), custom_metadata:transfer_encoding()) ->
-    ok | lfm:error_reply().
-set_transfer_encoding(SessId, FileKey, Encoding) ->
-    call_cdmi(SessId, FileKey, #set_transfer_encoding{value = Encoding}, fun(_) ->
-        ok
-    end).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns completion status, which tells if the file is under modification by
-%% cdmi at the moment.
-%% @end
-%%--------------------------------------------------------------------
--spec get_cdmi_completion_status(session:id(), lfm:file_key()) ->
-    {ok, custom_metadata:cdmi_completion_status()} | lfm:error_reply().
-get_cdmi_completion_status(SessId, FileKey) ->
-    call_cdmi(
-        SessId, FileKey,
-        #get_cdmi_completion_status{},
-        fun(#cdmi_completion_status{value = Val}) -> {ok, Val} end
-    ).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Sets completion status, which tells if the file is under modification by
-%% cdmi at the moment.
-%% @end
-%%--------------------------------------------------------------------
--spec set_cdmi_completion_status(
-    session:id(),
-    lfm:file_key(),
-    custom_metadata:cdmi_completion_status()
-) ->
-    ok | lfm:error_reply().
-set_cdmi_completion_status(SessId, FileKey, CompletionStatus) ->
-    call_cdmi(
-        SessId, FileKey,
-        #set_cdmi_completion_status{value = CompletionStatus},
-        fun(_) -> ok end
-    ).
-
-
--spec get_mimetype(session:id(), lfm:file_key()) ->
-    {ok, custom_metadata:mimetype()} | lfm:error_reply().
-get_mimetype(SessId, FileKey) ->
-    call_cdmi(SessId, FileKey, #get_mimetype{}, fun(#mimetype{value = Val}) ->
-        {ok, Val}
-    end).
-
-
--spec set_mimetype(session:id(), lfm:file_key(), custom_metadata:mimetype()) ->
-    ok | lfm:error_reply().
-set_mimetype(SessId, FileKey, Mimetype) ->
-    call_cdmi(SessId, FileKey, #set_mimetype{value = Mimetype}, fun(_) -> ok end).
-
-
 -spec has_custom_metadata(session:id(), lfm:file_key()) ->
     {ok, boolean()} | lfm:error_reply().
 has_custom_metadata(SessId, FileKey) ->
@@ -290,44 +199,6 @@ has_custom_metadata(SessId, FileKey) ->
     end.
 
 
--spec set_metadata(
-    session:id(),
-    lfm:file_key(),
-    custom_metadata:type(),
-    custom_metadata:value(),
-    custom_metadata:query()
-) ->
-    ok | lfm:error_reply().
-set_metadata(SessId, FileKey, Type, Value, Query) ->
-    call_custom_metadata(
-        SessId, FileKey,
-        #set_metadata{query = Query, metadata = #metadata{type = Type, value = Value}},
-        fun(_) -> ok end
-    ).
-
-
--spec get_metadata(
-    session:id(),
-    lfm:file_key(),
-    custom_metadata:type(),
-    custom_metadata:query(),
-    boolean()
-) ->
-    {ok, custom_metadata:value()} | lfm:error_reply().
-get_metadata(SessId, FileKey, Type, Query, Inherited) ->
-    call_custom_metadata(
-        SessId, FileKey,
-        #get_metadata{type = Type, query = Query, inherited = Inherited},
-        fun(#metadata{value = Value}) -> {ok, Value} end
-    ).
-
-
--spec remove_metadata(session:id(), lfm:file_key(), custom_metadata:type()) ->
-    ok | lfm:error_reply().
-remove_metadata(SessId, FileKey, Type) ->
-    call_custom_metadata(SessId, FileKey, #remove_metadata{type = Type}, fun(_) -> ok end).
-
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -339,19 +210,3 @@ remove_metadata(SessId, FileKey, Type) ->
 call_xattr(SessId, FileKey, Request, SuccessCallback) ->
     Guid = lfm_file_key:resolve_file_key(SessId, FileKey, resolve_symlink),
     remote_utils:call_fslogic(SessId, file_request, Guid, Request, SuccessCallback).
-
-
-%% @private
--spec call_cdmi(session:id(), lfm:file_key(), provider_request_type(), success_callback()) ->
-    term().
-call_cdmi(SessId, FileKey, Request, SuccessCallback) ->
-    Guid = lfm_file_key:resolve_file_key(SessId, FileKey, resolve_symlink),
-    remote_utils:call_fslogic(SessId, provider_request, Guid, Request, SuccessCallback).
-
-
-%% @private
--spec call_custom_metadata(session:id(), lfm:file_key(), provider_request_type(), success_callback()) ->
-    term().
-call_custom_metadata(SessId, FileKey, Request, SuccessCallback) ->
-    Guid = lfm_file_key:resolve_file_key(SessId, FileKey, resolve_symlink),
-    remote_utils:call_fslogic(SessId, provider_request, Guid, Request, SuccessCallback).

@@ -43,13 +43,13 @@
 %%%===================================================================
 
 
--record(list_archives, {
+-record(archives_list_request, {
     dataset_id :: dataset:id(),
     opts :: archives_list:opts(),
     mode = ?BASIC_INFO :: archive_api:listing_mode()
 }).
 
--record(archive_dataset, {
+-record(dataset_archive_request, {
     id :: dataset:id(),
     config :: archive:config(),
     preserved_callback :: archive:callback(),
@@ -57,42 +57,46 @@
     description :: archive:description()
 }).
 
--record(get_archive_info, {
+-record(archivisation_cancel_request, {
     id :: archive:id()
 }).
 
--record(update_archive, {
+-record(archive_info_get_request, {
+    id :: archive:id()
+}).
+
+-record(archive_update_request, {
     id :: archive:id(),
     description :: archive:description() | undefined,
     diff :: archive:diff()
 }).
 
--record(delete_archive, {
+-record(archive_delete_request, {
     id :: archive:id(),
     callback :: archive:callback()
 }).
 
--record(recall_archive, {
+-record(archive_recall_request, {
     archive_id :: archive:id(),
     parent_directory_guid :: file_id:file_guid(),
     target_filename = default :: file_meta:name() | default
 }).
 
--record(cancel_archive_recall, {
+-record(archive_recall_cancel_request, {
     id :: archive_recall:id()
 }).
 
--record(get_recall_details, {
+-record(archive_recall_details_get_request, {
     id :: archive_recall:id()
 }).
 
--record(get_recall_progress, {
+-record(archive_recall_progress_get_request, {
     id :: archive_recall:id()
 }).
 
--record(browse_recall_log, {
+-record(archive_recall_log_browse_request, {
     id :: archive_recall:id(),
-    options :: json_infinite_log_model:listing_opts()
+    options :: audit_log_browse_opts:opts()
 }).
 
 
@@ -101,21 +105,45 @@
 %%%===================================================================
 
 
--record(schedule_atm_workflow_execution, {
+-record(atm_workflow_execution_schedule_request, {
     atm_workflow_schema_id :: od_atm_workflow_schema:id(),
     atm_workflow_schema_revision_num :: atm_workflow_schema_revision:revision_number(),
     store_initial_content_overlay :: atm_workflow_execution_api:store_initial_content_overlay(),
     callback_url :: undefined | http_client:url()
 }).
 
--record(cancel_atm_workflow_execution, {
+-record(atm_workflow_execution_cancel_request, {
     atm_workflow_execution_id :: atm_workflow_execution:id()
 }).
 
--record(repeat_atm_workflow_execution, {
+-record(atm_workflow_execution_repeat_request, {
     type :: atm_workflow_execution:repeat_type(),
     atm_workflow_execution_id :: atm_workflow_execution:id(),
     atm_lane_run_selector :: atm_lane_execution:lane_run_selector()
+}).
+
+
+%%%===================================================================
+%%% CDMI related operations available in middleware_worker
+%%%===================================================================
+
+
+-record(transfer_encoding_get_request, {}).
+
+-record(transfer_encoding_set_request, {
+    value :: binary()
+}).
+
+-record(cdmi_completion_status_get_request, {}).
+
+-record(cdmi_completion_status_set_request, {
+    value :: binary()
+}).
+
+-record(mimetype_get_request, {}).
+
+-record(mimetype_set_request, {
+    value :: binary()
 }).
 
 
@@ -124,38 +152,38 @@
 %%%===================================================================
 
 
--record(list_top_datasets, {
+-record(top_datasets_list_request, {
     state :: dataset:state(),
     opts :: dataset_api:listing_opts(),
     mode = ?BASIC_INFO :: dataset_api:listing_mode()
 }).
 
--record(list_children_datasets, {
+-record(children_datasets_list_request, {
     id :: dataset:id(),
     opts :: dataset_api:listing_opts(),
     mode = ?BASIC_INFO :: dataset_api:listing_mode()
 }).
 
--record(establish_dataset, {
+-record(dataset_establish_request, {
     protection_flags = ?no_flags_mask :: data_access_control:bitmask()
 }).
 
--record(get_dataset_info, {
+-record(dataset_info_get_request, {
     id :: dataset:id()
 }).
 
--record(update_dataset, {
+-record(dataset_update_request, {
     id :: dataset:id(),
     state :: undefined | dataset:state(),
     flags_to_set = ?no_flags_mask :: data_access_control:bitmask(),
     flags_to_unset = ?no_flags_mask :: data_access_control:bitmask()
 }).
 
--record(remove_dataset, {
+-record(dataset_remove_request, {
     id :: dataset:id()
 }).
 
--record(get_file_eff_dataset_summary, {}).
+-record(file_eff_dataset_summary_get_request, {}).
 
 
 %%%===================================================================
@@ -163,23 +191,23 @@
 %%%===================================================================
 
 
--record(add_qos_entry, {
+-record(qos_entry_add_request, {
     expression :: qos_expression:expression(),
     replicas_num :: qos_entry:replicas_num(),
     entry_type = user_defined :: qos_entry:type()
 }).
 
--record(get_qos_entry, {
+-record(qos_entry_get_request, {
     id :: qos_entry:id()
 }).
 
--record(remove_qos_entry, {
+-record(qos_entry_remove_request, {
     id :: qos_entry:id()
 }).
 
--record(get_effective_file_qos, {}).
+-record(effective_file_qos_get_request, {}).
 
--record(check_qos_status, {
+-record(qos_status_check_request, {
     qos_id :: qos_entry:id()
 }).
 
@@ -189,12 +217,12 @@
 %%%===================================================================
 
 
--record(create_share, {
+-record(share_create_request, {
     name :: od_share:name(),
     description :: od_share:description()
 }).
 
--record(remove_share, {
+-record(share_remove_request, {
     share_id :: od_share:id()
 }).
 
@@ -204,7 +232,7 @@
 %%%===================================================================
 
 
--record(schedule_file_transfer, {
+-record(file_transfer_schedule_request, {
     % meaning of fields in this record is explained in datastore_models.hrl
     % in definition of transfer record
     replicating_provider_id :: undefined | oneprovider:id(),
@@ -212,7 +240,7 @@
     callback :: transfer:callback()
 }).
 
--record(schedule_view_transfer, {
+-record(view_transfer_schedule_request, {
     % meaning of fields in this record is explained in datastore_models.hrl
     % in definition of transfer record
     replicating_provider_id :: undefined | oneprovider:id(),
@@ -221,5 +249,35 @@
     query_view_params :: transfer:query_view_params(),
     callback :: transfer:callback()
 }).
+
+
+%%%===================================================================
+%%% File metadata related operations available in middleware_worker
+%%%===================================================================
+
+
+-record(custom_metadata_get_request, {
+    type :: custom_metadata:type(),
+    query = [] :: custom_metadata:query(),
+    inherited = false :: boolean()
+}).
+
+-record(custom_metadata_set_request, {
+    type :: custom_metadata:type(),
+    query = [] :: custom_metadata:query(),
+    value :: term()
+}).
+
+-record(custom_metadata_remove_request, {
+    type :: custom_metadata:type()
+}).
+
+-record(file_distribution_gather_request, {}).
+
+-record(historical_dir_size_stats_gather_request, {
+    request :: ts_browse_request:record()
+}).
+
+-record(file_storage_locations_get_request, {}).
 
 -endif.

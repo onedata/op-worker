@@ -47,10 +47,14 @@
     default_initial_content = __INITIAL_CONTENT
 }).
 
--define(ATM_TIME_SERIES_STORE_CONFIG, #atm_time_series_store_config{schemas = [
-    ?MAX_FILE_SIZE_TS_SCHEMA,
-    ?COUNT_TS_SCHEMA
-]}).
+-define(ATM_TIME_SERIES_STORE_CONFIG, #atm_time_series_store_config{
+    time_series_collection_schema = #time_series_collection_schema{
+        time_series_schemas = [
+            ?MAX_FILE_SIZE_TS_SCHEMA,
+            ?COUNT_TS_SCHEMA
+        ]
+    }
+}).
 -define(ATM_TIME_SERIES_DISPATCH_RULES, [
     #atm_time_series_dispatch_rule{
         measurement_ts_name_matcher_type = has_prefix,
@@ -382,13 +386,13 @@ gen_random_time_series_measurements() ->
 ) ->
     ok.
 assert_exp_target_store_content(audit_log, SrcListStoreContent, #{
-    <<"logs">> := Logs,
+    <<"logEntries">> := Logs,
     <<"isLast">> := true
 }) ->
     LogContents = lists:sort(lists:map(
         fun(#{<<"content">> := LogContent}) -> LogContent end,
-        extract_value_from_infinite_log_entry(Logs))
-    ),
+        Logs
+    )),
     ?assertEqual(lists:sort(SrcListStoreContent), LogContents);
 
 assert_exp_target_store_content(list, SrcListStoreContent, #{

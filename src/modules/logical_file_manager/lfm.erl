@@ -67,8 +67,7 @@
     silent_read/3,
     truncate/3,
     release/1, monitored_release/1,
-    get_file_location/2,
-    get_file_distribution/2
+    get_file_location/2
 ]).
 %% Directory specific operations
 -export([
@@ -92,24 +91,11 @@
 %% Custom metadata related operations
 -export([
     has_custom_metadata/2,
-    set_metadata/5,
-    get_metadata/5,
-    remove_metadata/3,
-
     list_xattr/4,
     set_xattr/3,
     set_xattr/5,
     get_xattr/4,
     remove_xattr/3
-]).
-%% CDMI related operations
--export([
-    get_transfer_encoding/2,
-    set_transfer_encoding/3,
-    get_cdmi_completion_status/2,
-    set_cdmi_completion_status/3,
-    get_mimetype/2,
-    set_mimetype/3
 ]).
 
 %% Utility functions
@@ -225,7 +211,7 @@ ensure_dir(SessId, RelativeRootGuid, FilePath, Mode) ->
     ?run(lfm_files:ensure_dir(SessId, RelativeRootGuid, FilePath, Mode)).
 
 -spec is_dir(session:id(), file_key()) ->
-    ok | error_reply().
+    boolean() | error_reply().
 is_dir(SessId, FileEntry) ->
     ?run(lfm_files:is_dir(SessId, FileEntry)).
 
@@ -450,17 +436,6 @@ get_file_location(SessId, FileKey) ->
     ?run(lfm_files:get_file_location(SessId, FileKey)).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns block map for a file.
-%% @end
-%%--------------------------------------------------------------------
--spec get_file_distribution(session:id(), file_key()) ->
-    {ok, Blocks :: [[non_neg_integer()]]} | error_reply().
-get_file_distribution(SessId, FileKey) ->
-    ?run(lfm_files:get_file_distribution(SessId, FileKey)).
-
-
 %%%===================================================================
 %%% Directory specific operations
 %%%===================================================================
@@ -596,36 +571,6 @@ has_custom_metadata(SessId, FileKey) ->
     ?run(lfm_attrs:has_custom_metadata(SessId, FileKey)).
 
 
--spec set_metadata(
-    session:id(),
-    file_key(),
-    custom_metadata:type(),
-    custom_metadata:value(),
-    custom_metadata:query()
-) ->
-    ok | error_reply().
-set_metadata(SessId, FileKey, Type, Value, Query) ->
-    ?run(lfm_attrs:set_metadata(SessId, FileKey, Type, Value, Query)).
-
-
--spec get_metadata(
-    session:id(),
-    file_key(),
-    custom_metadata:type(),
-    custom_metadata:query(),
-    boolean()
-) ->
-    {ok, custom_metadata:value()} | error_reply().
-get_metadata(SessId, FileKey, Type, Query, Inherited) ->
-    ?run(lfm_attrs:get_metadata(SessId, FileKey, Type, Query, Inherited)).
-
-
--spec remove_metadata(session:id(), file_key(), custom_metadata:type()) ->
-    ok | error_reply().
-remove_metadata(SessId, FileKey, Type) ->
-    ?run(lfm_attrs:remove_metadata(SessId, FileKey, Type)).
-
-
 -spec list_xattr(session:id(), file_key(), boolean(), boolean()) ->
     {ok, [custom_metadata:name()]} | error_reply().
 list_xattr(SessId, FileKey, Inherited, ShowInternal) ->
@@ -654,59 +599,6 @@ get_xattr(SessId, FileKey, XattrName, Inherited) ->
     ok | error_reply().
 remove_xattr(SessId, FileKey, XattrName) ->
     ?run(lfm_attrs:remove_xattr(SessId, FileKey, XattrName)).
-
-
-%%%===================================================================
-%%% CDMI related operations
-%%%===================================================================
-
-
--spec get_transfer_encoding(session:id(), file_key()) ->
-    {ok, custom_metadata:transfer_encoding()} | error_reply().
-get_transfer_encoding(SessId, FileKey) ->
-    ?run(lfm_attrs:get_transfer_encoding(SessId, FileKey)).
-
-
--spec set_transfer_encoding(session:id(), file_key(), custom_metadata:transfer_encoding()) ->
-    ok | error_reply().
-set_transfer_encoding(SessId, FileKey, Encoding) ->
-    ?run(lfm_attrs:set_transfer_encoding(SessId, FileKey, Encoding)).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns completion status, which tells if the file is under modification by
-%% cdmi at the moment.
-%% @end
-%%--------------------------------------------------------------------
--spec get_cdmi_completion_status(session:id(), file_key()) ->
-    {ok, custom_metadata:cdmi_completion_status()} | error_reply().
-get_cdmi_completion_status(SessId, FileKey) ->
-    ?run(lfm_attrs:get_cdmi_completion_status(SessId, FileKey)).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Sets completion status, which tells if the file is under modification by
-%% cdmi at the moment.
-%% @end
-%%--------------------------------------------------------------------
--spec set_cdmi_completion_status(session:id(), file_key(), custom_metadata:cdmi_completion_status()) ->
-    ok | error_reply().
-set_cdmi_completion_status(SessId, FileKey, CompletionStatus) ->
-    ?run(lfm_attrs:set_cdmi_completion_status(SessId, FileKey, CompletionStatus)).
-
-
--spec get_mimetype(session:id(), file_key()) ->
-    {ok, custom_metadata:mimetype()} | error_reply().
-get_mimetype(SessId, FileKey) ->
-    ?run(lfm_attrs:get_mimetype(SessId, FileKey)).
-
-
--spec set_mimetype(session:id(), file_key(), custom_metadata:mimetype()) ->
-    ok | error_reply().
-set_mimetype(SessId, FileKey, Mimetype) ->
-    ?run(lfm_attrs:set_mimetype(SessId, FileKey, Mimetype)).
 
 
 %%%===================================================================

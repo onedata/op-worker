@@ -68,8 +68,8 @@ create(TaskId, FileUuid, ParentUuid) ->
 
 
 -spec report_children_to_process(id(), file_meta:uuid(), non_neg_integer(), boolean()) -> status().
-report_children_to_process(TaskId, FileUUid, ChildrenCount, AllBatchesListed) ->
-    update_and_check(TaskId, FileUUid, fun(#tree_traverse_progress{
+report_children_to_process(TaskId, FileUuid, ChildrenCount, AllBatchesListed) ->
+    update_and_check(TaskId, FileUuid, fun(#tree_traverse_progress{
         to_process = ToProcess,
         all_batches_listed = CurrentAllBatchesListed
     } = TTP) ->

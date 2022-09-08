@@ -90,14 +90,19 @@
 run_scenarios(TestSpec, Config) ->
     ScenariosRootDirPath = create_all_scenarios_root_dir(TestSpec, Config),
 
-    run_space_owner_test_scenarios(ScenariosRootDirPath, TestSpec, Config),
-    run_space_privs_scenarios(ScenariosRootDirPath, TestSpec, Config),
-    run_file_protection_scenarios(ScenariosRootDirPath, TestSpec, Config),
-    run_data_access_caveats_scenarios(ScenariosRootDirPath, TestSpec, Config),
-    run_share_test_scenarios(ScenariosRootDirPath, TestSpec, Config),
-    run_open_handle_mode_scenarios(ScenariosRootDirPath, TestSpec, Config),
-    run_posix_perms_scenarios(ScenariosRootDirPath, TestSpec, Config),
-    run_acl_perms_scenarios(ScenariosRootDirPath, TestSpec, Config).
+    try
+        run_space_owner_test_scenarios(ScenariosRootDirPath, TestSpec, Config),
+        run_space_privs_scenarios(ScenariosRootDirPath, TestSpec, Config),
+        run_file_protection_scenarios(ScenariosRootDirPath, TestSpec, Config),
+        run_data_access_caveats_scenarios(ScenariosRootDirPath, TestSpec, Config),
+        run_share_test_scenarios(ScenariosRootDirPath, TestSpec, Config),
+        run_open_handle_mode_scenarios(ScenariosRootDirPath, TestSpec, Config),
+        run_posix_perms_scenarios(ScenariosRootDirPath, TestSpec, Config),
+        run_acl_perms_scenarios(ScenariosRootDirPath, TestSpec, Config)
+    catch Type:Reason:StackTrace ->
+        ct:pal("Test failed due to ~p:~p.~nStacktrace: ~p", [Type, Reason, StackTrace]),
+        error(test_failed)
+    end.
 
 
 %%%===================================================================
@@ -716,7 +721,7 @@ run_open_handle_mode_scenarios(ScenariosRootDirPath, #perms_test_spec{
     space_user = SpaceUser,
     space_owner = SpaceOwner,
     requires_traverse_ancestors = RequiresTraverseAncestors,
-    available_in_share_mode = AvailableInShareMode,
+    available_in_open_handle_mode = AvailableInOpenHandleMode,
     operation = Operation,
     files = Files
 } = TestSpec, Config) ->
@@ -752,7 +757,7 @@ run_open_handle_mode_scenarios(ScenariosRootDirPath, #perms_test_spec{
         Node, Executioner, ExecutionerToken, open_handle
     ),
 
-    case AvailableInShareMode of
+    case AvailableInOpenHandleMode of
         true ->
             % Operation is available in share/public mode but access is still controlled
             % (even for space owner) by posix mode (other bits) or acl
@@ -781,7 +786,7 @@ run_open_handle_mode_scenarios(ScenariosRootDirPath, #perms_test_spec{
                 files_owner_session_id = FileOwnerUserSessId,
                 executioner_session_id = ExecutionerSessId
             });
-        _ ->
+        false ->
             % If operation is not available in share/public mode then operation
             % should be rejected even if all permissions are granted
             set_full_perms(PermsType, Node, AllFiles),

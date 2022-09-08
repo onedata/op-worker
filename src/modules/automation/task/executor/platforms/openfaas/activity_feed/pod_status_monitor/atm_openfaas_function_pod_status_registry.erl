@@ -27,6 +27,7 @@
 -include("modules/automation/atm_execution.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
+-include_lib("cluster_worker/include/audit_log.hrl").
 
 %% API
 -export([create_for_function/1, get/1, delete/1]).
@@ -95,7 +96,7 @@ delete(RegistryId) ->
     {ok, PodStatusRegistry} = ?MODULE:get(RegistryId),
 
     foreach_summary(fun(_PodId, PodStatusSummary) ->
-        json_infinite_log_model:destroy(
+        audit_log:delete(
             PodStatusSummary#atm_openfaas_function_pod_status_summary.event_log_id
         )
     end, PodStatusRegistry),
@@ -124,10 +125,10 @@ foreach_summary(Callback, #atm_openfaas_function_pod_status_registry{registry = 
     maps:foreach(Callback, Registry).
 
 
--spec browse_pod_event_log(infinite_log:log_id(), json_infinite_log_model:listing_opts()) ->
-    {ok, json_infinite_log_model:browse_result()} | {error, term()}.
-browse_pod_event_log(LogId, ListingOpts) ->
-    case json_infinite_log_model:browse_content(LogId, ListingOpts) of
+-spec browse_pod_event_log(infinite_log:log_id(), audit_log_browse_opts:opts()) ->
+    {ok, audit_log:browse_result()} | {error, term()}.
+browse_pod_event_log(LogId, BrowseOpts) ->
+    case audit_log:browse(LogId, BrowseOpts) of
         {error, _} = Error ->
             Error;
         {ok, Data} ->
@@ -225,7 +226,7 @@ gen_pod_event_log_id(RegistryId, PodId) ->
 %% @private
 -spec ensure_pod_event_log_created(infinite_log:log_id()) -> ok.
 ensure_pod_event_log_created(LogId) ->
-    case json_infinite_log_model:create(LogId, #{}) of
+    case audit_log:create(LogId, #{}) of
         ok -> ok;
         {error, already_exists} -> ok
     end.
@@ -249,13 +250,13 @@ consume_pod_status_report(#atm_openfaas_function_pod_status_report{
     end),
 
     PodEventLogId = gen_pod_event_log_id(PodStatusRegistryId, PodId),
-    EventData = build_event_data(EventTimestamp, EventType, EventReason, EventMessage),
-    case json_infinite_log_model:append(PodEventLogId, EventData) of
+    AppendRequest = build_append_request(EventTimestamp, EventType, EventReason, EventMessage),
+    case audit_log:append(PodEventLogId, AppendRequest) of
         ok ->
             ok;
         {error, not_found} ->
             ensure_pod_event_log_created(PodEventLogId),
-            ok = json_infinite_log_model:append(PodEventLogId, EventData)
+            ok = audit_log:append(PodEventLogId, AppendRequest)
     end.
 
 
@@ -314,16 +315,23 @@ update_summary(PodId, Diff, Default, Record = #atm_openfaas_function_pod_status_
 
 
 %% @private
--spec build_event_data(
+-spec build_append_request(
     atm_openfaas_function_pod_status_report:event_timestamp(),
     atm_openfaas_function_pod_status_report:event_type(),
     atm_openfaas_function_pod_status_report:event_reason(),
     atm_openfaas_function_pod_status_report:event_message()
-) -> event_data().
-build_event_data(EventTimestamp, EventType, EventReason, EventMessage) ->
-    #{
-        <<"timestamp">> => EventTimestamp,
-        <<"type">> => EventType,
-        <<"reason">> => EventReason,
-        <<"message">> => EventMessage
+) ->
+    audit_log:append_request().
+build_append_request(EventTimestamp, EventType, EventReason, EventMessage) ->
+    #audit_log_append_request{
+        severity = case EventType of
+            <<"Warning">> -> ?WARNING_AUDIT_LOG_SEVERITY;
+            _ -> ?INFO_AUDIT_LOG_SEVERITY
+        end,
+        content = #{
+            <<"timestamp">> => EventTimestamp,
+            <<"type">> => EventType,
+            <<"reason">> => EventReason,
+            <<"message">> => EventMessage
+        }
     }.

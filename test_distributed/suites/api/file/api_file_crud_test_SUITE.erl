@@ -293,8 +293,10 @@ get_space_dir_details(ProviderSelector, SpaceDirGuid, SpaceName) ->
         {ok, _}, file_test_utils:get_attrs(oct_background:get_random_provider_node(ProviderSelector), SpaceDirGuid), ?ATTEMPTS
     ),
     #file_details{
-        file_attr = SpaceAttrs#file_attr{name = SpaceName},
-        index_startid = file_listing:build_index(file_id:guid_to_space_id(SpaceDirGuid)),
+        file_attr = SpaceAttrs#file_attr{
+            name = SpaceName, 
+            index = file_listing:build_index(file_id:guid_to_space_id(SpaceDirGuid))
+        },
         active_permissions_type = posix,
         eff_protection_flags = ?no_flags_mask,
         eff_qos_membership = ?NONE_MEMBERSHIP,

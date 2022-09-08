@@ -682,7 +682,7 @@ build_download_file_verify_fun(MemRef) ->
             % tested file is in a single level file tree
             [#object{type = ?REGULAR_FILE_TYPE, guid = FileGuid, content = Content}] ->
                 FileSize = size(Content),
-                check_single_file_download_distribution(MemRef, ExpTestResult, ApiTestCtx, FileGuid, FileSize, Providers, P1Node);
+                check_single_file_download_distribution(MemRef, ExpTestResult, ApiTestCtx, FileGuid, FileSize, Providers, P1Node, P2Node);
 
             % tested file is a directory in a two-level file tree
             [#object{type = ?DIRECTORY_TYPE, children = [
@@ -697,7 +697,7 @@ build_download_file_verify_fun(MemRef) ->
                     {_, _} -> expected_success
                 end,
                 lists:foreach(fun(Object) ->
-                    check_tarball_download_distribution(MemRef, ExpTestResult1, ApiTestCtx, Object, Providers, P1Node)
+                    check_tarball_download_distribution(MemRef, ExpTestResult1, ApiTestCtx, Object, Providers, P1Node, P2Node)
                 end, utils:ensure_list(TestedTreeObject));
             % tested file is a directory in a single level file-tree
             _ ->
@@ -707,7 +707,7 @@ build_download_file_verify_fun(MemRef) ->
                     {_, _} -> expected_success
                 end,
                 lists:foreach(fun(Object) ->
-                    check_tarball_download_distribution(MemRef, ExpTestResult1, ApiTestCtx, Object, Providers, P1Node)
+                    check_tarball_download_distribution(MemRef, ExpTestResult1, ApiTestCtx, Object, Providers, P1Node, P2Node)
                 end, utils:ensure_list(FileTreeObject))
         end
     end.
@@ -715,13 +715,13 @@ build_download_file_verify_fun(MemRef) ->
 %% @private
 -spec check_single_file_download_distribution(
     api_test_memory:mem_ref(), expected_success | expected_failure, onenv_api_test_runner:api_test_ctx(),
-    file_id:file_guid(), file_meta:size(), [oneprovider:id()], node()
+    file_id:file_guid(), file_meta:size(), [oneprovider:id()], node(), node()
 ) -> ok.
-check_single_file_download_distribution(_MemRef, expected_failure, _, FileGuid, FileSize, Providers, P1Node) ->
-    file_test_utils:await_distribution(Providers, FileGuid, [{P1Node, FileSize}]);
-check_single_file_download_distribution(_MemRef, expected_success, #api_test_ctx{node = P1Node}, FileGuid, FileSize, Providers, P1Node) ->
-    file_test_utils:await_distribution(Providers, FileGuid, [{P1Node, FileSize}]);
-check_single_file_download_distribution(MemRef, expected_success, #api_test_ctx{node = DownloadNode}, FileGuid, FileSize, Providers, P1Node) ->
+check_single_file_download_distribution(_MemRef, expected_failure, _, FileGuid, FileSize, Providers, P1Node, P2Node) ->
+    file_test_utils:await_distribution(Providers, FileGuid, [{P1Node, FileSize}, {P2Node, 0}]);
+check_single_file_download_distribution(_MemRef, expected_success, #api_test_ctx{node = P1Node}, FileGuid, FileSize, Providers, P1Node, P2Node) ->
+    file_test_utils:await_distribution(Providers, FileGuid, [{P1Node, FileSize}, {P2Node, 0}]);
+check_single_file_download_distribution(MemRef, expected_success, #api_test_ctx{node = DownloadNode}, FileGuid, FileSize, Providers, P1Node, _P2Node) ->
     FirstBlockFetchedSize = min(FileSize, ?DEFAULT_READ_BLOCK_SIZE),
     ExpDist = case api_test_memory:get(MemRef, download_succeeded, true) of
         true -> [{P1Node, FileSize}, {DownloadNode, FileSize}];
@@ -733,37 +733,37 @@ check_single_file_download_distribution(MemRef, expected_success, #api_test_ctx{
 %% @private
 -spec check_tarball_download_distribution(
     api_test_memory:mem_ref(), expected_success | expected_failure, onenv_api_test_runner:api_test_ctx(),
-    onenv_file_test_utils:object_spec(), [oneprovider:id()], node()
+    onenv_file_test_utils:object_spec(), [oneprovider:id()], node(), node()
 ) -> ok.
-check_tarball_download_distribution(_, _, #api_test_ctx{node = ?ONEZONE_TARGET_NODE}, _, _, _) ->
+check_tarball_download_distribution(_, _, #api_test_ctx{node = ?ONEZONE_TARGET_NODE}, _, _, _, _) ->
     % The request was made via Onezone's shared data redirector,
     % we do not have information where it was redirected here.
     % Still, the target node is randomized, and other cases
     % cover all possible resulting distributions.
     ok;
-check_tarball_download_distribution(_MemRef, _ExpTestResult, _ApiTestCtx, #object{type = ?SYMLINK_TYPE}, _Providers, _P1Node) ->
+check_tarball_download_distribution(_MemRef, _ExpTestResult, _ApiTestCtx, #object{type = ?SYMLINK_TYPE}, _Providers, _P1Node, _P2Node) ->
     ok;
-check_tarball_download_distribution(_MemRef, expected_failure, _, #object{type = ?REGULAR_FILE_TYPE} = Object, Providers, P1Node) ->
+check_tarball_download_distribution(_MemRef, expected_failure, _, #object{type = ?REGULAR_FILE_TYPE} = Object, Providers, P1Node, P2Node) ->
     #object{guid = FileGuid, content = Content} = Object,
     FileSize = size(Content),
-    file_test_utils:await_distribution(Providers, FileGuid, [{P1Node, FileSize}]);
-check_tarball_download_distribution(_MemRef, expected_success, #api_test_ctx{node = P1Node}, #object{type = ?REGULAR_FILE_TYPE} = Object, Providers, P1Node) ->
+    file_test_utils:await_distribution(Providers, FileGuid, [{P1Node, FileSize}, {P2Node, 0}]);
+check_tarball_download_distribution(_MemRef, expected_success, #api_test_ctx{node = P1Node}, #object{type = ?REGULAR_FILE_TYPE} = Object, Providers, P1Node, P2Node) ->
     #object{guid = FileGuid, content = Content} = Object,
     FileSize = size(Content),
-    file_test_utils:await_distribution(Providers, FileGuid, [{P1Node, FileSize}]);
-check_tarball_download_distribution(MemRef, expected_success, ApiTestCtx, #object{type = ?REGULAR_FILE_TYPE} = Object, Providers, P1Node) ->
+    file_test_utils:await_distribution(Providers, FileGuid, [{P1Node, FileSize}, {P2Node, 0}]);
+check_tarball_download_distribution(MemRef, expected_success, ApiTestCtx, #object{type = ?REGULAR_FILE_TYPE} = Object, Providers, P1Node, P2Node) ->
     #api_test_ctx{node = DownloadNode, client = Client} = ApiTestCtx,
     #object{guid = FileGuid, content = Content} = Object,
     FileSize = size(Content),
     User4Id = oct_background:get_user_id(user4),
     ExpDist = case {Client, api_test_memory:get(MemRef, scope)} of
-        {?USER(User4Id), private} -> [{P1Node, FileSize}];
+        {?USER(User4Id), private} -> [{P1Node, FileSize}, {P2Node, 0}];
         _ -> [{P1Node, FileSize}, {DownloadNode, FileSize}]
     end,
     file_test_utils:await_distribution(Providers, FileGuid, ExpDist);
-check_tarball_download_distribution(MemRef, ExpTestResult, ApiTestCtx, #object{type = ?DIRECTORY_TYPE, children = Children}, Providers, P1Node) ->
+check_tarball_download_distribution(MemRef, ExpTestResult, ApiTestCtx, #object{type = ?DIRECTORY_TYPE, children = Children}, Providers, P1Node, P2Node) ->
     lists:foreach(fun(Child) ->
-        check_tarball_download_distribution(MemRef, ExpTestResult, ApiTestCtx, Child, Providers, P1Node)
+        check_tarball_download_distribution(MemRef, ExpTestResult, ApiTestCtx, Child, Providers, P1Node, P2Node)
     end, Children).
 
 
@@ -1221,7 +1221,7 @@ build_rest_download_file_verify_fun(MemRef, FileSize) ->
                 [#object{children = [#object{guid = Guid}]}] -> Guid;
                 [#object{guid = Guid}] -> Guid
             end,
-            file_test_utils:await_distribution(Providers, FileGuid, [{P1Node, FileSize}]);
+            file_test_utils:await_distribution(Providers, FileGuid, [{P1Node, FileSize}, {P2Node, 0}]);
         (expected_success, #api_test_ctx{node = DownloadNode, data = Data}) ->
             FileGuid = case api_test_memory:get(MemRef, file_tree_object) of
                 [#object{children = [#object{guid = Guid}]}] -> Guid;
@@ -1236,7 +1236,7 @@ build_rest_download_file_verify_fun(MemRef, FileSize) ->
                     % cover all possible resulting distributions.
                     ok;
                 P1Node ->
-                    file_test_utils:await_distribution(Providers, FileGuid, [{P1Node, FileSize}]);
+                    file_test_utils:await_distribution(Providers, FileGuid, [{P1Node, FileSize}, {P2Node, 0}]);
                 _Other ->
                     case maps:get(<<"range">>, utils:ensure_defined(Data, #{}), undefined) of
                         undefined ->
@@ -1268,7 +1268,7 @@ build_rest_download_file_verify_fun(MemRef, FileSize) ->
                             ]);
 
                         {_, ?HTTP_416_RANGE_NOT_SATISFIABLE} ->
-                            file_test_utils:await_distribution(Providers, [FileGuid], [{P1Node, FileSize}])
+                            file_test_utils:await_distribution(Providers, [FileGuid], [{P1Node, FileSize}, {P2Node, 0}])
                     end
             end
     end.

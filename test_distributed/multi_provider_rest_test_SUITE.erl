@@ -49,8 +49,7 @@
 %utils
 -export([
     verify_file/3, create_file/3, create_dir/3,
-    create_nested_directory_tree/4, sync_file_counter/3, create_file_counter/4,
-    verify_distribution/6
+    create_nested_directory_tree/4, sync_file_counter/3, create_file_counter/4
 ]).
 
 all() ->
@@ -69,17 +68,8 @@ all() ->
 
 -define(SPACE1_ID, <<"space1">>).
 
--define(normalizeDistribution(__Distributions), lists:sort(lists:map(fun(__Distribution) ->
-    __Distribution#{
-        <<"totalBlocksSize">> => lists:foldl(fun([_Offset, __Size], __SizeAcc) ->
-            __SizeAcc + __Size
-        end, 0, maps:get(<<"blocks">>, __Distribution))
-    }
-end, __Distributions))).
-
 -define(assertDistribution(Worker, ExpectedDistribution, Config, FileGuid),
-    ?assertEqual(?normalizeDistribution(ExpectedDistribution), begin
-
+    ?assertMatch(ExpectedDistribution, begin
         case rest_test_utils:request(
             Worker,
             <<
@@ -91,7 +81,7 @@ end, __Distributions))).
             ?USER_1_AUTH_HEADERS(Config), []
         ) of
             {ok, 200, _, __Body} ->
-                lists:sort(json_utils:decode(__Body));
+                json_utils:decode(__Body);
             Error ->
                 Error
         end
@@ -153,6 +143,8 @@ transfers_should_be_ordered_by_timestamps(Config) ->
     SpaceId = ?config(space_id, Config),
     DomainP1 = domain(WorkerP1),
     DomainP2 = domain(WorkerP2),
+    StorageP1 = initializer:get_supporting_storage_id(WorkerP1, SpaceId),
+    StorageP2 = initializer:get_supporting_storage_id(WorkerP2, SpaceId),
 
     File = ?absPath(SpaceId, <<"file_sorted">>),
     Size = 1,
@@ -167,8 +159,29 @@ transfers_should_be_ordered_by_timestamps(Config) ->
     % when
     ?assertMatch({ok, #file_attr{size = Size}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
     ?assertMatch({ok, #file_attr{size = Size2}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File2}), ?ATTEMPTS),
-    ExpectedDistribution = [#{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, Size]]}],
-    ExpectedDistribution2 = [#{<<"providerId">> => domain(WorkerP1), <<"blocks">> => [[0, Size2]]}],
+    ExpectedDistributionFun = fun(S) -> #{
+        <<"distributionPerProvider">> => #{
+            DomainP1 => #{
+                <<"distributionPerStorage">> => #{
+                    StorageP1 =>
+                        #{<<"blocks">> => [[0, S]], <<"physicalSize">> => S}
+                },
+                <<"logicalSize">> => S, 
+                <<"success">> => true
+            }, 
+            DomainP2 => #{
+                <<"distributionPerStorage">> => #{
+                    StorageP2 =>
+                        #{<<"blocks">> => [],  <<"physicalSize">> => 0}
+                },
+                <<"logicalSize">> => S,
+                <<"success">> => true
+            }
+        },
+        <<"type">> => atom_to_binary(?REGULAR_FILE_TYPE)
+    } end,
+    ExpectedDistribution = ExpectedDistributionFun(Size),
+    ExpectedDistribution2 = ExpectedDistributionFun(Size2),
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, FileGuid),
     ?assertDistribution(WorkerP2, ExpectedDistribution2, Config, FileGuid2),
 
@@ -659,15 +672,6 @@ verify_file(Worker, SessionId, FileGuid) ->
             ok
     end,
     ?SYNC_FILE_COUNTER ! verified.
-
-verify_distribution(Worker, ExpectedDistribution, Config, FileGuid, FilePath, SessionId) ->
-    case lfm_proxy:stat(Worker, SessionId, ?FILE_REF(FileGuid)) of
-        {ok, #file_attr{type = ?DIRECTORY_TYPE}} ->
-            ?SYNC_FILE_COUNTER ! verified;
-        {ok, #file_attr{type = ?REGULAR_FILE_TYPE}} ->
-            ?assertDistribution(Worker, ExpectedDistribution, Config, FilePath),
-            ?SYNC_FILE_COUNTER ! verified
-    end.
 
 list_ended_transfers(Worker, SpaceId) ->
     {ok, Transfers} = rpc:call(Worker, transfer, list_ended_transfers, [SpaceId]),

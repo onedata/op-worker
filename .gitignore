@@ -23,6 +23,8 @@ rel/files/vm.args
 rel/vars.config
 
 /test/eunit_results
+test/dialyzer_results
+test/codetag_tracker_results
 /test_distributed/logs
 !/test_distributed/logs/.gitkeep
 /test_distributed/cover_tmp.spec

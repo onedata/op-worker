@@ -46,7 +46,7 @@ schedule_workflow_execution(
 ) ->
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
 
-    middleware_worker:check_exec(SessionId, SpaceGuid, #schedule_atm_workflow_execution{
+    middleware_worker:check_exec(SessionId, SpaceGuid, #atm_workflow_execution_schedule_request{
         atm_workflow_schema_id = AtmWorkflowSchemaId,
         atm_workflow_schema_revision_num = AtmWorkflowSchemaRevisionNum,
         store_initial_content_overlay = AtmStoreInitialContentOverlay,
@@ -59,7 +59,7 @@ schedule_workflow_execution(
 cancel_workflow_execution(SessionId, AtmWorkflowExecutionId) ->
     SpaceGuid = atm_workflow_execution_id_to_space_guid(AtmWorkflowExecutionId),
 
-    middleware_worker:check_exec(SessionId, SpaceGuid, #cancel_atm_workflow_execution{
+    middleware_worker:check_exec(SessionId, SpaceGuid, #atm_workflow_execution_cancel_request{
         atm_workflow_execution_id = AtmWorkflowExecutionId
     }).
 
@@ -74,7 +74,7 @@ cancel_workflow_execution(SessionId, AtmWorkflowExecutionId) ->
 repeat_workflow_execution(SessionId, RepeatType, AtmWorkflowExecutionId, AtmLaneRunSelector) ->
     SpaceGuid = atm_workflow_execution_id_to_space_guid(AtmWorkflowExecutionId),
 
-    middleware_worker:check_exec(SessionId, SpaceGuid, #repeat_atm_workflow_execution{
+    middleware_worker:check_exec(SessionId, SpaceGuid, #atm_workflow_execution_repeat_request{
         type = RepeatType,
         atm_workflow_execution_id = AtmWorkflowExecutionId,
         atm_lane_run_selector = AtmLaneRunSelector

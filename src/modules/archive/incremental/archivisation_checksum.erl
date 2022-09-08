@@ -104,9 +104,10 @@ has_checksum_changed(ArchivedFileCtx, FileCtx, UserCtx, Type) ->
 get_json_metadata(FileCtx, UserCtx) ->
     SessionId = user_ctx:get_session_id(UserCtx),
     FileGuid = file_ctx:get_logical_guid_const(FileCtx),
-    case lfm:get_metadata(SessionId, ?FILE_REF(FileGuid), json, [], false) of
-        {ok, JsonMetadata} -> JsonMetadata;
-        {error, ?ENODATA} -> undefined
+    try
+        mi_file_metadata:get_custom_metadata(SessionId, ?FILE_REF(FileGuid), json, [], false)
+    catch throw:?ERROR_POSIX(?ENODATA) ->
+        undefined
     end.
 
 

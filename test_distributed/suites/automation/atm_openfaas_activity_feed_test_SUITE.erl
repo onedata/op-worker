@@ -16,6 +16,7 @@
 
 -include("modules/automation/atm_execution.hrl").
 -include("onenv_test_utils.hrl").
+-include_lib("cluster_worker/include/audit_log.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -734,6 +735,10 @@ verify_recorded_pod_status_changes(RegistryId, SubmittedReports) ->
     }, LogsByPodAcc) ->
         EventData = #{
             <<"timestamp">> => EventTimestamp,
+            <<"severity">> => case EventType of
+                <<"warning">> -> ?WARNING_AUDIT_LOG_SEVERITY;
+                _ -> ?INFO_AUDIT_LOG_SEVERITY
+            end,
             <<"content">> => #{
                 <<"type">> => EventType,
                 <<"reason">> => EventReason,

@@ -144,10 +144,10 @@
 }).
 -type test_ctx() :: #test_ctx{}.
 
--define(AWAIT_OTHER_PARALLEL_PIPELINES_NEXT_STEP_INTERVAL, 100).
+-define(AWAIT_OTHER_PARALLEL_PIPELINES_NEXT_STEP_INTERVAL, 150).
 -define(TEST_HUNG_MAX_PROBES_NUM, 20).
 
--define(ASSERT_RETRIES, 30).
+-define(ASSERT_RETRIES, 45).
 
 -define(TEST_PROC_PID_KEY(__ATM_WORKFLOW_EXECUTION_ID),
     {atm_test_runner_process, __ATM_WORKFLOW_EXECUTION_ID}
@@ -255,16 +255,20 @@ browse_store(AtmStoreSchemaId, AtmMockCallCtx) ->
     browse_store(AtmStoreSchemaId, undefined, AtmMockCallCtx).
 
 
--spec browse_store(automation:id(), undefined | atm_task_execution:id(), mock_call_ctx()) ->
+-spec browse_store(
+    exception_store | automation:id(),
+    undefined | atm_lane_execution:lane_run_selector() | atm_task_execution:id(),
+    mock_call_ctx()
+) ->
     json_utils:json_term().
-browse_store(AtmStoreSchemaId, AtmTaskExecutionId, AtmMockCallCtx = #atm_mock_call_ctx{
+browse_store(AtmStoreSchemaId, AtmTaskExecutionIdOrLaneRunSelector, AtmMockCallCtx = #atm_mock_call_ctx{
     provider = ProviderSelector,
     space = SpaceSelector,
     session_id = SessionId,
     workflow_execution_id = AtmWorkflowExecutionId
 }) ->
     SpaceId = oct_background:get_space_id(SpaceSelector),
-    AtmStoreId = get_store_id(AtmStoreSchemaId, AtmTaskExecutionId, AtmMockCallCtx),
+    AtmStoreId = get_store_id(AtmStoreSchemaId, AtmTaskExecutionIdOrLaneRunSelector, AtmMockCallCtx),
     ?rpc(ProviderSelector, browse_store(SessionId, SpaceId, AtmWorkflowExecutionId, AtmStoreId)).
 
 
@@ -301,8 +305,12 @@ monitor_workflow_execution(TestCtx0) ->
     after ?AWAIT_OTHER_PARALLEL_PIPELINES_NEXT_STEP_INTERVAL ->
         case TestCtx0#test_ctx.test_hung_probes_left of
             0 ->
+                PendingStepPhaseSelectors = lists:map(
+                    fun(#step_phase{selector = StepPhaseSelector}) -> StepPhaseSelector end,
+                    TestCtx0#test_ctx.pending_step_phases
+                ),
                 ct:pal("Automation workflow execution test hung after steps: ~p", [
-                    TestCtx0#test_ctx.executed_step_phases
+                    PendingStepPhaseSelectors ++ TestCtx0#test_ctx.executed_step_phases
                 ]),
                 ?assertEqual(success, failure);
             Num ->
@@ -1123,8 +1131,22 @@ reply_to_execution_process({ExecutionProcPid, MRef}, Reply) ->
 
 
 %% @private
--spec get_store_id(automation:id(), undefined | atm_task_execution:id(), mock_call_ctx()) ->
+-spec get_store_id(
+    exception_store | automation:id(),
+    undefined | atm_lane_execution:lane_run_selector() | atm_task_execution:id(),
+    mock_call_ctx()
+) ->
     atm_store:id().
+get_store_id(exception_store, AtmLaneRunSelector, #atm_mock_call_ctx{
+    provider = ProviderSelector,
+    workflow_execution_id = AtmWorkflowExecutionId
+}) ->
+    {ok, #document{value = AtmWorkflowExecution}} = ?rpc(
+        ProviderSelector, atm_workflow_execution:get(AtmWorkflowExecutionId)
+    ),
+    {ok, AtmLaneRun} = atm_lane_execution:get_run(AtmLaneRunSelector, AtmWorkflowExecution),
+    AtmLaneRun#atm_lane_execution_run.exception_store_id;
+
 get_store_id(?WORKFLOW_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID, _AtmTaskExecutionId, #atm_mock_call_ctx{
     provider = ProviderSelector,
     workflow_execution_id = AtmWorkflowExecutionId
@@ -1176,7 +1198,7 @@ browse_store(SessionId, SpaceId, AtmWorkflowExecutionId, AtmStoreId) ->
 
 %% @private
 build_browse_opts(audit_log) ->
-    #atm_audit_log_store_content_browse_options{listing_opts = ?INFINITE_LOG_BASED_STORES_LISTING_OPTS};
+    #atm_audit_log_store_content_browse_options{browse_opts = ?INFINITE_LOG_BASED_STORES_LISTING_OPTS};
 
 build_browse_opts(list) ->
     #atm_list_store_content_browse_options{listing_opts = ?INFINITE_LOG_BASED_STORES_LISTING_OPTS};
@@ -1192,7 +1214,7 @@ build_browse_opts(single_value) ->
 
 build_browse_opts(time_series) ->
     #atm_time_series_store_content_browse_options{
-        request = #time_series_get_slice_request{
+        request = #time_series_slice_get_request{
             layout = #{?ALL_TIME_SERIES => [?ALL_METRICS]},
             start_timestamp = undefined,
             window_limit = 10000000000000000000000000000000000000000000000000000

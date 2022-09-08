@@ -1309,16 +1309,14 @@ lfm_get_details(Config) ->
 
     Index1 = file_listing:build_index(<<"space_id2">>),
     ?assertMatch({ok, #file_details{
-        file_attr = #file_attr{name = <<"space_name2">>, size = undefined},
-        index_startid = Index1,
+        file_attr = #file_attr{name = <<"space_name2">>, size = undefined, index = Index1},
         active_permissions_type = posix,
         has_metadata = false
     }}, lfm_proxy:get_details(W, SessId1, {path, <<"/space_name2">>})),
 
     Index2 = file_listing:build_index(<<"test5">>, ?GET_DOMAIN_BIN(W)),
     ?assertMatch({ok, #file_details{
-        file_attr = #file_attr{name = <<"test5">>, size = 0},
-        index_startid = Index2,
+        file_attr = #file_attr{name = <<"test5">>, size = 0, index = Index2},
         active_permissions_type = posix,
         has_metadata = false
     }}, lfm_proxy:get_details(W, SessId1, {path, <<"/space_name2/test5">>})),
@@ -1633,7 +1631,7 @@ lfm_truncate_and_write(Config) ->
     ?assertMatch({ok, #file_attr{size = 1}}, lfm_proxy:stat(W, SessId, FileKey), 10),
     verify_file_content(Config, Handle, <<"a">>),
     ?assertMatch({ok, [#{<<"blocks">> := [[0, 1]], <<"totalBlocksSize">> := 1}]},
-        lfm_proxy:get_file_distribution(W, SessId, FileKey)),
+        opt_file_metadata:get_distribution_deprecated(W, SessId, FileKey)),
 
     % Test truncate between writes - blocks should not be aggregated
     % and first block should be trimmed
@@ -1643,7 +1641,7 @@ lfm_truncate_and_write(Config) ->
     ?assertMatch({ok, #file_attr{size = 8}}, lfm_proxy:stat(W, SessId, FileKey), 10),
     verify_file_content(Config, Handle, <<"abc\0\0fgh">>),
     ?assertMatch({ok, [#{<<"blocks">> := [[0, 3], [5, 3]], <<"totalBlocksSize">> := 6}]},
-        lfm_proxy:get_file_distribution(W, SessId, FileKey)),
+        opt_file_metadata:get_distribution_deprecated(W, SessId, FileKey)),
 
     % Test truncate between writes - blocks should not be aggregated
     % and first block should not be included in final result
@@ -1654,7 +1652,7 @@ lfm_truncate_and_write(Config) ->
     verify_file_content(Config, Handle, <<"abc\0\0fgh\0xy">>),
 
     ?assertMatch({ok, [#{<<"blocks">> := [[0, 3], [5, 3], [9, 2]], <<"totalBlocksSize">> := 8}]},
-        lfm_proxy:get_file_distribution(W, SessId, FileKey), 10),
+        opt_file_metadata:get_distribution_deprecated(W, SessId, FileKey), 10),
 
     % Test truncate between writes - blocks should not be aggregated
     % and first block should be trimmed
@@ -1666,7 +1664,7 @@ lfm_truncate_and_write(Config) ->
     ?assertMatch({ok, #file_attr{size = 18}}, lfm_proxy:stat(W, SessId, FileKey), 10),
     verify_file_content(Config, Handle, <<"abc\0\0fgh\0xybcdefgh">>),
     ?assertMatch({ok, [#{<<"blocks">> := [[0, 3], [5, 3], [9, 4], [15, 3]], <<"totalBlocksSize">> := 13}]},
-        lfm_proxy:get_file_distribution(W, SessId, FileKey)),
+        opt_file_metadata:get_distribution_deprecated(W, SessId, FileKey)),
 
     % Test truncate between writes - blocks should not be aggregated
     % and first block should not be included in final result
@@ -1679,7 +1677,7 @@ lfm_truncate_and_write(Config) ->
     verify_file_content(Config, Handle, <<"abc\0\0fgh\0xybcdefghixy">>),
 
     ?assertMatch({ok, [#{<<"blocks">> := [[0, 3], [5, 3], [9, 4], [15, 3], [19, 2]], <<"totalBlocksSize">> := 15}]},
-        lfm_proxy:get_file_distribution(W, SessId, FileKey), 10).
+        opt_file_metadata:get_distribution_deprecated(W, SessId, FileKey), 10).
 
 lfm_acl(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
@@ -2364,7 +2362,7 @@ check_list_recursive_start_after(Worker, SessId, RootDirGuid, Prefix, AllExpecte
 verify_sparse_file(ReadFun, W, SessId, FileGuid, FileSize, ExpectedBlocks) ->
     BlocksSize = lists:foldl(fun([_, Size], Acc) -> Acc + Size end, 0, ExpectedBlocks),
     ?assertMatch({ok, [#{<<"blocks">> := ExpectedBlocks, <<"totalBlocksSize">> := BlocksSize}]},
-        lfm_proxy:get_file_distribution(W, SessId, ?FILE_REF(FileGuid))),
+        opt_file_metadata:get_distribution_deprecated(W, SessId, ?FILE_REF(FileGuid))),
 
     ?assertMatch({ok, #file_attr{size = FileSize}}, lfm_proxy:stat(W, SessId, ?FILE_REF(FileGuid))),
 
@@ -2583,7 +2581,7 @@ verify_details(Config, MainDirPath, Files, FilesOffset, ExpectedSize, Offset, Li
     case List of
         [_ | _] ->
             LastFile = lists:last(List),
-            LastFile#file_details.index_startid;
+            LastFile#file_details.file_attr#file_attr.index;
         _ ->
             undefined
     end.

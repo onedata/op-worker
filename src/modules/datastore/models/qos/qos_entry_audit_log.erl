@@ -15,15 +15,16 @@
 
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("cluster_worker/include/audit_log.hrl").
 -include_lib("cluster_worker/include/modules/datastore/infinite_log.hrl").
 
 %% API
 -export([
     create/1,
-    report_synchronization_started/2,
-    report_file_synchronized/2,
-    report_file_synchronization_skipped/3,
-    report_file_synchronization_failed/3,
+    report_synchronization_started/3,
+    report_file_synchronized/3,
+    report_file_synchronization_skipped/4,
+    report_file_synchronization_failed/4,
     destroy/1,
     browse_content/2
 ]).
@@ -42,65 +43,84 @@
 
 -spec create(id()) -> ok | {error, term()}.
 create(Id) ->
-    json_infinite_log_model:create(Id, #{
+    audit_log:create(Id, #{
         size_pruning_threshold => ?LOG_MAX_SIZE,
         age_pruning_threshold => ?LOG_EXPIRATION
     }).
 
 
--spec report_synchronization_started(id(), file_id:file_guid()) -> ok | {error, term()}.
-report_synchronization_started(Id, FileGuid) ->
-    json_infinite_log_model:append(Id, #{
-        <<"status">> => <<"scheduled">>,
-        <<"severity">> => <<"info">>,
-        <<"fileId">> => file_guid_to_object_id(FileGuid),
-        <<"description">> => <<"Remote replica differs, reconciliation started.">>
-    }).
-
-
--spec report_file_synchronized(id(), file_id:file_guid()) -> ok | {error, term()}.
-report_file_synchronized(Id, FileGuid) ->
-    json_infinite_log_model:append(Id, #{
-        <<"status">> => <<"completed">>,
-        <<"severity">> => <<"info">>,
-        <<"fileId">> => file_guid_to_object_id(FileGuid),
-        <<"description">> => <<"Local replica reconciled.">>
-    }).
-
-
--spec report_file_synchronization_skipped(id(), file_id:file_guid(), skip_reason()) ->
+-spec report_synchronization_started(id(), file_id:file_guid(), file_meta:path()) -> 
     ok | {error, term()}.
-report_file_synchronization_skipped(Id, FileGuid, Reason) ->
-    json_infinite_log_model:append(Id, #{
-        <<"status">> => <<"skipped">>,
-        <<"severity">> => <<"info">>,
-        <<"fileId">> => file_guid_to_object_id(FileGuid),
-        <<"description">> => skip_reason_to_description(Reason)
+report_synchronization_started(Id, FileGuid, FilePath) ->
+    audit_log:append(Id, #audit_log_append_request{
+        severity = ?INFO_AUDIT_LOG_SEVERITY,
+        content = #{
+            <<"status">> => <<"scheduled">>,
+            <<"fileId">> => file_guid_to_object_id(FileGuid),
+            <<"description">> => <<"Remote replica differs, reconciliation started.">>,
+            <<"path">> => FilePath
+        }
     }).
 
 
--spec report_file_synchronization_failed(id(), file_id:file_guid(), {error, term()}) -> ok | {error, term()}.
-report_file_synchronization_failed(Id, FileGuid, Error) ->
+-spec report_file_synchronized(id(), file_id:file_guid(), file_meta:path()) -> 
+    ok | {error, term()}.
+report_file_synchronized(Id, FileGuid, FilePath) ->
+    audit_log:append(Id, #audit_log_append_request{
+        severity = ?INFO_AUDIT_LOG_SEVERITY,
+        content = #{
+            <<"status">> => <<"completed">>,
+            <<"fileId">> => file_guid_to_object_id(FileGuid),
+            <<"description">> => <<"Local replica reconciled.">>,
+            <<"path">> => FilePath
+        }
+    }).
+
+
+-spec report_file_synchronization_skipped(id(), file_id:file_guid(), file_meta:path(), skip_reason()) ->
+    ok | {error, term()}.
+report_file_synchronization_skipped(Id, FileGuid, FilePath, Reason) ->
+    audit_log:append(Id, #audit_log_append_request{
+        severity = ?INFO_AUDIT_LOG_SEVERITY,
+        content = #{
+            <<"status">> => <<"skipped">>,
+            <<"fileId">> => file_guid_to_object_id(FileGuid),
+            <<"description">> => skip_reason_to_description(Reason),
+            <<"path">> => FilePath
+        }
+    }).
+
+
+-spec report_file_synchronization_failed(id(), file_id:file_guid(), file_meta:path(), {error, term()}) -> 
+    ok | {error, term()}.
+report_file_synchronization_failed(Id, FileGuid, FilePath, Error) ->
     ErrorJson = errors:to_json(Error),
-    json_infinite_log_model:append(Id, #{
-        <<"status">> => <<"failed">>,
-        <<"severity">> => <<"error">>,
-        <<"fileId">> => file_guid_to_object_id(FileGuid),
-        <<"description">> => str_utils:format_bin("Failed to reconcile local replica: ~s", 
-            [maps:get(<<"description">>, ErrorJson)]),
-        <<"reason">> => ErrorJson
+
+    audit_log:append(Id, #audit_log_append_request{
+        severity = ?ERROR_AUDIT_LOG_SEVERITY,
+        content = #{
+            <<"status">> => <<"failed">>,
+            <<"fileId">> => file_guid_to_object_id(FileGuid),
+            <<"description">> => str_utils:format_bin(
+                "Failed to reconcile local replica: ~s",
+                [maps:get(<<"description">>, ErrorJson)]
+            ),
+            <<"reason">> => ErrorJson,
+            <<"path">> => FilePath
+        }
     }).
 
 
 -spec destroy(id()) -> ok | {error, term()}.
 destroy(Id) ->
-    json_infinite_log_model:destroy(Id).
+    audit_log:delete(Id).
 
 
--spec browse_content(id(), json_infinite_log_model:listing_opts()) ->
-    {ok, json_infinite_log_model:browse_result()} | {error, term()}.
+-spec browse_content(id(), audit_log_browse_opts:opts()) ->
+    {ok, audit_log:browse_result()} | errors:error().
 browse_content(Id, Opts) ->
-    json_infinite_log_model:browse_content(Id, Opts).
+    audit_log:browse(Id, Opts).
+
 
 %%%===================================================================
 %%% Internal functions

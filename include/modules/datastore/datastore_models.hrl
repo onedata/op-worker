@@ -17,6 +17,7 @@
 -include("modules/storage/luma/luma.hrl").
 -include("modules/fslogic/file_attr.hrl").
 -include("workflow_engine.hrl").
+-include_lib("ctool/include/space_support/support_parameters.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_models.hrl").
 
 -type file_descriptors() :: #{session:id() => non_neg_integer()}.
@@ -126,6 +127,8 @@
     shares = [] :: [od_share:id()],
 
     harvesters = [] :: [od_harvester:id()],
+
+    support_parameters_registry = #support_parameters_registry{} :: support_parameters_registry:record(),
 
     cache_state = #{} :: cache_state()
 }).
@@ -238,6 +241,7 @@
     revision_registry :: atm_lambda_revision_registry:record(),
 
     atm_inventories = [] :: [od_atm_inventory:id()],
+    compatible :: boolean(),
 
     cache_state = #{} :: cache_state()
 }).
@@ -249,6 +253,7 @@
     revision_registry :: atm_workflow_schema_revision_registry:record(),
 
     atm_inventory :: od_atm_inventory:id(),
+    compatible :: boolean(),
 
     cache_state = #{} :: cache_state()
 }).
@@ -430,14 +435,13 @@
 % Model used for storing information concerning archive.
 % One documents is stored for one archive.
 -record(archive, {
+    archiving_provider :: oneprovider:id(),
     dataset_id :: dataset:id(),
     creation_time :: time:seconds(),
     creator :: archive:creator(),
     state :: archive:state(),
     config :: archive:config(),
-    preserved_callback :: archive:callback(),
-    deleted_callback :: archive:callback(),
-    description :: archive:description(),
+    modifiable_fields :: archive:modifiable_fields(),
     % This directory is root for archive.
     % It has predefined uuid=?ARCHIVE_DIR_UUID(ArchiveId)
     % See archivisation_tree.erl for more info.
@@ -766,7 +770,8 @@
 
 %% Model that holds synchronization state for a space
 -record(dbsync_state, {
-    seq = #{} :: #{od_provider:id() => {couchbase_changes:seq(), datastore_doc:timestamp()}}
+    seq = #{} :: #{od_provider:id() => {couchbase_changes:seq(), datastore_doc:timestamp()}},
+    resynchronization_params = #{} :: #{od_provider:id() => dbsync_state:resynchronization_params()}
 }).
 
 %% Model that holds state entries for DBSync worker
@@ -1065,12 +1070,6 @@
 
     % timestamps of status changes that allow verification when historic statistics were trustworthy
     status_change_timestamps = [] :: [dir_stats_service_state:status_change_timestamp()]
-}).
-
-
--record(space_support_state, {
-    accounting_enabled :: boolean(),
-    dir_stats_service_state :: dir_stats_service_state:record()
 }).
 
 

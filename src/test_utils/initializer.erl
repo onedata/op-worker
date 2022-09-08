@@ -1283,6 +1283,10 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
     test_utils:mock_expect(Workers, space_logic, has_eff_user, fun(SessionId, SpaceId, UserId) ->
         {ok, #document{value = #od_space{eff_users = EffUsers}}} = GetSpaceFun(SessionId, SpaceId),
         maps:is_key(UserId, EffUsers)
+    end),
+
+    test_utils:mock_expect(Workers, space_logic, update_support_parameters, fun(_, _) ->
+        ok
     end).
 
 -spec provider_logic_mock_setup(Config :: list(), Workers :: node() | [node()],

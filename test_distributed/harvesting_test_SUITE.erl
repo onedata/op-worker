@@ -583,7 +583,7 @@ changes_should_be_submitted_to_all_harvesters_and_indices_subscribed_for_the_spa
     JSON1 = #{<<"color">> => <<"blue">>},
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID2)),
-    ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), json, JSON1, []),
+    ok = opt_file_metadata:set_custom_metadata(Worker, SessId, ?FILE_REF(Guid), json, JSON1, []),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
     Destination = #{
@@ -616,11 +616,11 @@ changes_from_all_subscribed_spaces_should_be_submitted_to_the_harvester(Config) 
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID3)),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
-    ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), json, JSON1, []),
+    ok = opt_file_metadata:set_custom_metadata(Worker, SessId, ?FILE_REF(Guid), json, JSON1, []),
 
     {ok, Guid2} = lfm_proxy:create(Worker, SessId, ?PATH(FileName2, ?SPACE_ID4)),
     {ok, FileId2} = file_id:guid_to_objectid(Guid2),
-    ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid2), json, JSON2, []),
+    ok = opt_file_metadata:set_custom_metadata(Worker, SessId, ?FILE_REF(Guid2), json, JSON2, []),
 
     Destination = #{?HARVESTER1 => [?INDEX11]},
     ProviderId = ?PROVIDER_ID(Worker),
@@ -663,11 +663,11 @@ each_provider_should_submit_only_local_changes_to_the_harvester(Config) ->
 
     {ok, Guid} = lfm_proxy:create(WorkerP1, SessId, ?PATH(FileName, ?SPACE_ID5)),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
-    ok = lfm_proxy:set_metadata(WorkerP1, SessId, ?FILE_REF(Guid), json, JSON1, []),
+    ok = opt_file_metadata:set_custom_metadata(WorkerP1, SessId, ?FILE_REF(Guid), json, JSON1, []),
 
     {ok, Guid2} = lfm_proxy:create(WorkerP2, SessId2, ?PATH(FileName2, ?SPACE_ID5)),
     {ok, FileId2} = file_id:guid_to_objectid(Guid2),
-    ok = lfm_proxy:set_metadata(WorkerP2, SessId2, ?FILE_REF(Guid2), json, JSON2, []),
+    ok = opt_file_metadata:set_custom_metadata(WorkerP2, SessId2, ?FILE_REF(Guid2), json, JSON2, []),
 
     Destination = #{?HARVESTER3 => [?INDEX31]},
 
@@ -734,11 +734,11 @@ each_provider_should_submit_only_local_changes_to_the_harvester2(Config) ->
 
     {ok, Guid} = lfm_proxy:create(WorkerP1, SessId, ?PATH(FileName, ?SPACE_ID5)),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
-    ok = lfm_proxy:set_metadata(WorkerP1, SessId, ?FILE_REF(Guid), json, JSON1, []),
+    ok = opt_file_metadata:set_custom_metadata(WorkerP1, SessId, ?FILE_REF(Guid), json, JSON1, []),
 
     {ok, Guid2} = lfm_proxy:create(WorkerP2, SessId2, ?PATH(FileName2, ?SPACE_ID5)),
     {ok, FileId2} = file_id:guid_to_objectid(Guid2),
-    ok = lfm_proxy:set_metadata(WorkerP2, SessId2, ?FILE_REF(Guid2), json, JSON2, []),
+    ok = opt_file_metadata:set_custom_metadata(WorkerP2, SessId2, ?FILE_REF(Guid2), json, JSON2, []),
 
     Destination = #{?HARVESTER3 => [?INDEX31]},
 
@@ -824,7 +824,7 @@ submit_entry_failure(Config) ->
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
-    ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), json, JSON1, []),
+    ok = opt_file_metadata:set_custom_metadata(Worker, SessId, ?FILE_REF(Guid), json, JSON1, []),
 
     Destination = #{?HARVESTER1 => [?INDEX11]},
     ProviderId = ?PROVIDER_ID(Worker),
@@ -848,8 +848,8 @@ submit_entry_failure(Config) ->
     {ok, Guid2} = lfm_proxy:create(Worker, SessId, ?PATH(FileName2, ?SPACE_ID1)),
     {ok, FileId2} = file_id:guid_to_objectid(Guid2),
 
-    ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), json, JSON2, []),
-    ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid2), json, JSON3, []),
+    ok = opt_file_metadata:set_custom_metadata(Worker, SessId, ?FILE_REF(Guid), json, JSON2, []),
+    ok = opt_file_metadata:set_custom_metadata(Worker, SessId, ?FILE_REF(Guid2), json, JSON3, []),
 
     % changes should not be submitted as connection to onezone failed
     ?assertNotReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
@@ -921,7 +921,7 @@ delete_entry_failure(Config) ->
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
-    ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), json, JSON1, []),
+    ok = opt_file_metadata:set_custom_metadata(Worker, SessId, ?FILE_REF(Guid), json, JSON1, []),
 
     Destination = #{?HARVESTER1 => [?INDEX11]},
     ProviderId = ?PROVIDER_ID(Worker),

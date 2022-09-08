@@ -171,7 +171,7 @@
 
 -define(assertBlocks(Worker, SessionId, ExpectedDistribution, FileGuid),
     ?assertEqual(lists:sort(ExpectedDistribution), begin
-        case lfm_proxy:get_file_distribution(Worker, SessionId, ?FILE_REF(FileGuid)) of
+        case opt_file_metadata:get_distribution_deprecated(Worker, SessionId, ?FILE_REF(FileGuid)) of
             {ok, __FileBlocks} -> lists:sort(__FileBlocks);
             Error -> Error
         end
@@ -6041,11 +6041,21 @@ should_not_sync_file_during_replication(Config) ->
     ok = lfm_proxy:close(W2, FileHandle),
     ?assertBlocks(W1, SessId, [
         #{
+            <<"blocks">> => [],
+            <<"providerId">> => ?GET_DOMAIN_BIN(W1),
+            <<"totalBlocksSize">> => 0
+        },
+        #{
             <<"blocks">> => [[0, ?TEST_DATA_SIZE]],
             <<"providerId">> => ?GET_DOMAIN_BIN(W2),
             <<"totalBlocksSize">> => ?TEST_DATA_SIZE
         }
     ], FileGuid),
+    
+    % @TODO VFS-VFS-9498 not needed after file replication uses fetched file location instead of dbsynced
+    TestDataSize = ?TEST_DATA_SIZE,
+    ?assertMatch({ok, [[0, TestDataSize]]}, 
+        opt_file_metadata:get_local_knowledge_of_remote_provider_blocks(W1, FileGuid, ?GET_DOMAIN_BIN(W2)), ?ATTEMPTS),
 
     enable_initial_scan(Config, ?SPACE_ID),
     enable_continuous_scans(Config, ?SPACE_ID),
@@ -7039,7 +7049,7 @@ init_per_testcase(Case, Config)
     orelse Case =:= create_subfiles_import_many2_test
     orelse Case =:= append_file_update_test ->
 
-    init_per_testcase(default, dir_stats_collector_test_base:init(Config, true));
+    init_per_testcase(default, dir_stats_collector_test_base:init_and_enable_for_new_space(Config));
 
 init_per_testcase(delete_many_subfiles_test, Config) ->
     Config2 = [
@@ -7047,7 +7057,7 @@ init_per_testcase(delete_many_subfiles_test, Config) ->
             detect_deletions => true,
             detect_modifications => false}} | Config
     ],
-    init_per_testcase(default, dir_stats_collector_test_base:init(Config2, true));
+    init_per_testcase(default, dir_stats_collector_test_base:init_and_enable_for_new_space(Config2));
 
 init_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),

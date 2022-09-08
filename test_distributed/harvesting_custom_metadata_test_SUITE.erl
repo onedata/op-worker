@@ -249,7 +249,7 @@ set_json_metadata(Config) ->
     JSON = #{<<"color">> => <<"blue">>},
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
-    ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), json, JSON, []),
+    ok = opt_file_metadata:set_custom_metadata(Worker, SessId, ?FILE_REF(Guid), json, JSON, []),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
     Destination = #{?HARVESTER1 => [?INDEX11]},
@@ -287,7 +287,7 @@ modify_json_metadata(Config) ->
     JSON = #{<<"color">> => <<"blue">>},
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
-    ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), json, JSON, []),
+    ok = opt_file_metadata:set_custom_metadata(Worker, SessId, ?FILE_REF(Guid), json, JSON, []),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
     Destination = #{?HARVESTER1 => [?INDEX11]},
@@ -305,7 +305,7 @@ modify_json_metadata(Config) ->
     }], ProviderId),
 
     JSON2 = #{<<"color">> => <<"blue">>, <<"size">> => <<"big">>},
-    ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), json, JSON2, []),
+    ok = opt_file_metadata:set_custom_metadata(Worker, SessId, ?FILE_REF(Guid), json, JSON2, []),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
         <<"fileId">> => FileId,
@@ -326,7 +326,7 @@ delete_json_metadata(Config) ->
     JSON = #{<<"color">> => <<"blue">>},
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
-    ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), json, JSON, []),
+    ok = opt_file_metadata:set_custom_metadata(Worker, SessId, ?FILE_REF(Guid), json, JSON, []),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
     Destination = #{?HARVESTER1 => [?INDEX11]},
@@ -343,7 +343,7 @@ delete_json_metadata(Config) ->
         }
     }], ProviderId),
 
-    ok = lfm_proxy:remove_metadata(Worker, SessId, ?FILE_REF(Guid), json),
+    ok = opt_file_metadata:remove_custom_metadata(Worker, SessId, ?FILE_REF(Guid), json),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
         <<"fileId">> => FileId,
@@ -362,7 +362,7 @@ delete_file_with_json_metadata(Config) ->
     JSON = #{<<"color">> => <<"blue">>},
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
-    ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), json, JSON, []),
+    ok = opt_file_metadata:set_custom_metadata(Worker, SessId, ?FILE_REF(Guid), json, JSON, []),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
     Destination = #{?HARVESTER1 => [?INDEX11]},
@@ -397,7 +397,7 @@ modify_json_many_times(Config) ->
         Key = <<"key_", (integer_to_binary(I))/binary>>,
         Value = <<"value_", (integer_to_binary(I))/binary>>,
         JSON = #{Key => Value},
-        ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), json, JSON, []),
+        ok = opt_file_metadata:set_custom_metadata(Worker, SessId, ?FILE_REF(Guid), json, JSON, []),
         JSON
     end, undefined, lists:seq(1, Modifications)),
 
@@ -422,7 +422,7 @@ set_rdf_metadata(Config) ->
     RDF = ?DUMMY_RDF,
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
-    ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), rdf, RDF, []),
+    ok = opt_file_metadata:set_custom_metadata(Worker, SessId, ?FILE_REF(Guid), rdf, RDF, []),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
     Destination = #{?HARVESTER1 => [?INDEX11]},
@@ -459,7 +459,7 @@ modify_rdf_metadata(Config) ->
     RDF = ?DUMMY_RDF,
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
-    ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), rdf, RDF, []),
+    ok = opt_file_metadata:set_custom_metadata(Worker, SessId, ?FILE_REF(Guid), rdf, RDF, []),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
     Destination = #{?HARVESTER1 => [?INDEX11]},
@@ -477,7 +477,7 @@ modify_rdf_metadata(Config) ->
     }], ProviderId),
 
     RDF2 = ?DUMMY_RDF(2),
-    ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), rdf, RDF2, []),
+    ok = opt_file_metadata:set_custom_metadata(Worker, SessId, ?FILE_REF(Guid), rdf, RDF2, []),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
         <<"fileId">> => FileId,
@@ -498,7 +498,7 @@ delete_rdf_metadata(Config) ->
     RDF = ?DUMMY_RDF,
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
-    ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), rdf, RDF, []),
+    ok = opt_file_metadata:set_custom_metadata(Worker, SessId, ?FILE_REF(Guid), rdf, RDF, []),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
     Destination = #{?HARVESTER1 => [?INDEX11]},
@@ -515,7 +515,7 @@ delete_rdf_metadata(Config) ->
         }
     }], ProviderId),
 
-    ok = lfm_proxy:remove_metadata(Worker, SessId, ?FILE_REF(Guid), rdf),
+    ok = opt_file_metadata:remove_custom_metadata(Worker, SessId, ?FILE_REF(Guid), rdf),
 
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
         <<"fileId">> => FileId,
@@ -534,7 +534,7 @@ delete_file_with_rdf_metadata(Config) ->
     RDF = ?DUMMY_RDF,
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
-    ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), rdf, RDF, []),
+    ok = opt_file_metadata:set_custom_metadata(Worker, SessId, ?FILE_REF(Guid), rdf, RDF, []),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
     Destination = #{?HARVESTER1 => [?INDEX11]},
@@ -567,7 +567,7 @@ modify_rdf_many_times(Config) ->
 
     ExpectedFinalRDF = lists:foldl(fun(I, _) ->
         RDF = ?DUMMY_RDF(I),
-        ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), rdf, RDF, []),
+        ok = opt_file_metadata:set_custom_metadata(Worker, SessId, ?FILE_REF(Guid), rdf, RDF, []),
         RDF
     end, undefined, lists:seq(1, Modifications)),
 
@@ -829,7 +829,7 @@ modify_metadata_and_rename_file(Config) ->
     JSON = #{<<"color">> => <<"blue">>},
 
     {ok, Guid} = lfm_proxy:create(Worker, SessId, ?PATH(FileName, ?SPACE_ID1)),
-    ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), json, JSON, []),
+    ok = opt_file_metadata:set_custom_metadata(Worker, SessId, ?FILE_REF(Guid), json, JSON, []),
     {ok, FileId} = file_id:guid_to_objectid(Guid),
 
     Destination = #{?HARVESTER1 => [?INDEX11]},
@@ -848,7 +848,7 @@ modify_metadata_and_rename_file(Config) ->
 
     JSON2 = #{<<"color">> => <<"blue">>, <<"size">> => <<"big">>},
     {ok, Guid} = lfm_proxy:mv(Worker, SessId, ?FILE_REF(Guid), ?PATH(FileName2, ?SPACE_ID1)),
-    ok = lfm_proxy:set_metadata(Worker, SessId, ?FILE_REF(Guid), json, JSON2, []),
+    ok = opt_file_metadata:set_custom_metadata(Worker, SessId, ?FILE_REF(Guid), json, JSON2, []),
 
     % both updates should be aggregated and sent in one batch
     ?assertReceivedHarvestMetadata(?SPACE_ID1, Destination, [#{
