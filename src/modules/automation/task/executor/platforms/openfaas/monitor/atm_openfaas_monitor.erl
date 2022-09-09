@@ -157,7 +157,7 @@ stop_service() ->
 %% Initializes the server.
 %% @end
 %%--------------------------------------------------------------------
--spec init(Args :: term()) -> {ok, state(), {continue, atom()}}.
+-spec init(Args :: term()) -> {ok, undefined, {continue, atom()}}.
 init(_) ->
     process_flag(trap_exit, true),
     {ok, undefined, {continue, create_state_outside_of_init_to_not_block_op_start_for_few_milliseconds}}.

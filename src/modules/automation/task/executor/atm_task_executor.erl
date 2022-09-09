@@ -37,7 +37,7 @@
     delete/1,
     get_type/1,
     is_in_readonly_mode/1,
-    run/2
+    run/3
 ]).
 
 %% persistent_record callbacks
@@ -99,7 +99,7 @@
 
 -callback is_in_readonly_mode(record()) -> boolean().
 
--callback run(lambda_input(), record()) -> ok | no_return().
+-callback run(atm_run_job_batch_ctx:record(), lambda_input(), record()) -> ok | no_return().
 
 
 %%%===================================================================
@@ -157,10 +157,10 @@ is_in_readonly_mode(AtmTaskExecutor) ->
     Model:is_in_readonly_mode(AtmTaskExecutor).
 
 
--spec run(lambda_input(), record()) -> ok | no_return().
-run(LambdaInput, AtmTaskExecutor) ->
+-spec run(atm_run_job_batch_ctx:record(), lambda_input(), record()) -> ok | no_return().
+run(AtmRunJobBatchCtx, LambdaInput, AtmTaskExecutor) ->
     Model = utils:record_type(AtmTaskExecutor),
-    Model:run(LambdaInput, AtmTaskExecutor).
+    Model:run(AtmRunJobBatchCtx, LambdaInput, AtmTaskExecutor).
 
 
 %%%===================================================================
