@@ -39,7 +39,7 @@
 
 -spec save(id(), atm_openfaas_monitor:status()) -> {ok, doc()} | {error, term()}.
 save(Id, Status) ->
-    datastore_model:save(?CTX, #document{key = Id, value = #atm_openfaas_status_cache{
+    {ok, _} = datastore_model:save(?CTX, #document{key = Id, value = #atm_openfaas_status_cache{
         status = Status
     }}).
 

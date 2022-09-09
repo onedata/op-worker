@@ -41,11 +41,11 @@
 
 
 -type status() :: not_configured | unreachable | unhealthy | healthy.
--type condition() :: up | {falling, GraceAttemptsLeft :: non_neg_integer()} | down.
+-type running_smoothness() :: good | {awaiting_recovery, non_neg_integer()} | disrupted.
 
 -record(state, {
     status :: status(),
-    condition :: condition()
+    running_smoothness :: running_smoothness()
 }).
 -type state() :: #state{}.
 
@@ -55,9 +55,9 @@
 -define(STATUS_CHECK_INTERVAL_SECONDS, op_worker:get_env(
     openfaas_status_check_interval_seconds, 60
 )).
--define(STATUS_CHECK_GRACE_ATTEMPTS, op_worker:get_env(
+-define(STATUS_CHECK_GRACE_ATTEMPTS(), max(0, op_worker:get_env(
     openfaas_status_check_grace_attempts, 5
-)).
+))).
 
 -define(REPORT_OPENFAAS_DOWN_TO_ATM_WORKFLOW_EXECUTION_LAYER,
     report_openfaas_down_to_atm_workflow_execution_layer
@@ -162,9 +162,10 @@ init(_) ->
     Status = check_openfaas_status(),
     atm_openfaas_status_cache:save(?SERVICE_NAME, Status),
 
-    State = #state{status = Status, condition = case Status of
-        healthy -> up;
-        _ -> down
+    %% TODO
+    State = #state{status = Status, running_smoothness = case Status of
+        healthy -> good;
+        _ -> disrupted
     end},
     {ok, State, timer:seconds(?STATUS_CHECK_INTERVAL_SECONDS)}.
 
@@ -207,8 +208,7 @@ handle_info(timeout, State = #state{status = CurrentStatus}) ->
     NewStatus = check_openfaas_status(),
     NewStatus /= CurrentStatus andalso atm_openfaas_status_cache:save(?SERVICE_NAME, NewStatus),
 
-    NewState = #state{status = NewStatus, condition = infer_condition(NewStatus, State)},
-    {noreply, NewState, timer:seconds(?STATUS_CHECK_INTERVAL_SECONDS)};
+    {noreply, handle_status_update(NewStatus, State), timer:seconds(?STATUS_CHECK_INTERVAL_SECONDS)};
 
 handle_info(?REPORT_OPENFAAS_DOWN_TO_ATM_WORKFLOW_EXECUTION_LAYER, State = #state{
     status = CurrentStatus
@@ -286,28 +286,30 @@ check_openfaas_status() ->
 
 
 %% @private
--spec infer_condition(NewStatus :: status(), state()) -> condition().
-infer_condition(healthy, _State) ->
-    up;
+-spec handle_status_update(NewStatus :: status(), state()) -> state().
+handle_status_update(healthy, _CurrentState) ->
+    #state{status = healthy, running_smoothness = good};
 
-infer_condition(NewStatus, #state{status = healthy}) ->
-    case max(0, ?STATUS_CHECK_GRACE_ATTEMPTS) of
-        0 ->
-            report_openfaas_down_to_atm_workflow_execution_layer(NewStatus),
-            down;
-        GraceAttempts ->
-            {falling, GraceAttempts - 1}
-    end;
+handle_status_update(NewNotHealthyStatus, #state{status = healthy}) ->
+    handle_status_update(NewNotHealthyStatus, #state{
+        status = NewNotHealthyStatus,
+        running_smoothness = {awaiting_recovery, ?STATUS_CHECK_GRACE_ATTEMPTS()}
+    });
 
-infer_condition(NewStatus, #state{condition = {falling, 0}}) ->
-    report_openfaas_down_to_atm_workflow_execution_layer(NewStatus),
-    down;
+handle_status_update(NewNotHealthyStatus, #state{running_smoothness = {awaiting_recovery, 0}}) ->
+    report_openfaas_down_to_atm_workflow_execution_layer(NewNotHealthyStatus),
+    #state{status = NewNotHealthyStatus, running_smoothness = disrupted};
 
-infer_condition(_NewStatus, #state{condition = {falling, GraceAttemptsLeft}}) ->
-    {falling, GraceAttemptsLeft - 1};
+handle_status_update(NewNotHealthyStatus, #state{
+    running_smoothness = {awaiting_recovery, GraceAttemptsLeft}
+}) ->
+    #state{
+        status = NewNotHealthyStatus,
+        running_smoothness = {awaiting_recovery, GraceAttemptsLeft - 1}
+    };
 
-infer_condition(_NewStatus, #state{condition = down}) ->
-    down.
+handle_status_update(NewNotHealthyStatus, State) ->
+    State#state{status = NewNotHealthyStatus}.
 
 
 %% @private
