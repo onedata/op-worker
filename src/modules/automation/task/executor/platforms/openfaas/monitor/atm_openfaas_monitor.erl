@@ -35,7 +35,7 @@
 %% gen_server callbacks
 -export([
     init/1,
-    handle_call/3, handle_cast/2, handle_info/2,
+    handle_call/3, handle_cast/2, handle_continue/2, handle_info/2,
     terminate/2, code_change/3
 ]).
 
@@ -68,7 +68,8 @@
 
 -define(SERVER, {global, ?MODULE}).
 
--define(SERVICE_NAME, <<"AtmOpenfaasMonitor">>).
+-define(SERVICE_NAME, <<"atm_openfaas_monitor">>).
+-define(SERVICE_ID(), datastore_key:new_from_digest(?SERVICE_NAME)).
 
 
 %%%===================================================================
@@ -78,7 +79,7 @@
 
 -spec setup_internal_service() -> ok.
 setup_internal_service() ->
-    ok = internal_services_manager:start_service(?MODULE, ?SERVICE_NAME, ?SERVICE_NAME, #{
+    ok = internal_services_manager:start_service(?MODULE, ?SERVICE_NAME, ?SERVICE_ID(), #{
         start_function => start_service,
         stop_function => stop_service
     }).
@@ -107,7 +108,7 @@ assert_openfaas_healthy() ->
 
 -spec get_openfaas_status() -> status().
 get_openfaas_status() ->
-    case atm_openfaas_status_cache:get(?SERVICE_NAME) of
+    case atm_openfaas_status_cache:get(?SERVICE_ID()) of
         {ok, #document{value = #atm_openfaas_status_cache{status = Status}}} ->
             Status;
         {error, not_found} ->
@@ -141,7 +142,8 @@ start_service() ->
 
 -spec stop_service() -> ok.
 stop_service() ->
-    ok = supervisor:terminate_child(?FSLOGIC_WORKER_SUP, ?MODULE).
+    ok = supervisor:terminate_child(?FSLOGIC_WORKER_SUP, ?MODULE),
+    ok = supervisor:delete_child(?FSLOGIC_WORKER_SUP, ?MODULE).
 
 
 %%%===================================================================
@@ -155,19 +157,10 @@ stop_service() ->
 %% Initializes the server.
 %% @end
 %%--------------------------------------------------------------------
--spec init(Args :: term()) -> {ok, state(), non_neg_integer()}.
+-spec init(Args :: term()) -> {ok, state(), {continue, atom()}}.
 init(_) ->
     process_flag(trap_exit, true),
-
-    Status = check_openfaas_status(),
-    atm_openfaas_status_cache:save(?SERVICE_NAME, Status),
-
-    %% TODO
-    State = #state{status = Status, running_smoothness = case Status of
-        healthy -> good;
-        _ -> disrupted
-    end},
-    {ok, State, timer:seconds(?STATUS_CHECK_INTERVAL_SECONDS)}.
+    {ok, undefined, {continue, create_state_outside_of_init_to_not_block_op_start_for_few_milliseconds}}.
 
 
 %%--------------------------------------------------------------------
@@ -202,11 +195,32 @@ handle_cast(Request, State) ->
 %% Handles all non call/cast messages
 %% @end
 %%--------------------------------------------------------------------
+-spec handle_continue(Continue :: term(), undefined) ->
+    {noreply, NewState :: state(), non_neg_integer()}.
+handle_continue(create_state_outside_of_init_to_not_block_op_start_for_few_milliseconds, undefined) ->
+    State = case get_openfaas_status() of
+        healthy ->
+            #state{status = healthy, running_smoothness = good};
+        NotHealthyStatus ->
+            report_openfaas_down_to_atm_workflow_execution_layer(NotHealthyStatus),
+            #state{status = NotHealthyStatus, running_smoothness = disrupted}
+    end,
+    atm_openfaas_status_cache:save(?SERVICE_ID(), State#state.status),
+
+    {noreply, State, timer:seconds(?STATUS_CHECK_INTERVAL_SECONDS)}.
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handles all non call/cast messages
+%% @end
+%%--------------------------------------------------------------------
 -spec handle_info(Info :: term(), state()) ->
     {noreply, NewState :: state(), non_neg_integer()}.
 handle_info(timeout, State = #state{status = CurrentStatus}) ->
     NewStatus = check_openfaas_status(),
-    NewStatus /= CurrentStatus andalso atm_openfaas_status_cache:save(?SERVICE_NAME, NewStatus),
+    NewStatus /= CurrentStatus andalso atm_openfaas_status_cache:save(?SERVICE_ID(), NewStatus),
 
     {noreply, handle_status_update(NewStatus, State), timer:seconds(?STATUS_CHECK_INTERVAL_SECONDS)};
 
