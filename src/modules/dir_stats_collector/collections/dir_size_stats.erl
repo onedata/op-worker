@@ -264,7 +264,7 @@ internal_stats_config(Guid) ->
         (?INCARNATION_TIME_SERIES) ->
             {?INCARNATION_TIME_SERIES, current_metric_composition()};
         (StatName) ->
-            {StatName, maps:merge(historical_stats_metric_composition(), current_metric_composition())}
+            {StatName, maps:merge(?DIR_SIZE_STATS_METRICS, current_metric_composition())}
     end, [?INCARNATION_TIME_SERIES | stat_names(Guid)]).
 
 
@@ -288,36 +288,9 @@ current_metric_composition() ->
 
 
 %% @private
--spec historical_stats_metric_composition() -> time_series:metric_composition().
-historical_stats_metric_composition() ->
-    #{
-        ?MINUTE_METRIC => #metric_config{
-            resolution = ?MINUTE_RESOLUTION,
-            retention = 720,
-            aggregator = last
-        },
-        ?HOUR_METRIC => #metric_config{
-            resolution = ?HOUR_RESOLUTION,
-            retention = 1440,
-            aggregator = last
-        },
-        ?DAY_METRIC => #metric_config{
-            resolution = ?DAY_RESOLUTION,
-            retention = 550,
-            aggregator = last
-        },
-        ?MONTH_METRIC => #metric_config{
-            resolution = ?MONTH_RESOLUTION,
-            retention = 360,
-            aggregator = last
-        }
-    }.
-
-
-%% @private
 -spec gen_default_historical_stats_layout(file_id:file_guid()) -> time_series_collection:layout().
 gen_default_historical_stats_layout(Guid) ->
-    MetricNames = maps:keys(historical_stats_metric_composition()),
+    MetricNames = maps:keys(?DIR_SIZE_STATS_METRICS),
     maps_utils:generate_from_list(fun(TimeSeriesName) -> {TimeSeriesName, MetricNames} end, stat_names(Guid)).
 
 
@@ -381,7 +354,7 @@ gen_empty_current_stats(Guid) ->
 %% @private
 -spec gen_empty_historical_stats(file_id:file_guid()) -> historical_stats().
 gen_empty_historical_stats(Guid) ->
-    MetricNames = maps:keys(historical_stats_metric_composition()),
+    MetricNames = maps:keys(?DIR_SIZE_STATS_METRICS),
     maps_utils:generate_from_list(fun(TimeSeriesName) ->
         {TimeSeriesName, maps_utils:generate_from_list(fun(MetricName) ->
             {MetricName, []}

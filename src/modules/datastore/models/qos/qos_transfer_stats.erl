@@ -30,8 +30,10 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% functions operating on document using datastore model API
--export([ensure_exists/1, delete/1, report/3]).
--export([get_layout/2, get_slice/4]).
+-export([ensure_exists/1, delete/1]).
+-export([get_collection_schema/1]).
+-export([browse/3]).
+-export([report/3]).
 
 %% datastore model callbacks
 -export([get_ctx/0]).
@@ -64,16 +66,17 @@ delete(QosEntryId) ->
     ok = datastore_time_series_collection:delete(?CTX, ?COLLECTION_ID(QosEntryId, ?FILES_STATS)).
 
 
--spec get_layout(qos_entry:id(), type()) ->
-    {ok, time_series_collection:layout()} | {error, term()}.
-get_layout(QosEntryId, Type) ->
-    datastore_time_series_collection:get_layout(?CTX, ?COLLECTION_ID(QosEntryId, Type)).
+-spec get_collection_schema(type()) -> time_series_collection_schema:record().
+get_collection_schema(?BYTES_STATS) ->
+    ?QOS_BYTES_STATS_COLLECTION_SCHEMA;
+get_collection_schema(?FILES_STATS) ->
+    ?QOS_FILES_STATS_COLLECTION_SCHEMA.
 
 
--spec get_slice(qos_entry:id(), type(), time_series_collection:layout(), ts_windows:list_options()) ->
-    {ok, time_series_collection:slice()} | {error, term()}.
-get_slice(QosEntryId, Type, SliceLayout, ListWindowsOptions) ->
-    datastore_time_series_collection:get_slice(?CTX, ?COLLECTION_ID(QosEntryId, Type), SliceLayout, ListWindowsOptions).
+-spec browse(qos_entry:id(), type(), ts_browse_request:record()) ->
+    {ok, ts_browse_result:record()} | {error, term()}.
+browse(QosEntryId, Type, TsBrowseRequest) ->
+    datastore_time_series_collection:browse(?CTX, ?COLLECTION_ID(QosEntryId, Type), TsBrowseRequest).
 
 
 -spec report(qos_entry:id(), type(), #{od_storage:id() => non_neg_integer()}) ->
@@ -98,6 +101,7 @@ report(QosEntryId, Type, ValuesPerStorage) ->
 %%% Internal functions
 %%%===================================================================
 
+%% @private
 -spec ensure_exists_internal(time_series_collection:id()) -> ok | {error, term()}.
 ensure_exists_internal(CollectionId) ->
     Config = config_with_time_series([?QOS_TOTAL_TIME_SERIES_NAME]),
@@ -108,6 +112,7 @@ ensure_exists_internal(CollectionId) ->
     end.
 
 
+%% @private
 -spec consume_measurements(time_series_collection:id(), time_series_collection:consume_spec(), non_neg_integer()) ->
     ok.
 consume_measurements(CollectionId, _ConsumeSpec, 0) ->
@@ -131,36 +136,11 @@ consume_measurements(CollectionId, ConsumeSpec, Retries) ->
     end.
 
 
--spec supported_metrics() -> time_series:metric_composition().
-supported_metrics() -> #{
-    ?QOS_MINUTE_METRIC_NAME => #metric_config{
-        resolution = ?MINUTE_RESOLUTION,
-        retention = 120,
-        aggregator = sum
-    },
-    ?QOS_HOUR_METRIC_NAME => #metric_config{
-        resolution = ?HOUR_RESOLUTION,
-        retention = 48,
-        aggregator = sum
-    },
-    ?QOS_DAY_METRIC_NAME => #metric_config{
-        resolution = ?DAY_RESOLUTION,
-        retention = 60,
-        aggregator = sum
-    },
-    ?QOS_MONTH_METRIC_NAME => #metric_config{
-        resolution = ?MONTH_RESOLUTION,
-        retention = 12,
-        aggregator = sum
-    }
-}.
-
-
 %% @private
 -spec config_with_time_series([time_series:name()]) -> time_series_collection:config().
 config_with_time_series(TimeSeriesNames) ->
     maps_utils:generate_from_list(fun(TimeSeriesName) ->
-        {TimeSeriesName, supported_metrics()}
+        {TimeSeriesName, ?QOS_STATS_METRICS}
     end, TimeSeriesNames).
 
 %%%===================================================================
