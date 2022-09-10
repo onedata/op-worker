@@ -22,7 +22,7 @@
     start_all/2,
     stop_all/3,
     resume_all/2,
-    ensure_all_ended/1,
+    ensure_all_stopped/1,
     teardown_all/2,
     delete_all/1, delete/1
 ]).
@@ -147,9 +147,9 @@ resume_all(AtmWorkflowExecutionCtx, AtmParallelBoxExecutions) ->
     end).
 
 
--spec ensure_all_ended([record()]) -> ok | no_return().
-ensure_all_ended(AtmParallelBoxExecutions) ->
-    pforeach_running_task(fun atm_task_execution_handler:handle_ended/1, AtmParallelBoxExecutions).
+-spec ensure_all_stopped([record()]) -> ok | no_return().
+ensure_all_stopped(AtmParallelBoxExecutions) ->
+    pforeach_running_task(fun atm_task_execution_handler:handle_stopped/1, AtmParallelBoxExecutions).
 
 
 -spec teardown_all(atm_workflow_execution_ctx:record(), [record()]) -> ok.
@@ -425,7 +425,7 @@ infer_new_status_from_task_statuses(CurrentStatus, AtmTaskExecutionStatuses) ->
             PossibleNewStatus;
         false ->
             % possible when status is not changing or in case of races (e.g.
-            % stopping task ended while some other task has not been marked
+            % stopping task completed while some other task has not been marked
             % as stopping yet and as such is still active - overall status
             % should remain as stopping rather than regressing to active)
             CurrentStatus

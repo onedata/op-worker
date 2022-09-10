@@ -285,17 +285,17 @@ fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error() ->
                             end
                         end
                     },
-                    handle_task_execution_ended = #atm_step_mock_spec{
+                    handle_task_execution_stopped = #atm_step_mock_spec{
                         after_step_exp_state_diff = fun uncorrelated_result_failure_expect_task_execution_ended/1
                     },
-                    handle_lane_execution_ended = #atm_step_mock_spec{
+                    handle_lane_execution_stopped = #atm_step_mock_spec{
                         after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState}) ->
                             {true, atm_workflow_execution_exp_state_builder:expect_lane_run_failed({1, 1}, false, ExpState)}
                         end
                     }
                 }
             ],
-            handle_workflow_execution_ended = #atm_step_mock_spec{
+            handle_workflow_execution_stopped = #atm_step_mock_spec{
                 after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
                     {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_failed(ExpState0)}
                 end
@@ -604,14 +604,14 @@ job_failure_atm_workflow_execution_test_base(JobFailureType, #fail_atm_workflow_
             process_task_result_for_item = 'build mock spec for process_task_result_for_item step'(
                 JobFailureType, TestcaseId, ShouldItemProcessingFailFun
             ),
-            handle_task_execution_ended = #atm_step_mock_spec{
+            handle_task_execution_stopped = #atm_step_mock_spec{
                 after_step_exp_state_diff = fun(MockCallCtx) ->
                     job_failure_expect_task_execution_ended(
                         TestcaseId, BuildTask1AuditLogExpContentFun, MockCallCtx
                     )
                 end
             },
-            handle_lane_execution_ended = 'build mock for handle_lane_execution_ended step'(
+            handle_lane_execution_stopped = 'build mock for handle_lane_execution_stopped step'(
                 TestcaseId, AtmLaneRunSelector, IsLastExpLaneRun
             )
         }
@@ -630,7 +630,7 @@ job_failure_atm_workflow_execution_test_base(JobFailureType, #fail_atm_workflow_
                 BuildAtmLaneRunTestSpecFun({1, 2}, false),
                 BuildAtmLaneRunTestSpecFun({1, 3}, true)
             ],
-            handle_workflow_execution_ended = #atm_step_mock_spec{
+            handle_workflow_execution_stopped = #atm_step_mock_spec{
                 after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
                     {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_failed(ExpState0)}
                 end
@@ -928,13 +928,13 @@ job_failure_expect_task3_ended(TestcaseId, AtmTask3ExecutionId, ExpState) ->
 
 
 %% @private
--spec 'build mock for handle_lane_execution_ended step'(
+-spec 'build mock for handle_lane_execution_stopped step'(
     term(),
     atm_lane_execution:lane_run_selector(),
     boolean()
 ) ->
     atm_workflow_execution_test_runner:step_mock_spec().
-'build mock for handle_lane_execution_ended step'(TestcaseId, AtmLaneRunSelector, IsLastExpLaneRun) ->
+'build mock for handle_lane_execution_stopped step'(TestcaseId, AtmLaneRunSelector, IsLastExpLaneRun) ->
     #atm_step_mock_spec{
         after_step_exp_state_diff = fun(AtmMockCallCtx = #atm_mock_call_ctx{
             workflow_execution_exp_state = ExpState0

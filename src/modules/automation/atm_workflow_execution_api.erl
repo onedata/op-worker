@@ -267,6 +267,7 @@ purge_all() ->
     lists:foreach(fun(SpaceId) ->
         foreach_atm_workflow_execution(DeleteFun, SpaceId, ?WAITING_PHASE),
         foreach_atm_workflow_execution(DeleteFun, SpaceId, ?ONGOING_PHASE),
+        foreach_atm_workflow_execution(DeleteFun, SpaceId, ?SUSPENDED_PHASE),
         foreach_atm_workflow_execution(DeleteFun, SpaceId, ?ENDED_PHASE)
     end, SpaceIds),
 

@@ -334,7 +334,7 @@ map_results_to_store_test_base(#map_results_to_store_test_spec{
             incarnation_num = 1,
             lane_runs = [#atm_lane_run_execution_test_spec{
                 selector = {1, 1},
-                handle_task_execution_ended = #atm_step_mock_spec{
+                handle_task_execution_stopped = #atm_step_mock_spec{
                     after_step_hook = fun(AtmMockCallCtx = #atm_mock_call_ctx{
                         call_args = [_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId]
                     }) ->

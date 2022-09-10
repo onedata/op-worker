@@ -20,9 +20,9 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 
 % Callbacks
--export([prepare_lane/3, restart_lane/3, run_task_for_item/6, process_task_result_for_item/5, report_item_error/3,
+-export([prepare_lane/3, restart_lane/3, run_task_for_item/5, process_task_result_for_item/5, report_item_error/3,
     handle_task_results_processed_for_all_items/3, process_streamed_task_data/4,
-    handle_task_execution_ended/3, handle_lane_execution_ended/3, handle_workflow_execution_ended/2]).
+    handle_task_execution_stopped/3, handle_lane_execution_stopped/3, handle_workflow_execution_stopped/2, handle_exception/5]).
 % API
 -export([is_last_lane/1, get_ignored_lane_id/0, get_ignored_lane_predecessor_id/0, pack_task_id/3, decode_task_id/1]).
 
@@ -30,7 +30,7 @@
 -define(LAST_LANE_ID, <<"5">>).
 -define(PENULTIMATE_LANE_ID, <<"4">>).
 % Ignored lane is one that is expected to be ignored as a result of lane change by
-% handle_lane_execution_ended callback. It has no parallel boxes and iterator so execution of this lane
+% handle_lane_execution_stopped callback. It has no parallel boxes and iterator so execution of this lane
 % results in exception. It is only possible to execute this lane preparation (also in advance).
 -define(IGNORED_LANE_ID, 1234).
 -define(IGNORED_LANE_PREDECESSOR_ID, <<"2">>).
@@ -143,25 +143,18 @@ restart_lane(ExecutionId, ExecutionContext, LaneId) ->
     workflow_engine:execution_id(),
     test_execution_context(),
     workflow_engine:task_id(),
-    iterator:item(),
-    workflow_handler:finished_callback_id(),
-    workflow_handler:heartbeat_callback_id()
+    workflow_jobs:encoded_job_identifier(),
+    iterator:item()
 ) ->
-    workflow_handler:handler_execution_result().
-run_task_for_item(_ExecutionId, #{task_type := async}, _TaskId, Item, FinishCallback, _) ->
+    ok.
+run_task_for_item(ExecutionId, #{task_type := async}, _TaskId, EncodedJobIdentifier, Item) ->
     spawn(fun() ->
         timer:sleep(100), % TODO VFS-7784 - test with different sleep times
         Result = #{<<"result">> => <<"ok">>, <<"item">> => Item},
-        case binary_to_integer(Item) =< 10 of
-            true ->
-                % Use http_client only for part of items as it is much slower than direct `handle_callback` call
-                http_client:put(FinishCallback, #{}, json_utils:encode(Result));
-            false ->
-                workflow_engine_callback_handler:handle_callback(FinishCallback, Result)
-        end
+        workflow_engine:report_async_task_result(ExecutionId, EncodedJobIdentifier, Result)
     end),
     ok;
-run_task_for_item(_ExecutionId, _Context, _TaskId, _Item, _FinishCallback, _) ->
+run_task_for_item(_ExecutionId, _Context, _TaskId, _EncodedJobIdentifier, _Item) ->
     ok.
 
 
@@ -212,44 +205,44 @@ handle_task_results_processed_for_all_items(_, _, _) ->
     ok.
 
 
--spec handle_task_execution_ended(
+-spec handle_task_execution_stopped(
     workflow_engine:execution_id(),
     test_execution_context(),
     workflow_engine:task_id()
 ) ->
     ok.
-handle_task_execution_ended(_, _, _) ->
+handle_task_execution_stopped(_, _, _) ->
     ok.
 
 
--spec handle_lane_execution_ended(
+-spec handle_lane_execution_stopped(
     workflow_engine:execution_id(),
     test_execution_context(),
     workflow_engine:lane_id()
 ) ->
-    workflow_handler:lane_ended_callback_result().
-handle_lane_execution_ended(ExecutionId, #{
+    workflow_handler:lane_stopped_callback_result().
+handle_lane_execution_stopped(ExecutionId, #{
     lane_to_retry := ?IGNORED_LANE_PREDECESSOR_ID,
     prepare_ignored_lane_in_advance := true
 } = ExecutionContext, ?IGNORED_LANE_PREDECESSOR_ID) ->
-    case handle_lane_execution_ended(ExecutionId,
+    case handle_lane_execution_stopped(ExecutionId,
         maps:remove(prepare_ignored_lane_in_advance, ExecutionContext), ?IGNORED_LANE_PREDECESSOR_ID) of
         ?CONTINUE(?IGNORED_LANE_PREDECESSOR_ID, _) -> ?CONTINUE(?IGNORED_LANE_PREDECESSOR_ID, ?IGNORED_LANE_ID);
         Other -> Other
     end;
-handle_lane_execution_ended(_ExecutionId, #{prepare_ignored_lane_in_advance := true}, ?IGNORED_LANE_PREDECESSOR_ID) ->
+handle_lane_execution_stopped(_ExecutionId, #{prepare_ignored_lane_in_advance := true}, ?IGNORED_LANE_PREDECESSOR_ID) ->
     ?CONTINUE(?NEXT_LANE_ID(?IGNORED_LANE_PREDECESSOR_ID), ?IGNORED_LANE_ID);
-handle_lane_execution_ended(_ExecutionId, #{prepare_in_advance_out_of_order := {LaneId, LaneIdOutOfOrder}}, LaneId) ->
+handle_lane_execution_stopped(_ExecutionId, #{prepare_in_advance_out_of_order := {LaneId, LaneIdOutOfOrder}}, LaneId) ->
     ?CONTINUE(?NEXT_LANE_ID(LaneId), LaneIdOutOfOrder);
-handle_lane_execution_ended(ExecutionId, #{lane_to_retry := LaneId} = ExecutionContext, LaneId) ->
+handle_lane_execution_stopped(ExecutionId, #{lane_to_retry := LaneId} = ExecutionContext, LaneId) ->
     case node_cache:get({lane_retried, ExecutionId, LaneId}, undefined) of
         true ->
-            handle_lane_execution_ended(ExecutionId, maps:remove(lane_to_retry, ExecutionContext), LaneId);
+            handle_lane_execution_stopped(ExecutionId, maps:remove(lane_to_retry, ExecutionContext), LaneId);
         _ ->
             node_cache:put({lane_retried, ExecutionId, LaneId}, true),
             ?CONTINUE(LaneId, ?NEXT_LANE_ID(LaneId))
     end;
-handle_lane_execution_ended(_ExecutionId, #{prepare_in_advance := true} = ExecutionContext, LaneId) ->
+handle_lane_execution_stopped(_ExecutionId, #{prepare_in_advance := true} = ExecutionContext, LaneId) ->
     case {maybe_finish_execution(ExecutionContext, LaneId), LaneId} of
         {?END_EXECUTION, _} ->
             ?END_EXECUTION;
@@ -259,7 +252,7 @@ handle_lane_execution_ended(_ExecutionId, #{prepare_in_advance := true} = Execut
             NextLaneId = ?NEXT_LANE_ID(LaneId),
             ?CONTINUE(NextLaneId, ?NEXT_LANE_ID(NextLaneId))
     end;
-handle_lane_execution_ended(_ExecutionId, ExecutionContext, LaneId) ->
+handle_lane_execution_stopped(_ExecutionId, ExecutionContext, LaneId) ->
     case maybe_finish_execution(ExecutionContext, LaneId) of
         ?END_EXECUTION ->
             ?END_EXECUTION;
@@ -268,13 +261,25 @@ handle_lane_execution_ended(_ExecutionId, ExecutionContext, LaneId) ->
     end.
 
 
--spec handle_workflow_execution_ended(
+-spec handle_workflow_execution_stopped(
     workflow_engine:execution_id(),
     test_execution_context()
 ) ->
     ok.
-handle_workflow_execution_ended(_, _) ->
+handle_workflow_execution_stopped(_, _) ->
     ok.
+
+
+- spec handle_exception(
+    workflow_engine:execution_id(),
+    workflow_engine:execution_context(),
+    throw | error | exit,
+    term(),
+    list()
+) ->
+    ?END_EXECUTION.
+handle_exception(_, _, _, _, _) ->
+    ?END_EXECUTION.
 
 
 %%%===================================================================

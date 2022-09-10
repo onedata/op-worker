@@ -21,7 +21,7 @@
     prepare/3,
     stop/3,
     resume/3,
-    handle_ended/3
+    handle_stopped/3
 ]).
 
 
@@ -68,7 +68,7 @@ prepare(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
         case stop(AtmLaneRunSelector, failure, AtmWorkflowExecutionCtx) of
             {ok, _} ->
                 % Call via ?MODULE: to allow mocking in tests
-                ?MODULE:handle_ended(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx);
+                ?MODULE:handle_stopped(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx);
             ?ERROR_NOT_FOUND ->
                 % failed to create lane run in advance
                 ok
@@ -153,19 +153,19 @@ resume(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
         atm_workflow_execution_logger:workflow_critical(LogContent, Logger),
 
         {ok, _} = stop(AtmLaneRunSelector, failure, AtmWorkflowExecutionCtx),
-        ?MODULE:handle_ended(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
+        ?MODULE:handle_stopped(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
 
         error
     end.
 
 
--spec handle_ended(
+-spec handle_stopped(
     atm_lane_execution:lane_run_selector(),
     atm_workflow_execution:id(),
     atm_workflow_execution_ctx:record()
 ) ->
-    workflow_handler:lane_ended_callback_result() | no_return().
-handle_ended(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
+    workflow_handler:lane_stopped_callback_result() | no_return().
+handle_stopped(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     {IsRetryScheduled, NextAtmWorkflowExecution = #atm_workflow_execution{
         current_lane_index = NextAtmLaneIndex,
         current_run_num = NextRunNum,
@@ -326,9 +326,9 @@ stop_suspended(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, #document{
     value = AtmWorkflowExecution
 }) ->
     stop_parallel_boxes(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecution),
-    % execution was suspended == there was no active process handling it and manual handle_ended
+    % execution was suspended == there was no active process handling it and manual handle_stopped
     % call is necessary
-    atm_lane_execution_status:handle_ended(AtmLaneRunSelector, AtmWorkflowExecutionId),
+    atm_lane_execution_status:handle_stopped(AtmLaneRunSelector, AtmWorkflowExecutionId),
     {ok, stopped}.
 
 
@@ -344,9 +344,9 @@ stop_running(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, #document{
     key = AtmWorkflowExecutionId,
     value = AtmWorkflowExecution
 }) ->
-    %% TODO MW first cancel/stop call
+    workflow_engine:init_cancel_procedure(AtmWorkflowExecutionId),
     stop_parallel_boxes(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecution),
-    workflow_engine:cancel_execution(AtmWorkflowExecutionId),  %% TODO MW second cancel/stop call
+    workflow_engine:finish_cancel_procedure(AtmWorkflowExecutionId),
     {ok, stopping}.
 
 
@@ -391,8 +391,8 @@ end_lane_run(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
         current_run_num = CurrentRunNum
     }}} = atm_workflow_execution:get(AtmWorkflowExecutionId),
 
-    % Check if current lane run is ending here rather then right before this bool
-    % usage as below calls may shift current lane run selector
+    % Check if current lane run is being stopped here rather then right before
+    % this bool usage as below calls may shift current lane run selector
     IsCurrentAtmLaneRun = atm_lane_execution:is_current_lane_run(
         AtmLaneRunSelector, AtmWorkflowExecution
     ),
@@ -402,14 +402,14 @@ end_lane_run(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
     unfreeze_iterated_store_in_case_of_global_store(CurrentRun, AtmWorkflowExecutionCtx),
     freeze_exception_store(CurrentRun),
 
-    atm_parallel_box_execution:ensure_all_ended(AtmParallelBoxExecutions),
+    atm_parallel_box_execution:ensure_all_stopped(AtmParallelBoxExecutions),
 
     #document{
         value = NewAtmWorkflowExecution = #atm_workflow_execution{
             current_lane_index = NextAtmLaneIndex,
             current_run_num = NextRunNum
         }
-    } = atm_lane_execution_status:handle_ended(AtmLaneRunSelector, AtmWorkflowExecutionId),
+    } = atm_lane_execution_status:handle_stopped(AtmLaneRunSelector, AtmWorkflowExecutionId),
 
     atm_parallel_box_execution:teardown_all(AtmWorkflowExecutionCtx, AtmParallelBoxExecutions),
 
@@ -453,7 +453,7 @@ freeze_exception_store(#atm_lane_execution_run{exception_store_id = AtmException
 %% @private
 %% @doc
 %% Performs any operation that needs to be done right before current lane run
-%% execution (all previous preparations must have been ended and lane run ready
+%% execution (all previous preparations must have been stopped and lane run ready
 %% to execute).
 %% @end
 %%--------------------------------------------------------------------
@@ -469,7 +469,7 @@ call_current_lane_run_pre_execution_hooks(AtmWorkflowExecution = #atm_workflow_e
             ),
             atm_store_api:freeze(Run#atm_lane_execution_run.iterated_store_id);
         _ ->
-            % execution must have ended or lane run is still not ready
+            % execution must have stopped or lane run is still not ready
             % (either not fully prepared or previous run is still ongoing)
             ok
     end.

@@ -22,11 +22,11 @@
 -export([init/0, prepare_next_waiting_job/1, prepare_next_waiting_result/1, populate_with_jobs_for_item/4,
     pause_job/2, mark_ongoing_job_finished/2, register_failure/2,
     register_async_job_finish/3, prepare_next_parallel_box/4,
-    get_identfiers_for_next_parallel_boxes/3, has_ongoing_jobs/1]).
+    get_identfiers_for_next_parallel_boxes/3, has_ongoing_jobs/1, get_all_async_cached_result_ids/1]).
 %% Functions returning/updating pending_async_jobs field
 -export([register_async_call/4, check_timeouts/1, reset_keepalive_timer/2]).
 %% Functions operating on job_identifier record
--export([job_identifier_to_binary/1, binary_to_job_identifier/1, get_item_id/2, get_subject_id/3,
+-export([encode_job_identifier/1, decode_job_identifier/1, get_item_id/2, get_subject_id/3,
     get_task_details/2, get_processing_type/1, is_previous/2]).
 %% API used to check which tasks are finished for all items
 -export([is_task_finished/2, is_task_finished/3, build_tasks_tree/1]).
@@ -74,6 +74,7 @@
 }).
 
 -type job_identifier() :: #job_identifier{}.
+-type encoded_job_identifier() :: binary().
 -type jobs_set() :: gb_sets:set(job_identifier()).
 -type items_set() :: sets:set(workflow_execution_state:index()).
 -type pending_async_jobs() :: #{job_identifier() => #async_job_timer{}}.
@@ -87,7 +88,7 @@
 -define(ITERATION_FINISHED, iteration_finished).
 -type results_iterator() :: gb_sets:iter(job_identifier()) | ?ITERATION_FINISHED.
 
--export_type([job_identifier/0, jobs/0, item_processing_result/0]).
+-export_type([job_identifier/0, encoded_job_identifier/0, jobs/0, item_processing_result/0]).
 
 -define(SEPARATOR, "_").
 -define(OPERATION_UNSUPPORTED, operation_unsupported).
@@ -293,6 +294,10 @@ has_ongoing_jobs(#workflow_jobs{ongoing = Ongoing}) ->
     not gb_sets:is_empty(Ongoing).
 
 
+-spec get_all_async_cached_result_ids(jobs()) -> [workflow_cached_async_result:result_ref()].
+get_all_async_cached_result_ids(#workflow_jobs{async_cached_results = Results}) ->
+    maps:values(Results).
+
 %%%===================================================================
 %%% Functions returning/updating pending_async_jobs field
 %%%===================================================================
@@ -372,8 +377,8 @@ reset_keepalive_timer(Jobs = #workflow_jobs{pending_async_jobs = AsyncCalls}, Jo
 %%% Functions operating on job_identifier record
 %%%===================================================================
 
--spec job_identifier_to_binary(job_identifier()) -> binary().
-job_identifier_to_binary(#job_identifier{
+-spec encode_job_identifier(job_identifier()) -> encoded_job_identifier().
+encode_job_identifier(#job_identifier{
     processing_type = ?JOB_PROCESSING,
     item_index = ItemIndex,
     parallel_box_index = BoxIndex,
@@ -382,11 +387,11 @@ job_identifier_to_binary(#job_identifier{
     <<(integer_to_binary(ItemIndex))/binary, ?SEPARATOR,
         (integer_to_binary(BoxIndex))/binary, ?SEPARATOR,
         (integer_to_binary(TaskIndex))/binary>>;
-job_identifier_to_binary(#job_identifier{processing_type = ?ASYNC_RESULT_PROCESSING}) ->
+encode_job_identifier(#job_identifier{processing_type = ?ASYNC_RESULT_PROCESSING}) ->
     throw(?OPERATION_UNSUPPORTED).
 
--spec binary_to_job_identifier(binary()) -> job_identifier().
-binary_to_job_identifier(Binary) ->
+-spec decode_job_identifier(encoded_job_identifier()) -> job_identifier().
+decode_job_identifier(Binary) ->
     [ItemIndexBin, BoxIndexBin, TaskIndexBin] = binary:split(Binary, <<?SEPARATOR>>, [global, trim_all]),
     #job_identifier{
         processing_type = ?JOB_PROCESSING,

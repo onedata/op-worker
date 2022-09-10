@@ -56,9 +56,7 @@
 % TODO VFS-7628 make openfaas respond to https
 %% Endpoint used as callback for Openfaas
 -define(ATM_JOB_OUTPUT_CALLBACK_PATH, "/automation/workflow/executions/:wf_exec_id/jobs/:jid/output").
--define(ATM_JOB_HEARTBEAT_CALLBACK_PATH, "/automation/workflow/executions/:wf_exec_id/jobs/:jid/hearteat").
+-define(ATM_JOB_HEARTBEAT_CALLBACK_PATH, "/automation/workflow/executions/:wf_exec_id/jobs/:jid/heartbeat").
 
-
--define(ATM_TASK_FINISHED_CALLBACK_PATH, "/tasks/").  %% TODO MW rm
 
 -endif.

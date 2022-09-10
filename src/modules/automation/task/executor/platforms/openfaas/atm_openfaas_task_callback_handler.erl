@@ -36,7 +36,7 @@
 
 -spec build_job_batch_output_url(
     atm_workflow_execution:id(),
-    workflow_jobs:job_identifier()
+    workflow_jobs:encoded_job_identifier()
 ) ->
     binary().
 build_job_batch_output_url(AtmWorkflowExecutionId, AtmJobBatchId) ->
@@ -45,7 +45,7 @@ build_job_batch_output_url(AtmWorkflowExecutionId, AtmJobBatchId) ->
 
 -spec build_job_batch_heartbeat_url(
     atm_workflow_execution:id(),
-    workflow_jobs:job_identifier()
+    workflow_jobs:encoded_job_identifier()
 ) ->
     binary().
 build_job_batch_heartbeat_url(AtmWorkflowExecutionId, AtmJobBatchId) ->
@@ -71,17 +71,15 @@ init(Req0, State = #{type := output}) ->
         <<"500">> -> ?ERROR_ATM_JOB_BATCH_CRASHED(trim_body(Body))
     end,
 
-    workflow_engine:report_execution_status_update(
+    workflow_engine:report_async_task_result(
         cowboy_req:binding(wf_exec_id, Req1),
-        <<"todo">>,  %% TODO MW rm ?
-        ?ASYNC_CALL_ENDED,
         cowboy_req:binding(jid, Req1),
         Result
     ),
     {ok, cowboy_req:reply(?HTTP_204_NO_CONTENT, Req1), State};
 
 init(Req, State = #{type := heartbeat}) ->
-    workflow_timeout_monitor:report_heartbeat(
+    workflow_engine:report_async_task_heartbeat(
         cowboy_req:binding(wf_exec_id, Req),
         cowboy_req:binding(jid, Req)
     ),

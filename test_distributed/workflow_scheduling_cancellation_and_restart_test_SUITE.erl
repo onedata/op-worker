@@ -24,7 +24,7 @@
     sync_workflow_external_cancel_during_execution_of_the_only_task_of_lane_test/1,
     sync_workflow_external_cancel_test/1,
     async_workflow_with_prepare_in_advance_external_cancel_test/1,
-    async_workflow_external_cancel_during_handle_callback_test/1,
+    async_workflow_external_cancel_during_report_async_task_result_test/1,
     async_workflow_external_cancel_during_result_processing_test/1,
     internal_cancel_caused_by_sync_job_error_test/1,
     internal_cancel_caused_by_async_job_error_test/1,
@@ -40,6 +40,11 @@
     internal_cancel_caused_by_stream_data_processing_error_test/1,
     internal_cancel_caused_by_stream_closing_error_test/1,
 
+    multiple_parallel_cancels_during_run_task_test/1,
+    multiple_parallel_cancels_during_report_result_test/1,
+    cancel_interrupted_by_exception_during_run_task_test/1,
+    cancel_interrupted_by_exception_during_processing_result_test/1,
+
     restart_callback_failure_test/1
 ]).
 
@@ -49,7 +54,7 @@ all() ->
         sync_workflow_external_cancel_during_execution_of_the_only_task_of_lane_test,
         sync_workflow_external_cancel_test,
         async_workflow_with_prepare_in_advance_external_cancel_test,
-        async_workflow_external_cancel_during_handle_callback_test,
+        async_workflow_external_cancel_during_report_async_task_result_test,
         async_workflow_external_cancel_during_result_processing_test,
         internal_cancel_caused_by_sync_job_error_test,
         internal_cancel_caused_by_async_job_error_test,
@@ -65,6 +70,11 @@ all() ->
         internal_cancel_caused_by_stream_data_processing_error_test,
         internal_cancel_caused_by_stream_closing_error_test,
 
+        multiple_parallel_cancels_during_run_task_test,
+        multiple_parallel_cancels_during_report_result_test,
+        cancel_interrupted_by_exception_during_run_task_test,
+        cancel_interrupted_by_exception_during_processing_result_test,
+
         restart_callback_failure_test
     ]).
 
@@ -76,10 +86,13 @@ all() ->
     test_execution_manager_option ::
         {workflow_scheduling_test_common:test_manager_task_failure_key(), workflow_engine:task_id()} |
         {cancel_execution, prepare_lane, workflow_engine:lane_id()} |
-        {cancel_execution, run_task_for_item | handle_callback |
+        {cancel_execution, run_task_for_item | report_async_task_result |
         process_task_result_for_item, workflow_engine:task_id()} |
+        {init_cancel_procedure, run_task_for_item | report_async_task_result |
+        process_task_result_for_item, workflow_engine:task_id(), CallsNum :: non_neg_integer()} |
         {fail_stream_termination, {workflow_engine:task_id(), handle_task_results_processed_for_all_items}},
-    generator_options = #{} :: workflow_test_handler:generator_options()
+    generator_options = #{} :: workflow_test_handler:generator_options(),
+    verify_history_options = #{} :: #{workflow_scheduling_test_common:lane_history_check_key() => workflow_engine:lane_id()}
 }).
 
 
@@ -107,12 +120,12 @@ async_workflow_with_prepare_in_advance_external_cancel_test(Config) ->
         test_execution_manager_option = {cancel_execution, run_task_for_item, <<"3_3_2">>}
     }).
 
-async_workflow_external_cancel_during_handle_callback_test(Config) ->
+async_workflow_external_cancel_during_report_async_task_result_test(Config) ->
     cancel_and_restart_test_base(Config, #test_config{
         task_type = async,
         prepare_in_advance = true,
         lane_id = <<"1">>,
-        test_execution_manager_option = {cancel_execution, handle_callback, <<"1_1_1">>}
+        test_execution_manager_option = {cancel_execution, report_async_task_result, <<"1_1_1">>}
     }).
 
 async_workflow_external_cancel_during_result_processing_test(Config) ->
@@ -223,6 +236,63 @@ internal_cancel_caused_by_stream_closing_error_test(Config) ->
             {fail_stream_termination, {<<"3_2_2">>, handle_task_results_processed_for_all_items}},
         generator_options = ?EXEMPLARY_STREAMS_WITH_TERMINATION_ERROR
     }).
+
+%%%===================================================================
+
+multiple_parallel_cancels_during_run_task_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    AfterFirstExecutionCallback = fun(ExecutionId) ->
+        rpc:call(Worker, workflow_engine, finish_cancel_procedure, [ExecutionId])
+    end,
+    multiple_parallel_cancels_test_base(Config, #test_config{
+        task_type = async,
+        lane_id = <<"3">>,
+        test_execution_manager_option = {init_cancel_procedure, {run_task_for_item, <<"3_3_2">>, <<"100">>, 3}},
+        verify_history_options = #{stop_on_lane => <<"3">>}
+    }, AfterFirstExecutionCallback).
+
+multiple_parallel_cancels_during_report_result_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    AfterFirstExecutionCallback = fun(ExecutionId) ->
+        rpc:call(Worker, workflow_engine, finish_cancel_procedure, [ExecutionId])
+    end,
+    multiple_parallel_cancels_test_base(Config, #test_config{
+        task_type = async,
+        lane_id = <<"3">>,
+        test_execution_manager_option = {init_cancel_procedure, {report_async_task_result, <<"3_3_2">>, <<"100">>, 3}},
+        prepare_in_advance = true,
+        generator_options = ?EXEMPLARY_STREAMS,
+        verify_history_options = #{stop_on_lane => <<"3">>}
+    }, AfterFirstExecutionCallback).
+
+
+cancel_interrupted_by_exception_during_run_task_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    AfterFirstExecutionCallback = fun(ExecutionId) ->
+        rpc:call(Worker, workflow_engine, init_cancel_procedure, [ExecutionId])
+    end,
+    multiple_parallel_cancels_test_base(Config, #test_config{
+        task_type = async,
+        lane_id = <<"3">>,
+        test_execution_manager_option = {init_cancel_procedure_and_throw, {run_task_for_item, <<"3_3_2">>, <<"100">>}},
+        generator_options = ?EXEMPLARY_STREAMS,
+        verify_history_options = #{expect_exception => <<"3">>}
+    }, AfterFirstExecutionCallback).
+
+
+cancel_interrupted_by_exception_during_processing_result_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    AfterFirstExecutionCallback = fun(ExecutionId) ->
+        rpc:call(Worker, workflow_engine, init_cancel_procedure, [ExecutionId])
+    end,
+    multiple_parallel_cancels_test_base(Config, #test_config{
+        task_type = async,
+        lane_id = <<"3">>,
+        test_execution_manager_option = {init_cancel_procedure_and_throw, {process_task_result_for_item, <<"3_3_2">>, <<"100">>}},
+        generator_options = ?EXEMPLARY_STREAMS,
+        verify_history_options = #{expect_exception => <<"3">>}
+    }, AfterFirstExecutionCallback).
+
 
 %%%===================================================================
 
@@ -345,6 +415,60 @@ cancel_and_restart_test_base(Config, #test_config{
         ExtendedHistoryStats2, TaskType, #{restart => true}),
     workflow_scheduling_test_common:verify_execution_history(
         WorkflowExecutionSpec2, ExecutionHistory2, #{restart_lane => LaneId}),
+
+    workflow_scheduling_test_common:verify_memory(Config, InitialKeys).
+
+
+multiple_parallel_cancels_test_base(Config, #test_config{
+    task_type = TaskType,
+    prepare_in_advance = PrepareInAdvance,
+    lane_id = LaneId,
+    test_execution_manager_option = TestExecutionManagerOption,
+    generator_options = GeneratorOptions,
+    verify_history_options = VerifyHistoryOptions
+}, AfterFirstExecutionCallback) ->
+    InitialKeys = workflow_scheduling_test_common:get_all_workflow_related_datastore_keys(Config),
+    [Worker | _] = ?config(op_worker_nodes, Config),
+
+    #{id := ExecutionId} = WorkflowExecutionSpec = workflow_scheduling_test_common:gen_workflow_execution_spec(
+        TaskType, PrepareInAdvance, GeneratorOptions),
+    {TestExecutionManagerOptionKey, TestExecutionManagerOptionValue} = TestExecutionManagerOption,
+    workflow_scheduling_test_common:set_test_execution_manager_option(
+        Config, TestExecutionManagerOptionKey, TestExecutionManagerOptionValue),
+    ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow,
+        [workflow_scheduling_test_common:get_engine_id(), WorkflowExecutionSpec])),
+
+    #{execution_history := ExecutionHistory} = ExtendedHistoryStats =
+        workflow_scheduling_test_common:get_task_execution_history(Config),
+    ?assertMatch(#{cancel_ans := ok}, ExtendedHistoryStats),
+    workflow_scheduling_test_common:verify_execution_history_stats(
+        ExtendedHistoryStats, TaskType, #{ignore_async_slots_check => true}),
+    ?assertNot(workflow_scheduling_test_common:has_finish_callbacks_for_lane(ExecutionHistory, LaneId)),
+
+    AfterFirstExecutionCallback(ExecutionId),
+    rpc:call(Worker, workflow_engine, finish_cancel_procedure, [ExecutionId]),
+    #{execution_history := ExecutionHistory2} = workflow_scheduling_test_common:get_task_execution_history(Config),
+    ?assertEqual([], ExecutionHistory2),
+
+    rpc:call(Worker, workflow_engine, finish_cancel_procedure, [ExecutionId]),
+    #{execution_history := ExecutionHistory3} =
+        workflow_scheduling_test_common:get_task_execution_history(Config),
+    workflow_scheduling_test_common:verify_execution_history(WorkflowExecutionSpec,
+        ExecutionHistory ++ ExecutionHistory2 ++ ExecutionHistory3, VerifyHistoryOptions),
+    workflow_scheduling_test_common:verify_memory(Config, InitialKeys, true),
+
+    WorkflowExecutionSpec2 = workflow_scheduling_test_common:gen_workflow_execution_spec(
+        TaskType, PrepareInAdvance, #{first_lane_id => LaneId}, ExecutionId),
+    ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow,
+        [workflow_scheduling_test_common:get_engine_id(), WorkflowExecutionSpec2])),
+    ct:print("Workflow restarted"),
+
+    #{execution_history := FinalExecutionHistory} = FinalExtendedHistoryStats =
+        workflow_scheduling_test_common:get_task_execution_history(Config),
+    workflow_scheduling_test_common:verify_execution_history_stats(
+        FinalExtendedHistoryStats, TaskType, #{restart => true}),
+    workflow_scheduling_test_common:verify_execution_history(
+        WorkflowExecutionSpec2, FinalExecutionHistory, #{restart_lane => LaneId}),
 
     workflow_scheduling_test_common:verify_memory(Config, InitialKeys).
 
