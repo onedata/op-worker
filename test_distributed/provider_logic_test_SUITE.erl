@@ -341,7 +341,7 @@ convenience_functions_test(Config) ->
 confined_access_token_test(Config) ->
     [Node | _] = ?config(op_worker_nodes, Config),
 
-    Caveat = #cv_api{whitelist = [{?OP_PANEL, all, ?GRI_PATTERN('*', '*', '*', '*')}]},
+    Caveat = #cv_api{whitelist = [{?OP_PANEL, all, ?GRI_PATTERN('*', <<"*">>, <<"*">>, '*')}]},
     AccessToken = initializer:create_access_token(?USER_1, [Caveat]),
     TokenCredentials = auth_manager:build_token_credentials(
         AccessToken, undefined,
