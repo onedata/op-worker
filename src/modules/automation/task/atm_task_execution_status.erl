@@ -35,9 +35,9 @@
 %%%  |     +-----------+   +----------+     +--------+   +-------------+    2*    +--------+    4*    +-----------+
 %%%  |     |  SKIPPED  |   | FINISHED |     | FAILED |   | INTERRUPTED | <------- | PAUSED | -------> | CANCELLED |
 %%%  |     +-----------+   +----------+     +--------+   +-------------+          +--------+          +-----------+
-%%%  |           |                                              |                      |                     |
-%%%   \          |                                              |                      |                    /
-%%%     ---------o----------------------------------------------o----------------------o-------------------
+%%%  |           |                                              |                      |
+%%%   \          |                                              |                     /
+%%%     ---------o----------------------------------------------o--------------------
 %%%
 %%% ^stopping - common step when halting execution due to:
 %%% 1* - failure severe enough to cause stopping of entire automation workflow execution
@@ -92,7 +92,6 @@ is_transition_allowed(?PAUSED_STATUS, ?CANCELLED_STATUS) -> true;
 is_transition_allowed(?SKIPPED_STATUS, ?PENDING_STATUS) -> true;
 is_transition_allowed(?INTERRUPTED_STATUS, ?PENDING_STATUS) -> true;
 is_transition_allowed(?PAUSED_STATUS, ?PENDING_STATUS) -> true;
-is_transition_allowed(?CANCELLED_STATUS, ?PENDING_STATUS) -> true;
 
 is_transition_allowed(_, _) -> false.
 
@@ -272,8 +271,7 @@ handle_resume(AtmTaskExecutionId) ->
         (AtmTaskExecution = #atm_task_execution{status = Status}) when
             Status =:= ?SKIPPED_STATUS;
             Status =:= ?INTERRUPTED_STATUS;
-            Status =:= ?PAUSED_STATUS;
-            Status =:= ?CANCELLED_STATUS
+            Status =:= ?PAUSED_STATUS
         ->
             {ok, AtmTaskExecution#atm_task_execution{
                 status = ?PENDING_STATUS,
@@ -282,7 +280,8 @@ handle_resume(AtmTaskExecutionId) ->
 
         (#atm_task_execution{status = Status}) when
             Status =:= ?FINISHED_STATUS;
-            Status =:= ?FAILED_STATUS
+            Status =:= ?FAILED_STATUS;
+            Status =:= ?CANCELLED_STATUS
         ->
             {error, task_already_ended}
     end).
