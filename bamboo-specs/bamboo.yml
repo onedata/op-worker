@@ -1,8 +1,7 @@
 ---
 version: 2
 plan:
-  # key: VFS-PROV 
-  key: BAM-PROV 
+  key: VFS-PROV 
 plan-permissions:
 - users:
   - plgdutka
@@ -17,8 +16,7 @@ plan-permissions:
 ---
 version: 2
 plan:
-  # project-key: VFS
-  project-key: BAM
+  project-key: VFS
   key: PROV
   name: op-worker
 variables:
@@ -26,8 +24,7 @@ variables:
   version_major: '2'
   version_minor: '1'
   planSrc: VFS-PROV
-  # branchSrc: develop
-  branchSrc: feature/VFS-9519-auto-quarantine-test-cases-for-new-branches
+  branchSrc: develop
 repositories:
 - op-worker:
     scope: global
