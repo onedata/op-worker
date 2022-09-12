@@ -1267,6 +1267,24 @@
     update_report :: workflow_execution_state:update_report() | undefined
 }).
 
+-record(workflow_execution_state_dump, {
+    engine_id :: workflow_engine:id(),
+    handler :: workflow_handler:handler(),
+    initial_context :: workflow_engine:execution_context(),
+
+    execution_status :: ?NOT_PREPARED | ?EXECUTING,
+    next_lane_preparation_status :: ?NOT_PREPARED | ?PREPARED_IN_ADVANCE,
+
+    lowest_failed_job_identifier :: workflow_jobs:job_identifier() | undefined,
+    failed_job_count = 0 :: non_neg_integer(),
+
+    iteration_state :: workflow_iteration_state:state() | undefined,
+    % TODO VFS-7788 jobs_registry
+    jobs :: workflow_jobs:jobs() | undefined % TODO - chyba powinnismy odpowiedzi przetworzyc
+    % TODO - chyba tego nie bedziemy czymac w dump bo powinno byc przetworzone
+%%    tasks_data_registry :: workflow_tasks_data_registry:registry() | undefined
+}).
+
 -record(workflow_async_call_pool, {
     slots_used = 0 :: non_neg_integer(),
     slots_limit :: non_neg_integer()

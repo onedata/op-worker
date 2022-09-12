@@ -305,7 +305,7 @@ restart_callback_failure_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     #{id := ExecutionId} = WorkflowExecutionSpec =
         workflow_scheduling_test_common:gen_workflow_execution_spec(
-            TaskType, PrepareInAdvance, #{lane_options => #{failure_count_to_cancel => 1}}),
+            TaskType, PrepareInAdvance, #{lane_options => #{failure_count_to_cancel => 1, save_progress => true}}),
     workflow_scheduling_test_common:set_test_execution_manager_option(Config, fail_job, {<<"3_1_1">>, <<"100">>}),
     ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow,
         [workflow_scheduling_test_common:get_engine_id(), WorkflowExecutionSpec])),
@@ -337,7 +337,7 @@ restart_callback_failure_test(Config) ->
     workflow_scheduling_test_common:verify_execution_history_stats(
         ExtendedHistoryStats3, TaskType, #{restart => true}),
     workflow_scheduling_test_common:verify_execution_history(
-        WorkflowExecutionSpec2, ExecutionHistory3, #{restart_lane => LaneId}),
+        WorkflowExecutionSpec2, ExecutionHistory3, #{resume_lane => LaneId}),
 
     workflow_scheduling_test_common:verify_memory(Config, InitialKeys).
 
@@ -361,7 +361,7 @@ cancel_and_restart_test_base(Config, #test_config{
         _ -> #{failure_count_to_cancel => 1}
     end,
     #{id := ExecutionId} = WorkflowExecutionSpec = workflow_scheduling_test_common:gen_workflow_execution_spec(
-        TaskType, PrepareInAdvance, GeneratorOptions#{lane_options => LaneOptions}),
+        TaskType, PrepareInAdvance, GeneratorOptions#{lane_options => LaneOptions, save_progress => true}),
     {TestExecutionManagerOptionKey, TestExecutionManagerOptionValue} = case TestExecutionManagerOption of
         {cancel_execution, prepare_lane, LaneIdToCancel} ->
             {cancel_execution, {prepare_lane, LaneIdToCancel}};
@@ -414,7 +414,7 @@ cancel_and_restart_test_base(Config, #test_config{
     workflow_scheduling_test_common:verify_execution_history_stats(
         ExtendedHistoryStats2, TaskType, #{restart => true}),
     workflow_scheduling_test_common:verify_execution_history(
-        WorkflowExecutionSpec2, ExecutionHistory2, #{restart_lane => LaneId}),
+        WorkflowExecutionSpec2, ExecutionHistory2, #{resume_lane => LaneId}),
 
     workflow_scheduling_test_common:verify_memory(Config, InitialKeys).
 
@@ -431,7 +431,7 @@ multiple_parallel_cancels_test_base(Config, #test_config{
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     #{id := ExecutionId} = WorkflowExecutionSpec = workflow_scheduling_test_common:gen_workflow_execution_spec(
-        TaskType, PrepareInAdvance, GeneratorOptions),
+        TaskType, PrepareInAdvance, GeneratorOptions#{save_progress => true}),
     {TestExecutionManagerOptionKey, TestExecutionManagerOptionValue} = TestExecutionManagerOption,
     workflow_scheduling_test_common:set_test_execution_manager_option(
         Config, TestExecutionManagerOptionKey, TestExecutionManagerOptionValue),
@@ -468,7 +468,7 @@ multiple_parallel_cancels_test_base(Config, #test_config{
     workflow_scheduling_test_common:verify_execution_history_stats(
         FinalExtendedHistoryStats, TaskType, #{restart => true}),
     workflow_scheduling_test_common:verify_execution_history(
-        WorkflowExecutionSpec2, FinalExecutionHistory, #{restart_lane => LaneId}),
+        WorkflowExecutionSpec2, FinalExecutionHistory, #{resume_lane => LaneId}),
 
     workflow_scheduling_test_common:verify_memory(Config, InitialKeys).
 

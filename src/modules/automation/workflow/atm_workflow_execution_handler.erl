@@ -34,7 +34,7 @@
 % workflow_handler callbacks
 -export([
     prepare_lane/3,
-    restart_lane/3,
+    resume_lane/3,
 
     run_task_for_item/5,
     process_task_result_for_item/5,
@@ -235,13 +235,13 @@ prepare_lane(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneRunSelector
     ).
 
 
--spec restart_lane(
+-spec resume_lane(
     atm_workflow_execution:id(),
     atm_workflow_execution_env:record(),
     atm_lane_execution:lane_run_selector()
 ) ->
     {ok, workflow_engine:lane_spec()} | error.
-restart_lane(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneRunSelector) ->
+resume_lane(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, AtmLaneRunSelector) ->
     atm_lane_execution_handler:resume(
         AtmLaneRunSelector,
         AtmWorkflowExecutionId,

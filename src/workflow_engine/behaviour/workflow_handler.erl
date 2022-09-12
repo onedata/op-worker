@@ -51,12 +51,10 @@
 -type lane_stopped_callback_result() :: ?CONTINUE(workflow_engine:lane_id(), workflow_engine:lane_id()) |
     ?END_EXECUTION. % engine does not distinguish reason of execution finish - ?END_EXECUTION is returned
                        % if processed lane is last lane as well as on error
-% TODO VFS-7787 move following types to callback server:
--type finished_callback_id() :: binary().
--type heartbeat_callback_id() :: binary().
+-type progress_data_persistence() :: save_progress | clean_progress.
 
 -export_type([handler/0, async_processing_result/0, handler_execution_result/0, prepare_lane_result/0,
-    lane_stopped_callback_result/0, finished_callback_id/0, heartbeat_callback_id/0]).
+    lane_stopped_callback_result/0, progress_data_persistence/0]).
 
 %%%===================================================================
 %%% Callbacks descriptions
@@ -84,7 +82,7 @@
 %% if resume should result in clean start
 %% @end
 %%--------------------------------------------------------------------
--callback restart_lane(  %% TODO MW rename to resume
+-callback resume_lane(
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
     workflow_engine:lane_id()
@@ -215,7 +213,7 @@
     workflow_engine:execution_id(),
     workflow_engine:execution_context()
 ) ->
-    ok.
+    progress_data_persistence().
 
 
 %%--------------------------------------------------------------------
@@ -232,4 +230,4 @@
     term(),
     list()
 ) ->
-    ?END_EXECUTION.
+    progress_data_persistence().

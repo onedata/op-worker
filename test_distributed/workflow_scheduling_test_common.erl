@@ -321,15 +321,15 @@ mock_handlers(Workers, Manager) ->
             )
     end),
 
-    test_utils:mock_expect(Workers, workflow_test_handler, restart_lane, fun
+    test_utils:mock_expect(Workers, workflow_test_handler, resume_lane, fun
         (_ExecutionId, #{lane_id := _} = _Context, _LaneId) ->
-            % Context with lane_id defined cannot be used in restart_lane handler
+            % Context with lane_id defined cannot be used in resume_lane handler
             % (wrong type of context is used by caller)
             throw(wrong_context);
         (ExecutionId, Context, LaneId) ->
             MockTemplate(
                 #handler_call{
-                    function = prepare_lane, % currently restart_lane and prepare_lane callbacks works identically
+                    function = prepare_lane, % currently resume_lane and prepare_lane callbacks works identically
                     execution_id = ExecutionId,
                     context =  Context,
                     lane_id = LaneId
@@ -624,7 +624,7 @@ verify_lanes_execution_history([{TaskIds, ExpectedItems, LaneExecutionContext} |
 
     VerificationType = case Options of
         #{stop_on_lane := LaneId} -> skip_items_verification;
-        #{restart_lane := LaneId} -> skip_items_verification;
+        #{resume_lane := LaneId} -> skip_items_verification;
         #{expect_empty_items_list := LaneId} -> expect_empty_items_list;
         #{expect_lane_finish := LaneId} -> expect_lane_finish;
         #{expect_exception := LaneId} -> expect_exception;
@@ -692,7 +692,7 @@ verify_lanes_execution_history([{TaskIds, ExpectedItems, LaneExecutionContext} |
 
             NewExpected = case Options of
                 #{stop_on_lane := LaneId} -> [];
-                #{restart_lane := LaneId} -> ExpectedTail
+                #{resume_lane := LaneId} -> ExpectedTail
             end,
             [_ | NewGathered] = lists:dropwhile(fun(HandlerCall) ->
                     HandlerCall =/= FirstNotFiltered

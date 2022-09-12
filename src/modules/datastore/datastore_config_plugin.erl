@@ -98,6 +98,7 @@ get_models() -> [
     archive_recall_progress,
     workflow_engine_state,
     workflow_execution_state,
+    workflow_execution_state_dump,
     workflow_cached_item,
     workflow_cached_async_result,
     workflow_cached_task_data,
