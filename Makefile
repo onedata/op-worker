@@ -126,7 +126,10 @@ coverage:
 
 # Dialyzes the project.
 dialyzer:
-	$(REBAR) dialyzer
+	@./bamboos/scripts/run-with-surefire-report.py \
+		--test-name Dialyze \
+		--report-path test/dialyzer_results/TEST-dialyzer.xml \
+		$(REBAR) dialyzer
 
 ##
 ## Packaging targets
@@ -165,4 +168,7 @@ pkgclean:
 	rm -rf package
 
 codetag-tracker:
-	@echo "Skipping codetag-tracker for release version 20.02.*"
+	@./bamboos/scripts/run-with-surefire-report.py \
+		--test-name CodetagTracker \
+		--report-path test/codetag_tracker_results/TEST-codetag_tracker.xml \
+		echo "Skipping codetag-tracker for release version 20.02.*"
