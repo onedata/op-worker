@@ -277,8 +277,8 @@ fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error() ->
                         }) ->
                             case AnyMeasurementInvalidFun(UncorrelatedResults) of
                                 true ->
-                                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_aborting(
-                                        atm_workflow_execution_exp_state_builder:expect_lane_run_aborting({1, 1}, ExpState)
+                                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(
+                                        atm_workflow_execution_exp_state_builder:expect_lane_run_stopping({1, 1}, ExpState)
                                     )};
                                 false ->
                                     false

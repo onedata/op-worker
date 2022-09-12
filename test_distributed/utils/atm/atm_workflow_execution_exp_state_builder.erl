@@ -34,7 +34,7 @@
     expect_lane_run_started_preparing_in_advance/2,
     expect_lane_run_created/2,
     expect_lane_run_enqueued/2,
-    expect_lane_run_aborting/2,
+    expect_lane_run_stopping/2,
     expect_lane_run_finished/2,
     expect_lane_run_failed/2,
     expect_lane_run_failed/3,
@@ -56,7 +56,7 @@
     expect_task_parallel_box_transitioned_to_inferred_status/3,
     expect_all_tasks_skipped/2,
 
-    expect_workflow_execution_aborting/1,
+    expect_workflow_execution_stopping/1,
     expect_workflow_execution_finished/1,
     expect_workflow_execution_failed/1,
     expect_workflow_execution_cancelled/1,
@@ -156,6 +156,7 @@ init(
 
             <<"scheduleTime">> => build_timestamp_field_validator(ApproxScheduleTime),
             <<"startTime">> => 0,
+            <<"suspendTime">> => 0,
             <<"finishTime">> => 0
         },
         exp_task_execution_state_ctx_registry = #{}
@@ -294,10 +295,10 @@ expect_lane_run_enqueued(AtmLaneRunSelector, ExpStateCtx) ->
     update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx).
 
 
--spec expect_lane_run_aborting(atm_lane_execution:lane_run_selector(), ctx()) ->
+-spec expect_lane_run_stopping(atm_lane_execution:lane_run_selector(), ctx()) ->
     ctx().
-expect_lane_run_aborting(AtmLaneRunSelector, ExpStateCtx) ->
-    ExpAtmLaneRunStateDiff = #{<<"status">> => <<"aborting">>},
+expect_lane_run_stopping(AtmLaneRunSelector, ExpStateCtx) ->
+    ExpAtmLaneRunStateDiff = #{<<"status">> => <<"stopping">>},
     update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx).
 
 
@@ -556,17 +557,17 @@ expect_all_tasks_skipped(AtmLaneRunSelector, ExpStateCtx = #exp_workflow_executi
     }).
 
 
--spec expect_workflow_execution_aborting(ctx()) -> ctx().
-expect_workflow_execution_aborting(ExpStateCtx) ->
+-spec expect_workflow_execution_stopping(ctx()) -> ctx().
+expect_workflow_execution_stopping(ExpStateCtx) ->
     ExpAtmWorkflowExecutionStateDiff = fun
         (ExpAtmWorkflowExecutionState = #{<<"startTime">> := 0}) ->
             % atm workflow execution failure/cancel while in schedule status
             ExpAtmWorkflowExecutionState#{
-                <<"status">> => <<"aborting">>,
+                <<"status">> => <<"stopping">>,
                 <<"startTime">> => build_timestamp_field_validator(?NOW())
             };
         (ExpAtmWorkflowExecutionState) ->
-            ExpAtmWorkflowExecutionState#{<<"status">> => <<"aborting">>}
+            ExpAtmWorkflowExecutionState#{<<"status">> => <<"stopping">>}
     end,
     update_workflow_execution_exp_state(ExpAtmWorkflowExecutionStateDiff, ExpStateCtx).
 
