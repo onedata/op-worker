@@ -75,11 +75,17 @@ get_node_name(FileCtx0, UserCtx) ->
             {FileName, FileCtx2}
     end.
 
+
 -spec get_node_path_tokens(tree_node()) -> {[node_name()], tree_node()}.
 get_node_path_tokens(FileCtx) ->
-    {Path, FileCtx1} = file_ctx:get_canonical_path(FileCtx),
-    [_Separator | PathTokens] = filename:split(Path),
-    {PathTokens, FileCtx1}.
+    {UuidPath, FileCtx1} = file_ctx:get_uuid_based_path(FileCtx),
+    [_Separator, SpaceId | Uuids] = filename:split(UuidPath),
+    {ok, SpaceName} = space_logic:get_name(?ROOT_SESS_ID, SpaceId),
+    PathTokens = lists:map(fun(Uuid) ->
+        {Name, _} = get_node_name(file_ctx:new_by_uuid(Uuid, SpaceId), user_ctx:new(?ROOT_SESS_ID)),
+        Name
+    end, Uuids),
+    {[SpaceName | PathTokens], FileCtx1}.
 
 
 -spec init_node_iterator(tree_node(), node_name() | undefined, recursive_listing:limit()) -> 
@@ -117,15 +123,16 @@ get_next_batch(#{node := FileCtx, opts := ListOpts}, UserCtx) ->
             {false, Ctx} -> check_non_dir_access(UserCtx, Ctx)
         end,
         {Children, PaginationToken, FileCtx3} = file_tree:list_children(
-            FileCtx2, UserCtx, ListOpts, CanonicalChildrenWhiteList),
-            ProgressMarker = case file_listing:is_finished(PaginationToken) of
-                true -> done;
-                false -> more
-            end,
-            {ProgressMarker, Children, #{
-                node => FileCtx3, 
-                opts => #{pagination_token => PaginationToken}}
-            }
+            FileCtx2, UserCtx, ListOpts, CanonicalChildrenWhiteList
+        ),
+        ProgressMarker = case file_listing:is_finished(PaginationToken) of
+            true -> done;
+            false -> more
+        end,
+        {ProgressMarker, Children, #{
+            node => FileCtx3, 
+            opts => #{pagination_token => PaginationToken}}
+        }
     catch throw:?EACCES ->
         no_access
     end.

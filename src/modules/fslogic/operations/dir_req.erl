@@ -340,9 +340,9 @@ get_children_details_insecure(UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhit
 %% @private
 %% @doc
 %% Lists recursively files ordered by path lexicographically. 
-%%% By default only non-directory (i.e regular, symlinks and hardlinks) are listed.
-%%% When options `include_directories` is set to true directory entries will be included in result.
-%%% For more details consult `recursive_listing` and `recursive_file_listing_node` module doc.
+%% By default only non-directory (i.e regular, symlinks and hardlinks) are listed.
+%% When options `include_directories` is set to true directory entries will be included in result.
+%% For more details consult `recursive_listing` and `recursive_file_listing_node` module doc.
 %% @end
 %%--------------------------------------------------------------------
 -spec list_recursively_insecure(user_ctx:ctx(), file_ctx:ctx(), recursive_listing_opts()) ->

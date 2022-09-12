@@ -58,6 +58,11 @@ get_node_id(#dataset_info{id = Id} = DatasetInfo) ->
     {Id, DatasetInfo}.
 
 
+-spec get_node_name(tree_node(), user_ctx:ctx() | undefined) -> {node_name(), tree_node()}.
+get_node_name(#dataset_info{root_file_path = RootFilePath} = DatasetInfo, _UserCtx) ->
+    {filename:basename(RootFilePath), DatasetInfo}.
+
+
 -spec get_node_path_tokens(tree_node()) -> {[node_name()], tree_node()}.
 get_node_path_tokens(#dataset_info{root_file_guid = RootFileGuid, id = Id} = DatasetInfo) ->
     SpaceId = file_id:guid_to_space_id(RootFileGuid),
@@ -69,11 +74,6 @@ get_node_path_tokens(#dataset_info{root_file_guid = RootFileGuid, id = Id} = Dat
         Name
     end, [Id | EffAncestorDatasets]),
     {[SpaceId | lists:reverse(PathTokens)], DatasetInfo}.
-
-
--spec get_node_name(tree_node(), user_ctx:ctx() | undefined) -> {node_name(), tree_node()}.
-get_node_name(#dataset_info{root_file_path = RootFilePath} = DatasetInfo, _UserCtx) ->
-    {filename:basename(RootFilePath), DatasetInfo}.
 
 
 -spec init_node_iterator(tree_node(), node_name() | undefined, recursive_listing:limit()) -> 

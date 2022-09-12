@@ -458,7 +458,7 @@ translate_from_protobuf(#'GetFileChildren'{
             };
         _ ->
             #{
-                pagination_token => Token
+                pagination_token => file_listing:decode_pagination_token(Token)
             }
     end,
     #get_file_children{
@@ -481,7 +481,7 @@ translate_from_protobuf(#'GetFileChildrenAttrs'{
             };
         _ ->
             #{
-                pagination_token => Token
+                pagination_token => file_listing:decode_pagination_token(Token)
             }
     end,
     #get_file_children_attrs{
@@ -1491,7 +1491,8 @@ translate_to_protobuf(#get_file_children{listing_options = ListingOpts}) ->
     {get_file_children, #'GetFileChildren'{
         offset = maps:get(offset, ListingOpts, undefined),
         size = maps:get(limit, ListingOpts, undefined),
-        index_token = maps:get(pagination_token, ListingOpts, undefined),
+        index_token = file_listing:encode_pagination_token(
+            maps:get(pagination_token, ListingOpts, undefined)),
         index_startid = maps:get(index, ListingOpts, undefined)
     }};
 translate_to_protobuf(#get_file_children_attrs{
@@ -1502,7 +1503,8 @@ translate_to_protobuf(#get_file_children_attrs{
     {get_file_children_attrs, #'GetFileChildrenAttrs'{
         offset = maps:get(offset, ListingOpts, undefined),
         size = maps:get(limit, ListingOpts, undefined),
-        index_token = maps:get(pagination_token, ListingOpts, undefined),
+        index_token = file_listing:encode_pagination_token(
+            maps:get(pagination_token, ListingOpts, undefined)),
         include_replication_status = IRS,
         include_link_count = ILC
     }};
