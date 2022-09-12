@@ -147,7 +147,7 @@ update_job_progress(Id, Job, Pool, TaskId, Status) ->
     {ok, traverse:master_job_map()}.
 do_master_job(InitialJob, MasterJobArgs = #{task_id := TaskId}) ->
     ErrorHandler = fun(Job, Reason, Stacktrace) ->
-        handle_error(TaskId, Job),
+        handle_verification_error(TaskId, Job),
         ?error_stacktrace("Unexpected error during verification of archive ~p:~n~p", 
             [TaskId, Reason], Stacktrace),
         {ok, #{}} % unexpected error - no jobs can be created
@@ -158,7 +158,7 @@ do_master_job(InitialJob, MasterJobArgs = #{task_id := TaskId}) ->
 -spec do_slave_job(tree_traverse:slave_job(), id()) -> ok.
 do_slave_job(InitialJob, TaskId) ->
     ErrorHandler = fun(Job, Reason, Stacktrace) ->
-        handle_error(TaskId, Job),
+        handle_verification_error(TaskId, Job),
         ?error_stacktrace("Unexpected error during verification of archive ~p:~n~p", 
             [TaskId, Reason], Stacktrace)
     end,
@@ -186,7 +186,7 @@ do_slave_job_unsafe(#tree_traverse_slave{
                 true ->
                     ?warning("Invalid checksum for file ~p in archive ~p",
                         [file_ctx:get_logical_guid_const(FileCtx), TaskId]),
-                    handle_error(TaskId, Job)
+                    handle_verification_error(TaskId, Job)
             end
     end.
 
@@ -217,15 +217,15 @@ do_dir_master_job_unsafe(#tree_traverse{
                     true ->
                         ?warning("Invalid checksum for dir ~p in archive ~p", 
                             [file_ctx:get_logical_guid_const(FileCtx), TaskId]),
-                        handle_error(TaskId, Job)
+                        handle_verification_error(TaskId, Job)
                 end
         end
     end,
     tree_traverse:do_master_job(Job, MasterJobArgs, NewJobsPreprocessor).
 
 
--spec handle_error(id(), tree_traverse:job()) -> ok.
-handle_error(TaskId, Job) ->
+-spec handle_verification_error(id(), tree_traverse:job()) -> ok.
+handle_verification_error(TaskId, Job) ->
     {FileGuid, FilePath} = job_to_error_info(Job),
     archivisation_audit_log:report_file_verification_failed(TaskId, FileGuid, FilePath),
     archive:mark_verification_failed(TaskId),

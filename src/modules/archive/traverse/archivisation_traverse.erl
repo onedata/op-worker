@@ -167,7 +167,7 @@ do_master_job(InitialJob, MasterJobArgs = #{task_id := TaskId}) ->
     ErrorHandler = fun(Job, Reason, Stacktrace) ->
         report_error(TaskId, #tree_traverse{user_id = UserId} = Job, Reason, Stacktrace),
         {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId),
-        do_aborted_master_job(Job, MasterJobArgs, UserCtx, failed)
+        do_aborted_master_job(Job, MasterJobArgs, UserCtx, {failed, Reason})
     end,
     archive_traverses_common:do_master_job(?MODULE, InitialJob, MasterJobArgs, ErrorHandler).
 
@@ -186,7 +186,7 @@ do_slave_job(InitialJob, TaskId) ->
         report_error(TaskId, Job, Reason, Stacktrace),
         {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId),
         archivisation_traverse_logic:mark_finished_and_propagate_up(
-            FileCtx, UserCtx, TraverseInfo, TaskId, MasterJobUuid, StartTimestamp, RelativePath, failed)
+            FileCtx, UserCtx, TraverseInfo, TaskId, MasterJobUuid, StartTimestamp, RelativePath, {failed, Reason})
     end,
     archive_traverses_common:execute_unsafe_job(
         ?MODULE, do_slave_job_unsafe, [TaskId, StartTimestamp], InitialJob, ErrorHandler).
@@ -291,13 +291,12 @@ build_new_jobs_preprocessor_fun(TaskId, FileCtx, TraverseInfo, UserCtx, Relative
 
 -spec report_error(id(), tree_traverse:job(), Reason :: any(), Stacktrace :: list()) -> ok.
 report_error(TaskId, Job, Reason, Stacktrace) ->
-    {ArchiveDocs, FileGuid, FilePath} = job_to_error_info(Job),
+    {ArchiveDocs, FileGuid} = job_to_error_info(Job),
     lists:foreach(fun(ArchiveDoc) ->
         {ok, ArchiveId} = archive:get_id(ArchiveDoc),
         archive:mark_file_failed(ArchiveDoc),
         ?error_stacktrace("Unexpected error during archivisation(~p) of file ~p in archive ~p:~n~p", 
-            [TaskId, FileGuid, ArchiveId, Reason], Stacktrace),
-        archivisation_audit_log:report_file_archivisation_failed(ArchiveId, FileGuid, FilePath, Reason)
+            [TaskId, FileGuid, ArchiveId, Reason], Stacktrace)
     end, ArchiveDocs).
 
 
@@ -391,21 +390,11 @@ resolve_symlink(FileCtx, UserCtx) ->
     end.
 
 
--spec job_to_error_info(tree_traverse:job()) -> {[archive:doc()], file_id:file_guid(), file_meta:path()}.
-job_to_error_info(#tree_traverse{traverse_info = TraverseInfo, file_ctx = FileCtx, relative_path = Path}) -> 
-    {info_to_archive_docs(TraverseInfo), file_ctx:get_logical_guid_const(FileCtx), Path};
-job_to_error_info(#tree_traverse_slave{traverse_info = TraverseInfo, file_ctx = FileCtx, relative_path = Path}) ->
-    {info_to_archive_docs(TraverseInfo), file_ctx:get_logical_guid_const(FileCtx), Path}.
-
-
--spec info_to_archive_docs(info()) -> [archive:doc()].
-info_to_archive_docs(#{aip_ctx := AipCtx, dip_ctx := DipCtx}) ->
-    lists:filtermap(fun(ArchivisationCtx) ->
-        case archivisation_traverse_ctx:get_archive_doc(ArchivisationCtx) of
-            undefined -> false;
-            ArchiveDoc -> {true, ArchiveDoc}
-        end
-    end, [AipCtx, DipCtx]).
+-spec job_to_error_info(tree_traverse:job()) -> {[archive:doc()], file_id:file_guid()}.
+job_to_error_info(#tree_traverse{traverse_info = TraverseInfo, file_ctx = FileCtx}) -> 
+    {archivisation_traverse_logic:info_to_archive_docs(TraverseInfo), file_ctx:get_logical_guid_const(FileCtx)};
+job_to_error_info(#tree_traverse_slave{traverse_info = TraverseInfo, file_ctx = FileCtx}) ->
+    {archivisation_traverse_logic:info_to_archive_docs(TraverseInfo), file_ctx:get_logical_guid_const(FileCtx)}.
 
 
 -spec get_base_archive_doc(archive:doc(), archive:config()) -> archive:doc() | undefined.

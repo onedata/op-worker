@@ -1074,16 +1074,23 @@ audit_log_test_base(ExpectedState, FailedFileType) ->
         {ArchiveDataDirGuid, ArchivedChildFileGuid}
     end,
     
+    % error mocked in mock_job_function_error/2
+    ErrorReasonJson = #{
+        <<"description">> => <<"Operation failed with POSIX error: enoent.">>,
+        <<"details">> => #{<<"errno">> => <<"enoent">>},
+        <<"id">> => <<"posix">>
+    },
+    
     ExpectedLogsTemplates = case {ExpectedState, FailedFileType} of
         {?ARCHIVE_PRESERVED, _} -> [
             {ok, ChildFileGuid, PathFun([DirName, ChildFileName])},
             {ok, DirGuid, PathFun([DirName])}
         ];
         {?ARCHIVE_FAILED, dir} -> [
-            {archivisation_failed, DirGuid, PathFun([DirName])}
+            {archivisation_failed, DirGuid, PathFun([DirName]), ErrorReasonJson}
         ];
         {?ARCHIVE_FAILED, reg_file} -> [
-            {archivisation_failed, ChildFileGuid, PathFun([DirName, ChildFileName])},
+            {archivisation_failed, ChildFileGuid, PathFun([DirName, ChildFileName]), ErrorReasonJson},
             {ok, DirGuid, PathFun([DirName])}
         ];
         {?ARCHIVE_VERIFICATION_FAILED, dir} ->
@@ -1102,7 +1109,7 @@ audit_log_test_base(ExpectedState, FailedFileType) ->
             ]
     end,
     GetAuditLogFun = fun() ->
-        case opw_test_rpc:call(krakow, qos_entry_audit_log, browse_content, [ArchiveId, #{}]) of
+        case opw_test_rpc:call(krakow, archivisation_audit_log, browse, [ArchiveId, #{}]) of
             {ok, #{<<"isLast">> := IsLast, <<"logEntries">> := LogEntries}} ->
                 LogEntriesWithoutIndices = lists:map(fun(Entry) ->
                     maps:remove(<<"index">>, Entry)
@@ -1113,12 +1120,12 @@ audit_log_test_base(ExpectedState, FailedFileType) ->
         end
     end,
     ExpectedLogs = lists:map(fun(Template) -> 
-        log_template_mapper(Timestamp, Template) 
+        log_template_to_expected_entry(Timestamp, Template) 
     end, ExpectedLogsTemplates),
     ?assertMatch({ok, {true, ExpectedLogs}}, GetAuditLogFun()).
 
 
-log_template_mapper(Timestamp, {ok, Guid, Path}) ->
+log_template_to_expected_entry(Timestamp, {ok, Guid, Path}) ->
     {ok, ObjectId} = file_id:guid_to_objectid(Guid),
     #{
         <<"content">> => #{
@@ -1129,22 +1136,19 @@ log_template_mapper(Timestamp, {ok, Guid, Path}) ->
         <<"severity">> => <<"info">>,
         <<"timestamp">> => Timestamp
     };
-log_template_mapper(Timestamp, {archivisation_failed, Guid, Path}) ->
+log_template_to_expected_entry(Timestamp, {archivisation_failed, Guid, Path, ErrorReasonJson}) ->
     {ok, ObjectId} = file_id:guid_to_objectid(Guid),
     #{
         <<"content">> => #{
             <<"description">> => <<"File archivisation failed.">>,
             <<"fileId">> => ObjectId,
             <<"path">> => Path,
-            <<"reason">> => #{
-                <<"description">> => <<"Operation failed with POSIX error: enoent.">>,
-                <<"details">> => #{<<"errno">> => <<"enoent">>},
-                <<"id">> => <<"posix">>
-            }},
+            <<"startTimestamp">> => Timestamp,
+            <<"reason">> => ErrorReasonJson},
         <<"severity">> => <<"error">>,
         <<"timestamp">> => Timestamp
     };
-log_template_mapper(Timestamp, {verification_failed, Guid, Path}) ->
+log_template_to_expected_entry(Timestamp, {verification_failed, Guid, Path}) ->
     {ok, ObjectId} = file_id:guid_to_objectid(Guid),
     #{
         <<"content">> => #{

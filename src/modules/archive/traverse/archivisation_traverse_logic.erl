@@ -25,7 +25,8 @@
     mark_finished_and_propagate_up/8, 
     handle_file/4,
     initialize_archive_dir/3,
-    save_dir_checksum_metadata/3
+    save_dir_checksum_metadata/3,
+    info_to_archive_docs/1
 ]).
 
 -type id() :: archivisation_traverse:id().
@@ -68,15 +69,11 @@ mark_building_if_first_job(Job = #tree_traverse{traverse_info = #{
 
 
 -spec mark_finished_and_propagate_up(file_ctx:ctx(), user_ctx:ctx(), info(), id(), file_meta:uuid(), 
-    time:millis(), file_meta:path(), failed | completed) -> ok.
+    time:millis(), file_meta:path(), {failed, Reason :: any()} | completed) -> ok.
 mark_finished_and_propagate_up(
     CurrentFileCtx, UserCtx, TraverseInfo, TaskId, SourceMasterUuid, StartTimestamp, FilePath, Status
 ) ->
-    FileGuid = file_ctx:get_logical_guid_const(CurrentFileCtx),
-    Status =:= completed andalso lists:foreach(fun(ArchiveId) ->
-        archivisation_audit_log:report_file_archivisation_finished(
-            ArchiveId, FileGuid, FilePath, StartTimestamp)
-    end, info_to_archive_ids(TraverseInfo)),
+    report_to_audit_log(CurrentFileCtx, TraverseInfo, StartTimestamp, FilePath, Status),
     NextTraverseInfo = mark_finished_if_current_archive_is_rooted_in_current_file(
         CurrentFileCtx, UserCtx, TraverseInfo),
     propagate_finished_up(CurrentFileCtx, UserCtx, NextTraverseInfo, TaskId, SourceMasterUuid, FilePath).
@@ -133,6 +130,16 @@ save_dir_checksum_metadata(undefined, _, _) ->
 save_dir_checksum_metadata(FileGuid, UserCtx, TotalChildrenCount) ->
     FileCtx = file_ctx:new_by_guid(FileGuid),
     archivisation_checksum:dir_calculate_and_save(FileCtx, UserCtx, TotalChildrenCount).
+
+
+-spec info_to_archive_docs(info()) -> [archive:doc()].
+info_to_archive_docs(#{aip_ctx := AipCtx, dip_ctx := DipCtx}) ->
+    lists:filtermap(fun(ArchivisationCtx) ->
+        case archivisation_traverse_ctx:get_archive_doc(ArchivisationCtx) of
+            undefined -> false;
+            ArchiveDoc -> {true, ArchiveDoc}
+        end
+    end, [AipCtx, DipCtx]).
 
 
 %%%===================================================================
@@ -490,14 +497,18 @@ is_archive_rooted_in_current_file(CurrentFileCtx, #{
         (CurrentFileGuid =:= CurrentArchiveRootGuid andalso CreateNestedArchives).
 
 
--spec info_to_archive_ids(info()) -> [archive:doc()].
-info_to_archive_ids(#{aip_ctx := AipCtx, dip_ctx := DipCtx}) ->
-    lists:filtermap(fun(ArchivisationCtx) ->
-        case archivisation_traverse_ctx:get_archive_doc(ArchivisationCtx) of
-            undefined -> 
-                false;
-            ArchiveDoc ->
-                {ok, ArchiveId} = archive:get_id(ArchiveDoc),
-                {true, ArchiveId}
-        end
-    end, [AipCtx, DipCtx]).
+-spec report_to_audit_log(file_ctx:ctx(), info(), time:millis(), file_meta:path(),
+    {failed, Reason :: any()} | completed) -> ok.
+report_to_audit_log(CurrentFileCtx, TraverseInfo, StartTimestamp, FilePath, Status) ->
+    FileGuid = file_ctx:get_logical_guid_const(CurrentFileCtx),
+    {ReportFun, AdditionalArgs} = case Status of
+        completed ->
+            {fun archivisation_audit_log:report_file_archivisation_finished/4, []};
+        {failed, Reason} ->
+            {fun archivisation_audit_log:report_file_archivisation_failed/5, [Reason]}
+    end,
+    
+    lists:foreach(fun(ArchiveDoc) ->
+        {ok, ArchiveId} = archive:get_id(ArchiveDoc),
+        erlang:apply(ReportFun, [ArchiveId, FileGuid, FilePath, StartTimestamp | AdditionalArgs])
+    end, info_to_archive_docs(TraverseInfo)).

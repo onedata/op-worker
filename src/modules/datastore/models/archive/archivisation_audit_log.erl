@@ -19,12 +19,12 @@
 
 %% API
 -export([
-    create/1, destroy/1, browse_content/2
+    create/1, destroy/1, browse/2
 ]).
 
 -export([
     report_file_archivisation_finished/4,
-    report_file_archivisation_failed/4,
+    report_file_archivisation_failed/5,
     report_file_verification_failed/3
 ]).
 
@@ -32,8 +32,8 @@
 
 -export_type([id/0]).
 
--define(LOG_MAX_SIZE, op_worker:get_env(qos_entry_audit_log_max_size, 10000)).
--define(LOG_EXPIRATION, op_worker:get_env(qos_entry_audit_log_expiration_seconds, 1209600)). % 14 days
+-define(LOG_MAX_SIZE, op_worker:get_env(archivisation_audit_log_max_size, 10000)).
+-define(LOG_EXPIRATION, op_worker:get_env(archivisation_audit_log_expiration_seconds, 1209600)). % 14 days
 
 %%%===================================================================
 %%% API
@@ -52,9 +52,9 @@ destroy(Id) ->
     audit_log:delete(Id).
 
 
--spec browse_content(id(), audit_log_browse_opts:opts()) ->
+-spec browse(id(), audit_log_browse_opts:opts()) ->
     {ok, audit_log:browse_result()} | errors:error().
-browse_content(Id, Opts) ->
+browse(Id, Opts) ->
     audit_log:browse(Id, Opts).
 
 
@@ -72,9 +72,9 @@ report_file_archivisation_finished(Id, FileGuid, FilePath, StartTimestamp) ->
     }).
 
 
--spec report_file_archivisation_failed(id(), file_id:file_guid(), file_meta:path(), {error, term()}) ->
-    ok | {error, term()}.
-report_file_archivisation_failed(Id, FileGuid, FilePath, Error) ->
+-spec report_file_archivisation_failed(id(), file_id:file_guid(), file_meta:path(), time:millis(), 
+    {error, term()}) -> ok | {error, term()}.
+report_file_archivisation_failed(Id, FileGuid, FilePath, StartTimestamp, Error) ->
     ErrorJson = errors:to_json(Error),
     
     audit_log:append(Id, #audit_log_append_request{
@@ -82,6 +82,7 @@ report_file_archivisation_failed(Id, FileGuid, FilePath, Error) ->
         content = #{
             <<"description">> => <<"File archivisation failed.">>,
             <<"fileId">> => file_guid_to_object_id(FileGuid),
+            <<"startTimestamp">> => StartTimestamp,
             <<"reason">> => ErrorJson,
             <<"path">> => FilePath
         }
