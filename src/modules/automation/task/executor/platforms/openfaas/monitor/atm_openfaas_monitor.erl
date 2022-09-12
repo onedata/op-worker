@@ -151,24 +151,12 @@ stop_service() ->
 %%%===================================================================
 
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Initializes the server.
-%% @end
-%%--------------------------------------------------------------------
 -spec init(Args :: term()) -> {ok, undefined, {continue, atom()}}.
 init(_) ->
     process_flag(trap_exit, true),
     {ok, undefined, {continue, create_state_outside_of_init_to_not_block_op_start_for_few_milliseconds}}.
 
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handles call messages
-%% @end
-%%--------------------------------------------------------------------
 -spec handle_call(Request :: term(), From :: {pid(), Tag :: term()}, state()) ->
     {reply, Reply :: term(), NewState :: state()}.
 handle_call(Request, _From, State) ->
@@ -176,12 +164,6 @@ handle_call(Request, _From, State) ->
     {reply, {error, wrong_request}, State}.
 
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handles cast messages
-%% @end
-%%--------------------------------------------------------------------
 -spec handle_cast(Request :: term(), state()) ->
     {noreply, NewState :: state()}.
 handle_cast(Request, State) ->
@@ -189,13 +171,7 @@ handle_cast(Request, State) ->
     {noreply, State}.
 
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handles all non call/cast messages
-%% @end
-%%--------------------------------------------------------------------
--spec handle_continue(Continue :: term(), undefined) ->
+-spec handle_continue(create_state_outside_of_init_to_not_block_op_start_for_few_milliseconds, undefined) ->
     {noreply, NewState :: state(), non_neg_integer()}.
 handle_continue(create_state_outside_of_init_to_not_block_op_start_for_few_milliseconds, undefined) ->
     State = case get_openfaas_status() of
@@ -210,12 +186,6 @@ handle_continue(create_state_outside_of_init_to_not_block_op_start_for_few_milli
     {noreply, State, timer:seconds(?STATUS_CHECK_INTERVAL_SECONDS)}.
 
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Handles all non call/cast messages
-%% @end
-%%--------------------------------------------------------------------
 -spec handle_info(Info :: term(), state()) ->
     {noreply, NewState :: state(), non_neg_integer()}.
 handle_info(timeout, State = #state{status = CurrentStatus}) ->
@@ -235,27 +205,12 @@ handle_info(Info, State) ->
     {noreply, State}.
 
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function is called by a gen_server when it is about to
-%% terminate. It should be the opposite of Module:init/1 and do any
-%% necessary cleaning up. When it returns, the gen_server terminates
-%% with Reason. The return value is ignored.
-%% @end
-%%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     state()) -> term().
 terminate(_Reason, _State) ->
     ok.
 
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Converts process state when code is changed
-%% @end
-%%--------------------------------------------------------------------
 -spec code_change(OldVsn :: term() | {down, term()}, state(), Extra :: term()) ->
     {ok, NewState :: state()}.
 code_change(_OldVsn, State, _Extra) ->

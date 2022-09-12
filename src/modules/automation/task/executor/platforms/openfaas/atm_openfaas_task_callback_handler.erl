@@ -36,7 +36,7 @@
 
 -spec build_job_batch_output_url(
     atm_workflow_execution:id(),
-    workflow_jobs:encoded_job_identifier()
+    atm_task_executor:job_batch_id()
 ) ->
     binary().
 build_job_batch_output_url(AtmWorkflowExecutionId, AtmJobBatchId) ->
@@ -45,7 +45,7 @@ build_job_batch_output_url(AtmWorkflowExecutionId, AtmJobBatchId) ->
 
 -spec build_job_batch_heartbeat_url(
     atm_workflow_execution:id(),
-    workflow_jobs:encoded_job_identifier()
+    atm_task_executor:job_batch_id()
 ) ->
     binary().
 build_job_batch_heartbeat_url(AtmWorkflowExecutionId, AtmJobBatchId) ->

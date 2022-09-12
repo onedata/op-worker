@@ -113,7 +113,7 @@ get_models() -> [
     atm_tree_forest_iterator_queue,
     atm_openfaas_function_pod_status_registry,
     atm_openfaas_result_streamer_registry,
-    atm_openfaas_status,
+    atm_openfaas_status_cache,
     atm_time_series_store_container,
 
     %% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 21.02.*.

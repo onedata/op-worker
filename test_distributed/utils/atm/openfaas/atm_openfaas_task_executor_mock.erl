@@ -80,9 +80,9 @@ init(ProviderSelectors, ModuleWithOpenfaasDockerMock) ->
         #{model => atm_task_execution, disc_driver => undefined}
     end),
 
-    test_utils:mock_new(Workers, ?MOCKED_MODULE, [passthrough, no_history]),
+    test_utils:mock_new(Workers, [?MOCKED_MODULE, atm_openfaas_monitor], [passthrough, no_history]),
 
-    mock_assert_openfaas_available(Workers),
+    mock_assert_openfaas_healthy(Workers),
 
     mock_create(Workers),
     mock_initiate(Workers),
@@ -100,7 +100,7 @@ init(ProviderSelectors, ModuleWithOpenfaasDockerMock) ->
     ok.
 teardown(ProviderSelectors) ->
     Workers = get_nodes(utils:ensure_list(ProviderSelectors)),
-    test_utils:mock_unload(Workers, ?MOCKED_MODULE).
+    test_utils:mock_unload(Workers, [?MOCKED_MODULE, atm_openfaas_monitor]).
 
 
 -spec mock_lane_initiation_result(
@@ -131,10 +131,10 @@ get_nodes(ProviderSelectors) ->
 
 
 %% @private
--spec mock_assert_openfaas_available([node()]) -> ok.
-mock_assert_openfaas_available(Workers) ->
+-spec mock_assert_openfaas_healthy([node()]) -> ok.
+mock_assert_openfaas_healthy(Workers) ->
     MockFun = fun() -> ok end,
-    test_utils:mock_expect(Workers, ?MOCKED_MODULE, assert_openfaas_available, MockFun).
+    test_utils:mock_expect(Workers, atm_openfaas_monitor, assert_openfaas_healthy, MockFun).
 
 
 %% @private
@@ -258,31 +258,22 @@ mock_is_in_readonly_mode(Workers) ->
 %% @private
 -spec mock_run([node()], module()) -> ok.
 mock_run(Workers, ModuleWithOpenfaasDockerMock) ->
-    MockFun = fun(AtmRunJobBatchCtx, Input, AtmTaskExecutor = #atm_openfaas_task_executor{
+    MockFun = fun(AtmRunJobBatchCtx, AtmLambdaInput, AtmTaskExecutor = #atm_openfaas_task_executor{
         operation_spec = #atm_openfaas_operation_spec{docker_image = DockerImage}
     }) ->
         spawn(fun() ->
-            AtmTaskExecutionUncorrelatedResultNames = get_task_execution_uncorrelated_result_names(
-                AtmTaskExecutor
-            ),
-
             Output = try
-                stream_task_data_if_task_has_any_uncorrelated_results(
-                    AtmTaskExecutor,
-                    AtmTaskExecutionUncorrelatedResultNames,
-                    ModuleWithOpenfaasDockerMock:exec(DockerImage, Input)
-                )
+                AtmJobInputData = prepare_job_input_data(AtmRunJobBatchCtx, AtmLambdaInput),
+                AtmJobOutputData = ModuleWithOpenfaasDockerMock:exec(DockerImage, AtmJobInputData),
+                process_task_uncorrelated_results(AtmTaskExecutor, AtmJobOutputData)
             catch Type:Reason:Stacktrace ->
                 errors:to_json(?atm_examine_error(Type, Reason, Stacktrace))
             end,
 
-            Response = case is_map(Output) of
+            http_client:post(build_job_callback_url(AtmLambdaInput), #{}, case is_map(Output) of
                 true -> json_utils:encode(Output);
                 false -> Output
-            end,
-
-            CallbackUrl = atm_run_job_batch_ctx:get_forward_output_url(AtmRunJobBatchCtx),  %% TODO
-            http_client:post(CallbackUrl, #{}, Response)
+            end)
         end),
 
         ok
@@ -291,35 +282,58 @@ mock_run(Workers, ModuleWithOpenfaasDockerMock) ->
 
 
 %% @private
--spec stream_task_data_if_task_has_any_uncorrelated_results(
-    record(),
-    [automation:name()],
-    atm_task_executor:job_batch_result()
-) ->
-    atm_task_executor:job_batch_result().
-stream_task_data_if_task_has_any_uncorrelated_results(
-    _AtmTaskExecutor,
-    [],
-    Output
-) ->
-    Output;  %% TODO fix
+-spec prepare_job_input_data(atm_run_job_batch_ctx:record(), atm_task_executor:lambda_input()) ->
+    json_utils:json_map().
+prepare_job_input_data(AtmRunJobBatchCtx, #atm_lambda_input{
+    workflow_execution_id = AtmWorkflowExecutionId,
+    job_batch_id = AtmJobBatchId,
+    args_batch = ArgsBatch
+}) ->
+    HeartbeatUrl = atm_openfaas_task_callback_handler:build_job_batch_heartbeat_url(
+        AtmWorkflowExecutionId, AtmJobBatchId
+    ),
 
-stream_task_data_if_task_has_any_uncorrelated_results(
-    AtmTaskExecutor,
-    AtmTaskExecutionUncorrelatedResultNames,
-    #{<<"resultsBatch">> := ResultsBatch}
-) ->
-    ResultStreamerRef = get_result_streamer_ref(AtmTaskExecutor),
+    #{
+        <<"ctx">> => #{
+            <<"heartbeatUrl">> => HeartbeatUrl,
+            <<"oneproviderDomain">> => oneprovider:get_domain(),
+            <<"accessToken">> => atm_run_job_batch_ctx:get_access_token(AtmRunJobBatchCtx)
+        },
+        <<"argsBatch">> => ArgsBatch
+    }.
 
-    #{<<"resultsBatch">> => lists:map(fun(Results) ->
-        Chunk = maps:map(
-            % Wrap results in array to simulate sidecar - openfaas feed server batch optimization
-            fun(_ResultName, Value) -> [Value] end,
-            maps:with(AtmTaskExecutionUncorrelatedResultNames, Results)
-        ),
-        atm_openfaas_result_streamer_mock:deliver_chunk_report(ResultStreamerRef, Chunk),
-        maps:without(AtmTaskExecutionUncorrelatedResultNames, Results)
-    end, ResultsBatch)}.
+
+%% @private
+-spec process_task_uncorrelated_results(record(), atm_task_executor:job_batch_result()) ->
+    json_utils:json_map().
+process_task_uncorrelated_results(AtmTaskExecutor, AtmTaskOutputData) ->
+    case get_task_execution_uncorrelated_result_names(AtmTaskExecutor) of
+        [] ->
+            AtmTaskOutputData;
+        AtmTaskExecutionUncorrelatedResultNames ->
+            ResultStreamerRef = get_result_streamer_ref(AtmTaskExecutor),
+
+            #{<<"resultsBatch">> => lists:map(fun(Results) ->
+                Chunk = maps:map(
+                    % Wrap results in array to simulate sidecar - openfaas feed server batch optimization
+                    fun(_ResultName, Value) -> [Value] end,
+                    maps:with(AtmTaskExecutionUncorrelatedResultNames, Results)
+                ),
+                atm_openfaas_result_streamer_mock:deliver_chunk_report(ResultStreamerRef, Chunk),
+                maps:without(AtmTaskExecutionUncorrelatedResultNames, Results)
+            end, maps:get(<<"resultsBatch">>, AtmTaskOutputData))}
+    end.
+
+
+%% @private
+-spec build_job_callback_url(atm_task_executor:lambda_input()) -> binary().
+build_job_callback_url(#atm_lambda_input{
+    workflow_execution_id = AtmWorkflowExecutionId,
+    job_batch_id = AtmJobBatchId
+}) ->
+    atm_openfaas_task_callback_handler:build_job_batch_output_url(
+        AtmWorkflowExecutionId, AtmJobBatchId
+    ).
 
 
 %% @private
