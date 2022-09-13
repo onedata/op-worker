@@ -906,11 +906,6 @@ verify_execution_history_stats(Acc, WorkflowType, Options) ->
     case {Options, WorkflowType} of
         {#{is_empty := true}, _} ->
             ok;
-        {#{restart := true}, sync} ->
-            ?assertEqual(0, MaxAsyncSlots),
-            % Restart callback is called before any pool slot is used
-            ?assertEqual(0, MinPoolSlots),
-            ?assertEqual(20, MaxPoolSlots);
         {#{ignore_max_slots_check := true}, sync} ->
             ?assertEqual(0, MaxAsyncSlots),
             ?assertNotEqual(0, MinPoolSlots);
@@ -957,8 +952,10 @@ get_all_workflow_related_datastore_keys(Config) ->
 
     % TODO VFS-7788 - fix race between workflow_iterator_snapshot:cleanup and workflow_iterator_snapshot:save
     % (snapshot can be restored)
-%%    Models = [workflow_cached_item, workflow_cached_async_result, workflow_iterator_snapshot, workflow_execution_state],
-    Models = [workflow_cached_item, workflow_cached_async_result, workflow_execution_state],
+%%    Models = [workflow_cached_item, workflow_cached_async_result, workflow_iterator_snapshot,
+%%        workflow_execution_state, workflow_cached_task_data, workflow_execution_state_dump],
+    Models = [workflow_cached_item, workflow_cached_async_result, workflow_execution_state,
+        workflow_cached_task_data, workflow_execution_state_dump],
     lists:map(fun(Model) ->
         Ctx = datastore_model_default:set_defaults(datastore_model_default:get_ctx(Model)),
         #{memory_driver := MemoryDriver, memory_driver_ctx := MemoryDriverCtx} = Ctx,

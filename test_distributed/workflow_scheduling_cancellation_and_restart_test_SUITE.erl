@@ -305,7 +305,7 @@ restart_callback_failure_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     #{id := ExecutionId} = WorkflowExecutionSpec =
         workflow_scheduling_test_common:gen_workflow_execution_spec(
-            TaskType, PrepareInAdvance, #{lane_options => #{failure_count_to_cancel => 1, save_progress => true}}),
+            TaskType, PrepareInAdvance, #{lane_options => #{failure_count_to_cancel => 1}, save_progress => true}),
     workflow_scheduling_test_common:set_test_execution_manager_option(Config, fail_job, {<<"3_1_1">>, <<"100">>}),
     ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow,
         [workflow_scheduling_test_common:get_engine_id(), WorkflowExecutionSpec])),
@@ -334,8 +334,7 @@ restart_callback_failure_test(Config) ->
 
     #{execution_history := ExecutionHistory3} = ExtendedHistoryStats3 =
         workflow_scheduling_test_common:get_task_execution_history(Config),
-    workflow_scheduling_test_common:verify_execution_history_stats(
-        ExtendedHistoryStats3, TaskType, #{restart => true}),
+    workflow_scheduling_test_common:verify_execution_history_stats(ExtendedHistoryStats3, TaskType),
     workflow_scheduling_test_common:verify_execution_history(
         WorkflowExecutionSpec2, ExecutionHistory3, #{resume_lane => LaneId}),
 
@@ -411,8 +410,7 @@ cancel_and_restart_test_base(Config, #test_config{
 
     #{execution_history := ExecutionHistory2} = ExtendedHistoryStats2 =
         workflow_scheduling_test_common:get_task_execution_history(Config),
-    workflow_scheduling_test_common:verify_execution_history_stats(
-        ExtendedHistoryStats2, TaskType, #{restart => true}),
+    workflow_scheduling_test_common:verify_execution_history_stats(ExtendedHistoryStats2, TaskType),
     workflow_scheduling_test_common:verify_execution_history(
         WorkflowExecutionSpec2, ExecutionHistory2, #{resume_lane => LaneId}),
 
@@ -465,8 +463,7 @@ multiple_parallel_cancels_test_base(Config, #test_config{
 
     #{execution_history := FinalExecutionHistory} = FinalExtendedHistoryStats =
         workflow_scheduling_test_common:get_task_execution_history(Config),
-    workflow_scheduling_test_common:verify_execution_history_stats(
-        FinalExtendedHistoryStats, TaskType, #{restart => true}),
+    workflow_scheduling_test_common:verify_execution_history_stats(FinalExtendedHistoryStats, TaskType),
     workflow_scheduling_test_common:verify_execution_history(
         WorkflowExecutionSpec2, FinalExecutionHistory, #{resume_lane => LaneId}),
 
