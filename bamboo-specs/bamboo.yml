@@ -304,16 +304,30 @@ Build:
       interpreter: BINSH_OR_CMDEXE
       scripts:
       - |-
+        if [ ${bamboo_planRepository_branch} != "develop" ]; then
+          if [ -z ${bamboo_ManualBuildTriggerReason_userName+x} ]; then
+            echo "===========================================================================================================" >&2
+            echo "CAUTION: This branch (${bamboo_planRepository_branch}) should be run manually!" >&2
+            echo "Builds triggered automatically by changes in the repo will always fail." >&2
+            echo "===========================================================================================================" >&2
+            exit 1;
+          fi
+        fi
+      description: Trigger check    
+      conditions: 
+      - variable:
+          matches:
+            bamboo.buildNumber: '[4-9]|.{2,}'
+  - script:
+      <<: *run-script
+      scripts:
+      - |-
         cd op_worker
         git remote set-url origin ${bamboo.repository.git.repositoryUrl}
         git remote -v
         make submodules
         cd ..
       description: Init submodules
-      conditions: 
-      - variable:
-          matches:
-            bamboo.buildNumber: '[4-9]|.{2,}'
   - script:
       <<: *run-script
       scripts:
