@@ -114,7 +114,7 @@ groups() -> [
         atm_workflow_execution_cancelled_in_preparing_status_before_run_was_created,
         atm_workflow_execution_cancelled_in_preparing_status_after_run_was_created,
         atm_workflow_execution_cancel_before_lane_run_preparation_failed,
-        atm_workflow_execution_cancel_in_aborting_status_after_lane_run_preparation_failed,
+        atm_workflow_execution_cancel_in_stopping_status_after_lane_run_preparation_failed,
 
         first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_1,
         first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_2,

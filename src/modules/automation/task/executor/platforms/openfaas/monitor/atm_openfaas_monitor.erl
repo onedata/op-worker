@@ -154,7 +154,7 @@ stop_service() ->
 -spec init(Args :: term()) -> {ok, undefined, {continue, atom()}}.
 init(_) ->
     process_flag(trap_exit, true),
-    {ok, undefined, {continue, create_state_outside_of_init_to_not_block_op_start_for_few_milliseconds}}.
+    {ok, undefined, {continue, nonblocking_state_init}}.
 
 
 -spec handle_call(Request :: term(), From :: {pid(), Tag :: term()}, state()) ->
@@ -171,9 +171,9 @@ handle_cast(Request, State) ->
     {noreply, State}.
 
 
--spec handle_continue(create_state_outside_of_init_to_not_block_op_start_for_few_milliseconds, undefined) ->
+-spec handle_continue(nonblocking_state_init, undefined) ->
     {noreply, NewState :: state(), non_neg_integer()}.
-handle_continue(create_state_outside_of_init_to_not_block_op_start_for_few_milliseconds, undefined) ->
+handle_continue(nonblocking_state_init, undefined) ->
     State = case get_openfaas_status() of
         healthy ->
             #state{status = healthy, running_smoothness = good};

@@ -42,6 +42,7 @@
     expect_lane_run_rerunable/2,
     expect_lane_run_retriable/2,
     expect_lane_run_num_set/3,
+    expect_lane_run_removed/2,
 
     get_task_selector/2,
     get_task_stats/2,
@@ -331,17 +332,6 @@ expect_lane_run_interrupted(AtmLaneRunSelector, ExpStateCtx) ->
     update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx).
 
 
--spec expect_lane_run_num_set(
-    atm_lane_execution:lane_run_selector(),
-    atm_lane_execution:run_num(),
-    ctx()
-) ->
-    ctx().
-expect_lane_run_num_set(AtmLaneRunSelector, RunNum, ExpStateCtx) ->
-    ExpAtmLaneRunStateDiff = #{<<"runNumber">> => RunNum},
-    update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx).
-
-
 -spec expect_lane_run_rerunable(atm_lane_execution:lane_run_selector(), ctx()) ->
     ctx().
 expect_lane_run_rerunable(AtmLaneRunSelector, ExpStateCtx) ->
@@ -354,6 +344,49 @@ expect_lane_run_rerunable(AtmLaneRunSelector, ExpStateCtx) ->
 expect_lane_run_retriable(AtmLaneRunSelector, ExpStateCtx) ->
     ExpAtmLaneRunStateDiff = #{<<"isRetriable">> => true},
     update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx).
+
+
+-spec expect_lane_run_num_set(
+    atm_lane_execution:lane_run_selector(),
+    atm_lane_execution:run_num(),
+    ctx()
+) ->
+    ctx().
+expect_lane_run_num_set(AtmLaneRunSelector, RunNum, ExpStateCtx) ->
+    ExpAtmLaneRunStateDiff = #{<<"runNumber">> => RunNum},
+    update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx).
+
+
+-spec expect_lane_run_removed(atm_lane_execution:lane_run_selector(), ctx()) ->
+    ctx().
+expect_lane_run_removed({AtmLaneSelector, AtmRunSelector}, ExpStateCtx = #exp_workflow_execution_state_ctx{
+    current_run_num = CurrentRunNum,
+    exp_workflow_execution_state = ExpAtmWorkflowExecutionState = #{<<"lanes">> := AtmLaneExecutions},
+    exp_task_execution_state_ctx_registry = ExpAtmTaskExecutionsRegistry
+}) ->
+    AtmLaneIndex = resolve_lane_selector(AtmLaneSelector, ExpStateCtx),
+    TargetRunNum = resolve_run_selector(AtmRunSelector, ExpStateCtx),
+
+    AtmLaneExecutionWithRun = #{<<"runs">> := AtmLaneRuns} = lists:nth(AtmLaneIndex, AtmLaneExecutions),
+    {#{<<"parallelBoxes">> := AtmParallelBoxes}, RestAtmLaneRuns} = take_run(
+        TargetRunNum, CurrentRunNum, AtmLaneRuns, []
+    ),
+    AtmLaneExecutionWithoutRun = AtmLaneExecutionWithRun#{<<"runs">> => RestAtmLaneRuns},
+
+    AtmTaskExecutionIds = lists:foldl(fun(#{<<"taskRegistry">> := AtmTaskRegistry}, Acc) ->
+        maps:values(AtmTaskRegistry) ++ Acc
+    end, [], AtmParallelBoxes),
+
+    ExpStateCtx#exp_workflow_execution_state_ctx{
+        exp_workflow_execution_state = ExpAtmWorkflowExecutionState#{
+            <<"lanes">> => lists_utils:replace_at(
+                AtmLaneExecutionWithoutRun, AtmLaneIndex, AtmLaneExecutions
+            )
+        },
+        exp_task_execution_state_ctx_registry = maps:without(
+            AtmTaskExecutionIds, ExpAtmTaskExecutionsRegistry
+        )
+    }.
 
 
 -spec get_task_selector(atm_task_execution:id(), ctx()) -> task_selector().
@@ -827,6 +860,22 @@ update_task_execution_exp_state(AtmTaskExecutionId, ExpStateDiff, ExpStateCtx = 
     ExpStateCtx#exp_workflow_execution_state_ctx{exp_task_execution_state_ctx_registry = maps:update_with(
         AtmTaskExecutionId, Diff, ExpAtmTaskExecutionsRegistry
     )}.
+
+
+%% @private
+take_run(_TargetRunNum, _CurrentRunNum, [], _) ->
+    error;
+
+take_run(TargetRunNum, CurrentRunNum, [Run = #{<<"runNumber">> := null} | RestRuns], NewerRunsReversed) when
+    CurrentRunNum =< TargetRunNum
+->
+    {Run, lists:reverse(NewerRunsReversed) ++ RestRuns};
+
+take_run(TargetRunNum, _CurrentRunNum, [Run = #{<<"runNumber">> := TargetRunNum} | RestRuns], NewerRunsReversed) ->
+    {Run, lists:reverse(NewerRunsReversed) ++ RestRuns};
+
+take_run(TargetRunNum, CurrentRunNum, [Run | RestRuns], NewerRunsReversed) ->
+    take_run(TargetRunNum, CurrentRunNum, RestRuns, [Run | NewerRunsReversed]).
 
 
 %% @private
