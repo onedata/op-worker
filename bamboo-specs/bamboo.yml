@@ -1930,27 +1930,6 @@ xrootd_helper:
     name: cover_ct_xrootd_helper.tar.gz
   - *ct_logs
 
-Quarantine_hack_request_next_build:
-  key: ZREQN
-  description: Request next build 
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script:
-      description: Request next build
-      scripts:
-        # The script which requests the next build of a plan resides on the bamboo server.
-        # For more details about the script look at https://git.onedata.org/projects/VFS/repos/bamboos/browse/bamboo-server/run-build.sh?at=refs%2Fheads%2Ffeature%2FVFS-9519-auto-quarantine-test-cases-for-new-branches
-        # The script is run indirectly by the CGI script used in the curl command.
-        - curl 10.87.23.72:3080/cgi-bin/run-build?${bamboo_planKey}
-      conditions:
-        - variable:
-            matches:
-              bamboo.buildNumber: '2'      
-  - script: *always-successful
-  requirements: *requirements
-  artifact-subscriptions: []
-
 Coverage report:
   key: CR
   other: *common-opts
@@ -2172,4 +2151,24 @@ Coverage report:
   - artifact: cover_ct_workflow_scheduling.tar.gz
   - artifact: cover_ct_workflow_scheduling_cancellation_and_restart.tar.gz
   - artifact: cover_ct_xrootd_helper.tar.gz
+
+Quarantine_hack_request_next_build:
+  key: ZREQN
+  description: Request next build 
+  other: *common-opts
+  tasks:
+  - checkout: *fake-checkout
+  - script:
+      description: Request next build
+      scripts:
+        # The script which requests the next build of a plan resides on the bamboo server.
+        # For more details about the script look at https://git.onedata.org/projects/VFS/repos/bamboos/browse/bamboo-server/run-build.sh?at=refs%2Fheads%2Ffeature%2FVFS-9519-auto-quarantine-test-cases-for-new-branches
+        # The script is run indirectly by the CGI script used in the curl command.
+        - curl 10.87.23.72:3080/cgi-bin/run-build?${bamboo_planKey}
+      conditions:
+        - variable:
+            matches:
+              bamboo.buildNumber: '2'      
+  - script: *always-successful
+  artifact-subscriptions: []
 ...
