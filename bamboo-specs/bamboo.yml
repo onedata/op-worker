@@ -233,16 +233,16 @@ stages:
     - workflow_scheduling
     - workflow_scheduling_cancellation_and_restart
     - xrootd_helper
-- Quarantine hack - request next build:
-    manual: false
-    final: true
-    jobs:
-    - Quarantine_hack_request_next_build    
 - Coverage report:
     manual: false
     final: false
     jobs:
     - Coverage report
+- Quarantine hack - request next build:
+    manual: false
+    final: true
+    jobs:
+    - Quarantine_hack_request_next_build    
 
 Quarantine_hack_copy_quarantine:
   key: COPQU
