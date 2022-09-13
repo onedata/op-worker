@@ -37,9 +37,10 @@
     expect_lane_run_stopping/2,
     expect_lane_run_finished/2,
     expect_lane_run_failed/2,
-    expect_lane_run_failed/3,
     expect_lane_run_cancelled/2,
     expect_lane_run_interrupted/2,
+    expect_lane_run_rerunable/2,
+    expect_lane_run_retriable/2,
     expect_lane_run_num_set/3,
 
     get_task_selector/2,
@@ -305,37 +306,21 @@ expect_lane_run_stopping(AtmLaneRunSelector, ExpStateCtx) ->
 -spec expect_lane_run_finished(atm_lane_execution:lane_run_selector(), ctx()) ->
     ctx().
 expect_lane_run_finished(AtmLaneRunSelector, ExpStateCtx) ->
-    ExpAtmLaneRunStateDiff = #{
-        <<"status">> => <<"finished">>,
-        <<"isRerunable">> => true
-    },
+    ExpAtmLaneRunStateDiff = #{<<"status">> => <<"finished">>},
     update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx).
 
 
 -spec expect_lane_run_failed(atm_lane_execution:lane_run_selector(), ctx()) ->
     ctx().
 expect_lane_run_failed(AtmLaneRunSelector, ExpStateCtx) ->
-    expect_lane_run_failed(AtmLaneRunSelector, false, ExpStateCtx).
-
-
--spec expect_lane_run_failed(atm_lane_execution:lane_run_selector(), boolean(), ctx()) ->
-    ctx().
-expect_lane_run_failed(AtmLaneRunSelector, IsRetriable, ExpStateCtx) ->
-    ExpAtmLaneRunStateDiff = #{
-        <<"status">> => <<"failed">>,
-        <<"isRerunable">> => true,
-        <<"isRetriable">> => IsRetriable
-    },
+    ExpAtmLaneRunStateDiff = #{<<"status">> => <<"failed">>},
     update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx).
 
 
 -spec expect_lane_run_cancelled(atm_lane_execution:lane_run_selector(), ctx()) ->
     ctx().
 expect_lane_run_cancelled(AtmLaneRunSelector, ExpStateCtx) ->
-    ExpAtmLaneRunStateDiff = #{
-        <<"status">> => <<"cancelled">>,
-        <<"isRerunable">> => true
-    },
+    ExpAtmLaneRunStateDiff = #{<<"status">> => <<"cancelled">>},
     update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx).
 
 
@@ -354,6 +339,20 @@ expect_lane_run_interrupted(AtmLaneRunSelector, ExpStateCtx) ->
     ctx().
 expect_lane_run_num_set(AtmLaneRunSelector, RunNum, ExpStateCtx) ->
     ExpAtmLaneRunStateDiff = #{<<"runNumber">> => RunNum},
+    update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx).
+
+
+-spec expect_lane_run_rerunable(atm_lane_execution:lane_run_selector(), ctx()) ->
+    ctx().
+expect_lane_run_rerunable(AtmLaneRunSelector, ExpStateCtx) ->
+    ExpAtmLaneRunStateDiff = #{<<"isRerunable">> => true},
+    update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx).
+
+
+-spec expect_lane_run_retriable(atm_lane_execution:lane_run_selector(), ctx()) ->
+    ctx().
+expect_lane_run_retriable(AtmLaneRunSelector, ExpStateCtx) ->
+    ExpAtmLaneRunStateDiff = #{<<"isRetriable">> => true},
     update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx).
 
 
