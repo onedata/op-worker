@@ -276,7 +276,7 @@ Quarantine_hack_copy_quarantine:
       description: Always successful
       scripts:
         - true
-        
+
 Quarantine_hack_terminate_build:
   key: TERMB
   other: *common-opts
