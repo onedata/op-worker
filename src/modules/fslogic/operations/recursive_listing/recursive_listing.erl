@@ -101,7 +101,7 @@
     entries :: [Entry], 
     inaccessible_paths :: [NodePath]
 }.
--type result() :: result(node_path(), tree_node()).
+-type result() :: result(node_path(), result_entry()).
 
 -export_type([prefix/0, pagination_token/0, options/0, result_entry/0, result_entry/2, result/2]).
 

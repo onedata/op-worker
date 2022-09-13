@@ -35,8 +35,8 @@
 
 -type node_id() :: file_id:file_guid().
 -type tree_node() :: file_ctx:ctx().
--type node_name() :: file_meta:node_name().
--type node_path() :: file_meta:node_path().
+-type node_name() :: file_meta:name().
+-type node_path() :: file_meta:path().
 -type node_iterator() :: #{
     node := tree_node(),
     opts := file_listing:options()
@@ -143,7 +143,7 @@ get_next_batch(#{node := FileCtx, opts := ListOpts}, UserCtx) ->
 
 %% @private
 -spec check_dir_access(user_ctx:ctx(), file_ctx:ctx()) ->
-    {undefined | [file_meta:node_name()], file_ctx:ctx()}.
+    {undefined | [file_meta:name()], file_ctx:ctx()}.
 check_dir_access(UserCtx, DirCtx) ->
     fslogic_authz:ensure_authorized_readdir(UserCtx, DirCtx, 
         [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?list_container_mask)]).
@@ -151,6 +151,6 @@ check_dir_access(UserCtx, DirCtx) ->
 
 %% @private
 -spec check_non_dir_access(user_ctx:ctx(), file_ctx:ctx()) -> 
-    {undefined | [file_meta:node_name()], file_ctx:ctx()}.
+    {undefined | [file_meta:name()], file_ctx:ctx()}.
 check_non_dir_access(UserCtx, FileCtx) ->
     fslogic_authz:ensure_authorized_readdir(UserCtx, FileCtx, [?TRAVERSE_ANCESTORS]).

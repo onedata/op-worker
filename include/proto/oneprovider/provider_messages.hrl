@@ -97,8 +97,8 @@
 }).
 
 -record(recursive_listing_result, {
-    entries :: [recursive_listing:result_entry()],
-    inaccessible_paths :: [recursive_listing:node_path()],
+    entries,
+    inaccessible_paths,
     pagination_token :: undefined | recursive_listing:pagination_token()
 }).
 

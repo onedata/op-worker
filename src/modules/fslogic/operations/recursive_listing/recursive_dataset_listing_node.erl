@@ -33,7 +33,7 @@
 
 -type node_id() :: binary(). % actually dataset:id(), but without undefined.
 -type tree_node() :: dataset_api:info().
--type node_name() :: file_meta:node_name().
+-type node_name() :: file_meta:name().
 -type node_path() :: file_meta:path().
 -type node_iterator() :: #{
     node := tree_node(),
@@ -93,7 +93,7 @@ init_node_iterator(DatasetInfo, StartName, Limit) ->
 
 
 -spec get_next_batch(node_iterator(), user_ctx:ctx()) ->
-    {more | done, [tree_node()], node_iterator(), tree_node()}.
+    {more | done, [tree_node()], node_iterator()}.
 get_next_batch(#{node := #dataset_info{id = Id} = DatasetInfo, opts := ListOpts}, _UserCtx) ->
     % NOTE: no need to check access privileges as dataset listing is controlled only by space privs 
     % and should be checked on higher levels.
