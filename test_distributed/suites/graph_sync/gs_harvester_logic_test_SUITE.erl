@@ -9,7 +9,7 @@
 %%% This module tests harvester logic API using mocked gs_client module.
 %%% @end
 %%%--------------------------------------------------------------------
--module(harvester_logic_test_SUITE).
+-module(gs_harvester_logic_test_SUITE).
 -author("Jakub Kudzia").
 
 -include("logic_tests_common.hrl").

@@ -9,7 +9,7 @@
 %%% Provider to Zone connection tests
 %%% @end
 %%%-------------------------------------------------------------------
--module(zone_connection_test_SUITE).
+-module(gs_zone_connection_test_SUITE).
 -author("Lukasz Opiola").
 
 -include("http/gui_paths.hrl").

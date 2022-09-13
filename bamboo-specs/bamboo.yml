@@ -24,7 +24,7 @@ variables:
   version_major: '2'
   version_minor: '1'
   planSrc: VFS-PROV
-  branchSrc: develop
+  branchSrc: release/20.02.19
 repositories:
 - op-worker:
     scope: global
@@ -54,12 +54,12 @@ other:
         duration: '1'
         buildsToKeep: '1'
 stages:
-- Quarantine hack - copy quarantine:
+- Qnthack - copy quarantine:
     manual: false
     final: false
     jobs:
-    - Quarantine_hack_copy_quarantine
-    - Quarantine_hack_terminate_build
+    - Qnthack - copy quarantine
+    - Qnthack - terminate build
 - Build:
     manual: false
     final: false
@@ -72,9 +72,6 @@ stages:
     - _Dialyze
     - _Codetag Tracker
     - _Unit Test
-    - api_archive
-    - api_dataset_crud
-    - api_dataset_tree
     - api_file_attrs
     - api_file_crud
     - api_file_ls
@@ -82,28 +79,8 @@ stages:
     - api_file_metadata_get
     - api_file_metadata_set
     - api_file_stream
-    - api_file_upload_gui
-    - api_file_upload_rest
-    - api_samples
+    - api_file_upload
     - api_share
-    - api_storage
-    - archive
-    - archive_bagit_sequential
-    - archive_model
-    - archive_recall
-    - archive_sequential
-    - archivestorage_helper
-    - archivisation_cancellation
-    - atm_audit_log_store
-    - atm_list_store
-    - atm_openfaas_activity_feed
-    - atm_range_store
-    - atm_single_value_store
-    - atm_time_series_store
-    - atm_tree_forest_store
-    - atm_value
-    - atm_workflow_execution
-    - atm_workflow_executions_collection
     - autocleaning
     - cdmi
     - ceph_helper
@@ -113,13 +90,10 @@ stages:
     - connection
     - connection_layer
     - connection_manager
-    - dataset
-    - datasets_structure
     - datastore_remote_driver
     - dbsync
     - dbsync_changes_requesting
     - dbsync_changes_requesting_with_errors
-    - dir_stats_collector
     - event_manager
     - event_stream
     - events
@@ -132,9 +106,6 @@ stages:
     - file_registration
     - fslogic_req
     - glusterfs_helper
-    - gs_atm_inventory_logic
-    - gs_atm_lambda_logic
-    - gs_atm_workflow_schema_logic
     - gs_channel
     - gs_cluster_logic
     - gs_group_logic
@@ -149,13 +120,11 @@ stages:
     - gs_user_logic
     - gs_zone_connection
     - harvesting
-    - harvesting_custom_metadata
     - harvesting_stream
     - idp_access_token
     - lfm_attrs
     - lfm_files_posix
     - lfm_files_s3
-    - lfm_symlinks_resolution
     - luma
     - massive_multi_provider_file_ops
     - massive_multi_provider_file_ops2
@@ -166,12 +135,10 @@ stages:
     - multi_provider_changes_rest
     - multi_provider_db_sync
     - multi_provider_file_ops
-    - multi_provider_hardlinks
     - multi_provider_proxy
+    - multi_provider_qos
     - multi_provider_rest
     - multi_provider_view_rest
-    - multiple_workflow_scheduling
-    - nfs_helper
     - node_failure
     - nulldevice_helper
     - performance_2_provider
@@ -181,11 +148,7 @@ stages:
     - provider_connection
     - qos
     - qos_api
-    - qos_multi_provider
-    - qos_multi_provider_single_file
     - qos_replica_protection
-    - qos_status
-    - qos_status_reconciliation
     - quota
     - readonly_storage
     - rename
@@ -210,11 +173,8 @@ stages:
     - storage_cleanup
     - storage_files
     - storage_import
-    - storage_import_delete_and_links
     - storage_import_deletion
     - storage_import_s3
-    - storage_import_update
-    - storage_import_update_s3
     - storage_req
     - storage_sync_links
     - storage_traverse
@@ -230,34 +190,32 @@ stages:
     - view
     - webdav_helper
     - webdav_token
-    - workflow_scheduling
-    - workflow_scheduling_cancellation_and_restart
     - xrootd_helper
-- Quarantine hack - request next build:
-    manual: false
-    final: true
-    jobs:
-    - Quarantine_hack_request_next_build    
 - Coverage report:
     manual: false
     final: false
     jobs:
-    - Coverage report
+      - Coverage report
+- Qnthack - rerun:
+    manual: false
+    final: true
+    jobs:
+      - Qnthack - rerun
 
-Quarantine_hack_copy_quarantine:
+Qnthack - copy quarantine:
   key: COPQU
   other: &common-opts
     clean-working-dir: true
     all-other-apps:
-      custom: 
+      custom:
         auto: {}
         buildHangingConfig.enabled: 'false'
   tasks:
-  - checkout: &fake-checkout       
+  - checkout: &fake-checkout
       conditions:
       - variable:
           exists: fake.var
-  - script: &quarantine-hack-run-script-on-third-build 
+  - script: &quarantine-hack-run-script-on-third-build
       interpreter: BINSH_OR_CMDEXE
       scripts:
       - |-
@@ -276,12 +234,12 @@ Quarantine_hack_copy_quarantine:
       description: Always successful
       scripts:
         - true
-        
-Quarantine_hack_terminate_build:
+
+Qnthack - terminate build:
   key: TERMB
   other: *common-opts
-  tasks:  
-  - checkout: *fake-checkout       
+  tasks:
+  - checkout: *fake-checkout
   - script: *always-successful
   - script:
       <<: *quarantine-hack-run-script-on-third-build
@@ -291,76 +249,90 @@ Quarantine_hack_terminate_build:
         false
       description: Terminate build
       conditions: *quarantine-hack-cond-build3
-      
+
 Build:
   key: BUILD
   other: *common-opts
   tasks:
-  - checkout:
-      path: op_worker
-      force-clean-build: 'true'
-      description: Checkout Default Repository
-  - script: &run-script
-      interpreter: BINSH_OR_CMDEXE
-      scripts:
-      - |-
-        cd op_worker
-        git remote set-url origin ${bamboo.repository.git.repositoryUrl}
-        git remote -v
-        make submodules
-        cd ..
-      description: Init submodules
-      conditions: 
-      - variable:
-          matches:
-            bamboo.buildNumber: '[4-9]|.{2,}'
-  - script:
-      <<: *run-script
-      scripts:
-      - find . -type f -exec sed -i 's/plgrid.pl/onedata.org/g' {} \;
-      description: substitute plgrid.pl with onedata.org
-  - script:
-      <<: *run-script
-      scripts:
-      - ./make.py -e REBAR_PROFILE=bamboo -r ${bamboo.agentWorkingDirectory} test_rel
-      environment: PREFER_STATIC_LINK=1
-      working-dir: op_worker
-      description: Build
-  - script:
-      <<: *run-script
-      scripts:
-      - tar -czf op_worker.tar.gz op_worker/
-      description: Package
-      conditions: 
-      - variable:
-          matches:
-            bamboo.buildNumber: '.{1,}'
-  - script:
-      <<: *run-script
-      scripts:
-      - |-
-        echo ./op_worker/bamboos/artifacts/push_artifact.py --hostname ${bamboo.artifactRepoHostname} --port ${bamboo.artifactRepoPort} \
-            --username ${bamboo.artifactRepoUsername} --branch ${bamboo.planRepository.branchName} --plan ${bamboo.planRepository.name} \
-            --artifact-name op_worker.tar.gz
-        ./op_worker/bamboos/artifacts/push_artifact.py --hostname ${bamboo.artifactRepoHostname} --port ${bamboo.artifactRepoPort} \
-            --username ${bamboo.artifactRepoUsername} --branch ${bamboo.planRepository.branchName} --plan ${bamboo.planRepository.name} \
-            --artifact-name op_worker.tar.gz
-      description: Push artifact
+    - checkout:
+        path: op_worker
+        force-clean-build: 'true'
+        description: Checkout Default Repository
+    - script: &run-script
+        interpreter: BINSH_OR_CMDEXE
+        scripts:
+          - |-
+            if [ ${bamboo_planRepository_branch} != "develop" ]; then
+              if [ -z ${bamboo_ManualBuildTriggerReason_userName+x} ]; then
+                echo "===========================================================================================================" >&2
+                echo "CAUTION: This branch (${bamboo_planRepository_branch}) should be run manually!" >&2
+                echo "Builds triggered automatically by changes in the repo will always fail." >&2
+                echo "===========================================================================================================" >&2
+                exit 1;
+              fi
+            fi
+        description: Trigger check
+        conditions:
+          - variable:
+              matches:
+                bamboo.buildNumber: '[4-9]|.{2,}'
+    - script:
+        <<: *run-script
+        scripts:
+          - |-
+            cd op_worker
+            git remote set-url origin ${bamboo.repository.git.repositoryUrl}
+            git remote -v
+            make submodules
+            cd ..
+        description: Init submodules
+    - script:
+        <<: *run-script
+        scripts:
+          - find . -type f -exec sed -i 's/plgrid.pl/onedata.org/g' {} \;
+        description: substitute plgrid.pl with onedata.org
+    - script:
+        <<: *run-script
+        scripts:
+          - ./make.py -e REBAR_PROFILE=bamboo -r ${bamboo.agentWorkingDirectory} test_rel
+        environment: PREFER_STATIC_LINK=1
+        working-dir: op_worker
+        description: Build
+    - script:
+        <<: *run-script
+        scripts:
+          - tar -czf op_worker.tar.gz op_worker/
+        description: Package
+        conditions:
+          - variable:
+              matches:
+                bamboo.buildNumber: '.{1,}'
+    - script:
+        <<: *run-script
+        scripts:
+          - |-
+            echo ./op_worker/bamboos/artifacts/push_artifact.py --hostname ${bamboo.artifactRepoHostname} --port ${bamboo.artifactRepoPort} \
+                --username ${bamboo.artifactRepoUsername} --branch ${bamboo.planRepository.branchName} --plan ${bamboo.planRepository.name} \
+                --artifact-name op_worker.tar.gz
+            ./op_worker/bamboos/artifacts/push_artifact.py --hostname ${bamboo.artifactRepoHostname} --port ${bamboo.artifactRepoPort} \
+                --username ${bamboo.artifactRepoUsername} --branch ${bamboo.planRepository.branchName} --plan ${bamboo.planRepository.name} \
+                --artifact-name op_worker.tar.gz
+        description: Push artifact
   final-tasks:
-  - script: &clear-env
-      <<: *run-script
-      scripts:
-      - curl ${bamboo.OnedataFinalTasksURL} | bash -
-      description: Clear env
+    - script: &clear-env
+        <<: *run-script
+        scripts:
+          - curl ${bamboo.OnedataFinalTasksURL} | bash -
+        description: Clear env
   artifacts:
-  - name: op_worker.tar.gz
-    pattern: op_worker.tar.gz
-    shared: true
-    required: false
+    - name: op_worker.tar.gz
+      pattern: op_worker.tar.gz
+      shared: true
+      required: false
   requirements: &requirements
-  - system.docker.executable
-  - onedata
-  artifact-subscriptions: []
+    - system.docker.executable
+    - onedata
+  artifact-subscriptions: [ ]
   
 _Codetag Tracker:
   key: CT
@@ -495,7 +467,7 @@ _Unit Test:
   requirements: *requirements
   artifact-subscriptions: *op-worker
   
-api_archive: &ct-onenv-job
+api_file_attrs: &ct-onenv-job
   key: APIARC
   other: *common-opts
   tasks:
@@ -536,12 +508,12 @@ api_archive: &ct-onenv-job
       - ./ct_onenv.py --suite ${bamboo.shortJobName} --path-to-sources ..
       description: Run CT onenv tests
   final-tasks: &final-tasks
-  - test-parser: &test-parser
+  - test-parser:
       type: junit
       ignore-time: 'false'
       test-results: op_worker/test_distributed/logs/*/surefire.xml
       description: Parse test results
-  - script: &save-cover-results
+  - script:
       <<: *run-script-working-dir
       scripts:
       - |-
@@ -550,7 +522,7 @@ api_archive: &ct-onenv-job
         cp test_distributed/logs/ct_run.*/*COVER* cover_ct
         tar -czf cover_ct_${bamboo.shortJobName}.tar.gz cover_ct/
       description: Save cover and test results
-  - script: &push-surefire
+  - script:
       <<: *run-script-working-dir
       scripts:
       - |-
@@ -571,7 +543,7 @@ api_archive: &ct-onenv-job
   - script: *clear-env
   artifacts:
   - &cover_ct
-    name: cover_ct_api_archive.tar.gz
+    name: cover_ct_api_file_attrs.tar.gz
     pattern: cover_ct_${bamboo.shortJobName}.tar.gz
     location: op_worker
     shared: true
@@ -584,30 +556,6 @@ api_archive: &ct-onenv-job
   requirements:
   - minikube
   artifact-subscriptions: *op-worker
-  
-api_dataset_crud:
-  <<: *ct-onenv-job
-  key: APIDATASETCRUD
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_api_dataset_crud.tar.gz
-  - *ct_logs
-  
-api_dataset_tree:
-  <<: *ct-onenv-job
-  key: APIDATASETTREE
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_api_dataset_tree.tar.gz
-  - *ct_logs
-
-api_file_attrs:
-  <<: *ct-onenv-job
-  key: FILDAPI
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_api_file_attrs.tar.gz
-  - *ct_logs
   
 api_file_crud:
   <<: *ct-onenv-job
@@ -656,29 +604,13 @@ api_file_stream:
   - <<: *cover_ct
     name: cover_ct_api_file_stream.tar.gz
   - *ct_logs
-  
-api_file_upload_gui:
-  <<: *ct-onenv-job
-  key: APIFILEUPLOADGUI
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_api_file_upload_gui.tar.gz
-  - *ct_logs
-  
-api_file_upload_rest:
+
+api_file_upload:
   <<: *ct-onenv-job
   key: FILUPLOADAPI
   artifacts:
   - <<: *cover_ct
-    name: cover_ct_api_file_upload_rest.tar.gz
-  - *ct_logs
-  
-api_samples:
-  <<: *ct-onenv-job
-  key: ASA
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_api_samples.tar.gz
+    name: cover_ct_api_file_upload.tar.gz
   - *ct_logs
   
 api_share:
@@ -688,172 +620,27 @@ api_share:
   - <<: *cover_ct
     name: cover_ct_api_share.tar.gz
   - *ct_logs
-  
-api_storage:
-  <<: *ct-onenv-job
-  key: AST
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_api_storage.tar.gz
-  - *ct_logs
-  
-archive:
-  <<: *ct-onenv-job
-  key: ARC
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_archive.tar.gz
-  - *ct_logs
-  
-archive_bagit_sequential:
-  <<: *ct-onenv-job
-  key: ABS
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_archive_bagit_sequential.tar.gz
-  - *ct_logs
-  
-archive_model:
-  <<: *ct-onenv-job
-  key: ARMOD
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_archive_model.tar.gz
-  - *ct_logs
-  
-archive_recall:
-  <<: *ct-onenv-job
-  key: ARREC
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_archive_recall.tar.gz
-  - *ct_logs
 
-archive_sequential:
-  <<: *ct-onenv-job
-  key: ARS
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_archive_sequential.tar.gz
-  - *ct_logs
-
-archivestorage_helper: &ct-job
-  key: AR
-  description: Archive storage S3 helper test
+autocleaning: &ct-job
+  key: AUT
   other: *common-opts
   tasks:
-  - checkout: *fake-checkout
-  - script: *unpack
-  - script: *quarantine-hack-pull-surefire
-  - script:
-      <<: *run-script-working-dir
-      scripts:
-      - ./ct_run.py --suite ${bamboo.shortJobName}
-      description: Run CT
+    - checkout: *fake-checkout
+    - script: *unpack
+    - script: *quarantine-hack-pull-surefire
+    - script:
+        <<: *run-script-working-dir
+        scripts:
+          - ./ct_run.py --suite ${bamboo.shortJobName}
+        description: Run CT
   final-tasks: *final-tasks
   artifacts:
-  - <<: *cover_ct
-    name: cover_ct_archivestorage_helper.tar.gz
-  - *ct_logs
+    - <<: *cover_ct
+      name: cover_ct_autocleaning.tar.gz
+    - *ct_logs
   requirements: *requirements
   artifact-subscriptions: *op-worker
-  
-archivisation_cancellation:
-  <<: *ct-onenv-job
-  key: ARCC
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_archivisation_cancellation.tar.gz
-  - *ct_logs
 
-atm_audit_log_store:
-  <<: *ct-onenv-job
-  key: AALS
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_atm_audit_log_store.tar.gz
-  - *ct_logs
-
-atm_list_store:
-  <<: *ct-onenv-job
-  key: ATMLST
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_atm_list_store.tar.gz
-  - *ct_logs
-
-atm_openfaas_activity_feed:
-  <<: *ct-onenv-job
-  key: AOAF
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_atm_openfaas_activity_feed.tar.gz
-  - *ct_logs
-
-atm_range_store:
-  <<: *ct-onenv-job
-  key: ATMRST
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_atm_range_store.tar.gz
-  - *ct_logs
-
-atm_single_value_store:
-  <<: *ct-onenv-job
-  key: ATMSVST
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_atm_single_value_store.tar.gz
-  - *ct_logs
-
-atm_time_series_store:
-  <<: *ct-onenv-job
-  key: ATMTSSTEST
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_atm_time_series_store.tar.gz
-  - *ct_logs
-
-atm_tree_forest_store:
-  <<: *ct-onenv-job
-  key: ATMTFST
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_atm_tree_forest_store.tar.gz
-  - *ct_logs
-
-atm_value:
-  <<: *ct-onenv-job
-  key: ATMVALUE
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_atm_value.tar.gz
-  - *ct_logs
-  
-atm_workflow_execution:
-  <<: *ct-onenv-job
-  key: ATMWFEXEC
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_atm_workflow_execution.tar.gz
-  - *ct_logs
-
-atm_workflow_executions_collection:
-  <<: *ct-onenv-job
-  key: ATMWFEXECCOLLECTION
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_atm_workflow_executions_collection.tar.gz
-  - *ct_logs
-
-autocleaning:
-  <<: *ct-job
-  key: AUT
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_autocleaning.tar.gz
-  - *ct_logs
-  
 cdmi:
   <<: *ct-job
   key: CDMI
@@ -919,22 +706,6 @@ connection_manager:
     name: cover_ct_connection_manager.tar.gz
   - *ct_logs
 
-dataset:
-  <<: *ct-onenv-job
-  key: DATSET
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_dataset.tar.gz
-  - *ct_logs
-
-datasets_structure:
-  <<: *ct-onenv-job
-  key: DATSTRUCT
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_datasets_structure.tar.gz
-  - *ct_logs
-
 datastore_remote_driver:
   <<: *ct-job
   key: DRD
@@ -971,14 +742,6 @@ dbsync_changes_requesting_with_errors:
     name: cover_ct_dbsync_changes_requesting_with_errors.tar.gz
   - *ct_logs
   requirements: *os-agent
-
-dir_stats_collector:
-  <<: *ct-job
-  key: DSC
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_dir_stats_collector.tar.gz
-  - *ct_logs
 
 event_manager:
   <<: *ct-job
@@ -1075,30 +838,6 @@ glusterfs_helper:
   artifacts:
   - <<: *cover_ct
     name: cover_ct_glusterfs_helper.tar.gz
-  - *ct_logs
-
-gs_atm_inventory_logic:
-  <<: *ct-job
-  key: GSAT
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_gs_atm_inventory_logic.tar.gz
-  - *ct_logs
-
-gs_atm_lambda_logic:
-  <<: *ct-job
-  key: GALL
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_gs_atm_lambda_logic.tar.gz
-  - *ct_logs
-
-gs_atm_workflow_schema_logic:
-  <<: *ct-job
-  key: GAWSL
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_gs_atm_workflow_schema_logic.tar.gz
   - *ct_logs
 
 gs_channel:
@@ -1214,14 +953,6 @@ harvesting:
     name: cover_ct_harvesting.tar.gz
   - *ct_logs
 
-harvesting_custom_metadata:
-  <<: *ct-job
-  key: HCM
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_harvesting_custom_metadata.tar.gz
-  - *ct_logs
-
 harvesting_stream:
   <<: *ct-job
   key: HARMNG
@@ -1261,14 +992,6 @@ lfm_files_s3:
   artifacts:
   - <<: *cover_ct
     name: cover_ct_lfm_files_s3.tar.gz
-  - *ct_logs
-
-lfm_symlinks_resolution:
-  <<: *ct-onenv-job
-  key: LFMSYMLINKRESOLUTION
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_lfm_symlinks_resolution.tar.gz
   - *ct_logs
 
 luma:
@@ -1355,21 +1078,21 @@ multi_provider_file_ops:
   - *ct_logs
   requirements: *os-agent
 
-multi_provider_hardlinks:
-  <<: *ct-job
-  key: MPH
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_multi_provider_hardlinks.tar.gz
-  - *ct_logs
-  requirements: *os-agent
-
 multi_provider_proxy:
   <<: *ct-job
   key: MULPPROX
   artifacts:
   - <<: *cover_ct
     name: cover_ct_multi_provider_proxy.tar.gz
+  - *ct_logs
+  requirements: *os-agent
+
+multi_provider_qos:
+  <<: *ct-job
+  key: MULPQOS
+  artifacts:
+  - <<: *cover_ct
+    name: cover_ct_multi_provider_qos.tar.gz
   - *ct_logs
   requirements: *os-agent
 
@@ -1390,46 +1113,15 @@ multi_provider_view_rest:
   - *ct_logs
   requirements: *os-agent
 
-multiple_workflow_scheduling:
-  <<: *ct-job
-  key: MWS
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_multiple_workflow_scheduling.tar.gz
-  - *ct_logs
-
-nfs_helper:
-  <<: *ct-job
-  key: NFSHEL
-  description: NFS helper test
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_nfs_helper.tar.gz
-  - *ct_logs
-
 node_failure:
   <<: *ct-onenv-job
   key: NOD
-  final-tasks: &final-tasks-pack-logs
-  - test-parser: *test-parser
-  - script: *save-cover-results
-  - script: *push-surefire
-  - script:
-      <<: *run-script
-      scripts:
-      - |-
-        cp sources_info.yaml op_worker/test_distributed/logs/
-        tar -mczf ct_logs_${bamboo.shortJobName}.tar.gz op_worker/test_distributed/logs/
-      description: Pack logs
-  - script:
-      <<: *clear-env
-      working-dir: op_worker
   artifacts:
-  - <<: *cover_ct
-    name: cover_ct_node_failure.tar.gz
-  - *ct_logs
+    - <<: *cover_ct
+      name: cover_ct_node_failure.tar.gz
+    - *ct_logs
   requirements: *os-agent
-  
+
 nulldevice_helper:
   <<: *ct-job
   key: NUL
@@ -1482,7 +1174,7 @@ provider_connection:
   - *ct_logs
 
 qos:
-  <<: *ct-onenv-job
+  <<: *ct-job
   key: QOS
   artifacts:
   - <<: *cover_ct
@@ -1497,45 +1189,12 @@ qos_api:
     name: cover_ct_qos_api.tar.gz
   - *ct_logs
 
-qos_multi_provider:
-  <<: *ct-onenv-job
-  key: MULQ
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_qos_multi_provider.tar.gz
-  - *ct_logs
-  requirements: *os-agent
-  
-qos_multi_provider_single_file:
-  <<: *ct-onenv-job
-  key: SFQOS
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_qos_multi_provider_single_file.tar.gz
-  - *ct_logs
-
 qos_replica_protection:
-  <<: *ct-onenv-job
+  <<: *ct-job
   key: QRP
   artifacts:
   - <<: *cover_ct
     name: cover_ct_qos_replica_protection.tar.gz
-  - *ct_logs
-
-qos_status:
-  <<: *ct-onenv-job
-  key: QOSTA
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_qos_status.tar.gz
-  - *ct_logs
-
-qos_status_reconciliation:
-  <<: *ct-onenv-job
-  key: QSR
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_qos_status_reconciliation.tar.gz
   - *ct_logs
 
 quota:
@@ -1730,14 +1389,6 @@ storage_import:
     name: cover_ct_storage_import.tar.gz
   - *ct_logs
 
-storage_import_delete_and_links:
-  <<: *ct-job
-  key: SIDL
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_storage_import_delete_and_links.tar.gz
-  - *ct_logs
-
 storage_import_deletion:
   <<: *ct-job
   key: STORIMPDEL
@@ -1752,22 +1403,6 @@ storage_import_s3:
   artifacts:
   - <<: *cover_ct
     name: cover_ct_storage_import_s3.tar.gz
-  - *ct_logs
-
-storage_import_update:
-  <<: *ct-job
-  key: SIU
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_storage_import_update.tar.gz
-  - *ct_logs
-
-storage_import_update_s3:
-  <<: *ct-job
-  key: SIUS3
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_storage_import_update_s3.tar.gz
   - *ct_logs
 
 storage_req:
@@ -1805,7 +1440,6 @@ swift_helper:
 tmp_db_error:
   <<: *ct-onenv-job
   key: TMPDBER
-  final-tasks: *final-tasks-pack-logs
   artifacts:
   - <<: *cover_ct
     name: cover_ct_tmp_db_error.tar.gz
@@ -1891,22 +1525,6 @@ webdav_token:
     name: cover_ct_webdav_token.tar.gz
   - *ct_logs
 
-workflow_scheduling:
-  <<: *ct-job
-  key: WSCH
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_workflow_scheduling.tar.gz
-  - *ct_logs
-
-workflow_scheduling_cancellation_and_restart:
-  <<: *ct-job
-  key: WSCR
-  artifacts:
-  - <<: *cover_ct
-    name: cover_ct_workflow_scheduling_cancellation_and_restart.tar.gz
-  - *ct_logs
-
 xrootd_helper:
   <<: *ct-job
   key: XROOT
@@ -1915,27 +1533,6 @@ xrootd_helper:
   - <<: *cover_ct
     name: cover_ct_xrootd_helper.tar.gz
   - *ct_logs
-
-Quarantine_hack_request_next_build:
-  key: ZREQN
-  description: Request next build 
-  other: *common-opts
-  tasks:
-  - checkout: *fake-checkout
-  - script:
-      description: Request next build
-      scripts:
-        # The script which requests the next build of a plan resides on the bamboo server.
-        # For more details about the script look at https://git.onedata.org/projects/VFS/repos/bamboos/browse/bamboo-server/run-build.sh?at=refs%2Fheads%2Ffeature%2FVFS-9519-auto-quarantine-test-cases-for-new-branches
-        # The script is run indirectly by the CGI script used in the curl command.
-        - curl 10.87.23.72:3080/cgi-bin/run-build?${bamboo_planKey}
-      conditions:
-        - variable:
-            matches:
-              bamboo.buildNumber: '2'      
-  - script: *always-successful
-  requirements: *requirements
-  artifact-subscriptions: []
 
 Coverage report:
   key: CR
@@ -1998,9 +1595,6 @@ Coverage report:
   artifact-subscriptions:
   - artifact: cover_eunit.tar.gz
   - artifact: op_worker.tar.gz
-  - artifact: cover_ct_api_archive.tar.gz
-  - artifact: cover_ct_api_dataset_crud.tar.gz
-  - artifact: cover_ct_api_dataset_tree.tar.gz
   - artifact: cover_ct_api_file_attrs.tar.gz
   - artifact: cover_ct_api_file_crud.tar.gz
   - artifact: cover_ct_api_file_ls.tar.gz
@@ -2008,27 +1602,8 @@ Coverage report:
   - artifact: cover_ct_api_file_metadata_get.tar.gz
   - artifact: cover_ct_api_file_metadata_set.tar.gz
   - artifact: cover_ct_api_file_stream.tar.gz
-  - artifact: cover_ct_api_file_upload_gui.tar.gz
-  - artifact: cover_ct_api_file_upload_rest.tar.gz
-  - artifact: cover_ct_api_samples.tar.gz
+  - artifact: cover_ct_api_file_upload.tar.gz
   - artifact: cover_ct_api_share.tar.gz
-  - artifact: cover_ct_api_storage.tar.gz
-  - artifact: cover_ct_archive.tar.gz
-  - artifact: cover_ct_archive_bagit_sequential.tar.gz
-  - artifact: cover_ct_archive_model.tar.gz
-  - artifact: cover_ct_archive_recall.tar.gz
-  - artifact: cover_ct_archive_sequential.tar.gz
-  - artifact: cover_ct_archivestorage_helper.tar.gz
-  - artifact: cover_ct_atm_audit_log_store.tar.gz
-  - artifact: cover_ct_atm_list_store.tar.gz
-  - artifact: cover_ct_atm_openfaas_activity_feed.tar.gz
-  - artifact: cover_ct_atm_range_store.tar.gz
-  - artifact: cover_ct_atm_single_value_store.tar.gz
-  - artifact: cover_ct_atm_time_series_store.tar.gz
-  - artifact: cover_ct_atm_tree_forest_store.tar.gz
-  - artifact: cover_ct_atm_value.tar.gz
-  - artifact: cover_ct_atm_workflow_execution.tar.gz
-  - artifact: cover_ct_atm_workflow_executions_collection.tar.gz
   - artifact: cover_ct_autocleaning.tar.gz
   - artifact: cover_ct_cdmi.tar.gz
   - artifact: cover_ct_ceph_helper.tar.gz
@@ -2038,13 +1613,10 @@ Coverage report:
   - artifact: cover_ct_connection.tar.gz
   - artifact: cover_ct_connection_layer.tar.gz
   - artifact: cover_ct_connection_manager.tar.gz
-  - artifact: cover_ct_dataset.tar.gz
-  - artifact: cover_ct_datasets_structure.tar.gz
   - artifact: cover_ct_datastore_remote_driver.tar.gz
   - artifact: cover_ct_dbsync.tar.gz
   - artifact: cover_ct_dbsync_changes_requesting.tar.gz
   - artifact: cover_ct_dbsync_changes_requesting_with_errors.tar.gz
-  - artifact: cover_ct_dir_stats_collector.tar.gz
   - artifact: cover_ct_event_manager.tar.gz
   - artifact: cover_ct_event_stream.tar.gz
   - artifact: cover_ct_events.tar.gz
@@ -2057,9 +1629,6 @@ Coverage report:
   - artifact: cover_ct_file_registration.tar.gz
   - artifact: cover_ct_fslogic_req.tar.gz
   - artifact: cover_ct_glusterfs_helper.tar.gz
-  - artifact: cover_ct_gs_atm_inventory_logic.tar.gz
-  - artifact: cover_ct_gs_atm_lambda_logic.tar.gz
-  - artifact: cover_ct_gs_atm_workflow_schema_logic.tar.gz
   - artifact: cover_ct_gs_channel.tar.gz
   - artifact: cover_ct_gs_cluster_logic.tar.gz
   - artifact: cover_ct_gs_group_logic.tar.gz
@@ -2074,13 +1643,11 @@ Coverage report:
   - artifact: cover_ct_gs_user_logic.tar.gz
   - artifact: cover_ct_gs_zone_connection.tar.gz
   - artifact: cover_ct_harvesting.tar.gz
-  - artifact: cover_ct_harvesting_custom_metadata.tar.gz
   - artifact: cover_ct_harvesting_stream.tar.gz
   - artifact: cover_ct_idp_access_token.tar.gz
   - artifact: cover_ct_lfm_attrs.tar.gz
   - artifact: cover_ct_lfm_files_posix.tar.gz
   - artifact: cover_ct_lfm_files_s3.tar.gz
-  - artifact: cover_ct_lfm_symlinks_resolution.tar.gz
   - artifact: cover_ct_luma.tar.gz
   - artifact: cover_ct_massive_multi_provider_file_ops.tar.gz
   - artifact: cover_ct_massive_multi_provider_file_ops2.tar.gz
@@ -2091,12 +1658,10 @@ Coverage report:
   - artifact: cover_ct_multi_provider_changes_rest.tar.gz
   - artifact: cover_ct_multi_provider_db_sync.tar.gz
   - artifact: cover_ct_multi_provider_file_ops.tar.gz
-  - artifact: cover_ct_multi_provider_hardlinks.tar.gz
   - artifact: cover_ct_multi_provider_proxy.tar.gz
+  - artifact: cover_ct_multi_provider_qos.tar.gz
   - artifact: cover_ct_multi_provider_rest.tar.gz
   - artifact: cover_ct_multi_provider_view_rest.tar.gz
-  - artifact: cover_ct_multiple_workflow_scheduling.tar.gz
-  - artifact: cover_ct_nfs_helper.tar.gz
   - artifact: cover_ct_node_failure.tar.gz
   - artifact: cover_ct_nulldevice_helper.tar.gz
   - artifact: cover_ct_performance_2_provider.tar.gz
@@ -2106,11 +1671,7 @@ Coverage report:
   - artifact: cover_ct_provider_connection.tar.gz
   - artifact: cover_ct_qos.tar.gz
   - artifact: cover_ct_qos_api.tar.gz
-  - artifact: cover_ct_qos_multi_provider.tar.gz
-  - artifact: cover_ct_qos_multi_provider_single_file.tar.gz
   - artifact: cover_ct_qos_replica_protection.tar.gz
-  - artifact: cover_ct_qos_status.tar.gz
-  - artifact: cover_ct_qos_status_reconciliation.tar.gz
   - artifact: cover_ct_quota.tar.gz
   - artifact: cover_ct_readonly_storage.tar.gz
   - artifact: cover_ct_rename.tar.gz
@@ -2135,11 +1696,8 @@ Coverage report:
   - artifact: cover_ct_storage_cleanup.tar.gz
   - artifact: cover_ct_storage_files.tar.gz
   - artifact: cover_ct_storage_import.tar.gz
-  - artifact: cover_ct_storage_import_delete_and_links.tar.gz
   - artifact: cover_ct_storage_import_deletion.tar.gz
   - artifact: cover_ct_storage_import_s3.tar.gz
-  - artifact: cover_ct_storage_import_update.tar.gz
-  - artifact: cover_ct_storage_import_update_s3.tar.gz
   - artifact: cover_ct_storage_req.tar.gz
   - artifact: cover_ct_storage_sync_links.tar.gz
   - artifact: cover_ct_storage_traverse.tar.gz
@@ -2155,7 +1713,26 @@ Coverage report:
   - artifact: cover_ct_view.tar.gz
   - artifact: cover_ct_webdav_helper.tar.gz
   - artifact: cover_ct_webdav_token.tar.gz
-  - artifact: cover_ct_workflow_scheduling.tar.gz
-  - artifact: cover_ct_workflow_scheduling_cancellation_and_restart.tar.gz
   - artifact: cover_ct_xrootd_helper.tar.gz
+
+
+Qnthack - rerun:
+  key: ZREQN
+  description: Rerun
+  other: *common-opts
+  tasks:
+    - checkout: *fake-checkout
+    - script:
+        description: Rerun
+        scripts:
+          # The script which requests the next build of a plan resides on the bamboo server.
+          # For more details about the script look at https://git.onedata.org/projects/VFS/repos/bamboos/browse/bamboo-server/run-build.sh?at=refs%2Fheads%2Ffeature%2FVFS-9519-auto-quarantine-test-cases-for-new-branches
+          # The script is run indirectly by the CGI script used in the curl command.
+          - curl 10.87.23.72:3080/cgi-bin/run-build?${bamboo_planKey}
+        conditions:
+          - variable:
+              matches:
+                bamboo.buildNumber: '2'
+    - script: *always-successful
+  artifact-subscriptions: [ ]
 ...
