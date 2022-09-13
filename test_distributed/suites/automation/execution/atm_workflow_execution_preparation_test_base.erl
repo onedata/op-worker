@@ -128,7 +128,8 @@ first_lane_run_preparation_failure_before_run_was_created() ->
             }],
             handle_workflow_execution_stopped = #atm_step_mock_spec{
                 after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
-                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_failed(ExpState0)}
+                    ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_rerunable({1, 1}, ExpState0),
+                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_failed(ExpState1)}
                 end
             }
         }]
