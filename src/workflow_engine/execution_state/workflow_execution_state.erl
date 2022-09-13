@@ -405,17 +405,20 @@ report_lane_execution_prepared(Handler, ExecutionId, _LaneId, ?PREPARE_CURRENT, 
         ?WF_ERROR_PREPARATION_FAILED -> ok
     end;
 report_lane_execution_prepared(Handler, ExecutionId, LaneId, ?PREPARE_IN_ADVANCE, {ok, LaneSpec} = Ans) ->
-    case update(ExecutionId, fun(State) ->
-        finish_lane_preparation_in_advance(reset_state_fields_for_next_lane(State), LaneId, LaneSpec)
-    end) of
+    case update(ExecutionId, fun(State) -> finish_lane_preparation_in_advance(State, LaneId, LaneSpec) end) of
         {ok, _} -> ok;
         ?WF_ERROR_UNKNOWN_LANE -> ok;
         ?WF_ERROR_CURRENT_LANE -> report_lane_execution_prepared(Handler, ExecutionId, LaneId, ?PREPARE_CURRENT, Ans)
     end;
-report_lane_execution_prepared(_Handler, ExecutionId, LaneId, LaneType, error) ->
+report_lane_execution_prepared(_Handler, ExecutionId, LaneId, ?PREPARE_CURRENT, error) ->
     case update(ExecutionId, fun(State) ->
-        handle_lane_preparation_failure(reset_state_fields_for_next_lane(State), LaneId, LaneType)
+        handle_lane_preparation_failure(reset_state_fields_for_next_lane(State), LaneId, ?PREPARE_CURRENT)
     end) of
+        {ok, _} -> ok;
+        ?WF_ERROR_UNKNOWN_LANE -> ok
+    end;
+report_lane_execution_prepared(_Handler, ExecutionId, LaneId, ?PREPARE_IN_ADVANCE, error) ->
+    case update(ExecutionId, fun(State) -> handle_lane_preparation_failure(State, LaneId, ?PREPARE_IN_ADVANCE) end) of
         {ok, _} -> ok;
         ?WF_ERROR_UNKNOWN_LANE -> ok
     end.
