@@ -97,8 +97,8 @@
 }).
 
 -record(recursive_listing_result, {
-    entries :: [any()],
-    inaccessible_paths :: [any()],
+    entries :: [any()], % [recursive_listing:result_entry()] but dialyzer does not accept it
+    inaccessible_paths :: [any()], % [recursive_listing:node_path()] but dialyzer does not accept it
     pagination_token :: undefined | recursive_listing:pagination_token()
 }).
 
