@@ -353,7 +353,7 @@ _Codetag Tracker:
       working-dir: op_worker
       description: Codetag Tracker
   final-tasks:
-  - test-parser:
+  - test-parser: &parse-test-results
       type: junit
       ignore-time: 'false'
       test-results: op_worker/test/codetag_tracker_results/TEST-*.xml
@@ -376,10 +376,8 @@ _Dialyze:
       description: Dialyze
   final-tasks:
   - test-parser:
-      type: junit
-      ignore-time: 'false'
+      <<: *parse-test-results
       test-results: op_worker/test/dialyzer_results/TEST-*.xml
-      description: Parse test results
   - script:
       <<: *run-script
       scripts:
@@ -440,8 +438,7 @@ _Unit Test:
         tar -czf cover_eunit.tar.gz cover_eunit/
       description: Save cover and test results
   - test-parser:
-      type: junit
-      ignore-time: 'false'
+      <<: *parse-test-results
       test-results: op_worker/test/eunit_results/TEST-*.xml
       description: Parse test results
   - script:
@@ -509,10 +506,8 @@ api_file_attrs: &ct-onenv-job
       description: Run CT onenv tests
   final-tasks: &final-tasks
   - test-parser:
-      type: junit
-      ignore-time: 'false'
+      <<: *parse-test-results
       test-results: op_worker/test_distributed/logs/*/surefire.xml
-      description: Parse test results
   - script:
       <<: *run-script-working-dir
       scripts:
