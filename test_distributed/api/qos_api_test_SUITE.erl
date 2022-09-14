@@ -106,19 +106,19 @@ create_qos_test(Config) ->
             target_nodes = [P1, P2],
             client_spec = ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config),
             setup_fun = SetupFun,
-            verify_fun = verify_fun(MemRef, Config, create),
+            verify_fun = verify_fun(MemRef, Config, {instance, create}),
             scenario_templates = [
                 #scenario_template{
                     name = <<"Create QoS using rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = prepare_args_fun_rest(MemRef, create),
-                    validate_result_fun = validate_result_fun_rest(MemRef, create)
+                    prepare_args_fun = prepare_args_fun_rest(MemRef, {instance, create}),
+                    validate_result_fun = validate_result_fun_rest(MemRef, {instance, create})
                 },
                 #scenario_template{
                     name = <<"Create QoS using gs endpoint">>,
                     type = gs,
-                    prepare_args_fun = prepare_args_fun_gs(MemRef, create),
-                    validate_result_fun = validate_result_fun_gs(MemRef, create)
+                    prepare_args_fun = prepare_args_fun_gs(MemRef, {instance, create}),
+                    validate_result_fun = validate_result_fun_gs(MemRef, {instance, create})
                 }
             ],
             data_spec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
@@ -149,14 +149,14 @@ get_qos_test(Config) ->
                 #scenario_template{
                     name = <<"Get QoS using rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = prepare_args_fun_rest(MemRef, get),
-                    validate_result_fun = validate_result_fun_rest(MemRef, get)
+                    prepare_args_fun = prepare_args_fun_rest(MemRef, {instance, get}),
+                    validate_result_fun = validate_result_fun_rest(MemRef, {instance, get})
                 },
                 #scenario_template{
                     name = <<"Get QoS using gs endpoint">>,
                     type = gs,
-                    prepare_args_fun = prepare_args_fun_gs(MemRef, get),
-                    validate_result_fun = validate_result_fun_gs(MemRef, get)
+                    prepare_args_fun = prepare_args_fun_gs(MemRef, {instance, get}),
+                    validate_result_fun = validate_result_fun_gs(MemRef, {instance, get})
                 }
             ],
             data_spec = #data_spec{
@@ -181,18 +181,18 @@ delete_qos_test(Config) ->
             target_nodes = [P1, P2],
             client_spec = ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config),
             setup_fun = setup_fun(MemRef, Config, Guid),
-            verify_fun = verify_fun(MemRef, Config, delete),
+            verify_fun = verify_fun(MemRef, Config, {instance, delete}),
             scenario_templates = [
                 #scenario_template{
                     name = <<"Delete QoS using rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = prepare_args_fun_rest(MemRef, delete),
+                    prepare_args_fun = prepare_args_fun_rest(MemRef, {instance, delete}),
                     validate_result_fun = fun(_, {ok, ?HTTP_204_NO_CONTENT, _, #{}}) -> ok end
                 },
                 #scenario_template{
                     name = <<"Delete QoS using gs endpoint">>,
                     type = gs,
-                    prepare_args_fun = prepare_args_fun_gs(MemRef, delete),
+                    prepare_args_fun = prepare_args_fun_gs(MemRef, {instance, delete}),
                     validate_result_fun = fun(_, ok) -> ok end
                 }
             ],
@@ -510,7 +510,7 @@ setup_fun(MemRef, Config, Guid) ->
 %%% Prepare args functions
 %%%===================================================================
 
-prepare_args_fun_rest(MemRef, create) ->
+prepare_args_fun_rest(MemRef, {instance, create}) ->
     fun(#api_test_ctx{data = Data}) ->
         Guid = api_test_memory:get(MemRef, guid),
 
@@ -557,7 +557,7 @@ prepare_args_fun_rest(MemRef, qos_audit_log) ->
         }
     end;
 
-prepare_args_fun_rest(MemRef, Method) ->
+prepare_args_fun_rest(MemRef, {instance, Method}) ->
     fun(#api_test_ctx{data = Data}) ->
         QosEntryId = api_test_memory:get(MemRef, qos),
 
@@ -569,7 +569,7 @@ prepare_args_fun_rest(MemRef, Method) ->
     end.
 
 
-prepare_args_fun_gs(MemRef, create) ->
+prepare_args_fun_gs(MemRef, {instance, create}) ->
     fun(#api_test_ctx{data = Data}) ->
         Guid = api_test_memory:get(MemRef, guid),
 
@@ -639,7 +639,7 @@ prepare_args_fun_gs(MemRef, {qos_transfer_stats_collection, slice, Type}) ->
         }
     end;
 
-prepare_args_fun_gs(MemRef, Method) ->
+prepare_args_fun_gs(MemRef, {instance, Method}) ->
     fun(#api_test_ctx{data = Data}) ->
         QosEntryId = api_test_memory:get(MemRef, qos),
         {Id, _} = api_test_utils:maybe_substitute_bad_id(QosEntryId, Data),
@@ -654,14 +654,14 @@ prepare_args_fun_gs(MemRef, Method) ->
 %%% Validate result functions
 %%%===================================================================
 
-validate_result_fun_rest(MemRef, create) ->
+validate_result_fun_rest(MemRef, {instance, create}) ->
     fun(_ApiTestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
         ?assertEqual(?HTTP_201_CREATED, RespCode),
         QosEntryId = maps:get(<<"qosRequirementId">>, RespBody),
         api_test_memory:set(MemRef, qos, QosEntryId)
     end;
 
-validate_result_fun_rest(MemRef, get) ->
+validate_result_fun_rest(MemRef, {instance, get}) ->
     fun(_, {ok, RespCode, _RespHeaders, RespBody}) ->
         Guid = api_test_memory:get(MemRef, guid),
         QosEntryId = api_test_memory:get(MemRef, qos),
@@ -735,13 +735,13 @@ validate_result_fun_rest(_MemRef, qos_audit_log) ->
     end.
 
 
-validate_result_fun_gs(MemRef, create) ->
+validate_result_fun_gs(MemRef, {instance, create}) ->
     fun(_ApiTestCtx, {ok, Result}) ->
         #gri{id = QosEntryId} = ?assertMatch(#gri{type = op_qos}, gri:deserialize(maps:get(<<"gri">>, Result))),
         api_test_memory:set(MemRef, qos, QosEntryId)
     end;
 
-validate_result_fun_gs(MemRef, get) ->
+validate_result_fun_gs(MemRef, {instance, get}) ->
     fun(_, {ok, Result}) ->
         Guid = api_test_memory:get(MemRef, guid),
         QosEntryId = api_test_memory:get(MemRef, qos),
@@ -867,7 +867,7 @@ validate_result_fun_gs(MemRef, {qos_transfer_stats_collection, slice, Collection
 %%% Verify env functions
 %%%===================================================================
 
-verify_fun(MemRef, Config, create) ->
+verify_fun(MemRef, Config, {instance, create}) ->
     [P2, P1] = ?config(op_worker_nodes, Config),
     SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
     SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
@@ -892,7 +892,7 @@ verify_fun(MemRef, Config, create) ->
             true
     end;
 
-verify_fun(MemRef, Config, delete) ->
+verify_fun(MemRef, Config, {instance, delete}) ->
     [P2, P1] = ?config(op_worker_nodes, Config),
     SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
     SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),

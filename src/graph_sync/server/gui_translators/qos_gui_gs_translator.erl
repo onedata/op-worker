@@ -37,7 +37,7 @@ translate_value(#gri{aspect = audit_log}, ListedEntries) ->
 translate_value(#gri{aspect = {transfer_stats_collection_schema, _}}, TimeSeriesCollectionSchema) ->
     jsonable_record:to_json(TimeSeriesCollectionSchema);
 translate_value(#gri{aspect = {transfer_stats_collection, _}}, TSBrowseResult) ->
-    ts_browse_result:translate_for_gui(TSBrowseResult).
+    ts_browse_result:to_json_with_compressed_windows(TSBrowseResult).
 
 
 -spec translate_resource(gri:gri(), Data :: term()) ->
