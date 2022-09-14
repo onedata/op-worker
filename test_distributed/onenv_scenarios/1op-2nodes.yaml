@@ -25,46 +25,14 @@ sources:
       - op-worker
       - cluster-manager
 
-
-# Onezone image to use. Note that if 'sources' option is enabled, it must
-# be based off onedata/worker image (it contains all the machinery to run the
-# application from sources - images based off onedata-worker are images with
-# -dev suffix).
-onezoneImage: "docker.onedata.org/onezone-dev:20.02.12"
-
-# Oneprovider image to use. Note that if 'sources' option is enabled, it must
-# be based off onedata/worker image (images based off onedata-worker are
-# images with -dev suffix).
-oneproviderImage: "docker.onedata.org/oneprovider-dev:20.02.12"
-
-# Determines if elastic search should start.
-elasticSearch: false
-
-# Determines if luma should start.
-luma: false
-
-# Determines if onedata rest client should start.
-onedataCli: false
-
-# Determines if oneclients should start.
-oneclients: false
-
-# When enabled, onezoneImage and oneproviderImage will be pulled before every
-# deployment. If disabled, they will only be pulled if not existent.
-forceImagePull: false
-
-# Determines if spaces should be created. It can be either boolean value or
-# list of spaces that should be created.
-#
-# By default spaces supported by all providers are created. For custom
-# space configuration please refer to one of MyValues.yaml file in
-# scenario directory.
 users:
   - &user1
     name: user1
     password: password
 
 
+# Determines if spaces should be created. It can be either boolean value or
+# list of spaces that should be created.
 spaces:
   - name: space1
     user: *user1
