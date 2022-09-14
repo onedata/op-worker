@@ -92,6 +92,7 @@ stop(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx) ->
         {ok, AtmWorkflowExecutionDoc = #document{value = #atm_workflow_execution{
             prev_status = PrevStatus
         }}} ->
+            %% TODO MW call engine to delete db for this worklow?
             case atm_workflow_execution_status:status_to_phase(PrevStatus) of
                 ?SUSPENDED_PHASE ->
                     stop_suspended(

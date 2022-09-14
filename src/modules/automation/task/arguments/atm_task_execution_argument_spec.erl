@@ -160,14 +160,6 @@ build_value(Item, _AtmRunJobBatchCtx, #atm_task_argument_value_builder{
     end;
 
 build_value(_Item, AtmRunJobBatchCtx, #atm_task_argument_value_builder{
-    type = onedatafs_credentials
-}) ->
-    #{
-        <<"host">> => oneprovider:get_domain(),
-        <<"accessToken">> => atm_run_job_batch_ctx:get_access_token(AtmRunJobBatchCtx)
-    };
-
-build_value(_Item, AtmRunJobBatchCtx, #atm_task_argument_value_builder{
     type = single_value_store_content,
     recipe = AtmSingleValueStoreSchemaId
 }) ->
@@ -199,5 +191,5 @@ build_value(_Item, _AtmRunJobBatchCtx, #atm_task_argument_value_builder{
 }) ->
     % TODO VFS-7660 handle rest of atm_task_argument_value_builder:type()
     throw(?ERROR_ATM_TASK_ARG_MAPPER_UNSUPPORTED_VALUE_BUILDER(ValueBuilderType, [
-        const, iterated_item, onedatafs_credentials, single_value_store_content
+        const, iterated_item, single_value_store_content
     ])).

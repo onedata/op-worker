@@ -66,9 +66,9 @@
 %%%  N   |  +----------+    +--------+       +-----------+    +-----------+   |                 |
 %%%  D   |  | FINISHED |    | FAILED |       | CANCELLED |    |  CRASHED  |   |                 |
 %%%  E   |  +----------+    +--------+       +-----------+    +-----------+   |                 |
-%%%  D   |                                             |                      |                 |
-%%%       \                                            |                      |                /
-%%%         -------------------------------------------o----------------------o---------------
+%%%  D   |                                                                    |                 |
+%%%       \                                                                   |                /
+%%%         ------------------------------------------- ----------------------o---------------
 %%%                                         resuming execution
 %%%
 %%% Lane run transition to STOPPING status when execution is halted and not all items were processed.
@@ -324,8 +324,7 @@ handle_resume(AtmWorkflowExecutionId) ->
         atm_lane_execution:update_run({current, current}, fun
             (#atm_lane_execution_run{status = Status} = Run) when
                 Status =:= ?INTERRUPTED_STATUS;
-                Status =:= ?PAUSED_STATUS;
-                Status =:= ?CANCELLED_STATUS
+                Status =:= ?PAUSED_STATUS
             ->
                 {ok, Run#atm_lane_execution_run{
                     status = ?RESUMING_STATUS,

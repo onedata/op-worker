@@ -34,13 +34,15 @@
     expect_lane_run_started_preparing_in_advance/2,
     expect_lane_run_created/2,
     expect_lane_run_enqueued/2,
-    expect_lane_run_aborting/2,
+    expect_lane_run_stopping/2,
     expect_lane_run_finished/2,
     expect_lane_run_failed/2,
-    expect_lane_run_failed/3,
     expect_lane_run_cancelled/2,
     expect_lane_run_interrupted/2,
+    expect_lane_run_rerunable/2,
+    expect_lane_run_retriable/2,
     expect_lane_run_num_set/3,
+    expect_lane_run_removed/2,
 
     get_task_selector/2,
     get_task_stats/2,
@@ -56,7 +58,7 @@
     expect_task_parallel_box_transitioned_to_inferred_status/3,
     expect_all_tasks_skipped/2,
 
-    expect_workflow_execution_aborting/1,
+    expect_workflow_execution_stopping/1,
     expect_workflow_execution_finished/1,
     expect_workflow_execution_failed/1,
     expect_workflow_execution_cancelled/1,
@@ -156,6 +158,7 @@ init(
 
             <<"scheduleTime">> => build_timestamp_field_validator(ApproxScheduleTime),
             <<"startTime">> => 0,
+            <<"suspendTime">> => 0,
             <<"finishTime">> => 0
         },
         exp_task_execution_state_ctx_registry = #{}
@@ -294,47 +297,31 @@ expect_lane_run_enqueued(AtmLaneRunSelector, ExpStateCtx) ->
     update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx).
 
 
--spec expect_lane_run_aborting(atm_lane_execution:lane_run_selector(), ctx()) ->
+-spec expect_lane_run_stopping(atm_lane_execution:lane_run_selector(), ctx()) ->
     ctx().
-expect_lane_run_aborting(AtmLaneRunSelector, ExpStateCtx) ->
-    ExpAtmLaneRunStateDiff = #{<<"status">> => <<"aborting">>},
+expect_lane_run_stopping(AtmLaneRunSelector, ExpStateCtx) ->
+    ExpAtmLaneRunStateDiff = #{<<"status">> => <<"stopping">>},
     update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx).
 
 
 -spec expect_lane_run_finished(atm_lane_execution:lane_run_selector(), ctx()) ->
     ctx().
 expect_lane_run_finished(AtmLaneRunSelector, ExpStateCtx) ->
-    ExpAtmLaneRunStateDiff = #{
-        <<"status">> => <<"finished">>,
-        <<"isRerunable">> => true
-    },
+    ExpAtmLaneRunStateDiff = #{<<"status">> => <<"finished">>},
     update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx).
 
 
 -spec expect_lane_run_failed(atm_lane_execution:lane_run_selector(), ctx()) ->
     ctx().
 expect_lane_run_failed(AtmLaneRunSelector, ExpStateCtx) ->
-    expect_lane_run_failed(AtmLaneRunSelector, false, ExpStateCtx).
-
-
--spec expect_lane_run_failed(atm_lane_execution:lane_run_selector(), boolean(), ctx()) ->
-    ctx().
-expect_lane_run_failed(AtmLaneRunSelector, IsRetriable, ExpStateCtx) ->
-    ExpAtmLaneRunStateDiff = #{
-        <<"status">> => <<"failed">>,
-        <<"isRerunable">> => true,
-        <<"isRetriable">> => IsRetriable
-    },
+    ExpAtmLaneRunStateDiff = #{<<"status">> => <<"failed">>},
     update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx).
 
 
 -spec expect_lane_run_cancelled(atm_lane_execution:lane_run_selector(), ctx()) ->
     ctx().
 expect_lane_run_cancelled(AtmLaneRunSelector, ExpStateCtx) ->
-    ExpAtmLaneRunStateDiff = #{
-        <<"status">> => <<"cancelled">>,
-        <<"isRerunable">> => true
-    },
+    ExpAtmLaneRunStateDiff = #{<<"status">> => <<"cancelled">>},
     update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx).
 
 
@@ -342,6 +329,20 @@ expect_lane_run_cancelled(AtmLaneRunSelector, ExpStateCtx) ->
     ctx().
 expect_lane_run_interrupted(AtmLaneRunSelector, ExpStateCtx) ->
     ExpAtmLaneRunStateDiff = #{<<"status">> => <<"interrupted">>},
+    update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx).
+
+
+-spec expect_lane_run_rerunable(atm_lane_execution:lane_run_selector(), ctx()) ->
+    ctx().
+expect_lane_run_rerunable(AtmLaneRunSelector, ExpStateCtx) ->
+    ExpAtmLaneRunStateDiff = #{<<"isRerunable">> => true},
+    update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx).
+
+
+-spec expect_lane_run_retriable(atm_lane_execution:lane_run_selector(), ctx()) ->
+    ctx().
+expect_lane_run_retriable(AtmLaneRunSelector, ExpStateCtx) ->
+    ExpAtmLaneRunStateDiff = #{<<"isRetriable">> => true},
     update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx).
 
 
@@ -354,6 +355,38 @@ expect_lane_run_interrupted(AtmLaneRunSelector, ExpStateCtx) ->
 expect_lane_run_num_set(AtmLaneRunSelector, RunNum, ExpStateCtx) ->
     ExpAtmLaneRunStateDiff = #{<<"runNumber">> => RunNum},
     update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx).
+
+
+-spec expect_lane_run_removed(atm_lane_execution:lane_run_selector(), ctx()) ->
+    ctx().
+expect_lane_run_removed({AtmLaneSelector, AtmRunSelector}, ExpStateCtx = #exp_workflow_execution_state_ctx{
+    current_run_num = CurrentRunNum,
+    exp_workflow_execution_state = ExpAtmWorkflowExecutionState = #{<<"lanes">> := AtmLaneExecutions},
+    exp_task_execution_state_ctx_registry = ExpAtmTaskExecutionsRegistry
+}) ->
+    AtmLaneIndex = resolve_lane_selector(AtmLaneSelector, ExpStateCtx),
+    TargetRunNum = resolve_run_selector(AtmRunSelector, ExpStateCtx),
+
+    AtmLaneExecutionWithRun = #{<<"runs">> := AtmLaneRuns} = lists:nth(AtmLaneIndex, AtmLaneExecutions),
+    {#{<<"parallelBoxes">> := AtmParallelBoxes}, RestAtmLaneRuns} = take_run(
+        TargetRunNum, CurrentRunNum, AtmLaneRuns, []
+    ),
+    AtmLaneExecutionWithoutRun = AtmLaneExecutionWithRun#{<<"runs">> => RestAtmLaneRuns},
+
+    AtmTaskExecutionIds = lists:foldl(fun(#{<<"taskRegistry">> := AtmTaskRegistry}, Acc) ->
+        maps:values(AtmTaskRegistry) ++ Acc
+    end, [], AtmParallelBoxes),
+
+    ExpStateCtx#exp_workflow_execution_state_ctx{
+        exp_workflow_execution_state = ExpAtmWorkflowExecutionState#{
+            <<"lanes">> => lists_utils:replace_at(
+                AtmLaneExecutionWithoutRun, AtmLaneIndex, AtmLaneExecutions
+            )
+        },
+        exp_task_execution_state_ctx_registry = maps:without(
+            AtmTaskExecutionIds, ExpAtmTaskExecutionsRegistry
+        )
+    }.
 
 
 -spec get_task_selector(atm_task_execution:id(), ctx()) -> task_selector().
@@ -556,17 +589,17 @@ expect_all_tasks_skipped(AtmLaneRunSelector, ExpStateCtx = #exp_workflow_executi
     }).
 
 
--spec expect_workflow_execution_aborting(ctx()) -> ctx().
-expect_workflow_execution_aborting(ExpStateCtx) ->
+-spec expect_workflow_execution_stopping(ctx()) -> ctx().
+expect_workflow_execution_stopping(ExpStateCtx) ->
     ExpAtmWorkflowExecutionStateDiff = fun
         (ExpAtmWorkflowExecutionState = #{<<"startTime">> := 0}) ->
             % atm workflow execution failure/cancel while in schedule status
             ExpAtmWorkflowExecutionState#{
-                <<"status">> => <<"aborting">>,
+                <<"status">> => <<"stopping">>,
                 <<"startTime">> => build_timestamp_field_validator(?NOW())
             };
         (ExpAtmWorkflowExecutionState) ->
-            ExpAtmWorkflowExecutionState#{<<"status">> => <<"aborting">>}
+            ExpAtmWorkflowExecutionState#{<<"status">> => <<"stopping">>}
     end,
     update_workflow_execution_exp_state(ExpAtmWorkflowExecutionStateDiff, ExpStateCtx).
 
@@ -827,6 +860,22 @@ update_task_execution_exp_state(AtmTaskExecutionId, ExpStateDiff, ExpStateCtx = 
     ExpStateCtx#exp_workflow_execution_state_ctx{exp_task_execution_state_ctx_registry = maps:update_with(
         AtmTaskExecutionId, Diff, ExpAtmTaskExecutionsRegistry
     )}.
+
+
+%% @private
+take_run(_TargetRunNum, _CurrentRunNum, [], _) ->
+    error;
+
+take_run(TargetRunNum, CurrentRunNum, [Run = #{<<"runNumber">> := null} | RestRuns], NewerRunsReversed) when
+    CurrentRunNum =< TargetRunNum
+->
+    {Run, lists:reverse(NewerRunsReversed) ++ RestRuns};
+
+take_run(TargetRunNum, _CurrentRunNum, [Run = #{<<"runNumber">> := TargetRunNum} | RestRuns], NewerRunsReversed) ->
+    {Run, lists:reverse(NewerRunsReversed) ++ RestRuns};
+
+take_run(TargetRunNum, CurrentRunNum, [Run | RestRuns], NewerRunsReversed) ->
+    take_run(TargetRunNum, CurrentRunNum, RestRuns, [Run | NewerRunsReversed]).
 
 
 %% @private

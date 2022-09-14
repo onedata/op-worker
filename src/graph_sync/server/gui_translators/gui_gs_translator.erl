@@ -50,7 +50,7 @@ handshake_attributes(_Client) ->
         <<"serviceVersion">> => op_worker:get_release_version(),
         <<"onezoneUrl">> => oneprovider:get_oz_url(),
         <<"transfersHistoryLimitPerFile">> => transferred_file:get_history_limit(),
-        <<"openfaasAvailable">> => atm_openfaas_task_executor:is_openfaas_available(),
+        <<"openfaasAvailable">> => atm_openfaas_monitor:is_openfaas_healthy(),
         <<"bagitUploaderWorkflowSchemaId">> => utils:undefined_to_null(BagitUploaderWorkflowSchemaId),
         <<"qosTransferStatsConfig">> => #{
             <<"totalTimeSeriesId">> => ?QOS_TOTAL_TIME_SERIES_NAME,

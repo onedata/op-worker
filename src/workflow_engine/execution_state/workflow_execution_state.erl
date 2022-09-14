@@ -64,8 +64,8 @@
 -define(PREPARATION_CANCELLED(CallCount), #execution_cancelled{execution_step = lane_prepare, call_count = CallCount}).
 -define(WAITING_FOR_NEXT_LANE_PREPARATION_END(HasExceptionAppeared), #execution_cancelled{
     execution_step = waiting_on_next_lane_prepare, call_count = 0, has_exception_appeared = HasExceptionAppeared}).
--define(EXECUTION_ENDED_AFTER_CANCEL(HasExceptionAppeared), #execution_cancelled{
-    execution_step = finishing_execution, call_count = 0, has_exception_appeared = HasExceptionAppeared}).
+-define(EXECUTION_ENDED_AFTER_CANCEL(HasExceptionAppeared), #execution_cancelled{execution_step = finishing_execution,
+    call_count = 0, callbacks_to_execute = [], has_exception_appeared = HasExceptionAppeared}).
 
 
 % Macros and records used to provide additional information about document update procedure
@@ -410,8 +410,15 @@ report_lane_execution_prepared(Handler, ExecutionId, LaneId, ?PREPARE_IN_ADVANCE
         ?WF_ERROR_UNKNOWN_LANE -> ok;
         ?WF_ERROR_CURRENT_LANE -> report_lane_execution_prepared(Handler, ExecutionId, LaneId, ?PREPARE_CURRENT, Ans)
     end;
-report_lane_execution_prepared(_Handler, ExecutionId, LaneId, LaneType, error) ->
-    case update(ExecutionId, fun(State) -> handle_lane_preparation_failure(State, LaneId, LaneType) end) of
+report_lane_execution_prepared(_Handler, ExecutionId, LaneId, ?PREPARE_CURRENT, error) ->
+    case update(ExecutionId, fun(State) ->
+        handle_lane_preparation_failure(reset_state_fields_for_next_lane(State), LaneId, ?PREPARE_CURRENT)
+    end) of
+        {ok, _} -> ok;
+        ?WF_ERROR_UNKNOWN_LANE -> ok
+    end;
+report_lane_execution_prepared(_Handler, ExecutionId, LaneId, ?PREPARE_IN_ADVANCE, error) ->
+    case update(ExecutionId, fun(State) -> handle_lane_preparation_failure(State, LaneId, ?PREPARE_IN_ADVANCE) end) of
         {ok, _} -> ok;
         ?WF_ERROR_UNKNOWN_LANE -> ok
     end.
@@ -533,7 +540,9 @@ finish_lane_preparation(Handler, ExecutionId,
         [] ->
             % workflow_jobs require at least one parallel_boxes in lane
             ?error("No parallel boxes for lane ~p of execution id: ~p", [LaneSpec, ExecutionId]),
-            {ok, _} = update(ExecutionId, fun(State) -> handle_lane_preparation_failure(State, undefined, ?PREPARE_CURRENT) end),
+            {ok, _} = update(ExecutionId, fun(State) ->
+                handle_lane_preparation_failure(reset_state_fields_for_next_lane(State), undefined, ?PREPARE_CURRENT)
+            end),
             ?WF_ERROR_PREPARATION_FAILED;
         _ ->
             BoxesMap = lists:foldl(fun({BoxIndex, BoxSpec}, BoxesAcc) ->
@@ -546,7 +555,8 @@ finish_lane_preparation(Handler, ExecutionId,
             NextIterationStep = get_next_iterator(Handler, LaneExecutionContext, Iterator, ExecutionId),
             FailureCountToCancel = maps:get(failure_count_to_cancel, LaneSpec, undefined),
             case update(ExecutionId, fun(State) ->
-                finish_lane_preparation_internal(State, BoxesMap, LaneExecutionContext, NextIterationStep, FailureCountToCancel)
+                finish_lane_preparation_internal(reset_state_fields_for_next_lane(State),
+                    BoxesMap, LaneExecutionContext, NextIterationStep, FailureCountToCancel)
             end) of
                 {ok, #document{value = #workflow_execution_state{
                     execution_status = ?EXECUTION_CANCELLED(_), current_lane = CurrentLane,
@@ -964,6 +974,15 @@ execute_exception_handler(#document{key = ExecutionId, value = #workflow_executi
     ok.
 
 
+-spec reset_state_fields_for_next_lane(state()) -> state().
+reset_state_fields_for_next_lane(State) ->
+    State#workflow_execution_state{
+        iteration_state = workflow_iteration_state:init(),
+        jobs = workflow_jobs:init(),
+        tasks_data_registry = workflow_tasks_data_registry:empty()
+    }.
+
+
 -spec handle_lane_preparation_failure(state(), workflow_engine:lane_id() | undefined,
     workflow_engine:preparation_mode()) -> {ok, state()} | ?WF_ERROR_UNKNOWN_LANE.
 handle_lane_preparation_failure(
@@ -981,9 +1000,11 @@ handle_lane_preparation_failure(
     {ok, State#workflow_execution_state{execution_status = ?WAITING_FOR_NEXT_LANE_PREPARATION_END(false)}};
 handle_lane_preparation_failure(
     #workflow_execution_state{
-        execution_status = ?EXECUTION_CANCELLED(_)
+        execution_status = ?EXECUTION_CANCELLED(_) = Status
     } = State, _LaneId, ?PREPARE_CURRENT) ->
-    {ok, State};
+    {ok, State#workflow_execution_state{
+        execution_status = Status#execution_cancelled{execution_step = finishing_execution}
+    }};
 handle_lane_preparation_failure(State, _LaneId, ?PREPARE_CURRENT) ->
     {ok, State#workflow_execution_state{execution_status = ?PREPARATION_FAILED}};
 handle_lane_preparation_failure(

@@ -277,8 +277,8 @@ fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error() ->
                         }) ->
                             case AnyMeasurementInvalidFun(UncorrelatedResults) of
                                 true ->
-                                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_aborting(
-                                        atm_workflow_execution_exp_state_builder:expect_lane_run_aborting({1, 1}, ExpState)
+                                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(
+                                        atm_workflow_execution_exp_state_builder:expect_lane_run_stopping({1, 1}, ExpState)
                                     )};
                                 false ->
                                     false
@@ -290,7 +290,7 @@ fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error() ->
                     },
                     handle_lane_execution_stopped = #atm_step_mock_spec{
                         after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState}) ->
-                            {true, atm_workflow_execution_exp_state_builder:expect_lane_run_failed({1, 1}, false, ExpState)}
+                            {true, atm_workflow_execution_exp_state_builder:expect_lane_run_failed({1, 1}, ExpState)}
                         end
                     }
                 }
@@ -943,8 +943,8 @@ job_failure_expect_task3_ended(TestcaseId, AtmTask3ExecutionId, ExpState) ->
             check_iterated_items(TestcaseId, AtmLaneRunSelector, AtmMockCallCtx),
             check_exception_store_content(TestcaseId, AtmLaneRunSelector, AtmMockCallCtx),
 
-            ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_failed(
-                AtmLaneRunSelector, true, ExpState0
+            ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_failed(  %% TODO isRetriable == true
+                AtmLaneRunSelector, ExpState0
             ),
             {true, case IsLastExpLaneRun of
                 true ->

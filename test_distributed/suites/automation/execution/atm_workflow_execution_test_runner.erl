@@ -318,7 +318,7 @@ monitor_workflow_execution(TestCtx0) ->
                 TestCtx2 = address_pending_expectations(TestCtx1),
                 TestCtx3 = end_pending_step_phase_executions(TestCtx2),
 
-                case has_workflow_ended(TestCtx3) of
+                case has_workflow_stopped(TestCtx3) of
                     true ->
                         ok;
                     false ->
@@ -393,7 +393,7 @@ end_pending_step_phase_executions(TestCtx = #test_ctx{pending_step_phases = Pend
             after_step -> ok
         end),
 
-        shift_monitored_lane_run_if_current_one_ended(
+        shift_monitored_lane_run_if_current_one_stopped(
             StepMockCallReport,
             TestCtxAcc0#test_ctx{executed_step_phases = [StepPhaseSelector | ExecutedStepPhases]}
         )
@@ -422,15 +422,15 @@ begin_deferred_step_phase_executions_if_possible(TestCtx = #test_ctx{
 
 
 %% @private
--spec has_workflow_ended(test_ctx()) -> boolean().
-has_workflow_ended(#test_ctx{
+-spec has_workflow_stopped(test_ctx()) -> boolean().
+has_workflow_stopped(#test_ctx{
     ongoing_incarnations = [],
     pending_step_phases = [],
     deferred_step_phases = DeferredStepPhases
 }) ->
     maps_utils:is_empty(DeferredStepPhases);
 
-has_workflow_ended(#test_ctx{}) ->
+has_workflow_stopped(#test_ctx{}) ->
     false.
 
 
@@ -616,10 +616,10 @@ get_exp_state_diff(
 ) ->
     fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0, call_args = [
         _AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId,
-        ItemsBatch, _ReportResultUrl, _HeartbeatUrl
+        _AtmJobBatchId, ItemBatch
     ]}) ->
         ExpState1 = atm_workflow_execution_exp_state_builder:expect_task_items_in_processing_increased(
-            AtmTaskExecutionId, length(ItemsBatch), ExpState0
+            AtmTaskExecutionId, length(ItemBatch), ExpState0
         ),
         ExpState2 = atm_workflow_execution_exp_state_builder:expect_task_transitioned_to_active_status_if_was_in_pending_status(
             AtmTaskExecutionId, ExpState1
@@ -778,15 +778,15 @@ assert_exp_workflow_execution_state(#test_ctx{
 
 
 %% @private
--spec shift_monitored_lane_run_if_current_one_ended(mock_call_report(), test_ctx()) ->
+-spec shift_monitored_lane_run_if_current_one_stopped(mock_call_report(), test_ctx()) ->
     test_ctx().
-shift_monitored_lane_run_if_current_one_ended(
+shift_monitored_lane_run_if_current_one_stopped(
     #mock_call_report{timing = after_step, step = handle_workflow_execution_stopped},
-    TestCtx = #test_ctx{ongoing_incarnations = [_]}  %% last incarnation ended
+    TestCtx = #test_ctx{ongoing_incarnations = [_]}  %% last incarnation stopped
 ) ->
     TestCtx#test_ctx{ongoing_incarnations = []};
 
-shift_monitored_lane_run_if_current_one_ended(
+shift_monitored_lane_run_if_current_one_stopped(
     #mock_call_report{timing = after_step, step = handle_workflow_execution_stopped},
     TestCtx = #test_ctx{ongoing_incarnations = [_ | LeftoverIncarnations]}
 ) ->
@@ -802,7 +802,7 @@ shift_monitored_lane_run_if_current_one_ended(
         ongoing_incarnations = LeftoverIncarnations
     };
 
-shift_monitored_lane_run_if_current_one_ended(
+shift_monitored_lane_run_if_current_one_stopped(
     StepMockCallReport = #mock_call_report{
         timing = after_step,
         step = Step,
@@ -813,7 +813,7 @@ shift_monitored_lane_run_if_current_one_ended(
         current_run_num = CurrentAtmRunNum
     }
 ) when
-    % Lane execution ended callback may ba called during lane preparation in case of failure
+    % Lane execution stopped callback may ba called during lane preparation in case of failure
     % - in such case it will be prepare_lane that will finish executing last
     Step =:= prepare_lane;
     Step =:= handle_lane_execution_stopped
@@ -827,14 +827,14 @@ shift_monitored_lane_run_if_current_one_ended(
 
     case {IsLastLaneRunStepPhase, AtmLaneRunSelector} of
         {true, CurrentAtmLaneRunSelector} ->
-            shift_monitored_lane_run_after_current_one_ended(TestCtx);
+            shift_monitored_lane_run_after_current_one_stopped(TestCtx);
         {true, _} ->
-            filter_out_ended_lane_run_preparing_in_advance(AtmLaneRunSelector, TestCtx);
+            filter_out_stopped_lane_run_preparing_in_advance(AtmLaneRunSelector, TestCtx);
         {false, _} ->
             TestCtx
     end;
 
-shift_monitored_lane_run_if_current_one_ended(_, TestCtx) ->
+shift_monitored_lane_run_if_current_one_stopped(_, TestCtx) ->
     TestCtx.
 
 
@@ -862,8 +862,8 @@ is_end_phase_of_last_step_of_lane_run(
 
 
 %% @private
--spec shift_monitored_lane_run_after_current_one_ended(test_ctx()) -> test_ctx().
-shift_monitored_lane_run_after_current_one_ended(TestCtx = #test_ctx{
+-spec shift_monitored_lane_run_after_current_one_stopped(test_ctx()) -> test_ctx().
+shift_monitored_lane_run_after_current_one_stopped(TestCtx = #test_ctx{
     ongoing_incarnations = [OngoingIncarnation | LeftoverIncarnations]
 }) ->
     case OngoingIncarnation#atm_workflow_execution_incarnation_test_spec.lane_runs of
@@ -890,12 +890,12 @@ shift_monitored_lane_run_after_current_one_ended(TestCtx = #test_ctx{
 
 
 %% @private
--spec filter_out_ended_lane_run_preparing_in_advance(
+-spec filter_out_stopped_lane_run_preparing_in_advance(
     atm_lane_execution:lane_run_selector(),
     test_ctx()
 ) ->
     test_ctx().
-filter_out_ended_lane_run_preparing_in_advance(AtmLaneRunSelector, TestCtx = #test_ctx{
+filter_out_stopped_lane_run_preparing_in_advance(AtmLaneRunSelector, TestCtx = #test_ctx{
     ongoing_incarnations = [OngoingIncarnation | LeftoverIncarnations]
 }) ->
     NewOngoingIncarnation = OngoingIncarnation#atm_workflow_execution_incarnation_test_spec{
@@ -960,7 +960,7 @@ mock_workflow_execution_handler_steps(Workers) ->
     end),
 
     mock_workflow_execution_handler_step(Workers, prepare_lane, 3),
-    mock_workflow_execution_handler_step(Workers, run_task_for_item, 6),
+    mock_workflow_execution_handler_step(Workers, run_task_for_item, 5),
     mock_workflow_execution_handler_step(Workers, process_task_result_for_item, 5),
     mock_workflow_execution_handler_step(Workers, process_streamed_task_data, 4),
     mock_workflow_execution_handler_step(Workers, report_item_error, 3),
@@ -1026,7 +1026,7 @@ build_workflow_execution_handler_step_function_mock(6, Label) ->
 mock_lane_execution_handler_steps(Workers) ->
     test_utils:mock_new(Workers, atm_lane_execution_handler, [passthrough, no_history]),
 
-    test_utils:mock_expect(Workers, atm_lane_execution_handler, handle_ended, fun(
+    test_utils:mock_expect(Workers, atm_lane_execution_handler, handle_stopped, fun(
         AtmLaneRunSelector,
         AtmWorkflowExecutionId,
         AtmWorkflowExecutionCtx

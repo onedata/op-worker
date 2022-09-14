@@ -39,7 +39,7 @@
     atm_workflow_execution_cancelled_in_preparing_status_before_run_was_created/1,
     atm_workflow_execution_cancelled_in_preparing_status_after_run_was_created/1,
     atm_workflow_execution_cancel_before_lane_run_preparation_failed/1,
-    atm_workflow_execution_cancel_in_aborting_status_after_lane_run_preparation_failed/1,
+    atm_workflow_execution_cancel_in_stopping_status_after_lane_run_preparation_failed/1,
 
     first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_1/1,
     first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_2/1,
@@ -114,7 +114,7 @@ groups() -> [
         atm_workflow_execution_cancelled_in_preparing_status_before_run_was_created,
         atm_workflow_execution_cancelled_in_preparing_status_after_run_was_created,
         atm_workflow_execution_cancel_before_lane_run_preparation_failed,
-        atm_workflow_execution_cancel_in_aborting_status_after_lane_run_preparation_failed,
+        atm_workflow_execution_cancel_in_stopping_status_after_lane_run_preparation_failed,
 
         first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_1,
         first_lane_run_preparation_failure_interrupts_lane_preparing_in_advance_2,
@@ -253,7 +253,7 @@ atm_workflow_execution_cancel_before_lane_run_preparation_failed(_Config) ->
     ?RUN_PREPARATION_TEST().
 
 
-atm_workflow_execution_cancel_in_aborting_status_after_lane_run_preparation_failed(_Config) ->
+atm_workflow_execution_cancel_in_stopping_status_after_lane_run_preparation_failed(_Config) ->
     ?RUN_PREPARATION_TEST().
 
 

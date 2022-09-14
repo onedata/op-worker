@@ -55,9 +55,9 @@
 %%%  N   |  +----------+    +--------+       +-----------+    +-----------+   |                 |
 %%%  D   |  | FINISHED |    | FAILED |       | CANCELLED |    |  CRASHED  |   |                 |
 %%%  E   |  +----------+    +--------+       +-----------+    +-----------+   |                 |
-%%%  D   |                                             |                      |                 |
-%%%       \                                            |                      |                /
-%%%         -------------------------------------------o----------------------o---------------
+%%%  D   |                                                                    |                 |
+%%%       \                                                                   |                /
+%%%         ------------------------------------------------------------------o---------------
 %%%                                         resuming execution
 %%%
 %%% Workflow transition to STOPPING status when execution is halted and not all items were processed.
@@ -309,8 +309,7 @@ handle_resume(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
     Diff = fun
         (Record = #atm_workflow_execution{status = Status}) when
             Status =:= ?INTERRUPTED_STATUS;
-            Status =:= ?PAUSED_STATUS;
-            Status =:= ?CANCELLED_STATUS
+            Status =:= ?PAUSED_STATUS
         ->
             AtmLaneRunDiff(Record#atm_workflow_execution{
                 status = ?RESUMING_STATUS,

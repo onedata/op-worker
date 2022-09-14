@@ -35,9 +35,9 @@
 %%%  |     +-----------+   +----------+     +--------+   +-------------+    2*    +--------+    4*    +-----------+
 %%%  |     |  SKIPPED  |   | FINISHED |     | FAILED |   | INTERRUPTED | <------- | PAUSED | -------> | CANCELLED |
 %%%  |     +-----------+   +----------+     +--------+   +-------------+          +--------+          +-----------+
-%%%  |           |                                              |                      |                     |
-%%%   \          |                                              |                      |                    /
-%%%     ---------o----------------------------------------------o----------------------o-------------------
+%%%  |           |                                              |                      |
+%%%   \          |                                              |                     /
+%%%     ---------o----------------------------------------------o--------------------
 %%%
 %%% Task transition to STOPPING status when execution is halted and not all items were processed.
 %%% It is necessary as results for already scheduled ones must be awaited even if no more items are scheduled.
@@ -96,7 +96,6 @@ is_transition_allowed(?PAUSED_STATUS, ?CANCELLED_STATUS) -> true;
 is_transition_allowed(?SKIPPED_STATUS, ?PENDING_STATUS) -> true;
 is_transition_allowed(?INTERRUPTED_STATUS, ?PENDING_STATUS) -> true;
 is_transition_allowed(?PAUSED_STATUS, ?PENDING_STATUS) -> true;
-is_transition_allowed(?CANCELLED_STATUS, ?PENDING_STATUS) -> true;
 
 is_transition_allowed(_, _) -> false.
 
@@ -276,8 +275,7 @@ handle_resume(AtmTaskExecutionId) ->
         (AtmTaskExecution = #atm_task_execution{status = Status}) when
             Status =:= ?SKIPPED_STATUS;
             Status =:= ?INTERRUPTED_STATUS;
-            Status =:= ?PAUSED_STATUS;
-            Status =:= ?CANCELLED_STATUS
+            Status =:= ?PAUSED_STATUS
         ->
             {ok, AtmTaskExecution#atm_task_execution{
                 status = ?PENDING_STATUS,
@@ -286,7 +284,8 @@ handle_resume(AtmTaskExecutionId) ->
 
         (#atm_task_execution{status = Status}) when
             Status =:= ?FINISHED_STATUS;
-            Status =:= ?FAILED_STATUS
+            Status =:= ?FAILED_STATUS;
+            Status =:= ?CANCELLED_STATUS
         ->
             {error, task_already_stopped}
     end).
