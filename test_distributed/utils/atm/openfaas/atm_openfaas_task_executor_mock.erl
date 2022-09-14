@@ -270,10 +270,16 @@ mock_run(Workers, ModuleWithOpenfaasDockerMock) ->
                 errors:to_json(?atm_examine_error(Type, Reason, Stacktrace))
             end,
 
-            http_client:post(build_job_callback_url(AtmLambdaInput), #{}, case is_map(Output) of
-                true -> json_utils:encode(Output);
-                false -> Output
-            end)
+            {FunctionStatus, Response} = case is_map(Output) of
+                true -> {<<"200">>, json_utils:encode(Output)};
+                false -> {<<"500">>, Output}
+            end,
+
+            http_client:post(
+                build_job_callback_url(AtmLambdaInput),
+                #{<<"x-function-status">> => FunctionStatus},
+                Response
+            )
         end),
 
         ok

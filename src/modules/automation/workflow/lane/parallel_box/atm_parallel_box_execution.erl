@@ -409,24 +409,30 @@ is_running(#atm_parallel_box_execution{status = AtmParallelBoxExecutionStatus}) 
 -spec infer_new_status_from_task_statuses(atm_task_execution:status(), [atm_task_execution:status()]) ->
     status().
 infer_new_status_from_task_statuses(CurrentStatus, AtmTaskExecutionStatuses) ->
-    PossibleNewStatus = case lists:usort(AtmTaskExecutionStatuses) of
+    case lists:usort(AtmTaskExecutionStatuses) of
         [Status] ->
             Status;
+        [?PENDING_STATUS, ?SKIPPED_STATUS] when CurrentStatus =:= ?PENDING_STATUS ->
+            % Some task must have stopped execution while others are still
+            % pending - overall parallel box status is active
+            ?ACTIVE_STATUS;
         UniqueStatuses ->
-            hd(lists:dropwhile(fun(Status) -> not lists:member(Status, UniqueStatuses) end, [
-                ?STOPPING_STATUS, ?ACTIVE_STATUS, ?PENDING_STATUS,
-                ?CANCELLED_STATUS, ?FAILED_STATUS, ?INTERRUPTED_STATUS,
-                ?PAUSED_STATUS, ?FINISHED_STATUS
-            ]))
-    end,
-
-    case atm_task_execution_status:is_transition_allowed(CurrentStatus, PossibleNewStatus) of
-        true ->
-            PossibleNewStatus;
-        false ->
-            % possible when status is not changing or in case of races (e.g.
-            % stopping task completed while some other task has not been marked
-            % as stopping yet and as such is still active - overall status
-            % should remain as stopping rather than regressing to active)
-            CurrentStatus
+            PossibleNewStatus = hd(lists:dropwhile(
+                fun(Status) -> not lists:member(Status, UniqueStatuses) end,
+                [
+                    ?STOPPING_STATUS, ?ACTIVE_STATUS, ?PENDING_STATUS,
+                    ?CANCELLED_STATUS, ?FAILED_STATUS, ?INTERRUPTED_STATUS,
+                    ?PAUSED_STATUS, ?FINISHED_STATUS
+                ]
+            )),
+            case atm_task_execution_status:is_transition_allowed(CurrentStatus, PossibleNewStatus) of
+                true ->
+                    PossibleNewStatus;
+                false ->
+                    % possible when status is not changing or in case of races (e.g.
+                    % stopping task completed while some other task has not been marked
+                    % as stopping yet and as such is still active - overall status
+                    % should remain as stopping rather than regressing to active)
+                    CurrentStatus
+            end
     end.

@@ -181,7 +181,13 @@ iterate_over_range_store() ->
                 run_task_for_item = #atm_step_mock_spec{
                     before_step_hook = build_validate_iterated_item_batches_fun(?FUNCTION_NAME)
                 }
-            }]
+            }],
+            handle_workflow_execution_stopped = #atm_step_mock_spec{
+                after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                    ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_rerunable({1, 1}, ExpState0),
+                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_finished(ExpState1)}
+                end
+            }
         }]
     }),
     assert_all_items_were_iterated(?FUNCTION_NAME, lists:seq(-100, 99, 2)).
@@ -199,7 +205,13 @@ iterate_over_empty_range_store() ->
             lane_runs = [#atm_lane_run_execution_test_spec{
                 selector = {1, 1},
                 handle_task_execution_stopped = build_handle_task_execution_stopped_mock_spec_for_skipped_tasks()
-            }]
+            }],
+            handle_workflow_execution_stopped = #atm_step_mock_spec{
+                after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                    ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_rerunable({1, 1}, ExpState0),
+                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_finished(ExpState1)}
+                end
+            }
         }]
     }).
 
@@ -331,7 +343,13 @@ iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(#iterate_
                     [] -> build_handle_task_execution_stopped_mock_spec_for_skipped_tasks();
                     _ -> #atm_step_mock_spec{}
                 end
-            }]
+            }],
+            handle_workflow_execution_stopped = #atm_step_mock_spec{
+                after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                    ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_rerunable({1, 1}, ExpState0),
+                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_finished(ExpState1)}
+                end
+            }
         }]
     }),
     assert_all_items_were_iterated(TestCaseMarker, ExpIteratedEntries).
@@ -423,7 +441,7 @@ build_validate_iterated_item_batches_fun(TestCaseMarker, Mapper) ->
         workflow_execution_exp_state = ExpState,
         call_args = [
             _AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId,
-            ItemBatch, _ReportResultUrl, _HeartbeatUrl
+            _AtmJobBatchId, ItemBatch
         ]
     }) ->
         {_, _, AtmTaskSchemaId} = atm_workflow_execution_exp_state_builder:get_task_selector(
