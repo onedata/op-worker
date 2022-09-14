@@ -522,6 +522,17 @@ prepare_args_fun_rest(MemRef, {instance, create}) ->
         }
     end;
 
+prepare_args_fun_rest(MemRef, {instance, Method}) ->
+    fun(#api_test_ctx{data = Data}) ->
+        QosEntryId = api_test_memory:get(MemRef, qos),
+
+        {Id, _} = api_test_utils:maybe_substitute_bad_id(QosEntryId, Data),
+        #rest_args{
+            method = Method,
+            path = <<"qos_requirements/", Id/binary>>
+        }
+    end;
+
 prepare_args_fun_rest(MemRef, qos_summary) ->
     fun(#api_test_ctx{data = Data}) ->
         Guid = api_test_memory:get(MemRef, guid),
@@ -555,17 +566,6 @@ prepare_args_fun_rest(MemRef, qos_audit_log) ->
                 <<"qos_requirements/", QosEntryId/binary, "/audit_log">>, Data
             )
         }
-    end;
-
-prepare_args_fun_rest(MemRef, {instance, Method}) ->
-    fun(#api_test_ctx{data = Data}) ->
-        QosEntryId = api_test_memory:get(MemRef, qos),
-
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(QosEntryId, Data),
-        #rest_args{
-            method = Method,
-            path = <<"qos_requirements/", Id/binary>>
-        }
     end.
 
 
@@ -577,6 +577,16 @@ prepare_args_fun_gs(MemRef, {instance, create}) ->
             operation = create,
             gri = #gri{type = op_qos, aspect = instance, scope = private},
             data = maybe_inject_object_id(Data, Guid)
+        }
+    end;
+
+prepare_args_fun_gs(MemRef, {instance, Method}) ->
+    fun(#api_test_ctx{data = Data}) ->
+        QosEntryId = api_test_memory:get(MemRef, qos),
+        {Id, _} = api_test_utils:maybe_substitute_bad_id(QosEntryId, Data),
+        #gs_args{
+            operation = Method,
+            gri = #gri{type = op_qos, id = Id, aspect = instance, scope = private}
         }
     end;
 
@@ -636,16 +646,6 @@ prepare_args_fun_gs(MemRef, {qos_transfer_stats_collection, slice, Type}) ->
             % mode is optional and so must be specified in the data spec, but if left out, defaults to layout,
             % hence the mode must be added here to the data for slice retrieval tests
             data = UpdatedData#{<<"mode">> => <<"slice">>}
-        }
-    end;
-
-prepare_args_fun_gs(MemRef, {instance, Method}) ->
-    fun(#api_test_ctx{data = Data}) ->
-        QosEntryId = api_test_memory:get(MemRef, qos),
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(QosEntryId, Data),
-        #gs_args{
-            operation = Method,
-            gri = #gri{type = op_qos, id = Id, aspect = instance, scope = private}
         }
     end.
 
