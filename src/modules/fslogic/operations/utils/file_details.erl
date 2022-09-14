@@ -65,6 +65,10 @@ resolve(UserCtx, FileCtx) ->
     }.
 
 
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
 %% @private
 -spec has_metadata(file_ctx:ctx()) -> boolean().
 has_metadata(FileCtx) ->

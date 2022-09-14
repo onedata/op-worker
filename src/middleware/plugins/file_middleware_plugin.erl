@@ -1227,17 +1227,17 @@ create_file(SessionId, ParentGuid, Name, ?SYMLINK_TYPE, TargetPath) ->
 
 -spec build_check_requested_attrs_fun([binary()]) -> 
     fun((binary() | [binary()]) -> true | no_return()).
-build_check_requested_attrs_fun(AllowedValues) -> fun
-    F(AttributeList) when is_list(AttributeList) ->
-        lists:foreach(fun(A) -> F(A) end, AttributeList),
-        true;
-    F(<<"xattr.", _/binary>>) ->
-        true;
-    F(Attribute) ->
-        case lists:member(Attribute, AllowedValues) of
-            true ->
-                true;
-            false ->
-                throw(?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, AllowedValues ++ [<<"xattr.*">>]))
-        end
-end.
+build_check_requested_attrs_fun(AllowedValues) -> 
+    fun F(AttributeList) when is_list(AttributeList) ->
+            lists:foreach(fun(A) -> F(A) end, AttributeList),
+            true;
+        F(<<"xattr.", _/binary>>) ->
+            true;
+        F(Attribute) ->
+            case lists:member(Attribute, AllowedValues) of
+                true ->
+                    true;
+                false ->
+                    throw(?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, AllowedValues ++ [<<"xattr.*">>]))
+            end
+    end.

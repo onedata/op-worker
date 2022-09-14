@@ -259,6 +259,7 @@ infer_starting_file([PrefixToken | Tail], DirCtx, UserCtx, RevRelPathTokens) ->
     entry() | no_return().
 build_entry_from_internal_entry(UserCtx, {Path, FileCtx}, BaseOpts) ->
     GetAttrFun = case file_attr:should_fetch_xattrs(maps:get(include_optional_attrs, BaseOpts)) of
+        % fetching xattrs require more privileges than file listing, so insecure version cannot be called
         {true, _} -> fun attr_req:get_file_attr/3;
         false -> fun attr_req:get_file_attr_insecure/3
     end,

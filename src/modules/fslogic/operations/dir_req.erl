@@ -250,6 +250,7 @@ get_children_attrs_insecure(
         include_optional_attrs => OptionalAttrs
     },
     GetAttrFun = case file_attr:should_fetch_xattrs(OptionalAttrs) of
+        % fetching xattrs require more privileges than file listing, so insecure version cannot be called
         {true, _} -> fun attr_req:get_file_attr/3;
         false -> fun attr_req:get_file_attr_insecure/3
     end,

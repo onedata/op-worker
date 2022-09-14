@@ -115,20 +115,22 @@ remove(UserCtx, FileCtx0, XattrName) ->
 ) ->
     {ok, [custom_metadata:name()]}.
 list_insecure(UserCtx, FileCtx, IncludeInherited, ShowInternal) ->
-    {ok, DirectXattrs} = list_direct_xattrs(FileCtx),
-    AllXattrs = case IncludeInherited of
+    {ok, DirectXattrNames} = list_direct_xattrs(FileCtx),
+    XattrNames = case IncludeInherited of
         true ->
             {ok, AncestorsXattrs} = list_ancestor_xattrs(UserCtx, FileCtx, []),
             % Filter out cdmi attributes - those are not inherited
             InheritedXattrs = lists:filter(fun(Key) ->
                 not is_cdmi_xattr(Key)
             end, AncestorsXattrs),
-            lists:usort(DirectXattrs ++ InheritedXattrs);
+            lists:usort(DirectXattrNames ++ InheritedXattrs);
         false ->
-            DirectXattrs
+            DirectXattrNames
     end,
-
-    {ok, filter(FileCtx, AllXattrs, ShowInternal)}.
+    case ShowInternal of
+        true -> {ok, prepend_acl(FileCtx, XattrNames)};
+        false -> {ok, remove_internal(XattrNames)}
+    end.
 
 
 %% @private
@@ -138,8 +140,7 @@ get_all_direct_insecure(FileCtx) ->
     FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     case custom_metadata:get_all_xattrs(FileUuid) of
         {ok, AllXattrsWithValues} ->
-            XattrsToReturn = filter(FileCtx, maps:keys(AllXattrsWithValues), false),
-            {ok, maps:with(XattrsToReturn, AllXattrsWithValues)};
+            {ok, maps:with(remove_internal(maps:keys(AllXattrsWithValues)), AllXattrsWithValues)};
         {error, _} = Error ->
             Error
     end.
@@ -209,8 +210,9 @@ is_cdmi_xattr(XattrName) ->
 
 
 %% @private
--spec filter(file_ctx:ctx(), [custom_metadata:name()], boolean()) -> [custom_metadata:name()].
-filter(FileCtx, AllXattrs, _ShowInternal = true) ->
+-spec prepend_acl(file_ctx:ctx(), [custom_metadata:name()]) -> 
+    [custom_metadata:name()].
+prepend_acl(FileCtx, XattrsKeys) ->
     % acl is kept in file_meta instead of custom_metadata
     % but is still treated as metadata so ?ACL_KEY
     % is added to listing if active perms type for
@@ -218,9 +220,14 @@ filter(FileCtx, AllXattrs, _ShowInternal = true) ->
     % it is omitted.
     case file_ctx:get_active_perms_type(FileCtx, ignore_deleted) of
         {acl, _} ->
-            [?ACL_KEY | AllXattrs];
+            [?ACL_KEY | XattrsKeys];
         _ ->
-            AllXattrs
-    end;
-filter(_FileCtx, AllXattrs, _ShowInternal = false) ->
-    lists:filter(fun(Key) -> not is_internal_xattr(Key) end, AllXattrs).
+            XattrsKeys
+    end.
+
+
+%% @private
+-spec remove_internal([custom_metadata:name()]) ->
+    [custom_metadata:name()].
+remove_internal(XattrsKeys) ->
+    lists:filter(fun(Key) -> not is_internal_xattr(Key) end, XattrsKeys).
