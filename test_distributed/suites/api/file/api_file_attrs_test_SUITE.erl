@@ -53,6 +53,7 @@
 
     test_for_hardlink_between_files_test/1,
     
+    get_historical_dir_size_stats_schema_test/1,
     gather_historical_dir_size_stats_layout_test/1,
     gather_historical_dir_size_stats_slice_test/1
 ]).
@@ -80,6 +81,7 @@ groups() -> [
         get_dir_distribution_1_test,
         get_dir_distribution_2_test,
         get_dir_distribution_3_test,
+        get_historical_dir_size_stats_schema_test,
         gather_historical_dir_size_stats_layout_test,
         gather_historical_dir_size_stats_slice_test
     ]}
@@ -1148,16 +1150,43 @@ build_get_distribution_prepare_gs_args_fun(FileGuid, Scope) ->
 %%% Gather historical dir size stats test functions
 %%%===================================================================
 
+get_historical_dir_size_stats_schema_test(Config) ->
+    ?assert(onenv_api_test_runner:run_tests([
+        #suite_spec{
+            target_nodes = ?config(op_worker_nodes, Config),
+            client_spec = ?CLIENT_SPEC_FOR_PUBLIC_ACCESS_SCENARIOS,
+            scenario_templates = [
+                #scenario_template{
+                    name = <<"Get dir size stats collection schema using op_file gs api">>,
+                    type = gs,
+                    prepare_args_fun = fun(_) ->
+                        #gs_args{
+                            operation = get,
+                            gri = #gri{type = op_file, id = undefined, aspect = dir_size_stats_collection_schema, scope = public}
+                        }
+                    end,
+                    validate_result_fun = fun(_TestCtx, {ok, Result}) ->
+                        ?assertEqual(
+                            jsonable_record:from_json(Result, time_series_collection_schema),
+                            ?DIR_SIZE_STATS_COLLECTION_SCHEMA
+                        )
+                    end
+                }
+            ]
+        }
+    ])).
+
+
 gather_historical_dir_size_stats_layout_test(Config) ->
     enable_dir_stats_collecting_for_space(krakow, space_krk_par),
     enable_dir_stats_collecting_for_space(paris, space_krk_par),
-    
+
     SpaceId = oct_background:get_space_id(space_krk_par),
     P1Id = oct_background:get_provider_id(krakow),
     P1StorageId = get_storage_id(SpaceId, P1Id),
     P2Id = oct_background:get_provider_id(paris),
     P2StorageId = get_storage_id(SpaceId, P2Id),
-    
+
     #object{guid = DirGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
         user3, space_krk_par, #dir_spec{mode = 8#707, shares = [#share_spec{}]}
     ),
@@ -1171,9 +1200,9 @@ gather_historical_dir_size_stats_layout_test(Config) ->
     },
     await_dir_stats_collecting_status(krakow, SpaceId, enabled),
     await_dir_stats_collecting_status(paris, SpaceId, enabled),
-    
+
     ValidateGsSuccessfulCallFun = fun(_TestCtx, Result) ->
-        ?assertEqual({ok, ExpLayout}, Result)
+        ?assertEqual({ok, #{<<"layout">> => ExpLayout}}, Result)
     end,
     DataSpec = #data_spec{
         optional = [<<"mode">>],
@@ -1226,10 +1255,10 @@ gather_historical_dir_size_stats_slice_test(Config) ->
     await_dir_stats_collecting_status(krakow, SpaceId, enabled),
     await_dir_stats_collecting_status(paris, SpaceId, enabled),
     ValidateGsSuccessfulCallFun = fun(_TestCtx, Result) ->
-        {ok, ResultWindows} = ?assertMatch({ok, #{<<"windows">> := _}}, Result),
+        {ok, ResultData} = ?assertMatch({ok, #{<<"slice">> := _}}, Result),
         ResultWithoutTimestamps = tsc_structure:map(fun(_TimeSeriesName, _MetricsName, Windows) ->
             lists:map(fun(Map) -> maps:remove(<<"timestamp">>, Map) end, Windows)
-        end, maps:get(<<"windows">> , ResultWindows)),
+        end, maps:get(<<"slice">> , ResultData)),
         ?assertEqual(ExpSlice, ResultWithoutTimestamps)
     end,
     DataSpec = #data_spec{
@@ -1284,17 +1313,16 @@ gather_historical_dir_size_stats_test_base(FileGuid, ShareId, ValidateGsSuccessf
     ])).
 
 
-
 %% @private
 -spec build_gather_historical_dir_size_stats_prepare_gs_args_fun(file_id:file_guid(), map()) ->
     onenv_api_test_runner:prepare_args_fun().
 build_gather_historical_dir_size_stats_prepare_gs_args_fun(FileGuid, DefaultData) ->
     fun(#api_test_ctx{data = Data}) ->
         {GriId, Data2} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data),
-        
+
         #gs_args{
             operation = get,
-            gri = #gri{type = op_file, id = GriId, aspect = dir_size_stats},
+            gri = #gri{type = op_file, id = GriId, aspect = dir_size_stats_collection},
             data = maps:merge(DefaultData, Data2)
         }
     end.
