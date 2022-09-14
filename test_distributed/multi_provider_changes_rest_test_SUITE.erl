@@ -97,8 +97,7 @@ token_auth_test(Config) ->
     )),
 
     % Request containing invalid api caveat should be rejected
-    GRIPattern = #gri_pattern{type = op_metrics, id = SpaceId, aspect = changes},
-    InvalidApiCaveat = #cv_api{whitelist = [{all, all, GRIPattern#gri_pattern{id = <<"ASD">>}}]},
+    InvalidApiCaveat = #cv_api{whitelist = [{all, all, ?GRI_PATTERN(op_metrics, <<"ASD">>, <<"changes">>)}]},
     TokenWithInvalidApiCaveat = tokens:confine(Token, InvalidApiCaveat),
     ExpRestError2 = rest_test_utils:get_rest_error(
         ?ERROR_UNAUTHORIZED(?ERROR_TOKEN_CAVEAT_UNVERIFIED(InvalidApiCaveat))
@@ -109,7 +108,7 @@ token_auth_test(Config) ->
     )),
 
     % Request containing valid api caveat should succeed
-    ValidApiCaveat = #cv_api{whitelist = [{all, all, GRIPattern}]},
+    ValidApiCaveat = #cv_api{whitelist = [{all, all, ?GRI_PATTERN(op_metrics, SpaceId, <<"changes">>)}]},
     TokenWithValidApiCaveat = tokens:confine(Token, ValidApiCaveat),
     ?assertMatch({ok, _}, get_changes(
         [{{access_token, ?USER_1}, TokenWithValidApiCaveat} | Config],
