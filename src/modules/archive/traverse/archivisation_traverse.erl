@@ -246,7 +246,7 @@ do_slave_job_unsafe(#tree_traverse_slave{
 
 
 -spec do_aborted_master_job(tree_traverse:master_job(), traverse:master_job_extended_args(), 
-    user_ctx:ctx(), completed | failed) -> {ok, traverse:master_job_map()}.
+    user_ctx:ctx(), completed | {failed, Reason :: any()}) -> {ok, traverse:master_job_map()}.
 do_aborted_master_job(
     Job = #tree_traverse{file_ctx = FileCtx, traverse_info = TraverseInfo, relative_path = RelativePath},
     MasterJobArgs = #{task_id := TaskId},

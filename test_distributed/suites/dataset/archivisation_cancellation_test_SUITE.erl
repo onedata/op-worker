@@ -516,23 +516,29 @@ cancel_archivisation(ProviderId, ArchiveId) ->
 %===================================================================
 
 mock_required_functions(#test_config{cancelled_traverse = TraverseModule, cancelled_job_type = master_job}) ->
-    Nodes = oct_background:get_all_providers_nodes(),
-    mock_job_function(Nodes, TraverseModule, do_dir_master_job_unsafe);
-mock_required_functions(#test_config{cancelled_traverse = TraverseModule, cancelled_job_type = slave_job}) ->
-    Nodes = oct_background:get_all_providers_nodes(),
-    mock_job_function(Nodes, TraverseModule, do_slave_job_unsafe).
+    mock_job_function(TraverseModule, do_dir_master_job_unsafe, 2);
+mock_required_functions(#test_config{cancelled_traverse = archivisation_traverse, cancelled_job_type = slave_job}) ->
+    mock_job_function(archivisation_traverse, do_slave_job_unsafe, 3);
+mock_required_functions(#test_config{cancelled_traverse = archive_verification_traverse, cancelled_job_type = slave_job}) ->
+    mock_job_function(archive_verification_traverse, do_slave_job_unsafe, 2).
 
 
-mock_job_function(Nodes, Module, FunName) ->
+mock_job_function(Module, FunName, Arity) ->
+    Nodes = oct_background:get_all_providers_nodes(),
     test_utils:mock_new(Nodes, Module),
     TestProcess = self(),
-    test_utils:mock_expect(Nodes, Module, FunName, fun(Job, Arg2) ->
+    MockFunBase = fun(Args) ->
         Ref = make_ref(),
         TestProcess ! {stopped, Ref, self()},
         receive {continue, Ref} ->
-            meck:passthrough([Job, Arg2])
+            meck:passthrough(Args)
         end
-    end).
+    end,
+    MockFun = case Arity of
+        2 -> fun(Job, Arg2) -> MockFunBase([Job, Arg2]) end;
+        3 -> fun(Job, Arg2, Arg3) -> MockFunBase([Job, Arg2, Arg3]) end
+    end,
+    test_utils:mock_expect(Nodes, Module, FunName, MockFun).
 
 
 continue_mocked_jobs() ->
