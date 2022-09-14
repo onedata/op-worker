@@ -71,7 +71,7 @@ to_json(#file_attr{
         <<"provider_id">> => ProviderId,
         <<"owner_id">> => OwnerId,
         <<"hardlinks_count">> => utils:undefined_to_null(HardlinksCount),
-        <<"index">> => Index
+        <<"index">> => file_listing:encode_index(Index)
     },
     maps:fold(fun(XattrName, XattrValue, Acc) ->
         Acc#{<<"xattr.", XattrName/binary>> => utils:undefined_to_null(XattrValue)}

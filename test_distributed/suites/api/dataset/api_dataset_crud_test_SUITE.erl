@@ -290,7 +290,7 @@ get_dataset_test(Config) ->
     end,
     OriginalFilePath = filename:join(["/", ?SPACE_KRK_PAR, DirName, FileName]),
 
-    case State == ?ATTACHED_DATASET andalso lists:member(?DATA_PROTECTION_BIN, ProtectionFlags) of
+    case State == ?ATTACHED_DATASET orelse lists:member(?DATA_PROTECTION_BIN, ProtectionFlags) of
         true ->
             ct:pal(?FMT("Test get ~p dataset", [State])),
 

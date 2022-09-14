@@ -211,7 +211,7 @@ ensure_dir(SessId, RelativeRootGuid, FilePath, Mode) ->
     ?run(lfm_files:ensure_dir(SessId, RelativeRootGuid, FilePath, Mode)).
 
 -spec is_dir(session:id(), file_key()) ->
-    ok | error_reply().
+    boolean() | error_reply().
 is_dir(SessId, FileEntry) ->
     ?run(lfm_files:is_dir(SessId, FileEntry)).
 

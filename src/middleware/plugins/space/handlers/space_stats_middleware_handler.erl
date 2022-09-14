@@ -133,7 +133,7 @@ delete(_) ->
 translate_dir_stats_service_state(DirStatsServiceState) ->
     Json = #{<<"status">> => dir_stats_service_state:get_status(DirStatsServiceState)},
 
-    case dir_stats_service_state:get_last_status_change_timestamp_if_in_enabled_status(
+    case dir_stats_service_state:get_last_initialization_timestamp_if_in_enabled_status(
         DirStatsServiceState
     ) of
         {ok, Timestamp} -> Json#{<<"since">> => Timestamp};

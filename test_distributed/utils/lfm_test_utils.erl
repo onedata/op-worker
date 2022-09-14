@@ -197,8 +197,8 @@ rm_recursive(Worker, SessId, DirGuid, BatchSize, DeleteDir, BaseListOpts) ->
 
 
 rm_files(Worker, SessId, GuidsAndPaths, BatchSize) ->
-    Results = lists:map(fun({G, Name}) ->
-        case Name =:= ?TRASH_DIR_NAME of
+    Results = lists:map(fun({G, _Name}) ->
+        case fslogic_file_id:is_special_guid(G) of
             true ->
                 rm_recursive(Worker, SessId, G, BatchSize, false);
             false ->
@@ -207,7 +207,7 @@ rm_files(Worker, SessId, GuidsAndPaths, BatchSize) ->
                         rm_recursive(Worker, SessId, G, BatchSize, true);
                     false ->
                         lfm_proxy:unlink(Worker, SessId, ?FILE_REF(G));
-                    {error, not_found} -> ok;
+                    {error, enoent} -> ok;
                     Error -> Error
                 end
         end

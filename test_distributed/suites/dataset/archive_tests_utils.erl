@@ -23,11 +23,13 @@
 
 -export([create_archive_dir/5]).
 -export([
-    assert_archive_dir_structure_is_correct/7, assert_archive_state/3, 
+    assert_archive_dir_structure_is_correct/7, assert_archive_state/3, assert_archive_state/4,
     assert_archive_is_preserved/8, assert_incremental_archive_links/3,
-    assert_copied/6
+    assert_copied/6, assert_structure/7
 ]).
--export([mock_archive_verification/0, wait_for_archive_verification_traverse/2, start_verification_traverse/2]).
+-export([
+    mock_archive_verification/0, wait_for_archive_verification_traverse/2, start_verification_traverse/2
+]).
 
 
 -define(SPACE, space_krk_par_p).
@@ -49,12 +51,17 @@ assert_archive_dir_structure_is_correct(Node, SessionId, SpaceId, DatasetId, Arc
     assert_archive_dir_exists(Node, SessionId, SpaceId, DatasetId, ArchiveId, UserId, Attempts).
 
 
-assert_archive_state(ArchiveId, ExpectedState, Attempts) ->
-    lists:foreach(fun(Provider) ->
-        Node = oct_background:get_random_provider_node(Provider),
-        SessionId = oct_background:get_user_session_id(?USER1, Provider),
-        ?assertMatch({ok, #archive_info{state = ExpectedState}}, opt_archives:get_info(Node, SessionId, ArchiveId), Attempts)
-    end, oct_background:get_space_supporting_providers(?SPACE)).
+assert_archive_state(ArchiveList, ExpectedState, Attempts) ->
+    assert_archive_state(ArchiveList, ExpectedState, oct_background:get_space_supporting_providers(?SPACE), Attempts).
+
+assert_archive_state(ArchiveList, ExpectedState, Providers, Attempts) ->
+    SessId = fun(P) -> oct_background:get_user_session_id(?USER1, P) end,
+    lists:foreach(fun(A) ->
+        lists:foreach(fun(Provider) ->
+            ?assertMatch({ok, #archive_info{state = ExpectedState}}, 
+                opt_archives:get_info(Provider, SessId(Provider), A), Attempts)
+        end, utils:ensure_list(Providers))
+    end, utils:ensure_list(ArchiveList)).
 
 
 assert_archive_is_preserved(_Node, _SessionId, undefined, _DatasetId, _DatasetRootFileGuid, _FileCount, _ExpSize, _Attempts) ->
@@ -105,32 +112,6 @@ assert_incremental_archive_links(BaseArchiveId, ArchiveId, ModifiedFiles) ->
     end, oct_background:get_space_supporting_providers(?SPACE)).
 
 
-mock_archive_verification() ->
-    Nodes = oct_background:get_all_providers_nodes(),
-    test_utils:mock_new(Nodes, archive_verification_traverse, [passthrough]),
-    Pid = self(),
-    test_utils:mock_expect(Nodes, archive_verification_traverse, block_archive_modification,
-        fun(ArchiveDoc) ->
-            {ok, ArchiveId} = archive:get_id(ArchiveDoc),
-            Pid ! {archive_verification_mock, ArchiveId, self()},
-            receive {continue, ArchiveId} ->
-                meck:passthrough([ArchiveDoc])
-            end
-        end).
-
-
-wait_for_archive_verification_traverse(ArchiveId, Attempts) ->
-    receive {archive_verification_mock, ArchiveId, Pid} ->
-        {ok, Pid}
-    after timer:seconds(Attempts) ->
-        {error, archive_creation_not_finished}
-    end.
-
-
-start_verification_traverse(Pid, ArchiveId) ->
-    Pid ! {continue, ArchiveId}.
-
-
 assert_copied(Node, SessionId, SourceGuid, TargetGuid, FollowSymlinks, Attempts) ->
     assert_attrs_copied(Node, SessionId, SourceGuid, TargetGuid, Attempts),
     assert_metadata_copied(Node, SessionId, SourceGuid, TargetGuid),
@@ -176,6 +157,38 @@ assert_copied(Node, SessionId, SourceGuid, TargetGuid, FollowSymlinks, Attempts)
                     assert_symlink_values_copied(Node, SessionId, SourceGuid, TargetGuid, Attempts)
             end
     end.
+
+
+%===================================================================
+% Test mocks
+%===================================================================
+
+mock_archive_verification() ->
+    Nodes = oct_background:get_all_providers_nodes(),
+    test_utils:mock_new(Nodes, archive_verification_traverse, [passthrough]),
+    Pid = self(),
+    test_utils:mock_expect(Nodes, archive_verification_traverse, block_archive_modification,
+        fun(ArchiveDoc) ->
+            {ok, ArchiveId} = archive:get_id(ArchiveDoc),
+            Pid ! {archive_verification_mock, ArchiveId, self()},
+            receive {continue, ArchiveId} ->
+                meck:passthrough([ArchiveDoc])
+            end
+        end).
+
+
+% this function require calling mock_archive_verification/1 beforehand
+wait_for_archive_verification_traverse(ArchiveId, Attempts) ->
+    receive {archive_verification_mock, ArchiveId, Pid} ->
+        {ok, Pid}
+    after timer:seconds(Attempts) ->
+        {error, archive_creation_not_finished}
+    end.
+
+
+% this function require calling mock_archive_verification/1 beforehand
+start_verification_traverse(Pid, ArchiveId) ->
+    Pid ! {continue, ArchiveId}.
 
 
 %===================================================================

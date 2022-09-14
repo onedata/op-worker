@@ -28,19 +28,20 @@
     get_state/1, get_config/1, get_preserved_callback/1, get_deleted_callback/1,
     get_description/1, get_stats/1, get_root_dir_guid/1,
     get_data_dir_guid/1, get_parent_id/1, get_parent_doc/1, get_base_archive_id/1,
-    get_related_dip_id/1, get_related_aip_id/1, is_finished/1
+    get_related_dip_id/1, get_related_aip_id/1, 
+    is_finished/1, is_building/1
 ]).
 
 % setters
 -export([mark_building/1, mark_deleting/2,
     mark_file_archived/2, mark_file_failed/1, mark_creation_finished/2,
-    mark_preserved/1, mark_verification_failed/1,
+    mark_preserved/1, mark_verification_failed/1, mark_cancelling/1, mark_cancelled/1,
     set_root_dir_guid/2, set_data_dir_guid/2, set_base_archive_id/2,
     set_related_dip/2, set_related_aip/2
 ]).
 
 %% datastore_model callbacks
--export([get_ctx/0, get_record_version/0, get_record_struct/1]).
+-export([get_ctx/0, get_record_version/0, get_record_struct/1, resolve_conflict/3]).
 
 -compile([{no_auto_import, [get/1]}]).
 
@@ -58,7 +59,8 @@
 -type creator() :: od_user:id().
 
 -type state() :: ?ARCHIVE_PENDING | ?ARCHIVE_BUILDING | ?ARCHIVE_PRESERVED | ?ARCHIVE_DELETING 
-    | ?ARCHIVE_FAILED | ?ARCHIVE_VERIFYING | ?ARCHIVE_VERIFICATION_FAILED.
+    | ?ARCHIVE_FAILED | ?ARCHIVE_VERIFYING | ?ARCHIVE_VERIFICATION_FAILED | ?ARCHIVE_CANCELLING 
+    | ?ARCHIVE_CANCELLED.
 -type timestamp() :: time:seconds().
 -type description() :: binary().
 -type callback() :: http_client:url() | undefined.
@@ -67,10 +69,22 @@
 
 -type error() :: {error, term()}.
 
+% archive fields that can be modified by any provider. Other fields can be changed only by archiving 
+% provider (except setting state to ?ARCHIVE_CANCELLING, which also can be done by any provider).
+-record(modifiable_fields, {
+    incarnation = 0 :: non_neg_integer(),
+    preserved_callback :: archive:callback(),
+    deleted_callback :: archive:callback(),
+    description :: archive:description()
+}).
+
+-type modifiable_fields() :: #modifiable_fields{}.
+
 -export_type([
     id/0, doc/0, creator/0,
     state/0, timestamp/0, description/0,
-    config/0, callback/0, diff/0
+    config/0, callback/0, diff/0,
+    modifiable_fields/0
 ]).
 
 % @formatter:on
@@ -93,14 +107,17 @@
 create(DatasetId, SpaceId, Creator, Config, PreservedCallback, DeletedCallback, Description, BaseArchiveId) ->
     datastore_model:create(?CTX, #document{
         value = #archive{
+            archiving_provider = oneprovider:get_id(),
             dataset_id = DatasetId,
             creation_time = global_clock:timestamp_seconds(),
             creator = Creator,
             state = ?ARCHIVE_PENDING,
             config = Config,
-            preserved_callback = PreservedCallback,
-            deleted_callback = DeletedCallback,
-            description = Description,
+            modifiable_fields = #modifiable_fields{
+                preserved_callback = PreservedCallback,
+                deleted_callback = DeletedCallback,
+                description = Description
+            },
             stats = archive_stats:empty(),
             base_archive_id = BaseArchiveId
         },
@@ -114,12 +131,15 @@ create_nested(DatasetId, #document{
     value = #archive{
         config = Config,
         creator = Creator,
-        description = Description
+        modifiable_fields = #modifiable_fields{
+            description = Description
+        }
     },
     scope = SpaceId
 }) ->
     datastore_model:create(?CTX, #document{
         value = #archive{
+            archiving_provider = oneprovider:get_id(),
             dataset_id = DatasetId,
             creation_time = global_clock:timestamp_seconds(),
             creator = Creator,
@@ -127,7 +147,9 @@ create_nested(DatasetId, #document{
             state = ?ARCHIVE_BUILDING,
             config = Config,
             parent = ParentArchiveId,
-            description = Description,
+            modifiable_fields = #modifiable_fields{
+                description = Description
+            },
             stats = archive_stats:empty()
         },
         scope = SpaceId
@@ -153,17 +175,24 @@ get(ArchiveId) ->
 
 -spec modify_attrs(id(), diff()) -> ok | error().
 modify_attrs(ArchiveId, Diff) when is_map(Diff) ->
-    ?extract_ok(update(ArchiveId, fun(Archive = #archive{
-        description = PrevDescription,
-        preserved_callback = PrevPreservedCallback,
-        deleted_callback = PrevDeletedCallback
+    Result = update(ArchiveId, fun(Archive = #archive{
+        modifiable_fields = #modifiable_fields{
+            incarnation = Incarnation,
+            description = PrevDescription,
+            preserved_callback = PrevPreservedCallback,
+            deleted_callback = PrevDeletedCallback
+        }
     }) ->
         {ok, Archive#archive{
-            description = utils:ensure_defined(maps:get(<<"description">>, Diff, undefined), PrevDescription),
-            preserved_callback = utils:ensure_defined(maps:get(<<"preservedCallback">>, Diff, undefined), PrevPreservedCallback),
-            deleted_callback = utils:ensure_defined(maps:get(<<"deletedCallback">>, Diff, undefined), PrevDeletedCallback)
+            modifiable_fields = #modifiable_fields{
+                incarnation = Incarnation + 1,
+                description = maps:get(<<"description">>, Diff, PrevDescription),
+                preserved_callback = maps:get(<<"preservedCallback">>, Diff, PrevPreservedCallback),
+                deleted_callback = maps:get(<<"deletedCallback">>, Diff, PrevDeletedCallback)
+            }
         }}
-    end)).
+    end),
+    ?extract_ok(Result).
 
 
 -spec delete(archive:id()) -> ok | error().
@@ -231,8 +260,10 @@ find_file(ArchiveDoc, RelativeFilePath, UserCtx) ->
 %%% Getters for #archive record
 %%%===================================================================
 
--spec get_id(doc()) -> {ok, id()}.
+-spec get_id(doc() | id()) -> {ok, id()}.
 get_id(#document{key = ArchiveId}) ->
+    {ok, ArchiveId};
+get_id(ArchiveId) ->
     {ok, ArchiveId}.
 
 -spec get_creation_time(record() | doc()) -> {ok, timestamp()}.
@@ -278,19 +309,19 @@ get_config(#document{value = Archive}) ->
     get_config(Archive).
 
 -spec get_preserved_callback(record() | doc()) -> {ok, callback()}.
-get_preserved_callback(#archive{preserved_callback = PreservedCallback}) ->
+get_preserved_callback(#archive{modifiable_fields = #modifiable_fields{preserved_callback = PreservedCallback}}) ->
     {ok, PreservedCallback};
 get_preserved_callback(#document{value = Archive}) ->
     get_preserved_callback(Archive).
 
 -spec get_deleted_callback(record() | doc()) -> {ok, callback()}.
-get_deleted_callback(#archive{deleted_callback = DeletedCallback}) ->
+get_deleted_callback(#archive{modifiable_fields = #modifiable_fields{deleted_callback = DeletedCallback}}) ->
     {ok, DeletedCallback};
 get_deleted_callback(#document{value = Archive}) ->
     get_deleted_callback(Archive).
 
 -spec get_description(id() | record() | doc()) -> {ok, description()}.
-get_description(#archive{description = Description}) ->
+get_description(#archive{modifiable_fields = #modifiable_fields{description = Description}}) ->
     {ok, Description};
 get_description(#document{value = Archive}) ->
     get_description(Archive);
@@ -309,11 +340,7 @@ get_root_dir_guid(#archive{root_dir_guid = RootDirGuid}) ->
 get_root_dir_guid(#document{value = Archive}) ->
     get_root_dir_guid(Archive).
 
--spec get_data_dir_guid
-    (record() | doc() | id()) -> {ok, file_id:file_guid()};
-    (undefined) -> {ok, undefined}.
-get_data_dir_guid(undefined) -> 
-    {ok, undefined};
+-spec get_data_dir_guid(record() | doc() | id()) -> {ok, file_id:file_guid()}.
 get_data_dir_guid(#archive{data_dir_guid = DataDirGuid}) -> 
     {ok, DataDirGuid};
 get_data_dir_guid(#document{value = Archive}) -> 
@@ -363,9 +390,15 @@ get_related_aip_id(ArchiveId) ->
 -spec is_finished(record() | doc()) -> boolean().
 is_finished(#archive{state = State}) ->
     lists:member(State, [?ARCHIVE_PRESERVED, ?ARCHIVE_FAILED, ?ARCHIVE_DELETING, 
-        ?ARCHIVE_VERIFYING, ?ARCHIVE_VERIFICATION_FAILED]);
+        ?ARCHIVE_VERIFICATION_FAILED, ?ARCHIVE_CANCELLED]);
 is_finished(#document{value = Archive}) ->
     is_finished(Archive).
+
+-spec is_building(record() | doc()) -> boolean().
+is_building(#archive{state = State}) ->
+    lists:member(State, [?ARCHIVE_PENDING, ?ARCHIVE_BUILDING]);
+is_building(#document{value = Archive}) ->
+    is_building(Archive).
 
 %%%===================================================================
 %%% Setters for #archive record
@@ -375,7 +408,9 @@ is_finished(#document{value = Archive}) ->
 mark_deleting(ArchiveId, Callback) ->
     update(ArchiveId, fun(Archive = #archive{
         state = PrevState,
-        deleted_callback = PrevDeletedCallback,
+        modifiable_fields = ModifiableFields = #modifiable_fields{
+            deleted_callback = PrevDeletedCallback
+        },
         parent = Parent
     }) ->
         case PrevState =:= ?ARCHIVE_PENDING
@@ -388,7 +423,9 @@ mark_deleting(ArchiveId, Callback) ->
             false ->
                 {ok, Archive#archive{
                     state = ?ARCHIVE_DELETING,
-                    deleted_callback = utils:ensure_defined(Callback, PrevDeletedCallback)
+                    modifiable_fields = ModifiableFields#modifiable_fields{
+                        deleted_callback = utils:ensure_defined(Callback, PrevDeletedCallback)
+                    }
                 }}
         end
     end).
@@ -405,21 +442,24 @@ mark_building(ArchiveDocOrId) ->
 
 -spec mark_creation_finished(id() | doc(), archive_stats:record()) -> ok.
 mark_creation_finished(ArchiveDocOrId, NestedArchivesStats) ->
-    UpdateResult = update(ArchiveDocOrId, fun(Archive = #archive{stats = CurrentStats}) ->
-        AggregatedStats = archive_stats:sum(CurrentStats, NestedArchivesStats),
-        {ok, Archive#archive{
-            state = case AggregatedStats#archive_stats.files_failed =:= 0 of
-                true -> ?ARCHIVE_VERIFYING;
-                false -> ?ARCHIVE_FAILED
-            end,
-            stats = AggregatedStats
-        }}
+    UpdateResult = update(ArchiveDocOrId, fun
+        (Archive = #archive{stats = CurrentStats, state = ?ARCHIVE_BUILDING}) ->
+            AggregatedStats = archive_stats:sum(CurrentStats, NestedArchivesStats),
+            {ok, Archive#archive{
+                state = case AggregatedStats#archive_stats.files_failed =:= 0 of
+                    true -> ?ARCHIVE_VERIFYING;
+                    false -> ?ARCHIVE_FAILED
+                end,
+                stats = AggregatedStats
+            }};
+        (Archive = #archive{state = ?ARCHIVE_CANCELLING}) ->
+            {ok, Archive#archive{state = ?ARCHIVE_CANCELLED}}
     end),
     case UpdateResult of
         {ok, #document{value = #archive{state = ?ARCHIVE_VERIFYING}} = Doc} ->
             archive_verification_traverse:block_archive_modification(Doc),
             archive_verification_traverse:start(Doc);
-        {ok, #document{value = #archive{state = ?ARCHIVE_FAILED}}} -> 
+        {ok, #document{value = #archive{}}} ->
             ok
     end.
 
@@ -427,11 +467,34 @@ mark_creation_finished(ArchiveDocOrId, NestedArchivesStats) ->
 -spec mark_preserved(id() | doc()) -> ok | error().
 mark_preserved(ArchiveDocOrId) ->
     ?extract_ok(update(ArchiveDocOrId, fun
-        (#archive{state = ?ARCHIVE_VERIFYING} = Archive) ->
+        (#archive{state = State} = Archive) when State =/= ?ARCHIVE_VERIFICATION_FAILED ->
             {ok, Archive#archive{state = ?ARCHIVE_PRESERVED}};
         (Archive) ->
             {ok, Archive}
     end)).
+
+
+-spec mark_cancelling(id() | doc()) -> ok | {error, already_finished} | error().
+mark_cancelling(ArchiveDocOrId) ->
+    ?extract_ok(update(ArchiveDocOrId, fun
+        (#archive{} = Archive) ->
+            case is_finished(Archive) of
+                true -> {error, already_finished};
+                false -> {ok, Archive#archive{state = ?ARCHIVE_CANCELLING}}
+            end
+    end)).
+
+
+-spec mark_cancelled(id() | doc()) -> ok | error().
+mark_cancelled(ArchiveDocOrId) ->
+    ?ok_if_no_change(?ok_if_not_found(?extract_ok(update(ArchiveDocOrId, fun
+        (#archive{} = Archive) ->
+            case is_finished(Archive) of
+                true -> {error, no_change};
+                false -> {ok, Archive#archive{state = ?ARCHIVE_CANCELLED}}
+            end
+    end)))).
+
 
 
 -spec mark_verification_failed(id() | doc()) -> ok | error().
@@ -529,17 +592,22 @@ get_ctx() ->
 get_record_version() ->
     1.
 
+
 -spec get_record_struct(datastore_model:record_version()) -> datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
+        {archiving_provider, string},
         {dataset_id, string},
         {creation_time, integer},
         {creator, string},
         {state, atom},
         {config, {custom, string, {persistent_record, encode, decode, archive_config}}},
-        {preserved_callback, string},
-        {deleted_callback, string},
-        {description, string},
+        {modifiable_fields, {record, [
+            {incarnation, integer},
+            {preserved_callback, string},
+            {deleted_callback, string},
+            {description, string}
+        ]}},
         {root_dir_guid, string},
         {data_dir_guid, string},
         {stats, {custom, string, {persistent_record, encode, decode, archive_stats}}},
@@ -548,3 +616,125 @@ get_record_struct(1) ->
         {related_dip, string},
         {related_aip, string}
     ]}.
+
+
+-spec resolve_conflict(datastore_model:ctx(), doc(), doc()) ->
+    {boolean(), doc()} | ignore | default.
+resolve_conflict(_Ctx, #document{value = RemoteValue} = RemoteDoc, #document{value = LocalValue} = LocalDoc) ->
+    % Archive fields that can be modified by any provider are stored under modifiable fields field. 
+    % Other fields can be changed only by archiving provider (except setting state to ?ARCHIVE_CANCELLING, 
+    % which also can be done by any provider).
+    
+    #document{revs = [LocalRev | _], mutators = [RemoteDocMutator], deleted = LocalDeleted} = LocalDoc,
+    #document{revs = [RemoteRev | _], deleted = RemoteDeleted} = RemoteDoc,
+    
+    case datastore_rev:is_greater(RemoteRev, LocalRev) of
+        true ->
+            case {LocalDeleted, resolve_conflict_remote_rev_greater(LocalValue, RemoteValue)} of
+                {true, _} ->
+                    case RemoteDeleted of
+                        true -> {false, RemoteDoc};
+                        false -> {true, RemoteDoc#document{deleted = true}}
+                    end;
+                {false, {true, NewRecord}} ->
+                    {true, RemoteDoc#document{value = NewRecord}};
+                {false, remote} ->
+                    {false, RemoteDoc}
+            end;
+        false ->
+            case {RemoteDeleted, resolve_conflict_local_rev_greater(LocalValue, RemoteValue, RemoteDocMutator)} of
+                {true, _} ->
+                    case LocalDeleted of
+                        true -> ignore;
+                        false -> {true, LocalDoc#document{deleted = true}}
+                    end;
+                {false, {true, NewRecord}} ->
+                    {true, LocalDoc#document{value = NewRecord}};
+                {false, ignore} ->
+                    ignore
+            end
+    end.
+
+
+-spec resolve_conflict_remote_rev_greater(record(), record()) -> 
+    {true, record()} | remote.
+resolve_conflict_remote_rev_greater(
+    #archive{archiving_provider = ArchivingProviderId} = LocalValue,
+    #archive{state = RemoteState} = RemoteValue
+) ->
+    LocalProviderId = oneprovider:get_id_or_undefined(),
+    case {LocalProviderId, is_finished(LocalValue), RemoteState} of
+        {ArchivingProviderId, false = _LocalFinished, ?ARCHIVE_CANCELLING} ->
+            {true, LocalValue#archive{
+                state = ?ARCHIVE_CANCELLING, 
+                modifiable_fields = resolve_modifiable_fields_conflict(RemoteValue, LocalValue)
+            }};
+        {ArchivingProviderId, _, _} ->
+            {true, LocalValue#archive{
+                modifiable_fields = resolve_modifiable_fields_conflict(RemoteValue, LocalValue)
+            }};
+        { _, _, _} ->
+            case is_modifiable_fields_conflict(RemoteValue, LocalValue) of
+                true -> 
+                    {true, RemoteValue#archive{
+                        modifiable_fields = resolve_modifiable_fields_conflict(RemoteValue, LocalValue)
+                    }};
+                false ->
+                    remote
+            end
+    end.
+
+
+-spec resolve_conflict_local_rev_greater(record(), record(), oneprovider:id()) -> 
+    {true, record()} | ignore.
+resolve_conflict_local_rev_greater(
+    #archive{archiving_provider = ArchivingProviderId, state = LocalState} = LocalValue,
+    #archive{state = RemoteState} = RemoteValue,
+    RemoteDocMutator
+) ->
+    Result = case {RemoteDocMutator, {LocalState, is_finished(LocalValue)}, {RemoteState, is_finished(RemoteValue)}} of
+        {ArchivingProviderId, {?ARCHIVE_CANCELLING, _}, {_, false = _RemoteFinished}} ->
+            {true, RemoteValue#archive{state = ?ARCHIVE_CANCELLING}};
+        {ArchivingProviderId, _, _} ->
+            {true, RemoteValue};
+        {_, {?ARCHIVE_CANCELLING, _}, {?ARCHIVE_CANCELLING, _}} ->
+            ignore;
+        {_, {_, true = _LocalFinished}, _} ->
+            ignore;
+        {_, _, {?ARCHIVE_CANCELLING, _}} ->
+            {true, LocalValue#archive{state = ?ARCHIVE_CANCELLING}};
+        {_, _, _} ->
+            ignore
+    end,
+    case {Result, is_modifiable_fields_conflict(LocalValue, RemoteValue)} of
+        {ignore, true} ->
+            {true, LocalValue#archive{modifiable_fields = resolve_modifiable_fields_conflict(LocalValue, RemoteValue)}};
+        {{true, UpdatedValue}, true} ->
+            {true, UpdatedValue#archive{modifiable_fields = resolve_modifiable_fields_conflict(LocalValue, RemoteValue)}};
+        _ ->
+            Result
+    end.
+
+
+-spec is_modifiable_fields_conflict(record(), record()) -> boolean().
+is_modifiable_fields_conflict(#archive{modifiable_fields = MF1}, #archive{modifiable_fields = MF2}) ->
+    MF1 =/= MF2.
+
+
+-spec resolve_modifiable_fields_conflict(GreaterRevRecord :: record(), LowerRevRecord :: record()) -> 
+    modifiable_fields().
+resolve_modifiable_fields_conflict(
+    #archive{modifiable_fields = #modifiable_fields{incarnation = Incarnation1} = MF1},
+    #archive{modifiable_fields = #modifiable_fields{incarnation = Incarnation2} = _MF2}
+) when Incarnation1 > Incarnation2 ->
+    MF1;
+resolve_modifiable_fields_conflict(
+    #archive{modifiable_fields = #modifiable_fields{incarnation = Incarnation1} = _MF1},
+    #archive{modifiable_fields = #modifiable_fields{incarnation = Incarnation2} = MF2}
+) when Incarnation1 < Incarnation2 ->
+    MF2;
+resolve_modifiable_fields_conflict(
+    #archive{modifiable_fields = GreaterRevMF}, 
+    #archive{modifiable_fields = _LoverRevMF2}
+) ->
+    GreaterRevMF.

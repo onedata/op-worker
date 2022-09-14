@@ -32,6 +32,7 @@
 -type archive_operation() ::
     #archives_list_request{} |
     #dataset_archive_request{} |
+    #archivisation_cancel_request{} |
     #archive_info_get_request{} |
     #archive_update_request{} |
     #archive_delete_request{} |
