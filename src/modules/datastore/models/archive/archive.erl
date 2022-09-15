@@ -102,10 +102,10 @@
 %%% API functions
 %%%===================================================================
 
--spec create(dataset:id(), od_space:id(), creator(), config(), callback(), callback(), description(), archive:id() | undefined) ->
-    {ok, doc()} | error().
+-spec create(dataset:id(), od_space:id(), creator(), config(), callback(), callback(), 
+    description(), id() | undefined) -> {ok, doc()} | error().
 create(DatasetId, SpaceId, Creator, Config, PreservedCallback, DeletedCallback, Description, BaseArchiveId) ->
-    datastore_model:create(?CTX, #document{
+    create(#document{
         value = #archive{
             archiving_provider = oneprovider:get_id(),
             dataset_id = DatasetId,
@@ -137,7 +137,7 @@ create_nested(DatasetId, #document{
     },
     scope = SpaceId
 }) ->
-    datastore_model:create(?CTX, #document{
+    create(#document{
         value = #archive{
             archiving_provider = oneprovider:get_id(),
             dataset_id = DatasetId,
@@ -156,9 +156,13 @@ create_nested(DatasetId, #document{
     }).
 
 
--spec create_dip_archive(archive:doc()) -> {ok, archive:doc()} | {error, term()}.
-create_dip_archive(#document{key = AipArchiveId, value = #archive{config = AipConfig} = AipArchiveValue, scope = Scope}) -> 
-    datastore_model:create(?CTX, #document{
+-spec create_dip_archive(doc()) -> {ok, doc()} | {error, term()}.
+create_dip_archive(#document{
+    key = AipArchiveId, 
+    value = #archive{config = AipConfig} = AipArchiveValue, 
+    scope = Scope
+}) -> 
+    create(#document{
         value = AipArchiveValue#archive{
             config = archive_config:enforce_plain_layout(AipConfig),
             related_aip = AipArchiveId,
@@ -167,6 +171,17 @@ create_dip_archive(#document{key = AipArchiveId, value = #archive{config = AipCo
         scope = Scope
     }).
 
+
+-spec create(doc()) -> {ok, doc()} | {error, term()}.
+create(DocToCreate) ->
+    case datastore_model:create(?CTX, DocToCreate) of
+        {ok, #document{key = ArchiveId} = Doc} ->
+            archivisation_audit_log:create(ArchiveId),
+            {ok, Doc};
+        {error, _} = Error ->
+            Error
+    end.
+    
 
 -spec get(id()) -> {ok, doc()} | error().
 get(ArchiveId) ->
@@ -197,6 +212,7 @@ modify_attrs(ArchiveId, Diff) when is_map(Diff) ->
 
 -spec delete(archive:id()) -> ok | error().
 delete(ArchiveId) ->
+    archivisation_audit_log:destroy(ArchiveId),
     datastore_model:delete(?CTX, ArchiveId).
 
 

@@ -687,7 +687,7 @@ get_recursive_file_list_inaccessible_paths_test_base(Config) ->
         get_files_recursively(Worker, SessId2, ?FILE_REF(MainDirGuid), #{limit => length(AllFiles) + 1})),
     ?assertMatch({ok, AllFiles, [], _},
         get_files_recursively(Worker, SessId2, ?FILE_REF(MainDirGuid), #{start_after_path => EaccesDirName, limit => length(AllFiles)})),
-    ?assertMatch({ok, [], [<<".">>], _},
+    ?assertMatch({error, ?EACCES},
         get_files_recursively(Worker, SessId2, ?FILE_REF(EaccesDirGuid), #{limit => length(AllFiles)})).
 
 

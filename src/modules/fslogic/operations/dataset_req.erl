@@ -27,7 +27,8 @@
     get_info/3,
     get_file_eff_summary/2,
     list_top_datasets/5,
-    list_children_datasets/5
+    list_children_datasets/5,
+    list_recursively/4
 ]).
 
 %% Archives API
@@ -47,6 +48,15 @@
 
 -type error() :: {error, term()}.
 
+-type recursive_listing_opts() :: #{
+    % NOTE: pagination_token and start_after_path are mutually exclusive
+    pagination_token => recursive_listing:pagination_token(),
+    start_after_path => recursive_dataset_listing_node:node_path(),
+    prefix => recursive_listing:prefix(),
+    limit => recursive_listing:limit()
+}.
+
+-export_type([recursive_listing_opts/0]).
 
 %%%===================================================================
 %%% API functions
@@ -147,6 +157,22 @@ list_children_datasets(SpaceDirCtx, Dataset, Opts, ListingMode, UserCtx) ->
 
     dataset_api:list_children_datasets(Dataset, Opts, ListingMode).
 
+
+-spec list_recursively(
+    od_space:id(),
+    dataset:id(),
+    recursive_listing_opts(),
+    user_ctx:ctx()
+) ->
+    {ok, recursive_dataset_listing_node:result()} | error().
+list_recursively(SpaceId, DatasetId, Opts, UserCtx) ->
+    UserId = user_ctx:get_user_id(UserCtx),
+    space_logic:assert_has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW),
+    
+    {ok, DatasetInfo} = dataset_api:get_info(DatasetId),
+    FinalOpts = Opts#{include_branching_nodes => true},
+    {ok, recursive_listing:list(recursive_dataset_listing_node, UserCtx, DatasetInfo, FinalOpts)}.
+    
 
 %%%===================================================================
 %%% Archives API functions

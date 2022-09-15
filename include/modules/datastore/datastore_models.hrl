@@ -1049,7 +1049,8 @@
     all_batches_listed = false :: boolean(),
     % Uuid of file that should be processed after current file's subtree is processed.
     % If undefined then current file's parent will be used.
-    next_subtree_root = undefined :: undefined | file_meta:uuid()
+    next_subtree_root = undefined :: undefined | file_meta:uuid(),
+    processing_start_timestamp :: time:millis()
 }).
 
 -record(dir_update_time_stats, {
@@ -1180,16 +1181,6 @@
     schedule_time = 0 :: atm_workflow_execution:timestamp(),
     start_time = 0 :: atm_workflow_execution:timestamp(),
     finish_time = 0 :: atm_workflow_execution:timestamp()
-}).
-
-%% Model for storing persistent state of a single tree forest iteration.
--record(atm_tree_forest_iterator_queue, {
-    values = #{} :: atm_tree_forest_iterator_queue:values(),
-    last_pushed_value_index = 0 :: atm_tree_forest_iterator_queue:index(),
-    highest_peeked_value_index = 0 :: atm_tree_forest_iterator_queue:index(),
-    discriminator = {0, <<>>} :: atm_tree_forest_iterator_queue:discriminator(),
-    last_pruned_node_num = 0 :: atm_tree_forest_iterator_queue:node_num(),
-    max_values_per_node :: pos_integer() | undefined
 }).
 
 % Record holding the registry of pod status changes for an OpenFaaS function

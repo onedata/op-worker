@@ -580,10 +580,10 @@ get_children_details(Worker, SessId, FileKey, ListOpts) ->
     node(),
     session:id(),
     lfm:file_key(),
-    recursive_file_listing:options(),
+    dir_req:recursive_listing_opts(),
     [attr_req:optional_attr()]
 ) ->
-    {ok, [recursive_file_listing:entry()], [file_meta:path()], recursive_file_listing:pagination_token()} | lfm:error_reply().
+    {ok, [recursive_file_listing_node:entry()], [file_meta:path()], recursive_listing:pagination_token()} | lfm:error_reply().
 get_files_recursively(Worker, SessId, FileKey, Options, OptionalAttrs) ->
     ?EXEC(Worker, lfm:get_files_recursively(SessId, uuid_to_file_ref(Worker, FileKey), Options, OptionalAttrs)).
 

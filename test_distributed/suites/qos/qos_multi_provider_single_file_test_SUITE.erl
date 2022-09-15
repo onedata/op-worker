@@ -16,7 +16,9 @@
 -include("modules/logical_file_manager/lfm.hrl").
 -include("qos_tests_utils.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
+-include_lib("ctool/include/time_series/common.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
+-include_lib("cluster_worker/include/time_series/browsing.hrl").
 
 %% API
 -export([
@@ -46,10 +48,10 @@
     contrary_qos/1,
     multi_qos_where_one_cannot_be_satisfied/1,
     multi_qos_that_overlaps/1,
-    
+
     qos_reconciliation_file_test/1,
     qos_reconciliation_dir_test/1,
-    
+
     qos_transfer_stats_test/1
 ]).
 
@@ -73,10 +75,10 @@ all() -> [
     contrary_qos,
     multi_qos_where_one_cannot_be_satisfied,
     multi_qos_that_overlaps,
-    
+
     qos_reconciliation_file_test,
     qos_reconciliation_dir_test,
-    
+
     qos_transfer_stats_test
 ].
 
@@ -408,7 +410,7 @@ basic_qos_reconciliation_test_base(DirStructureType) ->
     [Provider1, Provider2 | _] = oct_background:get_provider_ids(),
     P1Node = oct_background:get_random_provider_node(Provider1),
     SpaceId = oct_background:get_space_id(?SPACE1_PLACEHOLDER),
-    
+
     Filename = generator:gen_name(),
     QosSpec = create_basic_qos_test_spec(DirStructureType, Filename),
     {GuidsAndPaths, _} = qos_tests_utils:fulfill_qos_test_base(QosSpec),
@@ -442,7 +444,7 @@ create_basic_qos_test_spec(DirStructureType, QosFilename) ->
             {?nested_dir_structure(?SPACE_NAME, QosFilename, [Provider1]),
                 ?nested_dir_structure(?SPACE_NAME, QosFilename, [Provider1, Provider2])}
     end,
-    
+
     #fulfill_qos_test_spec{
         initial_dir_structure = #test_dir_structure{
             dir_structure = DirStructure
@@ -489,25 +491,25 @@ qos_transfer_stats_test(_Config) ->
     P2Node = oct_background:get_random_provider_node(Provider2),
     P3Node = oct_background:get_random_provider_node(Provider3),
     SpaceId = oct_background:get_space_id(?SPACE1_PLACEHOLDER),
-    
+
     Name = generator:gen_name(),
     Guid = qos_tests_utils:create_file(Provider1, ?SESS_ID(Provider1), ?PATH(Name), ?TEST_DATA),
     {ok, QosEntryId} = opt_qos:add_qos_entry(P1Node, ?SESS_ID(Provider1), ?FILE_REF(Guid), <<"providerId=", Provider2/binary>>, 1),
     % wait for qos entries to be dbsynced to other provider
     ?assertMatch({ok, _}, opt_qos:get_qos_entry(P2Node, ?SESS_ID(Provider2), QosEntryId), ?ATTEMPTS),
     ?assertEqual({ok, ?FULFILLED_QOS_STATUS}, opt_qos:check_qos_status(P1Node, ?SESS_ID(Provider1), QosEntryId), ?ATTEMPTS),
-    
+
     check_transfer_stats(Provider1, QosEntryId, ?BYTES_STATS, [<<"total">>], empty),
     check_transfer_stats(Provider2, QosEntryId, ?BYTES_STATS, [<<"total">>, opt_spaces:get_storage_id(Provider1, SpaceId)], {1, byte_size(?TEST_DATA)}),
     check_transfer_stats(Provider1, QosEntryId, ?FILES_STATS, [<<"total">>], empty),
     check_transfer_stats(Provider2, QosEntryId, ?FILES_STATS, [<<"total">>, opt_spaces:get_storage_id(Provider2, SpaceId)], {1, 1}),
-    
+
     NewData = crypto:strong_rand_bytes(8),
     lfm_test_utils:write_file(P3Node, ?SESS_ID(Provider3), Guid, NewData),
 
     ?assertEqual(NewData, lfm_test_utils:read_file(P2Node, ?SESS_ID(Provider2), Guid, byte_size(NewData)), ?ATTEMPTS),
     ?assertEqual({ok, ?FULFILLED_QOS_STATUS}, opt_qos:check_qos_status(P2Node, ?SESS_ID(Provider2), QosEntryId), ?ATTEMPTS),
-    
+
     check_transfer_stats(Provider1, QosEntryId, ?BYTES_STATS, [<<"total">>], empty),
     check_transfer_stats(Provider2, QosEntryId, ?BYTES_STATS, [opt_spaces:get_storage_id(Provider1, SpaceId)], {1, byte_size(?TEST_DATA)}),
     check_transfer_stats(Provider2, QosEntryId, ?BYTES_STATS, [opt_spaces:get_storage_id(Provider3, SpaceId)], {1, byte_size(NewData)}),
@@ -615,7 +617,7 @@ get_initial_structure_with_single_dir(Provider, Name) ->
         provider = Provider,
         dir_structure = {?SPACE_NAME, [
             {?DIRNAME(Name), [
-                {?FILENAME(Name), <<"test_data">>, [Provider]}  
+                {?FILENAME(Name), <<"test_data">>, [Provider]}
             ]}
         ]}
     }.
@@ -652,12 +654,13 @@ read_file(Node, FilePath) ->
 
 
 check_transfer_stats(Provider, QosEntryId, Type, ExpTimeSeriesNames, ExpectedFirstWindow) ->
-    {ok, Layout} = opw_test_rpc:call(Provider, qos_transfer_stats, get_layout, [QosEntryId, Type]),
-    {ok, Stats} = opw_test_rpc:call(Provider, qos_transfer_stats, get_slice, [QosEntryId, Type, Layout, #{}]),
+    {ok, Slice} = opw_test_rpc:call(Provider, qos_transfer_stats, browse, [
+        QosEntryId, Type, #time_series_slice_get_request{layout = ?COMPLETE_LAYOUT}
+    ]),
     lists:foreach(fun(TimeSeriesName) ->
         lists:foreach(fun(MetricName) ->
-            ?assert(kv_utils:is_key([TimeSeriesName, MetricName], Stats)),
-            Windows = kv_utils:get([TimeSeriesName, MetricName], Stats),
+            ?assert(kv_utils:is_key([TimeSeriesName, MetricName], Slice)),
+            Windows = kv_utils:get([TimeSeriesName, MetricName], Slice),
             case ExpectedFirstWindow of
                 empty ->
                     ?assertEqual([], Windows);
