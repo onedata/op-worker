@@ -575,8 +575,6 @@ handle_file_request(UserCtx, #get_file_children_attrs{listing_options = ListingO
     dir_req:get_children_attrs(UserCtx, FileCtx, ListingOpts, IncludeReplicationStatus, IncludeLinkCount);
 handle_file_request(UserCtx, #get_file_children_details{listing_options = ListingOpts}, FileCtx) ->
     dir_req:get_children_details(UserCtx, FileCtx, ListingOpts);
-handle_file_request(UserCtx, #get_recursive_file_list{listing_options = Options}, FileCtx) ->
-    recursive_file_listing:list(UserCtx, FileCtx, Options);
 handle_file_request(UserCtx, #rename{
     target_parent_guid = TargetParentGuid,
     target_name = TargetName
@@ -660,7 +658,9 @@ handle_provider_request(UserCtx, #set_acl{acl = #acl{value = Acl}}, FileCtx) ->
 handle_provider_request(UserCtx, #remove_acl{}, FileCtx) ->
     acl_req:remove_acl(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #check_perms{flag = Flag}, FileCtx) ->
-    permission_req:check_perms(UserCtx, FileCtx, Flag).
+    permission_req:check_perms(UserCtx, FileCtx, Flag);
+handle_provider_request(UserCtx, #get_recursive_file_list{listing_options = Options}, FileCtx) ->
+    dir_req:list_recursively(UserCtx, FileCtx, Options).
 
 
 %%--------------------------------------------------------------------

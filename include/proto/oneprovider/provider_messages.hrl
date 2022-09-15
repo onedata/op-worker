@@ -43,10 +43,14 @@
 -record(get_file_path, {
 }).
 
+-record(get_recursive_file_list, {
+    listing_options :: dir_req:recursive_listing_opts()
+}).
+
 -type provider_request_type() ::
     #get_parent{} |
     #get_acl{} | #set_acl{} | #remove_acl{} | #check_perms{} |
-    #get_file_path{}.
+    #get_file_path{} | #get_recursive_file_list{}.
 
 
 -record(file_path, {
@@ -92,9 +96,15 @@
     related_dip_id :: undefined | archive:id()
 }).
 
+-record(recursive_listing_result, {
+    entries :: [any()], % [recursive_listing:result_entry()] but dialyzer does not accept it
+    inaccessible_paths :: [any()], % [recursive_listing:node_path()] but dialyzer does not accept it
+    pagination_token :: undefined | recursive_listing:pagination_token()
+}).
+
 -type provider_response_type() ::
     #acl{} | #dir{} | #file_path{}| #dataset_info{} | #file_eff_dataset_summary{} |
-    #archive_info{} | undefined.
+    #archive_info{} | #recursive_listing_result{} | undefined.
 
 -record(provider_request, {
     context_guid :: fslogic_worker:file_guid(),

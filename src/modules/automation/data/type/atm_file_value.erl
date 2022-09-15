@@ -19,22 +19,21 @@
 
 -include("modules/logical_file_manager/lfm.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% atm_data_validator callbacks
 -export([assert_meets_constraints/3]).
 
 %% atm_tree_forest_store_container_iterator callbacks
 -export([
-    list_children/4,
-    initial_listing_options/0,
-    encode_listing_options/1, decode_listing_options/1
+    list_tree/4
 ]).
 
 %% atm_data_compressor callbacks
 -export([compress/2, expand/3]).
 
--type list_opts() :: file_listing:options().
 
 %%%===================================================================
 %%% atm_data_validator callbacks
@@ -66,51 +65,21 @@ assert_meets_constraints(AtmWorkflowExecutionAuth, #{<<"file_id">> := ObjectId} 
 %%% atm_tree_forest_store_container_iterator callbacks
 %%%===================================================================
 
-
--spec list_children(atm_workflow_execution_auth:record(), file_id:file_guid(), list_opts(), non_neg_integer()) ->
-    {[{file_id:file_guid(), file_meta:name()}], [file_id:file_guid()], list_opts(), IsLast :: boolean()} | no_return().
-list_children(AtmWorkflowExecutionAuth, Guid, ListOpts, BatchSize) ->
-    SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
-    try
-        list_children_unsafe(SessionId, Guid, ListOpts#{limit => BatchSize})
-    catch _:Error ->
-        Errno = datastore_runner:normalize_error(Error),
-        case fslogic_errors:is_access_error(Errno) of
-            true ->
-                {[], [], #{}, true};
-            _ -> 
-                throw(?ERROR_POSIX(Errno))
-        end
-    end.
-
-
--spec initial_listing_options() -> list_opts().
-initial_listing_options() ->
-    #{
-        tune_for_large_continuous_listing => false
-    }.
-
-
--spec encode_listing_options(list_opts()) -> json_utils:json_term().
-encode_listing_options(#{tune_for_large_continuous_listing := Value}) ->
-    #{
-        <<"tune_for_large_continuous_listing">> => Value
-    };
-encode_listing_options(#{pagination_token := Token}) ->
-    #{
-        <<"pagination_token">> => file_listing:encode_pagination_token(Token)
-    }.
-
-
--spec decode_listing_options(json_utils:json_term()) -> list_opts().
-decode_listing_options(#{<<"tune_for_large_continuous_listing">> := Value}) ->
-    #{
-        tune_for_large_continuous_listing => Value
-    };
-decode_listing_options(#{<<"pagination_token">> := EncodedToken}) ->
-    #{
-        pagination_token => file_listing:decode_pagination_token(EncodedToken)
-    }.
+-spec list_tree(
+    atm_workflow_execution_auth:record(),
+    recursive_listing:pagination_token() | undefined,
+    atm_value:compressed(),
+    atm_store_container_iterator:batch_size()
+) ->
+    {[atm_value:expanded()], recursive_listing:pagination_token() | undefined}.
+list_tree(AtmWorkflowExecutionAuth, PrevToken, CompressedRoot, BatchSize) ->
+    list_internal(AtmWorkflowExecutionAuth, CompressedRoot,
+        maps_utils:remove_undefined(#{
+            limit => BatchSize, 
+            pagination_token => PrevToken,
+            include_directories => true
+        })
+    ).
 
 
 %%%===================================================================
@@ -143,6 +112,28 @@ expand(AtmWorkflowExecutionAuth, Guid, _ValueConstraints) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%% @private
+-spec list_internal(atm_workflow_execution_auth:record(), atm_value:compressed(), dir_req:recursive_listing_opts()) ->
+    {[atm_value:expanded()], recursive_listing:pagination_token() | undefined}.
+list_internal(AtmWorkflowExecutionAuth, CompressedRoot, Opts) ->
+    UserCtx = user_ctx:new(atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth)),
+    FileCtx = file_ctx:new_by_guid(CompressedRoot),
+    try
+        #provider_response{provider_response = #recursive_listing_result{
+            entries = Entries, pagination_token = PaginationToken}} = dir_req:list_recursively(UserCtx, FileCtx, Opts),
+        MappedEntries = lists:map(fun({_Path, FileAttrs}) ->
+            file_middleware_plugin:file_attrs_to_json(FileAttrs)
+        end, Entries),
+        {MappedEntries, PaginationToken}
+    catch _:Error ->
+        case datastore_runner:normalize_error(Error) of
+            not_found -> {[], undefined};
+            ?EPERM -> {[], undefined};
+            ?EACCES -> {[], undefined};
+            _ -> error(Error)
+        end
+    end.
 
 
 %% @private
@@ -185,34 +176,4 @@ check_explicit_constraints(#file_attr{type = FileType}, Constraints) ->
                 #{file_type => Other}, fun jsonable_record:to_json/2
             ),
             throw({unverified_constraints, UnverifiedConstraint})
-    end.
-
-
-%% @private
--spec list_children_unsafe(session:id(), file_id:file_guid(), list_opts()) ->
-    {[{file_id:file_guid(), file_meta:name()}], [file_id:file_guid()], list_opts(), boolean()}.
-list_children_unsafe(SessionId, Guid, ListOpts) ->
-    case file_ctx:is_dir(file_ctx:new_by_guid(Guid)) of
-        {false, _Ctx} ->
-            {[], [], #{}, true};
-        {true, Ctx} ->
-            {Children, ListingPaginationToken, _Ctx1} = dir_req:get_children_ctxs(
-                user_ctx:new(SessionId),
-                Ctx,
-                ListOpts),
-            {ReversedDirsAndNames, ReversedFiles} = lists:foldl(fun(ChildCtx, {DirsSoFar, FilesSoFar}) ->
-                case file_ctx:is_dir(ChildCtx) of
-                    {true, ChildCtx1} ->
-                        {Name, ChildCtx2} = file_ctx:get_aliased_name(ChildCtx1, undefined),
-                        {[{file_ctx:get_logical_guid_const(ChildCtx2), Name} | DirsSoFar], FilesSoFar};
-                    {false, _} ->
-                        {DirsSoFar, [file_ctx:get_logical_guid_const(ChildCtx) | FilesSoFar]}
-                end
-            end, {[], []}, Children),
-            {
-                lists:reverse(ReversedDirsAndNames), 
-                lists:reverse(ReversedFiles), 
-                #{pagination_token => ListingPaginationToken},
-                file_listing:is_finished(ListingPaginationToken)
-            }
     end.

@@ -88,7 +88,6 @@ init_per_testcase(async_task_enqueuing_test = Case, Config) ->
 init_per_testcase(_, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     Manager = spawn(fun start_test_execution_manager/0),
-    % TODO VFS-7784 - mock iterator and check if forget_before and mark_exhausted after iterators are not needed anymore
     % TODO VFS-7784 - test iteration failure
     mock_handlers(Workers, Manager),
     [{test_execution_manager, Manager} | Config].
