@@ -126,26 +126,42 @@ build_run_creation_ctx(AtmLaneRunSelector, AtmWorkflowExecutionDoc, AtmWorkflowE
         }
     } = atm_lane_execution:get_schema(AtmLaneRunSelector, AtmWorkflowExecution),
 
+    IteratedStoreId = case Run#atm_lane_execution_run.iterated_store_id of
+        undefined ->
+            % If not explicitly set then take designated by schema store
+            atm_workflow_execution_ctx:get_global_store_id(
+                AtmStoreSchemaId, AtmWorkflowExecutionCtx
+            );
+        Id ->
+            Id
+    end,
+
+    {RunType, OriginAtmLaneRun} = case Run#atm_lane_execution_run.origin_run_num of
+        undefined ->
+            {regular, undefined};
+        OriginRunNum ->
+            OriginLaneRunSelector = {AtmLaneSelector, OriginRunNum},
+            {ok, OriginRun} = atm_lane_execution:get_run(OriginLaneRunSelector, AtmWorkflowExecution),
+            case OriginRun#atm_lane_execution_run.iterated_store_id of
+                IteratedStoreId -> {rerun, OriginRun};
+                _ -> {retry, OriginRun}
+            end
+    end,
+
     #run_creation_ctx{
         creation_args = #atm_lane_execution_run_creation_args{
+            type = RunType,
             workflow_execution_ctx = AtmWorkflowExecutionCtx,
             workflow_execution_doc = AtmWorkflowExecutionDoc,
 
             lane_index = atm_lane_execution:resolve_selector(AtmLaneSelector, AtmWorkflowExecution),
             lane_schema = AtmLaneSchema,
+            origin_run = OriginAtmLaneRun,
 
-            iterated_store_id = case Run#atm_lane_execution_run.iterated_store_id of
-                undefined ->
-                    % If not explicitly set then take designated by schema store
-                    atm_workflow_execution_ctx:get_global_store_id(
-                        AtmStoreSchemaId, AtmWorkflowExecutionCtx
-                    );
-                IteratedStoreId ->
-                    IteratedStoreId
-            end
+            iterated_store_id = IteratedStoreId
         },
-        reset_lane_retries_num = case Run#atm_lane_execution_run.origin_run_num of
-            undefined -> true;
+        reset_lane_retries_num = case RunType of
+            regular -> true;
             _ -> false
         end,
         execution_components = #run_execution_components{}
