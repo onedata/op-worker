@@ -56,6 +56,7 @@
     expect_task_finished/2,
     expect_task_skipped/2,
     expect_task_failed/2,
+    expect_task_interrupted/2,
     expect_task_cancelled/2,
     expect_task_parallel_box_transitioned_to_inferred_status/3,
     expect_all_tasks_skipped/2,
@@ -552,6 +553,12 @@ expect_task_skipped(AtmTaskExecutionId, ExpStateCtx) ->
     ctx().
 expect_task_failed(AtmTaskExecutionId, ExpStateCtx) ->
     expect_task_transitioned_to(AtmTaskExecutionId, <<"failed">>, ExpStateCtx).
+
+
+-spec expect_task_interrupted(atm_task_execution:id(), ctx()) ->
+    ctx().
+expect_task_interrupted(AtmTaskExecutionId, ExpStateCtx) ->
+    expect_task_transitioned_to(AtmTaskExecutionId, <<"interrupted">>, ExpStateCtx).
 
 
 -spec expect_task_cancelled(atm_task_execution:id(), ctx()) ->
