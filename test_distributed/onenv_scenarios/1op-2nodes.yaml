@@ -33,6 +33,8 @@ users:
     name: user2
     password: password
 
+storages:
+  - s3
 
 spaces:
   - name: space1
