@@ -637,7 +637,7 @@ translate_from_protobuf(#'FileAttr'{} = FileAttr) ->
     Xattrs = lists:foldl(fun(Xattr, Acc) ->
         #xattr{name = Name, value = Value} = translate_from_protobuf(Xattr),
         Acc#{Name => Value}
-    end, #{}, #'FileAttr'.xattrs),
+    end, #{}, FileAttr#'FileAttr'.xattrs),
     #file_attr{
         guid = FileAttr#'FileAttr'.uuid,
         name = FileAttr#'FileAttr'.name,

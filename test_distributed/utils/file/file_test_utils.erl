@@ -71,7 +71,7 @@ get_attrs(Node, FileGuid) ->
 -spec get_attrs(node(), session:id(), file_id:file_guid()) ->
     {ok, lfm_attrs:file_attributes()} | error().
 get_attrs(Node, SessId, FileGuid) ->
-    case lfm_proxy:stat(Node, SessId, ?FILE_REF(FileGuid), [size]) of
+    case lfm_proxy:stat(Node, SessId, ?FILE_REF(FileGuid), [size, replication_status, link_count]) of
         % File attrs are constructed from several records so it is possible that
         % even if 'file_meta' (the main doc) was synchronized 'times' doc wasn't
         {ok, #file_attr{mtime = 0}} ->

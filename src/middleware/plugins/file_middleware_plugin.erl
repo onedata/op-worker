@@ -505,10 +505,10 @@ data_spec_get(#gri{aspect = children, scope = Sc}) -> #{
                 false
         end},
         <<"tune_for_large_continuous_listing">> => {boolean, any},
-        <<"attribute">> => case Sc of
+        <<"attribute">> => {any, case Sc of
             public -> build_check_requested_attrs_fun(?PUBLIC_BASIC_ATTRIBUTES);
             private -> build_check_requested_attrs_fun(?PRIVATE_BASIC_ATTRIBUTES)
-        end
+        end}
     }
 };
 
@@ -528,11 +528,11 @@ data_spec_get(#gri{aspect = files, scope = Sc}) -> #{
 
 data_spec_get(#gri{aspect = attrs, scope = private}) -> #{
     required => #{id => {binary, guid}},
-    optional => #{<<"attribute">> => build_check_requested_attrs_fun(?PRIVATE_BASIC_ATTRIBUTES)}
+    optional => #{<<"attribute">> => {any, build_check_requested_attrs_fun(?PRIVATE_BASIC_ATTRIBUTES)}}
 };
 data_spec_get(#gri{aspect = attrs, scope = public}) -> #{
     required => #{id => {binary, guid}},
-    optional => #{<<"attribute">> => build_check_requested_attrs_fun(?PUBLIC_BASIC_ATTRIBUTES)}
+    optional => #{<<"attribute">> => {any, build_check_requested_attrs_fun(?PUBLIC_BASIC_ATTRIBUTES)}}
 };
 
 data_spec_get(#gri{aspect = xattrs}) -> #{

@@ -561,8 +561,8 @@ get_children_data_spec(gs, _Scope) ->
     };
 get_children_data_spec(rest, Scope) ->
     {AllowedAttrs, ScopeAttrsToCheck} = case Scope of
-        public -> {?PUBLIC_BASIC_ATTRIBUTES, []};
-        private -> {?PRIVATE_BASIC_ATTRIBUTES, [<<"hardlinks_count">>]}
+        public -> {?PUBLIC_BASIC_ATTRIBUTES ++ [<<"xattr.*">>], []};
+        private -> {?PRIVATE_BASIC_ATTRIBUTES ++ [<<"xattr.*">>], [<<"hardlinks_count">>]}
     end,
     #data_spec{
         optional = [<<"limit">>, <<"attribute">>],
