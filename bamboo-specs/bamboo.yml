@@ -54,12 +54,12 @@ other:
         duration: '1'
         buildsToKeep: '1'
 stages:
-  - Quarantine hack - copy quarantine:
+  - Qnthack - copy quarantine:
       manual: false
       final: false
       jobs:
-        - Quarantine_hack_copy_quarantine
-        - Quarantine_hack_terminate_build
+        - Qnthack - copy quarantine
+        - Qnthack - terminate build
   - Build:
       manual: false
       final: false
@@ -238,13 +238,13 @@ stages:
       final: false
       jobs:
         - Coverage report
-  - Quarantine hack - request next build:
+  - Qnthack - rerun:
       manual: false
       final: true
       jobs:
-        - Quarantine_hack_request_next_build
+        - Qnthack - rerun
 
-Quarantine_hack_copy_quarantine:
+Qnthack - copy quarantine:
   key: COPQU
   other: &common-opts
     clean-working-dir: true
@@ -277,7 +277,7 @@ Quarantine_hack_copy_quarantine:
         scripts:
           - true
 
-Quarantine_hack_terminate_build:
+Qnthack - terminate build:
   key: TERMB
   other: *common-opts
   tasks:
@@ -395,7 +395,7 @@ _Codetag Tracker:
         working-dir: op_worker
         description: Codetag Tracker
   final-tasks:
-    - test-parser:
+    - test-parser: &parse-test-results
         type: junit
         ignore-time: 'false'
         test-results: op_worker/test/codetag_tracker_results/TEST-*.xml
@@ -418,10 +418,8 @@ _Dialyze:
         description: Dialyze
   final-tasks:
     - test-parser:
-        type: junit
-        ignore-time: 'false'
+        <<: *parse-test-results
         test-results: op_worker/test/dialyzer_results/TEST-*.xml
-        description: Parse test results
     - script:
         <<: *run-script
         scripts:
@@ -482,8 +480,7 @@ _Unit Test:
             tar -czf cover_eunit.tar.gz cover_eunit/
         description: Save cover and test results
     - test-parser:
-        type: junit
-        ignore-time: 'false'
+        <<: *parse-test-results
         test-results: op_worker/test/eunit_results/TEST-*.xml
         description: Parse test results
     - script:
@@ -550,12 +547,10 @@ api_archive: &ct-onenv-job
           - ./ct_onenv.py --suite ${bamboo.shortJobName} --path-to-sources ..
         description: Run CT onenv tests
   final-tasks: &final-tasks
-    - test-parser: &test-parser
-        type: junit
-        ignore-time: 'false'
+    - test-parser:
+        <<: *parse-test-results
         test-results: op_worker/test_distributed/logs/*/surefire.xml
-        description: Parse test results
-    - script: &save-cover-results
+    - script:
         <<: *run-script-working-dir
         scripts:
           - |-
@@ -564,7 +559,7 @@ api_archive: &ct-onenv-job
             cp test_distributed/logs/ct_run.*/*COVER* cover_ct
             tar -czf cover_ct_${bamboo.shortJobName}.tar.gz cover_ct/
         description: Save cover and test results
-    - script: &push-surefire
+    - script:
         <<: *run-script-working-dir
         scripts:
           - |-
@@ -584,16 +579,16 @@ api_archive: &ct-onenv-job
         description: Pack test logs
     - script: *clear-env
   artifacts:
+    - &ct_logs
+      name: ct_logs_${bamboo.shortJobName}.tar.gz
+      pattern: ct_logs_${bamboo.shortJobName}.tar.gz
+      shared: false
+      required: false
     - &cover_ct
       name: cover_ct_api_archive.tar.gz
       pattern: cover_ct_${bamboo.shortJobName}.tar.gz
       location: op_worker
       shared: true
-      required: false
-    - &ct_logs
-      name: ct_logs_${bamboo.shortJobName}.tar.gz
-      pattern: ct_logs_${bamboo.shortJobName}.tar.gz
-      shared: false
       required: false
   requirements:
     - minikube
@@ -603,153 +598,153 @@ api_dataset_crud:
   <<: *ct-onenv-job
   key: APIDATASETCRUD
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_api_dataset_crud.tar.gz
-    - *ct_logs
 
 api_dataset_tree:
   <<: *ct-onenv-job
   key: APIDATASETTREE
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_api_dataset_tree.tar.gz
-    - *ct_logs
 
 api_file_attrs:
   <<: *ct-onenv-job
   key: FILDAPI
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_api_file_attrs.tar.gz
-    - *ct_logs
 
 api_file_crud:
   <<: *ct-onenv-job
   key: FILCRUDAPI
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_api_file_crud.tar.gz
-    - *ct_logs
 
 api_file_ls:
   <<: *ct-onenv-job
   key: FILLSAPI
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_api_file_ls.tar.gz
-    - *ct_logs
 
 api_file_metadata_delete:
   <<: *ct-onenv-job
   key: FILMETRMAPI
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_api_file_metadata_delete.tar.gz
-    - *ct_logs
 
 api_file_metadata_get:
   <<: *ct-onenv-job
   key: FILMDAPI
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_api_file_metadata_get.tar.gz
-    - *ct_logs
 
 api_file_metadata_set:
   <<: *ct-onenv-job
   key: FILMETSETAPI
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_api_file_metadata_set.tar.gz
-    - *ct_logs
 
 api_file_stream:
   <<: *ct-onenv-job
   key: FILSTREAMAPI
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_api_file_stream.tar.gz
-    - *ct_logs
 
 api_file_upload_gui:
   <<: *ct-onenv-job
   key: APIFILEUPLOADGUI
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_api_file_upload_gui.tar.gz
-    - *ct_logs
 
 api_file_upload_rest:
   <<: *ct-onenv-job
   key: FILUPLOADAPI
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_api_file_upload_rest.tar.gz
-    - *ct_logs
 
 api_samples:
   <<: *ct-onenv-job
   key: ASA
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_api_samples.tar.gz
-    - *ct_logs
 
 api_share:
   <<: *ct-onenv-job
   key: SHARAPI
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_api_share.tar.gz
-    - *ct_logs
 
 api_storage:
   <<: *ct-onenv-job
   key: AST
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_api_storage.tar.gz
-    - *ct_logs
 
 archive:
   <<: *ct-onenv-job
   key: ARC
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_archive.tar.gz
-    - *ct_logs
 
 archive_bagit_sequential:
   <<: *ct-onenv-job
   key: ABS
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_archive_bagit_sequential.tar.gz
-    - *ct_logs
 
 archive_model:
   <<: *ct-onenv-job
   key: ARMOD
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_archive_model.tar.gz
-    - *ct_logs
 
 archive_recall:
   <<: *ct-onenv-job
   key: ARREC
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_archive_recall.tar.gz
-    - *ct_logs
 
 archive_sequential:
   <<: *ct-onenv-job
   key: ARS
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_archive_sequential.tar.gz
-    - *ct_logs
 
 archivestorage_helper: &ct-job
   key: AR
@@ -766,9 +761,9 @@ archivestorage_helper: &ct-job
         description: Run CT
   final-tasks: *final-tasks
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_archivestorage_helper.tar.gz
-    - *ct_logs
   requirements: *requirements
   artifact-subscriptions: *op-worker
 
@@ -776,202 +771,202 @@ archivisation_cancellation:
   <<: *ct-onenv-job
   key: ARCC
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_archivisation_cancellation.tar.gz
-    - *ct_logs
 
 atm_audit_log_store:
   <<: *ct-onenv-job
   key: AALS
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_atm_audit_log_store.tar.gz
-    - *ct_logs
 
 atm_list_store:
   <<: *ct-onenv-job
   key: ATMLST
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_atm_list_store.tar.gz
-    - *ct_logs
 
 atm_openfaas_activity_feed:
   <<: *ct-onenv-job
   key: AOAF
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_atm_openfaas_activity_feed.tar.gz
-    - *ct_logs
 
 atm_range_store:
   <<: *ct-onenv-job
   key: ATMRST
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_atm_range_store.tar.gz
-    - *ct_logs
 
 atm_single_value_store:
   <<: *ct-onenv-job
   key: ATMSVST
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_atm_single_value_store.tar.gz
-    - *ct_logs
 
 atm_time_series_store:
   <<: *ct-onenv-job
   key: ATMTSSTEST
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_atm_time_series_store.tar.gz
-    - *ct_logs
 
 atm_tree_forest_store:
   <<: *ct-onenv-job
   key: ATMTFST
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_atm_tree_forest_store.tar.gz
-    - *ct_logs
 
 atm_value:
   <<: *ct-onenv-job
   key: ATMVALUE
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_atm_value.tar.gz
-    - *ct_logs
 
 atm_workflow_execution:
   <<: *ct-onenv-job
   key: ATMWFEXEC
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_atm_workflow_execution.tar.gz
-    - *ct_logs
 
 atm_workflow_executions_collection:
   <<: *ct-onenv-job
   key: ATMWFEXECCOLLECTION
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_atm_workflow_executions_collection.tar.gz
-    - *ct_logs
 
 autocleaning:
   <<: *ct-job
   key: AUT
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_autocleaning.tar.gz
-    - *ct_logs
 
 cdmi:
   <<: *ct-job
   key: CDMI
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_cdmi.tar.gz
-    - *ct_logs
 
 ceph_helper:
   <<: *ct-job
   key: CE
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_ceph_helper.tar.gz
-    - *ct_logs
 
 cephrados_helper:
   <<: *ct-job
   key: CEP
   description: CephRados helper integration test
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_cephrados_helper.tar.gz
-    - *ct_logs
 
 client_events:
   <<: *ct-job
   key: CLIEVE
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_client_events.tar.gz
-    - *ct_logs
 
 cluster_upgrade:
   <<: *ct-job
   key: CLUS
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_cluster_upgrade.tar.gz
-    - *ct_logs
 
 connection:
   <<: *ct-job
   key: CON
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_connection.tar.gz
-    - *ct_logs
 
 connection_layer:
   <<: *ct-job
   key: CONLAYER
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_connection_layer.tar.gz
-    - *ct_logs
 
 connection_manager:
   <<: *ct-onenv-job
   key: CONMANAGER
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_connection_manager.tar.gz
-    - *ct_logs
 
 dataset:
   <<: *ct-onenv-job
   key: DATSET
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_dataset.tar.gz
-    - *ct_logs
 
 datasets_structure:
   <<: *ct-onenv-job
   key: DATSTRUCT
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_datasets_structure.tar.gz
-    - *ct_logs
 
 datastore_remote_driver:
   <<: *ct-job
   key: DRD
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_datastore_remote_driver.tar.gz
-    - *ct_logs
 
 dbsync:
   <<: *ct-job
   key: DBSYN
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_dbsync.tar.gz
-    - *ct_logs
 
 dbsync_changes_requesting:
   <<: *ct-job
   key: DCR
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_dbsync_changes_requesting.tar.gz
-    - *ct_logs
   requirements: &os-agent
     - os-agent
     - system.docker.executable
@@ -981,467 +976,453 @@ dbsync_changes_requesting_with_errors:
   <<: *ct-job
   key: DCRWE
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_dbsync_changes_requesting_with_errors.tar.gz
-    - *ct_logs
   requirements: *os-agent
 
 dir_stats_collector:
   <<: *ct-job
   key: DSC
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_dir_stats_collector.tar.gz
-    - *ct_logs
 
 event_manager:
   <<: *ct-job
   key: EVMG
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_event_manager.tar.gz
-    - *ct_logs
 
 event_stream:
   <<: *ct-job
   key: EVSTR
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_event_stream.tar.gz
-    - *ct_logs
 
 events:
   <<: *ct-job
   key: EV
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_events.tar.gz
-    - *ct_logs
 
 events_performance:
   <<: *ct-job
   key: EVPERF
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_events_performance.tar.gz
-    - *ct_logs
 
 events_reliability:
   <<: *ct-job
   key: EVREL
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_events_reliability.tar.gz
-    - *ct_logs
 
 events_reliability_2op:
   <<: *ct-job
   key: EVREL2OP
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_events_reliability_2op.tar.gz
-    - *ct_logs
 
 file_deletion:
   <<: *ct-job
   key: FILEDEL
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_file_deletion.tar.gz
-    - *ct_logs
 
 file_lifecycle:
   <<: *ct-job
   key: FIL
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_file_lifecycle.tar.gz
-    - *ct_logs
 
 file_popularity:
   <<: *ct-job
   key: FPOP
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_file_popularity.tar.gz
-    - *ct_logs
 
 file_registration:
   <<: *ct-job
   key: FILREG
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_file_registration.tar.gz
-    - *ct_logs
 
 fslogic_req:
   <<: *ct-job
   key: FSLOG
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_fslogic_req.tar.gz
-    - *ct_logs
 
 glusterfs_helper:
   <<: *ct-job
   key: GLUS
   description: GlusterFS helper test
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_glusterfs_helper.tar.gz
-    - *ct_logs
 
 gs_atm_inventory_logic:
   <<: *ct-job
   key: GSAT
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_gs_atm_inventory_logic.tar.gz
-    - *ct_logs
 
 gs_atm_lambda_logic:
   <<: *ct-job
   key: GALL
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_gs_atm_lambda_logic.tar.gz
-    - *ct_logs
 
 gs_atm_workflow_schema_logic:
   <<: *ct-job
   key: GAWSL
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_gs_atm_workflow_schema_logic.tar.gz
-    - *ct_logs
 
 gs_channel:
   <<: *ct-job
   key: GSCHAN
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_gs_channel.tar.gz
-    - *ct_logs
 
 gs_cluster_logic:
   <<: *ct-job
   key: CL
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_gs_cluster_logic.tar.gz
-    - *ct_logs
 
 gs_group_logic:
   <<: *ct-job
   key: GROUP
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_gs_group_logic.tar.gz
-    - *ct_logs
 
 gs_handle_logic:
   <<: *ct-job
   key: HAN
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_gs_handle_logic.tar.gz
-    - *ct_logs
 
 gs_handle_service_logic:
   <<: *ct-job
   key: HSL
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_gs_handle_service_logic.tar.gz
-    - *ct_logs
 
 gs_harvester_logic:
   <<: *ct-job
   key: HARLOG
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_gs_harvester_logic.tar.gz
-    - *ct_logs
 
 gs_provider_logic:
   <<: *ct-job
   key: PROV
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_gs_provider_logic.tar.gz
-    - *ct_logs
 
 gs_share_logic:
   <<: *ct-job
   key: SHAR
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_gs_share_logic.tar.gz
-    - *ct_logs
 
 gs_space_logic:
   <<: *ct-job
   key: SPAC
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_gs_space_logic.tar.gz
-    - *ct_logs
 
 gs_storage_logic:
   <<: *ct-job
   key: STLO
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_gs_storage_logic.tar.gz
-    - *ct_logs
 
 gs_token_logic:
   <<: *ct-job
   key: TOK
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_gs_token_logic.tar.gz
-    - *ct_logs
 
 gs_user_logic:
   <<: *ct-job
   key: US
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_gs_user_logic.tar.gz
-    - *ct_logs
 
 gs_zone_connection:
   <<: *ct-onenv-job
   key: ZON
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_gs_zone_connection.tar.gz
-    - *ct_logs
   requirements: *os-agent
 
 harvesting:
   <<: *ct-job
   key: HAR
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_harvesting.tar.gz
-    - *ct_logs
 
 harvesting_custom_metadata:
   <<: *ct-job
   key: HCM
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_harvesting_custom_metadata.tar.gz
-    - *ct_logs
 
 harvesting_stream:
   <<: *ct-job
   key: HARMNG
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_harvesting_stream.tar.gz
-    - *ct_logs
   requirements: *os-agent
 
 idp_access_token:
   <<: *ct-job
   key: IAT
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_idp_access_token.tar.gz
-    - *ct_logs
 
 lfm_attrs:
   <<: *ct-job
   key: LFMATTR
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_lfm_attrs.tar.gz
-    - *ct_logs
 
 lfm_files_posix:
   <<: *ct-job
   key: LFMFIL
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_lfm_files_posix.tar.gz
-    - *ct_logs
 
 lfm_files_s3:
   <<: *ct-job
   key: LFMFS3
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_lfm_files_s3.tar.gz
-    - *ct_logs
 
 lfm_symlinks_resolution:
   <<: *ct-onenv-job
   key: LFMSYMLINKRESOLUTION
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_lfm_symlinks_resolution.tar.gz
-    - *ct_logs
 
 luma:
   <<: *ct-job
   key: LUMA
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_luma.tar.gz
-    - *ct_logs
 
 massive_multi_provider_file_ops2:
   <<: *ct-job
   key: MAS2
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_massive_multi_provider_file_ops2.tar.gz
-    - *ct_logs
   requirements: *os-agent
 
 massive_multi_provider_file_ops:
   <<: *ct-job
   key: MAS
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_massive_multi_provider_file_ops.tar.gz
-    - *ct_logs
   requirements: *os-agent
 
 memory_pools_cleanup:
   <<: *ct-job
   key: MEM
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_memory_pools_cleanup.tar.gz
-    - *ct_logs
 
 model_file_meta:
   <<: *ct-job
   key: MO
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_model_file_meta.tar.gz
-    - *ct_logs
 
 monitoring:
   <<: *ct-job
   key: MON
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_monitoring.tar.gz
-    - *ct_logs
 
 multi_provider_cdmi:
   <<: *ct-job
   key: MULTIPROVCDMI
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_multi_provider_cdmi.tar.gz
-    - *ct_logs
 
 multi_provider_changes_rest:
   <<: *ct-job
   key: MUL
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_multi_provider_changes_rest.tar.gz
-    - *ct_logs
 
 multi_provider_db_sync:
   <<: *ct-job
   key: MULPDBS
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_multi_provider_db_sync.tar.gz
-    - *ct_logs
   requirements: *os-agent
 
 multi_provider_file_ops:
   <<: *ct-job
   key: MULTIFOPS
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_multi_provider_file_ops.tar.gz
-    - *ct_logs
   requirements: *os-agent
 
 multi_provider_hardlinks:
   <<: *ct-job
   key: MPH
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_multi_provider_hardlinks.tar.gz
-    - *ct_logs
   requirements: *os-agent
 
 multi_provider_proxy:
   <<: *ct-job
   key: MULPPROX
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_multi_provider_proxy.tar.gz
-    - *ct_logs
   requirements: *os-agent
 
 multi_provider_rest:
   <<: *ct-job
   key: MULREST
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_multi_provider_rest.tar.gz
-    - *ct_logs
 
 multi_provider_view_rest:
   <<: *ct-job
   key: MULIDX
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_multi_provider_view_rest.tar.gz
-    - *ct_logs
   requirements: *os-agent
 
 multiple_workflow_scheduling:
   <<: *ct-job
   key: MWS
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_multiple_workflow_scheduling.tar.gz
-    - *ct_logs
 
 nfs_helper:
   <<: *ct-job
   key: NFSHEL
   description: NFS helper test
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_nfs_helper.tar.gz
-    - *ct_logs
 
 node_failure:
   <<: *ct-onenv-job
   key: NOD
-  final-tasks: &final-tasks-pack-logs
-    - test-parser: *test-parser
-    - script: *save-cover-results
-    - script: *push-surefire
-    - script:
-        <<: *run-script
-        scripts:
-          - |-
-            cp sources_info.yaml op_worker/test_distributed/logs/
-            tar -mczf ct_logs_${bamboo.shortJobName}.tar.gz op_worker/test_distributed/logs/
-        description: Pack logs
-    - script:
-        <<: *clear-env
-        working-dir: op_worker
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_node_failure.tar.gz
-    - *ct_logs
   requirements: *os-agent
 
 nulldevice_helper:
@@ -1449,486 +1430,485 @@ nulldevice_helper:
   key: NUL
   description: Null Device helper integration test
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_nulldevice_helper.tar.gz
-    - *ct_logs
 
 performance_2_provider:
   <<: *ct-job
   key: P2P
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_performance_2_provider.tar.gz
-    - *ct_logs
 
 permissions_posix:
   <<: *ct-job
   key: PERMPOSIX
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_permissions_posix.tar.gz
-    - *ct_logs
   requirements: *os-agent
 
 permissions_s3:
   <<: *ct-job
   key: PERMS3
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_permissions_s3.tar.gz
-    - *ct_logs
   requirements: *os-agent
 
 posix_helper:
   <<: *ct-job
   key: HELP
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_posix_helper.tar.gz
-    - *ct_logs
 
 provider_connection:
   <<: *ct-job
   key: PROVCON
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_provider_connection.tar.gz
-    - *ct_logs
 
 qos:
   <<: *ct-onenv-job
   key: QOS
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_qos.tar.gz
-    - *ct_logs
 
 qos_api:
   <<: *ct-job
   key: QOSAPI
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_qos_api.tar.gz
-    - *ct_logs
 
 qos_multi_provider:
   <<: *ct-onenv-job
   key: MULQ
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_qos_multi_provider.tar.gz
-    - *ct_logs
   requirements: *os-agent
 
 qos_multi_provider_single_file:
   <<: *ct-onenv-job
   key: SFQOS
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_qos_multi_provider_single_file.tar.gz
-    - *ct_logs
 
 qos_replica_protection:
   <<: *ct-onenv-job
   key: QRP
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_qos_replica_protection.tar.gz
-    - *ct_logs
 
 qos_status:
   <<: *ct-onenv-job
   key: QOSTA
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_qos_status.tar.gz
-    - *ct_logs
 
 qos_status_reconciliation:
   <<: *ct-onenv-job
   key: QSR
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_qos_status_reconciliation.tar.gz
-    - *ct_logs
 
 quota:
   <<: *ct-job
   key: QU
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_quota.tar.gz
-    - *ct_logs
 
 readonly_storage:
   <<: *ct-job
   key: ROST
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_readonly_storage.tar.gz
-    - *ct_logs
 
 rename:
   <<: *ct-job
   key: RE
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_rename.tar.gz
-    - *ct_logs
 
 replica_deletion:
   <<: *ct-job
   key: REPDEL
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_replica_deletion.tar.gz
-    - *ct_logs
 
 replica_eviction_transfers_rest:
   <<: *ct-job
   key: REPEVREST
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_replica_eviction_transfers_rest.tar.gz
-    - *ct_logs
 
 replica_migration_transfers_rest:
   <<: *ct-job
   key: REPMIGREST
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_replica_migration_transfers_rest.tar.gz
-    - *ct_logs
 
 replication:
   <<: *ct-job
   key: REP
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_replication.tar.gz
-    - *ct_logs
 
 replication_transfers_rest:
   <<: *ct-job
   key: REPREST
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_replication_transfers_rest.tar.gz
-    - *ct_logs
 
 rest:
   <<: *ct-job
   key: RES
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_rest.tar.gz
-    - *ct_logs
 
 reverse_luma:
   <<: *ct-job
   key: REV
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_reverse_luma.tar.gz
-    - *ct_logs
 
 s3_helper:
   <<: *ct-job
   key: S3HEL
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_s3_helper.tar.gz
-    - *ct_logs
 
 sequencer:
   <<: *ct-job
   key: SEQ
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_sequencer.tar.gz
-    - *ct_logs
 
 sequencer_in_stream:
   <<: *ct-job
   key: SEQINSTR
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_sequencer_in_stream.tar.gz
-    - *ct_logs
 
 sequencer_manager:
   <<: *ct-job
   key: SEQMG
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_sequencer_manager.tar.gz
-    - *ct_logs
 
 sequencer_out_stream:
   <<: *ct-job
   key: SEQOUTSTR
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_sequencer_out_stream.tar.gz
-    - *ct_logs
 
 sequencer_performance:
   <<: *ct-job
   key: SEQPERF
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_sequencer_performance.tar.gz
-    - *ct_logs
 
 session_manager:
   <<: *ct-job
   key: SESMG
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_session_manager.tar.gz
-    - *ct_logs
 
 session_offline:
   <<: *ct-onenv-job
   key: SESSOFFLINE
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_session_offline.tar.gz
-    - *ct_logs
 
 session_watcher:
   <<: *ct-job
   key: SESWTCH
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_session_watcher.tar.gz
-    - *ct_logs
 
 single_node_failure:
   <<: *ct-onenv-job
   key: SNF
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_single_node_failure.tar.gz
-    - *ct_logs
 
 space_unsupport:
   <<: *ct-job
   key: SPUN
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_space_unsupport.tar.gz
-    - *ct_logs
 
 storage_cleanup:
   <<: *ct-job
   key: STCL
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_storage_cleanup.tar.gz
-    - *ct_logs
 
 storage_files:
   <<: *ct-job
   key: STFILES
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_storage_files.tar.gz
-    - *ct_logs
 
 storage_import:
   <<: *ct-job
   key: STORIMP
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_storage_import.tar.gz
-    - *ct_logs
 
 storage_import_delete_and_links:
   <<: *ct-job
   key: SIDL
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_storage_import_delete_and_links.tar.gz
-    - *ct_logs
 
 storage_import_deletion:
   <<: *ct-job
   key: STORIMPDEL
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_storage_import_deletion.tar.gz
-    - *ct_logs
 
 storage_import_s3:
   <<: *ct-job
   key: STORIMPS3
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_storage_import_s3.tar.gz
-    - *ct_logs
 
 storage_import_update:
   <<: *ct-job
   key: SIU
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_storage_import_update.tar.gz
-    - *ct_logs
 
 storage_import_update_s3:
   <<: *ct-job
   key: SIUS3
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_storage_import_update_s3.tar.gz
-    - *ct_logs
 
 storage_req:
   <<: *ct-job
   key: FUS
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_storage_req.tar.gz
-    - *ct_logs
 
 storage_sync_links:
   <<: *ct-job
   key: SSL
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_storage_sync_links.tar.gz
-    - *ct_logs
 
 storage_traverse:
   <<: *ct-job
   key: STTR
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_storage_traverse.tar.gz
-    - *ct_logs
 
 swift_helper:
   <<: *ct-job
   key: SWIHEL
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_swift_helper.tar.gz
-    - *ct_logs
 
 tmp_db_error:
   <<: *ct-onenv-job
   key: TMPDBER
-  final-tasks: *final-tasks-pack-logs
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_tmp_db_error.tar.gz
-    - *ct_logs
 
 transfer_create_api:
   <<: *ct-job
   key: TRANCREATE
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_transfer_create_api.tar.gz
-    - *ct_logs
 
 transfer_get_api:
   <<: *ct-job
   key: TRANGETAPI
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_transfer_get_api.tar.gz
-    - *ct_logs
 
 transfer_stats:
   <<: *ct-job
   key: TRAN
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_transfer_stats.tar.gz
-    - *ct_logs
 
 transfers_restart:
   <<: *ct-onenv-job
   key: TRRST
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_transfers_restart.tar.gz
-    - *ct_logs
 
 trash:
   <<: *ct-onenv-job
   key: TRASH
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_trash.tar.gz
-    - *ct_logs
 
 tree_deletion_traverse:
   <<: *ct-onenv-job
   key: TDT
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_tree_deletion_traverse.tar.gz
-    - *ct_logs
 
 user_auth:
   <<: *ct-job
   key: USERAUTH
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_user_auth.tar.gz
-    - *ct_logs
 
 view:
   <<: *ct-job
   key: INDEX
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_view.tar.gz
-    - *ct_logs
 
 webdav_helper:
   <<: *ct-job
   key: WEB
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_webdav_helper.tar.gz
-    - *ct_logs
 
 webdav_token:
   <<: *ct-job
   key: WDT
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_webdav_token.tar.gz
-    - *ct_logs
 
 workflow_scheduling:
   <<: *ct-job
   key: WSCH
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_workflow_scheduling.tar.gz
-    - *ct_logs
 
 workflow_scheduling_cancellation_and_restart:
   <<: *ct-job
   key: WSCR
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_workflow_scheduling_cancellation_and_restart.tar.gz
-    - *ct_logs
 
 xrootd_helper:
   <<: *ct-job
   key: XROOT
   description: Test XRootD helper
   artifacts:
+    - *ct_logs
     - <<: *cover_ct
       name: cover_ct_xrootd_helper.tar.gz
-    - *ct_logs
 
 Coverage report:
   key: CR
@@ -2152,14 +2132,14 @@ Coverage report:
     - artifact: cover_ct_workflow_scheduling_cancellation_and_restart.tar.gz
     - artifact: cover_ct_xrootd_helper.tar.gz
 
-Quarantine_hack_request_next_build:
+Qnthack - rerun:
   key: ZREQN
-  description: Request next build
+  description: Rerun
   other: *common-opts
   tasks:
     - checkout: *fake-checkout
     - script:
-        description: Request next build
+        description: Rerun
         scripts:
           # The script which requests the next build of a plan resides on the bamboo server.
           # For more details about the script look at https://git.onedata.org/projects/VFS/repos/bamboos/browse/bamboo-server/run-build.sh?at=refs%2Fheads%2Ffeature%2FVFS-9519-auto-quarantine-test-cases-for-new-branches
