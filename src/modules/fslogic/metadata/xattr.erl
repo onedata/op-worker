@@ -129,7 +129,7 @@ list_insecure(UserCtx, FileCtx, IncludeInherited, ShowInternal) ->
     end,
     case ShowInternal of
         true -> {ok, prepend_acl(FileCtx, XattrNames)};
-        false -> {ok, remove_internal(XattrNames)}
+        false -> {ok, filter_internal(XattrNames)}
     end.
 
 
@@ -140,7 +140,7 @@ get_all_direct_insecure(FileCtx) ->
     FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     case custom_metadata:get_all_xattrs(FileUuid) of
         {ok, AllXattrsWithValues} ->
-            {ok, maps:with(remove_internal(maps:keys(AllXattrsWithValues)), AllXattrsWithValues)};
+            {ok, maps:with(filter_internal(maps:keys(AllXattrsWithValues)), AllXattrsWithValues)};
         {error, _} = Error ->
             Error
     end.
@@ -227,7 +227,7 @@ prepend_acl(FileCtx, XattrsKeys) ->
 
 
 %% @private
--spec remove_internal([custom_metadata:name()]) ->
+-spec filter_internal([custom_metadata:name()]) ->
     [custom_metadata:name()].
-remove_internal(XattrsKeys) ->
+filter_internal(XattrsKeys) ->
     lists:filter(fun(Key) -> not is_internal_xattr(Key) end, XattrsKeys).

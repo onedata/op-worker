@@ -569,7 +569,7 @@ get_children_data_spec(rest, Scope) ->
         correct_values = #{
             <<"limit">> => [1, 100],
             <<"attribute">> => [
-                lists_utils:random_sublist(AllowedAttrs), 
+                lists_utils:random_sublist(AllowedAttrs -- [<<"xattr.*">>]),
                 [<<"shares">>, <<"mode">>, <<"parent_id">>],
                 [<<"file_id">>, <<"name">>],
                 <<"ctime">>
@@ -581,7 +581,7 @@ get_children_data_spec(rest, Scope) ->
             {<<"limit">>, 0, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 1000)},
             {<<"limit">>, 1001, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 1000)},
             {<<"attribute">>, <<"abc">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, AllowedAttrs)},
-            {<<"attribute">>, [<<"name">>, 8], ?ERROR_BAD_VALUE_LIST_NOT_ALLOWED(<<"attribute">>, AllowedAttrs)}
+            {<<"attribute">>, [<<"name">>, 8], ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, AllowedAttrs)}
         ]
     }.
 

@@ -20,13 +20,15 @@
 
 -export([
     get_content/2, get_content/3,
-    get_attrs/2, get_attrs/3
+    get_attrs/2, get_attrs/3, get_attrs/4,
+    set_xattr/4
 ]).
 -export([await_sync/2]).
 -export([
     await_size/3,
     await_content/3, await_content/4,
-    await_distribution/3
+    await_distribution/3,
+    await_xattr/4
 ]).
 
 -type offset() :: non_neg_integer().
@@ -67,11 +69,20 @@ get_content(Node, FileGuid, Offset) ->
 get_attrs(Node, FileGuid) ->
     get_attrs(Node, ?ROOT_SESS_ID, FileGuid).
 
-
 -spec get_attrs(node(), session:id(), file_id:file_guid()) ->
     {ok, lfm_attrs:file_attributes()} | error().
 get_attrs(Node, SessId, FileGuid) ->
-    case lfm_proxy:stat(Node, SessId, ?FILE_REF(FileGuid), [size, replication_status, link_count]) of
+    get_attrs(Node, SessId, FileGuid, []).
+
+
+-spec get_attrs(node(), session:id(), file_id:file_guid(), [custom_metadata:name()]) ->
+    {ok, lfm_attrs:file_attributes()} | error().
+get_attrs(Node, SessId, FileGuid, RequestedXattrs) ->
+    XattrsOpt = case RequestedXattrs of
+        [] -> [];
+        _ -> [{xattrs, RequestedXattrs}]
+    end,
+    case lfm_proxy:stat(Node, SessId, ?FILE_REF(FileGuid), [size, replication_status, link_count] ++ XattrsOpt) of
         % File attrs are constructed from several records so it is possible that
         % even if 'file_meta' (the main doc) was synchronized 'times' doc wasn't
         {ok, #file_attr{mtime = 0}} ->
@@ -79,6 +90,15 @@ get_attrs(Node, SessId, FileGuid) ->
         Result ->
             Result
     end.
+
+
+-spec set_xattr(node(), file_id:file_guid(), custom_metadata:name(), custom_metadata:value()) ->
+    ok | error().
+set_xattr(Node, FileGuid, Name, Value) ->
+    lfm_proxy:set_xattr(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), #xattr{
+        name = Name,
+        value = Value
+    }).
 
 
 -spec await_sync(node() | [node()], file_id:file_guid() | [file_id:file_guid()]) ->
@@ -163,6 +183,21 @@ await_distribution(Nodes, Files, ExpSizeOrBlocksPerProvider) ->
             ?assertEqual(ExpDistribution, FetchDistributionFun(Node, FileGuid), Attempts)
         end, utils:ensure_list(Nodes))
     end, utils:ensure_list(Files)).
+
+
+-spec await_xattr(node(), file_id:file_guid(), [custom_metadata:name()], non_neg_integer()) -> ok.
+await_xattr(Node, FileGuid, ExpectedXattrs, Attempts) ->
+    CheckFun = fun() ->
+        try
+            {ok, CurrentXattrs} = lfm_proxy:list_xattr(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), false, false),
+            lists:foreach(fun(Xattr) ->
+                true = lists:member(Xattr, CurrentXattrs)
+            end, ExpectedXattrs)
+        catch _:E ->
+            E
+        end
+    end,
+    ?assertEqual(ok, CheckFun(), Attempts).
 
 
 %%%===================================================================

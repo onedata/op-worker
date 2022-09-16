@@ -34,6 +34,7 @@
 
 -export([
     get_file_attrs_test/1,
+    get_file_attrs_with_xattrs_test/1,
     get_shared_file_attrs_test/1,
     get_attrs_on_provider_not_supporting_space_test/1,
 
@@ -61,6 +62,7 @@
 groups() -> [
     {parallel_tests, [parallel], [
         get_file_attrs_test,
+        get_file_attrs_with_xattrs_test,
         get_shared_file_attrs_test,
         get_attrs_on_provider_not_supporting_space_test,
 
@@ -101,16 +103,41 @@ all() -> [
 %%% Get attrs test functions
 %%%===================================================================
 
-
 get_file_attrs_test(Config) ->
-    [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
-
+    
     {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(8#707),
-    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
-
+    
     {ok, FileAttrs} = file_test_utils:get_attrs(P2Node, FileGuid),
     JsonAttrs = api_test_utils:file_attrs_to_json(undefined, FileAttrs),
+    DataSpec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+        FileGuid, undefined, get_attrs_data_spec(normal_mode)
+    ),
+    get_file_attrs_test_base(Config, DataSpec, FileType, FileGuid, JsonAttrs).
+
+
+get_file_attrs_with_xattrs_test(Config) ->
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
+    
+    {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(?DEFAULT_FILE_MODE),
+    ok = file_test_utils:set_xattr(P1Node, FileGuid, <<"xattr_name">>, <<"xattr_value">>),
+    ok = file_test_utils:set_xattr(P1Node, FileGuid, <<"xattr_name2">>, <<"xattr_value2">>),
+    file_test_utils:await_xattr(P2Node, FileGuid, [<<"xattr_name">>, <<"xattr_name2">>], ?ATTEMPTS),
+    
+    {ok, FileAttrs} = file_test_utils:get_attrs(P2Node, ?ROOT_SESS_ID, FileGuid, [<<"xattr_name">>]),
+    JsonAttrs = api_test_utils:file_attrs_to_json(undefined, FileAttrs),
+    DataSpec = #data_spec{
+        optional = [<<"attribute">>],
+        correct_values = #{<<"attribute">> => [<<"xattr.xattr_name">>]}
+    },
+    get_file_attrs_test_base(Config, DataSpec, FileType, FileGuid, JsonAttrs).
+
+
+get_file_attrs_test_base(Config, DataSpec, FileType, FileGuid, JsonAttrs) ->
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
+    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
     ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
@@ -140,9 +167,7 @@ get_file_attrs_test(Config) ->
                 }
             ],
             randomly_select_scenarios = true,
-            data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
-                FileGuid, undefined, get_attrs_data_spec(normal_mode)
-            )
+            data_spec = DataSpec
         },
         #suite_spec{
             target_nodes = ?config(op_worker_nodes, Config),

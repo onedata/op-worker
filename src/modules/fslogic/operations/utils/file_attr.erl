@@ -28,7 +28,7 @@
     resolve_name_conflicts |
     allow_name_conflicts.
 
--type optional_attr() :: size | replication_status | link_count | {xattrs, [binary()]}.
+-type optional_attr() :: size | replication_status | link_count | {xattrs, [custom_metadata:name()]}.
 
 -type compute_file_attr_opts() :: #{
     % Tells whether to calculate attr even if file was recently removed.
