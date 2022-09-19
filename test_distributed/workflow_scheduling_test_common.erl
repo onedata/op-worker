@@ -470,6 +470,22 @@ mock_handlers(Workers, Manager) ->
             )
     end),
 
+    test_utils:mock_expect(Workers, workflow_test_handler, handle_workflow_interrupted, fun
+        (_ExecutionId, #{lane_id := _} = _Context) ->
+            % Context with lane_id defined cannot be used in handle_workflow_interrupted handler
+            % (wrong type of context is used by caller)
+            throw(wrong_context);
+        (ExecutionId, Context) ->
+            MockTemplate(
+                #handler_call{
+                    function = handle_workflow_interrupted,
+                    execution_id = ExecutionId,
+                    context =  Context
+                },
+                [ExecutionId, Context]
+            )
+    end),
+
     test_utils:mock_expect(Workers, workflow_test_handler, handle_exception, fun
         (ExecutionId, Context, ErrorType, Reason, Stacktrace) ->
             MockTemplate(
@@ -712,7 +728,10 @@ verify_lanes_execution_history([{TaskIds, ExpectedItems, LaneExecutionContext} |
                 (_) ->
                     true
             end, GatheredForLane),
-            ?assertMatch([#handler_call{function = handle_exception}], Filtered),
+            ?assertMatch(
+                [#handler_call{function = handle_exception}, #handler_call{function = handle_workflow_interrupted}],
+                Filtered
+            ),
             [FirstGatheredForLane | _] = GatheredForLane,
             FilteredGathered = lists:dropwhile(fun(HandlerCall) ->
                 HandlerCall =/= FirstGatheredForLane
@@ -883,8 +902,8 @@ verify_empty_lane(ExecutionHistory, LaneId) ->
 has_finish_callbacks_for_lane(ExecutionHistory, LaneId) ->
     lists:any(fun
         (#handler_call{function = Fun, lane_id = Id}) when Id =:= LaneId ->
-            Fun =:= handle_workflow_execution_stopped orelse Fun =:= handle_lane_execution_stopped orelse
-                Fun =:= handle_task_execution_stopped orelse Fun =:= handle_exception;
+            lists:member(Fun, [handle_workflow_execution_stopped, handle_workflow_interrupted,
+                handle_lane_execution_stopped, handle_task_execution_stopped, handle_exception]);
         (_) ->
             false
     end, ExecutionHistory).
@@ -954,8 +973,7 @@ get_all_workflow_related_datastore_keys(Config) ->
     % (snapshot can be restored)
 %%    Models = [workflow_cached_item, workflow_cached_async_result, workflow_iterator_snapshot,
 %%        workflow_execution_state, workflow_cached_task_data, workflow_execution_state_dump],
-    Models = [workflow_cached_item, workflow_cached_async_result, workflow_execution_state,
-        workflow_cached_task_data, workflow_execution_state_dump],
+    Models = [workflow_cached_item, workflow_cached_async_result, workflow_execution_state, workflow_cached_task_data],
     lists:map(fun(Model) ->
         Ctx = datastore_model_default:set_defaults(datastore_model_default:get_ctx(Model)),
         #{memory_driver := MemoryDriver, memory_driver_ctx := MemoryDriverCtx} = Ctx,
@@ -1008,7 +1026,8 @@ gen_workflow_execution_spec(WorkflowType, PrepareInAdvance, ContextBase, Id) ->
             async_call_pools => [?ASYNC_CALL_POOL_ID]
         },
         first_lane_id => FirstLaneId,
-        next_lane_id => NextLaneId
+        next_lane_id => NextLaneId,
+        snapshot_mode => maps:get(snapshot_mode, ContextBase, ?UNTIL_FIRST_FAILURE)
     }.
 
 verify_executions_started(0) ->

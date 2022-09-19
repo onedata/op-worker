@@ -206,10 +206,25 @@
 %%--------------------------------------------------------------------
 %% @doc
 %% Callback reporting that all tasks in given workflow have been
-%% executed for all items. It will be called exactly once.
+%% executed for all items or workflow has been cancelled and no task
+%% is being processed. It will be called exactly once if an exception
+%% has not appeared.
 %% @end
 %%--------------------------------------------------------------------
 -callback handle_workflow_execution_stopped(
+    workflow_engine:execution_id(),
+    workflow_engine:execution_context()
+) ->
+    progress_data_persistence().
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Callback reporting that has been abandoned or exception appeared
+%% and no task is being processed. It will be called exactly once.
+%% @end
+%%--------------------------------------------------------------------
+-callback handle_workflow_interrupted(
     workflow_engine:execution_id(),
     workflow_engine:execution_context()
 ) ->
@@ -230,4 +245,4 @@
     term(),
     list()
 ) ->
-    progress_data_persistence().
+    ok.

@@ -152,7 +152,8 @@ all() ->
         workflow_scheduling_test_common:test_manager_task_failure_key() =>
             {workflow_engine:lane_id(), workflow_engine:task_id(), iterator:item()},
         workflow_scheduling_test_common:lane_history_check_key() => workflow_engine:lane_id()
-    }
+    },
+    restart_doc_present = false :: boolean()
 }).
 
 
@@ -502,7 +503,8 @@ iteration_failure_test_base(Config, #test_config{
     single_execution_test_base(Config, BasicConfig#test_config{
         verify_statistics_options = VerifyStatsOptions#{ignore_max_slots_check => true},
         generator_options = GeneratorOptions#{fail_iteration => ItemNum, finish_on_lane => LaneId},
-        verify_history_options = VerifyHistoryOptions#{expect_exception => LaneId}
+        verify_history_options = VerifyHistoryOptions#{expect_exception => LaneId},
+        restart_doc_present = true
     }).
 
 exception_test_base(Config, CallbackToThrow) ->
@@ -511,7 +513,8 @@ exception_test_base(Config, CallbackToThrow) ->
         generator_options = ?EXEMPLARY_STREAMS,
         test_execution_manager_options = [{throw_error, {CallbackToThrow, <<"3_3_2">>, <<"100">>}}],
         verify_statistics_options = #{ignore_async_slots_check => true},
-        verify_history_options = #{expect_exception => <<"3">>}
+        verify_history_options = #{expect_exception => <<"3">>},
+        restart_doc_present = true
     }),
 
     ?assertNot(workflow_scheduling_test_common:has_finish_callbacks_for_lane(ExecutionHistory, <<"3">>)).
@@ -533,7 +536,8 @@ lane_preparation_exception_test_base(Config, LineToThrow, PrepareInAdvance) ->
         generator_options = ?EXEMPLARY_STREAMS,
         test_execution_manager_options = [{throw_error, LineToThrow}],
         verify_statistics_options = #{ignore_async_slots_check => true},
-        verify_history_options = #{expect_exception => <<"3">>}
+        verify_history_options = #{expect_exception => <<"3">>},
+        restart_doc_present = true
     }),
 
     ?assertNot(workflow_scheduling_test_common:has_finish_callbacks_for_lane(ExecutionHistory, <<"3">>)).
@@ -547,7 +551,8 @@ single_execution_test_base(Config, #test_config{
     test_execution_manager_options = ManagerOptions,
     generator_options = GeneratorOptions,
     verify_statistics_options = VerifyStatsOptions,
-    verify_history_options = VerifyHistoryOptions
+    verify_history_options = VerifyHistoryOptions,
+    restart_doc_present = RestartDocPresent
 }) ->
     workflow_scheduling_test_common:set_test_execution_manager_options(Config, ManagerOptions),
     InitialKeys = workflow_scheduling_test_common:get_all_workflow_related_datastore_keys(Config),
@@ -560,12 +565,13 @@ single_execution_test_base(Config, #test_config{
 
     #{execution_history := ExecutionHistory} = ExtendedHistoryStats = 
         workflow_scheduling_test_common:get_task_execution_history(Config),
+%%    ct:print("aaaa ~p", [ExecutionHistory]),
     workflow_scheduling_test_common:verify_execution_history_stats(
         ExtendedHistoryStats, TaskType, VerifyStatsOptions),
     workflow_scheduling_test_common:verify_execution_history(
         WorkflowExecutionSpec, ExecutionHistory, VerifyHistoryOptions),
 
-    workflow_scheduling_test_common:verify_memory(Config, InitialKeys),
+    workflow_scheduling_test_common:verify_memory(Config, InitialKeys, RestartDocPresent),
     ExecutionHistory.
 
 

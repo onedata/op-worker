@@ -75,7 +75,8 @@
     execution_context => execution_context(),
     first_lane_id => lane_id(), % does not have to be defined if execution is restarted from snapshot
     next_lane_id => lane_id(),
-    force_clean_execution => boolean()
+    force_clean_execution => boolean(),
+    snapshot_mode => workflow_execution_state:snapshot_mode()
 }.
 
 -type task_type() :: sync | async.
@@ -146,12 +147,14 @@ execute_workflow(EngineId, ExecutionSpec) ->
     Context = maps:get(execution_context, ExecutionSpec, undefined),
     FirstLaneId = maps:get(first_lane_id, ExecutionSpec, undefined),
     NextLaneId = maps:get(next_lane_id, ExecutionSpec, undefined),
+    SnapshotMode = maps:get(snapshot_mode, ExecutionSpec, ?ALL_ITEMS),
 
     InitAns = case ExecutionSpec of
         #{force_clean_execution := true} -> 
-            workflow_execution_state:init(ExecutionId, EngineId, Handler, Context, FirstLaneId, NextLaneId);
+            workflow_execution_state:init(ExecutionId, EngineId, Handler, Context, FirstLaneId, NextLaneId, SnapshotMode);
         _ ->
-            workflow_execution_state:resume_from_snapshot(ExecutionId, EngineId, Handler, Context, FirstLaneId, NextLaneId)
+            workflow_execution_state:resume_from_snapshot(
+                ExecutionId, EngineId, Handler, Context, FirstLaneId, NextLaneId, SnapshotMode)
     end,
 
     case InitAns of
@@ -503,7 +506,7 @@ schedule_next_job_insecure(EngineId, DeferredExecutions) ->
 handle_execution_ended(EngineId, ExecutionId, #execution_ended{
     handler = Handler,
     context = Context,
-    final_action = FinalAction,
+    final_callback = FinalCallback,
     lane_callbacks = LaneCallbacks
 }) ->
     case workflow_engine_state:remove_execution_id(EngineId, ExecutionId) of
@@ -516,18 +519,13 @@ handle_execution_ended(EngineId, ExecutionId, #execution_ended{
                     ok
             end,
 
-            ProgressDataPersistence = case FinalAction of
-                execute_callback ->
-                    call_handler(ExecutionId, Context, Handler, handle_workflow_execution_stopped, []);
-                _ ->
-                    FinalAction
-            end,
-
-            case ProgressDataPersistence of
+            case call_handler(ExecutionId, Context, Handler, FinalCallback, []) of
                 clean_progress ->
                     workflow_iterator_snapshot:cleanup(ExecutionId);
                 save_progress ->
-                    workflow_execution_state_dump:dump_workflow_execution_state(ExecutionId)
+                    % TODO - uncomment
+%%                    workflow_execution_state_dump:dump_workflow_execution_state(ExecutionId)
+                    ok
             end,
 
             workflow_execution_state:cleanup(ExecutionId);

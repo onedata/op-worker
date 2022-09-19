@@ -1237,6 +1237,8 @@
     engine_id :: workflow_engine:id(),
     handler :: workflow_handler:handler(),
     initial_context :: workflow_engine:execution_context(),
+    incarnation_tag :: workflow_execution_state:incarnation_tag(),
+    snapshot_mode = ?ALL_ITEMS :: workflow_execution_state:snapshot_mode(),
 
     execution_status = ?NOT_PREPARED :: workflow_execution_state:execution_status(),
     current_lane :: workflow_execution_state:current_lane(),
@@ -1247,7 +1249,6 @@
     next_lane_preparation_status = ?NOT_PREPARED :: workflow_execution_state:next_lane_preparation_status(),
     next_lane :: workflow_execution_state:next_lane(),
 
-    lowest_failed_job_identifier :: workflow_jobs:job_identifier() | undefined,
     failed_job_count = 0 :: non_neg_integer(),
 
     iteration_state :: workflow_iteration_state:state() | undefined,
@@ -1268,21 +1269,13 @@
 }).
 
 -record(workflow_execution_state_dump, {
-    engine_id :: workflow_engine:id(),
-    handler :: workflow_handler:handler(),
-    initial_context :: workflow_engine:execution_context(),
-
-    execution_status :: ?NOT_PREPARED | ?EXECUTING,
-    next_lane_preparation_status :: ?NOT_PREPARED | ?PREPARED_IN_ADVANCE,
-
-    lowest_failed_job_identifier :: workflow_jobs:job_identifier() | undefined,
+    snapshot_mode :: workflow_execution_state:snapshot_mode(),
+    lane_status :: ?PREPARED | ?NOT_PREPARED,
     failed_job_count = 0 :: non_neg_integer(),
 
-    iteration_state :: workflow_iteration_state:state() | undefined,
-    % TODO VFS-7788 jobs_registry
-    jobs :: workflow_jobs:jobs() | undefined % TODO - chyba powinnismy odpowiedzi przetworzyc
-    % TODO - chyba tego nie bedziemy czymac w dump bo powinno byc przetworzone
-%%    tasks_data_registry :: workflow_tasks_data_registry:registry() | undefined
+    iteration_state_dump = workflow_iteration_state:dump(),
+    jobs_dump = workflow_jobs:dump(),
+    tasks_data_registry_dump = workflow_tasks_data_registry:dump()
 }).
 
 -record(workflow_async_call_pool, {

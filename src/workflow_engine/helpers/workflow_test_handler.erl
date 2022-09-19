@@ -22,7 +22,8 @@
 % Callbacks
 -export([prepare_lane/3, resume_lane/3, run_task_for_item/5, process_task_result_for_item/5, report_item_error/3,
     handle_task_results_processed_for_all_items/3, process_streamed_task_data/4,
-    handle_task_execution_stopped/3, handle_lane_execution_stopped/3, handle_workflow_execution_stopped/2, handle_exception/5]).
+    handle_task_execution_stopped/3, handle_lane_execution_stopped/3,
+    handle_workflow_execution_stopped/2, handle_workflow_interrupted/2, handle_exception/5]).
 % API
 -export([is_last_lane/1, get_ignored_lane_id/0, get_ignored_lane_predecessor_id/0, pack_task_id/3, decode_task_id/1]).
 
@@ -273,6 +274,17 @@ handle_workflow_execution_stopped(_, _) ->
     clean_progress.
 
 
+-spec handle_workflow_interrupted(
+    workflow_engine:execution_id(),
+    test_execution_context()
+) ->
+    workflow_handler:progress_data_persistence().
+handle_workflow_interrupted(_, #{save_progress := true}) ->
+    save_progress;
+handle_workflow_interrupted(_, _) ->
+    clean_progress.
+
+
 - spec handle_exception(
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
@@ -280,9 +292,9 @@ handle_workflow_execution_stopped(_, _) ->
     term(),
     list()
 ) ->
-    save_progress.
+    ok.
 handle_exception(_, _, _, _, _) ->
-    save_progress.
+    ok.
 
 
 %%%===================================================================

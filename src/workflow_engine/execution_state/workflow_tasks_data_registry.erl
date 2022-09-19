@@ -30,7 +30,8 @@
 %% API
 -export([empty/0, put/3, take_for_processing/1, mark_processed/3,
     mark_all_task_data_received/2, is_stream_finalized/2,
-    claim_execution_of_cancellation_procedures/1]).
+    claim_execution_of_cancellation_procedures/1,
+    dump/1, from_dump/1, get_dump_struct/0]).
 %% Test API
 -export([is_empty/1]).
 
@@ -47,7 +48,8 @@
 
 
 -opaque registry() :: #registry{}.
--export_type([registry/0]).
+-opaque dump() :: [workflow_engine:task_id()].
+-export_type([registry/0, dump/0]).
 
 
 %%%===================================================================
@@ -123,6 +125,20 @@ claim_execution_of_cancellation_procedures(#registry{cancellation_procedures_cla
     {ok, Data#registry{cancellation_procedures_claimed = true}};
 claim_execution_of_cancellation_procedures(#registry{}) ->
     already_claimed.
+
+
+-spec dump(registry()) -> dump().
+dump(#registry{streams_with_all_data_received = Streams}) ->
+    Streams.
+
+
+-spec from_dump(dump()) -> registry().
+from_dump(Streams) ->
+    #registry{streams_with_all_data_received = Streams}.
+
+-spec get_dump_struct() -> list().
+get_dump_struct() ->
+    [string].
 
 
 %%%===================================================================
