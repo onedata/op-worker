@@ -84,7 +84,7 @@ has_metadata(FileCtx) ->
 
 
 %% @private
--spec resolve_effective_values(file_ctx:ctx(), file_meta:doc(), non_neg_integer() | infinity) ->
+-spec resolve_effective_values(file_ctx:ctx(), file_meta:doc(), non_neg_integer()) ->
     {effective_values(), file_ctx:ctx()}.
 resolve_effective_values(FileCtx, FileDoc, ReferencesLimit) ->
     ShouldCalculateEffectiveValues = case file_meta_hardlinks:count_references(FileDoc) of
