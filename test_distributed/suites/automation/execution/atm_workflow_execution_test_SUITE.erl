@@ -93,7 +93,9 @@
     fail_atm_workflow_execution_due_to_job_missing_required_results_error/1,
     fail_atm_workflow_execution_due_to_incorrect_result_type_error/1,
     fail_atm_workflow_execution_due_to_lambda_exception/1,
-    fail_atm_workflow_execution_due_to_lambda_error/1
+    fail_atm_workflow_execution_due_to_lambda_error/1,
+
+    repeat_not_ended_atm_workflow_execution/1
 ]).
 
 groups() -> [
@@ -173,6 +175,9 @@ groups() -> [
         fail_atm_workflow_execution_due_to_incorrect_result_type_error,
         fail_atm_workflow_execution_due_to_lambda_exception,
         fail_atm_workflow_execution_due_to_lambda_error
+    ]},
+    {repeat_tests, [], [
+        repeat_not_ended_atm_workflow_execution
     ]}
 ].
 
@@ -183,7 +188,8 @@ all() -> [
     {group, cancellation_tests},
     {group, iteration_tests},
     {group, mapping_tests},
-    {group, failure_tests}
+    {group, failure_tests},
+    {group, repeat_tests}
 ].
 
 
@@ -201,7 +207,8 @@ all() -> [
 -define(RUN_CANCELLATION_TEST(), ?RUN_TEST(atm_workflow_execution_cancellation_test_base)).
 -define(RUN_ITERATION_TEST(), ?RUN_TEST(atm_workflow_execution_iteration_test_base)).
 -define(RUN_MAPPING_TEST(), ?RUN_TEST(atm_workflow_execution_mapping_test_base)).
--define(FAILURE_MAPPING_TEST(), ?RUN_TEST(atm_workflow_execution_failure_test_base)).
+-define(RUN_FAILURE_TEST(), ?RUN_TEST(atm_workflow_execution_failure_test_base)).
+-define(RUN_REPEAT_TEST(), ?RUN_TEST(atm_workflow_execution_repeat_test_base)).
 
 
 %%%===================================================================
@@ -398,39 +405,43 @@ map_results_to_task_time_series_store(_Config) ->
 
 
 fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error(_Config) ->
-    ?FAILURE_MAPPING_TEST().
+    ?RUN_FAILURE_TEST().
 
 
 fail_atm_workflow_execution_due_to_incorrect_const_arg_type_error(_Config) ->
-    ?FAILURE_MAPPING_TEST().
+    ?RUN_FAILURE_TEST().
 
 
 fail_atm_workflow_execution_due_to_incorrect_iterated_item_query_arg_error(_Config) ->
-    ?FAILURE_MAPPING_TEST().
+    ?RUN_FAILURE_TEST().
 
 
 fail_atm_workflow_execution_due_to_empty_single_value_store_arg_error(_Config) ->
-    ?FAILURE_MAPPING_TEST().
+    ?RUN_FAILURE_TEST().
 
 
 fail_atm_workflow_execution_due_to_job_result_store_mapping_error(_Config) ->
-    ?FAILURE_MAPPING_TEST().
+    ?RUN_FAILURE_TEST().
 
 
 fail_atm_workflow_execution_due_to_job_missing_required_results_error(_Config) ->
-    ?FAILURE_MAPPING_TEST().
+    ?RUN_FAILURE_TEST().
 
 
 fail_atm_workflow_execution_due_to_incorrect_result_type_error(_Config) ->
-    ?FAILURE_MAPPING_TEST().
+    ?RUN_FAILURE_TEST().
 
 
 fail_atm_workflow_execution_due_to_lambda_exception(_Config) ->
-    ?FAILURE_MAPPING_TEST().
+    ?RUN_FAILURE_TEST().
 
 
 fail_atm_workflow_execution_due_to_lambda_error(_Config) ->
-    ?FAILURE_MAPPING_TEST().
+    ?RUN_FAILURE_TEST().
+
+
+repeat_not_ended_atm_workflow_execution(_Config) ->
+    ?RUN_REPEAT_TEST().
 
 
 %===================================================================
@@ -482,7 +493,8 @@ init_per_group(TestGroup, Config) when
     TestGroup =:= cancellation_tests;
     TestGroup =:= iteration_tests;
     TestGroup =:= mapping_tests;
-    TestGroup =:= failure_tests
+    TestGroup =:= failure_tests;
+    TestGroup =:= repeat_tests
 ->
     atm_openfaas_task_executor_mock:init(?PROVIDER_SELECTOR, atm_openfaas_docker_mock),
     atm_workflow_execution_test_runner:init(?PROVIDER_SELECTOR),
@@ -501,7 +513,8 @@ end_per_group(TestGroup, Config) when
     TestGroup =:= cancellation_tests;
     TestGroup =:= iteration_tests;
     TestGroup =:= mapping_tests;
-    TestGroup =:= failure_tests
+    TestGroup =:= failure_tests;
+    TestGroup =:= repeat_tests
 ->
     atm_workflow_execution_test_runner:teardown(?PROVIDER_SELECTOR),
     atm_openfaas_task_executor_mock:teardown(?PROVIDER_SELECTOR),

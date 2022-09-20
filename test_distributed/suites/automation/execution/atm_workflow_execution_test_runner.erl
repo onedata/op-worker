@@ -54,7 +54,11 @@
 %% API
 -export([init/1, teardown/1]).
 -export([run/1]).
--export([cancel_workflow_execution/1]).
+-export([
+    pause_workflow_execution/1,
+    cancel_workflow_execution/1,
+    repeat_workflow_execution/3
+]).
 -export([browse_store/2, browse_store/3]).
 
 -type step_name() ::
@@ -246,6 +250,16 @@ run(TestSpec = #atm_workflow_execution_test_spec{
     }).
 
 
+-spec pause_workflow_execution(atm_workflow_execution_test_runner:mock_call_ctx()) ->
+    ok.
+pause_workflow_execution(#atm_mock_call_ctx{
+    provider = ProviderSelector,
+    session_id = SessionId,
+    workflow_execution_id = AtmWorkflowExecutionId
+}) ->
+    ?erpc(ProviderSelector, mi_atm:pause_workflow_execution(SessionId, AtmWorkflowExecutionId)).
+
+
 -spec cancel_workflow_execution(atm_workflow_execution_test_runner:mock_call_ctx()) ->
     ok.
 cancel_workflow_execution(#atm_mock_call_ctx{
@@ -254,6 +268,22 @@ cancel_workflow_execution(#atm_mock_call_ctx{
     workflow_execution_id = AtmWorkflowExecutionId
 }) ->
     ?erpc(ProviderSelector, mi_atm:cancel_workflow_execution(SessionId, AtmWorkflowExecutionId)).
+
+
+-spec repeat_workflow_execution(
+    atm_workflow_execution:repeat_type(),
+    atm_lane_execution:lane_run_selector(),
+    atm_workflow_execution_test_runner:mock_call_ctx()
+) ->
+    ok.
+repeat_workflow_execution(RepeatType, AtmLaneRunSelector, #atm_mock_call_ctx{
+    provider = ProviderSelector,
+    session_id = SessionId,
+    workflow_execution_id = AtmWorkflowExecutionId
+}) ->
+    ?erpc(ProviderSelector, mi_atm:repeat_workflow_execution(
+        SessionId, RepeatType, AtmWorkflowExecutionId, AtmLaneRunSelector
+    )).
 
 
 -spec browse_store(automation:id(), mock_call_ctx()) -> json_utils:json_term().
