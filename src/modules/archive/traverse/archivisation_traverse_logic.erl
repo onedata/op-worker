@@ -22,10 +22,11 @@
 %% API
 -export([
     mark_building_if_first_job/1, 
-    mark_finished_and_propagate_up/5, 
+    mark_finished_and_propagate_up/8, 
     handle_file/4,
     initialize_archive_dir/3,
-    save_dir_checksum_metadata/3
+    save_dir_checksum_metadata/3,
+    info_to_archive_docs/1
 ]).
 
 -type id() :: archivisation_traverse:id().
@@ -67,12 +68,15 @@ mark_building_if_first_job(Job = #tree_traverse{traverse_info = #{
     end.
 
 
--spec mark_finished_and_propagate_up(file_ctx:ctx(), user_ctx:ctx(), info(), id(),
-    file_meta:uuid()) -> ok.
-mark_finished_and_propagate_up(CurrentFileCtx, UserCtx, TraverseInfo, TaskId, SourceMasterUuid) ->
+-spec mark_finished_and_propagate_up(file_ctx:ctx(), user_ctx:ctx(), info(), id(), file_meta:uuid(), 
+    time:millis(), file_meta:path(), {failed, Reason :: any()} | completed) -> ok.
+mark_finished_and_propagate_up(
+    CurrentFileCtx, UserCtx, TraverseInfo, TaskId, SourceMasterUuid, StartTimestamp, FilePath, Status
+) ->
+    report_to_audit_log(CurrentFileCtx, TraverseInfo, StartTimestamp, FilePath, Status),
     NextTraverseInfo = mark_finished_if_current_archive_is_rooted_in_current_file(
         CurrentFileCtx, UserCtx, TraverseInfo),
-    propagate_finished_up(CurrentFileCtx, UserCtx, NextTraverseInfo, TaskId, SourceMasterUuid).
+    propagate_finished_up(CurrentFileCtx, UserCtx, NextTraverseInfo, TaskId, SourceMasterUuid, FilePath).
 
 
 -spec handle_file(file_ctx:ctx(), file_meta:path(), user_ctx:ctx(),
@@ -126,6 +130,16 @@ save_dir_checksum_metadata(undefined, _, _) ->
 save_dir_checksum_metadata(FileGuid, UserCtx, TotalChildrenCount) ->
     FileCtx = file_ctx:new_by_guid(FileGuid),
     archivisation_checksum:dir_calculate_and_save(FileCtx, UserCtx, TotalChildrenCount).
+
+
+-spec info_to_archive_docs(info()) -> [archive:doc()].
+info_to_archive_docs(#{aip_ctx := AipCtx, dip_ctx := DipCtx}) ->
+    lists:filtermap(fun(ArchivisationCtx) ->
+        case archivisation_traverse_ctx:get_archive_doc(ArchivisationCtx) of
+            undefined -> false;
+            ArchiveDoc -> {true, ArchiveDoc}
+        end
+    end, [AipCtx, DipCtx]).
 
 
 %%%===================================================================
@@ -257,8 +271,10 @@ set_aip_dip_relation(AipArchiveCtx, DipArchiveCtx) ->
     }.
 
 
--spec propagate_finished_up(file_ctx:ctx(), user_ctx:ctx(), info(), id(), file_meta:uuid()) -> ok.
-propagate_finished_up(FileCtx, UserCtx, TraverseInfo, TaskId, SourceMasterUuid) ->
+-spec propagate_finished_up(
+    file_ctx:ctx(), user_ctx:ctx(), info(), id(), file_meta:uuid(), file_meta:path()
+) -> ok.
+propagate_finished_up(FileCtx, UserCtx, TraverseInfo, TaskId, SourceMasterUuid, FilePath) ->
     #{scheduled_dataset_root_guid := ScheduledDatasetRootGuid} = TraverseInfo,
     FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     case FileGuid =:= ScheduledDatasetRootGuid of
@@ -268,10 +284,10 @@ propagate_finished_up(FileCtx, UserCtx, TraverseInfo, TaskId, SourceMasterUuid) 
             SpaceId = file_ctx:get_space_id_const(FileCtx),
             ParentStatus = tree_traverse:report_child_processed(TaskId, SourceMasterUuid),
             case ParentStatus of
-                ?SUBTREE_PROCESSED(NextSubtreeRoot) ->
+                ?SUBTREE_PROCESSED(NextSubtreeRoot, StartTimestamp) ->
                     SourceMasterFileCtx = file_ctx:new_by_uuid(SourceMasterUuid, SpaceId),
-                    mark_finished_and_propagate_up(
-                        SourceMasterFileCtx, UserCtx, TraverseInfo, TaskId, NextSubtreeRoot);
+                    mark_finished_and_propagate_up(SourceMasterFileCtx, UserCtx, TraverseInfo, 
+                        TaskId, NextSubtreeRoot, StartTimestamp, filename:dirname(FilePath), completed);
                 ?SUBTREE_NOT_PROCESSED ->
                     ok
             end
@@ -479,3 +495,20 @@ is_archive_rooted_in_current_file(CurrentFileCtx, #{
     CurrentFileGuid = file_ctx:get_logical_guid_const(CurrentFileCtx),
     CurrentFileGuid =:= ScheduledDatasetRootGuid orelse
         (CurrentFileGuid =:= CurrentArchiveRootGuid andalso CreateNestedArchives).
+
+
+-spec report_to_audit_log(file_ctx:ctx(), info(), time:millis(), file_meta:path(),
+    {failed, Reason :: any()} | completed) -> ok.
+report_to_audit_log(CurrentFileCtx, TraverseInfo, StartTimestamp, FilePath, Status) ->
+    FileGuid = file_ctx:get_logical_guid_const(CurrentFileCtx),
+    {ReportFun, AdditionalArgs} = case Status of
+        completed ->
+            {fun archivisation_audit_log:report_file_archivisation_finished/4, []};
+        {failed, Reason} ->
+            {fun archivisation_audit_log:report_file_archivisation_failed/5, [Reason]}
+    end,
+    
+    lists:foreach(fun(ArchiveDoc) ->
+        {ok, ArchiveId} = archive:get_id(ArchiveDoc),
+        erlang:apply(ReportFun, [ArchiveId, FileGuid, FilePath, StartTimestamp | AdditionalArgs])
+    end, info_to_archive_docs(TraverseInfo)).

@@ -177,10 +177,10 @@ end)()).
     forbidden_not_in_space = [?USER_IN_SPACE_1_AUTH],
     supported_clients_per_node = ?SUPPORTED_CLIENTS_PER_NODE(__CONFIG)
 }).
-% Special case -> any user can make requests for shares but if request is
-% being made using credentials by user not supported on specific provider
+% Special case -> any user can make requests for publicly accessibly resources,
+% but if request is being made using credentials by user not supported on specific provider
 % ?ERROR_UNAUTHORIZED(?ERROR_USER_NOT_SUPPORTED) should be returned
--define(CLIENT_SPEC_FOR_SHARE_SCENARIOS(__CONFIG), #client_spec{
+-define(CLIENT_SPEC_FOR_PUBLIC_ACCESS_SCENARIOS(__CONFIG), #client_spec{
     correct = [?NOBODY, ?USER_IN_SPACE_KRK_AUTH, ?USER_IN_SPACE_KRK_PAR_AUTH, ?USER_IN_BOTH_SPACES_AUTH],
     unauthorized = [],
     forbidden_not_in_space = [],
