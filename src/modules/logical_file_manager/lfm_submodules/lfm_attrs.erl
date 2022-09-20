@@ -52,13 +52,13 @@
 %% Returns file attributes (see file_attr.hrl).
 %% @end
 %%--------------------------------------------------------------------
--spec stat(SessId :: session:id(), lfm:file_key(), boolean()) ->
+-spec stat(SessId :: session:id(), lfm:file_key(), [attr_req:optional_attr()]) ->
     {ok, file_attributes()} | lfm:error_reply().
-stat(SessId, FileKey, IncludeLinksCount) ->
+stat(SessId, FileKey, OptionalAttrs) ->
     FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
     
     remote_utils:call_fslogic(
-        SessId, file_request, FileGuid, #get_file_attr{include_link_count = IncludeLinksCount},
+        SessId, file_request, FileGuid, #get_file_attr{optional_attrs = OptionalAttrs},
         fun(#file_attr{} = Attrs) -> {ok, Attrs} end
     ).
 

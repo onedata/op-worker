@@ -490,11 +490,12 @@ file_attrs_to_json(undefined, #file_attr{
     provider_id = ProviderId,
     owner_id = OwnerId,
     nlink = HardlinksCount,
-    index = Index
+    index = Index,
+    xattrs = Xattrs
 }) ->
     {ok, ObjectId} = file_id:guid_to_objectid(Guid),
     
-    #{
+    BaseJson = #{
         <<"file_id">> => ObjectId,
         <<"name">> => Name,
         <<"mode">> => list_to_binary(string:right(integer_to_list(Mode, 8), 3, $0)),
@@ -520,7 +521,10 @@ file_attrs_to_json(undefined, #file_attr{
         <<"owner_id">> => OwnerId,
         <<"hardlinks_count">> => utils:undefined_to_null(HardlinksCount),
         <<"index">> => file_listing:encode_index(Index)
-    };
+    },
+    maps:fold(fun(XattrName, XattrValue, Acc) ->
+        Acc#{<<"xattr.", XattrName/binary>> => utils:undefined_to_null(XattrValue)}
+    end, BaseJson, Xattrs);
 file_attrs_to_json(ShareId, #file_attr{
     guid = FileGuid,
     parent_guid = ParentGuid,
@@ -532,12 +536,13 @@ file_attrs_to_json(ShareId, #file_attr{
     atime = Atime,
     ctime = Ctime,
     shares = Shares,
-    index = Index
+    index = Index,
+    xattrs = Xattrs
 }) ->
     {ok, ObjectId} = file_id:guid_to_objectid(file_id:guid_to_share_guid(FileGuid, ShareId)),
     IsShareRoot = lists:member(ShareId, Shares),
     
-    #{
+    BaseJson = #{
         <<"file_id">> => ObjectId,
         <<"name">> => Name,
         <<"mode">> => list_to_binary(string:right(integer_to_list(Mode band 2#111, 8), 3, $0)),
@@ -560,7 +565,10 @@ file_attrs_to_json(ShareId, #file_attr{
             false -> []
         end,
         <<"index">> => file_listing:encode_index(Index)
-    }.
+    },
+    maps:fold(fun(XattrName, XattrValue, Acc) ->
+        Acc#{<<"xattr.", XattrName/binary>> => utils:undefined_to_null(XattrValue)}
+    end, BaseJson, Xattrs).
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -31,9 +31,6 @@
 -include_lib("cluster_worker/include/time_series/browsing.hrl").
 
 
-%% API
--export([file_attrs_to_json/1]).
-
 %% middleware_router callbacks
 -export([resolve_handler/3]).
 
@@ -47,61 +44,6 @@
 
 -define(DEFAULT_BASIC_ATTRIBUTES, [<<"file_id">>, <<"name">>]).
 -define(DEFAULT_RECURSIVE_FILE_LIST_ATTRIBUTES, [<<"file_id">>, <<"path">>]).
-
-
-%%%===================================================================
-%%% API
-%%%===================================================================
-
-
--spec file_attrs_to_json(lfm_attrs:file_attributes()) -> json_utils:json_map().
-file_attrs_to_json(#file_attr{
-    guid = Guid,
-    name = Name,
-    mode = Mode,
-    parent_guid = ParentGuid,
-    uid = Uid,
-    gid = Gid,
-    atime = Atime,
-    mtime = Mtime,
-    ctime = Ctime,
-    type = Type,
-    size = Size,
-    shares = Shares,
-    provider_id = ProviderId,
-    owner_id = OwnerId,
-    nlink = HardlinksCount,
-    index = Index
-}) ->
-    {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-
-    #{
-        <<"file_id">> => ObjectId,
-        <<"name">> => Name,
-        <<"mode">> => list_to_binary(string:right(integer_to_list(Mode, 8), 3, $0)),
-        <<"parent_id">> => case ParentGuid of
-            undefined ->
-                null;
-            _ ->
-                {ok, ParentObjectId} = file_id:guid_to_objectid(ParentGuid),
-                ParentObjectId
-        end,
-        <<"storage_user_id">> => Uid,
-        <<"storage_group_id">> => Gid,
-        <<"atime">> => Atime,
-        <<"mtime">> => Mtime,
-        <<"ctime">> => Ctime,
-        <<"type">> => str_utils:to_binary(Type),
-        <<"size">> => case Type of
-            ?DIRECTORY_TYPE -> null;
-            _ -> utils:undefined_to_null(Size)
-        end,
-        <<"shares">> => Shares,
-        <<"provider_id">> => ProviderId,
-        <<"owner_id">> => OwnerId,
-        <<"hardlinks_count">> => utils:undefined_to_null(HardlinksCount),
-        <<"index">> => file_listing:encode_index(Index)
-    }.
 
 
 %%%===================================================================
@@ -566,8 +508,8 @@ data_spec_get(#gri{aspect = children, scope = Sc}) -> #{
         end},
         <<"tune_for_large_continuous_listing">> => {boolean, any},
         <<"attribute">> => {any, case Sc of
-            public -> ?PUBLIC_BASIC_ATTRIBUTES;
-            private -> ?PRIVATE_BASIC_ATTRIBUTES
+            public -> build_check_requested_attrs_fun(?PUBLIC_BASIC_ATTRIBUTES);
+            private -> build_check_requested_attrs_fun(?PRIVATE_BASIC_ATTRIBUTES)
         end}
     }
 };
@@ -581,19 +523,19 @@ data_spec_get(#gri{aspect = files, scope = Sc}) -> #{
         <<"start_after">> => {binary, any},
         <<"include_directories">> => {boolean, any},
         <<"attribute">> => {any, case Sc of
-            public -> [<<"path">> | ?PUBLIC_BASIC_ATTRIBUTES];
-            private -> [<<"path">> | ?PRIVATE_BASIC_ATTRIBUTES]
+            public -> build_check_requested_attrs_fun([<<"path">> | ?PUBLIC_BASIC_ATTRIBUTES]);
+            private -> build_check_requested_attrs_fun([<<"path">> | ?PRIVATE_BASIC_ATTRIBUTES])
         end}
     }
 };
 
 data_spec_get(#gri{aspect = attrs, scope = private}) -> #{
     required => #{id => {binary, guid}},
-    optional => #{<<"attribute">> => {any, ?PRIVATE_BASIC_ATTRIBUTES}}
+    optional => #{<<"attribute">> => {any, build_check_requested_attrs_fun(?PRIVATE_BASIC_ATTRIBUTES)}}
 };
 data_spec_get(#gri{aspect = attrs, scope = public}) -> #{
     required => #{id => {binary, guid}},
-    optional => #{<<"attribute">> => {any, ?PUBLIC_BASIC_ATTRIBUTES}}
+    optional => #{<<"attribute">> => {any, build_check_requested_attrs_fun(?PUBLIC_BASIC_ATTRIBUTES)}}
 };
 
 data_spec_get(#gri{aspect = xattrs}) -> #{
@@ -820,27 +762,23 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = childre
             }
     end,
 
-    ToJsonWithRequestedAttributes = fun(ItemToJson) ->
-        fun(Res) ->
-            maps:with(RequestedAttributes, ItemToJson(Res))
-        end
-    end,
-
     {ResultJson, ListingPaginationToken} = case lists:sort(lists_utils:union(RequestedAttributes, ?DEFAULT_BASIC_ATTRIBUTES)) of
         ?DEFAULT_BASIC_ATTRIBUTES ->
             {ok, Children, ReturnedListingPaginationToken} = ?lfm_check(lfm:get_children(
                 SessionId, ?FILE_REF(FileGuid), ListingOpts)),
-            ItemToJson = fun
-                ({Guid, Name}) ->
-                    {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-                    #{<<"file_id">> => ObjectId, <<"name">> => Name}
+            ItemToJson = fun({Guid, Name}) ->
+                {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+                maps:with(RequestedAttributes, #{<<"file_id">> => ObjectId, <<"name">> => Name})
             end,
-            {lists:map(ToJsonWithRequestedAttributes(ItemToJson), Children), ReturnedListingPaginationToken};
+            {lists:map(ItemToJson, Children), ReturnedListingPaginationToken};
         _ ->
-            IncludeHardlinksCount = lists:member(<<"hardlinks_count">>, RequestedAttributes),
-            {ok, Children, ReturnedListingPaginationToken} = ?lfm_check(lfm:get_children_attrs(
-                SessionId, ?FILE_REF(FileGuid), ListingOpts, false, IncludeHardlinksCount)),
-            {lists:map(ToJsonWithRequestedAttributes(fun file_attrs_to_json/1), Children), ReturnedListingPaginationToken}
+            OptionalAttrs = file_attr_translator:build_optional_attrs_opt(RequestedAttributes),
+            {ok, Children, ReturnedListingPaginationToken} = 
+                ?lfm_check(lfm:get_children_attrs(SessionId, ?FILE_REF(FileGuid), ListingOpts, OptionalAttrs)),
+            ItemToJson = fun(FileAttr) ->
+                file_attr_translator:to_json(FileAttr, RequestedAttributes)
+            end,
+            {lists:map(ItemToJson, Children), ReturnedListingPaginationToken}
     end,
     
     {ok, value, {
@@ -877,11 +815,12 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = files}}
         include_directories => maps:get(<<"include_directories">>, Data, undefined)
     }),
     RequestedAttributes = utils:ensure_list(maps:get(<<"attribute">>, Data, ?DEFAULT_RECURSIVE_FILE_LIST_ATTRIBUTES)),
+    OptionalAttrs = file_attr_translator:build_optional_attrs_opt(RequestedAttributes),
     {ok, Result, InaccessiblePaths, NextPageToken} =
-        ?lfm_check(lfm:get_files_recursively(SessionId, ?FILE_REF(FileGuid), Options)),
+        ?lfm_check(lfm:get_files_recursively(SessionId, ?FILE_REF(FileGuid), Options, OptionalAttrs)),
     JsonResult = lists:map(fun({Path, Attrs}) ->
-        JsonAttrs = file_attrs_to_json(Attrs),
-        maps:with(RequestedAttributes, JsonAttrs#{<<"path">> => Path})
+        JsonAttrs = file_attr_translator:to_json(Attrs),
+        file_attr_translator:select_attrs(JsonAttrs#{<<"path">> => Path}, RequestedAttributes)
     end, Result),
     {ok, value, {JsonResult, InaccessiblePaths, NextPageToken}};
 
@@ -895,9 +834,10 @@ get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = attrs, 
         Attr ->
             [Attr]
     end,
-    {ok, FileAttrs} = ?lfm_check(lfm:stat(Auth#auth.session_id, ?FILE_REF(FileGuid), true)),
+    OptionalAttrs = file_attr_translator:build_optional_attrs_opt(RequestedAttributes),
+    {ok, FileAttrs} = ?lfm_check(lfm:stat(Auth#auth.session_id, ?FILE_REF(FileGuid), OptionalAttrs)),
 
-    {ok, value, maps:with(RequestedAttributes, file_attrs_to_json(FileAttrs))};
+    {ok, value, file_attr_translator:to_json(FileAttrs, RequestedAttributes)};
 
 get(#op_req{auth = Auth, data = Data, gri = #gri{id = FileGuid, aspect = xattrs}}, _) ->
     SessionId = Auth#auth.session_id,
@@ -1298,3 +1238,21 @@ create_file(SessionId, ParentGuid, Name, ?LINK_TYPE, TargetGuid) ->
     lfm:make_link(SessionId, ?FILE_REF(TargetGuid), ?FILE_REF(ParentGuid), Name);
 create_file(SessionId, ParentGuid, Name, ?SYMLINK_TYPE, TargetPath) ->
     lfm:make_symlink(SessionId, ?FILE_REF(ParentGuid), Name, TargetPath).
+
+
+-spec build_check_requested_attrs_fun([binary()]) -> 
+    fun((binary() | [binary()]) -> true | no_return()).
+build_check_requested_attrs_fun(AllowedValues) -> 
+    fun F(AttributeList) when is_list(AttributeList) ->
+            lists:foreach(fun(A) -> F(A) end, AttributeList),
+            true;
+        F(<<"xattr.", _/binary>>) ->
+            true;
+        F(Attribute) ->
+            case lists:member(Attribute, AllowedValues) of
+                true ->
+                    true;
+                false ->
+                    throw(?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, AllowedValues ++ [<<"xattr.*">>]))
+            end
+    end.
