@@ -30,6 +30,7 @@
 %% atm_store_container callbacks
 -export([
     create/3,
+    copy/1,
     get_config/1,
 
     get_iterated_item_data_spec/1,
@@ -86,6 +87,11 @@ create(AtmWorkflowExecutionAuth, AtmStoreConfig, InitialItemsArray) ->
     Logs = sanitize_append_requests(AtmWorkflowExecutionAuth, LogContentDataSpec, InitialItemsArray),
 
     extend_audit_log(Logs, create_container(AtmStoreConfig)).
+
+
+-spec copy(record()) -> no_return().
+copy(_) ->
+    throw(?ERROR_NOT_SUPPORTED).
 
 
 -spec get_config(record()) -> atm_audit_log_store_config:record().
