@@ -1048,6 +1048,14 @@ await_dir_stats_collecting_status(ProviderPlaceholder, SpaceId, Status) ->
     ).
 
 
+-spec await_file_size_sync(oct_background:entity_selector(), file_meta:size(), file_id:file_guid()) -> ok.
+await_file_size_sync(ProviderPlaceholder, ExpectedSize, Guid) ->
+    Node = oct_background:get_random_provider_node(ProviderPlaceholder),
+    SessId = oct_background:get_user_session_id(user3, ProviderPlaceholder),
+    ?assertMatch({ok, #file_attr{size = ExpectedSize}}, lfm_proxy:stat(Node, SessId, ?FILE_REF(Guid)), ?ATTEMPTS),
+    ok.
+
+
 %% @private
 -spec get_storage_id(od_space:id(), oneprovider:id()) -> od_storage:id().
 get_storage_id(SpaceId, ProviderId) ->
@@ -1188,7 +1196,11 @@ gather_historical_dir_size_stats_layout_test(Config) ->
     P2StorageId = get_storage_id(SpaceId, P2Id),
 
     #object{guid = DirGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
-        user3, space_krk_par, #dir_spec{mode = 8#707, shares = [#share_spec{}]}
+        user3, space_krk_par, #dir_spec{
+            mode = 8#707, 
+            shares = [#share_spec{}], 
+            children = [#file_spec{content = crypto:strong_rand_bytes(8)}]
+        }
     ),
     Metrics = [?DAY_METRIC, ?HOUR_METRIC, ?MINUTE_METRIC, ?MONTH_METRIC],
     ExpLayout = #{
@@ -1200,6 +1212,8 @@ gather_historical_dir_size_stats_layout_test(Config) ->
     },
     await_dir_stats_collecting_status(krakow, SpaceId, enabled),
     await_dir_stats_collecting_status(paris, SpaceId, enabled),
+    await_file_size_sync(krakow, 8, DirGuid),
+    await_file_size_sync(paris, 8, DirGuid),
 
     ValidateGsSuccessfulCallFun = fun(_TestCtx, Result) ->
         ?assertEqual({ok, #{<<"layout">> => ExpLayout}}, Result)
@@ -1254,6 +1268,8 @@ gather_historical_dir_size_stats_slice_test(Config) ->
     }),
     await_dir_stats_collecting_status(krakow, SpaceId, enabled),
     await_dir_stats_collecting_status(paris, SpaceId, enabled),
+    await_file_size_sync(krakow, 24, DirGuid),
+    await_file_size_sync(paris, 24, DirGuid),
     ValidateGsSuccessfulCallFun = fun(_TestCtx, Result) ->
         {ok, ResultData} = ?assertMatch({ok, #{<<"slice">> := _}}, Result),
         ResultWithoutTimestamps = tsc_structure:map(fun(_TimeSeriesName, _MetricsName, Windows) ->
