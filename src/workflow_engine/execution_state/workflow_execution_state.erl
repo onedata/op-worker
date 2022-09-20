@@ -84,9 +84,9 @@
 }).
 -define(TASK_PROCESSED_REPORT(TaskStatus), {task_processed_report, TaskStatus}).
 -define(EXECUTION_CANCELLED_REPORT(ItemIdsToDelete, TaskIds),
-    ?EXECUTION_CANCELLED_REPORT(ItemIdsToDelete, TaskIds, [])).
--define(EXECUTION_CANCELLED_REPORT(ItemIdsToDelete, TaskIds, ResultIds),
-    {execution_canceled_report, ItemIdsToDelete, TaskIds, ResultIds}).
+    ?EXECUTION_CANCELLED_REPORT(ItemIdsToDelete, TaskIds, [], [])).
+-define(EXECUTION_CANCELLED_REPORT(ItemIdsToDelete, TaskIds, ResultIds, TaskDataIds),
+    {execution_canceled_report, ItemIdsToDelete, TaskIds, ResultIds, TaskDataIds}).
 -define(EXECUTION_CANCELLED_WITH_OPEN_STREAMS_REPORT(TaskIds), {execution_canceled_with_open_streams_report, TaskIds}).
 -define(EXECUTION_CANCELLED_WITH_OPEN_STREAMS_REPORT(Handler, LaneContext, TaskIds),
     {execution_canceled_with_open_streams_report, Handler, LaneContext, TaskIds}).
@@ -107,6 +107,7 @@
 -define(WF_ERROR_ITERATION_FAILED, {error, iteration_failed}).
 -define(WF_ERROR_CURRENT_LANE, {error, current_lane}).
 -define(WF_ERROR_UNKNOWN_LANE, {error, unknown_lane}).
+-define(WF_ERROR_EXCEPTION_APPEARED(EngineId), {error, {exception_appeared, EngineId}}).
 
 -type index() :: non_neg_integer(). % scheduling is based on positions of elements (items, parallel_boxes, tasks)
                                     % to allow executions of tasks in chosen order
@@ -149,7 +150,7 @@
     ?TASK_PROCESSED_REPORT(task_status()) | ?JOBS_EXPIRED_REPORT(async_pools_slots_to_free()) |
     ?LANE_READY_TO_BE_FINISHED_REPORT(workflow_engine:lane_id(), workflow_engine:execution_context()) |
     ?EXECUTION_CANCELLED_REPORT([workflow_cached_item:id()], [workflow_engine:task_id()],
-        [workflow_cached_async_result:result_ref()]) |
+        [workflow_cached_async_result:result_ref()], [workflow_cached_task_data:id()]) |
     ?EXECUTION_CANCELLED_WITH_OPEN_STREAMS_REPORT([workflow_engine:task_id()]) | no_items_error() |
     ?EXECUTE_DELAYED_CALLBACKS(callback_to_exectute()) | ?ITEM_RESTARTED.
 
@@ -433,13 +434,25 @@ report_limit_reached_error(ExecutionId, JobIdentifier) ->
     workflow_engine:streamed_task_data()) -> {ok, workflow_engine:id()}.
 report_new_streamed_task_data(ExecutionId, TaskId, TaskData) ->
     CachedTaskDataId = workflow_cached_task_data:put(TaskData),
-    {ok, #document{value = #workflow_execution_state{engine_id = EngineId}}} =
-        update(ExecutionId, fun(State = #workflow_execution_state{tasks_data_registry = TasksDataRegistry}) ->
+    UpdateAns = update(ExecutionId, fun
+        (#workflow_execution_state{
+            execution_status = #execution_cancelled{has_exception_appeared = true},
+            engine_id = EngineId
+        }) ->
+            ?WF_ERROR_EXCEPTION_APPEARED(EngineId);
+        (State = #workflow_execution_state{tasks_data_registry = TasksDataRegistry}) ->
             {ok, State#workflow_execution_state{
                 tasks_data_registry = workflow_tasks_data_registry:put(TaskId, CachedTaskDataId, TasksDataRegistry)
             }}
-        end),
-    {ok, EngineId}.
+    end),
+
+    case UpdateAns of
+        {ok, #document{value = #workflow_execution_state{engine_id = EngineId}}} ->
+            {ok, EngineId};
+        ?WF_ERROR_EXCEPTION_APPEARED(EngineId) ->
+            workflow_cached_task_data:delete(CachedTaskDataId),
+            {ok, EngineId}
+    end.
 
 
 -spec report_streamed_task_data_processed(workflow_engine:execution_id(), workflow_engine:task_id(),
@@ -767,7 +780,7 @@ handle_state_update_after_job_preparation(ExecutionId, #document{value = #workfl
             ?WF_ERROR_EXECUTION_ENDED(#execution_ended{handler = Handler, context = ExecutionContext})
     end;
 handle_state_update_after_job_preparation(_ExecutionId, #document{value = #workflow_execution_state{
-    update_report = ?EXECUTION_CANCELLED_REPORT(ItemIdsToDelete, TaskIdsToFinish, ResultIdsToDel),
+    update_report = ?EXECUTION_CANCELLED_REPORT(ItemIdsToDelete, TaskIdsToFinish, ResultIdsToDel, TaskDataIds),
     current_lane = #current_lane{id = LaneId, execution_context = LaneContext},
     execution_status = ExecutionStatus,
     handler = Handler,
@@ -776,6 +789,8 @@ handle_state_update_after_job_preparation(_ExecutionId, #document{value = #workf
 }}) ->
     lists:foreach(fun workflow_cached_item:delete/1, ItemIdsToDelete),
     lists:foreach(fun workflow_cached_async_result:delete/1, ResultIdsToDel),
+    lists:foreach(fun workflow_cached_task_data:delete/1, TaskDataIds),
+
     case PrefetchedIterationStep of
         undefined -> ok;
         ?WF_ERROR_ITERATION_FAILED -> ok;
@@ -1420,27 +1435,32 @@ prepare_next_waiting_job(State = #workflow_execution_state{
     jobs = Jobs,
     iteration_state = IterationState,
     next_lane_preparation_status = NextLaneStatus,
-    pending_callbacks = PendingCallbacks
+    pending_callbacks = PendingCallbacks,
+    tasks_data_registry = TaskDataRegistry
 }) ->
-    case workflow_jobs:has_ongoing_jobs(Jobs) orelse PendingCallbacks =/= [] of
+    case workflow_jobs:has_ongoing_jobs(Jobs)
+        orelse PendingCallbacks =/= []
+        orelse workflow_tasks_data_registry:has_ongoing(TaskDataRegistry)
+    of
         true ->
             ?WF_ERROR_NO_WAITING_ITEMS;
         false ->
             ResultIds = workflow_jobs:get_all_async_cached_result_ids(Jobs),
-            % TODO - moze poczekac na ongoing async streamy?
+            TaskDataIds = workflow_tasks_data_registry:get_all_task_data_ids(TaskDataRegistry),
+            ItemIds = workflow_iteration_state:get_all_item_ids(IterationState),
             case NextLaneStatus of
                 ?PREPARING ->
-                    ItemIds = workflow_iteration_state:get_all_item_ids(IterationState),
                     {ok, State#workflow_execution_state{
                         iteration_state = workflow_iteration_state:init(),
+                        tasks_data_registry = workflow_tasks_data_registry:empty(),
                         execution_status = Status#execution_cancelled{execution_step = waiting_on_next_lane_prepare},
-                        update_report = ?EXECUTION_CANCELLED_REPORT(ItemIds, [], ResultIds)
+                        update_report = ?EXECUTION_CANCELLED_REPORT(ItemIds, [], ResultIds, TaskDataIds)
                     }};
                 _ ->
-                    ItemIds = workflow_iteration_state:get_all_item_ids(IterationState),
                     {ok, State#workflow_execution_state{
                         iteration_state = workflow_iteration_state:init(),
-                        update_report = ?EXECUTION_CANCELLED_REPORT(ItemIds, [], ResultIds)
+                        tasks_data_registry = workflow_tasks_data_registry:empty(),
+                        update_report = ?EXECUTION_CANCELLED_REPORT(ItemIds, [], ResultIds, TaskDataIds)
                     }}
             end
     end;

@@ -31,6 +31,7 @@
 -export([empty/0, put/3, take_for_processing/1, mark_processed/3,
     mark_all_task_data_received/2, is_stream_finalized/2,
     claim_execution_of_cancellation_procedures/1,
+    has_ongoing/1, get_all_task_data_ids/1,
     dump/1, from_dump/1, get_dump_struct/0]).
 %% Test API
 -export([is_empty/1]).
@@ -125,6 +126,16 @@ claim_execution_of_cancellation_procedures(#registry{cancellation_procedures_cla
     {ok, Data#registry{cancellation_procedures_claimed = true}};
 claim_execution_of_cancellation_procedures(#registry{}) ->
     already_claimed.
+
+
+-spec has_ongoing(registry()) -> boolean().
+has_ongoing(#registry{ongoing = Ongoing}) ->
+    maps:size(Ongoing) =/= 0.
+
+
+-spec get_all_task_data_ids(registry()) -> [workflow_cached_task_data:id()].
+get_all_task_data_ids(#registry{waiting = Waiting, ongoing = Ongoing}) ->
+    lists:flatten(maps:values(Waiting)) ++ lists:flatten(maps:values(Ongoing)).
 
 
 -spec dump(registry()) -> dump().
