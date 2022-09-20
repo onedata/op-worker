@@ -97,6 +97,15 @@
     get_xattr/4,
     remove_xattr/3
 ]).
+%% Multipart upload related operations
+-export([
+    create_multipart_upload/3,
+    abort_multipart_upload/2,
+    complete_multipart_upload/2,
+    list_multipart_uploads/4,
+    upload_multipart_part/3,
+    list_multipart_parts/4
+]).
 
 %% Utility functions
 -export([check_result/1]).
@@ -601,6 +610,42 @@ get_xattr(SessId, FileKey, XattrName, Inherited) ->
 remove_xattr(SessId, FileKey, XattrName) ->
     ?run(lfm_attrs:remove_xattr(SessId, FileKey, XattrName)).
 
+%%%===================================================================
+%%% Multipart upload related operations
+%%%===================================================================
+
+-spec create_multipart_upload(session:id(), od_space:id(), file_meta:path()) ->
+    {ok, multipart_upload:id()} | {error, term()}.
+create_multipart_upload(SessId, SpaceId, Path) ->
+    ?run(lfm_multipart_upload:create(SessId, SpaceId, Path)).
+
+
+-spec abort_multipart_upload(session:id(), multipart_upload:id()) -> ok | {error, term()}.
+abort_multipart_upload(SessId, UploadId) ->
+    ?run(lfm_multipart_upload:abort(SessId, UploadId)).
+
+
+-spec complete_multipart_upload(session:id(), multipart_upload:id()) -> ok | {error, term()}.
+complete_multipart_upload(SessId, UploadId) ->
+    ?run(lfm_multipart_upload:complete(SessId, UploadId)).
+
+
+-spec list_multipart_uploads(session:id(), od_space:id(), non_neg_integer(), multipart_upload:pagination_token() | undefined) ->
+    {ok, [multipart_upload:record()], multipart_upload:pagination_token(), boolean()} | {error, term()}.
+list_multipart_uploads(SessId, SpaceId, Limit, Token) ->
+    ?run(lfm_multipart_upload:list(SessId, SpaceId, Limit, Token)).
+
+
+-spec upload_multipart_part(session:id(), multipart_upload:id(), multipart_upload_part:record()) ->
+    ok | {error, term()}.
+upload_multipart_part(SessId, UploadId, Part) ->
+    ?run(lfm_multipart_upload:upload_part(SessId, UploadId, Part)).
+
+
+-spec list_multipart_parts(session:id(), multipart_upload:id(), non_neg_integer(), multipart_upload_part:part()) ->
+    {ok, [multipart_upload_part:record()], boolean()} | {error, term()}.
+list_multipart_parts(SessId, UploadId, Limit, StartAfter) ->
+    ?run(lfm_multipart_upload:list_parts(SessId, UploadId, Limit, StartAfter)).
 
 %%%===================================================================
 %%% Utility functions

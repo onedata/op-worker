@@ -61,7 +61,14 @@
 
     get_acl/3, set_acl/4, remove_acl/3,
 
-    has_custom_metadata/3
+    has_custom_metadata/3,
+
+    create_multipart_upload/4,
+    abort_multipart_upload/3,
+    complete_multipart_upload/3,
+    list_multipart_uploads/5,
+    upload_multipart_part/4,
+    list_multipart_parts/5
 ]).
 
 -define(EXEC(Worker, Function),
@@ -662,6 +669,44 @@ remove_acl(Worker, SessId, FileKey) ->
     {ok, boolean()}.
 has_custom_metadata(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:has_custom_metadata(SessId, FileKey)).
+
+
+%%%===================================================================
+%%% Multipart upload related operations
+%%%===================================================================
+
+-spec create_multipart_upload(node(), session:id(), od_space:id(), file_meta:path()) ->
+    {ok, multipart_upload:id()} | {error, term()}.
+create_multipart_upload(Worker, SessId, SpaceId, Path) ->
+    ?EXEC(Worker, lfm:create_multipart_upload(SessId, SpaceId, Path)).
+
+
+-spec abort_multipart_upload(node(), session:id(), multipart_upload:id()) -> ok | {error, term()}.
+abort_multipart_upload(Worker, SessId, UploadId) ->
+    ?EXEC(Worker, lfm:abort_multipart_upload(SessId, UploadId)).
+
+
+-spec complete_multipart_upload(node(), session:id(), multipart_upload:id()) -> ok | {error, term()}.
+complete_multipart_upload(Worker, SessId, UploadId) ->
+    ?EXEC(Worker, lfm:complete_multipart_upload(SessId, UploadId)).
+
+
+-spec list_multipart_uploads(node(), session:id(), od_space:id(), non_neg_integer(), multipart_upload:pagination_token() | undefined) ->
+    {ok, [multipart_upload:record()], multipart_upload:pagination_token(), boolean()} | {error, term()}.
+list_multipart_uploads(Worker, SessId, SpaceId, Limit, Token) ->
+    ?EXEC(Worker, lfm:list_multipart_uploads(SessId, SpaceId, Limit, Token)).
+
+
+-spec upload_multipart_part(node(), session:id(), multipart_upload:id(), multipart_upload_part:record()) ->
+    ok | {error, term()}.
+upload_multipart_part(Worker, SessId, UploadId, Part) ->
+    ?EXEC(Worker, lfm:upload_multipart_part(SessId, UploadId, Part)).
+
+
+-spec list_multipart_parts(node(), session:id(), multipart_upload:id(), non_neg_integer(), multipart_upload_part:part()) ->
+    {ok, [multipart_upload_part:record()], boolean()} | {error, term()}.
+list_multipart_parts(Worker, SessId, UploadId, Limit, StartAfter) ->
+    ?EXEC(Worker, lfm:list_multipart_parts(SessId, UploadId, Limit, StartAfter)).
 
 
 %%%===================================================================

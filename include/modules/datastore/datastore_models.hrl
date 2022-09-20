@@ -1262,4 +1262,22 @@
     slots_limit :: non_neg_integer()
 }).
 
+%%%===================================================================
+%%% Multipart upload connected models
+%%%===================================================================
+
+-record(multipart_upload, {
+    multipart_upload_id :: multipart_upload:id() | undefined,
+    path :: multipart_upload:path(),
+    creation_time :: time:millis(),
+    space_id :: od_space:id()
+}).
+
+-record(multipart_upload_part, {
+    number :: non_neg_integer(),
+    size :: non_neg_integer(),
+    etag :: binary(),
+    last_modified :: non_neg_integer()
+}).
+
 -endif.

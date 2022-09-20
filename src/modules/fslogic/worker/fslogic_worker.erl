@@ -465,6 +465,9 @@ handle_request_locally(UserCtx, #fuse_request{fuse_request = #file_request{
     Ans = handle_file_request(UserCtx, Req, FileCtx),
     ?update_counter(?EXOMETER_TIME_NAME(ReqName), stopwatch:read_micros(Stopwatch)),
     Ans;
+handle_request_locally(UserCtx, #fuse_request{fuse_request = #multipart_upload_request{
+    multipart_request = Req}}, _FileCtx) ->
+    handle_multipart_upload_request(UserCtx, Req);
 handle_request_locally(UserCtx, #fuse_request{fuse_request = Req}, FileCtx) ->
     handle_fuse_request(UserCtx, Req, FileCtx);
 handle_request_locally(UserCtx, #provider_request{provider_request = Req}, FileCtx) ->
@@ -539,6 +542,8 @@ handle_fuse_request(UserCtx, #verify_storage_test_file{
     end;
 handle_fuse_request(UserCtx, #get_fs_stats{}, FileCtx) ->
     attr_req:get_fs_stats(UserCtx, FileCtx).
+    
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -637,7 +642,20 @@ handle_file_request(UserCtx, #fsync{
     data_only = DataOnly,
     handle_id = HandleId
 }, FileCtx) ->
-    file_req:fsync(UserCtx, FileCtx, DataOnly, HandleId).
+    file_req:fsync(UserCtx, FileCtx, DataOnly, HandleId);
+handle_file_request(UserCtx, #report_file_written{offset = Offset, size = Size}, FileCtx) ->
+    file_req:report_file_written(UserCtx, FileCtx, Offset, Size);
+handle_file_request(UserCtx, #report_file_read{offset = Offset, size = Size}, FileCtx) ->
+    file_req:report_file_read(UserCtx, FileCtx, Offset, Size);
+handle_file_request(UserCtx, #get_recursive_file_list{
+    listing_options = Options,
+    optional_attrs = OptionalAttrs
+}, FileCtx) ->
+    dir_req:list_recursively(UserCtx, FileCtx, Options, OptionalAttrs);
+handle_file_request(UserCtx, #get_file_attr_by_path{path = RelativePath, optional_attrs = OptionalAttrs}, RootFileCtx) ->
+    attr_req:get_file_attr_by_path(UserCtx, RootFileCtx, RelativePath, OptionalAttrs);
+handle_file_request(UserCtx, #create_path{path = Path}, RootFileCtx) ->
+    dir_req:create_dir_at_path(UserCtx, RootFileCtx, Path).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -658,12 +676,7 @@ handle_provider_request(UserCtx, #set_acl{acl = #acl{value = Acl}}, FileCtx) ->
 handle_provider_request(UserCtx, #remove_acl{}, FileCtx) ->
     acl_req:remove_acl(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #check_perms{flag = Flag}, FileCtx) ->
-    permission_req:check_perms(UserCtx, FileCtx, Flag);
-handle_provider_request(UserCtx, #get_recursive_file_list{
-    listing_options = Options,
-    optional_attrs = OptionalAttrs
-}, FileCtx) ->
-    dir_req:list_recursively(UserCtx, FileCtx, Options, OptionalAttrs).
+    permission_req:check_perms(UserCtx, FileCtx, Flag).
 
 
 %%--------------------------------------------------------------------
@@ -680,6 +693,34 @@ handle_proxyio_request(UserCtx, #remote_write{byte_sequence = ByteSequences}, Fi
 handle_proxyio_request(UserCtx, #remote_read{offset = Offset, size = Size}, FileCtx,
     HandleId) ->
     read_write_req:read(UserCtx, FileCtx, HandleId, Offset, Size).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Processes a multipart upload request and returns a response.
+%% @end
+%%--------------------------------------------------------------------
+handle_multipart_upload_request(UserCtx, #create_multipart_upload{space_id = SpaceId, path = Path}) ->
+    multipart_upload_req:create(UserCtx, SpaceId, Path);
+handle_multipart_upload_request(_UserCtx, #upload_multipart_part{multipart_upload_id = UploadId, part = Part}) ->
+    multipart_upload_req:upload_part(UploadId, Part);
+handle_multipart_upload_request(_UserCtx, #list_multipart_parts{
+    multipart_upload_id = UploadId,
+    limit = Limit,
+    part_marker = PartMarker
+}) ->
+    multipart_upload_req:list_parts(UploadId, Limit, PartMarker);
+handle_multipart_upload_request(UserCtx, #abort_multipart_upload{multipart_upload_id = UploadId}) ->
+    multipart_upload_req:abort(UserCtx, UploadId);
+handle_multipart_upload_request(UserCtx, #complete_multipart_upload{multipart_upload_id = UploadId}) ->
+    multipart_upload_req:complete(UserCtx, UploadId);
+handle_multipart_upload_request(UserCtx, #list_multipart_uploads{
+    space_id = SpaceId,
+    limit = Limit,
+    index_token = IndexToken
+}) ->
+    multipart_upload_req:list(UserCtx, SpaceId, Limit, IndexToken).
 
 
 -spec schedule_stale_atm_workflow_executions_termination() -> ok.

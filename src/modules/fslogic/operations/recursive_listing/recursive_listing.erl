@@ -38,7 +38,7 @@
 -module(recursive_listing).
 -author("Michal Stanisz").
 
--include("proto/oneprovider/provider_messages.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API

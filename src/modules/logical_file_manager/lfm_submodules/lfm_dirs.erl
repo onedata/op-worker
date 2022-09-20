@@ -171,7 +171,7 @@ get_children_count(SessId, FileKey) ->
 get_files_recursively(SessId, FileKey, Options, OptionalAttrs) ->
     FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, resolve_symlink),
     
-    remote_utils:call_fslogic(SessId, provider_request, FileGuid,
+    remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #get_recursive_file_list{
             listing_options = Options,
             optional_attrs = OptionalAttrs

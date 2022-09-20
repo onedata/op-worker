@@ -23,6 +23,7 @@
 %% API
 -export([
     mkdir/4,
+    create_dir_at_path/3,
     get_children_ctxs/3,
     get_children/3,
     get_children_attrs/4,
@@ -64,6 +65,25 @@ mkdir(UserCtx, ParentFileCtx0, Name, Mode) ->
         [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?add_subcontainer_mask)]
     ),
     mkdir_insecure(UserCtx, ParentFileCtx1, Name, Mode).
+
+
+-spec create_dir_at_path(user_ctx:ctx(), file_ctx:ctx(), file_meta:path()) -> 
+    fslogic_worker:fuse_response().
+create_dir_at_path(UserCtx, RootFileCtx, Path) ->
+    #fuse_response{fuse_response = #guid{guid = Guid}} =
+        guid_req:ensure_dir(UserCtx, RootFileCtx, Path, ?DEFAULT_DIR_MODE),
+    try attr_req:get_file_attr(UserCtx, file_ctx:new_by_guid(Guid), [size]) of
+        #fuse_response{fuse_response = #file_attr{type = ?DIRECTORY_TYPE}} = Response ->
+            Response;
+        _ ->
+            #fuse_response{status = #status{code = ?ENOTDIR}}
+    catch Class:Reason ->
+        case datastore_runner:normalize_error(Reason) of
+            not_found -> create_dir_at_path(UserCtx, RootFileCtx, Path);
+            ?ENOENT -> create_dir_at_path(UserCtx, RootFileCtx, Path);
+            _ -> erlang:apply(erlang, Class, [Reason])
+        end
+    end.
 
 
 -spec get_children(user_ctx:ctx(), file_ctx:ctx(), file_listing:options()) ->

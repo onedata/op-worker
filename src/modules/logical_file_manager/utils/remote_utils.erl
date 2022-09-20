@@ -29,7 +29,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec call_fslogic(SessId :: session:id(),
-    RequestType :: file_request | provider_request | proxyio_request,
+    RequestType :: file_request | provider_request | multipart_upload_request | proxyio_request,
     ContextEntry :: fslogic_worker:file_guid() | undefined, Request :: term(),
     OKHandle :: fun((Response :: term()) -> Return)) ->
     Return when Return :: term().
@@ -83,4 +83,7 @@ call_fslogic(SessId, proxyio_request, Request = #proxyio_request{
             {error, Code};
         {ok, #status{code = Code}} ->
             {error, Code}
-    end.
+    end;
+call_fslogic(SessId, multipart_upload_request, Request, OKHandle) ->
+    call_fslogic(SessId, fuse_request,
+        #multipart_upload_request{multipart_request = Request}, OKHandle).
