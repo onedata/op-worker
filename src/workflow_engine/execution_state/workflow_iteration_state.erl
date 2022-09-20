@@ -249,7 +249,10 @@ handle_item_processed(
 
 -spec get_all_item_ids(state()) -> [workflow_cached_item:id()].
 get_all_item_ids(#iteration_state{pending_items = Pending, items_finished_ahead = FinishedAhead}) ->
-    FinishedAheadItemIds = lists:filter(fun(Id) -> Id =/= undefined end, gb_trees:values(FinishedAhead)),
+    FinishedAheadItemIds = lists:filtermap(fun
+        (undefined) -> false;
+        ({_, Id}) -> {true, Id}
+    end, gb_trees:values(FinishedAhead)),
     maps:values(Pending) ++ FinishedAheadItemIds.
 
 -spec get_item_id(state(), workflow_execution_state:index()) -> workflow_cached_item:id().
