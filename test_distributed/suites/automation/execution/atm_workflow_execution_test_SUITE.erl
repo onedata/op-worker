@@ -95,7 +95,8 @@
     fail_atm_workflow_execution_due_to_lambda_exception/1,
     fail_atm_workflow_execution_due_to_lambda_error/1,
 
-    repeat_not_ended_atm_workflow_execution/1
+    repeat_not_ended_atm_workflow_execution/1,
+    repeat_finished_atm_lane_run_execution/1
 ]).
 
 groups() -> [
@@ -177,7 +178,8 @@ groups() -> [
         fail_atm_workflow_execution_due_to_lambda_error
     ]},
     {repeat_tests, [], [
-        repeat_not_ended_atm_workflow_execution
+        repeat_not_ended_atm_workflow_execution,
+        repeat_finished_atm_lane_run_execution
     ]}
 ].
 
@@ -441,6 +443,10 @@ fail_atm_workflow_execution_due_to_lambda_error(_Config) ->
 
 
 repeat_not_ended_atm_workflow_execution(_Config) ->
+    ?RUN_REPEAT_TEST().
+
+
+repeat_finished_atm_lane_run_execution(_Config) ->
     ?RUN_REPEAT_TEST().
 
 

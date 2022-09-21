@@ -829,15 +829,24 @@ assert_exp_workflow_execution_state(#test_ctx{
 -spec shift_monitored_lane_run_if_current_one_stopped(mock_call_report(), test_ctx()) ->
     test_ctx().
 shift_monitored_lane_run_if_current_one_stopped(
-    #mock_call_report{timing = after_step, step = handle_workflow_execution_stopped},
-    TestCtx = #test_ctx{ongoing_incarnations = [_]}  %% last incarnation stopped
+    StepMockCallReport = #mock_call_report{timing = after_step, step = handle_workflow_execution_stopped},
+    TestCtx = #test_ctx{ongoing_incarnations = [EndedIncarnation]}  %% last incarnation stopped
 ) ->
+    call_if_defined(
+        EndedIncarnation#atm_workflow_execution_incarnation_test_spec.after_hook,
+        build_mock_call_ctx(StepMockCallReport, TestCtx)
+    ),
     TestCtx#test_ctx{ongoing_incarnations = []};
 
 shift_monitored_lane_run_if_current_one_stopped(
-    #mock_call_report{timing = after_step, step = handle_workflow_execution_stopped},
-    TestCtx = #test_ctx{ongoing_incarnations = [_ | LeftoverIncarnations]}
+    StepMockCallReport = #mock_call_report{timing = after_step, step = handle_workflow_execution_stopped},
+    TestCtx = #test_ctx{ongoing_incarnations = [EndedIncarnation | LeftoverIncarnations]}
 ) ->
+    call_if_defined(
+        EndedIncarnation#atm_workflow_execution_incarnation_test_spec.after_hook,
+        build_mock_call_ctx(StepMockCallReport, TestCtx)
+    ),
+
     #atm_workflow_execution_incarnation_test_spec{
         lane_runs = [#atm_lane_run_execution_test_spec{
             selector = {AtmLaneIndex, AtmRunNum}

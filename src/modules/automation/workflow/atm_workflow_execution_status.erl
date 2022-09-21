@@ -105,7 +105,7 @@
 % Function taking as argument entire atm_workflow_execution record, modifying lane run
 % and returning updated atm_workflow_execution record (or record)
 -type lane_run_diff() :: fun((atm_workflow_execution:record()) ->
-    atm_workflow_execution:record() | errors:error()
+    {ok, atm_workflow_execution:record()} | errors:error()
 ).
 
 
@@ -284,11 +284,16 @@ handle_manual_lane_repeat(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
     Diff = fun(Record) ->
         case infer_phase(Record) of
             ?ENDED_PHASE ->
-                AtmLaneRunDiff(Record#atm_workflow_execution{
-                    status = ?SCHEDULED_STATUS,
-                    incarnation = Record#atm_workflow_execution.incarnation + 1,
-                    schedule_time = global_clock:timestamp_seconds()
-                });
+                case AtmLaneRunDiff(Record) of
+                    {ok, NewRecord} ->
+                        {ok, NewRecord#atm_workflow_execution{
+                            status = ?SCHEDULED_STATUS,
+                            incarnation = Record#atm_workflow_execution.incarnation + 1,
+                            schedule_time = global_clock:timestamp_seconds()
+                        }};
+                    {error, _} = Error ->
+                        Error
+                end;
             _ ->
                 ?ERROR_ATM_WORKFLOW_EXECUTION_NOT_ENDED
         end

@@ -69,14 +69,6 @@
         prefix_combiner = overwrite
     }
 ]).
--define(ANY_MEASUREMENT_DATA_SPEC, #atm_data_spec{
-    type = atm_time_series_measurement_type,
-    value_constraints = #{specs => [#atm_time_series_measurement_spec{
-        name_matcher_type = has_prefix,
-        name_matcher = <<>>,
-        unit = none
-    }]}
-}).
 
 -define(ECHO_TASK_SCHEMA_DRAFT(__RESULT_MAPPERS), #atm_task_schema_draft{
     lambda_id = ?ECHO_LAMBDA_ID,

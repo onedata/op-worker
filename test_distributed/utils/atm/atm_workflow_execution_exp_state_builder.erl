@@ -28,7 +28,9 @@
 -export([
     init/5,
 
+    set_current_lane_run/3,
     expect_lane_run_automatic_retry_scheduled/2,
+    expect_lane_run_manual_repeat_scheduled/4,
     expect_lane_run_started_preparing/2,
     expect_current_lane_run_started_preparing/2,
     expect_lane_run_started_preparing_in_advance/2,
@@ -42,6 +44,7 @@
     expect_lane_run_paused/2,
     expect_lane_run_rerunable/2,
     expect_lane_run_retriable/2,
+    expect_lane_run_repeatable/4,
     expect_lane_run_num_set/3,
     expect_lane_run_removed/2,
 
@@ -63,6 +66,7 @@
     expect_all_tasks_skipped/2,
     expect_all_tasks_stopping/2,
 
+    expect_workflow_execution_scheduled/1,
     expect_workflow_execution_stopping/1,
     expect_workflow_execution_finished/1,
     expect_workflow_execution_failed/1,
@@ -171,6 +175,14 @@ init(
     }.
 
 
+-spec set_current_lane_run(non_neg_integer(), non_neg_integer(), ctx()) -> ctx().
+set_current_lane_run(AtmLaneIndex, AtmRunNum, ExpState) ->
+    ExpState#exp_workflow_execution_state_ctx{
+        current_lane_index = AtmLaneIndex,
+        current_run_num = AtmRunNum
+    }.
+
+
 -spec expect_lane_run_automatic_retry_scheduled(atm_lane_execution:lane_run_selector(), ctx()) ->
     ctx().
 expect_lane_run_automatic_retry_scheduled({AtmLaneSelector, _}, ExpStateCtx = #exp_workflow_execution_state_ctx{
@@ -193,6 +205,48 @@ expect_lane_run_automatic_retry_scheduled({AtmLaneSelector, _}, ExpStateCtx = #e
         ExpAtmWorkflowExecutionState0,
         [NewLaneRun | PrevAtmLaneExecutionRuns],
         Path
+    ),
+    ExpStateCtx#exp_workflow_execution_state_ctx{
+        exp_workflow_execution_state = ExpAtmWorkflowExecutionState1
+    }.
+
+
+-spec expect_lane_run_manual_repeat_scheduled(
+    atm_workflow_execution:repeat_type(),
+    atm_lane_execution:lane_run_selector(),
+    non_neg_integer(),
+    ctx()
+) ->
+    ctx().
+expect_lane_run_manual_repeat_scheduled(
+    RepeatType,
+    AtmLaneRunSelector,
+    NewRunNum,
+    ExpStateCtx = #exp_workflow_execution_state_ctx{exp_workflow_execution_state = ExpAtmWorkflowExecutionState0}
+) ->
+    {AtmLaneSelector, AtmRunSelector} = AtmLaneRunSelector,
+    AtmLaneIndex = resolve_lane_selector(AtmLaneSelector, ExpStateCtx),
+    AtmRunNum = resolve_run_selector(AtmRunSelector, ExpStateCtx),
+
+    AtmLaneExecutionPath = ?JSON_PATH("lanes.[~B].runs", [AtmLaneIndex - 1]),
+    {ok, PrevAtmLaneExecutionRuns} = json_utils:query(ExpAtmWorkflowExecutionState0, AtmLaneExecutionPath),
+    {ok, {_, PrevAtmLaneRunState}} = locate_lane_run(AtmLaneRunSelector, ExpStateCtx),
+
+    {RepeatTypeBin, IteratedStoreId} = case RepeatType of
+        retry -> {<<"retry">>, maps:get(<<"exceptionStoreId">>, PrevAtmLaneRunState)};
+        rerun -> {<<"rerun">>, maps:get(<<"iteratedStoreId">>, PrevAtmLaneRunState)}
+    end,
+    NewLaneRun = build_initial_regular_lane_run_exp_state(
+        NewRunNum,
+        <<"scheduled">>,
+        RepeatTypeBin,
+        AtmRunNum,
+        IteratedStoreId
+    ),
+    {ok, ExpAtmWorkflowExecutionState1} = json_utils:insert(
+        ExpAtmWorkflowExecutionState0,
+        [NewLaneRun | PrevAtmLaneExecutionRuns],
+        AtmLaneExecutionPath
     ),
     ExpStateCtx#exp_workflow_execution_state_ctx{
         exp_workflow_execution_state = ExpAtmWorkflowExecutionState1
@@ -231,19 +285,24 @@ expect_current_lane_run_started_preparing(AtmLaneRunSelector, ExpStateCtx0) ->
 expect_lane_run_started_preparing_in_advance(AtmLaneRunSelector, ExpStateCtx = #exp_workflow_execution_state_ctx{
     exp_workflow_execution_state = ExpAtmWorkflowExecutionState0
 }) ->
-    {AtmLaneRunPath, ExpAtmLaneRunState} = case locate_lane_run(AtmLaneRunSelector, ExpStateCtx) of
+    {ok, ExpAtmWorkflowExecutionState1} = case locate_lane_run(AtmLaneRunSelector, ExpStateCtx) of
         {ok, {Path, Run = #{<<"status">> := <<"scheduled">>}}} ->
-            {Path, Run#{<<"status">> => <<"preparing">>}};
+            json_utils:insert(
+                ExpAtmWorkflowExecutionState0,
+                Run#{<<"status">> => <<"preparing">>},
+                Path
+            );
         ?ERROR_NOT_FOUND ->
             AtmLaneIndex = resolve_lane_selector(element(1, AtmLaneRunSelector), ExpStateCtx),
-            Path = ?JSON_PATH("lanes.[~B].runs.[0]", [AtmLaneIndex - 1]),
-            {Path, build_initial_regular_lane_run_exp_state(undefined, <<"preparing">>)}
+            Path = ?JSON_PATH("lanes.[~B].runs", [AtmLaneIndex - 1]),
+            {ok, PrevRuns} = json_utils:query(ExpAtmWorkflowExecutionState0, Path),
+
+            json_utils:insert(
+                ExpAtmWorkflowExecutionState0,
+                [build_initial_regular_lane_run_exp_state(undefined, <<"preparing">>) | PrevRuns],
+                Path
+            )
     end,
-    {ok, ExpAtmWorkflowExecutionState1} = json_utils:insert(
-        ExpAtmWorkflowExecutionState0,
-        ExpAtmLaneRunState,
-        AtmLaneRunPath
-    ),
     ExpStateCtx#exp_workflow_execution_state_ctx{
         exp_workflow_execution_state = ExpAtmWorkflowExecutionState1
     }.
@@ -356,6 +415,16 @@ expect_lane_run_rerunable(AtmLaneRunSelector, ExpStateCtx) ->
     ctx().
 expect_lane_run_retriable(AtmLaneRunSelector, ExpStateCtx) ->
     ExpAtmLaneRunStateDiff = #{<<"isRetriable">> => true},
+    update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx).
+
+
+-spec expect_lane_run_repeatable(atm_lane_execution:lane_run_selector(), boolean(), boolean(), ctx()) ->
+    ctx().
+expect_lane_run_repeatable(AtmLaneRunSelector, IsRerunable, IsRepeatable, ExpStateCtx) ->
+    ExpAtmLaneRunStateDiff = #{
+        <<"isRerunable">> => IsRerunable,
+        <<"isRetriable">> => IsRepeatable
+    },
     update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx).
 
 
@@ -639,6 +708,17 @@ expect_all_tasks_stopping(AtmLaneRunSelector, ExpStateCtx) ->
         ExpAtmParallelBoxExecutionStatusChangeFun,
         ExpStateCtx
     ).
+
+
+-spec expect_workflow_execution_scheduled(ctx()) -> ctx().
+expect_workflow_execution_scheduled(ExpStateCtx) ->
+    ExpAtmWorkflowExecutionStateDiff = fun(ExpAtmWorkflowExecutionState) ->
+        ExpAtmWorkflowExecutionState#{
+            <<"status">> => <<"scheduled">>,
+            <<"scheduleTime">> => build_timestamp_field_validator(?NOW())
+        }
+    end,
+    update_workflow_execution_exp_state(ExpAtmWorkflowExecutionStateDiff, ExpStateCtx).
 
 
 -spec expect_workflow_execution_stopping(ctx()) -> ctx().

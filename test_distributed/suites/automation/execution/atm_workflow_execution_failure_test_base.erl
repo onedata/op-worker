@@ -30,30 +30,6 @@
 ]).
 
 
--define(ANY_MEASUREMENT_DATA_SPEC, #atm_data_spec{
-    type = atm_time_series_measurement_type,
-    value_constraints = #{specs => [#atm_time_series_measurement_spec{
-        name_matcher_type = has_prefix,
-        name_matcher = <<>>,
-        unit = none
-    }]}
-}).
-
--define(CORRECT_ATM_TIME_SERIES_DISPATCH_RULES, [
-    #atm_time_series_dispatch_rule{
-        measurement_ts_name_matcher_type = has_prefix,
-        measurement_ts_name_matcher = <<"count_">>,
-        target_ts_name_generator = ?COUNT_TS_NAME_GENERATOR,
-        prefix_combiner = converge
-    },
-    #atm_time_series_dispatch_rule{
-        measurement_ts_name_matcher_type = exact,
-        measurement_ts_name_matcher = <<"size">>,
-        target_ts_name_generator = ?MAX_FILE_SIZE_TS_NAME,
-        prefix_combiner = overwrite
-    }
-]).
-
 -define(SINGLE_VALUE_STORE_SCHEMA_ID, <<"single_store_id">>).
 -define(ITERATED_STORE_SCHEMA_ID, <<"store_store_id">>).
 -define(TARGET_STORE_SCHEMA_ID, <<"target_store_id">>).
@@ -954,7 +930,7 @@ job_failure_expect_task3_ended(TestcaseId, AtmTask3ExecutionId, ExpState) ->
             check_iterated_items(TestcaseId, AtmLaneRunSelector, AtmMockCallCtx),
             check_exception_store_content(TestcaseId, AtmLaneRunSelector, AtmMockCallCtx),
 
-            ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_failed(  %% TODO isRetriable == true
+            ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_failed(
                 AtmLaneRunSelector, ExpState0
             ),
             {true, case IsLastExpLaneRun of
