@@ -42,7 +42,8 @@
     init_archive_recall_test/1,
     get_archive_recall_details_test/1,
     get_archive_recall_progress_test/1,
-    get_datasets_summary_for_archive_test/1
+    get_datasets_summary_for_archive_test/1,
+    get_archivisation_audit_log/1
 ]).
 
 %% httpd callback
@@ -60,7 +61,8 @@ groups() -> [
         init_archive_recall_test,
         get_archive_recall_details_test,
         get_archive_recall_progress_test,
-        get_datasets_summary_for_archive_test
+        get_datasets_summary_for_archive_test,
+        get_archivisation_audit_log
     ]}
 ].
 
@@ -1137,6 +1139,83 @@ gs_recall_get_aspect(progress) -> archive_recall_progress.
 -spec rest_recall_get_path_suffix(details | progress) -> binary().
 rest_recall_get_path_suffix(details) -> <<"/recall/details">>;
 rest_recall_get_path_suffix(progress) -> <<"/recall/progress">>.
+
+
+%%%===================================================================
+%%% Get archivisation audit log test
+%%%===================================================================
+
+get_archivisation_audit_log(_Config) ->
+    #object{dataset = #dataset_object{
+        archives = [#archive_object{id = ArchiveId}]
+    }} = onenv_file_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{dataset = #dataset_spec{
+        archives = 1
+    }}, krakow),
+    
+    ?assert(onenv_api_test_runner:run_tests([
+        #suite_spec{
+            target_nodes = [krakow], % audit log is only available on provider performing archivisation
+            client_spec = #client_spec{
+                correct = [
+                    user2,  % space owner - doesn't need any perms
+                    user3,  % files owner
+                    user4   % space member - should succeed as getting audit log doesn't require any space perms
+                ],
+                unauthorized = [nobody],
+                forbidden_not_in_space = [user1]
+            },
+            randomly_select_scenarios = true,
+            scenario_templates = [
+                % fixme rest
+                #scenario_template{
+                    name = <<"Get archisation audit log using GS API">>,
+                    type = gs,
+                    prepare_args_fun = build_get_archivisation_audit_log_prepare_gs_args_fun(ArchiveId),
+                    validate_result_fun = validate_archivisation_audit_log_fun_gs()
+                }
+            ],
+            data_spec = #data_spec{
+                optional = [<<"timestamp">>, <<"offset">>],
+                correct_values = #{
+                    <<"timestamp">> => [7967656156000], % some time in the future
+                    <<"offset">> => [0]
+                },
+                bad_values = [
+                    {<<"timestamp">>, <<"aaa">>, ?ERROR_BAD_VALUE_INTEGER(<<"timestamp">>)},
+                    {<<"timestamp">>, -8, ?ERROR_BAD_VALUE_TOO_LOW(<<"timestamp">>, 0)},
+                    {<<"offset">>, <<"aaa">>, ?ERROR_BAD_VALUE_INTEGER(<<"offset">>)}
+                ]
+            }
+        }
+    ])).
+
+%% @private
+-spec build_get_archivisation_audit_log_prepare_gs_args_fun(dataset:id()) ->
+    onenv_api_test_runner:prepare_args_fun().
+build_get_archivisation_audit_log_prepare_gs_args_fun(ArchiveId) ->
+    fun(#api_test_ctx{data = Data0}) ->
+        {GriId, Data1} = api_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
+        
+        #gs_args{
+            operation = get,
+            gri = #gri{type = op_archive, id = GriId, aspect = audit_log, scope = private},
+            data = Data1
+        }
+    end.
+
+
+%% @private
+-spec validate_archivisation_audit_log_fun_gs() ->
+    ok | no_return().
+validate_archivisation_audit_log_fun_gs() ->
+    fun(_, RespBody) ->
+        
+        ?assertMatch({ok, #{
+            <<"isLast">> := true,
+            <<"logEntries">> := [_ | _]
+        }}, RespBody),
+        ok
+    end.
 
 
 %%%===================================================================

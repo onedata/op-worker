@@ -26,6 +26,8 @@
 %%%===================================================================
 
 -spec translate_value(gri:gri(), Value :: term()) -> gs_protocol:data().
+translate_value(#gri{aspect = audit_log}, ListedEntries) ->
+    ListedEntries;
 translate_value(#gri{aspect = recall}, RootId) ->
     #{<<"rootFileId">> => RootId}.
 

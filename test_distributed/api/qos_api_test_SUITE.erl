@@ -332,6 +332,7 @@ get_qos_entry_audit_log(Config) ->
             setup_fun = fun() ->
                 api_test_memory:set(MemRef, qos_entry_id, QosEntryId)
             end,
+            % fixme add test for gui
             scenario_templates = [
                 #scenario_template{
                     name = <<"Get QoS audit log using rest endpoint">>,

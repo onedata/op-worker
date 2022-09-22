@@ -47,6 +47,7 @@ resolve_handler(create, delete, private) -> ?MODULE;
 resolve_handler(create, recall, private) -> ?MODULE;
 
 resolve_handler(get, instance, private) -> ?MODULE;
+resolve_handler(get, audit_log, private) -> ?MODULE;
 
 resolve_handler(update, instance, private) -> ?MODULE;
 
@@ -94,6 +95,8 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = recall}}) -> #{
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
     undefined;
+data_spec(#op_req{operation = get, gri = #gri{aspect = audit_log}}) ->
+    audit_log_browse_opts:json_data_spec();
 
 data_spec(#op_req{operation = update, gri = #gri{aspect = instance}}) -> #{
     optional => #{
@@ -123,6 +126,7 @@ fetch_entity(#op_req{operation = Op, auth = ?USER(_UserId), gri = #gri{
     (Op =:= create andalso As =:= cancel);
     (Op =:= create andalso As =:= recall);
     (Op =:= get andalso As =:= instance);
+    (Op =:= get andalso As =:= audit_log);
     (Op =:= update andalso As =:= instance)
 ->
     case archive:get(ArchiveId) of
@@ -152,6 +156,7 @@ authorize(#op_req{operation = Op, auth = Auth, gri = #gri{aspect = As}}, Archive
     (Op =:= create andalso As =:= delete);
     (Op =:= create andalso As =:= recall);
     (Op =:= get andalso As =:= instance);
+    (Op =:= get andalso As =:= audit_log);
     (Op =:= update andalso As =:= instance)
 ->
     {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
@@ -174,6 +179,7 @@ validate(#op_req{operation = Op, gri = #gri{aspect = As}}, ArchiveDoc) when
     (Op =:= create andalso As =:= delete);
     (Op =:= create andalso As =:= recall);
     (Op =:= get andalso As =:= instance);
+    (Op =:= get andalso As =:=  audit_log);
     (Op =:= update andalso As =:= instance)
 ->
     {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
@@ -223,7 +229,16 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{id = ArchiveId, aspect = rec
 %%--------------------------------------------------------------------
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
 get(#op_req{auth = Auth, gri = #gri{id = ArchiveId, aspect = instance}}, _) ->
-    {ok, mi_archives:get_info(Auth#auth.session_id, ArchiveId)}.
+    {ok, mi_archives:get_info(Auth#auth.session_id, ArchiveId)};
+
+get(#op_req{gri = #gri{id = ArchiveIdId, aspect = audit_log}, data = Data}, _) ->
+    BrowseOpts = audit_log_browse_opts:from_json(Data),
+    case archivisation_audit_log:browse(ArchiveIdId, BrowseOpts) of
+        {ok, BrowseResult} ->
+            {ok, value, BrowseResult};
+        {error, _} = Error ->
+            Error
+    end.
 
 
 %%--------------------------------------------------------------------
