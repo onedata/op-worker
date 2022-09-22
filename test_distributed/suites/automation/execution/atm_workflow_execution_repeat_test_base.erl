@@ -22,7 +22,8 @@
     repeat_finished_atm_lane_run_execution/0,
     rerun_failed_iterated_atm_lane_run_execution/0,
     retry_failed_iterated_atm_lane_run_execution/0,
-    repeat_failed_while_preparing_atm_lane_run_execution/0
+    repeat_failed_while_preparing_atm_lane_run_execution/0,
+    repeat_failed_not_iterated_atm_lane_run_execution/0
 ]).
 
 
@@ -420,6 +421,67 @@ repeat_failed_while_preparing_atm_lane_run_execution() ->
     }).
 
 
+% Retrying failed due to reason other than job failures (e.g. uncorrelated task result processing)
+% lane run should fail while rerunning it should succeed
+repeat_failed_not_iterated_atm_lane_run_execution() ->
+    Lane2Run2TestSpec = 'build failed due to task uncorrelated result processing atm_lane_run_execution_test_spec'(
+        {2, 2}
+    ),
+    atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
+        provider = ?PROVIDER_SELECTOR,
+        user = ?USER_SELECTOR,
+        space = ?SPACE_SELECTOR,
+        workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
+            gen_time_series_measurements(), file_pipe
+        ),
+        workflow_schema_revision_num = 1,
+        incarnations = [
+            #atm_workflow_execution_incarnation_test_spec{
+                incarnation_num = 1,
+                lane_runs = [
+                    #atm_lane_run_execution_test_spec{
+                        selector = {1, 1}
+                    },
+                    'build failed due to task uncorrelated result processing atm_lane_run_execution_test_spec'({2, 1})
+                ],
+                handle_workflow_execution_stopped = #atm_step_mock_spec{
+                    after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                        ExpState1 = expect_lane_runs_repeatable([{1, 1}, {2, 1}], true, false, ExpState0),
+                        {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_failed(ExpState1)}
+                    end
+                },
+                after_hook = fun(AtmMockCallCtx) ->
+                    assert_not_retriable({1, 1}, AtmMockCallCtx),
+                    ?assertEqual(ok, atm_workflow_execution_test_runner:repeat_workflow_execution(
+                        rerun, {2, 1}, AtmMockCallCtx
+                    ))
+                end
+            },
+            #atm_workflow_execution_incarnation_test_spec{
+                incarnation_num = 2,
+                lane_runs = [Lane2Run2TestSpec#atm_lane_run_execution_test_spec{
+                    prepare_lane = #atm_step_mock_spec{
+                        before_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                            ExpState1 = atm_workflow_execution_exp_state_builder:set_current_lane_run(2, 2, ExpState0),
+                            ExpState2 = expect_lane_runs_repeatable([{1, 1}, {2, 1}], false, false, ExpState1),
+                            ExpState3 = atm_workflow_execution_exp_state_builder:expect_lane_run_manual_repeat_scheduled(
+                                rerun, {2, 1}, 2, ExpState2
+                            ),
+                            {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_scheduled(ExpState3)}
+                        end
+                    }
+                }],
+                handle_workflow_execution_stopped = #atm_step_mock_spec{
+                    after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                        ExpState1 = expect_lane_runs_repeatable([{1, 1}, {2, 1}, {2, 2}], true, false, ExpState0),
+                        {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_failed(ExpState1)}
+                    end
+                }
+            }
+        ]
+    }).
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -530,6 +592,43 @@ build_failed_atm_lane_run_execution_test_spec(AtmLaneRunSelector, IsLastExpLaneR
                     )
             end}
         end
+    }.
+
+
+%% @private
+'build failed due to task uncorrelated result processing atm_lane_run_execution_test_spec'(AtmLaneRunSelector) ->
+    #atm_lane_run_execution_test_spec{
+        selector = AtmLaneRunSelector,
+        process_streamed_task_data = #atm_step_mock_spec{
+            after_step_exp_state_diff = fun(#atm_mock_call_ctx{
+                workflow_execution_exp_state = ExpState,
+                call_args = [
+                    _AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, _AtmTaskExecutionId,
+                    {chunk, #{?ECHO_ARG_NAME := UncorrelatedResults}}
+                ]
+            }) ->
+                case does_contain_size_measurement(UncorrelatedResults) of
+                    true ->
+                        {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(
+                            atm_workflow_execution_exp_state_builder:expect_lane_run_stopping(
+                                AtmLaneRunSelector, atm_workflow_execution_exp_state_builder:expect_all_tasks_stopping(
+                                    AtmLaneRunSelector, ExpState
+                                )
+                            )
+                        )};
+                    false ->
+                        false
+                end
+            end
+        },
+        handle_task_execution_stopped = #atm_step_mock_spec{
+            after_step_exp_state_diff = fun lane2_task1_expect_task_execution_failed/1
+        },
+        handle_lane_execution_stopped = #atm_step_mock_spec{
+            after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState}) ->
+                {true, atm_workflow_execution_exp_state_builder:expect_lane_run_failed(AtmLaneRunSelector, ExpState)}
+            end
+        }
     }.
 
 

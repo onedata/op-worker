@@ -231,6 +231,8 @@ handle_stopping(AtmLaneRunSelector, AtmWorkflowExecutionId, Reason) ->
             ->
                 {ok, Run#atm_lane_execution_run{status = ?STOPPING_STATUS, stopping_reason = Reason}};
 
+            %% TODO VFS-9765 allow stopping resuming workflow
+
             (#atm_lane_execution_run{status = StoppedStatus}) ->
                 ?ERROR_ATM_INVALID_STATUS_TRANSITION(StoppedStatus, ?STOPPING_STATUS)
         end, AtmWorkflowExecution)

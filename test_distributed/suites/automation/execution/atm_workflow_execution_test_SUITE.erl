@@ -99,7 +99,8 @@
     repeat_finished_atm_lane_run_execution/1,
     rerun_failed_iterated_atm_lane_run_execution/1,
     retry_failed_iterated_atm_lane_run_execution/1,
-    repeat_failed_while_preparing_atm_lane_run_execution/1
+    repeat_failed_while_preparing_atm_lane_run_execution/1,
+    repeat_failed_not_iterated_atm_lane_run_execution/1
 ]).
 
 groups() -> [
@@ -185,7 +186,8 @@ groups() -> [
         repeat_finished_atm_lane_run_execution,
         rerun_failed_iterated_atm_lane_run_execution,
         retry_failed_iterated_atm_lane_run_execution,
-        repeat_failed_while_preparing_atm_lane_run_execution
+        repeat_failed_while_preparing_atm_lane_run_execution,
+        repeat_failed_not_iterated_atm_lane_run_execution
     ]}
 ].
 
@@ -465,6 +467,10 @@ retry_failed_iterated_atm_lane_run_execution(_Config) ->
 
 
 repeat_failed_while_preparing_atm_lane_run_execution(_Config) ->
+    ?RUN_REPEAT_TEST().
+
+
+repeat_failed_not_iterated_atm_lane_run_execution(_Config) ->
     ?RUN_REPEAT_TEST().
 
 
