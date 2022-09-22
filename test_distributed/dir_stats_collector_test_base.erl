@@ -556,8 +556,8 @@ verify_dir_on_provider_creating_files(Config, NodesSelector, Guid) ->
     [Worker | _] = ?config(NodesSelector, Config),
     SessId = lfm_test_utils:get_user1_session_id(Config, Worker),
 
-    {ok, Children, _} = ?assertMatch({ok, _, _},
-        lfm_proxy:get_children_attrs(Worker, SessId, ?FILE_REF(Guid), #{offset => 0, limit => 100000, tune_for_large_continuous_listing => false})),
+    {ok, Children, _} = ?assertMatch({ok, _, _}, lfm_proxy:get_children_attrs(Worker, SessId,
+        ?FILE_REF(Guid), #{offset => 0, limit => 100000, tune_for_large_continuous_listing => false})),
 
     StatsForEmptyDir = #{
         ?REG_FILE_AND_LINK_COUNT => 0,
@@ -580,13 +580,21 @@ verify_dir_on_provider_creating_files(Config, NodesSelector, Guid) ->
 
     check_dir_stats(Config, NodesSelector, Guid, maps:remove(update_time, Expectations)),
 
-    {ok, #file_attr{mtime = MTime, ctime = CTime}} = ?assertMatch({ok, _},
-        lfm_proxy:stat(Worker, SessId, ?FILE_REF(Guid))),
-    CollectorTime = get_dir_update_time_stat(Worker, Guid),
-    ?assert(CollectorTime >= max(MTime, CTime)),
-    % Time for directory should not be earlier than time for any child
-    ?assert(CollectorTime >= maps:get(update_time, Expectations, 0)),
-    update_expectations_map(Expectations, #{update_time => CollectorTime}).
+    VerifyTimes = fun() ->
+        try
+            {ok, #file_attr{mtime = MTime, ctime = CTime}} = lfm_proxy:stat(Worker, SessId, ?FILE_REF(Guid)),
+            CollectorTime = get_dir_update_time_stat(Worker, Guid),
+            true = CollectorTime >= max(MTime, CTime),
+            % Time for directory should not be earlier than time for any child
+            true = CollectorTime >= maps:get(update_time, Expectations, 0),
+            {ok, CollectorTime}
+        catch
+            Error:Reason:Stacktrace ->
+                {Error, Reason, Stacktrace}
+        end
+    end,
+    {ok, UpdateTime} = ?assertMatch({ok, _}, VerifyTimes(), ?ATTEMPTS),
+    update_expectations_map(Expectations, #{update_time => UpdateTime}).
 
 
 %%%===================================================================
@@ -749,7 +757,7 @@ check_update_times(Config, NodesSelectors, FileConstructorsToCheck) ->
         end, NodesSelectors),
 
         % Check if times for all selectors ale equal
-        ?assert(lists:all(fun(NodeUpdateTimes) -> NodeUpdateTimes =:= UpdateTimesOnFirstProvider end, AllUpdateTimes)),
+        true = lists:all(fun(NodeUpdateTimes) -> NodeUpdateTimes =:= UpdateTimesOnFirstProvider end, AllUpdateTimes),
 
         lists:foldl(fun
             ({MetadataTime, not_a_dir}, {MaxMetadataTime, LastCollectorTime}) ->
@@ -757,8 +765,8 @@ check_update_times(Config, NodesSelectors, FileConstructorsToCheck) ->
             ({MetadataTime, CollectorTime}, {MaxMetadataTime, LastCollectorTime}) ->
                 % Time for directory should not be earlier than time for any child
                 NewMaxMetadataTime = max(MaxMetadataTime, MetadataTime),
-                ?assert(CollectorTime >= NewMaxMetadataTime),
-                ?assert(CollectorTime >= LastCollectorTime),
+                true = CollectorTime >= NewMaxMetadataTime,
+                true = CollectorTime >= LastCollectorTime,
                 {NewMaxMetadataTime, CollectorTime}
         end, {0, 0}, UpdateTimesOnFirstProvider),
 
@@ -878,7 +886,7 @@ update_expectations_map(Map, DiffMap) ->
 
 
 get_dir_update_time_stat(Worker, Guid) ->
-    {ok, CollectorTime} = ?assertMatch({ok, _}, rpc:call(Worker, dir_update_time_stats, get_update_time, [Guid])),
+    {ok, CollectorTime} = rpc:call(Worker, dir_update_time_stats, get_update_time, [Guid]),
     CollectorTime.
 
 
