@@ -20,7 +20,8 @@
 -export([
     repeat_not_ended_atm_workflow_execution/0,
     repeat_finished_atm_lane_run_execution/0,
-    rerun_failed_iterated_atm_lane_run_execution/0
+    rerun_failed_iterated_atm_lane_run_execution/0,
+    retry_failed_iterated_atm_lane_run_execution/0
 ]).
 
 
@@ -44,8 +45,11 @@
 -define(MISSING_TS_NAME_GENERATOR, <<"missing_generator">>).
 
 -define(ATM_WORKFLOW_SCHEMA_DRAFT(__ITERATED_CONTENT, __RELAY_METHOD),
+    ?ATM_WORKFLOW_SCHEMA_DRAFT(?FUNCTION_NAME, __ITERATED_CONTENT, __RELAY_METHOD)
+).
+-define(ATM_WORKFLOW_SCHEMA_DRAFT(__TESTCASE, __ITERATED_CONTENT, __RELAY_METHOD),
     #atm_workflow_schema_dump_draft{
-        name = str_utils:to_binary(?FUNCTION_NAME),
+        name = str_utils:to_binary(__TESTCASE),
         revision_num = 1,
         revision = #atm_workflow_schema_revision_draft{
             stores = [
@@ -254,12 +258,20 @@ repeat_finished_atm_lane_run_execution() ->
 
 
 rerun_failed_iterated_atm_lane_run_execution() ->
+    repeat_failed_iterated_atm_lane_run_execution_test_base(?FUNCTION_NAME, rerun).
+
+
+retry_failed_iterated_atm_lane_run_execution() ->
+    repeat_failed_iterated_atm_lane_run_execution_test_base(?FUNCTION_NAME, retry).
+
+
+repeat_failed_iterated_atm_lane_run_execution_test_base(TestCase, RepeatType) ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         provider = ?PROVIDER_SELECTOR,
         user = ?USER_SELECTOR,
         space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
-            gen_time_series_measurements(), return_value
+            TestCase, gen_time_series_measurements(), return_value
         ),
         workflow_schema_revision_num = 1,
         incarnations = [
@@ -279,7 +291,7 @@ rerun_failed_iterated_atm_lane_run_execution() ->
                 },
                 after_hook = fun(AtmMockCallCtx) ->
                     ?assertEqual(ok, atm_workflow_execution_test_runner:repeat_workflow_execution(
-                        rerun, {2, 1}, AtmMockCallCtx
+                        RepeatType, {2, 1}, AtmMockCallCtx
                     ))
                 end
             },
@@ -294,7 +306,7 @@ rerun_failed_iterated_atm_lane_run_execution() ->
                                 ExpState1 = atm_workflow_execution_exp_state_builder:set_current_lane_run(2, 3, ExpState0),
                                 ExpState2 = expect_lane_runs_repeatable([{1, 1}, {2, 1}, {2, 2}], false, false, ExpState1),
                                 ExpState3 = atm_workflow_execution_exp_state_builder:expect_lane_run_manual_repeat_scheduled(
-                                    rerun, {2, 1}, 3, ExpState2
+                                    RepeatType, {2, 1}, 3, ExpState2
                                 ),
                                 {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_scheduled(ExpState3)}
                             end
