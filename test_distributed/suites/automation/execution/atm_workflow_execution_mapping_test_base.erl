@@ -79,13 +79,14 @@
 }).
 
 -define(RESULT_MAPPING_WORKFLOW_SCHEMA_DRAFT(
+    __TESTCASE,
     __STORE_SCHEMA_DRAFTS,
     __ITERATED_ITEM_DATA_SPEC,
     __TARGET_STORE_SCHEMA_ID,
     __TARGET_STORE_CONTENT_UPDATE_OPTIONS
 ),
     #atm_workflow_schema_dump_draft{
-        name = <<"echo">>,
+        name = str_utils:to_binary(__TESTCASE),
         revision_num = 1,
         revision = #atm_workflow_schema_revision_draft{
             stores = __STORE_SCHEMA_DRAFTS,
@@ -113,6 +114,7 @@
 ).
 
 -record(map_results_to_global_store_test_spec, {
+    testcase :: atom(),
     iterated_item_spec :: atm_data_spec:record(),
     iterated_items :: [automation:item()],
     target_store_type :: automation:store_type(),
@@ -122,6 +124,7 @@
 -type map_results_to_global_store_test_spec() :: #map_results_to_global_store_test_spec{}.
 
 -record(map_results_to_store_test_spec, {
+    testcase :: atom(),
     global_store_schema_drafts :: [atm_test_schema_factory:atm_store_schema_draft()],
     iterated_item_spec :: atm_data_spec:record(),
     iterated_items :: [automation:item()],
@@ -144,6 +147,7 @@ map_results_to_audit_log_store() ->
     IteratedItemDataSpec = #atm_data_spec{type = atm_integer_type},
 
     map_results_to_global_store_test_base(#map_results_to_global_store_test_spec{
+        testcase = ?FUNCTION_NAME,
         iterated_item_spec = IteratedItemDataSpec,
         iterated_items = lists:seq(20, 200, 4),
         target_store_type = audit_log,
@@ -156,6 +160,7 @@ map_results_to_list_store() ->
     IteratedItemDataSpec = #atm_data_spec{type = atm_string_type},
 
     map_results_to_global_store_test_base(#map_results_to_global_store_test_spec{
+        testcase = ?FUNCTION_NAME,
         iterated_item_spec = IteratedItemDataSpec,
         iterated_items = lists_utils:generate(fun() -> ?RAND_STR() end, ?RAND_INT(30, 50)),
         target_store_type = list,
@@ -174,6 +179,7 @@ map_results_to_range_store() ->
     end, ?RAND_INT(30, 50)),
 
     map_results_to_global_store_test_base(#map_results_to_global_store_test_spec{
+        testcase = ?FUNCTION_NAME,
         iterated_item_spec = #atm_data_spec{type = atm_range_type},
         iterated_items = IteratedItems,
         target_store_type = range,
@@ -186,6 +192,7 @@ map_results_to_single_value_store() ->
     IteratedItemDataSpec = #atm_data_spec{type = atm_object_type},
 
     map_results_to_global_store_test_base(#map_results_to_global_store_test_spec{
+        testcase = ?FUNCTION_NAME,
         iterated_item_spec = IteratedItemDataSpec,
         iterated_items = gen_random_object_list(),
         target_store_type = single_value,
@@ -196,6 +203,7 @@ map_results_to_single_value_store() ->
 
 map_results_to_time_series_store() ->
     map_results_to_global_store_test_base(#map_results_to_global_store_test_spec{
+        testcase = ?FUNCTION_NAME,
         iterated_item_spec = ?ANY_MEASUREMENT_DATA_SPEC,
         iterated_items = gen_random_time_series_measurements(),
         target_store_type = time_series,
@@ -217,6 +225,7 @@ map_results_to_tree_forest_store() ->
     end, FileObjects),
 
     map_results_to_global_store_test_base(#map_results_to_global_store_test_spec{
+        testcase = ?FUNCTION_NAME,
         iterated_item_spec = IteratedItemDataSpec,
         iterated_items = IteratedItems,
         target_store_type = tree_forest,
@@ -229,6 +238,7 @@ map_results_to_tree_forest_store() ->
 -spec map_results_to_global_store_test_base(map_results_to_global_store_test_spec()) ->
     ok.
 map_results_to_global_store_test_base(#map_results_to_global_store_test_spec{
+    testcase = Testcase,
     iterated_item_spec = IteratedItemDataSpec,
     iterated_items = IteratedItems,
     target_store_type = TargetStoreType,
@@ -245,6 +255,7 @@ map_results_to_global_store_test_base(#map_results_to_global_store_test_spec{
     },
 
     map_results_to_store_test_base(#map_results_to_store_test_spec{
+        testcase = Testcase,
         global_store_schema_drafts = [IteratedStoreSchemaDraft, TargetStoreSchemaDraft],
         iterated_item_spec = IteratedItemDataSpec,
         iterated_items = IteratedItems,
@@ -260,6 +271,7 @@ map_results_to_workflow_audit_log_store() ->
     IteratedStoreSchemaDraft = ?ITERATED_LIST_STORE_SCHEMA_DRAFT(IteratedItemDataSpec, IteratedItems),
 
     map_results_to_store_test_base(#map_results_to_store_test_spec{
+        testcase = ?FUNCTION_NAME,
         global_store_schema_drafts = [IteratedStoreSchemaDraft],
         iterated_item_spec = IteratedItemDataSpec,
         iterated_items = IteratedItems,
@@ -275,6 +287,7 @@ map_results_to_task_audit_log_store() ->
     IteratedStoreSchemaDraft = ?ITERATED_LIST_STORE_SCHEMA_DRAFT(IteratedItemDataSpec, IteratedItems),
 
     map_results_to_store_test_base(#map_results_to_store_test_spec{
+        testcase = ?FUNCTION_NAME,
         global_store_schema_drafts = [IteratedStoreSchemaDraft],
         iterated_item_spec = IteratedItemDataSpec,
         iterated_items = IteratedItems,
@@ -290,6 +303,7 @@ map_results_to_task_time_series_store() ->
     IteratedStoreSchemaDraft = ?ITERATED_LIST_STORE_SCHEMA_DRAFT(IteratedItemDataSpec, IteratedItems),
 
     map_results_to_store_test_base(#map_results_to_store_test_spec{
+        testcase = ?FUNCTION_NAME,
         global_store_schema_drafts = [IteratedStoreSchemaDraft],
         iterated_item_spec = IteratedItemDataSpec,
         iterated_items = IteratedItems,
@@ -304,6 +318,7 @@ map_results_to_task_time_series_store() ->
 %% @private
 -spec map_results_to_store_test_base(map_results_to_store_test_spec()) -> ok.
 map_results_to_store_test_base(#map_results_to_store_test_spec{
+    testcase = Testcase,
     global_store_schema_drafts = StoreSchemaDrafts,
     iterated_item_spec = IteratedItemDataSpec,
     iterated_items = IteratedItems,
@@ -316,6 +331,7 @@ map_results_to_store_test_base(#map_results_to_store_test_spec{
         user = ?USER_SELECTOR,
         space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?RESULT_MAPPING_WORKFLOW_SCHEMA_DRAFT(
+            Testcase,
             StoreSchemaDrafts,
             IteratedItemDataSpec,
             TargetStoreSchemaId,

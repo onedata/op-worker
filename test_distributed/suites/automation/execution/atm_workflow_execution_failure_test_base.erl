@@ -69,12 +69,13 @@
 }).
 
 -define(FAILING_WORKFLOW_SCHEMA_DRAFT(
+    __TESTCASE,
     __ITERATED_CONTENT,
     __FAILING_TASK_SCHEMA_DRAFT,
     __FAILING_LAMBDA_DRAFT
 ),
     #atm_workflow_schema_dump_draft{
-        name = <<"doomed">>,
+        name = str_utils:to_binary(__TESTCASE),
         revision_num = 1,
         revision = #atm_workflow_schema_revision_draft{
             stores = [
@@ -140,6 +141,7 @@
 
 -define(JOB_FAILING_DUE_TO_ARG_MAPPING_WORKFLOW_SCHEMA_DRAFT(__FAILING_ARG_TASK_MAPPER),
     ?FAILING_WORKFLOW_SCHEMA_DRAFT(
+        ?FUNCTION_NAME,
         gen_time_series_measurements(),
         ?FAILING_TASK_SCHEMA_DRAFT(
             [__FAILING_ARG_TASK_MAPPER],
@@ -151,6 +153,7 @@
 
 -define(JOB_FAILING_DUE_TO_RESULT_MAPPING_WORKFLOW_SCHEMA_DRAFT(__FAILING_DOCKER_IMAGE_ID),
     ?FAILING_WORKFLOW_SCHEMA_DRAFT(
+        ?FUNCTION_NAME,
         gen_time_series_measurements(),
         ?FAILING_TASK_SCHEMA_DRAFT(
             [?ITERATED_ITEM_ARG_MAPPER(?ECHO_ARG_NAME)],
@@ -233,6 +236,7 @@ fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error() ->
         user = ?USER_SELECTOR,
         space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?FAILING_WORKFLOW_SCHEMA_DRAFT(
+            ?FUNCTION_NAME,
             gen_time_series_measurements(),
             ?FAILING_MEASUREMENT_STORE_MAPPING_TASK_SCHEMA_DRAFT,
             ?ECHO_LAMBDA_DRAFT(?ANY_MEASUREMENT_DATA_SPEC, file_pipe)
@@ -466,6 +470,7 @@ fail_atm_workflow_execution_due_to_job_result_store_mapping_error() ->
     job_failure_atm_workflow_execution_test_base(result_error, #fail_atm_workflow_execution_test_spec{
         testcase_id = ?FUNCTION_NAME,
         atm_workflow_schema_draft = ?FAILING_WORKFLOW_SCHEMA_DRAFT(
+            ?FUNCTION_NAME,
             gen_time_series_measurements(),
             ?FAILING_MEASUREMENT_STORE_MAPPING_TASK_SCHEMA_DRAFT,
             ?ECHO_LAMBDA_DRAFT(?ANY_MEASUREMENT_DATA_SPEC)

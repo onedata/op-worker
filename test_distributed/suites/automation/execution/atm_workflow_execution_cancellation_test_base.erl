@@ -38,7 +38,7 @@
 }).
 
 -define(ECHO_ATM_WORKFLOW_SCHEMA_DRAFT(__ITEMS_COUNT), #atm_workflow_schema_dump_draft{
-    name = <<"echo">>,
+    name = str_utils:to_binary(?FUNCTION_NAME),
     revision_num = 1,
     revision = #atm_workflow_schema_revision_draft{
         stores = [
