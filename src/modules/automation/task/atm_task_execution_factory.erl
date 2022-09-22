@@ -227,7 +227,7 @@ create_time_series_store(CreationCtx = #creation_ctx{
         AtmTaskSchemaId,
         lists:nth(AtmParallelBoxIndex, OriginAtmParallelBoxExecutions)
     ),
-    {ok, #document{key = AtmTaskTSStoreId}} = atm_store_api:copy(OriginAtmTaskTSStoreId),
+    #document{key = AtmTaskTSStoreId} = atm_store_api:copy(OriginAtmTaskTSStoreId, false),
 
     CreationCtx#creation_ctx{execution_components = ExecutionComponents#execution_components{
         time_series_store_id = AtmTaskTSStoreId
