@@ -141,6 +141,7 @@ build_value(Item, AtmRunJobBatchCtx, #atm_task_argument_value_builder{
     type = object,
     recipe = ObjectSpec
 }) ->
+    %% TODO VFS-7660 add path to errors when constructing nested arguments
     maps:map(fun(_Key, NestedBuilder = #atm_task_argument_value_builder{}) ->
         build_value(Item, AtmRunJobBatchCtx, NestedBuilder)
     end, ObjectSpec);
