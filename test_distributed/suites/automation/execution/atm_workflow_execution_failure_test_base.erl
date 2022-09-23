@@ -22,6 +22,7 @@
     fail_atm_workflow_execution_due_to_incorrect_const_arg_type_error/0,
     fail_atm_workflow_execution_due_to_incorrect_iterated_item_query_arg_error/0,
     fail_atm_workflow_execution_due_to_empty_single_value_store_arg_error/0,
+    fail_atm_workflow_execution_due_to_job_timeout/0,
     fail_atm_workflow_execution_due_to_job_result_store_mapping_error/0,
     fail_atm_workflow_execution_due_to_job_missing_required_results_error/0,
     fail_atm_workflow_execution_due_to_incorrect_result_type_error/0,
@@ -461,6 +462,28 @@ fail_atm_workflow_execution_due_to_empty_single_value_store_arg_error() ->
                         ?SINGLE_VALUE_STORE_SCHEMA_ID
                     )
                 ))
+            }
+        end
+    }).
+
+
+fail_atm_workflow_execution_due_to_job_timeout() ->
+    job_failure_atm_workflow_execution_test_base(result_error, #fail_atm_workflow_execution_test_spec{
+        testcase_id = ?FUNCTION_NAME,
+        atm_workflow_schema_draft = ?FAILING_WORKFLOW_SCHEMA_DRAFT(
+            ?FUNCTION_NAME,
+            gen_time_series_measurements(),
+            ?FAILING_TASK_SCHEMA_DRAFT(
+                [?ITERATED_ITEM_ARG_MAPPER(?ECHO_ARG_NAME)],
+                [?TARGET_STORE_RESULT_MAPPER(?CORRECT_ATM_TIME_SERIES_DISPATCH_RULES)]
+            ),
+            ?FAILING_ECHO_MEASUREMENTS_LAMBDA_DRAFT(?ECHO_WITH_SLEEP_DOCKER_IMAGE_ID)
+        ),
+        build_task1_audit_log_exp_content_fun = fun(ItemBatch) ->
+            #{
+                <<"description">> => <<"Failed to process batch of items.">>,
+                <<"itemBatch">> => ItemBatch,
+                <<"reason">> => errors:to_json(?ERROR_TIMEOUT)
             }
         end
     }).

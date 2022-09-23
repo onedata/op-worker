@@ -91,6 +91,7 @@
     fail_atm_workflow_execution_due_to_incorrect_const_arg_type_error/1,
     fail_atm_workflow_execution_due_to_incorrect_iterated_item_query_arg_error/1,
     fail_atm_workflow_execution_due_to_empty_single_value_store_arg_error/1,
+    fail_atm_workflow_execution_due_to_job_timeout/1,
     fail_atm_workflow_execution_due_to_job_result_store_mapping_error/1,
     fail_atm_workflow_execution_due_to_job_missing_required_results_error/1,
     fail_atm_workflow_execution_due_to_incorrect_result_type_error/1,
@@ -177,9 +178,12 @@ groups() -> [
     ]},
     {failure_tests, [], [
         fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error,
+
         fail_atm_workflow_execution_due_to_incorrect_const_arg_type_error,
         fail_atm_workflow_execution_due_to_incorrect_iterated_item_query_arg_error,
         fail_atm_workflow_execution_due_to_empty_single_value_store_arg_error,
+
+        fail_atm_workflow_execution_due_to_job_timeout,
         fail_atm_workflow_execution_due_to_job_result_store_mapping_error,
         fail_atm_workflow_execution_due_to_job_missing_required_results_error,
         fail_atm_workflow_execution_due_to_incorrect_result_type_error,
@@ -440,6 +444,10 @@ fail_atm_workflow_execution_due_to_empty_single_value_store_arg_error(_Config) -
     ?RUN_FAILURE_TEST().
 
 
+fail_atm_workflow_execution_due_to_job_timeout(_Config) ->
+    ?RUN_FAILURE_TEST().
+
+
 fail_atm_workflow_execution_due_to_job_result_store_mapping_error(_Config) ->
     ?RUN_FAILURE_TEST().
 
@@ -505,7 +513,9 @@ init_per_suite(Config) ->
             envs = [{op_worker, op_worker, [
                 {fuse_session_grace_period_seconds, 24 * 60 * 60},
                 {atm_workflow_engine_slots_count, 100000},
-                {atm_workflow_engine_async_calls_limit, 100000}
+                {atm_workflow_engine_async_calls_limit, 100000},
+                {atm_workflow_job_timeout_sec, 1},
+                {atm_workflow_job_timeout_check_period_sec, 1}
             ]}],
             posthook = fun(NewConfig) ->
                 atm_test_inventory:init_per_suite(?PROVIDER_SELECTOR, user1),
