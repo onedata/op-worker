@@ -87,6 +87,8 @@
     map_results_to_task_audit_log_store/1,
     map_results_to_task_time_series_store/1,
 
+    map_results_to_multiple_stores/1,
+
     fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error/1,
     fail_atm_workflow_execution_due_to_incorrect_const_arg_type_error/1,
     fail_atm_workflow_execution_due_to_incorrect_iterated_item_query_arg_error/1,
@@ -174,7 +176,9 @@ groups() -> [
 
         map_results_to_workflow_audit_log_store,
         map_results_to_task_audit_log_store,
-        map_results_to_task_time_series_store
+        map_results_to_task_time_series_store,
+
+        map_results_to_multiple_stores
     ]},
     {failure_tests, [], [
         fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error,
@@ -425,6 +429,10 @@ map_results_to_task_audit_log_store(_Config) ->
 
 
 map_results_to_task_time_series_store(_Config) ->
+    ?RUN_MAPPING_TEST().
+
+
+map_results_to_multiple_stores(_Config) ->
     ?RUN_MAPPING_TEST().
 
 
