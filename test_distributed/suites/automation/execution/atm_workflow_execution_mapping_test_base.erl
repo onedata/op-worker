@@ -21,6 +21,8 @@
 -include("modules/automation/atm_execution.hrl").
 
 -export([
+    map_arguments/0,
+
     map_results_to_audit_log_store/0,
     map_results_to_list_store/0,
     map_results_to_range_store/0,
@@ -30,7 +32,9 @@
 
     map_results_to_workflow_audit_log_store/0,
     map_results_to_task_audit_log_store/0,
-    map_results_to_task_time_series_store/0
+    map_results_to_task_time_series_store/0,
+
+    map_results_to_multiple_stores/0
 ]).
 
 
@@ -39,8 +43,11 @@
 
 
 -define(ITERATED_STORE_SCHEMA_ID, <<"iterated_st">>).
--define(ITERATED_LIST_STORE_SCHEMA_DRAFT(__ITEM_DATA_SPEC, __INITIAL_CONTENT), #atm_store_schema_draft{
-    id = ?ITERATED_STORE_SCHEMA_ID,
+-define(ITERATED_LIST_STORE_SCHEMA_DRAFT(__ITEM_DATA_SPEC, __INITIAL_CONTENT),
+    ?LIST_STORE_SCHEMA_DRAFT(?ITERATED_STORE_SCHEMA_ID, __ITEM_DATA_SPEC, __INITIAL_CONTENT)
+).
+-define(LIST_STORE_SCHEMA_DRAFT(__ID, __ITEM_DATA_SPEC, __INITIAL_CONTENT), #atm_store_schema_draft{
+    id = __ID,
     type = list,
     config = #atm_list_store_config{item_data_spec = __ITEM_DATA_SPEC},
     requires_initial_content = false,
@@ -141,6 +148,103 @@
 %%%===================================================================
 %%% Tests
 %%%===================================================================
+
+
+map_arguments() ->
+    ConstValue = <<"makaron">>,
+
+    IteratedItems = lists:map(fun(Num) -> #{<<"num">> => Num} end, lists:seq(1, 40)),
+
+    SingleValueStoreSchemaId = <<"sv">>,
+    SingleValueStoreContent = <<"ursus">>,
+    SingleValueStoreSchemaDraft = #atm_store_schema_draft{
+        id = SingleValueStoreSchemaId,
+        type = single_value,
+        config = #atm_single_value_store_config{item_data_spec = #atm_data_spec{type = atm_string_type}},
+        requires_initial_content = false,
+        default_initial_content = SingleValueStoreContent
+    },
+
+    TargetStoreSchemaId = <<"target_st">>,
+    ExpTargetStoreFinalContent = lists:sort(lists:map(fun(#{<<"num">> := Num}) ->
+        #{
+            <<"const">> => ConstValue,
+            <<"iterated">> => Num,
+            <<"sv_content">> => SingleValueStoreContent
+        }
+    end, IteratedItems)),
+
+    atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
+        provider = ?PROVIDER_SELECTOR,
+        user = ?USER_SELECTOR,
+        space = ?SPACE_SELECTOR,
+        workflow_schema_dump_or_draft = #atm_workflow_schema_dump_draft{
+            name = str_utils:to_binary(?FUNCTION_NAME),
+            revision_num = 1,
+            revision = #atm_workflow_schema_revision_draft{
+                stores = [
+                    ?LIST_STORE_SCHEMA_DRAFT(?ITERATED_STORE_SCHEMA_ID, ?ATM_OBJECT_DATA_SPEC, IteratedItems),
+                    SingleValueStoreSchemaDraft,
+                    ?LIST_STORE_SCHEMA_DRAFT(TargetStoreSchemaId, ?ATM_OBJECT_DATA_SPEC, [])
+                ],
+                lanes = [#atm_lane_schema_draft{
+                    parallel_boxes = [#atm_parallel_box_schema_draft{tasks = [
+                        #atm_task_schema_draft{
+                            lambda_id = ?ECHO_LAMBDA_ID,
+                            lambda_revision_number = ?ECHO_LAMBDA_REVISION_NUM,
+                            argument_mappings = [#atm_task_schema_argument_mapper{
+                                argument_name = ?ECHO_ARG_NAME,
+                                value_builder = #atm_task_argument_value_builder{
+                                    type = object,
+                                    recipe = #{
+                                        <<"const">> => #atm_task_argument_value_builder{
+                                            type = const,
+                                            recipe = ConstValue
+                                        },
+                                        <<"iterated">> => #atm_task_argument_value_builder{
+                                            type = iterated_item,
+                                            recipe = [<<"num">>]
+                                        },
+                                        <<"sv_content">> => #atm_task_argument_value_builder{
+                                            type = single_value_store_content,
+                                            recipe = SingleValueStoreSchemaId
+                                        }
+                                    }
+                                }
+                            }],
+                            result_mappings = [#atm_task_schema_result_mapper{
+                                result_name = ?ECHO_ARG_NAME,
+                                store_schema_id = TargetStoreSchemaId,
+                                store_content_update_options = #atm_list_store_content_update_options{function = append}
+                            }]
+                        }
+                    ]}],
+                    store_iterator_spec = #atm_store_iterator_spec_draft{store_schema_id = ?ITERATED_STORE_SCHEMA_ID}
+                }]
+            },
+            supplementary_lambdas = #{?ECHO_LAMBDA_ID => #{
+                ?ECHO_LAMBDA_REVISION_NUM => ?ECHO_LAMBDA_DRAFT(?ATM_OBJECT_DATA_SPEC)
+            }}
+        },
+        workflow_schema_revision_num = 1,
+        incarnations = [#atm_workflow_execution_incarnation_test_spec{
+            incarnation_num = 1,
+            lane_runs = [#atm_lane_run_execution_test_spec{selector = {1, 1}}],
+            handle_workflow_execution_stopped = #atm_step_mock_spec{
+                after_step_exp_state_diff = fun(AtmMockCallCtx = #atm_mock_call_ctx{
+                    workflow_execution_exp_state = ExpState0
+                }) ->
+                    assert_exp_target_store_content(
+                        list,
+                        ExpTargetStoreFinalContent,
+                        atm_workflow_execution_test_runner:browse_store(TargetStoreSchemaId, undefined, AtmMockCallCtx)
+                    ),
+                    ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_rerunable({1, 1}, ExpState0),
+                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_finished(ExpState1)}
+                end
+            }
+        }]
+    }).
 
 
 map_results_to_audit_log_store() ->
@@ -353,6 +457,99 @@ map_results_to_store_test_base(#map_results_to_store_test_spec{
                                 TargetStoreSchemaId, AtmTaskExecutionId, AtmMockCallCtx
                             )
                         )
+                    end
+                }
+            }],
+            handle_workflow_execution_stopped = #atm_step_mock_spec{
+                after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                    ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_rerunable({1, 1}, ExpState0),
+                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_finished(ExpState1)}
+                end
+            }
+        }]
+    }).
+
+
+map_results_to_multiple_stores() ->
+    IteratedItems = gen_random_time_series_measurements(),
+
+    TargetListStoreSchemaId = <<"target_list_store">>,
+    TargetSingleValueStoreSchemaId = <<"target_single_value_store">>,
+
+    atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
+        provider = ?PROVIDER_SELECTOR,
+        user = ?USER_SELECTOR,
+        space = ?SPACE_SELECTOR,
+        workflow_schema_dump_or_draft = #atm_workflow_schema_dump_draft{
+            name = str_utils:to_binary(?FUNCTION_NAME),
+            revision_num = 1,
+            revision = #atm_workflow_schema_revision_draft{
+                stores = [
+                    ?LIST_STORE_SCHEMA_DRAFT(?ITERATED_STORE_SCHEMA_ID, ?ANY_MEASUREMENT_DATA_SPEC, IteratedItems),
+
+                    ?LIST_STORE_SCHEMA_DRAFT(TargetListStoreSchemaId, ?ANY_MEASUREMENT_DATA_SPEC, []),
+                    #atm_store_schema_draft{
+                        id = TargetSingleValueStoreSchemaId,
+                        type = single_value,
+                        config = #atm_single_value_store_config{item_data_spec = ?ANY_MEASUREMENT_DATA_SPEC}
+                    }
+                ],
+                lanes = [#atm_lane_schema_draft{
+                    parallel_boxes = [#atm_parallel_box_schema_draft{tasks = [
+                        #atm_task_schema_draft{
+                            lambda_id = ?ECHO_LAMBDA_ID,
+                            lambda_revision_number = ?ECHO_LAMBDA_REVISION_NUM,
+                            time_series_store_config = ?ATM_TIME_SERIES_STORE_CONFIG,
+                            argument_mappings = [?ITERATED_ITEM_ARG_MAPPER(?ECHO_ARG_NAME)],
+                            result_mappings = [
+                                #atm_task_schema_result_mapper{
+                                    result_name = ?ECHO_ARG_NAME,
+                                    store_schema_id = TargetListStoreSchemaId,
+                                    store_content_update_options = #atm_list_store_content_update_options{
+                                        function = append
+                                    }
+                                },
+                                #atm_task_schema_result_mapper{
+                                    result_name = ?ECHO_ARG_NAME,
+                                    store_schema_id = TargetSingleValueStoreSchemaId,
+                                    store_content_update_options = #atm_single_value_store_content_update_options{}
+                                },
+                                #atm_task_schema_result_mapper{
+                                    result_name = ?ECHO_ARG_NAME,
+                                    store_schema_id = ?CURRENT_TASK_TIME_SERIES_STORE_SCHEMA_ID,
+                                    store_content_update_options = #atm_time_series_store_content_update_options{
+                                        dispatch_rules = ?ATM_TIME_SERIES_DISPATCH_RULES
+                                    }
+                                }
+                            ]
+                        }
+                    ]}],
+                    store_iterator_spec = #atm_store_iterator_spec_draft{store_schema_id = ?ITERATED_STORE_SCHEMA_ID}
+                }]
+            },
+            supplementary_lambdas = #{?ECHO_LAMBDA_ID => #{
+                ?ECHO_LAMBDA_REVISION_NUM => ?ECHO_LAMBDA_DRAFT(?ATM_OBJECT_DATA_SPEC)
+            }}
+        },
+        workflow_schema_revision_num = 1,
+        incarnations = [#atm_workflow_execution_incarnation_test_spec{
+            incarnation_num = 1,
+            lane_runs = [#atm_lane_run_execution_test_spec{
+                selector = {1, 1},
+                handle_task_execution_stopped = #atm_step_mock_spec{
+                    after_step_hook = fun(AtmMockCallCtx = #atm_mock_call_ctx{
+                        call_args = [_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId]
+                    }) ->
+                        lists:foreach(fun({TargetStoreType, TargetStoreSchemaId}) ->
+                            TargetStoreContent = atm_workflow_execution_test_runner:browse_store(
+                                TargetStoreSchemaId, AtmTaskExecutionId, AtmMockCallCtx
+                            ),
+                            assert_exp_target_store_content(TargetStoreType, IteratedItems, TargetStoreContent)
+                        end, [
+                            {list, TargetListStoreSchemaId},
+                            {single_value, TargetSingleValueStoreSchemaId},
+                            {time_series, ?CURRENT_TASK_TIME_SERIES_STORE_SCHEMA_ID}
+                        ])
                     end
                 }
             }],

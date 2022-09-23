@@ -137,6 +137,15 @@ db_decode(#{
     atm_task_argument_value_builder:record()
 ) ->
     json_utils:json_term() | no_return().
+build_value(Item, AtmRunJobBatchCtx, #atm_task_argument_value_builder{
+    type = object,
+    recipe = ObjectSpec
+}) ->
+    %% TODO VFS-7660 add path to errors when constructing nested arguments
+    maps:map(fun(_Key, NestedBuilder = #atm_task_argument_value_builder{}) ->
+        build_value(Item, AtmRunJobBatchCtx, NestedBuilder)
+    end, ObjectSpec);
+
 build_value(_Item, _AtmRunJobBatchCtx, #atm_task_argument_value_builder{
     type = const,
     recipe = ConstValue
@@ -191,5 +200,5 @@ build_value(_Item, _AtmRunJobBatchCtx, #atm_task_argument_value_builder{
 }) ->
     % TODO VFS-7660 handle rest of atm_task_argument_value_builder:type()
     throw(?ERROR_ATM_TASK_ARG_MAPPER_UNSUPPORTED_VALUE_BUILDER(ValueBuilderType, [
-        const, iterated_item, single_value_store_content
+        const, iterated_item, object, single_value_store_content
     ])).

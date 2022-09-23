@@ -51,6 +51,8 @@
     first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_3/1,
     first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_4/1,
 
+    lane_preparing_in_advance_interruption_changes_to_failure_upon_first_lane_run_finish/1,
+
     cancel_scheduled_atm_workflow_execution/1,
     cancel_enqueued_atm_workflow_execution/1,
     cancel_active_atm_workflow_execution/1,
@@ -74,6 +76,8 @@
     iterate_over_tree_forest_store_with_all_items_inaccessible/1,
     iterate_over_empty_tree_forest_store/1,
 
+    map_arguments/1,
+
     map_results_to_audit_log_store/1,
     map_results_to_list_store/1,
     map_results_to_range_store/1,
@@ -85,10 +89,13 @@
     map_results_to_task_audit_log_store/1,
     map_results_to_task_time_series_store/1,
 
+    map_results_to_multiple_stores/1,
+
     fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error/1,
     fail_atm_workflow_execution_due_to_incorrect_const_arg_type_error/1,
     fail_atm_workflow_execution_due_to_incorrect_iterated_item_query_arg_error/1,
     fail_atm_workflow_execution_due_to_empty_single_value_store_arg_error/1,
+    fail_atm_workflow_execution_due_to_job_timeout/1,
     fail_atm_workflow_execution_due_to_job_result_store_mapping_error/1,
     fail_atm_workflow_execution_due_to_job_missing_required_results_error/1,
     fail_atm_workflow_execution_due_to_incorrect_result_type_error/1,
@@ -132,7 +139,9 @@ groups() -> [
         first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_1,
         first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_2,
         first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_3,
-        first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_4
+        first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_4,
+
+        lane_preparing_in_advance_interruption_changes_to_failure_upon_first_lane_run_finish
     ]},
     {cancellation_tests, [], [
         cancel_scheduled_atm_workflow_execution,
@@ -160,6 +169,8 @@ groups() -> [
         iterate_over_empty_tree_forest_store
     ]},
     {mapping_tests, [], [
+        map_arguments,
+
         map_results_to_audit_log_store,
         map_results_to_list_store,
         map_results_to_range_store,
@@ -169,13 +180,18 @@ groups() -> [
 
         map_results_to_workflow_audit_log_store,
         map_results_to_task_audit_log_store,
-        map_results_to_task_time_series_store
+        map_results_to_task_time_series_store,
+
+        map_results_to_multiple_stores
     ]},
     {failure_tests, [], [
         fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error,
+
         fail_atm_workflow_execution_due_to_incorrect_const_arg_type_error,
         fail_atm_workflow_execution_due_to_incorrect_iterated_item_query_arg_error,
         fail_atm_workflow_execution_due_to_empty_single_value_store_arg_error,
+
+        fail_atm_workflow_execution_due_to_job_timeout,
         fail_atm_workflow_execution_due_to_job_result_store_mapping_error,
         fail_atm_workflow_execution_due_to_job_missing_required_results_error,
         fail_atm_workflow_execution_due_to_incorrect_result_type_error,
@@ -308,6 +324,10 @@ first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_4(_Config
     ?RUN_PREPARATION_TEST().
 
 
+lane_preparing_in_advance_interruption_changes_to_failure_upon_first_lane_run_finish(_Config) ->
+    ?RUN_PREPARATION_TEST().
+
+
 cancel_scheduled_atm_workflow_execution(_Config) ->
     ?RUN_CANCELLATION_TEST().
 
@@ -380,6 +400,10 @@ iterate_over_empty_tree_forest_store(_Config) ->
     ?RUN_ITERATION_TEST().
 
 
+map_arguments(_Config) ->
+    ?RUN_MAPPING_TEST().
+
+
 map_results_to_audit_log_store(_Config) ->
     ?RUN_MAPPING_TEST().
 
@@ -416,6 +440,10 @@ map_results_to_task_time_series_store(_Config) ->
     ?RUN_MAPPING_TEST().
 
 
+map_results_to_multiple_stores(_Config) ->
+    ?RUN_MAPPING_TEST().
+
+
 fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error(_Config) ->
     ?RUN_FAILURE_TEST().
 
@@ -429,6 +457,10 @@ fail_atm_workflow_execution_due_to_incorrect_iterated_item_query_arg_error(_Conf
 
 
 fail_atm_workflow_execution_due_to_empty_single_value_store_arg_error(_Config) ->
+    ?RUN_FAILURE_TEST().
+
+
+fail_atm_workflow_execution_due_to_job_timeout(_Config) ->
     ?RUN_FAILURE_TEST().
 
 
@@ -497,7 +529,9 @@ init_per_suite(Config) ->
             envs = [{op_worker, op_worker, [
                 {fuse_session_grace_period_seconds, 24 * 60 * 60},
                 {atm_workflow_engine_slots_count, 100000},
-                {atm_workflow_engine_async_calls_limit, 100000}
+                {atm_workflow_engine_async_calls_limit, 100000},
+                {atm_workflow_job_timeout_sec, 1},
+                {atm_workflow_job_timeout_check_period_sec, 1}
             ]}],
             posthook = fun(NewConfig) ->
                 atm_test_inventory:init_per_suite(?PROVIDER_SELECTOR, user1),
