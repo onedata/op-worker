@@ -49,6 +49,7 @@
     expect_lane_run_removed/2,
 
     get_task_selector/2,
+    get_task_id/2,
     get_task_stats/2,
     get_task_status/2,
     expect_task_items_in_processing_increased/3,
@@ -72,6 +73,7 @@
     expect_workflow_execution_failed/1,
     expect_workflow_execution_cancelled/1,
     expect_workflow_execution_paused/1,
+    expect_workflow_execution_interrupted/1,
 
     assert_matches_with_backend/2
 ]).
@@ -484,6 +486,18 @@ get_task_selector(AtmTaskExecutionId, #exp_workflow_execution_state_ctx{
     {AtmLaneRunSelector, AtmParallelBoxSchemaId, AtmTaskSchemaId}.
 
 
+-spec get_task_id(task_selector(), ctx()) -> atm_task_execution:id().
+get_task_id({AtmLaneRunSelector, AtmParallelBoxSchemaId, AtmTaskSchemaId}, ExpStateCtx) ->
+    {ok, {_, #{<<"parallelBoxes">> := ExpParallelBoxExecutionStates}}} = locate_lane_run(
+        AtmLaneRunSelector, ExpStateCtx
+    ),
+    {ok, #{<<"taskRegistry">> := AtmTaskRegistry}} = lists_utils:find(
+        fun(#{<<"schemaId">> := SchemaId}) -> SchemaId == AtmParallelBoxSchemaId end,
+        ExpParallelBoxExecutionStates
+    ),
+    maps:get(AtmTaskSchemaId, AtmTaskRegistry).
+
+
 -spec get_task_stats(atm_task_execution:id(), ctx()) -> {integer(), integer(), integer()}.
 get_task_stats(AtmTaskExecutionId, #exp_workflow_execution_state_ctx{
     exp_task_execution_state_ctx_registry = ExpAtmTaskExecutionsRegistry
@@ -767,6 +781,15 @@ expect_workflow_execution_cancelled(ExpStateCtx) ->
 expect_workflow_execution_paused(ExpStateCtx) ->
     ExpAtmWorkflowExecutionStateDiff = #{
         <<"status">> => <<"paused">>,
+        <<"suspendTime">> => build_timestamp_field_validator(?NOW())
+    },
+    update_workflow_execution_exp_state(ExpAtmWorkflowExecutionStateDiff, ExpStateCtx).
+
+
+-spec expect_workflow_execution_interrupted(ctx()) -> ctx().
+expect_workflow_execution_interrupted(ExpStateCtx) ->
+    ExpAtmWorkflowExecutionStateDiff = #{
+        <<"status">> => <<"interrupted">>,
         <<"suspendTime">> => build_timestamp_field_validator(?NOW())
     },
     update_workflow_execution_exp_state(ExpAtmWorkflowExecutionStateDiff, ExpStateCtx).
