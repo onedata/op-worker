@@ -565,7 +565,6 @@ single_execution_test_base(Config, #test_config{
 
     #{execution_history := ExecutionHistory} = ExtendedHistoryStats = 
         workflow_scheduling_test_common:get_task_execution_history(Config),
-%%    ct:print("aaaa ~p", [ExecutionHistory]),
     workflow_scheduling_test_common:verify_execution_history_stats(
         ExtendedHistoryStats, TaskType, VerifyStatsOptions),
     workflow_scheduling_test_common:verify_execution_history(

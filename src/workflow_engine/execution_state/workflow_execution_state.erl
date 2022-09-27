@@ -392,14 +392,14 @@ report_execution_status_update(ExecutionId, JobIdentifier, UpdateType, Ans) ->
     workflow_handler:prepare_lane_result()
 ) -> ok.
 report_lane_execution_prepared(Handler, ExecutionId, _LaneId, ?PREPARE_CURRENT, prepare, {ok, LaneSpec}) ->
-    case finish_lane_preparation(Handler, ExecutionId, LaneSpec) of
+    case finish_lane_preparation(Handler, ExecutionId, LaneSpec, false) of
         {ok, #current_lane{index = LaneIndex, id = LaneId}, IteratorToSave, NextLaneId} ->
             workflow_iterator_snapshot:save(ExecutionId, LaneIndex, LaneId, 0, IteratorToSave, NextLaneId);
         ?WF_ERROR_LANE_ALREADY_PREPARED -> ok;
         ?WF_ERROR_PREPARATION_FAILED -> ok
     end;
 report_lane_execution_prepared(Handler, ExecutionId, _LaneId, ?PREPARE_CURRENT, {resume_from, Iterator}, {ok, LaneSpec}) ->
-    case finish_lane_preparation(Handler, ExecutionId, LaneSpec#{iterator => Iterator}) of
+    case finish_lane_preparation(Handler, ExecutionId, LaneSpec#{iterator => Iterator}, true) of
         {ok, #current_lane{index = LaneIndex, id = LaneId}, IteratorToSave, NextLaneId} ->
             workflow_iterator_snapshot:save(ExecutionId, LaneIndex, LaneId, 0, IteratorToSave, NextLaneId);
         ?WF_ERROR_LANE_ALREADY_PREPARED -> ok;
@@ -553,7 +553,8 @@ save(Doc) ->
 -spec finish_lane_preparation(
     workflow_handler:handler(),
     workflow_engine:execution_id(),
-    workflow_engine:lane_spec()
+    workflow_engine:lane_spec(),
+    boolean()
 ) ->
     {ok, current_lane(), iterator:iterator(), workflow_engine:lane_id() | undefined} |
     ?WF_ERROR_PREPARATION_FAILED | ?WF_ERROR_LANE_ALREADY_PREPARED.
@@ -562,7 +563,8 @@ finish_lane_preparation(Handler, ExecutionId,
         parallel_boxes := Boxes,
         iterator := Iterator,
         execution_context := LaneExecutionContext
-    } = LaneSpec
+    } = LaneSpec,
+    IsLaneResumed
 ) ->
     case Boxes of
         [] ->
@@ -583,8 +585,13 @@ finish_lane_preparation(Handler, ExecutionId,
             NextIterationStep = get_next_iterator(Handler, LaneExecutionContext, Iterator, ExecutionId),
             FailureCountToCancel = maps:get(failure_count_to_cancel, LaneSpec, undefined),
             case update(ExecutionId, fun(State) ->
-                finish_lane_preparation_internal(reset_state_fields_for_next_lane(State),
-                    BoxesMap, LaneExecutionContext, NextIterationStep, FailureCountToCancel)
+                State2 = case IsLaneResumed of
+                    true ->  State;
+                    false -> reset_state_fields_for_next_lane(State)
+                end,
+                finish_lane_preparation_internal(
+                    State2, BoxesMap, LaneExecutionContext, NextIterationStep, FailureCountToCancel
+                )
             end) of
                 {ok, #document{value = #workflow_execution_state{
                     execution_status = ?EXECUTION_CANCELLED(_), current_lane = CurrentLane,
@@ -681,6 +688,9 @@ prepare_next_job_using_iterator(ExecutionId, ItemIndex, CurrentIterationStep, La
     case update(ExecutionId, fun(State) ->
         handle_next_iteration_step(State, LaneIndex, ItemIndex, NextIterationStep, ParallelBoxToStart)
     end) of
+        {ok, #document{value = #workflow_execution_state{update_report = ?WF_ERROR_RACE_CONDITION}}} ->
+            maybe_delete_prefetched_iteration_step(NextIterationStep),
+            prepare_next_job_for_current_lane(ExecutionId);
         {ok, Doc} ->
             handle_state_update_after_job_preparation(ExecutionId, Doc);
         ?WF_ERROR_LANE_CHANGED ->
@@ -906,6 +916,7 @@ get_next_iterator(Handler, Context, Iterator, ExecutionId) ->
                 "Unexpected error getting next iterator", [],
                 Error, Reason, Stacktrace
             ),
+            % TODO - czy jest sens to osobno handloac skoro i tak dostaiemy wyjatek?
             ?WF_ERROR_ITERATION_FAILED
     end.
 
@@ -1028,6 +1039,8 @@ execute_exception_handler(#document{key = ExecutionId, value = #workflow_executi
 
 
 -spec reset_state_fields_for_next_lane(state()) -> state().
+reset_state_fields_for_next_lane(#workflow_execution_state{execution_status = ?RESUMING_FROM_ITERATOR(_)} = State) ->
+    State;
 reset_state_fields_for_next_lane(State) ->
     State#workflow_execution_state{
         iteration_state = workflow_iteration_state:init(),
@@ -1095,9 +1108,7 @@ finish_lane_preparation_internal(
     {ok, State#workflow_execution_state{
         execution_status = Status#execution_cancelled{execution_step = lane_execution},
         current_lane = CurrentLane#current_lane{execution_context = LaneExecutionContext, parallel_box_specs = BoxesMap},
-        iteration_state = workflow_iteration_state:init(),
         prefetched_iteration_step = PrefetchedIterationStep,
-        jobs = workflow_jobs:init(),
         tasks_data_registry = workflow_tasks_data_registry:empty()
     }};
 finish_lane_preparation_internal(
@@ -1121,9 +1132,7 @@ finish_lane_preparation_internal(
     {ok, State2#workflow_execution_state{
         execution_status = ?EXECUTING,
         current_lane = UpdatedCurrentLane,
-        iteration_state = workflow_iteration_state:init(),
         prefetched_iteration_step = PrefetchedIterationStep,
-        jobs = workflow_jobs:init(),
         tasks_data_registry = workflow_tasks_data_registry:empty()
     }};
 finish_lane_preparation_internal(_State, _BoxesMap, _LaneExecutionContext,
@@ -1217,6 +1226,12 @@ handle_next_iteration_step(State = #workflow_execution_state{
                 IterationState, PrevItemIndex, PrefetchedItemId) of
                 ?WF_ERROR_RACE_CONDITION = Error ->
                     Error;
+                {already_processed_item, _, NewIterationState} ->
+                    {ok, State#workflow_execution_state{
+                        update_report = ?WF_ERROR_RACE_CONDITION,
+                        iteration_state = NewIterationState,
+                        prefetched_iteration_step = NextIterationStep
+                    }};
                 {new_item, NewItemIndex, NewIterationState} ->
                     {NewJobs, ToStart} = workflow_jobs:populate_with_jobs_for_item(
                         Jobs, NewItemIndex, ParallelBoxToStart, BoxSpecs, IncarnationTag),
@@ -1339,20 +1354,32 @@ prepare_next_waiting_job(State = #workflow_execution_state{
         {ok, UpdatedState} ->
             {ok, UpdatedState};
         ?ERROR_NOT_FOUND ->
-            case workflow_jobs:prepare_next_waiting_job(Jobs) of
-                {ok, JobIdentifier, NewJobs} ->
-                    {TaskId, TaskSpec} = workflow_jobs:get_task_details(JobIdentifier, BoxSpecs),
-                    % Use old `Jobs` as subject is no longer present in `NewJobs` (job is not waiting anymore)
-                    SubjectId = workflow_jobs:get_subject_id(JobIdentifier, Jobs, IterationState),
-                    {ok, State#workflow_execution_state{
-                        update_report = #job_prepared_report{job_identifier = JobIdentifier,
-                            task_id = TaskId, task_spec = TaskSpec, subject_id = SubjectId},
-                        jobs = NewJobs
-                    }};
-                Error ->
+            case workflow_iteration_state:can_process_items(IterationState) of
+                true ->
+                    case workflow_jobs:prepare_next_waiting_job(Jobs) of
+                        {ok, JobIdentifier, NewJobs} ->
+                            {TaskId, TaskSpec} = workflow_jobs:get_task_details(JobIdentifier, BoxSpecs),
+                            % Use old `Jobs` as subject is no longer present in `NewJobs` (job is not waiting anymore)
+                            SubjectId = workflow_jobs:get_subject_id(JobIdentifier, Jobs, IterationState),
+                            {ok, State#workflow_execution_state{
+                                update_report = #job_prepared_report{job_identifier = JobIdentifier,
+                                    task_id = TaskId, task_spec = TaskSpec, subject_id = SubjectId},
+                                jobs = NewJobs
+                            }};
+                        Error ->
+                            case workflow_iteration_state:get_last_registered_item_index(IterationState) of
+                                undefined -> % iteration has finished
+                                    handle_no_waiting_items_error(State, Error);
+                                ItemIndex ->
+                                    ?WF_ERROR_NO_CACHED_ITEMS(LaneIndex, ItemIndex, PrefetchedIterationStep, Handler, Context)
+                            end
+                    end;
+                false ->
                     case workflow_iteration_state:get_last_registered_item_index(IterationState) of
                         undefined -> % iteration has finished
-                            handle_no_waiting_items_error(State, Error);
+                            % Iteration should not be finished when workflow_iteration_state:can_process_items returns false
+                            ?warning("Unexpected workflow_iteration_state"),
+                            handle_no_waiting_items_error(State, ?ERROR_NOT_FOUND);
                         ItemIndex ->
                             ?WF_ERROR_NO_CACHED_ITEMS(LaneIndex, ItemIndex, PrefetchedIterationStep, Handler, Context)
                     end
@@ -1446,20 +1473,20 @@ prepare_next_waiting_job(State = #workflow_execution_state{
             ?WF_ERROR_NO_WAITING_ITEMS;
         false ->
             ResultIds = workflow_jobs:get_all_async_cached_result_ids(Jobs),
-            TaskDataIds = workflow_tasks_data_registry:get_all_task_data_ids(TaskDataRegistry),
-            ItemIds = workflow_iteration_state:get_all_item_ids(IterationState),
+            {TaskDataIds, UpdatedTaskDataRegistry} = workflow_tasks_data_registry:finalize(TaskDataRegistry),
+            {ItemIds, UpdatedIterationState} = workflow_iteration_state:finalize(IterationState),
             case NextLaneStatus of
                 ?PREPARING ->
                     {ok, State#workflow_execution_state{
-                        iteration_state = workflow_iteration_state:init(),
-                        tasks_data_registry = workflow_tasks_data_registry:empty(),
+                        iteration_state = UpdatedIterationState,
+                        tasks_data_registry = UpdatedTaskDataRegistry,
                         execution_status = Status#execution_cancelled{execution_step = waiting_on_next_lane_prepare},
                         update_report = ?EXECUTION_CANCELLED_REPORT(ItemIds, [], ResultIds, TaskDataIds)
                     }};
                 _ ->
                     {ok, State#workflow_execution_state{
-                        iteration_state = workflow_iteration_state:init(),
-                        tasks_data_registry = workflow_tasks_data_registry:empty(),
+                        iteration_state = UpdatedIterationState,
+                        tasks_data_registry = UpdatedTaskDataRegistry,
                         update_report = ?EXECUTION_CANCELLED_REPORT(ItemIds, [], ResultIds, TaskDataIds)
                     }}
             end
@@ -1534,17 +1561,17 @@ verify_streams_when_execution_is_cancelled(State = #workflow_execution_state{
         ?ERROR_NOT_FOUND ->
             case are_all_data_streams_finalized(State) of
                 true when NextLaneStatus =:= ?PREPARING ->
-                    ItemIds = workflow_iteration_state:get_all_item_ids(IterationState),
+                    {ItemIds, UpdatedIterationState} = workflow_iteration_state:finalize(IterationState),
                     {ok, State#workflow_execution_state{
-                        iteration_state = workflow_iteration_state:init(),
+                        iteration_state = UpdatedIterationState,
                         execution_status = ?WAITING_FOR_NEXT_LANE_PREPARATION_END(false),
                         update_report = ?EXECUTION_CANCELLED_REPORT(ItemIds, TaskIdsToNotify),
                         pending_callbacks = [?CALLBACKS_ON_CANCEL_SELECTOR | PendingCallbacks]
                     }};
                 true ->
-                    ItemIds = workflow_iteration_state:get_all_item_ids(IterationState),
+                    {ItemIds, UpdatedIterationState} = workflow_iteration_state:finalize(IterationState),
                     {ok, State#workflow_execution_state{
-                        iteration_state = workflow_iteration_state:init(),
+                        iteration_state = UpdatedIterationState,
                         update_report = ?EXECUTION_CANCELLED_REPORT(ItemIds, TaskIdsToNotify),
                         pending_callbacks = [?CALLBACKS_ON_CANCEL_SELECTOR | PendingCallbacks]}};
                 false ->

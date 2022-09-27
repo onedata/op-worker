@@ -329,7 +329,8 @@ get_dump_struct() ->
             {item_index, integer},
             {parallel_box_index, integer},
             {task_index, integer},
-            {processing_type, atom}
+            {processing_type, atom},
+            {incarnation_tag, string}
         ]}],
         [integer]
     }.

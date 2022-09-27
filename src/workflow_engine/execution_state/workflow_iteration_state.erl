@@ -18,8 +18,8 @@
 -include("workflow_engine.hrl").
 
 %% API
--export([init/0, handle_iteration_finished/1, get_last_registered_item_index/1, register_item/3,
-    handle_item_processed/3, get_all_item_ids/1, get_item_id/2,
+-export([init/0, can_process_items/1, handle_iteration_finished/1, get_last_registered_item_index/1, register_item/3,
+    handle_item_processed/3, finalize/1, get_item_id/2,
     dump/1, from_dump/1, get_dump_struct/0]).
 %% Test API
 -export([is_finished_and_cleaned/1]).
@@ -33,7 +33,8 @@
                                                                                     % finished and all items are
                                                                                     % registered
     first_not_finished_item_index = 1 :: workflow_execution_state:index(), % TODO VFS-7787 - maybe init as undefined?
-    items_finished_ahead = gb_trees:empty() :: items_finished_ahead()
+    items_finished_ahead = gb_trees:empty() :: items_finished_ahead(),
+    phase = executing :: executing | {resuming, workflow_execution_state:index()} | finalzing
 }).
 
 -type state() :: #iteration_state{}.
@@ -48,7 +49,6 @@
 -type dump() :: {
     [workflow_execution_state:index()],
     workflow_execution_state:index(),
-    workflow_execution_state:index(),
     [{{workflow_execution_state:index(), workflow_execution_state:index()}, workflow_execution_state:index()}]
 }.
 
@@ -62,6 +62,11 @@
 init() ->
     #iteration_state{}.
 
+-spec can_process_items(state()) -> boolean().
+can_process_items(#iteration_state{phase = Phase}) ->
+    Phase =:= executing.
+
+
 -spec handle_iteration_finished(state()) -> state().
 handle_iteration_finished(Progress) ->
     Progress#iteration_state{last_registered_item_index = undefined}.
@@ -71,12 +76,28 @@ get_last_registered_item_index(#iteration_state{last_registered_item_index = Ind
     Index.
 
 -spec register_item(state(), workflow_execution_state:index(), workflow_cached_item:id()) ->
-    {new_item | restarted_item, workflow_execution_state:index(), state()} | ?WF_ERROR_RACE_CONDITION.
+    {new_item | restarted_item | already_processed_item, workflow_execution_state:index(), state()} |
+    ?WF_ERROR_RACE_CONDITION.
+register_item(
+    Progress = #iteration_state{
+        phase = executing,
+        last_registered_item_index = LastItemIndex,
+        pending_items = Pending
+    },
+    LastItemIndex,
+    ItemId
+) ->
+    NewItemIndex = LastItemIndex + 1,
+    {new_item, NewItemIndex, Progress#iteration_state{
+        pending_items = Pending#{NewItemIndex => ItemId},
+        last_registered_item_index = NewItemIndex
+    }};
 register_item(
     Progress = #iteration_state{
         last_registered_item_index = LastItemIndex,
         pending_items = Pending,
-        items_finished_ahead = FinishedAhead
+        items_finished_ahead = FinishedAhead,
+        phase = {resuming, ResumeIndex} = Phase
     },
     LastItemIndex,
     ItemId
@@ -92,30 +113,27 @@ register_item(
         _ -> false
     end,
 
+    Progress2 = Progress#iteration_state{
+        last_registered_item_index = NewItemIndex,
+        phase = case ResumeIndex of
+            NewItemIndex -> executing;
+            _ -> Phase
+        end
+    },
+
     case {IsRestartedItem, IsFinishedItem} of
         {false, false} ->
-            {new_item, NewItemIndex, Progress#iteration_state{
-                pending_items = Pending#{NewItemIndex => ItemId},
-                last_registered_item_index = NewItemIndex
-            }};
+            {already_processed_item, NewItemIndex, Progress2};
         {true, false} ->
-            {restarted_item, NewItemIndex, Progress#iteration_state{
+            {restarted_item, NewItemIndex, Progress2#iteration_state{
                 pending_items = Pending#{NewItemIndex => ItemId}
             }};
         {false, {true, TreeKey}} ->
-            {restarted_item, NewItemIndex, Progress#iteration_state{
+            {restarted_item, NewItemIndex, Progress2#iteration_state{
                 items_finished_ahead = gb_trees:enter(TreeKey, {NewItemIndex, ItemId}, FinishedAhead)
             }}
     end;
-register_item(_, _, _) ->
-    ?WF_ERROR_RACE_CONDITION;
-register_item(
-    #iteration_state{
-        last_registered_item_index = LastItemIndex
-    },
-    ItemIndex,
-    _ItemId
-) when ItemIndex < LastItemIndex ->
+register_item(_, LastItemIndex, _) ->
     ?WF_ERROR_RACE_CONDITION.
 
 -spec handle_item_processed(state(), workflow_execution_state:index(), boolean()) ->
@@ -247,13 +265,19 @@ handle_item_processed(
         items_finished_ahead = FinalFinishedAhead
     }, FinishedItemId, undefined, IdsToDelete}.
 
--spec get_all_item_ids(state()) -> [workflow_cached_item:id()].
-get_all_item_ids(#iteration_state{pending_items = Pending, items_finished_ahead = FinishedAhead}) ->
+-spec finalize(state()) -> {[workflow_cached_item:id()], state()}.
+finalize(#iteration_state{phase = finalzing} = State) ->
+    {[], State};
+finalize(#iteration_state{pending_items = Pending, items_finished_ahead = FinishedAhead} = State) ->
     FinishedAheadItemIds = lists:filtermap(fun
         (undefined) -> false;
         ({_, Id}) -> {true, Id}
     end, gb_trees:values(FinishedAhead)),
-    maps:values(Pending) ++ FinishedAheadItemIds.
+
+    {
+        maps:values(Pending) ++ FinishedAheadItemIds,
+        State#iteration_state{phase = finalzing} % TODO - a co jak mamy resuming obecnie?
+    }.
 
 -spec get_item_id(state(), workflow_execution_state:index()) -> workflow_cached_item:id().
 get_item_id(#iteration_state{pending_items = Pending}, ItemIndex) ->
@@ -272,17 +296,24 @@ dump(#iteration_state{
 
 
 -spec from_dump(dump()) -> state().
+% TODO - co jesli dumpowalismy gdy LastRegistered bylo juz undefined?
 from_dump({PendingItemsIndexes, LastRegistered, FirstNotFinished, FinishedAheadList}) ->
     PendingItems = maps:from_list(lists:map(fun(Index) -> {Index, undefined} end, PendingItemsIndexes)),
     FinishedAhead = gb_trees:from_orddict(lists:map(fun({Key, ItemIndex}) ->
         {Key, {ItemIndex, undefined}}
     end, FinishedAheadList)),
 
+    Phase = case LastRegistered =:= 0 orelse LastRegistered =:= FirstNotFinished - 1 of
+        true -> executing;
+        false -> {resuming, LastRegistered}
+    end,
+
     #iteration_state{
         pending_items = PendingItems,
-        last_registered_item_index = LastRegistered,
+        last_registered_item_index = FirstNotFinished - 1,
         first_not_finished_item_index = FirstNotFinished,
-        items_finished_ahead = FinishedAhead
+        items_finished_ahead = FinishedAhead,
+        phase = Phase
     }.
 
 

@@ -1274,8 +1274,7 @@
     failed_job_count = 0 :: non_neg_integer(),
 
     iteration_state_dump = workflow_iteration_state:dump(),
-    jobs_dump = workflow_jobs:dump(),
-    tasks_data_registry_dump = workflow_tasks_data_registry:dump()
+    jobs_dump = workflow_jobs:dump()
 }).
 
 -record(workflow_async_call_pool, {

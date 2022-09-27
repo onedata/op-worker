@@ -42,8 +42,7 @@ dump_workflow_execution_state(ExecutionId) ->
             failed_job_count = FailedCount,
 
             iteration_state = IterationState,
-            jobs = Jobs,
-            tasks_data_registry = TaskData
+            jobs = Jobs
         }} ->
             TranslatedStatus = case Status of
                 ?PREPARATION_FAILED -> ?NOT_PREPARED;
@@ -57,8 +56,7 @@ dump_workflow_execution_state(ExecutionId) ->
                 failed_job_count = FailedCount,
 
                 iteration_state_dump = workflow_iteration_state:dump(IterationState),
-                jobs_dump = workflow_jobs:dump(Jobs),
-                tasks_data_registry_dump = workflow_tasks_data_registry:dump(TaskData)
+                jobs_dump = workflow_jobs:dump(Jobs)
             }},
             {ok, _} = datastore_model:save(?CTX, Doc),
             ok;
@@ -80,8 +78,7 @@ restore_workflow_execution_state_from_dump(
             failed_job_count = FailedCount,
 
             iteration_state_dump = IterationStateDump,
-            jobs_dump = JobsDump,
-            tasks_data_registry_dump = TaskDataDump
+            jobs_dump = JobsDump
         }}} ->
             TranslatedStatus = case LaneStatus of
                 ?PREPARED -> ?RESUMING_FROM_ITERATOR(Iterator);
@@ -94,8 +91,7 @@ restore_workflow_execution_state_from_dump(
                 failed_job_count = FailedCount, % TODO VFS-7787 - maybe reset?
 
                 iteration_state = workflow_iteration_state:from_dump(IterationStateDump),
-                jobs = workflow_jobs:from_dump(JobsDump, Tag),
-                tasks_data_registry = workflow_tasks_data_registry:from_dump(TaskDataDump)
+                jobs = workflow_jobs:from_dump(JobsDump, Tag)
             }},
 
             workflow_execution_state:save(Doc),
@@ -122,6 +118,5 @@ get_record_struct(1) ->
         {failed_job_count, integer},
 
         {iteration_state, workflow_iteration_state:get_dump_struct()},
-        {jobs, workflow_jobs:get_dump_struct()},
-        {tasks_data_registry, workflow_tasks_data_registry:get_dump_struct()}
+        {jobs, workflow_jobs:get_dump_struct()}
     ]}.

@@ -523,9 +523,7 @@ handle_execution_ended(EngineId, ExecutionId, #execution_ended{
                 clean_progress ->
                     workflow_iterator_snapshot:cleanup(ExecutionId);
                 save_progress ->
-                    % TODO - uncomment
-%%                    workflow_execution_state_dump:dump_workflow_execution_state(ExecutionId)
-                    ok
+                    workflow_execution_state_dump:dump_workflow_execution_state(ExecutionId)
             end,
 
             workflow_execution_state:cleanup(ExecutionId);
