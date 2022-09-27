@@ -91,7 +91,7 @@
 
 -type result_override() :: {return, term()} | {throw, errors:error()}.
 
--type basic_mock_strategy() ::
+-type mock_strategy() ::
     % original step will be run unperturbed
     passthrough |
     % original step will be run after sleeping for specified period of time
@@ -101,9 +101,9 @@
     % original step will not be run and specified result will be returned immediately
     {yield, result_override()}.
 
--type mock_strategy() ::
-    basic_mock_strategy() |
-    fun((mock_call_report()) -> basic_mock_strategy()).
+-type mock_strategy_spec() ::
+    mock_strategy() |
+    fun((mock_call_report()) -> mock_strategy()).
 
 -type step_mock_spec() :: #atm_step_mock_spec{}.
 
@@ -113,7 +113,7 @@
 
 -export_type([
     mock_call_ctx/0, hook/0, exp_state_diff/0,
-    result_override/0, mock_strategy/0, step_phase_selector/0, step_mock_spec/0,
+    result_override/0, mock_strategy_spec/0, step_phase_selector/0, step_mock_spec/0,
     lane_run_test_spec/0, incarnation_test_spec/0, test_spec/0
 ]).
 
