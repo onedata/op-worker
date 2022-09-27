@@ -551,16 +551,14 @@ handle_fuse_request(UserCtx, #get_fs_stats{}, FileCtx) ->
 %%--------------------------------------------------------------------
 -spec handle_file_request(user_ctx:ctx(), file_request_type(), file_ctx:ctx()) ->
     fuse_response().
-handle_file_request(UserCtx, #get_file_attr{include_replication_status = IncludeReplicationStatus,
-    include_link_count = IncludeLinkCount}, FileCtx) ->
-    attr_req:get_file_attr(UserCtx, FileCtx, IncludeReplicationStatus, IncludeLinkCount);
+handle_file_request(UserCtx, #get_file_attr{optional_attrs = OptionalAttrs}, FileCtx) ->
+    attr_req:get_file_attr(UserCtx, FileCtx, OptionalAttrs);
 handle_file_request(UserCtx, #get_file_references{}, FileCtx) ->
     attr_req:get_file_references(UserCtx, FileCtx);
 handle_file_request(UserCtx, #get_file_details{}, FileCtx) ->
     attr_req:get_file_details(UserCtx, FileCtx);
-handle_file_request(UserCtx, #get_child_attr{name = Name,
-    include_replication_status = IncludeReplicationStatus, include_link_count = IncludeLinkCount}, ParentFileCtx) ->
-    attr_req:get_child_attr(UserCtx, ParentFileCtx, Name, IncludeReplicationStatus, IncludeLinkCount);
+handle_file_request(UserCtx, #get_child_attr{name = Name, optional_attrs = OptionalAttrs}, ParentFileCtx) ->
+    attr_req:get_child_attr(UserCtx, ParentFileCtx, Name, OptionalAttrs);
 handle_file_request(UserCtx, #change_mode{mode = Mode}, FileCtx) ->
     attr_req:chmod(UserCtx, FileCtx, Mode);
 handle_file_request(UserCtx, #update_times{atime = ATime, mtime = MTime, ctime = CTime}, FileCtx) ->
@@ -573,13 +571,13 @@ handle_file_request(UserCtx, #create_dir{name = Name, mode = Mode}, ParentFileCt
     dir_req:mkdir(UserCtx, ParentFileCtx, Name, Mode);
 handle_file_request(UserCtx, #get_file_children{listing_options = ListingOpts}, FileCtx) ->
     dir_req:get_children(UserCtx, FileCtx, ListingOpts);
-handle_file_request(UserCtx, #get_file_children_attrs{listing_options = ListingOpts, 
-    include_replication_status = IncludeReplicationStatus, include_link_count = IncludeLinkCount}, FileCtx) ->
-    dir_req:get_children_attrs(UserCtx, FileCtx, ListingOpts, IncludeReplicationStatus, IncludeLinkCount);
+handle_file_request(UserCtx, #get_file_children_attrs{
+    listing_options = ListingOpts, 
+    optional_attrs = OptionalAttrs
+}, FileCtx) ->
+    dir_req:get_children_attrs(UserCtx, FileCtx, ListingOpts, OptionalAttrs);
 handle_file_request(UserCtx, #get_file_children_details{listing_options = ListingOpts}, FileCtx) ->
     dir_req:get_children_details(UserCtx, FileCtx, ListingOpts);
-handle_file_request(UserCtx, #get_recursive_file_list{listing_options = Options}, FileCtx) ->
-    recursive_file_listing:list(UserCtx, FileCtx, Options);
 handle_file_request(UserCtx, #rename{
     target_parent_guid = TargetParentGuid,
     target_name = TargetName
@@ -663,7 +661,12 @@ handle_provider_request(UserCtx, #set_acl{acl = #acl{value = Acl}}, FileCtx) ->
 handle_provider_request(UserCtx, #remove_acl{}, FileCtx) ->
     acl_req:remove_acl(UserCtx, FileCtx);
 handle_provider_request(UserCtx, #check_perms{flag = Flag}, FileCtx) ->
-    permission_req:check_perms(UserCtx, FileCtx, Flag).
+    permission_req:check_perms(UserCtx, FileCtx, Flag);
+handle_provider_request(UserCtx, #get_recursive_file_list{
+    listing_options = Options,
+    optional_attrs = OptionalAttrs
+}, FileCtx) ->
+    dir_req:list_recursively(UserCtx, FileCtx, Options, OptionalAttrs).
 
 
 %%--------------------------------------------------------------------

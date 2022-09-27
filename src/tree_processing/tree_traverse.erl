@@ -296,17 +296,17 @@ do_master_job(Job, #{task_id := TaskId}, NewJobsPreprocessor) ->
     end.
 
 -spec do_aborted_master_job(master_job(), traverse:master_job_extended_args()) ->
-    {ok, traverse:master_job_map(), undefined | NextSubtreeRoot :: file_meta:uuid()}.
+    {ok, traverse:master_job_map(), undefined | NextSubtreeRoot :: file_meta:uuid(), undefined | time:millis()}.
 do_aborted_master_job(#tree_traverse{track_subtree_status = true} = Job, MasterJobArgs) ->
     #{task_id := TaskId} = MasterJobArgs,
     #tree_traverse{file_ctx = FileCtx} = Job,
     SubtreeProcessingStatus = tree_traverse_progress:report_children_to_process(
         TaskId, file_ctx:get_logical_uuid_const(FileCtx), 0, true),
     case SubtreeProcessingStatus of
-        ?SUBTREE_PROCESSED(NextSubtreeRoot) ->
-            {ok, #{}, NextSubtreeRoot};
+        ?SUBTREE_PROCESSED(NextSubtreeRoot, StartTimestamp) ->
+            {ok, #{}, NextSubtreeRoot, StartTimestamp};
         ?SUBTREE_NOT_PROCESSED ->
-            {ok, #{}, undefined}
+            {ok, #{}, undefined, undefined}
     end;
 do_aborted_master_job(#tree_traverse{track_subtree_status = false} = _Job, _MasterJobArgs) ->
     {ok, #{}, undefined}.

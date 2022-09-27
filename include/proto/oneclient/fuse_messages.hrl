@@ -29,8 +29,7 @@
 }).
 
 -record(get_file_attr, {
-    include_replication_status :: undefined | boolean(),
-    include_link_count :: undefined | boolean()
+    optional_attrs = [] :: [attr_req:optional_attr()]
 }).
 
 -record(get_file_references, {
@@ -41,8 +40,7 @@
 
 -record(get_child_attr, {
     name :: file_meta:name(),
-    include_replication_status :: undefined | boolean(),
-    include_link_count :: undefined | boolean()
+    optional_attrs = [] :: [attr_req:optional_attr()]
 }).
 
 -record(get_file_children, {
@@ -51,16 +49,11 @@
 
 -record(get_file_children_attrs, {
     listing_options :: file_listing:options(),
-    include_replication_status :: undefined | boolean(),
-    include_link_count :: undefined | boolean()
+    optional_attrs = [] :: [attr_req:optional_attr()]
 }).
 
 -record(get_file_children_details, {
     listing_options :: file_listing:options()
-}).
-
--record(get_recursive_file_list, {
-    listing_options :: recursive_file_listing:options()
 }).
 
 -record(create_dir, {
@@ -187,7 +180,7 @@
 -type file_request_type() ::
     #get_file_attr{} | #get_file_references{} |
     #get_file_children{} | #get_file_children_attrs{} |
-    #get_file_details{} | #get_file_children_details{} | #get_recursive_file_list{} |
+    #get_file_details{} | #get_file_children_details{} |
     #create_dir{} | #delete_file{} | #move_to_trash{} |
     #update_times{} | #change_mode{} |
     #rename{} | #create_file{} | #make_file{} |
@@ -271,12 +264,6 @@
     pagination_token :: file_listing:pagination_token()
 }).
 
--record(recursive_file_list, {
-    entries :: [recursive_file_listing:entry()],
-    inaccessible_paths :: [file_meta:path()],
-    pagination_token :: undefined | recursive_file_listing:pagination_token()
-}).
-
 -record(helper_arg, {
     key :: binary(),
     value :: binary()
@@ -358,7 +345,7 @@
     #file_attr{} | #file_references{} | #file_children{} | #file_location{} | #helper_params{} |
     #storage_test_file{} | #dir{} | #sync_response{} | #file_created{} |
     #file_opened{} | #file_renamed{} | #guid{} | #xattr_list{} | #xattr{} |
-    #file_children_attrs{} | #recursive_file_list{} | #file_location_changed{} | 
+    #file_children_attrs{} | #file_location_changed{} | 
     #file_opened_extended{} | #file_details{} | #file_children_details{} | #fs_stats{} | #symlink{} |
     undefined.
 

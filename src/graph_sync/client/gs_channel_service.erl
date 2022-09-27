@@ -164,7 +164,8 @@ start_service() ->
 
 -spec stop_service() -> ok | no_return().
 stop_service() ->
-    force_terminate_connection().
+    force_terminate_connection(),
+    ok.
 
 
 -spec takeover_service() -> ok.

@@ -19,7 +19,7 @@
 %% API
 -export([initialize/1, initialize/2]).
 %% Iterator API
--export([get_next/2, forget_before/1, mark_exhausted/1]).
+-export([get_next/2]).
 %% Persistent record API
 -export([db_encode/2, db_decode/2, version/0]).
 
@@ -57,14 +57,6 @@ get_next(_Context, #workflow_test_iterator{item_number = ItemNumber, item_count 
     stop;
 get_next(_Context, #workflow_test_iterator{item_number = Number} = Iterator) ->
     {ok, integer_to_binary(Number), Iterator#workflow_test_iterator{item_number = Number + 1}}.
-
--spec forget_before(iterator()) -> ok.
-forget_before(_) ->
-    ok.
-
--spec mark_exhausted(iterator()) -> ok.
-mark_exhausted(_) ->
-    ok.
 
 %%%===================================================================
 %%% Persistent record API

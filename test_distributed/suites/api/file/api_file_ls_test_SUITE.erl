@@ -561,15 +561,15 @@ get_children_data_spec(gs, _Scope) ->
     };
 get_children_data_spec(rest, Scope) ->
     {AllowedAttrs, ScopeAttrsToCheck} = case Scope of
-        public -> {?PUBLIC_BASIC_ATTRIBUTES, []};
-        private -> {?PRIVATE_BASIC_ATTRIBUTES, [<<"hardlinks_count">>]}
+        public -> {?PUBLIC_BASIC_ATTRIBUTES ++ [<<"xattr.*">>], []};
+        private -> {?PRIVATE_BASIC_ATTRIBUTES ++ [<<"xattr.*">>], [<<"hardlinks_count">>]}
     end,
     #data_spec{
         optional = [<<"limit">>, <<"attribute">>],
         correct_values = #{
             <<"limit">> => [1, 100],
             <<"attribute">> => [
-                lists_utils:random_sublist(AllowedAttrs), 
+                lists_utils:random_sublist(AllowedAttrs -- [<<"xattr.*">>]),
                 [<<"shares">>, <<"mode">>, <<"parent_id">>],
                 [<<"file_id">>, <<"name">>],
                 <<"ctime">>
@@ -581,7 +581,7 @@ get_children_data_spec(rest, Scope) ->
             {<<"limit">>, 0, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 1000)},
             {<<"limit">>, 1001, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 1000)},
             {<<"attribute">>, <<"abc">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, AllowedAttrs)},
-            {<<"attribute">>, [<<"name">>, 8], ?ERROR_BAD_VALUE_LIST_NOT_ALLOWED(<<"attribute">>, AllowedAttrs)}
+            {<<"attribute">>, [<<"name">>, 8], ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, AllowedAttrs)}
         ]
     }.
 

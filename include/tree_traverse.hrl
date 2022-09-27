@@ -68,7 +68,8 @@
 }).
 
 
--define(SUBTREE_PROCESSED(NextSubtreeRoot), {subtree_processed, NextSubtreeRoot}).
+-define(SUBTREE_PROCESSED(NextSubtreeRoot, ProcessingStartTimestamp), 
+    {subtree_processed, NextSubtreeRoot, ProcessingStartTimestamp}).
 -define(SUBTREE_NOT_PROCESSED, subtree_not_processed).
 
 -endif.

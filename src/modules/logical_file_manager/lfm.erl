@@ -75,9 +75,9 @@
     get_children/3,
     get_child_attr/3,
     get_children_attrs/3,
-    get_children_attrs/5,
+    get_children_attrs/4,
     get_children_details/3,
-    get_files_recursively/3,
+    get_files_recursively/4,
     get_children_count/2
 ]).
 %% Permissions related operations
@@ -151,7 +151,7 @@ get_fs_stats(SessId, FileKey) ->
 -spec stat(session:id(), file_key()) ->
     {ok, lfm_attrs:file_attributes()} | error_reply().
 stat(SessId, FileKey) ->
-    stat(SessId, FileKey, false).
+    stat(SessId, FileKey, [size]).
 
 
 %%--------------------------------------------------------------------
@@ -159,10 +159,10 @@ stat(SessId, FileKey) ->
 %% Returns file attributes (see file_attr.hrl).
 %% @end
 %%--------------------------------------------------------------------
--spec stat(session:id(), file_key(), boolean()) ->
+-spec stat(session:id(), file_key(), [attr_req:optional_attr()]) ->
     {ok, lfm_attrs:file_attributes()} | error_reply().
-stat(SessId, FileKey, IncludeLinksCount) ->
-    ?run(lfm_attrs:stat(SessId, FileKey, IncludeLinksCount)).
+stat(SessId, FileKey, OptionalAttrs) ->
+    ?run(lfm_attrs:stat(SessId, FileKey, OptionalAttrs)).
 
 
 %%--------------------------------------------------------------------
@@ -483,13 +483,13 @@ get_child_attr(SessId, ParentGuid, ChildName)  ->
 -spec get_children_attrs(session:id(), file_key(), file_listing:options()) ->
     {ok, [#file_attr{}], file_listing:pagination_token()} | error_reply().
 get_children_attrs(SessId, FileKey, ListOpts) ->
-    get_children_attrs(SessId, FileKey, ListOpts, false, false).
+    get_children_attrs(SessId, FileKey, ListOpts, [size]).
 
 
--spec get_children_attrs(session:id(), file_key(), file_listing:options(), boolean(), boolean()) ->
+-spec get_children_attrs(session:id(), file_key(), file_listing:options(), [attr_req:optional_attr()]) ->
     {ok, [#file_attr{}], file_listing:pagination_token()} | error_reply().
-get_children_attrs(SessId, FileKey, ListOpts, IncludeReplicationStatus, IncludeHardlinkCount) ->
-    ?run(lfm_dirs:get_children_attrs(SessId, FileKey, ListOpts, IncludeReplicationStatus, IncludeHardlinkCount)).
+get_children_attrs(SessId, FileKey, ListOpts, OptionalAttrs) ->
+    ?run(lfm_dirs:get_children_attrs(SessId, FileKey, ListOpts, OptionalAttrs)).
 
 
 %%--------------------------------------------------------------------
@@ -513,11 +513,12 @@ get_children_details(SessId, FileKey, ListOpts) ->
 -spec get_files_recursively(
     session:id(),
     lfm:file_key(),
-    recursive_file_listing:options()
+    dir_req:recursive_listing_opts(),
+    [attr_req:optional_attr()]
 ) ->
-    {ok, [recursive_file_listing:entry()], [file_meta:path()], recursive_file_listing:pagination_token()} | error_reply().
-get_files_recursively(SessId, FileKey, Options) -> 
-    ?run(lfm_dirs:get_files_recursively(SessId, FileKey, Options)).
+    {ok, [recursive_file_listing_node:entry()], [file_meta:path()], recursive_listing:pagination_token()} | error_reply().
+get_files_recursively(SessId, FileKey, Options, OptionalAttrs) -> 
+    ?run(lfm_dirs:get_files_recursively(SessId, FileKey, Options, OptionalAttrs)).
 
 
 -spec get_children_count(session:id(), file_key()) ->

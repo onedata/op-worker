@@ -432,7 +432,7 @@ translate_from_protobuf(#'FileRequest'{
         file_request = translate_from_protobuf(Record)
     };
 translate_from_protobuf(#'GetFileAttr'{include_replication_status = IRS, include_link_count = ILC}) ->
-    #get_file_attr{include_replication_status = IRS, include_link_count = ILC};
+    #get_file_attr{optional_attrs = [size | attrs_flags_to_optional_attrs(IRS, ILC)]};
 translate_from_protobuf(#'GetChildAttr'{
     name = Name,
     include_replication_status = IRS,
@@ -440,8 +440,7 @@ translate_from_protobuf(#'GetChildAttr'{
 }) ->
     #get_child_attr{
         name = Name,
-        include_replication_status = IRS,
-        include_link_count = ILC
+        optional_attrs = [size | attrs_flags_to_optional_attrs(IRS, ILC)]
     };
 translate_from_protobuf(#'GetFileChildren'{
     offset = Offset,
@@ -458,7 +457,7 @@ translate_from_protobuf(#'GetFileChildren'{
             };
         _ ->
             #{
-                pagination_token => Token
+                pagination_token => file_listing:decode_pagination_token(Token)
             }
     end,
     #get_file_children{
@@ -481,15 +480,14 @@ translate_from_protobuf(#'GetFileChildrenAttrs'{
             };
         _ ->
             #{
-                pagination_token => Token
+                pagination_token => file_listing:decode_pagination_token(Token)
             }
     end,
     #get_file_children_attrs{
         listing_options = maps_utils:remove_undefined(BaseListingOpts#{
             limit => Size
         }),
-        include_replication_status = IRS,
-        include_link_count = ILC
+        optional_attrs = [size | attrs_flags_to_optional_attrs(IRS, ILC)]
     };
 translate_from_protobuf(#'CreateDir'{
     name = Name,
@@ -636,6 +634,10 @@ translate_from_protobuf(#'ChildLink'{
         name = Name
     };
 translate_from_protobuf(#'FileAttr'{} = FileAttr) ->
+    Xattrs = lists:foldl(fun(Xattr, Acc) ->
+        #xattr{name = Name, value = Value} = translate_from_protobuf(Xattr),
+        Acc#{Name => Value}
+    end, #{}, FileAttr#'FileAttr'.xattrs),
     #file_attr{
         guid = FileAttr#'FileAttr'.uuid,
         name = FileAttr#'FileAttr'.name,
@@ -653,7 +655,8 @@ translate_from_protobuf(#'FileAttr'{} = FileAttr) ->
         owner_id = FileAttr#'FileAttr'.owner_id,
         fully_replicated = FileAttr#'FileAttr'.fully_replicated,
         nlink = FileAttr#'FileAttr'.nlink,
-        index = file_listing:decode_index(FileAttr#'FileAttr'.index)
+        index = file_listing:decode_index(FileAttr#'FileAttr'.index),
+        xattrs = Xattrs
     };
 translate_from_protobuf(#'FileChildren'{
     child_links = FileEntries,
@@ -1483,26 +1486,34 @@ translate_to_protobuf(#file_request{
         context_guid = ContextGuid,
         file_request = translate_to_protobuf(Record)}
     };
-translate_to_protobuf(#get_file_attr{include_replication_status = IRS}) ->
-    {get_file_attr, #'GetFileAttr'{include_replication_status = IRS}};
-translate_to_protobuf(#get_child_attr{name = Name, include_replication_status = IRS}) ->
-    {get_child_attr, #'GetChildAttr'{name = Name, include_replication_status = IRS}};
+translate_to_protobuf(#get_file_attr{optional_attrs = OptionalAttrs}) ->
+    {IRS, ILC} = optional_attrs_to_attrs_flags(OptionalAttrs),
+    {get_file_attr, #'GetFileAttr'{include_replication_status = IRS, include_link_count = ILC}};
+translate_to_protobuf(#get_child_attr{name = Name, optional_attrs = OptionalAttrs}) ->
+    {IRS, ILC} = optional_attrs_to_attrs_flags(OptionalAttrs),
+    {get_child_attr, #'GetChildAttr'{name = Name, include_replication_status = IRS, include_link_count = ILC}};
 translate_to_protobuf(#get_file_children{listing_options = ListingOpts}) ->
     {get_file_children, #'GetFileChildren'{
         offset = maps:get(offset, ListingOpts, undefined),
         size = maps:get(limit, ListingOpts, undefined),
-        index_token = maps:get(pagination_token, ListingOpts, undefined),
+        index_token = case maps:get(pagination_token, ListingOpts, undefined) of
+            undefined -> undefined;
+            PaginationToken -> file_listing:encode_pagination_token(PaginationToken)
+        end,
         index_startid = maps:get(index, ListingOpts, undefined)
     }};
 translate_to_protobuf(#get_file_children_attrs{
     listing_options = ListingOpts,
-    include_replication_status = IRS,
-    include_link_count = ILC
+    optional_attrs = OptionalAttrs
 }) ->
+    {IRS, ILC} = optional_attrs_to_attrs_flags(OptionalAttrs),
     {get_file_children_attrs, #'GetFileChildrenAttrs'{
         offset = maps:get(offset, ListingOpts, undefined),
         size = maps:get(limit, ListingOpts, undefined),
-        index_token = maps:get(pagination_token, ListingOpts, undefined),
+        index_token = case maps:get(pagination_token, ListingOpts, undefined) of
+            undefined -> undefined;
+            PaginationToken -> file_listing:encode_pagination_token(PaginationToken)
+        end,
         include_replication_status = IRS,
         include_link_count = ILC
     }};
@@ -1638,6 +1649,11 @@ translate_to_protobuf(#child_link{
         name = Name
     };
 translate_to_protobuf(#file_attr{} = FileAttr) ->
+    Xattrs = maps:fold(fun(XattrName, XattrValue, Acc) ->
+        {xattr, TranslatedXattr} = translate_to_protobuf(
+            #xattr{name = XattrName, value = XattrValue}),
+        [TranslatedXattr | Acc]
+    end, [], FileAttr#file_attr.xattrs),
     {file_attr, #'FileAttr'{
         uuid = FileAttr#file_attr.guid,
         name = FileAttr#file_attr.name,
@@ -1658,7 +1674,8 @@ translate_to_protobuf(#file_attr{} = FileAttr) ->
         owner_id = FileAttr#file_attr.owner_id,
         fully_replicated = FileAttr#file_attr.fully_replicated,
         nlink = FileAttr#file_attr.nlink,
-        index = file_listing:encode_index(FileAttr#file_attr.index)
+        index = file_listing:encode_index(FileAttr#file_attr.index),
+        xattrs = Xattrs
     }};
 translate_to_protobuf(#file_children{
     child_links = FileEntries,
@@ -2199,3 +2216,23 @@ open_flag_translate_to_protobuf(_) -> 'READ_WRITE'.
 open_flag_translate_from_protobuf('READ') -> read;
 open_flag_translate_from_protobuf('WRITE') -> write;
 open_flag_translate_from_protobuf(_) -> rdwr.
+
+
+-spec optional_attrs_to_attrs_flags([attr_req:optional_attr()]) -> 
+    {boolean(), boolean()}.
+optional_attrs_to_attrs_flags(OptionalAttrsList) ->
+    IRS = lists:member(replication_status, OptionalAttrsList),
+    ILC = lists:member(link_count, OptionalAttrsList),
+    {IRS, ILC}.
+
+
+-spec attrs_flags_to_optional_attrs(boolean() | undefined, boolean() | undefined) -> 
+    [attr_req:optional_attr()].
+attrs_flags_to_optional_attrs(true = _IRS, true = _ILC) ->
+    [replication_status, link_count];
+attrs_flags_to_optional_attrs(true = _IRS, _ILC) ->
+    [replication_status];
+attrs_flags_to_optional_attrs(_IRS, true = _ILC) ->
+    [link_count];
+attrs_flags_to_optional_attrs(_IRS, _ILC) ->
+    [].

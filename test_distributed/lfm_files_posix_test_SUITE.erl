@@ -84,6 +84,7 @@
     readdir_should_work_with_api_token/1,
     readdir_should_work_with_api_token_not_full_batch/1,
     readdir_should_work_with_startid/1,
+    readdir_plus_should_read_xattrs/1,
     get_children_details_should_return_empty_result_for_empty_dir/1,
     get_children_details_should_return_empty_result_zero_size/1,
     get_children_details_should_work_with_zero_offset/1,
@@ -93,6 +94,7 @@
     get_recursive_file_list/1,
     get_recursive_file_list_prefix_test/1,
     get_recursive_file_list_inaccessible_paths_test/1,
+    get_recursive_file_list_should_read_xattrs/1,
     lfm_recreate_handle_test/1,
     lfm_write_after_create_no_perms_test/1,
     lfm_recreate_handle_after_delete_test/1,
@@ -175,6 +177,7 @@
     readdir_should_work_with_api_token,
     readdir_should_work_with_api_token_not_full_batch,
     readdir_should_work_with_startid,
+    readdir_plus_should_read_xattrs,
     get_children_details_should_return_empty_result_for_empty_dir,
     get_children_details_should_return_empty_result_zero_size,
     get_children_details_should_work_with_zero_offset,
@@ -184,6 +187,7 @@
     get_recursive_file_list,
     get_recursive_file_list_prefix_test,
     get_recursive_file_list_inaccessible_paths_test,
+    get_recursive_file_list_should_read_xattrs,
     lfm_recreate_handle_test,
     lfm_write_after_create_no_perms_test,
     lfm_recreate_handle_after_delete_test,
@@ -441,6 +445,15 @@ readdir_should_work_with_api_token_not_full_batch(Config) ->
 
 readdir_should_work_with_startid(Config) ->
     lfm_files_test_base:readdir_should_work_with_startid(Config).
+
+
+readdir_plus_should_read_xattrs(Config) ->
+    lfm_files_test_base:readdir_plus_should_read_xattrs(Config).
+
+
+get_recursive_file_list_should_read_xattrs(Config) ->
+    lfm_files_test_base:get_recursive_file_list_should_read_xattrs(Config).
+
 
 
 get_children_details_should_return_empty_result_for_empty_dir(Config) ->

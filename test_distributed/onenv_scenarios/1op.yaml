@@ -21,32 +21,6 @@ sources:
       - cluster-manager
       - op-panel
 
-
-# Onezone image to use. Note that if 'sources' option is enabled, it must
-# be based off onedata/worker image (it contains all the machinery to run the
-# application from sources - images based off onedata-worker are images with
-# -dev suffix).
-onezoneImage: "docker.onedata.org/onezone-dev:develop"
-
-# Oneprovider image to use. Note that if 'sources' option is enabled, it must
-# be based off onedata/worker image (images based off onedata-worker are
-# images with -dev suffix).
-oneproviderImage: "docker.onedata.org/oneprovider-dev:develop"
-
-# Determines if elastic search should start.
-elasticSearch: false
-
-# Determines if onedata rest client should start.
-onedataCli: false
-
-# Determines if oneclients should start.
-oneclients: false
-
-# When enabled, onezoneImage and oneproviderImage will be pulled before every
-# deployment. If disabled, they will only be pulled if not existent.
-forceImagePull: false
-
-
 users:
   - &user1
     name: user1

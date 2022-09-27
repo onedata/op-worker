@@ -27,7 +27,7 @@
 -export([build/3]).
 
 % atm_store_container_iterator callbacks
--export([get_next_batch/3, forget_before/1, mark_exhausted/1]).
+-export([get_next_batch/3]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -92,16 +92,6 @@ get_next_batch(AtmWorkflowExecutionAuth, BatchSize, Record = #atm_range_store_co
             ),
             {ok, Batch, Record#atm_range_store_container_iterator{current_num = Threshold + Step}}
     end.
-
-
--spec forget_before(record()) -> ok.
-forget_before(_Record) ->
-    ok.
-
-
--spec mark_exhausted(record()) -> ok.
-mark_exhausted(_Record) ->
-    ok.
 
 
 %%%===================================================================

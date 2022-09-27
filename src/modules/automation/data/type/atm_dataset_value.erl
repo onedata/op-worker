@@ -27,19 +27,11 @@
 
 %% atm_tree_forest_store_container_iterator callbacks
 -export([
-    list_children/4,
-    initial_listing_options/0,
-    encode_listing_options/1, decode_listing_options/1
+    list_tree/4
 ]).
 
 %% atm_data_compressor callbacks
 -export([compress/2, expand/3]).
-
-
--type list_opts() :: #{
-    start_index := dataset_api:index(),
-    offset := non_neg_integer()
-}.
 
 
 %%%===================================================================
@@ -62,44 +54,17 @@ assert_meets_constraints(AtmWorkflowExecutionAuth, Value, _ValueConstraints) ->
 %%%===================================================================
 
 
--spec list_children(atm_workflow_execution_auth:record(), dataset:id(), list_opts(), non_neg_integer()) ->
-    {[{dataset:id(), dataset:name()}], [], list_opts(), IsLast :: boolean()} | no_return().
-list_children(AtmWorkflowExecutionAuth, DatasetId, ListOpts, BatchSize) ->
-    SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
-
-    try mi_datasets:list_children_datasets(SessionId, DatasetId, ListOpts#{limit => BatchSize}, undefined) of
-        {[], IsLast} ->
-            {[], [], #{}, IsLast};
-        {Entries, IsLast} ->
-            {_LastId, _LastName, LastIndex} = lists:last(Entries),
-            ResultEntries = lists:map(fun({Id, Name, _}) -> {Id, Name} end, Entries),
-            % all datasets are traversable, so returned list of nontraversable items is always empty
-            % set offset to 1 to ensure that listing is exclusive
-            {ResultEntries, [], #{offset => 1, start_index => LastIndex}, IsLast}
-    catch throw:Error ->
-        case middleware_utils:is_file_access_error(Error) of
-            true -> {[], [], #{}, true};
-            false -> throw(Error)
-        end
-    end.
-
-
--spec initial_listing_options() -> list_opts().
-initial_listing_options() ->
-    #{
-        start_index => <<>>,
-        offset => 0
-    }.
-
-
--spec encode_listing_options(list_opts()) -> json_utils:json_term().
-encode_listing_options(#{offset := Offset, start_index := StartIndex}) ->
-    #{<<"offset">> => Offset, <<"startIndex">> => StartIndex}.
-
-
--spec decode_listing_options(json_utils:json_term()) -> list_opts().
-decode_listing_options(#{<<"offset">> := Offset, <<"startIndex">> := StartIndex}) ->
-    #{offset => Offset, start_index => StartIndex}.
+-spec list_tree(
+    atm_workflow_execution_auth:record(),
+    recursive_listing:pagination_token() | undefined,
+    atm_value:compressed(),
+    atm_store_container_iterator:batch_size()
+) ->
+    {[atm_value:expanded()], recursive_listing:pagination_token() | undefined}.
+list_tree(AtmWorkflowExecutionAuth, PrevToken, CompressedRoot, BatchSize) ->
+    list_internal(AtmWorkflowExecutionAuth, CompressedRoot, 
+        maps_utils:remove_undefined(#{limit => BatchSize, pagination_token => PrevToken})
+    ).
 
 
 %%%===================================================================
@@ -127,6 +92,28 @@ expand(AtmWorkflowExecutionAuth, DatasetId, _ValueConstraints) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%% @private
+-spec list_internal(atm_workflow_execution_auth:record(), atm_value:compressed(), dataset_req:recursive_listing_opts()) ->
+    {[atm_value:expanded()], recursive_listing:pagination_token() | undefined}.
+list_internal(AtmWorkflowExecutionAuth, CompressedRoot, Opts) ->
+    UserCtx = user_ctx:new(atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth)),
+    try
+        SpaceId = atm_workflow_execution_auth:get_space_id(AtmWorkflowExecutionAuth),
+        {ok, #recursive_listing_result{entries = Entries, pagination_token = PaginationToken}} =
+            dataset_req:list_recursively(SpaceId, CompressedRoot, Opts, UserCtx),
+        MappedEntries = lists:map(fun({_Path, DatasetInfo}) -> 
+            dataset_utils:dataset_info_to_json(DatasetInfo) 
+        end, Entries),
+        {MappedEntries, PaginationToken}
+    catch _:Error ->
+        case datastore_runner:normalize_error(Error) of
+            not_found -> {[], undefined};
+            ?EPERM -> {[], undefined};
+            ?EACCES -> {[], undefined};
+            _ -> error(Error)
+        end
+    end.
 
 
 %% @private
