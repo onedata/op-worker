@@ -110,7 +110,10 @@
     repeat_failed_not_iterated_atm_lane_run_execution/1,
     repeat_cancelled_atm_lane_run_execution/1,
 
-    interrupt_ongoing_atm_workflow_execution_due_to_expired_session/1
+    interrupt_ongoing_atm_workflow_execution_due_to_expired_session/1,
+
+    pause_ongoing_atm_workflow_execution/1,
+    pause_ongoing_atm_workflow_execution_with_uncorrelated_results/1
 ]).
 
 groups() -> [
@@ -210,7 +213,10 @@ groups() -> [
         repeat_cancelled_atm_lane_run_execution
     ]},
     {suspend_tests, [], [
-        interrupt_ongoing_atm_workflow_execution_due_to_expired_session
+        interrupt_ongoing_atm_workflow_execution_due_to_expired_session,
+
+        pause_ongoing_atm_workflow_execution,
+        pause_ongoing_atm_workflow_execution_with_uncorrelated_results
     ]}
 ].
 
@@ -520,6 +526,14 @@ repeat_cancelled_atm_lane_run_execution(_Config) ->
 
 
 interrupt_ongoing_atm_workflow_execution_due_to_expired_session(_Config) ->
+    ?RUN_SUSPEND_TEST().
+
+
+pause_ongoing_atm_workflow_execution(_Config) ->
+    ?RUN_SUSPEND_TEST().
+
+
+pause_ongoing_atm_workflow_execution_with_uncorrelated_results(_Config) ->
     ?RUN_SUSPEND_TEST().
 
 
