@@ -671,21 +671,21 @@ get_root_workflow_execution_auth(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv
     ok.
 log_exception(Logger, throw, {session_acquisition_failed, Error}, _Stacktrace) ->
     LogContent = #{
-        <<"description">> => "Failed to acquire user session.",
+        <<"description">> => <<"Failed to acquire user session.">>,
         <<"reason">> => errors:to_json(Error)
     },
     atm_workflow_execution_logger:workflow_critical(LogContent, Logger);
 
 log_exception(Logger, throw, Reason, _Stacktrace) ->
     LogContent = #{
-        <<"description">> => "Unexpected error occured.",
+        <<"description">> => <<"Unexpected error occured.">>,
         <<"reason">> => errors:to_json(Reason)
     },
     atm_workflow_execution_logger:workflow_critical(LogContent, Logger);
 
 log_exception(Logger, Type, Reason, Stacktrace) ->
     LogContent = #{
-        <<"description">> => "Unexpected emergency occured.",
+        <<"description">> => <<"Unexpected emergency occured.">>,
         <<"reason">> => errors:to_json(?atm_examine_error(Type, Reason, Stacktrace))
     },
     atm_workflow_execution_logger:workflow_emergency(LogContent, Logger).

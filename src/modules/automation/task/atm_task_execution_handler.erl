@@ -81,7 +81,7 @@ resume(AtmWorkflowExecutionCtx, AtmTaskExecutionId) ->
             unfreeze_stores(AtmTaskExecution),
             {ok, initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionDoc)};
 
-        {error, task_already_stopped} ->
+        {error, task_already_ended} ->
             ignored
     end.
 

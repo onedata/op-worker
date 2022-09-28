@@ -131,7 +131,14 @@ handle_items_in_processing(AtmTaskExecutionId, ItemCount) ->
         (#atm_task_execution{status = ?STOPPING_STATUS}) ->
             {error, task_already_stopping};
 
-        (_) ->
+        (#atm_task_execution{status = Status}) when
+            Status =:= ?SKIPPED_STATUS;
+            Status =:= ?INTERRUPTED_STATUS;
+            Status =:= ?PAUSED_STATUS;
+            Status =:= ?FINISHED_STATUS;
+            Status =:= ?FAILED_STATUS;
+            Status =:= ?CANCELLED_STATUS
+        ->
             {error, task_already_stopped}
     end).
 
@@ -220,22 +227,38 @@ handle_stopping(AtmTaskExecutionId, Reason) ->
                 stopping_reason = Reason
             }};
 
-        (_) ->
+        (#atm_task_execution{status = Status}) when
+            Status =:= ?SKIPPED_STATUS;
+            Status =:= ?INTERRUPTED_STATUS;
+            Status =:= ?PAUSED_STATUS;
+            Status =:= ?FINISHED_STATUS;
+            Status =:= ?FAILED_STATUS;
+            Status =:= ?CANCELLED_STATUS
+        ->
             {error, task_already_stopped}
     end).
 
 
 -spec handle_stopped(atm_task_execution:id()) ->
-    {ok, atm_task_execution:doc()} | {error, task_already_stopped}.
+    {ok, atm_task_execution:doc()} |
+    {error, task_resuming} |
+    {error, task_already_stopped}.
 handle_stopped(AtmTaskExecutionId) ->
     apply_diff(AtmTaskExecutionId, fun
         (AtmTaskExecution = #atm_task_execution{status = ?PENDING_STATUS}) ->
             {ok, AtmTaskExecution#atm_task_execution{status = ?SKIPPED_STATUS}};
 
-        (AtmTaskExecution = #atm_task_execution{status = ?ACTIVE_STATUS, items_failed = 0}) ->
+        (AtmTaskExecution = #atm_task_execution{
+            status = ?ACTIVE_STATUS,
+            items_in_processing = 0,
+            items_failed = 0
+        }) ->
             {ok, AtmTaskExecution#atm_task_execution{status = ?FINISHED_STATUS}};
 
-        (AtmTaskExecution = #atm_task_execution{status = ?ACTIVE_STATUS}) ->
+        (AtmTaskExecution = #atm_task_execution{
+            status = ?ACTIVE_STATUS,
+            items_in_processing = 0
+        }) ->
             % All jobs were executed but some must have failed
             {ok, AtmTaskExecution#atm_task_execution{status = ?FAILED_STATUS}};
 
@@ -263,13 +286,20 @@ handle_stopped(AtmTaskExecutionId) ->
                 items_failed = UpdatedFailedItems
             }};
 
-        (_) ->
+        (#atm_task_execution{status = Status}) when
+            Status =:= ?SKIPPED_STATUS;
+            Status =:= ?INTERRUPTED_STATUS;
+            Status =:= ?PAUSED_STATUS;
+            Status =:= ?FINISHED_STATUS;
+            Status =:= ?FAILED_STATUS;
+            Status =:= ?CANCELLED_STATUS
+        ->
             {error, task_already_stopped}
     end).
 
 
 -spec handle_resume(atm_task_execution:id()) ->
-    {ok, atm_task_execution:doc()} | {error, task_already_stopped}.
+    {ok, atm_task_execution:doc()} | {error, task_already_ended}.
 handle_resume(AtmTaskExecutionId) ->
     apply_diff(AtmTaskExecutionId, fun
         (AtmTaskExecution = #atm_task_execution{status = Status}) when
@@ -287,7 +317,7 @@ handle_resume(AtmTaskExecutionId) ->
             Status =:= ?FAILED_STATUS;
             Status =:= ?CANCELLED_STATUS
         ->
-            {error, task_already_stopped}
+            {error, task_already_ended}
     end).
 
 

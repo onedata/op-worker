@@ -57,7 +57,9 @@
 -export([
     pause_workflow_execution/1,
     cancel_workflow_execution/1,
-    repeat_workflow_execution/3
+    repeat_workflow_execution/3,
+
+    delete_offline_session/1
 ]).
 -export([browse_store/2, browse_store/3]).
 
@@ -70,6 +72,7 @@
     report_item_error |
     handle_task_execution_stopped |
     handle_lane_execution_stopped |
+    handle_exception |
     handle_workflow_execution_stopped.
 
 -type step_phase_timing() :: before_step | after_step.
@@ -286,6 +289,14 @@ repeat_workflow_execution(RepeatType, AtmLaneRunSelector, #atm_mock_call_ctx{
     )).
 
 
+-spec delete_offline_session(mock_call_ctx()) -> ok | no_return().
+delete_offline_session(#atm_mock_call_ctx{
+    provider = ProviderSelector,
+    workflow_execution_id = AtmWorkflowExecutionId
+}) ->
+    ?erpc(ProviderSelector, offline_access_manager:close_session(AtmWorkflowExecutionId)).
+
+
 -spec browse_store(automation:id(), mock_call_ctx()) -> json_utils:json_term().
 browse_store(AtmStoreSchemaId, AtmMockCallCtx) ->
     browse_store(AtmStoreSchemaId, undefined, AtmMockCallCtx).
@@ -488,6 +499,15 @@ get_step_mock_spec(
     } | _]}
 ) ->
     {{handle_workflow_execution_stopped, Timing, IncarnationNum}, Spec};
+
+get_step_mock_spec(
+    #mock_call_report{step = handle_exception, timing = Timing},
+    #test_ctx{ongoing_incarnations = [#atm_workflow_execution_incarnation_test_spec{
+        incarnation_num = IncarnationNum,
+        handle_exception = Spec
+    } | _]}
+) ->
+    {{handle_exception, Timing, IncarnationNum}, Spec};
 
 get_step_mock_spec(
     #mock_call_report{step = prepare_lane, timing = Timing, args = [_, _, {AtmLaneIndex, _}]},
@@ -772,6 +792,20 @@ get_exp_state_diff(
     end;
 
 get_exp_state_diff(
+    #mock_call_report{step = handle_exception, timing = before_step},
+    #atm_step_mock_spec{before_step_exp_state_diff = default}
+) ->
+    ?NO_DIFF;
+
+get_exp_state_diff(
+    #mock_call_report{step = handle_exception, timing = after_step},
+    #atm_step_mock_spec{after_step_exp_state_diff = default}
+) ->
+    % Changes made by exception handling depends when it happens and as such no
+    % reasonable default implementation can be provided
+    ?NO_DIFF;
+
+get_exp_state_diff(
     #mock_call_report{timing = before_step},
     #atm_step_mock_spec{before_step_exp_state_diff = default}
 ) ->
@@ -829,9 +863,12 @@ assert_exp_workflow_execution_state(#test_ctx{
 -spec shift_monitored_lane_run_if_current_one_stopped(mock_call_report(), test_ctx()) ->
     test_ctx().
 shift_monitored_lane_run_if_current_one_stopped(
-    StepMockCallReport = #mock_call_report{timing = after_step, step = handle_workflow_execution_stopped},
+    StepMockCallReport = #mock_call_report{timing = after_step, step = Step},
     TestCtx = #test_ctx{ongoing_incarnations = [EndedIncarnation]}  %% last incarnation stopped
-) ->
+) when
+    Step =:= handle_exception;
+    Step =:= handle_workflow_execution_stopped
+->
     call_if_defined(
         EndedIncarnation#atm_workflow_execution_incarnation_test_spec.after_hook,
         build_mock_call_ctx(StepMockCallReport, TestCtx)
@@ -839,9 +876,12 @@ shift_monitored_lane_run_if_current_one_stopped(
     TestCtx#test_ctx{ongoing_incarnations = []};
 
 shift_monitored_lane_run_if_current_one_stopped(
-    StepMockCallReport = #mock_call_report{timing = after_step, step = handle_workflow_execution_stopped},
+    StepMockCallReport = #mock_call_report{timing = after_step, step = Step},
     TestCtx = #test_ctx{ongoing_incarnations = [EndedIncarnation | LeftoverIncarnations]}
-) ->
+) when
+    Step =:= handle_exception;
+    Step =:= handle_workflow_execution_stopped
+->
     call_if_defined(
         EndedIncarnation#atm_workflow_execution_incarnation_test_spec.after_hook,
         build_mock_call_ctx(StepMockCallReport, TestCtx)
@@ -1022,6 +1062,7 @@ mock_workflow_execution_handler_steps(Workers) ->
     mock_workflow_execution_handler_step(Workers, process_streamed_task_data, 4),
     mock_workflow_execution_handler_step(Workers, report_item_error, 3),
     mock_workflow_execution_handler_step(Workers, handle_task_execution_stopped, 3),
+    mock_workflow_execution_handler_step(Workers, handle_exception, 5),
     mock_workflow_execution_handler_step(Workers, handle_workflow_execution_stopped, 2).
 
 
