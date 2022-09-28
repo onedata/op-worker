@@ -110,9 +110,10 @@ fslogic_get_file_attr_test_base(Config, CheckReplicationStatus) ->
                 ?req(Worker, SessId, #resolve_guid{path = Path})
             ),
 
-        FullyReplicated = case {CheckReplicationStatus, Type} of
-            {true, ?REGULAR_FILE_TYPE} -> true;
-            _ -> undefined
+        {OptionalAttrs, FullyReplicated} = case {CheckReplicationStatus, Type} of
+            {true, ?REGULAR_FILE_TYPE} -> {[replication_status], true};
+            {true, _} -> {[replication_status], undefined};
+            _ -> {[], undefined}
         end,
 
         ?assertMatch(#fuse_response{status = #status{code = ?OK},
@@ -120,7 +121,7 @@ fslogic_get_file_attr_test_base(Config, CheckReplicationStatus) ->
                 guid = Guid, name = Name, type = Type, mode = Mode,
                 uid = UID, parent_guid = ParentGuid, fully_replicated = FullyReplicated
             }
-        }, ?file_req(Worker, SessId, Guid, #get_file_attr{include_replication_status = CheckReplicationStatus})),
+        }, ?file_req(Worker, SessId, Guid, #get_file_attr{optional_attrs = OptionalAttrs})),
 
         case ParentGuid =/= undefined of
             true ->
@@ -130,7 +131,7 @@ fslogic_get_file_attr_test_base(Config, CheckReplicationStatus) ->
                         uid = UID, parent_guid = ParentGuid, fully_replicated = FullyReplicated
                     }
                 }, ?file_req(Worker, SessId, ParentGuid,
-                    #get_child_attr{name = Name, include_replication_status = CheckReplicationStatus}));
+                    #get_child_attr{name = Name, optional_attrs = OptionalAttrs}));
             false ->
                 ok
         end
@@ -164,7 +165,7 @@ fslogic_get_file_children_attrs_with_replication_status_test(Config) ->
         ?assertMatch(#fuse_response{status = #status{code = ?OK}}, ?file_req(Worker, SessId, SpaceGuid,
             #get_file_children_attrs{
                 listing_options = #{offset => 0, limit => 1000, tune_for_large_continuous_listing => false}, 
-                include_replication_status = true
+                optional_attrs = [replication_status]
             })),
     ?assertMatch([_ | _], ChildrenAttrs),
 

@@ -104,7 +104,7 @@ expand(AtmWorkflowExecutionAuth, Guid, _ValueConstraints) ->
     SessionId = atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth),
 
     case lfm:stat(SessionId, ?FILE_REF(Guid)) of
-        {ok, FileAttrs} -> {ok, file_middleware_plugin:file_attrs_to_json(FileAttrs)};
+        {ok, FileAttrs} -> {ok, file_attr_translator:to_json(FileAttrs)};
         {error, Errno} -> ?ERROR_POSIX(Errno)
     end.
 
@@ -121,9 +121,10 @@ list_internal(AtmWorkflowExecutionAuth, CompressedRoot, Opts) ->
     FileCtx = file_ctx:new_by_guid(CompressedRoot),
     try
         #provider_response{provider_response = #recursive_listing_result{
-            entries = Entries, pagination_token = PaginationToken}} = dir_req:list_recursively(UserCtx, FileCtx, Opts),
+            entries = Entries, pagination_token = PaginationToken}
+        } = dir_req:list_recursively(UserCtx, FileCtx, Opts, [size]),
         MappedEntries = lists:map(fun({_Path, FileAttrs}) ->
-            file_middleware_plugin:file_attrs_to_json(FileAttrs)
+            file_attr_translator:to_json(FileAttrs)
         end, Entries),
         {MappedEntries, PaginationToken}
     catch _:Error ->
