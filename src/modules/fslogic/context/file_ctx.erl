@@ -74,8 +74,8 @@
 -export([is_file_ctx_const/1, is_space_dir_const/1, is_trash_dir_const/1, is_trash_dir_const/2,
     is_share_root_dir_const/1, is_symlink_const/1, is_special_const/1,
     is_user_root_dir_const/2, is_root_dir_const/1, file_exists_const/1, file_exists_or_is_deleted/1,
-    is_in_user_space_const/2, assert_not_special_const/1, assert_is_dir/1, assert_not_dir/1, get_type/1,
-    assert_not_trash_dir_const/1, assert_not_trash_dir_const/2]).
+    is_in_user_space_const/2, assert_not_special_const/1, assert_is_dir/1, assert_not_dir/1, get_type/1, 
+    get_type/2, assert_not_trash_dir_const/1, assert_not_trash_dir_const/2]).
 -export([equals/2]).
 -export([assert_not_readonly_target_storage_const/2]).
 
@@ -1238,11 +1238,20 @@ assert_not_dir(FileCtx) ->
 
 
 -spec get_type(ctx()) -> {file_meta:type(), ctx()}.
-get_type(FileCtx = #file_ctx{is_dir = true}) ->
-    {?DIRECTORY_TYPE, FileCtx};
 get_type(FileCtx) ->
-    {#document{value = #file_meta{type = Type}}, FileCtx2} =
+    get_type(FileCtx, exact).
+
+
+-spec get_type(ctx(), exact | effective) -> {file_meta:type(), ctx()}.
+get_type(FileCtx = #file_ctx{is_dir = true}, _) ->
+    {?DIRECTORY_TYPE, FileCtx};
+get_type(FileCtx, Policy) ->
+    {#document{value = FileMeta}, FileCtx2} =
         get_file_doc_including_deleted(FileCtx),
+    Type = case Policy of
+        exact -> FileMeta#file_meta.type;
+        effective -> file_meta:get_effective_type(FileMeta)
+    end,
     IsDir = Type =:= ?DIRECTORY_TYPE,
     {Type, FileCtx2#file_ctx{is_dir = IsDir}}.
 

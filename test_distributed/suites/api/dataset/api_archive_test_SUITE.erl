@@ -1166,7 +1166,6 @@ get_archivisation_audit_log(_Config) ->
             },
             randomly_select_scenarios = true,
             scenario_templates = [
-                % fixme rest
                 #scenario_template{
                     name = <<"Get archisation audit log using GS API">>,
                     type = gs,

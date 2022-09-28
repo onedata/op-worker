@@ -84,6 +84,7 @@
     dataset_id :: dataset:id(),
     state :: archive:state(),
     root_dir_guid :: undefined | file_id:file_guid(),
+    data_dir_guid :: undefined | file_id:file_guid(),
     creation_time :: time:millis(),
     config :: archive:config(),
     preserved_callback :: archive:callback(),

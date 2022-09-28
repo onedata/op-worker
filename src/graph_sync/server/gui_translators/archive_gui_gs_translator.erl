@@ -26,6 +26,15 @@
 %%%===================================================================
 
 -spec translate_value(gri:gri(), Value :: term()) -> gs_protocol:data().
+translate_value(#gri{aspect = file_info}, FileInfo) ->
+    #{
+        <<"sourceFile">> := SourceFileGuid,
+        <<"archivedFile">> := ArchivedFile
+    } = FileInfo,
+    #{
+        <<"sourceFile">> => prepare_instance_gri(op_file, SourceFileGuid),
+        <<"archivedFile">> => prepare_instance_gri(op_file, ArchivedFile)
+    };
 translate_value(#gri{aspect = audit_log}, ListedEntries) ->
     ListedEntries;
 translate_value(#gri{aspect = recall}, RootId) ->
@@ -60,23 +69,10 @@ translate_archive_info(#archive_info{
     related_dip_id = RelatedDipId
 }) ->
     #{
-        <<"gri">> => gri:serialize(#gri{
-            type = op_archive, id = ArchiveId,
-            aspect = instance, scope = private
-        }),
-        <<"dataset">> => gri:serialize(#gri{
-            type = op_dataset, id = DatasetId,
-            aspect = instance, scope = private
-        }),
+        <<"gri">> => prepare_archive_instance_gri(ArchiveId),
+        <<"dataset">> => prepare_instance_gri(op_dataset, DatasetId),
         <<"state">> => str_utils:to_binary(State),
-        <<"rootDir">> => case RootDirGuid =/= undefined of
-            true -> gri:serialize(#gri{
-                type = op_file, id = RootDirGuid,
-                aspect = instance, scope = private
-            });
-            false ->
-                null
-        end,
+        <<"rootDir">> => prepare_instance_gri(op_file, RootDirGuid),
         <<"creationTime">> => CreationTime,
         <<"config">> => archive_config:to_json(Config),
         <<"preservedCallback">> => utils:undefined_to_null(PreservedCallback),
@@ -92,11 +88,15 @@ translate_archive_info(#archive_info{
 
 
 -spec prepare_archive_instance_gri(undefined | archive:id()) -> gri:serialized() | null.
-prepare_archive_instance_gri(undefined) ->
-    null;
 prepare_archive_instance_gri(ArchiveId) ->
+    prepare_instance_gri(op_archive, ArchiveId).
+    
+
+-spec prepare_instance_gri(gri:entity_type(), gri:entity_id()) -> gri:serialized() | null.
+prepare_instance_gri(_, undefined) ->
+    null;
+prepare_instance_gri(Type, Id) ->
     gri:serialize(#gri{
-        type = op_archive, id = ArchiveId,
+        type = Type, id = Id,
         aspect = instance, scope = private
     }).
-    

@@ -12,6 +12,7 @@
 -module(archivisation_audit_log).
 -author("Michal Stanisz").
 
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("cluster_worker/include/audit_log.hrl").
@@ -23,9 +24,9 @@
 ]).
 
 -export([
-    report_file_archivisation_finished/4,
-    report_file_archivisation_failed/5,
-    report_file_verification_failed/3
+    report_file_archivisation_finished/5,
+    report_file_archivisation_failed/6,
+    report_file_verification_failed/4
 ]).
 
 -type id() :: archive:id().
@@ -58,46 +59,54 @@ browse(Id, Opts) ->
     audit_log:browse(Id, Opts).
 
 
--spec report_file_archivisation_finished(id(), file_id:file_guid(), file_meta:path(), time:millis()) -> 
-    ok | {error, term()}.
-report_file_archivisation_finished(Id, FileGuid, FilePath, StartTimestamp) ->
+-spec report_file_archivisation_finished(id(), file_id:file_guid(), file_meta:path(), 
+    file_meta:type(), time:millis()) -> ok | {error, term()}.
+report_file_archivisation_finished(Id, FileGuid, FilePath, FileType, StartTimestamp) ->
+    DescriptionPrefix = string:titlecase(type_to_description(FileType)),
+    
     audit_log:append(Id, #audit_log_append_request{
         severity = ?INFO_AUDIT_LOG_SEVERITY,
         content = #{
-            <<"description">> => <<"File archivisation finished.">>,
+            <<"description">> => <<DescriptionPrefix/binary, " archivisation finished.">>,
             <<"fileId">> => file_guid_to_object_id(FileGuid),
             <<"startTimestamp">> => StartTimestamp,
-            <<"path">> => FilePath
+            <<"path">> => FilePath,
+            <<"fileType">> => type_to_binary(FileType)
         }
     }).
 
 
--spec report_file_archivisation_failed(id(), file_id:file_guid(), file_meta:path(), time:millis(), 
-    {error, term()}) -> ok | {error, term()}.
-report_file_archivisation_failed(Id, FileGuid, FilePath, StartTimestamp, Error) ->
+-spec report_file_archivisation_failed(id(), file_id:file_guid(), file_meta:path(), file_meta:type(), 
+    time:millis(), {error, term()}) -> ok | {error, term()}.
+report_file_archivisation_failed(Id, FileGuid, FilePath, FileType, StartTimestamp, Error) ->
     ErrorJson = errors:to_json(Error),
+    DescriptionPrefix = string:titlecase(type_to_description(FileType)),
     
     audit_log:append(Id, #audit_log_append_request{
         severity = ?ERROR_AUDIT_LOG_SEVERITY,
         content = #{
-            <<"description">> => <<"File archivisation failed.">>,
+            <<"description">> => <<DescriptionPrefix/binary, " archivisation failed.">>,
             <<"fileId">> => file_guid_to_object_id(FileGuid),
             <<"startTimestamp">> => StartTimestamp,
             <<"reason">> => ErrorJson,
-            <<"path">> => FilePath
+            <<"path">> => FilePath,
+            <<"fileType">> => type_to_binary(FileType)
         }
     }).
 
 
--spec report_file_verification_failed(id(), file_id:file_guid(), file_meta:path()) ->
+-spec report_file_verification_failed(id(), file_id:file_guid(), file_meta:path(), file_meta:type()) ->
     ok | {error, term()}.
-report_file_verification_failed(Id, FileGuid, FilePath) ->
+report_file_verification_failed(Id, FileGuid, FilePath, FileType) ->
+    Description = <<"Archived ", (type_to_description(FileType))/binary, " verification failed.">>,
+    
     audit_log:append(Id, #audit_log_append_request{
         severity = ?ERROR_AUDIT_LOG_SEVERITY,
         content = #{
-            <<"description">> => <<"File verification failed.">>,
+            <<"description">> => Description,
             <<"fileId">> => file_guid_to_object_id(FileGuid),
-            <<"path">> => FilePath
+            <<"path">> => FilePath,
+            <<"fileType">> => type_to_binary(FileType)
         }
     }).
 
@@ -111,3 +120,17 @@ report_file_verification_failed(Id, FileGuid, FilePath) ->
 file_guid_to_object_id(FileGuid) ->
     {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
     ObjectId.
+
+
+%% @private
+-spec type_to_description(file_meta:type()) -> binary().
+type_to_description(?REGULAR_FILE_TYPE) -> <<"regular file">>;
+type_to_description(?DIRECTORY_TYPE) -> <<"directory">>;
+type_to_description(?SYMLINK_TYPE) -> <<"symbolic link">>.
+
+
+%% @private
+-spec type_to_binary(file_meta:type()) -> binary().
+type_to_binary(?REGULAR_FILE_TYPE) -> <<"REG">>;
+type_to_binary(?DIRECTORY_TYPE) -> <<"DIR">>;
+type_to_binary(?SYMLINK_TYPE) -> <<"SYMLNK">>.

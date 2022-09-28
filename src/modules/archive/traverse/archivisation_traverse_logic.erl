@@ -501,14 +501,15 @@ is_archive_rooted_in_current_file(CurrentFileCtx, #{
     {failed, Reason :: any()} | completed) -> ok.
 report_to_audit_log(CurrentFileCtx, TraverseInfo, StartTimestamp, FilePath, Status) ->
     FileGuid = file_ctx:get_logical_guid_const(CurrentFileCtx),
+    {FileType, _CurrentFileCtx2} = file_ctx:get_type(CurrentFileCtx, effective),
     {ReportFun, AdditionalArgs} = case Status of
         completed ->
-            {fun archivisation_audit_log:report_file_archivisation_finished/4, []};
+            {fun archivisation_audit_log:report_file_archivisation_finished/5, []};
         {failed, Reason} ->
-            {fun archivisation_audit_log:report_file_archivisation_failed/5, [Reason]}
+            {fun archivisation_audit_log:report_file_archivisation_failed/6, [Reason]}
     end,
     
     lists:foreach(fun(ArchiveDoc) ->
         {ok, ArchiveId} = archive:get_id(ArchiveDoc),
-        erlang:apply(ReportFun, [ArchiveId, FileGuid, FilePath, StartTimestamp | AdditionalArgs])
+        erlang:apply(ReportFun, [ArchiveId, FileGuid, FilePath, FileType, StartTimestamp | AdditionalArgs])
     end, info_to_archive_docs(TraverseInfo)).
