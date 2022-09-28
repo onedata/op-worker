@@ -379,15 +379,36 @@ upgrade_record(11, {?FILE_META_MODEL, Name, Type, Mode, ProtectionFlags, ACL, Ow
 resolve_conflict(_Ctx,
     NewDoc = #document{
         key = Uuid,
-        value = #file_meta{name = NewName, parent_uuid = NewParentUuid, type = Type},
+        value = #file_meta{
+            name = NewName,
+            parent_uuid = NewParentUuid,
+            type = Type,
+            mode = Mode,
+            acl = Acl,
+            shares = Shares
+        },
         scope = SpaceId
     }, PrevDoc = #document{
-        value = #file_meta{name = PrevName, parent_uuid = PrevParentUuid}
+        value = #file_meta{
+            name = PrevName,
+            parent_uuid = PrevParentUuid,
+            mode = PrevMode,
+            acl = PrevAcl,
+            shares = PrevShares
+        }
     }
 ) ->
     invalidate_effective_caches_if_moved(NewDoc, PrevDoc),
     invalidate_dataset_eff_cache_if_needed(NewDoc, PrevDoc),
     spawn(fun() ->
+        case file_meta:is_deleted(NewDoc) andalso not file_meta:is_deleted(PrevDoc) of
+            true ->
+                dir_size_stats:report_file_deleted(Type, file_id:pack_guid(NewParentUuid, SpaceId));
+            false ->
+                ok
+        end,
+
+        timer:sleep(200), % Invalidation of cache must occur after doc is saved
         invalidate_qos_bounded_cache_if_moved_to_trash(NewDoc, PrevDoc),
 
         case (NewName =/= PrevName) orelse (NewParentUuid =/= PrevParentUuid) of
@@ -399,15 +420,11 @@ resolve_conflict(_Ctx,
                 permissions_cache:invalidate(),
                 fslogic_event_emitter:emit_file_renamed_no_exclude(
                     FileCtx, OldParentGuid, NewParentGuid, NewName, PrevName);
-            _ ->
-                ok
-        end,
-
-        case file_meta:is_deleted(NewDoc) andalso not file_meta:is_deleted(PrevDoc) of
-            true ->
-                dir_size_stats:report_file_deleted(Type, file_id:pack_guid(NewParentUuid, SpaceId));
             false ->
-                ok
+                case (Mode =/= PrevMode) orelse (Acl =/= PrevAcl) orelse (Shares =/= PrevShares) of
+                    true -> permissions_cache:invalidate();
+                    false -> ok
+                end
         end
     end),
 
