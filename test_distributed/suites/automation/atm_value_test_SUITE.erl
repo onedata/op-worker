@@ -422,7 +422,7 @@ atm_file_value_compress_expand_test(_Config) ->
                 {
                     different,
                     #{<<"file_id">> => ?ok(file_id:guid_to_objectid(Guid))},
-                    file_middleware_plugin:file_attrs_to_json(FileAttrs)
+                    file_attr_translator:to_json(FileAttrs)
                 }
             end, [DirGuid, FileGuid, SymlinkGuid])
         ])

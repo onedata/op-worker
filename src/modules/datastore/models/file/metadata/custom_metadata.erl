@@ -25,7 +25,7 @@
 
 %% API
 -export([get/1, update/2, delete/1, create_or_update/2]).
--export([list_xattrs/1, get_xattr/2, set_xattr/6, remove_xattr/2]).
+-export([list_xattrs/1, get_xattr/2, get_all_xattrs/1, set_xattr/6, remove_xattr/2]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -123,6 +123,18 @@ get_xattr(FileUuid, Name) ->
             end;
         {error, _} = Error ->
             Error
+    end.
+
+
+-spec get_all_xattrs(file_meta:uuid()) -> {ok, #{name() => value()}} | {error, term()}.
+get_all_xattrs(FileUuid) ->
+    case datastore_model:get(?CTX, fslogic_file_id:ensure_referenced_uuid(FileUuid)) of
+        {ok, #document{value = #custom_metadata{value = Metadata}}} ->
+            {ok, Metadata};
+        {error, not_found} ->
+            {ok, #{}};
+        {error, Reason} ->
+            {error, Reason}
     end.
 
 
