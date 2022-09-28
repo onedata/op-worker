@@ -45,7 +45,7 @@
 -define(EXEMPLARY_STREAMS, ?EXEMPLARY_STREAMS_BASE({3,2} => [<<"100">>, handle_task_results_processed_for_all_items])).
 -define(EXEMPLARY_STREAMS2, ?EXEMPLARY_STREAMS_BASE({3,2} => [<<"10">>, <<"100">>])).
 -define(EXEMPLARY_STREAMS_WITH_TERMINATION_ERROR,
-    ?EXEMPLARY_STREAMS_BASE({2,2} => [<<"10">>, <<"100">>, termination_error])).
+    ?EXEMPLARY_STREAMS_BASE({2,1} => [<<"10">>, <<"100">>, termination_error])).
 
 
 -endif.

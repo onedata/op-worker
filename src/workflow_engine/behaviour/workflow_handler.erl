@@ -51,7 +51,7 @@
 -type lane_stopped_callback_result() :: ?CONTINUE(workflow_engine:lane_id(), workflow_engine:lane_id()) |
     ?END_EXECUTION. % engine does not distinguish reason of execution finish - ?END_EXECUTION is returned
                        % if processed lane is last lane as well as on error
--type progress_data_persistence() :: save_progress | clean_progress.
+-type progress_data_persistence() :: save_progress | save_iterator | clean_progress.
 
 -export_type([handler/0, async_processing_result/0, handler_execution_result/0, prepare_lane_result/0,
     lane_stopped_callback_result/0, progress_data_persistence/0]).

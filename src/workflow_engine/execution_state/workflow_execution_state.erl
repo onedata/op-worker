@@ -584,9 +584,10 @@ finish_lane_preparation(Handler, ExecutionId,
 
             NextIterationStep = get_next_iterator(Handler, LaneExecutionContext, Iterator, ExecutionId),
             FailureCountToCancel = maps:get(failure_count_to_cancel, LaneSpec, undefined),
-            case update(ExecutionId, fun(State) ->
-                State2 = case IsLaneResumed of
+            case update(ExecutionId, fun(#workflow_execution_state{iteration_state = IterationState} = State) ->
+                State2 = case IsLaneResumed andalso IterationState =/= undefined of
                     true ->  State;
+                    % Lane is not resumed or dump has not been found (IterationState =:= undefined)
                     false -> reset_state_fields_for_next_lane(State)
                 end,
                 finish_lane_preparation_internal(

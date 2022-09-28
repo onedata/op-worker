@@ -12,6 +12,7 @@
 -module(workflow_scheduling_cancellation_and_restart_test_SUITE).
 -author("Michal Wrzeszcz").
 
+-include("workflow_engine.hrl").
 -include("workflow_scheduling_test_common.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -233,7 +234,7 @@ internal_cancel_caused_by_stream_closing_error_test(Config) ->
         task_type = async,
         lane_id = <<"3">>,
         test_execution_manager_option =
-            {fail_stream_termination, {<<"3_2_2">>, handle_task_results_processed_for_all_items}},
+            {fail_stream_termination, {<<"3_2_1">>, handle_task_results_processed_for_all_items}},
         generator_options = ?EXEMPLARY_STREAMS_WITH_TERMINATION_ERROR
     }).
 
@@ -304,8 +305,8 @@ restart_callback_failure_test(Config) ->
 
     [Worker | _] = ?config(op_worker_nodes, Config),
     #{id := ExecutionId} = WorkflowExecutionSpec =
-        workflow_scheduling_test_common:gen_workflow_execution_spec(
-            TaskType, PrepareInAdvance, #{lane_options => #{failure_count_to_cancel => 1}, save_progress => true}),
+        workflow_scheduling_test_common:gen_workflow_execution_spec(TaskType, PrepareInAdvance,
+            #{lane_options => #{failure_count_to_cancel => 1}, progress_data_persistence => save_progress}),
     workflow_scheduling_test_common:set_test_execution_manager_option(Config, fail_job, {<<"3_1_1">>, <<"100">>}),
     ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow,
         [workflow_scheduling_test_common:get_engine_id(), WorkflowExecutionSpec])),
@@ -345,13 +346,19 @@ restart_callback_failure_test(Config) ->
 %%% Test skeletons
 %%%===================================================================
 
+cancel_and_restart_test_base(Config, TestConfig) ->
+    ct:print("Test restart from iterator"),
+    cancel_and_restart_test_base(Config, TestConfig, from_iterator),
+    ct:print("Test restart from dump"),
+    cancel_and_restart_test_base(Config, TestConfig, from_dump).
+
 cancel_and_restart_test_base(Config, #test_config{
     task_type = TaskType,
     prepare_in_advance = PrepareInAdvance,
     lane_id = LaneId,
     test_execution_manager_option = TestExecutionManagerOption,
     generator_options = GeneratorOptions
-}) ->
+}, RestartType) ->
     InitialKeys = workflow_scheduling_test_common:get_all_workflow_related_datastore_keys(Config),
 
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -359,80 +366,17 @@ cancel_and_restart_test_base(Config, #test_config{
         {cancel_execution, _, _} -> #{};
         _ -> #{failure_count_to_cancel => 1}
     end,
-    #{id := ExecutionId} = WorkflowExecutionSpec = workflow_scheduling_test_common:gen_workflow_execution_spec(
-        TaskType, PrepareInAdvance, GeneratorOptions#{lane_options => LaneOptions, save_progress => true}),
-    {TestExecutionManagerOptionKey, TestExecutionManagerOptionValue} = case TestExecutionManagerOption of
-        {cancel_execution, prepare_lane, LaneIdToCancel} ->
-            {cancel_execution, {prepare_lane, LaneIdToCancel}};
-        {cancel_execution, Function, Item} ->
-            {cancel_execution, {Function, Item, <<"100">>}};
-        {_Key, {_TaskId, _Itme}} ->
-            TestExecutionManagerOption;
-        {Key, TaskId} ->
-            {Key, {TaskId, <<"100">>}}
-    end,
-    workflow_scheduling_test_common:set_test_execution_manager_option(
-        Config, TestExecutionManagerOptionKey, TestExecutionManagerOptionValue),
-    ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow,
-        [workflow_scheduling_test_common:get_engine_id(), WorkflowExecutionSpec])),
-
-    #{execution_history := ExecutionHistory} = ExtendedHistoryStats =
-        workflow_scheduling_test_common:get_task_execution_history(Config),
-    case TestExecutionManagerOption of
-        cancel_execution -> ?assertMatch(#{cancel_ans := ok}, ExtendedHistoryStats);
-        _ -> ok
-    end,
-    workflow_scheduling_test_common:verify_execution_history_stats(
-        ExtendedHistoryStats, TaskType, #{ignore_async_slots_check => true}),
-
-    case TestExecutionManagerOption of
-        {cancel_execution, prepare_lane, LaneId} ->
-            workflow_scheduling_test_common:verify_execution_history(
-                WorkflowExecutionSpec, ExecutionHistory, #{expect_lane_finish => LaneId});
-        {cancel_execution, _, _} ->
-            workflow_scheduling_test_common:verify_execution_history(
-                WorkflowExecutionSpec, ExecutionHistory, #{stop_on_lane => LaneId});
-        {FailureType, {FailedTaskId, FailedItem}} ->
-            workflow_scheduling_test_common:verify_execution_history(WorkflowExecutionSpec, ExecutionHistory,
-                #{stop_on_lane => LaneId, FailureType => {LaneId, FailedTaskId, FailedItem}});
-        {FailureType, FailedTaskId} ->
-            workflow_scheduling_test_common:verify_execution_history(WorkflowExecutionSpec, ExecutionHistory,
-                #{stop_on_lane => LaneId, FailureType => {LaneId, FailedTaskId, <<"100">>}})
-    end,
-
-    workflow_scheduling_test_common:verify_memory(Config, InitialKeys, true),
-
-    WorkflowExecutionSpec2 = workflow_scheduling_test_common:gen_workflow_execution_spec(
-        TaskType, PrepareInAdvance, #{first_lane_id => LaneId}, ExecutionId),
-    ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow,
-        [workflow_scheduling_test_common:get_engine_id(), WorkflowExecutionSpec2])),
-    ct:print("Workflow restarted"),
-
-    #{execution_history := ExecutionHistory2} = ExtendedHistoryStats2 =
-        workflow_scheduling_test_common:get_task_execution_history(Config),
-    workflow_scheduling_test_common:verify_execution_history_stats(ExtendedHistoryStats2, TaskType),
-    workflow_scheduling_test_common:verify_execution_history(
-        WorkflowExecutionSpec2, ExecutionHistory2, #{resume_lane => LaneId}),
-
-    workflow_scheduling_test_common:verify_memory(Config, InitialKeys).
-
-
-cancel_and_restart_test_base2(Config, #test_config{
-    task_type = TaskType,
-    prepare_in_advance = PrepareInAdvance,
-    lane_id = LaneId,
-    test_execution_manager_option = TestExecutionManagerOption,
-    generator_options = GeneratorOptions
-}) ->
-    InitialKeys = workflow_scheduling_test_common:get_all_workflow_related_datastore_keys(Config),
-
-    [Worker | _] = ?config(op_worker_nodes, Config),
-    LaneOptions = case TestExecutionManagerOption of
-        {cancel_execution, _, _} -> #{};
-        _ -> #{failure_count_to_cancel => 1}
+    {SnapshotMode, DataPersistence} = case RestartType of
+        from_dump -> {?ALL_ITEMS, save_progress};
+        from_iterator -> {?UNTIL_FIRST_FAILURE, save_iterator}
     end,
     #{id := ExecutionId} = WorkflowExecutionSpec = workflow_scheduling_test_common:gen_workflow_execution_spec(
-        TaskType, PrepareInAdvance, GeneratorOptions#{lane_options => LaneOptions, save_progress => true}),
+        TaskType,
+        PrepareInAdvance,
+        GeneratorOptions#{
+            lane_options => LaneOptions, progress_data_persistence => DataPersistence, snapshot_mode => SnapshotMode
+        }
+    ),
     {TestExecutionManagerOptionKey, TestExecutionManagerOptionValue} = case TestExecutionManagerOption of
         {cancel_execution, prepare_lane, LaneIdToCancel} ->
             {cancel_execution, {prepare_lane, LaneIdToCancel}};
@@ -482,31 +426,32 @@ cancel_and_restart_test_base2(Config, #test_config{
 
     #{execution_history := ExecutionHistoryAfterRestart} = ExtendedHistoryStatsAfterRestart =
         workflow_scheduling_test_common:get_task_execution_history(Config),
-    ct:print("aaaaa ~p", [ExecutionHistoryAfterRestart]),
     workflow_scheduling_test_common:verify_execution_history_stats(ExtendedHistoryStatsAfterRestart, TaskType),
     workflow_scheduling_test_common:verify_execution_history(
         RestartWorkflowExecutionSpec, ExecutionHistoryAfterRestart, #{resume_lane => LaneId}),
 
     workflow_scheduling_test_common:verify_memory(Config, InitialKeys),
 
-    ct:print("Verifying combined history"),
-    FilteredExecutionHistory = workflow_scheduling_test_common:filter_finish_and_exception_handlers(
-        ExecutionHistory, LaneId),
-    FilteredExecutionHistory2 = workflow_scheduling_test_common:filter_prepare_in_adnave_handler(
-        FilteredExecutionHistory, LaneId, PrepareInAdvance),
-%%    ct:print("aaaaa ~p", [{ExecutionHistory, ExecutionHistoryAfterRestart}]),
-%%    ct:print("aaaaa ~p", [FilteredExecutionHistory2 -- (FilteredExecutionHistory2 -- ExecutionHistoryAfterRestart)]),
-%%    ct:print("aaaaa2 ~p", [ExecutionHistoryAfterRestart -- (ExecutionHistoryAfterRestart -- FilteredExecutionHistory2)]),
-    FilteredExecutionHistoryAfterRestart = workflow_scheduling_test_common:check_prepare_lane_in_head_and_filter(
-        ExecutionHistoryAfterRestart, LaneId),
-    FinalVerifyOptions = case {TestExecutionManagerOption, TaskType} of
-        {{fail_job, TId}, async} -> GeneratorOptions#{fail_and_restart_job => {LaneId, TId, <<"100">>}};
-        _ -> GeneratorOptions#{}
-    end,
-    MergedExecutionHistory  = workflow_scheduling_test_common:filter_repeated_stream_callbacks(
-        FilteredExecutionHistory2 ++ FilteredExecutionHistoryAfterRestart, LaneId, GeneratorOptions),
-    workflow_scheduling_test_common:verify_execution_history(
-        WorkflowExecutionSpec, MergedExecutionHistory, FinalVerifyOptions).
+    case RestartType of
+        from_dump ->
+            ct:print("Verifying combined history"),
+            FilteredExecutionHistory = workflow_scheduling_test_common:filter_finish_and_exception_handlers(
+                ExecutionHistory, LaneId),
+            FilteredExecutionHistory2 = workflow_scheduling_test_common:filter_prepare_in_adnave_handler(
+                FilteredExecutionHistory, LaneId, PrepareInAdvance),
+            FilteredExecutionHistoryAfterRestart = workflow_scheduling_test_common:check_prepare_lane_in_head_and_filter(
+                ExecutionHistoryAfterRestart, LaneId),
+            FinalVerifyOptions = case {TestExecutionManagerOption, TaskType} of
+                {{fail_job, TId}, async} -> GeneratorOptions#{fail_and_restart_job => {LaneId, TId, <<"100">>}};
+                _ -> GeneratorOptions#{}
+            end,
+            MergedExecutionHistory  = workflow_scheduling_test_common:filter_repeated_stream_callbacks(
+                FilteredExecutionHistory2 ++ FilteredExecutionHistoryAfterRestart, LaneId, GeneratorOptions),
+            workflow_scheduling_test_common:verify_execution_history(
+                WorkflowExecutionSpec, MergedExecutionHistory, FinalVerifyOptions);
+        from_iterator ->
+            ok
+    end.
 
 
 multiple_parallel_cancels_test_base(Config, #test_config{
@@ -521,7 +466,7 @@ multiple_parallel_cancels_test_base(Config, #test_config{
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     #{id := ExecutionId} = WorkflowExecutionSpec = workflow_scheduling_test_common:gen_workflow_execution_spec(
-        TaskType, PrepareInAdvance, GeneratorOptions#{save_progress => true}),
+        TaskType, PrepareInAdvance, GeneratorOptions#{progress_data_persistence => save_progress}),
     {TestExecutionManagerOptionKey, TestExecutionManagerOptionValue} = TestExecutionManagerOption,
     workflow_scheduling_test_common:set_test_execution_manager_option(
         Config, TestExecutionManagerOptionKey, TestExecutionManagerOptionValue),

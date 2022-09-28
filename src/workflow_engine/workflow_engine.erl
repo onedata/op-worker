@@ -168,7 +168,7 @@ execute_workflow(EngineId, ExecutionSpec) ->
             case ProgressDataPersistence of
                 clean_progress ->
                     workflow_iterator_snapshot:cleanup(ExecutionId);
-                save_progress ->
+                _ ->
                     ok
             end
     end.
@@ -523,7 +523,9 @@ handle_execution_ended(EngineId, ExecutionId, #execution_ended{
                 clean_progress ->
                     workflow_iterator_snapshot:cleanup(ExecutionId);
                 save_progress ->
-                    workflow_execution_state_dump:dump_workflow_execution_state(ExecutionId)
+                    workflow_execution_state_dump:dump_workflow_execution_state(ExecutionId);
+                save_iterator ->
+                    ok % Iterator is already persisted - simply do not clean it
             end,
 
             workflow_execution_state:cleanup(ExecutionId);

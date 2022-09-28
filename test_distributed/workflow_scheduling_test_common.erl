@@ -1104,7 +1104,7 @@ gen_workflow_execution_spec(WorkflowType, PrepareInAdvance, ContextBase, Id) ->
         },
         first_lane_id => FirstLaneId,
         next_lane_id => NextLaneId,
-        snapshot_mode => maps:get(snapshot_mode, ContextBase, ?ALL_ITEMS)%, ?UNTIL_FIRST_FAILURE)
+        snapshot_mode => maps:get(snapshot_mode, ContextBase, ?UNTIL_FIRST_FAILURE)
     }.
 
 verify_executions_started(0) ->

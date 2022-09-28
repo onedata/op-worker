@@ -50,7 +50,7 @@
     prepare_in_advance_out_of_order => {LaneId :: workflow_engine:lane_id(),
         LaneIdOutOfOrder :: workflow_engine:lane_id()}, % when LaneId finishes, set LaneIdOutOfOrder
                                                         % to be prepared in advance
-    save_progress => boolean()
+    progress_data_persistence => workflow_handler:progress_data_persistence()
 }.
 
 -type generator_options() :: #{
@@ -268,8 +268,8 @@ handle_lane_execution_stopped(_ExecutionId, ExecutionContext, LaneId) ->
     test_execution_context()
 ) ->
     workflow_handler:progress_data_persistence().
-handle_workflow_execution_stopped(_, #{save_progress := true}) ->
-    save_progress;
+handle_workflow_execution_stopped(_, #{progress_data_persistence := DataPersistence}) ->
+    DataPersistence;
 handle_workflow_execution_stopped(_, _) ->
     clean_progress.
 
@@ -279,8 +279,8 @@ handle_workflow_execution_stopped(_, _) ->
     test_execution_context()
 ) ->
     workflow_handler:progress_data_persistence().
-handle_workflow_interrupted(_, #{save_progress := true}) ->
-    save_progress;
+handle_workflow_interrupted(_, #{progress_data_persistence := DataPersistence}) ->
+    DataPersistence;
 handle_workflow_interrupted(_, _) ->
     clean_progress.
 
