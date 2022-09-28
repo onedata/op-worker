@@ -52,7 +52,7 @@ list(UserCtx, SpaceId, Limit, Token) ->
     }).
 
 
--spec upload_part(multipart_upload:id(), multipart_upload_part:part()) -> 
+-spec upload_part(multipart_upload:id(), multipart_upload_part:record()) -> 
     fslogic_worker:fuse_response().
 upload_part(UploadId, Part) ->
     case multipart_upload:get(UploadId) of
@@ -64,7 +64,7 @@ upload_part(UploadId, Part) ->
     end.
 
 
--spec list_parts(multipart_upload:id(), non_neg_integer(), multipart_upload_part:part()) ->
+-spec list_parts(multipart_upload:id(), non_neg_integer(), multipart_upload_part:part_number()) ->
     fslogic_worker:fuse_response().
 list_parts(UploadId, Limit, StartAfter) ->
     case multipart_upload:get(UploadId) of

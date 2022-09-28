@@ -642,7 +642,7 @@ upload_multipart_part(SessId, UploadId, Part) ->
     ?run(lfm_multipart_upload:upload_part(SessId, UploadId, Part)).
 
 
--spec list_multipart_parts(session:id(), multipart_upload:id(), non_neg_integer(), multipart_upload_part:part()) ->
+-spec list_multipart_parts(session:id(), multipart_upload:id(), non_neg_integer(), multipart_upload_part:part_number()) ->
     {ok, [multipart_upload_part:record()], boolean()} | {error, term()}.
 list_multipart_parts(SessId, UploadId, Limit, StartAfter) ->
     ?run(lfm_multipart_upload:list_parts(SessId, UploadId, Limit, StartAfter)).

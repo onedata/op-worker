@@ -196,6 +196,11 @@
     size :: integer()
 }).
 
+-record(get_recursive_file_list, {
+    listing_options :: dir_req:recursive_listing_opts(),
+    optional_attrs = [] :: [attr_req:optional_attr()]
+}).
+
 -type file_request_type() ::
     #get_file_attr{} | #get_file_references{} |
     #get_file_children{} | #get_file_children_attrs{} |
@@ -210,7 +215,8 @@
     #get_child_attr{} | #get_xattr{} | #set_xattr{} | #remove_xattr{} |
     #list_xattr{} | #fsync{} |
     #storage_file_created{} | #open_file_with_extended_info{} | 
-    #get_file_attr_by_path{} | #create_path{} | #report_file_written{} | #report_file_read{}.
+    #get_file_attr_by_path{} | #create_path{} | #report_file_written{} | #report_file_read{} | 
+    #get_recursive_file_list{}.
 
 -record(file_request, {
     context_guid :: fslogic_worker:file_guid(),
@@ -260,11 +266,6 @@
     file_id :: file_id:file_guid()
 }).
 
--record(get_recursive_file_list, {
-    listing_options :: dir_req:recursive_listing_opts(),
-    optional_attrs = [] :: [attr_req:optional_attr()]
-}).
-
 -record(create_multipart_upload, {
     space_id :: od_space:id(),
     path :: multipart_upload:path()
@@ -307,7 +308,7 @@
 -type fuse_request_type() ::
     #resolve_guid{} | #resolve_guid_by_canonical_path{} | #resolve_guid_by_relative_path{} | #ensure_dir{} |
     #get_helper_params{} | #create_storage_test_file{} | #verify_storage_test_file{} | #file_request{} | 
-    #get_fs_stats{} | #get_recursive_file_list{} | #multipart_upload_request{}.
+    #get_fs_stats{} |  #multipart_upload_request{}.
 
 -record(fuse_request, {
     fuse_request :: fuse_request_type()

@@ -1270,11 +1270,11 @@
     multipart_upload_id :: multipart_upload:id() | undefined,
     path :: multipart_upload:path(),
     creation_time :: time:millis(),
-    space_id :: od_space:id()
+    space_id :: od_space:id() | undefined
 }).
 
 -record(multipart_upload_part, {
-    number :: non_neg_integer(),
+    number :: multipart_upload_part:part_number(),
     size :: non_neg_integer(),
     etag :: binary(),
     last_modified :: non_neg_integer()

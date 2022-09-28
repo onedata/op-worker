@@ -26,9 +26,9 @@
 }).
 
 -type record() :: #multipart_upload_part{}.
--type part() :: non_neg_integer().
+-type part_number() :: non_neg_integer().
 
--export_type([record/0, part/0]).
+-export_type([record/0, part_number/0]).
 
 -define(DEFAULT_LIST_LIMIT, 5000).
 

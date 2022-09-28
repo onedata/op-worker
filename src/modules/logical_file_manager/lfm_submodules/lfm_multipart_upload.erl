@@ -76,7 +76,7 @@ upload_part(SessId, UploadId, Part) ->
     }, fun(_) -> ok end).
 
 
--spec list_parts(session:id(), multipart_upload:id(), non_neg_integer(), multipart_upload_part:part()) ->
+-spec list_parts(session:id(), multipart_upload:id(), non_neg_integer(), multipart_upload_part:part_number()) ->
     {ok, [multipart_upload_part:record()], boolean()} | {error, term()}.
 list_parts(SessId, UploadId, Limit, StartAfter) ->
     remote_utils:call_fslogic(SessId, multipart_upload_request, #list_multipart_parts{

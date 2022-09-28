@@ -703,7 +703,7 @@ upload_multipart_part(Worker, SessId, UploadId, Part) ->
     ?EXEC(Worker, lfm:upload_multipart_part(SessId, UploadId, Part)).
 
 
--spec list_multipart_parts(node(), session:id(), multipart_upload:id(), non_neg_integer(), multipart_upload_part:part()) ->
+-spec list_multipart_parts(node(), session:id(), multipart_upload:id(), non_neg_integer(), multipart_upload_part:part_number()) ->
     {ok, [multipart_upload_part:record()], boolean()} | {error, term()}.
 list_multipart_parts(Worker, SessId, UploadId, Limit, StartAfter) ->
     ?EXEC(Worker, lfm:list_multipart_parts(SessId, UploadId, Limit, StartAfter)).

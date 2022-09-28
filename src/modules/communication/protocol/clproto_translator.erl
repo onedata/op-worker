@@ -1193,7 +1193,7 @@ translate_from_protobuf(#'CloseSession'{}) ->
 translate_from_protobuf(#'CreateMultipartUpload'{space_id = SpaceId, path = Path}) ->
     #create_multipart_upload{space_id = SpaceId, path = Path};
 translate_from_protobuf(#'UploadMultipartPart'{multipart_upload_id = UploadId, part = Part}) ->
-    #upload_multipart_part{multipart_upload_id = UploadId, part = Part};
+    #upload_multipart_part{multipart_upload_id = UploadId, part = translate_from_protobuf(Part)};
 translate_from_protobuf(#'ListMultipartParts'{
     multipart_upload_id = UploadId,
     limit = Limit,
@@ -1222,7 +1222,7 @@ translate_from_protobuf(#'MultipartUploadRequest'{
     multipart_request = Request
 }) ->
     #multipart_upload_request{
-        multipart_request = translate_to_protobuf(Request)
+        multipart_request = translate_from_protobuf(Request)
     };
 translate_from_protobuf(#'MultipartPart'{
     number = Number,
@@ -2347,7 +2347,7 @@ translate_to_protobuf(#close_session{}) ->
 translate_to_protobuf(#create_multipart_upload{space_id = SpaceId, path = Path}) ->
     {create_multipart_upload, #'CreateMultipartUpload'{space_id = SpaceId, path = Path}};
 translate_to_protobuf(#upload_multipart_part{multipart_upload_id = UploadId, part = Part}) ->
-    {upload_multipart_part, #'UploadMultipartPart'{multipart_upload_id = UploadId, part = Part}};
+    {upload_multipart_part, #'UploadMultipartPart'{multipart_upload_id = UploadId, part = translate_to_protobuf(Part)}};
 translate_to_protobuf(#list_multipart_parts{
     multipart_upload_id = UploadId, 
     limit = Limit, 

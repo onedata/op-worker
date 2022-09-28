@@ -32,7 +32,7 @@
 -type pagination_token() :: binary().
 -type record() :: #multipart_upload{}.
 
--export_type([id/0, path/0, pagination_token/0]).
+-export_type([id/0, path/0, pagination_token/0, record/0]).
 
 -compile({no_auto_import, [get/1]}).
 
@@ -66,13 +66,13 @@ finish(UserId, UploadId) ->
     end.
 
 
--spec get(id()) -> datastore_doc:doc(record()).
+-spec get(id()) -> {ok, datastore_doc:doc(record())} | {error, term()}.
 get(UploadId) ->
     datastore_model:get(?CTX, UploadId).
 
 
 -spec list(od_space:id(), od_user:id(), non_neg_integer(), pagination_token()) -> 
-    {ok, [record()], pagination_token()}.
+    {ok, [record()], pagination_token() | undefined}.
 list(SpaceId, UserId, Limit, PaginationToken) ->
     BaseOpts = case PaginationToken of
         undefined -> #{token => #link_token{}};
