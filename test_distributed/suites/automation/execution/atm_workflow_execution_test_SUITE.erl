@@ -113,7 +113,9 @@
     interrupt_ongoing_atm_workflow_execution_due_to_expired_session/1,
 
     pause_ongoing_atm_workflow_execution/1,
-    pause_ongoing_atm_workflow_execution_with_uncorrelated_results/1
+    pause_ongoing_atm_workflow_execution_with_uncorrelated_results/1,
+
+    stopping_reason_cancel_overrides_pause/1
 ]).
 
 groups() -> [
@@ -217,6 +219,9 @@ groups() -> [
 
         pause_ongoing_atm_workflow_execution,
         pause_ongoing_atm_workflow_execution_with_uncorrelated_results
+    ]},
+    {stopping_tests, [], [
+        stopping_reason_cancel_overrides_pause
     ]}
 ].
 
@@ -229,7 +234,8 @@ all() -> [
     {group, mapping_tests},
     {group, failure_tests},
     {group, repeat_tests},
-    {group, suspend_tests}
+    {group, suspend_tests},
+    {group, stopping_tests}
 ].
 
 
@@ -250,6 +256,7 @@ all() -> [
 -define(RUN_FAILURE_TEST(), ?RUN_TEST(atm_workflow_execution_failure_test_base)).
 -define(RUN_REPEAT_TEST(), ?RUN_TEST(atm_workflow_execution_repeat_test_base)).
 -define(RUN_SUSPEND_TEST(), ?RUN_TEST(atm_workflow_execution_suspension_test_base)).
+-define(RUN_STOPPING_TEST(), ?RUN_TEST(atm_workflow_execution_stopping_test_base)).
 
 
 %%%===================================================================
@@ -537,6 +544,10 @@ pause_ongoing_atm_workflow_execution_with_uncorrelated_results(_Config) ->
     ?RUN_SUSPEND_TEST().
 
 
+stopping_reason_cancel_overrides_pause(_Config) ->
+    ?RUN_STOPPING_TEST().
+
+
 %===================================================================
 % SetUp and TearDown functions
 %===================================================================
@@ -590,7 +601,8 @@ init_per_group(TestGroup, Config) when
     TestGroup =:= mapping_tests;
     TestGroup =:= failure_tests;
     TestGroup =:= repeat_tests;
-    TestGroup =:= suspend_tests
+    TestGroup =:= suspend_tests;
+    TestGroup =:= stopping_tests
 ->
     atm_openfaas_task_executor_mock:init(?PROVIDER_SELECTOR, atm_openfaas_docker_mock),
     atm_workflow_execution_test_runner:init(?PROVIDER_SELECTOR),
@@ -611,7 +623,8 @@ end_per_group(TestGroup, Config) when
     TestGroup =:= mapping_tests;
     TestGroup =:= failure_tests;
     TestGroup =:= repeat_tests;
-    TestGroup =:= suspend_tests
+    TestGroup =:= suspend_tests;
+    TestGroup =:= stopping_tests
 ->
     atm_workflow_execution_test_runner:teardown(?PROVIDER_SELECTOR),
     atm_openfaas_task_executor_mock:teardown(?PROVIDER_SELECTOR),
