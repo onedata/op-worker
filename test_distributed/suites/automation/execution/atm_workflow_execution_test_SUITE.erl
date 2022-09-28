@@ -115,6 +115,7 @@
     pause_ongoing_atm_workflow_execution/1,
     pause_ongoing_atm_workflow_execution_with_uncorrelated_results/1,
 
+    stopping_reason_failure_overrides_pause/1,
     stopping_reason_cancel_overrides_pause/1
 ]).
 
@@ -221,6 +222,7 @@ groups() -> [
         pause_ongoing_atm_workflow_execution_with_uncorrelated_results
     ]},
     {stopping_tests, [], [
+        stopping_reason_failure_overrides_pause,
         stopping_reason_cancel_overrides_pause
     ]}
 ].
@@ -542,6 +544,10 @@ pause_ongoing_atm_workflow_execution(_Config) ->
 
 pause_ongoing_atm_workflow_execution_with_uncorrelated_results(_Config) ->
     ?RUN_SUSPEND_TEST().
+
+
+stopping_reason_failure_overrides_pause(_Config) ->
+    ?RUN_STOPPING_TEST().
 
 
 stopping_reason_cancel_overrides_pause(_Config) ->
