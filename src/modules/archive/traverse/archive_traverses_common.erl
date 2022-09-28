@@ -23,7 +23,7 @@
 -export([do_master_job/4]).
 -export([update_children_count/4, take_children_count/3]).
 -export([execute_unsafe_job/5]).
--export([is_cancelled/1]).
+-export([is_cancelling/1]).
 
 -type error_handler(T) :: fun((tree_traverse:job(), Error :: any(), Stacktrace :: list()) -> T).
 
@@ -63,18 +63,20 @@ execute_unsafe_job(Module, JobFunctionName, Options, Job, ErrorHandler) ->
     end.
 
 
--spec is_cancelled(archivisation_traverse_ctx:ctx() | archive:doc()) -> boolean() | {error, term()}.
-is_cancelled(#document{key = ArchiveId}) ->
+-spec is_cancelling(archivisation_traverse_ctx:ctx() | archive:doc()) -> boolean() | {error, term()}.
+is_cancelling(#document{key = ArchiveId}) ->
     case archive:get(ArchiveId) of
-        {ok, #document{value = #archive{state = State}}} ->
-            State == ?ARCHIVE_CANCELLING;
+        {ok, #document{value = #archive{state = ?ARCHIVE_CANCELLING(_)}}} ->
+            true;
+        {ok, #document{}} ->
+            false;
         {error, _} = Error ->
             Error
     end;
-is_cancelled(ArchiveCtx) ->
+is_cancelling(ArchiveCtx) ->
     case archivisation_traverse_ctx:get_archive_doc(ArchiveCtx) of
         undefined -> false;
-        ArchiveDoc -> is_cancelled(ArchiveDoc)
+        ArchiveDoc -> is_cancelling(ArchiveDoc)
     end.
 
 

@@ -19,7 +19,7 @@
 -export([
     list/4,
     archive_dataset/6,
-    cancel_archivisation/2,
+    cancel_archivisation/3,
     get_info/2,
     update/3,
     delete/3,
@@ -74,12 +74,15 @@ archive_dataset(SessionId, DatasetId, Config, PreservedCallback, DeletedCallback
     }).
 
 
--spec cancel_archivisation(session:id(), archive:id()) ->
+-spec cancel_archivisation(session:id(), archive:id(), archive:cancel_preservation_policy()) ->
     archive_api:info() | no_return().
-cancel_archivisation(SessionId, ArchiveId) ->
+cancel_archivisation(SessionId, ArchiveId, PreservationPolicy) ->
     SpaceGuid = archive_id_to_space_guid(ArchiveId),
     
-    middleware_worker:check_exec(SessionId, SpaceGuid, #archivisation_cancel_request{id = ArchiveId}).
+    middleware_worker:check_exec(SessionId, SpaceGuid, #archivisation_cancel_request{
+        id = ArchiveId,
+        preservation_policy = PreservationPolicy
+    }).
 
 
 -spec get_info(session:id(), archive:id()) ->

@@ -121,7 +121,10 @@ task_finished(TaskId, _Pool) ->
 -spec task_canceled(id(), tree_traverse:pool()) -> ok.
 task_canceled(TaskId, _Pool) ->
     tree_traverse_session:close_for_task(TaskId),
-    archive:mark_cancelled(TaskId), % does nothing if archive already marked as verification failed
+    case archive:mark_cancelled(TaskId) of
+        ok -> ok; % does nothing if archive already marked as `verification_failed`
+        delete -> archive_api:delete(TaskId, undefined)
+    end, 
     ?debug("Archive verification job ~p cancelled", [TaskId]).
 
 

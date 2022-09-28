@@ -58,7 +58,8 @@
 }).
 
 -record(archivisation_cancel_request, {
-    id :: archive:id()
+    id :: archive:id(),
+    preservation_policy :: archive:cancel_preservation_policy()
 }).
 
 -record(archive_info_get_request, {

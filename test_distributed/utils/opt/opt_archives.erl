@@ -15,7 +15,7 @@
 -export([
     list/4, list/5,
     archive_dataset/5, archive_dataset/7,
-    cancel_archivisation/3,
+    cancel_archivisation/4,
     get_info/3,
     update/4,
     delete/3, delete/4,
@@ -92,10 +92,10 @@ archive_dataset(
     ]).
 
 
--spec cancel_archivisation(oct_background:node_selector(), session:id(), archive:id()) ->
-    {ok, archive_api:info()} | errors:error().
-cancel_archivisation(NodeSelector, SessionId, ArchiveId) ->
-    ?CALL(NodeSelector, [SessionId, ArchiveId]).
+-spec cancel_archivisation(oct_background:node_selector(), session:id(), archive:id(), 
+    archive:cancel_preservation_policy()) -> {ok, archive_api:info()} | errors:error().
+cancel_archivisation(NodeSelector, SessionId, ArchiveId, PreservationPolicy) ->
+    ?CALL(NodeSelector, [SessionId, ArchiveId, PreservationPolicy]).
 
 
 -spec get_info(oct_background:node_selector(), session:id(), archive:id()) ->

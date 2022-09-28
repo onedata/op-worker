@@ -200,9 +200,13 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
     ArchiveInfo = mi_archives:get_info(SessionId, ArchiveId),
     {ok, resource, {GRI#gri{id = ArchiveId}, ArchiveInfo}};
 
-create(#op_req{auth = Auth, gri = #gri{id = ArchiveId, aspect = cancel}}) ->
+create(#op_req{auth = Auth, gri = #gri{id = ArchiveId, aspect = cancel}, data = Data}) ->
     SessionId = Auth#auth.session_id,
-    mi_archives:cancel_archivisation(SessionId, ArchiveId);
+    PreservationPolicy = case maps:get(<<"preservationPolicy">>, Data, <<"retain">>) of
+        <<"retain">> -> retain;
+        <<"delete">> -> delete
+    end,
+    mi_archives:cancel_archivisation(SessionId, ArchiveId, PreservationPolicy);
 
 create(#op_req{auth = Auth, data = Data, gri = #gri{id = ArchiveId, aspect = delete}}) ->
     SessionId = Auth#auth.session_id,
