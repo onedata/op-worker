@@ -147,7 +147,9 @@ cancel_scheduled_atm_workflow_execution() ->
                     ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_rerunable({1, 1}, ExpState0),
                     {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_cancelled(ExpState1)}
                 end
-            }
+            },
+            % assert cancelled execution can not be cancelled again
+            after_hook = fun assert_ended_atm_workflow_execution_can_not_be_cancelled/1
         }]
     }).
 
@@ -219,7 +221,9 @@ cancel_enqueued_atm_workflow_execution() ->
                     ExpState2 = atm_workflow_execution_exp_state_builder:expect_lane_run_removed({2, 1}, ExpState1),
                     {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_cancelled(ExpState2)}
                 end
-            }
+            },
+            % assert cancelled execution can not be cancelled again
+            after_hook = fun assert_ended_atm_workflow_execution_can_not_be_cancelled/1
         }]
     }).
 
@@ -376,7 +380,9 @@ cancel_active_atm_workflow_execution_test_base(Testcase, RelayMethod) ->
                     ExpState2 = atm_workflow_execution_exp_state_builder:expect_lane_run_removed({2, 1}, ExpState1),
                     {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_cancelled(ExpState2)}
                 end
-            }
+            },
+            % assert cancelled execution can not be cancelled again
+            after_hook = fun assert_ended_atm_workflow_execution_can_not_be_cancelled/1
         }]
     }).
 
