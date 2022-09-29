@@ -17,7 +17,9 @@
 -include("modules/automation/atm_execution.hrl").
 
 -export([
-    pause_scheduled_atm_workflow_execution/0
+    pause_scheduled_atm_workflow_execution/0,
+
+    pause_finishing_atm_workflow_execution/0
 ]).
 
 
@@ -137,3 +139,53 @@ pause_scheduled_atm_workflow_execution() ->
             }
         }]
     }).
+
+
+pause_finishing_atm_workflow_execution() ->
+    atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
+        provider = ?PROVIDER_SELECTOR,
+        user = ?USER_SELECTOR,
+        space = ?SPACE_SELECTOR,
+        workflow_schema_dump_or_draft = ?ECHO_ATM_WORKFLOW_SCHEMA_DRAFT,
+        workflow_schema_revision_num = 1,
+        incarnations = [#atm_workflow_execution_incarnation_test_spec{
+            incarnation_num = 1,
+            lane_runs = [
+                #atm_lane_run_execution_test_spec{
+                    selector = {1, 1}
+                },
+                #atm_lane_run_execution_test_spec{
+                    selector = {2, 1},
+                    handle_lane_execution_stopped = #atm_step_mock_spec{
+                        after_step_hook = fun(AtmMockCallCtx) ->
+                            % While atm workflow execution as whole has not yet transition to finished status
+                            % (last step remaining) the current lane run did. At this point pause
+                            % is no longer possible (execution is treated as successfully ended)
+                            ?assertThrow(
+                                ?ERROR_ATM_INVALID_STATUS_TRANSITION(?FINISHED_STATUS, ?STOPPING_STATUS),
+                                atm_workflow_execution_test_runner:pause_workflow_execution(AtmMockCallCtx)
+                            )
+                        end
+                    }
+                }
+            ],
+            handle_workflow_execution_stopped = #atm_step_mock_spec{
+                after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                    ExpState1 = expect_lane_runs_rerunable([{1, 1}, {2, 1}], ExpState0),
+                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_finished(ExpState1)}
+                end
+            }
+        }]
+    }).
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+expect_lane_runs_rerunable(AtmLaneRunSelectors, ExpState) ->
+    lists:foldl(fun(AtmLaneRunSelector, ExpStateAcc) ->
+        atm_workflow_execution_exp_state_builder:expect_lane_run_rerunable(AtmLaneRunSelector, ExpStateAcc)
+    end, ExpState, AtmLaneRunSelectors).
