@@ -68,6 +68,7 @@
     cancel_crashed_atm_workflow_execution/1,
 
     pause_scheduled_atm_workflow_execution/1,
+    pause_enqueued_atm_workflow_execution/1,
 
     pause_active_atm_workflow_execution_with_no_uncorrelated_task_results/1,
     pause_active_atm_workflow_execution_with_uncorrelated_task_results/1,
@@ -89,9 +90,6 @@
     fail_atm_workflow_execution_due_to_lambda_error/1,
 
     interrupt_ongoing_atm_workflow_execution_due_to_expired_session/1,
-
-    pause_ongoing_atm_workflow_execution/1,
-    pause_ongoing_atm_workflow_execution_with_uncorrelated_results/1,
 
     stopping_reason_failure_overrides_pause/1,
     stopping_reason_cancel_overrides_pause/1,
@@ -191,6 +189,7 @@ groups() -> [
 
     {pause_tests, [], [
         pause_scheduled_atm_workflow_execution,
+        pause_enqueued_atm_workflow_execution,
 
         pause_active_atm_workflow_execution_with_no_uncorrelated_task_results,
         pause_active_atm_workflow_execution_with_uncorrelated_task_results,
@@ -217,10 +216,7 @@ groups() -> [
     ]},
 
     {suspend_tests, [], [
-        interrupt_ongoing_atm_workflow_execution_due_to_expired_session,
-
-        pause_ongoing_atm_workflow_execution,
-        pause_ongoing_atm_workflow_execution_with_uncorrelated_results
+        interrupt_ongoing_atm_workflow_execution_due_to_expired_session
     ]},
 
     {stopping_tests, [], [
@@ -445,6 +441,10 @@ pause_scheduled_atm_workflow_execution(_Config) ->
     ?RUN_PAUSE_TEST().
 
 
+pause_enqueued_atm_workflow_execution(_Config) ->
+    ?RUN_PAUSE_TEST().
+
+
 pause_active_atm_workflow_execution_with_no_uncorrelated_task_results(_Config) ->
     ?RUN_PAUSE_TEST().
 
@@ -510,14 +510,6 @@ fail_atm_workflow_execution_due_to_lambda_error(_Config) ->
 
 
 interrupt_ongoing_atm_workflow_execution_due_to_expired_session(_Config) ->
-    ?RUN_SUSPEND_TEST().
-
-
-pause_ongoing_atm_workflow_execution(_Config) ->
-    ?RUN_SUSPEND_TEST().
-
-
-pause_ongoing_atm_workflow_execution_with_uncorrelated_results(_Config) ->
     ?RUN_SUSPEND_TEST().
 
 
