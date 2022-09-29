@@ -21,7 +21,8 @@
 
     pause_finishing_atm_workflow_execution/0,
     pause_finished_atm_workflow_execution/0,
-    pause_failed_atm_workflow_execution/0
+    pause_failed_atm_workflow_execution/0,
+    pause_crashed_atm_workflow_execution/0
 ]).
 
 
@@ -256,6 +257,40 @@ pause_failed_atm_workflow_execution() ->
     }).
 
 
+pause_crashed_atm_workflow_execution() ->
+    atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
+        provider = ?PROVIDER_SELECTOR,
+        user = ?USER_SELECTOR,
+        space = ?SPACE_SELECTOR,
+        workflow_schema_dump_or_draft = ?ECHO_ATM_WORKFLOW_SCHEMA_DRAFT,
+        workflow_schema_revision_num = 1,
+        incarnations = [#atm_workflow_execution_incarnation_test_spec{
+            incarnation_num = 1,
+            lane_runs = [
+                #atm_lane_run_execution_test_spec{
+                    selector = {1, 1}
+                },
+                #atm_lane_run_execution_test_spec{
+                    selector = {2, 1},
+                    process_task_result_for_item = #atm_step_mock_spec{
+                        strategy = {yield, {error, crashed}},
+                        after_step_exp_state_diff = no_diff
+                    }
+                }
+            ],
+            handle_exception = #atm_step_mock_spec{
+                after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                    ExpState1 = expect_execution_stopping_while_processing_lane2(ExpState0),
+                    ExpState2 = expect_lane2_pb_stopped(<<"interrupted">>, get_task4_id(ExpState1), ExpState1),
+                    ExpState3 = atm_workflow_execution_exp_state_builder:expect_lane_run_crashed({2, 1}, ExpState2),
+                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_crashed(ExpState3)}
+                end
+            },
+            after_hook = fun assert_ended_atm_workflow_execution_can_not_be_paused/1
+        }]
+    }).
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -266,6 +301,46 @@ expect_lane_runs_rerunable(AtmLaneRunSelectors, ExpState) ->
     lists:foldl(fun(AtmLaneRunSelector, ExpStateAcc) ->
         atm_workflow_execution_exp_state_builder:expect_lane_run_rerunable(AtmLaneRunSelector, ExpStateAcc)
     end, ExpState, AtmLaneRunSelectors).
+
+
+%% @private
+expect_execution_stopping_while_processing_lane2(ExpState0) ->
+    ExpState1 = atm_workflow_execution_exp_state_builder:expect_all_tasks_stopping({2, 1}, ExpState0),
+    ExpState2 = atm_workflow_execution_exp_state_builder:expect_lane_run_stopping({2, 1}, ExpState1),
+    atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(ExpState2).
+
+
+%% @private
+expect_lane2_pb_stopped(ExpectTaskFinalStatus, AtmTaskExecutionId, ExpState0) ->
+    atm_workflow_execution_exp_state_builder:expect_task_parallel_box_transitioned_to_inferred_status(
+        AtmTaskExecutionId,
+        % lane2 parallel boxes have only single task and as such their final status
+        % will be the same as that of their respective task
+        fun(_, _) -> ExpectTaskFinalStatus end,
+        expect_lane2_task_stopped(ExpectTaskFinalStatus, AtmTaskExecutionId, ExpState0)
+    ).
+
+
+%% @private
+expect_lane2_task_stopped(<<"paused">>, AtmTaskExecutionId, ExpState0) ->
+    atm_workflow_execution_exp_state_builder:expect_task_paused(AtmTaskExecutionId, ExpState0);
+
+expect_lane2_task_stopped(<<"interrupted">>, AtmTaskExecutionId, ExpState0) ->
+    atm_workflow_execution_exp_state_builder:expect_task_interrupted(AtmTaskExecutionId, ExpState0);
+
+expect_lane2_task_stopped(<<"skipped">>, AtmTaskExecutionId, ExpState0) ->
+    atm_workflow_execution_exp_state_builder:expect_task_skipped(AtmTaskExecutionId, ExpState0);
+
+expect_lane2_task_stopped(<<"failed">>, AtmTaskExecutionId, ExpState0) ->
+    atm_workflow_execution_exp_state_builder:expect_task_failed(AtmTaskExecutionId, ExpState0);
+
+expect_lane2_task_stopped(<<"cancelled">>, AtmTaskExecutionId, ExpState0) ->
+    atm_workflow_execution_exp_state_builder:expect_task_cancelled(AtmTaskExecutionId, ExpState0).
+
+
+%% @private
+get_task4_id(ExpState) ->
+    atm_workflow_execution_exp_state_builder:get_task_id({{2, 1}, <<"pb3">>, <<"task4">>}, ExpState).
 
 
 %% @private
