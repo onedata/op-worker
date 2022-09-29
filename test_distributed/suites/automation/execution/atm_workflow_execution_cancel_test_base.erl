@@ -19,7 +19,9 @@
 -export([
     cancel_scheduled_atm_workflow_execution/0,
     cancel_enqueued_atm_workflow_execution/0,
-    cancel_active_atm_workflow_execution/0,
+
+    cancel_active_atm_workflow_execution_with_no_uncorrelated_task_results/0,
+    cancel_active_atm_workflow_execution_with_uncorrelated_task_results/0,
 
     cancel_paused_atm_workflow_execution/0,
     cancel_interrupted_atm_workflow_execution/0,
@@ -42,8 +44,8 @@
     }]
 }).
 
--define(ECHO_ATM_WORKFLOW_SCHEMA_DRAFT(__ITEMS_COUNT), #atm_workflow_schema_dump_draft{
-    name = str_utils:to_binary(?FUNCTION_NAME),
+-define(ECHO_ATM_WORKFLOW_SCHEMA_DRAFT(__TESTCASE, __ITEMS_COUNT, __RELAY_METHOD), #atm_workflow_schema_dump_draft{
+    name = str_utils:to_binary(__TESTCASE),
     revision_num = 1,
     revision = #atm_workflow_schema_revision_draft{
         stores = [
@@ -94,10 +96,10 @@
         ]
     },
     supplementary_lambdas = #{?ECHO_LAMBDA_ID => #{
-        ?ECHO_LAMBDA_REVISION_NUM => ?INTEGER_ECHO_LAMBDA_DRAFT
+        ?ECHO_LAMBDA_REVISION_NUM => ?ECHO_LAMBDA_DRAFT(#atm_data_spec{type = atm_integer_type}, __RELAY_METHOD)
     }}
 }).
--define(ECHO_ATM_WORKFLOW_SCHEMA_DRAFT, ?ECHO_ATM_WORKFLOW_SCHEMA_DRAFT(5)).
+-define(ECHO_ATM_WORKFLOW_SCHEMA_DRAFT, ?ECHO_ATM_WORKFLOW_SCHEMA_DRAFT(?FUNCTION_NAME, 5, return_value)).
 
 
 %%%===================================================================
@@ -225,14 +227,23 @@ cancel_enqueued_atm_workflow_execution() ->
     }).
 
 
-cancel_active_atm_workflow_execution() ->
+cancel_active_atm_workflow_execution_with_no_uncorrelated_task_results() ->
+    cancel_active_atm_workflow_execution_test_base(?FUNCTION_NAME, return_value).
+
+
+cancel_active_atm_workflow_execution_with_uncorrelated_task_results() ->
+    cancel_active_atm_workflow_execution_test_base(?FUNCTION_NAME, file_pipe).
+
+
+%% @private
+cancel_active_atm_workflow_execution_test_base(Testcase, RelayMethod) ->
     ItemCount = 100,
 
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         provider = ?PROVIDER_SELECTOR,
         user = ?USER_SELECTOR,
         space = ?SPACE_SELECTOR,
-        workflow_schema_dump_or_draft = ?ECHO_ATM_WORKFLOW_SCHEMA_DRAFT(ItemCount),
+        workflow_schema_dump_or_draft = ?ECHO_ATM_WORKFLOW_SCHEMA_DRAFT(Testcase, ItemCount, RelayMethod),
         workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,

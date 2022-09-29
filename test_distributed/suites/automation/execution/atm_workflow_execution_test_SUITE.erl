@@ -55,7 +55,9 @@
 
     cancel_scheduled_atm_workflow_execution/1,
     cancel_enqueued_atm_workflow_execution/1,
-    cancel_active_atm_workflow_execution/1,
+
+    cancel_active_atm_workflow_execution_with_no_uncorrelated_task_results/1,
+    cancel_active_atm_workflow_execution_with_uncorrelated_task_results/1,
 
     cancel_paused_atm_workflow_execution/1,
     cancel_interrupted_atm_workflow_execution/1,
@@ -163,7 +165,9 @@ groups() -> [
     {cancel_tests, [], [
         cancel_scheduled_atm_workflow_execution,
         cancel_enqueued_atm_workflow_execution,
-        cancel_active_atm_workflow_execution,
+
+        cancel_active_atm_workflow_execution_with_no_uncorrelated_task_results,
+        cancel_active_atm_workflow_execution_with_uncorrelated_task_results,
 
         cancel_paused_atm_workflow_execution,
         cancel_interrupted_atm_workflow_execution,
@@ -379,7 +383,11 @@ cancel_enqueued_atm_workflow_execution(_Config) ->
     ?RUN_CANCEL_TEST().
 
 
-cancel_active_atm_workflow_execution(_Config) ->
+cancel_active_atm_workflow_execution_with_no_uncorrelated_task_results(_Config) ->
+    ?RUN_CANCEL_TEST().
+
+
+cancel_active_atm_workflow_execution_with_uncorrelated_task_results(_Config) ->
     ?RUN_CANCEL_TEST().
 
 
