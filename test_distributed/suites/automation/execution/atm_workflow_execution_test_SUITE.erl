@@ -74,6 +74,7 @@
     pause_active_atm_workflow_execution_with_uncorrelated_task_results/1,
 
     pause_finishing_atm_workflow_execution/1,
+    pause_cancelled_atm_workflow_execution/1,
     pause_finished_atm_workflow_execution/1,
     pause_failed_atm_workflow_execution/1,
     pause_crashed_atm_workflow_execution/1,
@@ -195,6 +196,7 @@ groups() -> [
         pause_active_atm_workflow_execution_with_uncorrelated_task_results,
 
         pause_finishing_atm_workflow_execution,
+        pause_cancelled_atm_workflow_execution,
         pause_finished_atm_workflow_execution,
         pause_failed_atm_workflow_execution,
         pause_crashed_atm_workflow_execution
@@ -454,6 +456,10 @@ pause_active_atm_workflow_execution_with_uncorrelated_task_results(_Config) ->
 
 
 pause_finishing_atm_workflow_execution(_Config) ->
+    ?RUN_PAUSE_TEST().
+
+
+pause_cancelled_atm_workflow_execution(_Config) ->
     ?RUN_PAUSE_TEST().
 
 
