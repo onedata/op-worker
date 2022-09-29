@@ -22,6 +22,7 @@
     cancel_active_atm_workflow_execution/0,
 
     cancel_paused_atm_workflow_execution/0,
+    cancel_interrupted_atm_workflow_execution/0,
 
     cancel_finishing_atm_workflow_execution/0,
     cancel_finished_atm_workflow_execution/0
@@ -409,17 +410,41 @@ cancel_paused_atm_workflow_execution() ->
                     {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_paused(ExpState0)}
                 end
             },
-            after_hook = fun(AtmMockCallCtx = #atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
-                ?assertEqual(ok, atm_workflow_execution_test_runner:cancel_workflow_execution(AtmMockCallCtx)),
+            after_hook = fun cancel_suspended_atm_workflow_execution/1
+        }]
+    }).
 
-                ExpState1 = atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(ExpState0),
-                ExpState2 = expect_lane2_pb_stopped(<<"cancelled">>, get_task4_id(ExpState1), ExpState1),
-                ExpState3 = atm_workflow_execution_exp_state_builder:expect_lane_run_cancelled({2, 1}, ExpState2),
-                ExpState4 = expect_lane_runs_rerunable([{1, 1}, {2, 1}], ExpState3),
-                ExpState5 = atm_workflow_execution_exp_state_builder:expect_workflow_execution_cancelled(ExpState4),
 
-                ?assert(atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState5, 0))
-            end
+cancel_interrupted_atm_workflow_execution() ->
+    atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
+        provider = ?PROVIDER_SELECTOR,
+        user = ?USER_SELECTOR,
+        space = ?SPACE_SELECTOR,
+        workflow_schema_dump_or_draft = ?ECHO_ATM_WORKFLOW_SCHEMA_DRAFT,
+        workflow_schema_revision_num = 1,
+        incarnations = [#atm_workflow_execution_incarnation_test_spec{
+            incarnation_num = 1,
+            lane_runs = [
+                #atm_lane_run_execution_test_spec{
+                    selector = {1, 1}
+                },
+                #atm_lane_run_execution_test_spec{
+                    selector = {2, 1},
+                    process_task_result_for_item = #atm_step_mock_spec{
+                        before_step_hook = fun atm_workflow_execution_test_runner:delete_offline_session/1,
+                        before_step_exp_state_diff = no_diff
+                    }
+                }
+            ],
+            handle_exception = #atm_step_mock_spec{
+                after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                    ExpState1 = expect_execution_stopping_while_processing_lane2(ExpState0),
+                    ExpState2 = expect_lane2_pb_stopped(<<"interrupted">>, get_task4_id(ExpState1), ExpState1),
+                    ExpState3 = atm_workflow_execution_exp_state_builder:expect_lane_run_interrupted({2, 1}, ExpState2),
+                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_interrupted(ExpState3)}
+                end
+            },
+            after_hook = fun cancel_suspended_atm_workflow_execution/1
         }]
     }).
 
@@ -454,9 +479,8 @@ cancel_finishing_atm_workflow_execution() ->
             ],
             handle_workflow_execution_stopped = #atm_step_mock_spec{
                 after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
-                    ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_rerunable({1, 1}, ExpState0),
-                    ExpState2 = atm_workflow_execution_exp_state_builder:expect_lane_run_rerunable({2, 1}, ExpState1),
-                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_finished(ExpState2)}
+                    ExpState1 = expect_lane_runs_rerunable([{1, 1}, {2, 1}], ExpState0),
+                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_finished(ExpState1)}
                 end
             }
         }]
@@ -484,9 +508,8 @@ cancel_finished_atm_workflow_execution() ->
                     )
                 end,
                 after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
-                    ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_rerunable({1, 1}, ExpState0),
-                    ExpState2 = atm_workflow_execution_exp_state_builder:expect_lane_run_rerunable({2, 1}, ExpState1),
-                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_finished(ExpState2)}
+                    ExpState1 = expect_lane_runs_rerunable([{1, 1}, {2, 1}], ExpState0),
+                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_finished(ExpState1)}
                 end
             }
         }]
@@ -546,6 +569,9 @@ expect_lane2_pb_stopped(ExpectTaskFinalStatus, AtmTaskExecutionId, ExpState0) ->
 expect_lane2_task_stopped(<<"paused">>, AtmTaskExecutionId, ExpState0) ->
     atm_workflow_execution_exp_state_builder:expect_task_paused(AtmTaskExecutionId, ExpState0);
 
+expect_lane2_task_stopped(<<"interrupted">>, AtmTaskExecutionId, ExpState0) ->
+    atm_workflow_execution_exp_state_builder:expect_task_interrupted(AtmTaskExecutionId, ExpState0);
+
 expect_lane2_task_stopped(<<"skipped">>, AtmTaskExecutionId, ExpState0) ->
     atm_workflow_execution_exp_state_builder:expect_task_skipped(AtmTaskExecutionId, ExpState0);
 
@@ -559,6 +585,21 @@ expect_lane2_task_stopped(<<"cancelled">>, AtmTaskExecutionId, ExpState0) ->
 %% @private
 get_task4_id(ExpState) ->
     atm_workflow_execution_exp_state_builder:get_task_id({{2, 1}, <<"pb3">>, <<"task4">>}, ExpState).
+
+
+%% @private
+cancel_suspended_atm_workflow_execution(AtmMockCallCtx = #atm_mock_call_ctx{
+    workflow_execution_exp_state = ExpState0
+}) ->
+    ?assertEqual(ok, atm_workflow_execution_test_runner:cancel_workflow_execution(AtmMockCallCtx)),
+
+    ExpState1 = atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(ExpState0),
+    ExpState2 = expect_lane2_pb_stopped(<<"cancelled">>, get_task4_id(ExpState1), ExpState1),
+    ExpState3 = atm_workflow_execution_exp_state_builder:expect_lane_run_cancelled({2, 1}, ExpState2),
+    ExpState4 = expect_lane_runs_rerunable([{1, 1}, {2, 1}], ExpState3),
+    ExpState5 = atm_workflow_execution_exp_state_builder:expect_workflow_execution_cancelled(ExpState4),
+
+    ?assert(atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState5, 0)).
 
 
 %% @private
