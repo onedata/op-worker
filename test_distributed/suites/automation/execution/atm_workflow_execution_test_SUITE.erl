@@ -67,6 +67,8 @@
     cancel_failed_atm_workflow_execution/1,
     cancel_crashed_atm_workflow_execution/1,
 
+    pause_scheduled_atm_workflow_execution/1,
+
     fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error/1,
     fail_atm_workflow_execution_due_to_incorrect_const_arg_type_error/1,
     fail_atm_workflow_execution_due_to_incorrect_iterated_item_query_arg_error/1,
@@ -179,6 +181,10 @@ groups() -> [
         cancel_crashed_atm_workflow_execution
     ]},
 
+    {pause_tests, [], [
+        pause_scheduled_atm_workflow_execution
+    ]},
+
     {failure_tests, [], [
         fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error,
 
@@ -259,6 +265,7 @@ all() -> [
     {group, scheduling_executable_workflow_schema_with_invalid_args_tests},
     {group, preparation_tests},
     {group, cancel_tests},
+    {group, pause_tests},
     {group, failure_tests},
     {group, suspend_tests},
     {group, stopping_tests},
@@ -415,6 +422,10 @@ cancel_failed_atm_workflow_execution(_Config) ->
 
 cancel_crashed_atm_workflow_execution(_Config) ->
     ?RUN_CANCEL_TEST().
+
+
+pause_scheduled_atm_workflow_execution(_Config) ->
+    ?RUN_PAUSE_TEST().
 
 
 fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error(_Config) ->
@@ -654,6 +665,7 @@ init_per_group(scheduling_executable_workflow_schema_with_invalid_args_tests, Co
 init_per_group(TestGroup, Config) when
     TestGroup =:= preparation_tests;
     TestGroup =:= cancel_tests;
+    TestGroup =:= pause_tests;
     TestGroup =:= failure_tests;
     TestGroup =:= suspend_tests;
     TestGroup =:= stopping_tests;
@@ -676,6 +688,7 @@ end_per_group(scheduling_executable_workflow_schema_with_invalid_args_tests, Con
 end_per_group(TestGroup, Config) when
     TestGroup =:= preparation_tests;
     TestGroup =:= cancel_tests;
+    TestGroup =:= pause_tests;
     TestGroup =:= failure_tests;
     TestGroup =:= suspend_tests;
     TestGroup =:= stopping_tests;

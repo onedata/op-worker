@@ -121,9 +121,7 @@ cancel_scheduled_atm_workflow_execution() ->
                 #atm_lane_run_execution_test_spec{
                     selector = {1, 1},
                     prepare_lane = #atm_step_mock_spec{
-                        before_step_hook = fun(AtmMockCallCtx) ->
-                            atm_workflow_execution_test_runner:cancel_workflow_execution(AtmMockCallCtx)
-                        end,
+                        before_step_hook = fun atm_workflow_execution_test_runner:cancel_workflow_execution/1,
                         before_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
                             ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_stopping({1, 1}, ExpState0),
                             {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(ExpState1)}
@@ -174,9 +172,7 @@ cancel_enqueued_atm_workflow_execution() ->
                             )}
                         end,
 
-                        after_step_hook = fun(AtmMockCallCtx) ->
-                            atm_workflow_execution_test_runner:cancel_workflow_execution(AtmMockCallCtx)
-                        end,
+                        after_step_hook = fun atm_workflow_execution_test_runner:cancel_workflow_execution/1,
                         after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
                             ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_stopping({1, 1}, ExpState0),
                             ExpState2 = atm_workflow_execution_exp_state_builder:expect_all_tasks_skipped({1, 1}, ExpState1),
