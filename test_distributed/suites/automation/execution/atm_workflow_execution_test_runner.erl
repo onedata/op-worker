@@ -96,7 +96,7 @@
 }).
 -type step_phase() :: #step_phase{}.
 
--type result_override() :: {return, term()} | {throw, errors:error()}.
+-type result_override() :: {return, term()} | {error | throw, errors:error()}.
 
 -type basic_mock_strategy() ::
     % original step will be run unperturbed
@@ -1209,9 +1209,10 @@ exec_mock(AtmWorkflowExecutionId, Step, Args) ->
 %% @private
 -spec apply_result_override
     ({return, Result}) -> Result when Result :: term();
-    ({throw, errors:error()}) -> no_return().
+    ({error | throw, errors:error()}) -> no_return().
 apply_result_override({return, Result}) -> Result;
-apply_result_override({throw, Error}) -> throw(Error).
+apply_result_override({throw, Error}) -> throw(Error);
+apply_result_override({error, Error}) -> error(Error).
 
 
 %% @private

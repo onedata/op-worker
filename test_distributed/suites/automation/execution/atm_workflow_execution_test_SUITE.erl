@@ -62,6 +62,7 @@
 
     cancel_finishing_atm_workflow_execution/1,
     cancel_finished_atm_workflow_execution/1,
+    cancel_crashed_atm_workflow_execution/1,
 
     fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error/1,
     fail_atm_workflow_execution_due_to_incorrect_const_arg_type_error/1,
@@ -168,7 +169,8 @@ groups() -> [
         cancel_interrupted_atm_workflow_execution,
 
         cancel_finishing_atm_workflow_execution,
-        cancel_finished_atm_workflow_execution
+        cancel_finished_atm_workflow_execution,
+        cancel_crashed_atm_workflow_execution
     ]},
 
     {failure_tests, [], [
@@ -394,6 +396,10 @@ cancel_finishing_atm_workflow_execution(_Config) ->
 
 
 cancel_finished_atm_workflow_execution(_Config) ->
+    ?RUN_CANCEL_TEST().
+
+
+cancel_crashed_atm_workflow_execution(_Config) ->
     ?RUN_CANCEL_TEST().
 
 

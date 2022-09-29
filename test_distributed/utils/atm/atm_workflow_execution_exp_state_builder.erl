@@ -40,6 +40,7 @@
     expect_lane_run_finished/2,
     expect_lane_run_failed/2,
     expect_lane_run_cancelled/2,
+    expect_lane_run_crashed/2,
     expect_lane_run_interrupted/2,
     expect_lane_run_paused/2,
     expect_lane_run_rerunable/2,
@@ -73,6 +74,7 @@
     expect_workflow_execution_finished/1,
     expect_workflow_execution_failed/1,
     expect_workflow_execution_cancelled/1,
+    expect_workflow_execution_crashed/1,
     expect_workflow_execution_paused/1,
     expect_workflow_execution_interrupted/1,
 
@@ -390,6 +392,13 @@ expect_lane_run_failed(AtmLaneRunSelector, ExpStateCtx) ->
     ctx().
 expect_lane_run_cancelled(AtmLaneRunSelector, ExpStateCtx) ->
     ExpAtmLaneRunStateDiff = #{<<"status">> => <<"cancelled">>},
+    update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx).
+
+
+-spec expect_lane_run_crashed(atm_lane_execution:lane_run_selector(), ctx()) ->
+    ctx().
+expect_lane_run_crashed(AtmLaneRunSelector, ExpStateCtx) ->
+    ExpAtmLaneRunStateDiff = #{<<"status">> => <<"crashed">>},
     update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx).
 
 
@@ -775,6 +784,15 @@ expect_workflow_execution_cancelled(ExpStateCtx) ->
     ExpAtmWorkflowExecutionStateDiff = #{
         <<"status">> => <<"cancelled">>,
         <<"finishTime">> => build_timestamp_field_validator(?NOW())
+    },
+    update_workflow_execution_exp_state(ExpAtmWorkflowExecutionStateDiff, ExpStateCtx).
+
+
+-spec expect_workflow_execution_crashed(ctx()) -> ctx().
+expect_workflow_execution_crashed(ExpStateCtx) ->
+    ExpAtmWorkflowExecutionStateDiff = #{
+        <<"status">> => <<"crashed">>,
+        <<"suspendTime">> => build_timestamp_field_validator(?NOW())
     },
     update_workflow_execution_exp_state(ExpAtmWorkflowExecutionStateDiff, ExpStateCtx).
 
