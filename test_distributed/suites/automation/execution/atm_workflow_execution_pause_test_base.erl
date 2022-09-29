@@ -23,6 +23,8 @@
     pause_active_atm_workflow_execution_with_no_uncorrelated_task_results/0,
     pause_active_atm_workflow_execution_with_uncorrelated_task_results/0,
 
+    pause_interrupted_atm_workflow_execution/0,
+
     pause_finishing_atm_workflow_execution/0,
     pause_cancelled_atm_workflow_execution/0,
     pause_finished_atm_workflow_execution/0,
@@ -144,7 +146,8 @@ pause_scheduled_atm_workflow_execution() ->
                 after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
                     {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_paused(ExpState0)}
                 end
-            }
+            },
+            after_hook = fun assert_paused_atm_workflow_execution_can_not_be_paused/1
         }]
     }).
 
@@ -215,7 +218,8 @@ pause_enqueued_atm_workflow_execution() ->
                     ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_removed({2, 1}, ExpState0),
                     {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_paused(ExpState1)}
                 end
-            }
+            },
+            after_hook = fun assert_paused_atm_workflow_execution_can_not_be_paused/1
         }]
     }).
 
@@ -372,7 +376,48 @@ pause_active_atm_workflow_execution_test_base(Testcase, RelayMethod) ->
                     ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_removed({2, 1}, ExpState0),
                     {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_paused(ExpState1)}
                 end
-            }
+            },
+            after_hook = fun assert_paused_atm_workflow_execution_can_not_be_paused/1
+        }]
+    }).
+
+
+pause_interrupted_atm_workflow_execution() ->
+    atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
+        provider = ?PROVIDER_SELECTOR,
+        user = ?USER_SELECTOR,
+        space = ?SPACE_SELECTOR,
+        workflow_schema_dump_or_draft = ?ECHO_ATM_WORKFLOW_SCHEMA_DRAFT,
+        workflow_schema_revision_num = 1,
+        incarnations = [#atm_workflow_execution_incarnation_test_spec{
+            incarnation_num = 1,
+            lane_runs = [
+                #atm_lane_run_execution_test_spec{
+                    selector = {1, 1}
+                },
+                #atm_lane_run_execution_test_spec{
+                    selector = {2, 1},
+                    process_task_result_for_item = #atm_step_mock_spec{
+                        before_step_hook = fun atm_workflow_execution_test_runner:delete_offline_session/1,
+                        before_step_exp_state_diff = no_diff
+                    }
+                }
+            ],
+            handle_exception = #atm_step_mock_spec{
+                after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                    ExpState1 = expect_execution_stopping_while_processing_lane2(ExpState0),
+                    ExpState2 = expect_lane2_pb_stopped(<<"interrupted">>, get_task4_id(ExpState1), ExpState1),
+                    ExpState3 = atm_workflow_execution_exp_state_builder:expect_lane_run_interrupted({2, 1}, ExpState2),
+                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_interrupted(ExpState3)}
+                end
+            },
+            after_hook = fun(AtmMockCallCtx = #atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                ?assertThrow(
+                    ?ERROR_ATM_INVALID_STATUS_TRANSITION(?INTERRUPTED_STATUS, ?STOPPING_STATUS),
+                    atm_workflow_execution_test_runner:pause_workflow_execution(AtmMockCallCtx)
+                ),
+                ?assert(atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState0, 0))
+            end
         }]
     }).
 
@@ -638,6 +683,17 @@ assert_ended_atm_workflow_execution_can_not_be_paused(AtmMockCallCtx = #atm_mock
 }) ->
     ?assertThrow(
         ?ERROR_ATM_WORKFLOW_EXECUTION_ENDED,
+        atm_workflow_execution_test_runner:pause_workflow_execution(AtmMockCallCtx)
+    ),
+    ?assert(atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState0, 0)).
+
+
+%% @private
+assert_paused_atm_workflow_execution_can_not_be_paused(AtmMockCallCtx = #atm_mock_call_ctx{
+    workflow_execution_exp_state = ExpState0
+}) ->
+    ?assertThrow(
+        ?ERROR_ATM_INVALID_STATUS_TRANSITION(?PAUSED_STATUS, ?STOPPING_STATUS),
         atm_workflow_execution_test_runner:pause_workflow_execution(AtmMockCallCtx)
     ),
     ?assert(atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState0, 0)).
