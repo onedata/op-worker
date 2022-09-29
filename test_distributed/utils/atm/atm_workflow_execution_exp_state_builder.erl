@@ -743,15 +743,11 @@ expect_workflow_execution_scheduled(ExpStateCtx) ->
 
 -spec expect_workflow_execution_stopping(ctx()) -> ctx().
 expect_workflow_execution_stopping(ExpStateCtx) ->
-    ExpAtmWorkflowExecutionStateDiff = fun
-        (ExpAtmWorkflowExecutionState = #{<<"startTime">> := 0}) ->
-            % atm workflow execution failure/cancel while in schedule status
-            ExpAtmWorkflowExecutionState#{
-                <<"status">> => <<"stopping">>,
-                <<"startTime">> => build_timestamp_field_validator(?NOW())
-            };
-        (ExpAtmWorkflowExecutionState) ->
-            ExpAtmWorkflowExecutionState#{<<"status">> => <<"stopping">>}
+    ExpAtmWorkflowExecutionStateDiff = fun(ExpAtmWorkflowExecutionState) ->
+        ExpAtmWorkflowExecutionState#{
+            <<"status">> => <<"stopping">>,
+            <<"startTime">> => build_timestamp_field_validator(?NOW())
+        }
     end,
     update_workflow_execution_exp_state(ExpAtmWorkflowExecutionStateDiff, ExpStateCtx).
 

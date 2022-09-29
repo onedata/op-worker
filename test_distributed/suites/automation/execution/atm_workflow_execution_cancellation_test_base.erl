@@ -20,6 +20,9 @@
     cancel_scheduled_atm_workflow_execution/0,
     cancel_enqueued_atm_workflow_execution/0,
     cancel_active_atm_workflow_execution/0,
+
+    cancel_paused_atm_workflow_execution/0,
+
     cancel_finishing_atm_workflow_execution/0,
     cancel_finished_atm_workflow_execution/0
 ]).
@@ -46,23 +49,22 @@
             ?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"st_2">>),
             ?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"st_3">>),
             ?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"st_4">>),
-            ?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"st_5">>)
+            ?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"st_devnull">>)
         ],
         lanes = [
             #atm_lane_schema_draft{
+                id = <<"lane1">>,
                 parallel_boxes = [
                     #atm_parallel_box_schema_draft{
-                        id = <<"pbox_first">>,
+                        id = <<"pb1">>,
                         tasks = [
-                            ?ECHO_ATM_TASK_SCHEMA__DRAFT(<<"t1">>, <<"st_2">>),
-                            ?ECHO_ATM_TASK_SCHEMA__DRAFT(<<"t2">>, <<"st_3">>)
+                            ?ECHO_ATM_TASK_SCHEMA__DRAFT(<<"task1">>, <<"st_2">>),
+                            ?ECHO_ATM_TASK_SCHEMA__DRAFT(<<"task2">>, <<"st_3">>)
                         ]
                     },
                     #atm_parallel_box_schema_draft{
-                        id = <<"pbox_last">>,
-                        tasks = [
-                            ?ECHO_ATM_TASK_SCHEMA__DRAFT(<<"t3">>, <<"st_4">>)
-                        ]
+                        id = <<"pb2">>,
+                        tasks = [?ECHO_ATM_TASK_SCHEMA__DRAFT(<<"task3">>, <<"st_4">>)]
                     }
                 ],
                 store_iterator_spec = #atm_store_iterator_spec_draft{store_schema_id = <<"st_1">>},
@@ -73,9 +75,17 @@
             % Check what happens to lane run preparing in advance (in various stages of preparation)
             % when previous lane run is cancelled
             #atm_lane_schema_draft{
-                parallel_boxes = [#atm_parallel_box_schema_draft{tasks = [
-                    ?ECHO_ATM_TASK_SCHEMA__DRAFT(<<"t10">>, <<"st_5">>)
-                ]}],
+                id = <<"lane2">>,
+                parallel_boxes = [
+                    #atm_parallel_box_schema_draft{
+                        id = <<"pb3">>,
+                        tasks = [?ECHO_ATM_TASK_SCHEMA__DRAFT(<<"task4">>, <<"st_devnull">>)]
+                    },
+                    #atm_parallel_box_schema_draft{
+                        id = <<"pb4">>,
+                        tasks = [?ECHO_ATM_TASK_SCHEMA__DRAFT(<<"task5">>, <<"st_devnull">>)]
+                    }
+                ],
                 store_iterator_spec = #atm_store_iterator_spec_draft{store_schema_id = <<"st_4">>},
                 max_retries = ?RAND_INT(3, 6)
             }
@@ -235,7 +245,7 @@ cancel_active_atm_workflow_execution() ->
                             call_args = [_, _, _, _, ItemBatch]
                         }) ->
                             case 'get task selector for run_task_for_item step call'(AtmMockCallCtx) of
-                                {_, <<"pbox_first">>, _} ->
+                                {_, <<"pb1">>, _} ->
                                     case lists:member(ItemCount, ItemBatch) of
                                         true ->
                                             % Delay execution of last batch to ensure it happens
@@ -244,15 +254,15 @@ cancel_active_atm_workflow_execution() ->
                                         false ->
                                             passthrough
                                     end;
-                                {_, <<"pbox_last">>, _} ->
+                                {_, <<"pb2">>, _} ->
                                     passthrough
                             end
                         end,
                         before_step_hook = fun(AtmMockCallCtx) ->
                             case 'get task selector for run_task_for_item step call'(AtmMockCallCtx) of
-                                {_, <<"pbox_first">>, _} ->
+                                {_, <<"pb1">>, _} ->
                                     ok;
-                                {_, <<"pbox_last">>, _} ->
+                                {_, <<"pb2">>, _} ->
                                     atm_workflow_execution_test_runner:cancel_workflow_execution(AtmMockCallCtx)
                             end
                         end,
@@ -260,9 +270,9 @@ cancel_active_atm_workflow_execution() ->
                             workflow_execution_exp_state = ExpState0
                         }) ->
                             case 'get task selector for run_task_for_item step call'(AtmMockCallCtx) of
-                                {_, <<"pbox_first">>, _} ->
+                                {_, <<"pb1">>, _} ->
                                     false;
-                                {_, <<"pbox_last">>, _} ->
+                                {_, <<"pb2">>, _} ->
                                     ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_stopping(
                                         {1, 1}, ExpState0
                                     ),
@@ -291,9 +301,9 @@ cancel_active_atm_workflow_execution() ->
                             DstAtmStoreSchemaId = case atm_workflow_execution_exp_state_builder:get_task_selector(
                                 AtmTaskExecutionId, ExpState
                             ) of
-                                {_, _, <<"t1">>} -> <<"st_2">>;
-                                {_, _, <<"t2">>} -> <<"st_3">>;
-                                {_, _, <<"t3">>} -> <<"st_4">>
+                                {_, _, <<"task1">>} -> <<"st_2">>;
+                                {_, _, <<"task2">>} -> <<"st_3">>;
+                                {_, _, <<"task3">>} -> <<"st_4">>
                             end,
                             % assert all processed items were mapped to destination store
                             #{<<"items">> := StDstItems} = atm_workflow_execution_test_runner:browse_store(
@@ -316,14 +326,14 @@ cancel_active_atm_workflow_execution() ->
                             ExpState1 = EndTaskFun(AtmTaskExecutionId, ExpState0),
 
                             InferStatusFun = fun
-                                % task t1 and t2 parallel box transition possible combinations
+                                % task task1 and task2 parallel box transition possible combinations
                                 (<<"stopping">>, [<<"skipped">>, <<"stopping">>]) -> <<"stopping">>;
                                 (<<"stopping">>, [<<"cancelled">>, <<"stopping">>]) -> <<"stopping">>;
                                 (<<"stopping">>, [<<"cancelled">>, <<"skipped">>, <<"stopping">>]) -> <<"stopping">>;
                                 (<<"stopping">>, [<<"cancelled">>, <<"skipped">>]) -> <<"cancelled">>;
                                 (<<"stopping">>, [<<"cancelled">>]) -> <<"cancelled">>;
 
-                                % task t3 parallel box transition
+                                % task task3 parallel box transition
                                 (<<"skipped">>, [<<"skipped">>]) -> <<"skipped">>
                             end,
                             {true, atm_workflow_execution_exp_state_builder:expect_task_parallel_box_transitioned_to_inferred_status(
@@ -362,15 +372,56 @@ cancel_active_atm_workflow_execution() ->
     }).
 
 
-%% @private
-'get task selector for run_task_for_item step call'(#atm_mock_call_ctx{
-    workflow_execution_exp_state = ExpState,
-    call_args = [
-        _AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId,
-        _AtmJobBatchId, _ItemBatch
-    ]
-}) ->
-    atm_workflow_execution_exp_state_builder:get_task_selector(AtmTaskExecutionId, ExpState).
+cancel_paused_atm_workflow_execution() ->
+    atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
+        provider = ?PROVIDER_SELECTOR,
+        user = ?USER_SELECTOR,
+        space = ?SPACE_SELECTOR,
+        workflow_schema_dump_or_draft = ?ECHO_ATM_WORKFLOW_SCHEMA_DRAFT,
+        workflow_schema_revision_num = 1,
+        incarnations = [#atm_workflow_execution_incarnation_test_spec{
+            incarnation_num = 1,
+            lane_runs = [
+                #atm_lane_run_execution_test_spec{
+                    selector = {1, 1}
+                },
+                #atm_lane_run_execution_test_spec{
+                    selector = {2, 1},
+                    process_task_result_for_item = #atm_step_mock_spec{
+                        before_step_hook = fun atm_workflow_execution_test_runner:pause_workflow_execution/1,
+
+                        before_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                            {true, expect_execution_stopping_while_processing_lane2(ExpState0)}
+                        end
+                    },
+                    handle_task_execution_stopped = #atm_step_mock_spec{
+                        after_step_exp_state_diff = build_lane2_task_stopped_after_step_diff(<<"paused">>)
+                    },
+                    handle_lane_execution_stopped = #atm_step_mock_spec{
+                        after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                            {true, atm_workflow_execution_exp_state_builder:expect_lane_run_paused({2, 1}, ExpState0)}
+                        end
+                    }
+                }
+            ],
+            handle_workflow_execution_stopped = #atm_step_mock_spec{
+                after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_paused(ExpState0)}
+                end
+            },
+            after_hook = fun(AtmMockCallCtx = #atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                ?assertEqual(ok, atm_workflow_execution_test_runner:cancel_workflow_execution(AtmMockCallCtx)),
+
+                ExpState1 = atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(ExpState0),
+                ExpState2 = expect_lane2_pb_stopped(<<"cancelled">>, get_task4_id(ExpState1), ExpState1),
+                ExpState3 = atm_workflow_execution_exp_state_builder:expect_lane_run_cancelled({2, 1}, ExpState2),
+                ExpState4 = expect_lane_runs_rerunable([{1, 1}, {2, 1}], ExpState3),
+                ExpState5 = atm_workflow_execution_exp_state_builder:expect_workflow_execution_cancelled(ExpState4),
+
+                ?assert(atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState5, 0))
+            end
+        }]
+    }).
 
 
 cancel_finishing_atm_workflow_execution() ->
@@ -440,3 +491,78 @@ cancel_finished_atm_workflow_execution() ->
             }
         }]
     }).
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+'get task selector for run_task_for_item step call'(#atm_mock_call_ctx{
+    workflow_execution_exp_state = ExpState,
+    call_args = [
+        _AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId,
+        _AtmJobBatchId, _ItemBatch
+    ]
+}) ->
+    atm_workflow_execution_exp_state_builder:get_task_selector(AtmTaskExecutionId, ExpState).
+
+
+%% @private
+expect_execution_stopping_while_processing_lane2(ExpState0) ->
+    ExpState1 = atm_workflow_execution_exp_state_builder:expect_all_tasks_stopping({2, 1}, ExpState0),
+    ExpState2 = atm_workflow_execution_exp_state_builder:expect_lane_run_stopping({2, 1}, ExpState1),
+    atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(ExpState2).
+
+
+%% @private
+build_lane2_task_stopped_after_step_diff(ExpectTask4FinalStatus) ->
+    fun(#atm_mock_call_ctx{
+        workflow_execution_exp_state = ExpState0,
+        call_args = [_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId]
+    }) ->
+        case atm_workflow_execution_exp_state_builder:get_task_selector(AtmTaskExecutionId, ExpState0) of
+            {_, <<"pb3">>, <<"task4">>} ->
+                {true, expect_lane2_pb_stopped(ExpectTask4FinalStatus, AtmTaskExecutionId, ExpState0)};
+            {_, <<"pb4">>, <<"task5">>} ->
+                {true, expect_lane2_pb_stopped(<<"skipped">>, AtmTaskExecutionId, ExpState0)}
+        end
+    end.
+
+
+%% @private
+expect_lane2_pb_stopped(ExpectTaskFinalStatus, AtmTaskExecutionId, ExpState0) ->
+    atm_workflow_execution_exp_state_builder:expect_task_parallel_box_transitioned_to_inferred_status(
+        AtmTaskExecutionId,
+        % lane2 parallel boxes have only single task and as such their final status
+        % will be the same as that of their respective task
+        fun(_, _) -> ExpectTaskFinalStatus end,
+        expect_lane2_task_stopped(ExpectTaskFinalStatus, AtmTaskExecutionId, ExpState0)
+    ).
+
+
+%% @private
+expect_lane2_task_stopped(<<"paused">>, AtmTaskExecutionId, ExpState0) ->
+    atm_workflow_execution_exp_state_builder:expect_task_paused(AtmTaskExecutionId, ExpState0);
+
+expect_lane2_task_stopped(<<"skipped">>, AtmTaskExecutionId, ExpState0) ->
+    atm_workflow_execution_exp_state_builder:expect_task_skipped(AtmTaskExecutionId, ExpState0);
+
+expect_lane2_task_stopped(<<"failed">>, AtmTaskExecutionId, ExpState0) ->
+    atm_workflow_execution_exp_state_builder:expect_task_failed(AtmTaskExecutionId, ExpState0);
+
+expect_lane2_task_stopped(<<"cancelled">>, AtmTaskExecutionId, ExpState0) ->
+    atm_workflow_execution_exp_state_builder:expect_task_cancelled(AtmTaskExecutionId, ExpState0).
+
+
+%% @private
+get_task4_id(ExpState) ->
+    atm_workflow_execution_exp_state_builder:get_task_id({{2, 1}, <<"pb3">>, <<"task4">>}, ExpState).
+
+
+%% @private
+expect_lane_runs_rerunable(AtmLaneRunSelectors, ExpState) ->
+    lists:foldl(fun(AtmLaneRunSelector, ExpStateAcc) ->
+        atm_workflow_execution_exp_state_builder:expect_lane_run_rerunable(AtmLaneRunSelector, ExpStateAcc)
+    end, ExpState, AtmLaneRunSelectors).

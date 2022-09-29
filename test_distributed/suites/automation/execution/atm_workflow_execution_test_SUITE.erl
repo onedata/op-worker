@@ -58,6 +58,7 @@
     cancel_active_atm_workflow_execution/1,
     cancel_finishing_atm_workflow_execution/1,
     cancel_finished_atm_workflow_execution/1,
+    cancel_paused_atm_workflow_execution/1,
 
     iterate_over_list_store/1,
     iterate_over_list_store_with_some_inaccessible_items/1,
@@ -157,7 +158,8 @@ groups() -> [
         cancel_enqueued_atm_workflow_execution,
         cancel_active_atm_workflow_execution,
         cancel_finishing_atm_workflow_execution,
-        cancel_finished_atm_workflow_execution
+        cancel_finished_atm_workflow_execution,
+        cancel_paused_atm_workflow_execution
     ]},
     {iteration_tests, [], [
         iterate_over_list_store,
@@ -361,6 +363,10 @@ cancel_enqueued_atm_workflow_execution(_Config) ->
 
 
 cancel_active_atm_workflow_execution(_Config) ->
+    ?RUN_CANCELLATION_TEST().
+
+
+cancel_paused_atm_workflow_execution(_Config) ->
     ?RUN_CANCELLATION_TEST().
 
 
