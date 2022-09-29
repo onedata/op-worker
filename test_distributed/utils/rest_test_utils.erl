@@ -22,6 +22,7 @@
 %% API
 -export([
     request/5, request/6,
+    cacerts_opts/1,
     user_token_header/1,
     assert_request_error/2,
     get_rest_error/1
@@ -35,15 +36,13 @@ request(Node, URL, Method, Headers, Body) ->
     request(Node, URL, Method, Headers, Body, [{recv_timeout, 60000}]).
 
 request(Node, URL, Method, Headers, Body, Opts) ->
-    CaCerts = opw_test_rpc:call(Node, https_listener, get_cert_chain_ders, []),
-    Opts2 = [{ssl_options, [{cacerts, CaCerts}]} | Opts],
     Headers2 = case is_map(Headers) of
         true -> Headers;
         false -> maps:from_list(Headers)
     end,
     Result = http_client:request(
         Method, <<(rest_endpoint(Node))/binary, URL/binary>>,
-        Headers2, Body, Opts2
+        Headers2, Body, [cacerts_opts(Node) | Opts]
     ),
     case Result of
         {ok, RespCode, RespHeaders, RespBody} ->
@@ -51,6 +50,10 @@ request(Node, URL, Method, Headers, Body, Opts) ->
         Other ->
             Other
     end.
+
+cacerts_opts(Node) ->
+    CaCerts = opw_test_rpc:call(Node, https_listener, get_cert_chain_ders, []),
+    [{ssl_options, [{cacerts, CaCerts}]}].
 
 user_token_header(AccessToken) ->
     case rand:uniform(3) of
