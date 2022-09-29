@@ -19,6 +19,9 @@
 -export([
     pause_scheduled_atm_workflow_execution/0,
 
+    pause_active_atm_workflow_execution_with_no_uncorrelated_task_results/0,
+    pause_active_atm_workflow_execution_with_uncorrelated_task_results/0,
+
     pause_finishing_atm_workflow_execution/0,
     pause_finished_atm_workflow_execution/0,
     pause_failed_atm_workflow_execution/0,
@@ -138,6 +141,163 @@ pause_scheduled_atm_workflow_execution() ->
             handle_workflow_execution_stopped = #atm_step_mock_spec{
                 after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
                     {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_paused(ExpState0)}
+                end
+            }
+        }]
+    }).
+
+
+pause_active_atm_workflow_execution_with_no_uncorrelated_task_results() ->
+    pause_active_atm_workflow_execution_test_base(?FUNCTION_NAME, return_value).
+
+
+pause_active_atm_workflow_execution_with_uncorrelated_task_results() ->
+    pause_active_atm_workflow_execution_test_base(?FUNCTION_NAME, file_pipe).
+
+
+%% @private
+pause_active_atm_workflow_execution_test_base(Testcase, RelayMethod) ->
+    ItemCount = 100,
+
+    atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
+        provider = ?PROVIDER_SELECTOR,
+        user = ?USER_SELECTOR,
+        space = ?SPACE_SELECTOR,
+        workflow_schema_dump_or_draft = ?ECHO_ATM_WORKFLOW_SCHEMA_DRAFT(Testcase, ItemCount, RelayMethod),
+        workflow_schema_revision_num = 1,
+        incarnations = [#atm_workflow_execution_incarnation_test_spec{
+            incarnation_num = 1,
+            lane_runs = [
+                #atm_lane_run_execution_test_spec{
+                    selector = {1, 1},
+                    prepare_lane = #atm_step_mock_spec{
+                        defer_after = {prepare_lane, after_step, {2, 1}}
+                    },
+                    run_task_for_item = #atm_step_mock_spec{
+                        strategy = fun(AtmMockCallCtx = #atm_mock_call_ctx{
+                            call_args = [_, _, _, _, ItemBatch]
+                        }) ->
+                            case 'get task selector for run_task_for_item step call'(AtmMockCallCtx) of
+                                {_, <<"pb1">>, _} ->
+                                    case lists:member(ItemCount, ItemBatch) of
+                                        true ->
+                                            % Delay execution of last batch to ensure it happens
+                                            % after execution is paused
+                                            {passthrough_with_delay, timer:seconds(2)};
+                                        false ->
+                                            passthrough
+                                    end;
+                                {_, <<"pb2">>, _} ->
+                                    passthrough
+                            end
+                        end,
+                        before_step_hook = fun(AtmMockCallCtx) ->
+                            case 'get task selector for run_task_for_item step call'(AtmMockCallCtx) of
+                                {_, <<"pb1">>, _} ->
+                                    ok;
+                                {_, <<"pb2">>, _} ->
+                                    atm_workflow_execution_test_runner:pause_workflow_execution(AtmMockCallCtx)
+                            end
+                        end,
+                        before_step_exp_state_diff = fun(AtmMockCallCtx = #atm_mock_call_ctx{
+                            workflow_execution_exp_state = ExpState0
+                        }) ->
+                            case 'get task selector for run_task_for_item step call'(AtmMockCallCtx) of
+                                {_, <<"pb1">>, _} ->
+                                    false;
+                                {_, <<"pb2">>, _} ->
+                                    ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_stopping(
+                                        {1, 1}, ExpState0
+                                    ),
+                                    ExpState2 = atm_workflow_execution_exp_state_builder:expect_all_tasks_stopping(
+                                        {1, 1}, ExpState1
+                                    ),
+                                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(
+                                        ExpState2
+                                    )}
+                            end
+                        end
+                    },
+                    handle_task_execution_stopped = #atm_step_mock_spec{
+                        before_step_exp_state_diff = fun(AtmMockCallCtx = #atm_mock_call_ctx{
+                            workflow_execution_exp_state = ExpState,
+                            call_args = [_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId]
+                        }) ->
+                            ExpTaskStats = atm_workflow_execution_exp_state_builder:get_task_stats(
+                                AtmTaskExecutionId, ExpState
+                            ),
+                            ExpItemsProcessed = element(3, ExpTaskStats),
+                            % pause blocks scheduling execution of leftover items
+                            % but the ones already scheduled should be finished
+                            ?assert(ExpItemsProcessed < ItemCount),
+
+                            DstAtmStoreSchemaId = case atm_workflow_execution_exp_state_builder:get_task_selector(
+                                AtmTaskExecutionId, ExpState
+                            ) of
+                                {_, _, <<"task1">>} -> <<"st_2">>;
+                                {_, _, <<"task2">>} -> <<"st_3">>;
+                                {_, _, <<"task3">>} -> <<"st_4">>
+                            end,
+                            % assert all processed items were mapped to destination store
+                            #{<<"items">> := StDstItems} = atm_workflow_execution_test_runner:browse_store(
+                                DstAtmStoreSchemaId, AtmMockCallCtx
+                            ),
+                            ?assertEqual(ExpItemsProcessed, length(StDstItems)),
+
+                            {true, ExpState}
+                        end,
+                        after_step_exp_state_diff = fun(#atm_mock_call_ctx{
+                            workflow_execution_exp_state = ExpState0,
+                            call_args = [_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId]
+                        }) ->
+                            EndTaskFun = case atm_workflow_execution_exp_state_builder:get_task_stats(
+                                AtmTaskExecutionId, ExpState0
+                            ) of
+                                {0, 0, 0} -> fun atm_workflow_execution_exp_state_builder:expect_task_skipped/2;
+                                _ -> fun atm_workflow_execution_exp_state_builder:expect_task_paused/2
+                            end,
+                            ExpState1 = EndTaskFun(AtmTaskExecutionId, ExpState0),
+
+                            InferStatusFun = fun
+                            % task task1 and task2 parallel box transition possible combinations
+                                (<<"stopping">>, [<<"skipped">>, <<"stopping">>]) -> <<"stopping">>;
+                                (<<"stopping">>, [<<"paused">>, <<"stopping">>]) -> <<"stopping">>;
+                                (<<"stopping">>, [<<"paused">>, <<"skipped">>, <<"stopping">>]) -> <<"stopping">>;
+                                (<<"stopping">>, [<<"paused">>, <<"skipped">>]) -> <<"paused">>;
+                                (<<"stopping">>, [<<"paused">>]) -> <<"paused">>;
+
+                                % task task3 parallel box transition
+                                (<<"skipped">>, [<<"skipped">>]) -> <<"skipped">>
+                            end,
+                            {true, atm_workflow_execution_exp_state_builder:expect_task_parallel_box_transitioned_to_inferred_status(
+                                AtmTaskExecutionId, InferStatusFun, ExpState1
+                            )}
+                        end
+                    },
+                    handle_lane_execution_stopped = #atm_step_mock_spec{
+                        after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState}) ->
+                            {true, atm_workflow_execution_exp_state_builder:expect_lane_run_paused({1, 1}, ExpState)}
+                        end
+                    }
+                },
+                #atm_lane_run_execution_test_spec{
+                    selector = {2, 1},
+                    handle_lane_execution_stopped = #atm_step_mock_spec{
+                        after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState}) ->
+                            % Previously enqueued lane is changed to interrupted
+                            {true, atm_workflow_execution_exp_state_builder:expect_lane_run_interrupted(
+                                {2, 1}, atm_workflow_execution_exp_state_builder:expect_all_tasks_skipped(
+                                    {2, 1}, ExpState
+                                )
+                            )}
+                        end
+                    }
+                }
+            ],
+            handle_workflow_execution_stopped = #atm_step_mock_spec{
+                after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                    ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_removed({2, 1}, ExpState0),
+                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_paused(ExpState1)}
                 end
             }
         }]
@@ -294,6 +454,17 @@ pause_crashed_atm_workflow_execution() ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+'get task selector for run_task_for_item step call'(#atm_mock_call_ctx{
+    workflow_execution_exp_state = ExpState,
+    call_args = [
+        _AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId,
+        _AtmJobBatchId, _ItemBatch
+    ]
+}) ->
+    atm_workflow_execution_exp_state_builder:get_task_selector(AtmTaskExecutionId, ExpState).
 
 
 %% @private

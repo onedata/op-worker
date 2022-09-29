@@ -69,6 +69,14 @@
 
     pause_scheduled_atm_workflow_execution/1,
 
+    pause_active_atm_workflow_execution_with_no_uncorrelated_task_results/1,
+    pause_active_atm_workflow_execution_with_uncorrelated_task_results/1,
+
+    pause_finishing_atm_workflow_execution/1,
+    pause_finished_atm_workflow_execution/1,
+    pause_failed_atm_workflow_execution/1,
+    pause_crashed_atm_workflow_execution/1,
+
     fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error/1,
     fail_atm_workflow_execution_due_to_incorrect_const_arg_type_error/1,
     fail_atm_workflow_execution_due_to_incorrect_iterated_item_query_arg_error/1,
@@ -182,7 +190,15 @@ groups() -> [
     ]},
 
     {pause_tests, [], [
-        pause_scheduled_atm_workflow_execution
+        pause_scheduled_atm_workflow_execution,
+
+        pause_active_atm_workflow_execution_with_no_uncorrelated_task_results,
+        pause_active_atm_workflow_execution_with_uncorrelated_task_results,
+
+        pause_finishing_atm_workflow_execution,
+        pause_finished_atm_workflow_execution,
+        pause_failed_atm_workflow_execution,
+        pause_crashed_atm_workflow_execution
     ]},
 
     {failure_tests, [], [
@@ -287,6 +303,7 @@ all() -> [
 -define(RUN_SCHEDULING_TEST(), ?RUN_TEST(atm_workflow_execution_scheduling_test_base)).
 -define(RUN_PREPARATION_TEST(), ?RUN_TEST(atm_workflow_execution_preparation_test_base)).
 -define(RUN_CANCEL_TEST(), ?RUN_TEST(atm_workflow_execution_cancel_test_base)).
+-define(RUN_PAUSE_TEST(), ?RUN_TEST(atm_workflow_execution_pause_test_base)).
 -define(RUN_FAILURE_TEST(), ?RUN_TEST(atm_workflow_execution_failure_test_base)).
 -define(RUN_SUSPEND_TEST(), ?RUN_TEST(atm_workflow_execution_suspension_test_base)).
 -define(RUN_STOPPING_TEST(), ?RUN_TEST(atm_workflow_execution_stopping_test_base)).
@@ -425,6 +442,30 @@ cancel_crashed_atm_workflow_execution(_Config) ->
 
 
 pause_scheduled_atm_workflow_execution(_Config) ->
+    ?RUN_PAUSE_TEST().
+
+
+pause_active_atm_workflow_execution_with_no_uncorrelated_task_results(_Config) ->
+    ?RUN_PAUSE_TEST().
+
+
+pause_active_atm_workflow_execution_with_uncorrelated_task_results(_Config) ->
+    ?RUN_PAUSE_TEST().
+
+
+pause_finishing_atm_workflow_execution(_Config) ->
+    ?RUN_PAUSE_TEST().
+
+
+pause_finished_atm_workflow_execution(_Config) ->
+    ?RUN_PAUSE_TEST().
+
+
+pause_failed_atm_workflow_execution(_Config) ->
+    ?RUN_PAUSE_TEST().
+
+
+pause_crashed_atm_workflow_execution(_Config) ->
     ?RUN_PAUSE_TEST().
 
 

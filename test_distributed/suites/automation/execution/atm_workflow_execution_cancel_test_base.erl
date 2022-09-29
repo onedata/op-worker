@@ -305,7 +305,6 @@ cancel_active_atm_workflow_execution_test_base(Testcase, RelayMethod) ->
                             ),
                             ExpItemsProcessed = element(3, ExpTaskStats),
                             % cancel blocks scheduling execution of leftover items
-                            % but the ones already scheduled should be finished
                             ?assert(ExpItemsProcessed < ItemCount),
 
                             DstAtmStoreSchemaId = case atm_workflow_execution_exp_state_builder:get_task_selector(
