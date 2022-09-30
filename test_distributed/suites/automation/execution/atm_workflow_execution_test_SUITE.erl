@@ -126,6 +126,8 @@
     map_results_to_multiple_stores/1,
 
     repeat_not_ended_atm_workflow_execution/1,
+    repeat_crashed_atm_workflow_execution/1,
+
     repeat_finished_atm_lane_run_execution/1,
     rerun_failed_iterated_atm_lane_run_execution/1,
     retry_failed_iterated_atm_lane_run_execution/1,
@@ -259,6 +261,8 @@ groups() -> [
 
     {repeat_tests, [], [
         repeat_not_ended_atm_workflow_execution,
+        repeat_crashed_atm_workflow_execution,
+
         repeat_finished_atm_lane_run_execution,
         rerun_failed_iterated_atm_lane_run_execution,
         retry_failed_iterated_atm_lane_run_execution,
@@ -610,6 +614,10 @@ map_results_to_multiple_stores(_Config) ->
 
 
 repeat_not_ended_atm_workflow_execution(_Config) ->
+    ?RUN_REPEAT_TEST().
+
+
+repeat_crashed_atm_workflow_execution(_Config) ->
     ?RUN_REPEAT_TEST().
 
 

@@ -19,6 +19,8 @@
 
 -export([
     repeat_not_ended_atm_workflow_execution/0,
+    repeat_crashed_atm_workflow_execution/0,
+
     repeat_finished_atm_lane_run_execution/0,
     rerun_failed_iterated_atm_lane_run_execution/0,
     retry_failed_iterated_atm_lane_run_execution/0,
@@ -68,6 +70,7 @@
             lanes = [
                 #atm_lane_schema_draft{
                     parallel_boxes = [#atm_parallel_box_schema_draft{
+                        id = <<"pb1">>,
                         tasks = [?ECHO_MEASUREMENTS_TASK_SCHEMA_DRAFT(
                             <<"lane1_task1">>,
                             ?CORRECT_ATM_TIME_SERIES_DISPATCH_RULES
@@ -80,6 +83,7 @@
                 },
                 #atm_lane_schema_draft{
                     parallel_boxes = [#atm_parallel_box_schema_draft{
+                        id = <<"pb2">>,
                         tasks = [?ECHO_MEASUREMENTS_TASK_SCHEMA_DRAFT(
                             <<"lane2_task1">>,
                             [
@@ -192,6 +196,48 @@ repeat_not_ended_atm_workflow_execution() ->
                     {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_paused(ExpState0)}
                 end
             }
+        }]
+    }).
+
+
+% Attempting to repeat any lane run while atm workflow execution has crashed should fail
+repeat_crashed_atm_workflow_execution() ->
+    atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
+        provider = ?PROVIDER_SELECTOR,
+        user = ?USER_SELECTOR,
+        space = ?SPACE_SELECTOR,
+        workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
+            gen_time_series_measurements(), return_value
+        ),
+        workflow_schema_revision_num = 1,
+        incarnations = [#atm_workflow_execution_incarnation_test_spec{
+            incarnation_num = 1,
+            lane_runs = [
+                #atm_lane_run_execution_test_spec{
+                    selector = {1, 1}
+                },
+                #atm_lane_run_execution_test_spec{
+                    selector = {2, 1},
+                    process_task_result_for_item = #atm_step_mock_spec{
+                        strategy = {yield, {error, crashed}},
+                        after_step_exp_state_diff = no_diff
+                    }
+                }
+            ],
+            handle_exception = #atm_step_mock_spec{
+                after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                    ExpState1 = expect_lane2_pb_interrupted(ExpState0),
+                    ExpState2 = atm_workflow_execution_exp_state_builder:expect_lane_run_crashed({2, 1}, ExpState1),
+                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_crashed(ExpState2)}
+                end
+            },
+            after_hook = fun(AtmMockCallCtx) ->
+                assert_not_retriable({1, 1}, AtmMockCallCtx),
+                assert_not_rerunable({1, 1}, AtmMockCallCtx),
+
+                assert_not_retriable({2, 1}, AtmMockCallCtx),
+                assert_not_rerunable({2, 1}, AtmMockCallCtx)
+            end
         }]
     }).
 
@@ -594,9 +640,34 @@ repeat_cancelled_atm_lane_run_execution() ->
 assert_not_retriable(AtmLaneRunSelector, AtmMockCallCtx) ->
     ?assertThrow(
         ?ERROR_ATM_LANE_EXECUTION_RETRY_FAILED,
-        atm_workflow_execution_test_runner:repeat_workflow_execution(
-            retry, AtmLaneRunSelector, AtmMockCallCtx
-        )
+        atm_workflow_execution_test_runner:repeat_workflow_execution(retry, AtmLaneRunSelector, AtmMockCallCtx)
+    ).
+
+
+%% @private
+-spec assert_not_rerunable(
+    atm_lane_execution:lane_run_selector(),
+    atm_workflow_execution_test_runner:mock_call_ctx()
+) ->
+    ok.
+assert_not_rerunable(AtmLaneRunSelector, AtmMockCallCtx) ->
+    ?assertThrow(
+        ?ERROR_ATM_LANE_EXECUTION_RERUN_FAILED,
+        atm_workflow_execution_test_runner:repeat_workflow_execution(rerun, AtmLaneRunSelector, AtmMockCallCtx)
+    ).
+
+
+%% @private
+expect_lane2_pb_interrupted(ExpState0) ->
+    AtmTaskExecutionId = atm_workflow_execution_exp_state_builder:get_task_id(
+        {{2, 1}, <<"pb2">>, <<"lane2_task1">>}, ExpState0
+    ),
+    atm_workflow_execution_exp_state_builder:expect_task_parallel_box_transitioned_to_inferred_status(
+        AtmTaskExecutionId,
+        % lane2 parallel boxes have only single task and as such their final status
+        % will be the same as that of their respective task
+        fun(_, _) -> <<"interrupted">> end,
+        atm_workflow_execution_exp_state_builder:expect_task_interrupted(AtmTaskExecutionId, ExpState0)
     ).
 
 
