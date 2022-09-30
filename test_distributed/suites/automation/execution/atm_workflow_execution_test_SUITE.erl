@@ -98,6 +98,7 @@
     stopping_reason_cancel_overrides_pause/1,
     stopping_reason_cancel_overrides_failure/1,
 
+    stopping_finishing_atm_workflow_execution/1,
     stopping_finished_atm_workflow_execution/1,
     stopping_cancelled_atm_workflow_execution/1,
     stopping_failed_atm_workflow_execution/1,
@@ -235,6 +236,7 @@ groups() -> [
         stopping_reason_cancel_overrides_pause,
         stopping_reason_cancel_overrides_failure,
 
+        stopping_finishing_atm_workflow_execution,
         stopping_finished_atm_workflow_execution,
         stopping_cancelled_atm_workflow_execution,
         stopping_failed_atm_workflow_execution,
@@ -546,6 +548,10 @@ stopping_reason_cancel_overrides_pause(_Config) ->
 
 
 stopping_reason_cancel_overrides_failure(_Config) ->
+    ?RUN_STOPPING_TEST().
+
+
+stopping_finishing_atm_workflow_execution(_Config) ->
     ?RUN_STOPPING_TEST().
 
 
