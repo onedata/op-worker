@@ -646,7 +646,7 @@ on_successful_rename(UserCtx, SourceFileCtx, SourceParentFileCtx, TargetParentFi
     CurrentTime = global_clock:timestamp_seconds(),
     ok = fslogic_times:update_mtime_ctime(SourceParentFileCtx, CurrentTime),
     ok = fslogic_times:update_mtime_ctime(TargetParentFileCtx, CurrentTime),
-    ok = fslogic_times:update_ctime(SourceFileCtx2, CurrentTime),
+    ok = fslogic_times:update_ctime(SourceFileCtx2, CurrentTime, true),
     ok = fslogic_event_emitter:emit_file_renamed_to_client(SourceFileCtx2, ParentGuid, TargetName, PrevName, UserCtx).
 
 

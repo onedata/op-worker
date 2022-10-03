@@ -93,7 +93,6 @@ emit(Evt, MgrRef) ->
     ExcludedRef :: pid() | session:id() | [pid() | session:id()]) ->
     ok | {error, Reason :: term()}.
 emit_to_filtered_subscribers(Evt, RoutingInfo, []) ->
-    ?info("emit1 ~p", [{Evt, RoutingInfo, erlang:process_info(self(), current_stacktrace)}]),
     case subscription_manager:get_subscribers(Evt, RoutingInfo) of
         #event_subscribers{subscribers = SessIds, subscribers_for_links = SessIdsForLinks} ->
             emit(Evt, SessIds),
@@ -110,7 +109,6 @@ emit_to_filtered_subscribers(Evt, RoutingInfo, []) ->
         {error, Reason} -> {error, Reason}
     end;
 emit_to_filtered_subscribers(Evt, RoutingInfo, ExcludedRef) ->
-    ?info("emit2 ~p", [{Evt, RoutingInfo, erlang:process_info(self(), current_stacktrace)}]),
     case subscription_manager:get_subscribers(Evt, RoutingInfo) of
         #event_subscribers{subscribers = SessIds, subscribers_for_links = SessIdsForLinks} ->
             Excluded = get_event_managers(ExcludedRef),
