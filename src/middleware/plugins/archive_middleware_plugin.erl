@@ -19,6 +19,7 @@
 -include("middleware/middleware.hrl").
 -include("modules/dataset/archive.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 %% middleware_router callbacks
@@ -194,10 +195,9 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
     Description = maps:get(<<"description">>, Data, ?DEFAULT_ARCHIVE_DESCRIPTION),
     PreservedCallback = maps:get(<<"preservedCallback">>, Data, undefined),
     DeletedCallback = maps:get(<<"deletedCallback">>, Data, undefined),
-    ArchiveId = mi_archives:archive_dataset(
+    ArchiveInfo = #archive_info{id = ArchiveId} = mi_archives:archive_dataset(
         SessionId, DatasetId, Config, PreservedCallback, DeletedCallback, Description
     ),
-    ArchiveInfo = mi_archives:get_info(SessionId, ArchiveId),
     {ok, resource, {GRI#gri{id = ArchiveId}, ArchiveInfo}};
 
 create(#op_req{auth = Auth, gri = #gri{id = ArchiveId, aspect = cancel}}) ->
