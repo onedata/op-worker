@@ -63,14 +63,17 @@ execute_unsafe_job(Module, JobFunctionName, Options, Job, ErrorHandler) ->
     end.
 
 
--spec is_cancelled(archivisation_traverse_ctx:ctx() | archive:doc()) -> boolean() | {error, term()}.
-is_cancelled(#document{key = ArchiveId}) ->
+-spec is_cancelled(archivisation_traverse_ctx:ctx() | archive:doc() | archive:id()) -> 
+    boolean() | {error, term()}.
+is_cancelled(ArchiveId) when is_binary(ArchiveId) ->
     case archive:get(ArchiveId) of
         {ok, #document{value = #archive{state = State}}} ->
             State == ?ARCHIVE_CANCELLING;
         {error, _} = Error ->
             Error
     end;
+is_cancelled(#document{key = ArchiveId}) ->
+    is_cancelled(ArchiveId);
 is_cancelled(ArchiveCtx) ->
     case archivisation_traverse_ctx:get_archive_doc(ArchiveCtx) of
         undefined -> false;

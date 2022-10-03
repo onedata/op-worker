@@ -209,6 +209,8 @@ delete_file(FileCtx, UserId, TaskId, TraverseInfo = #{emit_events := EmitEvents}
                 file_processed(FileCtx, UserCtx, TaskId, TraverseInfo)
             catch
                 throw:?EACCES ->
+                    ok;
+                throw:?EPERM ->
                     ok
             end;
         {error, ?EACCES} ->
