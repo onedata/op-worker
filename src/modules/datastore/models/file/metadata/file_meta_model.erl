@@ -428,7 +428,7 @@ resolve_conflict(_Ctx,
         end,
 
         case (Mode =/= PrevMode) orelse (Acl =/= PrevAcl) of
-            true -> fslogic_event_emitter:emit_file_attr_changed(file_ctx:new_by_uuid(Uuid, SpaceId), []);
+            true -> fslogic_event_emitter:emit_sizeless_file_attrs_changed(file_ctx:new_by_uuid(Uuid, SpaceId));
             false -> ok
         end
     end),
