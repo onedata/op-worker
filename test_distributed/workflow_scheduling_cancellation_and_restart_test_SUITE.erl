@@ -78,7 +78,7 @@ all() ->
 
         restart_callback_failure_test
     ]).
-
+% TODO - dodac test z cancelowanie ostatniego itemu (ostatni lub nieostatni task dla niego)
 
 -record(test_config, {
     task_type = sync :: sync | async,

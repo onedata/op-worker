@@ -516,7 +516,7 @@ exception_test_base(Config, CallbackToThrow) ->
         verify_history_options = #{expect_exception => <<"3">>},
         restart_doc_present = true
     }),
-
+% TODO - sprawdzic resume'a
     ?assertNot(workflow_scheduling_test_common:has_finish_callbacks_for_lane(ExecutionHistory, <<"3">>)).
 
 lane_failure_test_base(Config, #test_config{

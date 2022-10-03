@@ -23,7 +23,7 @@
     schedule_restart_of_job/2, mark_ongoing_job_finished/2, register_failure/2,
     register_async_job_finish/3, prepare_next_parallel_box/4,
     get_identfiers_for_next_parallel_boxes/3, has_ongoing_jobs/1, get_all_async_cached_result_ids/1,
-    dump/1, from_dump/2, get_dump_struct/0]).
+    get_waiting_or_ongoing_tasks_indexes/1, dump/1, from_dump/2, get_dump_struct/0]).
 %% Functions returning/updating pending_async_jobs field
 -export([register_async_call/4, check_timeouts/1, reset_keepalive_timer/2]).
 %% Functions operating on job_identifier record
@@ -307,6 +307,14 @@ has_ongoing_jobs(#workflow_jobs{ongoing = Ongoing}) ->
 -spec get_all_async_cached_result_ids(jobs()) -> [workflow_cached_async_result:result_ref()].
 get_all_async_cached_result_ids(#workflow_jobs{async_cached_results = Results}) ->
     maps:values(Results).
+
+
+-spec get_waiting_or_ongoing_tasks_indexes(jobs()) -> #{job_identifier() => [job_identifier()]}.
+get_waiting_or_ongoing_tasks_indexes(#workflow_jobs{waiting = Waiting, ongoing = Ongoing}) ->
+    gb_sets:fold(fun(#job_identifier{parallel_box_index = BoxIndex, task_index = TaskIndex}, Acc) ->
+        BoxTasks = maps:get(BoxIndex, Acc, []),
+        Acc#{BoxIndex => [TaskIndex | BoxTasks]}
+    end, #{}, gb_sets:union(Waiting, Ongoing)).
 
 
 -spec dump(jobs()) -> dump().

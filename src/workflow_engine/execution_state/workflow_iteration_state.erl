@@ -19,7 +19,7 @@
 
 %% API
 -export([init/0, can_process_items/1, handle_iteration_finished/1, get_last_registered_item_index/1, register_item/3,
-    handle_item_processed/3, finalize/1, get_item_id/2,
+    handle_item_processed/3, finalize/1, is_resuming_last_item/1, get_item_id/2,
     dump/1, from_dump/1, get_dump_struct/0]).
 %% Test API
 -export([is_finished_and_cleaned/1]).
@@ -34,7 +34,7 @@
                                                                                     % registered
     first_not_finished_item_index = 1 :: workflow_execution_state:index(), % TODO VFS-7787 - maybe init as undefined?
     items_finished_ahead = gb_trees:empty() :: items_finished_ahead(),
-    phase = executing :: executing | {resuming, workflow_execution_state:index()} | finalzing
+    phase = executing :: phase()
 }).
 
 -type state() :: #iteration_state{}.
@@ -45,9 +45,11 @@
     To :: workflow_execution_state:index(),
     From :: workflow_execution_state:index()
 }, SnapshotData :: {workflow_execution_state:index(), workflow_cached_item:id()} | undefined).
+-type phase() :: executing | {resuming, workflow_execution_state:index() | last_item | last_items} | finalzing.
 
 -type dump() :: {
     [workflow_execution_state:index()],
+    workflow_execution_state:index(),
     workflow_execution_state:index(),
     [{{workflow_execution_state:index(), workflow_execution_state:index()}, workflow_execution_state:index()}]
 }.
@@ -68,6 +70,10 @@ can_process_items(#iteration_state{phase = Phase}) ->
 
 
 -spec handle_iteration_finished(state()) -> state().
+handle_iteration_finished(#iteration_state{phase = {resuming, last_item}} = Progress) ->
+    Progress#iteration_state{phase = executing, last_registered_item_index = undefined};
+handle_iteration_finished(#iteration_state{phase = {resuming, last_items}} = Progress) ->
+    Progress#iteration_state{phase = executing, last_registered_item_index = undefined};
 handle_iteration_finished(Progress) ->
     Progress#iteration_state{last_registered_item_index = undefined}.
 
@@ -133,7 +139,7 @@ register_item(
                 items_finished_ahead = gb_trees:enter(TreeKey, {NewItemIndex, ItemId}, FinishedAhead)
             }}
     end;
-register_item(_, LastItemIndex, _) ->
+register_item(_, _, _) ->
     ?WF_ERROR_RACE_CONDITION.
 
 -spec handle_item_processed(state(), workflow_execution_state:index(), boolean()) ->
@@ -279,6 +285,11 @@ finalize(#iteration_state{pending_items = Pending, items_finished_ahead = Finish
         State#iteration_state{phase = finalzing} % TODO - a co jak mamy resuming obecnie?
     }.
 
+
+-spec is_resuming_last_item(state()) -> boolean().
+is_resuming_last_item(#iteration_state{phase = Phase}) ->
+    Phase =:= {resuming, last_item}.
+
 -spec get_item_id(state(), workflow_execution_state:index()) -> workflow_cached_item:id().
 get_item_id(#iteration_state{pending_items = Pending}, ItemIndex) ->
     maps:get(ItemIndex, Pending).
@@ -297,15 +308,23 @@ dump(#iteration_state{
 
 -spec from_dump(dump()) -> state().
 % TODO - co jesli dumpowalismy gdy LastRegistered bylo juz undefined?
+% Z undefined wywali sie po resumie - poprawic
 from_dump({PendingItemsIndexes, LastRegistered, FirstNotFinished, FinishedAheadList}) ->
     PendingItems = maps:from_list(lists:map(fun(Index) -> {Index, undefined} end, PendingItemsIndexes)),
     FinishedAhead = gb_trees:from_orddict(lists:map(fun({Key, ItemIndex}) ->
         {Key, {ItemIndex, undefined}}
     end, FinishedAheadList)),
 
+    % TODO - a co jesli jestesmy ostatnim itemem?
     Phase = case LastRegistered =:= 0 orelse LastRegistered =:= FirstNotFinished - 1 of
-        true -> executing;
-        false -> {resuming, LastRegistered}
+        true -> 
+            executing;
+        false -> 
+            case {LastRegistered, length(PendingItemsIndexes) =< 1} of
+                {undefined, true} -> {resuming, last_item};
+                {undefined, false} -> {resuming, last_items};
+                _ -> {resuming, LastRegistered}
+            end
     end,
 
     #iteration_state{
