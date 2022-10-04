@@ -55,7 +55,9 @@ start(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
 ) ->
     ok | no_return().
 stop(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Reason) ->
-    case atm_task_execution_status:handle_stopping(AtmTaskExecutionId, Reason) of
+    case atm_task_execution_status:handle_stopping(
+        AtmTaskExecutionId, Reason, get_incarnation(AtmWorkflowExecutionCtx)
+    ) of
         {ok, _} when Reason =:= pause ->
             % when execution is paused, ongoing jobs aren't abruptly stopped (the
             % execution engine will wait for them before transitioning to paused status)
@@ -76,12 +78,22 @@ stop(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Reason) ->
 -spec resume(atm_workflow_execution_ctx:record(), atm_task_execution:id()) ->
     ignored | {ok, {workflow_engine:task_spec(), atm_workflow_execution_env:diff()}} | no_return().
 resume(AtmWorkflowExecutionCtx, AtmTaskExecutionId) ->
-    case atm_task_execution_status:handle_resume(AtmTaskExecutionId) of
+    case atm_task_execution_status:handle_resuming(
+        AtmTaskExecutionId, get_incarnation(AtmWorkflowExecutionCtx)
+    ) of
         {ok, AtmTaskExecutionDoc = #document{value = AtmTaskExecution}} ->
             unfreeze_stores(AtmTaskExecution),
-            {ok, initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionDoc)};
+            InitiationResult = initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionDoc),
 
-        {error, task_already_ended} ->
+            case atm_task_execution_status:handle_resumed(AtmTaskExecutionId) of
+                {ok, _} ->
+                    {ok, InitiationResult};
+                {error, task_already_stopped} ->
+                    teardown(AtmWorkflowExecutionCtx, AtmTaskExecutionId),
+                    throw(?ERROR_ATM_WORKFLOW_EXECUTION_ABORTING)
+            end;
+
+        {error, task_already_stopped} ->
             ignored
     end.
 
@@ -497,12 +509,10 @@ handle_job_processing_error(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, E
     errors:error()
 ) ->
     ok.
-handle_uncorrelated_results_processing_error(
-    AtmWorkflowExecutionCtx,
-    AtmTaskExecutionId,
-    Error
-) ->
-    case atm_task_execution_status:handle_stopping(AtmTaskExecutionId, failure) of
+handle_uncorrelated_results_processing_error(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Error) ->
+    case atm_task_execution_status:handle_stopping(
+        AtmTaskExecutionId, failure, get_incarnation(AtmWorkflowExecutionCtx)
+    ) of
         {ok, #document{value = #atm_task_execution{lane_index = AtmLaneIndex, run_num = RunNum}}} ->
             log_uncorrelated_results_processing_error(
                 AtmWorkflowExecutionCtx, AtmTaskExecutionId, Error
@@ -570,3 +580,9 @@ unfreeze_stores(#atm_task_execution{
 }) ->
     AtmTSStoreId /= undefined andalso atm_store_api:unfreeze(AtmTSStoreId),
     atm_store_api:unfreeze(AtmSystemAuditLogStoreId).
+
+
+%% @private
+-spec get_incarnation(atm_workflow_execution_ctx:record()) -> atm_workflow_execution:incarnation().
+get_incarnation(AtmWorkflowExecutionCtx) ->
+    atm_workflow_execution_ctx:get_workflow_execution_incarnation(AtmWorkflowExecutionCtx).

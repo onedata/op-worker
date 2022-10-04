@@ -9,35 +9,42 @@
 %%% This module contains functions that handle atm task execution status
 %%% transitions according (with some exceptions described below) to following
 %%% state machine:
-%%%                                           |
-%%%           resuming execution              v
-%%%     ------------------------------> +-----------+
-%%%   /                                 |  PENDING  |
-%%%  |              ------------------- +-----------+
-%%%  |            /                           |
-%%%  |   task execution stopped               |
-%%%  |      with no item ever            first item
-%%%  |     scheduled to process      scheduled to process
-%%%  |           |                   /
-%%%  |           |                  |                                              ____
-%%%  |           |                  v                                            /      \ overriding ^stopping
-%%%  |           |            +----------+       ^stopping           +------------+     /       reason
-%%%  |           |            |  ACTIVE  | ------------------------> |  STOPPING  | <--
-%%%  |           |            +----------+                           +------------+
-%%%  |           |                  |                                       |
-%%%  |           |        task execution stopped                            |
-%%%  |           |            with all items           task execution stopped due to ^stopping reason
-%%%  |           |               processed            /            /                \               \
-%%%  |           |           /              \       1*            /                  \               4*
-%%%  |           |      successfully       else     |            2*                  3*               \
-%%%  |           |           |               |      |            |                    |                |
-%%%  |           v           v               v      v            v                    v                v
-%%%  |     +-----------+   +----------+     +--------+   +-------------+    2*    +--------+    4*    +-----------+
-%%%  |     |  SKIPPED  |   | FINISHED |     | FAILED |   | INTERRUPTED | <------- | PAUSED | -------> | CANCELLED |
-%%%  |     +-----------+   +----------+     +--------+   +-------------+          +--------+          +-----------+
-%%%  |           |                                              |                      |
-%%%   \          |                                              |                     /
-%%%     ---------o----------------------------------------------o--------------------
+%%%                                         |
+%%%                                         v
+%%%    ------------------------------ +-----------+ <---- no item ever scheduled
+%%%  /                                |  PENDING  |                      \
+%%% |             ------------------- +-----------+                       \
+%%% |           /                           |                              \                  +----------+
+%%% |  task execution stopped               |                              resumed with ----- | RESUMING | --------
+%%% |     with no item ever            first item                          /                  +----------+          \
+%%% |    scheduled to process      scheduled to process                   /                           ^              |
+%%% |          |                   /                                     /                            |              |
+%%% |          |                  |      ----------------------------- else                           |              |
+%%% |          |                  |    /                                                              |              |
+%%% |          |                  |   |                                          ____    overriding   |              |
+%%% |          |                  v   v                                        /      \  ^stopping    |              |
+%%% |          |            +----------+                           +------------+     /  reason       |              |
+%%% |          |            |  ACTIVE  | ------ ^stopping -------> |  STOPPING  | <--                 |              |
+%%% |          |            +----------+                           +------------+                     |              |
+%%% |          |                  |                                 /                                 |              |
+%%% |          |        task execution stopped            ---------                                  /               |
+%%% |          |            with all items              /                  resuming execution       /                |
+%%% |          |               processed               |              -----------------o-----------                  |
+%%% |          |           /              \            |            /                  |                             |
+%%% |          |      successfully       else          |           /      -------------|------- 4* ----              |
+%%% |          |           |               |           |          /     /              |                \            |
+%%% |          v           v               v           |         /     /               |                 v           |
+%%% |    +-----------+   +----------+     +--------+   |   +-------------+         +--------+         +-----------+  |
+%%% |    |  SKIPPED  |   | FINISHED |     | FAILED |   |   | INTERRUPTED | <- 2* - | PAUSED | - 4* -> | CANCELLED |  |
+%%% |    +-----------+   +----------+     +--------+   |   +-------------+         +--------+         +-----------+  |
+%%% |                                             ^    |       ^                       ^              ^              |
+%%% |                                             |    |       |                       |              |              |
+%%% |                                             1*   |       2*                      3*            4*              |
+%%% |                                              \   v       |                       |            /                |
+%%% |                                              [ task execution stopped due to ^stopping reason ]                |
+%%% |                                                 ^                                           ^                  |
+%%%  \                                               /                                             \                /
+%%%    ---------------------------------------------                                                 --------------
 %%%
 %%% Task transition to STOPPING status when execution is halted and not all items were processed.
 %%% It is necessary as results for already scheduled ones must be awaited even if no more items are scheduled.
@@ -66,9 +73,11 @@
     handle_items_withdrawn/2,
     handle_items_failed/2,
 
-    handle_stopping/2,
+    handle_stopping/3,
     handle_stopped/1,
-    handle_resume/1
+
+    handle_resuming/2,
+    handle_resumed/1
 ]).
 
 
@@ -79,8 +88,11 @@
 
 -spec is_transition_allowed(atm_task_execution:status(), atm_task_execution:status()) ->
     boolean().
-is_transition_allowed(?PENDING_STATUS, ?ACTIVE_STATUS) -> true;
 is_transition_allowed(?PENDING_STATUS, ?SKIPPED_STATUS) -> true;
+is_transition_allowed(?PENDING_STATUS, ?INTERRUPTED_STATUS) -> true;
+is_transition_allowed(?PENDING_STATUS, ?PAUSED_STATUS) -> true;
+is_transition_allowed(?PENDING_STATUS, ?CANCELLED_STATUS) -> true;
+is_transition_allowed(?PENDING_STATUS, ?ACTIVE_STATUS) -> true;
 
 is_transition_allowed(?ACTIVE_STATUS, ?FINISHED_STATUS) -> true;
 is_transition_allowed(?ACTIVE_STATUS, ?FAILED_STATUS) -> true;
@@ -92,15 +104,25 @@ is_transition_allowed(?STOPPING_STATUS, ?CANCELLED_STATUS) -> true;
 
 is_transition_allowed(?PAUSED_STATUS, ?INTERRUPTED_STATUS) -> true;
 is_transition_allowed(?PAUSED_STATUS, ?CANCELLED_STATUS) -> true;
+% Transition possible in case of race between resuming interrupted task and pausing it
+% (normally task should first transition to RESUMING status and only then to PAUSED)
+is_transition_allowed(?INTERRUPTED_STATUS, ?PAUSED_STATUS) -> true;
+is_transition_allowed(?INTERRUPTED_STATUS, ?CANCELLED_STATUS) -> true;
 
-is_transition_allowed(?SKIPPED_STATUS, ?PENDING_STATUS) -> true;
-is_transition_allowed(?INTERRUPTED_STATUS, ?PENDING_STATUS) -> true;
-is_transition_allowed(?PAUSED_STATUS, ?PENDING_STATUS) -> true;
+is_transition_allowed(?INTERRUPTED_STATUS, ?RESUMING_STATUS) -> true;
+is_transition_allowed(?PAUSED_STATUS, ?RESUMING_STATUS) -> true;
+
+is_transition_allowed(?RESUMING_STATUS, ?INTERRUPTED_STATUS) -> true;
+is_transition_allowed(?RESUMING_STATUS, ?PAUSED_STATUS) -> true;
+is_transition_allowed(?RESUMING_STATUS, ?CANCELLED_STATUS) -> true;
+is_transition_allowed(?RESUMING_STATUS, ?PENDING_STATUS) -> true;
+is_transition_allowed(?RESUMING_STATUS, ?ACTIVE_STATUS) -> true;
 
 is_transition_allowed(_, _) -> false.
 
 
 -spec is_running(atm_task_execution:status()) -> boolean().
+is_running(?RESUMING_STATUS) -> true;
 is_running(?PENDING_STATUS) -> true;
 is_running(?ACTIVE_STATUS) -> true;
 is_running(?STOPPING_STATUS) -> true;
@@ -192,18 +214,26 @@ handle_items_failed(AtmTaskExecutionId, ItemCount) ->
 
 -spec handle_stopping(
     atm_task_execution:id(),
-    atm_task_execution:stopping_reason()
+    atm_task_execution:stopping_reason(),
+    atm_workflow_execution:incarnation()
 ) ->
     {ok, atm_task_execution:doc()} | {error, task_already_stopping} | {error, task_already_stopped}.
-handle_stopping(AtmTaskExecutionId, Reason) ->
+handle_stopping(AtmTaskExecutionId, Reason, CurrentIncarnation) ->
     apply_diff(AtmTaskExecutionId, fun
-        (AtmTaskExecution = #atm_task_execution{status = ?PENDING_STATUS}) ->
-            {ok, AtmTaskExecution#atm_task_execution{status = ?SKIPPED_STATUS}};
+        (AtmTaskExecution = #atm_task_execution{status = Status}) when
+            Status =:= ?PENDING_STATUS;
+            Status =:= ?RESUMING_STATUS
+        ->
+            {ok, AtmTaskExecution#atm_task_execution{
+                status = infer_stopped_status(Reason),
+                stopping_incarnation = CurrentIncarnation
+            }};
 
         (AtmTaskExecution = #atm_task_execution{status = ?ACTIVE_STATUS}) ->
             {ok, AtmTaskExecution#atm_task_execution{
                 status = ?STOPPING_STATUS,
-                stopping_reason = Reason
+                stopping_reason = Reason,
+                stopping_incarnation = CurrentIncarnation
             }};
 
         (AtmTaskExecution = #atm_task_execution{
@@ -215,16 +245,29 @@ handle_stopping(AtmTaskExecutionId, Reason) ->
                 false -> {error, task_already_stopping}
             end;
 
-        (AtmTaskExecution = #atm_task_execution{status = ?PAUSED_STATUS}) when Reason =:= interrupt ->
+        (AtmTaskExecution = #atm_task_execution{status = ?PAUSED_STATUS}) when
+            Reason =:= cancel;
+            Reason =:= interrupt
+        ->
             {ok, AtmTaskExecution#atm_task_execution{
-                status = ?INTERRUPTED_STATUS,
-                stopping_reason = Reason
+                status = infer_stopped_status(Reason),
+                stopping_reason = Reason,
+                stopping_incarnation = CurrentIncarnation
             }};
 
-        (AtmTaskExecution = #atm_task_execution{status = ?PAUSED_STATUS}) when Reason =:= cancel ->
+        (AtmTaskExecution = #atm_task_execution{
+            status = ?INTERRUPTED_STATUS,
+            stopping_incarnation = PrevStoppingIncarnation
+        }) when
+            Reason =:= cancel;
+            % Possible race condition when resuming and immediately pausing interrupted task (resuming
+            % traverse hasn't yet transition task to RESUMING status while pausing traverse pauses it)
+            (Reason =:= pause andalso PrevStoppingIncarnation < CurrentIncarnation)
+        ->
             {ok, AtmTaskExecution#atm_task_execution{
-                status = ?CANCELLED_STATUS,
-                stopping_reason = Reason
+                status = infer_stopped_status(Reason),
+                stopping_reason = Reason,
+                stopping_incarnation = CurrentIncarnation
             }};
 
         (#atm_task_execution{status = Status}) when
@@ -240,9 +283,7 @@ handle_stopping(AtmTaskExecutionId, Reason) ->
 
 
 -spec handle_stopped(atm_task_execution:id()) ->
-    {ok, atm_task_execution:doc()} |
-    {error, task_resuming} |
-    {error, task_already_stopped}.
+    {ok, atm_task_execution:doc()} | {error, task_already_stopped}.
 handle_stopped(AtmTaskExecutionId) ->
     apply_diff(AtmTaskExecutionId, fun
         (AtmTaskExecution = #atm_task_execution{status = ?PENDING_STATUS}) ->
@@ -275,12 +316,7 @@ handle_stopped(AtmTaskExecutionId) ->
             UpdatedFailedItems = ItemsFailed + ItemsInProcessing,
 
             {ok, AtmTaskExecution#atm_task_execution{
-                status = case StoppingReason of
-                    pause -> ?PAUSED_STATUS;
-                    interrupt -> ?INTERRUPTED_STATUS;
-                    failure -> ?FAILED_STATUS;
-                    cancel -> ?CANCELLED_STATUS
-                end,
+                status = infer_stopped_status(StoppingReason),
                 items_in_processing = 0,
                 items_processed = UpdatedProcessedItems,
                 items_failed = UpdatedFailedItems
@@ -298,32 +334,74 @@ handle_stopped(AtmTaskExecutionId) ->
     end).
 
 
--spec handle_resume(atm_task_execution:id()) ->
-    {ok, atm_task_execution:doc()} | {error, task_already_ended}.
-handle_resume(AtmTaskExecutionId) ->
+-spec handle_resuming(atm_task_execution:id(), atm_workflow_execution:incarnation()) ->
+    {ok, atm_task_execution:doc()} | {error, task_already_stopped}.
+handle_resuming(AtmTaskExecutionId, CurrentIncarnation) ->
     apply_diff(AtmTaskExecutionId, fun
-        (AtmTaskExecution = #atm_task_execution{status = Status}) when
-            Status =:= ?SKIPPED_STATUS;
-            Status =:= ?INTERRUPTED_STATUS;
-            Status =:= ?PAUSED_STATUS
+        (AtmTaskExecution = #atm_task_execution{
+            status = Status,
+            stopping_incarnation = PrevStoppingIncarnation
+        }) when
+            (Status =:= ?INTERRUPTED_STATUS orelse Status =:= ?PAUSED_STATUS),
+            % Ensure status wasn't updated by parallel pause/interrupt (possible race)
+            % in current incarnation
+            PrevStoppingIncarnation < CurrentIncarnation
         ->
             {ok, AtmTaskExecution#atm_task_execution{
-                status = ?PENDING_STATUS,
+                status = ?RESUMING_STATUS,
                 stopping_reason = undefined
             }};
 
         (#atm_task_execution{status = Status}) when
+            Status =:= ?SKIPPED_STATUS;
+            Status =:= ?INTERRUPTED_STATUS;
+            Status =:= ?PAUSED_STATUS;
             Status =:= ?FINISHED_STATUS;
             Status =:= ?FAILED_STATUS;
             Status =:= ?CANCELLED_STATUS
         ->
-            {error, task_already_ended}
+            {error, task_already_stopped}
+    end).
+
+
+-spec handle_resumed(atm_task_execution:id()) ->
+    {ok, atm_task_execution:doc()} | {error, task_already_stopped}.
+handle_resumed(AtmTaskExecutionId) ->
+    apply_diff(AtmTaskExecutionId, fun
+        (AtmTaskExecution = #atm_task_execution{
+            status = ?RESUMING_STATUS,
+            items_in_processing = 0,
+            items_processed = 0,
+            items_failed = 0
+        }) ->
+            {ok, AtmTaskExecution#atm_task_execution{status = ?PENDING_STATUS}};
+
+        (AtmTaskExecution = #atm_task_execution{status = ?RESUMING_STATUS}) ->
+            {ok, AtmTaskExecution#atm_task_execution{status = ?ACTIVE_STATUS}};
+
+        (#atm_task_execution{status = Status}) when
+            Status =:= ?SKIPPED_STATUS;
+            Status =:= ?INTERRUPTED_STATUS;
+            Status =:= ?PAUSED_STATUS;
+            Status =:= ?FINISHED_STATUS;
+            Status =:= ?FAILED_STATUS;
+            Status =:= ?CANCELLED_STATUS
+        ->
+            {error, task_already_stopped}
     end).
 
 
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec infer_stopped_status(atm_task_execution:stopping_reason()) -> atm_task_execution:status().
+infer_stopped_status(pause) -> ?PAUSED_STATUS;
+infer_stopped_status(interrupt) -> ?INTERRUPTED_STATUS;
+infer_stopped_status(failure) -> ?INTERRUPTED_STATUS;
+infer_stopped_status(cancel) -> ?CANCELLED_STATUS.
 
 
 %% @private
