@@ -434,7 +434,10 @@ handle_job_batch_processing_error(
     ErrorLog = #{
         <<"description">> => <<"Failed to process batch of items.">>,
         <<"itemBatch">> => ItemBatch,
-        <<"reason">> => errors:to_json(Error)
+        <<"reason">> => case Error of
+            ?ERROR_ATM_JOB_BATCH_CRASHED(Reason) -> Reason;
+            _ -> errors:to_json(Error)
+        end
     },
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
     atm_workflow_execution_logger:task_error(ErrorLog, Logger).
