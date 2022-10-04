@@ -81,7 +81,7 @@ restore_workflow_execution_state_from_dump(
             jobs_dump = JobsDump
         }}} ->
             TranslatedStatus = case LaneStatus of
-                ?PREPARED -> ?RESUMING_FROM_ITERATOR(Iterator);
+                ?PREPARED -> ?RESUMING_FROM_DUMP(Iterator);
                 ?NOT_PREPARED -> ?NOT_PREPARED
             end,
 

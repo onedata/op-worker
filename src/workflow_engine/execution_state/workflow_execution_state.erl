@@ -63,7 +63,7 @@
 
 % Macros and records used to provide additional information about document update procedure
 % (see #workflow_execution_state.update_report)
--type init_type() :: prepare | {resume_from, iterator:iterator()}.
+-type init_type() :: prepare | ?RESUMING_FROM_ITERATOR(terator:iterator()) | ?RESUMING_FROM_DUMP(terator:iterator()).
 -export_type([init_type/0]).
 -define(LANE_DESIGNATED_FOR_INIT(InitType), {lane_designated_for_init, InitType}).
 -define(LANE_DESIGNATED_FOR_PREPARATION_IN_ADVANCE, lane_designated_for_preparation_in_advance).
@@ -122,7 +122,8 @@
 -export_type([state/0, doc/0]).
 
 -type execution_status() :: ?NOT_PREPARED | ?PREPARING | ?RESUMING_FROM_ITERATOR(iterator:iterator()) |
-    ?PREPARED_IN_ADVANCE | ?PREPARATION_FAILED | ?EXECUTING | #execution_cancelled{}.
+    ?RESUMING_FROM_DUMP(iterator:iterator()) |?PREPARED_IN_ADVANCE | ?PREPARATION_FAILED | ?EXECUTING |
+    #execution_cancelled{}.
 -type next_lane_preparation_status() :: ?NOT_PREPARED | ?PREPARING | ?PREPARED_IN_ADVANCE | ?PREPARATION_FAILED.
 % TODO VFS-7919 better type name
 -type handler_execution_or_cached_async_result() ::
@@ -402,8 +403,8 @@ report_lane_execution_prepared(Handler, ExecutionId, _LaneId, ?PREPARE_CURRENT, 
         ?WF_ERROR_LANE_ALREADY_PREPARED -> ok;
         ?WF_ERROR_PREPARATION_FAILED -> ok
     end;
-report_lane_execution_prepared(Handler, ExecutionId, _LaneId, ?PREPARE_CURRENT, {resume_from, Iterator}, {ok, LaneSpec}) ->
-    case finish_lane_preparation(Handler, ExecutionId, LaneSpec#{iterator => Iterator}, true) of
+report_lane_execution_prepared(Handler, ExecutionId, _LaneId, ?PREPARE_CURRENT, ?RESUMING(ResumeType, Iterator), {ok, LaneSpec}) ->
+    case finish_lane_preparation(Handler, ExecutionId, LaneSpec#{iterator => Iterator}, ResumeType =:= from_dump) of
         {ok, #current_lane{index = LaneIndex, id = LaneId}, IteratorToSave, NextLaneId} ->
             workflow_iterator_snapshot:save(ExecutionId, LaneIndex, LaneId, 0, IteratorToSave, NextLaneId);
         ?WF_ERROR_LANE_ALREADY_PREPARED -> ok;
@@ -568,7 +569,7 @@ finish_lane_preparation(Handler, ExecutionId,
         iterator := Iterator,
         execution_context := LaneExecutionContext
     } = LaneSpec,
-    IsLaneResumed
+    IsLaneResumedFromDump
 ) ->
     case Boxes of
         [] ->
@@ -588,10 +589,9 @@ finish_lane_preparation(Handler, ExecutionId,
 
             NextIterationStep = get_next_iterator(Handler, LaneExecutionContext, Iterator, ExecutionId),
             FailureCountToCancel = maps:get(failure_count_to_cancel, LaneSpec, undefined),
-            case update(ExecutionId, fun(#workflow_execution_state{iteration_state = IterationState} = State) ->
-                State2 = case IsLaneResumed andalso IterationState =/= undefined of
+            case update(ExecutionId, fun(State) ->
+                State2 = case IsLaneResumedFromDump of
                     true ->  State;
-                    % Lane is not resumed or dump has not been found (IterationState =:= undefined)
                     false -> reset_state_fields_for_next_lane(State)
                 end,
                 finish_lane_preparation_internal(
@@ -607,7 +607,7 @@ finish_lane_preparation(Handler, ExecutionId,
                     current_lane = CurrentLane,
                     next_lane = #next_lane{id = NextLaneId}
                 }} = UpdatedDoc} when NextIterationStep =:= undefined ->
-                    case IsLaneResumed of
+                    case IsLaneResumedFromDump of
                         true ->
                             {ok, _} = update(ExecutionId, fun(StateToUpdate) ->
                                 remove_pending_callback(StateToUpdate, ?CALLBACKS_ON_EMPTY_LANE_SELECTOR)
@@ -1075,7 +1075,7 @@ execute_exception_handler(#document{key = ExecutionId, value = #workflow_executi
 
 
 -spec reset_state_fields_for_next_lane(state()) -> state().
-reset_state_fields_for_next_lane(#workflow_execution_state{execution_status = ?RESUMING_FROM_ITERATOR(_)} = State) ->
+reset_state_fields_for_next_lane(#workflow_execution_state{execution_status = ?RESUMING_FROM_DUMP(_)} = State) ->
     State;
 reset_state_fields_for_next_lane(State) ->
     State#workflow_execution_state{
@@ -1375,9 +1375,12 @@ prepare_next_waiting_job(State = #workflow_execution_state{
 }) ->
     {ok, State#workflow_execution_state{execution_status = ?PREPARING, update_report = ?LANE_DESIGNATED_FOR_INIT(prepare)}};
 prepare_next_waiting_job(State = #workflow_execution_state{
-    execution_status = ?RESUMING_FROM_ITERATOR(Iterator)
+    execution_status = ?RESUMING(_, _) = Status
 }) ->
-    {ok, State#workflow_execution_state{execution_status = ?PREPARING, update_report = ?LANE_DESIGNATED_FOR_INIT({resume_from, Iterator})}};
+    {ok, State#workflow_execution_state{
+        execution_status = ?PREPARING,
+        update_report = ?LANE_DESIGNATED_FOR_INIT(Status)
+    }};
 prepare_next_waiting_job(State = #workflow_execution_state{
     execution_status = Status,
     next_lane_preparation_status = ?NOT_PREPARED,

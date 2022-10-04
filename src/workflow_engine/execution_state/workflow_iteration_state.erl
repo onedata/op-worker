@@ -302,7 +302,10 @@ dump(#iteration_state{
     first_not_finished_item_index = FirstNotFinished,
     items_finished_ahead = FinishedAhead
 }) ->
-    MappedFinishedAhead = lists:map(fun({Key, {ItemIndex, _}}) -> {Key, ItemIndex} end, gb_trees:to_list(FinishedAhead)),
+    MappedFinishedAhead = lists:map(fun
+        ({Key, undefined}) -> {Key, undefined};
+        ({Key, {ItemIndex, _}}) -> {Key, ItemIndex}
+    end, gb_trees:to_list(FinishedAhead)),
     {maps:keys(PendingItems), LastRegistered, FirstNotFinished, MappedFinishedAhead}.
 
 
@@ -311,8 +314,9 @@ dump(#iteration_state{
 % Z undefined wywali sie po resumie - poprawic
 from_dump({PendingItemsIndexes, LastRegistered, FirstNotFinished, FinishedAheadList}) ->
     PendingItems = maps:from_list(lists:map(fun(Index) -> {Index, undefined} end, PendingItemsIndexes)),
-    FinishedAhead = gb_trees:from_orddict(lists:map(fun({Key, ItemIndex}) ->
-        {Key, {ItemIndex, undefined}}
+    FinishedAhead = gb_trees:from_orddict(lists:map(fun
+        ({Key, undefined}) -> {Key, undefined};
+        ({Key, ItemIndex}) -> {Key, {ItemIndex, undefined}}
     end, FinishedAheadList)),
 
     % TODO - a co jesli jestesmy ostatnim itemem?

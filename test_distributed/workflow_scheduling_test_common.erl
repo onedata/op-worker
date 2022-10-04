@@ -24,8 +24,8 @@
 -export([get_task_execution_history/1, set_test_execution_manager_option/3, set_test_execution_manager_options/2,
     group_handler_calls_by_execution_id/1]).
 %% Helper functions verifying execution history
--export([verify_execution_history/2, verify_execution_history/3, verify_empty_lane/2, has_finish_callbacks_for_lane/2,
-    has_exception_callbacks/1, filter_finish_and_exception_handlers/2, filter_prepare_in_adnave_handler/3,
+-export([verify_execution_history/2, verify_execution_history/3, verify_empty_lane/2, has_any_finish_callbacks_for_lane/2,
+    has_exception_callback/1, filter_finish_and_exception_handlers/2, filter_prepare_in_adnave_handler/3,
     filter_repeated_stream_callbacks/3, check_prepare_lane_in_head_and_filter/2]).
 %% Helper functions history statistics
 -export([verify_execution_history_stats/2, verify_execution_history_stats/3]).
@@ -131,6 +131,8 @@ test_execution_manager_loop(#{execution_history := History} = Acc, ProcWaitingFo
             test_execution_manager_loop(Acc, Sender, Options);
         {set_option, Key, Value} ->
             test_execution_manager_loop(Acc, ProcWaitingForAns, Options#{Key => Value});
+        {cancel_ans, CancelAns} ->
+            test_execution_manager_loop(Acc#{cancel_ans => CancelAns}, ProcWaitingForAns, Options);
         stop ->
             ok
     after
@@ -225,6 +227,17 @@ reply_to_handler_mock(Sender, ManagerAcc, Options, #handler_call{
             end),
             Sender ! history_saved,
             ManagerAcc#{cancel_ans => CancelAns};
+        {Fun, #{sleep_and_cancel_execution := {Fun, TaskId, Item, SleepTime}}} ->
+            ManagerPid = self(),
+            spawn(fun() ->
+                timer:sleep(SleepTime),
+                CancelAns = rpc:call(node(Sender), workflow_engine, init_cancel_procedure, [ExecutionId]),
+                ManagerPid ! {cancel_ans, CancelAns},
+                Sender ! history_saved,
+                timer:sleep(rand:uniform(1000)),
+                rpc:call(node(Sender), workflow_engine, finish_cancel_procedure, [ExecutionId])
+            end),
+            ManagerAcc;
         {handle_lane_execution_stopped, #{fail_execution_ended_handler := LaneId}} ->
             Sender ! throw_error,
             ManagerAcc;
@@ -904,7 +917,7 @@ verify_empty_lane(ExecutionHistory, LaneId) ->
     ?assertMatch([#handler_call{function = prepare_lane, lane_id = LaneId},
         #handler_call{function = handle_workflow_execution_stopped}], ExecutionHistory).
 
-has_finish_callbacks_for_lane(ExecutionHistory, LaneId) ->
+has_any_finish_callbacks_for_lane(ExecutionHistory, LaneId) ->
     lists:any(fun
         (#handler_call{function = Fun, lane_id = Id}) when Id =:= LaneId ->
             lists:member(Fun, [handle_lane_execution_stopped, handle_task_execution_stopped]);
@@ -914,12 +927,10 @@ has_finish_callbacks_for_lane(ExecutionHistory, LaneId) ->
             false
     end, ExecutionHistory).
 
-has_exception_callbacks(ExecutionHistory) ->
+has_exception_callback(ExecutionHistory) ->
     lists:any(fun
-        (#handler_call{function = Fun}) ->
-            lists:member(Fun, [handle_task_execution_stopped, handle_exception]);
-        (_) ->
-            false
+        (#handler_call{function = Fun}) -> Fun =:= handle_exception;
+        (_) -> false
     end, ExecutionHistory).
 
 filter_finish_and_exception_handlers(ExecutionHistory, LaneId) ->
@@ -928,7 +939,7 @@ filter_finish_and_exception_handlers(ExecutionHistory, LaneId) ->
             not lists:member(Fun, [handle_lane_execution_stopped, handle_task_execution_stopped,
                 handle_task_results_processed_for_all_items, report_item_error]);
         (#handler_call{function = Fun}) ->
-            not lists:member(Fun, [handle_workflow_execution_stopped, handle_workflow_interrupted, andle_exception])
+            not lists:member(Fun, [handle_workflow_execution_stopped, handle_workflow_interrupted, handle_exception])
     end, ExecutionHistory).
 
 filter_prepare_in_adnave_handler(ExecutionHistory, LaneId, true = _IsPrepareInAdvanceSet) ->

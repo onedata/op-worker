@@ -70,7 +70,9 @@
 
 -define(NOT_PREPARED, not_prepared).
 -define(PREPARED, prepared).
--define(RESUMING_FROM_ITERATOR(Iterator), {resuming, Iterator}).
+-define(RESUMING(ResumeType, Iterator), {resuming, ResumeType, Iterator}).
+-define(RESUMING_FROM_ITERATOR(Iterator), ?RESUMING(from_iterator, Iterator)).
+-define(RESUMING_FROM_DUMP(Iterator), ?RESUMING(from_dump, Iterator)).
 -define(PREPARING, preparing).
 -define(PREPARED_IN_ADVANCE, prepared_in_advance).
 -define(PREPARATION_FAILED, preparation_failed).

@@ -770,7 +770,7 @@ prepare_lane(EngineId, ExecutionId, Handler, ExecutionContext, LaneId, Preparati
     try
         Callback = case InitType of
             prepare -> prepare_lane;
-            {resume_from, _} -> resume_lane
+            ?RESUMING(_, _) -> resume_lane
         end,
         Ans = call_handler(ExecutionId, ExecutionContext, Handler, Callback, [LaneId]),
         workflow_execution_state:report_lane_execution_prepared(Handler, ExecutionId, LaneId, PreparationMode, InitType, Ans),

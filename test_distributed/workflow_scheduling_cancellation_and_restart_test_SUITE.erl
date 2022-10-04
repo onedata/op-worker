@@ -27,6 +27,8 @@
     async_workflow_with_prepare_in_advance_external_cancel_test/1,
     async_workflow_external_cancel_during_report_async_task_result_test/1,
     async_workflow_external_cancel_during_result_processing_test/1,
+    async_workflow_last_item_last_result_external_cancel/1,
+    sync_workflow_last_item_middle_job_external_cancel/1,
     internal_cancel_caused_by_sync_job_error_test/1,
     internal_cancel_caused_by_async_job_error_test/1,
     internal_cancel_caused_by_async_job_timeout_test/1,
@@ -57,6 +59,8 @@ all() ->
         async_workflow_with_prepare_in_advance_external_cancel_test,
         async_workflow_external_cancel_during_report_async_task_result_test,
         async_workflow_external_cancel_during_result_processing_test,
+        async_workflow_last_item_last_result_external_cancel,
+        sync_workflow_last_item_middle_job_external_cancel,
         internal_cancel_caused_by_sync_job_error_test,
         internal_cancel_caused_by_async_job_error_test,
         internal_cancel_caused_by_async_job_timeout_test,
@@ -78,7 +82,7 @@ all() ->
 
         restart_callback_failure_test
     ]).
-% TODO - dodac test z cancelowanie ostatniego itemu (ostatni lub nieostatni task dla niego)
+% TODO - sprawdzc jaki iterator jest zapsany jak cancelujemy tuz po wykonaniu lane_ended
 
 -record(test_config, {
     task_type = sync :: sync | async,
@@ -134,6 +138,22 @@ async_workflow_external_cancel_during_result_processing_test(Config) ->
         task_type = async,
         lane_id = <<"3">>,
         test_execution_manager_option = {cancel_execution, process_task_result_for_item, <<"3_2_1">>}
+    }).
+
+async_workflow_last_item_last_result_external_cancel(Config) ->
+    cancel_and_restart_test_base(Config, #test_config{
+        task_type = async,
+        lane_id = <<"3">>,
+        % There are 3 parallel tasks in last parallel box - sleep before cancel to allow 2 other tasks end
+        test_execution_manager_option = {sleep_and_cancel_execution, process_task_result_for_item, <<"3_3_3">>, <<"200">>, 5000}
+    }).
+
+sync_workflow_last_item_middle_job_external_cancel(Config) ->
+    cancel_and_restart_test_base(Config, #test_config{
+        lane_id = <<"3">>,
+        % Sleep before cancel to allow other parallel items end
+        test_execution_manager_option = {sleep_and_cancel_execution, run_task_for_item, <<"3_2_2">>, <<"200">>, 5000},
+        generator_options = ?EXEMPLARY_STREAMS
     }).
 
 internal_cancel_caused_by_sync_job_error_test(Config) ->
@@ -364,6 +384,7 @@ cancel_and_restart_test_base(Config, #test_config{
     [Worker | _] = ?config(op_worker_nodes, Config),
     LaneOptions = case TestExecutionManagerOption of
         {cancel_execution, _, _} -> #{};
+        {sleep_and_cancel_execution, _, _, _, _} -> #{};
         _ -> #{failure_count_to_cancel => 1}
     end,
     {SnapshotMode, DataPersistence} = case RestartType of
@@ -380,8 +401,10 @@ cancel_and_restart_test_base(Config, #test_config{
     {TestExecutionManagerOptionKey, TestExecutionManagerOptionValue} = case TestExecutionManagerOption of
         {cancel_execution, prepare_lane, LaneIdToCancel} ->
             {cancel_execution, {prepare_lane, LaneIdToCancel}};
-        {cancel_execution, Function, Item} ->
-            {cancel_execution, {Function, Item, <<"100">>}};
+        {cancel_execution, Function, Task} ->
+            {cancel_execution, {Function, Task, <<"100">>}};
+        {sleep_and_cancel_execution, Function, Task, Item, SleepTime} ->
+            {sleep_and_cancel_execution, {Function, Task, Item, SleepTime}};
         {_Key, {_TaskId, _Itme}} ->
             TestExecutionManagerOption;
         {Key, TaskId} ->
@@ -396,6 +419,7 @@ cancel_and_restart_test_base(Config, #test_config{
         workflow_scheduling_test_common:get_task_execution_history(Config),
     case TestExecutionManagerOption of
         cancel_execution -> ?assertMatch(#{cancel_ans := ok}, ExtendedHistoryStats);
+        sleep_and_cancel_execution -> ?assertMatch(#{cancel_ans := ok}, ExtendedHistoryStats);
         _ -> ok
     end,
     workflow_scheduling_test_common:verify_execution_history_stats(
@@ -406,6 +430,9 @@ cancel_and_restart_test_base(Config, #test_config{
             workflow_scheduling_test_common:verify_execution_history(
                 WorkflowExecutionSpec, ExecutionHistory, #{expect_lane_finish => LaneId});
         {cancel_execution, _, _} ->
+            workflow_scheduling_test_common:verify_execution_history(
+                WorkflowExecutionSpec, ExecutionHistory, #{stop_on_lane => LaneId});
+        {sleep_and_cancel_execution, _, _, _, _} ->
             workflow_scheduling_test_common:verify_execution_history(
                 WorkflowExecutionSpec, ExecutionHistory, #{stop_on_lane => LaneId});
         {FailureType, {FailedTaskId, FailedItem}} ->
@@ -476,14 +503,15 @@ multiple_parallel_cancels_test_base(Config, #test_config{
     #{execution_history := ExecutionHistory} = ExtendedHistoryStats =
         workflow_scheduling_test_common:get_task_execution_history(Config),
     ?assertMatch(#{cancel_ans := ok}, ExtendedHistoryStats),
-    % TODO - weryfikujemy ze polecial exception
     workflow_scheduling_test_common:verify_execution_history_stats(
         ExtendedHistoryStats, TaskType, #{ignore_async_slots_check => true}),
-    ?assertNot(workflow_scheduling_test_common:has_finish_callbacks_for_lane(ExecutionHistory, LaneId)),
-    % TODO - skasowac funkcje has_exception_callbacks
-%%    ?assertNot(workflow_scheduling_test_common:has_exception_callbacks(ExecutionHistory)),
+    ?assertNot(workflow_scheduling_test_common:has_any_finish_callbacks_for_lane(ExecutionHistory, LaneId)),
+    HasExceptionCallback = case VerifyHistoryOptions of
+        #{expect_exception := _} -> true;
+        _ -> false
+    end,
+    ?assertEqual(HasExceptionCallback, workflow_scheduling_test_common:has_exception_callback(ExecutionHistory)),
 
-    % TODO - dalsze sprawdzanie chyba nie ma sensu
     AfterFirstExecutionCallback(ExecutionId),
     rpc:call(Worker, workflow_engine, finish_cancel_procedure, [ExecutionId]),
     #{execution_history := ExecutionHistory2} = workflow_scheduling_test_common:get_task_execution_history(Config),
