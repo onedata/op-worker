@@ -70,7 +70,7 @@ emit(Evt, {exclude, MgrRef}) ->
 
 emit(#event{} = Evt, MgrRef) ->
     ?update_counter(?EXOMETER_NAME(emit)),
-    case event_type:get_context() of
+    case event_type:get_context(Evt) of
         {file, Guid} ->
             case fslogic_file_id:is_trash_dir_guid(Guid) of
                 true -> ?info("event filtered ~p", [{Evt, MgrRef, erlang:process_info(self(), current_stacktrace)}]);
