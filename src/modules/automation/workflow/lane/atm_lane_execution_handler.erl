@@ -41,6 +41,8 @@ prepare(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
         {ok, AtmWorkflowExecutionDoc} ->
             prepare_lane_run(AtmLaneRunSelector, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx);
 
+        % Execution must have been suspended before lane run preparation finished but after
+        % lane run components has been created - resume it
         ?ERROR_ATM_INVALID_STATUS_TRANSITION(?RESUMING_STATUS, ?PREPARING_STATUS) ->
             {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:get(AtmWorkflowExecutionId),
 
@@ -220,7 +222,7 @@ resume_lane_run(AtmLaneRunSelector, AtmWorkflowExecutionDoc0, AtmWorkflowExecuti
         ),
         unfreeze_exception_store(AtmLaneRunSelector, AtmWorkflowExecutionDoc0),
 
-        AtmWorkflowExecutionDoc1 = atm_lane_execution_status:handle_enqueued(  %% TODO handle_resumed
+        AtmWorkflowExecutionDoc1 = atm_lane_execution_status:handle_resumed(
             AtmLaneRunSelector, AtmWorkflowExecutionDoc0#document.key
         ),
         call_current_lane_run_pre_execution_hooks(AtmWorkflowExecutionDoc1),
