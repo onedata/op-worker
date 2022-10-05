@@ -253,19 +253,19 @@ handle(?PERIODICAL_SPACES_AUTOCLEANING_CHECK) ->
     end,
     schedule_periodical_spaces_autocleaning_check();
 handle({fuse_request, SessId, FuseRequest}) ->
-    ?info("fuse_request(~p): ~p", [SessId, FuseRequest]),
+    ?debug("fuse_request(~p): ~p", [SessId, FuseRequest]),
     Response = handle_request_and_process_response(SessId, FuseRequest),
-    ?info("fuse_response: ~p", [Response]),
+    ?debug("fuse_response: ~p", [Response]),
     {ok, Response};
 handle({provider_request, SessId, ProviderRequest}) ->
-    ?info("provider_request(~p): ~p", [SessId, ProviderRequest]),
+    ?debug("provider_request(~p): ~p", [SessId, ProviderRequest]),
     Response = handle_request_and_process_response(SessId, ProviderRequest),
-    ?info("provider_response: ~p", [Response]),
+    ?debug("provider_response: ~p", [Response]),
     {ok, Response};
 handle({proxyio_request, SessId, ProxyIORequest}) ->
-    ?info("proxyio_request(~p): ~p", [SessId, fslogic_log:mask_data_in_message(ProxyIORequest)]),
+    ?debug("proxyio_request(~p): ~p", [SessId, fslogic_log:mask_data_in_message(ProxyIORequest)]),
     Response = handle_request_and_process_response(SessId, ProxyIORequest),
-    ?info("proxyio_response: ~p", [fslogic_log:mask_data_in_message(Response)]),
+    ?debug("proxyio_response: ~p", [fslogic_log:mask_data_in_message(Response)]),
     {ok, Response};
 handle({bounded_cache_timer, Msg}) ->
     bounded_cache:check_cache_size(Msg);
