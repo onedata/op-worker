@@ -21,7 +21,7 @@
 -export([get_routing_key/2, get_attr_routing_keys/2, get_replica_status_routing_keys/2,
     get_attr_routing_keys_without_replica_status_changes/2,
     get_stream_key/1, get_aggregation_key/1]).
--export([get_context/1, update_context/2]).
+-export([get_context/1]).
 -export([get_reference_based_prefix/1,
     get_attr_changed_reference_based_prefix/0, get_replica_status_reference_based_prefix/0]).
 
@@ -205,7 +205,7 @@ get_context(#file_written_event{file_guid = FileGuid}) ->
 get_context(#file_attr_changed_event{file_attr = FileAttr}) ->
     {file, FileAttr#file_attr.guid};
 get_context(#file_location_changed_event{file_location = FileLocation}) ->
-    {file, file_ctx:new_by_uuid(FileLocation#file_location.uuid, FileLocation#file_location.space_id)};
+    {file, file_id:pack_guid(FileLocation#file_location.uuid, FileLocation#file_location.space_id)};
 get_context(#file_perm_changed_event{file_guid = FileGuid}) ->
     {file, FileGuid};
 get_context(#file_removed_event{file_guid = FileGuid}) ->
@@ -215,38 +215,6 @@ get_context(#file_renamed_event{top_entry = Entry}) ->
 get_context(_) ->
     undefined.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates the event context.
-%% @end
-%%--------------------------------------------------------------------
--spec update_context(Evt :: event:base() | event:type(), Ctx :: ctx()) ->
-    NewEvt :: event:base() | event:type().
-update_context(#event{type = Type} = Evt, Ctx) ->
-    Evt#event{type = update_context(Type, Ctx)};
-update_context(#file_read_event{} = Evt, {file, FileCtx}) ->
-    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
-    Evt#file_read_event{file_guid = FileGuid};
-update_context(#file_written_event{} = Evt, {file, FileCtx}) ->
-    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
-    Evt#file_written_event{file_guid = FileGuid};
-update_context(#file_attr_changed_event{file_attr = A} = Evt, {file, FileCtx}) ->
-    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
-    Evt#file_attr_changed_event{file_attr = A#file_attr{guid = FileGuid}};
-update_context(#file_location_changed_event{file_location = L} = Evt, {file, FileCtx}) ->
-    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
-    Evt#file_location_changed_event{file_location = L#file_location{uuid = FileGuid}};
-update_context(#file_perm_changed_event{} = Evt, {file, FileCtx}) ->
-    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
-    Evt#file_perm_changed_event{file_guid = FileGuid};
-update_context(#file_removed_event{} = Evt, {file, FileCtx}) ->
-    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
-    Evt#file_removed_event{file_guid = FileGuid};
-update_context(#file_renamed_event{top_entry = E} = Evt, {file, FileCtx}) ->
-    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
-    Evt#file_renamed_event{top_entry = E#file_renamed_entry{old_guid = FileGuid}};
-update_context(Evt, _Ctx) ->
-    Evt.
 
 -spec get_reference_based_prefix(event:base() | event:type() | binary()) ->
     {ok, binary()} | {error, not_reference_based}.

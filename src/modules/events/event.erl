@@ -82,6 +82,7 @@ emit(#event{} = Evt, MgrRef) ->
 
 emit({aggregated, [#event{} | _]} = Evts, MgrRef) ->
     ?update_counter(?EXOMETER_NAME(emit)),
+    % Aggregated events are produced only for regular files - trash dir does not have to be filtered
     send_to_event_managers(Evts, get_event_managers(MgrRef));
 
 emit({aggregated, Evts}, MgrRef) ->

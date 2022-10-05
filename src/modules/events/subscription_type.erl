@@ -17,7 +17,7 @@
 
 %% API
 -export([get_routing_key/1, get_stream_key/1, get_stream/1, is_remote/1]).
--export([get_context/1, update_context/2]).
+-export([get_context/1]).
 
 -type ctx() :: undefined | {file, file_id:file_guid()}.
 
@@ -128,35 +128,6 @@ get_context(#file_renamed_subscription{file_guid = FileGuid}) ->
 get_context(_) ->
     undefined.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Updates the subscription context.
-%% @end
-%%--------------------------------------------------------------------
--spec update_context(Sub :: subscription:base() | subscription:type(), Ctx :: ctx()) ->
-    NewSub :: subscription:base() | subscription:type().
-update_context(#subscription{type = Type} = Sub, Ctx) ->
-    Sub#subscription{type = update_context(Type, Ctx)};
-update_context(#file_attr_changed_subscription{} = Object, {file, FileCtx}) ->
-    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
-    Object#file_attr_changed_subscription{file_guid = FileGuid};
-update_context(#replica_status_changed_subscription{} = Object, {file, FileCtx}) ->
-    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
-    Object#replica_status_changed_subscription{file_guid = FileGuid};
-update_context(#file_location_changed_subscription{} = Object, {file, FileCtx}) ->
-    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
-    Object#file_location_changed_subscription{file_guid = FileGuid};
-update_context(#file_perm_changed_subscription{} = Object, {file, FileCtx}) ->
-    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
-    Object#file_perm_changed_subscription{file_guid = FileGuid};
-update_context(#file_removed_subscription{} = Object, {file, FileCtx}) ->
-    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
-    Object#file_removed_subscription{file_guid = FileGuid};
-update_context(#file_renamed_subscription{} = Object, {file, FileCtx}) ->
-    FileGuid = file_ctx:get_logical_guid_const(FileCtx),
-    Object#file_renamed_subscription{file_guid = FileGuid};
-update_context(Object, _Ctx) ->
-    Object.
 
 %%%===================================================================
 %%% Internal functions
