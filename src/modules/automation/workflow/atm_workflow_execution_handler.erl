@@ -535,7 +535,7 @@ delete_all_lane_runs_prepared_in_advance(#document{
         ]}) when
             RunNum =:= undefined;
             RunNum =:= CurrentRunNum
-            ->
+        ->
             atm_lane_execution_factory:delete_run(AtmLaneRunPreparedInAdvance),
             {ok, AtmLaneExecution#atm_lane_execution{runs = PreviousLaneRuns}};
 
