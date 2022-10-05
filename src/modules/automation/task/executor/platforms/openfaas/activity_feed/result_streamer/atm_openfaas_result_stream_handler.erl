@@ -131,21 +131,6 @@ consume_result_streamer_report(ConnRef, ReportId, #atm_openfaas_result_streamer_
     handle_streamed_task_data(ConnRef, ReportId, {chunk, Chunk}, HandlerState),
     HandlerState;
 
-consume_result_streamer_report(ConnRef, ReportId, #atm_openfaas_result_streamer_invalid_data_report{
-    result_name = ResultName,
-    base_64_encoded_data = Base64EncodedData
-}, HandlerState) ->
-    Error = ?ERROR_BAD_DATA(
-        <<"filePipeResult.", ResultName/binary>>,
-        str_utils:format_bin(
-            "Received invalid data for filePipe result with name '~s'.~n"
-            "Base64 encoded data: ~s",
-            [ResultName, truncate_binary_for_logging(Base64EncodedData)]
-        )
-    ),
-    handle_streamed_task_data(ConnRef, ReportId, Error, HandlerState),
-    HandlerState;
-
 consume_result_streamer_report(ConnRef, _ReportId, #atm_openfaas_result_streamer_deregistration_report{}, HandlerState) ->
     #result_streamer_context{
         workflow_execution_id = WorkflowExecutionId,
