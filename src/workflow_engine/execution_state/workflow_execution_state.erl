@@ -206,16 +206,39 @@ init(ExecutionId, EngineId, Handler, Context, FirstLaneId, NextLaneId, SnapshotM
 resume_from_snapshot(ExecutionId, EngineId, Handler, Context, InitialLaneId, InitialNextLaneId, SnapshotMode) ->
     case workflow_iterator_snapshot:get(ExecutionId) of
         {ok, #workflow_iterator_snapshot{
+            lane_id = undefined,
+            iterator = undefined
+        }} ->
+            % Previous execution ended with no lane to run
+            init(ExecutionId, EngineId, Handler, Context, InitialLaneId, InitialNextLaneId, SnapshotMode);
+        {ok, #workflow_iterator_snapshot{
+            lane_index = LaneIndex, lane_id = LaneId,
+            iterator = undefined,
+            next_lane_id = NextLaneId
+        }} ->
+            Doc = #document{key = ExecutionId, value = #workflow_execution_state{
+                engine_id = EngineId,
+                handler = Handler,
+                initial_context = Context,
+                incarnation_tag = gen_incarnation_tag(),
+                snapshot_mode = SnapshotMode,
+                current_lane = #current_lane{index = LaneIndex, id = LaneId},
+                next_lane = #next_lane{id = NextLaneId}}
+            },
+            workflow_execution_state_dump:delete(ExecutionId),
+            save(Doc);
+        {ok, #workflow_iterator_snapshot{
             lane_index = LaneIndex, lane_id = LaneId,
             iterator = Iterator,
-            next_lane_id = NextLaneId}
-        } ->
+            next_lane_id = NextLaneId
+        }} ->
             Doc = #document{key = ExecutionId, value = #workflow_execution_state{
                 execution_status = ?RESUMING_FROM_ITERATOR(Iterator),
                 engine_id = EngineId,
                 handler = Handler,
                 initial_context = Context,
                 incarnation_tag = gen_incarnation_tag(),
+                snapshot_mode = SnapshotMode,
                 current_lane = #current_lane{index = LaneIndex, id = LaneId},
                 next_lane = #next_lane{id = NextLaneId}}
             },
@@ -789,6 +812,7 @@ handle_state_update_after_job_preparation(_ExecutionId, #document{value = #workf
 }}) ->
     ?PREPARE_LANE_EXECUTION(Handler, ExecutionContext, LaneId, ?PREPARE_IN_ADVANCE, prepare);
 handle_state_update_after_job_preparation(ExecutionId, #document{value = #workflow_execution_state{
+    current_lane = #current_lane{index = LaneIndex},
     update_report = ?LANE_READY_TO_BE_FINISHED_REPORT(FinishedLaneId, LaneContext),
     handler = Handler,
     initial_context = ExecutionContext,
@@ -808,18 +832,32 @@ handle_state_update_after_job_preparation(ExecutionId, #document{value = #workfl
                     prepare_next_job_for_current_lane(ExecutionId);
                 {ok, #document{value = #workflow_execution_state{
                     execution_status = ?PREPARING,
-                    update_report = ?LANE_DESIGNATED_FOR_INIT(InitType)
+                    update_report = ?LANE_DESIGNATED_FOR_INIT(InitType),
+                    current_lane = #current_lane{index = IndexToSnapshot, id = IdToSnapshot},
+                    next_lane = #next_lane{id = NextLaneIdToSnapshot}
                 }}} ->
+                    workflow_iterator_snapshot:save(
+                        ExecutionId, IndexToSnapshot, IdToSnapshot, 0, undefined, NextLaneIdToSnapshot),
                     ?PREPARE_LANE_EXECUTION(Handler, ExecutionContext, NextLaneId, ?PREPARE_CURRENT, InitType);
                 {ok, #document{value = #workflow_execution_state{
-                    execution_status = ?PREPARATION_FAILED
+                    execution_status = ?PREPARATION_FAILED,
+                    current_lane = #current_lane{index = IndexToSnapshot, id = IdToSnapshot},
+                    next_lane = #next_lane{id = NextLaneIdToSnapshot}
                 }}} ->
+                    workflow_iterator_snapshot:save(
+                        ExecutionId, IndexToSnapshot, IdToSnapshot, 0, undefined, NextLaneIdToSnapshot),
                     ?WF_ERROR_EXECUTION_ENDED(#execution_ended{handler = Handler, context = ExecutionContext});
-                {ok, _} ->
+                {ok, #document{value = #workflow_execution_state{
+                    current_lane = #current_lane{index = IndexToSnapshot, id = IdToSnapshot},
+                    next_lane = #next_lane{id = NextLaneIdToSnapshot}
+                }}} ->
+                    workflow_iterator_snapshot:save(
+                        ExecutionId, IndexToSnapshot, IdToSnapshot, 0, undefined, NextLaneIdToSnapshot),
                     ?WF_ERROR_NO_WAITING_ITEMS
             end;
         % Other possible answers are ?END_EXECUTION or error - error is logged by workflow_engine:call_handler/5 function
         _ when NextLaneStatus =:= ?PREPARING ->
+            workflow_iterator_snapshot:save(ExecutionId, LaneIndex, undefined, 0, undefined, undefined),
             case update(ExecutionId, fun maybe_wait_for_preparation_in_advance/1) of
                 ?WF_ERROR_LANE_ALREADY_PREPARED ->
                     ?WF_ERROR_EXECUTION_ENDED(#execution_ended{handler = Handler, context = ExecutionContext});
@@ -827,6 +865,7 @@ handle_state_update_after_job_preparation(ExecutionId, #document{value = #workfl
                     ?WF_ERROR_NO_WAITING_ITEMS
             end;
         _ ->
+            workflow_iterator_snapshot:save(ExecutionId, LaneIndex, undefined, 0, undefined, undefined),
             ?WF_ERROR_EXECUTION_ENDED(#execution_ended{handler = Handler, context = ExecutionContext})
     end;
 handle_state_update_after_job_preparation(_ExecutionId, #document{value = #workflow_execution_state{

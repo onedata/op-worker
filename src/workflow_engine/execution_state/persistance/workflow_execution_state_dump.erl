@@ -18,7 +18,7 @@
 
 
 %% API
--export([dump_workflow_execution_state/1, restore_workflow_execution_state_from_dump/2]).
+-export([dump_workflow_execution_state/1, restore_workflow_execution_state_from_dump/2, delete/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -95,11 +95,15 @@ restore_workflow_execution_state_from_dump(
             }},
 
             workflow_execution_state:save(Doc),
-            ok = datastore_model:delete(?CTX, ExecutionId);
+            delete(ExecutionId);
         ?ERROR_NOT_FOUND ->
             ?ERROR_NOT_FOUND
     end.
 
+
+-spec delete(workflow_engine:execution_id()) -> ok.
+delete(ExecutionId) ->
+    ok = datastore_model:delete(?CTX, ExecutionId).
 
 %%%===================================================================
 %%% datastore_model callbacks

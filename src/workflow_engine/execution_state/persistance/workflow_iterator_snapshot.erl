@@ -39,7 +39,7 @@
     workflow_execution_state:index(),
     workflow_engine:lane_id(),
     workflow_execution_state:index(),
-    iterator:iterator(),
+    iterator:iterator() | undefined,
     workflow_engine:lane_id() | undefined
 ) -> ok.
 save(ExecutionId, LaneIndex, LaneId, ItemIndex, Iterator, NextLaneId) ->

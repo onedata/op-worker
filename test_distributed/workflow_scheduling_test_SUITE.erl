@@ -559,7 +559,7 @@ resume_on_exception_test_base(Config, #test_config{
         from_dump -> {?ALL_ITEMS, save_progress};
         from_iterator -> {?UNTIL_FIRST_FAILURE, save_iterator}
     end,
-    {#{id := ExecutionId} = WorkflowExecutionSpec, ExecutionHistory} = single_execution_test_base(Config,
+    {#{id := ExecutionId}, ExecutionHistory} = single_execution_test_base(Config,
         TestConfig#test_config{generator_options = GeneratorOptions#{
             progress_data_persistence => DataPersistence, snapshot_mode => SnapshotMode
         }
