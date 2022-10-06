@@ -178,7 +178,7 @@ handle_preparing(AtmLaneRunSelector, AtmWorkflowExecutionId) ->
     % preparing in advance
     Default = #atm_lane_execution_run{run_num = undefined, status = ?PREPARING_STATUS},
 
-    atm_workflow_execution_status:handle_lane_preparing(
+    atm_workflow_execution_status:handle_lane_run_preparing(
         AtmLaneRunSelector, AtmWorkflowExecutionId, fun(AtmWorkflowExecution) ->
             atm_lane_execution:update_run(
                 AtmLaneRunSelector, AtmLaneRunDiff, Default, AtmWorkflowExecution
@@ -199,7 +199,7 @@ handle_enqueued(AtmLaneRunSelector, AtmWorkflowExecutionId) ->
                 ?ERROR_ATM_INVALID_STATUS_TRANSITION(Status, ?PREPARING_STATUS)
         end, AtmWorkflowExecution)
     end,
-    ?extract_doc(atm_workflow_execution_status:handle_lane_enqueued(AtmWorkflowExecutionId, Diff)).
+    ?extract_doc(atm_workflow_execution_status:handle_lane_run_enqueued(AtmWorkflowExecutionId, Diff)).
 
 
 -spec handle_resumed(atm_lane_execution:lane_run_selector(), atm_workflow_execution:id()) ->
@@ -224,7 +224,7 @@ handle_resumed(AtmLaneRunSelector, AtmWorkflowExecutionId) ->
                 ?ERROR_ATM_INVALID_STATUS_TRANSITION(Status, ?RESUMING_STATUS)
         end, AtmWorkflowExecution)
     end,
-    ?extract_doc(atm_workflow_execution_status:handle_lane_enqueued(AtmWorkflowExecutionId, Diff)).  %% TODO
+    ?extract_doc(atm_workflow_execution_status:handle_lane_run_resumed(AtmWorkflowExecutionId, Diff)).
 
 
 -spec handle_stopping(
@@ -261,7 +261,7 @@ handle_stopping(AtmLaneRunSelector, AtmWorkflowExecutionId, Reason) ->
                 ?ERROR_ATM_INVALID_STATUS_TRANSITION(StoppedStatus, ?STOPPING_STATUS)
         end, AtmWorkflowExecution)
     end,
-    atm_workflow_execution_status:handle_lane_stopping(AtmLaneRunSelector, AtmWorkflowExecutionId, Diff).
+    atm_workflow_execution_status:handle_lane_run_stopping(AtmLaneRunSelector, AtmWorkflowExecutionId, Diff).
 
 
 -spec handle_task_status_change(
@@ -308,7 +308,7 @@ handle_task_status_change(
             end
         end, AtmWorkflowExecution)
     end,
-    atm_workflow_execution_status:handle_lane_task_status_change(AtmWorkflowExecutionId, Diff).
+    atm_workflow_execution_status:handle_lane_run_task_status_change(AtmWorkflowExecutionId, Diff).
 
 
 -spec handle_stopped(atm_lane_execution:lane_run_selector(), atm_workflow_execution:id()) ->
@@ -342,7 +342,7 @@ handle_manual_repeat(RepeatType, {AtmLaneSelector, _} = AtmLaneRunSelector, AtmW
                 Error
         end
     end,
-    atm_workflow_execution_status:handle_manual_lane_repeat(AtmWorkflowExecutionId, Diff).
+    atm_workflow_execution_status:handle_manual_lane_run_repeat(AtmWorkflowExecutionId, Diff).
 
 
 -spec handle_resume(atm_workflow_execution:id()) ->
