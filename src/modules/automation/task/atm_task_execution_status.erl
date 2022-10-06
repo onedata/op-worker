@@ -400,7 +400,7 @@ handle_resumed(AtmTaskExecutionId) ->
 -spec infer_stopped_status(atm_task_execution:stopping_reason()) -> atm_task_execution:status().
 infer_stopped_status(pause) -> ?PAUSED_STATUS;
 infer_stopped_status(interrupt) -> ?INTERRUPTED_STATUS;
-infer_stopped_status(failure) -> ?INTERRUPTED_STATUS;
+infer_stopped_status(failure) -> ?FAILED_STATUS;
 infer_stopped_status(cancel) -> ?CANCELLED_STATUS.
 
 

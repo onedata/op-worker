@@ -418,12 +418,20 @@ set_times_on_phase_transition(AtmWorkflowExecution = #atm_workflow_execution{
                 finish_time = global_clock:monotonic_timestamp_seconds(StartTime)
             };
 
+        % Cancelling suspended execution
         {true, ?SUSPENDED_PHASE, ?ONGOING_PHASE} ->
             AtmWorkflowExecution#atm_workflow_execution{
                 start_time = global_clock:monotonic_timestamp_seconds(SuspendTime)
             };
 
+        % Resuming execution
         {true, ?SUSPENDED_PHASE, ?WAITING_PHASE} ->
+            AtmWorkflowExecution#atm_workflow_execution{
+                schedule_time = global_clock:monotonic_timestamp_seconds(SuspendTime)
+            };
+
+        % Manual lane run repeat
+        {true, ?ENDED_PHASE, ?WAITING_PHASE} ->
             AtmWorkflowExecution#atm_workflow_execution{
                 schedule_time = global_clock:monotonic_timestamp_seconds(SuspendTime)
             };
@@ -449,13 +457,20 @@ ensure_in_proper_phase_tree(#document{value = AtmWorkflowExecution} = AtmWorkflo
             atm_ended_workflow_executions:add(AtmWorkflowExecutionDoc),
             atm_ongoing_workflow_executions:delete(AtmWorkflowExecutionDoc);
 
+        % Cancelling suspended execution
         {true, ?SUSPENDED_PHASE, ?ONGOING_PHASE} ->
             atm_ongoing_workflow_executions:add(AtmWorkflowExecutionDoc),
             atm_suspended_workflow_executions:delete(AtmWorkflowExecutionDoc);
 
+        % Resuming execution
         {true, ?SUSPENDED_PHASE, ?WAITING_PHASE} ->
             atm_waiting_workflow_executions:add(AtmWorkflowExecutionDoc),
             atm_suspended_workflow_executions:delete(AtmWorkflowExecutionDoc);
+
+        % Manual lane run repeat
+        {true, ?ENDED_PHASE, ?WAITING_PHASE} ->
+            atm_waiting_workflow_executions:add(AtmWorkflowExecutionDoc),
+            atm_ended_workflow_executions:delete(AtmWorkflowExecutionDoc);
 
         false ->
             ok

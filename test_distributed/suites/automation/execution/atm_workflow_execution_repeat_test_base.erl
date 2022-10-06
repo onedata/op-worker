@@ -406,7 +406,7 @@ repeat_failed_while_preparing_atm_lane_run_execution() ->
                         handle_lane_execution_stopped = #atm_step_mock_spec{
                             before_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
                                 ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_stopping({1, 1}, ExpState0),
-                                ExpState2 = atm_workflow_execution_exp_state_builder:expect_all_tasks_skipped({1, 1}, ExpState1),
+                                ExpState2 = atm_workflow_execution_exp_state_builder:expect_all_tasks_interrupted({1, 1}, ExpState1),
                                 {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(ExpState2)}
                             end,
                             after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState}) ->
@@ -557,7 +557,7 @@ repeat_cancelled_atm_lane_run_execution() ->
                             after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
                                 ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_created({1, 1}, ExpState0),
                                 ExpState2 = atm_workflow_execution_exp_state_builder:expect_lane_run_stopping({1, 1}, ExpState1),
-                                ExpState3 = atm_workflow_execution_exp_state_builder:expect_all_tasks_skipped({1, 1}, ExpState2),
+                                ExpState3 = atm_workflow_execution_exp_state_builder:expect_all_tasks_cancelled({1, 1}, ExpState2),
                                 {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(ExpState3)}
                             end
                         },
@@ -781,7 +781,7 @@ build_failed_atm_lane_run_execution_test_spec(AtmLaneRunSelector, IsLastExpLaneR
                         {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(
                             atm_workflow_execution_exp_state_builder:expect_lane_run_stopping(
                                 AtmLaneRunSelector, atm_workflow_execution_exp_state_builder:expect_all_tasks_stopping(
-                                    AtmLaneRunSelector, ExpState
+                                    AtmLaneRunSelector, interrupt, ExpState
                                 )
                             )
                         )};
