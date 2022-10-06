@@ -261,7 +261,7 @@ fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error() ->
                                     {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(
                                         atm_workflow_execution_exp_state_builder:expect_lane_run_stopping(
                                             {1, 1}, atm_workflow_execution_exp_state_builder:expect_all_tasks_stopping(
-                                                {1, 1}, ExpState
+                                                {1, 1}, interrupt, ExpState
                                             )
                                         )
                                     )};
@@ -311,9 +311,9 @@ uncorrelated_result_failure_expect_task_execution_ended(AtmMockCallCtx = #atm_mo
 
             uncorrelated_result_expect_task1_failed(AtmTaskExecutionId, ExpState);
         {_, _, ?ATM_TASK2_SCHEMA_ID} ->
-            uncorrelated_result_expect_task2_ended(AtmTaskExecutionId, ExpState);
+            uncorrelated_result_expect_task2_interrupted(AtmTaskExecutionId, ExpState);
         {_, _, ?ATM_TASK3_SCHEMA_ID} ->
-            uncorrelated_result_expect_task3_ended(AtmTaskExecutionId, ExpState)
+            uncorrelated_result_expect_task3_interrupted(AtmTaskExecutionId, ExpState)
     end}.
 
 
@@ -331,18 +331,15 @@ uncorrelated_result_expect_task1_failed(AtmTask1ExecutionId, ExpState0) ->
 
 
 %% @private
--spec uncorrelated_result_expect_task2_ended(
+-spec uncorrelated_result_expect_task2_interrupted(
     atm_task_execution:id(),
     atm_workflow_execution_test_runner:exp_state()
 ) ->
     atm_workflow_execution_test_runner:exp_state().
-uncorrelated_result_expect_task2_ended(AtmTask2ExecutionId, ExpState0) ->
-    ExpState1 = case atm_workflow_execution_exp_state_builder:get_task_stats(AtmTask2ExecutionId, ExpState0) of
-        {0, 0, 0} ->
-            atm_workflow_execution_exp_state_builder:expect_task_skipped(AtmTask2ExecutionId, ExpState0);
-        {0, 0, _} ->
-            atm_workflow_execution_exp_state_builder:expect_task_interrupted(AtmTask2ExecutionId, ExpState0)
-    end,
+uncorrelated_result_expect_task2_interrupted(AtmTask2ExecutionId, ExpState0) ->
+    ExpState1 = atm_workflow_execution_exp_state_builder:expect_task_interrupted(
+        AtmTask2ExecutionId, ExpState0
+    ),
     uncorrelated_result_expect_pb1_changed_status(AtmTask2ExecutionId, ExpState1).
 
 
@@ -355,7 +352,6 @@ uncorrelated_result_expect_task2_ended(AtmTask2ExecutionId, ExpState0) ->
 uncorrelated_result_expect_pb1_changed_status(AtmTaskExecutionId, ExpState) ->
     InferStatusFun = fun
         (<<"active">>, [<<"failed">>, <<"interrupted">>]) -> <<"failed">>;
-        (<<"active">>, [<<"failed">>, <<"skipped">>]) -> <<"failed">>;
         (_, _) -> <<"active">>
     end,
     atm_workflow_execution_exp_state_builder:expect_task_parallel_box_transitioned_to_inferred_status(
@@ -364,24 +360,16 @@ uncorrelated_result_expect_pb1_changed_status(AtmTaskExecutionId, ExpState) ->
 
 
 %% @private
--spec uncorrelated_result_expect_task3_ended(
+-spec uncorrelated_result_expect_task3_interrupted(
     atm_task_execution:id(),
     atm_workflow_execution_test_runner:exp_state()
 ) ->
     atm_workflow_execution_test_runner:exp_state().
-uncorrelated_result_expect_task3_ended(AtmTask3ExecutionId, ExpState) ->
-    {ExpTaskTransitionFun, ExpPbStatus} = case atm_workflow_execution_exp_state_builder:get_task_stats(
-        AtmTask3ExecutionId, ExpState
-    ) of
-        {0, 0, 0} ->
-            {fun atm_workflow_execution_exp_state_builder:expect_task_skipped/2, <<"skipped">>};
-        {0, 0, _} ->
-            {fun atm_workflow_execution_exp_state_builder:expect_task_interrupted/2, <<"interrupted">>}
-    end,
+uncorrelated_result_expect_task3_interrupted(AtmTask3ExecutionId, ExpState) ->
     atm_workflow_execution_exp_state_builder:expect_task_parallel_box_transitioned_to_inferred_status(
         AtmTask3ExecutionId,
-        fun(_, _) -> ExpPbStatus end,
-        ExpTaskTransitionFun(AtmTask3ExecutionId, ExpState)
+        fun(_, _) -> <<"interrupted">> end,
+        atm_workflow_execution_exp_state_builder:expect_task_interrupted(AtmTask3ExecutionId, ExpState)
     ).
 
 

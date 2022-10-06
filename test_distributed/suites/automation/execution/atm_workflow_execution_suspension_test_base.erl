@@ -131,9 +131,10 @@ interrupt_ongoing_atm_workflow_execution_due_to_expired_session() ->
                 }
             ],
             handle_exception = #atm_step_mock_spec{
-                after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
-                    ExpState1 = expect_task_interrupted(get_task1_id(ExpState0), ExpState0),
-                    ExpState2 = expect_task_skipped(get_task2_id(ExpState1), ExpState1),
+                after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState1}) ->
+                    ExpState2 = atm_workflow_execution_exp_state_builder:expect_all_tasks_stopping(
+                        {2, 1}, interrupt, ExpState1
+                    ),
                     ExpState3 = atm_workflow_execution_exp_state_builder:expect_lane_run_interrupted({2, 1}, ExpState2),
                     {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_interrupted(ExpState3)}
                 end
@@ -145,31 +146,3 @@ interrupt_ongoing_atm_workflow_execution_due_to_expired_session() ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-
-%% @private
-expect_task_interrupted(AtmTaskExecutionId, ExpState0) ->
-    atm_workflow_execution_exp_state_builder:expect_task_parallel_box_transitioned_to_inferred_status(
-        AtmTaskExecutionId,
-        fun(_, _) -> <<"interrupted">> end,
-        atm_workflow_execution_exp_state_builder:expect_task_interrupted(AtmTaskExecutionId, ExpState0)
-    ).
-
-
-%% @private
-expect_task_skipped(AtmTaskExecutionId, ExpState0) ->
-    atm_workflow_execution_exp_state_builder:expect_task_parallel_box_transitioned_to_inferred_status(
-        AtmTaskExecutionId,
-        fun(_, _) -> <<"skipped">> end,
-        atm_workflow_execution_exp_state_builder:expect_task_skipped(AtmTaskExecutionId, ExpState0)
-    ).
-
-
-%% @private
-get_task1_id(ExpState) ->
-    atm_workflow_execution_exp_state_builder:get_task_id({{2, 1}, <<"pb1">>, <<"task1">>}, ExpState).
-
-
-%% @private
-get_task2_id(ExpState) ->
-    atm_workflow_execution_exp_state_builder:get_task_id({{2, 1}, <<"pb2">>, <<"task2">>}, ExpState).

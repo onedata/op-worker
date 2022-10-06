@@ -52,13 +52,17 @@
 create_run(AtmLaneRunSelector, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx) ->
     try
         create_run_internal(AtmLaneRunSelector, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx)
-    catch Type:Reason:Stacktrace ->
-        AtmWorkflowExecution = AtmWorkflowExecutionDoc#document.value,
+    catch
+        throw:?ERROR_ATM_WORKFLOW_EXECUTION_ABORTING ->
+            throw(?ERROR_ATM_WORKFLOW_EXECUTION_ABORTING);
 
-        throw(?ERROR_ATM_LANE_EXECUTION_CREATION_FAILED(
-            atm_lane_execution:get_schema_id(AtmLaneRunSelector, AtmWorkflowExecution),
-            ?atm_examine_error(Type, Reason, Stacktrace)
-        ))
+        Type:Reason:Stacktrace ->
+            AtmWorkflowExecution = AtmWorkflowExecutionDoc#document.value,
+
+            throw(?ERROR_ATM_LANE_EXECUTION_CREATION_FAILED(
+                atm_lane_execution:get_schema_id(AtmLaneRunSelector, AtmWorkflowExecution),
+                ?atm_examine_error(Type, Reason, Stacktrace)
+            ))
     end.
 
 
@@ -97,7 +101,9 @@ create_run_internal(AtmLaneRunSelector, AtmWorkflowExecutionDoc, AtmWorkflowExec
                 Error
         end
     end,
-    case atm_workflow_execution:update(AtmWorkflowExecutionDoc#document.key, Diff) of
+    AtmWorkflowExecutionId = AtmWorkflowExecutionDoc#document.key,
+
+    case atm_workflow_execution_status:handle_lane_run_created(AtmWorkflowExecutionId, Diff) of
         {ok, NewAtmWorkflowExecutionDoc} ->
             NewAtmWorkflowExecutionDoc;
         {error, _} = Error ->

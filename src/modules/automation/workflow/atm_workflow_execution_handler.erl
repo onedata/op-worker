@@ -502,14 +502,21 @@ ensure_all_lane_runs_stopped(#document{
         case atm_lane_execution:get_run(AtmLaneRunSelector, AtmWorkflowExecution) of
             {ok, #atm_lane_execution_run{status = Status}} ->
                 case atm_lane_execution_status:status_to_phase(Status) of
+                    ?WAITING_PHASE when AtmLaneIndex > CurrentAtmLaneIndex ->
+                        atm_lane_execution_handler:stop(
+                            AtmLaneRunSelector, interrupt, AtmWorkflowExecutionCtx
+                        ),
+                        atm_lane_execution_handler:handle_stopped(
+                            AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
+                        );
+                    ?ONGOING_PHASE ->
+                        atm_lane_execution_handler:handle_stopped(
+                            AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
+                        );
                     ?SUSPENDED_PHASE ->
                         ok;
                     ?ENDED_PHASE ->
-                        ok;
-                    _ ->
-                        atm_lane_execution_handler:handle_stopped(
-                            AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
-                        )
+                        ok
                 end;
             ?ERROR_NOT_FOUND ->
                 ok
@@ -535,7 +542,7 @@ delete_all_lane_runs_prepared_in_advance(#document{
         ]}) when
             RunNum =:= undefined;
             RunNum =:= CurrentRunNum
-            ->
+        ->
             atm_lane_execution_factory:delete_run(AtmLaneRunPreparedInAdvance),
             {ok, AtmLaneExecution#atm_lane_execution{runs = PreviousLaneRuns}};
 

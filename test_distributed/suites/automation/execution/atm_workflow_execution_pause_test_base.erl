@@ -169,7 +169,7 @@ pause_enqueued_atm_workflow_execution() ->
                         after_step_hook = fun atm_workflow_execution_test_runner:pause_workflow_execution/1,
                         after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
                             ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_stopping({1, 1}, ExpState0),
-                            ExpState2 = atm_workflow_execution_exp_state_builder:expect_all_tasks_skipped({1, 1}, ExpState1),
+                            ExpState2 = atm_workflow_execution_exp_state_builder:expect_all_tasks_paused({1, 1}, ExpState1),
                             {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(ExpState2)}
                         end
                     },
@@ -198,7 +198,7 @@ pause_enqueued_atm_workflow_execution() ->
                     },
                     handle_lane_execution_stopped = #atm_step_mock_spec{
                         before_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
-                            ExpState1 = atm_workflow_execution_exp_state_builder:expect_all_tasks_skipped({2, 1}, ExpState0),
+                            ExpState1 = atm_workflow_execution_exp_state_builder:expect_all_tasks_interrupted({2, 1}, ExpState0),
                             {true, atm_workflow_execution_exp_state_builder:expect_lane_run_stopping({2, 1}, ExpState1)}
                         end,
                         after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState}) ->
@@ -281,7 +281,7 @@ pause_active_atm_workflow_execution_test_base(Testcase, RelayMethod) ->
                                         {1, 1}, ExpState0
                                     ),
                                     ExpState2 = atm_workflow_execution_exp_state_builder:expect_all_tasks_stopping(
-                                        {1, 1}, ExpState1
+                                        {1, 1}, pause, ExpState1
                                     ),
                                     {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(
                                         ExpState2
@@ -321,24 +321,16 @@ pause_active_atm_workflow_execution_test_base(Testcase, RelayMethod) ->
                             workflow_execution_exp_state = ExpState0,
                             call_args = [_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId]
                         }) ->
-                            EndTaskFun = case atm_workflow_execution_exp_state_builder:get_task_stats(
+                            ExpState1 = atm_workflow_execution_exp_state_builder:expect_task_paused(
                                 AtmTaskExecutionId, ExpState0
-                            ) of
-                                {0, 0, 0} -> fun atm_workflow_execution_exp_state_builder:expect_task_skipped/2;
-                                _ -> fun atm_workflow_execution_exp_state_builder:expect_task_paused/2
-                            end,
-                            ExpState1 = EndTaskFun(AtmTaskExecutionId, ExpState0),
-
+                            ),
                             InferStatusFun = fun
                             % task task1 and task2 parallel box transition possible combinations
-                                (<<"stopping">>, [<<"skipped">>, <<"stopping">>]) -> <<"stopping">>;
                                 (<<"stopping">>, [<<"paused">>, <<"stopping">>]) -> <<"stopping">>;
-                                (<<"stopping">>, [<<"paused">>, <<"skipped">>, <<"stopping">>]) -> <<"stopping">>;
-                                (<<"stopping">>, [<<"paused">>, <<"skipped">>]) -> <<"paused">>;
                                 (<<"stopping">>, [<<"paused">>]) -> <<"paused">>;
 
                                 % task task3 parallel box transition
-                                (<<"skipped">>, [<<"skipped">>]) -> <<"skipped">>
+                                (<<"paused">>, [<<"paused">>]) -> <<"paused">>
                             end,
                             {true, atm_workflow_execution_exp_state_builder:expect_task_parallel_box_transitioned_to_inferred_status(
                                 AtmTaskExecutionId, InferStatusFun, ExpState1
@@ -357,7 +349,7 @@ pause_active_atm_workflow_execution_test_base(Testcase, RelayMethod) ->
                         after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState}) ->
                             % Previously enqueued lane is changed to interrupted
                             {true, atm_workflow_execution_exp_state_builder:expect_lane_run_interrupted(
-                                {2, 1}, atm_workflow_execution_exp_state_builder:expect_all_tasks_skipped(
+                                {2, 1}, atm_workflow_execution_exp_state_builder:expect_all_tasks_interrupted(
                                     {2, 1}, ExpState
                                 )
                             )}
@@ -398,9 +390,8 @@ pause_interrupted_atm_workflow_execution() ->
                 }
             ],
             handle_exception = #atm_step_mock_spec{
-                after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
-                    ExpState1 = expect_execution_stopping_while_processing_lane2(ExpState0),
-                    ExpState2 = expect_lane2_pb_stopped(<<"interrupted">>, get_task4_id(ExpState1), ExpState1),
+                after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState1}) ->
+                    ExpState2 = atm_workflow_execution_exp_state_builder:expect_all_tasks_interrupted({2, 1}, ExpState1),
                     ExpState3 = atm_workflow_execution_exp_state_builder:expect_lane_run_interrupted({2, 1}, ExpState2),
                     {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_interrupted(ExpState3)}
                 end
@@ -430,46 +421,6 @@ pause_interrupted_atm_workflow_execution() ->
     ]
 }) ->
     atm_workflow_execution_exp_state_builder:get_task_selector(AtmTaskExecutionId, ExpState).
-
-
-%% @private
-expect_execution_stopping_while_processing_lane2(ExpState0) ->
-    ExpState1 = atm_workflow_execution_exp_state_builder:expect_all_tasks_stopping({2, 1}, ExpState0),
-    ExpState2 = atm_workflow_execution_exp_state_builder:expect_lane_run_stopping({2, 1}, ExpState1),
-    atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(ExpState2).
-
-
-%% @private
-expect_lane2_pb_stopped(ExpectTaskFinalStatus, AtmTaskExecutionId, ExpState0) ->
-    atm_workflow_execution_exp_state_builder:expect_task_parallel_box_transitioned_to_inferred_status(
-        AtmTaskExecutionId,
-        % lane2 parallel boxes have only single task and as such their final status
-        % will be the same as that of their respective task
-        fun(_, _) -> ExpectTaskFinalStatus end,
-        expect_lane2_task_stopped(ExpectTaskFinalStatus, AtmTaskExecutionId, ExpState0)
-    ).
-
-
-%% @private
-expect_lane2_task_stopped(<<"paused">>, AtmTaskExecutionId, ExpState0) ->
-    atm_workflow_execution_exp_state_builder:expect_task_paused(AtmTaskExecutionId, ExpState0);
-
-expect_lane2_task_stopped(<<"interrupted">>, AtmTaskExecutionId, ExpState0) ->
-    atm_workflow_execution_exp_state_builder:expect_task_interrupted(AtmTaskExecutionId, ExpState0);
-
-expect_lane2_task_stopped(<<"skipped">>, AtmTaskExecutionId, ExpState0) ->
-    atm_workflow_execution_exp_state_builder:expect_task_skipped(AtmTaskExecutionId, ExpState0);
-
-expect_lane2_task_stopped(<<"failed">>, AtmTaskExecutionId, ExpState0) ->
-    atm_workflow_execution_exp_state_builder:expect_task_failed(AtmTaskExecutionId, ExpState0);
-
-expect_lane2_task_stopped(<<"cancelled">>, AtmTaskExecutionId, ExpState0) ->
-    atm_workflow_execution_exp_state_builder:expect_task_cancelled(AtmTaskExecutionId, ExpState0).
-
-
-%% @private
-get_task4_id(ExpState) ->
-    atm_workflow_execution_exp_state_builder:get_task_id({{2, 1}, <<"pb3">>, <<"task4">>}, ExpState).
 
 
 %% @private

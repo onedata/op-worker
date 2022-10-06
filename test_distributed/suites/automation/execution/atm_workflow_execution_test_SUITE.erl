@@ -51,7 +51,7 @@
     first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_3/1,
     first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_4/1,
 
-    lane_preparing_in_advance_interruption_changes_to_failure_upon_first_lane_run_finish/1,
+    lane_failed_in_advance_is_not_removed_if_first_lane_run_successfully_finished/1,
 
     cancel_scheduled_atm_workflow_execution/1,
     cancel_enqueued_atm_workflow_execution/1,
@@ -168,7 +168,7 @@ groups() -> [
         first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_3,
         first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_4,
 
-        lane_preparing_in_advance_interruption_changes_to_failure_upon_first_lane_run_finish
+        lane_failed_in_advance_is_not_removed_if_first_lane_run_successfully_finished
     ]},
 
     {cancel_tests, [], [
@@ -393,7 +393,7 @@ first_lane_run_preparation_cancel_interrupts_lane_preparing_in_advance_4(_Config
     ?RUN_PREPARATION_TEST().
 
 
-lane_preparing_in_advance_interruption_changes_to_failure_upon_first_lane_run_finish(_Config) ->
+lane_failed_in_advance_is_not_removed_if_first_lane_run_successfully_finished(_Config) ->
     ?RUN_PREPARATION_TEST().
 
 
