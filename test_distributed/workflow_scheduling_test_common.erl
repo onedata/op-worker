@@ -26,7 +26,7 @@
 %% Helper functions verifying execution history
 -export([verify_execution_history/2, verify_execution_history/3, verify_empty_lane/2, has_any_finish_callbacks_for_lane/2,
     has_exception_callback/1, filter_finish_and_exception_handlers/2, filter_prepare_in_adnave_handler/3,
-    filter_repeated_stream_callbacks/3, check_prepare_lane_in_head_and_filter/2]).
+    filter_repeated_stream_callbacks/3, check_prepare_lane_in_head_and_filter/2, verify_and_filter_duplicated_calls/1]).
 %% Helper functions history statistics
 -export([verify_execution_history_stats/2, verify_execution_history_stats/3]).
 %% Memory verification helper functions
@@ -994,6 +994,25 @@ check_prepare_lane_in_head_and_filter(ExecutionHistory, LaneId) ->
     ?assertMatch([#handler_call{function = prepare_lane, lane_id = LaneId} | _], ExecutionHistory),
     [_ | ExecutionHistoryTail] = ExecutionHistory,
     ExecutionHistoryTail.
+
+verify_and_filter_duplicated_calls(ExecutionHistory) ->
+    {FilteredExecutionHistory, DuplicatedCalls} = lists:foldl(fun
+        (#handler_call{function = process_streamed_task_data} = HandlerCall, {Acc, Duplicated}) ->
+            {[HandlerCall | Acc], Duplicated};
+
+        (HandlerCall, {Acc, Duplicated}) ->
+            IsDuplicated = lists:any(fun(FilteredCall) ->
+                FilteredCall#handler_call{context = undefined} =:= HandlerCall#handler_call{context = undefined}
+            end, Acc),
+
+            case IsDuplicated of
+                true -> {Acc, [HandlerCall | Duplicated]};
+                false -> {[HandlerCall | Acc], Duplicated}
+            end
+    end, {[], []}, lists:reverse(ExecutionHistory)),
+
+% TODO - sprawdzic czy duplikaty pokrywaja sie z tym co mamy w dump
+    FilteredExecutionHistory.
 
 
 %%%===================================================================

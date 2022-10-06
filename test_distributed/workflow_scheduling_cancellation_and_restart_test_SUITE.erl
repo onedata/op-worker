@@ -83,6 +83,8 @@ all() ->
         restart_callback_failure_test
     ]).
 % TODO - sprawdzc jaki iterator jest zapsany jak cancelujemy tuz po wykonaniu lane_ended
+% TODO - jaki iterator zapisujemy jak prepare_lane padl
+% TODO - co sie dzieje na cancelu po przetorzeniu ostatniego item'a - nie powinien sie workflow skonczyc dobrze?
 
 -record(test_config, {
     task_type = sync :: sync | async,
