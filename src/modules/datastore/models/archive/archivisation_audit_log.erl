@@ -62,7 +62,7 @@ browse(Id, Opts) ->
 -spec report_file_archivisation_finished(id(), file_id:file_guid(), file_meta:path(), 
     file_meta:type(), time:millis()) -> ok | {error, term()}.
 report_file_archivisation_finished(Id, FileGuid, FilePath, FileType, StartTimestamp) ->
-    DescriptionPrefix = string:titlecase(type_to_description(FileType)),
+    DescriptionPrefix = string:titlecase(type_to_human_readable_str(FileType)),
     
     audit_log:append(Id, #audit_log_append_request{
         severity = ?INFO_AUDIT_LOG_SEVERITY,
@@ -80,7 +80,7 @@ report_file_archivisation_finished(Id, FileGuid, FilePath, FileType, StartTimest
     time:millis(), {error, term()}) -> ok | {error, term()}.
 report_file_archivisation_failed(Id, FileGuid, FilePath, FileType, StartTimestamp, Error) ->
     ErrorJson = errors:to_json(Error),
-    DescriptionPrefix = string:titlecase(type_to_description(FileType)),
+    DescriptionPrefix = string:titlecase(type_to_human_readable_str(FileType)),
     
     audit_log:append(Id, #audit_log_append_request{
         severity = ?ERROR_AUDIT_LOG_SEVERITY,
@@ -98,7 +98,7 @@ report_file_archivisation_failed(Id, FileGuid, FilePath, FileType, StartTimestam
 -spec report_file_verification_failed(id(), file_id:file_guid(), file_meta:path(), file_meta:type()) ->
     ok | {error, term()}.
 report_file_verification_failed(Id, FileGuid, FilePath, FileType) ->
-    Description = <<"Archived ", (type_to_description(FileType))/binary, " verification failed.">>,
+    Description = <<"Verification of the archived ", (type_to_human_readable_str(FileType))/binary, " failed.">>,
     
     audit_log:append(Id, #audit_log_append_request{
         severity = ?ERROR_AUDIT_LOG_SEVERITY,
@@ -123,10 +123,10 @@ file_guid_to_object_id(FileGuid) ->
 
 
 %% @private
--spec type_to_description(file_meta:type()) -> binary().
-type_to_description(?REGULAR_FILE_TYPE) -> <<"regular file">>;
-type_to_description(?DIRECTORY_TYPE) -> <<"directory">>;
-type_to_description(?SYMLINK_TYPE) -> <<"symbolic link">>.
+-spec type_to_human_readable_str(file_meta:type()) -> binary().
+type_to_human_readable_str(?REGULAR_FILE_TYPE) -> <<"regular file">>;
+type_to_human_readable_str(?DIRECTORY_TYPE) -> <<"directory">>;
+type_to_human_readable_str(?SYMLINK_TYPE) -> <<"symbolic link">>.
 
 
 %% @private

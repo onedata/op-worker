@@ -501,7 +501,7 @@ is_archive_rooted_in_current_file(CurrentFileCtx, #{
     {failed, Reason :: any()} | completed) -> ok.
 report_to_audit_log(CurrentFileCtx, TraverseInfo, StartTimestamp, FilePath, Status) ->
     FileGuid = file_ctx:get_logical_guid_const(CurrentFileCtx),
-    {FileType, _CurrentFileCtx2} = file_ctx:get_type(CurrentFileCtx, effective),
+    {FileType, _CurrentFileCtx2} = file_ctx:get_effective_type(CurrentFileCtx),
     {ReportFun, AdditionalArgs} = case Status of
         completed ->
             {fun archivisation_audit_log:report_file_archivisation_finished/5, []};

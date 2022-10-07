@@ -1167,7 +1167,7 @@ get_archivisation_audit_log(_Config) ->
             randomly_select_scenarios = true,
             scenario_templates = [
                 #scenario_template{
-                    name = <<"Get archisation audit log using GS API">>,
+                    name = <<"Get archivisation audit log using GS API">>,
                     type = gs,
                     prepare_args_fun = build_get_archivisation_audit_log_prepare_gs_args_fun(ArchiveId),
                     validate_result_fun = validate_archivisation_audit_log_fun_gs()
@@ -1211,7 +1211,7 @@ validate_archivisation_audit_log_fun_gs() ->
         
         ?assertMatch({ok, #{
             <<"isLast">> := true,
-            <<"logEntries">> := [_ | _]
+            <<"logEntries">> := [_]
         }}, RespBody),
         ok
     end.

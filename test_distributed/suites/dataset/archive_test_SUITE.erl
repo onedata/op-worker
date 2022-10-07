@@ -1157,7 +1157,7 @@ log_template_to_expected_entry(Timestamp, {verification_failed, Guid, Path, Type
     #{
         <<"content">> => #{
             <<"description">> =>
-                <<"Archived ", (type_to_description(Type))/binary, " verification failed.">>,
+                <<"Verification of the archived ", (type_to_description(Type))/binary, " failed.">>,
             <<"fileId">> => ObjectId,
             <<"fileType">> => type_to_binary(Type),
             <<"path">> => Path

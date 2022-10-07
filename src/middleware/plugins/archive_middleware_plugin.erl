@@ -251,12 +251,12 @@ get(#op_req{auth = Auth, gri = #gri{id = ArchiveId, aspect = file_info}, data = 
         [] -> 
             DatasetInfo#dataset_info.root_file_guid;
         _ -> 
-            resolve_file_path(SessionId, DatasetInfo#dataset_info.root_file_guid, 
+            resolve_guid_by_relative_path(SessionId, DatasetInfo#dataset_info.root_file_guid, 
                 filename:join(DatasetRelativePathTokens))
     end,
     {ok, value, #{
         <<"archivedFile">> =>
-            resolve_file_path(SessionId, ArchiveInfo#archive_info.data_dir_guid, ArchiveRelativePath),
+            resolve_guid_by_relative_path(SessionId, ArchiveInfo#archive_info.data_dir_guid, ArchiveRelativePath),
         <<"sourceFile">> => 
             SourceFileGuid
     }};
@@ -296,9 +296,9 @@ delete(#op_req{}) ->
 %%%===================================================================
 
 %% @private
--spec resolve_file_path(session:id(), file_id:file_guid(), file_meta:path()) -> 
+-spec resolve_guid_by_relative_path(session:id(), file_id:file_guid(), file_meta:path()) -> 
     file_id:file_guid().
-resolve_file_path(SessionId, RootFileGuid, RelativePath) ->
+resolve_guid_by_relative_path(SessionId, RootFileGuid, RelativePath) ->
     {ok, Guid} = ?lfm_check(lfm:resolve_guid_by_relative_path(
         SessionId, RootFileGuid, RelativePath
     )),

@@ -29,11 +29,11 @@
 translate_value(#gri{aspect = file_info}, FileInfo) ->
     #{
         <<"sourceFile">> := SourceFileGuid,
-        <<"archivedFile">> := ArchivedFile
+        <<"archivedFile">> := ArchivedFileGuid
     } = FileInfo,
     #{
-        <<"sourceFile">> => prepare_instance_gri(op_file, SourceFileGuid),
-        <<"archivedFile">> => prepare_instance_gri(op_file, ArchivedFile)
+        <<"sourceFileId">> => SourceFileGuid,
+        <<"archivedFileId">> => ArchivedFileGuid
     };
 translate_value(#gri{aspect = audit_log}, ListedEntries) ->
     ListedEntries;
@@ -69,10 +69,10 @@ translate_archive_info(#archive_info{
     related_dip_id = RelatedDipId
 }) ->
     #{
-        <<"gri">> => prepare_archive_instance_gri(ArchiveId),
-        <<"dataset">> => prepare_instance_gri(op_dataset, DatasetId),
+        <<"gri">> => build_serialized_archive_instance_gri(ArchiveId),
+        <<"dataset">> => build_serialized_instance_gri(op_dataset, DatasetId),
         <<"state">> => str_utils:to_binary(State),
-        <<"rootDir">> => prepare_instance_gri(op_file, RootDirGuid),
+        <<"rootDir">> => build_serialized_instance_gri(op_file, RootDirGuid),
         <<"creationTime">> => CreationTime,
         <<"config">> => archive_config:to_json(Config),
         <<"preservedCallback">> => utils:undefined_to_null(PreservedCallback),
@@ -80,22 +80,22 @@ translate_archive_info(#archive_info{
         <<"description">> => Description,
         <<"index">> => Index,
         <<"stats">> => archive_stats:to_json(Stats),
-        <<"parentArchive">> => prepare_archive_instance_gri(ParentArchiveId),
-        <<"baseArchive">> => prepare_archive_instance_gri(BaseArchiveId),
-        <<"relatedAip">> => prepare_archive_instance_gri(RelatedAipId),
-        <<"relatedDip">> => prepare_archive_instance_gri(RelatedDipId)
+        <<"parentArchive">> => build_serialized_archive_instance_gri(ParentArchiveId),
+        <<"baseArchive">> => build_serialized_archive_instance_gri(BaseArchiveId),
+        <<"relatedAip">> => build_serialized_archive_instance_gri(RelatedAipId),
+        <<"relatedDip">> => build_serialized_archive_instance_gri(RelatedDipId)
     }.
 
 
--spec prepare_archive_instance_gri(undefined | archive:id()) -> gri:serialized() | null.
-prepare_archive_instance_gri(ArchiveId) ->
-    prepare_instance_gri(op_archive, ArchiveId).
+-spec build_serialized_archive_instance_gri(undefined | archive:id()) -> gri:serialized() | null.
+build_serialized_archive_instance_gri(ArchiveId) ->
+    build_serialized_instance_gri(op_archive, ArchiveId).
     
 
--spec prepare_instance_gri(gri:entity_type(), gri:entity_id()) -> gri:serialized() | null.
-prepare_instance_gri(_, undefined) ->
+-spec build_serialized_instance_gri(gri:entity_type(), gri:entity_id()) -> gri:serialized() | null.
+build_serialized_instance_gri(_, undefined) ->
     null;
-prepare_instance_gri(Type, Id) ->
+build_serialized_instance_gri(Type, Id) ->
     gri:serialize(#gri{
         type = Type, id = Id,
         aspect = instance, scope = private
