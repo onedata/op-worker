@@ -53,6 +53,19 @@
 
     lane_failed_in_advance_is_not_removed_if_first_lane_run_successfully_finished/1,
 
+    fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error/1,
+
+    fail_atm_workflow_execution_due_to_incorrect_const_arg_type_error/1,
+    fail_atm_workflow_execution_due_to_incorrect_iterated_item_query_arg_error/1,
+    fail_atm_workflow_execution_due_to_empty_single_value_store_arg_error/1,
+
+    fail_atm_workflow_execution_due_to_job_timeout/1,
+    fail_atm_workflow_execution_due_to_job_result_store_mapping_error/1,
+    fail_atm_workflow_execution_due_to_job_missing_required_results_error/1,
+    fail_atm_workflow_execution_due_to_incorrect_result_type_error/1,
+    fail_atm_workflow_execution_due_to_lambda_exception/1,
+    fail_atm_workflow_execution_due_to_lambda_error/1,
+
     cancel_scheduled_atm_workflow_execution/1,
     cancel_enqueued_atm_workflow_execution/1,
 
@@ -69,17 +82,6 @@
     pause_active_atm_workflow_execution_with_uncorrelated_task_results/1,
 
     pause_interrupted_atm_workflow_execution/1,
-
-    fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error/1,
-    fail_atm_workflow_execution_due_to_incorrect_const_arg_type_error/1,
-    fail_atm_workflow_execution_due_to_incorrect_iterated_item_query_arg_error/1,
-    fail_atm_workflow_execution_due_to_empty_single_value_store_arg_error/1,
-    fail_atm_workflow_execution_due_to_job_timeout/1,
-    fail_atm_workflow_execution_due_to_job_result_store_mapping_error/1,
-    fail_atm_workflow_execution_due_to_job_missing_required_results_error/1,
-    fail_atm_workflow_execution_due_to_incorrect_result_type_error/1,
-    fail_atm_workflow_execution_due_to_lambda_exception/1,
-    fail_atm_workflow_execution_due_to_lambda_error/1,
 
     interrupt_ongoing_atm_workflow_execution_due_to_expired_session/1,
 
@@ -171,6 +173,21 @@ groups() -> [
         lane_failed_in_advance_is_not_removed_if_first_lane_run_successfully_finished
     ]},
 
+    {failure_tests, [], [
+        fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error,
+
+        fail_atm_workflow_execution_due_to_incorrect_const_arg_type_error,
+        fail_atm_workflow_execution_due_to_incorrect_iterated_item_query_arg_error,
+        fail_atm_workflow_execution_due_to_empty_single_value_store_arg_error,
+
+        fail_atm_workflow_execution_due_to_job_timeout,
+        fail_atm_workflow_execution_due_to_job_result_store_mapping_error,
+        fail_atm_workflow_execution_due_to_job_missing_required_results_error,
+        fail_atm_workflow_execution_due_to_incorrect_result_type_error,
+        fail_atm_workflow_execution_due_to_lambda_exception,
+        fail_atm_workflow_execution_due_to_lambda_error
+    ]},
+
     {cancel_tests, [], [
         cancel_scheduled_atm_workflow_execution,
         cancel_enqueued_atm_workflow_execution,
@@ -192,22 +209,7 @@ groups() -> [
         pause_interrupted_atm_workflow_execution
     ]},
 
-    {failure_tests, [], [
-        fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error,
-
-        fail_atm_workflow_execution_due_to_incorrect_const_arg_type_error,
-        fail_atm_workflow_execution_due_to_incorrect_iterated_item_query_arg_error,
-        fail_atm_workflow_execution_due_to_empty_single_value_store_arg_error,
-
-        fail_atm_workflow_execution_due_to_job_timeout,
-        fail_atm_workflow_execution_due_to_job_result_store_mapping_error,
-        fail_atm_workflow_execution_due_to_job_missing_required_results_error,
-        fail_atm_workflow_execution_due_to_incorrect_result_type_error,
-        fail_atm_workflow_execution_due_to_lambda_exception,
-        fail_atm_workflow_execution_due_to_lambda_error
-    ]},
-
-    {suspend_tests, [], [
+    {interrupt_tests, [], [
         interrupt_ongoing_atm_workflow_execution_due_to_expired_session
     ]},
 
@@ -276,10 +278,10 @@ all() -> [
     {group, scheduling_non_executable_workflow_schema_tests},
     {group, scheduling_executable_workflow_schema_with_invalid_args_tests},
     {group, preparation_tests},
+    {group, failure_tests},
     {group, cancel_tests},
     {group, pause_tests},
-    {group, failure_tests},
-    {group, suspend_tests},
+    {group, interrupt_tests},
     {group, stopping_tests},
     {group, iteration_tests},
     {group, mapping_tests},
@@ -298,10 +300,10 @@ all() -> [
 
 -define(RUN_SCHEDULING_TEST(), ?RUN_TEST(atm_workflow_execution_scheduling_test_base)).
 -define(RUN_PREPARATION_TEST(), ?RUN_TEST(atm_workflow_execution_preparation_test_base)).
+-define(RUN_FAILURE_TEST(), ?RUN_TEST(atm_workflow_execution_failure_test_base)).
 -define(RUN_CANCEL_TEST(), ?RUN_TEST(atm_workflow_execution_cancel_test_base)).
 -define(RUN_PAUSE_TEST(), ?RUN_TEST(atm_workflow_execution_pause_test_base)).
--define(RUN_FAILURE_TEST(), ?RUN_TEST(atm_workflow_execution_failure_test_base)).
--define(RUN_SUSPEND_TEST(), ?RUN_TEST(atm_workflow_execution_suspension_test_base)).
+-define(RUN_INTERRUPT_TEST(), ?RUN_TEST(atm_workflow_execution_interrupt_test_base)).
 -define(RUN_STOPPING_TEST(), ?RUN_TEST(atm_workflow_execution_stopping_test_base)).
 -define(RUN_ITERATION_TEST(), ?RUN_TEST(atm_workflow_execution_iteration_test_base)).
 -define(RUN_MAPPING_TEST(), ?RUN_TEST(atm_workflow_execution_mapping_test_base)).
@@ -397,6 +399,46 @@ lane_failed_in_advance_is_not_removed_if_first_lane_run_successfully_finished(_C
     ?RUN_PREPARATION_TEST().
 
 
+fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error(_Config) ->
+    ?RUN_FAILURE_TEST().
+
+
+fail_atm_workflow_execution_due_to_incorrect_const_arg_type_error(_Config) ->
+    ?RUN_FAILURE_TEST().
+
+
+fail_atm_workflow_execution_due_to_incorrect_iterated_item_query_arg_error(_Config) ->
+    ?RUN_FAILURE_TEST().
+
+
+fail_atm_workflow_execution_due_to_empty_single_value_store_arg_error(_Config) ->
+    ?RUN_FAILURE_TEST().
+
+
+fail_atm_workflow_execution_due_to_job_timeout(_Config) ->
+    ?RUN_FAILURE_TEST().
+
+
+fail_atm_workflow_execution_due_to_job_result_store_mapping_error(_Config) ->
+    ?RUN_FAILURE_TEST().
+
+
+fail_atm_workflow_execution_due_to_job_missing_required_results_error(_Config) ->
+    ?RUN_FAILURE_TEST().
+
+
+fail_atm_workflow_execution_due_to_incorrect_result_type_error(_Config) ->
+    ?RUN_FAILURE_TEST().
+
+
+fail_atm_workflow_execution_due_to_lambda_exception(_Config) ->
+    ?RUN_FAILURE_TEST().
+
+
+fail_atm_workflow_execution_due_to_lambda_error(_Config) ->
+    ?RUN_FAILURE_TEST().
+
+
 cancel_scheduled_atm_workflow_execution(_Config) ->
     ?RUN_CANCEL_TEST().
 
@@ -441,48 +483,8 @@ pause_interrupted_atm_workflow_execution(_Config) ->
     ?RUN_PAUSE_TEST().
 
 
-fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error(_Config) ->
-    ?RUN_FAILURE_TEST().
-
-
-fail_atm_workflow_execution_due_to_incorrect_const_arg_type_error(_Config) ->
-    ?RUN_FAILURE_TEST().
-
-
-fail_atm_workflow_execution_due_to_incorrect_iterated_item_query_arg_error(_Config) ->
-    ?RUN_FAILURE_TEST().
-
-
-fail_atm_workflow_execution_due_to_empty_single_value_store_arg_error(_Config) ->
-    ?RUN_FAILURE_TEST().
-
-
-fail_atm_workflow_execution_due_to_job_timeout(_Config) ->
-    ?RUN_FAILURE_TEST().
-
-
-fail_atm_workflow_execution_due_to_job_result_store_mapping_error(_Config) ->
-    ?RUN_FAILURE_TEST().
-
-
-fail_atm_workflow_execution_due_to_job_missing_required_results_error(_Config) ->
-    ?RUN_FAILURE_TEST().
-
-
-fail_atm_workflow_execution_due_to_incorrect_result_type_error(_Config) ->
-    ?RUN_FAILURE_TEST().
-
-
-fail_atm_workflow_execution_due_to_lambda_exception(_Config) ->
-    ?RUN_FAILURE_TEST().
-
-
-fail_atm_workflow_execution_due_to_lambda_error(_Config) ->
-    ?RUN_FAILURE_TEST().
-
-
 interrupt_ongoing_atm_workflow_execution_due_to_expired_session(_Config) ->
-    ?RUN_SUSPEND_TEST().
+    ?RUN_INTERRUPT_TEST().
 
 
 stopping_reason_failure_overrides_pause(_Config) ->
@@ -693,10 +695,10 @@ init_per_group(scheduling_executable_workflow_schema_with_invalid_args_tests, Co
 
 init_per_group(TestGroup, Config) when
     TestGroup =:= preparation_tests;
+    TestGroup =:= failure_tests;
     TestGroup =:= cancel_tests;
     TestGroup =:= pause_tests;
-    TestGroup =:= failure_tests;
-    TestGroup =:= suspend_tests;
+    TestGroup =:= interrupt_tests;
     TestGroup =:= stopping_tests;
     TestGroup =:= iteration_tests;
     TestGroup =:= mapping_tests;
@@ -716,10 +718,10 @@ end_per_group(scheduling_executable_workflow_schema_with_invalid_args_tests, Con
 
 end_per_group(TestGroup, Config) when
     TestGroup =:= preparation_tests;
+    TestGroup =:= failure_tests;
     TestGroup =:= cancel_tests;
     TestGroup =:= pause_tests;
-    TestGroup =:= failure_tests;
-    TestGroup =:= suspend_tests;
+    TestGroup =:= interrupt_tests;
     TestGroup =:= stopping_tests;
     TestGroup =:= iteration_tests;
     TestGroup =:= mapping_tests;

@@ -6,11 +6,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Bases for tests concerning suspension (pause and interrupt) of automation
-%%% workflow execution.
+%%% Bases for tests concerning interrupt of automation workflow execution.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_workflow_execution_suspension_test_base).
+-module(atm_workflow_execution_interrupt_test_base).
 -author("Bartosz Walkowicz").
 
 -include("atm_workflow_execution_test.hrl").
