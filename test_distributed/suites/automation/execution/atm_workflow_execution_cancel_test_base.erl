@@ -501,11 +501,6 @@ expect_lane2_task_stopped(<<"cancelled">>, AtmTaskExecutionId, ExpState0) ->
 
 
 %% @private
-get_task4_id(ExpState) ->
-    atm_workflow_execution_exp_state_builder:get_task_id({{2, 1}, <<"pb3">>, <<"task4">>}, ExpState).
-
-
-%% @private
 cancel_suspended_atm_workflow_execution(AtmMockCallCtx = #atm_mock_call_ctx{
     workflow_execution_exp_state = ExpState0
 }) ->

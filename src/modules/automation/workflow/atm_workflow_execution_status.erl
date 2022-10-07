@@ -373,7 +373,8 @@ handle_resume(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
         ->
             AtmLaneRunDiff(Record#atm_workflow_execution{
                 status = ?RESUMING_STATUS,
-                schedule_time = global_clock:timestamp_seconds()
+                schedule_time = global_clock:timestamp_seconds(),
+                incarnation = Record#atm_workflow_execution.incarnation + 1
             });
 
         (_) ->

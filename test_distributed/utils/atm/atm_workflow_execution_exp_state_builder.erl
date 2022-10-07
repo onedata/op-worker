@@ -71,7 +71,6 @@
     expect_all_tasks_interrupted/2,
     expect_all_tasks_cancelled/2,
     expect_all_tasks_failed/2,
-    expect_all_tasks_stopping/2,
     expect_all_tasks_stopping/3,
 
     expect_workflow_execution_scheduled/1,
@@ -722,12 +721,6 @@ expect_all_tasks_cancelled(AtmLaneRunSelector, ExpStateCtx) ->
     ctx().
 expect_all_tasks_failed(AtmLaneRunSelector, ExpStateCtx) ->
     expect_all_tasks_transitioned_to(AtmLaneRunSelector, <<"failed">>, ExpStateCtx).
-
-
--spec expect_all_tasks_stopping(atm_lane_execution:lane_run_selector(), ctx()) ->
-    ctx().
-expect_all_tasks_stopping(AtmLaneRunSelector, ExpStateCtx) ->
-    expect_all_tasks_stopping(AtmLaneRunSelector, <<"skipped">>, ExpStateCtx).
 
 
 -spec expect_all_tasks_stopping(
