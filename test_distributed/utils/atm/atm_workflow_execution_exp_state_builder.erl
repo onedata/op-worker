@@ -43,6 +43,7 @@
     expect_lane_run_crashed/2,
     expect_lane_run_interrupted/2,
     expect_lane_run_paused/2,
+    expect_lane_run_resuming/2,
     expect_lane_run_rerunable/2,
     expect_lane_run_retriable/2,
     expect_lane_run_repeatable/4,
@@ -81,6 +82,7 @@
     expect_workflow_execution_crashed/1,
     expect_workflow_execution_paused/1,
     expect_workflow_execution_interrupted/1,
+    expect_workflow_execution_resuming/1,
 
     assert_matches_with_backend/2
 ]).
@@ -417,6 +419,13 @@ expect_lane_run_interrupted(AtmLaneRunSelector, ExpStateCtx) ->
     ctx().
 expect_lane_run_paused(AtmLaneRunSelector, ExpStateCtx) ->
     ExpAtmLaneRunStateDiff = #{<<"status">> => <<"paused">>},
+    update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx).
+
+
+-spec expect_lane_run_resuming(atm_lane_execution:lane_run_selector(), ctx()) ->
+    ctx().
+expect_lane_run_resuming(AtmLaneRunSelector, ExpStateCtx) ->
+    ExpAtmLaneRunStateDiff = #{<<"status">> => <<"resuming">>},
     update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx).
 
 
@@ -836,6 +845,17 @@ expect_workflow_execution_interrupted(ExpStateCtx) ->
         <<"status">> => <<"interrupted">>,
         <<"suspendTime">> => build_timestamp_field_validator(?NOW())
     },
+    update_workflow_execution_exp_state(ExpAtmWorkflowExecutionStateDiff, ExpStateCtx).
+
+
+-spec expect_workflow_execution_resuming(ctx()) -> ctx().
+expect_workflow_execution_resuming(ExpStateCtx) ->
+    ExpAtmWorkflowExecutionStateDiff = fun(ExpAtmWorkflowExecutionState) ->
+        ExpAtmWorkflowExecutionState#{
+            <<"status">> => <<"resuming">>,
+            <<"scheduleTime">> => build_timestamp_field_validator(?NOW())
+        }
+    end,
     update_workflow_execution_exp_state(ExpAtmWorkflowExecutionStateDiff, ExpStateCtx).
 
 

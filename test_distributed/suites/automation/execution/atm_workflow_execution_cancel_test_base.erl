@@ -28,7 +28,7 @@
 ]).
 
 
--define(ECHO_ATM_TASK_SCHEMA__DRAFT(__ID, __TARGET_STORE_SCHEMA_ID), #atm_task_schema_draft{
+-define(ECHO_ATM_TASK_SCHEMA_DRAFT(__ID, __TARGET_STORE_SCHEMA_ID), #atm_task_schema_draft{
     id = __ID,
     lambda_id = ?ECHO_LAMBDA_ID,
     lambda_revision_number = ?ECHO_LAMBDA_REVISION_NUM,
@@ -58,13 +58,13 @@
                     #atm_parallel_box_schema_draft{
                         id = <<"pb1">>,
                         tasks = [
-                            ?ECHO_ATM_TASK_SCHEMA__DRAFT(<<"task1">>, <<"st_2">>),
-                            ?ECHO_ATM_TASK_SCHEMA__DRAFT(<<"task2">>, <<"st_3">>)
+                            ?ECHO_ATM_TASK_SCHEMA_DRAFT(<<"task1">>, <<"st_2">>),
+                            ?ECHO_ATM_TASK_SCHEMA_DRAFT(<<"task2">>, <<"st_3">>)
                         ]
                     },
                     #atm_parallel_box_schema_draft{
                         id = <<"pb2">>,
-                        tasks = [?ECHO_ATM_TASK_SCHEMA__DRAFT(<<"task3">>, <<"st_4">>)]
+                        tasks = [?ECHO_ATM_TASK_SCHEMA_DRAFT(<<"task3">>, <<"st_4">>)]
                     }
                 ],
                 store_iterator_spec = #atm_store_iterator_spec_draft{store_schema_id = <<"st_1">>},
@@ -79,11 +79,11 @@
                 parallel_boxes = [
                     #atm_parallel_box_schema_draft{
                         id = <<"pb3">>,
-                        tasks = [?ECHO_ATM_TASK_SCHEMA__DRAFT(<<"task4">>, <<"st_devnull">>)]
+                        tasks = [?ECHO_ATM_TASK_SCHEMA_DRAFT(<<"task4">>, <<"st_devnull">>)]
                     },
                     #atm_parallel_box_schema_draft{
                         id = <<"pb4">>,
-                        tasks = [?ECHO_ATM_TASK_SCHEMA__DRAFT(<<"task5">>, <<"st_devnull">>)]
+                        tasks = [?ECHO_ATM_TASK_SCHEMA_DRAFT(<<"task5">>, <<"st_devnull">>)]
                     }
                 ],
                 store_iterator_spec = #atm_store_iterator_spec_draft{store_schema_id = <<"st_4">>},

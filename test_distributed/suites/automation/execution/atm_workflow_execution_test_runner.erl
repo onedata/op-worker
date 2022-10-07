@@ -60,6 +60,7 @@
     stop_workflow_execution/2,
 
     repeat_workflow_execution/3,
+    resume_workflow_execution/1,
 
     delete_offline_session/1
 ]).
@@ -304,6 +305,16 @@ repeat_workflow_execution(RepeatType, AtmLaneRunSelector, #atm_mock_call_ctx{
     ?erpc(ProviderSelector, mi_atm:repeat_workflow_execution(
         SessionId, RepeatType, AtmWorkflowExecutionId, AtmLaneRunSelector
     )).
+
+
+-spec resume_workflow_execution(atm_workflow_execution_test_runner:mock_call_ctx()) ->
+    ok.
+resume_workflow_execution(#atm_mock_call_ctx{
+    provider = ProviderSelector,
+    session_id = SessionId,
+    workflow_execution_id = AtmWorkflowExecutionId
+}) ->
+    ?erpc(ProviderSelector, mi_atm:resume_workflow_execution(SessionId, AtmWorkflowExecutionId)).
 
 
 -spec delete_offline_session(mock_call_ctx()) -> ok | no_return().

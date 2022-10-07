@@ -135,7 +135,9 @@
     retry_failed_iterated_atm_lane_run_execution/1,
     repeat_failed_while_preparing_atm_lane_run_execution/1,
     repeat_failed_not_iterated_atm_lane_run_execution/1,
-    repeat_cancelled_atm_lane_run_execution/1
+    repeat_cancelled_atm_lane_run_execution/1,
+
+    resume_atm_workflow_execution_paused_while_scheduled/1
 ]).
 
 groups() -> [
@@ -271,6 +273,10 @@ groups() -> [
         repeat_failed_while_preparing_atm_lane_run_execution,
         repeat_failed_not_iterated_atm_lane_run_execution,
         repeat_cancelled_atm_lane_run_execution
+    ]},
+
+    {resume_tests, [], [
+        resume_atm_workflow_execution_paused_while_scheduled
     ]}
 ].
 
@@ -285,7 +291,8 @@ all() -> [
     {group, stopping_tests},
     {group, iteration_tests},
     {group, mapping_tests},
-    {group, repeat_tests}
+    {group, repeat_tests},
+    {group, resume_tests}
 ].
 
 
@@ -308,6 +315,7 @@ all() -> [
 -define(RUN_ITERATION_TEST(), ?RUN_TEST(atm_workflow_execution_iteration_test_base)).
 -define(RUN_MAPPING_TEST(), ?RUN_TEST(atm_workflow_execution_mapping_test_base)).
 -define(RUN_REPEAT_TEST(), ?RUN_TEST(atm_workflow_execution_repeat_test_base)).
+-define(RUN_RESUME_TEST(), ?RUN_TEST(atm_workflow_execution_resume_test_base)).
 
 
 %%%===================================================================
@@ -647,6 +655,10 @@ repeat_cancelled_atm_lane_run_execution(_Config) ->
     ?RUN_REPEAT_TEST().
 
 
+resume_atm_workflow_execution_paused_while_scheduled(_Config) ->
+    ?RUN_RESUME_TEST().
+
+
 %===================================================================
 % SetUp and TearDown functions
 %===================================================================
@@ -702,7 +714,8 @@ init_per_group(TestGroup, Config) when
     TestGroup =:= stopping_tests;
     TestGroup =:= iteration_tests;
     TestGroup =:= mapping_tests;
-    TestGroup =:= repeat_tests
+    TestGroup =:= repeat_tests;
+    TestGroup =:= resume_tests
 ->
     atm_openfaas_task_executor_mock:init(?PROVIDER_SELECTOR, atm_openfaas_docker_mock),
     atm_workflow_execution_test_runner:init(?PROVIDER_SELECTOR),
@@ -725,7 +738,8 @@ end_per_group(TestGroup, Config) when
     TestGroup =:= stopping_tests;
     TestGroup =:= iteration_tests;
     TestGroup =:= mapping_tests;
-    TestGroup =:= repeat_tests
+    TestGroup =:= repeat_tests;
+    TestGroup =:= resume_tests
 ->
     atm_workflow_execution_test_runner:teardown(?PROVIDER_SELECTOR),
     atm_openfaas_task_executor_mock:teardown(?PROVIDER_SELECTOR),
