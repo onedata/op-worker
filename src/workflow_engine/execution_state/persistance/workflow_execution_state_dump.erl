@@ -20,8 +20,13 @@
 %% API
 -export([dump_workflow_execution_state/1, restore_workflow_execution_state_from_dump/2, delete/1]).
 
+% Test API
+-export([get/1]).
+
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
+
+-compile({no_auto_import, [get/1]}).
 
 
 -define(CTX, #{
@@ -71,7 +76,7 @@ restore_workflow_execution_state_from_dump(
     #document{key = ExecutionId, value = #workflow_execution_state{incarnation_tag = Tag} = StateBase} = DocBase,
     Iterator
 ) ->
-    case datastore_model:get(?CTX, ExecutionId) of
+    case get(ExecutionId) of
         {ok, #document{value = #workflow_execution_state_dump{
             snapshot_mode = SnapshotMode,
             lane_status = LaneStatus,
@@ -104,6 +109,16 @@ restore_workflow_execution_state_from_dump(
 -spec delete(workflow_engine:execution_id()) -> ok.
 delete(ExecutionId) ->
     ok = datastore_model:delete(?CTX, ExecutionId).
+
+
+%%%===================================================================
+%%% Test API
+%%%===================================================================
+
+-spec get(workflow_engine:execution_id()) -> {ok, datastore_doc:doc(#workflow_execution_state_dump{})} | ?ERROR_NOT_FOUND.
+get(ExecutionId) ->
+    datastore_model:get(?CTX, ExecutionId).
+
 
 %%%===================================================================
 %%% datastore_model callbacks

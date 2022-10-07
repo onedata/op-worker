@@ -567,6 +567,7 @@ resume_on_exception_test_base(Config, #test_config{
     ?assertNot(workflow_scheduling_test_common:has_any_finish_callbacks_for_lane(ExecutionHistory, LaneId)),
     ?assert(workflow_scheduling_test_common:has_exception_callback(ExecutionHistory)),
 
+    GetDumpAns = rpc:call(Worker, workflow_execution_state_dump, get, [ExecutionId]),
     % TODO VFS-7784 - common restart test utils for resume testing to be used here and by cancel_and_restart_test_base
     RestartGeneratorOptions = maps:without([fail_iteration, finish_on_lane], GeneratorOptions#{first_lane_id => LaneId}),
     RestartWorkflowExecutionSpec = workflow_scheduling_test_common:gen_workflow_execution_spec(
@@ -581,8 +582,7 @@ resume_on_exception_test_base(Config, #test_config{
     workflow_scheduling_test_common:verify_execution_history_stats(ExtendedHistoryStatsAfterRestart, TaskType),
     workflow_scheduling_test_common:verify_execution_history(
         RestartWorkflowExecutionSpec, ExecutionHistoryAfterRestart, #{resume_lane => LaneId}),
-    % TODO - czasem zostaje item !
-%%    workflow_scheduling_test_common:verify_memory(Config, InitialKeys),
+    workflow_scheduling_test_common:verify_memory(Config, InitialKeys),
 
     case RestartType of
         from_dump ->
@@ -599,8 +599,8 @@ resume_on_exception_test_base(Config, #test_config{
             end,
             MergedExecutionHistory  = workflow_scheduling_test_common:filter_repeated_stream_callbacks(
                 FilteredExecutionHistory2 ++ FilteredExecutionHistoryAfterRestart, LaneId, GeneratorOptions),
-            MergedAndFilteredExecutionHistory =
-                workflow_scheduling_test_common:verify_and_filter_duplicated_calls(MergedExecutionHistory),
+            MergedAndFilteredExecutionHistory = workflow_scheduling_test_common:verify_and_filter_duplicated_calls(
+                MergedExecutionHistory, GetDumpAns, LaneId, TestExecutionManagerOptions),
             VerifyGeneratorOptions = maps:without([fail_iteration, finish_on_lane], GeneratorOptions),
             VerifyWorkflowExecutionSpec = workflow_scheduling_test_common:gen_workflow_execution_spec(
                 TaskType, PrepareInAdvance, VerifyGeneratorOptions, ExecutionId),

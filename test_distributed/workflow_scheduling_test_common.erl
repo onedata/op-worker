@@ -26,7 +26,7 @@
 %% Helper functions verifying execution history
 -export([verify_execution_history/2, verify_execution_history/3, verify_empty_lane/2, has_any_finish_callbacks_for_lane/2,
     has_exception_callback/1, filter_finish_and_exception_handlers/2, filter_prepare_in_adnave_handler/3,
-    filter_repeated_stream_callbacks/3, check_prepare_lane_in_head_and_filter/2, verify_and_filter_duplicated_calls/1]).
+    filter_repeated_stream_callbacks/3, check_prepare_lane_in_head_and_filter/2, verify_and_filter_duplicated_calls/4]).
 %% Helper functions history statistics
 -export([verify_execution_history_stats/2, verify_execution_history_stats/3]).
 %% Memory verification helper functions
@@ -995,23 +995,61 @@ check_prepare_lane_in_head_and_filter(ExecutionHistory, LaneId) ->
     [_ | ExecutionHistoryTail] = ExecutionHistory,
     ExecutionHistoryTail.
 
-verify_and_filter_duplicated_calls(ExecutionHistory) ->
-    {FilteredExecutionHistory, DuplicatedCalls} = lists:foldl(fun
-        (#handler_call{function = process_streamed_task_data} = HandlerCall, {Acc, Duplicated}) ->
-            {[HandlerCall | Acc], Duplicated};
+verify_and_filter_duplicated_calls(ExecutionHistory, {ok, #document{
+    value = #workflow_execution_state_dump{jobs_dump = JobsDump}
+}}, ResumedLaneId, TestExecutionManagerOptions) ->
+    ResumedLaneIndex = binary_to_integer(ResumedLaneId),
+    TasksInProcessingWDuringDump = workflow_jobs:get_results_in_processing_from_dump(JobsDump),
+    DuplicatedHandlers = maps:map(fun(_, {Box, Tasks}) ->
+        {
+            Box,
+            lists:map(fun(Task) -> {Task, run_task_for_item} end, Tasks) ++
+                lists:map(fun(Task) -> {Task, report_async_task_result} end, Tasks)
+        }
+    end, TasksInProcessingWDuringDump),
 
-        (HandlerCall, {Acc, Duplicated}) ->
+    FinalDuplicatedHandlers = case TestExecutionManagerOptions of
+        [{throw_error, {FailedCallback, FailedTaskId, FailedItem}}] ->
+            FailedItemIndex = binary_to_integer(FailedItem),
+            {FailedLaneIndex, FailedBoxIndex, FailedTaskIndex} = workflow_test_handler:decode_task_id(FailedTaskId),
+            ?assertEqual(ResumedLaneIndex, FailedLaneIndex),
+            {FailedBoxIndex, FailedItemTasks} = maps:get(FailedItemIndex, DuplicatedHandlers, {FailedBoxIndex, []}),
+            FailedItemFinalTasks = FailedItemTasks ++ case FailedCallback of
+                process_task_result_for_item -> [{FailedTaskIndex, process_task_result_for_item}];
+                run_task_for_item -> [{FailedTaskIndex, run_task_for_item}, {FailedTaskIndex, report_async_task_result}]
+            end,
+            DuplicatedHandlers#{FailedItemIndex => {FailedBoxIndex, FailedItemFinalTasks}};
+        _ ->
+            DuplicatedHandlers
+    end,
+
+    {FilteredExecutionHistory, RemainingDuplicatedHandlers} = lists:foldl(fun
+        (#handler_call{function = Fun, item = Item, task_id = TaskId} = HandlerCall, {HandlersAcc, DuplicatedAcc})
+            when Fun =/= process_streamed_task_data
+        ->
             IsDuplicated = lists:any(fun(FilteredCall) ->
                 FilteredCall#handler_call{context = undefined} =:= HandlerCall#handler_call{context = undefined}
-            end, Acc),
+            end, HandlersAcc),
 
             case IsDuplicated of
-                true -> {Acc, [HandlerCall | Duplicated]};
-                false -> {[HandlerCall | Acc], Duplicated}
-            end
-    end, {[], []}, lists:reverse(ExecutionHistory)),
+                true ->
+                    ItemIndex = binary_to_integer(Item),
+                    {LaneIndex, BoxIndex, TaskIndex} = workflow_test_handler:decode_task_id(TaskId),
+                    ?assertEqual(ResumedLaneIndex, LaneIndex),
+                    {_, ExpectedTasks} = ?assertMatch({BoxIndex, _}, maps:get(ItemIndex, DuplicatedAcc, undefined)),
+                    ?assert(lists:member({TaskIndex, Fun}, ExpectedTasks)),
+                    {HandlersAcc, DuplicatedAcc#{ItemIndex => {BoxIndex, ExpectedTasks -- [{TaskIndex, Fun}]}}};
+                false ->
+                    {[HandlerCall | HandlersAcc], DuplicatedAcc}
+            end;
+        (HandlerCall, {HandlersAcc, DuplicatedAcc}) ->
+            {[HandlerCall | HandlersAcc], DuplicatedAcc}
+    end, {[], FinalDuplicatedHandlers}, lists:reverse(ExecutionHistory)),
 
-% TODO - sprawdzic czy duplikaty pokrywaja sie z tym co mamy w dump
+    lists:foreach(fun(DuplicatedHandlersForItem) ->
+        ?assertMatch({_, {_, []}}, DuplicatedHandlersForItem)
+    end, maps:to_list(RemainingDuplicatedHandlers)),
+
     FilteredExecutionHistory.
 
 

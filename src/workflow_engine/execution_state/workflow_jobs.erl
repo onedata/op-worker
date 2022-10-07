@@ -32,7 +32,7 @@
 %% API used to check which tasks are finished for all items
 -export([is_task_finished/2, is_task_finished/3, build_tasks_tree/1]).
 %% Test API
--export([is_empty/1]).
+-export([is_empty/1, get_results_in_processing_from_dump/1]).
 
 % Internal record used for scheduled jobs management
 -record(job_identifier, {
@@ -610,3 +610,20 @@ is_empty(#workflow_jobs{
 }) ->
     gb_sets:is_empty(Ongoing) andalso gb_sets:is_empty(Waiting) andalso sets:size(Failed) =:= 0 andalso
         maps:size(AsyncCalls) =:= 0 andalso maps:size(Raced) =:= 0 andalso maps:size(AsyncCached) =:= 0.
+
+
+-spec get_results_in_processing_from_dump(dump()) ->
+    #{workflow_execution_state:index() => {workflow_execution_state:index(), [workflow_execution_state:index()]}}.
+get_results_in_processing_from_dump({WaitingList, _FailedList}) ->
+    lists:foldl(fun
+        (#job_identifier{
+            processing_type = ?ASYNC_RESULT_PROCESSING,
+            item_index = ItemIndex,
+            parallel_box_index = BoxIndex,
+            task_index = TaskIndex
+        }, Acc) ->
+            {BoxIndex, TaskIndexes} = maps:get(ItemIndex, Acc, {BoxIndex, []}),
+            Acc#{ItemIndex => {BoxIndex, [TaskIndex | TaskIndexes]}};
+        (_, Acc) ->
+            Acc
+    end, #{}, WaitingList).
