@@ -19,26 +19,28 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([init/0, prepare_next_waiting_job/1, prepare_next_waiting_result/1, populate_with_jobs_for_item/4,
-    pause_job/2, mark_ongoing_job_finished/2, register_failure/2,
+-export([init/0, prepare_next_waiting_job/1, prepare_next_waiting_result/1, populate_with_jobs_for_item/5,
+    schedule_restart_of_job/2, mark_ongoing_job_finished/2, register_failure/2,
     register_async_job_finish/3, prepare_next_parallel_box/4,
-    get_identfiers_for_next_parallel_boxes/3, has_ongoing_jobs/1, get_all_async_cached_result_ids/1]).
+    get_identfiers_for_next_parallel_boxes/3, has_ongoing_jobs/1, get_all_async_cached_result_ids/1,
+    get_waiting_or_ongoing_tasks_indexes/1, dump/1, from_dump/2, get_dump_struct/0]).
 %% Functions returning/updating pending_async_jobs field
 -export([register_async_call/4, check_timeouts/1, reset_keepalive_timer/2]).
 %% Functions operating on job_identifier record
 -export([encode_job_identifier/1, decode_job_identifier/1, get_item_id/2, get_subject_id/3,
-    get_task_details/2, get_processing_type/1, is_previous/2]).
+    get_task_details/2, get_processing_type/1]).
 %% API used to check which tasks are finished for all items
 -export([is_task_finished/2, is_task_finished/3, build_tasks_tree/1]).
 %% Test API
--export([is_empty/1]).
+-export([is_empty/1, get_results_in_processing_from_dump/1]).
 
 % Internal record used for scheduled jobs management
 -record(job_identifier, {
     item_index :: workflow_execution_state:index(),
     parallel_box_index :: workflow_execution_state:index(),
     task_index :: workflow_execution_state:index(),
-    processing_type :: processing_type()
+    processing_type :: processing_type(),
+    incarnation_tag :: workflow_execution_state:incarnation_tag()
 }).
 
 % Internal record used to control timeouts of jobs that are processed asynchronously
@@ -88,7 +90,9 @@
 -define(ITERATION_FINISHED, iteration_finished).
 -type results_iterator() :: gb_sets:iter(job_identifier()) | ?ITERATION_FINISHED.
 
--export_type([job_identifier/0, encoded_job_identifier/0, jobs/0, item_processing_result/0]).
+-type dump() ::  {[job_identifier()], [workflow_execution_state:index()]}.
+
+-export_type([job_identifier/0, encoded_job_identifier/0, jobs/0, dump/0]).
 
 -define(SEPARATOR, "_").
 -define(OPERATION_UNSUPPORTED, operation_unsupported).
@@ -147,21 +151,23 @@ prepare_next_waiting_result(Jobs = #workflow_jobs{
     jobs(),
     workflow_execution_state:index(),
     workflow_execution_state:index(),
-    workflow_execution_state:boxes_map()
+    workflow_execution_state:boxes_map(),
+    workflow_execution_state:incarnation_tag()
 ) -> {jobs(), job_identifier()}.
 populate_with_jobs_for_item(
     Jobs = #workflow_jobs{
         ongoing = Ongoing,
         waiting = Waiting
     },
-    ItemIndex, ParallelBoxToStartIndex, BoxesSpec) ->
+    ItemIndex, ParallelBoxToStartIndex, BoxesSpec, IncarnationTag) ->
     Tasks = maps:get(1, BoxesSpec),
     [ToStart | ToWait] = lists:map(fun(TaskIndex) ->
         #job_identifier{
             processing_type = ?JOB_PROCESSING,
             item_index = ItemIndex,
             parallel_box_index = ParallelBoxToStartIndex,
-            task_index = TaskIndex
+            task_index = TaskIndex,
+            incarnation_tag = IncarnationTag
         }
     end, lists:seq(1, maps:size(Tasks))),
 
@@ -170,8 +176,8 @@ populate_with_jobs_for_item(
         waiting = gb_sets:union(Waiting, gb_sets:from_list(ToWait))
     }, ToStart}.
 
--spec pause_job(jobs(), job_identifier()) -> jobs().
-pause_job(Jobs = #workflow_jobs{
+-spec schedule_restart_of_job(jobs(), job_identifier()) -> jobs().
+schedule_restart_of_job(Jobs = #workflow_jobs{
     waiting = Waiting,
     ongoing = Ongoing
 }, JobIdentifier) ->
@@ -240,7 +246,8 @@ prepare_next_parallel_box(
     },
     #job_identifier{
         item_index = ItemIndex,
-        parallel_box_index = BoxIndex
+        parallel_box_index = BoxIndex,
+        incarnation_tag = IncarnationTag
     },
     BoxesSpec, BoxCount) ->
     case {has_item(ItemIndex, Failed), BoxIndex} of
@@ -257,7 +264,8 @@ prepare_next_parallel_box(
                     processing_type = ?JOB_PROCESSING,
                     item_index = ItemIndex,
                     parallel_box_index = NewBoxIndex,
-                    task_index = TaskIndex
+                    task_index = TaskIndex,
+                    incarnation_tag = IncarnationTag
                 } | TmpWaiting]
             end, [], lists:seq(1, maps:size(Tasks))),
             {ok, Jobs#workflow_jobs{
@@ -272,7 +280,8 @@ get_identfiers_for_next_parallel_boxes(#job_identifier{parallel_box_index = BoxC
     [];
 get_identfiers_for_next_parallel_boxes(#job_identifier{
     item_index = ItemIndex,
-    parallel_box_index = BoxIndex
+    parallel_box_index = BoxIndex,
+    incarnation_tag = IncarnationTag
 } = Identifier, BoxSpecs, BoxCount) ->
     NextBoxIndex = BoxIndex + 1,
     Tasks = maps:get(NextBoxIndex, BoxSpecs),
@@ -281,7 +290,8 @@ get_identfiers_for_next_parallel_boxes(#job_identifier{
             processing_type = ?JOB_PROCESSING,
             item_index = ItemIndex,
             parallel_box_index = NextBoxIndex,
-            task_index = TaskIndex
+            task_index = TaskIndex,
+            incarnation_tag = IncarnationTag
         }
     end, lists:seq(1, maps:size(Tasks))),
     Identifiers ++ get_identfiers_for_next_parallel_boxes(
@@ -297,6 +307,41 @@ has_ongoing_jobs(#workflow_jobs{ongoing = Ongoing}) ->
 -spec get_all_async_cached_result_ids(jobs()) -> [workflow_cached_async_result:result_ref()].
 get_all_async_cached_result_ids(#workflow_jobs{async_cached_results = Results}) ->
     maps:values(Results).
+
+
+-spec get_waiting_or_ongoing_tasks_indexes(jobs()) -> #{job_identifier() => [job_identifier()]}.
+get_waiting_or_ongoing_tasks_indexes(#workflow_jobs{waiting = Waiting, ongoing = Ongoing}) ->
+    gb_sets:fold(fun(#job_identifier{parallel_box_index = BoxIndex, task_index = TaskIndex}, Acc) ->
+        BoxTasks = maps:get(BoxIndex, Acc, []),
+        Acc#{BoxIndex => [TaskIndex | BoxTasks]}
+    end, #{}, gb_sets:union(Waiting, Ongoing)).
+
+
+-spec dump(jobs()) -> dump().
+dump(#workflow_jobs{waiting = Waiting, failed_items = FailedItems}) ->
+    {gb_sets:to_list(Waiting), sets:to_list(FailedItems)}.
+
+
+-spec from_dump(dump(), workflow_execution_state:incarnation_tag()) -> jobs().
+from_dump({WaitingList, FailedList}, IncarnationTag) ->
+    MappedWaitingList = lists:map(fun(JobIdentifier) ->
+        JobIdentifier#job_identifier{processing_type = ?JOB_PROCESSING, incarnation_tag = IncarnationTag}
+    end, WaitingList),
+    #workflow_jobs{waiting = gb_sets:from_list(MappedWaitingList), failed_items = sets:from_list(FailedList)}.
+
+
+-spec get_dump_struct() -> tuple().
+get_dump_struct() ->
+    {
+        [{record, [
+            {item_index, integer},
+            {parallel_box_index, integer},
+            {task_index, integer},
+            {processing_type, atom},
+            {incarnation_tag, string}
+        ]}],
+        [integer]
+    }.
 
 %%%===================================================================
 %%% Functions returning/updating pending_async_jobs field
@@ -382,22 +427,25 @@ encode_job_identifier(#job_identifier{
     processing_type = ?JOB_PROCESSING,
     item_index = ItemIndex,
     parallel_box_index = BoxIndex,
-    task_index = TaskIndex
+    task_index = TaskIndex,
+    incarnation_tag = IncarnationTag
 }) ->
     <<(integer_to_binary(ItemIndex))/binary, ?SEPARATOR,
         (integer_to_binary(BoxIndex))/binary, ?SEPARATOR,
-        (integer_to_binary(TaskIndex))/binary>>;
+        (integer_to_binary(TaskIndex))/binary, ?SEPARATOR,
+        IncarnationTag/binary>>;
 encode_job_identifier(#job_identifier{processing_type = ?ASYNC_RESULT_PROCESSING}) ->
     throw(?OPERATION_UNSUPPORTED).
 
 -spec decode_job_identifier(encoded_job_identifier()) -> job_identifier().
 decode_job_identifier(Binary) ->
-    [ItemIndexBin, BoxIndexBin, TaskIndexBin] = binary:split(Binary, <<?SEPARATOR>>, [global, trim_all]),
+    [ItemIndexBin, BoxIndexBin, TaskIndexBin, IncarnationTag] = binary:split(Binary, <<?SEPARATOR>>, [global, trim_all]),
     #job_identifier{
         processing_type = ?JOB_PROCESSING,
         item_index = binary_to_integer(ItemIndexBin),
         parallel_box_index = binary_to_integer(BoxIndexBin),
-        task_index = binary_to_integer(TaskIndexBin)
+        task_index = binary_to_integer(TaskIndexBin),
+        incarnation_tag = IncarnationTag
     }.
 
 -spec get_item_id(job_identifier(), workflow_iteration_state:state()) -> workflow_cached_item:id().
@@ -423,10 +471,6 @@ get_task_details(#job_identifier{parallel_box_index = BoxIndex, task_index = Tas
 -spec get_processing_type(job_identifier()) -> processing_type().
 get_processing_type(#job_identifier{processing_type = ProcessingType}) ->
     ProcessingType.
-
--spec is_previous(job_identifier(), job_identifier()) -> boolean().
-is_previous(#job_identifier{item_index = ItemIndex1}, #job_identifier{item_index = ItemIndex2}) ->
-    ItemIndex1 < ItemIndex2.
 
 %%%===================================================================
 %%% API used to check which tasks are finished for all items
@@ -566,3 +610,20 @@ is_empty(#workflow_jobs{
 }) ->
     gb_sets:is_empty(Ongoing) andalso gb_sets:is_empty(Waiting) andalso sets:size(Failed) =:= 0 andalso
         maps:size(AsyncCalls) =:= 0 andalso maps:size(Raced) =:= 0 andalso maps:size(AsyncCached) =:= 0.
+
+
+-spec get_results_in_processing_from_dump(dump()) ->
+    #{workflow_execution_state:index() => {workflow_execution_state:index(), [workflow_execution_state:index()]}}.
+get_results_in_processing_from_dump({WaitingList, _FailedList}) ->
+    lists:foldl(fun
+        (#job_identifier{
+            processing_type = ?ASYNC_RESULT_PROCESSING,
+            item_index = ItemIndex,
+            parallel_box_index = BoxIndex,
+            task_index = TaskIndex
+        }, Acc) ->
+            {BoxIndex, TaskIndexes} = maps:get(ItemIndex, Acc, {BoxIndex, []}),
+            Acc#{ItemIndex => {BoxIndex, [TaskIndex | TaskIndexes]}};
+        (_, Acc) ->
+            Acc
+    end, #{}, WaitingList).

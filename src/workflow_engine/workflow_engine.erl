@@ -25,7 +25,7 @@
 
 %% API
 -export([init/1, init/2, execute_workflow/2, cleanup_execution/1,
-    init_cancel_procedure/1, wait_for_pending_callbacks/1, finish_cancel_procedure/1]).
+    init_cancel_procedure/1, wait_for_pending_callbacks/1, finish_cancel_procedure/1, abandon/1]).
 -export([stream_task_data/3, report_task_data_streaming_concluded/3]).
 -export([report_async_task_result/3, report_async_task_heartbeat/2]).
 %% Framework internal API
@@ -40,7 +40,7 @@
 -export([init_service/2, takeover_service/3]).
 
 %% Function executed by wpool - do not call directly
--export([process_job_or_result/3, process_streamed_task_data/3, prepare_lane/6]).
+-export([process_job_or_result/3, process_streamed_task_data/3, prepare_lane/7]).
 
 -type id() :: binary(). % Id of an engine
 -type execution_id() :: binary().
@@ -75,7 +75,8 @@
     execution_context => execution_context(),
     first_lane_id => lane_id(), % does not have to be defined if execution is restarted from snapshot
     next_lane_id => lane_id(),
-    force_clean_execution => boolean()
+    force_clean_execution => boolean(),
+    snapshot_mode => workflow_execution_state:snapshot_mode()
 }.
 
 -type task_type() :: sync | async.
@@ -146,12 +147,14 @@ execute_workflow(EngineId, ExecutionSpec) ->
     Context = maps:get(execution_context, ExecutionSpec, undefined),
     FirstLaneId = maps:get(first_lane_id, ExecutionSpec, undefined),
     NextLaneId = maps:get(next_lane_id, ExecutionSpec, undefined),
+    SnapshotMode = maps:get(snapshot_mode, ExecutionSpec, ?ALL_ITEMS),
 
     InitAns = case ExecutionSpec of
         #{force_clean_execution := true} -> 
-            workflow_execution_state:init(ExecutionId, EngineId, Handler, Context, FirstLaneId, NextLaneId);
+            workflow_execution_state:init(ExecutionId, EngineId, Handler, Context, FirstLaneId, NextLaneId, SnapshotMode);
         _ ->
-            workflow_execution_state:restart_from_snapshot(ExecutionId, EngineId, Handler, Context, FirstLaneId, NextLaneId)
+            workflow_execution_state:resume_from_snapshot(
+                ExecutionId, EngineId, Handler, Context, FirstLaneId, NextLaneId, SnapshotMode)
     end,
 
     case InitAns of
@@ -159,8 +162,15 @@ execute_workflow(EngineId, ExecutionSpec) ->
             workflow_engine_state:add_execution_id(EngineId, ExecutionId),
             trigger_job_scheduling(EngineId, ?TAKE_UP_FREE_SLOTS);
         ?WF_ERROR_PREPARATION_FAILED ->
-            call_handler(ExecutionId, Context, Handler, handle_workflow_execution_stopped, []),
-            ok
+            ProgressDataPersistence = execute_exception_handler(
+                ExecutionId, Context, Handler, error, preparation_failed, []),
+
+            case ProgressDataPersistence of
+                clean_progress ->
+                    workflow_iterator_snapshot:cleanup(ExecutionId);
+                _ ->
+                    ok
+            end
     end.
 
 
@@ -190,6 +200,11 @@ finish_cancel_procedure(ExecutionId) ->
         {ok, EngineId} -> trigger_job_scheduling(EngineId);
         ?WF_ERROR_CANCEL_NOT_INITIALIZED -> ok
     end.
+
+
+-spec abandon(execution_id()) -> ok.
+abandon(ExecutionId) ->
+    workflow_execution_state:abandon(ExecutionId).
 
 
 -spec report_async_task_result(execution_id(), workflow_jobs:encoded_job_identifier(), processing_result()) -> ok.
@@ -339,18 +354,18 @@ handle_exception(ExecutionId, Handler, Message, MessageArgs, ErrorType, Reason, 
     end.
 
 -spec execute_exception_handler(execution_id(), execution_context(), workflow_handler:handler(),
-    throw | error | exit, term(), list()) -> ok.
+    throw | error | exit, term(), list()) -> workflow_handler:progress_data_persistence().
 execute_exception_handler(ExecutionId, Context, Handler, ErrorType, Reason, Stacktrace) ->
     try
-        apply(Handler, handle_exception, [ExecutionId, Context, ErrorType, Reason, Stacktrace]),
-        ok
+        apply(Handler, handle_exception, [ExecutionId, Context, ErrorType, Reason, Stacktrace])
     catch
         ErrorType2:Reason2:Stacktrace2  ->
             ?critical_stacktrace(
                 "Unexpected error handling exception for workflow_handler ~w (execution ~s): ~w:~p",
                 [Handler, ExecutionId, ErrorType2, Reason2],
                 Stacktrace2
-            )
+            ),
+            save_progress
     end.
 
 
@@ -463,9 +478,9 @@ schedule_next_job_insecure(EngineId, DeferredExecutions) ->
                                 ?WF_ERROR_LIMIT_REACHED ->
                                     schedule_next_job_insecure(EngineId, [ExecutionId | DeferredExecutions])
                             end;
-                        ?PREPARE_LANE_EXECUTION(Handler, ExecutionContext, LaneId, PreparationMode) ->
+                        ?PREPARE_LANE_EXECUTION(Handler, ExecutionContext, LaneId, PreparationMode, InitType) ->
                             schedule_lane_prepare_on_pool(
-                                EngineId, ExecutionId, Handler, ExecutionContext, LaneId, PreparationMode);
+                                EngineId, ExecutionId, Handler, ExecutionContext, LaneId, PreparationMode, InitType);
                         #execution_ended{} = ExecutionEndedRecord ->
                             handle_execution_ended(EngineId, ExecutionId, ExecutionEndedRecord),
                             schedule_next_job_insecure(EngineId, DeferredExecutions);
@@ -491,30 +506,28 @@ schedule_next_job_insecure(EngineId, DeferredExecutions) ->
 handle_execution_ended(EngineId, ExecutionId, #execution_ended{
     handler = Handler,
     context = Context,
-    reason = Reason,
-    callbacks_data = CallbacksData
+    final_callback = FinalCallback,
+    lane_callbacks = LaneCallbacks
 }) ->
     case workflow_engine_state:remove_execution_id(EngineId, ExecutionId) of
         ok ->
-            case CallbacksData of
-                {CancelledLaneId, CancelledLaneContext, TaskIds} ->
+            case LaneCallbacks of
+                {true, CancelledLaneId, CancelledLaneContext, TaskIds} ->
                     call_handlers_for_cancelled_lane(
                         ExecutionId, Handler, CancelledLaneContext, CancelledLaneId, TaskIds);
-                undefined ->
+                false ->
                     ok
             end,
 
-            case Reason of
-                % TODO VFS-7788 - fix race with workflow_iterator_snapshot:save (snapshot can be restored)
-                ?EXECUTION_ENDED ->
-                    call_handler(ExecutionId, Context, Handler, handle_workflow_execution_stopped, []),
+            case call_handler(ExecutionId, Context, Handler, FinalCallback, []) of
+                clean_progress ->
                     workflow_iterator_snapshot:cleanup(ExecutionId);
-                ?EXECUTION_CANCELLED ->
-                    call_handler(ExecutionId, Context, Handler, handle_workflow_execution_stopped, []),
-                    ok;
-                ?EXECUTION_ENDED_WITH_EXCEPTION ->
-                    ok
+                save_progress ->
+                    workflow_execution_state_dump:dump_workflow_execution_state(ExecutionId);
+                save_iterator ->
+                    ok % Iterator is already persisted - simply do not clean it
             end,
+
             workflow_execution_state:cleanup(ExecutionId);
         ?WF_ERROR_ALREADY_REMOVED ->
             ok
@@ -558,10 +571,11 @@ schedule_on_pool(EngineId, ExecutionId, #execution_spec{
     workflow_handler:handler(),
     execution_context(),
     lane_id(),
-    preparation_mode()
+    preparation_mode(),
+    workflow_execution_state:init_type()
 ) -> ok.
-schedule_lane_prepare_on_pool(EngineId, ExecutionId, Handler, ExecutionContext, LaneId, PreparationMode) ->
-    CallArgs = {?MODULE, prepare_lane, [EngineId, ExecutionId, Handler, ExecutionContext, LaneId, PreparationMode]},
+schedule_lane_prepare_on_pool(EngineId, ExecutionId, Handler, ExecutionContext, LaneId, PreparationMode, InitType) ->
+    CallArgs = {?MODULE, prepare_lane, [EngineId, ExecutionId, Handler, ExecutionContext, LaneId, PreparationMode, InitType]},
     ok = worker_pool:cast(?POOL_ID(EngineId), CallArgs).
 
 -spec get_default_keepalive_timeout(id()) -> time:seconds().
@@ -749,12 +763,17 @@ process_streamed_task_data(EngineId, ExecutionId, #execution_spec{
     workflow_handler:handler(),
     execution_context(),
     lane_id(),
-    preparation_mode()
+    preparation_mode(),
+    workflow_execution_state:init_type()
 ) -> ok.
-prepare_lane(EngineId, ExecutionId, Handler, ExecutionContext, LaneId, PreparationMode) ->
+prepare_lane(EngineId, ExecutionId, Handler, ExecutionContext, LaneId, PreparationMode, InitType) ->
     try
-        Ans = call_handler(ExecutionId, ExecutionContext, Handler, prepare_lane, [LaneId]),
-        workflow_execution_state:report_lane_execution_prepared(Handler, ExecutionId, LaneId, PreparationMode, Ans),
+        Callback = case InitType of
+            prepare -> prepare_lane;
+            ?RESUMING(_, _) -> resume_lane
+        end,
+        Ans = call_handler(ExecutionId, ExecutionContext, Handler, Callback, [LaneId]),
+        workflow_execution_state:report_lane_execution_prepared(Handler, ExecutionId, LaneId, PreparationMode, InitType, Ans),
         trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
     catch
         Error:Reason:Stacktrace  ->

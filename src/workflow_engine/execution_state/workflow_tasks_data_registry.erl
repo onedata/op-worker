@@ -30,7 +30,8 @@
 %% API
 -export([empty/0, put/3, take_for_processing/1, mark_processed/3,
     mark_all_task_data_received/2, is_stream_finalized/2,
-    claim_execution_of_cancellation_procedures/1]).
+    claim_execution_of_cancellation_procedures/1,
+    has_ongoing/1, finalize/1]).
 %% Test API
 -export([is_empty/1]).
 
@@ -42,12 +43,15 @@
 
     streams_with_all_data_received = [] :: [workflow_engine:task_id()],
     task_execution_order = [] :: [workflow_engine:task_id()],
-    cancellation_procedures_claimed = false :: boolean()
+    cancellation_procedures_claimed = false :: boolean(),
+    
+    is_finalized = false :: boolean()
 }).
 
 
 -opaque registry() :: #registry{}.
--export_type([registry/0]).
+-opaque dump() :: [workflow_engine:task_id()].
+-export_type([registry/0, dump/0]).
 
 
 %%%===================================================================
@@ -123,6 +127,21 @@ claim_execution_of_cancellation_procedures(#registry{cancellation_procedures_cla
     {ok, Data#registry{cancellation_procedures_claimed = true}};
 claim_execution_of_cancellation_procedures(#registry{}) ->
     already_claimed.
+
+
+-spec has_ongoing(registry()) -> boolean().
+has_ongoing(#registry{ongoing = Ongoing}) ->
+    maps:size(Ongoing) =/= 0.
+
+
+-spec finalize(registry()) -> {[workflow_cached_task_data:id()], registry()}.
+finalize(#registry{is_finalized = true} = Registry) ->
+    {[], Registry};
+finalize(#registry{waiting = Waiting, ongoing = Ongoing} = Registry) ->
+    {
+        lists:flatten(maps:values(Waiting)) ++ lists:flatten(maps:values(Ongoing)),
+        Registry#registry{is_finalized = true}
+    }.
 
 
 %%%===================================================================

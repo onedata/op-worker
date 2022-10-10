@@ -24,7 +24,9 @@
 -export([get_task_execution_history/1, set_test_execution_manager_option/3, set_test_execution_manager_options/2,
     group_handler_calls_by_execution_id/1]).
 %% Helper functions verifying execution history
--export([verify_execution_history/2, verify_execution_history/3, verify_empty_lane/2, has_finish_callbacks_for_lane/2]).
+-export([verify_execution_history/2, verify_execution_history/3, verify_empty_lane/2, has_any_finish_callbacks_for_lane/2,
+    has_exception_callback/1, filter_finish_and_exception_handlers/2, filter_prepare_in_adnave_handler/3,
+    filter_repeated_stream_callbacks/3, check_prepare_lane_in_head_and_filter/2, verify_and_filter_duplicated_calls/4]).
 %% Helper functions history statistics
 -export([verify_execution_history_stats/2, verify_execution_history_stats/3]).
 %% Memory verification helper functions
@@ -128,6 +130,8 @@ test_execution_manager_loop(#{execution_history := History} = Acc, ProcWaitingFo
             test_execution_manager_loop(Acc, Sender, Options);
         {set_option, Key, Value} ->
             test_execution_manager_loop(Acc, ProcWaitingForAns, Options#{Key => Value});
+        {cancel_ans, CancelAns} ->
+            test_execution_manager_loop(Acc#{cancel_ans => CancelAns}, ProcWaitingForAns, Options);
         stop ->
             ok
     after
@@ -222,6 +226,17 @@ reply_to_handler_mock(Sender, ManagerAcc, Options, #handler_call{
             end),
             Sender ! history_saved,
             ManagerAcc#{cancel_ans => CancelAns};
+        {Fun, #{sleep_and_cancel_execution := {Fun, TaskId, Item, SleepTime}}} ->
+            ManagerPid = self(),
+            spawn(fun() ->
+                timer:sleep(SleepTime),
+                CancelAns = rpc:call(node(Sender), workflow_engine, init_cancel_procedure, [ExecutionId]),
+                ManagerPid ! {cancel_ans, CancelAns},
+                Sender ! history_saved,
+                timer:sleep(rand:uniform(1000)),
+                rpc:call(node(Sender), workflow_engine, finish_cancel_procedure, [ExecutionId])
+            end),
+            ManagerAcc;
         {handle_lane_execution_stopped, #{fail_execution_ended_handler := LaneId}} ->
             Sender ! throw_error,
             ManagerAcc;
@@ -320,15 +335,15 @@ mock_handlers(Workers, Manager) ->
             )
     end),
 
-    test_utils:mock_expect(Workers, workflow_test_handler, restart_lane, fun
+    test_utils:mock_expect(Workers, workflow_test_handler, resume_lane, fun
         (_ExecutionId, #{lane_id := _} = _Context, _LaneId) ->
-            % Context with lane_id defined cannot be used in restart_lane handler
+            % Context with lane_id defined cannot be used in resume_lane handler
             % (wrong type of context is used by caller)
             throw(wrong_context);
         (ExecutionId, Context, LaneId) ->
             MockTemplate(
                 #handler_call{
-                    function = prepare_lane, % currently restart_lane and prepare_lane callbacks works identically
+                    function = prepare_lane, % TODO - zmienic na resume
                     execution_id = ExecutionId,
                     context =  Context,
                     lane_id = LaneId
@@ -447,7 +462,9 @@ mock_handlers(Workers, Manager) ->
                     execution_id = ExecutionId,
                     context =  Context,
                     lane_id = LaneId,
-                    result = workflow_execution_state:is_finished_and_cleaned(ExecutionId, LaneIndex)
+                    result = true
+                % TODO
+%%                    result = workflow_execution_state:is_finished_and_cleaned(ExecutionId, LaneIndex)
                 },
                 [ExecutionId, Context, LaneId]
             )
@@ -462,6 +479,22 @@ mock_handlers(Workers, Manager) ->
             MockTemplate(
                 #handler_call{
                     function = handle_workflow_execution_stopped,
+                    execution_id = ExecutionId,
+                    context =  Context
+                },
+                [ExecutionId, Context]
+            )
+    end),
+
+    test_utils:mock_expect(Workers, workflow_test_handler, handle_workflow_interrupted, fun
+        (_ExecutionId, #{lane_id := _} = _Context) ->
+            % Context with lane_id defined cannot be used in handle_workflow_interrupted handler
+            % (wrong type of context is used by caller)
+            throw(wrong_context);
+        (ExecutionId, Context) ->
+            MockTemplate(
+                #handler_call{
+                    function = handle_workflow_interrupted,
                     execution_id = ExecutionId,
                     context =  Context
                 },
@@ -623,7 +656,7 @@ verify_lanes_execution_history([{TaskIds, ExpectedItems, LaneExecutionContext} |
 
     VerificationType = case Options of
         #{stop_on_lane := LaneId} -> skip_items_verification;
-        #{restart_lane := LaneId} -> skip_items_verification;
+        #{resume_lane := LaneId} -> skip_items_verification;
         #{expect_empty_items_list := LaneId} -> expect_empty_items_list;
         #{expect_lane_finish := LaneId} -> expect_lane_finish;
         #{expect_exception := LaneId} -> expect_exception;
@@ -691,7 +724,7 @@ verify_lanes_execution_history([{TaskIds, ExpectedItems, LaneExecutionContext} |
 
             NewExpected = case Options of
                 #{stop_on_lane := LaneId} -> [];
-                #{restart_lane := LaneId} -> ExpectedTail
+                #{resume_lane := LaneId} -> ExpectedTail
             end,
             [_ | NewGathered] = lists:dropwhile(fun(HandlerCall) ->
                     HandlerCall =/= FirstNotFiltered
@@ -711,7 +744,10 @@ verify_lanes_execution_history([{TaskIds, ExpectedItems, LaneExecutionContext} |
                 (_) ->
                     true
             end, GatheredForLane),
-            ?assertMatch([#handler_call{function = handle_exception}], Filtered),
+            ?assertMatch(
+                [#handler_call{function = handle_exception}, #handler_call{function = handle_workflow_interrupted}],
+                Filtered
+            ),
             [FirstGatheredForLane | _] = GatheredForLane,
             FilteredGathered = lists:dropwhile(fun(HandlerCall) ->
                 HandlerCall =/= FirstGatheredForLane
@@ -848,6 +884,7 @@ verify_item_execution_history(Item, [CallsForBox | ExpectedCalls], [HandlerCall 
 
     Ignore = case Options of
         #{fail_job := {LaneId, TaskId, Item}} -> ignore_callback_call;
+        #{fail_and_restart_job := {LaneId, TaskId, Item}} -> ignore_callback_call;
         #{timeout := {LaneId, TaskId, Item}} -> ignore_next_box;
         #{fail_result_processing := {LaneId, TaskId, Item}} -> ignore_next_box;
         _ -> ignore_nothing
@@ -879,14 +916,141 @@ verify_empty_lane(ExecutionHistory, LaneId) ->
     ?assertMatch([#handler_call{function = prepare_lane, lane_id = LaneId},
         #handler_call{function = handle_workflow_execution_stopped}], ExecutionHistory).
 
-has_finish_callbacks_for_lane(ExecutionHistory, LaneId) ->
+has_any_finish_callbacks_for_lane(ExecutionHistory, LaneId) ->
     lists:any(fun
         (#handler_call{function = Fun, lane_id = Id}) when Id =:= LaneId ->
-            Fun =:= handle_workflow_execution_stopped orelse Fun =:= handle_lane_execution_stopped orelse
-                Fun =:= handle_task_execution_stopped orelse Fun =:= handle_exception;
+            lists:member(Fun, [handle_lane_execution_stopped, handle_task_execution_stopped]);
+        (#handler_call{function = Fun}) ->
+            Fun =:= handle_workflow_execution_stopped;
         (_) ->
             false
     end, ExecutionHistory).
+
+has_exception_callback(ExecutionHistory) ->
+    lists:any(fun
+        (#handler_call{function = Fun}) -> Fun =:= handle_exception;
+        (_) -> false
+    end, ExecutionHistory).
+
+filter_finish_and_exception_handlers(ExecutionHistory, LaneId) ->
+    lists:filter(fun
+        (#handler_call{function = Fun, lane_id = Id}) when Id =:= LaneId ->
+            not lists:member(Fun, [handle_lane_execution_stopped, handle_task_execution_stopped,
+                handle_task_results_processed_for_all_items, report_item_error]);
+        (#handler_call{function = Fun}) ->
+            not lists:member(Fun, [handle_workflow_execution_stopped, handle_workflow_interrupted, handle_exception])
+    end, ExecutionHistory).
+
+filter_prepare_in_adnave_handler(ExecutionHistory, LaneId, true = _IsPrepareInAdvanceSet) ->
+    lists:filter(fun
+        (#handler_call{function = prepare_lane, lane_id = Id}) ->
+            Id =/= integer_to_binary(binary_to_integer(LaneId) + 1);
+        (_) ->
+            true
+    end, ExecutionHistory);
+filter_prepare_in_adnave_handler(ExecutionHistory, _LaneId, false = _IsPrepareInAdvanceSet) ->
+    ExecutionHistory.
+
+filter_repeated_stream_callbacks(ExecutionHistory, LaneId, #{task_streams := Streams}) ->
+    StreamsMap = maps:fold(fun(LaneIndex, LaneStreams, ExternalAcc) ->
+        LaneStreamsMap = maps:fold(fun({BoxIndex, TaskIndex}, TaskStreams, InternalAcc) ->
+            MappedTaskStreams = lists:map(fun
+                ({Item, Count}) ->
+                    {{{LaneIndex, BoxIndex, TaskIndex}, Item}, Count};
+                (termination_error) ->
+                    {{{LaneIndex, BoxIndex, TaskIndex}, error}, 1};
+                (Item) ->
+                    {{{LaneIndex, BoxIndex, TaskIndex}, Item}, 1}
+            end, TaskStreams),
+            maps:merge(InternalAcc, maps:from_list(MappedTaskStreams))
+        end, #{}, LaneStreams),
+        maps:merge(ExternalAcc, LaneStreamsMap)
+    end, #{}, Streams),
+
+    {FilteredExecutionHistory, _} = lists:foldl(fun
+        (#handler_call{
+            function = process_streamed_task_data,
+            lane_id = LId,
+            task_id = TaskId,
+            item = Item
+        } = HandlerCall, {Acc, TmpStreamsMap}) when LId =:= LaneId ->
+            DecodedId = workflow_test_handler:decode_task_id(TaskId),
+            case maps:get({DecodedId, Item}, TmpStreamsMap, 0) of
+                0 ->
+                    {Acc, TmpStreamsMap};
+                Count ->
+                    {[HandlerCall | Acc], TmpStreamsMap#{{DecodedId, Item} => Count - 1}}
+            end;
+        (HandlerCall, {Acc, TmpStreamsMap}) ->
+            {[HandlerCall | Acc], TmpStreamsMap}
+    end, {[], StreamsMap}, lists:reverse(ExecutionHistory)),
+
+    FilteredExecutionHistory;
+filter_repeated_stream_callbacks(ExecutionHistory, _, _) ->
+    ExecutionHistory.
+
+check_prepare_lane_in_head_and_filter(ExecutionHistory, LaneId) ->
+    ?assertMatch([#handler_call{function = prepare_lane, lane_id = LaneId} | _], ExecutionHistory),
+    [_ | ExecutionHistoryTail] = ExecutionHistory,
+    ExecutionHistoryTail.
+
+verify_and_filter_duplicated_calls(ExecutionHistory, {ok, #document{
+    value = #workflow_execution_state_dump{jobs_dump = JobsDump}
+}}, ResumedLaneId, TestExecutionManagerOptions) ->
+    ResumedLaneIndex = binary_to_integer(ResumedLaneId),
+    TasksInProcessingWDuringDump = workflow_jobs:get_results_in_processing_from_dump(JobsDump),
+    DuplicatedHandlers = maps:map(fun(_, {Box, Tasks}) ->
+        {
+            Box,
+            lists:map(fun(Task) -> {Task, run_task_for_item} end, Tasks) ++
+                lists:map(fun(Task) -> {Task, report_async_task_result} end, Tasks)
+        }
+    end, TasksInProcessingWDuringDump),
+
+    FinalDuplicatedHandlers = case TestExecutionManagerOptions of
+        [{throw_error, {FailedCallback, FailedTaskId, FailedItem}}] ->
+            FailedItemIndex = binary_to_integer(FailedItem),
+            {FailedLaneIndex, FailedBoxIndex, FailedTaskIndex} = workflow_test_handler:decode_task_id(FailedTaskId),
+            ?assertEqual(ResumedLaneIndex, FailedLaneIndex),
+            {FailedBoxIndex, FailedItemTasks} = maps:get(FailedItemIndex, DuplicatedHandlers, {FailedBoxIndex, []}),
+            FailedItemFinalTasks = FailedItemTasks ++ case FailedCallback of
+                process_task_result_for_item -> [{FailedTaskIndex, process_task_result_for_item}];
+                run_task_for_item -> [{FailedTaskIndex, run_task_for_item}, {FailedTaskIndex, report_async_task_result}]
+            end,
+            DuplicatedHandlers#{FailedItemIndex => {FailedBoxIndex, FailedItemFinalTasks}};
+        _ ->
+            DuplicatedHandlers
+    end,
+
+    {FilteredExecutionHistory, RemainingDuplicatedHandlers} = lists:foldl(fun
+        (#handler_call{function = Fun, item = Item, task_id = TaskId} = HandlerCall, {HandlersAcc, DuplicatedAcc})
+            when Fun =/= process_streamed_task_data
+        ->
+            IsDuplicated = lists:any(fun(FilteredCall) ->
+                FilteredCall#handler_call{context = undefined} =:= HandlerCall#handler_call{context = undefined}
+            end, HandlersAcc),
+
+            case IsDuplicated of
+                true ->
+                    ItemIndex = binary_to_integer(Item),
+                    {LaneIndex, BoxIndex, TaskIndex} = workflow_test_handler:decode_task_id(TaskId),
+                    ?assertEqual(ResumedLaneIndex, LaneIndex),
+                    {_, ExpectedTasks} = ?assertMatch({BoxIndex, _}, maps:get(ItemIndex, DuplicatedAcc, undefined)),
+                    ?assert(lists:member({TaskIndex, Fun}, ExpectedTasks)),
+                    {HandlersAcc, DuplicatedAcc#{ItemIndex => {BoxIndex, ExpectedTasks -- [{TaskIndex, Fun}]}}};
+                false ->
+                    {[HandlerCall | HandlersAcc], DuplicatedAcc}
+            end;
+        (HandlerCall, {HandlersAcc, DuplicatedAcc}) ->
+            {[HandlerCall | HandlersAcc], DuplicatedAcc}
+    end, {[], FinalDuplicatedHandlers}, lists:reverse(ExecutionHistory)),
+
+    lists:foreach(fun(DuplicatedHandlersForItem) ->
+        ?assertMatch({_, {_, []}}, DuplicatedHandlersForItem)
+    end, maps:to_list(RemainingDuplicatedHandlers)),
+
+    FilteredExecutionHistory.
+
 
 %%%===================================================================
 %%% Helper functions history statistics
@@ -905,11 +1069,6 @@ verify_execution_history_stats(Acc, WorkflowType, Options) ->
     case {Options, WorkflowType} of
         {#{is_empty := true}, _} ->
             ok;
-        {#{restart := true}, sync} ->
-            ?assertEqual(0, MaxAsyncSlots),
-            % Restart callback is called before any pool slot is used
-            ?assertEqual(0, MinPoolSlots),
-            ?assertEqual(20, MaxPoolSlots);
         {#{ignore_max_slots_check := true}, sync} ->
             ?assertEqual(0, MaxAsyncSlots),
             ?assertNotEqual(0, MinPoolSlots);
@@ -956,8 +1115,9 @@ get_all_workflow_related_datastore_keys(Config) ->
 
     % TODO VFS-7788 - fix race between workflow_iterator_snapshot:cleanup and workflow_iterator_snapshot:save
     % (snapshot can be restored)
-%%    Models = [workflow_cached_item, workflow_cached_async_result, workflow_iterator_snapshot, workflow_execution_state],
-    Models = [workflow_cached_item, workflow_cached_async_result, workflow_execution_state],
+%%    Models = [workflow_cached_item, workflow_cached_async_result, workflow_iterator_snapshot,
+%%        workflow_execution_state, workflow_cached_task_data, workflow_execution_state_dump],
+    Models = [workflow_cached_item, workflow_cached_async_result, workflow_execution_state, workflow_cached_task_data],
     lists:map(fun(Model) ->
         Ctx = datastore_model_default:set_defaults(datastore_model_default:get_ctx(Model)),
         #{memory_driver := MemoryDriver, memory_driver_ctx := MemoryDriverCtx} = Ctx,
@@ -1010,7 +1170,8 @@ gen_workflow_execution_spec(WorkflowType, PrepareInAdvance, ContextBase, Id) ->
             async_call_pools => [?ASYNC_CALL_POOL_ID]
         },
         first_lane_id => FirstLaneId,
-        next_lane_id => NextLaneId
+        next_lane_id => NextLaneId,
+        snapshot_mode => maps:get(snapshot_mode, ContextBase, ?UNTIL_FIRST_FAILURE)
     }.
 
 verify_executions_started(0) ->
@@ -1063,6 +1224,8 @@ count_lane_elements(#{
             BasicLaneElementsCount - count_not_executed_tasks(TaskIds, FailedTask) + 1;
         {#{fail_job := {LaneId, FailedTask, _}}, async} ->
             BasicLaneElementsCount - 3 * count_not_executed_tasks(TaskIds, FailedTask) - 1;
+        {#{fail_and_restart_job := {LaneId, FailedTask, _}}, async} ->
+            BasicLaneElementsCount - 3 * count_not_executed_tasks(TaskIds, FailedTask) - 2;
         {#{timeout := {LaneId, FailedTask, _}}, async} ->
             BasicLaneElementsCount - 3 * count_not_executed_tasks(TaskIds, FailedTask) + 1;
         {#{fail_result_processing := {LaneId, FailedTask, _}}, async} ->
