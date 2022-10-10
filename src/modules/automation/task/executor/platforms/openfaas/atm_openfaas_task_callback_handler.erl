@@ -68,7 +68,7 @@ init(Req0, State = #{type := output}) ->
     Result = case cowboy_req:header(<<"x-function-status">>, Req1) of
         <<"200">> -> decode_lambda_output(Body);
         <<"404">> -> ?ERROR_ATM_JOB_BATCH_WITHDRAWN(trim_body(Body));
-        <<"500">> -> ?ERROR_ATM_JOB_BATCH_CRASHED(trim_body(Body))
+        _ -> ?ERROR_ATM_JOB_BATCH_CRASHED(trim_body(Body))
     end,
 
     workflow_engine:report_async_task_result(

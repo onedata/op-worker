@@ -259,7 +259,7 @@ unfreeze_exception_store(AtmLaneRunSelector, #document{value = AtmWorkflowExecut
     {ok, #atm_lane_execution_run{exception_store_id = AtmExceptionStoreId}} = atm_lane_execution:get_run(
         AtmLaneRunSelector, AtmWorkflowExecution
     ),
-    atm_store_api:freeze(AtmExceptionStoreId).
+    atm_store_api:unfreeze(AtmExceptionStoreId).
 
 
 %% @private

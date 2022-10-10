@@ -60,7 +60,7 @@
                         ]
                     }],
                     store_iterator_spec = ?ITERATOR_SPEC_DRAFT,
-                    max_retries = 0
+                    max_retries = 2
                 },
                 #atm_lane_schema_draft{
                     parallel_boxes = [#atm_parallel_box_schema_draft{
