@@ -152,6 +152,7 @@
     workflow_execution_exp_state :: atm_workflow_execution_exp_state_builder:exp_state(),
     workflow_execution_exp_state_changed :: boolean(),
 
+    prev_incarnations_executed_step_phases = [] :: [{non_neg_integer(), [step_phase_selector()]}],
     executed_step_phases = [] :: [step_phase_selector()],
     pending_step_phases = [] :: [step_phase()],
     deferred_step_phases = #{} :: #{step_phase_selector() => [step_phase()]},
@@ -384,9 +385,11 @@ monitor_workflow_execution(TestCtx0) ->
                     fun(#step_phase{selector = StepPhaseSelector}) -> StepPhaseSelector end,
                     TestCtx0#test_ctx.pending_step_phases
                 ),
-                ct:pal("Automation workflow execution test hung after steps: ~p", [
-                    PendingStepPhaseSelectors ++ TestCtx0#test_ctx.executed_step_phases
-                ]),
+                ct:pal("Automation workflow execution test hung after steps: ~p", [lists:flatten([
+                    PendingStepPhaseSelectors,
+                    TestCtx0#test_ctx.executed_step_phases,
+                    TestCtx0#test_ctx.prev_incarnations_executed_step_phases
+                ])]),
                 ?assertEqual(success, failure);
             Num ->
                 TestCtx1 = TestCtx0#test_ctx{test_hung_probes_left = Num - 1},
@@ -905,15 +908,21 @@ shift_monitored_lane_run_if_current_one_stopped(
 
 shift_monitored_lane_run_if_current_one_stopped(
     StepMockCallReport = #mock_call_report{timing = after_step, step = Step},
-    TestCtx = #test_ctx{ongoing_incarnations = [EndedIncarnation | LeftoverIncarnations]}
+    TestCtx = #test_ctx{
+        ongoing_incarnations = [EndedIncarnation | LeftoverIncarnations],
+        prev_incarnations_executed_step_phases = PrevIncarnationsExecutedStepPhases,
+        executed_step_phases = ExecutedStepPhases
+    }
 ) when
     Step =:= handle_exception;
     Step =:= handle_workflow_execution_stopped
 ->
-    call_if_defined(
-        EndedIncarnation#atm_workflow_execution_incarnation_test_spec.after_hook,
-        build_mock_call_ctx(StepMockCallReport, TestCtx)
-    ),
+    #atm_workflow_execution_incarnation_test_spec{
+        incarnation_num = IncarnationNum,
+        after_hook = AfterHook
+    } = EndedIncarnation,
+
+    call_if_defined(AfterHook, build_mock_call_ctx(StepMockCallReport, TestCtx)),
 
     #atm_workflow_execution_incarnation_test_spec{
         lane_runs = [#atm_lane_run_execution_test_spec{
@@ -924,7 +933,12 @@ shift_monitored_lane_run_if_current_one_stopped(
     TestCtx#test_ctx{
         current_lane_index = AtmLaneIndex,
         current_run_num = AtmRunNum,
-        ongoing_incarnations = LeftoverIncarnations
+        ongoing_incarnations = LeftoverIncarnations,
+        prev_incarnations_executed_step_phases = [
+            {IncarnationNum, ExecutedStepPhases}
+            | PrevIncarnationsExecutedStepPhases
+        ],
+        executed_step_phases = []
     };
 
 shift_monitored_lane_run_if_current_one_stopped(

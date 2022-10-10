@@ -64,6 +64,7 @@ stop(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Reason) ->
             ok;
 
         {ok, #document{value = #atm_task_execution{executor = AtmTaskExecutor}}} ->
+            %% TODO log about stopping
             % for other reasons than pause, ongoing jobs are immediately aborted
             atm_task_executor:abort(AtmWorkflowExecutionCtx, AtmTaskExecutor);
 

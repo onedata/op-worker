@@ -67,6 +67,7 @@
     expect_task_paused/2,
     expect_task_cancelled/2,
     expect_task_parallel_box_transitioned_to_inferred_status/3,
+    expect_all_tasks_pending/2,
     expect_all_tasks_skipped/2,
     expect_all_tasks_paused/2,
     expect_all_tasks_interrupted/2,
@@ -75,6 +76,7 @@
     expect_all_tasks_stopping/3,
 
     expect_workflow_execution_scheduled/1,
+    expect_workflow_execution_active/1,
     expect_workflow_execution_stopping/1,
     expect_workflow_execution_finished/1,
     expect_workflow_execution_failed/1,
@@ -702,6 +704,12 @@ expect_task_parallel_box_transitioned_to_inferred_status(AtmTaskExecutionId, Inf
     update_exp_task_parallel_box_execution_state(AtmTaskExecutionId, Diff, ExpStateCtx).
 
 
+-spec expect_all_tasks_pending(atm_lane_execution:lane_run_selector(), ctx()) ->
+    ctx().
+expect_all_tasks_pending(AtmLaneRunSelector, ExpStateCtx) ->
+    expect_all_tasks_transitioned_to(AtmLaneRunSelector, <<"pending">>, ExpStateCtx).
+
+
 -spec expect_all_tasks_skipped(atm_lane_execution:lane_run_selector(), ctx()) ->
     ctx().
 expect_all_tasks_skipped(AtmLaneRunSelector, ExpStateCtx) ->
@@ -778,6 +786,17 @@ expect_workflow_execution_scheduled(ExpStateCtx) ->
         ExpAtmWorkflowExecutionState#{
             <<"status">> => <<"scheduled">>,
             <<"scheduleTime">> => build_timestamp_field_validator(?NOW())
+        }
+    end,
+    update_workflow_execution_exp_state(ExpAtmWorkflowExecutionStateDiff, ExpStateCtx).
+
+
+-spec expect_workflow_execution_active(ctx()) -> ctx().
+expect_workflow_execution_active(ExpStateCtx) ->
+    ExpAtmWorkflowExecutionStateDiff = fun(ExpAtmWorkflowExecutionState) ->
+        ExpAtmWorkflowExecutionState#{
+            <<"status">> => <<"active">>,
+            <<"startTime">> => build_timestamp_field_validator(?NOW())
         }
     end,
     update_workflow_execution_exp_state(ExpAtmWorkflowExecutionStateDiff, ExpStateCtx).
