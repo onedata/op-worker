@@ -123,6 +123,7 @@ get_record_struct(1) ->
         {status, atom},
         {status_changed, boolean},
         {aborting_reason, atom},
+        {stopping_incarnation, integer},
 
         {items_in_processing, integer},
         {items_processed, integer},
