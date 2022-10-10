@@ -66,11 +66,14 @@
 
 % Record used only during creation of atm lane execution run (it is not persisted anywhere)
 -record(atm_lane_execution_run_creation_args, {
+    type :: regular | rerun | retry,
     workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
     workflow_execution_doc :: atm_workflow_execution:doc(),
 
     lane_index :: pos_integer(),
     lane_schema :: atm_lane_schema:record(),
+    origin_run :: undefined | atm_lane_execution:run(),
+
     iterated_store_id :: atm_store:id()
 }).
 

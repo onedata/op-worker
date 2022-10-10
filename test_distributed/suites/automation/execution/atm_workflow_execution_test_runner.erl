@@ -94,10 +94,16 @@
 -type mock_strategy() ::
     % original step will be run unperturbed
     passthrough |
+    % original step will be run after sleeping for specified period of time
+    {passthrough_with_delay, time:millis()} |
     % original step will be run but it's result will be replaced with specified one
     {passthrough_with_result_override, result_override()} |
     % original step will not be run and specified result will be returned immediately
     {yield, result_override()}.
+
+-type mock_strategy_spec() ::
+    mock_strategy() |
+    fun((mock_call_report()) -> mock_strategy()).
 
 -type step_mock_spec() :: #atm_step_mock_spec{}.
 
@@ -107,7 +113,7 @@
 
 -export_type([
     mock_call_ctx/0, hook/0, exp_state_diff/0,
-    result_override/0, mock_strategy/0, step_phase_selector/0, step_mock_spec/0,
+    result_override/0, mock_strategy_spec/0, step_phase_selector/0, step_mock_spec/0,
     lane_run_test_spec/0, incarnation_test_spec/0, test_spec/0
 ]).
 
@@ -388,9 +394,16 @@ end_pending_step_phase_executions(TestCtx = #test_ctx{pending_step_phases = Pend
         },
         TestCtxAcc0 = #test_ctx{executed_step_phases = ExecutedStepPhases}
     ) ->
+        StepMockCallCtx = build_mock_call_ctx(StepMockCallReport, TestCtxAcc0),
+
         reply_to_execution_process(ReplyTo, case Timing of
-            before_step -> MockStrategy;
-            after_step -> ok
+            before_step ->
+                case is_function(MockStrategy) of
+                    true -> MockStrategy(StepMockCallCtx);
+                    false -> MockStrategy
+                end;
+            after_step ->
+                ok
         end),
 
         shift_monitored_lane_run_if_current_one_stopped(
@@ -618,18 +631,23 @@ get_exp_state_diff(
         _AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId,
         _AtmJobBatchId, ItemBatch
     ]}) ->
-        ExpState1 = atm_workflow_execution_exp_state_builder:expect_task_items_in_processing_increased(
-            AtmTaskExecutionId, length(ItemBatch), ExpState0
+        ExpState1 = atm_workflow_execution_exp_state_builder:expect_task_transitioned_to_active_status_if_was_in_pending_status(
+            AtmTaskExecutionId, ExpState0
         ),
-        ExpState2 = atm_workflow_execution_exp_state_builder:expect_task_transitioned_to_active_status_if_was_in_pending_status(
+        ExpState2 = atm_workflow_execution_exp_state_builder:expect_task_parallel_box_transitioned_to_active_status_if_was_in_pending_status(
             AtmTaskExecutionId, ExpState1
         ),
-        ExpState3 = atm_workflow_execution_exp_state_builder:expect_task_parallel_box_transitioned_to_active_status_if_was_in_pending_status(
+        ExpState3 = atm_workflow_execution_exp_state_builder:expect_task_lane_run_transitioned_to_active_status_if_was_in_enqueued_status(
             AtmTaskExecutionId, ExpState2
         ),
-        ExpState4 = atm_workflow_execution_exp_state_builder:expect_task_lane_run_transitioned_to_active_status_if_was_in_enqueued_status(
-            AtmTaskExecutionId, ExpState3
-        ),
+        ExpState4 = case atm_workflow_execution_exp_state_builder:get_task_status(AtmTaskExecutionId, ExpState3) of
+            <<"active">> ->
+                atm_workflow_execution_exp_state_builder:expect_task_items_in_processing_increased(
+                    AtmTaskExecutionId, length(ItemBatch), ExpState3
+                );
+            _ ->
+                ExpState3
+        end,
         {true, ExpState4}
     end;
 
@@ -1086,12 +1104,22 @@ exec_mock(AtmWorkflowExecutionId, Step, Args) ->
                         timing = after_step
                     }),
                     Result;
+
+                {passthrough_with_delay, DelayMilliseconds} ->
+                    timer:sleep(DelayMilliseconds),
+                    Result = meck:passthrough(Args),
+                    ok = call_test_process(TestProcPid, MockCallReport#mock_call_report{
+                        timing = after_step
+                    }),
+                    Result;
+
                 {passthrough_with_result_override, ResultOverride} ->
                     meck:passthrough(Args),
                     ok = call_test_process(TestProcPid, MockCallReport#mock_call_report{
                         timing = after_step
                     }),
                     apply_result_override(ResultOverride);
+
                 {yield, ResultOverride} ->
                     apply_result_override(ResultOverride)
             end

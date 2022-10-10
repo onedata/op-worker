@@ -42,7 +42,7 @@
         % changes defined by test author
         atm_workflow_execution_test_runner:exp_state_diff(),
 
-    strategy = passthrough :: atm_workflow_execution_test_runner:mock_strategy(),
+    strategy = passthrough :: atm_workflow_execution_test_runner:mock_strategy_spec(),
 
     % below checks will not be executed in case of mock_result = {true, _}
     % (step has not been executed and as such no change compared to before_step_* should occur)

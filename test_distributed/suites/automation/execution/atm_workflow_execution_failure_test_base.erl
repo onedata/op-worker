@@ -278,7 +278,11 @@ fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error() ->
                             case AnyMeasurementInvalidFun(UncorrelatedResults) of
                                 true ->
                                     {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(
-                                        atm_workflow_execution_exp_state_builder:expect_lane_run_stopping({1, 1}, ExpState)
+                                        atm_workflow_execution_exp_state_builder:expect_lane_run_stopping(
+                                            {1, 1}, atm_workflow_execution_exp_state_builder:expect_all_tasks_stopping(
+                                                {1, 1}, ExpState
+                                            )
+                                        )
                                     )};
                                 false ->
                                     false
@@ -297,7 +301,8 @@ fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error() ->
             ],
             handle_workflow_execution_stopped = #atm_step_mock_spec{
                 after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
-                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_failed(ExpState0)}
+                    ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_rerunable({1, 1}, ExpState0),
+                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_failed(ExpState1)}
                 end
             }
         }]
@@ -355,7 +360,7 @@ uncorrelated_result_expect_task2_ended(AtmTask2ExecutionId, ExpState0) ->
         {0, 0, 0} ->
             atm_workflow_execution_exp_state_builder:expect_task_skipped(AtmTask2ExecutionId, ExpState0);
         {0, 0, _} ->
-            atm_workflow_execution_exp_state_builder:expect_task_finished(AtmTask2ExecutionId, ExpState0)
+            atm_workflow_execution_exp_state_builder:expect_task_interrupted(AtmTask2ExecutionId, ExpState0)
     end,
     uncorrelated_result_expect_pb1_changed_status(AtmTask2ExecutionId, ExpState1).
 
@@ -368,7 +373,7 @@ uncorrelated_result_expect_task2_ended(AtmTask2ExecutionId, ExpState0) ->
     atm_workflow_execution_test_runner:exp_state().
 uncorrelated_result_expect_pb1_changed_status(AtmTaskExecutionId, ExpState) ->
     InferStatusFun = fun
-        (<<"active">>, [<<"failed">>, <<"finished">>]) -> <<"failed">>;
+        (<<"active">>, [<<"failed">>, <<"interrupted">>]) -> <<"failed">>;
         (<<"active">>, [<<"failed">>, <<"skipped">>]) -> <<"failed">>;
         (_, _) -> <<"active">>
     end,
@@ -390,7 +395,7 @@ uncorrelated_result_expect_task3_ended(AtmTask3ExecutionId, ExpState) ->
         {0, 0, 0} ->
             {fun atm_workflow_execution_exp_state_builder:expect_task_skipped/2, <<"skipped">>};
         {0, 0, _} ->
-            {fun atm_workflow_execution_exp_state_builder:expect_task_finished/2, <<"finished">>}
+            {fun atm_workflow_execution_exp_state_builder:expect_task_interrupted/2, <<"interrupted">>}
     end,
     atm_workflow_execution_exp_state_builder:expect_task_parallel_box_transitioned_to_inferred_status(
         AtmTask3ExecutionId,
@@ -574,9 +579,8 @@ fail_atm_workflow_execution_due_to_lambda_error() ->
             #{
                 <<"description">> => <<"Failed to process batch of items.">>,
                 <<"itemBatch">> => ItemBatch,
-                <<"reason">> => errors:to_json(?ERROR_BAD_DATA(
-                    <<"lambdaOutput">>,
-                    ?ERROR_BAD_MESSAGE(?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_4_ERROR_MSG)
+                <<"reason">> => errors:to_json(?ERROR_ATM_JOB_BATCH_CRASHED(
+                    ?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_4_ERROR_MSG
                 ))
             }
         end
@@ -632,7 +636,14 @@ job_failure_atm_workflow_execution_test_base(JobFailureType, #fail_atm_workflow_
             ],
             handle_workflow_execution_stopped = #atm_step_mock_spec{
                 after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
-                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_failed(ExpState0)}
+                    ExpState1 = lists:foldl(fun(AtmLaneRunSelector, ExpStateAcc) ->
+                        atm_workflow_execution_exp_state_builder:expect_lane_run_rerunable(
+                            AtmLaneRunSelector, atm_workflow_execution_exp_state_builder:expect_lane_run_retriable(
+                                AtmLaneRunSelector, ExpStateAcc
+                            )
+                        )
+                    end, ExpState0, [{1, 1}, {1, 2}, {1, 3}]),
+                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_failed(ExpState1)}
                 end
             }
         }]
@@ -651,7 +662,7 @@ job_failure_atm_workflow_execution_test_base(JobFailureType, #fail_atm_workflow_
         workflow_execution_exp_state = ExpState0,
         call_args = [
             _AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId,
-            ItemBatch, _ReportResultUrl, _HeartbeatUrl
+            _AtmJobBatchId, ItemBatch
         ]
     }) ->
         ExpState1 = atm_workflow_execution_exp_state_builder:expect_task_items_in_processing_increased(
@@ -694,7 +705,7 @@ job_failure_atm_workflow_execution_test_base(JobFailureType, #fail_atm_workflow_
             workflow_execution_exp_state = ExpState0,
             call_args = [
                 _AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId,
-                ItemBatch, _LambdaOutput
+                ItemBatch, _JobBatchResult
             ]
         }) ->
             case atm_workflow_execution_exp_state_builder:get_task_selector(
@@ -714,7 +725,7 @@ job_failure_atm_workflow_execution_test_base(JobFailureType, #fail_atm_workflow_
             workflow_execution_exp_state = ExpState0,
             call_args = [
                 _AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId,
-                ItemBatch, _LambdaOutput
+                ItemBatch, _JobBatchResult
             ]
         }) ->
             job_failure_expect_task_items_processed(

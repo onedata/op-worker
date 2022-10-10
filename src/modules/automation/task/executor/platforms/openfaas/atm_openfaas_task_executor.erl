@@ -230,7 +230,7 @@ build_function_name(AtmWorkflowExecutionCtx, #atm_lambda_revision{name = AtmLamb
     % It is used by openfaas-pod-monitor when inferring function name from pod name
     % (k8s adds its own suffix when generating pod name).
     Name = str_utils:format_bin("w~s-s~s-~s-l", [
-        binary:part(AtmWorkflowExecutionId, 0, min(size(AtmWorkflowExecutionId), 10)),
+        binary:part(AtmWorkflowExecutionId, 0, 10),
         % Generate random substring to ensure functions registered in OpenFaaS
         % are unique for each task despite e.g. using the same lambda
         str_utils:rand_hex(5),
