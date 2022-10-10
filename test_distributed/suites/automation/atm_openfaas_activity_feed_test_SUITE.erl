@@ -165,6 +165,11 @@ pod_status_monitor_lifecycle_test(_Config) ->
     {ok, PodStatusRegistry} = ?assertMatch({ok, _}, get_function_pod_status_registry(FunctionPodStatusRegistryId)),
     ?assertEqual(ok, delete_function_pod_status_registry(FunctionPodStatusRegistryId)),
     ?assertEqual({error, not_found}, get_function_pod_status_registry(FunctionPodStatusRegistryId)),
+    % the deleted registry doc should be retained for some time
+    ?assertMatch({ok, _}, ?rpc(datastore_model:get(#{
+        model => atm_openfaas_function_pod_status_registry,
+        include_deleted => true
+    }, FunctionPodStatusRegistryId))),
 
     atm_openfaas_function_pod_status_registry:foreach_summary(fun(_PodId, #atm_openfaas_function_pod_status_summary{
         event_log_id = PodEventLogId
