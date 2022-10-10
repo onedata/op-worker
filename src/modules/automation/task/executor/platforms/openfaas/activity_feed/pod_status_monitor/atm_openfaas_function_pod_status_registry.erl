@@ -99,11 +99,11 @@ get(RegistryId) ->
 delete(RegistryId) ->
     {ok, PodStatusRegistry} = ?MODULE:get(RegistryId),
 
+    datastore_model:delete(datastore_model:set_expiry(?CTX, ?DELETED_REGISTRY_EXPIRY_SECONDS), RegistryId),
+
     foreach_summary(fun(_PodId, PodStatusSummary) ->
         audit_log:delete(PodStatusSummary#atm_openfaas_function_pod_status_summary.event_log_id)
-    end, PodStatusRegistry),
-
-    datastore_model:delete(datastore_model:set_expiry(?CTX, ?DELETED_REGISTRY_EXPIRY_SECONDS), RegistryId).
+    end, PodStatusRegistry).
 
 
 -spec to_json(record()) -> json_utils:json_term().
@@ -258,8 +258,17 @@ consume_pod_status_report(#atm_openfaas_function_pod_status_report{
                 ok ->
                     ok;
                 {error, not_found} ->
-                    ensure_pod_event_log_created(PodEventLogId),
-                    ok = audit_log:append(PodEventLogId, AppendRequest)
+                    % If there is no audit log, it means that either it has not been created yet
+                    % ot it has been deleted by a parallel process performing cleaning of the
+                    % registry and logs. The latter can be determined depending if the registry
+                    % has been deleted too - in such case, the log is ignored.
+                    case ?MODULE:get(PodStatusRegistryId) of
+                        {ok, _} ->
+                            ensure_pod_event_log_created(PodEventLogId),
+                            ok = audit_log:append(PodEventLogId, AppendRequest);
+                        {error, not_found} ->
+                            ok
+                    end
             end;
         {error, not_found} ->
             case datastore_model:get(?CTX#{include_deleted => true}, PodStatusRegistryId) of
