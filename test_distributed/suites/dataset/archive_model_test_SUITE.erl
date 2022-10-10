@@ -533,6 +533,7 @@ simple_archive_crud_test_base(DatasetId, RootFileType, ExpSize) ->
     ExpArchiveInfo = #archive_info{
         id = ArchiveId,
         dataset_id = DatasetId,
+        archiving_provider = oct_background:get_provider_id(krakow),
         state = ?ARCHIVE_PRESERVED,
         root_dir_guid = ArchiveRootDirGuid,
         data_dir_guid = ArchiveRootDirGuid,

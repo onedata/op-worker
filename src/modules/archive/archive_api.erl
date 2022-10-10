@@ -162,6 +162,7 @@ get_archive_info(ArchiveId) ->
 get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
     {ok, ArchiveId} = archive:get_id(ArchiveDoc),
     {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
+    {ok, ProviderId} = archive:get_archiving_provider_id(ArchiveDoc),
     {ok, Timestamp} = archive:get_creation_time(ArchiveDoc),
     {ok, State} = get_state(ArchiveDoc),
     {ok, Config} = archive:get_config(ArchiveDoc),
@@ -178,6 +179,7 @@ get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
     {ok, #archive_info{
         id = ArchiveId,
         dataset_id = DatasetId,
+        archiving_provider = ProviderId,
         state = State,
         root_dir_guid = ArchiveRootDirGuid,
         data_dir_guid = ArchiveDataDirGuid,

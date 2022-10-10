@@ -54,6 +54,7 @@ translate_resource(#gri{aspect = instance, scope = private}, ArchiveInfo) ->
 translate_archive_info(#archive_info{
     id = ArchiveId,
     dataset_id = DatasetId,
+    archiving_provider = ProviderId,
     state = State,
     root_dir_guid = RootDirGuid,
     creation_time = CreationTime,
@@ -71,6 +72,7 @@ translate_archive_info(#archive_info{
     #{
         <<"gri">> => build_serialized_archive_instance_gri(ArchiveId),
         <<"dataset">> => build_serialized_instance_gri(op_dataset, DatasetId),
+        <<"providerId">> => build_serialized_instance_gri(od_provider, ProviderId, protected),
         <<"state">> => str_utils:to_binary(State),
         <<"rootDir">> => build_serialized_instance_gri(op_file, RootDirGuid),
         <<"creationTime">> => CreationTime,
@@ -90,13 +92,19 @@ translate_archive_info(#archive_info{
 -spec build_serialized_archive_instance_gri(undefined | archive:id()) -> gri:serialized() | null.
 build_serialized_archive_instance_gri(ArchiveId) ->
     build_serialized_instance_gri(op_archive, ArchiveId).
-    
+
 
 -spec build_serialized_instance_gri(gri:entity_type(), gri:entity_id()) -> gri:serialized() | null.
-build_serialized_instance_gri(_, undefined) ->
-    null;
 build_serialized_instance_gri(Type, Id) ->
+    build_serialized_instance_gri(Type, Id, private).
+    
+
+-spec build_serialized_instance_gri(gri:entity_type(), gri:entity_id(), gri:scope()) -> 
+    gri:serialized() | null.
+build_serialized_instance_gri(_, undefined, _) ->
+    null;
+build_serialized_instance_gri(Type, Id, Scope) ->
     gri:serialize(#gri{
         type = Type, id = Id,
-        aspect = instance, scope = private
+        aspect = instance, scope = Scope
     }).
