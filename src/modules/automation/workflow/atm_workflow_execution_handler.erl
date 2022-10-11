@@ -51,7 +51,8 @@
 
     handle_workflow_execution_stopped/2,
 
-    handle_exception/5
+    handle_exception/5,
+    handle_workflow_interrupted/2
 ]).
 
 
@@ -399,11 +400,13 @@ handle_lane_execution_stopped(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, A
     atm_workflow_execution:id(),
     atm_workflow_execution_env:record()
 ) ->
-    ok.
+    workflow_handler:progress_data_persistence().
 handle_workflow_execution_stopped(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv) ->
     AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(AtmWorkflowExecutionEnv),
-    end_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
-    ok.
+
+    infer_progress_data_persistence_policy(end_workflow_execution(
+        AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
+    )).
 
 
 -spec handle_exception(
@@ -413,14 +416,10 @@ handle_workflow_execution_stopped(AtmWorkflowExecutionId, AtmWorkflowExecutionEn
     term(),
     list()
 ) ->
-    ?END_EXECUTION.
+    ok.
 handle_exception(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, Type, Reason, Stacktrace) ->
-    AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(
-        undefined,
-        % user session may no longer be available (e.g. session expiration caused exception) -
-        % use provider root session just to stop execution
-        get_root_workflow_execution_auth(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv),
-        AtmWorkflowExecutionEnv
+    AtmWorkflowExecutionCtx = get_root_workflow_execution_ctx(
+        AtmWorkflowExecutionId, AtmWorkflowExecutionEnv
     ),
 
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
@@ -431,9 +430,23 @@ handle_exception(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, Type, Reason, 
         _ -> crash
     end,
     atm_lane_execution_handler:stop({current, current}, StoppingReason, AtmWorkflowExecutionCtx),
-    end_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
 
-    ?END_EXECUTION.
+    ok.
+
+
+-spec handle_workflow_interrupted(
+    atm_workflow_execution:id(),
+    atm_workflow_execution_env:record()
+) ->
+    workflow_handler:progress_data_persistence().
+handle_workflow_interrupted(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv) ->
+    AtmWorkflowExecutionCtx = get_root_workflow_execution_ctx(
+        AtmWorkflowExecutionId, AtmWorkflowExecutionEnv
+    ),
+
+    infer_progress_data_persistence_policy(end_workflow_execution(
+        AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
+    )).
 
 
 %%%===================================================================
@@ -458,6 +471,16 @@ acquire_global_env(#document{key = AtmWorkflowExecutionId, value = #atm_workflow
     atm_workflow_execution_env:set_workflow_audit_log_store_container(
         AtmWorkflowAuditLogStoreContainer, Env
     ).
+
+
+%% @private
+-spec infer_progress_data_persistence_policy(atm_workflow_execution:doc()) ->
+    workflow_handler:progress_data_persistence().
+infer_progress_data_persistence_policy(#document{value = AtmWorkflowExecution}) ->
+    case atm_workflow_execution_status:infer_phase(AtmWorkflowExecution) of
+        ?SUSPENDED_PHASE -> save_progress;
+        ?ENDED_PHASE -> clean_progress
+    end.
 
 
 %% @private
@@ -655,17 +678,16 @@ send_notification(CallbackUrl, Headers, Payload) ->
 
 
 %% @private
--spec get_root_workflow_execution_auth(
-    atm_workflow_execution:id(),
-    atm_workflow_execution_env:record()
-) ->
-    atm_workflow_execution_auth:record().
-get_root_workflow_execution_auth(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv) ->
-    atm_workflow_execution_auth:build(
+get_root_workflow_execution_ctx(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv) ->
+    % user session may no longer be available (e.g. session expiration caused exception) -
+    % use provider root session just to stop execution
+    AtmWorkflowExecutionAuth = atm_workflow_execution_auth:build(
         atm_workflow_execution_env:get_space_id(AtmWorkflowExecutionEnv),
         AtmWorkflowExecutionId,
         ?ROOT_SESS_ID
-    ).
+    ),
+
+    atm_workflow_execution_ctx:acquire(undefined, AtmWorkflowExecutionAuth, AtmWorkflowExecutionEnv).
 
 
 %% @private
