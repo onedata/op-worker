@@ -6,10 +6,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Bases for tests of resuming atm workflow execution.
+%%% Tests of resuming atm workflow execution.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_workflow_execution_resume_test_base).
+-module(atm_workflow_execution_resume_tests).
 -author("Bartosz Walkowicz").
 
 -include("atm_workflow_execution_test.hrl").
@@ -103,9 +103,6 @@
 -define(ATM_WORKFLOW_SCHEMA_DRAFT, ?ATM_WORKFLOW_SCHEMA_DRAFT(
     ?FUNCTION_NAME, [?RAND_INT(100)], ?ECHO_DOCKER_IMAGE_ID
 )).
-
-
--define(NOW(), global_clock:timestamp_seconds()).
 
 
 %%%===================================================================

@@ -6,10 +6,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Bases for tests concerning stopping of automation workflow execution.
+%%% Tests concerning stopping of automation workflow execution.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_workflow_execution_stopping_test_base).
+-module(atm_workflow_execution_stopping_tests).
 -author("Bartosz Walkowicz").
 
 -include("atm_workflow_execution_test.hrl").
@@ -111,7 +111,7 @@
 
 -define(STOPPING_REASONS, [crash, cancel, failure, interrupt, pause]).
 
--define(NOW(), global_clock:timestamp_seconds()).
+-define(NOW_SEC(), global_clock:timestamp_seconds()).
 
 
 %%%===================================================================
@@ -481,7 +481,7 @@ gen_correct_time_series_measurements() ->
 gen_time_series_measurement(TsName) ->
     #{
         <<"tsName">> => TsName,
-        <<"timestamp">> => ?RAND_ELEMENT([?NOW() - 100, ?NOW(), ?NOW() + 3700]),
+        <<"timestamp">> => ?RAND_ELEMENT([?NOW_SEC() - 100, ?NOW_SEC(), ?NOW_SEC() + 3700]),
         <<"value">> => ?RAND_INT(10000000)
     }.
 

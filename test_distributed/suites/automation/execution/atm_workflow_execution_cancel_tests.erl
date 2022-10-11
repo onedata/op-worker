@@ -6,10 +6,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Bases for automation workflow execution cancel tests.
+%%% Tests concerning cancel of automation workflow execution.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_workflow_execution_cancel_test_base).
+-module(atm_workflow_execution_cancel_tests).
 -author("Bartosz Walkowicz").
 
 -include("atm_workflow_execution_test.hrl").

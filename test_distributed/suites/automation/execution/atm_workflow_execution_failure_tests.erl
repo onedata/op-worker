@@ -6,10 +6,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Bases for tests concerning failure of automation workflow execution.
+%%% Tests concerning failure of automation workflow execution.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_workflow_execution_failure_test_base).
+-module(atm_workflow_execution_failure_tests).
 -author("Bartosz Walkowicz").
 
 -include("atm_workflow_execution_test.hrl").
@@ -216,7 +216,7 @@
 
 -type job_failure_type() :: arg_error | result_error.
 
--define(NOW(), global_clock:timestamp_seconds()).
+-define(NOW_SEC(), global_clock:timestamp_seconds()).
 
 
 %%%===================================================================
@@ -1108,7 +1108,7 @@ gen_time_series_measurements() ->
     lists_utils:generate(fun(_) ->
         #{
             <<"tsName">> => ?RAND_ELEMENT([<<"count_erl">>, <<"size">>, ?RAND_STR()]),
-            <<"timestamp">> => ?RAND_ELEMENT([?NOW() - 100, ?NOW(), ?NOW() + 3700]),
+            <<"timestamp">> => ?RAND_ELEMENT([?NOW_SEC() - 100, ?NOW_SEC(), ?NOW_SEC() + 3700]),
             <<"value">> => ?RAND_INT(10000000)
         }
     end, 40).

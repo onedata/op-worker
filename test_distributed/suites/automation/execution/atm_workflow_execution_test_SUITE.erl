@@ -309,17 +309,17 @@ all() -> [
     end
 ).
 
--define(RUN_SCHEDULING_TEST(), ?RUN_TEST(atm_workflow_execution_scheduling_test_base)).
--define(RUN_PREPARATION_TEST(), ?RUN_TEST(atm_workflow_execution_preparation_test_base)).
--define(RUN_FAILURE_TEST(), ?RUN_TEST(atm_workflow_execution_failure_test_base)).
--define(RUN_CANCEL_TEST(), ?RUN_TEST(atm_workflow_execution_cancel_test_base)).
--define(RUN_PAUSE_TEST(), ?RUN_TEST(atm_workflow_execution_pause_test_base)).
--define(RUN_INTERRUPT_TEST(), ?RUN_TEST(atm_workflow_execution_interrupt_test_base)).
--define(RUN_STOPPING_TEST(), ?RUN_TEST(atm_workflow_execution_stopping_test_base)).
--define(RUN_ITERATION_TEST(), ?RUN_TEST(atm_workflow_execution_iteration_test_base)).
--define(RUN_MAPPING_TEST(), ?RUN_TEST(atm_workflow_execution_mapping_test_base)).
--define(RUN_REPEAT_TEST(), ?RUN_TEST(atm_workflow_execution_repeat_test_base)).
--define(RUN_RESUME_TEST(), ?RUN_TEST(atm_workflow_execution_resume_test_base)).
+-define(RUN_SCHEDULING_TEST(), ?RUN_TEST(atm_workflow_execution_scheduling_tests)).
+-define(RUN_PREPARATION_TEST(), ?RUN_TEST(atm_workflow_execution_preparation_tests)).
+-define(RUN_FAILURE_TEST(), ?RUN_TEST(atm_workflow_execution_failure_tests)).
+-define(RUN_CANCEL_TEST(), ?RUN_TEST(atm_workflow_execution_cancel_tests)).
+-define(RUN_PAUSE_TEST(), ?RUN_TEST(atm_workflow_execution_pause_tests)).
+-define(RUN_INTERRUPT_TEST(), ?RUN_TEST(atm_workflow_execution_interrupt_tests)).
+-define(RUN_STOPPING_TEST(), ?RUN_TEST(atm_workflow_execution_stopping_tests)).
+-define(RUN_ITERATION_TEST(), ?RUN_TEST(atm_workflow_execution_iteration_tests)).
+-define(RUN_MAPPING_TEST(), ?RUN_TEST(atm_workflow_execution_mapping_tests)).
+-define(RUN_REPEAT_TEST(), ?RUN_TEST(atm_workflow_execution_repeat_tests)).
+-define(RUN_RESUME_TEST(), ?RUN_TEST(atm_workflow_execution_resume_tests)).
 
 
 %%%===================================================================
@@ -678,7 +678,7 @@ resume_atm_workflow_execution_paused_while_active(_Config) ->
 
 init_per_suite(Config) ->
     ModulesToLoad = [
-        atm_workflow_execution_scheduling_test_base
+        atm_workflow_execution_scheduling_tests
         | ?ATM_WORKFLOW_EXECUTION_TEST_UTILS
     ],
     oct_background:init_per_suite(

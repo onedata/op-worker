@@ -6,10 +6,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Bases for tests concerning automation workflow execution preparation step.
+%%% Tests concerning automation workflow execution preparation step.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_workflow_execution_preparation_test_base).
+-module(atm_workflow_execution_preparation_tests).
 -author("Bartosz Walkowicz").
 
 -include("atm_workflow_execution_test.hrl").

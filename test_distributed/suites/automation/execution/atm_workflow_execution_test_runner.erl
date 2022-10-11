@@ -177,7 +177,7 @@
 
 -define(NO_DIFF, fun(_) -> false end).
 
--define(NOW(), global_clock:timestamp_seconds()).
+-define(NOW_SEC(), global_clock:timestamp_seconds()).
 
 -define(INFINITE_LOG_BASED_STORES_LISTING_OPTS, #{
     start_from => undefined,
@@ -240,7 +240,7 @@ run(TestSpec = #atm_workflow_execution_test_spec{
 
     AtmLaneSchemas = AtmWorkflowSchemaRevision#atm_workflow_schema_revision.lanes,
     ExpState = atm_workflow_execution_exp_state_builder:init(
-        ProviderSelector, SpaceId, AtmWorkflowExecutionId, ?NOW(), AtmLaneSchemas
+        ProviderSelector, SpaceId, AtmWorkflowExecutionId, ?NOW_SEC(), AtmLaneSchemas
     ),
     true = atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState, 0),
 
