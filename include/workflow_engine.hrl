@@ -83,10 +83,9 @@
 -define(EXECUTION_ENDED_WITH_EXCEPTION, execution_ended_with_exception).
 
 -record(execution_cancelled, {
-    execution_step = lane_execution :: lane_execution | lane_prepare |
-    waiting_on_next_lane_prepare | finishing_execution,
+    execution_step = lane_execution :: lane_execution | lane_prepare | waiting_on_next_lane_prepare | finishing_execution,
     has_lane_preparation_failed = false :: boolean(),
-    has_exception_appeared = false :: boolean(), % TODO VFS-7919 - change name to show that it handles abandoning workflow
+    is_interrupted = false :: boolean(),
     % Calls count is incremented when cancel is initialized and decremented when it is
     % marked as finished. Workflow can be finished only when calls count is decremented to 0
     call_count :: non_neg_integer(),

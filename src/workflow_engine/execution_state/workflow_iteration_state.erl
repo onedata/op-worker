@@ -282,7 +282,7 @@ finalize(#iteration_state{pending_items = Pending, items_finished_ahead = Finish
 
     {
         maps:values(Pending) ++ FinishedAheadItemIds,
-        State#iteration_state{phase = finalzing} % TODO - a co jak mamy resuming obecnie?
+        State#iteration_state{phase = finalzing}
     }.
 
 
@@ -310,8 +310,6 @@ dump(#iteration_state{
 
 
 -spec from_dump(dump()) -> state().
-% TODO - co jesli dumpowalismy gdy LastRegistered bylo juz undefined?
-% Z undefined wywali sie po resumie - poprawic
 from_dump({PendingItemsIndexes, LastRegistered, FirstNotFinished, FinishedAheadList}) ->
     PendingItems = maps:from_list(lists:map(fun(Index) -> {Index, undefined} end, PendingItemsIndexes)),
     FinishedAhead = gb_trees:from_orddict(lists:map(fun
@@ -319,7 +317,6 @@ from_dump({PendingItemsIndexes, LastRegistered, FirstNotFinished, FinishedAheadL
         ({Key, ItemIndex}) -> {Key, {ItemIndex, undefined}}
     end, FinishedAheadList)),
 
-    % TODO - a co jesli jestesmy ostatnim itemem?
     Phase = case LastRegistered =:= 0 orelse LastRegistered =:= FirstNotFinished - 1 of
         true -> 
             executing;
