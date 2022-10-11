@@ -405,7 +405,7 @@ stop_lane_run(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, #document{
 }) ->
     case atm_workflow_execution_status:status_to_phase(PrevStatus) of
         ?SUSPENDED_PHASE ->
-            %% TODO MW call engine to delete db for this worklow?
+            workflow_engine:cleanup_execution(AtmWorkflowExecutionId),
             stop_parallel_boxes(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecution),
             % execution was suspended == there was no active process handling it and manual handle_stopped
             % call is necessary
