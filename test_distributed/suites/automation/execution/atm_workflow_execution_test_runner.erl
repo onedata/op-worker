@@ -46,6 +46,7 @@
 -author("Bartosz Walkowicz").
 
 -include("atm_workflow_execution_test_runner.hrl").
+-include("atm_workflow_execution_test.hrl").
 -include("modules/automation/atm_execution.hrl").
 -include("onenv_test_utils.hrl").
 -include_lib("cluster_worker/include/time_series/browsing.hrl").
@@ -65,6 +66,7 @@
     delete_offline_session/1
 ]).
 -export([browse_store/2, browse_store/3]).
+-export([assert_ended_atm_workflow_execution_can_be_neither_stopped_nor_resumed/1]).
 
 -type step_name() ::
     prepare_lane |
@@ -347,6 +349,26 @@ browse_store(AtmStoreSchemaId, AtmTaskExecutionIdOrLaneRunSelector, AtmMockCallC
     SpaceId = oct_background:get_space_id(SpaceSelector),
     AtmStoreId = get_store_id(AtmStoreSchemaId, AtmTaskExecutionIdOrLaneRunSelector, AtmMockCallCtx),
     ?rpc(ProviderSelector, browse_store(SessionId, SpaceId, AtmWorkflowExecutionId, AtmStoreId)).
+
+
+-spec assert_ended_atm_workflow_execution_can_be_neither_stopped_nor_resumed(mock_call_ctx()) ->
+    ok.
+assert_ended_atm_workflow_execution_can_be_neither_stopped_nor_resumed(AtmMockCallCtx = #atm_mock_call_ctx{
+    workflow_execution_exp_state = ExpState0
+}) ->
+    lists:foreach(fun(StoppingReason) ->
+        ?assertEqual(
+            ?ERROR_ATM_WORKFLOW_EXECUTION_ENDED,
+            atm_workflow_execution_test_runner:stop_workflow_execution(StoppingReason, AtmMockCallCtx)
+        )
+    end, ?STOPPING_REASONS),
+
+    ?assertThrow(
+        ?ERROR_ATM_WORKFLOW_EXECUTION_NOT_RESUMABLE,
+        atm_workflow_execution_test_runner:resume_workflow_execution(AtmMockCallCtx)
+    ),
+
+    ?assert(atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState0, 0)).
 
 
 %%%===================================================================

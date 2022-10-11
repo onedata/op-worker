@@ -285,7 +285,8 @@ fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error() ->
                     ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_rerunable({1, 1}, ExpState0),
                     {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_failed(ExpState1)}
                 end
-            }
+            },
+            after_hook = fun atm_workflow_execution_test_runner:assert_ended_atm_workflow_execution_can_be_neither_stopped_nor_resumed/1
         }]
     }).
 
@@ -637,7 +638,8 @@ job_failure_atm_workflow_execution_test_base(JobFailureType, #fail_atm_workflow_
                     end, ExpState0, [{1, 1}, {1, 2}, {1, 3}]),
                     {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_failed(ExpState1)}
                 end
-            }
+            },
+            after_hook = fun atm_workflow_execution_test_runner:assert_ended_atm_workflow_execution_can_be_neither_stopped_nor_resumed/1
         }]
     }).
 
