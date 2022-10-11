@@ -13,7 +13,7 @@
 -module(logic_tests_common).
 -author("Lukasz Opiola").
 
--include("logic_tests_common.hrl").
+-include("../include/logic_tests_common.hrl").
 -include("http/gui_paths.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
 

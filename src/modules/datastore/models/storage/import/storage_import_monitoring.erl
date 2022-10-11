@@ -568,7 +568,8 @@ get_or_create(SpaceId) ->
             end;
         Error ->
             ?error("Failed to fetch storage_import_monitoring document for space ~p due to ~p",
-                [SpaceId, Error])
+                [SpaceId, Error]),
+            Error
     end.
 
 
