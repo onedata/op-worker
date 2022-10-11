@@ -143,8 +143,7 @@ cancel_scheduled_atm_workflow_execution() ->
                     {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_cancelled(ExpState1)}
                 end
             },
-            % assert cancelled execution can not be cancelled again
-            after_hook = fun assert_ended_atm_workflow_execution_can_not_be_cancelled/1
+            after_hook = fun atm_workflow_execution_test_runner:assert_ended_atm_workflow_execution_can_be_neither_stopped_nor_resumed/1
         }]
     }).
 
@@ -217,8 +216,7 @@ cancel_enqueued_atm_workflow_execution() ->
                     {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_cancelled(ExpState2)}
                 end
             },
-            % assert cancelled execution can not be cancelled again
-            after_hook = fun assert_ended_atm_workflow_execution_can_not_be_cancelled/1
+            after_hook = fun atm_workflow_execution_test_runner:assert_ended_atm_workflow_execution_can_be_neither_stopped_nor_resumed/1
         }]
     }).
 
@@ -368,8 +366,7 @@ cancel_active_atm_workflow_execution_test_base(Testcase, RelayMethod) ->
                     {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_cancelled(ExpState2)}
                 end
             },
-            % assert cancelled execution can not be cancelled again
-            after_hook = fun assert_ended_atm_workflow_execution_can_not_be_cancelled/1
+            after_hook = fun atm_workflow_execution_test_runner:assert_ended_atm_workflow_execution_can_be_neither_stopped_nor_resumed/1
         }]
     }).
 
@@ -512,18 +509,11 @@ cancel_suspended_atm_workflow_execution(AtmMockCallCtx = #atm_mock_call_ctx{
     ExpState4 = expect_lane_runs_rerunable([{1, 1}, {2, 1}], ExpState3),
     ExpState5 = atm_workflow_execution_exp_state_builder:expect_workflow_execution_cancelled(ExpState4),
 
-    ?assert(atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState5, 0)).
+    ?assert(atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState5, 0)),
 
-
-%% @private
-assert_ended_atm_workflow_execution_can_not_be_cancelled(AtmMockCallCtx = #atm_mock_call_ctx{
-    workflow_execution_exp_state = ExpState0
-}) ->
-    ?assertThrow(
-        ?ERROR_ATM_WORKFLOW_EXECUTION_ENDED,
-        atm_workflow_execution_test_runner:cancel_workflow_execution(AtmMockCallCtx)
-    ),
-    ?assert(atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState0, 0)).
+    atm_workflow_execution_test_runner:assert_ended_atm_workflow_execution_can_be_neither_stopped_nor_resumed(
+        AtmMockCallCtx#atm_mock_call_ctx{workflow_execution_exp_state = ExpState5}
+    ).
 
 
 %% @private

@@ -91,8 +91,6 @@
 
     stopping_finishing_atm_workflow_execution/1,
     stopping_finished_atm_workflow_execution/1,
-    stopping_cancelled_atm_workflow_execution/1,
-    stopping_failed_atm_workflow_execution/1,
     stopping_crashed_atm_workflow_execution/1,
 
     iterate_over_list_store/1,
@@ -224,8 +222,6 @@ groups() -> [
 
         stopping_finishing_atm_workflow_execution,
         stopping_finished_atm_workflow_execution,
-        stopping_cancelled_atm_workflow_execution,
-        stopping_failed_atm_workflow_execution,
         stopping_crashed_atm_workflow_execution
     ]},
 
@@ -285,18 +281,18 @@ groups() -> [
 ].
 
 all() -> [
-    {group, scheduling_non_executable_workflow_schema_tests},
-    {group, scheduling_executable_workflow_schema_with_invalid_args_tests},
-    {group, preparation_tests},
-    {group, failure_tests},
-    {group, cancel_tests},
-    {group, pause_tests},
-    {group, interrupt_tests},
-    {group, stopping_tests},
-    {group, iteration_tests},
-    {group, mapping_tests},
-    {group, repeat_tests},
-    {group, resume_tests}
+%%    {group, scheduling_non_executable_workflow_schema_tests},
+%%    {group, scheduling_executable_workflow_schema_with_invalid_args_tests},
+%%    {group, preparation_tests},
+%%    {group, failure_tests},
+    {group, cancel_tests}
+%%    {group, pause_tests},
+%%    {group, interrupt_tests},
+%%    {group, stopping_tests},
+%%    {group, iteration_tests},
+%%    {group, mapping_tests},
+%%    {group, repeat_tests},
+%%    {group, resume_tests}
 ].
 
 
@@ -516,14 +512,6 @@ stopping_finishing_atm_workflow_execution(_Config) ->
 
 
 stopping_finished_atm_workflow_execution(_Config) ->
-    ?RUN_STOPPING_TEST().
-
-
-stopping_cancelled_atm_workflow_execution(_Config) ->
-    ?RUN_STOPPING_TEST().
-
-
-stopping_failed_atm_workflow_execution(_Config) ->
     ?RUN_STOPPING_TEST().
 
 
