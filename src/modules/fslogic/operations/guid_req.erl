@@ -46,7 +46,15 @@ resolve_guid_by_relative_path(UserCtx, RootFileCtx, <<"">>) ->
 resolve_guid_by_relative_path(UserCtx, RootFileCtx, Path) ->
     PathTokens = binary:split(Path, <<"/">>, [global]),
     LeafFileCtx = lists:foldl(fun(PathToken, ParentCtx) ->
-        {ChildCtx, _} = file_tree:get_child(ParentCtx, PathToken, UserCtx),
+        ResolvedParentCtx = case file_ctx:is_symlink_const(ParentCtx) of
+            true ->
+                #fuse_response{fuse_response = #guid{guid = TargetParentGuid}} =
+                    symlink_req:resolve(UserCtx, ParentCtx),
+                file_ctx:new_by_guid(TargetParentGuid);
+            false ->
+                ParentCtx
+        end,
+        {ChildCtx, _} = file_tree:get_child(ResolvedParentCtx, PathToken, UserCtx),
         ChildCtx
     end, RootFileCtx, PathTokens),
     resolve_guid(UserCtx, LeafFileCtx).
