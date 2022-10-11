@@ -25,7 +25,6 @@
 -export([send_report/2, deliver_reports/2, deliver_reports_with_bodies/2]).
 -export([deliver_registration_report/4]).
 -export([deliver_chunk_report/2]).
--export([deliver_invalid_data_report/3]).
 -export([deliver_deregistration_report/1]).
 -export([simulate_conclusion_failure/2]).
 -export([has_received_internal_server_error_push_message/1]).
@@ -125,17 +124,6 @@ deliver_registration_report(ClientRef, WorkflowExecutionId, TaskExecutionId, Res
 deliver_chunk_report(Client, Chunk) ->
     deliver_reports_with_bodies(Client, [
         #atm_openfaas_result_streamer_chunk_report{chunk = Chunk}
-    ]).
-
-
--spec deliver_invalid_data_report(test_websocket_client:client_ref(), automation:name(), binary()) ->
-    ok.
-deliver_invalid_data_report(Client, ResultName, Base64EncodedData) ->
-    deliver_reports_with_bodies(Client, [
-        #atm_openfaas_result_streamer_invalid_data_report{
-            result_name = ResultName,
-            base_64_encoded_data = Base64EncodedData
-        }
     ]).
 
 
