@@ -54,11 +54,11 @@
 
 -define(EXECUTION_CANCELLED(CallCount), #execution_cancelled{call_count = CallCount}).
 -define(PREPARATION_CANCELLED(CallCount), #execution_cancelled{execution_step = lane_prepare, call_count = CallCount}).
--define(WAITING_FOR_NEXT_LANE_PREPARATION_END(HasExceptionAppeared), #execution_cancelled{
-    execution_step = waiting_on_next_lane_prepare, call_count = 0, has_exception_appeared = HasExceptionAppeared}).
--define(EXECUTION_ENDED_AFTER_CANCEL(HasExceptionAppeared), #execution_cancelled{
+-define(WAITING_FOR_NEXT_LANE_PREPARATION_END(IsInterrupted), #execution_cancelled{
+    execution_step = waiting_on_next_lane_prepare, call_count = 0, is_interrupted = IsInterrupted}).
+-define(EXECUTION_ENDED_AFTER_CANCEL(IsInterrupted), #execution_cancelled{
     execution_step = finishing_execution, call_count = 0, callbacks_to_execute = [],
-    has_exception_appeared = HasExceptionAppeared}).
+    is_interrupted = IsInterrupted}).
 
 
 % Macros and records used to provide additional information about document update procedure
@@ -210,6 +210,7 @@ resume_from_snapshot(ExecutionId, EngineId, Handler, Context, InitialLaneId, Ini
             iterator = undefined
         }} ->
             % Previous execution ended with no lane to run
+            workflow_execution_state_dump:delete(ExecutionId),
             init(ExecutionId, EngineId, Handler, Context, InitialLaneId, InitialNextLaneId, SnapshotMode);
         {ok, #workflow_iterator_snapshot{
             lane_index = LaneIndex, lane_id = LaneId,
@@ -402,7 +403,7 @@ report_execution_status_update(ExecutionId, JobIdentifier, UpdateType, Ans) ->
             {_TaskId, TaskSpec} = workflow_jobs:get_task_details(JobIdentifier, BoxSpecs),
 
             case {UpdateType, Status} of
-                {?ASYNC_CALL_ENDED, #execution_cancelled{has_exception_appeared = true}} ->
+                {?ASYNC_CALL_ENDED, #execution_cancelled{is_interrupted = true}} ->
                     workflow_cached_async_result:delete(CachedAns);
                 _ ->
                     ok
@@ -464,7 +465,7 @@ report_new_streamed_task_data(ExecutionId, TaskId, TaskData) ->
     CachedTaskDataId = workflow_cached_task_data:put(TaskData),
     UpdateAns = update(ExecutionId, fun
         (#workflow_execution_state{
-            execution_status = #execution_cancelled{has_exception_appeared = true},
+            execution_status = #execution_cancelled{is_interrupted = true},
             engine_id = EngineId
         }) ->
             ?WF_ERROR_EXCEPTION_APPEARED(EngineId);
@@ -890,7 +891,7 @@ handle_state_update_after_job_preparation(_ExecutionId, #document{value = #workf
             ?WF_ERROR_LANE_EXECUTION_CANCELLED(Handler, LaneId, LaneContext, TaskIdsToFinish);
         ?WAITING_FOR_NEXT_LANE_PREPARATION_END(true) ->
             ?WF_ERROR_NO_WAITING_ITEMS;
-        #execution_cancelled{has_exception_appeared = true} ->
+        #execution_cancelled{is_interrupted = true} ->
             ?WF_ERROR_EXECUTION_ENDED(#execution_ended{handler = Handler, context = ExecutionContext,
                 final_callback = handle_workflow_interrupted});
         _ ->
@@ -1044,7 +1045,7 @@ handle_execution_cancel_init(#workflow_execution_state{execution_status = ?PREPA
 handle_execution_cancel_init(#workflow_execution_state{execution_status = ?PREPARATION_FAILED} = State) ->
     % TODO VFS-7787 Return error to prevent document update
     {ok, State};
-handle_execution_cancel_init(#workflow_execution_state{execution_status = #execution_cancelled{has_exception_appeared = true}} = State) ->
+handle_execution_cancel_init(#workflow_execution_state{execution_status = #execution_cancelled{is_interrupted = true}} = State) ->
     % TODO VFS-7787 Return error to prevent document update
     {ok, State};
 handle_execution_cancel_init(#workflow_execution_state{execution_status = ?EXECUTION_CANCELLED(Counter) = Status} = State) ->
@@ -1061,7 +1062,7 @@ handle_execution_cancel_finish(_State) ->
 
 -spec mark_exception_appeared(state(), throw | error | exit, term(), list()) -> {ok, state()}.
 mark_exception_appeared(
-    #workflow_execution_state{execution_status = #execution_cancelled{has_exception_appeared = true}} = State,
+    #workflow_execution_state{execution_status = #execution_cancelled{is_interrupted = true}} = State,
     _ErrorType, _Reason, _Stacktrace
 ) ->
     {ok, State};
@@ -1073,7 +1074,7 @@ mark_exception_appeared(
 ) ->
     {ok, State#workflow_execution_state{execution_status = Status#execution_cancelled{
         call_count = 0,
-        has_exception_appeared = true,
+        is_interrupted = true,
         callbacks_to_execute = [
             {fun execute_exception_handler/5, ?CALLBACK_ON_EXCEPTION, [ErrorType, Reason, Stacktrace]} | Callbacks
         ]
@@ -1081,7 +1082,7 @@ mark_exception_appeared(
 mark_exception_appeared(State, ErrorType, Reason, Stacktrace) ->
     {ok, State#workflow_execution_state{execution_status = #execution_cancelled{
         call_count = 0,
-        has_exception_appeared = true,
+        is_interrupted = true,
         callbacks_to_execute = [
             {fun execute_exception_handler/5, ?CALLBACK_ON_EXCEPTION, [ErrorType, Reason, Stacktrace]}
         ]
@@ -1090,13 +1091,13 @@ mark_exception_appeared(State, ErrorType, Reason, Stacktrace) ->
 
 -spec mark_workflow_abandoned(state()) -> {ok, state()}.
 mark_workflow_abandoned(
-    #workflow_execution_state{execution_status = #execution_cancelled{has_exception_appeared = true}} = State
+    #workflow_execution_state{execution_status = #execution_cancelled{is_interrupted = true}} = State
 ) ->
     {ok, State};
 mark_workflow_abandoned(State) ->
     {ok, State#workflow_execution_state{execution_status = #execution_cancelled{
         call_count = 0,
-        has_exception_appeared = true
+        is_interrupted = true
     }}}.
 
 
@@ -1128,7 +1129,7 @@ reset_state_fields_for_next_lane(State) ->
     workflow_engine:preparation_mode()) -> {ok, state()} | ?WF_ERROR_UNKNOWN_LANE.
 handle_lane_preparation_failure(
     #workflow_execution_state{
-        execution_status = #execution_cancelled{has_exception_appeared = true} = Status,
+        execution_status = #execution_cancelled{is_interrupted = true} = Status,
         next_lane_preparation_status = ?PREPARING
     } = State, _LaneId, ?PREPARE_CURRENT) ->
     {ok, State#workflow_execution_state{
@@ -1139,7 +1140,7 @@ handle_lane_preparation_failure(
         next_lane_preparation_status = ?PREPARING
     } = State, _LaneId, ?PREPARE_CURRENT) ->
     {ok, State#workflow_execution_state{execution_status = #execution_cancelled{has_lane_preparation_failed = true,
-        execution_step = waiting_on_next_lane_prepare, call_count = 0, has_exception_appeared = false}}};
+        execution_step = waiting_on_next_lane_prepare, call_count = 0, is_interrupted = false}}};
 handle_lane_preparation_failure(
     #workflow_execution_state{
         execution_status = ?EXECUTION_CANCELLED(_) = Status
@@ -1528,7 +1529,7 @@ prepare_next_waiting_job(#workflow_execution_state{
 }) ->
     ?WF_ERROR_EXECUTION_ENDED(#execution_ended{handler = Handler, context = Context});
 prepare_next_waiting_job(State = #workflow_execution_state{
-    execution_status = #execution_cancelled{call_count = 0, has_exception_appeared = false, callbacks_to_execute = []},
+    execution_status = #execution_cancelled{call_count = 0, is_interrupted = false, callbacks_to_execute = []},
     jobs = Jobs,
     iteration_state = IterationState,
     current_lane = #current_lane{parallel_box_specs = BoxSpecs}
@@ -1550,7 +1551,7 @@ prepare_next_waiting_job(State = #workflow_execution_state{
     end;
 prepare_next_waiting_job(State = #workflow_execution_state{
     execution_status = #execution_cancelled{
-        call_count = 0, has_exception_appeared = true, callbacks_to_execute = []
+        call_count = 0, is_interrupted = true, callbacks_to_execute = []
     } = Status,
     jobs = Jobs,
     iteration_state = IterationState,
@@ -1587,7 +1588,7 @@ prepare_next_waiting_job(State = #workflow_execution_state{
 prepare_next_waiting_job(State = #workflow_execution_state{
     execution_status = #execution_cancelled{
         call_count = 0,
-        has_exception_appeared = true,
+        is_interrupted = true,
         callbacks_to_execute = Callbacks
     } = Status,
     pending_callbacks = []
@@ -1900,7 +1901,7 @@ report_job_finish(State = #workflow_execution_state{
             prepare_next_parallel_box(State#workflow_execution_state{jobs = NewJobs2}, JobIdentifier)
     end;
 report_job_finish(State = #workflow_execution_state{
-    execution_status = #execution_cancelled{has_exception_appeared = true},
+    execution_status = #execution_cancelled{is_interrupted = true},
     jobs = Jobs
 }, JobIdentifier, error) ->
     % Schedule restart of job to allow job restart after resume of workflow

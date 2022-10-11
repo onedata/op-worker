@@ -167,7 +167,7 @@ execute_workflow(EngineId, ExecutionSpec) ->
 
             case ProgressDataPersistence of
                 clean_progress ->
-                    workflow_iterator_snapshot:cleanup(ExecutionId);
+                    cleanup_execution(ExecutionId);
                 _ ->
                     ok
             end
@@ -176,6 +176,7 @@ execute_workflow(EngineId, ExecutionSpec) ->
 
 -spec cleanup_execution(execution_id()) -> ok.
 cleanup_execution(ExecutionId) ->
+    workflow_execution_state_dump:delete(ExecutionId),
     workflow_iterator_snapshot:cleanup(ExecutionId).
 
 
@@ -354,7 +355,7 @@ handle_exception(ExecutionId, Handler, Message, MessageArgs, ErrorType, Reason, 
     end.
 
 -spec execute_exception_handler(execution_id(), execution_context(), workflow_handler:handler(),
-    throw | error | exit, term(), list()) -> workflow_handler:progress_data_persistence().
+    throw | error | exit, term(), list()) -> ok.
 execute_exception_handler(ExecutionId, Context, Handler, ErrorType, Reason, Stacktrace) ->
     try
         apply(Handler, handle_exception, [ExecutionId, Context, ErrorType, Reason, Stacktrace])
@@ -364,8 +365,7 @@ execute_exception_handler(ExecutionId, Context, Handler, ErrorType, Reason, Stac
                 "Unexpected error handling exception for workflow_handler ~w (execution ~s): ~w:~p",
                 [Handler, ExecutionId, ErrorType2, Reason2],
                 Stacktrace2
-            ),
-            save_progress
+            )
     end.
 
 

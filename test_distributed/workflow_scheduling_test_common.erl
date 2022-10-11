@@ -24,7 +24,7 @@
 -export([get_task_execution_history/1, set_test_execution_manager_option/3, set_test_execution_manager_options/2,
     group_handler_calls_by_execution_id/1]).
 %% Helper functions verifying execution history
--export([verify_execution_history/2, verify_execution_history/3, verify_empty_lane/2, has_any_finish_callbacks_for_lane/2,
+-export([verify_execution_history/2, verify_execution_history/3, verify_empty_lane/2, has_any_finish_callback_for_lane/2,
     has_exception_callback/1, filter_finish_and_exception_handlers/2, filter_prepare_in_adnave_handler/3,
     filter_repeated_stream_callbacks/3, check_prepare_lane_in_head_and_filter/2, verify_and_filter_duplicated_calls/4]).
 %% Helper functions history statistics
@@ -916,7 +916,7 @@ verify_empty_lane(ExecutionHistory, LaneId) ->
     ?assertMatch([#handler_call{function = prepare_lane, lane_id = LaneId},
         #handler_call{function = handle_workflow_execution_stopped}], ExecutionHistory).
 
-has_any_finish_callbacks_for_lane(ExecutionHistory, LaneId) ->
+has_any_finish_callback_for_lane(ExecutionHistory, LaneId) ->
     lists:any(fun
         (#handler_call{function = Fun, lane_id = Id}) when Id =:= LaneId ->
             lists:member(Fun, [handle_lane_execution_stopped, handle_task_execution_stopped]);

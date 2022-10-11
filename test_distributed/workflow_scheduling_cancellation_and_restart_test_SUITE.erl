@@ -85,6 +85,7 @@ all() ->
 % TODO - sprawdzc jaki iterator jest zapsany jak cancelujemy tuz po wykonaniu lane_ended
 % TODO - jaki iterator zapisujemy jak prepare_lane padl
 % TODO - co sie dzieje na cancelu po przetorzeniu ostatniego item'a - nie powinien sie workflow skonczyc dobrze?
+% TODO - test wielokrotnego resume'a w tym cancelowania zaraz po resume lub po wykonaniu callbacku resumed
 
 -record(test_config, {
     task_type = sync :: sync | async,
@@ -507,7 +508,7 @@ multiple_parallel_cancels_test_base(Config, #test_config{
     ?assertMatch(#{cancel_ans := ok}, ExtendedHistoryStats),
     workflow_scheduling_test_common:verify_execution_history_stats(
         ExtendedHistoryStats, TaskType, #{ignore_async_slots_check => true}),
-    ?assertNot(workflow_scheduling_test_common:has_any_finish_callbacks_for_lane(ExecutionHistory, LaneId)),
+    ?assertNot(workflow_scheduling_test_common:has_any_finish_callback_for_lane(ExecutionHistory, LaneId)),
     HasExceptionCallback = case VerifyHistoryOptions of
         #{expect_exception := _} -> true;
         _ -> false

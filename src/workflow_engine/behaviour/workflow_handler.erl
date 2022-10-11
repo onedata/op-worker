@@ -208,7 +208,7 @@
 %% Callback reporting that all tasks in given workflow have been
 %% executed for all items or workflow has been cancelled and no task
 %% is being processed. It will be called exactly once if an exception
-%% has not appeared.
+%% has not appeared nor workflow has been abandoned.
 %% @end
 %%--------------------------------------------------------------------
 -callback handle_workflow_execution_stopped(
@@ -221,7 +221,8 @@
 %%--------------------------------------------------------------------
 %% @doc
 %% Callback reporting that has been abandoned or exception appeared
-%% and no task is being processed. It will be called exactly once.
+%% and no task is being processed. It will be called exactly once after
+%% exception or abandon.
 %% @end
 %%--------------------------------------------------------------------
 -callback handle_workflow_interrupted(
