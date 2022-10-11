@@ -63,7 +63,7 @@
 
 % Macros and records used to provide additional information about document update procedure
 % (see #workflow_execution_state.update_report)
--type init_type() :: prepare | ?RESUMING_FROM_ITERATOR(terator:iterator()) | ?RESUMING_FROM_DUMP(terator:iterator()).
+-type init_type() :: prepare | ?RESUMING_FROM_ITERATOR(iterator:iterator()) | ?RESUMING_FROM_DUMP(iterator:iterator()).
 -export_type([init_type/0]).
 -define(LANE_DESIGNATED_FOR_INIT(InitType), {lane_designated_for_init, InitType}).
 -define(LANE_DESIGNATED_FOR_PREPARATION_IN_ADVANCE, lane_designated_for_preparation_in_advance).

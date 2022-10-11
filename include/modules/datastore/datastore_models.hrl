@@ -1220,9 +1220,9 @@
 }).
 
 -record(workflow_iterator_snapshot, {
-    iterator :: iterator:iterator(),
+    iterator :: iterator:iterator() | undefined,
     lane_index :: workflow_execution_state:index(),
-    lane_id :: workflow_engine:lane_id(),
+    lane_id :: workflow_engine:lane_id() | undefined,
     next_lane_id :: workflow_engine:lane_id() | undefined,
     item_index :: workflow_execution_state:index()
 }).
