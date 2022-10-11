@@ -69,6 +69,7 @@
 -type step_name() ::
     prepare_lane |
     create_run |
+    restart_lane |
     run_task_for_item |
     process_task_result_for_item |
     process_streamed_task_data |
@@ -563,6 +564,17 @@ get_step_mock_spec(
     {{create_run, Timing, Selector}, Spec};
 
 get_step_mock_spec(
+    #mock_call_report{step = restart_lane, timing = Timing, args = [{AtmLaneIndex, _}, _, _]},
+    NewTestCtx
+) ->
+    #atm_lane_run_execution_test_spec{
+        selector = Selector,
+        create_run = Spec
+    } = get_lane_run_test_spec(AtmLaneIndex, NewTestCtx),
+
+    {{restart_lane, Timing, Selector}, Spec};
+
+get_step_mock_spec(
     #mock_call_report{
         step = handle_lane_execution_stopped,
         timing = Timing,
@@ -955,6 +967,7 @@ shift_monitored_lane_run_if_current_one_stopped(
     % Lane execution stopped callback may ba called during lane preparation in case of failure
     % - in such case it will be prepare_lane that will finish executing last
     Step =:= prepare_lane;
+    Step =:= restart_lane;
     Step =:= handle_lane_execution_stopped
 ->
     AtmLaneRunTestSpec = get_lane_run_test_spec(AtmLaneIndex, TestCtx),
@@ -990,7 +1003,7 @@ is_end_phase_of_last_step_of_lane_run(
     #test_ctx{executed_step_phases = ExecutedStepPhases}
 ) ->
     SecondToLastStepPhaseInLaneRunInCaseThisIsTheLastOne = {
-        hd([prepare_lane, handle_lane_execution_stopped] -- [Step]),
+        hd([prepare_lane, restart_lane, handle_lane_execution_stopped] -- [Step]),
         after_step,
         AtmLaneRunSelector
     },
@@ -1099,6 +1112,7 @@ mock_workflow_execution_handler_steps(Workers) ->
     end),
 
     mock_workflow_execution_handler_step(Workers, prepare_lane, 3),
+    mock_workflow_execution_handler_step(Workers, restart_lane, 3),
     mock_workflow_execution_handler_step(Workers, run_task_for_item, 5),
     mock_workflow_execution_handler_step(Workers, process_task_result_for_item, 5),
     mock_workflow_execution_handler_step(Workers, process_streamed_task_data, 4),
