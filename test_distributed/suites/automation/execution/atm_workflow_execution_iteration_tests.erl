@@ -6,11 +6,11 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Bases for tests of iterating over list, range, single_value and tree_forest
-%%% stores (iteration over audit_log and time_series is not supported in schema).
+%%% Tests of iterating over list, range, single_value and tree_forest stores
+%%% (iteration over audit_log and time_series is not supported in schema).
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_workflow_execution_iteration_test_base).
+-module(atm_workflow_execution_iteration_tests).
 -author("Bartosz Walkowicz").
 
 -include("atm_workflow_execution_test.hrl").
@@ -115,7 +115,6 @@
 -define(FILE_DATA_SPEC, #atm_data_spec{type = atm_file_type}).
 
 
--define(NOW(), global_clock:timestamp_seconds()).
 -define(CACHE_KEY(__TESTCASE_MARKER, __ATM_TASK_SCHEMA_ID), {__TESTCASE_MARKER, __ATM_TASK_SCHEMA_ID}).
 
 

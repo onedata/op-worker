@@ -6,13 +6,13 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Bases for tests of mapping task arguments and results.
+%%% Tests of mapping task arguments and results.
 %%% NOTE: stores have dedicated test suites and as such only basic mapping
 %%% cases are tested here (test cases check overall integration between
 %%% various components rather than concrete one).
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_workflow_execution_mapping_test_base).
+-module(atm_workflow_execution_mapping_tests).
 -author("Bartosz Walkowicz").
 
 -include("atm_workflow_execution_test.hrl").
@@ -142,7 +142,7 @@
 -type map_results_to_store_test_spec() :: #map_results_to_store_test_spec{}.
 
 
--define(NOW(), global_clock:timestamp_seconds()).
+-define(NOW_SEC(), global_clock:timestamp_seconds()).
 
 
 %%%===================================================================
@@ -583,7 +583,7 @@ gen_random_time_series_measurements() ->
     lists_utils:generate(fun(_) ->
         #{
             <<"tsName">> => ?RAND_ELEMENT([<<"count_erl">>, <<"size">>, ?RAND_STR()]),
-            <<"timestamp">> => ?RAND_ELEMENT([?NOW() - 100, ?NOW(), ?NOW() + 3700]),
+            <<"timestamp">> => ?RAND_ELEMENT([?NOW_SEC() - 100, ?NOW_SEC(), ?NOW_SEC() + 3700]),
             <<"value">> => ?RAND_INT(10000000)
         }
     end, 100).

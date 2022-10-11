@@ -91,8 +91,6 @@
 
     stopping_finishing_atm_workflow_execution/1,
     stopping_finished_atm_workflow_execution/1,
-    stopping_cancelled_atm_workflow_execution/1,
-    stopping_failed_atm_workflow_execution/1,
     stopping_crashed_atm_workflow_execution/1,
 
     iterate_over_list_store/1,
@@ -138,7 +136,8 @@
     repeat_cancelled_atm_lane_run_execution/1,
 
     resume_atm_workflow_execution_paused_while_scheduled/1,
-    resume_atm_workflow_execution_paused_while_preparing/1
+    resume_atm_workflow_execution_paused_while_preparing/1,
+    resume_atm_workflow_execution_paused_while_active/1
 ]).
 
 groups() -> [
@@ -223,8 +222,6 @@ groups() -> [
 
         stopping_finishing_atm_workflow_execution,
         stopping_finished_atm_workflow_execution,
-        stopping_cancelled_atm_workflow_execution,
-        stopping_failed_atm_workflow_execution,
         stopping_crashed_atm_workflow_execution
     ]},
 
@@ -278,7 +275,8 @@ groups() -> [
 
     {resume_tests, [], [
         resume_atm_workflow_execution_paused_while_scheduled,
-        resume_atm_workflow_execution_paused_while_preparing
+        resume_atm_workflow_execution_paused_while_preparing,
+        resume_atm_workflow_execution_paused_while_active
     ]}
 ].
 
@@ -307,17 +305,17 @@ all() -> [
     end
 ).
 
--define(RUN_SCHEDULING_TEST(), ?RUN_TEST(atm_workflow_execution_scheduling_test_base)).
--define(RUN_PREPARATION_TEST(), ?RUN_TEST(atm_workflow_execution_preparation_test_base)).
--define(RUN_FAILURE_TEST(), ?RUN_TEST(atm_workflow_execution_failure_test_base)).
--define(RUN_CANCEL_TEST(), ?RUN_TEST(atm_workflow_execution_cancel_test_base)).
--define(RUN_PAUSE_TEST(), ?RUN_TEST(atm_workflow_execution_pause_test_base)).
--define(RUN_INTERRUPT_TEST(), ?RUN_TEST(atm_workflow_execution_interrupt_test_base)).
--define(RUN_STOPPING_TEST(), ?RUN_TEST(atm_workflow_execution_stopping_test_base)).
--define(RUN_ITERATION_TEST(), ?RUN_TEST(atm_workflow_execution_iteration_test_base)).
--define(RUN_MAPPING_TEST(), ?RUN_TEST(atm_workflow_execution_mapping_test_base)).
--define(RUN_REPEAT_TEST(), ?RUN_TEST(atm_workflow_execution_repeat_test_base)).
--define(RUN_RESUME_TEST(), ?RUN_TEST(atm_workflow_execution_resume_test_base)).
+-define(RUN_SCHEDULING_TEST(), ?RUN_TEST(atm_workflow_execution_scheduling_tests)).
+-define(RUN_PREPARATION_TEST(), ?RUN_TEST(atm_workflow_execution_preparation_tests)).
+-define(RUN_FAILURE_TEST(), ?RUN_TEST(atm_workflow_execution_failure_tests)).
+-define(RUN_CANCEL_TEST(), ?RUN_TEST(atm_workflow_execution_cancel_tests)).
+-define(RUN_PAUSE_TEST(), ?RUN_TEST(atm_workflow_execution_pause_tests)).
+-define(RUN_INTERRUPT_TEST(), ?RUN_TEST(atm_workflow_execution_interrupt_tests)).
+-define(RUN_STOPPING_TEST(), ?RUN_TEST(atm_workflow_execution_stopping_tests)).
+-define(RUN_ITERATION_TEST(), ?RUN_TEST(atm_workflow_execution_iteration_tests)).
+-define(RUN_MAPPING_TEST(), ?RUN_TEST(atm_workflow_execution_mapping_tests)).
+-define(RUN_REPEAT_TEST(), ?RUN_TEST(atm_workflow_execution_repeat_tests)).
+-define(RUN_RESUME_TEST(), ?RUN_TEST(atm_workflow_execution_resume_tests)).
 
 
 %%%===================================================================
@@ -517,14 +515,6 @@ stopping_finished_atm_workflow_execution(_Config) ->
     ?RUN_STOPPING_TEST().
 
 
-stopping_cancelled_atm_workflow_execution(_Config) ->
-    ?RUN_STOPPING_TEST().
-
-
-stopping_failed_atm_workflow_execution(_Config) ->
-    ?RUN_STOPPING_TEST().
-
-
 stopping_crashed_atm_workflow_execution(_Config) ->
     ?RUN_STOPPING_TEST().
 
@@ -665,6 +655,10 @@ resume_atm_workflow_execution_paused_while_preparing(_Config) ->
     ?RUN_RESUME_TEST().
 
 
+resume_atm_workflow_execution_paused_while_active(_Config) ->
+    ?RUN_RESUME_TEST().
+
+
 %===================================================================
 % SetUp and TearDown functions
 %===================================================================
@@ -672,7 +666,7 @@ resume_atm_workflow_execution_paused_while_preparing(_Config) ->
 
 init_per_suite(Config) ->
     ModulesToLoad = [
-        atm_workflow_execution_scheduling_test_base
+        atm_workflow_execution_scheduling_tests
         | ?ATM_WORKFLOW_EXECUTION_TEST_UTILS
     ],
     oct_background:init_per_suite(

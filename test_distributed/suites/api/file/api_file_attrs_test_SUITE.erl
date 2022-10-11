@@ -34,6 +34,7 @@
 
 -export([
     get_file_attrs_test/1,
+    get_file_attrs_with_xattrs_test/1,
     get_shared_file_attrs_test/1,
     get_attrs_on_provider_not_supporting_space_test/1,
 
@@ -61,6 +62,7 @@
 groups() -> [
     {parallel_tests, [parallel], [
         get_file_attrs_test,
+        get_file_attrs_with_xattrs_test,
         get_shared_file_attrs_test,
         get_attrs_on_provider_not_supporting_space_test,
 
@@ -101,16 +103,41 @@ all() -> [
 %%% Get attrs test functions
 %%%===================================================================
 
-
 get_file_attrs_test(Config) ->
-    [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
-
+    
     {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(8#707),
-    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
-
+    
     {ok, FileAttrs} = file_test_utils:get_attrs(P2Node, FileGuid),
     JsonAttrs = api_test_utils:file_attrs_to_json(undefined, FileAttrs),
+    DataSpec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+        FileGuid, undefined, get_attrs_data_spec(normal_mode)
+    ),
+    get_file_attrs_test_base(Config, DataSpec, FileType, FileGuid, JsonAttrs).
+
+
+get_file_attrs_with_xattrs_test(Config) ->
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
+    
+    {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(?DEFAULT_FILE_MODE),
+    ok = file_test_utils:set_xattr(P1Node, FileGuid, <<"xattr_name">>, <<"xattr_value">>),
+    ok = file_test_utils:set_xattr(P1Node, FileGuid, <<"xattr_name2">>, <<"xattr_value2">>),
+    file_test_utils:await_xattr(P2Node, FileGuid, [<<"xattr_name">>, <<"xattr_name2">>], ?ATTEMPTS),
+    
+    {ok, FileAttrs} = file_test_utils:get_attrs(P2Node, ?ROOT_SESS_ID, FileGuid, [<<"xattr_name">>]),
+    JsonAttrs = api_test_utils:file_attrs_to_json(undefined, FileAttrs),
+    DataSpec = #data_spec{
+        optional = [<<"attribute">>],
+        correct_values = #{<<"attribute">> => [<<"xattr.xattr_name">>]}
+    },
+    get_file_attrs_test_base(Config, DataSpec, FileType, FileGuid, JsonAttrs).
+
+
+get_file_attrs_test_base(Config, DataSpec, FileType, FileGuid, JsonAttrs) ->
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
+    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
     ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
@@ -140,9 +167,7 @@ get_file_attrs_test(Config) ->
                 }
             ],
             randomly_select_scenarios = true,
-            data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
-                FileGuid, undefined, get_attrs_data_spec(normal_mode)
-            )
+            data_spec = DataSpec
         },
         #suite_spec{
             target_nodes = ?config(op_worker_nodes, Config),
@@ -345,9 +370,9 @@ get_attrs_data_spec(normal_mode) ->
         optional = [<<"attribute">>],
         correct_values = #{<<"attribute">> => ?PRIVATE_BASIC_ATTRIBUTES},
         bad_values = [
-            {<<"attribute">>, true, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PRIVATE_BASIC_ATTRIBUTES)},
-            {<<"attribute">>, 10, {gs, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PRIVATE_BASIC_ATTRIBUTES)}},
-            {<<"attribute">>, <<"NaN">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PRIVATE_BASIC_ATTRIBUTES)}
+            {<<"attribute">>, true, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PRIVATE_BASIC_ATTRIBUTES ++ [<<"xattr.*">>])},
+            {<<"attribute">>, 10, {gs, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PRIVATE_BASIC_ATTRIBUTES ++ [<<"xattr.*">>])}},
+            {<<"attribute">>, <<"NaN">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PRIVATE_BASIC_ATTRIBUTES ++ [<<"xattr.*">>])}
         ]
     };
 get_attrs_data_spec(share_mode) ->
@@ -355,10 +380,10 @@ get_attrs_data_spec(share_mode) ->
         optional = [<<"attribute">>],
         correct_values = #{<<"attribute">> => ?PUBLIC_BASIC_ATTRIBUTES},
         bad_values = [
-            {<<"attribute">>, true, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PUBLIC_BASIC_ATTRIBUTES)},
-            {<<"attribute">>, 10, {gs, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PUBLIC_BASIC_ATTRIBUTES)}},
-            {<<"attribute">>, <<"NaN">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PUBLIC_BASIC_ATTRIBUTES)},
-            {<<"attribute">>, <<"owner_id">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PUBLIC_BASIC_ATTRIBUTES)}
+            {<<"attribute">>, true, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PUBLIC_BASIC_ATTRIBUTES ++ [<<"xattr.*">>])},
+            {<<"attribute">>, 10, {gs, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PUBLIC_BASIC_ATTRIBUTES ++ [<<"xattr.*">>])}},
+            {<<"attribute">>, <<"NaN">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PUBLIC_BASIC_ATTRIBUTES ++ [<<"xattr.*">>])},
+            {<<"attribute">>, <<"owner_id">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PUBLIC_BASIC_ATTRIBUTES ++ [<<"xattr.*">>])}
         ]
     }.
 
@@ -1048,6 +1073,14 @@ await_dir_stats_collecting_status(ProviderPlaceholder, SpaceId, Status) ->
     ).
 
 
+-spec await_file_size_sync(oct_background:entity_selector(), file_meta:size(), file_id:file_guid()) -> ok.
+await_file_size_sync(ProviderPlaceholder, ExpectedSize, Guid) ->
+    Node = oct_background:get_random_provider_node(ProviderPlaceholder),
+    SessId = oct_background:get_user_session_id(user3, ProviderPlaceholder),
+    ?assertMatch({ok, #file_attr{size = ExpectedSize}}, lfm_proxy:stat(Node, SessId, ?FILE_REF(Guid)), ?ATTEMPTS),
+    ok.
+
+
 %% @private
 -spec get_storage_id(od_space:id(), oneprovider:id()) -> od_storage:id().
 get_storage_id(SpaceId, ProviderId) ->
@@ -1188,7 +1221,11 @@ gather_historical_dir_size_stats_layout_test(Config) ->
     P2StorageId = get_storage_id(SpaceId, P2Id),
 
     #object{guid = DirGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
-        user3, space_krk_par, #dir_spec{mode = 8#707, shares = [#share_spec{}]}
+        user3, space_krk_par, #dir_spec{
+            mode = 8#707, 
+            shares = [#share_spec{}], 
+            children = [#file_spec{content = crypto:strong_rand_bytes(8)}]
+        }
     ),
     Metrics = [?DAY_METRIC, ?HOUR_METRIC, ?MINUTE_METRIC, ?MONTH_METRIC],
     ExpLayout = #{
@@ -1200,6 +1237,8 @@ gather_historical_dir_size_stats_layout_test(Config) ->
     },
     await_dir_stats_collecting_status(krakow, SpaceId, enabled),
     await_dir_stats_collecting_status(paris, SpaceId, enabled),
+    await_file_size_sync(krakow, 8, DirGuid),
+    await_file_size_sync(paris, 8, DirGuid),
 
     ValidateGsSuccessfulCallFun = fun(_TestCtx, Result) ->
         ?assertEqual({ok, #{<<"layout">> => ExpLayout}}, Result)
@@ -1254,6 +1293,8 @@ gather_historical_dir_size_stats_slice_test(Config) ->
     }),
     await_dir_stats_collecting_status(krakow, SpaceId, enabled),
     await_dir_stats_collecting_status(paris, SpaceId, enabled),
+    await_file_size_sync(krakow, 24, DirGuid),
+    await_file_size_sync(paris, 24, DirGuid),
     ValidateGsSuccessfulCallFun = fun(_TestCtx, Result) ->
         {ok, ResultData} = ?assertMatch({ok, #{<<"slice">> := _}}, Result),
         ResultWithoutTimestamps = tsc_structure:map(fun(_TimeSeriesName, _MetricsName, Windows) ->

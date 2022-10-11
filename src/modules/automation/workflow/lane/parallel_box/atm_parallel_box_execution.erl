@@ -27,7 +27,7 @@
     delete_all/1, delete/1
 ]).
 -export([set_tasks_run_num/2, update_task_status/3]).
--export([gather_statuses/1]).
+-export([get_task_id/2, gather_statuses/1]).
 -export([to_json/1]).
 
 %% persistent_record callbacks
@@ -217,6 +217,13 @@ update_task_status(AtmTaskExecutionId, NewStatus, #atm_parallel_box_execution{
         false ->
             ?ERROR_ATM_INVALID_STATUS_TRANSITION(CurrentStatus, NewStatus)
     end.
+
+
+-spec get_task_id(automation:id(), record()) -> atm_task_execution:id().
+get_task_id(AtmTaskSchemaId, #atm_parallel_box_execution{
+    task_registry = AtmTaskExecutionRegistry
+}) ->
+    maps:get(AtmTaskSchemaId, AtmTaskExecutionRegistry).
 
 
 -spec gather_statuses([record()]) -> [status()].

@@ -36,6 +36,7 @@
     expect_lane_run_started_preparing_in_advance/2,
     expect_lane_run_created/2,
     expect_lane_run_enqueued/2,
+    expect_lane_run_active/2,
     expect_lane_run_stopping/2,
     expect_lane_run_finished/2,
     expect_lane_run_failed/2,
@@ -68,6 +69,7 @@
     expect_task_cancelled/2,
     expect_task_parallel_box_transitioned_to_inferred_status/3,
     expect_all_tasks_pending/2,
+    expect_all_tasks_active/2,
     expect_all_tasks_skipped/2,
     expect_all_tasks_paused/2,
     expect_all_tasks_interrupted/2,
@@ -372,6 +374,13 @@ expect_lane_run_created(AtmLaneRunSelector, ExpStateCtx = #exp_workflow_executio
     ctx().
 expect_lane_run_enqueued(AtmLaneRunSelector, ExpStateCtx) ->
     ExpAtmLaneRunStateDiff = #{<<"status">> => <<"enqueued">>},
+    update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx).
+
+
+-spec expect_lane_run_active(atm_lane_execution:lane_run_selector(), ctx()) ->
+    ctx().
+expect_lane_run_active(AtmLaneRunSelector, ExpStateCtx) ->
+    ExpAtmLaneRunStateDiff = #{<<"status">> => <<"active">>},
     update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx).
 
 
@@ -708,6 +717,12 @@ expect_task_parallel_box_transitioned_to_inferred_status(AtmTaskExecutionId, Inf
     ctx().
 expect_all_tasks_pending(AtmLaneRunSelector, ExpStateCtx) ->
     expect_all_tasks_transitioned_to(AtmLaneRunSelector, <<"pending">>, ExpStateCtx).
+
+
+-spec expect_all_tasks_active(atm_lane_execution:lane_run_selector(), ctx()) ->
+    ctx().
+expect_all_tasks_active(AtmLaneRunSelector, ExpStateCtx) ->
+    expect_all_tasks_transitioned_to(AtmLaneRunSelector, <<"active">>, ExpStateCtx).
 
 
 -spec expect_all_tasks_skipped(atm_lane_execution:lane_run_selector(), ctx()) ->

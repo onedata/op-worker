@@ -6,10 +6,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Bases for tests concerning interrupt of automation workflow execution.
+%%% Tests concerning interrupt of automation workflow execution.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_workflow_execution_interrupt_test_base).
+-module(atm_workflow_execution_interrupt_tests).
 -author("Bartosz Walkowicz").
 
 -include("atm_workflow_execution_test.hrl").
@@ -91,8 +91,6 @@
     }
 ).
 
--define(NOW(), global_clock:timestamp_seconds()).
-
 
 %%%===================================================================
 %%% Tests
@@ -140,8 +138,3 @@ interrupt_ongoing_atm_workflow_execution_due_to_expired_session() ->
             }
         }]
     }).
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
