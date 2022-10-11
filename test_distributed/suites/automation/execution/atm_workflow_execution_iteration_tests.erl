@@ -6,11 +6,11 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Bases for tests of iterating over list, range, single_value and tree_forest
-%%% stores (iteration over audit_log and time_series is not supported in schema).
+%%% Tests of iterating over list, range, single_value and tree_forest stores
+%%% (iteration over audit_log and time_series is not supported in schema).
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_workflow_execution_iteration_test_base).
+-module(atm_workflow_execution_iteration_tests).
 -author("Bartosz Walkowicz").
 
 -include("atm_workflow_execution_test.hrl").
@@ -37,6 +37,7 @@
 ]).
 
 -record(iterate_over_file_store_test_spec, {
+    testcase :: atom(),
     store_type :: automation:store_type(),
     initial_files :: [onenv_file_test_utils:object()],
     % atm_file_type values are references to file entity in op. When those files
@@ -61,10 +62,10 @@
 }).
 
 -define(FOREACH_WORKFLOW_SCHEMA_DRAFT(
-    __STORE_TYPE, __STORE_CONFIG, __DEFAULT_INITIAL_CONTENT, __ITERATED_ITEM_DATA_SPEC
+    __TESTCASE, __STORE_TYPE, __STORE_CONFIG, __DEFAULT_INITIAL_CONTENT, __ITERATED_ITEM_DATA_SPEC
 ),
     #atm_workflow_schema_dump_draft{
-        name = <<"echo">>,
+        name = str_utils:to_binary(__TESTCASE),
         revision_num = 1,
         revision = #atm_workflow_schema_revision_draft{
             stores = [
@@ -103,6 +104,7 @@
 ).
 
 -define(RANGE_FOREACH_WORKFLOW_SCHEMA_DRAFT(__INITIAL_CONTENT), ?FOREACH_WORKFLOW_SCHEMA_DRAFT(
+    ?FUNCTION_NAME,
     range,
     #atm_range_store_config{},
     __INITIAL_CONTENT,
@@ -113,7 +115,6 @@
 -define(FILE_DATA_SPEC, #atm_data_spec{type = atm_file_type}).
 
 
--define(NOW(), global_clock:timestamp_seconds()).
 -define(CACHE_KEY(__TESTCASE_MARKER, __ATM_TASK_SCHEMA_ID), {__TESTCASE_MARKER, __ATM_TASK_SCHEMA_ID}).
 
 
@@ -126,6 +127,7 @@ iterate_over_list_store() ->
     InitialFiles = create_initial_files(),
 
     iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(#iterate_over_file_store_test_spec{
+        testcase = ?FUNCTION_NAME,
         store_type = list,
         initial_files = InitialFiles,
         files_to_remove_before_iteration_starts = [],
@@ -138,6 +140,7 @@ iterate_over_list_store_with_some_inaccessible_items() ->
     FilesToRemove = lists_utils:random_sublist(FileObjects),
 
     iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(#iterate_over_file_store_test_spec{
+        testcase = ?FUNCTION_NAME,
         store_type = list,
         initial_files = InitialFiles,
         files_to_remove_before_iteration_starts = FilesToRemove,
@@ -149,6 +152,7 @@ iterate_over_list_store_with_all_items_inaccessible() ->
     InitialFiles = create_initial_files(),
 
     iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(#iterate_over_file_store_test_spec{
+        testcase = ?FUNCTION_NAME,
         store_type = list,
         initial_files = InitialFiles,
         files_to_remove_before_iteration_starts = InitialFiles,
@@ -158,6 +162,7 @@ iterate_over_list_store_with_all_items_inaccessible() ->
 
 iterate_over_empty_list_store() ->
     iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(#iterate_over_file_store_test_spec{
+        testcase = ?FUNCTION_NAME,
         store_type = list,
         initial_files = [],
         files_to_remove_before_iteration_starts = [],
@@ -220,6 +225,7 @@ iterate_over_single_value_store() ->
     [DirObject | _] = create_initial_files(),
 
     iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(#iterate_over_file_store_test_spec{
+        testcase = ?FUNCTION_NAME,
         store_type = single_value,
         initial_files = DirObject,
         files_to_remove_before_iteration_starts = [],
@@ -231,6 +237,7 @@ iterate_over_single_value_store_with_all_items_inaccessible() ->
     [DirObject | _] = create_initial_files(),
 
     iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(#iterate_over_file_store_test_spec{
+        testcase = ?FUNCTION_NAME,
         store_type = single_value,
         initial_files = DirObject,
         files_to_remove_before_iteration_starts = [DirObject],
@@ -240,6 +247,7 @@ iterate_over_single_value_store_with_all_items_inaccessible() ->
 
 iterate_over_empty_single_value_store() ->
     iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(#iterate_over_file_store_test_spec{
+        testcase = ?FUNCTION_NAME,
         store_type = single_value,
         initial_files = undefined,
         files_to_remove_before_iteration_starts = [],
@@ -251,6 +259,7 @@ iterate_over_tree_forest_store() ->
     InitialFiles = [DirObject, A | FileObjects] = create_initial_files(),
 
     iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(#iterate_over_file_store_test_spec{
+        testcase = ?FUNCTION_NAME,
         store_type = tree_forest,
         initial_files = InitialFiles,
         files_to_remove_before_iteration_starts = [],
@@ -263,6 +272,7 @@ iterate_over_tree_forest_store_with_some_inaccessible_items() ->
     FilesToRemove = [DirObject | lists_utils:random_sublist(FileObjects)],
 
     iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(#iterate_over_file_store_test_spec{
+        testcase = ?FUNCTION_NAME,
         store_type = tree_forest,
         initial_files = InitialFiles,
         files_to_remove_before_iteration_starts = FilesToRemove,
@@ -274,6 +284,7 @@ iterate_over_tree_forest_store_with_all_items_inaccessible() ->
     InitialFiles = create_initial_files(),
 
     iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(#iterate_over_file_store_test_spec{
+        testcase = ?FUNCTION_NAME,
         store_type = tree_forest,
         initial_files = InitialFiles,
         files_to_remove_before_iteration_starts = InitialFiles,
@@ -283,6 +294,7 @@ iterate_over_tree_forest_store_with_all_items_inaccessible() ->
 
 iterate_over_empty_tree_forest_store() ->
     iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(#iterate_over_file_store_test_spec{
+        testcase = ?FUNCTION_NAME,
         store_type = tree_forest,
         initial_files = [],
         files_to_remove_before_iteration_starts = [],
@@ -294,6 +306,7 @@ iterate_over_empty_tree_forest_store() ->
 -spec iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(iterate_over_file_store_test_spec()) ->
     ok.
 iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(#iterate_over_file_store_test_spec{
+    testcase = Testcase,
     store_type = AtmStoreType,
     initial_files = InitialFiles,
     files_to_remove_before_iteration_starts = FilesToRemove,
@@ -312,6 +325,7 @@ iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(#iterate_
         user = ?USER_SELECTOR,
         space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?FOREACH_WORKFLOW_SCHEMA_DRAFT(
+            Testcase,
             AtmStoreType,
             case AtmStoreType of
                 list -> #atm_list_store_config{item_data_spec = ?FILE_DATA_SPEC};

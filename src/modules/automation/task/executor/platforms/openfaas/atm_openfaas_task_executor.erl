@@ -599,6 +599,7 @@ schedule_function_execution(AtmRunJobBatchCtx, LambdaInput, #atm_openfaas_task_e
     Body = json_utils:encode(#{
         <<"ctx">> => #{
             <<"heartbeatUrl">> => build_job_heartbeat_url(LambdaInput),
+            <<"timeoutSeconds">> => op_worker:get_env(atm_workflow_job_timeout_sec, 1800),
             <<"oneproviderDomain">> => oneprovider:get_domain(),
             <<"accessToken">> => atm_run_job_batch_ctx:get_access_token(AtmRunJobBatchCtx)
         },

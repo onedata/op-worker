@@ -1125,6 +1125,9 @@
     status_changed = false :: boolean(),
     % Flag used to differentiate reasons why task is stopping
     stopping_reason = undefined :: undefined | atm_task_execution:stopping_reason(),
+    % Recorded incarnation when last stopping (pause, cancel, interrupt, etc.) has occurred.
+    % It is used to resolve races possible when resuming and immediately stopping execution.
+    stopping_incarnation = 0 :: atm_workflow_execution:incarnation(),
 
     items_in_processing = 0 :: non_neg_integer(),
     items_processed = 0 :: non_neg_integer(),

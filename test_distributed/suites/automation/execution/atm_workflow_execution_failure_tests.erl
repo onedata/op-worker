@@ -6,10 +6,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Bases for tests concerning failure of automation workflow execution.
+%%% Tests concerning failure of automation workflow execution.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_workflow_execution_failure_test_base).
+-module(atm_workflow_execution_failure_tests).
 -author("Bartosz Walkowicz").
 
 -include("atm_workflow_execution_test.hrl").
@@ -22,6 +22,7 @@
     fail_atm_workflow_execution_due_to_incorrect_const_arg_type_error/0,
     fail_atm_workflow_execution_due_to_incorrect_iterated_item_query_arg_error/0,
     fail_atm_workflow_execution_due_to_empty_single_value_store_arg_error/0,
+    fail_atm_workflow_execution_due_to_job_timeout/0,
     fail_atm_workflow_execution_due_to_job_result_store_mapping_error/0,
     fail_atm_workflow_execution_due_to_job_missing_required_results_error/0,
     fail_atm_workflow_execution_due_to_incorrect_result_type_error/0,
@@ -29,30 +30,6 @@
     fail_atm_workflow_execution_due_to_lambda_error/0
 ]).
 
-
--define(ANY_MEASUREMENT_DATA_SPEC, #atm_data_spec{
-    type = atm_time_series_measurement_type,
-    value_constraints = #{specs => [#atm_time_series_measurement_spec{
-        name_matcher_type = has_prefix,
-        name_matcher = <<>>,
-        unit = none
-    }]}
-}).
-
--define(CORRECT_ATM_TIME_SERIES_DISPATCH_RULES, [
-    #atm_time_series_dispatch_rule{
-        measurement_ts_name_matcher_type = has_prefix,
-        measurement_ts_name_matcher = <<"count_">>,
-        target_ts_name_generator = ?COUNT_TS_NAME_GENERATOR,
-        prefix_combiner = converge
-    },
-    #atm_time_series_dispatch_rule{
-        measurement_ts_name_matcher_type = exact,
-        measurement_ts_name_matcher = <<"size">>,
-        target_ts_name_generator = ?MAX_FILE_SIZE_TS_NAME,
-        prefix_combiner = overwrite
-    }
-]).
 
 -define(SINGLE_VALUE_STORE_SCHEMA_ID, <<"single_store_id">>).
 -define(ITERATED_STORE_SCHEMA_ID, <<"store_store_id">>).
@@ -93,12 +70,13 @@
 }).
 
 -define(FAILING_WORKFLOW_SCHEMA_DRAFT(
+    __TESTCASE,
     __ITERATED_CONTENT,
     __FAILING_TASK_SCHEMA_DRAFT,
     __FAILING_LAMBDA_DRAFT
 ),
     #atm_workflow_schema_dump_draft{
-        name = <<"doomed">>,
+        name = str_utils:to_binary(__TESTCASE),
         revision_num = 1,
         revision = #atm_workflow_schema_revision_draft{
             stores = [
@@ -164,6 +142,7 @@
 
 -define(JOB_FAILING_DUE_TO_ARG_MAPPING_WORKFLOW_SCHEMA_DRAFT(__FAILING_ARG_TASK_MAPPER),
     ?FAILING_WORKFLOW_SCHEMA_DRAFT(
+        ?FUNCTION_NAME,
         gen_time_series_measurements(),
         ?FAILING_TASK_SCHEMA_DRAFT(
             [__FAILING_ARG_TASK_MAPPER],
@@ -175,6 +154,7 @@
 
 -define(JOB_FAILING_DUE_TO_RESULT_MAPPING_WORKFLOW_SCHEMA_DRAFT(__FAILING_DOCKER_IMAGE_ID),
     ?FAILING_WORKFLOW_SCHEMA_DRAFT(
+        ?FUNCTION_NAME,
         gen_time_series_measurements(),
         ?FAILING_TASK_SCHEMA_DRAFT(
             [?ITERATED_ITEM_ARG_MAPPER(?ECHO_ARG_NAME)],
@@ -236,7 +216,7 @@
 
 -type job_failure_type() :: arg_error | result_error.
 
--define(NOW(), global_clock:timestamp_seconds()).
+-define(NOW_SEC(), global_clock:timestamp_seconds()).
 
 
 %%%===================================================================
@@ -257,6 +237,7 @@ fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error() ->
         user = ?USER_SELECTOR,
         space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?FAILING_WORKFLOW_SCHEMA_DRAFT(
+            ?FUNCTION_NAME,
             gen_time_series_measurements(),
             ?FAILING_MEASUREMENT_STORE_MAPPING_TASK_SCHEMA_DRAFT,
             ?ECHO_LAMBDA_DRAFT(?ANY_MEASUREMENT_DATA_SPEC, file_pipe)
@@ -280,7 +261,7 @@ fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error() ->
                                     {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(
                                         atm_workflow_execution_exp_state_builder:expect_lane_run_stopping(
                                             {1, 1}, atm_workflow_execution_exp_state_builder:expect_all_tasks_stopping(
-                                                {1, 1}, ExpState
+                                                {1, 1}, interrupt, ExpState
                                             )
                                         )
                                     )};
@@ -304,7 +285,8 @@ fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error() ->
                     ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_rerunable({1, 1}, ExpState0),
                     {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_failed(ExpState1)}
                 end
-            }
+            },
+            after_hook = fun atm_workflow_execution_test_runner:assert_ended_atm_workflow_execution_can_be_neither_stopped_nor_resumed/1
         }]
     }).
 
@@ -330,9 +312,9 @@ uncorrelated_result_failure_expect_task_execution_ended(AtmMockCallCtx = #atm_mo
 
             uncorrelated_result_expect_task1_failed(AtmTaskExecutionId, ExpState);
         {_, _, ?ATM_TASK2_SCHEMA_ID} ->
-            uncorrelated_result_expect_task2_ended(AtmTaskExecutionId, ExpState);
+            uncorrelated_result_expect_task2_interrupted(AtmTaskExecutionId, ExpState);
         {_, _, ?ATM_TASK3_SCHEMA_ID} ->
-            uncorrelated_result_expect_task3_ended(AtmTaskExecutionId, ExpState)
+            uncorrelated_result_expect_task3_interrupted(AtmTaskExecutionId, ExpState)
     end}.
 
 
@@ -350,18 +332,15 @@ uncorrelated_result_expect_task1_failed(AtmTask1ExecutionId, ExpState0) ->
 
 
 %% @private
--spec uncorrelated_result_expect_task2_ended(
+-spec uncorrelated_result_expect_task2_interrupted(
     atm_task_execution:id(),
     atm_workflow_execution_test_runner:exp_state()
 ) ->
     atm_workflow_execution_test_runner:exp_state().
-uncorrelated_result_expect_task2_ended(AtmTask2ExecutionId, ExpState0) ->
-    ExpState1 = case atm_workflow_execution_exp_state_builder:get_task_stats(AtmTask2ExecutionId, ExpState0) of
-        {0, 0, 0} ->
-            atm_workflow_execution_exp_state_builder:expect_task_skipped(AtmTask2ExecutionId, ExpState0);
-        {0, 0, _} ->
-            atm_workflow_execution_exp_state_builder:expect_task_interrupted(AtmTask2ExecutionId, ExpState0)
-    end,
+uncorrelated_result_expect_task2_interrupted(AtmTask2ExecutionId, ExpState0) ->
+    ExpState1 = atm_workflow_execution_exp_state_builder:expect_task_interrupted(
+        AtmTask2ExecutionId, ExpState0
+    ),
     uncorrelated_result_expect_pb1_changed_status(AtmTask2ExecutionId, ExpState1).
 
 
@@ -374,7 +353,6 @@ uncorrelated_result_expect_task2_ended(AtmTask2ExecutionId, ExpState0) ->
 uncorrelated_result_expect_pb1_changed_status(AtmTaskExecutionId, ExpState) ->
     InferStatusFun = fun
         (<<"active">>, [<<"failed">>, <<"interrupted">>]) -> <<"failed">>;
-        (<<"active">>, [<<"failed">>, <<"skipped">>]) -> <<"failed">>;
         (_, _) -> <<"active">>
     end,
     atm_workflow_execution_exp_state_builder:expect_task_parallel_box_transitioned_to_inferred_status(
@@ -383,24 +361,16 @@ uncorrelated_result_expect_pb1_changed_status(AtmTaskExecutionId, ExpState) ->
 
 
 %% @private
--spec uncorrelated_result_expect_task3_ended(
+-spec uncorrelated_result_expect_task3_interrupted(
     atm_task_execution:id(),
     atm_workflow_execution_test_runner:exp_state()
 ) ->
     atm_workflow_execution_test_runner:exp_state().
-uncorrelated_result_expect_task3_ended(AtmTask3ExecutionId, ExpState) ->
-    {ExpTaskTransitionFun, ExpPbStatus} = case atm_workflow_execution_exp_state_builder:get_task_stats(
-        AtmTask3ExecutionId, ExpState
-    ) of
-        {0, 0, 0} ->
-            {fun atm_workflow_execution_exp_state_builder:expect_task_skipped/2, <<"skipped">>};
-        {0, 0, _} ->
-            {fun atm_workflow_execution_exp_state_builder:expect_task_interrupted/2, <<"interrupted">>}
-    end,
+uncorrelated_result_expect_task3_interrupted(AtmTask3ExecutionId, ExpState) ->
     atm_workflow_execution_exp_state_builder:expect_task_parallel_box_transitioned_to_inferred_status(
         AtmTask3ExecutionId,
-        fun(_, _) -> ExpPbStatus end,
-        ExpTaskTransitionFun(AtmTask3ExecutionId, ExpState)
+        fun(_, _) -> <<"interrupted">> end,
+        atm_workflow_execution_exp_state_builder:expect_task_interrupted(AtmTask3ExecutionId, ExpState)
     ).
 
 
@@ -486,10 +456,33 @@ fail_atm_workflow_execution_due_to_empty_single_value_store_arg_error() ->
     }).
 
 
+fail_atm_workflow_execution_due_to_job_timeout() ->
+    job_failure_atm_workflow_execution_test_base(result_error, #fail_atm_workflow_execution_test_spec{
+        testcase_id = ?FUNCTION_NAME,
+        atm_workflow_schema_draft = ?FAILING_WORKFLOW_SCHEMA_DRAFT(
+            ?FUNCTION_NAME,
+            gen_time_series_measurements(),
+            ?FAILING_TASK_SCHEMA_DRAFT(
+                [?ITERATED_ITEM_ARG_MAPPER(?ECHO_ARG_NAME)],
+                [?TARGET_STORE_RESULT_MAPPER(?CORRECT_ATM_TIME_SERIES_DISPATCH_RULES)]
+            ),
+            ?FAILING_ECHO_MEASUREMENTS_LAMBDA_DRAFT(?ECHO_WITH_SLEEP_DOCKER_IMAGE_ID)
+        ),
+        build_task1_audit_log_exp_content_fun = fun(ItemBatch) ->
+            #{
+                <<"description">> => <<"Failed to process batch of items.">>,
+                <<"itemBatch">> => ItemBatch,
+                <<"reason">> => errors:to_json(?ERROR_TIMEOUT)
+            }
+        end
+    }).
+
+
 fail_atm_workflow_execution_due_to_job_result_store_mapping_error() ->
     job_failure_atm_workflow_execution_test_base(result_error, #fail_atm_workflow_execution_test_spec{
         testcase_id = ?FUNCTION_NAME,
         atm_workflow_schema_draft = ?FAILING_WORKFLOW_SCHEMA_DRAFT(
+            ?FUNCTION_NAME,
             gen_time_series_measurements(),
             ?FAILING_MEASUREMENT_STORE_MAPPING_TASK_SCHEMA_DRAFT,
             ?ECHO_LAMBDA_DRAFT(?ANY_MEASUREMENT_DATA_SPEC)
@@ -645,7 +638,8 @@ job_failure_atm_workflow_execution_test_base(JobFailureType, #fail_atm_workflow_
                     end, ExpState0, [{1, 1}, {1, 2}, {1, 3}]),
                     {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_failed(ExpState1)}
                 end
-            }
+            },
+            after_hook = fun atm_workflow_execution_test_runner:assert_ended_atm_workflow_execution_can_be_neither_stopped_nor_resumed/1
         }]
     }).
 
@@ -954,7 +948,7 @@ job_failure_expect_task3_ended(TestcaseId, AtmTask3ExecutionId, ExpState) ->
             check_iterated_items(TestcaseId, AtmLaneRunSelector, AtmMockCallCtx),
             check_exception_store_content(TestcaseId, AtmLaneRunSelector, AtmMockCallCtx),
 
-            ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_failed(  %% TODO isRetriable == true
+            ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_failed(
                 AtmLaneRunSelector, ExpState0
             ),
             {true, case IsLastExpLaneRun of
@@ -1116,7 +1110,7 @@ gen_time_series_measurements() ->
     lists_utils:generate(fun(_) ->
         #{
             <<"tsName">> => ?RAND_ELEMENT([<<"count_erl">>, <<"size">>, ?RAND_STR()]),
-            <<"timestamp">> => ?RAND_ELEMENT([?NOW() - 100, ?NOW(), ?NOW() + 3700]),
+            <<"timestamp">> => ?RAND_ELEMENT([?NOW_SEC() - 100, ?NOW_SEC(), ?NOW_SEC() + 3700]),
             <<"value">> => ?RAND_INT(10000000)
         }
     end, 40).

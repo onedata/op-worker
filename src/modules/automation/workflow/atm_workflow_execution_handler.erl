@@ -502,14 +502,21 @@ ensure_all_lane_runs_stopped(#document{
         case atm_lane_execution:get_run(AtmLaneRunSelector, AtmWorkflowExecution) of
             {ok, #atm_lane_execution_run{status = Status}} ->
                 case atm_lane_execution_status:status_to_phase(Status) of
+                    ?WAITING_PHASE when AtmLaneIndex > CurrentAtmLaneIndex ->
+                        atm_lane_execution_handler:stop(
+                            AtmLaneRunSelector, interrupt, AtmWorkflowExecutionCtx
+                        ),
+                        atm_lane_execution_handler:handle_stopped(
+                            AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
+                        );
+                    ?ONGOING_PHASE ->
+                        atm_lane_execution_handler:handle_stopped(
+                            AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
+                        );
                     ?SUSPENDED_PHASE ->
                         ok;
                     ?ENDED_PHASE ->
-                        ok;
-                    _ ->
-                        atm_lane_execution_handler:handle_stopped(
-                            AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
-                        )
+                        ok
                 end;
             ?ERROR_NOT_FOUND ->
                 ok
@@ -535,7 +542,7 @@ delete_all_lane_runs_prepared_in_advance(#document{
         ]}) when
             RunNum =:= undefined;
             RunNum =:= CurrentRunNum
-            ->
+        ->
             atm_lane_execution_factory:delete_run(AtmLaneRunPreparedInAdvance),
             {ok, AtmLaneExecution#atm_lane_execution{runs = PreviousLaneRuns}};
 
@@ -671,21 +678,21 @@ get_root_workflow_execution_auth(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv
     ok.
 log_exception(Logger, throw, {session_acquisition_failed, Error}, _Stacktrace) ->
     LogContent = #{
-        <<"description">> => "Failed to acquire user session.",
+        <<"description">> => <<"Failed to acquire user session.">>,
         <<"reason">> => errors:to_json(Error)
     },
     atm_workflow_execution_logger:workflow_critical(LogContent, Logger);
 
 log_exception(Logger, throw, Reason, _Stacktrace) ->
     LogContent = #{
-        <<"description">> => "Unexpected error occured.",
+        <<"description">> => <<"Unexpected error occured.">>,
         <<"reason">> => errors:to_json(Reason)
     },
     atm_workflow_execution_logger:workflow_critical(LogContent, Logger);
 
 log_exception(Logger, Type, Reason, Stacktrace) ->
     LogContent = #{
-        <<"description">> => "Unexpected emergency occured.",
+        <<"description">> => <<"Unexpected emergency occured.">>,
         <<"reason">> => errors:to_json(?atm_examine_error(Type, Reason, Stacktrace))
     },
     atm_workflow_execution_logger:workflow_emergency(LogContent, Logger).

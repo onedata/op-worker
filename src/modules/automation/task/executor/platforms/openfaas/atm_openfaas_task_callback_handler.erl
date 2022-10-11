@@ -68,7 +68,7 @@ init(Req0, State = #{type := output}) ->
     Result = case cowboy_req:header(<<"x-function-status">>, Req1) of
         <<"200">> -> decode_lambda_output(Body);
         <<"404">> -> ?ERROR_ATM_JOB_BATCH_WITHDRAWN(trim_body(Body));
-        <<"500">> -> ?ERROR_ATM_JOB_BATCH_CRASHED(trim_body(Body))
+        _ -> ?ERROR_ATM_JOB_BATCH_CRASHED(trim_body(Body))
     end,
 
     workflow_engine:report_async_task_result(
@@ -112,8 +112,12 @@ build_url(AtmWorkflowExecutionId, AtmJobBatchId, TypeBin) ->
 -spec decode_lambda_output(binary()) -> atm_task_executor:job_batch_result().
 decode_lambda_output(Body) ->
     try json_utils:decode(Body) of
+        #{<<"exception">> := Reason} ->
+            ?ERROR_ATM_JOB_BATCH_CRASHED(Reason);
+
         #{<<"resultsBatch">> := ResultsBatch} when is_list(ResultsBatch) ->
             {ok, #atm_lambda_output{results_batch = ResultsBatch}};
+
         _ ->
             ?ERROR_BAD_DATA(<<"lambdaOutput">>, str_utils:format_bin(
                 "Expected '{\"resultsBatch\": [$LAMBDA_RESULTS_FOR_ITEM, ...]}' with "

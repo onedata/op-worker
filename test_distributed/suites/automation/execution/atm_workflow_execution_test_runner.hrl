@@ -55,6 +55,7 @@
 
     prepare_lane = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
     create_run = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
+    restart_lane = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
 
     run_task_for_item = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
     process_task_result_for_item = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
@@ -68,7 +69,10 @@
 -record(atm_workflow_execution_incarnation_test_spec, {
     incarnation_num :: atm_workflow_execution:incarnation(),
     lane_runs :: [atm_workflow_execution_test_runner:lane_run_test_spec()],
-    handle_workflow_execution_stopped = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec()
+    handle_workflow_execution_stopped = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
+    handle_exception = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
+    % Hook called after entire incarnation ended with ctx of 'handle_workflow_execution_stopped' step
+    after_hook = undefined :: undefined | atm_workflow_execution_test_runner:hook()
 }).
 
 -record(atm_workflow_execution_test_spec, {

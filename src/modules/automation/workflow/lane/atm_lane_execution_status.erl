@@ -14,29 +14,29 @@
 %%%                               +-------------+       ^stopping
 %%%                               |  SCHEDULED  |------------------------
 %%%                               +-------------+                         \
-%%%    +------------+                    |              ^stopping          \
-%%%    |  RESUMING  | -------------------|----------------------------------o
+%%%    +------------+                    |                                 \
+%%%    |  RESUMING  | -------------------|--------------- ^stopping --------o
 %%%    +------------+                    v                                  |
-%%% W    ^        |               +-------------+       ^stopping           |
-%%% A    |        |               |  PREPARING  |---------------------------o
-%%% I    |        |               +-------------+                           |
-%%% T    |        |                      |                                  |
-%%% I    |        |        ready to execute (all associated                 |
-%%% N    |        |        documents created and initiated)                 |
-%%% G    |        |                      |                                  |
-%%%      |        |                      v                                  |
-%%%      |         \              +-------------+         ^stopping         |
-%%%      |           -----------> |   ENQUEUED  |---------------------------o
-%%%      |                        +-------------+                           |
-%%%      |                               |                                  |
-%%%      |                 first task within atm lane run                   |
-%%%      |                            started                               |
-%%% =====|===============================|==================================|================================
-%%%      |                               v                                  |
-%%%      |                         +-------------+        ^stopping         |
-%%%      |                ---------|    ACTIVE   |--------------------------o
-%%%      |              /          +-------------+                          |       ____
-%%%  O   |             |                                                    v     /      \ overriding ^stopping
+%%% W    ^  |   |  \              +-------------+                           |
+%%% A    |  |   |    - resumed -> |  PREPARING  |-------- ^stopping --------o
+%%% I    |  |   |                 +-------------+                           |
+%%% T    |  |   |                        |                                  |
+%%% I    |  |   |          ready to execute (all associated                 |
+%%% N    |  |   |          documents created and initiated)                 |
+%%% G    |  |   |                        |                                  |
+%%%      |  |   |                        v                                  |
+%%%      |  |    \                +-------------+                           |
+%%%      |  |      -- resumed --> |   ENQUEUED  |-------- ^stopping --------o
+%%%      |  |                     +-------------+                           |
+%%%      |  |                            |                                  |
+%%%      |  |              first task within atm lane run                   |
+%%%      |  |                         started                               |
+%%% =====|==|============================|==================================|================================
+%%%      |   \                           v                                  |
+%%%      |     ----- resumed ----> +-------------+                          |
+%%%      |                         |    ACTIVE   |------- ^stopping --------o
+%%%      |                -------> +-------------+                          |       ____
+%%%  O   |              /                                                   v     /      \ overriding ^stopping
 %%%  N   |             |                                             +-------------+     /        reason
 %%%  G   |  lane execution stopped                                   |   STOPPING  | <--
 %%%  O   |         run with                                          +-------------+ <-------------------
@@ -68,8 +68,7 @@
 %%%  E   |  +----------+    +--------+       +-----------+    +-----------+   |                 |
 %%%  D   |                                                                    |                 |
 %%%       \                                                                   |                /
-%%%         ------------------------------------------- ----------------------o---------------
-%%%                                         resuming execution
+%%%         ----------------------------------- resuming ---------------------o---------------
 %%%
 %%% Lane run transition to STOPPING status when execution is halted and not all items were processed.
 %%% It is necessary as results for already scheduled ones must be awaited even if no more items are scheduled.
@@ -84,12 +83,11 @@
 %%%      has failed and entire automation workflow execution is being stopped.
 %%% 5* - user pausing entire automation workflow execution.
 %%%
-%%% There are some exceptions to above diagram:
-%%% 1) atm lane execution run prepared in advance is always marked as INTERRUPTED
-%%%    if workflow execution ends before reaching it.
-%%% 2) interrupted lane run when preparing in advance if previous lane run finished
-%%%    successfully - INTERRUPTED status is changed to FAILED as this run effectively
-%%%    becomes the point of workflow execution failure at which it can be rerun.
+%%% After suspended execution is resumed it should transition to status the lane run had before it's suspension,
+%%% which is:
+%%% 1. PREPARING if no execution components were created
+%%% 2. ENQUEUED if all tasks and parallel boxes are in PENDING status (none was started)
+%%% 3. ACTIVE otherwise
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_lane_execution_status).
@@ -105,6 +103,7 @@
 -export([
     handle_preparing/2,
     handle_enqueued/2,
+    handle_resumed/2,
     handle_stopping/3,
     handle_task_status_change/5,
     handle_stopped/2,
@@ -163,11 +162,14 @@ can_manual_lane_run_repeat_be_scheduled(RepeatType, Run, AtmWorkflowExecution) -
 
 
 -spec handle_preparing(atm_lane_execution:lane_run_selector(), atm_workflow_execution:id()) ->
-    atm_workflow_execution:doc() | no_return().
+    {ok, atm_workflow_execution:doc()} | errors:error().
 handle_preparing(AtmLaneRunSelector, AtmWorkflowExecutionId) ->
     % transition to ?PREPARING_STATUS from ?SCHEDULED_STATUS
     AtmLaneRunDiff = fun
-        (#atm_lane_execution_run{status = ?SCHEDULED_STATUS} = Run) ->
+        (Run = #atm_lane_execution_run{status = ?SCHEDULED_STATUS}) ->
+            {ok, Run#atm_lane_execution_run{status = ?PREPARING_STATUS}};
+
+        (Run = #atm_lane_execution_run{status = ?RESUMING_STATUS, parallel_boxes = []}) ->
             {ok, Run#atm_lane_execution_run{status = ?PREPARING_STATUS}};
 
         (#atm_lane_execution_run{status = Status}) ->
@@ -176,13 +178,13 @@ handle_preparing(AtmLaneRunSelector, AtmWorkflowExecutionId) ->
     % preparing in advance
     Default = #atm_lane_execution_run{run_num = undefined, status = ?PREPARING_STATUS},
 
-    ?extract_doc(atm_workflow_execution_status:handle_lane_preparing(
+    atm_workflow_execution_status:handle_lane_run_preparing(
         AtmLaneRunSelector, AtmWorkflowExecutionId, fun(AtmWorkflowExecution) ->
             atm_lane_execution:update_run(
                 AtmLaneRunSelector, AtmLaneRunDiff, Default, AtmWorkflowExecution
             )
         end
-    )).
+    ).
 
 
 -spec handle_enqueued(atm_lane_execution:lane_run_selector(), atm_workflow_execution:id()) ->
@@ -190,16 +192,39 @@ handle_preparing(AtmLaneRunSelector, AtmWorkflowExecutionId) ->
 handle_enqueued(AtmLaneRunSelector, AtmWorkflowExecutionId) ->
     Diff = fun(AtmWorkflowExecution) ->
         atm_lane_execution:update_run(AtmLaneRunSelector, fun
-            (#atm_lane_execution_run{status = Status} = Run) when
-                Status =:= ?PREPARING_STATUS;
-                Status =:= ?RESUMING_STATUS
-            ->
+            (#atm_lane_execution_run{status = ?PREPARING_STATUS} = Run) ->
                 {ok, Run#atm_lane_execution_run{status = ?ENQUEUED_STATUS}};
+
             (#atm_lane_execution_run{status = Status}) ->
                 ?ERROR_ATM_INVALID_STATUS_TRANSITION(Status, ?PREPARING_STATUS)
         end, AtmWorkflowExecution)
     end,
-    ?extract_doc(atm_workflow_execution_status:handle_lane_enqueued(AtmWorkflowExecutionId, Diff)).
+    ?extract_doc(atm_workflow_execution_status:handle_lane_run_enqueued(AtmWorkflowExecutionId, Diff)).
+
+
+-spec handle_resumed(atm_lane_execution:lane_run_selector(), atm_workflow_execution:id()) ->
+    atm_workflow_execution:doc() | no_return().
+handle_resumed(AtmLaneRunSelector, AtmWorkflowExecutionId) ->
+    Diff = fun(AtmWorkflowExecution) ->
+        atm_lane_execution:update_run(AtmLaneRunSelector, fun
+            (Run = #atm_lane_execution_run{status = ?RESUMING_STATUS}) ->
+                AtmParallelBoxExecutionStatuses = atm_parallel_box_execution:gather_statuses(
+                    Run#atm_lane_execution_run.parallel_boxes
+                ),
+                case lists:usort(AtmParallelBoxExecutionStatuses) of
+                    [?PENDING_STATUS] ->
+                        ?ENQUEUED_STATUS;
+                    _ ->
+                        ?ACTIVE_STATUS
+                end,
+
+                {ok, Run#atm_lane_execution_run{status = ?ENQUEUED_STATUS}};
+
+            (#atm_lane_execution_run{status = Status}) ->
+                ?ERROR_ATM_INVALID_STATUS_TRANSITION(Status, ?RESUMING_STATUS)
+        end, AtmWorkflowExecution)
+    end,
+    ?extract_doc(atm_workflow_execution_status:handle_lane_run_resumed(AtmWorkflowExecutionId, Diff)).
 
 
 -spec handle_stopping(
@@ -212,6 +237,7 @@ handle_stopping(AtmLaneRunSelector, AtmWorkflowExecutionId, Reason) ->
     Diff = fun(AtmWorkflowExecution) ->
         atm_lane_execution:update_run(AtmLaneRunSelector, fun
             (#atm_lane_execution_run{status = Status} = Run) when
+                Status =:= ?RESUMING_STATUS;
                 Status =:= ?SCHEDULED_STATUS;
                 Status =:= ?PREPARING_STATUS;
                 Status =:= ?ENQUEUED_STATUS;
@@ -235,7 +261,7 @@ handle_stopping(AtmLaneRunSelector, AtmWorkflowExecutionId, Reason) ->
                 ?ERROR_ATM_INVALID_STATUS_TRANSITION(StoppedStatus, ?STOPPING_STATUS)
         end, AtmWorkflowExecution)
     end,
-    atm_workflow_execution_status:handle_lane_stopping(AtmLaneRunSelector, AtmWorkflowExecutionId, Diff).
+    atm_workflow_execution_status:handle_lane_run_stopping(AtmLaneRunSelector, AtmWorkflowExecutionId, Diff).
 
 
 -spec handle_task_status_change(
@@ -253,7 +279,9 @@ handle_task_status_change(
     AtmTaskExecutionId,
     NewAtmTaskExecutionStatus
 ) ->
-    HasTaskStarted = lists:member(NewAtmTaskExecutionStatus, [?ACTIVE_STATUS, ?SKIPPED_STATUS]),
+    HasTaskStarted = not lists:member(NewAtmTaskExecutionStatus, [
+        ?RESUMING_STATUS, ?PENDING_STATUS
+    ]),
 
     Diff = fun(AtmWorkflowExecution) ->
         atm_lane_execution:update_run(AtmLaneRunSelector, fun(Run) ->
@@ -280,7 +308,7 @@ handle_task_status_change(
             end
         end, AtmWorkflowExecution)
     end,
-    atm_workflow_execution_status:handle_lane_task_status_change(AtmWorkflowExecutionId, Diff).
+    atm_workflow_execution_status:handle_lane_run_task_status_change(AtmWorkflowExecutionId, Diff).
 
 
 -spec handle_stopped(atm_lane_execution:lane_run_selector(), atm_workflow_execution:id()) ->
@@ -291,7 +319,7 @@ handle_stopped(AtmLaneRunSelector, AtmWorkflowExecutionId) ->
             true ->
                 handle_currently_executed_lane_run_stopped(AtmWorkflowExecution);
             false ->
-                handle_prepared_in_advance_lane_run_stopped(AtmLaneRunSelector, AtmWorkflowExecution)
+                end_lane_run(AtmLaneRunSelector, AtmWorkflowExecution)
         end
     end,
     ?extract_doc(atm_workflow_execution:update(AtmWorkflowExecutionId, Diff)).
@@ -314,7 +342,7 @@ handle_manual_repeat(RepeatType, {AtmLaneSelector, _} = AtmLaneRunSelector, AtmW
                 Error
         end
     end,
-    atm_workflow_execution_status:handle_manual_lane_repeat(AtmWorkflowExecutionId, Diff).
+    atm_workflow_execution_status:handle_manual_lane_run_repeat(AtmWorkflowExecutionId, Diff).
 
 
 -spec handle_resume(atm_workflow_execution:id()) ->
@@ -393,7 +421,7 @@ handle_currently_executed_lane_run_stopped(AtmWorkflowExecution1 = #atm_workflow
     lanes_count = AtmLanesCount,
     current_lane_index = CurrentAtmLaneIndex
 }) ->
-    {ok, AtmWorkflowExecution2} = end_currently_executed_lane_run(AtmWorkflowExecution1),
+    {ok, AtmWorkflowExecution2} = end_lane_run({current, current}, AtmWorkflowExecution1),
 
     {ok, CurrentRun = #atm_lane_execution_run{
         stopping_reason = StoppingReason,
@@ -413,10 +441,10 @@ handle_currently_executed_lane_run_stopped(AtmWorkflowExecution1 = #atm_workflow
 
 
 %% @private
--spec end_currently_executed_lane_run(atm_workflow_execution:record()) ->
+-spec end_lane_run(atm_lane_execution:lane_run_selector(), atm_workflow_execution:record()) ->
     {ok, atm_workflow_execution:record()} | errors:error().
-end_currently_executed_lane_run(AtmWorkflowExecution) ->
-    atm_lane_execution:update_run({current, current}, fun
+end_lane_run(AtmLaneRunSelector, AtmWorkflowExecution) ->
+    atm_lane_execution:update_run(AtmLaneRunSelector, fun
         (#atm_lane_execution_run{status = Status}) when
             Status =:= ?RESUMING_STATUS;
             Status =:= ?SCHEDULED_STATUS;
@@ -484,15 +512,9 @@ schedule_next_lane_run(AtmWorkflowExecution = #atm_workflow_execution{
     NextAtmLaneIndex = CurrentAtmLaneIndex + 1,
 
     % set run_no for lane run that is already preparing in advance
-    Diff = fun
-        (#atm_lane_execution_run{run_num = undefined, status = ?INTERRUPTED_STATUS} = Run) ->
-            % interrupted lane run previously preparing in advance - change to ?FAILED_STATUS
-            % as it will become the point of workflow execution failure at which it can be rerun
-            {ok, Run#atm_lane_execution_run{run_num = CurrentRunNum, status = ?FAILED_STATUS}};
-
-        (#atm_lane_execution_run{run_num = undefined} = Run) ->
-            % lane run already preparing in advance
-            {ok, Run#atm_lane_execution_run{run_num = CurrentRunNum}}
+    Diff = fun(#atm_lane_execution_run{run_num = undefined} = Run) ->
+        % lane run already preparing in advance
+        {ok, Run#atm_lane_execution_run{run_num = CurrentRunNum}}
     end,
     % schedule new lane run
     Default = #atm_lane_execution_run{run_num = CurrentRunNum, status = ?SCHEDULED_STATUS},
@@ -501,18 +523,6 @@ schedule_next_lane_run(AtmWorkflowExecution = #atm_workflow_execution{
         {NextAtmLaneIndex, CurrentRunNum}, Diff, Default, AtmWorkflowExecution
     ),
     {ok, NewAtmWorkflowExecution#atm_workflow_execution{current_lane_index = NextAtmLaneIndex}}.
-
-
-%% @private
--spec handle_prepared_in_advance_lane_run_stopped(
-    atm_lane_execution:lane_run_selector(),
-    atm_workflow_execution:record()
-) ->
-    {ok, atm_workflow_execution:record()}.
-handle_prepared_in_advance_lane_run_stopped(AtmLaneRunSelector, AtmWorkflowExecution) ->
-    atm_lane_execution:update_run(AtmLaneRunSelector, fun(Run) ->
-        {ok, Run#atm_lane_execution_run{status = ?INTERRUPTED_STATUS}}
-    end, AtmWorkflowExecution).
 
 
 %% @private

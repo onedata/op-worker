@@ -28,6 +28,24 @@
 exec(?ECHO_DOCKER_IMAGE_ID, #{<<"argsBatch">> := ArgsBatch}) ->
     #{<<"resultsBatch">> => ArgsBatch};
 
+exec(?ECHO_WITH_SLEEP_DOCKER_IMAGE_ID, #{
+    <<"ctx">> := #{<<"heartbeatUrl">> := HeartbeatUrl},
+    <<"argsBatch">> := ArgsBatch
+}) ->
+    % Send heartbeat to inform op about job processing start
+    http_client:post(HeartbeatUrl),
+
+    timer:sleep(timer:seconds(12)),
+    #{<<"resultsBatch">> => ArgsBatch};
+
+exec(?ECHO_WITH_EXCEPTION_ON_EVEN_NUMBERS, #{<<"argsBatch">> := ArgsBatch}) ->
+    #{<<"resultsBatch">> => lists:map(fun
+        (JobArgs = #{?ECHO_ARG_NAME := Num}) when Num rem 2 == 1 ->
+            JobArgs;
+        (_) ->
+            #{<<"exception">> => <<"even number">>}
+    end, ArgsBatch)};
+
 exec(?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_1, #{<<"argsBatch">> := ArgsBatch}) ->
     #{<<"resultsBatch">> => lists:map(fun
         (#{<<"value">> := #{<<"tsName">> := <<"size">>}}) -> #{};
