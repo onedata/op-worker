@@ -264,6 +264,7 @@ verify_private_samples_symlink_test(_Config) ->
     verify_all_samples(?SYMLINK_TYPE, private).
 
 
+%% @private
 verify_all_samples(FileType, Scope) ->
     Guid = setup_verify_sample_env(FileType, Scope),
     #rest_api_samples{samples = Samples, api_root = ApiRoot} = get_samples(Guid, Scope),
@@ -282,8 +283,9 @@ verify_all_samples(FileType, Scope) ->
         undefined -> ok;
         _ -> verify_sample(RemoveFileSample, Guid)
     end.
-    
 
+
+%% @private
 verify_sample(#rest_api_request_sample{name = <<"Get attributes">>} = Sample, Guid) ->
     {ok, #file_attr{name = Name}} = lfm_proxy:stat(
         oct_background:get_random_provider_node(krakow), 
@@ -414,12 +416,15 @@ verify_sample(Sample, _) ->
     throw({sample_test_not_implemented, Sample#rest_api_request_sample.name}).
 
 
+%% @private
 verify_sample_base(Sample, VerifyFun) ->
     verify_sample_base(Sample, VerifyFun, <<>>).
 
+%% @private
 verify_sample_base(Sample, VerifyFun, Body) ->
     verify_sample_base(Sample, VerifyFun, Body, #{}).
 
+%% @private
 verify_sample_base(VerifyFun, #rest_api_request_sample{
     method = Method, 
     path = Path, 
@@ -444,7 +449,8 @@ verify_sample_base(VerifyFun, #rest_api_request_sample{
     case Code > 300 of
         true ->
             ct:pal("Code: ~p~nResponse: ~p~n~nMethod: ~p~nPath: ~p~nBody: ~p~nHeaders: ~p~n", 
-                [Code, ResultBody, Method, SubstitutedPath, Body, Headers]);
+                [Code, ResultBody, Method, SubstitutedPath, Body, Headers]),
+            error(fail);
         false -> 
             ok
     end,
@@ -523,6 +529,7 @@ verify_private_rest_api_samples(Node, FileType, FileGuid, SamplesJson) ->
     ?assertEqual(operation_names(private, FileType), OperationNames).
 
 
+%% @private
 operation_names(public, ?DIRECTORY_TYPE) -> [
     <<"Download directory (tar)">>,
     <<"List directory files and subdirectories">>,
@@ -539,6 +546,9 @@ operation_names(public, ?REGULAR_FILE_TYPE) -> [
     <<"Get RDF metadata">>
 ];
 operation_names(private, ?DIRECTORY_TYPE) -> [
+    <<"Download directory (tar)">>,
+    <<"List directory files and subdirectories">>,
+    <<"Create file in directory">>,
     <<"Remove file">>,
     <<"Get attributes">>,
     <<"Get JSON metadata">>,
@@ -549,12 +559,12 @@ operation_names(private, ?DIRECTORY_TYPE) -> [
     <<"Remove RDF metadata">>,
     <<"Get extended attributes (xattrs)">>,
     <<"Set extended attribute (xattr)">>,
-    <<"Remove extended attributes (xattrs)">>,
-    <<"Create file in directory">>,
-    <<"List directory files and subdirectories">>,
-    <<"Download directory (tar)">>
+    <<"Remove extended attributes (xattrs)">>
 ];
 operation_names(private, ?REGULAR_FILE_TYPE) -> [
+    <<"Download file content">>,
+    <<"Update file content">>,
+    <<"Get file hard links">>,
     <<"Remove file">>,
     <<"Get attributes">>,
     <<"Get JSON metadata">>,
@@ -565,19 +575,17 @@ operation_names(private, ?REGULAR_FILE_TYPE) -> [
     <<"Remove RDF metadata">>,
     <<"Get extended attributes (xattrs)">>,
     <<"Set extended attribute (xattr)">>,
-    <<"Remove extended attributes (xattrs)">>,
-    <<"Download file content">>,
-    <<"Update file content">>,
-    <<"Get file hard links">>
+    <<"Remove extended attributes (xattrs)">>
 ];
 operation_names(private, ?SYMLINK_TYPE) -> [
-    <<"Remove file">>,
-    <<"Get attributes">>,
     <<"Get symbolic link value">>,
-    <<"Get file hard links">>
+    <<"Get file hard links">>,
+    <<"Remove file">>,
+    <<"Get attributes">>
 ].
 
 
+%% @private
 get_samples(FileGuid, Scope) ->
     Module = case Scope of
         public -> public_file_api_samples;
@@ -592,12 +600,14 @@ get_samples(FileGuid, Scope) ->
     jsonable_record:from_json(RestApiSamplesJson, rest_api_samples).
 
 
+%% @private
 get_custom_metadata(Guid, MetadataType) ->
     Node = oct_background:get_random_provider_node(krakow),
     SessId = oct_background:get_user_session_id(user2, krakow),
     opt_file_metadata:get_custom_metadata(Node, SessId, ?FILE_REF(Guid), MetadataType, [], false).
 
 
+%% @private
 get_xattrs(Guid) ->
     Node = oct_background:get_random_provider_node(krakow),
     SessId = oct_background:get_user_session_id(user2, krakow),
@@ -608,12 +618,14 @@ get_xattrs(Guid) ->
     end, #{}, Xattrs).
 
 
+%% @private
 normalize_method('GET') -> get;
 normalize_method('POST') -> post;
 normalize_method('PUT') -> put;
 normalize_method('DELETE') -> delete.
 
 
+%% @private
 setup_verify_sample_env(?DIRECTORY_TYPE, Scope) ->
     #object{guid = Guid, shares = [ShareId]} =
         onenv_file_test_utils:create_and_sync_file_tree(user2, space_krk_par, #dir_spec{
@@ -643,12 +655,14 @@ setup_verify_sample_env(?SYMLINK_TYPE, Scope) ->
     build_test_guid(Scope, Guid, ShareId).
 
 
+%% @private
 build_test_guid(private, Guid, _ShareId) ->
     Guid;
 build_test_guid(public, Guid, ShareId) ->
     file_id:guid_to_share_guid(Guid, ShareId).
 
 
+%% @private
 metadata_spec() ->
     #metadata_spec{
         json = #{<<"some_json_key">> => <<"some_json_value">>},

@@ -57,28 +57,28 @@ gen_samples(FileType, FileId) ->
 
 
 %% @private
--spec rest_api_endpoints(file_meta:type() | file_and_dir, file_id:objectid()) -> 
+-spec rest_api_endpoints(file_meta:type() | file_and_dir, file_id:objectid()) ->
     [rest_api_request_sample:record()].
-rest_api_endpoints(?DIRECTORY_TYPE, FileId) -> 
-    rest_api_endpoints(file_and_dir, FileId) ++ [
-        create_file_endpoint(FileId),
+rest_api_endpoints(?DIRECTORY_TYPE, FileId) ->
+    [
+        download_directory_endpoint(FileId),
         list_children_endpoint(FileId),
-        download_directory_endpoint(FileId)
-    ];
-rest_api_endpoints(?REGULAR_FILE_TYPE, FileId) -> 
-    rest_api_endpoints(file_and_dir, FileId) ++ [
+        create_file_endpoint(FileId)
+    ] ++ rest_api_endpoints(file_and_dir, FileId);
+rest_api_endpoints(?REGULAR_FILE_TYPE, FileId) ->
+    [
         download_file_content_endpoint(FileId),
         update_file_content_endpoint(FileId),
         get_hardlinks_endpoint(FileId)
-    ];
-rest_api_endpoints(?SYMLINK_TYPE, FileId) -> 
+    ] ++ rest_api_endpoints(file_and_dir, FileId);
+rest_api_endpoints(?SYMLINK_TYPE, FileId) ->
     [
-        remove_file_endpoint(FileId),
-        get_attrs_endpoint(FileId),
         get_symlink_value_endpoint(FileId),
-        get_hardlinks_endpoint(FileId)
+        get_hardlinks_endpoint(FileId),
+        remove_file_endpoint(FileId),
+        get_attrs_endpoint(FileId)
     ];
-rest_api_endpoints(file_and_dir, FileId) -> 
+rest_api_endpoints(file_and_dir, FileId) ->
     [
         remove_file_endpoint(FileId),
         get_attrs_endpoint(FileId),
@@ -99,7 +99,7 @@ rest_api_endpoints(file_and_dir, FileId) ->
 create_file_endpoint(FileId) ->
     #rest_api_request_sample{
         name = <<"Create file in directory">>,
-        description = <<"Creates file in the directory.">>,
+        description = <<"Creates a file in the directory.">>,
         method = 'POST',
         path = str_utils:format_bin("/data/~s/children?name=$NAME", [FileId]),
         placeholders = #{
@@ -156,7 +156,7 @@ download_file_content_endpoint(FileId) ->
 update_file_content_endpoint(FileId) ->
     #rest_api_request_sample{
         name = <<"Update file content">>,
-        description = <<"Updates the content of the file.">>,
+        description = <<"Overwrites the content of the file.">>,
         method = 'PUT',
         path = str_utils:format_bin("/data/~s/content", [FileId]),
         data = <<"$NEW_CONTENT">>,
@@ -173,7 +173,7 @@ update_file_content_endpoint(FileId) ->
 remove_file_endpoint(FileId) ->
     #rest_api_request_sample{
         name = <<"Remove file">>,
-        description = <<"Removes file.">>,
+        description = <<"Removes the file or directory.">>,
         method = 'DELETE',
         path = str_utils:format_bin("/data/~s", [FileId]),
         swagger_operation_id = <<"remove_file">>
@@ -185,7 +185,7 @@ remove_file_endpoint(FileId) ->
 get_attrs_endpoint(FileId) ->
     #rest_api_request_sample{
         name = <<"Get attributes">>,
-        description = <<"Returns basic attributes of a file or directory.">>,
+        description = <<"Returns basic attributes of the file or directory.">>,
         method = 'GET',
         path = str_utils:format_bin("/data/~s", [FileId]),
         optional_parameters = [<<"attribute">>],
@@ -198,7 +198,7 @@ get_attrs_endpoint(FileId) ->
 get_hardlinks_endpoint(FileId) ->
     #rest_api_request_sample{
         name = <<"Get file hard links">>,
-        description = <<"Returns Ids of all hard links (including this one) associated with file.">>,
+        description = <<"Returns the Ids of all hard links (including this one) associated with the file.">>,
         method = 'GET',
         path = str_utils:format_bin("/data/~s/hardlinks", [FileId]),
         swagger_operation_id = <<"get_file_hardlinks">>
@@ -210,7 +210,7 @@ get_hardlinks_endpoint(FileId) ->
 get_symlink_value_endpoint(FileId) ->
     #rest_api_request_sample{
         name = <<"Get symbolic link value">>,
-        description = <<"Returns the value of symbolic link.">>,
+        description = <<"Returns the value of the symbolic link.">>,
         method = 'GET',
         path = str_utils:format_bin("/data/~s/symlink_value", [FileId]),
         swagger_operation_id = <<"get_symlink_value">>
@@ -222,7 +222,7 @@ get_symlink_value_endpoint(FileId) ->
 get_json_metadata_endpoint(FileId) ->
     #rest_api_request_sample{
         name = <<"Get JSON metadata">>,
-        description = <<"Returns custom JSON metadata associated with a file or directory.">>,
+        description = <<"Returns custom JSON metadata associated with the file or directory.">>,
         method = 'GET',
         path = str_utils:format_bin("/data/~s/metadata/json", [FileId]),
         optional_parameters = [
@@ -237,7 +237,7 @@ get_json_metadata_endpoint(FileId) ->
 set_json_metadata_endpoint(FileId) ->
     #rest_api_request_sample{
         name = <<"Set JSON metadata">>,
-        description = <<"Sets json metadata for a file or directory.">>,
+        description = <<"Sets json metadata for the file or directory.">>,
         method = 'PUT',
         path = str_utils:format_bin("/data/~s/metadata/json", [FileId]),
         data = <<"$METADATA">>,
@@ -259,7 +259,7 @@ set_json_metadata_endpoint(FileId) ->
 remove_json_metadata_endpoint(FileId) ->
     #rest_api_request_sample{
         name = <<"Remove JSON metadata">>,
-        description = <<"Removes json metadata from a file or directory.">>,
+        description = <<"Removes json metadata from the file or directory.">>,
         method = 'DELETE',
         path = str_utils:format_bin("/data/~s/metadata/json", [FileId]),
         optional_parameters = [<<"resolve_symlink">>],
@@ -272,7 +272,7 @@ remove_json_metadata_endpoint(FileId) ->
 get_rdf_metadata_endpoint(FileId) ->
     #rest_api_request_sample{
         name = <<"Get RDF metadata">>,
-        description = <<"Returns custom RDF metadata associated with a file or directory.">>,
+        description = <<"Returns custom RDF metadata associated with the file or directory.">>,
         method = 'GET',
         path = str_utils:format_bin("/data/~s/metadata/rdf", [FileId]),
         optional_parameters = [<<"resolve_symlink">>],
@@ -285,7 +285,7 @@ get_rdf_metadata_endpoint(FileId) ->
 set_rdf_metadata_endpoint(FileId) ->
     #rest_api_request_sample{
         name = <<"Set RDF metadata">>,
-        description = <<"Sets rdf metadata for a file or directory.">>,
+        description = <<"Sets rdf metadata for the file or directory.">>,
         method = 'PUT',
         path = str_utils:format_bin("/data/~s/metadata/rdf", [FileId]),
         data = <<"$METADATA">>,
@@ -305,7 +305,7 @@ set_rdf_metadata_endpoint(FileId) ->
 remove_rdf_metadata_endpoint(FileId) ->
     #rest_api_request_sample{
         name = <<"Remove RDF metadata">>,
-        description = <<"Removes rdf metadata from a file or directory.">>,
+        description = <<"Removes rdf metadata from the file or directory.">>,
         method = 'DELETE',
         path = str_utils:format_bin("/data/~s/metadata/rdf", [FileId]),
         optional_parameters = [<<"resolve_symlink">>],
@@ -318,7 +318,7 @@ remove_rdf_metadata_endpoint(FileId) ->
 get_xattrs_metadata_endpoint(FileId) ->
     #rest_api_request_sample{
         name = <<"Get extended attributes (xattrs)">>,
-        description = <<"Returns custom extended attributes (xattrs) associated with a file or directory.">>,
+        description = <<"Returns custom extended attributes (xattrs) associated with the file or directory.">>,
         method = 'GET',
         path = str_utils:format_bin("/data/~s/metadata/xattrs", [FileId]),
         optional_parameters = [
@@ -333,7 +333,7 @@ get_xattrs_metadata_endpoint(FileId) ->
 set_xattr_metadata_endpoint(FileId) ->
     #rest_api_request_sample{
         name = <<"Set extended attribute (xattr)">>,
-        description = <<"Sets extended attribute (xattr) for a file or directory.">>,
+        description = <<"Sets extended attribute (xattr) for the file or directory.">>,
         method = 'PUT',
         path = str_utils:format_bin("/data/~s/metadata/xattrs", [FileId]),
         data = <<"$XATTR">>,
@@ -353,7 +353,7 @@ set_xattr_metadata_endpoint(FileId) ->
 remove_xattrs_metadata_endpoint(FileId) ->
     #rest_api_request_sample{
         name = <<"Remove extended attributes (xattrs)">>,
-        description = <<"Removes extended attributes (xattrs) from a file or directory.">>,
+        description = <<"Removes extended attributes (xattrs) from the file or directory.">>,
         method = 'DELETE',
         path = str_utils:format_bin("/data/~s/metadata/xattrs", [FileId]),
         data = <<"$DATA">>,
