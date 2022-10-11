@@ -26,14 +26,14 @@
 %%%===================================================================
 
 -spec translate_value(gri:gri(), Value :: term()) -> gs_protocol:data().
-translate_value(#gri{aspect = file_info}, FileInfo) ->
+translate_value(#gri{aspect = identify_file}, FileInfo) ->
     #{
         <<"sourceFile">> := SourceFileGuid,
         <<"archivedFile">> := ArchivedFileGuid
     } = FileInfo,
     #{
-        <<"sourceFileId">> => SourceFileGuid,
-        <<"archivedFileId">> => ArchivedFileGuid
+        <<"sourceFileId">> => utils:undefined_to_null(SourceFileGuid),
+        <<"archivedFileId">> => utils:undefined_to_null(ArchivedFileGuid)
     };
 translate_value(#gri{aspect = audit_log}, ListedEntries) ->
     ListedEntries;
@@ -72,7 +72,7 @@ translate_archive_info(#archive_info{
     #{
         <<"gri">> => build_serialized_archive_instance_gri(ArchiveId),
         <<"dataset">> => build_serialized_instance_gri(op_dataset, DatasetId),
-        <<"providerId">> => build_serialized_instance_gri(od_provider, ProviderId, protected),
+        <<"provider">> => build_serialized_instance_gri(op_provider, ProviderId, protected),
         <<"state">> => str_utils:to_binary(State),
         <<"rootDir">> => build_serialized_instance_gri(op_file, RootDirGuid),
         <<"creationTime">> => CreationTime,

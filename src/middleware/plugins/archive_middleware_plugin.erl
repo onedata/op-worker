@@ -46,9 +46,9 @@ resolve_handler(create, instance, private) -> ?MODULE;
 resolve_handler(create, cancel, private) -> ?MODULE;
 resolve_handler(create, delete, private) -> ?MODULE;
 resolve_handler(create, recall, private) -> ?MODULE;
+resolve_handler(create, identify_file, private) -> ?MODULE;
 
 resolve_handler(get, instance, private) -> ?MODULE;
-resolve_handler(get, file_info, private) -> ?MODULE;
 resolve_handler(get, audit_log, private) -> ?MODULE;
 
 resolve_handler(update, instance, private) -> ?MODULE;
@@ -94,14 +94,14 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = recall}}) -> #{
         <<"targetFileName">> => {binary, non_empty}
     }
 };
-
-data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
-    undefined;
-data_spec(#op_req{operation = get, gri = #gri{aspect = file_info}}) -> #{
+data_spec(#op_req{operation = create, gri = #gri{aspect = identify_file}}) -> #{
     required => #{
         <<"relativePath">> => {binary, non_empty}
     }
 };
+
+data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
+    undefined;
 data_spec(#op_req{operation = get, gri = #gri{aspect = audit_log}}) ->
     audit_log_browse_opts:json_data_spec();
 
@@ -132,8 +132,8 @@ fetch_entity(#op_req{operation = Op, auth = ?USER(_UserId), gri = #gri{
     (Op =:= create andalso As =:= delete);
     (Op =:= create andalso As =:= cancel);
     (Op =:= create andalso As =:= recall);
+    (Op =:= create andalso As =:= identify_file);
     (Op =:= get andalso As =:= instance);
-    (Op =:= get andalso As =:= file_info);
     (Op =:= get andalso As =:= audit_log);
     (Op =:= update andalso As =:= instance)
 ->
@@ -163,8 +163,8 @@ authorize(#op_req{operation = Op, auth = Auth, gri = #gri{aspect = As}}, Archive
     (Op =:= create andalso As =:= cancel);
     (Op =:= create andalso As =:= delete);
     (Op =:= create andalso As =:= recall);
+    (Op =:= create andalso As =:= identify_file);
     (Op =:= get andalso As =:= instance);
-    (Op =:= get andalso As =:= file_info);
     (Op =:= get andalso As =:= audit_log);
     (Op =:= update andalso As =:= instance)
 ->
@@ -187,8 +187,8 @@ validate(#op_req{operation = Op, gri = #gri{aspect = As}}, ArchiveDoc) when
     (Op =:= create andalso As =:= cancel);
     (Op =:= create andalso As =:= delete);
     (Op =:= create andalso As =:= recall);
+    (Op =:= create andalso As =:= identify_file);
     (Op =:= get andalso As =:= instance);
-    (Op =:= get andalso As =:= file_info);
     (Op =:= get andalso As =:=  audit_log);
     (Op =:= update andalso As =:= instance)
 ->
@@ -229,7 +229,27 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{id = ArchiveId, aspect = rec
     SessionId = Auth#auth.session_id,
     ParentDirectoryGuid = maps:get(<<"parentDirectoryId">>, Data),
     TargetFileName = maps:get(<<"targetFileName">>, Data, default),
-    {ok, value, mi_archives:recall(SessionId, ArchiveId, ParentDirectoryGuid, TargetFileName)}.
+    {ok, value, mi_archives:recall(SessionId, ArchiveId, ParentDirectoryGuid, TargetFileName)};
+
+create(#op_req{auth = Auth, gri = #gri{id = ArchiveId, aspect = identify_file}, data = Data}) ->
+    SessionId = Auth#auth.session_id,
+    ArchiveInfo = mi_archives:get_info(SessionId, ArchiveId),
+    DatasetInfo = mi_datasets:get_info(SessionId, ArchiveInfo#archive_info.dataset_id),
+    ArchiveRelativePath = maps:get(<<"relativePath">>, Data),
+    [_ | DatasetRelativePathTokens] = filename:split(ArchiveRelativePath),
+    SourceFileGuid = case DatasetRelativePathTokens of
+        [] ->
+            DatasetInfo#dataset_info.root_file_guid;
+        _ ->
+            resolve_guid_by_relative_path(SessionId, DatasetInfo#dataset_info.root_file_guid,
+                filename:join(DatasetRelativePathTokens))
+    end,
+    {ok, value, #{
+        <<"archivedFile">> =>
+            resolve_guid_by_relative_path(SessionId, ArchiveInfo#archive_info.data_dir_guid, ArchiveRelativePath),
+        <<"sourceFile">> =>
+            SourceFileGuid
+    }}.
 
 
 %%--------------------------------------------------------------------
@@ -240,26 +260,6 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{id = ArchiveId, aspect = rec
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
 get(#op_req{auth = Auth, gri = #gri{id = ArchiveId, aspect = instance}}, _) ->
     {ok, mi_archives:get_info(Auth#auth.session_id, ArchiveId)};
-
-get(#op_req{auth = Auth, gri = #gri{id = ArchiveId, aspect = file_info}, data = Data}, _) ->
-    SessionId = Auth#auth.session_id,
-    ArchiveInfo = mi_archives:get_info(SessionId, ArchiveId),
-    DatasetInfo = mi_datasets:get_info(SessionId, ArchiveInfo#archive_info.dataset_id),
-    ArchiveRelativePath = maps:get(<<"relativePath">>, Data),
-    [_ | DatasetRelativePathTokens] = filename:split(ArchiveRelativePath),
-    SourceFileGuid = case DatasetRelativePathTokens of
-        [] -> 
-            DatasetInfo#dataset_info.root_file_guid;
-        _ -> 
-            resolve_guid_by_relative_path(SessionId, DatasetInfo#dataset_info.root_file_guid, 
-                filename:join(DatasetRelativePathTokens))
-    end,
-    {ok, value, #{
-        <<"archivedFile">> =>
-            resolve_guid_by_relative_path(SessionId, ArchiveInfo#archive_info.data_dir_guid, ArchiveRelativePath),
-        <<"sourceFile">> => 
-            SourceFileGuid
-    }};
 
 get(#op_req{gri = #gri{id = ArchiveIdId, aspect = audit_log}, data = Data}, _) ->
     BrowseOpts = audit_log_browse_opts:from_json(Data),
@@ -297,9 +297,10 @@ delete(#op_req{}) ->
 
 %% @private
 -spec resolve_guid_by_relative_path(session:id(), file_id:file_guid(), file_meta:path()) -> 
-    file_id:file_guid().
+    file_id:file_guid() | undefined.
 resolve_guid_by_relative_path(SessionId, RootFileGuid, RelativePath) ->
-    {ok, Guid} = ?lfm_check(lfm:resolve_guid_by_relative_path(
-        SessionId, RootFileGuid, RelativePath
-    )),
-    Guid.
+    case lfm:resolve_guid_by_relative_path(SessionId, RootFileGuid, RelativePath) of
+        {ok, Guid} -> Guid;
+        {error, ?ENOENT} -> undefined;
+        Other -> ?lfm_check(Other)
+    end.
