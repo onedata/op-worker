@@ -403,7 +403,7 @@ resume_atm_workflow_execution_paused_while_active() ->
                 incarnation_num = 2,
                 lane_runs = [
                     ResumedLaneRunBaseTestSpec#atm_lane_run_execution_test_spec{
-                        restart_lane = #atm_step_mock_spec{
+                        resume_lane = #atm_step_mock_spec{
                             before_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
                                 ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_resuming({1, 1}, ExpState0),
                                 {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_resuming(ExpState1)}
