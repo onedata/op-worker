@@ -94,7 +94,7 @@ archive_dataset(
     ]),
     case Result of
         {ok, #archive_info{id = ArchiveId}} -> {ok, ArchiveId};
-        Other -> Other
+        {error, _} = Error -> Error
     end.
 
 
