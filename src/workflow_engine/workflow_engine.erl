@@ -162,14 +162,10 @@ execute_workflow(EngineId, ExecutionSpec) ->
             workflow_engine_state:add_execution_id(EngineId, ExecutionId),
             trigger_job_scheduling(EngineId, ?TAKE_UP_FREE_SLOTS);
         ?WF_ERROR_PREPARATION_FAILED ->
-            ProgressDataPersistence = execute_exception_handler(
-                ExecutionId, Context, Handler, error, preparation_failed, []),
-
-            case ProgressDataPersistence of
-                clean_progress ->
-                    cleanup_execution(ExecutionId);
-                _ ->
-                    ok
+            execute_exception_handler(ExecutionId, Context, Handler, error, preparation_failed, []),
+            case call_handler(ExecutionId, Context, Handler, handle_workflow_interrupted, []) of
+                clean_progress -> cleanup_execution(ExecutionId);
+                _ -> ok
             end
     end.
 
