@@ -24,7 +24,7 @@
 
 
 %% API
--export([init/7, resume_from_snapshot/7, init_cancel/1, finish_cancel/1, wait_for_pending_callbacks/1,
+-export([init/7, resume_from_snapshot/7, init_cancel/2, finish_cancel/1, wait_for_pending_callbacks/1,
     handle_exception/4, abandon/1, cleanup/1, prepare_next_job/1,
     report_execution_status_update/4, report_lane_execution_prepared/6, report_limit_reached_error/2,
     report_new_streamed_task_data/3, report_streamed_task_data_processed/4, mark_all_streamed_task_data_received/3,
@@ -252,10 +252,12 @@ resume_from_snapshot(ExecutionId, EngineId, Handler, Context, InitialLaneId, Ini
             init(ExecutionId, EngineId, Handler, Context, InitialLaneId, InitialNextLaneId, SnapshotMode)
     end.
 
--spec init_cancel(workflow_engine:execution_id()) -> ok.
-init_cancel(ExecutionId) ->
-    {ok, _} = update(ExecutionId, fun handle_execution_cancel_init/1),
-    ok.
+-spec init_cancel(workflow_engine:execution_id(), workflow_engine:cancel_pred()) -> ok | ?WF_ERROR_PRED_NOT_MEET.
+init_cancel(ExecutionId, Pred) ->
+    case update(ExecutionId, fun(State) -> handle_execution_cancel_init(State, Pred) end) of
+        {ok, _} -> ok;
+        ?WF_ERROR_PRED_NOT_MEET -> ?WF_ERROR_PRED_NOT_MEET
+    end.
 
 -spec finish_cancel(workflow_engine:execution_id()) -> {ok, workflow_engine:id()} | ?WF_ERROR_CANCEL_NOT_INITIALIZED.
 finish_cancel(ExecutionId) ->
@@ -1040,18 +1042,23 @@ set_current_lane(#workflow_execution_state{
         update_report = NewUpdateReport
     }}.
 
--spec handle_execution_cancel_init(state()) -> {ok, state()}.
-handle_execution_cancel_init(#workflow_execution_state{execution_status = ?PREPARING} = State) ->
+-spec handle_execution_cancel_init(state(), workflow_engine:cancel_pred()) -> {ok, state()} | ?WF_ERROR_PRED_NOT_MEET.
+handle_execution_cancel_init(
+    #workflow_execution_state{current_lane = #current_lane{id = LaneId}},
+    #{lane_id := ExpectedLaneId}
+) when LaneId =/= ExpectedLaneId ->
+    ?WF_ERROR_PRED_NOT_MEET;
+handle_execution_cancel_init(#workflow_execution_state{execution_status = ?PREPARING} = State, _) ->
     {ok, State#workflow_execution_state{execution_status = ?PREPARATION_CANCELLED(1)}};
-handle_execution_cancel_init(#workflow_execution_state{execution_status = ?PREPARATION_FAILED} = State) ->
+handle_execution_cancel_init(#workflow_execution_state{execution_status = ?PREPARATION_FAILED} = State, _) ->
     % TODO VFS-7787 Return error to prevent document update
     {ok, State};
-handle_execution_cancel_init(#workflow_execution_state{execution_status = #execution_cancelled{is_interrupted = true}} = State) ->
+handle_execution_cancel_init(#workflow_execution_state{execution_status = #execution_cancelled{is_interrupted = true}} = State, _) ->
     % TODO VFS-7787 Return error to prevent document update
     {ok, State};
-handle_execution_cancel_init(#workflow_execution_state{execution_status = ?EXECUTION_CANCELLED(Counter) = Status} = State) ->
+handle_execution_cancel_init(#workflow_execution_state{execution_status = ?EXECUTION_CANCELLED(Counter) = Status} = State, _) ->
     {ok, State#workflow_execution_state{execution_status = Status#execution_cancelled{call_count = Counter + 1}}};
-handle_execution_cancel_init(State) ->
+handle_execution_cancel_init(State, _) ->
     {ok, State#workflow_execution_state{execution_status = ?EXECUTION_CANCELLED(1)}}.
 
 -spec handle_execution_cancel_finish(state()) -> {ok, state()} | ?WF_ERROR_CANCEL_NOT_INITIALIZED.
