@@ -73,6 +73,7 @@
     expect_all_tasks_skipped/2,
     expect_all_tasks_paused/2,
     expect_all_tasks_interrupted/2,
+    expect_all_tasks_abruptly_interrupted/2,
     expect_all_tasks_cancelled/2,
     expect_all_tasks_failed/2,
     expect_all_tasks_stopping/3,
@@ -749,6 +750,40 @@ expect_all_tasks_paused(AtmLaneRunSelector, ExpStateCtx) ->
     ctx().
 expect_all_tasks_interrupted(AtmLaneRunSelector, ExpStateCtx) ->
     expect_all_tasks_transitioned_to(AtmLaneRunSelector, <<"interrupted">>, ExpStateCtx).
+
+
+-spec expect_all_tasks_abruptly_interrupted(atm_lane_execution:lane_run_selector(), ctx()) ->
+    ctx().
+expect_all_tasks_abruptly_interrupted(AtmLaneRunSelector, ExpStateCtx) ->
+    ExpAtmTaskExecutionStatusChangeFun = fun(ExpAtmTaskExecution = #exp_task_execution_state_ctx{
+        exp_state = ExpState
+    }) ->
+        ExpAtmTaskExecution#exp_task_execution_state_ctx{exp_state = handle_abruptly_stopped_task_stats(ExpState#{
+            <<"status">> => <<"interrupted">>
+        })}
+    end,
+    ExpAtmParallelBoxExecutionStatusChangeFun = fun(ExpAtmParallelBoxExecutionState, _) ->
+        ExpAtmParallelBoxExecutionState#{<<"status">> => <<"interrupted">>}
+    end,
+    expect_all_tasks_transitioned(
+        AtmLaneRunSelector,
+        ExpAtmTaskExecutionStatusChangeFun,
+        ExpAtmParallelBoxExecutionStatusChangeFun,
+        ExpStateCtx
+    ).
+
+
+%% @private
+handle_abruptly_stopped_task_stats(ExpAtmTaskExecutionState = #{
+    <<"itemsInProcessing">> := ItemsInProcessing,
+    <<"itemsProcessed">> := ItemsProcessed,
+    <<"itemsFailed">> := ItemsFailed
+}) ->
+    ExpAtmTaskExecutionState#{
+        <<"itemsInProcessing">> => 0,
+        <<"itemsProcessed">> => ItemsProcessed + ItemsInProcessing,
+        <<"itemsFailed">> => ItemsFailed + ItemsInProcessing
+    }.
 
 
 -spec expect_all_tasks_cancelled(atm_lane_execution:lane_run_selector(), ctx()) ->

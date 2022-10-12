@@ -285,14 +285,14 @@ all() -> [
 %%    {group, scheduling_executable_workflow_schema_with_invalid_args_tests},
 %%    {group, preparation_tests},
 %%    {group, failure_tests},
-%%    {group, cancel_tests},
+    {group, cancel_tests}
 %%    {group, pause_tests},
 %%    {group, interrupt_tests},
 %%    {group, stopping_tests},
 %%    {group, iteration_tests},
 %%    {group, mapping_tests},
 %%    {group, repeat_tests},
-    {group, resume_tests}
+%%    {group, resume_tests}
 ].
 
 
