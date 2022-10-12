@@ -425,12 +425,12 @@ verify_sample_base(Sample, VerifyFun, Body) ->
     verify_sample_base(Sample, VerifyFun, Body, #{}).
 
 %% @private
-verify_sample_base(VerifyFun, #rest_api_request_sample{
+verify_sample_base(#rest_api_request_sample{
     method = Method, 
     path = Path, 
     headers = Headers, 
     requires_authorization = RequiresAuthorization
-}, Body, PlaceholderValues) ->
+}, VerifyFun, Body, PlaceholderValues) ->
     AuthHeader = case RequiresAuthorization of
         true -> maps:from_list([rest_test_utils:user_token_header(oct_background:get_user_access_token(user2))]);
         false -> #{}

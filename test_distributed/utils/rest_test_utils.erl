@@ -42,7 +42,7 @@ request(Node, URL, Method, Headers, Body, Opts) ->
     end,
     Result = http_client:request(
         Method, <<(rest_endpoint(Node))/binary, URL/binary>>,
-        Headers2, Body, [cacerts_opts(Node) | Opts]
+        Headers2, Body, cacerts_opts(Node) ++ Opts
     ),
     case Result of
         {ok, RespCode, RespHeaders, RespBody} ->
