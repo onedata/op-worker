@@ -283,14 +283,11 @@ expect_current_lane_run_started_preparing(AtmLaneRunSelector, ExpStateCtx0) ->
     ExpAtmLaneRunStateDiff = #{<<"status">> => <<"preparing">>},
     ExpStateCtx1 = update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx0),
 
-    ExpAtmWorkflowExecutionStateDiff = fun
-        (ExpAtmWorkflowExecutionState = #{<<"status">> := <<"scheduled">>}) ->
-            ExpAtmWorkflowExecutionState#{
-                <<"status">> => <<"active">>,
-                <<"startTime">> => build_timestamp_field_validator(?NOW())
-            };
-        (ExpAtmWorkflowExecutionState) ->
-            ExpAtmWorkflowExecutionState
+    ExpAtmWorkflowExecutionStateDiff = fun(ExpAtmWorkflowExecutionState) ->
+        ExpAtmWorkflowExecutionState#{
+            <<"status">> => <<"active">>,
+            <<"startTime">> => build_timestamp_field_validator(?NOW())
+        }
     end,
     update_workflow_execution_exp_state(ExpAtmWorkflowExecutionStateDiff, ExpStateCtx1).
 
@@ -440,28 +437,39 @@ expect_lane_run_resuming(AtmLaneRunSelector, ExpStateCtx) ->
     update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx).
 
 
--spec expect_lane_run_rerunable(atm_lane_execution:lane_run_selector(), ctx()) ->
+-spec expect_lane_run_rerunable(
+    atm_lane_execution:lane_run_selector() | [atm_lane_execution:lane_run_selector()],
+    ctx()
+) ->
     ctx().
-expect_lane_run_rerunable(AtmLaneRunSelector, ExpStateCtx) ->
+expect_lane_run_rerunable(AtmLaneRunSelectors, ExpStateCtx) ->
     ExpAtmLaneRunStateDiff = #{<<"isRerunable">> => true},
-    update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx).
+    update_exp_lane_runs_state(as_list(AtmLaneRunSelectors), ExpAtmLaneRunStateDiff, ExpStateCtx).
 
 
--spec expect_lane_run_retriable(atm_lane_execution:lane_run_selector(), ctx()) ->
+-spec expect_lane_run_retriable(
+    atm_lane_execution:lane_run_selector() | [atm_lane_execution:lane_run_selector()],
+    ctx()
+) ->
     ctx().
-expect_lane_run_retriable(AtmLaneRunSelector, ExpStateCtx) ->
+expect_lane_run_retriable(AtmLaneRunSelectors, ExpStateCtx) ->
     ExpAtmLaneRunStateDiff = #{<<"isRetriable">> => true},
-    update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx).
+    update_exp_lane_runs_state(as_list(AtmLaneRunSelectors), ExpAtmLaneRunStateDiff, ExpStateCtx).
 
 
--spec expect_lane_run_repeatable(atm_lane_execution:lane_run_selector(), boolean(), boolean(), ctx()) ->
+-spec expect_lane_run_repeatable(
+    atm_lane_execution:lane_run_selector() | [atm_lane_execution:lane_run_selector()],
+    boolean(),
+    boolean(),
+    ctx()
+) ->
     ctx().
-expect_lane_run_repeatable(AtmLaneRunSelector, IsRerunable, IsRepeatable, ExpStateCtx) ->
+expect_lane_run_repeatable(AtmLaneRunSelectors, IsRerunable, IsRepeatable, ExpStateCtx) ->
     ExpAtmLaneRunStateDiff = #{
         <<"isRerunable">> => IsRerunable,
         <<"isRetriable">> => IsRepeatable
     },
-    update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx).
+    update_exp_lane_runs_state(as_list(AtmLaneRunSelectors), ExpAtmLaneRunStateDiff, ExpStateCtx).
 
 
 -spec expect_lane_run_num_set(
@@ -996,6 +1004,24 @@ update_workflow_execution_exp_state(Diff, ExpStateCtx = #exp_workflow_execution_
     ExpStateCtx#exp_workflow_execution_state_ctx{
         exp_workflow_execution_state = Diff(ExpAtmWorkflowExecutionState)
     }.
+
+
+%% @private
+-spec update_exp_lane_runs_state(
+    [atm_lane_execution:lane_run_selector()],
+    json_utils:json_map() | fun((lane_run_state()) -> lane_run_state()),
+    ctx()
+) ->
+    ctx().
+update_exp_lane_runs_state(AtmLaneRunSelectors, ExpAtmLaneRunStateDiff, ExpStateCtx) ->
+    lists:foldl(fun(AtmLaneRunSelector, ExpStateCtxAcc) ->
+        update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtxAcc)
+    end, ExpStateCtx, AtmLaneRunSelectors).
+
+
+%% @private
+as_list(Term) when is_list(Term) -> Term;
+as_list(Term) -> [Term].
 
 
 %% @private

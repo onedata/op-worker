@@ -404,16 +404,8 @@ monitor_workflow_execution(TestCtx0) ->
     after ?AWAIT_OTHER_PARALLEL_PIPELINES_NEXT_STEP_INTERVAL ->
         case TestCtx0#test_ctx.test_hung_probes_left of
             0 ->
-                PendingStepPhaseSelectors = lists:map(
-                    fun(#step_phase{selector = StepPhaseSelector}) -> StepPhaseSelector end,
-                    TestCtx0#test_ctx.pending_step_phases
-                ),
-                ct:pal("Automation workflow execution test hung after steps: ~p", [lists:flatten([
-                    PendingStepPhaseSelectors,
-                    TestCtx0#test_ctx.executed_step_phases,
-                    TestCtx0#test_ctx.prev_incarnations_executed_step_phases
-                ])]),
-                ?assertEqual(success, failure);
+                ct:pal("Automation workflow execution test hung"),
+                fail_test(TestCtx0);
             Num ->
                 TestCtx1 = TestCtx0#test_ctx{test_hung_probes_left = Num - 1},
                 TestCtx2 = address_pending_expectations(TestCtx1),
@@ -909,21 +901,31 @@ get_exp_state_diff(
 
 %% @private
 -spec assert_exp_workflow_execution_state(test_ctx()) -> test_ctx().
-assert_exp_workflow_execution_state(#test_ctx{
-    workflow_execution_exp_state = ExpState,
-    executed_step_phases = ExecutedStepPhases
-}) ->
+assert_exp_workflow_execution_state(TestCtx = #test_ctx{workflow_execution_exp_state = ExpState}) ->
     case atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState, ?ASSERT_RETRIES) of
         true ->
             ok;
         false ->
-            ct:pal("Automation workflow execution test failed after steps: ~p", [
-                ExecutedStepPhases
-            ]),
-            ?assertEqual(success, failure)
+            ct:pal("Automation workflow execution test failed due to unmet expectations"),
+            fail_test(TestCtx)
     end.
 
 
+%% @private
+fail_test(TestCtx) ->
+    PendingStepPhaseSelectors = lists:map(
+        fun(#step_phase{selector = StepPhaseSelector}) -> StepPhaseSelector end,
+        TestCtx#test_ctx.pending_step_phases
+    ),
+    ct:pal("PENDING STEPS:~n~n~20p~n~n~nEXECUTED STEPS:~n~n~20p~n~n~nPREVIOUS INCARNATIONS:~n~n~20p", [
+        PendingStepPhaseSelectors,
+        TestCtx#test_ctx.executed_step_phases,
+        TestCtx#test_ctx.prev_incarnations_executed_step_phases
+    ]),
+    ?assertEqual(success, failure).
+
+
+%% TODO set current lane run selector in exp state on shift
 %% @private
 -spec shift_monitored_lane_run_if_current_one_stopped(mock_call_report(), test_ctx()) ->
     test_ctx().

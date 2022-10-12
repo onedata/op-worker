@@ -168,7 +168,15 @@ resume_atm_workflow_execution_paused_while_scheduled() ->
                         selector = {2, 1},
                         prepare_lane = #atm_step_mock_spec{defer_after = {prepare_lane, after_step, {1, 1}}}
                     }
-                ]
+                ],
+                handle_workflow_execution_stopped = #atm_step_mock_spec{
+                    after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                        ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_rerunable(
+                            [{1, 1}, {2, 1}], ExpState0
+                        ),
+                        {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_finished(ExpState1)}
+                    end
+                }
             }
         ]
     }).
@@ -241,7 +249,15 @@ resume_atm_workflow_execution_paused_while_preparing() ->
                         selector = {2, 1},
                         prepare_lane = #atm_step_mock_spec{defer_after = {prepare_lane, after_step, {1, 1}}}
                     }
-                ]
+                ],
+                handle_workflow_execution_stopped = #atm_step_mock_spec{
+                    after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                        ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_rerunable(
+                            [{1, 1}, {2, 1}], ExpState0
+                        ),
+                        {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_finished(ExpState1)}
+                    end
+                }
             }
         ]
     }).
@@ -423,7 +439,15 @@ resume_atm_workflow_execution_paused_while_active() ->
                             defer_after = {handle_lane_execution_stopped, after_step, {1, 3}}
                         }
                     }
-                ]
+                ],
+                handle_workflow_execution_stopped = #atm_step_mock_spec{
+                    after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                        ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_repeatable(
+                            [{1, 1}, {1, 2}, {1, 3}], true, true, ExpState0
+                        ),
+                        {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_finished(ExpState1)}
+                    end
+                }
             }
         ]
     }).
