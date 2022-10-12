@@ -73,6 +73,7 @@
     expect_all_tasks_skipped/2,
     expect_all_tasks_paused/2,
     expect_all_tasks_interrupted/2,
+    expect_all_tasks_abruptly_interrupted/2,
     expect_all_tasks_cancelled/2,
     expect_all_tasks_failed/2,
     expect_all_tasks_stopping/3,
@@ -283,14 +284,11 @@ expect_current_lane_run_started_preparing(AtmLaneRunSelector, ExpStateCtx0) ->
     ExpAtmLaneRunStateDiff = #{<<"status">> => <<"preparing">>},
     ExpStateCtx1 = update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx0),
 
-    ExpAtmWorkflowExecutionStateDiff = fun
-        (ExpAtmWorkflowExecutionState = #{<<"status">> := <<"scheduled">>}) ->
-            ExpAtmWorkflowExecutionState#{
-                <<"status">> => <<"active">>,
-                <<"startTime">> => build_timestamp_field_validator(?NOW())
-            };
-        (ExpAtmWorkflowExecutionState) ->
-            ExpAtmWorkflowExecutionState
+    ExpAtmWorkflowExecutionStateDiff = fun(ExpAtmWorkflowExecutionState) ->
+        ExpAtmWorkflowExecutionState#{
+            <<"status">> => <<"active">>,
+            <<"startTime">> => build_timestamp_field_validator(?NOW())
+        }
     end,
     update_workflow_execution_exp_state(ExpAtmWorkflowExecutionStateDiff, ExpStateCtx1).
 
@@ -440,28 +438,39 @@ expect_lane_run_resuming(AtmLaneRunSelector, ExpStateCtx) ->
     update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx).
 
 
--spec expect_lane_run_rerunable(atm_lane_execution:lane_run_selector(), ctx()) ->
+-spec expect_lane_run_rerunable(
+    atm_lane_execution:lane_run_selector() | [atm_lane_execution:lane_run_selector()],
+    ctx()
+) ->
     ctx().
-expect_lane_run_rerunable(AtmLaneRunSelector, ExpStateCtx) ->
+expect_lane_run_rerunable(AtmLaneRunSelectors, ExpStateCtx) ->
     ExpAtmLaneRunStateDiff = #{<<"isRerunable">> => true},
-    update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx).
+    update_exp_lane_runs_state(as_list(AtmLaneRunSelectors), ExpAtmLaneRunStateDiff, ExpStateCtx).
 
 
--spec expect_lane_run_retriable(atm_lane_execution:lane_run_selector(), ctx()) ->
+-spec expect_lane_run_retriable(
+    atm_lane_execution:lane_run_selector() | [atm_lane_execution:lane_run_selector()],
+    ctx()
+) ->
     ctx().
-expect_lane_run_retriable(AtmLaneRunSelector, ExpStateCtx) ->
+expect_lane_run_retriable(AtmLaneRunSelectors, ExpStateCtx) ->
     ExpAtmLaneRunStateDiff = #{<<"isRetriable">> => true},
-    update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx).
+    update_exp_lane_runs_state(as_list(AtmLaneRunSelectors), ExpAtmLaneRunStateDiff, ExpStateCtx).
 
 
--spec expect_lane_run_repeatable(atm_lane_execution:lane_run_selector(), boolean(), boolean(), ctx()) ->
+-spec expect_lane_run_repeatable(
+    atm_lane_execution:lane_run_selector() | [atm_lane_execution:lane_run_selector()],
+    boolean(),
+    boolean(),
+    ctx()
+) ->
     ctx().
-expect_lane_run_repeatable(AtmLaneRunSelector, IsRerunable, IsRepeatable, ExpStateCtx) ->
+expect_lane_run_repeatable(AtmLaneRunSelectors, IsRerunable, IsRepeatable, ExpStateCtx) ->
     ExpAtmLaneRunStateDiff = #{
         <<"isRerunable">> => IsRerunable,
         <<"isRetriable">> => IsRepeatable
     },
-    update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtx).
+    update_exp_lane_runs_state(as_list(AtmLaneRunSelectors), ExpAtmLaneRunStateDiff, ExpStateCtx).
 
 
 -spec expect_lane_run_num_set(
@@ -743,6 +752,40 @@ expect_all_tasks_interrupted(AtmLaneRunSelector, ExpStateCtx) ->
     expect_all_tasks_transitioned_to(AtmLaneRunSelector, <<"interrupted">>, ExpStateCtx).
 
 
+-spec expect_all_tasks_abruptly_interrupted(atm_lane_execution:lane_run_selector(), ctx()) ->
+    ctx().
+expect_all_tasks_abruptly_interrupted(AtmLaneRunSelector, ExpStateCtx) ->
+    ExpAtmTaskExecutionStatusChangeFun = fun(ExpAtmTaskExecution = #exp_task_execution_state_ctx{
+        exp_state = ExpState
+    }) ->
+        ExpAtmTaskExecution#exp_task_execution_state_ctx{exp_state = handle_abruptly_stopped_task_stats(ExpState#{
+            <<"status">> => <<"interrupted">>
+        })}
+    end,
+    ExpAtmParallelBoxExecutionStatusChangeFun = fun(ExpAtmParallelBoxExecutionState, _) ->
+        ExpAtmParallelBoxExecutionState#{<<"status">> => <<"interrupted">>}
+    end,
+    expect_all_tasks_transitioned(
+        AtmLaneRunSelector,
+        ExpAtmTaskExecutionStatusChangeFun,
+        ExpAtmParallelBoxExecutionStatusChangeFun,
+        ExpStateCtx
+    ).
+
+
+%% @private
+handle_abruptly_stopped_task_stats(ExpAtmTaskExecutionState = #{
+    <<"itemsInProcessing">> := ItemsInProcessing,
+    <<"itemsProcessed">> := ItemsProcessed,
+    <<"itemsFailed">> := ItemsFailed
+}) ->
+    ExpAtmTaskExecutionState#{
+        <<"itemsInProcessing">> => 0,
+        <<"itemsProcessed">> => ItemsProcessed + ItemsInProcessing,
+        <<"itemsFailed">> => ItemsFailed + ItemsInProcessing
+    }.
+
+
 -spec expect_all_tasks_cancelled(atm_lane_execution:lane_run_selector(), ctx()) ->
     ctx().
 expect_all_tasks_cancelled(AtmLaneRunSelector, ExpStateCtx) ->
@@ -996,6 +1039,24 @@ update_workflow_execution_exp_state(Diff, ExpStateCtx = #exp_workflow_execution_
     ExpStateCtx#exp_workflow_execution_state_ctx{
         exp_workflow_execution_state = Diff(ExpAtmWorkflowExecutionState)
     }.
+
+
+%% @private
+-spec update_exp_lane_runs_state(
+    [atm_lane_execution:lane_run_selector()],
+    json_utils:json_map() | fun((lane_run_state()) -> lane_run_state()),
+    ctx()
+) ->
+    ctx().
+update_exp_lane_runs_state(AtmLaneRunSelectors, ExpAtmLaneRunStateDiff, ExpStateCtx) ->
+    lists:foldl(fun(AtmLaneRunSelector, ExpStateCtxAcc) ->
+        update_exp_lane_run_state(AtmLaneRunSelector, ExpAtmLaneRunStateDiff, ExpStateCtxAcc)
+    end, ExpStateCtx, AtmLaneRunSelectors).
+
+
+%% @private
+as_list(Term) when is_list(Term) -> Term;
+as_list(Term) -> [Term].
 
 
 %% @private

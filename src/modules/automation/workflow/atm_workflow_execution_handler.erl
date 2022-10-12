@@ -490,12 +490,11 @@ infer_progress_data_persistence_policy(#document{value = AtmWorkflowExecution}) 
 ) ->
     atm_workflow_execution:doc().
 end_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
-    {ok, AtmWorkflowExecutionDoc0} = atm_workflow_execution:get(AtmWorkflowExecutionId),
-    ensure_all_lane_runs_stopped(AtmWorkflowExecutionDoc0, AtmWorkflowExecutionCtx),
-    {ok, AtmWorkflowExecutionDoc1} = delete_all_lane_runs_prepared_in_advance(
-        AtmWorkflowExecutionDoc0
+    ensure_all_lane_runs_stopped(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
+    {ok, AtmWorkflowExecutionDoc} = delete_all_lane_runs_prepared_in_advance(
+        AtmWorkflowExecutionId
     ),
-    freeze_global_stores(AtmWorkflowExecutionDoc1),
+    freeze_global_stores(AtmWorkflowExecutionDoc),
 
     atm_workflow_execution_session:terminate(AtmWorkflowExecutionId),
 
@@ -508,17 +507,18 @@ end_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
 
 %% @private
 -spec ensure_all_lane_runs_stopped(
-    atm_workflow_execution:doc(),
+    atm_workflow_execution:id(),
     atm_workflow_execution_ctx:record()
 ) ->
     ok.
-ensure_all_lane_runs_stopped(#document{
-    key = AtmWorkflowExecutionId,
-    value = AtmWorkflowExecution = #atm_workflow_execution{
-        lanes_count = AtmLanesCount,
-        current_lane_index = CurrentAtmLaneIndex
-    }
-}, AtmWorkflowExecutionCtx) ->
+ensure_all_lane_runs_stopped(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
+    {ok, #document{
+        value = AtmWorkflowExecution = #atm_workflow_execution{
+            lanes_count = AtmLanesCount,
+            current_lane_index = CurrentAtmLaneIndex
+        }
+    }} = atm_workflow_execution:get(AtmWorkflowExecutionId),
+
     lists:foreach(fun(AtmLaneIndex) ->
         AtmLaneRunSelector = {AtmLaneIndex, current},
 
@@ -548,16 +548,17 @@ ensure_all_lane_runs_stopped(#document{
 
 
 %% @private
--spec delete_all_lane_runs_prepared_in_advance(atm_workflow_execution:doc()) ->
+-spec delete_all_lane_runs_prepared_in_advance(atm_workflow_execution:id()) ->
     {ok, atm_workflow_execution:doc()}.
-delete_all_lane_runs_prepared_in_advance(#document{
-    key = AtmWorkflowExecutionId,
-    value = AtmWorkflowExecution = #atm_workflow_execution{
-        lanes_count = AtmLanesCount,
-        current_lane_index = CurrentAtmLaneIndex,
-        current_run_num = CurrentRunNum
-    }
-}) ->
+delete_all_lane_runs_prepared_in_advance(AtmWorkflowExecutionId) ->
+    {ok, #document{
+        value = AtmWorkflowExecution = #atm_workflow_execution{
+            lanes_count = AtmLanesCount,
+            current_lane_index = CurrentAtmLaneIndex,
+            current_run_num = CurrentRunNum
+        }
+    }} = atm_workflow_execution:get(AtmWorkflowExecutionId),
+
     AtmLaneExecutionDiff = fun
         (AtmLaneExecution = #atm_lane_execution{runs = [
             AtmLaneRunPreparedInAdvance = #atm_lane_execution_run{run_num = RunNum}
