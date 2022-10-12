@@ -238,7 +238,7 @@ on_openfaas_down(AtmWorkflowExecutionId, Error) ->
         },
         atm_workflow_execution_logger:workflow_critical(LogContent, Logger),
 
-        %% TODO MW call to engine that no responses will be sent ??
+        workflow_engine:abandon(AtmWorkflowExecutionId),
         atm_lane_execution_handler:stop({current, current}, interrupt, AtmWorkflowExecutionCtx),
         end_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx)
     catch throw:{session_acquisition_failed, _} = Reason ->
