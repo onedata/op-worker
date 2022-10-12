@@ -292,7 +292,7 @@ resume_atm_workflow_execution_paused_while_active() ->
         end
     },
 
-    BuildAtmLaneRunTestSpecFun = fun(ExpExceptionStoreContent, AtmLaneRunSelector, IsLastExpLaneRun) ->
+    BuildAtmLaneRunTestSpecFun = fun(AtmLaneRunSelector, ExpExceptionStoreContent, IsLastExpLaneRun) ->
         #atm_lane_run_execution_test_spec{
             selector = AtmLaneRunSelector,
 
@@ -338,7 +338,7 @@ resume_atm_workflow_execution_paused_while_active() ->
             }
         }
     end,
-    ResumedLaneRunBaseTestSpec = BuildAtmLaneRunTestSpecFun([2, 4, 6], {1, 1}, false),
+    ResumedLaneRunBaseTestSpec = BuildAtmLaneRunTestSpecFun({1, 1}, [2, 4, 6], false),
 
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         provider = ?PROVIDER_SELECTOR,
@@ -431,8 +431,9 @@ resume_atm_workflow_execution_paused_while_active() ->
                             end
                         }
                     },
-                    BuildAtmLaneRunTestSpecFun([2, 4, 6], {1, 2}, false),
-                    BuildAtmLaneRunTestSpecFun([2, 4, 6], {1, 3}, true),
+                    BuildAtmLaneRunTestSpecFun({1, 2}, [2, 4, 6], false),
+                    BuildAtmLaneRunTestSpecFun({1, 3}, [2, 4, 6], true),
+
                     #atm_lane_run_execution_test_spec{
                         selector = {2, 3},
                         prepare_lane = #atm_step_mock_spec{

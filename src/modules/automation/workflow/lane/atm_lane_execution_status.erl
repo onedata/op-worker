@@ -211,14 +211,14 @@ handle_resumed(AtmLaneRunSelector, AtmWorkflowExecutionId) ->
                 AtmParallelBoxExecutionStatuses = atm_parallel_box_execution:gather_statuses(
                     Run#atm_lane_execution_run.parallel_boxes
                 ),
-                case lists:usort(AtmParallelBoxExecutionStatuses) of
+                ResumedStatus = case lists:usort(AtmParallelBoxExecutionStatuses) of
                     [?PENDING_STATUS] ->
                         ?ENQUEUED_STATUS;
                     _ ->
                         ?ACTIVE_STATUS
                 end,
 
-                {ok, Run#atm_lane_execution_run{status = ?ENQUEUED_STATUS}};
+                {ok, Run#atm_lane_execution_run{status = ResumedStatus}};
 
             (#atm_lane_execution_run{status = Status}) ->
                 ?ERROR_ATM_INVALID_STATUS_TRANSITION(Status, ?RESUMING_STATUS)
