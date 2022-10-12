@@ -197,7 +197,8 @@ init(ExecutionId, EngineId, Handler, Context, FirstLaneId, NextLaneId, SnapshotM
         current_lane = #current_lane{index = 1, id = FirstLaneId},
         next_lane = #next_lane{id = NextLaneId}
     }},
-    save(Doc).
+    save(Doc),
+    workflow_iterator_snapshot:save(ExecutionId, 1, FirstLaneId, 0, undefined, NextLaneId).
 
 -spec resume_from_snapshot(
     workflow_engine:execution_id(), workflow_engine:id(), workflow_handler:handler(), workflow_engine:execution_context(),
