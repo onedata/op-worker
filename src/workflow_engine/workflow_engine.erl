@@ -25,7 +25,8 @@
 
 %% API
 -export([init/1, init/2, execute_workflow/2, cleanup_execution/1,
-    init_cancel_procedure/1, wait_for_pending_callbacks/1, finish_cancel_procedure/1, abandon/1]).
+    init_cancel_procedure/1, init_cancel_procedure/2,
+    wait_for_pending_callbacks/1, finish_cancel_procedure/1, abandon/1]).
 -export([stream_task_data/3, report_task_data_streaming_concluded/3]).
 -export([report_async_task_result/3, report_async_task_heartbeat/2]).
 %% Framework internal API
@@ -57,6 +58,7 @@
 -type handler_execution_result() :: workflow_handler:handler_execution_result() | {ok, KeepaliveTimeout :: time:seconds()}.
 -type processing_result() :: handler_execution_result() | workflow_handler:async_processing_result().
 -type preparation_mode() :: ?PREPARE_CURRENT | ?PREPARE_IN_ADVANCE.
+-type cancel_pred() :: #{lane_id => lane_id()}.
 
 %% @formatter:off
 -type options() :: #{
@@ -98,7 +100,7 @@
 
 -export_type([id/0, execution_id/0, execution_context/0, lane_id/0, task_id/0, streamed_task_data/0, stream_closing_result/0,
     subject_id/0, execution_spec/0, processing_stage/0, handler_execution_result/0, processing_result/0,
-    task_spec/0, parallel_box_spec/0, lane_spec/0, preparation_mode/0]).
+    task_spec/0, parallel_box_spec/0, lane_spec/0, preparation_mode/0, cancel_pred/0]).
 
 -type handler_function() :: atom().
 -type handler_args() :: [term()].
@@ -178,7 +180,13 @@ cleanup_execution(ExecutionId) ->
 
 -spec init_cancel_procedure(execution_id()) -> ok.
 init_cancel_procedure(ExecutionId) ->
-    workflow_execution_state:init_cancel(ExecutionId).
+    workflow_execution_state:init_cancel(ExecutionId, #{}).
+
+
+-spec init_cancel_procedure(execution_id(), cancel_pred()) -> ok | ?WF_ERROR_PRED_NOT_MEET.
+init_cancel_procedure(ExecutionId, Pred) ->
+    workflow_execution_state:init_cancel(ExecutionId, Pred).
+
 
 %%--------------------------------------------------------------------
 %% @doc
