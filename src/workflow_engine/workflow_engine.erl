@@ -244,13 +244,17 @@ report_task_data_streaming_concluded(ExecutionId, TaskId, Result) ->
 -spec report_execution_status_update(execution_id(), processing_stage(),
     workflow_jobs:job_identifier(), processing_result()) -> ok.
 report_execution_status_update(ExecutionId, ReportType, JobIdentifier, Ans) ->
-    StatusUpdateAns = workflow_execution_state:report_execution_status_update(ExecutionId, JobIdentifier, ReportType, Ans),
+    StatusUpdateAns = case Ans of
+        pause_job -> workflow_execution_state:pause_job(ExecutionId, JobIdentifier);
+        _ -> workflow_execution_state:report_execution_status_update(ExecutionId, JobIdentifier, ReportType, Ans)
+    end,
 
     case StatusUpdateAns of
         {ok, EngineId, TaskSpec} ->
             DecrementSlotsUsage = case {ReportType, Ans} of
                 {?ASYNC_CALL_ENDED, _} -> true;
                 {?ASYNC_CALL_STARTED, error} -> true;
+                {?ASYNC_CALL_STARTED, pause_job} -> true;
                 _ -> false
             end,
 
@@ -562,7 +566,7 @@ schedule_on_pool(EngineId, ExecutionId, #execution_spec{
                     ok = worker_pool:cast(?POOL_ID(EngineId), CallArgs);
                 ?WF_ERROR_LIMIT_REACHED ->
                     % TODO VFS-7787 - handle case when other tasks can be started (limit of task, not task execution engine is reached)
-                    workflow_execution_state:report_limit_reached_error(ExecutionId, JobIdentifier),
+                    workflow_execution_state:pause_job(ExecutionId, JobIdentifier),
                     ?WF_ERROR_LIMIT_REACHED
             end;
         _ ->
@@ -676,7 +680,9 @@ process_item(ExecutionId, #execution_spec{
     EncodedJobIdentifier = workflow_jobs:encode_job_identifier(JobIdentifier),
     try
         case Handler:run_task_for_item(ExecutionId, ExecutionContext, TaskId, EncodedJobIdentifier, Item) of
-            {error, _} -> error;
+            {error, running_item_failed} -> error;
+            {error, task_already_stopping} -> pause_job;
+            {error, task_already_stopped} -> pause_job;
             Other -> Other
         end
     catch

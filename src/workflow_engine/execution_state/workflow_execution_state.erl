@@ -26,7 +26,7 @@
 %% API
 -export([init/7, resume_from_snapshot/7, init_cancel/2, finish_cancel/1, wait_for_pending_callbacks/1,
     handle_exception/4, abandon/1, cleanup/1, prepare_next_job/1,
-    report_execution_status_update/4, report_lane_execution_prepared/6, report_limit_reached_error/2,
+    report_execution_status_update/4, report_lane_execution_prepared/6, pause_job/2,
     report_new_streamed_task_data/3, report_streamed_task_data_processed/4, mark_all_streamed_task_data_received/3,
     check_timeouts/1, reset_keepalive_timer/2, get_result_processing_data/2, get/1, save/1]).
 %% Test API
@@ -456,10 +456,15 @@ report_lane_execution_prepared(_Handler, ExecutionId, LaneId, ?PREPARE_IN_ADVANC
         ?WF_ERROR_UNKNOWN_LANE -> ok
     end.
 
--spec report_limit_reached_error(workflow_engine:execution_id(), workflow_jobs:job_identifier()) -> ok.
-report_limit_reached_error(ExecutionId, JobIdentifier) ->
-    {ok, _} = update(ExecutionId, fun(State) -> pause_job(State, JobIdentifier) end),
-    ok.
+-spec pause_job(workflow_engine:execution_id(), workflow_jobs:job_identifier()) ->
+    {ok, workflow_engine:id(), workflow_engine:task_spec()}.
+pause_job(ExecutionId, JobIdentifier) ->
+    {ok, #document{value = #workflow_execution_state{
+        engine_id = EngineId,
+        current_lane = #current_lane{parallel_box_specs = BoxSpecs}
+    }}} = update(ExecutionId, fun(State) -> pause_job_internal(State, JobIdentifier) end),
+    {_TaskId, PausedTaskSpec} = workflow_jobs:get_task_details(JobIdentifier, BoxSpecs),
+    {ok, EngineId, PausedTaskSpec}.
 
 
 -spec report_new_streamed_task_data(workflow_engine:execution_id(), workflow_engine:task_id(),
@@ -1357,8 +1362,8 @@ handle_next_iteration_step(State = #workflow_execution_state{
 handle_next_iteration_step(_State, _LaneIndex, _PrevItemIndex, _NextIterationStep, _ParallelBoxToStart) ->
     ?WF_ERROR_LANE_CHANGED.
 
--spec pause_job(state(), workflow_jobs:job_identifier()) -> {ok, state()}.
-pause_job(State = #workflow_execution_state{jobs = Jobs}, JobIdentifier) ->
+-spec pause_job_internal(state(), workflow_jobs:job_identifier()) -> {ok, state()}.
+pause_job_internal(State = #workflow_execution_state{jobs = Jobs}, JobIdentifier) ->
     {ok, State#workflow_execution_state{
         jobs = workflow_jobs:schedule_restart_of_job(Jobs, JobIdentifier)
     }}.
