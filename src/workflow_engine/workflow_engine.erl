@@ -533,7 +533,9 @@ handle_execution_ended(EngineId, ExecutionId, #execution_ended{
                 save_progress ->
                     workflow_execution_state_dump:dump_workflow_execution_state(ExecutionId);
                 save_iterator ->
-                    ok % Iterator is already persisted - simply do not clean it
+                    ok; % Iterator is already persisted - simply do not clean it
+                error ->
+                    ok % Error has been logged inside call_handler
             end,
 
             workflow_execution_state:cleanup(ExecutionId);
