@@ -52,9 +52,10 @@
     ?END_EXECUTION. % engine does not distinguish reason of execution finish - ?END_EXECUTION is returned
                        % if processed lane is last lane as well as on error
 -type progress_data_persistence() :: save_progress | save_iterator | clean_progress.
+-type interrupt_reason() :: term().
 
 -export_type([handler/0, async_processing_result/0, handler_execution_result/0, prepare_lane_result/0,
-    lane_stopped_callback_result/0, progress_data_persistence/0]).
+    lane_stopped_callback_result/0, progress_data_persistence/0, interrupt_reason/0]).
 
 %%%===================================================================
 %%% Callbacks descriptions
@@ -227,7 +228,8 @@
 %%--------------------------------------------------------------------
 -callback handle_workflow_interrupted(
     workflow_engine:execution_id(),
-    workflow_engine:execution_context()
+    workflow_engine:execution_context(),
+    undefined | interrupt_reason()
 ) ->
     progress_data_persistence().
 
@@ -246,4 +248,4 @@
     term(),
     list()
 ) ->
-    ok.
+    interrupt_reason().
