@@ -33,7 +33,7 @@
 -export([get_async_call_pools/1, trigger_job_scheduling/1,
     call_handler/5, call_handle_task_execution_stopped_for_all_tasks/4,
     call_handle_task_results_processed_for_all_items_for_all_tasks/4, call_handlers_for_cancelled_lane/5,
-    handle_exception/7, execute_exception_handler/6, get_enqueuing_timeout/1]).
+    handle_exception/8, execute_exception_handler/6, get_enqueuing_timeout/1]).
 %% Test API
 -export([set_enqueuing_timeout/2]).
 
@@ -296,7 +296,7 @@ call_handler(ExecutionId, Context, Handler, Function, Args) ->
     catch
         Error:Reason:Stacktrace  ->
             handle_exception(
-                ExecutionId, Handler,
+                ExecutionId, Handler, Context,
                 "Unexpected error in ~w (args: ~p)", [Function, Args],
                 Error, Reason, Stacktrace
             ),
@@ -343,16 +343,16 @@ call_handlers_for_cancelled_lane(ExecutionId, Handler, Context, LaneId, TaskIds)
                 [LaneId, ExecutionId, Other])
     end.
 
--spec handle_exception(execution_id(), workflow_handler:handler(),
+-spec handle_exception(execution_id(), workflow_handler:handler(), execution_context(),
     string(), list(), throw | error | exit, term(), list()) -> ok.
-handle_exception(ExecutionId, Handler, Message, MessageArgs, ErrorType, Reason, Stacktrace) ->
+handle_exception(ExecutionId, Handler, Context, Message, MessageArgs, ErrorType, Reason, Stacktrace) ->
     try
         ?error_stacktrace(
             "workflow_handler ~w, execution ~s: " ++ Message ++ ": ~w:~p",
             [Handler, ExecutionId | MessageArgs] ++ [ErrorType, Reason],
             Stacktrace
         ),
-        workflow_execution_state:handle_exception(ExecutionId, ErrorType, Reason, Stacktrace)
+        workflow_execution_state:handle_exception(ExecutionId, Context, ErrorType, Reason, Stacktrace)
     catch
         ErrorType2:Reason2:Stacktrace2  ->
             ?critical_stacktrace(
@@ -521,12 +521,30 @@ handle_execution_ended(EngineId, ExecutionId, #execution_ended{
         ok ->
             case LaneCallbacks of
                 {true, CancelledLaneId, CancelledLaneContext, TaskIds} ->
+                    % TODO - przetestowac czy jak poleci tu wyjatek to wywolamy callback
                     call_handlers_for_cancelled_lane(
                         ExecutionId, Handler, CancelledLaneContext, CancelledLaneId, TaskIds);
                 false ->
                     ok
             end,
 
+            execute_final_callback(ExecutionId, Context, Handler, FinalCallback),
+            workflow_execution_state:cleanup(ExecutionId);
+        ?WF_ERROR_ALREADY_REMOVED ->
+            ok
+    end.
+
+
+-spec execute_final_callback(id(), execution_id(), workflow_handler:handler(),
+    handle_workflow_execution_stopped | handle_workflow_interrupted) -> ok.
+execute_final_callback(ExecutionId, Context, Handler, FinalCallback) ->
+    case
+        FinalCallback =:= handle_workflow_execution_stopped andalso
+            workflow_execution_state:execute_exception_handler_if_waiting(ExecutionId)
+    of
+        true ->
+            execute_final_callback(ExecutionId, Context, Handler, handle_workflow_interrupted);
+        false ->
             case call_handler(ExecutionId, Context, Handler, FinalCallback, []) of
                 clean_progress ->
                     workflow_iterator_snapshot:cleanup(ExecutionId);
@@ -535,13 +553,18 @@ handle_execution_ended(EngineId, ExecutionId, #execution_ended{
                 save_iterator ->
                     ok; % Iterator is already persisted - simply do not clean it
                 error ->
-                    ok % Error has been logged inside call_handler
-            end,
-
-            workflow_execution_state:cleanup(ExecutionId);
-        ?WF_ERROR_ALREADY_REMOVED ->
-            ok
+                    case
+                        FinalCallback =:= handle_workflow_execution_stopped andalso
+                            workflow_execution_state:execute_exception_handler_if_waiting(ExecutionId)
+                    of
+                        true ->
+                            execute_final_callback(ExecutionId, Context, Handler, handle_workflow_interrupted);
+                        false ->
+                            ok
+                    end
+            end
     end.
+
 
 -spec schedule_on_pool(
     id(),
@@ -638,6 +661,7 @@ process_job_or_result(EngineId, ExecutionId, ExecutionSpec = #execution_spec{
 -spec process_item(id(), execution_id(), execution_spec()) -> ok.
 process_item(EngineId, ExecutionId, ExecutionSpec = #execution_spec{
     handler = Handler,
+    context = ExecutionContext,
     task_id = TaskId,
     task_spec = TaskSpec,
     subject_id = ItemId,
@@ -663,7 +687,7 @@ process_item(EngineId, ExecutionId, ExecutionSpec = #execution_spec{
     catch
         Error:Reason:Stacktrace  ->
             handle_exception(
-                ExecutionId, Handler,
+                ExecutionId, Handler, ExecutionContext,
                 "Unexpected error handling task ~p for item id ~p", [TaskId, ItemId],
                 Error, Reason, Stacktrace
             ),
@@ -691,7 +715,7 @@ process_item(ExecutionId, #execution_spec{
         Error:Reason:Stacktrace  ->
             % TODO VFS-7788 - use callbacks to get human readable information about item and task
             handle_exception(
-                ExecutionId, Handler,
+                ExecutionId, Handler, ExecutionContext,
                 "Unexpected error handling task ~p for item ~p (id ~p)", [TaskId, Item, ItemId],
                 Error, Reason, Stacktrace
             ),
@@ -717,7 +741,7 @@ process_result(EngineId, ExecutionId, #execution_spec{
             Error:Reason:Stacktrace  ->
                 % TODO VFS-7788 - use callbacks to get human readable information about task
                 handle_exception(
-                    ExecutionId, Handler,
+                    ExecutionId, Handler, ExecutionContext,
                     "Unexpected error processing task ~p result ~p (id ~p) for item ~p (id ~p)",
                     [TaskId, CachedResult, CachedResultId, CachedItem, ItemId],
                     Error, Reason, Stacktrace
@@ -728,7 +752,7 @@ process_result(EngineId, ExecutionId, #execution_spec{
     catch
         Error2:Reason2:Stacktrace2  ->
             handle_exception(
-                ExecutionId, Handler,
+                ExecutionId, Handler, ExecutionContext,
                 "Unexpected error getting item or result to process task ~p result ~p",
                 [TaskId, CachedResultId],
                 Error2, Reason2, Stacktrace2
@@ -753,7 +777,7 @@ process_streamed_task_data(EngineId, ExecutionId, #execution_spec{
         catch
             Error:Reason:Stacktrace  ->
                 handle_exception(
-                    ExecutionId, Handler,
+                    ExecutionId, Handler, ExecutionContext,
                     "Unexpected error processing task ~p data ~p", [TaskId, CachedTaskDataId],
                     Error, Reason, Stacktrace
                 ),
@@ -762,7 +786,7 @@ process_streamed_task_data(EngineId, ExecutionId, #execution_spec{
     catch
         Error2:Reason2:Stacktrace2  ->
             handle_exception(
-                ExecutionId, Handler,
+                ExecutionId, Handler, ExecutionContext,
                 "Unexpected error getting data ~p for task ~p", [CachedTaskDataId, TaskId],
                 Error2, Reason2, Stacktrace2
             ),
@@ -790,7 +814,7 @@ prepare_lane(EngineId, ExecutionId, Handler, ExecutionContext, LaneId, Preparati
     catch
         Error:Reason:Stacktrace  ->
             handle_exception(
-                ExecutionId, Handler,
+                ExecutionId, Handler, ExecutionContext,
                 "Unexpected error preparing lane ~p", [LaneId],
                 Error, Reason, Stacktrace
             ),

@@ -25,7 +25,7 @@
 
 %% API
 -export([init/7, resume_from_snapshot/7, init_cancel/2, finish_cancel/1, wait_for_pending_callbacks/1,
-    handle_exception/4, abandon/1, cleanup/1, prepare_next_job/1,
+    handle_exception/5, execute_exception_handler_if_waiting/1, abandon/1, cleanup/1, prepare_next_job/1,
     report_execution_status_update/4, report_lane_execution_prepared/6, pause_job/2,
     report_new_streamed_task_data/3, report_streamed_task_data_processed/4, mark_all_streamed_task_data_received/3,
     check_timeouts/1, reset_keepalive_timer/2, get_result_processing_data/2, get/1, save/1]).
@@ -278,10 +278,28 @@ wait_for_pending_callbacks(ExecutionId) ->
             ok
     end.
 
--spec handle_exception(workflow_engine:execution_id(), throw | error | exit, term(), list()) -> ok.
-handle_exception(ExecutionId, ErrorType, Reason, Stacktrace) ->
-    {ok, _} = update(ExecutionId, fun(State) -> mark_exception_appeared(State, ErrorType, Reason, Stacktrace) end),
+-spec handle_exception(workflow_engine:execution_id(), workflow_engine:execution_context(),
+    throw | error | exit, term(), list()) -> ok.
+handle_exception(ExecutionId, Context, ErrorType, Reason, Stacktrace) ->
+    {ok, _} = update(ExecutionId, fun(State) -> mark_exception_appeared(State, Context, ErrorType, Reason, Stacktrace) end),
     ok.
+
+-spec execute_exception_handler_if_waiting(workflow_engine:execution_id()) -> boolean().
+execute_exception_handler_if_waiting(ExecutionId) ->
+    case datastore_model:get(?CTX, ExecutionId) of
+        {ok, #document{value = #workflow_execution_state{
+            execution_status = #execution_cancelled{
+                call_count = 0,
+                is_interrupted = true,
+                callbacks_to_execute = [{CallbackFun, ?CALLBACK_ON_EXCEPTION, CallbackArgs} | _]
+            }
+        }} = Doc} ->
+            apply(CallbackFun, [Doc, ?CALLBACK_ON_EXCEPTION | CallbackArgs]),
+            true;
+        _ ->
+            false
+    end.
+
 
 -spec abandon(workflow_engine:execution_id()) -> ok.
 abandon(ExecutionId) ->
@@ -308,6 +326,7 @@ prepare_next_job(ExecutionId) ->
         ?WF_ERROR_EXECUTION_ENDED(ExecutionEnded) ->
             ExecutionEnded;
         ?WF_ERROR_LANE_EXECUTION_CANCELLED(Handler, CancelledLaneId, CancelledLaneContext, TaskIds) ->
+            % TODO - przetestowac czy jak poleci tu wyjatek to wywolamy callback
             workflow_engine:call_handlers_for_cancelled_lane(
                 ExecutionId, Handler, CancelledLaneContext, CancelledLaneId, TaskIds),
             {ok, _} = update(ExecutionId, fun(State) ->
@@ -869,11 +888,14 @@ handle_state_update_after_job_preparation(ExecutionId, #document{value = #workfl
             workflow_iterator_snapshot:save(ExecutionId, LaneIndex, undefined, 0, undefined, undefined),
             case update(ExecutionId, fun maybe_wait_for_preparation_in_advance/1) of
                 ?WF_ERROR_LANE_ALREADY_PREPARED ->
+                    % TODO - przetestowac czy jak poleci tu wyjatek to wywolamy callback
                     ?WF_ERROR_EXECUTION_ENDED(#execution_ended{handler = Handler, context = ExecutionContext});
                 {ok, _} ->
+                    % TODO - sprawdzic czy jak polecial wyjatek to callback sie wywolal
                     ?WF_ERROR_NO_WAITING_ITEMS
             end;
         _ ->
+            % TODO - przetestowac czy jak poleci tu wyjatek to wywolamy callback
             workflow_iterator_snapshot:save(ExecutionId, LaneIndex, undefined, 0, undefined, undefined),
             ?WF_ERROR_EXECUTION_ENDED(#execution_ended{handler = Handler, context = ExecutionContext})
     end;
@@ -999,7 +1021,7 @@ get_next_iterator(Handler, Context, Iterator, ExecutionId) ->
     catch
         Error:Reason:Stacktrace ->
             workflow_engine:handle_exception(
-                ExecutionId, Handler,
+                ExecutionId, Handler, Context,
                 "Unexpected error getting next iterator", [],
                 Error, Reason, Stacktrace
             ),
@@ -1073,31 +1095,32 @@ handle_execution_cancel_finish(#workflow_execution_state{execution_status = ?EXE
 handle_execution_cancel_finish(_State) ->
     ?WF_ERROR_CANCEL_NOT_INITIALIZED.
 
--spec mark_exception_appeared(state(), throw | error | exit, term(), list()) -> {ok, state()}.
+-spec mark_exception_appeared(state(), workflow_engine:execution_context(),
+    throw | error | exit, term(), list()) -> {ok, state()}.
 mark_exception_appeared(
     #workflow_execution_state{execution_status = #execution_cancelled{is_interrupted = true}} = State,
-    _ErrorType, _Reason, _Stacktrace
+    _Context, _ErrorType, _Reason, _Stacktrace
 ) ->
     {ok, State};
 mark_exception_appeared(
     #workflow_execution_state{
         execution_status = #execution_cancelled{callbacks_to_execute = Callbacks} = Status
     } = State,
-    ErrorType, Reason, Stacktrace
+    Context, ErrorType, Reason, Stacktrace
 ) ->
     {ok, State#workflow_execution_state{execution_status = Status#execution_cancelled{
         call_count = 0,
         is_interrupted = true,
         callbacks_to_execute = [
-            {fun execute_exception_handler/5, ?CALLBACK_ON_EXCEPTION, [ErrorType, Reason, Stacktrace]} | Callbacks
+            {fun execute_exception_handler/6, ?CALLBACK_ON_EXCEPTION, [Context, ErrorType, Reason, Stacktrace]} | Callbacks
         ]
     }}};
-mark_exception_appeared(State, ErrorType, Reason, Stacktrace) ->
+mark_exception_appeared(State, Context, ErrorType, Reason, Stacktrace) ->
     {ok, State#workflow_execution_state{execution_status = #execution_cancelled{
         call_count = 0,
         is_interrupted = true,
         callbacks_to_execute = [
-            {fun execute_exception_handler/5, ?CALLBACK_ON_EXCEPTION, [ErrorType, Reason, Stacktrace]}
+            {fun execute_exception_handler/6, ?CALLBACK_ON_EXCEPTION, [Context, ErrorType, Reason, Stacktrace]}
         ]
     }}}.
 
@@ -1114,11 +1137,11 @@ mark_workflow_abandoned(State) ->
     }}}.
 
 
--spec execute_exception_handler(doc(), callback_selector(), throw | error | exit, term(), list()) -> ok.
+-spec execute_exception_handler(doc(), callback_selector(), workflow_engine:execution_context(),
+    throw | error | exit, term(), list()) -> ok.
 execute_exception_handler(#document{key = ExecutionId, value = #workflow_execution_state{
-    handler = Handler,
-    current_lane = #current_lane{execution_context = Context}
-}}, CallbackSelector, ErrorType, Reason, Stacktrace) ->
+    handler = Handler
+}}, CallbackSelector, Context, ErrorType, Reason, Stacktrace) ->
     workflow_engine:execute_exception_handler(
         ExecutionId, Context, Handler, ErrorType, Reason, Stacktrace),
     {ok, _} = update(ExecutionId, fun(State) ->
