@@ -302,5 +302,5 @@ resolve_guid_by_relative_path(SessionId, RootFileGuid, RelativePath) ->
     case lfm:resolve_guid_by_relative_path(SessionId, RootFileGuid, RelativePath) of
         {ok, Guid} -> Guid;
         {error, ?ENOENT} -> undefined;
-        Other -> ?lfm_check(Other)
+        {error, Errno} -> throw(?ERROR_POSIX(Errno))
     end.

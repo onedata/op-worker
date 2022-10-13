@@ -227,7 +227,7 @@ do_dir_master_job_unsafe(#tree_traverse{
 -spec handle_verification_error(id(), tree_traverse:job()) -> ok.
 handle_verification_error(TaskId, Job) ->
     {FileCtx, FilePath} = job_to_error_info(Job),
-    {FileType, FileCtx2} = file_ctx:get_type(FileCtx, effective),
+    {FileType, FileCtx2} = file_ctx:get_effective_type(FileCtx),
     archivisation_audit_log:report_file_verification_failed(
         TaskId, file_ctx:get_logical_guid_const(FileCtx2), FilePath, FileType),
     archive:mark_verification_failed(TaskId),
