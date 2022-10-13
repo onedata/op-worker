@@ -487,11 +487,11 @@ mock_handlers(Workers, Manager) ->
     end),
 
     test_utils:mock_expect(Workers, workflow_test_handler, handle_workflow_interrupted, fun
-        (_ExecutionId, #{lane_id := _} = _Context) ->
+        (_ExecutionId, #{lane_id := _} = _Context, _InterruptReason) ->
             % Context with lane_id defined cannot be used in handle_workflow_interrupted handler
             % (wrong type of context is used by caller)
             throw(wrong_context);
-        (ExecutionId, Context) ->
+        (ExecutionId, Context, _InterruptReason) ->
             MockTemplate(
                 #handler_call{
                     function = handle_workflow_interrupted,

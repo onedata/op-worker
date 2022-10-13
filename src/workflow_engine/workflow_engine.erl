@@ -164,8 +164,8 @@ execute_workflow(EngineId, ExecutionSpec) ->
             workflow_engine_state:add_execution_id(EngineId, ExecutionId),
             trigger_job_scheduling(EngineId, ?TAKE_UP_FREE_SLOTS);
         ?WF_ERROR_PREPARATION_FAILED ->
-            execute_exception_handler(ExecutionId, Context, Handler, error, preparation_failed, []),
-            case call_handler(ExecutionId, Context, Handler, handle_workflow_interrupted, []) of
+            InterruptReason = execute_exception_handler(ExecutionId, Context, Handler, error, preparation_failed, []),
+            case call_handler(ExecutionId, Context, Handler, handle_workflow_interrupted, [InterruptReason]) of
                 clean_progress -> cleanup_execution(ExecutionId);
                 _ -> ok
             end
@@ -208,8 +208,8 @@ finish_cancel_procedure(ExecutionId) ->
 
 
 -spec abandon(execution_id(), workflow_handler:interrupt_reason()) -> ok.
-abandon(ExecutionId, InterruptReason) ->  %% TODO MW handle
-    workflow_execution_state:abandon(ExecutionId).
+abandon(ExecutionId, InterruptReason) ->
+    workflow_execution_state:abandon(ExecutionId, InterruptReason).
 
 
 -spec report_async_task_result(execution_id(), workflow_jobs:encoded_job_identifier(), processing_result()) -> ok.
@@ -363,7 +363,7 @@ handle_exception(ExecutionId, Handler, Context, Message, MessageArgs, ErrorType,
     end.
 
 -spec execute_exception_handler(execution_id(), execution_context(), workflow_handler:handler(),
-    throw | error | exit, term(), list()) -> ok.
+    throw | error | exit, term(), list()) -> workflow_handler:interrupt_reason() | undefined.
 execute_exception_handler(ExecutionId, Context, Handler, ErrorType, Reason, Stacktrace) ->
     try
         apply(Handler, handle_exception, [ExecutionId, Context, ErrorType, Reason, Stacktrace])
@@ -373,7 +373,8 @@ execute_exception_handler(ExecutionId, Context, Handler, ErrorType, Reason, Stac
                 "Unexpected error handling exception for workflow_handler ~w (execution ~s): ~w:~p",
                 [Handler, ExecutionId, ErrorType2, Reason2],
                 Stacktrace2
-            )
+            ),
+            undefined
     end.
 
 
@@ -536,16 +537,17 @@ handle_execution_ended(EngineId, ExecutionId, #execution_ended{
 
 
 -spec execute_final_callback(id(), execution_id(), workflow_handler:handler(),
-    handle_workflow_execution_stopped | handle_workflow_interrupted) -> ok.
+    handle_workflow_execution_stopped | {handle_workflow_interrupted, workflow_handler:interrupt_reason()}) -> ok.
 execute_final_callback(ExecutionId, Context, Handler, FinalCallback) ->
-    case
-        FinalCallback =:= handle_workflow_execution_stopped andalso
-            workflow_execution_state:execute_exception_handler_if_waiting(ExecutionId)
-    of
-        true ->
-            execute_final_callback(ExecutionId, Context, Handler, handle_workflow_interrupted);
-        false ->
-            case call_handler(ExecutionId, Context, Handler, FinalCallback, []) of
+    case {FinalCallback, workflow_execution_state:execute_exception_handler_if_waiting(ExecutionId)} of
+        {handle_workflow_execution_stopped, {executed, Reason}} ->
+            execute_final_callback(ExecutionId, Context, Handler, {handle_workflow_interrupted, Reason});
+        _ ->
+            {FunName, Args} = case FinalCallback of
+                handle_workflow_execution_stopped -> {handle_workflow_execution_stopped, []};
+                {handle_workflow_interrupted, Reason} -> {handle_workflow_interrupted, [Reason]}
+            end,
+            case call_handler(ExecutionId, Context, Handler, FunName, Args) of
                 clean_progress ->
                     workflow_iterator_snapshot:cleanup(ExecutionId);
                 save_progress ->
@@ -553,13 +555,10 @@ execute_final_callback(ExecutionId, Context, Handler, FinalCallback) ->
                 save_iterator ->
                     ok; % Iterator is already persisted - simply do not clean it
                 error ->
-                    case
-                        FinalCallback =:= handle_workflow_execution_stopped andalso
-                            workflow_execution_state:execute_exception_handler_if_waiting(ExecutionId)
-                    of
-                        true ->
-                            execute_final_callback(ExecutionId, Context, Handler, handle_workflow_interrupted);
-                        false ->
+                    case {FinalCallback, workflow_execution_state:execute_exception_handler_if_waiting(ExecutionId)} of
+                        {handle_workflow_execution_stopped, {executed, NewReason}} ->
+                            execute_final_callback(ExecutionId, Context, Handler, {handle_workflow_interrupted, NewReason});
+                        _ ->
                             ok
                     end
             end

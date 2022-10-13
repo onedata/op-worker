@@ -70,12 +70,7 @@ get(ExecutionId) ->
 
 -spec cleanup(workflow_engine:execution_id()) -> ok.
 cleanup(ExecutionId) ->
-    case ?MODULE:get(ExecutionId) of
-        {ok, #workflow_iterator_snapshot{iterator = Iterator}} ->
-            ok = datastore_model:delete(?CTX, ExecutionId);
-        ?ERROR_NOT_FOUND ->
-            ok
-    end.
+    ok = datastore_model:delete(?CTX, ExecutionId).
 
 
 %%%===================================================================

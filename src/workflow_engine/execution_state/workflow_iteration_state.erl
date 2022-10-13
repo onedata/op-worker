@@ -19,7 +19,7 @@
 
 %% API
 -export([init/0, can_process_items/1, handle_iteration_finished/1, get_last_registered_item_index/1, register_item/3,
-    handle_item_processed/3, finalize/1, is_resuming_last_item/1, get_item_id/2,
+    handle_item_processed/3, finalize/1, restart_iteration/1, get_item_id/2,
     dump/1, from_dump/1, get_dump_struct/0]).
 %% Test API
 -export([is_finished_and_cleaned/1]).
@@ -45,7 +45,7 @@
     To :: workflow_execution_state:index(),
     From :: workflow_execution_state:index()
 }, SnapshotData :: {workflow_execution_state:index(), workflow_cached_item:id()} | undefined).
--type phase() :: executing | {resuming, workflow_execution_state:index() | last_item | last_items} | finalzing.
+-type phase() :: executing | {resuming, workflow_execution_state:index() | finished_iteration | restarted_iteration} | finalzing.
 
 -type dump() :: {
     [workflow_execution_state:index()],
@@ -70,9 +70,9 @@ can_process_items(#iteration_state{phase = Phase}) ->
 
 
 -spec handle_iteration_finished(state()) -> state().
-handle_iteration_finished(#iteration_state{phase = {resuming, last_item}} = Progress) ->
+handle_iteration_finished(#iteration_state{phase = {resuming, finished_iteration}} = Progress) ->
     Progress#iteration_state{phase = executing, last_registered_item_index = undefined};
-handle_iteration_finished(#iteration_state{phase = {resuming, last_items}} = Progress) ->
+handle_iteration_finished(#iteration_state{phase = {resuming, restarted_iteration}} = Progress) ->
     Progress#iteration_state{phase = executing, last_registered_item_index = undefined};
 handle_iteration_finished(Progress) ->
     Progress#iteration_state{last_registered_item_index = undefined}.
@@ -285,10 +285,11 @@ finalize(#iteration_state{pending_items = Pending, items_finished_ahead = Finish
         State#iteration_state{phase = finalzing}
     }.
 
-
--spec is_resuming_last_item(state()) -> boolean().
-is_resuming_last_item(#iteration_state{phase = Phase}) ->
-    Phase =:= {resuming, last_item}.
+-spec restart_iteration(state()) -> {ok, state()} | already_restarted.
+restart_iteration(#iteration_state{phase = {resuming, finished_iteration}} = State) ->
+    {ok, State#iteration_state{phase = {resuming, restarted_iteration}}};
+restart_iteration(_) ->
+    already_restarted.
 
 -spec get_item_id(state(), workflow_execution_state:index()) -> workflow_cached_item:id().
 get_item_id(#iteration_state{pending_items = Pending}, ItemIndex) ->
@@ -321,9 +322,8 @@ from_dump({PendingItemsIndexes, LastRegistered, FirstNotFinished, FinishedAheadL
         true -> 
             executing;
         false -> 
-            case {LastRegistered, length(PendingItemsIndexes) =< 1} of
-                {undefined, true} -> {resuming, last_item};
-                {undefined, false} -> {resuming, last_items};
+            case LastRegistered of
+                undefined -> {resuming, finished_iteration};
                 _ -> {resuming, LastRegistered}
             end
     end,

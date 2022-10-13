@@ -86,6 +86,7 @@ all() ->
 % TODO - jaki iterator zapisujemy jak prepare_lane padl
 % TODO - co sie dzieje na cancelu po przetorzeniu ostatniego item'a - nie powinien sie workflow skonczyc dobrze?
 % TODO - test wielokrotnego resume'a w tym cancelowania zaraz po resume lub po wykonaniu callbacku resumed
+% TODO - testy abandon?
 
 -record(test_config, {
     task_type = sync :: sync | async,
