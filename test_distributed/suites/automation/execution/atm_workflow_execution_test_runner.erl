@@ -78,6 +78,7 @@
     run_task_for_item |
     process_task_result_for_item |
     process_streamed_task_data |
+    handle_task_results_processed_for_all_items |
     report_item_error |
     handle_task_execution_stopped |
     handle_lane_execution_stopped |
@@ -1167,6 +1168,7 @@ mock_workflow_execution_handler_steps(Workers) ->
     mock_workflow_execution_handler_step(Workers, run_task_for_item, 5),
     mock_workflow_execution_handler_step(Workers, process_task_result_for_item, 5),
     mock_workflow_execution_handler_step(Workers, process_streamed_task_data, 4),
+    mock_workflow_execution_handler_step(Workers, handle_task_results_processed_for_all_items, 3),
     mock_workflow_execution_handler_step(Workers, report_item_error, 3),
     mock_workflow_execution_handler_step(Workers, handle_task_execution_stopped, 3),
     mock_workflow_execution_handler_step(Workers, handle_exception, 5),

@@ -85,6 +85,15 @@
 
     interrupt_ongoing_atm_workflow_execution_due_to_expired_session/1,
 
+    crash_atm_workflow_execution_during_prepare_lane_callback/1,
+    crash_atm_workflow_execution_during_run_task_for_item_callback/1,
+    crash_atm_workflow_execution_during_process_task_result_for_item_callback/1,
+    crash_atm_workflow_execution_during_process_streamed_task_data_callback/1,
+    crash_atm_workflow_execution_during_handle_task_results_processed_for_all_items_callback/1,
+    crash_atm_workflow_execution_during_handle_task_execution_stopped_callback/1,
+    crash_atm_workflow_execution_during_handle_lane_execution_stopped_callback/1,
+    crash_atm_workflow_execution_during_handle_workflow_execution_stopped_callback/1,
+
     stopping_reason_failure_overrides_pause/1,
     stopping_reason_cancel_overrides_pause/1,
     stopping_reason_cancel_overrides_failure/1,
@@ -215,6 +224,17 @@ groups() -> [
         interrupt_ongoing_atm_workflow_execution_due_to_expired_session
     ]},
 
+    {crash_tests, [], [
+        crash_atm_workflow_execution_during_prepare_lane_callback,
+        crash_atm_workflow_execution_during_run_task_for_itm_callback,
+        crash_atm_workflow_execution_during_process_task_result_for_item_callback,
+        crash_atm_workflow_execution_during_process_streamed_task_data_callback,
+        crash_atm_workflow_execution_during_handle_task_results_processed_for_all_items_callback,
+        crash_atm_workflow_execution_during_handle_task_execution_stopped_callback,
+        crash_atm_workflow_execution_during_handle_lane_execution_stopped_callback,
+        crash_atm_workflow_execution_during_handle_workflow_execution_stopped_callback
+    ]},
+
     {stopping_tests, [], [
         stopping_reason_failure_overrides_pause,
         stopping_reason_cancel_overrides_pause,
@@ -288,6 +308,7 @@ all() -> [
     {group, cancel_tests},
     {group, pause_tests},
     {group, interrupt_tests},
+    {group, crash_tests},
     {group, stopping_tests},
     {group, iteration_tests},
     {group, mapping_tests},
@@ -311,6 +332,7 @@ all() -> [
 -define(RUN_CANCEL_TEST(), ?RUN_TEST(atm_workflow_execution_cancel_tests)).
 -define(RUN_PAUSE_TEST(), ?RUN_TEST(atm_workflow_execution_pause_tests)).
 -define(RUN_INTERRUPT_TEST(), ?RUN_TEST(atm_workflow_execution_interrupt_tests)).
+-define(RUN_CRASH_TEST(), ?RUN_TEST(atm_workflow_execution_crash_tests)).
 -define(RUN_STOPPING_TEST(), ?RUN_TEST(atm_workflow_execution_stopping_tests)).
 -define(RUN_ITERATION_TEST(), ?RUN_TEST(atm_workflow_execution_iteration_tests)).
 -define(RUN_MAPPING_TEST(), ?RUN_TEST(atm_workflow_execution_mapping_tests)).
@@ -493,6 +515,38 @@ pause_interrupted_atm_workflow_execution(_Config) ->
 
 interrupt_ongoing_atm_workflow_execution_due_to_expired_session(_Config) ->
     ?RUN_INTERRUPT_TEST().
+
+
+crash_atm_workflow_execution_during_prepare_lane_callback(_Config) ->
+    ?RUN_CRASH_TEST().
+
+
+crash_atm_workflow_execution_during_run_task_for_item_callback(_Config) ->
+    ?RUN_CRASH_TEST().
+
+
+crash_atm_workflow_execution_during_process_task_result_for_item_callback(_Config) ->
+    ?RUN_CRASH_TEST().
+
+
+crash_atm_workflow_execution_during_process_streamed_task_data_callback(_Config) ->
+    ?RUN_CRASH_TEST().
+
+
+crash_atm_workflow_execution_during_handle_task_results_processed_for_all_items_callback(_Config) ->
+    ?RUN_CRASH_TEST().
+
+
+crash_atm_workflow_execution_during_handle_task_execution_stopped_callback(_Config) ->
+    ?RUN_CRASH_TEST().
+
+
+crash_atm_workflow_execution_during_handle_lane_execution_stopped_callback(_Config) ->
+    ?RUN_CRASH_TEST().
+
+
+crash_atm_workflow_execution_during_handle_workflow_execution_stopped_callback(_Config) ->
+    ?RUN_CRASH_TEST().
 
 
 stopping_reason_failure_overrides_pause(_Config) ->
@@ -711,6 +765,7 @@ init_per_group(TestGroup, Config) when
     TestGroup =:= cancel_tests;
     TestGroup =:= pause_tests;
     TestGroup =:= interrupt_tests;
+    TestGroup =:= crash_tests;
     TestGroup =:= stopping_tests;
     TestGroup =:= iteration_tests;
     TestGroup =:= mapping_tests;
@@ -734,7 +789,7 @@ end_per_group(TestGroup, Config) when
     TestGroup =:= failure_tests;
     TestGroup =:= cancel_tests;
     TestGroup =:= pause_tests;
-    TestGroup =:= interrupt_tests;
+    TestGroup =:= crash_tests;
     TestGroup =:= stopping_tests;
     TestGroup =:= iteration_tests;
     TestGroup =:= mapping_tests;
