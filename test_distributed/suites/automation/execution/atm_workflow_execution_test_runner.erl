@@ -65,7 +65,10 @@
 
     delete_offline_session/1
 ]).
--export([browse_store/2, browse_store/3]).
+-export([
+    browse_store/2, browse_store/3,
+    get_exception_store_content/2
+]).
 -export([assert_ended_atm_workflow_execution_can_be_neither_stopped_nor_resumed/1]).
 
 -type step_name() ::
@@ -350,6 +353,15 @@ browse_store(AtmStoreSchemaId, AtmTaskExecutionIdOrLaneRunSelector, AtmMockCallC
     SpaceId = oct_background:get_space_id(SpaceSelector),
     AtmStoreId = get_store_id(AtmStoreSchemaId, AtmTaskExecutionIdOrLaneRunSelector, AtmMockCallCtx),
     ?rpc(ProviderSelector, browse_store(SessionId, SpaceId, AtmWorkflowExecutionId, AtmStoreId)).
+
+
+-spec get_exception_store_content(atm_lane_execution:lane_run_selector(), mock_call_ctx()) ->
+    json_utils:json_term().
+get_exception_store_content(AtmLaneRunSelector, AtmMockCallCtx) ->
+    #{<<"items">> := Items, <<"isLast">> := true} = atm_workflow_execution_test_runner:browse_store(
+        exception_store, AtmLaneRunSelector, AtmMockCallCtx
+    ),
+    lists:map(fun(#{<<"value">> := Content}) -> Content end, Items).
 
 
 -spec assert_ended_atm_workflow_execution_can_be_neither_stopped_nor_resumed(mock_call_ctx()) ->
