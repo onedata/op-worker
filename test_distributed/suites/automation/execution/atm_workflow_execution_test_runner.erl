@@ -65,7 +65,10 @@
 
     delete_offline_session/1
 ]).
--export([browse_store/2, browse_store/3]).
+-export([
+    browse_store/2, browse_store/3,
+    get_exception_store_content/2
+]).
 -export([assert_ended_atm_workflow_execution_can_be_neither_stopped_nor_resumed/1]).
 
 -type step_name() ::
@@ -350,6 +353,15 @@ browse_store(AtmStoreSchemaId, AtmTaskExecutionIdOrLaneRunSelector, AtmMockCallC
     SpaceId = oct_background:get_space_id(SpaceSelector),
     AtmStoreId = get_store_id(AtmStoreSchemaId, AtmTaskExecutionIdOrLaneRunSelector, AtmMockCallCtx),
     ?rpc(ProviderSelector, browse_store(SessionId, SpaceId, AtmWorkflowExecutionId, AtmStoreId)).
+
+
+-spec get_exception_store_content(atm_lane_execution:lane_run_selector(), mock_call_ctx()) ->
+    json_utils:json_term().
+get_exception_store_content(AtmLaneRunSelector, AtmMockCallCtx) ->
+    #{<<"items">> := Items, <<"isLast">> := true} = atm_workflow_execution_test_runner:browse_store(
+        exception_store, AtmLaneRunSelector, AtmMockCallCtx
+    ),
+    lists:map(fun(#{<<"value">> := Content}) -> Content end, Items).
 
 
 -spec assert_ended_atm_workflow_execution_can_be_neither_stopped_nor_resumed(mock_call_ctx()) ->
@@ -952,6 +964,7 @@ shift_monitored_lane_run_if_current_one_stopped(
 shift_monitored_lane_run_if_current_one_stopped(
     StepMockCallReport = #mock_call_report{timing = after_step, step = Step},
     TestCtx = #test_ctx{
+        workflow_execution_exp_state = ExpState0,
         ongoing_incarnations = [EndedIncarnation | LeftoverIncarnations],
         prev_incarnations_executed_step_phases = PrevIncarnationsExecutedStepPhases,
         executed_step_phases = ExecutedStepPhases
@@ -976,6 +989,9 @@ shift_monitored_lane_run_if_current_one_stopped(
     TestCtx#test_ctx{
         current_lane_index = AtmLaneIndex,
         current_run_num = AtmRunNum,
+        workflow_execution_exp_state = atm_workflow_execution_exp_state_builder:set_current_lane_run(
+            AtmLaneIndex, AtmRunNum, ExpState0
+        ),
         ongoing_incarnations = LeftoverIncarnations,
         prev_incarnations_executed_step_phases = [
             {IncarnationNum, ExecutedStepPhases}
@@ -1047,6 +1063,7 @@ is_end_phase_of_last_step_of_lane_run(
 %% @private
 -spec shift_monitored_lane_run_after_current_one_stopped(test_ctx()) -> test_ctx().
 shift_monitored_lane_run_after_current_one_stopped(TestCtx = #test_ctx{
+    workflow_execution_exp_state = ExpState0,
     ongoing_incarnations = [OngoingIncarnation | LeftoverIncarnations]
 }) ->
     case OngoingIncarnation#atm_workflow_execution_incarnation_test_spec.lane_runs of
@@ -1067,6 +1084,9 @@ shift_monitored_lane_run_after_current_one_stopped(TestCtx = #test_ctx{
             TestCtx#test_ctx{
                 current_lane_index = AtmLaneIndex,
                 current_run_num = AtmRunNum,
+                workflow_execution_exp_state = atm_workflow_execution_exp_state_builder:set_current_lane_run(
+                    AtmLaneIndex, AtmRunNum, ExpState0
+                ),
                 ongoing_incarnations = [NewOngoingIncarnation | LeftoverIncarnations]
             }
     end.

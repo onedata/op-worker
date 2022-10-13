@@ -292,6 +292,18 @@ resume_atm_workflow_execution_paused_while_active() ->
         end
     },
 
+    AssertExpTaskStatsFun = fun(AtmTaskExecutionId, ExpTask1Stats, ExpTask2Stats, ExpState0) ->
+        ExpTaskStats = case atm_workflow_execution_exp_state_builder:get_task_selector(
+            AtmTaskExecutionId, ExpState0
+        ) of
+            {_, _, <<"task1">>} -> ExpTask1Stats;
+            _ -> ExpTask2Stats
+        end,
+        ?assertEqual(ExpTaskStats, atm_workflow_execution_exp_state_builder:get_task_stats(
+            AtmTaskExecutionId, ExpState0
+        ))
+    end,
+
     BuildAtmLaneRunTestSpecFun = fun(AtmLaneRunSelector, ExpExceptionStoreContent, IsLastExpLaneRun) ->
         #atm_lane_run_execution_test_spec{
             selector = AtmLaneRunSelector,
@@ -299,6 +311,13 @@ resume_atm_workflow_execution_paused_while_active() ->
             process_task_result_for_item = ProcessTaskResultForItemStepMockSpec,
 
             handle_task_execution_stopped = #atm_step_mock_spec{
+                before_step_exp_state_diff = fun(#atm_mock_call_ctx{
+                    workflow_execution_exp_state = ExpState0,
+                    call_args = [_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId]
+                }) ->
+                    AssertExpTaskStatsFun(AtmTaskExecutionId, {0, 0, 6}, {0, 3, 6}, ExpState0),
+                    false
+                end,
                 after_step_exp_state_diff = fun(#atm_mock_call_ctx{
                     workflow_execution_exp_state = ExpState,
                     call_args = [_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId]
@@ -338,6 +357,7 @@ resume_atm_workflow_execution_paused_while_active() ->
             }
         }
     end,
+
     ResumedLaneRunBaseTestSpec = BuildAtmLaneRunTestSpecFun({1, 1}, [2, 4, 6], false),
 
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
@@ -359,6 +379,7 @@ resume_atm_workflow_execution_paused_while_active() ->
                         run_task_for_item = #atm_step_mock_spec{
                             strategy = fun(#atm_mock_call_ctx{call_args = [_, _, _, _, [Item]]}) ->
                                 case lists:member(Item, [4, 5, 6]) of
+                                    % Delay execution of last batch to ensure it happens after execution is paused
                                     true -> {passthrough_with_delay, timer:seconds(1)};
                                     false -> passthrough
                                 end
@@ -372,16 +393,7 @@ resume_atm_workflow_execution_paused_while_active() ->
                                 workflow_execution_exp_state = ExpState0,
                                 call_args = [_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId]
                             }) ->
-                                ExpTaskStats = case atm_workflow_execution_exp_state_builder:get_task_selector(
-                                    AtmTaskExecutionId, ExpState0
-                                ) of
-                                    {_, _, <<"task1">>} -> {0, 0, 6};  %% TODO check stats after resume
-                                    _ -> {0, 1, 3}
-                                end,
-                                ?assertEqual(
-                                    ExpTaskStats,
-                                    atm_workflow_execution_exp_state_builder:get_task_stats(AtmTaskExecutionId, ExpState0)
-                                ),
+                                AssertExpTaskStatsFun(AtmTaskExecutionId, {0, 0, 6}, {0, 1, 3}, ExpState0),
                                 {true, expect_execution_stopping_while_processing_lane1(ExpState0, pause)}
                             end,
                             after_step_exp_state_diff = fun(#atm_mock_call_ctx{

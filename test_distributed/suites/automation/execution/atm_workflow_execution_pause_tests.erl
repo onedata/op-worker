@@ -338,7 +338,10 @@ pause_active_atm_workflow_execution_test_base(Testcase, RelayMethod) ->
                         end
                     },
                     handle_lane_execution_stopped = #atm_step_mock_spec{
-                        after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState}) ->
+                        after_step_exp_state_diff = fun(AtmMockCallCtx = #atm_mock_call_ctx{
+                            workflow_execution_exp_state = ExpState
+                        }) ->
+                            assert_exception_store_is_empty({1, 1}, AtmMockCallCtx),
                             {true, atm_workflow_execution_exp_state_builder:expect_lane_run_paused({1, 1}, ExpState)}
                         end
                     }
@@ -452,3 +455,10 @@ assert_paused_atm_workflow_execution_can_not_be_paused(AtmMockCallCtx = #atm_moc
         atm_workflow_execution_test_runner:pause_workflow_execution(AtmMockCallCtx)
     ),
     ?assert(atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState0, 0)).
+
+
+%% @private
+assert_exception_store_is_empty(AtmLaneRunSelector, AtmMockCallCtx) ->
+    ?assertEqual([], lists:sort(atm_workflow_execution_test_runner:get_exception_store_content(
+        AtmLaneRunSelector, AtmMockCallCtx
+    ))).

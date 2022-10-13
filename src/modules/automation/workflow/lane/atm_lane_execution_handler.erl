@@ -73,7 +73,7 @@ stop(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx) ->
     ),
     case atm_lane_execution_status:handle_stopping(AtmLaneRunSelector, AtmWorkflowExecutionId, Reason) of
         {ok, AtmWorkflowExecutionDoc} ->
-            stop_lane_run(
+            handle_lane_run_stopping(
                 AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecutionDoc
             );
 
@@ -85,7 +85,7 @@ stop(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx) ->
             % repeat stopping procedure just in case if previously it wasn't finished
             % (e.g. provider abrupt shutdown and restart)
             {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:get(AtmWorkflowExecutionId),
-            stop_lane_run(
+            handle_lane_run_stopping(
                 AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecutionDoc
             );
 
@@ -392,29 +392,37 @@ get_iterator_spec(AtmLaneRunSelector, AtmWorkflowExecution = #atm_workflow_execu
 
 
 %% @private
--spec stop_lane_run(
+-spec handle_lane_run_stopping(
     atm_lane_execution:lane_run_selector(),
     atm_lane_execution:run_stopping_reason(),
     atm_workflow_execution_ctx:record(),
     atm_workflow_execution:doc()
 ) ->
     {ok, stopping | stopped}.
-stop_lane_run(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, #document{
+handle_lane_run_stopping(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, #document{
     key = AtmWorkflowExecutionId,
     value = AtmWorkflowExecution = #atm_workflow_execution{prev_status = PrevStatus}
 }) ->
+    IsCurrentLaneRun = atm_lane_execution:is_current_lane_run(
+        AtmLaneRunSelector, AtmWorkflowExecution
+    ),
+
     case atm_workflow_execution_status:status_to_phase(PrevStatus) of
-        ?SUSPENDED_PHASE ->
+        ?SUSPENDED_PHASE when IsCurrentLaneRun ->
+            % Stopping suspended execution - since there was no active process
+            % handling it, manual cleanup and callback calls are necessary
             workflow_engine:cleanup_execution(AtmWorkflowExecutionId),
             stop_parallel_boxes(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecution),
-            % execution was suspended == there was no active process handling it and manual handle_stopped
-            % call is necessary
             atm_lane_execution_status:handle_stopped(AtmLaneRunSelector, AtmWorkflowExecutionId),
             {ok, stopped};
-        _ ->
+        _ when IsCurrentLaneRun ->
+            % Currently executed lane run stopping == entire workflow execution is stopping
             workflow_engine:init_cancel_procedure(AtmWorkflowExecutionId),
             stop_parallel_boxes(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecution),
             workflow_engine:finish_cancel_procedure(AtmWorkflowExecutionId),
+            {ok, stopping};
+        _ ->
+            stop_parallel_boxes(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecution),
             {ok, stopping}
     end.
 

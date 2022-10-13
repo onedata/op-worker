@@ -902,7 +902,7 @@ expect_workflow_execution_cancelled(ExpStateCtx) ->
 expect_workflow_execution_crashed(ExpStateCtx) ->
     ExpAtmWorkflowExecutionStateDiff = #{
         <<"status">> => <<"crashed">>,
-        <<"suspendTime">> => build_timestamp_field_validator(?NOW())
+        <<"finishTime">> => build_timestamp_field_validator(?NOW())
     },
     update_workflow_execution_exp_state(ExpAtmWorkflowExecutionStateDiff, ExpStateCtx).
 

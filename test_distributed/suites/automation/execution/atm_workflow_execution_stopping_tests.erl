@@ -352,14 +352,27 @@ stopping_crashed_atm_workflow_execution() ->
                     process_task_result_for_item = #atm_step_mock_spec{
                         strategy = {yield, {error, crashed}},
                         after_step_exp_state_diff = no_diff
+                    },
+
+                    handle_lane_execution_stopped = #atm_step_mock_spec{
+                        % this is called as part of `handle_workflow_interrupted`
+                        after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                            ExpState1 = atm_workflow_execution_exp_state_builder:expect_all_tasks_abruptly_interrupted(
+                                {2, 1}, ExpState0
+                            ),
+                            {true, atm_workflow_execution_exp_state_builder:expect_lane_run_crashed({2, 1}, ExpState1)}
+                        end
                     }
                 }
             ],
             handle_exception = #atm_step_mock_spec{
-                after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState1}) ->
-                    ExpState2 = expect_execution_stopping_while_processing_lane2(ExpState1, interrupt),
-                    ExpState3 = atm_workflow_execution_exp_state_builder:expect_lane_run_crashed({2, 1}, ExpState2),
-                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_crashed(ExpState3)}
+                after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                    {true, expect_execution_stopping_while_processing_lane2(ExpState0, interrupt)}
+                end
+            },
+            handle_workflow_interrupted = #atm_step_mock_spec{
+                after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_crashed(ExpState0)}
                 end
             },
             after_hook = fun assert_ended_atm_workflow_execution_can_not_be_stopped/1
