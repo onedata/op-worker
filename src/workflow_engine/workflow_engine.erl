@@ -26,7 +26,7 @@
 %% API
 -export([init/1, init/2, execute_workflow/2, cleanup_execution/1,
     init_cancel_procedure/1, init_cancel_procedure/2,
-    wait_for_pending_callbacks/1, finish_cancel_procedure/1, abandon/1]).
+    wait_for_pending_callbacks/1, finish_cancel_procedure/1, abandon/2]).
 -export([stream_task_data/3, report_task_data_streaming_concluded/3]).
 -export([report_async_task_result/3, report_async_task_heartbeat/2]).
 %% Framework internal API
@@ -207,8 +207,8 @@ finish_cancel_procedure(ExecutionId) ->
     end.
 
 
--spec abandon(execution_id()) -> ok.
-abandon(ExecutionId) ->
+-spec abandon(execution_id(), workflow_handler:interrupt_reason()) -> ok.
+abandon(ExecutionId, InterruptReason) ->  %% TODO MW handle
     workflow_execution_state:abandon(ExecutionId).
 
 
