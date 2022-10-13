@@ -964,6 +964,7 @@ shift_monitored_lane_run_if_current_one_stopped(
 shift_monitored_lane_run_if_current_one_stopped(
     StepMockCallReport = #mock_call_report{timing = after_step, step = Step},
     TestCtx = #test_ctx{
+        workflow_execution_exp_state = ExpState0,
         ongoing_incarnations = [EndedIncarnation | LeftoverIncarnations],
         prev_incarnations_executed_step_phases = PrevIncarnationsExecutedStepPhases,
         executed_step_phases = ExecutedStepPhases
@@ -988,6 +989,9 @@ shift_monitored_lane_run_if_current_one_stopped(
     TestCtx#test_ctx{
         current_lane_index = AtmLaneIndex,
         current_run_num = AtmRunNum,
+        workflow_execution_exp_state = atm_workflow_execution_exp_state_builder:set_current_lane_run(
+            AtmLaneIndex, AtmRunNum, ExpState0
+        ),
         ongoing_incarnations = LeftoverIncarnations,
         prev_incarnations_executed_step_phases = [
             {IncarnationNum, ExecutedStepPhases}
@@ -1059,6 +1063,7 @@ is_end_phase_of_last_step_of_lane_run(
 %% @private
 -spec shift_monitored_lane_run_after_current_one_stopped(test_ctx()) -> test_ctx().
 shift_monitored_lane_run_after_current_one_stopped(TestCtx = #test_ctx{
+    workflow_execution_exp_state = ExpState0,
     ongoing_incarnations = [OngoingIncarnation | LeftoverIncarnations]
 }) ->
     case OngoingIncarnation#atm_workflow_execution_incarnation_test_spec.lane_runs of
@@ -1079,6 +1084,9 @@ shift_monitored_lane_run_after_current_one_stopped(TestCtx = #test_ctx{
             TestCtx#test_ctx{
                 current_lane_index = AtmLaneIndex,
                 current_run_num = AtmRunNum,
+                workflow_execution_exp_state = atm_workflow_execution_exp_state_builder:set_current_lane_run(
+                    AtmLaneIndex, AtmRunNum, ExpState0
+                ),
                 ongoing_incarnations = [NewOngoingIncarnation | LeftoverIncarnations]
             }
     end.
