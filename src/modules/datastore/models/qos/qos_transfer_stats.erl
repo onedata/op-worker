@@ -62,8 +62,8 @@ ensure_exists(QosEntryId) ->
 
 -spec delete(qos_entry:id()) -> ok.
 delete(QosEntryId) ->
-    ok = datastore_time_series_collection:delete(?CTX, ?COLLECTION_ID(QosEntryId, ?BYTES_STATS)),
-    ok = datastore_time_series_collection:delete(?CTX, ?COLLECTION_ID(QosEntryId, ?FILES_STATS)).
+    ok = ?ok_if_not_found(datastore_time_series_collection:delete(?CTX, ?COLLECTION_ID(QosEntryId, ?BYTES_STATS))),
+    ok = ?ok_if_not_found(datastore_time_series_collection:delete(?CTX, ?COLLECTION_ID(QosEntryId, ?FILES_STATS))).
 
 
 -spec get_collection_schema(type()) -> time_series_collection_schema:record().
