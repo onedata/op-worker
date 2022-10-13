@@ -212,7 +212,7 @@ list_directory_endpoint(FileId) ->
 get_attributes_endpoint(FileId) ->
     #rest_api_request_sample{
         name = <<"Get attributes">>,
-        description = <<"Returns basic attributes of a file or directory.">>,
+        description = <<"Returns basic attributes of the file or directory.">>,
         method = 'GET',
         path = str_utils:format_bin("/shares/data/~s", [FileId]),
         requires_authorization = false,
@@ -226,7 +226,7 @@ get_attributes_endpoint(FileId) ->
 get_extended_attributes_endpoint(FileId) ->
     #rest_api_request_sample{
         name = <<"Get extended attributes (xattrs)">>,
-        description = <<"Returns custom extended attributes (xattrs) associated with a file or directory.">>,
+        description = <<"Returns custom extended attributes (xattrs) associated with the file or directory.">>,
         method = 'GET',
         path = str_utils:format_bin("/shares/data/~s/metadata/xattrs", [FileId]),
         requires_authorization = false,
@@ -240,7 +240,7 @@ get_extended_attributes_endpoint(FileId) ->
 get_json_metadata_endpoint(FileId) ->
     #rest_api_request_sample{
         name = <<"Get JSON metadata">>,
-        description = <<"Returns custom JSON metadata associated with a file or directory.">>,
+        description = <<"Returns custom JSON metadata associated with the file or directory.">>,
         method = 'GET',
         path = str_utils:format_bin("/shares/data/~s/metadata/json", [FileId]),
         requires_authorization = false,
@@ -255,7 +255,7 @@ get_json_metadata_endpoint(FileId) ->
 get_rdf_metadata_endpoint(FileId) ->
     #rest_api_request_sample{
         name = <<"Get RDF metadata">>,
-        description = <<"Returns custom RDF metadata associated with a file or directory.">>,
+        description = <<"Returns custom RDF metadata associated with the file or directory.">>,
         method = 'GET',
         path = str_utils:format_bin("/shares/data/~s/metadata/rdf", [FileId]),
         requires_authorization = false,

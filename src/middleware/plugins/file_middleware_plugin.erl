@@ -456,6 +456,7 @@ resolve_get_operation_handler(archive_recall_details, private) -> ?MODULE;
 resolve_get_operation_handler(archive_recall_progress, private) -> ?MODULE;
 resolve_get_operation_handler(archive_recall_log, private) -> ?MODULE;
 resolve_get_operation_handler(api_samples, public) -> ?MODULE;
+resolve_get_operation_handler(api_samples, private) -> ?MODULE;
 resolve_get_operation_handler(dir_size_stats_collection_schema, public) -> ?MODULE;
 resolve_get_operation_handler(dir_size_stats_collection, private) -> ?MODULE;
 resolve_get_operation_handler(_, _) -> throw(?ERROR_NOT_SUPPORTED).
@@ -665,7 +666,8 @@ authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= archive_recall_details;
     As =:= archive_recall_progress;
     As =:= archive_recall_log;
-    As =:= dir_size_stats_collection
+    As =:= dir_size_stats_collection;
+    As =:= api_samples
 ->
     middleware_utils:has_access_to_file_space(Auth, Guid);
 
@@ -987,6 +989,9 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = archive_recall_log},
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = api_samples, scope = public}}, _) ->
     {ok, value, public_file_api_samples:generate_for(Auth#auth.session_id, FileGuid)};
+
+get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = api_samples, scope = private}}, _) ->
+    {ok, value, private_file_api_samples:generate_for(Auth#auth.session_id, FileGuid)};
 
 get(#op_req{gri = #gri{id = undefined, aspect = dir_size_stats_collection_schema}}, _) ->
     {ok, value, ?DIR_SIZE_STATS_COLLECTION_SCHEMA};
