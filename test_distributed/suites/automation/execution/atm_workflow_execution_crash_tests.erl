@@ -28,7 +28,9 @@
 
     crash_atm_workflow_execution_during_handle_lane_execution_stopped_callback/0,
 
-    crash_atm_workflow_execution_during_handle_workflow_execution_stopped_callback/0
+    crash_atm_workflow_execution_during_handle_workflow_execution_stopped_callback/0,
+
+    crash_atm_workflow_execution_during_handle_exception_callback/0
 ]).
 
 
@@ -277,6 +279,34 @@ crash_atm_workflow_execution_during_handle_workflow_execution_stopped_callback()
                 strategy = {yield, {error, crashed}},
                 after_step_exp_state_diff = no_diff
             },
+            handle_workflow_interrupted = atm_workflow_crashed_after_step_mock_spec()
+        }]
+    }).
+
+
+crash_atm_workflow_execution_during_handle_exception_callback() ->
+    atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
+        provider = ?PROVIDER_SELECTOR,
+        user = ?USER_SELECTOR,
+        space = ?SPACE_SELECTOR,
+        workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT,
+        workflow_schema_revision_num = 1,
+        incarnations = [#atm_workflow_execution_incarnation_test_spec{
+            incarnation_num = 1,
+            lane_runs = [#atm_lane_run_execution_test_spec{
+                selector = {1, 1},
+                process_task_result_for_item = #atm_step_mock_spec{
+                    strategy = {yield, {error, crashed}},
+                    after_step_exp_state_diff = no_diff
+                }
+            }],
+            handle_exception = #atm_step_mock_spec{
+                strategy = {yield, {error, crashed}},
+                after_step_exp_state_diff = no_diff
+            },
+            % Atm workflow execution should at least transition to crashed status even if
+            % not all atm workflow execution components could be properly stopped
+            % (they may be left e.g. active)
             handle_workflow_interrupted = atm_workflow_crashed_after_step_mock_spec()
         }]
     }).

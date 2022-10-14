@@ -98,6 +98,8 @@
 
     crash_atm_workflow_execution_during_handle_workflow_execution_stopped_callback/1,
 
+    crash_atm_workflow_execution_during_handle_exception_callback/1,
+
     stopping_reason_failure_overrides_pause/1,
     stopping_reason_cancel_overrides_pause/1,
     stopping_reason_cancel_overrides_failure/1,
@@ -240,7 +242,9 @@ groups() -> [
 
         crash_atm_workflow_execution_during_handle_lane_execution_stopped_callback,
 
-        crash_atm_workflow_execution_during_handle_workflow_execution_stopped_callback
+        crash_atm_workflow_execution_during_handle_workflow_execution_stopped_callback,
+
+        crash_atm_workflow_execution_during_handle_exception_callback
     ]},
 
     {stopping_tests, [], [
@@ -558,6 +562,10 @@ crash_atm_workflow_execution_during_handle_lane_execution_stopped_callback(_Conf
 
 
 crash_atm_workflow_execution_during_handle_workflow_execution_stopped_callback(_Config) ->
+    ?RUN_CRASH_TEST().
+
+
+crash_atm_workflow_execution_during_handle_exception_callback(_Config) ->
     ?RUN_CRASH_TEST().
 
 
