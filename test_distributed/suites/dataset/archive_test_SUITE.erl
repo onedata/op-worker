@@ -1049,7 +1049,7 @@ audit_log_test_base(ExpectedState, FailedFileType) ->
         name = DirName,
         dataset = #dataset_object{archives = [#archive_object{id = ArchiveId}]},
         children = [
-            #object{guid = ChildFileGuid, name = ChildFileName}
+            #object{name = ChildFileName}
         ]
     } =
         onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{
@@ -1063,14 +1063,6 @@ audit_log_test_base(ExpectedState, FailedFileType) ->
         ([]) -> <<>>;
         (Tokens) -> filename:join(Tokens)
     end,
-    ArchivedFileGuidsFun = fun(ArchiveId) ->
-        Node = oct_background:get_random_provider_node(krakow),
-        SessId = oct_background:get_user_session_id(?USER1, krakow),
-        {ok, ArchiveDataDirGuid} = opw_test_rpc:call(krakow, archive, get_data_dir_guid, [ArchiveId]),
-        {ok, [{ArchivedDirGuid, _}]} = lfm_proxy:get_children(Node, SessId, ?FILE_REF(ArchiveDataDirGuid), 0, 1),
-        {ok, [{ArchivedChildFileGuid, _}]} = lfm_proxy:get_children(Node, SessId, ?FILE_REF(ArchivedDirGuid), 0, 1),
-        {ArchiveDataDirGuid, ArchivedChildFileGuid}
-    end,
     
     % error mocked in mock_job_function_error/2
     ErrorReasonJson = #{
@@ -1081,29 +1073,27 @@ audit_log_test_base(ExpectedState, FailedFileType) ->
     
     ExpectedLogsTemplates = case {ExpectedState, FailedFileType} of
         {?ARCHIVE_PRESERVED, _} -> [
-            {ok, ChildFileGuid, PathFun([DirName, ChildFileName]), ?REGULAR_FILE_TYPE},
-            {ok, DirGuid, PathFun([DirName]), ?DIRECTORY_TYPE}
+            {ok, PathFun([DirName, ChildFileName]), ?REGULAR_FILE_TYPE},
+            {ok, PathFun([DirName]), ?DIRECTORY_TYPE}
         ];
         {?ARCHIVE_FAILED, dir} -> [
-            {archivisation_failed, DirGuid, PathFun([DirName]), ?DIRECTORY_TYPE, ErrorReasonJson}
+            {archivisation_failed, PathFun([DirName]), ?DIRECTORY_TYPE, ErrorReasonJson}
         ];
         {?ARCHIVE_FAILED, reg_file} -> [
-            {archivisation_failed, ChildFileGuid, PathFun([DirName, ChildFileName]), ?REGULAR_FILE_TYPE, ErrorReasonJson},
-            {ok, DirGuid, PathFun([DirName]), ?DIRECTORY_TYPE}
+            {archivisation_failed, PathFun([DirName, ChildFileName]), ?REGULAR_FILE_TYPE, ErrorReasonJson},
+            {ok, PathFun([DirName]), ?DIRECTORY_TYPE}
         ];
         {?ARCHIVE_VERIFICATION_FAILED, dir} ->
-            {ArchiveDataDirGuid, _ArchivedChildFileGuid} = ArchivedFileGuidsFun(ArchiveId),
             [
-                {ok, ChildFileGuid, PathFun([DirName, ChildFileName]), ?REGULAR_FILE_TYPE},
-                {ok, DirGuid, PathFun([DirName]), ?DIRECTORY_TYPE},
-                {verification_failed, ArchiveDataDirGuid, PathFun([]), ?DIRECTORY_TYPE}
+                {ok, PathFun([DirName, ChildFileName]), ?REGULAR_FILE_TYPE},
+                {ok, PathFun([DirName]), ?DIRECTORY_TYPE},
+                {verification_failed, PathFun([]), ?DIRECTORY_TYPE}
             ];
         {?ARCHIVE_VERIFICATION_FAILED, reg_file} ->
-            {_ArchiveDataDirGuid, ArchivedChildFileGuid} = ArchivedFileGuidsFun(ArchiveId),
             [
-                {ok, ChildFileGuid, PathFun([DirName, ChildFileName]), ?REGULAR_FILE_TYPE},
-                {ok, DirGuid, PathFun([DirName]), ?DIRECTORY_TYPE},
-                {verification_failed, ArchivedChildFileGuid, PathFun([DirName, ChildFileName]), ?REGULAR_FILE_TYPE}
+                {ok, PathFun([DirName, ChildFileName]), ?REGULAR_FILE_TYPE},
+                {ok, PathFun([DirName]), ?DIRECTORY_TYPE},
+                {verification_failed, PathFun([DirName, ChildFileName]), ?REGULAR_FILE_TYPE}
             ]
     end,
     GetAuditLogFun = fun() ->
@@ -1123,26 +1113,22 @@ audit_log_test_base(ExpectedState, FailedFileType) ->
     ?assertMatch({ok, {true, ExpectedLogs}}, GetAuditLogFun()).
 
 
-log_template_to_expected_entry(Timestamp, {ok, Guid, Path, Type}) ->
-    {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+log_template_to_expected_entry(Timestamp, {ok, Path, Type}) ->
     #{
         <<"content">> => #{
             <<"description">> =>
                 string:titlecase(<<(type_to_description(Type))/binary, " archivisation finished.">>),
-            <<"fileId">> => ObjectId,
             <<"path">> => Path,
             <<"fileType">> => type_to_binary(Type),
             <<"startTimestamp">> => Timestamp},
         <<"severity">> => <<"info">>,
         <<"timestamp">> => Timestamp
     };
-log_template_to_expected_entry(Timestamp, {archivisation_failed, Guid, Path, Type, ErrorReasonJson}) ->
-    {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+log_template_to_expected_entry(Timestamp, {archivisation_failed, Path, Type, ErrorReasonJson}) ->
     #{
         <<"content">> => #{
             <<"description">> =>
                 string:titlecase(<<(type_to_description(Type))/binary, " archivisation failed.">>),
-            <<"fileId">> => ObjectId,
             <<"path">> => Path,
             <<"fileType">> => type_to_binary(Type),
             <<"startTimestamp">> => Timestamp,
@@ -1150,13 +1136,11 @@ log_template_to_expected_entry(Timestamp, {archivisation_failed, Guid, Path, Typ
         <<"severity">> => <<"error">>,
         <<"timestamp">> => Timestamp
     };
-log_template_to_expected_entry(Timestamp, {verification_failed, Guid, Path, Type}) ->
-    {ok, ObjectId} = file_id:guid_to_objectid(Guid),
+log_template_to_expected_entry(Timestamp, {verification_failed, Path, Type}) ->
     #{
         <<"content">> => #{
             <<"description">> =>
                 <<"Verification of the archived ", (type_to_description(Type))/binary, " failed.">>,
-            <<"fileId">> => ObjectId,
             <<"fileType">> => type_to_binary(Type),
             <<"path">> => Path
         },

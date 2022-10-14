@@ -231,9 +231,8 @@ handle_verification_error(TaskId, Job) ->
         [_] -> <<>>;
         [_ | PathTokens] -> filename:join(PathTokens)
     end,
-    {FileType, FileCtx2} = file_ctx:get_effective_type(FileCtx),
-    archivisation_audit_log:report_file_verification_failed(
-        TaskId, file_ctx:get_logical_guid_const(FileCtx2), RelativePath, FileType),
+    {FileType, _FileCtx2} = file_ctx:get_effective_type(FileCtx),
+    archivisation_audit_log:report_file_verification_failed(TaskId, RelativePath, FileType),
     archive:mark_verification_failed(TaskId),
     cancel(TaskId).
 

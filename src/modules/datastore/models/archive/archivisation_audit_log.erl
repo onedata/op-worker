@@ -24,9 +24,9 @@
 ]).
 
 -export([
-    report_file_archivisation_finished/5,
-    report_file_archivisation_failed/6,
-    report_file_verification_failed/4
+    report_file_archivisation_finished/4,
+    report_file_archivisation_failed/5,
+    report_file_verification_failed/3
 ]).
 
 -type id() :: archive:id().
@@ -59,16 +59,15 @@ browse(Id, Opts) ->
     audit_log:browse(Id, Opts).
 
 
--spec report_file_archivisation_finished(id(), file_id:file_guid(), file_meta:path(), 
+-spec report_file_archivisation_finished(id(), file_meta:path(),
     file_meta:type(), time:millis()) -> ok | {error, term()}.
-report_file_archivisation_finished(Id, FileGuid, FilePath, FileType, StartTimestamp) ->
+report_file_archivisation_finished(Id, FilePath, FileType, StartTimestamp) ->
     DescriptionPrefix = string:titlecase(type_to_human_readable_str(FileType)),
     
     audit_log:append(Id, #audit_log_append_request{
         severity = ?INFO_AUDIT_LOG_SEVERITY,
         content = #{
             <<"description">> => <<DescriptionPrefix/binary, " archivisation finished.">>,
-            <<"fileId">> => file_guid_to_object_id(FileGuid),
             <<"startTimestamp">> => StartTimestamp,
             <<"path">> => FilePath,
             <<"fileType">> => type_to_binary(FileType)
@@ -76,9 +75,9 @@ report_file_archivisation_finished(Id, FileGuid, FilePath, FileType, StartTimest
     }).
 
 
--spec report_file_archivisation_failed(id(), file_id:file_guid(), file_meta:path(), file_meta:type(), 
+-spec report_file_archivisation_failed(id(), file_meta:path(), file_meta:type(),
     time:millis(), {error, term()}) -> ok | {error, term()}.
-report_file_archivisation_failed(Id, FileGuid, FilePath, FileType, StartTimestamp, Error) ->
+report_file_archivisation_failed(Id, FilePath, FileType, StartTimestamp, Error) ->
     ErrorJson = errors:to_json(Error),
     DescriptionPrefix = string:titlecase(type_to_human_readable_str(FileType)),
     
@@ -86,7 +85,6 @@ report_file_archivisation_failed(Id, FileGuid, FilePath, FileType, StartTimestam
         severity = ?ERROR_AUDIT_LOG_SEVERITY,
         content = #{
             <<"description">> => <<DescriptionPrefix/binary, " archivisation failed.">>,
-            <<"fileId">> => file_guid_to_object_id(FileGuid),
             <<"startTimestamp">> => StartTimestamp,
             <<"reason">> => ErrorJson,
             <<"path">> => FilePath,
@@ -95,16 +93,15 @@ report_file_archivisation_failed(Id, FileGuid, FilePath, FileType, StartTimestam
     }).
 
 
--spec report_file_verification_failed(id(), file_id:file_guid(), file_meta:path(), file_meta:type()) ->
+-spec report_file_verification_failed(id(), file_meta:path(), file_meta:type()) ->
     ok | {error, term()}.
-report_file_verification_failed(Id, FileGuid, FilePath, FileType) ->
+report_file_verification_failed(Id, FilePath, FileType) ->
     Description = <<"Verification of the archived ", (type_to_human_readable_str(FileType))/binary, " failed.">>,
     
     audit_log:append(Id, #audit_log_append_request{
         severity = ?ERROR_AUDIT_LOG_SEVERITY,
         content = #{
             <<"description">> => Description,
-            <<"fileId">> => file_guid_to_object_id(FileGuid),
             <<"path">> => FilePath,
             <<"fileType">> => type_to_binary(FileType)
         }

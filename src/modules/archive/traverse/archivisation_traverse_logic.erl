@@ -500,18 +500,17 @@ is_archive_rooted_in_current_file(CurrentFileCtx, #{
 -spec report_to_audit_log(file_ctx:ctx(), info(), time:millis(), file_meta:path(),
     {failed, Reason :: any()} | completed, user_ctx:ctx()) -> ok.
 report_to_audit_log(CurrentFileCtx, TraverseInfo, StartTimestamp, FilePath, Status, UserCtx) ->
-    FileGuid = file_ctx:get_logical_guid_const(CurrentFileCtx),
     {FileType, _CurrentFileCtx2} = file_ctx:get_effective_type(CurrentFileCtx),
     {ReportFun, AdditionalArgs} = case Status of
         completed ->
-            {fun archivisation_audit_log:report_file_archivisation_finished/5, []};
+            {fun archivisation_audit_log:report_file_archivisation_finished/4, []};
         {failed, Reason} ->
-            {fun archivisation_audit_log:report_file_archivisation_failed/6, [Reason]}
+            {fun archivisation_audit_log:report_file_archivisation_failed/5, [Reason]}
     end,
     
     lists:foreach(fun(ArchiveDoc) ->
         {ok, DatasetRootParentPath} = archive:get_dataset_root_parent_path(ArchiveDoc, UserCtx),
         RelativeFilePath = filepath_utils:relative(DatasetRootParentPath, FilePath),
         {ok, ArchiveId} = archive:get_id(ArchiveDoc),
-        erlang:apply(ReportFun, [ArchiveId, FileGuid, RelativeFilePath, FileType, StartTimestamp | AdditionalArgs])
+        erlang:apply(ReportFun, [ArchiveId, RelativeFilePath, FileType, StartTimestamp | AdditionalArgs])
     end, info_to_archive_docs(TraverseInfo)).
