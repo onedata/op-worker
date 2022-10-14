@@ -232,7 +232,7 @@ groups() -> [
         crash_atm_workflow_execution_during_prepare_lane_callback,
         crash_atm_workflow_execution_during_resume_lane_callback,
 
-        crash_atm_workflow_execution_during_run_task_for_itm_callback,
+        crash_atm_workflow_execution_during_run_task_for_item_callback,
         crash_atm_workflow_execution_during_process_task_result_for_item_callback,
         crash_atm_workflow_execution_during_process_streamed_task_data_callback,
         crash_atm_workflow_execution_during_handle_task_results_processed_for_all_items_callback,
