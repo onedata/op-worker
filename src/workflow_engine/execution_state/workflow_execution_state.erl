@@ -154,7 +154,7 @@
     ?EXECUTION_CANCELLED_REPORT([workflow_cached_item:id()], [workflow_engine:task_id()],
         [workflow_cached_async_result:result_ref()], [workflow_cached_task_data:id()]) |
     ?EXECUTION_CANCELLED_WITH_OPEN_STREAMS_REPORT([workflow_engine:task_id()]) | no_items_error() |
-    ?EXECUTE_DELAYED_CALLBACKS(callback_to_exectute()) | ?ITEM_RESTARTED |
+    ?EXECUTE_DELAYED_CALLBACKS([callback_to_exectute()]) | ?ITEM_RESTARTED |
     ?EXECUTE_CALLBACKS_ON_PARTIALLY_ENDED_LANE(#{workflow_jobs:job_identifier() => [workflow_jobs:job_identifier()]}) |
     ?WF_ERROR_RACE_CONDITION.
 
