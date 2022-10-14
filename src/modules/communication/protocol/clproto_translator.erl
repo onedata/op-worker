@@ -1219,7 +1219,7 @@ translate_from_protobuf(#'ListMultipartUploads'{
         index_token = IndexToken
     };
 translate_from_protobuf(#'MultipartUploadRequest'{
-    multipart_request = Request
+    multipart_request = {_, Request}
 }) ->
     #multipart_upload_request{
         multipart_request = translate_from_protobuf(Request)
