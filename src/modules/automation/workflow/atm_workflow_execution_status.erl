@@ -98,6 +98,7 @@
     handle_lane_run_stopping/3,
     handle_lane_run_task_status_change/2,
     handle_stopped/1,
+    handle_crashed/1,
     handle_manual_lane_run_repeat/2,
     handle_resume/2
 ]).
@@ -323,6 +324,23 @@ handle_stopped(AtmWorkflowExecutionId) ->
             {current, current}, Record
         ),
         {ok, set_times_on_phase_transition(Record#atm_workflow_execution{status = Status})}
+    end,
+
+    Result = {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:update(
+        AtmWorkflowExecutionId, Diff
+    ),
+    ensure_in_proper_phase_tree(AtmWorkflowExecutionDoc),
+
+    Result.
+
+
+-spec handle_crashed(atm_workflow_execution:id()) ->
+    {ok, atm_workflow_execution:doc()} | no_return().
+handle_crashed(AtmWorkflowExecutionId) ->
+    Diff = fun(Record) ->
+        {ok, set_times_on_phase_transition(Record#atm_workflow_execution{
+            status = ?CRASHED_STATUS
+        })}
     end,
 
     Result = {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:update(

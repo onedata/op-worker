@@ -1172,7 +1172,7 @@ mock_workflow_execution_handler_steps(Workers) ->
     mock_workflow_execution_handler_step(Workers, report_item_error, 3),
     mock_workflow_execution_handler_step(Workers, handle_task_execution_stopped, 3),
     mock_workflow_execution_handler_step(Workers, handle_exception, 5),
-    mock_workflow_execution_handler_step(Workers, handle_workflow_interrupted, 2),
+    mock_workflow_execution_handler_step(Workers, handle_workflow_interrupted, 3),
     mock_workflow_execution_handler_step(Workers, handle_workflow_execution_stopped, 2).
 
 

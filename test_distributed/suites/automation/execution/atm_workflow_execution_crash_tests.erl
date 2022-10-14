@@ -93,7 +93,7 @@
 
 
 crash_atm_workflow_execution_during_prepare_lane_callback() ->
-    crash_atm_workflow_execution_test_base(#atm_lane_run_execution_test_spec{
+    crash_atm_workflow_execution_test_base(?FUNCTION_NAME, #atm_lane_run_execution_test_spec{
         prepare_lane = #atm_step_mock_spec{
             strategy = {yield, {error, crashed}},
             after_step_exp_state_diff = no_diff
@@ -175,7 +175,7 @@ crash_atm_workflow_execution_during_resume_lane_callback() ->
 
 
 crash_atm_workflow_execution_during_run_task_for_item_callback() ->
-    crash_atm_workflow_execution_test_base(#atm_lane_run_execution_test_spec{
+    crash_atm_workflow_execution_test_base(?FUNCTION_NAME, #atm_lane_run_execution_test_spec{
         run_task_for_item = #atm_step_mock_spec{
             strategy = {yield, {error, crashed}},
             after_step_exp_state_diff = no_diff
@@ -184,7 +184,7 @@ crash_atm_workflow_execution_during_run_task_for_item_callback() ->
 
 
 crash_atm_workflow_execution_during_process_task_result_for_item_callback() ->
-    crash_atm_workflow_execution_test_base(#atm_lane_run_execution_test_spec{
+    crash_atm_workflow_execution_test_base(?FUNCTION_NAME, #atm_lane_run_execution_test_spec{
         process_task_result_for_item = #atm_step_mock_spec{
             strategy = {yield, {error, crashed}},
             after_step_exp_state_diff = no_diff
@@ -193,7 +193,7 @@ crash_atm_workflow_execution_during_process_task_result_for_item_callback() ->
 
 
 crash_atm_workflow_execution_during_process_streamed_task_data_callback() ->
-    crash_atm_workflow_execution_test_base(#atm_lane_run_execution_test_spec{
+    crash_atm_workflow_execution_test_base(?FUNCTION_NAME, #atm_lane_run_execution_test_spec{
         process_streamed_task_data = #atm_step_mock_spec{
             strategy = {yield, {error, crashed}},
             after_step_exp_state_diff = no_diff
@@ -202,7 +202,7 @@ crash_atm_workflow_execution_during_process_streamed_task_data_callback() ->
 
 
 crash_atm_workflow_execution_during_handle_task_results_processed_for_all_items_callback() ->
-    crash_atm_workflow_execution_test_base(#atm_lane_run_execution_test_spec{
+    crash_atm_workflow_execution_test_base(?FUNCTION_NAME, #atm_lane_run_execution_test_spec{
         handle_task_results_processed_for_all_items = #atm_step_mock_spec{
             strategy = {yield, {error, crashed}},
             after_step_exp_state_diff = no_diff
@@ -211,7 +211,7 @@ crash_atm_workflow_execution_during_handle_task_results_processed_for_all_items_
 
 
 crash_atm_workflow_execution_during_handle_task_execution_stopped_callback() ->
-    crash_atm_workflow_execution_test_base(#atm_lane_run_execution_test_spec{
+    crash_atm_workflow_execution_test_base(?FUNCTION_NAME, #atm_lane_run_execution_test_spec{
         handle_task_execution_stopped = #atm_step_mock_spec{
             strategy = {yield, {error, crashed}},
             after_step_exp_state_diff = no_diff
@@ -288,12 +288,12 @@ crash_atm_workflow_execution_during_handle_workflow_execution_stopped_callback()
 
 
 %% @private
-crash_atm_workflow_execution_test_base(CrashingAtmLaneRunExecutionTestSpec) ->
+crash_atm_workflow_execution_test_base(Testcase, CrashingAtmLaneRunExecutionTestSpec) ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         provider = ?PROVIDER_SELECTOR,
         user = ?USER_SELECTOR,
         space = ?SPACE_SELECTOR,
-        workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(file_pipe),
+        workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(Testcase, file_pipe),
         workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,
