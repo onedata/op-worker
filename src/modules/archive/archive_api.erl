@@ -87,7 +87,7 @@
 -spec start_archivisation(
     dataset:id(), archive:config(), archive:callback(), archive:callback(),
     archive:description(), user_ctx:ctx()
-) -> {ok, archive:id()} | error().
+) -> {ok, info()} | error().
 start_archivisation(
     DatasetId, Config, PreservedCallback, DeletedCallback, Description, UserCtx
 ) ->
@@ -115,7 +115,7 @@ start_archivisation(
                     archives_list:add(DatasetId, SpaceId, AipArchiveId, Timestamp),
                     case archivisation_traverse:start(FinalAipArchiveDoc, DatasetDoc, UserCtx) of
                         ok ->
-                            {ok, AipArchiveId};
+                            get_archive_info(FinalAipArchiveDoc, undefined);
                         {error, _} = Error ->
                             Error
                     end;

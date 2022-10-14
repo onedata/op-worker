@@ -61,7 +61,7 @@ list(SessionId, DatasetId, Opts, ListingMode) ->
     archive:callback(),
     archive:description()
 ) ->
-    archive:id() | no_return().
+    archive_api:info() | no_return().
 archive_dataset(SessionId, DatasetId, Config, PreservedCallback, DeletedCallback, Description) ->
     SpaceGuid = dataset_id_to_space_guid(DatasetId),
 
@@ -75,7 +75,7 @@ archive_dataset(SessionId, DatasetId, Config, PreservedCallback, DeletedCallback
 
 
 -spec cancel_archivisation(session:id(), archive:id()) ->
-    archive_api:info() | no_return().
+    ok | no_return().
 cancel_archivisation(SessionId, ArchiveId) ->
     SpaceGuid = archive_id_to_space_guid(ArchiveId),
     
