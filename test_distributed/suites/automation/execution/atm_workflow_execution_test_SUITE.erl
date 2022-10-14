@@ -86,12 +86,16 @@
     interrupt_ongoing_atm_workflow_execution_due_to_expired_session/1,
 
     crash_atm_workflow_execution_during_prepare_lane_callback/1,
+    crash_atm_workflow_execution_during_resume_lane_callback/1,
+
     crash_atm_workflow_execution_during_run_task_for_item_callback/1,
     crash_atm_workflow_execution_during_process_task_result_for_item_callback/1,
     crash_atm_workflow_execution_during_process_streamed_task_data_callback/1,
     crash_atm_workflow_execution_during_handle_task_results_processed_for_all_items_callback/1,
     crash_atm_workflow_execution_during_handle_task_execution_stopped_callback/1,
+
     crash_atm_workflow_execution_during_handle_lane_execution_stopped_callback/1,
+
     crash_atm_workflow_execution_during_handle_workflow_execution_stopped_callback/1,
 
     stopping_reason_failure_overrides_pause/1,
@@ -226,12 +230,16 @@ groups() -> [
 
     {crash_tests, [], [
         crash_atm_workflow_execution_during_prepare_lane_callback,
+        crash_atm_workflow_execution_during_resume_lane_callback,
+
         crash_atm_workflow_execution_during_run_task_for_itm_callback,
         crash_atm_workflow_execution_during_process_task_result_for_item_callback,
         crash_atm_workflow_execution_during_process_streamed_task_data_callback,
         crash_atm_workflow_execution_during_handle_task_results_processed_for_all_items_callback,
         crash_atm_workflow_execution_during_handle_task_execution_stopped_callback,
+
         crash_atm_workflow_execution_during_handle_lane_execution_stopped_callback,
+
         crash_atm_workflow_execution_during_handle_workflow_execution_stopped_callback
     ]},
 
@@ -518,6 +526,10 @@ interrupt_ongoing_atm_workflow_execution_due_to_expired_session(_Config) ->
 
 
 crash_atm_workflow_execution_during_prepare_lane_callback(_Config) ->
+    ?RUN_CRASH_TEST().
+
+
+crash_atm_workflow_execution_during_resume_lane_callback(_Config) ->
     ?RUN_CRASH_TEST().
 
 
