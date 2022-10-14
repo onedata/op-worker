@@ -1059,11 +1059,9 @@ audit_log_test_base(ExpectedState, FailedFileType) ->
             children = [#file_spec{}]
         }, krakow),
     archive_tests_utils:assert_archive_state(ArchiveId, ExpectedState, ?ATTEMPTS),
-    PathFun = fun(Tokens) ->
-        filename:join([<<"/">>, ?SPACE_BIN | Tokens])
-    end,
-    ArchivePathFun = fun(Tokens) ->
-        filename:join([<<"/">>, <<"archive_", ArchiveId/binary>> | Tokens])
+    PathFun = fun
+        ([]) -> <<>>;
+        (Tokens) -> filename:join(Tokens)
     end,
     ArchivedFileGuidsFun = fun(ArchiveId) ->
         Node = oct_background:get_random_provider_node(krakow),
@@ -1098,14 +1096,14 @@ audit_log_test_base(ExpectedState, FailedFileType) ->
             [
                 {ok, ChildFileGuid, PathFun([DirName, ChildFileName]), ?REGULAR_FILE_TYPE},
                 {ok, DirGuid, PathFun([DirName]), ?DIRECTORY_TYPE},
-                {verification_failed, ArchiveDataDirGuid, ArchivePathFun([]), ?DIRECTORY_TYPE}
+                {verification_failed, ArchiveDataDirGuid, PathFun([]), ?DIRECTORY_TYPE}
             ];
         {?ARCHIVE_VERIFICATION_FAILED, reg_file} ->
             {_ArchiveDataDirGuid, ArchivedChildFileGuid} = ArchivedFileGuidsFun(ArchiveId),
             [
                 {ok, ChildFileGuid, PathFun([DirName, ChildFileName]), ?REGULAR_FILE_TYPE},
                 {ok, DirGuid, PathFun([DirName]), ?DIRECTORY_TYPE},
-                {verification_failed, ArchivedChildFileGuid, ArchivePathFun([DirName, ChildFileName]), ?REGULAR_FILE_TYPE}
+                {verification_failed, ArchivedChildFileGuid, PathFun([DirName, ChildFileName]), ?REGULAR_FILE_TYPE}
             ]
     end,
     GetAuditLogFun = fun() ->
