@@ -369,9 +369,10 @@ long_lasting_lane_preparation_of_two_lanes_test(Config) ->
 
 lane_execution_ended_handler_failure_test(Config) ->
     % TODO VFS-7784 - do not skip items check when execution_ended_handler fails
-    lane_failure_test_base(Config, #test_config{test_manager_failure_key = fail_execution_ended_handler}, stop_on_lane).
+    lane_failure_test_base(Config, #test_config{test_manager_failure_key = fail_execution_ended_handler}, fail_on_lane_finish).
 
 lane_execution_ended_handler_failure_before_prepare_in_advance_finish_test(Config) ->
+    % TODO - ten test chyba nie dziala tak jak zakladamy
     lane_failure_test_base(Config, #test_config{
         prepare_in_advance = true,
         test_manager_failure_key = fail_execution_ended_handler,
@@ -564,7 +565,7 @@ resume_on_exception_test_base(Config, #test_config{
             progress_data_persistence => DataPersistence, snapshot_mode => SnapshotMode
         }
     }),
-    ?assertNot(workflow_scheduling_test_common:has_any_finish_callbacks_for_lane(ExecutionHistory, LaneId)),
+    ?assertNot(workflow_scheduling_test_common:has_any_finish_callback_for_lane(ExecutionHistory, LaneId)),
     ?assert(workflow_scheduling_test_common:has_exception_callback(ExecutionHistory)),
 
     GetDumpAns = rpc:call(Worker, workflow_execution_state_dump, get, [ExecutionId]),

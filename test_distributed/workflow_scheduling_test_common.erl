@@ -49,7 +49,7 @@
 
 -type test_manager_task_failure_key() :: fail_job | fail_result_processing | timeout |
     fail_lane_preparation | fail_execution_ended_handler.
--type lane_history_check_key() :: expect_empty_items_list | stop_on_lane |
+-type lane_history_check_key() :: expect_empty_items_list | stop_on_lane | fail_on_lane_finish |
     delay_and_fail_lane_preparation_in_advance | fail_lane_preparation_in_advance | expect_exception.
 -export_type([test_manager_task_failure_key/0, lane_history_check_key/0]).
 
@@ -631,6 +631,11 @@ get_items(Context, Iterator) ->
         _ -> []
     end.
 
+verify_lanes_execution_history([], Gathered, #{fail_on_lane_finish := LaneId}) ->
+    ?assertMatch([
+        #handler_call{function = handle_exception, context = #{lane_id := LaneId}},
+        #handler_call{function = handle_workflow_interrupted}
+    ], Gathered);
 verify_lanes_execution_history([], Gathered, _Options) ->
     ?assertMatch([#handler_call{function = handle_workflow_execution_stopped}], Gathered);
 verify_lanes_execution_history([{_, _, #{lane_id := LaneId}} | _], Gathered, #{fail_lane_preparation_in_advance := LaneId}) ->
@@ -656,6 +661,7 @@ verify_lanes_execution_history([{TaskIds, ExpectedItems, LaneExecutionContext} |
 
     VerificationType = case Options of
         #{stop_on_lane := LaneId} -> skip_items_verification;
+        #{fail_on_lane_finish := LaneId} -> skip_items_verification;
         #{resume_lane := LaneId} -> skip_items_verification;
         #{expect_empty_items_list := LaneId} -> expect_empty_items_list;
         #{expect_lane_finish := LaneId} -> expect_lane_finish;
@@ -724,6 +730,7 @@ verify_lanes_execution_history([{TaskIds, ExpectedItems, LaneExecutionContext} |
 
             NewExpected = case Options of
                 #{stop_on_lane := LaneId} -> [];
+                #{fail_on_lane_finish := LaneId} -> [];
                 #{resume_lane := LaneId} -> ExpectedTail
             end,
             [_ | NewGathered] = lists:dropwhile(fun(HandlerCall) ->

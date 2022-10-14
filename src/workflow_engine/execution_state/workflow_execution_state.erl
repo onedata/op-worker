@@ -287,23 +287,18 @@ handle_exception(ExecutionId, Context, ErrorType, Reason, Stacktrace) ->
 -spec execute_exception_handler_if_waiting(workflow_engine:execution_id()) ->
     {executed, workflow_handler:interrupt_reason()} | not_waiting.
 execute_exception_handler_if_waiting(ExecutionId) ->
-    case datastore_model:get(?CTX, ExecutionId) of
+    case update(ExecutionId, fun check_waiting_exception_handler/1) of
         {ok, #document{value = #workflow_execution_state{
             handler = Handler,
-            execution_status = #execution_cancelled{
-                call_count = 0,
-                is_interrupted = true,
-                callbacks_to_execute = [{_, ?CALLBACK_ON_EXCEPTION, [Context, ErrorType, Reason, Stacktrace]} | _]
-            }
+            update_report = ?EXECUTE_DELAYED_CALLBACKS([{_, _, [Context, ErrorType, Reason, Stacktrace]}])
         }}} ->
             {
                 executed,
                 workflow_engine:execute_exception_handler(ExecutionId, Context, Handler, ErrorType, Reason, Stacktrace)
             };
-        _ ->
+        ?ERROR_NOT_FOUND ->
             not_waiting
     end.
-
 
 -spec abandon(workflow_engine:execution_id(), workflow_handler:interrupt_reason()) -> ok.
 abandon(ExecutionId, InterruptReason) ->
@@ -1128,6 +1123,20 @@ mark_exception_appeared(State, Context, ErrorType, Reason, Stacktrace) ->
         ]
     }}}.
 
+-spec check_waiting_exception_handler(state()) -> {ok, state()} | ?ERROR_NOT_FOUND.
+check_waiting_exception_handler(#workflow_execution_state{
+    execution_status = #execution_cancelled{
+        call_count = 0,
+        is_interrupted = true,
+        callbacks_to_execute = [{_, ?CALLBACK_ON_EXCEPTION, _} = ExceptionCallback | _]
+    } = Status
+} = State) ->
+    {ok, State#workflow_execution_state{
+        execution_status = Status#execution_cancelled{callbacks_to_execute = []},
+        update_report = ?EXECUTE_DELAYED_CALLBACKS([ExceptionCallback])
+    }};
+check_waiting_exception_handler(_) ->
+    ?ERROR_NOT_FOUND.
 
 -spec mark_workflow_abandoned(state(), workflow_handler:interrupt_reason()) -> {ok, state()}.
 mark_workflow_abandoned(
@@ -1327,12 +1336,13 @@ handle_next_iteration_step(State = #workflow_execution_state{
 
     case {CanUsePrefetchedIterationStep, NextIterationStep} of
         {false, undefined} ->
-            State2 = State#workflow_execution_state{
-                iteration_state = workflow_iteration_state:handle_iteration_finished(IterationState)},
-            case restart_iteration(State2) of
-                {ok, State3} ->
-                    {ok, State3};
+            case restart_iteration(State) of
+                {ok, State2} ->
+                    {ok, State2#workflow_execution_state{
+                        iteration_state = workflow_iteration_state:handle_iteration_finished(IterationState)}};
                 already_restarted ->
+                    State2 = State#workflow_execution_state{
+                        iteration_state = workflow_iteration_state:handle_iteration_finished(IterationState)},
                     case prepare_next_waiting_job(State2) of
                         {ok, _} = OkAns -> OkAns;
                         Error -> {ok, State2#workflow_execution_state{update_report = Error}}
