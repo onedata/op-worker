@@ -1259,7 +1259,7 @@
     % TODO VFS-7919 - consider keeping callbacks list from beginning
     % to guarantee that each callback is called exactly once
     pending_callbacks = [] :: [workflow_execution_state:callback_selector()],
-    items_to_process = #{workflow_cached_item:id() => [workflow_execution_state:item_processing_action()]},
+    items_to_process = #{} :: #{workflow_cached_item:id() => [report | snapshot | delete]},
 
     % Field used to return additional information about document update procedure
     % (datastore:update returns {ok, #document{}} or {error, term()}
