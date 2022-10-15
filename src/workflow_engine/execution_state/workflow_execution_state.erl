@@ -95,6 +95,8 @@
 -define(LANE_PREPARED_REPORT(Lane), {lane_prepared_report, Lane}).
 -define(EXECUTE_DELAYED_CALLBACKS(Callbacks), {execute_delayed_callback, Callbacks}).
 -define(ITEM_RESTARTED, item_restarted).
+-define(DELETE_ITEM, delete_item).
+-define(DELETE_ITEM(ItemId), {delete_item, ItemId}).
 -define(EXECUTE_CALLBACKS_ON_PARTIALLY_ENDED_LANE(WaitingOrOngoingTasksIndexes),
     {execute_callbacks_on_partially_ended_lane, WaitingOrOngoingTasksIndexes}).
 
@@ -117,6 +119,7 @@
 -type iteration_step() :: {workflow_cached_item:id(), iterator:iterator()}.
 -type iteration_status() :: iteration_step() | undefined.
 -type task_status() :: ongoing | waiting_for_data_stream_finalization | ended.
+-type item_processing_action() :: report | snapshot | delete.
 -type state() :: #workflow_execution_state{}.
 -type doc() :: datastore_doc:doc(state()).
 -export_type([state/0, doc/0]).
@@ -156,7 +159,7 @@
     ?EXECUTION_CANCELLED_WITH_OPEN_STREAMS_REPORT([workflow_engine:task_id()]) | no_items_error() |
     ?EXECUTE_DELAYED_CALLBACKS([callback_to_exectute()]) | ?ITEM_RESTARTED |
     ?EXECUTE_CALLBACKS_ON_PARTIALLY_ENDED_LANE(#{workflow_jobs:job_identifier() => [workflow_jobs:job_identifier()]}) |
-    ?WF_ERROR_RACE_CONDITION.
+    ?DELETE_ITEM(workflow_cached_item:id()).
 
 -define(CALLBACKS_ON_CANCEL_SELECTOR, callbacks_on_cancel).
 -define(CALLBACKS_ON_STREAMS_CANCEL_SELECTOR, callbacks_on_stream_cancel).
@@ -169,8 +172,9 @@
 -type callback_to_exectute() :: {function(), callback_selector(), Args:: list()}.
 -export_type([callback_to_exectute/0]).
 
--export_type([index/0, incarnation_tag/0, snapshot_mode/0, iteration_status/0, current_lane/0, next_lane/0, execution_status/0,
-    next_lane_preparation_status/0, boxes_map/0, update_report/0, callback_selector/0]).
+-export_type([index/0, incarnation_tag/0, snapshot_mode/0, iteration_status/0, item_processing_action/0,
+    current_lane/0, next_lane/0, execution_status/0, next_lane_preparation_status/0, boxes_map/0,
+    update_report/0, callback_selector/0]).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -367,7 +371,7 @@ report_execution_status_update(ExecutionId, JobIdentifier, UpdateType, Ans) ->
             item_ids_to_delete = ItemIdsToDelete,
             task_statuses_to_report = ReportedTaskStatuses
         }}}} ->
-            lists:foreach(fun workflow_cached_item:delete/1, ItemIdsToDelete -- [IdToReportError]),
+            lists:foreach(fun workflow_cached_item:delete/1, ItemIdsToDelete),
             {Doc, IdToReportError, ReportedTaskStatuses};
         {ok, Doc = #document{value = #workflow_execution_state{
             next_lane = #next_lane{
@@ -385,7 +389,8 @@ report_execution_status_update(ExecutionId, JobIdentifier, UpdateType, Ans) ->
             IteratorToSave = workflow_cached_item:get_iterator(ItemIdToSnapshot),
             workflow_iterator_snapshot:save(
                 ExecutionId, LaneIndex, LaneId, ItemIndex, IteratorToSave, NextLaneId),
-            lists:foreach(fun workflow_cached_item:delete/1, ItemIdsToDelete -- [IdToReportError]),
+            maybe_delete_item_after_snapshot(ExecutionId, ItemIdToSnapshot),
+            lists:foreach(fun workflow_cached_item:delete/1, ItemIdsToDelete),
             {Doc, IdToReportError, ReportedTaskStatuses};
         {ok, Doc = #document{value = #workflow_execution_state{
             update_report = ?TASK_PROCESSED_REPORT(ReportedTaskStatus)
@@ -772,8 +777,10 @@ prepare_next_job_using_iterator(ExecutionId, ItemIndex, CurrentIterationStep, La
     case update(ExecutionId, fun(State) ->
         handle_next_iteration_step(State, LaneIndex, ItemIndex, NextIterationStep, ParallelBoxToStart)
     end) of
-        {ok, #document{value = #workflow_execution_state{update_report = ?WF_ERROR_RACE_CONDITION}}} ->
-            maybe_delete_prefetched_iteration_step(NextIterationStep),
+        {ok, #document{value = #workflow_execution_state{
+            update_report = ?DELETE_ITEM(ItemId)
+        }}} ->
+            workflow_cached_item:delete(ItemId),
             prepare_next_job_for_current_lane(ExecutionId);
         {ok, #document{value = #workflow_execution_state{
             update_report = ?EXECUTE_CALLBACKS_ON_PARTIALLY_ENDED_LANE(WaitingOrOngoingTasksIndexes)
@@ -962,13 +969,50 @@ maybe_report_item_error(#document{key = ExecutionId, value = #workflow_execution
 }} = Doc, ItemIdToReportError) ->
     Item = workflow_cached_item:get_item(ItemIdToReportError),
     workflow_engine:call_handler(ExecutionId, Context, Handler, report_item_error, [Item]),
-    delete_item_callback(Doc, ItemIdToReportError).
+
+    case update(ExecutionId, fun(#workflow_execution_state{items_to_process = ItemsToProcess} = State) ->
+        case maps:get(ItemIdToReportError, ItemsToProcess, undefined) of
+            [report] ->
+                {ok, State#workflow_execution_state{items_to_process = maps:remove(ItemIdToReportError, ItemsToProcess)}};
+            [report, snapshot] ->
+                {ok, State#workflow_execution_state{items_to_process = maps:remove(ItemIdToReportError, ItemsToProcess)}};
+            [report, delete] ->
+                {ok, State#workflow_execution_state{
+                    items_to_process = maps:remove(ItemIdToReportError, ItemsToProcess),
+                    update_report = ?DELETE_ITEM
+                }};
+            undefined ->
+                ?ERROR_NOT_FOUND
+        end
+    end) of
+        {ok, #document{value = #workflow_execution_state{update_report = ?DELETE_ITEM}} = UpdatedDoc} ->
+            delete_item_callback(UpdatedDoc, ItemIdToReportError);
+        ?ERROR_NOT_FOUND ->
+            delete_item_callback(Doc, ItemIdToReportError);
+        _ ->
+            {ok, _} = update(ExecutionId, fun(State) -> remove_pending_callback(State, ItemIdToReportError) end),
+            ok
+    end.
 
 -spec delete_item_callback(doc(), workflow_cached_item:id()) -> ok.
 delete_item_callback(#document{key = ExecutionId}, ItemIdToReportError) ->
     workflow_cached_item:delete(ItemIdToReportError),
     {ok, _} = update(ExecutionId, fun(State) -> remove_pending_callback(State, ItemIdToReportError) end),
     ok.
+
+-spec maybe_delete_item_after_snapshot(workflow_engine:execution_id(), workflow_cached_item:id()) -> ok.
+maybe_delete_item_after_snapshot(ExecutionId, ItemId) ->
+    case update(ExecutionId, fun(#workflow_execution_state{items_to_process = ItemsToProcess} = State) ->
+        case maps:get(ItemId, ItemsToProcess, undefined) of
+            [report, snapshot] ->
+                {ok, State#workflow_execution_state{items_to_process = maps:remove(ItemId, ItemsToProcess)}};
+            undefined ->
+                ?ERROR_NOT_FOUND
+        end
+    end) of
+        {ok, _} -> ok;
+        _ -> workflow_cached_item:delete(ItemId)
+    end.
 
 -spec maybe_notify_task_execution_ended(doc(), workflow_jobs:job_identifier(), task_status()) -> ok.
 maybe_notify_task_execution_ended(_Doc, _JobIdentifier, ongoing) ->
@@ -1365,7 +1409,7 @@ handle_next_iteration_step(State = #workflow_execution_state{
                         _ -> Jobs
                     end,
                     {ok, State#workflow_execution_state{
-                        update_report = ?WF_ERROR_RACE_CONDITION,
+                        update_report = ?DELETE_ITEM(PrefetchedItemId),
                         iteration_state = NewIterationState,
                         prefetched_iteration_step = NextIterationStep,
                         jobs = FinalJobs
@@ -1817,7 +1861,8 @@ prepare_next_parallel_box(State = #workflow_execution_state{
         id = LaneId
     },
     jobs = Jobs,
-    iteration_state = IterationState
+    iteration_state = IterationState,
+    items_to_process = ItemsToProcess
 }, JobIdentifier) ->
     case workflow_jobs:prepare_next_parallel_box(Jobs, JobIdentifier, BoxSpecs, BoxCount) of
         {ok, NewJobs} ->
@@ -1851,15 +1896,32 @@ prepare_next_parallel_box(State = #workflow_execution_state{
                     Identifier, [TaskStatus], TaskStatus =/= ongoing)
             end, State3, TaskStatusesToReport),
 
-            ItemIdToReportError = case SuccessOrFailure of
-                ?SUCCESS -> undefined;
-                ?FAILURE -> FinishedItemId
+            {ItemIdToReportError, UpdatedItemIdsToDelete, UpdatedItemsToProcess} = case {
+                SuccessOrFailure,
+                lists:member(FinishedItemId, ItemIdsToDelete)
+            } of
+                {?SUCCESS, _} ->
+                    {undefined, ItemIdsToDelete, ItemsToProcess};
+                {?FAILURE, true} ->
+                    {FinishedItemId, ItemIdsToDelete -- [FinishedItemId], ItemsToProcess};
+                {?FAILURE, false} ->
+                    {FinishedItemId, ItemIdsToDelete -- [FinishedItemId], ItemsToProcess#{FinishedItemId => [report]}}
             end,
+
+            FinalItemsToProcess = lists:foldl(fun(ItemId, Acc) ->
+                case maps:get(ItemId, Acc, undefined) of
+                    [report] when ItemId =:= ItemIdToSnapshot -> Acc#{ItemId => [report, snapshot]};
+                    [report] -> Acc#{ItemId => [report, delete]};
+                    _ -> Acc
+                end
+            end, UpdatedItemsToProcess, UpdatedItemIdsToDelete),
+
             {ok, State4#workflow_execution_state{
+                items_to_process = FinalItemsToProcess,
                 update_report = #items_processed_report{lane_index = LaneIndex, lane_id = LaneId,
-                    last_finished_item_index = ItemIndex,
-                    item_id_to_report_error = ItemIdToReportError, item_id_to_snapshot = ItemIdToSnapshot,
-                    item_ids_to_delete = ItemIdsToDelete, task_statuses_to_report = TaskStatusesToReport}
+                    last_finished_item_index = ItemIndex, item_id_to_report_error = ItemIdToReportError,
+                    item_id_to_snapshot = ItemIdToSnapshot, task_statuses_to_report = TaskStatusesToReport,
+                    item_ids_to_delete = UpdatedItemIdsToDelete -- [ItemIdToSnapshot]}
             }}
     end.
 
