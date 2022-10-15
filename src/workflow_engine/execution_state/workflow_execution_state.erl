@@ -119,7 +119,6 @@
 -type iteration_step() :: {workflow_cached_item:id(), iterator:iterator()}.
 -type iteration_status() :: iteration_step() | undefined.
 -type task_status() :: ongoing | waiting_for_data_stream_finalization | ended.
--type item_processing_action() :: report | snapshot | delete.
 -type state() :: #workflow_execution_state{}.
 -type doc() :: datastore_doc:doc(state()).
 -export_type([state/0, doc/0]).
@@ -172,9 +171,8 @@
 -type callback_to_exectute() :: {function(), callback_selector(), Args:: list()}.
 -export_type([callback_to_exectute/0]).
 
--export_type([index/0, incarnation_tag/0, snapshot_mode/0, iteration_status/0, item_processing_action/0,
-    current_lane/0, next_lane/0, execution_status/0, next_lane_preparation_status/0, boxes_map/0,
-    update_report/0, callback_selector/0]).
+-export_type([index/0, incarnation_tag/0, snapshot_mode/0, iteration_status/0, current_lane/0, next_lane/0,
+    execution_status/0, next_lane_preparation_status/0, boxes_map/0, update_report/0, callback_selector/0]).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -2096,6 +2094,7 @@ handle_no_waiting_items_error(#workflow_execution_state{
 %%--------------------------------------------------------------------
 -spec is_finished_and_cleaned(workflow_engine:execution_id(), index()) -> true | {false, state()}.
 is_finished_and_cleaned(ExecutionId, LaneIndex) ->
+    % TODO - sprawdzic czy items_to_process jest puste
     case get(ExecutionId) of
         {ok, #workflow_execution_state{
             current_lane = #current_lane{index = Index, id = undefined},
