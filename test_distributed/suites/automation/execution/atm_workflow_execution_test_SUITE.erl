@@ -106,7 +106,6 @@
 
     stopping_finishing_atm_workflow_execution/1,
     stopping_finished_atm_workflow_execution/1,
-    stopping_crashed_atm_workflow_execution/1,
 
     iterate_over_list_store/1,
     iterate_over_list_store_with_some_inaccessible_items/1,
@@ -253,8 +252,7 @@ groups() -> [
         stopping_reason_cancel_overrides_failure,
 
         stopping_finishing_atm_workflow_execution,
-        stopping_finished_atm_workflow_execution,
-        stopping_crashed_atm_workflow_execution
+        stopping_finished_atm_workflow_execution
     ]},
 
     {iteration_tests, [], [
@@ -586,10 +584,6 @@ stopping_finishing_atm_workflow_execution(_Config) ->
 
 
 stopping_finished_atm_workflow_execution(_Config) ->
-    ?RUN_STOPPING_TEST().
-
-
-stopping_crashed_atm_workflow_execution(_Config) ->
     ?RUN_STOPPING_TEST().
 
 
