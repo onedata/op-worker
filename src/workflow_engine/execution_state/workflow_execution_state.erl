@@ -1903,10 +1903,12 @@ prepare_next_parallel_box(State = #workflow_execution_state{
             } of
                 {?SUCCESS, _} ->
                     {undefined, ItemIdsToDelete, ItemsToProcess};
-                {?FAILURE, true} ->
-                    {FinishedItemId, ItemIdsToDelete -- [FinishedItemId], ItemsToProcess};
                 {?FAILURE, false} ->
-                    {FinishedItemId, ItemIdsToDelete -- [FinishedItemId], ItemsToProcess#{FinishedItemId => [report]}}
+                    {FinishedItemId, ItemIdsToDelete -- [FinishedItemId], ItemsToProcess#{FinishedItemId => [report]}};
+                {?FAILURE, true} when FinishedItemId =:= ItemIdToSnapshot ->
+                    {FinishedItemId, ItemIdsToDelete -- [FinishedItemId], ItemsToProcess#{FinishedItemId => [report, snapshot]}};
+                {?FAILURE, true} ->
+                    {FinishedItemId, ItemIdsToDelete -- [FinishedItemId], ItemsToProcess}
             end,
 
             FinalItemsToProcess = lists:foldl(fun(ItemId, Acc) ->
