@@ -369,7 +369,7 @@ report_execution_status_update(ExecutionId, JobIdentifier, UpdateType, Ans) ->
             item_ids_to_delete = ItemIdsToDelete,
             task_statuses_to_report = ReportedTaskStatuses
         }}}} ->
-            lists:foreach(fun workflow_cached_item:delete/1, ItemIdsToDelete),
+            lists:foreach(fun(ItemId) -> maybe_delete_item(ExecutionId, ItemId) end, ItemIdsToDelete),
             {Doc, IdToReportError, ReportedTaskStatuses};
         {ok, Doc = #document{value = #workflow_execution_state{
             next_lane = #next_lane{
@@ -387,8 +387,8 @@ report_execution_status_update(ExecutionId, JobIdentifier, UpdateType, Ans) ->
             IteratorToSave = workflow_cached_item:get_iterator(ItemIdToSnapshot),
             workflow_iterator_snapshot:save(
                 ExecutionId, LaneIndex, LaneId, ItemIndex, IteratorToSave, NextLaneId),
-            maybe_delete_item_after_snapshot(ExecutionId, ItemIdToSnapshot),
-            lists:foreach(fun workflow_cached_item:delete/1, ItemIdsToDelete),
+            maybe_delete_item(ExecutionId, ItemIdToSnapshot),
+            lists:foreach(fun(ItemId) -> maybe_delete_item(ExecutionId, ItemId) end, ItemIdsToDelete),
             {Doc, IdToReportError, ReportedTaskStatuses};
         {ok, Doc = #document{value = #workflow_execution_state{
             update_report = ?TASK_PROCESSED_REPORT(ReportedTaskStatus)
@@ -998,8 +998,8 @@ delete_item_callback(#document{key = ExecutionId}, ItemIdToReportError) ->
     {ok, _} = update(ExecutionId, fun(State) -> remove_pending_callback(State, ItemIdToReportError) end),
     ok.
 
--spec maybe_delete_item_after_snapshot(workflow_engine:execution_id(), workflow_cached_item:id()) -> ok.
-maybe_delete_item_after_snapshot(ExecutionId, ItemId) ->
+-spec maybe_delete_item(workflow_engine:execution_id(), workflow_cached_item:id()) -> ok.
+maybe_delete_item(ExecutionId, ItemId) ->
     case update(ExecutionId, fun(#workflow_execution_state{items_to_process = ItemsToProcess} = State) ->
         case maps:get(ItemId, ItemsToProcess, undefined) of
             [report, snapshot] ->
