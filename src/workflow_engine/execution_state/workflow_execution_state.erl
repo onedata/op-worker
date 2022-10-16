@@ -158,7 +158,7 @@
     ?EXECUTION_CANCELLED_WITH_OPEN_STREAMS_REPORT([workflow_engine:task_id()]) | no_items_error() |
     ?EXECUTE_DELAYED_CALLBACKS([callback_to_exectute()]) | ?ITEM_RESTARTED |
     ?EXECUTE_CALLBACKS_ON_PARTIALLY_ENDED_LANE(#{workflow_jobs:job_identifier() => [workflow_jobs:job_identifier()]}) |
-    ?DELETE_ITEM(workflow_cached_item:id()).
+    ?DELETE_ITEM | ?DELETE_ITEM(workflow_cached_item:id()).
 
 -define(CALLBACKS_ON_CANCEL_SELECTOR, callbacks_on_cancel).
 -define(CALLBACKS_ON_STREAMS_CANCEL_SELECTOR, callbacks_on_stream_cancel).
@@ -1004,12 +1004,15 @@ maybe_delete_item_after_snapshot(ExecutionId, ItemId) ->
         case maps:get(ItemId, ItemsToProcess, undefined) of
             [report, snapshot] ->
                 {ok, State#workflow_execution_state{items_to_process = maps:remove(ItemId, ItemsToProcess)}};
+            [report, delete] ->
+                ?WF_ERROR_RACE_CONDITION;
             undefined ->
                 ?ERROR_NOT_FOUND
         end
     end) of
         {ok, _} -> ok;
-        _ -> workflow_cached_item:delete(ItemId)
+        ?WF_ERROR_RACE_CONDITION -> ok;
+        ?ERROR_NOT_FOUND -> workflow_cached_item:delete(ItemId)
     end.
 
 -spec maybe_notify_task_execution_ended(doc(), workflow_jobs:job_identifier(), task_status()) -> ok.
