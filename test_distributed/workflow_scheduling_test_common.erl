@@ -491,14 +491,14 @@ mock_handlers(Workers, Manager) ->
             % Context with lane_id defined cannot be used in handle_workflow_interrupted handler
             % (wrong type of context is used by caller)
             throw(wrong_context);
-        (ExecutionId, Context, _InterruptReason) ->
+        (ExecutionId, Context, InterruptReason) ->
             MockTemplate(
                 #handler_call{
                     function = handle_workflow_interrupted,
                     execution_id = ExecutionId,
                     context =  Context
                 },
-                [ExecutionId, Context]
+                [ExecutionId, Context, InterruptReason]
             )
     end),
 

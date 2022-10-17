@@ -751,7 +751,7 @@ build_failed_atm_lane_run_execution_test_spec(AtmLaneRunSelector, IsLastExpLaneR
             ),
             {true, case IsLastExpLaneRun of
                 true ->
-                    ExpState1;
+                    atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(ExpState1);
                 false ->
                     {AtmLaneSelector, RunNum} = AtmLaneRunSelector,
 
