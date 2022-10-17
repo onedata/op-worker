@@ -304,19 +304,20 @@ resume_atm_workflow_execution_paused_while_active() ->
         ))
     end,
 
-    BuildAtmLaneRunTestSpecFun = fun(AtmLaneRunSelector, ExpExceptionStoreContent, IsLastExpLaneRun) ->
+    BuildAtmLaneRunTestSpecFun = fun(
+        AtmLaneRunSelector, ExpTask1FinalStats, ExpTask2FinalStats, ExpExceptionStoreContent, IsLastExpLaneRun
+    ) ->
         #atm_lane_run_execution_test_spec{
             selector = AtmLaneRunSelector,
 
             process_task_result_for_item = ProcessTaskResultForItemStepMockSpec,
 
             handle_task_execution_stopped = #atm_step_mock_spec{
-                before_step_exp_state_diff = fun(#atm_mock_call_ctx{
+                before_step_hook = fun(#atm_mock_call_ctx{
                     workflow_execution_exp_state = ExpState0,
                     call_args = [_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId]
                 }) ->
-                    AssertExpTaskStatsFun(AtmTaskExecutionId, {0, 0, 6}, {0, 3, 6}, ExpState0),
-                    false
+                    AssertExpTaskStatsFun(AtmTaskExecutionId, ExpTask1FinalStats, ExpTask2FinalStats, ExpState0)
                 end,
                 after_step_exp_state_diff = fun(#atm_mock_call_ctx{
                     workflow_execution_exp_state = ExpState,
@@ -332,14 +333,13 @@ resume_atm_workflow_execution_paused_while_active() ->
             },
 
             handle_lane_execution_stopped = #atm_step_mock_spec{
-                after_step_exp_state_diff = fun(AtmMockCallCtx = #atm_mock_call_ctx{
-                    workflow_execution_exp_state = ExpState0
-                }) ->
+                after_step_hook = fun(AtmMockCallCtx) ->
                     ?assertEqual(
                         lists:sort(ExpExceptionStoreContent),
                         lists:sort(get_exception_store_content(AtmLaneRunSelector, AtmMockCallCtx))
-                    ),
-
+                    )
+                end,
+                after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
                     ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_failed(
                         AtmLaneRunSelector, ExpState0
                     ),
@@ -358,7 +358,7 @@ resume_atm_workflow_execution_paused_while_active() ->
         }
     end,
 
-    ResumedLaneRunBaseTestSpec = BuildAtmLaneRunTestSpecFun({1, 1}, [2, 4, 6], false),
+    ResumedLaneRunBaseTestSpec = BuildAtmLaneRunTestSpecFun({1, 1}, {0, 0, 6}, {0, 3, 6}, [2, 4, 6], false),
 
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         provider = ?PROVIDER_SELECTOR,
@@ -443,13 +443,14 @@ resume_atm_workflow_execution_paused_while_active() ->
                             end
                         }
                     },
-                    BuildAtmLaneRunTestSpecFun({1, 2}, [2, 4, 6], false),
-                    BuildAtmLaneRunTestSpecFun({1, 3}, [2, 4, 6], true),
+                    BuildAtmLaneRunTestSpecFun({1, 2}, {0, 0, 3}, {0, 3, 3}, [2, 4, 6], false),
+                    BuildAtmLaneRunTestSpecFun({1, 3}, {0, 0, 3}, {0, 3, 3}, [2, 4, 6], true),
 
                     #atm_lane_run_execution_test_spec{
                         selector = {2, 3},
                         prepare_lane = #atm_step_mock_spec{
-                            defer_after = {handle_lane_execution_stopped, after_step, {1, 3}}
+                            defer_after = {handle_lane_execution_stopped, after_step, {1, 3}},
+                            after_step_exp_state_diff = no_diff
                         }
                     }
                 ],
@@ -458,7 +459,7 @@ resume_atm_workflow_execution_paused_while_active() ->
                         ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_repeatable(
                             [{1, 1}, {1, 2}, {1, 3}], true, true, ExpState0
                         ),
-                        {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_finished(ExpState1)}
+                        {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_failed(ExpState1)}
                     end
                 }
             }

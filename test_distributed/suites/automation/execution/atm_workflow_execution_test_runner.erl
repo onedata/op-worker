@@ -1046,19 +1046,21 @@ shift_monitored_lane_run_if_current_one_stopped(_, TestCtx) ->
 ) ->
     boolean().
 is_end_phase_of_last_step_of_lane_run(
-    #mock_call_report{timing = after_step, step = Step},
+    #mock_call_report{timing = after_step, step = handle_lane_execution_stopped},
     AtmLaneRunSelector,
     #test_ctx{executed_step_phases = ExecutedStepPhases}
 ) ->
-    SecondToLastStepPhaseInLaneRunInCaseThisIsTheLastOne = {
-        hd([prepare_lane, resume_lane, handle_lane_execution_stopped] -- [Step]),
-        after_step,
-        AtmLaneRunSelector
-    },
-    lists:member(
-        SecondToLastStepPhaseInLaneRunInCaseThisIsTheLastOne,
-        ExecutedStepPhases
-    ).
+    lists:any(
+        fun(StepSelector) -> lists:member(StepSelector, ExecutedStepPhases) end,
+        [{prepare_lane, after_step, AtmLaneRunSelector}, {resume_lane, after_step, AtmLaneRunSelector}]
+    );
+
+is_end_phase_of_last_step_of_lane_run(
+    #mock_call_report{timing = after_step},
+    AtmLaneRunSelector,
+    #test_ctx{executed_step_phases = ExecutedStepPhases}
+) ->
+    lists:member({handle_lane_execution_stopped, after_step, AtmLaneRunSelector}, ExecutedStepPhases).
 
 
 %% @private
