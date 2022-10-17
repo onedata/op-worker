@@ -467,7 +467,7 @@ begin_step_phase_execution(
 ) ->
     StepMockCallCtx = build_mock_call_ctx(StepMockCallReport, TestCtx0),
 
-    call_if_defined(get_hook(StepMockCallReport, StepMockSpec), StepMockCallCtx),
+    call_hook_if_defined(get_hook(StepMockCallReport, StepMockSpec), StepMockCallCtx, TestCtx0),
 
     ExpStateDiff = get_exp_state_diff(StepMockCallReport, StepMockSpec),
     TestCtx1 = case ExpStateDiff(StepMockCallCtx) of
@@ -694,9 +694,19 @@ get_hook(#mock_call_report{timing = after_step}, #atm_step_mock_spec{after_step_
 
 
 %% @private
--spec call_if_defined(undefined | fun((term()) -> ok), term()) -> ok.
-call_if_defined(undefined, _Input) -> ok;
-call_if_defined(Fun, Input) -> Fun(Input).
+-spec call_hook_if_defined(undefined | hook(), term(), test_ctx()) -> ok.
+call_hook_if_defined(undefined, _Input, _TestCtx) ->
+    ok;
+call_hook_if_defined(HookFun, Input, TestCtx) ->
+    try
+        HookFun(Input),
+        ok
+    catch Type:Error:Stacktrace ->
+        ct:pal("Unexpected exception when calling test hook: ~p", [
+            iolist_to_binary(lager:pr_stacktrace(Stacktrace, {Type, Error}))
+        ]),
+        fail_test(TestCtx)
+    end.
 
 
 %% @private
@@ -956,9 +966,10 @@ shift_monitored_lane_run_if_current_one_stopped(
     Step =:= handle_workflow_interrupted;
     Step =:= handle_workflow_execution_stopped
 ->
-    call_if_defined(
+    call_hook_if_defined(
         EndedIncarnation#atm_workflow_execution_incarnation_test_spec.after_hook,
-        build_mock_call_ctx(StepMockCallReport, TestCtx)
+        build_mock_call_ctx(StepMockCallReport, TestCtx),
+        TestCtx
     ),
     TestCtx#test_ctx{ongoing_incarnations = []};
 
@@ -979,7 +990,7 @@ shift_monitored_lane_run_if_current_one_stopped(
         after_hook = AfterHook
     } = EndedIncarnation,
 
-    call_if_defined(AfterHook, build_mock_call_ctx(StepMockCallReport, TestCtx)),
+    call_hook_if_defined(AfterHook, build_mock_call_ctx(StepMockCallReport, TestCtx), TestCtx),
 
     #atm_workflow_execution_incarnation_test_spec{
         lane_runs = [#atm_lane_run_execution_test_spec{
