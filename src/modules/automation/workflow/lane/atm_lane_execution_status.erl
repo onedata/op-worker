@@ -322,7 +322,9 @@ handle_stopped(AtmLaneRunSelector, AtmWorkflowExecutionId) ->
                 end_lane_run(AtmLaneRunSelector, AtmWorkflowExecution)
         end
     end,
-    ?extract_doc(atm_workflow_execution:update(AtmWorkflowExecutionId, Diff)).
+    ?extract_doc(atm_workflow_execution_status:handle_lane_run_stopped(
+        AtmLaneRunSelector, AtmWorkflowExecutionId, Diff
+    )).
 
 
 -spec handle_manual_repeat(

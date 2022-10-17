@@ -862,11 +862,14 @@ expect_workflow_execution_active(ExpStateCtx) ->
 
 -spec expect_workflow_execution_stopping(ctx()) -> ctx().
 expect_workflow_execution_stopping(ExpStateCtx) ->
-    ExpAtmWorkflowExecutionStateDiff = fun(ExpAtmWorkflowExecutionState) ->
-        ExpAtmWorkflowExecutionState#{
-            <<"status">> => <<"stopping">>,
-            <<"startTime">> => build_timestamp_field_validator(?NOW())
-        }
+    ExpAtmWorkflowExecutionStateDiff = fun
+        (ExpAtmWorkflowExecutionState = #{<<"status">> := <<"active">>}) ->
+            ExpAtmWorkflowExecutionState#{<<"status">> => <<"stopping">>};
+        (ExpAtmWorkflowExecutionState) ->
+            ExpAtmWorkflowExecutionState#{
+                <<"status">> => <<"stopping">>,
+                <<"startTime">> => build_timestamp_field_validator(?NOW())
+            }
     end,
     update_workflow_execution_exp_state(ExpAtmWorkflowExecutionStateDiff, ExpStateCtx).
 

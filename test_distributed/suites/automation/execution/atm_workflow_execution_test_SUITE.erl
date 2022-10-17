@@ -63,8 +63,8 @@
     fail_atm_workflow_execution_due_to_job_result_store_mapping_error/1,
     fail_atm_workflow_execution_due_to_job_missing_required_results_error/1,
     fail_atm_workflow_execution_due_to_incorrect_result_type_error/1,
-    fail_atm_workflow_execution_due_to_lambda_exception/1,
-    fail_atm_workflow_execution_due_to_lambda_error/1,
+    fail_atm_workflow_execution_due_to_lambda_item_exception/1,
+    fail_atm_workflow_execution_due_to_lambda_batch_exception/1,
 
     cancel_scheduled_atm_workflow_execution/1,
     cancel_enqueued_atm_workflow_execution/1,
@@ -202,8 +202,8 @@ groups() -> [
         fail_atm_workflow_execution_due_to_job_result_store_mapping_error,
         fail_atm_workflow_execution_due_to_job_missing_required_results_error,
         fail_atm_workflow_execution_due_to_incorrect_result_type_error,
-        fail_atm_workflow_execution_due_to_lambda_exception,
-        fail_atm_workflow_execution_due_to_lambda_error
+        fail_atm_workflow_execution_due_to_lambda_item_exception,
+        fail_atm_workflow_execution_due_to_lambda_batch_exception
     ]},
 
     {cancel_tests, [], [
@@ -479,11 +479,11 @@ fail_atm_workflow_execution_due_to_incorrect_result_type_error(_Config) ->
     ?RUN_FAILURE_TEST().
 
 
-fail_atm_workflow_execution_due_to_lambda_exception(_Config) ->
+fail_atm_workflow_execution_due_to_lambda_item_exception(_Config) ->
     ?RUN_FAILURE_TEST().
 
 
-fail_atm_workflow_execution_due_to_lambda_error(_Config) ->
+fail_atm_workflow_execution_due_to_lambda_batch_exception(_Config) ->
     ?RUN_FAILURE_TEST().
 
 

@@ -26,8 +26,8 @@
     fail_atm_workflow_execution_due_to_job_result_store_mapping_error/0,
     fail_atm_workflow_execution_due_to_job_missing_required_results_error/0,
     fail_atm_workflow_execution_due_to_incorrect_result_type_error/0,
-    fail_atm_workflow_execution_due_to_lambda_exception/0,
-    fail_atm_workflow_execution_due_to_lambda_error/0
+    fail_atm_workflow_execution_due_to_lambda_item_exception/0,
+    fail_atm_workflow_execution_due_to_lambda_batch_exception/0
 ]).
 
 
@@ -352,8 +352,8 @@ uncorrelated_result_expect_task2_interrupted(AtmTask2ExecutionId, ExpState0) ->
     atm_workflow_execution_test_runner:exp_state().
 uncorrelated_result_expect_pb1_changed_status(AtmTaskExecutionId, ExpState) ->
     InferStatusFun = fun
-        (<<"active">>, [<<"failed">>, <<"interrupted">>]) -> <<"failed">>;
-        (_, _) -> <<"active">>
+        (<<"stopping">>, [<<"failed">>, <<"interrupted">>]) -> <<"failed">>;
+        (Status, _) -> Status
     end,
     atm_workflow_execution_exp_state_builder:expect_task_parallel_box_transitioned_to_inferred_status(
         AtmTaskExecutionId, InferStatusFun, ExpState
@@ -543,7 +543,7 @@ fail_atm_workflow_execution_due_to_incorrect_result_type_error() ->
     }).
 
 
-fail_atm_workflow_execution_due_to_lambda_exception() ->
+fail_atm_workflow_execution_due_to_lambda_item_exception() ->
     job_failure_atm_workflow_execution_test_base(result_error, #fail_atm_workflow_execution_test_spec{
         testcase_id = ?FUNCTION_NAME,
         atm_workflow_schema_draft = ?JOB_FAILING_DUE_TO_RESULT_MAPPING_WORKFLOW_SCHEMA_DRAFT(
@@ -562,7 +562,7 @@ fail_atm_workflow_execution_due_to_lambda_exception() ->
     }).
 
 
-fail_atm_workflow_execution_due_to_lambda_error() ->
+fail_atm_workflow_execution_due_to_lambda_batch_exception() ->
     job_failure_atm_workflow_execution_test_base(result_error, #fail_atm_workflow_execution_test_spec{
         testcase_id = ?FUNCTION_NAME,
         atm_workflow_schema_draft = ?JOB_FAILING_DUE_TO_RESULT_MAPPING_WORKFLOW_SCHEMA_DRAFT(
@@ -953,7 +953,7 @@ job_failure_expect_task3_ended(TestcaseId, AtmTask3ExecutionId, ExpState) ->
             ),
             {true, case IsLastExpLaneRun of
                 true ->
-                    ExpState1;
+                    atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(ExpState1);
                 false ->
                     {AtmLaneSelector, RunNum} = AtmLaneRunSelector,
 

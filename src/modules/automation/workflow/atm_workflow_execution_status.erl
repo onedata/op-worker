@@ -23,35 +23,35 @@
 %%% =====|=====|=========================|==================================|================================
 %%%      |      \                        v                                  |
 %%%      |        --- resumed ---> +-------------+                          |
-%%%      |                         |    ACTIVE   |------- ^stopping --------o
+%%%      |                         |    ACTIVE   |------- ^stopping --------o                           %% TODO should finished also transition via stopping??
 %%%      |                -------- +-------------+                          |       ____
 %%%  O   |              /                                                   v     /      \ overriding ^stopping
-%%%  N   |             |                                             +-------------+     /        reason
-%%%  G   |  last lane execution stopped                              |   STOPPING  | <--
-%%%  O   |         run with                                          +-------------+ <-------------------
-%%%  I   |          /    \                                                |                               \
-%%%  N   |         /      \                                               |                               |
-%%%  G   |        /        \                last lane run execution stopped with ^stopping reason         |
-%%%      |       /          \                 /        |           |          |               |           |
-%%%      |    else    any parallel box       1*       2*          3*         4*              5*           |
-%%%      |      |       stopped with        /          |           |          |               |           |
-%%%      |      |         failure          /           |           |          |               |           |
-%%% =====|======|============|============/============|===========|==========|===============|===========|==
-%%%      |      |            |           /             |           |          |               |           |
-%%%  S   |      |            |          /              |           |          |               |           2*
-%%%  U   |      |            |         /               |           |          |               v           |
-%%%  S   |      |            |        /                |           |          |           +----------+    |
-%%%  P   |      |            |       /                 |           |          |           |  PAUSED  | ---o
-%%%  E   |      |            |      |                  |           |          |           +----------+    |
-%%%  N   |      |            |      |                  |           |          v                 |         |
-%%%  D   |      |            |      |                  |           |    +-------------+         |        /
-%%%  E   |      |            |      |                  |           |    | INTERRUPTED | --------|-------
-%%%  D   |      |            |      |                  |           |    +-------------+         |
-%%%      |      |            |      |                  |           |          |                 |
-%%%  ====|======|============|======|==================|===========|==========|=================|============
-%%%      |      |            |      |                  |           |          |                 |
-%%%      |      |            |      |                  |           |          |                 |
-%%%  E   |      v            v      v                  v           v          |                 |
+%%%  N   |             /                    any parallel box         +-------------+     /        reason
+%%%  G   |  last lane execution run --------- stopped with --------> |   STOPPING  | <--
+%%%  O   |       stopped with                   failure              +-------------+ <-------------------
+%%%  I   |          /                                                     |                               \
+%%%  N   |         /                                                      |                               |
+%%%  G   |        /                         last lane run execution stopped with ^stopping reason         |
+%%%      |       /                            /        |           |          |               |           |
+%%%      |    else                           1*       2*          3*         4*              5*           |
+%%%      |      |                           /          |           |          |               |           |
+%%%      |      |                          /           |           |          |               |           |
+%%% =====|======|=========================/============|===========|==========|===============|===========|==
+%%%      |      |                        /             |           |          |               |           |
+%%%  S   |      |                       /              |           |          |               |           2*
+%%%  U   |      |                      /               |           |          |               v           |
+%%%  S   |      |                     /                |           |          |           +----------+    |
+%%%  P   |      |                    /                 |           |          |           |  PAUSED  | ---o
+%%%  E   |      |                   |                  |           |          |           +----------+    |
+%%%  N   |      |                   |                  |           |          v                 |         |
+%%%  D   |      |                   |                  |           |    +-------------+         |        /
+%%%  E   |      |                   |                  |           |    | INTERRUPTED | --------|-------
+%%%  D   |      |                   |                  |           |    +-------------+         |
+%%%      |      |                   |                  |           |          |                 |
+%%%  ====|======|===================|==================|===========|==========|=================|============
+%%%      |      |                   |                  |           |          |                 |
+%%%      |      |                   |                  |           |          |                 |
+%%%  E   |      v                   v                  v           v          |                 |
 %%%  N   |  +----------+    +--------+       +-----------+    +-----------+   |                 |
 %%%  D   |  | FINISHED |    | FAILED |       | CANCELLED |    |  CRASHED  |   |                 |
 %%%  E   |  +----------+    +--------+       +-----------+    +-----------+   |                 |
@@ -64,8 +64,8 @@
 %%% In case when all items were already processed, such intermediate transition is not needed and workflow can
 %%% be immediately stopped.
 %%% Possible reasons for ^stopping workflow execution when not all items were processed are as follows:
-%%% 1* - failure severe enough to cause stopping of entire automation workflow execution
-%%%      (e.g. error when processing task uncorrelated results).
+%%% 1* - failure stopping entire automation workflow execution (e.g. error when processing task
+%%%      uncorrelated results or failure of last possible automatic lane run retry).
 %%% 2* - user cancelling entire automation workflow execution.
 %%% 3* - unhandled exception occurred.
 %%% 4* - abrupt interruption when some other component (e.g user offline session expired)
@@ -96,6 +96,7 @@
     handle_lane_run_enqueued/2,
     handle_lane_run_resumed/2,
     handle_lane_run_stopping/3,
+    handle_lane_run_stopped/3,
     handle_lane_run_task_status_change/2,
     handle_stopped/1,
     handle_crashed/1,
@@ -292,6 +293,40 @@ handle_lane_run_stopping(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmLaneRunD
         {error, _} = Error ->
             Error
     end.
+
+
+-spec handle_lane_run_stopped(
+    atm_lane_execution:lane_run_selector(),
+    atm_workflow_execution:id(),
+    lane_run_diff()
+) ->
+    {ok, atm_workflow_execution:doc()} | errors:error().
+handle_lane_run_stopped(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmLaneRunDiff) ->
+    atm_workflow_execution:update(AtmWorkflowExecutionId, fun
+        (Record = #atm_workflow_execution{status = ?ACTIVE_STATUS}) ->
+            case AtmLaneRunDiff(Record) of
+                {ok, NewRecord} ->
+                    IsCurrentLaneRun = atm_lane_execution:is_current_lane_run(
+                        AtmLaneRunSelector, NewRecord
+                    ),
+                    case atm_lane_execution:get_run(AtmLaneRunSelector, NewRecord) of
+                        {ok, #atm_lane_execution_run{
+                            status = ?FAILED_STATUS,
+                            stopping_reason = undefined
+                        }} when IsCurrentLaneRun ->
+                            % Entire atm workflow execution should transition to STOPPING status
+                            % when last automatic retry of current lane fails
+                            {ok, NewRecord#atm_workflow_execution{status = ?STOPPING_STATUS}};
+                        _ ->
+                            {ok, NewRecord}
+                    end;
+                {error, _} = Error ->
+                    Error
+            end;
+
+        (Record) ->
+            AtmLaneRunDiff(Record)
+    end).
 
 
 -spec handle_lane_run_task_status_change(atm_workflow_execution:id(), lane_run_diff()) ->
