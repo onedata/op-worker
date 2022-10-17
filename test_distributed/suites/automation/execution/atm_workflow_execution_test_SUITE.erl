@@ -107,8 +107,7 @@
     stopping_reason_crash_overrides_failure/1,
     stopping_reason_crash_overrides_cancel/1,
 
-    stopping_finishing_atm_workflow_execution/1,
-    stopping_finished_atm_workflow_execution/1,
+    finish_atm_workflow_execution/1,
 
     iterate_over_list_store/1,
     iterate_over_list_store_with_some_inaccessible_items/1,
@@ -255,10 +254,11 @@ groups() -> [
         stopping_reason_cancel_overrides_failure,
         stopping_reason_crash_overrides_pause,
         stopping_reason_crash_overrides_failure,
-        stopping_reason_crash_overrides_cancel,
+        stopping_reason_crash_overrides_cancel
+    ]},
 
-        stopping_finishing_atm_workflow_execution,
-        stopping_finished_atm_workflow_execution
+    {finish_tests, [], [
+        finish_atm_workflow_execution
     ]},
 
     {iteration_tests, [], [
@@ -326,6 +326,7 @@ all() -> [
     {group, interrupt_tests},
     {group, crash_tests},
     {group, stopping_tests},
+    {group, finish_tests},
     {group, iteration_tests},
     {group, mapping_tests},
     {group, repeat_tests},
@@ -352,6 +353,7 @@ all() -> [
 -define(RUN_STOPPING_TEST(), ?RUN_TEST(atm_workflow_execution_stopping_tests)).
 -define(RUN_ITERATION_TEST(), ?RUN_TEST(atm_workflow_execution_iteration_tests)).
 -define(RUN_MAPPING_TEST(), ?RUN_TEST(atm_workflow_execution_mapping_tests)).
+-define(RUN_FINISH_TEST(), ?RUN_TEST(atm_workflow_execution_finish_tests)).
 -define(RUN_REPEAT_TEST(), ?RUN_TEST(atm_workflow_execution_repeat_tests)).
 -define(RUN_RESUME_TEST(), ?RUN_TEST(atm_workflow_execution_resume_tests)).
 
@@ -597,12 +599,8 @@ stopping_reason_crash_overrides_cancel(_Config) ->
     ?RUN_STOPPING_TEST().
 
 
-stopping_finishing_atm_workflow_execution(_Config) ->
-    ?RUN_STOPPING_TEST().
-
-
-stopping_finished_atm_workflow_execution(_Config) ->
-    ?RUN_STOPPING_TEST().
+finish_atm_workflow_execution(_Config) ->
+    ?RUN_FINISH_TEST().
 
 
 iterate_over_list_store(_Config) ->
@@ -799,6 +797,7 @@ init_per_group(TestGroup, Config) when
     TestGroup =:= interrupt_tests;
     TestGroup =:= crash_tests;
     TestGroup =:= stopping_tests;
+    TestGroup =:= finish_tests;
     TestGroup =:= iteration_tests;
     TestGroup =:= mapping_tests;
     TestGroup =:= repeat_tests;
@@ -824,6 +823,7 @@ end_per_group(TestGroup, Config) when
     TestGroup =:= interrupt_tests;
     TestGroup =:= crash_tests;
     TestGroup =:= stopping_tests;
+    TestGroup =:= finish_tests;
     TestGroup =:= iteration_tests;
     TestGroup =:= mapping_tests;
     TestGroup =:= repeat_tests;
