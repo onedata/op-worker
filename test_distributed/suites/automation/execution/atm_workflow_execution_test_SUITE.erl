@@ -103,6 +103,9 @@
     stopping_reason_failure_overrides_pause/1,
     stopping_reason_cancel_overrides_pause/1,
     stopping_reason_cancel_overrides_failure/1,
+    stopping_reason_crash_overrides_pause/1,
+    stopping_reason_crash_overrides_failure/1,
+    stopping_reason_crash_overrides_cancel/1,
 
     stopping_finishing_atm_workflow_execution/1,
     stopping_finished_atm_workflow_execution/1,
@@ -250,6 +253,9 @@ groups() -> [
         stopping_reason_failure_overrides_pause,
         stopping_reason_cancel_overrides_pause,
         stopping_reason_cancel_overrides_failure,
+        stopping_reason_crash_overrides_pause,
+        stopping_reason_crash_overrides_failure,
+        stopping_reason_crash_overrides_cancel,
 
         stopping_finishing_atm_workflow_execution,
         stopping_finished_atm_workflow_execution
@@ -579,6 +585,18 @@ stopping_reason_cancel_overrides_failure(_Config) ->
     ?RUN_STOPPING_TEST().
 
 
+stopping_reason_crash_overrides_pause(_Config) ->
+    ?RUN_STOPPING_TEST().
+
+
+stopping_reason_crash_overrides_failure(_Config) ->
+    ?RUN_STOPPING_TEST().
+
+
+stopping_reason_crash_overrides_cancel(_Config) ->
+    ?RUN_STOPPING_TEST().
+
+
 stopping_finishing_atm_workflow_execution(_Config) ->
     ?RUN_STOPPING_TEST().
 
@@ -803,6 +821,7 @@ end_per_group(TestGroup, Config) when
     TestGroup =:= failure_tests;
     TestGroup =:= cancel_tests;
     TestGroup =:= pause_tests;
+    TestGroup =:= interrupt_tests;
     TestGroup =:= crash_tests;
     TestGroup =:= stopping_tests;
     TestGroup =:= iteration_tests;
