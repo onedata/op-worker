@@ -82,11 +82,11 @@ all() ->
 
         restart_callback_failure_test
     ]).
-% TODO - sprawdzc jaki iterator jest zapsany jak cancelujemy tuz po wykonaniu lane_ended
-% TODO - jaki iterator zapisujemy jak prepare_lane padl
-% TODO - co sie dzieje na cancelu po przetorzeniu ostatniego item'a - nie powinien sie workflow skonczyc dobrze?
-% TODO - test wielokrotnego resume'a w tym cancelowania zaraz po resume lub po wykonaniu callbacku resumed
-% TODO - testy abandon?
+% TODO VFS-9993 - check resume with cancel after lane_ended callback (verify iterator snapshot)
+% TODO VFS-9993 - check resume after prepare_lane fail (verify iterator snapshot)
+% TODO VFS-9993 - check resume after cancel when all items are processed (verify iterator snapshot)
+% TODO VFS-9993 - multiple resume tests (including cancel right after or during resume_lane callback)
+% TODO VFS-9993 - test abandon
 
 -record(test_config, {
     task_type = sync :: sync | async,

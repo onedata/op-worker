@@ -343,7 +343,7 @@ mock_handlers(Workers, Manager) ->
         (ExecutionId, Context, LaneId) ->
             MockTemplate(
                 #handler_call{
-                    function = prepare_lane, % TODO - zmienic na resume
+                    function = prepare_lane, % TODO VFS-9993 - differentiate prepare and resume during history check
                     execution_id = ExecutionId,
                     context =  Context,
                     lane_id = LaneId
@@ -463,7 +463,7 @@ mock_handlers(Workers, Manager) ->
                     context =  Context,
                     lane_id = LaneId,
                     result = true
-                % TODO
+                    % TODO VFS-9993 verify result
 %%                    result = workflow_execution_state:is_finished_and_cleaned(ExecutionId, LaneIndex)
                 },
                 [ExecutionId, Context, LaneId]

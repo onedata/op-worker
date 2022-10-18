@@ -522,7 +522,7 @@ handle_execution_ended(EngineId, ExecutionId, #execution_ended{
         ok ->
             case LaneCallbacks of
                 {true, CancelledLaneId, CancelledLaneContext, TaskIds} ->
-                    % TODO - przetestowac czy jak poleci tu wyjatek to wywolamy callback
+                    % TODO VFS-9993 - test if exception handler is called when exception appears here
                     call_handlers_for_cancelled_lane(
                         ExecutionId, Handler, CancelledLaneContext, CancelledLaneId, TaskIds);
                 false ->

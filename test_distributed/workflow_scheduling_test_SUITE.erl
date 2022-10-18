@@ -372,7 +372,7 @@ lane_execution_ended_handler_failure_test(Config) ->
     lane_failure_test_base(Config, #test_config{test_manager_failure_key = fail_execution_ended_handler}, fail_on_lane_finish).
 
 lane_execution_ended_handler_failure_before_prepare_in_advance_finish_test(Config) ->
-    % TODO - ten test chyba nie dziala tak jak zakladamy
+    % TODO VFS-9993 - check if this test works as expected
     lane_failure_test_base(Config, #test_config{
         prepare_in_advance = true,
         test_manager_failure_key = fail_execution_ended_handler,

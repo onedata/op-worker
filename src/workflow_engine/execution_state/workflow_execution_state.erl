@@ -327,7 +327,7 @@ prepare_next_job(ExecutionId) ->
         ?WF_ERROR_EXECUTION_ENDED(ExecutionEnded) ->
             ExecutionEnded;
         ?WF_ERROR_LANE_EXECUTION_CANCELLED(Handler, CancelledLaneId, CancelledLaneContext, TaskIds) ->
-            % TODO - przetestowac czy jak poleci tu wyjatek to wywolamy callback
+            % TODO VFS-9993 - test if exception handler is called when exception appears here
             workflow_engine:call_handlers_for_cancelled_lane(
                 ExecutionId, Handler, CancelledLaneContext, CancelledLaneId, TaskIds),
             {ok, _} = update(ExecutionId, fun(State) ->
@@ -891,14 +891,14 @@ handle_state_update_after_job_preparation(ExecutionId, #document{value = #workfl
             maybe_save_iterator_on_workflow_end_or_error(HandlerAns, Doc),
             case update(ExecutionId, fun maybe_wait_for_preparation_in_advance/1) of
                 ?WF_ERROR_LANE_ALREADY_PREPARED ->
-                    % TODO - przetestowac czy jak poleci tu wyjatek to wywolamy callback
+                    % TODO VFS-9993 - test if exception handler is called when exception appears here
                     ?WF_ERROR_EXECUTION_ENDED(#execution_ended{handler = Handler, context = ExecutionContext});
                 {ok, _} ->
-                    % TODO - sprawdzic czy jak polecial wyjatek to callback sie wywolal
+                    % TODO VFS-9993 - test if exception handler is called when exception appears here
                     ?WF_ERROR_NO_WAITING_ITEMS
             end;
         HandlerAns ->
-            % TODO - przetestowac czy jak poleci tu wyjatek to wywolamy callback
+            % TODO VFS-9993 - test if exception handler is called when exception appears here
             maybe_save_iterator_on_workflow_end_or_error(HandlerAns, Doc),
             ?WF_ERROR_EXECUTION_ENDED(#execution_ended{handler = Handler, context = ExecutionContext})
     end;
@@ -2118,7 +2118,7 @@ handle_no_waiting_items_error(#workflow_execution_state{
 %%--------------------------------------------------------------------
 -spec is_finished_and_cleaned(workflow_engine:execution_id(), index()) -> true | {false, state()}.
 is_finished_and_cleaned(ExecutionId, LaneIndex) ->
-    % TODO - sprawdzic czy items_to_process jest puste
+    % TODO VFS-9993 - check if items_to_process are empty
     case get(ExecutionId) of
         {ok, #workflow_execution_state{
             current_lane = #current_lane{index = Index, id = undefined},
