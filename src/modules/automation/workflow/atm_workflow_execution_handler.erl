@@ -448,8 +448,11 @@ handle_workflow_interrupted(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, Int
     FinalInterruptReason = try
         shut_workflow_execution_components(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
         InterruptReason
-    catch _:_ ->
-        %% TODO error log??
+    catch Type:Reason ->
+        ?error_stacktrace(
+            "Emergency atm workflow execution components shutdown failed due to ~p:~p",
+            [Type, Reason]
+        ),
         crash
     end,
 
