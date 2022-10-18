@@ -128,7 +128,7 @@ stop(UserCtx, AtmWorkflowExecutionId, Reason) ->
         {ok, stopped} ->
             % atm workflow execution was stopped and there are no active processes handling it
             % (e.g. cancelling already suspended execution) - end procedures must be called manually
-            end_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
+            shut_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
             ok;
         {error, _} = Error ->
             Error
@@ -206,7 +206,7 @@ on_provider_restart(AtmWorkflowExecutionId) ->
     try
         AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(AtmWorkflowExecutionEnv),
         atm_lane_execution_handler:stop({current, current}, interrupt, AtmWorkflowExecutionCtx),
-        case end_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) of
+        case shut_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) of
             #document{value = #atm_workflow_execution{status = ?INTERRUPTED_STATUS}} ->
                 UserCtx = atm_workflow_execution_auth:get_user_ctx(atm_workflow_execution_ctx:get_auth(
                     AtmWorkflowExecutionCtx
@@ -240,7 +240,7 @@ on_openfaas_down(AtmWorkflowExecutionId, Error) ->
 
         workflow_engine:abandon(AtmWorkflowExecutionId, interrupt),
         atm_lane_execution_handler:stop({current, current}, interrupt, AtmWorkflowExecutionCtx),
-        end_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx)
+        shut_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx)
     catch throw:{session_acquisition_failed, _} = Reason ->
         handle_exception(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, throw, Reason, [])
     end,
@@ -404,7 +404,7 @@ handle_lane_execution_stopped(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, A
 handle_workflow_execution_stopped(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv) ->
     AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(AtmWorkflowExecutionEnv),
 
-    infer_progress_data_persistence_policy(end_workflow_execution(
+    infer_progress_data_persistence_policy(shut_workflow_execution(
         AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
     )).
 
@@ -416,7 +416,7 @@ handle_workflow_execution_stopped(AtmWorkflowExecutionId, AtmWorkflowExecutionEn
     term(),
     list()
 ) ->
-    ok.
+    interrupt | crash.
 handle_exception(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, Type, Reason, Stacktrace) ->
     AtmWorkflowExecutionCtx = get_root_workflow_execution_ctx(
         AtmWorkflowExecutionId, AtmWorkflowExecutionEnv
@@ -431,23 +431,37 @@ handle_exception(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, Type, Reason, 
     end,
     atm_lane_execution_handler:stop({current, current}, StoppingReason, AtmWorkflowExecutionCtx),
 
-    ok.
+    StoppingReason.
 
 
 -spec handle_workflow_interrupted(
     atm_workflow_execution:id(),
     atm_workflow_execution_env:record(),
-    workflow_handler:interrupt_reason()
+    undefined | interrupt | crash
 ) ->
     workflow_handler:progress_data_persistence().
-handle_workflow_interrupted(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, _) ->
+handle_workflow_interrupted(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, InterruptReason) ->
     AtmWorkflowExecutionCtx = get_root_workflow_execution_ctx(
         AtmWorkflowExecutionId, AtmWorkflowExecutionEnv
     ),
 
-    infer_progress_data_persistence_policy(end_workflow_execution(
-        AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
-    )).
+    FinalInterruptReason = try
+        shut_workflow_execution_components(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
+        InterruptReason
+    catch Type:Reason ->
+        ?error_stacktrace(
+            "Emergency atm workflow execution components shutdown failed due to ~p:~p",
+            [Type, Reason]
+        ),
+        crash
+    end,
+
+    {ok, StoppedAtmWorkflowExecutionDoc} = case FinalInterruptReason of
+        crash -> atm_workflow_execution_status:handle_crashed(AtmWorkflowExecutionId);
+        _ -> atm_workflow_execution_status:handle_stopped(AtmWorkflowExecutionId)
+    end,
+    notify_stopped(StoppedAtmWorkflowExecutionDoc),
+    infer_progress_data_persistence_policy(StoppedAtmWorkflowExecutionDoc).
 
 
 %%%===================================================================
@@ -485,25 +499,34 @@ infer_progress_data_persistence_policy(#document{value = AtmWorkflowExecution}) 
 
 
 %% @private
--spec end_workflow_execution(
+-spec shut_workflow_execution(
     atm_workflow_execution:id(),
     atm_workflow_execution_ctx:record()
 ) ->
     atm_workflow_execution:doc().
-end_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
-    ensure_all_lane_runs_stopped(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
-    {ok, AtmWorkflowExecutionDoc} = delete_all_lane_runs_prepared_in_advance(
-        AtmWorkflowExecutionId
-    ),
-    freeze_global_stores(AtmWorkflowExecutionDoc),
-
-    atm_workflow_execution_session:terminate(AtmWorkflowExecutionId),
+shut_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
+    shut_workflow_execution_components(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
 
     {ok, StoppedAtmWorkflowExecutionDoc} = atm_workflow_execution_status:handle_stopped(
         AtmWorkflowExecutionId
     ),
     notify_stopped(StoppedAtmWorkflowExecutionDoc),
     StoppedAtmWorkflowExecutionDoc.
+
+
+%% @private
+-spec shut_workflow_execution_components(
+    atm_workflow_execution:id(),
+    atm_workflow_execution_ctx:record()
+) ->
+    ok.
+shut_workflow_execution_components(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
+    atm_workflow_execution_session:terminate(AtmWorkflowExecutionId),
+    ensure_all_lane_runs_stopped(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
+    {ok, AtmWorkflowExecutionDoc} = delete_all_lane_runs_prepared_in_advance(
+        AtmWorkflowExecutionId
+    ),
+    freeze_global_stores(AtmWorkflowExecutionDoc).
 
 
 %% @private
