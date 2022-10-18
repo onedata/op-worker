@@ -432,7 +432,7 @@ resume_atm_workflow_execution_paused_after_all_tasks_finished() ->
                                 {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_resuming(ExpState1)}
                             end,
                             after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState1}) ->
-                                ExpState2 = atm_workflow_execution_exp_state_builder:expect_lane_run_active({1, 1}, ExpState1),
+                                ExpState2 = atm_workflow_execution_exp_state_builder:expect_lane_run_active({1, 2}, ExpState1),
                                 {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_active(ExpState2)}
                             end
                         }
