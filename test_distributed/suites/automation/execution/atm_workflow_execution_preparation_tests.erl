@@ -915,6 +915,13 @@ lane_failed_in_advance_is_not_removed_if_first_lane_run_successfully_finished() 
                     selector = {1, 1},
                     prepare_lane = #atm_step_mock_spec{
                         defer_after = {handle_lane_execution_stopped, after_step, {2, 1}}
+                    },
+                    handle_lane_execution_stopped = #atm_step_mock_spec{
+                        after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                            ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_num_set({2, 1}, 1, ExpState0),
+                            ExpState2 = atm_workflow_execution_exp_state_builder:expect_lane_run_finished({1, 1}, ExpState1),
+                            {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(ExpState2)}
+                        end
                     }
                 },
                 #atm_lane_run_execution_test_spec{

@@ -48,8 +48,9 @@
 %%%
 %%% Task transition to STOPPING status when execution is halted and not all items were processed.
 %%% It is necessary as results for already scheduled ones must be awaited even if no more items are scheduled.
-%%% In case when all items were already processed, such intermediate transition is not needed and task can
-%%% be immediately stopped.
+%%% In case when all items were already processed, such intermediate transition is omitted (transition
+%%% from ACTIVE to stopped status can be done during one update operation) - although
+%%% logically such transition occurs.
 %%% Possible reasons for ^stopping task execution when not all items were processed are as follows:
 %%% 1* - failure severe enough to cause stopping of entire automation workflow execution
 %%%      (e.g. error when processing uncorrelated results).

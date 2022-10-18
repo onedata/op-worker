@@ -860,7 +860,9 @@ get_exp_state_diff(
                     {CurrentAtmLaneIndex + 1, CurrentAtmRunNum}, CurrentAtmRunNum, ExpState0
                 );
             false ->
-                ExpState0
+                atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(
+                    ExpState0
+                )
         end,
         {true, atm_workflow_execution_exp_state_builder:expect_lane_run_finished(
             AtmLaneRunSelector, ExpState1
@@ -955,7 +957,6 @@ fail_test(TestCtx) ->
     ?assertEqual(success, failure).
 
 
-%% TODO set current lane run selector in exp state on shift
 %% @private
 -spec shift_monitored_lane_run_if_current_one_stopped(mock_call_report(), test_ctx()) ->
     test_ctx().
