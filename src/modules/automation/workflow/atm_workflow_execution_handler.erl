@@ -52,7 +52,7 @@
     handle_workflow_execution_stopped/2,
 
     handle_exception/5,
-    handle_workflow_interrupted/3
+    handle_workflow_abruptly_stopped/3
 ]).
 
 
@@ -434,13 +434,13 @@ handle_exception(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, Type, Reason, 
     StoppingReason.
 
 
--spec handle_workflow_interrupted(
+-spec handle_workflow_abruptly_stopped(
     atm_workflow_execution:id(),
     atm_workflow_execution_env:record(),
     undefined | interrupt | crash
 ) ->
     workflow_handler:progress_data_persistence().
-handle_workflow_interrupted(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, InterruptReason) ->
+handle_workflow_abruptly_stopped(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, InterruptReason) ->
     AtmWorkflowExecutionCtx = get_root_workflow_execution_ctx(
         AtmWorkflowExecutionId, AtmWorkflowExecutionEnv
     ),

@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Stores progress information needed to restart workflow.
+%%% Stores progress information needed to resume workflow.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(workflow_execution_state_dump).

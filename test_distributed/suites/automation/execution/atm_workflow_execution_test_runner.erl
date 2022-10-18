@@ -84,7 +84,7 @@
     handle_lane_execution_stopped |
     handle_workflow_execution_stopped |
     handle_exception |
-    handle_workflow_interrupted.
+    handle_workflow_abruptly_stopped.
 
 -type step_phase_timing() :: before_step | after_step.
 
@@ -570,13 +570,13 @@ get_step_mock_spec(
     {{handle_exception, Timing, IncarnationNum}, Spec};
 
 get_step_mock_spec(
-    #mock_call_report{step = handle_workflow_interrupted, timing = Timing},
+    #mock_call_report{step = handle_workflow_abruptly_stopped, timing = Timing},
     #test_ctx{ongoing_incarnations = [#atm_workflow_execution_incarnation_test_spec{
         incarnation_num = IncarnationNum,
-        handle_workflow_interrupted = Spec
+        handle_workflow_abruptly_stopped = Spec
     } | _]}
 ) ->
-    {{handle_workflow_interrupted, Timing, IncarnationNum}, Spec};
+    {{handle_workflow_abruptly_stopped, Timing, IncarnationNum}, Spec};
 
 get_step_mock_spec(
     #mock_call_report{step = prepare_lane, timing = Timing, args = [_, _, {AtmLaneIndex, _}]},
@@ -888,7 +888,7 @@ get_exp_state_diff(
     #atm_step_mock_spec{after_step_exp_state_diff = default}
 ) when
     Step =:= handle_exception;
-    Step =:= handle_workflow_interrupted
+    Step =:= handle_workflow_abruptly_stopped
 ->
     % Changes made by exception handling depends when it happens and as such no
     % reasonable default implementation can be provided
@@ -964,7 +964,7 @@ shift_monitored_lane_run_if_current_one_stopped(
     StepMockCallReport = #mock_call_report{timing = after_step, step = Step},
     TestCtx = #test_ctx{ongoing_incarnations = [EndedIncarnation]}  %% last incarnation stopped
 ) when
-    Step =:= handle_workflow_interrupted;
+    Step =:= handle_workflow_abruptly_stopped;
     Step =:= handle_workflow_execution_stopped
 ->
     call_hook_if_defined(
@@ -983,7 +983,7 @@ shift_monitored_lane_run_if_current_one_stopped(
         executed_step_phases = ExecutedStepPhases
     }
 ) when
-    Step =:= handle_workflow_interrupted;
+    Step =:= handle_workflow_abruptly_stopped;
     Step =:= handle_workflow_execution_stopped
 ->
     #atm_workflow_execution_incarnation_test_spec{
@@ -1186,7 +1186,7 @@ mock_workflow_execution_handler_steps(Workers) ->
     mock_workflow_execution_handler_step(Workers, report_item_error, 3),
     mock_workflow_execution_handler_step(Workers, handle_task_execution_stopped, 3),
     mock_workflow_execution_handler_step(Workers, handle_exception, 5),
-    mock_workflow_execution_handler_step(Workers, handle_workflow_interrupted, 3),
+    mock_workflow_execution_handler_step(Workers, handle_workflow_abruptly_stopped, 3),
     mock_workflow_execution_handler_step(Workers, handle_workflow_execution_stopped, 2).
 
 

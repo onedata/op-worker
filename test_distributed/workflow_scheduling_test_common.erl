@@ -486,15 +486,15 @@ mock_handlers(Workers, Manager) ->
             )
     end),
 
-    test_utils:mock_expect(Workers, workflow_test_handler, handle_workflow_interrupted, fun
+    test_utils:mock_expect(Workers, workflow_test_handler, handle_workflow_abruptly_stopped, fun
         (_ExecutionId, #{lane_id := _} = _Context, _InterruptReason) ->
-            % Context with lane_id defined cannot be used in handle_workflow_interrupted handler
+            % Context with lane_id defined cannot be used in handle_workflow_abruptly_stopped handler
             % (wrong type of context is used by caller)
             throw(wrong_context);
         (ExecutionId, Context, InterruptReason) ->
             MockTemplate(
                 #handler_call{
-                    function = handle_workflow_interrupted,
+                    function = handle_workflow_abruptly_stopped,
                     execution_id = ExecutionId,
                     context =  Context
                 },
@@ -634,7 +634,7 @@ get_items(Context, Iterator) ->
 verify_lanes_execution_history([], Gathered, #{fail_on_lane_finish := LaneId}) ->
     ?assertMatch([
         #handler_call{function = handle_exception, context = #{lane_id := LaneId}},
-        #handler_call{function = handle_workflow_interrupted}
+        #handler_call{function = handle_workflow_abruptly_stopped}
     ], Gathered);
 verify_lanes_execution_history([], Gathered, _Options) ->
     ?assertMatch([#handler_call{function = handle_workflow_execution_stopped}], Gathered);
@@ -752,7 +752,7 @@ verify_lanes_execution_history([{TaskIds, ExpectedItems, LaneExecutionContext} |
                     true
             end, GatheredForLane),
             ?assertMatch(
-                [#handler_call{function = handle_exception}, #handler_call{function = handle_workflow_interrupted}],
+                [#handler_call{function = handle_exception}, #handler_call{function = handle_workflow_abruptly_stopped}],
                 Filtered
             ),
             [FirstGatheredForLane | _] = GatheredForLane,
@@ -891,7 +891,7 @@ verify_item_execution_history(Item, [CallsForBox | ExpectedCalls], [HandlerCall 
 
     Ignore = case Options of
         #{fail_job := {LaneId, TaskId, Item}} -> ignore_callback_call;
-        #{fail_and_restart_job := {LaneId, TaskId, Item}} -> ignore_callback_call;
+        #{fail_and_resume_job := {LaneId, TaskId, Item}} -> ignore_callback_call;
         #{timeout := {LaneId, TaskId, Item}} -> ignore_next_box;
         #{fail_result_processing := {LaneId, TaskId, Item}} -> ignore_next_box;
         _ -> ignore_nothing
@@ -945,7 +945,7 @@ filter_finish_and_exception_handlers(ExecutionHistory, LaneId) ->
             not lists:member(Fun, [handle_lane_execution_stopped, handle_task_execution_stopped,
                 handle_task_results_processed_for_all_items, report_item_error]);
         (#handler_call{function = Fun}) ->
-            not lists:member(Fun, [handle_workflow_execution_stopped, handle_workflow_interrupted, handle_exception])
+            not lists:member(Fun, [handle_workflow_execution_stopped, handle_workflow_abruptly_stopped, handle_exception])
     end, ExecutionHistory).
 
 filter_prepare_in_adnave_handler(ExecutionHistory, LaneId, true = _IsPrepareInAdvanceSet) ->
@@ -1104,14 +1104,14 @@ verify_execution_history_stats(Acc, WorkflowType, Options) ->
 verify_memory(Config, InitialKeys) ->
     verify_memory(Config, InitialKeys, false).
 
-verify_memory(Config, InitialKeys, RestartDocPresent) ->
+verify_memory(Config, InitialKeys, ResumeDocPresent) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     ?assertEqual([], rpc:call(Worker, workflow_engine_state, get_execution_ids, [?ENGINE_ID])),
     ?assertEqual(0, rpc:call(Worker, workflow_engine_state, get_slots_used, [?ENGINE_ID])),
 
     lists:foreach(fun({Model, Keys}) ->
-        case RestartDocPresent andalso Model =:= workflow_iterator_snapshot of
+        case ResumeDocPresent andalso Model =:= workflow_iterator_snapshot of
             true -> ?assertMatch([_], Keys -- proplists:get_value(Model, InitialKeys));
             false -> ?assertEqual([], Keys -- proplists:get_value(Model, InitialKeys))
         end
@@ -1231,7 +1231,7 @@ count_lane_elements(#{
             BasicLaneElementsCount - count_not_executed_tasks(TaskIds, FailedTask) + 1;
         {#{fail_job := {LaneId, FailedTask, _}}, async} ->
             BasicLaneElementsCount - 3 * count_not_executed_tasks(TaskIds, FailedTask) - 1;
-        {#{fail_and_restart_job := {LaneId, FailedTask, _}}, async} ->
+        {#{fail_and_resume_job := {LaneId, FailedTask, _}}, async} ->
             BasicLaneElementsCount - 3 * count_not_executed_tasks(TaskIds, FailedTask) - 2;
         {#{timeout := {LaneId, FailedTask, _}}, async} ->
             BasicLaneElementsCount - 3 * count_not_executed_tasks(TaskIds, FailedTask) + 1;

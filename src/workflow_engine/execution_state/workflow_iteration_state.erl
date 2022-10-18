@@ -19,10 +19,11 @@
 
 %% API
 -export([init/0, can_process_items/1, handle_iteration_finished/1, get_last_registered_item_index/1, register_item/3,
-    handle_item_processed/3, finalize/1, restart_iteration/1, get_item_id/2,
+    handle_item_processed/3, finalize/1, resume_iteration/1, get_item_id/2,
     dump/1, from_dump/1, get_dump_struct/0]).
 %% Test API
 -export([is_finished_and_cleaned/1]).
+
 
 % Internal record to store information about all items currently being used and last registered
 % iterator that will be used to obtain next items.
@@ -37,6 +38,16 @@
     phase = executing :: phase()
 }).
 
+-record(dump, {
+    pending_items_indexes :: [workflow_execution_state:index()],
+    last_registered_item_index :: workflow_execution_state:index() | undefined,
+    first_not_finished_item_index :: workflow_execution_state:index(),
+    items_finished_ahead = [{
+        {workflow_execution_state:index(), workflow_execution_state:index()},
+        workflow_execution_state:index()
+    }]
+}).
+
 -type state() :: #iteration_state{}.
 % Tree storing ranges of items which processing already finished.
 % Range is deleted from tree when no items with smaller index is being processed.
@@ -45,14 +56,9 @@
     To :: workflow_execution_state:index(),
     From :: workflow_execution_state:index()
 }, SnapshotData :: {workflow_execution_state:index(), workflow_cached_item:id()} | undefined).
--type phase() :: executing | {resuming, workflow_execution_state:index() | finished_iteration | restarted_iteration} | finalzing.
+-type phase() :: executing | {resuming, workflow_execution_state:index() | finished_iteration | resumed_iteration} | finalzing.
 
--type dump() :: {
-    [workflow_execution_state:index()],
-    workflow_execution_state:index(),
-    workflow_execution_state:index(),
-    [{{workflow_execution_state:index(), workflow_execution_state:index()}, workflow_execution_state:index()}]
-}.
+-type dump() :: dump().
 
 -export_type([state/0, dump/0]).
 
@@ -72,7 +78,7 @@ can_process_items(#iteration_state{phase = Phase}) ->
 -spec handle_iteration_finished(state()) -> state().
 handle_iteration_finished(#iteration_state{phase = {resuming, finished_iteration}} = Progress) ->
     Progress#iteration_state{phase = executing, last_registered_item_index = undefined};
-handle_iteration_finished(#iteration_state{phase = {resuming, restarted_iteration}} = Progress) ->
+handle_iteration_finished(#iteration_state{phase = {resuming, resumed_iteration}} = Progress) ->
     Progress#iteration_state{phase = executing, last_registered_item_index = undefined};
 handle_iteration_finished(Progress) ->
     Progress#iteration_state{last_registered_item_index = undefined}.
@@ -82,7 +88,7 @@ get_last_registered_item_index(#iteration_state{last_registered_item_index = Ind
     Index.
 
 -spec register_item(state(), workflow_execution_state:index(), workflow_cached_item:id()) ->
-    {new_item | restarted_item | already_processed_item, workflow_execution_state:index(), state()} |
+    {new_item | resumed_item | already_processed_item, workflow_execution_state:index(), state()} |
     ?WF_ERROR_RACE_CONDITION.
 register_item(
     Progress = #iteration_state{
@@ -109,7 +115,7 @@ register_item(
     ItemId
 ) ->
     NewItemIndex = LastItemIndex + 1,
-    IsRestartedItem = case maps:get(NewItemIndex, Pending, not_found) of
+    IsResumedItem = case maps:get(NewItemIndex, Pending, not_found) of
         undefined -> true;
         _ -> false
     end,
@@ -127,15 +133,15 @@ register_item(
         end
     },
 
-    case {IsRestartedItem, IsFinishedItem} of
+    case {IsResumedItem, IsFinishedItem} of
         {false, false} ->
             {already_processed_item, NewItemIndex, Progress2};
         {true, false} ->
-            {restarted_item, NewItemIndex, Progress2#iteration_state{
+            {resumed_item, NewItemIndex, Progress2#iteration_state{
                 pending_items = Pending#{NewItemIndex => ItemId}
             }};
         {false, {true, TreeKey}} ->
-            {restarted_item, NewItemIndex, Progress2#iteration_state{
+            {resumed_item, NewItemIndex, Progress2#iteration_state{
                 items_finished_ahead = gb_trees:enter(TreeKey, {NewItemIndex, ItemId}, FinishedAhead)
             }}
     end;
@@ -285,11 +291,11 @@ finalize(#iteration_state{pending_items = Pending, items_finished_ahead = Finish
         State#iteration_state{phase = finalzing}
     }.
 
--spec restart_iteration(state()) -> {ok, state()} | already_restarted.
-restart_iteration(#iteration_state{phase = {resuming, finished_iteration}} = State) ->
-    {ok, State#iteration_state{phase = {resuming, restarted_iteration}}};
-restart_iteration(_) ->
-    already_restarted.
+-spec resume_iteration(state()) -> {ok, state()} | already_resumed.
+resume_iteration(#iteration_state{phase = {resuming, finished_iteration}} = State) ->
+    {ok, State#iteration_state{phase = {resuming, resumed_iteration}}};
+resume_iteration(_) ->
+    already_resumed.
 
 -spec get_item_id(state(), workflow_execution_state:index()) -> workflow_cached_item:id().
 get_item_id(#iteration_state{pending_items = Pending}, ItemIndex) ->
@@ -307,11 +313,21 @@ dump(#iteration_state{
         ({Key, undefined}) -> {Key, undefined};
         ({Key, {ItemIndex, _}}) -> {Key, ItemIndex}
     end, gb_trees:to_list(FinishedAhead)),
-    {maps:keys(PendingItems), LastRegistered, FirstNotFinished, MappedFinishedAhead}.
+    #dump{
+        pending_items_indexes = maps:keys(PendingItems),
+        last_registered_item_index = LastRegistered,
+        first_not_finished_item_index = FirstNotFinished,
+        items_finished_ahead = MappedFinishedAhead
+    }.
 
 
 -spec from_dump(dump()) -> state().
-from_dump({PendingItemsIndexes, LastRegistered, FirstNotFinished, FinishedAheadList}) ->
+from_dump(#dump{
+    pending_items_indexes = PendingItemsIndexes,
+    last_registered_item_index = LastRegistered,
+    first_not_finished_item_index = FirstNotFinished,
+    items_finished_ahead = FinishedAheadList
+}) ->
     PendingItems = maps:from_list(lists:map(fun(Index) -> {Index, undefined} end, PendingItemsIndexes)),
     FinishedAhead = gb_trees:from_orddict(lists:map(fun
         ({Key, undefined}) -> {Key, undefined};
@@ -339,7 +355,12 @@ from_dump({PendingItemsIndexes, LastRegistered, FirstNotFinished, FinishedAheadL
 
 -spec get_dump_struct() -> tuple().
 get_dump_struct() ->
-    {[integer], integer, integer, [{{integer, integer}, integer}]}.
+    {record, [
+        {pending_items_indexes, [integer]},
+        {last_registered_item_index, integer},
+        {first_not_finished_item_index, integer},
+        {items_finished_ahead, [{{integer, integer}, integer}]}
+    ]}.
 
 
 %%%===================================================================

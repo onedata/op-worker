@@ -442,7 +442,7 @@ cancel_interrupted_atm_workflow_execution() ->
                     },
 
                     handle_lane_execution_stopped = #atm_step_mock_spec{
-                        % this is called as part of `handle_workflow_interrupted`
+                        % this is called as part of `handle_workflow_abruptly_stopped`
                         after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
                             ExpState1 = atm_workflow_execution_exp_state_builder:expect_all_tasks_abruptly_interrupted(
                                 {2, 1}, ExpState0
@@ -457,7 +457,7 @@ cancel_interrupted_atm_workflow_execution() ->
                     {true, expect_execution_stopping_while_processing_lane2(ExpState0, interrupt)}
                 end
             },
-            handle_workflow_interrupted = #atm_step_mock_spec{
+            handle_workflow_abruptly_stopped = #atm_step_mock_spec{
                 after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
                     {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_interrupted(ExpState0)}
                 end

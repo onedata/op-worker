@@ -20,7 +20,7 @@
 
 %% API
 -export([init/0, prepare_next_waiting_job/1, prepare_next_waiting_result/1, populate_with_jobs_for_item/5,
-    schedule_restart_of_job/2, mark_ongoing_job_finished/2, register_failure/2,
+    schedule_resume_of_job/2, mark_ongoing_job_finished/2, register_failure/2,
     register_async_job_finish/3, prepare_next_parallel_box/4,
     get_identfiers_for_next_parallel_boxes/3, has_ongoing_jobs/1, get_all_async_cached_result_ids/1,
     get_waiting_or_ongoing_tasks_indexes/1, dump/1, from_dump/2, get_dump_struct/0]).
@@ -75,6 +75,12 @@
     results_iterator :: undefined | results_iterator()
 }).
 
+-record(dump, {
+    waiting :: [job_identifier()],
+    failed :: [workflow_execution_state:index()]
+}).
+
+
 -type job_identifier() :: #job_identifier{}.
 -type encoded_job_identifier() :: binary().
 -type jobs_set() :: gb_sets:set(job_identifier()).
@@ -90,7 +96,7 @@
 -define(ITERATION_FINISHED, iteration_finished).
 -type results_iterator() :: gb_sets:iter(job_identifier()) | ?ITERATION_FINISHED.
 
--type dump() ::  {[job_identifier()], [workflow_execution_state:index()]}.
+-type dump() ::  #dump{}.
 
 -export_type([job_identifier/0, encoded_job_identifier/0, jobs/0, dump/0]).
 
@@ -176,8 +182,8 @@ populate_with_jobs_for_item(
         waiting = gb_sets:union(Waiting, gb_sets:from_list(ToWait))
     }, ToStart}.
 
--spec schedule_restart_of_job(jobs(), job_identifier()) -> jobs().
-schedule_restart_of_job(Jobs = #workflow_jobs{
+-spec schedule_resume_of_job(jobs(), job_identifier()) -> jobs().
+schedule_resume_of_job(Jobs = #workflow_jobs{
     waiting = Waiting,
     ongoing = Ongoing
 }, JobIdentifier) ->
@@ -319,11 +325,11 @@ get_waiting_or_ongoing_tasks_indexes(#workflow_jobs{waiting = Waiting, ongoing =
 
 -spec dump(jobs()) -> dump().
 dump(#workflow_jobs{waiting = Waiting, failed_items = FailedItems}) ->
-    {gb_sets:to_list(Waiting), sets:to_list(FailedItems)}.
+    #dump{waiting = gb_sets:to_list(Waiting), failed = sets:to_list(FailedItems)}.
 
 
 -spec from_dump(dump(), workflow_execution_state:incarnation_tag()) -> jobs().
-from_dump({WaitingList, FailedList}, IncarnationTag) ->
+from_dump(#dump{waiting = WaitingList, failed = FailedList}, IncarnationTag) ->
     MappedWaitingList = lists:map(fun(JobIdentifier) ->
         JobIdentifier#job_identifier{processing_type = ?JOB_PROCESSING, incarnation_tag = IncarnationTag}
     end, WaitingList),
@@ -332,16 +338,16 @@ from_dump({WaitingList, FailedList}, IncarnationTag) ->
 
 -spec get_dump_struct() -> tuple().
 get_dump_struct() ->
-    {
-        [{record, [
+    {record, [
+        {waiting, [{record, [
             {item_index, integer},
             {parallel_box_index, integer},
             {task_index, integer},
             {processing_type, atom},
             {incarnation_tag, string}
-        ]}],
-        [integer]
-    }.
+        ]}]},
+        {failed, [integer]}
+    ]}.
 
 %%%===================================================================
 %%% Functions returning/updating pending_async_jobs field

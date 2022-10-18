@@ -75,7 +75,7 @@
     id := id(),
     workflow_handler := workflow_handler:handler(),
     execution_context => execution_context(),
-    first_lane_id => lane_id(), % does not have to be defined if execution is restarted from snapshot
+    first_lane_id => lane_id(), % does not have to be defined if execution is resumed from snapshot
     next_lane_id => lane_id(),
     force_clean_execution => boolean(),
     snapshot_mode => workflow_execution_state:snapshot_mode()
@@ -165,7 +165,7 @@ execute_workflow(EngineId, ExecutionSpec) ->
             trigger_job_scheduling(EngineId, ?TAKE_UP_FREE_SLOTS);
         ?WF_ERROR_PREPARATION_FAILED ->
             InterruptReason = execute_exception_handler(ExecutionId, Context, Handler, error, preparation_failed, []),
-            case call_handler(ExecutionId, Context, Handler, handle_workflow_interrupted, [InterruptReason]) of
+            case call_handler(ExecutionId, Context, Handler, handle_workflow_abruptly_stopped, [InterruptReason]) of
                 clean_progress -> cleanup_execution(ExecutionId);
                 _ -> ok
             end
@@ -207,7 +207,7 @@ finish_cancel_procedure(ExecutionId) ->
     end.
 
 
--spec abandon(execution_id(), workflow_handler:interrupt_reason()) -> ok.
+-spec abandon(execution_id(), workflow_handler:abrupt_stop_reason()) -> ok.
 abandon(ExecutionId, InterruptReason) ->
     workflow_execution_state:abandon(ExecutionId, InterruptReason).
 
@@ -363,7 +363,7 @@ handle_exception(ExecutionId, Handler, Context, Message, MessageArgs, ErrorType,
     end.
 
 -spec execute_exception_handler(execution_id(), execution_context(), workflow_handler:handler(),
-    throw | error | exit, term(), list()) -> workflow_handler:interrupt_reason() | undefined.
+    throw | error | exit, term(), list()) -> workflow_handler:abrupt_stop_reason() | undefined.
 execute_exception_handler(ExecutionId, Context, Handler, ErrorType, Reason, Stacktrace) ->
     try
         apply(Handler, handle_exception, [ExecutionId, Context, ErrorType, Reason, Stacktrace])
@@ -537,15 +537,15 @@ handle_execution_ended(EngineId, ExecutionId, #execution_ended{
 
 
 -spec execute_final_callback(id(), execution_id(), workflow_handler:handler(),
-    handle_workflow_execution_stopped | {handle_workflow_interrupted, workflow_handler:interrupt_reason()}) -> ok.
+    handle_workflow_execution_stopped | {handle_workflow_abruptly_stopped, workflow_handler:abrupt_stop_reason()}) -> ok.
 execute_final_callback(ExecutionId, Context, Handler, FinalCallback) ->
     case {FinalCallback, workflow_execution_state:execute_exception_handler_if_waiting(ExecutionId)} of
         {handle_workflow_execution_stopped, {executed, Reason}} ->
-            execute_final_callback(ExecutionId, Context, Handler, {handle_workflow_interrupted, Reason});
+            execute_final_callback(ExecutionId, Context, Handler, {handle_workflow_abruptly_stopped, Reason});
         _ ->
             {FunName, Args} = case FinalCallback of
                 handle_workflow_execution_stopped -> {handle_workflow_execution_stopped, []};
-                {handle_workflow_interrupted, Reason} -> {handle_workflow_interrupted, [Reason]}
+                {handle_workflow_abruptly_stopped, Reason} -> {handle_workflow_abruptly_stopped, [Reason]}
             end,
             case call_handler(ExecutionId, Context, Handler, FunName, Args) of
                 clean_progress ->
@@ -557,7 +557,7 @@ execute_final_callback(ExecutionId, Context, Handler, FinalCallback) ->
                 error ->
                     case {FinalCallback, workflow_execution_state:execute_exception_handler_if_waiting(ExecutionId)} of
                         {handle_workflow_execution_stopped, {executed, NewReason}} ->
-                            execute_final_callback(ExecutionId, Context, Handler, {handle_workflow_interrupted, NewReason});
+                            execute_final_callback(ExecutionId, Context, Handler, {handle_workflow_abruptly_stopped, NewReason});
                         _ ->
                             ok
                     end

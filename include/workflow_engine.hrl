@@ -92,7 +92,7 @@
     % Some callbacks cannot be executed when calls count is higher than 0.
     % They will be executed when calls count is decremented to 0.
     callbacks_to_execute = [] :: [workflow_execution_state:callback_to_exectute()],
-    interrupt_reason :: workflow_handler:interrupt_reason() | undefined
+    abrupt_stop_reason :: workflow_handler:abrupt_stop_reason() | undefined
 }).
 
 %%%===================================================================
@@ -126,7 +126,7 @@
     handler :: workflow_handler:handler(),
     context :: workflow_engine:execution_context(),
     final_callback = handle_workflow_execution_stopped :: handle_workflow_execution_stopped |
-        {handle_workflow_interrupted, workflow_handler:interrupt_reason()},
+        {handle_workflow_abruptly_stopped, workflow_handler:abrupt_stop_reason()},
     lane_callbacks = false ::
         {true, workflow_engine:lane_id(), workflow_engine:execution_context(), [workflow_engine:task_id()]} | false
 }).

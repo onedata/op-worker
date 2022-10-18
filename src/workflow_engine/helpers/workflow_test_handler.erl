@@ -23,7 +23,7 @@
 -export([prepare_lane/3, resume_lane/3, run_task_for_item/5, process_task_result_for_item/5, report_item_error/3,
     handle_task_results_processed_for_all_items/3, process_streamed_task_data/4,
     handle_task_execution_stopped/3, handle_lane_execution_stopped/3,
-    handle_workflow_execution_stopped/2, handle_workflow_interrupted/3, handle_exception/5]).
+    handle_workflow_execution_stopped/2, handle_workflow_abruptly_stopped/3, handle_exception/5]).
 % API
 -export([is_last_lane/1, get_ignored_lane_id/0, get_ignored_lane_predecessor_id/0, pack_task_id/3, decode_task_id/1]).
 
@@ -274,15 +274,15 @@ handle_workflow_execution_stopped(_, _) ->
     clean_progress.
 
 
--spec handle_workflow_interrupted(
+-spec handle_workflow_abruptly_stopped(
     workflow_engine:execution_id(),
     test_execution_context(),
-    workflow_handler:interrupt_reason()
+    workflow_handler:abrupt_stop_reason()
 ) ->
     workflow_handler:progress_data_persistence().
-handle_workflow_interrupted(_, #{progress_data_persistence := DataPersistence}, _) ->
+handle_workflow_abruptly_stopped(_, #{progress_data_persistence := DataPersistence}, _) ->
     DataPersistence;
-handle_workflow_interrupted(_, _, _) ->
+handle_workflow_abruptly_stopped(_, _, _) ->
     clean_progress.
 
 

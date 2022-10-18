@@ -52,10 +52,10 @@
     ?END_EXECUTION. % engine does not distinguish reason of execution finish - ?END_EXECUTION is returned
                        % if processed lane is last lane as well as on error
 -type progress_data_persistence() :: save_progress | save_iterator | clean_progress.
--type interrupt_reason() :: term().
+-type abrupt_stop_reason() :: term().
 
 -export_type([handler/0, async_processing_result/0, handler_execution_result/0, prepare_lane_result/0,
-    lane_stopped_callback_result/0, progress_data_persistence/0, interrupt_reason/0]).
+    lane_stopped_callback_result/0, progress_data_persistence/0, abrupt_stop_reason/0]).
 
 %%%===================================================================
 %%% Callbacks descriptions
@@ -78,7 +78,7 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Callback to get lane spec when execution is restarted from snapshot.
+%% Callback to get lane spec when execution is resumed from snapshot.
 %% TODO - VFS-8495 - integrate with atm workflow resume and decide
 %% if resume should result in clean start
 %% @end
@@ -226,10 +226,10 @@
 %% exception or abandon.
 %% @end
 %%--------------------------------------------------------------------
--callback handle_workflow_interrupted(
+-callback handle_workflow_abruptly_stopped(
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
-    undefined | interrupt_reason()
+    undefined | abrupt_stop_reason()
 ) ->
     progress_data_persistence().
 
@@ -248,4 +248,4 @@
     term(),
     list()
 ) ->
-    interrupt_reason().
+    abrupt_stop_reason().

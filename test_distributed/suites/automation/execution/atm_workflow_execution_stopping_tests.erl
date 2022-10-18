@@ -298,7 +298,7 @@ stopping_reason_crash_overrides_pause() ->
                 %% already paused task2 changes status to interrupted
                 after_step_exp_state_diff = build_expect_task2_stopped_exp_state_diff(<<"interrupted">>)
             },
-            handle_workflow_interrupted = build_crash_handle_workflow_interrupted_step_mock_spec(
+            handle_workflow_abruptly_stopped = build_crash_handle_workflow_abruptly_stopped_step_mock_spec(
                 fun atm_workflow_execution_test_runner:pause_workflow_execution/1
             )
         }]
@@ -336,7 +336,7 @@ stopping_reason_crash_overrides_failure() ->
                     handle_lane_execution_stopped = build_crash_handle_lane_execution_stopped_step_mock_spec(<<"failed">>)
                 }
             ],
-            handle_workflow_interrupted = build_crash_handle_workflow_interrupted_step_mock_spec(undefined)
+            handle_workflow_abruptly_stopped = build_crash_handle_workflow_abruptly_stopped_step_mock_spec(undefined)
         }]
     }).
 
@@ -370,7 +370,7 @@ stopping_reason_crash_overrides_cancel() ->
                     handle_lane_execution_stopped = build_crash_handle_lane_execution_stopped_step_mock_spec(<<"cancelled">>)
                 }
             ],
-            handle_workflow_interrupted = build_crash_handle_workflow_interrupted_step_mock_spec(
+            handle_workflow_abruptly_stopped = build_crash_handle_workflow_abruptly_stopped_step_mock_spec(
                 fun atm_workflow_execution_test_runner:cancel_workflow_execution/1
             )
         }]
@@ -437,7 +437,7 @@ build_crash_handle_lane_execution_stopped_step_mock_spec(ExpTask1FinalStatus) ->
 
 
 %% @private
-build_crash_handle_workflow_interrupted_step_mock_spec(AfterHook) ->
+build_crash_handle_workflow_abruptly_stopped_step_mock_spec(AfterHook) ->
     #atm_step_mock_spec{
         before_step_hook = AfterHook,
         after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->

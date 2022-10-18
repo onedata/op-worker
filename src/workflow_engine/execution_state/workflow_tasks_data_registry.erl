@@ -50,8 +50,7 @@
 
 
 -opaque registry() :: #registry{}.
--opaque dump() :: [workflow_engine:task_id()].
--export_type([registry/0, dump/0]).
+-export_type([registry/0]).
 
 
 %%%===================================================================
