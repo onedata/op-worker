@@ -112,12 +112,6 @@ report_file_verification_failed(Id, FilePath, FileType) ->
 %%% Internal functions
 %%%===================================================================
 
-%% @private
--spec file_guid_to_object_id(file_id:file_guid()) -> file_id:objectid().
-file_guid_to_object_id(FileGuid) ->
-    {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
-    ObjectId.
-
 
 %% @private
 -spec type_to_human_readable_str(file_meta:type()) -> binary().
