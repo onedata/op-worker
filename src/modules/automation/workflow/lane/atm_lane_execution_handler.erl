@@ -189,7 +189,7 @@ prepare_lane_run(AtmLaneRunSelector, AtmWorkflowExecutionDoc0, AtmWorkflowExecut
         Type:Reason:Stacktrace ->
             LogContent = #{
                 <<"description">> => str_utils:format_bin(
-                    "Failed to prepare next run of lane number ~B.",
+                    "Failed to prepare next run of lane number ~p.",
                     [element(1, AtmLaneRunSelector)]
                 ),
                 <<"reason">> => errors:to_json(?atm_examine_error(Type, Reason, Stacktrace))
@@ -238,7 +238,7 @@ resume_lane_run(AtmLaneRunSelector, AtmWorkflowExecutionDoc0, AtmWorkflowExecuti
             {AtmLaneIndex, RunNum} = AtmLaneRunSelector,
             LogContent = #{
                 <<"description">> => str_utils:format_bin(
-                    "Failed to resume ~B run of lane number ~B.",
+                    "Failed to resume ~p run of lane number ~p.",
                     [RunNum, AtmLaneIndex]
                 ),
                 <<"reason">> => errors:to_json(?atm_examine_error(Type, Reason, Stacktrace))
