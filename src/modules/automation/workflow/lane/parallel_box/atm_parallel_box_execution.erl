@@ -306,9 +306,12 @@ initiate_all(AtmParallelBoxExecutions, InitiateTaskFun) ->
     } = AtmParallelBoxExecution) ->
         try
             initiate(AtmParallelBoxExecution, InitiateTaskFun)
-        catch Type:Reason:Stacktrace ->
-            Error = ?atm_examine_error(Type, Reason, Stacktrace),
-            throw(?ERROR_ATM_PARALLEL_BOX_EXECUTION_INITIATION_FAILED(AtmParallelBoxSchemaId, Error))
+        catch
+            throw:?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING ->
+                throw(?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING);
+            Type:Reason:Stacktrace ->
+                Error = ?atm_examine_error(Type, Reason, Stacktrace),
+                throw(?ERROR_ATM_PARALLEL_BOX_EXECUTION_INITIATION_FAILED(AtmParallelBoxSchemaId, Error))
         end
     end, AtmParallelBoxExecutions),
 
@@ -336,9 +339,12 @@ initiate(#atm_parallel_box_execution{task_registry = AtmTaskExecutionRegistry}, 
     ) ->
         try
             {AtmTaskExecutionId, InitiateTaskFun(AtmTaskExecutionId)}
-        catch Type:Reason:Stacktrace ->
-            Error = ?atm_examine_error(Type, Reason, Stacktrace),
-            throw(?ERROR_ATM_TASK_EXECUTION_INITIATION_FAILED(AtmTaskSchemaId, Error))
+        catch
+            throw:?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING ->
+                throw(?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING);
+            Type:Reason:Stacktrace ->
+                Error = ?atm_examine_error(Type, Reason, Stacktrace),
+                throw(?ERROR_ATM_TASK_EXECUTION_INITIATION_FAILED(AtmTaskSchemaId, Error))
         end
     end, maps:to_list(AtmTaskExecutionRegistry)),
 

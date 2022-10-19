@@ -578,7 +578,7 @@ assert_atm_workflow_execution_is_not_stopping(#initiation_ctx{
     ),
     case atm_workflow_execution:get(AtmWorkflowExecutionId) of
         {ok, #document{value = #atm_workflow_execution{status = ?STOPPING_STATUS}}} ->
-            throw(?ERROR_ATM_WORKFLOW_EXECUTION_STOPPED);
+            throw(?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING);
         _ ->
             ok
     end.

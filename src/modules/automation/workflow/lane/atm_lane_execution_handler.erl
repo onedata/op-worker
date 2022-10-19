@@ -296,11 +296,14 @@ initiate_lane_run(
             execution_context => AtmWorkflowExecutionEnvDiff(AtmWorkflowExecutionEnv),
             parallel_boxes => AtmParallelBoxExecutionSpecs
         }
-    catch Type:Reason:Stacktrace ->
-        throw(?ERROR_ATM_LANE_EXECUTION_INITIATION_FAILED(
-            atm_lane_execution:get_schema_id(AtmLaneRunSelector, AtmWorkflowExecution),
-            ?atm_examine_error(Type, Reason, Stacktrace)
-        ))
+    catch
+        throw:?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING ->
+            throw(?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING);
+        Type:Reason:Stacktrace ->
+            throw(?ERROR_ATM_LANE_EXECUTION_INITIATION_FAILED(
+                atm_lane_execution:get_schema_id(AtmLaneRunSelector, AtmWorkflowExecution),
+                ?atm_examine_error(Type, Reason, Stacktrace)
+            ))
     end.
 
 
