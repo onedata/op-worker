@@ -338,7 +338,10 @@ pause_active_atm_workflow_execution_test_base(Testcase, RelayMethod) ->
                         end
                     },
                     handle_lane_execution_stopped = #atm_step_mock_spec{
-                        after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState}) ->
+                        after_step_exp_state_diff = fun(AtmMockCallCtx = #atm_mock_call_ctx{
+                            workflow_execution_exp_state = ExpState
+                        }) ->
+                            assert_exception_store_is_empty({1, 1}, AtmMockCallCtx),
                             {true, atm_workflow_execution_exp_state_builder:expect_lane_run_paused({1, 1}, ExpState)}
                         end
                     }
@@ -386,14 +389,27 @@ pause_interrupted_atm_workflow_execution() ->
                     process_task_result_for_item = #atm_step_mock_spec{
                         before_step_hook = fun atm_workflow_execution_test_runner:delete_offline_session/1,
                         before_step_exp_state_diff = no_diff
+                    },
+
+                    handle_lane_execution_stopped = #atm_step_mock_spec{
+                        % this is called as part of `handle_workflow_abruptly_stopped`
+                        after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                            ExpState1 = atm_workflow_execution_exp_state_builder:expect_all_tasks_abruptly_interrupted(
+                                {2, 1}, ExpState0
+                            ),
+                            {true, atm_workflow_execution_exp_state_builder:expect_lane_run_interrupted({2, 1}, ExpState1)}
+                        end
                     }
                 }
             ],
             handle_exception = #atm_step_mock_spec{
-                after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState1}) ->
-                    ExpState2 = atm_workflow_execution_exp_state_builder:expect_all_tasks_interrupted({2, 1}, ExpState1),
-                    ExpState3 = atm_workflow_execution_exp_state_builder:expect_lane_run_interrupted({2, 1}, ExpState2),
-                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_interrupted(ExpState3)}
+                after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                    {true, expect_execution_stopping_while_processing_lane2(ExpState0, interrupt)}
+                end
+            },
+            handle_workflow_abruptly_stopped = #atm_step_mock_spec{
+                after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_interrupted(ExpState0)}
                 end
             },
             after_hook = fun(AtmMockCallCtx = #atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
@@ -424,6 +440,13 @@ pause_interrupted_atm_workflow_execution() ->
 
 
 %% @private
+expect_execution_stopping_while_processing_lane2(ExpState0, Reason) ->
+    ExpState1 = atm_workflow_execution_exp_state_builder:expect_all_tasks_stopping({2, 1}, Reason, ExpState0),
+    ExpState2 = atm_workflow_execution_exp_state_builder:expect_lane_run_stopping({2, 1}, ExpState1),
+    atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(ExpState2).
+
+
+%% @private
 assert_paused_atm_workflow_execution_can_not_be_paused(AtmMockCallCtx = #atm_mock_call_ctx{
     workflow_execution_exp_state = ExpState0
 }) ->
@@ -432,3 +455,10 @@ assert_paused_atm_workflow_execution_can_not_be_paused(AtmMockCallCtx = #atm_moc
         atm_workflow_execution_test_runner:pause_workflow_execution(AtmMockCallCtx)
     ),
     ?assert(atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState0, 0)).
+
+
+%% @private
+assert_exception_store_is_empty(AtmLaneRunSelector, AtmMockCallCtx) ->
+    ?assertEqual([], lists:sort(atm_workflow_execution_test_runner:get_exception_store_content(
+        AtmLaneRunSelector, AtmMockCallCtx
+    ))).

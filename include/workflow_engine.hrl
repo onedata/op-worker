@@ -50,6 +50,13 @@
 -define(FAILURE, failure).
 
 %%%===================================================================
+%%% Macros describing mode of snapshots creation
+%%%===================================================================
+
+-define(ALL_ITEMS, all_items).
+-define(UNTIL_FIRST_FAILURE, until_first_failure).
+
+%%%===================================================================
 %%% Macros describing possible types of processing on pool
 %%%===================================================================
 
@@ -62,6 +69,10 @@
 %%%===================================================================
 
 -define(NOT_PREPARED, not_prepared).
+-define(PREPARED, prepared).
+-define(RESUMING(ResumeType, Iterator), {resuming, ResumeType, Iterator}).
+-define(RESUMING_FROM_ITERATOR(Iterator), ?RESUMING(from_iterator, Iterator)).
+-define(RESUMING_FROM_DUMP(Iterator), ?RESUMING(from_dump, Iterator)).
 -define(PREPARING, preparing).
 -define(PREPARED_IN_ADVANCE, prepared_in_advance).
 -define(PREPARATION_FAILED, preparation_failed).
@@ -70,6 +81,19 @@
 -define(EXECUTION_CANCELLED, execution_cancelled).
 -define(EXECUTION_ENDED, execution_ended).
 -define(EXECUTION_ENDED_WITH_EXCEPTION, execution_ended_with_exception).
+
+-record(execution_cancelled, {
+    execution_step = lane_execution :: lane_execution | lane_prepare | waiting_on_next_lane_prepare | finishing_execution,
+    has_lane_preparation_failed = false :: boolean(),
+    is_interrupted = false :: boolean(),
+    % Calls count is incremented when cancel is initialized and decremented when it is
+    % marked as finished. Workflow can be finished only when calls count is decremented to 0
+    call_count :: non_neg_integer(),
+    % Some callbacks cannot be executed when calls count is higher than 0.
+    % They will be executed when calls count is decremented to 0.
+    callbacks_to_execute = [] :: [workflow_execution_state:callback_to_exectute()],
+    abrupt_stop_reason :: workflow_handler:abrupt_stop_reason() | undefined
+}).
 
 %%%===================================================================
 %%% Macros used to describe processing of parallel box's jobs
@@ -101,14 +125,15 @@
 -record(execution_ended, {
     handler :: workflow_handler:handler(),
     context :: workflow_engine:execution_context(),
-    reason = ?EXECUTION_ENDED :: ?EXECUTION_ENDED | ?EXECUTION_CANCELLED | ?EXECUTION_ENDED_WITH_EXCEPTION,
-    callbacks_data :: {workflow_engine:lane_id(), workflow_engine:execution_context(), [workflow_engine:task_id()]} |
-        undefined
+    final_callback = handle_workflow_execution_stopped :: handle_workflow_execution_stopped |
+        {handle_workflow_abruptly_stopped, workflow_handler:abrupt_stop_reason()},
+    lane_callbacks = false ::
+        {true, workflow_engine:lane_id(), workflow_engine:execution_context(), [workflow_engine:task_id()]} | false
 }).
 -define(DEFER_EXECUTION, defer_execution).
 -define(RETRY_EXECUTION, retry_execution).
--define(PREPARE_LANE_EXECUTION(Handler, ExecutionContext, LaneId, PreparationMode),
-    {prepare_lane_execution, Handler, ExecutionContext, LaneId, PreparationMode}).
+-define(PREPARE_LANE_EXECUTION(Handler, ExecutionContext, LaneId, PreparationMode, InitType),
+    {prepare_lane_execution, Handler, ExecutionContext, LaneId, PreparationMode, InitType}).
 
 % errors returned by workflow_engine_state to control workflow_engine
 -define(WF_ERROR_ALL_SLOTS_USED, {error, all_slots_used}).
@@ -121,6 +146,7 @@
 -define(WF_ERROR_ITEM_PROCESSING_ENDED(Item, SuccessOrFailure),
     {error, {item_processing_ended, Item, SuccessOrFailure}}).
 -define(WF_ERROR_CANCEL_NOT_INITIALIZED, {error, cancel_not_initialized}).
+-define(WF_ERROR_PRED_NOT_MEET, {error, pred_not_meet}).
 
 % errors returned by workflow_async_call_pool to control workflow_engine
 -define(WF_ERROR_LIMIT_REACHED, {error, limit_reached}).

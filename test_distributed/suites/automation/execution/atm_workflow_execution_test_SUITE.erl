@@ -63,8 +63,8 @@
     fail_atm_workflow_execution_due_to_job_result_store_mapping_error/1,
     fail_atm_workflow_execution_due_to_job_missing_required_results_error/1,
     fail_atm_workflow_execution_due_to_incorrect_result_type_error/1,
-    fail_atm_workflow_execution_due_to_lambda_exception/1,
-    fail_atm_workflow_execution_due_to_lambda_error/1,
+    fail_atm_workflow_execution_due_to_lambda_item_exception/1,
+    fail_atm_workflow_execution_due_to_lambda_batch_exception/1,
 
     cancel_scheduled_atm_workflow_execution/1,
     cancel_enqueued_atm_workflow_execution/1,
@@ -85,13 +85,29 @@
 
     interrupt_ongoing_atm_workflow_execution_due_to_expired_session/1,
 
+    crash_atm_workflow_execution_during_prepare_lane_callback/1,
+    crash_atm_workflow_execution_during_resume_lane_callback/1,
+
+    crash_atm_workflow_execution_during_run_task_for_item_callback/1,
+    crash_atm_workflow_execution_during_process_task_result_for_item_callback/1,
+    crash_atm_workflow_execution_during_process_streamed_task_data_callback/1,
+    crash_atm_workflow_execution_during_handle_task_results_processed_for_all_items_callback/1,
+    crash_atm_workflow_execution_during_handle_task_execution_stopped_callback/1,
+
+    crash_atm_workflow_execution_during_handle_lane_execution_stopped_callback/1,
+
+    crash_atm_workflow_execution_during_handle_workflow_execution_stopped_callback/1,
+
+    crash_atm_workflow_execution_during_handle_exception_callback/1,
+
     stopping_reason_failure_overrides_pause/1,
     stopping_reason_cancel_overrides_pause/1,
     stopping_reason_cancel_overrides_failure/1,
+    stopping_reason_crash_overrides_pause/1,
+    stopping_reason_crash_overrides_failure/1,
+    stopping_reason_crash_overrides_cancel/1,
 
-    stopping_finishing_atm_workflow_execution/1,
-    stopping_finished_atm_workflow_execution/1,
-    stopping_crashed_atm_workflow_execution/1,
+    finish_atm_workflow_execution/1,
 
     iterate_over_list_store/1,
     iterate_over_list_store_with_some_inaccessible_items/1,
@@ -137,7 +153,8 @@
 
     resume_atm_workflow_execution_paused_while_scheduled/1,
     resume_atm_workflow_execution_paused_while_preparing/1,
-    resume_atm_workflow_execution_paused_while_active/1
+    resume_atm_workflow_execution_paused_while_active/1,
+    resume_atm_workflow_execution_paused_after_all_tasks_finished/1
 ]).
 
 groups() -> [
@@ -186,8 +203,8 @@ groups() -> [
         fail_atm_workflow_execution_due_to_job_result_store_mapping_error,
         fail_atm_workflow_execution_due_to_job_missing_required_results_error,
         fail_atm_workflow_execution_due_to_incorrect_result_type_error,
-        fail_atm_workflow_execution_due_to_lambda_exception,
-        fail_atm_workflow_execution_due_to_lambda_error
+        fail_atm_workflow_execution_due_to_lambda_item_exception,
+        fail_atm_workflow_execution_due_to_lambda_batch_exception
     ]},
 
     {cancel_tests, [], [
@@ -215,14 +232,34 @@ groups() -> [
         interrupt_ongoing_atm_workflow_execution_due_to_expired_session
     ]},
 
+    {crash_tests, [], [
+        crash_atm_workflow_execution_during_prepare_lane_callback,
+        crash_atm_workflow_execution_during_resume_lane_callback,
+
+        crash_atm_workflow_execution_during_run_task_for_item_callback,
+        crash_atm_workflow_execution_during_process_task_result_for_item_callback,
+        crash_atm_workflow_execution_during_process_streamed_task_data_callback,
+        crash_atm_workflow_execution_during_handle_task_results_processed_for_all_items_callback,
+        crash_atm_workflow_execution_during_handle_task_execution_stopped_callback,
+
+        crash_atm_workflow_execution_during_handle_lane_execution_stopped_callback,
+
+        crash_atm_workflow_execution_during_handle_workflow_execution_stopped_callback,
+
+        crash_atm_workflow_execution_during_handle_exception_callback
+    ]},
+
     {stopping_tests, [], [
         stopping_reason_failure_overrides_pause,
         stopping_reason_cancel_overrides_pause,
         stopping_reason_cancel_overrides_failure,
+        stopping_reason_crash_overrides_pause,
+        stopping_reason_crash_overrides_failure,
+        stopping_reason_crash_overrides_cancel
+    ]},
 
-        stopping_finishing_atm_workflow_execution,
-        stopping_finished_atm_workflow_execution,
-        stopping_crashed_atm_workflow_execution
+    {finish_tests, [], [
+        finish_atm_workflow_execution
     ]},
 
     {iteration_tests, [], [
@@ -276,7 +313,8 @@ groups() -> [
     {resume_tests, [], [
         resume_atm_workflow_execution_paused_while_scheduled,
         resume_atm_workflow_execution_paused_while_preparing,
-        resume_atm_workflow_execution_paused_while_active
+        resume_atm_workflow_execution_paused_while_active,
+        resume_atm_workflow_execution_paused_after_all_tasks_finished
     ]}
 ].
 
@@ -288,7 +326,9 @@ all() -> [
     {group, cancel_tests},
     {group, pause_tests},
     {group, interrupt_tests},
+    {group, crash_tests},
     {group, stopping_tests},
+    {group, finish_tests},
     {group, iteration_tests},
     {group, mapping_tests},
     {group, repeat_tests},
@@ -311,9 +351,11 @@ all() -> [
 -define(RUN_CANCEL_TEST(), ?RUN_TEST(atm_workflow_execution_cancel_tests)).
 -define(RUN_PAUSE_TEST(), ?RUN_TEST(atm_workflow_execution_pause_tests)).
 -define(RUN_INTERRUPT_TEST(), ?RUN_TEST(atm_workflow_execution_interrupt_tests)).
+-define(RUN_CRASH_TEST(), ?RUN_TEST(atm_workflow_execution_crash_tests)).
 -define(RUN_STOPPING_TEST(), ?RUN_TEST(atm_workflow_execution_stopping_tests)).
 -define(RUN_ITERATION_TEST(), ?RUN_TEST(atm_workflow_execution_iteration_tests)).
 -define(RUN_MAPPING_TEST(), ?RUN_TEST(atm_workflow_execution_mapping_tests)).
+-define(RUN_FINISH_TEST(), ?RUN_TEST(atm_workflow_execution_finish_tests)).
 -define(RUN_REPEAT_TEST(), ?RUN_TEST(atm_workflow_execution_repeat_tests)).
 -define(RUN_RESUME_TEST(), ?RUN_TEST(atm_workflow_execution_resume_tests)).
 
@@ -439,11 +481,11 @@ fail_atm_workflow_execution_due_to_incorrect_result_type_error(_Config) ->
     ?RUN_FAILURE_TEST().
 
 
-fail_atm_workflow_execution_due_to_lambda_exception(_Config) ->
+fail_atm_workflow_execution_due_to_lambda_item_exception(_Config) ->
     ?RUN_FAILURE_TEST().
 
 
-fail_atm_workflow_execution_due_to_lambda_error(_Config) ->
+fail_atm_workflow_execution_due_to_lambda_batch_exception(_Config) ->
     ?RUN_FAILURE_TEST().
 
 
@@ -495,6 +537,46 @@ interrupt_ongoing_atm_workflow_execution_due_to_expired_session(_Config) ->
     ?RUN_INTERRUPT_TEST().
 
 
+crash_atm_workflow_execution_during_prepare_lane_callback(_Config) ->
+    ?RUN_CRASH_TEST().
+
+
+crash_atm_workflow_execution_during_resume_lane_callback(_Config) ->
+    ?RUN_CRASH_TEST().
+
+
+crash_atm_workflow_execution_during_run_task_for_item_callback(_Config) ->
+    ?RUN_CRASH_TEST().
+
+
+crash_atm_workflow_execution_during_process_task_result_for_item_callback(_Config) ->
+    ?RUN_CRASH_TEST().
+
+
+crash_atm_workflow_execution_during_process_streamed_task_data_callback(_Config) ->
+    ?RUN_CRASH_TEST().
+
+
+crash_atm_workflow_execution_during_handle_task_results_processed_for_all_items_callback(_Config) ->
+    ?RUN_CRASH_TEST().
+
+
+crash_atm_workflow_execution_during_handle_task_execution_stopped_callback(_Config) ->
+    ?RUN_CRASH_TEST().
+
+
+crash_atm_workflow_execution_during_handle_lane_execution_stopped_callback(_Config) ->
+    ?RUN_CRASH_TEST().
+
+
+crash_atm_workflow_execution_during_handle_workflow_execution_stopped_callback(_Config) ->
+    ?RUN_CRASH_TEST().
+
+
+crash_atm_workflow_execution_during_handle_exception_callback(_Config) ->
+    ?RUN_CRASH_TEST().
+
+
 stopping_reason_failure_overrides_pause(_Config) ->
     ?RUN_STOPPING_TEST().
 
@@ -507,16 +589,20 @@ stopping_reason_cancel_overrides_failure(_Config) ->
     ?RUN_STOPPING_TEST().
 
 
-stopping_finishing_atm_workflow_execution(_Config) ->
+stopping_reason_crash_overrides_pause(_Config) ->
     ?RUN_STOPPING_TEST().
 
 
-stopping_finished_atm_workflow_execution(_Config) ->
+stopping_reason_crash_overrides_failure(_Config) ->
     ?RUN_STOPPING_TEST().
 
 
-stopping_crashed_atm_workflow_execution(_Config) ->
+stopping_reason_crash_overrides_cancel(_Config) ->
     ?RUN_STOPPING_TEST().
+
+
+finish_atm_workflow_execution(_Config) ->
+    ?RUN_FINISH_TEST().
 
 
 iterate_over_list_store(_Config) ->
@@ -659,6 +745,10 @@ resume_atm_workflow_execution_paused_while_active(_Config) ->
     ?RUN_RESUME_TEST().
 
 
+resume_atm_workflow_execution_paused_after_all_tasks_finished(_Config) ->
+    ?RUN_RESUME_TEST().
+
+
 %===================================================================
 % SetUp and TearDown functions
 %===================================================================
@@ -711,7 +801,9 @@ init_per_group(TestGroup, Config) when
     TestGroup =:= cancel_tests;
     TestGroup =:= pause_tests;
     TestGroup =:= interrupt_tests;
+    TestGroup =:= crash_tests;
     TestGroup =:= stopping_tests;
+    TestGroup =:= finish_tests;
     TestGroup =:= iteration_tests;
     TestGroup =:= mapping_tests;
     TestGroup =:= repeat_tests;
@@ -735,7 +827,9 @@ end_per_group(TestGroup, Config) when
     TestGroup =:= cancel_tests;
     TestGroup =:= pause_tests;
     TestGroup =:= interrupt_tests;
+    TestGroup =:= crash_tests;
     TestGroup =:= stopping_tests;
+    TestGroup =:= finish_tests;
     TestGroup =:= iteration_tests;
     TestGroup =:= mapping_tests;
     TestGroup =:= repeat_tests;

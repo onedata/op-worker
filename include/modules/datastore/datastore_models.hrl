@@ -1218,9 +1218,9 @@
 }).
 
 -record(workflow_iterator_snapshot, {
-    iterator :: iterator:iterator(),
+    iterator :: iterator:iterator() | undefined,
     lane_index :: workflow_execution_state:index(),
-    lane_id :: workflow_engine:lane_id(),
+    lane_id :: workflow_engine:lane_id() | undefined,
     next_lane_id :: workflow_engine:lane_id() | undefined,
     item_index :: workflow_execution_state:index()
 }).
@@ -1235,6 +1235,8 @@
     engine_id :: workflow_engine:id(),
     handler :: workflow_handler:handler(),
     initial_context :: workflow_engine:execution_context(),
+    incarnation_tag :: workflow_execution_state:incarnation_tag(),
+    snapshot_mode = ?ALL_ITEMS :: workflow_execution_state:snapshot_mode(),
 
     execution_status = ?NOT_PREPARED :: workflow_execution_state:execution_status(),
     current_lane :: workflow_execution_state:current_lane(),
@@ -1245,7 +1247,6 @@
     next_lane_preparation_status = ?NOT_PREPARED :: workflow_execution_state:next_lane_preparation_status(),
     next_lane :: workflow_execution_state:next_lane(),
 
-    lowest_failed_job_identifier :: workflow_jobs:job_identifier() | undefined,
     failed_job_count = 0 :: non_neg_integer(),
 
     iteration_state :: workflow_iteration_state:state() | undefined,
@@ -1258,11 +1259,21 @@
     % TODO VFS-7919 - consider keeping callbacks list from beginning
     % to guarantee that each callback is called exactly once
     pending_callbacks = [] :: [workflow_execution_state:callback_selector()],
+    items_to_process = #{} :: #{workflow_cached_item:id() => [report | snapshot | delete]},
 
     % Field used to return additional information about document update procedure
     % (datastore:update returns {ok, #document{}} or {error, term()}
     % so such information has to be returned via record's field).
     update_report :: workflow_execution_state:update_report() | undefined
+}).
+
+-record(workflow_execution_state_dump, {
+    snapshot_mode :: workflow_execution_state:snapshot_mode(),
+    lane_status :: ?PREPARED | ?NOT_PREPARED,
+    failed_job_count = 0 :: non_neg_integer(),
+
+    iteration_state_dump = workflow_iteration_state:dump(),
+    jobs_dump = workflow_jobs:dump()
 }).
 
 -record(workflow_async_call_pool, {

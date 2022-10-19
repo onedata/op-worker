@@ -61,10 +61,10 @@ stop(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Reason) ->
         {ok, _} when Reason =:= pause ->
             % when execution is paused, ongoing jobs aren't abruptly stopped (the
             % execution engine will wait for them before transitioning to paused status)
-            ok;
+            log_stopping_reason(AtmWorkflowExecutionCtx, Reason);
 
         {ok, #document{value = #atm_task_execution{executor = AtmTaskExecutor}}} ->
-            %% TODO log about stopping
+            log_stopping_reason(AtmWorkflowExecutionCtx, Reason),
             % for other reasons than pause, ongoing jobs are immediately aborted
             atm_task_executor:abort(AtmWorkflowExecutionCtx, AtmTaskExecutor);
 
@@ -91,7 +91,7 @@ resume(AtmWorkflowExecutionCtx, AtmTaskExecutionId) ->
                     {ok, InitiationResult};
                 {error, task_already_stopped} ->
                     teardown(AtmWorkflowExecutionCtx, AtmTaskExecutionId),
-                    throw(?ERROR_ATM_WORKFLOW_EXECUTION_ABORTING)
+                    throw(?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING)
             end;
 
         {error, task_already_stopped} ->
@@ -564,6 +564,22 @@ log_uncorrelated_results_processing_error(
         }
     },
     atm_workflow_execution_logger:workflow_critical(WorkflowLog, Logger).
+
+
+%% @private
+-spec log_stopping_reason(
+    atm_workflow_execution_ctx:record(),
+    atm_task_execution:stopping_reason()
+) ->
+    ok.
+log_stopping_reason(AtmWorkflowExecutionCtx, StoppingReason) ->
+    Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
+
+    TaskLog = #{
+        <<"description">> => <<"Stopping task execution.">>,
+        <<"reason">> => StoppingReason
+    },
+    atm_workflow_execution_logger:task_info(TaskLog, Logger).
 
 
 %% @private

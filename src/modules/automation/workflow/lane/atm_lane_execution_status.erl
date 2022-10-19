@@ -72,8 +72,9 @@
 %%%
 %%% Lane run transition to STOPPING status when execution is halted and not all items were processed.
 %%% It is necessary as results for already scheduled ones must be awaited even if no more items are scheduled.
-%%% In case when all items were already processed, such intermediate transition is not needed and lane run can
-%%% be immediately stopped.
+%%% In case when all items were already processed, such intermediate transition is omitted (transition
+%%% from ACTIVE to either FINISHED or FAILED can be done during one update operation) - although
+%%% logically such transition occurs.
 %%% Possible reasons for ^stopping lane run execution when not all items were processed are as follows:
 %%% 1* - failure severe enough to cause stopping of entire automation workflow execution
 %%%      (e.g. error when processing uncorrelated results).
@@ -211,14 +212,14 @@ handle_resumed(AtmLaneRunSelector, AtmWorkflowExecutionId) ->
                 AtmParallelBoxExecutionStatuses = atm_parallel_box_execution:gather_statuses(
                     Run#atm_lane_execution_run.parallel_boxes
                 ),
-                case lists:usort(AtmParallelBoxExecutionStatuses) of
+                ResumedStatus = case lists:usort(AtmParallelBoxExecutionStatuses) of
                     [?PENDING_STATUS] ->
                         ?ENQUEUED_STATUS;
                     _ ->
                         ?ACTIVE_STATUS
                 end,
 
-                {ok, Run#atm_lane_execution_run{status = ?ENQUEUED_STATUS}};
+                {ok, Run#atm_lane_execution_run{status = ResumedStatus}};
 
             (#atm_lane_execution_run{status = Status}) ->
                 ?ERROR_ATM_INVALID_STATUS_TRANSITION(Status, ?RESUMING_STATUS)
@@ -322,7 +323,7 @@ handle_stopped(AtmLaneRunSelector, AtmWorkflowExecutionId) ->
                 end_lane_run(AtmLaneRunSelector, AtmWorkflowExecution)
         end
     end,
-    ?extract_doc(atm_workflow_execution:update(AtmWorkflowExecutionId, Diff)).
+    ?extract_doc(atm_workflow_execution_status:handle_lane_run_stopped(AtmWorkflowExecutionId, Diff)).
 
 
 -spec handle_manual_repeat(

@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Stores iterators used to restart workflow executions (one iterator per execution).
+%%% Stores iterators used to resume workflow executions (one iterator per execution).
 %%% Each iterator is stored together with lane and item index to prevent races.
 %%% TODO VFS-7787 - save first iterator of lane
 %%% @end
@@ -37,9 +37,9 @@
 -spec save(
     workflow_engine:execution_id(),
     workflow_execution_state:index(),
-    workflow_engine:lane_id(),
+    workflow_engine:lane_id() | undefined,
     workflow_execution_state:index(),
-    iterator:iterator(),
+    iterator:iterator() | undefined,
     workflow_engine:lane_id() | undefined
 ) -> ok.
 save(ExecutionId, LaneIndex, LaneId, ItemIndex, Iterator, NextLaneId) ->
@@ -70,12 +70,7 @@ get(ExecutionId) ->
 
 -spec cleanup(workflow_engine:execution_id()) -> ok.
 cleanup(ExecutionId) ->
-    case ?MODULE:get(ExecutionId) of
-        {ok, #workflow_iterator_snapshot{iterator = Iterator}} ->
-            ok = datastore_model:delete(?CTX, ExecutionId);
-        ?ERROR_NOT_FOUND ->
-            ok
-    end.
+    ok = datastore_model:delete(?CTX, ExecutionId).
 
 
 %%%===================================================================

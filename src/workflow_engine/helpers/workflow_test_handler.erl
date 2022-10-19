@@ -20,9 +20,10 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 
 % Callbacks
--export([prepare_lane/3, restart_lane/3, run_task_for_item/5, process_task_result_for_item/5, report_item_error/3,
+-export([prepare_lane/3, resume_lane/3, run_task_for_item/5, process_task_result_for_item/5, report_item_error/3,
     handle_task_results_processed_for_all_items/3, process_streamed_task_data/4,
-    handle_task_execution_stopped/3, handle_lane_execution_stopped/3, handle_workflow_execution_stopped/2, handle_exception/5]).
+    handle_task_execution_stopped/3, handle_lane_execution_stopped/3,
+    handle_workflow_execution_stopped/2, handle_workflow_abruptly_stopped/3, handle_exception/5]).
 % API
 -export([is_last_lane/1, get_ignored_lane_id/0, get_ignored_lane_predecessor_id/0, pack_task_id/3, decode_task_id/1]).
 
@@ -47,8 +48,9 @@
     prepare_ignored_lane_in_advance => boolean(), % when ?IGNORED_LANE_PREDECESSOR_ID finishes,
                                                   % set ?IGNORED_LANE_ID to be prepared in advance
     prepare_in_advance_out_of_order => {LaneId :: workflow_engine:lane_id(),
-        LaneIdOutOfOrder :: workflow_engine:lane_id()} % when LaneId finishes, set LaneIdOutOfOrder
-                                                       % to be prepared in advance
+        LaneIdOutOfOrder :: workflow_engine:lane_id()}, % when LaneId finishes, set LaneIdOutOfOrder
+                                                        % to be prepared in advance
+    progress_data_persistence => workflow_handler:progress_data_persistence()
 }.
 
 -type generator_options() :: #{
@@ -129,13 +131,13 @@ prepare_lane(_ExecutionId, #{task_type := Type, async_call_pools := Pools} = Exe
     }}.
 
 
--spec restart_lane(
+-spec resume_lane(
     workflow_engine:execution_id(),
     test_execution_context(),
     workflow_engine:lane_id()
 ) ->
     workflow_handler:prepare_lane_result().
-restart_lane(ExecutionId, ExecutionContext, LaneId) ->
+resume_lane(ExecutionId, ExecutionContext, LaneId) ->
     prepare_lane(ExecutionId, ExecutionContext, LaneId).
 
 
@@ -265,9 +267,23 @@ handle_lane_execution_stopped(_ExecutionId, ExecutionContext, LaneId) ->
     workflow_engine:execution_id(),
     test_execution_context()
 ) ->
-    ok.
+    workflow_handler:progress_data_persistence().
+handle_workflow_execution_stopped(_, #{progress_data_persistence := DataPersistence}) ->
+    DataPersistence;
 handle_workflow_execution_stopped(_, _) ->
-    ok.
+    clean_progress.
+
+
+-spec handle_workflow_abruptly_stopped(
+    workflow_engine:execution_id(),
+    test_execution_context(),
+    workflow_handler:abrupt_stop_reason()
+) ->
+    workflow_handler:progress_data_persistence().
+handle_workflow_abruptly_stopped(_, #{progress_data_persistence := DataPersistence}, _) ->
+    DataPersistence;
+handle_workflow_abruptly_stopped(_, _, _) ->
+    clean_progress.
 
 
 - spec handle_exception(
@@ -277,9 +293,9 @@ handle_workflow_execution_stopped(_, _) ->
     term(),
     list()
 ) ->
-    ?END_EXECUTION.
+    undefined.
 handle_exception(_, _, _, _, _) ->
-    ?END_EXECUTION.
+    undefined.
 
 
 %%%===================================================================
