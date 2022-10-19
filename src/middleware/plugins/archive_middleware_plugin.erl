@@ -210,10 +210,9 @@ create(#op_req{auth = Auth, data = Data, gri = #gri{aspect = instance} = GRI}) -
     Description = maps:get(<<"description">>, Data, ?DEFAULT_ARCHIVE_DESCRIPTION),
     PreservedCallback = maps:get(<<"preservedCallback">>, Data, undefined),
     DeletedCallback = maps:get(<<"deletedCallback">>, Data, undefined),
-    ArchiveId = mi_archives:archive_dataset(
+    ArchiveInfo = #archive_info{id = ArchiveId} = mi_archives:archive_dataset(
         SessionId, DatasetId, Config, PreservedCallback, DeletedCallback, Description
     ),
-    ArchiveInfo = mi_archives:get_info(SessionId, ArchiveId),
     {ok, resource, {GRI#gri{id = ArchiveId}, ArchiveInfo}};
 
 create(#op_req{auth = Auth, gri = #gri{id = ArchiveId, aspect = cancel}}) ->
