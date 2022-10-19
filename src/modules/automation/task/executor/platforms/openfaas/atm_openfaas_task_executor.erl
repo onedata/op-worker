@@ -560,8 +560,27 @@ await_function_readiness(#initiation_ctx{
         ready ->
             log_function_ready(InitiationCtx);
         not_ready ->
+            assert_atm_workflow_execution_is_not_stopping(InitiationCtx),
             timer:sleep(timer:seconds(?AWAIT_READINESS_INTERVAL_SEC)),
             await_function_readiness(InitiationCtx, RetriesLeft - 1)
+    end.
+
+
+%% @private
+-spec assert_atm_workflow_execution_is_not_stopping(initiation_ctx()) -> ok | no_return().
+assert_atm_workflow_execution_is_not_stopping(#initiation_ctx{
+    task_executor_initiation_ctx = #atm_task_executor_initiation_ctx{
+        workflow_execution_ctx = AtmWorkflowExecutionCtx
+    }
+}) ->
+    AtmWorkflowExecutionId = atm_workflow_execution_ctx:get_workflow_execution_id(
+        AtmWorkflowExecutionCtx
+    ),
+    case atm_workflow_execution:get(AtmWorkflowExecutionId) of
+        {ok, #document{value = #atm_workflow_execution{status = ?STOPPING_STATUS}}} ->
+            throw(?ERROR_ATM_WORKFLOW_EXECUTION_STOPPED);
+        _ ->
+            ok
     end.
 
 
