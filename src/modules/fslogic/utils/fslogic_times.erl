@@ -15,8 +15,12 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([update_atime/1, update_ctime/1, update_ctime/2, update_mtime_ctime/1,
+-export([update_atime/1, update_ctime/1, update_ctime_without_emit/1, update_ctime/3, update_mtime_ctime/1,
     update_mtime_ctime/2, update_times_and_emit/2]).
+
+
+-type update_verbosity() :: emit_event | silent.
+
 
 -define(NOW(), global_clock:timestamp_seconds()).
 
@@ -51,23 +55,27 @@ update_atime(FileCtx) ->
 %%--------------------------------------------------------------------
 -spec update_ctime(file_ctx:ctx()) -> ok.
 update_ctime(FileCtx) ->
-    update_ctime(FileCtx, ?NOW()).
+    update_ctime(FileCtx, ?NOW(), emit_event).
+
+-spec update_ctime_without_emit(file_ctx:ctx()) -> ok.
+update_ctime_without_emit(FileCtx) ->
+    update_ctime(FileCtx, ?NOW(), silent).
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Updates entry ctime to given time
 %% @end
 %%--------------------------------------------------------------------
--spec update_ctime(file_ctx:ctx(), CurrentTime :: file_meta:time()) -> ok.
-update_ctime(FileCtx, CurrentTime) ->
-    ok = update_times_and_emit(FileCtx, fun(Times = #times{ctime = Time}) ->
+-spec update_ctime(file_ctx:ctx(), CurrentTime :: file_meta:time(), update_verbosity()) -> ok.
+update_ctime(FileCtx, CurrentTime, Verbosity) ->
+    ok = update_times(FileCtx, fun(Times = #times{ctime = Time}) ->
         case Time of
             CurrentTime ->
                 {error, {not_changed, Times}};
             _ ->
                 {ok, Times#times{ctime = CurrentTime}}
         end
-    end).
+    end, Verbosity).
 
 %%--------------------------------------------------------------------
 %% @equiv update_mtime_ctime(FileCtx, ?NOW()).
@@ -101,6 +109,10 @@ update_mtime_ctime(FileCtx, CurrentTime) ->
 %%--------------------------------------------------------------------
 -spec update_times_and_emit(file_ctx:ctx(), times:diff()) -> ok.
 update_times_and_emit(FileCtx, TimesDiff) ->
+    update_times(FileCtx, TimesDiff, emit_event).
+
+-spec update_times(file_ctx:ctx(), times:diff(), update_verbosity()) -> ok.
+update_times(FileCtx, TimesDiff, Verbosity) ->
     FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     case fslogic_file_id:is_share_root_dir_uuid(FileUuid) of
         true ->
@@ -114,7 +126,7 @@ update_times_and_emit(FileCtx, TimesDiff) ->
                         % TODO VFS-8830 - set file_ctx:is_dir in functions that update times and know file type
                         % to optimize type check
                         dir_update_time_stats:report_update_of_nearest_dir(file_ctx:get_logical_guid_const(FileCtx), FinalTimes),
-                        fslogic_event_emitter:emit_sizeless_file_attrs_changed(FileCtx)
+                        Verbosity =:= emit_event andalso fslogic_event_emitter:emit_sizeless_file_attrs_changed(FileCtx)
                     end),
                     ok;
                 {error, {not_changed, _}} ->
