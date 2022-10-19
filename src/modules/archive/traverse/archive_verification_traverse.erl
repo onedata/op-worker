@@ -75,8 +75,7 @@ start(ArchiveDoc) ->
             UserId = user_ctx:get_user_id(UserCtx),
             Options = #{
                 task_id => TaskId,
-                children_master_jobs_mode => async,
-                initial_relative_path => filename:join([<<"/">>, <<"archive_", TaskId/binary>>])
+                children_master_jobs_mode => async
             },
             {ok, TaskId} = tree_traverse:run(
                 ?POOL_NAME, file_ctx:new_by_guid(DataFileGuid), UserId, Options),
@@ -226,14 +225,20 @@ do_dir_master_job_unsafe(#tree_traverse{
 
 -spec handle_verification_error(id(), tree_traverse:job()) -> ok.
 handle_verification_error(TaskId, Job) ->
-    {FileGuid, FilePath} = job_to_error_info(Job),
-    archivisation_audit_log:report_file_verification_failed(TaskId, FileGuid, FilePath),
+    {FileCtx, FilePath} = job_to_error_info(Job),
+    % ignore archive root dir in relative path
+    RelativePath = case filename:split(FilePath) of
+        [_] -> <<>>;
+        [_ | PathTokens] -> filename:join(PathTokens)
+    end,
+    {FileType, _FileCtx2} = file_ctx:get_effective_type(FileCtx),
+    archivisation_audit_log:report_file_verification_failed(TaskId, RelativePath, FileType),
     archive:mark_verification_failed(TaskId),
     cancel(TaskId).
 
 
--spec job_to_error_info(tree_traverse:job()) -> {file_id:file_guid(), file_meta:path()}.
+-spec job_to_error_info(tree_traverse:job()) -> {file_ctx:ctx(), file_meta:path()}.
 job_to_error_info(#tree_traverse{file_ctx = FileCtx, relative_path = Path}) ->
-    {file_ctx:get_logical_guid_const(FileCtx), Path};
+    {FileCtx, Path};
 job_to_error_info(#tree_traverse_slave{file_ctx = FileCtx, relative_path = Path}) ->
-    {file_ctx:get_logical_guid_const(FileCtx), Path}.
+    {FileCtx, Path}.

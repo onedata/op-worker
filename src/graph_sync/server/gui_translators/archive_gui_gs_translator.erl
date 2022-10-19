@@ -26,6 +26,17 @@
 %%%===================================================================
 
 -spec translate_value(gri:gri(), Value :: term()) -> gs_protocol:data().
+translate_value(#gri{aspect = identify_file}, FileInfo) ->
+    #{
+        <<"sourceFile">> := SourceFileGuid,
+        <<"archivedFile">> := ArchivedFileGuid
+    } = FileInfo,
+    #{
+        <<"sourceFileId">> => utils:undefined_to_null(SourceFileGuid),
+        <<"archivedFileId">> => utils:undefined_to_null(ArchivedFileGuid)
+    };
+translate_value(#gri{aspect = audit_log}, ListedEntries) ->
+    ListedEntries;
 translate_value(#gri{aspect = recall}, RootId) ->
     #{<<"rootFileId">> => RootId}.
 
@@ -43,6 +54,7 @@ translate_resource(#gri{aspect = instance, scope = private}, ArchiveInfo) ->
 translate_archive_info(#archive_info{
     id = ArchiveId,
     dataset_id = DatasetId,
+    archiving_provider = ProviderId,
     state = State,
     root_dir_guid = RootDirGuid,
     creation_time = CreationTime,
@@ -58,23 +70,11 @@ translate_archive_info(#archive_info{
     related_dip_id = RelatedDipId
 }) ->
     #{
-        <<"gri">> => gri:serialize(#gri{
-            type = op_archive, id = ArchiveId,
-            aspect = instance, scope = private
-        }),
-        <<"dataset">> => gri:serialize(#gri{
-            type = op_dataset, id = DatasetId,
-            aspect = instance, scope = private
-        }),
+        <<"gri">> => build_serialized_archive_instance_gri(ArchiveId),
+        <<"dataset">> => build_serialized_instance_gri(op_dataset, DatasetId),
+        <<"provider">> => build_serialized_instance_gri(op_provider, ProviderId, protected),
         <<"state">> => str_utils:to_binary(State),
-        <<"rootDir">> => case RootDirGuid =/= undefined of
-            true -> gri:serialize(#gri{
-                type = op_file, id = RootDirGuid,
-                aspect = instance, scope = private
-            });
-            false ->
-                null
-        end,
+        <<"rootDir">> => build_serialized_instance_gri(op_file, RootDirGuid),
         <<"creationTime">> => CreationTime,
         <<"config">> => archive_config:to_json(Config),
         <<"preservedCallback">> => utils:undefined_to_null(PreservedCallback),
@@ -82,19 +82,29 @@ translate_archive_info(#archive_info{
         <<"description">> => Description,
         <<"index">> => Index,
         <<"stats">> => archive_stats:to_json(Stats),
-        <<"parentArchive">> => prepare_archive_instance_gri(ParentArchiveId),
-        <<"baseArchive">> => prepare_archive_instance_gri(BaseArchiveId),
-        <<"relatedAip">> => prepare_archive_instance_gri(RelatedAipId),
-        <<"relatedDip">> => prepare_archive_instance_gri(RelatedDipId)
+        <<"parentArchive">> => build_serialized_archive_instance_gri(ParentArchiveId),
+        <<"baseArchive">> => build_serialized_archive_instance_gri(BaseArchiveId),
+        <<"relatedAip">> => build_serialized_archive_instance_gri(RelatedAipId),
+        <<"relatedDip">> => build_serialized_archive_instance_gri(RelatedDipId)
     }.
 
 
--spec prepare_archive_instance_gri(undefined | archive:id()) -> gri:serialized() | null.
-prepare_archive_instance_gri(undefined) ->
-    null;
-prepare_archive_instance_gri(ArchiveId) ->
-    gri:serialize(#gri{
-        type = op_archive, id = ArchiveId,
-        aspect = instance, scope = private
-    }).
+-spec build_serialized_archive_instance_gri(undefined | archive:id()) -> gri:serialized() | null.
+build_serialized_archive_instance_gri(ArchiveId) ->
+    build_serialized_instance_gri(op_archive, ArchiveId).
+
+
+-spec build_serialized_instance_gri(gri:entity_type(), gri:entity_id()) -> gri:serialized() | null.
+build_serialized_instance_gri(Type, Id) ->
+    build_serialized_instance_gri(Type, Id, private).
     
+
+-spec build_serialized_instance_gri(gri:entity_type(), gri:entity_id(), gri:scope()) -> 
+    gri:serialized() | null.
+build_serialized_instance_gri(_, undefined, _) ->
+    null;
+build_serialized_instance_gri(Type, Id, Scope) ->
+    gri:serialize(#gri{
+        type = Type, id = Id,
+        aspect = instance, scope = Scope
+    }).

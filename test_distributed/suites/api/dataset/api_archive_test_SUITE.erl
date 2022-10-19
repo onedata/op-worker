@@ -42,7 +42,8 @@
     init_archive_recall_test/1,
     get_archive_recall_details_test/1,
     get_archive_recall_progress_test/1,
-    get_datasets_summary_for_archive_test/1
+    get_datasets_summary_for_archive_test/1,
+    get_archivisation_audit_log/1
 ]).
 
 %% httpd callback
@@ -60,7 +61,8 @@ groups() -> [
         init_archive_recall_test,
         get_archive_recall_details_test,
         get_archive_recall_progress_test,
-        get_datasets_summary_for_archive_test
+        get_datasets_summary_for_archive_test,
+        get_archivisation_audit_log
     ]}
 ].
 
@@ -230,7 +232,7 @@ build_create_archive_validate_rest_call_result_fun(MemRef) ->
 -spec build_create_archive_validate_gs_call_result_fun(api_test_memory:mem_ref()) ->
     onenv_api_test_runner:validate_call_result_fun().
 build_create_archive_validate_gs_call_result_fun(MemRef) ->
-    fun(#api_test_ctx{data = Data}, Result) ->
+    fun(#api_test_ctx{data = Data, node = Node}, Result) ->
         DatasetId = maps:get(<<"datasetId">>, Data),
 
         {ok, #{<<"gri">> := ArchiveGri} = ArchiveData} = ?assertMatch({ok, _}, Result),
@@ -247,7 +249,7 @@ build_create_archive_validate_gs_call_result_fun(MemRef) ->
         DeletedCallback = maps:get(<<"deletedCallback">>, Data, undefined),
 
         ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId, ?ARCHIVE_BUILDING, Config,
-            Description, PreservedCallback, DeletedCallback, undefined),
+            Description, PreservedCallback, DeletedCallback, undefined, opw_test_rpc:get_provider_id(Node)),
         % state is removed from the map as it may be in pending, building or even preserved state when request is handled
         IgnoredKeys = [<<"state">>, <<"stats">>, <<"rootDir">>, <<"creationTime">>, <<"index">>, <<"baseArchive">>, <<"relatedDip">>],
         ExpArchiveData2 = maps:without(IgnoredKeys, ExpArchiveData),
@@ -273,12 +275,14 @@ build_verify_archive_created_fun(MemRef, Providers, AttachedDatasets, DetachedDa
     fun
         (expected_success, #api_test_ctx{
             client = ?USER(UserId),
-            data = Data
+            data = Data,
+            node = Node
         }) ->
             ArchiveId = api_test_memory:get(MemRef, archive_id),
 
             CreationTime = time_test_utils:get_frozen_time_seconds(),
             DatasetId = maps:get(<<"datasetId">>, Data),
+            ProviderId = opw_test_rpc:get_provider_id(Node),
             ConfigJson = maps:get(<<"config">>, Data, #{}),
             Description = maps:get(<<"description">>, Data, ?DEFAULT_ARCHIVE_DESCRIPTION),
             PreservedCallback = maps:get(<<"preservedCallback">>, Data, undefined),
@@ -289,7 +293,7 @@ build_verify_archive_created_fun(MemRef, Providers, AttachedDatasets, DetachedDa
             end,
             assert_dataset_lists(AttachedDatasets, DetachedDatasets),
             verify_archive(
-                UserId, Providers, ArchiveId, DatasetId, CreationTime, ConfigJson,
+                UserId, Providers, ArchiveId, DatasetId, ProviderId, CreationTime, ConfigJson,
                 PreservedCallback, DeletedCallback, Description
             );
         (expected_failure, _) ->
@@ -340,7 +344,7 @@ get_archive_info(_Config) ->
             description = Description
         }]
     }} = onenv_file_test_utils:create_and_sync_file_tree(user3, ?SPACE,
-        #file_spec{dataset = #dataset_spec{archives = 1}}
+        #file_spec{dataset = #dataset_spec{archives = 1}}, krakow
     ),
 
     ConfigJson = archive_config:to_json(Config),
@@ -389,7 +393,7 @@ get_archive_info(_Config) ->
                     validate_result_fun = fun(#api_test_ctx{}, {ok, Result}) ->
                         DirGuid = get_root_dir_guid(ArchiveId),
                         ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId, ?ARCHIVE_PRESERVED,
-                            Config, Description, undefined, undefined, DirGuid),
+                            Config, Description, undefined, undefined, DirGuid, oct_background:get_provider_id(krakow)),
                         ?assertEqual(ExpArchiveData, maps:without([<<"creationTime">>, <<"index">>, <<"relatedDip">>], Result)),
                         ?assertEqual(archive_config:should_include_dip(Config), maps:get(<<"relatedDip">>, Result) =/= null)
                     end
@@ -1140,6 +1144,82 @@ rest_recall_get_path_suffix(progress) -> <<"/recall/progress">>.
 
 
 %%%===================================================================
+%%% Get archivisation audit log test
+%%%===================================================================
+
+get_archivisation_audit_log(_Config) ->
+    #object{dataset = #dataset_object{
+        archives = [#archive_object{id = ArchiveId}]
+    }} = onenv_file_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{dataset = #dataset_spec{
+        archives = 1
+    }}, krakow),
+    
+    ?assert(onenv_api_test_runner:run_tests([
+        #suite_spec{
+            target_nodes = [krakow], % audit log is only available on provider performing archivisation
+            client_spec = #client_spec{
+                correct = [
+                    user2,  % space owner - doesn't need any perms
+                    user3,  % files owner
+                    user4   % space member - should succeed as getting audit log doesn't require any space perms
+                ],
+                unauthorized = [nobody],
+                forbidden_not_in_space = [user1]
+            },
+            randomly_select_scenarios = true,
+            scenario_templates = [
+                #scenario_template{
+                    name = <<"Get archivisation audit log using GS API">>,
+                    type = gs,
+                    prepare_args_fun = build_get_archivisation_audit_log_prepare_gs_args_fun(ArchiveId),
+                    validate_result_fun = validate_archivisation_audit_log_fun_gs()
+                }
+            ],
+            data_spec = #data_spec{
+                optional = [<<"timestamp">>, <<"offset">>],
+                correct_values = #{
+                    <<"timestamp">> => [7967656156000], % some time in the future
+                    <<"offset">> => [0]
+                },
+                bad_values = [
+                    {<<"timestamp">>, <<"aaa">>, ?ERROR_BAD_VALUE_INTEGER(<<"timestamp">>)},
+                    {<<"timestamp">>, -8, ?ERROR_BAD_VALUE_TOO_LOW(<<"timestamp">>, 0)},
+                    {<<"offset">>, <<"aaa">>, ?ERROR_BAD_VALUE_INTEGER(<<"offset">>)}
+                ]
+            }
+        }
+    ])).
+
+%% @private
+-spec build_get_archivisation_audit_log_prepare_gs_args_fun(dataset:id()) ->
+    onenv_api_test_runner:prepare_args_fun().
+build_get_archivisation_audit_log_prepare_gs_args_fun(ArchiveId) ->
+    fun(#api_test_ctx{data = Data0}) ->
+        {GriId, Data1} = api_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
+        
+        #gs_args{
+            operation = get,
+            gri = #gri{type = op_archive, id = GriId, aspect = audit_log, scope = private},
+            data = Data1
+        }
+    end.
+
+
+%% @private
+-spec validate_archivisation_audit_log_fun_gs() ->
+    ok | no_return().
+validate_archivisation_audit_log_fun_gs() ->
+    fun(_, RespBody) ->
+        
+        ?assertMatch({ok, #{
+            <<"isLast">> := true,
+            <<"logEntries">> := [_]
+        }}, RespBody),
+        ok
+    end.
+
+
+%%%===================================================================
 %%% Miscellaneous tests
 %%%===================================================================
 
@@ -1164,12 +1244,12 @@ get_datasets_summary_for_archive_test(_Config) ->
 
 %% @private
 -spec verify_archive(
-    od_user:id(), [oct_background:entity_selector()], archive:id(), dataset:id(), archive:timestamp(),
+    od_user:id(), [oct_background:entity_selector()], archive:id(), dataset:id(), oneprovider:id(), archive:timestamp(),
     json_utils:json_map(), archive:callback(), archive:callback(), archive:description()
 ) ->
     ok.
 verify_archive(
-    UserId, Providers, ArchiveId, DatasetId, CreationTime, ConfigJson,
+    UserId, Providers, ArchiveId, DatasetId, ProviderId, CreationTime, ConfigJson,
     PreservedCallback, DeletedCallback, Description
 ) ->
     lists:foreach(fun(Provider) ->
@@ -1183,6 +1263,7 @@ verify_archive(
         ExpArchiveInfo = #archive_info{
             id = ArchiveId,
             dataset_id = DatasetId,
+            archiving_provider = ProviderId,
             state = ?ARCHIVE_PRESERVED,
             root_dir_guid = RootDirGuid,
             creation_time = CreationTime,
@@ -1198,6 +1279,8 @@ verify_archive(
                 {ok, ActualArchiveInfo} ->
                     ?assertEqual(archive_config:should_include_dip(Config), ActualArchiveInfo#archive_info.related_dip_id =/= undefined),
                     ActualArchiveInfo#archive_info{
+                        % for bagit archives data dir is created during archivisation so its id is not known.
+                        data_dir_guid = undefined,
                         % baseArchiveId is the id of the last successfully preserved, so it depends on previous test cases.
                         base_archive_id = undefined,
                         % DIP is created alongside AIP archive, so value of `relatedDip` field is not know beforehand. 
@@ -1221,13 +1304,15 @@ list_archive_ids(Node, UserSessId, DatasetId, ListOpts) ->
 
 %% @private
 -spec build_archive_gs_instance(archive:id(), dataset:id(), archive:state(), archive:config(),
-    archive:description(), archive:callback(), archive:callback(), file_id:file_guid()) -> json_utils:json_term().
+    archive:description(), archive:callback(), archive:callback(), file_id:file_guid(), oneprovider:id()) ->
+    json_utils:json_term().
 build_archive_gs_instance(ArchiveId, DatasetId, State, Config, Description, PreservedCallback, DeletedCallback,
-    RootDirGuid
+    RootDirGuid, ProviderId
 ) ->
     BasicInfo = archive_gui_gs_translator:translate_archive_info(#archive_info{
         id = ArchiveId,
         dataset_id = DatasetId,
+        archiving_provider = ProviderId,
         state = str_utils:to_binary(State),
         root_dir_guid = RootDirGuid,
         config = Config,
