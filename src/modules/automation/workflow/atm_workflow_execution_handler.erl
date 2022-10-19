@@ -448,10 +448,11 @@ handle_workflow_abruptly_stopped(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv
     FinalInterruptReason = try
         shut_workflow_execution_components(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
         InterruptReason
-    catch Type:Reason ->
+    catch Type:Reason:Stacktrace ->
         ?error_stacktrace(
             "Emergency atm workflow execution components shutdown failed due to ~p:~p",
-            [Type, Reason]
+            [Type, Reason],
+            Stacktrace
         ),
         crash
     end,
