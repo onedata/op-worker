@@ -620,7 +620,7 @@ is_empty(#workflow_jobs{
 
 -spec get_results_in_processing_from_dump(dump()) ->
     #{workflow_execution_state:index() => {workflow_execution_state:index(), [workflow_execution_state:index()]}}.
-get_results_in_processing_from_dump({WaitingList, _FailedList}) ->
+get_results_in_processing_from_dump(#dump{waiting = WaitingList}) ->
     lists:foldl(fun
         (#job_identifier{
             processing_type = ?ASYNC_RESULT_PROCESSING,

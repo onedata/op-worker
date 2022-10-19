@@ -9,7 +9,7 @@
 %%% Test of workflow scheduling cancellation.
 %%% @end
 %%%-------------------------------------------------------------------
--module(workflow_scheduling_cancellation_and_resume_test_SUITE).
+-module(workflow_scheduling_cancellation_and_restart_test_SUITE).
 -author("Michal Wrzeszcz").
 
 -include("workflow_engine.hrl").
