@@ -572,9 +572,7 @@ fail_atm_workflow_execution_due_to_lambda_batch_exception() ->
             #{
                 <<"description">> => <<"Failed to process batch of items.">>,
                 <<"itemBatch">> => ItemBatch,
-                <<"reason">> => errors:to_json(?ERROR_ATM_JOB_BATCH_CRASHED(
-                    ?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_4_ERROR_MSG
-                ))
+                <<"reason">> => ?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_4_ERROR_MSG
             }
         end
     }).
