@@ -54,7 +54,7 @@ prepare(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
                     error
             end;
 
-        ?ERROR_ATM_WORKFLOW_EXECUTION_ABORTING ->
+        ?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING ->
             handle_setup_exception(
                 execution_stopping, AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
             )
@@ -181,7 +181,7 @@ prepare_lane_run(AtmLaneRunSelector, AtmWorkflowExecutionDoc0, AtmWorkflowExecut
 
         {ok, LaneSpec}
     catch
-        throw:?ERROR_ATM_WORKFLOW_EXECUTION_ABORTING ->
+        throw:?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING ->
             handle_setup_exception(
                 execution_stopping, AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
             );
@@ -229,7 +229,7 @@ resume_lane_run(AtmLaneRunSelector, AtmWorkflowExecutionDoc0, AtmWorkflowExecuti
 
         {ok, LaneSpec}
     catch
-        throw:?ERROR_ATM_WORKFLOW_EXECUTION_ABORTING ->
+        throw:?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING ->
             handle_setup_exception(
                 execution_stopping, AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
             );

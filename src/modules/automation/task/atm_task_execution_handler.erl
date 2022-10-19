@@ -91,7 +91,7 @@ resume(AtmWorkflowExecutionCtx, AtmTaskExecutionId) ->
                     {ok, InitiationResult};
                 {error, task_already_stopped} ->
                     teardown(AtmWorkflowExecutionCtx, AtmTaskExecutionId),
-                    throw(?ERROR_ATM_WORKFLOW_EXECUTION_ABORTING)
+                    throw(?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING)
             end;
 
         {error, task_already_stopped} ->

@@ -53,8 +53,8 @@ create_run(AtmLaneRunSelector, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx)
     try
         create_run_internal(AtmLaneRunSelector, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx)
     catch
-        throw:?ERROR_ATM_WORKFLOW_EXECUTION_ABORTING ->
-            throw(?ERROR_ATM_WORKFLOW_EXECUTION_ABORTING);
+        throw:?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING ->
+            throw(?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING);
 
         Type:Reason:Stacktrace ->
             AtmWorkflowExecution = AtmWorkflowExecutionDoc#document.value,
