@@ -167,10 +167,10 @@ handle_info(request_changes, State = #state{
             MaxSize = application:get_env(?APP_NAME,
                 dbsync_changes_max_request_size, 1000000),
             Until2 = min(Until, Seq + MaxSize),
-            {FinalUntil, IncludedMutators} = case dbsync_state:get_resynchronization_params(SpaceId, ProviderId) of
+            {FinalUntil, IncludedMutators} = case dbsync_state:check_synchronization_params(SpaceId, ProviderId, Seq) of
                 undefined ->
                     {Until2, ?ALL_MUTATORS_EXCEPT_SENDER};
-                #resynchronization_params{target_seq = TargetSeq, included_mutators = Mutators} ->
+                #synchronization_params{target_seq = TargetSeq, included_mutators = Mutators} ->
                     {min(TargetSeq, Until2), Mutators}
             end,
             dbsync_communicator:request_changes(

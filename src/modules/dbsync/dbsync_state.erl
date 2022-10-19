@@ -18,7 +18,7 @@
 
 %% API
 -export([delete/1, get_seq/2, get_seq_and_timestamp/2, set_seq_and_timestamp/4,
-    resynchronize_stream/3, get_resynchronization_params/2]).
+    resynchronize_stream/3, get_synchronization_params/2, check_synchronization_params/3]).
 
 %% datastore_model callbacks
 -export([get_record_version/0, get_record_struct/1, upgrade_record/2]).
@@ -26,8 +26,8 @@
 -define(CTX, #{model => ?MODULE}).
 
 -type state() :: #dbsync_state{}.
--type resynchronization_params() :: #resynchronization_params{}.
--export_type([resynchronization_params/0]).
+-type synchronization_params() :: #synchronization_params{}.
+-export_type([synchronization_params/0]).
 
 %%%===================================================================
 %%% API
@@ -101,11 +101,12 @@ set_seq_and_timestamp(SpaceId, ProviderId, Number, Timestamp) ->
 -spec resynchronize_stream(od_space:id(), od_provider:id(), dbsync_in_stream:mutators()) ->
     ok | {error, Reason :: term()}.
 resynchronize_stream(SpaceId, ProviderId, IncludedMutators) ->
-    DiffFun = fun(#dbsync_state{seq = Seq, resynchronization_params = Params} = State) ->
+    DiffFun = fun(#dbsync_state{seq = Seq, synchronization_params = Params} = State) ->
         {CurrentSeq, _} = maps:get(ProviderId, Seq, {1, 0}),
         {ok, State#dbsync_state{
             seq = maps:put(ProviderId, {1, 0}, Seq),
-            resynchronization_params = maps:put(ProviderId, #resynchronization_params{
+            synchronization_params = maps:put(ProviderId, #synchronization_params{
+                mode = resynchronization,
                 target_seq = CurrentSeq,
                 included_mutators = IncludedMutators
             }, Params)
@@ -119,14 +120,45 @@ resynchronize_stream(SpaceId, ProviderId, IncludedMutators) ->
     end.
 
 
--spec get_resynchronization_params(od_space:id(), od_provider:id()) -> resynchronization_params() | undefined.
-get_resynchronization_params(SpaceId, ProviderId) ->
+-spec get_synchronization_params(od_space:id(), od_provider:id()) -> synchronization_params() | undefined.
+get_synchronization_params(SpaceId, ProviderId) ->
     case datastore_model:get(?CTX, SpaceId) of
-        {ok, #document{value = #dbsync_state{resynchronization_params = Params}}} ->
+        {ok, #document{value = #dbsync_state{synchronization_params = Params}}} ->
             maps:get(ProviderId, Params, undefined);
         {error, not_found} ->
             undefined
     end.
+
+
+-spec check_synchronization_params(od_space:id(), od_provider:id(), couchbase_changes:seq()) -> 
+    synchronization_params() | undefined.
+check_synchronization_params(SpaceId, ProviderId, TargetSeq) ->
+    InitialProviderParams = #synchronization_params{
+        target_seq = TargetSeq,
+        included_mutators = ?ALL_MUTATORS_EXCEPT_SENDER,
+        mode = initial_sync
+    },
+    Default = #dbsync_state{seq = #{ProviderId => {1, 0}}, synchronization_params = #{ProviderId => InitialProviderParams}},
+    DiffFun = fun(#dbsync_state{seq = Seq, synchronization_params = Params} = State) ->
+        case maps:get(ProviderId, Seq, {1, 0}) of
+            {1, 0} ->
+                {ok, State#dbsync_state{
+                    synchronization_params = maps:put(ProviderId, InitialProviderParams, Params)
+                }};
+            _ ->
+                {error, {nothing_changed, maps:get(ProviderId, Params, undefined)}}
+        end
+    end,
+
+    case datastore_model:update(?CTX, SpaceId, DiffFun, Default) of
+        {ok, #document{value = #dbsync_state{synchronization_params = UpdatedParams}}} ->
+            maps:get(ProviderId, UpdatedParams, undefined);
+        {error, {nothing_changed, OldValue}} -> 
+            OldValue;
+        {error, not_found} -> 
+            undefined
+    end.
+
 
 %%%===================================================================
 %%% Internal functions
@@ -135,19 +167,27 @@ get_resynchronization_params(SpaceId, ProviderId) ->
 -spec set_seq_and_timestamp_internal(state(), od_provider:id(), couchbase_changes:seq(), dbsync_changes:timestamp()) ->
     state().
 set_seq_and_timestamp_internal(
-    #dbsync_state{seq = SeqMap, resynchronization_params = Params} = State,
+    #dbsync_state{seq = SeqMap, synchronization_params = Params} = State,
     ProviderId,
     NewSeq,
     Timestamp
 ) ->
-    UpdatedParams = case maps:get(ProviderId, Params, undefined) of
-        #resynchronization_params{target_seq = TargetSeq} when NewSeq >= TargetSeq -> maps:remove(ProviderId, Params);
-        _ -> Params
+    {UpdatedSeqMap, UpdatedParams} = case maps:get(ProviderId, Params, undefined) of
+        #synchronization_params{mode = initial_sync, target_seq = TargetSeq} = ProviderParams when NewSeq >= TargetSeq ->
+            {
+                maps:put(ProviderId, {1, 0}, SeqMap),
+                maps:put(ProviderId, ProviderParams#synchronization_params{mode = resynchronization}, Params)
+            };
+        #synchronization_params{mode = resynchronization, target_seq = TargetSeq} when NewSeq >= TargetSeq ->
+            {maps:put(ProviderId, {NewSeq, Timestamp}, SeqMap), maps:remove(ProviderId, Params)};
+        _ ->
+            {maps:put(ProviderId, {NewSeq, Timestamp}, SeqMap), Params}
     end,
     State#dbsync_state{
-        seq = maps:put(ProviderId, {NewSeq, Timestamp}, SeqMap),
-        resynchronization_params = UpdatedParams
+        seq = UpdatedSeqMap,
+        synchronization_params = UpdatedParams
     }.
+
 
 %%%===================================================================
 %%% datastore_model callbacks
@@ -160,7 +200,7 @@ set_seq_and_timestamp_internal(
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    3.
+    4.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -184,6 +224,15 @@ get_record_struct(3) ->
             {target_seq, integer},
             {included_mutators, [string]}
         ]}}}
+    ]};
+get_record_struct(4) ->
+    {record, [
+        {seq, #{string => {integer, integer}}},
+        {synchronization_params, #{string => {record, [
+            {mode, atom},
+            {target_seq, integer},
+            {included_mutators, [string]}
+        ]}}}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -193,10 +242,12 @@ get_record_struct(3) ->
 %%--------------------------------------------------------------------
 -spec upgrade_record(datastore_model:record_version(), datastore_model:record()) ->
     {datastore_model:record_version(), datastore_model:record()}.
-upgrade_record(1, {?MODULE, Map}
-) ->
+upgrade_record(1, {?MODULE, Map}) ->
     Map2 = maps:map(fun(_ProviderId, Number) -> {Number, 0} end, Map),
     {2, {?MODULE, Map2}};
-upgrade_record(2, {?MODULE, SeqMap}
-) ->
-    {3, {?MODULE, SeqMap, #{}}}.
+upgrade_record(2, {?MODULE, SeqMap}) ->
+    {3, {?MODULE, SeqMap, #{}}};
+upgrade_record(2, {?MODULE, SeqMap, Params}) ->
+    {3, {?MODULE, SeqMap, maps:map(fun(_ProvideId, {resynchronization_params, TargetSeq, IncludedMutators}) ->
+        {synchronization_params, resynchronization, TargetSeq, IncludedMutators}
+    end, Params)}}.

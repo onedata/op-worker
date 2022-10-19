@@ -620,7 +620,7 @@ resynchronization_test(Config) ->
         ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessId1, ?FILE_REF(Guid)), 60)
     end, Worker2Dirs ++ Worker2Files ++ Worker3Dirs ++ Worker3Files),
 
-    ?assertEqual(undefined, rpc:call(Worker1, dbsync_state, get_resynchronization_params, [SpaceId, Provider2Id])).
+    ?assertEqual(undefined, rpc:call(Worker1, dbsync_state, get_synchronization_params, [SpaceId, Provider2Id])).
 
 
 %%%===================================================================
