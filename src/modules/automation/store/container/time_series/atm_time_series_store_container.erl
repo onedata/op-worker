@@ -113,10 +113,8 @@ create(_AtmWorkflowExecutionAuth, _AtmStoreConfig, _InitialContent) ->
 
 -spec copy(record()) -> record() | no_return().
 copy(OriginRecord = #atm_time_series_store_container{backend_id = OriginBackendId}) ->
-    %% TODO replace
-%%    {ok, BackendId} = datastore_time_series_collection:clone(?CTX, OriginBackendId),
-%%    OriginRecord#atm_time_series_store_container{backend_id = BackendId}.
-    OriginRecord.
+    {ok, BackendId} = datastore_time_series_collection:clone(?CTX, OriginBackendId),
+    OriginRecord#atm_time_series_store_container{backend_id = BackendId}.
 
 
 -spec get_config(record()) -> atm_time_series_store_config:record().

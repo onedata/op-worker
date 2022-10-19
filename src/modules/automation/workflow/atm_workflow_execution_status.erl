@@ -170,10 +170,17 @@ handle_lane_run_preparing(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmLaneRun
             AtmLaneRunDiff(Record);
 
         (#atm_workflow_execution{status = ?STOPPING_STATUS}) ->
-            ?ERROR_ATM_WORKFLOW_EXECUTION_ABORTING;
+            ?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING;
 
-        (#atm_workflow_execution{status = _StoppedStatus}) ->
-            ?ERROR_ATM_WORKFLOW_EXECUTION_ENDED
+        (#atm_workflow_execution{status = Status}) when
+            Status =:= ?FINISHED_STATUS;
+            Status =:= ?FAILED_STATUS;
+            Status =:= ?CANCELLED_STATUS;
+            Status =:= ?CRASHED_STATUS;
+            Status =:= ?INTERRUPTED_STATUS;
+            Status =:= ?PAUSED_STATUS
+        ->
+            ?ERROR_ATM_WORKFLOW_EXECUTION_STOPPED
     end,
 
     case atm_workflow_execution:update(AtmWorkflowExecutionId, Diff) of
@@ -200,10 +207,17 @@ handle_lane_run_created(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
             AtmLaneRunDiff(Record);
 
         (#atm_workflow_execution{status = ?STOPPING_STATUS}) ->
-            ?ERROR_ATM_WORKFLOW_EXECUTION_ABORTING;
+            ?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING;
 
-        (#atm_workflow_execution{status = _StoppedStatus}) ->
-            ?ERROR_ATM_WORKFLOW_EXECUTION_ENDED
+        (#atm_workflow_execution{status = Status}) when
+            Status =:= ?FINISHED_STATUS;
+            Status =:= ?FAILED_STATUS;
+            Status =:= ?CANCELLED_STATUS;
+            Status =:= ?CRASHED_STATUS;
+            Status =:= ?INTERRUPTED_STATUS;
+            Status =:= ?PAUSED_STATUS
+        ->
+            ?ERROR_ATM_WORKFLOW_EXECUTION_STOPPED
     end).
 
 
@@ -222,10 +236,17 @@ handle_lane_run_enqueued(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
             AtmLaneRunDiff(Record);
 
         (#atm_workflow_execution{status = ?STOPPING_STATUS}) ->
-            ?ERROR_ATM_WORKFLOW_EXECUTION_ABORTING;
+            ?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING;
 
-        (#atm_workflow_execution{status = _StoppedStatus}) ->
-            ?ERROR_ATM_WORKFLOW_EXECUTION_ENDED
+        (#atm_workflow_execution{status = Status}) when
+            Status =:= ?FINISHED_STATUS;
+            Status =:= ?FAILED_STATUS;
+            Status =:= ?CANCELLED_STATUS;
+            Status =:= ?CRASHED_STATUS;
+            Status =:= ?INTERRUPTED_STATUS;
+            Status =:= ?PAUSED_STATUS
+        ->
+            ?ERROR_ATM_WORKFLOW_EXECUTION_STOPPED
     end).
 
 
@@ -244,10 +265,17 @@ handle_lane_run_resumed(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
             end;
 
         (#atm_workflow_execution{status = ?STOPPING_STATUS}) ->
-            ?ERROR_ATM_WORKFLOW_EXECUTION_ABORTING;
+            ?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING;
 
-        (#atm_workflow_execution{status = _StoppedStatus}) ->
-            ?ERROR_ATM_WORKFLOW_EXECUTION_ENDED
+        (#atm_workflow_execution{status = Status}) when
+            Status =:= ?FINISHED_STATUS;
+            Status =:= ?FAILED_STATUS;
+            Status =:= ?CANCELLED_STATUS;
+            Status =:= ?CRASHED_STATUS;
+            Status =:= ?INTERRUPTED_STATUS;
+            Status =:= ?PAUSED_STATUS
+        ->
+            ?ERROR_ATM_WORKFLOW_EXECUTION_STOPPED
     end,
 
     case atm_workflow_execution:update(AtmWorkflowExecutionId, Diff) of
@@ -272,6 +300,8 @@ handle_lane_run_stopping(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmLaneRunD
             Status == ?SCHEDULED_STATUS;
             Status == ?ACTIVE_STATUS;
             Status == ?STOPPING_STATUS;
+
+            % Suspended execution can be cancelled
             Status == ?INTERRUPTED_STATUS;
             Status == ?PAUSED_STATUS
         ->
@@ -286,7 +316,12 @@ handle_lane_run_stopping(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmLaneRunD
                     UpdateResult
             end;
 
-        (#atm_workflow_execution{status = _StoppedStatus}) ->
+        (#atm_workflow_execution{status = Status}) when
+            Status =:= ?FINISHED_STATUS;
+            Status =:= ?FAILED_STATUS;
+            Status =:= ?CANCELLED_STATUS;
+            Status =:= ?CRASHED_STATUS
+        ->
             ?ERROR_ATM_WORKFLOW_EXECUTION_ENDED
     end,
 
@@ -329,8 +364,8 @@ handle_lane_run_stopped(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
 handle_lane_run_task_status_change(AtmWorkflowExecutionId, AtmLaneRunDiff) ->
     Diff = fun(Record) ->
         case infer_phase(Record) of
-            ?SUSPENDED_PHASE -> ?ERROR_ATM_WORKFLOW_EXECUTION_ENDED;    %% TODO rename to STOPPED
-            ?ENDED_PHASE -> ?ERROR_ATM_WORKFLOW_EXECUTION_ENDED;
+            ?SUSPENDED_PHASE -> ?ERROR_ATM_WORKFLOW_EXECUTION_STOPPED;
+            ?ENDED_PHASE -> ?ERROR_ATM_WORKFLOW_EXECUTION_STOPPED;
             _ -> AtmLaneRunDiff(Record)
         end
     end,
