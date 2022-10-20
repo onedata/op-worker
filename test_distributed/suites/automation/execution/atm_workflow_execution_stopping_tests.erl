@@ -18,6 +18,8 @@
 -include("modules/automation/atm_execution.hrl").
 
 -export([
+    stopping_reason_interrupt_overrides_pause/0,
+
     stopping_reason_failure_overrides_pause/0,
     stopping_reason_cancel_overrides_pause/0,
     stopping_reason_cancel_overrides_failure/0,
@@ -112,6 +114,78 @@
 %%%===================================================================
 %%% Tests
 %%%===================================================================
+
+
+stopping_reason_interrupt_overrides_pause() ->
+    DelayedMeasurementName = <<"delayed">>,
+
+    atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
+        provider = ?PROVIDER_SELECTOR,
+        user = ?USER_SELECTOR,
+        space = ?SPACE_SELECTOR,
+        workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
+            return_value,
+            [gen_time_series_measurement(DelayedMeasurementName) | gen_correct_time_series_measurements()],
+            ?CORRECT_ATM_TIME_SERIES_DISPATCH_RULES
+        ),
+        workflow_schema_revision_num = 1,
+        incarnations = [#atm_workflow_execution_incarnation_test_spec{
+            incarnation_num = 1,
+            lane_runs = [
+                #atm_lane_run_execution_test_spec{
+                    selector = {1, 1}
+                },
+                #atm_lane_run_execution_test_spec{
+                    selector = {2, 1},
+                    process_task_result_for_item = #atm_step_mock_spec{
+                        before_step_hook = fun atm_workflow_execution_test_runner:pause_workflow_execution/1,
+                        before_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                            {true, expect_execution_stopping_while_processing_lane2(ExpState0, pause)}
+                        end,
+
+                        strategy = fun(#atm_mock_call_ctx{call_args = [_, _, _, ItemBatch, _]}) ->
+                            ContainsDelayedMeasurement = lists:any(
+                                fun(#{<<"tsName">> := TSName}) -> TSName == DelayedMeasurementName end,
+                                ItemBatch
+                            ),
+                            case ContainsDelayedMeasurement of
+                                true ->
+                                    % Delay execution of batch to ensure it happens after execution is interrupted
+                                    % which should result in exception interrupting execution
+                                    {passthrough_with_delay, timer:seconds(1)};
+                                false ->
+                                    passthrough
+                            end
+                        end,
+                        after_step_hook = fun atm_workflow_execution_test_runner:delete_offline_session/1
+                    },
+                    % this is called as part of `handle_workflow_abruptly_stopped`
+                    handle_lane_execution_stopped =#atm_step_mock_spec{
+                        after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                            ExpState1 = atm_workflow_execution_exp_state_builder:expect_all_tasks_abruptly_interrupted(
+                                {2, 1}, ExpState0
+                            ),
+                            {true, atm_workflow_execution_exp_state_builder:expect_lane_run_interrupted({2, 1}, ExpState1)}
+                        end
+                    }
+                }
+            ],
+            handle_exception = #atm_step_mock_spec{
+                % Ensure interrupt prevails against pause
+                after_step_hook = fun atm_workflow_execution_test_runner:pause_workflow_execution/1,
+                %% already paused task2 changes status to interrupted
+                after_step_exp_state_diff = build_expect_task2_stopped_exp_state_diff(<<"interrupted">>)
+            },
+            handle_workflow_abruptly_stopped = #atm_step_mock_spec{
+                % Ensure interrupt prevails against pause
+                before_step_hook = fun atm_workflow_execution_test_runner:pause_workflow_execution/1,
+
+                after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_interrupted(ExpState0)}
+                end
+            }
+        }]
+    }).
 
 
 stopping_reason_failure_overrides_pause() ->

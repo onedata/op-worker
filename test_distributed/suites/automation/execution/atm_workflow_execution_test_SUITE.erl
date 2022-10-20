@@ -100,6 +100,8 @@
 
     crash_atm_workflow_execution_during_handle_exception_callback/1,
 
+    stopping_reason_interrupt_overrides_pause/1,
+
     stopping_reason_failure_overrides_pause/1,
     stopping_reason_cancel_overrides_pause/1,
     stopping_reason_cancel_overrides_failure/1,
@@ -250,6 +252,8 @@ groups() -> [
     ]},
 
     {stopping_tests, [], [
+        stopping_reason_interrupt_overrides_pause,
+
         stopping_reason_failure_overrides_pause,
         stopping_reason_cancel_overrides_pause,
         stopping_reason_cancel_overrides_failure,
@@ -575,6 +579,10 @@ crash_atm_workflow_execution_during_handle_workflow_execution_stopped_callback(_
 
 crash_atm_workflow_execution_during_handle_exception_callback(_Config) ->
     ?RUN_CRASH_TEST().
+
+
+stopping_reason_interrupt_overrides_pause(_Config) ->
+    ?RUN_STOPPING_TEST().
 
 
 stopping_reason_failure_overrides_pause(_Config) ->
