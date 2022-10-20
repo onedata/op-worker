@@ -27,6 +27,7 @@
     stopping_reason_cancel_overrides_failure/0,
 
     stopping_reason_crash_overrides_pause/0,
+    stopping_reason_crash_overrides_interrupt/0,
     stopping_reason_crash_overrides_failure/0,
     stopping_reason_crash_overrides_cancel/0
 ]).
@@ -428,6 +429,44 @@ stopping_reason_crash_overrides_pause() ->
             },
             handle_workflow_abruptly_stopped = build_crash_handle_workflow_abruptly_stopped_step_mock_spec(
                 fun atm_workflow_execution_test_runner:pause_workflow_execution/1
+            )
+        }]
+    }).
+
+
+stopping_reason_crash_overrides_interrupt() ->
+    atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
+        provider = ?PROVIDER_SELECTOR,
+        user = ?USER_SELECTOR,
+        space = ?SPACE_SELECTOR,
+        workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
+            return_value, gen_correct_time_series_measurements(), ?CORRECT_ATM_TIME_SERIES_DISPATCH_RULES
+        ),
+        workflow_schema_revision_num = 1,
+        incarnations = [#atm_workflow_execution_incarnation_test_spec{
+            incarnation_num = 1,
+            lane_runs = [
+                #atm_lane_run_execution_test_spec{
+                    selector = {1, 1}
+                },
+                #atm_lane_run_execution_test_spec{
+                    selector = {2, 1},
+                    process_task_result_for_item = #atm_step_mock_spec{
+                        before_step_hook = fun interrupt_workflow_execution/1,
+
+                        before_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                            {true, expect_execution_stopping_while_processing_lane2(ExpState0, interrupt)}
+                        end
+                    },
+                    handle_task_execution_stopped = build_crash_handle_task_execution_stopped_step_mock_spec(),
+                    handle_lane_execution_stopped = build_crash_handle_lane_execution_stopped_step_mock_spec(<<"interrupted">>)
+                }
+            ],
+            handle_exception = #atm_step_mock_spec{
+                before_step_hook = fun interrupt_workflow_execution/1
+            },
+            handle_workflow_abruptly_stopped = build_crash_handle_workflow_abruptly_stopped_step_mock_spec(
+                fun interrupt_workflow_execution/1
             )
         }]
     }).
