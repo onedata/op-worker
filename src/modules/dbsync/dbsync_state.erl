@@ -18,7 +18,8 @@
 
 %% API
 -export([delete/1, get_seq/2, get_seq_and_timestamp/2, set_seq_and_timestamp/4,
-    resynchronize_stream/3, get_synchronization_params/2, check_synchronization_params/3]).
+    resynchronize_stream/3, get_synchronization_params/2, check_synchronization_params/3,
+    set_initial_sync_repeat/1]).
 
 %% datastore_model callbacks
 -export([get_record_version/0, get_record_struct/1, upgrade_record/2]).
@@ -160,6 +161,42 @@ check_synchronization_params(SpaceId, ProviderId, TargetSeq) ->
     end.
 
 
+-spec set_initial_sync_repeat(od_space:id()) -> ok | {error, initial_sync_does_not_exist}.
+set_initial_sync_repeat(SpaceId) ->
+    case datastore_model:get(?CTX, SpaceId) of
+        {ok, #document{value = #dbsync_state{synchronization_params = ParamsToCheck}}} ->
+            ParamsToCheckValues = maps:values(ParamsToCheck),
+            IsAnyInitialSync = lists:any(fun(#synchronization_params{mode = Mode}) ->
+                Mode =:= initial_sync
+            end, ParamsToCheckValues),
+            IsAnyInitialSyncToRepeat = lists:any(fun(#synchronization_params{mode = Mode}) ->
+                Mode =:= initial_sync_to_repeat
+            end, ParamsToCheckValues),
+
+            case {IsAnyInitialSync, IsAnyInitialSyncToRepeat} of
+                {true, _} ->
+                    DiffFun = fun(#dbsync_state{synchronization_params = Params} = State) ->
+                        UpdatedParams = maps:fold(fun
+                            (ProviderId, #synchronization_params{mode = initial_sync} = ProviderParams, Acc) ->
+                                Acc#{ProviderId => ProviderParams#synchronization_params{mode = initial_sync_to_repeat}};
+                            (_, _, Acc) ->
+                                Acc
+                        end, Params, Params),
+                        {ok, State#dbsync_state{synchronization_params = UpdatedParams}}
+                    end,
+
+                    {ok, _} = datastore_model:update(?CTX, SpaceId, DiffFun),
+                    ok;
+                {false, true} ->
+                    ok;
+                {false, false} ->
+                    {error, initial_sync_does_not_exist}
+            end;
+        {error, not_found} ->
+            {error, initial_sync_does_not_exist}
+    end.
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -173,12 +210,14 @@ set_seq_and_timestamp_internal(
     Timestamp
 ) ->
     {UpdatedSeqMap, UpdatedParams} = case maps:get(ProviderId, Params, undefined) of
-        #synchronization_params{mode = initial_sync, target_seq = TargetSeq} = ProviderParams when NewSeq >= TargetSeq ->
+        #synchronization_params{
+            mode = initial_sync_to_repeat, target_seq = TargetSeq
+        } = ProviderParams when NewSeq >= TargetSeq ->
             {
                 maps:put(ProviderId, {1, 0}, SeqMap),
                 maps:put(ProviderId, ProviderParams#synchronization_params{mode = resynchronization}, Params)
             };
-        #synchronization_params{mode = resynchronization, target_seq = TargetSeq} when NewSeq >= TargetSeq ->
+        #synchronization_params{target_seq = TargetSeq} when NewSeq >= TargetSeq ->
             {maps:put(ProviderId, {NewSeq, Timestamp}, SeqMap), maps:remove(ProviderId, Params)};
         _ ->
             {maps:put(ProviderId, {NewSeq, Timestamp}, SeqMap), Params}

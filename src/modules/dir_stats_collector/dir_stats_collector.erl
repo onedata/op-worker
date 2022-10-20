@@ -244,7 +244,7 @@ update_stats_of_nearest_dir(Guid, CollectionType, CollectionUpdate) ->
                             update_stats_of_parent_internal(get_parent(Doc, SpaceId), CollectionType, CollectionUpdate)
                     end;
                 ?ERROR_NOT_FOUND ->
-                    file_meta_posthooks:add_hook({file_meta_missing, FileUuid}, generator:gen_name(),
+                    file_meta_posthooks:add_hook({file_meta_missing, FileUuid}, generator:gen_name(), SpaceId,
                         ?MODULE, ?FUNCTION_NAME, [Guid, CollectionType, CollectionUpdate])
             end;
         false ->
@@ -986,7 +986,8 @@ acquire_space_collecting_status(SpaceId, #state{space_collecting_statuses = Coll
 -spec add_hook_for_missing_doc(file_id:file_guid(), dir_stats_collection:type(), dir_stats_collection:collection()) ->
     ok | ?ERROR_INTERNAL_SERVER_ERROR.
 add_hook_for_missing_doc(Guid, CollectionType, CollectionUpdate) ->
-    file_meta_posthooks:add_hook({file_meta_missing, file_id:guid_to_uuid(Guid)}, generator:gen_name(),
+    file_meta_posthooks:add_hook({file_meta_missing, file_id:guid_to_uuid(Guid)},
+        generator:gen_name(), file_id:guid_to_space_id(Guid),
         ?MODULE, update_stats_of_parent, [Guid, CollectionType, CollectionUpdate, return_error]).
 
 
