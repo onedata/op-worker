@@ -65,8 +65,8 @@
 -export_type([function_name/0]).
 
 
--define(AWAIT_READINESS_RETRIES, 300).
--define(AWAIT_READINESS_INTERVAL_SEC, 1).
+-define(AWAIT_RETRIES, 300).
+-define(AWAIT_INTERVAL_SEC, 1).
 
 
 %%%===================================================================
@@ -107,6 +107,7 @@ create(AtmWorkflowExecutionCtx, _AtmLaneIndex, _AtmTaskSchema, AtmLambdaRevision
 -spec initiate(atm_task_executor:initiation_ctx(), record()) ->
     workflow_engine:task_spec() | no_return().
 initiate(AtmTaskExecutorInitiationCtx = #atm_task_executor_initiation_ctx{
+    workflow_execution_ctx = AtmWorkflowExecutionCtx,
     task_schema = AtmTaskSchema,
     lambda_revision = AtmLambdaRevision,
     uncorrelated_results = AtmTaskExecutionUncorrelatedResultNames
@@ -117,10 +118,15 @@ initiate(AtmTaskExecutorInitiationCtx = #atm_task_executor_initiation_ctx{
         openfaas_config = atm_openfaas_config:get(),
         executor = AtmTaskExecutor
     },
-    case is_function_registered(InitiationCtx) of
+
+    % Ensure there is no function with generated name
+    remove_function(AtmWorkflowExecutionCtx, AtmTaskExecutor),
+    case await_function_removal(InitiationCtx, ?AWAIT_RETRIES) of
         true -> ok;
-        false -> register_function(InitiationCtx)
+        false -> throw(?ERROR_ATM_OPENFAAS_FUNCTION_REGISTRATION_FAILED)
     end,
+
+    register_function(InitiationCtx),
     await_function_readiness(InitiationCtx),
 
     #{
@@ -527,7 +533,7 @@ insert_function_annotations(FunctionDefinition, NewFunctionAnnotations) ->
 %% @private
 -spec await_function_readiness(initiation_ctx()) -> ok | no_return().
 await_function_readiness(InitiationCtx) ->
-    await_function_readiness(InitiationCtx, ?AWAIT_READINESS_RETRIES).
+    await_function_readiness(InitiationCtx, ?AWAIT_RETRIES).
 
 
 %% @private
@@ -561,7 +567,7 @@ await_function_readiness(#initiation_ctx{
             log_function_ready(InitiationCtx);
         not_ready ->
             assert_atm_workflow_execution_is_not_stopping(InitiationCtx),
-            timer:sleep(timer:seconds(?AWAIT_READINESS_INTERVAL_SEC)),
+            timer:sleep(timer:seconds(?AWAIT_INTERVAL_SEC)),
             await_function_readiness(InitiationCtx, RetriesLeft - 1)
     end.
 
@@ -705,3 +711,19 @@ log_function_removal_failed(AtmWorkflowExecutionCtx, FunctionName, Error) ->
     },
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
     atm_workflow_execution_logger:workflow_warning(LogContent, Logger).
+
+
+%% @private
+-spec await_function_removal(initiation_ctx(), non_neg_integer()) -> boolean().
+await_function_removal(_InitiationCtx, 0) ->
+    false;
+
+await_function_removal(InitiationCtx, RetriesLeft) ->
+    case is_function_registered(InitiationCtx) of
+        true ->
+            assert_atm_workflow_execution_is_not_stopping(InitiationCtx),
+            timer:sleep(timer:seconds(?AWAIT_INTERVAL_SEC)),
+            await_function_removal(InitiationCtx, RetriesLeft - 1);
+        false ->
+            true
+    end.
