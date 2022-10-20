@@ -238,11 +238,10 @@ on_openfaas_down(AtmWorkflowExecutionId, Error) ->
         },
         atm_workflow_execution_logger:workflow_critical(LogContent, Logger),
 
-        workflow_engine:abandon(AtmWorkflowExecutionId, interrupt),
         atm_lane_execution_handler:stop({current, current}, interrupt, AtmWorkflowExecutionCtx),
-        shut_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx)
+        workflow_engine:abandon(AtmWorkflowExecutionId, interrupt)
     catch throw:{session_acquisition_failed, _} = Reason ->
-        handle_exception(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, throw, Reason, [])
+        handle_exception(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, throw, Reason, [])  %% TODO
     end,
 
     ok.

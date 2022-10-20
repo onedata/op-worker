@@ -63,7 +63,8 @@
     repeat_workflow_execution/3,
     resume_workflow_execution/1,
 
-    delete_offline_session/1
+    delete_offline_session/1,
+    report_openfaas_unhealthy/1
 ]).
 -export([
     browse_store/2, browse_store/3,
@@ -332,6 +333,16 @@ delete_offline_session(#atm_mock_call_ctx{
     workflow_execution_id = AtmWorkflowExecutionId
 }) ->
     ?erpc(ProviderSelector, offline_access_manager:close_session(AtmWorkflowExecutionId)).
+
+
+-spec report_openfaas_unhealthy(mock_call_ctx()) -> ok | no_return().
+report_openfaas_unhealthy(#atm_mock_call_ctx{
+    provider = ProviderSelector,
+    workflow_execution_id = AtmWorkflowExecutionId
+}) ->
+    ?erpc(ProviderSelector, atm_workflow_execution_handler:on_openfaas_down(
+        AtmWorkflowExecutionId, ?ERROR_ATM_OPENFAAS_UNHEALTHY
+    )).
 
 
 -spec browse_store(automation:id(), mock_call_ctx()) -> json_utils:json_term().
