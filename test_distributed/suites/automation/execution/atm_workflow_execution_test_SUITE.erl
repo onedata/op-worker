@@ -103,8 +103,11 @@
     stopping_reason_interrupt_overrides_pause/1,
 
     stopping_reason_failure_overrides_pause/1,
+    stopping_reason_failure_overrides_interrupt/1,
+
     stopping_reason_cancel_overrides_pause/1,
     stopping_reason_cancel_overrides_failure/1,
+
     stopping_reason_crash_overrides_pause/1,
     stopping_reason_crash_overrides_failure/1,
     stopping_reason_crash_overrides_cancel/1,
@@ -255,8 +258,11 @@ groups() -> [
         stopping_reason_interrupt_overrides_pause,
 
         stopping_reason_failure_overrides_pause,
+        stopping_reason_failure_overrides_interrupt,
+
         stopping_reason_cancel_overrides_pause,
         stopping_reason_cancel_overrides_failure,
+
         stopping_reason_crash_overrides_pause,
         stopping_reason_crash_overrides_failure,
         stopping_reason_crash_overrides_cancel
@@ -586,6 +592,10 @@ stopping_reason_interrupt_overrides_pause(_Config) ->
 
 
 stopping_reason_failure_overrides_pause(_Config) ->
+    ?RUN_STOPPING_TEST().
+
+
+stopping_reason_failure_overrides_interrupt(_Config) ->
     ?RUN_STOPPING_TEST().
 
 
