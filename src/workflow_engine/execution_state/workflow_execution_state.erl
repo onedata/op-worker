@@ -1043,10 +1043,17 @@ maybe_notify_task_execution_ended(
     ok;
 maybe_notify_task_execution_ended(#document{key = ExecutionId, value = #workflow_execution_state{
     handler = Handler,
+    execution_status = Status,
     current_lane = #current_lane{parallel_box_specs = BoxSpecs, execution_context = Context}
 }}, JobIdentifier, waiting_for_data_stream_finalization) ->
     {TaskId, _TaskSpec} = workflow_jobs:get_task_details(JobIdentifier, BoxSpecs),
-    workflow_engine:call_handler(ExecutionId, Context, Handler, handle_task_results_processed_for_all_items, [TaskId]),
+    case Status of
+        #execution_cancelled{is_interrupted = true} ->
+            ok;
+        _ ->
+            workflow_engine:call_handler(
+                ExecutionId, Context, Handler, handle_task_results_processed_for_all_items, [TaskId])
+    end,
     {ok, _} = update(ExecutionId, fun(State) -> remove_pending_callback(State, JobIdentifier) end),
     ok;
 maybe_notify_task_execution_ended(#document{value = #workflow_execution_state{
@@ -1058,9 +1065,15 @@ maybe_notify_task_execution_ended(#document{value = #workflow_execution_state{
 -spec handle_task_execution_stopped(doc(), callback_selector(), workflow_engine:task_id()) -> ok.
 handle_task_execution_stopped(#document{key = ExecutionId, value = #workflow_execution_state{
     handler = Handler,
+    execution_status = Status,
     current_lane = #current_lane{execution_context = Context}
 }}, CallbackSelector, TaskId) ->
-    workflow_engine:call_handler(ExecutionId, Context, Handler, handle_task_execution_stopped, [TaskId]),
+    case Status of
+        #execution_cancelled{is_interrupted = true} ->
+            ok;
+        _ ->
+            workflow_engine:call_handler(ExecutionId, Context, Handler, handle_task_execution_stopped, [TaskId])
+    end,
     {ok, _} = update(ExecutionId, fun(State) -> remove_pending_callback(State, CallbackSelector) end),
     ok.
 
