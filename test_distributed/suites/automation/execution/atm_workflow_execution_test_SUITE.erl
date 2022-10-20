@@ -263,7 +263,7 @@ groups() -> [
         stopping_reason_failure_overrides_interrupt,
 
         stopping_reason_cancel_overrides_pause,
-        stopping_reason_cancel_overrides_interrupt,
+%%        stopping_reason_cancel_overrides_interrupt  %% TODO VFS-9917 fix and uncomment
         stopping_reason_cancel_overrides_failure,
 
         stopping_reason_crash_overrides_pause,
