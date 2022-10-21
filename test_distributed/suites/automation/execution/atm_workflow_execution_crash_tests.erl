@@ -171,7 +171,7 @@ crash_atm_workflow_execution_during_resume_lane_callback() ->
                     end
                 },
                 handle_workflow_abruptly_stopped = atm_workflow_crashed_after_step_mock_spec(),
-                after_hook = fun atm_workflow_execution_test_runner:assert_ended_atm_workflow_execution_can_be_neither_stopped_nor_resumed/1
+                after_hook = fun assert_no_action_possible_on_crashed_atm_workflow_execution/1
             }
         ]
     }).
@@ -260,7 +260,7 @@ crash_atm_workflow_execution_during_handle_lane_execution_stopped_callback() ->
                     {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_crashed(ExpState1)}
                 end
             },
-            after_hook = fun atm_workflow_execution_test_runner:assert_ended_atm_workflow_execution_can_be_neither_stopped_nor_resumed/1
+            after_hook = fun assert_no_action_possible_on_crashed_atm_workflow_execution/1
         }]
     }).
 
@@ -282,7 +282,7 @@ crash_atm_workflow_execution_during_handle_workflow_execution_stopped_callback()
                 after_step_exp_state_diff = no_diff
             },
             handle_workflow_abruptly_stopped = atm_workflow_crashed_after_step_mock_spec(),
-            after_hook = fun atm_workflow_execution_test_runner:assert_ended_atm_workflow_execution_can_be_neither_stopped_nor_resumed/1
+            after_hook = fun assert_no_action_possible_on_crashed_atm_workflow_execution/1
         }]
     }).
 
@@ -311,7 +311,7 @@ crash_atm_workflow_execution_during_handle_exception_callback() ->
             % not all atm workflow execution components could be properly stopped
             % (they may be left e.g. active)
             handle_workflow_abruptly_stopped = atm_workflow_crashed_after_step_mock_spec(),
-            after_hook = fun atm_workflow_execution_test_runner:assert_ended_atm_workflow_execution_can_be_neither_stopped_nor_resumed/1
+            after_hook = fun assert_no_action_possible_on_crashed_atm_workflow_execution/1
         }]
     }).
 
@@ -349,7 +349,7 @@ crash_atm_workflow_execution_test_base(Testcase, CrashingAtmLaneRunExecutionTest
                 end
             },
             handle_workflow_abruptly_stopped = atm_workflow_crashed_after_step_mock_spec(),
-            after_hook = fun atm_workflow_execution_test_runner:assert_ended_atm_workflow_execution_can_be_neither_stopped_nor_resumed/1
+            after_hook = fun assert_no_action_possible_on_crashed_atm_workflow_execution/1
         }]
     }).
 
@@ -379,3 +379,19 @@ expect_lane1_pb_paused(AtmTaskExecutionId, ExpState0) ->
         fun(_, _) -> <<"paused">> end,
         atm_workflow_execution_exp_state_builder:expect_task_paused(AtmTaskExecutionId, ExpState0)
     ).
+
+
+%% @private
+assert_no_action_possible_on_crashed_atm_workflow_execution(AtmMockCallCtx) ->
+    atm_workflow_execution_test_runner:assert_ended_atm_workflow_execution_can_be_neither_stopped_nor_resumed(
+        AtmMockCallCtx
+    ),
+
+    lists:foreach(fun({RepeatType, ExpError}) ->
+        ?assertThrow(ExpError, atm_workflow_execution_test_runner:repeat_workflow_execution(
+            RepeatType, {1, 1}, AtmMockCallCtx
+        ))
+    end, [
+        {retry, ?ERROR_ATM_LANE_EXECUTION_RETRY_FAILED},
+        {rerun, ?ERROR_ATM_LANE_EXECUTION_RERUN_FAILED}
+    ]).

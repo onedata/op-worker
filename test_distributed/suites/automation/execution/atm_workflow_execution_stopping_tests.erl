@@ -387,7 +387,8 @@ stopping_reason_cancel_overrides_interrupt() ->
                 before_step_exp_state_diff = build_expect_task2_stopped_exp_state_diff(<<"cancelled">>),
 
                 after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
-                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_cancelled(ExpState0)}
+                    ExpState1 = expect_lane_runs_rerunable([{1, 1}, {2, 1}], ExpState0),
+                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_cancelled(ExpState1)}
                 end
             }
         }]
