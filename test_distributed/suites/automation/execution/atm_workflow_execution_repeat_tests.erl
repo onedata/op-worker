@@ -18,9 +18,6 @@
 -include("modules/automation/atm_execution.hrl").
 
 -export([
-    repeat_not_ended_atm_workflow_execution/0,
-    repeat_crashed_atm_workflow_execution/0,
-
     repeat_finished_atm_lane_run_execution/0,
     rerun_failed_iterated_atm_lane_run_execution/0,
     retry_failed_iterated_atm_lane_run_execution/0,
@@ -118,141 +115,6 @@
 %%%===================================================================
 %%% Tests
 %%%===================================================================
-
-
-% Attempting to repeat any lane run while atm workflow execution has not yet ended should fail
-repeat_not_ended_atm_workflow_execution() ->
-    AssertNotRepeatableFun = fun(AtmMockCallCtx) ->
-        lists:foreach(fun(RepeatType) ->
-            ?assertThrow(
-                ?ERROR_ATM_WORKFLOW_EXECUTION_NOT_ENDED,
-                atm_workflow_execution_test_runner:repeat_workflow_execution(
-                    RepeatType, {1, 1}, AtmMockCallCtx
-                )
-            )
-        end, [rerun, retry])
-    end,
-    Lane1Run1StepMockSpecBase = #atm_step_mock_spec{
-        before_step_hook = AssertNotRepeatableFun,
-        after_step_hook = AssertNotRepeatableFun
-    },
-
-    atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
-        provider = ?PROVIDER_SELECTOR,
-        user = ?USER_SELECTOR,
-        space = ?SPACE_SELECTOR,
-        workflow_schema_dump_or_draft = #atm_workflow_schema_dump_draft{
-            name = <<"repeat_not_ended_atm_workflow_execution">>,
-            revision_num = 1,
-            revision = #atm_workflow_schema_revision_draft{
-                stores = [
-                    ?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"st1">>, lists:seq(1, 20))
-                ],
-                lanes = [#atm_lane_schema_draft{
-                    parallel_boxes = [#atm_parallel_box_schema_draft{
-                        tasks = [#atm_task_schema_draft{
-                            id = <<"t1">>,
-                            lambda_id = ?ECHO_LAMBDA_ID,
-                            lambda_revision_number = ?ECHO_LAMBDA_REVISION_NUM,
-                            argument_mappings = [?ITERATED_ITEM_ARG_MAPPER(?ECHO_ARG_NAME)],
-                            result_mappings = []
-                        }]
-                    }],
-                    store_iterator_spec = #atm_store_iterator_spec_draft{store_schema_id = <<"st1">>}
-                }]
-            },
-            supplementary_lambdas = #{?ECHO_LAMBDA_ID => #{
-                ?ECHO_LAMBDA_REVISION_NUM => ?ECHO_LAMBDA_DRAFT(#atm_data_spec{type = atm_integer_type})
-            }}
-        },
-        workflow_schema_revision_num = 1,
-        incarnations = [#atm_workflow_execution_incarnation_test_spec{
-            incarnation_num = 1,
-            lane_runs = [
-                #atm_lane_run_execution_test_spec{
-                    selector = {1, 1},
-                    prepare_lane = Lane1Run1StepMockSpecBase,
-                    create_run = Lane1Run1StepMockSpecBase,
-                    run_task_for_item = Lane1Run1StepMockSpecBase,
-                    process_task_result_for_item = Lane1Run1StepMockSpecBase,
-                    handle_task_execution_stopped = Lane1Run1StepMockSpecBase,
-                    handle_lane_execution_stopped = Lane1Run1StepMockSpecBase#atm_step_mock_spec{
-                        before_step_hook = fun(AtmMockCallCtx) ->
-                            atm_workflow_execution_test_runner:pause_workflow_execution(AtmMockCallCtx),
-                            AssertNotRepeatableFun(AtmMockCallCtx)
-                        end,
-                        before_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
-                            ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_stopping({1, 1}, ExpState0),
-                            {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(ExpState1)}
-                        end,
-                        after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
-                            {true, atm_workflow_execution_exp_state_builder:expect_lane_run_paused({1, 1}, ExpState0)}
-                        end
-                    }
-                }
-            ],
-            handle_workflow_execution_stopped = Lane1Run1StepMockSpecBase#atm_step_mock_spec{
-                after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
-                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_paused(ExpState0)}
-                end
-            }
-        }]
-    }).
-
-
-% Attempting to repeat any lane run while atm workflow execution has crashed should fail
-repeat_crashed_atm_workflow_execution() ->
-    atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
-        provider = ?PROVIDER_SELECTOR,
-        user = ?USER_SELECTOR,
-        space = ?SPACE_SELECTOR,
-        workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
-            gen_time_series_measurements(), return_value
-        ),
-        workflow_schema_revision_num = 1,
-        incarnations = [#atm_workflow_execution_incarnation_test_spec{
-            incarnation_num = 1,
-            lane_runs = [
-                #atm_lane_run_execution_test_spec{
-                    selector = {1, 1}
-                },
-                #atm_lane_run_execution_test_spec{
-                    selector = {2, 1},
-                    process_task_result_for_item = #atm_step_mock_spec{
-                        strategy = {yield, {error, crashed}},
-                        after_step_exp_state_diff = no_diff
-                    },
-
-                    handle_lane_execution_stopped = #atm_step_mock_spec{
-                        % this is called as part of `handle_workflow_abruptly_stopped`
-                        after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
-                            ExpState1 = atm_workflow_execution_exp_state_builder:expect_all_tasks_abruptly_interrupted(
-                                {2, 1}, ExpState0
-                            ),
-                            {true, atm_workflow_execution_exp_state_builder:expect_lane_run_crashed({2, 1}, ExpState1)}
-                        end
-                    }
-                }
-            ],
-            handle_exception = #atm_step_mock_spec{
-                after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
-                    {true, expect_execution_stopping_while_processing_lane2(ExpState0, interrupt)}
-                end
-            },
-            handle_workflow_abruptly_stopped = #atm_step_mock_spec{
-                after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
-                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_crashed(ExpState0)}
-                end
-            },
-            after_hook = fun(AtmMockCallCtx) ->
-                assert_not_retriable({1, 1}, AtmMockCallCtx),
-                assert_not_rerunable({1, 1}, AtmMockCallCtx),
-
-                assert_not_retriable({2, 1}, AtmMockCallCtx),
-                assert_not_rerunable({2, 1}, AtmMockCallCtx)
-            end
-        }]
-    }).
 
 
 % Retrying finished lane run should fail while rerunning it should succeed
@@ -650,26 +512,6 @@ assert_not_retriable(AtmLaneRunSelector, AtmMockCallCtx) ->
         ?ERROR_ATM_LANE_EXECUTION_RETRY_FAILED,
         atm_workflow_execution_test_runner:repeat_workflow_execution(retry, AtmLaneRunSelector, AtmMockCallCtx)
     ).
-
-
-%% @private
--spec assert_not_rerunable(
-    atm_lane_execution:lane_run_selector(),
-    atm_workflow_execution_test_runner:mock_call_ctx()
-) ->
-    ok.
-assert_not_rerunable(AtmLaneRunSelector, AtmMockCallCtx) ->
-    ?assertThrow(
-        ?ERROR_ATM_LANE_EXECUTION_RERUN_FAILED,
-        atm_workflow_execution_test_runner:repeat_workflow_execution(rerun, AtmLaneRunSelector, AtmMockCallCtx)
-    ).
-
-
-%% @private
-expect_execution_stopping_while_processing_lane2(ExpState0, Reason) ->
-    ExpState1 = atm_workflow_execution_exp_state_builder:expect_all_tasks_stopping({2, 1}, Reason, ExpState0),
-    ExpState2 = atm_workflow_execution_exp_state_builder:expect_lane_run_stopping({2, 1}, ExpState1),
-    atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(ExpState2).
 
 
 %% @private

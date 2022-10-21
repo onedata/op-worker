@@ -54,7 +54,9 @@
 
 -define(EXECUTION_CANCELLED(CallCount), #execution_cancelled{call_count = CallCount}).
 -define(PREPARATION_CANCELLED(CallCount), #execution_cancelled{execution_step = lane_prepare, call_count = CallCount}).
--define(WAITING_FOR_NEXT_LANE_PREPARATION_END(IsInterrupted), #execution_cancelled{
+-define(WAITING_FOR_NEXT_LANE_PREPARATION_END(IsInterrupted), #execution_cancelled{callbacks_to_execute = [],
+    execution_step = waiting_on_next_lane_prepare, call_count = 0, is_interrupted = IsInterrupted}).
+-define(WAITING_FOR_ERROR_HANDLING_OR_NEXT_LANE_PREPARATION_END(IsInterrupted), #execution_cancelled{
     execution_step = waiting_on_next_lane_prepare, call_count = 0, is_interrupted = IsInterrupted}).
 -define(EXECUTION_ENDED_AFTER_CANCEL(IsInterrupted, Reason), #execution_cancelled{
     execution_step = finishing_execution, call_count = 0, callbacks_to_execute = [],
@@ -920,9 +922,9 @@ handle_state_update_after_job_preparation(_ExecutionId, #document{value = #workf
     end,
     % TODO VFS-7787 - test cancel during lane_execution_finished callback execution
     case ExecutionStatus of
-        ?WAITING_FOR_NEXT_LANE_PREPARATION_END(false) ->
+        ?WAITING_FOR_ERROR_HANDLING_OR_NEXT_LANE_PREPARATION_END(false) ->
             ?WF_ERROR_LANE_EXECUTION_CANCELLED(Handler, LaneId, LaneContext, TaskIdsToFinish);
-        ?WAITING_FOR_NEXT_LANE_PREPARATION_END(true) ->
+        ?WAITING_FOR_ERROR_HANDLING_OR_NEXT_LANE_PREPARATION_END(true) ->
             ?WF_ERROR_NO_WAITING_ITEMS;
         #execution_cancelled{is_interrupted = true, abrupt_stop_reason = Reason} ->
             ?WF_ERROR_EXECUTION_ENDED(#execution_ended{handler = Handler, context = ExecutionContext,
@@ -1043,10 +1045,17 @@ maybe_notify_task_execution_ended(
     ok;
 maybe_notify_task_execution_ended(#document{key = ExecutionId, value = #workflow_execution_state{
     handler = Handler,
+    execution_status = Status,
     current_lane = #current_lane{parallel_box_specs = BoxSpecs, execution_context = Context}
 }}, JobIdentifier, waiting_for_data_stream_finalization) ->
     {TaskId, _TaskSpec} = workflow_jobs:get_task_details(JobIdentifier, BoxSpecs),
-    workflow_engine:call_handler(ExecutionId, Context, Handler, handle_task_results_processed_for_all_items, [TaskId]),
+    case Status of
+        #execution_cancelled{is_interrupted = true} ->
+            ok;
+        _ ->
+            workflow_engine:call_handler(
+                ExecutionId, Context, Handler, handle_task_results_processed_for_all_items, [TaskId])
+    end,
     {ok, _} = update(ExecutionId, fun(State) -> remove_pending_callback(State, JobIdentifier) end),
     ok;
 maybe_notify_task_execution_ended(#document{value = #workflow_execution_state{
@@ -1058,9 +1067,15 @@ maybe_notify_task_execution_ended(#document{value = #workflow_execution_state{
 -spec handle_task_execution_stopped(doc(), callback_selector(), workflow_engine:task_id()) -> ok.
 handle_task_execution_stopped(#document{key = ExecutionId, value = #workflow_execution_state{
     handler = Handler,
+    execution_status = Status,
     current_lane = #current_lane{execution_context = Context}
 }}, CallbackSelector, TaskId) ->
-    workflow_engine:call_handler(ExecutionId, Context, Handler, handle_task_execution_stopped, [TaskId]),
+    case Status of
+        #execution_cancelled{is_interrupted = true} ->
+            ok;
+        _ ->
+            workflow_engine:call_handler(ExecutionId, Context, Handler, handle_task_execution_stopped, [TaskId])
+    end,
     {ok, _} = update(ExecutionId, fun(State) -> remove_pending_callback(State, CallbackSelector) end),
     ok.
 
@@ -1370,7 +1385,7 @@ finish_lane_preparation_in_advance(_State, _LaneId, _LaneSpec) ->
 maybe_wait_for_preparation_in_advance(#workflow_execution_state{
     next_lane_preparation_status = ?PREPARING
 } = State) ->
-    {ok, State#workflow_execution_state{execution_status = ?WAITING_FOR_NEXT_LANE_PREPARATION_END(false)}};
+    {ok, State#workflow_execution_state{execution_status = ?WAITING_FOR_ERROR_HANDLING_OR_NEXT_LANE_PREPARATION_END(false)}};
 maybe_wait_for_preparation_in_advance(_State) ->
     ?WF_ERROR_LANE_ALREADY_PREPARED.
 
@@ -1794,7 +1809,7 @@ verify_streams_when_execution_is_cancelled(State = #workflow_execution_state{
                     {ItemIds, UpdatedIterationState} = workflow_iteration_state:finalize(IterationState),
                     {ok, State#workflow_execution_state{
                         iteration_state = UpdatedIterationState,
-                        execution_status = ?WAITING_FOR_NEXT_LANE_PREPARATION_END(false),
+                        execution_status = ?WAITING_FOR_ERROR_HANDLING_OR_NEXT_LANE_PREPARATION_END(false),
                         update_report = ?EXECUTION_CANCELLED_REPORT(ItemIds, TaskIdsToNotify),
                         pending_callbacks = [?CALLBACKS_ON_CANCEL_SELECTOR | PendingCallbacks]
                     }};

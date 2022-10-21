@@ -233,16 +233,14 @@ on_openfaas_down(AtmWorkflowExecutionId, Error) ->
 
         Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
         LogContent = #{
-            <<"description">> => "OpenFaaS service is not healthy (see error reason).",
+            <<"description">> => <<"OpenFaaS service is not healthy (see error reason).">>,
             <<"reason">> => errors:to_json(Error)
         },
         atm_workflow_execution_logger:workflow_critical(LogContent, Logger),
 
-        workflow_engine:abandon(AtmWorkflowExecutionId, interrupt),
-        atm_lane_execution_handler:stop({current, current}, interrupt, AtmWorkflowExecutionCtx),
-        shut_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx)
-    catch throw:{session_acquisition_failed, _} = Reason ->
-        handle_exception(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, throw, Reason, [])
+        atm_lane_execution_handler:stop({current, current}, interrupt, AtmWorkflowExecutionCtx)
+    after
+        workflow_engine:abandon(AtmWorkflowExecutionId, interrupt)
     end,
 
     ok.
@@ -417,21 +415,43 @@ handle_workflow_execution_stopped(AtmWorkflowExecutionId, AtmWorkflowExecutionEn
     list()
 ) ->
     interrupt | crash.
-handle_exception(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, Type, Reason, Stacktrace) ->
+handle_exception(
+    AtmWorkflowExecutionId,
+    AtmWorkflowExecutionEnv,
+    ExceptionType,
+    ExceptionReason,
+    ExceptionStacktrace
+) ->
     AtmWorkflowExecutionCtx = get_root_workflow_execution_ctx(
         AtmWorkflowExecutionId, AtmWorkflowExecutionEnv
     ),
 
     Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
-    log_exception(Logger, Type, Reason, Stacktrace),
+    log_exception(Logger, ExceptionType, ExceptionReason, ExceptionStacktrace),
 
-    StoppingReason = case Type of
+    AbruptStoppingReason = case ExceptionType of
         throw -> interrupt;
         _ -> crash
     end,
-    atm_lane_execution_handler:stop({current, current}, StoppingReason, AtmWorkflowExecutionCtx),
 
-    StoppingReason.
+    case atm_lane_execution_handler:stop(
+        {current, current}, AbruptStoppingReason, AtmWorkflowExecutionCtx
+    ) of
+        {ok, _} ->
+            AbruptStoppingReason;
+
+        % if last lane run already stopped then abrupt stopping hasn't crashed
+        % and only workflow needs to be marked as stopped
+        ?ERROR_ATM_INVALID_STATUS_TRANSITION(Status, ?STOPPING_STATUS) ->
+            LastAtmLaneRunPhase = atm_lane_execution_status:status_to_phase(Status),
+            case lists:member(LastAtmLaneRunPhase, [?SUSPENDED_PHASE, ?ENDED_PHASE]) of
+                true -> AbruptStoppingReason;
+                _ -> crash
+            end;
+
+        {error, _} ->
+            crash
+    end.
 
 
 -spec handle_workflow_abruptly_stopped(
@@ -440,14 +460,18 @@ handle_exception(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, Type, Reason, 
     undefined | interrupt | crash
 ) ->
     workflow_handler:progress_data_persistence().
-handle_workflow_abruptly_stopped(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv, InterruptReason) ->
+handle_workflow_abruptly_stopped(
+    AtmWorkflowExecutionId,
+    AtmWorkflowExecutionEnv,
+    OriginalAbruptStoppingReason
+) ->
     AtmWorkflowExecutionCtx = get_root_workflow_execution_ctx(
         AtmWorkflowExecutionId, AtmWorkflowExecutionEnv
     ),
 
-    FinalInterruptReason = try
+    AbruptStoppingReason = try
         shut_workflow_execution_components(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
-        InterruptReason
+        utils:ensure_defined(OriginalAbruptStoppingReason, crash)
     catch Type:Reason:Stacktrace ->
         ?error_stacktrace(
             "Emergency atm workflow execution components shutdown failed due to ~p:~p",
@@ -457,7 +481,7 @@ handle_workflow_abruptly_stopped(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv
         crash
     end,
 
-    {ok, StoppedAtmWorkflowExecutionDoc} = case FinalInterruptReason of
+    {ok, StoppedAtmWorkflowExecutionDoc} = case AbruptStoppingReason of
         crash -> atm_workflow_execution_status:handle_crashed(AtmWorkflowExecutionId);
         _ -> atm_workflow_execution_status:handle_stopped(AtmWorkflowExecutionId)
     end,

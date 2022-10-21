@@ -75,6 +75,16 @@
 
 
 finish_atm_workflow_execution() ->
+    AssertActionsNotPossibleOnNotStoppedExecution = fun(AtmMockCallCtx) ->
+        atm_workflow_execution_test_runner:assert_not_stopped_atm_workflow_execution_can_be_neither_repeated_nor_resumed(
+            {1, 1}, AtmMockCallCtx
+        )
+    end,
+    Lane1Run1StepMockSpecBase = #atm_step_mock_spec{
+        before_step_hook = AssertActionsNotPossibleOnNotStoppedExecution,
+        after_step_hook = AssertActionsNotPossibleOnNotStoppedExecution
+    },
+
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         provider = ?PROVIDER_SELECTOR,
         user = ?USER_SELECTOR,
@@ -85,7 +95,13 @@ finish_atm_workflow_execution() ->
             incarnation_num = 1,
             lane_runs = [#atm_lane_run_execution_test_spec{
                 selector = {1, 1},
+                prepare_lane = Lane1Run1StepMockSpecBase,
+                create_run = Lane1Run1StepMockSpecBase,
+                run_task_for_item = Lane1Run1StepMockSpecBase,
+                process_task_result_for_item = Lane1Run1StepMockSpecBase,
+                handle_task_execution_stopped = Lane1Run1StepMockSpecBase,
                 handle_lane_execution_stopped = #atm_step_mock_spec{
+                    before_step_hook = AssertActionsNotPossibleOnNotStoppedExecution,
                     after_step_hook = fun(AtmMockCallCtx) ->
                         % While atm workflow execution as whole has not yet transition to finished status
                         % (last step remaining) the current lane run did. At this point stopping it
@@ -97,7 +113,9 @@ finish_atm_workflow_execution() ->
                                     StoppingReason, AtmMockCallCtx
                                 )
                             )
-                        end, ?STOPPING_REASONS)
+                        end, ?STOPPING_REASONS),
+
+                        AssertActionsNotPossibleOnNotStoppedExecution(AtmMockCallCtx)
                     end
                 }
             }],

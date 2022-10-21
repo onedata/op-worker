@@ -75,6 +75,9 @@
     cancel_paused_atm_workflow_execution/1,
     cancel_interrupted_atm_workflow_execution/1,
 
+    cancel_resuming_paused_atm_workflow_execution/1,
+    cancel_resuming_interrupted_atm_workflow_execution/1,
+
     pause_scheduled_atm_workflow_execution/1,
     pause_enqueued_atm_workflow_execution/1,
 
@@ -100,10 +103,17 @@
 
     crash_atm_workflow_execution_during_handle_exception_callback/1,
 
+    stopping_reason_interrupt_overrides_pause/1,
+
     stopping_reason_failure_overrides_pause/1,
+    stopping_reason_failure_overrides_interrupt/1,
+
     stopping_reason_cancel_overrides_pause/1,
+    stopping_reason_cancel_overrides_interrupt/1,
     stopping_reason_cancel_overrides_failure/1,
+
     stopping_reason_crash_overrides_pause/1,
+    stopping_reason_crash_overrides_interrupt/1,
     stopping_reason_crash_overrides_failure/1,
     stopping_reason_crash_overrides_cancel/1,
 
@@ -141,9 +151,6 @@
 
     map_results_to_multiple_stores/1,
 
-    repeat_not_ended_atm_workflow_execution/1,
-    repeat_crashed_atm_workflow_execution/1,
-
     repeat_finished_atm_lane_run_execution/1,
     rerun_failed_iterated_atm_lane_run_execution/1,
     retry_failed_iterated_atm_lane_run_execution/1,
@@ -152,9 +159,16 @@
     repeat_cancelled_atm_lane_run_execution/1,
 
     resume_atm_workflow_execution_paused_while_scheduled/1,
+    resume_atm_workflow_execution_interrupted_while_scheduled/1,
+
     resume_atm_workflow_execution_paused_while_preparing/1,
+    resume_atm_workflow_execution_interrupted_while_preparing/1,
+
     resume_atm_workflow_execution_paused_while_active/1,
-    resume_atm_workflow_execution_paused_after_all_tasks_finished/1
+    resume_atm_workflow_execution_interrupted_while_active/1,
+
+    resume_atm_workflow_execution_paused_after_all_tasks_finished/1,
+    resume_atm_workflow_execution_interrupted_after_all_tasks_finished/1
 ]).
 
 groups() -> [
@@ -215,7 +229,10 @@ groups() -> [
         cancel_active_atm_workflow_execution_with_uncorrelated_task_results,
 
         cancel_paused_atm_workflow_execution,
-        cancel_interrupted_atm_workflow_execution
+        cancel_interrupted_atm_workflow_execution,
+
+        cancel_resuming_paused_atm_workflow_execution,
+        cancel_resuming_interrupted_atm_workflow_execution
     ]},
 
     {pause_tests, [], [
@@ -250,10 +267,17 @@ groups() -> [
     ]},
 
     {stopping_tests, [], [
+        stopping_reason_interrupt_overrides_pause,
+
         stopping_reason_failure_overrides_pause,
+        stopping_reason_failure_overrides_interrupt,
+
         stopping_reason_cancel_overrides_pause,
+        stopping_reason_cancel_overrides_interrupt,
         stopping_reason_cancel_overrides_failure,
+
         stopping_reason_crash_overrides_pause,
+        stopping_reason_crash_overrides_interrupt,
         stopping_reason_crash_overrides_failure,
         stopping_reason_crash_overrides_cancel
     ]},
@@ -299,9 +323,6 @@ groups() -> [
     ]},
 
     {repeat_tests, [], [
-        repeat_not_ended_atm_workflow_execution,
-        repeat_crashed_atm_workflow_execution,
-
         repeat_finished_atm_lane_run_execution,
         rerun_failed_iterated_atm_lane_run_execution,
         retry_failed_iterated_atm_lane_run_execution,
@@ -312,9 +333,16 @@ groups() -> [
 
     {resume_tests, [], [
         resume_atm_workflow_execution_paused_while_scheduled,
+        resume_atm_workflow_execution_interrupted_while_scheduled,
+
         resume_atm_workflow_execution_paused_while_preparing,
+        resume_atm_workflow_execution_interrupted_while_preparing,
+
         resume_atm_workflow_execution_paused_while_active,
-        resume_atm_workflow_execution_paused_after_all_tasks_finished
+        resume_atm_workflow_execution_interrupted_while_active,
+
+        resume_atm_workflow_execution_paused_after_all_tasks_finished,
+        resume_atm_workflow_execution_interrupted_after_all_tasks_finished
     ]}
 ].
 
@@ -513,6 +541,14 @@ cancel_interrupted_atm_workflow_execution(_Config) ->
     ?RUN_CANCEL_TEST().
 
 
+cancel_resuming_paused_atm_workflow_execution(_Config) ->
+    ?RUN_CANCEL_TEST().
+
+
+cancel_resuming_interrupted_atm_workflow_execution(_Config) ->
+    ?RUN_CANCEL_TEST().
+
+
 pause_scheduled_atm_workflow_execution(_Config) ->
     ?RUN_PAUSE_TEST().
 
@@ -577,11 +613,23 @@ crash_atm_workflow_execution_during_handle_exception_callback(_Config) ->
     ?RUN_CRASH_TEST().
 
 
+stopping_reason_interrupt_overrides_pause(_Config) ->
+    ?RUN_STOPPING_TEST().
+
+
 stopping_reason_failure_overrides_pause(_Config) ->
     ?RUN_STOPPING_TEST().
 
 
+stopping_reason_failure_overrides_interrupt(_Config) ->
+    ?RUN_STOPPING_TEST().
+
+
 stopping_reason_cancel_overrides_pause(_Config) ->
+    ?RUN_STOPPING_TEST().
+
+
+stopping_reason_cancel_overrides_interrupt(_Config) ->
     ?RUN_STOPPING_TEST().
 
 
@@ -590,6 +638,10 @@ stopping_reason_cancel_overrides_failure(_Config) ->
 
 
 stopping_reason_crash_overrides_pause(_Config) ->
+    ?RUN_STOPPING_TEST().
+
+
+stopping_reason_crash_overrides_interrupt(_Config) ->
     ?RUN_STOPPING_TEST().
 
 
@@ -701,14 +753,6 @@ map_results_to_multiple_stores(_Config) ->
     ?RUN_MAPPING_TEST().
 
 
-repeat_not_ended_atm_workflow_execution(_Config) ->
-    ?RUN_REPEAT_TEST().
-
-
-repeat_crashed_atm_workflow_execution(_Config) ->
-    ?RUN_REPEAT_TEST().
-
-
 repeat_finished_atm_lane_run_execution(_Config) ->
     ?RUN_REPEAT_TEST().
 
@@ -737,7 +781,15 @@ resume_atm_workflow_execution_paused_while_scheduled(_Config) ->
     ?RUN_RESUME_TEST().
 
 
+resume_atm_workflow_execution_interrupted_while_scheduled(_Config) ->
+    ?RUN_RESUME_TEST().
+
+
 resume_atm_workflow_execution_paused_while_preparing(_Config) ->
+    ?RUN_RESUME_TEST().
+
+
+resume_atm_workflow_execution_interrupted_while_preparing(_Config) ->
     ?RUN_RESUME_TEST().
 
 
@@ -745,7 +797,15 @@ resume_atm_workflow_execution_paused_while_active(_Config) ->
     ?RUN_RESUME_TEST().
 
 
+resume_atm_workflow_execution_interrupted_while_active(_Config) ->
+    ?RUN_RESUME_TEST().
+
+
 resume_atm_workflow_execution_paused_after_all_tasks_finished(_Config) ->
+    ?RUN_RESUME_TEST().
+
+
+resume_atm_workflow_execution_interrupted_after_all_tasks_finished(_Config) ->
     ?RUN_RESUME_TEST().
 
 

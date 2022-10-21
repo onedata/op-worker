@@ -63,13 +63,18 @@
     repeat_workflow_execution/3,
     resume_workflow_execution/1,
 
-    delete_offline_session/1
+    delete_offline_session/1,
+    report_openfaas_unhealthy/1
 ]).
 -export([
     browse_store/2, browse_store/3,
     get_exception_store_content/2
 ]).
--export([assert_ended_atm_workflow_execution_can_be_neither_stopped_nor_resumed/1]).
+-export([
+    assert_ended_atm_workflow_execution_can_be_neither_stopped_nor_resumed/1,
+    assert_not_stopped_atm_workflow_execution_can_be_neither_repeated_nor_resumed/2,
+    assert_not_ended_atm_workflow_execution_can_not_be_repeated/2
+]).
 
 -type step_name() ::
     prepare_lane |
@@ -334,6 +339,16 @@ delete_offline_session(#atm_mock_call_ctx{
     ?erpc(ProviderSelector, offline_access_manager:close_session(AtmWorkflowExecutionId)).
 
 
+-spec report_openfaas_unhealthy(mock_call_ctx()) -> ok | no_return().
+report_openfaas_unhealthy(#atm_mock_call_ctx{
+    provider = ProviderSelector,
+    workflow_execution_id = AtmWorkflowExecutionId
+}) ->
+    ?erpc(ProviderSelector, atm_workflow_execution_handler:on_openfaas_down(
+        AtmWorkflowExecutionId, ?ERROR_ATM_OPENFAAS_UNHEALTHY
+    )).
+
+
 -spec browse_store(automation:id(), mock_call_ctx()) -> json_utils:json_term().
 browse_store(AtmStoreSchemaId, AtmMockCallCtx) ->
     browse_store(AtmStoreSchemaId, undefined, AtmMockCallCtx).
@@ -383,6 +398,35 @@ assert_ended_atm_workflow_execution_can_be_neither_stopped_nor_resumed(AtmMockCa
     ),
 
     ?assert(atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState0, 0)).
+
+
+-spec assert_not_stopped_atm_workflow_execution_can_be_neither_repeated_nor_resumed(
+    atm_lane_execution:lane_run_selector(),
+    mock_call_ctx()
+) ->
+    ok.
+assert_not_stopped_atm_workflow_execution_can_be_neither_repeated_nor_resumed(AtmLaneRunSelector, AtmMockCallCtx) ->
+    ?assertThrow(
+        ?ERROR_ATM_WORKFLOW_EXECUTION_NOT_RESUMABLE,
+        atm_workflow_execution_test_runner:resume_workflow_execution(AtmMockCallCtx)
+    ),
+    assert_not_ended_atm_workflow_execution_can_not_be_repeated(AtmLaneRunSelector, AtmMockCallCtx).
+
+
+-spec assert_not_ended_atm_workflow_execution_can_not_be_repeated(
+    atm_lane_execution:lane_run_selector(),
+    mock_call_ctx()
+) ->
+    ok.
+assert_not_ended_atm_workflow_execution_can_not_be_repeated(AtmLaneRunSelector, AtmMockCallCtx) ->
+    lists:foreach(fun(RepeatType) ->
+        ?assertThrow(
+            ?ERROR_ATM_WORKFLOW_EXECUTION_NOT_ENDED,
+            atm_workflow_execution_test_runner:repeat_workflow_execution(
+                RepeatType, AtmLaneRunSelector, AtmMockCallCtx
+            )
+        )
+    end, [rerun, retry]).
 
 
 %%%===================================================================
