@@ -161,7 +161,10 @@
     resume_atm_workflow_execution_paused_while_scheduled/1,
     resume_atm_workflow_execution_paused_while_preparing/1,
     resume_atm_workflow_execution_paused_while_active/1,
-    resume_atm_workflow_execution_paused_after_all_tasks_finished/1
+    resume_atm_workflow_execution_interrupted_while_active/1,
+
+    resume_atm_workflow_execution_paused_after_all_tasks_finished/1,
+    resume_atm_workflow_execution_interrupted_after_all_tasks_finished/1
 ]).
 
 groups() -> [
@@ -328,7 +331,10 @@ groups() -> [
         resume_atm_workflow_execution_paused_while_scheduled,
         resume_atm_workflow_execution_paused_while_preparing,
         resume_atm_workflow_execution_paused_while_active,
-        resume_atm_workflow_execution_paused_after_all_tasks_finished
+        resume_atm_workflow_execution_interrupted_while_active,
+
+        resume_atm_workflow_execution_paused_after_all_tasks_finished,
+        resume_atm_workflow_execution_interrupted_after_all_tasks_finished
     ]}
 ].
 
@@ -775,7 +781,15 @@ resume_atm_workflow_execution_paused_while_active(_Config) ->
     ?RUN_RESUME_TEST().
 
 
+resume_atm_workflow_execution_interrupted_while_active(_Config) ->
+    ?RUN_RESUME_TEST().
+
+
 resume_atm_workflow_execution_paused_after_all_tasks_finished(_Config) ->
+    ?RUN_RESUME_TEST().
+
+
+resume_atm_workflow_execution_interrupted_after_all_tasks_finished(_Config) ->
     ?RUN_RESUME_TEST().
 
 

@@ -21,7 +21,10 @@
     resume_atm_workflow_execution_paused_while_scheduled/0,
     resume_atm_workflow_execution_paused_while_preparing/0,
     resume_atm_workflow_execution_paused_while_active/0,
-    resume_atm_workflow_execution_paused_after_all_tasks_finished/0
+    resume_atm_workflow_execution_interrupted_while_active/0,
+
+    resume_atm_workflow_execution_paused_after_all_tasks_finished/0,
+    resume_atm_workflow_execution_interrupted_after_all_tasks_finished/0
 ]).
 
 
@@ -265,6 +268,15 @@ resume_atm_workflow_execution_paused_while_preparing() ->
 
 
 resume_atm_workflow_execution_paused_while_active() ->
+    resume_atm_workflow_execution_suspended_while_active_test_base(?FUNCTION_NAME, pause).
+
+
+resume_atm_workflow_execution_interrupted_while_active() ->
+    resume_atm_workflow_execution_suspended_while_active_test_base(?FUNCTION_NAME, interrupt).
+
+
+%% @private
+resume_atm_workflow_execution_suspended_while_active_test_base(Testcase, SuspendMethod) ->
     ResumedLaneRunBaseTestSpec = build_failed_atm_lane1_run_execution_test_spec(
         {1, 1}, {0, 0, 6}, {0, 3, 6}, [2, 4, 6], false
     ),
@@ -274,7 +286,7 @@ resume_atm_workflow_execution_paused_while_active() ->
         user = ?USER_SELECTOR,
         space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
-            ?FUNCTION_NAME,
+            Testcase,
             [1, 2, 3, 4, 5, 6],
             ?ECHO_WITH_EXCEPTION_ON_EVEN_NUMBERS
         ),
@@ -288,7 +300,7 @@ resume_atm_workflow_execution_paused_while_active() ->
                         run_task_for_item = #atm_step_mock_spec{
                             strategy = fun(#atm_mock_call_ctx{call_args = [_, _, _, _, [Item]]}) ->
                                 case lists:member(Item, [4, 5, 6]) of
-                                    % Delay execution of last batch to ensure it happens after execution is paused
+                                    % Delay execution of last batch to ensure it happens after execution is suspended
                                     true -> {passthrough_with_delay, timer:seconds(1)};
                                     false -> passthrough
                                 end
@@ -296,20 +308,24 @@ resume_atm_workflow_execution_paused_while_active() ->
                         },
                         process_task_result_for_item = 'build mock spec for process_task_result_for_item step'(),
                         handle_task_execution_stopped = #atm_step_mock_spec{
-                            before_step_hook = fun atm_workflow_execution_test_runner:pause_workflow_execution/1,
+                            before_step_hook = get_suspend_hook(SuspendMethod),
 
                             before_step_exp_state_diff = fun(#atm_mock_call_ctx{
                                 workflow_execution_exp_state = ExpState0,
                                 call_args = [_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId]
                             }) ->
                                 assert_lane1_tasks_stats(AtmTaskExecutionId, {0, 0, 6}, {0, 1, 3}, ExpState0),
-                                {true, expect_execution_stopping_while_processing_lane1(ExpState0, pause)}
+                                {true, expect_execution_stopping_while_processing_lane1(ExpState0, SuspendMethod)}
                             end,
                             after_step_exp_state_diff = fun(#atm_mock_call_ctx{
                                 workflow_execution_exp_state = ExpState0,
                                 call_args = [_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId]
                             }) ->
-                                {true, expect_lane1_pb_stopped(<<"paused">>, AtmTaskExecutionId, ExpState0)}
+                                ExpAtmTaskExecutionFinalStatus = case SuspendMethod of
+                                    pause -> <<"paused">>;
+                                    interrupt -> <<"interrupted">>
+                                end,
+                                {true, expect_lane1_pb_stopped(ExpAtmTaskExecutionFinalStatus, AtmTaskExecutionId, ExpState0)}
                             end
                         },
                         handle_lane_execution_stopped = #atm_step_mock_spec{
@@ -317,7 +333,7 @@ resume_atm_workflow_execution_paused_while_active() ->
                                 workflow_execution_exp_state = ExpState
                             }) ->
                                 ?assertEqual([2], lists:sort(get_exception_store_content({1, 1}, AtmMockCallCtx))),
-                                {true, atm_workflow_execution_exp_state_builder:expect_lane_run_paused({1, 1}, ExpState)}
+                                {true, expect_lane_run_suspended(SuspendMethod, {1, 1}, ExpState)}
                             end
                         }
                     },
@@ -331,7 +347,7 @@ resume_atm_workflow_execution_paused_while_active() ->
                 ],
                 handle_workflow_execution_stopped = #atm_step_mock_spec{
                     after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
-                        {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_paused(ExpState0)}
+                        {true, expect_workflow_execution_suspended(SuspendMethod, ExpState0)}
                     end
                 },
                 after_hook = fun atm_workflow_execution_test_runner:resume_workflow_execution/1
