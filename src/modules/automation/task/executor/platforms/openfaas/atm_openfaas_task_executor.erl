@@ -119,7 +119,8 @@ initiate(AtmTaskExecutorInitiationCtx = #atm_task_executor_initiation_ctx{
         executor = AtmTaskExecutor
     },
 
-    % Ensure there is no function with generated name
+    % Ensure there is no function with specified name registered in OpenFaaS service
+    % (may be e.g. remnant of previous executions)
     remove_function(AtmWorkflowExecutionCtx, AtmTaskExecutor),
     case await_function_removal(InitiationCtx, ?AWAIT_RETRIES) of
         true -> ok;

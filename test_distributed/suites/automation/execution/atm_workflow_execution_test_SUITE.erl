@@ -76,6 +76,7 @@
     cancel_interrupted_atm_workflow_execution/1,
 
     cancel_resuming_paused_atm_workflow_execution/1,
+    cancel_resuming_interrupted_atm_workflow_execution/1,
 
     pause_scheduled_atm_workflow_execution/1,
     pause_enqueued_atm_workflow_execution/1,
@@ -224,7 +225,10 @@ groups() -> [
         cancel_active_atm_workflow_execution_with_uncorrelated_task_results,
 
         cancel_paused_atm_workflow_execution,
-        cancel_interrupted_atm_workflow_execution
+        cancel_interrupted_atm_workflow_execution,
+
+        cancel_resuming_paused_atm_workflow_execution,
+        cancel_resuming_interrupted_atm_workflow_execution
     ]},
 
     {pause_tests, [], [
@@ -530,6 +534,10 @@ cancel_interrupted_atm_workflow_execution(_Config) ->
 
 
 cancel_resuming_paused_atm_workflow_execution(_Config) ->
+    ?RUN_CANCEL_TEST().
+
+
+cancel_resuming_interrupted_atm_workflow_execution(_Config) ->
     ?RUN_CANCEL_TEST().
 
 
