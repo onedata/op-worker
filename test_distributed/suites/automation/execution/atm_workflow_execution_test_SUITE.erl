@@ -75,6 +75,8 @@
     cancel_paused_atm_workflow_execution/1,
     cancel_interrupted_atm_workflow_execution/1,
 
+    cancel_resuming_paused_atm_workflow_execution/1,
+
     pause_scheduled_atm_workflow_execution/1,
     pause_enqueued_atm_workflow_execution/1,
 
@@ -263,7 +265,7 @@ groups() -> [
         stopping_reason_failure_overrides_interrupt,
 
         stopping_reason_cancel_overrides_pause,
-%%        stopping_reason_cancel_overrides_interrupt  %% TODO VFS-9917 fix and uncomment
+        stopping_reason_cancel_overrides_interrupt,
         stopping_reason_cancel_overrides_failure,
 
         stopping_reason_crash_overrides_pause,
@@ -524,6 +526,10 @@ cancel_paused_atm_workflow_execution(_Config) ->
 
 
 cancel_interrupted_atm_workflow_execution(_Config) ->
+    ?RUN_CANCEL_TEST().
+
+
+cancel_resuming_paused_atm_workflow_execution(_Config) ->
     ?RUN_CANCEL_TEST().
 
 
