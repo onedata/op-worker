@@ -175,7 +175,7 @@ resume_atm_workflow_execution_interrupted_while_scheduled() ->
             #atm_lane_run_execution_test_spec{
                 selector = {2, 1},
                 prepare_lane = #atm_step_mock_spec{
-                    defer_after = {prepare_lane, after_step, {1, 1}},
+                    defer_after = {handle_exception, after_step, 1},
                     after_step_exp_state_diff = no_diff
                 }
             }
