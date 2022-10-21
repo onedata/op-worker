@@ -24,7 +24,9 @@
     cancel_active_atm_workflow_execution_with_uncorrelated_task_results/0,
 
     cancel_paused_atm_workflow_execution/0,
-    cancel_interrupted_atm_workflow_execution/0
+    cancel_interrupted_atm_workflow_execution/0,
+
+    cancel_resuming_paused_atm_workflow_execution/0
 ]).
 
 
@@ -375,49 +377,19 @@ cancel_active_atm_workflow_execution_test_base(Testcase, RelayMethod) ->
 
 
 cancel_paused_atm_workflow_execution() ->
+    PausedIncarnation = build_paused_active_incarnation_test_spec(),
+
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         provider = ?PROVIDER_SELECTOR,
         user = ?USER_SELECTOR,
         space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?ECHO_ATM_WORKFLOW_SCHEMA_DRAFT,
         workflow_schema_revision_num = 1,
-        incarnations = [#atm_workflow_execution_incarnation_test_spec{
-            incarnation_num = 1,
-            lane_runs = [
-                #atm_lane_run_execution_test_spec{
-                    selector = {1, 1}
-                },
-                #atm_lane_run_execution_test_spec{
-                    selector = {2, 1},
-                    process_task_result_for_item = #atm_step_mock_spec{
-                        before_step_hook = fun atm_workflow_execution_test_runner:pause_workflow_execution/1,
-
-                        before_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
-                            {true, expect_execution_stopping_while_processing_lane2(ExpState0, pause)}
-                        end
-                    },
-                    handle_task_execution_stopped = #atm_step_mock_spec{
-                        after_step_exp_state_diff = fun(#atm_mock_call_ctx{
-                            workflow_execution_exp_state = ExpState0,
-                            call_args = [_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId]
-                        }) ->
-                            {true, expect_lane2_pb_stopped(<<"paused">>, AtmTaskExecutionId, ExpState0)}
-                        end
-                    },
-                    handle_lane_execution_stopped = #atm_step_mock_spec{
-                        after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
-                            {true, atm_workflow_execution_exp_state_builder:expect_lane_run_paused({2, 1}, ExpState0)}
-                        end
-                    }
-                }
-            ],
-            handle_workflow_execution_stopped = #atm_step_mock_spec{
-                after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
-                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_paused(ExpState0)}
-                end
-            },
-            after_hook = fun cancel_suspended_atm_workflow_execution/1
-        }]
+        incarnations = [
+            PausedIncarnation#atm_workflow_execution_incarnation_test_spec{
+                after_hook = fun cancel_suspended_atm_workflow_execution/1
+            }
+        ]
     }).
 
 
@@ -467,9 +439,99 @@ cancel_interrupted_atm_workflow_execution() ->
     }).
 
 
+cancel_resuming_paused_atm_workflow_execution() ->
+    cancel_resuming_atm_workflow_execution_test_base(build_paused_active_incarnation_test_spec()).
+
+
+%% @private
+cancel_resuming_atm_workflow_execution_test_base(SuspendedIncarnation) ->
+    atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
+        provider = ?PROVIDER_SELECTOR,
+        user = ?USER_SELECTOR,
+        space = ?SPACE_SELECTOR,
+        workflow_schema_dump_or_draft = ?ECHO_ATM_WORKFLOW_SCHEMA_DRAFT,
+        workflow_schema_revision_num = 1,
+        incarnations = [
+            SuspendedIncarnation#atm_workflow_execution_incarnation_test_spec{
+                after_hook = fun atm_workflow_execution_test_runner:resume_workflow_execution/1
+            },
+            #atm_workflow_execution_incarnation_test_spec{
+                incarnation_num = 2,
+                lane_runs = [
+                    #atm_lane_run_execution_test_spec{
+                        selector = {2, 1},
+                        resume_lane = #atm_step_mock_spec{
+                            before_step_hook = fun atm_workflow_execution_test_runner:cancel_workflow_execution/1,
+                            before_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                                ExpState1 = atm_workflow_execution_exp_state_builder:expect_all_tasks_cancelled({2, 1}, ExpState0),
+                                ExpState2 = atm_workflow_execution_exp_state_builder:expect_lane_run_stopping({2, 1}, ExpState1),
+                                {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(ExpState2)}
+                            end
+                        },
+                        % This is called from within 'resume_lane'
+                        handle_lane_execution_stopped = #atm_step_mock_spec{
+                            after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                                {true, atm_workflow_execution_exp_state_builder:expect_lane_run_cancelled({2, 1}, ExpState0)}
+                            end
+                        }
+                    }
+                ],
+                handle_workflow_execution_stopped = #atm_step_mock_spec{
+                    after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                        ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_rerunable(
+                            [{1, 1}, {2, 1}], ExpState0
+                        ),
+                        {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_cancelled(ExpState1)}
+                    end
+                }
+            }
+        ]
+    }).
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+build_paused_active_incarnation_test_spec() ->
+    #atm_workflow_execution_incarnation_test_spec{
+        incarnation_num = 1,
+        lane_runs = [
+            #atm_lane_run_execution_test_spec{
+                selector = {1, 1}
+            },
+            #atm_lane_run_execution_test_spec{
+                selector = {2, 1},
+                process_task_result_for_item = #atm_step_mock_spec{
+                    before_step_hook = fun atm_workflow_execution_test_runner:pause_workflow_execution/1,
+
+                    before_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                        {true, expect_execution_stopping_while_processing_lane2(ExpState0, pause)}
+                    end
+                },
+                handle_task_execution_stopped = #atm_step_mock_spec{
+                    after_step_exp_state_diff = fun(#atm_mock_call_ctx{
+                        workflow_execution_exp_state = ExpState0,
+                        call_args = [_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId]
+                    }) ->
+                        {true, expect_lane2_pb_stopped(<<"paused">>, AtmTaskExecutionId, ExpState0)}
+                    end
+                },
+                handle_lane_execution_stopped = #atm_step_mock_spec{
+                    after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                        {true, atm_workflow_execution_exp_state_builder:expect_lane_run_paused({2, 1}, ExpState0)}
+                    end
+                }
+            }
+        ],
+        handle_workflow_execution_stopped = #atm_step_mock_spec{
+            after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_paused(ExpState0)}
+            end
+        }
+    }.
 
 
 %% @private
