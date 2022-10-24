@@ -45,7 +45,7 @@
     on_cancel_init/2, task_canceled/2, task_finished/2]).
 
 %% File_meta posthooks used during tests
--export([test_posthook/1]).
+-export([test_posthook/2]).
 
 -define(TEST_CASES, [
     initial_sync_repeat_test, resynchronization_test, db_sync_basic_opts_test, db_sync_many_ops_test,
@@ -660,7 +660,7 @@ initial_sync_repeat_test(Config) ->
     Master = self(),
     test_utils:mock_expect(Worker1, dbsync_changes, apply, fun
         (#document{key = Key, value = #file_meta{}} = Doc) when Key =:= Worker2RootUuid ->
-            Master ! {worker2_root_synced, self()},
+            Master ! {file_synced, Key, self()},
             receive
                 proceed -> meck:passthrough([Doc])
             end;
@@ -669,15 +669,9 @@ initial_sync_repeat_test(Config) ->
     end),
     ?assertEqual(ok, test_utils:mock_unload(Worker1, dbsync_utils)),
 
-    check_synchronization_params_on_root_sync(Worker1, SpaceId, Provider2Id, Worker2RootUuid, initial_sync),
-    check_synchronization_params_on_root_sync(Worker1, SpaceId, Provider2Id, Worker2RootUuid, resynchronization),
-
-    ?assertEqual(posthook_executed, receive
-        posthook_executed -> posthook_executed
-    after
-        timer:seconds(30) ->
-            timeout
-    end),
+    add_posthooks_on_file_sync(Worker1, SpaceId, Provider2Id, initial_sync, [<<"1">>, <<"2">>]),
+    add_posthooks_on_file_sync(Worker1, SpaceId, Provider2Id, resynchronization, [<<"3">>]),
+    verify_posthooks_called([<<"1">>, <<"3">>]),
 
     lists:foreach(fun(Guid) ->
         ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessId1, ?FILE_REF(Guid)), 60)
@@ -729,7 +723,10 @@ init_per_testcase(initial_sync_repeat_test = Case, Config) ->
     test_utils:mock_expect(Worker, qos_hooks, reconcile_qos, fun(_, _) ->
         ok
     end),
-    test_utils:set_env(Worker, ?APP_NAME, max_file_meta_posthooks, 0),
+    test_utils:mock_expect(Worker, qos_hooks, reconcile_qos, fun(_) ->
+        ok
+    end),
+    test_utils:set_env(Worker, ?APP_NAME, max_file_meta_posthooks, 1),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 60}),
@@ -754,7 +751,7 @@ end_per_testcase(db_sync_basic_opts_with_errors_test = Case, Config) ->
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(resynchronization_test = Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Worker, [dbsync_changes, dbsync_utils]),
+    test_utils:mock_unload(Worker, [dbsync_changes]),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(initial_sync_repeat_test = Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
@@ -904,16 +901,18 @@ get_expected_jobs() ->
         1551,1552,1553,1556,1557, 1558].
 
 
-check_synchronization_params_on_root_sync(Worker, SpaceId, ProviderId, Worker2RootUuid, Mode) ->
+add_posthooks_on_file_sync(Worker, SpaceId, ProviderId, ExpectedSyncMode, Posthooks) ->
     Master = self(),
     CheckAns = receive
-        {worker2_root_synced, DbsyncProc} ->
+        {file_synced, Uuid, DbsyncProc} ->
             ?assertMatch(#synchronization_params{
-                mode = Mode,
+                mode = ExpectedSyncMode,
                 included_mutators = ?ALL_MUTATORS_EXCEPT_SENDER
             }, rpc:call(Worker, dbsync_state, get_synchronization_params, [SpaceId, ProviderId])),
-            rpc:call(Worker, file_meta_posthooks, add_hook, [
-                {file_meta_missing, Worker2RootUuid}, <<"xyz">>, SpaceId, ?MODULE, test_posthook, [Master]]),
+            lists:foreach(fun(PosthookName) ->
+                ?assertEqual(ok, rpc:call(Worker, file_meta_posthooks, add_hook, [
+                    {file_meta_missing, Uuid}, PosthookName, SpaceId, ?MODULE, test_posthook, [Master, PosthookName]]))
+            end, Posthooks),    
             DbsyncProc ! proceed,
             ok
     after
@@ -923,5 +922,17 @@ check_synchronization_params_on_root_sync(Worker, SpaceId, ProviderId, Worker2Ro
     ?assertEqual(ok, CheckAns).
 
 
-test_posthook(Master) ->
-    Master ! posthook_executed.
+test_posthook(Master, PosthookName) ->
+    Master ! {posthook_executed, PosthookName},
+    ok.
+
+
+verify_posthooks_called(ExpectedPosthooks) ->
+    receive
+        {posthook_executed, PosthookName} ->
+            ?assert(lists:member(PosthookName, ExpectedPosthooks)),
+            verify_posthooks_called(ExpectedPosthooks -- [PosthookName])
+    after
+        timer:seconds(5) ->
+            ?assertEqual([], ExpectedPosthooks)
+    end.
