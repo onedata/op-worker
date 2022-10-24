@@ -245,10 +245,7 @@ archive_metadata(ArchiveDirCtx, UserCtx, RelativeFilePath, ArchivedFileCtx) ->
 %% @private
 -spec calculate_relative_path(archive:doc(), file_meta:path(), user_ctx:ctx()) -> file_meta:path().
 calculate_relative_path(ArchiveDoc, SourceFilePath, UserCtx) ->
-    {ok, DatasetRootFileCtx} = archive:get_dataset_root_file_ctx(ArchiveDoc),
-    {DatasetRootPath, _} = file_ctx:get_logical_path(DatasetRootFileCtx, UserCtx),
-    {_, DatasetRootParentPath} = filepath_utils:basename_and_parent_dir(DatasetRootPath),
-
+    {ok, DatasetRootParentPath} = archive:get_dataset_root_parent_path(ArchiveDoc, UserCtx),
     filename:join([?BAGIT_DATA_DIR_NAME, filepath_utils:relative(DatasetRootParentPath, SourceFilePath)]).
 
 
