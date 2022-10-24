@@ -62,7 +62,8 @@ start() ->
         {'_', [
             {?LE_CHALLENGE_PATH ++ "/[...]", cowboy_static, {dir, ?LE_CHALLENGE_ROOT}},
             % TODO VFS-7628 make openfaas respond to https
-            {?ATM_TASK_FINISHED_CALLBACK_PATH ++ "[...]", workflow_engine_callback_handler, []},
+            {?ATM_JOB_OUTPUT_CALLBACK_PATH, atm_openfaas_task_callback_handler, #{type => output}},
+            {?ATM_JOB_HEARTBEAT_CALLBACK_PATH, atm_openfaas_task_callback_handler, #{type => heartbeat}},
             {'_', redirector_handler, https_listener:port()}
         ]}
     ]),

@@ -11,10 +11,11 @@
 %%% workflow_engine:execute_workflow/2 function is called.
 %%% Name of module implementing callback is provided to workflow engine as an
 %%% argument to execute_workflow/2 function. The execution can be cancelled
-%%% either by calling workflow_engine:cancel_execution/1 function (external cancel)
+%%% either by calling workflow_engine:init_cancel_procedure/1 function followed
+%%% by workflow_engine:finish_cancel_procedure/1 function call (external cancel)
 %%% or by workflow engine as a result or error (internal cancel when number of
 %%% callbacks' errors is greater than failure_count_to_cancel lane parameter).
-%%% Workflow execution ends when handle_lane_execution_ended callback returns
+%%% Workflow execution ends when handle_lane_execution_stopped callback returns
 %%% ?END_EXECUTION or as a result of external or internal cancellation.
 %%%
 %%% Execution of workflow consists of execution of lanes. Each lane consists
@@ -27,11 +28,11 @@
 %%% prepared by calling prepare_lane callback before any task is executed.
 %%% Lane can be prepared right before execution of task or be prepared in advance
 %%% during execution of previous lane. Lane to be executed and prepared in
-%%% advance are returned by handle_lane_execution_ended callback for previous lane.
+%%% advance are returned by handle_lane_execution_stopped callback for previous lane.
 %%% Thus, lane prepared in advance does not have to be always executed after
-%%% preparation as handle_lane_execution_ended for lane currently being executed can
+%%% preparation as handle_lane_execution_stopped for lane currently being executed can
 %%% ignore prepared in advance lane and return other lane to be executed next.
-%%% handle_lane_execution_ended callback can also return currently executed lane id
+%%% handle_lane_execution_stopped callback can also return currently executed lane id
 %%% to retry lane. In such a case lane is prepared for second time.
 %%% @end
 %%%--------------------------------------------------------------------
@@ -44,17 +45,17 @@
 -type handler() :: module().
 -type async_processing_basic_result() :: term().
 -type async_processing_result() :: async_processing_basic_result() | ?ERROR_MALFORMED_DATA | ?ERROR_TIMEOUT.
--type handler_execution_result() :: ok | error.
+-type handler_execution_result() :: ok | error. % NOTE - run_task_for_item can return {error, _} what is
+                                                % translated to error by workflow_engine.
 -type prepare_lane_result() :: {ok, workflow_engine:lane_spec()} | error.
--type lane_ended_callback_result() :: ?CONTINUE(workflow_engine:lane_id(), workflow_engine:lane_id()) |
+-type lane_stopped_callback_result() :: ?CONTINUE(workflow_engine:lane_id(), workflow_engine:lane_id()) |
     ?END_EXECUTION. % engine does not distinguish reason of execution finish - ?END_EXECUTION is returned
                        % if processed lane is last lane as well as on error
-% TODO VFS-7787 move following types to callback server:
--type finished_callback_id() :: binary().
--type heartbeat_callback_id() :: binary().
+-type progress_data_persistence() :: save_progress | save_iterator | clean_progress.
+-type abrupt_stop_reason() :: term().
 
 -export_type([handler/0, async_processing_result/0, handler_execution_result/0, prepare_lane_result/0,
-    lane_ended_callback_result/0, finished_callback_id/0, heartbeat_callback_id/0]).
+    lane_stopped_callback_result/0, progress_data_persistence/0, abrupt_stop_reason/0]).
 
 %%%===================================================================
 %%% Callbacks descriptions
@@ -77,12 +78,12 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Callback to get lane spec when execution is restarted from snapshot.
+%% Callback to get lane spec when execution is resumed from snapshot.
 %% TODO - VFS-8495 - integrate with atm workflow resume and decide
 %% if resume should result in clean start
 %% @end
 %%--------------------------------------------------------------------
--callback restart_lane(
+-callback resume_lane(
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
     workflow_engine:lane_id()
@@ -104,11 +105,10 @@
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
     workflow_engine:task_id(),
-    iterator:item(),
-    finished_callback_id(),
-    heartbeat_callback_id()
+    workflow_jobs:encoded_job_identifier(),
+    iterator:item()
 ) ->
-    handler_execution_result().
+    ok | {error, running_item_failed} | {error, task_already_stopping} | {error, task_already_stopped}.
 
 
 %%--------------------------------------------------------------------
@@ -177,12 +177,12 @@
 %% outputs processed and all streamed task data was processed (in case
 %% the task had data stream). This callback is executed once for each task.
 %% It is guaranteed that callback is called before call of
-%% handle_lane_execution_ended callback for task's lane.
+%% handle_lane_execution_stopped callback for task's lane.
 %% Warning: there is no guarantee that callbacks for tasks are called
 %% exactly the same order as the tasks were finished.
 %% @end
 %%--------------------------------------------------------------------
--callback handle_task_execution_ended(
+-callback handle_task_execution_stopped(
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
     workflow_engine:task_id()
@@ -196,22 +196,56 @@
 %% for all items. It will be called exactly once for lane.
 %% @end
 %%--------------------------------------------------------------------
--callback handle_lane_execution_ended(
+-callback handle_lane_execution_stopped(
     workflow_engine:execution_id(),
     workflow_engine:execution_context(),
     workflow_engine:lane_id()
 ) ->
-    lane_ended_callback_result().
+    lane_stopped_callback_result().
 
 
 %%--------------------------------------------------------------------
 %% @doc
 %% Callback reporting that all tasks in given workflow have been
-%% executed for all items. It will be called exactly once.
+%% executed for all items or workflow has been cancelled and no task
+%% is being processed. It will be called exactly once if an exception
+%% has not appeared nor workflow has been abandoned.
 %% @end
 %%--------------------------------------------------------------------
--callback handle_workflow_execution_ended(
+-callback handle_workflow_execution_stopped(
     workflow_engine:execution_id(),
     workflow_engine:execution_context()
 ) ->
-    ok.
+    progress_data_persistence().
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Callback reporting that has been abandoned or exception appeared
+%% and no task is being processed. It will be called exactly once after
+%% exception or abandon.
+%% @end
+%%--------------------------------------------------------------------
+-callback handle_workflow_abruptly_stopped(
+    workflow_engine:execution_id(),
+    workflow_engine:execution_context(),
+    undefined | abrupt_stop_reason()
+) ->
+    progress_data_persistence().
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Callback called when uncaught exception was raised from any callback.
+%% While it is called all other callbacks processing is put on hold.
+%% Depending on exception handling execution is either resumed or aborted.
+%% @end
+%%--------------------------------------------------------------------
+-callback handle_exception(
+    workflow_engine:execution_id(),
+    workflow_engine:execution_context(),
+    throw | error | exit,
+    term(),
+    list()
+) ->
+    abrupt_stop_reason().

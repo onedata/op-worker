@@ -28,6 +28,7 @@
 %% API
 -export([
     create/4,
+    copy/1,
     get_store_type/1, get_config/1, get_iterated_item_data_spec/1,
     acquire_iterator/1,
     browse_content/2,
@@ -95,6 +96,8 @@
 ) ->
     record() | no_return().
 
+-callback copy(record()) -> record() | no_return().
+
 -callback get_config(record()) -> atm_store_config:record().
 
 %%-------------------------------------------------------------------
@@ -139,6 +142,12 @@
 create(AtmStoreType, AtmWorkflowExecutionAuth, AtmStoreConfig, InitialContent) ->
     RecordType = atm_store_type_to_atm_store_container_type(AtmStoreType),
     RecordType:create(AtmWorkflowExecutionAuth, AtmStoreConfig, InitialContent).
+
+
+-spec copy(record()) -> record() | no_return().
+copy(AtmStoreContainer) ->
+    RecordType = utils:record_type(AtmStoreContainer),
+    RecordType:copy(AtmStoreContainer).
 
 
 -spec get_store_type(record()) -> automation:store_type().

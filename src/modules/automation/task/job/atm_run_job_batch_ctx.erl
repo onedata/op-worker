@@ -19,21 +19,18 @@
 -include_lib("ctool/include/aai/aai.hrl").
 
 %% API
--export([build/4]).
+-export([build/2]).
 -export([
     get_workflow_execution_ctx/1,
     get_workflow_execution_auth/1,
-    get_access_token/1,
-    get_forward_output_url/1,
-    get_heartbeat_url/1
+    get_workflow_execution_id/1,
+    get_access_token/1
 ]).
 
 
 -record(atm_run_job_batch_ctx, {
     workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
-    is_in_readonly_mode :: boolean(),
-    forward_output_url :: binary(),
-    heartbeat_url :: binary()
+    is_in_readonly_mode :: boolean()
 }).
 -type record() :: #atm_run_job_batch_ctx{}.
 
@@ -45,16 +42,14 @@
 %%%===================================================================
 
 
--spec build(atm_workflow_execution_ctx:record(), binary(), binary(), atm_task_execution:record()) ->
+-spec build(atm_workflow_execution_ctx:record(), atm_task_execution:record()) ->
     record().
-build(AtmWorkflowExecutionCtx, ForwardOutputUrl, HeartbeatUrl, #atm_task_execution{
+build(AtmWorkflowExecutionCtx, #atm_task_execution{
     executor = AtmTaskExecutor
 }) ->
     #atm_run_job_batch_ctx{
         workflow_execution_ctx = AtmWorkflowExecutionCtx,
-        is_in_readonly_mode = atm_task_executor:is_in_readonly_mode(AtmTaskExecutor),
-        forward_output_url = ForwardOutputUrl,
-        heartbeat_url = HeartbeatUrl
+        is_in_readonly_mode = atm_task_executor:is_in_readonly_mode(AtmTaskExecutor)
     }.
 
 
@@ -66,6 +61,11 @@ get_workflow_execution_ctx(#atm_run_job_batch_ctx{workflow_execution_ctx = AtmWo
 -spec get_workflow_execution_auth(record()) -> atm_workflow_execution_auth:record().
 get_workflow_execution_auth(#atm_run_job_batch_ctx{workflow_execution_ctx = AtmWorkflowExecutionCtx}) ->
     atm_workflow_execution_ctx:get_auth(AtmWorkflowExecutionCtx).
+
+
+-spec get_workflow_execution_id(record()) -> atm_workflow_execution:id().
+get_workflow_execution_id(#atm_run_job_batch_ctx{workflow_execution_ctx = AtmWorkflowExecutionCtx}) ->
+    atm_workflow_execution_ctx:get_workflow_execution_id(AtmWorkflowExecutionCtx).
 
 
 -spec get_access_token(record()) -> auth_manager:access_token().
@@ -80,13 +80,3 @@ get_access_token(#atm_run_job_batch_ctx{
         true -> tokens:confine(AccessToken, #cv_data_readonly{});
         false -> AccessToken
     end.
-
-
--spec get_forward_output_url(record()) -> binary().
-get_forward_output_url(#atm_run_job_batch_ctx{forward_output_url = ForwardOutputUrl}) ->
-    ForwardOutputUrl.
-
-
--spec get_heartbeat_url(record()) -> binary().
-get_heartbeat_url(#atm_run_job_batch_ctx{heartbeat_url = HeartbeatUrl}) ->
-    HeartbeatUrl.

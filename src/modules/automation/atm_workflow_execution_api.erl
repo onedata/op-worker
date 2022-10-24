@@ -46,9 +46,12 @@
     list/4,
     schedule/6,
     get/1, get_summary/2,
-    cancel/1,
+    cancel/2,
+    pause/2,
+    resume/2,
     repeat/4,
-    terminate_not_ended/1,
+    report_provider_restart/1,
+    report_openfaas_down/2,
     purge_all/0
 ]).
 
@@ -157,6 +160,7 @@ get_summary(AtmWorkflowExecutionId, #atm_workflow_execution{
     status = AtmWorkflowExecutionStatus,
     schedule_time = ScheduleTime,
     start_time = StartTime,
+    suspend_time = SuspendTime,
     finish_time = FinishTime
 }) ->
     {ok, #document{
@@ -173,13 +177,24 @@ get_summary(AtmWorkflowExecutionId, #atm_workflow_execution{
         status = AtmWorkflowExecutionStatus,
         schedule_time = ScheduleTime,
         start_time = StartTime,
+        suspend_time = SuspendTime,
         finish_time = FinishTime
     }.
 
 
--spec cancel(atm_workflow_execution:id()) -> ok | errors:error().
-cancel(AtmWorkflowExecutionId) ->
-    atm_workflow_execution_handler:cancel(AtmWorkflowExecutionId).
+-spec cancel(user_ctx:ctx(), atm_workflow_execution:id()) -> ok | errors:error().
+cancel(UserCtx, AtmWorkflowExecutionId) ->
+    atm_workflow_execution_handler:stop(UserCtx, AtmWorkflowExecutionId, cancel).
+
+
+-spec pause(user_ctx:ctx(), atm_workflow_execution:id()) -> ok | errors:error().
+pause(UserCtx, AtmWorkflowExecutionId) ->
+    atm_workflow_execution_handler:stop(UserCtx, AtmWorkflowExecutionId, pause).
+
+
+-spec resume(user_ctx:ctx(), atm_workflow_execution:id()) -> ok | errors:error().
+resume(UserCtx, AtmWorkflowExecutionId) ->
+    atm_workflow_execution_handler:resume(UserCtx, AtmWorkflowExecutionId).
 
 
 -spec repeat(
@@ -197,33 +212,40 @@ repeat(UserCtx, Type, AtmLaneRunSelector, AtmWorkflowExecutionId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Terminates all waiting and ongoing workflow executions for given space.
-%% This function should be called only after provider restart to terminate
+%% This function should be called only after provider restart to handle
 %% stale (processes handling execution no longer exists) workflows.
+%% All waiting and ongoing workflow executions for given space are:
+%% a) terminated as ?CRASHED/?CANCELLED/?FAILED if execution was already stopping
+%% b) terminated as ?INTERRUPTED otherwise (running execution was interrupted by
+%%    provider shutdown). Such executions will be resumed.
 %% @end
 %%--------------------------------------------------------------------
-terminate_not_ended(SpaceId) ->
-    TerminateFun = fun(AtmWorkflowExecutionId) ->
+-spec report_provider_restart(od_space:id()) -> ok.
+report_provider_restart(SpaceId) ->
+    CallbackFun = fun(AtmWorkflowExecutionId) ->
         try
-            {ok, #document{
-                value = #atm_workflow_execution{
-                    incarnation = AtmWorkflowIncarnation
-                }
-            }} = atm_lane_execution_status:handle_aborting(
-                {current, current}, AtmWorkflowExecutionId, failure
-            ),
-
-            atm_workflow_execution_handler:handle_workflow_execution_ended(
-                AtmWorkflowExecutionId,
-                atm_workflow_execution_env:build(SpaceId, AtmWorkflowExecutionId, AtmWorkflowIncarnation)
-            )
+            atm_workflow_execution_handler:on_provider_restart(AtmWorkflowExecutionId)
         catch Type:Reason:Stacktrace ->
             ?atm_examine_error(Type, Reason, Stacktrace)
         end
     end,
 
-    foreach_atm_workflow_execution(TerminateFun, SpaceId, ?WAITING_PHASE),
-    foreach_atm_workflow_execution(TerminateFun, SpaceId, ?ONGOING_PHASE).
+    foreach_atm_workflow_execution(CallbackFun, SpaceId, ?WAITING_PHASE),
+    foreach_atm_workflow_execution(CallbackFun, SpaceId, ?ONGOING_PHASE).
+
+
+-spec report_openfaas_down(od_space:id(), errors:error()) -> ok.
+report_openfaas_down(SpaceId, Error) ->
+    CallbackFun = fun(AtmWorkflowExecutionId) ->
+        try
+            atm_workflow_execution_handler:on_openfaas_down(AtmWorkflowExecutionId, Error)
+        catch Type:Reason:Stacktrace ->
+            ?atm_examine_error(Type, Reason, Stacktrace)
+        end
+    end,
+
+    foreach_atm_workflow_execution(CallbackFun, SpaceId, ?WAITING_PHASE),
+    foreach_atm_workflow_execution(CallbackFun, SpaceId, ?ONGOING_PHASE).
 
 
 %%--------------------------------------------------------------------
@@ -235,6 +257,7 @@ terminate_not_ended(SpaceId) ->
 %% and as such should never be called after successful Oneprovider start.
 %% @end
 %%--------------------------------------------------------------------
+-spec purge_all() -> ok.
 purge_all() ->
     ?info("Starting atm_workflow_execution purge procedure..."),
 
@@ -244,6 +267,7 @@ purge_all() ->
     lists:foreach(fun(SpaceId) ->
         foreach_atm_workflow_execution(DeleteFun, SpaceId, ?WAITING_PHASE),
         foreach_atm_workflow_execution(DeleteFun, SpaceId, ?ONGOING_PHASE),
+        foreach_atm_workflow_execution(DeleteFun, SpaceId, ?SUSPENDED_PHASE),
         foreach_atm_workflow_execution(DeleteFun, SpaceId, ?ENDED_PHASE)
     end, SpaceIds),
 
@@ -266,6 +290,8 @@ list_basic_entries(SpaceId, ?WAITING_PHASE, ListingOpts) ->
     atm_waiting_workflow_executions:list(SpaceId, ListingOpts);
 list_basic_entries(SpaceId, ?ONGOING_PHASE, ListingOpts) ->
     atm_ongoing_workflow_executions:list(SpaceId, ListingOpts);
+list_basic_entries(SpaceId, ?SUSPENDED_PHASE, ListingOpts) ->
+    atm_suspended_workflow_executions:list(SpaceId, ListingOpts);
 list_basic_entries(SpaceId, ?ENDED_PHASE, ListingOpts) ->
     atm_ended_workflow_executions:list(SpaceId, ListingOpts).
 

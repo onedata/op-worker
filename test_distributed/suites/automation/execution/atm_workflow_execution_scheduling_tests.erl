@@ -6,10 +6,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Bases for tests concerning scheduling automation workflow schemas.
+%%% Tests concerning scheduling automation workflow schemas.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_workflow_execution_scheduling_test_base).
+-module(atm_workflow_execution_scheduling_tests).
 -author("Bartosz Walkowicz").
 
 -include("atm_workflow_execution_test.hrl").

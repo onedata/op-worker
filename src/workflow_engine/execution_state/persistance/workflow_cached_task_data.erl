@@ -15,7 +15,7 @@
 -include("modules/datastore/datastore_models.hrl").
 
 %% API
--export([put/1, take/1]).
+-export([put/1, take/1, delete/1]).
 
 -type id() :: datastore:key().
 -export_type([id/0]).
@@ -40,5 +40,10 @@ put(Data) ->
 -spec take(id()) -> workflow_engine:streamed_task_data().
 take(Id) ->
     {ok, #document{value = #workflow_cached_task_data{data = Data}}} = datastore_model:get(?CTX, Id),
-    ok = datastore_model:delete(?CTX, Id),
+    delete(Id),
     Data.
+
+
+-spec delete(id()) -> ok.
+delete(Id) ->
+    ok = datastore_model:delete(?CTX, Id).
