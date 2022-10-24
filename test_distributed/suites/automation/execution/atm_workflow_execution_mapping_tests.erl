@@ -237,7 +237,7 @@ map_arguments() ->
                     assert_exp_target_store_content(
                         list,
                         ExpTargetStoreFinalContent,
-                        atm_workflow_execution_test_runner:browse_store(TargetStoreSchemaId, undefined, AtmMockCallCtx)
+                        atm_workflow_execution_test_utils:browse_store(TargetStoreSchemaId, undefined, AtmMockCallCtx)
                     ),
                     ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_rerunable({1, 1}, ExpState0),
                     {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_finished(ExpState1)}
@@ -453,7 +453,7 @@ map_results_to_store_test_base(#map_results_to_store_test_spec{
                         assert_exp_target_store_content(
                             TargetStoreType,
                             IteratedItems,
-                            atm_workflow_execution_test_runner:browse_store(
+                            atm_workflow_execution_test_utils:browse_store(
                                 TargetStoreSchemaId, AtmTaskExecutionId, AtmMockCallCtx
                             )
                         )
@@ -541,7 +541,7 @@ map_results_to_multiple_stores() ->
                         call_args = [_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId]
                     }) ->
                         lists:foreach(fun({TargetStoreType, TargetStoreSchemaId}) ->
-                            TargetStoreContent = atm_workflow_execution_test_runner:browse_store(
+                            TargetStoreContent = atm_workflow_execution_test_utils:browse_store(
                                 TargetStoreSchemaId, AtmTaskExecutionId, AtmMockCallCtx
                             ),
                             assert_exp_target_store_content(TargetStoreType, IteratedItems, TargetStoreContent)

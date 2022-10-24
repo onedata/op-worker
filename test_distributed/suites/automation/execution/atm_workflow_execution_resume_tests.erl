@@ -125,7 +125,7 @@ resume_atm_workflow_execution_paused_while_scheduled() ->
             #atm_lane_run_execution_test_spec{
                 selector = {1, 1},
                 prepare_lane = #atm_step_mock_spec{
-                    before_step_hook = fun atm_workflow_execution_test_runner:pause_workflow_execution/1,
+                    before_step_hook = fun atm_workflow_execution_test_utils:pause_workflow_execution/1,
                     before_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
                         ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_stopping({1, 1}, ExpState0),
                         {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(ExpState1)}
@@ -162,7 +162,7 @@ resume_atm_workflow_execution_interrupted_while_scheduled() ->
             #atm_lane_run_execution_test_spec{
                 selector = {1, 1},
                 prepare_lane = #atm_step_mock_spec{
-                    before_step_hook = fun atm_workflow_execution_test_runner:delete_offline_session/1,
+                    before_step_hook = fun atm_workflow_execution_test_utils:delete_offline_session/1,
                     after_step_exp_state_diff = no_diff
                 },
                 handle_lane_execution_stopped = #atm_step_mock_spec{
@@ -206,7 +206,7 @@ resume_atm_workflow_execution_suspended_while_scheduled_test_base(Testcase, Susp
         workflow_schema_revision_num = 1,
         incarnations = [
             SuspendedIncarnation#atm_workflow_execution_incarnation_test_spec{
-                after_hook = fun atm_workflow_execution_test_runner:resume_workflow_execution/1
+                after_hook = fun atm_workflow_execution_test_utils:resume_workflow_execution/1
             },
             #atm_workflow_execution_incarnation_test_spec{
                 incarnation_num = 2,
@@ -248,7 +248,7 @@ resume_atm_workflow_execution_paused_while_preparing() ->
                     after_step_exp_state_diff = no_diff
                 },
                 create_run = #atm_step_mock_spec{
-                    after_step_hook = fun atm_workflow_execution_test_runner:pause_workflow_execution/1,
+                    after_step_hook = fun atm_workflow_execution_test_utils:pause_workflow_execution/1,
                     after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
                         ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_created({1, 1}, ExpState0),
                         ExpState2 = atm_workflow_execution_exp_state_builder:expect_lane_run_stopping({1, 1}, ExpState1),
@@ -289,7 +289,7 @@ resume_atm_workflow_execution_interrupted_while_preparing() ->
                     after_step_exp_state_diff = no_diff
                 },
                 create_run = #atm_step_mock_spec{
-                    after_step_hook = fun atm_workflow_execution_test_runner:report_openfaas_unhealthy/1,
+                    after_step_hook = fun atm_workflow_execution_test_utils:report_openfaas_unhealthy/1,
                     after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
                         ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_created({1, 1}, ExpState0),
                         {true, expect_execution_stopping_while_processing_lane1(ExpState1, interrupt)}
@@ -331,7 +331,7 @@ resume_atm_workflow_execution_suspended_while_preparing_test_base(Testcase, Susp
         workflow_schema_revision_num = 1,
         incarnations = [
             SuspendedIncarnation#atm_workflow_execution_incarnation_test_spec{
-                after_hook = fun atm_workflow_execution_test_runner:resume_workflow_execution/1
+                after_hook = fun atm_workflow_execution_test_utils:resume_workflow_execution/1
             },
             #atm_workflow_execution_incarnation_test_spec{
                 incarnation_num = 2,
@@ -451,7 +451,7 @@ resume_atm_workflow_execution_suspended_while_active_test_base(Testcase, Suspend
                         {true, expect_workflow_execution_suspended(SuspendMethod, ExpState0)}
                     end
                 },
-                after_hook = fun atm_workflow_execution_test_runner:resume_workflow_execution/1
+                after_hook = fun atm_workflow_execution_test_utils:resume_workflow_execution/1
             },
             #atm_workflow_execution_incarnation_test_spec{
                 incarnation_num = 2,
@@ -546,7 +546,7 @@ resume_atm_workflow_execution_suspended_after_all_tasks_finished_test_base(Testc
                         {true, expect_workflow_execution_suspended(SuspendMethod, ExpState0)}
                     end
                 },
-                after_hook = fun atm_workflow_execution_test_runner:resume_workflow_execution/1
+                after_hook = fun atm_workflow_execution_test_utils:resume_workflow_execution/1
             },
             #atm_workflow_execution_incarnation_test_spec{
                 incarnation_num = 2,
@@ -593,11 +593,11 @@ resume_atm_workflow_execution_suspended_after_all_tasks_finished_test_base(Testc
 
 %% @private
 interrupt_workflow_execution(AtmMockCallCtx) ->
-    atm_workflow_execution_test_runner:stop_workflow_execution(interrupt, AtmMockCallCtx).
+    atm_workflow_execution_test_utils:stop_workflow_execution(interrupt, AtmMockCallCtx).
 
 
 %% @private
-get_suspend_hook(pause) -> fun atm_workflow_execution_test_runner:pause_workflow_execution/1;
+get_suspend_hook(pause) -> fun atm_workflow_execution_test_utils:pause_workflow_execution/1;
 get_suspend_hook(interrupt) -> fun interrupt_workflow_execution/1.
 
 
@@ -728,7 +728,7 @@ assert_lane1_tasks_stats(AtmTaskExecutionId, ExpTask1Stats, ExpTask2Stats, ExpSt
 
 %% @private
 expect_execution_stopping_while_processing_lane1(ExpState0, Reason) ->
-    ExpState1 = atm_workflow_execution_exp_state_builder:expect_all_tasks_stopping({1, 1}, Reason, ExpState0),
+    ExpState1 = atm_workflow_execution_exp_state_builder:expect_all_tasks_stopping_due_to({1, 1}, Reason, ExpState0),
     ExpState2 = atm_workflow_execution_exp_state_builder:expect_lane_run_stopping({1, 1}, ExpState1),
     atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(ExpState2).
 
@@ -760,7 +760,7 @@ expect_lane1_task_stopped(<<"failed">>, AtmTaskExecutionId, ExpState0) ->
 
 %% @private
 get_exception_store_content(AtmLaneRunSelector, AtmMockCallCtx) ->
-    #{<<"items">> := Items, <<"isLast">> := true} = atm_workflow_execution_test_runner:browse_store(
+    #{<<"items">> := Items, <<"isLast">> := true} = atm_workflow_execution_test_utils:browse_store(
         exception_store, AtmLaneRunSelector, AtmMockCallCtx
     ),
     lists:sort(lists:map(fun(#{<<"value">> := Content}) -> Content end, Items)).

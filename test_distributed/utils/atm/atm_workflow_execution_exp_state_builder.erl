@@ -78,7 +78,7 @@
     expect_all_tasks_abruptly_interrupted/2,
     expect_all_tasks_abruptly_cancelled/2,
     expect_all_tasks_abruptly_stopped/3,
-    expect_all_tasks_stopping/3,
+    expect_all_tasks_stopping_due_to/3,
 
     expect_workflow_execution_scheduled/1,
     expect_workflow_execution_active/1,
@@ -91,6 +91,7 @@
     expect_workflow_execution_interrupted/1,
     expect_workflow_execution_resuming/1,
 
+    assert_matches_with_backend/1,
     assert_matches_with_backend/2
 ]).
 
@@ -769,18 +770,18 @@ expect_all_tasks_failed(AtmLaneRunSelector, ExpStateCtx) ->
 -spec expect_all_tasks_abruptly_interrupted(atm_lane_execution:lane_run_selector(), ctx()) ->
     ctx().
 expect_all_tasks_abruptly_interrupted(AtmLaneRunSelector, ExpStateCtx) ->
-    expect_all_tasks_abruptly_stopped(<<"interrupted">>, AtmLaneRunSelector, ExpStateCtx).
+    expect_all_tasks_abruptly_stopped(AtmLaneRunSelector, <<"interrupted">>, ExpStateCtx).
 
 
 -spec expect_all_tasks_abruptly_cancelled(atm_lane_execution:lane_run_selector(), ctx()) ->
     ctx().
 expect_all_tasks_abruptly_cancelled(AtmLaneRunSelector, ExpStateCtx) ->
-    expect_all_tasks_abruptly_stopped(<<"cancelled">>, AtmLaneRunSelector, ExpStateCtx).
+    expect_all_tasks_abruptly_stopped(AtmLaneRunSelector, <<"cancelled">>, ExpStateCtx).
 
 
--spec expect_all_tasks_abruptly_stopped(binary(), atm_lane_execution:lane_run_selector(), ctx()) ->
+-spec expect_all_tasks_abruptly_stopped(atm_lane_execution:lane_run_selector(), binary(), ctx()) ->
     ctx().
-expect_all_tasks_abruptly_stopped(FinalStatus, AtmLaneRunSelector, ExpStateCtx) ->
+expect_all_tasks_abruptly_stopped(AtmLaneRunSelector, FinalStatus, ExpStateCtx) ->
     ExpAtmTaskExecutionStatusChangeFun = fun(ExpAtmTaskExecution = #exp_task_execution_state_ctx{
         exp_state = ExpState
     }) ->
@@ -812,13 +813,13 @@ handle_abruptly_stopped_task_stats(ExpAtmTaskExecutionState = #{
     }.
 
 
--spec expect_all_tasks_stopping(
+-spec expect_all_tasks_stopping_due_to(
     atm_lane_execution:lane_run_selector(),
     atm_lane_execution:run_stopping_reason(),
     ctx()
 ) ->
     ctx().
-expect_all_tasks_stopping(AtmLaneRunSelector, Reason, ExpStateCtx) ->
+expect_all_tasks_stopping_due_to(AtmLaneRunSelector, Reason, ExpStateCtx) ->
     Status = case Reason of
         pause -> <<"paused">>;
         interrupt -> <<"interrupted">>;
@@ -951,6 +952,11 @@ expect_workflow_execution_resuming(ExpStateCtx) ->
         }
     end,
     update_workflow_execution_exp_state(ExpAtmWorkflowExecutionStateDiff, ExpStateCtx).
+
+
+-spec assert_matches_with_backend(ctx()) -> boolean().
+assert_matches_with_backend(ExpStateCtx) ->
+    assert_matches_with_backend(ExpStateCtx, 0).
 
 
 -spec assert_matches_with_backend(ctx(), non_neg_integer()) -> boolean().

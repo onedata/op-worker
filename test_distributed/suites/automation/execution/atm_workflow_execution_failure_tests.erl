@@ -260,7 +260,7 @@ fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error() ->
                                 true ->
                                     {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(
                                         atm_workflow_execution_exp_state_builder:expect_lane_run_stopping(
-                                            {1, 1}, atm_workflow_execution_exp_state_builder:expect_all_tasks_stopping(
+                                            {1, 1}, atm_workflow_execution_exp_state_builder:expect_all_tasks_stopping_due_to(
                                                 {1, 1}, interrupt, ExpState
                                             )
                                         )
@@ -286,7 +286,7 @@ fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error() ->
                     {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_failed(ExpState1)}
                 end
             },
-            after_hook = fun atm_workflow_execution_test_runner:assert_ended_atm_workflow_execution_can_be_neither_stopped_nor_resumed/1
+            after_hook = fun atm_workflow_execution_test_utils:assert_ended_workflow_execution_can_be_neither_stopped_nor_resumed/1
         }]
     }).
 
@@ -637,7 +637,7 @@ job_failure_atm_workflow_execution_test_base(JobFailureType, #fail_atm_workflow_
                     {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_failed(ExpState1)}
                 end
             },
-            after_hook = fun atm_workflow_execution_test_runner:assert_ended_atm_workflow_execution_can_be_neither_stopped_nor_resumed/1
+            after_hook = fun atm_workflow_execution_test_utils:assert_ended_workflow_execution_can_be_neither_stopped_nor_resumed/1
         }]
     }).
 
@@ -851,7 +851,7 @@ job_failure_expect_task_execution_ended(
 ) ->
     [automation:item()].
 get_audit_log_contents(AtmTaskExecutionId, AtmMockCallCtx) ->
-    #{<<"logEntries">> := Logs, <<"isLast">> := true} = atm_workflow_execution_test_runner:browse_store(
+    #{<<"logEntries">> := Logs, <<"isLast">> := true} = atm_workflow_execution_test_utils:browse_store(
         ?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID, AtmTaskExecutionId, AtmMockCallCtx
     ),
     lists:map(fun(#{<<"content">> := LogContent}) -> LogContent end, Logs).
@@ -971,7 +971,7 @@ job_failure_expect_task3_ended(TestcaseId, AtmTask3ExecutionId, ExpState) ->
 ) ->
     ok | no_return().
 check_iterated_items(TestcaseId, {1, 1} = AtmLaneRunSelector, AtmMockCallCtx) ->
-    #{<<"items">> := Items, <<"isLast">> := true} = atm_workflow_execution_test_runner:browse_store(
+    #{<<"items">> := Items, <<"isLast">> := true} = atm_workflow_execution_test_utils:browse_store(
         ?ITERATED_STORE_SCHEMA_ID, undefined, AtmMockCallCtx
     ),
     SrcStoreContent = lists:sort(lists:map(fun(#{<<"value">> := Value}) -> Value end, Items)),
@@ -1009,7 +1009,7 @@ check_exception_store_content(TestcaseId, AtmLaneRunSelector, AtmMockCallCtx) ->
 ) ->
     [automation:item()].
 get_exception_store_content(AtmLaneRunSelector, AtmMockCallCtx) ->
-    #{<<"items">> := Items, <<"isLast">> := true} = atm_workflow_execution_test_runner:browse_store(
+    #{<<"items">> := Items, <<"isLast">> := true} = atm_workflow_execution_test_utils:browse_store(
         exception_store, AtmLaneRunSelector, AtmMockCallCtx
     ),
     lists:map(fun(#{<<"value">> := Content}) -> Content end, Items).

@@ -115,7 +115,7 @@ pause_scheduled_atm_workflow_execution() ->
                 #atm_lane_run_execution_test_spec{
                     selector = {1, 1},
                     prepare_lane = #atm_step_mock_spec{
-                        before_step_hook = fun atm_workflow_execution_test_runner:pause_workflow_execution/1,
+                        before_step_hook = fun atm_workflow_execution_test_utils:pause_workflow_execution/1,
                         before_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
                             ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_stopping({1, 1}, ExpState0),
                             {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(ExpState1)}
@@ -166,7 +166,7 @@ pause_enqueued_atm_workflow_execution() ->
                             )}
                         end,
 
-                        after_step_hook = fun atm_workflow_execution_test_runner:pause_workflow_execution/1,
+                        after_step_hook = fun atm_workflow_execution_test_utils:pause_workflow_execution/1,
                         after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
                             ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_stopping({1, 1}, ExpState0),
                             ExpState2 = atm_workflow_execution_exp_state_builder:expect_all_tasks_paused({1, 1}, ExpState1),
@@ -267,7 +267,7 @@ pause_active_atm_workflow_execution_test_base(Testcase, RelayMethod) ->
                                 {_, <<"pb1">>, _} ->
                                     ok;
                                 {_, <<"pb2">>, _} ->
-                                    atm_workflow_execution_test_runner:pause_workflow_execution(AtmMockCallCtx)
+                                    atm_workflow_execution_test_utils:pause_workflow_execution(AtmMockCallCtx)
                             end
                         end,
                         before_step_exp_state_diff = fun(AtmMockCallCtx = #atm_mock_call_ctx{
@@ -280,7 +280,7 @@ pause_active_atm_workflow_execution_test_base(Testcase, RelayMethod) ->
                                     ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_stopping(
                                         {1, 1}, ExpState0
                                     ),
-                                    ExpState2 = atm_workflow_execution_exp_state_builder:expect_all_tasks_stopping(
+                                    ExpState2 = atm_workflow_execution_exp_state_builder:expect_all_tasks_stopping_due_to(
                                         {1, 1}, pause, ExpState1
                                     ),
                                     {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(
@@ -310,7 +310,7 @@ pause_active_atm_workflow_execution_test_base(Testcase, RelayMethod) ->
                                 {_, _, <<"task3">>} -> <<"st_4">>
                             end,
                             % assert all processed items were mapped to destination store
-                            #{<<"items">> := StDstItems} = atm_workflow_execution_test_runner:browse_store(
+                            #{<<"items">> := StDstItems} = atm_workflow_execution_test_utils:browse_store(
                                 DstAtmStoreSchemaId, AtmMockCallCtx
                             ),
                             ?assertEqual(ExpItemsProcessed, length(StDstItems)),
@@ -387,7 +387,7 @@ pause_interrupted_atm_workflow_execution() ->
                 #atm_lane_run_execution_test_spec{
                     selector = {2, 1},
                     process_task_result_for_item = #atm_step_mock_spec{
-                        before_step_hook = fun atm_workflow_execution_test_runner:delete_offline_session/1,
+                        before_step_hook = fun atm_workflow_execution_test_utils:delete_offline_session/1,
                         before_step_exp_state_diff = no_diff
                     },
 
@@ -415,9 +415,9 @@ pause_interrupted_atm_workflow_execution() ->
             after_hook = fun(AtmMockCallCtx = #atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
                 ?assertThrow(
                     ?ERROR_ATM_INVALID_STATUS_TRANSITION(?INTERRUPTED_STATUS, ?STOPPING_STATUS),
-                    atm_workflow_execution_test_runner:pause_workflow_execution(AtmMockCallCtx)
+                    atm_workflow_execution_test_utils:pause_workflow_execution(AtmMockCallCtx)
                 ),
-                atm_workflow_execution_test_runner:assert_not_ended_atm_workflow_execution_can_not_be_repeated(
+                atm_workflow_execution_test_utils:assert_not_ended_workflow_execution_can_not_be_repeated(
                     {1, 1}, AtmMockCallCtx
                 ),
                 ?assert(atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState0, 0))
@@ -444,7 +444,7 @@ pause_interrupted_atm_workflow_execution() ->
 
 %% @private
 expect_execution_stopping_while_processing_lane2(ExpState0, Reason) ->
-    ExpState1 = atm_workflow_execution_exp_state_builder:expect_all_tasks_stopping({2, 1}, Reason, ExpState0),
+    ExpState1 = atm_workflow_execution_exp_state_builder:expect_all_tasks_stopping_due_to({2, 1}, Reason, ExpState0),
     ExpState2 = atm_workflow_execution_exp_state_builder:expect_lane_run_stopping({2, 1}, ExpState1),
     atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(ExpState2).
 
@@ -455,9 +455,9 @@ assert_paused_atm_workflow_execution_can_be_neither_paused_nor_repeated(AtmMockC
 }) ->
     ?assertThrow(
         ?ERROR_ATM_INVALID_STATUS_TRANSITION(?PAUSED_STATUS, ?STOPPING_STATUS),
-        atm_workflow_execution_test_runner:pause_workflow_execution(AtmMockCallCtx)
+        atm_workflow_execution_test_utils:pause_workflow_execution(AtmMockCallCtx)
     ),
-    atm_workflow_execution_test_runner:assert_not_ended_atm_workflow_execution_can_not_be_repeated(
+    atm_workflow_execution_test_utils:assert_not_ended_workflow_execution_can_not_be_repeated(
         {1, 1}, AtmMockCallCtx
     ),
     ?assert(atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState0, 0)).
@@ -465,6 +465,6 @@ assert_paused_atm_workflow_execution_can_be_neither_paused_nor_repeated(AtmMockC
 
 %% @private
 assert_exception_store_is_empty(AtmLaneRunSelector, AtmMockCallCtx) ->
-    ?assertEqual([], lists:sort(atm_workflow_execution_test_runner:get_exception_store_content(
+    ?assertEqual([], lists:sort(atm_workflow_execution_test_utils:get_exception_store_content(
         AtmLaneRunSelector, AtmMockCallCtx
     ))).

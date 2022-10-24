@@ -76,7 +76,7 @@
 
 finish_atm_workflow_execution() ->
     AssertActionsNotPossibleOnNotStoppedExecution = fun(AtmMockCallCtx) ->
-        atm_workflow_execution_test_runner:assert_not_stopped_atm_workflow_execution_can_be_neither_repeated_nor_resumed(
+        atm_workflow_execution_test_utils:assert_not_stopped_workflow_execution_can_be_neither_repeated_nor_resumed(
             {1, 1}, AtmMockCallCtx
         )
     end,
@@ -109,7 +109,7 @@ finish_atm_workflow_execution() ->
                         lists:foreach(fun(StoppingReason) ->
                             ?assertEqual(
                                 ?ERROR_ATM_INVALID_STATUS_TRANSITION(?FINISHED_STATUS, ?STOPPING_STATUS),
-                                atm_workflow_execution_test_runner:stop_workflow_execution(
+                                atm_workflow_execution_test_utils:stop_workflow_execution(
                                     StoppingReason, AtmMockCallCtx
                                 )
                             )
@@ -125,6 +125,6 @@ finish_atm_workflow_execution() ->
                     {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_finished(ExpState1)}
                 end
             },
-            after_hook = fun atm_workflow_execution_test_runner:assert_ended_atm_workflow_execution_can_be_neither_stopped_nor_resumed/1
+            after_hook = fun atm_workflow_execution_test_utils:assert_ended_workflow_execution_can_be_neither_stopped_nor_resumed/1
         }]
     }).

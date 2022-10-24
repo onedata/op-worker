@@ -123,7 +123,7 @@ interrupt_ongoing_atm_workflow_execution_due_to_expired_session() ->
                                     passthrough
                             end
                         end,
-                        after_step_hook = fun atm_workflow_execution_test_runner:delete_offline_session/1
+                        after_step_hook = fun atm_workflow_execution_test_utils:delete_offline_session/1
                     },
 
                     handle_lane_execution_stopped = #atm_step_mock_spec{
@@ -158,6 +158,6 @@ interrupt_ongoing_atm_workflow_execution_due_to_expired_session() ->
 
 %% @private
 expect_execution_stopping_while_processing_lane2(ExpState0, Reason) ->
-    ExpState1 = atm_workflow_execution_exp_state_builder:expect_all_tasks_stopping({2, 1}, Reason, ExpState0),
+    ExpState1 = atm_workflow_execution_exp_state_builder:expect_all_tasks_stopping_due_to({2, 1}, Reason, ExpState0),
     ExpState2 = atm_workflow_execution_exp_state_builder:expect_lane_run_stopping({2, 1}, ExpState1),
     atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(ExpState2).
