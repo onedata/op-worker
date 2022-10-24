@@ -20,6 +20,7 @@
 -include("modules/fslogic/file_attr.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include("modules/dbsync/dbsync.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -36,17 +37,20 @@
     traverse_cancel_test/1, external_traverse_cancel_test/1, traverse_external_cancel_test/1,
     queued_traverse_cancel_test/1, queued_traverse_external_cancel_test/1, traverse_restart_test/1,
     multiple_traverse_test/1, external_multiple_traverse_test/1, mixed_multiple_traverse_test/1,
-    db_sync_basic_opts_with_errors_test/1, resynchronization_test/1
+    db_sync_basic_opts_with_errors_test/1, resynchronization_test/1, initial_sync_repeat_test/1
 ]).
 
 %% Pool callbacks
 -export([do_master_job/2, do_slave_job/2, update_job_progress/5, get_job/1, get_sync_info/1,
     on_cancel_init/2, task_canceled/2, task_finished/2]).
 
+%% File_meta posthooks used during tests
+-export([test_posthook/1]).
+
 -define(TEST_CASES, [
-    resynchronization_test, db_sync_basic_opts_test, db_sync_many_ops_test, db_sync_distributed_modification_test,
-    multi_space_test, rtransfer_test, rtransfer_multisource_test, rtransfer_blocking_test,
-    traverse_test, external_traverse_test, traverse_cancel_test, external_traverse_cancel_test,
+    initial_sync_repeat_test, resynchronization_test, db_sync_basic_opts_test, db_sync_many_ops_test,
+    db_sync_distributed_modification_test, multi_space_test, rtransfer_test, rtransfer_multisource_test,
+    rtransfer_blocking_test, traverse_test, external_traverse_test, traverse_cancel_test, external_traverse_cancel_test,
     traverse_external_cancel_test, queued_traverse_cancel_test, queued_traverse_external_cancel_test,
     traverse_restart_test, multiple_traverse_test, external_multiple_traverse_test, mixed_multiple_traverse_test,
     db_sync_basic_opts_with_errors_test
@@ -620,7 +624,66 @@ resynchronization_test(Config) ->
         ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessId1, ?FILE_REF(Guid)), 60)
     end, Worker2Dirs ++ Worker2Files ++ Worker3Dirs ++ Worker3Files),
 
-    ?assertEqual(undefined, rpc:call(Worker1, dbsync_state, get_synchronization_params, [SpaceId, Provider2Id])).
+    ?assertEqual(undefined, rpc:call(Worker1, dbsync_state, get_synchronization_params, [SpaceId, Provider2Id]), 5).
+
+
+initial_sync_repeat_test(Config) ->
+    [Worker1, Worker2, Worker3] = ?config(op_worker_nodes, Config),
+    SessId1 = lfm_test_utils:get_user1_session_id(Config, Worker1),
+    SessId2 = lfm_test_utils:get_user1_session_id(Config, Worker2),
+    SessId3 = lfm_test_utils:get_user1_session_id(Config, Worker3),
+    SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
+    SpaceGuid = lfm_test_utils:get_user1_first_space_guid(Config),
+    Structure = [{3, 3}, {3, 3}],
+
+    Provider2Id = rpc:call(Worker2, oneprovider, get_id_or_undefined, []),
+    test_utils:mock_expect(Worker1, dbsync_utils, is_supported, fun(SpaceId, ProviderIds) ->
+        case lists:member(Provider2Id, ProviderIds) of
+            true -> false;
+            false -> meck:passthrough([SpaceId, ProviderIds])
+        end
+    end),
+    ?assertEqual(continue, rpc:call(Worker1, dbsync_state, set_seq_and_timestamp, [SpaceId, Provider2Id, 1, 0])),
+
+    {ok, Worker2Root} = ?assertMatch({ok, _},
+        lfm_proxy:mkdir(Worker2, SessId2, SpaceGuid, <<"initial_sync_repeat_test_dir2">>, 8#777)),
+    Worker2RootUuid = file_id:guid_to_uuid(Worker2Root),
+    {Worker2Dirs, Worker2Files} = lfm_test_utils:create_files_tree(Worker2, SessId2, Structure, Worker2Root),
+
+    {ok, Worker3Root} = ?assertMatch({ok, _},
+        lfm_proxy:mkdir(Worker3, SessId3, SpaceGuid, <<"initial_sync_repeat_test_dir3">>, 8#777)),
+    {Worker3Dirs, Worker3Files} = lfm_test_utils:create_files_tree(Worker3, SessId3, Structure, Worker3Root),
+
+    % Sleep to allow synchronization of documents with mocked is_supported function
+    timer:sleep(timer:seconds(30)),
+
+    Master = self(),
+    test_utils:mock_expect(Worker1, dbsync_changes, apply, fun
+        (#document{key = Key, value = #file_meta{}} = Doc) when Key =:= Worker2RootUuid ->
+            Master ! {worker2_root_synced, self()},
+            receive
+                proceed -> meck:passthrough([Doc])
+            end;
+        (Doc) ->
+            meck:passthrough([Doc])
+    end),
+    ?assertEqual(ok, test_utils:mock_unload(Worker1, dbsync_utils)),
+
+    check_synchronization_params_on_root_sync(Worker1, SpaceId, Provider2Id, Worker2RootUuid, initial_sync),
+    check_synchronization_params_on_root_sync(Worker1, SpaceId, Provider2Id, Worker2RootUuid, resynchronization),
+
+    ?assertEqual(posthook_executed, receive
+        posthook_executed -> posthook_executed
+    after
+        timer:seconds(30) ->
+            timeout
+    end),
+
+    lists:foreach(fun(Guid) ->
+        ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessId1, ?FILE_REF(Guid)), 60)
+    end, Worker2Dirs ++ Worker2Files ++ Worker3Dirs ++ Worker3Files),
+
+    ?assertEqual(undefined, rpc:call(Worker1, dbsync_state, get_synchronization_params, [SpaceId, Provider2Id]), 5).
 
 
 %%%===================================================================
@@ -653,6 +716,21 @@ init_per_testcase(resynchronization_test = Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, [dbsync_changes]),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
+init_per_testcase(initial_sync_repeat_test = Case, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    test_utils:mock_new(Worker, [dbsync_changes, dbsync_utils, qos_hooks]),
+    % Prevent changing of dbsync synchronization mode by QoS hooks
+    test_utils:mock_expect(Worker, qos_hooks, handle_qos_entry_change, fun(_, _) ->
+        ok
+    end),
+    test_utils:mock_expect(Worker, qos_hooks, invalidate_cache_and_reconcile, fun(_) ->
+        ok
+    end),
+    test_utils:mock_expect(Worker, qos_hooks, reconcile_qos, fun(_, _) ->
+        ok
+    end),
+    test_utils:set_env(Worker, ?APP_NAME, max_file_meta_posthooks, 0),
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 60}),
     lfm_proxy:init(Config).
@@ -676,7 +754,12 @@ end_per_testcase(db_sync_basic_opts_with_errors_test = Case, Config) ->
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(resynchronization_test = Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Worker, [dbsync_changes]),
+    test_utils:mock_unload(Worker, [dbsync_changes, dbsync_utils]),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+end_per_testcase(initial_sync_repeat_test = Case, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Worker, [dbsync_changes, dbsync_utils, qos_hooks]),
+    ?assertEqual(ok, rpc:call(Worker, application, unset_env, [?APP_NAME, max_file_meta_posthooks])),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).
@@ -819,3 +902,26 @@ get_expected_jobs() ->
         1051,1052,1053,1056,1057,1058,
         1501,1502, 1503,1506,1507,1508,
         1551,1552,1553,1556,1557, 1558].
+
+
+check_synchronization_params_on_root_sync(Worker, SpaceId, ProviderId, Worker2RootUuid, Mode) ->
+    Master = self(),
+    CheckAns = receive
+        {worker2_root_synced, DbsyncProc} ->
+            ?assertMatch(#synchronization_params{
+                mode = Mode,
+                included_mutators = ?ALL_MUTATORS_EXCEPT_SENDER
+            }, rpc:call(Worker, dbsync_state, get_synchronization_params, [SpaceId, ProviderId])),
+            rpc:call(Worker, file_meta_posthooks, add_hook, [
+                {file_meta_missing, Worker2RootUuid}, <<"xyz">>, SpaceId, ?MODULE, test_posthook, [Master]]),
+            DbsyncProc ! proceed,
+            ok
+    after
+        timer:seconds(30) ->
+            timeout
+    end,
+    ?assertEqual(ok, CheckAns).
+
+
+test_posthook(Master) ->
+    Master ! posthook_executed.

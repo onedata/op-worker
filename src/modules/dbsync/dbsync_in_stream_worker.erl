@@ -181,8 +181,10 @@ handle_info(request_changes, State = #state{
             })}
     end;
 handle_info({batch_applied, {Since, Until}, Timestamp, Ans}, #state{} = State) ->
-    State2 = change_applied(Since, Until, Timestamp, Ans, State),
-    {noreply, State2};
+    case change_applied(Since, Until, Timestamp, Ans, State) of
+        {continue, State2} -> {noreply, State2};
+        {reset, State2} -> {stop, normal, State2}
+    end;
 handle_info(Info, #state{} = State) ->
     ?log_bad_request(Info),
     {noreply, State}.
@@ -327,7 +329,7 @@ apply_changes_batch(Since, Until, Timestamp, Docs, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec change_applied(couchbase_changes:since(), couchbase_changes:until(), dbsync_changes:timestamp(),
-    ok | timeout | {error, datastore_doc:seq(), term()}, state()) -> state().
+    ok | timeout | {error, datastore_doc:seq(), term()}, state()) -> {continue | reset, state()}.
 change_applied(_Since, Until, Timestamp, Ans, State) ->
     State2 = State#state{apply_batch = undefined},
     case Ans of
@@ -335,10 +337,10 @@ change_applied(_Since, Until, Timestamp, Ans, State) ->
             gen_server2:cast(self(), check_batch_stash),
             update_seq(Until, Timestamp, State2);
         {error, Seq, _} ->
-            State3 = update_seq(Seq - 1, undefined, State2),
-            schedule_changes_request(State3);
+            {Ans, State3} = update_seq(Seq - 1, undefined, State2),
+            {Ans, schedule_changes_request(State3)};
         timeout ->
-            schedule_changes_request(State2)
+            {continue, schedule_changes_request(State2)}
     end.
 
 %%--------------------------------------------------------------------
@@ -382,12 +384,13 @@ prepare_batch(Docs, Timestamp, Until, State = #state{
 %% Updates sequence number of the beginning of expected changes range.
 %% @end
 %%--------------------------------------------------------------------
--spec update_seq(couchbase_changes:seq(), dbsync_changes:timestamp() | undefined, state()) -> state().
+-spec update_seq(couchbase_changes:seq(), dbsync_changes:timestamp() | undefined, state()) ->
+    {continue | reset, state()}.
 update_seq(Seq, _Timestamp, State = #state{seq = Seq}) ->
-    State;
+    {continue, State};
 update_seq(Seq, Timestamp, State = #state{space_id = SpaceId, provider_id = ProviderId}) ->
-    dbsync_state:set_seq_and_timestamp(SpaceId, ProviderId, Seq, Timestamp),
-    State#state{seq = Seq}.
+    Ans = dbsync_state:set_seq_and_timestamp(SpaceId, ProviderId, Seq, Timestamp),
+    {Ans, State#state{seq = Seq}}.
 
 %%--------------------------------------------------------------------
 %% @private

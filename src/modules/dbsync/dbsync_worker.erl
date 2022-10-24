@@ -223,7 +223,8 @@ start_out_stream(SpaceId) ->
         (Since, Until, Timestamp, Docs) ->
             ProviderId = oneprovider:get_id(),
             dbsync_communicator:broadcast_changes(SpaceId, Since, Until, Timestamp, Docs),
-            dbsync_state:set_seq_and_timestamp(SpaceId, ProviderId, Until, Timestamp)
+            dbsync_state:set_seq_and_timestamp(SpaceId, ProviderId, Until, Timestamp),
+            ok
     end,
     Spec = dbsync_out_stream_spec(SpaceId, SpaceId, [
         {main_stream, true},

@@ -76,7 +76,7 @@ get_seq_and_timestamp(SpaceId, ProviderId) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec set_seq_and_timestamp(od_space:id(), od_provider:id(), couchbase_changes:seq(),
-    dbsync_changes:timestamp() | undefined) -> ok | {error, Reason :: term()}.
+    dbsync_changes:timestamp() | undefined) -> continue | reset | {error, Reason :: term()}.
 set_seq_and_timestamp(SpaceId, ProviderId, Number, Timestamp) ->
     {Diff, Default} = case Timestamp of
         undefined ->
@@ -94,7 +94,16 @@ set_seq_and_timestamp(SpaceId, ProviderId, Number, Timestamp) ->
     end,
 
     case datastore_model:update(?CTX, SpaceId, Diff, Default) of
-        {ok, _} -> ok;
+        {ok, #document{value = #dbsync_state{seq = SeqMap, synchronization_params = Params}}} ->
+            case maps:get(ProviderId, Params, undefined) of
+                #synchronization_params{mode = resynchronization} ->
+                    case maps:get(ProviderId, SeqMap, undefined) of
+                        {1, 0} when {Number, Timestamp} =/= {1, 0} -> reset;
+                        _ -> continue
+                    end;
+                _ ->
+                    continue
+            end;
         {error, Reason} -> {error, Reason}
     end.
 
@@ -141,13 +150,14 @@ check_synchronization_params(SpaceId, ProviderId, TargetSeq) ->
     },
     Default = #dbsync_state{seq = #{ProviderId => {1, 0}}, synchronization_params = #{ProviderId => InitialProviderParams}},
     DiffFun = fun(#dbsync_state{seq = Seq, synchronization_params = Params} = State) ->
-        case maps:get(ProviderId, Seq, {1, 0}) of
-            {1, 0} ->
+        ProviderParams = maps:get(ProviderId, Params, undefined),
+        case {maps:get(ProviderId, Seq, {1, 0}), ProviderParams} of
+            {{1, 0}, undefined} ->
                 {ok, State#dbsync_state{
                     synchronization_params = maps:put(ProviderId, InitialProviderParams, Params)
                 }};
             _ ->
-                {error, {nothing_changed, maps:get(ProviderId, Params, undefined)}}
+                {error, {nothing_changed, ProviderParams}}
         end
     end,
 
