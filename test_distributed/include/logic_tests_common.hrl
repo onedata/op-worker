@@ -401,7 +401,7 @@ end).
                                 #atm_task_schema_argument_mapper{
                                     argument_name = <<"lambda4ArgName">>,
                                     value_builder = #atm_task_argument_value_builder{
-                                        type = onedatafs_credentials, recipe = undefined
+                                        type = iterated_item, recipe = undefined
                                     }
                                 }
                             ],

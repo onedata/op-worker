@@ -46,6 +46,7 @@
 -author("Bartosz Walkowicz").
 
 -include("atm_workflow_execution_test_runner.hrl").
+-include("atm_workflow_execution_test.hrl").
 -include("modules/automation/atm_execution.hrl").
 -include("onenv_test_utils.hrl").
 -include_lib("cluster_worker/include/time_series/browsing.hrl").
@@ -54,19 +55,41 @@
 %% API
 -export([init/1, teardown/1]).
 -export([run/1]).
--export([cancel_workflow_execution/1]).
--export([browse_store/2, browse_store/3]).
+-export([
+    pause_workflow_execution/1,
+    cancel_workflow_execution/1,
+    stop_workflow_execution/2,
+
+    repeat_workflow_execution/3,
+    resume_workflow_execution/1,
+
+    delete_offline_session/1,
+    report_openfaas_unhealthy/1
+]).
+-export([
+    browse_store/2, browse_store/3,
+    get_exception_store_content/2
+]).
+-export([
+    assert_ended_atm_workflow_execution_can_be_neither_stopped_nor_resumed/1,
+    assert_not_stopped_atm_workflow_execution_can_be_neither_repeated_nor_resumed/2,
+    assert_not_ended_atm_workflow_execution_can_not_be_repeated/2
+]).
 
 -type step_name() ::
     prepare_lane |
     create_run |
+    resume_lane |
     run_task_for_item |
     process_task_result_for_item |
     process_streamed_task_data |
+    handle_task_results_processed_for_all_items |
     report_item_error |
-    handle_task_execution_ended |
-    handle_lane_execution_ended |
-    handle_workflow_execution_ended.
+    handle_task_execution_stopped |
+    handle_lane_execution_stopped |
+    handle_workflow_execution_stopped |
+    handle_exception |
+    handle_workflow_abruptly_stopped.
 
 -type step_phase_timing() :: before_step | after_step.
 
@@ -89,15 +112,21 @@
 }).
 -type step_phase() :: #step_phase{}.
 
--type result_override() :: {return, term()} | {throw, errors:error()}.
+-type result_override() :: {return, term()} | {error | throw, errors:error()}.
 
 -type mock_strategy() ::
     % original step will be run unperturbed
     passthrough |
+    % original step will be run after sleeping for specified period of time
+    {passthrough_with_delay, time:millis()} |
     % original step will be run but it's result will be replaced with specified one
     {passthrough_with_result_override, result_override()} |
     % original step will not be run and specified result will be returned immediately
     {yield, result_override()}.
+
+-type mock_strategy_spec() ::
+    mock_strategy() |
+    fun((mock_call_report()) -> mock_strategy()).
 
 -type step_mock_spec() :: #atm_step_mock_spec{}.
 
@@ -107,7 +136,7 @@
 
 -export_type([
     mock_call_ctx/0, hook/0, exp_state_diff/0,
-    result_override/0, mock_strategy/0, step_phase_selector/0, step_mock_spec/0,
+    result_override/0, mock_strategy_spec/0, step_phase_selector/0, step_mock_spec/0,
     lane_run_test_spec/0, incarnation_test_spec/0, test_spec/0
 ]).
 
@@ -136,6 +165,7 @@
     workflow_execution_exp_state :: atm_workflow_execution_exp_state_builder:exp_state(),
     workflow_execution_exp_state_changed :: boolean(),
 
+    prev_incarnations_executed_step_phases = [] :: [{non_neg_integer(), [step_phase_selector()]}],
     executed_step_phases = [] :: [step_phase_selector()],
     pending_step_phases = [] :: [step_phase()],
     deferred_step_phases = #{} :: #{step_phase_selector() => [step_phase()]},
@@ -159,7 +189,7 @@
 
 -define(NO_DIFF, fun(_) -> false end).
 
--define(NOW(), global_clock:timestamp_seconds()).
+-define(NOW_SEC(), global_clock:timestamp_seconds()).
 
 -define(INFINITE_LOG_BASED_STORES_LISTING_OPTS, #{
     start_from => undefined,
@@ -222,7 +252,7 @@ run(TestSpec = #atm_workflow_execution_test_spec{
 
     AtmLaneSchemas = AtmWorkflowSchemaRevision#atm_workflow_schema_revision.lanes,
     ExpState = atm_workflow_execution_exp_state_builder:init(
-        ProviderSelector, SpaceId, AtmWorkflowExecutionId, ?NOW(), AtmLaneSchemas
+        ProviderSelector, SpaceId, AtmWorkflowExecutionId, ?NOW_SEC(), AtmLaneSchemas
     ),
     true = atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState, 0),
 
@@ -240,14 +270,83 @@ run(TestSpec = #atm_workflow_execution_test_spec{
     }).
 
 
+-spec pause_workflow_execution(atm_workflow_execution_test_runner:mock_call_ctx()) ->
+    ok | no_return().
+pause_workflow_execution(#atm_mock_call_ctx{
+    provider = ProviderSelector,
+    session_id = SessionId,
+    workflow_execution_id = AtmWorkflowExecutionId
+}) ->
+    ?erpc(ProviderSelector, mi_atm:pause_workflow_execution(SessionId, AtmWorkflowExecutionId)).
+
+
 -spec cancel_workflow_execution(atm_workflow_execution_test_runner:mock_call_ctx()) ->
-    ok.
+    ok | no_return().
 cancel_workflow_execution(#atm_mock_call_ctx{
     provider = ProviderSelector,
     session_id = SessionId,
     workflow_execution_id = AtmWorkflowExecutionId
 }) ->
     ?erpc(ProviderSelector, mi_atm:cancel_workflow_execution(SessionId, AtmWorkflowExecutionId)).
+
+
+-spec stop_workflow_execution(
+    atm_lane_execution:run_stopping_reason(),
+    atm_workflow_execution_test_runner:mock_call_ctx()
+) ->
+    ok | errors:error().
+stop_workflow_execution(Reason, #atm_mock_call_ctx{
+    provider = ProviderSelector,
+    session_id = SessionId,
+    workflow_execution_id = AtmWorkflowExecutionId
+}) ->
+    ?erpc(ProviderSelector, atm_workflow_execution_handler:stop(
+        user_ctx:new(SessionId), AtmWorkflowExecutionId, Reason
+    )).
+
+
+-spec repeat_workflow_execution(
+    atm_workflow_execution:repeat_type(),
+    atm_lane_execution:lane_run_selector(),
+    atm_workflow_execution_test_runner:mock_call_ctx()
+) ->
+    ok.
+repeat_workflow_execution(RepeatType, AtmLaneRunSelector, #atm_mock_call_ctx{
+    provider = ProviderSelector,
+    session_id = SessionId,
+    workflow_execution_id = AtmWorkflowExecutionId
+}) ->
+    ?erpc(ProviderSelector, mi_atm:repeat_workflow_execution(
+        SessionId, RepeatType, AtmWorkflowExecutionId, AtmLaneRunSelector
+    )).
+
+
+-spec resume_workflow_execution(atm_workflow_execution_test_runner:mock_call_ctx()) ->
+    ok.
+resume_workflow_execution(#atm_mock_call_ctx{
+    provider = ProviderSelector,
+    session_id = SessionId,
+    workflow_execution_id = AtmWorkflowExecutionId
+}) ->
+    ?erpc(ProviderSelector, mi_atm:resume_workflow_execution(SessionId, AtmWorkflowExecutionId)).
+
+
+-spec delete_offline_session(mock_call_ctx()) -> ok | no_return().
+delete_offline_session(#atm_mock_call_ctx{
+    provider = ProviderSelector,
+    workflow_execution_id = AtmWorkflowExecutionId
+}) ->
+    ?erpc(ProviderSelector, offline_access_manager:close_session(AtmWorkflowExecutionId)).
+
+
+-spec report_openfaas_unhealthy(mock_call_ctx()) -> ok | no_return().
+report_openfaas_unhealthy(#atm_mock_call_ctx{
+    provider = ProviderSelector,
+    workflow_execution_id = AtmWorkflowExecutionId
+}) ->
+    ?erpc(ProviderSelector, atm_workflow_execution_handler:on_openfaas_down(
+        AtmWorkflowExecutionId, ?ERROR_ATM_OPENFAAS_UNHEALTHY
+    )).
 
 
 -spec browse_store(automation:id(), mock_call_ctx()) -> json_utils:json_term().
@@ -270,6 +369,64 @@ browse_store(AtmStoreSchemaId, AtmTaskExecutionIdOrLaneRunSelector, AtmMockCallC
     SpaceId = oct_background:get_space_id(SpaceSelector),
     AtmStoreId = get_store_id(AtmStoreSchemaId, AtmTaskExecutionIdOrLaneRunSelector, AtmMockCallCtx),
     ?rpc(ProviderSelector, browse_store(SessionId, SpaceId, AtmWorkflowExecutionId, AtmStoreId)).
+
+
+-spec get_exception_store_content(atm_lane_execution:lane_run_selector(), mock_call_ctx()) ->
+    json_utils:json_term().
+get_exception_store_content(AtmLaneRunSelector, AtmMockCallCtx) ->
+    #{<<"items">> := Items, <<"isLast">> := true} = atm_workflow_execution_test_runner:browse_store(
+        exception_store, AtmLaneRunSelector, AtmMockCallCtx
+    ),
+    lists:map(fun(#{<<"value">> := Content}) -> Content end, Items).
+
+
+-spec assert_ended_atm_workflow_execution_can_be_neither_stopped_nor_resumed(mock_call_ctx()) ->
+    ok.
+assert_ended_atm_workflow_execution_can_be_neither_stopped_nor_resumed(AtmMockCallCtx = #atm_mock_call_ctx{
+    workflow_execution_exp_state = ExpState0
+}) ->
+    lists:foreach(fun(StoppingReason) ->
+        ?assertEqual(
+            ?ERROR_ATM_WORKFLOW_EXECUTION_ENDED,
+            atm_workflow_execution_test_runner:stop_workflow_execution(StoppingReason, AtmMockCallCtx)
+        )
+    end, ?STOPPING_REASONS),
+
+    ?assertThrow(
+        ?ERROR_ATM_WORKFLOW_EXECUTION_NOT_RESUMABLE,
+        atm_workflow_execution_test_runner:resume_workflow_execution(AtmMockCallCtx)
+    ),
+
+    ?assert(atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState0, 0)).
+
+
+-spec assert_not_stopped_atm_workflow_execution_can_be_neither_repeated_nor_resumed(
+    atm_lane_execution:lane_run_selector(),
+    mock_call_ctx()
+) ->
+    ok.
+assert_not_stopped_atm_workflow_execution_can_be_neither_repeated_nor_resumed(AtmLaneRunSelector, AtmMockCallCtx) ->
+    ?assertThrow(
+        ?ERROR_ATM_WORKFLOW_EXECUTION_NOT_RESUMABLE,
+        atm_workflow_execution_test_runner:resume_workflow_execution(AtmMockCallCtx)
+    ),
+    assert_not_ended_atm_workflow_execution_can_not_be_repeated(AtmLaneRunSelector, AtmMockCallCtx).
+
+
+-spec assert_not_ended_atm_workflow_execution_can_not_be_repeated(
+    atm_lane_execution:lane_run_selector(),
+    mock_call_ctx()
+) ->
+    ok.
+assert_not_ended_atm_workflow_execution_can_not_be_repeated(AtmLaneRunSelector, AtmMockCallCtx) ->
+    lists:foreach(fun(RepeatType) ->
+        ?assertThrow(
+            ?ERROR_ATM_WORKFLOW_EXECUTION_NOT_ENDED,
+            atm_workflow_execution_test_runner:repeat_workflow_execution(
+                RepeatType, AtmLaneRunSelector, AtmMockCallCtx
+            )
+        )
+    end, [rerun, retry]).
 
 
 %%%===================================================================
@@ -305,20 +462,14 @@ monitor_workflow_execution(TestCtx0) ->
     after ?AWAIT_OTHER_PARALLEL_PIPELINES_NEXT_STEP_INTERVAL ->
         case TestCtx0#test_ctx.test_hung_probes_left of
             0 ->
-                PendingStepPhaseSelectors = lists:map(
-                    fun(#step_phase{selector = StepPhaseSelector}) -> StepPhaseSelector end,
-                    TestCtx0#test_ctx.pending_step_phases
-                ),
-                ct:pal("Automation workflow execution test hung after steps: ~p", [
-                    PendingStepPhaseSelectors ++ TestCtx0#test_ctx.executed_step_phases
-                ]),
-                ?assertEqual(success, failure);
+                ct:pal("Automation workflow execution test hung"),
+                fail_test(TestCtx0);
             Num ->
                 TestCtx1 = TestCtx0#test_ctx{test_hung_probes_left = Num - 1},
                 TestCtx2 = address_pending_expectations(TestCtx1),
                 TestCtx3 = end_pending_step_phase_executions(TestCtx2),
 
-                case has_workflow_ended(TestCtx3) of
+                case has_workflow_stopped(TestCtx3) of
                     true ->
                         ok;
                     false ->
@@ -360,7 +511,7 @@ begin_step_phase_execution(
 ) ->
     StepMockCallCtx = build_mock_call_ctx(StepMockCallReport, TestCtx0),
 
-    call_if_defined(get_hook(StepMockCallReport, StepMockSpec), StepMockCallCtx),
+    call_hook_if_defined(get_hook(StepMockCallReport, StepMockSpec), StepMockCallCtx, TestCtx0),
 
     ExpStateDiff = get_exp_state_diff(StepMockCallReport, StepMockSpec),
     TestCtx1 = case ExpStateDiff(StepMockCallCtx) of
@@ -388,12 +539,19 @@ end_pending_step_phase_executions(TestCtx = #test_ctx{pending_step_phases = Pend
         },
         TestCtxAcc0 = #test_ctx{executed_step_phases = ExecutedStepPhases}
     ) ->
+        StepMockCallCtx = build_mock_call_ctx(StepMockCallReport, TestCtxAcc0),
+
         reply_to_execution_process(ReplyTo, case Timing of
-            before_step -> MockStrategy;
-            after_step -> ok
+            before_step ->
+                case is_function(MockStrategy) of
+                    true -> MockStrategy(StepMockCallCtx);
+                    false -> MockStrategy
+                end;
+            after_step ->
+                ok
         end),
 
-        shift_monitored_lane_run_if_current_one_ended(
+        shift_monitored_lane_run_if_current_one_stopped(
             StepMockCallReport,
             TestCtxAcc0#test_ctx{executed_step_phases = [StepPhaseSelector | ExecutedStepPhases]}
         )
@@ -422,15 +580,15 @@ begin_deferred_step_phase_executions_if_possible(TestCtx = #test_ctx{
 
 
 %% @private
--spec has_workflow_ended(test_ctx()) -> boolean().
-has_workflow_ended(#test_ctx{
+-spec has_workflow_stopped(test_ctx()) -> boolean().
+has_workflow_stopped(#test_ctx{
     ongoing_incarnations = [],
     pending_step_phases = [],
     deferred_step_phases = DeferredStepPhases
 }) ->
     maps_utils:is_empty(DeferredStepPhases);
 
-has_workflow_ended(#test_ctx{}) ->
+has_workflow_stopped(#test_ctx{}) ->
     false.
 
 
@@ -438,13 +596,31 @@ has_workflow_ended(#test_ctx{}) ->
 -spec get_step_mock_spec(mock_call_report(), test_ctx()) ->
     {step_phase_selector(), step_mock_spec()}.
 get_step_mock_spec(
-    #mock_call_report{step = handle_workflow_execution_ended, timing = Timing},
+    #mock_call_report{step = handle_workflow_execution_stopped, timing = Timing},
     #test_ctx{ongoing_incarnations = [#atm_workflow_execution_incarnation_test_spec{
         incarnation_num = IncarnationNum,
-        handle_workflow_execution_ended = Spec
+        handle_workflow_execution_stopped = Spec
     } | _]}
 ) ->
-    {{handle_workflow_execution_ended, Timing, IncarnationNum}, Spec};
+    {{handle_workflow_execution_stopped, Timing, IncarnationNum}, Spec};
+
+get_step_mock_spec(
+    #mock_call_report{step = handle_exception, timing = Timing},
+    #test_ctx{ongoing_incarnations = [#atm_workflow_execution_incarnation_test_spec{
+        incarnation_num = IncarnationNum,
+        handle_exception = Spec
+    } | _]}
+) ->
+    {{handle_exception, Timing, IncarnationNum}, Spec};
+
+get_step_mock_spec(
+    #mock_call_report{step = handle_workflow_abruptly_stopped, timing = Timing},
+    #test_ctx{ongoing_incarnations = [#atm_workflow_execution_incarnation_test_spec{
+        incarnation_num = IncarnationNum,
+        handle_workflow_abruptly_stopped = Spec
+    } | _]}
+) ->
+    {{handle_workflow_abruptly_stopped, Timing, IncarnationNum}, Spec};
 
 get_step_mock_spec(
     #mock_call_report{step = prepare_lane, timing = Timing, args = [_, _, {AtmLaneIndex, _}]},
@@ -469,8 +645,19 @@ get_step_mock_spec(
     {{create_run, Timing, Selector}, Spec};
 
 get_step_mock_spec(
+    #mock_call_report{step = resume_lane, timing = Timing, args = [{AtmLaneIndex, _}, _, _]},
+    NewTestCtx
+) ->
+    #atm_lane_run_execution_test_spec{
+        selector = Selector,
+        create_run = Spec
+    } = get_lane_run_test_spec(AtmLaneIndex, NewTestCtx),
+
+    {{resume_lane, Timing, Selector}, Spec};
+
+get_step_mock_spec(
     #mock_call_report{
-        step = handle_lane_execution_ended,
+        step = handle_lane_execution_stopped,
         timing = Timing,
         args = [{AtmLaneIndex, _}, _, _]
     },
@@ -478,10 +665,10 @@ get_step_mock_spec(
 ) ->
     #atm_lane_run_execution_test_spec{
         selector = Selector,
-        handle_lane_execution_ended = Spec
+        handle_lane_execution_stopped = Spec
     } = get_lane_run_test_spec(AtmLaneIndex, NewTestCtx),
 
-    {{handle_lane_execution_ended, Timing, Selector}, Spec};
+    {{handle_lane_execution_stopped, Timing, Selector}, Spec};
 
 get_step_mock_spec(#mock_call_report{step = Step, timing = Timing}, NewTestCtx) ->
     AtmLaneRunTestSpec = get_current_lane_run_test_spec(NewTestCtx),
@@ -551,9 +738,19 @@ get_hook(#mock_call_report{timing = after_step}, #atm_step_mock_spec{after_step_
 
 
 %% @private
--spec call_if_defined(undefined | fun((term()) -> ok), term()) -> ok.
-call_if_defined(undefined, _Input) -> ok;
-call_if_defined(Fun, Input) -> Fun(Input).
+-spec call_hook_if_defined(undefined | hook(), term(), test_ctx()) -> ok.
+call_hook_if_defined(undefined, _Input, _TestCtx) ->
+    ok;
+call_hook_if_defined(HookFun, Input, TestCtx) ->
+    try
+        HookFun(Input),
+        ok
+    catch Type:Error:Stacktrace ->
+        ct:pal("Unexpected exception when calling test hook: ~p", [
+            iolist_to_binary(lager:pr_stacktrace(Stacktrace, {Type, Error}))
+        ]),
+        fail_test(TestCtx)
+    end.
 
 
 %% @private
@@ -616,20 +813,25 @@ get_exp_state_diff(
 ) ->
     fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0, call_args = [
         _AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId,
-        ItemsBatch, _ReportResultUrl, _HeartbeatUrl
+        _AtmJobBatchId, ItemBatch
     ]}) ->
-        ExpState1 = atm_workflow_execution_exp_state_builder:expect_task_items_in_processing_increased(
-            AtmTaskExecutionId, length(ItemsBatch), ExpState0
+        ExpState1 = atm_workflow_execution_exp_state_builder:expect_task_transitioned_to_active_status_if_was_in_pending_status(
+            AtmTaskExecutionId, ExpState0
         ),
-        ExpState2 = atm_workflow_execution_exp_state_builder:expect_task_transitioned_to_active_status_if_was_in_pending_status(
+        ExpState2 = atm_workflow_execution_exp_state_builder:expect_task_parallel_box_transitioned_to_active_status_if_was_in_pending_status(
             AtmTaskExecutionId, ExpState1
         ),
-        ExpState3 = atm_workflow_execution_exp_state_builder:expect_task_parallel_box_transitioned_to_active_status_if_was_in_pending_status(
+        ExpState3 = atm_workflow_execution_exp_state_builder:expect_task_lane_run_transitioned_to_active_status_if_was_in_enqueued_status(
             AtmTaskExecutionId, ExpState2
         ),
-        ExpState4 = atm_workflow_execution_exp_state_builder:expect_task_lane_run_transitioned_to_active_status_if_was_in_enqueued_status(
-            AtmTaskExecutionId, ExpState3
-        ),
+        ExpState4 = case atm_workflow_execution_exp_state_builder:get_task_status(AtmTaskExecutionId, ExpState3) of
+            <<"active">> ->
+                atm_workflow_execution_exp_state_builder:expect_task_items_in_processing_increased(
+                    AtmTaskExecutionId, length(ItemBatch), ExpState3
+                );
+            _ ->
+                ExpState3
+        end,
         {true, ExpState4}
     end;
 
@@ -653,13 +855,13 @@ get_exp_state_diff(
     end;
 
 get_exp_state_diff(
-    #mock_call_report{step = handle_task_execution_ended, timing = before_step},
+    #mock_call_report{step = handle_task_execution_stopped, timing = before_step},
     #atm_step_mock_spec{before_step_exp_state_diff = default}
 ) ->
     ?NO_DIFF;
 
 get_exp_state_diff(
-    #mock_call_report{step = handle_task_execution_ended, timing = after_step},
+    #mock_call_report{step = handle_task_execution_stopped, timing = after_step},
     #atm_step_mock_spec{after_step_exp_state_diff = default}
 ) ->
     fun(#atm_mock_call_ctx{
@@ -680,13 +882,13 @@ get_exp_state_diff(
     end;
 
 get_exp_state_diff(
-    #mock_call_report{step = handle_lane_execution_ended, timing = before_step},
+    #mock_call_report{step = handle_lane_execution_stopped, timing = before_step},
     #atm_step_mock_spec{before_step_exp_state_diff = default}
 ) ->
     ?NO_DIFF;
 
 get_exp_state_diff(
-    #mock_call_report{step = handle_lane_execution_ended, timing = after_step},
+    #mock_call_report{step = handle_lane_execution_stopped, timing = after_step},
     #atm_step_mock_spec{after_step_exp_state_diff = default}
 ) ->
     fun(#atm_mock_call_ctx{
@@ -702,7 +904,9 @@ get_exp_state_diff(
                     {CurrentAtmLaneIndex + 1, CurrentAtmRunNum}, CurrentAtmRunNum, ExpState0
                 );
             false ->
-                ExpState0
+                atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(
+                    ExpState0
+                )
         end,
         {true, atm_workflow_execution_exp_state_builder:expect_lane_run_finished(
             AtmLaneRunSelector, ExpState1
@@ -710,18 +914,29 @@ get_exp_state_diff(
     end;
 
 get_exp_state_diff(
-    #mock_call_report{step = handle_workflow_execution_ended, timing = before_step},
+    #mock_call_report{step = handle_workflow_execution_stopped, timing = before_step},
     #atm_step_mock_spec{before_step_exp_state_diff = default}
 ) ->
     ?NO_DIFF;
 
 get_exp_state_diff(
-    #mock_call_report{step = handle_workflow_execution_ended, timing = after_step},
+    #mock_call_report{step = handle_workflow_execution_stopped, timing = after_step},
     #atm_step_mock_spec{after_step_exp_state_diff = default}
 ) ->
     fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
         {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_finished(ExpState0)}
     end;
+
+get_exp_state_diff(
+    #mock_call_report{step = Step, timing = before_step},
+    #atm_step_mock_spec{after_step_exp_state_diff = default}
+) when
+    Step =:= handle_exception;
+    Step =:= handle_workflow_abruptly_stopped
+->
+    % Changes made by exception handling depends when it happens and as such no
+    % reasonable default implementation can be provided
+    ?NO_DIFF;
 
 get_exp_state_diff(
     #mock_call_report{timing = before_step},
@@ -762,34 +977,66 @@ get_exp_state_diff(
 
 %% @private
 -spec assert_exp_workflow_execution_state(test_ctx()) -> test_ctx().
-assert_exp_workflow_execution_state(#test_ctx{
-    workflow_execution_exp_state = ExpState,
-    executed_step_phases = ExecutedStepPhases
-}) ->
+assert_exp_workflow_execution_state(TestCtx = #test_ctx{workflow_execution_exp_state = ExpState}) ->
     case atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState, ?ASSERT_RETRIES) of
         true ->
             ok;
         false ->
-            ct:pal("Automation workflow execution test failed after steps: ~p", [
-                ExecutedStepPhases
-            ]),
-            ?assertEqual(success, failure)
+            ct:pal("Automation workflow execution test failed due to unmet expectations"),
+            fail_test(TestCtx)
     end.
 
 
 %% @private
--spec shift_monitored_lane_run_if_current_one_ended(mock_call_report(), test_ctx()) ->
+fail_test(TestCtx) ->
+    PendingStepPhaseSelectors = lists:map(
+        fun(#step_phase{selector = StepPhaseSelector}) -> StepPhaseSelector end,
+        TestCtx#test_ctx.pending_step_phases
+    ),
+    ct:pal("PENDING STEPS:~n~n~20p~n~n~nEXECUTED STEPS:~n~n~20p~n~n~nPREVIOUS INCARNATIONS:~n~n~20p", [
+        PendingStepPhaseSelectors,
+        TestCtx#test_ctx.executed_step_phases,
+        TestCtx#test_ctx.prev_incarnations_executed_step_phases
+    ]),
+    ?assertEqual(success, failure).
+
+
+%% @private
+-spec shift_monitored_lane_run_if_current_one_stopped(mock_call_report(), test_ctx()) ->
     test_ctx().
-shift_monitored_lane_run_if_current_one_ended(
-    #mock_call_report{timing = after_step, step = handle_workflow_execution_ended},
-    TestCtx = #test_ctx{ongoing_incarnations = [_]}  %% last incarnation ended
-) ->
+shift_monitored_lane_run_if_current_one_stopped(
+    StepMockCallReport = #mock_call_report{timing = after_step, step = Step},
+    TestCtx = #test_ctx{ongoing_incarnations = [EndedIncarnation]}  %% last incarnation stopped
+) when
+    Step =:= handle_workflow_abruptly_stopped;
+    Step =:= handle_workflow_execution_stopped
+->
+    call_hook_if_defined(
+        EndedIncarnation#atm_workflow_execution_incarnation_test_spec.after_hook,
+        build_mock_call_ctx(StepMockCallReport, TestCtx),
+        TestCtx
+    ),
     TestCtx#test_ctx{ongoing_incarnations = []};
 
-shift_monitored_lane_run_if_current_one_ended(
-    #mock_call_report{timing = after_step, step = handle_workflow_execution_ended},
-    TestCtx = #test_ctx{ongoing_incarnations = [_ | LeftoverIncarnations]}
-) ->
+shift_monitored_lane_run_if_current_one_stopped(
+    StepMockCallReport = #mock_call_report{timing = after_step, step = Step},
+    TestCtx = #test_ctx{
+        workflow_execution_exp_state = ExpState0,
+        ongoing_incarnations = [EndedIncarnation | LeftoverIncarnations],
+        prev_incarnations_executed_step_phases = PrevIncarnationsExecutedStepPhases,
+        executed_step_phases = ExecutedStepPhases
+    }
+) when
+    Step =:= handle_workflow_abruptly_stopped;
+    Step =:= handle_workflow_execution_stopped
+->
+    #atm_workflow_execution_incarnation_test_spec{
+        incarnation_num = IncarnationNum,
+        after_hook = AfterHook
+    } = EndedIncarnation,
+
+    call_hook_if_defined(AfterHook, build_mock_call_ctx(StepMockCallReport, TestCtx), TestCtx),
+
     #atm_workflow_execution_incarnation_test_spec{
         lane_runs = [#atm_lane_run_execution_test_spec{
             selector = {AtmLaneIndex, AtmRunNum}
@@ -799,10 +1046,18 @@ shift_monitored_lane_run_if_current_one_ended(
     TestCtx#test_ctx{
         current_lane_index = AtmLaneIndex,
         current_run_num = AtmRunNum,
-        ongoing_incarnations = LeftoverIncarnations
+        workflow_execution_exp_state = atm_workflow_execution_exp_state_builder:set_current_lane_run(
+            AtmLaneIndex, AtmRunNum, ExpState0
+        ),
+        ongoing_incarnations = LeftoverIncarnations,
+        prev_incarnations_executed_step_phases = [
+            {IncarnationNum, ExecutedStepPhases}
+            | PrevIncarnationsExecutedStepPhases
+        ],
+        executed_step_phases = []
     };
 
-shift_monitored_lane_run_if_current_one_ended(
+shift_monitored_lane_run_if_current_one_stopped(
     StepMockCallReport = #mock_call_report{
         timing = after_step,
         step = Step,
@@ -813,10 +1068,11 @@ shift_monitored_lane_run_if_current_one_ended(
         current_run_num = CurrentAtmRunNum
     }
 ) when
-    % Lane execution ended callback may ba called during lane preparation in case of failure
+    % Lane execution stopped callback may ba called during lane preparation in case of failure
     % - in such case it will be prepare_lane that will finish executing last
     Step =:= prepare_lane;
-    Step =:= handle_lane_execution_ended
+    Step =:= resume_lane;
+    Step =:= handle_lane_execution_stopped
 ->
     AtmLaneRunTestSpec = get_lane_run_test_spec(AtmLaneIndex, TestCtx),
     AtmLaneRunSelector = AtmLaneRunTestSpec#atm_lane_run_execution_test_spec.selector,
@@ -827,14 +1083,14 @@ shift_monitored_lane_run_if_current_one_ended(
 
     case {IsLastLaneRunStepPhase, AtmLaneRunSelector} of
         {true, CurrentAtmLaneRunSelector} ->
-            shift_monitored_lane_run_after_current_one_ended(TestCtx);
+            shift_monitored_lane_run_after_current_one_stopped(TestCtx);
         {true, _} ->
-            filter_out_ended_lane_run_preparing_in_advance(AtmLaneRunSelector, TestCtx);
+            filter_out_stopped_lane_run_preparing_in_advance(AtmLaneRunSelector, TestCtx);
         {false, _} ->
             TestCtx
     end;
 
-shift_monitored_lane_run_if_current_one_ended(_, TestCtx) ->
+shift_monitored_lane_run_if_current_one_stopped(_, TestCtx) ->
     TestCtx.
 
 
@@ -846,24 +1102,27 @@ shift_monitored_lane_run_if_current_one_ended(_, TestCtx) ->
 ) ->
     boolean().
 is_end_phase_of_last_step_of_lane_run(
-    #mock_call_report{timing = after_step, step = Step},
+    #mock_call_report{timing = after_step, step = handle_lane_execution_stopped},
     AtmLaneRunSelector,
     #test_ctx{executed_step_phases = ExecutedStepPhases}
 ) ->
-    SecondToLastStepPhaseInLaneRunInCaseThisIsTheLastOne = {
-        hd([prepare_lane, handle_lane_execution_ended] -- [Step]),
-        after_step,
-        AtmLaneRunSelector
-    },
-    lists:member(
-        SecondToLastStepPhaseInLaneRunInCaseThisIsTheLastOne,
-        ExecutedStepPhases
-    ).
+    lists:any(
+        fun(StepSelector) -> lists:member(StepSelector, ExecutedStepPhases) end,
+        [{prepare_lane, after_step, AtmLaneRunSelector}, {resume_lane, after_step, AtmLaneRunSelector}]
+    );
+
+is_end_phase_of_last_step_of_lane_run(
+    #mock_call_report{timing = after_step},
+    AtmLaneRunSelector,
+    #test_ctx{executed_step_phases = ExecutedStepPhases}
+) ->
+    lists:member({handle_lane_execution_stopped, after_step, AtmLaneRunSelector}, ExecutedStepPhases).
 
 
 %% @private
--spec shift_monitored_lane_run_after_current_one_ended(test_ctx()) -> test_ctx().
-shift_monitored_lane_run_after_current_one_ended(TestCtx = #test_ctx{
+-spec shift_monitored_lane_run_after_current_one_stopped(test_ctx()) -> test_ctx().
+shift_monitored_lane_run_after_current_one_stopped(TestCtx = #test_ctx{
+    workflow_execution_exp_state = ExpState0,
     ongoing_incarnations = [OngoingIncarnation | LeftoverIncarnations]
 }) ->
     case OngoingIncarnation#atm_workflow_execution_incarnation_test_spec.lane_runs of
@@ -884,18 +1143,21 @@ shift_monitored_lane_run_after_current_one_ended(TestCtx = #test_ctx{
             TestCtx#test_ctx{
                 current_lane_index = AtmLaneIndex,
                 current_run_num = AtmRunNum,
+                workflow_execution_exp_state = atm_workflow_execution_exp_state_builder:set_current_lane_run(
+                    AtmLaneIndex, AtmRunNum, ExpState0
+                ),
                 ongoing_incarnations = [NewOngoingIncarnation | LeftoverIncarnations]
             }
     end.
 
 
 %% @private
--spec filter_out_ended_lane_run_preparing_in_advance(
+-spec filter_out_stopped_lane_run_preparing_in_advance(
     atm_lane_execution:lane_run_selector(),
     test_ctx()
 ) ->
     test_ctx().
-filter_out_ended_lane_run_preparing_in_advance(AtmLaneRunSelector, TestCtx = #test_ctx{
+filter_out_stopped_lane_run_preparing_in_advance(AtmLaneRunSelector, TestCtx = #test_ctx{
     ongoing_incarnations = [OngoingIncarnation | LeftoverIncarnations]
 }) ->
     NewOngoingIncarnation = OngoingIncarnation#atm_workflow_execution_incarnation_test_spec{
@@ -960,12 +1222,16 @@ mock_workflow_execution_handler_steps(Workers) ->
     end),
 
     mock_workflow_execution_handler_step(Workers, prepare_lane, 3),
-    mock_workflow_execution_handler_step(Workers, run_task_for_item, 6),
+    mock_workflow_execution_handler_step(Workers, resume_lane, 3),
+    mock_workflow_execution_handler_step(Workers, run_task_for_item, 5),
     mock_workflow_execution_handler_step(Workers, process_task_result_for_item, 5),
     mock_workflow_execution_handler_step(Workers, process_streamed_task_data, 4),
+    mock_workflow_execution_handler_step(Workers, handle_task_results_processed_for_all_items, 3),
     mock_workflow_execution_handler_step(Workers, report_item_error, 3),
-    mock_workflow_execution_handler_step(Workers, handle_task_execution_ended, 3),
-    mock_workflow_execution_handler_step(Workers, handle_workflow_execution_ended, 2).
+    mock_workflow_execution_handler_step(Workers, handle_task_execution_stopped, 3),
+    mock_workflow_execution_handler_step(Workers, handle_exception, 5),
+    mock_workflow_execution_handler_step(Workers, handle_workflow_abruptly_stopped, 3),
+    mock_workflow_execution_handler_step(Workers, handle_workflow_execution_stopped, 2).
 
 
 %% @private
@@ -1026,14 +1292,14 @@ build_workflow_execution_handler_step_function_mock(6, Label) ->
 mock_lane_execution_handler_steps(Workers) ->
     test_utils:mock_new(Workers, atm_lane_execution_handler, [passthrough, no_history]),
 
-    test_utils:mock_expect(Workers, atm_lane_execution_handler, handle_ended, fun(
+    test_utils:mock_expect(Workers, atm_lane_execution_handler, handle_stopped, fun(
         AtmLaneRunSelector,
         AtmWorkflowExecutionId,
         AtmWorkflowExecutionCtx
     ) ->
         exec_mock(
             AtmWorkflowExecutionId,
-            handle_lane_execution_ended,
+            handle_lane_execution_stopped,
             [AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx]
         )
     end).
@@ -1086,12 +1352,22 @@ exec_mock(AtmWorkflowExecutionId, Step, Args) ->
                         timing = after_step
                     }),
                     Result;
+
+                {passthrough_with_delay, DelayMilliseconds} ->
+                    timer:sleep(DelayMilliseconds),
+                    Result = meck:passthrough(Args),
+                    ok = call_test_process(TestProcPid, MockCallReport#mock_call_report{
+                        timing = after_step
+                    }),
+                    Result;
+
                 {passthrough_with_result_override, ResultOverride} ->
                     meck:passthrough(Args),
                     ok = call_test_process(TestProcPid, MockCallReport#mock_call_report{
                         timing = after_step
                     }),
                     apply_result_override(ResultOverride);
+
                 {yield, ResultOverride} ->
                     apply_result_override(ResultOverride)
             end
@@ -1101,9 +1377,10 @@ exec_mock(AtmWorkflowExecutionId, Step, Args) ->
 %% @private
 -spec apply_result_override
     ({return, Result}) -> Result when Result :: term();
-    ({throw, errors:error()}) -> no_return().
+    ({error | throw, errors:error()}) -> no_return().
 apply_result_override({return, Result}) -> Result;
-apply_result_override({throw, Error}) -> throw(Error).
+apply_result_override({throw, Error}) -> throw(Error);
+apply_result_override({error, Error}) -> error(Error).
 
 
 %% @private

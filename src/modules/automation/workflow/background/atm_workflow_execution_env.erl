@@ -31,7 +31,8 @@
     set_workflow_audit_log_store_container/2,
     set_lane_run_exception_store_container/2,
     add_task_audit_log_store_container/3,
-    add_task_time_series_store_id/3
+    add_task_time_series_store_id/3,
+    ensure_task_registered/2
 ]).
 -export([
     get_space_id/1,
@@ -45,7 +46,7 @@
     get_task_time_series_store_id/2,
 
     acquire_auth/1,
-    acquire_logger/3
+    build_logger/3
 ]).
 
 
@@ -159,6 +160,16 @@ add_task_time_series_store_id(
     }}.
 
 
+-spec ensure_task_registered(atm_task_execution:id(), record()) -> record().
+ensure_task_registered(AtmTaskExecutionId, Record = #atm_workflow_execution_env{
+    task_audit_logs_registry = AtmTaskAuditLogsRegistry
+}) ->
+    case maps:is_key(AtmTaskExecutionId, AtmTaskAuditLogsRegistry) of
+        true -> Record;
+        false -> add_task_stores(AtmTaskExecutionId, Record)
+    end.
+
+
 -spec get_space_id(record()) -> od_space:id().
 get_space_id(#atm_workflow_execution_env{space_id = SpaceId}) ->
     SpaceId.
@@ -221,18 +232,19 @@ acquire_auth(#atm_workflow_execution_env{
     atm_workflow_execution_auth:build(SpaceId, AtmWorkflowExecutionId, CreatorUserCtx).
 
 
--spec acquire_logger(
+-spec build_logger(
     undefined | atm_task_execution:id(),
     atm_workflow_execution_auth:record(),
     record()
 ) ->
     atm_workflow_execution_logger:record() | no_return().
-acquire_logger(AtmTaskExecutionId, AtmWorkflowExecutionAuth, #atm_workflow_execution_env{
-    workflow_audit_log_store_container = AtmWorkflowAuditLogStoreContainer
-} = Record) ->
+build_logger(AtmTaskExecutionId, AtmWorkflowExecutionAuth, #atm_workflow_execution_env{
+    workflow_audit_log_store_container = AtmWorkflowAuditLogStoreContainer,
+    task_audit_logs_registry = AtmTaskAuditLogsRegistry
+}) ->
     atm_workflow_execution_logger:build(
         AtmWorkflowExecutionAuth,
-        get_task_audit_log_store_container(AtmTaskExecutionId, Record),
+        maps:get(AtmTaskExecutionId, AtmTaskAuditLogsRegistry, undefined),
         AtmWorkflowAuditLogStoreContainer
     ).
 
@@ -243,9 +255,21 @@ acquire_logger(AtmTaskExecutionId, AtmWorkflowExecutionAuth, #atm_workflow_execu
 
 
 %% @private
--spec get_task_audit_log_store_container(undefined | atm_task_execution:id(), record()) ->
-    undefined | atm_store_container:record().
-get_task_audit_log_store_container(AtmTaskExecutionId, #atm_workflow_execution_env{
-    task_audit_logs_registry = AtmTaskAuditLogsRegistry
+-spec add_task_stores(atm_task_execution:id(), record()) -> record().
+add_task_stores(AtmTaskExecutionId, Record0 = #atm_workflow_execution_env{
+    workflow_execution_id = AtmWorkflowExecutionId
 }) ->
-    maps:get(AtmTaskExecutionId, AtmTaskAuditLogsRegistry, undefined).
+    {ok, #document{
+        value = #atm_task_execution{
+            workflow_execution_id = AtmWorkflowExecutionId,
+            system_audit_log_store_id = AtmSystemAuditLogStoreId,
+            time_series_store_id = AtmTaskTSStoreId
+        }
+    }} = atm_task_execution:get(AtmTaskExecutionId),
+
+    Record1 = add_task_time_series_store_id(AtmTaskExecutionId, AtmTaskTSStoreId, Record0),
+
+    {ok, #atm_store{container = AtmTaskAuditLogStoreContainer}} = atm_store_api:get(
+        AtmSystemAuditLogStoreId
+    ),
+    add_task_audit_log_store_container(AtmTaskExecutionId, AtmTaskAuditLogStoreContainer, Record1).

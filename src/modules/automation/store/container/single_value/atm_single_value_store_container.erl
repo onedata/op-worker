@@ -22,6 +22,7 @@
 %% atm_store_container callbacks
 -export([
     create/3,
+    copy/1,
     get_config/1,
 
     get_iterated_item_data_spec/1,
@@ -80,6 +81,11 @@ create(AtmWorkflowExecutionAuth, AtmStoreConfig, InitialContent) ->
         config = AtmStoreConfig,
         compressed_item = atm_value:compress(InitialContent, ItemDataSpec)
     }.
+
+
+-spec copy(record()) -> no_return().
+copy(_) ->
+    throw(?ERROR_NOT_SUPPORTED).
 
 
 -spec get_config(record()) -> atm_single_value_store_config:record().

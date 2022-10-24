@@ -18,6 +18,7 @@
 %% API
 -export([
     create/3,
+    copy/2,
     get/1, acquire_iterator/2,
     freeze/1, unfreeze/1,
     browse_content/3,
@@ -68,6 +69,19 @@ create(AtmWorkflowExecutionAuth, InitialContent, #atm_store_schema{
             StoreType, AtmWorkflowExecutionAuth, AtmStoreConfig, ActualInitialContent
         )
     }).
+
+
+-spec copy(atm_store:id(), undefined | boolean()) -> atm_store:doc() | no_return().
+copy(AtmStoreId, Frozen) ->
+    {ok, AtmStore = #atm_store{frozen = OriginFrozen, container = AtmStoreContainer}} = get(
+        AtmStoreId
+    ),
+
+    {ok, Doc} = atm_store:create(AtmStore#atm_store{
+        frozen = utils:ensure_defined(Frozen, OriginFrozen),
+        container = atm_store_container:copy(AtmStoreContainer)
+    }),
+    Doc.
 
 
 -spec get(atm_store:id()) -> {ok, atm_store:record()} | ?ERROR_NOT_FOUND.

@@ -44,7 +44,7 @@ create_response(#gri{aspect = instance}, _, resource, {#gri{id = AtmWorkflowExec
 %% @end
 %%--------------------------------------------------------------------
 -spec get_response(gri:gri(), Resource :: term()) -> #rest_resp{}.
-get_response(#gri{id = AtmWorkflowExecutionId}, #atm_workflow_execution{
+get_response(#gri{id = AtmWorkflowExecutionId}, AtmWorkflowExecution = #atm_workflow_execution{
     schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
     name = Name,
     atm_inventory_id = AtmInventoryId,
@@ -55,13 +55,13 @@ get_response(#gri{id = AtmWorkflowExecutionId}, #atm_workflow_execution{
 
     schedule_time = ScheduleTime,
     start_time = StartTime,
+    suspend_time = SuspendTime,
     finish_time = FinishTime,
 
     lambda_snapshot_registry = AtmLambdaSnapshotRegistry,
     store_registry = AtmStoreRegistry,
     system_audit_log_store_id = AtmWorkflowAuditLogStoreId,
 
-    lanes = AtmLaneExecutions,
     lanes_count = AtmLanesCount
 }) ->
     ?OK_REPLY(#{
@@ -76,6 +76,7 @@ get_response(#gri{id = AtmWorkflowExecutionId}, #atm_workflow_execution{
 
         <<"scheduleTime">> => ScheduleTime,
         <<"startTime">> => StartTime,
+        <<"suspendTime">> => SuspendTime,
         <<"finishTime">> => FinishTime,
 
         <<"lambdaSnapshotRegistry">> => AtmLambdaSnapshotRegistry,
@@ -83,7 +84,7 @@ get_response(#gri{id = AtmWorkflowExecutionId}, #atm_workflow_execution{
         <<"systemAuditLogStoreId">> => utils:undefined_to_null(AtmWorkflowAuditLogStoreId),
 
         <<"lanes">> => lists:map(
-            fun(LaneIndex) -> atm_lane_execution:to_json(maps:get(LaneIndex, AtmLaneExecutions)) end,
+            fun(AtmLaneIndex) -> atm_lane_execution:to_json(AtmLaneIndex, AtmWorkflowExecution) end,
             lists:seq(1, AtmLanesCount)
         )
     }).

@@ -33,7 +33,7 @@
     update_run/3, update_run/4
 ]).
 -export([get/2, update/3]).
--export([to_json/1]).
+-export([to_json/2]).
 
 %% persistent_record callbacks
 -export([version/0, upgrade_encoded_record/2, db_encode/2, db_decode/2]).
@@ -49,11 +49,16 @@
 -type run_selector() :: current | run_num().
 
 -type run_status() ::
-    ?SCHEDULED_STATUS | ?PREPARING_STATUS | ?ENQUEUED_STATUS |
-    ?ACTIVE_STATUS | ?ABORTING_STATUS |
-    ?FINISHED_STATUS | ?CANCELLED_STATUS | ?FAILED_STATUS | ?INTERRUPTED_STATUS.
+    % waiting
+    ?RESUMING_STATUS | ?SCHEDULED_STATUS | ?PREPARING_STATUS | ?ENQUEUED_STATUS |
+    % ongoing
+    ?ACTIVE_STATUS | ?STOPPING_STATUS |
+    % suspended
+    ?INTERRUPTED_STATUS | ?PAUSED_STATUS |
+    % ended
+    ?FINISHED_STATUS | ?CRASHED_STATUS | ?CANCELLED_STATUS | ?FAILED_STATUS.
 
--type run_aborting_reason() :: cancel | failure.
+-type run_stopping_reason() :: crash | cancel | failure | interrupt | pause.
 
 -type run_diff() :: fun((run()) -> {ok, run()} | {error, term()}).
 -type run() :: #atm_lane_execution_run{}.
@@ -61,7 +66,7 @@
 %% TODO VFS-8660 replace tuple with record
 -type lane_run_selector() :: {selector(), run_selector()}.
 
--export_type([index/0, selector/0, run_aborting_reason/0, diff/0, record/0]).
+-export_type([index/0, selector/0, run_stopping_reason/0, diff/0, record/0]).
 -export_type([run_num/0, run_selector/0, run_status/0, run_diff/0, run/0]).
 -export_type([lane_run_selector/0]).
 
@@ -194,20 +199,23 @@ update(AtmLaneSelector, Diff, AtmWorkflowExecution = #atm_workflow_execution{
     end.
 
 
--spec to_json(record()) -> json_utils:json_map().
-to_json(#atm_lane_execution{schema_id = AtmLaneSchemaId, runs = Runs}) ->
+-spec to_json(selector(), atm_workflow_execution:record()) -> json_utils:json_map().
+to_json(AtmLaneSelector, AtmWorkflowExecution) ->
+    AtmLaneExecution = get(AtmLaneSelector, AtmWorkflowExecution),
+
     {RunsJson, _} = lists:mapfoldr(fun(#atm_lane_execution_run{run_num = RunNum} = Run, RunsPerNum) ->
-        {run_to_json(Run, RunsPerNum), RunsPerNum#{RunNum => Run}}
-    end, #{}, Runs),
+        {run_to_json(Run, RunsPerNum, AtmWorkflowExecution), RunsPerNum#{RunNum => Run}}
+    end, #{}, AtmLaneExecution#atm_lane_execution.runs),
 
     #{
-        <<"schemaId">> => AtmLaneSchemaId,
+        <<"schemaId">> => AtmLaneExecution#atm_lane_execution.schema_id,
         <<"runs">> => RunsJson
     }.
 
 
 %% @private
--spec run_to_json(run(), #{run_num() => run()}) -> json_utils:json_map().
+-spec run_to_json(run(), #{run_num() => run()}, atm_workflow_execution:record()) ->
+    json_utils:json_map().
 run_to_json(Run = #atm_lane_execution_run{
     run_num = RunNum,
     origin_run_num = OriginRunNum,
@@ -215,7 +223,7 @@ run_to_json(Run = #atm_lane_execution_run{
     iterated_store_id = IteratedStoreId,
     exception_store_id = ExceptionStoreId,
     parallel_boxes = AtmParallelBoxExecutions
-}, RunsPerNum) ->
+}, RunsPerNum, AtmWorkflowExecution) ->
     #{
         <<"runNumber">> => utils:undefined_to_null(RunNum),
         <<"originRunNumber">> => utils:undefined_to_null(OriginRunNum),
@@ -238,10 +246,10 @@ run_to_json(Run = #atm_lane_execution_run{
                 end
         end,
         <<"isRetriable">> => atm_lane_execution_status:can_manual_lane_run_repeat_be_scheduled(
-            retry, Run
+            retry, Run, AtmWorkflowExecution
         ),
         <<"isRerunable">> => atm_lane_execution_status:can_manual_lane_run_repeat_be_scheduled(
-            rerun, Run
+            rerun, Run, AtmWorkflowExecution
         )
     }.
 
@@ -297,7 +305,7 @@ encode_run(NestedRecordEncoder, #atm_lane_execution_run{
     run_num = RunNum,
     origin_run_num = OriginRunNum,
     status = Status,
-    aborting_reason = AbortingReason,
+    stopping_reason = StoppingReason,
     iterated_store_id = IteratedStoreId,
     exception_store_id = ExceptionStoreId,
     parallel_boxes = AtmParallelBoxExecutions
@@ -310,9 +318,9 @@ encode_run(NestedRecordEncoder, #atm_lane_execution_run{
         end, AtmParallelBoxExecutions)
     },
     EncodedRun2 = maps_utils:put_if_defined(EncodedRun1, <<"originRunNum">>, OriginRunNum),
-    EncodedRun3 = case AbortingReason of
+    EncodedRun3 = case StoppingReason of
         undefined -> EncodedRun2;
-        _ -> EncodedRun2#{<<"abortingReason">> => atom_to_binary(AbortingReason, utf8)}
+        _ -> EncodedRun2#{<<"stoppingReason">> => atom_to_binary(StoppingReason, utf8)}
     end,
     EncodedRun4 = maps_utils:put_if_defined(EncodedRun3, <<"iteratedStoreId">>, IteratedStoreId),
     maps_utils:put_if_defined(EncodedRun4, <<"exceptionStoreId">>, ExceptionStoreId).
@@ -344,9 +352,9 @@ decode_run(NestedRecordDecoder, EncodedRun = #{
         run_num = RunNum,
         origin_run_num = maps:get(<<"originRunNum">>, EncodedRun, undefined),
         status = binary_to_atom(StatusBin, utf8),
-        aborting_reason = case maps:get(<<"abortingReason">>, EncodedRun, undefined) of
+        stopping_reason = case maps:get(<<"stoppingReason">>, EncodedRun, undefined) of
             undefined -> undefined;
-            EncodedAbortingReason -> binary_to_atom(EncodedAbortingReason, utf8)
+            EncodedStoppingReason -> binary_to_atom(EncodedStoppingReason, utf8)
         end,
         iterated_store_id = maps:get(<<"iteratedStoreId">>, EncodedRun, undefined),
         exception_store_id = maps:get(<<"exceptionStoreId">>, EncodedRun, undefined),
