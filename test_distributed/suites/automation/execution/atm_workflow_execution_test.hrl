@@ -22,16 +22,6 @@
 -include_lib("onenv_ct/include/oct_background.hrl").
 
 
-% provider on which workflows shall be executed
--define(PROVIDER_SELECTOR, krakow).
-
-% space in which workflows shall be executed
--define(SPACE_SELECTOR, space_krk).
-
-% test inventory member with limited privileges
--define(USER_SELECTOR, user2).
-
-
 -define(STOPPING_REASONS, [crash, cancel, failure, interrupt, pause]).
 
 

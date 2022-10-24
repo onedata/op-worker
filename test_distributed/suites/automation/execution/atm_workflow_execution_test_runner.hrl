@@ -17,6 +17,24 @@
 -include_lib("ctool/include/automation/automation.hrl").
 
 
+% default provider on which workflows shall be executed
+-define(PROVIDER_SELECTOR, krakow).
+
+% default space in which workflows shall be executed
+-define(SPACE_SELECTOR, space_krk).
+
+% default test inventory member with limited privileges
+-define(USER_SELECTOR, user2).
+
+% message used for synchronous calls from the execution process to the test process
+% to enable applying hooks or modifying expectations before and after execution of
+% a specific step (execution process waits for an ACK before it proceeds).
+-record(mock_call_report, {
+    step :: atm_workflow_execution_test_runner:step_name(),
+    timing :: atm_workflow_execution_test_runner:step_phase_timing(),
+    args :: [term()]
+}).
+
 -record(atm_mock_call_ctx, {
     provider :: oct_background:entity_selector(),
     space :: oct_background:entity_selector(),
@@ -80,14 +98,14 @@
 }).
 
 -record(atm_workflow_execution_test_spec, {
-    provider :: oct_background:entity_selector(),
-    user :: oct_background:entity_selector(),
-    space :: oct_background:entity_selector(),
+    provider = ?PROVIDER_SELECTOR :: oct_background:entity_selector(),
+    user = ?USER_SELECTOR :: oct_background:entity_selector(),
+    space = ?SPACE_SELECTOR :: oct_background:entity_selector(),
 
     workflow_schema_dump_or_draft ::
         atm_test_inventory:atm_workflow_schema_dump() |
         atm_test_schema_factory:atm_workflow_schema_dump_draft(),
-    workflow_schema_revision_num :: atm_workflow_schema_revision:revision_number(),
+    workflow_schema_revision_num = 1 :: atm_workflow_schema_revision:revision_number(),
 
     store_initial_content_overlay = #{} :: atm_workflow_execution_api:store_initial_content_overlay(),
     callback_url = undefined :: undefined | http_client:url(),
@@ -103,7 +121,10 @@
     atm_openfaas_activity_feed_client_mock,
     test_websocket_client,
     atm_test_inventory,
-    atm_workflow_execution_test_runner
+
+    atm_workflow_execution_test_runner,
+    atm_workflow_execution_test_mocks,
+    atm_workflow_execution_test_utils
 ]).
 
 

@@ -55,26 +55,7 @@
 %% API
 -export([init/1, teardown/1]).
 -export([run/1]).
--export([
-    pause_workflow_execution/1,
-    cancel_workflow_execution/1,
-    stop_workflow_execution/2,
 
-    repeat_workflow_execution/3,
-    resume_workflow_execution/1,
-
-    delete_offline_session/1,
-    report_openfaas_unhealthy/1
-]).
--export([
-    browse_store/2, browse_store/3,
-    get_exception_store_content/2
-]).
--export([
-    assert_ended_atm_workflow_execution_can_be_neither_stopped_nor_resumed/1,
-    assert_not_stopped_atm_workflow_execution_can_be_neither_repeated_nor_resumed/2,
-    assert_not_ended_atm_workflow_execution_can_not_be_repeated/2
-]).
 
 -type step_name() ::
     prepare_lane |
@@ -108,7 +89,7 @@
     selector :: step_phase_selector(),
     mock_call_report :: mock_call_report(),
     mock_spec :: step_mock_spec(),
-    reply_to :: pid()
+    reply_to :: atm_workflow_execution_test_mocks:reply_to()
 }).
 -type step_phase() :: #step_phase{}.
 
@@ -140,16 +121,7 @@
     lane_run_test_spec/0, incarnation_test_spec/0, test_spec/0
 ]).
 
-% message used for synchronous calls from the execution process to the test process
-% to enable applying hooks or modifying expectations before and after execution of
-% a specific step (execution process waits for an ACK before it proceeds).
--record(mock_call_report, {
-    step :: step_name(),
-    timing :: step_phase_timing(),
-    args :: [term()]
-}).
 -type mock_call_report() :: #mock_call_report{}.
--type reply_to() :: {pid(), reference()}.
 
 -record(test_ctx, {
     test_spec :: test_spec(),
@@ -179,23 +151,7 @@
 
 -define(ASSERT_RETRIES, 45).
 
--define(TEST_PROC_PID_KEY(__ATM_WORKFLOW_EXECUTION_ID),
-    {atm_test_runner_process, __ATM_WORKFLOW_EXECUTION_ID}
-).
--define(ATM_WORKFLOW_EXECUTION_ID_MSG(__ATM_WORKFLOW_EXECUTION_ID),
-    {atm_workflow_execution_id, __ATM_WORKFLOW_EXECUTION_ID}
-).
-
-
 -define(NO_DIFF, fun(_) -> false end).
-
--define(NOW_SEC(), global_clock:timestamp_seconds()).
-
--define(INFINITE_LOG_BASED_STORES_LISTING_OPTS, #{
-    start_from => undefined,
-    offset => 0,
-    limit => 1000000000
-}).
 
 
 %%%===================================================================
@@ -206,23 +162,13 @@
 -spec init(oct_background:entity_selector() | [oct_background:entity_selector()]) ->
     ok.
 init(ProviderSelectors) ->
-    Workers = get_nodes(utils:ensure_list(ProviderSelectors)),
-
-    mock_workflow_execution_factory(Workers),
-    mock_workflow_execution_handler_steps(Workers),
-    mock_lane_execution_handler_steps(Workers),
-    mock_lane_execution_factory_steps(Workers).
+    atm_workflow_execution_test_mocks:init(ProviderSelectors).
 
 
 -spec teardown(oct_background:entity_selector() | [oct_background:entity_selector()]) ->
     ok.
 teardown(ProviderSelectors) ->
-    Workers = get_nodes(utils:ensure_list(ProviderSelectors)),
-
-    unmock_lane_execution_factory_steps(Workers),
-    unmock_lane_execution_handler_steps(Workers),
-    unmock_workflow_execution_handler_steps(Workers),
-    unmock_workflow_execution_factory(Workers).
+    atm_workflow_execution_test_mocks:teardown(ProviderSelectors).
 
 
 -spec run(test_spec()) -> ok | no_return().
@@ -240,19 +186,16 @@ run(TestSpec = #atm_workflow_execution_test_spec{
     SpaceId = oct_background:get_space_id(SpaceSelector),
 
     AtmWorkflowSchemaId = atm_test_inventory:add_workflow_schema(AtmWorkflowSchemaDumpOrDraft),
-    AtmWorkflowSchemaRevision = atm_test_inventory:get_workflow_schema_revision(
-        AtmWorkflowSchemaRevisionNum, AtmWorkflowSchemaId
+    {AtmWorkflowExecutionId, _} = atm_workflow_execution_test_mocks:schedule_workflow_execution_as_test_process(
+        ProviderSelector, SessionId, SpaceId, AtmWorkflowSchemaId, AtmWorkflowSchemaRevisionNum,
+        AtmStoreInitialContentOverlay, CallbackUrl
     ),
 
-    TestProcPid = self(),
-    {AtmWorkflowExecutionId, _} = ?rpc(ProviderSelector, mi_atm:schedule_workflow_execution(
-        SessionId, SpaceId, AtmWorkflowSchemaId, AtmWorkflowSchemaRevisionNum,
-        AtmStoreInitialContentOverlay#{test_process => TestProcPid}, CallbackUrl
-    )),
-
-    AtmLaneSchemas = AtmWorkflowSchemaRevision#atm_workflow_schema_revision.lanes,
+    #atm_workflow_schema_revision{lanes = AtmLaneSchemas} = atm_test_inventory:get_workflow_schema_revision(
+        AtmWorkflowSchemaRevisionNum, AtmWorkflowSchemaId
+    ),
     ExpState = atm_workflow_execution_exp_state_builder:init(
-        ProviderSelector, SpaceId, AtmWorkflowExecutionId, ?NOW_SEC(), AtmLaneSchemas
+        ProviderSelector, SpaceId, AtmWorkflowExecutionId, AtmLaneSchemas
     ),
     true = atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState, 0),
 
@@ -268,165 +211,6 @@ run(TestSpec = #atm_workflow_execution_test_spec{
         workflow_execution_exp_state_changed = false,
         test_hung_probes_left = ?TEST_HUNG_MAX_PROBES_NUM
     }).
-
-
--spec pause_workflow_execution(atm_workflow_execution_test_runner:mock_call_ctx()) ->
-    ok | no_return().
-pause_workflow_execution(#atm_mock_call_ctx{
-    provider = ProviderSelector,
-    session_id = SessionId,
-    workflow_execution_id = AtmWorkflowExecutionId
-}) ->
-    ?erpc(ProviderSelector, mi_atm:pause_workflow_execution(SessionId, AtmWorkflowExecutionId)).
-
-
--spec cancel_workflow_execution(atm_workflow_execution_test_runner:mock_call_ctx()) ->
-    ok | no_return().
-cancel_workflow_execution(#atm_mock_call_ctx{
-    provider = ProviderSelector,
-    session_id = SessionId,
-    workflow_execution_id = AtmWorkflowExecutionId
-}) ->
-    ?erpc(ProviderSelector, mi_atm:cancel_workflow_execution(SessionId, AtmWorkflowExecutionId)).
-
-
--spec stop_workflow_execution(
-    atm_lane_execution:run_stopping_reason(),
-    atm_workflow_execution_test_runner:mock_call_ctx()
-) ->
-    ok | errors:error().
-stop_workflow_execution(Reason, #atm_mock_call_ctx{
-    provider = ProviderSelector,
-    session_id = SessionId,
-    workflow_execution_id = AtmWorkflowExecutionId
-}) ->
-    ?erpc(ProviderSelector, atm_workflow_execution_handler:stop(
-        user_ctx:new(SessionId), AtmWorkflowExecutionId, Reason
-    )).
-
-
--spec repeat_workflow_execution(
-    atm_workflow_execution:repeat_type(),
-    atm_lane_execution:lane_run_selector(),
-    atm_workflow_execution_test_runner:mock_call_ctx()
-) ->
-    ok.
-repeat_workflow_execution(RepeatType, AtmLaneRunSelector, #atm_mock_call_ctx{
-    provider = ProviderSelector,
-    session_id = SessionId,
-    workflow_execution_id = AtmWorkflowExecutionId
-}) ->
-    ?erpc(ProviderSelector, mi_atm:repeat_workflow_execution(
-        SessionId, RepeatType, AtmWorkflowExecutionId, AtmLaneRunSelector
-    )).
-
-
--spec resume_workflow_execution(atm_workflow_execution_test_runner:mock_call_ctx()) ->
-    ok.
-resume_workflow_execution(#atm_mock_call_ctx{
-    provider = ProviderSelector,
-    session_id = SessionId,
-    workflow_execution_id = AtmWorkflowExecutionId
-}) ->
-    ?erpc(ProviderSelector, mi_atm:resume_workflow_execution(SessionId, AtmWorkflowExecutionId)).
-
-
--spec delete_offline_session(mock_call_ctx()) -> ok | no_return().
-delete_offline_session(#atm_mock_call_ctx{
-    provider = ProviderSelector,
-    workflow_execution_id = AtmWorkflowExecutionId
-}) ->
-    ?erpc(ProviderSelector, offline_access_manager:close_session(AtmWorkflowExecutionId)).
-
-
--spec report_openfaas_unhealthy(mock_call_ctx()) -> ok | no_return().
-report_openfaas_unhealthy(#atm_mock_call_ctx{
-    provider = ProviderSelector,
-    workflow_execution_id = AtmWorkflowExecutionId
-}) ->
-    ?erpc(ProviderSelector, atm_workflow_execution_handler:on_openfaas_down(
-        AtmWorkflowExecutionId, ?ERROR_ATM_OPENFAAS_UNHEALTHY
-    )).
-
-
--spec browse_store(automation:id(), mock_call_ctx()) -> json_utils:json_term().
-browse_store(AtmStoreSchemaId, AtmMockCallCtx) ->
-    browse_store(AtmStoreSchemaId, undefined, AtmMockCallCtx).
-
-
--spec browse_store(
-    exception_store | automation:id(),
-    undefined | atm_lane_execution:lane_run_selector() | atm_task_execution:id(),
-    mock_call_ctx()
-) ->
-    json_utils:json_term().
-browse_store(AtmStoreSchemaId, AtmTaskExecutionIdOrLaneRunSelector, AtmMockCallCtx = #atm_mock_call_ctx{
-    provider = ProviderSelector,
-    space = SpaceSelector,
-    session_id = SessionId,
-    workflow_execution_id = AtmWorkflowExecutionId
-}) ->
-    SpaceId = oct_background:get_space_id(SpaceSelector),
-    AtmStoreId = get_store_id(AtmStoreSchemaId, AtmTaskExecutionIdOrLaneRunSelector, AtmMockCallCtx),
-    ?rpc(ProviderSelector, browse_store(SessionId, SpaceId, AtmWorkflowExecutionId, AtmStoreId)).
-
-
--spec get_exception_store_content(atm_lane_execution:lane_run_selector(), mock_call_ctx()) ->
-    json_utils:json_term().
-get_exception_store_content(AtmLaneRunSelector, AtmMockCallCtx) ->
-    #{<<"items">> := Items, <<"isLast">> := true} = atm_workflow_execution_test_runner:browse_store(
-        exception_store, AtmLaneRunSelector, AtmMockCallCtx
-    ),
-    lists:map(fun(#{<<"value">> := Content}) -> Content end, Items).
-
-
--spec assert_ended_atm_workflow_execution_can_be_neither_stopped_nor_resumed(mock_call_ctx()) ->
-    ok.
-assert_ended_atm_workflow_execution_can_be_neither_stopped_nor_resumed(AtmMockCallCtx = #atm_mock_call_ctx{
-    workflow_execution_exp_state = ExpState0
-}) ->
-    lists:foreach(fun(StoppingReason) ->
-        ?assertEqual(
-            ?ERROR_ATM_WORKFLOW_EXECUTION_ENDED,
-            atm_workflow_execution_test_runner:stop_workflow_execution(StoppingReason, AtmMockCallCtx)
-        )
-    end, ?STOPPING_REASONS),
-
-    ?assertThrow(
-        ?ERROR_ATM_WORKFLOW_EXECUTION_NOT_RESUMABLE,
-        atm_workflow_execution_test_runner:resume_workflow_execution(AtmMockCallCtx)
-    ),
-
-    ?assert(atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState0, 0)).
-
-
--spec assert_not_stopped_atm_workflow_execution_can_be_neither_repeated_nor_resumed(
-    atm_lane_execution:lane_run_selector(),
-    mock_call_ctx()
-) ->
-    ok.
-assert_not_stopped_atm_workflow_execution_can_be_neither_repeated_nor_resumed(AtmLaneRunSelector, AtmMockCallCtx) ->
-    ?assertThrow(
-        ?ERROR_ATM_WORKFLOW_EXECUTION_NOT_RESUMABLE,
-        atm_workflow_execution_test_runner:resume_workflow_execution(AtmMockCallCtx)
-    ),
-    assert_not_ended_atm_workflow_execution_can_not_be_repeated(AtmLaneRunSelector, AtmMockCallCtx).
-
-
--spec assert_not_ended_atm_workflow_execution_can_not_be_repeated(
-    atm_lane_execution:lane_run_selector(),
-    mock_call_ctx()
-) ->
-    ok.
-assert_not_ended_atm_workflow_execution_can_not_be_repeated(AtmLaneRunSelector, AtmMockCallCtx) ->
-    lists:foreach(fun(RepeatType) ->
-        ?assertThrow(
-            ?ERROR_ATM_WORKFLOW_EXECUTION_NOT_ENDED,
-            atm_workflow_execution_test_runner:repeat_workflow_execution(
-                RepeatType, AtmLaneRunSelector, AtmMockCallCtx
-            )
-        )
-    end, [rerun, retry]).
 
 
 %%%===================================================================
@@ -541,7 +325,7 @@ end_pending_step_phase_executions(TestCtx = #test_ctx{pending_step_phases = Pend
     ) ->
         StepMockCallCtx = build_mock_call_ctx(StepMockCallReport, TestCtxAcc0),
 
-        reply_to_execution_process(ReplyTo, case Timing of
+        atm_workflow_execution_test_mocks:reply_to_execution_process(ReplyTo, case Timing of
             before_step ->
                 case is_function(MockStrategy) of
                     true -> MockStrategy(StepMockCallCtx);
@@ -1166,334 +950,3 @@ filter_out_stopped_lane_run_preparing_in_advance(AtmLaneRunSelector, TestCtx = #
         end, OngoingIncarnation#atm_workflow_execution_incarnation_test_spec.lane_runs)
     },
     TestCtx#test_ctx{ongoing_incarnations = [NewOngoingIncarnation | LeftoverIncarnations]}.
-
-
-
-%% @private
--spec get_nodes([oct_background:entity_selector()]) -> [node()].
-get_nodes(ProviderSelectors) ->
-    lists:flatmap(fun(ProviderSelector) ->
-        oct_background:get_provider_nodes(ProviderSelector)
-    end, ProviderSelectors).
-
-
-%% @private
--spec mock_workflow_execution_factory([node()]) -> ok.
-mock_workflow_execution_factory(Workers) ->
-    test_utils:mock_new(Workers, atm_workflow_execution_factory, [passthrough, no_history]),
-
-    test_utils:mock_expect(Workers, atm_workflow_execution_factory, create, fun(
-        UserCtx,
-        SpaceId,
-        AtmWorkflowSchemaId,
-        AtmWorkflowSchemaRevisionNum,
-        StoreInitialValues,
-        CallbackUrl
-    ) ->
-        Result = {#document{key = AtmWorkflowExecutionId}, _} = meck:passthrough([
-            UserCtx, SpaceId, AtmWorkflowSchemaId, AtmWorkflowSchemaRevisionNum,
-            StoreInitialValues, CallbackUrl
-        ]),
-        case maps:get(test_process, StoreInitialValues, undefined) of
-            undefined -> ok;
-            TestProcPid -> node_cache:put(?TEST_PROC_PID_KEY(AtmWorkflowExecutionId), TestProcPid)
-        end,
-        Result
-    end).
-
-
-%% @private
--spec unmock_workflow_execution_factory([node()]) -> ok.
-unmock_workflow_execution_factory(Workers) ->
-    test_utils:mock_unload(Workers, atm_workflow_execution_factory).
-
-
-%% @private
--spec mock_workflow_execution_handler_steps([node()]) -> ok.
-mock_workflow_execution_handler_steps(Workers) ->
-    test_utils:mock_new(Workers, atm_workflow_execution_handler, [passthrough, no_history]),
-
-    test_utils:mock_expect(Workers, atm_workflow_execution_handler, handle_task_results_processed_for_all_items, fun(
-        AtmWorkflowExecutionId,
-        _AtmWorkflowExecutionEnv,
-        AtmTaskExecutionId
-    ) ->
-        workflow_engine:report_task_data_streaming_concluded(AtmWorkflowExecutionId, AtmTaskExecutionId, success)
-    end),
-
-    mock_workflow_execution_handler_step(Workers, prepare_lane, 3),
-    mock_workflow_execution_handler_step(Workers, resume_lane, 3),
-    mock_workflow_execution_handler_step(Workers, run_task_for_item, 5),
-    mock_workflow_execution_handler_step(Workers, process_task_result_for_item, 5),
-    mock_workflow_execution_handler_step(Workers, process_streamed_task_data, 4),
-    mock_workflow_execution_handler_step(Workers, handle_task_results_processed_for_all_items, 3),
-    mock_workflow_execution_handler_step(Workers, report_item_error, 3),
-    mock_workflow_execution_handler_step(Workers, handle_task_execution_stopped, 3),
-    mock_workflow_execution_handler_step(Workers, handle_exception, 5),
-    mock_workflow_execution_handler_step(Workers, handle_workflow_abruptly_stopped, 3),
-    mock_workflow_execution_handler_step(Workers, handle_workflow_execution_stopped, 2).
-
-
-%% @private
--spec unmock_workflow_execution_handler_steps([node()]) -> ok.
-unmock_workflow_execution_handler_steps(Workers) ->
-    test_utils:mock_unload(Workers, atm_workflow_execution_handler).
-
-
-%% @private
--spec mock_workflow_execution_handler_step([node()], atom(), 1..6) -> ok.
-mock_workflow_execution_handler_step(Workers, FunName, FunArity) ->
-    MockFun = build_workflow_execution_handler_step_function_mock(FunArity, FunName),
-    test_utils:mock_expect(Workers, atm_workflow_execution_handler, FunName, MockFun).
-
-
-%% @private
--spec build_workflow_execution_handler_step_function_mock(1..6, atom()) ->
-    function().
-build_workflow_execution_handler_step_function_mock(1, Label) ->
-    fun(Arg1) ->
-        Args = [Arg1],
-        exec_mock(hd(Args), Label, Args)
-    end;
-
-build_workflow_execution_handler_step_function_mock(2, Label) ->
-    fun(Arg1, Arg2) ->
-        Args = [Arg1, Arg2],
-        exec_mock(hd(Args), Label, Args)
-    end;
-
-build_workflow_execution_handler_step_function_mock(3, Label) ->
-    fun(Arg1, Arg2, Arg3) ->
-        Args = [Arg1, Arg2, Arg3],
-        exec_mock(hd(Args), Label, Args)
-    end;
-
-build_workflow_execution_handler_step_function_mock(4, Label) ->
-    fun(Arg1, Arg2, Arg3, Arg4) ->
-        Args = [Arg1, Arg2, Arg3, Arg4],
-        exec_mock(hd(Args), Label, Args)
-    end;
-
-build_workflow_execution_handler_step_function_mock(5, Label) ->
-    fun(Arg1, Arg2, Arg3, Arg4, Arg5) ->
-        Args = [Arg1, Arg2, Arg3, Arg4, Arg5],
-        exec_mock(hd(Args), Label, Args)
-    end;
-
-build_workflow_execution_handler_step_function_mock(6, Label) ->
-    fun(Arg1, Arg2, Arg3, Arg4, Arg5, Arg6) ->
-        Args = [Arg1, Arg2, Arg3, Arg4, Arg5, Arg6],
-        exec_mock(hd(Args), Label, Args)
-    end.
-
-
-%% @private
--spec mock_lane_execution_handler_steps([node()]) -> ok.
-mock_lane_execution_handler_steps(Workers) ->
-    test_utils:mock_new(Workers, atm_lane_execution_handler, [passthrough, no_history]),
-
-    test_utils:mock_expect(Workers, atm_lane_execution_handler, handle_stopped, fun(
-        AtmLaneRunSelector,
-        AtmWorkflowExecutionId,
-        AtmWorkflowExecutionCtx
-    ) ->
-        exec_mock(
-            AtmWorkflowExecutionId,
-            handle_lane_execution_stopped,
-            [AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx]
-        )
-    end).
-
-
-%% @private
--spec unmock_lane_execution_handler_steps([node()]) -> ok.
-unmock_lane_execution_handler_steps(Workers) ->
-    test_utils:mock_unload(Workers, atm_lane_execution_handler).
-
-
-%% @private
--spec mock_lane_execution_factory_steps([node()]) -> ok.
-mock_lane_execution_factory_steps(Workers) ->
-    test_utils:mock_new(Workers, atm_lane_execution_factory, [passthrough, no_history]),
-
-    test_utils:mock_expect(Workers, atm_lane_execution_factory, create_run, fun(
-        AtmLaneRunSelector,
-        AtmWorkflowExecutionDoc,
-        AtmWorkflowExecutionCtx
-    ) ->
-        exec_mock(
-            AtmWorkflowExecutionDoc#document.key,
-            create_run,
-            [AtmLaneRunSelector, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx]
-        )
-    end).
-
-
-%% @private
--spec unmock_lane_execution_factory_steps([node()]) -> ok.
-unmock_lane_execution_factory_steps(Workers) ->
-    test_utils:mock_unload(Workers, atm_lane_execution_factory).
-
-
-%% @private
--spec exec_mock(atm_workflow_execution:id(), atom(), [term()]) -> term().
-exec_mock(AtmWorkflowExecutionId, Step, Args) ->
-    case node_cache:get(?TEST_PROC_PID_KEY(AtmWorkflowExecutionId), undefined) of
-        undefined ->
-            meck:passthrough(Args);
-        TestProcPid ->
-            MockCallReport = #mock_call_report{timing = before_step, step = Step, args = Args},
-            MockExecution = call_test_process(TestProcPid, MockCallReport),
-
-            case MockExecution of
-                passthrough ->
-                    Result = meck:passthrough(Args),
-                    ok = call_test_process(TestProcPid, MockCallReport#mock_call_report{
-                        timing = after_step
-                    }),
-                    Result;
-
-                {passthrough_with_delay, DelayMilliseconds} ->
-                    timer:sleep(DelayMilliseconds),
-                    Result = meck:passthrough(Args),
-                    ok = call_test_process(TestProcPid, MockCallReport#mock_call_report{
-                        timing = after_step
-                    }),
-                    Result;
-
-                {passthrough_with_result_override, ResultOverride} ->
-                    meck:passthrough(Args),
-                    ok = call_test_process(TestProcPid, MockCallReport#mock_call_report{
-                        timing = after_step
-                    }),
-                    apply_result_override(ResultOverride);
-
-                {yield, ResultOverride} ->
-                    apply_result_override(ResultOverride)
-            end
-    end.
-
-
-%% @private
--spec apply_result_override
-    ({return, Result}) -> Result when Result :: term();
-    ({error | throw, errors:error()}) -> no_return().
-apply_result_override({return, Result}) -> Result;
-apply_result_override({throw, Error}) -> throw(Error);
-apply_result_override({error, Error}) -> error(Error).
-
-
-%% @private
--spec call_test_process(pid(), term()) -> term() | no_return().
-call_test_process(TestProcPid, Msg) ->
-    MRef = erlang:monitor(process, TestProcPid),
-    TestProcPid ! {{self(), MRef}, Msg},
-    receive
-        {MRef, Reply} ->
-            erlang:demonitor(MRef, [flush]),
-            Reply;
-        {'DOWN', MRef, _, _, Reason} ->
-            exit(Reason)
-    end.
-
-
-%% @private
--spec reply_to_execution_process
-    % when replying to 'before_step' report
-    (reply_to(), mock_strategy()) -> ok;
-    % when replying to 'after_step' report
-    (reply_to(), ok) -> ok.
-reply_to_execution_process({ExecutionProcPid, MRef}, Reply) ->
-    ExecutionProcPid ! {MRef, Reply}.
-
-
-%% @private
--spec get_store_id(
-    exception_store | automation:id(),
-    undefined | atm_lane_execution:lane_run_selector() | atm_task_execution:id(),
-    mock_call_ctx()
-) ->
-    atm_store:id().
-get_store_id(exception_store, AtmLaneRunSelector, #atm_mock_call_ctx{
-    provider = ProviderSelector,
-    workflow_execution_id = AtmWorkflowExecutionId
-}) ->
-    {ok, #document{value = AtmWorkflowExecution}} = ?rpc(
-        ProviderSelector, atm_workflow_execution:get(AtmWorkflowExecutionId)
-    ),
-    {ok, AtmLaneRun} = atm_lane_execution:get_run(AtmLaneRunSelector, AtmWorkflowExecution),
-    AtmLaneRun#atm_lane_execution_run.exception_store_id;
-
-get_store_id(?WORKFLOW_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID, _AtmTaskExecutionId, #atm_mock_call_ctx{
-    provider = ProviderSelector,
-    workflow_execution_id = AtmWorkflowExecutionId
-}) ->
-    {ok, #document{value = #atm_workflow_execution{system_audit_log_store_id = AtmStoreId}}} = ?rpc(
-        ProviderSelector, atm_workflow_execution:get(AtmWorkflowExecutionId)
-    ),
-    AtmStoreId;
-
-get_store_id(?CURRENT_TASK_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID, AtmTaskExecutionId, #atm_mock_call_ctx{
-    provider = ProviderSelector
-}) ->
-    {ok, #document{value = #atm_task_execution{system_audit_log_store_id = AtmStoreId}}} = ?rpc(
-        ProviderSelector, atm_task_execution:get(AtmTaskExecutionId)
-    ),
-    AtmStoreId;
-
-get_store_id(?CURRENT_TASK_TIME_SERIES_STORE_SCHEMA_ID, AtmTaskExecutionId, #atm_mock_call_ctx{
-    provider = ProviderSelector
-}) ->
-    {ok, #document{value = #atm_task_execution{time_series_store_id = AtmStoreId}}} = ?rpc(
-        ProviderSelector, atm_task_execution:get(AtmTaskExecutionId)
-    ),
-    AtmStoreId;
-
-get_store_id(AtmStoreSchemaId, _AtmTaskExecutionId, #atm_mock_call_ctx{
-    provider = ProviderSelector,
-    workflow_execution_id = AtmWorkflowExecutionId
-}) ->
-    {ok, #document{value = #atm_workflow_execution{store_registry = AtmStoreRegistry}}} = ?rpc(
-        ProviderSelector, atm_workflow_execution:get(AtmWorkflowExecutionId)
-    ),
-    maps:get(AtmStoreSchemaId, AtmStoreRegistry).
-
-
-%% @private
--spec browse_store(session:id(), od_space:id(), atm_workflow_execution:id(), atm_store:id()) ->
-    json_utils:json_term().
-browse_store(SessionId, SpaceId, AtmWorkflowExecutionId, AtmStoreId) ->
-    {ok, AtmStore = #atm_store{container = AtmStoreContainer}} = atm_store_api:get(
-        AtmStoreId
-    ),
-    atm_store_content_browse_result:to_json(atm_store_api:browse_content(
-        atm_workflow_execution_auth:build(SpaceId, AtmWorkflowExecutionId, SessionId),
-        build_browse_opts(atm_store_container:get_store_type(AtmStoreContainer)),
-        AtmStore
-    )).
-
-
-%% @private
-build_browse_opts(audit_log) ->
-    #atm_audit_log_store_content_browse_options{browse_opts = ?INFINITE_LOG_BASED_STORES_LISTING_OPTS};
-
-build_browse_opts(list) ->
-    #atm_list_store_content_browse_options{listing_opts = ?INFINITE_LOG_BASED_STORES_LISTING_OPTS};
-
-build_browse_opts(tree_forest) ->
-    #atm_tree_forest_store_content_browse_options{listing_opts = ?INFINITE_LOG_BASED_STORES_LISTING_OPTS};
-
-build_browse_opts(range) ->
-    #atm_range_store_content_browse_options{};
-
-build_browse_opts(single_value) ->
-    #atm_single_value_store_content_browse_options{};
-
-build_browse_opts(time_series) ->
-    #atm_time_series_store_content_browse_options{
-        request = #time_series_slice_get_request{
-            layout = #{?ALL_TIME_SERIES => [?ALL_METRICS]},
-            start_timestamp = undefined,
-            window_limit = 10000000000000000000000000000000000000000000000000000
-        }
-    }.
