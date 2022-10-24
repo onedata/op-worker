@@ -916,7 +916,7 @@ add_posthooks_on_file_sync(Worker, SpaceId, ProviderId, ExpectedSyncMode, Postho
             DbsyncProc ! proceed,
             ok
     after
-        timer:seconds(30) ->
+        timer:seconds(60) ->
             timeout
     end,
     ?assertEqual(ok, CheckAns).
