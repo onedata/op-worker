@@ -337,8 +337,8 @@ change_applied(_Since, Until, Timestamp, Ans, State) ->
             gen_server2:cast(self(), check_batch_stash),
             update_seq(Until, Timestamp, State2);
         {error, Seq, _} ->
-            {Ans, State3} = update_seq(Seq - 1, undefined, State2),
-            {Ans, schedule_changes_request(State3)};
+            {UpdateAns, State3} = update_seq(Seq - 1, undefined, State2),
+            {UpdateAns, schedule_changes_request(State3)};
         timeout ->
             {continue, schedule_changes_request(State2)}
     end.

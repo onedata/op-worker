@@ -87,7 +87,7 @@ set_seq_and_timestamp(SpaceId, ProviderId, Number, Timestamp) ->
             end,
             {DiffFun, #dbsync_state{seq = #{ProviderId => {Number, 0}}}};
         _ ->
-            DiffFun = fun(#dbsync_state{seq = Seq} = State) ->
+            DiffFun = fun(State) ->
                 {ok, set_seq_and_timestamp_internal(State, ProviderId, Number, Timestamp)}
             end,
             {DiffFun, #dbsync_state{seq = #{ProviderId => {Number, Timestamp}}}}
