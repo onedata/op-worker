@@ -636,7 +636,7 @@ initial_sync_repeat_test(Config) ->
     SpaceGuid = lfm_test_utils:get_user1_first_space_guid(Config),
     Structure = [{3, 3}, {3, 3}],
 
-    Provider2Id = rpc:call(Worker2, oneprovider, get_id_or_undefined, []),
+    Provider2Id = opw_test_rpc:get_provider_id(Worker2),
     test_utils:mock_expect(Worker1, dbsync_utils, is_supported, fun(SpaceId, ProviderIds) ->
         case lists:member(Provider2Id, ProviderIds) of
             true -> false;
@@ -916,7 +916,7 @@ add_posthooks_on_file_sync(Worker, SpaceId, ProviderId, ExpectedSyncMode, Postho
             DbsyncProc ! proceed,
             ok
     after
-        timer:seconds(60) ->
+        timer:seconds(30) ->
             timeout
     end,
     ?assertEqual(ok, CheckAns).

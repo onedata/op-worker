@@ -18,11 +18,9 @@
 -define(ALL_MUTATORS_EXCEPT_SENDER, [<<"all_mutators_except_sender">>]).
 
 -record(synchronization_params, {
-    mode :: resynchronization | initial_sync | initial_sync_to_repeat,
-    target_seq :: couchbase_changes:seq(),  % Seq number that ends resynchronization (resynchronization params are
-                                            % deleted when this seq number is reached). It is equal to current sequence
-                                            % number of stream at the moment of resynchronization start
-                                            % (see dbsync_state:resynchronize_stream/3).
+    mode :: dbsync_state:synchronization_mode(),
+    target_seq :: couchbase_changes:seq(),  % Seq number that ends particular mode of synchronization (depending on mode,
+                                            % mode may be changed or params may be deleted when this seq number is reached).
     included_mutators :: dbsync_in_stream:mutators()    % Only documents of included_mutators are resynchronized - documents
                                                         % mutated by other providers are ignored during resynchronization.
 }).
