@@ -76,9 +76,12 @@
 
 -type mock_call_ctx() :: #atm_mock_call_ctx{}.
 -type hook() :: fun((mock_call_ctx()) -> ok).
--type exp_state_diff() :: fun((mock_call_ctx()) ->
+-type exp_state_diff_fun() :: fun((mock_call_ctx()) ->
     false | {true, atm_workflow_execution_exp_state_builder:exp_state()}
 ).
+-type exp_state_diff() ::
+    exp_state_diff_fun() |
+    [atm_workflow_execution_exp_state_builder:expectation()].
 
 -type step_phase_selector() :: {
     step_name(),
@@ -116,7 +119,7 @@
 -type test_spec() :: #atm_workflow_execution_test_spec{}.
 
 -export_type([
-    mock_call_ctx/0, hook/0, exp_state_diff/0,
+    mock_call_ctx/0, hook/0, exp_state_diff_fun/0, exp_state_diff/0,
     result_override/0, mock_strategy_spec/0, step_phase_selector/0, step_mock_spec/0,
     lane_run_test_spec/0, incarnation_test_spec/0, test_spec/0
 ]).
@@ -297,8 +300,15 @@ begin_step_phase_execution(
 
     call_hook_if_defined(get_hook(StepMockCallReport, StepMockSpec), StepMockCallCtx, TestCtx0),
 
-    ExpStateDiff = get_exp_state_diff(StepMockCallReport, StepMockSpec),
-    TestCtx1 = case ExpStateDiff(StepMockCallCtx) of
+    ExpStateDiffFun = case get_exp_state_diff(StepMockCallReport, StepMockSpec) of
+        Fun when is_function(Fun, 1) ->
+            Fun;
+        Expectations when is_list(Expectations) ->
+            fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState}) ->
+                {true, atm_workflow_execution_exp_state_builder:expect(ExpState, Expectations)}
+            end
+    end,
+    TestCtx1 = case ExpStateDiffFun(StepMockCallCtx) of
         {true, NewExpState} ->
             TestCtx0#test_ctx{
                 workflow_execution_exp_state = NewExpState,
@@ -530,7 +540,7 @@ call_hook_if_defined(HookFun, Input, TestCtx) ->
         HookFun(Input),
         ok
     catch Type:Error:Stacktrace ->
-        ct:pal("Unexpected exception when calling test hook: ~p", [
+        ct:pal("Unexpected exception when calling test hook: ~s", [
             iolist_to_binary(lager:pr_stacktrace(Stacktrace, {Type, Error}))
         ]),
         fail_test(TestCtx)
