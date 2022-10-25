@@ -476,19 +476,32 @@ upgrade_record(1, QosEntry) ->
 %%--------------------------------------------------------------------
 -spec resolve_conflict(datastore_model:ctx(), doc(), doc()) ->
     {boolean(), doc()} | ignore | default.
-resolve_conflict(_Ctx, #document{key = QosId, value = RemoteValue, scope = SpaceId} = RemoteDoc,
-    #document{value = LocalValue}) ->
-
-    case resolve_conflict_internal(SpaceId, QosId, RemoteValue, LocalValue) of
-        default ->
-            default;
-        #qos_entry{} = Value ->
-            % for now always take the remote document. This has to be changed
-            % when it will be necessary to use revision history.
-            {true, RemoteDoc#document{
-                value = Value
-            }}
+resolve_conflict(_Ctx,
+    #document{key = QosId, value = RemoteValue, scope = SpaceId, revs = [RemoteRev | _], deleted = RemoteDeleted} = RemoteDoc,
+    #document{value = LocalValue, revs = [LocalRev | _], deleted = LocalDeleted} = LocalDoc
+) ->
+    case {datastore_rev:is_greater(RemoteRev, LocalRev), LocalDeleted, RemoteDeleted} of
+        {true, true, false} ->
+            {true, RemoteDoc#document{deleted = true}};
+        {true, _, true} ->
+            {false, RemoteDoc};
+        {false, true, _} ->
+            ignore;
+        {false, false, true} ->
+            {true, LocalDoc#document{deleted = true}};
+        {_, false, false} ->
+            case resolve_conflict_internal(SpaceId, QosId, RemoteValue, LocalValue) of
+                default ->
+                    default;
+                #qos_entry{} = Value ->
+                    % for now always take the remote document. This has to be changed
+                    % when it will be necessary to use revision history.
+                    {true, RemoteDoc#document{
+                        value = Value
+                    }}
+            end
     end.
+
 
 %% @private
 -spec resolve_conflict_internal(od_space:id(), id(), record(), record()) -> default | record().

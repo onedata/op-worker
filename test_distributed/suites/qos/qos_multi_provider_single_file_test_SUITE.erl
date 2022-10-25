@@ -500,9 +500,15 @@ qos_transfer_stats_test(_Config) ->
     ?assertEqual({ok, ?FULFILLED_QOS_STATUS}, opt_qos:check_qos_status(P1Node, ?SESS_ID(Provider1), QosEntryId), ?ATTEMPTS),
 
     check_transfer_stats(Provider1, QosEntryId, ?BYTES_STATS, [<<"total">>], empty),
-    check_transfer_stats(Provider2, QosEntryId, ?BYTES_STATS, [<<"total">>, opt_spaces:get_storage_id(Provider1, SpaceId)], {1, byte_size(?TEST_DATA)}),
+    check_transfer_stats(Provider2, QosEntryId, ?BYTES_STATS, [
+        <<"total">>,
+        ?QOS_STORAGE_TIME_SERIES_NAME((opt_spaces:get_storage_id(Provider1, SpaceId)))
+    ], {1, byte_size(?TEST_DATA)}),
     check_transfer_stats(Provider1, QosEntryId, ?FILES_STATS, [<<"total">>], empty),
-    check_transfer_stats(Provider2, QosEntryId, ?FILES_STATS, [<<"total">>, opt_spaces:get_storage_id(Provider2, SpaceId)], {1, 1}),
+    check_transfer_stats(Provider2, QosEntryId, ?FILES_STATS, [
+        <<"total">>,
+        ?QOS_STORAGE_TIME_SERIES_NAME((opt_spaces:get_storage_id(Provider2, SpaceId)))
+    ], {1, 1}),
 
     NewData = crypto:strong_rand_bytes(8),
     lfm_test_utils:write_file(P3Node, ?SESS_ID(Provider3), Guid, NewData),
@@ -511,11 +517,18 @@ qos_transfer_stats_test(_Config) ->
     ?assertEqual({ok, ?FULFILLED_QOS_STATUS}, opt_qos:check_qos_status(P2Node, ?SESS_ID(Provider2), QosEntryId), ?ATTEMPTS),
 
     check_transfer_stats(Provider1, QosEntryId, ?BYTES_STATS, [<<"total">>], empty),
-    check_transfer_stats(Provider2, QosEntryId, ?BYTES_STATS, [opt_spaces:get_storage_id(Provider1, SpaceId)], {1, byte_size(?TEST_DATA)}),
-    check_transfer_stats(Provider2, QosEntryId, ?BYTES_STATS, [opt_spaces:get_storage_id(Provider3, SpaceId)], {1, byte_size(NewData)}),
+    check_transfer_stats(Provider2, QosEntryId, ?BYTES_STATS, [
+        ?QOS_STORAGE_TIME_SERIES_NAME((opt_spaces:get_storage_id(Provider1, SpaceId)))
+    ], {1, byte_size(?TEST_DATA)}),
+    check_transfer_stats(Provider2, QosEntryId, ?BYTES_STATS, [
+        ?QOS_STORAGE_TIME_SERIES_NAME((opt_spaces:get_storage_id(Provider3, SpaceId)))
+    ], {1, byte_size(NewData)}),
     check_transfer_stats(Provider2, QosEntryId, ?BYTES_STATS, [<<"total">>], {2, byte_size(NewData) + byte_size(?TEST_DATA)}),
     check_transfer_stats(Provider1, QosEntryId, ?FILES_STATS, [<<"total">>], empty),
-    check_transfer_stats(Provider2, QosEntryId, ?FILES_STATS, [<<"total">>, opt_spaces:get_storage_id(Provider2, SpaceId)], {2, 2}).
+    check_transfer_stats(Provider2, QosEntryId, ?FILES_STATS, [
+        <<"total">>,
+        ?QOS_STORAGE_TIME_SERIES_NAME((opt_spaces:get_storage_id(Provider2, SpaceId)))
+    ], {2, 2}).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -654,13 +667,18 @@ read_file(Node, FilePath) ->
 
 
 check_transfer_stats(Provider, QosEntryId, Type, ExpTimeSeriesNames, ExpectedFirstWindow) ->
-    {ok, Slice} = opw_test_rpc:call(Provider, qos_transfer_stats, browse, [
-        QosEntryId, Type, #time_series_slice_get_request{layout = ?COMPLETE_LAYOUT}
-    ]),
+    GetSliceFun = fun() ->
+        {ok, #time_series_slice_get_result{slice = Slice}} = opw_test_rpc:call(
+            Provider, qos_transfer_stats, browse, [
+                QosEntryId, Type, #time_series_slice_get_request{layout = ?COMPLETE_LAYOUT}
+            ]
+        ),
+        Slice
+    end,
     lists:foreach(fun(TimeSeriesName) ->
         lists:foreach(fun(MetricName) ->
-            ?assert(kv_utils:is_key([TimeSeriesName, MetricName], Slice)),
-            Windows = kv_utils:get([TimeSeriesName, MetricName], Slice),
+            ?assert(kv_utils:is_key([TimeSeriesName, MetricName], GetSliceFun()), ?ATTEMPTS),
+            Windows = kv_utils:get([TimeSeriesName, MetricName], GetSliceFun()),
             case ExpectedFirstWindow of
                 empty ->
                     ?assertEqual([], Windows);
