@@ -29,7 +29,7 @@
 -type state() :: #dbsync_state{}.
 -type synchronization_mode() :: resynchronization | initial_sync | initial_sync_to_repeat.
 -type synchronization_params() :: #synchronization_params{}.
--type synchronization_params_map() ::#{od_provider:id() => dbsync_state:synchronization_params()}.
+-type synchronization_params_map() ::#{od_provider:id() => synchronization_params()}.
 -export_type([synchronization_mode/0, synchronization_params_map/0]).
 
 %%%===================================================================

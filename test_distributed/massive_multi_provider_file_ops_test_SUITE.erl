@@ -45,7 +45,7 @@
     on_cancel_init/2, task_canceled/2, task_finished/2]).
 
 %% File_meta posthooks used during tests
--export([test_posthook/2]).
+-export([test_posthook/3]).
 
 -define(TEST_CASES, [
     initial_sync_repeat_test, resynchronization_test, db_sync_basic_opts_test, db_sync_many_ops_test,
@@ -910,8 +910,9 @@ add_posthooks_on_file_sync(Worker, SpaceId, ProviderId, ExpectedSyncMode, Postho
                 included_mutators = ?ALL_MUTATORS_EXCEPT_SENDER
             }, rpc:call(Worker, dbsync_state, get_synchronization_params, [SpaceId, ProviderId])),
             lists:foreach(fun(PosthookName) ->
-                ?assertEqual(ok, rpc:call(Worker, file_meta_posthooks, add_hook, [
-                    {file_meta_missing, Uuid}, PosthookName, SpaceId, ?MODULE, test_posthook, [Master, PosthookName]]))
+                ?assertEqual(ok, rpc:call(Worker, file_meta_posthooks, add_hook,
+                    [{file_meta_missing, Uuid}, PosthookName, SpaceId, ?MODULE, test_posthook, [Master, Uuid, PosthookName]]
+                ))
             end, Posthooks),    
             DbsyncProc ! proceed,
             ok
@@ -922,9 +923,14 @@ add_posthooks_on_file_sync(Worker, SpaceId, ProviderId, ExpectedSyncMode, Postho
     ?assertEqual(ok, CheckAns).
 
 
-test_posthook(Master, PosthookName) ->
-    Master ! {posthook_executed, PosthookName},
-    ok.
+test_posthook(Master, Uuid, PosthookName) ->
+    case file_meta:exists(Uuid) of
+        true ->
+            Master ! {posthook_executed, PosthookName},
+            ok;
+        false ->
+            {error, not_found}
+    end.
 
 
 verify_posthooks_called(ExpectedPosthooks) ->
