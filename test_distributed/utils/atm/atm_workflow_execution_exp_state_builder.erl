@@ -140,8 +140,12 @@
     {current_lane_run_selector, {atm_lane_execution:index(), atm_lane_execution:run_num()}} |
 
     {task, atm_task_execution:id() | task_selector(), atm_task_execution:status()} |
-    {task, atm_task_execution:id() | task_selector(),
-        parallel_box_transitioned_to_inferred_status, parallel_box_status_infer_fun()} |
+    {task, atm_task_execution:id() | task_selector(), items_finished, non_neg_integer()} |
+    {task, atm_task_execution:id() | task_selector(), items_failed, non_neg_integer()} |
+    {
+        task, atm_task_execution:id() | task_selector(),
+        parallel_box_transitioned_to_inferred_status, parallel_box_status_infer_fun()
+    } |
     {all_tasks, atm_lane_execution:lane_run_selector(), atm_task_execution:status()} |
     {all_tasks, atm_lane_execution:lane_run_selector(), abruptly, failed | cancelled | interrupted} |
     {all_tasks, atm_lane_execution:lane_run_selector(), stopping_due_to, pause | interrupt | cancel} |
@@ -254,6 +258,14 @@ expect(ExpStateCtx, {task, AtmTaskExecutionIdOrSelector, ExpStatus}) when
 ->
     AtmTaskExecutionId = resolve_task_id(AtmTaskExecutionIdOrSelector, ExpStateCtx),
     expect_task_transitioned_to(AtmTaskExecutionId, str_utils:to_binary(ExpStatus), ExpStateCtx);
+
+expect(ExpStateCtx, {task, AtmTaskExecutionIdOrSelector, items_finished, ItemCount}) ->
+    AtmTaskExecutionId = resolve_task_id(AtmTaskExecutionIdOrSelector, ExpStateCtx),
+    expect_task_items_moved_from_processing_to_processed(AtmTaskExecutionId, ItemCount, ExpStateCtx);
+
+expect(ExpStateCtx, {task, AtmTaskExecutionIdOrSelector, items_failed, ItemCount}) ->
+    AtmTaskExecutionId = resolve_task_id(AtmTaskExecutionIdOrSelector, ExpStateCtx),
+    expect_task_items_moved_from_processing_to_failed_and_processed(AtmTaskExecutionId, ItemCount, ExpStateCtx);
 
 expect(
     ExpStateCtx,
