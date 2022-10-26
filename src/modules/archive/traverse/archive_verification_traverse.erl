@@ -98,7 +98,7 @@ block_archive_modification(#document{value = #archive{root_dir_guid = RootDirGui
 
 -spec unblock_archive_modification(archive:doc()) -> ok.
 unblock_archive_modification(#document{value = #archive{root_dir_guid = RootDirGuid}}) -> 
-    ?extract_ok(dataset_api:remove(file_id:guid_to_uuid(RootDirGuid))).
+    ?extract_ok(dataset_api:remove(file_id:guid_to_uuid(RootDirGuid), internal)).
 
 
 %%%===================================================================
@@ -111,10 +111,15 @@ task_started(TaskId, _Pool) ->
 
 
 -spec task_finished(id(), tree_traverse:pool()) -> ok.
-task_finished(TaskId, _Pool) ->
-    tree_traverse_session:close_for_task(TaskId),
-    archive:mark_preserved(TaskId),
-    ?debug("Archive verification job ~p finished", [TaskId]).
+task_finished(TaskId, Pool) ->
+    case archive_traverses_common:is_cancelled(TaskId) of
+        true -> 
+            task_canceled(TaskId, Pool);
+        false ->
+            tree_traverse_session:close_for_task(TaskId),
+            archive:mark_preserved(TaskId),
+            ?debug("Archive verification job ~p finished", [TaskId])
+    end.
 
 
 -spec task_canceled(id(), tree_traverse:pool()) -> ok.
@@ -220,7 +225,16 @@ do_dir_master_job_unsafe(#tree_traverse{
                 end
         end
     end,
-    tree_traverse:do_master_job(Job, MasterJobArgs, NewJobsPreprocessor).
+    % Cancelling on remote provider when passing between archivisation and verification traverses phases can result
+    % in a situation, that remote provider is not yet aware of verification traverse and does not cancel it.
+    % Therefore this check here is required for proper cancellation.
+    case archive_traverses_common:is_cancelled(TaskId) of
+        true ->
+            cancel(TaskId),
+            tree_traverse:do_aborted_master_job(Job, MasterJobArgs);
+        false -> 
+            tree_traverse:do_master_job(Job, MasterJobArgs, NewJobsPreprocessor)
+    end.
 
 
 -spec handle_verification_error(id(), tree_traverse:job()) -> ok.
