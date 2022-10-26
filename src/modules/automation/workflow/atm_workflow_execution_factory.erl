@@ -161,6 +161,7 @@ delete_insecure(AtmWorkflowExecutionId) ->
     case atm_workflow_execution_status:infer_phase(AtmWorkflowExecution) of
         ?WAITING_PHASE -> atm_waiting_workflow_executions:delete(AtmWorkflowExecutionDoc);
         ?ONGOING_PHASE -> atm_ongoing_workflow_executions:delete(AtmWorkflowExecutionDoc);
+        ?SUSPENDED_PHASE -> atm_suspended_workflow_executions:delete(AtmWorkflowExecutionDoc);
         ?ENDED_PHASE -> atm_ended_workflow_executions:delete(AtmWorkflowExecutionDoc)
     end.
 
@@ -424,6 +425,7 @@ create_workflow_execution_doc(#creation_ctx{
 
             schedule_time = global_clock:timestamp_seconds(),
             start_time = 0,
+            suspend_time = 0,
             finish_time = 0
         }
     }),

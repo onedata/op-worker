@@ -45,6 +45,8 @@
 -type atm_operation() ::
     #atm_workflow_execution_schedule_request{} |
     #atm_workflow_execution_cancel_request{} |
+    #atm_workflow_execution_pause_request{} |
+    #atm_workflow_execution_resume_request{} |
     #atm_workflow_execution_repeat_request{}.
 
 -type cdmi_operation() ::

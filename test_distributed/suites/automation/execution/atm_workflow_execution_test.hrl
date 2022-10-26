@@ -32,4 +32,7 @@
 -define(USER_SELECTOR, user2).
 
 
+-define(STOPPING_REASONS, [crash, cancel, failure, interrupt, pause]).
+
+
 -endif.

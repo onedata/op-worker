@@ -581,6 +581,7 @@ get_type(#file_meta{type = Type}) ->
 get_type(#document{value = FileMeta}) ->
     get_type(FileMeta).
 
+
 -spec get_effective_type(file_meta() | doc()) -> type().
 get_effective_type(#file_meta{type = ?LINK_TYPE}) ->
     ?REGULAR_FILE_TYPE;

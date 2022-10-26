@@ -87,12 +87,7 @@ archive_regular_file(
 archive_regular_file(
     ArchiveDoc, FileCtx, TargetParentCtx, BaseArchiveDoc, ResolvedFilePath, UserCtx, CopyOpts
 ) ->
-    {ok, DatasetRootFileGuid} = archive:get_dataset_root_file_guid(ArchiveDoc),
-    DatasetRootFileCtx = file_ctx:new_by_guid(DatasetRootFileGuid),
-    {DatasetRootLogicalPath, _DatasetRootFileCtx2} = file_ctx:get_logical_path(
-        DatasetRootFileCtx, UserCtx),
-    {_, DatasetRootParentPath} = filepath_utils:basename_and_parent_dir(DatasetRootLogicalPath),
-    
+    {ok, DatasetRootParentPath} = archive:get_dataset_root_parent_path(ArchiveDoc, UserCtx),
     RelativeFilePath = filepath_utils:relative(DatasetRootParentPath, ResolvedFilePath),
     
     case archive:find_file(BaseArchiveDoc, RelativeFilePath, UserCtx) of

@@ -123,8 +123,8 @@ event_stream_should_not_aggregate_events_with_different_keys(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     {ok, Stm} = start_event_stream(Worker,
         fun(Ctr) -> Ctr >= 2 end, infinity),
-    emit(Worker, Stm, file_read_event(<<"file_uuid_1">>, 1, [{0, 1}])),
-    emit(Worker, Stm, file_read_event(<<"file_uuid_2">>, 1, [{0, 1}])),
+    emit(Worker, Stm, file_read_event(file_id:pack_guid(<<"file_uuid_1">>, <<"space_id">>), 1, [{0, 1}])),
+    emit(Worker, Stm, file_read_event(file_id:pack_guid(<<"file_uuid_2">>, <<"space_id">>), 1, [{0, 1}])),
     ?assertReceivedMatch({event_handler, [_ | _]}, ?TIMEOUT),
     stop_event_stream(Stm).
 
@@ -228,13 +228,13 @@ emit(Worker, Stm, Evt) ->
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
-%% @equiv file_read_event(<<"file_uuid">>, Size, Blocks)
+%% @equiv file_read_event(file_id:pack_guid(<<"file_uuid">>, <<"space_id">>), Size, Blocks)
 %% @end
 %%--------------------------------------------------------------------
 -spec file_read_event(Size :: file_meta:size(), Blocks :: proplists:proplist()) ->
     Evt :: #event{}.
 file_read_event(Size, Blocks) ->
-    file_read_event(<<"file_uuid">>, Size, Blocks).
+    file_read_event(file_id:pack_guid(<<"file_uuid">>, <<"space_id">>), Size, Blocks).
 
 %%--------------------------------------------------------------------
 %% @private

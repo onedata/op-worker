@@ -42,7 +42,7 @@
 -spec data_spec(middleware:req()) -> undefined | middleware_sanitizer:data_spec().
 data_spec(#op_req{operation = get, gri = #gri{aspect = atm_workflow_execution_summaries}}) -> #{
     optional => #{
-        <<"phase">> => {atom, [?WAITING_PHASE, ?ONGOING_PHASE, ?ENDED_PHASE]},
+        <<"phase">> => {atom, [?WAITING_PHASE, ?ONGOING_PHASE, ?SUSPENDED_PHASE, ?ENDED_PHASE]},
         <<"index">> => {binary, any},
         <<"token">> => {binary, non_empty},
         <<"offset">> => {integer, any},

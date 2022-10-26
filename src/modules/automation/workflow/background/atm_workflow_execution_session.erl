@@ -23,8 +23,6 @@
 %% API
 -export([init/2, acquire/1, terminate/1]).
 
--define(LOG_THROTTLING_INTERVAL, 600). % 10 minutes
-
 
 %%%===================================================================
 %%% API functions
@@ -47,14 +45,7 @@ acquire(AtmWorkflowExecutionId) ->
         {ok, SessionId} ->
             user_ctx:new(SessionId);
         {error, _} = Error ->
-            utils:throttle(?LOG_THROTTLING_INTERVAL, fun() ->
-                ?error(
-                    "Atm workflow execution ~s failed to acquire offline session due to ~p. "
-                    "Execution will be cancelled.", [AtmWorkflowExecutionId, Error]
-                )
-            end),
-            % TODO VFS-7693 cancel workflow
-            throw(?ERROR_FORBIDDEN)
+            throw({session_acquisition_failed, Error})
     end.
 
 

@@ -425,6 +425,15 @@ resolve_conflict(_Ctx,
                     true -> permissions_cache:invalidate();
                     false -> ok
                 end
+        end,
+
+        case (Mode =/= PrevMode) orelse (Acl =/= PrevAcl) of
+            true ->
+                Ctx = file_ctx:new_by_uuid(Uuid, SpaceId),
+                fslogic_event_emitter:emit_sizeless_file_attrs_changed(Ctx),
+                fslogic_event_emitter:emit_file_perm_changed(Ctx);
+            false ->
+                ok
         end
     end),
 

@@ -44,16 +44,7 @@
     workflow_emergency/2, workflow_emergency/3
 ]).
 
-%% Possible severities:
-%% 1. ?LOGGER_DEBUG
-%% 2. ?LOGGER_INFO
-%% 3. ?LOGGER_NOTICE
-%% 4. ?LOGGER_WARNING
-%% 5. ?LOGGER_ALERT
-%% 6. ?LOGGER_ERROR
-%% 7. ?LOGGER_CRITICAL
-%% 8. ?LOGGER_EMERGENCY
--type severity() :: binary().
+-type severity() :: binary().  %% see audit_log.hrl
 
 -type log_content() :: binary() | json_utils:json_map().
 -type log() :: json_utils:json_map() | audit_log:append_request().
