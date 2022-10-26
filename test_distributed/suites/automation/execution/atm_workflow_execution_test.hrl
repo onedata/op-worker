@@ -25,4 +25,14 @@
 -define(STOPPING_REASONS, [crash, cancel, failure, interrupt, pause]).
 
 
+% Lane run scheduled to prepare in advance but deferred until workflow execution stopped - should immediately fail
+-define(UNSCHEDULED_LANE_RUN_TEST_SPEC(__LANE_RUN_SELECTOR, __DEFER_AFTER), #atm_lane_run_execution_test_spec{
+    selector = __LANE_RUN_SELECTOR,
+    prepare_lane = #atm_step_mock_spec{
+        defer_after = __DEFER_AFTER,
+        after_step_exp_state_diff = no_diff
+    }
+}).
+
+
 -endif.

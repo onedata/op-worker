@@ -135,13 +135,7 @@ resume_atm_workflow_execution_paused_while_scheduled() ->
                 },
                 handle_lane_execution_stopped = #atm_step_mock_spec{after_step_exp_state_diff = no_diff}
             },
-            #atm_lane_run_execution_test_spec{
-                selector = {2, 1},
-                prepare_lane = #atm_step_mock_spec{
-                    defer_after = {prepare_lane, after_step, {1, 1}},
-                    after_step_exp_state_diff = no_diff
-                }
-            }
+            ?UNSCHEDULED_LANE_RUN_TEST_SPEC({2, 1}, {prepare_lane, after_step, {1, 1}})
         ],
         handle_workflow_execution_stopped = #atm_step_mock_spec{
             after_step_exp_state_diff = [workflow_paused]
@@ -165,13 +159,7 @@ resume_atm_workflow_execution_interrupted_while_scheduled() ->
                     after_step_exp_state_diff = [{lane_run, {1, 1}, interrupted}]
                 }
             },
-            #atm_lane_run_execution_test_spec{
-                selector = {2, 1},
-                prepare_lane = #atm_step_mock_spec{
-                    defer_after = {handle_exception, after_step, 1},
-                    after_step_exp_state_diff = no_diff
-                }
-            }
+            ?UNSCHEDULED_LANE_RUN_TEST_SPEC({2, 1}, {handle_exception, after_step, 1})
         ],
         handle_exception = #atm_step_mock_spec{
             after_step_exp_state_diff = [
@@ -246,13 +234,7 @@ resume_atm_workflow_execution_paused_while_preparing() ->
                     after_step_exp_state_diff = [{lane_run, {1, 1}, paused}]
                 }
             },
-            #atm_lane_run_execution_test_spec{
-                selector = {2, 1},
-                prepare_lane = #atm_step_mock_spec{
-                    defer_after = {prepare_lane, after_step, {1, 1}},
-                    after_step_exp_state_diff = no_diff
-                }
-            }
+            ?UNSCHEDULED_LANE_RUN_TEST_SPEC({2, 1}, {prepare_lane, after_step, {1, 1}})
         ],
         handle_workflow_execution_stopped = #atm_step_mock_spec{
             after_step_exp_state_diff = [workflow_paused]
@@ -284,13 +266,7 @@ resume_atm_workflow_execution_interrupted_while_preparing() ->
                     after_step_exp_state_diff = [{lane_run, {1, 1}, interrupted}]
                 }
             },
-            #atm_lane_run_execution_test_spec{
-                selector = {2, 1},
-                prepare_lane = #atm_step_mock_spec{
-                    defer_after = {prepare_lane, after_step, {1, 1}},
-                    after_step_exp_state_diff = no_diff
-                }
-            }
+            ?UNSCHEDULED_LANE_RUN_TEST_SPEC({2, 1}, {prepare_lane, after_step, {1, 1}})
         ],
         handle_workflow_abruptly_stopped = #atm_step_mock_spec{
             after_step_exp_state_diff = [workflow_interrupted]
@@ -408,13 +384,7 @@ resume_atm_workflow_execution_suspended_while_active_test_base(Testcase, Suspend
                             after_step_exp_state_diff = [{lane_run, {1, 1}, SuspendedStatus}]
                         }
                     },
-                    #atm_lane_run_execution_test_spec{
-                        selector = {2, 1},
-                        prepare_lane = #atm_step_mock_spec{
-                            defer_after = {handle_lane_execution_stopped, after_step, {1, 1}},
-                            after_step_exp_state_diff = no_diff
-                        }
-                    }
+                    ?UNSCHEDULED_LANE_RUN_TEST_SPEC({2, 1}, {handle_lane_execution_stopped, after_step, {1, 1}})
                 ],
                 handle_workflow_execution_stopped = #atm_step_mock_spec{
                     after_step_exp_state_diff = [build_workflow_suspended_expectation(SuspendedStatus)]
@@ -439,14 +409,7 @@ resume_atm_workflow_execution_suspended_while_active_test_base(Testcase, Suspend
                     },
                     build_lane_run_execution_test_spec_with_even_numbers({1, 2}, {0, 0, 3}, {0, 3, 3}, [2, 4, 6], false),
                     build_lane_run_execution_test_spec_with_even_numbers({1, 3}, {0, 0, 3}, {0, 3, 3}, [2, 4, 6], true),
-
-                    #atm_lane_run_execution_test_spec{
-                        selector = {2, 3},
-                        prepare_lane = #atm_step_mock_spec{
-                            defer_after = {handle_lane_execution_stopped, after_step, {1, 3}},
-                            after_step_exp_state_diff = no_diff
-                        }
-                    }
+                    ?UNSCHEDULED_LANE_RUN_TEST_SPEC({2, 3}, {handle_lane_execution_stopped, after_step, {1, 3}})
                 ],
                 handle_workflow_execution_stopped = #atm_step_mock_spec{
                     after_step_exp_state_diff = [
@@ -471,7 +434,7 @@ resume_atm_workflow_execution_interrupted_after_some_tasks_finished() ->
 %% @private
 resume_atm_workflow_execution_suspended_after_some_tasks_finished_test_base(Testcase, SuspendedStatus) ->
     ResumedLaneRunBaseTestSpec = build_lane_run_execution_test_spec_with_even_numbers(
-        {1, 2}, {0, 0, 2}, {0, 0, 0}, [666, 999], false
+        {1, 2}, {0, 0, 1}, {0, 1, 1}, [666], false
     ),
 
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
@@ -485,7 +448,8 @@ resume_atm_workflow_execution_suspended_after_some_tasks_finished_test_base(Test
                     build_lane_run_execution_test_spec_with_even_numbers(
                         {1, 1}, {0, 0, 2}, {0, 1, 2}, [666], false
                     ),
-                    ResumedLaneRunBaseTestSpec#atm_lane_run_execution_test_spec{
+                    #atm_lane_run_execution_test_spec{
+                        selector = {1, 2},
                         run_task_for_item = #atm_step_mock_spec{
                             strategy = fun(#atm_mock_call_ctx{
                                 workflow_execution_exp_state = ExpState,
@@ -500,6 +464,8 @@ resume_atm_workflow_execution_suspended_after_some_tasks_finished_test_base(Test
                                 end
                             end
                         },
+                        process_task_result_for_item = 'build mock spec for process_task_result_for_item with even numbers step'(),
+
                         handle_task_execution_stopped = #atm_step_mock_spec{
                             before_step_hook = fun(AtmMockCallCtx) ->
                                 assert_lane1_task_execution_stopped_stats({0, 0, 1}, {0, 0, 0}, AtmMockCallCtx)
@@ -515,16 +481,13 @@ resume_atm_workflow_execution_suspended_after_some_tasks_finished_test_base(Test
                             })
                         },
                         handle_lane_execution_stopped = #atm_step_mock_spec{
+                            after_step_hook = fun(AtmMockCallCtx) ->
+                                assert_exception_store_content([], {1, 2}, AtmMockCallCtx)
+                            end,
                             after_step_exp_state_diff = [{lane_run, {1, 2}, SuspendedStatus}]
                         }
                     },
-                    #atm_lane_run_execution_test_spec{
-                        selector = {2, 1},
-                        prepare_lane = #atm_step_mock_spec{
-                            defer_after = {handle_lane_execution_stopped, after_step, {1, 2}},
-                            after_step_exp_state_diff = no_diff
-                        }
-                    }
+                    ?UNSCHEDULED_LANE_RUN_TEST_SPEC({2, 1}, {handle_lane_execution_stopped, after_step, {1, 2}})
                 ],
                 handle_workflow_execution_stopped = #atm_step_mock_spec{
                     after_step_exp_state_diff = [build_workflow_suspended_expectation(SuspendedStatus)]
@@ -534,8 +497,9 @@ resume_atm_workflow_execution_suspended_after_some_tasks_finished_test_base(Test
             #atm_workflow_execution_incarnation_test_spec{
                 incarnation_num = 2,
                 lane_runs = [
+                    %% TODO ensure only task2 returned from resume_lane
                     ResumedLaneRunBaseTestSpec#atm_lane_run_execution_test_spec{
-                        resume_lane = #atm_step_mock_spec{
+                        prepare_lane = #atm_step_mock_spec{     %% TODO MW why prepare_lane instead of resume_lane ????
                             before_step_exp_state_diff = [
                                 {lane_run, {1, 2}, resuming},
                                 workflow_resuming
@@ -548,20 +512,13 @@ resume_atm_workflow_execution_suspended_after_some_tasks_finished_test_base(Test
                         }
                     },
                     build_lane_run_execution_test_spec_with_even_numbers({1, 3}, {0, 0, 1}, {0, 1, 1}, [666], true),
-
-                    #atm_lane_run_execution_test_spec{
-                        selector = {2, 3},
-                        prepare_lane = #atm_step_mock_spec{
-                            defer_after = {handle_lane_execution_stopped, after_step, {1, 3}},
-                            after_step_exp_state_diff = no_diff
-                        }
-                    }
+                    ?UNSCHEDULED_LANE_RUN_TEST_SPEC({2, 3}, {handle_lane_execution_stopped, after_step, {1, 3}})
                 ],
                 handle_workflow_execution_stopped = #atm_step_mock_spec{
                     after_step_exp_state_diff = [
                         {lane_runs, [{1, 1}, {1, 2}, {1, 3}], rerunable},
                         {lane_runs, [{1, 1}, {1, 2}, {1, 3}], retriable},
-                        workflow_cancelled  %% TODO workflow_failed
+                        workflow_failed
                     ]
                 }
             }
@@ -597,19 +554,16 @@ resume_atm_workflow_execution_suspended_after_all_tasks_finished_test_base(Testc
                     ResumedLaneRunBaseTestSpec#atm_lane_run_execution_test_spec{
                         handle_lane_execution_stopped = #atm_step_mock_spec{
                             before_step_hook = get_suspend_hook(SuspendedStatus),
+                            after_step_hook = fun(AtmMockCallCtx) ->
+                                assert_exception_store_content([22, 44], {1, 2}, AtmMockCallCtx)
+                            end,
                             after_step_exp_state_diff = [
                                 {lane_run, {1, 2}, SuspendedStatus},
                                 workflow_stopping
                             ]
                         }
                     },
-                    #atm_lane_run_execution_test_spec{
-                        selector = {2, 1},
-                        prepare_lane = #atm_step_mock_spec{
-                            defer_after = {handle_lane_execution_stopped, after_step, {1, 2}},
-                            after_step_exp_state_diff = no_diff
-                        }
-                    }
+                    ?UNSCHEDULED_LANE_RUN_TEST_SPEC({2, 1}, {handle_lane_execution_stopped, after_step, {1, 2}})
                 ],
                 handle_workflow_execution_stopped = #atm_step_mock_spec{
                     after_step_exp_state_diff = [build_workflow_suspended_expectation(SuspendedStatus)]
@@ -632,14 +586,7 @@ resume_atm_workflow_execution_suspended_after_all_tasks_finished_test_base(Testc
                         }
                     },
                     build_lane_run_execution_test_spec_with_even_numbers({1, 3}, {0, 0, 2}, {0, 2, 2}, [22, 44], true),
-
-                    #atm_lane_run_execution_test_spec{
-                        selector = {2, 3},
-                        prepare_lane = #atm_step_mock_spec{
-                            defer_after = {handle_lane_execution_stopped, after_step, {1, 3}},
-                            after_step_exp_state_diff = no_diff
-                        }
-                    }
+                    ?UNSCHEDULED_LANE_RUN_TEST_SPEC({2, 3}, {handle_lane_execution_stopped, after_step, {1, 3}})
                 ],
                 handle_workflow_execution_stopped = #atm_step_mock_spec{
                     after_step_exp_state_diff = [
