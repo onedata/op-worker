@@ -261,8 +261,9 @@ get_associated_file_ctx(DatasetDoc) ->
 
 -spec remove_unsafe(dataset:doc(), dataset_type()) -> ok.
 remove_unsafe(#document{key = DatasetId} = Doc, DatasetType) ->
+    % Internal datasets are not added to datasets structure so there is no need to remove them from it.
     case DatasetType of
-        internal -> 
+        internal ->
             ok;
         user_defined ->
             ok = remove_from_datasets_structure(Doc)

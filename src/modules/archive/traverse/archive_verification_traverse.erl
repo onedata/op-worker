@@ -226,8 +226,11 @@ do_dir_master_job_unsafe(#tree_traverse{
                 end
         end
     end,
+    % Cancelling on remote provider when passing between archivisation and verification traverses phases can result
+    % in a situation, that remote provider is not yet aware of verification traverse and does not cancel it.
+    % Therefore this check here is required for proper cancellation.
     case archive_traverses_common:is_cancelled(TaskId) of
-        true -> 
+        true ->
             cancel(TaskId),
             tree_traverse:do_aborted_master_job(Job, MasterJobArgs);
         false -> 
