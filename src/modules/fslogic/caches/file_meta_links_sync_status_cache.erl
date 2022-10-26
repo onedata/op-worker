@@ -142,6 +142,9 @@ invalidate(SpaceId) ->
     {error, term()}.
 calculate_links_sync_status([_, {error, _} = Error, _CalculationInfo]) ->
     Error;
+calculate_links_sync_status([#document{value = #file_meta{is_scope = true}}, _ParentValue, CalculationInfo]) ->
+    % is_scope is true for space dir - parent should not be checked as it does not exist
+    {ok, synced, CalculationInfo};
 calculate_links_sync_status([#document{} = FileMetaDoc, _ParentValue, CalculationInfo]) ->
     #document{value = #file_meta{name = Name, parent_uuid = ParentUuid}} = FileMetaDoc,
     case file_meta_forest:get(ParentUuid, all, Name) of
