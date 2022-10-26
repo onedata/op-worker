@@ -13,9 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("atm_workflow_execution_test.hrl").
--include("atm/atm_test_schema_drafts.hrl").
 -include("atm/atm_test_store.hrl").
--include("modules/automation/atm_execution.hrl").
 
 -export([
     resume_atm_workflow_execution_paused_while_scheduled/0,
@@ -26,6 +24,9 @@
 
     resume_atm_workflow_execution_paused_while_active/0,
     resume_atm_workflow_execution_interrupted_while_active/0,
+
+    resume_atm_workflow_execution_paused_after_some_tasks_finished/0,
+    resume_atm_workflow_execution_interrupted_after_some_tasks_finished/0,
 
     resume_atm_workflow_execution_paused_after_all_tasks_finished/0,
     resume_atm_workflow_execution_interrupted_after_all_tasks_finished/0
@@ -452,6 +453,115 @@ resume_atm_workflow_execution_suspended_while_active_test_base(Testcase, Suspend
                         {lane_runs, [{1, 1}, {1, 2}, {1, 3}], rerunable},
                         {lane_runs, [{1, 1}, {1, 2}, {1, 3}], retriable},
                         workflow_failed
+                    ]
+                }
+            }
+        ]
+    }).
+
+
+resume_atm_workflow_execution_paused_after_some_tasks_finished() ->
+    resume_atm_workflow_execution_suspended_after_some_tasks_finished_test_base(?FUNCTION_NAME, paused).
+
+
+resume_atm_workflow_execution_interrupted_after_some_tasks_finished() ->
+    resume_atm_workflow_execution_suspended_after_some_tasks_finished_test_base(?FUNCTION_NAME, interrupted).
+
+
+%% @private
+resume_atm_workflow_execution_suspended_after_some_tasks_finished_test_base(Testcase, SuspendedStatus) ->
+    ResumedLaneRunBaseTestSpec = build_lane_run_execution_test_spec_with_even_numbers(
+        {1, 2}, {0, 0, 2}, {0, 0, 0}, [666, 999], false
+    ),
+
+    atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
+        workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
+            Testcase, [666, 999]
+        ),
+        incarnations = [
+            #atm_workflow_execution_incarnation_test_spec{
+                incarnation_num = 1,
+                lane_runs = [
+                    build_lane_run_execution_test_spec_with_even_numbers(
+                        {1, 1}, {0, 0, 2}, {0, 1, 2}, [666], false
+                    ),
+                    ResumedLaneRunBaseTestSpec#atm_lane_run_execution_test_spec{
+                        run_task_for_item = #atm_step_mock_spec{
+                            strategy = fun(#atm_mock_call_ctx{
+                                workflow_execution_exp_state = ExpState,
+                                call_args = [_, _, AtmTaskExecutionId, _, _]
+                            }) ->
+                                case atm_workflow_execution_exp_state_builder:get_task_schema_id(
+                                    AtmTaskExecutionId, ExpState
+                                ) of
+                                    <<"task1">> -> passthrough;
+                                    % Ensure no item is executed by task2 before suspension
+                                    <<"task2">> -> {passthrough_with_delay, timer:seconds(1)}
+                                end
+                            end
+                        },
+                        handle_task_execution_stopped = #atm_step_mock_spec{
+                            before_step_hook = fun(AtmMockCallCtx) ->
+                                assert_lane1_task_execution_stopped_stats({0, 0, 1}, {0, 0, 0}, AtmMockCallCtx)
+                            end,
+                            after_step_hook = get_suspend_hook(SuspendedStatus),
+                            after_step_exp_state_diff = build_handle_task_execution_stopped_exp_state_diff(#{
+                                <<"task1">> => lists:flatten([
+                                    build_expectations_for_lane1_task_transitioned_to(?TASK1_SELECTOR({1, 2}), finished),
+                                    build_expectations_for_lane1_task_transitioned_to(?TASK2_SELECTOR({1, 2}), SuspendedStatus),
+                                    {lane_run, {1, 2}, stopping},
+                                    workflow_stopping
+                                ])
+                            })
+                        },
+                        handle_lane_execution_stopped = #atm_step_mock_spec{
+                            after_step_exp_state_diff = [{lane_run, {1, 2}, SuspendedStatus}]
+                        }
+                    },
+                    #atm_lane_run_execution_test_spec{
+                        selector = {2, 1},
+                        prepare_lane = #atm_step_mock_spec{
+                            defer_after = {handle_lane_execution_stopped, after_step, {1, 2}},
+                            after_step_exp_state_diff = no_diff
+                        }
+                    }
+                ],
+                handle_workflow_execution_stopped = #atm_step_mock_spec{
+                    after_step_exp_state_diff = [build_workflow_suspended_expectation(SuspendedStatus)]
+                },
+                after_hook = fun atm_workflow_execution_test_utils:resume_workflow_execution/1
+            },
+            #atm_workflow_execution_incarnation_test_spec{
+                incarnation_num = 2,
+                lane_runs = [
+                    ResumedLaneRunBaseTestSpec#atm_lane_run_execution_test_spec{
+                        resume_lane = #atm_step_mock_spec{
+                            before_step_exp_state_diff = [
+                                {lane_run, {1, 2}, resuming},
+                                workflow_resuming
+                            ],
+                            after_step_exp_state_diff = lists:flatten([
+                                build_expectations_for_lane1_task_transitioned_to(?TASK2_SELECTOR({1, 2}), pending),
+                                {lane_run, {1, 2}, active},
+                                workflow_active
+                            ])
+                        }
+                    },
+                    build_lane_run_execution_test_spec_with_even_numbers({1, 3}, {0, 0, 1}, {0, 1, 1}, [666], true),
+
+                    #atm_lane_run_execution_test_spec{
+                        selector = {2, 3},
+                        prepare_lane = #atm_step_mock_spec{
+                            defer_after = {handle_lane_execution_stopped, after_step, {1, 3}},
+                            after_step_exp_state_diff = no_diff
+                        }
+                    }
+                ],
+                handle_workflow_execution_stopped = #atm_step_mock_spec{
+                    after_step_exp_state_diff = [
+                        {lane_runs, [{1, 1}, {1, 2}, {1, 3}], rerunable},
+                        {lane_runs, [{1, 1}, {1, 2}, {1, 3}], retriable},
+                        workflow_cancelled  %% TODO workflow_failed
                     ]
                 }
             }
