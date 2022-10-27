@@ -497,7 +497,7 @@ get_lane_run_test_spec(TargetAtmLaneIndex, #test_ctx{ongoing_incarnations = [
 
 %% @private
 -spec build_mock_call_ctx(mock_call_report(), test_ctx()) -> mock_call_ctx().
-build_mock_call_ctx(#mock_call_report{args = CallArgs}, #test_ctx{
+build_mock_call_ctx(#mock_call_report{args = CallArgs, result = Result}, #test_ctx{
     test_spec = #atm_workflow_execution_test_spec{
         provider = ProviderSelector,
         space = SpaceSelector
@@ -518,7 +518,8 @@ build_mock_call_ctx(#mock_call_report{args = CallArgs}, #test_ctx{
         lane_count = AtmLaneCount,
         current_lane_index = CurrentAtmLaneIndex,
         current_run_num = CurrentRunNum,
-        call_args = CallArgs
+        call_args = CallArgs,
+        call_result = Result
     }.
 
 

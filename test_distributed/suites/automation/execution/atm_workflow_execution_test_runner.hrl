@@ -32,7 +32,8 @@
 -record(mock_call_report, {
     step :: atm_workflow_execution_test_runner:step_name(),
     timing :: atm_workflow_execution_test_runner:step_phase_timing(),
-    args :: [term()]
+    args :: [term()],
+    result :: undefined | term()
 }).
 
 -record(atm_mock_call_ctx, {
@@ -44,7 +45,9 @@
     lane_count :: non_neg_integer(),
     current_lane_index :: atm_lane_execution:index(),
     current_run_num :: atm_lane_execution:run_num(),
-    call_args :: [term()]
+    call_args :: [term()],
+    % Result of step execution available only in after_step phase or 'undefined' in before_step phase
+    call_result :: undefined | term()
 }).
 
 -record(atm_step_mock_spec, {

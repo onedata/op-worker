@@ -38,7 +38,7 @@
 
 -define(INTEGER_DATA_SPEC, #atm_data_spec{type = atm_integer_type}).
 
--define(LAMBDA_DRAFT(__DOCKER_IMAGE), #atm_lambda_revision_draft{
+-define(LAMBDA_DRAFT(__DOCKER_IMAGE, __RELAY_METHOD), #atm_lambda_revision_draft{
     operation_spec = #atm_openfaas_operation_spec_draft{
         docker_image = __DOCKER_IMAGE
     },
@@ -50,7 +50,7 @@
     result_specs = [#atm_lambda_result_spec{
         name = ?ECHO_ARG_NAME,
         data_spec = ?INTEGER_DATA_SPEC,
-        relay_method = ?RAND_ELEMENT([return_value, file_pipe])
+        relay_method = __RELAY_METHOD
     }]
 }).
 
@@ -104,8 +104,10 @@
             ]
         },
         supplementary_lambdas = #{
-            <<"lambda1">> => #{?ECHO_LAMBDA_REVISION_NUM => ?LAMBDA_DRAFT(?ECHO_DOCKER_IMAGE_ID)},
-            <<"lambda2">> => #{?ECHO_LAMBDA_REVISION_NUM => ?LAMBDA_DRAFT(?ECHO_WITH_EXCEPTION_ON_EVEN_NUMBERS)}
+            <<"lambda1">> => #{?ECHO_LAMBDA_REVISION_NUM => ?LAMBDA_DRAFT(?ECHO_DOCKER_IMAGE_ID, file_pipe)},
+            <<"lambda2">> => #{?ECHO_LAMBDA_REVISION_NUM => ?LAMBDA_DRAFT(
+                ?ECHO_WITH_EXCEPTION_ON_EVEN_NUMBERS, return_value
+            )}
         }
     }
 ).
@@ -295,6 +297,10 @@ resume_atm_workflow_execution_suspended_while_preparing_test_base(Testcase, Susp
                                 {lane_run, {1, 1}, resuming},
                                 workflow_resuming
                             ],
+                            after_step_hook = build_assert_exp_parallel_box_specs_returned_hook([
+                                #{?TASK1_SELECTOR({1, 1}) => #{type => async, data_stream_enabled => true}},
+                                #{?TASK2_SELECTOR({1, 1}) => #{type => async, data_stream_enabled => false}}
+                            ]),
                             after_step_exp_state_diff = [
                                 {all_tasks, {1, 1}, pending},
                                 {lane_run, {1, 1}, enqueued},
@@ -400,6 +406,10 @@ resume_atm_workflow_execution_suspended_while_active_test_base(Testcase, Suspend
                                 {lane_run, {1, 1}, resuming},
                                 workflow_resuming
                             ],
+                            after_step_hook = build_assert_exp_parallel_box_specs_returned_hook([
+                                #{?TASK1_SELECTOR({1, 1}) => #{type => async, data_stream_enabled => true}},
+                                #{?TASK2_SELECTOR({1, 1}) => #{type => async, data_stream_enabled => false}}
+                            ]),
                             after_step_exp_state_diff = [
                                 {all_tasks, {1, 1}, active},
                                 {lane_run, {1, 1}, active},
@@ -434,19 +444,19 @@ resume_atm_workflow_execution_interrupted_after_some_tasks_finished() ->
 %% @private
 resume_atm_workflow_execution_suspended_after_some_tasks_finished_test_base(Testcase, SuspendedStatus) ->
     ResumedLaneRunBaseTestSpec = build_lane_run_execution_test_spec_with_even_numbers(
-        {1, 2}, {0, 0, 1}, {0, 1, 1}, [666], false
+        {1, 2}, {0, 0, 0}, {0, 2, 2}, [88, 666], false
     ),
 
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
-            Testcase, [666, 999]
+            Testcase, [88, 666, 999]
         ),
         incarnations = [
             #atm_workflow_execution_incarnation_test_spec{
                 incarnation_num = 1,
                 lane_runs = [
                     build_lane_run_execution_test_spec_with_even_numbers(
-                        {1, 1}, {0, 0, 2}, {0, 1, 2}, [666], false
+                        {1, 1}, {0, 0, 3}, {0, 2, 3}, [88, 666], false
                     ),
                     #atm_lane_run_execution_test_spec{
                         selector = {1, 2},
@@ -468,7 +478,7 @@ resume_atm_workflow_execution_suspended_after_some_tasks_finished_test_base(Test
 
                         handle_task_execution_stopped = #atm_step_mock_spec{
                             before_step_hook = fun(AtmMockCallCtx) ->
-                                assert_lane1_task_execution_stopped_stats({0, 0, 1}, {0, 0, 0}, AtmMockCallCtx)
+                                assert_lane1_task_execution_stopped_stats({0, 0, 2}, {0, 0, 0}, AtmMockCallCtx)
                             end,
                             after_step_hook = get_suspend_hook(SuspendedStatus),
                             after_step_exp_state_diff = build_handle_task_execution_stopped_exp_state_diff(#{
@@ -497,13 +507,16 @@ resume_atm_workflow_execution_suspended_after_some_tasks_finished_test_base(Test
             #atm_workflow_execution_incarnation_test_spec{
                 incarnation_num = 2,
                 lane_runs = [
-                    %% TODO ensure only task2 returned from resume_lane
                     ResumedLaneRunBaseTestSpec#atm_lane_run_execution_test_spec{
                         prepare_lane = #atm_step_mock_spec{     %% TODO MW why prepare_lane instead of resume_lane ????
                             before_step_exp_state_diff = [
                                 {lane_run, {1, 2}, resuming},
                                 workflow_resuming
                             ],
+                            % task1 already finished so only spec for pb2/task2 should be present
+                            after_step_hook = build_assert_exp_parallel_box_specs_returned_hook([
+                                #{?TASK2_SELECTOR({1, 2}) => #{type => async, data_stream_enabled => false}}
+                            ]),
                             after_step_exp_state_diff = lists:flatten([
                                 build_expectations_for_lane1_task_transitioned_to(?TASK2_SELECTOR({1, 2}), pending),
                                 {lane_run, {1, 2}, active},
@@ -511,7 +524,7 @@ resume_atm_workflow_execution_suspended_after_some_tasks_finished_test_base(Test
                             ])
                         }
                     },
-                    build_lane_run_execution_test_spec_with_even_numbers({1, 3}, {0, 0, 1}, {0, 1, 1}, [666], true),
+                    build_lane_run_execution_test_spec_with_even_numbers({1, 3}, {0, 0, 2}, {0, 2, 2}, [88, 666], true),
                     ?UNSCHEDULED_LANE_RUN_TEST_SPEC({2, 3}, {handle_lane_execution_stopped, after_step, {1, 3}})
                 ],
                 handle_workflow_execution_stopped = #atm_step_mock_spec{
@@ -579,6 +592,8 @@ resume_atm_workflow_execution_suspended_after_all_tasks_finished_test_base(Testc
                                 {lane_run, {1, 2}, resuming},
                                 workflow_resuming
                             ],
+                            % All tasks already finished so parallel box specs should be empty
+                            after_step_hook = build_assert_exp_parallel_box_specs_returned_hook([]),
                             after_step_exp_state_diff = [
                                 {lane_run, {1, 2}, active},
                                 workflow_active
@@ -632,8 +647,8 @@ build_handle_task_execution_stopped_exp_state_diff(ExpectationsPerTask) ->
         AtmTaskSchemaId = atm_workflow_execution_exp_state_builder:get_task_schema_id(
             AtmTaskExecutionId, ExpState0
         ),
-        case maps:get(AtmTaskSchemaId, ExpectationsPerTask, undefined) of
-            undefined ->
+        case maps:get(AtmTaskSchemaId, ExpectationsPerTask, no_diff) of
+            no_diff ->
                 false;
             Expectations ->
                 {true, atm_workflow_execution_exp_state_builder:expect(ExpState0, Expectations)}
@@ -745,3 +760,22 @@ assert_lane1_task_execution_stopped_stats(ExpTask1FinalStats, ExpTask2FinalStats
         end,
         atm_workflow_execution_exp_state_builder:get_task_stats(AtmTaskExecutionId, ExpState0)
     ).
+
+
+%% @private
+build_assert_exp_parallel_box_specs_returned_hook(ExpParallelBoxSpecsWithTaskSelectors) ->
+    fun(#atm_mock_call_ctx{
+        workflow_execution_exp_state = ExpState,
+        call_result = {ok, #{parallel_boxes := ReturnedParallelBoxSpecs}}
+    }) ->
+        ExpParallelBoxSpecs = lists:map(fun(ExpParallelBoxSpec) ->
+            maps_utils:map_key_value(fun
+                ({_, _, _} = TaskSelector, TaskSpec) ->
+                    {atm_workflow_execution_exp_state_builder:get_task_id(TaskSelector, ExpState), TaskSpec};
+                (AtmTaskExecutionId, TaskSpec) ->
+                    {AtmTaskExecutionId, TaskSpec}
+            end, ExpParallelBoxSpec)
+        end, ExpParallelBoxSpecsWithTaskSelectors),
+
+        ?assertEqual(ExpParallelBoxSpecs, ReturnedParallelBoxSpecs)
+    end.

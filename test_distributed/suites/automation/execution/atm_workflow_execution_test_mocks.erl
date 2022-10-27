@@ -279,36 +279,43 @@ exec_mock(AtmWorkflowExecutionId, Step, Args) ->
         undefined ->
             meck:passthrough(Args);
         TestProcPid ->
-            MockCallReport = #mock_call_report{timing = before_step, step = Step, args = Args},
+            MockCallReport = #mock_call_report{
+                timing = before_step,
+                step = Step,
+                args = Args,
+                result = undefined
+            },
             MockExecution = call_test_process(TestProcPid, MockCallReport),
 
             case MockExecution of
                 passthrough ->
-                    Result = meck:passthrough(Args),
-                    ok = call_test_process(TestProcPid, MockCallReport#mock_call_report{
-                        timing = after_step
-                    }),
-                    Result;
+                    exec_original_function(Args, TestProcPid, MockCallReport);
 
                 {passthrough_with_delay, DelayMilliseconds} ->
                     timer:sleep(DelayMilliseconds),
-                    Result = meck:passthrough(Args),
-                    ok = call_test_process(TestProcPid, MockCallReport#mock_call_report{
-                        timing = after_step
-                    }),
-                    Result;
+                    exec_original_function(Args, TestProcPid, MockCallReport);
 
                 {passthrough_with_result_override, ResultOverride} ->
-                    meck:passthrough(Args),
-                    ok = call_test_process(TestProcPid, MockCallReport#mock_call_report{
-                        timing = after_step
-                    }),
+                    exec_original_function(Args, TestProcPid, MockCallReport),
                     apply_result_override(ResultOverride);
 
                 {yield, ResultOverride} ->
                     apply_result_override(ResultOverride)
             end
     end.
+
+
+%% @private
+-spec exec_original_function([term()], pid(), atm_workflow_execution_test_runner:mock_call_report()) ->
+    term().
+exec_original_function(Args, TestProcPid, MockCallReport) ->
+    Result = meck:passthrough(Args),
+    ok = call_test_process(TestProcPid, MockCallReport#mock_call_report{
+        timing = after_step,
+        result = Result
+    }),
+    Result.
+
 
 
 %% @private
