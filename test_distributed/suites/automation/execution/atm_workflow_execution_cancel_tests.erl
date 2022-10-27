@@ -48,11 +48,11 @@
     revision_num = 1,
     revision = #atm_workflow_schema_revision_draft{
         stores = [
-            ?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"st_1">>, lists:seq(1, __ITEMS_COUNT)),
-            ?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"st_2">>),
-            ?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"st_3">>),
-            ?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"st_4">>),
-            ?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"st_devnull">>)
+            ?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"iterated_store">>, lists:seq(1, __ITEMS_COUNT)),
+            ?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"task1_dst_store">>),
+            ?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"task2_dst_store">>),
+            ?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"task3_dst_store">>),
+            ?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"task4_dst_store">>)
         ],
         lanes = [
             #atm_lane_schema_draft{
@@ -61,16 +61,16 @@
                     #atm_parallel_box_schema_draft{
                         id = <<"pb1">>,
                         tasks = [
-                            ?ECHO_ATM_TASK_SCHEMA_DRAFT(<<"task1">>, <<"st_2">>),
-                            ?ECHO_ATM_TASK_SCHEMA_DRAFT(<<"task2">>, <<"st_3">>)
+                            ?ECHO_ATM_TASK_SCHEMA_DRAFT(<<"task1">>, <<"task1_dst_store">>),
+                            ?ECHO_ATM_TASK_SCHEMA_DRAFT(<<"task2">>, <<"task2_dst_store">>)
                         ]
                     },
                     #atm_parallel_box_schema_draft{
                         id = <<"pb2">>,
-                        tasks = [?ECHO_ATM_TASK_SCHEMA_DRAFT(<<"task3">>, <<"st_4">>)]
+                        tasks = [?ECHO_ATM_TASK_SCHEMA_DRAFT(<<"task3">>, <<"task3_dst_store">>)]
                     }
                 ],
-                store_iterator_spec = #atm_store_iterator_spec_draft{store_schema_id = <<"st_1">>},
+                store_iterator_spec = #atm_store_iterator_spec_draft{store_schema_id = <<"iterated_store">>},
 
                 % Check that cancelled executions are not retried automatically
                 max_retries = ?RAND_INT(3, 6)
@@ -82,10 +82,10 @@
                 parallel_boxes = [
                     #atm_parallel_box_schema_draft{
                         id = <<"pb3">>,
-                        tasks = [?ECHO_ATM_TASK_SCHEMA_DRAFT(<<"task4">>, <<"st_devnull">>)]
+                        tasks = [?ECHO_ATM_TASK_SCHEMA_DRAFT(<<"task4">>, <<"task4_dst_store">>)]
                     }
                 ],
-                store_iterator_spec = #atm_store_iterator_spec_draft{store_schema_id = <<"st_4">>},
+                store_iterator_spec = #atm_store_iterator_spec_draft{store_schema_id = <<"iterated_store">>},
                 max_retries = ?RAND_INT(3, 6)
             }
         ]
@@ -122,13 +122,7 @@ cancel_scheduled_atm_workflow_execution() ->
                     },
                     handle_lane_execution_stopped = #atm_step_mock_spec{after_step_exp_state_diff = no_diff}
                 },
-                #atm_lane_run_execution_test_spec{
-                    selector = {2, 1},
-                    prepare_lane = #atm_step_mock_spec{
-                        defer_after = {prepare_lane, after_step, {1, 1}},
-                        after_step_exp_state_diff = no_diff
-                    }
-                }
+                ?UNSCHEDULED_LANE_RUN_TEST_SPEC({2, 1}, {prepare_lane, after_step, {1, 1}})
             ],
             handle_workflow_execution_stopped = #atm_step_mock_spec{
                 after_step_exp_state_diff = [
@@ -231,35 +225,27 @@ cancel_active_atm_workflow_execution_test_base(Testcase, RelayMethod) ->
                         % - task3 transitions to 'cancelled' as definitely no item was scheduled for it.
                         before_step_hook = fun atm_workflow_execution_test_utils:cancel_workflow_execution/1,
                         before_step_exp_state_diff = [
-                            {all_tasks, {1, 1}, stopping_due_to, cancel},  %% TODO expectation per task ?
+                            {all_tasks, {1, 1}, stopping_due_to, cancel},  %% TODO VFS-9917 expectation per task ?
                             {lane_run, {1, 1}, stopping},
                             workflow_stopping
                         ]
                     },
                     handle_task_execution_stopped = #atm_step_mock_spec{
                         % Assert not all items were processed by tasks
-                        %% TODO refactor hook
                         before_step_hook = fun(AtmMockCallCtx = #atm_mock_call_ctx{
                             workflow_execution_exp_state = ExpState,
                             call_args = [_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId]
                         }) ->
-                            ExpTaskStats = atm_workflow_execution_exp_state_builder:get_task_stats(
+                            {_, _, ExpItemsProcessed} = atm_workflow_execution_exp_state_builder:get_task_stats(
                                 AtmTaskExecutionId, ExpState
                             ),
-                            ExpItemsProcessed = element(3, ExpTaskStats),
-                            % cancel blocks scheduling execution of leftover items
                             ?assert(ExpItemsProcessed < ItemCount),
 
-                            DstAtmStoreSchemaId = case atm_workflow_execution_exp_state_builder:get_task_schema_id(
+                            AtmTaskSchemaId = atm_workflow_execution_exp_state_builder:get_task_schema_id(
                                 AtmTaskExecutionId, ExpState
-                            ) of
-                                <<"task1">> -> <<"st_2">>;
-                                <<"task2">> -> <<"st_3">>;
-                                <<"task3">> -> <<"st_4">>
-                            end,
-                            % assert all processed items were mapped to destination store
+                            ),
                             #{<<"items">> := StDstItems} = atm_workflow_execution_test_utils:browse_store(
-                                DstAtmStoreSchemaId, AtmMockCallCtx
+                                <<AtmTaskSchemaId/binary, "_dst_store">>, AtmMockCallCtx
                             ),
                             ?assertEqual(ExpItemsProcessed, length(StDstItems))
                         end,
