@@ -316,7 +316,7 @@ upgrade_record(1, {?MODULE, Map}) ->
     {2, {?MODULE, Map2}};
 upgrade_record(2, {?MODULE, SeqMap}) ->
     {3, {?MODULE, SeqMap, #{}}};
-upgrade_record(2, {?MODULE, SeqMap, Params}) ->
-    {3, {?MODULE, SeqMap, maps:map(fun(_ProvideId, {resynchronization_params, TargetSeq, IncludedMutators}) ->
+upgrade_record(3, {?MODULE, SeqMap, Params}) ->
+    {4, {?MODULE, SeqMap, maps:map(fun(_ProvideId, {resynchronization_params, TargetSeq, IncludedMutators}) ->
         {synchronization_params, resynchronization, TargetSeq, IncludedMutators}
     end, Params)}}.
