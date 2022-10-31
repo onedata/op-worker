@@ -132,6 +132,8 @@
 -type task_registry() :: #{AtmTaskSchemaId :: automation:id() => atm_task_execution:id()}.
 -type task_selector() :: {atm_lane_execution:lane_run_selector(), automation:id(), automation:id()}.
 
+-type parallel_box_selector() :: {atm_lane_execution:lane_run_selector(), automation:id()}.
+
 -type parallel_box_status_infer_fun() :: fun(
     (CurrentParallelBoxStatus :: binary(), [AtmTaskStatus :: binary()]) -> binary()
 ).
@@ -149,6 +151,8 @@
     {all_tasks, atm_lane_execution:lane_run_selector(), atm_task_execution:status()} |
     {all_tasks, atm_lane_execution:lane_run_selector(), abruptly, failed | cancelled | interrupted} |
     {all_tasks, atm_lane_execution:lane_run_selector(), stopping_due_to, pause | interrupt | cancel} |
+
+    {parallel_box, parallel_box_selector(), atm_parallel_box_execution:status()} |
 
     {lane_run, atm_lane_execution:lane_run_selector(), automatic_retry_scheduled} |
     {lane_run, atm_lane_execution:lane_run_selector(), manual_retry_scheduled, atm_lane_execution:run_num()} |
@@ -178,7 +182,7 @@
 
 -type log_fun() :: fun((binary(), [term()]) -> ok).
 
--export_type([ctx/0, task_selector/0, expectation/0]).
+-export_type([ctx/0, task_selector/0, parallel_box_selector/0, expectation/0]).
 
 
 -define(JSON_PATH(__QUERY_BIN), binary:split(__QUERY_BIN, <<".">>, [global])).
@@ -301,6 +305,20 @@ expect(ExpStateCtx, {all_tasks, AtmLaneRunSelector, stopping_due_to, Reason}) wh
     Reason =:= cancel
 ->
     expect_all_tasks_stopping_due_to(AtmLaneRunSelector, Reason, ExpStateCtx);
+
+expect(ExpStateCtx, {parallel_box, AtmParallelBoxSelector, ExpStatus}) when
+    ExpStatus =:= resuming;
+    ExpStatus =:= pending;
+    ExpStatus =:= active;
+    ExpStatus =:= stopping;
+    ExpStatus =:= skipped;
+    ExpStatus =:= finished;
+    ExpStatus =:= failed;
+    ExpStatus =:= cancelled;
+    ExpStatus =:= paused;
+    ExpStatus =:= interrupted
+->
+    expect_parallel_box_transitioned_to(AtmParallelBoxSelector, str_utils:to_binary(ExpStatus), ExpStateCtx);
 
 expect(ExpStateCtx, {lane_run, AtmLaneRunSelector, automatic_retry_scheduled}) ->
     expect_lane_run_automatic_retry_scheduled(AtmLaneRunSelector, ExpStateCtx);
@@ -1340,6 +1358,14 @@ update_exp_task_parallel_box_execution_state(AtmTaskExecutionId, Diff, ExpStateC
         parallel_box_schema_id = AtmParallelBoxSchemaId
     } = maps:get(AtmTaskExecutionId, ExpAtmTaskExecutionsRegistry),
 
+    update_exp_parallel_box_execution_state(AtmLaneRunSelector, AtmParallelBoxSchemaId, Diff, ExpStateCtx).
+
+
+%% @private
+-spec expect_parallel_box_transitioned_to(parallel_box_selector(), binary(), ctx()) ->
+    ctx().
+expect_parallel_box_transitioned_to({AtmLaneRunSelector, AtmParallelBoxSchemaId}, Status, ExpStateCtx) ->
+    Diff = #{<<"status">> => Status},
     update_exp_parallel_box_execution_state(AtmLaneRunSelector, AtmParallelBoxSchemaId, Diff, ExpStateCtx).
 
 
