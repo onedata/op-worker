@@ -128,6 +128,14 @@
     }
 ]).
 
+-define(ATM_TREE_FOREST_STORE_SCHEMA_DRAFT(__ID, __ITEM_DATA_SPEC, __INITIAL_CONTENT), #atm_store_schema_draft{
+    id = __ID,
+    type = tree_forest,
+    config = #atm_tree_forest_store_config{item_data_spec = __ITEM_DATA_SPEC},
+    requires_initial_content = false,
+    default_initial_content = __INITIAL_CONTENT
+}).
+
 -define(ATM_LIST_STORE_SCHEMA_DRAFT(__ID, __ITEM_DATA_SPEC, __INITIAL_CONTENT), #atm_store_schema_draft{
     id = __ID,
     type = list,
@@ -145,6 +153,14 @@
     id = __ID,
     type = single_value,
     config = #atm_single_value_store_config{item_data_spec = __ITEM_DATA_SPEC},
+    requires_initial_content = false,
+    default_initial_content = __INITIAL_CONTENT
+}).
+
+-define(ATM_RANGE_STORE_SCHEMA_DRAFT(__ID, __INITIAL_CONTENT), #atm_store_schema_draft{
+    id = __ID,
+    type = range,
+    config = #atm_range_store_config{},
     requires_initial_content = false,
     default_initial_content = __INITIAL_CONTENT
 }).
