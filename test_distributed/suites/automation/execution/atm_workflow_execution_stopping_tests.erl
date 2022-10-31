@@ -69,7 +69,7 @@
             lanes = [
                 #atm_lane_schema_draft{
                     parallel_boxes = [#atm_parallel_box_schema_draft{tasks = [
-                        ?ECHO_MEASUREMENTS_TASK_SCHEMA_DRAFT(<<"task0">>, ?CORRECT_ATM_TIME_SERIES_DISPATCH_RULES)
+                        ?ECHO_MEASUREMENTS_TASK_SCHEMA_DRAFT(<<"task0">>, ?CORRECT_ATM_TS_DISPATCH_RULES)
                     ]}],
                     store_iterator_spec = #atm_store_iterator_spec_draft{
                         store_schema_id = ?ITERATED_STORE_SCHEMA_ID
@@ -103,7 +103,7 @@
     }
 ).
 -define(ATM_WORKFLOW_SCHEMA_DRAFT, ?ATM_WORKFLOW_SCHEMA_DRAFT(
-    return_value, gen_correct_time_series_measurements(), ?CORRECT_ATM_TIME_SERIES_DISPATCH_RULES
+    return_value, gen_correct_time_series_measurements(), ?CORRECT_ATM_TS_DISPATCH_RULES
 )).
 
 -define(INVALID_DISPATCH_RULE, #atm_time_series_dispatch_rule{
@@ -131,7 +131,7 @@ stopping_reason_interrupt_overrides_pause() ->
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
             return_value,
             [gen_time_series_measurement(DelayedMeasurementName) | gen_correct_time_series_measurements()],
-            ?CORRECT_ATM_TIME_SERIES_DISPATCH_RULES
+            ?CORRECT_ATM_TS_DISPATCH_RULES
         ),
         workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
@@ -201,7 +201,7 @@ stopping_reason_failure_overrides_pause() ->
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
             file_pipe,
             [gen_time_series_measurement(<<"size">>)],
-            [?INVALID_DISPATCH_RULE | ?CORRECT_ATM_TIME_SERIES_DISPATCH_RULES]
+            [?INVALID_DISPATCH_RULE | ?CORRECT_ATM_TS_DISPATCH_RULES]
         ),
         workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
@@ -254,7 +254,7 @@ stopping_reason_failure_overrides_interrupt() ->
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
             file_pipe,
             [gen_time_series_measurement(<<"size">>)],
-            [?INVALID_DISPATCH_RULE | ?CORRECT_ATM_TIME_SERIES_DISPATCH_RULES]
+            [?INVALID_DISPATCH_RULE | ?CORRECT_ATM_TS_DISPATCH_RULES]
         ),
         workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
@@ -303,7 +303,7 @@ stopping_reason_cancel_overrides_pause() ->
         user = ?USER_SELECTOR,
         space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
-            return_value, gen_correct_time_series_measurements(), ?CORRECT_ATM_TIME_SERIES_DISPATCH_RULES
+            return_value, gen_correct_time_series_measurements(), ?CORRECT_ATM_TS_DISPATCH_RULES
         ),
         workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
@@ -352,7 +352,7 @@ stopping_reason_cancel_overrides_interrupt() ->
         user = ?USER_SELECTOR,
         space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
-            return_value, gen_correct_time_series_measurements(), ?CORRECT_ATM_TIME_SERIES_DISPATCH_RULES
+            return_value, gen_correct_time_series_measurements(), ?CORRECT_ATM_TS_DISPATCH_RULES
         ),
         workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
@@ -403,7 +403,7 @@ stopping_reason_cancel_overrides_failure() ->
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
             file_pipe,
             [gen_time_series_measurement(<<"size">>)],
-            [?INVALID_DISPATCH_RULE | ?CORRECT_ATM_TIME_SERIES_DISPATCH_RULES]
+            [?INVALID_DISPATCH_RULE | ?CORRECT_ATM_TS_DISPATCH_RULES]
         ),
         workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
@@ -450,7 +450,7 @@ stopping_reason_crash_overrides_pause() ->
         user = ?USER_SELECTOR,
         space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
-            return_value, gen_correct_time_series_measurements(), ?CORRECT_ATM_TIME_SERIES_DISPATCH_RULES
+            return_value, gen_correct_time_series_measurements(), ?CORRECT_ATM_TS_DISPATCH_RULES
         ),
         workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
@@ -490,7 +490,7 @@ stopping_reason_crash_overrides_interrupt() ->
         user = ?USER_SELECTOR,
         space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
-            return_value, gen_correct_time_series_measurements(), ?CORRECT_ATM_TIME_SERIES_DISPATCH_RULES
+            return_value, gen_correct_time_series_measurements(), ?CORRECT_ATM_TS_DISPATCH_RULES
         ),
         workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
@@ -530,7 +530,7 @@ stopping_reason_crash_overrides_failure() ->
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
             file_pipe,
             [gen_time_series_measurement(<<"size">>)],
-            [?INVALID_DISPATCH_RULE | ?CORRECT_ATM_TIME_SERIES_DISPATCH_RULES]
+            [?INVALID_DISPATCH_RULE | ?CORRECT_ATM_TS_DISPATCH_RULES]
         ),
         workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
@@ -564,7 +564,7 @@ stopping_reason_crash_overrides_cancel() ->
         user = ?USER_SELECTOR,
         space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
-            return_value, gen_correct_time_series_measurements(), ?CORRECT_ATM_TIME_SERIES_DISPATCH_RULES
+            return_value, gen_correct_time_series_measurements(), ?CORRECT_ATM_TS_DISPATCH_RULES
         ),
         workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{

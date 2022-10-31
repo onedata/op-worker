@@ -70,7 +70,7 @@
                         id = <<"pb1">>,
                         tasks = [?ECHO_MEASUREMENTS_TASK_SCHEMA_DRAFT(
                             <<"lane1_task1">>,
-                            ?CORRECT_ATM_TIME_SERIES_DISPATCH_RULES
+                            ?CORRECT_ATM_TS_DISPATCH_RULES
                         )]
                     }],
                     store_iterator_spec = #atm_store_iterator_spec_draft{
@@ -90,7 +90,7 @@
                                     target_ts_name_generator = ?MISSING_TS_NAME_GENERATOR,
                                     prefix_combiner = overwrite
                                 }
-                                | ?CORRECT_ATM_TIME_SERIES_DISPATCH_RULES
+                                | ?CORRECT_ATM_TS_DISPATCH_RULES
                             ]
                         )]
                     }],

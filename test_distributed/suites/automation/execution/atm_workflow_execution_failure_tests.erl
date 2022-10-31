@@ -66,7 +66,7 @@
     lambda_id = ?ECHO_LAMBDA_ID,
     lambda_revision_number = ?ECHO_LAMBDA_REVISION_NUM,
     argument_mappings = [?ITERATED_ITEM_ARG_MAPPER(?ECHO_ARG_NAME)],
-    result_mappings = [?TARGET_STORE_RESULT_MAPPER(?CORRECT_ATM_TIME_SERIES_DISPATCH_RULES)]
+    result_mappings = [?TARGET_STORE_RESULT_MAPPER(?CORRECT_ATM_TS_DISPATCH_RULES)]
 }).
 
 -define(FAILING_WORKFLOW_SCHEMA_DRAFT(
@@ -146,7 +146,7 @@
         gen_time_series_measurements(),
         ?FAILING_TASK_SCHEMA_DRAFT(
             [__FAILING_ARG_TASK_MAPPER],
-            [?TARGET_STORE_RESULT_MAPPER(?CORRECT_ATM_TIME_SERIES_DISPATCH_RULES)]
+            [?TARGET_STORE_RESULT_MAPPER(?CORRECT_ATM_TS_DISPATCH_RULES)]
         ),
         ?ECHO_LAMBDA_DRAFT(?ANY_MEASUREMENT_DATA_SPEC)
     )
@@ -158,7 +158,7 @@
         gen_time_series_measurements(),
         ?FAILING_TASK_SCHEMA_DRAFT(
             [?ITERATED_ITEM_ARG_MAPPER(?ECHO_ARG_NAME)],
-            [?TARGET_STORE_RESULT_MAPPER(?CORRECT_ATM_TIME_SERIES_DISPATCH_RULES)]
+            [?TARGET_STORE_RESULT_MAPPER(?CORRECT_ATM_TS_DISPATCH_RULES)]
         ),
         ?FAILING_ECHO_MEASUREMENTS_LAMBDA_DRAFT(__FAILING_DOCKER_IMAGE_ID)
     )
@@ -174,7 +174,7 @@
             target_ts_name_generator = ?MISSING_TS_NAME_GENERATOR,
             prefix_combiner = overwrite
         }
-        | ?CORRECT_ATM_TIME_SERIES_DISPATCH_RULES
+        | ?CORRECT_ATM_TS_DISPATCH_RULES
     ])]
 )).
 
@@ -464,7 +464,7 @@ fail_atm_workflow_execution_due_to_job_timeout() ->
             gen_time_series_measurements(),
             ?FAILING_TASK_SCHEMA_DRAFT(
                 [?ITERATED_ITEM_ARG_MAPPER(?ECHO_ARG_NAME)],
-                [?TARGET_STORE_RESULT_MAPPER(?CORRECT_ATM_TIME_SERIES_DISPATCH_RULES)]
+                [?TARGET_STORE_RESULT_MAPPER(?CORRECT_ATM_TS_DISPATCH_RULES)]
             ),
             ?FAILING_ECHO_MEASUREMENTS_LAMBDA_DRAFT(?ECHO_WITH_SLEEP_DOCKER_IMAGE_ID)
         ),

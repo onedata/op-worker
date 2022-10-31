@@ -13,18 +13,12 @@
 -author("Bartosz Walkowicz").
 
 -include("atm_workflow_execution_test.hrl").
--include("atm/atm_test_schema_drafts.hrl").
--include("atm/atm_test_store.hrl").
 -include("modules/automation/atm_execution.hrl").
 
 -export([
     finish_atm_workflow_execution/0
 ]).
 
-
--define(INTEGER_DATA_SPEC, #atm_data_spec{type = atm_integer_type}).
-
--define(LAST_ITEM, 20).
 
 -define(ITERATED_STORE_SCHEMA_ID, <<"iterated_store_id">>).
 -define(TARGET_STORE_SCHEMA_ID, <<"target_store_id">>).
@@ -48,8 +42,8 @@
     revision_num = 1,
     revision = #atm_workflow_schema_revision_draft{
         stores = [
-            ?INTEGER_LIST_STORE_SCHEMA_DRAFT(?ITERATED_STORE_SCHEMA_ID, lists:seq(1, ?LAST_ITEM)),
-            ?INTEGER_LIST_STORE_SCHEMA_DRAFT(?TARGET_STORE_SCHEMA_ID)
+            ?INTEGER_ATM_LIST_STORE_SCHEMA_DRAFT(?ITERATED_STORE_SCHEMA_ID, lists:seq(1, 10)),
+            ?INTEGER_ATM_LIST_STORE_SCHEMA_DRAFT(?TARGET_STORE_SCHEMA_ID)
         ],
         lanes = [#atm_lane_schema_draft{
             parallel_boxes = [#atm_parallel_box_schema_draft{tasks = [
@@ -63,7 +57,7 @@
     },
     supplementary_lambdas = #{
         ?ECHO_LAMBDA_ID => #{?ECHO_LAMBDA_REVISION_NUM => ?ECHO_LAMBDA_DRAFT(
-            ?INTEGER_DATA_SPEC, ?RAND_ELEMENT([return_value, file_pipe])
+            ?ATM_INTEGER_DATA_SPEC, ?RAND_ELEMENT([return_value, file_pipe])
         )}
     }
 }).
@@ -86,11 +80,7 @@ finish_atm_workflow_execution() ->
     },
 
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
-        provider = ?PROVIDER_SELECTOR,
-        user = ?USER_SELECTOR,
-        space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT,
-        workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,
             lane_runs = [#atm_lane_run_execution_test_spec{
@@ -120,10 +110,10 @@ finish_atm_workflow_execution() ->
                 }
             }],
             handle_workflow_execution_stopped = #atm_step_mock_spec{
-                after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
-                    ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_rerunable({1, 1}, ExpState0),
-                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_finished(ExpState1)}
-                end
+                after_step_exp_state_diff = [
+                    {lane_runs, [{1, 1}], rerunable},
+                    workflow_finished
+                ]
             },
             after_hook = fun atm_workflow_execution_test_utils:assert_ended_workflow_execution_can_be_neither_stopped_nor_resumed/1
         }]

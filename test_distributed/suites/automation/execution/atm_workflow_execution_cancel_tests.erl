@@ -13,8 +13,6 @@
 -author("Bartosz Walkowicz").
 
 -include("atm_workflow_execution_test.hrl").
--include("atm/atm_test_schema_drafts.hrl").
--include("modules/automation/atm_execution.hrl").
 
 -export([
     cancel_scheduled_atm_workflow_execution/0,
@@ -48,11 +46,11 @@
     revision_num = 1,
     revision = #atm_workflow_schema_revision_draft{
         stores = [
-            ?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"iterated_store">>, lists:seq(1, __ITEMS_COUNT)),
-            ?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"task1_dst_store">>),
-            ?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"task2_dst_store">>),
-            ?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"task3_dst_store">>),
-            ?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"task4_dst_store">>)
+            ?INTEGER_ATM_LIST_STORE_SCHEMA_DRAFT(<<"iterated_store">>, lists:seq(1, __ITEMS_COUNT)),
+            ?INTEGER_ATM_LIST_STORE_SCHEMA_DRAFT(<<"task1_dst_store">>),
+            ?INTEGER_ATM_LIST_STORE_SCHEMA_DRAFT(<<"task2_dst_store">>),
+            ?INTEGER_ATM_LIST_STORE_SCHEMA_DRAFT(<<"task3_dst_store">>),
+            ?INTEGER_ATM_LIST_STORE_SCHEMA_DRAFT(<<"task4_dst_store">>)
         ],
         lanes = [
             #atm_lane_schema_draft{
