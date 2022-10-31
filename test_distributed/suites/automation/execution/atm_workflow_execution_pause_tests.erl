@@ -44,11 +44,11 @@
     revision_num = 1,
     revision = #atm_workflow_schema_revision_draft{
         stores = [
-            ?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"st_1">>, lists:seq(1, __ITEMS_COUNT)),
-            ?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"st_2">>),
-            ?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"st_3">>),
-            ?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"st_4">>),
-            ?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"st_devnull">>)
+            ?INTEGER_ATM_LIST_STORE_SCHEMA_DRAFT(<<"st_1">>, lists:seq(1, __ITEMS_COUNT)),
+            ?INTEGER_ATM_LIST_STORE_SCHEMA_DRAFT(<<"st_2">>),
+            ?INTEGER_ATM_LIST_STORE_SCHEMA_DRAFT(<<"st_3">>),
+            ?INTEGER_ATM_LIST_STORE_SCHEMA_DRAFT(<<"st_4">>),
+            ?INTEGER_ATM_LIST_STORE_SCHEMA_DRAFT(<<"st_devnull">>)
         ],
         lanes = [
             #atm_lane_schema_draft{

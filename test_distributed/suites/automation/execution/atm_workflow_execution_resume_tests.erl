@@ -77,8 +77,8 @@
         revision_num = 1,
         revision = #atm_workflow_schema_revision_draft{
             stores = [
-                ?INTEGER_LIST_STORE_SCHEMA_DRAFT(?ITERATED_STORE_SCHEMA_ID, __ITERATED_CONTENT),
-                ?INTEGER_LIST_STORE_SCHEMA_DRAFT(?TARGET_STORE_SCHEMA_ID)
+                ?INTEGER_ATM_LIST_STORE_SCHEMA_DRAFT(?ITERATED_STORE_SCHEMA_ID, __ITERATED_CONTENT),
+                ?INTEGER_ATM_LIST_STORE_SCHEMA_DRAFT(?TARGET_STORE_SCHEMA_ID)
             ],
             lanes = [
                 #atm_lane_schema_draft{
