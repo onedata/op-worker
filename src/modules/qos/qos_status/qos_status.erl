@@ -43,21 +43,25 @@
 %%%         * any ancestor has traverse_link -> traversed
 %%%         * otherwise -> not traversed
 %%%
-%%% To check whether given directory have been traversed: 
+%%% To check whether given directory have been traversed:
 %%%     - qos_status document for directory exists -> not traversed
 %%%     - there is no qos_status document for directory: 
 %%%         * any ancestor has traverse_link -> traversed
-%%%         * otherwise -> not traversed 
-%%% 
-%%% 
-%%% In order to be able to check whether file is being reconciled, when file change was reported 
+%%%         * otherwise -> not traversed
+%%%
+%%%
+%%% In order to be able to check whether file is being reconciled, when file change was reported
 %%% reconcile_link is created. This link is file uuid_based_path (similar to canonical, but path 
 %%% elements are uuids instead of filenames/dirnames). This link is deleted after reconcile job 
 %%% is done. 
 %%% 
 %%% To check if there is any reconcile job in subtree of a directory simply check if there is any 
 %%% reconcile_link with its prefix being this directory uuid based path.
-%%% 
+%%%
+%%% It may be impossible to generate such a path when not all docs are synced yet. In such a case
+%%% traverse is added to entry traverse list and for each such traverse uuid based path is generated
+%%% during status check on best effort manner.
+%%%
 %%% When file has many references (i.e some hardlinks were created), status links consisting of 
 %%% uuid_based_path are added for each file reference. 
 %%% 
@@ -126,47 +130,47 @@ aggregate(Statuses) ->
 
 -spec report_traverse_start(traverse:id(), file_ctx:ctx()) -> {ok, file_ctx:ctx()}.
 report_traverse_start(TraverseId, FileCtx) ->
-    qos_traverse_status:report_started(TraverseId, FileCtx).
+    qos_uptree_status:report_started(TraverseId, FileCtx).
 
 
 -spec report_traverse_finished(traverse:id(), file_ctx:ctx()) -> ok | {error, term()}.
 report_traverse_finished(TraverseId, FileCtx) ->
-    qos_traverse_status:report_finished(TraverseId, FileCtx).
+    qos_uptree_status:report_finished(TraverseId, FileCtx).
 
 
 -spec report_next_traverse_batch(traverse:id(), file_ctx:ctx(),
     ChildrenDirs :: [file_meta:uuid()], ChildrenFiles :: [file_meta:uuid()], 
     BatchLastFilename :: file_meta:name()) -> ok.
 report_next_traverse_batch(TraverseId, FileCtx, ChildrenDirs, ChildrenFiles, BatchLastFilename) ->
-    qos_traverse_status:report_next_batch(TraverseId, FileCtx, ChildrenDirs, ChildrenFiles, BatchLastFilename).
+    qos_uptree_status:report_next_batch(TraverseId, FileCtx, ChildrenDirs, ChildrenFiles, BatchLastFilename).
 
 
 -spec report_traverse_finished_for_dir(traverse:id(), file_ctx:ctx()) -> ok | {error, term()}.
 report_traverse_finished_for_dir(TraverseId, FileCtx) ->
-    qos_traverse_status:report_finished_for_dir(TraverseId, FileCtx).
+    qos_uptree_status:report_finished_for_dir(TraverseId, FileCtx).
 
 
 -spec report_traverse_finished_for_file(traverse:id(), file_ctx:ctx(), file_ctx:ctx()) ->
     ok | {error, term()}.
 report_traverse_finished_for_file(TraverseId, FileCtx, OriginalRootParentCtx) ->
-    qos_traverse_status:report_finished_for_file(TraverseId, FileCtx, OriginalRootParentCtx).
+    qos_uptree_status:report_finished_for_file(TraverseId, FileCtx, OriginalRootParentCtx).
 
 
 -spec report_reconciliation_started(traverse:id(), file_ctx:ctx(), [qos_entry:id()]) -> 
     ok | {error, term()}.
 report_reconciliation_started(TraverseId, FileCtx, QosEntries) ->
-    qos_reconciliation_status:report_started(TraverseId, FileCtx, QosEntries).
+    qos_downtree_status:report_started(TraverseId, FileCtx, QosEntries).
 
 
 -spec report_reconciliation_finished(traverse:id(), file_ctx:ctx()) -> ok | {error, term()}.
 report_reconciliation_finished(TraverseId, FileCtx) ->
-    qos_reconciliation_status:report_finished(TraverseId, FileCtx).
+    qos_downtree_status:report_finished(TraverseId, FileCtx).
 
 
 -spec report_file_transfer_failure(file_ctx:ctx(), [qos_entry:id()]) ->
     ok | {error, term()}.
 report_file_transfer_failure(FileCtx, QosEntries) ->
-    qos_reconciliation_status:report_file_transfer_failure(FileCtx, QosEntries).
+    qos_downtree_status:report_file_transfer_failure(FileCtx, QosEntries).
 
 
 -spec report_file_deleted(file_ctx:ctx(), qos_entry:id()) -> ok.
@@ -177,8 +181,8 @@ report_file_deleted(FileCtx, QosEntryId) ->
 report_file_deleted(FileCtx, QosEntryId, OriginalRootParentCtx) ->
     case qos_entry:get(QosEntryId) of
         {ok, QosEntryDoc} ->
-            qos_traverse_status:report_file_deleted(FileCtx, QosEntryDoc, OriginalRootParentCtx),
-            qos_reconciliation_status:report_file_deleted(FileCtx, QosEntryDoc, OriginalRootParentCtx);
+            qos_uptree_status:report_file_deleted(FileCtx, QosEntryDoc, OriginalRootParentCtx),
+            qos_downtree_status:report_file_deleted(FileCtx, QosEntryDoc, OriginalRootParentCtx);
         {error, not_found} ->
             ok
     end.
@@ -186,7 +190,7 @@ report_file_deleted(FileCtx, QosEntryId, OriginalRootParentCtx) ->
 
 -spec report_entry_deleted(od_space:id(), qos_entry:id()) -> ok.
 report_entry_deleted(SpaceId, QosEntryId) ->
-    qos_reconciliation_status:report_entry_deleted(SpaceId, QosEntryId).
+    qos_downtree_status:report_entry_deleted(SpaceId, QosEntryId).
     
 
 %%%===================================================================
@@ -202,8 +206,8 @@ check_possible_entry_status(FileCtx, QosEntryDoc, QosEntryId) ->
         has_at_least_one_reference -> ok
     end,
     (not file_qos:is_effective_qos_of_file(FileDoc, QosEntryId)) orelse
-        qos_reconciliation_status:check(FileCtx1, QosEntryDoc) andalso
-            qos_traverse_status:check(FileCtx1, QosEntryDoc).
+        qos_downtree_status:check(FileCtx1, QosEntryDoc) andalso
+            qos_uptree_status:check(FileCtx1, QosEntryDoc).
 
 %%%===================================================================
 %%% datastore_model callbacks

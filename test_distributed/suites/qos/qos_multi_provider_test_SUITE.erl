@@ -307,7 +307,9 @@ reconcile_with_links_and_file_meta_race_nested_file_test(_Config) ->
 
 
 reconcile_with_links_race_test_base(Depth, RecordsToBlock) ->
-    [Provider1, Provider2 | _] = Providers = oct_background:get_provider_ids(),
+    Provider1 = oct_background:get_provider_id(krakow),
+    Provider2 = oct_background:get_provider_id(paris),
+    Providers = [Provider1, Provider2],
     SpaceId = oct_background:get_space_id(?SPACE_PLACEHOLDER),
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     P1Node = oct_background:get_random_provider_node(Provider1),
@@ -316,17 +318,15 @@ reconcile_with_links_race_test_base(Depth, RecordsToBlock) ->
     Name = generator:gen_name(),
     
     {ok, DirGuid} = lfm_proxy:mkdir(P1Node, ?SESS_ID(Provider1), SpaceGuid, ?filename(Name, 0), ?DEFAULT_DIR_PERMS),
-    % ensure that link in space is synchronized - in env_up tests space uuid is a legacy key and therefore file_meta posthooks are NOT executed for it
-    ?assertMatch({ok, _}, opw_test_rpc:call(Provider2, file_meta_forest, get, [file_id:guid_to_uuid(SpaceGuid), all, ?filename(Name, 0)]), ?ATTEMPTS),
     
     mock_dbsync_changes(oct_background:get_provider_nodes(Provider2), ?FUNCTION_NAME),
     {ok, QosEntryId} = opt_qos:add_qos_entry(P1Node, ?SESS_ID(Provider1), ?FILE_REF(DirGuid), <<"providerId=", Provider2/binary>>, 1),
     
     
-    ParentGuid = lists:foldl(fun(_, TmpParentGuid) ->
+    [ParentGuid | _AncestorGuids] = lists:foldl(fun(_, [TmpParentGuid | _] = Guids) ->
         {ok, G} = lfm_proxy:mkdir(P1Node, ?SESS_ID(Provider1), TmpParentGuid, ?filename(Name, 0), ?DEFAULT_DIR_PERMS),
-        G
-    end, DirGuid, lists:seq(1, Depth)),
+        [G | Guids]
+    end, [DirGuid], lists:seq(1, Depth)),
     Guid = create_file_with_content(P1Node, ?SESS_ID(Provider1), ParentGuid, ?filename(Name, 0)),
     
     ?assertMatch({ok, {Map, _}} when map_size(Map) =/= 0,
@@ -368,7 +368,7 @@ reconcile_with_links_race_test_base(Depth, RecordsToBlock) ->
     
     ensure_docs_received(?FUNCTION_NAME, Filters),
     unmock_dbsync_changes(oct_background:get_provider_nodes(Provider2)),
-    % mock fslogic_authz:ensure_authorized/3 to bypass its fail on non existing 
+    % mock fslogic_authz:ensure_authorized/3 to bypass its fail on non existing
     % ancestor file meta document when checking file distribution
     mock_fslogic_authz_ensure_authorized(oct_background:get_provider_nodes(Provider2)),
     save_not_matching_docs(P2Node, ?FUNCTION_NAME, Filters),
@@ -583,6 +583,8 @@ qos_traverse_cancellation_test(_Config) ->
     % wait for reconciliation transfer to start
     receive {qos_slave_job, _Pid, FileGuid} = Msg ->
         self() ! Msg
+    after timer:seconds(?ATTEMPTS) ->
+        throw(reconciliation_transfer_not_started)
     end,
     
     % remove entry to trigger transfer cancellation
@@ -711,8 +713,8 @@ mock_file_meta_posthooks() ->
     test_utils:mock_new(Nodes, file_meta_posthooks, [passthrough]),
     TestPid = self(),
     ok = test_utils:mock_expect(Nodes, file_meta_posthooks, add_hook,
-        fun(MissingElement, Identifier, SpaceId, Module, Function, Args) ->
-            Res = meck:passthrough([MissingElement, Identifier, SpaceId, Module, Function, Args]),
+        fun(MissingElement, Identifier, SpaceId, Module, Function, Args, Opts) ->
+            Res = meck:passthrough([MissingElement, Identifier, SpaceId, Module, Function, Args, Opts]),
             TestPid ! post_hook_created,
             Res
         end).
@@ -821,4 +823,6 @@ ensure_docs_received(MsgIdentifier, [{links, RecordType, _} | Tail]) ->
 wait_for_doc(MsgIdentifier, RecordType) ->
     receive {MsgIdentifier, RecordType, _} = Msg ->
         self() ! Msg
+    after timer:seconds(?ATTEMPTS) ->
+        throw({doc_not_received, RecordType, MsgIdentifier})
     end.

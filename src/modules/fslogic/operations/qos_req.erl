@@ -202,7 +202,7 @@ remove_qos_entry_insecure(UserCtx, QosEntryId) ->
         true ->
             % TODO: VFS-5567 For now QoS entry is added only for file or dir
             % for which it has been added, so starting traverse is not needed.
-            ok = qos_hooks:handle_entry_delete(QosDoc),
+            ok = qos_logic:handle_entry_delete(QosDoc),
             ok = qos_entry:delete(QosEntryId);
         false ->
             ?ERROR_FORBIDDEN

@@ -6,11 +6,11 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Module responsible for managing QoS status during files reconciliation. 
+%%% Module responsible for managing QoS status downtree (top-down).
 %%% For more details consult `qos_status` module doc.
 %%% @end
 %%%-------------------------------------------------------------------
--module(qos_reconciliation_status).
+-module(qos_downtree_status).
 -author("Michal Stanisz").
 
 -include("modules/datastore/qos.hrl").
@@ -38,12 +38,8 @@
 %%%===================================================================
 
 -spec check(file_ctx:ctx(), qos_entry:doc()) -> boolean().
-check(FileCtx, #document{key = QosEntryId}) ->
-    {UuidBasedPath, _} = file_ctx:get_uuid_based_path(FileCtx),
-    case qos_status_links:get_next_links(?RECONCILE_LINKS_KEY(QosEntryId), UuidBasedPath, 1, all) of
-        {ok, []} -> true;
-        {ok, [Path]} -> not str_utils:binary_starts_with(Path, UuidBasedPath)
-    end.
+check(FileCtx, QosDoc) ->
+    check_links(FileCtx, QosDoc) andalso check_traverses(FileCtx, QosDoc).
 
 
 -spec report_started(traverse:id(), file_ctx:ctx(), [qos_entry:id()]) -> 
@@ -51,14 +47,21 @@ check(FileCtx, #document{key = QosEntryId}) ->
 report_started(TraverseId, FileCtx, QosEntries) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     lists:foreach(fun(InternalFileCtx) ->
-        {UuidBasedPath, _} = file_ctx:get_uuid_based_path(InternalFileCtx),
-        Link = {?RECONCILE_LINK_NAME(UuidBasedPath, TraverseId), TraverseId},
-        lists:foreach(fun(QosEntryId) ->
-            ok = qos_status_links:add_link(SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId), Link),
-            ok = qos_status_links:delete_link(SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId),
-                ?FAILED_TRANSFER_LINK_NAME(UuidBasedPath))
-        end, QosEntries)
-    end, get_references(FileCtx)).
+        case get_uuid_based_path(InternalFileCtx) of
+            not_synced ->
+                lists:foreach(fun(QosEntryId) ->
+                    ok = qos_entry:add_to_traverses_list(SpaceId, QosEntryId, TraverseId,
+                        file_ctx:get_logical_uuid_const(InternalFileCtx))
+                end, QosEntries);
+            UuidBasedPath ->
+                Link = {?RECONCILE_LINK_NAME(UuidBasedPath, TraverseId), TraverseId},
+                lists:foreach(fun(QosEntryId) ->
+                    ok = qos_status_links:add_link(SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId), Link),
+                    ok = qos_status_links:delete_link(SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId),
+                        ?FAILED_TRANSFER_LINK_NAME(UuidBasedPath))
+                end, QosEntries)
+        end
+    end, file_ctx:list_references_ctx_const(FileCtx)).
 
 
 -spec report_finished(traverse:id(), file_ctx:ctx()) -> ok | {error, term()}.
@@ -74,14 +77,18 @@ report_finished(TraverseId, FileCtx) ->
             {ok, EffectiveFileQos} ->
                 file_qos:get_qos_entries(EffectiveFileQos)
         end,
-        {UuidBasedPath, _} = file_ctx:get_uuid_based_path(InternalFileCtx),
-        lists:foreach(fun(QosEntryId) ->
-            ok = qos_status_links:delete_link(
-                file_ctx:get_space_id_const(InternalFileCtx),
-                ?RECONCILE_LINKS_KEY(QosEntryId),
-                ?RECONCILE_LINK_NAME(UuidBasedPath, TraverseId))
-        end, QosEntries)
-    end, get_references(FileCtx)).
+        case get_uuid_based_path(InternalFileCtx) of
+            not_synced ->
+                ok;
+            UuidBasedPath ->
+                lists:foreach(fun(QosEntryId) ->
+                    ok = qos_status_links:delete_link(
+                        file_ctx:get_space_id_const(InternalFileCtx),
+                        ?RECONCILE_LINKS_KEY(QosEntryId),
+                        ?RECONCILE_LINK_NAME(UuidBasedPath, TraverseId))
+                end, QosEntries)
+        end
+    end, file_ctx:list_references_ctx_const(FileCtx)).
 
 
 -spec report_file_transfer_failure(file_ctx:ctx(), [qos_entry:id()]) ->
@@ -95,7 +102,7 @@ report_file_transfer_failure(FileCtx, QosEntries) ->
             ok = qos_status_links:add_link(SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId), Link)
         end, QosEntries),
         ok = qos_entry:add_to_failed_files_list(SpaceId, file_ctx:get_logical_uuid_const(InternalFileCtx))
-    end, get_references(FileCtx)).
+    end, file_ctx:list_references_ctx_const(FileCtx)).
 
 
 -spec report_file_deleted(file_ctx:ctx(), qos_entry:doc(), file_ctx:ctx() | undefined) -> ok.
@@ -134,13 +141,44 @@ report_entry_deleted(SpaceId, QosEntryId) ->
 %%%===================================================================
 
 %% @private
--spec get_references(file_ctx:ctx()) -> [file_ctx:ctx()].
-get_references(FileCtx) ->
-    {ok, References} = file_ctx:list_references_const(FileCtx),
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-    LogicalUuid = file_ctx:get_logical_uuid_const(FileCtx),
-    lists:map(
-        fun (FileUuid) when FileUuid == LogicalUuid -> FileCtx;
-            (FileUuid) -> file_ctx:new_by_uuid(FileUuid, SpaceId)
-        end,
-    References).
+-spec check_links(file_ctx:ctx(), qos_entry:doc()) -> boolean().
+check_links(FileCtx, #document{key = QosEntryId}) ->
+    {UuidBasedPath, _} = file_ctx:get_uuid_based_path(FileCtx),
+    case qos_status_links:get_next_links(?RECONCILE_LINKS_KEY(QosEntryId), UuidBasedPath, 1, all) of
+        {ok, []} -> true;
+        {ok, [Path]} -> not str_utils:binary_starts_with(Path, UuidBasedPath)
+    end.
+
+
+%% @private
+-spec check_traverses(file_ctx:ctx(), qos_entry:doc()) -> boolean().
+check_traverses(FileCtx, #document{key = QosEntryId}) ->
+    qos_entry:fold_traverses(QosEntryId, fun({_TraverseId, TraverseRootUuid}, Acc) ->
+        Acc andalso not is_traverse_in_subtree(FileCtx, TraverseRootUuid)
+    end, true).
+
+
+%% @private
+-spec is_traverse_in_subtree(file_ctx:ctx(), file_meta:uuid()) -> boolean().
+is_traverse_in_subtree(SubtreeRootCtx, CheckedFileUuid) ->
+    SpaceId = file_ctx:get_space_id_const(SubtreeRootCtx),
+    lists:any(fun(InternalFileCtx) ->
+        case get_uuid_based_path(InternalFileCtx) of
+            not_synced ->
+                % no need to check as this subtree is disconnected from space root
+                false;
+            UuidBasedPath ->
+                lists:member(file_ctx:get_logical_uuid_const(SubtreeRootCtx), lists:droplast(filename:split(UuidBasedPath)))
+        end
+    end, file_ctx:list_references_ctx_const(file_ctx:new_by_uuid(CheckedFileUuid, SpaceId))).
+
+
+%% @private
+-spec get_uuid_based_path(file_ctx:ctx()) -> file_meta:uuid_based_path() | not_synced.
+get_uuid_based_path(FileCtx) ->
+    try
+        {UuidBasedPath, _} = file_ctx:get_uuid_based_path(FileCtx),
+        UuidBasedPath
+    catch throw:{error, {file_meta_missing, _}} ->
+        not_synced
+    end.

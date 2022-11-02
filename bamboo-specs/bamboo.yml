@@ -185,7 +185,6 @@ stages:
         - qos_multi_provider_single_file
         - qos_replica_protection
         - qos_status
-        - qos_status_reconciliation
         - quota
         - readonly_storage
         - rename
@@ -1526,14 +1525,6 @@ qos_status:
     - <<: *cover_ct
       name: cover_ct_qos_status.tar.gz
 
-qos_status_reconciliation:
-  <<: *ct-onenv-job
-  key: QSR
-  artifacts:
-    - *ct_logs
-    - <<: *cover_ct
-      name: cover_ct_qos_status_reconciliation.tar.gz
-
 quota:
   <<: *ct-job
   key: QU
@@ -2084,7 +2075,6 @@ Coverage report:
     - artifact: cover_ct_qos_multi_provider_single_file.tar.gz
     - artifact: cover_ct_qos_replica_protection.tar.gz
     - artifact: cover_ct_qos_status.tar.gz
-    - artifact: cover_ct_qos_status_reconciliation.tar.gz
     - artifact: cover_ct_quota.tar.gz
     - artifact: cover_ct_readonly_storage.tar.gz
     - artifact: cover_ct_rename.tar.gz

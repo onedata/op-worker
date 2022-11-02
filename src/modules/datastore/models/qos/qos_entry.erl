@@ -24,17 +24,7 @@
 %%% Multiple qos_entry documents can be created for the same file or directory.
 %%% Adding two identical QoS requirements for the same file results in two
 %%% different qos_entry documents.
-%%% qos_entry is considered as fulfilled when:
-%%%     - there is no information that qos_entry cannot be satisfied (this
-%%%       information is stored in `possibility_check` field in qos_entry document.
-%%%       It is set to `{possible, ProviderId}` if during evaluation of QoS expression
-%%%       provider ProviderId was able to calculate list of storages that would fulfill
-%%%       QoS requirements, otherwise it is set to `{impossible, ProviderId}`)
-%%%     - there are no traverse requests in qos_entry document. Traverse requests
-%%%       are added to qos_entry document on its creation and removed from document
-%%%       when traverse task for this request is completed
-%%%     - there are no links indicating that file has been changed and it should
-%%%       be reconciled (see qos_status.erl)
+%%% For qos_entry fulfillment status details consult `qos_status` module.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(qos_entry).
@@ -65,13 +55,14 @@
     apply_to_all_transfers/2]).
 -export([add_to_failed_files_list/2, remove_from_failed_files_list/2, 
     apply_to_all_in_failed_files_list/2]).
+-export([add_to_traverses_list/4, remove_from_traverses_list/3, fold_traverses/3]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0, upgrade_record/2, resolve_conflict/3]).
 -export([encode_expression/1, decode_expression/1]).
 
 %% for tests
--export([accumulate_link_names/2]).
+-export([accumulate_links/2]).
 
 -type id() :: datastore_doc:key().
 -type record() :: #qos_entry{}.
@@ -84,12 +75,12 @@
 -type type() :: internal | user_defined.
 
 -type qos_transfer_id() :: transfer:id().
--type one_or_many(Type) :: Type | [Type].
 -type list_opts() :: #{
     token => datastore_links_iter:token(), 
     prev_link_name => datastore_links:link_name()
 }.
 -type list_apply_fun() :: fun((datastore_links:link_name()) -> any()).
+-type list_fold_fun() :: fun(({datastore_links:link_name(), datastore_links:link_target()}, any()) -> any()).
 
 -export_type([id/0, doc/0, record/0, type/0, replicas_num/0]).
 
@@ -107,6 +98,7 @@
 
 -define(IMPOSSIBLE_KEY(SpaceId), <<"impossible_qos_key_", SpaceId/binary>>).
 -define(TRANSFERS_KEY(QosEntryId), <<"transfer_qos_key_", QosEntryId/binary>>).
+-define(TRAVERSES_KEY(QosEntryId), <<"qos_traverse_key_", QosEntryId/binary>>).
 -define(FAILED_FILES_KEY(SpaceId), <<"failed_files_qos_key_", SpaceId/binary>>).
 
 -define(FOLD_LINKS_BATCH_SIZE, op_worker:get_env(qos_fold_links_batch_size, 100)).
@@ -170,27 +162,39 @@ delete(QosEntryId) ->
 
 
 %% @private
--spec add_local_links(datastore:key(), datastore:tree_id(),
-    one_or_many({datastore:link_name(), datastore:link_target()})) ->
-    one_or_many({ok, datastore:link()} | {error, term()}).
-add_local_links(Key, TreeId, Links) ->
-    datastore_model:add_links(?LOCAL_CTX, Key, TreeId, Links).
+-spec add_local_link(datastore:key(), {datastore:link_name(), datastore:link_target()}) ->
+    {ok, datastore:link()} | {error, term()}.
+add_local_link(Key, Links) ->
+    datastore_model:add_links(?LOCAL_CTX, Key, oneprovider:get_id(), Links).
 
 
 %% @private
--spec delete_local_links(datastore:key(), datastore:tree_id(),
-    one_or_many(datastore:link_name() | {datastore:link_name(), datastore:link_rev()})) ->
-    one_or_many(ok | {error, term()}).
-delete_local_links(Key, TreeId, Links) ->
-    datastore_model:delete_links(?LOCAL_CTX, Key, TreeId, Links).
+-spec delete_local_link(datastore:key(), datastore:link_name()) ->
+    ok | {error, term()}.
+delete_local_link(Key, Links) ->
+    datastore_model:delete_links(?LOCAL_CTX, Key, oneprovider:get_id(), Links).
 
 
 %% @private
--spec fold_local_links(id(), datastore:fold_fun(datastore:link()),
+-spec add_synced_link(datastore:scope(), datastore:key(), {datastore:link_name(), datastore:link_target()}) ->
+    ok | {error, term()}.
+add_synced_link(SpaceId, Key, Link) ->
+    ?extract_ok(?ok_if_exists(datastore_model:add_links(?CTX#{scope => SpaceId}, Key, oneprovider:get_id(), Link))).
+
+
+%% @private
+-spec delete_synced_link(datastore:scope(), datastore:key(), datastore:link_name()) ->
+    ok | {error, term()}.
+delete_synced_link(SpaceId, Key, LinkName) ->
+    ok = datastore_model:delete_links(?CTX#{scope => SpaceId}, Key, oneprovider:get_id(), LinkName).
+
+
+%% @private
+-spec fold_links(id(), datastore:fold_fun(datastore:link()),
     datastore:fold_acc(), datastore:fold_opts()) -> {ok, datastore:fold_acc()} |
     {{ok, datastore:fold_acc()}, datastore_links_iter:token()} | {error, term()}.
-fold_local_links(Key, Fun, Acc, Opts) ->
-    datastore_model:fold_links(?LOCAL_CTX, Key, oneprovider:get_id(), Fun, Acc, Opts).
+fold_links(Key, Fun, Acc, Opts) ->
+    datastore_model:fold_links(?CTX, Key, all, Fun, Acc, Opts).
 
 
 %%%===================================================================
@@ -311,12 +315,12 @@ is_internal(#qos_entry{type = Type}) ->
 -spec add_to_impossible_list(od_space:id(), id()) ->  ok | {error, term()}.
 add_to_impossible_list(SpaceId, QosEntryId) ->
     ?ok_if_exists(?extract_ok(
-        add_local_links(?IMPOSSIBLE_KEY(SpaceId), oneprovider:get_id(), {QosEntryId, QosEntryId}))).
+        add_local_link(?IMPOSSIBLE_KEY(SpaceId), {QosEntryId, QosEntryId}))).
 
 -spec remove_from_impossible_list(od_space:id(), id()) ->  ok | {error, term()}.
 remove_from_impossible_list(SpaceId, QosEntryId) ->
     ?extract_ok(
-        delete_local_links(?IMPOSSIBLE_KEY(SpaceId), oneprovider:get_id(), QosEntryId)).
+        delete_local_link(?IMPOSSIBLE_KEY(SpaceId), QosEntryId)).
 
 -spec apply_to_all_impossible_in_space(od_space:id(), list_apply_fun()) -> ok.
 apply_to_all_impossible_in_space(SpaceId, Fun) ->
@@ -325,11 +329,11 @@ apply_to_all_impossible_in_space(SpaceId, Fun) ->
 
 -spec add_transfer_to_list(id(), qos_transfer_id()) -> ok | {error, term()}.
 add_transfer_to_list(QosEntryId, TransferId) ->
-    ?extract_ok(add_local_links(?TRANSFERS_KEY(QosEntryId), oneprovider:get_id(), {TransferId, TransferId})).
+    ?extract_ok(add_local_link(?TRANSFERS_KEY(QosEntryId), {TransferId, TransferId})).
 
 -spec remove_transfer_from_list(id(), qos_transfer_id()) -> ok | {error, term()}.
 remove_transfer_from_list(QosEntryId, TransferId)  ->
-    delete_local_links(?TRANSFERS_KEY(QosEntryId), oneprovider:get_id(), TransferId).
+    delete_local_link(?TRANSFERS_KEY(QosEntryId), TransferId).
 
 -spec apply_to_all_transfers(od_space:id(), list_apply_fun()) -> ok.
 apply_to_all_transfers(QosEntryId, Fun) ->
@@ -338,32 +342,56 @@ apply_to_all_transfers(QosEntryId, Fun) ->
 
 -spec add_to_failed_files_list(od_space:id(), file_meta:uuid()) -> ok | {error, term()}.
 add_to_failed_files_list(SpaceId, FileUuid) ->
-    ?ok_if_exists(?extract_ok(add_local_links(?FAILED_FILES_KEY(SpaceId), oneprovider:get_id(), {FileUuid, FileUuid}))).
+    ?ok_if_exists(?extract_ok(add_local_link(?FAILED_FILES_KEY(SpaceId), {FileUuid, FileUuid}))).
 
 -spec remove_from_failed_files_list(od_space:id(), file_meta:uuid()) -> ok | {error, term()}.
 remove_from_failed_files_list(SpaceId, FileUuid)  ->
-    delete_local_links(?FAILED_FILES_KEY(SpaceId), oneprovider:get_id(), FileUuid).
+    delete_local_link(?FAILED_FILES_KEY(SpaceId), FileUuid).
 
 -spec apply_to_all_in_failed_files_list(od_space:id(), list_apply_fun()) -> ok.
 apply_to_all_in_failed_files_list(SpaceId, Fun) ->
     apply_to_all_in_list(?FAILED_FILES_KEY(SpaceId), Fun).
 
 
+-spec add_to_traverses_list(od_space:id(), id(), qos_traverse:id(), file_meta:uuid()) -> ok | {error, term()}.
+add_to_traverses_list(SpaceId, QosEntryId, TraverseId, TraverseRootUuid) ->
+    ?ok_if_exists(?extract_ok(add_synced_link(SpaceId, ?TRAVERSES_KEY(QosEntryId), {TraverseId, TraverseRootUuid}))).
+
+-spec remove_from_traverses_list(od_space:id(), id(), qos_traverse:id()) -> ok | {error, term()}.
+remove_from_traverses_list(SpaceId, QosEntryId, TraverseId)  ->
+    delete_synced_link(SpaceId, ?TRAVERSES_KEY(QosEntryId), TraverseId).
+
+
+-spec fold_traverses(id(), list_fold_fun(), any()) -> any().
+fold_traverses(QosEntryId, Fun, InitialAcc) ->
+    fold_all_in_list(?TRAVERSES_KEY(QosEntryId), Fun, InitialAcc).
+
+
+%% @private
+-spec fold_all_in_list(datastore:key(), list_fold_fun(), any()) -> any().
+fold_all_in_list(Key, Fun, InitialAcc) ->
+    {List, NextBatchOpts} = list_next_batch(Key, #{}),
+    fold_and_list_next_batch(Key, Fun, List, NextBatchOpts, InitialAcc).
+
+
+%% @private
+-spec fold_and_list_next_batch(datastore:key(), list_fold_fun(),
+    [datastore_links:link_name()], list_opts(), any()) -> any().
+fold_and_list_next_batch(_Key, _Fun, [], _Opts, Acc) -> Acc;
+fold_and_list_next_batch(Key, Fun, List, Opts, Acc) ->
+    NextAcc = lists:foldl(Fun, Acc, List),
+    {NextBatch, NextBatchOpts} = list_next_batch(Key, Opts),
+    fold_and_list_next_batch(Key, Fun, NextBatch, NextBatchOpts, NextAcc).
+
+
 %% @private
 -spec apply_to_all_in_list(datastore:key(), list_apply_fun()) -> ok.
 apply_to_all_in_list(Key, Fun) ->
-    {List, NextBatchOpts} = list_next_batch(Key, #{}),
-    apply_and_list_next_batch(Key, Fun, List, NextBatchOpts).
-
-
-%% @private
--spec apply_and_list_next_batch(datastore:key(), list_apply_fun(), 
-    [datastore_links:link_name()], list_opts()) -> ok.
-apply_and_list_next_batch(_Key, _Fun, [], _Opts) -> ok;
-apply_and_list_next_batch(Key, Fun, List, Opts) ->
-    lists:foreach(Fun, List),
-    {NextBatch, NextBatchOpts} = list_next_batch(Key, Opts),
-    apply_and_list_next_batch(Key, Fun, NextBatch, NextBatchOpts).
+    FinalFun = fun({LinkName, _LinkTarget}, _Acc) ->
+        Fun(LinkName),
+        ok
+    end,
+    fold_all_in_list(Key, FinalFun, ok).
 
 
 %% @private
@@ -374,8 +402,8 @@ list_next_batch(Key, Opts) ->
         true -> Opts;
         false -> Opts#{token => #link_token{}}
     end,
-    {{ok, Res}, Token} = fold_local_links(Key,
-        fun accumulate_link_names/2, [],
+    {{ok, Res}, Token} = fold_links(Key,
+        fun accumulate_links/2, [],
         Opts1#{size => ?FOLD_LINKS_BATCH_SIZE}),
     NextBatchOpts = case Res of
         [] -> #{token => Token};
@@ -385,9 +413,9 @@ list_next_batch(Key, Opts) ->
 
 
 %% @private
--spec accumulate_link_names(datastore_links:link(), [datastore_links:link_name()]) -> 
+-spec accumulate_links(datastore_links:link(), [datastore_links:link_name()]) ->
     {ok, [datastore_links:link_name()]}.
-accumulate_link_names(#link{name = Name}, Acc) -> {ok, [Name | Acc]}.
+accumulate_links(#link{name = Name, target = Target}, Acc) -> {ok, [{Name, Target} | Acc]}.
 
 %%%===================================================================
 %%% datastore_model callbacks

@@ -84,7 +84,7 @@ handle(?RETRY_FAILED_FILES) ->
     case provider_logic:get_spaces() of
         {ok, Spaces} ->
             lists:foreach(fun(SpaceId) ->
-                ok = qos_hooks:retry_failed_files(SpaceId)
+                ok = qos_logic:retry_failed_files(SpaceId)
             end, Spaces);
         Error -> 
             ?warning("QoS failed files retry failed to fetch provider spaces due to: ~p", [Error])

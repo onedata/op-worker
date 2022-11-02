@@ -680,7 +680,7 @@ import_file_unsafe(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
                 ParentUuid, SpaceId, Info),
             % Size could not be updated in statistic as file_meta was created after file_location.
             % As a result file_meta_posthooks have been created during file_location creation - execute them now.
-            file_meta_posthooks:execute_hooks(FileUuid),
+            file_meta_posthooks:execute_hooks(FileUuid, doc),
             {ok, StorageFileCtx5} = create_times_from_stat_timestamps(FileUuid, StorageFileCtx4),
             ParentGuid = file_ctx:get_logical_guid_const(ParentCtx),
             {ok, FileType} = storage_driver:infer_type(Mode),

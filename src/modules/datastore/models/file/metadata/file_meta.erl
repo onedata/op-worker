@@ -203,6 +203,7 @@ create({uuid, ParentUuid}, FileDoc = #document{value = FileMeta = #file_meta{nam
         end
     end).
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns file meta.
@@ -258,7 +259,18 @@ get_including_deleted(Uuid) ->
                 Error -> Error
             end;
         false ->
-            datastore_model:get(?CTX#{include_deleted => true}, Uuid)
+            case datastore_model:get(?CTX#{include_deleted => true}, Uuid) of
+                {error, not_found} ->
+                    case fslogic_file_id:is_space_dir_uuid(Uuid) of
+                        true ->
+                            make_space_exist(fslogic_file_id:space_dir_uuid_to_spaceid(Uuid)),
+                            datastore_model:get(?CTX#{include_deleted => true}, Uuid);
+                        false ->
+                            {error, not_found}
+                    end;
+                Other ->
+                    Other
+            end
     end.
 
 

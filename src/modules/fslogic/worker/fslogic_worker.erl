@@ -276,7 +276,7 @@ handle(?INIT_EFFECTIVE_CACHES(Space)) ->
     paths_cache:init(Space),
     dataset_eff_cache:init(Space),
     archive_recall_cache:init(Space),
-    file_meta_links_sync_status_cache:init(Space);
+    file_meta_sync_status_cache:init(Space);
 handle(_Request) ->
     ?log_bad_request(_Request),
     {error, wrong_request}.
@@ -346,7 +346,7 @@ init_effective_caches() ->
     % TODO VFS-7412 refactor effective_value cache
     paths_cache:init_group(),
     dataset_eff_cache:init_group(),
-    file_meta_links_sync_status_cache:init_group(),
+    file_meta_sync_status_cache:init_group(),
     archive_recall_cache:init_group(),
     schedule_init_effective_caches(all).
 
