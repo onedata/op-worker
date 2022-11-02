@@ -134,12 +134,12 @@ save_location(FileLocation) ->
 %%-------------------------------------------------------------------
 -spec save_location(file_location:doc(), od_user:id() | undefined) ->
     {ok, file_location:id()} | {error, term()}.
-save_location(#document{value = #file_location{uuid = Uuid}} = FileLocation, UserIdOrUndefined) ->
+save_location(#document{key = Key, value = #file_location{uuid = Uuid, blocks = Blocks}} = FileLocation, UserIdOrUndefined) ->
     replica_synchronizer:apply_or_run_locally(Uuid, fun() ->
         fslogic_cache:save_doc(FileLocation)
     end, fun() ->
         Ans = fslogic_cache:save_doc(FileLocation),
-        fslogic_cache:cache_blocks(FileLocation),
+        fslogic_cache:cache_blocks(Key, Blocks),
         Ans
     end, fun() ->
         file_location:save_and_update_quota(FileLocation, UserIdOrUndefined)
