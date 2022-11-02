@@ -458,10 +458,12 @@ add_data_stream_annotations_if_required(FunctionDefinition, #initiation_ctx{
     Endpoint = oneprovider:build_url(wss, string:replace(
         ?OPENFAAS_ACTIVITY_FEED_WS_COWBOY_ROUTE, ":client_type", "result_streamer"
     )),
+    ResultStreamerImage = atm_openfaas_config:get_result_streamer_image(OpenfaasConfig),
     ActivityFeedSecret = atm_openfaas_config:get_activity_feed_secret(OpenfaasConfig),
 
     insert_function_annotations(FunctionDefinition, #{
         <<"resultstream.openfaas.onedata.org/inject">> => <<"enabled">>,
+        <<"resultstream.openfaas.onedata.org/image">> => ResultStreamerImage,
         <<"resultstream.openfaas.onedata.org/result_names">> => str_utils:join_binary(
             AtmTaskExecutionUncorrelatedResultNames, <<",">>
         ),
