@@ -139,7 +139,9 @@ save_location(#document{value = #file_location{uuid = Uuid}} = FileLocation, Use
     replica_synchronizer:apply_or_run_locally(Uuid, fun() ->
         fslogic_cache:save_doc(FileLocation)
     end, fun() ->
-        fslogic_cache:save_doc(FileLocation)
+        Ans = fslogic_cache:save_doc(FileLocation),
+        fslogic_cache:cache_blocks(FileLocation),
+        Ans
     end, fun() ->
         file_location:save_and_update_quota(FileLocation, UserIdOrUndefined)
     end).

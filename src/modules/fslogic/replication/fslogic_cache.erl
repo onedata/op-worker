@@ -296,11 +296,17 @@ clear_location_changes() ->
 %% @end
 %%-------------------------------------------------------------------
 -spec get_doc(file_location:id()) -> file_location:doc() | {error, not_found}.
-get_doc(undefined) ->
-    {error, not_found};
 get_doc(Key) ->
+    get_doc(Key, false).
+
+-spec get_doc(file_location:id(), boolean()) -> file_location:doc() | {error, not_found}.
+get_doc(undefined, _) ->
+    {error, not_found};
+get_doc(Key, ForceReload) ->
     case get({?DOCS, Key}) of
-        undefined ->
+        #document{} = Doc when ForceReload =:= false ->
+            Doc;
+        GetAns ->
             case file_location:get(Key) of
                 {ok, LocationDoc = #document{
                     key = Key,
@@ -309,7 +315,10 @@ get_doc(Key) ->
                     LocationDoc2 = LocationDoc#document{
                         value = Location#file_location{blocks = []}
                     },
-                    cache_doc(LocationDoc),
+                    case GetAns of
+                        undefined -> cache_doc(LocationDoc);
+                        _ -> store_doc(LocationDoc)
+                    end,
 
                     {Blocks, Sorted} = merge_local_blocks(LocationDoc),
                     put({?BLOCKS, Key}, blocks_to_tree(Blocks, Sorted)),
@@ -321,9 +330,7 @@ get_doc(Key) ->
                 Error ->
                     ?error("Fslogic cache error: ~p", [Error]),
                     throw({fslogic_cache_error, Error})
-            end;
-        Doc ->
-            Doc
+            end
     end.
 
 %%-------------------------------------------------------------------
@@ -451,7 +458,7 @@ get_blocks(Key) ->
 get_public_blocks(Key) ->
     case get({?PUBLIC_BLOCKS, Key}) of
         undefined ->
-            case get_doc(Key) of
+            case get_doc(Key, true) of
                 #document{} ->
                     get_public_blocks(Key);
                 _ ->
@@ -471,7 +478,7 @@ get_public_blocks(Key) ->
 get_blocks_tree(Key) ->
     case get({?BLOCKS, Key}) of
         undefined ->
-            case get_doc(Key) of
+            case get_doc(Key, true) of
                 #document{} ->
                     get_blocks_tree(Key);
                 _ ->
