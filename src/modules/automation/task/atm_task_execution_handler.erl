@@ -379,10 +379,15 @@ parse_job_batch_result(_ItemBatch, Error = {error, _}) ->
     % Entire batch processing failed (e.g. timeout or malformed lambda response)
     Error;
 
+parse_job_batch_result(ItemBatch, {ok, #atm_lambda_output{results_batch = undefined}}) ->
+    {ok, lists:map(fun(Item) -> {Item, #{}} end, ItemBatch)};
+
 parse_job_batch_result(ItemBatch, {ok, #atm_lambda_output{results_batch = ResultsBatch}}) when
     length(ItemBatch) == length(ResultsBatch)
 ->
     {ok, lists:zipwith(fun
+        (Item, undefined) ->
+            {Item, #{}};
         (Item, Result) when is_map(Result) ->
             {Item, Result};
         (Item, Result) ->

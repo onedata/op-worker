@@ -270,7 +270,7 @@ mock_run(Workers, ModuleWithOpenfaasDockerMock) ->
                 errors:to_json(?atm_examine_error(Type, Reason, Stacktrace))
             end,
 
-            {FunctionStatus, Response} = case is_map(Output) of
+            {FunctionStatus, Response} = case Output == null orelse is_map(Output) of
                 true -> {<<"200">>, json_utils:encode(Output)};
                 false -> {<<"500">>, Output}
             end,
@@ -319,15 +319,22 @@ process_task_uncorrelated_results(AtmTaskExecutor, AtmTaskOutputData) ->
         AtmTaskExecutionUncorrelatedResultNames ->
             ResultStreamerRef = get_result_streamer_ref(AtmTaskExecutor),
 
-            #{<<"resultsBatch">> => lists:map(fun(Results) ->
+            ResultsBatch = lists:map(fun(AllResults) ->
                 Chunk = maps:map(
                     % Wrap results in array to simulate sidecar - openfaas feed server batch optimization
                     fun(_ResultName, Value) -> [Value] end,
-                    maps:with(AtmTaskExecutionUncorrelatedResultNames, Results)
+                    maps:with(AtmTaskExecutionUncorrelatedResultNames, AllResults)
                 ),
                 atm_openfaas_result_streamer_mock:deliver_chunk_report(ResultStreamerRef, Chunk),
-                maps:without(AtmTaskExecutionUncorrelatedResultNames, Results)
-            end, maps:get(<<"resultsBatch">>, AtmTaskOutputData))}
+                maps:without(AtmTaskExecutionUncorrelatedResultNames, AllResults)
+            end, maps:get(<<"resultsBatch">>, AtmTaskOutputData)),
+
+            case {lists:all(fun maps_utils:is_empty/1, ResultsBatch), rand:uniform(3)} of
+                {false, _} -> #{<<"resultsBatch">> => ResultsBatch};
+                {true, 1} -> null;
+                {true, 2} -> #{<<"resultsBatch">> => null};
+                {true, 3} -> #{<<"resultsBatch">> => lists:map(fun(_) -> ?RAND_ELEMENT([null, #{}]) end, ResultsBatch)}
+            end
     end.
 
 
