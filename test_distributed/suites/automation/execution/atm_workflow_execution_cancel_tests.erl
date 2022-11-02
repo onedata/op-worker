@@ -247,25 +247,16 @@ cancel_active_atm_workflow_execution_test_base(Testcase, RelayMethod) ->
                             ),
                             ?assertEqual(ExpItemsProcessed, length(StDstItems))
                         end,
-                        after_step_exp_state_diff = fun(#atm_mock_call_ctx{
-                            workflow_execution_exp_state = ExpState,
-                            call_args = [_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId]
-                        }) ->
-                            case atm_workflow_execution_exp_state_builder:get_task_schema_id(
-                                AtmTaskExecutionId, ExpState
-                            ) of
-                                <<"task3">> ->
-                                    false;
-                                _ ->
-                                    {true, atm_workflow_execution_exp_state_builder:expect(ExpState, [
-                                        {task, AtmTaskExecutionId, cancelled},
-                                        {task, AtmTaskExecutionId, parallel_box_transitioned_to_inferred_status, fun
-                                            (<<"stopping">>, [<<"cancelled">>, <<"stopping">>]) -> <<"stopping">>;
-                                            (<<"stopping">>, [<<"cancelled">>]) -> <<"cancelled">>
-                                        end}
-                                    ])}
-                            end
-                        end
+                        after_step_exp_state_diff = atm_workflow_execution_test_utils:build_task_step_exp_state_diff(#{
+                            [<<"task1">>, <<"task2">>] => [
+                                {task, ?TASK_ID_PLACEHOLDER, cancelled},
+                                {task, ?TASK_ID_PLACEHOLDER, parallel_box_transitioned_to_inferred_status, fun
+                                    (<<"stopping">>, [<<"cancelled">>, <<"stopping">>]) -> <<"stopping">>;
+                                    (<<"stopping">>, [<<"cancelled">>]) -> <<"cancelled">>
+                                end}
+                            ],
+                            <<"task3">> => no_diff
+                        })
                     },
                     handle_lane_execution_stopped = #atm_step_mock_spec{
                         after_step_hook = fun(AtmMockCallCtx) ->

@@ -37,4 +37,8 @@
 }).
 
 
+-define(TASK_ID_PLACEHOLDER, <<"task_placeholder">>).
+-define(PB_SELECTOR_PLACEHOLDER, {{0, 0}, <<"pb_plaholder">>}).
+
+
 -endif.

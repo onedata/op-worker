@@ -366,19 +366,16 @@ resume_atm_workflow_execution_suspended_while_active_test_base(Testcase, Suspend
                                 SuspendHook = get_suspend_hook(SuspendedStatus),
                                 SuspendHook(AtmMockCallCtx)
                             end,
-                            before_step_exp_state_diff = build_handle_task_execution_stopped_exp_state_diff(#{
+                            before_step_exp_state_diff = atm_workflow_execution_test_utils:build_task_step_exp_state_diff(#{
                                 <<"task1">> => [
                                     {all_tasks, {1, 1}, stopping},
                                     {lane_run, {1, 1}, stopping},
                                     workflow_stopping
                                 ]
                             }),
-                            after_step_exp_state_diff = build_handle_task_execution_stopped_exp_state_diff(#{
-                                <<"task1">> => build_expectations_for_lane1_task_transitioned_to(
-                                    ?TASK1_SELECTOR({1, 1}), SuspendedStatus
-                                ),
-                                <<"task2">> => build_expectations_for_lane1_task_transitioned_to(
-                                    ?TASK2_SELECTOR({1, 1}), SuspendedStatus
+                            after_step_exp_state_diff = atm_workflow_execution_test_utils:build_task_step_exp_state_diff(#{
+                                [<<"task1">>, <<"task2">>] => build_expectations_for_lane1_task_transitioned_to(
+                                    ?TASK_ID_PLACEHOLDER, SuspendedStatus
                                 )
                             })
                         },
@@ -481,7 +478,7 @@ resume_atm_workflow_execution_suspended_after_some_tasks_finished_test_base(Test
                                 assert_lane1_task_execution_stopped_stats({0, 0, 2}, {0, 0, 0}, AtmMockCallCtx)
                             end,
                             after_step_hook = get_suspend_hook(SuspendedStatus),
-                            after_step_exp_state_diff = build_handle_task_execution_stopped_exp_state_diff(#{
+                            after_step_exp_state_diff = atm_workflow_execution_test_utils:build_task_step_exp_state_diff(#{
                                 <<"task1">> => lists:flatten([
                                     build_expectations_for_lane1_task_transitioned_to(?TASK1_SELECTOR({1, 2}), finished),
                                     build_expectations_for_lane1_task_transitioned_to(?TASK2_SELECTOR({1, 2}), SuspendedStatus),
@@ -636,24 +633,6 @@ get_suspend_hook(interrupted) -> fun atm_workflow_execution_test_utils:interrupt
 %% @private
 build_workflow_suspended_expectation(paused) -> workflow_paused;
 build_workflow_suspended_expectation(interrupted) -> workflow_interrupted.
-
-
-%% @private
-build_handle_task_execution_stopped_exp_state_diff(ExpectationsPerTask) ->
-    fun(#atm_mock_call_ctx{
-        workflow_execution_exp_state = ExpState0,
-        call_args = [_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId]
-    }) ->
-        AtmTaskSchemaId = atm_workflow_execution_exp_state_builder:get_task_schema_id(
-            AtmTaskExecutionId, ExpState0
-        ),
-        case maps:get(AtmTaskSchemaId, ExpectationsPerTask, no_diff) of
-            no_diff ->
-                false;
-            Expectations ->
-                {true, atm_workflow_execution_exp_state_builder:expect(ExpState0, Expectations)}
-        end
-    end.
 
 
 %% @private

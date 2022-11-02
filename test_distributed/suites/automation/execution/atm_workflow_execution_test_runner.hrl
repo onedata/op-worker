@@ -45,6 +45,7 @@
     lane_count :: non_neg_integer(),
     current_lane_index :: atm_lane_execution:index(),
     current_run_num :: atm_lane_execution:run_num(),
+    step :: atm_workflow_execution_test_runner:step_name(),
     call_args :: [term()],
     % Result of step execution available only in after_step phase or 'undefined' in before_step phase
     call_result :: undefined | term()

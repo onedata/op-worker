@@ -363,32 +363,24 @@ create_initial_files() ->
 -spec build_handle_task_execution_stopped_mock_spec_for_skipped_tasks() ->
     atm_execution_test_runner:step_mock_spec().
 build_handle_task_execution_stopped_mock_spec_for_skipped_tasks() ->
+    CommonExpectations = [
+        % No job was ever executed so lane run transitions to active status just now
+        {lane_run, {1, 1}, active},
+        {task, ?TASK_ID_PLACEHOLDER, skipped}
+    ],
     #atm_step_mock_spec{
-        after_step_exp_state_diff = fun(#atm_mock_call_ctx{
-            workflow_execution_exp_state = ExpState0,
-            call_args = [_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId]
-        }) ->
-            %% TODO ??
-            InferStatusFun = case atm_workflow_execution_exp_state_builder:get_task_selector(AtmTaskExecutionId, ExpState0) of
-                {_, <<"pb1">>, _} ->
-                    % parallel box with 2 tasks - it should transition to:
-                    % - active when first task stopped
-                    % - skipped after second task stopped
-                    fun
-                        (<<"pending">>, [<<"pending">>, <<"skipped">>]) -> <<"active">>;
-                        (<<"active">>, [<<"skipped">>]) -> <<"skipped">>
-                    end;
-                {_, <<"pb2">>, _} ->
-                    fun(_, _) -> <<"skipped">> end
-            end,
-            Expectations = [
-                {task, AtmTaskExecutionId, skipped},
-                {task, AtmTaskExecutionId, parallel_box_transitioned_to_inferred_status, InferStatusFun},
-                % No job was ever executed so lane run transitions to active status just now
-                {lane_run, {1, 1}, active}
+        after_step_exp_state_diff = atm_workflow_execution_test_utils:build_task_step_exp_state_diff(#{
+            [<<"task1">>, <<"task2">>] => CommonExpectations ++ [
+                % parallel box with 2 tasks - it should transition to:
+                % - active when first task skipped
+                % - skipped after second task skipped
+                {task, ?TASK_ID_PLACEHOLDER, parallel_box_transitioned_to_inferred_status, fun
+                    (<<"pending">>, [<<"pending">>, <<"skipped">>]) -> <<"active">>;
+                    (<<"active">>, [<<"skipped">>]) -> <<"skipped">>
+                end}
             ],
-            {true, atm_workflow_execution_exp_state_builder:expect(ExpState0, Expectations)}
-        end
+            <<"task3">> => CommonExpectations ++ [{parallel_box, ?PB_SELECTOR_PLACEHOLDER, skipped}]
+        })
     }.
 
 
