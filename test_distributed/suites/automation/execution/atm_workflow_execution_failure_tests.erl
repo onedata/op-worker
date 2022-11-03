@@ -233,16 +233,12 @@ fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error() ->
     end,
 
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
-        provider = ?PROVIDER_SELECTOR,
-        user = ?USER_SELECTOR,
-        space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?FAILING_WORKFLOW_SCHEMA_DRAFT(
             ?FUNCTION_NAME,
             gen_time_series_measurements(),
             ?FAILING_MEASUREMENT_STORE_MAPPING_TASK_SCHEMA_DRAFT,
             ?ECHO_LAMBDA_DRAFT(?ANY_MEASUREMENT_DATA_SPEC, file_pipe)
         ),
-        workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,
             lane_runs = [
@@ -613,11 +609,7 @@ job_failure_atm_workflow_execution_test_base(JobFailureType, #fail_atm_workflow_
     end,
 
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
-        provider = ?PROVIDER_SELECTOR,
-        user = ?USER_SELECTOR,
-        space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = AtmWorkflowSchemaDraft,
-        workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,
             lane_runs = [

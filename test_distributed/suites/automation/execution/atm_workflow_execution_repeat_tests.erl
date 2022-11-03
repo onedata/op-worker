@@ -120,13 +120,9 @@
 % Retrying finished lane run should fail while rerunning it should succeed
 repeat_finished_atm_lane_run_execution() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
-        provider = ?PROVIDER_SELECTOR,
-        user = ?USER_SELECTOR,
-        space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
             gen_time_series_measurements(), return_value
         ),
-        workflow_schema_revision_num = 1,
         incarnations = [
             #atm_workflow_execution_incarnation_test_spec{
                 incarnation_num = 1,
@@ -190,13 +186,9 @@ retry_failed_iterated_atm_lane_run_execution() ->
 
 repeat_failed_iterated_atm_lane_run_execution_test_base(TestCase, RepeatType) ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
-        provider = ?PROVIDER_SELECTOR,
-        user = ?USER_SELECTOR,
-        space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
             TestCase, gen_time_series_measurements(), return_value
         ),
-        workflow_schema_revision_num = 1,
         incarnations = [
             #atm_workflow_execution_incarnation_test_spec{
                 incarnation_num = 1,
@@ -257,13 +249,9 @@ repeat_failed_iterated_atm_lane_run_execution_test_base(TestCase, RepeatType) ->
 % Retrying failed while preparing lane run should fail while rerunning it should succeed
 repeat_failed_while_preparing_atm_lane_run_execution() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
-        provider = ?PROVIDER_SELECTOR,
-        user = ?USER_SELECTOR,
-        space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
             gen_time_series_measurements(), return_value
         ),
-        workflow_schema_revision_num = 1,
         incarnations = [
             #atm_workflow_execution_incarnation_test_spec{
                 incarnation_num = 1,
@@ -347,13 +335,9 @@ repeat_failed_not_iterated_atm_lane_run_execution() ->
         {2, 2}
     ),
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
-        provider = ?PROVIDER_SELECTOR,
-        user = ?USER_SELECTOR,
-        space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
             gen_time_series_measurements(), file_pipe
         ),
-        workflow_schema_revision_num = 1,
         incarnations = [
             #atm_workflow_execution_incarnation_test_spec{
                 incarnation_num = 1,
@@ -403,13 +387,9 @@ repeat_failed_not_iterated_atm_lane_run_execution() ->
 % Retrying cancelled lane run should fail while rerunning it should succeed
 repeat_cancelled_atm_lane_run_execution() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
-        provider = ?PROVIDER_SELECTOR,
-        user = ?USER_SELECTOR,
-        space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
             gen_time_series_measurements(), return_value
         ),
-        workflow_schema_revision_num = 1,
         incarnations = [
             #atm_workflow_execution_incarnation_test_spec{
                 incarnation_num = 1,

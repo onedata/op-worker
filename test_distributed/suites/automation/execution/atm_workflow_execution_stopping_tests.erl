@@ -125,15 +125,11 @@ stopping_reason_interrupt_overrides_pause() ->
     DelayedMeasurementName = <<"delayed">>,
 
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
-        provider = ?PROVIDER_SELECTOR,
-        user = ?USER_SELECTOR,
-        space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
             return_value,
             [gen_time_series_measurement(DelayedMeasurementName) | gen_correct_time_series_measurements()],
             ?CORRECT_ATM_TS_DISPATCH_RULES
         ),
-        workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,
             lane_runs = [
@@ -195,15 +191,11 @@ stopping_reason_interrupt_overrides_pause() ->
 
 stopping_reason_failure_overrides_pause() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
-        provider = ?PROVIDER_SELECTOR,
-        user = ?USER_SELECTOR,
-        space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
             file_pipe,
             [gen_time_series_measurement(<<"size">>)],
             [?INVALID_DISPATCH_RULE | ?CORRECT_ATM_TS_DISPATCH_RULES]
         ),
-        workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,
             lane_runs = [
@@ -248,15 +240,11 @@ stopping_reason_failure_overrides_pause() ->
 
 stopping_reason_failure_overrides_interrupt() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
-        provider = ?PROVIDER_SELECTOR,
-        user = ?USER_SELECTOR,
-        space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
             file_pipe,
             [gen_time_series_measurement(<<"size">>)],
             [?INVALID_DISPATCH_RULE | ?CORRECT_ATM_TS_DISPATCH_RULES]
         ),
-        workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,
             lane_runs = [
@@ -299,13 +287,9 @@ stopping_reason_failure_overrides_interrupt() ->
 
 stopping_reason_cancel_overrides_pause() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
-        provider = ?PROVIDER_SELECTOR,
-        user = ?USER_SELECTOR,
-        space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
             return_value, gen_correct_time_series_measurements(), ?CORRECT_ATM_TS_DISPATCH_RULES
         ),
-        workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,
             lane_runs = [
@@ -348,13 +332,9 @@ stopping_reason_cancel_overrides_pause() ->
 
 stopping_reason_cancel_overrides_interrupt() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
-        provider = ?PROVIDER_SELECTOR,
-        user = ?USER_SELECTOR,
-        space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
             return_value, gen_correct_time_series_measurements(), ?CORRECT_ATM_TS_DISPATCH_RULES
         ),
-        workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,
             lane_runs = [
@@ -397,15 +377,11 @@ stopping_reason_cancel_overrides_interrupt() ->
 
 stopping_reason_cancel_overrides_failure() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
-        provider = ?PROVIDER_SELECTOR,
-        user = ?USER_SELECTOR,
-        space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
             file_pipe,
             [gen_time_series_measurement(<<"size">>)],
             [?INVALID_DISPATCH_RULE | ?CORRECT_ATM_TS_DISPATCH_RULES]
         ),
-        workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,
             lane_runs = [
@@ -446,13 +422,9 @@ stopping_reason_cancel_overrides_failure() ->
 
 stopping_reason_crash_overrides_pause() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
-        provider = ?PROVIDER_SELECTOR,
-        user = ?USER_SELECTOR,
-        space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
             return_value, gen_correct_time_series_measurements(), ?CORRECT_ATM_TS_DISPATCH_RULES
         ),
-        workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,
             lane_runs = [
@@ -486,13 +458,9 @@ stopping_reason_crash_overrides_pause() ->
 
 stopping_reason_crash_overrides_interrupt() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
-        provider = ?PROVIDER_SELECTOR,
-        user = ?USER_SELECTOR,
-        space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
             return_value, gen_correct_time_series_measurements(), ?CORRECT_ATM_TS_DISPATCH_RULES
         ),
-        workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,
             lane_runs = [
@@ -524,15 +492,11 @@ stopping_reason_crash_overrides_interrupt() ->
 
 stopping_reason_crash_overrides_failure() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
-        provider = ?PROVIDER_SELECTOR,
-        user = ?USER_SELECTOR,
-        space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
             file_pipe,
             [gen_time_series_measurement(<<"size">>)],
             [?INVALID_DISPATCH_RULE | ?CORRECT_ATM_TS_DISPATCH_RULES]
         ),
-        workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,
             lane_runs = [
@@ -560,13 +524,9 @@ stopping_reason_crash_overrides_failure() ->
 
 stopping_reason_crash_overrides_cancel() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
-        provider = ?PROVIDER_SELECTOR,
-        user = ?USER_SELECTOR,
-        space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
             return_value, gen_correct_time_series_measurements(), ?CORRECT_ATM_TS_DISPATCH_RULES
         ),
-        workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,
             lane_runs = [

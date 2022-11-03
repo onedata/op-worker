@@ -688,7 +688,7 @@ build_lane_run_execution_test_spec_with_even_numbers(
             ]
         }) ->
             ItemCount = length(ItemBatch),
-            EvenNumbersCount = lists:sum(lists:map(fun(Item) -> 1 - (Item rem 2) end, ItemBatch)),
+            EvenNumberCount = lists:sum(lists:map(fun(Item) -> 1 - (Item rem 2) end, ItemBatch)),
 
             Expectations = case atm_workflow_execution_exp_state_builder:get_task_schema_id(
                 AtmTaskExecutionId, ExpState0
@@ -697,8 +697,8 @@ build_lane_run_execution_test_spec_with_even_numbers(
                     [{task, AtmTaskExecutionId, items_finished, ItemCount}];
                 <<"task2">> ->
                     [
-                        {task, AtmTaskExecutionId, items_finished, ItemCount - EvenNumbersCount},
-                        {task, AtmTaskExecutionId, items_failed, EvenNumbersCount}
+                        {task, AtmTaskExecutionId, items_finished, ItemCount - EvenNumberCount},
+                        {task, AtmTaskExecutionId, items_failed, EvenNumberCount}
                     ]
             end,
             {true, atm_workflow_execution_exp_state_builder:expect(ExpState0, Expectations)}
