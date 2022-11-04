@@ -412,7 +412,7 @@ translate_from_protobuf(#'ListFilesRecursively'{
     xattrs = Xattrs
 }) ->
     #get_recursive_file_list{
-        optional_attrs = xattrs_to_optional_attrs(Xattrs),
+        optional_attrs = [size | xattrs_to_optional_attrs(Xattrs)],
         listing_options = maps_utils:remove_undefined(#{
             pagination_token => Token,
             start_after => StartAfter,
@@ -1606,6 +1606,21 @@ translate_to_protobuf(#get_recursive_file_list{
         limit = maps:get(limit, ListingOptions, undefined),
         include_dirs = maps:get(include_dirs, ListingOptions, undefined),
         xattrs = Xattrs
+    }};
+translate_to_protobuf(#recursive_listing_result{
+    % currently only recursive file listing can be requested with clproto therefore entry is always
+    % of type recursive_file_listing_node:entry().
+    entries = Entries,
+    pagination_token = PaginationToken
+}) ->
+    {files_list, #'FileList'{
+        files = lists:map(fun({Path, FileAttr}) ->
+            % put file path as name as that is expected by oneclient
+            {file_attr, TranslatedFileAttr} = translate_to_protobuf(FileAttr#file_attr{name = Path}),
+            TranslatedFileAttr
+        end, Entries),
+        next_page_token = PaginationToken,
+        is_last = PaginationToken == undefined
     }};
 translate_to_protobuf(#file_request{
     context_guid = ContextGuid,
