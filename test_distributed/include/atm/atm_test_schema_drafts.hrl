@@ -35,18 +35,6 @@
 -define(ECHO_WITH_EXCEPTION_ON_EVEN_NUMBERS, <<"test/echo_with_exception_on_even_numbers">>).
 
 
--define(INTEGER_LIST_STORE_SCHEMA_DRAFT(__ID, __DEFAULT_INITIAL_CONTENT), #atm_store_schema_draft{
-    id = __ID,
-    type = list,
-    config = #atm_list_store_config{item_data_spec = #atm_data_spec{
-        type = atm_integer_type
-    }},
-    requires_initial_content = false,
-    default_initial_content = __DEFAULT_INITIAL_CONTENT
-}).
--define(INTEGER_LIST_STORE_SCHEMA_DRAFT(__ID), ?INTEGER_LIST_STORE_SCHEMA_DRAFT(__ID, undefined)).
-
-
 -define(ECHO_ARG_NAME, <<"value">>).
 
 -define(ECHO_LAMBDA_DRAFT(__DATA_SPEC, __RELAY_METHOD), #atm_lambda_revision_draft{

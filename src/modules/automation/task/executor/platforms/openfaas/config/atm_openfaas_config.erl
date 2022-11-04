@@ -24,10 +24,18 @@
     get_function_namespace/1,
     get_activity_feed_secret/1,
     get_oneclient_image/1,
-    get_oneclient_options/1
+    get_oneclient_options/1,
+    get_result_streamer_image/1
 ]).
 
+-record(atm_openfaas_config, {
+    url :: binary(),
+    basic_auth :: binary(),
+    function_namespace :: binary(),
+    activity_feed_secret :: binary()
+}).
 -opaque record() :: #atm_openfaas_config{}.
+
 -export_type([record/0]).
 
 
@@ -87,6 +95,17 @@ get_oneclient_image(_Record) ->
 -spec get_oneclient_options(record()) -> binary().
 get_oneclient_options(_Record) ->
     str_utils:to_binary(get_env(openfaas_oneclient_options, <<"">>)).
+
+
+-spec get_result_streamer_image(record()) -> binary().
+get_result_streamer_image(_Record) ->
+    case get_env(openfaas_result_streamer_image, undefined) of
+        undefined ->
+            ReleaseVersion = op_worker:get_release_version(),
+            <<"onedata/openfaas-lambda-result-streamer:", ReleaseVersion/binary>>;
+        ResultStreamerImage ->
+            str_utils:to_binary(ResultStreamerImage)
+    end.
 
 
 %%%===================================================================

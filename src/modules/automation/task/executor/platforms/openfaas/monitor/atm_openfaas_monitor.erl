@@ -135,7 +135,7 @@ start_service() ->
         {ok, _} ->
             ok;
         Error ->
-            ?debug("Failed to start atm_openfaas_monitor due to: ~p", [Error]),
+            ?critical("Failed to start atm_openfaas_monitor due to: ~p", [Error]),
             abort
     end.
 

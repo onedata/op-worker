@@ -13,8 +13,6 @@
 -author("Bartosz Walkowicz").
 
 -include("atm_workflow_execution_test.hrl").
--include("atm/atm_test_schema_drafts.hrl").
--include("modules/automation/atm_execution.hrl").
 
 -export([
     crash_atm_workflow_execution_during_prepare_lane_callback/0,
@@ -33,10 +31,6 @@
     crash_atm_workflow_execution_during_handle_exception_callback/0
 ]).
 
-
--define(INTEGER_DATA_SPEC, #atm_data_spec{type = atm_integer_type}).
-
--define(LAST_ITEM, 20).
 
 -define(ITERATED_STORE_SCHEMA_ID, <<"iterated_store_id">>).
 -define(TARGET_STORE_SCHEMA_ID, <<"target_store_id">>).
@@ -61,13 +55,14 @@
         revision_num = 1,
         revision = #atm_workflow_schema_revision_draft{
             stores = [
-                ?INTEGER_LIST_STORE_SCHEMA_DRAFT(?ITERATED_STORE_SCHEMA_ID, lists:seq(1, ?LAST_ITEM)),
-                ?INTEGER_LIST_STORE_SCHEMA_DRAFT(?TARGET_STORE_SCHEMA_ID)
+                ?INTEGER_ATM_LIST_STORE_SCHEMA_DRAFT(?ITERATED_STORE_SCHEMA_ID, lists:seq(1, 10)),
+                ?INTEGER_ATM_LIST_STORE_SCHEMA_DRAFT(?TARGET_STORE_SCHEMA_ID)
             ],
             lanes = [#atm_lane_schema_draft{
-                parallel_boxes = [#atm_parallel_box_schema_draft{tasks = [
-                    ?ATM_TASK_SCHEMA_DRAFT(<<"task0">>)
-                ]}],
+                parallel_boxes = [#atm_parallel_box_schema_draft{
+                    id = <<"pb0">>,
+                    tasks = [?ATM_TASK_SCHEMA_DRAFT(<<"task0">>)]
+                }],
                 store_iterator_spec = #atm_store_iterator_spec_draft{
                     store_schema_id = ?ITERATED_STORE_SCHEMA_ID
                 },
@@ -75,9 +70,9 @@
             }]
         },
         supplementary_lambdas = #{
-            ?ECHO_LAMBDA_ID => #{
-                ?ECHO_LAMBDA_REVISION_NUM => ?ECHO_LAMBDA_DRAFT(?INTEGER_DATA_SPEC, __RELAY_METHOD)
-            }
+            ?ECHO_LAMBDA_ID => #{?ECHO_LAMBDA_REVISION_NUM => ?ECHO_LAMBDA_DRAFT(
+                ?ATM_INTEGER_DATA_SPEC, __RELAY_METHOD
+            )}
         }
     }
 ).
@@ -87,6 +82,9 @@
 -define(ATM_WORKFLOW_SCHEMA_DRAFT,
     ?ATM_WORKFLOW_SCHEMA_DRAFT(?RAND_ELEMENT([return_value, file_pipe]))
 ).
+
+-define(PB0_SELECTOR(__ATM_LANE_RUN_SELECTOR), {__ATM_LANE_RUN_SELECTOR, <<"pb0">>}).
+-define(TASK0_SELECTOR(__ATM_LANE_RUN_SELECTOR), {__ATM_LANE_RUN_SELECTOR, <<"pb0">>, <<"task0">>}).
 
 
 %%%===================================================================
@@ -105,40 +103,33 @@ crash_atm_workflow_execution_during_prepare_lane_callback() ->
 
 crash_atm_workflow_execution_during_resume_lane_callback() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
-        provider = ?PROVIDER_SELECTOR,
-        user = ?USER_SELECTOR,
-        space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(return_value),
-        workflow_schema_revision_num = 1,
         incarnations = [
             #atm_workflow_execution_incarnation_test_spec{
                 incarnation_num = 1,
                 lane_runs = [#atm_lane_run_execution_test_spec{
                     selector = {1, 1},
                     handle_task_execution_stopped = #atm_step_mock_spec{
-                        before_step_hook = fun atm_workflow_execution_test_runner:pause_workflow_execution/1,
-                        before_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
-                            {true, expect_execution_stopping_while_processing_lane1(ExpState0, pause)}
-                        end,
-                        after_step_exp_state_diff = fun(#atm_mock_call_ctx{
-                            workflow_execution_exp_state = ExpState0,
-                            call_args = [_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId]
-                        }) ->
-                            {true, expect_lane1_pb_paused(AtmTaskExecutionId, ExpState0)}
-                        end
+                        before_step_hook = fun atm_workflow_execution_test_utils:pause_workflow_execution/1,
+                        before_step_exp_state_diff = [
+                            {task, ?TASK0_SELECTOR({1, 1}), stopping},
+                            {parallel_box, ?PB0_SELECTOR({1, 1}), stopping},
+                            {lane_run, {1, 1}, stopping},
+                            workflow_stopping
+                        ],
+                        after_step_exp_state_diff = [
+                            {task, ?TASK0_SELECTOR({1, 1}), paused},
+                            {parallel_box, ?PB0_SELECTOR({1, 1}), paused}
+                        ]
                     },
                     handle_lane_execution_stopped = #atm_step_mock_spec{
-                        after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState}) ->
-                            {true, atm_workflow_execution_exp_state_builder:expect_lane_run_paused({1, 1}, ExpState)}
-                        end
+                        after_step_exp_state_diff = [{lane_run, {1, 1}, paused}]
                     }
                 }],
                 handle_workflow_execution_stopped = #atm_step_mock_spec{
-                    after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
-                        {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_paused(ExpState0)}
-                    end
+                    after_step_exp_state_diff = [workflow_paused]
                 },
-                after_hook = fun atm_workflow_execution_test_runner:resume_workflow_execution/1
+                after_hook = fun atm_workflow_execution_test_utils:resume_workflow_execution/1
             },
             #atm_workflow_execution_incarnation_test_spec{
                 incarnation_num = 2,
@@ -146,31 +137,31 @@ crash_atm_workflow_execution_during_resume_lane_callback() ->
                     #atm_lane_run_execution_test_spec{
                         selector = {1, 1},
                         resume_lane = #atm_step_mock_spec{
-                            before_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
-                                ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_resuming({1, 1}, ExpState0),
-                                {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_resuming(ExpState1)}
-                            end,
+                            before_step_exp_state_diff = [
+                                {lane_run, {1, 1}, resuming},
+                                workflow_resuming
+                            ],
                             strategy = {yield, {error, crashed}},
                             after_step_exp_state_diff = no_diff
                         },
 
+                        % this is called as part of `handle_workflow_abruptly_stopped`
                         handle_lane_execution_stopped = #atm_step_mock_spec{
-                            % this is called as part of `handle_workflow_abruptly_stopped`
-                            after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
-                                {true, atm_workflow_execution_exp_state_builder:expect_lane_run_crashed({1, 1}, ExpState0)}
-                            end
+                            after_step_exp_state_diff = [{lane_run, {1, 1}, crashed}]
                         }
                     }
                 ],
                 handle_exception = #atm_step_mock_spec{
-                    after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
+                    after_step_exp_state_diff = [
                         % All paused tasks should be immediately transitioned to interrupted status omitting stopping status
-                        ExpState1 = atm_workflow_execution_exp_state_builder:expect_all_tasks_interrupted({1, 1}, ExpState0),
-                        ExpState2 = atm_workflow_execution_exp_state_builder:expect_lane_run_stopping({1, 1}, ExpState1),
-                        {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(ExpState2)}
-                    end
+                        {all_tasks, {1, 1}, interrupted},
+                        {lane_run, {1, 1}, stopping},
+                        workflow_stopping
+                    ]
                 },
-                handle_workflow_abruptly_stopped = atm_workflow_crashed_after_step_mock_spec(),
+                handle_workflow_abruptly_stopped = #atm_step_mock_spec{
+                    after_step_exp_state_diff = [workflow_crashed]
+                },
                 after_hook = fun assert_no_action_possible_on_crashed_atm_workflow_execution/1
             }
         ]
@@ -224,11 +215,7 @@ crash_atm_workflow_execution_during_handle_task_execution_stopped_callback() ->
 
 crash_atm_workflow_execution_during_handle_lane_execution_stopped_callback() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
-        provider = ?PROVIDER_SELECTOR,
-        user = ?USER_SELECTOR,
-        space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT,
-        workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,
             lane_runs = [#atm_lane_run_execution_test_spec{
@@ -249,16 +236,16 @@ crash_atm_workflow_execution_during_handle_lane_execution_stopped_callback() ->
                 }
             }],
             handle_exception = #atm_step_mock_spec{
-                after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
-                    ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_stopping({1, 1}, ExpState0),
-                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(ExpState1)}
-                end
+                after_step_exp_state_diff = [
+                    {lane_run, {1, 1}, stopping},
+                    workflow_stopping
+                ]
             },
             handle_workflow_abruptly_stopped = #atm_step_mock_spec{
-                after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
-                    ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_crashed({1, 1}, ExpState0),
-                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_crashed(ExpState1)}
-                end
+                after_step_exp_state_diff = [
+                    {lane_run, {1, 1}, crashed},
+                    workflow_crashed
+                ]
             },
             after_hook = fun assert_no_action_possible_on_crashed_atm_workflow_execution/1
         }]
@@ -267,11 +254,7 @@ crash_atm_workflow_execution_during_handle_lane_execution_stopped_callback() ->
 
 crash_atm_workflow_execution_during_handle_workflow_execution_stopped_callback() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
-        provider = ?PROVIDER_SELECTOR,
-        user = ?USER_SELECTOR,
-        space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT,
-        workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,
             lane_runs = [#atm_lane_run_execution_test_spec{
@@ -281,7 +264,9 @@ crash_atm_workflow_execution_during_handle_workflow_execution_stopped_callback()
                 strategy = {yield, {error, crashed}},
                 after_step_exp_state_diff = no_diff
             },
-            handle_workflow_abruptly_stopped = atm_workflow_crashed_after_step_mock_spec(),
+            handle_workflow_abruptly_stopped = #atm_step_mock_spec{
+                after_step_exp_state_diff = [workflow_crashed]
+            },
             after_hook = fun assert_no_action_possible_on_crashed_atm_workflow_execution/1
         }]
     }).
@@ -289,11 +274,7 @@ crash_atm_workflow_execution_during_handle_workflow_execution_stopped_callback()
 
 crash_atm_workflow_execution_during_handle_exception_callback() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
-        provider = ?PROVIDER_SELECTOR,
-        user = ?USER_SELECTOR,
-        space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT,
-        workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,
             lane_runs = [#atm_lane_run_execution_test_spec{
@@ -310,7 +291,9 @@ crash_atm_workflow_execution_during_handle_exception_callback() ->
             % Atm workflow execution should at least transition to crashed status even if
             % not all atm workflow execution components could be properly stopped
             % (they may be left e.g. active)
-            handle_workflow_abruptly_stopped = atm_workflow_crashed_after_step_mock_spec(),
+            handle_workflow_abruptly_stopped = #atm_step_mock_spec{
+                after_step_exp_state_diff = [workflow_crashed]
+            },
             after_hook = fun assert_no_action_possible_on_crashed_atm_workflow_execution/1
         }]
     }).
@@ -324,71 +307,43 @@ crash_atm_workflow_execution_during_handle_exception_callback() ->
 %% @private
 crash_atm_workflow_execution_test_base(Testcase, CrashingAtmLaneRunExecutionTestSpec) ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
-        provider = ?PROVIDER_SELECTOR,
-        user = ?USER_SELECTOR,
-        space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(Testcase, file_pipe),
-        workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,
             lane_runs = [CrashingAtmLaneRunExecutionTestSpec#atm_lane_run_execution_test_spec{
                 selector = {1, 1},
+                % this is called as part of `handle_workflow_abruptly_stopped`
                 handle_lane_execution_stopped = #atm_step_mock_spec{
-                    % this is called as part of `handle_workflow_abruptly_stopped`
-                    after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
-                        ExpState1 = atm_workflow_execution_exp_state_builder:expect_all_tasks_abruptly_interrupted(
-                            {1, 1}, ExpState0
-                        ),
-                        {true, atm_workflow_execution_exp_state_builder:expect_lane_run_crashed({1, 1}, ExpState1)}
-                    end
+                    after_step_exp_state_diff = [
+                        {all_tasks, {1, 1}, abruptly, interrupted},
+                        {lane_run, {1, 1}, crashed}
+                    ]
                 }
             }],
             handle_exception = #atm_step_mock_spec{
+                %% TODO VFS-9917 expectation per task ?
                 after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
-                    {true, expect_execution_stopping_while_processing_lane1(ExpState0, interrupt)}
+                    ExpState1 = atm_workflow_execution_exp_state_builder:expect_all_tasks_stopping_due_to({1, 1}, interrupt, ExpState0),
+                    ExpState2 = atm_workflow_execution_exp_state_builder:expect_lane_run_stopping({1, 1}, ExpState1),
+                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(ExpState2)}
                 end
             },
-            handle_workflow_abruptly_stopped = atm_workflow_crashed_after_step_mock_spec(),
+            handle_workflow_abruptly_stopped = #atm_step_mock_spec{
+                after_step_exp_state_diff = [workflow_crashed]
+            },
             after_hook = fun assert_no_action_possible_on_crashed_atm_workflow_execution/1
         }]
     }).
 
 
 %% @private
-atm_workflow_crashed_after_step_mock_spec() ->
-    #atm_step_mock_spec{
-        after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
-            {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_crashed(ExpState0)}
-        end
-    }.
-
-
-%% @private
-expect_execution_stopping_while_processing_lane1(ExpState0, Reason) ->
-    ExpState1 = atm_workflow_execution_exp_state_builder:expect_all_tasks_stopping({1, 1}, Reason, ExpState0),
-    ExpState2 = atm_workflow_execution_exp_state_builder:expect_lane_run_stopping({1, 1}, ExpState1),
-    atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(ExpState2).
-
-
-%% @private
-expect_lane1_pb_paused(AtmTaskExecutionId, ExpState0) ->
-    atm_workflow_execution_exp_state_builder:expect_task_parallel_box_transitioned_to_inferred_status(
-        AtmTaskExecutionId,
-        % lane2 parallel boxes have only single task and as such their final status
-        % will be the same as that of their respective task
-        fun(_, _) -> <<"paused">> end,
-        atm_workflow_execution_exp_state_builder:expect_task_paused(AtmTaskExecutionId, ExpState0)
-    ).
-
-
-%% @private
 assert_no_action_possible_on_crashed_atm_workflow_execution(AtmMockCallCtx) ->
-    atm_workflow_execution_test_runner:assert_ended_atm_workflow_execution_can_be_neither_stopped_nor_resumed(
+    atm_workflow_execution_test_utils:assert_ended_workflow_execution_can_be_neither_stopped_nor_resumed(
         AtmMockCallCtx
     ),
 
     lists:foreach(fun({RepeatType, ExpError}) ->
-        ?assertThrow(ExpError, atm_workflow_execution_test_runner:repeat_workflow_execution(
+        ?assertThrow(ExpError, atm_workflow_execution_test_utils:repeat_workflow_execution(
             RepeatType, {1, 1}, AtmMockCallCtx
         ))
     end, [

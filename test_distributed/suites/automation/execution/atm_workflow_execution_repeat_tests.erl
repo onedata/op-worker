@@ -70,7 +70,7 @@
                         id = <<"pb1">>,
                         tasks = [?ECHO_MEASUREMENTS_TASK_SCHEMA_DRAFT(
                             <<"lane1_task1">>,
-                            ?CORRECT_ATM_TIME_SERIES_DISPATCH_RULES
+                            ?CORRECT_ATM_TS_DISPATCH_RULES
                         )]
                     }],
                     store_iterator_spec = #atm_store_iterator_spec_draft{
@@ -90,7 +90,7 @@
                                     target_ts_name_generator = ?MISSING_TS_NAME_GENERATOR,
                                     prefix_combiner = overwrite
                                 }
-                                | ?CORRECT_ATM_TIME_SERIES_DISPATCH_RULES
+                                | ?CORRECT_ATM_TS_DISPATCH_RULES
                             ]
                         )]
                     }],
@@ -120,13 +120,9 @@
 % Retrying finished lane run should fail while rerunning it should succeed
 repeat_finished_atm_lane_run_execution() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
-        provider = ?PROVIDER_SELECTOR,
-        user = ?USER_SELECTOR,
-        space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
             gen_time_series_measurements(), return_value
         ),
-        workflow_schema_revision_num = 1,
         incarnations = [
             #atm_workflow_execution_incarnation_test_spec{
                 incarnation_num = 1,
@@ -144,7 +140,7 @@ repeat_finished_atm_lane_run_execution() ->
                 },
                 after_hook = fun(AtmMockCallCtx) ->
                     assert_not_retriable({1, 1}, AtmMockCallCtx),
-                    ?assertEqual(ok, atm_workflow_execution_test_runner:repeat_workflow_execution(
+                    ?assertEqual(ok, atm_workflow_execution_test_utils:repeat_workflow_execution(
                         rerun, {1, 1}, AtmMockCallCtx
                     ))
                 end
@@ -190,13 +186,9 @@ retry_failed_iterated_atm_lane_run_execution() ->
 
 repeat_failed_iterated_atm_lane_run_execution_test_base(TestCase, RepeatType) ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
-        provider = ?PROVIDER_SELECTOR,
-        user = ?USER_SELECTOR,
-        space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
             TestCase, gen_time_series_measurements(), return_value
         ),
-        workflow_schema_revision_num = 1,
         incarnations = [
             #atm_workflow_execution_incarnation_test_spec{
                 incarnation_num = 1,
@@ -213,7 +205,7 @@ repeat_failed_iterated_atm_lane_run_execution_test_base(TestCase, RepeatType) ->
                     end
                 },
                 after_hook = fun(AtmMockCallCtx) ->
-                    ?assertEqual(ok, atm_workflow_execution_test_runner:repeat_workflow_execution(
+                    ?assertEqual(ok, atm_workflow_execution_test_utils:repeat_workflow_execution(
                         RepeatType, {2, 1}, AtmMockCallCtx
                     ))
                 end
@@ -257,13 +249,9 @@ repeat_failed_iterated_atm_lane_run_execution_test_base(TestCase, RepeatType) ->
 % Retrying failed while preparing lane run should fail while rerunning it should succeed
 repeat_failed_while_preparing_atm_lane_run_execution() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
-        provider = ?PROVIDER_SELECTOR,
-        user = ?USER_SELECTOR,
-        space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
             gen_time_series_measurements(), return_value
         ),
-        workflow_schema_revision_num = 1,
         incarnations = [
             #atm_workflow_execution_incarnation_test_spec{
                 incarnation_num = 1,
@@ -304,7 +292,7 @@ repeat_failed_while_preparing_atm_lane_run_execution() ->
                 },
                 after_hook = fun(AtmMockCallCtx) ->
                     assert_not_retriable({1, 1}, AtmMockCallCtx),
-                    ?assertEqual(ok, atm_workflow_execution_test_runner:repeat_workflow_execution(
+                    ?assertEqual(ok, atm_workflow_execution_test_utils:repeat_workflow_execution(
                         rerun, {1, 1}, AtmMockCallCtx
                     ))
                 end
@@ -347,13 +335,9 @@ repeat_failed_not_iterated_atm_lane_run_execution() ->
         {2, 2}
     ),
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
-        provider = ?PROVIDER_SELECTOR,
-        user = ?USER_SELECTOR,
-        space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
             gen_time_series_measurements(), file_pipe
         ),
-        workflow_schema_revision_num = 1,
         incarnations = [
             #atm_workflow_execution_incarnation_test_spec{
                 incarnation_num = 1,
@@ -371,7 +355,7 @@ repeat_failed_not_iterated_atm_lane_run_execution() ->
                 },
                 after_hook = fun(AtmMockCallCtx) ->
                     assert_not_retriable({1, 1}, AtmMockCallCtx),
-                    ?assertEqual(ok, atm_workflow_execution_test_runner:repeat_workflow_execution(
+                    ?assertEqual(ok, atm_workflow_execution_test_utils:repeat_workflow_execution(
                         rerun, {2, 1}, AtmMockCallCtx
                     ))
                 end
@@ -403,13 +387,9 @@ repeat_failed_not_iterated_atm_lane_run_execution() ->
 % Retrying cancelled lane run should fail while rerunning it should succeed
 repeat_cancelled_atm_lane_run_execution() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
-        provider = ?PROVIDER_SELECTOR,
-        user = ?USER_SELECTOR,
-        space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
             gen_time_series_measurements(), return_value
         ),
-        workflow_schema_revision_num = 1,
         incarnations = [
             #atm_workflow_execution_incarnation_test_spec{
                 incarnation_num = 1,
@@ -423,7 +403,7 @@ repeat_cancelled_atm_lane_run_execution() ->
                                 )}
                             end,
                             after_step_hook = fun(AtmMockCallCtx) ->
-                                atm_workflow_execution_test_runner:cancel_workflow_execution(AtmMockCallCtx)
+                                atm_workflow_execution_test_utils:cancel_workflow_execution(AtmMockCallCtx)
                             end,
                             after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
                                 ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_created({1, 1}, ExpState0),
@@ -460,7 +440,7 @@ repeat_cancelled_atm_lane_run_execution() ->
                 },
                 after_hook = fun(AtmMockCallCtx) ->
                     assert_not_retriable({1, 1}, AtmMockCallCtx),
-                    ?assertEqual(ok, atm_workflow_execution_test_runner:repeat_workflow_execution(
+                    ?assertEqual(ok, atm_workflow_execution_test_utils:repeat_workflow_execution(
                         rerun, {1, 1}, AtmMockCallCtx
                     ))
                 end
@@ -510,7 +490,7 @@ repeat_cancelled_atm_lane_run_execution() ->
 assert_not_retriable(AtmLaneRunSelector, AtmMockCallCtx) ->
     ?assertThrow(
         ?ERROR_ATM_LANE_EXECUTION_RETRY_FAILED,
-        atm_workflow_execution_test_runner:repeat_workflow_execution(retry, AtmLaneRunSelector, AtmMockCallCtx)
+        atm_workflow_execution_test_utils:repeat_workflow_execution(retry, AtmLaneRunSelector, AtmMockCallCtx)
     ).
 
 
@@ -621,7 +601,7 @@ build_failed_atm_lane_run_execution_test_spec(AtmLaneRunSelector, IsLastExpLaneR
                     true ->
                         {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(
                             atm_workflow_execution_exp_state_builder:expect_lane_run_stopping(
-                                AtmLaneRunSelector, atm_workflow_execution_exp_state_builder:expect_all_tasks_stopping(
+                                AtmLaneRunSelector, atm_workflow_execution_exp_state_builder:expect_all_tasks_stopping_due_to(
                                     AtmLaneRunSelector, interrupt, ExpState
                                 )
                             )
