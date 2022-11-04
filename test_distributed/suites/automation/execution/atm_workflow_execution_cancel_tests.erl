@@ -96,6 +96,13 @@
     ?FUNCTION_NAME, ?RAND_INT(5, 10), return_value)
 ).
 
+-define(TASK1_SELECTOR(__ATM_LANE_RUN_SELECTOR), {__ATM_LANE_RUN_SELECTOR, <<"pb1">>, <<"task1">>}).
+-define(TASK2_SELECTOR(__ATM_LANE_RUN_SELECTOR), {__ATM_LANE_RUN_SELECTOR, <<"pb1">>, <<"task2">>}).
+-define(TASK3_SELECTOR(__ATM_LANE_RUN_SELECTOR), {__ATM_LANE_RUN_SELECTOR, <<"pb2">>, <<"task3">>}).
+
+-define(PB1_SELECTOR(__ATM_LANE_RUN_SELECTOR), {__ATM_LANE_RUN_SELECTOR, <<"pb1">>}).
+-define(PB2_SELECTOR(__ATM_LANE_RUN_SELECTOR), {__ATM_LANE_RUN_SELECTOR, <<"pb2">>}).
+
 
 %%%===================================================================
 %%% Tests
@@ -194,6 +201,16 @@ cancel_active_atm_workflow_execution_with_uncorrelated_task_results() ->
 cancel_active_atm_workflow_execution_test_base(Testcase, RelayMethod) ->
     ItemCount = 40,
 
+    UpdateTaskStatusAfterPauseFun = fun(ExpTaskState = #{
+        <<"itemsInProcessing">> := IIP,
+        <<"itemsProcessed">> := IP
+    }) ->
+        ExpTaskState#{<<"status">> => case IIP + IP of
+            0 -> <<"cancelled">>;
+            _ -> <<"stopping">>
+        end}
+    end,
+
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         workflow_schema_dump_or_draft = ?ECHO_ATM_WORKFLOW_SCHEMA_DRAFT(Testcase, ItemCount, RelayMethod),
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
@@ -222,11 +239,20 @@ cancel_active_atm_workflow_execution_test_base(Testcase, RelayMethod) ->
                         %   transition to 'cancelled' if no item was scheduled).
                         % - task3 transitions to 'cancelled' as definitely no item was scheduled for it.
                         before_step_hook = fun atm_workflow_execution_test_utils:cancel_workflow_execution/1,
-                        before_step_exp_state_diff = [
-                            {all_tasks, {1, 1}, stopping_due_to, cancel},  %% TODO VFS-9917 expectation per task ?
+                        before_step_exp_state_diff = lists:flatten([
+                            % task1 or task2 transitions to 'stopping' status as for at least one of them some
+                            % items were scheduled
+                            {task, ?TASK1_SELECTOR({1, 1}), UpdateTaskStatusAfterPauseFun},
+                            {task, ?TASK2_SELECTOR({1, 1}), UpdateTaskStatusAfterPauseFun},
+                            {parallel_box, ?PB1_SELECTOR({1, 1}), stopping},
+
+                            % task3 immediately transitions to 'paused' as definitely no item was scheduled for it
+                            {task, ?TASK3_SELECTOR({1, 1}), cancelled},
+                            {parallel_box, ?PB2_SELECTOR({1, 1}), cancelled},
+
                             {lane_run, {1, 1}, stopping},
                             workflow_stopping
-                        ]
+                        ])
                     },
                     handle_task_execution_stopped = #atm_step_mock_spec{
                         % Assert not all items were processed by tasks

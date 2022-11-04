@@ -148,6 +148,7 @@
         task, atm_task_execution:id() | task_selector(),
         parallel_box_transitioned_to_inferred_status, parallel_box_status_infer_fun()
     } |
+    {task, atm_task_execution:id() | task_selector(), fun((task_execution_state()) -> task_execution_state())} |
     {all_tasks, atm_lane_execution:lane_run_selector(), atm_task_execution:status()} |
     {all_tasks, atm_lane_execution:lane_run_selector(), abruptly, failed | cancelled | interrupted} |
     {all_tasks, atm_lane_execution:lane_run_selector(), stopping_due_to, pause | interrupt | cancel} |
@@ -277,6 +278,10 @@ expect(
 ) ->
     AtmTaskExecutionId = resolve_task_id(AtmTaskExecutionIdOrSelector, ExpStateCtx),
     expect_task_parallel_box_transitioned_to_inferred_status(AtmTaskExecutionId, InferStatusFun, ExpStateCtx);
+
+expect(ExpStateCtx, {task, AtmTaskExecutionIdOrSelector, ExpTaskStateDiff}) when is_function(ExpTaskStateDiff, 1) ->
+    AtmTaskExecutionId = resolve_task_id(AtmTaskExecutionIdOrSelector, ExpStateCtx),
+    update_task_execution_exp_state(AtmTaskExecutionId, ExpTaskStateDiff, ExpStateCtx);
 
 expect(ExpStateCtx, {all_tasks, AtmLaneRunSelector, ExpStatus}) when
     ExpStatus =:= resuming;
