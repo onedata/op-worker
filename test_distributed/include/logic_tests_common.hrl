@@ -217,7 +217,7 @@ end).
 % Mocked atm_lambda data
 -define(ATM_LAMBDA_DATA_SPEC,
     #atm_data_spec{
-        type = atm_archive_type,
+        type = atm_integer_type,
         value_constraints = #{}
     }
 ).
@@ -251,7 +251,7 @@ end).
         memory_requested = 1000000000, memory_limit = 5000000000,
         ephemeral_storage_requested = 1000000000, ephemeral_storage_limit = 5000000000
     },
-    checksum = <<"3f6d7839f3388d4f214064937e0ee66d">>,
+    checksum = <<"d2b23c06fcc8e5e6bee32016503bd71f">>,
     state = stable
 }).
 -define(ATM_LAMBDA_REVISION_REGISTRY_VALUE(__AtmLambda), #atm_lambda_revision_registry{
