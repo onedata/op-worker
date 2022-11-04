@@ -374,6 +374,16 @@ CHANGELOG
     Onepanel GUI to show censored values instead of hiding them
     completely.
 
+### 20.02.19
+
+-   **VFS-9926** Web GUI: Opening Oneprovider view in Onezone GUI when
+    entering Oneprovider domain.
+-   **VFS-9730** Improve handling of api caveats related to API
+    operations concerning other components than Onezone - in some cases,
+    tokens with such caveats could be treated as invalid.
+-   **VFS-10012** Web GUI: Fixed hanging file upload bug when multiple
+    uploads have been scheduled.
+
 ### 20.02.18
 
 ### 20.02.17
