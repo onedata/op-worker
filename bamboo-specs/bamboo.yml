@@ -304,7 +304,7 @@ Build:
         interpreter: BINSH_OR_CMDEXE
         scripts:
           - |-
-            if [ ${bamboo_planRepository_branch} != "develop" ]; then
+            if [[ ${bamboo_planRepository_branch} != "develop" && ! ${bamboo_planRepository_branch} =~ ^release/.* ]]; then
               if [ -z ${bamboo_ManualBuildTriggerReason_userName+x} ]; then
                 echo "===========================================================================================================" >&2
                 echo "CAUTION: This branch (${bamboo_planRepository_branch}) should be run manually!" >&2
