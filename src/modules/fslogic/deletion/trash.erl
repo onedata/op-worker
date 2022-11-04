@@ -84,7 +84,7 @@ move_to_trash(FileCtx, UserCtx) ->
     permissions_cache:invalidate(),
     fslogic_event_emitter:emit_file_renamed_no_exclude(
         FileCtx5, ParentGuid, TrashGuid, NameInTrash, Name),
-    FileCtx5.
+    file_ctx:reset(FileCtx5). % file_meta document and parent cached in file_ctx are invalid
 
 
 %%--------------------------------------------------------------------

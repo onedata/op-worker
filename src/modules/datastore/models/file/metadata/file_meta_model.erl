@@ -401,13 +401,6 @@ resolve_conflict(_Ctx,
     invalidate_effective_caches_if_moved(NewDoc, PrevDoc),
     invalidate_dataset_eff_cache_if_needed(NewDoc, PrevDoc),
     spawn(fun() ->
-        case file_meta:is_deleted(NewDoc) andalso not file_meta:is_deleted(PrevDoc) of
-            true ->
-                dir_size_stats:report_file_deleted(Type, file_id:pack_guid(NewParentUuid, SpaceId));
-            false ->
-                ok
-        end,
-
         timer:sleep(200), % Invalidation of cache must occur after doc is saved
         invalidate_qos_bounded_cache_if_moved_to_trash(NewDoc, PrevDoc),
 
@@ -419,12 +412,27 @@ resolve_conflict(_Ctx,
                 paths_cache:invalidate_on_all_nodes(SpaceId),
                 permissions_cache:invalidate(),
                 fslogic_event_emitter:emit_file_renamed_no_exclude(
-                    FileCtx, OldParentGuid, NewParentGuid, NewName, PrevName);
+                    FileCtx, OldParentGuid, NewParentGuid, NewName, PrevName),
+
+                case NewParentUuid =/= PrevParentUuid of
+                    true ->
+                        dir_stats_collector:report_file_moved(Type, file_ctx:get_logical_guid_const(FileCtx),
+                            OldParentGuid, NewParentGuid);
+                    false ->
+                        ok
+                end;
             false ->
                 case (Mode =/= PrevMode) orelse (Acl =/= PrevAcl) orelse (Shares =/= PrevShares) of
                     true -> permissions_cache:invalidate();
                     false -> ok
                 end
+        end,
+
+        case file_meta:is_deleted(NewDoc) andalso not file_meta:is_deleted(PrevDoc) of
+            true ->
+                dir_size_stats:report_file_deleted(Type, file_id:pack_guid(NewParentUuid, SpaceId));
+            false ->
+                ok
         end,
 
         case (Mode =/= PrevMode) orelse (Acl =/= PrevAcl) of
