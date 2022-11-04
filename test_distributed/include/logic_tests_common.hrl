@@ -217,7 +217,7 @@ end).
 % Mocked atm_lambda data
 -define(ATM_LAMBDA_DATA_SPEC,
     #atm_data_spec{
-        type = atm_archive_type,
+        type = atm_integer_type,
         value_constraints = #{}
     }
 ).
