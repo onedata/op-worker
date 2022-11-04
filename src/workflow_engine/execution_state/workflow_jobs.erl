@@ -23,7 +23,7 @@
     schedule_resume_of_job/2, mark_ongoing_job_finished/2, register_failure/2,
     register_async_job_finish/3, prepare_next_parallel_box/4,
     get_identfiers_for_next_parallel_boxes/3, has_ongoing_jobs/1, get_all_async_cached_result_ids/1,
-    get_waiting_or_ongoing_tasks_indexes/1, dump/1, from_dump/2, get_dump_struct/0]).
+    get_waiting_or_ongoing_tasks_indexes/1, dump/1, from_dump/2, get_dump_struct/0, fix_resumed_indexes/3]).
 %% Functions returning/updating pending_async_jobs field
 -export([register_async_call/4, check_timeouts/1, reset_keepalive_timer/2]).
 %% Functions operating on job_identifier record
@@ -348,6 +348,25 @@ get_dump_struct() ->
         ]}]},
         {failed, [integer]}
     ]}.
+
+
+-spec fix_resumed_indexes(jobs(), workflow_execution_state:boxes_map(),
+    workflow_execution_state_dump:task_index_map()) -> jobs().
+fix_resumed_indexes(#workflow_jobs{waiting = Waiting}, BoxesSpec, OriginalIndexMap) ->
+    TaskIdsToIndexes = maps:fold(fun(BoxIndex, BoxSpec, ExternalAcc) ->
+        maps:fold(fun(TaskIndex, {TaskId, _}, InternalAcc) ->
+            InternalAcc#{TaskId => {BoxIndex, TaskIndex}}
+        end, ExternalAcc, BoxSpec)
+    end, #{}, BoxesSpec),
+
+    MappedWaiting = gb_sets:from_ordset(lists:sort(lists:map(
+        fun(#job_identifier{parallel_box_index = BoxIndex, task_index = TaskIndex} = Identifier) ->
+            {NewBoxIndex, NewTaskIndex} = maps:get(maps:get({BoxIndex, TaskIndex}, OriginalIndexMap), TaskIdsToIndexes),
+            Identifier#job_identifier{parallel_box_index = NewBoxIndex, task_index = NewTaskIndex}
+        end, gb_sets:to_list(Waiting)))),
+
+    #workflow_jobs{waiting = MappedWaiting}.
+
 
 %%%===================================================================
 %%% Functions returning/updating pending_async_jobs field

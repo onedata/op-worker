@@ -1272,8 +1272,9 @@
     lane_status :: ?PREPARED | ?NOT_PREPARED,
     failed_job_count = 0 :: non_neg_integer(),
 
-    iteration_state_dump = workflow_iteration_state:dump(),
-    jobs_dump = workflow_jobs:dump()
+    iteration_state_dump :: workflow_iteration_state:dump(),
+    jobs_dump :: workflow_jobs:dump(),
+    task_index_map :: workflow_execution_state_dump:task_index_map_as_list()
 }).
 
 -record(workflow_async_call_pool, {

@@ -505,7 +505,7 @@ resume_atm_workflow_execution_suspended_after_some_tasks_finished_test_base(Test
                 incarnation_num = 2,
                 lane_runs = [
                     ResumedLaneRunBaseTestSpec#atm_lane_run_execution_test_spec{
-                        prepare_lane = #atm_step_mock_spec{     %% TODO MW why prepare_lane instead of resume_lane ????
+                        resume_lane = #atm_step_mock_spec{
                             before_step_exp_state_diff = [
                                 {lane_run, {1, 2}, resuming},
                                 workflow_resuming
