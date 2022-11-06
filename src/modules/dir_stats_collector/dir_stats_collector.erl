@@ -271,11 +271,14 @@ delete_stats(Guid, CollectionType) ->
     % TODO VFS-9204 - delete from collector memory for collections_initialization status
     case dir_stats_service_state:is_active(file_id:guid_to_space_id(Guid)) of
         true ->
-            case request_flush(Guid, CollectionType, prune_flushed) of
-                ok -> CollectionType:delete(Guid);
-                ?ERROR_DIR_STATS_NOT_READY -> CollectionType:delete(Guid);
-                ?ERROR_INTERNAL_SERVER_ERROR -> ?ERROR_INTERNAL_SERVER_ERROR
-            end;
+            % TODO VFS-9204 - deletion of stat docs results in races when file is deleted via trash in
+            % multiprovider environment (collection is deleted before doc move to trash handling)
+            ok;
+%%            case request_flush(Guid, CollectionType, prune_flushed) of
+%%                ok -> CollectionType:delete(Guid);
+%%                ?ERROR_DIR_STATS_NOT_READY -> CollectionType:delete(Guid);
+%%                ?ERROR_INTERNAL_SERVER_ERROR -> ?ERROR_INTERNAL_SERVER_ERROR
+%%            end;
         false ->
             CollectionType:delete(Guid)
     end.
