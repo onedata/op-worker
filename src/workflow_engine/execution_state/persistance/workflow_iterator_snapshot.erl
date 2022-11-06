@@ -46,8 +46,17 @@ save(ExecutionId, LaneIndex, LaneId, ItemIndex, Iterator, NextLaneId) ->
     Record = #workflow_iterator_snapshot{lane_index = LaneIndex, lane_id = LaneId,
         item_index = ItemIndex, iterator = Iterator, next_lane_id = NextLaneId},
     Diff = fun
-        (ExistingRecord = #workflow_iterator_snapshot{lane_index = SavedLaneIndex, item_index = SavedItemIndex}) when
-            SavedLaneIndex < LaneIndex orelse (SavedLaneIndex == LaneIndex andalso SavedItemIndex < ItemIndex) ->
+        (ExistingRecord = #workflow_iterator_snapshot{
+            lane_index = SavedLaneIndex,
+            item_index = SavedItemIndex,
+            iterator = SavedIterator
+        }) when
+            SavedLaneIndex < LaneIndex orelse
+            (SavedLaneIndex == LaneIndex andalso (
+                SavedItemIndex < ItemIndex orelse
+                (SavedItemIndex == ItemIndex andalso SavedIterator =:= undefined andalso Iterator =/= undefined)
+            ))
+        ->
             {ok, ExistingRecord#workflow_iterator_snapshot{lane_index = LaneIndex, lane_id = LaneId,
                 item_index = ItemIndex, iterator = Iterator, next_lane_id = NextLaneId}};
         (_) ->

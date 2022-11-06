@@ -102,7 +102,7 @@
 
 %% Record used as an return value from lambda call
 -record(atm_lambda_output, {
-    results_batch :: [atm_task_executor:job_results()]
+    results_batch :: undefined | [undefined | atm_task_executor:job_results()]
 }).
 
 
@@ -174,14 +174,6 @@
 % Record expressing the push message sent to lambda result streamers to
 % cue their finalization (flushing of all results and deregistering)
 -record(atm_openfaas_result_streamer_finalization_signal, {
-}).
-
-% Record expressing OpenFaaS service configuration
--record(atm_openfaas_config, {
-    url :: binary(),
-    basic_auth :: binary(),
-    function_namespace :: binary(),
-    activity_feed_secret :: binary()
 }).
 
 %% Atm data types related macros

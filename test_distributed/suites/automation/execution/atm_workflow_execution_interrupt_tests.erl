@@ -51,8 +51,8 @@
         revision_num = 1,
         revision = #atm_workflow_schema_revision_draft{
             stores = [
-                ?INTEGER_LIST_STORE_SCHEMA_DRAFT(?ITERATED_STORE_SCHEMA_ID, lists:seq(1, ?LAST_ITEM)),
-                ?INTEGER_LIST_STORE_SCHEMA_DRAFT(?TARGET_STORE_SCHEMA_ID)
+                ?INTEGER_ATM_LIST_STORE_SCHEMA_DRAFT(?ITERATED_STORE_SCHEMA_ID, lists:seq(1, ?LAST_ITEM)),
+                ?INTEGER_ATM_LIST_STORE_SCHEMA_DRAFT(?TARGET_STORE_SCHEMA_ID)
             ],
             lanes = [
                 #atm_lane_schema_draft{
@@ -99,11 +99,7 @@
 
 interrupt_ongoing_atm_workflow_execution_due_to_expired_session() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
-        provider = ?PROVIDER_SELECTOR,
-        user = ?USER_SELECTOR,
-        space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(return_value),
-        workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,
             lane_runs = [
@@ -123,7 +119,7 @@ interrupt_ongoing_atm_workflow_execution_due_to_expired_session() ->
                                     passthrough
                             end
                         end,
-                        after_step_hook = fun atm_workflow_execution_test_runner:delete_offline_session/1
+                        after_step_hook = fun atm_workflow_execution_test_utils:delete_offline_session/1
                     },
 
                     handle_lane_execution_stopped = #atm_step_mock_spec{
@@ -158,6 +154,6 @@ interrupt_ongoing_atm_workflow_execution_due_to_expired_session() ->
 
 %% @private
 expect_execution_stopping_while_processing_lane2(ExpState0, Reason) ->
-    ExpState1 = atm_workflow_execution_exp_state_builder:expect_all_tasks_stopping({2, 1}, Reason, ExpState0),
+    ExpState1 = atm_workflow_execution_exp_state_builder:expect_all_tasks_stopping_due_to({2, 1}, Reason, ExpState0),
     ExpState2 = atm_workflow_execution_exp_state_builder:expect_lane_run_stopping({2, 1}, ExpState1),
     atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(ExpState2).

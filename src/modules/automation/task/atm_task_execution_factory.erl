@@ -223,10 +223,13 @@ create_time_series_store(CreationCtx = #creation_ctx{
     },
     execution_components = ExecutionComponents
 }) ->
-    OriginAtmTaskTSStoreId = atm_parallel_box_execution:get_task_id(
+    OriginAtmTaskExecutionId = atm_parallel_box_execution:get_task_id(
         AtmTaskSchemaId,
         lists:nth(AtmParallelBoxIndex, OriginAtmParallelBoxExecutions)
     ),
+    {ok, #document{value = OriginAtmTaskExecution}} = atm_task_execution:get(OriginAtmTaskExecutionId),
+
+    OriginAtmTaskTSStoreId = OriginAtmTaskExecution#atm_task_execution.time_series_store_id,
     #document{key = AtmTaskTSStoreId} = atm_store_api:copy(OriginAtmTaskTSStoreId, false),
 
     CreationCtx#creation_ctx{execution_components = ExecutionComponents#execution_components{

@@ -14,6 +14,8 @@
 
 
 -include("atm/atm_test_schema.hrl").
+-include("atm/atm_test_schema_drafts.hrl").
+-include("atm/atm_test_store.hrl").
 -include("atm_workflow_execution_test_runner.hrl").
 -include("onenv_test_utils.hrl").
 -include_lib("ctool/include/automation/automation.hrl").
@@ -22,17 +24,21 @@
 -include_lib("onenv_ct/include/oct_background.hrl").
 
 
-% provider on which workflows shall be executed
--define(PROVIDER_SELECTOR, krakow).
-
-% space in which workflows shall be executed
--define(SPACE_SELECTOR, space_krk).
-
-% test inventory member with limited privileges
--define(USER_SELECTOR, user2).
-
-
 -define(STOPPING_REASONS, [crash, cancel, failure, interrupt, pause]).
+
+
+% Lane run scheduled to prepare in advance but deferred until workflow execution stopped - should immediately fail
+-define(UNSCHEDULED_LANE_RUN_TEST_SPEC(__LANE_RUN_SELECTOR, __DEFER_AFTER), #atm_lane_run_execution_test_spec{
+    selector = __LANE_RUN_SELECTOR,
+    prepare_lane = #atm_step_mock_spec{
+        defer_after = __DEFER_AFTER,
+        after_step_exp_state_diff = no_diff
+    }
+}).
+
+
+-define(TASK_ID_PLACEHOLDER, <<"task_placeholder">>).
+-define(PB_SELECTOR_PLACEHOLDER, {{0, 0}, <<"pb_plaholder">>}).
 
 
 -endif.

@@ -34,6 +34,12 @@
 }).
 
 
+-type task_index_map() ::
+    #{{workflow_execution_state:index(), workflow_execution_state:index()} => workflow_engine:task_id()}.
+-type task_index_map_as_list() ::
+    [{{workflow_execution_state:index(), workflow_execution_state:index()}, workflow_engine:task_id()}].
+-export_type([task_index_map/0, task_index_map_as_list/0]).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -48,7 +54,7 @@ dump_workflow_execution_state(ExecutionId) ->
 
             iteration_state = IterationState,
             jobs = Jobs
-        }} ->
+        } = State} ->
             TranslatedStatus = case Status of
                 ?PREPARATION_FAILED -> ?NOT_PREPARED;
                 #execution_cancelled{has_lane_preparation_failed = true} -> ?NOT_PREPARED;
@@ -61,7 +67,8 @@ dump_workflow_execution_state(ExecutionId) ->
                 failed_job_count = FailedCount,
 
                 iteration_state_dump = workflow_iteration_state:dump(IterationState),
-                jobs_dump = workflow_jobs:dump(Jobs)
+                jobs_dump = workflow_jobs:dump(Jobs),
+                task_index_map = prepare_task_index_map(workflow_execution_state:get_boxes_map(State))
             }},
             {ok, _} = datastore_model:save(?CTX, Doc),
             ok;
@@ -83,10 +90,11 @@ restore_workflow_execution_state_from_dump(
             failed_job_count = FailedCount,
 
             iteration_state_dump = IterationStateDump,
-            jobs_dump = JobsDump
+            jobs_dump = JobsDump,
+            task_index_map = TaskIndexMap
         }}} ->
             TranslatedStatus = case LaneStatus of
-                ?PREPARED -> ?RESUMING_FROM_DUMP(Iterator);
+                ?PREPARED -> ?RESUMING_FROM_DUMP(Iterator, maps:from_list(TaskIndexMap));
                 ?NOT_PREPARED -> ?NOT_PREPARED
             end,
 
@@ -137,5 +145,19 @@ get_record_struct(1) ->
         {failed_job_count, integer},
 
         {iteration_state, workflow_iteration_state:get_dump_struct()},
-        {jobs, workflow_jobs:get_dump_struct()}
+        {jobs, workflow_jobs:get_dump_struct()},
+        {task_index_map, [{{integer, integer}, string}]}
     ]}.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+-spec prepare_task_index_map(workflow_execution_state:boxes_map()) -> task_index_map_as_list().
+prepare_task_index_map(BoxesMap) ->
+    maps:fold(fun(BoxIndex, BoxSpec, ExternalAcc) ->
+        maps:fold(fun(TaskIndex, {TaskId, _}, InternalAcc) ->
+            [{{BoxIndex, TaskIndex}, TaskId} | InternalAcc]
+        end, ExternalAcc, BoxSpec)
+    end, [], BoxesMap).

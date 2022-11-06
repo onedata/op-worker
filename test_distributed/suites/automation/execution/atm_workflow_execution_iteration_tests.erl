@@ -14,8 +14,6 @@
 -author("Bartosz Walkowicz").
 
 -include("atm_workflow_execution_test.hrl").
--include("atm/atm_test_schema_drafts.hrl").
--include("modules/automation/atm_execution.hrl").
 
 -export([
     iterate_over_list_store/0,
@@ -47,52 +45,42 @@
 }).
 -type iterate_over_file_store_test_spec() :: #iterate_over_file_store_test_spec{}.
 
--define(FOREACH_TASK_DRAFT(__ID, __LAMBDA_ID, __LAMBDA_REVISION_NUM), #atm_task_schema_draft{
+-define(ITERATED_STORE_SCHEMA_ID, <<"iterated_st">>).
+
+-define(ATM_FILE_DATA_SPEC, #atm_data_spec{type = atm_file_type}).
+
+-define(FOREACH_TASK_DRAFT(__ID), #atm_task_schema_draft{
     id = __ID,
-    lambda_id = __LAMBDA_ID,
-    lambda_revision_number = __LAMBDA_REVISION_NUM,
-    argument_mappings = [#atm_task_schema_argument_mapper{
-        argument_name = <<"value">>,
-        value_builder = #atm_task_argument_value_builder{
-            type = iterated_item,
-            recipe = undefined
-        }
-    }],
+    lambda_id = ?ECHO_LAMBDA_ID,
+    lambda_revision_number = ?ECHO_LAMBDA_REVISION_NUM,
+    argument_mappings = [?ITERATED_ITEM_ARG_MAPPER(?ECHO_ARG_NAME)],
     result_mappings = []
 }).
 
 -define(FOREACH_WORKFLOW_SCHEMA_DRAFT(
-    __TESTCASE, __STORE_TYPE, __STORE_CONFIG, __DEFAULT_INITIAL_CONTENT, __ITERATED_ITEM_DATA_SPEC
+    __TESTCASE, __ITERATED_STORE_SCHEMA_DRAFT, __ITERATED_ITEM_DATA_SPEC
 ),
     #atm_workflow_schema_dump_draft{
         name = str_utils:to_binary(__TESTCASE),
         revision_num = 1,
         revision = #atm_workflow_schema_revision_draft{
-            stores = [
-                #atm_store_schema_draft{
-                    id = <<"st_1">>,
-                    type = __STORE_TYPE,
-                    config = __STORE_CONFIG,
-                    requires_initial_content = false,
-                    default_initial_content = __DEFAULT_INITIAL_CONTENT
-                }
-            ],
+            stores = [__ITERATED_STORE_SCHEMA_DRAFT],
             lanes = [#atm_lane_schema_draft{
                 parallel_boxes = [
                     #atm_parallel_box_schema_draft{
                         id = <<"pb1">>,
                         tasks = [
-                            ?FOREACH_TASK_DRAFT(<<"t1">>, ?ECHO_LAMBDA_ID, ?ECHO_LAMBDA_REVISION_NUM),
-                            ?FOREACH_TASK_DRAFT(<<"t2">>, ?ECHO_LAMBDA_ID, ?ECHO_LAMBDA_REVISION_NUM)
+                            ?FOREACH_TASK_DRAFT(<<"task1">>),
+                            ?FOREACH_TASK_DRAFT(<<"task2">>)
                         ]
                     },
                     #atm_parallel_box_schema_draft{
                         id = <<"pb2">>,
-                        tasks = [?FOREACH_TASK_DRAFT(<<"t3">>, ?ECHO_LAMBDA_ID, ?ECHO_LAMBDA_REVISION_NUM)]
+                        tasks = [?FOREACH_TASK_DRAFT(<<"task3">>)]
                     }
                 ],
                 store_iterator_spec = #atm_store_iterator_spec_draft{
-                    store_schema_id = <<"st_1">>,
+                    store_schema_id = ?ITERATED_STORE_SCHEMA_ID,
                     max_batch_size = ?RAND_INT(5, 8)
                 }
             }]
@@ -103,19 +91,8 @@
     }
 ).
 
--define(RANGE_FOREACH_WORKFLOW_SCHEMA_DRAFT(__INITIAL_CONTENT), ?FOREACH_WORKFLOW_SCHEMA_DRAFT(
-    ?FUNCTION_NAME,
-    range,
-    #atm_range_store_config{},
-    __INITIAL_CONTENT,
-    #atm_data_spec{type = atm_integer_type}
-)).
--define(RANGE_FOREACH_WORKFLOW_SCHEMA_DRAFT, ?RANGE_FOREACH_WORKFLOW_SCHEMA_DRAFT(undefined)).
 
--define(FILE_DATA_SPEC, #atm_data_spec{type = atm_file_type}).
-
-
--define(CACHE_KEY(__TESTCASE_MARKER, __ATM_TASK_SCHEMA_ID), {__TESTCASE_MARKER, __ATM_TASK_SCHEMA_ID}).
+-define(CACHE_KEY(__TESTCASE, __ATM_TASK_SCHEMA_ID), {__TESTCASE, __ATM_TASK_SCHEMA_ID}).
 
 
 %%%===================================================================
@@ -171,27 +148,27 @@ iterate_over_empty_list_store() ->
 
 
 iterate_over_range_store() ->
+    Range = #{<<"start">> => -100, <<"end">> => 100, <<"step">> => 2},
+
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
-        provider = ?PROVIDER_SELECTOR,
-        user = ?USER_SELECTOR,
-        space = ?SPACE_SELECTOR,
-        workflow_schema_dump_or_draft = ?RANGE_FOREACH_WORKFLOW_SCHEMA_DRAFT(
-            #{<<"start">> => -100, <<"end">> => 100, <<"step">> => 2}
+        workflow_schema_dump_or_draft = ?FOREACH_WORKFLOW_SCHEMA_DRAFT(
+            ?FUNCTION_NAME,
+            ?ATM_RANGE_STORE_SCHEMA_DRAFT(?ITERATED_STORE_SCHEMA_ID, Range),
+            ?ATM_INTEGER_DATA_SPEC
         ),
-        workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,
             lane_runs = [#atm_lane_run_execution_test_spec{
                 selector = {1, 1},
                 run_task_for_item = #atm_step_mock_spec{
-                    before_step_hook = build_validate_iterated_item_batches_fun(?FUNCTION_NAME)
+                    before_step_hook = build_record_iterated_items_hook(?FUNCTION_NAME)
                 }
             }],
             handle_workflow_execution_stopped = #atm_step_mock_spec{
-                after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
-                    ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_rerunable({1, 1}, ExpState0),
-                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_finished(ExpState1)}
-                end
+                after_step_exp_state_diff = [
+                    {lane_runs, [{1, 1}], rerunable},
+                    workflow_finished
+                ]
             }
         }]
     }),
@@ -200,11 +177,11 @@ iterate_over_range_store() ->
 
 iterate_over_empty_range_store() ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
-        provider = ?PROVIDER_SELECTOR,
-        user = ?USER_SELECTOR,
-        space = ?SPACE_SELECTOR,
-        workflow_schema_dump_or_draft = ?RANGE_FOREACH_WORKFLOW_SCHEMA_DRAFT(undefined),
-        workflow_schema_revision_num = 1,
+        workflow_schema_dump_or_draft = ?FOREACH_WORKFLOW_SCHEMA_DRAFT(
+            ?FUNCTION_NAME,
+            ?ATM_RANGE_STORE_SCHEMA_DRAFT(?ITERATED_STORE_SCHEMA_ID, undefined),
+            ?ATM_INTEGER_DATA_SPEC
+        ),
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,
             lane_runs = [#atm_lane_run_execution_test_spec{
@@ -212,10 +189,10 @@ iterate_over_empty_range_store() ->
                 handle_task_execution_stopped = build_handle_task_execution_stopped_mock_spec_for_skipped_tasks()
             }],
             handle_workflow_execution_stopped = #atm_step_mock_spec{
-                after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
-                    ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_rerunable({1, 1}, ExpState0),
-                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_finished(ExpState1)}
-                end
+                after_step_exp_state_diff = [
+                    {lane_runs, [{1, 1}], rerunable},
+                    workflow_finished
+                ]
             }
         }]
     }).
@@ -312,30 +289,25 @@ iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(#iterate_
     files_to_remove_before_iteration_starts = FilesToRemove,
     exp_iterated_files = ExpIteratedFiles
 }) ->
-    TestCaseMarker = ?RAND_STR(),
-    InitialContent = case InitialFiles of
+    AtmStoreInitialContent = case InitialFiles of
         undefined -> undefined;
         #object{} -> file_object_to_atm_file_value(InitialFiles);
         _ when is_list(InitialFiles) -> lists:map(fun file_object_to_atm_file_value/1, InitialFiles)
     end,
+    AtmStoreSchemaDraft = case AtmStoreType of
+        list ->
+            ?ATM_LIST_STORE_SCHEMA_DRAFT(?ITERATED_STORE_SCHEMA_ID, ?ATM_FILE_DATA_SPEC, AtmStoreInitialContent);
+        single_value ->
+            ?ATM_SV_STORE_SCHEMA_DRAFT(?ITERATED_STORE_SCHEMA_ID, ?ATM_FILE_DATA_SPEC, AtmStoreInitialContent);
+        tree_forest ->
+            ?ATM_TREE_FOREST_STORE_SCHEMA_DRAFT(?ITERATED_STORE_SCHEMA_ID, ?ATM_FILE_DATA_SPEC, AtmStoreInitialContent)
+    end,
     ExpIteratedEntries = lists:map(fun file_object_to_atm_file_value/1, ExpIteratedFiles),
 
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
-        provider = ?PROVIDER_SELECTOR,
-        user = ?USER_SELECTOR,
-        space = ?SPACE_SELECTOR,
         workflow_schema_dump_or_draft = ?FOREACH_WORKFLOW_SCHEMA_DRAFT(
-            Testcase,
-            AtmStoreType,
-            case AtmStoreType of
-                list -> #atm_list_store_config{item_data_spec = ?FILE_DATA_SPEC};
-                single_value -> #atm_single_value_store_config{item_data_spec = ?FILE_DATA_SPEC};
-                tree_forest -> #atm_tree_forest_store_config{item_data_spec = ?FILE_DATA_SPEC}
-            end,
-            InitialContent,
-            ?FILE_DATA_SPEC
+            Testcase, AtmStoreSchemaDraft, ?ATM_FILE_DATA_SPEC
         ),
-        workflow_schema_revision_num = 1,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,
             lane_runs = [#atm_lane_run_execution_test_spec{
@@ -348,8 +320,8 @@ iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(#iterate_
                     end
                 },
                 run_task_for_item = #atm_step_mock_spec{
-                    before_step_hook = build_validate_iterated_item_batches_fun(
-                        TestCaseMarker,
+                    before_step_hook = build_record_iterated_items_hook(
+                        Testcase,
                         fun filter_out_everything_but_file_id_from_atm_file_value/1
                     )
                 },
@@ -359,14 +331,14 @@ iterate_over_file_keeping_store_with_some_inaccessible_files_test_base(#iterate_
                 end
             }],
             handle_workflow_execution_stopped = #atm_step_mock_spec{
-                after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
-                    ExpState1 = atm_workflow_execution_exp_state_builder:expect_lane_run_rerunable({1, 1}, ExpState0),
-                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_finished(ExpState1)}
-                end
+                after_step_exp_state_diff = [
+                    {lane_runs, [{1, 1}], rerunable},
+                    workflow_finished
+                ]
             }
         }]
     }),
-    assert_all_items_were_iterated(TestCaseMarker, ExpIteratedEntries).
+    assert_all_items_were_iterated(Testcase, ExpIteratedEntries).
 
 
 %%%===================================================================
@@ -391,36 +363,24 @@ create_initial_files() ->
 -spec build_handle_task_execution_stopped_mock_spec_for_skipped_tasks() ->
     atm_execution_test_runner:step_mock_spec().
 build_handle_task_execution_stopped_mock_spec_for_skipped_tasks() ->
+    CommonExpectations = [
+        % No job was ever executed so lane run transitions to active status just now
+        {lane_run, {1, 1}, active},
+        {task, ?TASK_ID_PLACEHOLDER, skipped}
+    ],
     #atm_step_mock_spec{
-        after_step_exp_state_diff = fun(#atm_mock_call_ctx{
-            workflow_execution_exp_state = ExpState0,
-            call_args = [_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId]
-        }) ->
-            % No job was ever executed so lane run transitions to active status just now
-            ExpState1 = atm_workflow_execution_exp_state_builder:expect_task_lane_run_transitioned_to_active_status_if_was_in_enqueued_status(
-                AtmTaskExecutionId, atm_workflow_execution_exp_state_builder:expect_task_skipped(
-                    AtmTaskExecutionId, ExpState0
-                )
-            ),
-            {true, case atm_workflow_execution_exp_state_builder:get_task_selector(AtmTaskExecutionId, ExpState1) of
-                {_, <<"pb1">>, _} ->
-                    % parallel box with 2 tasks - it should transition to:
-                    % - active when first task ended
-                    % - skipped after second task ended
-                    InferStatusFun = fun
-                        (<<"pending">>, [<<"pending">>, <<"skipped">>]) -> <<"active">>;
-                        (<<"active">>, [<<"skipped">>]) -> <<"skipped">>
-                    end,
-                    atm_workflow_execution_exp_state_builder:expect_task_parallel_box_transitioned_to_inferred_status(
-                        AtmTaskExecutionId, InferStatusFun, ExpState1
-                    );
-                {_, <<"pb2">>, _} ->
-                    % parallel box with only 1 task - should transition to skipped status
-                    atm_workflow_execution_exp_state_builder:expect_task_parallel_box_transitioned_to_inferred_status(
-                        AtmTaskExecutionId, fun(_, _) -> <<"skipped">> end, ExpState1
-                    )
-            end}
-        end
+        after_step_exp_state_diff = atm_workflow_execution_test_utils:build_task_step_exp_state_diff(#{
+            [<<"task1">>, <<"task2">>] => CommonExpectations ++ [
+                % parallel box with 2 tasks - it should transition to:
+                % - active when first task skipped
+                % - skipped after second task skipped
+                {task, ?TASK_ID_PLACEHOLDER, parallel_box_transitioned_to_inferred_status, fun
+                    (<<"pending">>, [<<"pending">>, <<"skipped">>]) -> <<"active">>;
+                    (<<"active">>, [<<"skipped">>]) -> <<"skipped">>
+                end}
+            ],
+            <<"task3">> => CommonExpectations ++ [{parallel_box, ?PB_SELECTOR_PLACEHOLDER, skipped}]
+        })
     }.
 
 
@@ -438,43 +398,40 @@ filter_out_everything_but_file_id_from_atm_file_value(AtmFileValue) ->
 
 
 %% @private
--spec build_validate_iterated_item_batches_fun(term()) ->
+-spec build_record_iterated_items_hook(term()) ->
     atm_workflow_execution_test_runner:hook().
-build_validate_iterated_item_batches_fun(TestCaseMarker) ->
-    build_validate_iterated_item_batches_fun(TestCaseMarker, fun(Item) -> Item end).
+build_record_iterated_items_hook(Testcase) ->
+    build_record_iterated_items_hook(Testcase, fun(Item) -> Item end).
 
 
 %% @private
--spec build_validate_iterated_item_batches_fun(
+-spec build_record_iterated_items_hook(
     term(),
     fun((automation:item()) -> automation:item())
 ) ->
     atm_workflow_execution_test_runner:hook().
-build_validate_iterated_item_batches_fun(TestCaseMarker, Mapper) ->
+build_record_iterated_items_hook(Testcase, Mapper) ->
     fun(#atm_mock_call_ctx{
         workflow_execution_exp_state = ExpState,
-        call_args = [
-            _AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId,
-            _AtmJobBatchId, ItemBatch
-        ]
+        call_args = [_, _, AtmTaskExecutionId, _, ItemBatch]
     }) ->
-        {_, _, AtmTaskSchemaId} = atm_workflow_execution_exp_state_builder:get_task_selector(
-            AtmTaskExecutionId, ExpState
-        ),
-        MappedItemBatch = lists:map(Mapper, ItemBatch),
-        record_iterated_items(TestCaseMarker, AtmTaskSchemaId, MappedItemBatch)
+        record_iterated_items(
+            Testcase,
+            atm_workflow_execution_exp_state_builder:get_task_schema_id(AtmTaskExecutionId, ExpState),
+            lists:map(Mapper, ItemBatch)
+        )
     end.
 
 
 %% @private
 -spec assert_all_items_were_iterated(term(), [automation:item()]) -> ok.
-assert_all_items_were_iterated(TestCaseMarker, ExpIteratedItems) ->
+assert_all_items_were_iterated(Testcase, ExpIteratedItems) ->
     lists:foreach(fun(AtmTaskSchemaId) ->
         ?assertEqual(
             lists:sort(ExpIteratedItems),
-            get_recorded_iterated_items(TestCaseMarker, AtmTaskSchemaId)
+            get_recorded_iterated_items(Testcase, AtmTaskSchemaId)
         )
-    end, [<<"t1">>, <<"t2">>, <<"t3">>]).
+    end, [<<"task1">>, <<"task2">>, <<"task3">>]).
 
 
 %% @private

@@ -112,11 +112,17 @@ build_url(AtmWorkflowExecutionId, AtmJobBatchId, TypeBin) ->
 -spec decode_lambda_output(binary()) -> atm_task_executor:job_batch_result().
 decode_lambda_output(Body) ->
     try json_utils:decode(Body) of
+        null ->
+            {ok, #atm_lambda_output{results_batch = undefined}};
+
         #{<<"exception">> := Reason} ->
             ?ERROR_ATM_JOB_BATCH_CRASHED(Reason);
 
+        #{<<"resultsBatch">> := null} ->
+            {ok, #atm_lambda_output{results_batch = undefined}};
+
         #{<<"resultsBatch">> := ResultsBatch} when is_list(ResultsBatch) ->
-            {ok, #atm_lambda_output{results_batch = ResultsBatch}};
+            {ok, #atm_lambda_output{results_batch = lists:map(fun utils:null_to_undefined/1, ResultsBatch)}};
 
         _ ->
             ?ERROR_BAD_DATA(<<"lambdaOutput">>, str_utils:format_bin(
