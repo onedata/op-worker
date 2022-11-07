@@ -27,6 +27,7 @@
 
 -export([
     dir_stats_collector_test/1,
+    dir_stats_collector_trash_test/1,
     transfer_after_enabling_stats_test/1,
     dir_stats_collector_parallel_write_test/1,
     dir_stats_collector_parallel_override_test/1,
@@ -65,6 +66,7 @@
 
 -define(TEST_CASES, [
     dir_stats_collector_test,
+    dir_stats_collector_trash_test,
     transfer_after_enabling_stats_test,
     dir_stats_collector_parallel_write_test,
     dir_stats_collector_parallel_override_test,
@@ -1196,6 +1198,12 @@ dir_stats_collector_test(Config0) ->
     dir_stats_collector_test_base:multiprovider_test(Config).
 
 
+dir_stats_collector_trash_test(Config0) ->
+    UserId = <<"user1">>,
+    Config = multi_provider_file_ops_test_base:extend_config(Config0, UserId, {4,0,0,2}, 60),
+    dir_stats_collector_test_base:multiprovider_trash_test(Config).
+
+
 transfer_after_enabling_stats_test(Config0) ->
     UserId = <<"user1">>,
     Config = multi_provider_file_ops_test_base:extend_config(Config0, UserId, {4,0,0,2}, 60),
@@ -1385,6 +1393,7 @@ init_per_testcase(truncate_on_storage_does_not_block_synchronizer = Case, Config
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(Case, Config) when
     Case =:= dir_stats_collector_test;
+    Case =:= dir_stats_collector_trash_test;
     Case =:= dir_stats_collector_parallel_write_test;
     Case =:= dir_stats_collector_parallel_override_test;
     Case =:= dir_stats_collector_parallel_write_with_sleep_test;
@@ -1432,6 +1441,7 @@ end_per_testcase(truncate_on_storage_does_not_block_synchronizer = Case, Config)
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(Case, Config) when
     Case =:= dir_stats_collector_test;
+    Case =:= dir_stats_collector_trash_test;
     Case =:= transfer_after_enabling_stats_test;
     Case =:= dir_stats_collector_parallel_write_test;
     Case =:= dir_stats_collector_parallel_override_test;

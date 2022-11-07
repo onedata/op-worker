@@ -27,7 +27,7 @@
 -export([report_update_of_dir/2, report_update_of_nearest_dir/2, get_update_time/1, delete_stats/1]).
 
 %% dir_stats_collection_behaviour callbacks
--export([acquire/1, consolidate/3, save/3, delete/1, init_dir/1, init_child/1]).
+-export([acquire/1, consolidate/3, on_collection_move/2, save/3, delete/1, init_dir/1, init_child/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -98,6 +98,11 @@ acquire(Guid) ->
 consolidate(_, OldValue, NewValue) ->
     % Use max in case of provision of earlier time via dbsync
     max(OldValue, NewValue).
+
+
+-spec on_collection_move(dir_stats_collection:stat_name(), dir_stats_collection:stat_value()) -> ignore.
+on_collection_move(_, _) ->
+    ignore.
 
 
 -spec save(file_id:file_guid(), dir_stats_collection:collection(), non_neg_integer() | current) -> ok.

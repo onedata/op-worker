@@ -304,6 +304,7 @@ Build:
         interpreter: BINSH_OR_CMDEXE
         scripts:
           - |-
+            #!/bin/bash
             if [[ ${bamboo_planRepository_branch} != "develop" && ! ${bamboo_planRepository_branch} =~ ^release/.* ]]; then
               if [ -z ${bamboo_ManualBuildTriggerReason_userName+x} ]; then
                 echo "===========================================================================================================" >&2
