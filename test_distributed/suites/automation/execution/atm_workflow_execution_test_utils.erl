@@ -40,7 +40,8 @@
     assert_not_ended_workflow_execution_can_not_be_repeated/2
 ]).
 -export([
-    build_task_step_exp_state_diff/1
+    build_task_step_exp_state_diff/1,
+    build_task_step_hook/1
 ]).
 
 
@@ -222,7 +223,7 @@ assert_not_ended_workflow_execution_can_not_be_repeated(AtmLaneRunSelector, AtmM
 %% @end
 %%--------------------------------------------------------------------
 -spec build_task_step_exp_state_diff(
-    #{automation:id() | [automation:id()] => no_diff | [atm_workflow_execution_exp_state_builder:expectation()]}
+    #{automation:id() | [automation:id()] => no_diff | atm_workflow_execution_test_runner:exp_state_diff()}
 ) ->
     atm_workflow_execution_test_runner:exp_state_diff().
 build_task_step_exp_state_diff(ExpectationsPerTask) ->
@@ -232,12 +233,27 @@ build_task_step_exp_state_diff(ExpectationsPerTask) ->
         case get_task_expectations(ExpectationsPerTask, AtmTaskExecutionId, ExpState) of
             no_diff ->
                 false;
-            ExpectationsWithPlaceholders ->
+            ExpectationsWithPlaceholders when is_list(ExpectationsWithPlaceholders) ->
                 Expectations = substitute_expectation_placeholders(
                     ExpectationsWithPlaceholders, AtmTaskExecutionId, ExpState
                 ),
-                {true, atm_workflow_execution_exp_state_builder:expect(ExpState, Expectations)}
+                {true, atm_workflow_execution_exp_state_builder:expect(ExpState, Expectations)};
+            ExpStateDiffFun when is_function(ExpStateDiffFun) ->
+                ExpStateDiffFun(AtmMockCallCtx)
         end
+    end.
+
+
+-spec build_task_step_hook(#{automation:id() => atm_workflow_execution_test_runner:hook()}) ->
+    atm_workflow_execution_test_runner:hook().
+build_task_step_hook(HooksPerTask) ->
+    fun(AtmMockCallCtx = #atm_mock_call_ctx{workflow_execution_exp_state = ExpState}) ->
+        AtmTaskSchemaId = atm_workflow_execution_exp_state_builder:get_task_schema_id(
+            get_task_execution_id(AtmMockCallCtx),
+            ExpState
+        ),
+        TaskStepHook = maps:get(AtmTaskSchemaId, HooksPerTask, fun(_) -> ok end),
+        TaskStepHook(AtmMockCallCtx)
     end.
 
 
