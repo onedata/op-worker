@@ -577,10 +577,10 @@ check_timeouts(ExecutionId) ->
 
 -spec reset_keepalive_timer(workflow_engine:execution_id(), workflow_jobs:job_identifier()) -> ok.
 reset_keepalive_timer(ExecutionId, JobIdentifier) ->
-    {ok, _} = update(ExecutionId, fun(State) ->
-        reset_keepalive_timer_internal(State, JobIdentifier)
-    end),
-    ok.
+    case update(ExecutionId, fun(State) -> reset_keepalive_timer_internal(State, JobIdentifier) end) of
+        {ok, _} -> ok;
+        ?ERROR_NOT_FOUND -> ok
+    end.
 
 -spec get_result_processing_data(workflow_engine:execution_id(), workflow_jobs:job_identifier()) ->
     {workflow_handler:handler(), workflow_engine:execution_context(), workflow_engine:task_id()}.
