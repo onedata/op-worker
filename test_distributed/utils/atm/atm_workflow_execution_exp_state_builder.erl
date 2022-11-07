@@ -142,6 +142,7 @@
     {current_lane_run_selector, {atm_lane_execution:index(), atm_lane_execution:run_num()}} |
 
     {task, atm_task_execution:id() | task_selector(), atm_task_execution:status()} |
+    {task, atm_task_execution:id() | task_selector(), items_scheduled, non_neg_integer()} |
     {task, atm_task_execution:id() | task_selector(), items_finished, non_neg_integer()} |
     {task, atm_task_execution:id() | task_selector(), items_failed, non_neg_integer()} |
     {
@@ -164,9 +165,9 @@
     {lane_run, atm_lane_execution:lane_run_selector(), started_preparing_in_advance} |
     {lane_run, atm_lane_execution:lane_run_selector(), created} |
     {lane_run, atm_lane_execution:lane_run_selector(), atm_lane_execution:run_status()} |
-
     {lane_run, atm_lane_execution:lane_run_selector(), run_num_set, atm_lane_execution:run_num()} |
     {lane_run, atm_lane_execution:lane_run_selector(), removed} |
+
     {lane_runs, atm_lane_execution:lane_run_selector() | [atm_lane_execution:lane_run_selector()], rerunable} |
     {lane_runs, atm_lane_execution:lane_run_selector() | [atm_lane_execution:lane_run_selector()], retriable} |
 
@@ -263,6 +264,23 @@ expect(ExpStateCtx, {task, AtmTaskExecutionIdOrSelector, ExpStatus}) when
 ->
     AtmTaskExecutionId = resolve_task_id(AtmTaskExecutionIdOrSelector, ExpStateCtx),
     expect_task_transitioned_to(AtmTaskExecutionId, str_utils:to_binary(ExpStatus), ExpStateCtx);
+
+expect(ExpStateCtx0, {task, AtmTaskExecutionIdOrSelector, items_scheduled, ItemCount}) ->
+    AtmTaskExecutionId = resolve_task_id(AtmTaskExecutionIdOrSelector, ExpStateCtx0),
+
+    ExpStateCtx1 = lists:foldl(fun(ExpectFun, ExpStateCtxAcc) ->
+        ExpectFun(AtmTaskExecutionId, ExpStateCtxAcc)
+    end, ExpStateCtx0, [
+        fun expect_task_transitioned_to_active_status_if_was_in_pending_status/2,
+        fun expect_task_parallel_box_transitioned_to_active_status_if_was_in_pending_status/2,
+        fun expect_task_lane_run_transitioned_to_active_status_if_was_in_enqueued_status/2
+    ]),
+    case get_task_status(AtmTaskExecutionId, ExpStateCtx1) of
+        <<"active">> ->
+            expect_task_items_in_processing_increased(AtmTaskExecutionId, ItemCount, ExpStateCtx1);
+        _ ->
+            ExpStateCtx1
+    end;
 
 expect(ExpStateCtx, {task, AtmTaskExecutionIdOrSelector, items_finished, ItemCount}) ->
     AtmTaskExecutionId = resolve_task_id(AtmTaskExecutionIdOrSelector, ExpStateCtx),

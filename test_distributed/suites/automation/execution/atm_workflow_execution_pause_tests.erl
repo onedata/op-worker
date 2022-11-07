@@ -344,7 +344,7 @@ pause_interrupted_atm_workflow_execution() ->
                 atm_workflow_execution_test_utils:assert_not_ended_workflow_execution_can_not_be_repeated(
                     {1, 1}, AtmMockCallCtx
                 ),
-                ?assert(atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState0, 0))
+                ?assert(atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState0))
             end
         }]
     }).
@@ -366,7 +366,7 @@ assert_paused_atm_workflow_execution_can_be_neither_paused_nor_repeated(AtmMockC
     atm_workflow_execution_test_utils:assert_not_ended_workflow_execution_can_not_be_repeated(
         {1, 1}, AtmMockCallCtx
     ),
-    ?assert(atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState0, 0)).
+    ?assert(atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState0)).
 
 
 %% @private
