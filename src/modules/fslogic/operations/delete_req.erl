@@ -142,9 +142,15 @@ delete_using_trash_insecure(UserCtx, FileCtx, EmitEvents) ->
     fslogic_worker:fuse_response().
 delete_insecure(UserCtx, FileCtx, Silent) ->
     FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
-    {ok, #document{value = #file_meta{provider_id = ProviderId}}} =
-        file_meta:update(FileUuid, fun(FileMeta = #file_meta{}) ->
+    case file_meta:update(FileUuid, fun
+        (#file_meta{deleted = true}) ->
+            {error, already_deleted};
+        (FileMeta = #file_meta{}) ->
             {ok, FileMeta#file_meta{deleted = true}}
-        end),
-    fslogic_delete:delete_file_locally(UserCtx, FileCtx, ProviderId, Silent),
+    end) of
+        {ok, #document{value = #file_meta{provider_id = ProviderId}}} ->
+            fslogic_delete:delete_file_locally(UserCtx, FileCtx, ProviderId, Silent);
+        {error, already_deleted} ->
+            ok
+    end,
     ?FUSE_OK_RESP.
