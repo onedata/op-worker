@@ -19,7 +19,8 @@
     interrupt_scheduled_atm_workflow_execution_due_to_expired_session/0,
     interrupt_scheduled_atm_workflow_execution_due_to_openfaas_down/0,
 
-    interrupt_enqueued_atm_workflow_execution_due_to_expired_session/0
+    interrupt_enqueued_atm_workflow_execution_due_to_expired_session/0,
+    interrupt_enqueued_atm_workflow_execution_due_to_openfaas_down/0
 ]).
 
 
@@ -193,6 +194,45 @@ interrupt_enqueued_atm_workflow_execution_due_to_expired_session() ->
                     workflow_stopping
                 ]
             },
+            handle_workflow_abruptly_stopped = #atm_step_mock_spec{
+                after_step_exp_state_diff = [
+                    {lane_run, {2, 1}, removed},
+                    workflow_interrupted
+                ]
+            },
+            after_hook = fun assert_interrupted_atm_workflow_execution_can_be_neither_paused_nor_repeated/1
+        }]
+    }).
+
+
+interrupt_enqueued_atm_workflow_execution_due_to_openfaas_down() ->
+    atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
+        workflow_schema_dump_or_draft = ?ECHO_ATM_WORKFLOW_SCHEMA_DRAFT,
+        incarnations = [#atm_workflow_execution_incarnation_test_spec{
+            incarnation_num = 1,
+            lane_runs = [
+                #atm_lane_run_execution_test_spec{
+                    selector = {1, 1},
+                    prepare_lane = #atm_step_mock_spec{
+                        % Await for next lane run to prepare in advance
+                        defer_after = {prepare_lane, after_step, {2, 1}}
+                    },
+                    run_task_for_item = #atm_step_mock_spec{
+                        before_step_hook = fun atm_workflow_execution_test_utils:report_openfaas_unhealthy/1,
+                        before_step_exp_state_diff = [
+                            {all_tasks, {1, 1}, interrupted},
+                            {lane_run, {1, 1}, stopping},
+                            workflow_stopping
+                        ],
+                        after_step_exp_state_diff = no_diff
+                    },
+                    % This is called as part of `handle_workflow_abruptly_stopped`
+                    handle_lane_execution_stopped = #atm_step_mock_spec{
+                        after_step_exp_state_diff = [{lane_run, {1, 1}, interrupted}]
+                    }
+                },
+                ?INTERRUPTED_LANE_RUN_PREPARED_IN_ADVANCE_TEST_SPEC({2, 1})
+            ],
             handle_workflow_abruptly_stopped = #atm_step_mock_spec{
                 after_step_exp_state_diff = [
                     {lane_run, {2, 1}, removed},
