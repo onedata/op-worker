@@ -35,7 +35,7 @@
 
 
 %% API
--export([create/1, move_to_trash/2, schedule_deletion_from_trash/4]).
+-export([create/1, move_to_trash/2, schedule_deletion_from_trash/5]).
 
 
 -define(NAME_UUID_SEPARATOR, "@@").
@@ -93,12 +93,12 @@ move_to_trash(FileCtx, UserCtx) ->
 %% asynchronously remove the subtree from the trash.
 %% @end
 %%--------------------------------------------------------------------
--spec schedule_deletion_from_trash(file_ctx:ctx(), user_ctx:ctx(), boolean(), file_meta:uuid()) ->
+-spec schedule_deletion_from_trash(file_ctx:ctx(), user_ctx:ctx(), boolean(), file_meta:uuid(), file_meta:name()) ->
     {ok, tree_deletion_traverse:id()} | {error, term()}.
-schedule_deletion_from_trash(FileCtx, _UserCtx, EmitEvents, RootOriginalParentUuid) ->
+schedule_deletion_from_trash(FileCtx, _UserCtx, EmitEvents, RootOriginalParentUuid, RootFileName) ->
     file_ctx:assert_not_special_const(FileCtx),
     % TODO VFS-7348 schedule deletion as user not by root
-    case tree_deletion_traverse:start(FileCtx, user_ctx:new(?ROOT_USER_ID), EmitEvents, RootOriginalParentUuid) of
+    case tree_deletion_traverse:start(FileCtx, user_ctx:new(?ROOT_USER_ID), EmitEvents, RootOriginalParentUuid, RootFileName) of
         {ok, TaskId} ->
             {ok, TaskId};
         {error, _} = Error ->
