@@ -16,14 +16,16 @@
 -include("modules/automation/atm_execution.hrl").
 
 -export([
-    interrupt_scheduled_atm_workflow_execution_due_to_expired_session/0,
-    interrupt_scheduled_atm_workflow_execution_due_to_openfaas_down/0,
+    interrupt_scheduled_atm_workflow_execution_due_to_internal_exception/0,
+    interrupt_scheduled_atm_workflow_execution_due_to_external_abandon/0,
 
-    interrupt_enqueued_atm_workflow_execution_due_to_expired_session/0,
-    interrupt_enqueued_atm_workflow_execution_due_to_openfaas_down/0,
+    interrupt_enqueued_atm_workflow_execution_due_to_internal_exception/0,
+    interrupt_enqueued_atm_workflow_execution_due_to_external_abandon/0,
 
-    interrupt_active_atm_workflow_execution_with_no_uncorrelated_task_results_due_to_expired_session/0,
-    interrupt_active_atm_workflow_execution_with_uncorrelated_task_results_due_to_expired_session/0
+    interrupt_active_atm_workflow_execution_with_no_uncorrelated_task_results_due_to_internal_exception/0,
+    interrupt_active_atm_workflow_execution_with_uncorrelated_task_results_due_to_internal_exception/0,
+    interrupt_active_atm_workflow_execution_with_no_uncorrelated_task_results_due_to_external_abandon/0,
+    interrupt_active_atm_workflow_execution_with_uncorrelated_task_results_due_to_external_abandon/0
 ]).
 
 
@@ -99,28 +101,26 @@
 -define(PB1_SELECTOR(__ATM_LANE_RUN_SELECTOR), {__ATM_LANE_RUN_SELECTOR, <<"pb1">>}).
 -define(PB2_SELECTOR(__ATM_LANE_RUN_SELECTOR), {__ATM_LANE_RUN_SELECTOR, <<"pb2">>}).
 
+-type interrupt_type() :: internal_exception | external_abandon.
+
 
 %%%===================================================================
 %%% Tests
 %%%===================================================================
 
 
-interrupt_scheduled_atm_workflow_execution_due_to_expired_session() ->
-    interrupt_scheduled_atm_workflow_execution_test_base(
-        exception,
-        fun atm_workflow_execution_test_utils:delete_offline_session/1
-    ).
+interrupt_scheduled_atm_workflow_execution_due_to_internal_exception() ->
+    interrupt_scheduled_atm_workflow_execution_test_base(internal_exception).
 
 
-interrupt_scheduled_atm_workflow_execution_due_to_openfaas_down() ->
-    interrupt_scheduled_atm_workflow_execution_test_base(
-        external,
-        fun atm_workflow_execution_test_utils:report_openfaas_unhealthy/1
-    ).
+interrupt_scheduled_atm_workflow_execution_due_to_external_abandon() ->
+    interrupt_scheduled_atm_workflow_execution_test_base(external_abandon).
 
 
 %% @private
-interrupt_scheduled_atm_workflow_execution_test_base(InterruptType, InterruptHook) ->
+-spec interrupt_scheduled_atm_workflow_execution_test_base(interrupt_type()) ->
+    ok.
+interrupt_scheduled_atm_workflow_execution_test_base(InterruptType) ->
     StoppingExecutionExpStateDiff = [
         {lane_run, {1, 1}, stopping},
         workflow_stopping
@@ -134,11 +134,11 @@ interrupt_scheduled_atm_workflow_execution_test_base(InterruptType, InterruptHoo
                 #atm_lane_run_execution_test_spec{
                     selector = {1, 1},
                     prepare_lane = #atm_step_mock_spec{
-                        before_step_hook = InterruptHook,
+                        before_step_hook = get_interrupt_hook(InterruptType),
                         % State is changed immediately only by external interrupt procedure
                         before_step_exp_state_diff = case InterruptType of
-                            exception -> default;
-                            external -> StoppingExecutionExpStateDiff
+                            internal_exception -> default;
+                            external_abandon -> StoppingExecutionExpStateDiff
                         end,
                         after_step_exp_state_diff = no_diff
                     },
@@ -150,8 +150,8 @@ interrupt_scheduled_atm_workflow_execution_test_base(InterruptType, InterruptHoo
             ],
             % Callback called only in case of interrupt caused by exception
             handle_exception = #atm_step_mock_spec{after_step_exp_state_diff = case InterruptType of
-                exception -> StoppingExecutionExpStateDiff;
-                external -> default
+                internal_exception -> StoppingExecutionExpStateDiff;
+                external_abandon -> default
             end},
             handle_workflow_abruptly_stopped = #atm_step_mock_spec{
                 after_step_exp_state_diff = [workflow_interrupted]
@@ -161,22 +161,18 @@ interrupt_scheduled_atm_workflow_execution_test_base(InterruptType, InterruptHoo
     }).
 
 
-interrupt_enqueued_atm_workflow_execution_due_to_expired_session() ->
-    interrupt_enqueued_atm_workflow_execution_test_base(
-        exception,
-        fun atm_workflow_execution_test_utils:delete_offline_session/1
-    ).
+interrupt_enqueued_atm_workflow_execution_due_to_internal_exception() ->
+    interrupt_enqueued_atm_workflow_execution_test_base(internal_exception).
 
 
-interrupt_enqueued_atm_workflow_execution_due_to_openfaas_down() ->
-    interrupt_enqueued_atm_workflow_execution_test_base(
-        external,
-        fun atm_workflow_execution_test_utils:report_openfaas_unhealthy/1
-    ).
+interrupt_enqueued_atm_workflow_execution_due_to_external_abandon() ->
+    interrupt_enqueued_atm_workflow_execution_test_base(external_abandon).
 
 
 %% @private
-interrupt_enqueued_atm_workflow_execution_test_base(InterruptType, InterruptHook) ->
+-spec interrupt_enqueued_atm_workflow_execution_test_base(interrupt_type()) ->
+    ok.
+interrupt_enqueued_atm_workflow_execution_test_base(InterruptType) ->
     StoppingExecutionExpStateDiff = [
         {all_tasks, {1, 1}, interrupted},
         {lane_run, {1, 1}, stopping},
@@ -195,11 +191,11 @@ interrupt_enqueued_atm_workflow_execution_test_base(InterruptType, InterruptHook
                         defer_after = {prepare_lane, after_step, {2, 1}}
                     },
                     run_task_for_item = #atm_step_mock_spec{
-                        before_step_hook = InterruptHook,
+                        before_step_hook = get_interrupt_hook(InterruptType),
                         % State is changed immediately only by external interrupt procedure
                         before_step_exp_state_diff = case InterruptType of
-                            exception -> default;
-                            external -> StoppingExecutionExpStateDiff
+                            internal_exception -> default;
+                            external_abandon -> StoppingExecutionExpStateDiff
                         end,
                         after_step_exp_state_diff = no_diff
                     },
@@ -212,8 +208,8 @@ interrupt_enqueued_atm_workflow_execution_test_base(InterruptType, InterruptHook
             ],
             % Callback called only in case of interrupt caused by exception
             handle_exception = #atm_step_mock_spec{after_step_exp_state_diff = case InterruptType of
-                exception -> StoppingExecutionExpStateDiff;
-                external -> default
+                internal_exception -> StoppingExecutionExpStateDiff;
+                external_abandon -> default
             end},
             handle_workflow_abruptly_stopped = #atm_step_mock_spec{
                 after_step_exp_state_diff = [
@@ -226,16 +222,24 @@ interrupt_enqueued_atm_workflow_execution_test_base(InterruptType, InterruptHook
     }).
 
 
-interrupt_active_atm_workflow_execution_with_no_uncorrelated_task_results_due_to_expired_session() ->
-    interrupt_active_atm_workflow_execution_test_base(?FUNCTION_NAME, return_value).
+interrupt_active_atm_workflow_execution_with_no_uncorrelated_task_results_due_to_internal_exception() ->
+    interrupt_active_atm_workflow_execution_test_base(?FUNCTION_NAME, internal_exception, return_value).
 
 
-interrupt_active_atm_workflow_execution_with_uncorrelated_task_results_due_to_expired_session() ->
-    interrupt_active_atm_workflow_execution_test_base(?FUNCTION_NAME, file_pipe).
+interrupt_active_atm_workflow_execution_with_uncorrelated_task_results_due_to_internal_exception() ->
+    interrupt_active_atm_workflow_execution_test_base(?FUNCTION_NAME, internal_exception, file_pipe).
+
+
+interrupt_active_atm_workflow_execution_with_no_uncorrelated_task_results_due_to_external_abandon() ->
+    interrupt_active_atm_workflow_execution_test_base(?FUNCTION_NAME, external_abandon, return_value).
+
+
+interrupt_active_atm_workflow_execution_with_uncorrelated_task_results_due_to_external_abandon() ->
+    interrupt_active_atm_workflow_execution_test_base(?FUNCTION_NAME, external_abandon, file_pipe).
 
 
 %% @private
-interrupt_active_atm_workflow_execution_test_base(Testcase, RelayMethod) ->
+interrupt_active_atm_workflow_execution_test_base(Testcase, InterruptType, RelayMethod) ->
     ItemCount = 20,
 
     UpdateTaskStatusAfterPauseFun = fun(ExpTaskState = #{
@@ -247,6 +251,21 @@ interrupt_active_atm_workflow_execution_test_base(Testcase, RelayMethod) ->
             _ -> <<"stopping">>
         end}
     end,
+
+    StoppingExecutionExpStateDiff = [
+        % task1 or task2 transitions to 'stopping' status as for at least one of them some
+        % items were scheduled
+        {task, ?TASK1_SELECTOR({1, 1}), UpdateTaskStatusAfterPauseFun},
+        {task, ?TASK2_SELECTOR({1, 1}), UpdateTaskStatusAfterPauseFun},
+        {parallel_box, ?PB1_SELECTOR({1, 1}), stopping},
+
+        % task3 immediately transitions to 'interrupted' as definitely no item was scheduled for it
+        {task, ?TASK3_SELECTOR({1, 1}), interrupted},
+        {parallel_box, ?PB2_SELECTOR({1, 1}), interrupted},
+
+        {lane_run, {1, 1}, stopping},
+        workflow_stopping
+    ],
 
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         workflow_schema_dump_or_draft = ?ECHO_ATM_WORKFLOW_SCHEMA_DRAFT(Testcase, ItemCount, RelayMethod),
@@ -269,7 +288,12 @@ interrupt_active_atm_workflow_execution_test_base(Testcase, RelayMethod) ->
                         end
                     },
                     process_task_result_for_item = #atm_step_mock_spec{
-                        before_step_hook = fun atm_workflow_execution_test_utils:delete_offline_session/1
+                        before_step_hook = get_interrupt_hook(InterruptType),
+                        % State is changed immediately only by external interrupt procedure
+                        before_step_exp_state_diff = case InterruptType of
+                            internal_exception -> default;
+                            external_abandon -> StoppingExecutionExpStateDiff
+                        end
                     },
                     % This is called as part of `handle_workflow_abruptly_stopped`
                     handle_lane_execution_stopped = #atm_step_mock_spec{
@@ -284,22 +308,11 @@ interrupt_active_atm_workflow_execution_test_base(Testcase, RelayMethod) ->
                 },
                 ?INTERRUPTED_LANE_RUN_PREPARED_IN_ADVANCE_TEST_SPEC({2, 1})
             ],
-            handle_exception = #atm_step_mock_spec{
-                after_step_exp_state_diff = lists:flatten([
-                    % task1 or task2 transitions to 'stopping' status as for at least one of them some
-                    % items were scheduled
-                    {task, ?TASK1_SELECTOR({1, 1}), UpdateTaskStatusAfterPauseFun},
-                    {task, ?TASK2_SELECTOR({1, 1}), UpdateTaskStatusAfterPauseFun},
-                    {parallel_box, ?PB1_SELECTOR({1, 1}), stopping},
-
-                    % task3 immediately transitions to 'interrupted' as definitely no item was scheduled for it
-                    {task, ?TASK3_SELECTOR({1, 1}), interrupted},
-                    {parallel_box, ?PB2_SELECTOR({1, 1}), interrupted},
-
-                    {lane_run, {1, 1}, stopping},
-                    workflow_stopping
-                ])
-            },
+            % Callback called only in case of interrupt caused by exception
+            handle_exception = #atm_step_mock_spec{after_step_exp_state_diff = case InterruptType of
+                internal_exception -> StoppingExecutionExpStateDiff;
+                external_abandon -> default
+            end},
             handle_workflow_abruptly_stopped = #atm_step_mock_spec{
                 after_step_exp_state_diff = [
                     {lane_run, {2, 1}, removed},
@@ -314,6 +327,12 @@ interrupt_active_atm_workflow_execution_test_base(Testcase, RelayMethod) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec get_interrupt_hook(interrupt_type()) -> atm_workflow_execution_test_runner:hook().
+get_interrupt_hook(internal_exception) -> fun atm_workflow_execution_test_utils:delete_offline_session/1;
+get_interrupt_hook(external_abandon) -> fun atm_workflow_execution_test_utils:report_openfaas_unhealthy/1.
 
 
 %% @private
