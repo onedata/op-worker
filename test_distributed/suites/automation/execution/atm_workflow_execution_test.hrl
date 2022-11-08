@@ -36,6 +36,18 @@
     }
 }).
 
+% Lane run prepared in advance and enqueued but interrupted due to workflow stopping before reaching it
+-define(INTERRUPTED_LANE_RUN_PREPARED_IN_ADVANCE_TEST_SPEC(__ATM_LANE_RUN_SELECTOR), #atm_lane_run_execution_test_spec{
+    selector = __ATM_LANE_RUN_SELECTOR,
+    handle_lane_execution_stopped = #atm_step_mock_spec{
+        before_step_exp_state_diff = [
+            {all_tasks, __ATM_LANE_RUN_SELECTOR, interrupted},
+            {lane_run, __ATM_LANE_RUN_SELECTOR, stopping}
+        ],
+        after_step_exp_state_diff = [{lane_run, __ATM_LANE_RUN_SELECTOR, interrupted}]
+    }
+}).
+
 
 -define(TASK_ID_PLACEHOLDER, <<"task_placeholder">>).
 -define(PB_SELECTOR_PLACEHOLDER, {{0, 0}, <<"pb_plaholder">>}).

@@ -161,16 +161,7 @@ pause_enqueued_atm_workflow_execution() ->
                         after_step_exp_state_diff = [{lane_run, {1, 1}, paused}]
                     }
                 },
-                #atm_lane_run_execution_test_spec{
-                    selector = {2, 1},
-                    handle_lane_execution_stopped = #atm_step_mock_spec{
-                        before_step_exp_state_diff = [
-                            {all_tasks, {2, 1}, interrupted},
-                            {lane_run, {2, 1}, stopping}
-                        ],
-                        after_step_exp_state_diff = [{lane_run, {2, 1}, interrupted}]
-                    }
-                }
+                ?INTERRUPTED_LANE_RUN_PREPARED_IN_ADVANCE_TEST_SPEC({2, 1})
             ],
             handle_workflow_execution_stopped = #atm_step_mock_spec{
                 after_step_exp_state_diff = [
@@ -279,16 +270,7 @@ pause_active_atm_workflow_execution_test_base(Testcase, RelayMethod) ->
                         after_step_exp_state_diff = [{lane_run, {1, 1}, paused}]
                     }
                 },
-                #atm_lane_run_execution_test_spec{
-                    selector = {2, 1},
-                    handle_lane_execution_stopped = #atm_step_mock_spec{
-                        % Previously enqueued (in advance) lane run is changed to interrupted
-                        after_step_exp_state_diff = [
-                            {all_tasks, {2, 1}, interrupted},
-                            {lane_run, {2, 1}, interrupted}
-                        ]
-                    }
-                }
+                ?INTERRUPTED_LANE_RUN_PREPARED_IN_ADVANCE_TEST_SPEC({2, 1})
             ],
             handle_workflow_execution_stopped = #atm_step_mock_spec{
                 after_step_exp_state_diff = [
