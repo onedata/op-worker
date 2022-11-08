@@ -86,7 +86,8 @@
 
     pause_interrupted_atm_workflow_execution/1,
 
-    interrupt_ongoing_atm_workflow_execution_due_to_expired_session/1,
+    interrupt_scheduled_atm_workflow_execution_due_to_expired_session/1,
+    interrupt_scheduled_atm_workflow_execution_due_to_openfaas_down/1,
 
     crash_atm_workflow_execution_during_prepare_lane_callback/1,
     crash_atm_workflow_execution_during_resume_lane_callback/1,
@@ -249,7 +250,8 @@ groups() -> [
     ]},
 
     {interrupt_tests, [], [
-        interrupt_ongoing_atm_workflow_execution_due_to_expired_session
+        interrupt_scheduled_atm_workflow_execution_due_to_expired_session,
+        interrupt_scheduled_atm_workflow_execution_due_to_openfaas_down
     ]},
 
     {crash_tests, [], [
@@ -575,7 +577,11 @@ pause_interrupted_atm_workflow_execution(_Config) ->
     ?RUN_PAUSE_TEST().
 
 
-interrupt_ongoing_atm_workflow_execution_due_to_expired_session(_Config) ->
+interrupt_scheduled_atm_workflow_execution_due_to_expired_session(_Config) ->
+    ?RUN_INTERRUPT_TEST().
+
+
+interrupt_scheduled_atm_workflow_execution_due_to_openfaas_down(_Config) ->
     ?RUN_INTERRUPT_TEST().
 
 
