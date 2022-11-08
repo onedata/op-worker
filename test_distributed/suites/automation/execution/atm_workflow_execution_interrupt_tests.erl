@@ -20,7 +20,10 @@
     interrupt_scheduled_atm_workflow_execution_due_to_openfaas_down/0,
 
     interrupt_enqueued_atm_workflow_execution_due_to_expired_session/0,
-    interrupt_enqueued_atm_workflow_execution_due_to_openfaas_down/0
+    interrupt_enqueued_atm_workflow_execution_due_to_openfaas_down/0,
+
+    interrupt_active_atm_workflow_execution_with_no_uncorrelated_task_results_due_to_expired_session/0,
+    interrupt_active_atm_workflow_execution_with_uncorrelated_task_results_due_to_expired_session/0
 ]).
 
 
@@ -244,6 +247,91 @@ interrupt_enqueued_atm_workflow_execution_due_to_openfaas_down() ->
     }).
 
 
+interrupt_active_atm_workflow_execution_with_no_uncorrelated_task_results_due_to_expired_session() ->
+    interrupt_active_atm_workflow_execution_test_base(?FUNCTION_NAME, return_value).
+
+
+interrupt_active_atm_workflow_execution_with_uncorrelated_task_results_due_to_expired_session() ->
+    interrupt_active_atm_workflow_execution_test_base(?FUNCTION_NAME, file_pipe).
+
+
+%% @private
+interrupt_active_atm_workflow_execution_test_base(Testcase, RelayMethod) ->
+    ItemCount = 20,
+
+    UpdateTaskStatusAfterPauseFun = fun(ExpTaskState = #{
+        <<"itemsInProcessing">> := IIP,
+        <<"itemsProcessed">> := IP
+    }) ->
+        ExpTaskState#{<<"status">> => case IIP + IP of
+            0 -> <<"interrupted">>;
+            _ -> <<"stopping">>
+        end}
+    end,
+
+    atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
+        workflow_schema_dump_or_draft = ?ECHO_ATM_WORKFLOW_SCHEMA_DRAFT(Testcase, ItemCount, RelayMethod),
+        incarnations = [#atm_workflow_execution_incarnation_test_spec{
+            incarnation_num = 1,
+            lane_runs = [
+                #atm_lane_run_execution_test_spec{
+                    selector = {1, 1},
+                    prepare_lane = #atm_step_mock_spec{
+                        % Await lane run in advance prepared and enqueued
+                        defer_after = {prepare_lane, after_step, {2, 1}}
+                    },
+                    run_task_for_item = #atm_step_mock_spec{
+                        % Delay execution of last batch to ensure it happens after execution is paused
+                        strategy = fun(#atm_mock_call_ctx{call_args = [_, _, _, _, ItemBatch]}) ->
+                            case lists:member(ItemCount, ItemBatch) of
+                                true -> {passthrough_with_delay, timer:seconds(2)};
+                                false -> passthrough
+                            end
+                        end
+                    },
+                    process_task_result_for_item = #atm_step_mock_spec{
+                        before_step_hook = fun atm_workflow_execution_test_utils:delete_offline_session/1
+                    },
+                    % This is called as part of `handle_workflow_abruptly_stopped`
+                    handle_lane_execution_stopped = #atm_step_mock_spec{
+                        after_step_hook = fun(AtmMockCallCtx) ->
+                            assert_exception_store_is_empty({1, 1}, AtmMockCallCtx)
+                        end,
+                        after_step_exp_state_diff = [
+                            {all_tasks, {1, 1}, abruptly, interrupted},
+                            {lane_run, {1, 1}, interrupted}
+                        ]
+                    }
+                },
+                ?INTERRUPTED_LANE_RUN_PREPARED_IN_ADVANCE_TEST_SPEC({2, 1})
+            ],
+            handle_exception = #atm_step_mock_spec{
+                after_step_exp_state_diff = lists:flatten([
+                    % task1 or task2 transitions to 'stopping' status as for at least one of them some
+                    % items were scheduled
+                    {task, ?TASK1_SELECTOR({1, 1}), UpdateTaskStatusAfterPauseFun},
+                    {task, ?TASK2_SELECTOR({1, 1}), UpdateTaskStatusAfterPauseFun},
+                    {parallel_box, ?PB1_SELECTOR({1, 1}), stopping},
+
+                    % task3 immediately transitions to 'interrupted' as definitely no item was scheduled for it
+                    {task, ?TASK3_SELECTOR({1, 1}), interrupted},
+                    {parallel_box, ?PB2_SELECTOR({1, 1}), interrupted},
+
+                    {lane_run, {1, 1}, stopping},
+                    workflow_stopping
+                ])
+            },
+            handle_workflow_abruptly_stopped = #atm_step_mock_spec{
+                after_step_exp_state_diff = [
+                    {lane_run, {2, 1}, removed},
+                    workflow_interrupted
+                ]
+            },
+            after_hook = fun assert_interrupted_atm_workflow_execution_can_be_neither_paused_nor_repeated/1
+        }]
+    }).
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -261,3 +349,10 @@ assert_interrupted_atm_workflow_execution_can_be_neither_paused_nor_repeated(Atm
         {1, 1}, AtmMockCallCtx
     ),
     ?assert(atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState0)).
+
+
+%% @private
+assert_exception_store_is_empty(AtmLaneRunSelector, AtmMockCallCtx) ->
+    ?assertEqual([], lists:sort(atm_workflow_execution_test_utils:get_exception_store_content(
+        AtmLaneRunSelector, AtmMockCallCtx
+    ))).
