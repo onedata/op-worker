@@ -77,7 +77,8 @@
 %%% logically such transition occurs.
 %%% Possible reasons for ^stopping lane run execution when not all items were processed are as follows:
 %%% 1* - failure severe enough to cause stopping of entire automation workflow execution
-%%%      (e.g. error when processing uncorrelated results).
+%%%      (e.g. error when processing uncorrelated results) or interruption if any active task
+%%%      had uncorrelated results (some of them may have been lost).
 %%% 2* - user cancelling entire automation workflow execution.
 %%% 3* - unhandled exception occurred.
 %%% 4* - abrupt interruption when some other component (e.g user offline session expired)
@@ -456,10 +457,7 @@ end_lane_run(AtmLaneRunSelector, AtmWorkflowExecution) ->
             ?ERROR_ATM_INVALID_STATUS_TRANSITION(Status, ?INTERRUPTED_STATUS);
 
         (#atm_lane_execution_run{status = ?ACTIVE_STATUS} = Run) ->
-            AtmParallelBoxExecutionStatuses = atm_parallel_box_execution:gather_statuses(
-                Run#atm_lane_execution_run.parallel_boxes
-            ),
-            StoppedStatus = case lists:member(?FAILED_STATUS, AtmParallelBoxExecutionStatuses) of
+            StoppedStatus = case has_any_parallel_box_status(?FAILED_STATUS, Run) of
                 true -> ?FAILED_STATUS;
                 false -> ?FINISHED_STATUS
             end,
@@ -467,17 +465,36 @@ end_lane_run(AtmLaneRunSelector, AtmWorkflowExecution) ->
 
         (#atm_lane_execution_run{status = ?STOPPING_STATUS} = Run) ->
             StoppedStatus = case Run#atm_lane_execution_run.stopping_reason of
-                crash -> ?CRASHED_STATUS;
-                cancel -> ?CANCELLED_STATUS;
-                failure -> ?FAILED_STATUS;
-                interrupt -> ?INTERRUPTED_STATUS;
-                pause -> ?PAUSED_STATUS
+                crash ->
+                    ?CRASHED_STATUS;
+                cancel ->
+                    ?CANCELLED_STATUS;
+                failure ->
+                    ?FAILED_STATUS;
+                interrupt ->
+                    % If any task fails during interruption (e.g. due to having uncorrelated results)
+                    % then entire lane run is treated as failed
+                    case has_any_parallel_box_status(?FAILED_STATUS, Run) of
+                        true -> ?FAILED_STATUS;
+                        false -> ?INTERRUPTED_STATUS
+                    end;
+                pause ->
+                    ?PAUSED_STATUS
             end,
             {ok, Run#atm_lane_execution_run{status = StoppedStatus}};
 
         (#atm_lane_execution_run{status = StoppedStatus}) ->
             ?ERROR_ATM_INVALID_STATUS_TRANSITION(StoppedStatus, ?INTERRUPTED_STATUS)
     end, AtmWorkflowExecution).
+
+
+%% @private
+-spec has_any_parallel_box_status(atm_parallel_box_execution:status(), atm_lane_execution:run()) ->
+    boolean().
+has_any_parallel_box_status(Status, #atm_lane_execution_run{
+    parallel_boxes = AtmParallelBoxExecutions
+}) ->
+    lists:member(Status, atm_parallel_box_execution:gather_statuses(AtmParallelBoxExecutions)).
 
 
 %% @private
