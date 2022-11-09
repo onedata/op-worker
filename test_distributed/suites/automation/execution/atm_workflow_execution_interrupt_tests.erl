@@ -27,7 +27,10 @@
     interrupt_active_atm_workflow_execution_with_no_uncorrelated_task_results_due_to_external_abandon/0,
     interrupt_active_atm_workflow_execution_with_uncorrelated_task_results_due_to_external_abandon/0,
 
-    interrupt_paused_atm_workflow_execution/0
+    interrupt_paused_atm_workflow_execution/0,
+
+    interrupt_resuming_paused_atm_workflow_execution_due_to_internal_exception/0,
+    interrupt_resuming_paused_atm_workflow_execution_due_to_external_abandon/0
 ]).
 
 
@@ -353,40 +356,11 @@ interrupt_active_atm_workflow_execution_test_base(Testcase, InterruptType, Relay
 
 
 interrupt_paused_atm_workflow_execution() ->
+    PausedIncarnation = build_paused_enqueued_incarnation_test_spec(),
+
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         workflow_schema_dump_or_draft = ?ECHO_ATM_WORKFLOW_SCHEMA_DRAFT,
-        incarnations = [#atm_workflow_execution_incarnation_test_spec{
-            incarnation_num = 1,
-            lane_runs = [
-                #atm_lane_run_execution_test_spec{
-                    selector = {1, 1}
-                },
-                #atm_lane_run_execution_test_spec{
-                    selector = {2, 1},
-                    process_task_result_for_item = #atm_step_mock_spec{
-                        before_step_hook = fun atm_workflow_execution_test_utils:pause_workflow_execution/1,
-                        before_step_exp_state_diff = [
-                            {all_tasks, {2, 1}, stopping},
-                            {lane_run, {2, 1}, stopping},
-                            workflow_stopping
-                        ]
-                    },
-                    handle_task_execution_stopped = #atm_step_mock_spec{
-                        after_step_exp_state_diff = atm_workflow_execution_test_utils:build_task_step_exp_state_diff(#{
-                            <<"task4">> => [
-                                {task, ?TASK_ID_PLACEHOLDER, paused},
-                                {parallel_box, ?PB_SELECTOR_PLACEHOLDER, paused}
-                            ]
-                        })
-                    },
-                    handle_lane_execution_stopped = #atm_step_mock_spec{
-                        after_step_exp_state_diff = [{lane_run, {2, 1}, paused}]
-                    }
-                }
-            ],
-            handle_workflow_execution_stopped = #atm_step_mock_spec{
-                after_step_exp_state_diff = [workflow_paused]
-            },
+        incarnations = [PausedIncarnation#atm_workflow_execution_incarnation_test_spec{
             after_hook = fun(AtmMockCallCtx = #atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
                 ?assertEqual(
                     ?ERROR_ATM_INVALID_STATUS_TRANSITION(?PAUSED_STATUS, ?STOPPING_STATUS),
@@ -401,6 +375,73 @@ interrupt_paused_atm_workflow_execution() ->
     }).
 
 
+interrupt_resuming_paused_atm_workflow_execution_due_to_internal_exception() ->
+    interrupt_resuming_paused_atm_workflow_execution_test_base(internal_exception).
+
+
+interrupt_resuming_paused_atm_workflow_execution_due_to_external_abandon() ->
+    interrupt_resuming_paused_atm_workflow_execution_test_base(external_abandon).
+
+
+%% @private
+-spec interrupt_resuming_paused_atm_workflow_execution_test_base(interrupt_type()) ->
+    ok.
+interrupt_resuming_paused_atm_workflow_execution_test_base(InterruptType) ->
+    StoppingExecutionExpStateDiff = [
+        {all_tasks, {1, 1}, interrupted},
+        {lane_run, {1, 1}, stopping},
+        workflow_stopping
+    ],
+    PausedIncarnation = build_paused_enqueued_incarnation_test_spec(),
+
+    atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
+        workflow_schema_dump_or_draft = ?ECHO_ATM_WORKFLOW_SCHEMA_DRAFT,
+        incarnations = [
+            PausedIncarnation#atm_workflow_execution_incarnation_test_spec{
+                after_hook = fun(AtmMockCallCtx = #atm_mock_call_ctx{workflow_execution_exp_state = ExpSuspendedState}) ->
+                    atm_workflow_execution_test_utils:resume_workflow_execution(AtmMockCallCtx),
+
+                    ExpResumingState = atm_workflow_execution_exp_state_builder:expect(ExpSuspendedState, [
+                        {lane_run, {1, 1}, resuming},
+                        workflow_resuming
+                    ]),
+                    ?assert(atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpResumingState))
+                end
+            },
+            #atm_workflow_execution_incarnation_test_spec{
+                incarnation_num = 2,
+                lane_runs = [
+                    #atm_lane_run_execution_test_spec{
+                        selector = {1, 1},
+                        resume_lane = #atm_step_mock_spec{
+                            before_step_hook = get_interrupt_hook(InterruptType),
+                            % State is changed immediately only by external interrupt procedure
+                            before_step_exp_state_diff = case InterruptType of
+                                internal_exception -> default;
+                                external_abandon -> StoppingExecutionExpStateDiff
+                            end,
+                            after_step_exp_state_diff = no_diff
+                        },
+                        handle_lane_execution_stopped = #atm_step_mock_spec{
+                            after_step_exp_state_diff = [{lane_run, {1, 1}, interrupted}]
+                        }
+                    },
+                    ?UNSCHEDULED_LANE_RUN_TEST_SPEC({2, 1}, {resume_lane, before_step, {1, 1}})
+                ],
+                % Callback called only in case of interrupt caused by exception
+                handle_exception = #atm_step_mock_spec{after_step_exp_state_diff = case InterruptType of
+                    internal_exception -> StoppingExecutionExpStateDiff;
+                    external_abandon -> default
+                end},
+                handle_workflow_abruptly_stopped = #atm_step_mock_spec{
+                    after_step_exp_state_diff = [workflow_interrupted]
+                },
+                after_hook = fun assert_interrupted_atm_workflow_execution_can_be_neither_paused_nor_repeated/1
+            }
+        ]
+    }).
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -410,6 +451,36 @@ interrupt_paused_atm_workflow_execution() ->
 -spec get_interrupt_hook(interrupt_type()) -> atm_workflow_execution_test_runner:hook().
 get_interrupt_hook(internal_exception) -> fun atm_workflow_execution_test_utils:delete_offline_session/1;
 get_interrupt_hook(external_abandon) -> fun atm_workflow_execution_test_utils:report_openfaas_unhealthy/1.
+
+
+%% @private
+build_paused_enqueued_incarnation_test_spec() ->
+    #atm_workflow_execution_incarnation_test_spec{
+        incarnation_num = 1,
+        lane_runs = [
+            #atm_lane_run_execution_test_spec{
+                selector = {1, 1},
+                run_task_for_item = #atm_step_mock_spec{
+                    before_step_hook = fun atm_workflow_execution_test_utils:pause_workflow_execution/1,
+                    before_step_exp_state_diff = [
+                        {all_tasks, {1, 1}, paused},
+                        {lane_run, {1, 1}, stopping},
+                        workflow_stopping
+                    ]
+                },
+                handle_task_execution_stopped = #atm_step_mock_spec{
+                    after_step_exp_state_diff = no_diff
+                },
+                handle_lane_execution_stopped = #atm_step_mock_spec{
+                    after_step_exp_state_diff = [{lane_run, {1, 1}, paused}]
+                }
+            },
+            ?UNSCHEDULED_LANE_RUN_TEST_SPEC({2, 1}, {handle_lane_execution_stopped, after_step, {1, 1}})
+        ],
+        handle_workflow_execution_stopped = #atm_step_mock_spec{
+            after_step_exp_state_diff = [workflow_paused]
+        }
+    }.
 
 
 %% @private
