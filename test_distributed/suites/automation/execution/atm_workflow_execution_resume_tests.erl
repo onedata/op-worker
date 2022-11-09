@@ -71,7 +71,7 @@
     max_batch_size = 1
 }).
 
--define(ATM_WORKFLOW_SCHEMA_DRAFT(__TESTCASE, __ITERATED_CONTENT),
+-define(ATM_WORKFLOW_SCHEMA_DRAFT(__TESTCASE, __ITERATED_CONTENT, __RELAY_METHOD),
     #atm_workflow_schema_dump_draft{
         name = str_utils:to_binary(__TESTCASE),
         revision_num = 1,
@@ -104,12 +104,17 @@
             ]
         },
         supplementary_lambdas = #{
-            <<"lambda1">> => #{?ECHO_LAMBDA_REVISION_NUM => ?LAMBDA_DRAFT(?ECHO_DOCKER_IMAGE_ID, file_pipe)},
+            <<"lambda1">> => #{?ECHO_LAMBDA_REVISION_NUM => ?LAMBDA_DRAFT(
+                ?ECHO_DOCKER_IMAGE_ID, __RELAY_METHOD
+            )},
             <<"lambda2">> => #{?ECHO_LAMBDA_REVISION_NUM => ?LAMBDA_DRAFT(
                 ?ECHO_WITH_EXCEPTION_ON_EVEN_NUMBERS, return_value
             )}
         }
     }
+).
+-define(ATM_WORKFLOW_SCHEMA_DRAFT(__TESTCASE, __ITERATED_CONTENT),
+    ?ATM_WORKFLOW_SCHEMA_DRAFT(__TESTCASE, __ITERATED_CONTENT, file_pipe)
 ).
 
 -define(TASK1_SELECTOR(__ATM_LANE_RUN_SELECTOR), {__ATM_LANE_RUN_SELECTOR, <<"pb1">>, <<"task1">>}).
@@ -340,7 +345,9 @@ resume_atm_workflow_execution_suspended_while_active_test_base(Testcase, Suspend
 
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(
-            Testcase, [1, 2, 3, 4, 5, 6]
+            % Use return_value instead of file_pipe relay method (it would result
+            % in failed execution due to uncorrelated results)
+            Testcase, [1, 2, 3, 4, 5, 6], return_value
         ),
         incarnations = [
             #atm_workflow_execution_incarnation_test_spec{
@@ -404,7 +411,7 @@ resume_atm_workflow_execution_suspended_while_active_test_base(Testcase, Suspend
                                 workflow_resuming
                             ],
                             after_step_hook = build_assert_exp_parallel_box_specs_returned_hook([
-                                #{?TASK1_SELECTOR({1, 1}) => #{type => async, data_stream_enabled => true}},
+                                #{?TASK1_SELECTOR({1, 1}) => #{type => async, data_stream_enabled => false}},
                                 #{?TASK2_SELECTOR({1, 1}) => #{type => async, data_stream_enabled => false}}
                             ]),
                             after_step_exp_state_diff = [

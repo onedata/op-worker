@@ -474,6 +474,7 @@ handle_status_change(#document{
         run_num = RunNumOrUndefined,
         parallel_box_index = AtmParallelBoxIndex,
         status = NewStatus,
+        stopping_reason = StoppingReason,
         status_changed = true
     }
 }) ->
@@ -481,5 +482,5 @@ handle_status_change(#document{
 
     ok = atm_lane_execution_status:handle_task_status_change(
         AtmWorkflowExecutionId, {AtmLaneIndex, RunSelector}, AtmParallelBoxIndex,
-        AtmTaskExecutionId, NewStatus
+        AtmTaskExecutionId, StoppingReason, NewStatus
     ).

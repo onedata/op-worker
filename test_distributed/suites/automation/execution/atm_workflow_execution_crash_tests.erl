@@ -93,7 +93,7 @@
 
 
 crash_atm_workflow_execution_during_prepare_lane_callback() ->
-    crash_atm_workflow_execution_test_base(?FUNCTION_NAME, #atm_lane_run_execution_test_spec{
+    crash_atm_workflow_execution_test_base(?FUNCTION_NAME, interrupted, #atm_lane_run_execution_test_spec{
         prepare_lane = #atm_step_mock_spec{
             strategy = {yield, {error, crashed}},
             after_step_exp_state_diff = no_diff
@@ -169,7 +169,7 @@ crash_atm_workflow_execution_during_resume_lane_callback() ->
 
 
 crash_atm_workflow_execution_during_run_task_for_item_callback() ->
-    crash_atm_workflow_execution_test_base(?FUNCTION_NAME, #atm_lane_run_execution_test_spec{
+    crash_atm_workflow_execution_test_base(?FUNCTION_NAME, interrupted, #atm_lane_run_execution_test_spec{
         run_task_for_item = #atm_step_mock_spec{
             strategy = {yield, {error, crashed}},
             after_step_exp_state_diff = no_diff
@@ -178,7 +178,7 @@ crash_atm_workflow_execution_during_run_task_for_item_callback() ->
 
 
 crash_atm_workflow_execution_during_process_task_result_for_item_callback() ->
-    crash_atm_workflow_execution_test_base(?FUNCTION_NAME, #atm_lane_run_execution_test_spec{
+    crash_atm_workflow_execution_test_base(?FUNCTION_NAME, failed, #atm_lane_run_execution_test_spec{
         process_task_result_for_item = #atm_step_mock_spec{
             strategy = {yield, {error, crashed}},
             after_step_exp_state_diff = no_diff
@@ -187,7 +187,7 @@ crash_atm_workflow_execution_during_process_task_result_for_item_callback() ->
 
 
 crash_atm_workflow_execution_during_process_streamed_task_data_callback() ->
-    crash_atm_workflow_execution_test_base(?FUNCTION_NAME, #atm_lane_run_execution_test_spec{
+    crash_atm_workflow_execution_test_base(?FUNCTION_NAME, failed, #atm_lane_run_execution_test_spec{
         process_streamed_task_data = #atm_step_mock_spec{
             strategy = {yield, {error, crashed}},
             after_step_exp_state_diff = no_diff
@@ -196,7 +196,7 @@ crash_atm_workflow_execution_during_process_streamed_task_data_callback() ->
 
 
 crash_atm_workflow_execution_during_handle_task_results_processed_for_all_items_callback() ->
-    crash_atm_workflow_execution_test_base(?FUNCTION_NAME, #atm_lane_run_execution_test_spec{
+    crash_atm_workflow_execution_test_base(?FUNCTION_NAME, failed, #atm_lane_run_execution_test_spec{
         handle_task_results_processed_for_all_items = #atm_step_mock_spec{
             strategy = {yield, {error, crashed}},
             after_step_exp_state_diff = no_diff
@@ -205,7 +205,7 @@ crash_atm_workflow_execution_during_handle_task_results_processed_for_all_items_
 
 
 crash_atm_workflow_execution_during_handle_task_execution_stopped_callback() ->
-    crash_atm_workflow_execution_test_base(?FUNCTION_NAME, #atm_lane_run_execution_test_spec{
+    crash_atm_workflow_execution_test_base(?FUNCTION_NAME, failed, #atm_lane_run_execution_test_spec{
         handle_task_execution_stopped = #atm_step_mock_spec{
             strategy = {yield, {error, crashed}},
             after_step_exp_state_diff = no_diff
@@ -305,7 +305,7 @@ crash_atm_workflow_execution_during_handle_exception_callback() ->
 
 
 %% @private
-crash_atm_workflow_execution_test_base(Testcase, CrashingAtmLaneRunExecutionTestSpec) ->
+crash_atm_workflow_execution_test_base(Testcase, ExpTasksFinalStatus, CrashingAtmLaneRunExecutionTestSpec) ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(Testcase, file_pipe),
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
@@ -315,7 +315,7 @@ crash_atm_workflow_execution_test_base(Testcase, CrashingAtmLaneRunExecutionTest
                 % this is called as part of `handle_workflow_abruptly_stopped`
                 handle_lane_execution_stopped = #atm_step_mock_spec{
                     after_step_exp_state_diff = [
-                        {all_tasks, {1, 1}, abruptly, interrupted},
+                        {all_tasks, {1, 1}, abruptly, ExpTasksFinalStatus},
                         {lane_run, {1, 1}, crashed}
                     ]
                 }

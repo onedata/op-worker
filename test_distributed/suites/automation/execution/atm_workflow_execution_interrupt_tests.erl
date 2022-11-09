@@ -242,7 +242,11 @@ interrupt_active_atm_workflow_execution_with_uncorrelated_task_results_due_to_ex
 interrupt_active_atm_workflow_execution_test_base(Testcase, InterruptType, RelayMethod) ->
     ItemCount = 20,
 
-    UpdateTaskStatusAfterPauseFun = fun(ExpTaskState = #{
+    ExpFinalStatus = case RelayMethod of
+        return_value -> interrupted;
+        file_pipe -> failed
+    end,
+    InferTaskStatusAfterInterruptFun = fun(ExpTaskState = #{
         <<"itemsInProcessing">> := IIP,
         <<"itemsProcessed">> := IP
     }) ->
@@ -251,12 +255,20 @@ interrupt_active_atm_workflow_execution_test_base(Testcase, InterruptType, Relay
             _ -> <<"stopping">>
         end}
     end,
+    InferStoppedTaskStatusFun = fun
+        (ExpTaskState = #{<<"status">> := <<"stopping">>}) ->
+            atm_workflow_execution_exp_state_builder:adjust_abruptly_stopped_task_stats(ExpTaskState#{
+                <<"status">> => str_utils:to_binary(ExpFinalStatus)
+            });
+        (ExpTaskState = #{<<"status">> := <<"interrupted">>}) ->
+            ExpTaskState
+    end,
 
     StoppingExecutionExpStateDiff = [
         % task1 or task2 transitions to 'stopping' status as for at least one of them some
         % items were scheduled
-        {task, ?TASK1_SELECTOR({1, 1}), UpdateTaskStatusAfterPauseFun},
-        {task, ?TASK2_SELECTOR({1, 1}), UpdateTaskStatusAfterPauseFun},
+        {task, ?TASK1_SELECTOR({1, 1}), InferTaskStatusAfterInterruptFun},
+        {task, ?TASK2_SELECTOR({1, 1}), InferTaskStatusAfterInterruptFun},
         {parallel_box, ?PB1_SELECTOR({1, 1}), stopping},
 
         % task3 immediately transitions to 'interrupted' as definitely no item was scheduled for it
@@ -301,8 +313,10 @@ interrupt_active_atm_workflow_execution_test_base(Testcase, InterruptType, Relay
                             assert_exception_store_is_empty({1, 1}, AtmMockCallCtx)
                         end,
                         after_step_exp_state_diff = [
-                            {all_tasks, {1, 1}, abruptly, interrupted},
-                            {lane_run, {1, 1}, interrupted}
+                            {task, ?TASK1_SELECTOR({1, 1}), InferStoppedTaskStatusFun},
+                            {task, ?TASK2_SELECTOR({1, 1}), InferStoppedTaskStatusFun},
+                            {parallel_box, ?PB1_SELECTOR({1, 1}), ExpFinalStatus},
+                            {lane_run, {1, 1}, ExpFinalStatus}
                         ]
                     }
                 },
@@ -314,12 +328,24 @@ interrupt_active_atm_workflow_execution_test_base(Testcase, InterruptType, Relay
                 external_abandon -> default
             end},
             handle_workflow_abruptly_stopped = #atm_step_mock_spec{
-                after_step_exp_state_diff = [
-                    {lane_run, {2, 1}, removed},
-                    workflow_interrupted
-                ]
+                after_step_exp_state_diff = case ExpFinalStatus of
+                    interrupted ->
+                        [
+                            {lane_run, {2, 1}, removed},
+                            workflow_interrupted
+                        ];
+                    failed ->
+                        [
+                            {lane_run, {2, 1}, removed},
+                            {lane_runs, [{1, 1}], rerunable},
+                            workflow_failed
+                        ]
+                end
             },
-            after_hook = fun assert_interrupted_atm_workflow_execution_can_be_neither_paused_nor_repeated/1
+            after_hook = case ExpFinalStatus of
+                interrupted -> fun assert_interrupted_atm_workflow_execution_can_be_neither_paused_nor_repeated/1;
+                failed -> fun atm_workflow_execution_test_utils:assert_ended_workflow_execution_can_be_neither_stopped_nor_resumed/1
+            end
         }]
     }).
 

@@ -48,6 +48,7 @@
     get_task_schema_id/2,
     get_task_id/2,
     get_task_stats/2,
+    adjust_abruptly_stopped_task_stats/1,
     get_task_status/2,
 
     expect_task_items_in_processing_increased/3,
@@ -732,6 +733,20 @@ get_task_stats(AtmTaskExecutionId, #exp_workflow_execution_state_ctx{
     {IIP, IF, IP}.
 
 
+%% @private
+-spec adjust_abruptly_stopped_task_stats(task_execution_state()) -> task_execution_state().
+adjust_abruptly_stopped_task_stats(ExpAtmTaskExecutionState = #{
+    <<"itemsInProcessing">> := ItemsInProcessing,
+    <<"itemsProcessed">> := ItemsProcessed,
+    <<"itemsFailed">> := ItemsFailed
+}) ->
+    ExpAtmTaskExecutionState#{
+        <<"itemsInProcessing">> => 0,
+        <<"itemsProcessed">> => ItemsProcessed + ItemsInProcessing,
+        <<"itemsFailed">> => ItemsFailed + ItemsInProcessing
+    }.
+
+
 -spec get_task_status(atm_task_execution:id(), ctx()) -> binary().
 get_task_status(AtmTaskExecutionId, #exp_workflow_execution_state_ctx{
     exp_task_execution_state_ctx_registry = ExpAtmTaskExecutionsRegistry
@@ -889,7 +904,7 @@ expect_all_tasks_abruptly_stopped(AtmLaneRunSelector, FinalStatus, ExpStateCtx) 
     ExpAtmTaskExecutionStatusChangeFun = fun(ExpAtmTaskExecution = #exp_task_execution_state_ctx{
         exp_state = ExpState
     }) ->
-        ExpAtmTaskExecution#exp_task_execution_state_ctx{exp_state = handle_abruptly_stopped_task_stats(ExpState#{
+        ExpAtmTaskExecution#exp_task_execution_state_ctx{exp_state = adjust_abruptly_stopped_task_stats(ExpState#{
             <<"status">> => FinalStatus
         })}
     end,
@@ -902,19 +917,6 @@ expect_all_tasks_abruptly_stopped(AtmLaneRunSelector, FinalStatus, ExpStateCtx) 
         ExpAtmParallelBoxExecutionStatusChangeFun,
         ExpStateCtx
     ).
-
-
-%% @private
-handle_abruptly_stopped_task_stats(ExpAtmTaskExecutionState = #{
-    <<"itemsInProcessing">> := ItemsInProcessing,
-    <<"itemsProcessed">> := ItemsProcessed,
-    <<"itemsFailed">> := ItemsFailed
-}) ->
-    ExpAtmTaskExecutionState#{
-        <<"itemsInProcessing">> => 0,
-        <<"itemsProcessed">> => ItemsProcessed + ItemsInProcessing,
-        <<"itemsFailed">> => ItemsFailed + ItemsInProcessing
-    }.
 
 
 -spec expect_all_tasks_stopping_due_to(
