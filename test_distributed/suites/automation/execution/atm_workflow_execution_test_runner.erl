@@ -61,6 +61,8 @@
     prepare_lane |
     create_run |
     resume_lane |
+    handle_task_resuming |
+    handle_task_resumed |
     run_task_for_item |
     process_task_result_for_item |
     process_streamed_task_data |
@@ -110,7 +112,7 @@
 
 -type mock_strategy_spec() ::
     mock_strategy() |
-    fun((mock_call_report()) -> mock_strategy()).
+    fun((mock_call_ctx()) -> mock_strategy()).
 
 -type step_mock_spec() :: #atm_step_mock_spec{}.
 

@@ -85,6 +85,7 @@
     pause_active_atm_workflow_execution_with_uncorrelated_task_results/1,
 
     pause_interrupted_atm_workflow_execution/1,
+    pause_resuming_interrupted_atm_workflow_execution/1,
 
     interrupt_scheduled_atm_workflow_execution_due_to_internal_exception/1,
     interrupt_scheduled_atm_workflow_execution_due_to_external_abandon/1,
@@ -259,7 +260,8 @@ groups() -> [
         pause_active_atm_workflow_execution_with_no_uncorrelated_task_results,
         pause_active_atm_workflow_execution_with_uncorrelated_task_results,
 
-        pause_interrupted_atm_workflow_execution
+        pause_interrupted_atm_workflow_execution,
+        pause_resuming_interrupted_atm_workflow_execution
     ]},
 
     {interrupt_tests, [], [
@@ -600,6 +602,10 @@ pause_active_atm_workflow_execution_with_uncorrelated_task_results(_Config) ->
 
 
 pause_interrupted_atm_workflow_execution(_Config) ->
+    ?RUN_PAUSE_TEST().
+
+
+pause_resuming_interrupted_atm_workflow_execution(_Config) ->
     ?RUN_PAUSE_TEST().
 
 
@@ -951,7 +957,6 @@ init_per_group(TestGroup, Config) when
     TestGroup =:= repeat_tests;
     TestGroup =:= resume_tests
 ->
-    atm_openfaas_task_executor_mock:init(?PROVIDER_SELECTOR, atm_openfaas_docker_mock),
     atm_workflow_execution_test_runner:init(?PROVIDER_SELECTOR),
     Config.
 
@@ -978,7 +983,6 @@ end_per_group(TestGroup, Config) when
     TestGroup =:= resume_tests
 ->
     atm_workflow_execution_test_runner:teardown(?PROVIDER_SELECTOR),
-    atm_openfaas_task_executor_mock:teardown(?PROVIDER_SELECTOR),
     Config.
 
 

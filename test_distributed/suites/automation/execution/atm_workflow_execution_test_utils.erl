@@ -41,7 +41,8 @@
 ]).
 -export([
     build_task_step_exp_state_diff/1,
-    build_task_step_hook/1
+    build_task_step_hook/1,
+    build_task_step_strategy/1
 ]).
 
 
@@ -257,6 +258,21 @@ build_task_step_hook(HooksPerTask) ->
     end.
 
 
+-spec build_task_step_strategy(#{automation:id() => atm_workflow_execution_test_runner:mock_strategy_spec()}) ->
+    atm_workflow_execution_test_runner:mock_strategy_spec().
+build_task_step_strategy(StrategiesPerTask) ->
+    fun(AtmMockCallCtx = #atm_mock_call_ctx{workflow_execution_exp_state = ExpState}) ->
+        AtmTaskSchemaId = atm_workflow_execution_exp_state_builder:get_task_schema_id(
+            get_task_execution_id(AtmMockCallCtx),
+            ExpState
+        ),
+        case maps:get(AtmTaskSchemaId, StrategiesPerTask, passthrough) of
+            TaskStrategyFun when is_function(TaskStrategyFun, 1) -> TaskStrategyFun(AtmMockCallCtx);
+            TaskStrategy -> TaskStrategy
+        end
+    end.
+
+
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -354,6 +370,18 @@ build_browse_opts(time_series) ->
 
 
 %% @private
+get_task_execution_id(#atm_mock_call_ctx{
+    step = handle_task_resuming,
+    call_args = [AtmTaskExecutionId, _CurrentIncarnation]
+}) ->
+    AtmTaskExecutionId;
+
+get_task_execution_id(#atm_mock_call_ctx{
+    step = handle_task_resumed,
+    call_args = [AtmTaskExecutionId]
+}) ->
+    AtmTaskExecutionId;
+
 get_task_execution_id(#atm_mock_call_ctx{
     step = run_task_for_item,
     call_args = [_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId, _AtmJobBatchId, _ItemBatch]
