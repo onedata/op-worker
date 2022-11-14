@@ -95,6 +95,7 @@
     get_recursive_file_list_prefix_test/1,
     get_recursive_file_list_inaccessible_paths_test/1,
     get_recursive_file_list_should_read_xattrs/1,
+    get_recursive_file_list_internal_multibatch/1,
     lfm_recreate_handle_test/1,
     lfm_write_after_create_no_perms_test/1,
     lfm_recreate_handle_after_delete_test/1,
@@ -188,6 +189,7 @@
     get_recursive_file_list_prefix_test,
     get_recursive_file_list_inaccessible_paths_test,
     get_recursive_file_list_should_read_xattrs,
+    get_recursive_file_list_internal_multibatch,
     lfm_recreate_handle_test,
     lfm_write_after_create_no_perms_test,
     lfm_recreate_handle_after_delete_test,
@@ -454,6 +456,8 @@ readdir_plus_should_read_xattrs(Config) ->
 get_recursive_file_list_should_read_xattrs(Config) ->
     lfm_files_test_base:get_recursive_file_list_should_read_xattrs(Config).
 
+get_recursive_file_list_internal_multibatch(Config) ->
+    lfm_files_test_base:get_recursive_file_list_internal_multibatch(Config).
 
 
 get_children_details_should_return_empty_result_for_empty_dir(Config) ->
