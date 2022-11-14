@@ -364,7 +364,6 @@ process_current_branching_node_in_batches(UserCtx, NodeIterator, State, ResultAc
             {done, Res};
         {_, more} ->
             UpdatedState = State#state{
-                limit = Limit - result_length(Res), 
                 is_first_batch = false
             },
             process_current_branching_node_in_batches(UserCtx, NextIterator, UpdatedState, Res)
@@ -396,7 +395,7 @@ process_child(UserCtx, Node, #state{current_node_path_tokens = CurrentPathTokens
 %%%===================================================================
 %%% Helper functions 
 %%%===================================================================
-    
+
 %% @private
 -spec init_current_branching_node_processing(state()) -> {node_iterator(), state()}.
 init_current_branching_node_processing(#state{relative_start_after_path_tokens = []} = State) ->
