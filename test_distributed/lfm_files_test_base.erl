@@ -96,6 +96,7 @@
     get_recursive_file_list_prefix_test_base/1,
     get_recursive_file_list_inaccessible_paths_test_base/1,
     get_recursive_file_list_should_read_xattrs/1,
+    get_recursive_file_list_internal_multibatch/1,
     lfm_recreate_handle/3,
     lfm_open_failure/1,
     lfm_create_and_open_failure/1,
@@ -699,6 +700,27 @@ get_recursive_file_list_should_read_xattrs(Config) ->
         lists:map(fun({_Path, Attrs}) -> Attrs end, List)
     end,
     readdir_plus_read_xattrs_base(Config, ReadFun).
+
+
+get_recursive_file_list_internal_multibatch(Config) ->
+    % internal children batch limit is set to 1000 (see recursive_listing ?LIST_RECURSIVE_BATCH_SIZE), so this test
+    % checks listing with limit larger than this value
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    
+    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
+    lfm_ct:set_default_context(Worker, SessId1),
+    
+    MainDirName = generator:gen_name(),
+    MainDirPath = <<"/space_name1/", MainDirName/binary, "/">>,
+    MainDirGuid = lfm_ct:mkdir(MainDirPath),
+    GuidsAndPaths = lists:map(fun(Num) ->
+        Path = <<MainDirPath/binary, (integer_to_binary(Num))/binary>>,
+        {lfm_ct:create(Path), integer_to_binary(Num)}
+    end, lists:seq(1, 1500)),
+    ExpectedResult = lists:sort(fun({_Guid1, Path1}, {_Guid2, Path2}) -> Path1 =< Path2 end, GuidsAndPaths),
+    
+    ?assertMatch({ok, ExpectedResult, _, _},
+        get_files_recursively(Worker, SessId1, ?FILE_REF(MainDirGuid), #{limit => 1500})).
 
 
 echo_loop(Config) ->
