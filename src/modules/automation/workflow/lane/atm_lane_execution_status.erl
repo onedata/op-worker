@@ -210,10 +210,10 @@ handle_resumed(AtmLaneRunSelector, AtmWorkflowExecutionId) ->
     Diff = fun(AtmWorkflowExecution) ->
         atm_lane_execution:update_run(AtmLaneRunSelector, fun
             (Run = #atm_lane_execution_run{status = ?RESUMING_STATUS}) ->
-                AtmParallelBoxExecutionStatuses = atm_parallel_box_execution:gather_statuses(
+                AtmTaskExecutionStatuses = atm_parallel_box_execution:gather_task_statuses(
                     Run#atm_lane_execution_run.parallel_boxes
                 ),
-                ResumedStatus = case lists:usort(AtmParallelBoxExecutionStatuses) of
+                ResumedStatus = case lists:usort(AtmTaskExecutionStatuses) of
                     [?PENDING_STATUS] ->
                         ?ENQUEUED_STATUS;
                     _ ->
@@ -475,7 +475,7 @@ end_lane_run(AtmLaneRunSelector, AtmWorkflowExecution) ->
             ?ERROR_ATM_INVALID_STATUS_TRANSITION(Status, ?INTERRUPTED_STATUS);
 
         (#atm_lane_execution_run{status = ?ACTIVE_STATUS} = Run) ->
-            StoppedStatus = case has_any_parallel_box_status(?FAILED_STATUS, Run) of
+            StoppedStatus = case has_any_task_failed(Run) of
                 true -> ?FAILED_STATUS;
                 false -> ?FINISHED_STATUS
             end,
@@ -497,12 +497,11 @@ end_lane_run(AtmLaneRunSelector, AtmWorkflowExecution) ->
 
 
 %% @private
--spec has_any_parallel_box_status(atm_parallel_box_execution:status(), atm_lane_execution:run()) ->
-    boolean().
-has_any_parallel_box_status(Status, #atm_lane_execution_run{
-    parallel_boxes = AtmParallelBoxExecutions
-}) ->
-    lists:member(Status, atm_parallel_box_execution:gather_statuses(AtmParallelBoxExecutions)).
+-spec has_any_task_failed(atm_lane_execution:run()) -> boolean().
+has_any_task_failed(#atm_lane_execution_run{parallel_boxes = AtmParallelBoxExecutions}) ->
+    lists:member(?FAILED_STATUS, atm_parallel_box_execution:gather_task_statuses(
+        AtmParallelBoxExecutions
+    )).
 
 
 %% @private

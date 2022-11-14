@@ -97,9 +97,6 @@
 -define(TASK2_SELECTOR(__ATM_LANE_RUN_SELECTOR), {__ATM_LANE_RUN_SELECTOR, <<"pb1">>, <<"task2">>}).
 -define(TASK3_SELECTOR(__ATM_LANE_RUN_SELECTOR), {__ATM_LANE_RUN_SELECTOR, <<"pb2">>, <<"task3">>}).
 
--define(PB1_SELECTOR(__ATM_LANE_RUN_SELECTOR), {__ATM_LANE_RUN_SELECTOR, <<"pb1">>}).
--define(PB2_SELECTOR(__ATM_LANE_RUN_SELECTOR), {__ATM_LANE_RUN_SELECTOR, <<"pb2">>}).
-
 
 %%%===================================================================
 %%% Tests
@@ -224,11 +221,9 @@ pause_active_atm_workflow_execution_test_base(Testcase, RelayMethod) ->
                             % items were scheduled
                             {task, ?TASK1_SELECTOR({1, 1}), UpdateTaskStatusAfterPauseFun},
                             {task, ?TASK2_SELECTOR({1, 1}), UpdateTaskStatusAfterPauseFun},
-                            {parallel_box, ?PB1_SELECTOR({1, 1}), stopping},
 
                             % task3 immediately transitions to 'paused' as definitely no item was scheduled for it
                             {task, ?TASK3_SELECTOR({1, 1}), paused},
-                            {parallel_box, ?PB2_SELECTOR({1, 1}), paused},
 
                             {lane_run, {1, 1}, stopping},
                             workflow_stopping
@@ -254,13 +249,7 @@ pause_active_atm_workflow_execution_test_base(Testcase, RelayMethod) ->
                             ?assertEqual(ExpItemsProcessed, length(StDstItems))
                         end,
                         after_step_exp_state_diff = atm_workflow_execution_test_utils:build_task_step_exp_state_diff(#{
-                            [<<"task1">>, <<"task2">>] => [
-                                {task, ?TASK_ID_PLACEHOLDER, paused},
-                                {task, ?TASK_ID_PLACEHOLDER, parallel_box_transitioned_to_inferred_status, fun
-                                    (<<"stopping">>, [<<"paused">>, <<"stopping">>]) -> <<"stopping">>;
-                                    (<<"stopping">>, [<<"paused">>]) -> <<"paused">>
-                                end}
-                            ],
+                            [<<"task1">>, <<"task2">>] => [{task, ?TASK_ID_PLACEHOLDER, paused}],
                             <<"task3">> => no_diff
                         })
                     },

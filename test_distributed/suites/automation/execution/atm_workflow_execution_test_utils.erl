@@ -236,7 +236,7 @@ build_task_step_exp_state_diff(ExpectationsPerTask) ->
                 false;
             ExpectationsWithPlaceholders when is_list(ExpectationsWithPlaceholders) ->
                 Expectations = substitute_expectation_placeholders(
-                    ExpectationsWithPlaceholders, AtmTaskExecutionId, ExpState
+                    ExpectationsWithPlaceholders, AtmTaskExecutionId
                 ),
                 {true, atm_workflow_execution_exp_state_builder:expect(ExpState, Expectations)};
             ExpStateDiffFun when is_function(ExpStateDiffFun) ->
@@ -433,19 +433,12 @@ get_task_expectations(ExpectationsPerTask, AtmTaskExecutionId, ExpState) ->
 
 
 %% @private
-substitute_expectation_placeholders(Expectations, AtmTaskExecutionId, ExpState) ->
-    {AtmLaneRunSelector, AtmParallelBoxSchemaId, _} = atm_workflow_execution_exp_state_builder:get_task_selector(
-        AtmTaskExecutionId, ExpState
-    ),
-    AtmParallelBxoSelector = {AtmLaneRunSelector, AtmParallelBoxSchemaId},
-
+substitute_expectation_placeholders(Expectations, AtmTaskExecutionId) ->
     lists:map(fun
         (Expectation) when is_tuple(Expectation), tuple_size(Expectation) > 2 ->
             case {element(1, Expectation), element(2, Expectation)} of
                 {task, ?TASK_ID_PLACEHOLDER} ->
                     setelement(2, Expectation, AtmTaskExecutionId);
-                {parallel_box, ?PB_SELECTOR_PLACEHOLDER} ->
-                    setelement(2, Expectation, AtmParallelBxoSelector);
                 _ ->
                     Expectation
             end;

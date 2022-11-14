@@ -381,9 +381,7 @@ resume_atm_workflow_execution_suspended_while_active_test_base(Testcase, Suspend
                                 ]
                             }),
                             after_step_exp_state_diff = atm_workflow_execution_test_utils:build_task_step_exp_state_diff(#{
-                                [<<"task1">>, <<"task2">>] => build_expectations_for_lane1_task_transitioned_to(
-                                    ?TASK_ID_PLACEHOLDER, SuspendedStatus
-                                )
+                                [<<"task1">>, <<"task2">>] => [{task, ?TASK_ID_PLACEHOLDER, SuspendedStatus}]
                             })
                         },
 
@@ -486,12 +484,12 @@ resume_atm_workflow_execution_suspended_after_some_tasks_finished_test_base(Test
                             end,
                             after_step_hook = get_suspend_hook(SuspendedStatus),
                             after_step_exp_state_diff = atm_workflow_execution_test_utils:build_task_step_exp_state_diff(#{
-                                <<"task1">> => lists:flatten([
-                                    build_expectations_for_lane1_task_transitioned_to(?TASK1_SELECTOR({1, 2}), finished),
-                                    build_expectations_for_lane1_task_transitioned_to(?TASK2_SELECTOR({1, 2}), SuspendedStatus),
+                                <<"task1">> => [
+                                    {task, ?TASK1_SELECTOR({1, 2}), finished},
+                                    {task, ?TASK2_SELECTOR({1, 2}), SuspendedStatus},
                                     {lane_run, {1, 2}, stopping},
                                     workflow_stopping
-                                ])
+                                ]
                             })
                         },
                         handle_lane_execution_stopped = #atm_step_mock_spec{
@@ -521,11 +519,11 @@ resume_atm_workflow_execution_suspended_after_some_tasks_finished_test_base(Test
                             after_step_hook = build_assert_exp_parallel_box_specs_returned_hook([
                                 #{?TASK2_SELECTOR({1, 2}) => #{type => async, data_stream_enabled => false}}
                             ]),
-                            after_step_exp_state_diff = lists:flatten([
-                                build_expectations_for_lane1_task_transitioned_to(?TASK2_SELECTOR({1, 2}), pending),
+                            after_step_exp_state_diff = [
+                                {task, ?TASK2_SELECTOR({1, 2}), pending},
                                 {lane_run, {1, 2}, active},
                                 workflow_active
-                            ])
+                            ]
                         }
                     },
                     build_lane_run_execution_test_spec_with_even_numbers({1, 3}, {0, 0, 2}, {0, 2, 2}, [88, 666], true),
@@ -664,8 +662,9 @@ build_lane_run_execution_test_spec_with_even_numbers(
                     <<"task1">> -> finished;
                     <<"task2">> -> failed
                 end,
-                Expectations = build_expectations_for_lane1_task_transitioned_to(AtmTaskExecutionId, StoppedStatus),
-                {true, atm_workflow_execution_exp_state_builder:expect(ExpState, Expectations)}
+                {true, atm_workflow_execution_exp_state_builder:expect(ExpState, [
+                    {task, AtmTaskExecutionId, StoppedStatus}
+                ])}
             end
         },
 
@@ -711,16 +710,6 @@ build_lane_run_execution_test_spec_with_even_numbers(
             {true, atm_workflow_execution_exp_state_builder:expect(ExpState0, Expectations)}
         end
     }.
-
-
-%% @private
-build_expectations_for_lane1_task_transitioned_to(AtmTaskExecutionId, Status) ->
-    StoppedStatusBin = str_utils:to_binary(Status),
-
-    [
-        {task, AtmTaskExecutionId, Status},
-        {task, AtmTaskExecutionId, parallel_box_transitioned_to_inferred_status, fun(_, _) -> StoppedStatusBin end}
-    ].
 
 
 %% @private

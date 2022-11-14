@@ -103,9 +103,6 @@
 -define(TASK2_SELECTOR(__ATM_LANE_RUN_SELECTOR), {__ATM_LANE_RUN_SELECTOR, <<"pb1">>, <<"task2">>}).
 -define(TASK3_SELECTOR(__ATM_LANE_RUN_SELECTOR), {__ATM_LANE_RUN_SELECTOR, <<"pb2">>, <<"task3">>}).
 
--define(PB1_SELECTOR(__ATM_LANE_RUN_SELECTOR), {__ATM_LANE_RUN_SELECTOR, <<"pb1">>}).
--define(PB2_SELECTOR(__ATM_LANE_RUN_SELECTOR), {__ATM_LANE_RUN_SELECTOR, <<"pb2">>}).
-
 -type interrupt_type() :: internal_exception | external_abandon.
 
 
@@ -274,11 +271,9 @@ interrupt_active_atm_workflow_execution_test_base(Testcase, InterruptType, Relay
         % items were scheduled
         {task, ?TASK1_SELECTOR({1, 1}), InferTaskStatusAfterInterruptFun},
         {task, ?TASK2_SELECTOR({1, 1}), InferTaskStatusAfterInterruptFun},
-        {parallel_box, ?PB1_SELECTOR({1, 1}), stopping},
 
         % task3 immediately transitions to 'interrupted' as definitely no item was scheduled for it
         {task, ?TASK3_SELECTOR({1, 1}), interrupted},
-        {parallel_box, ?PB2_SELECTOR({1, 1}), interrupted},
 
         {lane_run, {1, 1}, stopping},
         workflow_stopping
@@ -320,7 +315,6 @@ interrupt_active_atm_workflow_execution_test_base(Testcase, InterruptType, Relay
                         after_step_exp_state_diff = [
                             {task, ?TASK1_SELECTOR({1, 1}), InferStoppedTaskStatusFun},
                             {task, ?TASK2_SELECTOR({1, 1}), InferStoppedTaskStatusFun},
-                            {parallel_box, ?PB1_SELECTOR({1, 1}), ExpFinalStatus},
                             {lane_run, {1, 1}, ExpFinalStatus}
                         ]
                     }

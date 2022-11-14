@@ -100,18 +100,6 @@
 -define(TASK1_SELECTOR(__ATM_LANE_RUN_SELECTOR), {__ATM_LANE_RUN_SELECTOR, <<"pb1">>, <<"task1">>}).
 -define(TASK2_SELECTOR(__ATM_LANE_RUN_SELECTOR), {__ATM_LANE_RUN_SELECTOR, <<"pb2">>, <<"task2">>}).
 
--define(PB1_SELECTOR(__ATM_LANE_RUN_SELECTOR), {__ATM_LANE_RUN_SELECTOR, <<"pb1">>}).
--define(PB2_SELECTOR(__ATM_LANE_RUN_SELECTOR), {__ATM_LANE_RUN_SELECTOR, <<"pb2">>}).
-
--define(PB1_TASK1_STATUS_EXPECTATIONS(Status), [
-    {task, ?TASK1_SELECTOR({2, 1}), Status},
-    {parallel_box, ?PB1_SELECTOR({2, 1}), Status}
-]).
--define(PB2_TASK2_STATUS_EXPECTATIONS(Status), [
-    {task, ?TASK2_SELECTOR({2, 1}), Status},
-    {parallel_box, ?PB2_SELECTOR({2, 1}), Status}
-]).
-
 -define(CRASHING_TASK_EXECUTION_STOPPED_STEP_MOCK, #atm_step_mock_spec{
     strategy = {yield, {error, crashed}},
     after_step_exp_state_diff = no_diff
@@ -154,12 +142,12 @@ stopping_reason_interrupt_overrides_pause() ->
                     selector = {2, 1},
                     process_task_result_for_item = #atm_step_mock_spec{
                         before_step_hook = fun atm_workflow_execution_test_utils:pause_workflow_execution/1,
-                        before_step_exp_state_diff = lists:flatten([
-                            ?PB1_TASK1_STATUS_EXPECTATIONS(stopping),
-                            ?PB2_TASK2_STATUS_EXPECTATIONS(paused),
+                        before_step_exp_state_diff = [
+                            {task, ?TASK1_SELECTOR({2, 1}), stopping},
+                            {task, ?TASK2_SELECTOR({2, 1}), paused},
                             {lane_run, {2, 1}, stopping},
                             workflow_stopping
-                        ]),
+                        ],
                         % Delay execution of chosen batch to ensure it happens after execution is interrupted
                         strategy = fun(#atm_mock_call_ctx{call_args = [_, _, _, ItemBatch, _]}) ->
                             case ContainsDelayedMeasurementPred(ItemBatch) of
@@ -182,7 +170,7 @@ stopping_reason_interrupt_overrides_pause() ->
                 % Ensure interrupt prevails against pause
                 after_step_hook = fun atm_workflow_execution_test_utils:pause_workflow_execution/1,
                 % Already paused task2 changes status to interrupted
-                after_step_exp_state_diff = ?PB2_TASK2_STATUS_EXPECTATIONS(interrupted)
+                after_step_exp_state_diff = {task, ?TASK2_SELECTOR({2, 1}), interrupted}
             },
             handle_workflow_abruptly_stopped = #atm_step_mock_spec{
                 % Ensure interrupt prevails against pause
@@ -213,21 +201,21 @@ stopping_reason_failure_overrides_pause() ->
                     % Failure occurs during streamed data processing
                     process_streamed_task_data = #atm_step_mock_spec{
                         before_step_hook = fun atm_workflow_execution_test_utils:pause_workflow_execution/1,
-                        before_step_exp_state_diff = lists:flatten([
-                            ?PB1_TASK1_STATUS_EXPECTATIONS(stopping),
-                            ?PB2_TASK2_STATUS_EXPECTATIONS(paused),
+                        before_step_exp_state_diff = [
+                            {task, ?TASK1_SELECTOR({2, 1}), stopping},
+                            {task, ?TASK2_SELECTOR({2, 1}), paused},
                             {lane_run, {2, 1}, stopping},
                             workflow_stopping
-                        ]),
+                        ],
                         % Already stopped task2 changes status from paused to interrupted due to task1 failure
-                        after_step_exp_state_diff = ?PB2_TASK2_STATUS_EXPECTATIONS(interrupted)
+                        after_step_exp_state_diff = [{task, ?TASK2_SELECTOR({2, 1}), interrupted}]
                     },
                     handle_task_execution_stopped = #atm_step_mock_spec{
                         % Ensure failure prevails against pause
                         before_step_hook = fun atm_workflow_execution_test_utils:pause_workflow_execution/1,
 
                         after_step_exp_state_diff = atm_workflow_execution_test_utils:build_task_step_exp_state_diff(#{
-                            <<"task1">> => ?PB1_TASK1_STATUS_EXPECTATIONS(failed)
+                            <<"task1">> => [{task, ?TASK1_SELECTOR({2, 1}), failed}]
                         })
                     },
                     handle_lane_execution_stopped = #atm_step_mock_spec{
@@ -264,19 +252,19 @@ stopping_reason_failure_overrides_interrupt() ->
                     % Failure occurs during streamed data processing
                     process_streamed_task_data = #atm_step_mock_spec{
                         before_step_hook = fun atm_workflow_execution_test_utils:interrupt_workflow_execution/1,
-                        before_step_exp_state_diff = lists:flatten([
-                            ?PB1_TASK1_STATUS_EXPECTATIONS(stopping),
-                            ?PB2_TASK2_STATUS_EXPECTATIONS(interrupted),
+                        before_step_exp_state_diff = [
+                            {task, ?TASK1_SELECTOR({2, 1}), stopping},
+                            {task, ?TASK2_SELECTOR({2, 1}), interrupted},
                             {lane_run, {2, 1}, stopping},
                             workflow_stopping
-                        ])
+                        ]
                     },
                     handle_task_execution_stopped = #atm_step_mock_spec{
                         % Ensure failure prevails against interrupt
                         before_step_hook = fun atm_workflow_execution_test_utils:interrupt_workflow_execution/1,
 
                         after_step_exp_state_diff = atm_workflow_execution_test_utils:build_task_step_exp_state_diff(#{
-                            <<"task1">> => ?PB1_TASK1_STATUS_EXPECTATIONS(failed)
+                            <<"task1">> => [{task, ?TASK1_SELECTOR({2, 1}), failed}]
                         })
                     },
                     handle_lane_execution_stopped = #atm_step_mock_spec{
@@ -309,21 +297,21 @@ stopping_reason_cancel_overrides_pause() ->
                     selector = {2, 1},
                     process_task_result_for_item = #atm_step_mock_spec{
                         before_step_hook = fun atm_workflow_execution_test_utils:pause_workflow_execution/1,
-                        before_step_exp_state_diff = lists:flatten([
-                            ?PB1_TASK1_STATUS_EXPECTATIONS(stopping),
-                            ?PB2_TASK2_STATUS_EXPECTATIONS(paused),
+                        before_step_exp_state_diff = [
+                            {task, ?TASK1_SELECTOR({2, 1}), stopping},
+                            {task, ?TASK2_SELECTOR({2, 1}), paused},
                             {lane_run, {2, 1}, stopping},
                             workflow_stopping
-                        ])
+                        ]
                     },
                     handle_task_execution_stopped = #atm_step_mock_spec{
                         before_step_hook = fun atm_workflow_execution_test_utils:cancel_workflow_execution/1,
                         % Already stopped task2 changes status from paused to cancelled
-                        before_step_exp_state_diff = ?PB2_TASK2_STATUS_EXPECTATIONS(cancelled),
+                        before_step_exp_state_diff = [{task, ?TASK2_SELECTOR({2, 1}), cancelled}],
                         % Ensure cancel prevails against pause
                         after_step_hook = fun atm_workflow_execution_test_utils:pause_workflow_execution/1,
                         after_step_exp_state_diff = atm_workflow_execution_test_utils:build_task_step_exp_state_diff(#{
-                            <<"task1">> => ?PB1_TASK1_STATUS_EXPECTATIONS(cancelled)
+                            <<"task1">> => [{task, ?TASK1_SELECTOR({2, 1}), cancelled}]
                         })
                     },
                     handle_lane_execution_stopped = #atm_step_mock_spec{
@@ -356,12 +344,12 @@ stopping_reason_cancel_overrides_interrupt() ->
                     selector = {2, 1},
                     process_task_result_for_item = #atm_step_mock_spec{
                         before_step_hook = fun atm_workflow_execution_test_utils:report_openfaas_unhealthy/1,
-                        before_step_exp_state_diff = lists:flatten([
-                            ?PB1_TASK1_STATUS_EXPECTATIONS(stopping),
-                            ?PB2_TASK2_STATUS_EXPECTATIONS(interrupted),
+                        before_step_exp_state_diff = [
+                            {task, ?TASK1_SELECTOR({2, 1}), stopping},
+                            {task, ?TASK2_SELECTOR({2, 1}), interrupted},
                             {lane_run, {2, 1}, stopping},
                             workflow_stopping
-                        ])
+                        ]
                     },
                     % This is called as part of `handle_workflow_abruptly_stopped`
                     handle_lane_execution_stopped = #atm_step_mock_spec{
@@ -376,7 +364,7 @@ stopping_reason_cancel_overrides_interrupt() ->
                 % Ensure cancel prevails against interrupt
                 before_step_hook = fun atm_workflow_execution_test_utils:cancel_workflow_execution/1,
                 % Already stopped task2 changes status from interrupted to cancelled
-                before_step_exp_state_diff = ?PB2_TASK2_STATUS_EXPECTATIONS(cancelled),
+                before_step_exp_state_diff = [{task, ?TASK2_SELECTOR({2, 1}), cancelled}],
 
                 after_step_exp_state_diff = [
                     {lane_runs, [{1, 1}, {2, 1}], rerunable},
@@ -405,19 +393,19 @@ stopping_reason_cancel_overrides_failure() ->
 
                     % Failure occurs during streamed data processing
                     process_streamed_task_data = #atm_step_mock_spec{
-                        after_step_exp_state_diff = lists:flatten([
-                            ?PB1_TASK1_STATUS_EXPECTATIONS(stopping),
-                            ?PB2_TASK2_STATUS_EXPECTATIONS(interrupted),
+                        after_step_exp_state_diff = [
+                            {task, ?TASK1_SELECTOR({2, 1}), stopping},
+                            {task, ?TASK2_SELECTOR({2, 1}), interrupted},
                             {lane_run, {2, 1}, stopping},
                             workflow_stopping
-                        ])
+                        ]
                     },
                     handle_task_execution_stopped = #atm_step_mock_spec{
                         before_step_hook = fun atm_workflow_execution_test_utils:cancel_workflow_execution/1,
                         % Already stopped task2 changes status from interrupted to cancelled
-                        before_step_exp_state_diff = ?PB2_TASK2_STATUS_EXPECTATIONS(cancelled),
+                        before_step_exp_state_diff = [{task, ?TASK2_SELECTOR({2, 1}), cancelled}],
                         after_step_exp_state_diff = atm_workflow_execution_test_utils:build_task_step_exp_state_diff(#{
-                            <<"task1">> => ?PB1_TASK1_STATUS_EXPECTATIONS(cancelled)
+                            <<"task1">> => [{task, ?TASK1_SELECTOR({2, 1}), cancelled}]
                         })
                     },
                     handle_lane_execution_stopped = #atm_step_mock_spec{
@@ -450,21 +438,21 @@ stopping_reason_crash_overrides_pause() ->
                     selector = {2, 1},
                     process_task_result_for_item = #atm_step_mock_spec{
                         before_step_hook = fun atm_workflow_execution_test_utils:pause_workflow_execution/1,
-                        before_step_exp_state_diff = lists:flatten([
-                            ?PB1_TASK1_STATUS_EXPECTATIONS(stopping),
-                            ?PB2_TASK2_STATUS_EXPECTATIONS(paused),
+                        before_step_exp_state_diff = [
+                            {task, ?TASK1_SELECTOR({2, 1}), stopping},
+                            {task, ?TASK2_SELECTOR({2, 1}), paused},
                             {lane_run, {2, 1}, stopping},
                             workflow_stopping
-                        ])
+                        ]
                     },
                     handle_task_execution_stopped = ?CRASHING_TASK_EXECUTION_STOPPED_STEP_MOCK,
 
                     % This is called as part of `handle_workflow_abruptly_stopped`
                     handle_lane_execution_stopped = #atm_step_mock_spec{
-                        after_step_exp_state_diff = lists:flatten([
-                            ?PB1_TASK1_STATUS_EXPECTATIONS(interrupted),
+                        after_step_exp_state_diff = [
+                            {task, ?TASK1_SELECTOR({2, 1}), interrupted},
                             {lane_run, {2, 1}, crashed}
-                        ])
+                        ]
                     }
                 }
             ],
@@ -472,7 +460,7 @@ stopping_reason_crash_overrides_pause() ->
                 % Ensure crash prevails against pause
                 after_step_hook = fun atm_workflow_execution_test_utils:pause_workflow_execution/1,
                 % Already paused task2 changes status to interrupted
-                after_step_exp_state_diff = ?PB2_TASK2_STATUS_EXPECTATIONS(interrupted)
+                after_step_exp_state_diff = [{task, ?TASK2_SELECTOR({2, 1}), interrupted}]
             },
             handle_workflow_abruptly_stopped = #atm_step_mock_spec{
                 % Ensure crash prevails against pause
@@ -498,21 +486,21 @@ stopping_reason_crash_overrides_interrupt() ->
                     selector = {2, 1},
                     process_task_result_for_item = #atm_step_mock_spec{
                         before_step_hook = fun atm_workflow_execution_test_utils:interrupt_workflow_execution/1,
-                        before_step_exp_state_diff = lists:flatten([
-                            ?PB1_TASK1_STATUS_EXPECTATIONS(stopping),
-                            ?PB2_TASK2_STATUS_EXPECTATIONS(interrupted),
+                        before_step_exp_state_diff = [
+                            {task, ?TASK1_SELECTOR({2, 1}), stopping},
+                            {task, ?TASK2_SELECTOR({2, 1}), interrupted},
                             {lane_run, {2, 1}, stopping},
                             workflow_stopping
-                        ])
+                        ]
                     },
                     handle_task_execution_stopped = ?CRASHING_TASK_EXECUTION_STOPPED_STEP_MOCK,
 
                     % This is called as part of `handle_workflow_abruptly_stopped`
                     handle_lane_execution_stopped = #atm_step_mock_spec{
-                        after_step_exp_state_diff = lists:flatten([
-                            ?PB1_TASK1_STATUS_EXPECTATIONS(interrupted),
+                        after_step_exp_state_diff = [
+                            {task, ?TASK1_SELECTOR({2, 1}), interrupted},
                             {lane_run, {2, 1}, crashed}
-                        ])
+                        ]
                     }
                 }
             ],
@@ -547,22 +535,22 @@ stopping_reason_crash_overrides_failure() ->
 
                     % Failure occurs during streamed data processing
                     process_streamed_task_data = #atm_step_mock_spec{
-                        after_step_exp_state_diff = lists:flatten([
-                            ?PB1_TASK1_STATUS_EXPECTATIONS(stopping),
-                            ?PB2_TASK2_STATUS_EXPECTATIONS(interrupted),
+                        after_step_exp_state_diff = [
+                            {task, ?TASK1_SELECTOR({2, 1}), stopping},
+                            {task, ?TASK2_SELECTOR({2, 1}), interrupted},
                             {lane_run, {2, 1}, stopping},
                             workflow_stopping
-                        ])
+                        ]
                     },
                     handle_task_execution_stopped = ?CRASHING_TASK_EXECUTION_STOPPED_STEP_MOCK,
 
                     % This is called as part of `handle_workflow_abruptly_stopped`
                     handle_lane_execution_stopped = #atm_step_mock_spec{
-                        after_step_exp_state_diff = lists:flatten([
+                        after_step_exp_state_diff = [
                             % Task transitions to failed status if it was already stopping due to failure when crash occurred
-                            ?PB1_TASK1_STATUS_EXPECTATIONS(failed),
+                            {task, ?TASK1_SELECTOR({2, 1}), failed},
                             {lane_run, {2, 1}, crashed}
-                        ])
+                        ]
                     }
                 }
             ],
@@ -586,12 +574,12 @@ stopping_reason_crash_overrides_cancel() ->
                     selector = {2, 1},
                     process_task_result_for_item = #atm_step_mock_spec{
                         before_step_hook = fun atm_workflow_execution_test_utils:cancel_workflow_execution/1,
-                        before_step_exp_state_diff = lists:flatten([
-                            ?PB1_TASK1_STATUS_EXPECTATIONS(stopping),
-                            ?PB2_TASK2_STATUS_EXPECTATIONS(cancelled),
+                        before_step_exp_state_diff = [
+                            {task, ?TASK1_SELECTOR({2, 1}), stopping},
+                            {task, ?TASK2_SELECTOR({2, 1}), cancelled},
                             {lane_run, {2, 1}, stopping},
                             workflow_stopping
-                        ])
+                        ]
                     },
                     handle_task_execution_stopped = ?CRASHING_TASK_EXECUTION_STOPPED_STEP_MOCK,
 
@@ -599,7 +587,7 @@ stopping_reason_crash_overrides_cancel() ->
                     handle_lane_execution_stopped = #atm_step_mock_spec{
                         after_step_exp_state_diff = [
                             % Task transitions to cancelled status if it was already stopping due to cancel when crash occurred
-                            ?PB1_TASK1_STATUS_EXPECTATIONS(cancelled),
+                            {task, ?TASK1_SELECTOR({2, 1}), cancelled},
                             {lane_run, {2, 1}, crashed}
                         ]
                     }

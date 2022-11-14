@@ -113,14 +113,10 @@ crash_atm_workflow_execution_during_resume_lane_callback() ->
                         before_step_hook = fun atm_workflow_execution_test_utils:pause_workflow_execution/1,
                         before_step_exp_state_diff = [
                             {task, ?TASK0_SELECTOR({1, 1}), stopping},
-                            {parallel_box, ?PB0_SELECTOR({1, 1}), stopping},
                             {lane_run, {1, 1}, stopping},
                             workflow_stopping
                         ],
-                        after_step_exp_state_diff = [
-                            {task, ?TASK0_SELECTOR({1, 1}), paused},
-                            {parallel_box, ?PB0_SELECTOR({1, 1}), paused}
-                        ]
+                        after_step_exp_state_diff = [{task, ?TASK0_SELECTOR({1, 1}), paused}]
                     },
                     handle_lane_execution_stopped = #atm_step_mock_spec{
                         after_step_exp_state_diff = [{lane_run, {1, 1}, paused}]

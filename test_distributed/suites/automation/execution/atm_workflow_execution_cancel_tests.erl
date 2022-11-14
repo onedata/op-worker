@@ -235,11 +235,9 @@ cancel_active_atm_workflow_execution_test_base(Testcase, RelayMethod) ->
                             % items were scheduled
                             {task, ?TASK1_SELECTOR({1, 1}), UpdateTaskStatusAfterPauseFun},
                             {task, ?TASK2_SELECTOR({1, 1}), UpdateTaskStatusAfterPauseFun},
-                            {parallel_box, ?PB1_SELECTOR({1, 1}), stopping},
 
                             % task3 immediately transitions to 'paused' as definitely no item was scheduled for it
                             {task, ?TASK3_SELECTOR({1, 1}), cancelled},
-                            {parallel_box, ?PB2_SELECTOR({1, 1}), cancelled},
 
                             {lane_run, {1, 1}, stopping},
                             workflow_stopping
@@ -265,13 +263,7 @@ cancel_active_atm_workflow_execution_test_base(Testcase, RelayMethod) ->
                             ?assertEqual(ExpItemsProcessed, length(StDstItems))
                         end,
                         after_step_exp_state_diff = atm_workflow_execution_test_utils:build_task_step_exp_state_diff(#{
-                            [<<"task1">>, <<"task2">>] => [
-                                {task, ?TASK_ID_PLACEHOLDER, cancelled},
-                                {task, ?TASK_ID_PLACEHOLDER, parallel_box_transitioned_to_inferred_status, fun
-                                    (<<"stopping">>, [<<"cancelled">>, <<"stopping">>]) -> <<"stopping">>;
-                                    (<<"stopping">>, [<<"cancelled">>]) -> <<"cancelled">>
-                                end}
-                            ],
+                            [<<"task1">>, <<"task2">>] => [{task, ?TASK_ID_PLACEHOLDER, cancelled}],
                             <<"task3">> => no_diff
                         })
                     },
@@ -382,7 +374,6 @@ cancel_resuming_atm_workflow_execution_test_base(Testcase, SuspendedIncarnation)
                             after_step_exp_state_diff = atm_workflow_execution_test_utils:build_task_step_exp_state_diff(#{
                                 <<"task1">> => [
                                     {task, ?TASK_ID_PLACEHOLDER, resuming}
-%%                                    {parallel_box, ?PB_SELECTOR_PLACEHOLDER, resuming}  %% TODO
                                 ],
                                 <<"task2">> => [
                                     {all_tasks, {1, 1}, cancelled},

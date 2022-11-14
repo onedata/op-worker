@@ -19,9 +19,11 @@
 
 -export([
     fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error/0,
+
     fail_atm_workflow_execution_due_to_incorrect_const_arg_type_error/0,
     fail_atm_workflow_execution_due_to_incorrect_iterated_item_query_arg_error/0,
     fail_atm_workflow_execution_due_to_empty_single_value_store_arg_error/0,
+
     fail_atm_workflow_execution_due_to_job_timeout/0,
     fail_atm_workflow_execution_due_to_job_result_store_mapping_error/0,
     fail_atm_workflow_execution_due_to_job_missing_required_results_error/0,
@@ -198,11 +200,6 @@
 
 
 fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error() ->
-    InferPB1StatusFun = fun
-        (<<"stopping">>, [<<"failed">>, <<"interrupted">>]) -> <<"failed">>;
-        (Status, _) -> Status
-    end,
-
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         workflow_schema_dump_or_draft = ?FAILING_WORKFLOW_SCHEMA_DRAFT(
             ?FUNCTION_NAME,
@@ -243,18 +240,9 @@ fail_atm_workflow_execution_due_to_uncorrelated_result_store_mapping_error() ->
                             end
                         }),
                         after_step_exp_state_diff = atm_workflow_execution_test_utils:build_task_step_exp_state_diff(#{
-                            <<"task1">> => [
-                                {task, ?TASK_ID_PLACEHOLDER, failed},
-                                {task, ?TASK_ID_PLACEHOLDER, parallel_box_transitioned_to_inferred_status, InferPB1StatusFun}
-                            ],
-                            <<"task2">> => [
-                                {task, ?TASK_ID_PLACEHOLDER, interrupted},
-                                {task, ?TASK_ID_PLACEHOLDER, parallel_box_transitioned_to_inferred_status, InferPB1StatusFun}
-                            ],
-                            <<"task3">> => [
-                                {task, ?TASK_ID_PLACEHOLDER, interrupted},
-                                {parallel_box, ?PB_SELECTOR_PLACEHOLDER, interrupted}
-                            ]
+                            <<"task1">> => [{task, ?TASK_ID_PLACEHOLDER, failed}],
+                            <<"task2">> => [{task, ?TASK_ID_PLACEHOLDER, interrupted}],
+                            <<"task3">> => [{task, ?TASK_ID_PLACEHOLDER, interrupted}]
                         })
                     },
                     handle_lane_execution_stopped = #atm_step_mock_spec{
@@ -515,10 +503,6 @@ build_job_failure_lane_run_test_spec(AtmLaneRunSelector, IsLastExpLaneRun, #fail
     should_item_processing_fail_fun = ShouldItemProcessingFailFun,
     build_task1_audit_log_exp_content_fun = BuildTask1AuditLogExpContentFun
 }) ->
-    InferPB1StatusAfterTaskStoppedFun = fun
-        (<<"active">>, [<<"failed">>, <<"finished">>]) -> <<"failed">>;
-        (_, _) -> <<"active">>
-    end,
     InferFailedItemCountFun = fun(ItemBatch) ->
         record_items_processed(TestcaseId, AtmLaneRunSelector, ItemBatch),
 
@@ -616,22 +600,15 @@ build_job_failure_lane_run_test_spec(AtmLaneRunSelector, IsLastExpLaneRun, #fail
                 end
             }),
             after_step_exp_state_diff = atm_workflow_execution_test_utils:build_task_step_exp_state_diff(#{
-                <<"task1">> => [
-                    {task, ?TASK_ID_PLACEHOLDER, failed},
-                    {task, ?TASK_ID_PLACEHOLDER, parallel_box_transitioned_to_inferred_status, InferPB1StatusAfterTaskStoppedFun}
-                ],
-                <<"task2">> => [
-                    {task, ?TASK_ID_PLACEHOLDER, finished},
-                    {task, ?TASK_ID_PLACEHOLDER, parallel_box_transitioned_to_inferred_status, InferPB1StatusAfterTaskStoppedFun}
-                ],
+                <<"task1">> => [{task, ?TASK_ID_PLACEHOLDER, failed}],
+                <<"task2">> => [{task, ?TASK_ID_PLACEHOLDER, finished}],
                 <<"task3">> => fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState}) ->
                     ExpStatus = case get_exp_items_processed_by_task3(TestcaseId, AtmLaneRunSelector) of
                         0 -> skipped;
                         _ -> finished
                     end,
                     {true, atm_workflow_execution_exp_state_builder:expect(ExpState, [
-                        {task, ?TASK3_SELECTOR(AtmLaneRunSelector), ExpStatus},
-                        {parallel_box, ?PB2_SELECTOR(AtmLaneRunSelector), ExpStatus}
+                        {task, ?TASK3_SELECTOR(AtmLaneRunSelector), ExpStatus}
                     ])}
                 end
             })

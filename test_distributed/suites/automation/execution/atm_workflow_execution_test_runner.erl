@@ -644,11 +644,7 @@ get_exp_state_diff(
         call_args = [_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId]
     }) ->
         {true, atm_workflow_execution_exp_state_builder:expect(ExpState, [
-            {task, AtmTaskExecutionId, finished},
-            {task, AtmTaskExecutionId, parallel_box_transitioned_to_inferred_status, fun
-                (<<"active">>, [<<"finished">>]) -> <<"finished">>;
-                (CurrentStatus, _) -> CurrentStatus
-            end}
+            {task, AtmTaskExecutionId, finished}
         ])}
     end;
 
