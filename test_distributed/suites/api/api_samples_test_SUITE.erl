@@ -436,7 +436,7 @@ verify_sample_base(#rest_api_request_sample{
         false -> #{}
     end,
     SubstitutedPath = maps:fold(fun(Placeholder, Value, P) ->
-        binary:replace(P, Placeholder, Value, [global])
+        binary:replace(P, Placeholder, http_utils:url_encode(Value), [global])
     end, Path, PlaceholderValues),
     Opts = [{follow_redirect, true} | rest_test_utils:cacerts_opts(oct_background:get_random_provider_node(krakow))],
     {ok, Code, _, ResultBody} = ?assertMatch({ok, _, _, _}, http_client:request(
