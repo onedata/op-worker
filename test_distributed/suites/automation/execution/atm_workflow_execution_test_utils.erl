@@ -40,7 +40,9 @@
     assert_not_ended_workflow_execution_can_not_be_repeated/2
 ]).
 -export([
-    build_task_step_exp_state_diff/1
+    build_task_step_exp_state_diff/1,
+    build_task_step_hook/1,
+    build_task_step_strategy/1
 ]).
 
 
@@ -222,7 +224,7 @@ assert_not_ended_workflow_execution_can_not_be_repeated(AtmLaneRunSelector, AtmM
 %% @end
 %%--------------------------------------------------------------------
 -spec build_task_step_exp_state_diff(
-    #{automation:id() | [automation:id()] => no_diff | [atm_workflow_execution_exp_state_builder:expectation()]}
+    #{automation:id() | [automation:id()] => no_diff | atm_workflow_execution_test_runner:exp_state_diff()}
 ) ->
     atm_workflow_execution_test_runner:exp_state_diff().
 build_task_step_exp_state_diff(ExpectationsPerTask) ->
@@ -232,11 +234,41 @@ build_task_step_exp_state_diff(ExpectationsPerTask) ->
         case get_task_expectations(ExpectationsPerTask, AtmTaskExecutionId, ExpState) of
             no_diff ->
                 false;
-            ExpectationsWithPlaceholders ->
+            ExpectationsWithPlaceholders when is_list(ExpectationsWithPlaceholders) ->
                 Expectations = substitute_expectation_placeholders(
-                    ExpectationsWithPlaceholders, AtmTaskExecutionId, ExpState
+                    ExpectationsWithPlaceholders, AtmTaskExecutionId
                 ),
-                {true, atm_workflow_execution_exp_state_builder:expect(ExpState, Expectations)}
+                {true, atm_workflow_execution_exp_state_builder:expect(ExpState, Expectations)};
+            ExpStateDiffFun when is_function(ExpStateDiffFun) ->
+                ExpStateDiffFun(AtmMockCallCtx)
+        end
+    end.
+
+
+-spec build_task_step_hook(#{automation:id() => atm_workflow_execution_test_runner:hook()}) ->
+    atm_workflow_execution_test_runner:hook().
+build_task_step_hook(HooksPerTask) ->
+    fun(AtmMockCallCtx = #atm_mock_call_ctx{workflow_execution_exp_state = ExpState}) ->
+        AtmTaskSchemaId = atm_workflow_execution_exp_state_builder:get_task_schema_id(
+            get_task_execution_id(AtmMockCallCtx),
+            ExpState
+        ),
+        TaskStepHook = maps:get(AtmTaskSchemaId, HooksPerTask, fun(_) -> ok end),
+        TaskStepHook(AtmMockCallCtx)
+    end.
+
+
+-spec build_task_step_strategy(#{automation:id() => atm_workflow_execution_test_runner:mock_strategy_spec()}) ->
+    atm_workflow_execution_test_runner:mock_strategy_spec().
+build_task_step_strategy(StrategiesPerTask) ->
+    fun(AtmMockCallCtx = #atm_mock_call_ctx{workflow_execution_exp_state = ExpState}) ->
+        AtmTaskSchemaId = atm_workflow_execution_exp_state_builder:get_task_schema_id(
+            get_task_execution_id(AtmMockCallCtx),
+            ExpState
+        ),
+        case maps:get(AtmTaskSchemaId, StrategiesPerTask, passthrough) of
+            TaskStrategyFun when is_function(TaskStrategyFun, 1) -> TaskStrategyFun(AtmMockCallCtx);
+            TaskStrategy -> TaskStrategy
         end
     end.
 
@@ -339,6 +371,18 @@ build_browse_opts(time_series) ->
 
 %% @private
 get_task_execution_id(#atm_mock_call_ctx{
+    step = handle_task_resuming,
+    call_args = [AtmTaskExecutionId, _CurrentIncarnation]
+}) ->
+    AtmTaskExecutionId;
+
+get_task_execution_id(#atm_mock_call_ctx{
+    step = handle_task_resumed,
+    call_args = [AtmTaskExecutionId]
+}) ->
+    AtmTaskExecutionId;
+
+get_task_execution_id(#atm_mock_call_ctx{
     step = run_task_for_item,
     call_args = [_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId, _AtmJobBatchId, _ItemBatch]
 }) ->
@@ -389,19 +433,12 @@ get_task_expectations(ExpectationsPerTask, AtmTaskExecutionId, ExpState) ->
 
 
 %% @private
-substitute_expectation_placeholders(Expectations, AtmTaskExecutionId, ExpState) ->
-    {AtmLaneRunSelector, AtmParallelBoxSchemaId, _} = atm_workflow_execution_exp_state_builder:get_task_selector(
-        AtmTaskExecutionId, ExpState
-    ),
-    AtmParallelBxoSelector = {AtmLaneRunSelector, AtmParallelBoxSchemaId},
-
+substitute_expectation_placeholders(Expectations, AtmTaskExecutionId) ->
     lists:map(fun
         (Expectation) when is_tuple(Expectation), tuple_size(Expectation) > 2 ->
             case {element(1, Expectation), element(2, Expectation)} of
                 {task, ?TASK_ID_PLACEHOLDER} ->
                     setelement(2, Expectation, AtmTaskExecutionId);
-                {parallel_box, ?PB_SELECTOR_PLACEHOLDER} ->
-                    setelement(2, Expectation, AtmParallelBxoSelector);
                 _ ->
                     Expectation
             end;

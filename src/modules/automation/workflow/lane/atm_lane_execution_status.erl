@@ -77,7 +77,8 @@
 %%% logically such transition occurs.
 %%% Possible reasons for ^stopping lane run execution when not all items were processed are as follows:
 %%% 1* - failure severe enough to cause stopping of entire automation workflow execution
-%%%      (e.g. error when processing uncorrelated results).
+%%%      (e.g. error when processing uncorrelated results) or interruption if any active task
+%%%      had uncorrelated results (some of them may have been lost).
 %%% 2* - user cancelling entire automation workflow execution.
 %%% 3* - unhandled exception occurred.
 %%% 4* - abrupt interruption when some other component (e.g user offline session expired)
@@ -106,7 +107,7 @@
     handle_enqueued/2,
     handle_resumed/2,
     handle_stopping/3,
-    handle_task_status_change/5,
+    handle_task_status_change/6,
     handle_stopped/2,
 
     handle_manual_repeat/3,
@@ -209,10 +210,10 @@ handle_resumed(AtmLaneRunSelector, AtmWorkflowExecutionId) ->
     Diff = fun(AtmWorkflowExecution) ->
         atm_lane_execution:update_run(AtmLaneRunSelector, fun
             (Run = #atm_lane_execution_run{status = ?RESUMING_STATUS}) ->
-                AtmParallelBoxExecutionStatuses = atm_parallel_box_execution:gather_statuses(
+                AtmTaskExecutionStatuses = atm_parallel_box_execution:gather_task_statuses(
                     Run#atm_lane_execution_run.parallel_boxes
                 ),
-                ResumedStatus = case lists:usort(AtmParallelBoxExecutionStatuses) of
+                ResumedStatus = case lists:usort(AtmTaskExecutionStatuses) of
                     [?PENDING_STATUS] ->
                         ?ENQUEUED_STATUS;
                     _ ->
@@ -270,6 +271,7 @@ handle_stopping(AtmLaneRunSelector, AtmWorkflowExecutionId, Reason) ->
     atm_lane_execution:lane_run_selector(),
     pos_integer(),
     atm_task_execution:id(),
+    atm_task_execution:stopping_reason(),
     atm_task_execution:status()
 ) ->
     ok | errors:error().
@@ -278,6 +280,7 @@ handle_task_status_change(
     AtmLaneRunSelector,
     AtmParallelBoxIndex,
     AtmTaskExecutionId,
+    AtmTaskExecutionStoppingReason,
     NewAtmTaskExecutionStatus
 ) ->
     HasTaskStarted = not lists:member(NewAtmTaskExecutionStatus, [
@@ -285,20 +288,36 @@ handle_task_status_change(
     ]),
 
     Diff = fun(AtmWorkflowExecution) ->
-        atm_lane_execution:update_run(AtmLaneRunSelector, fun(Run) ->
-            AtmParallelBoxExecutions = Run#atm_lane_execution_run.parallel_boxes,
+        atm_lane_execution:update_run(AtmLaneRunSelector, fun(Run = #atm_lane_execution_run{
+            status = CurrentRunStatus,
+            stopping_reason = StoppingReason,
+            parallel_boxes = AtmParallelBoxExecutions
+        }) ->
             AtmParallelBoxExecution = lists:nth(AtmParallelBoxIndex, AtmParallelBoxExecutions),
 
             case atm_parallel_box_execution:update_task_status(
                 AtmTaskExecutionId, NewAtmTaskExecutionStatus, AtmParallelBoxExecution
             ) of
                 {ok, NewParallelBoxExecution} ->
+                    % If lane run is already stopping due to interruption but any interrupted
+                    % task fails due to having uncorrelated results (some of those results may
+                    % have been lost) then change lane run stopping reason to failure
+                    ShouldUpdateStoppingReasonToFailure = lists:all(fun(Cond) -> Cond == true end, [
+                        StoppingReason == interrupt,
+                        AtmTaskExecutionStoppingReason == interrupt,
+                        NewAtmTaskExecutionStatus == ?FAILED_STATUS
+                    ]),
+
                     {ok, Run#atm_lane_execution_run{
-                        status = case {Run#atm_lane_execution_run.status, HasTaskStarted} of
+                        status = case {CurrentRunStatus, HasTaskStarted} of
                             {?ENQUEUED_STATUS, true} ->
                                 ?ACTIVE_STATUS;
                             {CurrentStatus, _} ->
                                 CurrentStatus
+                        end,
+                        stopping_reason = case ShouldUpdateStoppingReasonToFailure of
+                            true -> failure;
+                            false -> StoppingReason
                         end,
                         parallel_boxes = lists_utils:replace_at(
                             NewParallelBoxExecution, AtmParallelBoxIndex, AtmParallelBoxExecutions
@@ -456,10 +475,7 @@ end_lane_run(AtmLaneRunSelector, AtmWorkflowExecution) ->
             ?ERROR_ATM_INVALID_STATUS_TRANSITION(Status, ?INTERRUPTED_STATUS);
 
         (#atm_lane_execution_run{status = ?ACTIVE_STATUS} = Run) ->
-            AtmParallelBoxExecutionStatuses = atm_parallel_box_execution:gather_statuses(
-                Run#atm_lane_execution_run.parallel_boxes
-            ),
-            StoppedStatus = case lists:member(?FAILED_STATUS, AtmParallelBoxExecutionStatuses) of
+            StoppedStatus = case has_any_task_failed(Run) of
                 true -> ?FAILED_STATUS;
                 false -> ?FINISHED_STATUS
             end,
@@ -478,6 +494,14 @@ end_lane_run(AtmLaneRunSelector, AtmWorkflowExecution) ->
         (#atm_lane_execution_run{status = StoppedStatus}) ->
             ?ERROR_ATM_INVALID_STATUS_TRANSITION(StoppedStatus, ?INTERRUPTED_STATUS)
     end, AtmWorkflowExecution).
+
+
+%% @private
+-spec has_any_task_failed(atm_lane_execution:run()) -> boolean().
+has_any_task_failed(#atm_lane_execution_run{parallel_boxes = AtmParallelBoxExecutions}) ->
+    lists:member(?FAILED_STATUS, atm_parallel_box_execution:gather_task_statuses(
+        AtmParallelBoxExecutions
+    )).
 
 
 %% @private

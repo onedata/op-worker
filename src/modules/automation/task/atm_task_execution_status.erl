@@ -53,7 +53,8 @@
 %%% logically such transition occurs.
 %%% Possible reasons for ^stopping task execution when not all items were processed are as follows:
 %%% 1* - failure severe enough to cause stopping of entire automation workflow execution
-%%%      (e.g. error when processing uncorrelated results).
+%%%      (e.g. error when processing uncorrelated results) or interruption of active task
+%%%      if it has any uncorrelated results (some of them may have been lost).
 %%% 2* - abrupt interruption when some other component (e.g task or external service like OpenFaaS)
 %%%      has failed and entire automation workflow execution is being stopped.
 %%% 3* - user pausing entire automation workflow execution.
@@ -309,7 +310,8 @@ handle_stopped(AtmTaskExecutionId) ->
             stopping_reason = StoppingReason,
             items_in_processing = ItemsInProcessing,
             items_processed = ItemsProcessed,
-            items_failed = ItemsFailed
+            items_failed = ItemsFailed,
+            uncorrelated_result_specs = UncorrelatedResultSpecs
         }) ->
             % atm workflow execution may have been abruptly interrupted by e.g.
             % provider restart which resulted in stale `items_in_processing`
@@ -317,7 +319,15 @@ handle_stopped(AtmTaskExecutionId) ->
             UpdatedFailedItems = ItemsFailed + ItemsInProcessing,
 
             {ok, AtmTaskExecution#atm_task_execution{
-                status = infer_stopped_status(StoppingReason),
+                status = case {StoppingReason, lists_utils:is_empty(UncorrelatedResultSpecs)} of
+                    {interrupt, false} ->
+                        % If task having uncorrelated results is interrupted not all of those
+                        % results may have been received and as such it is treated as failure
+                        % rather then interruption
+                        ?FAILED_STATUS;
+                    _ ->
+                        infer_stopped_status(StoppingReason)
+                end,
                 items_in_processing = 0,
                 items_processed = UpdatedProcessedItems,
                 items_failed = UpdatedFailedItems
@@ -464,6 +474,7 @@ handle_status_change(#document{
         run_num = RunNumOrUndefined,
         parallel_box_index = AtmParallelBoxIndex,
         status = NewStatus,
+        stopping_reason = StoppingReason,
         status_changed = true
     }
 }) ->
@@ -471,5 +482,5 @@ handle_status_change(#document{
 
     ok = atm_lane_execution_status:handle_task_status_change(
         AtmWorkflowExecutionId, {AtmLaneIndex, RunSelector}, AtmParallelBoxIndex,
-        AtmTaskExecutionId, NewStatus
+        AtmTaskExecutionId, StoppingReason, NewStatus
     ).

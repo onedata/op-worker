@@ -45,23 +45,27 @@
 -spec init(oct_background:entity_selector() | [oct_background:entity_selector()]) ->
     ok.
 init(ProviderSelectors) ->
-    Workers = get_nodes(utils:ensure_list(ProviderSelectors)),
+    atm_openfaas_task_executor_mock:init(ProviderSelectors, atm_openfaas_docker_mock),
 
+    Workers = get_nodes(utils:ensure_list(ProviderSelectors)),
     mock_workflow_execution_factory(Workers),
     mock_workflow_execution_handler_steps(Workers),
     mock_lane_execution_handler_steps(Workers),
-    mock_lane_execution_factory_steps(Workers).
+    mock_lane_execution_factory_steps(Workers),
+    mock_task_execution_status_steps(Workers).
 
 
 -spec teardown(oct_background:entity_selector() | [oct_background:entity_selector()]) ->
     ok.
 teardown(ProviderSelectors) ->
     Workers = get_nodes(utils:ensure_list(ProviderSelectors)),
-
+    unmock_task_execution_status_steps(Workers),
     unmock_lane_execution_factory_steps(Workers),
     unmock_lane_execution_handler_steps(Workers),
     unmock_workflow_execution_handler_steps(Workers),
-    unmock_workflow_execution_factory(Workers).
+    unmock_workflow_execution_factory(Workers),
+
+    atm_openfaas_task_executor_mock:teardown(?PROVIDER_SELECTOR).
 
 
 -spec schedule_workflow_execution_as_test_process(
@@ -273,6 +277,38 @@ unmock_lane_execution_factory_steps(Workers) ->
 
 
 %% @private
+-spec mock_task_execution_status_steps([node()]) -> ok.
+mock_task_execution_status_steps(Workers) ->
+    Module = atm_task_execution_status,
+    test_utils:mock_new(Workers, Module, [passthrough, no_history]),
+
+    test_utils:mock_expect(Workers, Module, handle_resuming, fun(AtmTaskExecutionId, CurrentIncarnation) ->
+        AtmWorkflowExecutionId = get_workflow_execution_id(AtmTaskExecutionId),
+        exec_mock(AtmWorkflowExecutionId, handle_task_resuming, [AtmTaskExecutionId, CurrentIncarnation])
+    end),
+    test_utils:mock_expect(Workers, Module, handle_resumed, fun(AtmTaskExecutionId) ->
+        AtmWorkflowExecutionId = get_workflow_execution_id(AtmTaskExecutionId),
+        exec_mock(AtmWorkflowExecutionId, handle_task_resumed, [AtmTaskExecutionId])
+    end).
+
+
+%% @private
+-spec get_workflow_execution_id(atm_task_execution:id()) -> atm_workflow_execution:id().
+get_workflow_execution_id(AtmTaskExecutionId) ->
+    % atm_task_execution model is mocked in 'atm_openfaas_task_executor_mock' to be memory only.
+    % This makes other mocks to use the same ctx when getting atm_task_execution docs.
+    Ctx = #{model => atm_task_execution, disc_driver => undefined},
+    {ok, #document{value = AtmTaskExecution}} = datastore_model:get(Ctx, AtmTaskExecutionId),
+    AtmTaskExecution#atm_task_execution.workflow_execution_id.
+
+
+%% @private
+-spec unmock_task_execution_status_steps([node()]) -> ok.
+unmock_task_execution_status_steps(Workers) ->
+    test_utils:mock_unload(Workers, atm_task_execution_status).
+
+
+%% @private
 -spec exec_mock(atm_workflow_execution:id(), atom(), [term()]) -> term().
 exec_mock(AtmWorkflowExecutionId, Step, Args) ->
     case node_cache:get(?TEST_PROC_PID_KEY(AtmWorkflowExecutionId), undefined) of
@@ -315,7 +351,6 @@ exec_original_function(Args, TestProcPid, MockCallReport) ->
         result = Result
     }),
     Result.
-
 
 
 %% @private
