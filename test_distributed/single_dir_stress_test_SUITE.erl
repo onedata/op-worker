@@ -66,12 +66,20 @@ single_dir_creation_test_base(Config) ->
 single_large_dir_creation_test(Config) ->
     ?PERFORMANCE(Config, [
         {parameters, [
-            [{name, files_num}, {value, 1000}, {description, "Numer of files in dir"}]
+            [{name, files_num}, {value, 10000}, {description, "Numer of files in dir"}],
+            [{name, proc_num}, {value, 20}, {description, "Number of precesses that create files"}],
+            [{name, reps_num}, {value, 100}, {description, "Number of test function repeats"}],
+            [{name, test_list}, {value, true}, {description, "Measure ls time after every 20000 files creation"}]
         ]},
         {description, "Creates files in dir using single process"}
     ]).
 single_large_dir_creation_test_base(Config) ->
-    files_stress_test_base:single_dir_creation_test_base(Config, false).
+    Ans = files_stress_test_base:single_dir_creation_test_base(Config, false),
+    RepsNum = ?config(reps_num, Config),
+    case ?config(rep_num, Config) >= RepsNum of
+        true -> [stop | Ans];
+        false -> Ans
+    end.
 
 %%%===================================================================
 %%% SetUp and TearDown functions
