@@ -27,7 +27,7 @@
     delete_all/1, delete/1
 ]).
 -export([set_tasks_run_num/2, update_task_status/3]).
--export([get_task_id/2, gather_statuses/1]).
+-export([get_task_id/2, gather_task_statuses/1]).
 -export([to_json/1]).
 
 %% persistent_record callbacks
@@ -42,17 +42,14 @@
     no_return()
 ).
 
--type status() :: atm_task_execution:status().
-
 -record(atm_parallel_box_execution, {
     schema_id :: automation:id(),
-    status :: status(),
     task_registry :: #{AtmTaskSchemaId :: automation:id() => atm_task_execution:id()},
     task_statuses :: #{atm_task_execution:id() => atm_task_execution:status()}
 }).
--type record() :: #atm_parallel_box_execution{}.
+-opaque record() :: #atm_parallel_box_execution{}.
 
--export_type([creation_args/0, status/0, record/0]).
+-export_type([creation_args/0, record/0]).
 
 
 %%%===================================================================
@@ -112,7 +109,6 @@ create(AtmLaneExecutionRunCreationArgs, AtmParallelBoxIndex, #atm_parallel_box_s
 
     #atm_parallel_box_execution{
         schema_id = AtmParallelBoxSchemaId,
-        status = ?PENDING_STATUS,
         task_registry = AtmTaskExecutionRegistry,
         task_statuses = AtmTaskExecutionStatuses
     }.
@@ -197,22 +193,16 @@ set_tasks_run_num(RunNum, AtmParallelBoxExecutions) ->
 -spec update_task_status(atm_task_execution:id(), atm_task_execution:status(), record()) ->
     {ok, record()} | {error, term()}.
 update_task_status(AtmTaskExecutionId, NewStatus, #atm_parallel_box_execution{
-    status = AtmParallelBoxExecutionStatus,
     task_statuses = AtmTaskExecutionStatuses
 } = AtmParallelBoxExecution) ->
     CurrentStatus = maps:get(AtmTaskExecutionId, AtmTaskExecutionStatuses),
 
     case atm_task_execution_status:is_transition_allowed(CurrentStatus, NewStatus) of
         true ->
-            NewAtmTaskExecutionStatuses = AtmTaskExecutionStatuses#{
-                AtmTaskExecutionId => NewStatus
-            },
             {ok, AtmParallelBoxExecution#atm_parallel_box_execution{
-                status = infer_new_status_from_task_statuses(
-                    AtmParallelBoxExecutionStatus,
-                    maps:values(NewAtmTaskExecutionStatuses)
-                ),
-                task_statuses = NewAtmTaskExecutionStatuses
+                task_statuses = AtmTaskExecutionStatuses#{
+                    AtmTaskExecutionId => NewStatus
+                }
             }};
         false ->
             ?ERROR_ATM_INVALID_STATUS_TRANSITION(CurrentStatus, NewStatus)
@@ -226,23 +216,20 @@ get_task_id(AtmTaskSchemaId, #atm_parallel_box_execution{
     maps:get(AtmTaskSchemaId, AtmTaskExecutionRegistry).
 
 
--spec gather_statuses([record()]) -> [status()].
-gather_statuses(AtmParallelBoxExecutions) ->
-    lists:map(
-        fun(#atm_parallel_box_execution{status = Status}) -> Status end,
-        AtmParallelBoxExecutions
-    ).
+-spec gather_task_statuses([record()]) -> [atm_task_execution:status()].
+gather_task_statuses(AtmParallelBoxExecutions) ->
+    lists:flatmap(fun(#atm_parallel_box_execution{task_statuses = AtmTaskExecutionStatuses}) ->
+        maps:values(AtmTaskExecutionStatuses)
+    end, AtmParallelBoxExecutions).
 
 
 -spec to_json(record()) -> json_utils:json_term().
 to_json(#atm_parallel_box_execution{
     schema_id = AtmParallelBoxSchemaId,
-    status = AtmParallelBoxExecutionStatus,
     task_registry = AtmTaskExecutionRegistry
 }) ->
     #{
         <<"schemaId">> => AtmParallelBoxSchemaId,
-        <<"status">> => atom_to_binary(AtmParallelBoxExecutionStatus, utf8),
         <<"taskRegistry">> => AtmTaskExecutionRegistry
     }.
 
@@ -261,13 +248,11 @@ version() ->
     json_utils:json_term().
 db_encode(#atm_parallel_box_execution{
     schema_id = AtmParallelBoxSchemaId,
-    status = AtmParallelBoxExecutionStatus,
     task_registry = AtmTaskExecutionRegistry,
     task_statuses = AtmTaskExecutionStatuses
 }, _NestedRecordEncoder) ->
     #{
         <<"schemaId">> => AtmParallelBoxSchemaId,
-        <<"status">> => atom_to_binary(AtmParallelBoxExecutionStatus, utf8),
         <<"taskRegistry">> => AtmTaskExecutionRegistry,
         <<"taskStatuses">> => maps:map(fun(_AtmTaskExecutionId, AtmTaskExecutionStatus) ->
             atom_to_binary(AtmTaskExecutionStatus, utf8)
@@ -279,13 +264,11 @@ db_encode(#atm_parallel_box_execution{
     record().
 db_decode(#{
     <<"schemaId">> := AtmParallelBoxSchemaId,
-    <<"status">> := AtmParallelBoxExecutionStatusBin,
     <<"taskRegistry">> := AtmTaskExecutionRegistry,
     <<"taskStatuses">> := AtmTaskExecutionStatusesJson
 }, _NestedRecordDecoder) ->
     #atm_parallel_box_execution{
         schema_id = AtmParallelBoxSchemaId,
-        status = binary_to_existing_atom(AtmParallelBoxExecutionStatusBin, utf8),
         task_registry = AtmTaskExecutionRegistry,
         task_statuses = maps:map(fun(_AtmTaskExecutionId, AtmTaskExecutionStatusBin) ->
             binary_to_existing_atom(AtmTaskExecutionStatusBin, utf8)
@@ -395,57 +378,13 @@ foreach_task(AtmWorkflowExecutionCtx0, AtmParallelBoxExecutions, Callback) ->
 ) ->
     ok | no_return().
 pforeach_running_task(Callback, AtmParallelBoxExecutions) ->
-    atm_parallel_runner:foreach(fun(Record = #atm_parallel_box_execution{
+    atm_parallel_runner:foreach(fun(#atm_parallel_box_execution{
         task_statuses = AtmTaskExecutionStatuses
     }) ->
-        case is_running(Record) of
-            true ->
-                atm_parallel_runner:foreach(fun({AtmTaskExecutionId, AtmTaskExecutionStatus}) ->
-                    case atm_task_execution_status:is_running(AtmTaskExecutionStatus) of
-                        true -> Callback(AtmTaskExecutionId);
-                        false -> ok
-                    end
-                end, maps:to_list(AtmTaskExecutionStatuses));
-            false ->
-                ok
-        end
-    end, AtmParallelBoxExecutions).
-
-
-%% @private
--spec is_running(record()) -> boolean().
-is_running(#atm_parallel_box_execution{status = AtmParallelBoxExecutionStatus}) ->
-    atm_task_execution_status:is_running(AtmParallelBoxExecutionStatus).
-
-
-%% @private
--spec infer_new_status_from_task_statuses(atm_task_execution:status(), [atm_task_execution:status()]) ->
-    status().
-infer_new_status_from_task_statuses(CurrentStatus, AtmTaskExecutionStatuses) ->
-    case lists:usort(AtmTaskExecutionStatuses) of
-        [Status] ->
-            Status;
-        [?PENDING_STATUS, ?SKIPPED_STATUS] when CurrentStatus =:= ?PENDING_STATUS ->
-            % Some task must have stopped execution while others are still
-            % pending - overall parallel box status is active
-            ?ACTIVE_STATUS;
-        UniqueStatuses ->
-            PossibleNewStatus = hd(lists:dropwhile(
-                fun(Status) -> not lists:member(Status, UniqueStatuses) end,
-                [
-                    ?STOPPING_STATUS, ?ACTIVE_STATUS, ?PENDING_STATUS,
-                    ?CANCELLED_STATUS, ?FAILED_STATUS, ?INTERRUPTED_STATUS,
-                    ?PAUSED_STATUS, ?FINISHED_STATUS
-                ]
-            )),
-            case atm_task_execution_status:is_transition_allowed(CurrentStatus, PossibleNewStatus) of
-                true ->
-                    PossibleNewStatus;
-                false ->
-                    % possible when status is not changing or in case of races (e.g.
-                    % stopping task completed while some other task has not been marked
-                    % as stopping yet and as such is still active - overall status
-                    % should remain as stopping rather than regressing to active)
-                    CurrentStatus
+        atm_parallel_runner:foreach(fun({AtmTaskExecutionId, AtmTaskExecutionStatus}) ->
+            case atm_task_execution_status:is_running(AtmTaskExecutionStatus) of
+                true -> Callback(AtmTaskExecutionId);
+                false -> ok
             end
-    end.
+        end, maps:to_list(AtmTaskExecutionStatuses))
+    end, AtmParallelBoxExecutions).
