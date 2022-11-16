@@ -70,10 +70,20 @@ emit(Evt, {exclude, MgrRef}) ->
 
 emit(#event{} = Evt, MgrRef) ->
     ?update_counter(?EXOMETER_NAME(emit)),
-    send_to_event_managers(Evt, get_event_managers(MgrRef));
+    case event_type:get_context(Evt) of
+        {file, Guid} ->
+            % Filter events connected with trash (oneclient should not see trash)
+            case fslogic_file_id:is_trash_dir_guid(Guid) of
+                true -> ok;
+                false -> send_to_event_managers(Evt, get_event_managers(MgrRef))
+            end;
+        _ ->
+            send_to_event_managers(Evt, get_event_managers(MgrRef))
+    end;
 
 emit({aggregated, [#event{} | _]} = Evts, MgrRef) ->
     ?update_counter(?EXOMETER_NAME(emit)),
+    % Aggregated events are produced only for regular files - trash dir does not have to be filtered
     send_to_event_managers(Evts, get_event_managers(MgrRef));
 
 emit({aggregated, Evts}, MgrRef) ->

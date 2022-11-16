@@ -70,7 +70,7 @@ on_file_location_change(FileCtx, ChangedLocationDoc = #document{
                                 catch
                                     throw:{error, {file_meta_missing, MissingUuid}}  ->
                                         ?debug("~p file_meta_missing: ~p", [?FUNCTION_NAME, MissingUuid]),
-                                        file_meta_posthooks:add_hook({file_meta_missing, MissingUuid}, LocId,
+                                        file_meta_posthooks:add_hook({file_meta_missing, MissingUuid}, LocId, SpaceId,
                                             ?MODULE, ?FUNCTION_NAME, [file_ctx:reset(FileCtx), ChangedLocationDoc])
                                 end;
                             false ->

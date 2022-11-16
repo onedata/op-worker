@@ -58,7 +58,9 @@
 
 % requests
 -define(PERIODICAL_SPACES_AUTOCLEANING_CHECK, periodical_spaces_autocleaning_check).
--define(TERMINATE_STALE_ATM_WORKFLOW_EXECUTIONS, terminate_stale_atm_workflow_executions).
+-define(REPORT_PROVIDER_RESTART_TO_ATM_WORKFLOW_EXECUTION_LAYER,
+    report_provider_restart_to_atm_workflow_execution_layer
+).
 -define(RERUN_TRANSFERS, rerun_transfers).
 -define(RESTART_AUTOCLEANING_RUNS, restart_autocleaning_runs).
 -define(INIT_EFFECTIVE_CACHES(Space), {init_effective_caches, Space}).
@@ -69,8 +71,8 @@
 % delays and intervals
 -define(AUTOCLEANING_PERIODICAL_SPACES_CHECK_INTERVAL,
     op_worker:get_env(autocleaning_periodical_spaces_check_interval, timer:minutes(1))).
--define(TERMINATE_STALE_ATM_WORKFLOW_EXECUTIONS_DELAY,
-    op_worker:get_env(terminate_stale_atm_workflow_executions_delay, 10000)).
+-define(REPORT_PROVIDER_RESTART_TO_ATM_WORKFLOW_EXECUTION_LAYER_DELAY,
+    op_worker:get_env(report_provider_restart_to_atm_workflow_execution_layer_delay, 10000)).
 -define(RERUN_TRANSFERS_DELAY,
     op_worker:get_env(rerun_transfers_delay, 10000)).
 -define(RESTART_AUTOCLEANING_RUNS_DELAY,
@@ -184,6 +186,7 @@ init(_Args) ->
     init_effective_caches(),
     transfer:init(),
     file_upload_manager_watcher_service:setup_internal_service(),
+    atm_openfaas_monitor:setup_internal_service(),
     atm_workflow_execution_api:init_engine(),
     replica_deletion_master:init_workers_pool(),
     file_registration:init_pool(),
@@ -194,7 +197,7 @@ init(_Args) ->
     archivisation_traverse:init_pool(),
 
     schedule_rerun_transfers(),
-    schedule_stale_atm_workflow_executions_termination(),
+    schedule_provider_restart_report_to_atm_workflow_execution_layer(),
     schedule_restart_autocleaning_runs(),
     schedule_periodical_spaces_autocleaning_check(),
 
@@ -232,9 +235,9 @@ handle(ping) ->
     pong;
 handle(healthcheck) ->
     ok;
-handle(?TERMINATE_STALE_ATM_WORKFLOW_EXECUTIONS) ->
-    ?debug("Terminating stale atm workflow executions"),
-    terminate_stale_atm_workflow_executions(),
+handle(?REPORT_PROVIDER_RESTART_TO_ATM_WORKFLOW_EXECUTION_LAYER) ->
+    ?debug("Reporting stale atm workflow executions after provider restart"),
+    report_provider_restart_to_atm_workflow_execution(),
     ok;
 handle(?RERUN_TRANSFERS) ->
     ?debug("Rerunning unfinished transfers"),
@@ -723,9 +726,12 @@ handle_multipart_upload_request(UserCtx, #list_multipart_uploads{
     multipart_upload_req:list(UserCtx, SpaceId, Limit, IndexToken).
 
 
--spec schedule_stale_atm_workflow_executions_termination() -> ok.
-schedule_stale_atm_workflow_executions_termination() ->
-    schedule(?TERMINATE_STALE_ATM_WORKFLOW_EXECUTIONS, ?TERMINATE_STALE_ATM_WORKFLOW_EXECUTIONS_DELAY).
+-spec schedule_provider_restart_report_to_atm_workflow_execution_layer() -> ok.
+schedule_provider_restart_report_to_atm_workflow_execution_layer() ->
+    schedule(
+        ?REPORT_PROVIDER_RESTART_TO_ATM_WORKFLOW_EXECUTION_LAYER,
+        ?REPORT_PROVIDER_RESTART_TO_ATM_WORKFLOW_EXECUTION_LAYER_DELAY
+    ).
 
 -spec schedule_rerun_transfers() -> ok.
 schedule_rerun_transfers() ->
@@ -770,20 +776,23 @@ periodical_spaces_autocleaning_check() ->
             ?error_stacktrace("Unable to trigger spaces auto-cleaning check due to: ~p", [{Error2, Reason}], Stacktrace)
     end.
 
--spec terminate_stale_atm_workflow_executions() -> ok.
-terminate_stale_atm_workflow_executions() ->
+-spec report_provider_restart_to_atm_workflow_execution() -> ok.
+report_provider_restart_to_atm_workflow_execution() ->
     try provider_logic:get_spaces() of
         {ok, SpaceIds} ->
-            lists:foreach(fun atm_workflow_execution_api:terminate_not_ended/1, SpaceIds);
+            lists:foreach(fun atm_workflow_execution_api:report_provider_restart/1, SpaceIds);
         ?ERROR_UNREGISTERED_ONEPROVIDER ->
-            schedule_stale_atm_workflow_executions_termination();
+            schedule_provider_restart_report_to_atm_workflow_execution_layer();
         ?ERROR_NO_CONNECTION_TO_ONEZONE ->
-            schedule_stale_atm_workflow_executions_termination();
+            schedule_provider_restart_report_to_atm_workflow_execution_layer();
         Error = {error, _} ->
-            ?error("Unable to terminate stale atm workflow executions due to: ~p", [Error])
+            ?error(
+                "Unable to report provider restart to atm workflow execution layer due to: ~p",
+                [Error]
+            )
     catch Class:Reason:Stacktrace ->
         ?error_stacktrace(
-            "Unable to terminate stale atm workflow executions due to: ~p",
+            "Unable to report provider restart to atm workflow execution layer due to: ~p",
             [{Class, Reason}],
             Stacktrace
         )

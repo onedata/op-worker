@@ -344,14 +344,16 @@ get(#op_req{gri = #gri{aspect = instance}}, Transfer) ->
 get(#op_req{gri = #gri{aspect = progress}}, #transfer{
     bytes_replicated = BytesReplicated,
     files_replicated = FilesReplicated,
-    files_evicted = FilesEvicted
+    files_evicted = FilesEvicted,
+    files_processed = FilesProcessed
 } = Transfer) ->
     {ok, #{
         <<"status">> => transfer:status(Transfer),
         <<"timestamp">> => get_last_update(Transfer),
         <<"replicatedBytes">> => BytesReplicated,
         <<"replicatedFiles">> => FilesReplicated,
-        <<"evictedFiles">> => FilesEvicted
+        <<"evictedFiles">> => FilesEvicted,
+        <<"processedFiles">> => FilesProcessed
     }};
 get(#op_req{data = Data, gri = #gri{aspect = throughput_charts}}, Transfer) ->
     StartTime = Transfer#transfer.start_time,

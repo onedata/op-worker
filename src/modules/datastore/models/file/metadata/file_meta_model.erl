@@ -387,6 +387,7 @@ resolve_conflict(_Ctx,
             acl = Acl,
             shares = Shares
         },
+        revs = [NewRev | _],
         scope = SpaceId
     }, PrevDoc = #document{
         value = #file_meta{
@@ -395,45 +396,66 @@ resolve_conflict(_Ctx,
             mode = PrevMode,
             acl = PrevAcl,
             shares = PrevShares
-        }
+        },
+        revs = [PrevlRev | _]
     }
 ) ->
-    invalidate_effective_caches_if_moved(NewDoc, PrevDoc),
-    invalidate_dataset_eff_cache_if_needed(NewDoc, PrevDoc),
-    spawn(fun() ->
-        case file_meta:is_deleted(NewDoc) andalso not file_meta:is_deleted(PrevDoc) of
-            true ->
-                dir_size_stats:report_file_deleted(Type, file_id:pack_guid(NewParentUuid, SpaceId));
-            false ->
-                ok
-        end,
+    case datastore_rev:is_greater(NewRev, PrevlRev) of
+        true ->
+            invalidate_effective_caches_if_moved(NewDoc, PrevDoc),
+            invalidate_dataset_eff_cache_if_needed(NewDoc, PrevDoc),
+            spawn(fun() ->
+                timer:sleep(200), % Invalidation of cache must occur after doc is saved
+                invalidate_qos_bounded_cache_if_moved_to_trash(NewDoc, PrevDoc),
 
-        timer:sleep(200), % Invalidation of cache must occur after doc is saved
-        invalidate_qos_bounded_cache_if_moved_to_trash(NewDoc, PrevDoc),
+                case (NewName =/= PrevName) orelse (NewParentUuid =/= PrevParentUuid) of
+                    true ->
+                        FileCtx = file_ctx:new_by_uuid(Uuid, SpaceId),
+                        OldParentGuid = file_id:pack_guid(PrevParentUuid, SpaceId),
+                        NewParentGuid = file_id:pack_guid(NewParentUuid, SpaceId),
+                        paths_cache:invalidate_on_all_nodes(SpaceId),
+                        permissions_cache:invalidate(),
+                        fslogic_event_emitter:emit_file_renamed_no_exclude(
+                            FileCtx, OldParentGuid, NewParentGuid, NewName, PrevName),
 
-        case (NewName =/= PrevName) orelse (NewParentUuid =/= PrevParentUuid) of
-            true ->
-                FileCtx = file_ctx:new_by_uuid(Uuid, SpaceId),
-                OldParentGuid = file_id:pack_guid(PrevParentUuid, SpaceId),
-                NewParentGuid = file_id:pack_guid(NewParentUuid, SpaceId),
-                paths_cache:invalidate_on_all_nodes(SpaceId),
-                permissions_cache:invalidate(),
-                fslogic_event_emitter:emit_file_renamed_no_exclude(
-                    FileCtx, OldParentGuid, NewParentGuid, NewName, PrevName);
-            false ->
-                case (Mode =/= PrevMode) orelse (Acl =/= PrevAcl) orelse (Shares =/= PrevShares) of
-                    true -> permissions_cache:invalidate();
-                    false -> ok
+                        case NewParentUuid =/= PrevParentUuid of
+                            true ->
+                                dir_stats_collector:report_file_moved(Type, file_ctx:get_logical_guid_const(FileCtx),
+                                    OldParentGuid, NewParentGuid);
+                            false ->
+                                ok
+                        end;
+                    false ->
+                        case (Mode =/= PrevMode) orelse (Acl =/= PrevAcl) orelse (Shares =/= PrevShares) of
+                            true -> permissions_cache:invalidate();
+                            false -> ok
+                        end
+                end,
+
+                case file_meta:is_deleted(NewDoc) andalso not file_meta:is_deleted(PrevDoc) of
+                    true ->
+                        dir_size_stats:report_file_deleted(Type, file_id:pack_guid(NewParentUuid, SpaceId));
+                    false ->
+                        ok
+                end,
+
+                case (Mode =/= PrevMode) orelse (Acl =/= PrevAcl) of
+                    true ->
+                        Ctx = file_ctx:new_by_uuid(Uuid, SpaceId),
+                        fslogic_event_emitter:emit_sizeless_file_attrs_changed(Ctx),
+                        fslogic_event_emitter:emit_file_perm_changed(Ctx);
+                    false ->
+                        ok
                 end
-        end
-    end),
+            end);
+        false ->
+            ok
+    end,
 
     case file_meta_hardlinks:merge_references(NewDoc, PrevDoc) of
         not_mutated ->
             default;
         {mutated, MergedReferences} ->
-            #document{revs = [NewRev | _]} = NewDoc,
-            #document{revs = [PrevlRev | _]} = PrevDoc,
             DocBase = #document{value = RecordBase} = case datastore_rev:is_greater(NewRev, PrevlRev) of
                 true -> NewDoc;
                 false -> PrevDoc

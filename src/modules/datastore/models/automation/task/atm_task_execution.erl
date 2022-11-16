@@ -27,14 +27,18 @@
 -type diff() :: datastore_doc:diff(record()).
 
 -type status() ::
-    ?PENDING_STATUS |
-    ?ACTIVE_STATUS |
-    ?FINISHED_STATUS | ?FAILED_STATUS | ?SKIPPED_STATUS.
+    % waiting
+    ?RESUMING_STATUS | ?PENDING_STATUS |
+    % ongoing
+    ?ACTIVE_STATUS | ?STOPPING_STATUS |
+    % stopped
+    ?FINISHED_STATUS | ?SKIPPED_STATUS |
+    ?CANCELLED_STATUS | ?FAILED_STATUS | ?INTERRUPTED_STATUS | ?PAUSED_STATUS.
 
--type aborting_reason() :: failure.
+-type stopping_reason() :: cancel | failure | interrupt | pause.
 
 -export_type([id/0, record/0, doc/0, diff/0]).
--export_type([status/0, aborting_reason/0]).
+-export_type([status/0, stopping_reason/0]).
 
 
 % get ctx via module call to allow mocking in ct tests
@@ -119,6 +123,7 @@ get_record_struct(1) ->
         {status, atom},
         {status_changed, boolean},
         {aborting_reason, atom},
+        {stopping_incarnation, integer},
 
         {items_in_processing, integer},
         {items_processed, integer},

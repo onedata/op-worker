@@ -22,7 +22,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 
--export([consolidate/3, with_all/2, list_types/0]).
+-export([consolidate/3, on_collection_move/2, with_all/2, list_types/0]).
 
 
 -type type() :: module().
@@ -47,6 +47,22 @@
 -spec consolidate(type(), collection(), collection()) -> collection().
 consolidate(CollectionType, OriginalMap, DiffMap) ->
     maps:merge_with(fun CollectionType:consolidate/3, OriginalMap, DiffMap).
+
+
+-spec on_collection_move(type(), collection()) -> {update_source_parent, collection()} | ignore.
+on_collection_move(CollectionType, Collection) ->
+    maps:fold(fun
+        (StatName, StatValue, ignore) ->
+            case CollectionType:on_collection_move(StatName, StatValue) of
+                {update_source_parent, ValueToUpdate} -> {update_source_parent, #{StatName => ValueToUpdate}};
+                ignore -> ignore
+            end;
+        (StatName, StatValue, {update_source_parent, Acc}) ->
+            case CollectionType:on_collection_move(StatName, StatValue) of
+                {update_source_parent, ValueToUpdate} -> {update_source_parent, Acc#{StatName => ValueToUpdate}};
+                ignore -> {update_source_parent, Acc}
+            end
+    end, ignore, Collection).
 
 
 -spec with_all(stats_selector(), collection()) -> {ok, collection()} | ?ERROR_NOT_FOUND.

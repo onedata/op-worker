@@ -430,7 +430,8 @@ assert_local_documents_cleaned_up(Worker) ->
     AllModels = datastore_config_plugin:get_models(),
     ModelsToCheck = AllModels
         -- [storage_config, provider_auth, workflow_engine_state, workflow_async_call_pool, % Models not associated
-                                                                                            % with space support
+            atm_openfaas_status_cache,                                                      % with space support
+
             file_meta, times, %% These documents without scope are related to user root dir,
                               %% which is not cleaned up during unsupport
             dbsync_state,

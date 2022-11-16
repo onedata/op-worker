@@ -24,7 +24,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% functions operating on record using datastore model API
--export([add_hook/5, execute_hooks/1, delete/1]).
+-export([add_hook/6, execute_hooks/1, delete/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
@@ -48,12 +48,15 @@
     model => ?MODULE
 }).
 
+-define(MAX_POSTHOOKS,  op_worker:get_env(max_file_meta_posthooks, 256)).
+
 %%%===================================================================
 %%% Functions operating on record using datastore_model API
 %%%===================================================================
 
--spec add_hook(missing_element(), hook_identifier(), module(), atom(), [term()]) -> ok | ?ERROR_INTERNAL_SERVER_ERROR.
-add_hook(MissingElement, Identifier, Module, Function, Args) ->
+-spec add_hook(missing_element(), hook_identifier(), od_space:id(), module(), atom(), [term()]) ->
+    ok | ?ERROR_INTERNAL_SERVER_ERROR.
+add_hook(MissingElement, Identifier, SpaceId, Module, Function, Args) ->
     FileUuid = get_hook_uuid(MissingElement),
     UniqueIdentifier = generate_hook_id(Identifier),
     EncodedArgs = term_to_binary(Args),
@@ -64,7 +67,10 @@ add_hook(MissingElement, Identifier, Module, Function, Args) ->
     },
 
     AddAns = datastore_model:update(?CTX, FileUuid, fun(#file_meta_posthooks{hooks = Hooks} = FileMetaPosthooks) ->
-        {ok, FileMetaPosthooks#file_meta_posthooks{hooks = Hooks#{UniqueIdentifier => Hook}}}
+        case maps:size(Hooks) >= ?MAX_POSTHOOKS of
+            true -> {error, too_many_posthooks};
+            false -> {ok, FileMetaPosthooks#file_meta_posthooks{hooks = Hooks#{UniqueIdentifier => Hook}}}
+        end
     end, #file_meta_posthooks{hooks = #{UniqueIdentifier => Hook}}),
 
     case AddAns of
@@ -80,6 +86,14 @@ add_hook(MissingElement, Identifier, Module, Function, Args) ->
                     ok;
                 false ->
                     ok
+            end;
+        {error, too_many_posthooks} ->
+            case dbsync_state:set_initial_sync_repeat(SpaceId) of
+                ok ->
+                    ok;
+                {error, initial_sync_does_not_exist} ->
+                    ?error("~p:~p error for file ~p (identifier ~p, hook module ~p, hook fun ~p, hook args ~p):"
+                        " too many posthooks", [?MODULE, ?FUNCTION_NAME, FileUuid, Identifier, Module, Function, Args])
             end;
         Error ->
             ?error("~p:~p error for file ~p (identifier ~p, hook module ~p, hook fun ~p, hook args ~p): ~p",

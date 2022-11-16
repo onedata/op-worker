@@ -157,7 +157,6 @@ example_data_spec(AtmDataType) when
     AtmDataType =:= atm_file_type;
     AtmDataType =:= atm_integer_type;
     AtmDataType =:= atm_object_type;
-    AtmDataType =:= atm_onedatafs_credentials_type;
     AtmDataType =:= atm_range_type;
     AtmDataType =:= atm_string_type
 ->
@@ -221,14 +220,6 @@ gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_data_spec{
     lists:foldl(fun(_, Acc) ->
         Acc#{?RAND_STR(32) => lists_utils:random_element([?RAND_STR(32), rand:uniform(1000000)])}
     end, #{}, lists:seq(1, ?RAND_INT(3, 5)));
-
-gen_valid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_data_spec{
-    type = atm_onedatafs_credentials_type
-}) ->
-    #{
-        <<"host">> => ?rpc(ProviderSelector, oneprovider:get_domain()),
-        <<"accessToken">> => atm_workflow_execution_auth:get_access_token(AtmWorkflowExecutionAuth)
-    };
 
 gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_data_spec{
     type = atm_range_type

@@ -21,10 +21,12 @@
 
 %% API
 -export([create/8, create_nested/2, create_dip_archive/1, get/1, modify_attrs/2, delete/1]).
--export([get_root_dir_ctx/1, get_all_ancestors/1, get_dataset_root_file_ctx/1, find_file/3]).
+-export([get_root_dir_ctx/1, get_all_ancestors/1, get_dataset_root_file_ctx/1,
+    get_dataset_root_parent_path/2, find_file/3]).
 
 % getters
--export([get_id/1, get_creation_time/1, get_dataset_id/1, get_dataset_root_file_guid/1, get_space_id/1,
+-export([get_id/1, get_creation_time/1, get_dataset_id/1, get_archiving_provider_id/1, 
+    get_dataset_root_file_guid/1, get_space_id/1,
     get_state/1, get_config/1, get_preserved_callback/1, get_deleted_callback/1,
     get_description/1, get_stats/1, get_root_dir_guid/1,
     get_data_dir_guid/1, get_parent_id/1, get_parent_doc/1, get_base_archive_id/1,
@@ -228,6 +230,13 @@ get_dataset_root_file_ctx(Archive) ->
     {ok, file_ctx:new_by_guid(DatasetRootFileGuid)}.
 
 
+-spec get_dataset_root_parent_path(record() | doc(), user_ctx:ctx()) -> {ok, file_meta:path()}.
+get_dataset_root_parent_path(Archive, UserCtx) ->
+    {ok, DatasetRootFileCtx} = get_dataset_root_file_ctx(Archive),
+    {DatasetRootPath, _} = file_ctx:get_logical_path(DatasetRootFileCtx, UserCtx),
+    {ok, filename:dirname(DatasetRootPath)}.
+
+
 -spec get_all_ancestors(doc() | record()) -> {ok, [doc()]}.
 get_all_ancestors(#archive{parent = ParentArchive}) ->
     get_all_ancestors(ParentArchive, []);
@@ -293,6 +302,12 @@ get_dataset_id(#archive{dataset_id = DatasetId}) ->
     {ok, DatasetId};
 get_dataset_id(#document{value = Archive}) ->
     get_dataset_id(Archive).
+
+-spec get_archiving_provider_id(record() | doc()) -> {ok, oneprovider:id()}.
+get_archiving_provider_id(#archive{archiving_provider = ProviderId}) ->
+    {ok, ProviderId};
+get_archiving_provider_id(#document{value = Archive}) ->
+    get_archiving_provider_id(Archive).
 
 -spec get_dataset_root_file_guid(id() | doc()) -> {ok, file_id:file_guid()}.
 get_dataset_root_file_guid(Doc = #document{}) ->

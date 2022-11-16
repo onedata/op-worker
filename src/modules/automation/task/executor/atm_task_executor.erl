@@ -29,7 +29,16 @@
 -include_lib("ctool/include/automation/automation.hrl").
 
 %% API
--export([create/4, initiate/2, teardown/2, delete/1, get_type/1, is_in_readonly_mode/1, run/3]).
+-export([
+    create/4,
+    initiate/2,
+    abort/2,
+    teardown/2,
+    delete/1,
+    get_type/1,
+    is_in_readonly_mode/1,
+    run/3
+]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -43,24 +52,26 @@
 -type job_args() :: json_utils:json_map().
 -type job_results() :: json_utils:json_map() | errors:error().
 
-%% Below types format can't be expressed directly in type spec due to dialyzer
-%% limitations in specifying individual maps keys in case of binaries.
-%% Instead it is shown below their declaration.
+-type job_batch_id() :: binary().
 
--type lambda_input() :: json_utils:json_map().
-%% #{
-%%      <<"argsBatch">> := [job_args()],
-%%      <<"ctx">> := #{<<"heartbeatUrl">> := binary()}
-%% }
--type lambda_output() :: json_utils:json_map() | errors:error().
-%% #{
-%%      <<"resultsBatch">> := [job_results()]
-%% }
+-type lambda_input() :: #atm_lambda_input{}.
+-type lambda_output() :: #atm_lambda_output{}.
+
+-type job_batch_result() ::
+    {ok, lambda_output()} |
+    % special error signaling that job execution has been rejected.
+    % It will be specially handled when stopping execution - items_in_processing
+    % counter will be decremented but overall job is not consider as failed.
+    % In any other case it will be treated as normal error.
+    ?ERROR_ATM_JOB_BATCH_WITHDRAWN(binary()) |
+    errors:error().
 
 -type streamed_data() :: {chunk, json_utils:json_map()} | errors:error().
 
 -export_type([initiation_ctx/0]).
--export_type([job_args/0, job_results/0, lambda_input/0, lambda_output/0, streamed_data/0]).
+-export_type([job_args/0, job_results/0]).
+-export_type([job_batch_id/0, lambda_input/0, lambda_output/0, job_batch_result/0]).
+-export_type([streamed_data/0]).
 
 -export_type([model/0, record/0]).
 
@@ -80,14 +91,15 @@
 
 -callback initiate(initiation_ctx(), record()) -> workflow_engine:task_spec() | no_return().
 
+-callback abort(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
+
 -callback teardown(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
 
 -callback delete(record()) -> ok | no_return().
 
 -callback is_in_readonly_mode(record()) -> boolean().
 
--callback run(atm_run_job_batch_ctx:record(), lambda_input(), record()) ->
-    ok | no_return().
+-callback run(atm_run_job_batch_ctx:record(), lambda_input(), record()) -> ok | no_return().
 
 
 %%%===================================================================
@@ -116,6 +128,12 @@ initiate(AtmTaskExecutorInitiationCtx, AtmTaskExecutor) ->
     Model:initiate(AtmTaskExecutorInitiationCtx, AtmTaskExecutor).
 
 
+-spec abort(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
+abort(AtmWorkflowExecutionCtx, AtmTaskExecutor) ->
+    Model = utils:record_type(AtmTaskExecutor),
+    Model:abort(AtmWorkflowExecutionCtx, AtmTaskExecutor).
+
+
 -spec teardown(atm_workflow_execution_ctx:record(), record()) -> ok | no_return().
 teardown(AtmWorkflowExecutionCtx, AtmTaskExecutor) ->
     Model = utils:record_type(AtmTaskExecutor),
@@ -139,8 +157,7 @@ is_in_readonly_mode(AtmTaskExecutor) ->
     Model:is_in_readonly_mode(AtmTaskExecutor).
 
 
--spec run(atm_run_job_batch_ctx:record(), lambda_input(), record()) ->
-    ok | no_return().
+-spec run(atm_run_job_batch_ctx:record(), lambda_input(), record()) -> ok | no_return().
 run(AtmRunJobBatchCtx, LambdaInput, AtmTaskExecutor) ->
     Model = utils:record_type(AtmTaskExecutor),
     Model:run(AtmRunJobBatchCtx, LambdaInput, AtmTaskExecutor).

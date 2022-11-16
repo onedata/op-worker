@@ -73,7 +73,10 @@
 
 -spec create() -> id().
 create() ->
-    {ok, Id} = json_infinite_log_model:create(#{}),
+    {ok, Id} = json_infinite_log_model:create(#{
+        %% TODO VFS-9934 implement dynamic slot management
+        max_entries_per_node => 100
+    }),
     Id.
 
 

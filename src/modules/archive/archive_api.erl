@@ -87,7 +87,7 @@
 -spec start_archivisation(
     dataset:id(), archive:config(), archive:callback(), archive:callback(),
     archive:description(), user_ctx:ctx()
-) -> {ok, archive:id()} | error().
+) -> {ok, info()} | error().
 start_archivisation(
     DatasetId, Config, PreservedCallback, DeletedCallback, Description, UserCtx
 ) ->
@@ -115,7 +115,7 @@ start_archivisation(
                     archives_list:add(DatasetId, SpaceId, AipArchiveId, Timestamp),
                     case archivisation_traverse:start(FinalAipArchiveDoc, DatasetDoc, UserCtx) of
                         ok ->
-                            {ok, AipArchiveId};
+                            get_archive_info(FinalAipArchiveDoc, undefined);
                         {error, _} = Error ->
                             Error
                     end;
@@ -162,10 +162,12 @@ get_archive_info(ArchiveId) ->
 get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
     {ok, ArchiveId} = archive:get_id(ArchiveDoc),
     {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
+    {ok, ProviderId} = archive:get_archiving_provider_id(ArchiveDoc),
     {ok, Timestamp} = archive:get_creation_time(ArchiveDoc),
     {ok, State} = get_state(ArchiveDoc),
     {ok, Config} = archive:get_config(ArchiveDoc),
     {ok, ArchiveRootDirGuid} = archive:get_root_dir_guid(ArchiveDoc),
+    {ok, ArchiveDataDirGuid} = archive:get_data_dir_guid(ArchiveDoc),
     {ok, PreservedCallback} = archive:get_preserved_callback(ArchiveDoc),
     {ok, DeletedCallback} = archive:get_deleted_callback(ArchiveDoc),
     {ok, Description} = archive:get_description(ArchiveDoc),
@@ -177,8 +179,10 @@ get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
     {ok, #archive_info{
         id = ArchiveId,
         dataset_id = DatasetId,
+        archiving_provider = ProviderId,
         state = State,
         root_dir_guid = ArchiveRootDirGuid,
+        data_dir_guid = ArchiveDataDirGuid,
         creation_time = Timestamp,
         config = Config,
         preserved_callback = PreservedCallback,

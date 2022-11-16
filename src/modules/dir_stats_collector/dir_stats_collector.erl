@@ -62,7 +62,8 @@
 -export([get_stats/3,
     update_stats_of_dir/3, update_stats_of_parent/3, update_stats_of_parent/4, update_stats_of_nearest_dir/3,
     flush_stats/2, delete_stats/2,
-    initialize_collections/1]).
+    initialize_collections/1,
+    report_file_moved/4]).
 %% API - space
 -export([stop_collecting/1]).
 
@@ -164,6 +165,7 @@
 -define(INITIALIZE_COLLECTIONS(Guid), {initialize_collections, Guid}).
 -define(CONTINUE_COLLECTIONS_INITIALIZATION(Guid), {continue_collections_initialization, Guid}).
 -define(STOP_COLLECTING(SpaceId), {stop_collecting, SpaceId}).
+-define(FILE_MOVED(Guid, SourceParentGuid, TargetParentGuid), {file_moved, Guid, SourceParentGuid, TargetParentGuid}).
 
 
 %%%===================================================================
@@ -244,7 +246,7 @@ update_stats_of_nearest_dir(Guid, CollectionType, CollectionUpdate) ->
                             update_stats_of_parent_internal(get_parent(Doc, SpaceId), CollectionType, CollectionUpdate)
                     end;
                 ?ERROR_NOT_FOUND ->
-                    file_meta_posthooks:add_hook({file_meta_missing, FileUuid}, generator:gen_name(),
+                    file_meta_posthooks:add_hook({file_meta_missing, FileUuid}, generator:gen_name(), SpaceId,
                         ?MODULE, ?FUNCTION_NAME, [Guid, CollectionType, CollectionUpdate])
             end;
         false ->
@@ -269,11 +271,14 @@ delete_stats(Guid, CollectionType) ->
     % TODO VFS-9204 - delete from collector memory for collections_initialization status
     case dir_stats_service_state:is_active(file_id:guid_to_space_id(Guid)) of
         true ->
-            case request_flush(Guid, CollectionType, prune_flushed) of
-                ok -> CollectionType:delete(Guid);
-                ?ERROR_DIR_STATS_NOT_READY -> CollectionType:delete(Guid);
-                ?ERROR_INTERNAL_SERVER_ERROR -> ?ERROR_INTERNAL_SERVER_ERROR
-            end;
+            % TODO VFS-9204 - deletion of stat docs results in races when file is deleted via trash in
+            % multiprovider environment (collection is deleted before doc move to trash handling)
+            ok;
+%%            case request_flush(Guid, CollectionType, prune_flushed) of
+%%                ok -> CollectionType:delete(Guid);
+%%                ?ERROR_DIR_STATS_NOT_READY -> CollectionType:delete(Guid);
+%%                ?ERROR_INTERNAL_SERVER_ERROR -> ?ERROR_INTERNAL_SERVER_ERROR
+%%            end;
         false ->
             CollectionType:delete(Guid)
     end.
@@ -282,6 +287,28 @@ delete_stats(Guid, CollectionType) ->
 -spec initialize_collections(file_id:file_guid()) -> ok | ?ERROR_INTERNAL_SERVER_ERROR.
 initialize_collections(Guid) ->
     call_designated_node(Guid, submit_and_await, [?MODULE, Guid, ?INITIALIZE_COLLECTIONS(Guid)]).
+
+
+-spec report_file_moved(file_meta:type(), file_id:file_guid(), file_id:file_guid(), file_id:file_guid()) -> ok.
+report_file_moved(?DIRECTORY_TYPE, FileGuid, SourceParentGuid, TargetParentGuid) ->
+    case dir_stats_service_state:is_active(file_id:guid_to_space_id(FileGuid)) of
+        true ->
+            Message = ?FILE_MOVED(FileGuid, SourceParentGuid, TargetParentGuid),
+            call_designated_node(FileGuid, acknowledged_cast, [?MODULE, FileGuid, Message]);
+        false ->
+            ok
+    end;
+report_file_moved(_, FileGuid, SourceParentGuid, TargetParentGuid) ->
+    lists:foreach(fun(CollectionType) ->
+        ChildStats = CollectionType:init_child(FileGuid),
+        case dir_stats_collection:on_collection_move(CollectionType, ChildStats) of
+            {update_source_parent, CollectionUpdate} ->
+                update_stats_of_dir(SourceParentGuid, external, CollectionType, CollectionUpdate);
+            ignore ->
+                ok
+        end,
+        update_stats_of_dir(TargetParentGuid, external, CollectionType, ChildStats)
+    end, dir_stats_collection:list_types()).
 
 
 %%%===================================================================
@@ -443,7 +470,8 @@ handle_call(Request, State) ->
     {ok, State}.
 
 
--spec handle_cast(#dsc_update_request{} | ?SCHEDULED_FLUSH | ?SCHEDULED_COLLECTIONS_INITIALIZATION, state()) -> state().
+-spec handle_cast(#dsc_update_request{} | ?SCHEDULED_FLUSH | ?SCHEDULED_COLLECTIONS_INITIALIZATION |
+    ?FILE_MOVED(file_id:file_guid(), file_id:file_guid(), file_id:file_guid()), state()) -> state().
 handle_cast(#dsc_update_request{
     guid = Guid,
     update_type = UpdateType,
@@ -472,6 +500,11 @@ handle_cast(?SCHEDULED_COLLECTIONS_INITIALIZATION, State) ->
 
 handle_cast(?CONTINUE_COLLECTIONS_INITIALIZATION(Guid), State) ->
     continue_collections_initialization_for_dir(Guid, State);
+
+handle_cast(?FILE_MOVED(Guid, SourceParentGuid, TargetParentGuid), State) ->
+    lists:foldl(fun(CollectionType, StateAcc) ->
+        collection_moved(Guid, CollectionType, SourceParentGuid, TargetParentGuid, StateAcc)
+    end, State, dir_stats_collection:list_types());
 
 handle_cast(Info, State) ->
     ?log_bad_request(Info),
@@ -986,7 +1019,8 @@ acquire_space_collecting_status(SpaceId, #state{space_collecting_statuses = Coll
 -spec add_hook_for_missing_doc(file_id:file_guid(), dir_stats_collection:type(), dir_stats_collection:collection()) ->
     ok | ?ERROR_INTERNAL_SERVER_ERROR.
 add_hook_for_missing_doc(Guid, CollectionType, CollectionUpdate) ->
-    file_meta_posthooks:add_hook({file_meta_missing, file_id:guid_to_uuid(Guid)}, generator:gen_name(),
+    file_meta_posthooks:add_hook({file_meta_missing, file_id:guid_to_uuid(Guid)},
+        generator:gen_name(), file_id:guid_to_space_id(Guid),
         ?MODULE, update_stats_of_parent, [Guid, CollectionType, CollectionUpdate, return_error]).
 
 
@@ -1011,3 +1045,52 @@ call_designated_node(Guid, Function, Args) ->
 -spec gen_cached_dir_stats_key(file_id:file_guid(), dir_stats_collection:type()) -> cached_dir_stats_key().
 gen_cached_dir_stats_key(Guid, CollectionType) ->
     {Guid, CollectionType}.
+
+
+%% @private
+-spec collection_moved(file_id:file_guid(), dir_stats_collection:type(), file_id:file_guid(), file_id:file_guid(),
+    state()) -> state().
+collection_moved(Guid, CollectionType, SourceParentGuid, TargetParentGuid, State) ->
+    case update_in_cache(Guid, CollectionType, fun(CachedDirStats) ->
+        % Use source parent to flush changes
+        % TODO VFS-9204 - analyze race with collection modification
+        % (is it possible to load statistic with new parent, do changes and flush before move is handled?)
+        CachedDirStats#cached_dir_stats{parent = SourceParentGuid}
+    end, State) of
+        {
+            {ok, #cached_dir_stats{current_stats = CurrentStats, collecting_status = enabled}},
+            UpdatedState
+        } ->
+            CachedDirStatsKey = gen_cached_dir_stats_key(Guid, CollectionType),
+            % TODO VFS-9204 - handle flush errors
+            {_FlushAns, UpdatedState2} = flush_cached_dir_stats(CachedDirStatsKey, prune_inactive, UpdatedState),
+            InitialDirStats = CollectionType:init_child(Guid),
+            ConsolidatedStats = dir_stats_collection:consolidate(CollectionType, InitialDirStats, CurrentStats),
+
+            case dir_stats_collection:on_collection_move(CollectionType, ConsolidatedStats) of
+                {update_source_parent, CollectionUpdate} ->
+                    update_stats_of_dir(SourceParentGuid, internal, CollectionType, CollectionUpdate);
+                ignore ->
+                    ok
+            end,
+
+            {_, UpdatedState3} = update_in_cache(Guid, CollectionType, fun(CachedDirStats) ->
+                CachedDirStats#cached_dir_stats{parent = TargetParentGuid}
+            end, UpdatedState2),
+            update_stats_of_dir(TargetParentGuid, internal, CollectionType, ConsolidatedStats),
+            UpdatedState3;
+
+        {
+            {ok, #cached_dir_stats{current_stats = _CurrentStats, collecting_status = initializing}},
+            UpdatedState
+        } ->
+            {_, UpdatedState2} = update_in_cache(Guid, CollectionType, fun(CachedDirStats) ->
+                CachedDirStats#cached_dir_stats{parent = TargetParentGuid}
+            end, UpdatedState),
+            UpdatedState2;
+        {
+            ?ERROR_DIR_STATS_DISABLED_FOR_SPACE,
+            UpdatedState
+        } ->
+            UpdatedState
+    end.

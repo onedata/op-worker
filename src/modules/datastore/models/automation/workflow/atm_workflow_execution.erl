@@ -34,14 +34,17 @@
 %% (origin run + manual repeats)
 -type incarnation() :: non_neg_integer().
 
--type phase() :: ?WAITING_PHASE | ?ONGOING_PHASE | ?ENDED_PHASE.
+-type phase() :: ?WAITING_PHASE | ?ONGOING_PHASE | ?SUSPENDED_PHASE | ?ENDED_PHASE.
 
-%% @formatter:off
 -type status() ::
-    ?SCHEDULED_STATUS |
-    ?ACTIVE_STATUS | ?ABORTING_STATUS |
-    ?FINISHED_STATUS | ?CANCELLED_STATUS | ?FAILED_STATUS.
-%% @formatter:on
+    % waiting
+    ?RESUMING_STATUS | ?SCHEDULED_STATUS |
+    % ongoing
+    ?ACTIVE_STATUS | ?STOPPING_STATUS |
+    % suspended
+    ?INTERRUPTED_STATUS | ?PAUSED_STATUS |
+    % ended
+    ?FINISHED_STATUS | ?CRASHED_STATUS | ?CANCELLED_STATUS | ?FAILED_STATUS.
 
 -type timestamp() :: time:seconds().
 
@@ -143,5 +146,6 @@ get_record_struct(1) ->
 
         {schedule_time, integer},
         {start_time, integer},
+        {suspend_time, integer},
         {finish_time, integer}
     ]}.

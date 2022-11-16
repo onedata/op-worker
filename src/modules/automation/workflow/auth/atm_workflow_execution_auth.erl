@@ -27,7 +27,7 @@
 -export([
     get_space_id/1,
     get_workflow_execution_id/1,
-    get_user_id/1, get_session_id/1, get_access_token/1
+    get_user_id/1, get_session_id/1, get_access_token/1, get_user_ctx/1
 ]).
 
 
@@ -84,3 +84,8 @@ get_session_id(#atm_workflow_execution_auth{user_ctx = UserCtx}) ->
 get_access_token(#atm_workflow_execution_auth{user_ctx = UserCtx}) ->
     TokenCredentials = user_ctx:get_credentials(UserCtx),
     auth_manager:get_access_token(TokenCredentials).
+
+
+-spec get_user_ctx(record()) -> user_ctx:ctx().
+get_user_ctx(#atm_workflow_execution_auth{user_ctx = UserCtx}) ->
+    UserCtx.

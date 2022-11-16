@@ -50,8 +50,11 @@ initialize(ItemCount, FailOnItem) ->
 %%%===================================================================
 
 -spec get_next(workflow_engine:execution_context(), iterator()) -> {ok, item(), iterator()} | stop.
-get_next(_Context, #workflow_test_iterator{item_number = ItemNumber, fail_on_item = ItemNumber}) ->
-    throw(test_error);
+get_next(Context, #workflow_test_iterator{item_number = ItemNumber, fail_on_item = ItemNumber} = Iterator) ->
+    case op_worker:get_env(ignore_workflow_test_iterator_fail_config, false) of
+        false -> throw(test_error);
+        true -> get_next(Context, Iterator#workflow_test_iterator{fail_on_item = -1})
+    end;
 get_next(_Context, #workflow_test_iterator{item_number = ItemNumber, item_count = ItemCount})
     when ItemNumber > ItemCount ->
     stop;

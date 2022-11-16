@@ -771,7 +771,7 @@
 %% Model that holds synchronization state for a space
 -record(dbsync_state, {
     seq = #{} :: #{od_provider:id() => {couchbase_changes:seq(), datastore_doc:timestamp()}},
-    resynchronization_params = #{} :: #{od_provider:id() => dbsync_state:resynchronization_params()}
+    synchronization_params = #{} :: dbsync_state:synchronization_params_map()
 }).
 
 %% Model that holds state entries for DBSync worker
@@ -1123,8 +1123,11 @@
     % when updating doc). It is necessary due to limitation of datastore as
     % otherwise getting document before update would be needed (to compare 2 docs).
     status_changed = false :: boolean(),
-    % Flag used to differentiate reasons why task is aborting
-    aborting_reason = undefined :: undefined | atm_task_execution:aborting_reason(),
+    % Flag used to differentiate reasons why task is stopping
+    stopping_reason = undefined :: undefined | atm_task_execution:stopping_reason(),
+    % Recorded incarnation when last stopping (pause, cancel, interrupt, etc.) has occurred.
+    % It is used to resolve races possible when resuming and immediately stopping execution.
+    stopping_incarnation = 0 :: atm_workflow_execution:incarnation(),
 
     items_in_processing = 0 :: non_neg_integer(),
     items_processed = 0 :: non_neg_integer(),
@@ -1180,6 +1183,7 @@
 
     schedule_time = 0 :: atm_workflow_execution:timestamp(),
     start_time = 0 :: atm_workflow_execution:timestamp(),
+    suspend_time = 0 :: atm_workflow_execution:timestamp(),
     finish_time = 0 :: atm_workflow_execution:timestamp()
 }).
 
@@ -1191,6 +1195,10 @@
     }
 }).
 %% @formatter:on
+
+-record(atm_openfaas_status_cache, {
+    status :: atm_openfaas_monitor:status()
+}).
 
 %%%===================================================================
 %%% Workflow engine connected models
@@ -1210,9 +1218,9 @@
 }).
 
 -record(workflow_iterator_snapshot, {
-    iterator :: iterator:iterator(),
+    iterator :: iterator:iterator() | undefined,
     lane_index :: workflow_execution_state:index(),
-    lane_id :: workflow_engine:lane_id(),
+    lane_id :: workflow_engine:lane_id() | undefined,
     next_lane_id :: workflow_engine:lane_id() | undefined,
     item_index :: workflow_execution_state:index()
 }).
@@ -1227,17 +1235,18 @@
     engine_id :: workflow_engine:id(),
     handler :: workflow_handler:handler(),
     initial_context :: workflow_engine:execution_context(),
+    incarnation_tag :: workflow_execution_state:incarnation_tag(),
+    snapshot_mode = ?ALL_ITEMS :: workflow_execution_state:snapshot_mode(),
 
     execution_status = ?NOT_PREPARED :: workflow_execution_state:execution_status(),
     current_lane :: workflow_execution_state:current_lane(),
 
     % engine can prepare next lane in advance but it is not being executed until current lane is finished
-    % and workflow_handler:handle_lane_execution_ended/3 (called for current lane) confirms that next lane
+    % and workflow_handler:handle_lane_execution_stopped/3 (called for current lane) confirms that next lane
     % execution should start
     next_lane_preparation_status = ?NOT_PREPARED :: workflow_execution_state:next_lane_preparation_status(),
     next_lane :: workflow_execution_state:next_lane(),
 
-    lowest_failed_job_identifier :: workflow_jobs:job_identifier() | undefined,
     failed_job_count = 0 :: non_neg_integer(),
 
     iteration_state :: workflow_iteration_state:state() | undefined,
@@ -1250,11 +1259,22 @@
     % TODO VFS-7919 - consider keeping callbacks list from beginning
     % to guarantee that each callback is called exactly once
     pending_callbacks = [] :: [workflow_execution_state:callback_selector()],
+    items_to_process = #{} :: #{workflow_cached_item:id() => [report | snapshot | delete]},
 
     % Field used to return additional information about document update procedure
     % (datastore:update returns {ok, #document{}} or {error, term()}
     % so such information has to be returned via record's field).
     update_report :: workflow_execution_state:update_report() | undefined
+}).
+
+-record(workflow_execution_state_dump, {
+    snapshot_mode :: workflow_execution_state:snapshot_mode(),
+    lane_status :: ?PREPARED | ?NOT_PREPARED,
+    failed_job_count = 0 :: non_neg_integer(),
+
+    iteration_state_dump :: workflow_iteration_state:dump(),
+    jobs_dump :: workflow_jobs:dump(),
+    task_index_map :: workflow_execution_state_dump:task_index_map_as_list()
 }).
 
 -record(workflow_async_call_pool, {
