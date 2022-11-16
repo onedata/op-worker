@@ -31,6 +31,7 @@
 -export_type([record/0, part_number/0]).
 
 -define(DEFAULT_LIST_LIMIT, 5000).
+-define(DEFAULT_START_AFTER, 0).
 
 %%%===================================================================
 %%% API
@@ -46,22 +47,24 @@ create(UploadId, #multipart_upload_part{number = PartNumber} = MultipartUploadPa
     ok = ?extract_ok(?ok_if_exists(datastore_model:add_links(?CTX, UploadId, oneprovider:get_id(), {PartNumber, PartId}))).
 
 
--spec list(multipart_upload:id(), non_neg_integer(), non_neg_integer()) -> 
+-spec list(multipart_upload:id(), non_neg_integer() | undefined, non_neg_integer() | undefined) ->
     {ok, [record()], boolean()}.
 list(UploadId, Limit, StartAfter) ->
+    FinalLimit = utils:ensure_defined(Limit, ?DEFAULT_LIST_LIMIT),
+    FinalStartAfter = utils:ensure_defined(StartAfter, ?DEFAULT_START_AFTER),
     FoldFun = fun(#link{target = PartId}, Acc) -> 
         {ok, [PartId | Acc]} 
     end,
     {ok, ReversedPartIds} = datastore_model:fold_links(?CTX, UploadId, oneprovider:get_id(), FoldFun, [], #{
-        size => Limit,
-        prev_link_name  => StartAfter,
+        size => FinalLimit,
+        prev_link_name  => FinalStartAfter,
         prev_tree_id => oneprovider:get_id()
     }),
     ReversedParts = lists_utils:pmap(fun(PartId) ->
         {ok, #document{value = MultipartPart}} = datastore_model:get(?CTX, PartId),
         MultipartPart
     end, ReversedPartIds),
-    {ok, lists:reverse(ReversedParts), length(ReversedParts) < Limit}.
+    {ok, lists:reverse(ReversedParts), length(ReversedParts) < FinalLimit}.
 
 
 -spec cleanup(multipart_upload:id()) -> ok.

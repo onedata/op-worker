@@ -278,8 +278,8 @@
 
 -record(list_multipart_parts, {
     multipart_upload_id :: multipart_upload:id(),
-    limit :: non_neg_integer(),
-    part_marker :: non_neg_integer()
+    limit :: undefined | non_neg_integer(),
+    part_marker :: undefined | non_neg_integer()
 }).
 
 -record(abort_multipart_upload, {
