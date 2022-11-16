@@ -386,7 +386,7 @@ verify_sample(#rest_api_request_sample{name = <<"Download file content">>} = Sam
         {ok, Handle} = lfm_proxy:open(Node, SessId, ?FILE_REF(Guid), read),
         {ok, ExpectedContent} = lfm_proxy:read(Node, Handle, 0, 100),
         ?assertMatch(ExpectedContent, ResultBody),
-        lfm_proxy:close_all(Node)
+        lfm_proxy:close(Node, Handle)
     end,
     verify_sample_base(Sample, VerifyFun);
 verify_sample(#rest_api_request_sample{name = <<"Update file content">>} = Sample, Guid) ->
@@ -395,7 +395,7 @@ verify_sample(#rest_api_request_sample{name = <<"Update file content">>} = Sampl
     VerifyFun = fun(_ResultBody) ->
         {ok, Handle} = lfm_proxy:open(Node, SessId, ?FILE_REF(Guid), read),
         ?assertMatch({ok, <<"file_content_set_in_test">>}, lfm_proxy:read(Node, Handle, 0, 100)),
-        lfm_proxy:close_all(Node)
+        lfm_proxy:close(Node, Handle)
     end,
     verify_sample_base(Sample, VerifyFun, <<"file_content_set_in_test">>);
 verify_sample(#rest_api_request_sample{name = <<"Get file hard links">>} = Sample, Guid) ->
