@@ -64,9 +64,14 @@ gather_attributes(UserCtx, GatherAttributesFun, Entries, BaseOpts) ->
                     })
             end,
             {true, Result}
-        catch _:_ ->
-            % Entry metadata can be not fully synchronized with other provider
-            false
+        catch Class:Reason ->
+            case datastore_runner:normalize_error(Reason) of
+                not_found ->
+                    % Entry metadata can be not fully synchronized with other provider
+                    false;
+                _ ->
+                    erlang:apply(erlang, Class, [Reason])
+            end
         end
     end,
     lists_utils:pfiltermap(FilterMapFun, EnumeratedChildren, ?MAX_MAP_CHILDREN_PROCESSES).
