@@ -19,6 +19,7 @@
 -include("api_file_test_utils.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/api_samples/common.hrl").
+-include_lib("ctool/include/test/rest_api_samples_test_utils.hrl").
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
 
 
@@ -31,25 +32,13 @@
 
 -export([
     public_file_api_samples_test/1,
-    private_file_api_samples_test/1,
-    
-    verify_public_samples_directory_test/1,
-    verify_public_samples_reg_file_test/1,
-    verify_private_samples_directory_test/1,
-    verify_private_samples_reg_file_test/1,
-    verify_private_samples_symlink_test/1
+    private_file_api_samples_test/1
 ]).
 
 groups() -> [
-    {all_tests, [parallel], [
+    {all_tests, [sequential], [
         public_file_api_samples_test,
-        private_file_api_samples_test,
-
-        verify_public_samples_directory_test,
-        verify_public_samples_reg_file_test,
-        verify_private_samples_directory_test,
-        verify_private_samples_reg_file_test,
-        verify_private_samples_symlink_test
+        private_file_api_samples_test
     ]}
 ].
 
@@ -57,7 +46,17 @@ all() -> [
     {group, all_tests}
 ].
 
+-define(RAND_NODE(), oct_background:get_random_provider_node(krakow)).
+-define(USER_2_SESS(), oct_background:get_user_session_id(user2, krakow)).
+
 -define(DUMMY_XROOTD_SERVER_DOMAIN, <<"xrootd.example.com">>).
+
+-define(EXAMPLE_METADATA_SPEC, #metadata_spec{
+    json = #{<<"some_json_key">> => <<"some_json_value">>},
+    rdf = <<"<some_rdf>value</some_rdf>">>,
+    xattrs = #{<<"xattr_key">> => <<"xattr_value">>}
+}).
+
 -define(ATTEMPTS, 30).
 
 
@@ -91,17 +90,23 @@ public_file_api_samples_test(_Config) ->
         ]
     } = onenv_file_test_utils:create_and_sync_file_tree(user2, space_krk_par,
         #dir_spec{
+            metadata = ?EXAMPLE_METADATA_SPEC,
             shares = [#share_spec{}],
             children = [
                 #file_spec{
                     name = <<"file">>,
+                    content = ?RAND_STR(),
+                    metadata = ?EXAMPLE_METADATA_SPEC,
                     shares = [#share_spec{}]
                 },
                 #dir_spec{
                     name = <<"nested_dir">>,
+                    metadata = ?EXAMPLE_METADATA_SPEC,
                     children = [
                         #file_spec{
-                            name = <<"nested_file">>
+                            name = <<"nested_file">>,
+                            content = ?RAND_STR(),
+                            metadata = ?EXAMPLE_METADATA_SPEC
                         }
                     ]
                 }
@@ -114,6 +119,7 @@ public_file_api_samples_test(_Config) ->
     public_file_api_samples_test_base(?REGULAR_FILE_TYPE, NestedFileGuid, TopDirShareId, filename:join([<<"/">>, TopDirName, <<"nested_dir">>, <<"nested_file">>])),
     public_file_api_samples_test_base(?DIRECTORY_TYPE, TopDirGuid, TopDirShareId, <<"/", TopDirName/binary>>),
     public_file_api_samples_test_base(?DIRECTORY_TYPE, NestedDirGuid, TopDirShareId, filename:join([<<"/">>, TopDirName, <<"nested_dir">>])).
+
 
 public_file_api_samples_test_base(FileType, FileGuid, ShareId, FilePathInShare) ->
     public_file_api_samples_test_base(FileType, FileGuid, ShareId, FilePathInShare, xrootd_enabled),
@@ -153,14 +159,19 @@ public_file_api_samples_test_base(FileType, FileGuid, ShareId, FilePathInShare, 
                         }
                     end,
                     validate_result_fun = fun(_, {ok, Result}) ->
+                        ExpectedApiRoot = str_utils:format_bin("https://~s/api/v3/onezone", [ozw_test_rpc:get_domain()]),
+                        rest_api_samples_test_utils:verify_structure(
+                            Result, ExpectedApiRoot, exp_operation_list(public, FileType)
+                        ),
+                        rest_api_samples_test_utils:test_samples(
+                            Result, get_user_access_token(), cacert_opts(), ShareGuid, fun build_sample_test_spec/1
+                        ),
                         case XrootdStatus of
                             xrootd_enabled ->
-                                ?assertEqual(lists:sort([<<"rest">>, <<"xrootd">>]), lists:sort(maps:keys(Result))),
-                                verify_xrootd_api_samples(FileType, SpaceId, ShareId, FilePathInShare, maps:get(<<"xrootd">>, Result)),
-                                verify_public_rest_api_samples(FileType, ShareGuid, maps:get(<<"rest">>, Result));
+                                ?assert(maps:is_key(<<"xrootd">>, Result)),
+                                verify_xrootd_api_samples(FileType, SpaceId, ShareId, FilePathInShare, maps:get(<<"xrootd">>, Result));
                             xrootd_disabled ->
-                                ?assertEqual([<<"rest">>], maps:keys(Result)),
-                                verify_public_rest_api_samples(FileType, ShareGuid, maps:get(<<"rest">>, Result))
+                                ?assertNot(maps:is_key(<<"xrootd">>, Result))
                         end
                     end
                 }
@@ -188,9 +199,12 @@ private_file_api_samples_test(_Config) ->
         ]
     } = onenv_file_test_utils:create_and_sync_file_tree(user2, space_krk_par,
         #dir_spec{
+            metadata = ?EXAMPLE_METADATA_SPEC,
             children = [
                 #file_spec{
-                    name = <<"file">>
+                    name = <<"file">>,
+                    content = ?RAND_STR(),
+                    metadata = ?EXAMPLE_METADATA_SPEC
                 },
                 #symlink_spec{
                     name = <<"symlink">>,
@@ -199,16 +213,16 @@ private_file_api_samples_test(_Config) ->
             ]
         }
     ),
-    
-    private_file_api_samples_test_base(?DIRECTORY_TYPE, DirGuid),
+
+    private_file_api_samples_test_base(?SYMLINK_TYPE, SymlinkGuid),
     private_file_api_samples_test_base(?REGULAR_FILE_TYPE, FileGuid),
-    private_file_api_samples_test_base(?SYMLINK_TYPE, SymlinkGuid).
+    private_file_api_samples_test_base(?DIRECTORY_TYPE, DirGuid).
 
 private_file_api_samples_test_base(FileType, FileGuid) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
     Providers = [P1Node, P2Node],
-    
+
     ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = Providers,
@@ -232,8 +246,8 @@ private_file_api_samples_test_base(FileType, FileGuid) ->
                         }
                     end,
                     validate_result_fun = fun(#api_test_ctx{node = Node}, {ok, Result}) ->
-                        ?assertEqual([<<"rest">>], maps:keys(Result)),
-                        verify_private_rest_api_samples(Node, FileType, FileGuid, maps:get(<<"rest">>, Result))
+                        ExpApiRoot = str_utils:format_bin("https://~s:443/api/v3/oneprovider", [opw_test_rpc:get_provider_domain(Node)]),
+                        rest_api_samples_test_utils:verify_structure(Result, ExpApiRoot, exp_operation_list(private, FileType))
                     end
                 }
             ],
@@ -241,224 +255,200 @@ private_file_api_samples_test_base(FileType, FileGuid) ->
                 bad_values = [{bad_id, <<"NonExistentFile">>, ?ERROR_BAD_VALUE_IDENTIFIER(<<"id">>)}]
             }
         }
-    ])).
+    ])),
 
+    % testing samples is deferred till the end of the test as one of the operations deletes the file
+    ApiSamples = opw_test_rpc:call(?RAND_NODE(), private_file_api_samples, generate_for, [?USER_2_SESS(), FileGuid]),
+    rest_api_samples_test_utils:test_samples(
+        ApiSamples, get_user_access_token(), cacert_opts(), FileGuid, fun build_sample_test_spec/1
+    ).
 
 %%%===================================================================
-%%% Verify samples test functions
+%%% Internal functions
 %%%===================================================================
 
-verify_public_samples_directory_test(_Config) ->
-    verify_all_samples(?DIRECTORY_TYPE, public).
-
-verify_public_samples_reg_file_test(_Config) ->
-    verify_all_samples(?REGULAR_FILE_TYPE, public).
-
-verify_private_samples_directory_test(_Config) ->
-    verify_all_samples(?DIRECTORY_TYPE, private).
-
-verify_private_samples_reg_file_test(_Config) ->
-    verify_all_samples(?REGULAR_FILE_TYPE, private).
-
-verify_private_samples_symlink_test(_Config) ->
-    verify_all_samples(?SYMLINK_TYPE, private).
+%% @private
+-spec exp_operation_list(public | private, file_meta:type()) -> rest_api_samples_test_utils:operation_listing().
+exp_operation_list(public, ?DIRECTORY_TYPE) -> [
+    {'GET', <<"get_shared_data">>, <<"Download directory (tar)">>},
+    {'GET', <<"get_shared_data">>, <<"List directory files and subdirectories">>},
+    {'GET', <<"get_shared_data">>, <<"Get attributes">>},
+    {'GET', <<"get_shared_data">>, <<"Get extended attributes (xattrs)">>},
+    {'GET', <<"get_shared_data">>, <<"Get JSON metadata">>},
+    {'GET', <<"get_shared_data">>, <<"Get RDF metadata">>}
+];
+exp_operation_list(public, ?REGULAR_FILE_TYPE) -> [
+    {'GET', <<"get_shared_data">>, <<"Download file content">>},
+    {'GET', <<"get_shared_data">>, <<"Get attributes">>},
+    {'GET', <<"get_shared_data">>, <<"Get extended attributes (xattrs)">>},
+    {'GET', <<"get_shared_data">>, <<"Get JSON metadata">>},
+    {'GET', <<"get_shared_data">>, <<"Get RDF metadata">>}
+];
+exp_operation_list(private, ?DIRECTORY_TYPE) -> [
+    {'GET', <<"download_file_content">>, <<"Download directory (tar)">>},
+    {'GET', <<"list_children">>, <<"List directory files and subdirectories">>},
+    {'POST', <<"create_file">>, <<"Create file in directory">>},
+    {'DELETE', <<"remove_file">>, <<"Remove file">>},
+    {'GET', <<"get_attrs">>, <<"Get attributes">>},
+    {'GET', <<"get_json_metadata">>, <<"Get JSON metadata">>},
+    {'PUT', <<"set_json_metadata">>, <<"Set JSON metadata">>},
+    {'DELETE', <<"remove_json_metadata">>, <<"Remove JSON metadata">>},
+    {'GET', <<"get_rdf_metadata">>, <<"Get RDF metadata">>},
+    {'PUT', <<"set_rdf_metadata">>, <<"Set RDF metadata">>},
+    {'DELETE', <<"remove_rdf_metadata">>, <<"Remove RDF metadata">>},
+    {'GET', <<"get_xattrs">>, <<"Get extended attributes (xattrs)">>},
+    {'PUT', <<"set_xattr">>, <<"Set extended attribute (xattr)">>},
+    {'DELETE', <<"remove_xattrs">>, <<"Remove extended attributes (xattrs)">>}
+];
+exp_operation_list(private, ?REGULAR_FILE_TYPE) -> [
+    {'GET', <<"download_file_content">>, <<"Download file content">>},
+    {'PUT', <<"update_file_content">>, <<"Update file content">>},
+    {'GET', <<"get_file_hardlinks">>, <<"Get file hard links">>},
+    {'DELETE', <<"remove_file">>, <<"Remove file">>},
+    {'GET', <<"get_attrs">>, <<"Get attributes">>},
+    {'GET', <<"get_json_metadata">>, <<"Get JSON metadata">>},
+    {'PUT', <<"set_json_metadata">>, <<"Set JSON metadata">>},
+    {'DELETE', <<"remove_json_metadata">>, <<"Remove JSON metadata">>},
+    {'GET', <<"get_rdf_metadata">>, <<"Get RDF metadata">>},
+    {'PUT', <<"set_rdf_metadata">>, <<"Set RDF metadata">>},
+    {'DELETE', <<"remove_rdf_metadata">>, <<"Remove RDF metadata">>},
+    {'GET', <<"get_xattrs">>, <<"Get extended attributes (xattrs)">>},
+    {'PUT', <<"set_xattr">>, <<"Set extended attribute (xattr)">>},
+    {'DELETE', <<"remove_xattrs">>, <<"Remove extended attributes (xattrs)">>}
+];
+exp_operation_list(private, ?SYMLINK_TYPE) -> [
+    {'GET', <<"get_symlink_value">>, <<"Get symbolic link value">>},
+    {'GET', <<"get_file_hardlinks">>, <<"Get file hard links">>},
+    {'DELETE', <<"remove_file">>, <<"Remove file">>},
+    {'GET', <<"get_attrs">>, <<"Get attributes">>}
+].
 
 
 %% @private
-verify_all_samples(FileType, Scope) ->
-    Guid = setup_verify_sample_env(FileType, Scope),
-    #rest_api_samples{samples = Samples, api_root = ApiRoot} = get_samples(Guid, Scope),
-    RemoveFileSample = lists:foldl(fun(#rest_api_request_sample{path = PathSuffix} = Sample, Acc) ->
-        UpdatedSample = Sample#rest_api_request_sample{path = <<ApiRoot/binary, PathSuffix/binary>>},
-        % call remove file sample after all tests, as it will remove the file
-        case UpdatedSample#rest_api_request_sample.name of
-            <<"Remove file">> -> 
-                UpdatedSample;
-            _ -> 
-                verify_sample(UpdatedSample, Guid),
-                Acc
-        end
-    end, undefined, Samples),
-    case RemoveFileSample of
-        undefined -> ok;
-        _ -> verify_sample(RemoveFileSample, Guid)
-    end.
-
-
-%% @private
-verify_sample(#rest_api_request_sample{name = <<"Get attributes">>} = Sample, Guid) ->
-    {ok, #file_attr{name = Name}} = lfm_proxy:stat(
-        oct_background:get_random_provider_node(krakow), 
-        oct_background:get_user_session_id(user2, krakow), 
-        ?FILE_REF(Guid)
-    ),
-    VerifyFun = fun(ResultBody) ->
-        DecodedResult = json_utils:decode(ResultBody),
-        ?assertMatch(#{<<"name">> := _}, DecodedResult),
-        ?assertEqual(Name, maps:get(<<"name">>, DecodedResult))
-    end,
-    verify_sample_base(Sample, VerifyFun);
-verify_sample(#rest_api_request_sample{name = <<"Remove file">>} = Sample, Guid) ->
-    VerifyFun = fun(_ResultBody) ->
-        ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(
-            oct_background:get_random_provider_node(krakow), 
-            oct_background:get_user_session_id(user2, krakow), 
-            ?FILE_REF(Guid)
-        ), ?ATTEMPTS)
-    end,
-    verify_sample_base(Sample, VerifyFun);
-verify_sample(#rest_api_request_sample{name = <<"Get JSON metadata">>} = Sample, Guid) ->
-    VerifyFun = fun(ResultBody) ->
-        ?assertEqual(get_custom_metadata(Guid, json), {ok, json_utils:decode(ResultBody)})
-    end,
-    verify_sample_base(Sample, VerifyFun);
-verify_sample(#rest_api_request_sample{name = <<"Set JSON metadata">>} = Sample, Guid) ->
-    VerifyFun = fun(_ResultBody) ->
-        ?assertEqual({ok, #{<<"some_json_key">> => <<"value_set_in_test">>}}, get_custom_metadata(Guid, json))
-    end,
-    verify_sample_base(Sample, VerifyFun, json_utils:encode(#{<<"some_json_key">> => <<"value_set_in_test">>}));
-verify_sample(#rest_api_request_sample{name = <<"Remove JSON metadata">>} = Sample, Guid) ->
-    VerifyFun = fun(_ResultBody) ->
-        ?assertEqual(?ERROR_POSIX(?ENODATA), get_custom_metadata(Guid, json))
-    end,
-    verify_sample_base(Sample, VerifyFun);
-verify_sample(#rest_api_request_sample{name = <<"Get RDF metadata">>} = Sample, Guid) ->
-    VerifyFun = fun(ResultBody) ->
-        ?assertEqual(get_custom_metadata(Guid, rdf), {ok, ResultBody})
-    end,
-    verify_sample_base(Sample, VerifyFun);
-verify_sample(#rest_api_request_sample{name = <<"Set RDF metadata">>} = Sample, Guid) ->
-    VerifyFun = fun(_ResultBody) ->
-        ?assertEqual({ok, <<"rdf_metadata_set_in_test">>}, get_custom_metadata(Guid, rdf))
-    end,
-    verify_sample_base(Sample, VerifyFun, <<"rdf_metadata_set_in_test">>);
-verify_sample(#rest_api_request_sample{name = <<"Remove RDF metadata">>} = Sample, Guid) ->
-    VerifyFun = fun(_ResultBody) ->
-        ?assertEqual(?ERROR_POSIX(?ENODATA), get_custom_metadata(Guid, rdf))
-    end,
-    verify_sample_base(Sample, VerifyFun);
-verify_sample(#rest_api_request_sample{name = <<"Get extended attributes (xattrs)">>} = Sample, Guid) ->
-    VerifyFun = fun(ResultBody) ->
-        ?assertEqual(get_xattrs(Guid), json_utils:decode(ResultBody))
-    end,
-    verify_sample_base(Sample, VerifyFun);
-verify_sample(#rest_api_request_sample{name = <<"Set extended attribute (xattr)">>} = Sample, Guid) ->
-    VerifyFun = fun(_ResultBody) ->
-        ?assertMatch(#{<<"xattr_created_in_test">> := <<"value">>}, get_xattrs(Guid))
-    end,
-    verify_sample_base(Sample, VerifyFun, json_utils:encode(#{<<"xattr_created_in_test">> => <<"value">>}));
-verify_sample(#rest_api_request_sample{name = <<"Remove extended attributes (xattrs)">>} = Sample, Guid) ->
-    VerifyFun = fun(_ResultBody) ->
-        ?assertNotMatch(#{<<"xattr_key">> := <<"xattr_value">>}, get_xattrs(Guid))
-    end,
-    verify_sample_base(Sample, VerifyFun, json_utils:encode(#{<<"keys">> => [<<"xattr_key">>]}));
-verify_sample(#rest_api_request_sample{name = <<"Create file in directory">>} = Sample, Guid) ->
-    Node = oct_background:get_random_provider_node(krakow),
-    SessId = oct_background:get_user_session_id(user2, krakow),
-    Filename = generator:gen_name(),
-    VerifyFun = fun(_ResultBody) ->
-        {ok, Children} = lfm_proxy:get_children(Node, SessId, ?FILE_REF(Guid), 0, 100),
-        ?assertMatch({ok, _}, lists_utils:find(fun({_ChildGuid, ChildName}) -> ChildName == Filename end, Children))
-    end,
-    verify_sample_base(Sample, VerifyFun, <<>>, #{<<"$NAME">> => Filename});
-verify_sample(#rest_api_request_sample{name = <<"List directory files and subdirectories">>} = Sample, Guid) ->
-    Node = oct_background:get_random_provider_node(krakow),
-    SessId = oct_background:get_user_session_id(user2, krakow),
-    VerifyFun = fun(ResultBody) ->
-        {ok, Children} = lfm_proxy:get_children(Node, SessId, ?FILE_REF(Guid), 0, 100),
+-spec build_sample_test_spec(rest_api_request_sample:name()) -> rest_api_samples_test_utils:sample_test_spec().
+build_sample_test_spec(<<"Download directory (tar)">>) -> #sample_test_spec{
+    verify_fun = fun(_Guid, ResultBody) ->
+        ?assertMatch({ok, _}, erl_tar:extract({binary, ResultBody}, [memory]))
+    end
+};
+build_sample_test_spec(<<"Download file content">>) -> #sample_test_spec{
+    verify_fun = fun(Guid, ResultBody) ->
+        ?assertEqual(ResultBody, lfm_test_utils:read_file(?RAND_NODE(), ?USER_2_SESS(), Guid, 1000))
+    end
+};
+build_sample_test_spec(<<"List directory files and subdirectories">>) -> #sample_test_spec{
+    verify_fun = fun(Guid, ResultBody) ->
+        {ok, Children} = lfm_proxy:get_children(?RAND_NODE(), ?USER_2_SESS(), ?FILE_REF(Guid), 0, 100),
         ExpectedChildren = lists:map(fun({ChildGuid, ChildName}) ->
             {ok, ObjectId} = file_id:guid_to_objectid(ChildGuid),
             #{<<"file_id">> => ObjectId, <<"name">> => ChildName}
         end, Children),
         ?assertMatch(#{<<"children">> := _}, json_utils:decode(ResultBody)),
         ?assertMatch(ExpectedChildren, maps:get(<<"children">>, json_utils:decode(ResultBody)))
+    end
+};
+build_sample_test_spec(<<"Create file in directory">>) -> #sample_test_spec{
+    setup_fun = fun(Guid) ->
+        Filename = generator:gen_name(),
+        {Guid, Filename}
     end,
-    verify_sample_base(Sample, VerifyFun);
-verify_sample(#rest_api_request_sample{name = <<"Download directory (tar)">>} = Sample, _Guid) ->
-    VerifyFun = fun(ResultBody) ->
-        ?assertMatch({ok, _}, erl_tar:extract({binary, ResultBody}, [memory]))
-    end,
-    verify_sample_base(Sample, VerifyFun);
-verify_sample(#rest_api_request_sample{name = <<"Download file content">>} = Sample, Guid) ->
-    Node = oct_background:get_random_provider_node(krakow),
-    SessId = oct_background:get_user_session_id(user2, krakow),
-    VerifyFun = fun(ResultBody) ->
-        {ok, Handle} = lfm_proxy:open(Node, SessId, ?FILE_REF(Guid), read),
-        {ok, ExpectedContent} = lfm_proxy:read(Node, Handle, 0, 100),
-        ?assertMatch(ExpectedContent, ResultBody),
-        lfm_proxy:close(Node, Handle)
-    end,
-    verify_sample_base(Sample, VerifyFun);
-verify_sample(#rest_api_request_sample{name = <<"Update file content">>} = Sample, Guid) ->
-    Node = oct_background:get_random_provider_node(krakow),
-    SessId = oct_background:get_user_session_id(user2, krakow),
-    VerifyFun = fun(_ResultBody) ->
-        {ok, Handle} = lfm_proxy:open(Node, SessId, ?FILE_REF(Guid), read),
-        ?assertMatch({ok, <<"file_content_set_in_test">>}, lfm_proxy:read(Node, Handle, 0, 100)),
-        lfm_proxy:close(Node, Handle)
-    end,
-    verify_sample_base(Sample, VerifyFun, <<"file_content_set_in_test">>);
-verify_sample(#rest_api_request_sample{name = <<"Get file hard links">>} = Sample, Guid) ->
-    VerifyFun = fun(ResultBody) ->
+    substitute_placeholder_fun = fun({_Guid, Filename}, <<"$NAME">>) -> Filename end,
+    verify_fun = fun({Guid, Filename}, _ResultBody) ->
+        {ok, Children} = lfm_proxy:get_children(?RAND_NODE(), ?USER_2_SESS(), ?FILE_REF(Guid), 0, 100),
+        ?assertMatch({ok, _}, lists_utils:find(fun({_ChildGuid, ChildName}) -> ChildName == Filename end, Children))
+    end
+};
+build_sample_test_spec(<<"Update file content">>) -> #sample_test_spec{
+    substitute_placeholder_fun = fun(_Guid, <<"$NEW_CONTENT">>) -> <<"file_content_set_in_test">> end,
+    verify_fun = fun(Guid, _ResultBody) ->
+        ?assertEqual(<<"file_content_set_in_test">>, lfm_test_utils:read_file(?RAND_NODE(), ?USER_2_SESS(), Guid, 1000))
+    end
+};
+build_sample_test_spec(<<"Remove file">>) -> #sample_test_spec{
+    testing_priority = 20,
+    verify_fun = fun(Guid, _ResultBody) ->
+        ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(?RAND_NODE(), ?USER_2_SESS(), ?FILE_REF(Guid)), ?ATTEMPTS)
+    end
+};
+build_sample_test_spec(<<"Get file hard links">>) -> #sample_test_spec{
+    verify_fun = fun(Guid, ResultBody) ->
         {ok, ObjectId} = file_id:guid_to_objectid(Guid),
         ?assertEqual([ObjectId], json_utils:decode(ResultBody))
+    end
+};
+build_sample_test_spec(<<"Get attributes">>) -> #sample_test_spec{
+    verify_fun = fun(Guid, ResultBody) ->
+        {ok, #file_attr{name = Name}} = lfm_proxy:stat(?RAND_NODE(), ?USER_2_SESS(), ?FILE_REF(Guid)),
+        ?assertMatch(#{<<"name">> := Name}, json_utils:decode(ResultBody))
+    end
+};
+build_sample_test_spec(<<"Get JSON metadata">>) -> #sample_test_spec{
+    verify_fun = fun(Guid, ResultBody) ->
+        ?assertEqual(element(2, {ok, _} = get_custom_metadata(Guid, json)), json_utils:decode(ResultBody))
+    end
+};
+build_sample_test_spec(<<"Set JSON metadata">>) -> #sample_test_spec{
+    substitute_placeholder_fun = fun(_Guid, <<"$METADATA">>) ->
+        json_utils:encode(#{<<"some_json_key">> => <<"value_set_in_test">>})
     end,
-    verify_sample_base(Sample, VerifyFun);
-verify_sample(#rest_api_request_sample{name = <<"Get symbolic link value">>} = Sample, Guid) ->
-    Node = oct_background:get_random_provider_node(krakow),
-    SessId = oct_background:get_user_session_id(user2, krakow),
-    VerifyFun = fun(ResultBody) ->
-        {ok, SymlinkValue} = lfm_proxy:read_symlink(Node, SessId, ?FILE_REF(Guid)),
+    verify_fun = fun(Guid, _ResultBody) ->
+        ?assertEqual({ok, #{<<"some_json_key">> => <<"value_set_in_test">>}}, get_custom_metadata(Guid, json))
+    end
+};
+build_sample_test_spec(<<"Remove JSON metadata">>) -> #sample_test_spec{
+    testing_priority = 10,
+    verify_fun = fun(Guid, _ResultBody) ->
+        ?assertEqual(?ERROR_POSIX(?ENODATA), get_custom_metadata(Guid, json))
+    end
+};
+build_sample_test_spec(<<"Get RDF metadata">>) -> #sample_test_spec{
+    verify_fun = fun(Guid, ResultBody) ->
+        ?assertEqual(element(2, {ok, _} = get_custom_metadata(Guid, rdf)), ResultBody)
+    end
+};
+build_sample_test_spec(<<"Set RDF metadata">>) -> #sample_test_spec{
+    substitute_placeholder_fun = fun(_Guid, <<"$METADATA">>) ->
+        <<"<rdf>metadata_set_in_test</rdf>">>
+    end,
+    verify_fun = fun(Guid, _ResultBody) ->
+        ?assertEqual({ok, <<"<rdf>metadata_set_in_test</rdf>">>}, get_custom_metadata(Guid, rdf))
+    end
+};
+build_sample_test_spec(<<"Remove RDF metadata">>) -> #sample_test_spec{
+    testing_priority = 10,
+    verify_fun = fun(Guid, _ResultBody) ->
+        ?assertEqual(?ERROR_POSIX(?ENODATA), get_custom_metadata(Guid, rdf))
+    end
+};
+build_sample_test_spec(<<"Get extended attributes (xattrs)">>) -> #sample_test_spec{
+    verify_fun = fun(Guid, ResultBody) ->
+        ?assertEqual(get_xattrs(Guid), json_utils:decode(ResultBody))
+    end
+};
+build_sample_test_spec(<<"Set extended attribute (xattr)">>) -> #sample_test_spec{
+    substitute_placeholder_fun = fun(_Guid, <<"$XATTRS">>) ->
+        json_utils:encode(#{<<"xattr1">> => <<"value1">>, <<"xattr2">> => <<"value2">>})
+    end,
+    verify_fun = fun(Guid, _ResultBody) ->
+        ?assert(maps_utils:is_submap(#{<<"xattr1">> => <<"value1">>, <<"xattr2">> => <<"value2">>}, get_xattrs(Guid)))
+    end
+};
+build_sample_test_spec(<<"Remove extended attributes (xattrs)">>) -> #sample_test_spec{
+    testing_priority = 10,
+    substitute_placeholder_fun = fun(_Guid, <<"$KEY_LIST">>) ->
+        json_utils:encode([<<"xattr1">>, <<"xattr2">>])
+    end,
+    verify_fun = fun(Guid, _ResultBody) ->
+        ?assertNot(maps:is_key(<<"xattr_created_in_test">>, get_xattrs(Guid)))
+    end
+};
+build_sample_test_spec(<<"Get symbolic link value">>) -> #sample_test_spec{
+    verify_fun = fun(Guid, ResultBody) ->
+        {ok, SymlinkValue} = lfm_proxy:read_symlink(?RAND_NODE(), ?USER_2_SESS(), ?FILE_REF(Guid)),
         ?assertEqual(SymlinkValue, ResultBody)
-    end,
-    verify_sample_base(Sample, VerifyFun);
-verify_sample(Sample, _) ->
-    throw({sample_test_not_implemented, Sample#rest_api_request_sample.name}).
+    end
+}.
 
-
-%% @private
-verify_sample_base(Sample, VerifyFun) ->
-    verify_sample_base(Sample, VerifyFun, <<>>).
-
-%% @private
-verify_sample_base(Sample, VerifyFun, Body) ->
-    verify_sample_base(Sample, VerifyFun, Body, #{}).
-
-%% @private
-verify_sample_base(#rest_api_request_sample{
-    method = Method, 
-    path = Path, 
-    headers = Headers, 
-    requires_authorization = RequiresAuthorization
-}, VerifyFun, Body, PlaceholderValues) ->
-    AuthHeader = case RequiresAuthorization of
-        true -> maps:from_list([rest_test_utils:user_token_header(oct_background:get_user_access_token(user2))]);
-        false -> #{}
-    end,
-    SubstitutedPath = maps:fold(fun(Placeholder, Value, P) ->
-        binary:replace(P, Placeholder, http_utils:url_encode(Value), [global])
-    end, Path, PlaceholderValues),
-    Opts = [{follow_redirect, true} | rest_test_utils:cacerts_opts(oct_background:get_random_provider_node(krakow))],
-    {ok, Code, _, ResultBody} = ?assertMatch({ok, _, _, _}, http_client:request(
-        normalize_method(Method),
-        SubstitutedPath, 
-        maps:merge(AuthHeader, Headers), 
-        Body,
-        Opts
-    )),
-    case Code > 300 of
-        true ->
-            ct:pal("Code: ~p~nResponse: ~p~n~nMethod: ~p~nPath: ~p~nBody: ~p~nHeaders: ~p~n", 
-                [Code, ResultBody, Method, SubstitutedPath, Body, Headers]),
-            error(fail);
-        false -> 
-            ok
-    end,
-    VerifyFun(ResultBody).
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
 
 %% @private
 verify_xrootd_api_samples(FileType, SpaceId, ShareId, FilePath, SamplesJson) ->
@@ -485,196 +475,27 @@ verify_xrootd_api_samples(FileType, SpaceId, ShareId, FilePath, SamplesJson) ->
 
 
 %% @private
-verify_public_rest_api_samples(FileType, ShareGuid, SamplesJson) ->
-    {ok, ShareObjectId} = file_id:guid_to_objectid(ShareGuid),
-
-    Samples = ?assertMatch(#rest_api_samples{}, jsonable_record:from_json(SamplesJson, rest_api_samples)),
-    ExpectedApiRoot = str_utils:format_bin("https://~s/api/v3/onezone", [ozw_test_rpc:get_domain()]),
-    ?assertEqual(ExpectedApiRoot, Samples#rest_api_samples.api_root),
-
-    OperationNames = lists:map(fun(Sample) ->
-        ?assertMatch(#rest_api_request_sample{}, Sample),
-        ?assertNot(string:is_empty(Sample#rest_api_request_sample.description)),
-        ?assertEqual('GET', Sample#rest_api_request_sample.method),
-        TokenizedPath = filename:split(Sample#rest_api_request_sample.path),
-        ?assert(lists:member(ShareObjectId, TokenizedPath)),
-        ?assertEqual(undefined, Sample#rest_api_request_sample.data),
-        ?assertNot(Sample#rest_api_request_sample.requires_authorization),
-        ?assert(Sample#rest_api_request_sample.follow_redirects),
-        ?assertEqual(<<"get_shared_data">>, Sample#rest_api_request_sample.swagger_operation_id),
-        Sample#rest_api_request_sample.name
-    end, Samples#rest_api_samples.samples),
-
-    ?assertEqual(operation_names(public, FileType), OperationNames).
+get_user_access_token() ->
+    oct_background:get_user_access_token(user2).
 
 
 %% @private
-verify_private_rest_api_samples(Node, FileType, FileGuid, SamplesJson) ->
-    {ok, ObjectId} = file_id:guid_to_objectid(FileGuid),
-    
-    Samples = ?assertMatch(#rest_api_samples{}, jsonable_record:from_json(SamplesJson, rest_api_samples)),
-    ExpectedApiRoot = str_utils:format_bin("https://~s:443/api/v3/oneprovider", [opw_test_rpc:get_provider_domain(Node)]),
-    ?assertEqual(ExpectedApiRoot, Samples#rest_api_samples.api_root),
-    
-    OperationNames = lists:map(fun(Sample) ->
-        ?assertMatch(#rest_api_request_sample{}, Sample),
-        ?assertNot(string:is_empty(Sample#rest_api_request_sample.description)),
-        TokenizedPath = filename:split(Sample#rest_api_request_sample.path),
-        ?assert(lists:member(ObjectId, TokenizedPath)),
-        ?assert(Sample#rest_api_request_sample.requires_authorization),
-        ?assertNot(Sample#rest_api_request_sample.follow_redirects),
-        Sample#rest_api_request_sample.name
-    end, Samples#rest_api_samples.samples),
-    
-    ?assertEqual(operation_names(private, FileType), OperationNames).
-
-
-%% @private
-operation_names(public, ?DIRECTORY_TYPE) -> [
-    <<"Download directory (tar)">>,
-    <<"List directory files and subdirectories">>,
-    <<"Get attributes">>,
-    <<"Get extended attributes (xattrs)">>,
-    <<"Get JSON metadata">>,
-    <<"Get RDF metadata">>
-];
-operation_names(public, ?REGULAR_FILE_TYPE) -> [
-    <<"Download file content">>,
-    <<"Get attributes">>,
-    <<"Get extended attributes (xattrs)">>,
-    <<"Get JSON metadata">>,
-    <<"Get RDF metadata">>
-];
-operation_names(private, ?DIRECTORY_TYPE) -> [
-    <<"Download directory (tar)">>,
-    <<"List directory files and subdirectories">>,
-    <<"Create file in directory">>,
-    <<"Remove file">>,
-    <<"Get attributes">>,
-    <<"Get JSON metadata">>,
-    <<"Set JSON metadata">>,
-    <<"Remove JSON metadata">>,
-    <<"Get RDF metadata">>,
-    <<"Set RDF metadata">>,
-    <<"Remove RDF metadata">>,
-    <<"Get extended attributes (xattrs)">>,
-    <<"Set extended attribute (xattr)">>,
-    <<"Remove extended attributes (xattrs)">>
-];
-operation_names(private, ?REGULAR_FILE_TYPE) -> [
-    <<"Download file content">>,
-    <<"Update file content">>,
-    <<"Get file hard links">>,
-    <<"Remove file">>,
-    <<"Get attributes">>,
-    <<"Get JSON metadata">>,
-    <<"Set JSON metadata">>,
-    <<"Remove JSON metadata">>,
-    <<"Get RDF metadata">>,
-    <<"Set RDF metadata">>,
-    <<"Remove RDF metadata">>,
-    <<"Get extended attributes (xattrs)">>,
-    <<"Set extended attribute (xattr)">>,
-    <<"Remove extended attributes (xattrs)">>
-];
-operation_names(private, ?SYMLINK_TYPE) -> [
-    <<"Get symbolic link value">>,
-    <<"Get file hard links">>,
-    <<"Remove file">>,
-    <<"Get attributes">>
-].
-
-
-%% @private
-get_samples(FileGuid, Scope) ->
-    Module = case Scope of
-        public -> public_file_api_samples;
-        private -> private_file_api_samples
-    end,
-    #{<<"rest">> := RestApiSamplesJson} = opw_test_rpc:call(
-        oct_background:get_random_provider_node(krakow),
-        Module,
-        generate_for,
-        [oct_background:get_user_session_id(user2, krakow), FileGuid]
-    ),
-    jsonable_record:from_json(RestApiSamplesJson, rest_api_samples).
+cacert_opts() ->
+    rest_test_utils:cacerts_opts(oct_background:get_random_provider_node(krakow)).
 
 
 %% @private
 get_custom_metadata(Guid, MetadataType) ->
-    Node = oct_background:get_random_provider_node(krakow),
-    SessId = oct_background:get_user_session_id(user2, krakow),
-    opt_file_metadata:get_custom_metadata(Node, SessId, ?FILE_REF(Guid), MetadataType, [], false).
+    opt_file_metadata:get_custom_metadata(?RAND_NODE(), ?USER_2_SESS(), ?FILE_REF(Guid), MetadataType, [], false).
 
 
 %% @private
 get_xattrs(Guid) ->
-    Node = oct_background:get_random_provider_node(krakow),
-    SessId = oct_background:get_user_session_id(user2, krakow),
-    {ok, Xattrs} = lfm_proxy:list_xattr(Node, SessId, ?FILE_REF(Guid), false, false),
-    lists:foldl(fun(Xattr, Acc) ->
-        {ok, #xattr{value = Value}} = lfm_proxy:get_xattr(Node, SessId, ?FILE_REF(Guid), Xattr),
-        Acc#{Xattr => Value}
-    end, #{}, Xattrs).
-
-
-%% @private
-normalize_method('GET') -> get;
-normalize_method('POST') -> post;
-normalize_method('PUT') -> put;
-normalize_method('DELETE') -> delete.
-
-
-%% @private
-setup_verify_sample_env(?DIRECTORY_TYPE, Scope) ->
-    #object{guid = Guid, shares = [ShareId]} =
-        onenv_file_test_utils:create_and_sync_file_tree(user2, space_krk_par, #dir_spec{
-            metadata = metadata_spec(),
-            shares = [#share_spec{}],
-            children = [#file_spec{}, #dir_spec{}]
-        }),
-    build_test_guid(Scope, Guid, ShareId);
-setup_verify_sample_env(?REGULAR_FILE_TYPE, Scope) ->
-    #object{guid = Guid, shares = [ShareId]} =
-        onenv_file_test_utils:create_and_sync_file_tree(user2, space_krk_par, #file_spec{
-            content = <<"some_content">>,
-            shares = [#share_spec{}],
-            metadata = metadata_spec()
-        }),
-    build_test_guid(Scope, Guid, ShareId);
-setup_verify_sample_env(?SYMLINK_TYPE, Scope) ->
-    [#object{guid = Guid, shares = [ShareId]}, _] =
-        onenv_file_test_utils:create_and_sync_file_tree(user2, space_krk_par, [
-            #file_spec{custom_label = <<"link_target">>},
-            #symlink_spec{
-                shares = [#share_spec{}],
-                symlink_value = {custom_label, <<"link_target">>}
-            }
-        ]),
-    
-    build_test_guid(Scope, Guid, ShareId).
-
-
-%% @private
-build_test_guid(private, Guid, _ShareId) ->
-    Guid;
-build_test_guid(public, Guid, ShareId) ->
-    file_id:guid_to_share_guid(Guid, ShareId).
-
-
-%% @private
-metadata_spec() ->
-    #metadata_spec{
-        json = #{<<"some_json_key">> => <<"some_json_value">>},
-        rdf = <<"some_rdf">>,
-        xattrs = #{<<"xattr_key">> => <<"xattr_value">>}
-    }.
-    
+    lfm_test_utils:get_xattrs(?RAND_NODE(), ?USER_2_SESS(), Guid).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
-
 
 init_per_suite(Config) ->
     oct_background:init_per_suite(Config, #onenv_test_config{

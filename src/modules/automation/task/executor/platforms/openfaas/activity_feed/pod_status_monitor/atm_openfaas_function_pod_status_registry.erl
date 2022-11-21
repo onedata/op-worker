@@ -51,11 +51,6 @@
 % multiple pods, which may be started or terminated at different moments
 -type pod_id() :: binary().
 
-% Jsonable object containing all information related to an event, stored in the
-% database in the same format as later returned during listing. Does not include
-% the log index, which is added after entries are listed.
--type event_data() :: json_utils:json_map().
-
 -export_type([id/0, diff/0, record/0, doc/0]).
 -export_type([pod_id/0]).
 

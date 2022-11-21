@@ -94,6 +94,7 @@ rest_api_endpoints(file_and_dir, FileId) ->
     ].
 
 
+
 %% @private
 -spec create_file_endpoint(file_id:objectid()) -> rest_api_request_sample:record().
 create_file_endpoint(FileId) ->
@@ -245,7 +246,7 @@ set_json_metadata_endpoint(FileId) ->
             <<"content-type">> => <<"application/json">>
         },
         placeholders = #{
-            <<"$METADATA">> => <<"The json metadata.">>
+            <<"$METADATA">> => <<"The JSON metadata.">>
         },
         optional_parameters = [
             <<"filter_type">>, <<"filter">>, <<"resolve_symlink">>
@@ -293,7 +294,7 @@ set_rdf_metadata_endpoint(FileId) ->
             <<"content-type">> => <<"application/rdf+xml">>
         },
         placeholders = #{
-            <<"$METADATA">> => <<"The rdf metadata.">>
+            <<"$METADATA">> => <<"The rdf metadata (XML).">>
         },
         optional_parameters = [<<"resolve_symlink">>],
         swagger_operation_id = <<"set_rdf_metadata">>
@@ -336,12 +337,12 @@ set_xattr_metadata_endpoint(FileId) ->
         description = <<"Sets extended attribute (xattr) for the file or directory.">>,
         method = 'PUT',
         path = str_utils:format_bin("/data/~s/metadata/xattrs", [FileId]),
-        data = <<"$XATTR">>,
+        data = <<"$XATTRS">>,
         headers = #{
             <<"content-type">> => <<"application/json">>
         },
         placeholders = #{
-            <<"$XATTR">> => <<"Extended attribute name and value.">>
+            <<"$XATTRS">> => <<"Key-value pairs to be set as extended attributes (a JSON object).">>
         },
         optional_parameters = [<<"resolve_symlink">>],
         swagger_operation_id = <<"set_xattr">>
@@ -356,12 +357,12 @@ remove_xattrs_metadata_endpoint(FileId) ->
         description = <<"Removes extended attributes (xattrs) from the file or directory.">>,
         method = 'DELETE',
         path = str_utils:format_bin("/data/~s/metadata/xattrs", [FileId]),
-        data = <<"$DATA">>,
+        data = <<"{\"keys\": $KEY_LIST}">>,
         headers = #{
             <<"content-type">> => <<"application/json">>
         },
         placeholders = #{
-            <<"$DATA">> => <<"The extended attributes keys to remove.">>
+            <<"$KEY_LIST">> => <<"The extended attribute keys to remove (a JSON array of strings).">>
         },
         optional_parameters = [<<"resolve_symlink">>],
         swagger_operation_id = <<"remove_xattrs">>
