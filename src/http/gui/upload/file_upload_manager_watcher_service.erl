@@ -93,7 +93,7 @@ start_file_upload_manager() ->
             ok;
         Error->
             ?critical("Failed to start file_upload_manager due to: ~p", [Error]),
-            abort
+            error
     end.
 
 
