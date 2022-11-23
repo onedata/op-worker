@@ -94,7 +94,6 @@ rest_api_endpoints(file_and_dir, FileId) ->
     ].
 
 
-
 %% @private
 -spec create_file_endpoint(file_id:objectid()) -> rest_api_request_sample:record().
 create_file_endpoint(FileId) ->

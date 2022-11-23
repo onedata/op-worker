@@ -36,7 +36,7 @@
 ]).
 
 groups() -> [
-    {all_tests, [sequential], [
+    {all_tests, [parallel], [
         public_file_api_samples_test,
         private_file_api_samples_test
     ]}
