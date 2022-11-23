@@ -56,7 +56,7 @@ single_large_dir_creation_test(Config) ->
             [{name, reps_num}, {value, 200}, {description, "Number of test function repeats"}],
             [{name, test_list}, {value, false}, {description, "Measure ls time after every 20000 files creation"}]
         ]},
-        {description, "Creates files in dir using single process"}
+        {description, "Creates files in dir using multiple processes and calculates stats for such large dir at the end"}
     ]).
 single_large_dir_creation_test_base(Config) ->
     case get(stress_phase) of

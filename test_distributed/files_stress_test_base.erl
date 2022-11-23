@@ -34,6 +34,8 @@
 %%% Test functions
 %%%===================================================================
 
+% Test creates files in a loop. If CreateDeleteLoop is false, number of files grows during the test.
+% If CreateDeleteLoop is true, files are deleted after each iteration.
 single_dir_creation_test_base(Config, CreateDeleteLoop) ->
     FilesNum = ?config(files_num, Config),
     ProcNum = case CreateDeleteLoop of

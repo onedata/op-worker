@@ -58,7 +58,7 @@ single_dir_creation_test(Config) ->
         {parameters, [
             [{name, files_num}, {value, 1000}, {description, "Numer of files in dir"}]
         ]},
-        {description, "Creates files in dir using single process"}
+        {description, "Creates and deletes files in dir (in a loop)"}
     ]).
 single_dir_creation_test_base(Config) ->
     files_stress_test_base:single_dir_creation_test_base(Config, true).
@@ -71,7 +71,7 @@ single_large_dir_creation_test(Config) ->
             [{name, reps_num}, {value, 100}, {description, "Number of test function repeats"}],
             [{name, test_list}, {value, true}, {description, "Measure ls time after every 20000 files creation"}]
         ]},
-        {description, "Creates files in dir using single process"}
+        {description, "Creates files in dir using using multiple processes"}
     ]).
 single_large_dir_creation_test_base(Config) ->
     Ans = files_stress_test_base:single_dir_creation_test_base(Config, false),
