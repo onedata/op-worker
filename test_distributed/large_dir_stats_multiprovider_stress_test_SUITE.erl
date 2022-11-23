@@ -6,15 +6,14 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This SUITE contains stress test for dir_stats_collector.
+%%% This SUITE contains stress test for dir_stats_collector in multiprovider environment.
 %%% @end
 %%%--------------------------------------------------------------------
--module(dir_stats_collector_stress_test_SUITE).
+-module(large_dir_stats_multiprovider_stress_test_SUITE).
 -author("Michal Wrzeszcz").
 
 -include("global_definitions.hrl").
 -include("modules/dir_stats_collector/dir_size_stats.hrl").
--include_lib("cluster_worker/include/elements/worker_host/worker_protocol.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -22,12 +21,12 @@
 
 %% export for ct
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
--export([stress_test/1, stress_test_base/1, many_files_creation_tree_test/1,
-    many_files_creation_tree_test_base/1]).
+-export([stress_test/1, stress_test_base/1, single_large_dir_creation_test/1,
+    single_large_dir_creation_test_base/1]).
 
 -define(STRESS_CASES, []).
 -define(STRESS_NO_CLEARING_CASES, [
-    many_files_creation_tree_test
+    single_large_dir_creation_test
 ]).
 
 all() ->
@@ -49,50 +48,41 @@ stress_test_base(Config) ->
 
 %%%===================================================================
 
-many_files_creation_tree_test(Config) ->
+single_large_dir_creation_test(Config) ->
     ?PERFORMANCE(Config, [
         {parameters, [
-            [{name, spawn_beg_level}, {value, 4}, {description, "Level of tree to start spawning processes"}],
-            [{name, spawn_end_level}, {value, 5}, {description, "Level of tree to stop spawning processes"}],
-            [{name, dir_level}, {value, 6}, {description, "Level of last test directory"}],
-            [{name, dirs_per_parent}, {value, 6}, {description, "Child directories in single dir"}],
-            [{name, files_per_dir}, {value, 40}, {description, "Number of files in single directory"}]
+            [{name, files_num}, {value, 10000}, {description, "Numer of files in dir"}],
+            [{name, proc_num}, {value, 20}, {description, "Number of precesses that create files"}],
+            [{name, reps_num}, {value, 200}, {description, "Number of test function repeats"}],
+            [{name, test_list}, {value, false}, {description, "Measure ls time after every 20000 files creation"}]
         ]},
-        {description, "Creates directories' and files' tree using multiple process and checks statistics"}
+        {description, "Creates files in dir using multiple processes and calculates stats for such large dir at the end"}
     ]).
-many_files_creation_tree_test_base(Config) ->
+single_large_dir_creation_test_base(Config) ->
     case get(stress_phase) of
         undefined ->
-            case files_stress_test_base:many_files_creation_tree_test_base(Config, #{cache_guids => true}) of
-                [stop | PhaseAns] ->
-                    put(stress_phase, verify_stats),
-                    PhaseAns;
-                Other ->
-                    Other
-            end;
-        verify_stats ->
-            [Worker | _] = ?config(op_worker_nodes, Config),
-            SpaceGuid = lfm_test_utils:get_user1_first_space_guid(Config),
-            {ok, SpaceDirStats} = ?assertMatch({ok, _}, rpc:call(Worker, dir_size_stats, get_stats, [SpaceGuid])),
-            ExpectedDirStats = get_expected_stats(Config),
-            PhaseAns = files_stress_test_base:get_final_ans_tree(Worker, 0, 0, 0, 0, 0, 0, 0, 0, 0),
-            case SpaceDirStats of
-                ExpectedDirStats ->
-                    ct:print("Space dir stats verified"),
+            Ans = files_stress_test_base:single_dir_creation_test_base(Config, false),
+            RepsNum = ?config(reps_num, Config),
+            case ?config(rep_num, Config) >= RepsNum of
+                true ->
+                    [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
+                    Provider1Id = rpc:call(Worker1, oneprovider, get_id_or_undefined, []),
+                    Provider2Id = rpc:call(Worker2, oneprovider, get_id_or_undefined, []),
                     SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
-                    ?assertEqual(ok, rpc:call(Worker, dir_stats_service_state, disable, [SpaceId])),
-                    ?assertEqual(ok, rpc:call(Worker, dir_stats_service_state, enable, [SpaceId])),
-                    put(stress_phase, calculate_stats),
-                    PhaseAns;
-                _ ->
-                    ct:print("Space dir stats: ~p~nExpected: ~p", [SpaceDirStats, ExpectedDirStats]),
-                    timer:sleep(5000),
-                    PhaseAns
-            end;
+
+                    ?assertEqual(ok, rpc:call(Worker1, dbsync_worker, reset_provider_stream, [SpaceId, Provider2Id])),
+                    ?assertEqual(ok, rpc:call(Worker2, dbsync_worker, reset_provider_stream, [SpaceId, Provider1Id])),
+
+                    ?assertEqual(ok, rpc:call(Worker1, dir_stats_service_state, enable, [SpaceId])),
+                    put(stress_phase, calculate_stats);
+                false ->
+                    ok
+            end,
+            Ans;
         calculate_stats ->
             [Worker | _] = ?config(op_worker_nodes, Config),
             SpaceGuid = lfm_test_utils:get_user1_first_space_guid(Config),
-            PhaseAns = files_stress_test_base:get_final_ans_tree(Worker, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+            PhaseAns = files_stress_test_base:get_final_ans(0, 0, 0, 0, 0, 0, 0, 0, 0),
             case rpc:call(Worker, dir_size_stats, get_stats, [SpaceGuid]) of
                 ?ERROR_DIR_STATS_NOT_READY ->
                     ct:print("Initializing stats collections"),
@@ -106,12 +96,33 @@ many_files_creation_tree_test_base(Config) ->
                     ExpectedDirStats = get_expected_stats(Config),
                     case SpaceDirStats of
                         ExpectedDirStats ->
-                            [stop | PhaseAns];
+                            ct:print("Collected space dir stats: ~p", [SpaceDirStats]),
+                            put(stress_phase, check_synchronization_params),
+                            PhaseAns;
                         _ ->
                             ct:print("Collected space dir stats: ~p~nExpected: ~p", [SpaceDirStats, ExpectedDirStats]),
                             timer:sleep(5000),
                             PhaseAns
                     end
+            end;
+        check_synchronization_params ->
+            [Worker1, Worker2 | _] = ?config(op_worker_nodes, Config),
+            Provider1Id = rpc:call(Worker1, oneprovider, get_id_or_undefined, []),
+            Provider2Id = rpc:call(Worker2, oneprovider, get_id_or_undefined, []),
+            SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
+            PhaseAns = files_stress_test_base:get_final_ans(0, 0, 0, 0, 0, 0, 0, 0, 0),
+
+            Params1 = rpc:call(Worker1, dbsync_state, get_synchronization_params, [SpaceId, Provider2Id]),
+            Params2 = rpc:call(Worker2, dbsync_state, get_synchronization_params, [SpaceId, Provider1Id]),
+
+            case {Params1, Params2} of
+                {undefined, undefined} ->
+                    ct:print("Resynchronization finished"),
+                    [stop | PhaseAns];
+                _ ->
+                    ct:print("Resynchronization worker1: ~p, worker2: ~p", [Params1, Params2]),
+                    timer:sleep(5000),
+                    PhaseAns
             end
     end.
 
@@ -145,18 +156,12 @@ end_per_testcase(_Case, Config) ->
 
 get_expected_stats(Config) ->
     StorageId = lfm_test_utils:get_user1_first_storage_id(Config, op_worker_nodes),
-
-    DirLevel = ?config(dir_level, Config),
-    DirsPerParent = ?config(dirs_per_parent, Config),
-    FilesPerDir = ?config(files_per_dir, Config),
-    ExpectedFileCount = round(math:pow(DirsPerParent, DirLevel) * FilesPerDir), % round to change float to int
-    ExpectedDirCount = round(lists:sum(lists:map(fun(Level) -> % round to change float to int
-        math:pow(DirsPerParent, Level)
-    end, lists:seq(1, DirLevel)))),
+    RepsNum = ?config(reps_num, Config),
+    FilesNum = ?config(files_num, Config),
 
     #{
-        ?REG_FILE_AND_LINK_COUNT => ExpectedFileCount,
-        ?DIR_COUNT => ExpectedDirCount,
+        ?REG_FILE_AND_LINK_COUNT => FilesNum * RepsNum,
+        ?DIR_COUNT => get(dirs_created),
         ?TOTAL_SIZE => 0,
         ?SIZE_ON_STORAGE(StorageId) => 0
     }.
