@@ -109,7 +109,7 @@ repeat_workflow_execution(SessionId, RepeatType, AtmWorkflowExecutionId, AtmLane
 discard_workflow_execution(SessionId, SpaceId, AtmWorkflowExecutionId) ->
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
 
-    middleware_worker:check_exec(SessionId, SpaceGuid, #atm_workflow_execution_repeat_request{
+    middleware_worker:check_exec(SessionId, SpaceGuid, #atm_workflow_execution_discard_request{
         atm_workflow_execution_id = AtmWorkflowExecutionId
     }).
 

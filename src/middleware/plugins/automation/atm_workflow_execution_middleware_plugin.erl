@@ -128,20 +128,20 @@ data_spec(#op_req{operation = delete, gri = #gri{aspect = batch}}) ->
 fetch_entity(#op_req{auth = ?NOBODY}) ->
     ?ERROR_UNAUTHORIZED;
 
+fetch_entity(#op_req{operation = delete, gri = #gri{scope = private, aspect = As}}) when
+    As =:= instance;
+    As =:= batch
+->
+    % Do not fetch entity - it will be done by 'delete' callback later
+    {ok, {undefined, 1}};
+
 fetch_entity(#op_req{gri = #gri{id = AtmWorkflowExecutionId, scope = private}}) ->
     case atm_workflow_execution_api:get(AtmWorkflowExecutionId) of
         {ok, AtmWorkflowExecution} ->
             {ok, {AtmWorkflowExecution, 1}};
         {error, _} = Error ->
             Error
-    end;
-
-fetch_entity(#op_req{operation = delete, gri = #gri{scope = private, aspect = As}}) when
-    As =:= instance;
-    As =:= batch
-->
-    % Do not fetch entity - it will be done by 'delete' callback later
-    {ok, {undefined, 1}}.
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -337,7 +337,10 @@ delete(#op_req{auth = ?USER(UserId, SessionId), gri = #gri{
 delete(OpReq = #op_req{data = Data, gri = GRI = #gri{aspect = batch}}) ->
     {ok, value, lists:foldl(fun(AtmWorkflowExecutionId, Acc) ->
         Acc#{AtmWorkflowExecutionId => try
-            delete(OpReq#op_req{data = #{}, gri = GRI#gri{aspect = instance}})
+            delete(OpReq#op_req{data = #{}, gri = GRI#gri{
+                id = AtmWorkflowExecutionId,
+                aspect = instance
+            }})
         catch throw:Error ->
             Error
         end}
