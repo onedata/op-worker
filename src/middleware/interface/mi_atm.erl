@@ -104,7 +104,7 @@ repeat_workflow_execution(SessionId, RepeatType, AtmWorkflowExecutionId, AtmLane
     }).
 
 
--spec discard_workflow_execution(session:id(), od_space:id(), [atm_workflow_execution:id()]) ->
+-spec discard_workflow_execution(session:id(), od_space:id(), atm_workflow_execution:id()) ->
     ok | errors:error().
 discard_workflow_execution(SessionId, SpaceId, AtmWorkflowExecutionId) ->
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),

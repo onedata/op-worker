@@ -368,7 +368,7 @@ infer_lane_selector(AtmLaneSchemaId, #atm_workflow_execution{lanes = AtmLaneExec
 
 -spec has_access_to_workflow_execution_details(
     aai:auth(),
-    atm_workflow_execution:record() | atm_workflow_execution:id()
+    atm_workflow_execution:record()
 ) ->
     boolean().
 has_access_to_workflow_execution_details(?GUEST, _) ->
@@ -382,12 +382,4 @@ has_access_to_workflow_execution_details(?USER(UserId, SessionId), #atm_workflow
 
     HasEffAtmInventory andalso space_logic:has_eff_privilege(
         SpaceId, UserId, ?SPACE_VIEW_ATM_WORKFLOW_EXECUTIONS
-    );
-
-has_access_to_workflow_execution_details(Auth, AtmWorkflowExecutionId) ->
-    case atm_workflow_execution_api:get(AtmWorkflowExecutionId) of
-        {ok, AtmWorkflowExecution} ->
-            has_access_to_workflow_execution_details(Auth, AtmWorkflowExecution);
-        {error, _} ->
-            false
-    end.
+    ).

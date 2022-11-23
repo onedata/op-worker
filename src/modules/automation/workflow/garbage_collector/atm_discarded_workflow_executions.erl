@@ -32,7 +32,7 @@
 list(StartAtmWorkflowExecutionId, Limit) ->
     ListingOpts = #{
         prev_link_name => StartAtmWorkflowExecutionId,
-        limit => Limit
+        size => Limit
     },
     FoldFun = fun(#link{name = AtmWorkflowExecutionId}, Acc) ->
         {ok, [AtmWorkflowExecutionId | Acc]}
