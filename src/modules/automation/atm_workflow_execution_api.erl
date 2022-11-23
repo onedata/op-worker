@@ -50,6 +50,9 @@
     pause/2,
     resume/2,
     repeat/4,
+    discard/1
+]).
+-export([
     report_provider_restart/1,
     report_openfaas_down/2,
     purge_all/0
@@ -208,6 +211,11 @@ repeat(UserCtx, Type, AtmLaneRunSelector, AtmWorkflowExecutionId) ->
     atm_workflow_execution_handler:repeat(
         UserCtx, Type, AtmLaneRunSelector, AtmWorkflowExecutionId
     ).
+
+
+-spec discard(atm_workflow_execution:id()) -> ok | errors:error().
+discard(AtmWorkflowExecutionId) ->
+    atm_workflow_execution_status:handle_discard(AtmWorkflowExecutionId).
 
 
 %%--------------------------------------------------------------------
