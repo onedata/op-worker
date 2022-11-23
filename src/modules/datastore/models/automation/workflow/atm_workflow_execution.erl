@@ -15,7 +15,12 @@
 -include("modules/automation/atm_execution.hrl").
 
 %% API
--export([create/1, get/1, update/2, delete/1]).
+-export([
+    create/1,
+    get/1, get_including_discarded/1,
+    update/2, update_including_discarded/2,
+    delete/1
+]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_version/0, get_record_struct/1]).
@@ -72,11 +77,32 @@ create(AtmWorkflowExecutionDoc) ->
 
 -spec get(id()) -> {ok, doc()} | {error, term()}.
 get(AtmWorkflowExecutionId) ->
+    case datastore_model:get(?CTX, AtmWorkflowExecutionId) of
+        {ok, #document{value = #atm_workflow_execution{discarded = true}}} ->
+            ?ERROR_NOT_FOUND;
+        Result ->
+            Result
+    end.
+
+
+-spec get_including_discarded(id()) -> {ok, doc()} | {error, term()}.
+get_including_discarded(AtmWorkflowExecutionId) ->
     datastore_model:get(?CTX, AtmWorkflowExecutionId).
 
 
 -spec update(id(), diff()) -> {ok, doc()} | {error, term()}.
 update(AtmWorkflowExecutionId, Diff1) ->
+    Diff2 = fun
+        (#atm_workflow_execution{discarded = true}) ->
+            ?ERROR_NOT_FOUND;
+        (#atm_workflow_execution{status = PrevStatus} = AtmWorkflowExecution) ->
+            Diff1(AtmWorkflowExecution#atm_workflow_execution{prev_status = PrevStatus})
+    end,
+    datastore_model:update(?CTX, AtmWorkflowExecutionId, Diff2).
+
+
+-spec update_including_discarded(id(), diff()) -> {ok, doc()} | {error, term()}.
+update_including_discarded(AtmWorkflowExecutionId, Diff1) ->
     Diff2 = fun(#atm_workflow_execution{status = PrevStatus} = AtmWorkflowExecution) ->
         Diff1(AtmWorkflowExecution#atm_workflow_execution{prev_status = PrevStatus})
     end,
@@ -121,6 +147,8 @@ get_record_version() ->
 -spec get_record_struct(datastore_model:record_version()) -> datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
+        {discarded, boolean},
+
         {user_id, string},
         {space_id, string},
         {atm_inventory_id, string},
