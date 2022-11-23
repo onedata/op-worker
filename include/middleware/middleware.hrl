@@ -130,6 +130,10 @@
     atm_lane_run_selector :: atm_lane_execution:lane_run_selector()
 }).
 
+-record(atm_workflow_execution_discard_request, {
+    atm_workflow_execution_id :: atm_workflow_execution:id()
+}).
+
 
 %%%===================================================================
 %%% CDMI related operations available in middleware_worker

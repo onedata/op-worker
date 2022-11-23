@@ -47,7 +47,8 @@
     #atm_workflow_execution_cancel_request{} |
     #atm_workflow_execution_pause_request{} |
     #atm_workflow_execution_resume_request{} |
-    #atm_workflow_execution_repeat_request{}.
+    #atm_workflow_execution_repeat_request{} |
+    #atm_workflow_execution_discard_request{}.
 
 -type cdmi_operation() ::
     #transfer_encoding_get_request{} |

@@ -116,6 +116,11 @@ execute(UserCtx, _SpaceDirCtx, #atm_workflow_execution_repeat_request{
         UserCtx, Type, AtmLaneRunSelector, AtmWorkflowExecutionId
     );
 
+execute(_UserCtx, _SpaceDirCtx, #atm_workflow_execution_discard_request{
+    atm_workflow_execution_id = AtmWorkflowExecutionId
+}) ->
+    ok = atm_workflow_execution_api:discard(AtmWorkflowExecutionId);
+
 
 %% CDMI
 
