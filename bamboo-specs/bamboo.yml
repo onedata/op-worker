@@ -259,7 +259,7 @@ Build:
         force-clean-build: 'true'
         description: Checkout Default Repository
     - script: &run-script
-        interpreter: BINSH_OR_CMDEXE
+        interpreter: SHELL
         scripts:
           - |-
             #!/bin/bash
