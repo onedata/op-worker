@@ -55,6 +55,9 @@ resolve_handler(create, rerun, private) -> ?MODULE;
 resolve_handler(get, instance, private) -> ?MODULE;
 resolve_handler(get, summary, private) -> ?MODULE;
 
+resolve_handler(delete, instance, private) -> ?MODULE;
+resolve_handler(delete, batch, private) -> ?MODULE;
+
 resolve_handler(_, _, _) -> throw(?ERROR_NOT_SUPPORTED).
 
 
@@ -102,7 +105,15 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = As}}) when
     As =:= instance;
     As =:= summary
 ->
-    undefined.
+    undefined;
+
+data_spec(#op_req{operation = delete, gri = #gri{aspect = instance}}) ->
+    undefined;
+
+data_spec(#op_req{operation = delete, gri = #gri{aspect = batch}}) ->
+    #{required => #{
+        <<"ids">> => {list_of_binaries, non_empty}
+    }}.
 
 
 %%--------------------------------------------------------------------
@@ -123,7 +134,14 @@ fetch_entity(#op_req{gri = #gri{id = AtmWorkflowExecutionId, scope = private}}) 
             {ok, {AtmWorkflowExecution, 1}};
         {error, _} = Error ->
             Error
-    end.
+    end;
+
+fetch_entity(#op_req{operation = delete, gri = #gri{scope = private, aspect = As}}) when
+    As =:= instance;
+    As =:= batch
+->
+    % Do not fetch entity - it will be done by 'delete' callback later
+    {ok, {undefined, 1}}.
 
 
 %%--------------------------------------------------------------------
@@ -165,7 +183,14 @@ authorize(#op_req{operation = get, auth = Auth, gri = #gri{aspect = instance}}, 
 authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
     aspect = summary
 }}, #atm_workflow_execution{space_id = SpaceId}) ->
-    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_ATM_WORKFLOW_EXECUTIONS).
+    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_ATM_WORKFLOW_EXECUTIONS);
+
+authorize(#op_req{operation = delete, gri = #gri{aspect = As}}, _) when
+    As =:= instance;
+    As =:= batch
+->
+    % Do not check authorization - it will be done by 'delete' callback later
+    true.
 
 
 %%--------------------------------------------------------------------
@@ -193,6 +218,13 @@ validate(#op_req{operation = get, gri = #gri{aspect = As}}, _) when
     As =:= summary
 ->
     % Doc was already fetched in 'fetch_entity' so space must be supported locally
+    ok;
+
+validate(#op_req{operation = delete, gri = #gri{aspect = As}}, _) when
+    As =:= instance;
+    As =:= batch
+->
+    % Do not validate request - it will be done by 'delete' callback later
     ok.
 
 
@@ -285,8 +317,31 @@ update(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec delete(middleware:req()) -> middleware:delete_result().
-delete(_) ->
-    ?ERROR_NOT_SUPPORTED.
+delete(#op_req{auth = ?USER(UserId, SessionId), gri = #gri{
+    id = AtmWorkflowExecutionId,
+    aspect = instance
+}}) ->
+    % Fetch atm workflow execution
+    AtmWorkflowExecution = ?check(atm_workflow_execution_api:get(AtmWorkflowExecutionId)),
+    #atm_workflow_execution{space_id = SpaceId, user_id = CreatorUserId} = AtmWorkflowExecution,
+
+    % Check authorization
+    IsAuthorized = space_logic:has_eff_privilege(SpaceId, UserId, case UserId of
+        CreatorUserId -> ?SPACE_SCHEDULE_ATM_WORKFLOW_EXECUTIONS;
+        _ -> ?SPACE_MANAGE_ATM_WORKFLOW_EXECUTIONS
+    end),
+    IsAuthorized orelse throw(?ERROR_FORBIDDEN),
+
+    mi_atm:discard_workflow_execution(SessionId, SpaceId, AtmWorkflowExecutionId);
+
+delete(OpReq = #op_req{data = Data, gri = GRI = #gri{aspect = batch}}) ->
+    {ok, value, lists:foldl(fun(AtmWorkflowExecutionId, Acc) ->
+        Acc#{AtmWorkflowExecutionId => try
+            delete(OpReq#op_req{data = #{}, gri = GRI#gri{aspect = instance}})
+        catch throw:Error ->
+            Error
+        end}
+    end, #{}, maps:get(<<"ids">>, Data))}.
 
 
 %%%===================================================================
