@@ -17,6 +17,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
+-export([index/2]).
 -export([list/3, add/4, delete/4]).
 
 
@@ -53,6 +54,13 @@
 %%%===================================================================
 
 
+-spec index(atm_workflow_execution:id(), atm_workflow_execution:timestamp()) ->
+    index().
+index(AtmWorkflowExecutionId, Timestamp) ->
+    TimestampPart = integer_to_binary(?EPOCH_INFINITY - Timestamp),
+    <<TimestampPart/binary, AtmWorkflowExecutionId/binary>>.
+
+
 -spec list(forest(), tree_ids(), listing_opts()) -> entries().
 list(Forest, TreeIds, ListingOpts) ->
     FoldFun = fun(#link{name = Index, target = AtmWorkflowExecutionId}, Acc) ->
@@ -86,14 +94,6 @@ delete(Forest, TreeId, AtmWorkflowExecutionId, Timestamp) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-
-%% @private
--spec index(atm_workflow_execution:id(), atm_workflow_execution:timestamp()) ->
-    index().
-index(AtmWorkflowExecutionId, Timestamp) ->
-    TimestampPart = integer_to_binary(?EPOCH_INFINITY - Timestamp),
-    <<TimestampPart/binary, AtmWorkflowExecutionId/binary>>.
 
 
 %% @private
