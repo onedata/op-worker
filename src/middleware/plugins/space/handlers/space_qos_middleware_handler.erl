@@ -64,11 +64,11 @@ fetch_entity(_) ->
 authorize(#op_req{auth = ?GUEST}, _) ->
     false;
 
-authorize(#op_req{operation = create, auth = ?USER(UserId), gri = #gri{
+authorize(#op_req{operation = create, auth = ?USER(UserId, SessionId), gri = #gri{
     id = SpaceId,
     aspect = evaluate_qos_expression
 }}, _) ->
-    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_MANAGE_QOS);
+    space_logic:has_eff_user(SessionId, SpaceId, UserId);
 
 authorize(#op_req{operation = get, auth = ?USER(UserId, SessionId), gri = #gri{
     id = SpaceId,
