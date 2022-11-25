@@ -141,13 +141,14 @@ create(
 delete_insecure(AtmWorkflowExecutionId) ->
     {ok, AtmWorkflowExecutionDoc = #document{
         value = AtmWorkflowExecution = #atm_workflow_execution{
+            discarded = IsDiscarded,
             schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
             lambda_snapshot_registry = AtmLambdaSnapshotRegistry,
             store_registry = AtmGlobalStoreRegistry,
             system_audit_log_store_id = AtmWorkflowAuditLogStoreId,
             lanes = AtmLaneExecutions
         }
-    }} = atm_workflow_execution:get(AtmWorkflowExecutionId),
+    }} = atm_workflow_execution:get_including_discarded(AtmWorkflowExecutionId),
 
     delete_execution_components(#execution_components{
         schema_snapshot_id = AtmWorkflowSchemaSnapshotId,
@@ -157,6 +158,8 @@ delete_insecure(AtmWorkflowExecutionId) ->
         lanes = AtmLaneExecutions
     }),
     atm_workflow_execution:delete(AtmWorkflowExecutionId),
+
+    IsDiscarded andalso atm_discarded_workflow_executions:delete(AtmWorkflowExecutionId),
 
     case atm_workflow_execution_status:infer_phase(AtmWorkflowExecution) of
         ?WAITING_PHASE -> atm_waiting_workflow_executions:delete(AtmWorkflowExecutionDoc);

@@ -54,7 +54,7 @@
 %%%===================================================================
 
 
--spec id() -> supervisor:child_id().
+-spec id() -> atom().
 id() -> ?MODULE.
 
 
@@ -80,7 +80,7 @@ start_link() ->
 %%%===================================================================
 
 
--spec init(Args :: term()) -> {ok, undefined, {continue, atom()}}.
+-spec init(Args :: term()) -> {ok, undefined, non_neg_integer()}.
 init(_) ->
     process_flag(trap_exit, true),
     {ok, undefined, timer:seconds(?GC_RUN_INTERVAL_SECONDS)}.
@@ -103,11 +103,12 @@ handle_cast(Request, State) ->
 -spec handle_info(Info :: term(), state()) ->
     {noreply, NewState :: state(), non_neg_integer()}.
 handle_info(timeout, State) ->
-    ?info("Starting atm_workflow_execution garbage collecting procedure..."),
+    ?info("Starting garbage atm_workflow_execution collecting procedure..."),
 
     discard_expired_atm_workflow_executions(),
+    purge_discarded_atm_workflow_executions(),
 
-    ?info("atm_workflow_execution garbage collecting procedure finished succesfully."),
+    ?info("Garbage atm_workflow_execution collecting procedure finished succesfully."),
 
     {noreply, State, timer:seconds(?GC_RUN_INTERVAL_SECONDS)};
 
@@ -155,14 +156,14 @@ discard_expired_atm_workflow_executions() ->
 %% @private
 -spec discard_expired_atm_workflow_executions(od_space:id()) -> ok.
 discard_expired_atm_workflow_executions(SpaceId) ->
-    ?info("(Space: ~s) Starting expired atm_workflow_execution discarding procedure...", [
+    ?info("[Space: ~s] Starting expired atm_workflow_execution discarding procedure...", [
         SpaceId
     ]),
 
     discard_expired_atm_workflow_executions(SpaceId, ?SUSPENDED_PHASE),
     discard_expired_atm_workflow_executions(SpaceId, ?ENDED_PHASE),
 
-    ?info("(Space: ~s) Expired atm_workflow_execution discarding procedure finished succesfully.", [
+    ?info("[Space: ~s] Expired atm_workflow_execution discarding procedure finished succesfully.", [
         SpaceId
     ]).
 
@@ -199,7 +200,7 @@ discard_expired_atm_workflow_executions(SpaceId, Phase, ListingOpts = #{start_in
         SpaceId, Phase, basic, ListingOpts
     ),
 
-    {LastEntryIndex, DiscardedAtmWorkflowExecutions} = lists:foldl(
+    {LastEntryIndex, DiscardedAtmWorkflowExecutionIds} = lists:foldl(
         fun({Index, AtmWorkflowExecutionId}, {_, Acc}) ->
             {Index, case discard_atm_workflow_execution(AtmWorkflowExecutionId) of
                 true -> [AtmWorkflowExecutionId | Acc];
@@ -209,8 +210,7 @@ discard_expired_atm_workflow_executions(SpaceId, Phase, ListingOpts = #{start_in
         {StartIndex, []},
         AtmWorkflowExecutionBasicEntries
     ),
-
-    ?debug("Discarded atm ~p workflow executions: ~p", [Phase, DiscardedAtmWorkflowExecutions]),
+    ?debug("Discarded atm ~p workflow executions: ~p", [Phase, DiscardedAtmWorkflowExecutionIds]),
 
     case IsLast of
         true ->
@@ -224,13 +224,66 @@ discard_expired_atm_workflow_executions(SpaceId, Phase, ListingOpts = #{start_in
 
 %% @private
 -spec discard_atm_workflow_execution(atm_workflow_execution:id()) -> boolean().
-discard_atm_workflow_execution(AtmWorkflowExecution) ->
-    case atm_workflow_execution_api:discard(AtmWorkflowExecution) of
+discard_atm_workflow_execution(AtmWorkflowExecutionId) ->
+    case atm_workflow_execution_api:discard(AtmWorkflowExecutionId) of
         ok ->
             true;
         {error, _} = Error ->
-            ?warning("Failed to discard atm workflow execution (id: ~s) due to: ~p", [
-                AtmWorkflowExecution, Error
+            ?warning("Failed to discard atm workflow execution (id: ~p) due to: ~p", [
+                AtmWorkflowExecutionId, Error
             ]),
             false
+    end.
+
+
+%% @private
+-spec purge_discarded_atm_workflow_executions() -> ok.
+purge_discarded_atm_workflow_executions() ->
+    ?info("Starting discarded atm_workflow_execution purging procedure..."),
+
+    purge_discarded_atm_workflow_executions(<<>>),
+
+    ?info("Discarded atm_workflow_execution purging procedure finished succesfully.").
+
+
+%% @private
+-spec purge_discarded_atm_workflow_executions(atm_workflow_execution:id()) -> ok.
+purge_discarded_atm_workflow_executions(StartAtmWorkflowExecutionId) ->
+    DiscardedAtmWorkflowExecutionIds = atm_discarded_workflow_executions:list(
+        StartAtmWorkflowExecutionId, ?LIST_BATCH_SIZE
+    ),
+
+    {LastAtmWorkflowExecutionId, PurgedAtmWorkflowExecutionIds} = lists:foldl(
+        fun(AtmWorkflowExecutionId, {_, Acc}) ->
+            {AtmWorkflowExecutionId, case purge_atm_workflow_execution(AtmWorkflowExecutionId) of
+                true -> [AtmWorkflowExecutionId | Acc];
+                false -> Acc
+            end}
+        end,
+        {StartAtmWorkflowExecutionId, []},
+        DiscardedAtmWorkflowExecutionIds
+    ),
+    ?debug("Purged atm workflow executions: ~p", [PurgedAtmWorkflowExecutionIds]),
+
+    case length(DiscardedAtmWorkflowExecutionIds) < ?LIST_BATCH_SIZE of
+        true ->
+            ok;
+        false ->
+            purge_discarded_atm_workflow_executions(LastAtmWorkflowExecutionId)
+    end.
+
+
+%% @private
+-spec purge_atm_workflow_execution(atm_workflow_execution:id()) -> boolean().
+purge_atm_workflow_execution(AtmWorkflowExecutionId) ->
+    try
+        atm_workflow_execution_factory:delete_insecure(AtmWorkflowExecutionId),
+        true
+    catch Type:Reason:Stacktrace ->
+        ?error_stacktrace(
+            "Failed to purge atm workflow execution (id: ~s) due to ~p:~p",
+            [AtmWorkflowExecutionId, Type, Reason],
+            Stacktrace
+        ),
+        false
     end.
