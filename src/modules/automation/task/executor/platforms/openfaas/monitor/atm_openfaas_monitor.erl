@@ -22,15 +22,12 @@
 -include_lib("ctool/include/http/codes.hrl").
 
 %% API
--export([setup_internal_service/0, start_link/0]).
+-export([id/0, spec/0, start_link/0]).
 -export([
     is_openfaas_healthy/0,
     assert_openfaas_healthy/0,
     get_openfaas_status/0
 ]).
-
-%% Internal Service callbacks
--export([start_service/0, stop_service/0]).
 
 %% gen_server callbacks
 -export([
@@ -68,21 +65,26 @@
 
 -define(SERVER, {global, ?MODULE}).
 
--define(SERVICE_NAME, <<"atm_openfaas_monitor">>).
--define(SERVICE_ID(), datastore_key:new_from_digest(?SERVICE_NAME)).
-
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
 
--spec setup_internal_service() -> ok.
-setup_internal_service() ->
-    ok = internal_services_manager:start_service(?MODULE, ?SERVICE_NAME, ?SERVICE_ID(), #{
-        start_function => start_service,
-        stop_function => stop_service
-    }).
+-spec id() -> atom().
+id() -> ?MODULE.
+
+
+-spec spec() -> supervisor:child_spec().
+spec() ->
+    #{
+        id => id(),
+        start => {?MODULE, start_link, []},
+        restart => permanent,
+        shutdown => timer:seconds(10),
+        type => worker,
+        modules => [?MODULE]
+    }.
 
 
 -spec start_link() -> {ok, pid()} | {error, term()}.
@@ -108,42 +110,12 @@ assert_openfaas_healthy() ->
 
 -spec get_openfaas_status() -> status().
 get_openfaas_status() ->
-    case atm_openfaas_status_cache:get(?SERVICE_ID()) of
+    case atm_openfaas_status_cache:get(?ATM_SERVICE_ID()) of
         {ok, #document{value = #atm_openfaas_status_cache{status = Status}}} ->
             Status;
         {error, not_found} ->
             check_openfaas_status()
     end.
-
-
-%%%===================================================================
-%%% Internal services API
-%%%===================================================================
-
-
--spec start_service() -> ok | abort.
-start_service() ->
-    Spec = #{
-        id => ?MODULE,
-        start => {?MODULE, start_link, []},
-        restart => permanent,
-        shutdown => timer:seconds(10),
-        type => worker,
-        modules => [?MODULE]
-    },
-    case catch supervisor:start_child(?FSLOGIC_WORKER_SUP, Spec) of
-        {ok, _} ->
-            ok;
-        Error ->
-            ?critical("Failed to start atm_openfaas_monitor due to: ~p", [Error]),
-            abort
-    end.
-
-
--spec stop_service() -> ok.
-stop_service() ->
-    ok = supervisor:terminate_child(?FSLOGIC_WORKER_SUP, ?MODULE),
-    ok = supervisor:delete_child(?FSLOGIC_WORKER_SUP, ?MODULE).
 
 
 %%%===================================================================
@@ -181,7 +153,7 @@ handle_continue(nonblocking_state_init, undefined) ->
             report_openfaas_down_to_atm_workflow_execution_layer(NotHealthyStatus),
             #state{status = NotHealthyStatus, running_smoothness = disrupted}
     end,
-    atm_openfaas_status_cache:save(?SERVICE_ID(), State#state.status),
+    atm_openfaas_status_cache:save(?ATM_SERVICE_ID(), State#state.status),
 
     {noreply, State, timer:seconds(?STATUS_CHECK_INTERVAL_SECONDS)}.
 
@@ -190,7 +162,7 @@ handle_continue(nonblocking_state_init, undefined) ->
     {noreply, NewState :: state(), non_neg_integer()}.
 handle_info(timeout, State = #state{status = CurrentStatus}) ->
     NewStatus = check_openfaas_status(),
-    NewStatus /= CurrentStatus andalso atm_openfaas_status_cache:save(?SERVICE_ID(), NewStatus),
+    NewStatus /= CurrentStatus andalso atm_openfaas_status_cache:save(?ATM_SERVICE_ID(), NewStatus),
 
     {noreply, handle_status_update(NewStatus, State), timer:seconds(?STATUS_CHECK_INTERVAL_SECONDS)};
 
