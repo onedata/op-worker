@@ -22,6 +22,7 @@
 
 %% API
 -export([id/0, spec/0, start_link/0]).
+-export([run/0]).
 
 %% gen_server callbacks
 -export([
@@ -75,6 +76,11 @@ start_link() ->
     gen_server:start_link(?SERVER, ?MODULE, [], []).
 
 
+-spec run() -> ok.
+run() ->
+    gen_server:call(?SERVER, gc_atm_workflow_executions).
+
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -87,7 +93,12 @@ init(_) ->
 
 
 -spec handle_call(Request :: term(), From :: {pid(), Tag :: term()}, state()) ->
-    {reply, Reply :: term(), NewState :: state()}.
+    {reply, Reply :: term(), NewState :: state()} |
+    {reply, Reply :: term(), NewState :: state(), non_neg_integer()}.
+handle_call(gc_atm_workflow_executions, _From, State) ->
+    garbage_collect_atm_workflow_executions(),
+    {reply, ok, State, timer:seconds(?GC_RUN_INTERVAL_SECONDS)};
+
 handle_call(Request, _From, State) ->
     ?log_bad_request(Request),
     {reply, {error, wrong_request}, State}.
@@ -101,15 +112,10 @@ handle_cast(Request, State) ->
 
 
 -spec handle_info(Info :: term(), state()) ->
+    {noreply, NewState :: state()} |
     {noreply, NewState :: state(), non_neg_integer()}.
 handle_info(timeout, State) ->
-    ?info("Starting garbage atm_workflow_execution collecting procedure..."),
-
-    discard_expired_atm_workflow_executions(),
-    purge_discarded_atm_workflow_executions(),
-
-    ?info("Garbage atm_workflow_execution collecting procedure finished succesfully."),
-
+    garbage_collect_atm_workflow_executions(),
     {noreply, State, timer:seconds(?GC_RUN_INTERVAL_SECONDS)};
 
 handle_info(Info, State) ->
@@ -132,6 +138,17 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec garbage_collect_atm_workflow_executions() -> ok.
+garbage_collect_atm_workflow_executions() ->
+    ?info("Starting garbage atm_workflow_execution collecting procedure..."),
+
+    discard_expired_atm_workflow_executions(),
+    purge_discarded_atm_workflow_executions(),
+
+    ?info("Garbage atm_workflow_execution collecting procedure finished succesfully.").
 
 
 %% @private
