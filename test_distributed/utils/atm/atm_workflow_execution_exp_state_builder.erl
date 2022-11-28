@@ -1156,12 +1156,39 @@ assert_workflow_execution_expectations(ExpStateCtx = #exp_workflow_execution_sta
         <<"atmWorkflowExecution">>, ExpAtmWorkflowExecutionState, AtmWorkflowExecutionState, LogFun
     ) of
         ok ->
-            true;
+            true andalso assert_workflow_execution_in_proper_links_tree(ExpStateCtx, LogFun);
         badmatch ->
             LogFun(
                 "Error: mismatch between exp workflow execution state: ~n~p~n~nand model stored in op: ~n~p",
                 [ExpAtmWorkflowExecutionState, AtmWorkflowExecutionState]
             ),
+            false
+    end.
+
+
+%% @private
+-spec assert_workflow_execution_in_proper_links_tree(ctx(), log_fun()) -> boolean().
+assert_workflow_execution_in_proper_links_tree(#exp_workflow_execution_state_ctx{
+    provider_selector = ProviderSelector,
+    workflow_execution_id = AtmWorkflowExecutionId,
+    exp_workflow_execution_state = #{<<"spaceId">> := SpaceId, <<"status">> := ExpStatus}
+}, LogFun) ->
+    TreeModule = case atm_workflow_execution_status:status_to_phase(binary_to_atom(ExpStatus)) of
+        ?WAITING_PHASE -> atm_waiting_workflow_executions;
+        ?ONGOING_PHASE -> atm_ongoing_workflow_executions;
+        ?SUSPENDED_PHASE -> atm_suspended_workflow_executions;
+        ?ENDED_PHASE -> atm_ended_workflow_executions
+    end,
+    AtmWorkflowExecutionEntries = opw_test_rpc:call(ProviderSelector, TreeModule, list, [
+        SpaceId, #{offset => 0, limit => 100000000000000000}
+    ]),
+    case lists:any(fun({_, Id}) -> Id == AtmWorkflowExecutionId end, AtmWorkflowExecutionEntries) of
+        true ->
+            true;
+        false ->
+            LogFun("Error: workflow execution (id: ~s) not present in expected links tree: ~p", [
+                AtmWorkflowExecutionId, TreeModule
+            ]),
             false
     end.
 
