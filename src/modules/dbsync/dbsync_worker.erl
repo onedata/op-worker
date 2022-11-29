@@ -332,11 +332,16 @@ handle_changes_request(ProviderId, #changes_request2{
                         ?error("Error when starting stream on demand ~p:~p", [Error, Reason])
                 end;
             _ ->
-                ?info("Changes request ~p from provider ~p while processing previous request. Terminate prev stream",
-                    [Request, ProviderId]),
-                dbsync_out_stream:terminate(Name),
-                handle_changes_request(ProviderId, Request)
-
+                case dbsync_out_stream:try_terminate(Name, Since) of
+                    ok ->
+                        ?info("Changes request ~p from provider ~p while processing previous request. "
+                        "Terminate previous stream.", [Request, ProviderId]),
+                        handle_changes_request(ProviderId, Request);
+                    ignore ->
+                        ?info("Changes request ~p from provider ~p while processing previous request. "
+                        "Ignoring.", [Request, ProviderId]),
+                        ok
+                end
         end
     end).
 

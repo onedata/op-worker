@@ -699,7 +699,6 @@ continue_collections_initialization_for_dir(Guid, #state{initialization_progress
                 end
         end
     catch
-        % TODO - obsluzyc jak dane sa rozjechane tzn brakuje pliku
         Error:Reason:Stacktrace ->
             ?error_stacktrace("Dir stats collector ~p error for ~p: ~p:~p",
                 [?FUNCTION_NAME, Guid, Error, Reason], Stacktrace),

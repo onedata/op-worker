@@ -23,7 +23,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/3, terminate/1]).
+-export([start_link/3, try_terminate/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -71,9 +71,17 @@ start_link(Name, SpaceId, Opts) ->
     gen_server2:start_link({global, {?MODULE, Name}}, ?MODULE, [SpaceId, Opts], []).
 
 
--spec terminate(binary()) -> ok.
-terminate(Name) ->
-    ok = gen_server:call({?MODULE, Name}, terminate).
+-spec try_terminate(binary(), couchbase_changes:since()) -> ok | ignore.
+try_terminate(Name, SinceToIgnoreTerminate) ->
+    try
+        gen_server2:call({global, {?MODULE, Name}}, {terminate, SinceToIgnoreTerminate}, infinity)
+    catch
+        _:{noproc, _} ->
+            ok; % Ignore terminated process
+        exit:{normal, _} ->
+            ok  % Ignore terminated process
+    end.
+
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -132,9 +140,11 @@ init([SpaceId, Opts]) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: state()} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_call(terminate, _From, #state{stream_pid = undefined} = State) ->
+handle_call({terminate, SinceToIgnoreTerminate}, _From, #state{since = SinceToIgnoreTerminate} = State) ->
+    {reply, ignore, State};
+handle_call({terminate, _}, _From, #state{stream_pid = undefined} = State) ->
     {stop, normal, ok, State};
-handle_call(terminate, _From, #state{stream_pid = Pid} = State) ->
+handle_call({terminate, _}, _From, #state{stream_pid = Pid} = State) ->
     couchbase_changes_stream:stop_async(Pid),
     {stop, normal, ok, State};
 handle_call(Request, _From, #state{} = State) ->

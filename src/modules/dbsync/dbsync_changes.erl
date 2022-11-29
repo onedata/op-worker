@@ -385,14 +385,15 @@ get_ctx(Model) ->
     od_provider:id()
 ) -> ok.
 log(Docs, BatchRange, Ans, SpaceId, ProviderId) ->
-    case op_worker:get_env(dbsync_audit_log_file_max_size, 524288000) of % 500 MB
+    case op_worker:get_env(dbsync_changes_audit_log_file_max_size, 524288000) of % 500 MB
         0 ->
             ok;
         MaxSize ->
-            LogFile = "/tmp/dbsync_changes_" ++ str_utils:to_list(SpaceId) ++ ".log",
+            LogFilePrefix = op_worker:get_env(dbsync_changes_audit_log_file_prefix, "/tmp/dbsync_changes_"),
+            LogFile = LogFilePrefix ++ str_utils:to_list(SpaceId) ++ ".log",
 
             Seqs = lists:map(fun(#document{seq = Seq}) -> Seq end, Docs),
-            Log = "Seqs range ~p (space ~p, provider ~p) applied with ans: ~p~nSeqs in range: ~p",
+            Log = "Seqs range ~p (space ~p, provider ~p) applied with ans: ~p~nSeqs in range: ~w",
             Args = [BatchRange, SpaceId, ProviderId, Ans, Seqs],
             onedata_logger:log_with_rotation(LogFile, Log, Args, MaxSize)
     end.
