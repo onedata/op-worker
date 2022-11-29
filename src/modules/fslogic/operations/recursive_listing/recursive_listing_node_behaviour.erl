@@ -15,6 +15,8 @@
 -module(recursive_listing_node_behaviour).
 -author("Michal Stanisz").
 
+-include_lib("ctool/include/errors.hrl").
+
 % aliases for specs shortening, should NOT be exported.
 -type tree_node() :: recursive_listing:tree_node().
 -type node_id() :: recursive_listing:node_id().
@@ -26,15 +28,15 @@
 %%% Callbacks
 %%%===================================================================
 
--callback is_branching_node(tree_node()) -> {boolean(), tree_node()}.
+-callback is_branching_node(tree_node()) -> {boolean(), tree_node()} | ?ERROR_NOT_FOUND.
 
 % NOTE: callback called only for listing root node to check correctness of pagination_token.
 -callback get_node_id(tree_node()) -> {node_id(), tree_node()}.
 
--callback get_node_name(tree_node(), user_ctx:ctx() | undefined) -> {node_name(), tree_node()}.
+-callback get_node_name(tree_node(), user_ctx:ctx() | undefined) -> {node_name(), tree_node()} | ?ERROR_NOT_FOUND.
 
 % NOTE: callback used only in listing initialization process.
--callback get_node_path_tokens(tree_node()) -> {[node_name()], tree_node()}.
+-callback get_node_path_tokens(tree_node()) -> {[node_name()], tree_node()} | ?ERROR_NOT_FOUND.
 
 % NOTE: callback called only for branching nodes
 -callback init_node_iterator(tree_node(), node_name() | undefined, limit()) -> 

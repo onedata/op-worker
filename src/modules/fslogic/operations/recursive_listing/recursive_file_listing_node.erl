@@ -46,13 +46,27 @@
 
 -export_type([node_path/0, result/0, entry/0]).
 
+-define(safeguard_not_synced(_Code),
+    try
+        _Code
+    catch Class:Reason ->
+        case datastore_runner:normalize_error(Reason) of
+            not_found ->
+                % File metadata can be not fully synchronized yet
+                ?ERROR_NOT_FOUND;
+            _ ->
+                erlang:apply(erlang, Class, [Reason])
+        end
+    end
+).
+
 %%%===================================================================
 %%% `recursive_listing` callbacks
 %%%===================================================================
 
--spec is_branching_node(tree_node()) -> {boolean(), tree_node()}.
+-spec is_branching_node(tree_node()) -> {boolean(), tree_node()} | ?ERROR_NOT_FOUND.
 is_branching_node(FileCtx) ->
-    file_ctx:is_dir(FileCtx).
+    ?safeguard_not_synced(file_ctx:is_dir(FileCtx)).
 
 
 -spec get_node_id(tree_node()) -> {node_id(), tree_node()}.
@@ -62,30 +76,34 @@ get_node_id(FileCtx) ->
 
 -spec get_node_name(tree_node(), user_ctx:ctx() | undefined) -> {node_name(), tree_node()}.
 get_node_name(FileCtx0, UserCtx) ->
-    {FileName, FileCtx1} = file_ctx:get_aliased_name(FileCtx0, UserCtx),
-    {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx1),
-    ProviderId = file_meta:get_provider_id(FileDoc),
-    {ok, ParentUuid} = file_meta:get_parent_uuid(FileDoc),
-    FileUuid = file_ctx:get_logical_uuid_const(FileCtx2),
-    
-    case file_meta:check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, ProviderId) of
-        {conflicting, ExtendedName, _ConflictingFiles} ->
-            {ExtendedName, FileCtx2};
-        _ ->
-            {FileName, FileCtx2}
-    end.
+    ?safeguard_not_synced(begin
+        {FileName, FileCtx1} = file_ctx:get_aliased_name(FileCtx0, UserCtx),
+        {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx1),
+        ProviderId = file_meta:get_provider_id(FileDoc),
+        {ok, ParentUuid} = file_meta:get_parent_uuid(FileDoc),
+        FileUuid = file_ctx:get_logical_uuid_const(FileCtx2),
+        
+        case file_meta:check_name_and_get_conflicting_files(ParentUuid, FileName, FileUuid, ProviderId) of
+            {conflicting, ExtendedName, _ConflictingFiles} ->
+                {ExtendedName, FileCtx2};
+            _ ->
+                {FileName, FileCtx2}
+        end
+    end).
 
 
--spec get_node_path_tokens(tree_node()) -> {[node_name()], tree_node()}.
+-spec get_node_path_tokens(tree_node()) -> {[node_name()], tree_node()} | ?ERROR_NOT_FOUND.
 get_node_path_tokens(FileCtx) ->
-    {UuidPath, FileCtx1} = file_ctx:get_uuid_based_path(FileCtx),
-    [_Separator, SpaceId | Uuids] = filename:split(UuidPath),
-    {ok, SpaceName} = space_logic:get_name(?ROOT_SESS_ID, SpaceId),
-    PathTokens = lists:map(fun(Uuid) ->
-        {Name, _} = get_node_name(file_ctx:new_by_uuid(Uuid, SpaceId), user_ctx:new(?ROOT_SESS_ID)),
-        Name
-    end, Uuids),
-    {[SpaceName | PathTokens], FileCtx1}.
+    ?safeguard_not_synced(begin
+        {UuidPath, FileCtx1} = file_ctx:get_uuid_based_path(FileCtx),
+        [_Separator, SpaceId | Uuids] = filename:split(UuidPath),
+        {ok, SpaceName} = space_logic:get_name(?ROOT_SESS_ID, SpaceId),
+        PathTokens = lists:map(fun(Uuid) ->
+            {Name, _} = get_node_name(file_ctx:new_by_uuid(Uuid, SpaceId), user_ctx:new(?ROOT_SESS_ID)),
+            Name
+        end, Uuids),
+        {[SpaceName | PathTokens], FileCtx1}
+    end).
 
 
 -spec init_node_iterator(tree_node(), node_name() | undefined, recursive_listing:limit()) -> 
