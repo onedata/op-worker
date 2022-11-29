@@ -302,6 +302,11 @@ parallel_apply(DocsList, Ref) ->
             SlaveAns = lists:foldl(fun
                 (Doc, ok) ->
                     dbsync_changes:apply(Doc);
+                (#document{seq = DocSeq} = Doc, {error, ErrorSeq, _} = Acc) when DocSeq < ErrorSeq ->
+                    case dbsync_changes:apply(Doc) of
+                        ok -> Acc;
+                        {error, _, _} = ApplyError -> ApplyError
+                    end;
                 (_, Acc) ->
                     Acc
             end, ok, lists:reverse(DocList)),
