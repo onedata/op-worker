@@ -53,7 +53,7 @@
         case datastore_runner:normalize_error(Reason) of
             not_found ->
                 % File metadata can be not fully synchronized yet
-                ?ERROR_NOT_FOUND;
+                not_found;
             _ ->
                 erlang:apply(erlang, Class, [Reason])
         end
@@ -64,7 +64,7 @@
 %%% `recursive_listing` callbacks
 %%%===================================================================
 
--spec is_branching_node(tree_node()) -> {boolean(), tree_node()} | ?ERROR_NOT_FOUND.
+-spec is_branching_node(tree_node()) -> {boolean(), tree_node()} | not_found.
 is_branching_node(FileCtx) ->
     ?safeguard_not_synced(file_ctx:is_dir(FileCtx)).
 
@@ -74,7 +74,7 @@ get_node_id(FileCtx) ->
     {file_ctx:get_logical_guid_const(FileCtx), FileCtx}.
 
 
--spec get_node_name(tree_node(), user_ctx:ctx() | undefined) -> {node_name(), tree_node()}.
+-spec get_node_name(tree_node(), user_ctx:ctx() | undefined) -> {node_name(), tree_node()} | not_found.
 get_node_name(FileCtx0, UserCtx) ->
     ?safeguard_not_synced(begin
         {FileName, FileCtx1} = file_ctx:get_aliased_name(FileCtx0, UserCtx),
@@ -92,7 +92,7 @@ get_node_name(FileCtx0, UserCtx) ->
     end).
 
 
--spec get_node_path_tokens(tree_node()) -> {[node_name()], tree_node()} | ?ERROR_NOT_FOUND.
+-spec get_node_path_tokens(tree_node()) -> {[node_name()], tree_node()} | not_found.
 get_node_path_tokens(FileCtx) ->
     ?safeguard_not_synced(begin
         {UuidPath, FileCtx1} = file_ctx:get_uuid_based_path(FileCtx),

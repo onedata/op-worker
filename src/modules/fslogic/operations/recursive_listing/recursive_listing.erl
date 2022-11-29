@@ -151,7 +151,7 @@ list(Module, UserCtx, RootNode, Options) ->
                 {false, NodeToList2} ->
                     {build_result_node_entry_list(
                         InitialState#state{current_node = NodeToList2}, <<>>), [], undefined};
-                ?ERROR_NOT_FOUND ->
+                not_found ->
                     #recursive_listing_result{
                         inaccessible_paths = [],
                         entries = []
@@ -193,7 +193,7 @@ prepare_initial_listing_state(Module, UserCtx, RootNode, Options) ->
             case infer_start_after(GivenStartAfter, Prefix, LastPrefixToken) of
                 {ok, FinalStartAfter} ->
                     % all docs on node path must be synced as infer_starting_node returned ok
-                    % therefore no need to check if ?ERROR_NOT_FOUND
+                    % therefore no need to check if not_found
                     {NodePathTokens, NodeToList2} = Module:get_node_path_tokens(NodeToList),
                     {RootNodePathTokens, _RootNode2} = Module:get_node_path_tokens(RootNode),
                     {ok, #state{
@@ -246,7 +246,7 @@ infer_starting_node(Module, [PrefixToken | Tail], Node, UserCtx, RevRelPathToken
                     infer_starting_node(
                         Module, Tail, NextNode2, UserCtx, [PrefixToken | RevRelPathTokens]);
                 _ ->
-                    % if ?ERROR_NOT_FOUND then ONLY node that could be on prefix path is not yet fully synced
+                    % if not_found then ONLY node that could be on prefix path is not yet fully synced
                     nothing_to_list
             end;
         {_, [], _Iterator} ->
@@ -385,24 +385,24 @@ process_child(_UserCtx, _Node, #state{limit = 0}) ->
     {more, #result_accumulator{}};
 process_child(UserCtx, Node, #state{current_node_path_tokens = CurrentPathTokens, module = Module} = State) ->
     case Module:get_node_name(Node, UserCtx) of
-        ?ERROR_NOT_FOUND ->
-            {done, #result_accumulator{}};
-         {Name, Node2} ->
-             case Module:is_branching_node(Node2) of
-                 {true, Node3} ->
-                     {ProgressMarker, NextChildrenRes} = process_current_branching_node(UserCtx,
-                         State#state{
-                             current_node = Node3,
-                             current_node_path_tokens = CurrentPathTokens ++ [Name]
-                         }
-                     ),
-                     {ProgressMarker, NextChildrenRes};
-                 {false, Node3} ->
-                     UpdatedState = State#state{current_node_path_tokens = CurrentPathTokens, current_node = Node3},
-                     {done, #result_accumulator{entries = build_result_node_entry_list(UpdatedState, Name)}};
-                 ?ERROR_NOT_FOUND ->
-                     {done, #result_accumulator{}}
-             end
+        {Name, Node2} ->
+            case Module:is_branching_node(Node2) of
+                {true, Node3} ->
+                    {ProgressMarker, NextChildrenRes} = process_current_branching_node(UserCtx,
+                        State#state{
+                            current_node = Node3,
+                            current_node_path_tokens = CurrentPathTokens ++ [Name]
+                        }
+                    ),
+                    {ProgressMarker, NextChildrenRes};
+                {false, Node3} ->
+                    UpdatedState = State#state{current_node_path_tokens = CurrentPathTokens, current_node = Node3},
+                    {done, #result_accumulator{entries = build_result_node_entry_list(UpdatedState, Name)}};
+                not_found ->
+                    {done, #result_accumulator{}}
+            end;
+        not_found ->
+            {done, #result_accumulator{}}
     end.
 
 
