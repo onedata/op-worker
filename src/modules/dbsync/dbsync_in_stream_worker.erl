@@ -242,29 +242,37 @@ handle_changes_batch(Since, Until, Timestamp, Docs,
             State2 = stash_changes_batch(Since, Until, Timestamp, Docs, State),
             schedule_changes_request(State2);
         {Lower, _} when Lower < Seq ->
-            case FBP of
+            case op_worker:get_env(reset_dbsync_changes_when_lower_seq_appears, false) of
                 true ->
-                    MaxLowerChanges = application:get_env(?APP_NAME,
-                        lower_changes_before_reset, 10),
-                    case {LCC < MaxLowerChanges, LCC, MaxLowerChanges} of
-                        {true, 0, _} ->
-                            State#state{lower_changes_count = 1,
-                                first_lower_seq = Lower};
-                        {true, _, _} ->
-                            State#state{lower_changes_count = LCC + 1};
-                        {_, _, 0} ->
-                            ?info("Reset changes seq for space ~p,"
-                            " old ~p, new ~p", [SpaceID, Seq, Lower]),
-                            State#state{seq = Lower};
+                    % Lower sequence can appear after source provider crash (some changes and counter has not been
+                    % persisted) or when a batch had been lost and than applied with other batches from stash
+                    case FBP of
+                        true ->
+                            % TODO VFS-10189 - do not reset after application of lost batch together with stashed changes
+                            MaxLowerChanges = application:get_env(?APP_NAME,
+                                lower_changes_before_reset, 10),
+                            case {LCC < MaxLowerChanges, LCC, MaxLowerChanges} of
+                                {true, 0, _} ->
+                                    State#state{lower_changes_count = 1,
+                                        first_lower_seq = Lower};
+                                {true, _, _} ->
+                                    State#state{lower_changes_count = LCC + 1};
+                                {_, _, 0} ->
+                                    ?info("Reset changes seq for space ~p,"
+                                    " old ~p, new ~p", [SpaceID, Seq, Lower]),
+                                    State#state{seq = Lower};
+                                _ ->
+                                    ?info("Reset changes seq for space ~p,"
+                                    " old ~p, new ~p", [SpaceID, Seq, FLS]),
+                                    State#state{seq = FLS}
+                            end;
                         _ ->
-                            ?info("Reset changes seq for space ~p,"
-                            " old ~p, new ~p", [SpaceID, Seq, FLS]),
-                            State#state{seq = FLS}
+                            ?info("Reset changes seq with first batch for space ~p,"
+                            " old ~p, new ~p", [SpaceID, Seq, Lower]),
+                            State#state{seq = Lower}
                     end;
-                _ ->
-                    ?info("Reset changes seq with first batch for space ~p,"
-                    " old ~p, new ~p", [SpaceID, Seq, Lower]),
-                    State#state{seq = Lower}
+                false ->
+                    State
             end;
         _ ->
             State
@@ -308,10 +316,10 @@ stash_changes_batch(Since, Until, Timestamp, Docs, State = #state{
 %%--------------------------------------------------------------------
 -spec apply_changes_batch(couchbase_changes:since(), couchbase_changes:until(),
     dbsync_changes:timestamp(), [datastore:doc()], state()) -> state().
-apply_changes_batch(Since, Until, Timestamp, Docs, State) ->
+apply_changes_batch(Since, Until, Timestamp, Docs, #state{space_id = SpaceId, provider_id = ProviderId} = State) ->
     State2 = cancel_changes_request(State),
     {Docs2, Timestamp2, Until2, State3} = prepare_batch(Docs, Timestamp, Until, State2),
-    dbsync_changes:apply_batch(Docs2, {Since, Until2}, Timestamp2),
+    dbsync_changes:apply_batch(Docs2, {Since, Until2}, Timestamp2, SpaceId, ProviderId),
 
     case op_worker:get_env(dbsync_in_stream_worker_gc, on) of
         on ->

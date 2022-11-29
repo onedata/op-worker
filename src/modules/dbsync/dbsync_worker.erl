@@ -278,7 +278,7 @@ handle_changes_request(ProviderId, #changes_request2{
     since = Since,
     until = Until,
     included_mutators = IncludedMutators
-}) ->
+} = Request) ->
     Handler = fun
         (BatchSince, end_of_stream, Timestamp, Docs) ->
             dbsync_communicator:send_changes(
@@ -332,7 +332,11 @@ handle_changes_request(ProviderId, #changes_request2{
                         ?error("Error when starting stream on demand ~p:~p", [Error, Reason])
                 end;
             _ ->
-                ok
+                ?info("Changes request ~p from provider ~p while processing previous request. Terminate prev stream",
+                    [Request, ProviderId]),
+                dbsync_out_stream:terminate(Name),
+                handle_changes_request(ProviderId, Request)
+
         end
     end).
 
