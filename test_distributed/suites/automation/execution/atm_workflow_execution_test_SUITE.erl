@@ -916,7 +916,9 @@ init_per_suite(Config) ->
                 {atm_workflow_engine_slots_count, 100000},
                 {atm_workflow_engine_async_calls_limit, 100000},
                 {atm_workflow_job_timeout_sec, 1},
-                {atm_workflow_job_timeout_check_period_sec, 1}
+                {atm_workflow_job_timeout_check_period_sec, 1},
+                {atm_suspended_workflow_executions_expiration_interval_sec, 0},
+                {atm_ended_workflow_executions_expiration_interval_sec, 0}
             ]}],
             posthook = fun(NewConfig) ->
                 atm_test_inventory:init_per_suite(?PROVIDER_SELECTOR, user1),

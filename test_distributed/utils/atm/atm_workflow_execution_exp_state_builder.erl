@@ -22,13 +22,15 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/automation/atm_execution.hrl").
+-include("onenv_test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 
 %% API
 -export([
-    init/4,
+    init/5,
     expect/2,
-    assert_matches_with_backend/1, assert_matches_with_backend/2
+    assert_matches_with_backend/1, assert_matches_with_backend/2,
+    assert_deleted/1
 ]).
 -export([
     set_current_lane_run/3,
@@ -134,6 +136,7 @@
     oct_background:entity_selector(),
     od_space:id(),
     atm_workflow_execution:id(),
+    [atm_store_schema:record()],
     [atm_lane_schema:record()]
 ) ->
     ctx().
@@ -141,6 +144,7 @@ init(
     ProviderSelector,
     SpaceId,
     AtmWorkflowExecutionId,
+    AtmStoreSchemas,
     AtmLaneSchemas = [FirstAtmLaneSchema | RestAtmLaneSchemas]
 ) ->
     ExpFirstAtmLaneExecutionState = #{
@@ -154,6 +158,14 @@ init(
         }
     end, RestAtmLaneSchemas),
 
+    % It is not possible to infer store ids and they must be fetched from created docs
+    AtmWorkflowExecution = fetch_workflow_execution(ProviderSelector, AtmWorkflowExecutionId),
+    AtmAuditLogStoreId = AtmWorkflowExecution#atm_workflow_execution.system_audit_log_store_id,
+    case is_binary(AtmAuditLogStoreId) of
+        true -> ok;
+        false -> crash("ERROR - workflow audit log not created")
+    end,
+
     #exp_workflow_execution_state_ctx{
         provider_selector = ProviderSelector,
         lane_schemas = AtmLaneSchemas,
@@ -164,6 +176,9 @@ init(
 
         exp_workflow_execution_state = #{
             <<"spaceId">> => SpaceId,
+
+            <<"storeRegistry">> => get_store_registry(AtmWorkflowExecution, AtmStoreSchemas),
+            <<"systemAuditLogId">> => AtmAuditLogStoreId,
 
             <<"lanes">> => [ExpFirstAtmLaneExecutionState | ExpRestAtmLaneExecutionStates],
 
@@ -440,6 +455,13 @@ assert_matches_with_backend(ExpStateCtx, Retries) ->
     end.
 
 
+-spec assert_deleted(ctx()) -> boolean().
+assert_deleted(ExpStateCtx) ->
+    assert_workflow_related_docs_deleted(ExpStateCtx),
+    assert_global_store_related_docs_deleted(ExpStateCtx),
+    assert_task_related_docs_deleted(ExpStateCtx).
+
+
 -spec set_current_lane_run(non_neg_integer(), non_neg_integer(), ctx()) -> ctx().
 set_current_lane_run(AtmLaneIndex, AtmRunNum, ExpState) ->
     ExpState#exp_workflow_execution_state_ctx{
@@ -527,6 +549,45 @@ get_task_status(AtmTaskExecutionId, #exp_workflow_execution_state_ctx{
 %% @private
 as_list(Term) when is_list(Term) -> Term;
 as_list(Term) -> [Term].
+
+
+%% @private
+-spec crash(Format :: string(), Args :: [term()]) -> no_return().
+crash(Format, Args) ->
+    crash(str_utils:format_bin(Format, Args)).
+
+
+%% @private
+-spec crash(string() | binary()) -> no_return().
+crash(ErrorMsg) ->
+    ct:pal(str_utils:to_binary(ErrorMsg)),
+    ?assert(false).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Store registry must be fetched from model stored in op as it is not
+%% possible to tell beforehand (and later assert) what ids will be generated
+%% for store instances.
+%% @end
+%%--------------------------------------------------------------------
+-spec get_store_registry(atm_workflow_execution:record(), [atm_store_schema:record()]) ->
+    atm_workflow_execution:store_registry().
+get_store_registry(
+    #atm_workflow_execution{store_registry = AtmStoreRegistry},
+    AtmStoreSchemas
+) ->
+    ExpStoreSchemaId = lists:sort(lists:map(fun(#atm_store_schema{id = AtmStoreSchemaId}) ->
+        AtmStoreSchemaId
+    end, AtmStoreSchemas)),
+
+    case lists:sort(maps:keys(AtmStoreRegistry)) of
+        ExpStoreSchemaId -> ok;
+        _ -> crash("ERROR - store instances not generated for every store schema")
+    end,
+
+    AtmStoreRegistry.
 
 
 %% @private
@@ -712,17 +773,21 @@ expect_lane_run_started_preparing_in_advance(
     ctx().
 expect_lane_run_created(
     ExpStateCtx = #exp_workflow_execution_state_ctx{
+        provider_selector = ProviderSelector,
         workflow_execution_id = AtmWorkflowExecutionId,
         exp_task_execution_state_ctx_registry = ExpAtmTaskExecutionStateCtxRegistry0
     },
     AtmLaneRunSelector
 ) ->
     AtmLaneSchema = get_lane_schema(ExpStateCtx, AtmLaneRunSelector),
-    {ok, AtmLaneRun} = atm_lane_execution:get_run(AtmLaneRunSelector, fetch_workflow_execution(ExpStateCtx)),
+    {ok, AtmLaneRun} = atm_lane_execution:get_run(AtmLaneRunSelector, fetch_workflow_execution(
+        ProviderSelector, AtmWorkflowExecutionId
+    )),
 
     {ExpAtmParallelBoxExecutionStates, ExpAtmTaskExecutionStateCtxRegistry1} = lists:mapfoldl(
         fun({AtmParallelBoxSchema, AtmParallelBoxExecution}, OuterAcc) ->
             AtmParallelBoxSchemaId = AtmParallelBoxSchema#atm_parallel_box_schema.id,
+            AtmTaskSchemas = AtmParallelBoxSchema#atm_parallel_box_schema.tasks,
             AtmTasksRegistry = get_task_registry(AtmParallelBoxExecution, AtmParallelBoxSchema),
 
             ExpAtmParallelBoxExecutionState = build_exp_initial_parallel_box_execution_state(
@@ -730,11 +795,30 @@ expect_lane_run_created(
                 AtmTasksRegistry
             ),
             UpdatedOuterAcc = maps:fold(fun(AtmTaskSchemaId, AtmTaskExecutionId, InnerAcc) ->
+                {ok, AtmTaskSchema} = lists_utils:find(fun(#atm_task_schema{id = Id}) ->
+                    Id == AtmTaskSchemaId
+                end, AtmTaskSchemas),
+
+                #atm_task_execution{
+                    system_audit_log_store_id = AtmTaskAuditLogStoreId,
+                    time_series_store_id = AtmTaskTSStoreId
+                } = fetch_task_execution(ProviderSelector, AtmTaskExecutionId),
+
+                case is_binary(AtmTaskAuditLogStoreId) of
+                    true -> ok;
+                    false -> crash("ERROR - task (id: ~s) audit log not created", [AtmTaskExecutionId])
+                end,
+                case {AtmTaskSchema#atm_task_schema.time_series_store_config, is_binary(AtmTaskTSStoreId)} of
+                    {undefined, false} -> ok;
+                    {_, true} -> ok;
+                    _ -> crash("ERROR - task (id: ~s) time series store not created", [AtmTaskExecutionId])
+                end,
+
                 InnerAcc#{AtmTaskExecutionId => #exp_task_execution_state_ctx{
                     lane_run_selector = AtmLaneRunSelector,
                     parallel_box_schema_id = AtmParallelBoxSchemaId,
                     exp_state = build_task_execution_initial_exp_state(
-                        AtmWorkflowExecutionId, AtmTaskSchemaId
+                        AtmWorkflowExecutionId, AtmTaskSchemaId, AtmTaskAuditLogStoreId, AtmTaskTSStoreId
                     )
                 }}
             end, OuterAcc, AtmTasksRegistry),
@@ -791,14 +875,21 @@ get_task_registry(AtmParallelBoxExecution, #atm_parallel_box_schema{tasks = AtmT
         AtmTaskSchemas
     )),
     case lists:sort(maps:keys(AtmTasksRegistry)) of
-        ExpTaskSchemaIds ->
-            ok;
-        _ ->
-            ct:pal("ERROR - task executions not generated for every task schema"),
-            ?assert(false)
+        ExpTaskSchemaIds -> ok;
+        _ -> crash("ERROR - task executions not generated for every task schema")
     end,
 
     AtmTasksRegistry.
+
+
+%% @private
+-spec fetch_task_execution(oct_background:entity_selector(), atm_task_execution:id()) ->
+    atm_task_execution:record().
+fetch_task_execution(ProviderSelector, AtmTaskExecutionId) ->
+    {ok, #document{value = AtmTaskExecution}} = ?rpc(ProviderSelector, atm_task_execution:get(
+        AtmTaskExecutionId
+    )),
+    AtmTaskExecution.
 
 
 %% @private
@@ -1055,11 +1146,9 @@ update_exp_workflow_execution_state(ExpStateCtx = #exp_workflow_execution_state_
 
 
 %% @private
--spec fetch_workflow_execution(ctx()) -> atm_workflow_execution:record().
-fetch_workflow_execution(#exp_workflow_execution_state_ctx{
-    provider_selector = ProviderSelector,
-    workflow_execution_id = AtmWorkflowExecutionId
-}) ->
+-spec fetch_workflow_execution(oct_background:entity_selector(), atm_workflow_execution:id()) ->
+    atm_workflow_execution:record().
+fetch_workflow_execution(ProviderSelector, AtmWorkflowExecutionId) ->
     {ok, #document{value = AtmWorkflowExecution}} = opw_test_rpc:call(
         ProviderSelector, atm_workflow_execution, get, [AtmWorkflowExecutionId]
     ),
@@ -1125,13 +1214,28 @@ build_exp_initial_parallel_box_execution_state(AtmParallelBoxSchemaId, AtmTasksR
 
 
 %% @private
--spec build_task_execution_initial_exp_state(atm_workflow_execution:id(), automation:id()) ->
+-spec build_task_execution_initial_exp_state(
+    atm_workflow_execution:id(),
+    automation:id(),
+    atm_store:id(),
+    undefined | atm_store:id()
+) ->
     task_execution_state().
-build_task_execution_initial_exp_state(AtmWorkflowExecutionId, AtmTaskSchemaId) ->
+build_task_execution_initial_exp_state(
+    AtmWorkflowExecutionId,
+    AtmTaskSchemaId,
+    AtmTaskAuditLogStoreId,
+    AtmTaskTSStoreId
+) ->
     #{
         <<"atmWorkflowExecutionId">> => AtmWorkflowExecutionId,
         <<"schemaId">> => AtmTaskSchemaId,
+
+        <<"systemAuditLogId">> => AtmTaskAuditLogStoreId,
+        <<"timeSeriesStoreId">> => utils:undefined_to_null(AtmTaskTSStoreId),
+
         <<"status">> => <<"pending">>,
+
         <<"itemsInProcessing">> => 0,
         <<"itemsProcessed">> => 0,
         <<"itemsFailed">> => 0
@@ -1148,9 +1252,13 @@ assert_matches_with_backend_internal(ExpStateCtx, LogFun) ->
 %% @private
 -spec assert_workflow_execution_expectations(ctx(), log_fun()) -> boolean().
 assert_workflow_execution_expectations(ExpStateCtx = #exp_workflow_execution_state_ctx{
+    provider_selector = ProviderSelector,
+    workflow_execution_id = AtmWorkflowExecutionId,
     exp_workflow_execution_state = ExpAtmWorkflowExecutionState
 }, LogFun) ->
-    AtmWorkflowExecutionState = atm_workflow_execution_to_json(fetch_workflow_execution(ExpStateCtx)),
+    AtmWorkflowExecutionState = atm_workflow_execution_to_json(fetch_workflow_execution(
+        ProviderSelector, AtmWorkflowExecutionId
+    )),
 
     case catch assert_json_expectations(
         <<"atmWorkflowExecution">>, ExpAtmWorkflowExecutionState, AtmWorkflowExecutionState, LogFun
@@ -1200,9 +1308,7 @@ assert_task_execution_expectations(#exp_workflow_execution_state_ctx{
     exp_task_execution_state_ctx_registry = ExpAtmTaskExecutionStateCtxRegistry
 }, LogFun) ->
     maps_utils:fold_while(fun(AtmTaskExecutionId, ExpAtmTaskExecution, true) ->
-        {ok, #document{value = AtmTaskExecution}} = opw_test_rpc:call(
-            ProviderSelector, atm_task_execution, get, [AtmTaskExecutionId]
-        ),
+        AtmTaskExecution = fetch_task_execution(ProviderSelector, AtmTaskExecutionId),
         AtmTaskExecutionState = atm_task_execution_to_json(AtmTaskExecution),
         ExpAtmTaskExecutionState = ExpAtmTaskExecution#exp_task_execution_state_ctx.exp_state,
 
@@ -1222,10 +1328,97 @@ assert_task_execution_expectations(#exp_workflow_execution_state_ctx{
 
 
 %% @private
+-spec assert_workflow_related_docs_deleted(ctx()) -> ok | no_return().
+assert_workflow_related_docs_deleted(#exp_workflow_execution_state_ctx{
+    provider_selector = ProviderSelector,
+    workflow_execution_id = AtmWorkflowExecutionId,
+    exp_workflow_execution_state = #{
+        <<"systemAuditLogId">> := AtmAuditLogStoreId,
+        <<"lanes">> := ExpAtmLaneExecutionStates
+    }
+}) ->
+    try
+        ?assertEqual(
+            ?ERROR_NOT_FOUND,
+            ?rpc(ProviderSelector, atm_workflow_execution:get_including_discarded(AtmWorkflowExecutionId))
+        ),
+
+        assert_store_related_docs_deleted(ProviderSelector, AtmAuditLogStoreId),
+
+        lists:foreach(fun(#{<<"runs">> := AtmLaneRuns}) ->
+            lists:foreach(fun(#{<<"exceptionStoreId">> := ExceptionStoreId}) ->
+                assert_store_related_docs_deleted(ProviderSelector, ExceptionStoreId)
+            end, AtmLaneRuns)
+        end, ExpAtmLaneExecutionStates)
+    catch Type:Reason ->
+        ct:pal("ERROR: workflow (id: ~s) related docs are not deleted.", [AtmWorkflowExecutionId]),
+        erlang:Type(Reason)
+    end.
+
+
+%% @private
+-spec assert_global_store_related_docs_deleted(ctx()) -> ok | no_return().
+assert_global_store_related_docs_deleted(#exp_workflow_execution_state_ctx{
+    provider_selector = ProviderSelector,
+    workflow_execution_id = AtmWorkflowExecutionId,
+    exp_workflow_execution_state = #{<<"storeRegistry">> := AtmStoreRegistry}
+}) ->
+    try
+        lists:foreach(fun(AtmStoreId) ->
+            assert_store_related_docs_deleted(ProviderSelector, AtmStoreId)
+        end, maps:values(AtmStoreRegistry))
+    catch Type:Reason ->
+        ct:pal("ERROR: global stores related docs are not deleted.", [AtmWorkflowExecutionId]),
+        erlang:Type(Reason)
+    end.
+
+
+%% @private
+-spec assert_task_related_docs_deleted(ctx()) -> ok | no_return().
+assert_task_related_docs_deleted(#exp_workflow_execution_state_ctx{
+    provider_selector = ProviderSelector,
+    exp_task_execution_state_ctx_registry = ExpAtmTaskExecutionsRegistry
+}) ->
+    maps:foreach(fun(AtmTaskExecutionId, #exp_task_execution_state_ctx{exp_state = #{
+        <<"systemAuditLogId">> := AtmTaskAuditLogStoreId,
+        <<"timeSeriesStoreId">> := AtmTaskTSStoreId
+    }}) ->
+        try
+            ?assertEqual(
+                ?ERROR_NOT_FOUND,
+                ?rpc(ProviderSelector, atm_task_execution:get(AtmTaskExecutionId))
+            ),
+            assert_store_related_docs_deleted(ProviderSelector, AtmTaskAuditLogStoreId),
+            assert_store_related_docs_deleted(ProviderSelector, AtmTaskTSStoreId)
+        catch Type:Reason ->
+            ct:pal("ERROR: task (id: ~s) related docs are not deleted.", [AtmTaskExecutionId]),
+            erlang:Type(Reason)
+        end
+    end, ExpAtmTaskExecutionsRegistry).
+
+
+%% @private
+-spec assert_store_related_docs_deleted(
+    oct_background:entity_selector(),
+    null | undefined | atm_store:id()
+) ->
+    ok | no_return().
+assert_store_related_docs_deleted(_ProviderSelector, null) ->
+    ok;
+assert_store_related_docs_deleted(_ProviderSelector, undefined) ->
+    ok;
+assert_store_related_docs_deleted(ProviderSelector, AtmStoreId) ->
+    ?assertEqual(?ERROR_NOT_FOUND, ?rpc(ProviderSelector, atm_store:get(AtmStoreId))).
+
+
+%% @private
 -spec atm_workflow_execution_to_json(atm_workflow_execution:record()) ->
     workflow_execution_state().
 atm_workflow_execution_to_json(AtmWorkflowExecution = #atm_workflow_execution{
     space_id = SpaceId,
+
+    store_registry = AtmStoreRegistry,
+    system_audit_log_store_id = AtmAuditLogStoreId,
 
     lanes_count = AtmLanesCount,
 
@@ -1238,6 +1431,9 @@ atm_workflow_execution_to_json(AtmWorkflowExecution = #atm_workflow_execution{
 }) ->
     #{
         <<"spaceId">> => SpaceId,
+
+        <<"storeRegistry">> => AtmStoreRegistry,
+        <<"systemAuditLogId">> => AtmAuditLogStoreId,
 
         <<"lanes">> => lists:map(
             fun(AtmLaneIndex) -> atm_lane_execution:to_json(AtmLaneIndex, AtmWorkflowExecution) end,
@@ -1262,6 +1458,9 @@ atm_task_execution_to_json(#atm_task_execution{
 
     status = AtmTaskExecutionStatus,
 
+    system_audit_log_store_id = AtmTaskAuditLogStoreId,
+    time_series_store_id = AtmTaskTSStoreId,
+
     items_in_processing = ItemsInProcessing,
     items_processed = ItemsProcessed,
     items_failed = ItemsFailed
@@ -1271,6 +1470,9 @@ atm_task_execution_to_json(#atm_task_execution{
         <<"schemaId">> => AtmTaskSchemaId,
 
         <<"status">> => atom_to_binary(AtmTaskExecutionStatus, utf8),
+
+        <<"systemAuditLogId">> => AtmTaskAuditLogStoreId,
+        <<"timeSeriesStoreId">> => utils:undefined_to_null(AtmTaskTSStoreId),
 
         <<"itemsInProcessing">> => ItemsInProcessing,
         <<"itemsProcessed">> => ItemsProcessed,

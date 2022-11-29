@@ -128,6 +128,7 @@
     atm_openfaas_activity_feed_client_mock,
     test_websocket_client,
     atm_test_inventory,
+    atm_workflow_execution_exp_state_builder,
 
     atm_workflow_execution_test_runner,
     atm_workflow_execution_test_mocks,

@@ -196,11 +196,13 @@ run(TestSpec = #atm_workflow_execution_test_spec{
         AtmStoreInitialContentOverlay, CallbackUrl
     ),
 
-    #atm_workflow_schema_revision{lanes = AtmLaneSchemas} = atm_test_inventory:get_workflow_schema_revision(
-        AtmWorkflowSchemaRevisionNum, AtmWorkflowSchemaId
-    ),
+    #atm_workflow_schema_revision{
+        stores = AtmStoreSchemas,
+        lanes = AtmLaneSchemas
+    } = atm_test_inventory:get_workflow_schema_revision(AtmWorkflowSchemaRevisionNum, AtmWorkflowSchemaId),
+
     ExpState = atm_workflow_execution_exp_state_builder:init(
-        ProviderSelector, SpaceId, AtmWorkflowExecutionId, AtmLaneSchemas
+        ProviderSelector, SpaceId, AtmWorkflowExecutionId, AtmStoreSchemas, AtmLaneSchemas
     ),
     true = atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState),
 
@@ -260,13 +262,23 @@ monitor_workflow_execution(TestCtx0) ->
 
                 case has_workflow_stopped(TestCtx3) of
                     true ->
-                        ok;
+                        test_garbage_collector(TestCtx3);
                     false ->
                         TestCtx4 = begin_deferred_step_phase_executions_if_possible(TestCtx3),
                         monitor_workflow_execution(TestCtx4)
                 end
         end
     end.
+
+
+%% @private
+-spec test_garbage_collector(test_ctx()) -> ok | no_return().
+test_garbage_collector(#test_ctx{
+    test_spec = #atm_workflow_execution_test_spec{provider = ProviderSelector},
+    workflow_execution_exp_state = ExpState
+}) ->
+    ?rpc(ProviderSelector, atm_workflow_execution_garbage_collector:run()),
+    atm_workflow_execution_exp_state_builder:assert_deleted(ExpState).
 
 
 %% @private
@@ -684,7 +696,7 @@ get_exp_state_diff(_, _) ->
 
 
 %% @private
--spec assert_exp_workflow_execution_state(test_ctx()) -> test_ctx().
+-spec assert_exp_workflow_execution_state(test_ctx()) -> ok | no_return().
 assert_exp_workflow_execution_state(TestCtx = #test_ctx{workflow_execution_exp_state = ExpState}) ->
     case atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState, ?ASSERT_RETRIES) of
         true ->
