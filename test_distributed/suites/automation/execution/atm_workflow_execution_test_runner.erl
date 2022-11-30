@@ -279,9 +279,11 @@ test_garbage_collector(#test_ctx{test_spec = #atm_workflow_execution_test_spec{t
 
 test_garbage_collector(#test_ctx{
     test_spec = #atm_workflow_execution_test_spec{provider = ProviderSelector},
+    workflow_execution_id = AtmWorkflowExecutionId,
     workflow_execution_exp_state = ExpState
 }) ->
-    ?rpc(ProviderSelector, atm_workflow_execution_garbage_collector:run()),
+    ok = ?rpc(ProviderSelector, atm_workflow_execution_api:discard(AtmWorkflowExecutionId)),
+    ok = ?rpc(ProviderSelector, atm_workflow_execution_garbage_collector:run()),
     atm_workflow_execution_exp_state_builder:assert_deleted(ExpState).
 
 

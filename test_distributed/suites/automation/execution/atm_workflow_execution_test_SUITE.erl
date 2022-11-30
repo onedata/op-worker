@@ -431,6 +431,12 @@ all() -> [
 -define(RUN_RESUME_TEST(), ?RUN_TEST(atm_workflow_execution_resume_tests)).
 -define(RUN_GC_TEST(), ?RUN_TEST(atm_workflow_execution_gc_tests)).
 
+-define(GC_RELATED_ENV_VARS, [
+    atm_workflow_execution_garbage_collector_run_interval_sec,
+    atm_suspended_workflow_executions_expiration_interval_sec,
+    atm_ended_workflow_executions_expiration_interval_sec
+]).
+
 
 %%%===================================================================
 %%% Test cases
@@ -976,10 +982,14 @@ init_per_group(TestGroup, Config) when
     atm_workflow_execution_test_runner:init(?PROVIDER_SELECTOR),
     Config;
 
-init_per_group(gc_tests, Config) ->
-    time_test_utils:freeze_time(Config),
+init_per_group(gc_tests, Config0) ->
+    Config1 = lists:foldl(fun(EnvVar, ConfigAcc) ->
+        [{EnvVar, ?rpc(?PROVIDER_SELECTOR, op_worker:get_env(EnvVar))} | ConfigAcc]
+    end, Config0, ?GC_RELATED_ENV_VARS),
+
+    time_test_utils:freeze_time(Config1),
     atm_workflow_execution_test_runner:init(?PROVIDER_SELECTOR),
-    Config.
+    Config1.
 
 
 end_per_group(scheduling_non_executable_workflow_schema_tests, Config) ->
@@ -1008,13 +1018,10 @@ end_per_group(TestGroup, Config) when
 
 end_per_group(gc_tests, Config) ->
     % Reset atm gc env as it may have been tampered by gc tests
-    lists:foreach(fun({EnvVar, EnvValue}) ->
-        ?rpc(?PROVIDER_SELECTOR, op_worker:set_env(EnvVar, EnvValue))
-    end, [
-        {atm_workflow_execution_garbage_collector_run_interval_sec, 3600},
-        {atm_suspended_workflow_executions_expiration_interval_sec, 0},
-        {atm_ended_workflow_executions_expiration_interval_sec, 0}
-    ]),
+    lists:foreach(fun(EnvVar) ->
+        ?rpc(?PROVIDER_SELECTOR, op_worker:set_env(EnvVar, ?config(EnvVar, Config)))
+    end, ?GC_RELATED_ENV_VARS),
+
     atm_workflow_execution_test_runner:teardown(?PROVIDER_SELECTOR),
     time_test_utils:unfreeze_time(Config),
     Config.

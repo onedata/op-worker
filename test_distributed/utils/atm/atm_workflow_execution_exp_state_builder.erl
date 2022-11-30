@@ -1281,24 +1281,39 @@ assert_workflow_execution_in_proper_links_tree(#exp_workflow_execution_state_ctx
     workflow_execution_id = AtmWorkflowExecutionId,
     exp_workflow_execution_state = #{<<"spaceId">> := SpaceId, <<"status">> := ExpStatus}
 }, LogFun) ->
-    TreeModule = case atm_workflow_execution_status:status_to_phase(binary_to_atom(ExpStatus)) of
+    Phase = atm_workflow_execution_status:status_to_phase(binary_to_atom(ExpStatus)),
+
+    case lists:member(AtmWorkflowExecutionId, list_phase_links_tree(ProviderSelector, SpaceId, Phase)) of
+        true ->
+            true;
+        false ->
+            LogFun("Error: workflow execution (id: ~s) not present in expected links tree: ~p", [
+                AtmWorkflowExecutionId, Phase
+            ]),
+            false
+    end.
+
+
+%% @private
+-spec list_phase_links_tree(
+    oct_background:entity_selector(),
+    od_space:id(),
+    atm_workflow_execution:phase()
+) ->
+    [atm_workflow_execution:id()].
+list_phase_links_tree(ProviderSelector, SpaceId, Phase) ->
+    TreeModule = case Phase of
         ?WAITING_PHASE -> atm_waiting_workflow_executions;
         ?ONGOING_PHASE -> atm_ongoing_workflow_executions;
         ?SUSPENDED_PHASE -> atm_suspended_workflow_executions;
         ?ENDED_PHASE -> atm_ended_workflow_executions
     end,
-    AtmWorkflowExecutionEntries = opw_test_rpc:call(ProviderSelector, TreeModule, list, [
-        SpaceId, #{offset => 0, limit => 100000000000000000}
-    ]),
-    case lists:any(fun({_, Id}) -> Id == AtmWorkflowExecutionId end, AtmWorkflowExecutionEntries) of
-        true ->
-            true;
-        false ->
-            LogFun("Error: workflow execution (id: ~s) not present in expected links tree: ~p", [
-                AtmWorkflowExecutionId, TreeModule
-            ]),
-            false
-    end.
+    ListOpts = #{offset => 0, limit => 100000000000000000},
+
+    lists:map(
+        fun({_Index, AtmWorkflowExecutionId}) -> AtmWorkflowExecutionId end,
+        ?rpc(ProviderSelector, TreeModule:list(SpaceId, ListOpts))
+    ).
 
 
 %% @private
@@ -1333,11 +1348,23 @@ assert_workflow_related_docs_deleted(#exp_workflow_execution_state_ctx{
     provider_selector = ProviderSelector,
     workflow_execution_id = AtmWorkflowExecutionId,
     exp_workflow_execution_state = #{
+        <<"spaceId">> := SpaceId,
         <<"systemAuditLogId">> := AtmAuditLogStoreId,
-        <<"lanes">> := ExpAtmLaneExecutionStates
+        <<"lanes">> := ExpAtmLaneExecutionStates,
+        <<"status">> := ExpStatus
     }
 }) ->
     try
+        Phase = atm_workflow_execution_status:status_to_phase(binary_to_atom(ExpStatus)),
+        ?assertNot(lists:member(
+            AtmWorkflowExecutionId,
+            list_phase_links_tree(ProviderSelector, SpaceId, Phase)
+        )),
+        ?assertNot(lists:member(
+            AtmWorkflowExecutionId,
+            ?rpc(ProviderSelector, atm_discarded_workflow_executions:list(<<>>, 100000000000000000))
+        )),
+
         ?assertEqual(
             ?ERROR_NOT_FOUND,
             ?rpc(ProviderSelector, atm_workflow_execution:get_including_discarded(AtmWorkflowExecutionId))
