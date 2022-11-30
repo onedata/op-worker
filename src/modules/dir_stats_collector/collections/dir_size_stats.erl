@@ -38,6 +38,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("cluster_worker/include/time_series/browsing.hrl").
 -include_lib("ctool/include/time_series/common.hrl").
+-include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 
@@ -211,14 +212,23 @@ init_dir(Guid) ->
 
 -spec init_child(file_id:file_guid()) -> dir_stats_collection:collection().
 init_child(Guid) ->
-    EmptyCurrentStats = gen_empty_current_stats(Guid),
+    EmptyCurrentStats = gen_empty_current_stats(Guid), % TODO VFS-9204 - maybe refactor as gen_empty_current_stats
+                                                       % gets storage_id that is also used by prepare_file_size_summary
     case file_meta:get_including_deleted(file_id:guid_to_uuid(Guid)) of
         {ok, Doc} ->
             case file_meta:get_type(Doc) of
                 ?DIRECTORY_TYPE ->
                     EmptyCurrentStats#{?DIR_COUNT => 1};
                 _ ->
-                    {FileSizes, _} = file_ctx:prepare_file_size_summary(file_ctx:new_by_guid(Guid)),
+                    FileSizes = try
+                        {Sizes, _} = file_ctx:prepare_file_size_summary(file_ctx:new_by_guid(Guid)),
+                        Sizes
+                    catch
+                        Error:Reason:Stacktrace ->
+                            ?error_stacktrace("Error initializing size stats for ~p: ~p:~p",
+                                [Guid, Error, Reason], Stacktrace),
+                            []
+                    end,
                     lists:foldl(fun
                         ({total, Size}, Acc) -> Acc#{?TOTAL_SIZE => Size};
                         ({StorageId, Size}, Acc) -> Acc#{?SIZE_ON_STORAGE(StorageId) => Size}
