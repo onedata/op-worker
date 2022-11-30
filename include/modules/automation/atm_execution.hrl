@@ -334,6 +334,8 @@
 ).
 
 
+-define(ATM_WORKER_SUP, atm_worker_sup).
+
 -define(ATM_SERVICE_NAME, <<"atm_service">>).
 -define(ATM_SERVICE_ID(), datastore_key:new_from_digest(?ATM_SERVICE_NAME)).
 

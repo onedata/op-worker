@@ -190,7 +190,11 @@ custom_workers() -> filter_disabled_workers([
     ]},
     {qos_worker, []},
     {middleware_worker, []},
-    {provider_rpc_worker, []}
+    {provider_rpc_worker, []},
+    {atm_worker, [
+        {supervisor_flags, atm_worker:supervisor_flags()},
+        {supervisor_children_spec, atm_worker:supervisor_children_spec()}
+    ], [{terminate_timeout, infinity}]}
 ]).
 
 %%--------------------------------------------------------------------
