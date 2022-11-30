@@ -262,7 +262,8 @@ monitor_workflow_execution(TestCtx0) ->
 
                 case has_workflow_stopped(TestCtx3) of
                     true ->
-                        test_garbage_collector(TestCtx3);
+                        test_garbage_collector(TestCtx3),
+                        TestCtx3#test_ctx.workflow_execution_exp_state;
                     false ->
                         TestCtx4 = begin_deferred_step_phase_executions_if_possible(TestCtx3),
                         monitor_workflow_execution(TestCtx4)
@@ -273,6 +274,9 @@ monitor_workflow_execution(TestCtx0) ->
 
 %% @private
 -spec test_garbage_collector(test_ctx()) -> ok | no_return().
+test_garbage_collector(#test_ctx{test_spec = #atm_workflow_execution_test_spec{test_gc = false}}) ->
+    ok;
+
 test_garbage_collector(#test_ctx{
     test_spec = #atm_workflow_execution_test_spec{provider = ProviderSelector},
     workflow_execution_exp_state = ExpState

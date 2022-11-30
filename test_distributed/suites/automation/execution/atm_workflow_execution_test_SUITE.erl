@@ -186,7 +186,9 @@
     resume_atm_workflow_execution_interrupted_after_some_tasks_finished/1,
 
     resume_atm_workflow_execution_paused_after_all_tasks_finished/1,
-    resume_atm_workflow_execution_interrupted_after_all_tasks_finished/1
+    resume_atm_workflow_execution_interrupted_after_all_tasks_finished/1,
+
+    garbage_collect_atm_workflow_executions/1
 ]).
 
 groups() -> [
@@ -379,6 +381,10 @@ groups() -> [
 
         resume_atm_workflow_execution_paused_after_all_tasks_finished,
         resume_atm_workflow_execution_interrupted_after_all_tasks_finished
+    ]},
+
+    {gc_tests, [], [
+        garbage_collect_atm_workflow_executions
     ]}
 ].
 
@@ -396,7 +402,8 @@ all() -> [
     {group, iteration_tests},
     {group, mapping_tests},
     {group, repeat_tests},
-    {group, resume_tests}
+    {group, resume_tests},
+    {group, gc_tests}
 ].
 
 
@@ -422,6 +429,7 @@ all() -> [
 -define(RUN_FINISH_TEST(), ?RUN_TEST(atm_workflow_execution_finish_tests)).
 -define(RUN_REPEAT_TEST(), ?RUN_TEST(atm_workflow_execution_repeat_tests)).
 -define(RUN_RESUME_TEST(), ?RUN_TEST(atm_workflow_execution_resume_tests)).
+-define(RUN_GC_TEST(), ?RUN_TEST(atm_workflow_execution_gc_tests)).
 
 
 %%%===================================================================
@@ -897,6 +905,10 @@ resume_atm_workflow_execution_interrupted_after_all_tasks_finished(_Config) ->
     ?RUN_RESUME_TEST().
 
 
+garbage_collect_atm_workflow_executions(_Config) ->
+    ?RUN_GC_TEST().
+
+
 %===================================================================
 % SetUp and TearDown functions
 %===================================================================
@@ -904,7 +916,9 @@ resume_atm_workflow_execution_interrupted_after_all_tasks_finished(_Config) ->
 
 init_per_suite(Config) ->
     ModulesToLoad = [
-        atm_workflow_execution_scheduling_tests
+        ?MODULE,
+        atm_workflow_execution_scheduling_tests,
+        atm_workflow_execution_gc_tests
         | ?ATM_WORKFLOW_EXECUTION_TEST_UTILS
     ],
     oct_background:init_per_suite(
@@ -960,6 +974,11 @@ init_per_group(TestGroup, Config) when
     TestGroup =:= resume_tests
 ->
     atm_workflow_execution_test_runner:init(?PROVIDER_SELECTOR),
+    Config;
+
+init_per_group(gc_tests, Config) ->
+    time_test_utils:freeze_time(Config),
+    atm_workflow_execution_test_runner:init(?PROVIDER_SELECTOR),
     Config.
 
 
@@ -985,6 +1004,19 @@ end_per_group(TestGroup, Config) when
     TestGroup =:= resume_tests
 ->
     atm_workflow_execution_test_runner:teardown(?PROVIDER_SELECTOR),
+    Config;
+
+end_per_group(gc_tests, Config) ->
+    % Reset atm gc env as it may have been tampered by gc tests
+    lists:foreach(fun({EnvVar, EnvValue}) ->
+        ?rpc(?PROVIDER_SELECTOR, op_worker:set_env(EnvVar, EnvValue))
+    end, [
+        {atm_workflow_execution_garbage_collector_run_interval_sec, 3600},
+        {atm_suspended_workflow_executions_expiration_interval_sec, 0},
+        {atm_ended_workflow_executions_expiration_interval_sec, 0}
+    ]),
+    atm_workflow_execution_test_runner:teardown(?PROVIDER_SELECTOR),
+    time_test_utils:unfreeze_time(Config),
     Config.
 
 

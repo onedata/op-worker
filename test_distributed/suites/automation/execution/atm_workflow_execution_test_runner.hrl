@@ -117,7 +117,8 @@
     store_initial_content_overlay = #{} :: atm_workflow_execution_api:store_initial_content_overlay(),
     callback_url = undefined :: undefined | http_client:url(),
 
-    incarnations :: [atm_workflow_execution_test_runner:incarnation_test_spec()]
+    incarnations :: [atm_workflow_execution_test_runner:incarnation_test_spec()],
+    test_gc = true :: boolean()
 }).
 
 
