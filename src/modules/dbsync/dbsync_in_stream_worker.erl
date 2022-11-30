@@ -244,7 +244,7 @@ handle_changes_batch(Since, Until, Timestamp, Docs,
         {Lower, _} when Lower < Seq ->
             case op_worker:get_env(reset_dbsync_changes_when_lower_seq_appears, false) of
                 true ->
-                    % Lower sequence can appear after source provider crash (some changes and counter has not been
+                    % Lower sequence can appear after source provider crash (some changes and counter have not been
                     % persisted) or when a batch had been lost and than applied with other batches from stash
                     case FBP of
                         true ->

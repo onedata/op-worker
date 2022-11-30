@@ -335,7 +335,7 @@ handle_changes_request(ProviderId, #changes_request2{
                 case dbsync_out_stream:try_terminate(Name, Since) of
                     ok ->
                         ?info("Changes request ~p from provider ~p while processing previous request. "
-                        "Terminate previous stream.", [Request, ProviderId]),
+                        "Terminating previous stream.", [Request, ProviderId]),
                         handle_changes_request(ProviderId, Request);
                     ignore ->
                         ?info("Changes request ~p from provider ~p while processing previous request. "
