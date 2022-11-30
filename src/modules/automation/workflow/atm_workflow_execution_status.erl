@@ -424,7 +424,7 @@ handle_discard(AtmWorkflowExecutionId) ->
         case infer_phase(Record) of
             ?SUSPENDED_PHASE -> {ok, Record#atm_workflow_execution{discarded = true}};
             ?ENDED_PHASE -> {ok, Record#atm_workflow_execution{discarded = true}};
-            _ -> ?ERROR_ATM_WORKFLOW_EXECUTION_NOT_ENDED  %% TODO add error NOT_STOPPED
+            _ -> ?ERROR_ATM_WORKFLOW_EXECUTION_NOT_STOPPED
         end
     end,
 
