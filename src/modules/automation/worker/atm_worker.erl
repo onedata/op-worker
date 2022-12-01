@@ -162,7 +162,8 @@ restart_atm_workflow_executions(SpaceId) ->
     end,
 
     atm_workflow_execution_api:foreach(SpaceId, ?WAITING_PHASE, CallbackFun),
-    atm_workflow_execution_api:foreach(SpaceId, ?ONGOING_PHASE, CallbackFun).
+    atm_workflow_execution_api:foreach(SpaceId, ?ONGOING_PHASE, CallbackFun),
+    atm_workflow_execution_api:foreach(SpaceId, ?SUSPENDED_PHASE, CallbackFun).
 
 
 %%--------------------------------------------------------------------
@@ -223,7 +224,7 @@ await_pause_atm_workflow_executions(UserCtx, SpaceIds, CountdownTimer) ->
 pause_atm_workflow_executions(UserCtx, SpaceId) when is_binary(SpaceId) ->
     CallbackFun = fun(AtmWorkflowExecutionId, _) ->
         try
-            atm_workflow_execution_handler:stop(UserCtx, AtmWorkflowExecutionId, pause)
+            atm_workflow_execution_handler:stop(UserCtx, AtmWorkflowExecutionId, op_worker_stopping)
         catch Type:Reason:Stacktrace ->
             ?atm_examine_error(Type, Reason, Stacktrace)
         end,
