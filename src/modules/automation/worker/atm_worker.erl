@@ -6,8 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module handle graceful atm workflow executions shutdown when stopping
-%%% Oneprovider.
+%%% This module handles atm workflow executions restart and graceful pause
+%%% when stopping Oneprovider.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(atm_worker).
@@ -16,6 +16,7 @@
 -behaviour(worker_plugin_behaviour).
 
 -include("modules/automation/atm_execution.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -29,6 +30,10 @@
 -define(RESTART_ATM_WORKFLOW_EXECUTIONS_MSG, restart_atm_workflow_executions).
 -define(RESTART_ATM_WORKFLOW_EXECUTIONS_RETRY_DELAY, op_worker:get_env(
     restart_atm_workflow_executions_retry_delay, 10000
+)).
+
+-define(PAUSE_ATM_WORKFLOW_EXECUTIONS_ON_PROVIDER_STOPPING_INTERVAL_SEC, op_worker:get_env(
+    atm_workflow_executions_pause_interval_on_provider_stopping_sec, 3600
 )).
 
 
@@ -93,8 +98,7 @@ handle(Request) ->
 %%--------------------------------------------------------------------
 -spec cleanup() -> ok.
 cleanup() ->
-    % @TODO VFS-9846 Implement graceful atm workflow execution shutdown when stopping op
-    ok.
+    await_pause_atm_workflow_executions().
 
 
 %%%===================================================================
@@ -159,6 +163,83 @@ restart_atm_workflow_executions(SpaceId) ->
 
     atm_workflow_execution_api:foreach(SpaceId, ?WAITING_PHASE, CallbackFun),
     atm_workflow_execution_api:foreach(SpaceId, ?ONGOING_PHASE, CallbackFun).
+
+
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% This function should be called only when provider is stopping to gracefully
+%% pause all running atm workflow executions. Executions that will fail to pause
+%% within configured time interval will be abruptly interrupted by provider
+%% shutdown.
+%% @end
+%%--------------------------------------------------------------------
+-spec await_pause_atm_workflow_executions() -> ok.
+await_pause_atm_workflow_executions() ->
+    case provider_logic:get_spaces() of
+        {ok, SpaceIds} ->
+            ?info("Starting atm_workflow_executions graceful pause procedure..."),
+
+            RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
+            CountdownTimer = countdown_timer:start_seconds(
+                ?PAUSE_ATM_WORKFLOW_EXECUTIONS_ON_PROVIDER_STOPPING_INTERVAL_SEC
+            ),
+            await_pause_atm_workflow_executions(RootUserCtx, SpaceIds, CountdownTimer);
+        {error, _} = Error ->
+            ?warning("Skipping atm_workflow_executions graceful pause procedure due to: ~p", [
+                Error
+            ])
+    end.
+
+
+%% @private
+-spec await_pause_atm_workflow_executions(
+    user_ctx:ctx(),
+    [od_space:id()],
+    countdown_timer:instance()
+) ->
+    ok.
+await_pause_atm_workflow_executions(UserCtx, SpaceIds, CountdownTimer) ->
+    case countdown_timer:is_expired(CountdownTimer) of
+        true ->
+            ?warning(
+                "atm_workflow_executions graceful pause procedure finished due to timeout "
+                "while not all executions were paused."
+            );
+        false ->
+            case pause_atm_workflow_executions(UserCtx, SpaceIds) of
+                true ->
+                    ?info("atm_workflow_executions graceful pause procedure finished succesfully.");
+                false ->
+                    timer:sleep(timer:seconds(1)),
+                    await_pause_atm_workflow_executions(UserCtx, SpaceIds, CountdownTimer)
+            end
+    end.
+
+
+%% @private
+-spec pause_atm_workflow_executions(user_ctx:ctx(), od_space:id() | [od_space:id()]) ->
+    AllPaused :: boolean().
+pause_atm_workflow_executions(UserCtx, SpaceId) when is_binary(SpaceId) ->
+    CallbackFun = fun(AtmWorkflowExecutionId, _) ->
+        try
+            atm_workflow_execution_handler:stop(UserCtx, AtmWorkflowExecutionId, pause)
+        catch Type:Reason:Stacktrace ->
+            ?atm_examine_error(Type, Reason, Stacktrace)
+        end,
+        false
+    end,
+
+    NoWaiting = atm_workflow_execution_api:foldl(SpaceId, ?WAITING_PHASE, CallbackFun, true),
+    NoOngoing = atm_workflow_execution_api:foldl(SpaceId, ?ONGOING_PHASE, CallbackFun, true),
+
+    NoWaiting andalso NoOngoing;
+
+pause_atm_workflow_executions(UserCtx, SpaceIds) when is_list(SpaceIds) ->
+    lists:all(
+        fun(AllPaused) -> AllPaused end,
+        lists:map(fun(SpaceId) -> pause_atm_workflow_executions(UserCtx, SpaceId) end, SpaceIds)
+    ).
 
 
 %% @private

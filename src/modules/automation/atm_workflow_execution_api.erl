@@ -37,7 +37,6 @@
 -author("Bartosz Walkowicz").
 
 -include("modules/automation/atm_execution.hrl").
--include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -133,7 +132,7 @@ foreach(SpaceId, Phase, Callback) ->
     fun((atm_workflow_execution:id(), AccIn :: term()) -> AccOut :: term()),
     InitialAcc :: term()
 ) ->
-    ok.
+    term().
 foldl(SpaceId, Phase, Callback, InitialAcc) ->
     foldl(SpaceId, Phase, Callback, InitialAcc, #{limit => 1000, start_index => <<>>}).
 
@@ -287,7 +286,7 @@ list_basic_entries(SpaceId, ?ENDED_PHASE, ListingOpts) ->
     InitialAcc :: term(),
     atm_workflow_executions_forest:listing_opts()
 ) ->
-    ok.
+    term().
 foldl(SpaceId, Phase, Callback, InitialAcc, ListingOpts) ->
     {ok, AtmWorkflowExecutionBasicEntries, IsLast} = list(SpaceId, Phase, basic, ListingOpts),
 
