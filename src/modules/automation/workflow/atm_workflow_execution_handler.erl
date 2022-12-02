@@ -109,7 +109,7 @@ start(UserCtx, AtmWorkflowExecutionEnv, #document{
 -spec stop(
     user_ctx:ctx(),
     atm_workflow_execution:id(),
-    cancel | pause
+    cancel | pause | op_worker_stopping
 ) ->
     ok | errors:error().
 stop(UserCtx, AtmWorkflowExecutionId, Reason) ->
@@ -190,29 +190,38 @@ resume(UserCtx, AtmWorkflowExecutionId) ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% This function should be called only after provider restart to handle
-%% stale (processes handling execution no longer exists) workflow.
-%% Specified workflow execution is:
-%% a) terminated as ?CRASHED/?CANCELLED/?FAILED if execution was already stopping
-%% b) terminated as ?INTERRUPTED otherwise (running execution was interrupted by
-%%    provider shutdown). In such case, it will be resumed.
+%% This function should be called only after provider restart to:
+%% 1. handle stale atm workflow executions (waiting or ongoing execution where
+%%    processes no longer exists). They are:
+%%    a) terminated as ?CRASHED/?CANCELLED/?FAILED if execution was already stopping
+%%    b) terminated as ?INTERRUPTED otherwise (running execution was interrupted by
+%%       provider shutdown). In such case, it will be resumed.
+%% 2. resume atm workflow executions paused due to op worker stopping.
 %% @end
 %%--------------------------------------------------------------------
 -spec on_provider_restart(atm_workflow_execution:id()) -> ok | no_return().
 on_provider_restart(AtmWorkflowExecutionId) ->
-    {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:get(AtmWorkflowExecutionId),
+    {ok, AtmWorkflowExecutionDoc = #document{value = AtmWorkflowExecution}} = atm_workflow_execution:get(
+        AtmWorkflowExecutionId
+    ),
     AtmWorkflowExecutionEnv = acquire_global_env(AtmWorkflowExecutionDoc),
 
     try
-        AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(AtmWorkflowExecutionEnv),
-        atm_lane_execution_handler:stop({current, current}, interrupt, AtmWorkflowExecutionCtx),
-        case shut_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) of
-            #document{value = #atm_workflow_execution{status = ?INTERRUPTED_STATUS}} ->
-                UserCtx = atm_workflow_execution_auth:get_user_ctx(atm_workflow_execution_ctx:get_auth(
-                    AtmWorkflowExecutionCtx
-                )),
-                resume(UserCtx, AtmWorkflowExecutionId);
-            _ ->
+        {ok, #atm_lane_execution_run{stopping_reason = StoppingReason}} = atm_lane_execution:get_run(
+            {current, current}, AtmWorkflowExecution
+        ),
+
+        case atm_workflow_execution_status:infer_phase(AtmWorkflowExecution) of
+            RunningPhase when
+                RunningPhase =:= ?WAITING_PHASE;
+                RunningPhase =:= ?ONGOING_PHASE
+            ->
+                restart_stale(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv);
+
+            ?SUSPENDED_PHASE when StoppingReason =:= op_worker_stopping ->
+                resume_paused_by_op_worker_stopping(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv);
+
+            ?SUSPENDED_PHASE ->
                 ok
         end
     catch throw:{session_acquisition_failed, _} = Reason ->
@@ -524,6 +533,37 @@ infer_progress_data_persistence_policy(#document{value = AtmWorkflowExecution}) 
 
 
 %% @private
+-spec restart_stale(atm_workflow_execution:id(), atm_workflow_execution_env:record()) -> ok.
+restart_stale(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv) ->
+    AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(AtmWorkflowExecutionEnv),
+    AtmWorkflowExecutionAuth = atm_workflow_execution_ctx:get_auth(AtmWorkflowExecutionCtx),
+    UserCtx = atm_workflow_execution_auth:get_user_ctx(AtmWorkflowExecutionAuth),
+
+    atm_lane_execution_handler:stop({current, current}, interrupt, AtmWorkflowExecutionCtx),
+
+    case shut_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) of
+        #document{value = #atm_workflow_execution{status = ?INTERRUPTED_STATUS}} ->
+            ok = resume(UserCtx, AtmWorkflowExecutionId);
+        _ ->
+            ok
+    end.
+
+
+%% @private
+-spec resume_paused_by_op_worker_stopping(
+    atm_workflow_execution:id(),
+    atm_workflow_execution_env:record()
+) ->
+    ok.
+resume_paused_by_op_worker_stopping(AtmWorkflowExecutionId, AtmWorkflowExecutionEnv) ->
+    AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(AtmWorkflowExecutionEnv),
+    AtmWorkflowExecutionAuth = atm_workflow_execution_ctx:get_auth(AtmWorkflowExecutionCtx),
+    UserCtx = atm_workflow_execution_auth:get_user_ctx(AtmWorkflowExecutionAuth),
+
+    ok = resume(UserCtx, AtmWorkflowExecutionId).
+
+
+%% @private
 -spec shut_workflow_execution(
     atm_workflow_execution:id(),
     atm_workflow_execution_ctx:record()
@@ -546,12 +586,20 @@ shut_workflow_execution(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
 ) ->
     ok.
 shut_workflow_execution_components(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
-    atm_workflow_execution_session:terminate(AtmWorkflowExecutionId),
     ensure_all_lane_runs_stopped(AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
     {ok, AtmWorkflowExecutionDoc} = delete_all_lane_runs_prepared_in_advance(
         AtmWorkflowExecutionId
     ),
-    freeze_global_stores(AtmWorkflowExecutionDoc).
+    freeze_global_stores(AtmWorkflowExecutionDoc),
+
+    case atm_lane_execution:get_run({current, current}, AtmWorkflowExecutionDoc#document.value) of
+        {ok, #atm_lane_execution_run{stopping_reason = op_worker_stopping}} ->
+            % Do not terminate session for executions paused due to op worker stopping
+            % as it will be resumed right after provider restarts
+            ok;
+        _ ->
+            atm_workflow_execution_session:terminate(AtmWorkflowExecutionId)
+    end.
 
 
 %% @private

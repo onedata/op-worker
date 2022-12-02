@@ -58,9 +58,6 @@
 
 % requests
 -define(PERIODICAL_SPACES_AUTOCLEANING_CHECK, periodical_spaces_autocleaning_check).
--define(REPORT_PROVIDER_RESTART_TO_ATM_WORKFLOW_EXECUTION_LAYER,
-    report_provider_restart_to_atm_workflow_execution_layer
-).
 -define(RERUN_TRANSFERS, rerun_transfers).
 -define(RESTART_AUTOCLEANING_RUNS, restart_autocleaning_runs).
 -define(INIT_EFFECTIVE_CACHES(Space), {init_effective_caches, Space}).
@@ -71,8 +68,6 @@
 % delays and intervals
 -define(AUTOCLEANING_PERIODICAL_SPACES_CHECK_INTERVAL,
     op_worker:get_env(autocleaning_periodical_spaces_check_interval, timer:minutes(1))).
--define(REPORT_PROVIDER_RESTART_TO_ATM_WORKFLOW_EXECUTION_LAYER_DELAY,
-    op_worker:get_env(report_provider_restart_to_atm_workflow_execution_layer_delay, 10000)).
 -define(RERUN_TRANSFERS_DELAY,
     op_worker:get_env(rerun_transfers_delay, 10000)).
 -define(RESTART_AUTOCLEANING_RUNS_DELAY,
@@ -194,7 +189,6 @@ init(_Args) ->
     archivisation_traverse:init_pool(),
 
     schedule_rerun_transfers(),
-    schedule_provider_restart_report_to_atm_workflow_execution_layer(),
     schedule_restart_autocleaning_runs(),
     schedule_periodical_spaces_autocleaning_check(),
 
@@ -231,10 +225,6 @@ init(_Args) ->
 handle(ping) ->
     pong;
 handle(healthcheck) ->
-    ok;
-handle(?REPORT_PROVIDER_RESTART_TO_ATM_WORKFLOW_EXECUTION_LAYER) ->
-    ?debug("Reporting stale atm workflow executions after provider restart"),
-    report_provider_restart_to_atm_workflow_execution(),
     ok;
 handle(?RERUN_TRANSFERS) ->
     ?debug("Rerunning unfinished transfers"),
@@ -682,13 +672,6 @@ handle_proxyio_request(UserCtx, #remote_read{offset = Offset, size = Size}, File
     read_write_req:read(UserCtx, FileCtx, HandleId, Offset, Size).
 
 
--spec schedule_provider_restart_report_to_atm_workflow_execution_layer() -> ok.
-schedule_provider_restart_report_to_atm_workflow_execution_layer() ->
-    schedule(
-        ?REPORT_PROVIDER_RESTART_TO_ATM_WORKFLOW_EXECUTION_LAYER,
-        ?REPORT_PROVIDER_RESTART_TO_ATM_WORKFLOW_EXECUTION_LAYER_DELAY
-    ).
-
 -spec schedule_rerun_transfers() -> ok.
 schedule_rerun_transfers() ->
     schedule(?RERUN_TRANSFERS, ?RERUN_TRANSFERS_DELAY).
@@ -730,28 +713,6 @@ periodical_spaces_autocleaning_check() ->
     catch
         Error2:Reason:Stacktrace ->
             ?error_stacktrace("Unable to trigger spaces auto-cleaning check due to: ~p", [{Error2, Reason}], Stacktrace)
-    end.
-
--spec report_provider_restart_to_atm_workflow_execution() -> ok.
-report_provider_restart_to_atm_workflow_execution() ->
-    try provider_logic:get_spaces() of
-        {ok, SpaceIds} ->
-            lists:foreach(fun atm_workflow_execution_api:report_provider_restart/1, SpaceIds);
-        ?ERROR_UNREGISTERED_ONEPROVIDER ->
-            schedule_provider_restart_report_to_atm_workflow_execution_layer();
-        ?ERROR_NO_CONNECTION_TO_ONEZONE ->
-            schedule_provider_restart_report_to_atm_workflow_execution_layer();
-        Error = {error, _} ->
-            ?error(
-                "Unable to report provider restart to atm workflow execution layer due to: ~p",
-                [Error]
-            )
-    catch Class:Reason:Stacktrace ->
-        ?error_stacktrace(
-            "Unable to report provider restart to atm workflow execution layer due to: ~p",
-            [{Class, Reason}],
-            Stacktrace
-        )
     end.
 
 -spec rerun_transfers() -> ok.
