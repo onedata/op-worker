@@ -22,6 +22,7 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_time_series.hrl").
 -include_lib("cluster_worker/include/audit_log.hrl").
 -include_lib("cluster_worker/include/modules/datastore/infinite_log.hrl").
 -include_lib("ctool/include/time_series/common.hrl").
@@ -194,7 +195,7 @@ get_counters_current_value(Id) ->
         {ok, Slice} ->
             {ok, maps:map(fun(_TimeSeriesName, #{?TOTAL_METRIC := Windows}) ->
                 case Windows of
-                    [{_Timestamp, {_Count, Value}}] ->
+                    [#window_info{value = Value}] ->
                         Value;
                     [] ->
                         0
