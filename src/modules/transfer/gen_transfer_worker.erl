@@ -39,7 +39,8 @@
 -record(state, {mod :: module()}).
 -type state() :: #state{}.
 
--define(LIST_BATCH_SIZE, 1000).
+-define(LIST_BATCH_SIZE, 100).
+-define(FILES_TO_PROCESS_THRESHOLD, 10 * ?LIST_BATCH_SIZE).
 
 %%%===================================================================
 %%% Callbacks
@@ -245,11 +246,15 @@ should_start(NextRetryTimestamp) ->
 transfer_data(State = #state{mod = Mod}, FileCtx0, Params, RetriesLeft) ->
     UserCtx = Params#transfer_params.user_ctx,
     AccessDefinitions = Mod:required_permissions(),
+    TransferId = Params#transfer_params.transfer_id,
 
     try
-        assert_transfer_is_ongoing(Params#transfer_params.transfer_id),
+        {ok, #document{value = Transfer}} = transfer:get(TransferId),
+
+        assert_transfer_is_ongoing(Transfer),
+
         FileCtx1 = fslogic_authz:ensure_authorized(UserCtx, FileCtx0, AccessDefinitions),
-        transfer_data_insecure(UserCtx, FileCtx1, State, Params)
+        transfer_data_insecure(UserCtx, FileCtx1, State, Transfer, Params)
     of
         ok ->
             ok;
@@ -271,9 +276,9 @@ transfer_data(State = #state{mod = Mod}, FileCtx0, Params, RetriesLeft) ->
 
 
 %% @private
--spec assert_transfer_is_ongoing(transfer:id()) -> ok | no_return().
-assert_transfer_is_ongoing(TransferId) ->
-    case transfer:is_ongoing(TransferId) of
+-spec assert_transfer_is_ongoing(transfer:transfer()) -> ok | no_return().
+assert_transfer_is_ongoing(Transfer) ->
+    case transfer:is_ongoing(Transfer) of
         true -> ok;
         false -> throw(already_ended)
     end.
@@ -357,9 +362,17 @@ backoff(RetryNum, MaxRetries) ->
 %% entire directory depending on file ctx).
 %% @end
 %%--------------------------------------------------------------------
--spec transfer_data_insecure(user_ctx:ctx(), file_ctx:ctx(), state(), transfer_params()) ->
+-spec transfer_data_insecure(
+    user_ctx:ctx(),
+    file_ctx:ctx(),
+    state(),
+    transfer:transfer(),
+    transfer_params()
+) ->
     ok | {error, term()}.
-transfer_data_insecure(_, FileCtx, State, Params = #transfer_params{iterator = undefined}) ->
+transfer_data_insecure(_, FileCtx, State, _Transfer, Params = #transfer_params{
+    iterator = undefined
+}) ->
     case file_ctx:file_exists_const(FileCtx) of
         true ->
             CallbackModule = State#state.mod,
@@ -368,7 +381,15 @@ transfer_data_insecure(_, FileCtx, State, Params = #transfer_params{iterator = u
             {error, not_found}
     end;
 
-transfer_data_insecure(UserCtx, RootFileCtx, State, Params = #transfer_params{
+transfer_data_insecure(_UserCtx, RootFileCtx, State, #transfer{files_to_process = FTP}, Params) when
+    FTP > ?FILES_TO_PROCESS_THRESHOLD
+->
+    % Postpone next file batch scheduling to ensure there are not enormous number
+    % of files already scheduled to process
+    CallbackModule = State#state.mod,
+    CallbackModule:enqueue_data_transfer(RootFileCtx, Params);
+
+transfer_data_insecure(UserCtx, RootFileCtx, State, _Transfer, Params = #transfer_params{
     transfer_id = TransferId,
     iterator = Iterator
 }) ->
