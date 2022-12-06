@@ -649,9 +649,4 @@ lane2_task1_expect_task_execution_failed(#atm_mock_call_ctx{
     workflow_execution_exp_state = ExpState0,
     call_args = [_AtmWorkflowExecutionId, _AtmWorkflowExecutionEnv, AtmTaskExecutionId]
 }) ->
-    ExpState1 = atm_workflow_execution_exp_state_builder:expect_task_failed(
-        AtmTaskExecutionId, ExpState0
-    ),
-    {true, atm_workflow_execution_exp_state_builder:expect_task_parallel_box_transitioned_to_inferred_status(
-        AtmTaskExecutionId, fun(_, _) -> <<"failed">> end, ExpState1
-    )}.
+    {true, atm_workflow_execution_exp_state_builder:expect_task_failed(AtmTaskExecutionId, ExpState0)}.

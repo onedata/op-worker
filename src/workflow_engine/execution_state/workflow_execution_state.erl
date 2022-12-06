@@ -1716,6 +1716,15 @@ prepare_next_waiting_job(State = #workflow_execution_state{
 prepare_next_waiting_job(State = #workflow_execution_state{
     execution_status = #execution_cancelled{
         call_count = 0, is_interrupted = true, callbacks_to_execute = []
+    },
+    jobs = undefined % execution interrupted before first lane preparation finish
+}) ->
+    {ok, State#workflow_execution_state{
+        update_report = ?EXECUTION_CANCELLED_REPORT([], [])
+    }};
+prepare_next_waiting_job(State = #workflow_execution_state{
+    execution_status = #execution_cancelled{
+        call_count = 0, is_interrupted = true, callbacks_to_execute = []
     } = Status,
     jobs = Jobs,
     iteration_state = IterationState,

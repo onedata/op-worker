@@ -116,7 +116,7 @@ delete_files_structure_test_base(Config, FilesStructure, TimeWarpSecs, ExpectedR
     RootDirCtx = file_ctx:new_by_guid(RootGuid),
     UserCtx = rpc:call(P1Node, user_ctx, new, [UserSessIdP1]),
 
-    {ok, TaskId} = rpc:call(P1Node, tree_deletion_traverse, start, [RootDirCtx, UserCtx, false, ?SPACE_UUID]),
+    {ok, TaskId} = rpc:call(P1Node, tree_deletion_traverse, start, [RootDirCtx, UserCtx, false, ?SPACE_UUID, DirName]),
     simulate_time_warp(Config, TimeWarpSecs),
 
     await_traverse_finished(TaskId),

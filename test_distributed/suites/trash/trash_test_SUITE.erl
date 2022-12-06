@@ -427,7 +427,7 @@ move_to_trash_and_schedule_deletion_should_work(_Config) ->
     DirCtx = file_ctx:new_by_guid(DirGuid),
 
     move_to_trash(P1Node, DirCtx, UserSessIdP1),
-    schedule_deletion_from_trash(P1Node, DirCtx, UserSessIdP1, ?SPACE_UUID),
+    schedule_deletion_from_trash(P1Node, DirCtx, UserSessIdP1, ?SPACE_UUID, DirName),
 
     lfm_test_utils:assert_space_and_trash_are_empty(P1Node, ?SPACE_ID1, ?ATTEMPTS),
     lfm_test_utils:assert_space_and_trash_are_empty(P2Node, ?SPACE_ID1, ?ATTEMPTS),
@@ -619,7 +619,7 @@ long_lasting_deletion_test_base(_Config, TimeWarpsCount,
     mock_traverse_finished(P1Node, self()),
 
     move_to_trash(P1Node, DirCtx, UserSessIdP1),
-    {ok, TaskId} = schedule_deletion_from_trash(P1Node, DirCtx, UserSessIdP1, ?SPACE_UUID),
+    {ok, TaskId} = schedule_deletion_from_trash(P1Node, DirCtx, UserSessIdP1, ?SPACE_UUID, DirName),
 
     lists:foreach(fun(_) ->
         % simulate that a TimeWarpPeriod time warp occurred during deletion from trash
@@ -696,9 +696,9 @@ move_to_trash(Worker, FileCtx, SessId) ->
     UserCtx = rpc:call(Worker, user_ctx, new, [SessId]),
     rpc:call(Worker, trash, move_to_trash, [FileCtx, UserCtx]).
 
-schedule_deletion_from_trash(Worker, FileCtx, SessId, RootOriginalParentUuid) ->
+schedule_deletion_from_trash(Worker, FileCtx, SessId, RootOriginalParentUuid, DirName) ->
     UserCtx = rpc:call(Worker, user_ctx, new, [SessId]),
-    rpc:call(Worker, trash, schedule_deletion_from_trash, [FileCtx, UserCtx, false, RootOriginalParentUuid]).
+    rpc:call(Worker, trash, schedule_deletion_from_trash, [FileCtx, UserCtx, false, RootOriginalParentUuid, DirName]).
 
 register_file(Worker, User, Body) ->
     Headers = #{

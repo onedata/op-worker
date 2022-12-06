@@ -363,23 +363,13 @@ create_initial_files() ->
 -spec build_handle_task_execution_stopped_mock_spec_for_skipped_tasks() ->
     atm_execution_test_runner:step_mock_spec().
 build_handle_task_execution_stopped_mock_spec_for_skipped_tasks() ->
-    CommonExpectations = [
-        % No job was ever executed so lane run transitions to active status just now
-        {lane_run, {1, 1}, active},
-        {task, ?TASK_ID_PLACEHOLDER, skipped}
-    ],
     #atm_step_mock_spec{
         after_step_exp_state_diff = atm_workflow_execution_test_utils:build_task_step_exp_state_diff(#{
-            [<<"task1">>, <<"task2">>] => CommonExpectations ++ [
-                % parallel box with 2 tasks - it should transition to:
-                % - active when first task skipped
-                % - skipped after second task skipped
-                {task, ?TASK_ID_PLACEHOLDER, parallel_box_transitioned_to_inferred_status, fun
-                    (<<"pending">>, [<<"pending">>, <<"skipped">>]) -> <<"active">>;
-                    (<<"active">>, [<<"skipped">>]) -> <<"skipped">>
-                end}
-            ],
-            <<"task3">> => CommonExpectations ++ [{parallel_box, ?PB_SELECTOR_PLACEHOLDER, skipped}]
+            [<<"task1">>, <<"task2">>, <<"task3">>] => [
+                % No job was ever executed so lane run transitions to active status just now
+                {lane_run, {1, 1}, active},
+                {task, ?TASK_ID_PLACEHOLDER, skipped}
+            ]
         })
     }.
 

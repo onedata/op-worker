@@ -85,8 +85,23 @@
     pause_active_atm_workflow_execution_with_uncorrelated_task_results/1,
 
     pause_interrupted_atm_workflow_execution/1,
+    pause_resuming_interrupted_atm_workflow_execution/1,
 
-    interrupt_ongoing_atm_workflow_execution_due_to_expired_session/1,
+    interrupt_scheduled_atm_workflow_execution_due_to_internal_exception/1,
+    interrupt_scheduled_atm_workflow_execution_due_to_external_abandon/1,
+
+    interrupt_enqueued_atm_workflow_execution_due_to_internal_exception/1,
+    interrupt_enqueued_atm_workflow_execution_due_to_external_abandon/1,
+
+    interrupt_active_atm_workflow_execution_with_no_uncorrelated_task_results_due_to_internal_exception/1,
+    interrupt_active_atm_workflow_execution_with_uncorrelated_task_results_due_to_internal_exception/1,
+    interrupt_active_atm_workflow_execution_with_no_uncorrelated_task_results_due_to_external_abandon/1,
+    interrupt_active_atm_workflow_execution_with_uncorrelated_task_results_due_to_external_abandon/1,
+
+    interrupt_paused_atm_workflow_execution/1,
+
+    interrupt_resuming_paused_atm_workflow_execution_due_to_internal_exception/1,
+    interrupt_resuming_paused_atm_workflow_execution_due_to_external_abandon/1,
 
     crash_atm_workflow_execution_during_prepare_lane_callback/1,
     crash_atm_workflow_execution_during_resume_lane_callback/1,
@@ -245,11 +260,26 @@ groups() -> [
         pause_active_atm_workflow_execution_with_no_uncorrelated_task_results,
         pause_active_atm_workflow_execution_with_uncorrelated_task_results,
 
-        pause_interrupted_atm_workflow_execution
+        pause_interrupted_atm_workflow_execution,
+        pause_resuming_interrupted_atm_workflow_execution
     ]},
 
     {interrupt_tests, [], [
-        interrupt_ongoing_atm_workflow_execution_due_to_expired_session
+        interrupt_scheduled_atm_workflow_execution_due_to_internal_exception,
+        interrupt_scheduled_atm_workflow_execution_due_to_external_abandon,
+
+        interrupt_enqueued_atm_workflow_execution_due_to_internal_exception,
+        interrupt_enqueued_atm_workflow_execution_due_to_external_abandon,
+
+        interrupt_active_atm_workflow_execution_with_no_uncorrelated_task_results_due_to_internal_exception,
+        interrupt_active_atm_workflow_execution_with_uncorrelated_task_results_due_to_internal_exception,
+        interrupt_active_atm_workflow_execution_with_no_uncorrelated_task_results_due_to_external_abandon,
+        interrupt_active_atm_workflow_execution_with_uncorrelated_task_results_due_to_external_abandon,
+
+        interrupt_paused_atm_workflow_execution,
+
+        interrupt_resuming_paused_atm_workflow_execution_due_to_internal_exception,
+        interrupt_resuming_paused_atm_workflow_execution_due_to_external_abandon
     ]},
 
     {crash_tests, [], [
@@ -575,7 +605,51 @@ pause_interrupted_atm_workflow_execution(_Config) ->
     ?RUN_PAUSE_TEST().
 
 
-interrupt_ongoing_atm_workflow_execution_due_to_expired_session(_Config) ->
+pause_resuming_interrupted_atm_workflow_execution(_Config) ->
+    ?RUN_PAUSE_TEST().
+
+
+interrupt_scheduled_atm_workflow_execution_due_to_internal_exception(_Config) ->
+    ?RUN_INTERRUPT_TEST().
+
+
+interrupt_scheduled_atm_workflow_execution_due_to_external_abandon(_Config) ->
+    ?RUN_INTERRUPT_TEST().
+
+
+interrupt_enqueued_atm_workflow_execution_due_to_internal_exception(_Config) ->
+    ?RUN_INTERRUPT_TEST().
+
+
+interrupt_enqueued_atm_workflow_execution_due_to_external_abandon(_Config) ->
+    ?RUN_INTERRUPT_TEST().
+
+
+interrupt_active_atm_workflow_execution_with_no_uncorrelated_task_results_due_to_internal_exception(_Config) ->
+    ?RUN_INTERRUPT_TEST().
+
+
+interrupt_active_atm_workflow_execution_with_uncorrelated_task_results_due_to_internal_exception(_Config) ->
+    ?RUN_INTERRUPT_TEST().
+
+
+interrupt_active_atm_workflow_execution_with_no_uncorrelated_task_results_due_to_external_abandon(_Config) ->
+    ?RUN_INTERRUPT_TEST().
+
+
+interrupt_active_atm_workflow_execution_with_uncorrelated_task_results_due_to_external_abandon(_Config) ->
+    ?RUN_INTERRUPT_TEST().
+
+
+interrupt_paused_atm_workflow_execution(_Config) ->
+    ?RUN_INTERRUPT_TEST().
+
+
+interrupt_resuming_paused_atm_workflow_execution_due_to_internal_exception(_Config) ->
+    ?RUN_INTERRUPT_TEST().
+
+
+interrupt_resuming_paused_atm_workflow_execution_due_to_external_abandon(_Config) ->
     ?RUN_INTERRUPT_TEST().
 
 
@@ -883,7 +957,6 @@ init_per_group(TestGroup, Config) when
     TestGroup =:= repeat_tests;
     TestGroup =:= resume_tests
 ->
-    atm_openfaas_task_executor_mock:init(?PROVIDER_SELECTOR, atm_openfaas_docker_mock),
     atm_workflow_execution_test_runner:init(?PROVIDER_SELECTOR),
     Config.
 
@@ -910,7 +983,6 @@ end_per_group(TestGroup, Config) when
     TestGroup =:= resume_tests
 ->
     atm_workflow_execution_test_runner:teardown(?PROVIDER_SELECTOR),
-    atm_openfaas_task_executor_mock:teardown(?PROVIDER_SELECTOR),
     Config.
 
 
