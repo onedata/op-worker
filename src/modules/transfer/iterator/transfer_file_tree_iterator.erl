@@ -55,11 +55,11 @@ get_next_batch(UserCtx, Limit, Iterator = #transfer_file_tree_iterator{
     root_file_ctx = RootFileCtx,
     pagination_token = PaginationToken
 }) ->
-    Opts = #{
+    ListOpts = maps_utils:remove_undefined(#{
         limit => Limit,
         pagination_token => PaginationToken,
         include_directories => false
-    },
+    }),
 
     try
         #provider_response{
@@ -67,7 +67,7 @@ get_next_batch(UserCtx, Limit, Iterator = #transfer_file_tree_iterator{
                 entries = Entries,
                 pagination_token = NextPaginationToken
             }
-        } = dir_req:list_recursively(UserCtx, RootFileCtx, Opts, []),
+        } = dir_req:list_recursively(UserCtx, RootFileCtx, ListOpts, []),
 
         ProgressMarker = case NextPaginationToken of
             undefined -> done;
@@ -84,9 +84,11 @@ get_next_batch(UserCtx, Limit, Iterator = #transfer_file_tree_iterator{
 
         {ProgressMarker, Results, NewIterator}
 
-    catch _:Reason ->
-        ?error("Recursive listing failed due to ~p when processing transfer ~p", [
-            Reason, TransferId
-        ]),
+    catch _:Reason:Stacktrace ->
+        ?error_stacktrace(
+            "Recursive listing failed due to ~p when processing transfer ~p",
+            [Reason, TransferId],
+            Stacktrace
+        ),
         {error, datastore_runner:normalize_error(Reason)}
     end.
