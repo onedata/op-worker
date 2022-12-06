@@ -876,7 +876,7 @@ start_pools() ->
     {ok, _} = worker_pool:start_sup_pool(?REPLICATION_WORKERS_POOL, [
         {workers, ?REPLICATION_WORKERS_NUM},
         {worker, {gen_transfer_worker, [?REPLICATION_WORKER]}},
-        {queue_type, lifo}
+        {queue_type, fifo}
     ]),
     {ok, _} = worker_pool:start_sup_pool(?REPLICATION_CONTROLLERS_POOL, [
         {workers, ?REPLICATION_CONTROLLERS_NUM},
@@ -885,7 +885,7 @@ start_pools() ->
     {ok, _} = worker_pool:start_sup_pool(?REPLICA_EVICTION_WORKERS_POOL, [
         {workers, ?REPLICA_EVICTION_WORKERS_NUM},
         {worker, {gen_transfer_worker, [?REPLICA_EVICTION_WORKER]}},
-        {queue_type, lifo}
+        {queue_type, fifo}
     ]),
     ok.
 

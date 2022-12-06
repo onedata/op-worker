@@ -487,9 +487,7 @@ new_replication_or_migration(#document{
     value = Transfer = #transfer{
         file_uuid = FileUuid,
         space_id = SpaceId,
-        callback = Callback,
-        index_name = ViewName,
-        query_view_params = QueryViewParams
+        callback = Callback
     }
 }) ->
     FileGuid = file_id:pack_guid(FileUuid, SpaceId),
@@ -499,9 +497,7 @@ new_replication_or_migration(#document{
         TransferId,
         FileGuid,
         Callback,
-        transfer:is_migration(Transfer),
-        ViewName,
-        QueryViewParams
+        transfer:is_migration(Transfer)
     }).
 
 

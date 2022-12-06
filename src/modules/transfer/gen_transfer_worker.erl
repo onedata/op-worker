@@ -39,7 +39,7 @@
 -record(state, {mod :: module()}).
 -type state() :: #state{}.
 
--define(DOC_ID_MISSING, doc_id_missing).
+-define(LIST_BATCH_SIZE, 1000).
 
 %%%===================================================================
 %%% Callbacks
@@ -247,6 +247,7 @@ transfer_data(State = #state{mod = Mod}, FileCtx0, Params, RetriesLeft) ->
     AccessDefinitions = Mod:required_permissions(),
 
     try
+        assert_transfer_is_ongoing(Params#transfer_params.transfer_id),
         FileCtx1 = fslogic_authz:ensure_authorized(UserCtx, FileCtx0, AccessDefinitions),
         transfer_data_insecure(UserCtx, FileCtx1, State, Params)
     of
@@ -266,6 +267,15 @@ transfer_data(State = #state{mod = Mod}, FileCtx0, Params, RetriesLeft) ->
                 Error, Reason, Params#transfer_params.transfer_id
             ], Stacktrace),
             maybe_retry(FileCtx0, Params, RetriesLeft, {Error, Reason})
+    end.
+
+
+%% @private
+-spec assert_transfer_is_ongoing(transfer:id()) -> ok | no_return().
+assert_transfer_is_ongoing(TransferId) ->
+    case transfer:is_ongoing(TransferId) of
+        true -> ok;
+        false -> throw(already_ended)
     end.
 
 
@@ -349,159 +359,41 @@ backoff(RetryNum, MaxRetries) ->
 %%--------------------------------------------------------------------
 -spec transfer_data_insecure(user_ctx:ctx(), file_ctx:ctx(), state(), transfer_params()) ->
     ok | {error, term()}.
-transfer_data_insecure(_, FileCtx, State, Params = #transfer_params{view_name = undefined}) ->
-    transfer_fs_subtree(State, FileCtx, Params);
-transfer_data_insecure(_, FileCtx, State, Params) ->
-    transfer_files_from_view(State, FileCtx, Params, undefined).
-
-
-%% @private
--spec enqueue_files_transfer(state(), [file_ctx:ctx()], transfer_params()) -> ok.
-enqueue_files_transfer(#state{mod = Mod}, FileCtxs, TransferParams) ->
-    lists:foreach(fun(FileCtx) ->
-        Mod:enqueue_data_transfer(FileCtx, TransferParams, undefined, undefined)
-    end, FileCtxs).
-
-
-%% @private
--spec transfer_fs_subtree(state(), file_ctx:ctx(), transfer_params()) ->
-    ok | {error, term()}.
-transfer_fs_subtree(State = #state{mod = Mod}, FileCtx, Params) ->
-    case transfer:is_ongoing(Params#transfer_params.transfer_id) of
+transfer_data_insecure(_, FileCtx, State, Params = #transfer_params{iterator = undefined}) ->
+    case file_ctx:file_exists_const(FileCtx) of
         true ->
-            case file_ctx:file_exists_const(FileCtx) of
-                true ->
-                    case file_ctx:is_dir(FileCtx) of
-                        {true, FileCtx2} ->
-                            ListOpts = #{tune_for_large_continuous_listing => true},
-                            transfer_dir(State, FileCtx2, ListOpts, Params);
-                        {false, FileCtx2} ->
-                            Mod:transfer_regular_file(FileCtx2, Params)
-                    end;
-                false ->
-                    {error, not_found}
-            end;
+            CallbackModule = State#state.mod,
+            CallbackModule:transfer_regular_file(FileCtx, Params);
         false ->
-            throw(already_ended)
-    end.
+            {error, not_found}
+    end;
 
-
-%% @private
--spec transfer_dir(state(), file_ctx:ctx(), file_listing:options(), transfer_params()) ->
-    ok | {error, term()}.
-transfer_dir(State, FileCtx, ListOpts, TransferParams = #transfer_params{
+transfer_data_insecure(UserCtx, RootFileCtx, State, Params = #transfer_params{
     transfer_id = TransferId,
-    user_ctx = UserCtx
+    iterator = Iterator
 }) ->
-    {Children, ListingPaginationToken, FileCtx2} = file_tree:list_children(FileCtx, UserCtx, ListOpts),
+    CallbackModule = State#state.mod,
 
-    Length = length(Children),
+    {ProgressMarker, Results, NewIterator} = transfer_iterator:get_next_batch(
+        UserCtx, ?LIST_BATCH_SIZE, Iterator
+    ),
+
+    Length = length(Results),
     transfer:increment_files_to_process_counter(TransferId, Length),
-    enqueue_files_transfer(State, Children, TransferParams),
+    RegularFileTransferParams = Params#transfer_params{iterator = undefined},
+    lists:foreach(fun
+        (error) ->
+            transfer:increment_files_failed_and_processed_counters(TransferId);
+        ({ok, FileCtx}) ->
+            CallbackModule:enqueue_data_transfer(FileCtx, RegularFileTransferParams)
+    end, Results),
 
-    case file_listing:is_finished(ListingPaginationToken) of
-        true ->
+    case ProgressMarker of
+        done ->
             transfer:increment_files_processed_counter(TransferId),
             ok;
-        false ->
-            transfer_dir(State, FileCtx2, #{pagination_token => ListingPaginationToken}, TransferParams)
-    end.
-
-
-%% @private
--spec transfer_files_from_view(state(), file_ctx:ctx(), transfer_params(),
-    file_meta:uuid() | undefined | ?DOC_ID_MISSING) -> ok | {error, term()}.
-transfer_files_from_view(State = #state{mod = Mod}, FileCtx, Params, LastDocId) ->
-    case transfer:is_ongoing(Params#transfer_params.transfer_id) of
-        true ->
-            Chunk = Mod:view_querying_chunk_size(),
-            transfer_files_from_view(State, FileCtx, Params, Chunk, LastDocId);
-        false ->
-            throw(already_ended)
-    end.
-
-
-%% @private
--spec transfer_files_from_view(state(), file_ctx:ctx(), transfer_params(),
-    non_neg_integer(), file_meta:uuid() | undefined | ?DOC_ID_MISSING) -> ok | {error, term()}.
-transfer_files_from_view(State, FileCtx, Params, Chunk, LastDocId) ->
-    #transfer_params{
-        transfer_id = TransferId,
-        view_name = ViewName,
-        query_view_params = QueryViewParams
-    } = Params,
-
-    QueryViewParams2 = case LastDocId of
-        undefined ->
-            [{skip, 0} | QueryViewParams];
-        ?DOC_ID_MISSING ->
-            % doc_id is missing when view has reduce function defined
-            % in such case we must iterate over results using limit and skip
-            [{skip, Chunk} | QueryViewParams];
-        _ ->
-            [{skip, 1}, {startkey_docid, LastDocId} | QueryViewParams]
-    end,
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-
-    case index:query(SpaceId, ViewName, [{limit, Chunk} | QueryViewParams2]) of
-        {ok, #{<<"rows">> := Rows}} ->
-            {NewLastDocId, FileCtxs} = lists:foldl(fun(Row, {_LastDocId, FileCtxsIn}) ->
-                Value = maps:get(<<"value">>, Row),
-                DocId = maps:get(<<"id">>, Row, ?DOC_ID_MISSING),
-                ObjectIds = case is_list(Value) of
-                    true -> lists:flatten(Value);
-                    false -> [Value]
-                end,
-                transfer:increment_files_to_process_counter(TransferId, length(ObjectIds)),
-                NewFileCtxs = lists:filtermap(fun(O) ->
-                    try
-                        {ok, G} = file_id:objectid_to_guid(O),
-                        NewFileCtx0 = file_ctx:new_by_guid(G), % TODO VFS-7443 - maybe use referenced guid?
-                        case file_ctx:file_exists_const(NewFileCtx0) of
-                            true ->
-                                % TODO VFS-6386 Enable and test view transfer with dirs
-                                case file_ctx:is_dir(NewFileCtx0) of
-                                    {true, _} ->
-                                        transfer:increment_files_processed_counter(TransferId),
-                                        false;
-                                    {false, NewFileCtx1} ->
-                                        {true, NewFileCtx1}
-                                end;
-                            false ->
-                                % TODO VFS-4218 currently we silently omit garbage
-                                % returned from view (view can return anything)
-                                transfer:increment_files_processed_counter(TransferId),
-                                false
-                        end
-                    catch
-                        Error:Reason:Stacktrace   ->
-                            transfer:increment_files_failed_and_processed_counters(TransferId),
-                            ?error_stacktrace(
-                                "Processing result of query view ~p "
-                                "in space ~p failed due to ~p:~p", [
-                                    ViewName, SpaceId, Error, Reason
-                                ],
-                                Stacktrace  
-                            ),
-                            false
-                    end
-                end, ObjectIds),
-                {DocId, FileCtxsIn ++ NewFileCtxs}
-            end, {undefined, []}, Rows),
-
-            enqueue_files_transfer(State, FileCtxs, Params#transfer_params{
-                view_name = undefined, query_view_params = undefined
-            }),
-            case length(Rows) < Chunk of
-                true ->
-                    transfer:increment_files_processed_counter(TransferId),
-                    ok;
-                false ->
-                    transfer_files_from_view(State, FileCtx, Params, NewLastDocId)
-            end;
-        Error = {error, Reason} ->
-            ?error("Querying view ~p failed due to ~p when processing transfer ~p", [
-                ViewName, Reason, TransferId
-            ]),
-            Error
+        more ->
+            CallbackModule:enqueue_data_transfer(RootFileCtx, Params#transfer_params{
+                iterator = NewIterator
+            })
     end.

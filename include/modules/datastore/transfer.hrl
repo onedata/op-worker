@@ -85,6 +85,8 @@
     transfer_id :: transfer:id(),
     user_ctx :: user_ctx:ctx(),
 
+    iterator :: undefined | transfer_iterator:record(),
+
     % Those fields are specified only for transfers by view.
     % Otherwise are left undefined.
     view_name = undefined :: transfer:view_name(),

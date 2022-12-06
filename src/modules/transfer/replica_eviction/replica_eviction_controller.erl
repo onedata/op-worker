@@ -145,22 +145,19 @@ handle_cast(start_replica_eviction, State = #state{
     transfer_id = TransferId,
     session_id = SessionId,
     file_guid = FileGuid,
-    supporting_provider_id = SupportingProviderId,
-    view_name = ViewName,
-    query_view_params = QueryViewParams
+    supporting_provider_id = SupportingProviderId
 }) ->
     flush(),
     case replica_eviction_status:handle_active(TransferId) of
-        {ok, _} ->
+        {ok, TransferDoc} ->
             FileCtx = file_ctx:new_by_guid(FileGuid), % TODO VFS-7443 - maybe use referenced guid?
-            TransferParams = #transfer_params{
+
+            replica_eviction_worker:enqueue_data_transfer(FileCtx, #transfer_params{
                 transfer_id = TransferId,
                 user_ctx = user_ctx:new(SessionId),
-                view_name = ViewName,
-                query_view_params = QueryViewParams,
+                iterator = transfer_iterator:build(TransferDoc),
                 supporting_provider = SupportingProviderId
-            },
-            replica_eviction_worker:enqueue_data_transfer(FileCtx, TransferParams),
+            }),
             {noreply, State#state{status = ?ACTIVE_STATUS}};
         {error, ?ACTIVE_STATUS} ->
             {ok, _} = transfer:set_controller_process(TransferId),
