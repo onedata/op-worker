@@ -20,6 +20,8 @@
 %% functions operating on document using datastore model API
 -export([create/3, get/1, finish/2, list/4]).
 
+-export([encode_token/1, decode_token/1, is_last/1]).
+
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_version/0, get_record_struct/1]).
 
@@ -29,7 +31,11 @@
 
 -type id() :: datastore_model:key().
 -type path() :: binary().
--type pagination_token() :: binary().
+-type pagination_token() :: #{
+    token => datastore_links_iter:token(),
+    prev_link_name => datastore_links:link_name(),
+    is_last => boolean()
+}.
 -type record() :: #multipart_upload{}.
 
 -export_type([id/0, path/0, pagination_token/0, record/0]).
@@ -58,9 +64,9 @@ finish(UserId, UploadId) ->
         {ok, #document{value = #multipart_upload{path = Path, creation_time = CreationTime, space_id = SpaceId}}} ->
             LinkKey = build_link_key(Path, CreationTime),
             Scope = get_upload_scope(SpaceId, UserId),
+            ok = datastore_model:delete(?CTX, UploadId),
             ok = multipart_upload_part:cleanup(UploadId),
-            ok = datastore_model:delete_links(?CTX, Scope, oneprovider:get_id(), LinkKey),
-            ok = datastore_model:delete(?CTX, UploadId);
+            ok = datastore_model:delete_links(?CTX, Scope, oneprovider:get_id(), LinkKey);
         {error, _} = Error ->
             Error
     end.
@@ -76,7 +82,7 @@ get(UploadId) ->
 list(SpaceId, UserId, Limit, PaginationToken) ->
     BaseOpts = case PaginationToken of
         undefined -> #{token => #link_token{}};
-        _ -> binary_to_term(base64url:decode(PaginationToken))
+        _ -> maps:remove(is_last, PaginationToken)
     end,
     FoldFun = fun(#link{name = PathAndTimestamp, target = UploadId}, Acc) -> 
         {ok, [{UploadId, PathAndTimestamp} | Acc]} 
@@ -89,12 +95,15 @@ list(SpaceId, UserId, Limit, PaginationToken) ->
         ?CTX, get_upload_scope(SpaceId, UserId), oneprovider:get_id(), FoldFun, [], Opts),
     NextToken = case {ReversedLinks, DatastoreToken#link_token.is_last} of
         {[{_, LastLinkName} | _], false} ->
-            base64url:encode(term_to_binary(#{
+            #{
                 token => DatastoreToken,
-                prev_link_name => LastLinkName
-            }));
-        _ -> 
-            undefined
+                prev_link_name => LastLinkName,
+                is_last => false
+            };
+        _ ->
+            #{
+                is_last => true
+            }
     end,
     FinalList = lists:foldl(fun({UploadId, LinkKey}, Acc) ->
         {Path, CreationTime} = split_link_key(LinkKey),
@@ -105,6 +114,21 @@ list(SpaceId, UserId, Limit, PaginationToken) ->
         } | Acc]
     end, [], ReversedLinks),
     {ok, FinalList, NextToken}.
+
+
+-spec encode_token(pagination_token()) -> binary().
+encode_token(Token) ->
+    base64url:encode(term_to_binary(Token)).
+
+
+-spec decode_token(binary()) -> pagination_token().
+decode_token(EncodedToken) ->
+   binary_to_term(base64url:decode(EncodedToken)).
+
+
+-spec is_last(pagination_token()) -> boolean().
+is_last(Token) ->
+    maps:get(is_last, Token).
 
 %%%===================================================================
 %%% Internal functions

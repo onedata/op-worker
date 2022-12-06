@@ -45,10 +45,15 @@ complete(UserCtx, UploadId) ->
     fslogic_worker:fuse_response().
 list(UserCtx, SpaceId, Limit, Token) ->
     {ok, Result, NextToken} = multipart_upload:list(SpaceId, user_ctx:get_user_id(UserCtx), Limit, Token),
+    IsLast = multipart_upload:is_last(NextToken),
+    FinalNextToken = case IsLast of
+        true -> undefined;
+        false -> NextToken
+    end,
     ?FUSE_OK_RESP(#multipart_uploads{
         uploads = Result,
-        next_page_token = NextToken,
-        is_last = NextToken == undefined
+        next_page_token = FinalNextToken,
+        is_last = IsLast
     }).
 
 

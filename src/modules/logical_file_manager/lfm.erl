@@ -72,6 +72,7 @@
 %% Directory specific operations
 -export([
     mkdir/3, mkdir/4,
+    create_dir_at_path/3,
     get_children/3,
     get_child_attr/3,
     get_children_attrs/3,
@@ -465,6 +466,11 @@ mkdir(SessId, Path, Mode) ->
     {ok, DirGuid :: fslogic_worker:file_guid()} | error_reply().
 mkdir(SessId, ParentGuid, Name, Mode) ->
     ?run(lfm_dirs:mkdir(SessId, ParentGuid, Name, Mode)).
+
+
+-spec create_dir_at_path(session:id(), fslogic_worker:file_guid(), file_meta:path()) -> {ok, #file_attr{}}.
+create_dir_at_path(SessId, ParentGuid, Path) ->
+    ?run(lfm_dirs:create_dir_at_path(SessId, ParentGuid, Path)).
 
 
 -spec get_children(session:id(), file_key(), file_listing:options()) ->

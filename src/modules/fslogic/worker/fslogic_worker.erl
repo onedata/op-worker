@@ -461,7 +461,8 @@ get_operation(#proxyio_request{proxyio_request = Req}) ->
 %%--------------------------------------------------------------------
 -spec handle_request_locally(user_ctx:ctx(), request(), file_ctx:ctx() | undefined) -> response().
 handle_request_locally(UserCtx, #fuse_request{fuse_request = #file_request{
-    file_request = Req}}, FileCtx) ->
+    file_request = Req
+}}, FileCtx) ->
     [ReqName | _] = tuple_to_list(Req),
     ?update_counter(?EXOMETER_NAME(ReqName)),
     Stopwatch = stopwatch:start(),
@@ -469,7 +470,8 @@ handle_request_locally(UserCtx, #fuse_request{fuse_request = #file_request{
     ?update_counter(?EXOMETER_TIME_NAME(ReqName), stopwatch:read_micros(Stopwatch)),
     Ans;
 handle_request_locally(UserCtx, #fuse_request{fuse_request = #multipart_upload_request{
-    multipart_request = Req}}, _FileCtx) ->
+    multipart_request = Req
+}}, _FileCtx) ->
     handle_multipart_upload_request(UserCtx, Req);
 handle_request_locally(UserCtx, #fuse_request{fuse_request = Req}, FileCtx) ->
     handle_fuse_request(UserCtx, Req, FileCtx);

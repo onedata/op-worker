@@ -185,6 +185,8 @@ open_file_with_extended_info(UserCtx, FileCtx, rdwr) ->
     open_file_with_extended_info_for_rdwr(UserCtx, FileCtx).
 
 
+% NOTE: this function is computationally expensive as it forces all queued events flush.
+% Use only in case of sporadic writing.
 -spec report_file_written(user_ctx:ctx(), file_ctx:ctx(), non_neg_integer(), integer()) ->
     fslogic_worker:fuse_response().
 report_file_written(UserCtx, FileCtx, Offset, Size) ->
@@ -197,6 +199,8 @@ report_file_written(UserCtx, FileCtx, Offset, Size) ->
     flush_event_queue(UserCtx, FileCtx).
 
 
+% NOTE: this function is computationally expensive as it forces all queued events flush.
+% Use only in case of sporadic reading.
 -spec report_file_read(user_ctx:ctx(), file_ctx:ctx(), non_neg_integer(), integer()) ->
     fslogic_worker:fuse_response().
 report_file_read(UserCtx, FileCtx, Offset, Size) ->

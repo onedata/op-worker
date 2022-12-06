@@ -73,6 +73,7 @@ create_dir_at_path(UserCtx, RootFileCtx, Path) ->
     #fuse_response{fuse_response = #guid{guid = Guid}} =
         guid_req:ensure_dir(UserCtx, RootFileCtx, Path, ?DEFAULT_DIR_MODE),
     try attr_req:get_file_attr(UserCtx, file_ctx:new_by_guid(Guid), [size]) of
+        % if dir does not exist, it will be created during error handling
         #fuse_response{fuse_response = #file_attr{type = ?DIRECTORY_TYPE}} = Response ->
             Response;
         _ ->

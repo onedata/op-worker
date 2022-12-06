@@ -48,6 +48,7 @@
     truncate/4,
 
     mkdir/3, mkdir/4, mkdir/5,
+    create_dir_at_path/4,
     get_children/4, get_children/5,
     get_children_attrs/4, get_children_attrs/5,
     get_child_attr/4,
@@ -535,9 +536,15 @@ mkdir(Worker, SessId, Path, Mode) ->
 
 -spec mkdir(node(), session:id(), fslogic_worker:file_guid(),
     file_meta:name(), file_meta:posix_permissions()) ->
-    {ok, DirUuid :: file_meta:uuid()} | lfm:error_reply().
+    {ok, DirGuid :: fslogic_worker:file_guid()} | lfm:error_reply().
 mkdir(Worker, SessId, ParentGuid, Name, Mode) ->
     ?EXEC(Worker, lfm:mkdir(SessId, ParentGuid, Name, Mode)).
+
+
+-spec create_dir_at_path(node(), session:id(), fslogic_worker:file_guid(), file_meta:path()) ->
+    {ok, #file_attr{}} | lfm:error_reply().
+create_dir_at_path(Worker, SessId, ParentGuid, Path) ->
+    ?EXEC(Worker, lfm:create_dir_at_path(SessId, ParentGuid, Path)).
 
 
 -spec get_children(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path(),

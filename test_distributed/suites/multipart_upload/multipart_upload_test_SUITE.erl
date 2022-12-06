@@ -10,7 +10,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(multipart_upload_test_SUITE).
--author("Michal stanisz").
+-author("Michal Stanisz").
 
 -include("modules/logical_file_manager/lfm.hrl").
 -include("onenv_test_utils.hrl").

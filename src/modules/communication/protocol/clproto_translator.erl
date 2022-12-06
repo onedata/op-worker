@@ -1595,8 +1595,8 @@ translate_to_protobuf(#get_recursive_file_list{
     listing_options = ListingOptions,
     optional_attrs = OptionalAttrs
 }) ->
-    Xattrs = case lists:keyfind(xattrs, 1, OptionalAttrs) of
-        {xattrs, XattrNames} -> XattrNames;
+    Xattrs = case file_attr:should_fetch_xattrs(OptionalAttrs) of
+        {true, XattrNames} -> XattrNames;
         false -> []
     end,
     {list_files_recursively, #'ListFilesRecursively'{

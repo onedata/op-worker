@@ -42,8 +42,8 @@ create(UploadId, #multipart_upload_part{number = PartNumber} = MultipartUploadPa
     PartId = get_part_id(UploadId, PartNumber),
     {ok, _} = datastore_model:save(?CTX, #document{
         key = PartId,
-        value = MultipartUploadPart}
-    ),
+        value = MultipartUploadPart
+    }),
     ok = ?extract_ok(?ok_if_exists(datastore_model:add_links(?CTX, UploadId, oneprovider:get_id(), {PartNumber, PartId}))).
 
 
@@ -71,8 +71,8 @@ list(UploadId, Limit, StartAfter) ->
 cleanup(UploadId) ->
     {ok, List, IsLast} = list(UploadId, ?DEFAULT_LIST_LIMIT, 0),
     lists:foreach(fun(#multipart_upload_part{number = PartNumber}) ->
-        ok = datastore_model:delete(?CTX, get_part_id(UploadId, PartNumber)),
-        ok = datastore_model:delete_links(?CTX, UploadId, oneprovider:get_id(), PartNumber)
+        ok = datastore_model:delete_links(?CTX, UploadId, oneprovider:get_id(), PartNumber),
+        ok = datastore_model:delete(?CTX, get_part_id(UploadId, PartNumber))
     end, List),
     case IsLast of
         true -> ok;
