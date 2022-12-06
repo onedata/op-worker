@@ -155,12 +155,16 @@ handle_cast(
 ) ->
     case replication_status:handle_enqueued(TransferId) of
         {ok, TransferDoc} ->
-            FileCtx = file_ctx:new_by_guid(FileGuid), % TODO VFS-7443 - maybe use referenced guid?
+            % TODO VFS-7443 - maybe use referenced guid?
+            {IsDir, RootFileCtx} = file_ctx:is_dir(file_ctx:new_by_guid(FileGuid)),
 
-            replication_worker:enqueue_data_transfer(FileCtx, #transfer_params{
+            replication_worker:enqueue_data_transfer(RootFileCtx, #transfer_params{
                 transfer_id = TransferId,
                 user_ctx = user_ctx:new(SessionId),
-                iterator = transfer_iterator:build(TransferDoc)
+                iterator = case IsDir of
+                    true -> transfer_iterator:build(TransferDoc);
+                    false -> undefined
+                end
             }),
             handle_enqueued(TransferId, Callback, EvictSourceReplica);
         {error, ?ENQUEUED_STATUS} ->
