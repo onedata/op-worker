@@ -127,8 +127,8 @@ evict_tree_of_empty_dirs(Config, Type, FileKeyType) ->
                     eviction_status => completed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
                     evicting_provider => transfers_test_utils:provider_id(WorkerP2),
-                    files_to_process => 1111,
-                    files_processed => 1111,
+                    files_to_process => 1,
+                    files_processed => 1,
                     files_replicated => 0,
                     bytes_replicated => 0,
                     files_evicted => 0
@@ -604,8 +604,8 @@ rerun_dir_eviction(Config, Type, FileKeyType) ->
                     eviction_status => failed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
                     evicting_provider => transfers_test_utils:provider_id(WorkerP2),
-                    files_to_process => 10,
-                    files_processed => 10,
+                    files_to_process => 8,
+                    files_processed => 8,
                     failed_files => 7,
                     files_evicted => 0
                 },
@@ -628,8 +628,8 @@ rerun_dir_eviction(Config, Type, FileKeyType) ->
                     eviction_status => completed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP2),
                     evicting_provider => transfers_test_utils:provider_id(WorkerP2),
-                    files_to_process => 10,
-                    files_processed => 10,
+                    files_to_process => 8,
+                    files_processed => 8,
                     failed_files => 0,
                     files_evicted => 7
                 },
@@ -1414,8 +1414,8 @@ scheduling_replica_eviction_by_view_returning_not_existing_file_should_not_fail(
                     eviction_status => completed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
                     evicting_provider => transfers_test_utils:provider_id(WorkerP2),
-                    files_to_process => 2,
-                    files_processed => 2,
+                    files_to_process => 1,
+                    files_processed => 1,
                     files_evicted => 0,
                     failed_files => 0
                 },
