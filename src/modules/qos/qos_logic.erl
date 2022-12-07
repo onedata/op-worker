@@ -171,42 +171,68 @@ missing_link_posthook(ParentUuid, MissingName, SpaceId) ->
 %% @private
 -spec reconcile_qos_insecure(file_ctx:ctx()) -> ok.
 reconcile_qos_insecure(FileCtx) ->
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-    case file_ctx:list_references_ctx_const(FileCtx) of
-        {error, not_found} ->
-            % Inode not synchronized yet, add posthook for it
-            add_missing_file_meta_posthook(SpaceId, {file_meta_missing, file_ctx:get_referenced_uuid_const(FileCtx)});
-        ReferencesList when is_list(ReferencesList) ->
-            FinalEffQos = lists:foldl(fun(ReferenceCtx, EffQosAcc) ->
-                file_qos:merge_file_qos(EffQosAcc, get_eff_qos_for_reference(ReferenceCtx))
-            end, undefined, ReferencesList),
-            start_traverse_for_effective_qos(FileCtx, FinalEffQos)
+    case get_eff_qos(FileCtx) of
+        undefined ->
+            ok;
+        {ok, EffFileQos} ->
+            case file_qos:is_in_trash(EffFileQos) of
+                false ->
+                    {StorageId, FileCtx2} = file_ctx:get_storage_id(FileCtx),
+                    QosEntriesToUpdate = file_qos:get_assigned_entries_for_storage(EffFileQos, StorageId),
+                    ok = qos_traverse:start(FileCtx2, QosEntriesToUpdate, datastore_key:new());
+                true ->
+                    LocalQosEntries = file_qos:get_locally_required_qos_entries(EffFileQos),
+                    {FileLogicalPath, FileCtx1} = file_ctx:get_logical_path(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
+                    FileGuid = file_ctx:get_logical_guid_const(FileCtx1),
+                    lists:foreach(fun(QosEntryId) ->
+                        ok = qos_entry_audit_log:report_file_synchronization_skipped(
+                            QosEntryId, FileGuid, FileLogicalPath, file_deleted_locally)
+                    end, LocalQosEntries)
+            end
     end.
 
 
 %% @private
--spec get_eff_qos_for_reference(file_ctx:ctx()) -> file_qos:effective_file_qos().
-get_eff_qos_for_reference(ReferenceCtx) ->
-    SpaceId = file_ctx:get_space_id_const(ReferenceCtx),
-    ReferenceUuid = file_ctx:get_logical_uuid_const(ReferenceCtx),
-    HighestSyncedFileParentUuid = case file_meta_sync_status_cache:get(SpaceId, ReferenceUuid) of
+-spec get_eff_qos(file_ctx:ctx()) -> file_qos:effective_file_qos().
+get_eff_qos(FileCtx) ->
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    ReferenceUuid = file_ctx:get_logical_uuid_const(FileCtx),
+    HighestSyncedAncestorUuid = case file_meta_sync_status_cache:get(SpaceId, ReferenceUuid) of
         {ok, synced} ->
-            <<>>;
+            <<>>; % space dir parent
         {error, {file_meta_missing, _} = MissingElement} ->
-            handle_missing_file_meta(ReferenceCtx, MissingElement);
+            handle_missing_file_meta(FileCtx, MissingElement);
         {error, {link_missing, _, _} = MissingElement} ->
-            handle_missing_link(ReferenceCtx, MissingElement)
+            handle_missing_link(FileCtx, MissingElement)
     end,
-    case HighestSyncedFileParentUuid of
+    case HighestSyncedAncestorUuid of
         ReferenceUuid ->
+            % link to this reference is missing - ignore, as posthook to execute on this reference when link appears has been added.
             undefined;
+        <<>> ->
+            {FileDoc, _} = file_ctx:get_file_doc(FileCtx),
+            case file_qos:get_effective(FileDoc) of
+                {error, {file_meta_missing, _}} ->
+                    % One of the file references has a missing ancestor. Calculate effective value only for this reference;
+                    % all other references trigger reconciliation when they synchronize.
+                    file_qos:get_effective(FileDoc, #{
+                        merge_callback => undefined,
+                        should_cache => false, % do not cache this value, as it is only for this reference
+                        use_referenced_key => false
+                    });
+                Res ->
+                    Res
+            end;
         _ ->
-            {FileDoc, _} = file_ctx:get_file_doc(ReferenceCtx),
-            % NOTE: calling with calculation_root_parent option will calculate effective value only for given reference
-            case file_qos:get_effective(FileDoc, #{calculation_root_parent => HighestSyncedFileParentUuid}) of
-                {ok, EffQos} -> EffQos;
-                undefined -> undefined
-            end
+            % This reference has a missing ancestor. Calculate effective value only for this reference up to missing ancestor;
+            % all other references trigger reconciliation when they synchronize.
+            {FileDoc, _} = file_ctx:get_file_doc(FileCtx),
+            file_qos:get_effective(FileDoc, #{
+                merge_callback => undefined,
+                should_cache => false, % do not cache this value, as it is only for this reference
+                use_referenced_key => false,
+                calculation_root_parent => HighestSyncedAncestorUuid
+            })
     end.
 
 
@@ -233,27 +259,6 @@ handle_missing_link(FileCtx, {link_missing, MissingParentUuid, MissingLinkName} 
     ?debug("[~p] Missing link: ~p", [?MODULE, {MissingParentUuid, MissingLinkName}]),
     add_missing_link_posthook(file_ctx:get_space_id_const(FileCtx), MissingElement),
     MissingParentUuid.
-
-
-%% @private
--spec start_traverse_for_effective_qos(file_ctx:ctx(), file_qos:effective_file_qos() | undefined) -> ok.
-start_traverse_for_effective_qos(_FileCtx, undefined) ->
-    ok;
-start_traverse_for_effective_qos(FileCtx, EffFileQos) ->
-    case file_qos:is_in_trash(EffFileQos) of
-        false ->
-            {StorageId, FileCtx2} = file_ctx:get_storage_id(FileCtx),
-            QosEntriesToUpdate = file_qos:get_assigned_entries_for_storage(EffFileQos, StorageId),
-            ok = qos_traverse:start(FileCtx2, QosEntriesToUpdate, datastore_key:new());
-        true ->
-            LocalQosEntries = file_qos:get_locally_required_qos_entries(EffFileQos),
-            {FileLogicalPath, FileCtx1} = file_ctx:get_logical_path(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
-            FileGuid = file_ctx:get_logical_guid_const(FileCtx1),
-            lists:foreach(fun(QosEntryId) ->
-                ok = qos_entry_audit_log:report_file_synchronization_skipped(
-                    QosEntryId, FileGuid, FileLogicalPath, file_deleted_locally)
-            end, LocalQosEntries)
-    end.
 
 
 %% @private

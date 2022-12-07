@@ -75,12 +75,11 @@
     differentiate_callback => differentiate_callback(), % note: do not use together with `referenced_key = true`
     force_execution_on_referenced_key => boolean(), % force execution of callback on inode even if reference of original file
                                                     % is deleted
-    calculation_root_parent => file_meta:uuid() % default: <<>>; should be uuid of directory.
-                                                % NOTE: if not equal to <<>> values will NOT be cached
-                                                % NOTE: if provided, value is calculated only for given reference
-                                                %       (even if merge_callback is provided)
-                                                % NOTE: this option works in best effort manner - if there is already value
-                                                %       calculated from space root cached it will be returned.
+    calculation_root_parent => file_meta:uuid(), % default: <<>>; should be uuid of directory.
+                                                 % NOTE: if not equal to <<>> values will NOT be cached
+                                                 % NOTE: this option works in best effort manner - if there is already value
+                                                 %       calculated from space root cached it will be returned.
+    should_cache => boolean() % default: true; indicates whether calculated value should be cached
 }.
 
 -export_type([args/0, calculation_info/0]).
@@ -189,10 +188,13 @@ get_or_calculate_internal(Cache, Key, FileDoc, CalculateCallback, Options) ->
         {error, not_found} ->
             MergeCallback = maps:get(merge_callback, Options, undefined),
             % only reg files and hardlinks can have multiple references
-            ShouldProcessMultipleRefs = (MergeCallback =/= undefined) andalso (not maps:is_key(calculation_root_parent, Options))
+            ShouldProcessMultipleRefs = (MergeCallback =/= undefined)
                 andalso (file_meta:get_effective_type(FileDoc) =:= ?REGULAR_FILE_TYPE),
 
-            ShouldCache = CalculationRootParent =:= <<>>,
+            ShouldCache = case maps:get(should_cache, Options, true) of
+                true -> CalculationRootParent =:= <<>>;
+                false -> false
+            end,
             {ok, Parent} = file_meta:get_parent_uuid(FileDoc),
             case {CalculationRootParent =:= Parent, fslogic_file_id:is_root_dir_uuid(Key), ShouldProcessMultipleRefs} of
                 {false, false, false} ->

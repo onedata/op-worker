@@ -379,11 +379,11 @@ list_references_ctx_const(FileCtx) ->
         {ok, References} ->
             SpaceId = file_ctx:get_space_id_const(FileCtx),
             LogicalUuid = file_ctx:get_logical_uuid_const(FileCtx),
-            lists:map(
+            {ok, lists:map(
                 fun (FileUuid) when FileUuid == LogicalUuid -> FileCtx;
                     (FileUuid) -> file_ctx:new_by_uuid(FileUuid, SpaceId)
                 end,
-                References);
+                References)};
         {error, _} = Error ->
             Error
     end.

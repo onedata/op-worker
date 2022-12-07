@@ -81,7 +81,7 @@
 -type membership() :: ?NONE_MEMBERSHIP | ?DIRECT_MEMBERSHIP 
     | ?ANCESTOR_MEMBERSHIP | ?DIRECT_AND_ANCESTOR_MEMBERSHIP.
 
--export_type([assigned_entries/0, membership/0]).
+-export_type([effective_file_qos/0, assigned_entries/0, membership/0]).
 
 -define(CTX, #{
     model => ?MODULE
@@ -430,11 +430,10 @@ get_effective(#document{} = FileDoc, OriginalParentDoc, Options) ->
     MergeCallback = fun(NewEntry, Acc, _EntryCalculationInfo, CalculationInfoAcc) ->
         {ok, merge_file_qos(NewEntry, Acc), CalculationInfoAcc}
     end,
-    FinalOptions = Options#{
+    FinalOptions = maps:merge(#{
         merge_callback => MergeCallback, 
-        use_referenced_key => true, 
-        force_execution_on_referenced_key => true
-    },
+        use_referenced_key => true
+    }, Options),
 
     merge_eff_qos_for_files([OriginalParentDoc, FileDoc], Callback, FinalOptions).
 

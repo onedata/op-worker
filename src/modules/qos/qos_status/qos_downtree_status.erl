@@ -61,7 +61,7 @@ report_started(TraverseId, FileCtx, QosEntries) ->
                         ?FAILED_TRANSFER_LINK_NAME(UuidBasedPath))
                 end, QosEntries)
         end
-    end, file_ctx:list_references_ctx_const(FileCtx)).
+    end, list_references(FileCtx)).
 
 
 -spec report_finished(traverse:id(), file_ctx:ctx()) -> ok | {error, term()}.
@@ -88,7 +88,7 @@ report_finished(TraverseId, FileCtx) ->
                         ?RECONCILE_LINK_NAME(UuidBasedPath, TraverseId))
                 end, QosEntries)
         end
-    end, file_ctx:list_references_ctx_const(FileCtx)).
+    end, list_references(FileCtx)).
 
 
 -spec report_file_transfer_failure(file_ctx:ctx(), [qos_entry:id()]) ->
@@ -102,7 +102,7 @@ report_file_transfer_failure(FileCtx, QosEntries) ->
             ok = qos_status_links:add_link(SpaceId, ?RECONCILE_LINKS_KEY(QosEntryId), Link)
         end, QosEntries),
         ok = qos_entry:add_to_failed_files_list(SpaceId, file_ctx:get_logical_uuid_const(InternalFileCtx))
-    end, file_ctx:list_references_ctx_const(FileCtx)).
+    end, list_references(FileCtx)).
 
 
 -spec report_file_deleted(file_ctx:ctx(), qos_entry:doc(), file_ctx:ctx() | undefined) -> ok.
@@ -170,7 +170,7 @@ is_traverse_in_subtree(SubtreeRootCtx, CheckedFileUuid) ->
             UuidBasedPath ->
                 lists:member(file_ctx:get_logical_uuid_const(SubtreeRootCtx), lists:droplast(filename:split(UuidBasedPath)))
         end
-    end, file_ctx:list_references_ctx_const(file_ctx:new_by_uuid(CheckedFileUuid, SpaceId))).
+    end, list_references(file_ctx:new_by_uuid(CheckedFileUuid, SpaceId))).
 
 
 %% @private
@@ -181,4 +181,13 @@ get_uuid_based_path(FileCtx) ->
         UuidBasedPath
     catch throw:{error, {file_meta_missing, _}} ->
         not_synced
+    end.
+
+
+%% @private
+-spec list_references(file_ctx:ctx()) -> [file_ctx:ctx()].
+list_references(FileCtx) ->
+    case file_ctx:list_references_ctx_const(FileCtx) of
+        {ok, References} -> References;
+        {error, not_found} -> []
     end.

@@ -176,14 +176,14 @@ delete_local_link(Key, Links) ->
 
 
 %% @private
--spec add_synced_link(datastore:scope(), datastore:key(), {datastore:link_name(), datastore:link_target()}) ->
+-spec add_synced_link(datastore_doc:scope(), datastore:key(), {datastore:link_name(), datastore:link_target()}) ->
     ok | {error, term()}.
 add_synced_link(SpaceId, Key, Link) ->
     ?extract_ok(?ok_if_exists(datastore_model:add_links(?CTX#{scope => SpaceId}, Key, oneprovider:get_id(), Link))).
 
 
 %% @private
--spec delete_synced_link(datastore:scope(), datastore:key(), datastore:link_name()) ->
+-spec delete_synced_link(datastore_doc:scope(), datastore:key(), datastore:link_name()) ->
     ok | {error, term()}.
 delete_synced_link(SpaceId, Key, LinkName) ->
     ok = datastore_model:delete_links(?CTX#{scope => SpaceId}, Key, oneprovider:get_id(), LinkName).
