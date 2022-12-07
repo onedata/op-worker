@@ -114,8 +114,8 @@ migrate_tree_of_empty_dirs(Config, Type, FileKeyType) ->
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
                     evicting_provider => transfers_test_utils:provider_id(WorkerP1),
                     replicating_provider => transfers_test_utils:provider_id(WorkerP2),
-                    files_to_process => 2222,
-                    files_processed => 2222,
+                    files_to_process => 2,
+                    files_processed => 2,
                     files_replicated => 0,
                     bytes_replicated => 0,
                     files_evicted => 0
@@ -783,8 +783,8 @@ scheduling_replica_migration_by_view_returning_not_existing_file_should_not_fail
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
                     replicating_provider => transfers_test_utils:provider_id(WorkerP2),
                     evicting_provider => transfers_test_utils:provider_id(WorkerP1),
-                    files_to_process => 4,
-                    files_processed => 4,
+                    files_to_process => 2,
+                    files_processed => 2,
                     files_evicted => 0,
                     failed_files => 0
                 },
