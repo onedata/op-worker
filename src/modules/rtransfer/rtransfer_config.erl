@@ -445,8 +445,8 @@ fetch(Request, TransferData, NotifyFun, CompleteFun, RetryNum) ->
 get_storages(Retries) ->
     Result = case {provider_logic:get_storages(), Retries} of
         {{ok, StorageIds}, _} ->
-            % Mitigation of a race condition when this function is called when
-            % a storage is being added - for some time it may be already
+            % Mitigation of a race condition; if this function is called when
+            % a storage is being added, for some time it may be already
             % created in Onezone but its local counterpart not yet set up.
             case lists:dropwhile(fun storage:exists/1, StorageIds) of
                 [] ->
