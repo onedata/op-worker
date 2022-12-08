@@ -293,7 +293,7 @@
 -record(list_multipart_uploads, {
     space_id :: od_space:id(),
     limit :: non_neg_integer(),
-    index_token :: multipart_upload:pagination_token()
+    index_token :: multipart_upload:pagination_token() | undefined
 }).
 
 -type multipart_request_type() :: #create_multipart_upload{} | #upload_multipart_part{} |
@@ -420,7 +420,7 @@
 -record(multipart_uploads, {
     uploads :: [multipart_upload:record()],
     is_last :: boolean(),
-    next_page_token :: multipart_upload:pagination_token()
+    next_page_token :: multipart_upload:pagination_token() | undefined
 }).
 
 -type fuse_response_type() ::

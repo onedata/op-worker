@@ -1211,12 +1211,12 @@ translate_from_protobuf(#'CompleteMultipartUpload'{multipart_upload_id = UploadI
 translate_from_protobuf(#'ListMultipartUploads'{
     space_id = SpaceId,
     limit = Limit,
-    index_token = IndexToken
+    index_token = EncodedIndexToken
 }) ->
     #list_multipart_uploads{
         space_id = SpaceId,
         limit = Limit,
-        index_token = IndexToken
+        index_token = multipart_upload:decode_token(EncodedIndexToken)
     };
 translate_from_protobuf(#'MultipartUploadRequest'{
     multipart_request = {_, Request}
@@ -1257,12 +1257,12 @@ translate_from_protobuf(#'MultipartUpload'{
 translate_from_protobuf(#'MultipartUploads'{
     uploads = Uploads,
     is_last = IsLast,
-    next_page_token = NextPageToken
+    next_page_token = EncodedNextPageToken
 }) ->
     {multipart_uploads, #multipart_uploads{
         uploads = lists:map(fun(Upload) -> translate_from_protobuf(Upload) end, Uploads),
         is_last = IsLast,
-        next_page_token = NextPageToken
+        next_page_token = multipart_upload:decode_token(EncodedNextPageToken)
     }};
 
 translate_from_protobuf(undefined) ->
@@ -2385,7 +2385,7 @@ translate_to_protobuf(#list_multipart_uploads{
     {list_multipart_uploads, #'ListMultipartUploads'{
         space_id = SpaceId,
         limit = Limit,
-        index_token = IndexToken
+        index_token = multipart_upload:encode_token(IndexToken)
     }};
 translate_to_protobuf(#multipart_upload_request{
     multipart_request = Request
@@ -2434,7 +2434,7 @@ translate_to_protobuf(#multipart_uploads{
             Record
         end, Uploads),
         is_last = IsLast,
-        next_page_token = NextPageToken
+        next_page_token = multipart_upload:encode_token(NextPageToken)
     }};
 
 translate_to_protobuf(undefined) ->

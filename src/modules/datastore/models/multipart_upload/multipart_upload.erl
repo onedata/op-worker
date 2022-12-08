@@ -116,12 +116,16 @@ list(SpaceId, UserId, Limit, PaginationToken) ->
     {ok, FinalList, NextToken}.
 
 
--spec encode_token(pagination_token()) -> binary().
+-spec encode_token(pagination_token() | undefined) -> binary() | undefined.
+encode_token(undefined) ->
+    undefined;
 encode_token(Token) ->
     base64url:encode(term_to_binary(Token)).
 
 
--spec decode_token(binary()) -> pagination_token().
+-spec decode_token(binary() | undefined) -> pagination_token() | undefined.
+decode_token(undefined) ->
+    undefined;
 decode_token(EncodedToken) ->
    binary_to_term(base64url:decode(EncodedToken)).
 
