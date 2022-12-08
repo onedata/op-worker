@@ -16,6 +16,7 @@
 
 Definitions.
 
+PosDigit    = [1-9]
 Digit       = [0-9]
 Char        = [\x{00A0}-\x{1FFF}a-zA-Z0-9_\.]
 Middle      = [\s-]
@@ -26,15 +27,15 @@ Operator    = [|&\\]
 
 Rules.
 
-{Operator}                                      : {token, {operator, TokenLine, TokenChars}}.
-[=]                                             : {token, {eq, TokenLine, TokenChars}}.
-{Comparator}                                    : {token, {comparator, TokenLine, TokenChars}}.
-anyStorage                                      : {token, {any_storage, TokenLine, TokenChars}}.
-{Digit}+(\.{Digit}+)?((E|e)(\+|\-)?{Digit}+)?   : {token, {number, TokenLine, json_utils:decode(TokenChars)}}.
-{Char}({Char}|{Middle})*{Char}|{Char}           : {token, {string, TokenLine, TokenChars}}.
-[()]                                            : {token, {list_to_atom(TokenChars), TokenLine}}.
-{Whitespace}+                                   : skip_token.
-\"|\"                                           : skip_token.
+{Operator}                                                          : {token, {operator, TokenLine, TokenChars}}.
+[=]                                                                 : {token, {eq, TokenLine, TokenChars}}.
+{Comparator}                                                        : {token, {comparator, TokenLine, TokenChars}}.
+anyStorage                                                          : {token, {any_storage, TokenLine, TokenChars}}.
+({Digit}|{PosDigit}{Digit}+)(\.{Digit}+)?((E|e)(\+|\-)?{Digit}+)?   : {token, {number, TokenLine, json_utils:decode(TokenChars)}}.
+{Char}({Char}|{Middle})*{Char}|{Char}                               : {token, {string, TokenLine, TokenChars}}.
+[()]                                                                : {token, {list_to_atom(TokenChars), TokenLine}}.
+{Whitespace}+                                                       : skip_token.
+\"|\"                                                               : skip_token.
 
 
 Erlang code.
