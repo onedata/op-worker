@@ -26,9 +26,9 @@
                 },
                 {
                     "type": "nulldevice",
-                    "name": "/mnt/st5",
-                    "latencyMin": "25",
-                    "latencyMax": "75",
+                    "name": "null-storage",
+                    "latencyMin": "0",
+                    "latencyMax": "0",
                     "timeoutProbability": "0.0",
                     "filter": "*",
                     "simulatedFilesystemParameters": "",
@@ -50,9 +50,9 @@
                 },
                 {
                     "type": "nulldevice",
-                    "name": "/mnt/st5",
-                    "latencyMin": "25",
-                    "latencyMax": "75",
+                    "name": "null-storage",
+                    "latencyMin": "0",
+                    "latencyMax": "0",
                     "timeoutProbability": "0.0",
                     "filter": "*",
                     "simulatedFilesystemParameters": "",
@@ -206,11 +206,11 @@
                 ],
                 "providers": {
                     "p1": {
-                        "storage": "/mnt/st5",
+                        "storage": "null-storage",
                         "supported_size": 1000000000
                     },
                     "p2": {
-                        "storage": "/mnt/st5",
+                        "storage": "null-storage",
                         "supported_size": 1000000000
                     }
                 }
