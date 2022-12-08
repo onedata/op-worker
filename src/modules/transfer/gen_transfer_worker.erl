@@ -381,9 +381,10 @@ transfer_data_insecure(_, FileCtx, State, _Transfer, Params = #transfer_params{
             {error, not_found}
     end;
 
-transfer_data_insecure(_UserCtx, RootFileCtx, State, #transfer{files_to_process = FTP}, Params) when
-    FTP > ?FILES_TO_PROCESS_THRESHOLD
-->
+transfer_data_insecure(_UserCtx, RootFileCtx, State, #transfer{
+    files_to_process = FilesToProcess,
+    files_processed = FilesProcessed
+}, Params) when FilesToProcess - FilesProcessed > ?FILES_TO_PROCESS_THRESHOLD ->
     % Postpone next file batch scheduling to ensure there are not enormous number
     % of files already scheduled to process
     CallbackModule = State#state.mod,
