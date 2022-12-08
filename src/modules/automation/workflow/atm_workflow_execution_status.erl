@@ -428,7 +428,7 @@ handle_discard(AtmWorkflowExecutionId) ->
         end
     end,
 
-    case atm_workflow_execution:update_including_discarded(AtmWorkflowExecutionId, Diff) of
+    case atm_workflow_execution:update(AtmWorkflowExecutionId, Diff, include_discarded) of
         {ok, #document{value = AtmWorkflowExecution} = AtmWorkflowExecutionDoc} ->
             case infer_phase(AtmWorkflowExecution) of
                 ?SUSPENDED_PHASE ->

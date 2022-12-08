@@ -191,9 +191,9 @@ custom_workers() -> filter_disabled_workers([
     {qos_worker, []},
     {middleware_worker, []},
     {provider_rpc_worker, []},
-    {atm_worker, [
-        {supervisor_flags, atm_worker:supervisor_flags()},
-        {supervisor_children_spec, atm_worker:supervisor_children_spec()}
+    {atm_supervision_worker, [
+        {supervisor_flags, atm_supervision_worker:supervisor_flags()},
+        {supervisor_children_spec, atm_supervision_worker:supervisor_children_spec()}
     ], [{terminate_timeout, infinity}]}
 ]).
 
@@ -208,7 +208,7 @@ on_db_and_workers_ready() ->
     fslogic_delete:cleanup_opened_files(),
     space_unsupport:init_pools(),
     file_upload_manager_watcher_service:setup_internal_service(),
-    atm_service:setup_internal_service(),
+    atm_warden_service:setup_internal_service(),
     atm_workflow_execution_api:init_engine(),
     gs_channel_service:on_db_and_workers_ready().
 

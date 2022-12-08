@@ -37,11 +37,11 @@
 -define(GC_RUN_INTERVAL_SECONDS, op_worker:get_env(
     atm_workflow_execution_garbage_collector_run_interval_sec, 3600  %% 1 hour
 )).
--define(ATM_SUSPENDED_WORKFLOW_EXECUTION_EXPIRATION_INTERVAL_SECONDS, op_worker:get_env(
-    atm_suspended_workflow_executions_expiration_interval_sec, 2592000  %% 30 days
+-define(ATM_SUSPENDED_WORKFLOW_EXECUTION_EXPIRATION_SECONDS, op_worker:get_env(
+    atm_suspended_workflow_executions_expiration_sec, 2592000  %% 30 days
 )).
--define(ATM_ENDED_WORKFLOW_EXECUTION_EXPIRATION_INTERVAL_SECONDS, op_worker:get_env(
-    atm_ended_workflow_executions_expiration_interval_sec, 1296000  %% 15 days
+-define(ATM_ENDED_WORKFLOW_EXECUTION_EXPIRATION_SECONDS, op_worker:get_env(
+    atm_ended_workflow_executions_expiration_sec, 1296000  %% 15 days
 )).
 -define(NOW_SECONDS(), global_clock:timestamp_seconds()).
 
@@ -143,12 +143,12 @@ code_change(_OldVsn, State, _Extra) ->
 %% @private
 -spec garbage_collect_atm_workflow_executions() -> ok.
 garbage_collect_atm_workflow_executions() ->
-    ?info("Starting garbage atm_workflow_execution collecting procedure..."),
+    ?info("Starting automation workflow executions garbage collecting procedure..."),
 
     discard_expired_atm_workflow_executions(),
     purge_discarded_atm_workflow_executions(),
 
-    ?info("Garbage atm_workflow_execution collecting procedure finished succesfully.").
+    ?info("Automation workflow executions garbage collecting procedure finished succesfully.").
 
 
 %% @private
@@ -156,15 +156,15 @@ garbage_collect_atm_workflow_executions() ->
 discard_expired_atm_workflow_executions() ->
     case provider_logic:get_spaces() of
         {ok, SpaceIds} ->
-            ?info("Starting expired atm_workflow_execution discarding procedure..."),
+            ?info("Starting expired automation workflow executions discarding procedure..."),
 
             lists:foreach(fun discard_expired_atm_workflow_executions/1, SpaceIds),
 
-            ?info("Expired atm_workflow_execution discarding procedure finished succesfully.");
+            ?info("Expired automation workflow executions discarding procedure finished succesfully.");
 
         {error, _} = Error ->
             ?warning(
-                "Skipping expired atm_workflow_execution discarding procedure due to: ~p",
+                "Skipping expired automation workflow executions discarding procedure due to: ~p",
                 [Error]
             )
     end.
@@ -173,34 +173,36 @@ discard_expired_atm_workflow_executions() ->
 %% @private
 -spec discard_expired_atm_workflow_executions(od_space:id()) -> ok.
 discard_expired_atm_workflow_executions(SpaceId) ->
-    ?info("[Space: ~s] Starting expired atm_workflow_execution discarding procedure...", [
-        SpaceId
-    ]),
+    ?info(
+        "[Space: ~s] Starting expired automation workflow executions discarding procedure...",
+        [SpaceId]
+    ),
 
     discard_expired_atm_workflow_executions(SpaceId, ?SUSPENDED_PHASE),
     discard_expired_atm_workflow_executions(SpaceId, ?ENDED_PHASE),
 
-    ?info("[Space: ~s] Expired atm_workflow_execution discarding procedure finished succesfully.", [
-        SpaceId
-    ]).
+    ?info(
+        "[Space: ~s] Expired automation workflow executions discarding procedure finished succesfully.",
+        [SpaceId]
+    ).
 
 
 %% @private
 -spec discard_expired_atm_workflow_executions(od_space:id(), ?SUSPENDED_PHASE | ?ENDED_PHASE) ->
     ok.
 discard_expired_atm_workflow_executions(SpaceId, ?SUSPENDED_PHASE) ->
-    ExpirationTime = ?NOW_SECONDS() - ?ATM_SUSPENDED_WORKFLOW_EXECUTION_EXPIRATION_INTERVAL_SECONDS,
-
     discard_expired_atm_workflow_executions(SpaceId, ?SUSPENDED_PHASE, #{
-        start_index => atm_workflow_executions_forest:index(<<>>, ExpirationTime),
+        start_index => atm_workflow_executions_forest:index(
+            <<>>, ?NOW_SECONDS() - ?ATM_SUSPENDED_WORKFLOW_EXECUTION_EXPIRATION_SECONDS
+        ),
         limit => ?LIST_BATCH_SIZE
     });
 
 discard_expired_atm_workflow_executions(SpaceId, ?ENDED_PHASE) ->
-    ExpirationTime = ?NOW_SECONDS() - ?ATM_ENDED_WORKFLOW_EXECUTION_EXPIRATION_INTERVAL_SECONDS,
-
     discard_expired_atm_workflow_executions(SpaceId, ?ENDED_PHASE, #{
-        start_index => atm_workflow_executions_forest:index(<<>>, ExpirationTime),
+        start_index => atm_workflow_executions_forest:index(
+            <<>>, ?NOW_SECONDS() - ?ATM_ENDED_WORKFLOW_EXECUTION_EXPIRATION_SECONDS
+        ),
         limit => ?LIST_BATCH_SIZE
     }).
 
@@ -227,7 +229,7 @@ discard_expired_atm_workflow_executions(SpaceId, Phase, ListingOpts = #{start_in
         {StartIndex, []},
         AtmWorkflowExecutionBasicEntries
     ),
-    ?debug("Discarded atm ~p workflow executions: ~p", [Phase, DiscardedAtmWorkflowExecutionIds]),
+    ?debug("Discarded ~p automation workflow executions: ~p", [Phase, DiscardedAtmWorkflowExecutionIds]),
 
     case IsLast of
         true ->
@@ -246,7 +248,8 @@ discard_atm_workflow_execution(AtmWorkflowExecutionId) ->
         ok ->
             true;
         {error, _} = Error ->
-            ?warning("Failed to discard atm workflow execution (id: ~p) due to: ~p", [
+            % Log only warning as next gc run will again try to discard this execution
+            ?warning("Failed to discard automation workflow execution (id: ~p) due to: ~p", [
                 AtmWorkflowExecutionId, Error
             ]),
             false
@@ -256,11 +259,11 @@ discard_atm_workflow_execution(AtmWorkflowExecutionId) ->
 %% @private
 -spec purge_discarded_atm_workflow_executions() -> ok.
 purge_discarded_atm_workflow_executions() ->
-    ?info("Starting discarded atm_workflow_execution purging procedure..."),
+    ?info("Starting discarded automation workflow executions purging procedure..."),
 
     purge_discarded_atm_workflow_executions(<<>>),
 
-    ?info("Discarded atm_workflow_execution purging procedure finished succesfully.").
+    ?info("Discarded automation workflow executions purging procedure finished succesfully.").
 
 
 %% @private
@@ -280,7 +283,7 @@ purge_discarded_atm_workflow_executions(StartAtmWorkflowExecutionId) ->
         {StartAtmWorkflowExecutionId, []},
         DiscardedAtmWorkflowExecutionIds
     ),
-    ?debug("Purged atm workflow executions: ~p", [PurgedAtmWorkflowExecutionIds]),
+    ?debug("Purged automation workflow executions: ~p", [PurgedAtmWorkflowExecutionIds]),
 
     case length(DiscardedAtmWorkflowExecutionIds) < ?LIST_BATCH_SIZE of
         true ->
@@ -298,7 +301,7 @@ purge_atm_workflow_execution(AtmWorkflowExecutionId) ->
         true
     catch Type:Reason:Stacktrace ->
         ?error_stacktrace(
-            "Failed to purge atm workflow execution (id: ~s) due to ~p:~p",
+            "Failed to purge automation workflow execution (id: ~s) due to ~p:~p",
             [AtmWorkflowExecutionId, Type, Reason],
             Stacktrace
         ),

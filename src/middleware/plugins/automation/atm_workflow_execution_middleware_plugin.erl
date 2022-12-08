@@ -190,6 +190,7 @@ authorize(#op_req{operation = delete, gri = #gri{aspect = As}}, _) when
     As =:= batch
 ->
     % Do not check authorization - it will be done by 'delete' callback later
+    % to correctly handle 'batch' aspect
     true.
 
 
@@ -225,6 +226,7 @@ validate(#op_req{operation = delete, gri = #gri{aspect = As}}, _) when
     As =:= batch
 ->
     % Do not validate request - it will be done by 'delete' callback later
+    % to correctly handle 'batch' aspect
     ok.
 
 
@@ -249,13 +251,13 @@ create(#op_req{auth = ?USER(_UserId, SessionId), gri = #gri{
     id = AtmWorkflowExecutionId,
     aspect = cancel
 }}) ->
-    mi_atm:cancel_workflow_execution(SessionId, AtmWorkflowExecutionId);
+    mi_atm:init_cancel_workflow_execution(SessionId, AtmWorkflowExecutionId);
 
 create(#op_req{auth = ?USER(_UserId, SessionId), gri = #gri{
     id = AtmWorkflowExecutionId,
     aspect = pause
 }}) ->
-    mi_atm:pause_workflow_execution(SessionId, AtmWorkflowExecutionId);
+    mi_atm:init_pause_workflow_execution(SessionId, AtmWorkflowExecutionId);
 
 create(#op_req{auth = ?USER(_UserId, SessionId), gri = #gri{
     id = AtmWorkflowExecutionId,
@@ -321,11 +323,9 @@ delete(#op_req{auth = ?USER(UserId, SessionId), gri = #gri{
     id = AtmWorkflowExecutionId,
     aspect = instance
 }}) ->
-    % Fetch atm workflow execution
     AtmWorkflowExecution = ?check(atm_workflow_execution_api:get(AtmWorkflowExecutionId)),
     #atm_workflow_execution{space_id = SpaceId, user_id = CreatorUserId} = AtmWorkflowExecution,
 
-    % Check authorization
     IsAuthorized = space_logic:has_eff_privilege(SpaceId, UserId, case UserId of
         CreatorUserId -> ?SPACE_SCHEDULE_ATM_WORKFLOW_EXECUTIONS;
         _ -> ?SPACE_MANAGE_ATM_WORKFLOW_EXECUTIONS

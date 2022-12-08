@@ -67,7 +67,7 @@ cancel_workflow_execution(#atm_mock_call_ctx{
     session_id = SessionId,
     workflow_execution_id = AtmWorkflowExecutionId
 }) ->
-    ?erpc(ProviderSelector, mi_atm:cancel_workflow_execution(SessionId, AtmWorkflowExecutionId)).
+    ?erpc(ProviderSelector, mi_atm:init_cancel_workflow_execution(SessionId, AtmWorkflowExecutionId)).
 
 
 -spec pause_workflow_execution(atm_workflow_execution_test_runner:mock_call_ctx()) ->
@@ -77,7 +77,7 @@ pause_workflow_execution(#atm_mock_call_ctx{
     session_id = SessionId,
     workflow_execution_id = AtmWorkflowExecutionId
 }) ->
-    ?erpc(ProviderSelector, mi_atm:pause_workflow_execution(SessionId, AtmWorkflowExecutionId)).
+    ?erpc(ProviderSelector, mi_atm:init_pause_workflow_execution(SessionId, AtmWorkflowExecutionId)).
 
 
 -spec delete_offline_session(atm_workflow_execution_test_runner:mock_call_ctx()) ->
@@ -116,7 +116,7 @@ stop_workflow_execution(Reason, #atm_mock_call_ctx{
     session_id = SessionId,
     workflow_execution_id = AtmWorkflowExecutionId
 }) ->
-    ?erpc(ProviderSelector, atm_workflow_execution_handler:stop(
+    ?erpc(ProviderSelector, atm_workflow_execution_handler:init_stop(
         user_ctx:new(SessionId), AtmWorkflowExecutionId, Reason
     )).
 

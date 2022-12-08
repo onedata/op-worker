@@ -17,8 +17,8 @@
 %% API
 -export([
     create/1,
-    get/1, get_including_discarded/1,
-    update/2, update_including_discarded/2,
+    get/1, get/2,
+    update/2, update/3,
     delete/1
 ]).
 
@@ -77,16 +77,20 @@ create(AtmWorkflowExecutionDoc) ->
 
 -spec get(id()) -> {ok, doc()} | {error, term()}.
 get(AtmWorkflowExecutionId) ->
-    case datastore_model:get(?CTX, AtmWorkflowExecutionId) of
+    get(AtmWorkflowExecutionId, ignore_discarded).
+
+
+-spec get(id(), ignore_discarded | include_discarded) ->
+    {ok, doc()} | {error, term()}.
+get(AtmWorkflowExecutionId, ignore_discarded) ->
+    case get(AtmWorkflowExecutionId, include_discarded) of
         {ok, #document{value = #atm_workflow_execution{discarded = true}}} ->
             ?ERROR_NOT_FOUND;
         Result ->
             Result
-    end.
+    end;
 
-
--spec get_including_discarded(id()) -> {ok, doc()} | {error, term()}.
-get_including_discarded(AtmWorkflowExecutionId) ->
+get(AtmWorkflowExecutionId, include_discarded) ->
     datastore_model:get(?CTX, AtmWorkflowExecutionId).
 
 
@@ -101,8 +105,18 @@ update(AtmWorkflowExecutionId, Diff1) ->
     datastore_model:update(?CTX, AtmWorkflowExecutionId, Diff2).
 
 
--spec update_including_discarded(id(), diff()) -> {ok, doc()} | {error, term()}.
-update_including_discarded(AtmWorkflowExecutionId, Diff1) ->
+-spec update(id(), diff(), ignore_discarded | include_discarded) ->
+    {ok, doc()} | {error, term()}.
+update(AtmWorkflowExecutionId, Diff1, ignore_discarded) ->
+    Diff2 = fun
+        (#atm_workflow_execution{discarded = true}) ->
+            ?ERROR_NOT_FOUND;
+        (#atm_workflow_execution{status = PrevStatus} = AtmWorkflowExecution) ->
+            Diff1(AtmWorkflowExecution#atm_workflow_execution{prev_status = PrevStatus})
+    end,
+    datastore_model:update(?CTX, AtmWorkflowExecutionId, Diff2);
+
+update(AtmWorkflowExecutionId, Diff1, include_discarded) ->
     Diff2 = fun(#atm_workflow_execution{status = PrevStatus} = AtmWorkflowExecution) ->
         Diff1(AtmWorkflowExecution#atm_workflow_execution{prev_status = PrevStatus})
     end,

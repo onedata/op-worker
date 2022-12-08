@@ -148,7 +148,7 @@ delete_insecure(AtmWorkflowExecutionId) ->
             system_audit_log_store_id = AtmWorkflowAuditLogStoreId,
             lanes = AtmLaneExecutions
         }
-    }} = atm_workflow_execution:get_including_discarded(AtmWorkflowExecutionId),
+    }} = atm_workflow_execution:get(AtmWorkflowExecutionId, include_discarded),
 
     delete_execution_components(#execution_components{
         schema_snapshot_id = AtmWorkflowSchemaSnapshotId,

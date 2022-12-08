@@ -77,21 +77,21 @@ garbage_collect_atm_workflow_executions() ->
         ExpAtmWorkflowExecutionState4, ExpAtmWorkflowExecutionState5
     ],
 
-    set_atm_suspended_workflow_executions_expiration_interval_sec(4),
-    set_atm_ended_workflow_executions_expiration_interval_sec(2),
+    set_env(atm_suspended_workflow_executions_expiration_interval_sec, 4),
+    set_env(atm_ended_workflow_executions_expiration_interval_sec, 2),
 
     % Move time backward and assert that no atm workflow execution is deleted
     time_test_utils:set_current_time_seconds(Timestamp - 2),
-    assert_matches_with_backend(AllExpAtmWorkflowExecutionStates),
+    assert_all_match_with_backend(AllExpAtmWorkflowExecutionStates),
 
-    set_atm_workflow_execution_garbage_collector_run_interval_sec(1),
+    set_env(atm_workflow_execution_garbage_collector_run_interval_sec, 1),
     % Manual gc run is needed for new interval to activate (original is 1h)
     run_gc(),
-    assert_matches_with_backend(AllExpAtmWorkflowExecutionStates),
+    assert_all_match_with_backend(AllExpAtmWorkflowExecutionStates),
 
     time_test_utils:set_current_time_seconds(Timestamp + 5),
     timer:sleep(timer:seconds(3)),
-    assert_matches_with_backend([
+    assert_all_match_with_backend([
         ExpAtmWorkflowExecutionState2, ExpAtmWorkflowExecutionState4, ExpAtmWorkflowExecutionState5
     ]),
     assert_atm_workflow_executions_deleted([
@@ -106,24 +106,6 @@ garbage_collect_atm_workflow_executions() ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-
-%% @private
--spec set_atm_workflow_execution_garbage_collector_run_interval_sec(non_neg_integer()) -> ok.
-set_atm_workflow_execution_garbage_collector_run_interval_sec(Interval) ->
-    set_env(atm_workflow_execution_garbage_collector_run_interval_sec, Interval).
-
-
-%% @private
--spec set_atm_suspended_workflow_executions_expiration_interval_sec(non_neg_integer()) -> ok.
-set_atm_suspended_workflow_executions_expiration_interval_sec(Interval) ->
-    set_env(atm_suspended_workflow_executions_expiration_interval_sec, Interval).
-
-
-%% @private
--spec set_atm_ended_workflow_executions_expiration_interval_sec(non_neg_integer()) -> ok.
-set_atm_ended_workflow_executions_expiration_interval_sec(Interval) ->
-    set_env(atm_ended_workflow_executions_expiration_interval_sec, Interval).
 
 
 %% @private
@@ -182,9 +164,9 @@ run_gc() ->
 
 
 %% @private
--spec assert_matches_with_backend([atm_workflow_execution_exp_state_builder:exp_state()]) ->
+-spec assert_all_match_with_backend([atm_workflow_execution_exp_state_builder:exp_state()]) ->
     ok.
-assert_matches_with_backend(ExpAtmWorkflowExecutionStates) ->
+assert_all_match_with_backend(ExpAtmWorkflowExecutionStates) ->
     lists:foreach(fun(ExpAtmWorkflowExecutionState) ->
         atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpAtmWorkflowExecutionState)
     end, ExpAtmWorkflowExecutionStates).

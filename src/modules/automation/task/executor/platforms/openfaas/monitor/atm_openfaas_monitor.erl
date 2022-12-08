@@ -65,6 +65,10 @@
 
 -define(SERVER, {global, ?MODULE}).
 
+% Reuse ?ATM_SERVICE_ID as id for openfaas monitor cache to ensure that cache
+% document management happens on the same node that monitor process exists
+-define(CACHE_ID, ?ATM_WARDEN_SERVICE_ID).
+
 
 %%%===================================================================
 %%% API
@@ -110,7 +114,7 @@ assert_openfaas_healthy() ->
 
 -spec get_openfaas_status() -> status().
 get_openfaas_status() ->
-    case atm_openfaas_status_cache:get(?ATM_SERVICE_ID()) of
+    case atm_openfaas_status_cache:get(?CACHE_ID) of
         {ok, #document{value = #atm_openfaas_status_cache{status = Status}}} ->
             Status;
         {error, not_found} ->
@@ -153,7 +157,7 @@ handle_continue(nonblocking_state_init, undefined) ->
             report_openfaas_down_to_atm_workflow_execution_layer(NotHealthyStatus),
             #state{status = NotHealthyStatus, running_smoothness = disrupted}
     end,
-    atm_openfaas_status_cache:save(?ATM_SERVICE_ID(), State#state.status),
+    atm_openfaas_status_cache:save(?CACHE_ID, State#state.status),
 
     {noreply, State, timer:seconds(?STATUS_CHECK_INTERVAL_SECONDS)}.
 
@@ -162,7 +166,7 @@ handle_continue(nonblocking_state_init, undefined) ->
     {noreply, NewState :: state(), non_neg_integer()}.
 handle_info(timeout, State = #state{status = CurrentStatus}) ->
     NewStatus = check_openfaas_status(),
-    NewStatus /= CurrentStatus andalso atm_openfaas_status_cache:save(?ATM_SERVICE_ID(), NewStatus),
+    NewStatus /= CurrentStatus andalso atm_openfaas_status_cache:save(?CACHE_ID, NewStatus),
 
     {noreply, handle_status_update(NewStatus, State), timer:seconds(?STATUS_CHECK_INTERVAL_SECONDS)};
 

@@ -1367,7 +1367,7 @@ assert_workflow_related_docs_deleted(#exp_workflow_execution_state_ctx{
 
         ?assertEqual(
             ?ERROR_NOT_FOUND,
-            ?rpc(ProviderSelector, atm_workflow_execution:get_including_discarded(AtmWorkflowExecutionId))
+            ?rpc(ProviderSelector, atm_workflow_execution:get(AtmWorkflowExecutionId, include_discarded))
         ),
 
         assert_store_related_docs_deleted(ProviderSelector, AtmAuditLogStoreId),

@@ -19,7 +19,7 @@
 %% API
 -export([
     prepare/3,
-    stop/3,
+    init_stop/3,
     resume/3,
     handle_stopped/3
 ]).
@@ -61,13 +61,13 @@ prepare(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
     end.
 
 
--spec stop(
+-spec init_stop(
     atm_lane_execution:lane_run_selector(),
     atm_lane_execution:run_stopping_reason(),
     atm_workflow_execution_ctx:record()
 ) ->
     {ok, stopping | stopped} | errors:error().
-stop(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx) ->
+init_stop(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx) ->
     AtmWorkflowExecutionId = atm_workflow_execution_ctx:get_workflow_execution_id(
         AtmWorkflowExecutionCtx
     ),
@@ -334,7 +334,7 @@ handle_setup_exception(Type, AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWork
         setup_failure -> failure;
         setup_interruption -> interrupt
     end,
-    case stop(AtmLaneRunSelector, StoppingReason, AtmWorkflowExecutionCtx) of
+    case init_stop(AtmLaneRunSelector, StoppingReason, AtmWorkflowExecutionCtx) of
         {ok, _} ->
             % Call via ?MODULE: to allow mocking in tests
             ?MODULE:handle_stopped(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx);
@@ -415,30 +415,38 @@ handle_lane_run_stopping(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, #d
             % Stopping suspended execution - since there was no active process
             % handling it, manual cleanup and callback calls are necessary
             workflow_engine:cleanup_execution(AtmWorkflowExecutionId),
-            stop_parallel_boxes(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecution),
+            init_stop_parallel_boxes(
+                AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecution
+            ),
             atm_lane_execution_status:handle_stopped(AtmLaneRunSelector, AtmWorkflowExecutionId),
             {ok, stopped};
+
         _ when IsCurrentLaneRun ->
             % Currently executed lane run stopping == entire workflow execution is stopping
             workflow_engine:init_cancel_procedure(AtmWorkflowExecutionId),
-            stop_parallel_boxes(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecution),
+            init_stop_parallel_boxes(
+                AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecution
+            ),
             workflow_engine:finish_cancel_procedure(AtmWorkflowExecutionId),
             {ok, stopping};
+
         _ ->
-            stop_parallel_boxes(AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecution),
+            init_stop_parallel_boxes(
+                AtmLaneRunSelector, Reason, AtmWorkflowExecutionCtx, AtmWorkflowExecution
+            ),
             {ok, stopping}
     end.
 
 
 %% @private
--spec stop_parallel_boxes(
+-spec init_stop_parallel_boxes(
     atm_lane_execution:lane_run_selector(),
     atm_lane_execution:run_stopping_reason(),
     atm_workflow_execution_ctx:record(),
     atm_workflow_execution:record()
 ) ->
     ok | no_return().
-stop_parallel_boxes(
+init_stop_parallel_boxes(
     AtmLaneRunSelector,
     AtmLaneRunStoppingReason,
     AtmWorkflowExecutionCtx,
@@ -452,7 +460,7 @@ stop_parallel_boxes(
     end,
     {ok, AtmLaneRun} = atm_lane_execution:get_run(AtmLaneRunSelector, AtmWorkflowExecution),
 
-    atm_parallel_box_execution:stop_all(
+    atm_parallel_box_execution:init_stop_all(
         AtmWorkflowExecutionCtx,
         AtmTaskExecutionStoppingReason,
         AtmLaneRun#atm_lane_execution_run.parallel_boxes

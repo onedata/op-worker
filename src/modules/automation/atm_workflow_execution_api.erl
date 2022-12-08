@@ -52,8 +52,8 @@
 -export([
     schedule/6,
     get/1, get_summary/2,
-    cancel/2,
-    pause/2,
+    init_cancel/2,
+    init_pause/2,
     resume/2,
     repeat/4,
     discard/1
@@ -209,14 +209,14 @@ get_summary(AtmWorkflowExecutionId, #atm_workflow_execution{
     }.
 
 
--spec cancel(user_ctx:ctx(), atm_workflow_execution:id()) -> ok | errors:error().
-cancel(UserCtx, AtmWorkflowExecutionId) ->
-    atm_workflow_execution_handler:stop(UserCtx, AtmWorkflowExecutionId, cancel).
+-spec init_cancel(user_ctx:ctx(), atm_workflow_execution:id()) -> ok | errors:error().
+init_cancel(UserCtx, AtmWorkflowExecutionId) ->
+    atm_workflow_execution_handler:init_stop(UserCtx, AtmWorkflowExecutionId, cancel).
 
 
--spec pause(user_ctx:ctx(), atm_workflow_execution:id()) -> ok | errors:error().
-pause(UserCtx, AtmWorkflowExecutionId) ->
-    atm_workflow_execution_handler:stop(UserCtx, AtmWorkflowExecutionId, pause).
+-spec init_pause(user_ctx:ctx(), atm_workflow_execution:id()) -> ok | errors:error().
+init_pause(UserCtx, AtmWorkflowExecutionId) ->
+    atm_workflow_execution_handler:init_stop(UserCtx, AtmWorkflowExecutionId, pause).
 
 
 -spec resume(user_ctx:ctx(), atm_workflow_execution:id()) -> ok | errors:error().

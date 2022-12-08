@@ -6,11 +6,11 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Internal (persistent) service that maintains existence of processes
-%%% supporting automation machinery.
+%%% Internal (persistent) service that maintains single instance
+%%% (across cluster) for each process supporting automation machinery.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_service).
+-module(atm_warden_service).
 -author("Bartosz Walkowicz").
 
 -include("modules/automation/atm_execution.hrl").
@@ -33,10 +33,15 @@
 
 -spec setup_internal_service() -> ok.
 setup_internal_service() ->
-    ok = internal_services_manager:start_service(?MODULE, ?ATM_SERVICE_NAME, ?ATM_SERVICE_ID(), #{
-        start_function => start_service,
-        stop_function => stop_service
-    }).
+    ok = internal_services_manager:start_service(
+        ?MODULE,
+        ?ATM_WARDEN_SERVICE_NAME,
+        ?ATM_WARDEN_SERVICE_ID,
+        #{
+            start_function => start_service,
+            stop_function => stop_service
+        }
+    ).
 
 
 %%%===================================================================

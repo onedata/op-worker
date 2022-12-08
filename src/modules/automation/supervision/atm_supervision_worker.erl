@@ -6,11 +6,12 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
+%%% TODO VFS-9402 Move graceful stopping to on_provider_stopping callback
 %%% This module handles atm workflow executions restart and graceful pause
 %%% when stopping Oneprovider.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_worker).
+-module(atm_supervision_worker).
 -author("Bartosz Walkowicz").
 
 -behaviour(worker_plugin_behaviour).
@@ -27,14 +28,18 @@
 -export([init/1, handle/1, cleanup/0]).
 
 
--define(RESTART_ATM_WORKFLOW_EXECUTIONS_MSG, restart_atm_workflow_executions).
--define(RESTART_ATM_WORKFLOW_EXECUTIONS_RETRY_DELAY, op_worker:get_env(
-    restart_atm_workflow_executions_retry_delay, 10000
+-define(ATM_WORKFLOW_EXECUTIONS_RESTART_MSG, restart_atm_workflow_executions).
+-define(ATM_WORKFLOW_EXECUTIONS_RESTART_RETRY_DELAY, op_worker:get_env(
+    atm_workflow_executions_restart_retry_delay, 10000
 )).
 
--define(PAUSE_ATM_WORKFLOW_EXECUTIONS_ON_PROVIDER_STOPPING_INTERVAL_SEC, op_worker:get_env(
-    atm_workflow_executions_pause_interval_on_provider_stopping_sec, 3600
+-define(ATM_WORKFLOW_EXECUTIONS_GRACEFUL_STOP_TIMEOUT_SEC, op_worker:get_env(
+    atm_workflow_executions_graceful_stop_timeout_sec, 3600
 )).
+
+-define(GRACEFUL_STOP_BACKOFF_INITIAL_SEC, 15).
+-define(GRACEFUL_STOP_BACKOFF_INCREASE_RATE, 1.1).
+-define(GRACEFUL_STOP_BACKOFF_MAX_SEC, 60).
 
 
 %%%===================================================================
@@ -44,7 +49,7 @@
 
 -spec supervisor_flags() -> supervisor:sup_flags().
 supervisor_flags() ->
-    #{strategy => one_for_one, intensity => 1000, period => 3600}.
+    #{strategy => one_for_one, intensity => 10, period => 3600}.
 
 
 -spec supervisor_children_spec() -> [supervisor:child_spec()].
@@ -83,7 +88,7 @@ handle(ping) ->
 handle(healthcheck) ->
     ok;
 
-handle(?RESTART_ATM_WORKFLOW_EXECUTIONS_MSG) ->
+handle(?ATM_WORKFLOW_EXECUTIONS_RESTART_MSG) ->
     restart_atm_workflow_executions(),
     ok;
 
@@ -98,7 +103,7 @@ handle(Request) ->
 %%--------------------------------------------------------------------
 -spec cleanup() -> ok.
 cleanup() ->
-    await_pause_atm_workflow_executions().
+    try_to_gracefully_stop_atm_workflow_executions().
 
 
 %%%===================================================================
@@ -110,41 +115,31 @@ cleanup() ->
 -spec schedule_atm_workflow_executions_restart() -> ok.
 schedule_atm_workflow_executions_restart() ->
     schedule(
-        ?RESTART_ATM_WORKFLOW_EXECUTIONS_MSG,
-        ?RESTART_ATM_WORKFLOW_EXECUTIONS_RETRY_DELAY
+        ?ATM_WORKFLOW_EXECUTIONS_RESTART_MSG,
+        ?ATM_WORKFLOW_EXECUTIONS_RESTART_RETRY_DELAY
     ).
 
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% This function should be called only after provider restart to handle
-%% stale (processes handling execution no longer exists) workflows.
-%% All waiting and ongoing workflow executions for given space are:
-%% a) terminated as ?CRASHED/?CANCELLED/?FAILED if execution was already stopping
-%% b) terminated as ?INTERRUPTED otherwise (running execution was interrupted by
-%%    provider shutdown). Such executions will be resumed.
-%% @end
-%%--------------------------------------------------------------------
 -spec restart_atm_workflow_executions() -> ok.
 restart_atm_workflow_executions() ->
     try provider_logic:get_spaces() of
         {ok, SpaceIds} ->
-            ?info("Starting atm_workflow_executions restart procedure..."),
+            ?info("Starting automation workflow executions restart procedure..."),
 
             lists:foreach(fun restart_atm_workflow_executions/1, SpaceIds),
 
-            ?info("atm_workflow_executions restart procedure finished.");
+            ?info("Automation workflow executions restart procedure finished.");
         ?ERROR_UNREGISTERED_ONEPROVIDER ->
             schedule_atm_workflow_executions_restart();
         ?ERROR_NO_CONNECTION_TO_ONEZONE ->
             schedule_atm_workflow_executions_restart();
         Error = {error, _} ->
-            ?error("Unable to restart atm workflow executions due to: ~p", [Error])
-    catch Class:Reason:Stacktrace ->
+            ?error("Unable to restart automation workflow executions due to: ~p", [Error])
+    catch Type:Reason:Stacktrace ->
         ?error_stacktrace(
-            "Unable to restart atm workflow executions due to: ~p",
-            [{Class, Reason}],
+            "Unable to restart automation workflow executions due to:~n~p:~p",
+            [Type, Reason],
             Stacktrace
         )
     end.
@@ -155,9 +150,13 @@ restart_atm_workflow_executions() ->
 restart_atm_workflow_executions(SpaceId) ->
     CallbackFun = fun(AtmWorkflowExecutionId) ->
         try
-            atm_workflow_execution_handler:on_provider_restart(AtmWorkflowExecutionId)
+            atm_workflow_execution_handler:restart(AtmWorkflowExecutionId)
         catch Type:Reason:Stacktrace ->
-            ?atm_examine_error(Type, Reason, Stacktrace)
+            ?error_stacktrace(
+                "Unexpected error while trying to restart automation workflow execution ~s:~n~p:~p",
+                [AtmWorkflowExecutionId, Type, Reason],
+                Stacktrace
+            )
         end
     end,
 
@@ -170,76 +169,107 @@ restart_atm_workflow_executions(SpaceId) ->
 %% @private
 %% @doc
 %% This function should be called only when provider is stopping to gracefully
-%% pause all running atm workflow executions. Executions that will fail to pause
+%% stop all running atm workflow executions. Executions that will fail to stop
 %% within configured time interval will be abruptly interrupted by provider
 %% shutdown.
 %% @end
 %%--------------------------------------------------------------------
--spec await_pause_atm_workflow_executions() -> ok.
-await_pause_atm_workflow_executions() ->
+-spec try_to_gracefully_stop_atm_workflow_executions() -> ok.
+try_to_gracefully_stop_atm_workflow_executions() ->
     case provider_logic:get_spaces() of
         {ok, SpaceIds} ->
-            ?info("Starting atm_workflow_executions graceful pause procedure..."),
+            ?info("Starting automation workflow executions graceful stop procedure..."),
 
             RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
             CountdownTimer = countdown_timer:start_seconds(
-                ?PAUSE_ATM_WORKFLOW_EXECUTIONS_ON_PROVIDER_STOPPING_INTERVAL_SEC
+                ?ATM_WORKFLOW_EXECUTIONS_GRACEFUL_STOP_TIMEOUT_SEC
             ),
-            await_pause_atm_workflow_executions(RootUserCtx, SpaceIds, CountdownTimer);
+            case try_to_gracefully_stop_atm_workflow_executions(
+                RootUserCtx, SpaceIds, CountdownTimer, ?GRACEFUL_STOP_BACKOFF_INITIAL_SEC
+            ) of
+                ok ->
+                    ?info("automation workflow executions graceful stop procedure finished succesfully.");
+                timeout ->
+                    ?warning(
+                        "Automation workflow executions graceful stop procedure finished "
+                        "due to timeout while not all executions were cleanly stopped. "
+                        "Leftover ones will be abruptly interrupted."
+                    ),
+                    stop_atm_workflow_executions(RootUserCtx, SpaceIds, interrupt)
+            end;
         {error, _} = Error ->
-            ?warning("Skipping atm_workflow_executions graceful pause procedure due to: ~p", [
-                Error
-            ])
+            ?warning(
+                "Skipping automation workflow executions graceful stop procedure due to: ~p",
+                [Error]
+            )
     end.
 
 
 %% @private
--spec await_pause_atm_workflow_executions(
+-spec try_to_gracefully_stop_atm_workflow_executions(
     user_ctx:ctx(),
     [od_space:id()],
-    countdown_timer:instance()
+    countdown_timer:instance(),
+    pos_integer()
 ) ->
-    ok.
-await_pause_atm_workflow_executions(UserCtx, SpaceIds, CountdownTimer) ->
+    ok | timeout.
+try_to_gracefully_stop_atm_workflow_executions(UserCtx, SpaceIds, CountdownTimer, BackoffSec) ->
     case countdown_timer:is_expired(CountdownTimer) of
         true ->
-            ?warning(
-                "atm_workflow_executions graceful pause procedure finished due to timeout "
-                "while not all executions were paused."
-            );
+            timeout;
         false ->
-            case pause_atm_workflow_executions(UserCtx, SpaceIds) of
+            case stop_atm_workflow_executions(UserCtx, SpaceIds, op_worker_stopping) of
                 true ->
-                    ?info("atm_workflow_executions graceful pause procedure finished succesfully.");
+                    ok;
                 false ->
-                    timer:sleep(timer:seconds(1)),
-                    await_pause_atm_workflow_executions(UserCtx, SpaceIds, CountdownTimer)
+                    timer:sleep(timer:seconds(BackoffSec)),
+
+                    try_to_gracefully_stop_atm_workflow_executions(
+                        UserCtx, SpaceIds, CountdownTimer, backoff(BackoffSec)
+                    )
             end
     end.
 
 
 %% @private
--spec pause_atm_workflow_executions(user_ctx:ctx(), od_space:id() | [od_space:id()]) ->
-    AllPaused :: boolean().
-pause_atm_workflow_executions(UserCtx, SpaceId) when is_binary(SpaceId) ->
+-spec backoff(pos_integer()) -> pos_integer().
+backoff(BackoffSec) ->
+    round(min(?GRACEFUL_STOP_BACKOFF_MAX_SEC, BackoffSec * ?GRACEFUL_STOP_BACKOFF_INCREASE_RATE)).
+
+
+%% @private
+-spec stop_atm_workflow_executions(
+    user_ctx:ctx(),
+    od_space:id() | [od_space:id()],
+    op_worker_stopping | interrupt
+) ->
+    AllStopped :: boolean().
+stop_atm_workflow_executions(UserCtx, SpaceId, StoppingReason) when is_binary(SpaceId) ->
     CallbackFun = fun(AtmWorkflowExecutionId, _) ->
         try
-            atm_workflow_execution_handler:stop(UserCtx, AtmWorkflowExecutionId, op_worker_stopping)
+            % There is no problem with calling init_stop on already stopping automation workflow
+            % execution as it is idempotent and it may help stop execution that failed to stop
+            % previously due to some errors
+            atm_workflow_execution_handler:init_stop(UserCtx, AtmWorkflowExecutionId, StoppingReason)
         catch Type:Reason:Stacktrace ->
-            ?atm_examine_error(Type, Reason, Stacktrace)
+            ?error_stacktrace(
+                "Unexpected error while trying to stop automation workflow execution ~s:~n~p:~p",
+                [AtmWorkflowExecutionId, Type, Reason],
+                Stacktrace
+            )
         end,
         false
     end,
 
-    NoWaiting = atm_workflow_execution_api:foldl(SpaceId, ?WAITING_PHASE, CallbackFun, true),
-    NoOngoing = atm_workflow_execution_api:foldl(SpaceId, ?ONGOING_PHASE, CallbackFun, true),
+    NoneWaiting = atm_workflow_execution_api:foldl(SpaceId, ?WAITING_PHASE, CallbackFun, true),
+    NoneOngoing = atm_workflow_execution_api:foldl(SpaceId, ?ONGOING_PHASE, CallbackFun, true),
 
-    NoWaiting andalso NoOngoing;
+    NoneWaiting andalso NoneOngoing;
 
-pause_atm_workflow_executions(UserCtx, SpaceIds) when is_list(SpaceIds) ->
+stop_atm_workflow_executions(UserCtx, SpaceIds, StoppingReason) when is_list(SpaceIds) ->
     lists:all(
-        fun(AllPaused) -> AllPaused end,
-        lists:map(fun(SpaceId) -> pause_atm_workflow_executions(UserCtx, SpaceId) end, SpaceIds)
+        fun(AllStopped) -> AllStopped end,
+        [stop_atm_workflow_executions(UserCtx, SpaceId, StoppingReason) || SpaceId <- SpaceIds]
     ).
 
 
