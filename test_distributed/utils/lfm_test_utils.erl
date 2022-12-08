@@ -23,6 +23,7 @@
     get_user1_first_storage_id/2]).
 -export([create_file/4, create_file/5, write_file/4, write_file/5, create_and_write_file/6, read_file/4]).
 -export([create_files_tree/4, create_files_tree/5]).
+-export([get_xattrs/3]).
 -export([clean_space/3, clean_space/4, assert_space_and_trash_are_empty/3, assert_space_dir_empty/3]).
 
 % TODO VFS-7215 - merge this module with file_ops_test_utils
@@ -118,6 +119,16 @@ create_files_tree(Worker, SessId, Structure, RootGuid) ->
 
 create_files_tree(Worker, SessId, Structure, RootGuid, FileSize) ->
     create_files_tree(Worker, SessId, Structure, RootGuid, FileSize, <<"dir">>, <<"file">>, [], []).
+
+
+-spec get_xattrs(node(), session:id(), file_id:file_guid()) ->
+    binary().
+get_xattrs(Worker, SessId, FileGuid) ->
+    {ok, Xattrs} = lfm_proxy:list_xattr(Worker, SessId, ?FILE_REF(FileGuid), false, false),
+    maps_utils:generate_from_list(fun(Xattr) ->
+        {ok, #xattr{value = Value}} = lfm_proxy:get_xattr(Worker, SessId, ?FILE_REF(FileGuid), Xattr),
+        Value
+    end, Xattrs).
 
 
 clean_space(Workers, SpaceId, Attempts) ->

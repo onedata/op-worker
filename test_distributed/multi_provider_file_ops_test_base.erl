@@ -1819,9 +1819,10 @@ mock_sync_and_rtransfer_errors(Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
 
     RequestDelay = test_utils:get_env(Worker, ?APP_NAME, dbsync_changes_request_delay),
-    test_utils:set_env(Workers, ?APP_NAME, dbsync_changes_request_delay, timer:seconds(1)),
+    test_utils:set_env(Workers, ?APP_NAME, dbsync_changes_request_delay, timer:seconds(2)),
 
-    test_utils:mock_new(Workers, [dbsync_in_stream_worker, dbsync_communicator, rtransfer_config], [passthrough]),
+    test_utils:mock_new(Workers,
+        [dbsync_in_stream_worker, dbsync_communicator, rtransfer_config, dbsync_changes], [passthrough]),
 
     test_utils:mock_expect(Workers, dbsync_in_stream_worker, handle_info, fun
         ({batch_applied, {Since, Until}, Timestamp, Ans} = Info, State) ->
@@ -1867,11 +1868,19 @@ mock_sync_and_rtransfer_errors(Config) ->
             end
         end),
 
+    test_utils:mock_expect(Workers, dbsync_changes, apply,
+        fun(#document{seq = Seq} = Doc) ->
+            case crypto:rand_uniform(1, 10) > 7 of
+                true -> {error, Seq, test_error};
+                false -> meck:passthrough([Doc])
+            end
+        end),
+
     [{request_delay, RequestDelay} | Config].
 
 unmock_sync_and_rtransfer_errors(Config) ->
     Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, [dbsync_in_stream_worker, dbsync_communicator, rtransfer_config]),
+    test_utils:mock_unload(Workers, [dbsync_in_stream_worker, dbsync_communicator, rtransfer_config, dbsync_changes]),
     RequestDelay = ?config(request_delay, Config),
     test_utils:set_env(Workers, ?APP_NAME, dbsync_changes_request_delay, RequestDelay).
 
