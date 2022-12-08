@@ -666,7 +666,7 @@ remove_local_associated_documents(FileCtx, StorageFileDeleted, StorageFileId) ->
     ok = archive_recall:delete_local_docs(FileUuid),
     ok = file_popularity:delete(FileUuid),
     ok = dir_size_stats:delete_stats(FileGuid),
-    ok = dir_update_time_stats:delete_stats(FileGuid).
+    ok = dir_stats_metadata:delete(FileGuid).
 
 
 %%--------------------------------------------------------------------

@@ -1053,9 +1053,10 @@
     processing_start_timestamp :: time:millis()
 }).
 
--record(dir_update_time_stats, {
-    time = 0 :: times:time(),
-    incarnation = 0 :: non_neg_integer()
+
+-record(dir_stats_metadata, {
+    parent :: file_id:file_guid(),
+    dir_update_time_stats :: dir_update_time_stats:stats() | undefined
 }).
 
 

@@ -104,7 +104,8 @@
     % accumulates all the updates that were reported since the last propagation to parent
     stat_updates_acc_for_parent = #{} :: dir_stats_collection:collection(),
     last_used :: stopwatch:instance() | undefined,
-    parent :: file_id:file_guid() | root_dir | undefined, % resolved and stored upon first access to this field,
+    parent :: file_id:file_guid() | undefined, % resolved and stored upon first access to this field,
+                                               % value <<"root_dir">> is used when dir has no parent to send updates
 
     % Field used to store information about collecting status to enable special requests handling during collection
     % initialization (when space collecting is changed to enabled for not empty space - see dir_stats_service_state)
@@ -165,7 +166,7 @@
 -define(INITIALIZE_COLLECTIONS(Guid), {initialize_collections, Guid}).
 -define(CONTINUE_COLLECTIONS_INITIALIZATION(Guid), {continue_collections_initialization, Guid}).
 -define(STOP_COLLECTING(SpaceId), {stop_collecting, SpaceId}).
--define(FILE_MOVED(Guid, SourceParentGuid, TargetParentGuid), {file_moved, Guid, SourceParentGuid, TargetParentGuid}).
+-define(FILE_MOVED(Guid, TargetParentGuid), {file_moved, Guid, TargetParentGuid}).
 
 
 %%%===================================================================
@@ -290,10 +291,10 @@ initialize_collections(Guid) ->
 
 
 -spec report_file_moved(file_meta:type(), file_id:file_guid(), file_id:file_guid(), file_id:file_guid()) -> ok.
-report_file_moved(?DIRECTORY_TYPE, FileGuid, SourceParentGuid, TargetParentGuid) ->
+report_file_moved(?DIRECTORY_TYPE, FileGuid, _SourceParentGuid, TargetParentGuid) ->
     case dir_stats_service_state:is_active(file_id:guid_to_space_id(FileGuid)) of
         true ->
-            Message = ?FILE_MOVED(FileGuid, SourceParentGuid, TargetParentGuid),
+            Message = ?FILE_MOVED(FileGuid, TargetParentGuid),
             call_designated_node(FileGuid, acknowledged_cast, [?MODULE, FileGuid, Message]);
         false ->
             ok
@@ -471,7 +472,7 @@ handle_call(Request, State) ->
 
 
 -spec handle_cast(#dsc_update_request{} | ?SCHEDULED_FLUSH | ?SCHEDULED_COLLECTIONS_INITIALIZATION |
-    ?FILE_MOVED(file_id:file_guid(), file_id:file_guid(), file_id:file_guid()), state()) -> state().
+    ?FILE_MOVED(file_id:file_guid(), file_id:file_guid()), state()) -> state().
 handle_cast(#dsc_update_request{
     guid = Guid,
     update_type = UpdateType,
@@ -494,6 +495,7 @@ handle_cast(#dsc_update_request{
 handle_cast(?SCHEDULED_FLUSH, State) ->
     flush_all(State);
 
+% TODO - moze trzeba by zrobic tak, zeby to blokowalo traverse?
 handle_cast(?SCHEDULED_COLLECTIONS_INITIALIZATION, State) ->
     ensure_space_collecting_statuses_up_to_date(
         start_collections_initialization_for_all_cached_dirs(State#state{initialization_timer_ref = undefined}));
@@ -501,9 +503,9 @@ handle_cast(?SCHEDULED_COLLECTIONS_INITIALIZATION, State) ->
 handle_cast(?CONTINUE_COLLECTIONS_INITIALIZATION(Guid), State) ->
     continue_collections_initialization_for_dir(Guid, State);
 
-handle_cast(?FILE_MOVED(Guid, SourceParentGuid, TargetParentGuid), State) ->
+handle_cast(?FILE_MOVED(Guid, TargetParentGuid), State) ->
     lists:foldl(fun(CollectionType, StateAcc) ->
-        collection_moved(Guid, CollectionType, SourceParentGuid, TargetParentGuid, StateAcc)
+        collection_moved(Guid, CollectionType, TargetParentGuid, StateAcc)
     end, State, dir_stats_collection:list_types());
 
 handle_cast(Info, State) ->
@@ -699,6 +701,7 @@ continue_collections_initialization_for_dir(Guid, #state{initialization_progress
                 end
         end
     catch
+        % TODO - obsluzyc jak dane sa rozjechane tzn brakuje pliku
         Error:Reason:Stacktrace ->
             ?error_stacktrace("Dir stats collector ~p error for ~p: ~p:~p",
                 [?FUNCTION_NAME, Guid, Error, Reason], Stacktrace),
@@ -928,9 +931,9 @@ update_cached_dir_stats(CachedDirStatsKey, CachedDirStats, #state{dir_stats_cach
 
 
 %% @private
--spec update_stats_of_parent_internal(file_id:file_guid() | root_dir, dir_stats_collection:type(),
+-spec update_stats_of_parent_internal(file_id:file_guid(), dir_stats_collection:type(),
     dir_stats_collection:collection()) -> ok | ?ERROR_INTERNAL_SERVER_ERROR.
-update_stats_of_parent_internal(root_dir = _ParentGuid, _CollectionType, _CollectionUpdate) ->
+update_stats_of_parent_internal(<<"root_dir">> = _ParentGuid, _CollectionType, _CollectionUpdate) ->
     ok;
 update_stats_of_parent_internal(ParentGuid, CollectionType, CollectionUpdate) ->
     update_stats_of_dir(ParentGuid, external, CollectionType, CollectionUpdate).
@@ -944,7 +947,7 @@ propagate_to_parent(Guid, CollectionType, #cached_dir_stats{
     {Parent, UpdatedCachedDirStats} = acquire_parent(Guid, CachedDirStats),
 
     Result = case Parent of
-        root_dir -> ok;
+        <<"root_dir">> -> ok;
         not_found -> add_hook_for_missing_doc(Guid, CollectionType, StatUpdatesAccForParent);
         _ -> update_stats_of_dir(Parent, internal, CollectionType, StatUpdatesAccForParent)
     end,
@@ -961,13 +964,24 @@ propagate_to_parent(Guid, CollectionType, #cached_dir_stats{
 
 %% @private
 -spec acquire_parent(file_id:file_guid(), cached_dir_stats()) ->
-    {file_id:file_guid() | root_dir | not_found, cached_dir_stats()}.
+    {file_id:file_guid() | not_found, cached_dir_stats()}.
 acquire_parent(Guid, #cached_dir_stats{
     parent = undefined
 } = CachedDirStats) ->
     case get_parent(Guid) of
-        {ok, ParentGuidToCache} -> {ParentGuidToCache, CachedDirStats#cached_dir_stats{parent = ParentGuidToCache}};
-        ?ERROR_NOT_FOUND -> {not_found, CachedDirStats}
+        {ok, ParentGuidToCache} ->
+            case dir_stats_metadata:get_parent(Guid) of
+                undefined ->
+                    dir_stats_metadata:update_parent(Guid, ParentGuidToCache),
+                    {ParentGuidToCache, CachedDirStats#cached_dir_stats{parent = ParentGuidToCache}};
+                ParentGuidToCache ->
+                    {ParentGuidToCache, CachedDirStats#cached_dir_stats{parent = ParentGuidToCache}};
+                OldParentGuid ->
+                    pes:self_cast(?FILE_MOVED(Guid, ParentGuidToCache)),
+                    {OldParentGuid, CachedDirStats#cached_dir_stats{parent = OldParentGuid}}
+            end;
+        ?ERROR_NOT_FOUND ->
+            {not_found, CachedDirStats}
     end;
 
 acquire_parent(_Guid, #cached_dir_stats{
@@ -977,7 +991,7 @@ acquire_parent(_Guid, #cached_dir_stats{
 
 
 %% @private
--spec get_parent(file_id:file_guid()) -> {ok, file_id:file_guid() | root_dir} | ?ERROR_NOT_FOUND.
+-spec get_parent(file_id:file_guid()) -> {ok, file_id:file_guid()} | ?ERROR_NOT_FOUND.
 get_parent(Guid) ->
     {FileUuid, SpaceId} = file_id:unpack_guid(Guid),
     case file_meta:get_including_deleted(FileUuid) of
@@ -987,11 +1001,11 @@ get_parent(Guid) ->
 
 
 %% @private
--spec get_parent(file_meta:doc(), od_space:id()) -> file_id:file_guid() | root_dir.
+-spec get_parent(file_meta:doc(), od_space:id()) -> file_id:file_guid().
 get_parent(Doc, SpaceId) ->
     {ok, ParentUuid} = file_meta:get_parent_uuid(Doc),
     case fslogic_file_id:is_root_dir_uuid(ParentUuid) of
-        true -> root_dir;
+        true -> <<"root_dir">>;
         false -> file_id:pack_guid(ParentUuid, SpaceId)
     end.
 
@@ -1048,28 +1062,39 @@ gen_cached_dir_stats_key(Guid, CollectionType) ->
 
 
 %% @private
--spec collection_moved(file_id:file_guid(), dir_stats_collection:type(), file_id:file_guid(), file_id:file_guid(),
-    state()) -> state().
-collection_moved(Guid, CollectionType, SourceParentGuid, TargetParentGuid, State) ->
+-spec collection_moved(file_id:file_guid(), dir_stats_collection:type(), file_id:file_guid(), state()) -> state().
+collection_moved(Guid, CollectionType, TargetParentGuid, State) ->
     case update_in_cache(Guid, CollectionType, fun(CachedDirStats) ->
-        % Use source parent to flush changes
-        % TODO VFS-9204 - analyze race with collection modification
-        % (is it possible to load statistic with new parent, do changes and flush before move is handled?)
-        CachedDirStats#cached_dir_stats{parent = SourceParentGuid}
+        {_, UpdatedCachedDirStats} = acquire_parent(Guid, CachedDirStats),
+        UpdatedCachedDirStats
     end, State) of
         {
-            {ok, #cached_dir_stats{current_stats = CurrentStats, collecting_status = enabled}},
+            {ok, #cached_dir_stats{parent = undefined}},
+            UpdatedState
+        } ->
+            UpdatedState; % Parent cannot be acquired so no data could be propagated to it
+        {
+            {ok, #cached_dir_stats{parent = TargetParentGuid}},
+            UpdatedState
+        } ->
+            UpdatedState;
+        {
+            {ok, #cached_dir_stats{
+                parent = PrevParentGuid,
+                current_stats = CurrentStats,
+                collecting_status = enabled
+            }},
             UpdatedState
         } ->
             CachedDirStatsKey = gen_cached_dir_stats_key(Guid, CollectionType),
             % TODO VFS-9204 - handle flush errors
-            {_FlushAns, UpdatedState2} = flush_cached_dir_stats(CachedDirStatsKey, prune_inactive, UpdatedState),
+            {_FlushAns, UpdatedState2} = flush_cached_dir_stats(CachedDirStatsKey, prune_inactive, UpdatedState), % TODO - moze wcale nie robic prune?, albo zrobic tylko flush do parenta?
             InitialDirStats = CollectionType:init_child(Guid),
             ConsolidatedStats = dir_stats_collection:consolidate(CollectionType, InitialDirStats, CurrentStats),
 
             case dir_stats_collection:on_collection_move(CollectionType, ConsolidatedStats) of
                 {update_source_parent, CollectionUpdate} ->
-                    update_stats_of_dir(SourceParentGuid, internal, CollectionType, CollectionUpdate);
+                    update_stats_of_dir(PrevParentGuid, internal, CollectionType, CollectionUpdate);
                 ignore ->
                     ok
             end,
@@ -1078,6 +1103,7 @@ collection_moved(Guid, CollectionType, SourceParentGuid, TargetParentGuid, State
                 CachedDirStats#cached_dir_stats{parent = TargetParentGuid}
             end, UpdatedState2),
             update_stats_of_dir(TargetParentGuid, internal, CollectionType, ConsolidatedStats),
+            dir_stats_metadata:update_parent(Guid, TargetParentGuid),
             UpdatedState3;
 
         {
@@ -1087,6 +1113,7 @@ collection_moved(Guid, CollectionType, SourceParentGuid, TargetParentGuid, State
             {_, UpdatedState2} = update_in_cache(Guid, CollectionType, fun(CachedDirStats) ->
                 CachedDirStats#cached_dir_stats{parent = TargetParentGuid}
             end, UpdatedState),
+            dir_stats_metadata:update_parent(Guid, TargetParentGuid),
             UpdatedState2;
         {
             ?ERROR_DIR_STATS_DISABLED_FOR_SPACE,

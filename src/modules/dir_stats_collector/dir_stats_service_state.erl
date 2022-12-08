@@ -383,6 +383,7 @@ report_collectors_stopped(SpaceId) ->
             pending_status_transition = enable,
             incarnation = Incarnation
         } = State) ->
+            % TODO - sprawdzic czy to nie przeskakuje jakiejs inkarnacj? - czemu statystyki sie nie skasowaly? cos z traversem?
             {ok, State#dir_stats_service_state{
                 status = initializing,
                 incarnation = Incarnation + 1,
