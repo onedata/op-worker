@@ -112,7 +112,7 @@ task_started(TaskId, _Pool) ->
 
 -spec task_finished(id(), tree_traverse:pool()) -> ok.
 task_finished(TaskId, Pool) ->
-    case archive_traverses_common:is_cancelled(TaskId) of
+    case archive_traverses_common:is_cancelling(TaskId) of
         true -> 
             task_canceled(TaskId, Pool);
         false ->
@@ -126,8 +126,8 @@ task_finished(TaskId, Pool) ->
 task_canceled(TaskId, _Pool) ->
     tree_traverse_session:close_for_task(TaskId),
     case archive:mark_cancelled(TaskId) of
-        ok -> ok; % does nothing if archive already marked as `verification_failed`
-        delete -> archive_api:delete(TaskId, undefined)
+        ok -> ok;
+        marked_to_delete  -> archive_api:delete(TaskId, undefined)
     end, 
     ?debug("Archive verification job ~p cancelled", [TaskId]).
 
@@ -231,7 +231,7 @@ do_dir_master_job_unsafe(#tree_traverse{
     % Cancelling on remote provider when passing between archivisation and verification traverses phases can result
     % in a situation, that remote provider is not yet aware of verification traverse and does not cancel it.
     % Therefore this check here is required for proper cancellation.
-    case archive_traverses_common:is_cancelled(TaskId) of
+    case archive_traverses_common:is_cancelling(TaskId) of
         true ->
             cancel(TaskId),
             tree_traverse:do_aborted_master_job(Job, MasterJobArgs);

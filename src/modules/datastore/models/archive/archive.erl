@@ -64,7 +64,7 @@
 
 -type state() :: ?ARCHIVE_PENDING | ?ARCHIVE_BUILDING | ?ARCHIVE_PRESERVED | ?ARCHIVE_DELETING 
     | ?ARCHIVE_FAILED | ?ARCHIVE_VERIFYING | ?ARCHIVE_VERIFICATION_FAILED 
-    | ?ARCHIVE_CANCELLING(retain) | ?ARCHIVE_CANCELLING(delete) | ?ARCHIVE_CANCELLED.
+    | ?ARCHIVE_CANCELLING(cancel_preservation_policy()) | ?ARCHIVE_CANCELLED.
 -type timestamp() :: time:seconds().
 -type description() :: binary().
 -type callback() :: http_client:url() | undefined.
@@ -476,7 +476,7 @@ mark_building(ArchiveDocOrId) ->
     end)).
 
 
--spec mark_creation_finished(id() | doc(), archive_stats:record()) -> ok | delete.
+-spec mark_creation_finished(id() | doc(), archive_stats:record()) -> ok | marked_to_delete.
 mark_creation_finished(ArchiveDocOrId, NestedArchivesStats) ->
     UpdateResult = update(ArchiveDocOrId, fun
         (Archive = #archive{stats = CurrentStats, state = ?ARCHIVE_BUILDING}) ->
@@ -489,8 +489,9 @@ mark_creation_finished(ArchiveDocOrId, NestedArchivesStats) ->
                 stats = AggregatedStats
             }};
         (#archive{state = ?ARCHIVE_CANCELLING(delete), related_aip = undefined}) ->
-            % do not delete DIP archive (RelatedAip =/= undefined) as it will be deleted alongside AIP
-            {error, delete};
+            % AIP archive (RelatedAip == undefined) deletion is sufficient, as it will automatically
+            % result in DIP archive (RelatedAip =/= undefined) deletion.
+            {error, marked_to_delete};
         (Archive = #archive{state = ?ARCHIVE_CANCELLING(_)}) ->
             {ok, Archive#archive{state = ?ARCHIVE_CANCELLED}}
     end),
@@ -502,8 +503,8 @@ mark_creation_finished(ArchiveDocOrId, NestedArchivesStats) ->
             ok;
         {error, not_found} -> 
             ok;
-        {error, delete} ->
-            delete
+        {error, marked_to_delete} ->
+             marked_to_delete
     end.
 
 
@@ -529,24 +530,26 @@ mark_cancelling(ArchiveDocOrId, PreservationPolicy) ->
     end)).
 
 
--spec mark_cancelled(id() | doc()) -> ok | delete | error().
+-spec mark_cancelled(id() | doc()) -> ok | marked_to_delete | error().
 mark_cancelled(ArchiveDocOrId) ->
-    UpdateResult = ?ok_if_no_change(?ok_if_not_found(?extract_ok(update(ArchiveDocOrId, fun
+    UpdateResult = ?extract_ok(update(ArchiveDocOrId, fun
         (#archive{state = State, related_aip = RelatedAip} = Archive) ->
             case {is_finished(Archive), State, RelatedAip} of
                 {true, _, _} -> 
                     {error, no_change}; 
-                {false, ?ARCHIVE_CANCELLING(delete), undefined} -> 
-                    % do not delete DIP archive (RelatedAip =/= undefined) as it will be deleted alongside AIP
-                    {error, delete};
+                {false, ?ARCHIVE_CANCELLING(delete), undefined} ->
+                    % AIP archive (RelatedAip == undefined) deletion is sufficient, as it will automatically
+                    % result in DIP archive (RelatedAip =/= undefined) deletion.
+                    {error, marked_to_delete };
                 _ ->
                     {ok, Archive#archive{state = ?ARCHIVE_CANCELLED}}
             end
-    end)))),
+    end)),
     case UpdateResult of
         ok -> ok;
         {error, not_found} -> ok;
-        {error, delete} -> delete
+        {error, no_change} -> ok;
+        {error, marked_to_delete } -> marked_to_delete
     end.
 
 
@@ -579,6 +582,7 @@ set_root_dir_guid(ArchiveDocOrId, RootDirGuid) ->
         {ok, Archive#archive{root_dir_guid = RootDirGuid}}
     end).
 
+
 -spec set_data_dir_guid(id() | doc(), file_id:file_guid()) -> {ok, doc()} | error().
 set_data_dir_guid(ArchiveDocOrId, DataDirGuid) ->
     update(ArchiveDocOrId, fun(Archive) ->
@@ -595,7 +599,6 @@ set_base_archive_id(ArchiveDoc, BaseArchiveId) when is_binary(BaseArchiveId) ->
     update(ArchiveDoc, fun(Archive) ->
         {ok, Archive#archive{base_archive_id = BaseArchiveId}}
     end).
-
 
 
 -spec set_related_dip(id() | doc(), archive:id() | undefined) -> {ok, doc()} | error().

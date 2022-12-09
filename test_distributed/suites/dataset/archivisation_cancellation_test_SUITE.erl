@@ -108,9 +108,9 @@ groups() -> [
         cancel_archivisation_with_delete,
         cancel_archivisation_dip_with_delete,
         cancel_verification_with_delete,
-        cancel_verification_dip_with_delete
+        cancel_verification_dip_with_delete,
         
-%%        cancel_preserved_archive_test
+        cancel_preserved_archive_test
     ]}
 ].
 
