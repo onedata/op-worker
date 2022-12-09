@@ -12,6 +12,8 @@
 -module(opt_archives).
 -author("Bartosz Walkowicz").
 
+-include("proto/oneprovider/provider_messages.hrl").
+
 -export([
     list/4, list/5,
     archive_dataset/5, archive_dataset/7,
@@ -87,9 +89,13 @@ archive_dataset(NodeSelector, SessionId, DatasetId, Config, Description) ->
 archive_dataset(
     NodeSelector, SessionId, DatasetId, Config, PreservedCallback, DeletedCallback, Description
 ) ->
-    ?CALL(NodeSelector, [
+    Result = ?CALL(NodeSelector, [
         SessionId, DatasetId, Config, PreservedCallback, DeletedCallback, Description
-    ]).
+    ]),
+    case Result of
+        {ok, #archive_info{id = ArchiveId}} -> {ok, ArchiveId};
+        {error, _} = Error -> Error
+    end.
 
 
 -spec cancel_archivisation(oct_background:node_selector(), session:id(), archive:id(), 

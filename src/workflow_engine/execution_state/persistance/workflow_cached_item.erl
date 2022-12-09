@@ -39,9 +39,7 @@ put(Item, Iterator) ->
     {ok, #document{key = ItemId}} = datastore_model:save(?CTX, Doc),
     ItemId.
 
--spec get_item(id() | undefined) -> iterator:item() | undefined.
-get_item(undefined) ->
-    undefined;
+-spec get_item(id()) -> iterator:item().
 get_item(ItemId) ->
     {ok, #document{value = #workflow_cached_item{item = Item}}} = datastore_model:get(?CTX, ItemId),
     Item.

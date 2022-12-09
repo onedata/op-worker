@@ -117,6 +117,14 @@
     atm_workflow_execution_id :: atm_workflow_execution:id()
 }).
 
+-record(atm_workflow_execution_pause_request, {
+    atm_workflow_execution_id :: atm_workflow_execution:id()
+}).
+
+-record(atm_workflow_execution_resume_request, {
+    atm_workflow_execution_id :: atm_workflow_execution:id()
+}).
+
 -record(atm_workflow_execution_repeat_request, {
     type :: atm_workflow_execution:repeat_type(),
     atm_workflow_execution_id :: atm_workflow_execution:id(),

@@ -73,7 +73,7 @@ mark_building_if_first_job(Job = #tree_traverse{traverse_info = #{
 mark_finished_and_propagate_up(
     CurrentFileCtx, UserCtx, TraverseInfo, TaskId, SourceMasterUuid, StartTimestamp, FilePath, Status
 ) ->
-    report_to_audit_log(CurrentFileCtx, TraverseInfo, StartTimestamp, FilePath, Status),
+    report_to_audit_log(CurrentFileCtx, TraverseInfo, StartTimestamp, FilePath, Status, UserCtx),
     NextTraverseInfo = mark_finished_if_current_archive_is_rooted_in_current_file(
         CurrentFileCtx, UserCtx, TraverseInfo),
     propagate_finished_up(CurrentFileCtx, UserCtx, NextTraverseInfo, TaskId, SourceMasterUuid, FilePath).
@@ -504,9 +504,9 @@ is_archive_rooted_in_current_file(CurrentFileCtx, #{
 
 
 -spec report_to_audit_log(file_ctx:ctx(), info(), time:millis(), file_meta:path(),
-    {failed, Reason :: any()} | completed) -> ok.
-report_to_audit_log(CurrentFileCtx, TraverseInfo, StartTimestamp, FilePath, Status) ->
-    FileGuid = file_ctx:get_logical_guid_const(CurrentFileCtx),
+    {failed, Reason :: any()} | completed, user_ctx:ctx()) -> ok.
+report_to_audit_log(CurrentFileCtx, TraverseInfo, StartTimestamp, FilePath, Status, UserCtx) ->
+    {FileType, _CurrentFileCtx2} = file_ctx:get_effective_type(CurrentFileCtx),
     {ReportFun, AdditionalArgs} = case Status of
         completed ->
             {fun archivisation_audit_log:report_file_archivisation_finished/4, []};
@@ -515,6 +515,8 @@ report_to_audit_log(CurrentFileCtx, TraverseInfo, StartTimestamp, FilePath, Stat
     end,
     
     lists:foreach(fun(ArchiveDoc) ->
+        {ok, DatasetRootParentPath} = archive:get_dataset_root_parent_path(ArchiveDoc, UserCtx),
+        RelativeFilePath = filepath_utils:relative(DatasetRootParentPath, FilePath),
         {ok, ArchiveId} = archive:get_id(ArchiveDoc),
-        erlang:apply(ReportFun, [ArchiveId, FileGuid, FilePath, StartTimestamp | AdditionalArgs])
+        erlang:apply(ReportFun, [ArchiveId, RelativeFilePath, FileType, StartTimestamp | AdditionalArgs])
     end, info_to_archive_docs(TraverseInfo)).

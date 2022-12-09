@@ -209,6 +209,34 @@ create_time_series_store(CreationCtx = #creation_ctx{creation_args = #creation_a
 }}) ->
     CreationCtx;
 
+%% Copy ts store in case of retry
+create_time_series_store(CreationCtx = #creation_ctx{
+    creation_args = #creation_args{
+        task_schema = #atm_task_schema{id = AtmTaskSchemaId},
+        parallel_box_execution_creation_args = #atm_parallel_box_execution_creation_args{
+            lane_execution_run_creation_args = #atm_lane_execution_run_creation_args{
+                type = retry,
+                origin_run = #atm_lane_execution_run{parallel_boxes = OriginAtmParallelBoxExecutions}
+            },
+            parallel_box_index = AtmParallelBoxIndex
+        }
+    },
+    execution_components = ExecutionComponents
+}) ->
+    OriginAtmTaskExecutionId = atm_parallel_box_execution:get_task_id(
+        AtmTaskSchemaId,
+        lists:nth(AtmParallelBoxIndex, OriginAtmParallelBoxExecutions)
+    ),
+    {ok, #document{value = OriginAtmTaskExecution}} = atm_task_execution:get(OriginAtmTaskExecutionId),
+
+    OriginAtmTaskTSStoreId = OriginAtmTaskExecution#atm_task_execution.time_series_store_id,
+    #document{key = AtmTaskTSStoreId} = atm_store_api:copy(OriginAtmTaskTSStoreId, false),
+
+    CreationCtx#creation_ctx{execution_components = ExecutionComponents#execution_components{
+        time_series_store_id = AtmTaskTSStoreId
+    }};
+
+%% Otherwise create new ts store instance
 create_time_series_store(CreationCtx = #creation_ctx{
     creation_args = #creation_args{
         task_schema = #atm_task_schema{

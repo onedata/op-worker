@@ -306,7 +306,10 @@ do_slave_job_unsafe(#tree_traverse_slave{
             {ok, _, _} = file_copy:copy(SessionId, FileGuid, TargetParentGuid, FileName,
                 ?COPY_OPTIONS(TaskId))
     end,
-    ok = archive_recall:report_file_finished(TaskId).
+    case traverse:is_job_cancelled(TaskId) of
+        true -> ok;
+        false -> archive_recall:report_file_finished(TaskId)
+    end.
 
 
 %% @private

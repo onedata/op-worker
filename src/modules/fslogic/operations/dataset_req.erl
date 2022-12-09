@@ -188,7 +188,7 @@ list_recursively(SpaceId, DatasetId, Opts, UserCtx) ->
     archive:description(),
     user_ctx:ctx()
 ) ->
-    {ok, archive:id()} | error().
+    {ok, archive_api:info()} | error().
 create_archive(SpaceDirCtx, DatasetId, Config, PreservedCallback, DeletedCallback, Description, UserCtx) ->
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_MANAGE_DATASETS),
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_CREATE_ARCHIVES),

@@ -23,6 +23,16 @@
                 {
                     "type": "posix",
                     "name": "/mnt/st4"
+                },
+                {
+                    "type": "nulldevice",
+                    "name": "null-storage",
+                    "latencyMin": "0",
+                    "latencyMax": "0",
+                    "timeoutProbability": "0.0",
+                    "filter": "*",
+                    "simulatedFilesystemParameters": "",
+                    "simulatedFilesystemGrowSpeed": "0.0"
                 }
             ],
             "users": [],
@@ -37,6 +47,16 @@
                 {
                     "type": "posix",
                     "name": "/mnt/st4"
+                },
+                {
+                    "type": "nulldevice",
+                    "name": "null-storage",
+                    "latencyMin": "0",
+                    "latencyMax": "0",
+                    "timeoutProbability": "0.0",
+                    "filter": "*",
+                    "simulatedFilesystemParameters": "",
+                    "simulatedFilesystemGrowSpeed": "0.0"
                 }
             ],
             "users": [],
@@ -173,6 +193,24 @@
                     },
                     "p2": {
                         "storage": "/mnt/st4",
+                        "supported_size": 1000000000
+                    }
+                }
+            },
+            "space5": {
+                "displayed_name": "space_name5",
+                "users": [
+                    "user1"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "null-storage",
+                        "supported_size": 1000000000
+                    },
+                    "p2": {
+                        "storage": "null-storage",
                         "supported_size": 1000000000
                     }
                 }

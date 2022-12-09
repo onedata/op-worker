@@ -27,6 +27,7 @@
 %% atm_store_container callbacks
 -export([
     create/3,
+    copy/1,
     get_config/1,
 
     get_iterated_item_data_spec/1,
@@ -108,6 +109,12 @@ create(_AtmWorkflowExecutionAuth, _AtmStoreConfig, _InitialContent) ->
         <<"initialContent">>,
         <<"Time series store does not accept initial content">>
     )).
+
+
+-spec copy(record()) -> record() | no_return().
+copy(OriginRecord = #atm_time_series_store_container{backend_id = OriginBackendId}) ->
+    {ok, BackendId} = datastore_time_series_collection:clone(?CTX, OriginBackendId),
+    OriginRecord#atm_time_series_store_container{backend_id = BackendId}.
 
 
 -spec get_config(record()) -> atm_time_series_store_config:record().

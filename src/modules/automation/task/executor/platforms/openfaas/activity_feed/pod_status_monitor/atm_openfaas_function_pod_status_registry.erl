@@ -51,15 +51,14 @@
 % multiple pods, which may be started or terminated at different moments
 -type pod_id() :: binary().
 
-% Jsonable object containing all information related to an event, stored in the
-% database in the same format as later returned during listing. Does not include
-% the log index, which is added after entries are listed.
--type event_data() :: json_utils:json_map().
-
 -export_type([id/0, diff/0, record/0, doc/0]).
 -export_type([pod_id/0]).
 
 -define(CTX, #{model => ?MODULE}).
+
+% The deleted registry doc is retained for some time to distinguish between registries that
+% never existed and those that were recently deleted (when a report comes and there is no matching registry).
+-define(DELETED_REGISTRY_EXPIRY_SECONDS, 604800).  % a week
 
 %%%===================================================================
 %%% API functions
@@ -95,13 +94,11 @@ get(RegistryId) ->
 delete(RegistryId) ->
     {ok, PodStatusRegistry} = ?MODULE:get(RegistryId),
 
-    foreach_summary(fun(_PodId, PodStatusSummary) ->
-        audit_log:delete(
-            PodStatusSummary#atm_openfaas_function_pod_status_summary.event_log_id
-        )
-    end, PodStatusRegistry),
+    datastore_model:delete(datastore_model:set_expiry(?CTX, ?DELETED_REGISTRY_EXPIRY_SECONDS), RegistryId),
 
-    datastore_model:delete(?CTX, RegistryId).
+    foreach_summary(fun(_PodId, PodStatusSummary) ->
+        audit_log:delete(PodStatusSummary#atm_openfaas_function_pod_status_summary.event_log_id)
+    end, PodStatusRegistry).
 
 
 -spec to_json(record()) -> json_utils:json_term().
@@ -245,18 +242,39 @@ consume_pod_status_report(#atm_openfaas_function_pod_status_report{
 } = PodStatusReport) ->
     PodStatusRegistryId = gen_registry_id(FunctionName),
 
-    {ok, _} = datastore_model:update(?CTX, PodStatusRegistryId, fun(PodStatusRegistry) ->
+    Diff = fun(PodStatusRegistry) ->
         {ok, apply_report_to_corresponding_summary(PodStatusReport, PodStatusRegistry)}
-    end),
-
-    PodEventLogId = gen_pod_event_log_id(PodStatusRegistryId, PodId),
-    AppendRequest = build_append_request(EventTimestamp, EventType, EventReason, EventMessage),
-    case audit_log:append(PodEventLogId, AppendRequest) of
-        ok ->
-            ok;
+    end,
+    case datastore_model:update(?CTX, PodStatusRegistryId, Diff) of
+        {ok, _} ->
+            PodEventLogId = gen_pod_event_log_id(PodStatusRegistryId, PodId),
+            AppendRequest = build_append_request(EventTimestamp, EventType, EventReason, EventMessage),
+            case audit_log:append(PodEventLogId, AppendRequest) of
+                ok ->
+                    ok;
+                {error, not_found} ->
+                    % If there is no audit log, it means that either it has not been created yet
+                    % ot it has been deleted by a parallel process performing cleaning of the
+                    % registry and logs. The latter can be determined depending if the registry
+                    % has been deleted too - in such case, the log is ignored.
+                    case ?MODULE:get(PodStatusRegistryId) of
+                        {ok, _} ->
+                            ensure_pod_event_log_created(PodEventLogId),
+                            ok = audit_log:append(PodEventLogId, AppendRequest);
+                        {error, not_found} ->
+                            ok
+                    end
+            end;
         {error, not_found} ->
-            ensure_pod_event_log_created(PodEventLogId),
-            ok = audit_log:append(PodEventLogId, AppendRequest)
+            case datastore_model:get(?CTX#{include_deleted => true}, PodStatusRegistryId) of
+                {ok, _} ->
+                    % the registry has been recently deleted, the report can be silently ignored
+                    ok;
+                {error, not_found} ->
+                    ?warning("Ignoring a pod status report received for inexistent registry (function name: '~s')", [
+                        FunctionName
+                    ])
+            end
     end.
 
 

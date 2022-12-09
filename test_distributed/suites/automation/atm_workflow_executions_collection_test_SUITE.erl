@@ -29,10 +29,12 @@
 -export([
     add_to_waiting_test/1,
     add_to_ongoing_test/1,
+    add_to_suspended_test/1,
     add_to_ended_test/1,
 
     delete_from_waiting_test/1,
     delete_from_ongoing_test/1,
+    delete_from_suspended_test/1,
     delete_from_ended_test/1,
 
     list_with_invalid_listing_opts_test/1,
@@ -52,6 +54,13 @@
     iterate_over_100_ongoing_atm_workflow_executions_using_start_index_and_limit_10_test/1,
     iterate_over_100_ongoing_atm_workflow_executions_using_start_index_and_limit_100_test/1,
 
+    iterate_over_100_suspended_atm_workflow_executions_using_offset_and_limit_1_test/1,
+    iterate_over_100_suspended_atm_workflow_executions_using_offset_and_limit_10_test/1,
+    iterate_over_100_suspended_atm_workflow_executions_using_offset_and_limit_100_test/1,
+    iterate_over_100_suspended_atm_workflow_executions_using_start_index_and_limit_1_test/1,
+    iterate_over_100_suspended_atm_workflow_executions_using_start_index_and_limit_10_test/1,
+    iterate_over_100_suspended_atm_workflow_executions_using_start_index_and_limit_100_test/1,
+
     iterate_over_100_ended_atm_workflow_executions_using_offset_and_limit_1_test/1,
     iterate_over_100_ended_atm_workflow_executions_using_offset_and_limit_10_test/1,
     iterate_over_100_ended_atm_workflow_executions_using_offset_and_limit_100_test/1,
@@ -64,10 +73,12 @@ groups() -> [
     {all_tests, [parallel], [
         add_to_waiting_test,
         add_to_ongoing_test,
+        add_to_suspended_test,
         add_to_ended_test,
 
         delete_from_waiting_test,
         delete_from_ongoing_test,
+        delete_from_suspended_test,
         delete_from_ended_test,
 
         list_with_invalid_listing_opts_test,
@@ -87,6 +98,13 @@ groups() -> [
         iterate_over_100_ongoing_atm_workflow_executions_using_start_index_and_limit_10_test,
         iterate_over_100_ongoing_atm_workflow_executions_using_start_index_and_limit_100_test,
 
+        iterate_over_100_suspended_atm_workflow_executions_using_offset_and_limit_1_test,
+        iterate_over_100_suspended_atm_workflow_executions_using_offset_and_limit_10_test,
+        iterate_over_100_suspended_atm_workflow_executions_using_offset_and_limit_100_test,
+        iterate_over_100_suspended_atm_workflow_executions_using_start_index_and_limit_1_test,
+        iterate_over_100_suspended_atm_workflow_executions_using_start_index_and_limit_10_test,
+        iterate_over_100_suspended_atm_workflow_executions_using_start_index_and_limit_100_test,
+
         iterate_over_100_ended_atm_workflow_executions_using_offset_and_limit_1_test,
         iterate_over_100_ended_atm_workflow_executions_using_offset_and_limit_10_test,
         iterate_over_100_ended_atm_workflow_executions_using_offset_and_limit_100_test,
@@ -104,7 +122,7 @@ all() -> [
 -type listing_method() :: offset | start_index.
 
 -define(ATM_WORKFLOW_EXECUTIONS_PHASES, [
-    ?WAITING_PHASE, ?ONGOING_PHASE, ?ENDED_PHASE
+    ?WAITING_PHASE, ?ONGOING_PHASE, ?SUSPENDED_PHASE, ?ENDED_PHASE
 ]).
 
 -define(DUMMY_ATM_INVENTORY_ID, <<"dummyId">>).
@@ -124,6 +142,10 @@ add_to_waiting_test(_Config) ->
 
 add_to_ongoing_test(_Config) ->
     add_links_test_base(?ONGOING_PHASE).
+
+
+add_to_suspended_test(_Config) ->
+    add_links_test_base(?SUSPENDED_PHASE).
 
 
 add_to_ended_test(_Config) ->
@@ -164,6 +186,10 @@ delete_from_waiting_test(_Config) ->
 
 delete_from_ongoing_test(_Config) ->
     delete_links_test_base(?ONGOING_PHASE).
+
+
+delete_from_suspended_test(_Config) ->
+    delete_links_test_base(?SUSPENDED_PHASE).
 
 
 delete_from_ended_test(_Config) ->
@@ -286,6 +312,30 @@ iterate_over_100_ongoing_atm_workflow_executions_using_start_index_and_limit_100
     iterate_over_atm_workflow_executions_test_base(?ONGOING_PHASE, 200, start_index, 100).
 
 
+iterate_over_100_suspended_atm_workflow_executions_using_offset_and_limit_1_test(_Config) ->
+    iterate_over_atm_workflow_executions_test_base(?SUSPENDED_PHASE, 200, offset, 1).
+
+
+iterate_over_100_suspended_atm_workflow_executions_using_offset_and_limit_10_test(_Config) ->
+    iterate_over_atm_workflow_executions_test_base(?SUSPENDED_PHASE, 200, offset, 10).
+
+
+iterate_over_100_suspended_atm_workflow_executions_using_offset_and_limit_100_test(_Config) ->
+    iterate_over_atm_workflow_executions_test_base(?SUSPENDED_PHASE, 200, offset, 100).
+
+
+iterate_over_100_suspended_atm_workflow_executions_using_start_index_and_limit_1_test(_Config) ->
+    iterate_over_atm_workflow_executions_test_base(?SUSPENDED_PHASE, 200, start_index, 1).
+
+
+iterate_over_100_suspended_atm_workflow_executions_using_start_index_and_limit_10_test(_Config) ->
+    iterate_over_atm_workflow_executions_test_base(?SUSPENDED_PHASE, 200, start_index, 10).
+
+
+iterate_over_100_suspended_atm_workflow_executions_using_start_index_and_limit_100_test(_Config) ->
+    iterate_over_atm_workflow_executions_test_base(?SUSPENDED_PHASE, 200, start_index, 100).
+
+
 iterate_over_100_ended_atm_workflow_executions_using_offset_and_limit_1_test(_Config) ->
     iterate_over_atm_workflow_executions_test_base(?ENDED_PHASE, 200, offset, 1).
 
@@ -389,6 +439,7 @@ gen_rand_workflow(SpaceId, AtmInventoryId) ->
         atm_inventory_id = AtmInventoryId,
         schedule_time = rand:uniform(9999999),
         start_time = rand:uniform(9999999),
+        suspend_time = rand:uniform(9999999),
         finish_time = rand:uniform(9999999)
     }}.
 
@@ -404,6 +455,10 @@ index(?ONGOING_PHASE, #document{key = AtmWorkflowExecutionId, value = #atm_workf
     start_time = StartTime
 }}) ->
     <<(integer_to_binary(?EPOCH_INFINITY - StartTime))/binary, AtmWorkflowExecutionId/binary>>;
+index(?SUSPENDED_PHASE, #document{key = AtmWorkflowExecutionId, value = #atm_workflow_execution{
+    suspend_time = SuspendTime
+}}) ->
+    <<(integer_to_binary(?EPOCH_INFINITY - SuspendTime))/binary, AtmWorkflowExecutionId/binary>>;
 index(?ENDED_PHASE, #document{key = AtmWorkflowExecutionId, value = #atm_workflow_execution{
     finish_time = FinishTime
 }}) ->
@@ -416,6 +471,8 @@ add_link(Node, ?WAITING_PHASE, AtmWorkflowExecutionDoc) ->
     ?assertEqual(ok, rpc:call(Node, atm_waiting_workflow_executions, add, [AtmWorkflowExecutionDoc]));
 add_link(Node, ?ONGOING_PHASE, AtmWorkflowExecutionDoc) ->
     ?assertEqual(ok, rpc:call(Node, atm_ongoing_workflow_executions, add, [AtmWorkflowExecutionDoc]));
+add_link(Node, ?SUSPENDED_PHASE, AtmWorkflowExecutionDoc) ->
+    ?assertEqual(ok, rpc:call(Node, atm_suspended_workflow_executions, add, [AtmWorkflowExecutionDoc]));
 add_link(Node, ?ENDED_PHASE, AtmWorkflowExecutionDoc) ->
     ?assertEqual(ok, rpc:call(Node, atm_ended_workflow_executions, add, [AtmWorkflowExecutionDoc])).
 
@@ -426,6 +483,8 @@ delete_link(Node, ?WAITING_PHASE, AtmWorkflowExecutionDoc) ->
     ?assertEqual(ok, rpc:call(Node, atm_waiting_workflow_executions, delete, [AtmWorkflowExecutionDoc]));
 delete_link(Node, ?ONGOING_PHASE, AtmWorkflowExecutionDoc) ->
     ?assertEqual(ok, rpc:call(Node, atm_ongoing_workflow_executions, delete, [AtmWorkflowExecutionDoc]));
+delete_link(Node, ?SUSPENDED_PHASE, AtmWorkflowExecutionDoc) ->
+    ?assertEqual(ok, rpc:call(Node, atm_suspended_workflow_executions, delete, [AtmWorkflowExecutionDoc]));
 delete_link(Node, ?ENDED_PHASE, AtmWorkflowExecutionDoc) ->
     ?assertEqual(ok, rpc:call(Node, atm_ended_workflow_executions, delete, [AtmWorkflowExecutionDoc])).
 
@@ -499,6 +558,8 @@ list_links(Node, SpaceId, ?WAITING_PHASE, TreeIds, ListingOpts) ->
     rpc:call(Node, atm_waiting_workflow_executions, list, [SpaceId, TreeIds, ListingOpts]);
 list_links(Node, SpaceId, ?ONGOING_PHASE, TreeIds, ListingOpts) ->
     rpc:call(Node, atm_ongoing_workflow_executions, list, [SpaceId, TreeIds, ListingOpts]);
+list_links(Node, SpaceId, ?SUSPENDED_PHASE, TreeIds, ListingOpts) ->
+    rpc:call(Node, atm_suspended_workflow_executions, list, [SpaceId, TreeIds, ListingOpts]);
 list_links(Node, SpaceId, ?ENDED_PHASE, TreeIds, ListingOpts) ->
     rpc:call(Node, atm_ended_workflow_executions, list, [SpaceId, TreeIds, ListingOpts]).
 

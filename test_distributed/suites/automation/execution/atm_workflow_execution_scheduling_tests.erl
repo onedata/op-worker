@@ -6,10 +6,10 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Bases for tests concerning scheduling automation workflow schemas.
+%%% Tests concerning scheduling automation workflow schemas.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_workflow_execution_scheduling_test_base).
+-module(atm_workflow_execution_scheduling_tests).
 -author("Bartosz Walkowicz").
 
 -include("atm_workflow_execution_test.hrl").
@@ -31,8 +31,8 @@
     revision_num = 1,
     revision = #atm_workflow_schema_revision_draft{
         stores = [
-            ?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"st_src">>, [1, 9, 64]),
-            ?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"st_dst">>)
+            ?INTEGER_ATM_LIST_STORE_SCHEMA_DRAFT(<<"st_src">>, [1, 9, 64]),
+            ?INTEGER_ATM_LIST_STORE_SCHEMA_DRAFT(<<"st_dst">>)
         ],
         lanes = [#atm_lane_schema_draft{
             parallel_boxes = [#atm_parallel_box_schema_draft{tasks = [#atm_task_schema_draft{
@@ -68,7 +68,7 @@ schedule_atm_workflow_with_no_lanes() ->
         name = <<"atm_workflow_with_no_lanes">>,
         revision_num = 1,
         revision = #atm_workflow_schema_revision_draft{
-            stores = [?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"st_src">>)],
+            stores = [?INTEGER_ATM_LIST_STORE_SCHEMA_DRAFT(<<"st_src">>)],
             lanes = []
         }
     }),
@@ -84,7 +84,7 @@ schedule_atm_workflow_with_empty_lane() ->
         name = <<"atm_workflow_with_empty_lane">>,
         revision_num = 1,
         revision = #atm_workflow_schema_revision_draft{
-            stores = [?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"st_src">>)],
+            stores = [?INTEGER_ATM_LIST_STORE_SCHEMA_DRAFT(<<"st_src">>)],
             lanes = [#atm_lane_schema_draft{
                 parallel_boxes = [],
                 store_iterator_spec = #atm_store_iterator_spec_draft{
@@ -109,7 +109,7 @@ schedule_atm_workflow_with_empty_parallel_box() ->
         name = <<"atm_workflow_with_empty_parallel_box">>,
         revision_num = 1,
         revision = #atm_workflow_schema_revision_draft{
-            stores = [?INTEGER_LIST_STORE_SCHEMA_DRAFT(<<"st_src">>)],
+            stores = [?INTEGER_ATM_LIST_STORE_SCHEMA_DRAFT(<<"st_src">>)],
             lanes = [#atm_lane_schema_draft{
                 parallel_boxes = [#atm_parallel_box_schema_draft{
                     tasks = []

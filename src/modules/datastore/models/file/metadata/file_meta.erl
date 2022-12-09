@@ -502,8 +502,13 @@ rename(SourceDoc, SourceParentUuid, TargetParentUuid, TargetName) ->
     end),
 
     % TODO VFS-8835 - test if other mechanisms handle size change
-    dir_size_stats:report_file_moved(Type, file_id:pack_guid(FileUuid, Scope),
-        file_id:pack_guid(SourceParentUuid, Scope), file_id:pack_guid(TargetParentUuid, Scope)),
+    case SourceParentUuid =/= TargetParentUuid of
+        true ->
+            dir_stats_collector:report_file_moved(Type, file_id:pack_guid(FileUuid, Scope),
+                file_id:pack_guid(SourceParentUuid, Scope), file_id:pack_guid(TargetParentUuid, Scope));
+        false ->
+            ok
+    end,
 
     dataset_api:move_if_applicable(SourceDoc, TargetDoc).
 
@@ -580,6 +585,7 @@ get_type(#file_meta{type = Type}) ->
     Type;
 get_type(#document{value = FileMeta}) ->
     get_type(FileMeta).
+
 
 -spec get_effective_type(file_meta() | doc()) -> type().
 get_effective_type(#file_meta{type = ?LINK_TYPE}) ->

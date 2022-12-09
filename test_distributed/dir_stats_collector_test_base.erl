@@ -21,7 +21,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 
--export([basic_test/1, multiprovider_test/1, transfer_after_enabling_test/1,
+-export([basic_test/1, multiprovider_test/1, multiprovider_trash_test/1, transfer_after_enabling_test/1,
     enabling_for_empty_space_test/1, enabling_for_not_empty_space_test/1, enabling_large_dirs_test/1,
     enabling_during_writing_test/1, race_with_file_adding_test/1, race_with_file_writing_test/1,
     race_with_subtree_adding_test/1, race_with_subtree_filling_with_data_test/1,
@@ -58,8 +58,43 @@ basic_test(Config) ->
     % TODO VFS-8835 - test rename
     create_initial_file_tree_and_fill_files(Config, op_worker_nodes, enabled),
     check_initial_dir_stats(Config, op_worker_nodes),
-    check_update_times(Config, [op_worker_nodes]).
+    check_update_times(Config, [op_worker_nodes]),
 
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    SessId = lfm_test_utils:get_user1_session_id(Config, Worker),
+    SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
+    SpaceGuid = lfm_test_utils:get_user1_first_space_guid(Config),
+    {ok, GuidsAndNames} = ?assertMatch({ok, _}, lfm_proxy:get_children(Worker, SessId, ?FILE_REF(SpaceGuid), 0, 100)),
+
+    lists:foreach(fun({Guid, _}) ->
+        {ok, ChildrenGuidsAndNames} = ?assertMatch({ok, _}, lfm_proxy:get_children(Worker, SessId, ?FILE_REF(Guid), 0, 100)),
+        lists:foreach(fun({ChildGuid, _}) ->
+            ?assertEqual(ok, lfm_proxy:rm_recursive(Worker, SessId, {uuid, file_id:guid_to_uuid(ChildGuid)}))
+        end, ChildrenGuidsAndNames),
+
+        check_dir_stats(Config, op_worker_nodes, Guid, #{
+            ?REG_FILE_AND_LINK_COUNT => 0,
+            ?DIR_COUNT => 0,
+            ?TOTAL_SIZE => 0,
+            ?TOTAL_SIZE_ON_STORAGE_KEY(Config, op_worker_nodes) => 0
+        }),
+
+        ?assertEqual(ok, lfm_proxy:rm_recursive(Worker, SessId, {uuid, file_id:guid_to_uuid(Guid)}))
+    end, GuidsAndNames),
+
+    check_dir_stats(Config, op_worker_nodes, SpaceGuid, #{
+        ?REG_FILE_AND_LINK_COUNT => 0,
+        ?DIR_COUNT => 0,
+        ?TOTAL_SIZE => 0,
+        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, op_worker_nodes) => 0
+    }),
+
+    check_dir_stats(Config, op_worker_nodes, fslogic_file_id:spaceid_to_trash_dir_guid(SpaceId), #{
+        ?REG_FILE_AND_LINK_COUNT => 0,
+        ?DIR_COUNT => 0,
+        ?TOTAL_SIZE => 0,
+        ?TOTAL_SIZE_ON_STORAGE_KEY(Config, op_worker_nodes) => 0
+    }).
 
 multiprovider_test(Config) ->
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(lfm_test_utils:get_user1_first_space_id(Config)),
@@ -116,12 +151,54 @@ multiprovider_test(Config) ->
     clean_space_and_verify_stats(Config).
 
 
+multiprovider_trash_test(Config) ->
+    create_initial_file_tree_and_fill_files(Config, ?PROVIDER_CREATING_FILES_NODES_SELECTOR, enabled),
+
+    lists:foreach(fun(NodesSelector) ->
+        check_initial_dir_stats(Config, NodesSelector)
+    end, [?PROVIDER_CREATING_FILES_NODES_SELECTOR, ?PROVIDER_DELETING_FILES_NODES_SELECTOR]),
+
+    check_update_times(Config, [?PROVIDER_CREATING_FILES_NODES_SELECTOR, ?PROVIDER_DELETING_FILES_NODES_SELECTOR]),
+
+    [Worker | _] = ?config(?PROVIDER_DELETING_FILES_NODES_SELECTOR, Config),
+    SessId = lfm_test_utils:get_user1_session_id(Config, Worker),
+    SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
+    SpaceGuid = lfm_test_utils:get_user1_first_space_guid(Config),
+    {ok, GuidsAndNames} = ?assertMatch({ok, _}, lfm_proxy:get_children(Worker, SessId, ?FILE_REF(SpaceGuid), 0, 100)),
+
+    lists:foreach(fun({Guid, _}) ->
+        {ok, ChildrenGuidsAndNames} = ?assertMatch({ok, _}, lfm_proxy:get_children(Worker, SessId, ?FILE_REF(Guid), 0, 100)),
+        lists:foreach(fun({ChildGuid, _}) ->
+            ?assertEqual(ok, lfm_proxy:rm_recursive(Worker, SessId, {uuid, file_id:guid_to_uuid(ChildGuid)}))
+        end, ChildrenGuidsAndNames)
+
+    % TODO TODO VFS-9204 - fix race when parent of dir move to trash is move to trash
+%%        ?assertEqual(ok, lfm_proxy:rm_recursive(Worker, SessId, {uuid, file_id:guid_to_uuid(Guid)}))
+    end, GuidsAndNames),
+
+    lists:foreach(fun(NodesSelector) ->
+        check_dir_stats(Config, NodesSelector, SpaceGuid, #{
+            ?REG_FILE_AND_LINK_COUNT => 0,
+            ?DIR_COUNT => 3,
+            ?TOTAL_SIZE => 0,
+            ?TOTAL_SIZE_ON_STORAGE_KEY(Config, NodesSelector) => 0
+        }),
+
+        check_dir_stats(Config, NodesSelector, fslogic_file_id:spaceid_to_trash_dir_guid(SpaceId), #{
+            ?REG_FILE_AND_LINK_COUNT => 0,
+            ?DIR_COUNT => 0,
+            ?TOTAL_SIZE => 0,
+            ?TOTAL_SIZE_ON_STORAGE_KEY(Config, NodesSelector) => 0
+        })
+    end, [?PROVIDER_DELETING_FILES_NODES_SELECTOR, ?PROVIDER_CREATING_FILES_NODES_SELECTOR]).
+
+
 transfer_after_enabling_test(Config) ->
     [WorkerCreatingFiles | _] = ?config(?PROVIDER_CREATING_FILES_NODES_SELECTOR, Config),
     [WorkerWithDelayedInit | _] = ?config(?PROVIDER_DELETING_FILES_NODES_SELECTOR, Config),
     SessId = lfm_test_utils:get_user1_session_id(Config, WorkerCreatingFiles),
     SpaceId = lfm_test_utils:get_user1_first_space_id(Config),
-    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(lfm_test_utils:get_user1_first_space_id(Config)),
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
 
     ?assertEqual(ok, rpc:call(WorkerCreatingFiles, dir_stats_service_state, enable, [SpaceId])),
     ?assertEqual(enabled,

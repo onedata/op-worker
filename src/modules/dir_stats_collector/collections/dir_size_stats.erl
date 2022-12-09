@@ -38,6 +38,7 @@
 -include("modules/datastore/datastore_models.hrl").
 -include_lib("cluster_worker/include/time_series/browsing.hrl").
 -include_lib("ctool/include/time_series/common.hrl").
+-include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 
@@ -47,11 +48,10 @@
     browse_historical_stats_collection/2,
     report_reg_file_size_changed/3,
     report_file_created/2, report_file_deleted/2,
-    report_file_moved/4,
     delete_stats/1]).
 
 %% dir_stats_collection_behaviour callbacks
--export([acquire/1, consolidate/3, save/3, delete/1, init_dir/1, init_child/1]).
+-export([acquire/1, consolidate/3, on_collection_move/2, save/3, delete/1, init_dir/1, init_child/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -141,21 +141,6 @@ report_file_deleted(_, Guid) ->
     update_stats(Guid, #{?REG_FILE_AND_LINK_COUNT => -1}).
 
 
--spec report_file_moved(file_meta:type(), file_id:file_guid(), file_id:file_guid(), file_id:file_guid()) -> ok.
-report_file_moved(?DIRECTORY_TYPE, FileGuid, SourceParentGuid, TargetParentGuid) ->
-    case dir_stats_service_state:is_active(file_id:guid_to_space_id(FileGuid)) of
-        true ->
-            {ok, Collection} = get_stats(FileGuid),
-            update_stats(TargetParentGuid, Collection),
-            update_stats(SourceParentGuid, maps:map(fun(_, Value) -> -Value end, Collection));
-        false ->
-            ok
-    end;
-report_file_moved(Type, _FileGuid, SourceParentGuid, TargetParentGuid) ->
-    report_file_created(Type, TargetParentGuid),
-    report_file_deleted(Type, SourceParentGuid).
-
-
 -spec delete_stats(file_id:file_guid()) -> ok.
 delete_stats(Guid) ->
     dir_stats_collector:delete_stats(Guid, ?MODULE).
@@ -181,6 +166,13 @@ acquire(Guid) ->
     dir_stats_collection:stat_value()) -> dir_stats_collection:stat_value().
 consolidate(_, Value, Diff) ->
     Value + Diff.
+
+
+-spec on_collection_move(dir_stats_collection:stat_name(), dir_stats_collection:stat_value()) ->
+    {update_source_parent, dir_stats_collection:stat_value()}.
+on_collection_move(_, Value) ->
+    {update_source_parent, -Value}.
+
 
 
 -spec save(file_id:file_guid(), dir_stats_collection:collection(), non_neg_integer() | current) -> ok.
@@ -220,14 +212,23 @@ init_dir(Guid) ->
 
 -spec init_child(file_id:file_guid()) -> dir_stats_collection:collection().
 init_child(Guid) ->
-    EmptyCurrentStats = gen_empty_current_stats(Guid),
+    EmptyCurrentStats = gen_empty_current_stats(Guid), % TODO VFS-9204 - maybe refactor as gen_empty_current_stats
+                                                       % gets storage_id that is also used by prepare_file_size_summary
     case file_meta:get_including_deleted(file_id:guid_to_uuid(Guid)) of
         {ok, Doc} ->
             case file_meta:get_type(Doc) of
                 ?DIRECTORY_TYPE ->
                     EmptyCurrentStats#{?DIR_COUNT => 1};
                 _ ->
-                    {FileSizes, _} = file_ctx:prepare_file_size_summary(file_ctx:new_by_guid(Guid)),
+                    FileSizes = try
+                        {Sizes, _} = file_ctx:prepare_file_size_summary(file_ctx:new_by_guid(Guid)),
+                        Sizes
+                    catch
+                        Error:Reason:Stacktrace ->
+                            ?error_stacktrace("Error initializing size stats for ~p: ~p:~p",
+                                [Guid, Error, Reason], Stacktrace),
+                            []
+                    end,
                     lists:foldl(fun
                         ({total, Size}, Acc) -> Acc#{?TOTAL_SIZE => Size};
                         ({StorageId, Size}, Acc) -> Acc#{?SIZE_ON_STORAGE(StorageId) => Size}

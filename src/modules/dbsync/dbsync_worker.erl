@@ -35,7 +35,7 @@
 -export([supervisor_flags/0, get_on_demand_changes_stream_id/2,
     start_streams/0, start_streams/1]).
 %% Resynchronization API
--export([reset_provider_stream/2, resynchronize_all/2, resynchronize/3]).
+-export([reset_provider_stream/2, resynchronize_all/2, resynchronize_provider_metadata/2, resynchronize/3]).
 
 %% Internal services API
 -export([start_in_stream/1, stop_in_stream/1, start_out_stream/1, stop_out_stream/1]).
@@ -166,12 +166,17 @@ get_on_demand_changes_stream_id(SpaceId, ProviderId) ->
 
 -spec reset_provider_stream(od_space:id(), od_provider:id()) -> ok.
 reset_provider_stream(SpaceId, ProviderId) ->
-    resynchronize(SpaceId, ProviderId, [ProviderId]).
+    resynchronize(SpaceId, ProviderId, ?ALL_MUTATORS_EXCEPT_SENDER).
 
 
 -spec resynchronize_all(od_space:id(), od_provider:id()) -> ok.
 resynchronize_all(SpaceId, ProviderId) ->
     resynchronize(SpaceId, ProviderId, ?ALL_MUTATORS).
+
+
+-spec resynchronize_provider_metadata(od_space:id(), od_provider:id()) -> ok.
+resynchronize_provider_metadata(SpaceId, ProviderId) ->
+    resynchronize(SpaceId, ProviderId, [ProviderId]).
 
 
 -spec resynchronize(od_space:id(), od_provider:id(), dbsync_in_stream:mutators()) -> ok.
@@ -218,7 +223,8 @@ start_out_stream(SpaceId) ->
         (Since, Until, Timestamp, Docs) ->
             ProviderId = oneprovider:get_id(),
             dbsync_communicator:broadcast_changes(SpaceId, Since, Until, Timestamp, Docs),
-            dbsync_state:set_seq_and_timestamp(SpaceId, ProviderId, Until, Timestamp)
+            dbsync_state:set_seq_and_timestamp(SpaceId, ProviderId, Until, Timestamp),
+            ok
     end,
     Spec = dbsync_out_stream_spec(SpaceId, SpaceId, [
         {main_stream, true},
@@ -272,7 +278,7 @@ handle_changes_request(ProviderId, #changes_request2{
     since = Since,
     until = Until,
     included_mutators = IncludedMutators
-}) ->
+} = Request) ->
     Handler = fun
         (BatchSince, end_of_stream, Timestamp, Docs) ->
             dbsync_communicator:send_changes(
@@ -297,8 +303,9 @@ handle_changes_request(ProviderId, #changes_request2{
                 FilteringOptions = case IncludedMutators of
                     ?ALL_MUTATORS ->
                         [];
-                    ?ALL_MUTATORS_EXCEPT_SENDER -> [{except_mutator, ProviderId}]; % TODO VFS-6652 - restults in different seq numbers/timestamps
-                                                                          % seen by different providers
+                    ?ALL_MUTATORS_EXCEPT_SENDER ->
+                        [{except_mutator, ProviderId}]; % TODO VFS-6652 - restults in different seq numbers/timestamps
+                                                        % seen by different providers
                     _ ->
                         [{filter, fun
                             (#document{mutators = [Mutator | _]}) ->
@@ -325,7 +332,16 @@ handle_changes_request(ProviderId, #changes_request2{
                         ?error("Error when starting stream on demand ~p:~p", [Error, Reason])
                 end;
             _ ->
-                ok
+                case dbsync_out_stream:try_terminate(Name, Since) of
+                    ok ->
+                        ?info("Changes request ~p from provider ~p while processing previous request. "
+                        "Terminating previous stream.", [Request, ProviderId]),
+                        handle_changes_request(ProviderId, Request);
+                    ignore ->
+                        ?info("Changes request ~p from provider ~p while processing previous request. "
+                        "Ignoring.", [Request, ProviderId]),
+                        ok
+                end
         end
     end).
 

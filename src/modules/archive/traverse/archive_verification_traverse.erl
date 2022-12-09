@@ -75,8 +75,7 @@ start(ArchiveDoc) ->
             UserId = user_ctx:get_user_id(UserCtx),
             Options = #{
                 task_id => TaskId,
-                children_master_jobs_mode => async,
-                initial_relative_path => filename:join([<<"/">>, <<"archive_", TaskId/binary>>])
+                children_master_jobs_mode => async
             },
             {ok, TaskId} = tree_traverse:run(
                 ?POOL_NAME, file_ctx:new_by_guid(DataFileGuid), UserId, Options),
@@ -99,7 +98,7 @@ block_archive_modification(#document{value = #archive{root_dir_guid = RootDirGui
 
 -spec unblock_archive_modification(archive:doc()) -> ok.
 unblock_archive_modification(#document{value = #archive{root_dir_guid = RootDirGuid}}) -> 
-    ?extract_ok(dataset_api:remove(file_id:guid_to_uuid(RootDirGuid))).
+    ?extract_ok(dataset_api:remove(file_id:guid_to_uuid(RootDirGuid), internal)).
 
 
 %%%===================================================================
@@ -112,10 +111,15 @@ task_started(TaskId, _Pool) ->
 
 
 -spec task_finished(id(), tree_traverse:pool()) -> ok.
-task_finished(TaskId, _Pool) ->
-    tree_traverse_session:close_for_task(TaskId),
-    archive:mark_preserved(TaskId),
-    ?debug("Archive verification job ~p finished", [TaskId]).
+task_finished(TaskId, Pool) ->
+    case archive_traverses_common:is_cancelled(TaskId) of
+        true -> 
+            task_canceled(TaskId, Pool);
+        false ->
+            tree_traverse_session:close_for_task(TaskId),
+            archive:mark_preserved(TaskId),
+            ?debug("Archive verification job ~p finished", [TaskId])
+    end.
 
 
 -spec task_canceled(id(), tree_traverse:pool()) -> ok.
@@ -224,19 +228,34 @@ do_dir_master_job_unsafe(#tree_traverse{
                 end
         end
     end,
-    tree_traverse:do_master_job(Job, MasterJobArgs, NewJobsPreprocessor).
+    % Cancelling on remote provider when passing between archivisation and verification traverses phases can result
+    % in a situation, that remote provider is not yet aware of verification traverse and does not cancel it.
+    % Therefore this check here is required for proper cancellation.
+    case archive_traverses_common:is_cancelled(TaskId) of
+        true ->
+            cancel(TaskId),
+            tree_traverse:do_aborted_master_job(Job, MasterJobArgs);
+        false -> 
+            tree_traverse:do_master_job(Job, MasterJobArgs, NewJobsPreprocessor)
+    end.
 
 
 -spec handle_verification_error(id(), tree_traverse:job()) -> ok.
 handle_verification_error(TaskId, Job) ->
-    {FileGuid, FilePath} = job_to_error_info(Job),
-    archivisation_audit_log:report_file_verification_failed(TaskId, FileGuid, FilePath),
+    {FileCtx, FilePath} = job_to_error_info(Job),
+    % ignore archive root dir in relative path
+    RelativePath = case filename:split(FilePath) of
+        [_] -> <<>>;
+        [_ | PathTokens] -> filename:join(PathTokens)
+    end,
+    {FileType, _FileCtx2} = file_ctx:get_effective_type(FileCtx),
+    archivisation_audit_log:report_file_verification_failed(TaskId, RelativePath, FileType),
     archive:mark_verification_failed(TaskId),
     cancel(TaskId).
 
 
--spec job_to_error_info(tree_traverse:job()) -> {file_id:file_guid(), file_meta:path()}.
+-spec job_to_error_info(tree_traverse:job()) -> {file_ctx:ctx(), file_meta:path()}.
 job_to_error_info(#tree_traverse{file_ctx = FileCtx, relative_path = Path}) ->
-    {file_ctx:get_logical_guid_const(FileCtx), Path};
+    {FileCtx, Path};
 job_to_error_info(#tree_traverse_slave{file_ctx = FileCtx, relative_path = Path}) ->
-    {file_ctx:get_logical_guid_const(FileCtx), Path}.
+    {FileCtx, Path}.

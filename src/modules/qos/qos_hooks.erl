@@ -225,4 +225,4 @@ add_reconcile_file_meta_posthook(FileCtx, MissingElement, IdentifierPrefix) ->
     InodeUuid = file_ctx:get_referenced_uuid_const(FileCtx),
     % save Prefix and InodeUuid in hook identifier for diagnostic purpose
     HookIdentifier = <<IdentifierPrefix/binary, "_", InodeUuid/binary>>,
-    ok = file_meta_posthooks:add_hook(MissingElement, HookIdentifier, ?MODULE, reconcile_qos, [InodeUuid, SpaceId]).
+    ok = file_meta_posthooks:add_hook(MissingElement, HookIdentifier, SpaceId, ?MODULE, reconcile_qos, [InodeUuid, SpaceId]).

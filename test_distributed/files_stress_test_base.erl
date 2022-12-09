@@ -26,7 +26,7 @@
 %% export for ct
 -export([init_per_suite/1, init_per_testcase/2, end_per_testcase/2, end_per_suite/1]).
 -export([many_files_creation_tree_test_base/2, single_dir_creation_test_base/2]).
--export([create_single_call/4, get_final_ans_tree/10, get_param_value/2]).
+-export([create_single_call/4, get_final_ans/9, get_final_ans_tree/10, get_param_value/2]).
 
 -define(TIMEOUT, timer:minutes(30)).
 
@@ -34,49 +34,61 @@
 %%% Test functions
 %%%===================================================================
 
-single_dir_creation_test_base(Config, Clear) ->
+% Test creates files in a loop. If CreateDeleteLoop is false, number of files grows during the test.
+% If CreateDeleteLoop is true, files are deleted after each iteration.
+single_dir_creation_test_base(Config, CreateDeleteLoop) ->
     FilesNum = ?config(files_num, Config),
+    ProcNum = case CreateDeleteLoop of
+        true -> 1;
+        false -> ?config(proc_num, Config)
+    end,
 
     [Worker | _] = ?config(op_worker_nodes, Config),
     User = <<"user1">>,
 
     SessId = ?config({session_id, {User, ?GET_DOMAIN(Worker)}}, Config),
-    [{_SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
+    [{SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
     RepeatNum = ?config(rep_num, Config),
 
     % Generate test setup
-    {Dir, CheckAns, NameExt} = case {Clear, RepeatNum} of
+    {Dir, CheckAns, NameExt} = case {CreateDeleteLoop, RepeatNum} of
         {true, _} ->
             MainDir = generator:gen_name(),
             D = <<"/", SpaceName/binary, "/", MainDir/binary>>,
             MkdirAns = lfm_proxy:mkdir(Worker, SessId, D),
             {D, MkdirAns, 0};
         {_, 1} ->
-            MainDir = <<"test_dir">>,
-            D = <<"/", SpaceName/binary, "/", MainDir/binary>>,
-            MkdirAns = lfm_proxy:mkdir(Worker, SessId, D),
-            {D, MkdirAns, 0};
+            case rand:uniform() < 0.5 of
+                true ->
+                    D = <<"/", SpaceName/binary, "/test_dir">>,
+                    MkdirAns = lfm_proxy:mkdir(Worker, SessId, D),
+                    put(main_dir, D),
+                    put(dirs_created, 1),
+                    {D, MkdirAns, 1};
+                false ->
+                    D = <<"/", SpaceName/binary>>,
+                    put(main_dir, D),
+                    put(dirs_created, 0),
+                    {D, {ok, fslogic_file_id:spaceid_to_space_dir_guid(SpaceId)}, 0}
+            end;
         _ ->
-            D = <<"/", SpaceName/binary, "/test_dir">>,
-            {D, {ok, ok}, RepeatNum}
+            {get(main_dir), {ok, ok}, RepeatNum}
     end,
     NameExtBin = integer_to_binary(NameExt),
 
     case CheckAns of
         {ok, _} ->
             % Create all
-            {SaveOk, SaveTime, SError, SErrorTime} =
-                rpc:call(Worker, ?MODULE, create_single_call,
-                    [SessId, Dir, FilesNum, NameExtBin]),
+            {SaveOk, SaveTime, SError, SErrorTime} = create_many(Worker, SessId, Dir, FilesNum, ProcNum, NameExtBin),        
 
             % Delete all is clearing is active
             {DelOk, DelTime, DError, DErrorTime} =
-                case Clear of
+                case CreateDeleteLoop of
                     true ->
                         lists:foldl(fun(N, {OkNum, OkTime, ErrorNum, ErrorTime}) ->
                             {T, A} = measure_execution_time(fun() ->
                                 N2 = integer_to_binary(N),
-                                File = <<Dir/binary, "/", NameExtBin/binary, "_", N2/binary>>,
+                                File = <<Dir/binary, "/", NameExtBin/binary, "_1_", N2/binary>>,
                                 lfm_proxy:unlink(Worker, SessId, {path, File})
                             end),
                             case A of
@@ -98,7 +110,7 @@ single_dir_creation_test_base(Config, Clear) ->
             DErrorAvgTime = get_avg(DError, DErrorTime),
 
             % Print statistics
-            case Clear of
+            case CreateDeleteLoop of
                 true ->
                     ct:print("Save num ~p, del num ~p", [SaveOk, DelOk]);
                 _ ->
@@ -111,23 +123,28 @@ single_dir_creation_test_base(Config, Clear) ->
                     NewSum = Sum + SaveOk,
                     put(ok_sum, NewSum),
 
-                    LastLS = case get(last_ls) of
-                        undefined ->
-                            0;
-                        LLS ->
-                            LLS
-                    end,
-
-                    case NewSum - LastLS >= 20000 of
+                    case ?config(test_list, Config) of
                         true ->
-                            put(last_ls, NewSum),
-                            LsTime = measure_execution_time(fun() ->
-                                ls(Worker, SessId, Dir, undefined)
-                            end),
+                            LastLS = case get(last_ls) of
+                                undefined ->
+                                    0;
+                                LLS ->
+                                    LLS
+                            end,
 
-                            ct:print("Save num ~p, sum ~p, ls time ~p",
-                                [SaveOk, NewSum, LsTime]);
-                        _ ->
+                            case NewSum - LastLS >= 20000 of
+                                true ->
+                                    put(last_ls, NewSum),
+                                    LsTime = measure_execution_time(fun() ->
+                                        ls(Worker, SessId, Dir, undefined)
+                                    end),
+
+                                    ct:print("Save num ~p, sum ~p, ls time ~p",
+                                        [SaveOk, NewSum, LsTime]);
+                                _ ->
+                                    ct:print("Save num ~p, sum ~p", [SaveOk, NewSum])
+                            end;
+                        false ->
                             ct:print("Save num ~p, sum ~p", [SaveOk, NewSum])
                     end
             end,
@@ -578,7 +595,7 @@ create_single_call(SessId, Dir, FilesNum, NameExtBin) ->
             {ok, _} ->
                 {OkNum+1, OkTime+T, ErrorNum, ErrorTime};
             _ ->
-                ct:print("Create error: ~p", [A]),
+                ?error("Create error: ~p", [A]),
                 {OkNum, OkTime, ErrorNum+1, ErrorTime+T}
         end
     end, {0,0,0,0}, lists:seq(1,FilesNum)).
@@ -619,3 +636,28 @@ get_worker_and_session(Workers, Sessions) ->
     Num = rand:uniform(length(Workers)),
     {lists:nth(Num, Workers), lists:nth(Num, Sessions)}.
 
+
+create_many(Worker, SessId, Dir, FilesNum, ProcNum, NameExtBin) ->
+    FilesPerProc = FilesNum div ProcNum,
+    Master = self(),
+    lists:foreach(fun(N) ->
+        spawn(fun() ->
+            try
+                NBin = integer_to_binary(N),
+                RpcAns = rpc:call(Worker, ?MODULE, create_single_call,
+                    [SessId, Dir, FilesPerProc, <<NameExtBin/binary, "_", NBin/binary>>]),
+                Master ! {create_single_call, RpcAns}
+            catch
+                Error:Reason:Stacktrace ->
+                    ct:print("Error: ~p:~p~n~p", [Error, Reason, Stacktrace]),
+                    Master ! {create_single_call, {0, 0, 0, 0}}
+            end
+        end)
+    end, lists:seq(1, ProcNum)),
+
+    lists:foldl(fun(_, {SaveOkAcc, SaveTimeAcc, SErrorAcc, SErrorTimeAcc}) ->
+        receive
+            {create_single_call, {SaveOk, SaveTime, SError, SErrorTime}} ->
+                {SaveOk + SaveOkAcc, SaveTime + SaveTimeAcc, SError + SErrorAcc, SErrorTime + SErrorTimeAcc}
+        end
+    end, {0, 0, 0, 0}, lists:seq(1, ProcNum)).

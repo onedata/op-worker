@@ -22,7 +22,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([establish/2, establish/3, update/4, remove/1, move_if_applicable/2]).
+-export([establish/2, establish/3, update/4, remove/1, remove/2, move_if_applicable/2]).
 -export([get_info/1, get_effective_membership_and_protection_flags/1, get_effective_summary/1]).
 -export([list_top_datasets/4, list_children_datasets/3]).
 -export([handle_file_deleted/1]).
@@ -113,15 +113,20 @@ update(DatasetDoc, NewState, FlagsToSet, FlagsToUnset) ->
 
 
 -spec remove(dataset:id() | dataset:doc()) -> ok | error().
-remove(#document{key = DatasetId}) ->
+remove(DocOrId) ->
+    remove(DocOrId, user_defined).
+
+
+-spec remove(dataset:id() | dataset:doc(), dataset_type()) -> ok | error().
+remove(#document{key = DatasetId}, DatasetType) ->
     % fetch doc again in critical section to avoid races with dataset state change
-    remove(DatasetId);
-remove(DatasetId) when is_binary(DatasetId) ->
+    remove(DatasetId, DatasetType);
+remove(DatasetId, DatasetType) when is_binary(DatasetId) ->
     ?CRITICAL_SECTION(DatasetId, fun() ->
         case archives_list:is_empty(DatasetId) of
             true ->
                 case dataset:get(DatasetId) of
-                    {ok, Doc} -> remove_unsafe(Doc);
+                    {ok, Doc} -> remove_unsafe(Doc, DatasetType);
                     {error, not_found} -> ok
                 end;
             false ->
@@ -254,9 +259,15 @@ get_associated_file_ctx(DatasetDoc) ->
 %%% Internal functions
 %%%===================================================================
 
--spec remove_unsafe(dataset:doc()) -> ok.
-remove_unsafe(#document{key = DatasetId} = Doc) ->
-    ok = remove_from_datasets_structure(Doc),
+-spec remove_unsafe(dataset:doc(), dataset_type()) -> ok.
+remove_unsafe(#document{key = DatasetId} = Doc, DatasetType) ->
+    % Internal datasets are not added to datasets structure so there is no need to remove them from it.
+    case DatasetType of
+        internal ->
+            ok;
+        user_defined ->
+            ok = remove_from_datasets_structure(Doc)
+    end,
     {ok, SpaceId} = dataset:get_space_id(Doc),
     ok = dataset:delete(DatasetId),
     {ok, Uuid} = dataset:get_root_file_uuid(Doc),
