@@ -267,7 +267,7 @@ mock_run(Workers, ModuleWithOpenfaasDockerMock) ->
                 AtmJobOutputData = ModuleWithOpenfaasDockerMock:exec(DockerImage, AtmJobInputData),
                 process_task_uncorrelated_results(AtmTaskExecutor, AtmJobOutputData)
             catch Type:Reason:Stacktrace ->
-                errors:to_json(?atm_examine_error(Type, Reason, Stacktrace))
+                errors:to_json(?examine_exception(Type, Reason, Stacktrace))
             end,
 
             {FunctionStatus, Response} = case Output == null orelse is_map(Output) of

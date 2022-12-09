@@ -55,12 +55,7 @@ handle(_Type, Reason, Stacktrace, SessionId, Request) ->
             {MF, FA}
     end,
 
-    case Error of
-        ?ERROR_UNEXPECTED_ERROR(_) ->
-            ?error_stacktrace(LogFormat, LogFormatArgs, Stacktrace);
-        _ ->
-            ?debug_stacktrace(LogFormat, LogFormatArgs, Stacktrace)
-    end,
+    ?debug_stacktrace(LogFormat, LogFormatArgs, Stacktrace),
 
     Error.
 
@@ -78,9 +73,6 @@ infer_error({error, Reason} = Error) ->
 
 infer_error(Reason) ->
     case ordsets:is_element(Reason, ?ERROR_CODES) of
-        true ->
-            ?ERROR_POSIX(Reason);
-        false ->
-            %% TODO VFS-8614 replace unexpected error with internal server error
-            ?ERROR_UNEXPECTED_ERROR(str_utils:rand_hex(5))
+        true -> ?ERROR_POSIX(Reason);
+        false -> ?handle_unknown_error(Reason)
     end.
