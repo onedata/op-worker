@@ -108,4 +108,7 @@
     <<?SYMLINK_SPACE_ID_PREFIX, (SpaceId)/binary, ?SYMLINK_SPACE_ID_SUFFIX>>
 ).
 
+% Separator between space name and its id added in case of duplicated name.
+-define(SPACE_NAME_ID_SEPARATOR, <<"#">>).
+
 -endif.

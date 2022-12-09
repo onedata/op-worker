@@ -199,7 +199,12 @@ has_eff_space(Client, UserId, SpaceId) when is_binary(UserId) ->
     od_space:name()) -> {true, od_space:id()} | false.
 get_space_by_name(Client, UserDoc = #document{}, SpaceName) ->
     {ok, Spaces} = get_eff_spaces(UserDoc),
-    get_space_by_name_internal(Client, SpaceName, Spaces);
+    case binary:split(SpaceName, ?SPACE_NAME_ID_SEPARATOR) of
+        [Name, Id] ->
+            get_space_by_name_internal(Client, Name, [Id]);
+        [SpaceName] ->
+            get_space_by_name_internal(Client, SpaceName, Spaces)
+    end;
 get_space_by_name(Client, UserId, SpaceName) ->
     case get(Client, UserId) of
         {error, _} ->
