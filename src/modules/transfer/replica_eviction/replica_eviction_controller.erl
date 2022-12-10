@@ -151,15 +151,14 @@ handle_cast(start_replica_eviction, State = #state{
     case replica_eviction_status:handle_active(TransferId) of
         {ok, TransferDoc} ->
             % TODO VFS-7443 - maybe use referenced guid?
-            {IsDir, RootFileCtx} = file_ctx:is_dir(file_ctx:new_by_guid(FileGuid)),
+            RootFileCtx = file_ctx:new_by_guid(FileGuid),
 
-            replica_eviction_worker:enqueue_data_transfer(RootFileCtx, #transfer_params{
+            replica_eviction_worker:enqueue_data_transfer(RootFileCtx, #transfer_job_ctx{
                 transfer_id = TransferId,
                 user_ctx = user_ctx:new(SessionId),
-                iterator = case IsDir of
-                    true -> transfer_iterator:build(TransferDoc);
-                    false -> undefined
-                end,
+                job = #transfer_traverse_job{
+                    iterator = transfer_iterator:build(TransferDoc)
+                },
                 supporting_provider = SupportingProviderId
             }),
             {noreply, State#state{status = ?ACTIVE_STATUS}};

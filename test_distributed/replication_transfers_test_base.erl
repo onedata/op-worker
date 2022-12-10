@@ -90,8 +90,8 @@ replicate_empty_dir(Config, Type, FileKeyType) ->
                 expected_transfer = #{
                     replication_status => completed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
-                    files_to_process => 1,
-                    files_processed => 1,
+                    files_to_process => 0,
+                    files_processed => 0,
                     files_replicated => 0,
                     bytes_replicated => 0
                 },
@@ -121,8 +121,8 @@ replicate_tree_of_empty_dirs(Config, Type, FileKeyType) ->
                 expected_transfer = #{
                     replication_status => completed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
-                    files_to_process => 1,
-                    files_processed => 1,
+                    files_to_process => 0,
+                    files_processed => 0,
                     files_replicated => 0,
                     bytes_replicated => 0
                 },
@@ -204,8 +204,8 @@ replicate_file_in_directory(Config, Type, FileKeyType) ->
                 expected_transfer = #{
                     replication_status => completed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
-                    files_to_process => 2,
-                    files_processed => 2,
+                    files_to_process => 1,
+                    files_processed => 1,
                     files_replicated => 1,
                     bytes_replicated => ?DEFAULT_SIZE,
                     min_hist => ?MIN_HIST(#{ProviderId1 => ?DEFAULT_SIZE}),
@@ -506,8 +506,8 @@ replicate_100_files_in_one_transfer(Config, Type, FileKeyType) ->
                 expected_transfer = #{
                     replication_status => completed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
-                    files_to_process => 101,
-                    files_processed => 101,
+                    files_to_process => FilesNum,
+                    files_processed => FilesNum,
                     files_replicated => FilesNum,
                     bytes_replicated => TotalTransferredBytes,
                     hr_hist => ?HOUR_HIST(#{ProviderId1 => TotalTransferredBytes}),
@@ -752,8 +752,8 @@ transfer_continues_on_modified_storage(Config, Type, FileKeyType) ->
                 expected_transfer = #{
                     replication_status => completed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
-                    files_to_process => 101,
-                    files_processed => 101,
+                    files_to_process => FilesNum,
+                    files_processed => FilesNum,
                     files_replicated => FilesNum,
                     bytes_replicated => fun(X) -> X >= TotalTransferredBytes end,
                     hr_hist => ?HOUR_HIST(#{ProviderId1 => fun(X) -> X >= TotalTransferredBytes end}),
@@ -798,8 +798,8 @@ cancel_replication_on_target_nodes_by_scheduling_user(Config, Type) ->
                 expected_transfer = #{
                     replication_status => cancelled,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
-                    files_to_process => fun(X) -> X =< 111 end,
-                    files_processed => fun(X) -> X =< 111 end,
+                    files_to_process => fun(X) -> X =< 100 end,
+                    files_processed => fun(X) -> X =< 100 end,
                     failed_files => 0,
                     files_replicated => fun(X) -> X < 100 end
                 },
@@ -840,8 +840,8 @@ cancel_replication_on_target_nodes_by_other_user(Config, Type) ->
                 expected_transfer = #{
                     replication_status => cancelled,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
-                    files_to_process => fun(X) -> X =< 111 end,
-                    files_processed => fun(X) -> X =< 111 end,
+                    files_to_process => fun(X) -> X =< 100 end,
+                    files_processed => fun(X) -> X =< 100 end,
                     failed_files => 0,
                     files_replicated => fun(X) -> X < 100 end
                 },
@@ -853,7 +853,6 @@ cancel_replication_on_target_nodes_by_other_user(Config, Type) ->
 
 file_replication_failures_should_fail_whole_transfer(Config, Type, FileKeyType) ->
     [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
-    AllFiles = 111,
     transfers_test_utils:mock_replica_synchronizer_failure(WorkerP2),
     ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
 
@@ -881,8 +880,8 @@ file_replication_failures_should_fail_whole_transfer(Config, Type, FileKeyType) 
                 expected_transfer = #{
                     replication_status => failed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
-                    files_to_process => AllFiles,
-                    files_processed => AllFiles,
+                    files_to_process => 100,
+                    files_processed => 100,
                     files_replicated => 0,
                     bytes_replicated => 0,
                     hr_hist => ?HOUR_HIST(#{ProviderId1 => 0}),
@@ -1132,8 +1131,8 @@ rerun_dir_replication(Config, Type, FileKeyType) ->
                     replication_status => failed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
                     replicating_provider => transfers_test_utils:provider_id(WorkerP2),
-                    files_to_process => 8,
-                    files_processed => 8,
+                    files_to_process => 7,
+                    files_processed => 7,
                     failed_files => 7,
                     files_replicated => 0,
                     bytes_replicated => 0,
@@ -1161,8 +1160,8 @@ rerun_dir_replication(Config, Type, FileKeyType) ->
                     replication_status => completed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP2),
                     replicating_provider => transfers_test_utils:provider_id(WorkerP2),
-                    files_to_process => 8,
-                    files_processed => 8,
+                    files_to_process => 7,
+                    files_processed => 7,
                     failed_files => 0,
                     files_replicated => 7,
                     bytes_replicated => TotalSize,
@@ -1235,8 +1234,8 @@ rerun_view_replication(Config, Type) ->
                 expected_transfer = #{
                     replication_status => failed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
-                    files_to_process => 2,
-                    files_processed => 2,
+                    files_to_process => 1,
+                    files_processed => 1,
                     files_replicated => 0,
                     bytes_replicated => 0,
                     hr_hist => ?HOUR_HIST(#{ProviderId1 => 0}),
@@ -1264,8 +1263,8 @@ rerun_view_replication(Config, Type) ->
                     replication_status => completed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP2),
                     replicating_provider => transfers_test_utils:provider_id(WorkerP2),
-                    files_to_process => 2,
-                    files_processed => 2,
+                    files_to_process => 1,
+                    files_processed => 1,
                     files_replicated => 1,
                     bytes_replicated => ?DEFAULT_SIZE,
                     min_hist => ?MIN_HIST(#{ProviderId1 => ?DEFAULT_SIZE}),
@@ -1333,8 +1332,8 @@ schedule_replication_of_regular_file_by_view(Config, Type) ->
                 expected_transfer = #{
                     replication_status => completed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
-                    files_to_process => 2,
-                    files_processed => 2,
+                    files_to_process => 1,
+                    files_processed => 1,
                     files_replicated => 1,
                     bytes_replicated => ?DEFAULT_SIZE,
                     min_hist => ?MIN_HIST(#{ProviderId1 => ?DEFAULT_SIZE}),
@@ -1441,8 +1440,8 @@ schedule_replication_of_regular_file_by_view_with_reduce(Config, Type) ->
                 expected_transfer = #{
                     replication_status => completed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
-                    files_to_process => 3,
-                    files_processed => 3,
+                    files_to_process => 2,
+                    files_processed => 2,
                     files_replicated => 2,
                     bytes_replicated => 2 * ?DEFAULT_SIZE,
                     min_hist => ?MIN_HIST(#{ProviderId1 => 2 * ?DEFAULT_SIZE}),
@@ -1532,8 +1531,8 @@ schedule_replication_of_regular_file_by_view2(Config, Type) ->
                 expected_transfer = #{
                     replication_status => completed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
-                    files_to_process => 2,
-                    files_processed => 2,
+                    files_to_process => 1,
+                    files_processed => 1,
                     files_replicated => 1,
                     bytes_replicated => ?DEFAULT_SIZE,
                     min_hist => ?MIN_HIST(#{ProviderId1 => ?DEFAULT_SIZE}),
@@ -1656,8 +1655,8 @@ scheduling_replication_by_view_with_function_returning_wrong_value_should_fail(C
                 expected_transfer = #{
                     replication_status => failed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
-                    files_to_process => 2,
-                    files_processed => 2,
+                    files_to_process => 1,
+                    files_processed => 1,
                     files_replicated => 0,
                     bytes_replicated => 0,
                     failed_files => 1
@@ -1733,8 +1732,8 @@ scheduling_replication_by_view_returning_not_existing_file_should_not_fail(Confi
                 expected_transfer = #{
                     replication_status => completed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
-                    files_to_process => 1,
-                    files_processed => 1,
+                    files_to_process => 0,
+                    files_processed => 0,
                     files_replicated => 0,
                     bytes_replicated => 0,
                     failed_files => 0
@@ -1778,8 +1777,8 @@ scheduling_replication_by_empty_view_should_succeed(Config, Type) ->
                 expected_transfer = #{
                     replication_status => completed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
-                    files_to_process => 1,
-                    files_processed => 1,
+                    files_to_process => 0,
+                    files_processed => 0,
                     files_replicated => 0,
                     bytes_replicated => 0
                 },
@@ -1842,8 +1841,8 @@ scheduling_replication_by_not_existing_key_in_view_should_succeed(Config, Type) 
                 expected_transfer = #{
                     replication_status => completed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
-                    files_to_process => 1,
-                    files_processed => 1,
+                    files_to_process => 0,
+                    files_processed => 0,
                     files_replicated => 0,
                     bytes_replicated => 0
                 },
@@ -1913,8 +1912,8 @@ schedule_replication_of_100_regular_files_by_view(Config, Type) ->
                 expected_transfer = #{
                     replication_status => completed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
-                    files_to_process => NumberOfFiles + 1,
-                    files_processed => NumberOfFiles + 1,
+                    files_to_process => NumberOfFiles,
+                    files_processed => NumberOfFiles,
                     files_replicated => NumberOfFiles,
                     bytes_replicated => NumberOfFiles * ?DEFAULT_SIZE
                 },
@@ -2127,8 +2126,8 @@ warp_time_during_replication(Config, Type) ->
                     finish_time => FutureTime,
                     replication_status => completed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
-                    files_to_process => 101,
-                    files_processed => 101,
+                    files_to_process => FilesNum,
+                    files_processed => FilesNum,
                     files_replicated => FilesNum,
                     bytes_replicated => TotalTransferredBytes,
                     min_hist => ExpMinHist,

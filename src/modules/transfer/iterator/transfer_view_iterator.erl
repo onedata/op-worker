@@ -85,7 +85,7 @@ get_next_batch(_UserCtx, Limit, Iterator = #transfer_view_iterator{
                 DocId = maps:get(<<"id">>, Row, ?DOC_ID_MISSING),
 
                 OuterAcc1 = lists:foldl(fun(ObjectId, InnerAcc) ->
-                    case resolve_file(SpaceId, ViewName, ObjectId) of
+                    case resolve_file(TransferId, SpaceId, ViewName, ObjectId) of
                         ignore -> InnerAcc;
                         Result -> [Result | InnerAcc]
                     end
@@ -122,9 +122,9 @@ get_object_ids(#{<<"value">> := ObjectId}) ->
 
 
 %% @private
--spec resolve_file(od_space:id(), transfer:view_name(), file_id:objectid()) ->
+-spec resolve_file(transfer:id(), od_space:id(), transfer:view_name(), file_id:objectid()) ->
     ignore | error | {ok, file_ctx:ctx()}.
-resolve_file(SpaceId, ViewName, ObjectId) ->
+resolve_file(TransferId, SpaceId, ViewName, ObjectId) ->
     try
         {ok, FileGuid} = file_id:objectid_to_guid(ObjectId),
         FileCtx0 = file_ctx:new_by_guid(FileGuid), % TODO VFS-7443 - maybe use referenced guid?
@@ -145,8 +145,9 @@ resolve_file(SpaceId, ViewName, ObjectId) ->
         end
     catch Type:Reason:Stacktrace ->
         ?error_stacktrace(
-            "Processing result of query view ~p in space ~p failed due to ~p:~p",
-            [ViewName, SpaceId, Type, Reason],
+            "Resolution of file id ~p returned by querying view ~p in space ~p "
+            "during transfer ~s failed due to ~p:~p",
+            [ObjectId, ViewName, SpaceId, TransferId, Type, Reason],
             Stacktrace
         ),
         error

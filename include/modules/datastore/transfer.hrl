@@ -81,16 +81,16 @@
     transfer_data, __FileCtx, __Params, __Retries, __NextRetryTimestamp
 }).
 
--record(transfer_params, {
+-record(transfer_traverse_job, {
+    iterator :: transfer_iterator:record()
+}).
+-record(transfer_regular_file_job, {}).
+
+-record(transfer_job_ctx, {
     transfer_id :: transfer:id(),
     user_ctx :: user_ctx:ctx(),
 
-    iterator :: undefined | transfer_iterator:record(),
-
-    % Those fields are specified only for transfers by view.
-    % Otherwise are left undefined.
-    view_name = undefined :: transfer:view_name(),
-    query_view_params = undefined :: transfer:query_view_params(),
+    job :: gen_transfer_worker:job(),
 
     % CAUTION!!! This field is currently unused.
     % This field is defined only if not whole but part of file
@@ -102,7 +102,5 @@
     % do not need to search for providers that have file replicas.
     supporting_provider = undefined :: undefined | od_provider:id()
 }).
-
--type transfer_params() :: #transfer_params{}.
 
 -endif.

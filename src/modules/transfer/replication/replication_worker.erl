@@ -45,7 +45,7 @@
 %% @equiv enqueue_data_transfer(FileCtx, TransferParams, undefined, undefined).
 %% @end
 %%--------------------------------------------------------------------
--spec enqueue_data_transfer(file_ctx:ctx(), transfer_params()) -> ok.
+-spec enqueue_data_transfer(file_ctx:ctx(), gen_transfer_worker:job_ctx()) -> ok.
 enqueue_data_transfer(FileCtx, TransferParams) ->
     enqueue_data_transfer(FileCtx, TransferParams, undefined, undefined).
 
@@ -85,9 +85,9 @@ view_querying_chunk_size() ->
 %% {@link transfer_worker_behaviour} callback enqueue_data_transfer/4.
 %% @end
 %%--------------------------------------------------------------------
--spec enqueue_data_transfer(file_ctx:ctx(), transfer_params(),
+-spec enqueue_data_transfer(file_ctx:ctx(), gen_transfer_worker:job_ctx(),
     undefined | non_neg_integer(), undefined | non_neg_integer()) -> ok.
-enqueue_data_transfer(FileCtx, TransferParams = #transfer_params{transfer_id = TransferId}, RetriesLeft, NextRetry) ->
+enqueue_data_transfer(FileCtx, TransferJobCtx = #transfer_job_ctx{transfer_id = TransferId}, RetriesLeft, NextRetry) ->
     case file_ctx:is_trash_dir_const(FileCtx) of
         true ->
             % ignore trash directory
@@ -95,7 +95,7 @@ enqueue_data_transfer(FileCtx, TransferParams = #transfer_params{transfer_id = T
         false ->
             RetriesLeft2 = utils:ensure_defined(RetriesLeft, max_transfer_retries()),
             worker_pool:cast(?REPLICATION_WORKERS_POOL, ?TRANSFER_DATA_REQ(
-                FileCtx, TransferParams, RetriesLeft2, NextRetry
+                FileCtx, TransferJobCtx, RetriesLeft2, NextRetry
             ))
     end,
     ok.
@@ -105,8 +105,8 @@ enqueue_data_transfer(FileCtx, TransferParams = #transfer_params{transfer_id = T
 %% {@link transfer_worker_behaviour} callback transfer_regular_file/2.
 %% @end
 %%--------------------------------------------------------------------
--spec transfer_regular_file(file_ctx:ctx(), transfer_params()) -> ok | {error, term()}.
-transfer_regular_file(FileCtx, #transfer_params{
+-spec transfer_regular_file(file_ctx:ctx(), gen_transfer_worker:job_ctx()) -> ok | {error, term()}.
+transfer_regular_file(FileCtx, #transfer_job_ctx{
     transfer_id = TransferId,
     user_ctx = UserCtx,
     block = Block

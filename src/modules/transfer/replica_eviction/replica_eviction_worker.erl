@@ -42,12 +42,12 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% @equiv enqueue_data_transfer(FileCtx, TransferParams, undefined, undefined).
+%% @equiv enqueue_data_transfer(FileCtx, TransferJobCtx, undefined, undefined).
 %% @end
 %%--------------------------------------------------------------------
--spec enqueue_data_transfer(file_ctx:ctx(), transfer_params()) -> ok.
-enqueue_data_transfer(FileCtx, TransferParams) ->
-    enqueue_data_transfer(FileCtx, TransferParams, undefined, undefined).
+-spec enqueue_data_transfer(file_ctx:ctx(), gen_transfer_worker:job_ctx()) -> ok.
+enqueue_data_transfer(FileCtx, TransferJobCtx) ->
+    enqueue_data_transfer(FileCtx, TransferJobCtx, undefined, undefined).
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -115,19 +115,19 @@ view_querying_chunk_size() ->
 %% {@link transfer_worker_behaviour} callback enqueue_data_transfer/4.
 %% @end
 %%--------------------------------------------------------------------
--spec enqueue_data_transfer(file_ctx:ctx(), transfer_params(),
+-spec enqueue_data_transfer(file_ctx:ctx(), gen_transfer_worker:job_ctx(),
     undefined | non_neg_integer(), undefined | non_neg_integer()) -> ok.
-enqueue_data_transfer(FileCtx, TransferParams = #transfer_params{transfer_id = TransferId},
+enqueue_data_transfer(FileCtx, TransferJobCtx = #transfer_job_ctx{transfer_id = TransferId},
     RetriesLeft, NextRetry
 ) ->
-    case file_ctx:is_trash_dir_const(FileCtx) andalso is_migration(TransferParams) of
+    case file_ctx:is_trash_dir_const(FileCtx) andalso is_migration(TransferJobCtx) of
         true ->
             % ignore trash directory in case of migration
             transfer:increment_files_processed_counter(TransferId);
         false ->
             RetriesLeft2 = utils:ensure_defined(RetriesLeft, max_transfer_retries()),
             worker_pool:cast(?REPLICA_EVICTION_WORKERS_POOL, ?TRANSFER_DATA_REQ(
-                FileCtx, TransferParams, RetriesLeft2, NextRetry
+                FileCtx, TransferJobCtx, RetriesLeft2, NextRetry
             ))
     end,
     ok.
@@ -141,10 +141,10 @@ enqueue_data_transfer(FileCtx, TransferParams = #transfer_params{transfer_id = T
 %% providers who have given file replicated.
 %% @end
 %%--------------------------------------------------------------------
--spec transfer_regular_file(file_ctx:ctx(), transfer_params()) -> ok | {error, term()}.
-transfer_regular_file(FileCtx, Params = #transfer_params{supporting_provider = undefined}) ->
+-spec transfer_regular_file(file_ctx:ctx(), gen_transfer_worker:job_ctx()) -> ok | {error, term()}.
+transfer_regular_file(FileCtx, TransferJobCtx = #transfer_job_ctx{supporting_provider = undefined}) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
-    TransferId = Params#transfer_params.transfer_id,
+    TransferId = TransferJobCtx#transfer_job_ctx.transfer_id,
     case replica_deletion_master:find_supporter_and_prepare_deletion_request(FileCtx) of
         undefined ->
             transfer:increment_files_processed_counter(TransferId);
@@ -152,7 +152,7 @@ transfer_regular_file(FileCtx, Params = #transfer_params{supporting_provider = u
             replica_deletion_master:request_deletion(SpaceId, DeletionRequest, TransferId, ?EVICTION_JOB)
     end,
     ok;
-transfer_regular_file(FileCtx, #transfer_params{
+transfer_regular_file(FileCtx, #transfer_job_ctx{
     transfer_id = TransferId,
     supporting_provider = SupportingProvider
 }) ->
@@ -166,8 +166,8 @@ transfer_regular_file(FileCtx, #transfer_params{
     replica_deletion_master:request_deletion(SpaceId, DeletionRequest, TransferId, ?EVICTION_JOB).
 
 
--spec is_migration(transfer_params()) -> boolean().
-is_migration(#transfer_params{supporting_provider = undefined}) ->
+-spec is_migration(gen_transfer_worker:job_ctx()) -> boolean().
+is_migration(#transfer_job_ctx{supporting_provider = undefined}) ->
     false;
-is_migration(#transfer_params{supporting_provider = SupportingProvider}) when is_binary(SupportingProvider) ->
+is_migration(#transfer_job_ctx{supporting_provider = SupportingProvider}) when is_binary(SupportingProvider) ->
     true.
