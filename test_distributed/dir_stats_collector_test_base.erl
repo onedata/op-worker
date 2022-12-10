@@ -569,7 +569,8 @@ parallel_write_test(Config, SleepOnWrite, InitialFileSize, OverrideInitialBytes)
     % Read files using 20 processes (spawn is hidden in pmap)
     ReadAnswers = lists_utils:pmap(fun(FileNum) ->
         % Check blocks visibility on reading provider before reading from file
-        FileGuid = resolve_guid(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR, [], [FileNum]),
+        % Guid is resolved using path so it is possible that resolve_guid fails even if file is seen in statistics
+        FileGuid = resolve_guid(Config, ?PROVIDER_DELETING_FILES_NODES_SELECTOR, [], [FileNum], ?ATTEMPTS),
         GetBlocks = fun() ->
             % @TODO VFS-VFS-9498 use distribution after replication uses fetched file location instead of dbsynced
             case opt_file_metadata:get_local_knowledge_of_remote_provider_blocks(WorkerProvider2, FileGuid, opw_test_rpc:get_provider_id(Worker)) of
@@ -954,13 +955,16 @@ write_to_file(Config, NodesSelector, DirConstructor, FileConstructor, BytesCount
 
 
 resolve_guid(Config, NodesSelector, DirConstructor, FileConstructor) ->
-    #file_attr{guid = Guid} = resolve_attrs(Config, NodesSelector, DirConstructor, FileConstructor),
+    resolve_guid(Config, NodesSelector, DirConstructor, FileConstructor, 1).
+
+resolve_guid(Config, NodesSelector, DirConstructor, FileConstructor, Attempts) ->
+    #file_attr{guid = Guid} = resolve_attrs(Config, NodesSelector, DirConstructor, FileConstructor, Attempts),
     Guid.
 
 
 resolve_update_times_in_metadata_and_stats(Config, NodesSelector, DirConstructor, FileConstructor) ->
     #file_attr{guid = Guid, mtime = MTime, ctime = CTime} =
-        resolve_attrs(Config, NodesSelector, DirConstructor, FileConstructor),
+        resolve_attrs(Config, NodesSelector, DirConstructor, FileConstructor, 1),
 
     DirUpdateTime = case FileConstructor of
         [] ->
@@ -973,14 +977,14 @@ resolve_update_times_in_metadata_and_stats(Config, NodesSelector, DirConstructor
     {max(MTime, CTime), DirUpdateTime}.
 
 
-resolve_attrs(Config, NodesSelector, DirConstructor, FileConstructor) ->
+resolve_attrs(Config, NodesSelector, DirConstructor, FileConstructor, Attempts) ->
     [Worker | _] = ?config(NodesSelector, Config),
     SessId = lfm_test_utils:get_user1_session_id(Config, Worker),
     SpaceName = lfm_test_utils:get_user1_first_space_name(Config),
 
     DirPath = build_path(filename:join([<<"/">>, SpaceName]), DirConstructor, "dir"),
     Path = build_path(DirPath, FileConstructor, "file"),
-    {ok, Attrs} = ?assertMatch({ok, _}, lfm_proxy:stat(Worker, SessId, {path, Path})),
+    {ok, Attrs} = ?assertMatch({ok, _}, lfm_proxy:stat(Worker, SessId, {path, Path}), Attempts),
     Attrs.
 
 

@@ -162,7 +162,7 @@ save_and_update_quota(Doc = #document{
 
 -spec get(id()) -> {ok, doc()} | {error, term()}.
 get(Key) ->
-    datastore_model:get(?CTX, Key).
+    datastore_model:get(?CTX#{include_deleted => true}, Key).
 
 
 %%--------------------------------------------------------------------
