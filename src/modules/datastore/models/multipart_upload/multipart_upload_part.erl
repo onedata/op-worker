@@ -69,12 +69,12 @@ list(UploadId, Limit, StartAfter) ->
 
 -spec cleanup(multipart_upload:id()) -> ok.
 cleanup(UploadId) ->
-    {ok, List, IsLast} = list(UploadId, ?DEFAULT_LIST_LIMIT, 0),
+    {ok, List, IsFinished} = list(UploadId, ?DEFAULT_LIST_LIMIT, 0),
     lists:foreach(fun(#multipart_upload_part{number = PartNumber}) ->
         ok = datastore_model:delete_links(?CTX, UploadId, oneprovider:get_id(), PartNumber),
         ok = datastore_model:delete(?CTX, get_part_id(UploadId, PartNumber))
     end, List),
-    case IsLast of
+    case IsFinished of
         true -> ok;
         false -> cleanup(UploadId)
     end.

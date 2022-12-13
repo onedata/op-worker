@@ -108,9 +108,9 @@ list_test(_Config) ->
     Uploads1 = CreateUploadsFun(),
     timer:sleep(100), % ensure different timestamps
     Uploads2 = CreateUploadsFun(),
-    ExpectedUploads = lists:reverse(lists:foldl(fun({U1, U2}, Acc) ->
-        [U2, U1 | Acc]
-    end, [], lists:zip(Uploads1, Uploads2))),
+    ExpectedUploads = lists:flatmap(fun({U1, U2}) ->
+        [U1, U2]
+    end, lists:zip(Uploads1, Uploads2)),
     ?assertEqual(ExpectedUploads, list_all_uploads(Node, SessId, SpaceId, 1000)),
     ?assertEqual(ExpectedUploads, list_all_uploads(Node, SessId, SpaceId, 100)),
     ?assertEqual(ExpectedUploads, list_all_uploads(Node, SessId, SpaceId, 10)),

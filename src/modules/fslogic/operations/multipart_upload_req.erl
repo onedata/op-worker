@@ -74,8 +74,8 @@ upload_part(UploadId, Part) ->
 list_parts(UploadId, Limit, StartAfter) ->
     case multipart_upload:get(UploadId) of
         {ok, _} ->
-            {ok, Result, IsLast} = multipart_upload_part:list(UploadId, Limit, StartAfter),
-            ?FUSE_OK_RESP(#multipart_parts{parts = Result, is_last = IsLast});
+            {ok, Result, IsFinished} = multipart_upload_part:list(UploadId, Limit, StartAfter),
+            ?FUSE_OK_RESP(#multipart_parts{parts = Result, is_last = IsFinished});
         {error, not_found} ->
             #fuse_response{status = #status{code = ?EINVAL}}
     end.
