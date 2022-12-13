@@ -82,7 +82,7 @@
 }).
 
 -record(transfer_traverse_job, {
-    iterator :: transfer_iterator:record()
+    iterator :: transfer_iterator:instance()
 }).
 -record(transfer_regular_file_job, {}).
 

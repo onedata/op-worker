@@ -833,7 +833,7 @@ fail_to_evict_file_replica_without_permissions(Config, Type, FileKeyType) ->
             setup = #setup{
                 setup_node = WorkerP1,
                 assertion_nodes = [WorkerP2],
-                files_structure = [{0, 1}],
+                files_structure = [{1, 2}, {0, 3}],
                 root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
                 replicate_to_nodes = [WorkerP2],
                 distribution = [
@@ -850,11 +850,17 @@ fail_to_evict_file_replica_without_permissions(Config, Type, FileKeyType) ->
                 function = fun transfers_test_mechanism:schedule_replica_eviction_without_permissions/2
             },
             expected = #expected{
-                expected_transfer = undefined,
-                distribution = [
-                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
-                    #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
-                ],
+                expected_transfer = #{
+                    eviction_status => completed,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP2),
+                    evicting_provider => transfers_test_utils:provider_id(WorkerP2),
+                    files_to_process => 2,
+                    files_processed => 2,
+                    files_replicated => 0,
+                    bytes_replicated => 0,
+                    files_evicted =>  2
+                },
+                distribution = undefined,
                 assertion_nodes = [WorkerP1, WorkerP2]
             }
         }

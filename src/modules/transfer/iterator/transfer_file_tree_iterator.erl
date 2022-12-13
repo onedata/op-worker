@@ -19,7 +19,7 @@
 
 %% API
 -export([
-    build/2,
+    new/2,
     get_next_batch/3
 ]).
 
@@ -28,9 +28,9 @@
     root_file_ctx :: file_ctx:ctx(),
     pagination_token :: undefined | recursive_listing:pagination_token()
 }).
--type record() :: #transfer_file_tree_iterator{}.
+-type instance() :: #transfer_file_tree_iterator{}.
 
--export_type([record/0]).
+-export_type([instance/0]).
 
 
 %%%===================================================================
@@ -38,8 +38,8 @@
 %%%===================================================================
 
 
--spec build(transfer:id(), file_ctx:ctx()) -> record().
-build(TransferId, RootFileCtx) ->
+-spec new(transfer:id(), file_ctx:ctx()) -> instance().
+new(TransferId, RootFileCtx) ->
     #transfer_file_tree_iterator{
         transfer_id = TransferId,
         root_file_ctx = RootFileCtx,
@@ -47,8 +47,8 @@ build(TransferId, RootFileCtx) ->
     }.
 
 
--spec get_next_batch(user_ctx:ctx(), pos_integer(), record()) ->
-    {more | done, [{ok, file_ctx:ctx()}], record()} |
+-spec get_next_batch(user_ctx:ctx(), pos_integer(), instance()) ->
+    {more | done, [{ok, file_ctx:ctx()}], instance()} |
     {error, term()}.
 get_next_batch(UserCtx, Limit, Iterator = #transfer_file_tree_iterator{
     transfer_id = TransferId,

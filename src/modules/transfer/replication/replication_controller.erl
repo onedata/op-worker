@@ -162,7 +162,7 @@ handle_cast(
                 transfer_id = TransferId,
                 user_ctx = user_ctx:new(SessionId),
                 job = #transfer_traverse_job{
-                    iterator = transfer_iterator:build(TransferDoc)
+                    iterator = transfer_iterator:new(TransferDoc)
                 }
             }),
             handle_enqueued(TransferId, Callback, EvictSourceReplica);

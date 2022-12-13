@@ -36,6 +36,11 @@
     code_change/3
 ]).
 
+% There are 2 different types of transfers jobs:
+% - traverse - iterates over data source (view, directory or even single file)
+%              listing regular files and scheduling their transfer jobs.
+%              This is the first scheduled job for every transfer.
+% - regular file transfer - transfers single regular file
 -type job() :: #transfer_traverse_job{} | #transfer_regular_file_job{}.
 -type job_ctx() :: #transfer_job_ctx{}.
 

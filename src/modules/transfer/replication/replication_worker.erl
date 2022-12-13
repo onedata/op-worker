@@ -60,7 +60,8 @@ enqueue_data_transfer(FileCtx, TransferParams) ->
 %%--------------------------------------------------------------------
 -spec required_permissions() -> [data_access_control:requirement()].
 required_permissions() ->
-    [?TRAVERSE_ANCESTORS, ?OPERATIONS(?write_object_mask)].
+    % TODO VFS-4844 use offline session in transfer
+    [?TRAVERSE_ANCESTORS].
 
 %%--------------------------------------------------------------------
 %% @doc

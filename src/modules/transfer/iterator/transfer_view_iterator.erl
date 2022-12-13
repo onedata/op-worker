@@ -18,7 +18,7 @@
 
 %% API
 -export([
-    build/4,
+    new/4,
     get_next_batch/3
 ]).
 
@@ -31,9 +31,9 @@
     query_view_params :: transfer:query_view_params(),
     last_doc_id :: undefined | ?DOC_ID_MISSING | file_meta:uuid()
 }).
--type record() :: #transfer_view_iterator{}.
+-type instance() :: #transfer_view_iterator{}.
 
--export_type([record/0]).
+-export_type([instance/0]).
 
 
 %%%===================================================================
@@ -41,9 +41,9 @@
 %%%===================================================================
 
 
--spec build(od_space:id(), transfer:id(), transfer:view_name(), transfer:query_view_params()) ->
-    record().
-build(SpaceId, TransferId, ViewName, QueryViewParams) ->
+-spec new(od_space:id(), transfer:id(), transfer:view_name(), transfer:query_view_params()) ->
+    instance().
+new(SpaceId, TransferId, ViewName, QueryViewParams) ->
     #transfer_view_iterator{
         space_id = SpaceId,
         transfer_id = TransferId,
@@ -53,8 +53,8 @@ build(SpaceId, TransferId, ViewName, QueryViewParams) ->
     }.
 
 
--spec get_next_batch(user_ctx:ctx(), pos_integer(), record()) ->
-    {more | done, [error | {ok, file_ctx:ctx()}], record()} |
+-spec get_next_batch(user_ctx:ctx(), pos_integer(), instance()) ->
+    {more | done, [error | {ok, file_ctx:ctx()}], instance()} |
     {error, term()}.
 get_next_batch(_UserCtx, Limit, Iterator = #transfer_view_iterator{
     space_id = SpaceId,
@@ -146,7 +146,7 @@ resolve_file(TransferId, SpaceId, ViewName, ObjectId) ->
     catch Type:Reason:Stacktrace ->
         ?error_stacktrace(
             "Resolution of file id ~p returned by querying view ~p in space ~p "
-            "during transfer ~s failed due to ~p:~p",
+            "during transfer ~s failed due to:~n~p:~p",
             [ObjectId, ViewName, SpaceId, TransferId, Type, Reason],
             Stacktrace
         ),

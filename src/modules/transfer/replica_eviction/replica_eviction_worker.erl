@@ -17,6 +17,7 @@
 
 -include("global_definitions.hrl").
 -include("modules/datastore/transfer.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("modules/replica_deletion/replica_deletion.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -90,7 +91,8 @@ process_replica_deletion_result(Error, SpaceId, FileUuid, TransferId) ->
 %%--------------------------------------------------------------------
 -spec required_permissions() -> [data_access_control:requirement()].
 required_permissions() ->
-    []. % todo VFS-4844
+    % TODO VFS-4844 use offline session in transfer
+    [?TRAVERSE_ANCESTORS].
 
 %%--------------------------------------------------------------------
 %% @doc

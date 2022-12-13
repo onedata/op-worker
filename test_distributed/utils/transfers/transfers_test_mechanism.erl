@@ -381,18 +381,20 @@ schedule_replica_eviction_without_permissions(Config, #scenario{
     schedule_node = ScheduleNode,
     evicting_nodes = EvictingNodes
 }) ->
+    {RootGuid, RootPath} = ?config(?ROOT_DIR_KEY, Config),
+    RootFileKey = file_key(RootGuid, RootPath, FileKeyType),
 
-    FilesGuidsAndPaths = ?config(?FILES_KEY, Config),
-    lists:foreach(fun(EvictingNode) ->
-        lists:foreach(fun({Guid, Path}) ->
-            FileKey = file_key(Guid, Path, FileKeyType),
-            EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
-            ?assertMatch({error, _},
-                ok = lfm_proxy:set_perms(ScheduleNode, ?DEFAULT_SESSION(ScheduleNode, Config), FileKey, ?DEFAULT_FILE_PERMS),
-                schedule_replica_eviction(ScheduleNode, EvictingProviderId, User, FileKey, Config, Type))
-        end, FilesGuidsAndPaths)
+    NodesTransferIdsAndFiles = lists:map(fun(EvictingNode) ->
+        lists:foreach(fun({DirGuid, Path}) ->
+            DirKey = file_key(DirGuid, Path, FileKeyType),
+            ok = lfm_proxy:set_perms(EvictingNode, ?DEFAULT_SESSION(EvictingNode, Config), DirKey, 8#000)
+        end, ?config(?DIRS_KEY, Config)),
+
+        EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
+        {ok, Tid} = schedule_replica_eviction(ScheduleNode, EvictingProviderId, User, RootFileKey, Config, Type),
+        {EvictingNode, Tid, RootGuid, RootPath}
     end, EvictingNodes),
-    Config.
+    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 
 cancel_replica_eviction_on_target_nodes_by_scheduling_user(Config, #scenario{
     user = User,
