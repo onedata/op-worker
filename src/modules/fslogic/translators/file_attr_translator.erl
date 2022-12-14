@@ -63,10 +63,7 @@ to_json(#file_attr{
         <<"mtime">> => Mtime,
         <<"ctime">> => Ctime,
         <<"type">> => str_utils:to_binary(Type),
-        <<"size">> => case Type of
-            ?DIRECTORY_TYPE -> null;
-            _ -> utils:undefined_to_null(Size)
-        end,
+        <<"size">> => utils:undefined_to_null(Size),
         <<"shares">> => Shares,
         <<"provider_id">> => ProviderId,
         <<"owner_id">> => OwnerId,
