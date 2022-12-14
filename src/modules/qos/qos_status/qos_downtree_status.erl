@@ -79,7 +79,7 @@ report_finished(TraverseId, FileCtx) ->
         end,
         case get_uuid_based_path(InternalFileCtx) of
             not_synced ->
-                ok;
+                ok; % link was never added, so no need to delete it
             UuidBasedPath ->
                 lists:foreach(fun(QosEntryId) ->
                     ok = qos_status_links:delete_link(

@@ -22,6 +22,7 @@
 %%%    for the file missing link was pointing to
 %%% 5. check effective qos between given file and missing one
 %%% 6. if there is any entry start traverse from given file
+% fixme - check acceptance tests - nested file is replicated from one storage to storage which id was set as qos requirement in parent dir
 %%% @end
 %%%-------------------------------------------------------------------
 -module(qos_logic).
@@ -218,7 +219,8 @@ get_eff_qos(FileCtx) ->
                     file_qos:get_effective(FileDoc, #{
                         merge_callback => undefined,
                         should_cache => false, % do not cache this value, as it is only for this reference
-                        use_referenced_key => false
+                        use_referenced_key => false,
+                        force_execution_on_referenced_key => false
                     });
                 Res ->
                     Res
@@ -231,6 +233,7 @@ get_eff_qos(FileCtx) ->
                 merge_callback => undefined,
                 should_cache => false, % do not cache this value, as it is only for this reference
                 use_referenced_key => false,
+                force_execution_on_referenced_key => false,
                 calculation_root_parent => HighestSyncedAncestorUuid
             })
     end.

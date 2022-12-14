@@ -431,8 +431,9 @@ get_effective(#document{} = FileDoc, OriginalParentDoc, Options) ->
         {ok, merge_file_qos(NewEntry, Acc), CalculationInfoAcc}
     end,
     FinalOptions = maps:merge(#{
-        merge_callback => MergeCallback, 
-        use_referenced_key => true
+        merge_callback => MergeCallback,
+        use_referenced_key => true,
+        force_execution_on_referenced_key => true
     }, Options),
 
     merge_eff_qos_for_files([OriginalParentDoc, FileDoc], Callback, FinalOptions).

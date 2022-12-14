@@ -371,17 +371,17 @@ fold_traverses(QosEntryId, Fun, InitialAcc) ->
 -spec fold_all_in_list(datastore:key(), list_fold_fun(), any()) -> any().
 fold_all_in_list(Key, Fun, InitialAcc) ->
     {List, NextBatchOpts} = list_next_batch(Key, #{}),
-    fold_and_list_next_batch(Key, Fun, List, NextBatchOpts, InitialAcc).
+    fold_in_batches(Key, Fun, List, NextBatchOpts, InitialAcc).
 
 
 %% @private
--spec fold_and_list_next_batch(datastore:key(), list_fold_fun(),
+-spec fold_in_batches(datastore:key(), list_fold_fun(),
     [datastore_links:link_name()], list_opts(), any()) -> any().
-fold_and_list_next_batch(_Key, _Fun, [], _Opts, Acc) -> Acc;
-fold_and_list_next_batch(Key, Fun, List, Opts, Acc) ->
+fold_in_batches(_Key, _Fun, [], _Opts, Acc) -> Acc;
+fold_in_batches(Key, Fun, List, Opts, Acc) ->
     NextAcc = lists:foldl(Fun, Acc, List),
     {NextBatch, NextBatchOpts} = list_next_batch(Key, Opts),
-    fold_and_list_next_batch(Key, Fun, NextBatch, NextBatchOpts, NextAcc).
+    fold_in_batches(Key, Fun, NextBatch, NextBatchOpts, NextAcc).
 
 
 %% @private

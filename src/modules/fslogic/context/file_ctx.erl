@@ -383,7 +383,8 @@ list_references_ctx_const(FileCtx) ->
                 fun (FileUuid) when FileUuid == LogicalUuid -> FileCtx;
                     (FileUuid) -> file_ctx:new_by_uuid(FileUuid, SpaceId)
                 end,
-                References)};
+                References
+            )};
         {error, _} = Error ->
             Error
     end.

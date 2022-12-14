@@ -7,8 +7,7 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module is responsible for effective checking synchronization status of file_meta and file_meta links documents.
-%%% For given file synchronization of synchronization of all files
-%%% on this file path is checked. Hardlinks are NOT checked.
+%%% For given file synchronization of all files on this file path is checked. Hardlinks are NOT checked.
 %%% Uses `effective_cache` under the hood.
 %%% TODO VFS-7412 refactor this module (duplicated code in other effective_ caches modules)
 %%% There are 3 possible results:

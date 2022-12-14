@@ -11,9 +11,9 @@
 %%% QoS entry for given file/directory is fulfilled when:
 %%%     - there is no information that qos_entry cannot be satisfied (see qos_entry.erl)
 %%%     - traverse created as result of adding this QoS entry has already synchronized 
-%%%       this file/all its files in subtree
+%%%       this file/all its files in subtree (qos_uptree_status)
 %%%     - file is not being reconciled/no file is currently being reconciled in 
-%%%       subtree of this directory
+%%%       subtree of this directory (qos_downtree_status)
 %%%
 %%% In order to be able to check that given file/directory has been traversed additional 
 %%% document(qos_status) is created for a directory when it was encountered during traverse. 
