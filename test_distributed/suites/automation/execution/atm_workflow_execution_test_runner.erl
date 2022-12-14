@@ -191,18 +191,16 @@ run(TestSpec = #atm_workflow_execution_test_spec{
     SpaceId = oct_background:get_space_id(SpaceSelector),
 
     AtmWorkflowSchemaId = atm_test_inventory:add_workflow_schema(AtmWorkflowSchemaDumpOrDraft),
+    AtmWorkflowSchemaRevision = atm_test_inventory:get_workflow_schema_revision(
+        AtmWorkflowSchemaRevisionNum, AtmWorkflowSchemaId
+    ),
     {AtmWorkflowExecutionId, _} = atm_workflow_execution_test_mocks:schedule_workflow_execution_as_test_process(
         ProviderSelector, SessionId, SpaceId, AtmWorkflowSchemaId, AtmWorkflowSchemaRevisionNum,
         AtmStoreInitialContentOverlay, CallbackUrl
     ),
 
-    #atm_workflow_schema_revision{
-        stores = AtmStoreSchemas,
-        lanes = AtmLaneSchemas
-    } = atm_test_inventory:get_workflow_schema_revision(AtmWorkflowSchemaRevisionNum, AtmWorkflowSchemaId),
-
     ExpState = atm_workflow_execution_exp_state_builder:init(
-        ProviderSelector, SpaceId, AtmWorkflowExecutionId, AtmStoreSchemas, AtmLaneSchemas
+        ProviderSelector, SpaceId, AtmWorkflowExecutionId, AtmWorkflowSchemaRevision
     ),
     true = atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState),
 
@@ -210,7 +208,7 @@ run(TestSpec = #atm_workflow_execution_test_spec{
         test_spec = TestSpec,
         session_id = SessionId,
         workflow_execution_id = AtmWorkflowExecutionId,
-        lane_count = length(AtmLaneSchemas),
+        lane_count = length(AtmWorkflowSchemaRevision#atm_workflow_schema_revision.lanes),
         current_lane_index = 1,
         current_run_num = 1,
         ongoing_incarnations = Incarnations,

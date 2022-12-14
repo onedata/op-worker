@@ -433,8 +433,8 @@ all() -> [
 
 -define(GC_RELATED_ENV_VARS, [
     atm_workflow_execution_garbage_collector_run_interval_sec,
-    atm_suspended_workflow_executions_expiration_interval_sec,
-    atm_ended_workflow_executions_expiration_interval_sec
+    atm_suspended_workflow_executions_expiration_sec,
+    atm_ended_workflow_executions_expiration_sec
 ]).
 
 

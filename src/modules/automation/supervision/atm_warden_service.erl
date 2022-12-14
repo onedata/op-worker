@@ -23,7 +23,7 @@
 -export([start_service/0, stop_service/0]).
 
 
--define(SERVICE_SUP, ?ATM_WORKER_SUP).
+-define(SERVICE_SUP, ?ATM_SUPERVISION_WORKER_SUP).
 
 
 %%%===================================================================

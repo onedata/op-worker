@@ -17,6 +17,7 @@
 
 -export([
     garbage_collect_atm_workflow_executions/0
+    %% TODO VFS-10256 Add large (1000+ executions) gc test
 ]).
 
 
@@ -76,17 +77,18 @@ garbage_collect_atm_workflow_executions() ->
         ExpAtmWorkflowExecutionState2, ExpAtmWorkflowExecutionState3,
         ExpAtmWorkflowExecutionState4, ExpAtmWorkflowExecutionState5
     ],
+    assert_all_match_with_backend(AllExpAtmWorkflowExecutionStates),
 
-    set_env(atm_suspended_workflow_executions_expiration_interval_sec, 4),
-    set_env(atm_ended_workflow_executions_expiration_interval_sec, 2),
+    set_env(atm_suspended_workflow_executions_expiration_sec, 4),
+    set_env(atm_ended_workflow_executions_expiration_sec, 2),
 
     % Move time backward and assert that no atm workflow execution is deleted
     time_test_utils:set_current_time_seconds(Timestamp - 2),
-    assert_all_match_with_backend(AllExpAtmWorkflowExecutionStates),
 
     set_env(atm_workflow_execution_garbage_collector_run_interval_sec, 1),
     % Manual gc run is needed for new interval to activate (original is 1h)
     run_gc(),
+
     assert_all_match_with_backend(AllExpAtmWorkflowExecutionStates),
 
     time_test_utils:set_current_time_seconds(Timestamp + 5),

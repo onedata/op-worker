@@ -27,7 +27,7 @@
 
 %% API
 -export([
-    init/5,
+    init/4,
     expect/2,
     assert_matches_with_backend/1, assert_matches_with_backend/2,
     assert_deleted/1
@@ -136,16 +136,17 @@
     oct_background:entity_selector(),
     od_space:id(),
     atm_workflow_execution:id(),
-    [atm_store_schema:record()],
-    [atm_lane_schema:record()]
+    atm_workflow_schema_revision:record()
 ) ->
     ctx().
 init(
     ProviderSelector,
     SpaceId,
     AtmWorkflowExecutionId,
-    AtmStoreSchemas,
-    AtmLaneSchemas = [FirstAtmLaneSchema | RestAtmLaneSchemas]
+    #atm_workflow_schema_revision{
+        stores = AtmStoreSchemas,
+        lanes = AtmLaneSchemas = [FirstAtmLaneSchema | RestAtmLaneSchemas]
+    }
 ) ->
     ExpFirstAtmLaneExecutionState = #{
         <<"schemaId">> => FirstAtmLaneSchema#atm_lane_schema.id,
