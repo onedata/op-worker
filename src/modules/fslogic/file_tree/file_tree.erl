@@ -337,32 +337,23 @@ get_user_root_dir_children(UserCtx, UserRootDirCtx, ListOpts, SpaceWhiteList) ->
             end, AllUserSpaces)
     end,
     SessId = user_ctx:get_session_id(UserCtx),
-    FilteredSpaces2 = lists:filter(fun(SpaceId) ->
-        {ok, Providers} = space_logic:get_provider_ids(SessId, SpaceId),
-        Providers =/= []
-    end, FilteredSpaces),
 
-    Children = case Offset < length(FilteredSpaces2) of
+    Children = case Offset < length(FilteredSpaces) of
         true ->
             SessId = user_ctx:get_session_id(UserCtx),
             
             GroupedSpaces = lists:foldl(fun(SpaceId, Acc) ->
                 {ok, SpaceName} = space_logic:get_name(SessId, SpaceId),
-                case Acc of
-                    [{SpaceName, Spaces} | Tail] ->
-                        [{SpaceName, [SpaceId | Spaces]} | Tail];
-                    _ ->
-                        [{SpaceName, [SpaceId]} | Acc]
-                end
-            end, [], FilteredSpaces2),
+                Acc#{SpaceName => [SpaceId | maps:get(SpaceName, Acc, [])]}
+            end, #{}, FilteredSpaces),
 
             SpacesChunk = lists:sublist(
-                lists:sort(lists:flatmap(
-                    fun ({Name, [SpaceId]}) -> [{Name, SpaceId}];
-                        ({Name, Spaces}) -> lists:map(fun(SpaceId) ->
+                lists:sort(maps:fold(
+                    fun (Name, [SpaceId], Acc) -> [{Name, SpaceId} | Acc];
+                        (Name, Spaces, Acc) -> Acc ++ lists:map(fun(SpaceId) ->
                             {<<Name/binary, (?SPACE_NAME_ID_SEPARATOR)/binary, SpaceId/binary>>, SpaceId}
                         end, Spaces)
-                end, GroupedSpaces)),
+                end, [], GroupedSpaces)),
                 Offset + 1,
                 Limit
             ),
