@@ -325,6 +325,8 @@ confidential_params(?SWIFT_HELPER_NAME) ->
     [<<"password">>];
 confidential_params(?GLUSTERFS_HELPER_NAME) ->
     [];
+confidential_params(?NFS_HELPER_NAME) ->
+    [];
 confidential_params(?WEBDAV_HELPER_NAME) ->
     [<<"credentials">>, <<"accessToken">>, <<"onedataAccessToken">>];
 confidential_params(?HTTP_HELPER_NAME) ->
