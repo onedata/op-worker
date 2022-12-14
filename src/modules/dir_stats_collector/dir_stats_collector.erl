@@ -211,6 +211,7 @@ update_stats_of_parent(Guid, CollectionType, CollectionUpdate) ->
 -spec update_stats_of_parent(file_id:file_guid(), dir_stats_collection:type(), dir_stats_collection:collection(),
     add_hook | return_error) -> ok | ?ERROR_NOT_FOUND | ?ERROR_INTERNAL_SERVER_ERROR.
 update_stats_of_parent(Guid, CollectionType, CollectionUpdate, ParentErrorHandlingMethod) ->
+    % TODO - dodac inkarnacje do wiadomosci dsc_update_request, zeby zabezpiieczyc sie przed szybkim
     case dir_stats_service_state:is_active(file_id:guid_to_space_id(Guid)) of
         true ->
             case get_parent(Guid) of
