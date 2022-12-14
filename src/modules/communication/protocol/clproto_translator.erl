@@ -418,7 +418,7 @@ translate_from_protobuf(#'ListFilesRecursively'{
             start_after => StartAfter,
             prefix => Prefix,
             limit => Limit,
-            include_dirs => IncludeDirs
+            include_directories => IncludeDirs
         })
     };
 translate_from_protobuf(#'CreateStorageTestFile'{
@@ -1604,7 +1604,7 @@ translate_to_protobuf(#get_recursive_file_list{
         start_after = maps:get(start_after, ListingOptions, undefined),
         prefix = maps:get(prefix, ListingOptions, undefined),
         limit = maps:get(limit, ListingOptions, undefined),
-        include_dirs = maps:get(include_dirs, ListingOptions, undefined),
+        include_dirs = maps:get(include_directories , ListingOptions, undefined),
         xattrs = Xattrs
     }};
 translate_to_protobuf(#recursive_listing_result{
