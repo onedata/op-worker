@@ -366,8 +366,8 @@ delete_doc(Key) ->
         #document{} = Doc -> {ok, Doc};
         _ -> file_location:get(Key)
     end,
-    case GetDocAns of
-        {ok, #document{value = #file_location{
+    Ans = case GetDocAns of
+        {ok, #document{deleted = false, value = #file_location{
             uuid = FileUuid,
             space_id = SpaceId,
             storage_id = StorageId,
@@ -376,16 +376,18 @@ delete_doc(Key) ->
             dir_size_stats:report_reg_file_size_changed(file_id:pack_guid(FileUuid, SpaceId), total, -LocationSize),
             StorageSize = get_local_size(Key),
             cache_size_change(Key, SpaceId, StorageId, -StorageSize),
-            apply_size_change(Key, FileUuid);
+            apply_size_change(Key, FileUuid),
+            LocationDelAns = file_location:delete(Key),
+            delete_local_blocks(Key),
+            LocationDelAns;
+        {ok, #document{deleted = true}} ->
+            ok;
         {error, not_found} ->
             ok;
         Error ->
-            ?error("~p:~p error ~p for key ~p", [?MODULE, ?FUNCTION_NAME, Error, Key])
+            ?error("~p:~p error ~p for key ~p", [?MODULE, ?FUNCTION_NAME, Error, Key]),
+            Error
     end,
-
-    Ans = file_location:delete(Key),
-
-    delete_local_blocks(Key),
 
     erase({?DOCS, Key}),
     erase({?FLUSHED_DOCS, Key}),

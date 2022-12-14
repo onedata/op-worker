@@ -45,8 +45,7 @@
 %% Location getters/setters
 -export([get_location/2, get_location/3, save_location/1, save_location/2,
     cache_location/1, update_location/4, create_location/1, create_location/2,
-    delete_local_location/1, delete_location/2, force_flush/1,
-    get_local_location/1, get_local_location/2]).
+    force_flush/1, get_local_location/1, get_local_location/2]).
 %% Blocks getters/setters
 -export([get_blocks/1, get_blocks/2, get_overlapping_blocks_sequence/2,
     set_blocks/2, set_final_blocks/2, update_blocks/2, clear_blocks/2]).
@@ -223,31 +222,6 @@ create_location(#document{key = Key, value = #file_location{uuid = Uuid}} = Doc,
         end
     end, fun() ->
         ?extract_key(file_location:create_and_update_quota(Doc, GeneratedKey))
-    end).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Deletes local location document.
-%% @end
-%%-------------------------------------------------------------------
--spec delete_local_location(file_meta:uuid()) ->
-    ok | {error, term()}.
-delete_local_location(Uuid) ->
-    LocId = file_location:local_id(Uuid),
-    delete_location(Uuid, LocId).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Deletes location document.
-%% @end
-%%-------------------------------------------------------------------
--spec delete_location(file_meta:uuid(), file_location:id()) ->
-    ok | {error, term()}.
-delete_location(Uuid, LocId) ->
-    replica_synchronizer:apply_or_run_locally(Uuid, fun() ->
-        fslogic_cache:delete_doc(LocId)
-    end, fun() ->
-        file_location:delete_and_update_quota(LocId)
     end).
 
 %%-------------------------------------------------------------------
