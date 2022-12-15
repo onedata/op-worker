@@ -91,7 +91,7 @@ process_replica_deletion_result(Error, SpaceId, FileUuid, TransferId) ->
 %%--------------------------------------------------------------------
 -spec required_permissions() -> [data_access_control:requirement()].
 required_permissions() ->
-    % TODO VFS-4844 use offline session in transfer
+    % TODO VFS-10259 use offline session in transfer
     [?TRAVERSE_ANCESTORS].
 
 %%--------------------------------------------------------------------

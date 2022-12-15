@@ -54,7 +54,7 @@ all() -> [
     migrate_big_file_replica,
     migrate_100_files_in_one_request,
     migrate_100_files_each_file_separately,
-%%    fail_to_migrate_file_replica_without_permissions %todo VFS-4844
+%%    fail_to_migrate_file_replica_without_permissions %todo VFS-10259
     schedule_migration_by_view,
     schedule_migration_of_regular_file_by_view_with_reduce,
     scheduling_migration_by_not_existing_view_should_fail,

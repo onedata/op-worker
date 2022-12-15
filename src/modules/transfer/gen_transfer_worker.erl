@@ -401,7 +401,8 @@ transfer_data_insecure(_UserCtx, RootFileCtx, State, #transfer{
     files_processed = FilesProcessed
 }, TransferJobCtx) when FilesToProcess - FilesProcessed > ?FILES_TO_PROCESS_THRESHOLD ->
     % Postpone next file batch scheduling to ensure there are not enormous number
-    % of files already scheduled to process
+    % of files already scheduled to process (already scheduled jobs may have
+    % scheduled retries)
     CallbackModule = State#state.mod,
     CallbackModule:enqueue_data_transfer(RootFileCtx, TransferJobCtx);
 

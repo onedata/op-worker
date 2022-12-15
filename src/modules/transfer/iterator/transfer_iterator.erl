@@ -8,6 +8,11 @@
 %%% @doc
 %%% This module defines iterator functionality to be implemented by any
 %%% possible data source in transfer.
+%%%
+%%%                             !!! Caution !!!
+%%% 1) This behaviour must be implemented by modules with records of the same name.
+%%% 2) Modules implementing this behaviour must register be registered in 'instance'
+%%%    type.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(transfer_iterator).
