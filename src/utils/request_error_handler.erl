@@ -72,7 +72,6 @@ infer_error({error, Reason} = Error) ->
     end;
 
 infer_error(Reason) ->
-    case ordsets:is_element(Reason, ?ERROR_CODES) of
-        true -> ?ERROR_POSIX(Reason);
-        false -> ?handle_unknown_error(Reason)
-    end.
+    % wrap in a proper term in hope it's a standardized error;
+    % if not, it will finally generate a translation error log and return an internal server error
+    infer_error({error, Reason}).
