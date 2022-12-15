@@ -61,7 +61,7 @@ create_all(AtmParallelBoxExecutionCreationArgs = #atm_parallel_box_execution_cre
         catch Type:Reason:Stacktrace ->
             catch delete_all([Doc#document.key || Doc <- AtmTaskExecutionDocs]),
 
-            Error = ?atm_examine_error(Type, Reason, Stacktrace),
+            Error = ?examine_exception(Type, Reason, Stacktrace),
             throw(?ERROR_ATM_TASK_EXECUTION_CREATION_FAILED(AtmTaskSchemaId, Error))
         end
     end, [], AtmTaskSchemas).
@@ -83,7 +83,7 @@ create(AtmParallelBoxExecutionCreationArgs, AtmTaskSchema) ->
         create_task_execution_doc(CreationCtx)
     catch Type:Reason:Stacktrace ->
         delete_execution_components(CreationCtx#creation_ctx.execution_components),
-        throw(?atm_examine_error(Type, Reason, Stacktrace))
+        throw(?examine_exception(Type, Reason, Stacktrace))
     end.
 
 
@@ -146,7 +146,7 @@ create_execution_components(CreationCtx) ->
             CreateExecutionComponentFun(NewCreationCtx)
         catch Type:Reason:Stacktrace ->
             delete_execution_components(NewCreationCtx#creation_ctx.execution_components),
-            throw(?atm_examine_error(Type, Reason, Stacktrace))
+            throw(?examine_exception(Type, Reason, Stacktrace))
         end
     end, CreationCtx, [
         fun create_executor/1,

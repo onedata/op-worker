@@ -765,6 +765,6 @@ log_exception(Logger, throw, Reason, _Stacktrace) ->
 log_exception(Logger, Type, Reason, Stacktrace) ->
     LogContent = #{
         <<"description">> => <<"Unexpected emergency occured.">>,
-        <<"reason">> => errors:to_json(?atm_examine_error(Type, Reason, Stacktrace))
+        <<"reason">> => errors:to_json(?examine_exception(Type, Reason, Stacktrace))
     },
     atm_workflow_execution_logger:workflow_emergency(LogContent, Logger).

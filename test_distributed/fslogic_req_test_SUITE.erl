@@ -16,6 +16,7 @@
 -include("global_definitions.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").
+-include("modules/events/definitions.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/onedata.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -45,7 +46,9 @@
     update_times_test/1,
     default_permissions_test/1,
     creating_handle_in_create_test/1,
-    creating_handle_in_open_test/1
+    creating_handle_in_open_test/1,
+    file_written_req_test/1,
+    file_read_req_test/1
 ]).
 
 all() ->
@@ -63,7 +66,9 @@ all() ->
         update_times_test,
         default_permissions_test,
         creating_handle_in_create_test,
-        creating_handle_in_open_test
+        creating_handle_in_open_test,
+        file_written_req_test,
+        file_read_req_test
     ]).
 
 -define(TIMEOUT, timer:seconds(5)).
@@ -774,6 +779,42 @@ creating_handle_in_open_test(Config) ->
     ?assertMatch(#fuse_response{status = #status{code = ?OK}, fuse_response = #file_location{}}, Resp2).
 
 
+file_written_req_test(Config) ->
+    file_read_written_base_test(Config, file_written).
+
+
+file_read_req_test(Config) ->
+    file_read_written_base_test(Config, file_read).
+
+
+file_read_written_base_test(Config, Type) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+    
+    {ok, Guid} = lfm_proxy:create(W, SessId, <<"/space_name2/", (generator:gen_name())/binary>>),
+    
+    % handler mocked in init_per_testcase
+    {HandlerName, FileRequest, GuidExtractor} = case Type of
+        file_written ->
+            {
+                handle_file_written_events,
+                #report_file_written{offset = 0, size = 8},
+                fun(#file_written_event{file_guid = G}) -> G end
+            };
+        file_read -> {
+            handle_file_read_events,
+            #report_file_read{offset = 0, size = 8},
+            fun(#file_read_event{file_guid = G}) -> G end
+        }
+    end,
+    ?assertMatch(#fuse_response{status = #status{code = ?OK}}, ?file_req(W, SessId, Guid, FileRequest)),
+    test_utils:mock_assert_num_calls(W, fslogic_event_handler, HandlerName, 2, 1),
+    receive {Type, events, Events} ->
+        ?assert(lists:any(fun(G) -> G == Guid end, [GuidExtractor(Event) || Event <- Events]))
+    after ?TIMEOUT ->
+        throw(message_not_received)
+    end.
+    
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -785,6 +826,12 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     initializer:teardown_storage(Config).
 
+init_per_testcase(file_written_req_test, Config) ->
+    mock_event_handler(file_written, Config),
+    init_per_testcase(default, Config);
+init_per_testcase(file_read_req_test, Config) ->
+    mock_event_handler(file_read, Config),
+    init_per_testcase(default, Config);
 init_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     initializer:communicator_mock(Workers),
@@ -818,3 +865,17 @@ get_guid(Worker, SessId, Path) ->
             ?req(Worker, SessId, #resolve_guid{path = Path})
         ),
     Guid.
+
+
+mock_event_handler(Type, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    Pid = self(),
+    HandlerName = case Type of
+        file_written -> handle_file_written_events;
+        file_read -> handle_file_read_events
+    end,
+    test_utils:mock_new(Workers, fslogic_event_handler, [passthrough]),
+    test_utils:mock_expect(Workers, fslogic_event_handler, HandlerName, fun(Events, SessId) ->
+        Pid ! {Type, events, Events},
+        meck:passthrough([Events, SessId])
+    end).
