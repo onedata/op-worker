@@ -156,7 +156,8 @@ copy_file_to_archive(FileCtx, TargetParentCtx, ResolvedFilePath, UserCtx, CopyOp
     {FileSize, CopyCtx2} = file_ctx:get_local_storage_file_size(CopyCtx),
     {SDHandle, CopyCtx3} = storage_driver:new_handle(SessionId, CopyCtx2),
     ok = storage_driver:flushbuffer(SDHandle, FileSize),
-    {ok, CopyCtx3}.
+    {ok, CopyCtx4} = sd_utils:chmod(UserCtx, CopyCtx3, 8#440),
+    {ok, CopyCtx4}.
 
 
 -spec make_hardlink_to_file_in_base_archive(file_ctx:ctx(), file_ctx:ctx(), file_ctx:ctx(), 
