@@ -44,6 +44,9 @@
 %%% NOTE: multiple collections can be initialized together to list directory
 %%%       children only once. As a result, some of initialization data must
 %%%       be stored per guid instead of per guid/collection_type pair.
+%%%
+%%% % TODO VFS-9204 Problems with dbsync can result in negative files count when link deletion is synced,
+%%%        than stats for dir are initialized and only then deleted file_meta appears
 %%% @end
 %%%-------------------------------------------------------------------
 -module(dir_stats_collector).
@@ -163,11 +166,15 @@
 -define(SCHEDULED_COLLECTIONS_INITIALIZATION, scheduled_stats_initialization).
 -define(SCHEDULED_COLLECTIONS_INITIALIZATION_INTERVAL_MILLIS, 2000).
 
--define(INITIALIZE_COLLECTIONS(Guid), {initialize_collections, Guid}).
--define(CONTINUE_COLLECTIONS_INITIALIZATION(Guid), {continue_collections_initialization, Guid}).
+-define(INIT_FIRST_RETRY_INTERVAL, 30000). % 30 sek
+-define(MAX_INIT_RETRY_INTERVAL, timer:minutes(30)).
+-define(INITIALIZE_COLLECTIONS(Guid, PidToNotify), {initialize_collections, Guid, PidToNotify}).
+-define(CONTINUE_COLLECTIONS_INITIALIZATION(Guid, PidToNotify),
+    ?CONTINUE_COLLECTIONS_INITIALIZATION(Guid, PidToNotify, ?INIT_FIRST_RETRY_INTERVAL)).
+-define(CONTINUE_COLLECTIONS_INITIALIZATION(Guid, PidToNotify, RetryInterval),
+    {continue_collections_initialization, Guid, PidToNotify, RetryInterval}).
 -define(STOP_COLLECTING(SpaceId), {stop_collecting, SpaceId}).
 -define(FILE_MOVED(Guid, TargetParentGuid), {file_moved, Guid, TargetParentGuid}).
-
 
 %%%===================================================================
 %%% API - single directory
@@ -211,7 +218,6 @@ update_stats_of_parent(Guid, CollectionType, CollectionUpdate) ->
 -spec update_stats_of_parent(file_id:file_guid(), dir_stats_collection:type(), dir_stats_collection:collection(),
     add_hook | return_error) -> ok | ?ERROR_NOT_FOUND | ?ERROR_INTERNAL_SERVER_ERROR.
 update_stats_of_parent(Guid, CollectionType, CollectionUpdate, ParentErrorHandlingMethod) ->
-    % TODO - dodac inkarnacje do wiadomosci dsc_update_request, zeby zabezpiieczyc sie przed szybkim
     case dir_stats_service_state:is_active(file_id:guid_to_space_id(Guid)) of
         true ->
             case get_parent(Guid) of
@@ -288,7 +294,7 @@ delete_stats(Guid, CollectionType) ->
 
 -spec initialize_collections(file_id:file_guid()) -> ok | ?ERROR_INTERNAL_SERVER_ERROR.
 initialize_collections(Guid) ->
-    call_designated_node(Guid, submit_and_await, [?MODULE, Guid, ?INITIALIZE_COLLECTIONS(Guid)]).
+    call_designated_node(Guid, submit_and_await, [?MODULE, Guid, ?INITIALIZE_COLLECTIONS(Guid, self())]).
 
 
 -spec report_file_moved(file_meta:type(), file_id:file_guid(), file_id:file_guid(), file_id:file_guid()) -> ok.
@@ -301,16 +307,22 @@ report_file_moved(?DIRECTORY_TYPE, FileGuid, _SourceParentGuid, TargetParentGuid
             ok
     end;
 report_file_moved(_, FileGuid, SourceParentGuid, TargetParentGuid) ->
-    lists:foreach(fun(CollectionType) ->
-        ChildStats = CollectionType:init_child(FileGuid),
-        case dir_stats_collection:on_collection_move(CollectionType, ChildStats) of
-            {update_source_parent, CollectionUpdate} ->
-                update_stats_of_dir(SourceParentGuid, external, CollectionType, CollectionUpdate);
-            ignore ->
-                ok
-        end,
-        update_stats_of_dir(TargetParentGuid, external, CollectionType, ChildStats)
-    end, dir_stats_collection:list_types()).
+    try
+        lists:foreach(fun(CollectionType) ->
+            ChildStats = CollectionType:init_child(FileGuid),
+            case dir_stats_collection:on_collection_move(CollectionType, ChildStats) of
+                {update_source_parent, CollectionUpdate} ->
+                    update_stats_of_dir(SourceParentGuid, external, CollectionType, CollectionUpdate);
+                ignore ->
+                    ok
+            end,
+            update_stats_of_dir(TargetParentGuid, external, CollectionType, ChildStats)
+        end, dir_stats_collection:list_types())
+    catch
+        Error:Reason:Stacktrace ->
+            ?error_stacktrace("Error handling file ~p move from ~p to ~p: ~p:~p",
+                [FileGuid, SourceParentGuid, TargetParentGuid, Error, Reason], Stacktrace)
+    end.
 
 
 %%%===================================================================
@@ -401,7 +413,7 @@ forced_terminate(Reason, State) ->
 %%%===================================================================
 
 -spec handle_call(#dsc_get_request{} | #dsc_flush_request{} |
-    ?INITIALIZE_COLLECTIONS(file_id:file_guid()) | ?STOP_COLLECTING(od_space:id()), state()) ->
+    ?INITIALIZE_COLLECTIONS(file_id:file_guid(), pid()) | ?STOP_COLLECTING(od_space:id()), state()) ->
     {
         ok | {ok, dir_stats_collection:collection()} | error(),
         state()
@@ -433,7 +445,7 @@ handle_call(#dsc_get_request{
 handle_call(#dsc_flush_request{guid = Guid, collection_type = CollectionType, pruning_strategy = PruningStrategy}, State) ->
     flush_cached_dir_stats(gen_cached_dir_stats_key(Guid, CollectionType), PruningStrategy, State);
 
-handle_call(?INITIALIZE_COLLECTIONS(Guid), State) ->
+handle_call(?INITIALIZE_COLLECTIONS(Guid, PidToNotify), State) ->
     {InitializationDataMap, UpdatedState} = lists:foldl(fun(CollectionType, {InitializationDataMapAcc, StateAcc}) ->
         case reset_last_used_timer(Guid, CollectionType, StateAcc) of
             {{ok, #cached_dir_stats{
@@ -448,9 +460,10 @@ handle_call(?INITIALIZE_COLLECTIONS(Guid), State) ->
 
     case maps:size(InitializationDataMap) of
         0 ->
+            PidToNotify ! initialization_finished,
             {ok, UpdatedState};
         _ ->
-            FinalState = start_collections_initialization_for_dir(Guid, InitializationDataMap, UpdatedState),
+            FinalState = start_collections_initialization_for_dir(Guid, PidToNotify, InitializationDataMap, UpdatedState),
             {ok, FinalState}
     end;
 
@@ -473,6 +486,7 @@ handle_call(Request, State) ->
 
 
 -spec handle_cast(#dsc_update_request{} | ?SCHEDULED_FLUSH | ?SCHEDULED_COLLECTIONS_INITIALIZATION |
+    ?CONTINUE_COLLECTIONS_INITIALIZATION(file_id:file_guid(), pid(), time:millis()) |
     ?FILE_MOVED(file_id:file_guid(), file_id:file_guid()), state()) -> state().
 handle_cast(#dsc_update_request{
     guid = Guid,
@@ -496,13 +510,12 @@ handle_cast(#dsc_update_request{
 handle_cast(?SCHEDULED_FLUSH, State) ->
     flush_all(State);
 
-% TODO - moze trzeba by zrobic tak, zeby to blokowalo traverse?
 handle_cast(?SCHEDULED_COLLECTIONS_INITIALIZATION, State) ->
     ensure_space_collecting_statuses_up_to_date(
         start_collections_initialization_for_all_cached_dirs(State#state{initialization_timer_ref = undefined}));
 
-handle_cast(?CONTINUE_COLLECTIONS_INITIALIZATION(Guid), State) ->
-    continue_collections_initialization_for_dir(Guid, State);
+handle_cast(?CONTINUE_COLLECTIONS_INITIALIZATION(Guid, PidToNotify, RetryInterval), State) ->
+    continue_collections_initialization_for_dir(Guid, PidToNotify, RetryInterval, State);
 
 handle_cast(?FILE_MOVED(Guid, TargetParentGuid), State) ->
     lists:foldl(fun(CollectionType, StateAcc) ->
@@ -663,14 +676,14 @@ start_collections_initialization_for_all_cached_dirs(#state{dir_stats_cache = Di
     end, #{}, DirStatsCache),
 
     maps:fold(fun(Guid, InitializationDataMap, StateAcc) ->
-        start_collections_initialization_for_dir(Guid, InitializationDataMap, StateAcc)
+        start_collections_initialization_for_dir(Guid, undefined, InitializationDataMap, StateAcc)
     end, State, InitializationDataMaps).
 
 
 %% @private
--spec start_collections_initialization_for_dir(file_id:file_guid(),
+-spec start_collections_initialization_for_dir(file_id:file_guid(), pid(),
     dir_stats_collections_initializer:initialization_data_map(), state()) -> state().
-start_collections_initialization_for_dir(Guid, InitializationDataMap, #state{
+start_collections_initialization_for_dir(Guid, PidToNotify, InitializationDataMap, #state{
     initialization_progress_map = ProgressMap
 } = State) ->
     case maps:is_key(Guid, ProgressMap) of
@@ -679,34 +692,45 @@ start_collections_initialization_for_dir(Guid, InitializationDataMap, #state{
         false ->
             DirInitializationProgress =
                 dir_stats_collections_initializer:start_dir_initialization(Guid, InitializationDataMap),
-            continue_collections_initialization_for_dir(
-                Guid, State#state{initialization_progress_map = ProgressMap#{Guid => DirInitializationProgress}})
+            continue_collections_initialization_for_dir(Guid, PidToNotify, ?INIT_FIRST_RETRY_INTERVAL,
+                State#state{initialization_progress_map = ProgressMap#{Guid => DirInitializationProgress}})
     end.
 
 
 %% @private
--spec continue_collections_initialization_for_dir(file_id:file_guid(), state()) -> state().
-continue_collections_initialization_for_dir(Guid, #state{initialization_progress_map = ProgressMap} = State) ->
+-spec continue_collections_initialization_for_dir(file_id:file_guid(), pid(), time:millis(), state()) -> state().
+continue_collections_initialization_for_dir(
+    Guid, PidToNotify, RetryInterval,
+    #state{initialization_progress_map = ProgressMap} = State
+) ->
     try
         case maps:get(Guid, ProgressMap, undefined) of
             undefined ->
+                (PidToNotify =/= undefined) andalso (PidToNotify ! initialization_finished),
                 State; % Progress can be deleted from map as a result of race with stats update
             DirInitializationProgress ->
                 case dir_stats_collections_initializer:continue_dir_initialization(DirInitializationProgress) of
                     {continue, UpdatedDirInitializationProgress} ->
-                        pes:self_cast(?CONTINUE_COLLECTIONS_INITIALIZATION(Guid)),
+                        pes:self_cast(?CONTINUE_COLLECTIONS_INITIALIZATION(Guid, PidToNotify)),
                         State#state{initialization_progress_map = ProgressMap#{Guid => UpdatedDirInitializationProgress}};
                     {finish, CollectionsMap} ->
+                        (PidToNotify =/= undefined) andalso (PidToNotify ! initialization_finished),
                         finish_collections_initialization_for_dir(Guid, CollectionsMap,
                             State#state{initialization_progress_map = maps:remove(Guid, ProgressMap)})
                 end
         end
     catch
-        % TODO - obsluzyc jak dane sa rozjechane tzn brakuje pliku
         Error:Reason:Stacktrace ->
-            ?error_stacktrace("Dir stats collector ~p error for ~p: ~p:~p",
-                [?FUNCTION_NAME, Guid, Error, Reason], Stacktrace),
-            State#state{initialization_progress_map = maps:remove(Guid, ProgressMap)}
+            case datastore_runner:normalize_error(Reason) of
+                no_connection_to_onezone ->
+                    ok;
+                _ ->
+                    ?error_stacktrace("Dir stats collector ~p error for ~p: ~p:~p",
+                        [?FUNCTION_NAME, Guid, Error, Reason], Stacktrace)
+            end,
+            NewRetryInterval = min(2 * RetryInterval, ?MAX_INIT_RETRY_INTERVAL),
+            pes:self_cast(?CONTINUE_COLLECTIONS_INITIALIZATION(Guid, PidToNotify, NewRetryInterval), RetryInterval),
+            State
     end.
 
 
@@ -1089,7 +1113,7 @@ collection_moved(Guid, CollectionType, TargetParentGuid, State) ->
         } ->
             CachedDirStatsKey = gen_cached_dir_stats_key(Guid, CollectionType),
             % TODO VFS-9204 - handle flush errors
-            {_FlushAns, UpdatedState2} = flush_cached_dir_stats(CachedDirStatsKey, prune_inactive, UpdatedState), % TODO - moze wcale nie robic prune?, albo zrobic tylko flush do parenta?
+            {_FlushAns, UpdatedState2} = flush_cached_dir_stats(CachedDirStatsKey, prune_inactive, UpdatedState),
             InitialDirStats = CollectionType:init_child(Guid),
             ConsolidatedStats = dir_stats_collection:consolidate(CollectionType, InitialDirStats, CurrentStats),
 

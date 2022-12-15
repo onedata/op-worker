@@ -212,45 +212,43 @@ init_dir(Guid) ->
 
 -spec init_child(file_id:file_guid()) -> dir_stats_collection:collection().
 init_child(Guid) ->
-    EmptyCurrentStats = gen_empty_current_stats(Guid), % TODO VFS-9204 - maybe refactor as gen_empty_current_stats
-                                                       % gets storage_id that is also used by prepare_file_size_summary
-    % TODO - dodac info ze robiimy tak ze wzgledu na race'y na aplikacji dokumentu skasowanego i po mv
-    % (mv obslugujemy najpier tak jakby dokument nie byl skasowany)
+    % Use get_including_deleted to handle races between mv and delete (handling mv when file_meta is deleted)
     case file_meta:get_including_deleted(file_id:guid_to_uuid(Guid)) of
         {ok, Doc} ->
-            % TODO - czemu including deleted? moze trzeba skasowany olac?
             case file_meta:get_type(Doc) of
                 ?DIRECTORY_TYPE ->
-                    EmptyCurrentStats#{?DIR_COUNT => 1};
+                    try
+                        EmptyCurrentStats = gen_empty_current_stats(Guid), % TODO VFS-9204 - maybe refactor as gen_empty_current_stats
+                        % gets storage_id that is also used by prepare_file_size_summary
+                        EmptyCurrentStats#{?DIR_COUNT => 1}
+                    catch
+                        Error:Reason:Stacktrace ->
+                            handle_init_error(Guid, Error, Reason, Stacktrace,
+                                #{?DIR_COUNT => 1, ?DIR_ERRORS_COUNT => 1})
+                    end;
                 _ ->
                     try
+                        EmptyCurrentStats = gen_empty_current_stats(Guid),
+                        % gets storage_id that is also used by prepare_file_size_summary
                         {FileSizes, _} = file_ctx:prepare_file_size_summary(file_ctx:new_by_guid(Guid)),
                         lists:foldl(fun
                             ({total, Size}, Acc) -> Acc#{?TOTAL_SIZE => Size};
                             ({StorageId, Size}, Acc) -> Acc#{?SIZE_ON_STORAGE(StorageId) => Size}
                         end, EmptyCurrentStats#{?REG_FILE_AND_LINK_COUNT => 1}, FileSizes)
                     catch
-                        % TODO - powtorzyc z backofferm jak bedzie niepodlaczony provider
-%%                        [op_worker] [E 2022-12-02 09:47:15.123 <0.4309.0>] Dir stats collector continue_collections_initialization_for_dir error for <<"Z3VpZCMxZjA1YzkzNzc2NjEwNTNiZDEwYzNjOTI5ZTI5NWZiM2NoZDNhMyM3NGQzMjVmYzYzOTIwMzZiMmM4OTZiYTJhYTc1NTM4OWNoOTIwMw">>: error:{badmatch,
-%%[op_worker]                                                                                                                                                                                                        {error,
-%%[op_worker]                                                                                                                                                                                                         no_connection_to_onezone}}
-%%[op_worker] Stacktrace:
-%%[op_worker]     dir_stats_collector:continue_collections_initialization_for_dir/2 line 692
-%%[op_worker]     dir_stats_collections_initializer:continue_dir_initialization/1 line 148
-%%[op_worker]     maps:map/2 line 428
-%%[op_worker]     maps:map_1/2 line 438
-%%[op_worker]     lists:foldl/3 line 1267
-%%[op_worker]     dir_size_stats:init_child/1 line 214
-%%[op_worker]     dir_size_stats:gen_empty_current_stats/1 line 342
-%%[op_worker]     dir_size_stats:stat_names/1 line 265
                         Error:Reason:Stacktrace ->
-                            ?error_stacktrace("Error initializing size stats for ~p: ~p:~p",
-                                [Guid, Error, Reason], Stacktrace),
-                            EmptyCurrentStats#{?REG_FILE_AND_LINK_COUNT => 1, ?ERRORS_COUNT => 1}
+                            handle_init_error(Guid, Error, Reason, Stacktrace,
+                                #{?REG_FILE_AND_LINK_COUNT => 1, ?FILE_ERRORS_COUNT => 1})
                     end
             end;
         ?ERROR_NOT_FOUND ->
-            EmptyCurrentStats % Race with file deletion - stats will be invalidated by next update
+            % Race with file deletion - stats will be invalidated by next update
+            try
+                gen_empty_current_stats(Guid)
+            catch
+                Error:Reason:Stacktrace ->
+                    handle_init_error(Guid, Error, Reason, Stacktrace, #{})
+            end
     end.
 
 
@@ -288,7 +286,7 @@ internal_stats_config(Guid) ->
 -spec stat_names(file_id:file_guid()) -> [dir_stats_collection:stat_name()].
 stat_names(Guid) ->
     {ok, StorageId} = space_logic:get_local_supporting_storage(file_id:guid_to_space_id(Guid)),
-    [?REG_FILE_AND_LINK_COUNT, ?DIR_COUNT, ?ERRORS_COUNT, ?TOTAL_SIZE, ?SIZE_ON_STORAGE(StorageId)].
+    [?REG_FILE_AND_LINK_COUNT, ?DIR_COUNT, ?FILE_ERRORS_COUNT, ?DIR_ERRORS_COUNT, ?TOTAL_SIZE, ?SIZE_ON_STORAGE(StorageId)].
 
 
 %% @private
@@ -376,3 +374,17 @@ gen_empty_historical_stats(Guid) ->
             {MetricName, []}
         end, MetricNames)}
     end, stat_names(Guid)).
+
+
+%% @private
+-spec handle_init_error(file_id:file_guid(), term(), term(), list(), current_stats()) -> term().
+handle_init_error(Guid, Error, Reason, Stacktrace, StatsToReturn) ->
+    case datastore_runner:normalize_error(Reason) of
+        no_connection_to_onezone ->
+            % Collector handles problems with zone connection
+            throw(no_connection_to_onezone);
+        _ ->
+            ?error_stacktrace("Error initializing size stats for ~p: ~p:~p",
+                [Guid, Error, Reason], Stacktrace),
+            StatsToReturn
+    end.
