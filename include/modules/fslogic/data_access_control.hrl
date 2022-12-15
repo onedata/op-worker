@@ -77,20 +77,25 @@
     ?read_metadata_mask
 )).
 
-
 % Operations forbidden by file protection flags
--define(DATA_PROTECTION_BLOCKED_OPERATIONS, (
+-define(FILE_DATA_PROTECTION_BLOCKED_OPERATIONS, (
     ?write_object_mask bor
     ?add_object_mask bor
     ?add_subcontainer_mask bor
-    ?delete_mask bor
     ?delete_child_mask
 )).
--define(METADATA_PROTECTION_BLOCKED_OPERATIONS, (
+-define(FILE_METADATA_PROTECTION_BLOCKED_OPERATIONS, (
     ?write_attributes_mask bor
     ?write_metadata_mask bor
     ?write_acl_mask
 )).
+
+% Operations forbidden by dataset protection flags
+-define(DATASET_DATA_PROTECTION_BLOCKED_OPERATIONS,
+    % deletion should only be blocked in dataset subtree;
+    % all file hardlinks outside of dataset are free to be deleted, as it does not change the file
+    ?delete_mask
+).
 
 
 % Operations allowed by posix mode

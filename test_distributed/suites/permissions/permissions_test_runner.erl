@@ -368,8 +368,8 @@ run_file_protection_scenarios(ScenariosRootDirPath, #perms_test_spec{
             false -> Acc
         end
     end, ?no_flags_mask, [
-        {?DATA_PROTECTION, ?DATA_PROTECTION_BLOCKED_OPERATIONS},
-        {?METADATA_PROTECTION, ?METADATA_PROTECTION_BLOCKED_OPERATIONS}
+        {?DATA_PROTECTION, ?FILE_DATA_PROTECTION_BLOCKED_OPERATIONS},
+        {?METADATA_PROTECTION, ?FILE_METADATA_PROTECTION_BLOCKED_OPERATIONS}
     ]),
 
     SpaceOwnerUserSessId = ?config({session_id, {SpaceOwner, ?GET_DOMAIN(Node)}}, Config),
