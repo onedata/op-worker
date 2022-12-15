@@ -188,7 +188,9 @@
     resume_atm_workflow_execution_paused_after_all_tasks_finished/1,
     resume_atm_workflow_execution_interrupted_after_all_tasks_finished/1,
 
-    garbage_collect_atm_workflow_executions/1
+    garbage_collect_atm_workflow_executions/1,
+
+    restart_op_worker_after_graceful_stop/1
 ]).
 
 groups() -> [
@@ -385,6 +387,10 @@ groups() -> [
 
     {gc_tests, [], [
         garbage_collect_atm_workflow_executions
+    ]},
+
+    {restarts_tests, [], [
+        restart_op_worker_after_graceful_stop
     ]}
 ].
 
@@ -404,12 +410,23 @@ all() -> [
     {group, repeat_tests},
     {group, resume_tests},
     {group, gc_tests}
+
+    % TODO VFS-10266 Uncomment after implementing onedata/internal task executor
+%%    {group, restarts_tests}
 ].
 
 
 -define(RUN_TEST(__TEST_BASE_MODULE),
     try
         __TEST_BASE_MODULE:?FUNCTION_NAME()
+    catch __TYPE:__REASON:__STACKTRACE ->
+        ct:pal("Test failed due to ~p:~p.~nStacktrace: ~p", [__TYPE, __REASON, __STACKTRACE]),
+        error(test_failed)
+    end
+).
+-define(RUN_TEST_WITH_CONFIG(__TEST_BASE_MODULE, __CONFIG),
+    try
+        __TEST_BASE_MODULE:?FUNCTION_NAME(__CONFIG)
     catch __TYPE:__REASON:__STACKTRACE ->
         ct:pal("Test failed due to ~p:~p.~nStacktrace: ~p", [__TYPE, __REASON, __STACKTRACE]),
         error(test_failed)
@@ -430,6 +447,9 @@ all() -> [
 -define(RUN_REPEAT_TEST(), ?RUN_TEST(atm_workflow_execution_repeat_tests)).
 -define(RUN_RESUME_TEST(), ?RUN_TEST(atm_workflow_execution_resume_tests)).
 -define(RUN_GC_TEST(), ?RUN_TEST(atm_workflow_execution_gc_tests)).
+-define(RUN_RESTART_TEST(__CONFIG), ?RUN_TEST_WITH_CONFIG(
+    atm_workflow_execution_restart_tests, __CONFIG
+)).
 
 -define(GC_RELATED_ENV_VARS, [
     atm_workflow_execution_garbage_collector_run_interval_sec,
@@ -915,6 +935,10 @@ garbage_collect_atm_workflow_executions(_Config) ->
     ?RUN_GC_TEST().
 
 
+restart_op_worker_after_graceful_stop(Config) ->
+    ?RUN_RESTART_TEST(Config).
+
+
 %===================================================================
 % SetUp and TearDown functions
 %===================================================================
@@ -924,7 +948,8 @@ init_per_suite(Config) ->
     ModulesToLoad = [
         ?MODULE,
         atm_workflow_execution_scheduling_tests,
-        atm_workflow_execution_gc_tests
+        atm_workflow_execution_gc_tests,
+        atm_workflow_execution_restart_tests
         | ?ATM_WORKFLOW_EXECUTION_TEST_UTILS
     ],
     oct_background:init_per_suite(
@@ -935,10 +960,11 @@ init_per_suite(Config) ->
                 {fuse_session_grace_period_seconds, 24 * 60 * 60},
                 {atm_workflow_engine_slots_count, 100000},
                 {atm_workflow_engine_async_calls_limit, 100000},
-                {atm_workflow_job_timeout_sec, 1},
+                {atm_workflow_job_timeout_sec, 10},
                 {atm_workflow_job_timeout_check_period_sec, 1},
                 {atm_suspended_workflow_executions_expiration_interval_sec, 0},
-                {atm_ended_workflow_executions_expiration_interval_sec, 0}
+                {atm_ended_workflow_executions_expiration_interval_sec, 0},
+                {atm_workflow_executions_graceful_stop_timeout_sec, 3}
             ]}],
             posthook = fun(NewConfig) ->
                 atm_test_inventory:init_per_suite(?PROVIDER_SELECTOR, user1),
@@ -977,7 +1003,8 @@ init_per_group(TestGroup, Config) when
     TestGroup =:= iteration_tests;
     TestGroup =:= mapping_tests;
     TestGroup =:= repeat_tests;
-    TestGroup =:= resume_tests
+    TestGroup =:= resume_tests;
+    TestGroup =:= restarts_tests
 ->
     atm_workflow_execution_test_runner:init(?PROVIDER_SELECTOR),
     Config;
@@ -1011,7 +1038,8 @@ end_per_group(TestGroup, Config) when
     TestGroup =:= iteration_tests;
     TestGroup =:= mapping_tests;
     TestGroup =:= repeat_tests;
-    TestGroup =:= resume_tests
+    TestGroup =:= resume_tests;
+    TestGroup =:= restarts_tests
 ->
     atm_workflow_execution_test_runner:teardown(?PROVIDER_SELECTOR),
     Config;
