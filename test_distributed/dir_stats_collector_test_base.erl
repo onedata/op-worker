@@ -723,7 +723,7 @@ verify_dir_on_provider_creating_files(Config, NodesSelector, Guid) ->
 
 delete_stats(Worker, Guid) ->
     ?assertEqual(ok, rpc:call(Worker, dir_size_stats, delete_stats, [Guid])),
-    ?assertEqual(ok, rpc:call(Worker, dir_stats_metadata, delete, [Guid])).
+    ?assertEqual(ok, rpc:call(Worker, dir_stats_collector_metadata, delete, [Guid])).
 
 
 enable(Config) ->

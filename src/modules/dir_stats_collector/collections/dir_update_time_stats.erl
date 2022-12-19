@@ -80,7 +80,7 @@ get_update_time(Guid) ->
 
 -spec acquire(file_id:file_guid()) -> {dir_stats_collection:collection(), non_neg_integer()}.
 acquire(Guid) ->
-    case dir_stats_metadata:get_dir_update_time_stats(Guid) of
+    case dir_stats_collector_metadata:get_dir_update_time_stats(Guid) of
         #dir_update_time_stats{
             time = Time,
             incarnation = Incarnation
@@ -120,12 +120,12 @@ save(Guid, #{?STAT_NAME := Time}, Incarnation) ->
         }
     end,
 
-    ok = ?extract_ok(dir_stats_metadata:update_dir_update_time_stats(Guid, Diff, Default)).
+    ok = ?extract_ok(dir_stats_collector_metadata:update_dir_update_time_stats(Guid, Diff, Default)).
 
 
 -spec delete(file_id:file_guid()) -> ok.
 delete(Guid) ->
-    dir_stats_metadata:delete_dir_update_time_stats(Guid).
+    dir_stats_collector_metadata:delete_dir_update_time_stats(Guid).
 
 
 -spec init_dir(file_id:file_guid()) -> dir_stats_collection:collection().
@@ -142,6 +142,15 @@ init_child(Guid) ->
 %%% datastore_model callbacks
 %%%===================================================================
 
+%% @doc
+%% Definition of record struct used by datastore.
+%%
+%% Warning: this module is not datastore model. dir_update_time_stats
+%% are stored inside dir_stats_collector_metadata datastore model. Creation of
+%% dir_update_time_stats record struct's new version requires creation
+%% of dir_stats_collector_metadata datastore model record struct's new version.
+%% @end
+%%--------------------------------------------------------------------
 -spec get_record_struct(datastore_model:record_version()) -> datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [

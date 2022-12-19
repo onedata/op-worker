@@ -430,7 +430,7 @@ get_location_size(LocId, Uuid) ->
     replica_synchronizer:apply_or_run_locally(Uuid, fun() ->
         fslogic_cache:get_local_size(LocId)
     end, fun() ->
-        case file_location:get(LocId) of
+        case file_location:get_including_deleted(LocId) of
             {ok, #document{value = #file_location{blocks = Blocks}}} ->
                 fslogic_blocks:size(Blocks);
             _ ->
@@ -546,7 +546,7 @@ get_blocks_range_helper(Blocks0) ->
 -spec get_location_not_cached(file_location:id(), get_doc_opts()) ->
     {ok, file_location:doc()} | {error, term()}.
 get_location_not_cached(LocId, false) ->
-    case file_location:get(LocId) of
+    case file_location:get_including_deleted(LocId) of
         {ok, #document{value = Location} = LocationDoc} ->
             {ok, LocationDoc#document{value =
             Location#file_location{blocks = []}}};
@@ -554,16 +554,16 @@ get_location_not_cached(LocId, false) ->
             Error
     end;
 get_location_not_cached(LocId, true) ->
-    case file_location:get(LocId) of
+    case file_location:get_including_deleted(LocId) of
         {ok, Doc} ->
             {ok, fslogic_cache:attach_local_blocks(Doc)};
         Error ->
             Error
     end;
 get_location_not_cached(LocId, skip_local_blocks) ->
-    file_location:get(LocId);
+    file_location:get_including_deleted(LocId);
 get_location_not_cached(LocId, {blocks_num, Num}) ->
-    case file_location:get(LocId) of
+    case file_location:get_including_deleted(LocId) of
         {ok, LocationDoc} ->
             #document{value = #file_location{blocks = Blocks} = Location}
                 = LocationDoc2 = fslogic_cache:attach_local_blocks(LocationDoc),

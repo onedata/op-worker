@@ -728,7 +728,7 @@ get_file_location_changes(#change_req{
     fields = Fields,
     exists = Exists
 }, FileUuid, _, State) ->
-    {ok, Doc} = file_location:get(FileUuid, oneprovider:get_id()),
+    {ok, Doc} = file_location:get_including_deleted(FileUuid, oneprovider:get_id()),
     #{<<"fileLocation">> => get_record_changes(false, Fields, Exists, Doc, State)};
 get_file_location_changes(_, _, _, _) ->
     #{}.

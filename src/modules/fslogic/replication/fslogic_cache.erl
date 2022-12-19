@@ -307,7 +307,7 @@ get_doc(Key, ForceReload) ->
         #document{} = Doc when ForceReload =:= false ->
             Doc;
         GetAns ->
-            case file_location:get(Key) of
+            case file_location:get_including_deleted(Key) of
                 {ok, LocationDoc = #document{
                     key = Key,
                     value = Location = #file_location{blocks = PublicBlocks}}
@@ -364,7 +364,7 @@ cache_doc(#document{key = Key} = LocationDoc) ->
 delete_doc(Key) ->
     GetDocAns = case get_doc(Key) of
         #document{} = Doc -> {ok, Doc};
-        _ -> file_location:get(Key)
+        _ -> file_location:get_including_deleted(Key)
     end,
     Ans = case GetDocAns of
         {ok, #document{deleted = false, value = #file_location{

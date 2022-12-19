@@ -77,6 +77,8 @@
 % but usage of time series allows keeping everything in single structure
 -define(INCARNATION_TIME_SERIES, <<"incarnation">>).
 
+-define(ERROR_HANDLING_MODE, op_worker:get_env(dir_size_stats_init_errors_handling_mode, repeat)).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -223,8 +225,8 @@ init_child(Guid) ->
                         EmptyCurrentStats#{?DIR_COUNT => 1}
                     catch
                         Error:Reason:Stacktrace ->
-                            handle_init_error(Guid, Error, Reason, Stacktrace,
-                                #{?DIR_COUNT => 1, ?DIR_ERRORS_COUNT => 1})
+                            handle_init_error(Guid, Error, Reason, Stacktrace),
+                            #{?DIR_COUNT => 1, ?DIR_ERRORS_COUNT => 1}
                     end;
                 _ ->
                     try
@@ -237,8 +239,8 @@ init_child(Guid) ->
                         end, EmptyCurrentStats#{?REG_FILE_AND_LINK_COUNT => 1}, FileSizes)
                     catch
                         Error:Reason:Stacktrace ->
-                            handle_init_error(Guid, Error, Reason, Stacktrace,
-                                #{?REG_FILE_AND_LINK_COUNT => 1, ?FILE_ERRORS_COUNT => 1})
+                            handle_init_error(Guid, Error, Reason, Stacktrace),
+                            #{?REG_FILE_AND_LINK_COUNT => 1, ?FILE_ERRORS_COUNT => 1}
                     end
             end;
         ?ERROR_NOT_FOUND ->
@@ -247,7 +249,8 @@ init_child(Guid) ->
                 gen_empty_current_stats(Guid)
             catch
                 Error:Reason:Stacktrace ->
-                    handle_init_error(Guid, Error, Reason, Stacktrace, #{})
+                    handle_init_error(Guid, Error, Reason, Stacktrace),
+                    #{}
             end
     end.
 
@@ -377,14 +380,35 @@ gen_empty_historical_stats(Guid) ->
 
 
 %% @private
--spec handle_init_error(file_id:file_guid(), term(), term(), list(), current_stats()) -> term().
-handle_init_error(Guid, Error, Reason, Stacktrace, StatsToReturn) ->
-    case datastore_runner:normalize_error(Reason) of
-        no_connection_to_onezone ->
-            % Collector handles problems with zone connection
-            throw(no_connection_to_onezone);
-        _ ->
+-spec handle_init_error(file_id:file_guid(), term(), term(), list()) -> ok | no_return().
+handle_init_error(Guid, Error, Reason, Stacktrace) ->
+    case ?ERROR_HANDLING_MODE of
+        ignore ->
             ?error_stacktrace("Error initializing size stats for ~p: ~p:~p",
-                [Guid, Error, Reason], Stacktrace),
-            StatsToReturn
+                [Guid, Error, Reason], Stacktrace);
+        silent_ignore ->
+            ok;
+
+        % throw to repeat init by collector
+        repeat ->
+            case datastore_runner:normalize_error(Reason) of
+                no_connection_to_onezone ->
+                    ok;
+                _ ->
+                    ?error_stacktrace("Error initializing size stats for ~p: ~p:~p",
+                        [Guid, Error, Reason], Stacktrace)
+            end,
+            throw(dir_size_stats_init_error);
+        silent_repeat ->
+            throw(dir_size_stats_init_error);
+
+        repeat_connection_errors ->
+            case datastore_runner:normalize_error(Reason) of
+                no_connection_to_onezone ->
+                    % Collector handles problems with zone connection
+                    throw(no_connection_to_onezone);
+                _ ->
+                    ?error_stacktrace("Error initializing size stats for ~p: ~p:~p",
+                        [Guid, Error, Reason], Stacktrace)
+            end
     end.

@@ -46,7 +46,7 @@
 %%%       be stored per guid instead of per guid/collection_type pair.
 %%%
 %%% % TODO VFS-9204 Problems with dbsync can result in negative files count when link deletion is synced,
-%%%        than stats for dir are initialized and only then deleted file_meta appears
+%%%        then stats for dir are initialized and only then deleted file_meta appears
 %%% @end
 %%%-------------------------------------------------------------------
 -module(dir_stats_collector).
@@ -724,6 +724,8 @@ continue_collections_initialization_for_dir(
             case datastore_runner:normalize_error(Reason) of
                 no_connection_to_onezone ->
                     ok;
+                dir_size_stats_init_error ->
+                    ok; % Error has been logged by dir_size_stats module
                 _ ->
                     ?error_stacktrace("Dir stats collector ~p error for ~p: ~p:~p",
                         [?FUNCTION_NAME, Guid, Error, Reason], Stacktrace)
@@ -995,9 +997,9 @@ acquire_parent(Guid, #cached_dir_stats{
 } = CachedDirStats) ->
     case get_parent(Guid) of
         {ok, ParentGuidToCache} ->
-            case dir_stats_metadata:get_parent(Guid) of
+            case dir_stats_collector_metadata:get_parent(Guid) of
                 undefined ->
-                    dir_stats_metadata:update_parent(Guid, ParentGuidToCache),
+                    dir_stats_collector_metadata:update_parent(Guid, ParentGuidToCache),
                     {ParentGuidToCache, CachedDirStats#cached_dir_stats{parent = ParentGuidToCache}};
                 ParentGuidToCache ->
                     {ParentGuidToCache, CachedDirStats#cached_dir_stats{parent = ParentGuidToCache}};
@@ -1128,7 +1130,7 @@ collection_moved(Guid, CollectionType, TargetParentGuid, State) ->
                 CachedDirStats#cached_dir_stats{parent = TargetParentGuid}
             end, UpdatedState2),
             update_stats_of_dir(TargetParentGuid, internal, CollectionType, ConsolidatedStats),
-            dir_stats_metadata:update_parent(Guid, TargetParentGuid),
+            dir_stats_collector_metadata:update_parent(Guid, TargetParentGuid),
             UpdatedState3;
 
         {
@@ -1138,7 +1140,7 @@ collection_moved(Guid, CollectionType, TargetParentGuid, State) ->
             {_, UpdatedState2} = update_in_cache(Guid, CollectionType, fun(CachedDirStats) ->
                 CachedDirStats#cached_dir_stats{parent = TargetParentGuid}
             end, UpdatedState),
-            dir_stats_metadata:update_parent(Guid, TargetParentGuid),
+            dir_stats_collector_metadata:update_parent(Guid, TargetParentGuid),
             UpdatedState2;
         {
             ?ERROR_DIR_STATS_DISABLED_FOR_SPACE,

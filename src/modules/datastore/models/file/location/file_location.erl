@@ -21,7 +21,7 @@
 % API
 -export([local_id/1, id/2]).
 -export([
-    get/1, get/2, get_local/1,
+    get_including_deleted/1, get_including_deleted/2, get_local/1,
     get_version_vector/1, get_owner_id/1, get_synced_gid/1,
     get_last_replication_timestamp/1, is_storage_file_created/1
 ]).
@@ -160,8 +160,8 @@ save_and_update_quota(Doc = #document{
     ?extract_key(datastore_model:save(?CTX, Doc#document{scope = SpaceId})).
 
 
--spec get(id()) -> {ok, doc()} | {error, term()}.
-get(Key) ->
+-spec get_including_deleted(id()) -> {ok, doc()} | {error, term()}.
+get_including_deleted(Key) ->
     datastore_model:get(?CTX#{include_deleted => true}, Key).
 
 
@@ -170,8 +170,8 @@ get(Key) ->
 %% Returns file location associated with given FileUuid and ProviderId.
 %% @end
 %%--------------------------------------------------------------------
--spec get(file_meta:uuid(), od_provider:id()) -> {ok, doc()} | {error, term()}.
-get(FileUuid, ProviderId) ->
+-spec get_including_deleted(file_meta:uuid(), od_provider:id()) -> {ok, doc()} | {error, term()}.
+get_including_deleted(FileUuid, ProviderId) ->
     ?MODULE:get(?MODULE:id(FileUuid, ProviderId)).
 
 %%--------------------------------------------------------------------

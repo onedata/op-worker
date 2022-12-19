@@ -9,7 +9,7 @@
 %%% Module storing metadata used by dir_stats_collector and some collections.
 %%% @end
 %%%-------------------------------------------------------------------
--module(dir_stats_metadata).
+-module(dir_stats_collector_metadata).
 -author("Michal Wrzeszcz").
 
 
@@ -35,6 +35,9 @@
 }).
 
 % Time in seconds for document to expire after delete (one year)
+% NOTE: when dir_stats_collector_metadata expires, dir_stats_collector
+%       is not able to handle races between remote document delete and rename.
+%       Thus, document expiry time is raised to time of synced docs' expiry.
 -define(DOCUMENT_EXPIRY_TIME, 31536000).
 
 
@@ -44,10 +47,10 @@
 
 -spec update_parent(file_id:file_guid(), file_id:file_guid()) -> ok.
 update_parent(Guid, Parent) ->
-    Default = #dir_stats_metadata{parent = Parent},
+    Default = #dir_stats_collector_metadata{parent = Parent},
 
     Diff = fun(Record) ->
-        {ok, Record#dir_stats_metadata{parent = Parent}}
+        {ok, Record#dir_stats_collector_metadata{parent = Parent}}
     end,
 
     ok = ?extract_ok(datastore_model:update(?CTX, file_id:guid_to_uuid(Guid), Diff, Default)).
@@ -56,7 +59,7 @@ update_parent(Guid, Parent) ->
 -spec get_parent(file_id:file_guid()) -> file_id:file_guid() | undefined.
 get_parent(Guid) ->
     case datastore_model:get(?CTX#{include_deleted => true}, file_id:guid_to_uuid(Guid)) of
-        {ok, #document{value = #dir_stats_metadata{parent = Parent}}} ->
+        {ok, #document{value = #dir_stats_collector_metadata{parent = Parent}}} ->
             Parent;
         ?ERROR_NOT_FOUND ->
             undefined
@@ -69,13 +72,13 @@ get_parent(Guid) ->
     dir_update_time_stats:stats()
 ) -> ok.
 update_dir_update_time_stats(Guid, Diff, Default) ->
-    DefaultDoc = #dir_stats_metadata{dir_update_time_stats = Default},
+    DefaultDoc = #dir_stats_collector_metadata{dir_update_time_stats = Default},
 
     RecordDiff = fun
-        (#dir_stats_metadata{dir_update_time_stats = undefined} = Record) ->
-            {ok, Record#dir_stats_metadata{dir_update_time_stats = Default}};
-        (#dir_stats_metadata{dir_update_time_stats = Stats} = Record) ->
-            {ok, Record#dir_stats_metadata{dir_update_time_stats = Diff(Stats)}}
+        (#dir_stats_collector_metadata{dir_update_time_stats = undefined} = Record) ->
+            {ok, Record#dir_stats_collector_metadata{dir_update_time_stats = Default}};
+        (#dir_stats_collector_metadata{dir_update_time_stats = Stats} = Record) ->
+            {ok, Record#dir_stats_collector_metadata{dir_update_time_stats = Diff(Stats)}}
     end,
 
     ok = ?extract_ok(datastore_model:update(?CTX, file_id:guid_to_uuid(Guid), RecordDiff, DefaultDoc)).
@@ -84,7 +87,7 @@ update_dir_update_time_stats(Guid, Diff, Default) ->
 -spec get_dir_update_time_stats(file_id:file_guid()) -> dir_update_time_stats:stats() | undefined.
 get_dir_update_time_stats(Guid) ->
     case datastore_model:get(?CTX#{include_deleted => true}, file_id:guid_to_uuid(Guid)) of
-        {ok, #document{value = #dir_stats_metadata{dir_update_time_stats = Stats}}} ->
+        {ok, #document{value = #dir_stats_collector_metadata{dir_update_time_stats = Stats}}} ->
             Stats;
         ?ERROR_NOT_FOUND ->
             undefined
@@ -94,7 +97,7 @@ get_dir_update_time_stats(Guid) ->
 -spec delete_dir_update_time_stats(file_id:file_guid()) -> ok.
 delete_dir_update_time_stats(Guid) ->
     Diff = fun(Record) ->
-        {ok, Record#dir_stats_metadata{parent = undefined}}
+        {ok, Record#dir_stats_collector_metadata{parent = undefined}}
     end,
 
     case datastore_model:update(?CTX, file_id:guid_to_uuid(Guid), Diff) of

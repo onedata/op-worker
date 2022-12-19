@@ -34,7 +34,7 @@
 %% API
 -export([supervisor_flags/0, get_on_demand_changes_stream_id/2,
     start_streams/0, start_streams/1]).
-%% Resynchronization API - TODO - moze pozwolic resync konkretnego zakresu?
+%% Resynchronization API
 -export([reset_provider_stream/2, resynchronize_all/2, resynchronize_provider_metadata/2, resynchronize/3]).
 
 %% Internal services API
