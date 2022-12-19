@@ -14,6 +14,7 @@
 
 -behaviour(transfer_iterator).
 
+-include("proto/oneclient/fuse_messages.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 

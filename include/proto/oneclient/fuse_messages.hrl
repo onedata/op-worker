@@ -177,6 +177,30 @@
 -record(storage_file_created, {
 }).
 
+-record(get_file_attr_by_path, {
+    path :: file_meta:path(),
+    optional_attrs :: [attr_req:optional_attr()]
+}).
+
+-record(create_path, {
+    path :: file_meta:path()
+}).
+
+-record(report_file_written, {
+    offset :: non_neg_integer(),
+    size :: integer()
+}).
+
+-record(report_file_read, {
+    offset :: non_neg_integer(),
+    size :: integer()
+}).
+
+-record(get_recursive_file_list, {
+    listing_options :: dir_req:recursive_listing_opts(),
+    optional_attrs = [] :: [attr_req:optional_attr()]
+}).
+
 -type file_request_type() ::
     #get_file_attr{} | #get_file_references{} |
     #get_file_children{} | #get_file_children_attrs{} |
@@ -190,7 +214,9 @@
     #synchronize_block_and_compute_checksum{} | #block_synchronization_request{} |
     #get_child_attr{} | #get_xattr{} | #set_xattr{} | #remove_xattr{} |
     #list_xattr{} | #fsync{} |
-    #storage_file_created{} | #open_file_with_extended_info{}.
+    #storage_file_created{} | #open_file_with_extended_info{} | 
+    #get_file_attr_by_path{} | #create_path{} | #report_file_written{} | #report_file_read{} | 
+    #get_recursive_file_list{}.
 
 -record(file_request, {
     context_guid :: fslogic_worker:file_guid(),
@@ -240,10 +266,49 @@
     file_id :: file_id:file_guid()
 }).
 
+-record(create_multipart_upload, {
+    space_id :: od_space:id(),
+    path :: multipart_upload:path()
+}).
+
+-record(upload_multipart_part, {
+    multipart_upload_id :: multipart_upload:id(),
+    part :: multipart_upload_part:record()
+}).
+
+-record(list_multipart_parts, {
+    multipart_upload_id :: multipart_upload:id(),
+    limit :: undefined | non_neg_integer(),
+    part_marker :: undefined | non_neg_integer()
+}).
+
+-record(abort_multipart_upload, {
+    multipart_upload_id :: multipart_upload:id()
+}).
+
+-record(complete_multipart_upload, {
+    multipart_upload_id :: multipart_upload:id()
+}).
+
+-record(list_multipart_uploads, {
+    space_id :: od_space:id(),
+    limit :: non_neg_integer(),
+    index_token :: multipart_upload:pagination_token() | undefined
+}).
+
+-type multipart_request_type() :: #create_multipart_upload{} | #upload_multipart_part{} |
+    #list_multipart_parts{} | #abort_multipart_upload{} | #complete_multipart_upload{} |
+    #list_multipart_uploads{}.
+
+-record(multipart_upload_request, {
+    multipart_request :: multipart_request_type()
+}).
+
+
 -type fuse_request_type() ::
     #resolve_guid{} | #resolve_guid_by_canonical_path{} | #resolve_guid_by_relative_path{} | #ensure_dir{} |
-    #get_helper_params{} | #create_storage_test_file{} |
-    #verify_storage_test_file{} | #file_request{} | #get_fs_stats{}.
+    #get_helper_params{} | #create_storage_test_file{} | #verify_storage_test_file{} | #file_request{} | 
+    #get_fs_stats{} |  #multipart_upload_request{}.
 
 -record(fuse_request, {
     fuse_request :: fuse_request_type()
@@ -306,6 +371,12 @@
     link :: file_meta_symlinks:symlink()
 }).
 
+-record(recursive_listing_result, {
+    entries :: [any()], % [recursive_listing:result_entry()] but dialyzer does not accept it
+    inaccessible_paths :: [any()], % [recursive_listing:node_path()] but dialyzer does not accept it
+    pagination_token :: undefined | recursive_listing:pagination_token()
+}).
+
 -record(file_opened_extended, {
     handle_id :: binary(),
     provider_id,
@@ -341,12 +412,24 @@
     references :: [file_id:file_guid()]
 }).
 
+-record(multipart_parts, {
+    parts :: [multipart_upload_part:record()],
+    is_last :: boolean()
+}).
+
+-record(multipart_uploads, {
+    uploads :: [multipart_upload:record()],
+    is_last :: boolean(),
+    next_page_token :: multipart_upload:pagination_token() | undefined
+}).
+
 -type fuse_response_type() ::
     #file_attr{} | #file_references{} | #file_children{} | #file_location{} | #helper_params{} |
     #storage_test_file{} | #dir{} | #sync_response{} | #file_created{} |
     #file_opened{} | #file_renamed{} | #guid{} | #xattr_list{} | #xattr{} |
-    #file_children_attrs{} | #file_location_changed{} | 
-    #file_opened_extended{} | #file_details{} | #file_children_details{} | #fs_stats{} | #symlink{} |
+    #file_children_attrs{} | #file_location_changed{} | #recursive_listing_result{} | 
+    #file_opened_extended{} | #file_details{} | #file_children_details{} | #fs_stats{} | #symlink{} | 
+    #multipart_uploads{} | #multipart_upload{} | #multipart_parts{} |
     undefined.
 
 -record(fuse_response, {

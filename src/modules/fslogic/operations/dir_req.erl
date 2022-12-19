@@ -23,6 +23,7 @@
 %% API
 -export([
     mkdir/4,
+    create_dir_at_path/3,
     get_children_ctxs/3,
     get_children/3,
     get_children_attrs/4,
@@ -64,6 +65,26 @@ mkdir(UserCtx, ParentFileCtx0, Name, Mode) ->
         [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?add_subcontainer_mask)]
     ),
     mkdir_insecure(UserCtx, ParentFileCtx1, Name, Mode).
+
+
+-spec create_dir_at_path(user_ctx:ctx(), file_ctx:ctx(), file_meta:path()) -> 
+    fslogic_worker:fuse_response().
+create_dir_at_path(UserCtx, RootFileCtx, Path) ->
+    #fuse_response{fuse_response = #guid{guid = Guid}} =
+        guid_req:ensure_dir(UserCtx, RootFileCtx, Path, ?DEFAULT_DIR_MODE),
+    try attr_req:get_file_attr(UserCtx, file_ctx:new_by_guid(Guid), [size]) of
+        % if dir does not exist, it will be created during error handling
+        #fuse_response{fuse_response = #file_attr{type = ?DIRECTORY_TYPE}} = Response ->
+            Response;
+        _ ->
+            #fuse_response{status = #status{code = ?ENOTDIR}}
+    catch Class:Reason ->
+        case datastore_runner:normalize_error(Reason) of
+            not_found -> create_dir_at_path(UserCtx, RootFileCtx, Path);
+            ?ENOENT -> create_dir_at_path(UserCtx, RootFileCtx, Path);
+            _ -> erlang:apply(erlang, Class, [Reason])
+        end
+    end.
 
 
 -spec get_children(user_ctx:ctx(), file_ctx:ctx(), file_listing:options()) ->
@@ -163,7 +184,7 @@ get_children_details(UserCtx, FileCtx0, ListOpts) ->
 
 
 -spec list_recursively(user_ctx:ctx(), file_ctx:ctx(), recursive_listing_opts(), [attr_req:optional_attr()]) ->
-    fslogic_worker:provider_response().
+    fslogic_worker:fuse_response().
 list_recursively(UserCtx, FileCtx0, ListOpts, OptionalAttrs) ->
     {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
     AccessRequirements = case IsDir of
@@ -281,8 +302,7 @@ get_children_attrs_insecure(
         false -> fun attr_req:get_file_attr_insecure/3
     end,
     ChildrenAttrs = readdir_plus:gather_attributes(
-        UserCtx,
-        child_attrs_mapper(GetAttrFun),
+        child_attrs_mapper(GetAttrFun, UserCtx),
         Children,
         ComputeAttrsOpts
     ),
@@ -318,8 +338,7 @@ get_children_details_insecure(UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhit
         FileCtx0, UserCtx, ListOpts, CanonicalChildrenWhiteList
     ),
     ChildrenDetails = readdir_plus:gather_attributes(
-        UserCtx,
-        child_attrs_mapper(fun(U, F, _Opts) -> attr_req:get_file_details_insecure(U, F) end),
+        child_attrs_mapper(fun(U, F, _Opts) -> attr_req:get_file_details_insecure(U, F) end, UserCtx),
         Children,
         #{}
     ),
@@ -344,7 +363,7 @@ get_children_details_insecure(UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhit
 -spec list_recursively_insecure(
     user_ctx:ctx(), file_ctx:ctx(), recursive_listing_opts(), [attr_req:optional_attr()]
 ) ->
-    fslogic_worker:provider_response().
+    fslogic_worker:fuse_response().
 list_recursively_insecure(UserCtx, FileCtx, ListOpts, OptionalAttrs) ->
     FinalListOpts = kv_utils:move_found(
         include_directories,
@@ -363,24 +382,24 @@ list_recursively_insecure(UserCtx, FileCtx, ListOpts, OptionalAttrs) ->
         {true, _} -> fun attr_req:get_file_attr/3;
         false -> fun attr_req:get_file_attr_insecure/3
     end,
-    MapperFun = fun(UserCtx, {Path, FileCtx}, BaseOpts) ->
+    MapperFun = fun({Path, EntryFileCtx}, BaseOpts) ->
         #fuse_response{
             status = #status{code = ?OK},
             fuse_response = FileAttrs
-        } = GetAttrFun(UserCtx, FileCtx, BaseOpts),
+        } = GetAttrFun(UserCtx, EntryFileCtx, BaseOpts),
         {Path, FileAttrs}
     end,
-    MappedEntries = readdir_plus:gather_attributes(UserCtx, MapperFun, Entries, ComputeAttrsOpts),
-    #provider_response{status = #status{code = ?OK},
-        provider_response = Result#recursive_listing_result{entries = MappedEntries}
+    MappedEntries = readdir_plus:gather_attributes(MapperFun, Entries, ComputeAttrsOpts),
+    #fuse_response{status = #status{code = ?OK},
+        fuse_response = Result#recursive_listing_result{entries = MappedEntries}
     }.
 
 
 %% @private
--spec child_attrs_mapper(map_child_fun()) -> 
+-spec child_attrs_mapper(map_child_fun(), user_ctx:ctx()) -> 
     readdir_plus:gather_attributes_fun(file_ctx:ctx(), fslogic_worker:fuse_response_type()).
-child_attrs_mapper(AttrsMappingFun) ->
-    fun(UserCtx, ChildCtx, BaseOpts) ->
+child_attrs_mapper(AttrsMappingFun, UserCtx) ->
+    fun(ChildCtx, BaseOpts) ->
         #fuse_response{status = #status{code = ?OK}, fuse_response = Result} = 
             AttrsMappingFun(UserCtx, ChildCtx, BaseOpts),
         Result
