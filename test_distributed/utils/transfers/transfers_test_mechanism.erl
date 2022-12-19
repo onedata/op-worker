@@ -62,6 +62,7 @@
 
     % migration scenarios
     migrate_root_directory/2,
+    migrate_despite_protection_flags/2,
     migrate_each_file_replica_separately/2,
     schedule_replica_migration_without_permissions/2,
     cancel_migration_on_target_nodes_by_scheduling_user/2,
@@ -584,6 +585,33 @@ migrate_root_directory(Config, #scenario{
             {ok, Tid} = schedule_replica_migration(ScheduleNode, EvictingProviderId,
                 User, FileKey, Config, Type, ReplicatingProviderId),
             {EvictingNode, Tid, Guid, Path}
+        end, EvictingNodes)
+    end, ReplicatingNodes),
+    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
+
+migrate_despite_protection_flags(Config, #scenario{
+    user = User,
+    type = Type,
+    file_key_type = FileKeyType,
+    schedule_node = ScheduleNode,
+    replicating_nodes = ReplicatingNodes,
+    evicting_nodes = EvictingNodes
+}) ->
+    {RootDirGuid, RootDirPath} = ?config(?ROOT_DIR_KEY, Config),
+    RootDirFileKey = file_key(RootDirGuid, RootDirPath, FileKeyType),
+
+    NodesTransferIdsAndFiles = lists:flatmap(fun(ReplicatingNode) ->
+        SessionId = ?DEFAULT_SESSION(ReplicatingNode, Config),
+        lists:foreach(fun({DirGuid, _}) ->
+            ?assertMatch({ok, _}, opt_datasets:establish(ReplicatingNode, SessionId, ?FILE_REF(DirGuid), ?PROTECTION_FLAGS))
+        end, ?config(?DIRS_KEY, Config)),
+
+        lists:map(fun(EvictingNode) ->
+            ReplicatingProviderId = transfers_test_utils:provider_id(ReplicatingNode),
+            EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
+            {ok, Tid} = schedule_replica_migration(ScheduleNode, EvictingProviderId,
+                User, RootDirFileKey, Config, Type, ReplicatingProviderId),
+            {EvictingNode, Tid, RootDirGuid, RootDirPath}
         end, EvictingNodes)
     end, ReplicatingNodes),
     ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
