@@ -131,7 +131,7 @@ report_bytes_copied(Id, Bytes) ->
 %%% Test API 
 %%%===================================================================
 
--spec get_stats(id(), time_series_collection:layout(), ts_windows:list_options()) ->
+-spec get_stats(id(), time_series_collection:layout(), ts_metric:list_options()) ->
     {ok, time_series_collection:slice()} | {error, term()}.
 get_stats(Id, SliceLayout, ListWindowsOptions) ->
     datastore_time_series_collection:get_slice(?CTX, ?TSC_ID(Id), SliceLayout, ListWindowsOptions).
