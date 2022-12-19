@@ -70,8 +70,8 @@
     args => args(),
     use_referenced_key => boolean(), % use referenced key to find/cache value instead of key of file doc
                                      % passed by get_or_calculate function argument
-    merge_callback => merge_callback(), % note: use `referenced_key = true` for more optimal caching
-                                        % if differentiate_callback is not used
+    merge_callback => merge_callback() | undefined, % note: use `referenced_key = true` for more optimal caching
+                                                    % if differentiate_callback is not used
     differentiate_callback => differentiate_callback(), % note: do not use together with `referenced_key = true`
     force_execution_on_referenced_key => boolean(), % force execution of callback on inode even if reference of original file
                                                     % is deleted
@@ -192,7 +192,7 @@ get_or_calculate_internal(Cache, Key, FileDoc, CalculateCallback, Options) ->
                 andalso (file_meta:get_effective_type(FileDoc) =:= ?REGULAR_FILE_TYPE),
 
             ShouldCache = case maps:get(should_cache, Options, true) of
-                true -> CalculationRootParent =:= <<>>;
+                true -> CalculationRootParent =:= <<>> orelse error(improper_use_of_effective_value);
                 false -> false
             end,
             {ok, Parent} = file_meta:get_parent_uuid(FileDoc),

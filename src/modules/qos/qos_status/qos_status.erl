@@ -58,9 +58,10 @@
 %%% To check if there is any reconcile job in subtree of a directory simply check if there is any 
 %%% reconcile_link with its prefix being this directory uuid based path.
 %%%
-%%% It may be impossible to generate such a path when not all docs are synced yet. In such a case
-%%% traverse is added to entry traverse list and for each such traverse uuid based path is generated
-%%% during status check on best effort manner.
+%%% At the moment of traverse start it may be impossible to calculate such a path as some docs could
+%%% be not synced yet. In such a case traverse is added to entry traverse list. During status check
+%%% for each such traverse uuid based path of traverse root is calculated and checked as described
+%%% above. When it cannot be calculated, such traverse is ignored, as it happens in disconnected subtree.
 %%%
 %%% When file has many references (i.e some hardlinks were created), status links consisting of 
 %%% uuid_based_path are added for each file reference. 

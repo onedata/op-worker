@@ -12,17 +12,19 @@
 %%%     * file_location of file changed - this triggers reconciliation procedure described below
 %%%
 %%% In general reconciliation procedure of given file is as follows:
-%%% 1. check if all documents on path to space root are synced. There are 3 possible outcomes:
-%%%   * some file_meta document is missing - go to 2.
+%%% 1. check if all documents on path to space root are synced (call to `file_meta_sync_status_cache:get`).
+%%% There are 3 possible outcomes:
+%%%   * some file_meta document is missing - continue to 2.
 %%%   * some link on path is missing - go to 4.
-%%%   * everything is synced - check effective qos entries for given file and go to 6.
-%%% 2. add file meta posthook for missing file - this posthook will execute this procedure from 1. for this missing file
-%%% 3. check if there is any missing link between given file and missing one - if so go to 4. otherwise 5.
-%%% 4. add file meta posthook for this missing link - this posthook will execute this procedure from 1.
-%%%    for the file missing link was pointing to
-%%% 5. check effective qos between given file and missing one
-%%% 6. if there is any entry start traverse from given file
-% fixme - check acceptance tests - nested file is replicated from one storage to storage which id was set as qos requirement in parent dir
+%%%   * everything is synced - fetch effective QoS entry list for given file and go to 6.
+%%% 2. add file meta posthook for missing file - this posthook will execute this procedure from 1. for this missing file;
+%%% 3. check if there is any missing link between given file and a file with missing file_meta - if so go to 4. otherwise 5
+%%%    (call to `file_meta_sync_status_cache:get` with calculation_root_parent option set to missing file meta uuid);
+%%% 4. add file meta posthook for this missing link - this posthook will execute this procedure from 1. for the file
+%%%    missing link was pointing to;
+%%% 5. fetch effective QoS entry list between given file and missing one (call to file_qos:get_effective_for_single_reference/2
+%%%    with uuid of file with missing file_meta/parent of missing link as CalculationRootParent);
+%%% 6. check if there is any entry in previously fetched effective QoS entries list; if so start traverse from given file.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(qos_logic).
@@ -67,6 +69,7 @@ handle_qos_entry_change(SpaceId, #document{key = QosEntryId, value = QosEntry} =
         true ->
             {ok, AllTraverseReqs} = qos_entry:get_traverse_reqs(QosEntry),
             ok = qos_entry:remove_from_impossible_list(SpaceId, QosEntryId),
+            %% @TODO VFS-10297 - qos parameters could have changed since this was calculated - it should be checked first
             ok = qos_traverse_req:start_applicable_traverses(QosEntryId, SpaceId, AllTraverseReqs);
         false ->
             ok = qos_entry:add_to_impossible_list(SpaceId, QosEntryId),
@@ -161,6 +164,7 @@ missing_link_posthook(ParentUuid, MissingName, SpaceId) ->
             reconcile_qos(file_ctx:new_by_uuid(Uuid, SpaceId));
         {error, _} ->
             % hook was triggered by one of links document synchronization, but there is still a missing one
+            %% @TODO VFS-10296 - refactor file_meta_posthooks and handle this case there
             repeat
     end.
 
@@ -194,7 +198,7 @@ reconcile_qos_insecure(FileCtx) ->
 
 
 %% @private
--spec get_eff_qos(file_ctx:ctx()) -> file_qos:effective_file_qos().
+-spec get_eff_qos(file_ctx:ctx()) -> {ok, file_qos:effective_file_qos()} | undefined.
 get_eff_qos(FileCtx) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     ReferenceUuid = file_ctx:get_logical_uuid_const(FileCtx),
@@ -216,12 +220,7 @@ get_eff_qos(FileCtx) ->
                 {error, {file_meta_missing, _}} ->
                     % One of the file references has a missing ancestor. Calculate effective value only for this reference;
                     % all other references trigger reconciliation when they synchronize.
-                    file_qos:get_effective(FileDoc, #{
-                        merge_callback => undefined,
-                        should_cache => false, % do not cache this value, as it is only for this reference
-                        use_referenced_key => false,
-                        force_execution_on_referenced_key => false
-                    });
+                    file_qos:get_effective_for_single_reference(FileDoc);
                 Res ->
                     Res
             end;
@@ -229,13 +228,7 @@ get_eff_qos(FileCtx) ->
             % This reference has a missing ancestor. Calculate effective value only for this reference up to missing ancestor;
             % all other references trigger reconciliation when they synchronize.
             {FileDoc, _} = file_ctx:get_file_doc(FileCtx),
-            file_qos:get_effective(FileDoc, #{
-                merge_callback => undefined,
-                should_cache => false, % do not cache this value, as it is only for this reference
-                use_referenced_key => false,
-                force_execution_on_referenced_key => false,
-                calculation_root_parent => HighestSyncedAncestorUuid
-            })
+            file_qos:get_effective_for_single_reference(FileDoc, HighestSyncedAncestorUuid)
     end.
 
 

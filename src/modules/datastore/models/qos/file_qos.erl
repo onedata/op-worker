@@ -9,7 +9,7 @@
 %%% for file or directory. It contains:
 %%%     - qos_entries - holds IDs of all qos_entries defined for this file (
 %%%       including qos_entries which demands cannot be satisfied). This list
-%%%       is updated on change of qos_entry document (see qos_hooks.erl),
+%%%       is updated on change of qos_entry document (see qos_logic.erl),
 %%%     - assigned_entries - holds mapping storage_id to list of qos_entry IDs.
 %%%       When new QoS is added for file or directory, storages on which replicas
 %%%       should be stored are calculated using QoS expression. Then traverse
@@ -48,7 +48,7 @@
 %% higher-level functions operating on file_qos document
 -export([
     get_effective/1,
-    get_effective/2,
+    get_effective_for_single_reference/1, get_effective_for_single_reference/2,
     get_direct_qos_entries/1,
     add_qos_entry_id/3, add_qos_entry_id/4, remove_qos_entry_id/3,
     is_replica_required_on_storage/2, is_effective_qos_of_file/2,
@@ -119,15 +119,22 @@ get_effective(FileIdOrDoc) ->
     get_effective(FileIdOrDoc, #{}).
 
 
--spec get_effective(file_meta:doc() | file_meta:uuid(), effective_value:get_or_calculate_options()) ->
+-spec get_effective_for_single_reference(file_meta:doc() | file_meta:uuid()) ->
     {ok, effective_file_qos()} | {error, {file_meta_missing, binary()}} | undefined.
-get_effective(FileUuid, Options) when is_binary(FileUuid) ->
-    case file_meta:get(FileUuid) of
-        {ok, FileDoc} -> get_effective(FileDoc, Options);
-        ?ERROR_NOT_FOUND -> {error, {file_meta_missing, FileUuid}}
-    end;
-get_effective(#document{} = FileDoc, Options) ->
-    get_effective(FileDoc, undefined, Options).
+get_effective_for_single_reference(FileIdOrDoc) ->
+    get_effective_for_single_reference(FileIdOrDoc, <<>>).
+
+
+-spec get_effective_for_single_reference(file_meta:doc() | file_meta:uuid(), file_meta:uuid()) ->
+    {ok, effective_file_qos()} | {error, {file_meta_missing, binary()}} | undefined.
+get_effective_for_single_reference(FileIdOrDoc, CalculationRootParent) ->
+    get_effective(FileIdOrDoc, #{
+        merge_callback => undefined,
+        should_cache => false, % do not cache this value, as it is only for one reference
+        use_referenced_key => false,
+        force_execution_on_referenced_key => false,
+        calculation_root_parent => CalculationRootParent
+    }).
 
 
 %%--------------------------------------------------------------------
@@ -404,6 +411,18 @@ merge_file_qos(FirstEffQos, SecondEffQos) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%% @private
+-spec get_effective(file_meta:doc() | file_meta:uuid(), effective_value:get_or_calculate_options()) ->
+    {ok, effective_file_qos()} | {error, {file_meta_missing, binary()}} | undefined.
+get_effective(FileUuid, Options) when is_binary(FileUuid) ->
+    case file_meta:get(FileUuid) of
+        {ok, FileDoc} -> get_effective(FileDoc, Options);
+        ?ERROR_NOT_FOUND -> {error, {file_meta_missing, FileUuid}}
+    end;
+get_effective(#document{} = FileDoc, Options) ->
+    get_effective(FileDoc, undefined, Options).
+
 
 %% @private
 -spec get_effective(file_meta:doc(), undefined | file_meta:doc(), effective_value:get_or_calculate_options()) ->

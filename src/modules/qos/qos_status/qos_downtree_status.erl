@@ -49,6 +49,8 @@ report_started(TraverseId, FileCtx, QosEntries) ->
     lists:foreach(fun(InternalFileCtx) ->
         case get_uuid_based_path(InternalFileCtx) of
             not_synced ->
+                % add to traverses list so status can be properly checked after all files on path are synced
+                % (for more details see check_traverses/2 and qos_status module doc).
                 lists:foreach(fun(QosEntryId) ->
                     ok = qos_entry:add_to_traverses_list(SpaceId, QosEntryId, TraverseId,
                         file_ctx:get_logical_uuid_const(InternalFileCtx))

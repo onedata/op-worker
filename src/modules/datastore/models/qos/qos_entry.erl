@@ -98,8 +98,12 @@
 
 -define(IMPOSSIBLE_KEY(SpaceId), <<"impossible_qos_key_", SpaceId/binary>>).
 -define(TRANSFERS_KEY(QosEntryId), <<"transfer_qos_key_", QosEntryId/binary>>).
--define(TRAVERSES_KEY(QosEntryId), <<"qos_traverse_key_", QosEntryId/binary>>).
 -define(FAILED_FILES_KEY(SpaceId), <<"failed_files_qos_key_", SpaceId/binary>>).
+% List of ongoing traverses rooted in directories. Additionally it holds traverses
+% rooted in regular files to which it was impossible to calculate path as some
+% documents where not synced for sole purpose of QoS status calculation
+% (for more detauls consult qos_downtree_status and qos_status module doc).
+-define(TRAVERSES_KEY(QosEntryId), <<"qos_traverse_key_", QosEntryId/binary>>).
 
 -define(FOLD_LINKS_BATCH_SIZE, op_worker:get_env(qos_fold_links_batch_size, 100)).
 
@@ -324,7 +328,7 @@ remove_from_impossible_list(SpaceId, QosEntryId) ->
 
 -spec apply_to_all_impossible_in_space(od_space:id(), list_apply_fun()) -> ok.
 apply_to_all_impossible_in_space(SpaceId, Fun) ->
-    apply_to_all_in_list(?IMPOSSIBLE_KEY(SpaceId), Fun).
+    apply_to_all_link_names_in_list(?IMPOSSIBLE_KEY(SpaceId), Fun).
 
 
 -spec add_transfer_to_list(id(), qos_transfer_id()) -> ok | {error, term()}.
@@ -337,7 +341,7 @@ remove_transfer_from_list(QosEntryId, TransferId)  ->
 
 -spec apply_to_all_transfers(od_space:id(), list_apply_fun()) -> ok.
 apply_to_all_transfers(QosEntryId, Fun) ->
-    apply_to_all_in_list(?TRANSFERS_KEY(QosEntryId), Fun).
+    apply_to_all_link_names_in_list(?TRANSFERS_KEY(QosEntryId), Fun).
 
 
 -spec add_to_failed_files_list(od_space:id(), file_meta:uuid()) -> ok | {error, term()}.
@@ -350,7 +354,7 @@ remove_from_failed_files_list(SpaceId, FileUuid)  ->
 
 -spec apply_to_all_in_failed_files_list(od_space:id(), list_apply_fun()) -> ok.
 apply_to_all_in_failed_files_list(SpaceId, Fun) ->
-    apply_to_all_in_list(?FAILED_FILES_KEY(SpaceId), Fun).
+    apply_to_all_link_names_in_list(?FAILED_FILES_KEY(SpaceId), Fun).
 
 
 -spec add_to_traverses_list(od_space:id(), id(), qos_traverse:id(), file_meta:uuid()) -> ok | {error, term()}.
@@ -385,8 +389,8 @@ fold_in_batches(Key, Fun, List, Opts, Acc) ->
 
 
 %% @private
--spec apply_to_all_in_list(datastore:key(), list_apply_fun()) -> ok.
-apply_to_all_in_list(Key, Fun) ->
+-spec apply_to_all_link_names_in_list(datastore:key(), list_apply_fun()) -> ok.
+apply_to_all_link_names_in_list(Key, Fun) ->
     FinalFun = fun({LinkName, _LinkTarget}, _Acc) ->
         Fun(LinkName),
         ok

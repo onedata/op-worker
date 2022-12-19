@@ -71,7 +71,7 @@ start(FileCtx, QosEntries, TaskId) ->
             <<"uuid">> => file_ctx:get_referenced_uuid_const(FileCtx)
         }
     },
-    FileCtx2 = update_status(FileCtx, QosEntries, TaskId),
+    FileCtx2 = update_status_on_start(FileCtx, QosEntries, TaskId),
     {ok, _} = tree_traverse:run(?POOL_NAME, FileCtx2, Options),
     ok.
     
@@ -120,6 +120,7 @@ task_finished(TaskId, _PoolName) ->
         <<"uuid">> := FileUuid
     } = AdditionalData} = traverse_task:get_additional_data(?POOL_NAME, TaskId),
     FileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
+    %% @TODO VFS-10298 - move to qos_status
     ok = qos_status:report_reconciliation_finished(TaskId, FileCtx),
     lists:foreach(fun(QosEntryId) ->
         ok = qos_entry:remove_from_traverses_list(SpaceId, QosEntryId, TaskId),
@@ -147,20 +148,22 @@ do_master_job(Job = #tree_traverse_slave{}, #{task_id := TaskId}) ->
     do_slave_job(Job, TaskId);
 do_master_job(Job = #tree_traverse{file_ctx = FileCtx}, MasterJobArgs = #{task_id := TaskId}) ->
     BatchProcessingPrehook = build_batch_processing_prehook(TaskId, FileCtx),
-    case file_qos:get_direct_qos_entries(file_ctx:get_logical_uuid_const(FileCtx)) of
-        [] ->
-            tree_traverse:do_master_job(Job, MasterJobArgs, BatchProcessingPrehook);
-        Entries ->
-            {ok, AdditionalData} = traverse_task:get_additional_data(?POOL_NAME, TaskId),
-            case Entries -- get_traverse_qos_entries(AdditionalData) of
-                [_ | _] ->
-                    % There exists some QoS entry that is set on this file and current traverse is not being executed for it.
-                    % As this entry must have started its own traverse there is no need for this one to continue.
-                    {ok, #{}};
-                [] ->
-                    tree_traverse:do_master_job(Job, MasterJobArgs, BatchProcessingPrehook)
-            end
-    end.
+    %% @TODO VFS-10301 - uncomment after fixing problem with entry deletion cancelling traverse other entries rely on.
+%%    case file_qos:get_direct_qos_entries(file_ctx:get_logical_uuid_const(FileCtx)) of
+%%        [] ->
+%%            tree_traverse:do_master_job(Job, MasterJobArgs, BatchProcessingPrehook);
+%%        _Entries ->
+%%            {ok, #{<<"uuid">> := TraverseRootUuid}} = traverse_task:get_additional_data(?POOL_NAME, TaskId),
+%%            case file_ctx:get_logical_uuid_const(FileCtx) of
+%%                TraverseRootUuid ->
+%%                    tree_traverse:do_master_job(Job, MasterJobArgs, BatchProcessingPrehook);
+%%                _ ->
+%%                    % There exists some QoS entry that is set on this file and current traverse is not being executed for it.
+%%                    % As this entry must have started its own traverse there is no need for this one to continue.
+%%                    {ok, #{}}
+%%            end
+%%    end.
+    tree_traverse:do_master_job(Job, MasterJobArgs, BatchProcessingPrehook).
 
 
 -spec do_slave_job(tree_traverse:slave_job(), id()) -> ok.
@@ -169,7 +172,7 @@ do_slave_job(#tree_traverse_slave{file_ctx = FileCtx} = Job, TaskId) ->
     {ok, AdditionalData} =
         traverse_task:get_additional_data(?POOL_NAME, TaskId),
     
-    % start transfer only for existing entries
+    % skip entries deleted after traverse start
     FinalQosEntries = lists:filter(fun(QosEntryId) ->
         case qos_entry:get(QosEntryId) of
             {ok, _} -> true;
@@ -209,8 +212,9 @@ flush_stats(SpaceId, TransferId, BytesPerProvider) ->
 %%%===================================================================
 
 %% @private
--spec update_status(file_ctx:ctx(), [qos_entry:id()], id()) -> file_ctx:ctx().
-update_status(FileCtx, QosEntries, TaskId) ->
+-spec update_status_on_start(file_ctx:ctx(), [qos_entry:id()], id()) -> file_ctx:ctx().
+update_status_on_start(FileCtx, QosEntries, TaskId) ->
+    %% @TODO VFS-10298 - move to qos_status
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     

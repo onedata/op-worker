@@ -138,6 +138,7 @@ execute_hooks_unsafe(Key, HooksToExecute) ->
         try
             case erlang:apply(Module, Function, binary_to_term(Args)) of
                 ok -> [Identifier | Acc];
+                %% @TODO VFS-10296 - handle not fully synced links in this module
                 repeat -> Acc
             end
         catch Error:Type:Stacktrace  ->
