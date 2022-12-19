@@ -15,6 +15,7 @@
 -author("Jakub Kudzia").
 
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/fslogic/data_access_control.hrl").
 -include("modules/storage/helpers/helpers.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("transfers_test_mechanism.hrl").
@@ -34,6 +35,7 @@
 -export([
     % replication scenarios
     replicate_root_directory/2,
+    replicate_despite_protection_flags/2,
     replicate_each_file_separately/2,
     error_on_replicating_files/2,
     change_storage_params/2,
@@ -86,6 +88,8 @@
         __NodesTransferIdsAndFiles ++ __OldNodesTransferIdsAndFiles
     end, __Config, [])
 ).
+
+-define(PROTECTION_FLAGS, ?set_flags(?METADATA_PROTECTION, ?DATA_PROTECTION)).
 
 %%%===================================================================
 %%% API
@@ -147,6 +151,28 @@ replicate_root_directory(Config, #scenario{
         TargetProviderId = transfers_test_utils:provider_id(TargetNode),
         {ok, Tid} = schedule_file_replication(ScheduleNode, TargetProviderId, User, FileKey, Config, Type),
         {TargetNode, Tid, Guid, Path}
+    end, ReplicatingNodes),
+    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
+
+replicate_despite_protection_flags(Config, #scenario{
+    user = User,
+    type = Type,
+    file_key_type = FileKeyType,
+    schedule_node = ScheduleNode,
+    replicating_nodes = ReplicatingNodes
+}) ->
+    {RootDirGuid, RootDirPath} = ?config(?ROOT_DIR_KEY, Config),
+    RootDirFileKey = file_key(RootDirGuid, RootDirPath, FileKeyType),
+
+    NodesTransferIdsAndFiles = lists:map(fun(TargetNode) ->
+        SessionId = ?DEFAULT_SESSION(TargetNode, Config),
+        lists:foreach(fun({DirGuid, _}) ->
+            ?assertMatch({ok, _}, opt_datasets:establish(TargetNode, SessionId, ?FILE_REF(DirGuid), ?PROTECTION_FLAGS))
+        end, ?config(?DIRS_KEY, Config)),
+
+        TargetProviderId = transfers_test_utils:provider_id(TargetNode),
+        {ok, Tid} = schedule_file_replication(ScheduleNode, TargetProviderId, User, RootDirFileKey, Config, Type),
+        {TargetNode, Tid, RootDirGuid, RootDirPath}
     end, ReplicatingNodes),
     ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 

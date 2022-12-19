@@ -35,6 +35,7 @@
     replicate_already_replicated_file/3,
     replicate_100_files_separately/3,
     replicate_100_files_in_one_transfer/3,
+    replication_should_succeed_despite_protection_flags/3,
     replication_should_succeed_when_there_is_enough_space_for_file/3,
     replication_should_fail_when_space_is_full/3,
     replicate_to_missing_provider/3,
@@ -521,6 +522,57 @@ replicate_100_files_in_one_transfer(Config, Type, FileKeyType) ->
                 assertion_nodes = [WorkerP2],
                 attempts = 600,
                 timeout = timer:minutes(10)
+            }
+        }
+    ).
+
+replication_should_succeed_despite_protection_flags(Config, Type, FileKeyType) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    FilesNum = 20,
+    TotalTransferredBytes = FilesNum * ?DEFAULT_SIZE,
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+    ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
+
+    transfers_test_mechanism:run_test(
+        Config, #transfer_test_spec{
+            setup = #setup{
+                setup_node = WorkerP1,
+                assertion_nodes = [WorkerP2],
+                files_structure = [{1, 10}, {0, 10}],
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ],
+                attempts = 600,
+                timeout = timer:minutes(10)
+            },
+            scenario = #scenario{
+                type = Type,
+                file_key_type = FileKeyType,
+                schedule_node = WorkerP1,
+                replicating_nodes = [WorkerP2],
+                function = fun transfers_test_mechanism:replicate_despite_protection_flags/2
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    replication_status => completed,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
+                    files_to_process => FilesNum,
+                    files_processed => FilesNum,
+                    files_replicated => FilesNum,
+                    bytes_replicated => TotalTransferredBytes,
+                    hr_hist => ?HOUR_HIST(#{ProviderId1 => TotalTransferredBytes}),
+                    dy_hist => ?DAY_HIST(#{ProviderId1 => TotalTransferredBytes}),
+                    mth_hist => ?MONTH_HIST(#{ProviderId1 => TotalTransferredBytes})
+                },
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
+                    #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ],
+                assertion_nodes = [WorkerP2],
+                %% TODO
+                attempts = 60,
+                timeout = timer:minutes(1)
             }
         }
     ).
