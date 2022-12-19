@@ -49,7 +49,9 @@
     moving_dir_permutated_path_test/1,
     moving_file_onto_itself_test/1,
     reading_from_open_file_after_rename_test/1,
-    redirecting_event_to_renamed_file_test/1]).
+    redirecting_event_to_renamed_file_test/1,
+    rename_file_null_storage_test/1
+]).
 
 all() ->
     ?ALL([
@@ -69,7 +71,8 @@ all() ->
         moving_dir_permutated_path_test,
         moving_file_onto_itself_test,
         reading_from_open_file_after_rename_test,
-        redirecting_event_to_renamed_file_test
+        redirecting_event_to_renamed_file_test,
+        rename_file_null_storage_test
     ]).
 
 %%%===================================================================
@@ -172,7 +175,7 @@ move_file_test(Config) ->
     {_, Handle4} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {path, filename(1, TestDir, "/target_dir/moved_file2_target")}, read)),
     ?assertEqual({ok, <<"test2">>}, lfm_proxy:read(W, Handle4, 0, 10)),
     ?assertEqual(ok, lfm_proxy:close(W, Handle4)),
-    
+
     %% with illegal target filename
     ?assertEqual({error, ?EINVAL}, lfm_proxy:mv(W, SessId, {guid, File3Guid}, {path, filename(1, TestDir, "")}, <<"path/with/slash">>)),
 
@@ -755,6 +758,35 @@ redirecting_event_to_renamed_file_test(Config) ->
         ?assertReceivedMatch({events, [#file_written_event{}]}, ?TIMEOUT),
     ?assertEqual(file_id:guid_to_uuid(NewFile1Guid), file_id:guid_to_uuid(Evt1Guid)).
 
+rename_file_null_storage_test(Config) ->
+    [W | _] = sorted_workers(Config),
+    SessId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+
+    {_, File1Guid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, filename(5, "renamed_file1"))),
+    {_, File2Guid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, filename(5, "renamed_file2"))),
+    {_, File3Guid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, filename(5, "renamed_file3"))),
+    {_, Handle1} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, ?FILE_REF(File1Guid), write)),
+    {_, Handle2} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, ?FILE_REF(File2Guid), write)),
+    ?assertEqual({ok, 5}, lfm_proxy:write(W, Handle1, 0, <<"test1">>)),
+    ?assertEqual({ok, 5}, lfm_proxy:write(W, Handle2, 0, <<"test2">>)),
+    ?assertEqual(ok, lfm_proxy:close(W, Handle1)),
+    ?assertEqual(ok, lfm_proxy:close(W, Handle2)),
+
+    %% with overwrite
+    ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, filename(5, "renamed_file1_target"))),
+    ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId, ?FILE_REF(File1Guid), filename(5, "renamed_file1_target"))),
+
+    %% without overwrite
+    ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId, ?FILE_REF(File2Guid), filename(5, "renamed_file2_target"))),
+
+    %% with illegal overwrite
+    ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(5, "renamed_file3_target"))),
+    ?assertEqual({error, ?EISDIR}, lfm_proxy:mv(W, SessId, ?FILE_REF(File3Guid), filename(5, "renamed_file3_target"))),
+
+    %% with illegal target filename
+    ?assertEqual({error, ?EINVAL}, lfm_proxy:mv(W, SessId, ?FILE_REF(File3Guid), {path, filename(5, "")}, <<"path/with/slash">>)).
+
+
 %%%===================================================================
 %%% SetUp and TearDown functions
 %%%===================================================================
@@ -814,6 +846,11 @@ filename(SpaceNo, TestDir, Suffix) ->
     SpaceNoBinary = integer_to_binary(SpaceNo),
     SuffixBinary = list_to_binary(Suffix),
     <<"/space_name", SpaceNoBinary/binary, "/", TestDir/binary, SuffixBinary/binary>>.
+
+filename(SpaceNo, Name) ->
+    SpaceNoBinary = integer_to_binary(SpaceNo),
+    NameBinary = list_to_binary(Name),
+    <<"/space_name", SpaceNoBinary/binary, "/", NameBinary/binary>>.
 
 get_times(W, SessId, IdType, Ids) ->
     lists:map(

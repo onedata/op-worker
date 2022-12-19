@@ -612,14 +612,19 @@ should_chown(UserCtx, FileCtx) ->
 %%-------------------------------------------------------------------
 -spec mark_parent_dirs_created_on_storage(file_ctx:ctx(), user_ctx:ctx()) -> ok.
 mark_parent_dirs_created_on_storage(DirCtx, UserCtx) ->
-    ParentCtxs = get_parent_dirs_not_created_on_storage(DirCtx, UserCtx, []),
-    {IsImported, DirCtx2} = file_ctx:is_imported_storage(DirCtx),
-    {StorageId, _DirCtx3} = file_ctx:get_storage_id(DirCtx2),
-    mark_parent_dirs_created_on_storage(ParentCtxs, StorageId, IsImported).
+    case file_ctx:is_root_dir_const(DirCtx) of
+        true ->
+            ok;
+        false ->
+            ParentCtxs = get_parent_dirs_not_created_on_storage(DirCtx, UserCtx, []),
+            {IsImported, DirCtx2} = file_ctx:is_imported_storage(DirCtx),
+            {StorageId, _DirCtx3} = file_ctx:get_storage_id(DirCtx2),
+            mark_parent_dirs_created_on_storage(ParentCtxs, StorageId, IsImported)
+    end.
 
 -spec get_parent_dirs_not_created_on_storage(file_ctx:ctx(), user_ctx:ctx(), [file_ctx:ctx()]) -> [file_ctx:ctx()].
 get_parent_dirs_not_created_on_storage(DirCtx, UserCtx, ParentCtxs) ->
-    case file_ctx:is_space_dir_const(DirCtx) of
+    case file_ctx:is_space_dir_const(DirCtx) orelse file_ctx:is_root_dir_const(DirCtx) of
         true ->
             ParentCtxs;
         false ->
