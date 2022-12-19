@@ -73,7 +73,7 @@ create_all(AtmLaneExecutionRunCreationArgs = #atm_lane_execution_run_creation_ar
 
             throw(?ERROR_ATM_PARALLEL_BOX_EXECUTION_CREATION_FAILED(
                 AtmParallelBoxSchema#atm_parallel_box_schema.id,
-                ?atm_examine_error(Type, Reason, Stacktrace)
+                ?examine_exception(Type, Reason, Stacktrace)
             ))
         end
     end, [], lists_utils:enumerate(AtmParallelBoxSchemas)).
@@ -293,7 +293,7 @@ initiate_all(AtmParallelBoxExecutions, InitiateTaskFun) ->
             throw:?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING ->
                 throw(?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING);
             Type:Reason:Stacktrace ->
-                Error = ?atm_examine_error(Type, Reason, Stacktrace),
+                Error = ?examine_exception(Type, Reason, Stacktrace),
                 throw(?ERROR_ATM_PARALLEL_BOX_EXECUTION_INITIATION_FAILED(AtmParallelBoxSchemaId, Error))
         end
     end, AtmParallelBoxExecutions),
@@ -326,7 +326,7 @@ initiate(#atm_parallel_box_execution{task_registry = AtmTaskExecutionRegistry}, 
             throw:?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING ->
                 throw(?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING);
             Type:Reason:Stacktrace ->
-                Error = ?atm_examine_error(Type, Reason, Stacktrace),
+                Error = ?examine_exception(Type, Reason, Stacktrace),
                 throw(?ERROR_ATM_TASK_EXECUTION_INITIATION_FAILED(AtmTaskSchemaId, Error))
         end
     end, maps:to_list(AtmTaskExecutionRegistry)),

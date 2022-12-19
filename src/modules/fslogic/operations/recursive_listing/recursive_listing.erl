@@ -38,7 +38,7 @@
 -module(recursive_listing).
 -author("Michal Stanisz").
 
--include("proto/oneprovider/provider_messages.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -150,7 +150,12 @@ list(Module, UserCtx, RootNode, Options) ->
                     {E, IP, build_pagination_token(E, IP, RootNodeId, ProgressMarker)};
                 {false, NodeToList2} ->
                     {build_result_node_entry_list(
-                        InitialState#state{current_node = NodeToList2}, <<>>), [], undefined}
+                        InitialState#state{current_node = NodeToList2}, <<>>), [], undefined};
+                not_found ->
+                    #recursive_listing_result{
+                        inaccessible_paths = [],
+                        entries = []
+                    }
             end,
             #recursive_listing_result{
                 entries = Entries,
@@ -187,6 +192,8 @@ prepare_initial_listing_state(Module, UserCtx, RootNode, Options) ->
         {ok, NodeToList, LastPrefixToken} ->
             case infer_start_after(GivenStartAfter, Prefix, LastPrefixToken) of
                 {ok, FinalStartAfter} ->
+                    % all docs on node path must be synced as infer_starting_node returned ok
+                    % therefore no need to check if not_found
                     {NodePathTokens, NodeToList2} = Module:get_node_path_tokens(NodeToList),
                     {RootNodePathTokens, _RootNode2} = Module:get_node_path_tokens(RootNode),
                     {ok, #state{
@@ -235,10 +242,11 @@ infer_starting_node(Module, [PrefixToken | Tail], Node, UserCtx, RevRelPathToken
     case Module:get_next_batch(NodeIterator, UserCtx) of
         {_, [NextNode], _Iterator} ->
             case Module:get_node_name(NextNode, UserCtx) of
-                {PrefixToken, NextNode2} -> 
+                {PrefixToken, NextNode2} ->
                     infer_starting_node(
                         Module, Tail, NextNode2, UserCtx, [PrefixToken | RevRelPathTokens]);
-                _ -> 
+                _ ->
+                    % if not_found then ONLY node that could be on prefix path is not yet fully synced
                     nothing_to_list
             end;
         {_, [], _Iterator} ->
@@ -376,19 +384,25 @@ process_current_branching_node_in_batches(UserCtx, NodeIterator, State, ResultAc
 process_child(_UserCtx, _Node, #state{limit = 0}) -> 
     {more, #result_accumulator{}};
 process_child(UserCtx, Node, #state{current_node_path_tokens = CurrentPathTokens, module = Module} = State) ->
-    {Name, Node2} = Module:get_node_name(Node, UserCtx),
-    case Module:is_branching_node(Node2) of
-        {true, Node3} ->
-            {ProgressMarker, NextChildrenRes} = process_current_branching_node(UserCtx,
-                State#state{
-                    current_node = Node3,
-                    current_node_path_tokens = CurrentPathTokens ++ [Name]
-                }
-            ),
-            {ProgressMarker, NextChildrenRes};
-        {false, Node3} ->
-            UpdatedState = State#state{current_node_path_tokens = CurrentPathTokens, current_node = Node3},
-            {done, #result_accumulator{entries = build_result_node_entry_list(UpdatedState, Name)}}
+    case Module:get_node_name(Node, UserCtx) of
+        {Name, Node2} ->
+            case Module:is_branching_node(Node2) of
+                {true, Node3} ->
+                    {ProgressMarker, NextChildrenRes} = process_current_branching_node(UserCtx,
+                        State#state{
+                            current_node = Node3,
+                            current_node_path_tokens = CurrentPathTokens ++ [Name]
+                        }
+                    ),
+                    {ProgressMarker, NextChildrenRes};
+                {false, Node3} ->
+                    UpdatedState = State#state{current_node_path_tokens = CurrentPathTokens, current_node = Node3},
+                    {done, #result_accumulator{entries = build_result_node_entry_list(UpdatedState, Name)}};
+                not_found ->
+                    {done, #result_accumulator{}}
+            end;
+        not_found ->
+            {done, #result_accumulator{}}
     end.
 
 

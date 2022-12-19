@@ -115,6 +115,10 @@ get_models() -> [
     atm_openfaas_result_streamer_registry,
     atm_openfaas_status_cache,
     atm_time_series_store_container,
+    
+    % multitpart upload models
+    multipart_upload,
+    multipart_upload_part,
 
     %% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 21.02.*.
     space_strategies,

@@ -21,7 +21,7 @@
 -export([create_file/5, storage_file_created/2, make_file/4, make_link/4, make_symlink/4,
     get_file_location/2, open_file/3, open_file/4, open_file_insecure/4,
     open_file_with_extended_info/3, storage_file_created_insecure/2,
-    fsync/4, release/3, flush_event_queue/2]).
+    fsync/4, report_file_written/4, report_file_read/4, release/3, flush_event_queue/2]).
 
 %% Export for RPC
 -export([open_on_storage/5]).
@@ -183,6 +183,33 @@ open_file_with_extended_info(UserCtx, FileCtx, write) ->
     open_file_with_extended_info_for_write(UserCtx, FileCtx);
 open_file_with_extended_info(UserCtx, FileCtx, rdwr) ->
     open_file_with_extended_info_for_rdwr(UserCtx, FileCtx).
+
+
+% NOTE: this function is computationally expensive as it forces all queued events flush.
+% Use only in case of sporadic writing.
+-spec report_file_written(user_ctx:ctx(), file_ctx:ctx(), non_neg_integer(), integer()) ->
+    fslogic_worker:fuse_response().
+report_file_written(UserCtx, FileCtx, Offset, Size) ->
+    ok = lfm_event_emitter:emit_file_written(
+        file_ctx:get_logical_guid_const(FileCtx),
+        [#file_block{offset = Offset, size = Size}],
+        undefined,
+        user_ctx:get_session_id(UserCtx)
+    ),
+    flush_event_queue(UserCtx, FileCtx).
+
+
+% NOTE: this function is computationally expensive as it forces all queued events flush.
+% Use only in case of sporadic reading.
+-spec report_file_read(user_ctx:ctx(), file_ctx:ctx(), non_neg_integer(), integer()) ->
+    fslogic_worker:fuse_response().
+report_file_read(UserCtx, FileCtx, Offset, Size) ->
+    ok = lfm_event_emitter:emit_file_read(
+        file_ctx:get_logical_guid_const(FileCtx),
+        [#file_block{offset = Offset, size = Size}],
+        user_ctx:get_session_id(UserCtx)
+    ),
+    flush_event_queue(UserCtx, FileCtx).
 
 
 %%--------------------------------------------------------------------

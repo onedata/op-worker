@@ -50,7 +50,7 @@ construct_args(Item, AtmRunJobBatchCtx, AtmTaskExecutionArgSpecs) ->
                 Item, AtmRunJobBatchCtx, AtmTaskExecutionArgSpec
             )}
         catch Type:Reason:Stacktrace ->
-            Error = ?atm_examine_error(Type, Reason, Stacktrace),
+            Error = ?examine_exception(Type, Reason, Stacktrace),
             throw(?ERROR_ATM_TASK_ARG_MAPPING_FAILED(ArgName, Error))
         end
     end, #{}, AtmTaskExecutionArgSpecs).

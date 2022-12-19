@@ -221,7 +221,7 @@ init_child(Guid) ->
                 ?DIRECTORY_TYPE ->
                     try
                         EmptyCurrentStats = gen_empty_current_stats(Guid), % TODO VFS-9204 - maybe refactor as gen_empty_current_stats
-                        % gets storage_id that is also used by prepare_file_size_summary
+                                                                           % gets storage_id that is also used by prepare_file_size_summary
                         EmptyCurrentStats#{?DIR_COUNT => 1}
                     catch
                         Error:Reason:Stacktrace ->

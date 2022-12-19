@@ -19,6 +19,7 @@
 %% API
 -export([
     mkdir/3, mkdir/4,
+    create_dir_at_path/3,
     get_children/3,
     get_children_attrs/4,
     get_child_attr/3,
@@ -63,6 +64,21 @@ mkdir(SessId, ParentGuid0, Name, Mode) ->
         fun(#dir{guid = DirGuid}) ->
             {ok, DirGuid}
         end).
+
+
+-spec create_dir_at_path(session:id(), fslogic_worker:file_guid(), file_meta:path()) ->
+    {ok, #file_attr{}} | lfm:error_reply().
+create_dir_at_path(SessId, ParentGuid0, Path) ->
+    ParentGuid1 = lfm_file_key:resolve_file_key(
+        SessId, ?FILE_REF(ParentGuid0), resolve_symlink
+    ),
+    
+    remote_utils:call_fslogic(SessId, file_request, ParentGuid1,
+        #create_path{path = Path},
+        fun(#file_attr{} = FileAttr) ->
+            {ok, FileAttr}
+        end
+    ).
 
 
 %%--------------------------------------------------------------------
@@ -171,7 +187,7 @@ get_children_count(SessId, FileKey) ->
 get_files_recursively(SessId, FileKey, Options, OptionalAttrs) ->
     FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, resolve_symlink),
     
-    remote_utils:call_fslogic(SessId, provider_request, FileGuid,
+    remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #get_recursive_file_list{
             listing_options = Options,
             optional_attrs = OptionalAttrs
