@@ -1055,7 +1055,7 @@
 
 
 -record(dir_stats_collector_metadata, {
-    parent :: file_id:file_guid(),
+    parent :: file_id:file_guid() | undefined,
     dir_update_time_stats :: dir_update_time_stats:stats() | undefined
 }).
 

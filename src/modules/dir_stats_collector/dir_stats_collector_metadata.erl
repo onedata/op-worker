@@ -97,7 +97,7 @@ get_dir_update_time_stats(Guid) ->
 -spec delete_dir_update_time_stats(file_id:file_guid()) -> ok.
 delete_dir_update_time_stats(Guid) ->
     Diff = fun(Record) ->
-        {ok, Record#dir_stats_collector_metadata{parent = undefined}}
+        {ok, Record#dir_stats_collector_metadata{dir_update_time_stats = undefined}}
     end,
 
     case datastore_model:update(?CTX, file_id:guid_to_uuid(Guid), Diff) of

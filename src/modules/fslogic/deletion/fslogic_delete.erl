@@ -703,7 +703,7 @@ delete_location(FileCtx) ->
             end;
         false ->
             %  NOTE: we are inside replica_synchronizer so direct operations on cache are possible
-            fslogic_cache:flush(FileUuid),
+            fslogic_cache:flush(),
             ok = fslogic_cache:delete_doc(file_location:local_id(FileUuid))
     end,
     FileCtx2.

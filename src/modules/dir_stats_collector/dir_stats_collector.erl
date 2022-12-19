@@ -153,6 +153,7 @@
 -type error() :: collecting_status_error() | ?ERROR_NOT_FOUND | ?ERROR_INTERNAL_SERVER_ERROR.
 -export_type([collecting_status_error/0, error/0]).
 
+-type pid_to_notify() :: pid() | undefined.
 
 -define(FLUSH_INTERVAL_MILLIS, 5000).
 -define(CACHED_DIR_STATS_INACTIVITY_PERIOD, 10000). % stats that are already flushed and not used for this period
@@ -486,7 +487,7 @@ handle_call(Request, State) ->
 
 
 -spec handle_cast(#dsc_update_request{} | ?SCHEDULED_FLUSH | ?SCHEDULED_COLLECTIONS_INITIALIZATION |
-    ?CONTINUE_COLLECTIONS_INITIALIZATION(file_id:file_guid(), pid(), time:millis()) |
+    ?CONTINUE_COLLECTIONS_INITIALIZATION(file_id:file_guid(), pid_to_notify(), time:millis()) |
     ?FILE_MOVED(file_id:file_guid(), file_id:file_guid()), state()) -> state().
 handle_cast(#dsc_update_request{
     guid = Guid,
@@ -681,7 +682,7 @@ start_collections_initialization_for_all_cached_dirs(#state{dir_stats_cache = Di
 
 
 %% @private
--spec start_collections_initialization_for_dir(file_id:file_guid(), pid(),
+-spec start_collections_initialization_for_dir(file_id:file_guid(), pid_to_notify(),
     dir_stats_collections_initializer:initialization_data_map(), state()) -> state().
 start_collections_initialization_for_dir(Guid, PidToNotify, InitializationDataMap, #state{
     initialization_progress_map = ProgressMap
@@ -698,7 +699,7 @@ start_collections_initialization_for_dir(Guid, PidToNotify, InitializationDataMa
 
 
 %% @private
--spec continue_collections_initialization_for_dir(file_id:file_guid(), pid(), time:millis(), state()) -> state().
+-spec continue_collections_initialization_for_dir(file_id:file_guid(), pid_to_notify(), time:millis(), state()) -> state().
 continue_collections_initialization_for_dir(
     Guid, PidToNotify, RetryInterval,
     #state{initialization_progress_map = ProgressMap} = State
@@ -731,7 +732,7 @@ continue_collections_initialization_for_dir(
                         [?FUNCTION_NAME, Guid, Error, Reason], Stacktrace)
             end,
             NewRetryInterval = min(2 * RetryInterval, ?MAX_INIT_RETRY_INTERVAL),
-            pes:self_cast(?CONTINUE_COLLECTIONS_INITIALIZATION(Guid, PidToNotify, NewRetryInterval), RetryInterval),
+            pes:self_cast_after(?CONTINUE_COLLECTIONS_INITIALIZATION(Guid, PidToNotify, NewRetryInterval), RetryInterval),
             State
     end.
 

@@ -172,7 +172,7 @@ get_including_deleted(Key) ->
 %%--------------------------------------------------------------------
 -spec get_including_deleted(file_meta:uuid(), od_provider:id()) -> {ok, doc()} | {error, term()}.
 get_including_deleted(FileUuid, ProviderId) ->
-    ?MODULE:get(?MODULE:id(FileUuid, ProviderId)).
+    ?MODULE:get_including_deleted(?MODULE:id(FileUuid, ProviderId)).
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -181,7 +181,7 @@ get_including_deleted(FileUuid, ProviderId) ->
 %%--------------------------------------------------------------------
 -spec get_local(file_meta:uuid()) -> {ok, doc()} | {error, term()}.
 get_local(FileUuid) ->
-    ?MODULE:get(FileUuid, oneprovider:get_id()).
+    ?MODULE:get_including_deleted(FileUuid, oneprovider:get_id()).
 
 
 -spec update(id(), diff()) -> {ok, doc()} | {error, term()}.
