@@ -570,9 +570,8 @@ replication_should_succeed_despite_protection_flags(Config, Type, FileKeyType) -
                     #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
                 ],
                 assertion_nodes = [WorkerP2],
-                %% TODO
-                attempts = 60,
-                timeout = timer:minutes(1)
+                attempts = 600,
+                timeout = timer:minutes(10)
             }
         }
     ).

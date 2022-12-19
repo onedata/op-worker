@@ -32,6 +32,7 @@
     evict_big_file_replica/3,
     evict_100_files_in_one_request/3,
     evict_100_files_each_file_separately/3,
+    evict_despite_protection_flags/3,
     many_simultaneous_failed_replica_evictions/3,
     rerun_replica_eviction/3,
     rerun_replica_eviction_by_other_user/3,
@@ -363,6 +364,54 @@ evict_100_files_each_file_separately(Config, Type, FileKeyType) ->
                     files_replicated => 0,
                     bytes_replicated => 0,
                     files_evicted => 1
+                },
+                assertion_nodes = [WorkerP1, WorkerP2],
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
+                    #{<<"providerId">> => ProviderId2, <<"blocks">> => []}
+                ],
+                attempts = 3600,
+                timeout = timer:minutes(60)
+            }
+        }
+    ).
+
+evict_despite_protection_flags(Config, Type, FileKeyType) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+    ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
+
+    transfers_test_mechanism:run_test(
+        Config, #transfer_test_spec{
+            setup = #setup{
+                setup_node = WorkerP1,
+                assertion_nodes = [WorkerP2],
+                files_structure = [{1, 10}, {0, 10}],
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
+                replicate_to_nodes = [WorkerP2],
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
+                    #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ]
+            },
+            scenario = #scenario{
+                type = Type,
+                file_key_type = FileKeyType,
+                schedule_node = WorkerP1,
+                evicting_nodes = [WorkerP2],
+                function = fun transfers_test_mechanism:evict_despite_protection_flags/2
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    replication_status => skipped,
+                    eviction_status => completed,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
+                    evicting_provider => transfers_test_utils:provider_id(WorkerP2),
+                    files_to_process => 20,
+                    files_processed => 20,
+                    files_replicated => 0,
+                    bytes_replicated => 0,
+                    files_evicted => 20
                 },
                 assertion_nodes = [WorkerP1, WorkerP2],
                 distribution = [

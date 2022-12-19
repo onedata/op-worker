@@ -29,6 +29,7 @@
     evict_big_file_replica/1,
     evict_100_files_in_one_request/1,
     evict_100_files_each_file_separately/1,
+    eviction_should_succeed_despite_protection_flags/1,
     many_simultaneous_failed_replica_evictions/1,
     rerun_replica_eviction/1,
     rerun_replica_eviction_by_other_user/1,
@@ -61,6 +62,7 @@ all() -> [
     evict_big_file_replica,
     evict_100_files_in_one_request,
     evict_100_files_each_file_separately,
+    eviction_should_succeed_despite_protection_flags,
     many_simultaneous_failed_replica_evictions,
     rerun_replica_eviction,
     rerun_replica_eviction_by_other_user,
@@ -109,6 +111,9 @@ evict_100_files_in_one_request(Config) ->
 
 evict_100_files_each_file_separately(Config) ->
     replica_eviction_transfers_test_base:evict_100_files_each_file_separately(Config, rest, guid).
+
+eviction_should_succeed_despite_protection_flags(Config) ->
+    replica_eviction_transfers_test_base:evict_despite_protection_flags(Config, rest, guid).
 
 many_simultaneous_failed_replica_evictions(Config) ->
     replica_eviction_transfers_test_base:many_simultaneous_failed_replica_evictions(Config, rest, guid).

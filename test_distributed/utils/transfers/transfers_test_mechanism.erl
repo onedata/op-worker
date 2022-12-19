@@ -49,6 +49,7 @@
 
     % replica eviction scenarios
     evict_root_directory/2,
+    evict_despite_protection_flags/2,
     evict_each_file_replica_separately/2,
     schedule_replica_eviction_without_permissions/2,
     cancel_replica_eviction_on_target_nodes_by_scheduling_user/2,
@@ -378,6 +379,28 @@ evict_root_directory(Config, #scenario{
         EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
         {ok, Tid} = schedule_replica_eviction(ScheduleNode, EvictingProviderId, User, FileKey, Config, Type),
         {EvictingNode, Tid, Guid, Path}
+    end, EvictingNodes),
+    ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
+
+evict_despite_protection_flags(Config, #scenario{
+    user = User,
+    type = Type,
+    file_key_type = FileKeyType,
+    schedule_node = ScheduleNode,
+    evicting_nodes = EvictingNodes
+}) ->
+    {RootDirGuid, RootDirPath} = ?config(?ROOT_DIR_KEY, Config),
+    RootDirFileKey = file_key(RootDirGuid, RootDirPath, FileKeyType),
+
+    NodesTransferIdsAndFiles = lists:map(fun(EvictingNode) ->
+        SessionId = ?DEFAULT_SESSION(EvictingNode, Config),
+        lists:foreach(fun({DirGuid, _}) ->
+            ?assertMatch({ok, _}, opt_datasets:establish(EvictingNode, SessionId, ?FILE_REF(DirGuid), ?PROTECTION_FLAGS))
+        end, ?config(?DIRS_KEY, Config)),
+
+        EvictingProviderId = transfers_test_utils:provider_id(EvictingNode),
+        {ok, Tid} = schedule_replica_eviction(ScheduleNode, EvictingProviderId, User, RootDirFileKey, Config, Type),
+        {EvictingNode, Tid, RootDirGuid, RootDirPath}
     end, EvictingNodes),
     ?UPDATE_TRANSFERS_KEY(NodesTransferIdsAndFiles, Config).
 
