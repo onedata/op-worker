@@ -22,6 +22,7 @@
 
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_time_series.hrl").
 -include_lib("cluster_worker/include/audit_log.hrl").
 -include_lib("cluster_worker/include/modules/datastore/infinite_log.hrl").
 -include_lib("ctool/include/time_series/common.hrl").
@@ -130,7 +131,7 @@ report_bytes_copied(Id, Bytes) ->
 %%% Test API 
 %%%===================================================================
 
--spec get_stats(id(), time_series_collection:layout(), ts_windows:list_options()) ->
+-spec get_stats(id(), time_series_collection:layout(), ts_metric:list_options()) ->
     {ok, time_series_collection:slice()} | {error, term()}.
 get_stats(Id, SliceLayout, ListWindowsOptions) ->
     datastore_time_series_collection:get_slice(?CTX, ?TSC_ID(Id), SliceLayout, ListWindowsOptions).
@@ -194,7 +195,7 @@ get_counters_current_value(Id) ->
         {ok, Slice} ->
             {ok, maps:map(fun(_TimeSeriesName, #{?TOTAL_METRIC := Windows}) ->
                 case Windows of
-                    [{_Timestamp, {_Count, Value}}] ->
+                    [#window_info{value = Value}] ->
                         Value;
                     [] ->
                         0

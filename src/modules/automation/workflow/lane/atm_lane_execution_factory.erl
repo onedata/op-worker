@@ -61,7 +61,7 @@ create_run(AtmLaneRunSelector, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx)
 
             throw(?ERROR_ATM_LANE_EXECUTION_CREATION_FAILED(
                 atm_lane_execution:get_schema_id(AtmLaneRunSelector, AtmWorkflowExecution),
-                ?atm_examine_error(Type, Reason, Stacktrace)
+                ?examine_exception(Type, Reason, Stacktrace)
             ))
     end.
 
@@ -183,7 +183,7 @@ create_run_execution_components(RunCreationCtx) ->
             CreateExecutionComponentFun(NewRunCreationCtx)
         catch Type:Reason:Stacktrace ->
             delete_run_execution_components(NewRunCreationCtx#run_creation_ctx.execution_components),
-            throw(?atm_examine_error(Type, Reason, Stacktrace))
+            throw(?examine_exception(Type, Reason, Stacktrace))
         end
     end, RunCreationCtx, [
         fun create_exception_store/1,

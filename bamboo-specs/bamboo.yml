@@ -170,6 +170,7 @@ stages:
         - multi_provider_proxy
         - multi_provider_rest
         - multi_provider_view_rest
+        - multipart_upload
         - multiple_workflow_scheduling
         - nfs_helper
         - node_failure
@@ -1399,6 +1400,14 @@ multi_provider_view_rest:
       name: cover_ct_multi_provider_view_rest.tar.gz
   requirements: *os-agent
 
+multipart_upload:
+  <<: *ct-onenv-job
+  key: MULUPL
+  artifacts:
+    - *ct_logs
+    - <<: *cover_ct
+      name: cover_ct_multipart_upload.tar.gz
+
 multiple_workflow_scheduling:
   <<: *ct-job
   key: MWS
@@ -2060,6 +2069,7 @@ Coverage report:
     - artifact: cover_ct_multi_provider_proxy.tar.gz
     - artifact: cover_ct_multi_provider_rest.tar.gz
     - artifact: cover_ct_multi_provider_view_rest.tar.gz
+    - artifact: cover_ct_multipart_upload.tar.gz
     - artifact: cover_ct_multiple_workflow_scheduling.tar.gz
     - artifact: cover_ct_nfs_helper.tar.gz
     - artifact: cover_ct_node_failure.tar.gz
