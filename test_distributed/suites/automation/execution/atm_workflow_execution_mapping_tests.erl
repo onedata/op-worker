@@ -612,10 +612,10 @@ insert_window_to_metric_with_sum_aggregator(Window, []) ->
     [Window];
 
 insert_window_to_metric_with_sum_aggregator(
-    #{<<"value">> := Value1, <<"timestamp">> := Timestamp},
+    Window = #{<<"value">> := Value1, <<"timestamp">> := Timestamp},
     [#{<<"value">> := Value2, <<"timestamp">> := Timestamp} | Tail]
 ) ->
-    [#{<<"value">> => Value1 + Value2, <<"timestamp">> => Timestamp} | Tail];
+    [Window#{<<"value">> => Value1 + Value2, <<"timestamp">> => Timestamp} | Tail];
 
 insert_window_to_metric_with_sum_aggregator(
     Window = #{<<"timestamp">> := Timestamp1},

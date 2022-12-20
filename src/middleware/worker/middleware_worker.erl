@@ -44,10 +44,11 @@
 
 -type atm_operation() ::
     #atm_workflow_execution_schedule_request{} |
-    #atm_workflow_execution_cancel_request{} |
-    #atm_workflow_execution_pause_request{} |
+    #atm_workflow_execution_init_cancel_request{} |
+    #atm_workflow_execution_init_pause_request{} |
     #atm_workflow_execution_resume_request{} |
-    #atm_workflow_execution_repeat_request{}.
+    #atm_workflow_execution_repeat_request{} |
+    #atm_workflow_execution_discard_request{}.
 
 -type cdmi_operation() ::
     #transfer_encoding_get_request{} |

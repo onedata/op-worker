@@ -38,4 +38,4 @@
 to_json(#atm_time_series_store_content_browse_result{
     result = BrowseResult
 }) ->
-    ts_browse_result:to_json_with_compressed_windows(BrowseResult).
+    ts_browse_result:to_json(BrowseResult).

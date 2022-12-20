@@ -317,12 +317,11 @@ crash_atm_workflow_execution_test_base(Testcase, ExpTasksFinalStatus, CrashingAt
                 }
             }],
             handle_exception = #atm_step_mock_spec{
-                %% TODO VFS-10089 expectation per task ?
-                after_step_exp_state_diff = fun(#atm_mock_call_ctx{workflow_execution_exp_state = ExpState0}) ->
-                    ExpState1 = atm_workflow_execution_exp_state_builder:expect_all_tasks_stopping_due_to({1, 1}, interrupt, ExpState0),
-                    ExpState2 = atm_workflow_execution_exp_state_builder:expect_lane_run_stopping({1, 1}, ExpState1),
-                    {true, atm_workflow_execution_exp_state_builder:expect_workflow_execution_stopping(ExpState2)}
-                end
+                after_step_exp_state_diff = [
+                    {all_tasks, {1, 1}, stopping_due_to, interrupt},
+                    {lane_run, {1, 1}, stopping},
+                    workflow_stopping
+                ]
             },
             handle_workflow_abruptly_stopped = #atm_step_mock_spec{
                 after_step_exp_state_diff = [workflow_crashed]

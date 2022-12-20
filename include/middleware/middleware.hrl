@@ -113,11 +113,11 @@
     callback_url :: undefined | http_client:url()
 }).
 
--record(atm_workflow_execution_cancel_request, {
+-record(atm_workflow_execution_init_cancel_request, {
     atm_workflow_execution_id :: atm_workflow_execution:id()
 }).
 
--record(atm_workflow_execution_pause_request, {
+-record(atm_workflow_execution_init_pause_request, {
     atm_workflow_execution_id :: atm_workflow_execution:id()
 }).
 
@@ -129,6 +129,10 @@
     type :: atm_workflow_execution:repeat_type(),
     atm_workflow_execution_id :: atm_workflow_execution:id(),
     atm_lane_run_selector :: atm_lane_execution:lane_run_selector()
+}).
+
+-record(atm_workflow_execution_discard_request, {
+    atm_workflow_execution_id :: atm_workflow_execution:id()
 }).
 
 

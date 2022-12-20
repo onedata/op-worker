@@ -19,7 +19,7 @@
 
 -include("modules/logical_file_manager/lfm.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
--include("proto/oneprovider/provider_messages.hrl").
+-include("proto/oneclient/fuse_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 
@@ -120,7 +120,7 @@ list_internal(AtmWorkflowExecutionAuth, CompressedRoot, Opts) ->
     UserCtx = user_ctx:new(atm_workflow_execution_auth:get_session_id(AtmWorkflowExecutionAuth)),
     FileCtx = file_ctx:new_by_guid(CompressedRoot),
     try
-        #provider_response{provider_response = #recursive_listing_result{
+        #fuse_response{fuse_response = #recursive_listing_result{
             entries = Entries, pagination_token = PaginationToken}
         } = dir_req:list_recursively(UserCtx, FileCtx, Opts, [size]),
         MappedEntries = lists:map(fun({_Path, FileAttrs}) ->

@@ -1152,6 +1152,8 @@
 }).
 
 -record(atm_workflow_execution, {
+    discarded = false :: boolean(),
+
     user_id :: od_user:id(),
     space_id :: od_space:id(),
     atm_inventory_id :: od_atm_inventory:id(),
@@ -1280,6 +1282,24 @@
 -record(workflow_async_call_pool, {
     slots_used = 0 :: non_neg_integer(),
     slots_limit :: non_neg_integer()
+}).
+
+%%%===================================================================
+%%% Multipart upload connected models
+%%%===================================================================
+
+-record(multipart_upload, {
+    multipart_upload_id :: multipart_upload:id() | undefined,
+    path :: multipart_upload:path(),
+    creation_time :: time:millis(),
+    space_id :: od_space:id() | undefined
+}).
+
+-record(multipart_upload_part, {
+    number :: multipart_upload_part:part_number(),
+    size :: non_neg_integer(),
+    etag :: binary(),
+    last_modified :: non_neg_integer()
 }).
 
 -endif.

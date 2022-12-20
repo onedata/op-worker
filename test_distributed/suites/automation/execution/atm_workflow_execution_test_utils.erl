@@ -28,7 +28,9 @@
     stop_workflow_execution/2,
 
     resume_workflow_execution/1,
-    repeat_workflow_execution/3
+    repeat_workflow_execution/3,
+
+    discard_workflow_execution/1
 ]).
 -export([
     browse_store/2, browse_store/3,
@@ -36,7 +38,7 @@
 ]).
 -export([
     assert_ended_workflow_execution_can_be_neither_stopped_nor_resumed/1,
-    assert_not_stopped_workflow_execution_can_be_neither_repeated_nor_resumed/2,
+    assert_not_stopped_workflow_execution_can_not_be_repeated_resumed_nor_discarded/2,
     assert_not_ended_workflow_execution_can_not_be_repeated/2
 ]).
 -export([
@@ -65,7 +67,7 @@ cancel_workflow_execution(#atm_mock_call_ctx{
     session_id = SessionId,
     workflow_execution_id = AtmWorkflowExecutionId
 }) ->
-    ?erpc(ProviderSelector, mi_atm:cancel_workflow_execution(SessionId, AtmWorkflowExecutionId)).
+    ?erpc(ProviderSelector, mi_atm:init_cancel_workflow_execution(SessionId, AtmWorkflowExecutionId)).
 
 
 -spec pause_workflow_execution(atm_workflow_execution_test_runner:mock_call_ctx()) ->
@@ -75,7 +77,7 @@ pause_workflow_execution(#atm_mock_call_ctx{
     session_id = SessionId,
     workflow_execution_id = AtmWorkflowExecutionId
 }) ->
-    ?erpc(ProviderSelector, mi_atm:pause_workflow_execution(SessionId, AtmWorkflowExecutionId)).
+    ?erpc(ProviderSelector, mi_atm:init_pause_workflow_execution(SessionId, AtmWorkflowExecutionId)).
 
 
 -spec delete_offline_session(atm_workflow_execution_test_runner:mock_call_ctx()) ->
@@ -114,7 +116,7 @@ stop_workflow_execution(Reason, #atm_mock_call_ctx{
     session_id = SessionId,
     workflow_execution_id = AtmWorkflowExecutionId
 }) ->
-    ?erpc(ProviderSelector, atm_workflow_execution_handler:stop(
+    ?erpc(ProviderSelector, atm_workflow_execution_handler:init_stop(
         user_ctx:new(SessionId), AtmWorkflowExecutionId, Reason
     )).
 
@@ -143,6 +145,15 @@ repeat_workflow_execution(RepeatType, AtmLaneRunSelector, #atm_mock_call_ctx{
     ?erpc(ProviderSelector, mi_atm:repeat_workflow_execution(
         SessionId, RepeatType, AtmWorkflowExecutionId, AtmLaneRunSelector
     )).
+
+
+-spec discard_workflow_execution(atm_workflow_execution_test_runner:mock_call_ctx()) ->
+    ok | errors:error().
+discard_workflow_execution(#atm_mock_call_ctx{
+    provider = ProviderSelector,
+    workflow_execution_id = AtmWorkflowExecutionId
+}) ->
+    ?erpc(ProviderSelector, atm_workflow_execution_api:discard(AtmWorkflowExecutionId)).
 
 
 -spec browse_store(automation:id(), atm_workflow_execution_test_runner:mock_call_ctx()) ->
@@ -191,14 +202,15 @@ assert_ended_workflow_execution_can_be_neither_stopped_nor_resumed(AtmMockCallCt
     ?assertThrow(?ERROR_ATM_WORKFLOW_EXECUTION_NOT_RESUMABLE, resume_workflow_execution(AtmMockCallCtx)).
 
 
--spec assert_not_stopped_workflow_execution_can_be_neither_repeated_nor_resumed(
+-spec assert_not_stopped_workflow_execution_can_not_be_repeated_resumed_nor_discarded(
     atm_lane_execution:lane_run_selector(),
     atm_workflow_execution_test_runner:mock_call_ctx()
 ) ->
     ok.
-assert_not_stopped_workflow_execution_can_be_neither_repeated_nor_resumed(AtmLaneRunSelector, AtmMockCallCtx) ->
+assert_not_stopped_workflow_execution_can_not_be_repeated_resumed_nor_discarded(AtmLaneRunSelector, AtmMockCallCtx) ->
     ?assertThrow(?ERROR_ATM_WORKFLOW_EXECUTION_NOT_RESUMABLE, resume_workflow_execution(AtmMockCallCtx)),
-    assert_not_ended_workflow_execution_can_not_be_repeated(AtmLaneRunSelector, AtmMockCallCtx).
+    assert_not_ended_workflow_execution_can_not_be_repeated(AtmLaneRunSelector, AtmMockCallCtx),
+    ?assertEqual(?ERROR_ATM_WORKFLOW_EXECUTION_NOT_STOPPED, discard_workflow_execution(AtmMockCallCtx)).
 
 
 -spec assert_not_ended_workflow_execution_can_not_be_repeated(
