@@ -34,7 +34,9 @@
 
 -define(EXP_WINDOW(__METRIC_CONFIG, __TIMESTAMP, __VALUE), #{
     <<"value">> => __VALUE,
-    <<"timestamp">> => __TIMESTAMP - __TIMESTAMP rem __METRIC_CONFIG#metric_config.resolution
+    <<"timestamp">> => __TIMESTAMP - __TIMESTAMP rem __METRIC_CONFIG#metric_config.resolution,
+    <<"firstMeasurementTimestamp">> => null,
+    <<"lastMeasurementTimestamp">> => null
 }).
 
 -define(MAX_FILE_SIZE_TS_NAME, <<"max_file_size">>).

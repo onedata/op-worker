@@ -16,6 +16,7 @@
 -include("modules/dir_stats_collector/dir_size_stats.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_time_series.hrl").
 -include_lib("cluster_worker/include/time_series/browsing.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -881,7 +882,7 @@ check_space_dir_values_map_and_time_series_collection(
         true ->
             maps:foreach(fun(_TimeSeriesName, WindowsPerMetric) ->
                 ?assertEqual(lists:duplicate(4, 0),
-                    lists:map(fun([{_Timestamp, Value}]) -> Value end, maps:values(WindowsPerMetric)))
+                    lists:map(fun([#window_info{value = Value}]) -> Value end, maps:values(WindowsPerMetric)))
             end, TimeStats);
         false ->
             maps:foreach(fun(_TimeSeriesName, WindowsPerMetric) ->
