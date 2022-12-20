@@ -135,7 +135,7 @@ run_job_batch(
             catch Type:Reason:Stacktrace ->
                 handle_job_batch_processing_error(
                     AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemBatch,
-                    ?atm_examine_error(Type, Reason, Stacktrace)
+                    ?examine_exception(Type, Reason, Stacktrace)
                 ),
                 {error, running_item_failed}
             end;
@@ -195,7 +195,7 @@ process_streamed_data(AtmWorkflowExecutionCtx, AtmTaskExecutionId, {chunk, Uncor
         handle_uncorrelated_results_processing_error(
             AtmWorkflowExecutionCtx,
             AtmTaskExecutionId,
-            ?atm_examine_error(Type, Reason, Stacktrace)
+            ?examine_exception(Type, Reason, Stacktrace)
         ),
         error
     end;
@@ -478,7 +478,7 @@ process_job_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, JobResult
         ),
         atm_task_execution_status:handle_item_processed(AtmTaskExecutionId)
     catch Type:Reason:Stacktrace ->
-        Error = ?atm_examine_error(Type, Reason, Stacktrace),
+        Error = ?examine_exception(Type, Reason, Stacktrace),
         handle_job_processing_error(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Error),
         error
     end.

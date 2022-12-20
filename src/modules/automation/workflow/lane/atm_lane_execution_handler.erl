@@ -192,7 +192,7 @@ prepare_lane_run(AtmLaneRunSelector, AtmWorkflowExecutionDoc0, AtmWorkflowExecut
                     "Failed to prepare next run of lane number ~p.",
                     [element(1, AtmLaneRunSelector)]
                 ),
-                <<"reason">> => errors:to_json(?atm_examine_error(Type, Reason, Stacktrace))
+                <<"reason">> => errors:to_json(?examine_exception(Type, Reason, Stacktrace))
             },
             Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
             atm_workflow_execution_logger:workflow_critical(LogContent, Logger),
@@ -241,7 +241,7 @@ resume_lane_run(AtmLaneRunSelector, AtmWorkflowExecutionDoc0, AtmWorkflowExecuti
                     "Failed to resume ~p run of lane number ~p.",
                     [RunNum, AtmLaneIndex]
                 ),
-                <<"reason">> => errors:to_json(?atm_examine_error(Type, Reason, Stacktrace))
+                <<"reason">> => errors:to_json(?examine_exception(Type, Reason, Stacktrace))
             },
             Logger = atm_workflow_execution_ctx:get_logger(AtmWorkflowExecutionCtx),
             atm_workflow_execution_logger:workflow_critical(LogContent, Logger),
@@ -302,7 +302,7 @@ initiate_lane_run(
         Type:Reason:Stacktrace ->
             throw(?ERROR_ATM_LANE_EXECUTION_INITIATION_FAILED(
                 atm_lane_execution:get_schema_id(AtmLaneRunSelector, AtmWorkflowExecution),
-                ?atm_examine_error(Type, Reason, Stacktrace)
+                ?examine_exception(Type, Reason, Stacktrace)
             ))
     end.
 

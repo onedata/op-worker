@@ -248,7 +248,7 @@ report_openfaas_down(SpaceId, Error) ->
         try
             atm_workflow_execution_handler:on_openfaas_down(AtmWorkflowExecutionId, Error)
         catch Type:Reason:Stacktrace ->
-            ?atm_examine_error(Type, Reason, Stacktrace)
+            ?examine_exception(Type, Reason, Stacktrace)
         end
     end,
 

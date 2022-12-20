@@ -119,7 +119,7 @@ create(
         create_workflow_execution_doc(CreationCtx)
     catch Type:Reason:Stacktrace ->
         delete_execution_components(ExecutionComponents),
-        throw(?atm_examine_error(Type, Reason, Stacktrace))
+        throw(?examine_exception(Type, Reason, Stacktrace))
     end,
     atm_waiting_workflow_executions:add(AtmWorkflowExecutionDoc),
 
@@ -215,7 +215,7 @@ create_execution_components(CreationCtx) ->
             CreateExecutionComponentFun(NewCreationCtx)
         catch Type:Reason:Stacktrace ->
             delete_execution_components(NewCreationCtx#creation_ctx.execution_components),
-            throw(?atm_examine_error(Type, Reason, Stacktrace))
+            throw(?examine_exception(Type, Reason, Stacktrace))
         end
     end, CreationCtx, [
         fun create_workflow_schema_snapshot/1,
@@ -262,7 +262,7 @@ create_lambda_snapshots(CreationCtx = #creation_ctx{
             Acc#{AtmLambdaId => AtmLambdaSnapshotId}
         catch Type:Reason:Stacktrace ->
             catch delete_lambda_snapshots(Acc),
-            throw(?atm_examine_error(Type, Reason, Stacktrace))
+            throw(?examine_exception(Type, Reason, Stacktrace))
         end
     end, #{}, AtmLambdaDocs),
 
@@ -311,7 +311,7 @@ create_global_stores(CreationCtx = #creation_ctx{
         catch Type:Reason:Stacktrace ->
             catch delete_stores(maps:values(AtmGlobalStoreRegistry)),
 
-            Error = ?atm_examine_error(Type, Reason, Stacktrace),
+            Error = ?examine_exception(Type, Reason, Stacktrace),
             throw(?ERROR_ATM_STORE_CREATION_FAILED(AtmStoreSchemaId, Error))
         end
     end, CreationCtx, AtmStoreSchemas).
