@@ -976,7 +976,7 @@ propagate_to_parent(Guid, CollectionType, #cached_dir_stats{
 
     Result = case Parent of
         <<"root_dir">> -> ok;
-        not_found -> add_hook_for_missing_doc(Guid, CollectionType, StatUpdatesAccForParent);
+        undefined -> add_hook_for_missing_doc(Guid, CollectionType, StatUpdatesAccForParent);
         _ -> update_stats_of_dir(Parent, internal, CollectionType, StatUpdatesAccForParent)
     end,
 
@@ -992,7 +992,7 @@ propagate_to_parent(Guid, CollectionType, #cached_dir_stats{
 
 %% @private
 -spec acquire_parent(file_id:file_guid(), cached_dir_stats()) ->
-    {file_id:file_guid() | not_found, cached_dir_stats()}.
+    {file_id:file_guid() | undefined, cached_dir_stats()}.
 acquire_parent(Guid, CachedDirStats) ->
     UpdatedCachedDirStats = cache_parent(Guid, CachedDirStats),
     {UpdatedCachedDirStats#cached_dir_stats.parent, UpdatedCachedDirStats}.
