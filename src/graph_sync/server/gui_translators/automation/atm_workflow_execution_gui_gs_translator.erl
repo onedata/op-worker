@@ -17,7 +17,7 @@
 -include("modules/automation/atm_execution.hrl").
 
 %% API
--export([translate_resource/2]).
+-export([translate_value/2, translate_resource/2]).
 
 %% Util functions
 -export([
@@ -29,6 +29,18 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+
+-spec translate_value(gri:gri(), Value :: term()) -> gs_protocol:data().
+translate_value(#gri{aspect = batch}, DiscardResults) ->
+    TranslateDiscardResultFun = fun
+        (_, ok) ->
+            #{<<"success">> => true};
+        (_, {error, _} = Error) ->
+            #{<<"success">> => false, <<"error">> => errors:to_json(Error)}
+    end,
+    maps:map(TranslateDiscardResultFun, DiscardResults).
 
 
 -spec translate_resource(gri:gri(), Data :: term()) -> gs_protocol:data().

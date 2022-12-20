@@ -100,7 +100,7 @@ cleanup() ->
 %%--------------------------------------------------------------------
 -spec supervisor_flags() -> supervisor:sup_flags().
 supervisor_flags() ->
-    #{strategy => one_for_one, intensity => 1000, period => 3600}.
+    #{strategy => one_for_one, intensity => 10, period => 3600}.
 
 %%--------------------------------------------------------------------
 %% @doc

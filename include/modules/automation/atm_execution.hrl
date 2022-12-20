@@ -317,4 +317,10 @@
 ]).
 
 
+-define(ATM_SUPERVISION_WORKER_SUP, atm_supervision_worker_sup).
+
+-define(ATM_WARDEN_SERVICE_NAME, <<"atm_warden_service">>).
+-define(ATM_WARDEN_SERVICE_ID, datastore_key:new_from_digest(?ATM_WARDEN_SERVICE_NAME)).
+
+
 -endif.

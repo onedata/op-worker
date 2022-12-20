@@ -17,10 +17,11 @@
 %% API
 -export([
     schedule_workflow_execution/6,
-    cancel_workflow_execution/2,
-    pause_workflow_execution/2,
+    init_cancel_workflow_execution/2,
+    init_pause_workflow_execution/2,
     resume_workflow_execution/2,
-    repeat_workflow_execution/4
+    repeat_workflow_execution/4,
+    discard_workflow_execution/3
 ]).
 
 
@@ -56,22 +57,22 @@ schedule_workflow_execution(
     }).
 
 
--spec cancel_workflow_execution(session:id(), atm_workflow_execution:id()) ->
+-spec init_cancel_workflow_execution(session:id(), atm_workflow_execution:id()) ->
     ok | no_return().
-cancel_workflow_execution(SessionId, AtmWorkflowExecutionId) ->
+init_cancel_workflow_execution(SessionId, AtmWorkflowExecutionId) ->
     SpaceGuid = atm_workflow_execution_id_to_space_guid(AtmWorkflowExecutionId),
 
-    middleware_worker:check_exec(SessionId, SpaceGuid, #atm_workflow_execution_cancel_request{
+    middleware_worker:check_exec(SessionId, SpaceGuid, #atm_workflow_execution_init_cancel_request{
         atm_workflow_execution_id = AtmWorkflowExecutionId
     }).
 
 
--spec pause_workflow_execution(session:id(), atm_workflow_execution:id()) ->
+-spec init_pause_workflow_execution(session:id(), atm_workflow_execution:id()) ->
     ok | no_return().
-pause_workflow_execution(SessionId, AtmWorkflowExecutionId) ->
+init_pause_workflow_execution(SessionId, AtmWorkflowExecutionId) ->
     SpaceGuid = atm_workflow_execution_id_to_space_guid(AtmWorkflowExecutionId),
 
-    middleware_worker:check_exec(SessionId, SpaceGuid, #atm_workflow_execution_pause_request{
+    middleware_worker:check_exec(SessionId, SpaceGuid, #atm_workflow_execution_init_pause_request{
         atm_workflow_execution_id = AtmWorkflowExecutionId
     }).
 
@@ -100,6 +101,24 @@ repeat_workflow_execution(SessionId, RepeatType, AtmWorkflowExecutionId, AtmLane
         type = RepeatType,
         atm_workflow_execution_id = AtmWorkflowExecutionId,
         atm_lane_run_selector = AtmLaneRunSelector
+    }).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Schedules removal of specified stopped automation workflow execution.
+%% Although underlying documents will be removed some time later (on next
+%% run of automation garbage collector) it will not be possible to fetch
+%% them after discard returns.
+%% @end
+%%--------------------------------------------------------------------
+-spec discard_workflow_execution(session:id(), od_space:id(), atm_workflow_execution:id()) ->
+    ok | errors:error().
+discard_workflow_execution(SessionId, SpaceId, AtmWorkflowExecutionId) ->
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+
+    middleware_worker:check_exec(SessionId, SpaceGuid, #atm_workflow_execution_discard_request{
+        atm_workflow_execution_id = AtmWorkflowExecutionId
     }).
 
 

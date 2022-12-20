@@ -70,7 +70,7 @@
 
 finish_atm_workflow_execution() ->
     AssertActionsNotPossibleOnNotStoppedExecution = fun(AtmMockCallCtx) ->
-        atm_workflow_execution_test_utils:assert_not_stopped_workflow_execution_can_be_neither_repeated_nor_resumed(
+        atm_workflow_execution_test_utils:assert_not_stopped_workflow_execution_can_not_be_repeated_resumed_nor_discarded(
             {1, 1}, AtmMockCallCtx
         )
     end,
