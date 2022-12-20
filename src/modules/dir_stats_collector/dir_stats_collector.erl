@@ -996,26 +996,33 @@ propagate_to_parent(Guid, CollectionType, #cached_dir_stats{
 acquire_parent(Guid, #cached_dir_stats{
     parent = undefined
 } = CachedDirStats) ->
+    UpdatedCachedDirStats = cache_parent(Guid, CachedDirStats),
+    {UpdatedCachedDirStats#cached_dir_stats.parent, UpdatedCachedDirStats}.
+
+
+%% @private
+-spec cache_parent(file_id:file_guid(), cached_dir_stats()) -> cached_dir_stats().
+cache_parent(Guid, #cached_dir_stats{
+    parent = undefined
+} = CachedDirStats) ->
     case get_parent(Guid) of
         {ok, ParentGuidToCache} ->
             case dir_stats_collector_metadata:get_parent(Guid) of
                 undefined ->
                     dir_stats_collector_metadata:update_parent(Guid, ParentGuidToCache),
-                    {ParentGuidToCache, CachedDirStats#cached_dir_stats{parent = ParentGuidToCache}};
+                    CachedDirStats#cached_dir_stats{parent = ParentGuidToCache};
                 ParentGuidToCache ->
-                    {ParentGuidToCache, CachedDirStats#cached_dir_stats{parent = ParentGuidToCache}};
+                    CachedDirStats#cached_dir_stats{parent = ParentGuidToCache};
                 OldParentGuid ->
                     pes:self_cast(?FILE_MOVED(Guid, ParentGuidToCache)),
-                    {OldParentGuid, CachedDirStats#cached_dir_stats{parent = OldParentGuid}}
+                    CachedDirStats#cached_dir_stats{parent = OldParentGuid}
             end;
         ?ERROR_NOT_FOUND ->
-            {not_found, CachedDirStats}
+            CachedDirStats
     end;
 
-acquire_parent(_Guid, #cached_dir_stats{
-    parent = CachedParent
-} = CachedDirStats) ->
-    {CachedParent, CachedDirStats}.
+cache_parent(_Guid, CachedDirStats) ->
+    CachedDirStats.
 
 
 %% @private
@@ -1093,8 +1100,7 @@ gen_cached_dir_stats_key(Guid, CollectionType) ->
 -spec collection_moved(file_id:file_guid(), dir_stats_collection:type(), file_id:file_guid(), state()) -> state().
 collection_moved(Guid, CollectionType, TargetParentGuid, State) ->
     case update_in_cache(Guid, CollectionType, fun(CachedDirStats) ->
-        {_, UpdatedCachedDirStats} = acquire_parent(Guid, CachedDirStats),
-        UpdatedCachedDirStats
+        cache_parent(Guid, CachedDirStats)
     end, State) of
         {
             {ok, #cached_dir_stats{parent = undefined}},
