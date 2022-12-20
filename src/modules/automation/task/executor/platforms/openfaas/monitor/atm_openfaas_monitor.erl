@@ -65,7 +65,7 @@
 
 -define(SERVER, {global, ?MODULE}).
 
-% Reuse ?ATM_SERVICE_ID as id for openfaas monitor cache to ensure that cache
+% Reuse ?ATM_WARDEN_SERVICE_ID as id for openfaas monitor cache to ensure that cache
 % document management happens on the same node that monitor process exists
 -define(CACHE_ID, ?ATM_WARDEN_SERVICE_ID).
 
