@@ -893,6 +893,10 @@
     % simultaneously for given TransferId
     pid :: undefined | binary(), %todo VFS-3657
 
+    % flags used for transfer management
+    replication_traverse_finished = false :: boolean(),
+    eviction_traverse_finished = false :: boolean(),
+
     % counters used for transfer management
     % if file is migrated (replicated and invalidated)
     % it will be included twice in both counters

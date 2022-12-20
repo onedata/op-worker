@@ -149,19 +149,22 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_cast({start_replication, SessionId, TransferId, FileGuid, Callback,
-    EvictSourceReplica, ViewName, QueryViewParams}, State
+handle_cast(
+    {start_replication, SessionId, TransferId, FileGuid, Callback, EvictSourceReplica},
+    State
 ) ->
     case replication_status:handle_enqueued(TransferId) of
-        {ok, _} ->
-            FileCtx = file_ctx:new_by_guid(FileGuid), % TODO VFS-7443 - maybe use referenced guid?
-            TransferParams = #transfer_params{
+        {ok, TransferDoc} ->
+            % TODO VFS-7443 - maybe use referenced guid?
+            RootFileCtx = file_ctx:new_by_guid(FileGuid),
+
+            replication_worker:enqueue_data_transfer(RootFileCtx, #transfer_job_ctx{
                 transfer_id = TransferId,
                 user_ctx = user_ctx:new(SessionId),
-                view_name = ViewName,
-                query_view_params = QueryViewParams
-            },
-            replication_worker:enqueue_data_transfer(FileCtx, TransferParams),
+                job = #transfer_traverse_job{
+                    iterator = transfer_iterator:new(TransferDoc)
+                }
+            }),
             handle_enqueued(TransferId, Callback, EvictSourceReplica);
         {error, ?ENQUEUED_STATUS} ->
             {ok, _} = transfer:set_controller_process(TransferId),

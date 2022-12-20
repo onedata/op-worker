@@ -32,6 +32,7 @@
     evict_big_file_replica/3,
     evict_100_files_in_one_request/3,
     evict_100_files_each_file_separately/3,
+    evict_despite_protection_flags/3,
     many_simultaneous_failed_replica_evictions/3,
     rerun_replica_eviction/3,
     rerun_replica_eviction_by_other_user/3,
@@ -93,8 +94,8 @@ evict_empty_dir(Config, Type, FileKeyType) ->
                     eviction_status => completed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
                     evicting_provider => transfers_test_utils:provider_id(WorkerP2),
-                    files_to_process => 1,
-                    files_processed => 1,
+                    files_to_process => 0,
+                    files_processed => 0,
                     files_replicated => 0,
                     bytes_replicated => 0,
                     files_evicted => 0
@@ -127,8 +128,8 @@ evict_tree_of_empty_dirs(Config, Type, FileKeyType) ->
                     eviction_status => completed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
                     evicting_provider => transfers_test_utils:provider_id(WorkerP2),
-                    files_to_process => 1111,
-                    files_processed => 1111,
+                    files_to_process => 0,
+                    files_processed => 0,
                     files_replicated => 0,
                     bytes_replicated => 0,
                     files_evicted => 0
@@ -216,8 +217,8 @@ evict_regular_file_replica_in_directory(Config, Type, FileKeyType) ->
                     eviction_status => completed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
                     evicting_provider => transfers_test_utils:provider_id(WorkerP2),
-                    files_to_process => 2,
-                    files_processed => 2,
+                    files_to_process => 1,
+                    files_processed => 1,
                     files_replicated => 0,
                     bytes_replicated => 0,
                     files_evicted => 1
@@ -310,8 +311,8 @@ evict_100_files_in_one_request(Config, Type, FileKeyType) ->
                     eviction_status => completed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
                     evicting_provider => transfers_test_utils:provider_id(WorkerP2),
-                    files_to_process => 101,
-                    files_processed => 101,
+                    files_to_process => 100,
+                    files_processed => 100,
                     files_replicated => 0,
                     bytes_replicated => 0,
                     files_evicted => 100
@@ -363,6 +364,54 @@ evict_100_files_each_file_separately(Config, Type, FileKeyType) ->
                     files_replicated => 0,
                     bytes_replicated => 0,
                     files_evicted => 1
+                },
+                assertion_nodes = [WorkerP1, WorkerP2],
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
+                    #{<<"providerId">> => ProviderId2, <<"blocks">> => []}
+                ],
+                attempts = 3600,
+                timeout = timer:minutes(60)
+            }
+        }
+    ).
+
+evict_despite_protection_flags(Config, Type, FileKeyType) ->
+    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    ProviderId1 = ?GET_DOMAIN_BIN(WorkerP1),
+    ProviderId2 = ?GET_DOMAIN_BIN(WorkerP2),
+
+    transfers_test_mechanism:run_test(
+        Config, #transfer_test_spec{
+            setup = #setup{
+                setup_node = WorkerP1,
+                assertion_nodes = [WorkerP2],
+                files_structure = [{1, 10}, {0, 10}],
+                root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
+                replicate_to_nodes = [WorkerP2],
+                distribution = [
+                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
+                    #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
+                ]
+            },
+            scenario = #scenario{
+                type = Type,
+                file_key_type = FileKeyType,
+                schedule_node = WorkerP1,
+                evicting_nodes = [WorkerP2],
+                function = fun transfers_test_mechanism:evict_despite_protection_flags/2
+            },
+            expected = #expected{
+                expected_transfer = #{
+                    replication_status => skipped,
+                    eviction_status => completed,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
+                    evicting_provider => transfers_test_utils:provider_id(WorkerP2),
+                    files_to_process => 20,
+                    files_processed => 20,
+                    files_replicated => 0,
+                    bytes_replicated => 0,
+                    files_evicted => 20
                 },
                 assertion_nodes = [WorkerP1, WorkerP2],
                 distribution = [
@@ -604,8 +653,8 @@ rerun_dir_eviction(Config, Type, FileKeyType) ->
                     eviction_status => failed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
                     evicting_provider => transfers_test_utils:provider_id(WorkerP2),
-                    files_to_process => 10,
-                    files_processed => 10,
+                    files_to_process => 7,
+                    files_processed => 7,
                     failed_files => 7,
                     files_evicted => 0
                 },
@@ -628,8 +677,8 @@ rerun_dir_eviction(Config, Type, FileKeyType) ->
                     eviction_status => completed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP2),
                     evicting_provider => transfers_test_utils:provider_id(WorkerP2),
-                    files_to_process => 10,
-                    files_processed => 10,
+                    files_to_process => 7,
+                    files_processed => 7,
                     failed_files => 0,
                     files_evicted => 7
                 },
@@ -696,8 +745,8 @@ rerun_view_eviction(Config, Type) ->
                     eviction_status => failed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
                     evicting_provider => transfers_test_utils:provider_id(WorkerP2),
-                    files_to_process => 2,
-                    files_processed => 2,
+                    files_to_process => 1,
+                    files_processed => 1,
                     failed_files => 1,
                     files_evicted =>  0
                 },
@@ -720,8 +769,8 @@ rerun_view_eviction(Config, Type) ->
                     eviction_status => completed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP2),
                     evicting_provider => transfers_test_utils:provider_id(WorkerP2),
-                    files_to_process => 2,
-                    files_processed => 2,
+                    files_to_process => 1,
+                    files_processed => 1,
                     files_replicated => 0,
                     bytes_replicated => 0,
                     files_evicted =>  1
@@ -767,8 +816,8 @@ cancel_replica_eviction_on_target_nodes_by_scheduling_user(Config, Type) ->
                 expected_transfer = #{
                     eviction_status => cancelled,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
-                    files_to_process => fun(X) -> X =< 111 end,
-                    files_processed => fun(X) -> X =< 111 end,
+                    files_to_process => fun(X) -> X =< 100 end,
+                    files_processed => fun(X) -> X =< 100 end,
                     failed_files => 0,
                     files_evicted => fun(X) -> X  < 100 end
                 },
@@ -812,8 +861,8 @@ cancel_replica_eviction_on_target_nodes_by_other_user(Config, Type) ->
                 expected_transfer = #{
                     eviction_status => cancelled,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
-                    files_to_process => fun(X) -> X =< 111 end,
-                    files_processed => fun(X) -> X =< 111 end,
+                    files_to_process => fun(X) -> X =< 100 end,
+                    files_processed => fun(X) -> X =< 100 end,
                     failed_files => 0,
                     files_evicted => fun(X) -> X < 100 end
                 },
@@ -833,7 +882,7 @@ fail_to_evict_file_replica_without_permissions(Config, Type, FileKeyType) ->
             setup = #setup{
                 setup_node = WorkerP1,
                 assertion_nodes = [WorkerP2],
-                files_structure = [{0, 1}],
+                files_structure = [{1, 2}, {0, 3}],
                 root_directory = transfers_test_utils:root_name(?FUNCTION_NAME, Type, FileKeyType),
                 replicate_to_nodes = [WorkerP2],
                 distribution = [
@@ -850,11 +899,17 @@ fail_to_evict_file_replica_without_permissions(Config, Type, FileKeyType) ->
                 function = fun transfers_test_mechanism:schedule_replica_eviction_without_permissions/2
             },
             expected = #expected{
-                expected_transfer = undefined,
-                distribution = [
-                    #{<<"providerId">> => ProviderId1, <<"blocks">> => [[0, ?DEFAULT_SIZE]]},
-                    #{<<"providerId">> => ProviderId2, <<"blocks">> => [[0, ?DEFAULT_SIZE]]}
-                ],
+                expected_transfer = #{
+                    eviction_status => completed,
+                    scheduling_provider => transfers_test_utils:provider_id(WorkerP2),
+                    evicting_provider => transfers_test_utils:provider_id(WorkerP2),
+                    files_to_process => 2,
+                    files_processed => 2,
+                    files_replicated => 0,
+                    bytes_replicated => 0,
+                    files_evicted =>  2
+                },
+                distribution = undefined,
                 assertion_nodes = [WorkerP1, WorkerP2]
             }
         }
@@ -1101,8 +1156,8 @@ schedule_replica_eviction_by_view(Config, Type) ->
                     eviction_status => completed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
                     evicting_provider => transfers_test_utils:provider_id(WorkerP2),
-                    files_to_process => 2,
-                    files_processed => 2,
+                    files_to_process => 1,
+                    files_processed => 1,
                     files_replicated => 0,
                     bytes_replicated => 0,
                     files_evicted =>  1
@@ -1209,8 +1264,8 @@ schedule_eviction_of_regular_file_by_view_with_reduce(Config, Type) ->
                     replication_status => skipped,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
                     evicting_provider => transfers_test_utils:provider_id(WorkerP2),
-                    files_to_process => 3,
-                    files_processed => 3,
+                    files_to_process => 2,
+                    files_processed => 2,
                     files_replicated => 0,
                     bytes_replicated => 0,
                     files_evicted => 2
@@ -1338,8 +1393,8 @@ scheduling_replica_eviction_by_view_with_function_returning_wrong_value_should_f
                     eviction_status => failed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
                     evicting_provider => transfers_test_utils:provider_id(WorkerP2),
-                    files_to_process => 2,
-                    files_processed => 2,
+                    files_to_process => 1,
+                    files_processed => 1,
                     files_evicted => 0,
                     failed_files => 1
                 },
@@ -1414,8 +1469,8 @@ scheduling_replica_eviction_by_view_returning_not_existing_file_should_not_fail(
                     eviction_status => completed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
                     evicting_provider => transfers_test_utils:provider_id(WorkerP2),
-                    files_to_process => 2,
-                    files_processed => 2,
+                    files_to_process => 0,
+                    files_processed => 0,
                     files_evicted => 0,
                     failed_files => 0
                 },
@@ -1455,8 +1510,8 @@ scheduling_replica_eviction_by_empty_view_should_succeed(Config, Type) ->
                     eviction_status => completed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
                     evicting_provider => transfers_test_utils:provider_id(WorkerP2),
-                    files_to_process => 1,
-                    files_processed => 1,
+                    files_to_process => 0,
+                    files_processed => 0,
                     files_evicted => 0
                 },
                 assertion_nodes = [WorkerP1, WorkerP2],
@@ -1519,8 +1574,8 @@ scheduling_replica_eviction_by_not_existing_key_in_view_should_succeed(Config, T
                     eviction_status => completed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
                     evicting_provider => transfers_test_utils:provider_id(WorkerP2),
-                    files_to_process => 1,
-                    files_processed => 1,
+                    files_to_process => 0,
+                    files_processed => 0,
                     files_evicted => 0
                 },
                 assertion_nodes = [WorkerP1, WorkerP2],
@@ -1591,8 +1646,8 @@ schedule_replica_eviction_of_100_regular_files_by_view(Config, Type) ->
                     eviction_status => completed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
                     evicting_provider => transfers_test_utils:provider_id(WorkerP2),
-                    files_to_process => NumberOfFiles + 1,
-                    files_processed => NumberOfFiles + 1,
+                    files_to_process => NumberOfFiles,
+                    files_processed => NumberOfFiles,
                     files_evicted => NumberOfFiles
                 },
                 assertion_nodes = [WorkerP1, WorkerP2],

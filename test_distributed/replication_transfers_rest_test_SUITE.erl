@@ -32,6 +32,7 @@
     not_synced_file_should_not_be_replicated/1,
     replicate_100_files_separately/1,
     replicate_100_files_in_one_transfer/1,
+    replication_should_succeed_despite_protection_flags/1,
     replication_should_succeed_when_there_is_enough_space_for_file/1,
     replication_should_fail_when_space_is_full/1,
     replicate_to_missing_provider_by_guid/1,
@@ -73,6 +74,7 @@ all() -> [
     not_synced_file_should_not_be_replicated,
     replicate_100_files_separately,
     replicate_100_files_in_one_transfer,
+    replication_should_succeed_despite_protection_flags,
     replication_should_succeed_when_there_is_enough_space_for_file,
     replication_should_fail_when_space_is_full,
     replicate_to_missing_provider_by_guid,
@@ -137,6 +139,9 @@ replicate_100_files_separately(Config) ->
 
 replicate_100_files_in_one_transfer(Config) ->
     replication_transfers_test_base:replicate_100_files_in_one_transfer(Config, rest, guid).
+
+replication_should_succeed_despite_protection_flags(Config) ->
+    replication_transfers_test_base:replication_should_succeed_despite_protection_flags(Config, rest, guid).
 
 replication_should_succeed_when_there_is_enough_space_for_file(Config) ->
     replication_transfers_test_base:replication_should_succeed_when_there_is_enough_space_for_file(Config, rest, guid).

@@ -108,9 +108,7 @@ build_create_file_transfer_setup_fun(TransferType, MemRef, SrcNode, DstNode, Use
 
         sync_files_between_nodes(TransferType, SrcNode, DstNode, OtherFiles ++ FilesToTransfer),
 
-        ExpTransfer = get_exp_transfer_stats(
-            TransferType, RootFileType, SrcNode, DstNode, length(FilesToTransfer)
-        ),
+        ExpTransfer = get_exp_transfer_stats(TransferType, SrcNode, DstNode, length(FilesToTransfer)),
 
         api_test_memory:set(MemRef, transfer_details, #{
             src_node => SrcNode,
@@ -171,9 +169,7 @@ build_create_view_transfer_setup_fun(TransferType, MemRef, SrcNode, DstNode, Use
                 ?assertViewQuery(ObjectIds, SrcNode, ?SPACE_2, ViewName,  QueryViewParams),
                 ?assertViewQuery(ObjectIds, DstNode, ?SPACE_2, ViewName,  QueryViewParams)
         end,
-        ExpTransfer = get_exp_transfer_stats(
-            TransferType, <<"dir">>, SrcNode, DstNode, FilesToTransferNum
-        ),
+        ExpTransfer = get_exp_transfer_stats(TransferType, SrcNode, DstNode, FilesToTransferNum),
 
         api_test_memory:set(MemRef, transfer_details, #{
             src_node => SrcNode,
@@ -301,74 +297,38 @@ sync_files_between_nodes(_TransferType, _SrcNode, DstNode, Files) ->
 %% and not any subdirectories.
 %% @end
 %%--------------------------------------------------------------------
-get_exp_transfer_stats(replication, <<"file">>, _SrcNode, DstNode, _FilesToTransferNum) ->
+get_exp_transfer_stats(replication, _SrcNode, DstNode, FilesToTransferNum) ->
     #{
         replication_status => completed,
         eviction_status => skipped,
         replicating_provider => transfers_test_utils:provider_id(DstNode),
         evicting_provider => undefined,
-        files_to_process => 1,
-        files_processed => 1,
-        files_replicated => 1,
-        bytes_replicated => ?BYTES_NUM,
-        files_evicted => 0
-    };
-get_exp_transfer_stats(eviction, <<"file">>, SrcNode, _DstNode, _FilesToTransferNum) ->
-    #{
-        replication_status => skipped,
-        eviction_status => completed,
-        replicating_provider => undefined,
-        evicting_provider => transfers_test_utils:provider_id(SrcNode),
-        files_to_process => 1,
-        files_processed => 1,
-        files_replicated => 0,
-        bytes_replicated => 0,
-        files_evicted => 1
-    };
-get_exp_transfer_stats(migration, <<"file">>, SrcNode, DstNode, _FilesToTransferNum) ->
-    #{
-        replication_status => completed,
-        eviction_status => completed,
-        replicating_provider => transfers_test_utils:provider_id(DstNode),
-        evicting_provider => transfers_test_utils:provider_id(SrcNode),
-        files_to_process => 2,
-        files_processed => 2,
-        files_replicated => 1,
-        bytes_replicated => ?BYTES_NUM,
-        files_evicted => 1
-    };
-get_exp_transfer_stats(replication, <<"dir">>, _SrcNode, DstNode, FilesToTransferNum) ->
-    #{
-        replication_status => completed,
-        eviction_status => skipped,
-        replicating_provider => transfers_test_utils:provider_id(DstNode),
-        evicting_provider => undefined,
-        files_to_process => 1 + FilesToTransferNum,
-        files_processed => 1 + FilesToTransferNum,
+        files_to_process => FilesToTransferNum,
+        files_processed => FilesToTransferNum,
         files_replicated => FilesToTransferNum,
         bytes_replicated => FilesToTransferNum * ?BYTES_NUM,
         files_evicted => 0
     };
-get_exp_transfer_stats(eviction, <<"dir">>, SrcNode, _DstNode, FilesToTransferNum) ->
+get_exp_transfer_stats(eviction, SrcNode, _DstNode, FilesToTransferNum) ->
     #{
         replication_status => skipped,
         eviction_status => completed,
         replicating_provider => undefined,
         evicting_provider => transfers_test_utils:provider_id(SrcNode),
-        files_to_process => 1 + FilesToTransferNum,
-        files_processed => 1 + FilesToTransferNum,
+        files_to_process => FilesToTransferNum,
+        files_processed => FilesToTransferNum,
         files_replicated => 0,
         bytes_replicated => 0,
         files_evicted => FilesToTransferNum
     };
-get_exp_transfer_stats(migration, <<"dir">>, SrcNode, DstNode, FilesToTransferNum) ->
+get_exp_transfer_stats(migration, SrcNode, DstNode, FilesToTransferNum) ->
     #{
         replication_status => completed,
         eviction_status => completed,
         replicating_provider => transfers_test_utils:provider_id(DstNode),
         evicting_provider => transfers_test_utils:provider_id(SrcNode),
-        files_to_process => 2 * (1 + FilesToTransferNum),
-        files_processed => 2 * (1 + FilesToTransferNum),
+        files_to_process => 2 * FilesToTransferNum,
+        files_processed => 2 * FilesToTransferNum,
         files_replicated => FilesToTransferNum,
         bytes_replicated => FilesToTransferNum * ?BYTES_NUM,
         files_evicted => FilesToTransferNum
