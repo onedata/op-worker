@@ -204,7 +204,7 @@ cancel_archivisation(SpaceDirCtx, ArchiveId, PreservationPolicy, UserCtx) ->
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_MANAGE_DATASETS),
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_CREATE_ARCHIVES),
     
-    archive_api:cancel_archivisation(ArchiveId, PreservationPolicy).
+    archive_api:cancel_archivisation(ArchiveId, PreservationPolicy, UserCtx).
 
 
 -spec update_archive(file_ctx:ctx(), archive:id(), archive:diff(), user_ctx:ctx()) ->

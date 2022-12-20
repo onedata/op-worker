@@ -339,7 +339,7 @@ mark_finished(ArchiveDoc, UserCtx, NestedArchiveStats) ->
     case archive:mark_creation_finished(ArchiveDoc, NestedArchiveStats) of
         ok -> 
             ok;
-        marked_to_delete ->
+        {error, marked_to_delete} ->
             {ok, ArchiveId} = archive:get_id(ArchiveDoc),
             archive_api:delete(ArchiveId, undefined)
     end.
