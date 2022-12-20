@@ -714,14 +714,6 @@ handle_multipart_upload_request(UserCtx, #list_multipart_uploads{
 }) ->
     multipart_upload_req:list(UserCtx, SpaceId, Limit, IndexToken).
 
-
--spec schedule_provider_restart_report_to_atm_workflow_execution_layer() -> ok.
-schedule_provider_restart_report_to_atm_workflow_execution_layer() ->
-    schedule(
-        ?REPORT_PROVIDER_RESTART_TO_ATM_WORKFLOW_EXECUTION_LAYER,
-        ?REPORT_PROVIDER_RESTART_TO_ATM_WORKFLOW_EXECUTION_LAYER_DELAY
-    ).
-
 -spec schedule_rerun_transfers() -> ok.
 schedule_rerun_transfers() ->
     schedule(?RERUN_TRANSFERS, ?RERUN_TRANSFERS_DELAY).

@@ -146,7 +146,9 @@ garbage_collect_atm_workflow_executions() ->
     ?info("Running workflow execution garbage collector..."),
 
     discard_expired_atm_workflow_executions(),
-    purge_discarded_atm_workflow_executions().
+    purge_discarded_atm_workflow_executions(),
+
+    ?debug("Automation workflow executions garbage collecting procedure finished succesfully.").
 
 
 %% @private
@@ -154,7 +156,11 @@ garbage_collect_atm_workflow_executions() ->
 discard_expired_atm_workflow_executions() ->
     case provider_logic:get_spaces() of
         {ok, SpaceIds} ->
-            lists:foreach(fun discard_expired_atm_workflow_executions/1, SpaceIds);
+            ?debug("Starting expired automation workflow executions discarding procedure..."),
+
+            lists:foreach(fun discard_expired_atm_workflow_executions/1, SpaceIds),
+
+            ?debug("Expired automation workflow executions discarding procedure finished succesfully.");
         {error, _} = Error ->
             ?warning(
                 "Skipping expired automation workflow executions discarding procedure due to: ~p",
@@ -166,8 +172,18 @@ discard_expired_atm_workflow_executions() ->
 %% @private
 -spec discard_expired_atm_workflow_executions(od_space:id()) -> ok.
 discard_expired_atm_workflow_executions(SpaceId) ->
+    ?debug(
+        "[Space: ~s] Starting expired automation workflow executions discarding procedure...",
+        [SpaceId]
+    ),
+
     discard_expired_atm_workflow_executions(SpaceId, ?SUSPENDED_PHASE),
-    discard_expired_atm_workflow_executions(SpaceId, ?ENDED_PHASE).
+    discard_expired_atm_workflow_executions(SpaceId, ?ENDED_PHASE),
+
+    ?debug(
+        "[Space: ~s] Expired automation workflow executions discarding procedure finished succesfully.",
+        [SpaceId]
+    ).
 
 
 %% @private
@@ -245,7 +261,11 @@ discard_atm_workflow_execution(AtmWorkflowExecutionId) ->
 %% @private
 -spec purge_discarded_atm_workflow_executions() -> ok.
 purge_discarded_atm_workflow_executions() ->
-    purge_discarded_atm_workflow_executions(<<>>).
+    ?debug("Starting discarded automation workflow executions purging procedure..."),
+
+    purge_discarded_atm_workflow_executions(<<>>),
+
+    ?debug("Discarded automation workflow executions purging procedure finished succesfully.").
 
 
 %% @private
