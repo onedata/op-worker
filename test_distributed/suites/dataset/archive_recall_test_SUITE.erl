@@ -16,6 +16,7 @@
 -include("modules/dataset/archive.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("onenv_test_utils.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_time_series.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -650,16 +651,16 @@ recall_details_test_base(Spec, TotalFileCount, TotalByteSize) ->
     },
     ?assertMatch({ok, #{
         <<"bytesCopied">> := #{
-            <<"hour">> := [{_,{_, TotalByteSize}}],
-            <<"minute">> := [{_,{_, TotalByteSize}}],
-            <<"day">> := [{_,{_, TotalByteSize}}],
-            <<"total">> := [{_,{_, TotalByteSize}}]
+            <<"hour">> := [#window_info{value = TotalByteSize}],
+            <<"minute">> := [#window_info{value = TotalByteSize}],
+            <<"day">> := [#window_info{value = TotalByteSize}],
+            <<"total">> := [#window_info{value = TotalByteSize}]
         },
         <<"filesCopied">> := #{
-            <<"hour">> := [{_,{TotalFileCount, TotalFileCount}}],
-            <<"minute">> := [{_,{TotalFileCount, TotalFileCount}}],
-            <<"day">> := [{_,{TotalFileCount, TotalFileCount}}],
-            <<"total">> := [{_,{TotalFileCount, TotalFileCount}}]
+            <<"hour">> := [#window_info{value = TotalFileCount}],
+            <<"minute">> := [#window_info{value = TotalFileCount}],
+            <<"day">> := [#window_info{value = TotalFileCount}],
+            <<"total">> := [#window_info{value = TotalFileCount}]
         },
         <<"filesFailed">> := #{
             <<"total">> := []
