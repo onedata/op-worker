@@ -993,9 +993,7 @@ propagate_to_parent(Guid, CollectionType, #cached_dir_stats{
 %% @private
 -spec acquire_parent(file_id:file_guid(), cached_dir_stats()) ->
     {file_id:file_guid() | not_found, cached_dir_stats()}.
-acquire_parent(Guid, #cached_dir_stats{
-    parent = undefined
-} = CachedDirStats) ->
+acquire_parent(Guid, CachedDirStats) ->
     UpdatedCachedDirStats = cache_parent(Guid, CachedDirStats),
     {UpdatedCachedDirStats#cached_dir_stats.parent, UpdatedCachedDirStats}.
 
