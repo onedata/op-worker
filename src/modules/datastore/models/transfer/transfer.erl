@@ -42,7 +42,8 @@
 
     replication_status/1, eviction_status/1, status/1,
 
-    mark_traverse_finished/1,
+    mark_replication_traverse_finished/1,
+    mark_eviction_traverse_finished/1,
 
     increment_files_to_process_counter/2, increment_files_processed_counter/1,
     increment_files_evicted_and_processed_counters/1,
@@ -502,10 +503,17 @@ status(#transfer{replication_status = Status}) ->
     Status.
 
 
--spec mark_traverse_finished(id()) -> {ok, doc()} | {error, term()}.
-mark_traverse_finished(TransferId) ->
+-spec mark_replication_traverse_finished(id()) -> {ok, doc()} | {error, term()}.
+mark_replication_traverse_finished(TransferId) ->
     update(TransferId, fun(Transfer) ->
-        {ok, Transfer#transfer{traverse_finished = true}}
+        {ok, Transfer#transfer{replication_traverse_finished = true}}
+    end).
+
+
+-spec mark_eviction_traverse_finished(id()) -> {ok, doc()} | {error, term()}.
+mark_eviction_traverse_finished(TransferId) ->
+    update(TransferId, fun(Transfer) ->
+        {ok, Transfer#transfer{eviction_traverse_finished = true}}
     end).
 
 

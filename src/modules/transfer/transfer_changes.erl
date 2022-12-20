@@ -157,7 +157,7 @@ handle_enqueued_replication(Doc = #document{key = TransferId, value = #transfer{
     replication_status = ?ENQUEUED_STATUS,
     replicating_provider = ReplicatingProviderId,
     cancel = Cancel,
-    traverse_finished = TraverseFinished,
+    replication_traverse_finished = TraverseFinished,
     files_processed = FilesProcessed,
     bytes_replicated = BytesReplicated,
     pid = Pid
@@ -196,7 +196,7 @@ handle_active_replication(Doc = #document{value = #transfer{
 handle_active_replication(#document{key = TransferId, value = #transfer{
     files_to_process = FilesToProcess,
     files_processed = FilesToProcess,
-    traverse_finished = true,
+    replication_traverse_finished = true,
     failed_files = 0,
     replicating_provider = ReplicatingProviderId,
     pid = Pid
@@ -208,7 +208,7 @@ handle_active_replication(#document{key = TransferId, value = #transfer{
 handle_active_replication(#document{key = TransferId, value = #transfer{
     files_to_process = FilesToProcess,
     files_processed = FilesToProcess,
-    traverse_finished = true,
+    replication_traverse_finished = true,
     replicating_provider = ReplicatingProviderId,
     pid = Pid
 }}) ->
@@ -266,7 +266,7 @@ handle_aborting_replication(#document{key = TransferId, value = #transfer{
     cancel = Cancel,
     files_to_process = FilesToProcess,
     files_processed = FilesProcessed,
-    traverse_finished = true,
+    replication_traverse_finished = true,
     replicating_provider = ReplicatingProviderId,
     pid = Pid
 }}) when FilesProcessed >= FilesToProcess ->
@@ -373,7 +373,7 @@ handle_active_replica_eviction(#document{key = TransferId, value = #transfer{
 handle_active_replica_eviction(#document{key = TransferId, value = #transfer{
     files_to_process = FilesToProcess,
     files_processed = FilesToProcess,
-    traverse_finished = true,
+    eviction_traverse_finished = true,
     failed_files = 0,
     evicting_provider = EvictingProviderId,
     pid = Pid
@@ -385,7 +385,7 @@ handle_active_replica_eviction(#document{key = TransferId, value = #transfer{
 handle_active_replica_eviction(#document{key = TransferId, value = #transfer{
     files_to_process = FilesToProcess,
     files_processed = FilesToProcess,
-    traverse_finished = true,
+    eviction_traverse_finished = true,
     evicting_provider = EvictingProviderId,
     pid = Pid
 }}) ->
@@ -424,7 +424,7 @@ handle_aborting_replica_eviction(#document{key = TransferId, value = #transfer{
     cancel = Cancel,
     files_to_process = FilesToProcess,
     files_processed = FilesProcessed,
-    traverse_finished = true,
+    eviction_traverse_finished = true,
     evicting_provider = EvictingProviderId,
     pid = Pid
 }}) when FilesProcessed >= FilesToProcess ->

@@ -63,8 +63,8 @@ get_next_batch(UserCtx, Limit, Iterator = #transfer_file_tree_iterator{
     }),
 
     try
-        #provider_response{
-            provider_response = #recursive_listing_result{
+        #fuse_response{
+            fuse_response = #recursive_listing_result{
                 entries = Entries,
                 pagination_token = NextPaginationToken
             }

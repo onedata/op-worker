@@ -329,7 +329,8 @@ get_record_struct(11) ->
         {replicating_provider, string},
         {evicting_provider, string},
         {pid, string}, %todo VFS-3657
-        {traverse_finished, boolean},  %% new field
+        {replication_traverse_finished, boolean},  %% new field
+        {eviction_traverse_finished, boolean},  %% new field
         {files_to_process, integer},
         {files_processed, integer},
         {failed_files, integer},
@@ -500,10 +501,12 @@ upgrade_record(10, {?TRANSFER_MODEL, FileUuid, SpaceId, UserId, RerunId, Path, C
     FilesEvicted, ScheduleTime, StartTime, FinishTime,
     LastUpdate, MinHist, HrHist, DyHist, MthHist, ViewName, QueryViewParams
 }) ->
+    TraverseFinished = FilesToProcess == FilesProcessed,
+
     {11, {?TRANSFER_MODEL, FileUuid, SpaceId, UserId, RerunId, Path, CallBack, Enqueued,
         Cancel, ReplicationStatus, EvictionStatus, SchedulingProvider,
-        ReplicatingProvider, EvictingProvider, Pid, FilesToProcess == FilesProcessed, FilesToProcess,
-        FilesProcessed, FailedFiles, FilesReplicated, BytesReplicated,
+        ReplicatingProvider, EvictingProvider, Pid, TraverseFinished, TraverseFinished,
+        FilesToProcess, FilesProcessed, FailedFiles, FilesReplicated, BytesReplicated,
         FilesEvicted, ScheduleTime, StartTime, FinishTime,
         LastUpdate, MinHist, HrHist, DyHist, MthHist, ViewName, QueryViewParams
     }}.

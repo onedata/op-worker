@@ -98,7 +98,7 @@ handle_enqueued(TransferId) ->
                 {ok, Transfer#transfer{
                     replication_status = ?ENQUEUED_STATUS,
                     start_time = global_clock:monotonic_timestamp_seconds(Transfer#transfer.schedule_time),
-                    traverse_finished = false,
+                    replication_traverse_finished = false,
                     pid = EncodedPid
                 }};
             Status ->

@@ -99,7 +99,7 @@ handle_active(TransferId) ->
             ?ENQUEUED_STATUS ->
                 {ok, Transfer#transfer{
                     eviction_status = ?ACTIVE_STATUS,
-                    traverse_finished = false,
+                    eviction_traverse_finished = false,
                     pid = EncodedPid
                 }};
             Status ->

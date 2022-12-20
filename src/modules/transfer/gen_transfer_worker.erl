@@ -428,8 +428,11 @@ transfer_data_insecure(UserCtx, RootFileCtx, State, _Transfer, TransferJobCtx = 
     end, Results),
 
     case ProgressMarker of
-        done ->
-            transfer:mark_traverse_finished(TransferId),
+        done when CallbackModule =:= replication_worker ->
+            transfer:mark_replication_traverse_finished(TransferId),
+            ok;
+        done when CallbackModule =:= replica_eviction_worker ->
+            transfer:mark_eviction_traverse_finished(TransferId),
             ok;
         more ->
             CallbackModule:enqueue_data_transfer(RootFileCtx, TransferJobCtx#transfer_job_ctx{
