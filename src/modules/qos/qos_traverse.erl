@@ -298,46 +298,42 @@ synchronize_file_for_entries_insecure(TaskId, #tree_traverse_slave{file_ctx = Fi
     end, QosEntries),
     ok = report_file_synchronization_started_for_entries(QosEntries, FileCtx),
     
-    {SyncResult, FileCtx2} = do_synchronize(FileCtx, TransferId),
-    
-    lists:foreach(fun(QosEntry) ->
-        qos_entry:remove_transfer_from_list(QosEntry, TransferId)
-    end, QosEntries),
-    
-    case SyncResult of
-        ok ->
+    case do_synchronize_file(FileCtx, TransferId) of
+        {ok, FileCtx2} ->
             ok = report_file_synchronized_for_entries(QosEntries, FileCtx2);
-        {ok, _} -> 
-            ok = report_file_synchronized_for_entries(QosEntries, FileCtx2);
-        {error, cancelled} -> 
+        {{error, cancelled}, _} ->
             % QoS entry was deleted, so there is no need to report to audit log
             ?debug("QoS file synchronization failed due to cancellation");
-        {error, _} = Error ->
+        {{error, _} = Error, FileCtx2} ->
             NormalizedError = normalize_error(Error),
             ok = report_file_failed_for_entries(QosEntries, FileCtx2, NormalizedError),
             ?error("Error during QoS file synchronization: ~p", [NormalizedError])
+    end,
+    
+    lists:foreach(fun(QosEntry) ->
+        qos_entry:remove_transfer_from_list(QosEntry, TransferId)
+    end, QosEntries).
+
+
+%% @private
+-spec do_synchronize_file(file_ctx:ctx(), transfer:id()) -> {ok | {error, term()}, file_ctx:ctx()}.
+do_synchronize_file(FileCtx, TransferId) ->
+    case fslogic_file_id:is_symlink_uuid(file_ctx:get_logical_uuid_const(FileCtx)) of
+        true -> {ok, FileCtx};
+        false -> do_synchronize_reg_file(FileCtx, TransferId)
     end.
 
 
 %% @private
--spec do_synchronize(file_ctx:ctx(), transfer:id()) -> {ok | {error, term()}, file_ctx:ctx()}.
-do_synchronize(FileCtx, TransferId) ->
-    {Size, FileCtx2} = file_ctx:get_file_size(FileCtx),
-    IsSymlink = fslogic_file_id:is_symlink_uuid(file_ctx:get_logical_uuid_const(FileCtx)),
+-spec do_synchronize_reg_file(file_ctx:ctx(), transfer:id()) -> {ok | {error, term()}, file_ctx:ctx()}.
+do_synchronize_reg_file(FileCtx, TransferId) ->
+    ok = ?ok_if_not_found(file_popularity:increment_open(FileCtx)),
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
+    {Size, FileCtx2} = file_ctx:get_file_size(FileCtx),
     FileBlock = #file_block{offset = 0, size = Size},
-    {case IsSymlink of
-        true ->
-            ok;
-        false ->
-            Res = replica_synchronizer:synchronize(UserCtx, FileCtx2, FileBlock,
-                false, TransferId, ?QOS_SYNCHRONIZATION_PRIORITY, ?MODULE),
-            case file_popularity:increment_open(FileCtx) of
-                ok -> ok;
-                {error, not_found} -> ok
-            end,
-            Res
-    end, FileCtx2}.
+    Res = ?extract_ok(replica_synchronizer:synchronize(UserCtx, FileCtx2, FileBlock,
+        false, TransferId, ?QOS_SYNCHRONIZATION_PRIORITY, ?MODULE)),
+    {Res, FileCtx2}.
 
 
 %% @private
