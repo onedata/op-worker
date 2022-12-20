@@ -96,29 +96,17 @@ get(AtmWorkflowExecutionId, include_discarded) ->
 
 -spec update(id(), diff()) -> {ok, doc()} | {error, term()}.
 update(AtmWorkflowExecutionId, Diff1) ->
-    Diff2 = fun
-        (#atm_workflow_execution{discarded = true}) ->
-            ?ERROR_NOT_FOUND;
-        (#atm_workflow_execution{status = PrevStatus} = AtmWorkflowExecution) ->
-            Diff1(AtmWorkflowExecution#atm_workflow_execution{prev_status = PrevStatus})
-    end,
-    datastore_model:update(?CTX, AtmWorkflowExecutionId, Diff2).
+    update(AtmWorkflowExecutionId, Diff1, ignore_discarded).
 
 
 -spec update(id(), diff(), ignore_discarded | include_discarded) ->
     {ok, doc()} | {error, term()}.
-update(AtmWorkflowExecutionId, Diff1, ignore_discarded) ->
+update(AtmWorkflowExecutionId, Diff1, Policy) ->
     Diff2 = fun
-        (#atm_workflow_execution{discarded = true}) ->
+        (#atm_workflow_execution{discarded = true}) when Policy =:= ignore_discarded ->
             ?ERROR_NOT_FOUND;
         (#atm_workflow_execution{status = PrevStatus} = AtmWorkflowExecution) ->
             Diff1(AtmWorkflowExecution#atm_workflow_execution{prev_status = PrevStatus})
-    end,
-    datastore_model:update(?CTX, AtmWorkflowExecutionId, Diff2);
-
-update(AtmWorkflowExecutionId, Diff1, include_discarded) ->
-    Diff2 = fun(#atm_workflow_execution{status = PrevStatus} = AtmWorkflowExecution) ->
-        Diff1(AtmWorkflowExecution#atm_workflow_execution{prev_status = PrevStatus})
     end,
     datastore_model:update(?CTX, AtmWorkflowExecutionId, Diff2).
 

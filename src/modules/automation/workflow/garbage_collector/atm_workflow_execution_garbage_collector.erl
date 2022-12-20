@@ -212,9 +212,10 @@ discard_expired_atm_workflow_executions(SpaceId, Phase, ListingOpts = #{start_in
         {StartIndex, []},
         AtmWorkflowExecutionBasicEntries
     ),
-    ?debug("[Space: ~s] Atm gc: discarded ~B expired workflow executions", [
-        SpaceId, length(DiscardedAtmWorkflowExecutionIds)
-    ]),
+    case length(DiscardedAtmWorkflowExecutionIds) of
+        0 -> ok;
+        Num -> ?info("[Space: ~s] Atm gc: discarded ~B expired workflow executions", [SpaceId, Num])
+    end,
 
     case IsLast of
         true ->
@@ -264,7 +265,10 @@ purge_discarded_atm_workflow_executions(StartAtmWorkflowExecutionId) ->
         {StartAtmWorkflowExecutionId, []},
         DiscardedAtmWorkflowExecutionIds
     ),
-    ?debug("Atm gc: purged ~B discarded workflow executions", [length(PurgedAtmWorkflowExecutionIds)]),
+    case length(PurgedAtmWorkflowExecutionIds) of
+        0 -> ok;
+        Num -> ?info("Atm gc: purged ~B discarded workflow executions", [Num])
+    end,
 
     case length(DiscardedAtmWorkflowExecutionIds) < ?LIST_BATCH_SIZE of
         true ->
