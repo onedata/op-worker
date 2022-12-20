@@ -501,6 +501,12 @@ upgrade_record(10, {?TRANSFER_MODEL, FileUuid, SpaceId, UserId, RerunId, Path, C
     FilesEvicted, ScheduleTime, StartTime, FinishTime,
     LastUpdate, MinHist, HrHist, DyHist, MthHist, ViewName, QueryViewParams
 }) ->
+    % It is not possible to correctly infer if replication traverse, eviction traverse or both
+    % were finished and it is only feasible to approximate it. This should not cause any problems
+    % as after provider restart transfers can only:
+    % - be ended - in such case value of these flags does not matter
+    % - be running without processes - the will be forcibly ended and as such
+    %                                  values of these fields should not matter
     TraverseFinished = FilesToProcess == FilesProcessed,
 
     {11, {?TRANSFER_MODEL, FileUuid, SpaceId, UserId, RerunId, Path, CallBack, Enqueued,

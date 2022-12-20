@@ -826,7 +826,7 @@ save_and_propagate_cached_dir_stats({Guid, CollectionType} = _CachedDirStatsKey,
         {propagate_to_parent(Guid, CollectionType, CachedDirStats), State2}
     catch
         Error:Reason:Stacktrace ->
-            ?error_stacktrace("Dir stats collector save and propagate error for collection type: ~p and guid ~p: ~p:~p",
+            ?error_stacktrace("Dir stats collector save and propagate error for collection type: ~p and guid ~p:~n~p:~p",
                 [CollectionType, Guid, Error, Reason], Stacktrace),
             {CachedDirStats, State2}
     end.
