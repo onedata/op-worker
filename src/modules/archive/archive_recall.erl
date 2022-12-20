@@ -117,7 +117,7 @@ browse_log(Id, Options) ->
     archive_recall_progress:browse_error_log(Id, Options).
 
 
--spec get_stats(id(), time_series_collection:layout(), ts_windows:list_options()) ->
+-spec get_stats(id(), time_series_collection:layout(), ts_metric:list_options()) ->
     {ok, time_series_collection:slice()} | {error, term()}.
 get_stats(Id, SliceLayout, ListWindowsOptions) ->
     archive_recall_progress:get_stats(Id, SliceLayout, ListWindowsOptions).

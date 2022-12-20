@@ -58,7 +58,7 @@
     % ended
     ?FINISHED_STATUS | ?CRASHED_STATUS | ?CANCELLED_STATUS | ?FAILED_STATUS.
 
--type run_stopping_reason() :: crash | cancel | failure | interrupt | pause.
+-type run_stopping_reason() :: crash | cancel | failure | interrupt | pause | op_worker_stopping.
 
 -type run_diff() :: fun((run()) -> {ok, run()} | {error, term()}).
 -type run() :: #atm_lane_execution_run{}.

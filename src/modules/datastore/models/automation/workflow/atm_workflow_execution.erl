@@ -15,7 +15,12 @@
 -include("modules/automation/atm_execution.hrl").
 
 %% API
--export([create/1, get/1, update/2, delete/1]).
+-export([
+    create/1,
+    get/1, get/2,
+    update/2, update/3,
+    delete/1
+]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_version/0, get_record_struct/1]).
@@ -72,13 +77,36 @@ create(AtmWorkflowExecutionDoc) ->
 
 -spec get(id()) -> {ok, doc()} | {error, term()}.
 get(AtmWorkflowExecutionId) ->
+    get(AtmWorkflowExecutionId, ignore_discarded).
+
+
+-spec get(id(), ignore_discarded | include_discarded) ->
+    {ok, doc()} | {error, term()}.
+get(AtmWorkflowExecutionId, ignore_discarded) ->
+    case get(AtmWorkflowExecutionId, include_discarded) of
+        {ok, #document{value = #atm_workflow_execution{discarded = true}}} ->
+            ?ERROR_NOT_FOUND;
+        Result ->
+            Result
+    end;
+
+get(AtmWorkflowExecutionId, include_discarded) ->
     datastore_model:get(?CTX, AtmWorkflowExecutionId).
 
 
 -spec update(id(), diff()) -> {ok, doc()} | {error, term()}.
 update(AtmWorkflowExecutionId, Diff1) ->
-    Diff2 = fun(#atm_workflow_execution{status = PrevStatus} = AtmWorkflowExecution) ->
-        Diff1(AtmWorkflowExecution#atm_workflow_execution{prev_status = PrevStatus})
+    update(AtmWorkflowExecutionId, Diff1, ignore_discarded).
+
+
+-spec update(id(), diff(), ignore_discarded | include_discarded) ->
+    {ok, doc()} | {error, term()}.
+update(AtmWorkflowExecutionId, Diff1, Policy) ->
+    Diff2 = fun
+        (#atm_workflow_execution{discarded = true}) when Policy =:= ignore_discarded ->
+            ?ERROR_NOT_FOUND;
+        (#atm_workflow_execution{status = PrevStatus} = AtmWorkflowExecution) ->
+            Diff1(AtmWorkflowExecution#atm_workflow_execution{prev_status = PrevStatus})
     end,
     datastore_model:update(?CTX, AtmWorkflowExecutionId, Diff2).
 
@@ -121,6 +149,8 @@ get_record_version() ->
 -spec get_record_struct(datastore_model:record_version()) -> datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
+        {discarded, boolean},
+
         {user_id, string},
         {space_id, string},
         {atm_inventory_id, string},

@@ -427,11 +427,12 @@ should_overwrite_stopping_reason(PrevReason, NewReason) ->
 %% @private
 -spec stopping_reason_priority(atm_lane_execution:run_stopping_reason()) ->
     non_neg_integer().
-stopping_reason_priority(pause) -> 0;
-stopping_reason_priority(interrupt) -> 1;
-stopping_reason_priority(failure) -> 2;
-stopping_reason_priority(cancel) -> 3;
-stopping_reason_priority(crash) -> 4.
+stopping_reason_priority(op_worker_stopping) -> 0;
+stopping_reason_priority(pause) -> 1;
+stopping_reason_priority(interrupt) -> 2;
+stopping_reason_priority(failure) -> 3;
+stopping_reason_priority(cancel) -> 4;
+stopping_reason_priority(crash) -> 5.
 
 
 %% @private
@@ -487,7 +488,8 @@ end_lane_run(AtmLaneRunSelector, AtmWorkflowExecution) ->
                 cancel -> ?CANCELLED_STATUS;
                 failure -> ?FAILED_STATUS;
                 interrupt -> ?INTERRUPTED_STATUS;
-                pause -> ?PAUSED_STATUS
+                pause -> ?PAUSED_STATUS;
+                op_worker_stopping -> ?PAUSED_STATUS
             end,
             {ok, Run#atm_lane_execution_run{status = StoppedStatus}};
 

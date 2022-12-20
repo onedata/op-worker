@@ -19,7 +19,7 @@
 %% API
 -export([
     start/2,
-    stop/3,
+    init_stop/3,
     resume/2,
 
     set_run_num/2,
@@ -48,13 +48,13 @@ start(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
     initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionDoc).
 
 
--spec stop(
+-spec init_stop(
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id(),
     atm_task_execution:stopping_reason()
 ) ->
     ok | no_return().
-stop(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Reason) ->
+init_stop(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Reason) ->
     case atm_task_execution_status:handle_stopping(
         AtmTaskExecutionId, Reason, get_incarnation(AtmWorkflowExecutionCtx)
     ) of
@@ -526,7 +526,7 @@ handle_uncorrelated_results_processing_error(AtmWorkflowExecutionCtx, AtmTaskExe
             log_uncorrelated_results_processing_error(
                 AtmWorkflowExecutionCtx, AtmTaskExecutionId, Error
             ),
-            {ok, _} = atm_lane_execution_handler:stop(
+            {ok, _} = atm_lane_execution_handler:init_stop(
                 {AtmLaneIndex, RunNum}, failure, AtmWorkflowExecutionCtx
             ),
             ok;

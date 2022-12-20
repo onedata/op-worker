@@ -104,6 +104,7 @@
     handle_lane_run_task_status_change/2,
     handle_stopped/1,
     handle_crashed/1,
+    handle_discard/1,
     handle_manual_lane_run_repeat/2,
     handle_resume/2
 ]).
@@ -414,6 +415,33 @@ handle_crashed(AtmWorkflowExecutionId) ->
     ensure_in_proper_phase_tree(AtmWorkflowExecutionDoc),
 
     Result.
+
+
+-spec handle_discard(atm_workflow_execution:id()) ->
+    ok | errors:error().
+handle_discard(AtmWorkflowExecutionId) ->
+    Diff = fun(Record) ->
+        case infer_phase(Record) of
+            ?SUSPENDED_PHASE -> {ok, Record#atm_workflow_execution{discarded = true}};
+            ?ENDED_PHASE -> {ok, Record#atm_workflow_execution{discarded = true}};
+            _ -> ?ERROR_ATM_WORKFLOW_EXECUTION_NOT_STOPPED
+        end
+    end,
+
+    case atm_workflow_execution:update(AtmWorkflowExecutionId, Diff, include_discarded) of
+        {ok, #document{value = AtmWorkflowExecution} = AtmWorkflowExecutionDoc} ->
+            case infer_phase(AtmWorkflowExecution) of
+                ?SUSPENDED_PHASE ->
+                    workflow_engine:cleanup_execution(AtmWorkflowExecutionId),
+                    atm_discarded_workflow_executions:add(AtmWorkflowExecutionId),
+                    atm_suspended_workflow_executions:delete(AtmWorkflowExecutionDoc);
+                ?ENDED_PHASE ->
+                    atm_discarded_workflow_executions:add(AtmWorkflowExecutionId),
+                    atm_ended_workflow_executions:delete(AtmWorkflowExecutionDoc)
+            end;
+        {error, _} = Error ->
+            Error
+    end.
 
 
 -spec handle_manual_lane_run_repeat(atm_workflow_execution:id(), lane_run_diff()) ->

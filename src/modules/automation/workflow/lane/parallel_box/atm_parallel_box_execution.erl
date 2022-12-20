@@ -20,7 +20,7 @@
 -export([
     create_all/1, create/3,
     start_all/2,
-    stop_all/3,
+    init_stop_all/3,
     resume_all/2,
     ensure_all_stopped/1,
     teardown_all/2,
@@ -122,15 +122,15 @@ start_all(AtmWorkflowExecutionCtx, AtmParallelBoxExecutions) ->
     end).
 
 
--spec stop_all(
+-spec init_stop_all(
     atm_workflow_execution_ctx:record(),
     atm_task_execution:stopping_reason(),
     [record()]
 ) ->
     ok.
-stop_all(AtmWorkflowExecutionCtx0, Reason, AtmParallelBoxExecutions) ->
+init_stop_all(AtmWorkflowExecutionCtx0, Reason, AtmParallelBoxExecutions) ->
     Callback = fun(AtmWorkflowExecutionCtx1, AtmTaskExecutionId) ->
-        catch atm_task_execution_handler:stop(AtmWorkflowExecutionCtx1, AtmTaskExecutionId, Reason)
+        catch atm_task_execution_handler:init_stop(AtmWorkflowExecutionCtx1, AtmTaskExecutionId, Reason)
     end,
     foreach_task(AtmWorkflowExecutionCtx0, AtmParallelBoxExecutions, Callback).
 

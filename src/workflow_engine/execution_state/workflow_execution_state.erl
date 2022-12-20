@@ -261,6 +261,7 @@ resume_from_snapshot(ExecutionId, EngineId, Handler, Context, InitialLaneId, Ini
 init_cancel(ExecutionId, Pred) ->
     case update(ExecutionId, fun(State) -> handle_execution_cancel_init(State, Pred) end) of
         {ok, _} -> ok;
+        ?ERROR_NOT_FOUND -> ok;
         ?WF_ERROR_PRED_NOT_MEET -> ?WF_ERROR_PRED_NOT_MEET
     end.
 
@@ -268,6 +269,7 @@ init_cancel(ExecutionId, Pred) ->
 finish_cancel(ExecutionId) ->
     case update(ExecutionId, fun handle_execution_cancel_finish/1) of
         {ok, #document{value = #workflow_execution_state{engine_id = EngineId}}} -> {ok, EngineId};
+        ?ERROR_NOT_FOUND -> ?WF_ERROR_CANCEL_NOT_INITIALIZED;
         ?WF_ERROR_CANCEL_NOT_INITIALIZED -> ?WF_ERROR_CANCEL_NOT_INITIALIZED
     end.
 
