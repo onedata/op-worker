@@ -1160,7 +1160,7 @@ fetch_workflow_execution(ProviderSelector, AtmWorkflowExecutionId) ->
 -spec build_timestamp_field_validator(non_neg_integer()) ->
     fun((non_neg_integer()) -> boolean()).
 build_timestamp_field_validator(ApproxTime) ->
-    fun(RecordedTime) -> abs(RecordedTime - ApproxTime) < 10 end.
+    fun(RecordedTime) -> abs(RecordedTime - ApproxTime) < 15 end.
 
 
 %% @private
