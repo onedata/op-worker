@@ -491,6 +491,6 @@ get_harvesters(SpaceId) ->
 
 -spec on_space_supported(od_space:id()) -> ok.
 on_space_supported(SpaceId) ->
-    ok = qos_hooks:reevaluate_all_impossible_qos_in_space(SpaceId).
+    ok = qos_logic:reevaluate_all_impossible_qos_in_space(SpaceId).
 
 

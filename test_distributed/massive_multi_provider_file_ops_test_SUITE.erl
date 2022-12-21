@@ -712,18 +712,18 @@ init_per_testcase(resynchronization_test = Case, Config) ->
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(initial_sync_repeat_test = Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_new(Worker, [dbsync_changes, dbsync_utils, qos_hooks]),
+    test_utils:mock_new(Worker, [dbsync_changes, dbsync_utils, qos_logic]),
     % Prevent changing of dbsync synchronization mode by QoS hooks
-    test_utils:mock_expect(Worker, qos_hooks, handle_qos_entry_change, fun(_, _) ->
+    test_utils:mock_expect(Worker, qos_logic, handle_qos_entry_change, fun(_, _) ->
         ok
     end),
-    test_utils:mock_expect(Worker, qos_hooks, invalidate_cache_and_reconcile, fun(_) ->
+    test_utils:mock_expect(Worker, qos_logic, invalidate_cache_and_reconcile, fun(_) ->
         ok
     end),
-    test_utils:mock_expect(Worker, qos_hooks, reconcile_qos, fun(_, _) ->
+    test_utils:mock_expect(Worker, qos_logic, reconcile_qos, fun(_, _) ->
         ok
     end),
-    test_utils:mock_expect(Worker, qos_hooks, reconcile_qos, fun(_) ->
+    test_utils:mock_expect(Worker, qos_logic, reconcile_qos, fun(_) ->
         ok
     end),
     test_utils:set_env(Worker, ?APP_NAME, max_file_meta_posthooks, 1),
@@ -755,7 +755,7 @@ end_per_testcase(resynchronization_test = Case, Config) ->
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(initial_sync_repeat_test = Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Worker, [dbsync_changes, dbsync_utils, qos_hooks]),
+    test_utils:mock_unload(Worker, [dbsync_changes, dbsync_utils, qos_logic]),
     ?assertEqual(ok, rpc:call(Worker, application, unset_env, [?APP_NAME, max_file_meta_posthooks])),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(_Case, Config) ->

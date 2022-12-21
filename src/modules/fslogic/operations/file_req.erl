@@ -423,8 +423,8 @@ make_link_insecure(UserCtx, TargetFileCtx, TargetParentFileCtx, Name) ->
                     include_optional_attrs => [size, replication_status]
                 }),
                 ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, FileAttr, [user_ctx:get_session_id(UserCtx)]),
-                ok = qos_hooks:invalidate_cache_and_reconcile(FileCtx),
                 dir_size_stats:report_file_created(?LINK_TYPE, file_ctx:get_logical_guid_const(TargetParentFileCtx3)),
+                ok = qos_logic:invalidate_cache_and_reconcile(FileCtx),
                 Ans#fuse_response{fuse_response = FileAttr}
             catch
                 Error:Reason ->

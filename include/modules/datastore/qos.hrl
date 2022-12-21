@@ -50,7 +50,7 @@
 
 % Request to remote providers to start QoS traverse.
 % This record is used as an element of datastore document (qos_entry).
-% Traverse is started in response to change of qos_entry document. (see qos_hooks.erl)
+% Traverse is started in response to change of qos_entry document. (see qos_logic.erl)
 -record(qos_traverse_req, {
     % uuid of file that travers should start from
     % TODO: This field will be necessary after resolving VFS-5567. For now all

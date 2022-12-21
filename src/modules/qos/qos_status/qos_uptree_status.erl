@@ -6,11 +6,11 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Module responsible for managing QoS status during initial traverse.
+%%% Module responsible for managing QoS status uptree (bottom up).
 %%% For more details consult `qos_status` module doc.
 %%% @end
 %%%-------------------------------------------------------------------
--module(qos_traverse_status).
+-module(qos_uptree_status).
 -author("Michal Stanisz").
 
 -include("modules/datastore/qos.hrl").
@@ -42,19 +42,10 @@
 %%%===================================================================
 
 -spec check(file_ctx:ctx(), qos_entry:doc()) -> boolean().
-check(FileCtx, #document{key = QosEntryId} = QosEntryDoc) ->
+check(FileCtx, QosEntryDoc) ->
     {ok, AllTraverseReqs} = qos_entry:get_traverse_reqs(QosEntryDoc),
-    AllTraverseIds = qos_traverse_req:get_traverse_ids(AllTraverseReqs),
-    NotFinishedTraverseIds = lists:filter(fun(TraverseId) ->
-        (not is_traverse_finished_for_file(TraverseId, FileCtx, QosEntryDoc))
-    end, AllTraverseIds),
-    
-    % fetch traverse list again to secure against possible race
-    % between start of status check and traverse finish
-    {ok, QosEntryDoc1} = qos_entry:get(QosEntryId),
-    {ok, TraverseReqsAfter} = qos_entry:get_traverse_reqs(QosEntryDoc1),
-    TraverseIdsAfter = qos_traverse_req:get_traverse_ids(TraverseReqsAfter),
-    [] == lists_utils:intersect(TraverseIdsAfter, NotFinishedTraverseIds).
+    qos_traverse_req:are_all_started(AllTraverseReqs) andalso
+        check_traverses(FileCtx, QosEntryDoc).
 
 
 -spec report_started(traverse:id(), file_ctx:ctx()) -> {ok, file_ctx:ctx()}.
@@ -125,12 +116,10 @@ report_finished_for_file(TraverseId, FileCtx, OriginalRootParentCtx) ->
 
 
 -spec report_file_deleted(file_ctx:ctx(), qos_entry:doc(), file_ctx:ctx() | undefined) -> ok.
-report_file_deleted(FileCtx, QosEntryDoc, OriginalRootParentCtx) ->
-    {ok, TraverseReqs} = qos_entry:get_traverse_reqs(QosEntryDoc),
-    {LocalTraverseIds, _} = qos_traverse_req:split_local_and_remote(TraverseReqs),
+report_file_deleted(FileCtx, #document{key = QosEntryId}, OriginalRootParentCtx) ->
     {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx),
 
-    lists:foreach(fun(TraverseId) ->
+    qos_entry:fold_traverses(QosEntryId, fun({TraverseId, _}, _Acc) ->
         case IsDir of
             true ->
                 {ParentFileCtx, _} = file_tree:get_original_parent(FileCtx1, OriginalRootParentCtx),
@@ -139,20 +128,26 @@ report_file_deleted(FileCtx, QosEntryDoc, OriginalRootParentCtx) ->
             false ->
                 ok = report_finished_for_file(TraverseId, FileCtx, OriginalRootParentCtx)
         end
-    end, LocalTraverseIds).
+    end, ok).
 
 %%%===================================================================
 %%% Functions concerning QoS status check during traverse
 %%%===================================================================
 
+%% @private
+-spec check_traverses(file_ctx:ctx(), qos_entry:doc()) -> boolean().
+check_traverses(FileCtx, #document{key = QosEntryId}) ->
+    qos_entry:fold_traverses(QosEntryId, fun({TraverseId, TraverseRootUuid}, Acc) ->
+        Acc andalso is_traverse_finished_for_file(TraverseId, FileCtx, TraverseRootUuid)
+    end, true).
+
 
 %% @private
--spec is_traverse_finished_for_file(traverse:id(), file_ctx:ctx(), qos_entry:doc()) -> boolean().
-is_traverse_finished_for_file(TraverseId, FileCtx, QosEntryDoc) ->
-    {ok, QosRootFileUuid} = qos_entry:get_file_uuid(QosEntryDoc),
-    {ok, SpaceId} = qos_entry:get_space_id(QosEntryDoc),
-    QosRootFileCtx = file_ctx:new_by_uuid(QosRootFileUuid, SpaceId),
-    {QosRootFileUuidPath, _} = file_ctx:get_uuid_based_path(QosRootFileCtx),
+-spec is_traverse_finished_for_file(traverse:id(), file_ctx:ctx(), file_meta:uuid()) -> boolean().
+is_traverse_finished_for_file(TraverseId, FileCtx, TraverseRootFileUuid) ->
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    TraverseRootFileCtx = file_ctx:new_by_uuid(TraverseRootFileUuid, SpaceId),
+    {TraverseRootFileUuidPath, _} = file_ctx:get_uuid_based_path(TraverseRootFileCtx),
     {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx),
     
     {ok, References} = file_ctx:list_references_const(FileCtx1),
@@ -162,32 +157,32 @@ is_traverse_finished_for_file(TraverseId, FileCtx, QosEntryDoc) ->
             (FileUuid) -> file_ctx:new_by_uuid(FileUuid, SpaceId)
         end,
     References),
-    ReferencesInQosSubtree = lists:filtermap(fun(InternalFileCtx) ->
+    ReferencesInTraverseSubtree = lists:filtermap(fun(InternalFileCtx) ->
         {FileUuidPath, InternalFileCtx1} = file_ctx:get_uuid_based_path(InternalFileCtx),
-        case string:prefix(FileUuidPath, QosRootFileUuidPath) of
+        case string:prefix(FileUuidPath, TraverseRootFileUuidPath) of
             nomatch -> false;
             _ -> {true, InternalFileCtx1}
         end
     end, ReferencesFileCtx),
-        
-    lists:any(fun(InternalFileCtx) ->
-            is_traverse_finished_for_file_in_qos_subtree(TraverseId, InternalFileCtx, QosRootFileUuid, IsDir)
-    end, ReferencesInQosSubtree).
+    
+    ReferencesInTraverseSubtree == [] orelse lists:any(fun(InternalFileCtx) ->
+        is_traverse_finished_for_file_in_qos_subtree(TraverseId, InternalFileCtx, TraverseRootFileUuid, IsDir)
+    end, ReferencesInTraverseSubtree).
 
 
 %% @private
 -spec is_traverse_finished_for_file_in_qos_subtree(traverse:id(), file_ctx:ctx(), file_meta:uuid(), boolean()) -> 
     boolean().
-is_traverse_finished_for_file_in_qos_subtree(TraverseId, FileCtx, QosRootFileUuid, _IsDir = true) ->
+is_traverse_finished_for_file_in_qos_subtree(TraverseId, FileCtx, TraverseRootFileUuid, _IsDir = true) ->
     InodeUuid = file_ctx:get_referenced_uuid_const(FileCtx),
     % qos_status document exists only for directories, so it does not matter whether referenced or logical uuid is used
     case qos_status_model:get(TraverseId, InodeUuid) of
         {ok, _} ->
             false;
         ?ERROR_NOT_FOUND ->
-            has_traverse_link(TraverseId, FileCtx) orelse is_parent_fulfilled(TraverseId, FileCtx, InodeUuid, QosRootFileUuid)
+            has_traverse_link(TraverseId, FileCtx) orelse is_parent_fulfilled(TraverseId, FileCtx, InodeUuid, TraverseRootFileUuid)
     end;
-is_traverse_finished_for_file_in_qos_subtree(TraverseId, FileCtx, QosRootFileUuid, _IsDir = false) ->
+is_traverse_finished_for_file_in_qos_subtree(TraverseId, FileCtx, TraverseRootFileUuid, _IsDir = false) ->
     {ParentFileCtx, FileCtx1} = file_tree:get_parent(FileCtx, undefined),
     {FileName, FileCtx2} = file_ctx:get_aliased_name(FileCtx1, undefined),
     ParentUuid = file_ctx:get_logical_uuid_const(ParentFileCtx),
@@ -202,21 +197,21 @@ is_traverse_finished_for_file_in_qos_subtree(TraverseId, FileCtx, QosRootFileUui
             FileName =< PreviousBatchLastFilename orelse
                 (not (FileName > LastFilename) and not lists:member(LogicalUuid, FilesList));
         ?ERROR_NOT_FOUND ->
-            is_parent_fulfilled(TraverseId, FileCtx2, LogicalUuid, QosRootFileUuid)
+            is_parent_fulfilled(TraverseId, FileCtx2, LogicalUuid, TraverseRootFileUuid)
     end.
 
 
 %% @private
 -spec is_parent_fulfilled(traverse:id(), file_ctx:ctx(), Uuid :: file_meta:uuid(),
     QosRootFileUuid :: file_meta:uuid()) -> boolean().
-is_parent_fulfilled(_TraverseId, _FileCtx, Uuid, QosRootFileUuid) when Uuid == QosRootFileUuid ->
+is_parent_fulfilled(_TraverseId, _FileCtx, Uuid, TraverseRootFileUuid) when Uuid == TraverseRootFileUuid ->
     false;
-is_parent_fulfilled(TraverseId, FileCtx, _Uuid, QosRootFileUuid) ->
+is_parent_fulfilled(TraverseId, FileCtx, _Uuid, TraverseRootFileUuid) ->
     {ParentFileCtx, _FileCtx1} = file_tree:get_parent(FileCtx, undefined),
     ParentUuid = file_ctx:get_logical_uuid_const(ParentFileCtx),
     has_traverse_link(TraverseId, ParentFileCtx)
         orelse (not has_qos_status_doc(TraverseId, ParentUuid)
-        andalso is_parent_fulfilled(TraverseId, ParentFileCtx, ParentUuid, QosRootFileUuid)).
+        andalso is_parent_fulfilled(TraverseId, ParentFileCtx, ParentUuid, TraverseRootFileUuid)).
 
 
 %% @private

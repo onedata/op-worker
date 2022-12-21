@@ -1380,14 +1380,14 @@ qos_status_during_reconciliation_with_dir_deletion_test_base(NumOfFiles, FileTyp
     
     lists:foreach(fun(Provider) ->
         lists:foreach(fun(Node) ->
-        ct:print("Deleting node: ~p", [Node]), % log current deleting node for greater verbosity during failures
-        {ok, DirGuid} = lfm_proxy:mkdir(P1Node, ?SESS_ID(Provider1), Dir1, generator:gen_name(), ?DEFAULT_DIR_PERMS),
-        Guids = create_files_and_write(P1Node, ?SESS_ID(Provider1), DirGuid, TypeSpec, NumOfFiles),
-        ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_nodes([Dir1, DirGuid | Guids], QosList, ?PENDING_QOS_STATUS), ?ATTEMPTS),
-        ok = lfm_proxy:rm_recursive(Node, ?SESS_ID(Provider), ?FILE_REF(DirGuid)),
-        ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_nodes([Dir1], QosList, ?FULFILLED_QOS_STATUS), ?ATTEMPTS),
-        % finish transfer to unlock waiting slave job process
-        ok = qos_tests_utils:finish_transfers(Guids, non_strict) % all hardlinks are to the same file so only one transfer started
+            ct:print("Deleting node: ~p", [Node]), % log current deleting node for greater verbosity during failures
+            {ok, DirGuid} = lfm_proxy:mkdir(P1Node, ?SESS_ID(Provider1), Dir1, generator:gen_name(), ?DEFAULT_DIR_PERMS),
+            Guids = create_files_and_write(P1Node, ?SESS_ID(Provider1), DirGuid, TypeSpec, NumOfFiles),
+            ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_nodes([Dir1, DirGuid | Guids], QosList, ?PENDING_QOS_STATUS), ?ATTEMPTS),
+            ok = lfm_proxy:rm_recursive(Node, ?SESS_ID(Provider), ?FILE_REF(DirGuid)),
+            ?assertEqual([], qos_tests_utils:gather_not_matching_statuses_on_all_nodes([Dir1], QosList, ?FULFILLED_QOS_STATUS), ?ATTEMPTS),
+            % finish transfer to unlock waiting slave job process
+            ok = qos_tests_utils:finish_transfers(Guids, non_strict) % all hardlinks are to the same file so only one transfer started
         end, oct_background:get_provider_nodes(Provider))
     end, oct_background:get_provider_ids()).
 
@@ -1733,7 +1733,7 @@ resolve_path(SpaceName, Name, Files) ->
 %% @private
 is_failed_files_list_empty(Providers, SpaceId) ->
     lists:all(fun(Provider) ->
-        {ok, []} == get_qos_failed_files_list(Provider, SpaceId)
+        [] == get_qos_failed_files_list(Provider, SpaceId)
     end, Providers).
 
 
@@ -1741,21 +1741,21 @@ is_failed_files_list_empty(Providers, SpaceId) ->
 is_file_in_failed_files_list(Provider, FileGuid) ->
     Uuid = file_id:guid_to_uuid(FileGuid),
     SpaceId = file_id:guid_to_space_id(FileGuid),
-    {ok, List} = get_qos_failed_files_list(Provider, SpaceId),
-    lists:member(Uuid, List).
+    lists:member(Uuid, get_qos_failed_files_list(Provider, SpaceId)).
 
 
 %% @private
 get_qos_failed_files_list(Provider, SpaceId) ->
     Node = oct_background:get_random_provider_node(Provider),
-    opw_test_rpc:call(Node, datastore_model, fold_links, [
-        #{model => qos_entry}, 
-        <<"failed_files_qos_key_", SpaceId/binary>>, 
+    {ok, AccumulatedLinks} = opw_test_rpc:call(Node, datastore_model, fold_links, [
+        #{model => qos_entry},
+        <<"failed_files_qos_key_", SpaceId/binary>>,
         Provider,
-        fun qos_entry:accumulate_link_names/2,
-        [], 
+        fun qos_entry:accumulate_links/2,
+        [],
         #{}
-    ]).
+    ]),
+    lists:map(fun({Name, _Target}) -> Name end, AccumulatedLinks).
 
 
 %% @private

@@ -116,7 +116,7 @@ change_replicated_internal(SpaceId, QosEntry = #document{
     value = #qos_entry{}
 }) ->
     ?debug("change_replicated_internal: qos_entry ~p", [QosEntryId]),
-    qos_hooks:handle_qos_entry_change(SpaceId, QosEntry);
+    qos_logic:handle_qos_entry_change(SpaceId, QosEntry);
 change_replicated_internal(SpaceId, ArchiveRecallDetails = #document{
     key = RecallId,
     value = #archive_recall_details{}
@@ -173,7 +173,7 @@ file_meta_change_replicated(SpaceId, #document{
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId),
     {ok, FileCtx2} = sd_utils:chmod(FileCtx, CurrentMode),
     ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx2, []),
-    ok = file_meta_posthooks:execute_hooks(FileUuid);
+    ok = file_meta_posthooks:execute_hooks(FileUuid, doc);
 file_meta_change_replicated(SpaceId, #document{
     key = FileUuid,
     deleted = false,
@@ -185,7 +185,7 @@ file_meta_change_replicated(SpaceId, #document{
             {ok, MergedDoc} = file_meta_hardlinks:merge_link_and_file_doc(LinkDoc, ReferencedDoc),
             FileCtx = file_ctx:new_by_doc(MergedDoc, SpaceId),
             % TODO VFS-7914 - Do not invalidate cache, when it is not needed
-            ok = qos_hooks:invalidate_cache_and_reconcile(FileCtx),
+            ok = qos_logic:invalidate_cache_and_reconcile(FileCtx),
             ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []);
         Error ->
             % TODO VFS-7531 - Handle dbsync events for hardlinks when referenced file_meta is missing
@@ -201,7 +201,7 @@ file_meta_change_replicated(SpaceId, #document{
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId),
     {ok, FileCtx2} = sd_utils:chmod(FileCtx, CurrentMode),
     ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx2, []),
-    ok = file_meta_posthooks:execute_hooks(FileUuid).
+    ok = file_meta_posthooks:execute_hooks(FileUuid, doc).
 
 
 %% @private
@@ -213,7 +213,7 @@ link_replicated(file_meta, LinkKey) ->
             % Legacy keys are not supported as it is impossible to retrieve GenericKey
             ok;
         GenericKey ->
-            file_meta_posthooks:execute_hooks(GenericKey)
+            file_meta_posthooks:execute_hooks(GenericKey, link)
     end;
 link_replicated(_Model, _LinkKey) ->
     ok.

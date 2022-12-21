@@ -661,7 +661,7 @@ remove_local_associated_documents(FileCtx, StorageFileDeleted, StorageFileId) ->
     FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
     FileGuid = file_ctx:get_logical_guid_const(FileCtx),
     StorageFileDeleted andalso maybe_delete_storage_sync_info(FileCtx, StorageFileId),
-    ok = file_meta_posthooks:delete(FileUuid),
+    ok = file_meta_posthooks:cleanup(FileUuid),
     ok = file_qos:cleanup_on_no_reference(FileCtx),
     ok = archive_recall:delete_local_docs(FileUuid),
     ok = file_popularity:delete(FileUuid),

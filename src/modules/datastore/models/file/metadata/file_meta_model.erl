@@ -542,7 +542,7 @@ invalidate_effective_caches_if_moved(
             spawn(fun() -> 
                 paths_cache:invalidate_on_all_nodes(SpaceId),
                 archive_recall_cache:invalidate_on_all_nodes(SpaceId),
-                file_meta_links_sync_status_cache:invalidate_on_all_nodes(SpaceId)
+                file_meta_sync_status_cache:invalidate_on_all_nodes(SpaceId)
             end),
             ok;
         false ->
