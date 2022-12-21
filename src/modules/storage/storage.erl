@@ -440,7 +440,7 @@ support_space(StorageId, SerializedToken, SupportSize, SupportParameters) ->
         ok ->
             case storage_logic:support_space(StorageId, SerializedToken, SupportSize, SupportParameters) of
                 {ok, SpaceId} ->
-                    on_space_supported(SpaceId, StorageId),
+                    on_space_supported(SpaceId, StorageId, SupportParameters),
                     {ok, SpaceId};
                 {error, _} = Error ->
                     Error
@@ -517,11 +517,18 @@ on_storage_created(StorageId) ->
 
 
 %% @private
--spec on_space_supported(od_space:id(), id()) -> ok.
-on_space_supported(SpaceId, StorageId) ->
+-spec on_space_supported(od_space:id(), id(), support_parameters:record()) -> ok.
+on_space_supported(SpaceId, StorageId, SupportParameters) ->
     % remove possible remnants of previous support 
     % (when space was unsupported in Onezone without provider knowledge)
     space_unsupport:cleanup_local_documents(SpaceId, StorageId),
+    case SupportParameters of
+        #support_parameters{dir_stats_service_enabled = true} ->
+            % NOTE: MUST be called before storage import is started
+            dir_stats_service_state:enable_for_new_support(SpaceId);
+        _ ->
+            ok
+    end,
     space_logic:on_space_supported(SpaceId).
 
 
