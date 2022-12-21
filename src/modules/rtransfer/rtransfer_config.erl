@@ -188,7 +188,7 @@ auth_request(TransferData, ProviderId) ->
 
         FileCtx = file_ctx:new_by_guid(FileGuid),
         {Loc, _} = file_ctx:get_local_file_location_doc(FileCtx, false),
-        #document{value =
+        #document{deleted = false, value =
                       #file_location{storage_id = StorageId,
                                      file_id = FileId}} = Loc,
 
