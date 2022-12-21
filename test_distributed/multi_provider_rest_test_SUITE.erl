@@ -38,6 +38,7 @@
 
 -export([
     lookup_file_objectid/1,
+    lookup_file_objectid_duplicated_space_name/1,
     transfers_should_be_ordered_by_timestamps/1,
     metric_get/1,
     list_spaces/1,
@@ -55,6 +56,7 @@
 all() ->
     ?ALL([
         lookup_file_objectid,
+        lookup_file_objectid_duplicated_space_name,
         transfers_should_be_ordered_by_timestamps,
         % @TODO VFS-8297 currently disabled
         % metric_get,
@@ -134,6 +136,22 @@ lookup_file_objectid(Config) ->
     )),
     #{<<"fileId">> := ObjectId} = json_utils:decode(Response),
     ?assertMatch({ok, ObjectId}, file_id:guid_to_objectid(FileGuid)).
+
+
+lookup_file_objectid_duplicated_space_name(Config) ->
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    Fun = fun(SpaceName) ->
+        {ok, 200, _, Response} = ?assertMatch({ok, 200, _, _}, rest_test_utils:request(
+            WorkerP1, <<"lookup-file-id/", SpaceName/binary>>, post,
+            ?USER_AUTH_HEADERS(Config, <<"user3">>, [{?HDR_CONTENT_TYPE, <<"application/json">>}]), []
+        )),
+        #{<<"fileId">> := ObjectId} = json_utils:decode(Response),
+        ObjectId
+    end,
+    {ok, Space1ObjectId} = file_id:guid_to_objectid(fslogic_file_id:spaceid_to_space_dir_guid(<<"space_duplicated1">>)),
+    {ok, Space2ObjectId} = file_id:guid_to_objectid(fslogic_file_id:spaceid_to_space_dir_guid(<<"space_duplicated2">>)),
+    ?assertMatch(Space1ObjectId, Fun(<<"space_duplicated@space_duplicated1">>)),
+    ?assertMatch(Space2ObjectId, Fun(<<"space_duplicated@space_duplicated2">>)).
 
 
 transfers_should_be_ordered_by_timestamps(Config) ->

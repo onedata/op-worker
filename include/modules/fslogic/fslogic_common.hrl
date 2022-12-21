@@ -109,6 +109,6 @@
 ).
 
 % Separator between space name and its id added in case of duplicated name.
--define(SPACE_NAME_ID_SEPARATOR, <<"#">>).
+-define(SPACE_NAME_ID_SEPARATOR, <<"@">>).
 
 -endif.
