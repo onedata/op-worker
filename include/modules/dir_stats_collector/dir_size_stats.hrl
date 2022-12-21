@@ -25,6 +25,8 @@
 
 -define(REG_FILE_AND_LINK_COUNT, <<"reg_file_and_link_count">>).
 -define(DIR_COUNT, <<"dir_count">>).
+-define(FILE_ERRORS_COUNT, <<"file_errors_count">>).
+-define(DIR_ERRORS_COUNT, <<"dir_errors_count">>).
 -define(TOTAL_SIZE, <<"total_size">>).
 -define(SIZE_ON_STORAGE(StorageId), <<?SIZE_ON_STORAGE_TS_PREFIX_STR, StorageId/binary>>).
 
@@ -78,6 +80,18 @@
     #time_series_schema{
         name_generator_type = exact,
         name_generator = ?DIR_COUNT,
+        unit = none,
+        metrics = ?DIR_SIZE_STATS_METRICS
+    },
+    #time_series_schema{
+        name_generator_type = exact,
+        name_generator = ?FILE_ERRORS_COUNT,
+        unit = none,
+        metrics = ?DIR_SIZE_STATS_METRICS
+    },
+    #time_series_schema{
+        name_generator_type = exact,
+        name_generator = ?DIR_ERRORS_COUNT,
         unit = none,
         metrics = ?DIR_SIZE_STATS_METRICS
     },

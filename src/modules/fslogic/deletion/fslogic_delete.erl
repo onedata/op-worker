@@ -666,7 +666,7 @@ remove_local_associated_documents(FileCtx, StorageFileDeleted, StorageFileId) ->
     ok = archive_recall:delete_local_docs(FileUuid),
     ok = file_popularity:delete(FileUuid),
     ok = dir_size_stats:delete_stats(FileGuid),
-    ok = dir_update_time_stats:delete_stats(FileGuid).
+    ok = dir_stats_collector_metadata:delete(FileGuid).
 
 
 %%--------------------------------------------------------------------
@@ -702,8 +702,9 @@ delete_location(FileCtx) ->
                 {error, not_found} -> ok
             end;
         false ->
-            fslogic_location_cache:force_flush(FileUuid),
-            ok = fslogic_location_cache:delete_local_location(FileUuid)
+            %  NOTE: we are inside replica_synchronizer so direct operations on cache are possible
+            fslogic_cache:flush(),
+            ok = fslogic_cache:delete_doc(file_location:local_id(FileUuid))
     end,
     FileCtx2.
 

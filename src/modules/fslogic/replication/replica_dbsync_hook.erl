@@ -77,6 +77,8 @@ on_file_location_change(FileCtx, ChangedLocationDoc = #document{
                                 ok = fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx4, true, []),
                                 ok = qos_logic:reconcile_qos(FileCtx4)
                         end;
+                    {#document{deleted = true}, _FileCtx4} ->
+                        ok;
                     {LocalLocation, FileCtx4} ->
                         update_local_location_replica(FileCtx4, LocalLocation, ChangedLocationDoc)
                 end;

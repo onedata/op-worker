@@ -1233,7 +1233,9 @@ gather_historical_dir_size_stats_layout_test(Config) ->
         ?REG_FILE_AND_LINK_COUNT => Metrics,
         ?TOTAL_SIZE => Metrics,
         ?SIZE_ON_STORAGE(P1StorageId) => Metrics,
-        ?SIZE_ON_STORAGE(P2StorageId) => Metrics
+        ?SIZE_ON_STORAGE(P2StorageId) => Metrics,
+        ?FILE_ERRORS_COUNT => Metrics,
+        ?DIR_ERRORS_COUNT => Metrics
     },
     await_dir_stats_collecting_status(krakow, SpaceId, enabled),
     await_dir_stats_collecting_status(paris, SpaceId, enabled),

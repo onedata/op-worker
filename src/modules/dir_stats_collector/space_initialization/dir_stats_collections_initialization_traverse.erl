@@ -90,6 +90,9 @@ do_master_job(#tree_traverse{
     file_ctx = FileCtx
 } = Job, MasterJobExtendedArgs) ->
     ok = dir_stats_collector:initialize_collections(file_ctx:get_logical_guid_const(FileCtx)),
+    receive
+        initialization_finished -> ok
+    end,
     do_tree_traverse_master_job(Job, MasterJobExtendedArgs);
 do_master_job(Job, MasterJobExtendedArgs) ->
     do_tree_traverse_master_job(Job, MasterJobExtendedArgs).

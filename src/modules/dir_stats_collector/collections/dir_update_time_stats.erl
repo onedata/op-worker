@@ -24,21 +24,24 @@
 
 
 %% API
--export([report_update_of_dir/2, report_update_of_nearest_dir/2, get_update_time/1, delete_stats/1]).
+-export([report_update_of_dir/2, report_update_of_nearest_dir/2, get_update_time/1]).
 
 %% dir_stats_collection_behaviour callbacks
 -export([acquire/1, consolidate/3, on_collection_move/2, save/3, delete/1, init_dir/1, init_child/1]).
 
 %% datastore_model callbacks
--export([get_ctx/0, get_record_struct/1]).
+-export([get_record_struct/1]).
 
 
--type ctx() :: datastore:ctx().
-
-
--define(CTX, #{
-    model => ?MODULE
+-record(dir_update_time_stats, {
+    time = 0 :: times:time(),
+    incarnation = 0 :: non_neg_integer()
 }).
+
+
+-type stats() :: #dir_update_time_stats{}.
+-export_type([stats/0]).
+
 
 -define(STAT_NAME, update_time).
 
@@ -71,24 +74,19 @@ get_update_time(Guid) ->
     end.
 
 
--spec delete_stats(file_id:file_guid()) -> ok.
-delete_stats(Guid) ->
-    dir_stats_collector:delete_stats(Guid, ?MODULE).
-
-
 %%%===================================================================
 %%% dir_stats_collection_behaviour callbacks
 %%%===================================================================
 
 -spec acquire(file_id:file_guid()) -> {dir_stats_collection:collection(), non_neg_integer()}.
 acquire(Guid) ->
-    case datastore_model:get(?CTX, file_id:guid_to_uuid(Guid)) of
-        {ok, #document{value = #dir_update_time_stats{
+    case dir_stats_collector_metadata:get_dir_update_time_stats(Guid) of
+        #dir_update_time_stats{
             time = Time,
             incarnation = Incarnation
-        }}} ->
+        } ->
             {#{?STAT_NAME => Time}, Incarnation};
-        ?ERROR_NOT_FOUND ->
+        undefined ->
             {#{?STAT_NAME => 0}, 0}
     end.
 
@@ -116,18 +114,18 @@ save(Guid, #{?STAT_NAME := Time}, Incarnation) ->
         incarnation = CurrentIncarnation
     } = Record) ->
         NewIncarnation = utils:ensure_defined(Incarnation, current, CurrentIncarnation),
-        {ok, Record#dir_update_time_stats{
+        Record#dir_update_time_stats{
             time = Time,
             incarnation = NewIncarnation
-        }}
+        }
     end,
 
-    ok = ?extract_ok(datastore_model:update(?CTX, file_id:guid_to_uuid(Guid), Diff, Default)).
+    ok = ?extract_ok(dir_stats_collector_metadata:update_dir_update_time_stats(Guid, Diff, Default)).
 
 
 -spec delete(file_id:file_guid()) -> ok.
 delete(Guid) ->
-    ok = datastore_model:delete(?CTX, file_id:guid_to_uuid(Guid)).
+    dir_stats_collector_metadata:delete_dir_update_time_stats(Guid).
 
 
 -spec init_dir(file_id:file_guid()) -> dir_stats_collection:collection().
@@ -144,11 +142,15 @@ init_child(Guid) ->
 %%% datastore_model callbacks
 %%%===================================================================
 
--spec get_ctx() -> ctx().
-get_ctx() ->
-    ?CTX.
-
-
+%% @doc
+%% Definition of record struct used by datastore.
+%%
+%% Warning: this module is not datastore model. dir_update_time_stats
+%% are stored inside dir_stats_collector_metadata datastore model. Creation of
+%% dir_update_time_stats record struct's new version requires creation
+%% of dir_stats_collector_metadata datastore model record struct's new version.
+%% @end
+%%--------------------------------------------------------------------
 -spec get_record_struct(datastore_model:record_version()) -> datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
