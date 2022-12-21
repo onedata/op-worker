@@ -39,7 +39,7 @@
     on_write_callback => fun(_BytesCopied) ->
         %% @TODO VFS-8937 - Update archive bytes copied continuously
         case archive:get(ArchiveId) of
-            {ok, #document{value = #archive{state = ?ARCHIVE_CANCELLING}}} -> abort;
+            {ok, #document{value = #archive{state = ?ARCHIVE_CANCELLING(_)}}} -> abort;
             _ -> continue
         end
     end
@@ -328,7 +328,7 @@ finalize_archive(ArchiveCtx, UserCtx) ->
 mark_finished(ArchiveDoc, UserCtx, NestedArchiveStats) ->
     case is_bagit(ArchiveDoc) of
         true ->
-            case archive_traverses_common:is_cancelled(ArchiveDoc) of
+            case archive_traverses_common:is_cancelling(ArchiveDoc) of
                 true -> ok;
                 false ->
                     {ok, ArchiveRootDirCtx} = archive:get_root_dir_ctx(ArchiveDoc),
@@ -336,7 +336,13 @@ mark_finished(ArchiveDoc, UserCtx, NestedArchiveStats) ->
             end;
         false -> ok
     end,
-    ok = archive:mark_creation_finished(ArchiveDoc, NestedArchiveStats).
+    case archive:mark_creation_finished(ArchiveDoc, NestedArchiveStats) of
+        ok -> 
+            ok;
+        {error, marked_to_delete} ->
+            {ok, ArchiveId} = archive:get_id(ArchiveDoc),
+            archive_api:delete(ArchiveId, undefined)
+    end.
 
 
 -spec do_archive(file_ctx:ctx(), file_meta:path(), ctx(), ctx(),

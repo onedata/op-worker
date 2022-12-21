@@ -63,6 +63,11 @@
     nested_cancel_verification_cancel_parent_cancel_dip/1,
     nested_cancel_verification_cancel_nested_cancel_dip/1,
     
+    cancel_archivisation_with_delete/1,
+    cancel_archivisation_dip_with_delete/1,
+    cancel_verification_with_delete/1,
+    cancel_verification_dip_with_delete/1,
+    
     cancel_preserved_archive_test/1
 ]).
 
@@ -85,20 +90,25 @@ groups() -> [
         cancel_remote_verification_slave_job,
         cancel_verification_cancel_aip,
         cancel_verification_cancel_dip,
-    
+
         nested_cancel_archivisation_cancel_parent,
         nested_cancel_archivisation_cancel_nested,
         nested_cancel_archivisation_cancel_parent_cancel_aip,
         nested_cancel_archivisation_cancel_nested_cancel_aip,
         nested_cancel_archivisation_cancel_parent_cancel_dip,
         nested_cancel_archivisation_cancel_nested_cancel_dip,
-    
+
         nested_cancel_verification_cancel_parent,
         nested_cancel_verification_cancel_nested,
         nested_cancel_verification_cancel_parent_cancel_aip,
         nested_cancel_verification_cancel_nested_cancel_aip,
         nested_cancel_verification_cancel_parent_cancel_dip,
         nested_cancel_verification_cancel_nested_cancel_dip,
+    
+        cancel_archivisation_with_delete,
+        cancel_archivisation_dip_with_delete,
+        cancel_verification_with_delete,
+        cancel_verification_dip_with_delete,
         
         cancel_preserved_archive_test
     ]}
@@ -123,7 +133,8 @@ all() -> [
     dip_strategy = no_dip :: no_dip | cancel_aip | cancel_dip,
     nested_strategy = no_nested :: no_nested | cancel_parent | cancel_nested,
     cancelled_traverse :: archivisation_traverse | archive_verification_traverse,
-    cancelled_job_type = slave_job :: slave_job | master_job
+    cancelled_job_type = slave_job :: slave_job | master_job,
+    preservation_policy = retain :: archive:cancel_preservation_policy()
 }).
 
 
@@ -337,21 +348,52 @@ nested_cancel_verification_cancel_nested_cancel_dip(_Config) ->
         cancelled_job_type = slave_job
     }).
 
+cancel_archivisation_with_delete(_Config) ->
+    cancel_test_base(#test_config{
+        cancelled_traverse = archivisation_traverse,
+        cancelled_job_type = slave_job,
+        preservation_policy = delete
+    }).
+
+cancel_archivisation_dip_with_delete(_Config) ->
+    cancel_test_base(#test_config{
+        cancelled_traverse = archivisation_traverse,
+        dip_strategy = cancel_dip,
+        cancelled_job_type = slave_job,
+        preservation_policy = delete
+    }).
+
+cancel_verification_with_delete(_Config) ->
+    cancel_test_base(#test_config{
+        cancelled_traverse = archive_verification_traverse,
+        cancelled_job_type = slave_job,
+        preservation_policy = delete
+    }).
+
+cancel_verification_dip_with_delete(_Config) ->
+    cancel_test_base(#test_config{
+        cancelled_traverse = archive_verification_traverse,
+        dip_strategy = cancel_dip,
+        cancelled_job_type = slave_job,
+        preservation_policy = delete
+    }).
+
 
 cancel_preserved_archive_test(_Config) ->
     #object{dataset = #dataset_object{archives = [#archive_object{id = ArchiveId}]}} = 
         setup_initial_environment(#test_config{}),
     archive_tests_utils:assert_archive_state(ArchiveId, ?ARCHIVE_PRESERVED, krakow, ?ATTEMPTS),
-    ?assertEqual(ok, cancel_archivisation(paris, ArchiveId)),
+    ?assertEqual(ok, cancel_archivisation(paris, ArchiveId, delete)),
     archive_tests_utils:assert_archive_state(ArchiveId, ?ARCHIVE_PRESERVED, [paris, krakow], ?ATTEMPTS).
 
 %===================================================================
 % Test bases
 %===================================================================
 
-cancel_test_base( #test_config{
+cancel_test_base(#test_config{
     cancelling_provider = CancellingProvider,
-    cancelled_traverse = CancelledTraverse
+    cancelled_traverse = CancelledTraverse,
+    preservation_policy = PreservationPolicy
 } = TestConfig) ->
     
     mock_required_functions(TestConfig),
@@ -366,21 +408,27 @@ cancel_test_base( #test_config{
     end,
     archive_tests_utils:assert_archive_state(ArchiveToCancelId, InitialExpectedState, ?ATTEMPTS),
     
-    ?assertEqual(ok, cancel_archivisation(CancellingProvider, ArchiveToCancelId)),
+    ?assertEqual(ok, cancel_archivisation(CancellingProvider, ArchiveToCancelId, PreservationPolicy)),
     
-    archive_tests_utils:assert_archive_state(CancelledArchivesToCheck, ?ARCHIVE_CANCELLING, ?ATTEMPTS),
+    archive_tests_utils:assert_archive_state(CancelledArchivesToCheck, ?ARCHIVE_CANCELLING(PreservationPolicy), ?ATTEMPTS),
     
     continue_mocked_jobs(),
     
-    archive_tests_utils:assert_archive_state(CancelledArchivesToCheck, ?ARCHIVE_CANCELLED, ?ATTEMPTS),
-    archive_tests_utils:assert_archive_state(NotCancelledArchivesToCheck, ?ARCHIVE_PRESERVED, ?ATTEMPTS),
+    case PreservationPolicy of
+        retain ->
+            archive_tests_utils:assert_archive_state(CancelledArchivesToCheck, ?ARCHIVE_CANCELLED, ?ATTEMPTS),
+            archive_tests_utils:assert_archive_state(NotCancelledArchivesToCheck, ?ARCHIVE_PRESERVED, ?ATTEMPTS),
     
-    case CancelledTraverse of
-        archivisation_traverse ->
-            assert_stats_not_full(CancelledArchivesToCheck),
-            assert_archive_not_preserved(TestConfig, FileTreeObject);
-        _ ->
-            ok
+            case CancelledTraverse of
+                archivisation_traverse ->
+                    assert_stats_not_full(CancelledArchivesToCheck),
+                    assert_archive_not_preserved(TestConfig, FileTreeObject);
+                _ ->
+                    ok
+            end;
+        delete ->
+            assert_archives_deleted(CancelledArchivesToCheck),
+            assert_archives_exist(NotCancelledArchivesToCheck)
     end.
 
 %===================================================================
@@ -416,11 +464,26 @@ assert_archive_not_preserved(#test_config{cancelled_job_type = slave_job, nested
 
 assert_stats_not_full(ArchiveList) ->
     lists_utils:pforeach(fun(ArchiveId) ->
-        {ok, #archive_info{stats = Stats}} = opt_archives:get_info(
-            krakow, oct_background:get_user_session_id(?USER1, krakow), ArchiveId),
+        {ok, #archive_info{stats = Stats}} = get_archive_info(krakow, ArchiveId),
         DataSize = 2 * byte_size(?TEST_DATA),
         ?assertNotMatch(#archive_stats{files_archived = 2, bytes_archived = DataSize}, Stats)
     end, ArchiveList).
+
+
+assert_archives_deleted(ArchivesToCheck) ->
+    lists:foreach(fun(ProviderId) ->
+        lists:foreach(fun(ArchiveId) ->
+            ?assertEqual(?ERROR_NOT_FOUND, get_archive_info(ProviderId, ArchiveId), ?ATTEMPTS)
+        end, ArchivesToCheck)
+    end, oct_background:get_provider_ids()).
+
+
+assert_archives_exist(ArchivesToCheck) ->
+    lists:foreach(fun(ProviderId) ->
+        lists:foreach(fun(ArchiveId) ->
+            ?assertMatch({ok, _}, get_archive_info(ProviderId, ArchiveId))
+        end, ArchivesToCheck)
+    end, oct_background:get_provider_ids()).
 
 
 %===================================================================
@@ -507,9 +570,13 @@ get_nested_archive_id(#object{children = [#object{dataset = #dataset_object{id =
         krakow, oct_background:get_user_session_id(?USER1, krakow), NestedDatasetId, #{offset => 0, limit => 1}),
     NestedArchiveId.
 
-cancel_archivisation(ProviderId, ArchiveId) ->
+cancel_archivisation(ProviderId, ArchiveId, PreservationPolicy) ->
     opt_archives:cancel_archivisation(
-        ProviderId, oct_background:get_user_session_id(?USER1, ProviderId), ArchiveId).
+        ProviderId, oct_background:get_user_session_id(?USER1, ProviderId), ArchiveId, PreservationPolicy).
+
+get_archive_info(ProviderSelector, ArchiveId) ->
+    opt_archives:get_info(
+        ProviderSelector, oct_background:get_user_session_id(?USER1, ProviderSelector), ArchiveId).
 
 %===================================================================
 % Mock related functions

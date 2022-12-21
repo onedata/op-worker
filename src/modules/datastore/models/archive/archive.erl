@@ -37,13 +37,15 @@
 % setters
 -export([mark_building/1, mark_deleting/2,
     mark_file_archived/2, mark_file_failed/1, mark_creation_finished/2,
-    mark_preserved/1, mark_verification_failed/1, mark_cancelling/1, mark_cancelled/1,
+    mark_preserved/1, mark_verification_failed/1, mark_cancelling/2, mark_cancelled/1,
     set_root_dir_guid/2, set_data_dir_guid/2, set_base_archive_id/2,
     set_related_dip/2, set_related_aip/2
 ]).
 
+
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_version/0, get_record_struct/1, resolve_conflict/3]).
+-export([encode_state/1, decode_state/1]).
 
 -compile([{no_auto_import, [get/1]}]).
 
@@ -61,13 +63,15 @@
 -type creator() :: od_user:id().
 
 -type state() :: ?ARCHIVE_PENDING | ?ARCHIVE_BUILDING | ?ARCHIVE_PRESERVED | ?ARCHIVE_DELETING 
-    | ?ARCHIVE_FAILED | ?ARCHIVE_VERIFYING | ?ARCHIVE_VERIFICATION_FAILED | ?ARCHIVE_CANCELLING 
-    | ?ARCHIVE_CANCELLED.
+    | ?ARCHIVE_FAILED | ?ARCHIVE_VERIFYING | ?ARCHIVE_VERIFICATION_FAILED 
+    | ?ARCHIVE_CANCELLING(cancel_preservation_policy()) | ?ARCHIVE_CANCELLED.
 -type timestamp() :: time:seconds().
 -type description() :: binary().
 -type callback() :: http_client:url() | undefined.
 
 -type config() :: archive_config:record().
+
+-type cancel_preservation_policy() :: retain | delete.
 
 -type error() :: {error, term()}.
 
@@ -86,6 +90,7 @@
     id/0, doc/0, creator/0,
     state/0, timestamp/0, description/0,
     config/0, callback/0, diff/0,
+    cancel_preservation_policy/0,
     modifiable_fields/0
 ]).
 
@@ -446,7 +451,7 @@ mark_deleting(ArchiveId, Callback) ->
     }) ->
         case PrevState =:= ?ARCHIVE_PENDING
             orelse PrevState =:= ?ARCHIVE_BUILDING
-            orelse Parent =/= undefined % nested archive cannot be removed as it would destroy parent archive
+            orelse Parent =/= undefined % nested archive cannot be deleted as it would destroy parent archive
         of
             true ->
                 %% @TODO VFS-8840 - create more descriptive error (also for nested archives)
@@ -471,7 +476,7 @@ mark_building(ArchiveDocOrId) ->
     end)).
 
 
--spec mark_creation_finished(id() | doc(), archive_stats:record()) -> ok.
+-spec mark_creation_finished(id() | doc(), archive_stats:record()) -> ok | {error, marked_to_delete}.
 mark_creation_finished(ArchiveDocOrId, NestedArchivesStats) ->
     UpdateResult = update(ArchiveDocOrId, fun
         (Archive = #archive{stats = CurrentStats, state = ?ARCHIVE_BUILDING}) ->
@@ -483,7 +488,11 @@ mark_creation_finished(ArchiveDocOrId, NestedArchivesStats) ->
                 end,
                 stats = AggregatedStats
             }};
-        (Archive = #archive{state = ?ARCHIVE_CANCELLING}) ->
+        (#archive{state = ?ARCHIVE_CANCELLING(delete), related_aip = undefined}) ->
+            % AIP archive (RelatedAip == undefined) deletion is sufficient, as it will automatically
+            % result in DIP archive deletion.
+            {error, marked_to_delete};
+        (Archive = #archive{state = ?ARCHIVE_CANCELLING(_)}) ->
             {ok, Archive#archive{state = ?ARCHIVE_CANCELLED}}
     end),
     case UpdateResult of
@@ -491,7 +500,11 @@ mark_creation_finished(ArchiveDocOrId, NestedArchivesStats) ->
             archive_verification_traverse:block_archive_modification(Doc),
             archive_verification_traverse:start(Doc);
         {ok, #document{value = #archive{}}} ->
-            ok
+            ok;
+        {error, not_found} -> 
+            ok;
+        {error, marked_to_delete} = Error ->
+            Error
     end.
 
 
@@ -505,27 +518,40 @@ mark_preserved(ArchiveDocOrId) ->
     end)).
 
 
--spec mark_cancelling(id() | doc()) -> ok | {error, already_finished} | error().
-mark_cancelling(ArchiveDocOrId) ->
+-spec mark_cancelling(id() | doc(), cancel_preservation_policy()) -> 
+    ok | {error, already_finished} | {error, already_cancelled} | error().
+mark_cancelling(ArchiveDocOrId, PreservationPolicy) ->
     ?extract_ok(update(ArchiveDocOrId, fun
-        (#archive{} = Archive) ->
-            case is_finished(Archive) of
-                true -> {error, already_finished};
-                false -> {ok, Archive#archive{state = ?ARCHIVE_CANCELLING}}
+        (#archive{state = State} = Archive) ->
+            case {is_finished(Archive), State} of
+                {true, ?ARCHIVE_CANCELLED} -> {error, already_cancelled};
+                {true, _} -> {error, already_finished};
+                {false, _} -> {ok, Archive#archive{state = ?ARCHIVE_CANCELLING(PreservationPolicy)}}
             end
     end)).
 
 
--spec mark_cancelled(id() | doc()) -> ok | error().
+-spec mark_cancelled(id() | doc()) -> ok | {error, marked_to_delete} | error().
 mark_cancelled(ArchiveDocOrId) ->
-    ?ok_if_no_change(?ok_if_not_found(?extract_ok(update(ArchiveDocOrId, fun
-        (#archive{} = Archive) ->
-            case is_finished(Archive) of
-                true -> {error, no_change};
-                false -> {ok, Archive#archive{state = ?ARCHIVE_CANCELLED}}
+    UpdateResult = ?extract_ok(update(ArchiveDocOrId, fun
+        (#archive{state = State, related_aip = RelatedAip} = Archive) ->
+            case {is_finished(Archive), State, RelatedAip} of
+                {true, _, _} ->
+                    {error, no_change};
+                {false, ?ARCHIVE_CANCELLING(delete), undefined} ->
+                    % AIP archive (RelatedAip == undefined) deletion is sufficient, as it will automatically
+                    % result in DIP archive deletion.
+                    {error, marked_to_delete};
+                _ ->
+                    {ok, Archive#archive{state = ?ARCHIVE_CANCELLED}}
             end
-    end)))).
-
+    end)),
+    case UpdateResult of
+        ok -> ok;
+        {error, not_found} -> ok;
+        {error, no_change} -> ok;
+        {error, marked_to_delete} = Error -> Error
+    end.
 
 
 -spec mark_verification_failed(id() | doc()) -> ok | error().
@@ -557,6 +583,7 @@ set_root_dir_guid(ArchiveDocOrId, RootDirGuid) ->
         {ok, Archive#archive{root_dir_guid = RootDirGuid}}
     end).
 
+
 -spec set_data_dir_guid(id() | doc(), file_id:file_guid()) -> {ok, doc()} | error().
 set_data_dir_guid(ArchiveDocOrId, DataDirGuid) ->
     update(ArchiveDocOrId, fun(Archive) ->
@@ -575,7 +602,6 @@ set_base_archive_id(ArchiveDoc, BaseArchiveId) when is_binary(BaseArchiveId) ->
     end).
 
 
-
 -spec set_related_dip(id() | doc(), archive:id() | undefined) -> {ok, doc()} | error().
 set_related_dip(ArchiveDocOrId, DipArchiveId) ->
     update(ArchiveDocOrId, fun(Archive) ->
@@ -588,7 +614,6 @@ set_related_aip(ArchiveDocOrId, AipArchiveId) ->
     update(ArchiveDocOrId, fun(Archive) ->
         {ok, Archive#archive{related_aip = AipArchiveId}}
     end).
-        
 
 %%%===================================================================
 %%% Internal functions
@@ -631,7 +656,7 @@ get_record_struct(1) ->
         {dataset_id, string},
         {creation_time, integer},
         {creator, string},
-        {state, atom},
+        {state, {custom, atom, {archive, encode_state, decode_state}}},
         {config, {custom, string, {persistent_record, encode, decode, archive_config}}},
         {modifiable_fields, {record, [
             {incarnation, integer},
@@ -695,9 +720,9 @@ resolve_conflict_remote_rev_greater(
 ) ->
     LocalProviderId = oneprovider:get_id_or_undefined(),
     case {LocalProviderId, is_finished(LocalValue), RemoteState} of
-        {ArchivingProviderId, false = _LocalFinished, ?ARCHIVE_CANCELLING} ->
+        {ArchivingProviderId, false = _LocalFinished, ?ARCHIVE_CANCELLING(_) = CancellingState} ->
             {true, LocalValue#archive{
-                state = ?ARCHIVE_CANCELLING, 
+                state = CancellingState, 
                 modifiable_fields = resolve_modifiable_fields_conflict(RemoteValue, LocalValue)
             }};
         {ArchivingProviderId, _, _} ->
@@ -724,16 +749,16 @@ resolve_conflict_local_rev_greater(
     RemoteDocMutator
 ) ->
     Result = case {RemoteDocMutator, {LocalState, is_finished(LocalValue)}, {RemoteState, is_finished(RemoteValue)}} of
-        {ArchivingProviderId, {?ARCHIVE_CANCELLING, _}, {_, false = _RemoteFinished}} ->
-            {true, RemoteValue#archive{state = ?ARCHIVE_CANCELLING}};
+        {ArchivingProviderId, {?ARCHIVE_CANCELLING(_) = CancellingState, _}, {_, false = _RemoteFinished}} ->
+            {true, RemoteValue#archive{state = CancellingState}};
         {ArchivingProviderId, _, _} ->
             {true, RemoteValue};
-        {_, {?ARCHIVE_CANCELLING, _}, {?ARCHIVE_CANCELLING, _}} ->
+        {_, {?ARCHIVE_CANCELLING(_), _}, {?ARCHIVE_CANCELLING(_), _}} ->
             ignore;
         {_, {_, true = _LocalFinished}, _} ->
             ignore;
-        {_, _, {?ARCHIVE_CANCELLING, _}} ->
-            {true, LocalValue#archive{state = ?ARCHIVE_CANCELLING}};
+        {_, _, {?ARCHIVE_CANCELLING(_) = CancellingState, _}} ->
+            {true, LocalValue#archive{state = CancellingState}};
         {_, _, _} ->
             ignore
     end,
@@ -769,3 +794,15 @@ resolve_modifiable_fields_conflict(
     #archive{modifiable_fields = _LoverRevMF2}
 ) ->
     GreaterRevMF.
+
+
+-spec encode_state(state()) -> atom().
+encode_state(?ARCHIVE_CANCELLING(delete)) -> cancelling_delete;
+encode_state(?ARCHIVE_CANCELLING(retain)) -> cancelling;
+encode_state(State) -> State.
+
+
+-spec decode_state(atom()) -> state().
+decode_state(cancelling_delete) -> ?ARCHIVE_CANCELLING(delete);
+decode_state(cancelling) -> ?ARCHIVE_CANCELLING(retain);
+decode_state(State) -> State.
