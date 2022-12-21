@@ -391,7 +391,7 @@ get_operations_blocked_by_file_protection_flags(FileCtx0) ->
         {?DATA_PROTECTION, ?FILE_DATA_PROTECTION_BLOCKED_OPERATIONS},
         {?METADATA_PROTECTION, ?FILE_METADATA_PROTECTION_BLOCKED_OPERATIONS}
     ],
-    {protection_flags_to_denied_operations(Flags, AllRestrictedOps), FileCtx1}.
+    {get_operations_blocked_by_protection_flags(Flags, AllRestrictedOps), FileCtx1}.
 
 
 %% @private
@@ -401,13 +401,13 @@ get_operations_blocked_by_dataset_protection_flags(FileCtx0) ->
     {FileDoc, FileCtx1} = file_ctx:get_file_doc_including_deleted(FileCtx0),
     {ok, Flags} = dataset_eff_cache:get_eff_dataset_protection_flags(FileDoc),
     AllRestrictedOps = [{?DATA_PROTECTION, ?DATASET_DATA_PROTECTION_BLOCKED_OPERATIONS}],
-    {protection_flags_to_denied_operations(Flags, AllRestrictedOps), FileCtx1}.
+    {get_operations_blocked_by_protection_flags(Flags, AllRestrictedOps), FileCtx1}.
 
 
 %% @private
--spec protection_flags_to_denied_operations(Flags :: bitmask(), [{ProtectionFlag :: bitmask(), RestrictedOps :: bitmask()}]) ->
+-spec get_operations_blocked_by_protection_flags(Flags :: bitmask(), [{ProtectionFlag :: bitmask(), RestrictedOps :: bitmask()}]) ->
     DeniedOps :: bitmask().
-protection_flags_to_denied_operations(Flags, AllRestrictedOps) ->
+get_operations_blocked_by_protection_flags(Flags, AllRestrictedOps) ->
     lists:foldl(fun({ProtectionFlag, RestrictedOps}, DeniedOpsAcc) ->
         case ?has_all_flags(Flags, ProtectionFlag) of
             true -> ?set_flags(DeniedOpsAcc, RestrictedOps);

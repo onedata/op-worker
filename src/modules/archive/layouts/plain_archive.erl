@@ -73,6 +73,8 @@
 %% API
 -export([archive_regular_file/7, archive_symlink/4]).
 
+-define(FILE_READONLY_STORAGE_PERMS, 8#440).
+
 %%%===================================================================
 %%% API functions
 %%%===================================================================
@@ -156,8 +158,7 @@ copy_file_to_archive(FileCtx, TargetParentCtx, ResolvedFilePath, UserCtx, CopyOp
     {FileSize, CopyCtx2} = file_ctx:get_local_storage_file_size(CopyCtx),
     {SDHandle, CopyCtx3} = storage_driver:new_handle(SessionId, CopyCtx2),
     ok = storage_driver:flushbuffer(SDHandle, FileSize),
-    {ok, CopyCtx4} = sd_utils:chmod(UserCtx, CopyCtx3, 8#440),
-    {ok, CopyCtx4}.
+    {ok, _CopyCtx4} = sd_utils:chmod(UserCtx, CopyCtx3, ?FILE_READONLY_STORAGE_PERMS).
 
 
 -spec make_hardlink_to_file_in_base_archive(file_ctx:ctx(), file_ctx:ctx(), file_ctx:ctx(), 
