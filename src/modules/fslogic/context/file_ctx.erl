@@ -69,7 +69,7 @@
 %% Functions that do not modify context
 -export([get_share_id_const/1, get_space_id_const/1, get_space_dir_uuid_const/1,
     get_logical_guid_const/1, get_referenced_guid_const/1, get_logical_uuid_const/1, get_referenced_uuid_const/1,
-    is_link_const/1, get_dir_location_doc_const/1, list_references_const/1, count_references_const/1
+    is_link_const/1, get_dir_location_doc_const/1, list_references_const/1, list_references_ctx_const/1, count_references_const/1
 ]).
 -export([is_file_ctx_const/1, is_space_dir_const/1, is_trash_dir_const/1, is_trash_dir_const/2,
     is_share_root_dir_const/1, is_symlink_const/1, is_special_const/1,
@@ -372,6 +372,22 @@ list_references_const(FileCtx) ->
     % TODO VFS-7444 - Investigate possibility to cache hardlink references in file_ctx
     FileUuid = get_referenced_uuid_const(FileCtx),
     file_meta_hardlinks:list_references(FileUuid).
+
+-spec list_references_ctx_const(ctx()) -> {ok, [ctx()]} | {error, term()}.
+list_references_ctx_const(FileCtx) ->
+    case list_references_const(FileCtx) of
+        {ok, References} ->
+            SpaceId = file_ctx:get_space_id_const(FileCtx),
+            LogicalUuid = file_ctx:get_logical_uuid_const(FileCtx),
+            {ok, lists:map(
+                fun (FileUuid) when FileUuid == LogicalUuid -> FileCtx;
+                    (FileUuid) -> file_ctx:new_by_uuid(FileUuid, SpaceId)
+                end,
+                References
+            )};
+        {error, _} = Error ->
+            Error
+    end.
 
 -spec count_references_const(ctx()) -> {ok, non_neg_integer()} | {error, term()}.
 count_references_const(FileCtx) ->

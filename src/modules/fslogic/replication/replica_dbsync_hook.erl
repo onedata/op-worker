@@ -75,7 +75,7 @@ on_file_location_change(FileCtx, ChangedLocationDoc = #document{
                                 end;
                             false ->
                                 ok = fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx4, true, []),
-                                ok = qos_hooks:reconcile_qos(FileCtx4)
+                                ok = qos_logic:reconcile_qos(FileCtx4)
                         end;
                     {#document{deleted = true}, _FileCtx4} ->
                         ok;
@@ -316,13 +316,13 @@ notify_attrs_change_if_necessary(FileCtx,
     case {ReplicaStatusChanged, OldSize =/= NewSize} of
         {true, SizeChanged} ->
             ok = fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx, SizeChanged, []),
-            ok = qos_hooks:reconcile_qos(FileCtx),
+            ok = qos_logic:reconcile_qos(FileCtx),
             ok = file_popularity:update_size(FileCtx);
         {false, true} ->
             ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []),
-            ok = qos_hooks:report_synchronization_skipped(FileCtx);
+            ok = qos_logic:report_synchronization_skipped(FileCtx);
         {false, false} ->
-            ok = qos_hooks:report_synchronization_skipped(FileCtx)
+            ok = qos_logic:report_synchronization_skipped(FileCtx)
     end.
 
 %%-------------------------------------------------------------------

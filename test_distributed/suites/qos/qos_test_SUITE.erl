@@ -377,7 +377,7 @@ audit_log_tests_init_per_testcase(Config, ExpectedSynchronizer) ->
     qos_tests_utils:mock_replica_synchronizer(Nodes, ExpectedSynchronizer),
     % mock retry failed files, so there is only one failed entry in audit log
     qos_tests_utils:mock_replica_synchronizer(Nodes, ?ERROR_POSIX(?ENOENT)),
-    test_utils:mock_expect(Nodes, qos_hooks, retry_failed_files, fun(_SpaceId) -> ok end).
+    test_utils:mock_expect(Nodes, qos_logic, retry_failed_files, fun(_SpaceId) -> ok end).
 
 
 end_per_testcase(_, Config) ->

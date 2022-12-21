@@ -396,7 +396,7 @@ set_qos_parameters(StorageId, QosParameters) ->
         ok ->
             {ok, Spaces} = storage_logic:get_spaces(StorageId),
             lists:foreach(fun(SpaceId) ->
-                ok = qos_hooks:reevaluate_all_impossible_qos_in_space(SpaceId)
+                ok = qos_logic:reevaluate_all_impossible_qos_in_space(SpaceId)
             end, Spaces);
         Error -> Error
     end.

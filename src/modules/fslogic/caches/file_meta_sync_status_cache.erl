@@ -6,12 +6,21 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% This module is responsible for effective checking synchronization status of file_meta links. 
+%%% This module is responsible for effective checking synchronization status of file_meta and file_meta links documents.
+%%% For given file synchronization of all files on this file path is checked. Hardlinks are NOT checked.
 %%% Uses `effective_cache` under the hood.
 %%% TODO VFS-7412 refactor this module (duplicated code in other effective_ caches modules)
+%%% There are 3 possible results:
+%%%     * synced - all documents on path to given file are synchronized;
+%%%     * {file_meta_missing, MissingUuid} - there is at least one file meta document missing, links status is unknown.
+%%%       Returned uuid is the last missing on path (there is guarantee, that all file_meta documents on path after
+%%%       this one are synchronized);
+%%%     * {link_missing, ParentUuid, Name} - there is at least one link document missing, all file_meta documents are synced.
+%%%       Returned link is the last missing on path (there is guarantee, that all link documents on path after
+%%%       this one are synchronized);
 %%% @end
 %%%-------------------------------------------------------------------
--module(file_meta_links_sync_status_cache).
+-module(file_meta_sync_status_cache).
 -author("Michał Stanisz").
 
 -include("global_definitions.hrl").
@@ -20,9 +29,12 @@
 
 %% API
 -export([init_group/0, init/1, invalidate_on_all_nodes/1]).
--export([get/2]).
+-export([get/2, get/3]).
 %% RPC API
 -export([invalidate/1]).
+
+-type missing_link() :: {link_missing, file_meta:uuid(), file_meta:name()}.
+-type missing_file_meta() :: {file_meta_missing, file_meta:uuid()}.
 
 -define(CACHE_GROUP, <<"file_meta_links_sync_status_cache_group">>).
 -define(CACHE_NAME(SpaceId),
@@ -106,23 +118,29 @@ invalidate_on_all_nodes(SpaceId) ->
 
 
 -spec get(od_space:id(), file_meta:uuid() | file_meta:doc()) ->
-    {ok, synced} | {error, {file_meta_missing, file_meta:uuid()}} | 
-    {error, {link_missing, file_meta:uuid(), file_meta:name()}} | {error, term()}.
-get(SpaceId, Doc = #document{value = #file_meta{}}) ->
+    {ok, synced} | {error, missing_file_meta() | missing_link()} | {error, term()}.
+get(SpaceId, DocOrUuid) ->
+    get(SpaceId, DocOrUuid, #{}).
+
+
+-spec get(od_space:id(), file_meta:uuid() | file_meta:doc(), effective_value:get_or_calculate_options()) ->
+    {ok, synced} | {error, missing_file_meta() | missing_link()} | {error, term()}.
+get(SpaceId, Doc = #document{value = #file_meta{}}, Opts) ->
     CacheName = ?CACHE_NAME(SpaceId),
-    case effective_value:get_or_calculate(CacheName, Doc, fun calculate_links_sync_status/1) of
+    case effective_value:get_or_calculate(CacheName, Doc, fun calculate_links_sync_status/1, Opts) of
         {ok, synced, _} ->
             {ok, synced};
+        {error, {link_missing, _, _} = MissingLink} ->
+            {error, find_lowest_missing_link(MissingLink, Doc)};
         {error, _} = Error ->
             Error
     end;
-get(SpaceId, Uuid) ->
+get(SpaceId, Uuid, Opts) ->
     case file_meta:get_including_deleted(Uuid) of
-        {ok, Doc} -> get(SpaceId, Doc);
+        {ok, Doc} -> get(SpaceId, Doc, Opts);
         ?ERROR_NOT_FOUND -> {error, {file_meta_missing, Uuid}};
         {error, _} = Error -> Error
     end.
-
 
 %%%===================================================================
 %%% RPC API functions
@@ -136,10 +154,9 @@ invalidate(SpaceId) ->
 %%% Internal functions
 %%%===================================================================
 
-
--spec calculate_links_sync_status(effective_value:args()) -> 
-    {ok, synced, effective_value:calculation_info()} | {error, {link_missing, file_meta:uuid(), file_meta:name()}} |
-    {error, term()}.
+%% @private
+-spec calculate_links_sync_status(effective_value:args()) ->
+    {ok, synced, effective_value:calculation_info()} | {error, missing_link()}.
 calculate_links_sync_status([_, {error, _} = Error, _CalculationInfo]) ->
     Error;
 calculate_links_sync_status([#document{value = #file_meta{is_scope = true}}, _ParentValue, CalculationInfo]) ->
@@ -150,4 +167,26 @@ calculate_links_sync_status([#document{} = FileMetaDoc, _ParentValue, Calculatio
     case file_meta_forest:get(ParentUuid, all, Name) of
         {ok, _} -> {ok, synced, CalculationInfo};
         {error, _} -> {error, {link_missing, ParentUuid, Name}}
+    end.
+
+
+%% @private
+-spec find_lowest_missing_link(missing_link(), file_meta:doc()) ->
+    missing_link().
+find_lowest_missing_link(
+    {link_missing, ParentUuid, _} = MissingLink,
+    #document{value = #file_meta{parent_uuid = ParentUuid}}
+) ->
+    MissingLink;
+find_lowest_missing_link(
+    MissingLink,
+    #document{value = #file_meta{parent_uuid =  ParentUuid, name = Name}} = Doc
+) ->
+    case file_meta_forest:get(ParentUuid, all, Name) of
+        {ok, _} ->
+            % we know that file_meta document is synced, because effective did not return file_meta_missing
+            {ok, NextDoc} = file_meta:get_parent(Doc),
+            find_lowest_missing_link(MissingLink, NextDoc);
+        {error, _} ->
+            {link_missing, ParentUuid, Name}
     end.

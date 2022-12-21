@@ -21,8 +21,7 @@
 -export([
     build_traverse_reqs/2, remove_req/2,
     select_traverse_reqs/2, get_storage/1,
-    get_traverse_ids/1,
-    are_all_finished/1,
+    are_all_started/1,
     start_applicable_traverses/3,
     split_local_and_remote/1
 ]).
@@ -78,13 +77,8 @@ get_storage(#qos_traverse_req{storage_id = StorageId}) ->
     StorageId.
 
 
--spec get_traverse_ids(traverse_reqs()) -> [id()].
-get_traverse_ids(TraverseReqs) ->
-    maps:keys(TraverseReqs).
-
-
--spec are_all_finished(traverse_reqs()) -> boolean().
-are_all_finished(AllTraverseReqs) ->
+-spec are_all_started(traverse_reqs()) -> boolean().
+are_all_started(AllTraverseReqs) ->
     maps:size(AllTraverseReqs) == 0.
 
 
@@ -122,11 +116,11 @@ start_traverse(FileCtx, QosEntryId, StorageId, TaskId) ->
     ok = file_qos:add_qos_entry_id(SpaceId, FileUuid, QosEntryId, StorageId),
     case lookup_file_meta_doc(FileCtx) of
         {ok, FileCtx1} ->
-            ok = qos_traverse:start_initial_traverse(FileCtx1, QosEntryId, TaskId);
+            ok = qos_traverse:start(FileCtx1, [QosEntryId], TaskId);
         {error, not_found} ->
             % There is no need to start traverse as appropriate transfers will be started
-            % when file is finally synced. If this is directory, then each child registered
-            % file meta posthook that will fulfill QoS after all its ancestors are synced.
+            % when file is finally synced. If this is directory, then descendants registered
+            % file_meta_posthook that will start traverse when document is synced.
             ok = qos_entry:remove_traverse_req(QosEntryId, TaskId)
     end.
 

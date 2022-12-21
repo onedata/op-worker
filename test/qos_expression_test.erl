@@ -26,6 +26,10 @@ valid_qos_expression_test() ->
     check_valid_expression(<<"latency<8">>, [<<"latency">>, 8, <<"<">>]),
     check_valid_expression(<<"latency>=8">>, [<<"latency">>, 8, <<">=">>]),
     check_valid_expression(<<"latency<=8">>, [<<"latency">>, 8, <<"<=">>]),
+    check_valid_expression(<<"latency=0">>, [<<"latency">>, 0, <<"=">>]),
+    check_valid_expression(<<"latency=10">>, [<<"latency">>, 10, <<"=">>]),
+    check_valid_expression(<<"latency=0.123">>, [<<"latency">>, 0.123, <<"=">>]),
+    check_valid_expression(<<"latency=0123">>, [<<"latency">>, <<"0123">>, <<"=">>]),
     
     Operators = [<<"|">>, <<"&">>, <<"\\">>],
     OperatorPairs = [{Op1, Op2} || Op1 <- Operators, Op2 <- Operators],
