@@ -89,7 +89,7 @@ get_models() -> [
     deletion_marker,
     tree_traverse_progress,
     dir_size_stats,
-    dir_update_time_stats,
+    dir_stats_collector_metadata,
     restart_hooks,
     dataset,
     bulk_download_task,

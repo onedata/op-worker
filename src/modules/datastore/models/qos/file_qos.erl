@@ -497,8 +497,18 @@ merge_assigned_entries(FirstAssignedEntries, SecondAssignedEntries) ->
 -spec get_original_parent_doc(undefined | file_ctx:ctx()) -> undefined | file_meta:doc().
 get_original_parent_doc(undefined) -> undefined;
 get_original_parent_doc(OriginalParentCtx) ->
-    {ParentDoc, _} = file_ctx:get_file_doc(OriginalParentCtx),
-    ParentDoc.
+    try
+        {ParentDoc, _} = file_ctx:get_file_doc(OriginalParentCtx),
+        ParentDoc
+    catch Class:Reason ->
+        case datastore_runner:normalize_error(Reason) of
+            not_found ->
+                % Parent metadata can be not fully synchronized with other provider
+                undefined;
+            _ ->
+                erlang:apply(erlang, Class, [Reason])
+        end
+    end.
 
 
 %%%===================================================================

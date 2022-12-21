@@ -306,7 +306,7 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, Flag) ->
             ?error_stacktrace("create_file_insecure error: ~p:~p", [Error, Reason], Stacktrace),
             sd_utils:unlink(FileCtx, UserCtx),
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
-            fslogic_location_cache:delete_local_location(FileUuid),
+            file_location:delete_and_update_quota(file_location:local_id(FileUuid)),
             file_meta:delete(FileUuid),
             times:delete(FileUuid),
             case Reason of
@@ -386,7 +386,7 @@ make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     catch
         Error:Reason ->
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
-            fslogic_location_cache:delete_local_location(FileUuid),
+            file_location:delete_and_update_quota(file_location:local_id(FileUuid)),
             file_meta:delete(FileUuid),
             times:delete(FileUuid),
             erlang:Error(Reason)

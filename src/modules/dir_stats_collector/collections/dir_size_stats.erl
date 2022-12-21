@@ -78,6 +78,8 @@
 % but usage of time series allows keeping everything in single structure
 -define(INCARNATION_TIME_SERIES, <<"incarnation">>).
 
+-define(ERROR_HANDLING_MODE, op_worker:get_env(dir_size_stats_init_errors_handling_mode, repeat)).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -213,30 +215,44 @@ init_dir(Guid) ->
 
 -spec init_child(file_id:file_guid()) -> dir_stats_collection:collection().
 init_child(Guid) ->
-    EmptyCurrentStats = gen_empty_current_stats(Guid), % TODO VFS-9204 - maybe refactor as gen_empty_current_stats
-                                                       % gets storage_id that is also used by prepare_file_size_summary
+    % Use get_including_deleted to handle races between mv and delete (handling mv when file_meta is deleted)
     case file_meta:get_including_deleted(file_id:guid_to_uuid(Guid)) of
         {ok, Doc} ->
             case file_meta:get_type(Doc) of
                 ?DIRECTORY_TYPE ->
-                    EmptyCurrentStats#{?DIR_COUNT => 1};
-                _ ->
-                    FileSizes = try
-                        {Sizes, _} = file_ctx:prepare_file_size_summary(file_ctx:new_by_guid(Guid)),
-                        Sizes
+                    try
+                        EmptyCurrentStats = gen_empty_current_stats(Guid), % TODO VFS-9204 - maybe refactor as gen_empty_current_stats
+                                                                           % gets storage_id that is also used by prepare_file_size_summary
+                        EmptyCurrentStats#{?DIR_COUNT => 1}
                     catch
                         Error:Reason:Stacktrace ->
-                            ?error_stacktrace("Error initializing size stats for ~p: ~p:~p",
-                                [Guid, Error, Reason], Stacktrace),
-                            []
-                    end,
-                    lists:foldl(fun
-                        ({total, Size}, Acc) -> Acc#{?TOTAL_SIZE => Size};
-                        ({StorageId, Size}, Acc) -> Acc#{?SIZE_ON_STORAGE(StorageId) => Size}
-                    end, EmptyCurrentStats#{?REG_FILE_AND_LINK_COUNT => 1}, FileSizes)
+                            handle_init_error(Guid, Error, Reason, Stacktrace),
+                            #{?DIR_COUNT => 1, ?DIR_ERRORS_COUNT => 1}
+                    end;
+                _ ->
+                    try
+                        EmptyCurrentStats = gen_empty_current_stats(Guid),
+                        % gets storage_id that is also used by prepare_file_size_summary
+                        {FileSizes, _} = file_ctx:prepare_file_size_summary(file_ctx:new_by_guid(Guid)),
+                        lists:foldl(fun
+                            ({total, Size}, Acc) -> Acc#{?TOTAL_SIZE => Size};
+                            ({StorageId, Size}, Acc) -> Acc#{?SIZE_ON_STORAGE(StorageId) => Size}
+                        end, EmptyCurrentStats#{?REG_FILE_AND_LINK_COUNT => 1}, FileSizes)
+                    catch
+                        Error:Reason:Stacktrace ->
+                            handle_init_error(Guid, Error, Reason, Stacktrace),
+                            #{?REG_FILE_AND_LINK_COUNT => 1, ?FILE_ERRORS_COUNT => 1}
+                    end
             end;
         ?ERROR_NOT_FOUND ->
-            EmptyCurrentStats % Race with file deletion - stats will be invalidated by next update
+            % Race with file deletion - stats will be invalidated by next update
+            try
+                gen_empty_current_stats(Guid)
+            catch
+                Error:Reason:Stacktrace ->
+                    handle_init_error(Guid, Error, Reason, Stacktrace),
+                    #{}
+            end
     end.
 
 
@@ -274,7 +290,7 @@ internal_stats_config(Guid) ->
 -spec stat_names(file_id:file_guid()) -> [dir_stats_collection:stat_name()].
 stat_names(Guid) ->
     {ok, StorageId} = space_logic:get_local_supporting_storage(file_id:guid_to_space_id(Guid)),
-    [?REG_FILE_AND_LINK_COUNT, ?DIR_COUNT, ?TOTAL_SIZE, ?SIZE_ON_STORAGE(StorageId)].
+    [?REG_FILE_AND_LINK_COUNT, ?DIR_COUNT, ?FILE_ERRORS_COUNT, ?DIR_ERRORS_COUNT, ?TOTAL_SIZE, ?SIZE_ON_STORAGE(StorageId)].
 
 
 %% @private
@@ -362,3 +378,38 @@ gen_empty_historical_stats(Guid) ->
             {MetricName, []}
         end, MetricNames)}
     end, stat_names(Guid)).
+
+
+%% @private
+-spec handle_init_error(file_id:file_guid(), term(), term(), list()) -> ok | no_return().
+handle_init_error(Guid, Error, Reason, Stacktrace) ->
+    case ?ERROR_HANDLING_MODE of
+        ignore ->
+            ?error_stacktrace("Error initializing size stats for ~p: ~p:~p",
+                [Guid, Error, Reason], Stacktrace);
+        silent_ignore ->
+            ok;
+
+        % throw to repeat init by collector
+        repeat ->
+            case datastore_runner:normalize_error(Reason) of
+                no_connection_to_onezone ->
+                    ok;
+                _ ->
+                    ?error_stacktrace("Error initializing size stats for ~p: ~p:~p",
+                        [Guid, Error, Reason], Stacktrace)
+            end,
+            throw(dir_size_stats_init_error);
+        silent_repeat ->
+            throw(dir_size_stats_init_error);
+
+        repeat_connection_errors ->
+            case datastore_runner:normalize_error(Reason) of
+                no_connection_to_onezone ->
+                    % Collector handles problems with zone connection
+                    throw(no_connection_to_onezone);
+                _ ->
+                    ?error_stacktrace("Error initializing size stats for ~p: ~p:~p",
+                        [Guid, Error, Reason], Stacktrace)
+            end
+    end.
