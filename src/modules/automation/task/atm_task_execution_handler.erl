@@ -19,7 +19,7 @@
 %% API
 -export([
     start/2,
-    stop/3,
+    init_stop/3,
     resume/2,
 
     set_run_num/2,
@@ -48,13 +48,13 @@ start(AtmWorkflowExecutionCtx, AtmTaskExecutionIdOrDoc) ->
     initiate(AtmWorkflowExecutionCtx, AtmTaskExecutionDoc).
 
 
--spec stop(
+-spec init_stop(
     atm_workflow_execution_ctx:record(),
     atm_task_execution:id(),
     atm_task_execution:stopping_reason()
 ) ->
     ok | no_return().
-stop(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Reason) ->
+init_stop(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Reason) ->
     case atm_task_execution_status:handle_stopping(
         AtmTaskExecutionId, Reason, get_incarnation(AtmWorkflowExecutionCtx)
     ) of
@@ -135,7 +135,7 @@ run_job_batch(
             catch Type:Reason:Stacktrace ->
                 handle_job_batch_processing_error(
                     AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemBatch,
-                    ?atm_examine_error(Type, Reason, Stacktrace)
+                    ?examine_exception(Type, Reason, Stacktrace)
                 ),
                 {error, running_item_failed}
             end;
@@ -195,7 +195,7 @@ process_streamed_data(AtmWorkflowExecutionCtx, AtmTaskExecutionId, {chunk, Uncor
         handle_uncorrelated_results_processing_error(
             AtmWorkflowExecutionCtx,
             AtmTaskExecutionId,
-            ?atm_examine_error(Type, Reason, Stacktrace)
+            ?examine_exception(Type, Reason, Stacktrace)
         ),
         error
     end;
@@ -478,7 +478,7 @@ process_job_results(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, JobResult
         ),
         atm_task_execution_status:handle_item_processed(AtmTaskExecutionId)
     catch Type:Reason:Stacktrace ->
-        Error = ?atm_examine_error(Type, Reason, Stacktrace),
+        Error = ?examine_exception(Type, Reason, Stacktrace),
         handle_job_processing_error(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Item, Error),
         error
     end.
@@ -526,7 +526,7 @@ handle_uncorrelated_results_processing_error(AtmWorkflowExecutionCtx, AtmTaskExe
             log_uncorrelated_results_processing_error(
                 AtmWorkflowExecutionCtx, AtmTaskExecutionId, Error
             ),
-            {ok, _} = atm_lane_execution_handler:stop(
+            {ok, _} = atm_lane_execution_handler:init_stop(
                 {AtmLaneIndex, RunNum}, failure, AtmWorkflowExecutionCtx
             ),
             ok;

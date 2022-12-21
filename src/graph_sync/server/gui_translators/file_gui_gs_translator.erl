@@ -70,7 +70,7 @@ translate_value(#gri{aspect = dir_size_stats_collection_schema}, TimeSeriesColle
     jsonable_record:to_json(TimeSeriesCollectionSchema);
 
 translate_value(#gri{aspect = dir_size_stats_collection}, TSBrowseResult) ->
-    ts_browse_result:to_json_with_compressed_windows(TSBrowseResult).
+    ts_browse_result:to_json(TSBrowseResult).
 
 
 -spec translate_resource(gri:gri(), Data :: term()) ->

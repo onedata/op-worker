@@ -170,19 +170,18 @@ delete(QosEntryId) ->
 
 
 %% @private
--spec add_local_links(datastore:key(), datastore:tree_id(),
-    one_or_many({datastore:link_name(), datastore:link_target()})) ->
+-spec add_local_links(datastore:key(), one_or_many({datastore:link_name(), datastore:link_target()})) ->
     one_or_many({ok, datastore:link()} | {error, term()}).
-add_local_links(Key, TreeId, Links) ->
-    datastore_model:add_links(?LOCAL_CTX, Key, TreeId, Links).
+add_local_links(Key, Links) ->
+    datastore_model:add_links(?LOCAL_CTX, Key, oneprovider:get_id(), Links).
 
 
 %% @private
--spec delete_local_links(datastore:key(), datastore:tree_id(),
+-spec delete_local_links(datastore:key(),
     one_or_many(datastore:link_name() | {datastore:link_name(), datastore:link_rev()})) ->
     one_or_many(ok | {error, term()}).
-delete_local_links(Key, TreeId, Links) ->
-    datastore_model:delete_links(?LOCAL_CTX, Key, TreeId, Links).
+delete_local_links(Key, Links) ->
+    datastore_model:delete_links(?LOCAL_CTX, Key, oneprovider:get_id(), Links).
 
 
 %% @private
@@ -311,12 +310,12 @@ is_internal(#qos_entry{type = Type}) ->
 -spec add_to_impossible_list(od_space:id(), id()) ->  ok | {error, term()}.
 add_to_impossible_list(SpaceId, QosEntryId) ->
     ?ok_if_exists(?extract_ok(
-        add_local_links(?IMPOSSIBLE_KEY(SpaceId), oneprovider:get_id(), {QosEntryId, QosEntryId}))).
+        add_local_links(?IMPOSSIBLE_KEY(SpaceId), {QosEntryId, QosEntryId}))).
 
 -spec remove_from_impossible_list(od_space:id(), id()) ->  ok | {error, term()}.
 remove_from_impossible_list(SpaceId, QosEntryId) ->
     ?extract_ok(
-        delete_local_links(?IMPOSSIBLE_KEY(SpaceId), oneprovider:get_id(), QosEntryId)).
+        delete_local_links(?IMPOSSIBLE_KEY(SpaceId), QosEntryId)).
 
 -spec apply_to_all_impossible_in_space(od_space:id(), list_apply_fun()) -> ok.
 apply_to_all_impossible_in_space(SpaceId, Fun) ->
@@ -325,11 +324,11 @@ apply_to_all_impossible_in_space(SpaceId, Fun) ->
 
 -spec add_transfer_to_list(id(), qos_transfer_id()) -> ok | {error, term()}.
 add_transfer_to_list(QosEntryId, TransferId) ->
-    ?extract_ok(add_local_links(?TRANSFERS_KEY(QosEntryId), oneprovider:get_id(), {TransferId, TransferId})).
+    ?extract_ok(add_local_links(?TRANSFERS_KEY(QosEntryId), {TransferId, TransferId})).
 
 -spec remove_transfer_from_list(id(), qos_transfer_id()) -> ok | {error, term()}.
 remove_transfer_from_list(QosEntryId, TransferId)  ->
-    delete_local_links(?TRANSFERS_KEY(QosEntryId), oneprovider:get_id(), TransferId).
+    delete_local_links(?TRANSFERS_KEY(QosEntryId), TransferId).
 
 -spec apply_to_all_transfers(od_space:id(), list_apply_fun()) -> ok.
 apply_to_all_transfers(QosEntryId, Fun) ->
@@ -338,11 +337,11 @@ apply_to_all_transfers(QosEntryId, Fun) ->
 
 -spec add_to_failed_files_list(od_space:id(), file_meta:uuid()) -> ok | {error, term()}.
 add_to_failed_files_list(SpaceId, FileUuid) ->
-    ?ok_if_exists(?extract_ok(add_local_links(?FAILED_FILES_KEY(SpaceId), oneprovider:get_id(), {FileUuid, FileUuid}))).
+    ?ok_if_exists(?extract_ok(add_local_links(?FAILED_FILES_KEY(SpaceId), {FileUuid, FileUuid}))).
 
 -spec remove_from_failed_files_list(od_space:id(), file_meta:uuid()) -> ok | {error, term()}.
 remove_from_failed_files_list(SpaceId, FileUuid)  ->
-    delete_local_links(?FAILED_FILES_KEY(SpaceId), oneprovider:get_id(), FileUuid).
+    delete_local_links(?FAILED_FILES_KEY(SpaceId), FileUuid).
 
 -spec apply_to_all_in_failed_files_list(od_space:id(), list_apply_fun()) -> ok.
 apply_to_all_in_failed_files_list(SpaceId, Fun) ->

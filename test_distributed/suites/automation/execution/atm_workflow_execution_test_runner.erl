@@ -191,16 +191,16 @@ run(TestSpec = #atm_workflow_execution_test_spec{
     SpaceId = oct_background:get_space_id(SpaceSelector),
 
     AtmWorkflowSchemaId = atm_test_inventory:add_workflow_schema(AtmWorkflowSchemaDumpOrDraft),
+    AtmWorkflowSchemaRevision = atm_test_inventory:get_workflow_schema_revision(
+        AtmWorkflowSchemaRevisionNum, AtmWorkflowSchemaId
+    ),
     {AtmWorkflowExecutionId, _} = atm_workflow_execution_test_mocks:schedule_workflow_execution_as_test_process(
         ProviderSelector, SessionId, SpaceId, AtmWorkflowSchemaId, AtmWorkflowSchemaRevisionNum,
         AtmStoreInitialContentOverlay, CallbackUrl
     ),
 
-    #atm_workflow_schema_revision{lanes = AtmLaneSchemas} = atm_test_inventory:get_workflow_schema_revision(
-        AtmWorkflowSchemaRevisionNum, AtmWorkflowSchemaId
-    ),
     ExpState = atm_workflow_execution_exp_state_builder:init(
-        ProviderSelector, SpaceId, AtmWorkflowExecutionId, AtmLaneSchemas
+        ProviderSelector, SpaceId, AtmWorkflowExecutionId, AtmWorkflowSchemaRevision
     ),
     true = atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState),
 
@@ -208,7 +208,7 @@ run(TestSpec = #atm_workflow_execution_test_spec{
         test_spec = TestSpec,
         session_id = SessionId,
         workflow_execution_id = AtmWorkflowExecutionId,
-        lane_count = length(AtmLaneSchemas),
+        lane_count = length(AtmWorkflowSchemaRevision#atm_workflow_schema_revision.lanes),
         current_lane_index = 1,
         current_run_num = 1,
         ongoing_incarnations = Incarnations,
@@ -260,13 +260,29 @@ monitor_workflow_execution(TestCtx0) ->
 
                 case has_workflow_stopped(TestCtx3) of
                     true ->
-                        ok;
+                        test_garbage_collector(TestCtx3),
+                        TestCtx3#test_ctx.workflow_execution_exp_state;
                     false ->
                         TestCtx4 = begin_deferred_step_phase_executions_if_possible(TestCtx3),
                         monitor_workflow_execution(TestCtx4)
                 end
         end
     end.
+
+
+%% @private
+-spec test_garbage_collector(test_ctx()) -> ok | no_return().
+test_garbage_collector(#test_ctx{test_spec = #atm_workflow_execution_test_spec{test_gc = false}}) ->
+    ok;
+
+test_garbage_collector(#test_ctx{
+    test_spec = #atm_workflow_execution_test_spec{provider = ProviderSelector},
+    workflow_execution_id = AtmWorkflowExecutionId,
+    workflow_execution_exp_state = ExpState
+}) ->
+    ok = ?rpc(ProviderSelector, atm_workflow_execution_api:discard(AtmWorkflowExecutionId)),
+    ok = ?rpc(ProviderSelector, atm_workflow_execution_garbage_collector:run()),
+    atm_workflow_execution_exp_state_builder:assert_deleted(ExpState).
 
 
 %% @private
@@ -684,7 +700,7 @@ get_exp_state_diff(_, _) ->
 
 
 %% @private
--spec assert_exp_workflow_execution_state(test_ctx()) -> test_ctx().
+-spec assert_exp_workflow_execution_state(test_ctx()) -> ok | no_return().
 assert_exp_workflow_execution_state(TestCtx = #test_ctx{workflow_execution_exp_state = ExpState}) ->
     case atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState, ?ASSERT_RETRIES) of
         true ->

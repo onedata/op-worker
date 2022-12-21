@@ -36,10 +36,21 @@
     code_change/3
 ]).
 
+% There are 2 different types of transfers jobs:
+% - traverse - iterates over data source (view, directory or even single file)
+%              listing regular files and scheduling their transfer jobs.
+%              This is the first scheduled job for every transfer.
+% - regular file transfer - transfers single regular file
+-type job() :: #transfer_traverse_job{} | #transfer_regular_file_job{}.
+-type job_ctx() :: #transfer_job_ctx{}.
+
+-export_type([job/0, job_ctx/0]).
+
 -record(state, {mod :: module()}).
 -type state() :: #state{}.
 
--define(DOC_ID_MISSING, doc_id_missing).
+-define(LIST_BATCH_SIZE, 100).
+-define(FILES_TO_PROCESS_THRESHOLD, 10 * ?LIST_BATCH_SIZE).
 
 %%%===================================================================
 %%% Callbacks
@@ -76,9 +87,13 @@
 %% retries and next retry timestamp.
 %% @end
 %%--------------------------------------------------------------------
--callback enqueue_data_transfer(file_ctx:ctx(), transfer_params(),
+-callback enqueue_data_transfer(
+    file_ctx:ctx(),
+    job_ctx(),
     RetriesLeft :: undefined | non_neg_integer(),
-    NextRetryTimestamp :: undefined | non_neg_integer()) -> ok.
+    NextRetryTimestamp :: undefined | non_neg_integer()
+) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -86,7 +101,7 @@
 %% Callback called when transferring regular file.
 %% @end
 %%--------------------------------------------------------------------
--callback transfer_regular_file(file_ctx:ctx(), transfer_params()) ->
+-callback transfer_regular_file(file_ctx:ctx(), job_ctx()) ->
     ok | {error, term()}.
 
 
@@ -137,17 +152,17 @@ handle_call(_Request, _From, State) ->
     {noreply, NewState :: state()} |
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: state()}).
-handle_cast(?TRANSFER_DATA_REQ(FileCtx, Params, Retries, NextRetryTimestamp), State) ->
+handle_cast(?TRANSFER_DATA_REQ(FileCtx, TransferJobCtx, Retries, NextRetryTimestamp), State) ->
     Mod = State#state.mod,
-    TransferId = Params#transfer_params.transfer_id,
+    TransferId = TransferJobCtx#transfer_job_ctx.transfer_id,
     case should_start(NextRetryTimestamp) of
         true ->
-            case transfer_data(State, FileCtx, Params, Retries) of
+            case transfer_data(State, FileCtx, TransferJobCtx, Retries) of
                 ok ->
                     ok;
                 {retry, NewFileCtx} ->
                     NextRetry = next_retry(State, Retries),
-                    Mod:enqueue_data_transfer(NewFileCtx, Params, Retries - 1, NextRetry);
+                    Mod:enqueue_data_transfer(NewFileCtx, TransferJobCtx, Retries - 1, NextRetry);
                 {error, not_found} ->
                     % todo VFS-4218 currently we ignore this case
                     {ok, _} = transfer:increment_files_processed_counter(TransferId);
@@ -159,9 +174,10 @@ handle_cast(?TRANSFER_DATA_REQ(FileCtx, Params, Retries, NextRetryTimestamp), St
                     {ok, _} = transfer:increment_files_failed_and_processed_counters(TransferId)
             end;
         _ ->
-            Mod:enqueue_data_transfer(FileCtx, Params, Retries, NextRetryTimestamp)
+            Mod:enqueue_data_transfer(FileCtx, TransferJobCtx, Retries, NextRetryTimestamp)
     end,
     {noreply, State, hibernate};
+
 handle_cast(Request, State) ->
     ?log_bad_request(Request),
     {noreply, State}.
@@ -240,32 +256,46 @@ should_start(NextRetryTimestamp) ->
 %% retry request and caught error otherwise.
 %% @end
 %%-------------------------------------------------------------------
--spec transfer_data(state(), file_ctx:ctx(), transfer_params(), non_neg_integer()) ->
+-spec transfer_data(state(), file_ctx:ctx(), job_ctx(), non_neg_integer()) ->
     ok | {retry, file_ctx:ctx()} | {error, term()}.
-transfer_data(State = #state{mod = Mod}, FileCtx0, Params, RetriesLeft) ->
-    UserCtx = Params#transfer_params.user_ctx,
+transfer_data(State = #state{mod = Mod}, FileCtx0, TransferJobCtx, RetriesLeft) ->
+    UserCtx = TransferJobCtx#transfer_job_ctx.user_ctx,
     AccessDefinitions = Mod:required_permissions(),
+    TransferId = TransferJobCtx#transfer_job_ctx.transfer_id,
 
     try
+        {ok, #document{value = Transfer}} = transfer:get(TransferId),
+
+        assert_transfer_is_ongoing(Transfer),
+
         FileCtx1 = fslogic_authz:ensure_authorized(UserCtx, FileCtx0, AccessDefinitions),
-        transfer_data_insecure(UserCtx, FileCtx1, State, Params)
+        transfer_data_insecure(UserCtx, FileCtx1, State, Transfer, TransferJobCtx)
     of
         ok ->
             ok;
         Error = {error, _Reason} ->
-            maybe_retry(FileCtx0, Params, RetriesLeft, Error)
+            maybe_retry(FileCtx0, TransferJobCtx, RetriesLeft, Error)
     catch
         throw:cancelled ->
             {error, cancelled};
         throw:already_ended ->
             {error, already_ended};
         error:{badmatch, Error = {error, not_found}} ->
-            maybe_retry(FileCtx0, Params, RetriesLeft, Error);
+            maybe_retry(FileCtx0, TransferJobCtx, RetriesLeft, Error);
         Error:Reason:Stacktrace   ->
             ?error_stacktrace("Unexpected error ~p:~p during transfer ~p", [
-                Error, Reason, Params#transfer_params.transfer_id
+                Error, Reason, TransferJobCtx#transfer_job_ctx.transfer_id
             ], Stacktrace),
-            maybe_retry(FileCtx0, Params, RetriesLeft, {Error, Reason})
+            maybe_retry(FileCtx0, TransferJobCtx, RetriesLeft, {Error, Reason})
+    end.
+
+
+%% @private
+-spec assert_transfer_is_ongoing(transfer:transfer()) -> ok | no_return().
+assert_transfer_is_ongoing(Transfer) ->
+    case transfer:is_ongoing(Transfer) of
+        true -> ok;
+        false -> throw(already_ended)
     end.
 
 
@@ -276,23 +306,23 @@ transfer_data(State = #state{mod = Mod}, FileCtx0, Params, RetriesLeft) ->
 %% Otherwise returns given error.
 %% @end
 %%-------------------------------------------------------------------
--spec maybe_retry(file_ctx:ctx(), transfer_params(), non_neg_integer(), term()) ->
+-spec maybe_retry(file_ctx:ctx(), job_ctx(), non_neg_integer(), term()) ->
     {retry, file_ctx:ctx()} | {error, term()}.
-maybe_retry(_FileCtx, Params, 0, Error = {error, not_found}) ->
+maybe_retry(_FileCtx, TransferJobCtx, 0, Error = {error, not_found}) ->
     ?error(
         "Data transfer in scope of transfer ~p failed due to ~p~n"
-        "No retries left", [Params#transfer_params.transfer_id, Error]
+        "No retries left", [TransferJobCtx#transfer_job_ctx.transfer_id, Error]
     ),
     Error;
-maybe_retry(FileCtx, Params, Retries, Error = {error, not_found}) ->
+maybe_retry(FileCtx, TransferJobCtx, Retries, Error = {error, not_found}) ->
     ?warning(
         "Data transfer in scope of transfer ~p failed due to ~p~n"
         "File transfer will be retried (attempts left: ~p)",
-        [Params#transfer_params.transfer_id, Error, Retries - 1]
+        [TransferJobCtx#transfer_job_ctx.transfer_id, Error, Retries - 1]
     ),
     {retry, FileCtx};
-maybe_retry(FileCtx, Params, 0, Error) ->
-    TransferId = Params#transfer_params.transfer_id,
+maybe_retry(FileCtx, TransferJobCtx, 0, Error) ->
+    TransferId = TransferJobCtx#transfer_job_ctx.transfer_id,
     {Path, _FileCtx2} = file_ctx:get_canonical_path(FileCtx),
 
     ?error(
@@ -300,8 +330,8 @@ maybe_retry(FileCtx, Params, 0, Error) ->
         "No retries left", [Path, TransferId, Error]
     ),
     {error, retries_per_file_transfer_exceeded};
-maybe_retry(FileCtx, Params, Retries, Error) ->
-    TransferId = Params#transfer_params.transfer_id,
+maybe_retry(FileCtx, TransferJobCtx, Retries, Error) ->
+    TransferId = TransferJobCtx#transfer_job_ctx.transfer_id,
     {Path, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
 
     ?warning(
@@ -347,161 +377,65 @@ backoff(RetryNum, MaxRetries) ->
 %% entire directory depending on file ctx).
 %% @end
 %%--------------------------------------------------------------------
--spec transfer_data_insecure(user_ctx:ctx(), file_ctx:ctx(), state(), transfer_params()) ->
+-spec transfer_data_insecure(
+    user_ctx:ctx(),
+    file_ctx:ctx(),
+    state(),
+    transfer:transfer(),
+    job_ctx()
+) ->
     ok | {error, term()}.
-transfer_data_insecure(_, FileCtx, State, Params = #transfer_params{view_name = undefined}) ->
-    transfer_fs_subtree(State, FileCtx, Params);
-transfer_data_insecure(_, FileCtx, State, Params) ->
-    transfer_files_from_view(State, FileCtx, Params, undefined).
-
-
-%% @private
--spec enqueue_files_transfer(state(), [file_ctx:ctx()], transfer_params()) -> ok.
-enqueue_files_transfer(#state{mod = Mod}, FileCtxs, TransferParams) ->
-    lists:foreach(fun(FileCtx) ->
-        Mod:enqueue_data_transfer(FileCtx, TransferParams, undefined, undefined)
-    end, FileCtxs).
-
-
-%% @private
--spec transfer_fs_subtree(state(), file_ctx:ctx(), transfer_params()) ->
-    ok | {error, term()}.
-transfer_fs_subtree(State = #state{mod = Mod}, FileCtx, Params) ->
-    case transfer:is_ongoing(Params#transfer_params.transfer_id) of
-        true ->
-            case file_ctx:file_exists_const(FileCtx) of
-                true ->
-                    case file_ctx:is_dir(FileCtx) of
-                        {true, FileCtx2} ->
-                            ListOpts = #{tune_for_large_continuous_listing => true},
-                            transfer_dir(State, FileCtx2, ListOpts, Params);
-                        {false, FileCtx2} ->
-                            Mod:transfer_regular_file(FileCtx2, Params)
-                    end;
-                false ->
-                    {error, not_found}
-            end;
-        false ->
-            throw(already_ended)
-    end.
-
-
-%% @private
--spec transfer_dir(state(), file_ctx:ctx(), file_listing:options(), transfer_params()) ->
-    ok | {error, term()}.
-transfer_dir(State, FileCtx, ListOpts, TransferParams = #transfer_params{
-    transfer_id = TransferId,
-    user_ctx = UserCtx
+transfer_data_insecure(_, FileCtx, State, _Transfer, TransferJobCtx = #transfer_job_ctx{
+    job = #transfer_regular_file_job{}
 }) ->
-    {Children, ListingPaginationToken, FileCtx2} = file_tree:list_children(FileCtx, UserCtx, ListOpts),
-
-    Length = length(Children),
-    transfer:increment_files_to_process_counter(TransferId, Length),
-    enqueue_files_transfer(State, Children, TransferParams),
-
-    case file_listing:is_finished(ListingPaginationToken) of
+    case file_ctx:file_exists_const(FileCtx) of
         true ->
-            transfer:increment_files_processed_counter(TransferId),
+            CallbackModule = State#state.mod,
+            CallbackModule:transfer_regular_file(FileCtx, TransferJobCtx);
+        false ->
+            {error, not_found}
+    end;
+
+transfer_data_insecure(_UserCtx, RootFileCtx, State, #transfer{
+    files_to_process = FilesToProcess,
+    files_processed = FilesProcessed
+}, TransferJobCtx) when FilesToProcess - FilesProcessed > ?FILES_TO_PROCESS_THRESHOLD ->
+    ?warning(
+        "Postponing next regular file transfer jobs scheduling for transfer ~s "
+        "as jobs threshold have been reached (possible large number of job retries)",
+        [TransferJobCtx#transfer_job_ctx.transfer_id]
+    ),
+    CallbackModule = State#state.mod,
+    CallbackModule:enqueue_data_transfer(RootFileCtx, TransferJobCtx);
+
+transfer_data_insecure(UserCtx, RootFileCtx, State, _Transfer, TransferJobCtx = #transfer_job_ctx{
+    transfer_id = TransferId,
+    job = TransferTraverseJob = #transfer_traverse_job{iterator = Iterator}
+}) ->
+    CallbackModule = State#state.mod,
+
+    {ProgressMarker, Results, NewIterator} = transfer_iterator:get_next_batch(
+        UserCtx, ?LIST_BATCH_SIZE, Iterator
+    ),
+
+    transfer:increment_files_to_process_counter(TransferId, length(Results)),
+    TransferRegularFileJobCtx = TransferJobCtx#transfer_job_ctx{job = #transfer_regular_file_job{}},
+    lists:foreach(fun
+        (error) ->
+            transfer:increment_files_failed_and_processed_counters(TransferId);
+        ({ok, FileCtx}) ->
+            CallbackModule:enqueue_data_transfer(FileCtx, TransferRegularFileJobCtx)
+    end, Results),
+
+    case ProgressMarker of
+        done when CallbackModule =:= replication_worker ->
+            transfer:mark_replication_traverse_finished(TransferId),
             ok;
-        false ->
-            transfer_dir(State, FileCtx2, #{pagination_token => ListingPaginationToken}, TransferParams)
-    end.
-
-
-%% @private
--spec transfer_files_from_view(state(), file_ctx:ctx(), transfer_params(),
-    file_meta:uuid() | undefined | ?DOC_ID_MISSING) -> ok | {error, term()}.
-transfer_files_from_view(State = #state{mod = Mod}, FileCtx, Params, LastDocId) ->
-    case transfer:is_ongoing(Params#transfer_params.transfer_id) of
-        true ->
-            Chunk = Mod:view_querying_chunk_size(),
-            transfer_files_from_view(State, FileCtx, Params, Chunk, LastDocId);
-        false ->
-            throw(already_ended)
-    end.
-
-
-%% @private
--spec transfer_files_from_view(state(), file_ctx:ctx(), transfer_params(),
-    non_neg_integer(), file_meta:uuid() | undefined | ?DOC_ID_MISSING) -> ok | {error, term()}.
-transfer_files_from_view(State, FileCtx, Params, Chunk, LastDocId) ->
-    #transfer_params{
-        transfer_id = TransferId,
-        view_name = ViewName,
-        query_view_params = QueryViewParams
-    } = Params,
-
-    QueryViewParams2 = case LastDocId of
-        undefined ->
-            [{skip, 0} | QueryViewParams];
-        ?DOC_ID_MISSING ->
-            % doc_id is missing when view has reduce function defined
-            % in such case we must iterate over results using limit and skip
-            [{skip, Chunk} | QueryViewParams];
-        _ ->
-            [{skip, 1}, {startkey_docid, LastDocId} | QueryViewParams]
-    end,
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-
-    case index:query(SpaceId, ViewName, [{limit, Chunk} | QueryViewParams2]) of
-        {ok, #{<<"rows">> := Rows}} ->
-            {NewLastDocId, FileCtxs} = lists:foldl(fun(Row, {_LastDocId, FileCtxsIn}) ->
-                Value = maps:get(<<"value">>, Row),
-                DocId = maps:get(<<"id">>, Row, ?DOC_ID_MISSING),
-                ObjectIds = case is_list(Value) of
-                    true -> lists:flatten(Value);
-                    false -> [Value]
-                end,
-                transfer:increment_files_to_process_counter(TransferId, length(ObjectIds)),
-                NewFileCtxs = lists:filtermap(fun(O) ->
-                    try
-                        {ok, G} = file_id:objectid_to_guid(O),
-                        NewFileCtx0 = file_ctx:new_by_guid(G), % TODO VFS-7443 - maybe use referenced guid?
-                        case file_ctx:file_exists_const(NewFileCtx0) of
-                            true ->
-                                % TODO VFS-6386 Enable and test view transfer with dirs
-                                case file_ctx:is_dir(NewFileCtx0) of
-                                    {true, _} ->
-                                        transfer:increment_files_processed_counter(TransferId),
-                                        false;
-                                    {false, NewFileCtx1} ->
-                                        {true, NewFileCtx1}
-                                end;
-                            false ->
-                                % TODO VFS-4218 currently we silently omit garbage
-                                % returned from view (view can return anything)
-                                transfer:increment_files_processed_counter(TransferId),
-                                false
-                        end
-                    catch
-                        Error:Reason:Stacktrace   ->
-                            transfer:increment_files_failed_and_processed_counters(TransferId),
-                            ?error_stacktrace(
-                                "Processing result of query view ~p "
-                                "in space ~p failed due to ~p:~p", [
-                                    ViewName, SpaceId, Error, Reason
-                                ],
-                                Stacktrace  
-                            ),
-                            false
-                    end
-                end, ObjectIds),
-                {DocId, FileCtxsIn ++ NewFileCtxs}
-            end, {undefined, []}, Rows),
-
-            enqueue_files_transfer(State, FileCtxs, Params#transfer_params{
-                view_name = undefined, query_view_params = undefined
-            }),
-            case length(Rows) < Chunk of
-                true ->
-                    transfer:increment_files_processed_counter(TransferId),
-                    ok;
-                false ->
-                    transfer_files_from_view(State, FileCtx, Params, NewLastDocId)
-            end;
-        Error = {error, Reason} ->
-            ?error("Querying view ~p failed due to ~p when processing transfer ~p", [
-                ViewName, Reason, TransferId
-            ]),
-            Error
+        done when CallbackModule =:= replica_eviction_worker ->
+            transfer:mark_eviction_traverse_finished(TransferId),
+            ok;
+        more ->
+            CallbackModule:enqueue_data_transfer(RootFileCtx, TransferJobCtx#transfer_job_ctx{
+                job = TransferTraverseJob#transfer_traverse_job{iterator = NewIterator}
+            })
     end.

@@ -64,7 +64,7 @@ truncate_insecure(UserCtx, FileCtx1, Size, UpdateTimes, CreateFileIfNotExist) ->
             on_successful_truncate(FileCtx2, Size, UpdateTimes);
         {false, FileCtx2} ->
             {SDHandle, FileCtx3} = storage_driver:new_handle(SessId, FileCtx2),
-            case storage_driver:open(SDHandle, write) of
+            case storage_driver:open_for_write_insecure(SDHandle) of
                 {ok, Handle} ->
                     % Flush events queue to get proper file size
                     catch lfm_event_controller:flush_event_queue(

@@ -41,19 +41,24 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([init_engine/0]).
+-export([
+    init_engine/0
+]).
 -export([
     list/4,
+    foreach/3,
+    foldl/4
+]).
+-export([
     schedule/6,
     get/1, get_summary/2,
-    cancel/2,
-    pause/2,
+    init_cancel/2,
+    init_pause/2,
     resume/2,
     repeat/4,
-    report_provider_restart/1,
-    report_openfaas_down/2,
-    purge_all/0
+    discard/1
 ]).
+-export([report_openfaas_down/2]).
 
 
 -type listing_mode() :: basic | summary.
@@ -108,6 +113,28 @@ list(SpaceId, Phase, summary, ListingOpts) ->
     end, AtmWorkflowExecutionBasicEntries),
 
     {ok, AtmWorkflowExecutionSummaryEntries, IsLast}.
+
+
+-spec foreach(
+    od_space:id(),
+    atm_workflow_execution:phase(),
+    fun((atm_workflow_execution:id()) -> term())
+) ->
+    ok.
+foreach(SpaceId, Phase, Callback) ->
+    foldl(SpaceId, Phase, fun(AtmWorkflowExecutionId, _) -> Callback(AtmWorkflowExecutionId) end, ok),
+    ok.
+
+
+-spec foldl(
+    od_space:id(),
+    atm_workflow_execution:phase(),
+    fun((atm_workflow_execution:id(), AccIn :: term()) -> AccOut :: term()),
+    InitialAcc :: term()
+) ->
+    term().
+foldl(SpaceId, Phase, Callback, InitialAcc) ->
+    foldl(SpaceId, Phase, Callback, InitialAcc, #{limit => 1000, start_index => <<>>}).
 
 
 -spec schedule(
@@ -182,14 +209,14 @@ get_summary(AtmWorkflowExecutionId, #atm_workflow_execution{
     }.
 
 
--spec cancel(user_ctx:ctx(), atm_workflow_execution:id()) -> ok | errors:error().
-cancel(UserCtx, AtmWorkflowExecutionId) ->
-    atm_workflow_execution_handler:stop(UserCtx, AtmWorkflowExecutionId, cancel).
+-spec init_cancel(user_ctx:ctx(), atm_workflow_execution:id()) -> ok | errors:error().
+init_cancel(UserCtx, AtmWorkflowExecutionId) ->
+    atm_workflow_execution_handler:init_stop(UserCtx, AtmWorkflowExecutionId, cancel).
 
 
--spec pause(user_ctx:ctx(), atm_workflow_execution:id()) -> ok | errors:error().
-pause(UserCtx, AtmWorkflowExecutionId) ->
-    atm_workflow_execution_handler:stop(UserCtx, AtmWorkflowExecutionId, pause).
+-spec init_pause(user_ctx:ctx(), atm_workflow_execution:id()) -> ok | errors:error().
+init_pause(UserCtx, AtmWorkflowExecutionId) ->
+    atm_workflow_execution_handler:init_stop(UserCtx, AtmWorkflowExecutionId, pause).
 
 
 -spec resume(user_ctx:ctx(), atm_workflow_execution:id()) -> ok | errors:error().
@@ -210,28 +237,9 @@ repeat(UserCtx, Type, AtmLaneRunSelector, AtmWorkflowExecutionId) ->
     ).
 
 
-%%--------------------------------------------------------------------
-%% @doc
-%% This function should be called only after provider restart to handle
-%% stale (processes handling execution no longer exists) workflows.
-%% All waiting and ongoing workflow executions for given space are:
-%% a) terminated as ?CRASHED/?CANCELLED/?FAILED if execution was already stopping
-%% b) terminated as ?INTERRUPTED otherwise (running execution was interrupted by
-%%    provider shutdown). Such executions will be resumed.
-%% @end
-%%--------------------------------------------------------------------
--spec report_provider_restart(od_space:id()) -> ok.
-report_provider_restart(SpaceId) ->
-    CallbackFun = fun(AtmWorkflowExecutionId) ->
-        try
-            atm_workflow_execution_handler:on_provider_restart(AtmWorkflowExecutionId)
-        catch Type:Reason:Stacktrace ->
-            ?atm_examine_error(Type, Reason, Stacktrace)
-        end
-    end,
-
-    foreach_atm_workflow_execution(CallbackFun, SpaceId, ?WAITING_PHASE),
-    foreach_atm_workflow_execution(CallbackFun, SpaceId, ?ONGOING_PHASE).
+-spec discard(atm_workflow_execution:id()) -> ok | errors:error().
+discard(AtmWorkflowExecutionId) ->
+    atm_workflow_execution_status:handle_discard(AtmWorkflowExecutionId).
 
 
 -spec report_openfaas_down(od_space:id(), errors:error()) -> ok.
@@ -240,38 +248,12 @@ report_openfaas_down(SpaceId, Error) ->
         try
             atm_workflow_execution_handler:on_openfaas_down(AtmWorkflowExecutionId, Error)
         catch Type:Reason:Stacktrace ->
-            ?atm_examine_error(Type, Reason, Stacktrace)
+            ?examine_exception(Type, Reason, Stacktrace)
         end
     end,
 
-    foreach_atm_workflow_execution(CallbackFun, SpaceId, ?WAITING_PHASE),
-    foreach_atm_workflow_execution(CallbackFun, SpaceId, ?ONGOING_PHASE).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Purges all workflow executions for all supported spaces.
-%%
-%%                              !!! Caution !!!
-%% This operation doesn't enforce any protection on deleted workflow executions
-%% and as such should never be called after successful Oneprovider start.
-%% @end
-%%--------------------------------------------------------------------
--spec purge_all() -> ok.
-purge_all() ->
-    ?info("Starting atm_workflow_execution purge procedure..."),
-
-    {ok, SpaceIds} = provider_logic:get_spaces(),
-    DeleteFun = fun atm_workflow_execution_factory:delete_insecure/1,
-
-    lists:foreach(fun(SpaceId) ->
-        foreach_atm_workflow_execution(DeleteFun, SpaceId, ?WAITING_PHASE),
-        foreach_atm_workflow_execution(DeleteFun, SpaceId, ?ONGOING_PHASE),
-        foreach_atm_workflow_execution(DeleteFun, SpaceId, ?SUSPENDED_PHASE),
-        foreach_atm_workflow_execution(DeleteFun, SpaceId, ?ENDED_PHASE)
-    end, SpaceIds),
-
-    ?info("atm_workflow_execution purge procedure finished succesfully.").
+    foreach(SpaceId, ?WAITING_PHASE, CallbackFun),
+    foreach(SpaceId, ?ONGOING_PHASE, CallbackFun).
 
 
 %%%===================================================================
@@ -297,37 +279,26 @@ list_basic_entries(SpaceId, ?ENDED_PHASE, ListingOpts) ->
 
 
 %% @private
--spec foreach_atm_workflow_execution(
-    fun((atm_workflow_execution:id()) -> ok),
-    od_space:id(),
-    atm_workflow_execution:phase()
-) ->
-    ok.
-foreach_atm_workflow_execution(Callback, SpaceId, Phase) ->
-    foreach_workflow(Callback, SpaceId, Phase, #{limit => 1000, start_index => <<>>}).
-
-
-%% @private
--spec foreach_workflow(
-    fun((atm_workflow_execution:id()) -> ok),
+-spec foldl(
     od_space:id(),
     atm_workflow_execution:phase(),
+    fun((atm_workflow_execution:id(), AccIn :: term()) -> AccOut :: term()),
+    InitialAcc :: term(),
     atm_workflow_executions_forest:listing_opts()
 ) ->
-    ok.
-foreach_workflow(Callback, SpaceId, Phase, ListingOpts) ->
+    term().
+foldl(SpaceId, Phase, Callback, InitialAcc, ListingOpts) ->
     {ok, AtmWorkflowExecutionBasicEntries, IsLast} = list(SpaceId, Phase, basic, ListingOpts),
 
-    LastEntryIndex = lists:foldl(fun({Index, AtmWorkflowExecutionId}, _) ->
-        Callback(AtmWorkflowExecutionId),
-        Index
-    end, <<>>, AtmWorkflowExecutionBasicEntries),
+    {LastEntryIndex, NewAcc} = lists:foldl(fun({Index, AtmWorkflowExecutionId}, {_, AccIn}) ->
+        {Index, Callback(AtmWorkflowExecutionId, AccIn)}
+    end, {<<>>, InitialAcc}, AtmWorkflowExecutionBasicEntries),
 
     case IsLast of
         true ->
-            ok;
+            NewAcc;
         false ->
-            foreach_workflow(Callback, SpaceId, Phase, ListingOpts#{
+            foldl(SpaceId, Phase, Callback, NewAcc, ListingOpts#{
                 start_index => LastEntryIndex, offset => 1
             })
     end.

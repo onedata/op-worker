@@ -107,7 +107,8 @@
     lfm_open_and_create_open_failure/1,
     lfm_mv_failure_multiple_users/1,
     sparse_files_should_be_created/2,
-    lfm_close_deleted_open_files/1
+    lfm_close_deleted_open_files/1,
+    lfm_create_dir_at_path/1
 ]).
 
 -export([
@@ -2371,6 +2372,17 @@ lfm_close_deleted_open_files(Config) ->
     
     ok = ?assertEqual(ok, lfm_proxy:close(W, Handle1)),
     ok = ?assertEqual(ok, lfm_proxy:close(W, Handle2)).
+
+
+lfm_create_dir_at_path(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+    
+    ParentGuid = opw_test_rpc:call(W, fslogic_file_id, spaceid_to_space_dir_guid, [<<"space_id1">>]),
+    Path = filename:join(lists:duplicate(8, generator:gen_name())),
+    
+    {ok, #file_attr{guid = Guid}} = ?assertMatch({ok, _}, lfm_proxy:create_dir_at_path(W, SessId1, ParentGuid, Path)),
+    ?assertMatch({ok, #file_attr{guid = Guid}}, lfm_proxy:create_dir_at_path(W, SessId1, ParentGuid, Path)).
 
 
 %%%====================================================================

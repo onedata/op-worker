@@ -36,6 +36,7 @@
 
 -include("modules/dir_stats_collector/dir_size_stats.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_time_series.hrl").
 -include_lib("cluster_worker/include/time_series/browsing.hrl").
 -include_lib("ctool/include/time_series/common.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -300,7 +301,7 @@ gen_default_historical_stats_layout(Guid) ->
 internal_stats_to_current_stats(InternalStats) ->
     maps:map(fun(_TimeSeriesName, #{?CURRENT_METRIC := Windows}) ->
         case Windows of
-            [{_Timestamp, Value}] -> Value;
+            [#window_info{value = Value}] -> Value;
             [] -> 0
         end
     end, maps:without([?INCARNATION_TIME_SERIES], InternalStats)).
@@ -326,7 +327,7 @@ internal_layout_to_historical_stats_layout(InternalLayout) ->
 %% @private
 -spec internal_stats_to_incarnation(internal_stats()) -> non_neg_integer().
 internal_stats_to_incarnation(#{?INCARNATION_TIME_SERIES := #{?CURRENT_METRIC := []}}) -> 0;
-internal_stats_to_incarnation(#{?INCARNATION_TIME_SERIES := #{?CURRENT_METRIC := [{_Timestamp, Value}]}}) -> Value.
+internal_stats_to_incarnation(#{?INCARNATION_TIME_SERIES := #{?CURRENT_METRIC := [#window_info{value = Value}]}}) -> Value.
 
 
 %% @private

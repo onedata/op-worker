@@ -30,6 +30,11 @@
 -export([data_spec/1, fetch_entity/1, authorize/2, validate/2]).
 -export([create/1, get/2, update/1, delete/1]).
 
+-record(atm_task_ctx, {
+    task :: atm_task_execution:record(),
+    workflow_execution :: atm_workflow_execution:record()
+}).
+
 -define(MAX_POD_EVENT_LOG_LIST_LIMIT, 1000).
 -define(DEFAULT_POD_EVENT_LOG_LIST_LIMIT, 1000).
 
@@ -87,8 +92,19 @@ fetch_entity(#op_req{auth = ?NOBODY}) ->
 
 fetch_entity(#op_req{gri = #gri{id = AtmTaskExecutionId, scope = private}}) ->
     case atm_task_execution:get(AtmTaskExecutionId) of
-        {ok, #document{value = AtmTaskExecution}} ->
-            {ok, {AtmTaskExecution, 1}};
+        {ok, #document{value = AtmTaskExecution = #atm_task_execution{
+            workflow_execution_id = AtmWorkflowExecutionId
+        }}} ->
+            case atm_workflow_execution_api:get(AtmWorkflowExecutionId) of
+                {ok, AtmWorkflowExecution} ->
+                    AtmTaskCtx = #atm_task_ctx{
+                        task = AtmTaskExecution,
+                        workflow_execution = AtmWorkflowExecution
+                    },
+                    {ok, {AtmTaskCtx, 1}};
+                {error, _} = Error ->
+                    Error
+            end;
         {error, _} = Error ->
             Error
     end.
@@ -103,15 +119,15 @@ fetch_entity(#op_req{gri = #gri{id = AtmTaskExecutionId, scope = private}}) ->
 authorize(#op_req{auth = ?GUEST}, _) ->
     false;
 
-authorize(#op_req{operation = get, auth = Auth, gri = #gri{aspect = Aspect}}, #atm_task_execution{
-    workflow_execution_id = AtmWorkflowExecutionId
+authorize(#op_req{operation = get, auth = Auth, gri = #gri{aspect = Aspect}}, #atm_task_ctx{
+    workflow_execution = AtmWorkflowExecution
 }) when
     Aspect =:= instance;
     Aspect =:= openfaas_function_pod_status_registry;
     element(1, Aspect) =:= openfaas_function_pod_event_log
 ->
     atm_workflow_execution_middleware_plugin:has_access_to_workflow_execution_details(
-        Auth, AtmWorkflowExecutionId
+        Auth, AtmWorkflowExecution
     ).
 
 
@@ -146,13 +162,19 @@ create(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
-get(#op_req{gri = #gri{aspect = instance, scope = private}}, AtmTaskExecution) ->
+get(#op_req{gri = #gri{aspect = instance, scope = private}}, #atm_task_ctx{task = AtmTaskExecution}) ->
     {ok, AtmTaskExecution};
 
-get(#op_req{gri = #gri{aspect = openfaas_function_pod_status_registry, scope = private}}, AtmTaskExecution) ->
+get(
+    #op_req{gri = #gri{aspect = openfaas_function_pod_status_registry, scope = private}},
+    #atm_task_ctx{task = AtmTaskExecution}
+) ->
     {ok, get_openfaas_function_pod_status_registry(AtmTaskExecution)};
 
-get(#op_req{data = Data, gri = #gri{aspect = {openfaas_function_pod_event_log, PodId}}}, AtmTaskExecution) ->
+get(
+    #op_req{data = Data, gri = #gri{aspect = {openfaas_function_pod_event_log, PodId}}},
+    #atm_task_ctx{task = AtmTaskExecution}
+) ->
     PodStatusRegistry = get_openfaas_function_pod_status_registry(AtmTaskExecution),
 
     case atm_openfaas_function_pod_status_registry:find_summary(PodId, PodStatusRegistry) of

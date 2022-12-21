@@ -131,6 +131,6 @@ consume_result(AtmWorkflowExecutionCtx, ResultName, ResultSpec, ResultValue) ->
             ResultValue
         )
     catch Type:Reason:Stacktrace ->
-        Error = ?atm_examine_error(Type, Reason, Stacktrace),
+        Error = ?examine_exception(Type, Reason, Stacktrace),
         throw(?ERROR_ATM_TASK_RESULT_MAPPING_FAILED(ResultName, Error))
     end.

@@ -19,6 +19,7 @@
 %% API
 -export([
     get_file_attr/3, 
+    get_file_attr_by_path/4,
     get_file_details/2,
     get_file_references/2,
     get_child_attr/4, chmod/3, update_times/5,
@@ -43,6 +44,7 @@
 %%% API
 %%%===================================================================
 
+
 %%--------------------------------------------------------------------
 %% @equiv get_file_attr_insecure/3 with permission checks and default options
 %% @end
@@ -65,6 +67,13 @@ get_file_attr(UserCtx, FileCtx, OptionalAttrs) when is_list(OptionalAttrs) ->
         include_optional_attrs => OptionalAttrs
     }).
 
+
+-spec get_file_attr_by_path(user_ctx:ctx(), file_ctx:ctx(), file_meta:path(), [optional_attr()]) ->
+    fslogic_worker:fuse_response().
+get_file_attr_by_path(UserCtx, RootFileCtx, Path, OptionalAttrs) ->
+    #fuse_response{fuse_response = #guid{guid = Guid}} =
+        guid_req:resolve_guid_by_relative_path(UserCtx, RootFileCtx, Path),
+    get_file_attr(UserCtx, file_ctx:new_by_guid(Guid), OptionalAttrs).
 
 
 %%--------------------------------------------------------------------

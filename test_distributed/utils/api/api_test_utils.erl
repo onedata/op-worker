@@ -177,7 +177,7 @@ create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, 
             lfm_test_utils:write_file(P1Node, SpaceOwnerSessIdP1, FileGuid, {rand_content, RandSize}),
             RandSize;
         <<"dir">> ->
-            undefined
+            0
     end,
     {ok, FileAttrs} = ?assertMatch(
         {ok, #file_attr{size = Size, shares = FileShares}},
@@ -401,11 +401,6 @@ file_details_to_gs_json(undefined, #file_details{
     has_metadata = HasMetadata,
     recall_root_id = RecallRootId
 }) ->
-    DisplayedSize = case Type of
-        ?DIRECTORY_TYPE -> null;
-        _ -> Size
-    end,
-
     #{
         <<"hasMetadata">> => HasMetadata,
         <<"guid">> => FileGuid,
@@ -421,7 +416,7 @@ file_details_to_gs_json(undefined, #file_details{
         end,
         <<"mtime">> => MTime,
         <<"type">> => str_utils:to_binary(Type),
-        <<"size">> => DisplayedSize,
+        <<"size">> => utils:undefined_to_null(Size),
         <<"shares">> => Shares,
         <<"activePermissionsType">> => atom_to_binary(ActivePermissionsType, utf8),
         <<"providerId">> => ProviderId,
@@ -446,10 +441,6 @@ file_details_to_gs_json(ShareId, #file_details{
     active_permissions_type = ActivePermissionsType,
     has_metadata = HasMetadata
 }) ->
-    DisplayedSize = case Type of
-        ?DIRECTORY_TYPE -> null;
-        _ -> Size
-    end,
     IsShareRoot = lists:member(ShareId, Shares),
 
     #{
@@ -464,7 +455,7 @@ file_details_to_gs_json(ShareId, #file_details{
         end,
         <<"mtime">> => MTime,
         <<"type">> => str_utils:to_binary(Type),
-        <<"size">> => DisplayedSize,
+        <<"size">> => utils:undefined_to_null(Size),
         <<"shares">> => case IsShareRoot of
             true -> [ShareId];
             false -> []
@@ -512,10 +503,7 @@ file_attrs_to_json(undefined, #file_attr{
         <<"mtime">> => Mtime,
         <<"ctime">> => Ctime,
         <<"type">> => str_utils:to_binary(Type),
-        <<"size">> => case Type of
-            ?DIRECTORY_TYPE -> null;
-            _ -> utils:undefined_to_null(Size)
-        end,
+        <<"size">> => utils:undefined_to_null(Size),
         <<"shares">> => Shares,
         <<"provider_id">> => ProviderId,
         <<"owner_id">> => OwnerId,
@@ -556,10 +544,7 @@ file_attrs_to_json(ShareId, #file_attr{
         <<"mtime">> => Mtime,
         <<"ctime">> => Ctime,
         <<"type">> => str_utils:to_binary(Type),
-        <<"size">> => case Type of
-            ?DIRECTORY_TYPE -> null;
-            _ -> utils:undefined_to_null(Size)
-        end,
+        <<"size">> => utils:undefined_to_null(Size),
         <<"shares">> => case IsShareRoot of
             true -> [ShareId];
             false -> []
