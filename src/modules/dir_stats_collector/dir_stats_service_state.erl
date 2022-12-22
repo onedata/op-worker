@@ -48,6 +48,7 @@
 -author("Michal Wrzeszcz").
 
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/datastore/datastore_runner.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
@@ -66,7 +67,8 @@
 -export([
     handle_space_support_parameters_change/2,
     enable/1, disable/1,
-    report_collections_initialization_finished/1, report_collectors_stopped/1
+    report_collections_initialization_finished/1, report_collectors_stopped/1,
+    enable_for_new_support/1
 ]).
 
 %% datastore_model callbacks
@@ -414,6 +416,15 @@ report_collectors_stopped(SpaceId) ->
     end.
 
 
+-spec enable_for_new_support(od_space:id()) -> ok | {error, term()}.
+enable_for_new_support(SpaceId) ->
+    NewRecord = #dir_stats_service_state{
+        status = enabled,
+        status_change_timestamps = update_timestamps(enabled, [])
+    },
+    ?extract_ok(create(SpaceId, NewRecord)).
+
+
 %%%===================================================================
 %%% datastore_model callbacks
 %%%===================================================================
@@ -442,6 +453,11 @@ get_record_struct(1) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+-spec create(od_space:id(), record()) -> {ok, doc()} | {error, term()}.
+create(SpaceId, Record) ->
+    datastore_model:create(?CTX, #document{key = SpaceId, value = Record}).
 
 
 -spec update(od_space:id(), diff()) -> {ok, doc()} | {error, term()}.
