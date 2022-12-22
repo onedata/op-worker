@@ -539,7 +539,8 @@ await_file_distribution_sync(CreationProvider, SyncProviders, UserId, #object{
     type = ?REGULAR_FILE_TYPE, guid = Guid, content = Content
 }) ->
     case fslogic_file_id:is_link_uuid(file_id:guid_to_uuid(Guid)) of
-        true -> ok;
+        true ->
+            ok;
         false ->
             lists:foreach(fun(SyncProvider) ->
                 SessId = oct_background:get_user_session_id(UserId, SyncProvider),

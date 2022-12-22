@@ -8,6 +8,7 @@
 %%%--------------------------------------------------------------------
 %%% @doc
 %%% This module checks user access rights for file.
+%%% @TODO VFS-10318 - standardize concepts regarding protection flags (restricted/blocked/forbidden/denied; dataset/file protection flags)
 %%% @end
 %%%--------------------------------------------------------------------
 -module(data_access_control).
