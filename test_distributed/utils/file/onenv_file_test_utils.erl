@@ -653,7 +653,7 @@ create_symlink(Node, SessId, ParentGuid, FileName, SymlinkValue) ->
     {ok, #file_attr{}} | no_return().
 create_hardlink(Node, SessId, ParentGuid, FileName, TargetGuid) ->
     {ok, ParentPath} = lfm_proxy:get_file_path(Node, SessId, ParentGuid),
-    {ok, _} = lfm_proxy:make_link(Node, SessId, filename:join(ParentPath, FileName), TargetGuid).
+    ?assertMatch({ok, _}, lfm_proxy:make_link(Node, SessId, filename:join(ParentPath, FileName), TargetGuid)).
 
 
 %% @private
