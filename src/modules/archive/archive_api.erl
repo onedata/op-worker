@@ -49,7 +49,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([start_archivisation/6, cancel_archivisation/1, recall/4, cancel_recall/1, update_archive/2, get_archive_info/1,
+-export([start_archivisation/6, cancel_archivisation/3, recall/4, cancel_recall/1, update_archive/2, get_archive_info/1,
     list_archives/3, delete/2, get_nested_archives_stats/1, get_aggregated_stats/1]).
 
 %% Exported for use in tests
@@ -244,6 +244,20 @@ remove_archive_recursive(ArchiveId) ->
     end.
 
 
+-spec cancel_archivisation(archive:doc() | archive:id(), archive:cancel_preservation_policy(), user_ctx:ctx()) ->
+    ok | {error, term()}.
+cancel_archivisation(ArchiveDoc = #document{value = #archive{related_dip = undefined, related_aip = RelatedAip}}, PP, UserCtx) ->
+    cancel_archivisations(ArchiveDoc, RelatedAip, PP, UserCtx);
+cancel_archivisation(ArchiveDoc = #document{value = #archive{related_aip = undefined, related_dip = RelatedDip}}, PP, UserCtx) ->
+    cancel_archivisations(ArchiveDoc, RelatedDip, PP, UserCtx);
+cancel_archivisation(ArchiveId, PreservationPolicy, UserCtx) ->
+    case archive:get(ArchiveId) of
+        {ok, ArchiveDoc} -> cancel_archivisation(ArchiveDoc, PreservationPolicy, UserCtx);
+        ?ERROR_NOT_FOUND -> ok;
+        {error, _} = Error -> Error
+    end.
+
+
 -spec get_nested_archives_stats(archive:id() | archive:doc()) -> archive_stats:record().
 get_nested_archives_stats(ArchiveIdOrDoc) ->
     get_nested_archives_stats(ArchiveIdOrDoc, #link_token{}, archive_stats:empty()).
@@ -376,33 +390,26 @@ unblock_archive(ArchiveId) ->
 
 
 %% @private
--spec cancel_archivisation(archive:doc() | archive:id()) -> ok | {error, term()}.
-cancel_archivisation(ArchiveDoc = #document{value = #archive{related_dip = undefined, related_aip = RelatedAip}}) ->
-    cancel_archivisations(ArchiveDoc, RelatedAip);
-cancel_archivisation(ArchiveDoc = #document{value = #archive{related_aip = undefined, related_dip = RelatedDip}}) ->
-    cancel_archivisations(ArchiveDoc, RelatedDip);
-cancel_archivisation(ArchiveId) ->
-    case archive:get(ArchiveId) of
-        {ok, ArchiveDoc} -> cancel_archivisation(ArchiveDoc);
-        ?ERROR_NOT_FOUND -> ok;
-        {error, _} = Error -> Error
-    end.
+-spec cancel_archivisations(archive:doc(), archive:id(), archive:cancel_preservation_policy(), user_ctx:ctx()) ->
+    ok | {error, term()}.
+cancel_archivisations(ArchiveDoc, RelatedArchiveId, PreservationPolicy, UserCtx) ->
+    RelatedArchiveId =/= undefined andalso cancel_single_archive(RelatedArchiveId, PreservationPolicy, UserCtx),
+    cancel_single_archive(ArchiveDoc, PreservationPolicy, UserCtx).
 
 
 %% @private
--spec cancel_archivisations(archive:doc(), archive:id()) -> ok | {error, term()}.
-cancel_archivisations(ArchiveDoc, RelatedArchiveId) ->
-    RelatedArchiveId =/= undefined andalso cancel_single_archive(RelatedArchiveId),
-    cancel_single_archive(ArchiveDoc).
-
-
-%% @private
--spec cancel_single_archive(archive:doc() | archive:id()) -> ok | {error, term()}.
-cancel_single_archive(ArchiveDocOrId) ->
-    case archive:mark_cancelling(ArchiveDocOrId) of
+-spec cancel_single_archive(archive:doc() | archive:id(), archive:cancel_preservation_policy(), user_ctx:ctx()) ->
+    ok | {error, term()}.
+cancel_single_archive(ArchiveDocOrId, PreservationPolicy, UserCtx) ->
+    case archive:mark_cancelling(ArchiveDocOrId, PreservationPolicy) of
         ok ->
             {ok, TaskId} = archive:get_id(ArchiveDocOrId),
             ok = ?ok_if_not_found(archive_verification_traverse:cancel(TaskId));
+        {error, already_cancelled} ->
+            case PreservationPolicy of
+                retain -> ok;
+                delete -> remove_single_archive(ArchiveDocOrId, UserCtx)
+            end;
         {error, already_finished} ->
             ok;
         {error, _} = Error ->

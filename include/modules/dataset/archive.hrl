@@ -23,7 +23,7 @@
 -define(ARCHIVE_FAILED, failed).
 -define(ARCHIVE_VERIFICATION_FAILED, verification_failed).
 -define(ARCHIVE_DELETING, deleting).
--define(ARCHIVE_CANCELLING, cancelling).
+-define(ARCHIVE_CANCELLING(PreservationPolicy), {cancelling, PreservationPolicy}).
 -define(ARCHIVE_CANCELLED, cancelled).
 
 

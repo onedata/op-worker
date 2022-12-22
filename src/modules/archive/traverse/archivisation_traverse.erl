@@ -207,7 +207,7 @@ do_dir_master_job_unsafe(Job = #tree_traverse{
     MasterJobArgs = #{task_id := TaskId}
 ) ->
     {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId),
-    case archive_traverses_common:is_cancelled(AipCtx) of
+    case archive_traverses_common:is_cancelling(AipCtx) of
         true ->
             do_aborted_master_job(Job, MasterJobArgs, UserCtx, completed);
         false ->
@@ -236,7 +236,7 @@ do_slave_job_unsafe(#tree_traverse_slave{
     relative_path = RelativePath
 }, TaskId, StartTimestamp) ->
     {ok, UserCtx} = tree_traverse_session:acquire_for_task(UserId, ?POOL_NAME, TaskId),
-    TraverseInfo2 = case archive_traverses_common:is_cancelled(AipCtx) of
+    TraverseInfo2 = case archive_traverses_common:is_cancelling(AipCtx) of
         true -> TraverseInfo;
         false -> archivisation_traverse_logic:handle_file(
             FileCtx, RelativePath, UserCtx, TraverseInfo)
