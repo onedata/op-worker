@@ -176,6 +176,42 @@
                         "supported_size": 10737418240
                     }
                 }
+            },
+            "space_duplicated1": {
+                "displayed_name": "space_duplicated",
+                "users": [
+                    "user3"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/st1",
+                        "supported_size": 10737418240
+                    },
+                    "p2": {
+                        "storage": "/mnt/st2",
+                        "supported_size": 10737418240
+                    }
+                }
+            },
+            "space_duplicated2": {
+                "displayed_name": "space_duplicated",
+                "users": [
+                    "user3"
+                ],
+                "groups": [
+                ],
+                "providers": {
+                    "p1": {
+                        "storage": "/mnt/st1",
+                        "supported_size": 10737418240
+                    },
+                    "p2": {
+                        "storage": "/mnt/st2",
+                        "supported_size": 10737418240
+                    }
+                }
             }
         }
     }
