@@ -60,6 +60,13 @@
 
 
 garbage_collect_atm_workflow_executions() ->
+    set_env(atm_suspended_workflow_executions_expiration_sec, 4),
+    set_env(atm_ended_workflow_executions_expiration_sec, 2),
+
+    % Force early gc run (with original interval 1h) to ensure it will not launch
+    % during following test setup
+    run_gc(),
+
     Timestamp = global_clock:timestamp_seconds(),
 
     ExpAtmWorkflowExecutionState1 = run_atm_workflow_execution(paused),
@@ -78,9 +85,6 @@ garbage_collect_atm_workflow_executions() ->
         ExpAtmWorkflowExecutionState4, ExpAtmWorkflowExecutionState5
     ],
     assert_all_match_with_backend(AllExpAtmWorkflowExecutionStates),
-
-    set_env(atm_suspended_workflow_executions_expiration_sec, 4),
-    set_env(atm_ended_workflow_executions_expiration_sec, 2),
 
     % Move time backward and assert that no atm workflow execution is deleted
     time_test_utils:set_current_time_seconds(Timestamp - 2),

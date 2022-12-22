@@ -960,10 +960,10 @@ init_per_suite(Config) ->
                 {fuse_session_grace_period_seconds, 24 * 60 * 60},
                 {atm_workflow_engine_slots_count, 100000},
                 {atm_workflow_engine_async_calls_limit, 100000},
-                {atm_workflow_job_timeout_sec, 10},
+                {atm_workflow_job_timeout_sec, 1},
                 {atm_workflow_job_timeout_check_period_sec, 1},
-                {atm_suspended_workflow_executions_expiration_interval_sec, 0},
-                {atm_ended_workflow_executions_expiration_interval_sec, 0},
+                {atm_suspended_workflow_executions_expiration_sec, 0},
+                {atm_ended_workflow_executions_expiration_sec, 0},
                 {atm_workflow_executions_graceful_stop_timeout_sec, 3}
             ]}],
             posthook = fun(NewConfig) ->
