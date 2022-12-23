@@ -18,6 +18,7 @@
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
+-include("onenv_test_utils.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/onedata.hrl").
 -include_lib("ctool/include/privileges.hrl").
@@ -63,7 +64,8 @@
     move_file_should_not_move_detached_dataset/1,
     reattach_to_moved_root_file/1,
     establish_datasets_with_the_same_names/1,
-    establish_nested_datasets_filetree_structure_with_hardlinks/1
+    establish_nested_datasets_filetree_structure_with_hardlinks/1,
+    remove_hardlink_with_protection_flags/1
 ]).
 
 all() -> ?ALL([
@@ -99,7 +101,8 @@ all() -> ?ALL([
     move_file_should_not_move_detached_dataset,
     reattach_to_moved_root_file,
     establish_datasets_with_the_same_names,
-    establish_nested_datasets_filetree_structure_with_hardlinks
+    establish_nested_datasets_filetree_structure_with_hardlinks,
+    remove_hardlink_with_protection_flags
 ]).
 
 -define(ATTEMPTS, 30).
@@ -1109,6 +1112,34 @@ establish_nested_datasets_filetree_structure_with_hardlinks(_Config) ->
 
     ?assertAttachedDataset(P1Node, UserSessIdP1, Link1DatasetId, Link1Guid, undefined, ?no_flags_mask, ?no_flags_mask),
     ?assertFileEffDatasetSummaryAndMembership(P1Node, UserSessIdP1, Link1Guid, Link1DatasetId, [], ?DIRECT_MEMBERSHIP, ?ALL_PROTECTION).
+
+
+remove_hardlink_with_protection_flags(_Config) ->
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
+    [
+        #object{
+            children = [
+                #object{guid = RegFileGuid},
+                #object{guid = LinkGuid1}
+            ]
+        },
+        #object{guid = LinkGuid2}
+    ] = onenv_file_test_utils:create_and_sync_file_tree(user1, space1, [
+        #dir_spec{
+            children = [
+                #file_spec{custom_label = link_target},
+                #hardlink_spec{target = {custom_label, link_target}}
+            ],
+            dataset = #dataset_spec{protection_flags = [?DATA_PROTECTION_BIN]}
+        },
+        #hardlink_spec{target = {custom_label, link_target}}
+    ]),
+    % hardlink outside dataset should be deleted, hardlink in dataset should not
+    ?assertEqual({error, eperm}, lfm_proxy:unlink(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid1))),
+    ?assertEqual({error, eperm}, lfm_proxy:unlink(P1Node, UserSessIdP1, ?FILE_REF(RegFileGuid))),
+    ?assertEqual(ok, lfm_proxy:unlink(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid2))).
+    
 
 
 %===================================================================
