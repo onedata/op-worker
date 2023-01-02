@@ -29,7 +29,7 @@
 -include("proto/oneprovider/provider_messages.hrl").
 -include("proto/oneprovider/remote_driver_messages.hrl").
 -include("proto/oneprovider/rtransfer_messages.hrl").
--include("modules/fslogic/file_distribution.hrl").
+-include("modules/fslogic/data_distribution.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("clproto/include/messages.hrl").
 -include_lib("cluster_worker/include/time_series/browsing.hrl").
@@ -913,6 +913,8 @@ translate_from_protobuf(#'ProviderCurrentDirSizeStatsBrowseRequest'{
     };
 translate_from_protobuf(#'ProviderRegDistributionGetRequest'{}) ->
     #provider_reg_distribution_get_request{};
+translate_from_protobuf(#'ProviderRegStorageLocationGetRequest'{}) ->
+    #provider_reg_storage_location_get_request{};
 
 translate_from_protobuf(#'ProviderRpcResponse'{
     status = ok,
@@ -950,12 +952,30 @@ translate_from_protobuf(#'ProviderRegDistributionGetResult'{
     logical_size = LogicalSize,
     distribution_per_storage = DistributionPerStorage
 }) ->
+    {BlocksPerStorage, LocationsPerStorage} = lists:foldl(
+        fun(#'StorageRegDistributionGetResult'{
+            storage_id = StorageId,
+            blocks = Blocks,
+            location = Location
+        }, {BlocksAcc, LocationsAcc}) ->
+            {
+                BlocksAcc#{StorageId => lists:map(fun(Block) -> translate_from_protobuf(Block) end, Blocks)},
+                LocationsAcc#{StorageId => Location}
+            }
+        end,
+    {#{}, #{}}, DistributionPerStorage),
     #provider_reg_distribution_get_result{
         logical_size = LogicalSize,
-        blocks_per_storage = lists:foldl(
-            fun(#'StorageRegDistributionGetResult'{storage_id = StorageId, blocks = Blocks}, Acc) ->
-                Acc#{StorageId => lists:map(fun(Block) -> translate_from_protobuf(Block) end, Blocks)}
-            end, #{}, DistributionPerStorage)
+        blocks_per_storage = BlocksPerStorage,
+        locations_per_storage = LocationsPerStorage
+    };
+translate_from_protobuf(#'ProviderRegStorageLocationResult'{
+    locations = Locations
+}) ->
+    #provider_reg_storage_location_result{
+        locations = lists:foldl(fun(#'StorageLocation'{storage_id = StorageId, location = Location}, Acc) ->
+            Acc#{StorageId => Location}
+        end, #{}, Locations)
     };
 
 
@@ -2083,6 +2103,8 @@ translate_to_protobuf(#time_series_slice_get_request{
     }};
 translate_to_protobuf(#provider_reg_distribution_get_request{}) ->
     {provider_reg_distribution_get_request, #'ProviderRegDistributionGetRequest'{}};
+translate_to_protobuf(#provider_reg_storage_location_get_request{}) ->
+    {provider_reg_storage_location_get_request, #'ProviderRegStorageLocationGetRequest'{}};
 
 translate_to_protobuf(#provider_rpc_response{
     status = ok,
@@ -2118,16 +2140,26 @@ translate_to_protobuf(#time_series_slice_get_result{} = SliceGetResult) ->
     }};
 translate_to_protobuf(#provider_reg_distribution_get_result{
     logical_size = LogicalSize,
-    blocks_per_storage = BlocksPerStorage
+    blocks_per_storage = BlocksPerStorage,
+    locations_per_storage = LocationsPerStorage
 }) ->
     {provider_reg_distribution_get_result, #'ProviderRegDistributionGetResult'{
         logical_size = LogicalSize,
         distribution_per_storage = maps:fold(fun(StorageId, StorageBlocks, Acc) ->
             [#'StorageRegDistributionGetResult'{
                 storage_id = StorageId,
-                blocks = lists:map(fun(Block) -> translate_to_protobuf(Block) end, StorageBlocks)
+                blocks = lists:map(fun(Block) -> translate_to_protobuf(Block) end, StorageBlocks),
+                location = maps:get(StorageId, LocationsPerStorage)
             } | Acc]
         end, [], BlocksPerStorage)
+    }};
+translate_to_protobuf(#provider_reg_storage_location_result{
+    locations = LocationsMap
+}) ->
+    {provider_reg_storage_location_result, #'ProviderRegStorageLocationResult'{
+        locations = maps:fold(fun(StorageId, Location, Acc) ->
+            [#'StorageLocation'{storage_id = StorageId, location = Location} | Acc]
+        end, [], LocationsMap)
     }};
 
 %% PROVIDER

@@ -9,20 +9,20 @@
 %%% Module responsible for performing operations on file distribution.
 %%% @end
 %%%--------------------------------------------------------------------
--module(file_distribution).
+-module(data_distribution).
 -author("Bartosz Walkowicz").
 
 -include("middleware/middleware.hrl").
 -include("modules/dir_stats_collector/dir_size_stats.hrl").
 -include("modules/fslogic/data_access_control.hrl").
--include("modules/fslogic/file_distribution.hrl").
+-include("modules/fslogic/data_distribution.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include("proto/oneprovider/provider_rpc_messages.hrl").
 
 %% API
 -export([
     gather/2,
-    get_storage_locations/2]).
+    gather_storage_locations/2]).
 
 % `undefined` physical size means that file was not yet created on this storage.
 -type dir_physical_size() :: undefined | non_neg_integer().
@@ -35,13 +35,14 @@
 
 -type symlink_distribution() :: #symlink_distribution_get_result{}.
 
--type get_request() :: #file_distribution_gather_request{}.
--type get_result() :: #file_distribution_gather_result{}.
+-type get_request() :: #data_distribution_gather_request{}.
+-type get_result() :: #data_distribution_gather_result{}.
 
--type storage_locations() :: #{
-    od_provider:id() => #{
-        storage:id() => file_location:storage_file_id()
-    }
+-type locations_per_storage() :: #{
+    storage:id() => file_location:storage_file_id()
+}.
+-type storage_locations_per_provider() :: #{
+    od_provider:id() => locations_per_storage()
 }.
 
 -export_type([
@@ -52,7 +53,7 @@
     get_request/0, get_result/0
 ]).
 
--export_type([storage_locations/0]).
+-export_type([storage_locations_per_provider/0, locations_per_storage/0]).
 
 
 %%%===================================================================
@@ -71,16 +72,16 @@ gather(UserCtx, FileCtx0) ->
 
     {FileType, FileCtx3} = file_ctx:get_type(FileCtx2),
 
-    {ok, #file_distribution_gather_result{distribution = case FileType of
+    {ok, #data_distribution_gather_result{distribution = case FileType of
         ?DIRECTORY_TYPE -> gather_dir_distribution(FileCtx3);
         ?SYMLINK_TYPE -> build_symlink_distribution(FileCtx3);
         _ -> gather_reg_distribution(FileCtx3)
     end}}.
 
 
--spec get_storage_locations(user_ctx:ctx(), file_ctx:ctx()) -> 
-    {ok, storage_locations()} | errors:error().
-get_storage_locations(UserCtx, FileCtx0) ->
+-spec gather_storage_locations(user_ctx:ctx(), file_ctx:ctx()) ->
+    {ok, storage_locations_per_provider()} | errors:error().
+gather_storage_locations(UserCtx, FileCtx0) ->
     FileCtx1 = file_ctx:assert_file_exists(FileCtx0),
     FileCtx2 = fslogic_authz:ensure_authorized(
         UserCtx, FileCtx1,
@@ -91,7 +92,7 @@ get_storage_locations(UserCtx, FileCtx0) ->
     case FileType of
         ?DIRECTORY_TYPE -> ?ERROR_NOT_SUPPORTED;
         ?SYMLINK_TYPE -> ?ERROR_NOT_SUPPORTED;
-        _ -> {ok, get_reg_storage_locations(FileCtx3)}
+        _ -> {ok, gather_reg_storage_locations(FileCtx3)}
     end.
 
 
@@ -183,22 +184,15 @@ gather_reg_distribution(FileCtx) ->
 
 
 %% @private
--spec get_reg_storage_locations(file_ctx:ctx()) -> storage_locations().
-get_reg_storage_locations(FileCtx) ->
-    FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-    
-    {ok, StoragesByProvider} = space_logic:get_storages_by_provider(SpaceId),
-    maps:map(fun(ProviderId, SupportingStorages) ->
-        LocId = file_location:id(FileUuid, ProviderId),
-        maps:map(fun(_StorageId, _) ->
-            case fslogic_location_cache:get_location(LocId, FileUuid, false) of
-                {ok, #document{deleted = true}} ->
-                    undefined;
-                {ok, #document{value = #file_location{file_id = StorageFileId}}} ->
-                    StorageFileId;
-                {error, not_found} ->
-                    undefined
-            end
-        end, SupportingStorages)
-    end, StoragesByProvider).
+-spec gather_reg_storage_locations(file_ctx:ctx()) -> storage_locations_per_provider().
+gather_reg_storage_locations(FileCtx) ->
+    GatheredStorageLocations = provider_rpc:gather_from_cosupporting_providers(
+        file_ctx:get_logical_guid_const(FileCtx),
+        #provider_reg_storage_location_get_request{}
+    ),
+    maps:map(
+        fun (_ProviderId, {ok, #provider_reg_storage_location_result{locations = LocationsPerStorage}}) ->
+                LocationsPerStorage;
+            (_ProviderId, {error, _} = Error) ->
+                Error
+    end, GatheredStorageLocations).
