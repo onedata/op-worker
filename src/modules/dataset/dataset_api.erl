@@ -180,12 +180,13 @@ get_info(DatasetId) ->
 
 
 -spec get_effective_membership_and_protection_flags(file_ctx:ctx()) ->
-    {ok, dataset:membership(), data_access_control:bitmask(), file_ctx:ctx()}.
+    {ok, dataset:membership(), data_access_control:bitmask(), data_access_control:bitmask(), file_ctx:ctx()}.
 get_effective_membership_and_protection_flags(FileCtx) ->
     {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
     {ok, EffCacheEntry} = dataset_eff_cache:get(FileDoc),
     {ok, EffAncestorDatasets} = dataset_eff_cache:get_eff_ancestor_datasets(EffCacheEntry),
     {ok, EffProtectionFlags} = dataset_eff_cache:get_eff_file_protection_flags(EffCacheEntry),
+    {ok, EffDatasetProtectionFlags} = dataset_eff_cache:get_eff_dataset_protection_flags(EffCacheEntry),
     IsDirectAttached = file_meta_dataset:is_attached(FileDoc),
     EffMembership = case {IsDirectAttached, length(EffAncestorDatasets) =/= 0} of
         {true, true} -> ?DIRECT_AND_ANCESTOR_MEMBERSHIP;
@@ -193,7 +194,7 @@ get_effective_membership_and_protection_flags(FileCtx) ->
         {false, true} -> ?ANCESTOR_MEMBERSHIP;
         {false, false} -> ?NONE_MEMBERSHIP
     end,
-    {ok, EffMembership, EffProtectionFlags, FileCtx2}.
+    {ok, EffMembership, EffProtectionFlags, EffDatasetProtectionFlags, FileCtx2}.
 
 
 -spec get_effective_summary(file_ctx:ctx()) -> {ok, file_eff_summary()}.

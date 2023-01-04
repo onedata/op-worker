@@ -175,6 +175,7 @@ translate_file_details(#file_details{
     active_permissions_type = ActivePermissionsType,
     eff_dataset_membership = EffDatasetMembership,
     eff_protection_flags = EffFileProtectionFlags,
+    eff_dataset_protection_flags = EffDatasetProtectionFlags,
     recall_root_id = RecallRootId,
     symlink_value = SymlinkValue,
     file_attr = #file_attr{
@@ -242,9 +243,8 @@ translate_file_details(#file_details{
         {private, _} ->
             PublicFields3#{
                 <<"hardlinksCount">> => utils:undefined_to_null(NLink),
-                <<"effProtectionFlags">> => file_meta:protection_flags_to_json(
-                    EffFileProtectionFlags
-                ),
+                <<"effProtectionFlags">> => file_meta:protection_flags_to_json(EffFileProtectionFlags),
+                <<"effDatasetProtectionFlags">> => file_meta:protection_flags_to_json(EffDatasetProtectionFlags),
                 <<"providerId">> => ProviderId,
                 <<"ownerId">> => OwnerId,
                 <<"effQosMembership">> => translate_membership(EffQosMembership),
