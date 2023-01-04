@@ -18,8 +18,10 @@
 
 -behaviour(gen_server).
 
+-include("modules/dbsync/dbsync.hrl").
 -include("global_definitions.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore.hrl").
 
 %% API
 -export([start_link/1]).
@@ -39,6 +41,10 @@
 -type mutators() :: [binary() | od_provider:id()]. % NOTE: special id values (values that are not provider ids)
                                                    %       are defined in dbsync.hrl
 -export_type([mutators/0]).
+
+
+-define(RESYNCHRONIZED_SEQS_ON_CLOSING_PROCEDURE_FAILURE,
+    op_worker:get_env(resynchronized_seqs_on_closing_procedure_failure, 1000000)).
 
 %%%===================================================================
 %%% API
@@ -86,8 +92,8 @@ init([SpaceId]) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: state()} |
     {stop, Reason :: term(), NewState :: state()}.
-handle_call({resynchronize, ProviderId, IncludedMutators}, _From, State) ->
-    {reply, ok, resynchronize(ProviderId, IncludedMutators, State)};
+handle_call({resynchronize, ProviderId, IncludedMutators, StartSeq, TargetSeq}, _From, State) ->
+    {reply, ok, resynchronize(ProviderId, IncludedMutators, StartSeq, TargetSeq, State)};
 handle_call(Request, _From, #state{} = State) ->
     ?log_bad_request(Request),
     {noreply, State}.
@@ -201,6 +207,7 @@ forward_changes_batch(ProviderId, Since, Until, Timestamp, Docs, State = #state{
             gen_server:cast(Worker, {changes_batch, Since, Until, Timestamp, Docs}),
             State;
         error ->
+            resynchronize_if_closing_procedure_failed(SpaceId, ProviderId),
             {ok, Worker} = dbsync_in_stream_worker:start_link(
                 SpaceId, ProviderId
             ),
@@ -220,8 +227,8 @@ forward_changes_batch(ProviderId, Since, Until, Timestamp, Docs, State = #state{
     State2.
 
 %% @private
--spec resynchronize(od_provider:id(), mutators(), state()) -> state().
-resynchronize(ProviderId, IncludedMutators, State = #state{
+-spec resynchronize(od_provider:id(), mutators(), integer(), couchbase_changes:seq() | current, state()) -> state().
+resynchronize(ProviderId, IncludedMutators, StartSeq, TargetSeq, State = #state{
     space_id = SpaceId,
     workers = Workers
 }) ->
@@ -235,7 +242,7 @@ resynchronize(ProviderId, IncludedMutators, State = #state{
             State
     end,
 
-    dbsync_state:resynchronize_stream(SpaceId, ProviderId, IncludedMutators),
+    dbsync_state:resynchronize_stream(SpaceId, ProviderId, IncludedMutators, StartSeq, TargetSeq),
     State2.
 
 %%--------------------------------------------------------------------
@@ -255,4 +262,66 @@ save_msg_id(MsgId, History) ->
             History3;
         false ->
             History2
+    end.
+
+
+%% @private
+-spec resynchronize_if_closing_procedure_failed(od_space:id(), d_provider:id()) -> ok.
+resynchronize_if_closing_procedure_failed(SpaceId, ProviderId) ->
+    case check_closing_procedure() of
+        succeeded ->
+            ok;
+        Error ->
+            case has_resynchronized_on_closing_procedure_failure(SpaceId, ProviderId) of
+                true ->
+                    ok;
+                false ->
+                    case ?RESYNCHRONIZED_SEQS_ON_CLOSING_PROCEDURE_FAILURE of
+                        0 ->
+                            ?error("Possible errors dbsync in stream {~p, ~p} due to node closing problems: ~p",
+                                [SpaceId, ProviderId, Error]),
+                            ok;
+                        Seq ->
+                            ?info("Resynchronizing ~p sequences on dbsync in stream {~p, ~p} due to: ~p",
+                                [Seq, SpaceId, ProviderId, Error]),
+                            ok = dbsync_state:resynchronize_stream(
+                                SpaceId, ProviderId, ?ALL_MUTATORS_EXCEPT_SENDER, -1 * Seq, current)
+                    end
+            end
+    end.
+
+
+%% @private
+-spec check_closing_procedure() -> succeeded | {bad_closing_statuses | bad_nodes, list()}.
+check_closing_procedure() ->
+    Nodes = consistent_hashing:get_all_nodes(),
+    {Res, BadNodes} = utils:rpc_multicall(Nodes, datastore_worker, get_application_closing_status, []),
+
+    case BadNodes of
+        [] ->
+            FilteredRes = lists:filtermap(fun
+                (?CLOSING_PROCEDURE_SUCCEEDED) -> false;
+                (Error) -> {true, Error}
+            end, Res),
+
+            case FilteredRes of
+                [] -> succeeded;
+                _ -> {bad_closing_statuses, FilteredRes}
+            end;
+        _ ->
+            {bad_nodes, BadNodes}
+    end.
+
+
+%% @private
+-spec has_resynchronized_on_closing_procedure_failure(od_space:id(), d_provider:id()) -> boolean().
+has_resynchronized_on_closing_procedure_failure(SpaceId, ProviderId) ->
+    ProvidersResynchronized = node_cache:get({providers_resynchronized_on_closing_procedure_failure, SpaceId}, []),
+    case lists:member(ProviderId, ProvidersResynchronized) of
+        true ->
+            true;
+        false ->
+            node_cache:put({providers_resynchronized_on_closing_procedure_failure, SpaceId},
+                [ProviderId | ProvidersResynchronized]),
+            false
     end.

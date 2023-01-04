@@ -229,15 +229,22 @@ init_child(Guid) ->
                             handle_init_error(Guid, Error, Reason, Stacktrace),
                             #{?DIR_COUNT => 1, ?DIR_ERRORS_COUNT => 1}
                     end;
-                _ ->
+                Type ->
                     try
                         EmptyCurrentStats = gen_empty_current_stats(Guid),
-                        % gets storage_id that is also used by prepare_file_size_summary
-                        {FileSizes, _} = file_ctx:prepare_file_size_summary(file_ctx:new_by_guid(Guid)),
-                        lists:foldl(fun
-                            ({total, Size}, Acc) -> Acc#{?TOTAL_SIZE => Size};
-                            ({StorageId, Size}, Acc) -> Acc#{?SIZE_ON_STORAGE(StorageId) => Size}
-                        end, EmptyCurrentStats#{?REG_FILE_AND_LINK_COUNT => 1}, FileSizes)
+
+                        case Type of
+                            ?REGULAR_FILE_TYPE ->
+                                % gets storage_id that is also used by prepare_file_size_summary
+                                {FileSizes, _} = file_ctx:prepare_file_size_summary(file_ctx:new_by_guid(Guid)),
+                                lists:foldl(fun
+                                    ({total, Size}, Acc) -> Acc#{?TOTAL_SIZE => Size};
+                                    ({StorageId, Size}, Acc) -> Acc#{?SIZE_ON_STORAGE(StorageId) => Size}
+                                end, EmptyCurrentStats#{?REG_FILE_AND_LINK_COUNT => 1}, FileSizes);
+                            _ ->
+                                % Links are counted with size 0
+                                EmptyCurrentStats#{?REG_FILE_AND_LINK_COUNT => 1}
+                        end
                     catch
                         Error:Reason:Stacktrace ->
                             handle_init_error(Guid, Error, Reason, Stacktrace),

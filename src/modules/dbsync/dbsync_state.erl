@@ -18,7 +18,7 @@
 
 %% API
 -export([delete/1, get_seq/2, get_seq_and_timestamp/2, set_seq_and_timestamp/4,
-    resynchronize_stream/3, get_synchronization_params/2, maybe_set_initial_sync/3,
+    resynchronize_stream/5, get_synchronization_params/2, maybe_set_initial_sync/3,
     set_initial_sync_repeat/1]).
 
 %% datastore_model callbacks
@@ -96,38 +96,49 @@ set_seq_and_timestamp(SpaceId, ProviderId, Number, Timestamp) ->
     end,
 
     case datastore_model:update(?CTX, SpaceId, Diff, Default) of
-        {ok, #document{value = #dbsync_state{seq = SeqMap, synchronization_params = Params}}} ->
-            case maps:get(ProviderId, Params, undefined) of
-                #synchronization_params{mode = resynchronization} ->
-                    case maps:get(ProviderId, SeqMap, undefined) of
-                        {1, 0} when {Number, Timestamp} =/= {1, 0} -> reset;
-                        _ -> continue
-                    end;
-                _ ->
-                    continue
+        {ok, #document{value = #dbsync_state{seq = SeqMap}}} ->
+            case maps:get(ProviderId, SeqMap, undefined) of
+                {Number, _} -> continue;
+                _ -> reset
             end;
         {error, Reason} -> {error, Reason}
     end.
 
 
--spec resynchronize_stream(od_space:id(), od_provider:id(), dbsync_in_stream:mutators()) ->
-    ok | {error, Reason :: term()}.
-resynchronize_stream(SpaceId, ProviderId, IncludedMutators) ->
+-spec resynchronize_stream(od_space:id(), od_provider:id(), dbsync_in_stream:mutators(),
+    integer(), couchbase_changes:seq() | current) -> ok | {error, Reason :: term()}.
+resynchronize_stream(SpaceId, ProviderId, IncludedMutators, StartSeq, TargetSeq) ->
     DiffFun = fun(#dbsync_state{seq = Seq, synchronization_params = Params} = State) ->
-        {CurrentSeq, _} = maps:get(ProviderId, Seq, {1, 0}),
-        {ok, State#dbsync_state{
-            seq = Seq#{ProviderId => {1, 0}},
-            synchronization_params = Params#{ProviderId => #synchronization_params{
-                mode = resynchronization,
-                target_seq = CurrentSeq,
-                included_mutators = IncludedMutators
-            }}
-        }}
+        {CurrentSeq, _} = Current = maps:get(ProviderId, Seq, {1, 0}),
+        case CurrentSeq > 1 andalso StartSeq =/= 0 andalso StartSeq < CurrentSeq of
+            true ->
+                FinalStartSeq = case StartSeq > 0 of
+                    true -> StartSeq;
+                    false -> max(CurrentSeq + StartSeq, 1) % StartSeq is negative
+                end,
+                {FinalTargetSeq, SeqAndTimestampToRestore} = case TargetSeq of
+                    PastSeq when is_integer(TargetSeq) andalso TargetSeq < CurrentSeq -> {PastSeq, Current};
+                    _ -> {CurrentSeq, undefined}
+                end,
+
+                {ok, State#dbsync_state{
+                    seq = Seq#{ProviderId => {FinalStartSeq, 0}},
+                    synchronization_params = Params#{ProviderId => #synchronization_params{
+                        mode = resynchronization,
+                        target_seq = FinalTargetSeq,
+                        included_mutators = IncludedMutators,
+                        seq_with_timestamp_to_restore = SeqAndTimestampToRestore
+                    }}
+                }};
+            false ->
+                {error, nothing_to_resynchronize}
+        end
     end,
 
     case datastore_model:update(?CTX, SpaceId, DiffFun) of
         {ok, _} -> ok;
         {error, not_found} -> ok;
+        {error, nothing_to_resynchronize} -> ok;
         {error, Reason} -> {error, Reason}
     end.
 
@@ -239,8 +250,8 @@ set_seq_and_timestamp_internal(
                 SeqMap#{ProviderId => {1, 0}},
                 Params#{ProviderId => ProviderParams#synchronization_params{mode = resynchronization}}
             };
-        #synchronization_params{target_seq = TargetSeq} when NewSeq >= TargetSeq ->
-            {SeqMap#{ProviderId => {NewSeq, Timestamp}}, maps:remove(ProviderId, Params)};
+        #synchronization_params{target_seq = TargetSeq, seq_with_timestamp_to_restore = ToRestore} when NewSeq >= TargetSeq ->
+            {SeqMap#{ProviderId => utils:ensure_defined(ToRestore, {NewSeq, Timestamp})}, maps:remove(ProviderId, Params)};
         _ ->
             {SeqMap#{ProviderId => {NewSeq, Timestamp}}, Params}
     end,
@@ -269,7 +280,7 @@ is_any_synchronization_in_mode(ExpectedMode, SynchronizationParams) ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    4.
+    5.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -302,6 +313,16 @@ get_record_struct(4) ->
             {target_seq, integer},
             {included_mutators, [string]}
         ]}}}
+    ]};
+get_record_struct(5) ->
+    {record, [
+        {seq, #{string => {integer, integer}}},
+        {synchronization_params, #{string => {record, [
+            {mode, atom}, % New field
+            {target_seq, integer},
+            {included_mutators, [string]},
+            {seq_with_timestamp_to_restore, {integer, integer}}
+        ]}}}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -319,4 +340,8 @@ upgrade_record(2, {?MODULE, SeqMap}) ->
 upgrade_record(3, {?MODULE, SeqMap, Params}) ->
     {4, {?MODULE, SeqMap, maps:map(fun(_ProvideId, {resynchronization_params, TargetSeq, IncludedMutators}) ->
         {synchronization_params, resynchronization, TargetSeq, IncludedMutators}
+    end, Params)}};
+upgrade_record(4, {?MODULE, SeqMap, Params}) ->
+    {5, {?MODULE, SeqMap, maps:map(fun(_ProvideId, {resynchronization_params, Mode, TargetSeq, IncludedMutators}) ->
+        {synchronization_params, Mode, TargetSeq, IncludedMutators, undefined}
     end, Params)}}.

@@ -35,7 +35,7 @@
 -export([supervisor_flags/0, get_on_demand_changes_stream_id/2,
     start_streams/0, start_streams/1]).
 %% Resynchronization API
--export([reset_provider_stream/2, resynchronize_all/2, resynchronize_provider_metadata/2, resynchronize/3]).
+-export([reset_provider_stream/2, resynchronize_all/2, resynchronize_provider_metadata/2, resynchronize/5]).
 
 %% Internal services API
 -export([start_in_stream/1, stop_in_stream/1, start_out_stream/1, stop_out_stream/1]).
@@ -166,22 +166,24 @@ get_on_demand_changes_stream_id(SpaceId, ProviderId) ->
 
 -spec reset_provider_stream(od_space:id(), od_provider:id()) -> ok.
 reset_provider_stream(SpaceId, ProviderId) ->
-    resynchronize(SpaceId, ProviderId, ?ALL_MUTATORS_EXCEPT_SENDER).
+    resynchronize(SpaceId, ProviderId, ?ALL_MUTATORS_EXCEPT_SENDER, 1, current).
 
 
 -spec resynchronize_all(od_space:id(), od_provider:id()) -> ok.
 resynchronize_all(SpaceId, ProviderId) ->
-    resynchronize(SpaceId, ProviderId, ?ALL_MUTATORS).
+    resynchronize(SpaceId, ProviderId, ?ALL_MUTATORS, 1, current).
 
 
 -spec resynchronize_provider_metadata(od_space:id(), od_provider:id()) -> ok.
 resynchronize_provider_metadata(SpaceId, ProviderId) ->
-    resynchronize(SpaceId, ProviderId, [ProviderId]).
+    resynchronize(SpaceId, ProviderId, [ProviderId], 1, current).
 
 
--spec resynchronize(od_space:id(), od_provider:id(), dbsync_in_stream:mutators()) -> ok.
-resynchronize(SpaceId, ProviderId, IncludedMutators) ->
-    gen_server:call({global, ?IN_STREAM_ID(SpaceId)}, {resynchronize, ProviderId, IncludedMutators}, infinity).
+-spec resynchronize(od_space:id(), od_provider:id(), dbsync_in_stream:mutators(),
+    integer(), couchbase_changes:seq() | current) -> ok.
+resynchronize(SpaceId, ProviderId, IncludedMutators, StartSeq, TargetSeq) ->
+    gen_server:call({global, ?IN_STREAM_ID(SpaceId)},
+        {resynchronize, ProviderId, IncludedMutators, StartSeq, TargetSeq}, infinity).
 
 
 %%%===================================================================
