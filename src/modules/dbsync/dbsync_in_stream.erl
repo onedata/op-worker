@@ -266,7 +266,7 @@ save_msg_id(MsgId, History) ->
 
 
 %% @private
--spec resynchronize_if_closing_procedure_failed(od_space:id(), d_provider:id()) -> ok.
+-spec resynchronize_if_closing_procedure_failed(od_space:id(), od_provider:id()) -> ok.
 resynchronize_if_closing_procedure_failed(SpaceId, ProviderId) ->
     case check_closing_procedure() of
         succeeded ->
@@ -314,7 +314,7 @@ check_closing_procedure() ->
 
 
 %% @private
--spec has_resynchronized_on_closing_procedure_failure(od_space:id(), d_provider:id()) -> boolean().
+-spec has_resynchronized_on_closing_procedure_failure(od_space:id(), od_provider:id()) -> boolean().
 has_resynchronized_on_closing_procedure_failure(SpaceId, ProviderId) ->
     ProvidersResynchronized = node_cache:get({providers_resynchronized_on_closing_procedure_failure, SpaceId}, []),
     case lists:member(ProviderId, ProvidersResynchronized) of
