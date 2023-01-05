@@ -11,6 +11,7 @@ bootstrap: $(RPM_TEMPLATE_DIR)/rpm.template
 	$(PKG_ID)/node_package/rebar -v create \
 					template_dir=$(PKG_ID)/node_package/priv/templates \
 					template_vars=$(PKG_ID)/$(PKG_VARS_CONFIG) template=rpm
+	sleep 3600000
 	make -f Makefile
 
 
