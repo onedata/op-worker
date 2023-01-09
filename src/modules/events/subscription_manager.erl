@@ -190,9 +190,14 @@ apply_space_id_filter(SessIds, undefined) ->
     SessIds;
 apply_space_id_filter(SessIds, SpaceIDFilter) ->
     lists:filter(fun(SessId) ->
-        UserCtx = user_ctx:new(SessId),
-        Spaces = user_ctx:get_eff_spaces(UserCtx),
-        lists:member(SpaceIDFilter, Spaces)
+        try
+            UserCtx = user_ctx:new(SessId),
+            Spaces = user_ctx:get_eff_spaces(UserCtx),
+            lists:member(SpaceIDFilter, Spaces)
+        catch
+            _:_ ->
+                false % filter this session id - user could be deleted so effective spaces cannot be get
+        end
     end, SessIds).
 
 -spec apply_auth_filter([session:id()], event_type:auth_check_type(),

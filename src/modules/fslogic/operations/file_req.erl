@@ -327,11 +327,17 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, Flag) ->
 storage_file_created_insecure(_UserCtx, FileCtx) ->
     {#document{
         key = FileLocationId,
-        value = #file_location{storage_file_created = StorageFileCreated}
+        value = #file_location{storage_file_created = StorageFileCreated},
+        deleted = Deleted
     }, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx, false),
 
-    case StorageFileCreated of
-        false ->
+    case {Deleted, StorageFileCreated} of
+        {true, _}  ->
+            #fuse_response{
+                status = #status{code = ?EAGAIN,
+                    description = <<"Location_update_error">>}
+            };
+        {false, false} ->
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
             UpdateAns = fslogic_location_cache:update_location(FileUuid, FileLocationId, fun
                 (#file_location{storage_file_created = true}) ->
@@ -353,7 +359,7 @@ storage_file_created_insecure(_UserCtx, FileCtx) ->
                 _ ->
                     FileCtx2
             end;
-        true ->
+        {false, true} ->
             #fuse_response{
                 status = #status{code = ?OK}
             }
