@@ -147,7 +147,7 @@
   0},
  {<<"rtransfer_link">>,
   {git,"ssh://git@git.onedata.org:7999/vfs/rtransfer_link.git",
-       {ref,"591585dc51cf04c031c54c6ebf46575cef7d9bc5"}},
+       {ref,"c6e76b4657ddeddccda395017f8f0c3a284d5f21"}},
   0},
  {<<"setup">>,{pkg,<<"setup">>,<<"2.1.0">>},2},
  {<<"ssl_verify_fun">>,{pkg,<<"ssl_verify_fun">>,<<"1.1.6">>},2},
