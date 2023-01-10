@@ -116,9 +116,15 @@ resynchronize_stream(SpaceId, ProviderId, IncludedMutators, StartSeq, TargetSeq)
                     true -> StartSeq;
                     false -> max(CurrentSeq + StartSeq, 1) % StartSeq is negative
                 end,
+
                 {FinalTargetSeq, SeqAndTimestampToRestore} = case TargetSeq of
                     PastSeq when is_integer(TargetSeq) andalso TargetSeq < CurrentSeq -> {PastSeq, Current};
                     _ -> {CurrentSeq, undefined}
+                end,
+
+                FinalSeqAndTimestampToRestore = case maps:get(ProviderId, Params, undefined) of
+                    #synchronization_params{seq_with_timestamp_to_restore = ToRestore} -> ToRestore;
+                    _ -> SeqAndTimestampToRestore
                 end,
 
                 {ok, State#dbsync_state{
@@ -127,7 +133,7 @@ resynchronize_stream(SpaceId, ProviderId, IncludedMutators, StartSeq, TargetSeq)
                         mode = resynchronization,
                         target_seq = FinalTargetSeq,
                         included_mutators = IncludedMutators,
-                        seq_with_timestamp_to_restore = SeqAndTimestampToRestore
+                        seq_with_timestamp_to_restore = FinalSeqAndTimestampToRestore
                     }}
                 }};
             false ->

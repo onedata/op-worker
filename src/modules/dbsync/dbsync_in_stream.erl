@@ -276,7 +276,7 @@ resynchronize_if_closing_procedure_failed(SpaceId, ProviderId) ->
             ok;
         Error ->
             case check_resynchronization_on_closing_procedure_failure(SpaceId, ProviderId) of
-                do_nothing ->
+                resynchronization_not_needed ->
                     ok;
                 resynchronize ->
                     case ?RESYNCHRONIZED_SEQS_ON_CLOSING_PROCEDURE_FAILURE of
@@ -319,12 +319,12 @@ check_closing_procedure() ->
 
 %% @private
 -spec check_resynchronization_on_closing_procedure_failure(od_space:id(), od_provider:id()) ->
-    resynchronize | do_nothing.
+    resynchronize | resynchronization_not_needed.
 check_resynchronization_on_closing_procedure_failure(SpaceId, ProviderId) ->
     ProvidersResynchronized = node_cache:get({providers_resynchronized_on_closing_procedure_failure, SpaceId}, []),
     case lists:member(ProviderId, ProvidersResynchronized) of
         true ->
-            do_nothing;
+            resynchronization_not_needed;
         false ->
             node_cache:put({providers_resynchronized_on_closing_procedure_failure, SpaceId},
                 [ProviderId | ProvidersResynchronized]),
