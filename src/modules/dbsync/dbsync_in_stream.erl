@@ -301,6 +301,7 @@ check_closing_procedure() ->
         [] ->
             FilteredRes = lists:filtermap(fun
                 (?CLOSING_PROCEDURE_SUCCEEDED) -> false;
+                (undefined) -> false; % First start of node
                 (Error) -> {true, Error}
             end, Res),
 
