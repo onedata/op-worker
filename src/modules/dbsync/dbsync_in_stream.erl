@@ -38,9 +38,12 @@
 
 -type msg_id_history() :: queue:queue(binary()).
 -type state() :: #state{}.
+-type sync_start_seq() :: integer(). % Sequences are positive integers. sync_start_seq() that is not positive integer
+                                     % is added to the current sequence to determine the start sequence.
+-type sync_target_seq() :: couchbase_changes:seq() | current.
 -type mutators() :: [binary() | od_provider:id()]. % NOTE: special id values (values that are not provider ids)
                                                    %       are defined in dbsync.hrl
--export_type([mutators/0]).
+-export_type([sync_start_seq/0, sync_target_seq/0, mutators/0]).
 
 
 -define(RESYNCHRONIZED_SEQS_ON_CLOSING_PROCEDURE_FAILURE,
@@ -227,7 +230,7 @@ forward_changes_batch(ProviderId, Since, Until, Timestamp, Docs, State = #state{
     State2.
 
 %% @private
--spec resynchronize(od_provider:id(), mutators(), integer(), couchbase_changes:seq() | current, state()) -> state().
+-spec resynchronize(od_provider:id(), mutators(), sync_start_seq(), sync_target_seq(), state()) -> state().
 resynchronize(ProviderId, IncludedMutators, StartSeq, TargetSeq, State = #state{
     space_id = SpaceId,
     workers = Workers
@@ -272,13 +275,13 @@ resynchronize_if_closing_procedure_failed(SpaceId, ProviderId) ->
         succeeded ->
             ok;
         Error ->
-            case has_resynchronized_on_closing_procedure_failure(SpaceId, ProviderId) of
-                true ->
+            case check_resynchronization_on_closing_procedure_failure(SpaceId, ProviderId) of
+                do_nothing ->
                     ok;
-                false ->
+                resynchronize ->
                     case ?RESYNCHRONIZED_SEQS_ON_CLOSING_PROCEDURE_FAILURE of
                         0 ->
-                            ?error("Possible errors dbsync in stream {~p, ~p} due to node closing problems: ~p",
+                            ?error("Possible dbsync errors in stream {~p, ~p} due to node closing problems: ~p",
                                 [SpaceId, ProviderId, Error]),
                             ok;
                         Seq ->
@@ -315,14 +318,15 @@ check_closing_procedure() ->
 
 
 %% @private
--spec has_resynchronized_on_closing_procedure_failure(od_space:id(), od_provider:id()) -> boolean().
-has_resynchronized_on_closing_procedure_failure(SpaceId, ProviderId) ->
+-spec check_resynchronization_on_closing_procedure_failure(od_space:id(), od_provider:id()) ->
+    resynchronize | do_nothing.
+check_resynchronization_on_closing_procedure_failure(SpaceId, ProviderId) ->
     ProvidersResynchronized = node_cache:get({providers_resynchronized_on_closing_procedure_failure, SpaceId}, []),
     case lists:member(ProviderId, ProvidersResynchronized) of
         true ->
-            true;
+            do_nothing;
         false ->
             node_cache:put({providers_resynchronized_on_closing_procedure_failure, SpaceId},
                 [ProviderId | ProvidersResynchronized]),
-            false
+            resynchronize
     end.

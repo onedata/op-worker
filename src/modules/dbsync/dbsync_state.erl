@@ -106,7 +106,7 @@ set_seq_and_timestamp(SpaceId, ProviderId, Number, Timestamp) ->
 
 
 -spec resynchronize_stream(od_space:id(), od_provider:id(), dbsync_in_stream:mutators(),
-    integer(), couchbase_changes:seq() | current) -> ok | {error, Reason :: term()}.
+    dbsync_in_stream:sync_start_seq(), dbsync_in_stream:sync_target_seq()) -> ok | {error, Reason :: term()}.
 resynchronize_stream(SpaceId, ProviderId, IncludedMutators, StartSeq, TargetSeq) ->
     DiffFun = fun(#dbsync_state{seq = Seq, synchronization_params = Params} = State) ->
         {CurrentSeq, _} = Current = maps:get(ProviderId, Seq, {1, 0}),
@@ -318,10 +318,10 @@ get_record_struct(5) ->
     {record, [
         {seq, #{string => {integer, integer}}},
         {synchronization_params, #{string => {record, [
-            {mode, atom}, % New field
+            {mode, atom},
             {target_seq, integer},
             {included_mutators, [string]},
-            {seq_with_timestamp_to_restore, {integer, integer}}
+            {seq_with_timestamp_to_restore, {integer, integer}} % New field
         ]}}}
     ]}.
 
@@ -342,6 +342,6 @@ upgrade_record(3, {?MODULE, SeqMap, Params}) ->
         {synchronization_params, resynchronization, TargetSeq, IncludedMutators}
     end, Params)}};
 upgrade_record(4, {?MODULE, SeqMap, Params}) ->
-    {5, {?MODULE, SeqMap, maps:map(fun(_ProvideId, {resynchronization_params, Mode, TargetSeq, IncludedMutators}) ->
+    {5, {?MODULE, SeqMap, maps:map(fun(_ProvideId, {synchronization_params, Mode, TargetSeq, IncludedMutators}) ->
         {synchronization_params, Mode, TargetSeq, IncludedMutators, undefined}
     end, Params)}}.

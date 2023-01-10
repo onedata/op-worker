@@ -24,7 +24,7 @@
     included_mutators :: dbsync_in_stream:mutators(),    % Only documents of included_mutators are resynchronized - documents
                                                          % mutated by other providers are ignored during resynchronization.
 
-    % When synchronization of changes window (instead of whole stream) is required - seq_with_timestamp_to_restore filed
+    % When synchronization of changes window (instead of whole stream) is required - seq_with_timestamp_to_restore field
     % stores sequence number and timestamp that should be restored when synchronization is finished
     seq_with_timestamp_to_restore :: {couchbase_changes:seq(), datastore_doc:timestamp()} | undefined
 }).

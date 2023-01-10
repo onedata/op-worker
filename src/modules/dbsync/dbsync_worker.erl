@@ -180,7 +180,7 @@ resynchronize_provider_metadata(SpaceId, ProviderId) ->
 
 
 -spec resynchronize(od_space:id(), od_provider:id(), dbsync_in_stream:mutators(),
-    integer(), couchbase_changes:seq() | current) -> ok.
+    dbsync_in_stream:sync_start_seq(), dbsync_in_stream:sync_target_seq()) -> ok.
 resynchronize(SpaceId, ProviderId, IncludedMutators, StartSeq, TargetSeq) ->
     gen_server:call({global, ?IN_STREAM_ID(SpaceId)},
         {resynchronize, ProviderId, IncludedMutators, StartSeq, TargetSeq}, infinity).
