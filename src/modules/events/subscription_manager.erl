@@ -262,7 +262,10 @@ remove_subscriber(Key, SessId) ->
                     Pred = fun(#file_subscription{sessions = SIds2}) ->
                         gb_sets:is_empty(SIds2)
                     end,
-                    file_subscription:delete(Key, Pred);
+                    case file_subscription:delete(Key, Pred) of
+                        ok -> ok;
+                        {error, {not_satisfied, _}} -> ok
+                    end;
                 false ->
                     ok
             end;
