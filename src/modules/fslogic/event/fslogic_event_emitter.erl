@@ -184,7 +184,6 @@ emit_file_location_changed(FileCtx, ExcludedSessions, Range) ->
         {undefined, _} ->
             ok;
         {Location, _FileCtx2} ->
-            {Location, _FileCtx2} = file_ctx:get_file_location_with_filled_gaps(FileCtx, Range),
             {Offset, Size} = fslogic_location_cache:get_blocks_range(Location, Range),
             emit_file_location_changed(Location, ExcludedSessions, Offset, Size)
     end.

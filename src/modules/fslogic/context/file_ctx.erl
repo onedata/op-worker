@@ -1389,7 +1389,7 @@ get_or_create_local_regular_file_location_doc(FileCtx, GetDocOpts, _CheckLocatio
             end, LocationDocs),
             get_local_file_location_doc(FileCtx3, GetDocOpts);
         {{error, already_exists}, FileCtx2} ->
-            % Possible race with file deletion - get included deleted
+            % Possible race with file deletion - get including deleted
             {ok, Location} = fslogic_location_cache:get_local_location_including_deleted(FileCtx2, GetDocOpts),
             {Location, FileCtx2}
     end.

@@ -195,7 +195,8 @@ apply_space_id_filter(SessIds, SpaceIDFilter) ->
             Spaces = user_ctx:get_eff_spaces(UserCtx),
             lists:member(SpaceIDFilter, Spaces)
         catch
-            _:_ ->
+            Error:Reason:Stacktrace ->
+                ?warning_stacktrace("Error applying space filters for subscriptions: ~p:~p", [Error, Reason], Stacktrace),
                 false % filter this session id - user could be deleted so effective spaces cannot be get
         end
     end, SessIds).
