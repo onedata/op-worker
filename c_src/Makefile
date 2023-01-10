@@ -45,7 +45,7 @@ ifndef ONEDATA_SCL
 else
 	CXXFLAGS += -fPIC -std=c++14 -O3 -Wall -D_FILE_OFFSET_BITS=64 -DASIO_STANDALONE \
     -DWITH_CEPH=1 -DWITH_S3=1 -DWITH_SWIFT=1 -DWITH_GLUSTERFS=1 -DWITH_WEBDAV=1 \
-    -DWITH_XROOTD=1 -DWITH_NFS=1 \
+    -DWITH_XROOTD=1 -DWITH_NFS=1 -DFUSE_USE_VERSION=31 \
     -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL \
     $(shell pkg-config --cflags botan-1.10 tbb fuse3) \
     -isystem $(HELPERS_DIR)/priv/include -isystem $(HELPERS_DIR)/deps/cppmetrics \
