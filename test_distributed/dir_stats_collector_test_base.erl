@@ -288,8 +288,8 @@ race_with_file_adding_test(Config) ->
         lfm_test_utils:create_and_write_file(Worker, SessId, SpaceGuid, <<"test_raced_file">>, 0, {rand_content, 10})
     end,
     test_with_race_base(Config, SpaceGuid, OnSpaceChildrenListed, #{
-        ?REG_FILE_AND_LINK_COUNT => 13,
-        ?DIR_COUNT => 12,
+        ?REG_FILE_AND_LINK_COUNT => 22,
+        ?DIR_COUNT => 21,
         ?FILE_ERRORS_COUNT => 0,
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 10,
@@ -306,8 +306,8 @@ race_with_file_writing_test(Config) ->
         lfm_test_utils:write_file(Worker, SessId, Guid, {rand_content, 10})
     end,
     test_with_race_base(Config, SpaceGuid, OnSpaceChildrenListed, #{
-        ?REG_FILE_AND_LINK_COUNT => 12,
-        ?DIR_COUNT => 12,
+        ?REG_FILE_AND_LINK_COUNT => 21,
+        ?DIR_COUNT => 21,
         ?FILE_ERRORS_COUNT => 0,
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 10,
@@ -334,8 +334,8 @@ race_with_subtree_adding_test(Config) ->
         end, Guids)
     end,
     test_with_race_base(Config, [1], OnSpaceChildrenListed, #{
-        ?REG_FILE_AND_LINK_COUNT => 12,
-        ?DIR_COUNT => 32,
+        ?REG_FILE_AND_LINK_COUNT => 21,
+        ?DIR_COUNT => 41,
         ?FILE_ERRORS_COUNT => 0,
         ?DIR_ERRORS_COUNT => 0,
         ?TOTAL_SIZE => 0,
