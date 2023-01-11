@@ -185,7 +185,7 @@ get_effective_membership_and_protection_flags(FileCtx) ->
     {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
     {ok, EffCacheEntry} = dataset_eff_cache:get(FileDoc),
     {ok, EffAncestorDatasets} = dataset_eff_cache:get_eff_ancestor_datasets(EffCacheEntry),
-    {ok, EffProtectionFlags} = dataset_eff_cache:get_eff_file_protection_flags(EffCacheEntry),
+    {ok, EffProtectionFlags} = dataset_eff_cache:get_eff_protection_flags(EffCacheEntry),
     {ok, EffDatasetProtectionFlags} = dataset_eff_cache:get_eff_dataset_protection_flags(EffCacheEntry),
     IsDirectAttached = file_meta_dataset:is_attached(FileDoc),
     EffMembership = case {IsDirectAttached, length(EffAncestorDatasets) =/= 0} of
@@ -214,7 +214,7 @@ get_effective_summary(FileCtx) ->
             {FileDoc, _FileCtx3} = file_ctx:get_file_doc(FileCtx2),
             {ok, EffCacheEntry} = dataset_eff_cache:get(FileDoc),
             {ok, EffAncestorDatasets} = dataset_eff_cache:get_eff_ancestor_datasets(EffCacheEntry),
-            {ok, EffProtectionFlags} = dataset_eff_cache:get_eff_file_protection_flags(EffCacheEntry),
+            {ok, EffProtectionFlags} = dataset_eff_cache:get_eff_protection_flags(EffCacheEntry),
             {ok, #file_eff_dataset_summary{
                 direct_dataset = file_meta_dataset:get_id(FileDoc),
                 eff_ancestor_datasets = EffAncestorDatasets,

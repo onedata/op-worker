@@ -387,7 +387,7 @@ get_operations_blocked_by_lack_of_space_privs(_UserCtx, _FileCtx, _ShareId) ->
     {bitmask(), file_ctx:ctx()}.
 get_operations_blocked_by_file_protection_flags(FileCtx0) ->
     {FileDoc, FileCtx1} = file_ctx:get_file_doc_including_deleted(FileCtx0),
-    {ok, Flags} = dataset_eff_cache:get_eff_file_protection_flags(FileDoc),
+    {ok, Flags} = dataset_eff_cache:get_eff_protection_flags(FileDoc),
     AllRestrictedOps = [
         {?DATA_PROTECTION, ?FILE_DATA_PROTECTION_BLOCKED_OPERATIONS},
         {?METADATA_PROTECTION, ?FILE_METADATA_PROTECTION_BLOCKED_OPERATIONS}

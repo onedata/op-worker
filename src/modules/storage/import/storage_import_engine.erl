@@ -1010,7 +1010,7 @@ maybe_update_file(StorageFileCtx, FileAttr, FileCtx, Info) ->
     {result(), file_ctx:ctx(), storage_file_ctx:ctx()}.
 maybe_update_attrs(StorageFileCtx, FileAttr, FileCtx, Info = #{parent_ctx := ParentCtx}) ->
     {FileDoc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
-    {ok, ProtectionFlags} = dataset_eff_cache:get_eff_file_protection_flags(FileDoc),
+    {ok, ProtectionFlags} = dataset_eff_cache:get_eff_protection_flags(FileDoc),
 
     % If ProtectionFlags are set, modification won't be reflected in the database
     % Attrs will be checked anyway to determine whether protected file has changed on storage.

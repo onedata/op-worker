@@ -516,7 +516,7 @@ do_update_master_job(TraverseJob = #storage_traverse_master{
             {ok, #{}};
         {ok, {SyncResult, FileCtx, StorageFileCtx2}} ->
             {FileDoc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
-            {ok, ProtectionFlags} = dataset_eff_cache:get_eff_file_protection_flags(FileDoc),
+            {ok, ProtectionFlags} = dataset_eff_cache:get_eff_protection_flags(FileDoc),
             case ProtectionFlags =/= ?no_flags_mask of
                 true ->
                     % do not schedule jobs for children as directory is protected

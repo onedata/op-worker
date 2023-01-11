@@ -60,8 +60,8 @@ resolve(UserCtx, FileCtx) ->
         has_metadata = has_metadata(FileCtx3),
         eff_qos_membership = maps:get(effective_qos_membership, EffectiveValues, undefined),
         eff_dataset_membership = maps:get(effective_dataset_membership, EffectiveValues, undefined),
-        eff_protection_flags = maps:get(effective_protection_flags, EffectiveValues, undefined),
-        eff_dataset_protection_flags = maps:get(effective_dataset_protection_flags , EffectiveValues, undefined),
+        eff_protection_flags = maps:get(effective_protection_flags, EffectiveValues, ?no_flags_mask),
+        eff_dataset_protection_flags = maps:get(effective_dataset_protection_flags , EffectiveValues, ?no_flags_mask),
         recall_root_id = maps:get(effective_recall, EffectiveValues, undefined),
         conflicting_name = resolve_conflicting_name(FileDoc, Uuid, FileAttrName)
     }.
