@@ -35,7 +35,7 @@
 
 -record(provider_reg_distribution_get_request, {}).
 
--record(provider_reg_storage_location_get_request, {}).
+-record(provider_reg_storage_locations_get_request, {}).
 
 -record(provider_historical_dir_size_stats_browse_request, {
     request :: ts_browse_request:record()
@@ -54,8 +54,8 @@
     stats :: dir_size_stats:current_stats()
 }).
 
--record(provider_reg_storage_location_result, {
-    locations :: data_distribution:locations_per_storage()
+-record(provider_reg_storage_locations_result, {
+    locations_per_storage :: data_distribution:locations_per_storage()
 }).
 
 -endif.

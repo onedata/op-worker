@@ -188,10 +188,10 @@ gather_reg_distribution(FileCtx) ->
 gather_reg_storage_locations(FileCtx) ->
     GatheredStorageLocations = provider_rpc:gather_from_cosupporting_providers(
         file_ctx:get_logical_guid_const(FileCtx),
-        #provider_reg_storage_location_get_request{}
+        #provider_reg_storage_locations_get_request{}
     ),
     maps:map(
-        fun (_ProviderId, {ok, #provider_reg_storage_location_result{locations = LocationsPerStorage}}) ->
+        fun (_ProviderId, {ok, #provider_reg_storage_locations_result{locations_per_storage = LocationsPerStorage}}) ->
                 LocationsPerStorage;
             (_ProviderId, {error, _} = Error) ->
                 Error

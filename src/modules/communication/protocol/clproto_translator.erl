@@ -913,8 +913,8 @@ translate_from_protobuf(#'ProviderCurrentDirSizeStatsBrowseRequest'{
     };
 translate_from_protobuf(#'ProviderRegDistributionGetRequest'{}) ->
     #provider_reg_distribution_get_request{};
-translate_from_protobuf(#'ProviderRegStorageLocationGetRequest'{}) ->
-    #provider_reg_storage_location_get_request{};
+translate_from_protobuf(#'ProviderRegStorageLocationsGetRequest'{}) ->
+    #provider_reg_storage_locations_get_request{};
 
 translate_from_protobuf(#'ProviderRpcResponse'{
     status = ok,
@@ -969,13 +969,14 @@ translate_from_protobuf(#'ProviderRegDistributionGetResult'{
         blocks_per_storage = BlocksPerStorage,
         locations_per_storage = LocationsPerStorage
     };
-translate_from_protobuf(#'ProviderRegStorageLocationResult'{
+translate_from_protobuf(#'ProviderRegStorageLocationsResult'{
     locations = Locations
 }) ->
-    #provider_reg_storage_location_result{
-        locations = lists:foldl(fun(#'StorageLocation'{storage_id = StorageId, location = Location}, Acc) ->
-            Acc#{StorageId => Location}
-        end, #{}, Locations)
+    #provider_reg_storage_locations_result{
+        locations_per_storage = maps_utils:generate_from_list(
+            fun(#'StorageLocation'{storage_id = StorageId, location = Location}) ->
+                {StorageId, Location}
+            end, Locations)
     };
 
 
@@ -2103,8 +2104,8 @@ translate_to_protobuf(#time_series_slice_get_request{
     }};
 translate_to_protobuf(#provider_reg_distribution_get_request{}) ->
     {provider_reg_distribution_get_request, #'ProviderRegDistributionGetRequest'{}};
-translate_to_protobuf(#provider_reg_storage_location_get_request{}) ->
-    {provider_reg_storage_location_get_request, #'ProviderRegStorageLocationGetRequest'{}};
+translate_to_protobuf(#provider_reg_storage_locations_get_request{}) ->
+    {provider_reg_storage_locations_get_request, #'ProviderRegStorageLocationsGetRequest'{}};
 
 translate_to_protobuf(#provider_rpc_response{
     status = ok,
@@ -2153,13 +2154,13 @@ translate_to_protobuf(#provider_reg_distribution_get_result{
             } | Acc]
         end, [], BlocksPerStorage)
     }};
-translate_to_protobuf(#provider_reg_storage_location_result{
-    locations = LocationsMap
+translate_to_protobuf(#provider_reg_storage_locations_result{
+    locations_per_storage = LocationsPerStorageMap
 }) ->
-    {provider_reg_storage_location_result, #'ProviderRegStorageLocationResult'{
+    {provider_reg_storage_locations_result, #'ProviderRegStorageLocationsResult'{
         locations = maps:fold(fun(StorageId, Location, Acc) ->
             [#'StorageLocation'{storage_id = StorageId, location = Location} | Acc]
-        end, [], LocationsMap)
+        end, [], LocationsPerStorageMap)
     }};
 
 %% PROVIDER

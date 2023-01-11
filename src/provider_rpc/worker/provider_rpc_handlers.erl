@@ -29,7 +29,7 @@
 execute(FileCtx, #provider_reg_distribution_get_request{}) ->
     provider_reg_distribution:get(FileCtx);
 
-execute(FileCtx, #provider_reg_storage_location_get_request{}) ->
+execute(FileCtx, #provider_reg_storage_locations_get_request{}) ->
     provider_reg_distribution:get_storage_locations(FileCtx);
 
 execute(FileCtx, #provider_current_dir_size_stats_browse_request{stat_names = StatNames}) ->

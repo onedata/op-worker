@@ -812,7 +812,9 @@ get_reg_file_distribution_test(Config) ->
     UserSessIdP2 = oct_background:get_user_session_id(user3, paris),
 
     FileType = <<"file">>,
-    FilePath = filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()]),
+    Filename = ?RANDOM_FILE_NAME(),
+    FilePath = filename:join(["/", ?SPACE_KRK_PAR, Filename]),
+    FileStorageLocation = filename:join(["/", SpaceId, Filename]),
     {ok, FileGuid} = lfm_test_utils:create_file(FileType, P1Node, UserSessIdP1, FilePath, 8#707),
     {ok, ShareId} = opt_shares:create(P1Node, SpaceOwnerSessIdP1, ?FILE_REF(FileGuid), <<"share">>),
 
@@ -823,12 +825,13 @@ get_reg_file_distribution_test(Config) ->
         distribution_per_provider = #{
             P1Id => #provider_reg_distribution_get_result{
                 logical_size = 20,
-                blocks_per_storage = #{P1StorageId => [?BLOCK(0, 20)]}
+                blocks_per_storage = #{P1StorageId => [?BLOCK(0, 20)]},
+                locations_per_storage = #{P1StorageId => FileStorageLocation}
             },
             P2Id => #provider_reg_distribution_get_result{
                 logical_size = 20,
-                blocks_per_storage = #{P2StorageId => []}
-                
+                blocks_per_storage = #{P2StorageId => []},
+                locations_per_storage = #{P2StorageId => undefined}
             }
         }
     }},
@@ -842,11 +845,13 @@ get_reg_file_distribution_test(Config) ->
         distribution_per_provider = #{
             P1Id => #provider_reg_distribution_get_result{
                 logical_size = 50,
-                blocks_per_storage = #{P1StorageId => [?BLOCK(0, 20)]}
+                blocks_per_storage = #{P1StorageId => [?BLOCK(0, 20)]},
+                locations_per_storage = #{P1StorageId => FileStorageLocation}
             },
             P2Id => #provider_reg_distribution_get_result{
                 logical_size = 50,
-                blocks_per_storage = #{P2StorageId => [?BLOCK(30, 20)]}
+                blocks_per_storage = #{P2StorageId => [?BLOCK(30, 20)]},
+                locations_per_storage = #{P2StorageId => FileStorageLocation}
             }
         }
     }},
@@ -1423,12 +1428,14 @@ get_reg_file_storage_locations_test(Config, StorageType) ->
             P1Id => #{
                 <<"locationsPerStorage">> => #{
                     P1StorageId => FileStoragePath
-                }           
+                },
+                <<"success">> => true
             },
             P2Id => #{
                 <<"locationsPerStorage">> => #{
                     P2StorageId => null
-                }
+                },
+                <<"success">> => true
             }
         }
     },
@@ -1444,12 +1451,14 @@ get_reg_file_storage_locations_test(Config, StorageType) ->
             P1Id => #{
                 <<"locationsPerStorage">> => #{
                     P1StorageId => FileStoragePath
-                }
+                },
+                <<"success">> => true
             },
             P2Id => #{
                 <<"locationsPerStorage">> => #{
                     P2StorageId => FileStoragePath
-                }
+                },
+                <<"success">> => true
             }
         }
     },

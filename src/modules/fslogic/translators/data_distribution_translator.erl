@@ -119,7 +119,7 @@ gather_result_to_json(gs, #data_distribution_gather_result{distribution = #reg_d
                 <<"success">> => true,
                 <<"logicalSize">> => LogicalSize,
                 <<"distributionPerStorage">> => DistributionPerStorage,
-                <<"locationsPerStorage">> => maps:map(fun(_K, V) -> utils:undefined_to_null(V) end, LocationsPerStorage)
+                <<"locationsPerStorage">> => maps_utils:undefined_to_null(LocationsPerStorage)
             }
     end, FileBlocksPerProvider),
 
@@ -155,7 +155,7 @@ gather_result_to_json(rest, #data_distribution_gather_result{distribution = #reg
                     <<"success">> => true,
                     <<"logicalSize">> => LogicalSize,
                     <<"distributionPerStorage">> => DistributionPerStorage,
-                    <<"locationsPerStorage">> => maps:map(fun(_K, V) -> utils:undefined_to_null(V) end, LocationsPerStorage)
+                    <<"locationsPerStorage">> => maps_utils:undefined_to_null(LocationsPerStorage)
                 }
             end, FileBlocksPerProvider)
     }.
@@ -174,9 +174,7 @@ storage_locations_to_json(StorageLocations) ->
                 _ ->
                     #{
                         <<"success">> => true,
-                        <<"locationsPerStorage">> => maps:map(fun(_StorageId, Value) ->
-                            utils:undefined_to_null(Value)
-                        end, LocationsPerStorage)
+                        <<"locationsPerStorage">> => maps_utils:undefined_to_null(LocationsPerStorage)
                     }
             end
         end, StorageLocations)

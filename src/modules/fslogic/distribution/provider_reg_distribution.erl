@@ -22,7 +22,7 @@
 
 -compile([{no_auto_import, [get/1]}]).
 
--type provider_reg_storage_location_result() :: #provider_reg_storage_location_result{}.
+-type provider_reg_storage_location_result() :: #provider_reg_storage_locations_result{}.
 
 %%%===================================================================
 %%% API
@@ -53,4 +53,4 @@ get_storage_locations(FileCtx) ->
     {ok, #provider_reg_distribution_get_result{
         locations_per_storage = LocationsPerStorage
     }} = get(FileCtx),
-    {ok, #provider_reg_storage_location_result{locations = LocationsPerStorage}}.
+    {ok, #provider_reg_storage_locations_result{locations_per_storage = LocationsPerStorage}}.
