@@ -24,7 +24,9 @@
     has_metadata :: boolean(),
     eff_qos_membership :: file_qos:membership() | undefined,
     eff_dataset_membership :: dataset:membership() | undefined,
+    % all protection flags inherited from ancestor datasets as well as from all hardlinks' datasets
     eff_protection_flags :: data_access_control:bitmask(),
+    % protection flags inherited only from ancestor datasets
     eff_dataset_protection_flags :: data_access_control:bitmask(),
     recall_root_id :: file_id:file_guid() | undefined,
     conflicting_name = undefined :: undefined | file_meta:name()
