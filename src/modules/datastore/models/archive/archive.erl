@@ -104,6 +104,8 @@
 }).
 % @formatter:off
 
+-define(ARCHIVE_FINISHED_STATES, [?ARCHIVE_PRESERVED, ?ARCHIVE_FAILED, ?ARCHIVE_DELETING,
+    ?ARCHIVE_VERIFICATION_FAILED, ?ARCHIVE_CANCELLED]).
 
 %%%===================================================================
 %%% API functions
@@ -425,8 +427,7 @@ get_related_aip_id(ArchiveId) ->
 
 -spec is_finished(record() | doc()) -> boolean().
 is_finished(#archive{state = State}) ->
-    lists:member(State, [?ARCHIVE_PRESERVED, ?ARCHIVE_FAILED, ?ARCHIVE_DELETING, 
-        ?ARCHIVE_VERIFICATION_FAILED, ?ARCHIVE_CANCELLED]);
+    lists:member(State, ?ARCHIVE_FINISHED_STATES);
 is_finished(#document{value = Archive}) ->
     is_finished(Archive).
 
@@ -443,26 +444,24 @@ is_building(#document{value = Archive}) ->
 -spec mark_deleting(id(), callback()) -> {ok, doc()} | error().
 mark_deleting(ArchiveId, Callback) ->
     update(ArchiveId, fun(Archive = #archive{
-        state = PrevState,
         modifiable_fields = ModifiableFields = #modifiable_fields{
             deleted_callback = PrevDeletedCallback
         },
         parent = Parent
     }) ->
-        case PrevState =:= ?ARCHIVE_PENDING
-            orelse PrevState =:= ?ARCHIVE_BUILDING
-            orelse Parent =/= undefined % nested archive cannot be deleted as it would destroy parent archive
-        of
-            true ->
-                %% @TODO VFS-8840 - create more descriptive error (also for nested archives)
-                ?ERROR_POSIX(?EBUSY);
-            false ->
+        case {is_finished(Archive), Parent} of
+            {true, undefined} ->
                 {ok, Archive#archive{
                     state = ?ARCHIVE_DELETING,
                     modifiable_fields = ModifiableFields#modifiable_fields{
                         deleted_callback = utils:ensure_defined(Callback, PrevDeletedCallback)
                     }
-                }}
+                }};
+            {false, undefined} ->
+                ?ERROR_ARCHIVE_IN_DISALLOWED_STATE(?ARCHIVE_FINISHED_STATES);
+            {_, Parent} ->
+                % nested archive cannot be deleted as it would destroy parent archive
+                ?ERROR_DELETING_NESTED_ARCHIVE(Parent)
         end
     end).
 

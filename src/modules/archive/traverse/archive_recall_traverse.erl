@@ -218,8 +218,7 @@ ensure_recall_allowed(SpaceId, UserCtx, TargetParentGuid) ->
 can_start_recall(SpaceId, Guid) ->
     case archive_recall_cache:get(SpaceId, file_id:guid_to_uuid(Guid)) of
         {ok, {ongoing, _}} ->
-            %% @TODO VFS-8840 - create more descriptive error
-            ?ERROR_POSIX(?EBUSY);
+            ?ERROR_RECALL_TARGET_IN_ONGOING_RECALL;
         _ ->
             ok
     end.

@@ -134,9 +134,8 @@ recall(ArchiveId, UserCtx, ParentGuid, TargetRootName) ->
         {ok, #document{value = #archive{state = ?ARCHIVE_PRESERVED}} = ArchiveDoc} ->
             archive_recall_traverse:start(ArchiveDoc, UserCtx, ParentGuid, TargetRootName);
         {ok, _} ->
-            %% @TODO VFS-8840 - create more descriptive error
-            ?ERROR_FORBIDDEN;
-        {error, _} = Error -> 
+            ?ERROR_ARCHIVE_IN_DISALLOWED_STATE([?ARCHIVE_PRESERVED]);
+        {error, _} = Error ->
             Error
     end.
 
