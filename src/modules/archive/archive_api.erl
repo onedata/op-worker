@@ -162,6 +162,7 @@ get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
     {ok, ArchiveId} = archive:get_id(ArchiveDoc),
     {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
     {ok, ProviderId} = archive:get_archiving_provider_id(ArchiveDoc),
+    {ok, Creator} = archive:get_creator(ArchiveDoc),
     {ok, Timestamp} = archive:get_creation_time(ArchiveDoc),
     {ok, State} = get_state(ArchiveDoc),
     {ok, Config} = archive:get_config(ArchiveDoc),
@@ -179,6 +180,7 @@ get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
         id = ArchiveId,
         dataset_id = DatasetId,
         archiving_provider = ProviderId,
+        creator = Creator,
         state = State,
         root_dir_guid = ArchiveRootDirGuid,
         data_dir_guid = ArchiveDataDirGuid,
@@ -243,18 +245,12 @@ remove_archive_recursive(ArchiveId) ->
     end.
 
 
--spec cancel_archivisation(archive:doc() | archive:id(), archive:cancel_preservation_policy(), user_ctx:ctx()) ->
+-spec cancel_archivisation(archive:doc(), archive:cancel_preservation_policy(), user_ctx:ctx()) ->
     ok | {error, term()}.
 cancel_archivisation(ArchiveDoc = #document{value = #archive{related_dip = undefined, related_aip = RelatedAip}}, PP, UserCtx) ->
     cancel_archivisations(ArchiveDoc, RelatedAip, PP, UserCtx);
 cancel_archivisation(ArchiveDoc = #document{value = #archive{related_aip = undefined, related_dip = RelatedDip}}, PP, UserCtx) ->
-    cancel_archivisations(ArchiveDoc, RelatedDip, PP, UserCtx);
-cancel_archivisation(ArchiveId, PreservationPolicy, UserCtx) ->
-    case archive:get(ArchiveId) of
-        {ok, ArchiveDoc} -> cancel_archivisation(ArchiveDoc, PreservationPolicy, UserCtx);
-        ?ERROR_NOT_FOUND -> ok;
-        {error, _} = Error -> Error
-    end.
+    cancel_archivisations(ArchiveDoc, RelatedDip, PP, UserCtx).
 
 
 -spec get_nested_archives_stats(archive:id() | archive:doc()) -> archive_stats:record().

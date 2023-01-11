@@ -25,11 +25,11 @@
     get_dataset_root_parent_path/2, find_file/3]).
 
 % getters
--export([get_id/1, get_creation_time/1, get_dataset_id/1, get_archiving_provider_id/1, 
-    get_dataset_root_file_guid/1, get_space_id/1,
+-export([get_id/1, get_creator/1, get_creation_time/1, get_dataset_id/1,
+    get_archiving_provider_id/1, get_dataset_root_file_guid/1, get_space_id/1,
     get_state/1, get_config/1, get_preserved_callback/1, get_deleted_callback/1,
-    get_description/1, get_stats/1, get_root_dir_guid/1,
-    get_data_dir_guid/1, get_parent_id/1, get_parent_doc/1, get_base_archive_id/1,
+    get_description/1, get_stats/1, get_root_dir_guid/1, get_data_dir_guid/1,
+    get_parent_id/1, get_parent_doc/1, get_base_archive_id/1,
     get_related_dip_id/1, get_related_aip_id/1, 
     is_finished/1, is_building/1
 ]).
@@ -297,6 +297,12 @@ get_id(#document{key = ArchiveId}) ->
     {ok, ArchiveId};
 get_id(ArchiveId) ->
     {ok, ArchiveId}.
+
+-spec get_creator(record() | doc()) -> {ok, od_user:id()}.
+get_creator(#archive{creator = Creator}) ->
+    {ok, Creator};
+get_creator(#document{value = Archive}) ->
+    get_creator(Archive).
 
 -spec get_creation_time(record() | doc()) -> {ok, timestamp()}.
 get_creation_time(#archive{creation_time = CreationTime}) ->

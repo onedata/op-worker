@@ -166,8 +166,7 @@ list_children_datasets(SpaceDirCtx, Dataset, Opts, ListingMode, UserCtx) ->
 ) ->
     {ok, recursive_dataset_listing_node:result()} | error().
 list_recursively(SpaceId, DatasetId, Opts, UserCtx) ->
-    UserId = user_ctx:get_user_id(UserCtx),
-    space_logic:assert_has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW),
+    assert_has_eff_privilege(SpaceId, UserCtx, ?SPACE_VIEW),
     
     {ok, DatasetInfo} = dataset_api:get_info(DatasetId),
     FinalOpts = Opts#{include_branching_nodes => true},
@@ -190,8 +189,7 @@ list_recursively(SpaceId, DatasetId, Opts, UserCtx) ->
 ) ->
     {ok, archive_api:info()} | error().
 create_archive(SpaceDirCtx, DatasetId, Config, PreservedCallback, DeletedCallback, Description, UserCtx) ->
-    assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_MANAGE_DATASETS),
-    assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_CREATE_ARCHIVES),
+    assert_has_eff_privileges(SpaceDirCtx, UserCtx, [?SPACE_MANAGE_DATASETS, ?SPACE_CREATE_ARCHIVES]),
 
     archive_api:start_archivisation(
         DatasetId, Config, PreservedCallback, DeletedCallback, Description, UserCtx
@@ -201,19 +199,35 @@ create_archive(SpaceDirCtx, DatasetId, Config, PreservedCallback, DeletedCallbac
 -spec cancel_archivisation(file_ctx:ctx(), archive:id(), archive:cancel_preservation_policy(), user_ctx:ctx()) -> 
     ok | {error, term()}.
 cancel_archivisation(SpaceDirCtx, ArchiveId, PreservationPolicy, UserCtx) ->
-    assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_MANAGE_DATASETS),
-    assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_CREATE_ARCHIVES),
-    
-    archive_api:cancel_archivisation(ArchiveId, PreservationPolicy, UserCtx).
+    case archive:get(ArchiveId) of
+        {ok, ArchiveDoc} ->
+            case is_archive_owner(UserCtx, ArchiveDoc) of
+                true -> ok;
+                false -> assert_has_eff_privileges(
+                    SpaceDirCtx, UserCtx, [?SPACE_MANAGE_DATASETS, ?SPACE_MANAGE_ARCHIVES])
+            end,
+            archive_api:cancel_archivisation(ArchiveDoc, PreservationPolicy, UserCtx);
+        ?ERROR_NOT_FOUND ->
+            ok;
+        {error, _} = Error ->
+            Error
+    end.
 
 
 -spec update_archive(file_ctx:ctx(), archive:id(), archive:diff(), user_ctx:ctx()) ->
     ok | error().
 update_archive(SpaceDirCtx, ArchiveId, Diff, UserCtx) ->
-    assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_MANAGE_DATASETS),
-    assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_CREATE_ARCHIVES),
-
-    archive_api:update_archive(ArchiveId, Diff).
+    case archive:get(ArchiveId) of
+        {ok, ArchiveDoc} ->
+            case is_archive_owner(UserCtx, ArchiveDoc) of
+                true -> ok;
+                false -> assert_has_eff_privileges(
+                    SpaceDirCtx, UserCtx, [?SPACE_MANAGE_DATASETS, ?SPACE_MANAGE_ARCHIVES])
+            end,
+            archive_api:update_archive(ArchiveId, Diff);
+        {error, _} = Error ->
+            Error
+    end.
 
 
 -spec get_archive_info(file_ctx:ctx(), archive:id(), user_ctx:ctx()) ->
@@ -239,8 +253,7 @@ list_archives(SpaceDirCtx, DatasetId, Opts, ListingMode, UserCtx) ->
 -spec init_archive_delete(file_ctx:ctx(), archive:id(), archive:callback(), user_ctx:ctx()) ->
     ok | error().
 init_archive_delete(SpaceDirCtx, ArchiveId, CallbackUrl, UserCtx) ->
-    assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_MANAGE_DATASETS),
-    assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_REMOVE_ARCHIVES),
+    assert_has_eff_privileges(SpaceDirCtx, UserCtx, [?SPACE_MANAGE_DATASETS, ?SPACE_REMOVE_ARCHIVES]),
 
     archive_api:delete(ArchiveId, CallbackUrl).
 
@@ -289,15 +302,32 @@ browse_archive_recall_log(FileCtx, RecallId, UserCtx, Options) ->
 %%% Internal functions
 %%%===================================================================
 
+%% @private
+-spec assert_has_eff_privileges(file_ctx:ctx(), user_ctx:ctx(), [privileges:space_privilege()]) -> ok.
+assert_has_eff_privileges(FileCtx, UserCtx, Privileges) ->
+    UserId = user_ctx:get_user_id(UserCtx),
+    lists:foreach(fun(Privilege) ->
+        assert_has_eff_privilege(FileCtx, UserId, Privilege)
+    end, Privileges).
+
 
 %% @private
--spec assert_has_eff_privilege(file_ctx:ctx(), user_ctx:ctx(), privileges:space_privilege()) -> ok.
-assert_has_eff_privilege(FileCtx, UserCtx, Privilege) ->
-    UserId = user_ctx:get_user_id(UserCtx),
+-spec assert_has_eff_privilege(file_ctx:ctx(), user_ctx:ctx() | od_user:id(), privileges:space_privilege()) -> ok.
+assert_has_eff_privilege(FileCtx, UserId, Privilege) when is_binary(UserId) ->
     case UserId =:= ?ROOT_USER_ID of
         true ->
             ok;
         false ->
             SpaceId = file_ctx:get_space_id_const(FileCtx),
             space_logic:assert_has_eff_privilege(SpaceId, UserId, Privilege)
-    end.
+    end;
+assert_has_eff_privilege(FileCtx, UserCtx, Privilege) ->
+    UserId = user_ctx:get_user_id(UserCtx),
+    assert_has_eff_privilege(FileCtx, UserId, Privilege).
+
+
+%% @private
+-spec is_archive_owner(user_ctx:ctx(), archive:doc()) -> boolean().
+is_archive_owner(UserCtx, #document{value = #archive{creator = Creator}}) ->
+    user_ctx:get_user_id(UserCtx) == Creator.
+    
