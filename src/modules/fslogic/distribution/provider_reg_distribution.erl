@@ -29,9 +29,9 @@ get(FileCtx0) ->
     {FileSize, FileCtx1} = file_ctx:get_file_size(FileCtx0),
     {Location, FileCtx2} = file_ctx:get_local_file_location_doc(FileCtx1),
     StorageDistribution = case Location of
-        #document{deleted = false, value = #file_location{storage_id = StorageId}} = FL ->
+        #document{value = #file_location{storage_id = StorageId}} = FL ->
             #{StorageId => fslogic_location_cache:get_blocks(FL)};
-        _ ->
+        undefined ->
             SpaceId = file_ctx:get_space_id_const(FileCtx2), 
             {ok, StorageId} = space_logic:get_local_supporting_storage(SpaceId),
             #{StorageId => []}

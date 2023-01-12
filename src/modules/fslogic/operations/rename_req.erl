@@ -238,7 +238,7 @@ rename_into_different_place_within_posix_space(UserCtx, SourceFileCtx,
 rename_into_different_place_within_posix_space(UserCtx, SourceFileCtx,
     TargetParentFileCtx, TargetName, ?REGULAR_FILE_TYPE, ?REGULAR_FILE_TYPE, TargetFileCtx
 ) ->
-    {#document{key = FileLocationId, value = #file_location{uuid = TargetFileUuid}, deleted = false}, _} =
+    {#document{key = FileLocationId, value = #file_location{uuid = TargetFileUuid}}, _} =
         file_ctx:get_local_file_location_doc(TargetFileCtx),
     fslogic_location_cache:update_location(TargetFileUuid, FileLocationId, fun
         (FileLocation) -> {ok, FileLocation#file_location{storage_file_created = false}}

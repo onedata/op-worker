@@ -608,6 +608,14 @@ resynchronization_test(Config) ->
     timer:sleep(timer:seconds(60)),
     ?assertEqual(ok, test_utils:mock_unload(Worker1, dbsync_changes)),
 
+    % Create and allow sync file which parent is not synced
+    [Worker2Dir1 | _] = Worker2Dirs,
+    {ok, {FileToUnlinkGuid, FileToUnlinkHandle}} = lfm_proxy:create_and_open(
+        Worker2, SessId2, Worker2Dir1, <<"file_to_unlink">>, ?DEFAULT_FILE_MODE),
+    ok = lfm_proxy:close(Worker2, FileToUnlinkHandle),
+    lfm_proxy:unlink(Worker2, SessId2, #file_ref{guid = FileToUnlinkGuid}),
+    timer:sleep(timer:seconds(20)),
+
     lists:foreach(fun(Guid) ->
         ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(Worker1, SessId1, ?FILE_REF(Guid)))
     end, Worker2Dirs ++ Worker2Files ++ Worker3Dirs ++ Worker3Files),

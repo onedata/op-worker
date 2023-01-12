@@ -180,9 +180,13 @@ emit_file_location_changed(FileCtx, ExcludedSessions) ->
     fslogic_blocks:blocks() | fslogic_blocks:block() | undefined) ->
     ok | {error, Reason :: term()}.
 emit_file_location_changed(FileCtx, ExcludedSessions, Range) ->
-    {Location, _FileCtx2} = file_ctx:get_file_location_with_filled_gaps(FileCtx, Range),
-    {Offset, Size} = fslogic_location_cache:get_blocks_range(Location, Range),
-    emit_file_location_changed(Location, ExcludedSessions, Offset, Size).
+    case file_ctx:get_file_location_with_filled_gaps(FileCtx, Range) of
+        {undefined, _} ->
+            ok;
+        {Location, _FileCtx2} ->
+            {Offset, Size} = fslogic_location_cache:get_blocks_range(Location, Range),
+            emit_file_location_changed(Location, ExcludedSessions, Offset, Size)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

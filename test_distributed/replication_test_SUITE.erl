@@ -374,7 +374,7 @@ write_and_truncate_should_not_update_remote_file_location(Config) ->
     {ok, RemoteLocationId} = ?assertMatch(
         {ok, _},
         ?extract_key(rpc:call(W1, fslogic_location_cache, create_location,
-            [#document{value = RemoteLocation}]))
+            [file_ctx:new_by_guid(FileGuid), #document{value = RemoteLocation}]))
     ),
 
     % when
@@ -472,7 +472,7 @@ read_should_synchronize_file(Config) ->
     },
     ?assertMatch(
         {ok, _},
-        ?extract_key(rpc:call(W1, fslogic_location_cache, create_location, [RemoteLocation]))
+        ?extract_key(rpc:call(W1, fslogic_location_cache, create_location, [file_ctx:new_by_guid(FileGuid), RemoteLocation]))
     ),
 
     LocalLocationId = file_location:id(FileUuid, LocalProviderId),
@@ -553,7 +553,7 @@ external_change_should_invalidate_blocks(Config) ->
     {ok, RemoteLocationId} = ?assertMatch(
         {ok, _},
         ?extract_key(rpc:call(W1, fslogic_location_cache, create_location,
-            [#document{value = RemoteLocation}]))
+            [file_ctx:new_by_guid(FileGuid), #document{value = RemoteLocation}]))
     ),
     {ok, RemoteLocationDoc} = rpc:call(W1, fslogic_location_cache, get_location, [RemoteLocationId, FileUuid]),
     UpdatedRemoteLocationDoc = #document{
@@ -681,7 +681,7 @@ remote_change_should_invalidate_only_updated_part_of_file(Config) ->
     {ok, RemoteLocationId} = ?assertMatch(
         {ok, _},
         rpc:call(W1, fslogic_location_cache, create_location,
-            [#document{key = datastore_key:new(), value = RemoteLocation}, true])
+            [file_ctx:new_by_guid(FileGuid), #document{key = datastore_key:new(), value = RemoteLocation}, true])
     ),
     {ok, RemoteLocationDoc} = rpc:call(W1, fslogic_location_cache, get_location, [RemoteLocationId, FileUuid]),
     UpdatedRemoteLocationDoc = #document{
@@ -762,7 +762,7 @@ remote_change_without_history_should_invalidate_whole_data(Config) ->
     {ok, RemoteLocationId} = ?assertMatch(
         {ok, _},
         ?extract_key(rpc:call(W1, fslogic_location_cache, create_location,
-            [#document{value = RemoteLocation}]))
+            [file_ctx:new_by_guid(FileGuid), #document{value = RemoteLocation}]))
     ),
     {ok, RemoteLocationDoc} = rpc:call(W1, fslogic_location_cache, get_location, [RemoteLocationId, FileUuid]),
     UpdatedRemoteLocationDoc = #document{
@@ -829,7 +829,7 @@ remote_change_of_size_should_notify_clients(Config) ->
     },
     {ok, RemoteLocationId} = ?assertMatch({ok, _},
         ?extract_key(rpc:call(W1, fslogic_location_cache, create_location,
-            [#document{value = RemoteLocation}]))),
+            [file_ctx:new_by_guid(FileGuid), #document{value = RemoteLocation}]))),
     {ok, RemoteLocationDoc} = rpc:call(W1, fslogic_location_cache, get_location, [RemoteLocationId, FileUuid]),
     UpdatedRemoteLocationDoc = bump_version(RemoteLocationDoc, 1),
 
@@ -888,7 +888,8 @@ remote_change_of_blocks_should_notify_clients(Config) ->
     },
     {ok, RemoteLocationId} = ?assertMatch(
         {ok, _},
-        rpc:call(W1, fslogic_location_cache, create_location, [#document{key = datastore_key:new(), value = RemoteLocation}, true])
+        rpc:call(W1, fslogic_location_cache, create_location,
+            [file_ctx:new_by_guid(FileGuid), #document{key = datastore_key:new(), value = RemoteLocation}, true])
     ),
     {ok, RemoteLocationDoc} = rpc:call(W1, fslogic_location_cache, get_location, [RemoteLocationId, FileUuid]),
     UpdatedRemoteLocationDoc = bump_version(RemoteLocationDoc, 1),
@@ -956,7 +957,7 @@ remote_irrelevant_change_should_not_notify_clients(Config) ->
     {ok, RemoteLocationId} = ?assertMatch(
         {ok, _},
         ?extract_key(rpc:call(W1, fslogic_location_cache, create_location,
-            [#document{value = RemoteLocation}]))
+            [file_ctx:new_by_guid(FileGuid), #document{value = RemoteLocation}]))
     ),
     {ok, RemoteLocationDoc} = rpc:call(W1, fslogic_location_cache, get_location, [RemoteLocationId, FileUuid]),
     UpdatedRemoteLocationDoc = bump_version(RemoteLocationDoc, 2),
@@ -1019,7 +1020,7 @@ conflicting_remote_changes_should_be_reconciled(Config) ->
     {ok, RemoteLocationId} = ?assertMatch(
         {ok, _},
         rpc:call(W1, fslogic_location_cache, create_location,
-            [#document{key = datastore_key:new(),value = RemoteLocation}, true])
+            [file_ctx:new_by_guid(FileGuid), #document{key = datastore_key:new(),value = RemoteLocation}, true])
     ),
     {ok, RemoteLocationDoc} = rpc:call(W1, fslogic_location_cache, get_location, [RemoteLocationId, FileUuid]),
     UpdatedRemoteLocationDoc = #document{
@@ -1099,7 +1100,7 @@ replica_invalidate_should_migrate_unique_data(Config) ->
     },
     ?assertMatch(
         {ok, _},
-        ?extract_key(rpc:call(W1, fslogic_location_cache, create_location, [RemoteLocation]))
+        ?extract_key(rpc:call(W1, fslogic_location_cache, create_location, [file_ctx:new_by_guid(FileGuid), RemoteLocation]))
     ),
 
     override_space_providers_mock(Config, Workers, SpaceId, [LocalProviderId, ExternalProviderId]),
@@ -1160,7 +1161,7 @@ replica_invalidate_should_truncate_storage_file_to_zero_size(Config) ->
     },
     ?assertMatch(
         {ok, _},
-        ?extract_key(rpc:call(W1, fslogic_location_cache, create_location, [RemoteLocation]))
+        ?extract_key(rpc:call(W1, fslogic_location_cache, create_location, [file_ctx:new_by_guid(FileGuid), RemoteLocation]))
     ),
 
     override_space_providers_mock(Config, Workers, SpaceId, [LocalProviderId, ExternalProviderId]),
@@ -1232,17 +1233,17 @@ dir_replica_invalidate_should_invalidate_all_children(Config) ->
             provider_id = ExternalProviderId,
             blocks = ExternalBlocks,
             file_id = ExternalFileId,
-            uuid = FileUuid1,
+            uuid = FileUuid2,
             version_vector = #{}
         }
     },
     ?assertMatch(
         {ok, _},
-        ?extract_key(rpc:call(W1, fslogic_location_cache, create_location, [RemoteLocation1]))
+        ?extract_key(rpc:call(W1, fslogic_location_cache, create_location, [file_ctx:new_by_guid(FileGuid1), RemoteLocation1]))
     ),
     ?assertMatch(
         {ok, _},
-        ?extract_key(rpc:call(W1, fslogic_location_cache, create_location, [RemoteLocation2]))
+        ?extract_key(rpc:call(W1, fslogic_location_cache, create_location, [file_ctx:new_by_guid(FileGuid2), RemoteLocation2]))
     ),
 
     override_space_providers_mock(Config, Workers, SpaceId, [LocalProviderId, ExternalProviderId]),

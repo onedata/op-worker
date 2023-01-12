@@ -24,7 +24,7 @@
 -export([get_uuid/0, get_local_location/0, get_all_locations/0,
     cache_location_change/2, clear_location_changes/0]).
 % Doc API
--export([get_doc/1, save_doc/1, cache_doc/1, delete_doc/1, attach_blocks/1,
+-export([get_doc/1, get_doc_including_deleted/1, save_doc/1, cache_doc/1, delete_doc/1, attach_blocks/1,
     attach_local_blocks/1, attach_public_blocks/1, merge_local_blocks/1]).
 % Block API
 -export([get_blocks/1, save_blocks/2, cache_blocks/2, check_blocks/1,
@@ -290,19 +290,26 @@ clear_location_changes() ->
 %%% Doc API
 %%%===================================================================
 
-%%-------------------------------------------------------------------
-%% @doc
-%% Returns file location.
-%% @end
-%%-------------------------------------------------------------------
 -spec get_doc(file_location:id()) -> file_location:doc() | {error, not_found}.
 get_doc(Key) ->
     get_doc(Key, false).
 
 -spec get_doc(file_location:id(), boolean()) -> file_location:doc() | {error, not_found}.
-get_doc(undefined, _) ->
-    {error, not_found};
 get_doc(Key, ForceReload) ->
+    case get_doc_including_deleted(Key, ForceReload) of
+        #document{deleted = true} -> {error, not_found};
+        Ans -> Ans
+    end.
+
+
+-spec get_doc_including_deleted(file_location:id()) -> file_location:doc() | {error, not_found}.
+get_doc_including_deleted(Key) ->
+    get_doc_including_deleted(Key, false).
+
+-spec get_doc_including_deleted(file_location:id(), boolean()) -> file_location:doc() | {error, not_found}.
+get_doc_including_deleted(undefined, _) ->
+    {error, not_found};
+get_doc_including_deleted(Key, ForceReload) ->
     case get({?DOCS, Key}) of
         #document{} = Doc when ForceReload =:= false ->
             Doc;
@@ -332,6 +339,7 @@ get_doc(Key, ForceReload) ->
                     throw({fslogic_cache_error, Error})
             end
     end.
+
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -364,10 +372,10 @@ cache_doc(#document{key = Key} = LocationDoc) ->
 delete_doc(Key) ->
     GetDocAns = case get_doc(Key) of
         #document{} = Doc -> {ok, Doc};
-        _ -> file_location:get_including_deleted(Key)
+        _ -> file_location:get(Key)
     end,
     Ans = case GetDocAns of
-        {ok, #document{deleted = false, value = #file_location{
+        {ok, #document{value = #file_location{
             uuid = FileUuid,
             space_id = SpaceId,
             storage_id = StorageId,
@@ -380,8 +388,6 @@ delete_doc(Key) ->
             LocationDelAns = file_location:delete(Key),
             delete_local_blocks(Key),
             LocationDelAns;
-        {ok, #document{deleted = true}} ->
-            ok;
         {error, not_found} ->
             ok;
         Error ->

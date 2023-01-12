@@ -193,8 +193,6 @@ get_reg_storage_locations(FileCtx) ->
         LocId = file_location:id(FileUuid, ProviderId),
         maps:map(fun(_StorageId, _) ->
             case fslogic_location_cache:get_location(LocId, FileUuid, false) of
-                {ok, #document{deleted = true}} ->
-                    undefined;
                 {ok, #document{value = #file_location{file_id = StorageFileId}}} ->
                     StorageFileId;
                 {error, not_found} ->
