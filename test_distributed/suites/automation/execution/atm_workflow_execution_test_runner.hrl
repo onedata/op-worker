@@ -109,6 +109,8 @@
     user = ?USER_SELECTOR :: oct_background:entity_selector(),
     space = ?SPACE_SELECTOR :: oct_background:entity_selector(),
 
+    is_time_frozen = false :: boolean(),
+
     workflow_schema_dump_or_draft ::
         atm_test_inventory:atm_workflow_schema_dump() |
         atm_test_schema_factory:atm_workflow_schema_dump_draft(),
