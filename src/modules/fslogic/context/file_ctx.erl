@@ -731,7 +731,7 @@ get_storage(FileCtx = #file_ctx{storage = Storage}) ->
 %% @equiv get_file_location_with_filled_gaps(FileCtx, undefined)
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_location_with_filled_gaps(ctx()) -> {#file_location{}, ctx()}.
+-spec get_file_location_with_filled_gaps(ctx()) -> {#file_location{} | undefined, ctx()}.
 get_file_location_with_filled_gaps(FileCtx) ->
     get_file_location_with_filled_gaps(FileCtx, undefined).
 
@@ -739,19 +739,23 @@ get_file_location_with_filled_gaps(FileCtx) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns location that can be understood by client. It has gaps filled, and
-%% stores guid instead of uuid.
+%% stores guid instead of uuid. Returns undefined if location is deleted.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_location_with_filled_gaps(ctx(),
     fslogic_blocks:blocks() | fslogic_blocks:block() | undefined) ->
-    {#file_location{}, ctx()}.
+    {#file_location{} | undefined, ctx()}.
 get_file_location_with_filled_gaps(FileCtx, ReqRange)
     when is_list(ReqRange) orelse ReqRange == undefined ->
     % get locations
     {Locations, FileCtx2} = get_file_location_docs(set_is_dir(FileCtx, false)),
-    {FileLocationDoc, FileCtx3} = get_or_create_local_file_location_doc(FileCtx2),
-    {fslogic_location:get_local_blocks_and_fill_location_gaps(ReqRange, FileLocationDoc, Locations,
-        get_logical_uuid_const(FileCtx3)), FileCtx3};
+    case get_or_create_local_file_location_doc(FileCtx2) of
+        {#document{deleted = true}, FileCtx3} ->
+            {undefined, FileCtx3};
+        {FileLocationDoc, FileCtx3} ->
+            {fslogic_location:get_local_blocks_and_fill_location_gaps(ReqRange, FileLocationDoc, Locations,
+                get_logical_uuid_const(FileCtx3)), FileCtx3}
+    end;
 get_file_location_with_filled_gaps(FileCtx, ReqRange) ->
     get_file_location_with_filled_gaps(FileCtx, [ReqRange]).
 
@@ -1385,7 +1389,9 @@ get_or_create_local_regular_file_location_doc(FileCtx, GetDocOpts, _CheckLocatio
             end, LocationDocs),
             get_local_file_location_doc(FileCtx3, GetDocOpts);
         {{error, already_exists}, FileCtx2} ->
-            get_local_file_location_doc(FileCtx2, GetDocOpts)
+            % Possible race with file deletion - get including deleted
+            {ok, Location} = fslogic_location_cache:get_local_location_including_deleted(FileCtx2, GetDocOpts),
+            {Location, FileCtx2}
     end.
 
 %%--------------------------------------------------------------------

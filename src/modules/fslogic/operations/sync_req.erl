@@ -53,7 +53,7 @@
     Prefetch :: boolean(), transfer_id(), non_neg_integer()) -> fuse_response().
 synchronize_block(UserCtx, FileCtx, undefined, Prefetch, TransferId, Priority) ->
     % trigger file_location creation
-    {#document{value = #file_location{size = Size} = FL} = FLDoc, FileCtx2} =
+    {#document{value = #file_location{size = Size} = FL, deleted = false} = FLDoc, FileCtx2} =
         file_ctx:get_or_create_local_file_location_doc(FileCtx, skip_local_blocks),
     case fslogic_location_cache:get_blocks(FLDoc, #{count => 2}) of
         [#file_block{offset = 0, size = Size}] ->
@@ -87,7 +87,7 @@ synchronize_block(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
     Prefetch :: boolean(), transfer_id(), non_neg_integer()) -> fuse_response().
 request_block_synchronization(UserCtx, FileCtx, undefined, Prefetch, TransferId, Priority) ->
     % trigger file_location creation
-    {#document{value = #file_location{size = Size}} = FLDoc, FileCtx2} =
+    {#document{value = #file_location{size = Size}, deleted = false} = FLDoc, FileCtx2} =
         file_ctx:get_or_create_local_file_location_doc(FileCtx, skip_local_blocks),
     case fslogic_location_cache:get_blocks(FLDoc, #{count => 2}) of
         [#file_block{offset = 0, size = Size}] ->

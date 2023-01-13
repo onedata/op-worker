@@ -370,7 +370,7 @@ delete_file_metadata(FileCtx, UserCtx, ?SPEC(?SINGLE_STEP_DEL, ?ALL_DOCS), Stora
     FileCtx2 = update_parent_timestamps(UserCtx, FileCtx),
     % TODO VFS-6094 currently, we remove file_location even if remove on storage fails
     % get StorageFileId before location is deleted as it's stored in file_location doc
-    {StorageFileId, FileCtx3} = file_ctx:get_storage_file_id(FileCtx2),
+    {StorageFileId, FileCtx3} = get_storage_file_id(FileCtx2),
     FileCtx4 = delete_location(FileCtx3),
     FileCtx5 = delete_file_meta(FileCtx4),
     remove_associated_documents(FileCtx5, StorageFileDeleted, StorageFileId),
@@ -378,7 +378,7 @@ delete_file_metadata(FileCtx, UserCtx, ?SPEC(?SINGLE_STEP_DEL, ?ALL_DOCS), Stora
     maybe_try_to_delete_parent(FileCtx6, UserCtx, ?ALL_DOCS, StorageFileId);
 delete_file_metadata(FileCtx, UserCtx, ?SPEC(?SINGLE_STEP_DEL, ?LOCAL_DOCS), StorageFileDeleted) ->
     % get StorageFileId before location is deleted as it's stored in file_location doc
-    {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
+    {StorageFileId, FileCtx2} = get_storage_file_id(FileCtx),
     FileCtx3 = delete_location(FileCtx2),
     remove_local_associated_documents(FileCtx3, StorageFileDeleted, StorageFileId),
     maybe_try_to_delete_parent(FileCtx3, UserCtx, ?LOCAL_DOCS, StorageFileId);
@@ -389,7 +389,7 @@ delete_file_metadata(FileCtx, UserCtx, ?SPEC(?TWO_STEP_DEL_INIT, _DocsDeletionSc
 delete_file_metadata(FileCtx, UserCtx, ?SPEC(?TWO_STEP_DEL_FIN, DocsDeletionScope), StorageFileDeleted) ->
     {FileDoc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
     % get StorageFileId before location is deleted as it's stored in file_location doc
-    {StorageFileId, FileCtx3} = file_ctx:get_storage_file_id(FileCtx2),
+    {StorageFileId, FileCtx3} = get_storage_file_id(FileCtx2),
     FileCtx4 = delete_location(FileCtx3),
     file_meta:delete_without_link(FileDoc), % do not match, document may not exist
     case DocsDeletionScope of
@@ -408,12 +408,14 @@ delete_file_metadata(FileCtx, UserCtx, ?SPEC(?TWO_STEP_DEL_FIN, DocsDeletionScop
     end.
 
 
--spec maybe_try_to_delete_parent(file_ctx:ctx(), user_ctx:ctx(), docs_deletion_scope(), helpers:file_id()) -> ok.
+-spec maybe_try_to_delete_parent(file_ctx:ctx(), user_ctx:ctx(), docs_deletion_scope(), helpers:file_id() | undefined) -> ok.
+maybe_try_to_delete_parent(_FileCtx, _UserCtx, _DocsDeletionScope, undefined) ->
+    ok;
 maybe_try_to_delete_parent(_FileCtx, _UserCtx, _DocsDeletionScope, ?DELETED_OPENED_FILES_DIR) ->
     ok;
 maybe_try_to_delete_parent(FileCtx, UserCtx, DocsDeletionScope, StorageFileId) ->
-    {ParentCtx, _FileCtx2} = file_tree:get_parent(FileCtx, UserCtx),
     try
+        {ParentCtx, _FileCtx2} = file_tree:get_parent(FileCtx, UserCtx),
         {ParentDoc, ParentCtx2} = file_ctx:get_file_doc_including_deleted(ParentCtx),
             case file_meta:is_deleted(ParentDoc) of
                 true ->
@@ -459,7 +461,9 @@ maybe_add_deletion_marker(FileCtx, UserCtx) ->
 %% want file_ctx to calculate StorageFileId basing on current CanonicalPath.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_deletion_marker(file_ctx:ctx(), user_ctx:ctx(), helpers:file_id()) -> file_ctx:ctx().
+-spec remove_deletion_marker(file_ctx:ctx(), user_ctx:ctx(), helpers:file_id() | undefined) -> file_ctx:ctx().
+remove_deletion_marker(FileCtx, _UserCtx, undefined) ->
+    FileCtx;
 remove_deletion_marker(FileCtx, UserCtx, StorageFileId) ->
     % TODO VFS-7377 use file_location:get_deleted instead of passing StorageFileId
     case file_ctx:is_imported_storage(FileCtx) of
@@ -517,7 +521,9 @@ update_parent_timestamps(UserCtx, FileCtx) ->
     end.
 
 
--spec maybe_delete_storage_sync_info(file_ctx:ctx(), helpers:file_id()) -> file_ctx:ctx().
+-spec maybe_delete_storage_sync_info(file_ctx:ctx(), helpers:file_id() | undefined) -> file_ctx:ctx().
+maybe_delete_storage_sync_info(FileCtx, undefined) ->
+    FileCtx;
 maybe_delete_storage_sync_info(FileCtx, StorageFileId) ->
     try
         case file_ctx:is_imported_storage(FileCtx) of
@@ -637,7 +643,7 @@ finalize_file_location_rename(FileUuid) ->
 %% Removes associated documents connected with file.
 %% @end
 %%--------------------------------------------------------------------
--spec remove_associated_documents(file_ctx:ctx(), boolean(), helpers:file_id()) -> ok.
+-spec remove_associated_documents(file_ctx:ctx(), boolean(), helpers:file_id() | undefined) -> ok.
 remove_associated_documents(FileCtx, StorageFileDeleted, StorageFileId) ->
     % TODO VFS-7377 use file_location:get_deleted instead of passing StorageFileId
     remove_synced_associated_documents(FileCtx),
@@ -655,7 +661,7 @@ remove_synced_associated_documents(FileCtx) ->
     ok = file_qos:delete_associated_entries_on_no_references(FileCtx).
 
 
--spec remove_local_associated_documents(file_ctx:ctx(), boolean(), helpers:file_id()) -> ok.
+-spec remove_local_associated_documents(file_ctx:ctx(), boolean(), helpers:file_id() | undefined) -> ok.
 remove_local_associated_documents(FileCtx, StorageFileDeleted, StorageFileId) ->
     % TODO VFS-7377 use file_location:get_deleted instead of passing StorageFileId
     FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
@@ -711,10 +717,10 @@ delete_location(FileCtx) ->
 
 -spec log_storage_file_deletion_error(file_ctx:ctx(), term(), false | {true, list()}) -> ok.
 log_storage_file_deletion_error(FileCtx, Error, IncludeStacktrace) ->
-    {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(FileCtx),
+    {StorageFileId, FileCtx2} = get_storage_file_id(FileCtx),
     {StorageId, FileCtx3} = file_ctx:get_storage_id(FileCtx2),
     FileGuid = file_ctx:get_logical_guid_const(FileCtx3),
-    Format = "Deleting file ~s on storage ~s with guid ~s failed due to ~p.",
+    Format = "Deleting file ~p on storage ~s with guid ~s failed due to ~p.",
     Args = [StorageFileId, StorageId, FileGuid, Error],
     case IncludeStacktrace of
         {true, Stacktrace} -> ?error_stacktrace(Format, Args, Stacktrace);
@@ -729,3 +735,14 @@ report_file_deleted(FileCtx) ->
     {ParentFileCtx, _} = file_tree:get_parent(FileCtx, undefined),
     {Type, _} = file_ctx:get_type(FileCtx),
     dir_size_stats:report_file_deleted(Type, file_ctx:get_logical_guid_const(ParentFileCtx)).
+
+
+-spec get_storage_file_id(file_ctx:ctx()) -> {helpers:file_id() | undefined, file_ctx:ctx()}.
+get_storage_file_id(FileCtx) ->
+    try
+        file_ctx:get_storage_file_id(FileCtx)
+    catch
+        % Parent is not synced while handling remote deletion of file
+        throw:{error, {file_meta_missing, _}}  ->
+            {undefined, FileCtx}
+    end.

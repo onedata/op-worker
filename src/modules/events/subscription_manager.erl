@@ -190,9 +190,15 @@ apply_space_id_filter(SessIds, undefined) ->
     SessIds;
 apply_space_id_filter(SessIds, SpaceIDFilter) ->
     lists:filter(fun(SessId) ->
-        UserCtx = user_ctx:new(SessId),
-        Spaces = user_ctx:get_eff_spaces(UserCtx),
-        lists:member(SpaceIDFilter, Spaces)
+        try
+            UserCtx = user_ctx:new(SessId),
+            Spaces = user_ctx:get_eff_spaces(UserCtx),
+            lists:member(SpaceIDFilter, Spaces)
+        catch
+            Error:Reason:Stacktrace ->
+                ?warning_stacktrace("Error applying space filters for subscriptions: ~p:~p", [Error, Reason], Stacktrace),
+                false % filter this session id - user could be deleted so effective spaces cannot be get
+        end
     end, SessIds).
 
 -spec apply_auth_filter([session:id()], event_type:auth_check_type(),
@@ -257,7 +263,10 @@ remove_subscriber(Key, SessId) ->
                     Pred = fun(#file_subscription{sessions = SIds2}) ->
                         gb_sets:is_empty(SIds2)
                     end,
-                    file_subscription:delete(Key, Pred);
+                    case file_subscription:delete(Key, Pred) of
+                        ok -> ok;
+                        {error, {not_satisfied, _}} -> ok
+                    end;
                 false ->
                     ok
             end;
