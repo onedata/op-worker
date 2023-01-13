@@ -73,7 +73,7 @@ translate_archive_info(#archive_info{
         <<"gri">> => build_serialized_archive_instance_gri(ArchiveId),
         <<"dataset">> => build_serialized_instance_gri(op_dataset, DatasetId),
         <<"provider">> => build_serialized_instance_gri(op_provider, ProviderId, protected),
-        <<"state">> => str_utils:to_binary(State),
+        <<"state">> => translate_archive_state(State),
         <<"rootDir">> => build_serialized_instance_gri(op_file, RootDirGuid),
         <<"creationTime">> => CreationTime,
         <<"config">> => archive_config:to_json(Config),
@@ -89,17 +89,20 @@ translate_archive_info(#archive_info{
     }.
 
 
+%% @private
 -spec build_serialized_archive_instance_gri(undefined | archive:id()) -> gri:serialized() | null.
 build_serialized_archive_instance_gri(ArchiveId) ->
     build_serialized_instance_gri(op_archive, ArchiveId).
 
 
+%% @private
 -spec build_serialized_instance_gri(gri:entity_type(), gri:entity_id()) -> gri:serialized() | null.
 build_serialized_instance_gri(Type, Id) ->
     build_serialized_instance_gri(Type, Id, private).
-    
 
--spec build_serialized_instance_gri(gri:entity_type(), gri:entity_id(), gri:scope()) -> 
+
+%% @private
+-spec build_serialized_instance_gri(gri:entity_type(), gri:entity_id(), gri:scope()) ->
     gri:serialized() | null.
 build_serialized_instance_gri(_, undefined, _) ->
     null;
@@ -108,3 +111,10 @@ build_serialized_instance_gri(Type, Id, Scope) ->
         type = Type, id = Id,
         aspect = instance, scope = Scope
     }).
+
+
+%% @private
+-spec translate_archive_state(archive:state()) -> binary().
+translate_archive_state({cancelling, delete}) -> <<"cancelling_with_delete">>;
+translate_archive_state({cancelling, retain}) -> <<"cancelling_with_retain">>;
+translate_archive_state(State) -> str_utils:to_binary(State).

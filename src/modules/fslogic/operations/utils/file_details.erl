@@ -27,6 +27,7 @@
     effective_qos_membership => file_qos:membership(),
     effective_dataset_membership => dataset:membership(), 
     effective_protection_flags => data_access_control:bitmask(),
+    effective_dataset_protection_flags => data_access_control:bitmask(),
     effective_recall => file_id:file_guid()
 }.
 
@@ -59,7 +60,8 @@ resolve(UserCtx, FileCtx) ->
         has_metadata = has_metadata(FileCtx3),
         eff_qos_membership = maps:get(effective_qos_membership, EffectiveValues, undefined),
         eff_dataset_membership = maps:get(effective_dataset_membership, EffectiveValues, undefined),
-        eff_protection_flags = maps:get(effective_protection_flags, EffectiveValues, undefined),
+        eff_protection_flags = maps:get(effective_protection_flags, EffectiveValues, ?no_flags_mask),
+        eff_dataset_protection_flags = maps:get(effective_dataset_protection_flags , EffectiveValues, ?no_flags_mask),
         recall_root_id = maps:get(effective_recall, EffectiveValues, undefined),
         conflicting_name = resolve_conflicting_name(FileDoc, Uuid, FileAttrName)
     }.
@@ -102,7 +104,7 @@ resolve_effective_values(FileCtx, FileDoc, ReferencesLimit) ->
 calculate_effective_values(FileCtx) ->
     {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
     EffectiveQoSMembership = file_qos:qos_membership(FileDoc),
-    {ok, EffectiveDatasetMembership, EffectiveProtectionFlags, FileCtx3} =
+    {ok, EffectiveDatasetMembership, EffectiveProtectionFlags, EffDatasetProtectionFlags, FileCtx3} =
         dataset_api:get_effective_membership_and_protection_flags(FileCtx2),
     EffectiveRecallRootGuid = case archive_recall:get_effective_recall(FileDoc) of
         {ok, undefined} -> undefined;
@@ -112,6 +114,7 @@ calculate_effective_values(FileCtx) ->
         effective_qos_membership => EffectiveQoSMembership,
         effective_dataset_membership => EffectiveDatasetMembership,
         effective_protection_flags => EffectiveProtectionFlags,
+        effective_dataset_protection_flags => EffDatasetProtectionFlags,
         effective_recall => EffectiveRecallRootGuid
     }, FileCtx3}.
 
