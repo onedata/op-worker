@@ -59,6 +59,7 @@ get_response(#gri{aspect = instance}, #archive_info{} = ArchiveInfo) ->
 translate_archive_info(#archive_info{
     id = ArchiveId,
     dataset_id = DatasetId,
+    creator = Creator,
     state = State,
     root_dir_guid = RootDirGuid,
     creation_time = CreationTime,
@@ -75,6 +76,7 @@ translate_archive_info(#archive_info{
         <<"archiveId">> => ArchiveId,
         <<"datasetId">> => DatasetId,
         <<"state">> => str_utils:to_binary(State),
+        <<"creator">> => Creator,
         <<"rootDirectoryId">> => case RootDirGuid =/= undefined of
             true ->
                 {ok, DirObjectId} = file_id:guid_to_objectid(RootDirGuid),

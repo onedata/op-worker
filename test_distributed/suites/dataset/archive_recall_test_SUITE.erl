@@ -712,7 +712,7 @@ recall_to_recalling_dir_test_base(Method) ->
             G
     end,
     
-    ?assertEqual(?ERROR_POSIX(?EBUSY), opt_archives:recall(krakow, SessId, ArchiveId, NewTargetParentGuid, default)),
+    ?assertEqual(?ERROR_RECALL_TARGET_IN_ONGOING_RECALL, opt_archives:recall(krakow, SessId, ArchiveId, NewTargetParentGuid, default)),
     
     finish_recall(Pid),
     

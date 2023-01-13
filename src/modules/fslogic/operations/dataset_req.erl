@@ -166,7 +166,8 @@ list_children_datasets(SpaceDirCtx, Dataset, Opts, ListingMode, UserCtx) ->
 ) ->
     {ok, recursive_dataset_listing_node:result()} | error().
 list_recursively(SpaceId, DatasetId, Opts, UserCtx) ->
-    assert_has_eff_privilege(SpaceId, UserCtx, ?SPACE_VIEW),
+    SpaceDirCtx = file_ctx:new_by_guid(fslogic_file_id:spaceid_to_space_dir_guid(SpaceId)),
+    assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_VIEW),
     
     {ok, DatasetInfo} = dataset_api:get_info(DatasetId),
     FinalOpts = Opts#{include_branching_nodes => true},
