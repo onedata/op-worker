@@ -181,7 +181,7 @@ run(TestSpec = #atm_workflow_execution_test_spec{
     provider = ProviderSelector,
     user = UserSelector,
     space = SpaceSelector,
-    is_time_frozen = IsTimeFrozen,
+    clock_status = ClockStatus,
     workflow_schema_dump_or_draft = AtmWorkflowSchemaDumpOrDraft,
     workflow_schema_revision_num = AtmWorkflowSchemaRevisionNum,
     store_initial_content_overlay = AtmStoreInitialContentOverlay,
@@ -201,7 +201,7 @@ run(TestSpec = #atm_workflow_execution_test_spec{
     ),
 
     ExpState = atm_workflow_execution_exp_state_builder:init(
-        ProviderSelector, SpaceId, IsTimeFrozen, AtmWorkflowExecutionId, AtmWorkflowSchemaRevision
+        ProviderSelector, SpaceId, ClockStatus, AtmWorkflowExecutionId, AtmWorkflowSchemaRevision
     ),
     true = atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState),
 

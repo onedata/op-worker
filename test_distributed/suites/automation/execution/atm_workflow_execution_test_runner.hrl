@@ -109,7 +109,7 @@
     user = ?USER_SELECTOR :: oct_background:entity_selector(),
     space = ?SPACE_SELECTOR :: oct_background:entity_selector(),
 
-    is_time_frozen = false :: boolean(),
+    clock_status = normal :: normal | frozen,
 
     workflow_schema_dump_or_draft ::
         atm_test_inventory:atm_workflow_schema_dump() |

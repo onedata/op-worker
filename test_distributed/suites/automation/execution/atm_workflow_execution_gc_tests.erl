@@ -125,7 +125,7 @@ set_env(EnvVar, EnvValue) ->
     atm_workflow_execution_exp_state_builder:exp_state().
 run_atm_workflow_execution(Testcase, paused) ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
-        is_time_frozen = true,
+        clock_status = frozen,
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(Testcase),
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,
@@ -149,7 +149,7 @@ run_atm_workflow_execution(Testcase, paused) ->
 
 run_atm_workflow_execution(Testcase, finished) ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
-        is_time_frozen = true,
+        clock_status = frozen,
         workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(Testcase),
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,

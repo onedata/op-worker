@@ -68,7 +68,7 @@
     current_lane_index :: atm_lane_execution:index(),
     current_run_num :: atm_lane_execution:run_num(),
 
-    is_time_frozen :: boolean(),
+    clock_status :: normal | frozen,
 
     exp_workflow_execution_state :: workflow_execution_state(),
     exp_task_execution_state_ctx_registry :: exp_task_execution_state_ctx_registry()
@@ -135,7 +135,7 @@
 -spec init(
     oct_background:entity_selector(),
     od_space:id(),
-    boolean(),
+    normal | frozen,
     atm_workflow_execution:id(),
     atm_workflow_schema_revision:record()
 ) ->
@@ -143,7 +143,7 @@
 init(
     ProviderSelector,
     SpaceId,
-    IsTimeFrozen,
+    ClockStatus,
     AtmWorkflowExecutionId,
     #atm_workflow_schema_revision{
         stores = AtmStoreSchemas,
@@ -177,7 +177,7 @@ init(
         current_lane_index = 1,
         current_run_num = 1,
 
-        is_time_frozen = IsTimeFrozen,
+        clock_status = ClockStatus,
 
         exp_workflow_execution_state = #{
             <<"spaceId">> => SpaceId,
@@ -190,7 +190,7 @@ init(
             <<"status">> => <<"scheduled">>,
 
             <<"scheduleTime">> => build_timestamp_field_validator(get_timestamp_seconds(
-                IsTimeFrozen
+                ClockStatus
             )),
             <<"startTime">> => 0,
             <<"suspendTime">> => 0,
@@ -556,12 +556,12 @@ get_task_status(AtmTaskExecutionId, #exp_workflow_execution_state_ctx{
 
 
 %% @private
--spec get_timestamp_seconds(ctx() | boolean()) -> time:seconds().
-get_timestamp_seconds(#exp_workflow_execution_state_ctx{is_time_frozen = IsTimeFrozen}) ->
-    get_timestamp_seconds(IsTimeFrozen);
-get_timestamp_seconds(true) ->
+-spec get_timestamp_seconds(ctx() | normal | frozen) -> time:seconds().
+get_timestamp_seconds(#exp_workflow_execution_state_ctx{clock_status = ClockStatus}) ->
+    get_timestamp_seconds(ClockStatus);
+get_timestamp_seconds(frozen) ->
     time_test_utils:get_frozen_time_seconds();
-get_timestamp_seconds(false) ->
+get_timestamp_seconds(normal) ->
     global_clock:timestamp_seconds().
 
 
