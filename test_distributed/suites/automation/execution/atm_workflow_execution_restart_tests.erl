@@ -330,7 +330,7 @@ expect_workflow_execution_active(AtmWorkflowExecutionId, AtmWorkflowSchemaRevisi
     SpaceId = oct_background:get_space_id(?SPACE_SELECTOR),
 
     ExpInitialState = atm_workflow_execution_exp_state_builder:init(
-        ?PROVIDER_SELECTOR, SpaceId, AtmWorkflowExecutionId, AtmWorkflowSchemaRevision
+        ?PROVIDER_SELECTOR, SpaceId, normal, AtmWorkflowExecutionId, AtmWorkflowSchemaRevision
     ),
     atm_workflow_execution_exp_state_builder:expect(ExpInitialState, [
         {lane_run, {1, 1}, started_preparing},

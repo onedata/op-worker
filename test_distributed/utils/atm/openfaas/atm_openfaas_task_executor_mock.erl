@@ -107,7 +107,7 @@ teardown(ProviderSelectors) ->
     oct_background:entity_selector(),
     atm_workflow_execution:id(),
     atm_lane_execution:index(),
-    success | failure
+    success | exception
 ) ->
     ok.
 mock_lane_initiation_result(ProviderSelector, AtmWorkflowExecutionId, AtmLaneIndex, MockedResult) ->
@@ -192,7 +192,7 @@ mock_initiate(Workers) ->
                     type => async,
                     data_stream_enabled => not lists_utils:is_empty(AtmTaskExecutionUncorrelatedResultNames)
                 };
-            failure ->
+            exception ->
                 throw(?ERROR_ATM_OPENFAAS_FUNCTION_REGISTRATION_FAILED)
         end
     end,

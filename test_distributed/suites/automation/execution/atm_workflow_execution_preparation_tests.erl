@@ -18,6 +18,7 @@
 -export([
     first_lane_run_preparation_failure_before_run_was_created/0,
     first_lane_run_preparation_failure_after_run_was_created/0,
+    first_lane_run_preparation_interruption_due_to_openfaas_error/0,
 
     atm_workflow_execution_cancelled_in_preparing_status_before_run_was_created/0,
     atm_workflow_execution_cancelled_in_preparing_status_after_run_was_created/0,
@@ -166,6 +167,42 @@ first_lane_run_preparation_failure_after_run_was_created() ->
                     {lane_runs, [{1, 1}], rerunable},
                     workflow_failed
                 ]
+            }
+        }]
+    }).
+
+
+first_lane_run_preparation_interruption_due_to_openfaas_error() ->
+    atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
+        workflow_schema_dump_or_draft = ?ECHO_1_LANE_ATM_WORKFLOW_SCHEMA_DRAFT,
+        incarnations = [#atm_workflow_execution_incarnation_test_spec{
+            incarnation_num = 1,
+            lane_runs = [#atm_lane_run_execution_test_spec{
+                selector = {1, 1},
+                prepare_lane = #atm_step_mock_spec{
+                    before_step_hook = fun(#atm_mock_call_ctx{
+                        provider = ProviderSelector,
+                        workflow_execution_id = AtmWorkflowExecutionId
+                    }) ->
+                        atm_openfaas_task_executor_mock:mock_lane_initiation_result(
+                            ProviderSelector, AtmWorkflowExecutionId, 1, exception
+                        )
+                    end,
+                    % Due to lane preparation failure 'handle_lane_execution_stopped' was called
+                    % from within lane preparation
+                    after_step_exp_state_diff = no_diff
+                },
+                handle_lane_execution_stopped = #atm_step_mock_spec{
+                    before_step_exp_state_diff = [
+                        {all_tasks, {1, 1}, interrupted},
+                        {lane_run, {1, 1}, stopping},
+                        workflow_stopping
+                    ],
+                    after_step_exp_state_diff = [{lane_run, {1, 1}, interrupted}]
+                }
+            }],
+            handle_workflow_execution_stopped = #atm_step_mock_spec{
+                after_step_exp_state_diff = [workflow_interrupted]
             }
         }]
     }).

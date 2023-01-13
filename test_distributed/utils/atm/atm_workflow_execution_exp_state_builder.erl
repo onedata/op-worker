@@ -27,7 +27,7 @@
 
 %% API
 -export([
-    init/4,
+    init/5,
     expect/2,
     assert_matches_with_backend/1, assert_matches_with_backend/2,
     assert_deleted/1
@@ -67,6 +67,8 @@
     workflow_execution_id :: atm_workflow_execution:id(),
     current_lane_index :: atm_lane_execution:index(),
     current_run_num :: atm_lane_execution:run_num(),
+
+    clock_status :: normal | frozen,
 
     exp_workflow_execution_state :: workflow_execution_state(),
     exp_task_execution_state_ctx_registry :: exp_task_execution_state_ctx_registry()
@@ -124,8 +126,6 @@
 -define(JSON_PATH(__QUERY_BIN), binary:split(__QUERY_BIN, <<".">>, [global])).
 -define(JSON_PATH(__FORMAT, __ARGS), ?JSON_PATH(str_utils:format_bin(__FORMAT, __ARGS))).
 
--define(NOW_SECONDS(), global_clock:timestamp_seconds()).
-
 
 %%%===================================================================
 %%% API
@@ -135,6 +135,7 @@
 -spec init(
     oct_background:entity_selector(),
     od_space:id(),
+    normal | frozen,
     atm_workflow_execution:id(),
     atm_workflow_schema_revision:record()
 ) ->
@@ -142,6 +143,7 @@
 init(
     ProviderSelector,
     SpaceId,
+    ClockStatus,
     AtmWorkflowExecutionId,
     #atm_workflow_schema_revision{
         stores = AtmStoreSchemas,
@@ -175,6 +177,8 @@ init(
         current_lane_index = 1,
         current_run_num = 1,
 
+        clock_status = ClockStatus,
+
         exp_workflow_execution_state = #{
             <<"spaceId">> => SpaceId,
 
@@ -185,7 +189,9 @@ init(
 
             <<"status">> => <<"scheduled">>,
 
-            <<"scheduleTime">> => build_timestamp_field_validator(?NOW_SECONDS()),
+            <<"scheduleTime">> => build_timestamp_field_validator(get_timestamp_seconds(
+                ClockStatus
+            )),
             <<"startTime">> => 0,
             <<"suspendTime">> => 0,
             <<"finishTime">> => 0
@@ -369,19 +375,19 @@ expect(ExpStateCtx, {lane_runs, AtmLaneRunSelectors, retriable, IsRetriabla}) ->
 expect(ExpStateCtx, workflow_scheduled) ->
     update_exp_workflow_execution_state(ExpStateCtx, #{
         <<"status">> => <<"scheduled">>,
-        <<"scheduleTime">> => build_timestamp_field_validator(?NOW_SECONDS())
+        <<"scheduleTime">> => build_timestamp_field_validator(get_timestamp_seconds(ExpStateCtx))
     });
 
 expect(ExpStateCtx, workflow_resuming) ->
     update_exp_workflow_execution_state(ExpStateCtx, #{
         <<"status">> => <<"resuming">>,
-        <<"scheduleTime">> => build_timestamp_field_validator(?NOW_SECONDS())
+        <<"scheduleTime">> => build_timestamp_field_validator(get_timestamp_seconds(ExpStateCtx))
     });
 
 expect(ExpStateCtx, workflow_active) ->
     update_exp_workflow_execution_state(ExpStateCtx, #{
         <<"status">> => <<"active">>,
-        <<"startTime">> => build_timestamp_field_validator(?NOW_SECONDS())
+        <<"startTime">> => build_timestamp_field_validator(get_timestamp_seconds(ExpStateCtx))
     });
 
 expect(ExpStateCtx, workflow_stopping) ->
@@ -391,44 +397,46 @@ expect(ExpStateCtx, workflow_stopping) ->
         (ExpAtmWorkflowExecutionState) ->
             ExpAtmWorkflowExecutionState#{
                 <<"status">> => <<"stopping">>,
-                <<"startTime">> => build_timestamp_field_validator(?NOW_SECONDS())
+                <<"startTime">> => build_timestamp_field_validator(get_timestamp_seconds(
+                    ExpStateCtx
+                ))
             }
     end);
 
 expect(ExpStateCtx, workflow_paused) ->
     update_exp_workflow_execution_state(ExpStateCtx, #{
         <<"status">> => <<"paused">>,
-        <<"suspendTime">> => build_timestamp_field_validator(?NOW_SECONDS())
+        <<"suspendTime">> => build_timestamp_field_validator(get_timestamp_seconds(ExpStateCtx))
     });
 
 expect(ExpStateCtx, workflow_interrupted) ->
     update_exp_workflow_execution_state(ExpStateCtx, #{
         <<"status">> => <<"interrupted">>,
-        <<"suspendTime">> => build_timestamp_field_validator(?NOW_SECONDS())
+        <<"suspendTime">> => build_timestamp_field_validator(get_timestamp_seconds(ExpStateCtx))
     });
 
 expect(ExpStateCtx, workflow_finished) ->
     update_exp_workflow_execution_state(ExpStateCtx, #{
         <<"status">> => <<"finished">>,
-        <<"finishTime">> => build_timestamp_field_validator(?NOW_SECONDS())
+        <<"finishTime">> => build_timestamp_field_validator(get_timestamp_seconds(ExpStateCtx))
     });
 
 expect(ExpStateCtx, workflow_failed) ->
     update_exp_workflow_execution_state(ExpStateCtx, #{
         <<"status">> => <<"failed">>,
-        <<"finishTime">> => build_timestamp_field_validator(?NOW_SECONDS())
+        <<"finishTime">> => build_timestamp_field_validator(get_timestamp_seconds(ExpStateCtx))
     });
 
 expect(ExpStateCtx, workflow_cancelled) ->
     update_exp_workflow_execution_state(ExpStateCtx, #{
         <<"status">> => <<"cancelled">>,
-        <<"finishTime">> => build_timestamp_field_validator(?NOW_SECONDS())
+        <<"finishTime">> => build_timestamp_field_validator(get_timestamp_seconds(ExpStateCtx))
     });
 
 expect(ExpStateCtx, workflow_crashed) ->
     update_exp_workflow_execution_state(ExpStateCtx, #{
         <<"status">> => <<"crashed">>,
-        <<"finishTime">> => build_timestamp_field_validator(?NOW_SECONDS())
+        <<"finishTime">> => build_timestamp_field_validator(get_timestamp_seconds(ExpStateCtx))
     });
 
 expect(ExpStateCtx, Expectations) when is_list(Expectations) ->
@@ -545,6 +553,16 @@ get_task_status(AtmTaskExecutionId, #exp_workflow_execution_state_ctx{
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec get_timestamp_seconds(ctx() | normal | frozen) -> time:seconds().
+get_timestamp_seconds(#exp_workflow_execution_state_ctx{clock_status = ClockStatus}) ->
+    get_timestamp_seconds(ClockStatus);
+get_timestamp_seconds(frozen) ->
+    time_test_utils:get_frozen_time_seconds();
+get_timestamp_seconds(normal) ->
+    global_clock:timestamp_seconds().
 
 
 %% @private
@@ -733,7 +751,7 @@ expect_current_lane_run_started_preparing(ExpStateCtx0, AtmLaneRunSelector) ->
     ),
     update_exp_workflow_execution_state(ExpStateCtx1, #{
         <<"status">> => <<"active">>,
-        <<"startTime">> => build_timestamp_field_validator(?NOW_SECONDS())
+        <<"startTime">> => build_timestamp_field_validator(get_timestamp_seconds(ExpStateCtx1))
     }).
 
 

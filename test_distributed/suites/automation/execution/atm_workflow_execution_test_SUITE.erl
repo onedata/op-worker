@@ -35,6 +35,7 @@
 
     first_lane_run_preparation_failure_before_run_was_created/1,
     first_lane_run_preparation_failure_after_run_was_created/1,
+    first_lane_run_preparation_interruption_due_to_openfaas_error/1,
 
     atm_workflow_execution_cancelled_in_preparing_status_before_run_was_created/1,
     atm_workflow_execution_cancelled_in_preparing_status_after_run_was_created/1,
@@ -209,6 +210,7 @@ groups() -> [
     {preparation_tests, [], [
         first_lane_run_preparation_failure_before_run_was_created,
         first_lane_run_preparation_failure_after_run_was_created,
+        first_lane_run_preparation_interruption_due_to_openfaas_error,
 
         atm_workflow_execution_cancelled_in_preparing_status_before_run_was_created,
         atm_workflow_execution_cancelled_in_preparing_status_after_run_was_created,
@@ -492,6 +494,10 @@ first_lane_run_preparation_failure_before_run_was_created(_Config) ->
 
 
 first_lane_run_preparation_failure_after_run_was_created(_Config) ->
+    ?RUN_PREPARATION_TEST().
+
+
+first_lane_run_preparation_interruption_due_to_openfaas_error(_Config) ->
     ?RUN_PREPARATION_TEST().
 
 
