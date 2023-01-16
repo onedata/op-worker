@@ -1045,19 +1045,17 @@ errors_test_base(TraverseType, JobType) ->
 audit_log_test_base(ExpectedState, FailedFileType) ->
     Timestamp = opw_test_rpc:call(oct_background:get_random_provider_node(krakow), global_clock, timestamp_millis, []),
     #object{
-        guid = DirGuid,
         name = DirName,
         dataset = #dataset_object{archives = [#archive_object{id = ArchiveId}]},
         children = [
             #object{name = ChildFileName}
         ]
-    } =
-        onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{
-            dataset = #dataset_spec{archives = [
-                #archive_spec{config = #archive_config{layout = ?ARCHIVE_PLAIN_LAYOUT}}
-            ]},
-            children = [#file_spec{}]
-        }, krakow),
+    } = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{
+        dataset = #dataset_spec{archives = [
+            #archive_spec{config = #archive_config{layout = ?ARCHIVE_PLAIN_LAYOUT}}
+        ]},
+        children = [#file_spec{}]
+    }, krakow),
     archive_tests_utils:assert_archive_state(ArchiveId, ExpectedState, ?ATTEMPTS),
     PathFun = fun
         ([]) -> <<>>;

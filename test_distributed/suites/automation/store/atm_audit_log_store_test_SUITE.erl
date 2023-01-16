@@ -59,6 +59,7 @@ all() -> [
 
 -define(PROVIDER_SELECTOR, krakow).
 -define(rpc(Expr), ?rpc(?PROVIDER_SELECTOR, Expr)).
+-define(erpc(Expr), ?erpc(?PROVIDER_SELECTOR, Expr)).
 
 
 %%%===================================================================
@@ -300,13 +301,16 @@ build_content_update_options(UpdateFun) ->
     [atm_value:expanded()].
 get_content(AtmWorkflowExecutionAuth, AtmStoreId) ->
     BrowseOpts = build_content_browse_options(#{<<"limit">> => 1000}),
-    #atm_audit_log_store_content_browse_result{result = #{
-        <<"logEntries">> := Logs,
-        <<"isLast">> := true
-    }} = ?rpc(?PROVIDER_SELECTOR, atm_store_api:browse_content(
-        AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId
-    )),
-    Logs.
+    try
+        #atm_audit_log_store_content_browse_result{result = #{
+            <<"logEntries">> := Logs,
+            <<"isLast">> := true
+        }} = ?erpc(atm_store_api:browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId)),
+        Logs
+    catch throw:?ERROR_NOT_FOUND ->
+        % possible when the underlying log hasn't been created yet (no appends were done)
+        []
+    end.
 
 
 %% @private
