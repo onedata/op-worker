@@ -1484,6 +1484,8 @@ remote_delete_file_reimport_race_test_base(Config, StorageType, CreatingNode) ->
     SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(?SPACE_ID),
     {FileUuid, _} = file_id:unpack_guid(FileGuid),
     remove_link(W2, SpaceUuid, ?TEST_FILE1, FileUuid),
+    % Verify that link has been removed
+    ?assertMatch({error, not_found}, get_link(W2, SpaceUuid, ?TEST_FILE1)),
 
     % wait till deletion of link is synchronized
     ?assertMatch({error, not_found}, get_link(W1, SpaceUuid, ?TEST_FILE1), ?ATTEMPTS),
