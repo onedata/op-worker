@@ -64,10 +64,10 @@
 %%% API functions
 %%%===================================================================
 
--spec create_for_function(atm_openfaas_task_executor:function_name()) ->
+-spec create_for_function(atm_openfaas_task_executor:function_id()) ->
     {ok, id()} | {error, term()}.
-create_for_function(FunctionName) ->
-    RegistryId = gen_registry_id(FunctionName),
+create_for_function(FunctionId) ->
+    RegistryId = gen_registry_id(FunctionId),
     Doc = #document{
         key = RegistryId,
         value = #atm_openfaas_function_pod_status_registry{}
@@ -209,9 +209,9 @@ get_record_struct(1) ->
 %%%===================================================================
 
 %% @private
--spec gen_registry_id(atm_openfaas_task_executor:function_name()) -> id().
-gen_registry_id(FunctionName) ->
-    datastore_key:new_from_digest([FunctionName]).
+-spec gen_registry_id(atm_openfaas_task_executor:function_id()) -> id().
+gen_registry_id(FunctionId) ->
+    datastore_key:new_from_digest([FunctionId]).
 
 
 %% @private
@@ -232,7 +232,7 @@ ensure_pod_event_log_created(LogId) ->
 %% @private
 -spec consume_pod_status_report(atm_openfaas_function_pod_status_report:record()) -> ok.
 consume_pod_status_report(#atm_openfaas_function_pod_status_report{
-    function_name = FunctionName,
+    function_id = FunctionId,
     pod_id = PodId,
 
     event_timestamp = EventTimestamp,
@@ -240,7 +240,7 @@ consume_pod_status_report(#atm_openfaas_function_pod_status_report{
     event_reason = EventReason,
     event_message = EventMessage
 } = PodStatusReport) ->
-    PodStatusRegistryId = gen_registry_id(FunctionName),
+    PodStatusRegistryId = gen_registry_id(FunctionId),
 
     Diff = fun(PodStatusRegistry) ->
         {ok, apply_report_to_corresponding_summary(PodStatusReport, PodStatusRegistry)}
@@ -272,7 +272,7 @@ consume_pod_status_report(#atm_openfaas_function_pod_status_report{
                     ok;
                 {error, not_found} ->
                     ?warning("Ignoring a pod status report received for inexistent registry (function name: '~s')", [
-                        FunctionName
+                        FunctionId
                     ])
             end
     end.
@@ -282,7 +282,7 @@ consume_pod_status_report(#atm_openfaas_function_pod_status_report{
 -spec apply_report_to_corresponding_summary(atm_openfaas_function_pod_status_report:record(), record()) ->
     record().
 apply_report_to_corresponding_summary(#atm_openfaas_function_pod_status_report{
-    function_name = FunctionName,
+    function_id = FunctionId,
     pod_id = PodId,
 
     pod_status = NewPodStatus,
@@ -290,7 +290,7 @@ apply_report_to_corresponding_summary(#atm_openfaas_function_pod_status_report{
 
     event_timestamp = EventTimestamp
 }, PodStatusRegistry) ->
-    PodStatusId = gen_registry_id(FunctionName),
+    PodStatusId = gen_registry_id(FunctionId),
     PodEventLogId = gen_pod_event_log_id(PodStatusId, PodId),
     Default = #atm_openfaas_function_pod_status_summary{
         current_status = NewPodStatus,
