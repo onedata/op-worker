@@ -13,7 +13,7 @@
 -author("Michal Stanisz").
 
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/fslogic/file_distribution.hrl").
+-include("modules/fslogic/data_distribution.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 
 -export([
@@ -92,7 +92,7 @@ gather_historical_dir_size_stats(NodeSelector, SessionId, FileKey, Request) ->
 
 
 -spec get_storage_locations(oct_background:node_selector(), session:id(), lfm:file_key()) ->
-    file_distribution:storage_locations() | no_return().
+    data_distribution:storage_locations_per_provider() | no_return().
 get_storage_locations(NodeSelector, SessionId, FileKey) ->
     ?CALL(NodeSelector, [SessionId, FileKey]).
 
@@ -133,8 +133,8 @@ get_local_knowledge_of_remote_provider_blocks(NodeSelector, FileGuid, RemoteProv
 %%% Internal functions
 %%%===================================================================
 
--spec to_json_deprecated(file_distribution:get_result()) -> json_utils:json_term().
-to_json_deprecated(#file_distribution_gather_result{distribution = #reg_distribution_gather_result{distribution_per_provider = FileBlocksPerProvider}}) ->
+-spec to_json_deprecated(data_distribution:get_result()) -> json_utils:json_term().
+to_json_deprecated(#data_distribution_gather_result{distribution = #reg_distribution_gather_result{distribution_per_provider = FileBlocksPerProvider}}) ->
     DistributionUnsorted = maps:fold(fun(ProviderId, #provider_reg_distribution_get_result{blocks_per_storage = BlocksPerStorage}, Acc) ->
         [Blocks] = maps:values(BlocksPerStorage),
         {BlockList, TotalBlocksSize} = get_blocks_summary(Blocks),

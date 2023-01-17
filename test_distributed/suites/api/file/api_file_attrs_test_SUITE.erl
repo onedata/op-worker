@@ -13,7 +13,7 @@
 -author("Bartosz Walkowicz").
 
 -include("api_file_test_utils.hrl").
--include("modules/fslogic/file_distribution.hrl").
+-include("modules/fslogic/data_distribution.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("modules/dir_stats_collector/dir_size_stats.hrl").
@@ -812,23 +812,26 @@ get_reg_file_distribution_test(Config) ->
     UserSessIdP2 = oct_background:get_user_session_id(user3, paris),
 
     FileType = <<"file">>,
-    FilePath = filename:join(["/", ?SPACE_KRK_PAR, ?RANDOM_FILE_NAME()]),
+    Filename = ?RANDOM_FILE_NAME(),
+    FilePath = filename:join(["/", ?SPACE_KRK_PAR, Filename]),
+    FileStorageLocation = filename:join(["/", SpaceId, Filename]),
     {ok, FileGuid} = lfm_test_utils:create_file(FileType, P1Node, UserSessIdP1, FilePath, 8#707),
     {ok, ShareId} = opt_shares:create(P1Node, SpaceOwnerSessIdP1, ?FILE_REF(FileGuid), <<"share">>),
 
     file_test_utils:await_sync(P2Node, FileGuid),
 
     lfm_test_utils:write_file(P1Node, UserSessIdP1, FileGuid, 0, {rand_content, 20}),
-    ExpDist1 = #file_distribution_gather_result{distribution = #reg_distribution_gather_result{
+    ExpDist1 = #data_distribution_gather_result{distribution = #reg_distribution_gather_result{
         distribution_per_provider = #{
             P1Id => #provider_reg_distribution_get_result{
                 logical_size = 20,
-                blocks_per_storage = #{P1StorageId => [?BLOCK(0, 20)]}
+                blocks_per_storage = #{P1StorageId => [?BLOCK(0, 20)]},
+                locations_per_storage = #{P1StorageId => FileStorageLocation}
             },
             P2Id => #provider_reg_distribution_get_result{
                 logical_size = 20,
-                blocks_per_storage = #{P2StorageId => []}
-                
+                blocks_per_storage = #{P2StorageId => []},
+                locations_per_storage = #{P2StorageId => undefined}
             }
         }
     }},
@@ -838,15 +841,17 @@ get_reg_file_distribution_test(Config) ->
     % Write another block to file on P2 and check returned distribution
 
     lfm_test_utils:write_file(P2Node, UserSessIdP2, FileGuid, 30, {rand_content, 20}),
-    ExpDist2 = #file_distribution_gather_result{distribution = #reg_distribution_gather_result{
+    ExpDist2 = #data_distribution_gather_result{distribution = #reg_distribution_gather_result{
         distribution_per_provider = #{
             P1Id => #provider_reg_distribution_get_result{
                 logical_size = 50,
-                blocks_per_storage = #{P1StorageId => [?BLOCK(0, 20)]}
+                blocks_per_storage = #{P1StorageId => [?BLOCK(0, 20)]},
+                locations_per_storage = #{P1StorageId => FileStorageLocation}
             },
             P2Id => #provider_reg_distribution_get_result{
                 logical_size = 50,
-                blocks_per_storage = #{P2StorageId => [?BLOCK(30, 20)]}
+                blocks_per_storage = #{P2StorageId => [?BLOCK(30, 20)]},
+                locations_per_storage = #{P2StorageId => FileStorageLocation}
             }
         }
     }},
@@ -877,7 +882,7 @@ get_dir_distribution_1_test(Config) ->
         }
     ),
 
-    ExpDist = #file_distribution_gather_result{distribution = #dir_distribution_gather_result{
+    ExpDist = #data_distribution_gather_result{distribution = #dir_distribution_gather_result{
         distribution_per_provider = #{
             oct_background:get_provider_id(krakow) => ?ERROR_DIR_STATS_DISABLED_FOR_SPACE,
             oct_background:get_provider_id(paris) => ?ERROR_DIR_STATS_DISABLED_FOR_SPACE
@@ -913,7 +918,7 @@ get_dir_distribution_2_test(Config) ->
         user3, space_krk_par, #dir_spec{mode = 8#707, shares = [#share_spec{}]}
     ),
 
-    ExpDist1 = #file_distribution_gather_result{distribution = #dir_distribution_gather_result{
+    ExpDist1 = #data_distribution_gather_result{distribution = #dir_distribution_gather_result{
         distribution_per_provider = #{
             P1Id => #provider_dir_distribution_get_result{
                 logical_size = 0,
@@ -931,7 +936,7 @@ get_dir_distribution_2_test(Config) ->
     {ok, FileGuid} = lfm_proxy:create(P2Node, UserSessIdP2, DirGuid, ?RAND_STR(), 8#707),
     lfm_test_utils:write_file(P2Node, UserSessIdP2, FileGuid, 30, {rand_content, 20}),
 
-    ExpDist2 = #file_distribution_gather_result{distribution = #dir_distribution_gather_result{
+    ExpDist2 = #data_distribution_gather_result{distribution = #dir_distribution_gather_result{
         distribution_per_provider = #{
             P1Id => #provider_dir_distribution_get_result{
                 logical_size = 50,
@@ -968,7 +973,7 @@ get_dir_distribution_3_test(Config) ->
         user3, space_krk_par, #dir_spec{mode = 8#707, shares = [#share_spec{}]}
     ),
 
-    ExpDist1 = #file_distribution_gather_result{distribution = #dir_distribution_gather_result{
+    ExpDist1 = #data_distribution_gather_result{distribution = #dir_distribution_gather_result{
         distribution_per_provider = #{
             P1Id => #provider_dir_distribution_get_result{
                 logical_size = 0,
@@ -986,7 +991,7 @@ get_dir_distribution_3_test(Config) ->
     lfm_test_utils:write_file(P1Node, UserSessIdP1, FileGuid, 5, {rand_content, 10}),
     lfm_test_utils:write_file(P2Node, UserSessIdP2, FileGuid, 30, {rand_content, 20}),
 
-    ExpDist2 = #file_distribution_gather_result{distribution = #dir_distribution_gather_result{
+    ExpDist2 = #data_distribution_gather_result{distribution = #dir_distribution_gather_result{
         distribution_per_provider = #{
             P1Id => #provider_dir_distribution_get_result{
                 logical_size = 50,
@@ -1012,7 +1017,7 @@ get_symlink_distribution_test(Config) ->
         user3, space_krk_par, #symlink_spec{symlink_value = <<"abcd">>, shares = [#share_spec{}]}
     ),
     
-    ExpDist = #file_distribution_gather_result{distribution = #symlink_distribution_get_result{
+    ExpDist = #data_distribution_gather_result{distribution = #symlink_distribution_get_result{
         logical_size = 0,
         storages_per_provider = #{
             P1Id => [P1StorageId],
@@ -1107,12 +1112,12 @@ get_distribution_test_base(FileType, FileGuid, ShareId, ExpDistribution, Config)
 get_distribution_test_base(FileType, FileGuid, ShareId, ExpDistribution, Config, ClientSpec) ->
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
-    ExpRestDistribution = opw_test_rpc:call(krakow, file_distribution_translator, gather_result_to_json, [rest, ExpDistribution, FileGuid]),
+    ExpRestDistribution = opw_test_rpc:call(krakow, data_distribution_translator, gather_result_to_json, [rest, ExpDistribution, FileGuid]),
     ValidateRestSuccessfulCallFun = fun(_TestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
         ?assertEqual({?HTTP_200_OK, ExpRestDistribution}, {RespCode, RespBody})
     end,
     
-    ExpGsDistribution = opw_test_rpc:call(krakow, file_distribution_translator, gather_result_to_json, [gs, ExpDistribution, FileGuid]),
+    ExpGsDistribution = opw_test_rpc:call(krakow, data_distribution_translator, gather_result_to_json, [gs, ExpDistribution, FileGuid]),
     CreateValidateGsSuccessfulCallFun = fun(Type) ->
         ExpGsResponse = ExpGsDistribution#{
             <<"gri">> => gri:serialize(#gri{
@@ -1423,12 +1428,14 @@ get_reg_file_storage_locations_test(Config, StorageType) ->
             P1Id => #{
                 <<"locationsPerStorage">> => #{
                     P1StorageId => FileStoragePath
-                }           
+                },
+                <<"success">> => true
             },
             P2Id => #{
                 <<"locationsPerStorage">> => #{
                     P2StorageId => null
-                }
+                },
+                <<"success">> => true
             }
         }
     },
@@ -1444,12 +1451,14 @@ get_reg_file_storage_locations_test(Config, StorageType) ->
             P1Id => #{
                 <<"locationsPerStorage">> => #{
                     P1StorageId => FileStoragePath
-                }
+                },
+                <<"success">> => true
             },
             P2Id => #{
                 <<"locationsPerStorage">> => #{
                     P2StorageId => FileStoragePath
-                }
+                },
+                <<"success">> => true
             }
         }
     },

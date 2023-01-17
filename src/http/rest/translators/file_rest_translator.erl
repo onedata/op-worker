@@ -15,7 +15,7 @@
 
 -include("http/rest.hrl").
 -include("middleware/middleware.hrl").
--include("modules/fslogic/file_distribution.hrl").
+-include("modules/fslogic/data_distribution.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 
 -export([create_response/4, get_response/2]).
@@ -66,10 +66,10 @@ get_response(#gri{aspect = As}, Metadata) when
     ?OK_REPLY(Metadata);
 
 get_response(#gri{id = Guid, aspect = distribution}, FileDistributionGetResult) ->
-    ?OK_REPLY(file_distribution_translator:gather_result_to_json(rest, FileDistributionGetResult, Guid));
+    ?OK_REPLY(data_distribution_translator:gather_result_to_json(rest, FileDistributionGetResult, Guid));
 
 get_response(#gri{aspect = storage_locations}, StorageLocations) ->
-    ?OK_REPLY(file_distribution_translator:storage_locations_to_json(StorageLocations));
+    ?OK_REPLY(data_distribution_translator:storage_locations_to_json(StorageLocations));
 
 get_response(#gri{aspect = dataset_summary}, #file_eff_dataset_summary{
     direct_dataset = DatasetId,
