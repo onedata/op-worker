@@ -210,10 +210,10 @@ init_batch(SpaceId, Links, CollectionsMap) ->
 init_batch_for_collection_type(SpaceId, Links, CollectionType, InitialStats) ->
     lists:foldl(fun
         ({_, ChildUuid}, undefined) ->
-            CollectionType:init_child(file_id:pack_guid(ChildUuid, SpaceId));
+            CollectionType:init_child(file_id:pack_guid(ChildUuid, SpaceId), false);
         ({_, ChildUuid}, Stats) ->
             dir_stats_collection:consolidate(CollectionType, Stats,
-                CollectionType:init_child(file_id:pack_guid(ChildUuid, SpaceId)))
+                CollectionType:init_child(file_id:pack_guid(ChildUuid, SpaceId)), false)
     end, InitialStats, Links).
 
 

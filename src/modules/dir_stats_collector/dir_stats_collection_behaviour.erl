@@ -96,7 +96,9 @@
 %%--------------------------------------------------------------------
 %% @doc
 %% Get statistics connected with child identified by guid.
+%% Second argument determines if stats should be counted if file is deleted (they are needed to handle races
+%% between mv and delete as it is possible that between mv and handling mv by collector someone deletes file).
 %% NOTE: if child is directory, returned statistics should not include statistics of this directory children.
 %% @end
 %%--------------------------------------------------------------------
--callback init_child(file_id:file_guid()) -> dir_stats_collection:collection() | no_return().
+-callback init_child(file_id:file_guid(), boolean()) -> dir_stats_collection:collection() | no_return().
