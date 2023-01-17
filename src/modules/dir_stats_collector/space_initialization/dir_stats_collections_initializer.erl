@@ -213,7 +213,7 @@ init_batch_for_collection_type(SpaceId, Links, CollectionType, InitialStats) ->
             CollectionType:init_child(file_id:pack_guid(ChildUuid, SpaceId), false);
         ({_, ChildUuid}, Stats) ->
             dir_stats_collection:consolidate(CollectionType, Stats,
-                CollectionType:init_child(file_id:pack_guid(ChildUuid, SpaceId)), false)
+                CollectionType:init_child(file_id:pack_guid(ChildUuid, SpaceId), false))
     end, InitialStats, Links).
 
 
