@@ -271,7 +271,7 @@ consume_pod_status_report(#atm_openfaas_function_pod_status_report{
                     % the registry has been recently deleted, the report can be silently ignored
                     ok;
                 {error, not_found} ->
-                    ?warning("Ignoring a pod status report received for inexistent registry (function name: '~s')", [
+                    ?warning("Ignoring a pod status report received for inexistent registry (function id: '~s')", [
                         FunctionId
                     ])
             end
