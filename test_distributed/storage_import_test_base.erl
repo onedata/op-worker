@@ -5538,7 +5538,7 @@ change_file_type4_test(Config) ->
     ok = lfm_proxy:close(W2, Handle),
 
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, ?FILE_REF(DirGuid)), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
     {ok, Handle2} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, ?FILE_REF(FileGuid), read), ?ATTEMPTS),
     ?assertMatch({ok, ?TEST_DATA}, lfm_proxy:read(W1, Handle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS),
 
