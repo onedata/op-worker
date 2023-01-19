@@ -93,7 +93,8 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = {transfer_stats_collectio
         <<"mode">> => {any, any},
         <<"layout">> => {any, any},
         <<"startTimestamp">> => {any, any},
-        <<"windowLimit">> => {any, any}
+        <<"windowLimit">> => {any, any},
+        <<"extendedInfo">> => {any, any}
     }
 };
 
