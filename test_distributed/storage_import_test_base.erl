@@ -2140,7 +2140,7 @@ sync_should_update_blocks_of_recreated_file_with_suffix_on_storage(Config, Stora
 
     %% Check if file was updated on W2
     {ok, H5} = ?assertMatch({ok, _},
-        lfm_proxy:open(W2, SessId2, ?FILE_REF(G2), read)),
+        lfm_proxy:open(W2, SessId2, ?FILE_REF(G2), read), ?ATTEMPTS),
     ?assertMatch({ok, ?TEST_DATA_ONE_BYTE_CHANGED},
         lfm_proxy:read(W2, H5, 0, ?TEST_DATA_SIZE), ?ATTEMPTS).
 
