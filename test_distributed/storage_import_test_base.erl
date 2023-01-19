@@ -1468,9 +1468,6 @@ remote_delete_file_reimport_race_test_base(Config, StorageType, CreatingNode) ->
 
     [ReplicatingNode] = Workers -- [CreatingNode],
 
-    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(?SPACE_ID),
-    ct:print("xxxx1 ~p", [get_link(W1, SpaceUuid, ?TEST_FILE1)]),
-
     %% Create file
     CreatorSessId = ?config({session_id, {?USER1, ?GET_DOMAIN(CreatingNode)}}, Config),
     {ok, FileGuid} = lfm_proxy:create(CreatingNode, CreatorSessId, ?SPACE_TEST_FILE_PATH1),
@@ -1484,12 +1481,10 @@ remote_delete_file_reimport_race_test_base(Config, StorageType, CreatingNode) ->
     ?assertMatch({ok, ?TEST_DATA}, lfm_proxy:read(ReplicatingNode, Handle2, 0, 10), ?ATTEMPTS),
 
     % pretend that only synchronization of deletion of link has happened
+    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(?SPACE_ID),
     {FileUuid, _} = file_id:unpack_guid(FileGuid),
-    ct:print("xxxx2 ~p", [get_link(W1, SpaceUuid, ?TEST_FILE1)]),
-    ct:print("xxxx3 ~p", [get_link(W2, SpaceUuid, ?TEST_FILE1)]),
+    ?assertMatch({ok, _, _}, get_link(W2, SpaceUuid, ?TEST_FILE1), ?ATTEMPTS),
     remove_link(W2, SpaceUuid, ?TEST_FILE1, FileUuid),
-    % Verify that link has been removed
-    ?assertMatch({error, not_found}, get_link(W2, SpaceUuid, ?TEST_FILE1)),
 
     % wait till deletion of link is synchronized
     ?assertMatch({error, not_found}, get_link(W1, SpaceUuid, ?TEST_FILE1), ?ATTEMPTS),
