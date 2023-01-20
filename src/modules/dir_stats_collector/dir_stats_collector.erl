@@ -310,7 +310,7 @@ report_file_moved(?DIRECTORY_TYPE, FileGuid, _SourceParentGuid, TargetParentGuid
 report_file_moved(_, FileGuid, SourceParentGuid, TargetParentGuid) ->
     try
         lists:foreach(fun(CollectionType) ->
-            ChildStats = CollectionType:init_child(FileGuid),
+            ChildStats = CollectionType:init_child(FileGuid, true),
             case dir_stats_collection:on_collection_move(CollectionType, ChildStats) of
                 {update_source_parent, CollectionUpdate} ->
                     update_stats_of_dir(SourceParentGuid, external, CollectionType, CollectionUpdate);
@@ -1121,7 +1121,7 @@ collection_moved(Guid, CollectionType, TargetParentGuid, State) ->
             CachedDirStatsKey = gen_cached_dir_stats_key(Guid, CollectionType),
             % TODO VFS-9204 - handle flush errors
             {_FlushAns, UpdatedState2} = flush_cached_dir_stats(CachedDirStatsKey, prune_inactive, UpdatedState),
-            InitialDirStats = CollectionType:init_child(Guid),
+            InitialDirStats = CollectionType:init_child(Guid, true),
             ConsolidatedStats = dir_stats_collection:consolidate(CollectionType, InitialDirStats, CurrentStats),
 
             case dir_stats_collection:on_collection_move(CollectionType, ConsolidatedStats) of

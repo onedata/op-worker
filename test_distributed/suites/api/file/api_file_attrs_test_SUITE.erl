@@ -1305,7 +1305,9 @@ gather_historical_dir_size_stats_slice_test(Config) ->
     ValidateGsSuccessfulCallFun = fun(_TestCtx, Result) ->
         {ok, ResultData} = ?assertMatch({ok, #{<<"slice">> := _}}, Result),
         ResultWithoutTimestamps = tsc_structure:map(fun(_TimeSeriesName, _MetricsName, Windows) ->
-            lists:map(fun(Map) -> maps:remove(<<"timestamp">>, Map) end, Windows)
+            lists:map(fun(Map) ->
+                maps:without([<<"timestamp">>, <<"firstMeasurementTimestamp">>, <<"lastMeasurementTimestamp">>], Map)
+            end, Windows)
         end, maps:get(<<"slice">> , ResultData)),
         ?assertEqual(ExpSlice, ResultWithoutTimestamps)
     end,

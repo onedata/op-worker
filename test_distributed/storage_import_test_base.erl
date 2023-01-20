@@ -1483,6 +1483,7 @@ remote_delete_file_reimport_race_test_base(Config, StorageType, CreatingNode) ->
     % pretend that only synchronization of deletion of link has happened
     SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(?SPACE_ID),
     {FileUuid, _} = file_id:unpack_guid(FileGuid),
+    ?assertMatch({ok, _, _}, get_link(W2, SpaceUuid, ?TEST_FILE1), ?ATTEMPTS),
     remove_link(W2, SpaceUuid, ?TEST_FILE1, FileUuid),
 
     % wait till deletion of link is synchronized
@@ -2139,7 +2140,7 @@ sync_should_update_blocks_of_recreated_file_with_suffix_on_storage(Config, Stora
 
     %% Check if file was updated on W2
     {ok, H5} = ?assertMatch({ok, _},
-        lfm_proxy:open(W2, SessId2, ?FILE_REF(G2), read)),
+        lfm_proxy:open(W2, SessId2, ?FILE_REF(G2), read), ?ATTEMPTS),
     ?assertMatch({ok, ?TEST_DATA_ONE_BYTE_CHANGED},
         lfm_proxy:read(W2, H5, 0, ?TEST_DATA_SIZE), ?ATTEMPTS).
 
@@ -5537,7 +5538,7 @@ change_file_type4_test(Config) ->
     ok = lfm_proxy:close(W2, Handle),
 
     ?assertMatch({ok, #file_attr{}},
-        lfm_proxy:stat(W1, SessId, ?FILE_REF(DirGuid)), ?ATTEMPTS),
+        lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS),
     {ok, Handle2} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, ?FILE_REF(FileGuid), read), ?ATTEMPTS),
     ?assertMatch({ok, ?TEST_DATA}, lfm_proxy:read(W1, Handle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS),
 
@@ -7058,6 +7059,12 @@ init_per_testcase(delete_many_subfiles_test, Config) ->
             detect_modifications => false}} | Config
     ],
     init_per_testcase(default, dir_stats_collector_test_base:init_and_enable_for_new_space(Config2));
+
+init_per_testcase(remote_delete_file_reimport_race_test, Config) ->
+    [W1 | _] = ?config(op_worker_nodes, Config),
+    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(?SPACE_ID),
+    ?assertMatch({error, not_found}, get_link(W1, SpaceUuid, ?TEST_FILE1), ?ATTEMPTS),
+    init_per_testcase(default, Config);
 
 init_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),

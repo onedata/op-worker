@@ -240,7 +240,9 @@ handle_missing_file_meta(FileCtx, {file_meta_missing, MissingUuid} = MissingElem
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     add_missing_file_meta_posthook(SpaceId, MissingElementFileMeta),
     MissingUuid =/= Uuid andalso
-        case file_meta_sync_status_cache:get(SpaceId, Uuid, #{calculation_root_parent => MissingUuid}) of
+        case file_meta_sync_status_cache:get(
+            SpaceId, Uuid, #{calculation_root_parent => MissingUuid, should_cache => false}
+        ) of
             {ok, synced} -> ok;
             {error, MissingElementLink} -> add_missing_link_posthook(SpaceId, MissingElementLink)
         end,
