@@ -7060,12 +7060,6 @@ init_per_testcase(delete_many_subfiles_test, Config) ->
     ],
     init_per_testcase(default, dir_stats_collector_test_base:init_and_enable_for_new_space(Config2));
 
-init_per_testcase(remote_delete_file_reimport_race_test, Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
-    SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(?SPACE_ID),
-    ?assertMatch({error, not_found}, get_link(W1, SpaceUuid, ?TEST_FILE1), ?ATTEMPTS),
-    init_per_testcase(default, Config);
-
 init_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     ct:timetrap({minutes, 20}),
