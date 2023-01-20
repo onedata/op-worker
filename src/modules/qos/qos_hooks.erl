@@ -108,7 +108,8 @@ reconcile_qos_internal(FileCtx, Options) when is_list(Options) ->
         {error, {file_meta_missing, MissingUuid}} ->
             % new file_ctx will be generated when file_meta_posthook
             % will be executed (see function reconcile_qos/2).
-            lists:member(ignore_missing_files, Options) orelse 
+            lists:member(ignore_missing_files, Options) orelse
+            % fixme encoder
                 file_meta_posthooks:add_hook(
                     MissingUuid, <<"check_qos_", FileUuid/binary>>,
                     ?MODULE, reconcile_qos, [FileUuid, SpaceId]),

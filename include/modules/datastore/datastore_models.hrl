@@ -320,6 +320,7 @@
 % For more information see storage_sync_links.erl
 -record(storage_sync_links, {}).
 
+%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 21.02.*.
 % This model can be associated with file and holds information about hooks
 % for given file. Hooks will be executed on future change of given
 % file's file_meta document.
