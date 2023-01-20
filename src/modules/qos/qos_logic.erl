@@ -262,14 +262,14 @@ handle_missing_link(FileCtx, {link_missing, MissingParentUuid, MissingLinkName} 
 -spec add_missing_link_posthook(od_space:id(), file_meta_posthooks:missing_element()) -> ok.
 add_missing_link_posthook(SpaceId, {link_missing, ParentUuid, MissingName} = MissingElement) ->
     ok = file_meta_posthooks:add_hook(MissingElement, <<"qos_missing_link_", MissingName/binary>>,
-        SpaceId, ?MODULE, missing_link_posthook, [ParentUuid, MissingName, SpaceId]).
+        ?MODULE, missing_link_posthook, term_to_binary([ParentUuid, MissingName, SpaceId])).
 
 
 %% @private
 -spec add_missing_file_meta_posthook(od_space:id(), file_meta_posthooks:missing_element()) -> ok.
 add_missing_file_meta_posthook(SpaceId, {file_meta_missing, MissingUuid} = MissingElement) ->
     ok = file_meta_posthooks:add_hook(MissingElement, <<"qos_missing_file_meta">>,
-        SpaceId, ?MODULE, missing_file_meta_posthook, [MissingUuid, SpaceId]).
+        ?MODULE, missing_file_meta_posthook, term_to_binary([MissingUuid, SpaceId])).
 
 
 %%--------------------------------------------------------------------

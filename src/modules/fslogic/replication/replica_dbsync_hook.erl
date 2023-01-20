@@ -70,8 +70,8 @@ on_file_location_change(FileCtx, ChangedLocationDoc = #document{
                                 catch
                                     throw:{error, {file_meta_missing, MissingUuid}}  ->
                                         ?debug("~p file_meta_missing: ~p", [?FUNCTION_NAME, MissingUuid]),
-                                        file_meta_posthooks:add_hook({file_meta_missing, MissingUuid}, LocId, SpaceId,
-                                            ?MODULE, ?FUNCTION_NAME, [file_ctx:reset(FileCtx), ChangedLocationDoc])
+                                        file_meta_posthooks:add_hook({file_meta_missing, MissingUuid}, LocId, ?MODULE,
+                                            ?FUNCTION_NAME, term_to_binary([file_ctx:reset(FileCtx), ChangedLocationDoc]))
                                 end;
                             false ->
                                 ok = fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx3, true, []),

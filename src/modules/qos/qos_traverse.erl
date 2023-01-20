@@ -30,6 +30,7 @@
 %% API
 -export([start/3, report_entry_deleted/1]).
 -export([init_pool/0, stop_pool/0]).
+-export([pool_name/0]).
 
 %% Traverse behaviour callbacks
 -export([do_master_job/2, do_slave_job/2, task_finished/2, task_canceled/2, 
@@ -102,6 +103,11 @@ init_pool() ->
 -spec stop_pool() -> ok.
 stop_pool() ->
     tree_traverse:stop(?POOL_NAME).
+
+
+-spec pool_name() -> traverse:pool().
+pool_name() ->
+    ?POOL_NAME.
 
 %%%===================================================================
 %%% Traverse callbacks
