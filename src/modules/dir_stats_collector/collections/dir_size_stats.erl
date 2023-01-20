@@ -222,7 +222,7 @@ init_child(Guid, IncludeDeleted) ->
                     % Race with file deletion - stats will be invalidated by next update
                     gen_empty_current_stats_and_handle_errors(Guid);
                 false ->
-                    init_child_existing_child(Guid, Doc)
+                    init_existing_child(Guid, Doc)
             end;
         ?ERROR_NOT_FOUND ->
             % Race with file deletion - stats will be invalidated by next update
@@ -243,8 +243,8 @@ get_ctx() ->
 %%% Internal functions
 %%%===================================================================
 
--spec init_child_existing_child(file_id:file_guid(), file_meta:doc()) -> dir_stats_collection:collection().
-init_child_existing_child(Guid, Doc) ->
+-spec init_existing_child(file_id:file_guid(), file_meta:doc()) -> dir_stats_collection:collection().
+init_existing_child(Guid, Doc) ->
     case file_meta:get_type(Doc) of
         ?DIRECTORY_TYPE ->
             try
