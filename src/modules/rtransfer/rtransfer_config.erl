@@ -462,6 +462,7 @@ get_storages(Retries) ->
         {?ERROR_NO_CONNECTION_TO_ONEZONE, 0} ->
             {ok, []}; % will be called again when connection is established
         {{error, _} = Error, 0} ->
+            ?critical("Unexpected error when fetching the list of storages: ~p", [Error]),
             Error;
         _ ->
             retry
