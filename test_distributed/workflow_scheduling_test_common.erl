@@ -25,8 +25,8 @@
     group_handler_calls_by_execution_id/1]).
 %% Helper functions verifying execution history
 -export([verify_execution_history/2, verify_execution_history/3, verify_empty_lane/2, has_any_finish_callback_for_lane/2,
-    has_exception_callback/1, filter_finish_and_exception_handlers/2, filter_prepare_in_adnave_handler/3,
-    filter_repeated_stream_callbacks/3, check_prepare_lane_in_head_and_filter/2, verify_and_filter_duplicated_calls/4]).
+    has_exception_callback/1, filter_finish_and_exception_handlers/2, filter_prepare_in_advance_handler/3,
+    filter_repeated_stream_callbacks/3, check_prepare_lane_in_head_and_filter/3, verify_and_filter_duplicated_calls/4]).
 %% Helper functions history statistics
 -export([verify_execution_history_stats/2, verify_execution_history_stats/3]).
 %% Memory verification helper functions
@@ -948,14 +948,14 @@ filter_finish_and_exception_handlers(ExecutionHistory, LaneId) ->
             not lists:member(Fun, [handle_workflow_execution_stopped, handle_workflow_abruptly_stopped, handle_exception])
     end, ExecutionHistory).
 
-filter_prepare_in_adnave_handler(ExecutionHistory, LaneId, true = _IsPrepareInAdvanceSet) ->
+filter_prepare_in_advance_handler(ExecutionHistory, LaneId, true = _IsPrepareInAdvanceSet) ->
     lists:filter(fun
         (#handler_call{function = prepare_lane, lane_id = Id}) ->
             Id =/= integer_to_binary(binary_to_integer(LaneId) + 1);
         (_) ->
             true
     end, ExecutionHistory);
-filter_prepare_in_adnave_handler(ExecutionHistory, _LaneId, false = _IsPrepareInAdvanceSet) ->
+filter_prepare_in_advance_handler(ExecutionHistory, _LaneId, false = _IsPrepareInAdvanceSet) ->
     ExecutionHistory.
 
 filter_repeated_stream_callbacks(ExecutionHistory, LaneId, #{task_streams := Streams}) ->
@@ -996,10 +996,22 @@ filter_repeated_stream_callbacks(ExecutionHistory, LaneId, #{task_streams := Str
 filter_repeated_stream_callbacks(ExecutionHistory, _, _) ->
     ExecutionHistory.
 
-check_prepare_lane_in_head_and_filter(ExecutionHistory, LaneId) ->
+check_prepare_lane_in_head_and_filter(ExecutionHistory, LaneId, false = _IsPrepareInAdvanceSet) ->
     ?assertMatch([#handler_call{function = prepare_lane, lane_id = LaneId} | _], ExecutionHistory),
     [_ | ExecutionHistoryTail] = ExecutionHistory,
-    ExecutionHistoryTail.
+    ExecutionHistoryTail;
+check_prepare_lane_in_head_and_filter(ExecutionHistory, LaneId, true = _IsPrepareInAdvanceSet) ->
+    ?assertMatch([#handler_call{function = prepare_lane} | _], ExecutionHistory),
+    [#handler_call{lane_id = LaneIdToCheck} = FirstHandlerCall | ExecutionHistoryTail] = ExecutionHistory,
+    NextLaneId = integer_to_binary(binary_to_integer(LaneId) + 1),
+    case LaneIdToCheck of
+        LaneId ->
+            ExecutionHistoryTail;
+        NextLaneId ->
+            ?assertMatch([#handler_call{function = prepare_lane, lane_id = LaneId} | _], ExecutionHistoryTail),
+            [_ | ExecutionHistoryTail2] = ExecutionHistoryTail,
+            [FirstHandlerCall | ExecutionHistoryTail2]
+    end.
 
 verify_and_filter_duplicated_calls(ExecutionHistory, {ok, #document{
     value = #workflow_execution_state_dump{jobs_dump = JobsDump}

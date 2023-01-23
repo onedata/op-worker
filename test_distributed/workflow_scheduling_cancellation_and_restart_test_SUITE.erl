@@ -468,10 +468,10 @@ cancel_and_resume_test_base(Config, #test_config{
             ct:print("Verifying combined history"),
             FilteredExecutionHistory = workflow_scheduling_test_common:filter_finish_and_exception_handlers(
                 ExecutionHistory, LaneId),
-            FilteredExecutionHistory2 = workflow_scheduling_test_common:filter_prepare_in_adnave_handler(
+            FilteredExecutionHistory2 = workflow_scheduling_test_common:filter_prepare_in_advance_handler(
                 FilteredExecutionHistory, LaneId, PrepareInAdvance),
             FilteredExecutionHistoryAfterResume = workflow_scheduling_test_common:check_prepare_lane_in_head_and_filter(
-                ExecutionHistoryAfterResume, LaneId),
+                ExecutionHistoryAfterResume, LaneId, PrepareInAdvance),
             FinalVerifyOptions = case {TestExecutionManagerOption, TaskType} of
                 {{fail_job, TId}, async} -> GeneratorOptions#{fail_and_resume_job => {LaneId, TId, <<"100">>}};
                 _ -> GeneratorOptions#{}
