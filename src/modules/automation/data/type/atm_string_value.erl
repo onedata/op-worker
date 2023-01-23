@@ -16,6 +16,8 @@
 -behaviour(atm_data_validator).
 -behaviour(atm_data_compressor).
 
+-include_lib("ctool/include/errors.hrl").
+
 %% atm_data_validator callbacks
 -export([assert_meets_constraints/3]).
 
@@ -34,8 +36,15 @@
     atm_data_type:value_constraints()
 ) ->
     ok | no_return().
-assert_meets_constraints(_AtmWorkflowExecutionAuth, _Value, _ValueConstraints) ->
-    ok.
+assert_meets_constraints(_AtmWorkflowExecutionAuth, Value, ValueConstraints) ->
+    try
+        lists:foreach(fun
+            ({_, undefined}) -> ok;
+            (ConstraintRule) -> assert_meets_constraint(ConstraintRule, Value)
+        end, maps:to_list(ValueConstraints))
+    catch throw:{unverified_constraints, UnverifiedConstraints} ->
+        throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(Value, atm_number_type, UnverifiedConstraints))
+    end.
 
 
 %%%===================================================================
@@ -51,3 +60,18 @@ compress(Value, _ValueConstraints) -> Value.
     {ok, atm_value:expanded()}.
 expand(_AtmWorkflowExecutionAuth, Value, _ValueConstraints) ->
     {ok, Value}.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec assert_meets_constraint(ConstraintRule :: {atom(), term()}, number()) ->
+    ok | no_return().
+assert_meets_constraint({allowed_values, AllowedValues}, Number) ->
+    case lists:member(Number, AllowedValues) of
+        true -> ok;
+        false -> throw(throw({unverified_constraints, #{<<"allowedValues">> => AllowedValues}}))
+    end.
