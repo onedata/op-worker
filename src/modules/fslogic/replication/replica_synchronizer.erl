@@ -874,10 +874,8 @@ handle_error(Ref, ErrorStatus, State) ->
         disassociate_froms(FinishedFroms, State1),
 
     %% Cancel TransferIds that are still left (i.e. the failed ref was only a part of the transfer)
-    AffectedTransferIds = maps:values(maps:with(AffectedFroms, State2#state.from_to_transfer_id)),
     [gen_server2:reply(From, ErrorStatus) || From <- FinishedFroms],
-    State3 = lists:foldl(fun cancel_transfer_id/2, State2, AffectedTransferIds),
-
+    State3 = cancel_froms(AffectedFroms, State2, ErrorStatus),
     associate_ref_with_tids(Ref, FailedTransfers, State3).
 
 %% @private
@@ -1034,20 +1032,26 @@ cancel_session(SessionId, State) ->
     end.
 
 
+%% @private
+-spec cancel_froms([from()], #state{}) -> #state{}.
+cancel_froms(Froms, State) ->
+    cancel_froms(Froms, State, {error, cancelled}).
+
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
 %% Cancels a transfers by synchronization request froms.
 %% @end
 %%--------------------------------------------------------------------
--spec cancel_froms([from()], #state{}) -> #state{}.
-cancel_froms([], State) ->
+-spec cancel_froms([from()], #state{}, term()) -> #state{}.
+cancel_froms([], State, _Response) ->
     State;
 cancel_froms(Froms, State = #state{
     in_progress = InProgress,
     from_to_refs = FTRs,
     ref_to_froms = RTFs
-}) ->
+}, Response) ->
     AffectedRefs = lists:flatmap(fun(From) -> maps:get(From, FTRs, []) end, Froms),
 
     FromsSet = gb_sets:from_list(Froms),
@@ -1064,7 +1068,7 @@ cancel_froms(Froms, State = #state{
     end, {RTFs, sets:new()}, maps:with(AffectedRefs, RTFs)),
 
     lists:foreach(fun(From) ->
-        gen_server2:reply(From, {error, cancelled})
+        gen_server2:reply(From, Response)
     end, Froms),
 
     InProgress2 = lists:filter(fun({_Block, Ref, _Priority}) ->
