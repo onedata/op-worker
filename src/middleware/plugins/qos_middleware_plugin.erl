@@ -49,8 +49,10 @@ resolve_handler(create, instance, private) -> ?MODULE;
 
 resolve_handler(get, instance, private) -> ?MODULE;
 resolve_handler(get, audit_log, private) -> ?MODULE;
-resolve_handler(get, time_series_collections, private) -> ?MODULE;
-resolve_handler(get, {time_series_collection, _}, private) -> ?MODULE;
+resolve_handler(get, {transfer_stats_collection_schema, ?BYTES_STATS}, public) -> ?MODULE;
+resolve_handler(get, {transfer_stats_collection_schema, ?FILES_STATS}, public) -> ?MODULE;
+resolve_handler(get, {transfer_stats_collection, ?BYTES_STATS}, private) -> ?MODULE;
+resolve_handler(get, {transfer_stats_collection, ?FILES_STATS}, private) -> ?MODULE;
 
 resolve_handler(delete, instance, private) -> ?MODULE;
 
@@ -80,36 +82,18 @@ data_spec(#op_req{operation = create, gri = #gri{aspect = instance}}) -> #{
 
 data_spec(#op_req{operation = get, gri = #gri{aspect = instance}}) ->
     undefined;
-data_spec(#op_req{operation = get, gri = #gri{aspect = audit_log}}) -> #{
-    optional => #{
-        <<"index">> => {binary, any},
-        <<"timestamp">> => {integer, {not_lower_than, 0}},
-        <<"offset">> => {integer, any},
-        <<"limit">> => {integer, {between, 1, ?MAX_LIST_LIMIT}},
-        <<"direction">> => {atom, [?FORWARD, ?BACKWARD]}
-    }
-};
-data_spec(#op_req{operation = get, gri = #gri{aspect = time_series_collections}}) ->
+data_spec(#op_req{operation = get, gri = #gri{aspect = audit_log}}) ->
+    audit_log_browse_opts:json_data_spec();
+data_spec(#op_req{operation = get, gri = #gri{aspect = {transfer_stats_collection_schema, _}}}) ->
     undefined;
-%% @TODO VFS-9176 Align QoS transfer stats API with time series API
-data_spec(#op_req{operation = get, gri = #gri{aspect = {time_series_collection, _}}}) -> #{
-    required => #{
-        <<"metrics">> => {json, fun(RequestedMetrics) ->
-            try
-                maps:foreach(fun(TimeSeriesName, MetricNames) ->
-                    true = is_binary(TimeSeriesName) andalso
-                        is_list(MetricNames) andalso
-                        lists:all(fun is_binary/1, MetricNames)
-                end, RequestedMetrics),
-                true
-            catch _:_ ->
-                false
-            end
-        end}
-    },
+data_spec(#op_req{operation = get, gri = #gri{aspect = {transfer_stats_collection, _}}}) -> #{
+    % for this aspect data is sanitized in `get` function, but all possible parameters
+    % still have to be specified so they are not removed during sanitization
     optional => #{
-        <<"startTimestamp">> => {integer, {not_lower_than, 0}},
-        <<"limit">> => {integer, {between, 1, ?MAX_LIST_LIMIT}}
+        <<"mode">> => {any, any},
+        <<"layout">> => {any, any},
+        <<"startTimestamp">> => {any, any},
+        <<"windowLimit">> => {any, any}
     }
 };
 
@@ -134,9 +118,9 @@ fetch_entity(#op_req{operation = get, auth = Auth, gri = #gri{
     fetch_qos_entry(Auth, QosEntryId);
 fetch_entity(#op_req{operation = get, gri = #gri{aspect = audit_log}}) ->
     {ok, {undefined, 1}};
-fetch_entity(#op_req{operation = get, gri = #gri{aspect = time_series_collections}}) ->
+fetch_entity(#op_req{operation = get, gri = #gri{aspect = {transfer_stats_collection_schema, _}}}) ->
     {ok, {undefined, 1}};
-fetch_entity(#op_req{operation = get, gri = #gri{aspect = {time_series_collection, _}}}) ->
+fetch_entity(#op_req{operation = get, gri = #gri{aspect = {transfer_stats_collection, _}}}) ->
     {ok, {undefined, 1}};
 
 fetch_entity(#op_req{operation = delete, auth = Auth, gri = #gri{
@@ -154,6 +138,13 @@ fetch_entity(#op_req{operation = delete, auth = Auth, gri = #gri{
 %% @end
 %%--------------------------------------------------------------------
 -spec authorize(middleware:req(), middleware:entity()) -> boolean().
+authorize(#op_req{operation = get, gri = #gri{
+    id = undefined,
+    aspect = {transfer_stats_collection_schema, _},
+    scope = public
+}}, _QosEntry) ->
+    true;
+
 authorize(#op_req{auth = ?GUEST}, _) ->
     false;
 
@@ -169,8 +160,7 @@ authorize(#op_req{operation = get, auth = ?USER(UserId), gri = #gri{
 }}, _QosEntry) when
     Aspect =:= instance;
     Aspect =:= audit_log;
-    Aspect =:= time_series_collections;
-    element(1, Aspect) =:= time_series_collection
+    element(1, Aspect) =:= transfer_stats_collection
 ->
     {ok, SpaceId} = ?lfm_check(qos_entry:get_space_id(QosEntryId)),
     space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW_QOS);
@@ -198,11 +188,17 @@ validate(#op_req{operation = create, gri = #gri{aspect = instance}, data = #{
 validate(#op_req{operation = get, gri = #gri{id = QosEntryId, aspect = Aspect}}, _QosEntry) when
     Aspect =:= instance;
     Aspect =:= audit_log;
-    Aspect =:= time_series_collections;
-    element(1, Aspect) =:= time_series_collection
+    element(1, Aspect) =:= transfer_stats_collection
 ->
     {ok, SpaceId} = ?lfm_check(qos_entry:get_space_id(QosEntryId)),
     middleware_utils:assert_space_supported_locally(SpaceId);
+
+validate(#op_req{operation = get, gri = #gri{
+    id = undefined,
+    aspect = {transfer_stats_collection_schema, _},
+    scope = public
+}}, _QosEntry) ->
+    ok;
 
 validate(#op_req{operation = delete, gri = #gri{
     id = QosEntryId,
@@ -248,40 +244,20 @@ get(#op_req{auth = Auth, gri = #gri{id = QosEntryId, aspect = instance}}, QosEnt
     {ok, entry_to_details(QosEntry, Status, SpaceId)};
 
 get(#op_req{gri = #gri{id = QosEntryId, aspect = audit_log}, data = Data}, _QosEntry) ->
-    {ok, BrowseResult} = 
-        qos_entry_audit_log:browse_content(QosEntryId, json_infinite_log_model:build_browse_opts(Data)),
+    BrowseOpts = audit_log_browse_opts:from_json(Data),
+    {ok, BrowseResult} = qos_entry_audit_log:browse_content(QosEntryId, BrowseOpts),
     {ok, value, BrowseResult};
 
-get(#op_req{gri = #gri{id = QosEntryId, aspect = time_series_collections}}, _QosEntry) ->
-    {ok, FilesCollectionLayout} = qos_transfer_stats:get_layout(QosEntryId, ?FILES_STATS),
-    {ok, BytesCollectionLayout} = qos_transfer_stats:get_layout(QosEntryId, ?BYTES_STATS),
-    {ok, value, #{
-        ?FILES_STATS => maps:keys(FilesCollectionLayout),
-        ?BYTES_STATS => maps:keys(BytesCollectionLayout)
-    }};
+get(#op_req{gri = #gri{id = undefined, aspect = {transfer_stats_collection_schema, Type}}}, _QosEntry) ->
+    {ok, value, qos_transfer_stats:get_collection_schema(Type)};
 
-%% @TODO VFS-9176 Align QoS transfer stats API with time series API
-get(#op_req{gri = #gri{id = QosEntryId, aspect = {time_series_collection, Type}}, data = Data}, _QosEntry) ->
-    SliceLayout = maps:get(<<"metrics">>, Data),
-    PossiblyUndefOpts = #{
-        start_timestamp => maps:get(<<"startTimestamp">>, Data, undefined),
-        window_limit => maps:get(<<"limit">>, Data, undefined)
-    },
-    Opts = maps_utils:remove_undefined(PossiblyUndefOpts),
-    case qos_transfer_stats:get_slice(QosEntryId, Type, SliceLayout, Opts) of
-        ?ERROR_NOT_FOUND ->
-            ?ERROR_NOT_FOUND;
-        {ok, Slice} ->
-            {ok, value, #{
-                <<"windows">> => tsc_structure:map(fun(_TimeSeriesName, _MetricName, Windows) ->
-                    lists:map(fun({Timestamp, {_ValuesCount, ValuesSum}}) ->
-                        #{
-                            <<"timestamp">> => Timestamp,
-                            <<"value">> => ValuesSum
-                        }
-                    end, Windows)
-                end, Slice)
-            }}
+get(#op_req{gri = #gri{id = QosEntryId, aspect = {transfer_stats_collection, Type}}, data = Data}, _QosEntry) ->
+    BrowseRequest = ts_browse_request:from_json(Data),
+    case qos_transfer_stats:browse(QosEntryId, Type, BrowseRequest) of
+        {ok, BrowseResult} ->
+            {ok, value, BrowseResult};
+        {error, _} = Error ->
+            Error
     end.
 
 

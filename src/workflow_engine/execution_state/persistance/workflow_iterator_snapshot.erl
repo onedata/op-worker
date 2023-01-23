@@ -6,7 +6,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Stores iterators used to restart workflow executions (one iterator per execution).
+%%% Stores iterators used to resume workflow executions (one iterator per execution).
 %%% Each iterator is stored together with lane and item index to prevent races.
 %%% TODO VFS-7787 - save first iterator of lane
 %%% @end
@@ -37,23 +37,26 @@
 -spec save(
     workflow_engine:execution_id(),
     workflow_execution_state:index(),
-    workflow_engine:lane_id(),
+    workflow_engine:lane_id() | undefined,
     workflow_execution_state:index(),
-    iterator:iterator(),
+    iterator:iterator() | undefined,
     workflow_engine:lane_id() | undefined
 ) -> ok.
 save(ExecutionId, LaneIndex, LaneId, ItemIndex, Iterator, NextLaneId) ->
-    {PrevLaneIndex, PrevIterator} = case ?MODULE:get(ExecutionId) of
-        {ok, #workflow_iterator_snapshot{lane_index = ReturnedLineIndex, iterator = ReturnedIterator}} ->
-            {ReturnedLineIndex, ReturnedIterator};
-        ?ERROR_NOT_FOUND ->
-            {undefined, undefined}
-    end,
     Record = #workflow_iterator_snapshot{lane_index = LaneIndex, lane_id = LaneId,
         item_index = ItemIndex, iterator = Iterator, next_lane_id = NextLaneId},
     Diff = fun
-        (ExistingRecord = #workflow_iterator_snapshot{lane_index = SavedLaneIndex, item_index = SavedItemIndex}) when
-            SavedLaneIndex < LaneIndex orelse (SavedLaneIndex == LaneIndex andalso SavedItemIndex < ItemIndex) ->
+        (ExistingRecord = #workflow_iterator_snapshot{
+            lane_index = SavedLaneIndex,
+            item_index = SavedItemIndex,
+            iterator = SavedIterator
+        }) when
+            SavedLaneIndex < LaneIndex orelse
+            (SavedLaneIndex == LaneIndex andalso (
+                SavedItemIndex < ItemIndex orelse
+                (SavedItemIndex == ItemIndex andalso SavedIterator =:= undefined andalso Iterator =/= undefined)
+            ))
+        ->
             {ok, ExistingRecord#workflow_iterator_snapshot{lane_index = LaneIndex, lane_id = LaneId,
                 item_index = ItemIndex, iterator = Iterator, next_lane_id = NextLaneId}};
         (_) ->
@@ -62,29 +65,7 @@ save(ExecutionId, LaneIndex, LaneId, ItemIndex, Iterator, NextLaneId) ->
     end,
     case datastore_model:update(?CTX, ExecutionId, Diff, Record) of
         {ok, _} ->
-            % Mark iterator exhausted after change of lane
-            % (each lane has new iterator and iterator for previous lane can be destroyed)
-            case PrevLaneIndex =/= 0 andalso PrevLaneIndex < LaneIndex of
-                true -> mark_exhausted(PrevIterator, ExecutionId); % TODO VFS-7787 - handle without additional get
-                false -> ok
-            end,
-            case ItemIndex of
-                0 ->
-                    % Execution of `forget_before` function results in forgetting all iteration data needed for
-                    % iterators previous to the argument. If `ItemIndex` is equal to 0, there are no previous iterators
-                    % so `forget_before` should not be called.
-                    ok;
-                _ ->
-                    try
-                        iterator:forget_before(Iterator)
-                    catch
-                        Error:Reason:Stacktrace ->
-                            ?error_stacktrace(
-                                "Unexpected error forgeting iteration data prevoius to current iterator "
-                                "(execution id: ~p): ~p:~p", [ExecutionId, Error, Reason], Stacktrace),
-                            ok
-                    end
-            end;
+            ok;
         {error, already_saved} ->
             ok
     end.
@@ -98,31 +79,8 @@ get(ExecutionId) ->
 
 -spec cleanup(workflow_engine:execution_id()) -> ok.
 cleanup(ExecutionId) ->
-    case ?MODULE:get(ExecutionId) of
-        {ok, #workflow_iterator_snapshot{iterator = Iterator}} ->
-            mark_exhausted(Iterator, ExecutionId),
-            ok = datastore_model:delete(?CTX, ExecutionId);
-        ?ERROR_NOT_FOUND ->
-            ok
-    end.
+    ok = datastore_model:delete(?CTX, ExecutionId).
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
--spec mark_exhausted(iterator:iterator(), workflow_engine:execution_id()) -> ok.
-mark_exhausted(Iterator, ExecutionId) ->
-    try
-        iterator:mark_exhausted(Iterator)
-    catch
-        Error:Reason:Stacktrace ->
-            ?error_stacktrace(
-                "Unexpected error marking exhausted iterator for execution: ~p ~p:~p",
-                [ExecutionId, Error, Reason],
-                Stacktrace
-            ),
-            ok
-    end.
 
 %%%===================================================================
 %%% datastore_model callbacks

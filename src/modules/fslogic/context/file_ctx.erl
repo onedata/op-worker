@@ -69,13 +69,13 @@
 %% Functions that do not modify context
 -export([get_share_id_const/1, get_space_id_const/1, get_space_dir_uuid_const/1,
     get_logical_guid_const/1, get_referenced_guid_const/1, get_logical_uuid_const/1, get_referenced_uuid_const/1,
-    is_link_const/1, get_dir_location_doc_const/1, list_references_const/1, count_references_const/1
+    is_link_const/1, get_dir_location_doc_const/1, list_references_const/1, list_references_ctx_const/1, count_references_const/1
 ]).
 -export([is_file_ctx_const/1, is_space_dir_const/1, is_trash_dir_const/1, is_trash_dir_const/2,
     is_share_root_dir_const/1, is_symlink_const/1, is_special_const/1,
     is_user_root_dir_const/2, is_root_dir_const/1, file_exists_const/1, file_exists_or_is_deleted/1,
-    is_in_user_space_const/2, assert_not_special_const/1, assert_is_dir/1, assert_not_dir/1, get_type/1,
-    assert_not_trash_dir_const/1, assert_not_trash_dir_const/2]).
+    is_in_user_space_const/2, assert_not_special_const/1, assert_is_dir/1, assert_not_dir/1, get_type/1, 
+    get_effective_type/1, assert_not_trash_dir_const/1, assert_not_trash_dir_const/2]).
 -export([equals/2]).
 -export([assert_not_readonly_target_storage_const/2]).
 
@@ -97,7 +97,7 @@
     get_or_create_local_file_location_doc/1, get_or_create_local_file_location_doc/2,
     get_or_create_local_regular_file_location_doc/3,
     get_file_location_ids/1, get_file_location_docs/1, get_file_location_docs/2,
-    get_active_perms_type/2, get_acl/1, get_mode/1, get_file_size/1, get_file_size_summary/1,
+    get_active_perms_type/2, get_acl/1, get_mode/1, get_file_size/1, prepare_file_size_summary/1,
     get_replication_status_and_size/1, get_file_size_from_remote_locations/1, get_owner/1,
     get_local_storage_file_size/1
 ]).
@@ -372,6 +372,22 @@ list_references_const(FileCtx) ->
     % TODO VFS-7444 - Investigate possibility to cache hardlink references in file_ctx
     FileUuid = get_referenced_uuid_const(FileCtx),
     file_meta_hardlinks:list_references(FileUuid).
+
+-spec list_references_ctx_const(ctx()) -> {ok, [ctx()]} | {error, term()}.
+list_references_ctx_const(FileCtx) ->
+    case list_references_const(FileCtx) of
+        {ok, References} ->
+            SpaceId = file_ctx:get_space_id_const(FileCtx),
+            LogicalUuid = file_ctx:get_logical_uuid_const(FileCtx),
+            {ok, lists:map(
+                fun (FileUuid) when FileUuid == LogicalUuid -> FileCtx;
+                    (FileUuid) -> file_ctx:new_by_uuid(FileUuid, SpaceId)
+                end,
+                References
+            )};
+        {error, _} = Error ->
+            Error
+    end.
 
 -spec count_references_const(ctx()) -> {ok, non_neg_integer()} | {error, term()}.
 count_references_const(FileCtx) ->
@@ -715,7 +731,7 @@ get_storage(FileCtx = #file_ctx{storage = Storage}) ->
 %% @equiv get_file_location_with_filled_gaps(FileCtx, undefined)
 %% @end
 %%--------------------------------------------------------------------
--spec get_file_location_with_filled_gaps(ctx()) -> {#file_location{}, ctx()}.
+-spec get_file_location_with_filled_gaps(ctx()) -> {#file_location{} | undefined, ctx()}.
 get_file_location_with_filled_gaps(FileCtx) ->
     get_file_location_with_filled_gaps(FileCtx, undefined).
 
@@ -723,20 +739,23 @@ get_file_location_with_filled_gaps(FileCtx) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns location that can be understood by client. It has gaps filled, and
-%% stores guid instead of uuid.
+%% stores guid instead of uuid. Returns undefined if location is deleted.
 %% @end
 %%--------------------------------------------------------------------
 -spec get_file_location_with_filled_gaps(ctx(),
     fslogic_blocks:blocks() | fslogic_blocks:block() | undefined) ->
-    {#file_location{}, ctx()}.
+    {#file_location{} | undefined, ctx()}.
 get_file_location_with_filled_gaps(FileCtx, ReqRange)
     when is_list(ReqRange) orelse ReqRange == undefined ->
     % get locations
-    {Locations, FileCtx2} = get_file_location_docs(FileCtx),
-    {FileLocationDoc, FileCtx3} =
-        get_or_create_local_file_location_doc(FileCtx2),
-    {fslogic_location:get_local_blocks_and_fill_location_gaps(ReqRange, FileLocationDoc, Locations,
-        get_logical_uuid_const(FileCtx3)), FileCtx3};
+    {Locations, FileCtx2} = get_file_location_docs(set_is_dir(FileCtx, false)),
+    case get_or_create_local_file_location_doc(FileCtx2) of
+        {#document{deleted = true}, FileCtx3} ->
+            {undefined, FileCtx3};
+        {FileLocationDoc, FileCtx3} ->
+            {fslogic_location:get_local_blocks_and_fill_location_gaps(ReqRange, FileLocationDoc, Locations,
+                get_logical_uuid_const(FileCtx3)), FileCtx3}
+    end;
 get_file_location_with_filled_gaps(FileCtx, ReqRange) ->
     get_file_location_with_filled_gaps(FileCtx, [ReqRange]).
 
@@ -959,17 +978,19 @@ get_file_size(FileCtx) ->
             get_file_size_from_remote_locations(FileCtx2)
     end.
 
--spec get_file_size_summary(ctx() | file_meta:uuid()) -> {[{total | storage:id(), non_neg_integer()}], ctx()}.
-get_file_size_summary(FileCtx) ->
-    case get_local_file_location_doc(FileCtx, true) of
+%%--------------------------------------------------------------------
+%% @doc
+%% Returns information about file size (logical and size on storage). Creates location doc if it does not exist.
+%% @end
+%%--------------------------------------------------------------------
+-spec prepare_file_size_summary(ctx() | file_meta:uuid()) -> {[{total | storage:id(), non_neg_integer()}], ctx()}.
+prepare_file_size_summary(FileCtx) ->
+    case get_or_create_local_regular_file_location_doc(FileCtx, true, true) of
         {#document{value = #file_location{size = undefined, storage_id = StorageId}} = Doc, FileCtx2} ->
             TotalSize = fslogic_blocks:upper(fslogic_location_cache:get_blocks(Doc)),
             {[{total, TotalSize}, {StorageId, file_location:count_bytes(Doc)}], FileCtx2};
         {#document{value = #file_location{size = TotalSize, storage_id = StorageId}} = Doc, FileCtx2} ->
-            {[{total, TotalSize}, {StorageId, file_location:count_bytes(Doc)}], FileCtx2};
-        {undefined, FileCtx2} ->
-            {TotalSize, FileCtx3} = get_file_size_from_remote_locations(FileCtx2),
-            {[{total, TotalSize}], FileCtx3}
+            {[{total, TotalSize}, {StorageId, file_location:count_bytes(Doc)}], FileCtx2}
     end.
 
 %%--------------------------------------------------------------------
@@ -1237,13 +1258,13 @@ assert_not_dir(FileCtx) ->
 
 
 -spec get_type(ctx()) -> {file_meta:type(), ctx()}.
-get_type(FileCtx = #file_ctx{is_dir = true}) ->
-    {?DIRECTORY_TYPE, FileCtx};
 get_type(FileCtx) ->
-    {#document{value = #file_meta{type = Type}}, FileCtx2} =
-        get_file_doc_including_deleted(FileCtx),
-    IsDir = Type =:= ?DIRECTORY_TYPE,
-    {Type, FileCtx2#file_ctx{is_dir = IsDir}}.
+    get_type(FileCtx, fun file_meta:get_type/1).
+
+
+-spec get_effective_type(ctx()) -> {file_meta:type(), ctx()}.
+get_effective_type(FileCtx) ->
+    get_type(FileCtx, fun file_meta:get_effective_type/1).
 
 
 -spec is_readonly_storage(ctx()) -> {boolean(), ctx()}.
@@ -1351,7 +1372,7 @@ resolve_and_cache_path(FileCtx, PathType) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_or_create_local_regular_file_location_doc(ctx(), fslogic_location_cache:get_doc_opts(),
-    boolean()) -> {file_location:doc() | undefined, ctx()}.
+    boolean()) -> {file_location:doc(), ctx()}.
 get_or_create_local_regular_file_location_doc(FileCtx, GetDocOpts, true) ->
     case get_local_file_location_doc(FileCtx, GetDocOpts) of
         {undefined, FileCtx2} ->
@@ -1368,7 +1389,9 @@ get_or_create_local_regular_file_location_doc(FileCtx, GetDocOpts, _CheckLocatio
             end, LocationDocs),
             get_local_file_location_doc(FileCtx3, GetDocOpts);
         {{error, already_exists}, FileCtx2} ->
-            get_local_file_location_doc(FileCtx2, GetDocOpts)
+            % Possible race with file deletion - get including deleted
+            {ok, Location} = fslogic_location_cache:get_local_location_including_deleted(FileCtx2, GetDocOpts),
+            {Location, FileCtx2}
     end.
 
 %%--------------------------------------------------------------------
@@ -1440,3 +1463,14 @@ get_dir_synced_gid_const(FileCtx) ->
         DirLocation ->
             dir_location:get_synced_gid(DirLocation)
     end.
+
+
+-spec get_type(ctx(), fun((file_meta:doc()) -> file_meta:type())) -> {file_meta:type(), ctx()}.
+get_type(FileCtx = #file_ctx{is_dir = true}, _) ->
+    {?DIRECTORY_TYPE, FileCtx};
+get_type(FileCtx, FileMetaFun) ->
+    {#document{value = FileMeta}, FileCtx2} =
+        get_file_doc_including_deleted(FileCtx),
+    Type = FileMetaFun(FileMeta),
+    IsDir = Type =:= ?DIRECTORY_TYPE,
+    {Type, FileCtx2#file_ctx{is_dir = IsDir}}.

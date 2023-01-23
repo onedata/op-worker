@@ -111,13 +111,13 @@ get_details(Id) ->
     archive_recall_details:get(Id).
 
 
--spec browse_log(id(), json_infinite_log_model:listing_opts()) -> 
-    {ok, json_infinite_log_model:browse_result()} | {error, term()}.
+-spec browse_log(id(), audit_log_browse_opts:opts()) ->
+    {ok, audit_log:browse_result()} | {error, term()}.
 browse_log(Id, Options) ->
     archive_recall_progress:browse_error_log(Id, Options).
 
 
--spec get_stats(id(), time_series_collection:layout(), ts_windows:list_options()) ->
+-spec get_stats(id(), time_series_collection:layout(), ts_metric:list_options()) ->
     {ok, time_series_collection:slice()} | {error, term()}.
 get_stats(Id, SliceLayout, ListWindowsOptions) ->
     archive_recall_progress:get_stats(Id, SliceLayout, ListWindowsOptions).

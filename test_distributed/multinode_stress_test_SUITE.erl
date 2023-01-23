@@ -55,7 +55,7 @@ single_dir_creation_test(Config) ->
             [{name, files_num}, {value, 100}, {description, "Numer of files to be created by single process"}],
             [{name, proc_num}, {value, 20}, {description, "Numer of parallel"}]
         ]},
-        {description, "Creates files in dir using single process"}
+        {description, "Creates files in dir using multiple processes"}
     ]).
 single_dir_creation_test_base(Config) ->
     FilesNum = ?config(files_num, Config),

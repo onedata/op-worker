@@ -12,9 +12,12 @@
 -module(opt_archives).
 -author("Bartosz Walkowicz").
 
+-include("proto/oneprovider/provider_messages.hrl").
+
 -export([
     list/4, list/5,
     archive_dataset/5, archive_dataset/7,
+    cancel_archivisation/4,
     get_info/3,
     update/4,
     delete/3, delete/4,
@@ -53,8 +56,8 @@ list(NodeSelector, SessionId, DatasetId, Opts) ->
     oct_background:node_selector(),
     session:id(),
     dataset:id(),
-    dataset_api:listing_opts(),
-    undefined | dataset_api:listing_mode()
+    archives_list:listing_opts(),
+    undefined | archive_api:listing_mode()
 ) ->
     {ok, {archive_api:entries(), boolean()}} | errors:error().
 list(NodeSelector, SessionId, DatasetId, Opts, ListingMode) ->
@@ -86,9 +89,19 @@ archive_dataset(NodeSelector, SessionId, DatasetId, Config, Description) ->
 archive_dataset(
     NodeSelector, SessionId, DatasetId, Config, PreservedCallback, DeletedCallback, Description
 ) ->
-    ?CALL(NodeSelector, [
+    Result = ?CALL(NodeSelector, [
         SessionId, DatasetId, Config, PreservedCallback, DeletedCallback, Description
-    ]).
+    ]),
+    case Result of
+        {ok, #archive_info{id = ArchiveId}} -> {ok, ArchiveId};
+        {error, _} = Error -> Error
+    end.
+
+
+-spec cancel_archivisation(oct_background:node_selector(), session:id(), archive:id(), 
+    archive:cancel_preservation_policy()) -> {ok, archive_api:info()} | errors:error().
+cancel_archivisation(NodeSelector, SessionId, ArchiveId, PreservationPolicy) ->
+    ?CALL(NodeSelector, [SessionId, ArchiveId, PreservationPolicy]).
 
 
 -spec get_info(oct_background:node_selector(), session:id(), archive:id()) ->

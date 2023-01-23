@@ -36,24 +36,6 @@
 
 -spec to_json(record()) -> json_utils:json_term().
 to_json(#atm_time_series_store_content_browse_result{
-    result = #time_series_layout_get_result{} = Result
+    result = BrowseResult
 }) ->
-    #{<<"layout">> => ts_browse_result:to_json(Result)};
-
-to_json(#atm_time_series_store_content_browse_result{
-    result = #time_series_slice_get_result{slice = Slice}
-}) ->
-    %% @TODO VFS-9589 - use ts_browse_result:to_json/1 after average metric aggregator is introduced
-    #{
-        <<"slice">> => tsc_structure:map(fun(_TimeSeriesName, _MetricName, Windows) ->
-            lists:map(fun({Timestamp, Value}) ->
-                #{
-                    <<"timestamp">> => Timestamp,
-                    <<"value">> => case Value of
-                        {_Count, Aggregated} -> Aggregated;
-                        Aggregated -> Aggregated
-                    end
-                }
-            end, Windows)
-        end, Slice)
-    }.
+    ts_browse_result:to_json(BrowseResult).

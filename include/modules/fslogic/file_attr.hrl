@@ -34,7 +34,10 @@
     provider_id :: od_provider:id(),
     owner_id :: od_user:id(),
     fully_replicated :: undefined | boolean(),
-    nlink :: undefined | non_neg_integer()
+    nlink :: undefined | non_neg_integer(),
+    % Listing index can be used to list dir children starting from this file
+    index :: file_listing:index(),
+    xattrs = #{} :: #{custom_metadata:name() => custom_metadata:value()}
 }).
 
 -record(xattr, {

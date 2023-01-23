@@ -41,6 +41,7 @@
 -include("modules/dataset/archive.hrl").
 -include("modules/dataset/dataset.hrl").
 -include("modules/dataset/archivisation_tree.hrl").
+-include("modules/datastore/datastore_runner.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include("modules/fslogic/data_access_control.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
@@ -48,7 +49,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([start_archivisation/6, recall/4, cancel_recall/1, update_archive/2, get_archive_info/1,
+-export([start_archivisation/6, cancel_archivisation/3, recall/4, cancel_recall/1, update_archive/2, get_archive_info/1,
     list_archives/3, delete/2, get_nested_archives_stats/1, get_aggregated_stats/1]).
 
 %% Exported for use in tests
@@ -86,7 +87,7 @@
 -spec start_archivisation(
     dataset:id(), archive:config(), archive:callback(), archive:callback(),
     archive:description(), user_ctx:ctx()
-) -> {ok, archive:id()} | error().
+) -> {ok, info()} | error().
 start_archivisation(
     DatasetId, Config, PreservedCallback, DeletedCallback, Description, UserCtx
 ) ->
@@ -114,7 +115,7 @@ start_archivisation(
                     archives_list:add(DatasetId, SpaceId, AipArchiveId, Timestamp),
                     case archivisation_traverse:start(FinalAipArchiveDoc, DatasetDoc, UserCtx) of
                         ok ->
-                            {ok, AipArchiveId};
+                            get_archive_info(FinalAipArchiveDoc, undefined);
                         {error, _} = Error ->
                             Error
                     end;
@@ -161,10 +162,12 @@ get_archive_info(ArchiveId) ->
 get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
     {ok, ArchiveId} = archive:get_id(ArchiveDoc),
     {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
+    {ok, ProviderId} = archive:get_archiving_provider_id(ArchiveDoc),
     {ok, Timestamp} = archive:get_creation_time(ArchiveDoc),
     {ok, State} = get_state(ArchiveDoc),
     {ok, Config} = archive:get_config(ArchiveDoc),
     {ok, ArchiveRootDirGuid} = archive:get_root_dir_guid(ArchiveDoc),
+    {ok, ArchiveDataDirGuid} = archive:get_data_dir_guid(ArchiveDoc),
     {ok, PreservedCallback} = archive:get_preserved_callback(ArchiveDoc),
     {ok, DeletedCallback} = archive:get_deleted_callback(ArchiveDoc),
     {ok, Description} = archive:get_description(ArchiveDoc),
@@ -176,8 +179,10 @@ get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
     {ok, #archive_info{
         id = ArchiveId,
         dataset_id = DatasetId,
+        archiving_provider = ProviderId,
         state = State,
         root_dir_guid = ArchiveRootDirGuid,
+        data_dir_guid = ArchiveDataDirGuid,
         creation_time = Timestamp,
         config = Config,
         preserved_callback = PreservedCallback,
@@ -230,8 +235,27 @@ delete(ArchiveId, CallbackUrl) ->
 
 
 -spec remove_archive_recursive(archive:doc() | archive:id()) -> ok.
-remove_archive_recursive(ArchiveDocOrId) ->
-    remove_archive_recursive(ArchiveDocOrId, #link_token{}).
+remove_archive_recursive(#document{} = ArchiveDoc) ->
+    remove_archive_recursive(ArchiveDoc, #link_token{});
+remove_archive_recursive(ArchiveId) ->
+    case archive:get(ArchiveId) of
+        {ok, ArchiveDoc} -> remove_archive_recursive(ArchiveDoc);
+        ?ERROR_NOT_FOUND -> ok
+    end.
+
+
+-spec cancel_archivisation(archive:doc() | archive:id(), archive:cancel_preservation_policy(), user_ctx:ctx()) ->
+    ok | {error, term()}.
+cancel_archivisation(ArchiveDoc = #document{value = #archive{related_dip = undefined, related_aip = RelatedAip}}, PP, UserCtx) ->
+    cancel_archivisations(ArchiveDoc, RelatedAip, PP, UserCtx);
+cancel_archivisation(ArchiveDoc = #document{value = #archive{related_aip = undefined, related_dip = RelatedDip}}, PP, UserCtx) ->
+    cancel_archivisations(ArchiveDoc, RelatedDip, PP, UserCtx);
+cancel_archivisation(ArchiveId, PreservationPolicy, UserCtx) ->
+    case archive:get(ArchiveId) of
+        {ok, ArchiveDoc} -> cancel_archivisation(ArchiveDoc, PreservationPolicy, UserCtx);
+        ?ERROR_NOT_FOUND -> ok;
+        {error, _} = Error -> Error
+    end.
 
 
 -spec get_nested_archives_stats(archive:id() | archive:doc()) -> archive_stats:record().
@@ -257,10 +281,10 @@ get_nested_archives_stats(ArchiveId, Token, NestedArchiveStatsAccIn) when is_bin
 -spec get_aggregated_stats(archive:doc() | archive:id()) -> {ok, archive_stats:record()}.
 get_aggregated_stats(ArchiveDoc = #document{}) ->
     {ok, ArchiveStats} = archive:get_stats(ArchiveDoc),
-    case archive:is_finished(ArchiveDoc) of
-        true ->
-            {ok, ArchiveStats};
+    case archive:is_building(ArchiveDoc) of
         false ->
+            {ok, ArchiveStats};
+        true ->
             {ok, ArchiveId} = archive:get_id(ArchiveDoc),
             NestedArchivesStats = get_nested_archives_stats(ArchiveId),
             {ok, archive_stats:sum(ArchiveStats, NestedArchivesStats)}
@@ -274,12 +298,12 @@ get_aggregated_stats(ArchiveId) ->
 %%%===================================================================
 
 %% @private
--spec remove_archive_recursive(archive:doc() | archive:id(), archives_forest:token()) -> ok.
-remove_archive_recursive(ArchiveDocOrId, Token) ->
-    {ok, ArchiveId} = case ArchiveDocOrId of
-        #document{} = ArchiveDoc -> archive:get_id(ArchiveDoc);
-        ArchiveId0 when is_binary(ArchiveId0) -> {ok, ArchiveId0}
-    end,
+-spec remove_archive_recursive(archive:doc(), archives_forest:token()) -> ok.
+remove_archive_recursive(ArchiveDoc, Token) ->
+    % parent archives must be unblocked first because otherwise hardlinks in children 
+    % archives would still have effective permission flags protecting them from being deleted.
+    ok = unblock_related_archives(ArchiveDoc),
+    {ok, ArchiveId} = archive:get_id(ArchiveDoc),
     case archives_forest:list(ArchiveId, Token, ?BATCH_SIZE) of
         {ok, ChildrenArchives, Token2} ->
             lists:foreach(fun(ChildArchiveId) ->
@@ -287,31 +311,25 @@ remove_archive_recursive(ArchiveDocOrId, Token) ->
             end, ChildrenArchives),
             case Token2#link_token.is_last of
                 true ->
-                    remove_archive(ArchiveDocOrId);
+                    remove_archive(ArchiveDoc);
                 false ->
-                    remove_archive_recursive(ArchiveDocOrId, Token2)
+                    remove_archive_recursive(ArchiveDoc, Token2)
             end;
         {error, not_found} ->
             ok
     end.
-
+    
 
 %% @private
--spec remove_archive(archive:doc() | archive:id()) -> ok | error().
+-spec remove_archive(archive:doc()) -> ok | error().
 remove_archive(ArchiveDoc = #document{value = #archive{related_dip = undefined, related_aip = RelatedAip}}) ->
     remove_archives(ArchiveDoc, RelatedAip);
 remove_archive(ArchiveDoc = #document{value = #archive{related_aip = undefined, related_dip = RelatedDip}}) ->
-    remove_archives(ArchiveDoc, RelatedDip);
-remove_archive(ArchiveId) ->
-    case archive:get(ArchiveId) of
-        {ok, ArchiveDoc} -> remove_archive(ArchiveDoc);
-        ?ERROR_NOT_FOUND -> ok;
-        {error, _} = Error -> Error
-    end.
+    remove_archives(ArchiveDoc, RelatedDip).
 
 
 %% @private
--spec remove_archives(archive:id() | archive:doc(), archive:id() | undefined) -> ok | error().
+-spec remove_archives(archive:doc(), archive:id() | undefined) -> ok | error().
 remove_archives(Archive, RelatedArchive) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
     ok = remove_single_archive(Archive, UserCtx),
@@ -324,7 +342,6 @@ remove_single_archive(undefined, _UserCtx) ->
     ok;
 remove_single_archive(ArchiveDoc = #document{}, UserCtx) ->
     {ok, ArchiveId} = archive:get_id(ArchiveDoc),
-    ok = archive_verification_traverse:unblock_archive_modification(ArchiveDoc),
     case archive:delete(ArchiveId) of
         ok ->
             {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
@@ -344,8 +361,59 @@ remove_single_archive(ArchiveDoc = #document{}, UserCtx) ->
 remove_single_archive(ArchiveId, UserCtx) ->
     case archive:get(ArchiveId) of
         {ok, ArchiveDoc} -> remove_single_archive(ArchiveDoc, UserCtx);
-        ?ERROR_NOT_FOUND -> ok;
-        {error, _} = Error -> Error
+        ?ERROR_NOT_FOUND -> ok
+    end.
+
+
+%% @private
+-spec unblock_related_archives(archive:doc()) -> ok.
+unblock_related_archives(#document{value = #archive{
+    related_aip = RelatedAip,
+    related_dip = RelatedDip
+}} = ArchiveDoc) ->
+    ok = unblock_archive(ArchiveDoc),
+    ok = unblock_archive(RelatedAip),
+    ok = unblock_archive(RelatedDip).
+
+
+%% @private
+-spec unblock_archive(archive:doc() | archive:id() | undefined) -> ok.
+unblock_archive(undefined) ->
+    ok;
+unblock_archive(#document{} = ArchiveDoc) ->
+    archive_verification_traverse:unblock_archive_modification(ArchiveDoc);
+unblock_archive(ArchiveId) ->
+    case archive:get(ArchiveId) of
+        {ok, ArchiveDoc} -> unblock_archive(ArchiveDoc);
+        ?ERROR_NOT_FOUND -> ok
+    end.
+
+
+%% @private
+-spec cancel_archivisations(archive:doc(), archive:id(), archive:cancel_preservation_policy(), user_ctx:ctx()) ->
+    ok | {error, term()}.
+cancel_archivisations(ArchiveDoc, RelatedArchiveId, PreservationPolicy, UserCtx) ->
+    RelatedArchiveId =/= undefined andalso cancel_single_archive(RelatedArchiveId, PreservationPolicy, UserCtx),
+    cancel_single_archive(ArchiveDoc, PreservationPolicy, UserCtx).
+
+
+%% @private
+-spec cancel_single_archive(archive:doc() | archive:id(), archive:cancel_preservation_policy(), user_ctx:ctx()) ->
+    ok | {error, term()}.
+cancel_single_archive(ArchiveDocOrId, PreservationPolicy, UserCtx) ->
+    case archive:mark_cancelling(ArchiveDocOrId, PreservationPolicy) of
+        ok ->
+            {ok, TaskId} = archive:get_id(ArchiveDocOrId),
+            ok = ?ok_if_not_found(archive_verification_traverse:cancel(TaskId));
+        {error, already_cancelled} ->
+            case PreservationPolicy of
+                retain -> ok;
+                delete -> remove_single_archive(ArchiveDocOrId, UserCtx)
+            end;
+        {error, already_finished} ->
+            ok;
+        {error, _} = Error ->
+            Error
     end.
 
 

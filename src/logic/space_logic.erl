@@ -35,8 +35,9 @@
 -export([is_owner/2]).
 -export([get_eff_groups/2, get_shares/2, get_local_storages/1,
     get_local_supporting_storage/1, get_provider_storages/2, get_storages_by_provider/1,
-    get_all_storage_ids/1, get_support_size/2]).
+    get_all_storage_ids/1, get_support_size/2, get_support_parameters/2]).
 -export([get_provider_ids/1, get_provider_ids/2]).
+-export([update_support_parameters/2]).
 -export([is_supported/2, is_supported/3]).
 -export([is_supported_by_storage/2]).
 -export([has_readonly_support_from/2]).
@@ -61,7 +62,7 @@
 %%--------------------------------------------------------------------
 -spec get(gs_client_worker:client(), od_space:id()) ->
     {ok, od_space:doc()} | errors:error().
-get(?GUEST_SESS_ID, SpaceId) ->    
+get(?GUEST_SESS_ID, SpaceId) ->
     % Guest session is a virtual session fully managed by provider, and it needs
     % access to space info to serve public data such as shares.
     get(?ROOT_SESS_ID, SpaceId);
@@ -253,7 +254,7 @@ get_local_storages(SpaceId) ->
 %%--------------------------------------------------------------------
 -spec get_provider_storages(od_space:id(), od_provider:id()) ->
     {ok, #{storage:id() => storage:access_type()}} | errors:error().
-get_provider_storages(SpaceId, ProviderId) when is_binary(SpaceId)->
+get_provider_storages(SpaceId, ProviderId) when is_binary(SpaceId) ->
     case get_storages_by_provider(SpaceId) of
         {ok, #{ProviderId := ProviderStorages}} ->
             {ok, ProviderStorages};
@@ -266,7 +267,7 @@ get_provider_storages(SpaceId, ProviderId) when is_binary(SpaceId)->
 
 -spec get_storages_by_provider(od_space:id()) ->
     {ok, #{od_provider:id() => #{storage:id() => storage:access_type()}}} | errors:error().
-get_storages_by_provider(SpaceId) when is_binary(SpaceId)->
+get_storages_by_provider(SpaceId) when is_binary(SpaceId) ->
     case space_logic:get(?ROOT_SESS_ID, SpaceId) of
         {ok, #document{value = #od_space{storages_by_provider = StoragesByProvider}}} ->
             {ok, StoragesByProvider};
@@ -301,6 +302,17 @@ get_support_size(SpaceId, ProviderId) ->
     end.
 
 
+-spec get_support_parameters(od_space:id(), od_provider:id()) ->
+    {ok, support_parameters:record()} | errors:error().
+get_support_parameters(SpaceId, ProviderId) ->
+    case get(?ROOT_SESS_ID, SpaceId) of
+        {ok, #document{value = #od_space{support_parameters_registry = SupportParametersRegistry}}} ->
+            {ok, support_parameters_registry:get_entry(ProviderId, SupportParametersRegistry)};
+        {error, _} = Error ->
+            Error
+    end.
+
+
 -spec get_provider_ids(od_space:id()) ->
     {ok, [od_provider:id()]} | errors:error().
 get_provider_ids(SpaceId) ->
@@ -316,6 +328,24 @@ get_provider_ids(SessionId, SpaceId) ->
         {error, _} = Error ->
             Error
     end.
+
+
+-spec update_support_parameters(od_space:id(), support_parameters:record()) ->
+    ok | errors:error().
+update_support_parameters(SpaceId, SupportParametersOverlay) ->
+    Result = gs_client_worker:request(?ROOT_SESS_ID, #gs_req_graph{
+        operation = update,
+        gri = #gri{
+            type = od_space,
+            id = SpaceId,
+            aspect = {support_parameters, oneprovider:get_id()},
+            scope = private
+        },
+        data = jsonable_record:to_json(SupportParametersOverlay, support_parameters)
+    }),
+    ?ON_SUCCESS(Result, fun(_) ->
+        space_logic:force_fetch(SpaceId)
+    end).
 
 
 -spec is_supported(od_space:doc() | od_space:record(), od_provider:id()) ->
@@ -461,6 +491,6 @@ get_harvesters(SpaceId) ->
 
 -spec on_space_supported(od_space:id()) -> ok.
 on_space_supported(SpaceId) ->
-    ok = qos_hooks:reevaluate_all_impossible_qos_in_space(SpaceId).
+    ok = qos_logic:reevaluate_all_impossible_qos_in_space(SpaceId).
 
 

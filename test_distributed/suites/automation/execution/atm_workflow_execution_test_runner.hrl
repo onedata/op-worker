@@ -17,6 +17,25 @@
 -include_lib("ctool/include/automation/automation.hrl").
 
 
+% default provider on which workflows shall be executed
+-define(PROVIDER_SELECTOR, krakow).
+
+% default space in which workflows shall be executed
+-define(SPACE_SELECTOR, space_krk).
+
+% default test inventory member with limited privileges
+-define(USER_SELECTOR, user2).
+
+% message used for synchronous calls from the execution process to the test process
+% to enable applying hooks or modifying expectations before and after execution of
+% a specific step (execution process waits for an ACK before it proceeds).
+-record(mock_call_report, {
+    step :: atm_workflow_execution_test_runner:step_name(),
+    timing :: atm_workflow_execution_test_runner:step_phase_timing(),
+    args :: [term()],
+    result :: undefined | term()
+}).
+
 -record(atm_mock_call_ctx, {
     provider :: oct_background:entity_selector(),
     space :: oct_background:entity_selector(),
@@ -26,7 +45,10 @@
     lane_count :: non_neg_integer(),
     current_lane_index :: atm_lane_execution:index(),
     current_run_num :: atm_lane_execution:run_num(),
-    call_args :: [term()]
+    step :: atm_workflow_execution_test_runner:step_name(),
+    call_args :: [term()],
+    % Result of step execution available only in after_step phase or 'undefined' in before_step phase
+    call_result :: undefined | term()
 }).
 
 -record(atm_step_mock_spec, {
@@ -42,7 +64,7 @@
         % changes defined by test author
         atm_workflow_execution_test_runner:exp_state_diff(),
 
-    strategy = passthrough :: atm_workflow_execution_test_runner:mock_strategy(),
+    strategy = passthrough :: atm_workflow_execution_test_runner:mock_strategy_spec(),
 
     % below checks will not be executed in case of mock_result = {true, _}
     % (step has not been executed and as such no change compared to before_step_* should occur)
@@ -56,35 +78,49 @@
     prepare_lane = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
     create_run = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
 
+    resume_lane = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
+    handle_task_resuming = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
+    handle_task_resumed = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
+
     run_task_for_item = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
     process_task_result_for_item = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
     process_streamed_task_data = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
+    handle_task_results_processed_for_all_items = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
     report_item_error = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
 
-    handle_task_execution_ended = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
-    handle_lane_execution_ended = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec()
+    handle_task_execution_stopped = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
+    handle_lane_execution_stopped = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec()
 }).
 
 -record(atm_workflow_execution_incarnation_test_spec, {
     incarnation_num :: atm_workflow_execution:incarnation(),
     lane_runs :: [atm_workflow_execution_test_runner:lane_run_test_spec()],
-    handle_workflow_execution_ended = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec()
+    handle_workflow_execution_stopped = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
+
+    handle_exception = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
+    handle_workflow_abruptly_stopped = #atm_step_mock_spec{} :: atm_workflow_execution_test_runner:step_mock_spec(),
+
+    % Hook called after entire incarnation ended with ctx of 'handle_workflow_execution_stopped' step
+    after_hook = undefined :: undefined | atm_workflow_execution_test_runner:hook()
 }).
 
 -record(atm_workflow_execution_test_spec, {
-    provider :: oct_background:entity_selector(),
-    user :: oct_background:entity_selector(),
-    space :: oct_background:entity_selector(),
+    provider = ?PROVIDER_SELECTOR :: oct_background:entity_selector(),
+    user = ?USER_SELECTOR :: oct_background:entity_selector(),
+    space = ?SPACE_SELECTOR :: oct_background:entity_selector(),
+
+    clock_status = normal :: normal | frozen,
 
     workflow_schema_dump_or_draft ::
         atm_test_inventory:atm_workflow_schema_dump() |
         atm_test_schema_factory:atm_workflow_schema_dump_draft(),
-    workflow_schema_revision_num :: atm_workflow_schema_revision:revision_number(),
+    workflow_schema_revision_num = 1 :: atm_workflow_schema_revision:revision_number(),
 
     store_initial_content_overlay = #{} :: atm_workflow_execution_api:store_initial_content_overlay(),
     callback_url = undefined :: undefined | http_client:url(),
 
-    incarnations :: [atm_workflow_execution_test_runner:incarnation_test_spec()]
+    incarnations :: [atm_workflow_execution_test_runner:incarnation_test_spec()],
+    test_gc = true :: boolean()
 }).
 
 
@@ -95,7 +131,11 @@
     atm_openfaas_activity_feed_client_mock,
     test_websocket_client,
     atm_test_inventory,
-    atm_workflow_execution_test_runner
+    atm_workflow_execution_exp_state_builder,
+
+    atm_workflow_execution_test_runner,
+    atm_workflow_execution_test_mocks,
+    atm_workflow_execution_test_utils
 ]).
 
 

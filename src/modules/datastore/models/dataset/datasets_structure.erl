@@ -84,7 +84,7 @@
 
 % @formatter:on
 
--export_type([opts/0, entries/0, entry/0, index/0]).
+-export_type([opts/0, entries/0, entry/0, index/0, limit/0, offset/0]).
 
 -define(CTX, (dataset:get_ctx())).
 

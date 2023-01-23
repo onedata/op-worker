@@ -16,6 +16,10 @@
 -ifndef(QOS_HRL).
 -define(QOS_HRL, 1).
 
+
+-include_lib("ctool/include/time_series/common.hrl").
+
+
 -define(QOS_SYNCHRONIZATION_PRIORITY, 224).
 
 % macros used for operations on QoS expression
@@ -46,7 +50,7 @@
 
 % Request to remote providers to start QoS traverse.
 % This record is used as an element of datastore document (qos_entry).
-% Traverse is started in response to change of qos_entry document. (see qos_hooks.erl)
+% Traverse is started in response to change of qos_entry document. (see qos_logic.erl)
 -record(qos_traverse_req, {
     % uuid of file that travers should start from
     % TODO: This field will be necessary after resolving VFS-5567. For now all
@@ -70,9 +74,54 @@
 -define(FILES_STATS, <<"files">>).
 
 -define(QOS_TOTAL_TIME_SERIES_NAME, <<"total">>).
+-define(QOS_STORAGE_TIME_SERIES_PREFIX_STR, "st_").
+-define(QOS_STORAGE_TIME_SERIES_NAME(StorageId), <<?QOS_STORAGE_TIME_SERIES_PREFIX_STR, StorageId/binary>>).
+
 -define(QOS_MINUTE_METRIC_NAME, <<"minute">>).
 -define(QOS_HOUR_METRIC_NAME, <<"hour">>).
 -define(QOS_DAY_METRIC_NAME, <<"day">>).
 -define(QOS_MONTH_METRIC_NAME, <<"month">>).
+
+
+-define(QOS_STATS_METRICS, #{
+    ?QOS_MINUTE_METRIC_NAME => #metric_config{
+        resolution = ?MINUTE_RESOLUTION,
+        retention = 120,
+        aggregator = sum
+    },
+    ?QOS_HOUR_METRIC_NAME => #metric_config{
+        resolution = ?HOUR_RESOLUTION,
+        retention = 48,
+        aggregator = sum
+    },
+    ?QOS_DAY_METRIC_NAME => #metric_config{
+        resolution = ?DAY_RESOLUTION,
+        retention = 60,
+        aggregator = sum
+    },
+    ?QOS_MONTH_METRIC_NAME => #metric_config{
+        resolution = ?MONTH_RESOLUTION,
+        retention = 12,
+        aggregator = sum
+    }
+}).
+
+
+-define(QOS_STATS_COLLECTION_SCHEMA(Unit), #time_series_collection_schema{time_series_schemas = [
+    #time_series_schema{
+        name_generator_type = exact,
+        name_generator = ?QOS_TOTAL_TIME_SERIES_NAME,
+        unit = Unit,
+        metrics = ?QOS_STATS_METRICS
+    },
+    #time_series_schema{
+        name_generator_type = add_prefix,
+        name_generator = <<?QOS_STORAGE_TIME_SERIES_PREFIX_STR>>,
+        unit = Unit,
+        metrics = ?QOS_STATS_METRICS
+    }
+]}).
+-define(QOS_BYTES_STATS_COLLECTION_SCHEMA, ?QOS_STATS_COLLECTION_SCHEMA(bytes)).
+-define(QOS_FILES_STATS_COLLECTION_SCHEMA, ?QOS_STATS_COLLECTION_SCHEMA(none)).
 
 -endif.

@@ -23,7 +23,7 @@
 
 
 %% API
--export([init_pool/0, stop_pool/0, start/4]).
+-export([init_pool/0, stop_pool/0, start/5]).
 
 %% Traverse behaviour callbacks
 -export([
@@ -66,13 +66,13 @@ stop_pool() ->
     tree_traverse:stop(?POOL_NAME).
 
 
--spec start(file_ctx:ctx(), user_ctx:ctx(), boolean(), file_meta:uuid()) -> {ok, id()} | {error, term()}.
-start(RootDirCtx, UserCtx, EmitEvents, RootOriginalParentUuid) ->
+-spec start(file_ctx:ctx(), user_ctx:ctx(), boolean(), file_meta:uuid(), file_meta:name()) ->
+    {ok, id()} | {error, term()}.
+start(RootDirCtx, UserCtx, EmitEvents, RootOriginalParentUuid, RootDirName) ->
     TaskId = datastore_key:new(),
     SpaceId = file_ctx:get_space_id_const(RootDirCtx),
     ParentFileCtx = file_ctx:new_by_uuid(RootOriginalParentUuid, SpaceId),
     {ParentPath, _FileCtx2} = file_ctx:get_logical_path(ParentFileCtx, user_ctx:new(?ROOT_SESS_ID)),
-    {RootDirName, RootDirCtx2} = file_ctx:get_aliased_name(RootDirCtx, undefined),
     Options = #{
         task_id => TaskId,
         track_subtree_status => true,
@@ -90,7 +90,7 @@ start(RootDirCtx, UserCtx, EmitEvents, RootOriginalParentUuid) ->
     },
     case tree_traverse_session:setup_for_task(UserCtx, TaskId) of
         ok ->
-            tree_traverse:run(?POOL_NAME, RootDirCtx2, user_ctx:get_user_id(UserCtx), Options);
+            tree_traverse:run(?POOL_NAME, RootDirCtx, user_ctx:get_user_id(UserCtx), Options);
         {error, _} = Error ->
             Error
     end.
@@ -159,7 +159,7 @@ do_slave_job(#tree_traverse_slave{
 %% @private
 -spec delete_dir_if_subtree_processed(tree_traverse_progress:status(), file_ctx:ctx(), od_user:id(),
     id(), info()) -> ok.
-delete_dir_if_subtree_processed(?SUBTREE_PROCESSED(_), FileCtx, UserId, TaskId, TraverseInfo) ->
+delete_dir_if_subtree_processed(?SUBTREE_PROCESSED(_, _), FileCtx, UserId, TaskId, TraverseInfo) ->
     delete_dir(FileCtx, UserId, TaskId, TraverseInfo);
 delete_dir_if_subtree_processed(?SUBTREE_NOT_PROCESSED, _FileCtx, _UserId, _TaskId, _TraverseInfo) ->
     ok.
@@ -209,6 +209,8 @@ delete_file(FileCtx, UserId, TaskId, TraverseInfo = #{emit_events := EmitEvents}
                 file_processed(FileCtx, UserCtx, TaskId, TraverseInfo)
             catch
                 throw:?EACCES ->
+                    ok;
+                throw:?EPERM ->
                     ok
             end;
         {error, ?EACCES} ->

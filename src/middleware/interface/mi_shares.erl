@@ -31,7 +31,7 @@
 create(SessionId, FileKey, Name, Description) ->
     FileGuid = lfm_file_key:resolve_file_key(SessionId, FileKey, do_not_resolve_symlink),
 
-    middleware_worker:check_exec(SessionId, FileGuid, #create_share{
+    middleware_worker:check_exec(SessionId, FileGuid, #share_create_request{
         name = Name,
         description = Description
     }).
@@ -41,7 +41,7 @@ create(SessionId, FileKey, Name, Description) ->
 remove(SessionId, ShareId) ->
     RootFileGuid = get_share_root_file_guid(SessionId, ShareId),
 
-    middleware_worker:check_exec(SessionId, RootFileGuid, #remove_share{share_id = ShareId}).
+    middleware_worker:check_exec(SessionId, RootFileGuid, #share_remove_request{share_id = ShareId}).
 
 
 %%%===================================================================

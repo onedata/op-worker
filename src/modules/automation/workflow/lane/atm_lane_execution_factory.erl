@@ -52,13 +52,17 @@
 create_run(AtmLaneRunSelector, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx) ->
     try
         create_run_internal(AtmLaneRunSelector, AtmWorkflowExecutionDoc, AtmWorkflowExecutionCtx)
-    catch Type:Reason:Stacktrace ->
-        AtmWorkflowExecution = AtmWorkflowExecutionDoc#document.value,
+    catch
+        throw:?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING ->
+            throw(?ERROR_ATM_WORKFLOW_EXECUTION_STOPPING);
 
-        throw(?ERROR_ATM_LANE_EXECUTION_CREATION_FAILED(
-            atm_lane_execution:get_schema_id(AtmLaneRunSelector, AtmWorkflowExecution),
-            ?atm_examine_error(Type, Reason, Stacktrace)
-        ))
+        Type:Reason:Stacktrace ->
+            AtmWorkflowExecution = AtmWorkflowExecutionDoc#document.value,
+
+            throw(?ERROR_ATM_LANE_EXECUTION_CREATION_FAILED(
+                atm_lane_execution:get_schema_id(AtmLaneRunSelector, AtmWorkflowExecution),
+                ?examine_exception(Type, Reason, Stacktrace)
+            ))
     end.
 
 
@@ -97,7 +101,9 @@ create_run_internal(AtmLaneRunSelector, AtmWorkflowExecutionDoc, AtmWorkflowExec
                 Error
         end
     end,
-    case atm_workflow_execution:update(AtmWorkflowExecutionDoc#document.key, Diff) of
+    AtmWorkflowExecutionId = AtmWorkflowExecutionDoc#document.key,
+
+    case atm_workflow_execution_status:handle_lane_run_created(AtmWorkflowExecutionId, Diff) of
         {ok, NewAtmWorkflowExecutionDoc} ->
             NewAtmWorkflowExecutionDoc;
         {error, _} = Error ->
@@ -126,26 +132,42 @@ build_run_creation_ctx(AtmLaneRunSelector, AtmWorkflowExecutionDoc, AtmWorkflowE
         }
     } = atm_lane_execution:get_schema(AtmLaneRunSelector, AtmWorkflowExecution),
 
+    IteratedStoreId = case Run#atm_lane_execution_run.iterated_store_id of
+        undefined ->
+            % If not explicitly set then take designated by schema store
+            atm_workflow_execution_ctx:get_global_store_id(
+                AtmStoreSchemaId, AtmWorkflowExecutionCtx
+            );
+        Id ->
+            Id
+    end,
+
+    {RunType, OriginAtmLaneRun} = case Run#atm_lane_execution_run.origin_run_num of
+        undefined ->
+            {regular, undefined};
+        OriginRunNum ->
+            OriginLaneRunSelector = {AtmLaneSelector, OriginRunNum},
+            {ok, OriginRun} = atm_lane_execution:get_run(OriginLaneRunSelector, AtmWorkflowExecution),
+            case OriginRun#atm_lane_execution_run.iterated_store_id of
+                IteratedStoreId -> {rerun, OriginRun};
+                _ -> {retry, OriginRun}
+            end
+    end,
+
     #run_creation_ctx{
         creation_args = #atm_lane_execution_run_creation_args{
+            type = RunType,
             workflow_execution_ctx = AtmWorkflowExecutionCtx,
             workflow_execution_doc = AtmWorkflowExecutionDoc,
 
             lane_index = atm_lane_execution:resolve_selector(AtmLaneSelector, AtmWorkflowExecution),
             lane_schema = AtmLaneSchema,
+            origin_run = OriginAtmLaneRun,
 
-            iterated_store_id = case Run#atm_lane_execution_run.iterated_store_id of
-                undefined ->
-                    % If not explicitly set then take designated by schema store
-                    atm_workflow_execution_ctx:get_global_store_id(
-                        AtmStoreSchemaId, AtmWorkflowExecutionCtx
-                    );
-                IteratedStoreId ->
-                    IteratedStoreId
-            end
+            iterated_store_id = IteratedStoreId
         },
-        reset_lane_retries_num = case Run#atm_lane_execution_run.origin_run_num of
-            undefined -> true;
+        reset_lane_retries_num = case RunType of
+            regular -> true;
             _ -> false
         end,
         execution_components = #run_execution_components{}
@@ -161,7 +183,7 @@ create_run_execution_components(RunCreationCtx) ->
             CreateExecutionComponentFun(NewRunCreationCtx)
         catch Type:Reason:Stacktrace ->
             delete_run_execution_components(NewRunCreationCtx#run_creation_ctx.execution_components),
-            throw(?atm_examine_error(Type, Reason, Stacktrace))
+            throw(?examine_exception(Type, Reason, Stacktrace))
         end
     end, RunCreationCtx, [
         fun create_exception_store/1,

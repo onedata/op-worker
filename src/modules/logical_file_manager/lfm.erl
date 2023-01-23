@@ -72,12 +72,13 @@
 %% Directory specific operations
 -export([
     mkdir/3, mkdir/4,
+    create_dir_at_path/3,
     get_children/3,
     get_child_attr/3,
     get_children_attrs/3,
-    get_children_attrs/5,
+    get_children_attrs/4,
     get_children_details/3,
-    get_files_recursively/3,
+    get_files_recursively/4,
     get_children_count/2
 ]).
 %% Permissions related operations
@@ -91,15 +92,20 @@
 %% Custom metadata related operations
 -export([
     has_custom_metadata/2,
-    set_metadata/5,
-    get_metadata/5,
-    remove_metadata/3,
-
     list_xattr/4,
     set_xattr/3,
     set_xattr/5,
     get_xattr/4,
     remove_xattr/3
+]).
+%% Multipart upload related operations
+-export([
+    create_multipart_upload/3,
+    abort_multipart_upload/2,
+    complete_multipart_upload/2,
+    list_multipart_uploads/4,
+    upload_multipart_part/3,
+    list_multipart_parts/4
 ]).
 
 %% Utility functions
@@ -155,7 +161,7 @@ get_fs_stats(SessId, FileKey) ->
 -spec stat(session:id(), file_key()) ->
     {ok, lfm_attrs:file_attributes()} | error_reply().
 stat(SessId, FileKey) ->
-    stat(SessId, FileKey, false).
+    stat(SessId, FileKey, [size]).
 
 
 %%--------------------------------------------------------------------
@@ -163,10 +169,10 @@ stat(SessId, FileKey) ->
 %% Returns file attributes (see file_attr.hrl).
 %% @end
 %%--------------------------------------------------------------------
--spec stat(session:id(), file_key(), boolean()) ->
+-spec stat(session:id(), file_key(), [attr_req:optional_attr()]) ->
     {ok, lfm_attrs:file_attributes()} | error_reply().
-stat(SessId, FileKey, IncludeLinksCount) ->
-    ?run(lfm_attrs:stat(SessId, FileKey, IncludeLinksCount)).
+stat(SessId, FileKey, OptionalAttrs) ->
+    ?run(lfm_attrs:stat(SessId, FileKey, OptionalAttrs)).
 
 
 %%--------------------------------------------------------------------
@@ -215,7 +221,7 @@ ensure_dir(SessId, RelativeRootGuid, FilePath, Mode) ->
     ?run(lfm_files:ensure_dir(SessId, RelativeRootGuid, FilePath, Mode)).
 
 -spec is_dir(session:id(), file_key()) ->
-    ok | error_reply().
+    boolean() | error_reply().
 is_dir(SessId, FileEntry) ->
     ?run(lfm_files:is_dir(SessId, FileEntry)).
 
@@ -462,6 +468,11 @@ mkdir(SessId, ParentGuid, Name, Mode) ->
     ?run(lfm_dirs:mkdir(SessId, ParentGuid, Name, Mode)).
 
 
+-spec create_dir_at_path(session:id(), fslogic_worker:file_guid(), file_meta:path()) -> {ok, #file_attr{}}.
+create_dir_at_path(SessId, ParentGuid, Path) ->
+    ?run(lfm_dirs:create_dir_at_path(SessId, ParentGuid, Path)).
+
+
 -spec get_children(session:id(), file_key(), file_listing:options()) ->
     {ok, [{fslogic_worker:file_guid(), file_meta:name()}], file_listing:pagination_token()} | error_reply().
 get_children(SessId, FileKey, ListOpts) ->
@@ -487,13 +498,13 @@ get_child_attr(SessId, ParentGuid, ChildName)  ->
 -spec get_children_attrs(session:id(), file_key(), file_listing:options()) ->
     {ok, [#file_attr{}], file_listing:pagination_token()} | error_reply().
 get_children_attrs(SessId, FileKey, ListOpts) ->
-    get_children_attrs(SessId, FileKey, ListOpts, false, false).
+    get_children_attrs(SessId, FileKey, ListOpts, [size]).
 
 
--spec get_children_attrs(session:id(), file_key(), file_listing:options(), boolean(), boolean()) ->
+-spec get_children_attrs(session:id(), file_key(), file_listing:options(), [attr_req:optional_attr()]) ->
     {ok, [#file_attr{}], file_listing:pagination_token()} | error_reply().
-get_children_attrs(SessId, FileKey, ListOpts, IncludeReplicationStatus, IncludeHardlinkCount) ->
-    ?run(lfm_dirs:get_children_attrs(SessId, FileKey, ListOpts, IncludeReplicationStatus, IncludeHardlinkCount)).
+get_children_attrs(SessId, FileKey, ListOpts, OptionalAttrs) ->
+    ?run(lfm_dirs:get_children_attrs(SessId, FileKey, ListOpts, OptionalAttrs)).
 
 
 %%--------------------------------------------------------------------
@@ -517,11 +528,12 @@ get_children_details(SessId, FileKey, ListOpts) ->
 -spec get_files_recursively(
     session:id(),
     lfm:file_key(),
-    recursive_file_listing:options()
+    dir_req:recursive_listing_opts(),
+    [attr_req:optional_attr()]
 ) ->
-    {ok, [recursive_file_listing:entry()], [file_meta:path()], recursive_file_listing:pagination_token()} | error_reply().
-get_files_recursively(SessId, FileKey, Options) -> 
-    ?run(lfm_dirs:get_files_recursively(SessId, FileKey, Options)).
+    {ok, [recursive_file_listing_node:entry()], [file_meta:path()], recursive_listing:pagination_token()} | error_reply().
+get_files_recursively(SessId, FileKey, Options, OptionalAttrs) -> 
+    ?run(lfm_dirs:get_files_recursively(SessId, FileKey, Options, OptionalAttrs)).
 
 
 -spec get_children_count(session:id(), file_key()) ->
@@ -575,36 +587,6 @@ has_custom_metadata(SessId, FileKey) ->
     ?run(lfm_attrs:has_custom_metadata(SessId, FileKey)).
 
 
--spec set_metadata(
-    session:id(),
-    file_key(),
-    custom_metadata:type(),
-    custom_metadata:value(),
-    custom_metadata:query()
-) ->
-    ok | error_reply().
-set_metadata(SessId, FileKey, Type, Value, Query) ->
-    ?run(lfm_attrs:set_metadata(SessId, FileKey, Type, Value, Query)).
-
-
--spec get_metadata(
-    session:id(),
-    file_key(),
-    custom_metadata:type(),
-    custom_metadata:query(),
-    boolean()
-) ->
-    {ok, custom_metadata:value()} | error_reply().
-get_metadata(SessId, FileKey, Type, Query, Inherited) ->
-    ?run(lfm_attrs:get_metadata(SessId, FileKey, Type, Query, Inherited)).
-
-
--spec remove_metadata(session:id(), file_key(), custom_metadata:type()) ->
-    ok | error_reply().
-remove_metadata(SessId, FileKey, Type) ->
-    ?run(lfm_attrs:remove_metadata(SessId, FileKey, Type)).
-
-
 -spec list_xattr(session:id(), file_key(), boolean(), boolean()) ->
     {ok, [custom_metadata:name()]} | error_reply().
 list_xattr(SessId, FileKey, Inherited, ShowInternal) ->
@@ -634,6 +616,42 @@ get_xattr(SessId, FileKey, XattrName, Inherited) ->
 remove_xattr(SessId, FileKey, XattrName) ->
     ?run(lfm_attrs:remove_xattr(SessId, FileKey, XattrName)).
 
+%%%===================================================================
+%%% Multipart upload related operations
+%%%===================================================================
+
+-spec create_multipart_upload(session:id(), od_space:id(), file_meta:path()) ->
+    {ok, multipart_upload:id()} | {error, term()}.
+create_multipart_upload(SessId, SpaceId, Path) ->
+    ?run(lfm_multipart_upload:create(SessId, SpaceId, Path)).
+
+
+-spec abort_multipart_upload(session:id(), multipart_upload:id()) -> ok | {error, term()}.
+abort_multipart_upload(SessId, UploadId) ->
+    ?run(lfm_multipart_upload:abort(SessId, UploadId)).
+
+
+-spec complete_multipart_upload(session:id(), multipart_upload:id()) -> ok | {error, term()}.
+complete_multipart_upload(SessId, UploadId) ->
+    ?run(lfm_multipart_upload:complete(SessId, UploadId)).
+
+
+-spec list_multipart_uploads(session:id(), od_space:id(), non_neg_integer(), multipart_upload:pagination_token() | undefined) ->
+    {ok, [multipart_upload:record()], multipart_upload:pagination_token(), boolean()} | {error, term()}.
+list_multipart_uploads(SessId, SpaceId, Limit, Token) ->
+    ?run(lfm_multipart_upload:list(SessId, SpaceId, Limit, Token)).
+
+
+-spec upload_multipart_part(session:id(), multipart_upload:id(), multipart_upload_part:record()) ->
+    ok | {error, term()}.
+upload_multipart_part(SessId, UploadId, Part) ->
+    ?run(lfm_multipart_upload:upload_part(SessId, UploadId, Part)).
+
+
+-spec list_multipart_parts(session:id(), multipart_upload:id(), non_neg_integer(), multipart_upload_part:part_number()) ->
+    {ok, [multipart_upload_part:record()], boolean()} | {error, term()}.
+list_multipart_parts(SessId, UploadId, Limit, StartAfter) ->
+    ?run(lfm_multipart_upload:list_parts(SessId, UploadId, Limit, StartAfter)).
 
 %%%===================================================================
 %%% Utility functions

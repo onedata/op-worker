@@ -14,16 +14,18 @@
 -include("global_definitions.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneclient/fuse_messages.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 
 %% API
 -export([
     mkdir/3, mkdir/4,
+    create_dir_at_path/3,
     get_children/3,
-    get_children_attrs/5,
+    get_children_attrs/4,
     get_child_attr/3,
     get_children_details/3,
     get_children_count/2,
-    get_files_recursively/3
+    get_files_recursively/4
 ]).
 
 
@@ -64,6 +66,21 @@ mkdir(SessId, ParentGuid0, Name, Mode) ->
         end).
 
 
+-spec create_dir_at_path(session:id(), fslogic_worker:file_guid(), file_meta:path()) ->
+    {ok, #file_attr{}} | lfm:error_reply().
+create_dir_at_path(SessId, ParentGuid0, Path) ->
+    ParentGuid1 = lfm_file_key:resolve_file_key(
+        SessId, ?FILE_REF(ParentGuid0), resolve_symlink
+    ),
+    
+    remote_utils:call_fslogic(SessId, file_request, ParentGuid1,
+        #create_path{path = Path},
+        fun(#file_attr{} = FileAttr) ->
+            {ok, FileAttr}
+        end
+    ).
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Gets {Guid, Name} for each directory children starting with Offset-th
@@ -94,16 +111,15 @@ get_children(SessId, FileKey, ListingOpts) ->
 %% starting with Offset-th entry and up to Limit of entries.
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_attrs(session:id(), lfm:file_key(), file_listing:options(), boolean(), boolean()) ->
+-spec get_children_attrs(session:id(), lfm:file_key(), file_listing:options(), [attr_req:optional_attr()]) ->
     {ok, [#file_attr{}], file_listing:pagination_token()} | lfm:error_reply().
-get_children_attrs(SessId, FileKey, ListingOpts, IncludeReplicationStatus, IncludeHardlinkCount) ->
+get_children_attrs(SessId, FileKey, ListingOpts, OptionalAttrs) ->
     FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, resolve_symlink),
 
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #get_file_children_attrs{
             listing_options = ListingOpts,
-            include_replication_status = IncludeReplicationStatus,
-            include_link_count = IncludeHardlinkCount
+            optional_attrs = OptionalAttrs
         },
         fun(#file_children_attrs{
             child_attrs = Attrs,
@@ -164,17 +180,19 @@ get_children_count(SessId, FileKey) ->
 -spec get_files_recursively(
     session:id(), 
     lfm:file_key(), 
-    recursive_file_listing:options()
+    dir_req:recursive_listing_opts(),
+    [attr_req:optional_attr()]
 ) ->
-    {ok, [recursive_file_listing:entry()], [file_meta:path()], recursive_file_listing:pagination_token()}.
-get_files_recursively(SessId, FileKey, Options) ->
+    {ok, [recursive_file_listing_node:entry()], [file_meta:path()], recursive_listing:pagination_token()}.
+get_files_recursively(SessId, FileKey, Options, OptionalAttrs) ->
     FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, resolve_symlink),
     
     remote_utils:call_fslogic(SessId, file_request, FileGuid,
         #get_recursive_file_list{
-            listing_options = Options
+            listing_options = Options,
+            optional_attrs = OptionalAttrs
         },
-        fun(#recursive_file_list{
+        fun(#recursive_listing_result{
             entries = Result,
             inaccessible_paths = InaccessiblePaths,
             pagination_token = PaginationToken

@@ -63,24 +63,14 @@ translate_value(#gri{aspect = download_url}, URL) ->
 
 translate_value(#gri{aspect = api_samples, scope = public}, ApiSamples) ->
     ApiSamples;
+translate_value(#gri{aspect = api_samples, scope = private}, ApiSamples) ->
+    ApiSamples;
 
-translate_value(#gri{aspect = dir_size_stats}, #time_series_layout_get_result{} = TSBrowseResult) ->
-    ts_browse_result:to_json(TSBrowseResult);
-translate_value(#gri{aspect = dir_size_stats}, #time_series_slice_get_result{slice = Slice}) ->
-    %% @TODO VFS-9589 - use ts_browse_result:to_json/1 after average metric aggregator is introduced
-    #{
-        <<"windows">> => tsc_structure:map(fun(_TimeSeriesName, _MetricName, Windows) ->
-            lists:map(fun({Timestamp, Value}) ->
-                #{
-                    <<"timestamp">> => Timestamp,
-                    <<"value">> => case Value of
-                        {_Count, Aggregated} -> Aggregated;
-                        Aggregated -> Aggregated
-                    end
-                }
-            end, Windows)
-        end, Slice)
-    }.
+translate_value(#gri{aspect = dir_size_stats_collection_schema}, TimeSeriesCollectionSchema) ->
+    jsonable_record:to_json(TimeSeriesCollectionSchema);
+
+translate_value(#gri{aspect = dir_size_stats_collection}, TSBrowseResult) ->
+    ts_browse_result:to_json(TSBrowseResult).
 
 
 -spec translate_resource(gri:gri(), Data :: term()) ->
@@ -89,7 +79,10 @@ translate_resource(#gri{aspect = instance, scope = Scope}, FileDetails) ->
     translate_file_details(FileDetails, Scope);
 
 translate_resource(#gri{aspect = distribution, scope = private, id = Guid}, Distribution) ->
-    file_distribution_gather_result:to_json(gs, Distribution, Guid);
+    file_distribution_translator:gather_result_to_json(gs, Distribution, Guid);
+
+translate_resource(#gri{aspect = storage_locations, scope = private}, StorageLocations) ->
+    file_distribution_translator:storage_locations_to_json(StorageLocations);
 
 translate_resource(#gri{aspect = acl, scope = private}, Acl) ->
     try
@@ -180,9 +173,9 @@ translate_file_details(#file_details{
     has_metadata = HasMetadata,
     eff_qos_membership = EffQosMembership,
     active_permissions_type = ActivePermissionsType,
-    index_startid = ListingIndex,
     eff_dataset_membership = EffDatasetMembership,
-    eff_protection_flags = EffFileProtectionFlags,
+    eff_protection_flags = EffProtectionFlags,
+    eff_dataset_protection_flags = EffDatasetProtectionFlags,
     recall_root_id = RecallRootId,
     symlink_value = SymlinkValue,
     file_attr = #file_attr{
@@ -196,7 +189,8 @@ translate_file_details(#file_details{
         shares = Shares,
         provider_id = ProviderId,
         owner_id = OwnerId,
-        nlink = NLink
+        nlink = NLink,
+        index = ListingIndex
     },
     conflicting_name = ConflictingName
 }, Scope) ->
@@ -249,9 +243,8 @@ translate_file_details(#file_details{
         {private, _} ->
             PublicFields3#{
                 <<"hardlinksCount">> => utils:undefined_to_null(NLink),
-                <<"effProtectionFlags">> => file_meta:protection_flags_to_json(
-                    EffFileProtectionFlags
-                ),
+                <<"effProtectionFlags">> => file_meta:protection_flags_to_json(EffProtectionFlags),
+                <<"effDatasetProtectionFlags">> => file_meta:protection_flags_to_json(EffDatasetProtectionFlags),
                 <<"providerId">> => ProviderId,
                 <<"ownerId">> => OwnerId,
                 <<"effQosMembership">> => translate_membership(EffQosMembership),

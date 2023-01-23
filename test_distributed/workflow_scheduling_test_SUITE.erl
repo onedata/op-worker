@@ -12,6 +12,7 @@
 -module(workflow_scheduling_test_SUITE).
 -author("Michal Wrzeszcz").
 
+-include("workflow_engine.hrl").
 -include("workflow_scheduling_test_common.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
@@ -32,6 +33,7 @@
     single_async_workflow_with_streams_execution_test/1,
     prepare_in_advance_test/1,
     heartbeat_test/1,
+    async_task_enqueuing_test/1,
     long_prepare_in_advance_test/1,
 
     fail_the_only_task_in_lane_test/1,
@@ -50,12 +52,17 @@
     fail_first_item_iteration_with_prepare_in_advance_test/1,
     fail_first_item_iteration_with_stream_test/1,
 
+    exception_during_run_task_test/1,
+    exception_during_processing_result_test/1,
+
     lane_preparation_failure_test/1,
     lane_preparation_in_advance_failure_test/1,
     fail_lane_preparation_before_prepare_in_advance_finish_test/1,
     long_lasting_lane_preparation_of_two_lanes_test/1,
     lane_execution_ended_handler_failure_test/1,
     lane_execution_ended_handler_failure_before_prepare_in_advance_finish_test/1,
+    lane_preparation_exception_test/1,
+    lane_preparation_in_advance_exception_test/1,
     
     execute_other_lane_than_the_one_prepared_in_advance_test/1,
     reuse_already_prepared_lane_test/1,
@@ -84,6 +91,7 @@ all() ->
         single_async_workflow_with_streams_execution_test,
         prepare_in_advance_test,
         heartbeat_test,
+        async_task_enqueuing_test,
         long_prepare_in_advance_test,
 
         fail_the_only_task_in_lane_test,
@@ -102,12 +110,17 @@ all() ->
         fail_first_item_iteration_with_prepare_in_advance_test,
         fail_first_item_iteration_with_stream_test,
 
+        exception_during_run_task_test,
+        exception_during_processing_result_test,
+
         lane_preparation_failure_test,
         lane_preparation_in_advance_failure_test,
         fail_lane_preparation_before_prepare_in_advance_finish_test,
         long_lasting_lane_preparation_of_two_lanes_test,
         lane_execution_ended_handler_failure_test,
         lane_execution_ended_handler_failure_before_prepare_in_advance_finish_test,
+        lane_preparation_exception_test,
+        lane_preparation_in_advance_exception_test,
 
         % TODO VFS-7784 - add test when lane is set to be prepared in advance twice
         % (callback should be called only once - test successful and failed execution)
@@ -140,7 +153,8 @@ all() ->
         workflow_scheduling_test_common:test_manager_task_failure_key() =>
             {workflow_engine:lane_id(), workflow_engine:task_id(), iterator:item()},
         workflow_scheduling_test_common:lane_history_check_key() => workflow_engine:lane_id()
-    }
+    },
+    resume_doc_present = false :: boolean()
 }).
 
 
@@ -204,6 +218,15 @@ heartbeat_test(Config) ->
     single_execution_test_base(Config, #test_config{
         task_type = async,
         test_execution_manager_options = [{delay_call, {<<"3_2_2">>, <<"100">>}}]
+    }).
+
+async_task_enqueuing_test(Config) ->
+    single_execution_test_base(Config, #test_config{
+        task_type = async,
+        % First heartbeat for task <<"3_2_2">> for item <<"100">> will appear after 8 seconds while keepalive_timeout
+        % is 5 seconds - the workflow should not fail because of set_enqueuing_timeout set to 20 seconds
+        % in init_per_testcase
+        test_execution_manager_options = [{delay_call, {<<"3_2_2">>, <<"100">>, timer:seconds(8)}}]
     }).
 
 long_prepare_in_advance_test(Config) ->
@@ -305,6 +328,15 @@ fail_first_item_iteration_with_stream_test(Config) ->
         generator_options = ?EXEMPLARY_EMPTY_STREAM
     }, <<"1">>, 1).
 
+
+%%%===================================================================
+
+exception_during_run_task_test(Config) ->
+    exception_test_base(Config, run_task_for_item).
+
+exception_during_processing_result_test(Config) ->
+    exception_test_base(Config, process_task_result_for_item).
+
 %%%===================================================================
 
 lane_preparation_failure_test(Config) ->
@@ -337,14 +369,21 @@ long_lasting_lane_preparation_of_two_lanes_test(Config) ->
 
 lane_execution_ended_handler_failure_test(Config) ->
     % TODO VFS-7784 - do not skip items check when execution_ended_handler fails
-    lane_failure_test_base(Config, #test_config{test_manager_failure_key = fail_execution_ended_handler}, stop_on_lane).
+    lane_failure_test_base(Config, #test_config{test_manager_failure_key = fail_execution_ended_handler}, fail_on_lane_finish).
 
 lane_execution_ended_handler_failure_before_prepare_in_advance_finish_test(Config) ->
+    % TODO VFS-9993 - check if this test works as expected
     lane_failure_test_base(Config, #test_config{
         prepare_in_advance = true,
         test_manager_failure_key = fail_execution_ended_handler,
         test_execution_manager_options = [{{delay_lane_preparation, <<"4">>}, true}]
     }, stop_on_lane).
+
+lane_preparation_exception_test(Config) ->
+    lane_preparation_exception_test_base(Config, <<"3">>, false).
+
+lane_preparation_in_advance_exception_test(Config) ->
+    lane_preparation_exception_test_base(Config, <<"4">>, true).
 
 %%%===================================================================
 
@@ -460,12 +499,25 @@ failure_test_base(Config, #test_config{
 
 iteration_failure_test_base(Config, #test_config{
     verify_statistics_options = VerifyStatsOptions,
-    generator_options = GeneratorOptions
+    generator_options = GeneratorOptions,
+    verify_history_options = VerifyHistoryOptions
 } = BasicConfig, LaneId, ItemNum) ->
-    single_execution_test_base(Config, BasicConfig#test_config{
+    resume_on_exception_test_base(Config, BasicConfig#test_config{
         verify_statistics_options = VerifyStatsOptions#{ignore_max_slots_check => true},
-        generator_options = GeneratorOptions#{fail_iteration => ItemNum, finish_on_lane => LaneId}
-    }).
+        generator_options = GeneratorOptions#{fail_iteration => ItemNum, finish_on_lane => LaneId},
+        verify_history_options = VerifyHistoryOptions#{expect_exception => LaneId},
+        resume_doc_present = true
+    }, LaneId).
+
+exception_test_base(Config, CallbackToThrow) ->
+    resume_on_exception_test_base(Config, #test_config{
+        task_type = async,
+        generator_options = ?EXEMPLARY_STREAMS,
+        test_execution_manager_options = [{throw_error, {CallbackToThrow, <<"3_3_2">>, <<"100">>}}],
+        verify_statistics_options = #{ignore_async_slots_check => true},
+        verify_history_options = #{expect_exception => <<"3">>},
+        resume_doc_present = true
+    }, <<"3">>).
 
 lane_failure_test_base(Config, #test_config{
     test_manager_failure_key = ManagerKey,
@@ -477,6 +529,88 @@ lane_failure_test_base(Config, #test_config{
         verify_history_options = #{VerifyOptionKey => LaneId}
     }).
 
+lane_preparation_exception_test_base(Config, LineToThrow, PrepareInAdvance) ->
+    resume_on_exception_test_base(Config, #test_config{
+        task_type = async,
+        prepare_in_advance = PrepareInAdvance,
+        generator_options = ?EXEMPLARY_STREAMS,
+        test_execution_manager_options = [{throw_error, LineToThrow}],
+        verify_statistics_options = #{ignore_async_slots_check => true},
+        verify_history_options = #{expect_exception => <<"3">>},
+        resume_doc_present = true
+    }, <<"3">>).
+
+resume_on_exception_test_base(Config, TestConfig, LaneId) ->
+    ct:print("Test resume from iterator"),
+    resume_on_exception_test_base(Config, TestConfig, LaneId, from_iterator),
+    ct:print("Test resume from dump"),
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    ?assertEqual(ok, rpc:call(Worker, op_worker, unset_env, [ignore_workflow_test_iterator_fail_config])),
+    resume_on_exception_test_base(Config, TestConfig, LaneId, from_dump).
+
+resume_on_exception_test_base(Config, #test_config{
+    task_type = TaskType,
+    prepare_in_advance = PrepareInAdvance,
+    generator_options = GeneratorOptions,
+    test_execution_manager_options = TestExecutionManagerOptions
+} = TestConfig, LaneId, ResumeType) ->
+    InitialKeys = workflow_scheduling_test_common:get_all_workflow_related_datastore_keys(Config),
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    {SnapshotMode, DataPersistence} = case ResumeType of
+        from_dump -> {?ALL_ITEMS, save_progress};
+        from_iterator -> {?UNTIL_FIRST_FAILURE, save_iterator}
+    end,
+    {#{id := ExecutionId}, ExecutionHistory} = single_execution_test_base(Config,
+        TestConfig#test_config{generator_options = GeneratorOptions#{
+            progress_data_persistence => DataPersistence, snapshot_mode => SnapshotMode
+        }
+    }),
+    ?assertNot(workflow_scheduling_test_common:has_any_finish_callback_for_lane(ExecutionHistory, LaneId)),
+    ?assert(workflow_scheduling_test_common:has_exception_callback(ExecutionHistory)),
+
+    GetDumpAns = rpc:call(Worker, workflow_execution_state_dump, get, [ExecutionId]),
+    % TODO VFS-7784 - common resume test utils for resume testing to be used here and by cancel_and_resume_test_base
+    ResumeGeneratorOptions = maps:without([fail_iteration, finish_on_lane], GeneratorOptions#{first_lane_id => LaneId}),
+    ResumeWorkflowExecutionSpec = workflow_scheduling_test_common:gen_workflow_execution_spec(
+        TaskType, PrepareInAdvance, ResumeGeneratorOptions, ExecutionId),
+    ?assertEqual(ok, rpc:call(Worker, op_worker, set_env, [ignore_workflow_test_iterator_fail_config, true])),
+    ?assertEqual(ok, rpc:call(Worker, workflow_engine, execute_workflow,
+        [workflow_scheduling_test_common:get_engine_id(), ResumeWorkflowExecutionSpec])),
+    ct:print("Workflow resumed"),
+
+    #{execution_history := ExecutionHistoryAfterResume} = ExtendedHistoryStatsAfterResume =
+        workflow_scheduling_test_common:get_task_execution_history(Config),
+    workflow_scheduling_test_common:verify_execution_history_stats(ExtendedHistoryStatsAfterResume, TaskType),
+    workflow_scheduling_test_common:verify_execution_history(
+        ResumeWorkflowExecutionSpec, ExecutionHistoryAfterResume, #{resume_lane => LaneId}),
+    workflow_scheduling_test_common:verify_memory(Config, InitialKeys),
+
+    case ResumeType of
+        from_dump ->
+            ct:print("Verifying combined history"),
+            FilteredExecutionHistory = workflow_scheduling_test_common:filter_finish_and_exception_handlers(
+                ExecutionHistory, LaneId),
+            FilteredExecutionHistory2 = workflow_scheduling_test_common:filter_prepare_in_adnave_handler(
+                FilteredExecutionHistory, LaneId, PrepareInAdvance),
+            FilteredExecutionHistoryAfterResume = workflow_scheduling_test_common:check_prepare_lane_in_head_and_filter(
+                ExecutionHistoryAfterResume, LaneId),
+            FinalVerifyOptions = case {TestExecutionManagerOptions, TaskType} of
+                [{throw_error, {run_task_for_item, TId, Item}}] -> GeneratorOptions#{fail_and_resume_job => {LaneId, TId, Item}};
+                _ -> GeneratorOptions#{}
+            end,
+            MergedExecutionHistory  = workflow_scheduling_test_common:filter_repeated_stream_callbacks(
+                FilteredExecutionHistory2 ++ FilteredExecutionHistoryAfterResume, LaneId, GeneratorOptions),
+            MergedAndFilteredExecutionHistory = workflow_scheduling_test_common:verify_and_filter_duplicated_calls(
+                MergedExecutionHistory, GetDumpAns, LaneId, TestExecutionManagerOptions),
+            VerifyGeneratorOptions = maps:without([fail_iteration, finish_on_lane], GeneratorOptions),
+            VerifyWorkflowExecutionSpec = workflow_scheduling_test_common:gen_workflow_execution_spec(
+                TaskType, PrepareInAdvance, VerifyGeneratorOptions, ExecutionId),
+            workflow_scheduling_test_common:verify_execution_history(
+                VerifyWorkflowExecutionSpec, MergedAndFilteredExecutionHistory, FinalVerifyOptions);
+        from_iterator ->
+            ok
+    end.
+
 execute_other_lane_than_the_one_prepared_in_advance_test_base(Config, BasicConfig) ->
     single_execution_test_base(Config, BasicConfig#test_config{prepare_in_advance = true}).
 
@@ -486,7 +620,8 @@ single_execution_test_base(Config, #test_config{
     test_execution_manager_options = ManagerOptions,
     generator_options = GeneratorOptions,
     verify_statistics_options = VerifyStatsOptions,
-    verify_history_options = VerifyHistoryOptions
+    verify_history_options = VerifyHistoryOptions,
+    resume_doc_present = ResumeDocPresent
 }) ->
     workflow_scheduling_test_common:set_test_execution_manager_options(Config, ManagerOptions),
     InitialKeys = workflow_scheduling_test_common:get_all_workflow_related_datastore_keys(Config),
@@ -504,7 +639,8 @@ single_execution_test_base(Config, #test_config{
     workflow_scheduling_test_common:verify_execution_history(
         WorkflowExecutionSpec, ExecutionHistory, VerifyHistoryOptions),
 
-    workflow_scheduling_test_common:verify_memory(Config, InitialKeys).
+    workflow_scheduling_test_common:verify_memory(Config, InitialKeys, ResumeDocPresent),
+    {WorkflowExecutionSpec, ExecutionHistory}.
 
 
 %%%===================================================================
@@ -521,4 +657,6 @@ init_per_testcase(Case, Config) ->
     workflow_scheduling_test_common:init_per_testcase(Case, Config).
 
 end_per_testcase(Case, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    ?assertEqual(ok, rpc:call(Worker, op_worker, unset_env, [ignore_workflow_test_iterator_fail_config])),
     workflow_scheduling_test_common:end_per_testcase(Case, Config).

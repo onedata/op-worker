@@ -428,7 +428,7 @@ get_user_root_dir_children_test(_Config) ->
         )}
     end,
     GetAllSpacesInfoFun = fun(Node) ->
-        [GetSpaceInfoFun(space_krk, Node), GetSpaceInfoFun(space_krk_par, Node)]
+        [GetSpaceInfoFun(space_krk, Node), GetSpaceInfoFun(space_krk_par, Node), GetSpaceInfoFun(space_s3, Node)]
     end,
 
     ?assert(onenv_api_test_runner:run_tests([
@@ -484,8 +484,10 @@ get_space_dir_details(Node, SpaceDirGuid, SpaceName, ParentGuid) ->
         {ok, _}, file_test_utils:get_attrs(Node, SpaceDirGuid), ?ATTEMPTS
     ),
     #file_details{
-        file_attr = SpaceAttrs#file_attr{name = SpaceName, parent_guid = ParentGuid},
-        index_startid = file_id:guid_to_space_id(SpaceDirGuid),
+        file_attr = SpaceAttrs#file_attr{
+            name = SpaceName, parent_guid = ParentGuid, 
+            index = file_listing:build_index(file_id:guid_to_space_id(SpaceDirGuid))
+        },
         active_permissions_type = posix,
         eff_protection_flags = ?no_flags_mask,
         eff_qos_membership = ?NONE_MEMBERSHIP,
@@ -559,15 +561,15 @@ get_children_data_spec(gs, _Scope) ->
     };
 get_children_data_spec(rest, Scope) ->
     {AllowedAttrs, ScopeAttrsToCheck} = case Scope of
-        public -> {?PUBLIC_BASIC_ATTRIBUTES, []};
-        private -> {?PRIVATE_BASIC_ATTRIBUTES, [<<"hardlinks_count">>]}
+        public -> {?PUBLIC_BASIC_ATTRIBUTES ++ [<<"xattr.*">>], []};
+        private -> {?PRIVATE_BASIC_ATTRIBUTES ++ [<<"xattr.*">>], [<<"hardlinks_count">>]}
     end,
     #data_spec{
         optional = [<<"limit">>, <<"attribute">>],
         correct_values = #{
             <<"limit">> => [1, 100],
             <<"attribute">> => [
-                lists_utils:random_sublist(AllowedAttrs), 
+                lists_utils:random_sublist(AllowedAttrs -- [<<"xattr.*">>]),
                 [<<"shares">>, <<"mode">>, <<"parent_id">>],
                 [<<"file_id">>, <<"name">>],
                 <<"ctime">>
@@ -579,7 +581,7 @@ get_children_data_spec(rest, Scope) ->
             {<<"limit">>, 0, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 1000)},
             {<<"limit">>, 1001, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 1000)},
             {<<"attribute">>, <<"abc">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, AllowedAttrs)},
-            {<<"attribute">>, [<<"name">>, 8], ?ERROR_BAD_VALUE_LIST_NOT_ALLOWED(<<"attribute">>, AllowedAttrs)}
+            {<<"attribute">>, [<<"name">>, 8], ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, AllowedAttrs)}
         ]
     }.
 

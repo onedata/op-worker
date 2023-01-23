@@ -17,6 +17,14 @@
 -include("proto/oneprovider/provider_messages.hrl").
 
 -export([
+    set_custom_metadata/6,
+    get_custom_metadata/6,
+    remove_custom_metadata/4,
+    
+    gather_historical_dir_size_stats/4,
+    get_storage_locations/3
+]).
+-export([
     get_distribution_deprecated/3
 ]).
 
@@ -36,6 +44,58 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+-spec set_custom_metadata(
+    oct_background:node_selector(),
+    session:id(),
+    lfm:file_key(),
+    custom_metadata:type(),
+    custom_metadata:value(),
+    custom_metadata:query()
+) ->
+    ok | no_return().
+set_custom_metadata(NodeSelector, SessionId, FileKey, Type, Value, Query) ->
+    ?CALL(NodeSelector, [SessionId, FileKey, Type, Value, Query]).
+
+
+-spec get_custom_metadata(
+    oct_background:node_selector(),
+    session:id(),
+    lfm:file_key(),
+    custom_metadata:type(),
+    custom_metadata:query(),
+    boolean()
+) ->
+    custom_metadata:value() | no_return().
+get_custom_metadata(NodeSelector, SessionId, FileKey, Type, Query, Inherited) ->
+    ?CALL(NodeSelector, [SessionId, FileKey, Type, Query, Inherited]).
+
+
+-spec remove_custom_metadata(
+    oct_background:node_selector(),
+    session:id(),
+    lfm:file_key(),
+    custom_metadata:type()
+) ->
+    ok | no_return().
+remove_custom_metadata(NodeSelector, SessionId, FileKey, Type) ->
+    ?CALL(NodeSelector, [SessionId, FileKey, Type]).
+
+
+-spec gather_historical_dir_size_stats(
+    oct_background:node_selector(), session:id(), lfm:file_key(), ts_browse_request:record()
+) ->
+    ts_browse_result:record() | no_return().
+gather_historical_dir_size_stats(NodeSelector, SessionId, FileKey, Request) ->
+    ?CALL(NodeSelector, [SessionId, FileKey, Request]).
+
+
+-spec get_storage_locations(oct_background:node_selector(), session:id(), lfm:file_key()) ->
+    file_distribution:storage_locations() | no_return().
+get_storage_locations(NodeSelector, SessionId, FileKey) ->
+    ?CALL(NodeSelector, [SessionId, FileKey]).
+
 
 -spec get_distribution_deprecated(oct_background:node_selector(), session:id(), lfm:file_ref()) -> 
     json_utils:json_term().
@@ -67,7 +127,7 @@ get_local_knowledge_of_remote_provider_blocks(NodeSelector, FileGuid, RemoteProv
         {error, _} = Error ->
             Error
     end.
-    
+
 
 %%%===================================================================
 %%% Internal functions

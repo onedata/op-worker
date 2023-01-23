@@ -265,42 +265,44 @@ qos_audit_log_base_test(ExpectedStatus, Type) ->
     FilePath = filename:join([?SPACE_PATH1, generator:gen_name()]),
     {RootGuid, FileIds} = prepare_audit_log_test_env(Type, Node, ?SESS_ID(ProviderId), FilePath),
     {ok, QosEntryId} = opt_qos:add_qos_entry(Node, ?SESS_ID(ProviderId), ?FILE_REF(RootGuid), <<"providerId=", ProviderId/binary>>, 1),
-    BaseExpected = case ExpectedStatus of
+    {BaseExpectedContent, ExpectedSeverity} = case ExpectedStatus of
         <<"completed">> ->
-            #{
-                <<"severity">> => <<"info">>,
-                <<"description">> => <<"Local replica reconciled.">>
-            };
+            {#{<<"description">> => <<"Local replica reconciled.">>}, <<"info">>};
         <<"failed">> ->
-            #{
-                <<"severity">> => <<"error">>,
-                % error mocked in init_per_testcase
-                <<"reason">> => #{
-                    <<"description">> => <<"Operation failed with POSIX error: enoent.">>,
-                    <<"details">> => #{<<"errno">> => <<"enoent">>},
-                    <<"id">> => <<"posix">>
+            {
+                #{
+                    % error mocked in init_per_testcase
+                    <<"reason">> => #{
+                        <<"description">> => <<"Operation failed with POSIX error: enoent.">>,
+                        <<"details">> => #{<<"errno">> => <<"enoent">>},
+                        <<"id">> => <<"posix">>
+                    },
+                    <<"description">> => <<"Failed to reconcile local replica: Operation failed with POSIX error: enoent.">>
                 },
-                <<"description">> => <<"Failed to reconcile local replica: Operation failed with POSIX error: enoent.">>
+                <<"error">>
             }
     end,
     SortFun = fun(#{<<"content">> := #{<<"fileId">> := FileIdA}}, #{<<"content">> := #{<<"fileId">> := FileIdB}}) ->
         FileIdA =< FileIdB
     end,
-    Expected = lists:sort(SortFun, lists:flatmap(fun(ObjectId) ->
+    Expected = lists:sort(SortFun, lists:flatmap(fun({ObjectId, Path}) ->
         [
             #{
                 <<"timestamp">> => Timestamp,
+                <<"severity">> => <<"info">>,
                 <<"content">> => #{
-                    <<"severity">> => <<"info">>,
                     <<"status">> => <<"scheduled">>,
                     <<"fileId">> => ObjectId,
+                    <<"path">> => Path,
                     <<"description">> => <<"Remote replica differs, reconciliation started.">>
                 }
             },
             #{
                 <<"timestamp">> => Timestamp,
-                <<"content">> => BaseExpected#{
+                <<"severity">> => ExpectedSeverity,
+                <<"content">> => BaseExpectedContent#{
                     <<"fileId">> => ObjectId,
+                    <<"path">> => Path,
                     <<"status">> => ExpectedStatus
                 }
             }
@@ -323,17 +325,17 @@ qos_audit_log_base_test(ExpectedStatus, Type) ->
 prepare_audit_log_test_env(single_file, Node, SessId, RootFilePath) ->
     {ok, Guid} = lfm_test_utils:create_file(<<"file">>, Node, SessId, RootFilePath),
     {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-    {Guid, [ObjectId]};
+    {Guid, [{ObjectId, RootFilePath}]};
 prepare_audit_log_test_env(effective, Node, SessId, RootFilePath) ->
     {ok, DirGuid} = lfm_test_utils:create_file(<<"dir">>, Node, SessId, RootFilePath),
     ChildrenNum = rand:uniform(50),
-    ChildrenIds = lists_utils:pmap(fun(Num) ->
+    ChildrenIdsAndPaths = lists_utils:pmap(fun(Num) ->
         FilePath = filename:join(RootFilePath, integer_to_binary(Num)),
         {ok, Guid} = lfm_test_utils:create_file(<<"file">>, Node, SessId, FilePath),
         {ok, ObjectId} = file_id:guid_to_objectid(Guid),
-        ObjectId
+        {ObjectId, FilePath}
     end, lists:seq(1, ChildrenNum)),
-    {DirGuid, ChildrenIds}.
+    {DirGuid, ChildrenIdsAndPaths}.
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -375,7 +377,7 @@ audit_log_tests_init_per_testcase(Config, ExpectedSynchronizer) ->
     qos_tests_utils:mock_replica_synchronizer(Nodes, ExpectedSynchronizer),
     % mock retry failed files, so there is only one failed entry in audit log
     qos_tests_utils:mock_replica_synchronizer(Nodes, ?ERROR_POSIX(?ENOENT)),
-    test_utils:mock_expect(Nodes, qos_hooks, retry_failed_files, fun(_SpaceId) -> ok end).
+    test_utils:mock_expect(Nodes, qos_logic, retry_failed_files, fun(_SpaceId) -> ok end).
 
 
 end_per_testcase(_, Config) ->

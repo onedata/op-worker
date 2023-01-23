@@ -18,11 +18,11 @@
 -include("proto/oneclient/fuse_messages.hrl").
 
 -export([
-    gather_attributes/4
+    gather_attributes/3
 ]).
 
 -type gather_attributes_fun(Entry, Attributes) :: 
-    fun((user_ctx:ctx(), Entry, attr_req:compute_file_attr_opts()) -> Attributes).
+    fun((Entry, attr_req:compute_file_attr_opts()) -> Attributes).
 
 -export_type([gather_attributes_fun/2]).
 
@@ -42,31 +42,35 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec gather_attributes(
-    user_ctx:ctx(),
     gather_attributes_fun(Entry, Attributes),
     [Entry],
     attr_req:compute_file_attr_opts()
 ) ->
     [Attributes].
-gather_attributes(UserCtx, GatherAttributesFun, Entries, BaseOpts) ->
+gather_attributes(GatherAttributesFun, Entries, BaseOpts) ->
     EntriesNum = length(Entries),
     EnumeratedChildren = lists_utils:enumerate(Entries),
     FilterMapFun = fun({Num, Entry}) ->
         try
             Result = case Num == 1 orelse Num == EntriesNum of
                 true ->
-                    GatherAttributesFun(UserCtx, Entry, BaseOpts#{
+                    GatherAttributesFun(Entry, BaseOpts#{
                         name_conflicts_resolution_policy => resolve_name_conflicts
                     });
                 false ->
-                    GatherAttributesFun(UserCtx, Entry, BaseOpts#{
+                    GatherAttributesFun(Entry, BaseOpts#{
                         name_conflicts_resolution_policy => allow_name_conflicts
                     })
             end,
             {true, Result}
-        catch _:_ ->
-            % Entry metadata can be not fully synchronized with other provider
-            false
+        catch Class:Reason ->
+            case datastore_runner:normalize_error(Reason) of
+                not_found ->
+                    % Entry metadata can be not fully synchronized with other provider
+                    false;
+                _ ->
+                    erlang:apply(erlang, Class, [Reason])
+            end
         end
     end,
     lists_utils:pfiltermap(FilterMapFun, EnumeratedChildren, ?MAX_MAP_CHILDREN_PROCESSES).

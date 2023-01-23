@@ -85,6 +85,7 @@
     readdir_plus_should_work_with_size_greater_than_dir_size/1,
     readdir_should_work_with_token/3,
     readdir_should_work_with_startid/1,
+    readdir_plus_should_read_xattrs/1,
     get_children_details_should_return_empty_result_for_empty_dir/1,
     get_children_details_should_return_empty_result_zero_size/1,
     get_children_details_should_work_with_zero_offset/1,
@@ -94,6 +95,8 @@
     get_recursive_file_list/1,
     get_recursive_file_list_prefix_test_base/1,
     get_recursive_file_list_inaccessible_paths_test_base/1,
+    get_recursive_file_list_should_read_xattrs/1,
+    get_recursive_file_list_internal_multibatch/1,
     lfm_recreate_handle/3,
     lfm_open_failure/1,
     lfm_create_and_open_failure/1,
@@ -104,7 +107,8 @@
     lfm_open_and_create_open_failure/1,
     lfm_mv_failure_multiple_users/1,
     sparse_files_should_be_created/2,
-    lfm_close_deleted_open_files/1
+    lfm_close_deleted_open_files/1,
+    lfm_create_dir_at_path/1
 ]).
 
 -export([
@@ -492,6 +496,15 @@ readdir_should_work_with_startid(Config) ->
     StartId7 = verify_with_startid(Config, MainDirPath, Files, 3, 4, -2, 4, StartId5),
     verify_with_startid(Config, MainDirPath, Files, 0, 6, -10, 6, StartId7).
 
+readdir_plus_should_read_xattrs(Config) ->
+    ReadFun = fun(Worker, SessId1, MainDirPath, Xattrs) ->
+        ListingOpts = #{offset => 0, limit => 10, tune_for_large_continuous_listing => false},
+        Ans = lfm_proxy:get_children_attrs(Worker, SessId1, {path, MainDirPath}, ListingOpts, [{xattrs, Xattrs}]),
+        {ok, List, _} = ?assertMatch({ok, _, _}, Ans),
+        List
+    end,
+    readdir_plus_read_xattrs_base(Config, ReadFun).
+
 get_children_details_should_return_empty_result_for_empty_dir(Config) ->
     {MainDirPath, Files} = generate_dir(Config, 0),
     verify_details(Config, MainDirPath, Files, 0, 0, 10).
@@ -676,9 +689,40 @@ get_recursive_file_list_inaccessible_paths_test_base(Config) ->
         get_files_recursively(Worker, SessId2, ?FILE_REF(MainDirGuid), #{limit => length(AllFiles) + 1})),
     ?assertMatch({ok, AllFiles, [], _},
         get_files_recursively(Worker, SessId2, ?FILE_REF(MainDirGuid), #{start_after_path => EaccesDirName, limit => length(AllFiles)})),
-    ?assertMatch({ok, [], [<<".">>], _},
+    ?assertMatch({error, ?EACCES},
         get_files_recursively(Worker, SessId2, ?FILE_REF(EaccesDirGuid), #{limit => length(AllFiles)})).
+
+
+get_recursive_file_list_should_read_xattrs(Config) ->
+    ReadFun = fun(Worker, SessId1, MainDirPath, Xattrs) ->
+        ListingOpts = #{offset => 0, limit => 10, tune_for_large_continuous_listing => false},
+        Ans = lfm_proxy:get_files_recursively(Worker, SessId1, {path, MainDirPath}, ListingOpts, [{xattrs, Xattrs}]),
+        {ok, List, _, _} = ?assertMatch({ok, _, _, _}, Ans),
+        lists:map(fun({_Path, Attrs}) -> Attrs end, List)
+    end,
+    readdir_plus_read_xattrs_base(Config, ReadFun).
+
+
+get_recursive_file_list_internal_multibatch(Config) ->
+    % internal children batch limit is set to 1000 (see recursive_listing ?LIST_RECURSIVE_BATCH_SIZE), so this test
+    % checks listing with limit larger than this value
+    [Worker | _] = ?config(op_worker_nodes, Config),
     
+    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config),
+    lfm_ct:set_default_context(Worker, SessId1),
+    
+    MainDirName = generator:gen_name(),
+    MainDirPath = <<"/space_name1/", MainDirName/binary, "/">>,
+    MainDirGuid = lfm_ct:mkdir(MainDirPath),
+    GuidsAndPaths = lists:map(fun(Num) ->
+        Path = <<MainDirPath/binary, (integer_to_binary(Num))/binary>>,
+        {lfm_ct:create(Path), integer_to_binary(Num)}
+    end, lists:seq(1, 1500)),
+    ExpectedResult = lists:sort(fun({_Guid1, Path1}, {_Guid2, Path2}) -> Path1 =< Path2 end, GuidsAndPaths),
+    
+    ?assertMatch({ok, ExpectedResult, _, _},
+        get_files_recursively(Worker, SessId1, ?FILE_REF(MainDirGuid), #{limit => 1500})).
+
 
 echo_loop(Config) ->
     ?PERFORMANCE(Config, [
@@ -1309,16 +1353,14 @@ lfm_get_details(Config) ->
 
     Index1 = file_listing:build_index(<<"space_id2">>),
     ?assertMatch({ok, #file_details{
-        file_attr = #file_attr{name = <<"space_name2">>, size = undefined},
-        index_startid = Index1,
+        file_attr = #file_attr{name = <<"space_name2">>, size = undefined, index = Index1},
         active_permissions_type = posix,
         has_metadata = false
     }}, lfm_proxy:get_details(W, SessId1, {path, <<"/space_name2">>})),
 
     Index2 = file_listing:build_index(<<"test5">>, ?GET_DOMAIN_BIN(W)),
     ?assertMatch({ok, #file_details{
-        file_attr = #file_attr{name = <<"test5">>, size = 0},
-        index_startid = Index2,
+        file_attr = #file_attr{name = <<"test5">>, size = 0, index = Index2},
         active_permissions_type = posix,
         has_metadata = false
     }}, lfm_proxy:get_details(W, SessId1, {path, <<"/space_name2/test5">>})),
@@ -2332,6 +2374,17 @@ lfm_close_deleted_open_files(Config) ->
     ok = ?assertEqual(ok, lfm_proxy:close(W, Handle2)).
 
 
+lfm_create_dir_at_path(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
+    
+    ParentGuid = opw_test_rpc:call(W, fslogic_file_id, spaceid_to_space_dir_guid, [<<"space_id1">>]),
+    Path = filename:join(lists:duplicate(8, generator:gen_name())),
+    
+    {ok, #file_attr{guid = Guid}} = ?assertMatch({ok, _}, lfm_proxy:create_dir_at_path(W, SessId1, ParentGuid, Path)),
+    ?assertMatch({ok, #file_attr{guid = Guid}}, lfm_proxy:create_dir_at_path(W, SessId1, ParentGuid, Path)).
+
+
 %%%====================================================================
 %%% Helper funtions
 %%%====================================================================
@@ -2583,7 +2636,7 @@ verify_details(Config, MainDirPath, Files, FilesOffset, ExpectedSize, Offset, Li
     case List of
         [_ | _] ->
             LastFile = lists:last(List),
-            LastFile#file_details.index_startid;
+            LastFile#file_details.file_attr#file_attr.index;
         _ ->
             undefined
     end.
@@ -2601,12 +2654,32 @@ produce_truncate_event(Worker, SessId, FileKey, Size) ->
     ok = rpc:call(Worker, lfm_event_emitter, emit_file_truncated, [FileGuid, Size, SessId]).
 
 get_files_recursively(Worker, SessId, FileRef, Options) ->
-    case lfm_proxy:get_files_recursively(Worker, SessId, FileRef, Options) of
+    case lfm_proxy:get_files_recursively(Worker, SessId, FileRef, Options, [size]) of
         {ok, Res, IP, Token} ->
             {ok, lists:map(fun({Path, #file_attr{guid = Guid}}) -> {Guid, Path} end, Res), IP, Token};
         Other ->
             Other
     end.
+
+readdir_plus_read_xattrs_base(Config, ReadFun) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    {MainDirPath, Files} = generate_dir(Config, 5),
+    
+    {SessId1, _UserId1} =
+        {?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker)}}, Config), ?config({user_id, <<"user1">>}, Config)},
+    
+    lists:foreach(fun(File) ->
+        lfm_proxy:set_xattr(Worker, SessId1, {path, filename:join([MainDirPath, File])}, #xattr{
+            name = <<"name">>,
+            value = File
+        })
+    end, Files),
+    
+    lists:foreach(fun({F1, F2}) ->
+        Xattrs = F1#file_attr.xattrs,
+        ?assertEqual(F2, maps:get(<<"name">>, Xattrs, undefined)),
+        ?assertEqual(undefined, maps:get(<<"undefined">>, Xattrs, defined))
+    end, lists:zip(ReadFun(Worker, SessId1, MainDirPath, [<<"name">>, <<"undefined">>]), Files)).
 
 
 %%%===================================================================

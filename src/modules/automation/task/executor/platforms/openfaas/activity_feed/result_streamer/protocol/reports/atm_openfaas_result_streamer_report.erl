@@ -30,14 +30,12 @@
 -type id() :: binary().
 -type body() :: atm_openfaas_result_streamer_registration_report:record()
 | atm_openfaas_result_streamer_chunk_report:record()
-| atm_openfaas_result_streamer_invalid_data_report:record()
 | atm_openfaas_result_streamer_deregistration_report:record().
 
 -export_type([record/0, id/0, body/0]).
 
 -type type() :: atm_openfaas_result_streamer_registration_report
 | atm_openfaas_result_streamer_chunk_report
-| atm_openfaas_result_streamer_invalid_data_report
 | atm_openfaas_result_streamer_deregistration_report.
 
 
@@ -74,7 +72,6 @@ from_json(RecordJson) ->
 -spec type_to_json(type()) -> json_utils:json_term().
 type_to_json(atm_openfaas_result_streamer_registration_report) -> <<"registration">>;
 type_to_json(atm_openfaas_result_streamer_chunk_report) -> <<"chunk">>;
-type_to_json(atm_openfaas_result_streamer_invalid_data_report) -> <<"invalidData">>;
 type_to_json(atm_openfaas_result_streamer_deregistration_report) -> <<"deregistration">>.
 
 
@@ -82,5 +79,4 @@ type_to_json(atm_openfaas_result_streamer_deregistration_report) -> <<"deregistr
 -spec type_from_json(json_utils:json_term()) -> type().
 type_from_json(<<"registration">>) -> atm_openfaas_result_streamer_registration_report;
 type_from_json(<<"chunk">>) -> atm_openfaas_result_streamer_chunk_report;
-type_from_json(<<"invalidData">>) -> atm_openfaas_result_streamer_invalid_data_report;
 type_from_json(<<"deregistration">>) -> atm_openfaas_result_streamer_deregistration_report.

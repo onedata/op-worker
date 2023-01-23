@@ -17,6 +17,7 @@
 -include("modules/storage/luma/luma.hrl").
 -include("modules/fslogic/file_attr.hrl").
 -include("workflow_engine.hrl").
+-include_lib("ctool/include/space_support/support_parameters.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_models.hrl").
 
 -type file_descriptors() :: #{session:id() => non_neg_integer()}.
@@ -126,6 +127,8 @@
     shares = [] :: [od_share:id()],
 
     harvesters = [] :: [od_harvester:id()],
+
+    support_parameters_registry = #support_parameters_registry{} :: support_parameters_registry:record(),
 
     cache_state = #{} :: cache_state()
 }).
@@ -432,14 +435,13 @@
 % Model used for storing information concerning archive.
 % One documents is stored for one archive.
 -record(archive, {
+    archiving_provider :: oneprovider:id(),
     dataset_id :: dataset:id(),
     creation_time :: time:seconds(),
     creator :: archive:creator(),
     state :: archive:state(),
     config :: archive:config(),
-    preserved_callback :: archive:callback(),
-    deleted_callback :: archive:callback(),
-    description :: archive:description(),
+    modifiable_fields :: archive:modifiable_fields(),
     % This directory is root for archive.
     % It has predefined uuid=?ARCHIVE_DIR_UUID(ArchiveId)
     % See archivisation_tree.erl for more info.
@@ -768,7 +770,8 @@
 
 %% Model that holds synchronization state for a space
 -record(dbsync_state, {
-    seq = #{} :: #{od_provider:id() => {couchbase_changes:seq(), datastore_doc:timestamp()}}
+    seq = #{} :: #{od_provider:id() => {couchbase_changes:seq(), datastore_doc:timestamp()}},
+    synchronization_params = #{} :: dbsync_state:synchronization_params_map()
 }).
 
 %% Model that holds state entries for DBSync worker
@@ -889,6 +892,10 @@
     % pid of replication or replica_eviction controller, as both cannot execute
     % simultaneously for given TransferId
     pid :: undefined | binary(), %todo VFS-3657
+
+    % flags used for transfer management
+    replication_traverse_finished = false :: boolean(),
+    eviction_traverse_finished = false :: boolean(),
 
     % counters used for transfer management
     % if file is migrated (replicated and invalidated)
@@ -1046,12 +1053,14 @@
     all_batches_listed = false :: boolean(),
     % Uuid of file that should be processed after current file's subtree is processed.
     % If undefined then current file's parent will be used.
-    next_subtree_root = undefined :: undefined | file_meta:uuid()
+    next_subtree_root = undefined :: undefined | file_meta:uuid(),
+    processing_start_timestamp :: time:millis()
 }).
 
--record(dir_update_time_stats, {
-    time = 0 :: times:time(),
-    incarnation = 0 :: non_neg_integer()
+
+-record(dir_stats_collector_metadata, {
+    parent :: file_id:file_guid() | undefined,
+    dir_update_time_stats :: dir_update_time_stats:stats() | undefined
 }).
 
 
@@ -1067,12 +1076,6 @@
 
     % timestamps of status changes that allow verification when historic statistics were trustworthy
     status_change_timestamps = [] :: [dir_stats_service_state:status_change_timestamp()]
-}).
-
-
--record(space_support_state, {
-    accounting_enabled :: boolean(),
-    dir_stats_service_state :: dir_stats_service_state:record()
 }).
 
 
@@ -1125,8 +1128,11 @@
     % when updating doc). It is necessary due to limitation of datastore as
     % otherwise getting document before update would be needed (to compare 2 docs).
     status_changed = false :: boolean(),
-    % Flag used to differentiate reasons why task is aborting
-    aborting_reason = undefined :: undefined | atm_task_execution:aborting_reason(),
+    % Flag used to differentiate reasons why task is stopping
+    stopping_reason = undefined :: undefined | atm_task_execution:stopping_reason(),
+    % Recorded incarnation when last stopping (pause, cancel, interrupt, etc.) has occurred.
+    % It is used to resolve races possible when resuming and immediately stopping execution.
+    stopping_incarnation = 0 :: atm_workflow_execution:incarnation(),
 
     items_in_processing = 0 :: non_neg_integer(),
     items_processed = 0 :: non_neg_integer(),
@@ -1151,6 +1157,8 @@
 }).
 
 -record(atm_workflow_execution, {
+    discarded = false :: boolean(),
+
     user_id :: od_user:id(),
     space_id :: od_space:id(),
     atm_inventory_id :: od_atm_inventory:id(),
@@ -1182,17 +1190,8 @@
 
     schedule_time = 0 :: atm_workflow_execution:timestamp(),
     start_time = 0 :: atm_workflow_execution:timestamp(),
+    suspend_time = 0 :: atm_workflow_execution:timestamp(),
     finish_time = 0 :: atm_workflow_execution:timestamp()
-}).
-
-%% Model for storing persistent state of a single tree forest iteration.
--record(atm_tree_forest_iterator_queue, {
-    values = #{} :: atm_tree_forest_iterator_queue:values(),
-    last_pushed_value_index = 0 :: atm_tree_forest_iterator_queue:index(),
-    highest_peeked_value_index = 0 :: atm_tree_forest_iterator_queue:index(),
-    discriminator = {0, <<>>} :: atm_tree_forest_iterator_queue:discriminator(),
-    last_pruned_node_num = 0 :: atm_tree_forest_iterator_queue:node_num(),
-    max_values_per_node :: pos_integer() | undefined
 }).
 
 % Record holding the registry of pod status changes for an OpenFaaS function
@@ -1203,6 +1202,10 @@
     }
 }).
 %% @formatter:on
+
+-record(atm_openfaas_status_cache, {
+    status :: atm_openfaas_monitor:status()
+}).
 
 %%%===================================================================
 %%% Workflow engine connected models
@@ -1222,9 +1225,9 @@
 }).
 
 -record(workflow_iterator_snapshot, {
-    iterator :: iterator:iterator(),
+    iterator :: iterator:iterator() | undefined,
     lane_index :: workflow_execution_state:index(),
-    lane_id :: workflow_engine:lane_id(),
+    lane_id :: workflow_engine:lane_id() | undefined,
     next_lane_id :: workflow_engine:lane_id() | undefined,
     item_index :: workflow_execution_state:index()
 }).
@@ -1239,17 +1242,18 @@
     engine_id :: workflow_engine:id(),
     handler :: workflow_handler:handler(),
     initial_context :: workflow_engine:execution_context(),
+    incarnation_tag :: workflow_execution_state:incarnation_tag(),
+    snapshot_mode = ?ALL_ITEMS :: workflow_execution_state:snapshot_mode(),
 
     execution_status = ?NOT_PREPARED :: workflow_execution_state:execution_status(),
     current_lane :: workflow_execution_state:current_lane(),
 
     % engine can prepare next lane in advance but it is not being executed until current lane is finished
-    % and workflow_handler:handle_lane_execution_ended/3 (called for current lane) confirms that next lane
+    % and workflow_handler:handle_lane_execution_stopped/3 (called for current lane) confirms that next lane
     % execution should start
     next_lane_preparation_status = ?NOT_PREPARED :: workflow_execution_state:next_lane_preparation_status(),
     next_lane :: workflow_execution_state:next_lane(),
 
-    lowest_failed_job_identifier :: workflow_jobs:job_identifier() | undefined,
     failed_job_count = 0 :: non_neg_integer(),
 
     iteration_state :: workflow_iteration_state:state() | undefined,
@@ -1262,6 +1266,7 @@
     % TODO VFS-7919 - consider keeping callbacks list from beginning
     % to guarantee that each callback is called exactly once
     pending_callbacks = [] :: [workflow_execution_state:callback_selector()],
+    items_to_process = #{} :: #{workflow_cached_item:id() => [report | snapshot | delete]},
 
     % Field used to return additional information about document update procedure
     % (datastore:update returns {ok, #document{}} or {error, term()}
@@ -1269,9 +1274,37 @@
     update_report :: workflow_execution_state:update_report() | undefined
 }).
 
+-record(workflow_execution_state_dump, {
+    snapshot_mode :: workflow_execution_state:snapshot_mode(),
+    lane_status :: ?PREPARED | ?NOT_PREPARED,
+    failed_job_count = 0 :: non_neg_integer(),
+
+    iteration_state_dump :: workflow_iteration_state:dump(),
+    jobs_dump :: workflow_jobs:dump(),
+    task_index_map :: workflow_execution_state_dump:task_index_map_as_list()
+}).
+
 -record(workflow_async_call_pool, {
     slots_used = 0 :: non_neg_integer(),
     slots_limit :: non_neg_integer()
+}).
+
+%%%===================================================================
+%%% Multipart upload connected models
+%%%===================================================================
+
+-record(multipart_upload, {
+    multipart_upload_id :: multipart_upload:id() | undefined,
+    path :: multipart_upload:path(),
+    creation_time :: time:millis(),
+    space_id :: od_space:id() | undefined
+}).
+
+-record(multipart_upload_part, {
+    number :: multipart_upload_part:part_number(),
+    size :: non_neg_integer(),
+    etag :: binary(),
+    last_modified :: non_neg_integer()
 }).
 
 -endif.

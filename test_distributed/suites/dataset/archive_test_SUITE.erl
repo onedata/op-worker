@@ -102,7 +102,18 @@
     verification_bagit_remove_file/1,
     verification_bagit_recreate_file/1,
     dip_verification_bagit/1,
-    nested_verification_bagit/1
+    nested_verification_bagit/1,
+    
+    error_during_archivisation_slave_job/1,
+    error_during_archivisation_master_job/1,
+    error_during_verification_slave_job/1,
+    error_during_verification_master_job/1,
+    
+    audit_log_test/1,
+    audit_log_failed_file_test/1,
+    audit_log_failed_dir_test/1,
+    audit_log_failed_file_verification_test/1,
+    audit_log_failed_dir_verification_test/1
 ]).
 
 groups() -> [
@@ -180,19 +191,35 @@ groups() -> [
         verification_bagit_recreate_file,
         dip_verification_bagit,
         nested_verification_bagit
+    ]},
+    {errors_tests, [
+        error_during_archivisation_slave_job,
+        error_during_archivisation_master_job,
+        error_during_verification_slave_job,
+        error_during_verification_master_job
+    ]},
+    {audit_log_tests, [
+        audit_log_test,
+        audit_log_failed_file_test,
+        audit_log_failed_dir_test,
+        audit_log_failed_file_verification_test,
+        audit_log_failed_dir_verification_test
     ]}
 ].
 
 
 all() -> [
     {group, parallel_tests},
-    {group, verification_tests}
+    {group, verification_tests},
+    {group, errors_tests},
+    {group, audit_log_tests}
 ].
 
 
 -define(ATTEMPTS, 60).
 
 -define(SPACE, space_krk_par_p).
+-define(SPACE_BIN, <<"space_krk_par_p">>).
 -define(USER1, user1).
 
 -define(TEST_DESCRIPTION1, <<"TEST DESCRIPTION">>).
@@ -405,6 +432,10 @@ modify_preserved_bagit_archive_test(_Config) ->
     modify_preserved_archive_test_base(?ARCHIVE_BAGIT_LAYOUT).
 
 
+%===================================================================
+% Verification tests - can not be run in parallel as they use mocks.
+%===================================================================
+
 verification_plain_modify_file(_Config) ->
     verification_modify_file_base(?ARCHIVE_PLAIN_LAYOUT).
 
@@ -455,6 +486,46 @@ nested_verification_bagit(_Config) ->
 
 
 %===================================================================
+% Errors tests - can not be run in parallel as they use mocks.
+%===================================================================
+
+error_during_archivisation_slave_job(_Config) ->
+    errors_test_base(archivisation, slave_job).
+
+error_during_archivisation_master_job(_Config) ->
+    errors_test_base(archivisation, master_job).
+
+error_during_verification_slave_job(_Config) ->
+    errors_test_base(verification, slave_job).
+
+error_during_verification_master_job(_Config) ->
+    errors_test_base(verification, master_job).
+
+
+%===================================================================
+% Audit log tests - can not be run in parallel as they use mocks.
+%===================================================================
+
+audit_log_test(_Config) ->
+    audit_log_test_base(?ARCHIVE_PRESERVED, undefined).
+
+audit_log_failed_file_test(_Config) ->
+    mock_job_function_error(archivisation_traverse, do_slave_job_unsafe),
+    audit_log_test_base(?ARCHIVE_FAILED, reg_file).
+
+audit_log_failed_dir_test(_Config) ->
+    mock_job_function_error(archivisation_traverse, do_dir_master_job_unsafe),
+    audit_log_test_base(?ARCHIVE_FAILED, dir).
+
+audit_log_failed_file_verification_test(_Config) ->
+    mock_job_function_error(archive_verification_traverse, do_slave_job_unsafe),
+    audit_log_test_base(?ARCHIVE_VERIFICATION_FAILED, reg_file).
+
+audit_log_failed_dir_verification_test(_Config) ->
+    mock_job_function_error(archive_verification_traverse, do_dir_master_job_unsafe),
+    audit_log_test_base(?ARCHIVE_VERIFICATION_FAILED, dir).
+
+%===================================================================
 % Test bases
 %===================================================================
 
@@ -465,7 +536,9 @@ archive_dataset_attached_to_dir_test_base(Layout, IncludeDip) ->
             id = DatasetId,
             archives = [#archive_object{id = ArchiveId}]
         }} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{
-            dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = Layout, include_dip = IncludeDip}}]},
+            dataset = #dataset_spec{archives = [
+                #archive_spec{config = #archive_config{layout = Layout, include_dip = IncludeDip}}
+            ]},
             metadata = #metadata_spec{json = ?RAND_JSON_METADATA()}
     }),
     archive_simple_dataset_test_base(DirGuid, DatasetId, ArchiveId, 0, 0).
@@ -498,7 +571,7 @@ archive_dataset_attached_to_hardlink_test_base(Layout, IncludeDip) ->
     {ok, #file_attr{guid = LinkGuid}} =
         lfm_proxy:make_link(P1Node, UserSessIdP1, ?FILE_REF(FileGuid), ?FILE_REF(SpaceGuid), ?RAND_NAME()),
     Json = ?RAND_JSON_METADATA(),
-    ok = lfm_proxy:set_metadata(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid), json, Json, []),
+    ok = opt_file_metadata:set_custom_metadata(P1Node, UserSessIdP1, ?FILE_REF(LinkGuid), json, Json, []),
     UserId = oct_background:get_user_id(?USER1),
     onenv_file_test_utils:await_file_metadata_sync(oct_background:get_space_supporting_providers(?SPACE), UserId, #object{
         guid = LinkGuid,
@@ -703,7 +776,7 @@ simple_incremental_archive_test_base(Layout, Modifications) ->
             ok = lfm_proxy:close(Node, H),
             ?FILE_IN_BASE_ARCHIVE_NAME;
         (metadata) ->
-            ok = lfm_proxy:set_metadata(Node, SessionId, #file_ref{guid = ChildGuid}, json, ?RAND_JSON_METADATA(), []),
+            ok = opt_file_metadata:set_custom_metadata(Node, SessionId, #file_ref{guid = ChildGuid}, json, ?RAND_JSON_METADATA(), []),
             ?FILE_IN_BASE_ARCHIVE_NAME;
         (new_file) ->
             Name = ?RAND_NAME(),
@@ -814,7 +887,7 @@ modify_preserved_archive_test_base(Layout) ->
     ?assertEqual({error, eperm}, lfm_proxy:unlink(Node, ?ROOT_SESS_ID, #file_ref{guid = FileGuid})),
     ?assertEqual({error, eperm},lfm_proxy:create(Node, ?ROOT_SESS_ID, DirGuid, FileName, ?DEFAULT_FILE_MODE)),
     ?assertEqual({error, eperm}, lfm_proxy:open(Node, ?ROOT_SESS_ID, #file_ref{guid = FileGuid}, write)),
-    ?assertEqual({error, eperm}, lfm_proxy:set_metadata(Node, ?ROOT_SESS_ID, #file_ref{guid = FileGuid}, json, ?RAND_JSON_METADATA(), [])),
+    ?assertEqual(?ERROR_POSIX(?EPERM), opt_file_metadata:set_custom_metadata(Node, ?ROOT_SESS_ID, #file_ref{guid = FileGuid}, json, ?RAND_JSON_METADATA(), [])),
     ?assertEqual({error, eperm}, lfm_proxy:rm_recursive(Node, ?ROOT_SESS_ID, #file_ref{guid = DirGuid})).
 
 
@@ -829,14 +902,14 @@ verification_modify_file_base(Layout) ->
 
 verification_modify_file_metadata_base(Layout) ->
     ModificationFun = fun(Node, _DirGuid, FileGuid, _FileName, _Content, _Metadata) ->
-        ok = lfm_proxy:set_metadata(Node, ?ROOT_SESS_ID, #file_ref{guid = FileGuid}, json, ?RAND_JSON_METADATA(), [])
+        ok = opt_file_metadata:set_custom_metadata(Node, ?ROOT_SESS_ID, #file_ref{guid = FileGuid}, json, ?RAND_JSON_METADATA(), [])
     end,
     simple_verification_test_base(Layout, ModificationFun).
 
 
 verification_modify_dir_metadata_base(Layout) ->
     ModificationFun = fun(Node, DirGuid, _FileGuid, _FileName, _Content, _Metadata) ->
-        ok = lfm_proxy:set_metadata(Node, ?ROOT_SESS_ID, #file_ref{guid = DirGuid}, json, ?RAND_JSON_METADATA(), [])
+        ok = opt_file_metadata:set_custom_metadata(Node, ?ROOT_SESS_ID, #file_ref{guid = DirGuid}, json, ?RAND_JSON_METADATA(), [])
     end,
     simple_verification_test_base(Layout, ModificationFun).
 
@@ -862,7 +935,7 @@ verification_recreate_file_base(Layout) ->
         {ok, H} = lfm_proxy:open(Node, ?ROOT_SESS_ID, #file_ref{guid = NewFileGuid}, write),
         {ok, _} = lfm_proxy:write(Node, H, 0, Content),
         ok = lfm_proxy:close(Node, H),
-        ok = lfm_proxy:set_metadata(Node, ?ROOT_SESS_ID, #file_ref{guid = NewFileGuid}, json, Metadata, [])
+        ok = opt_file_metadata:set_custom_metadata(Node, ?ROOT_SESS_ID, #file_ref{guid = NewFileGuid}, json, Metadata, [])
     end,
     simple_verification_test_base(Layout, ModificationFun).
 
@@ -955,6 +1028,156 @@ nested_verification_test_base(Layout) ->
     end, [NestedArchiveId1, NestedArchiveId2, ArchiveId]).
 
 
+errors_test_base(TraverseType, JobType) ->
+    mock_error_requested_job(TraverseType, JobType),
+    #object{dataset = #dataset_object{archives = [#archive_object{id = ArchiveId}]}} =
+        onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{
+            dataset = #dataset_spec{archives = 1},
+            children = [#file_spec{}, #dir_spec{}]
+        }),
+    ExpectedState = case TraverseType of
+        archivisation -> ?ARCHIVE_FAILED;
+        verification -> ?ARCHIVE_VERIFICATION_FAILED
+    end,
+    archive_tests_utils:assert_archive_state(ArchiveId, ExpectedState, ?ATTEMPTS).
+
+
+audit_log_test_base(ExpectedState, FailedFileType) ->
+    Timestamp = opw_test_rpc:call(oct_background:get_random_provider_node(krakow), global_clock, timestamp_millis, []),
+    #object{
+        guid = DirGuid,
+        name = DirName,
+        dataset = #dataset_object{archives = [#archive_object{id = ArchiveId}]},
+        children = [
+            #object{name = ChildFileName}
+        ]
+    } =
+        onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{
+            dataset = #dataset_spec{archives = [
+                #archive_spec{config = #archive_config{layout = ?ARCHIVE_PLAIN_LAYOUT}}
+            ]},
+            children = [#file_spec{}]
+        }, krakow),
+    archive_tests_utils:assert_archive_state(ArchiveId, ExpectedState, ?ATTEMPTS),
+    PathFun = fun
+        ([]) -> <<>>;
+        (Tokens) -> filename:join(Tokens)
+    end,
+    
+    % error mocked in mock_job_function_error/2
+    ErrorReasonJson = #{
+        <<"description">> => <<"Operation failed with POSIX error: enoent.">>,
+        <<"details">> => #{<<"errno">> => <<"enoent">>},
+        <<"id">> => <<"posix">>
+    },
+    
+    ExpectedLogsTemplates = case {ExpectedState, FailedFileType} of
+        {?ARCHIVE_PRESERVED, _} -> [
+            {ok, PathFun([DirName, ChildFileName]), ?REGULAR_FILE_TYPE},
+            {ok, PathFun([DirName]), ?DIRECTORY_TYPE}
+        ];
+        {?ARCHIVE_FAILED, dir} -> [
+            {archivisation_failed, PathFun([DirName]), ?DIRECTORY_TYPE, ErrorReasonJson}
+        ];
+        {?ARCHIVE_FAILED, reg_file} -> [
+            {archivisation_failed, PathFun([DirName, ChildFileName]), ?REGULAR_FILE_TYPE, ErrorReasonJson},
+            {ok, PathFun([DirName]), ?DIRECTORY_TYPE}
+        ];
+        {?ARCHIVE_VERIFICATION_FAILED, dir} ->
+            [
+                {ok, PathFun([DirName, ChildFileName]), ?REGULAR_FILE_TYPE},
+                {ok, PathFun([DirName]), ?DIRECTORY_TYPE},
+                {verification_failed, PathFun([]), ?DIRECTORY_TYPE}
+            ];
+        {?ARCHIVE_VERIFICATION_FAILED, reg_file} ->
+            [
+                {ok, PathFun([DirName, ChildFileName]), ?REGULAR_FILE_TYPE},
+                {ok, PathFun([DirName]), ?DIRECTORY_TYPE},
+                {verification_failed, PathFun([DirName, ChildFileName]), ?REGULAR_FILE_TYPE}
+            ]
+    end,
+    GetAuditLogFun = fun() ->
+        case opw_test_rpc:call(krakow, archivisation_audit_log, browse, [ArchiveId, #{}]) of
+            {ok, #{<<"isLast">> := IsLast, <<"logEntries">> := LogEntries}} ->
+                LogEntriesWithoutIndices = lists:map(fun(Entry) ->
+                    maps:remove(<<"index">>, Entry)
+                end, LogEntries),
+                {ok, {IsLast, LogEntriesWithoutIndices}};
+            {error, _} = Error ->
+                Error
+        end
+    end,
+    ExpectedLogs = lists:map(fun(Template) -> 
+        log_template_to_expected_entry(Timestamp, Template) 
+    end, ExpectedLogsTemplates),
+    ?assertMatch({ok, {true, ExpectedLogs}}, GetAuditLogFun()).
+
+
+log_template_to_expected_entry(Timestamp, {ok, Path, Type}) ->
+    #{
+        <<"content">> => #{
+            <<"description">> =>
+                string:titlecase(<<(type_to_description(Type))/binary, " archivisation finished.">>),
+            <<"path">> => Path,
+            <<"fileType">> => type_to_binary(Type),
+            <<"startTimestamp">> => Timestamp},
+        <<"severity">> => <<"info">>,
+        <<"timestamp">> => Timestamp
+    };
+log_template_to_expected_entry(Timestamp, {archivisation_failed, Path, Type, ErrorReasonJson}) ->
+    #{
+        <<"content">> => #{
+            <<"description">> =>
+                string:titlecase(<<(type_to_description(Type))/binary, " archivisation failed.">>),
+            <<"path">> => Path,
+            <<"fileType">> => type_to_binary(Type),
+            <<"startTimestamp">> => Timestamp,
+            <<"reason">> => ErrorReasonJson},
+        <<"severity">> => <<"error">>,
+        <<"timestamp">> => Timestamp
+    };
+log_template_to_expected_entry(Timestamp, {verification_failed, Path, Type}) ->
+    #{
+        <<"content">> => #{
+            <<"description">> =>
+                <<"Verification of the archived ", (type_to_description(Type))/binary, " failed.">>,
+            <<"fileType">> => type_to_binary(Type),
+            <<"path">> => Path
+        },
+        <<"severity">> => <<"error">>,
+        <<"timestamp">> => Timestamp
+    }.
+
+
+type_to_description(?REGULAR_FILE_TYPE) -> <<"regular file">>;
+type_to_description(?DIRECTORY_TYPE) -> <<"directory">>;
+type_to_description(?SYMLINK_TYPE) -> <<"symbolic link">>.
+
+
+type_to_binary(?REGULAR_FILE_TYPE) -> <<"REG">>;
+type_to_binary(?DIRECTORY_TYPE) -> <<"DIR">>;
+type_to_binary(?SYMLINK_TYPE) -> <<"SYMLNK">>.
+
+
+mock_error_requested_job(archivisation, slave_job) ->
+    mock_job_function_error(archivisation_traverse, do_slave_job_unsafe);
+mock_error_requested_job(archivisation, master_job) ->
+    mock_job_function_error(archivisation_traverse, do_dir_master_job_unsafe);
+mock_error_requested_job(verification, slave_job) ->
+    mock_job_function_error(archive_verification_traverse, do_slave_job_unsafe);
+mock_error_requested_job(verification, master_job) ->
+    mock_job_function_error(archive_verification_traverse, do_dir_master_job_unsafe).
+
+mock_job_function_error(Module, FunctionName) ->
+    Nodes = oct_background:get_all_providers_nodes(),
+    test_utils:mock_new(Nodes, Module),
+    {FunctionName, Arity} = lists:keyfind(FunctionName, 1, Module:module_info(exports)),
+    MockFun = case Arity of
+        2 -> fun(_, _) -> error(?ERROR_POSIX(?ENOENT)) end;
+        3 -> fun(_, _, _) -> error(?ERROR_POSIX(?ENOENT)) end
+    end,
+    test_utils:mock_expect(Nodes, Module, FunctionName, MockFun).
+
 %===================================================================
 % SetUp and TearDown functions
 %===================================================================
@@ -974,15 +1197,21 @@ end_per_suite(Config) ->
     oct_background:end_per_suite(),
     dir_stats_test_utils:enable_stats_counting(Config).
 
+init_per_group(audit_log_tests, Config) ->
+    ok = clock_freezer_mock:setup_for_ct(oct_background:get_all_providers_nodes(), [global_clock]),
+    init_per_group(default, Config);
 init_per_group(_Group, Config) ->
     Config2 = oct_background:update_background_config(Config),
     lfm_proxy:init(Config2, false).
 
 end_per_group(_Group, Config) ->
+    clock_freezer_mock:teardown_for_ct(oct_background:get_all_providers_nodes()),
     lfm_proxy:teardown(Config).
 
 init_per_testcase(_Case, Config) ->
     Config.
 
 end_per_testcase(_Case, _Config) ->
+    test_utils:mock_unload(oct_background:get_all_providers_nodes(), archivisation_traverse),
+    test_utils:mock_unload(oct_background:get_all_providers_nodes(), archive_verification_traverse),
     ok.

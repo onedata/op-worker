@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([apply_batch/3, apply/1]).
+-export([apply_batch/5, apply/1]).
 
 -type ctx() :: datastore_cache:ctx().
 -type key() :: datastore:key().
@@ -40,9 +40,9 @@
 %% Applies remote changes.
 %% @end
 %%--------------------------------------------------------------------
--spec apply_batch([datastore:doc()], {couchbase_changes:since(),
-    couchbase_changes:until()}, timestamp()) -> ok.
-apply_batch(Docs, BatchRange, Timestamp) ->
+-spec apply_batch([datastore:doc()], {couchbase_changes:since(), couchbase_changes:until()},
+    timestamp(), od_space:id(), od_provider:id()) -> ok.
+apply_batch(Docs, BatchRange, Timestamp, SpaceId, ProviderId) ->
     Master = self(),
     spawn_link(fun() ->
         DocsGroups = group_changes(Docs),
@@ -68,6 +68,7 @@ apply_batch(Docs, BatchRange, Timestamp) ->
         Ref = make_ref(),
         Pids = parallel_apply(DocsList3, Ref),
         Ans = gather_answers(Pids, Ref),
+        log(Docs, BatchRange, Ans, SpaceId, ProviderId),
         Master ! {batch_applied, BatchRange, Timestamp, Ans}
     end),
     ok.
@@ -100,6 +101,8 @@ apply(Doc = #document{value = Value, scope = SpaceId, seq = Seq}) ->
                                 ok
                         end,
                         Doc2;
+                    {error, already_exists} ->
+                        Doc;
                     {error, ignored} ->
                         undefined
                 end
@@ -143,6 +146,8 @@ links_save(Model, RoutingKey, Doc = #document{key = Key}) ->
     case datastore_router:route(save, [Ctx3, Key, Doc]) of
         {ok, Doc2} ->
             Doc2;
+        {error, already_exists} ->
+            Doc;
         {error, ignored} ->
             undefined
     end.
@@ -251,6 +256,8 @@ save_links_mask(Ctx, Doc = #document{key = Key,
     case datastore_router:route(save, [Ctx#{routing_key => RoutingKey}, Key, Doc]) of
         {ok, Doc2} ->
             Doc2;
+        {error, already_exists} ->
+            Doc;
         {error, ignored} ->
             undefined
     end.
@@ -295,6 +302,11 @@ parallel_apply(DocsList, Ref) ->
             SlaveAns = lists:foldl(fun
                 (Doc, ok) ->
                     dbsync_changes:apply(Doc);
+                (#document{seq = DocSeq} = Doc, {error, ErrorSeq, _} = Acc) when DocSeq < ErrorSeq ->
+                    case dbsync_changes:apply(Doc) of
+                        ok -> Acc;
+                        {error, _, _} = ApplyError -> ApplyError
+                    end;
                 (_, Acc) ->
                     Acc
             end, ok, lists:reverse(DocList)),
@@ -367,4 +379,26 @@ get_ctx(Model) ->
             datastore_model_default:set_defaults(Ctx#{model => Model});
         _ ->
             datastore_model_default:get_ctx(Model)
+    end.
+
+
+-spec log(
+    [datastore:doc()],
+    {couchbase_changes:since(), couchbase_changes:until()},
+    ok | timeout | {error, datastore_doc:seq(), term()},
+    od_space:id(),
+    od_provider:id()
+) -> ok.
+log(Docs, BatchRange, Ans, SpaceId, ProviderId) ->
+    case op_worker:get_env(dbsync_changes_audit_log_file_max_size, 524288000) of % 500 MB
+        0 ->
+            ok;
+        MaxSize ->
+            LogFilePrefix = op_worker:get_env(dbsync_changes_audit_log_file_prefix, "/tmp/dbsync_changes_"),
+            LogFile = LogFilePrefix ++ str_utils:to_list(SpaceId) ++ "_" ++ str_utils:to_list(ProviderId) ++ ".log",
+
+            Seqs = lists:map(fun(#document{seq = Seq}) -> Seq end, Docs),
+            Log = "Seqs range ~p applied with ans: ~p~nSeqs in range: ~w",
+            Args = [BatchRange, Ans, Seqs],
+            onedata_logger:log_with_rotation(LogFile, Log, Args, MaxSize)
     end.

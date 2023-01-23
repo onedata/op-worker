@@ -44,9 +44,8 @@
 
 %% Location getters/setters
 -export([get_location/2, get_location/3, save_location/1, save_location/2,
-    cache_location/1, update_location/4, create_location/1, create_location/2,
-    delete_local_location/1, delete_location/2, force_flush/1,
-    get_local_location/1, get_local_location/2]).
+    cache_location/1, update_location/4, create_location/2, create_location/3,
+    force_flush/1, get_local_location/1, get_local_location/2, get_local_location_including_deleted/2]).
 %% Blocks getters/setters
 -export([get_blocks/1, get_blocks/2, get_overlapping_blocks_sequence/2,
     set_blocks/2, set_final_blocks/2, update_blocks/2, clear_blocks/2]).
@@ -90,33 +89,25 @@ get_location(LocId, FileUuid) ->
     {ok, file_location:doc()} | {error, term()}.
 get_location(LocId, FileUuid, GetDocOpts) ->
     replica_synchronizer:apply_or_run_locally(FileUuid, fun() ->
-        case fslogic_cache:get_doc(LocId) of
-            #document{} = LocationDoc ->
-                {ok, LocationDoc};
-            Error ->
-                Error
-        end
+        get_location_inside_cache(LocId, false)
     end, fun() ->
-        case fslogic_cache:get_doc(LocId) of
-            #document{key = Key, value = Location} = LocationDoc ->
-                case GetDocOpts of
-                    false ->
-                        {ok, LocationDoc};
-                    true ->
-                        {ok, fslogic_cache:attach_blocks(LocationDoc)};
-                    skip_local_blocks ->
-                        {ok, fslogic_cache:attach_public_blocks(LocationDoc)};
-                    {blocks_num, Num} ->
-                        {ok, LocationDoc#document{value =
-                        Location#file_location{blocks =
-                        get_blocks(Key, #{count => Num})}}}
-                end;
-            Error ->
-                Error
-        end
+        get_location_from_cache(LocId, GetDocOpts, false)
     end, fun() ->
         get_location_not_cached(LocId, GetDocOpts)
     end).
+
+
+-spec get_local_location_including_deleted(file_ctx:ctx(), get_doc_opts()) ->
+    {ok, file_location:doc()} | {error, term()}.
+get_local_location_including_deleted(FileCtx, GetDocOpts) ->
+    LocId = file_location:local_id(file_ctx:get_logical_uuid_const(FileCtx)),
+    replica_synchronizer:apply(FileCtx, fun() ->
+        case fslogic_cache:is_current_proc_cache() of
+            true -> get_location_inside_cache(LocId, true);
+            false -> get_location_from_cache(LocId, GetDocOpts, true)
+        end
+    end).
+
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -134,11 +125,13 @@ save_location(FileLocation) ->
 %%-------------------------------------------------------------------
 -spec save_location(file_location:doc(), od_user:id() | undefined) ->
     {ok, file_location:id()} | {error, term()}.
-save_location(#document{value = #file_location{uuid = Uuid}} = FileLocation, UserIdOrUndefined) ->
+save_location(#document{key = Key, value = #file_location{uuid = Uuid, blocks = Blocks}} = FileLocation, UserIdOrUndefined) ->
     replica_synchronizer:apply_or_run_locally(Uuid, fun() ->
         fslogic_cache:save_doc(FileLocation)
     end, fun() ->
-        fslogic_cache:save_doc(FileLocation)
+        Ans = fslogic_cache:save_doc(FileLocation),
+        fslogic_cache:cache_blocks(Key, Blocks),
+        Ans
     end, fun() ->
         file_location:save_and_update_quota(FileLocation, UserIdOrUndefined)
     end).
@@ -191,22 +184,21 @@ update_location(FileUuid, LocId, Diff, ModifyBlocks) ->
 %% @equiv create_location(Doc, false).
 %% @end
 %%-------------------------------------------------------------------
--spec create_location(file_location:doc()) ->
+-spec create_location(file_ctx:ctx(), file_location:doc()) ->
     {ok, file_location:id()} | {error, term()}.
-create_location(Doc) ->
-    create_location(Doc, false).
+create_location(FileCtx, Doc) ->
+    create_location(FileCtx, Doc, false).
 
 %%-------------------------------------------------------------------
 %% @doc
 %% Creates location document.
 %% @end
 %%-------------------------------------------------------------------
--spec create_location(file_location:doc(), boolean()) ->
+-spec create_location(file_ctx:ctx(), file_location:doc(), boolean()) ->
     {ok, file_location:id()} | {error, term()}.
-create_location(#document{key = Key, value = #file_location{uuid = Uuid}} = Doc,
-    GeneratedKey) ->
-    replica_synchronizer:apply_or_run_locally(Uuid, fun() ->
-        case fslogic_cache:get_doc(Key) of
+create_location(FileCtx, #document{key = Key} = Doc, GeneratedKey) ->
+    replica_synchronizer:apply(FileCtx, fun() ->
+        case fslogic_cache:get_doc_including_deleted(Key) of
             #document{} ->
                 {error, already_exists};
             _ ->
@@ -219,33 +211,6 @@ create_location(#document{key = Key, value = #file_location{uuid = Uuid}} = Doc,
                         Other
                 end
         end
-    end, fun() ->
-        ?extract_key(file_location:create_and_update_quota(Doc, GeneratedKey))
-    end).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Deletes local location document.
-%% @end
-%%-------------------------------------------------------------------
--spec delete_local_location(file_meta:uuid()) ->
-    ok | {error, term()}.
-delete_local_location(Uuid) ->
-    LocId = file_location:local_id(Uuid),
-    delete_location(Uuid, LocId).
-
-%%-------------------------------------------------------------------
-%% @doc
-%% Deletes location document.
-%% @end
-%%-------------------------------------------------------------------
--spec delete_location(file_meta:uuid(), file_location:id()) ->
-    ok | {error, term()}.
-delete_location(Uuid, LocId) ->
-    replica_synchronizer:apply_or_run_locally(Uuid, fun() ->
-        fslogic_cache:delete_doc(LocId)
-    end, fun() ->
-        file_location:delete_and_update_quota(LocId)
     end).
 
 %%-------------------------------------------------------------------
@@ -559,6 +524,45 @@ get_blocks_range_helper(Blocks0) ->
             #file_block{offset = StopOffset, size = StopSize} = lists:last(Blocks),
             {StartOffset, StopOffset + StopSize}
     end.
+
+
+%% @private
+-spec get_location_inside_cache(file_location:id(), boolean()) -> {ok, file_location:doc()} | {error, term()}.
+get_location_inside_cache(LocId, IncludeDeleted) ->
+    case fslogic_cache:get_doc_including_deleted(LocId) of
+        #document{deleted = true} when not IncludeDeleted ->
+            {error, not_found};
+        #document{} = LocationDoc ->
+            {ok, LocationDoc};
+        Error ->
+            Error
+    end.
+
+
+%% @private
+-spec get_location_from_cache(file_location:id(), get_doc_opts(), boolean()) ->
+    {ok, file_location:doc()} | {error, term()}.
+get_location_from_cache(LocId, GetDocOpts, IncludeDeleted) ->
+    case fslogic_cache:get_doc_including_deleted(LocId) of
+        #document{deleted = true} when not IncludeDeleted ->
+            {error, not_found};
+        #document{key = Key, value = Location} = LocationDoc ->
+            case GetDocOpts of
+                false ->
+                    {ok, LocationDoc};
+                true ->
+                    {ok, fslogic_cache:attach_blocks(LocationDoc)};
+                skip_local_blocks ->
+                    {ok, fslogic_cache:attach_public_blocks(LocationDoc)};
+                {blocks_num, Num} ->
+                    {ok, LocationDoc#document{value =
+                    Location#file_location{blocks =
+                    get_blocks(Key, #{count => Num})}}}
+            end;
+        Error ->
+            Error
+    end.
+
 
 %%-------------------------------------------------------------------
 %% @private

@@ -8,6 +8,14 @@
 %%% @doc
 %%% This module is responsible for monitoring and restarting DBSync streams
 %%% and routing messages to them.
+%%%
+%%% The module provides also API for streams resynchronization. Stream
+%%% resynchronization sets sequence counter for particular stream/provider
+%%% pair to 0 forcing resend of metadata by chosen provider. It is possible
+%%% to choose which metadata should be resent (e.g., mutated only by sender
+%%% or by any provider).
+%%% NOTE: information about resynchronization is saved in dbsync_state so
+%%% restart of provider does not abort resynchronization.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(dbsync_worker).
@@ -17,6 +25,7 @@
 
 -include("global_definitions.hrl").
 -include("proto/oneprovider/dbsync_messages2.hrl").
+-include("modules/dbsync/dbsync.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% worker_plugin_behaviour callbacks
@@ -25,6 +34,8 @@
 %% API
 -export([supervisor_flags/0, get_on_demand_changes_stream_id/2,
     start_streams/0, start_streams/1]).
+%% Resynchronization API
+-export([reset_provider_stream/2, resynchronize_all/2, resynchronize_provider_metadata/2, resynchronize/5]).
 
 %% Internal services API
 -export([start_in_stream/1, stop_in_stream/1, start_out_stream/1, stop_out_stream/1]).
@@ -89,7 +100,7 @@ cleanup() ->
 %%--------------------------------------------------------------------
 -spec supervisor_flags() -> supervisor:sup_flags().
 supervisor_flags() ->
-    #{strategy => one_for_one, intensity => 1000, period => 3600}.
+    #{strategy => one_for_one, intensity => 10, period => 3600}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -148,6 +159,33 @@ start_streams(Spaces) ->
 get_on_demand_changes_stream_id(SpaceId, ProviderId) ->
     <<SpaceId/binary, "_", ProviderId/binary>>.
 
+
+%%%===================================================================
+%%% Resynchronization API
+%%%===================================================================
+
+-spec reset_provider_stream(od_space:id(), od_provider:id()) -> ok.
+reset_provider_stream(SpaceId, ProviderId) ->
+    resynchronize(SpaceId, ProviderId, ?ALL_MUTATORS_EXCEPT_SENDER, 1, current).
+
+
+-spec resynchronize_all(od_space:id(), od_provider:id()) -> ok.
+resynchronize_all(SpaceId, ProviderId) ->
+    resynchronize(SpaceId, ProviderId, ?ALL_MUTATORS, 1, current).
+
+
+-spec resynchronize_provider_metadata(od_space:id(), od_provider:id()) -> ok.
+resynchronize_provider_metadata(SpaceId, ProviderId) ->
+    resynchronize(SpaceId, ProviderId, [ProviderId], 1, current).
+
+
+-spec resynchronize(od_space:id(), od_provider:id(), dbsync_in_stream:mutators(),
+    dbsync_in_stream:sync_start_seq(), dbsync_in_stream:sync_target_seq()) -> ok.
+resynchronize(SpaceId, ProviderId, IncludedMutators, StartSeq, TargetSeq) ->
+    gen_server:call({global, ?IN_STREAM_ID(SpaceId)},
+        {resynchronize, ProviderId, IncludedMutators, StartSeq, TargetSeq}, infinity).
+
+
 %%%===================================================================
 %%% Internal services API
 %%%===================================================================
@@ -187,7 +225,8 @@ start_out_stream(SpaceId) ->
         (Since, Until, Timestamp, Docs) ->
             ProviderId = oneprovider:get_id(),
             dbsync_communicator:broadcast_changes(SpaceId, Since, Until, Timestamp, Docs),
-            dbsync_state:set_seq_and_timestamp(SpaceId, ProviderId, Until, Timestamp)
+            dbsync_state:set_seq_and_timestamp(SpaceId, ProviderId, Until, Timestamp),
+            ok
     end,
     Spec = dbsync_out_stream_spec(SpaceId, SpaceId, [
         {main_stream, true},
@@ -224,10 +263,9 @@ handle_changes_batch(ProviderId, MsgId, #changes_batch{
     timestamp = Timestamp,
     compressed_docs = CompressedDocs
 }) ->
-    Name = {dbsync_in_stream, SpaceId},
     Docs = dbsync_utils:uncompress(CompressedDocs),
     gen_server:cast(
-        {global, Name}, {changes_batch, MsgId, ProviderId, Since, Until, Timestamp, Docs}
+        {global, ?IN_STREAM_ID(SpaceId)}, {changes_batch, MsgId, ProviderId, Since, Until, Timestamp, Docs}
     ).
 
 %%--------------------------------------------------------------------
@@ -240,8 +278,9 @@ handle_changes_batch(ProviderId, MsgId, #changes_batch{
 handle_changes_request(ProviderId, #changes_request2{
     space_id = SpaceId,
     since = Since,
-    until = Until
-}) ->
+    until = Until,
+    included_mutators = IncludedMutators
+} = Request) ->
     Handler = fun
         (BatchSince, end_of_stream, Timestamp, Docs) ->
             dbsync_communicator:send_changes(
@@ -263,15 +302,29 @@ handle_changes_request(ProviderId, #changes_request2{
                 rpc:call(Node, supervisor, terminate_child, [?DBSYNC_WORKER_SUP, StreamID]),
                 rpc:call(Node, supervisor, delete_child, [?DBSYNC_WORKER_SUP, StreamID]),
 
+                FilteringOptions = case IncludedMutators of
+                    ?ALL_MUTATORS ->
+                        [];
+                    ?ALL_MUTATORS_EXCEPT_SENDER ->
+                        [{except_mutator, ProviderId}]; % TODO VFS-6652 - restults in different seq numbers/timestamps
+                                                        % seen by different providers
+                    _ ->
+                        [{filter, fun
+                            (#document{mutators = [Mutator | _]}) ->
+                                lists:member(Mutator, IncludedMutators);
+                            (_) ->
+                                false
+                        end}]
+                end,
+
                 Spec = dbsync_out_stream_spec(Name, SpaceId, [
                     {since, Since},
                     {until, Until},
-                    {except_mutator, ProviderId}, % TODO VFS-6652 - restults in different seq numbers/timestamps
-                                                  % seen by different providers
                     {handler, Handler},
                     {handling_interval, application:get_env(
                         ?APP_NAME, dbsync_changes_resend_interval, timer:seconds(1)
                     )}
+                    | FilteringOptions
                 ]),
                 try
                     {ok, _} = rpc:call(Node, supervisor, start_child, [?DBSYNC_WORKER_SUP, Spec]),
@@ -281,7 +334,16 @@ handle_changes_request(ProviderId, #changes_request2{
                         ?error("Error when starting stream on demand ~p:~p", [Error, Reason])
                 end;
             _ ->
-                ok
+                case dbsync_out_stream:try_terminate(Name, Since) of
+                    ok ->
+                        ?info("Changes request ~p from provider ~p while processing previous request. "
+                        "Terminating previous stream.", [Request, ProviderId]),
+                        handle_changes_request(ProviderId, Request);
+                    ignore ->
+                        ?info("Changes request ~p from provider ~p while processing previous request. "
+                        "Ignoring.", [Request, ProviderId]),
+                        ok
+                end
         end
     end).
 

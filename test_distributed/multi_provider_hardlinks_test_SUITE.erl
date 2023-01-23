@@ -136,9 +136,9 @@ basic_test(Config0) ->
 
     % Check if times and file_location documents have been deleted
     ?assertEqual({error, not_found}, ?GET_TIMES(Worker2, FileUuid)),
-    ?assertEqual({error, not_found}, ?GET_LOCATION(Worker2, FileUuid)),
+    ?assertMatch({error, not_found}, ?GET_LOCATION(Worker2, FileUuid)),
     ?assertEqual({error, not_found}, ?GET_TIMES(Worker1, FileUuid), Attempts),
-    ?assertEqual({error, not_found}, ?GET_LOCATION(Worker1, FileUuid), Attempts).
+    ?assertMatch({error, not_found}, ?GET_LOCATION(Worker1, FileUuid), Attempts).
 
 % Test scenario is as follows:
 % - creation of file two files and two links via provider 1

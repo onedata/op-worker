@@ -31,6 +31,7 @@
 
     schedule_time :: atm_workflow_execution:timestamp(),
     start_time :: atm_workflow_execution:timestamp(),
+    suspend_time :: atm_workflow_execution:timestamp(),
     finish_time :: atm_workflow_execution:timestamp()
 }).
 
@@ -55,7 +56,7 @@
 
     status :: atm_lane_execution:run_status(),
     % Flag used to differentiate reasons why lane execution run is aborting
-    aborting_reason = undefined :: undefined | atm_lane_execution:run_aborting_reason(),
+    stopping_reason = undefined :: undefined | atm_lane_execution:run_stopping_reason(),
 
     iterated_store_id = undefined :: undefined | atm_store:id(),
     exception_store_id = undefined :: undefined | atm_store:id(),
@@ -65,11 +66,14 @@
 
 % Record used only during creation of atm lane execution run (it is not persisted anywhere)
 -record(atm_lane_execution_run_creation_args, {
+    type :: regular | rerun | retry,
     workflow_execution_ctx :: atm_workflow_execution_ctx:record(),
     workflow_execution_doc :: atm_workflow_execution:doc(),
 
     lane_index :: pos_integer(),
     lane_schema :: atm_lane_schema:record(),
+    origin_run :: undefined | atm_lane_execution:run(),
+
     iterated_store_id :: atm_store:id()
 }).
 
@@ -88,6 +92,19 @@
     lambda_revision :: atm_lambda_revision:record(),
     uncorrelated_results :: [automation:name()]
 }).
+
+%% Record used as an argument for lambda call
+-record(atm_lambda_input, {
+    workflow_execution_id :: atm_workflow_execution:id(),
+    job_batch_id :: atm_task_executor:job_batch_id(),
+    args_batch :: [atm_task_executor:job_args()]
+}).
+
+%% Record used as an return value from lambda call
+-record(atm_lambda_output, {
+    results_batch :: undefined | [undefined | atm_task_executor:job_results()]
+}).
+
 
 % Record carrying an activity report of an OpenFaaS function
 -record(atm_openfaas_activity_report, {
@@ -123,7 +140,7 @@
 % Record carrying a generic result streamer report
 -record(atm_openfaas_result_streamer_report, {
     id :: atm_openfaas_result_streamer_report:id(),
-    body = atm_openfaas_result_streamer_report:body()
+    body :: atm_openfaas_result_streamer_report:body()
 }).
 
 % Record carrying a status report of a lambda result streamer of type 'registration'
@@ -158,7 +175,6 @@
 % cue their finalization (flushing of all results and deregistering)
 -record(atm_openfaas_result_streamer_finalization_signal, {
 }).
-
 
 %% Atm data types related macros
 
@@ -208,12 +224,11 @@
 }).
 
 -record(atm_audit_log_store_content_browse_options, {
-    listing_opts :: atm_store_container_infinite_log_backend:timestamp_aware_listing_opts()
+    browse_opts :: audit_log_browse_opts:opts()
 }).
 
 -record(atm_audit_log_store_content_browse_result, {
-    logs :: [atm_store_container_infinite_log_backend:entry()],
-    is_last :: boolean()
+    result :: audit_log:browse_result()
 }).
 
 -record(atm_list_store_content_browse_options, {
@@ -256,7 +271,7 @@
 
 -record(atm_store_content_update_req, {
     workflow_execution_auth :: atm_workflow_execution_auth:record(),
-    argument :: atm_value:expanded(),
+    argument :: atm_value:expanded() | audit_log:append_request(),
     options :: atm_store_content_update_options:record()
 }).
 
@@ -265,18 +280,22 @@
 
 -define(WAITING_PHASE, waiting).
 -define(ONGOING_PHASE, ongoing).
+-define(SUSPENDED_PHASE, suspended).
 -define(ENDED_PHASE, ended).
 
+-define(RESUMING_STATUS, resuming).
 -define(SCHEDULED_STATUS, scheduled).
 -define(PREPARING_STATUS, preparing).
 -define(ENQUEUED_STATUS, enqueued).
 -define(PENDING_STATUS, pending).
 -define(ACTIVE_STATUS, active).
--define(ABORTING_STATUS, aborting).
+-define(STOPPING_STATUS, stopping).
 -define(FINISHED_STATUS, finished).
 -define(CANCELLED_STATUS, cancelled).
 -define(FAILED_STATUS, failed).
 -define(INTERRUPTED_STATUS, interrupted).
+-define(PAUSED_STATUS, paused).
+-define(CRASHED_STATUS, crashed).
 -define(SKIPPED_STATUS, skipped).
 
 
@@ -298,21 +317,10 @@
 ]).
 
 
--define(atm_examine_error(__TYPE, __REASON, __STACKTRACE),
-    case __TYPE of
-        throw ->
-            __REASON;
-        _ ->
-            __ERROR_REF = str_utils:rand_hex(5),
+-define(ATM_SUPERVISION_WORKER_SUP, atm_supervision_worker_sup).
 
-            ?error_stacktrace(
-                "[~p:~p] Unexpected error (ref. ~s): ~p:~p",
-                [?MODULE, ?FUNCTION_NAME, __ERROR_REF, __TYPE, __REASON],
-                __STACKTRACE
-            ),
-            ?ERROR_UNEXPECTED_ERROR(__ERROR_REF)
-    end
-).
+-define(ATM_WARDEN_SERVICE_NAME, <<"atm_warden_service">>).
+-define(ATM_WARDEN_SERVICE_ID, datastore_key:new_from_digest(?ATM_WARDEN_SERVICE_NAME)).
 
 
 -endif.

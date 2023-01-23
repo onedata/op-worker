@@ -83,7 +83,7 @@ db_sync_basic_opts_test(Config) ->
     multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {4,0,0,2}, 60).
 
 db_sync_basic_opts_with_errors_test(Config) ->
-    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {4,0,0,2}, 60, false).
+    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {4,0,0,2}, 300, false).
 
 db_sync_create_after_del_test(Config) ->
     ?PERFORMANCE(Config, [

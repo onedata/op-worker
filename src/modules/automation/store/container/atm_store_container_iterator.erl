@@ -25,7 +25,7 @@
 -behaviour(persistent_record).
 
 %% API
--export([get_next_batch/3, forget_before/1, mark_exhausted/1]).
+-export([get_next_batch/3]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -51,12 +51,6 @@
 -callback get_next_batch(atm_workflow_execution_auth:record(), batch_size(), record()) ->
     {ok, [atm_value:expanded()], record()} | stop.
 
-%% @see iterator:forget_before
--callback forget_before(record()) -> ok.
-
-%% @see iterator:mark_exhausted
--callback mark_exhausted(record()) -> ok.
-
 
 %%%===================================================================
 %%% API
@@ -68,20 +62,6 @@
 get_next_batch(AtmWorkflowExecutionAuth, BatchSize, AtmStoreContainerIterator) ->
     Module = utils:record_type(AtmStoreContainerIterator),
     Module:get_next_batch(AtmWorkflowExecutionAuth, BatchSize, AtmStoreContainerIterator).
-
-
-%% @see iterator:forget_before
--spec forget_before(record()) -> ok.
-forget_before(AtmStoreContainerIterator) ->
-    Module = utils:record_type(AtmStoreContainerIterator),
-    Module:forget_before(AtmStoreContainerIterator).
-
-
-%% @see iterator:mark_exhausted
--spec mark_exhausted(record()) -> ok.
-mark_exhausted(AtmStoreContainerIterator) ->
-    Module = utils:record_type(AtmStoreContainerIterator),
-    Module:mark_exhausted(AtmStoreContainerIterator).
 
 
 %%%===================================================================

@@ -396,7 +396,7 @@ set_qos_parameters(StorageId, QosParameters) ->
         ok ->
             {ok, Spaces} = storage_logic:get_spaces(StorageId),
             lists:foreach(fun(SpaceId) ->
-                ok = qos_hooks:reevaluate_all_impossible_qos_in_space(SpaceId)
+                ok = qos_logic:reevaluate_all_impossible_qos_in_space(SpaceId)
             end, Spaces);
         Error -> Error
     end.
@@ -432,15 +432,15 @@ update_helper(StorageId, UpdateFun) ->
     id(),
     tokens:serialized(),
     od_space:support_size(),
-    space_support_state_api:support_opts()
+    support_parameters:record()
 ) ->
     {ok, od_space:id()} | errors:error().
-support_space(StorageId, SerializedToken, SupportSize, SupportOpts) ->
+support_space(StorageId, SerializedToken, SupportSize, SupportParameters) ->
     case validate_support_request(SerializedToken) of
         ok ->
-            case storage_logic:support_space(StorageId, SerializedToken, SupportSize, SupportOpts) of
+            case storage_logic:support_space(StorageId, SerializedToken, SupportSize, SupportParameters) of
                 {ok, SpaceId} ->
-                    on_space_supported(SpaceId, StorageId),
+                    on_space_supported(SpaceId, StorageId, SupportParameters),
                     {ok, SpaceId};
                 {error, _} = Error ->
                     Error
@@ -517,11 +517,18 @@ on_storage_created(StorageId) ->
 
 
 %% @private
--spec on_space_supported(od_space:id(), id()) -> ok.
-on_space_supported(SpaceId, StorageId) ->
+-spec on_space_supported(od_space:id(), id(), support_parameters:record()) -> ok.
+on_space_supported(SpaceId, StorageId, SupportParameters) ->
     % remove possible remnants of previous support 
     % (when space was unsupported in Onezone without provider knowledge)
     space_unsupport:cleanup_local_documents(SpaceId, StorageId),
+    case SupportParameters of
+        #support_parameters{dir_stats_service_enabled = true} ->
+            % NOTE: MUST be called before storage import is started
+            dir_stats_service_state:enable_for_new_support(SpaceId);
+        _ ->
+            ok
+    end,
     space_logic:on_space_supported(SpaceId).
 
 
@@ -531,7 +538,7 @@ on_space_unsupported(SpaceId, StorageId) ->
     space_unsupport:cleanup_local_documents(SpaceId, StorageId),
     auto_storage_import_worker:notify_space_unsupported(SpaceId),
     main_harvesting_stream:space_unsupported(SpaceId),
-    space_support_state_api:clean_support_state(SpaceId).
+    dir_stats_service_state:clean(SpaceId).
 
 
 %% @private

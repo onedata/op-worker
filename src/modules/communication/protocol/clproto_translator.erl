@@ -403,6 +403,24 @@ translate_from_protobuf(#'GetFSStats'{
     #get_fs_stats{
         file_id = FileGuid
     };
+translate_from_protobuf(#'ListFilesRecursively'{
+    token = Token,
+    start_after = StartAfter,
+    prefix = Prefix,
+    limit = Limit,
+    include_dirs = IncludeDirs,
+    xattrs = Xattrs
+}) ->
+    #get_recursive_file_list{
+        optional_attrs = [size | xattrs_to_optional_attrs(Xattrs)],
+        listing_options = maps_utils:remove_undefined(#{
+            pagination_token => Token,
+            start_after => StartAfter,
+            prefix => Prefix,
+            limit => Limit,
+            include_directories => IncludeDirs
+        })
+    };
 translate_from_protobuf(#'CreateStorageTestFile'{
     storage_id = Id,
     file_uuid = FileGuid
@@ -431,17 +449,19 @@ translate_from_protobuf(#'FileRequest'{
         context_guid = ContextGuid,
         file_request = translate_from_protobuf(Record)
     };
-translate_from_protobuf(#'GetFileAttr'{include_replication_status = IRS, include_link_count = ILC}) ->
-    #get_file_attr{include_replication_status = IRS, include_link_count = ILC};
+translate_from_protobuf(#'GetFileAttr'{include_replication_status = IRS, include_link_count = ILC, xattrs = Xattrs}) ->
+    #get_file_attr{optional_attrs = [size | attrs_flags_to_optional_attrs(IRS, ILC)] ++ xattrs_to_optional_attrs(Xattrs)};
+translate_from_protobuf(#'GetFileAttrByPath'{path = Path, xattrs = Xattrs}) ->
+    #get_file_attr_by_path{path = Path, optional_attrs = [size | xattrs_to_optional_attrs(Xattrs)]};
 translate_from_protobuf(#'GetChildAttr'{
     name = Name,
     include_replication_status = IRS,
-    include_link_count = ILC
+    include_link_count = ILC,
+    xattrs = Xattrs
 }) ->
     #get_child_attr{
         name = Name,
-        include_replication_status = IRS,
-        include_link_count = ILC
+        optional_attrs = [size | attrs_flags_to_optional_attrs(IRS, ILC)] ++ xattrs_to_optional_attrs(Xattrs)
     };
 translate_from_protobuf(#'GetFileChildren'{
     offset = Offset,
@@ -458,7 +478,7 @@ translate_from_protobuf(#'GetFileChildren'{
             };
         _ ->
             #{
-                pagination_token => Token
+                pagination_token => file_listing:decode_pagination_token(Token)
             }
     end,
     #get_file_children{
@@ -471,7 +491,8 @@ translate_from_protobuf(#'GetFileChildrenAttrs'{
     size = Size,
     index_token = Token,
     include_replication_status = IRS,
-    include_link_count = ILC
+    include_link_count = ILC,
+    xattrs = Xattrs
 }) ->
     BaseListingOpts = case Token of
         undefined ->
@@ -481,15 +502,14 @@ translate_from_protobuf(#'GetFileChildrenAttrs'{
             };
         _ ->
             #{
-                pagination_token => Token
+                pagination_token => file_listing:decode_pagination_token(Token)
             }
     end,
     #get_file_children_attrs{
         listing_options = maps_utils:remove_undefined(BaseListingOpts#{
             limit => Size
         }),
-        include_replication_status = IRS,
-        include_link_count = ILC
+        optional_attrs = [size | attrs_flags_to_optional_attrs(IRS, ILC)] ++ xattrs_to_optional_attrs(Xattrs)
     };
 translate_from_protobuf(#'CreateDir'{
     name = Name,
@@ -498,6 +518,12 @@ translate_from_protobuf(#'CreateDir'{
     #create_dir{
         name = Name,
         mode = Mode
+    };
+translate_from_protobuf(#'CreatePath'{
+    path = Path
+}) ->
+    #create_path{
+        path = Path
     };
 translate_from_protobuf(#'DeleteFile'{
     silent = Silent
@@ -636,6 +662,10 @@ translate_from_protobuf(#'ChildLink'{
         name = Name
     };
 translate_from_protobuf(#'FileAttr'{} = FileAttr) ->
+    Xattrs = lists:foldl(fun(Xattr, Acc) ->
+        #xattr{name = Name, value = Value} = translate_from_protobuf(Xattr),
+        Acc#{Name => Value}
+    end, #{}, FileAttr#'FileAttr'.xattrs),
     #file_attr{
         guid = FileAttr#'FileAttr'.uuid,
         name = FileAttr#'FileAttr'.name,
@@ -652,7 +682,9 @@ translate_from_protobuf(#'FileAttr'{} = FileAttr) ->
         shares = FileAttr#'FileAttr'.shares,
         owner_id = FileAttr#'FileAttr'.owner_id,
         fully_replicated = FileAttr#'FileAttr'.fully_replicated,
-        nlink = FileAttr#'FileAttr'.nlink
+        nlink = FileAttr#'FileAttr'.nlink,
+        index = file_listing:decode_index(FileAttr#'FileAttr'.index),
+        xattrs = Xattrs
     };
 translate_from_protobuf(#'FileChildren'{
     child_links = FileEntries,
@@ -786,6 +818,16 @@ translate_from_protobuf(#'FileRenamed'{
 translate_from_protobuf(#'Uuid'{uuid = Guid}) ->
     #guid{
         guid = Guid
+    };
+translate_from_protobuf(#'ReportFileWritten'{offset = Offset, size = Size}) ->
+    #report_file_written{
+        offset = Offset,
+        size = Size
+    };
+translate_from_protobuf(#'ReportFileRead'{offset = Offset, size = Size}) ->
+    #report_file_read{
+        offset = Offset,
+        size = Size
     };
 
 
@@ -970,28 +1012,6 @@ translate_from_protobuf(#'FSync'{
         data_only = DataOnly,
         handle_id = HandleId
     };
-translate_from_protobuf(#'ReadMetadata'{
-    type = Type,
-    query = Query,
-    inherited = Inherited
-}) ->
-    #get_metadata{
-        type = binary_to_existing_atom(Type, utf8),
-        query = Query,
-        inherited = Inherited
-    };
-translate_from_protobuf(#'WriteMetadata'{
-    metadata = Metadata,
-    query = Query
-}) ->
-    #set_metadata{
-        metadata = translate_from_protobuf(Metadata),
-        query = Query
-    };
-translate_from_protobuf(#'RemoveMetadata'{type = Type}) ->
-    #remove_metadata{
-        type = binary_to_existing_atom(Type, utf8)
-    };
 translate_from_protobuf(#'ProviderResponse'{
     status = Status,
     provider_response = {_, ProviderResponse}
@@ -1018,22 +1038,6 @@ translate_from_protobuf(#'Acl'{value = Value}) ->
     #acl{value = acl:from_json(json_utils:decode(Value), cdmi)};
 translate_from_protobuf(#'FilePath'{value = Value}) ->
     #file_path{value = Value};
-translate_from_protobuf(#'Metadata'{
-    type = <<"json">>,
-    value = Json
-}) ->
-    #metadata{
-        type = json,
-        value = json_utils:decode(Json)
-    };
-translate_from_protobuf(#'Metadata'{
-    type = <<"rdf">>,
-    value = Rdf
-}) ->
-    #metadata{
-        type = rdf,
-        value = Rdf
-    };
 translate_from_protobuf(#'CheckPerms'{flag = Flag}) ->
     #check_perms{flag = open_flag_translate_from_protobuf(Flag)};
 
@@ -1134,12 +1138,14 @@ translate_from_protobuf(#'ChangesBatch'{
 translate_from_protobuf(#'ChangesRequest2'{
     space_id = SpaceId,
     since = Since,
-    until = Until
+    until = Until,
+    included_mutators = IncludedMutators
 }) ->
     #changes_request2{
         space_id = SpaceId,
         since = Since,
-        until = Until
+        until = Until,
+        included_mutators = IncludedMutators
     };
 
 
@@ -1183,6 +1189,81 @@ translate_from_protobuf(#'RTransferNodesIPs'{nodes = Nodes}) ->
 translate_from_protobuf(#'CloseSession'{}) ->
     #close_session{};
 
+%% MULTIPART UPLOAD
+translate_from_protobuf(#'CreateMultipartUpload'{space_id = SpaceId, path = Path}) ->
+    #create_multipart_upload{space_id = SpaceId, path = Path};
+translate_from_protobuf(#'UploadMultipartPart'{multipart_upload_id = UploadId, part = Part}) ->
+    #upload_multipart_part{multipart_upload_id = UploadId, part = translate_from_protobuf(Part)};
+translate_from_protobuf(#'ListMultipartParts'{
+    multipart_upload_id = UploadId,
+    limit = Limit,
+    part_marker = PartMarker
+}) ->
+    #list_multipart_parts{
+        multipart_upload_id = UploadId,
+        limit = Limit,
+        part_marker = PartMarker
+    };
+translate_from_protobuf(#'AbortMultipartUpload'{multipart_upload_id = UploadId}) ->
+    #abort_multipart_upload{multipart_upload_id = UploadId};
+translate_from_protobuf(#'CompleteMultipartUpload'{multipart_upload_id = UploadId}) ->
+    #complete_multipart_upload{multipart_upload_id = UploadId};
+translate_from_protobuf(#'ListMultipartUploads'{
+    space_id = SpaceId,
+    limit = Limit,
+    index_token = EncodedIndexToken
+}) ->
+    #list_multipart_uploads{
+        space_id = SpaceId,
+        limit = Limit,
+        index_token = multipart_upload:decode_token(EncodedIndexToken)
+    };
+translate_from_protobuf(#'MultipartUploadRequest'{
+    multipart_request = {_, Request}
+}) ->
+    #multipart_upload_request{
+        multipart_request = translate_from_protobuf(Request)
+    };
+translate_from_protobuf(#'MultipartPart'{
+    number = Number,
+    size = Size,
+    etag = Etag,
+    last_modified = LastModified
+}) ->
+    #multipart_upload_part{
+        number = Number,
+        size = Size,
+        etag = Etag,
+        last_modified = LastModified
+    };
+translate_from_protobuf(#'MultipartParts'{
+    parts = Parts,
+    is_last = IsLast
+}) ->
+    #multipart_parts{
+        parts = lists:map(fun(Part) -> translate_from_protobuf(Part) end, Parts),
+        is_last = IsLast
+    };
+translate_from_protobuf(#'MultipartUpload'{
+    multipart_upload_id = UploadId,
+    path = Path,
+    creation_time = CreationTime
+}) ->
+    #multipart_upload{
+        multipart_upload_id = UploadId,
+        path = Path,
+        creation_time = CreationTime
+    };
+translate_from_protobuf(#'MultipartUploads'{
+    uploads = Uploads,
+    is_last = IsLast,
+    next_page_token = EncodedNextPageToken
+}) ->
+    {multipart_uploads, #multipart_uploads{
+        uploads = lists:map(fun(Upload) -> translate_from_protobuf(Upload) end, Uploads),
+        is_last = IsLast,
+        next_page_token = multipart_upload:decode_token(EncodedNextPageToken)
+    }};
 
 translate_from_protobuf(undefined) ->
     undefined.
@@ -1510,6 +1591,37 @@ translate_to_protobuf(#get_fs_stats{
     {get_fs_stats, #'GetFSStats'{
         file_id = FileGuid
     }};
+translate_to_protobuf(#get_recursive_file_list{
+    listing_options = ListingOptions,
+    optional_attrs = OptionalAttrs
+}) ->
+    Xattrs = case file_attr:should_fetch_xattrs(OptionalAttrs) of
+        {true, XattrNames} -> XattrNames;
+        false -> []
+    end,
+    {list_files_recursively, #'ListFilesRecursively'{
+        token = maps:get(pagination_token, ListingOptions, undefined),
+        start_after = maps:get(start_after, ListingOptions, undefined),
+        prefix = maps:get(prefix, ListingOptions, undefined),
+        limit = maps:get(limit, ListingOptions, undefined),
+        include_dirs = maps:get(include_directories , ListingOptions, undefined),
+        xattrs = Xattrs
+    }};
+translate_to_protobuf(#recursive_listing_result{
+    % currently only recursive file listing can be requested with clproto therefore entry is always
+    % of type recursive_file_listing_node:entry().
+    entries = Entries,
+    pagination_token = PaginationToken
+}) ->
+    {files_list, #'FileList'{
+        files = lists:map(fun({Path, FileAttr}) ->
+            % put file path as name as that is expected by oneclient
+            {file_attr, TranslatedFileAttr} = translate_to_protobuf(FileAttr#file_attr{name = Path}),
+            TranslatedFileAttr
+        end, Entries),
+        next_page_token = PaginationToken,
+        is_last = PaginationToken == undefined
+    }};
 translate_to_protobuf(#file_request{
     context_guid = ContextGuid,
     file_request = Record
@@ -1518,26 +1630,36 @@ translate_to_protobuf(#file_request{
         context_guid = ContextGuid,
         file_request = translate_to_protobuf(Record)}
     };
-translate_to_protobuf(#get_file_attr{include_replication_status = IRS}) ->
-    {get_file_attr, #'GetFileAttr'{include_replication_status = IRS}};
-translate_to_protobuf(#get_child_attr{name = Name, include_replication_status = IRS}) ->
-    {get_child_attr, #'GetChildAttr'{name = Name, include_replication_status = IRS}};
+translate_to_protobuf(#get_file_attr{optional_attrs = OptionalAttrs}) ->
+    {IRS, ILC} = optional_attrs_to_attrs_flags(OptionalAttrs),
+    {get_file_attr, #'GetFileAttr'{include_replication_status = IRS, include_link_count = ILC}};
+translate_to_protobuf(#get_file_attr_by_path{path = Path}) ->
+    {get_file_attr_by_path, #'GetFileAttrByPath'{path = Path}};
+translate_to_protobuf(#get_child_attr{name = Name, optional_attrs = OptionalAttrs}) ->
+    {IRS, ILC} = optional_attrs_to_attrs_flags(OptionalAttrs),
+    {get_child_attr, #'GetChildAttr'{name = Name, include_replication_status = IRS, include_link_count = ILC}};
 translate_to_protobuf(#get_file_children{listing_options = ListingOpts}) ->
     {get_file_children, #'GetFileChildren'{
         offset = maps:get(offset, ListingOpts, undefined),
         size = maps:get(limit, ListingOpts, undefined),
-        index_token = maps:get(pagination_token, ListingOpts, undefined),
+        index_token = case maps:get(pagination_token, ListingOpts, undefined) of
+            undefined -> undefined;
+            PaginationToken -> file_listing:encode_pagination_token(PaginationToken)
+        end,
         index_startid = maps:get(index, ListingOpts, undefined)
     }};
 translate_to_protobuf(#get_file_children_attrs{
     listing_options = ListingOpts,
-    include_replication_status = IRS,
-    include_link_count = ILC
+    optional_attrs = OptionalAttrs
 }) ->
+    {IRS, ILC} = optional_attrs_to_attrs_flags(OptionalAttrs),
     {get_file_children_attrs, #'GetFileChildrenAttrs'{
         offset = maps:get(offset, ListingOpts, undefined),
         size = maps:get(limit, ListingOpts, undefined),
-        index_token = maps:get(pagination_token, ListingOpts, undefined),
+        index_token = case maps:get(pagination_token, ListingOpts, undefined) of
+            undefined -> undefined;
+            PaginationToken -> file_listing:encode_pagination_token(PaginationToken)
+        end,
         include_replication_status = IRS,
         include_link_count = ILC
     }};
@@ -1548,6 +1670,12 @@ translate_to_protobuf(#create_dir{
     {create_dir, #'CreateDir'{
         name = Name,
         mode = Mode
+    }};
+translate_to_protobuf(#create_path{
+    path = Path
+}) ->
+    {create_path, #'CreatePath'{
+        path = Path
     }};
 translate_to_protobuf(#delete_file{silent = Silent}) ->
     {delete_file, #'DeleteFile'{silent = Silent}};
@@ -1673,6 +1801,11 @@ translate_to_protobuf(#child_link{
         name = Name
     };
 translate_to_protobuf(#file_attr{} = FileAttr) ->
+    Xattrs = maps:fold(fun(XattrName, XattrValue, Acc) ->
+        {xattr, TranslatedXattr} = translate_to_protobuf(
+            #xattr{name = XattrName, value = XattrValue}),
+        [TranslatedXattr | Acc]
+    end, [], FileAttr#file_attr.xattrs),
     {file_attr, #'FileAttr'{
         uuid = FileAttr#file_attr.guid,
         name = FileAttr#file_attr.name,
@@ -1692,7 +1825,9 @@ translate_to_protobuf(#file_attr{} = FileAttr) ->
         shares = FileAttr#file_attr.shares,
         owner_id = FileAttr#file_attr.owner_id,
         fully_replicated = FileAttr#file_attr.fully_replicated,
-        nlink = FileAttr#file_attr.nlink
+        nlink = FileAttr#file_attr.nlink,
+        index = file_listing:encode_index(FileAttr#file_attr.index),
+        xattrs = Xattrs
     }};
 translate_to_protobuf(#file_children{
     child_links = FileEntries,
@@ -1848,6 +1983,16 @@ translate_to_protobuf(#file_renamed{
 translate_to_protobuf(#guid{guid = Guid}) ->
     {uuid, #'Uuid'{
         uuid = Guid
+    }};
+translate_to_protobuf(#report_file_written{offset = Offset, size = Size}) ->
+    {report_file_written, #'ReportFileWritten'{
+        offset = Offset,
+        size = Size
+    }};
+translate_to_protobuf(#report_file_read{offset = Offset, size = Size}) ->
+    {report_file_read, #'ReportFileRead'{
+        offset = Offset,
+        size = Size
     }};
 
 
@@ -2040,29 +2185,6 @@ translate_to_protobuf(#fsync{
         data_only = DataOnly,
         handle_id = HandleId
     }};
-translate_to_protobuf(#get_metadata{
-    type = Type,
-    query = Query,
-    inherited = Inherited
-}) ->
-    {read_metadata, #'ReadMetadata'{
-        type = atom_to_binary(Type, utf8),
-        query = Query,
-        inherited = Inherited
-    }};
-translate_to_protobuf(#set_metadata{
-    metadata = Metadata,
-    query = Query
-}) ->
-    {_, MetadataProto} = translate_to_protobuf(Metadata),
-    {write_metadata, #'WriteMetadata'{
-        metadata = MetadataProto,
-        query = Query
-    }};
-translate_to_protobuf(#remove_metadata{type = Type}) ->
-    {remove_metadata, #'RemoveMetadata'{
-        type = atom_to_binary(Type, utf8)
-    }};
 
 
 translate_to_protobuf(#provider_response{
@@ -2090,22 +2212,6 @@ translate_to_protobuf(#acl{value = Value}) ->
     };
 translate_to_protobuf(#file_path{value = Value}) ->
     {file_path, #'FilePath'{value = Value}};
-translate_to_protobuf(#metadata{
-    type = json,
-    value = Json
-}) ->
-    {metadata, #'Metadata'{
-        type = <<"json">>,
-        value = json_utils:encode(Json)
-    }};
-translate_to_protobuf(#metadata{
-    type = rdf,
-    value = Rdf
-}) ->
-    {metadata, #'Metadata'{
-        type = <<"rdf">>,
-        value = Rdf
-    }};
 translate_to_protobuf(#check_perms{flag = Flag}) ->
     {check_perms, #'CheckPerms'{
         flag = open_flag_translate_to_protobuf(Flag)
@@ -2198,7 +2304,8 @@ translate_to_protobuf(#changes_request2{} = CR) ->
     {changes_request, #'ChangesRequest2'{
         space_id = CR#'changes_request2'.space_id,
         since = CR#'changes_request2'.since,
-        until = CR#'changes_request2'.until
+        until = CR#'changes_request2'.until,
+        included_mutators = CR#'changes_request2'.included_mutators
     }};
 
 
@@ -2250,6 +2357,86 @@ translate_to_protobuf(#close_session{}) ->
     {close_session, #'CloseSession'{}};
 
 
+%% MULTIPART UPLOAD
+
+translate_to_protobuf(#create_multipart_upload{space_id = SpaceId, path = Path}) ->
+    {create_multipart_upload, #'CreateMultipartUpload'{space_id = SpaceId, path = Path}};
+translate_to_protobuf(#upload_multipart_part{multipart_upload_id = UploadId, part = Part}) ->
+    {upload_multipart_part, #'UploadMultipartPart'{multipart_upload_id = UploadId, part = translate_to_protobuf(Part)}};
+translate_to_protobuf(#list_multipart_parts{
+    multipart_upload_id = UploadId, 
+    limit = Limit, 
+    part_marker = PartMarker
+}) ->
+    {list_multipart_parts, #'ListMultipartParts'{
+        multipart_upload_id = UploadId, 
+        limit = Limit, 
+        part_marker = PartMarker
+    }};
+translate_to_protobuf(#abort_multipart_upload{multipart_upload_id = UploadId}) ->
+    {abort_multipart_upload, #'AbortMultipartUpload'{multipart_upload_id = UploadId}};
+translate_to_protobuf(#complete_multipart_upload{multipart_upload_id = UploadId}) ->
+    {complete_multipart_upload, #'CompleteMultipartUpload'{multipart_upload_id = UploadId}};
+translate_to_protobuf(#list_multipart_uploads{
+    space_id = SpaceId,
+    limit = Limit,
+    index_token = IndexToken
+}) ->
+    {list_multipart_uploads, #'ListMultipartUploads'{
+        space_id = SpaceId,
+        limit = Limit,
+        index_token = multipart_upload:encode_token(IndexToken)
+    }};
+translate_to_protobuf(#multipart_upload_request{
+    multipart_request = Request
+}) ->
+    {multipart_upload_request, #'MultipartUploadRequest'{
+        multipart_request = translate_to_protobuf(Request)
+    }};
+translate_to_protobuf(#multipart_upload_part{
+    number = Number,
+    size = Size,
+    etag = Etag,
+    last_modified = LastModified
+}) ->
+    #'MultipartPart'{
+        number = Number,
+        size = Size,
+        etag = Etag,
+        last_modified = LastModified
+    };
+translate_to_protobuf(#multipart_parts{
+    parts = Parts,
+    is_last = IsLast
+}) ->
+    {multipart_parts, #'MultipartParts'{
+        parts = lists:map(fun(Part) -> translate_to_protobuf(Part) end, Parts),
+        is_last = IsLast
+    }};
+translate_to_protobuf(#multipart_upload{
+    multipart_upload_id = UploadId,
+    path = Path,
+    creation_time = CreationTime
+}) ->
+    {multipart_upload, #'MultipartUpload'{
+        multipart_upload_id = UploadId,
+        path = Path,
+        creation_time = CreationTime
+    }};
+translate_to_protobuf(#multipart_uploads{
+    uploads = Uploads,
+    is_last = IsLast,
+    next_page_token = NextPageToken
+}) ->
+    {multipart_uploads, #'MultipartUploads'{
+        uploads = lists:map(fun(Upload) -> 
+            {_, Record} = translate_to_protobuf(Upload), 
+            Record
+        end, Uploads),
+        is_last = IsLast,
+        next_page_token = multipart_upload:encode_token(NextPageToken)
+    }};
+
 translate_to_protobuf(undefined) ->
     undefined.
 
@@ -2271,3 +2458,27 @@ open_flag_translate_to_protobuf(_) -> 'READ_WRITE'.
 open_flag_translate_from_protobuf('READ') -> read;
 open_flag_translate_from_protobuf('WRITE') -> write;
 open_flag_translate_from_protobuf(_) -> rdwr.
+
+
+-spec optional_attrs_to_attrs_flags([attr_req:optional_attr()]) -> 
+    {boolean(), boolean()}.
+optional_attrs_to_attrs_flags(OptionalAttrsList) ->
+    IRS = lists:member(replication_status, OptionalAttrsList),
+    ILC = lists:member(link_count, OptionalAttrsList),
+    {IRS, ILC}.
+
+
+-spec attrs_flags_to_optional_attrs(boolean() | undefined, boolean() | undefined) -> 
+    [attr_req:optional_attr()].
+attrs_flags_to_optional_attrs(true = _IRS, true = _ILC) ->
+    [replication_status, link_count];
+attrs_flags_to_optional_attrs(true = _IRS, _ILC) ->
+    [replication_status];
+attrs_flags_to_optional_attrs(_IRS, true = _ILC) ->
+    [link_count];
+attrs_flags_to_optional_attrs(_IRS, _ILC) ->
+    [].
+
+-spec xattrs_to_optional_attrs([custom_metadata:name()]) -> [attr_req:optional_attr()].
+xattrs_to_optional_attrs([]) -> [];
+xattrs_to_optional_attrs(Xattrs) -> [{xattrs, Xattrs}].

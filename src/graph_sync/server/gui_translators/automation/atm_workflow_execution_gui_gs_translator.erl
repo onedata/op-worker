@@ -17,7 +17,7 @@
 -include("modules/automation/atm_execution.hrl").
 
 %% API
--export([translate_resource/2]).
+-export([translate_value/2, translate_resource/2]).
 
 %% Util functions
 -export([
@@ -29,6 +29,18 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+
+
+-spec translate_value(gri:gri(), Value :: term()) -> gs_protocol:data().
+translate_value(#gri{aspect = batch}, DiscardResults) ->
+    TranslateDiscardResultFun = fun
+        (_, ok) ->
+            #{<<"success">> => true};
+        (_, {error, _} = Error) ->
+            #{<<"success">> => false, <<"error">> => errors:to_json(Error)}
+    end,
+    maps:map(TranslateDiscardResultFun, DiscardResults).
 
 
 -spec translate_resource(gri:gri(), Data :: term()) -> gs_protocol:data().
@@ -46,7 +58,7 @@ translate_resource(#gri{aspect = summary, scope = private}, AtmWorkflowExecution
 
 -spec translate_atm_workflow_execution(atm_workflow_execution:record()) ->
     json_utils:json_map().
-translate_atm_workflow_execution(#atm_workflow_execution{
+translate_atm_workflow_execution(AtmWorkflowExecution = #atm_workflow_execution{
     space_id = SpaceId,
     atm_inventory_id = AtmInventoryId,
 
@@ -57,13 +69,13 @@ translate_atm_workflow_execution(#atm_workflow_execution{
     store_registry = AtmStoreRegistry,
     system_audit_log_store_id = AtmWorkflowAuditLogStoreId,
 
-    lanes = AtmLaneExecutions,
     lanes_count = AtmLanesCount,
 
     status = Status,
 
     schedule_time = ScheduleTime,
     start_time = StartTime,
+    suspend_time = SuspendTime,
     finish_time = FinishTime
 }) ->
     #{
@@ -87,7 +99,7 @@ translate_atm_workflow_execution(#atm_workflow_execution{
         <<"systemAuditLogId">> => utils:undefined_to_null(AtmWorkflowAuditLogStoreId),
 
         <<"lanes">> => lists:map(
-            fun(LaneIndex) -> atm_lane_execution:to_json(maps:get(LaneIndex, AtmLaneExecutions)) end,
+            fun(AtmLaneIndex) -> atm_lane_execution:to_json(AtmLaneIndex, AtmWorkflowExecution) end,
             lists:seq(1, AtmLanesCount)
         ),
 
@@ -95,6 +107,7 @@ translate_atm_workflow_execution(#atm_workflow_execution{
 
         <<"scheduleTime">> => ScheduleTime,
         <<"startTime">> => StartTime,
+        <<"suspendTime">> => SuspendTime,
         <<"finishTime">> => FinishTime
     }.
 
@@ -112,6 +125,7 @@ translate_atm_workflow_execution_summary(#atm_workflow_execution_summary{
 
     schedule_time = ScheduleTime,
     start_time = StartTime,
+    suspend_time = SuspendTime,
     finish_time = FinishTime
 }) ->
     #{
@@ -136,5 +150,6 @@ translate_atm_workflow_execution_summary(#atm_workflow_execution_summary{
 
         <<"scheduleTime">> => ScheduleTime,
         <<"startTime">> => StartTime,
+        <<"suspendTime">> => SuspendTime,
         <<"finishTime">> => FinishTime
     }.

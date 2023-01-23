@@ -31,6 +31,7 @@
 %% tests
 -export([
     create_test/1,
+    copy_test/1,
     manage_content_test/1,
     not_supported_iteration_test/1
 ]).
@@ -38,6 +39,7 @@
 groups() -> [
     {all_tests, [parallel], [
         create_test,
+        copy_test,
         manage_content_test,
         not_supported_iteration_test
     ]}
@@ -49,7 +51,7 @@ all() -> [
 
 
 -define(COUNTER_OF_ALL_COUNTS_TS_NAME, <<"counter_of_all_counts">>).
--define(COUNTER_OF_ALL_COUNTS_TS_SCHEMA, #atm_time_series_schema{
+-define(COUNTER_OF_ALL_COUNTS_TS_SCHEMA, #time_series_schema{
     name_generator_type = exact,
     name_generator = ?COUNTER_OF_ALL_COUNTS_TS_NAME,
     unit = none,
@@ -60,11 +62,15 @@ all() -> [
     }
 }).
 
--define(ATM_STORE_CONFIG, #atm_time_series_store_config{schemas = [
-    ?MAX_FILE_SIZE_TS_SCHEMA,
-    ?COUNT_TS_SCHEMA,
-    ?COUNTER_OF_ALL_COUNTS_TS_SCHEMA
-]}).
+-define(ATM_STORE_CONFIG, #atm_time_series_store_config{
+    time_series_collection_schema = #time_series_collection_schema{
+        time_series_schemas = [
+            ?MAX_FILE_SIZE_TS_SCHEMA,
+            ?COUNT_TS_SCHEMA,
+            ?COUNTER_OF_ALL_COUNTS_TS_SCHEMA
+        ]
+    }
+}).
 
 -define(DISPATCH_RULES, [
     #atm_time_series_dispatch_rule{
@@ -158,6 +164,67 @@ create_test(_Config) ->
         },
         get_slice(AtmWorkflowExecutionAuth, AtmStoreId, ExpLayout)
     ).
+
+
+copy_test(_Config) ->
+    AtmWorkflowExecutionAuth = create_workflow_execution_auth(),
+    AtmStoreSchema = build_store_schema(?ATM_STORE_CONFIG),
+
+    AtmStoreId = create_store(AtmWorkflowExecutionAuth, AtmStoreSchema),
+    ExpLayout = #{
+        ?MAX_FILE_SIZE_TS_NAME => [?MAX_FILE_SIZE_METRIC_NAME],
+        ?COUNTER_OF_ALL_COUNTS_TS_NAME => lists:sort([
+            ?MINUTE_METRIC_NAME, ?HOUR_METRIC_NAME, ?DAY_METRIC_NAME
+        ])
+    },
+    ?assertEqual(ExpLayout, get_layout(AtmWorkflowExecutionAuth, AtmStoreId)),
+
+    ContentUpdateOpts = #atm_time_series_store_content_update_options{
+        dispatch_rules = ?DISPATCH_RULES
+    },
+    Timestamp = infer_window_timestamp(?NOW(), ?DAY_METRIC_CONFIG) + 3 * ?HOUR_RESOLUTION + 1,
+
+    BuildExpWindows = fun(ExpValue) ->
+        #{
+            ?MAX_FILE_SIZE_TS_NAME => #{?MAX_FILE_SIZE_METRIC_NAME => []},
+            ?COUNTER_OF_ALL_COUNTS_TS_NAME => #{
+                ?MINUTE_METRIC_NAME => [?EXP_MINUTE_METRIC_WINDOW(Timestamp, ExpValue)],
+                ?HOUR_METRIC_NAME => [?EXP_HOUR_METRIC_WINDOW(Timestamp, ExpValue)],
+                ?DAY_METRIC_NAME => [?EXP_DAY_METRIC_WINDOW(Timestamp, ExpValue)]
+            }
+        }
+    end,
+
+    update_content(AtmStoreId, AtmWorkflowExecutionAuth, ContentUpdateOpts, [
+        #{<<"tsName">> => <<"count_trees">>, <<"timestamp">> => Timestamp, <<"value">> => 10}
+    ]),
+    ?assertEqual(ExpLayout, get_layout(AtmWorkflowExecutionAuth, AtmStoreId)),
+    ?assertEqual(BuildExpWindows(10), get_slice(AtmWorkflowExecutionAuth, AtmStoreId, ExpLayout)),
+
+    #document{key = NewAtmStoreId} = ?assertMatch(
+        #document{value = #atm_store{initial_content = undefined, frozen = false}},
+        ?rpc(atm_store_api:copy(AtmStoreId, false))
+    ),
+    ?assertEqual(ExpLayout, get_layout(AtmWorkflowExecutionAuth, NewAtmStoreId)),
+    ?assertEqual(BuildExpWindows(10), get_slice(AtmWorkflowExecutionAuth, NewAtmStoreId, ExpLayout)),
+
+    % Assert that original store content update has no effect on already existing copy
+    update_content(AtmStoreId, AtmWorkflowExecutionAuth, ContentUpdateOpts, [
+        #{<<"tsName">> => <<"count_trees">>, <<"timestamp">> => Timestamp, <<"value">> => 40}
+    ]),
+    ?assertEqual(ExpLayout, get_layout(AtmWorkflowExecutionAuth, AtmStoreId)),
+    ?assertEqual(BuildExpWindows(50), get_slice(AtmWorkflowExecutionAuth, AtmStoreId, ExpLayout)),
+    ?assertEqual(ExpLayout, get_layout(AtmWorkflowExecutionAuth, NewAtmStoreId)),
+    ?assertEqual(BuildExpWindows(10), get_slice(AtmWorkflowExecutionAuth, NewAtmStoreId, ExpLayout)),
+
+    % Assert that new store content update has no effect on original store
+    update_content(NewAtmStoreId, AtmWorkflowExecutionAuth, ContentUpdateOpts, [
+        #{<<"tsName">> => <<"count_trees">>, <<"timestamp">> => Timestamp, <<"value">> => 25}
+    ]),
+    ?assertEqual(ExpLayout, get_layout(AtmWorkflowExecutionAuth, AtmStoreId)),
+    ?assertEqual(BuildExpWindows(50), get_slice(AtmWorkflowExecutionAuth, AtmStoreId, ExpLayout)),
+    ?assertEqual(ExpLayout, get_layout(AtmWorkflowExecutionAuth, NewAtmStoreId)),
+    ?assertEqual(BuildExpWindows(35), get_slice(AtmWorkflowExecutionAuth, NewAtmStoreId, ExpLayout)).
 
 
 manage_content_test(_Config) ->
@@ -415,6 +482,13 @@ create_store(AtmWorkflowExecutionAuth, AtmStoreSchema) ->
         ?rpc(atm_store_api:create(AtmWorkflowExecutionAuth, undefined, AtmStoreSchema))
     ),
     AtmStoreId.
+
+
+%% @private
+update_content(AtmStoreId, AtmWorkflowExecutionAuth, ContentUpdateOpts, Measurements) ->
+    ?assertEqual(ok, ?rpc(atm_store_api:update_content(
+        AtmWorkflowExecutionAuth, Measurements, ContentUpdateOpts, AtmStoreId
+    ))).
 
 
 %% @private

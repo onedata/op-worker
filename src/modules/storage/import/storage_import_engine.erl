@@ -680,7 +680,7 @@ import_file_unsafe(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
                 ParentUuid, SpaceId, Info),
             % Size could not be updated in statistic as file_meta was created after file_location.
             % As a result file_meta_posthooks have been created during file_location creation - execute them now.
-            file_meta_posthooks:execute_hooks(FileUuid),
+            file_meta_posthooks:execute_hooks(FileUuid, doc),
             {ok, StorageFileCtx5} = create_times_from_stat_timestamps(FileUuid, StorageFileCtx4),
             ParentGuid = file_ctx:get_logical_guid_const(ParentCtx),
             {ok, FileType} = storage_driver:infer_type(Mode),
@@ -785,8 +785,8 @@ get_attr_including_deleted(FileCtx) ->
         }, _, IsDeleted} =
             attr_req:get_file_attr_and_conflicts_insecure(user_ctx:new(?ROOT_SESS_ID), FileCtx, #{
                 allow_deleted_files => true,
-                include_size => true,
-                name_conflicts_resolution_policy => allow_name_conflicts
+                name_conflicts_resolution_policy => allow_name_conflicts,
+                include_optional_attrs => [size]
             }),
         {ok, FileAttr, IsDeleted}
     catch
@@ -1009,7 +1009,7 @@ maybe_update_file(StorageFileCtx, FileAttr, FileCtx, Info) ->
     {result(), file_ctx:ctx(), storage_file_ctx:ctx()}.
 maybe_update_attrs(StorageFileCtx, FileAttr, FileCtx, Info = #{parent_ctx := ParentCtx}) ->
     {FileDoc, FileCtx2} = file_ctx:get_file_doc_including_deleted(FileCtx),
-    {ok, ProtectionFlags} = dataset_eff_cache:get_eff_file_protection_flags(FileDoc),
+    {ok, ProtectionFlags} = dataset_eff_cache:get_eff_protection_flags(FileDoc),
 
     % If ProtectionFlags are set, modification won't be reflected in the database
     % Attrs will be checked anyway to determine whether protected file has changed on storage.

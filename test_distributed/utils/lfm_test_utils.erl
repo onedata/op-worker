@@ -23,6 +23,7 @@
     get_user1_first_storage_id/2]).
 -export([create_file/4, create_file/5, write_file/4, write_file/5, create_and_write_file/6, read_file/4]).
 -export([create_files_tree/4, create_files_tree/5]).
+-export([get_xattrs/3]).
 -export([clean_space/3, clean_space/4, assert_space_and_trash_are_empty/3, assert_space_dir_empty/3]).
 
 % TODO VFS-7215 - merge this module with file_ops_test_utils
@@ -120,6 +121,16 @@ create_files_tree(Worker, SessId, Structure, RootGuid, FileSize) ->
     create_files_tree(Worker, SessId, Structure, RootGuid, FileSize, <<"dir">>, <<"file">>, [], []).
 
 
+-spec get_xattrs(node(), session:id(), file_id:file_guid()) ->
+    binary().
+get_xattrs(Worker, SessId, FileGuid) ->
+    {ok, Xattrs} = lfm_proxy:list_xattr(Worker, SessId, ?FILE_REF(FileGuid), false, false),
+    maps_utils:generate_from_list(fun(Xattr) ->
+        {ok, #xattr{value = Value}} = lfm_proxy:get_xattr(Worker, SessId, ?FILE_REF(FileGuid), Xattr),
+        Value
+    end, Xattrs).
+
+
 clean_space(Workers, SpaceId, Attempts) ->
     Workers2 = utils:ensure_list(Workers),
     CleaningWorker = lists_utils:random_element(Workers2),
@@ -133,7 +144,7 @@ clean_space(CleaningWorker, AllWorkers, SpaceId, Attempts) ->
     % TODO VFS-7064 remove below line after introducing link to trash directory
     rm_recursive(CleaningWorker, ?ROOT_SESS_ID, fslogic_file_id:spaceid_to_trash_dir_guid(SpaceId), BatchSize, false),
     ArchivesDirGuid = file_id:pack_guid(?ARCHIVES_ROOT_DIR_UUID(SpaceId), SpaceId),
-    rm_recursive(CleaningWorker, ?ROOT_SESS_ID, ArchivesDirGuid, BatchSize, true),
+    rm_recursive(CleaningWorker, ?ROOT_SESS_ID, ArchivesDirGuid, BatchSize, false),
     assert_space_and_trash_are_empty(AllWorkers, SpaceId, Attempts).
 
 assert_space_dir_empty(Workers, SpaceId, Attempts) ->
@@ -197,8 +208,8 @@ rm_recursive(Worker, SessId, DirGuid, BatchSize, DeleteDir, BaseListOpts) ->
 
 
 rm_files(Worker, SessId, GuidsAndPaths, BatchSize) ->
-    Results = lists:map(fun({G, Name}) ->
-        case Name =:= ?TRASH_DIR_NAME of
+    Results = lists:map(fun({G, _Name}) ->
+        case fslogic_file_id:is_special_guid(G) of
             true ->
                 rm_recursive(Worker, SessId, G, BatchSize, false);
             false ->
@@ -207,7 +218,7 @@ rm_files(Worker, SessId, GuidsAndPaths, BatchSize) ->
                         rm_recursive(Worker, SessId, G, BatchSize, true);
                     false ->
                         lfm_proxy:unlink(Worker, SessId, ?FILE_REF(G));
-                    {error, not_found} -> ok;
+                    {error, enoent} -> ok;
                     Error -> Error
                 end
         end

@@ -17,6 +17,7 @@
 -include("modules/fslogic/file_details.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include_lib("ctool/include/errors.hrl").
+-include_lib("cluster_worker/include/time_series/browsing.hrl").
 
 %% API
 -export([
@@ -33,10 +34,10 @@
 -spec translate_value(gri:gri(), Value :: term()) -> gs_protocol:data().
 translate_value(#gri{aspect = audit_log}, ListedEntries) ->
     ListedEntries;
-translate_value(#gri{aspect = time_series_collections}, Collections) ->
-    Collections;
-translate_value(#gri{aspect = {time_series_collection, _}}, ListedWindows) ->
-    ListedWindows.
+translate_value(#gri{aspect = {transfer_stats_collection_schema, _}}, TimeSeriesCollectionSchema) ->
+    jsonable_record:to_json(TimeSeriesCollectionSchema);
+translate_value(#gri{aspect = {transfer_stats_collection, _}}, TSBrowseResult) ->
+    ts_browse_result:to_json(TSBrowseResult).
 
 
 -spec translate_resource(gri:gri(), Data :: term()) ->

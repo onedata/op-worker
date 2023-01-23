@@ -23,14 +23,27 @@
 %% API
 -export([
     mkdir/4,
+    create_dir_at_path/3,
     get_children_ctxs/3,
     get_children/3,
-    get_children_attrs/5,
-    get_children_details/3
+    get_children_attrs/4,
+    get_children_details/3,
+    list_recursively/4
 ]).
+
+-type recursive_listing_opts() :: #{
+    % NOTE: pagination_token and start_after_path are mutually exclusive
+    pagination_token => recursive_listing:pagination_token(),
+    start_after_path => recursive_file_listing_node:node_path(),
+    prefix => recursive_listing:prefix(),
+    limit => recursive_listing:limit(),
+    include_directories => boolean()
+}.
 
 -type map_child_fun() :: fun((user_ctx:ctx(), file_ctx:ctx(), attr_req:compute_file_attr_opts()) ->
     fslogic_worker:fuse_response()) | no_return().
+
+-export_type([recursive_listing_opts/0]).
 
 %%%===================================================================
 %%% API
@@ -52,6 +65,26 @@ mkdir(UserCtx, ParentFileCtx0, Name, Mode) ->
         [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?add_subcontainer_mask)]
     ),
     mkdir_insecure(UserCtx, ParentFileCtx1, Name, Mode).
+
+
+-spec create_dir_at_path(user_ctx:ctx(), file_ctx:ctx(), file_meta:path()) -> 
+    fslogic_worker:fuse_response().
+create_dir_at_path(UserCtx, RootFileCtx, Path) ->
+    #fuse_response{fuse_response = #guid{guid = Guid}} =
+        guid_req:ensure_dir(UserCtx, RootFileCtx, Path, ?DEFAULT_DIR_MODE),
+    try attr_req:get_file_attr(UserCtx, file_ctx:new_by_guid(Guid), [size]) of
+        % if dir does not exist, it will be created during error handling
+        #fuse_response{fuse_response = #file_attr{type = ?DIRECTORY_TYPE}} = Response ->
+            Response;
+        _ ->
+            #fuse_response{status = #status{code = ?ENOTDIR}}
+    catch Class:Reason ->
+        case datastore_runner:normalize_error(Reason) of
+            not_found -> create_dir_at_path(UserCtx, RootFileCtx, Path);
+            ?ENOENT -> create_dir_at_path(UserCtx, RootFileCtx, Path);
+            _ -> erlang:apply(erlang, Class, [Reason])
+        end
+    end.
 
 
 -spec get_children(user_ctx:ctx(), file_ctx:ctx(), file_listing:options()) ->
@@ -116,9 +149,9 @@ get_children_ctxs(UserCtx, FileCtx0, ListOpts) ->
 %% @equiv get_children_attrs_insecure/7 with permission checks
 %% @end
 %%--------------------------------------------------------------------
--spec get_children_attrs(user_ctx:ctx(), file_ctx:ctx(), file_listing:options(), boolean(), boolean()) ->
+-spec get_children_attrs(user_ctx:ctx(), file_ctx:ctx(), file_listing:options(), [attr_req:optional_attr()]) ->
     fslogic_worker:fuse_response().
-get_children_attrs(UserCtx, FileCtx0, ListOpts, IncludeReplicationStatus, IncludeLinkCount) ->
+get_children_attrs(UserCtx, FileCtx0, ListOpts, OptionalAttrs) ->
     {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
     AccessRequirements = case IsDir of
         true -> [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?list_container_mask)];
@@ -128,7 +161,7 @@ get_children_attrs(UserCtx, FileCtx0, ListOpts, IncludeReplicationStatus, Includ
         UserCtx, FileCtx1, AccessRequirements
     ),
     get_children_attrs_insecure(
-        UserCtx, FileCtx2, ListOpts, IncludeReplicationStatus, IncludeLinkCount, CanonicalChildrenWhiteList
+        UserCtx, FileCtx2, ListOpts, OptionalAttrs, CanonicalChildrenWhiteList
     ).
 
 
@@ -149,6 +182,20 @@ get_children_details(UserCtx, FileCtx0, ListOpts) ->
     ),
     get_children_details_insecure(UserCtx, FileCtx2, ListOpts, CanonicalChildrenWhiteList).
 
+
+-spec list_recursively(user_ctx:ctx(), file_ctx:ctx(), recursive_listing_opts(), [attr_req:optional_attr()]) ->
+    fslogic_worker:fuse_response().
+list_recursively(UserCtx, FileCtx0, ListOpts, OptionalAttrs) ->
+    {IsDir, FileCtx1} = file_ctx:is_dir(FileCtx0),
+    AccessRequirements = case IsDir of
+        true -> [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?list_container_mask)];
+        false -> [?TRAVERSE_ANCESTORS]
+    end,
+    {_CanonicalChildrenWhiteList, FileCtx2} = fslogic_authz:ensure_authorized_readdir(
+        UserCtx, FileCtx1, AccessRequirements
+    ),
+    list_recursively_insecure(UserCtx, FileCtx2, ListOpts, OptionalAttrs).
+    
 
 %%%===================================================================
 %%% Internal functions
@@ -211,7 +258,6 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
         #fuse_response{fuse_response = FileAttr} =
             attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
                 allow_deleted_files => false,
-                include_size => false,
                 name_conflicts_resolution_policy => allow_name_conflicts
             }),
         FileAttr2 = FileAttr#file_attr{size = 0},
@@ -238,23 +284,25 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec get_children_attrs_insecure(user_ctx:ctx(), file_ctx:ctx(), file_listing:options(),
-    boolean(), boolean(), undefined | [file_meta:name()]
+    [attr_req:optional_attr()], undefined | [file_meta:name()]
 ) ->
     fslogic_worker:fuse_response().
 get_children_attrs_insecure(
-    UserCtx, FileCtx0, ListOpts, IncludeReplicationStatus, IncludeLinkCount, CanonicalChildrenWhiteList
+    UserCtx, FileCtx0, ListOpts, OptionalAttrs, CanonicalChildrenWhiteList
 ) ->
     {Children, ListingToken, FileCtx1} = file_tree:list_children(
         FileCtx0, UserCtx, ListOpts, CanonicalChildrenWhiteList),
     ComputeAttrsOpts = #{
         allow_deleted_files => false,
-        include_size => true,
-        include_replication_status => IncludeReplicationStatus,
-        include_link_count => IncludeLinkCount
+        include_optional_attrs => OptionalAttrs
     },
+    GetAttrFun = case file_attr:should_fetch_xattrs(OptionalAttrs) of
+        % fetching xattrs require more privileges than file listing, so insecure version cannot be called
+        {true, _} -> fun attr_req:get_file_attr/3;
+        false -> fun attr_req:get_file_attr_insecure/3
+    end,
     ChildrenAttrs = readdir_plus:gather_attributes(
-        UserCtx,
-        child_attrs_mapper(fun attr_req:get_file_attr_insecure/3),
+        child_attrs_mapper(GetAttrFun, UserCtx),
         Children,
         ComputeAttrsOpts
     ),
@@ -289,17 +337,10 @@ get_children_details_insecure(UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhit
     {Children, ListingToken, FileCtx1} = file_tree:list_children(
         FileCtx0, UserCtx, ListOpts, CanonicalChildrenWhiteList
     ),
-    ComputeAttrsOpts = #{
-        allow_deleted_files => false,
-        include_size => true,
-        include_replication_status => false,
-        include_link_count => true
-    },
     ChildrenDetails = readdir_plus:gather_attributes(
-        UserCtx,
-        child_attrs_mapper(fun attr_req:get_file_details_insecure/3),
+        child_attrs_mapper(fun(U, F, _Opts) -> attr_req:get_file_details_insecure(U, F) end, UserCtx),
         Children,
-        ComputeAttrsOpts
+        #{}
     ),
     fslogic_times:update_atime(FileCtx1),
     #fuse_response{status = #status{code = ?OK},
@@ -310,13 +351,56 @@ get_children_details_insecure(UserCtx, FileCtx0, ListOpts, CanonicalChildrenWhit
     }.
 
 
+%%--------------------------------------------------------------------
 %% @private
--spec child_attrs_mapper(map_child_fun()) -> 
+%% @doc
+%% Lists recursively files ordered by path lexicographically. 
+%% By default only non-directory (i.e regular, symlinks and hardlinks) are listed.
+%% When options `include_directories` is set to true directory entries will be included in result.
+%% For more details consult `recursive_listing` and `recursive_file_listing_node` module doc.
+%% @end
+%%--------------------------------------------------------------------
+-spec list_recursively_insecure(
+    user_ctx:ctx(), file_ctx:ctx(), recursive_listing_opts(), [attr_req:optional_attr()]
+) ->
+    fslogic_worker:fuse_response().
+list_recursively_insecure(UserCtx, FileCtx, ListOpts, OptionalAttrs) ->
+    FinalListOpts = kv_utils:move_found(
+        include_directories,
+        include_branching_nodes,
+        ListOpts
+    ),
+    #recursive_listing_result{
+        entries = Entries
+    } = Result = recursive_listing:list(recursive_file_listing_node, UserCtx, FileCtx, FinalListOpts),
+    ComputeAttrsOpts = #{
+        allow_deleted_files => false,
+        include_optional_attrs => OptionalAttrs
+    },
+    GetAttrFun = case file_attr:should_fetch_xattrs(OptionalAttrs) of
+        % fetching xattrs require more privileges than file listing, so insecure version cannot be called
+        {true, _} -> fun attr_req:get_file_attr/3;
+        false -> fun attr_req:get_file_attr_insecure/3
+    end,
+    MapperFun = fun({Path, EntryFileCtx}, BaseOpts) ->
+        #fuse_response{
+            status = #status{code = ?OK},
+            fuse_response = FileAttrs
+        } = GetAttrFun(UserCtx, EntryFileCtx, BaseOpts),
+        {Path, FileAttrs}
+    end,
+    MappedEntries = readdir_plus:gather_attributes(MapperFun, Entries, ComputeAttrsOpts),
+    #fuse_response{status = #status{code = ?OK},
+        fuse_response = Result#recursive_listing_result{entries = MappedEntries}
+    }.
+
+
+%% @private
+-spec child_attrs_mapper(map_child_fun(), user_ctx:ctx()) -> 
     readdir_plus:gather_attributes_fun(file_ctx:ctx(), fslogic_worker:fuse_response_type()).
-child_attrs_mapper(AttrsMappingFun) ->
-    fun(UserCtx, ChildCtx, BaseOpts) ->
+child_attrs_mapper(AttrsMappingFun, UserCtx) ->
+    fun(ChildCtx, BaseOpts) ->
         #fuse_response{status = #status{code = ?OK}, fuse_response = Result} = 
             AttrsMappingFun(UserCtx, ChildCtx, BaseOpts),
         Result
     end.
-

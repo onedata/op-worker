@@ -24,7 +24,7 @@
 -export([get_uuid/0, get_local_location/0, get_all_locations/0,
     cache_location_change/2, clear_location_changes/0]).
 % Doc API
--export([get_doc/1, save_doc/1, cache_doc/1, delete_doc/1, attach_blocks/1,
+-export([get_doc/1, get_doc_including_deleted/1, save_doc/1, cache_doc/1, delete_doc/1, attach_blocks/1,
     attach_local_blocks/1, attach_public_blocks/1, merge_local_blocks/1]).
 % Block API
 -export([get_blocks/1, save_blocks/2, cache_blocks/2, check_blocks/1,
@@ -290,18 +290,31 @@ clear_location_changes() ->
 %%% Doc API
 %%%===================================================================
 
-%%-------------------------------------------------------------------
-%% @doc
-%% Returns file location.
-%% @end
-%%-------------------------------------------------------------------
 -spec get_doc(file_location:id()) -> file_location:doc() | {error, not_found}.
-get_doc(undefined) ->
-    {error, not_found};
 get_doc(Key) ->
+    get_doc(Key, false).
+
+-spec get_doc(file_location:id(), boolean()) -> file_location:doc() | {error, not_found}.
+get_doc(Key, ForceReload) ->
+    case get_doc_including_deleted(Key, ForceReload) of
+        #document{deleted = true} -> {error, not_found};
+        Ans -> Ans
+    end.
+
+
+-spec get_doc_including_deleted(file_location:id()) -> file_location:doc() | {error, not_found}.
+get_doc_including_deleted(Key) ->
+    get_doc_including_deleted(Key, false).
+
+-spec get_doc_including_deleted(file_location:id(), boolean()) -> file_location:doc() | {error, not_found}.
+get_doc_including_deleted(undefined, _) ->
+    {error, not_found};
+get_doc_including_deleted(Key, ForceReload) ->
     case get({?DOCS, Key}) of
-        undefined ->
-            case file_location:get(Key) of
+        #document{} = Doc when ForceReload =:= false ->
+            Doc;
+        GetAns ->
+            case file_location:get_including_deleted(Key) of
                 {ok, LocationDoc = #document{
                     key = Key,
                     value = Location = #file_location{blocks = PublicBlocks}}
@@ -309,7 +322,10 @@ get_doc(Key) ->
                     LocationDoc2 = LocationDoc#document{
                         value = Location#file_location{blocks = []}
                     },
-                    cache_doc(LocationDoc),
+                    case GetAns of
+                        undefined -> cache_doc(LocationDoc);
+                        _ -> store_doc(LocationDoc)
+                    end,
 
                     {Blocks, Sorted} = merge_local_blocks(LocationDoc),
                     put({?BLOCKS, Key}, blocks_to_tree(Blocks, Sorted)),
@@ -321,10 +337,9 @@ get_doc(Key) ->
                 Error ->
                     ?error("Fslogic cache error: ~p", [Error]),
                     throw({fslogic_cache_error, Error})
-            end;
-        Doc ->
-            Doc
+            end
     end.
+
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -359,7 +374,7 @@ delete_doc(Key) ->
         #document{} = Doc -> {ok, Doc};
         _ -> file_location:get(Key)
     end,
-    case GetDocAns of
+    Ans = case GetDocAns of
         {ok, #document{value = #file_location{
             uuid = FileUuid,
             space_id = SpaceId,
@@ -369,16 +384,16 @@ delete_doc(Key) ->
             dir_size_stats:report_reg_file_size_changed(file_id:pack_guid(FileUuid, SpaceId), total, -LocationSize),
             StorageSize = get_local_size(Key),
             cache_size_change(Key, SpaceId, StorageId, -StorageSize),
-            apply_size_change(Key, FileUuid);
+            apply_size_change(Key, FileUuid),
+            LocationDelAns = file_location:delete(Key),
+            delete_local_blocks(Key),
+            LocationDelAns;
         {error, not_found} ->
             ok;
         Error ->
-            ?error("~p:~p error ~p for key ~p", [?MODULE, ?FUNCTION_NAME, Error, Key])
+            ?error("~p:~p error ~p for key ~p", [?MODULE, ?FUNCTION_NAME, Error, Key]),
+            Error
     end,
-
-    Ans = file_location:delete(Key),
-
-    delete_local_blocks(Key),
 
     erase({?DOCS, Key}),
     erase({?FLUSHED_DOCS, Key}),
@@ -455,7 +470,7 @@ get_blocks(Key) ->
 get_public_blocks(Key) ->
     case get({?PUBLIC_BLOCKS, Key}) of
         undefined ->
-            case get_doc(Key) of
+            case get_doc(Key, true) of
                 #document{} ->
                     get_public_blocks(Key);
                 _ ->
@@ -475,7 +490,7 @@ get_public_blocks(Key) ->
 get_blocks_tree(Key) ->
     case get({?BLOCKS, Key}) of
         undefined ->
-            case get_doc(Key) of
+            case get_doc(Key, true) of
                 #document{} ->
                     get_blocks_tree(Key);
                 _ ->
@@ -895,14 +910,17 @@ apply_size_change(Key, FileUuid) ->
             ok;
         Changes ->
             try
-                {ok, UserId} = file_location:get_owner_id(FileUuid),
+                UserIdOrUndefined = case file_location:get_owner_id(FileUuid) of
+                    {ok, Id} -> Id;
+                    {error,not_found} -> undefined
+                end,
                 lists:foreach(fun({{SpaceId, StorageId}, ChangeSize}) ->
                     % TODO VFS-8835 - cache parent when rename works properly
                     dir_size_stats:report_reg_file_size_changed(
                         file_id:pack_guid(FileUuid, SpaceId), {on_storage, StorageId}, ChangeSize),
                     space_quota:apply_size_change_and_maybe_emit(SpaceId, ChangeSize),
                     monitoring_event_emitter:emit_storage_used_updated(
-                        SpaceId, UserId, ChangeSize)
+                        SpaceId, UserIdOrUndefined, ChangeSize)
                 end, Changes),
 
                 put({?SIZE_CHANGES, Key}, []),

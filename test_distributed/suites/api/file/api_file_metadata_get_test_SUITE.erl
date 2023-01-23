@@ -133,8 +133,10 @@ get_rdf_metadata_test_base(SetRdfPolicy, TestMode, _Config) ->
     end,
     file_test_utils:await_sync(P2Node, FileGuid),
 
-    DataSpec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
-        FileGuid, ShareId, undefined
+    DataSpec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
+        api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+            FileGuid, ShareId, undefined
+        )
     ),
 
     get_metadata_test_base(
@@ -155,7 +157,7 @@ get_file_rdf_metadata_on_provider_not_supporting_space_test(_Config) ->
 
     SpaceId = oct_background:get_space_id(space_krk),
     {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
-    lfm_proxy:set_metadata(P1Node, SessIdP1, ?FILE_REF(FileGuid), rdf, ?RDF_METADATA_1, []),
+    opt_file_metadata:set_custom_metadata(P1Node, SessIdP1, ?FILE_REF(FileGuid), rdf, ?RDF_METADATA_1, []),
 
     GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id) end,
 
@@ -218,31 +220,33 @@ get_json_metadata_test_base(SetDirectJsonPolicy, TestMode, Config) ->
             }
     end,
 
-    DataSpec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
-        FileLayer5Guid, ShareId, #data_spec{
-            optional = QsParams = [<<"inherited">>, <<"filter_type">>, <<"filter">>],
-            correct_values = #{
-                <<"inherited">> => [true, false],
-                <<"filter_type">> => [<<"keypath">>],
-                <<"filter">> => [
-                    <<"attr3.attr32">>, <<"attr3.[10]">>,
-                    <<"attr2.attr22.[2]">>, <<"attr2.attr22.[10]">>
-                ]
-            },
-            bad_values = [
-                {<<"inherited">>, -100, ?ERROR_BAD_VALUE_BOOLEAN(<<"inherited">>)},
-                {<<"inherited">>, <<"dummy">>, ?ERROR_BAD_VALUE_BOOLEAN(<<"inherited">>)},
-                {<<"filter_type">>, <<"dummy">>,
-                    ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"filter_type">>, [<<"keypath">>])},
+    DataSpec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
+        api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+            FileLayer5Guid, ShareId, #data_spec{
+                optional = QsParams = [<<"inherited">>, <<"filter_type">>, <<"filter">>],
+                correct_values = #{
+                    <<"inherited">> => [true, false],
+                    <<"filter_type">> => [<<"keypath">>],
+                    <<"filter">> => [
+                        <<"attr3.attr32">>, <<"attr3.[10]">>,
+                        <<"attr2.attr22.[2]">>, <<"attr2.attr22.[10]">>
+                    ]
+                },
+                bad_values = [
+                    {<<"inherited">>, -100, ?ERROR_BAD_VALUE_BOOLEAN(<<"inherited">>)},
+                    {<<"inherited">>, <<"dummy">>, ?ERROR_BAD_VALUE_BOOLEAN(<<"inherited">>)},
+                    {<<"filter_type">>, <<"dummy">>,
+                        ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"filter_type">>, [<<"keypath">>])},
 
-                % Below differences between error returned by rest and gs are results of sending
-                % parameters via qs in REST, so they lost their original type and are cast to binary
-                {<<"filter_type">>, 100, {rest,
-                    ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"filter_type">>, [<<"keypath">>])}},
-                {<<"filter_type">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"filter_type">>)}},
-                {<<"filter">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"filter">>)}}
-            ]
-        }
+                    % Below differences between error returned by rest and gs are results of sending
+                    % parameters via qs in REST, so they lost their original type and are cast to binary
+                    {<<"filter_type">>, 100, {rest,
+                        ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"filter_type">>, [<<"keypath">>])}},
+                    {<<"filter_type">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"filter_type">>)}},
+                    {<<"filter">>, 100, {gs, ?ERROR_BAD_VALUE_BINARY(<<"filter">>)}}
+                ]
+            }
+        )
     ),
 
     get_metadata_test_base(
@@ -410,7 +414,7 @@ get_file_json_metadata_on_provider_not_supporting_space_test(_Config) ->
 
     SpaceId = oct_background:get_space_id(space_krk),
     {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_shared_file_in_space_krk(),
-    lfm_proxy:set_metadata(P1Node, SessIdP1, ?FILE_REF(FileGuid), json, ?JSON_METADATA_2, []),
+    opt_file_metadata:set_custom_metadata(P1Node, SessIdP1, ?FILE_REF(FileGuid), json, ?JSON_METADATA_2, []),
 
     GetExpCallResultFun = fun(_TestCtx) -> ?ERROR_SPACE_NOT_SUPPORTED_BY(SpaceId, P2Id) end,
 

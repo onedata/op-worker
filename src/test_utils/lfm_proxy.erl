@@ -48,11 +48,12 @@
     truncate/4,
 
     mkdir/3, mkdir/4, mkdir/5,
+    create_dir_at_path/4,
     get_children/4, get_children/5,
-    get_children_attrs/4,
+    get_children_attrs/4, get_children_attrs/5,
     get_child_attr/4,
     get_children_details/4,
-    get_files_recursively/4,
+    get_files_recursively/5,
 
     get_xattr/4, get_xattr/5,
     set_xattr/4, set_xattr/6,
@@ -62,7 +63,13 @@
     get_acl/3, set_acl/4, remove_acl/3,
 
     has_custom_metadata/3,
-    get_metadata/6, set_metadata/6, remove_metadata/4
+
+    create_multipart_upload/4,
+    abort_multipart_upload/3,
+    complete_multipart_upload/3,
+    list_multipart_uploads/5,
+    upload_multipart_part/4,
+    list_multipart_parts/5
 ]).
 
 -define(EXEC(Worker, Function),
@@ -146,10 +153,10 @@ stat(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:stat(SessId, uuid_to_file_ref(Worker, FileKey))).
 
 
--spec stat(node(), session:id(), lfm:file_key() | file_meta:uuid(), boolean()) ->
+-spec stat(node(), session:id(), lfm:file_key() | file_meta:uuid(), [attr_req:optional_attr()]) ->
     {ok, lfm_attrs:file_attributes()} | lfm:error_reply().
-stat(Worker, SessId, FileKey, IncludeLinksCount) ->
-    ?EXEC(Worker, lfm:stat(SessId, uuid_to_file_ref(Worker, FileKey), IncludeLinksCount)).
+stat(Worker, SessId, FileKey, OptionalAttrs) ->
+    ?EXEC(Worker, lfm:stat(SessId, uuid_to_file_ref(Worker, FileKey), OptionalAttrs)).
 
 
 -spec resolve_symlink(node(), session:id(), lfm:file_key() | file_meta:uuid()) ->
@@ -261,7 +268,7 @@ cp(Worker, SessId, FileKey, TargetParentKey, TargetName) ->
 
 
 -spec is_dir(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path()) ->
-    ok | lfm:error_reply().
+    boolean() | lfm:error_reply().
 is_dir(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:is_dir(SessId, uuid_to_file_ref(Worker, FileKey))).
 
@@ -529,9 +536,15 @@ mkdir(Worker, SessId, Path, Mode) ->
 
 -spec mkdir(node(), session:id(), fslogic_worker:file_guid(),
     file_meta:name(), file_meta:posix_permissions()) ->
-    {ok, DirUuid :: file_meta:uuid()} | lfm:error_reply().
+    {ok, DirGuid :: fslogic_worker:file_guid()} | lfm:error_reply().
 mkdir(Worker, SessId, ParentGuid, Name, Mode) ->
     ?EXEC(Worker, lfm:mkdir(SessId, ParentGuid, Name, Mode)).
+
+
+-spec create_dir_at_path(node(), session:id(), fslogic_worker:file_guid(), file_meta:path()) ->
+    {ok, #file_attr{}} | lfm:error_reply().
+create_dir_at_path(Worker, SessId, ParentGuid, Path) ->
+    ?EXEC(Worker, lfm:create_dir_at_path(SessId, ParentGuid, Path)).
 
 
 -spec get_children(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path(),
@@ -558,6 +571,13 @@ get_children_attrs(Worker, SessId, FileKey, ListOpts) ->
     ?EXEC(Worker, lfm:get_children_attrs(SessId, uuid_to_file_ref(Worker, FileKey), ListOpts)).
 
 
+-spec get_children_attrs(node(), session:id(), lfm:file_key() | file_meta:uuid_or_path(),
+    file_listing:options(), [attr_req:optional_attr()]) -> 
+    {ok, [#file_attr{}], file_listing:pagination_token()} | lfm:error_reply().
+get_children_attrs(Worker, SessId, FileKey, ListOpts, OptionalAttrs) ->
+    ?EXEC(Worker, lfm:get_children_attrs(SessId, uuid_to_file_ref(Worker, FileKey), ListOpts, OptionalAttrs)).
+
+
 -spec get_child_attr(node(), session:id(), fslogic_worker:file_guid(), file_meta:name()) ->
     {ok, lfm_attrs:file_attributes()} | lfm:error_reply().
 get_child_attr(Worker, SessId, ParentGuid, ChildName) ->
@@ -574,11 +594,12 @@ get_children_details(Worker, SessId, FileKey, ListOpts) ->
     node(),
     session:id(),
     lfm:file_key(),
-    recursive_file_listing:options()
+    dir_req:recursive_listing_opts(),
+    [attr_req:optional_attr()]
 ) ->
-    {ok, [recursive_file_listing:entry()], [file_meta:path()], recursive_file_listing:pagination_token()} | lfm:error_reply().
-get_files_recursively(Worker, SessId, FileKey, Options) ->
-    ?EXEC(Worker, lfm:get_files_recursively(SessId, uuid_to_file_ref(Worker, FileKey), Options)).
+    {ok, [recursive_file_listing_node:entry()], [file_meta:path()], recursive_listing:pagination_token()} | lfm:error_reply().
+get_files_recursively(Worker, SessId, FileKey, Options, OptionalAttrs) ->
+    ?EXEC(Worker, lfm:get_files_recursively(SessId, uuid_to_file_ref(Worker, FileKey), Options, OptionalAttrs)).
 
 
 %%%===================================================================
@@ -657,26 +678,42 @@ has_custom_metadata(Worker, SessId, FileKey) ->
     ?EXEC(Worker, lfm:has_custom_metadata(SessId, FileKey)).
 
 
--spec get_metadata(node(), session:id(), lfm:file_key(),
-    custom_metadata:type(), custom_metadata:query(), boolean()
-) ->
-    {ok, custom_metadata:value()}.
-get_metadata(Worker, SessId, FileKey, Type, Query, Inherited) ->
-    ?EXEC(Worker, lfm:get_metadata(SessId, FileKey, Type, Query, Inherited)).
+%%%===================================================================
+%%% Multipart upload related operations
+%%%===================================================================
+
+-spec create_multipart_upload(node(), session:id(), od_space:id(), file_meta:path()) ->
+    {ok, multipart_upload:id()} | {error, term()}.
+create_multipart_upload(Worker, SessId, SpaceId, Path) ->
+    ?EXEC(Worker, lfm:create_multipart_upload(SessId, SpaceId, Path)).
 
 
--spec set_metadata(node(), session:id(), lfm:file_key(),
-    custom_metadata:type(), custom_metadata:value(), custom_metadata:query()
-) ->
-    ok.
-set_metadata(Worker, SessId, FileKey, Type, Value, Query) ->
-    ?EXEC(Worker, lfm:set_metadata(SessId, FileKey, Type, Value, Query)).
+-spec abort_multipart_upload(node(), session:id(), multipart_upload:id()) -> ok | {error, term()}.
+abort_multipart_upload(Worker, SessId, UploadId) ->
+    ?EXEC(Worker, lfm:abort_multipart_upload(SessId, UploadId)).
 
 
--spec remove_metadata(node(), session:id(), lfm:file_key(),
-    custom_metadata:type()) -> ok.
-remove_metadata(Worker, SessId, FileKey, Type) ->
-    ?EXEC(Worker, lfm:remove_metadata(SessId, FileKey, Type)).
+-spec complete_multipart_upload(node(), session:id(), multipart_upload:id()) -> ok | {error, term()}.
+complete_multipart_upload(Worker, SessId, UploadId) ->
+    ?EXEC(Worker, lfm:complete_multipart_upload(SessId, UploadId)).
+
+
+-spec list_multipart_uploads(node(), session:id(), od_space:id(), non_neg_integer(), multipart_upload:pagination_token() | undefined) ->
+    {ok, [multipart_upload:record()], multipart_upload:pagination_token(), boolean()} | {error, term()}.
+list_multipart_uploads(Worker, SessId, SpaceId, Limit, Token) ->
+    ?EXEC(Worker, lfm:list_multipart_uploads(SessId, SpaceId, Limit, Token)).
+
+
+-spec upload_multipart_part(node(), session:id(), multipart_upload:id(), multipart_upload_part:record()) ->
+    ok | {error, term()}.
+upload_multipart_part(Worker, SessId, UploadId, Part) ->
+    ?EXEC(Worker, lfm:upload_multipart_part(SessId, UploadId, Part)).
+
+
+-spec list_multipart_parts(node(), session:id(), multipart_upload:id(), non_neg_integer(), multipart_upload_part:part_number()) ->
+    {ok, [multipart_upload_part:record()], boolean()} | {error, term()}.
+list_multipart_parts(Worker, SessId, UploadId, Limit, StartAfter) ->
+    ?EXEC(Worker, lfm:list_multipart_parts(SessId, UploadId, Limit, StartAfter)).
 
 
 %%%===================================================================

@@ -278,7 +278,10 @@ cleanup_datasets(Node, SpaceId, ForestType) ->
     {ok, Datasets} = rpc:call(Node, datasets_structure, list_all_unsafe, [SpaceId, ForestType]),
     lists:foreach(fun({_DatasetPath, {DatasetId, _DatasetName, _Index}}) ->
         cleanup_dataset(Node, DatasetId)
-    end, Datasets).
+    end, Datasets),
+    lists:foreach(fun(P) ->
+        ?assertEqual({ok, []}, opw_test_rpc:call(P, datasets_structure, list_all_unsafe, [SpaceId, ForestType]), ?ATTEMPTS)
+    end, oct_background:get_provider_ids()).
 
 
 %% @private

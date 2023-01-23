@@ -55,8 +55,8 @@ many_files_creation_tree_test(Config) ->
             [{name, spawn_beg_level}, {value, 4}, {description, "Level of tree to start spawning processes"}],
             [{name, spawn_end_level}, {value, 5}, {description, "Level of tree to stop spawning processes"}],
             [{name, dir_level}, {value, 6}, {description, "Level of last test directory"}],
-            [{name, dirs_per_parent}, {value, 5}, {description, "Child directories in single dir"}],
-            [{name, files_per_dir}, {value, 20}, {description, "Number of files in single directory"}]
+            [{name, dirs_per_parent}, {value, 6}, {description, "Child directories in single dir"}],
+            [{name, files_per_dir}, {value, 40}, {description, "Number of files in single directory"}]
         ]},
         {description, "Creates directories' and files' tree using multiple process and checks statistics"}
     ]).
@@ -127,12 +127,9 @@ end_per_suite(Config) ->
 
 init_per_testcase(stress_test = Case, Config) ->
     NewConfig = files_stress_test_base:init_per_testcase(Case, Config),
-    [Worker | _] = Workers = ?config(op_worker_nodes, NewConfig),
+    [Worker | _] = ?config(op_worker_nodes, NewConfig),
     SpaceId = lfm_test_utils:get_user1_first_space_id(NewConfig),
-    ?assertEqual(ok, rpc:call(Worker, space_support_state_api, init_support_state, [SpaceId, #{
-        accounting_enabled => false,
-        dir_stats_service_enabled => true
-    }])),
+    ?assertEqual(ok, rpc:call(Worker, dir_stats_service_state, enable, [SpaceId])),
     NewConfig;
 init_per_testcase(_Case, Config) ->
     Config.
@@ -161,5 +158,7 @@ get_expected_stats(Config) ->
         ?REG_FILE_AND_LINK_COUNT => ExpectedFileCount,
         ?DIR_COUNT => ExpectedDirCount,
         ?TOTAL_SIZE => 0,
-        ?SIZE_ON_STORAGE(StorageId) => 0
+        ?SIZE_ON_STORAGE(StorageId) => 0,
+        ?FILE_ERRORS_COUNT => 0,
+        ?DIR_ERRORS_COUNT => 0
     }.

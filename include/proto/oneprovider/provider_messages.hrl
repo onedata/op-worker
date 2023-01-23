@@ -43,35 +43,14 @@
 -record(get_file_path, {
 }).
 
--record(get_metadata, {
-    type :: custom_metadata:type(),
-    query = [] :: custom_metadata:query(),
-    inherited = false :: boolean()
-}).
-
--record(set_metadata, {
-    metadata :: custom_metadata:metadata(),
-    query = [] :: custom_metadata:query()
-}).
-
--record(remove_metadata, {
-    type :: custom_metadata:type()
-}).
-
 -type provider_request_type() ::
     #get_parent{} |
     #get_acl{} | #set_acl{} | #remove_acl{} | #check_perms{} |
-    #get_file_path{} |
-    #get_metadata{} | #remove_metadata{} | #set_metadata{}.
+    #get_file_path{}.
 
 
 -record(file_path, {
     value :: binary()
-}).
-
--record(metadata, {
-    type :: custom_metadata:type(),
-    value :: term()
 }).
 
 -record(dataset_info, {
@@ -98,8 +77,10 @@
 -record(archive_info, {
     id :: archive:id(),
     dataset_id :: dataset:id(),
+    archiving_provider :: oneprovider:id(),
     state :: archive:state(),
     root_dir_guid :: undefined | file_id:file_guid(),
+    data_dir_guid :: undefined | file_id:file_guid(),
     creation_time :: time:millis(),
     config :: archive:config(),
     preserved_callback :: archive:callback(),
@@ -114,7 +95,7 @@
 }).
 
 -type provider_response_type() ::
-    #acl{} | #dir{} | #file_path{}| #metadata{} | #dataset_info{} | #file_eff_dataset_summary{} | 
+    #acl{} | #dir{} | #file_path{}| #dataset_info{} | #file_eff_dataset_summary{} |
     #archive_info{} | undefined.
 
 -record(provider_request, {

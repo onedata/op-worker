@@ -173,24 +173,21 @@ update_job_progress(Id, Job, Pool, TaskId, Status) ->
 
 -spec do_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()}.
-do_master_job(#tree_traverse{file_ctx = FileCtx} = Job, MasterJobArgs) ->
-    {IsDir, FileCtx2} = file_ctx:is_dir(FileCtx),
-    case IsDir of
-        true ->
-            do_dir_master_job(Job#tree_traverse{file_ctx = FileCtx2}, MasterJobArgs);
-        false ->
-            % recalling archive can be created from a dataset established on a file/symlink.
-            tree_traverse:do_master_job(Job#tree_traverse{file_ctx = FileCtx2}, MasterJobArgs)
-    end.
+do_master_job(InitialJob, MasterJobArgs = #{task_id := TaskId}) ->
+    ErrorHandler = fun(Job, Reason, Stacktrace) ->
+        report_error(TaskId, Job, Reason, Stacktrace),
+        {ok, #{}} % unexpected error logged by report_error - no jobs can be created
+    end,
+    archive_traverses_common:do_master_job(?MODULE, InitialJob, MasterJobArgs, ErrorHandler).
 
 
 -spec do_slave_job(tree_traverse:slave_job(), id()) -> ok.
-do_slave_job(Job, TaskId
-) ->
-    case execute_unsafe_job(do_slave_job_unsafe, [TaskId], Job, TaskId) of
-        ok -> ok;
-        error -> ok % error should be logged and saved, continue recall
-    end.
+do_slave_job(InitialJob, TaskId) ->
+    ErrorHandler = fun(Job, Reason, Stacktrace) ->
+        report_error(TaskId, Job, Reason, Stacktrace)
+    end,
+    archive_traverses_common:execute_unsafe_job(
+        ?MODULE, do_slave_job_unsafe, [TaskId], InitialJob, ErrorHandler).
 
 %%%===================================================================
 %%% Internal functions
@@ -256,17 +253,6 @@ setup_recall_traverse(SpaceId, ArchiveDoc, RootFileGuid, TraverseInfo, StartFile
 
 
 %% @private
--spec do_dir_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) -> 
-    {ok, traverse:master_job_map()}.
-do_dir_master_job(Job, #{task_id := TaskId} = MasterJobArgs
-) ->
-    case execute_unsafe_job(do_dir_master_job_unsafe, [MasterJobArgs], Job, TaskId) of
-        error -> {ok, #{}}; % unexpected error logged by execute_unsafe_job - no jobs can be created
-        Res -> Res
-    end.
-
-
-%% @private
 -spec do_dir_master_job_unsafe(tree_traverse:master_job(), traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()}.
 do_dir_master_job_unsafe(#tree_traverse{
@@ -320,23 +306,9 @@ do_slave_job_unsafe(#tree_traverse_slave{
             {ok, _, _} = file_copy:copy(SessionId, FileGuid, TargetParentGuid, FileName,
                 ?COPY_OPTIONS(TaskId))
     end,
-    ok = archive_recall:report_file_finished(TaskId).
-
-
-%% @private
--spec execute_unsafe_job(atom(), [term()], tree_traverse:job(), id()) -> 
-    any() | error.
-execute_unsafe_job(JobFunctionName, Options, Job, TaskId) ->
-    try
-        % call using ?MODULE for mocking in tests
-        erlang:apply(?MODULE, JobFunctionName, [Job | Options])
-    catch
-        _Class:{badmatch, {error, Reason}}:Stacktrace ->
-            report_error(TaskId, Job, ?ERROR_POSIX(Reason), Stacktrace),
-            error;
-        _Class:Reason:Stacktrace ->
-            report_error(TaskId, Job, Reason, Stacktrace),
-            error
+    case traverse:is_job_cancelled(TaskId) of
+        true -> ok;
+        false -> archive_recall:report_file_finished(TaskId)
     end.
 
 

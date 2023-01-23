@@ -8,6 +8,7 @@
 %%%--------------------------------------------------------------------
 %%% @doc
 %%% This module checks user access rights for file.
+%%% @TODO VFS-10318 - standardize concepts regarding protection flags (restricted/blocked/forbidden/denied; dataset/file protection flags)
 %%% @end
 %%%--------------------------------------------------------------------
 -module(data_access_control).
@@ -154,10 +155,12 @@ assert_access_granted_for_user(UserCtx, FileCtx0, AccessRequirements0) ->
     file_ctx:ctx() | no_return().
 assert_access_permitted_by_protection_flags(FileCtx, AccessRequirements) ->
     {ForbiddenOps, FileCtx1} = get_operations_blocked_by_file_protection_flags(FileCtx),
+    {ForbiddenOps2, FileCtx2} = get_operations_blocked_by_dataset_protection_flags(FileCtx1),
+    AllForbiddenOps = ForbiddenOps bor ForbiddenOps2,
 
     IsRequirementMet = fun
         F(?OPERATIONS(RequiredOps)) ->
-            case ?common_flags(RequiredOps, ForbiddenOps) of
+            case ?common_flags(RequiredOps, AllForbiddenOps) of
                 ?no_flags_mask -> true;
                 _ -> false
             end;
@@ -167,7 +170,7 @@ assert_access_permitted_by_protection_flags(FileCtx, AccessRequirements) ->
             true
     end,
     case lists:all(IsRequirementMet, AccessRequirements) of
-        true -> FileCtx1;
+        true -> FileCtx2;
         false -> throw(?EPERM)
     end.
 
@@ -334,7 +337,8 @@ check_operations(UserCtx, FileCtx0, RequiredOps) ->
     ShareId = file_ctx:get_share_id_const(FileCtx0),
     ForbiddenOps1 = get_operations_blocked_by_lack_of_space_privs(UserCtx, FileCtx0, ShareId),
     {ForbiddenOps2, FileCtx1} = get_operations_blocked_by_file_protection_flags(FileCtx0),
-    AllForbiddenOps = ForbiddenOps1 bor ForbiddenOps2,
+    {ForbiddenOps3, FileCtx2} = get_operations_blocked_by_dataset_protection_flags(FileCtx1),
+    AllForbiddenOps = ForbiddenOps1 bor ForbiddenOps2 bor ForbiddenOps3,
 
     UserAccessCheckProgress = #user_access_check_progress{
         finished_step = ?OPERATIONS_AVAILABILITY_CHECK,
@@ -344,9 +348,9 @@ check_operations(UserCtx, FileCtx0, RequiredOps) ->
     },
     case ?common_flags(RequiredOps, AllForbiddenOps) of
         ?no_flags_mask ->
-            check_file_permissions(UserCtx, FileCtx1, RequiredOps, UserAccessCheckProgress);
+            check_file_permissions(UserCtx, FileCtx2, RequiredOps, UserAccessCheckProgress);
         _ ->
-            {forbidden, FileCtx1, UserAccessCheckProgress}
+            {forbidden, FileCtx2, UserAccessCheckProgress}
     end.
 
 
@@ -383,18 +387,34 @@ get_operations_blocked_by_lack_of_space_privs(_UserCtx, _FileCtx, _ShareId) ->
     {bitmask(), file_ctx:ctx()}.
 get_operations_blocked_by_file_protection_flags(FileCtx0) ->
     {FileDoc, FileCtx1} = file_ctx:get_file_doc_including_deleted(FileCtx0),
-    {ok, Flags} = dataset_eff_cache:get_eff_file_protection_flags(FileDoc),
+    {ok, Flags} = dataset_eff_cache:get_eff_protection_flags(FileDoc),
+    AllRestrictedOps = [
+        {?DATA_PROTECTION, ?FILE_DATA_PROTECTION_BLOCKED_OPERATIONS},
+        {?METADATA_PROTECTION, ?FILE_METADATA_PROTECTION_BLOCKED_OPERATIONS}
+    ],
+    {get_operations_blocked_by_protection_flags(Flags, AllRestrictedOps), FileCtx1}.
 
-    DeniedOps = lists:foldl(fun({ProtectionFlag, RestrictedOps}, DeniedOpsAcc) ->
+
+%% @private
+-spec get_operations_blocked_by_dataset_protection_flags(file_ctx:ctx()) ->
+    {bitmask(), file_ctx:ctx()}.
+get_operations_blocked_by_dataset_protection_flags(FileCtx0) ->
+    {FileDoc, FileCtx1} = file_ctx:get_file_doc_including_deleted(FileCtx0),
+    {ok, Flags} = dataset_eff_cache:get_eff_dataset_protection_flags(FileDoc),
+    AllRestrictedOps = [{?DATA_PROTECTION, ?DATASET_DATA_PROTECTION_BLOCKED_OPERATIONS}],
+    {get_operations_blocked_by_protection_flags(Flags, AllRestrictedOps), FileCtx1}.
+
+
+%% @private
+-spec get_operations_blocked_by_protection_flags(Flags :: bitmask(), [{ProtectionFlag :: bitmask(), RestrictedOps :: bitmask()}]) ->
+    DeniedOps :: bitmask().
+get_operations_blocked_by_protection_flags(Flags, AllRestrictedOps) ->
+    lists:foldl(fun({ProtectionFlag, RestrictedOps}, DeniedOpsAcc) ->
         case ?has_all_flags(Flags, ProtectionFlag) of
             true -> ?set_flags(DeniedOpsAcc, RestrictedOps);
             false -> DeniedOpsAcc
         end
-    end, ?no_flags_mask, [
-        {?DATA_PROTECTION, ?DATA_PROTECTION_BLOCKED_OPERATIONS},
-        {?METADATA_PROTECTION, ?METADATA_PROTECTION_BLOCKED_OPERATIONS}
-    ]),
-    {DeniedOps, FileCtx1}.
+    end, ?no_flags_mask, AllRestrictedOps).
 
 
 %% @private

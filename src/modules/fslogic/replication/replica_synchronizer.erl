@@ -31,7 +31,7 @@
 -define(PREFETCH_SIZE, op_worker:get_env(prefetch_size, 104857600)).
 
 %% The process is supposed to die after ?DIE_AFTER time of idling (no requests in flight)
--define(DIE_AFTER, 60000).
+-define(DIE_AFTER, 10000).
 
 %% How long transfer stats are aggregated before updating transfer document
 -define(STATS_AGGREGATION_TIME, application:get_env(
@@ -1558,7 +1558,9 @@ flush_blocks_list(AllBlocks, ExcludeSessions, Flush) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec flush_stats(#state{}, boolean()) -> #state{}.
-flush_stats(#state{cached_stats = Stats} = State, _) when map_size(Stats) == 0 ->
+flush_stats(#state{cached_stats = Stats} = State, true = _CancelTimer) when map_size(Stats) == 0 ->
+    cancel_caching_stats_timer(State);
+flush_stats(#state{cached_stats = Stats} = State, false = _CancelTimer) when map_size(Stats) == 0 ->
     State;
 flush_stats(#state{
     space_id = SpaceId,

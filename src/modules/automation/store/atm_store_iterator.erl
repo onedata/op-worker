@@ -23,7 +23,7 @@
 -export([build/2]).
 
 %% iterator callbacks
--export([get_next/2, forget_before/1, mark_exhausted/1]).
+-export([get_next/2]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -62,7 +62,7 @@ get_next(AtmWorkflowExecutionEnv, AtmStoreIterator = #atm_store_iterator{
     spec = #atm_store_iterator_spec{max_batch_size = Size},
     container_iterator = ContainerIterator
 }) ->
-    AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(undefined, AtmWorkflowExecutionEnv),
+    AtmWorkflowExecutionCtx = atm_workflow_execution_ctx:acquire(AtmWorkflowExecutionEnv),
     AtmWorkflowExecutionAuth = atm_workflow_execution_ctx:get_auth(AtmWorkflowExecutionCtx),
 
     case get_next_internal(AtmWorkflowExecutionAuth, ContainerIterator, Size) of
@@ -73,16 +73,6 @@ get_next(AtmWorkflowExecutionEnv, AtmStoreIterator = #atm_store_iterator{
                 container_iterator = NewAtmStoreContainerIterator
             }}
     end.
-
-
--spec forget_before(record()) -> ok.
-forget_before(#atm_store_iterator{container_iterator = ContainerIterator}) ->
-    atm_store_container_iterator:forget_before(ContainerIterator).
-
-
--spec mark_exhausted(record()) -> ok.
-mark_exhausted(#atm_store_iterator{container_iterator = ContainerIterator}) ->
-    atm_store_container_iterator:mark_exhausted(ContainerIterator).
 
 
 %%%===================================================================

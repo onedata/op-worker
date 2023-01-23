@@ -21,6 +21,7 @@
 -include_lib("ctool/include/http/headers.hrl").
 -include_lib("ctool/include/graph_sync/gri.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
+-include_lib("cluster_worker/include/time_series/browsing.hrl").
 
 -export([
     all/0,
@@ -36,8 +37,9 @@
     get_available_qos_parameters_test/1,
     evaluate_qos_expression_test/1,
     get_qos_entry_audit_log/1,
-    get_qos_time_series_collections/1,
-    get_qos_time_series_collection/1
+    get_qos_transfer_stats_collection_schema/1,
+    get_qos_transfer_stats_collection_layout/1,
+    get_qos_transfer_stats_collection_slice/1
 ]).
 
 
@@ -49,11 +51,12 @@ all() -> [
     get_available_qos_parameters_test,
     evaluate_qos_expression_test,
     get_qos_entry_audit_log,
-    get_qos_time_series_collections,
-    get_qos_time_series_collection
+    get_qos_transfer_stats_collection_schema,
+    get_qos_transfer_stats_collection_layout,
+    get_qos_transfer_stats_collection_slice
 ].
 
--define(ATTEMPTS, 20).
+-define(ATTEMPTS, 40).
 
 %%%===================================================================
 %%% QoS API tests.
@@ -103,19 +106,19 @@ create_qos_test(Config) ->
             target_nodes = [P1, P2],
             client_spec = ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config),
             setup_fun = SetupFun,
-            verify_fun = verify_fun(MemRef, Config, create),
+            verify_fun = verify_fun(MemRef, Config, {instance, create}),
             scenario_templates = [
                 #scenario_template{
                     name = <<"Create QoS using rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = prepare_args_fun_rest(MemRef, create),
-                    validate_result_fun = validate_result_fun_rest(MemRef, create)
+                    prepare_args_fun = prepare_args_fun_rest(MemRef, {instance, create}),
+                    validate_result_fun = validate_result_fun_rest(MemRef, {instance, create})
                 },
                 #scenario_template{
                     name = <<"Create QoS using gs endpoint">>,
                     type = gs,
-                    prepare_args_fun = prepare_args_fun_gs(MemRef, create),
-                    validate_result_fun = validate_result_fun_gs(MemRef, create)
+                    prepare_args_fun = prepare_args_fun_gs(MemRef, {instance, create}),
+                    validate_result_fun = validate_result_fun_gs(MemRef, {instance, create})
                 }
             ],
             data_spec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
@@ -146,14 +149,14 @@ get_qos_test(Config) ->
                 #scenario_template{
                     name = <<"Get QoS using rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = prepare_args_fun_rest(MemRef, get),
-                    validate_result_fun = validate_result_fun_rest(MemRef, get)
+                    prepare_args_fun = prepare_args_fun_rest(MemRef, {instance, get}),
+                    validate_result_fun = validate_result_fun_rest(MemRef, {instance, get})
                 },
                 #scenario_template{
                     name = <<"Get QoS using gs endpoint">>,
                     type = gs,
-                    prepare_args_fun = prepare_args_fun_gs(MemRef, get),
-                    validate_result_fun = validate_result_fun_gs(MemRef, get)
+                    prepare_args_fun = prepare_args_fun_gs(MemRef, {instance, get}),
+                    validate_result_fun = validate_result_fun_gs(MemRef, {instance, get})
                 }
             ],
             data_spec = #data_spec{
@@ -178,18 +181,18 @@ delete_qos_test(Config) ->
             target_nodes = [P1, P2],
             client_spec = ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config),
             setup_fun = setup_fun(MemRef, Config, Guid),
-            verify_fun = verify_fun(MemRef, Config, delete),
+            verify_fun = verify_fun(MemRef, Config, {instance, delete}),
             scenario_templates = [
                 #scenario_template{
                     name = <<"Delete QoS using rest endpoint">>,
                     type = rest,
-                    prepare_args_fun = prepare_args_fun_rest(MemRef, delete),
+                    prepare_args_fun = prepare_args_fun_rest(MemRef, {instance, delete}),
                     validate_result_fun = fun(_, {ok, ?HTTP_204_NO_CONTENT, _, #{}}) -> ok end
                 },
                 #scenario_template{
                     name = <<"Delete QoS using gs endpoint">>,
                     type = gs,
-                    prepare_args_fun = prepare_args_fun_gs(MemRef, delete),
+                    prepare_args_fun = prepare_args_fun_gs(MemRef, {instance, delete}),
                     validate_result_fun = fun(_, ok) -> ok end
                 }
             ],
@@ -353,44 +356,75 @@ get_qos_entry_audit_log(Config) ->
     ])).
 
 
-get_qos_time_series_collections(Config) ->
-    [FileCreatingProvider, TransferringProvider] = ?config(op_worker_nodes, Config),
-    QosEntryId = setup_preexisting_fulfilled_qos_causing_file_transfer(
-        Config, ?SPACE_2, FileCreatingProvider, TransferringProvider, 100
-    ),
+get_qos_transfer_stats_collection_schema(Config) ->
+    get_qos_transfer_stats_collection_schema_test_base(Config, ?BYTES_STATS),
+    get_qos_transfer_stats_collection_schema_test_base(Config, ?FILES_STATS).
 
-    MemRef = api_test_memory:init(),
-
+get_qos_transfer_stats_collection_schema_test_base(Config, Type) ->
     ?assert(api_test_runner:run_tests(Config, [
         #suite_spec{
-            target_nodes = [FileCreatingProvider, TransferringProvider],
-            client_spec = ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config),
-            setup_fun = fun() ->
-                api_test_memory:set(MemRef, qos_entry_id, QosEntryId),
-                api_test_memory:set(MemRef, space_id, ?SPACE_2),
-                api_test_memory:set(MemRef, file_creating_provider, FileCreatingProvider),
-                api_test_memory:set(MemRef, transferring_provider, TransferringProvider)
-            end,
+            target_nodes = ?config(op_worker_nodes, Config),
+            client_spec = ?CLIENT_SPEC_FOR_PUBLIC_ACCESS_SCENARIOS(Config),
             scenario_templates = [
                 #scenario_template{
-                    name = <<"Get time series collections using gs api">>,
+                    name = str_utils:format_bin("Get ~s stats collection schema", [Type]),
                     type = gs,
-                    prepare_args_fun = prepare_args_fun_gs(MemRef, qos_time_series_collections),
-                    validate_result_fun = validate_result_fun_gs(MemRef, qos_time_series_collections)
+                    prepare_args_fun = prepare_args_fun_gs(undefined, {qos_transfer_stats_collection, schema, Type}),
+                    validate_result_fun = validate_result_fun_gs(undefined, {qos_transfer_stats_collection, schema, Type})
                 }
-            ],
-            data_spec = #data_spec{
-                bad_values = [{bad_id, <<"NonExistingRequirement">>, ?ERROR_FORBIDDEN}]
-            }
+            ]
         }
     ])).
 
 
-get_qos_time_series_collection(Config) ->
-    get_qos_time_series_collection_test_base(Config, ?BYTES_STATS),
-    get_qos_time_series_collection_test_base(Config, ?FILES_STATS).
+get_qos_transfer_stats_collection_layout(Config) ->
+    get_qos_transfer_stats_collection_layout_test_base(Config, ?BYTES_STATS),
+    get_qos_transfer_stats_collection_layout_test_base(Config, ?FILES_STATS).
 
-get_qos_time_series_collection_test_base(Config, CollectionType) ->
+get_qos_transfer_stats_collection_layout_test_base(Config, CollectionType) ->
+    [FileCreatingProvider, TransferringProvider] = TargetNodes = ?config(op_worker_nodes, Config),
+    FileSize = rand:uniform(1000),
+    QosEntryId = setup_preexisting_fulfilled_qos_causing_file_transfer(
+        Config, ?SPACE_2, FileCreatingProvider, TransferringProvider, FileSize
+    ),
+
+    MemRef = api_test_memory:init(),
+    api_test_memory:set(MemRef, file_creating_provider, FileCreatingProvider),
+
+    lists:foreach(fun(TargetNode) ->
+        ?assert(api_test_runner:run_tests(Config, [
+            #suite_spec{
+                target_nodes = [TargetNode],
+                client_spec = ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config),
+                setup_fun = fun() ->
+                    api_test_memory:set(MemRef, qos_entry_id, QosEntryId),
+                    api_test_memory:set(MemRef, space_id, ?SPACE_2)
+                end,
+                scenario_templates = [
+                    #scenario_template{
+                        name = <<"Get time series collection layout of type '", CollectionType/binary, "' using gs api">>,
+                        type = gs,
+                        prepare_args_fun = prepare_args_fun_gs(MemRef, {qos_transfer_stats_collection, layout, CollectionType}),
+                        validate_result_fun = validate_result_fun_gs(MemRef, {qos_transfer_stats_collection, layout, CollectionType})
+                    }
+                ],
+                data_spec = #data_spec{
+                    optional = [<<"mode">>],
+                    correct_values = #{<<"mode">> => [<<"layout">>]},
+                    bad_values = [
+                        {<<"mode">>, mode, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"mode">>, [<<"layout">>, <<"slice">>])}
+                    ]
+                }
+            }
+        ]))
+    end, TargetNodes).
+
+
+get_qos_transfer_stats_collection_slice(Config) ->
+    get_qos_transfer_stats_collection_slice_test_base(Config, ?BYTES_STATS),
+    get_qos_transfer_stats_collection_slice_test_base(Config, ?FILES_STATS).
+
+get_qos_transfer_stats_collection_slice_test_base(Config, CollectionType) ->
     [FileCreatingProvider, TransferringProvider] = TargetNodes = ?config(op_worker_nodes, Config),
     FileSize = rand:uniform(1000),
     QosEntryId = setup_preexisting_fulfilled_qos_causing_file_transfer(
@@ -400,6 +434,7 @@ get_qos_time_series_collection_test_base(Config, CollectionType) ->
     TimestampFarInThePast = 123456789,
 
     MemRef = api_test_memory:init(),
+    api_test_memory:set(MemRef, file_creating_provider, FileCreatingProvider),
 
     lists:foreach(fun(TargetNode) ->
         ?assert(api_test_runner:run_tests(Config, [
@@ -409,38 +444,39 @@ get_qos_time_series_collection_test_base(Config, CollectionType) ->
                 setup_fun = fun() ->
                     api_test_memory:set(MemRef, qos_entry_id, QosEntryId),
                     api_test_memory:set(MemRef, file_size, FileSize),
-                    api_test_memory:set(MemRef, timestamp_far_in_the_past, TimestampFarInThePast),
-                    api_test_memory:set(MemRef, file_creating_provider, FileCreatingProvider)
+                    api_test_memory:set(MemRef, timestamp_far_in_the_past, TimestampFarInThePast)
                 end,
                 scenario_templates = [
                     #scenario_template{
-                        name = <<"Get time series collection of type '", CollectionType/binary, "' using gs api">>,
+                        name = <<"Get time series collection slice of type '", CollectionType/binary, "' using gs api">>,
                         type = gs,
-                        prepare_args_fun = prepare_args_fun_gs(MemRef, {qos_time_series_collection, CollectionType}),
-                        validate_result_fun = validate_result_fun_gs(MemRef, {qos_time_series_collection, CollectionType})
+                        prepare_args_fun = prepare_args_fun_gs(MemRef, {qos_transfer_stats_collection, slice, CollectionType}),
+                        validate_result_fun = validate_result_fun_gs(MemRef, {qos_transfer_stats_collection, slice, CollectionType})
                     }
                 ],
                 data_spec = #data_spec{
-                    required = [<<"metrics">>],
-                    optional = [<<"startTimestamp">>, <<"limit">>],
+                    required = [<<"layout">>],
+                    optional = [
+                        <<"mode">>,
+                        <<"startTimestamp">>,
+                        <<"windowLimit">>
+                    ],
                     correct_values = #{
-                        <<"metrics">> => [fun() ->
-                            {ok, Layout} = opw_test_rpc:call(
-                                TargetNode, qos_transfer_stats, get_layout, [QosEntryId, CollectionType]
-                            ),
-                            Layout
+                        <<"mode">> => [<<"slice">>],
+                        <<"layout">> => [fun() ->
+                            maps_utils:random_submap(expected_transfer_stats_layout(MemRef, TargetNode, ?SPACE_2, CollectionType))
                         end],
                         <<"startTimestamp">> => [global_clock:timestamp_seconds(), TimestampFarInThePast],
-                        <<"limit">> => [1, 500]
+                        <<"windowLimit">> => [1, 500]
                     },
                     bad_values = [
                         {bad_id, <<"NonExistingRequirement">>, ?ERROR_FORBIDDEN},
-                        {<<"metrics">>, [<<"a">>, <<"b">>], ?ERROR_BAD_VALUE_JSON(<<"metrics">>)},
-                        {<<"metrics">>, #{<<"a">> => [<<"a">>, 15]}, ?ERROR_BAD_DATA(<<"metrics">>)},
+                        {<<"layout">>, 8, ?ERROR_BAD_VALUE_JSON(<<"layout">>)},
+                        {<<"layout">>, #{<<"a">> => [<<"b">>, <<"c">>]}, ?ERROR_TSC_MISSING_LAYOUT(#{<<"a">> => [<<"b">>, <<"c">>]})},
                         {<<"startTimestamp">>, <<"aaa">>, ?ERROR_BAD_VALUE_INTEGER(<<"startTimestamp">>)},
                         {<<"startTimestamp">>, -8, ?ERROR_BAD_VALUE_TOO_LOW(<<"startTimestamp">>, 0)},
-                        {<<"limit">>, <<"aaa">>, ?ERROR_BAD_VALUE_INTEGER(<<"limit">>)},
-                        {<<"limit">>, 99999, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"limit">>, 1, 1000)}
+                        {<<"windowLimit">>, <<"aaa">>, ?ERROR_BAD_VALUE_INTEGER(<<"windowLimit">>)},
+                        {<<"windowLimit">>, 99999, ?ERROR_BAD_VALUE_NOT_IN_RANGE(<<"windowLimit">>, 1, 1000)}
                     ]
                 }
             }
@@ -474,7 +510,7 @@ setup_fun(MemRef, Config, Guid) ->
 %%% Prepare args functions
 %%%===================================================================
 
-prepare_args_fun_rest(MemRef, create) ->
+prepare_args_fun_rest(MemRef, {instance, create}) ->
     fun(#api_test_ctx{data = Data}) ->
         Guid = api_test_memory:get(MemRef, guid),
 
@@ -483,6 +519,17 @@ prepare_args_fun_rest(MemRef, create) ->
             path = <<"qos_requirements">>,
             body = json_utils:encode(maybe_inject_object_id(Data, Guid)),
             headers = #{?HDR_CONTENT_TYPE => <<"application/json">>}
+        }
+    end;
+
+prepare_args_fun_rest(MemRef, {instance, Method}) ->
+    fun(#api_test_ctx{data = Data}) ->
+        QosEntryId = api_test_memory:get(MemRef, qos),
+
+        {Id, _} = api_test_utils:maybe_substitute_bad_id(QosEntryId, Data),
+        #rest_args{
+            method = Method,
+            path = <<"qos_requirements/", Id/binary>>
         }
     end;
 
@@ -519,21 +566,10 @@ prepare_args_fun_rest(MemRef, qos_audit_log) ->
                 <<"qos_requirements/", QosEntryId/binary, "/audit_log">>, Data
             )
         }
-    end;
-
-prepare_args_fun_rest(MemRef, Method) ->
-    fun(#api_test_ctx{data = Data}) ->
-        QosEntryId = api_test_memory:get(MemRef, qos),
-
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(QosEntryId, Data),
-        #rest_args{
-            method = Method,
-            path = <<"qos_requirements/", Id/binary>>
-        }
     end.
 
 
-prepare_args_fun_gs(MemRef, create) ->
+prepare_args_fun_gs(MemRef, {instance, create}) ->
     fun(#api_test_ctx{data = Data}) ->
         Guid = api_test_memory:get(MemRef, guid),
 
@@ -541,6 +577,16 @@ prepare_args_fun_gs(MemRef, create) ->
             operation = create,
             gri = #gri{type = op_qos, aspect = instance, scope = private},
             data = maybe_inject_object_id(Data, Guid)
+        }
+    end;
+
+prepare_args_fun_gs(MemRef, {instance, Method}) ->
+    fun(#api_test_ctx{data = Data}) ->
+        QosEntryId = api_test_memory:get(MemRef, qos),
+        {Id, _} = api_test_utils:maybe_substitute_bad_id(QosEntryId, Data),
+        #gs_args{
+            operation = Method,
+            gri = #gri{type = op_qos, id = Id, aspect = instance, scope = private}
         }
     end;
 
@@ -571,34 +617,35 @@ prepare_args_fun_gs(_MemRef, evaluate_qos_expression) ->
         }
     end;
 
-prepare_args_fun_gs(MemRef, qos_time_series_collections) ->
-    fun(#api_test_ctx{data = Data}) ->
-        QosEntryId = api_test_memory:get(MemRef, qos_entry_id),
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(QosEntryId, Data),
+prepare_args_fun_gs(_MemRef, {qos_transfer_stats_collection, schema, Type}) ->
+    fun(#api_test_ctx{}) ->
         #gs_args{
             operation = get,
-            gri = #gri{type = op_qos, id = Id, aspect = time_series_collections, scope = private}
+            gri = #gri{type = op_qos, id = undefined, aspect = {transfer_stats_collection_schema, Type}, scope = public}
         }
     end;
 
-prepare_args_fun_gs(MemRef, {qos_time_series_collection, Type}) ->
+prepare_args_fun_gs(MemRef, {qos_transfer_stats_collection, layout, Type}) ->
     fun(#api_test_ctx{data = Data}) ->
         QosEntryId = api_test_memory:get(MemRef, qos_entry_id),
         {Id, UpdatedData} = api_test_utils:maybe_substitute_bad_id(QosEntryId, Data),
         #gs_args{
             operation = get,
-            gri = #gri{type = op_qos, id = Id, aspect = {time_series_collection, Type}, scope = private},
+            gri = #gri{type = op_qos, id = Id, aspect = {transfer_stats_collection, Type}, scope = private},
             data = UpdatedData
         }
     end;
 
-prepare_args_fun_gs(MemRef, Method) ->
+prepare_args_fun_gs(MemRef, {qos_transfer_stats_collection, slice, Type}) ->
     fun(#api_test_ctx{data = Data}) ->
-        QosEntryId = api_test_memory:get(MemRef, qos),
-        {Id, _} = api_test_utils:maybe_substitute_bad_id(QosEntryId, Data),
+        QosEntryId = api_test_memory:get(MemRef, qos_entry_id),
+        {Id, UpdatedData} = api_test_utils:maybe_substitute_bad_id(QosEntryId, Data),
         #gs_args{
-            operation = Method,
-            gri = #gri{type = op_qos, id = Id, aspect = instance, scope = private}
+            operation = get,
+            gri = #gri{type = op_qos, id = Id, aspect = {transfer_stats_collection, Type}, scope = private},
+            % mode is optional and so must be specified in the data spec, but if left out, defaults to layout,
+            % hence the mode must be added here to the data for slice retrieval tests
+            data = UpdatedData#{<<"mode">> => <<"slice">>}
         }
     end.
 
@@ -607,14 +654,14 @@ prepare_args_fun_gs(MemRef, Method) ->
 %%% Validate result functions
 %%%===================================================================
 
-validate_result_fun_rest(MemRef, create) ->
+validate_result_fun_rest(MemRef, {instance, create}) ->
     fun(_ApiTestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
         ?assertEqual(?HTTP_201_CREATED, RespCode),
         QosEntryId = maps:get(<<"qosRequirementId">>, RespBody),
         api_test_memory:set(MemRef, qos, QosEntryId)
     end;
 
-validate_result_fun_rest(MemRef, get) ->
+validate_result_fun_rest(MemRef, {instance, get}) ->
     fun(_, {ok, RespCode, _RespHeaders, RespBody}) ->
         Guid = api_test_memory:get(MemRef, guid),
         QosEntryId = api_test_memory:get(MemRef, qos),
@@ -665,9 +712,9 @@ validate_result_fun_rest(_MemRef, qos_audit_log) ->
                 #{
                     <<"index">> := _,
                     <<"timestamp">> := _,
+                    <<"severity">> := <<"info">>,
                     <<"content">> := #{
                         <<"status">> := <<"completed">>,
-                        <<"severity">> := <<"info">>,
                         <<"fileId">> := _,
                         <<"description">> := <<"Local replica reconciled.">>
                     }
@@ -675,9 +722,9 @@ validate_result_fun_rest(_MemRef, qos_audit_log) ->
                 #{
                     <<"index">> := _,
                     <<"timestamp">> := _,
+                    <<"severity">> := <<"info">>,
                     <<"content">> := #{
                         <<"status">> := <<"scheduled">>,
-                        <<"severity">> := <<"info">>,
                         <<"fileId">> := _,
                         <<"description">> := <<"Remote replica differs, reconciliation started.">>
                     }
@@ -688,13 +735,13 @@ validate_result_fun_rest(_MemRef, qos_audit_log) ->
     end.
 
 
-validate_result_fun_gs(MemRef, create) ->
+validate_result_fun_gs(MemRef, {instance, create}) ->
     fun(_ApiTestCtx, {ok, Result}) ->
         #gri{id = QosEntryId} = ?assertMatch(#gri{type = op_qos}, gri:deserialize(maps:get(<<"gri">>, Result))),
         api_test_memory:set(MemRef, qos, QosEntryId)
     end;
 
-validate_result_fun_gs(MemRef, get) ->
+validate_result_fun_gs(MemRef, {instance, get}) ->
     fun(_, {ok, Result}) ->
         Guid = api_test_memory:get(MemRef, guid),
         QosEntryId = api_test_memory:get(MemRef, qos),
@@ -759,44 +806,35 @@ validate_result_fun_gs(MemRef, evaluate_qos_expression) ->
         ?assertEqual(maps:get(<<"expressionRpn">>, Result), qos_expression:to_rpn(Expression))
     end;
 
-validate_result_fun_gs(MemRef, qos_time_series_collections) ->
-    fun(#api_test_ctx{node = TargetNode}, {ok, Result}) ->
-        TargetProviderId = ?GET_DOMAIN_BIN(TargetNode),
-        SpaceId = api_test_memory:get(MemRef, space_id),
-        FileCreatingProviderId = ?GET_DOMAIN_BIN(api_test_memory:get(MemRef, file_creating_provider)),
-        TransferringProviderId = ?GET_DOMAIN_BIN(api_test_memory:get(MemRef, transferring_provider)),
-
-        ExpectedResult = case TargetProviderId of
-            FileCreatingProviderId ->
-                % "total" time series is created by default by all supporting providers for each QoS entry,
-                % even if no data transfer is recorded
-                #{
-                    ?BYTES_STATS => [?QOS_TOTAL_TIME_SERIES_NAME],
-                    ?FILES_STATS => [?QOS_TOTAL_TIME_SERIES_NAME]
-                };
-            TransferringProviderId ->
-                #{
-                    ?BYTES_STATS => [?QOS_TOTAL_TIME_SERIES_NAME | get_supporting_storages(TargetNode, SpaceId, FileCreatingProviderId)],
-                    ?FILES_STATS => [?QOS_TOTAL_TIME_SERIES_NAME | get_supporting_storages(TargetNode, SpaceId, TransferringProviderId)]
-                }
-        end,
-
-        ?assertEqual(lists:sort(maps:keys(ExpectedResult)), lists:sort(maps:keys(Result))),
-        maps:foreach(fun(StatsType, TimeSeriesNames) ->
-            ?assertEqual(lists:sort(TimeSeriesNames), lists:sort(maps:get(StatsType, Result)))
-        end, ExpectedResult)
+validate_result_fun_gs(_MemRef, {qos_transfer_stats_collection, schema, CollectionType}) ->
+    fun(#api_test_ctx{}, {ok, Result}) ->
+        ?assertEqual(jsonable_record:from_json(Result, time_series_collection_schema), case CollectionType of
+            ?BYTES_STATS -> ?QOS_BYTES_STATS_COLLECTION_SCHEMA;
+            ?FILES_STATS -> ?QOS_FILES_STATS_COLLECTION_SCHEMA
+        end)
     end;
 
-validate_result_fun_gs(MemRef, {qos_time_series_collection, CollectionType}) ->
-    fun(#api_test_ctx{node = TargetNode, data = Data}, {ok, Result}) ->
+validate_result_fun_gs(MemRef, {qos_transfer_stats_collection, layout, CollectionType}) ->
+    fun(#api_test_ctx{node = TargetNode}, Result) ->
+        SpaceId = api_test_memory:get(MemRef, space_id),
+        ?assertEqual({ok, #{
+            <<"layout">> => expected_transfer_stats_layout(MemRef, TargetNode, SpaceId, CollectionType)}
+        }, Result)
+    end;
+
+validate_result_fun_gs(MemRef, {qos_transfer_stats_collection, slice, CollectionType}) ->
+    fun(#api_test_ctx{node = TargetNode, data = Data}, Result) ->
         TargetProviderId = ?GET_DOMAIN_BIN(TargetNode),
         FileSize = api_test_memory:get(MemRef, file_size),
         TimestampFarInThePast = api_test_memory:get(MemRef, timestamp_far_in_the_past),
         FileCreatingProviderId = ?GET_DOMAIN_BIN(api_test_memory:get(MemRef, file_creating_provider)),
 
-        RequestedMetrics = maps:get(<<"metrics">>, Data),
-        StartTimestamp = maps:get(<<"startTimestamp">>, Data, undefined),
+        RequestedLayout = maps:get(<<"layout">>, Data),
 
+        {ok, #{<<"slice">> := Slice}} = ?assertMatch({ok, #{<<"slice">> := _}}, Result),
+        ?assertEqual(RequestedLayout, tsc_structure:to_layout(Slice)),
+
+        StartTimestamp = maps:get(<<"startTimestamp">>, Data, undefined),
         ExpectingEmptyWindows = if
             StartTimestamp == TimestampFarInThePast ->
                 true;
@@ -809,35 +847,27 @@ validate_result_fun_gs(MemRef, {qos_time_series_collection, CollectionType}) ->
                 false
         end,
 
-        #{<<"windows">> := WindowsPerMetricPerTimeSeries} = ?assertMatch(#{<<"windows">> := _}, Result),
-        ?assertEqual(lists:sort(maps:keys(RequestedMetrics)), lists:sort(maps:keys(WindowsPerMetricPerTimeSeries))),
-        maps:foreach(fun(_TimeSeriesName, WindowsPerMetric) ->
-            ?assertEqual(
-                lists:sort([?QOS_MINUTE_METRIC_NAME, ?QOS_HOUR_METRIC_NAME, ?QOS_DAY_METRIC_NAME, ?QOS_MONTH_METRIC_NAME]),
-                lists:sort(maps:keys(WindowsPerMetric))
-            ),
-            maps:foreach(fun(_MetricId, WindowsInCurrentMetric) ->
-                case {ExpectingEmptyWindows, CollectionType} of
-                    {true, _} ->
-                        ?assertEqual([], WindowsInCurrentMetric);
-                    {false, ?BYTES_STATS} ->
-                        ?assertMatch([#{<<"value">> := FileSize}], WindowsInCurrentMetric);
-                    {false, ?FILES_STATS} ->
-                        [#{<<"value">> := Value}] = ?assertMatch([#{<<"value">> := _}], WindowsInCurrentMetric),
-                        % depending on the order of db-synced documents, the replicating provider may process
-                        % the file one or two times (the latter in case it first synced an empty file location,
-                        % then observed a changed file location)
-                        ?assert(Value == 1 orelse Value == 2)
-                end
-            end, WindowsPerMetric)
-        end, WindowsPerMetricPerTimeSeries)
+        tsc_structure:foreach(fun(_TimeSeriesName, _MetricName, Windows) ->
+            case {ExpectingEmptyWindows, CollectionType} of
+                {true, _} ->
+                    ?assertEqual([], Windows);
+                {false, ?BYTES_STATS} ->
+                    ?assertMatch([#{<<"value">> := FileSize, <<"timestamp">> := _}], Windows);
+                {false, ?FILES_STATS} ->
+                    [#{<<"value">> := Value}] = ?assertMatch([#{<<"value">> := _, <<"timestamp">> := _}], Windows),
+                    % depending on the order of db-synced documents, the replicating provider may process
+                    % the file one or two times (the latter in case it first synced an empty file location,
+                    % then observed a changed file location)
+                    ?assert(Value == 1 orelse Value == 2)
+            end
+        end, Slice)
     end.
 
 %%%===================================================================
 %%% Verify env functions
 %%%===================================================================
 
-verify_fun(MemRef, Config, create) ->
+verify_fun(MemRef, Config, {instance, create}) ->
     [P2, P1] = ?config(op_worker_nodes, Config),
     SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
     SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
@@ -862,7 +892,7 @@ verify_fun(MemRef, Config, create) ->
             true
     end;
 
-verify_fun(MemRef, Config, delete) ->
+verify_fun(MemRef, Config, {instance, delete}) ->
     [P2, P1] = ?config(op_worker_nodes, Config),
     SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(P1, Config),
     SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(P2, Config),
@@ -883,6 +913,7 @@ verify_fun(MemRef, Config, delete) ->
 %%% Internal functions
 %%%===================================================================
 
+%% @private
 maybe_inject_object_id(Data, Guid) ->
     {ok, ObjectId} = file_id:guid_to_objectid(Guid),
     case maps:get(<<"fileId">>, Data, undefined) of
@@ -891,6 +922,7 @@ maybe_inject_object_id(Data, Guid) ->
     end.
 
 
+%% @private
 check_evaluate_expression_result_storages(Node, SpaceId, Expression, Result) ->
     ExpectedStorages = opw_test_rpc:call(Node, qos_expression, get_matching_storages_in_space, [SpaceId, Expression]),
     lists:foreach(fun(StorageDetails) ->
@@ -901,6 +933,7 @@ check_evaluate_expression_result_storages(Node, SpaceId, Expression, Result) ->
     end, Result).
 
 
+%% @private
 setup_preexisting_fulfilled_qos_causing_file_transfer(Config, SpaceId, FileCreatingProvider, TransferringProvider, FileSize) ->
     SessIdP1 = ?USER_IN_BOTH_SPACES_SESS_ID(FileCreatingProvider, Config),
     SessIdP2 = ?USER_IN_BOTH_SPACES_SESS_ID(TransferringProvider, Config),
@@ -917,18 +950,45 @@ setup_preexisting_fulfilled_qos_causing_file_transfer(Config, SpaceId, FileCreat
     % wait for ?BYTES_STATS to be flushed - they are reported asynchronously by replica synchronizer and
     % may appear some time after QoS fulfillment
     ?assertMatch(
-        {ok, #{?QOS_TOTAL_TIME_SERIES_NAME := #{?QOS_MINUTE_METRIC_NAME := [{_, _}]}}},
-        opw_test_rpc:call(TransferringProvider, qos_transfer_stats, get_slice, [
-            QosEntryId, ?BYTES_STATS, #{?QOS_TOTAL_TIME_SERIES_NAME => [?QOS_MINUTE_METRIC_NAME]}, #{}
+        {ok, #time_series_slice_get_result{
+            slice = #{
+                ?QOS_TOTAL_TIME_SERIES_NAME := #{
+                    ?QOS_MINUTE_METRIC_NAME := [{_, _}]}
+            }
+        } },
+        opw_test_rpc:call(TransferringProvider, qos_transfer_stats, browse, [
+            QosEntryId, ?BYTES_STATS, #time_series_slice_get_request{
+                layout = #{?QOS_TOTAL_TIME_SERIES_NAME => [?QOS_MINUTE_METRIC_NAME]}
+            }
         ]),
         ?ATTEMPTS
     ),
     QosEntryId.
 
 
-get_supporting_storages(Node, SpaceId, ProviderId) ->
-    {ok, ProviderSupports} = opw_test_rpc:call(Node, space_logic, get_provider_storages, [SpaceId, ProviderId]),
-    maps:keys(ProviderSupports).
+%% @private
+expected_transfer_stats_layout(MemRef, Node, SpaceId, CollectionType) ->
+    ProviderId = ?GET_DOMAIN_BIN(Node),
+    FileCreatingProviderId = ?GET_DOMAIN_BIN(api_test_memory:get(MemRef, file_creating_provider)),
+
+    PerStorageTSNames = case ProviderId of
+        FileCreatingProviderId ->
+            % time series per storage should be created only on the transferring provider
+            [];
+        _ ->
+            % bytes stats are gathered per source storage, while files stats are gathered per target storage
+            ProviderOfIncludedStorages = case CollectionType of
+                ?BYTES_STATS -> FileCreatingProviderId;
+                ?FILES_STATS -> ProviderId
+            end,
+            {ok, IncludedStorages} = opw_test_rpc:call(
+                Node, space_logic, get_provider_storages, [SpaceId, ProviderOfIncludedStorages]
+            ),
+            [?QOS_STORAGE_TIME_SERIES_NAME(StorageId) || StorageId <- maps:keys(IncludedStorages)]
+    end,
+    maps_utils:generate_from_list(fun(TimeSeriesName) ->
+        {TimeSeriesName, maps:keys(?QOS_STATS_METRICS)}
+    end, [?QOS_TOTAL_TIME_SERIES_NAME | PerStorageTSNames]) .
 
 %%%===================================================================
 %%% SetUp and TearDown functions

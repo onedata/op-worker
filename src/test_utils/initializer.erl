@@ -1120,26 +1120,6 @@ user_logic_mock_setup(Workers, Users, NoHistory) ->
         fun(Client, UserId, SpaceId) ->
             {ok, Doc} = GetUserFun(private, Client, UserId),
             HasEffSpaceFun(Doc, SpaceId)
-        end),
-
-    test_utils:mock_expect(Workers, user_logic, get_space_by_name,
-        fun
-            F(Client, UserId, SpaceName) when is_binary(UserId) ->
-                {ok, UserDoc} = GetUserFun(private, Client, UserId),
-                F(Client, UserDoc, SpaceName);
-            F(Client, #document{value = #od_user{eff_spaces = EffSpaces}}, SpaceName) ->
-                lists:foldl(
-                    fun
-                        (_SpaceId, {true, Found}) ->
-                            {true, Found};
-                        (SpaceId, false) ->
-                            case space_logic:get_name(Client, SpaceId) of
-                                {ok, SpaceName} ->
-                                    {true, SpaceId};
-                                _ ->
-                                    false
-                            end
-                    end, false, EffSpaces)
         end).
 
 -spec group_logic_mock_setup(Workers :: node() | [node()],
@@ -1283,6 +1263,10 @@ space_logic_mock_setup(Workers, Spaces, Users, SpacesToStorages, SpacesHarvester
     test_utils:mock_expect(Workers, space_logic, has_eff_user, fun(SessionId, SpaceId, UserId) ->
         {ok, #document{value = #od_space{eff_users = EffUsers}}} = GetSpaceFun(SessionId, SpaceId),
         maps:is_key(UserId, EffUsers)
+    end),
+
+    test_utils:mock_expect(Workers, space_logic, update_support_parameters, fun(_, _) ->
+        ok
     end).
 
 -spec provider_logic_mock_setup(Config :: list(), Workers :: node() | [node()],

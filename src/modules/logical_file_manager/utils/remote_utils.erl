@@ -48,7 +48,7 @@ call_fslogic(SessId, provider_request, ContextGuid, Request, OKHandle) ->
             {error, Code}
     end.
 
--spec call_fslogic(SessId :: session:id(), RequestType :: fuse_request | proxyio_request,
+-spec call_fslogic(SessId :: session:id(), RequestType :: fuse_request | proxyio_request | multipart_upload_request,
     Request :: term(), OKHandle :: fun((Response :: term()) -> Return)) ->
     Return when Return :: term().
 call_fslogic(SessId, fuse_request, #file_request{context_guid = ContextGuid} = Request, OKHandle) ->
@@ -83,4 +83,7 @@ call_fslogic(SessId, proxyio_request, Request = #proxyio_request{
             {error, Code};
         {ok, #status{code = Code}} ->
             {error, Code}
-    end.
+    end;
+call_fslogic(SessId, multipart_upload_request, Request, OKHandle) ->
+    call_fslogic(SessId, fuse_request,
+        #multipart_upload_request{multipart_request = Request}, OKHandle).

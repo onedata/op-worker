@@ -517,7 +517,7 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentCtx0, TargetNa
     paths_cache:invalidate_on_all_nodes(SpaceId),
     dataset_eff_cache:invalidate_on_all_nodes(SpaceId),
     archive_recall_cache:invalidate_on_all_nodes(SpaceId),
-    file_meta_links_sync_status_cache:invalidate_on_all_nodes(SpaceId),
+    file_meta_sync_status_cache:invalidate_on_all_nodes(SpaceId),
 
     {Storage, SourceFileCtx4} = file_ctx:get_storage(SourceFileCtx3),
     Helper = storage:get_helper(Storage),
@@ -646,7 +646,7 @@ on_successful_rename(UserCtx, SourceFileCtx, SourceParentFileCtx, TargetParentFi
     CurrentTime = global_clock:timestamp_seconds(),
     ok = fslogic_times:update_mtime_ctime(SourceParentFileCtx, CurrentTime),
     ok = fslogic_times:update_mtime_ctime(TargetParentFileCtx, CurrentTime),
-    ok = fslogic_times:update_ctime(SourceFileCtx2, CurrentTime),
+    ok = fslogic_times:update_ctime(SourceFileCtx2, CurrentTime, emit_event),
     ok = fslogic_event_emitter:emit_file_renamed_to_client(SourceFileCtx2, ParentGuid, TargetName, PrevName, UserCtx).
 
 

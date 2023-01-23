@@ -37,12 +37,7 @@
     get_xattr/4,
     remove_xattr/3
 ]).
--export([
-    has_custom_metadata/2,
-    set_metadata/5,
-    get_metadata/5,
-    remove_metadata/3
-]).
+-export([has_custom_metadata/2]).
 
 -type success_callback() :: fun((term()) -> term()).
 
@@ -57,13 +52,13 @@
 %% Returns file attributes (see file_attr.hrl).
 %% @end
 %%--------------------------------------------------------------------
--spec stat(SessId :: session:id(), lfm:file_key(), boolean()) ->
+-spec stat(SessId :: session:id(), lfm:file_key(), [attr_req:optional_attr()]) ->
     {ok, file_attributes()} | lfm:error_reply().
-stat(SessId, FileKey, IncludeLinksCount) ->
+stat(SessId, FileKey, OptionalAttrs) ->
     FileGuid = lfm_file_key:resolve_file_key(SessId, FileKey, do_not_resolve_symlink),
     
     remote_utils:call_fslogic(
-        SessId, file_request, FileGuid, #get_file_attr{include_link_count = IncludeLinksCount},
+        SessId, file_request, FileGuid, #get_file_attr{optional_attrs = OptionalAttrs},
         fun(#file_attr{} = Attrs) -> {ok, Attrs} end
     ).
 
@@ -204,44 +199,6 @@ has_custom_metadata(SessId, FileKey) ->
     end.
 
 
--spec set_metadata(
-    session:id(),
-    lfm:file_key(),
-    custom_metadata:type(),
-    custom_metadata:value(),
-    custom_metadata:query()
-) ->
-    ok | lfm:error_reply().
-set_metadata(SessId, FileKey, Type, Value, Query) ->
-    call_custom_metadata(
-        SessId, FileKey,
-        #set_metadata{query = Query, metadata = #metadata{type = Type, value = Value}},
-        fun(_) -> ok end
-    ).
-
-
--spec get_metadata(
-    session:id(),
-    lfm:file_key(),
-    custom_metadata:type(),
-    custom_metadata:query(),
-    boolean()
-) ->
-    {ok, custom_metadata:value()} | lfm:error_reply().
-get_metadata(SessId, FileKey, Type, Query, Inherited) ->
-    call_custom_metadata(
-        SessId, FileKey,
-        #get_metadata{type = Type, query = Query, inherited = Inherited},
-        fun(#metadata{value = Value}) -> {ok, Value} end
-    ).
-
-
--spec remove_metadata(session:id(), lfm:file_key(), custom_metadata:type()) ->
-    ok | lfm:error_reply().
-remove_metadata(SessId, FileKey, Type) ->
-    call_custom_metadata(SessId, FileKey, #remove_metadata{type = Type}, fun(_) -> ok end).
-
-
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
@@ -253,11 +210,3 @@ remove_metadata(SessId, FileKey, Type) ->
 call_xattr(SessId, FileKey, Request, SuccessCallback) ->
     Guid = lfm_file_key:resolve_file_key(SessId, FileKey, resolve_symlink),
     remote_utils:call_fslogic(SessId, file_request, Guid, Request, SuccessCallback).
-
-
-%% @private
--spec call_custom_metadata(session:id(), lfm:file_key(), provider_request_type(), success_callback()) ->
-    term().
-call_custom_metadata(SessId, FileKey, Request, SuccessCallback) ->
-    Guid = lfm_file_key:resolve_file_key(SessId, FileKey, resolve_symlink),
-    remote_utils:call_fslogic(SessId, provider_request, Guid, Request, SuccessCallback).

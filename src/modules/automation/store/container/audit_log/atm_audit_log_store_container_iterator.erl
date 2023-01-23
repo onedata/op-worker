@@ -19,21 +19,18 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([build/2]).
--export([gen_listing_postprocessor/2]).
+-export([build/1]).
 
 % atm_store_container_iterator callbacks
--export([get_next_batch/3, forget_before/1, mark_exhausted/1]).
+-export([get_next_batch/3]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
 
 
 -record(atm_audit_log_store_container_iterator, {
-    log_content_data_spec :: atm_data_spec:record(),
-    backend_id :: atm_store_container_infinite_log_backend:id(),
-    last_listed_index = atm_store_container_infinite_log_backend:iterator_start_index() ::
-        atm_store_container_infinite_log_backend:index()
+    backend_id :: audit_log:id(),
+    audit_log_iterator = audit_log:new_iterator() :: audit_log:iterator()
 }).
 -type record() :: #atm_audit_log_store_container_iterator{}.
 
@@ -45,31 +42,9 @@
 %%%===================================================================
 
 
--spec build(atm_data_spec:record(), atm_store_container_infinite_log_backend:id()) ->
-    record().
-build(LogContentDataSpec, BackendId) ->
-    #atm_audit_log_store_container_iterator{
-        log_content_data_spec = LogContentDataSpec,
-        backend_id = BackendId
-    }.
-
-
--spec gen_listing_postprocessor(atm_workflow_execution_auth:record(), atm_data_spec:record()) ->
-    atm_store_container_infinite_log_backend:listing_postprocessor().
-gen_listing_postprocessor(AtmWorkflowExecutionAuth, LogContentDataSpec) ->
-    fun({Index, {Timestamp, CompressedLog}}) ->
-        CompressedLogContent = maps:get(<<"compressedContent">>, CompressedLog),
-        case atm_value:expand(AtmWorkflowExecutionAuth, CompressedLogContent, LogContentDataSpec) of
-            {ok, ExpandedLogContent} ->
-                {Index, {ok, #{
-                    <<"timestamp">> => Timestamp,
-                    <<"content">> => ExpandedLogContent,
-                    <<"severity">> => maps:get(<<"severity">>, CompressedLog)}
-                }};
-            {error, _} = Error ->
-                {Index, Error}
-        end
-    end.
+-spec build(audit_log:id()) -> record().
+build(BackendId) ->
+    #atm_audit_log_store_container_iterator{backend_id = BackendId}.
 
 
 %%%===================================================================
@@ -83,33 +58,18 @@ gen_listing_postprocessor(AtmWorkflowExecutionAuth, LogContentDataSpec) ->
     record()
 ) ->
     {ok, [atm_value:expanded()], record()} | stop.
-get_next_batch(AtmWorkflowExecutionAuth, BatchSize, Record = #atm_audit_log_store_container_iterator{
-    log_content_data_spec = LogContentDataSpec,
+get_next_batch(_AtmWorkflowExecutionAuth, BatchSize, Record = #atm_audit_log_store_container_iterator{
     backend_id = BackendId,
-    last_listed_index = LastListedIndex
+    audit_log_iterator = AuditLogIterator
 }) ->
-    Result = atm_store_container_infinite_log_backend:iterator_get_next_batch(
-        BatchSize, BackendId, LastListedIndex,
-        gen_listing_postprocessor(AtmWorkflowExecutionAuth, LogContentDataSpec)
-    ),
-    case Result of
+    case audit_log:next_batch(BatchSize, BackendId, AuditLogIterator) of
         stop ->
             stop;
-        {ok, FilteredEntries, NewLastListedIndex} ->
-            {ok, FilteredEntries, Record#atm_audit_log_store_container_iterator{
-                last_listed_index = NewLastListedIndex
+        {ok, Entries, NewAuditLogIterator} ->
+            {ok, Entries, Record#atm_audit_log_store_container_iterator{
+                audit_log_iterator = NewAuditLogIterator
             }}
     end.
-
-
--spec forget_before(record()) -> ok.
-forget_before(_AtmStoreContainerIterator) ->
-    ok.
-
-
--spec mark_exhausted(record()) -> ok.
-mark_exhausted(_AtmStoreContainerIterator) ->
-    ok.
 
 
 %%%===================================================================
@@ -125,25 +85,22 @@ version() ->
 -spec db_encode(record(), persistent_record:nested_record_encoder()) ->
     json_utils:json_term().
 db_encode(#atm_audit_log_store_container_iterator{
-    log_content_data_spec = LogContentDataSpec,
     backend_id = BackendId,
-    last_listed_index = LastListedIndex
-}, NestedRecordEncoder) ->
+    audit_log_iterator = AuditLogIterator
+}, _NestedRecordEncoder) ->
     #{
-        <<"logContentDataSpec">> => NestedRecordEncoder(LogContentDataSpec, atm_data_spec),
         <<"backendId">> => BackendId,
-        <<"lastListedIndex">> => LastListedIndex
+        <<"auditLogIterator">> => AuditLogIterator
     }.
 
 
 -spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
     record().
 db_decode(
-    JsonRecord = #{<<"logContentDataSpec">> := LogContentDataSpecJson, <<"backendId">> := BackendId},
-    NestedRecordDecoder
+    #{<<"backendId">> := BackendId, <<"auditLogIterator">> := AuditLogIterator},
+    _NestedRecordDecoder
 ) ->
     #atm_audit_log_store_container_iterator{
-        log_content_data_spec = NestedRecordDecoder(LogContentDataSpecJson, atm_data_spec),
         backend_id = BackendId,
-        last_listed_index = maps:get(<<"lastListedIndex">>, JsonRecord, <<"-1">>)
+        audit_log_iterator = AuditLogIterator
     }.

@@ -7,12 +7,15 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This model holds information about hooks registered for given file.
-%%% All hooks will be executed once upon the next change of file_meta
-%%% document associated with given file, then hooks list will be cleared.
+%%% All hooks will be executed once upon the next change of required
+%%% document associated with given file.
+%%% There are 2 types of posthooks, depending on type of missing element:
+%%%  * file_meta hooks - hooks, that will be executed, when file_meta document appears;
+%%%  * link hooks - hooks, that will be executed, when any link document appears.
+%%% After successful hook execution it is removed, when it returns `ok`
+%%% and retained when returns `repeat` (useful with link hooks, as it
+%%% can be triggered by any link document).
 %%% Any exported function can be used as a hook.
-%%% Note: hooks are only triggered for directories. There are
-%%% no hardlinks to directories. When hooks on regular files are
-%%% introduced, consider usage of referenced uuid.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_meta_posthooks).
@@ -24,7 +27,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% functions operating on record using datastore model API
--export([add_hook/5, execute_hooks/1, delete/1]).
+-export([add_hook/6, execute_hooks/2, cleanup/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
@@ -37,6 +40,7 @@
 }).
 
 -type hook() :: #hook{}.
+-type hook_type() :: doc | link.
 -type missing_element() :: {file_meta_missing, MissingUuid :: file_meta:uuid()} |
     {link_missing, Uuid :: file_meta:uuid(), MissingName :: file_meta:name()}.
 -type hook_identifier() :: binary().
@@ -48,14 +52,17 @@
     model => ?MODULE
 }).
 
+-define(MAX_POSTHOOKS,  op_worker:get_env(max_file_meta_posthooks, 256)).
+-define(LINK_KEY(FileUuid), <<"link_hooks_", FileUuid/binary>>).
+
 %%%===================================================================
 %%% Functions operating on record using datastore_model API
 %%%===================================================================
 
--spec add_hook(missing_element(), hook_identifier(), module(), atom(), [term()]) -> ok | ?ERROR_INTERNAL_SERVER_ERROR.
-add_hook(MissingElement, Identifier, Module, Function, Args) ->
+-spec add_hook(missing_element(), hook_identifier(), od_space:id(), module(), atom(), [term()]) ->
+    ok | ?ERROR_INTERNAL_SERVER_ERROR.
+add_hook(MissingElement, Identifier, SpaceId, Module, Function, Args) ->
     FileUuid = get_hook_uuid(MissingElement),
-    UniqueIdentifier = generate_hook_id(Identifier),
     EncodedArgs = term_to_binary(Args),
     Hook = #hook{
         module = Module,
@@ -63,9 +70,13 @@ add_hook(MissingElement, Identifier, Module, Function, Args) ->
         args = EncodedArgs
     },
 
-    AddAns = datastore_model:update(?CTX, FileUuid, fun(#file_meta_posthooks{hooks = Hooks} = FileMetaPosthooks) ->
-        {ok, FileMetaPosthooks#file_meta_posthooks{hooks = Hooks#{UniqueIdentifier => Hook}}}
-    end, #file_meta_posthooks{hooks = #{UniqueIdentifier => Hook}}),
+    HookType = missing_element_to_hook_type(MissingElement),
+    AddAns = datastore_model:update(?CTX, gen_datastore_key(FileUuid, HookType), fun(#file_meta_posthooks{hooks = Hooks} = FileMetaPosthooks) ->
+        case maps:size(Hooks) >= ?MAX_POSTHOOKS of
+            true -> {error, too_many_posthooks};
+            false -> {ok, FileMetaPosthooks#file_meta_posthooks{hooks = Hooks#{Identifier => Hook}}}
+        end
+    end, #file_meta_posthooks{hooks = #{Identifier => Hook}}),
 
     case AddAns of
         {ok, _} ->
@@ -76,10 +87,18 @@ add_hook(MissingElement, Identifier, Module, Function, Args) ->
             case has_missing_element_appeared(MissingElement) of
                 true ->
                     % Spawn to prevent deadlocks when hook is added from the inside of already existing hook
-                    spawn(fun() -> execute_hooks(FileUuid) end),
+                    spawn(fun() -> execute_hooks(FileUuid, missing_element_to_hook_type(MissingElement)) end),
                     ok;
                 false ->
                     ok
+            end;
+        {error, too_many_posthooks} ->
+            case dbsync_state:set_initial_sync_repeat(SpaceId) of
+                ok ->
+                    ok;
+                {error, initial_sync_does_not_exist} ->
+                    ?error("~p:~p error for file ~p (identifier ~p, hook module ~p, hook fun ~p, hook args ~p):"
+                        " too many posthooks", [?MODULE, ?FUNCTION_NAME, FileUuid, Identifier, Module, Function, Args])
             end;
         Error ->
             ?error("~p:~p error for file ~p (identifier ~p, hook module ~p, hook fun ~p, hook args ~p): ~p",
@@ -88,9 +107,10 @@ add_hook(MissingElement, Identifier, Module, Function, Args) ->
     end.
 
 
--spec execute_hooks(file_meta:uuid()) -> ok | {error, term()}.
-execute_hooks(FileUuid) ->
-    case datastore_model:get(?CTX, FileUuid) of
+-spec execute_hooks(file_meta:uuid(), hook_type()) -> ok | {error, term()}.
+execute_hooks(FileUuid, HookType) ->
+    Key = gen_datastore_key(FileUuid, HookType),
+    case datastore_model:get(?CTX, Key) of
         {ok, #document{value = #file_meta_posthooks{hooks = Hooks}}} ->
             case maps:size(Hooks) of
                 0 ->
@@ -98,9 +118,9 @@ execute_hooks(FileUuid) ->
                 _ ->
                     critical_section:run(FileUuid, fun() ->
                         % Get document once more as hooks might have changed before entering to critical section
-                        case datastore_model:get(?CTX, FileUuid) of
+                        case datastore_model:get(?CTX, Key) of
                             {ok, #document{value = #file_meta_posthooks{hooks = Hooks}}} ->
-                                execute_hooks(FileUuid, Hooks);
+                                execute_hooks_unsafe(Key, Hooks);
                             _ ->
                                 ok
                         end
@@ -112,16 +132,19 @@ execute_hooks(FileUuid) ->
 
 
 %% @private
--spec execute_hooks(file_meta:uuid(), hooks()) -> ok | {error, term()}.
-execute_hooks(FileUuid, HooksToExecute) ->
+-spec execute_hooks_unsafe(datastore:key(), hooks()) -> ok | {error, term()}.
+execute_hooks_unsafe(Key, HooksToExecute) ->
     SuccessfulHooks = maps:fold(fun(Identifier, #hook{module = Module, function = Function, args = Args}, Acc) ->
         try
-            ok = erlang:apply(Module, Function, binary_to_term(Args)),
-            [Identifier | Acc]
+            case erlang:apply(Module, Function, binary_to_term(Args)) of
+                ok -> [Identifier | Acc];
+                %% @TODO VFS-10296 - handle not fully synced links in this module
+                repeat -> Acc
+            end
         catch Error:Type:Stacktrace  ->
             ?debug_stacktrace(
                 "Error during execution of file meta posthook (~p) for file ~p ~p:~p",
-                [Identifier, FileUuid, Error, Type],
+                [Identifier, Key, Error, Type],
                 Stacktrace
             ),
             Acc
@@ -135,9 +158,9 @@ execute_hooks(FileUuid, HooksToExecute) ->
             UpdateFun = fun(#file_meta_posthooks{hooks = PreviousHooks} = FileMetaPosthooks) ->
                 {ok, FileMetaPosthooks#file_meta_posthooks{hooks = maps:without(SuccessfulHooks, PreviousHooks)}}
             end,
-            case datastore_model:update(?CTX, FileUuid, UpdateFun) of
+            case datastore_model:update(?CTX, Key, UpdateFun) of
                 {ok, #document{value = #file_meta_posthooks{hooks = Hooks}}} when map_size(Hooks) == 0 ->
-                    datastore_model:delete(?CTX, FileUuid, fun(#file_meta_posthooks{hooks = H}) -> map_size(H) == 0 end);
+                    datastore_model:delete(?CTX, Key, fun(#file_meta_posthooks{hooks = H}) -> map_size(H) == 0 end);
                 {ok, _} ->
                     ok;
                 {error, _} = Error ->
@@ -146,8 +169,8 @@ execute_hooks(FileUuid, HooksToExecute) ->
     end.
 
 
--spec delete(file_meta:uuid()) -> ok | {error, term()}.
-delete(Key) ->
+-spec cleanup(file_meta:uuid()) -> ok | {error, term()}.
+cleanup(Key) ->
     case datastore_model:delete(?CTX, Key) of
         ok -> ok;
         {error, not_found} -> ok;
@@ -159,26 +182,15 @@ delete(Key) ->
 %%% Internal functions
 %%%===================================================================
 
-%%--------------------------------------------------------------------
 %% @private
-%% @doc
-%% Generated id MUST be unique, as during hook execution another hook can be created 
-%% with exactly the same parameters. Adding such hook will result in it being deleted, 
-%% and in result not executed after first hook finishes execution.
-%% Prefix is only for diagnostic purposes and is not required for correct working.
-%% @end
-%%--------------------------------------------------------------------
--spec generate_hook_id(binary()) -> hook_identifier().
-generate_hook_id(Prefix) ->
-    <<Prefix/binary, "_", (datastore_key:new())/binary>>.
-
-
 -spec get_hook_uuid(missing_element()) -> file_meta:uuid().
 get_hook_uuid({file_meta_missing, MissingUuid}) ->
     MissingUuid;
 get_hook_uuid({link_missing, Uuid, _MissingName}) ->
     Uuid.
 
+
+%% @private
 -spec has_missing_element_appeared(missing_element()) -> boolean().
 has_missing_element_appeared({file_meta_missing, MissingUuid}) ->
     file_meta:exists(MissingUuid);
@@ -188,6 +200,15 @@ has_missing_element_appeared({link_missing, Uuid, MissingName}) ->
         {error, _} -> false
     end.
 
+
+%% @private
+-spec missing_element_to_hook_type(missing_element()) -> hook_type().
+missing_element_to_hook_type({file_meta_missing, _}) -> doc;
+missing_element_to_hook_type({link_missing, _, _}) -> link.
+
+
+gen_datastore_key(FileUuid, doc) -> FileUuid;
+gen_datastore_key(FileUuid, link) -> ?LINK_KEY(FileUuid).
 
 %%%===================================================================
 %%% datastore_model callbacks

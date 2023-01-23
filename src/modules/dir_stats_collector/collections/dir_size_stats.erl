@@ -36,8 +36,10 @@
 
 -include("modules/dir_stats_collector/dir_size_stats.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_time_series.hrl").
 -include_lib("cluster_worker/include/time_series/browsing.hrl").
 -include_lib("ctool/include/time_series/common.hrl").
+-include_lib("ctool/include/logging.hrl").
 -include_lib("ctool/include/errors.hrl").
 
 
@@ -47,11 +49,10 @@
     browse_historical_stats_collection/2,
     report_reg_file_size_changed/3,
     report_file_created/2, report_file_deleted/2,
-    report_file_moved/4,
     delete_stats/1]).
 
 %% dir_stats_collection_behaviour callbacks
--export([acquire/1, consolidate/3, save/3, delete/1, init_dir/1, init_child/1]).
+-export([acquire/1, consolidate/3, on_collection_move/2, save/3, delete/1, init_dir/1, init_child/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -76,6 +77,8 @@
 % Time series storing incarnation - historical values are not required
 % but usage of time series allows keeping everything in single structure
 -define(INCARNATION_TIME_SERIES, <<"incarnation">>).
+
+-define(ERROR_HANDLING_MODE, op_worker:get_env(dir_size_stats_init_errors_handling_mode, repeat)).
 
 %%%===================================================================
 %%% API
@@ -141,21 +144,6 @@ report_file_deleted(_, Guid) ->
     update_stats(Guid, #{?REG_FILE_AND_LINK_COUNT => -1}).
 
 
--spec report_file_moved(file_meta:type(), file_id:file_guid(), file_id:file_guid(), file_id:file_guid()) -> ok.
-report_file_moved(?DIRECTORY_TYPE, FileGuid, SourceParentGuid, TargetParentGuid) ->
-    case dir_stats_service_state:is_active(file_id:guid_to_space_id(FileGuid)) of
-        true ->
-            {ok, Collection} = get_stats(FileGuid),
-            update_stats(TargetParentGuid, Collection),
-            update_stats(SourceParentGuid, maps:map(fun(_, Value) -> -Value end, Collection));
-        false ->
-            ok
-    end;
-report_file_moved(Type, _FileGuid, SourceParentGuid, TargetParentGuid) ->
-    report_file_created(Type, TargetParentGuid),
-    report_file_deleted(Type, SourceParentGuid).
-
-
 -spec delete_stats(file_id:file_guid()) -> ok.
 delete_stats(Guid) ->
     dir_stats_collector:delete_stats(Guid, ?MODULE).
@@ -181,6 +169,13 @@ acquire(Guid) ->
     dir_stats_collection:stat_value()) -> dir_stats_collection:stat_value().
 consolidate(_, Value, Diff) ->
     Value + Diff.
+
+
+-spec on_collection_move(dir_stats_collection:stat_name(), dir_stats_collection:stat_value()) ->
+    {update_source_parent, dir_stats_collection:stat_value()}.
+on_collection_move(_, Value) ->
+    {update_source_parent, -Value}.
+
 
 
 -spec save(file_id:file_guid(), dir_stats_collection:collection(), non_neg_integer() | current) -> ok.
@@ -220,21 +215,51 @@ init_dir(Guid) ->
 
 -spec init_child(file_id:file_guid()) -> dir_stats_collection:collection().
 init_child(Guid) ->
-    EmptyCurrentStats = gen_empty_current_stats(Guid),
+    % Use get_including_deleted to handle races between mv and delete (handling mv when file_meta is deleted)
     case file_meta:get_including_deleted(file_id:guid_to_uuid(Guid)) of
         {ok, Doc} ->
             case file_meta:get_type(Doc) of
                 ?DIRECTORY_TYPE ->
-                    EmptyCurrentStats#{?DIR_COUNT => 1};
-                _ ->
-                    {FileSizes, _} = file_ctx:get_file_size_summary(file_ctx:new_by_guid(Guid)),
-                    lists:foldl(fun
-                        ({total, Size}, Acc) -> Acc#{?TOTAL_SIZE => Size};
-                        ({StorageId, Size}, Acc) -> Acc#{?SIZE_ON_STORAGE(StorageId) => Size}
-                    end, EmptyCurrentStats#{?REG_FILE_AND_LINK_COUNT => 1}, FileSizes)
+                    try
+                        EmptyCurrentStats = gen_empty_current_stats(Guid), % TODO VFS-9204 - maybe refactor as gen_empty_current_stats
+                                                                           % gets storage_id that is also used by prepare_file_size_summary
+                        EmptyCurrentStats#{?DIR_COUNT => 1}
+                    catch
+                        Error:Reason:Stacktrace ->
+                            handle_init_error(Guid, Error, Reason, Stacktrace),
+                            #{?DIR_COUNT => 1, ?DIR_ERRORS_COUNT => 1}
+                    end;
+                Type ->
+                    try
+                        EmptyCurrentStats = gen_empty_current_stats(Guid),
+
+                        case Type of
+                            ?REGULAR_FILE_TYPE ->
+                                % gets storage_id that is also used by prepare_file_size_summary
+                                {FileSizes, _} = file_ctx:prepare_file_size_summary(file_ctx:new_by_guid(Guid)),
+                                lists:foldl(fun
+                                    ({total, Size}, Acc) -> Acc#{?TOTAL_SIZE => Size};
+                                    ({StorageId, Size}, Acc) -> Acc#{?SIZE_ON_STORAGE(StorageId) => Size}
+                                end, EmptyCurrentStats#{?REG_FILE_AND_LINK_COUNT => 1}, FileSizes);
+                            _ ->
+                                % Links are counted with size 0
+                                EmptyCurrentStats#{?REG_FILE_AND_LINK_COUNT => 1}
+                        end
+                    catch
+                        Error:Reason:Stacktrace ->
+                            handle_init_error(Guid, Error, Reason, Stacktrace),
+                            #{?REG_FILE_AND_LINK_COUNT => 1, ?FILE_ERRORS_COUNT => 1}
+                    end
             end;
         ?ERROR_NOT_FOUND ->
-            EmptyCurrentStats % Race with file deletion - stats will be invalidated by next update
+            % Race with file deletion - stats will be invalidated by next update
+            try
+                gen_empty_current_stats(Guid)
+            catch
+                Error:Reason:Stacktrace ->
+                    handle_init_error(Guid, Error, Reason, Stacktrace),
+                    #{}
+            end
     end.
 
 
@@ -264,7 +289,7 @@ internal_stats_config(Guid) ->
         (?INCARNATION_TIME_SERIES) ->
             {?INCARNATION_TIME_SERIES, current_metric_composition()};
         (StatName) ->
-            {StatName, maps:merge(historical_stats_metric_composition(), current_metric_composition())}
+            {StatName, maps:merge(?DIR_SIZE_STATS_METRICS, current_metric_composition())}
     end, [?INCARNATION_TIME_SERIES | stat_names(Guid)]).
 
 
@@ -272,7 +297,7 @@ internal_stats_config(Guid) ->
 -spec stat_names(file_id:file_guid()) -> [dir_stats_collection:stat_name()].
 stat_names(Guid) ->
     {ok, StorageId} = space_logic:get_local_supporting_storage(file_id:guid_to_space_id(Guid)),
-    [?REG_FILE_AND_LINK_COUNT, ?DIR_COUNT, ?TOTAL_SIZE, ?SIZE_ON_STORAGE(StorageId)].
+    [?REG_FILE_AND_LINK_COUNT, ?DIR_COUNT, ?FILE_ERRORS_COUNT, ?DIR_ERRORS_COUNT, ?TOTAL_SIZE, ?SIZE_ON_STORAGE(StorageId)].
 
 
 %% @private
@@ -288,36 +313,9 @@ current_metric_composition() ->
 
 
 %% @private
--spec historical_stats_metric_composition() -> time_series:metric_composition().
-historical_stats_metric_composition() ->
-    #{
-        ?MINUTE_METRIC => #metric_config{
-            resolution = ?MINUTE_RESOLUTION,
-            retention = 720,
-            aggregator = last
-        },
-        ?HOUR_METRIC => #metric_config{
-            resolution = ?HOUR_RESOLUTION,
-            retention = 1440,
-            aggregator = last
-        },
-        ?DAY_METRIC => #metric_config{
-            resolution = ?DAY_RESOLUTION,
-            retention = 550,
-            aggregator = last
-        },
-        ?MONTH_METRIC => #metric_config{
-            resolution = ?MONTH_RESOLUTION,
-            retention = 360,
-            aggregator = last
-        }
-    }.
-
-
-%% @private
 -spec gen_default_historical_stats_layout(file_id:file_guid()) -> time_series_collection:layout().
 gen_default_historical_stats_layout(Guid) ->
-    MetricNames = maps:keys(historical_stats_metric_composition()),
+    MetricNames = maps:keys(?DIR_SIZE_STATS_METRICS),
     maps_utils:generate_from_list(fun(TimeSeriesName) -> {TimeSeriesName, MetricNames} end, stat_names(Guid)).
 
 
@@ -326,7 +324,7 @@ gen_default_historical_stats_layout(Guid) ->
 internal_stats_to_current_stats(InternalStats) ->
     maps:map(fun(_TimeSeriesName, #{?CURRENT_METRIC := Windows}) ->
         case Windows of
-            [{_Timestamp, Value}] -> Value;
+            [#window_info{value = Value}] -> Value;
             [] -> 0
         end
     end, maps:without([?INCARNATION_TIME_SERIES], InternalStats)).
@@ -352,7 +350,7 @@ internal_layout_to_historical_stats_layout(InternalLayout) ->
 %% @private
 -spec internal_stats_to_incarnation(internal_stats()) -> non_neg_integer().
 internal_stats_to_incarnation(#{?INCARNATION_TIME_SERIES := #{?CURRENT_METRIC := []}}) -> 0;
-internal_stats_to_incarnation(#{?INCARNATION_TIME_SERIES := #{?CURRENT_METRIC := [{_Timestamp, Value}]}}) -> Value.
+internal_stats_to_incarnation(#{?INCARNATION_TIME_SERIES := #{?CURRENT_METRIC := [#window_info{value = Value}]}}) -> Value.
 
 
 %% @private
@@ -381,9 +379,44 @@ gen_empty_current_stats(Guid) ->
 %% @private
 -spec gen_empty_historical_stats(file_id:file_guid()) -> historical_stats().
 gen_empty_historical_stats(Guid) ->
-    MetricNames = maps:keys(historical_stats_metric_composition()),
+    MetricNames = maps:keys(?DIR_SIZE_STATS_METRICS),
     maps_utils:generate_from_list(fun(TimeSeriesName) ->
         {TimeSeriesName, maps_utils:generate_from_list(fun(MetricName) ->
             {MetricName, []}
         end, MetricNames)}
     end, stat_names(Guid)).
+
+
+%% @private
+-spec handle_init_error(file_id:file_guid(), term(), term(), list()) -> ok | no_return().
+handle_init_error(Guid, Error, Reason, Stacktrace) ->
+    case ?ERROR_HANDLING_MODE of
+        ignore ->
+            ?error_stacktrace("Error initializing size stats for ~p: ~p:~p",
+                [Guid, Error, Reason], Stacktrace);
+        silent_ignore ->
+            ok;
+
+        % throw to repeat init by collector
+        repeat ->
+            case datastore_runner:normalize_error(Reason) of
+                no_connection_to_onezone ->
+                    ok;
+                _ ->
+                    ?error_stacktrace("Error initializing size stats for ~p: ~p:~p",
+                        [Guid, Error, Reason], Stacktrace)
+            end,
+            throw(dir_size_stats_init_error);
+        silent_repeat ->
+            throw(dir_size_stats_init_error);
+
+        repeat_connection_errors ->
+            case datastore_runner:normalize_error(Reason) of
+                no_connection_to_onezone ->
+                    % Collector handles problems with zone connection
+                    throw(no_connection_to_onezone);
+                _ ->
+                    ?error_stacktrace("Error initializing size stats for ~p: ~p:~p",
+                        [Guid, Error, Reason], Stacktrace)
+            end
+    end.

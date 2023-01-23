@@ -70,11 +70,16 @@
     args => args(),
     use_referenced_key => boolean(), % use referenced key to find/cache value instead of key of file doc
                                      % passed by get_or_calculate function argument
-    merge_callback => merge_callback(), % note: use `referenced_key = true` for more optimal caching
-                                        % if differentiate_callback is not used
+    merge_callback => merge_callback() | undefined, % note: use `referenced_key = true` for more optimal caching
+                                                    % if differentiate_callback is not used
     differentiate_callback => differentiate_callback(), % note: do not use together with `referenced_key = true`
-    force_execution_on_referenced_key => boolean() % force execution of callback on inode even if reference of original file
-                                                   % is deleted
+    force_execution_on_referenced_key => boolean(), % force execution of callback on inode even if reference of original file
+                                                    % is deleted
+    calculation_root_parent => file_meta:uuid(), % default: <<>>; should be uuid of directory.
+                                                 % NOTE: if not equal to <<>> values will NOT be cached
+                                                 % NOTE: this option works in best effort manner - if there is already value
+                                                 %       calculated from space root cached it will be returned.
+    should_cache => boolean() % default: true; indicates whether calculated value should be cached
 }.
 
 -export_type([args/0, calculation_info/0]).
@@ -176,6 +181,7 @@ get_or_calculate_in_critical_section(Cache, Key, FileDoc, CalculateCallback, Opt
     get_or_calculate_options()) -> get_or_calculate_return_value().
 get_or_calculate_internal(Cache, Key, FileDoc, CalculateCallback, Options) ->
     % Note - argument Key and field key if FileDoc can differ - see use_referenced_key option
+    CalculationRootParent = maps:get(calculation_root_parent, Options, <<>>),
     case bounded_cache:get(Cache, Key) of
         {ok, Value} ->
             {ok, Value, maps:get(initial_calculation_info, Options, undefined)};
@@ -185,45 +191,65 @@ get_or_calculate_internal(Cache, Key, FileDoc, CalculateCallback, Options) ->
             ShouldProcessMultipleRefs = (MergeCallback =/= undefined)
                 andalso (file_meta:get_effective_type(FileDoc) =:= ?REGULAR_FILE_TYPE),
 
-            case {fslogic_file_id:is_space_dir_uuid(Key), fslogic_file_id:is_root_dir_uuid(Key), ShouldProcessMultipleRefs} of
+            ShouldCache = case maps:get(should_cache, Options, true) of
+                true -> CalculationRootParent =:= <<>> orelse error(improper_use_of_effective_value);
+                false -> false
+            end,
+            {ok, Parent} = file_meta:get_parent_uuid(FileDoc),
+            case {CalculationRootParent =:= Parent, fslogic_file_id:is_root_dir_uuid(Key), ShouldProcessMultipleRefs} of
                 {false, false, false} ->
-                    get_or_calculate_single_reference(Cache, Key, FileDoc, CalculateCallback, Options);
+                    calculate_single_reference(Cache, Key, FileDoc, CalculateCallback, Options, ShouldCache);
                 {false, false, true} ->
-                    get_or_calculate_multiple_references(Cache, Key, FileDoc, CalculateCallback, Options);
+                    get_or_calculate_multiple_references(Cache, Key, FileDoc, CalculateCallback, Options, ShouldCache);
                 {false, true, _} ->
                     ?critical("Incorrect usage of effective_value cache ~p. "
                         "Calculation has reached the global root directory.", [Cache]),
                     {error, root_dir_reached};
                 {true, _, _} ->
-                    % root of space - init calculation with parent value undefined
-                    Args = maps:get(args, Options, []),
-                    Timestamp = maps:get(timestamp, Options),
+                    % calculation root - init calculation with parent value undefined
                     InitialCalculationInfo = maps:get(initial_calculation_info, Options, undefined),
-                    bounded_cache:calculate_and_cache(Cache, Key, CalculateCallback,
-                        [FileDoc, undefined, InitialCalculationInfo | Args], Timestamp)
+                    calculate_and_maybe_cache(
+                        Cache, Key, CalculateCallback, Options, [FileDoc, undefined, InitialCalculationInfo], ShouldCache)
             end
     end.
 
--spec get_or_calculate_single_reference(cache(), file_meta:uuid(), file_meta:doc(),
-    callback(), get_or_calculate_options()) -> get_or_calculate_return_value().
-get_or_calculate_single_reference(Cache, Key, FileDoc, CalculateCallback, Options) ->
+-spec calculate_single_reference(cache(), file_meta:uuid(), file_meta:doc(), callback(), get_or_calculate_options(),
+    boolean()) -> get_or_calculate_return_value().
+calculate_single_reference(Cache, Key, FileDoc, CalculateCallback, Options, ShouldCache) ->
     case calculate_for_parent(Cache, Key, FileDoc, CalculateCallback, Options) of
-        {ok, ParentValue, CalculationInfo} ->
-            Args = maps:get(args, Options, []),
-            Timestamp = maps:get(timestamp, Options),
-            bounded_cache:calculate_and_cache(Cache, Key, CalculateCallback,
-                [FileDoc, ParentValue, CalculationInfo | Args], Timestamp);
+        {ok, ParentValue, ParentCalculationInfo} ->
+            calculate_and_maybe_cache(
+                Cache, Key, CalculateCallback, Options, [FileDoc, ParentValue, ParentCalculationInfo], ShouldCache);
         {error, _} = Error ->
             Error
     end.
 
+-spec calculate_and_maybe_cache(cache(), file_meta:uuid(), callback(), get_or_calculate_options(), args(), boolean()) ->
+    get_or_calculate_return_value().
+calculate_and_maybe_cache(Cache, Key, CalculateCallback, Options, ArgsPrefix, ShouldCache) ->
+    Args = ArgsPrefix ++ maps:get(args, Options, []),
+    Timestamp = maps:get(timestamp, Options),
+    case {CalculateCallback(Args), ShouldCache} of
+        {{ok, Value, _} = Res, true} ->
+            bounded_cache:cache(Cache, Key, Value, Timestamp),
+            Res;
+        {Res, _} ->
+            Res
+    end.
+
 -spec get_or_calculate_multiple_references(cache(), file_meta:uuid(), file_meta:doc(),
-    callback(), get_or_calculate_options()) -> get_or_calculate_return_value().
-get_or_calculate_multiple_references(Cache, Key, #document{key = DocKey} = FileDoc, CalculateCallback, Options) ->
+    callback(), get_or_calculate_options(), boolean()) -> get_or_calculate_return_value().
+get_or_calculate_multiple_references(Cache, Key, #document{key = DocKey} = FileDoc, CalculateCallback, Options, ShouldCache) ->
     MergeCallback = maps:get(merge_callback, Options),
     References = get_references(FileDoc),
-    ReferencesValues = lists:map(fun(ReferenceDoc) ->
-        calculate_for_reference(Cache, ReferenceDoc, CalculateCallback, Options)
+    ReferencesValues = lists:map(fun(#document{key = ReferenceKey} = ReferenceDoc) ->
+        % NOTE: this function always calls CalculateCallback as there is high probability that value is not cached.
+        % This is because cache invalidation always deletes all cached values and value is always calculated for one
+        % or all references. As it has been tried to read value for reference passed in the argument before, it is
+        % only possible that value is cached when get_or_calculate function is being executed by multiple processes
+        % in parallel (and value has not been cached before). Thus, probability of finding value in cache is very
+        % low so cache is not checked to avoid additional cost of call to bounded_cache.
+        calculate_single_reference(Cache, ReferenceKey, ReferenceDoc, CalculateCallback, Options, false)
     end, References),
 
     case merge_references_values(ReferencesValues, undefined, MergeCallback) of
@@ -243,7 +269,7 @@ get_or_calculate_multiple_references(Cache, Key, #document{key = DocKey} = FileD
             end,
 
             differentiate_and_cache_references(Cache, Key, CalculatedValue, CalculationInfo,
-                References, ReferencesValues, Options);
+                References, ReferencesValues, Options, ShouldCache);
         Error ->
             Error
     end.
@@ -255,30 +281,13 @@ get_or_calculate_multiple_references(Cache, Key, #document{key = DocKey} = FileD
 -spec calculate_for_parent(cache(), file_meta:uuid(), file_meta:doc(), callback(),
     get_or_calculate_options()) -> get_or_calculate_return_value().
 calculate_for_parent(Cache, Key, FileDoc, CalculateCallback, Options) ->
-    {ok, ParentUuid} = get_parent(Key, FileDoc),
-    case file_meta:get_including_deleted(ParentUuid) of
-        {ok, ParentDoc} -> get_or_calculate(Cache, ParentDoc, CalculateCallback, Options);
-        _ -> {error, {file_meta_missing, ParentUuid}}
-    end.
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Calculate value using single reference.
-%% NOTE: this function always calls CalculateCallback as there is high probability that value is not cached.
-%% This is because cache invalidation always deletes all cached values and value is always calculated for one
-%% or all references. As it has been tried to read value for reference passed in the argument before, it is
-%% only possible that value is cached when get_or_calculate function is being executed by multiple processes
-%% in parallel (and value has not been cached before). Thus, probability of finding value in cache is very
-%% low so cache is not checked to avoid additional cost of call to bounded_cache.
-%% @end
-%%--------------------------------------------------------------------
--spec calculate_for_reference(cache(), file_meta:doc(), callback(), get_or_calculate_options()) ->
-    get_or_calculate_return_value().
-calculate_for_reference(Cache, #document{key = Key} = FileDoc, CalculateCallback, Options) ->
-    case calculate_for_parent(Cache, Key, FileDoc, CalculateCallback, Options) of
-        {ok, ParentValue, ParentCalculationInfo} ->
-            Args = maps:get(args, Options, []),
-            CalculateCallback([FileDoc, ParentValue, ParentCalculationInfo | Args]);
+    case get_parent_uuid(Key, FileDoc) of
+        {ok, ParentUuid} ->
+            case file_meta:get_including_deleted(ParentUuid) of
+                {ok, ParentDoc} -> get_or_calculate(Cache, ParentDoc, CalculateCallback, Options);
+                {error, not_found} ->
+                    {error, {file_meta_missing, ParentUuid}}
+            end;
         {error, _} = Error ->
             Error
     end.
@@ -297,10 +306,10 @@ merge_references_values([{ok, Value, CalculationInfo} | Tail], {ok, AccValue, Ac
     merge_references_values(Tail, MergeCallback(Value, AccValue, CalculationInfo, AccCalculationInfo), MergeCallback).
 
 -spec differentiate_and_cache_references(cache(), file_meta:uuid(), bounded_cache:value(),
-    calculation_info(), [file_meta:doc()], [get_or_calculate_return_value()], get_or_calculate_options()) ->
+    calculation_info(), [file_meta:doc()], [get_or_calculate_return_value()], get_or_calculate_options(), boolean()) ->
     get_or_calculate_return_value().
 differentiate_and_cache_references(Cache, _Key, MergedValue, CalculationInfo,
-    References, ReferencesValues, #{timestamp := Timestamp, differentiate_callback := DifferentiateCallback}) ->
+    References, ReferencesValues, #{timestamp := Timestamp, differentiate_callback := DifferentiateCallback}, ShouldCache) ->
     % Apply callback for all references
     FoldlAns = lists:foldl(fun
         ({ok, ReferenceValue, _}, {ok, Acc}) ->
@@ -317,7 +326,7 @@ differentiate_and_cache_references(Cache, _Key, MergedValue, CalculationInfo,
         {ok, ReversedMappedReferencesValues} ->
             % Head of list is value calculated for reference for which get_or_calculate function has been called
             [ReturnValue | _] = MappedReferencesValues = lists:reverse(ReversedMappedReferencesValues),
-            lists:foreach(fun({#document{key = CacheKey}, ValueToCache}) ->
+            ShouldCache andalso lists:foreach(fun({#document{key = CacheKey}, ValueToCache}) ->
                 bounded_cache:cache(Cache, CacheKey, ValueToCache, Timestamp)
             end, lists:zip(References, MappedReferencesValues)),    
             
@@ -326,8 +335,8 @@ differentiate_and_cache_references(Cache, _Key, MergedValue, CalculationInfo,
             FoldlError
     end;
 differentiate_and_cache_references(Cache, Key, MergedValue, CalculationInfo,
-    _References, _ReferencesValues, #{timestamp := Timestamp}) ->
-    bounded_cache:cache(Cache, Key, MergedValue, Timestamp),
+    _References, _ReferencesValues, #{timestamp := Timestamp}, ShouldCache) ->
+    ShouldCache andalso bounded_cache:cache(Cache, Key, MergedValue, Timestamp),
     {ok, MergedValue, CalculationInfo}.
 
 -spec force_execution_on_referenced_key(file_meta:uuid(), callback(), merge_callback(),
@@ -351,13 +360,17 @@ force_execution_on_referenced_key(INodeKey, CalculateCallback, MergeCallback, Ca
 %% FileDoc can be used. It results in one datastore get operation less.
 %% @end
 %%--------------------------------------------------------------------
--spec get_parent(file_meta:uuid(), file_meta:doc()) -> {ok, file_meta:uuid()} | {error, term()}.
-get_parent(Key, #document{key = Key} = FileDoc) ->
+-spec get_parent_uuid(file_meta:uuid(), file_meta:doc()) -> {ok, file_meta:uuid()} | {error, term()}.
+get_parent_uuid(Key, #document{key = Key} = FileDoc) ->
     file_meta:get_parent_uuid(FileDoc);
-get_parent(Key, _FileDoc) ->
+get_parent_uuid(Key, _FileDoc) ->
     % Key differs from key inside FileDoc (see use_referenced_key option) - file doc for Key 
     % will be got inside get_parent_uuid function
-    file_meta:get_parent_uuid(Key).
+    case file_meta:get_parent_uuid(Key) of
+        {ok, ParentUuid} -> {ok, ParentUuid};
+        {error, not_found} ->
+            {error, {file_meta_missing, Key}}
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc

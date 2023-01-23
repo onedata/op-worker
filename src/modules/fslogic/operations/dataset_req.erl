@@ -27,12 +27,14 @@
     get_info/3,
     get_file_eff_summary/2,
     list_top_datasets/5,
-    list_children_datasets/5
+    list_children_datasets/5,
+    list_recursively/4
 ]).
 
 %% Archives API
 -export([
     create_archive/7,
+    cancel_archivisation/4,
     update_archive/4,
     get_archive_info/3,
     list_archives/5,
@@ -46,6 +48,15 @@
 
 -type error() :: {error, term()}.
 
+-type recursive_listing_opts() :: #{
+    % NOTE: pagination_token and start_after_path are mutually exclusive
+    pagination_token => recursive_listing:pagination_token(),
+    start_after_path => recursive_dataset_listing_node:node_path(),
+    prefix => recursive_listing:prefix(),
+    limit => recursive_listing:limit()
+}.
+
+-export_type([recursive_listing_opts/0]).
 
 %%%===================================================================
 %%% API functions
@@ -147,6 +158,22 @@ list_children_datasets(SpaceDirCtx, Dataset, Opts, ListingMode, UserCtx) ->
     dataset_api:list_children_datasets(Dataset, Opts, ListingMode).
 
 
+-spec list_recursively(
+    od_space:id(),
+    dataset:id(),
+    recursive_listing_opts(),
+    user_ctx:ctx()
+) ->
+    {ok, recursive_dataset_listing_node:result()} | error().
+list_recursively(SpaceId, DatasetId, Opts, UserCtx) ->
+    UserId = user_ctx:get_user_id(UserCtx),
+    space_logic:assert_has_eff_privilege(SpaceId, UserId, ?SPACE_VIEW),
+    
+    {ok, DatasetInfo} = dataset_api:get_info(DatasetId),
+    FinalOpts = Opts#{include_branching_nodes => true},
+    {ok, recursive_listing:list(recursive_dataset_listing_node, UserCtx, DatasetInfo, FinalOpts)}.
+    
+
 %%%===================================================================
 %%% Archives API functions
 %%%===================================================================
@@ -161,7 +188,7 @@ list_children_datasets(SpaceDirCtx, Dataset, Opts, ListingMode, UserCtx) ->
     archive:description(),
     user_ctx:ctx()
 ) ->
-    {ok, archive:id()} | error().
+    {ok, archive_api:info()} | error().
 create_archive(SpaceDirCtx, DatasetId, Config, PreservedCallback, DeletedCallback, Description, UserCtx) ->
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_MANAGE_DATASETS),
     assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_CREATE_ARCHIVES),
@@ -169,6 +196,15 @@ create_archive(SpaceDirCtx, DatasetId, Config, PreservedCallback, DeletedCallbac
     archive_api:start_archivisation(
         DatasetId, Config, PreservedCallback, DeletedCallback, Description, UserCtx
     ).
+
+
+-spec cancel_archivisation(file_ctx:ctx(), archive:id(), archive:cancel_preservation_policy(), user_ctx:ctx()) -> 
+    ok | {error, term()}.
+cancel_archivisation(SpaceDirCtx, ArchiveId, PreservationPolicy, UserCtx) ->
+    assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_MANAGE_DATASETS),
+    assert_has_eff_privilege(SpaceDirCtx, UserCtx, ?SPACE_CREATE_ARCHIVES),
+    
+    archive_api:cancel_archivisation(ArchiveId, PreservationPolicy, UserCtx).
 
 
 -spec update_archive(file_ctx:ctx(), archive:id(), archive:diff(), user_ctx:ctx()) ->
@@ -191,7 +227,7 @@ get_archive_info(SpaceDirCtx, ArchiveId, UserCtx) ->
     file_ctx:ctx(),
     dataset:id(),
     archives_list:opts(),
-    dataset_api:listing_mode(),
+    archive_api:listing_mode(),
     user_ctx:ctx()
 ) ->
     {ok, {archive_api:entries(), boolean()}} | error().
@@ -242,7 +278,7 @@ get_archive_recall_progress(FileCtx, RecallId, UserCtx) ->
 
 
 -spec browse_archive_recall_log(file_ctx:ctx(), archive_recall:id(), user_ctx:ctx(), 
-    json_infinite_log_model:listing_opts()) -> {ok, json_infinite_log_model:browse_result()} | error().
+    audit_log_browse_opts:opts()) -> {ok, audit_log:browse_result()} | error().
 browse_archive_recall_log(FileCtx, RecallId, UserCtx, Options) ->
     fslogic_authz:ensure_authorized(UserCtx, FileCtx, [?TRAVERSE_ANCESTORS]),
     

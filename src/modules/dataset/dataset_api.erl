@@ -22,7 +22,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([establish/2, establish/3, update/4, remove/1, move_if_applicable/2]).
+-export([establish/2, establish/3, update/4, remove/1, remove/2, move_if_applicable/2]).
 -export([get_info/1, get_effective_membership_and_protection_flags/1, get_effective_summary/1]).
 -export([list_top_datasets/4, list_children_datasets/3]).
 -export([handle_file_deleted/1]).
@@ -113,30 +113,26 @@ update(DatasetDoc, NewState, FlagsToSet, FlagsToUnset) ->
 
 
 -spec remove(dataset:id() | dataset:doc()) -> ok | error().
-remove(Doc = #document{key = DatasetId}) ->
+remove(DocOrId) ->
+    remove(DocOrId, user_defined).
+
+
+-spec remove(dataset:id() | dataset:doc(), dataset_type()) -> ok | error().
+remove(#document{key = DatasetId}, DatasetType) ->
+    % fetch doc again in critical section to avoid races with dataset state change
+    remove(DatasetId, DatasetType);
+remove(DatasetId, DatasetType) when is_binary(DatasetId) ->
     ?CRITICAL_SECTION(DatasetId, fun() ->
         case archives_list:is_empty(DatasetId) of
             true ->
-                ok = remove_from_datasets_structure(Doc),
-                {ok, SpaceId} = dataset:get_space_id(Doc),
-                ok = dataset:delete(DatasetId),
-                {ok, Uuid} = dataset:get_root_file_uuid(Doc),
-                InvalidateDatasetsOnly = case file_meta:get(Uuid) of
-                    {ok, FileMetaDoc} ->
-                        ProtectionFlags = file_meta:get_protection_flags(FileMetaDoc),
-                        not ?has_any_flags(ProtectionFlags, ?DATA_PROTECTION bor ?METADATA_PROTECTION);
-                    _ ->
-                        false
-                end,
-                ok = file_meta_dataset:remove(Uuid),
-                dataset_eff_cache:invalidate_on_all_nodes(SpaceId, InvalidateDatasetsOnly);
+                case dataset:get(DatasetId) of
+                    {ok, Doc} -> remove_unsafe(Doc, DatasetType);
+                    {error, not_found} -> ok
+                end;
             false ->
                 {error, ?ENOTEMPTY}
         end
-    end);
-remove(DatasetId) when is_binary(DatasetId) ->
-    {ok, Doc} = dataset:get(DatasetId),
-    remove(Doc).
+    end).
 
 
 -spec move_if_applicable(file_meta:doc(), file_meta:doc()) -> ok.
@@ -184,12 +180,13 @@ get_info(DatasetId) ->
 
 
 -spec get_effective_membership_and_protection_flags(file_ctx:ctx()) ->
-    {ok, dataset:membership(), data_access_control:bitmask(), file_ctx:ctx()}.
+    {ok, dataset:membership(), data_access_control:bitmask(), data_access_control:bitmask(), file_ctx:ctx()}.
 get_effective_membership_and_protection_flags(FileCtx) ->
     {FileDoc, FileCtx2} = file_ctx:get_file_doc(FileCtx),
     {ok, EffCacheEntry} = dataset_eff_cache:get(FileDoc),
     {ok, EffAncestorDatasets} = dataset_eff_cache:get_eff_ancestor_datasets(EffCacheEntry),
-    {ok, EffProtectionFlags} = dataset_eff_cache:get_eff_file_protection_flags(EffCacheEntry),
+    {ok, EffProtectionFlags} = dataset_eff_cache:get_eff_protection_flags(EffCacheEntry),
+    {ok, EffDatasetProtectionFlags} = dataset_eff_cache:get_eff_dataset_protection_flags(EffCacheEntry),
     IsDirectAttached = file_meta_dataset:is_attached(FileDoc),
     EffMembership = case {IsDirectAttached, length(EffAncestorDatasets) =/= 0} of
         {true, true} -> ?DIRECT_AND_ANCESTOR_MEMBERSHIP;
@@ -197,7 +194,7 @@ get_effective_membership_and_protection_flags(FileCtx) ->
         {false, true} -> ?ANCESTOR_MEMBERSHIP;
         {false, false} -> ?NONE_MEMBERSHIP
     end,
-    {ok, EffMembership, EffProtectionFlags, FileCtx2}.
+    {ok, EffMembership, EffProtectionFlags, EffDatasetProtectionFlags, FileCtx2}.
 
 
 -spec get_effective_summary(file_ctx:ctx()) -> {ok, file_eff_summary()}.
@@ -217,7 +214,7 @@ get_effective_summary(FileCtx) ->
             {FileDoc, _FileCtx3} = file_ctx:get_file_doc(FileCtx2),
             {ok, EffCacheEntry} = dataset_eff_cache:get(FileDoc),
             {ok, EffAncestorDatasets} = dataset_eff_cache:get_eff_ancestor_datasets(EffCacheEntry),
-            {ok, EffProtectionFlags} = dataset_eff_cache:get_eff_file_protection_flags(EffCacheEntry),
+            {ok, EffProtectionFlags} = dataset_eff_cache:get_eff_protection_flags(EffCacheEntry),
             {ok, #file_eff_dataset_summary{
                 direct_dataset = file_meta_dataset:get_id(FileDoc),
                 eff_ancestor_datasets = EffAncestorDatasets,
@@ -262,6 +259,29 @@ get_associated_file_ctx(DatasetDoc) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+-spec remove_unsafe(dataset:doc(), dataset_type()) -> ok.
+remove_unsafe(#document{key = DatasetId} = Doc, DatasetType) ->
+    % Internal datasets are not added to datasets structure so there is no need to remove them from it.
+    case DatasetType of
+        internal ->
+            ok;
+        user_defined ->
+            ok = remove_from_datasets_structure(Doc)
+    end,
+    {ok, SpaceId} = dataset:get_space_id(Doc),
+    ok = dataset:delete(DatasetId),
+    {ok, Uuid} = dataset:get_root_file_uuid(Doc),
+    InvalidateDatasetsOnly = case file_meta:get(Uuid) of
+        {ok, FileMetaDoc} ->
+            ProtectionFlags = file_meta:get_protection_flags(FileMetaDoc),
+            not ?has_any_flags(ProtectionFlags, ?DATA_PROTECTION bor ?METADATA_PROTECTION);
+        _ ->
+            false
+    end,
+    ok = file_meta_dataset:remove(Uuid),
+    dataset_eff_cache:invalidate_on_all_nodes(SpaceId, InvalidateDatasetsOnly).
+
 
 -spec reattach(dataset:id(), data_access_control:bitmask(), data_access_control:bitmask()) -> ok | error().
 reattach(DatasetId, FlagsToSet, FlagsToUnset) ->

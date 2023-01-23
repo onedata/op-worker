@@ -16,6 +16,7 @@
 
 -include("modules/automation/atm_execution.hrl").
 -include("onenv_test_utils.hrl").
+-include_lib("cluster_worker/include/audit_log.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/http/codes.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -41,7 +42,6 @@
 
     result_streamer_registration_deregistration_test/1,
     result_streamer_chunk_reporting_test/1,
-    result_streamer_invalid_data_reporting_test/1,
     result_stream_conclusion_with_already_deregistered_streamers_test/1,
     result_stream_conclusion_with_still_registered_streamers_test/1,
     result_stream_conclusion_mixed_test/1,
@@ -67,7 +67,6 @@ groups() -> [
 
         result_streamer_registration_deregistration_test,
         result_streamer_chunk_reporting_test,
-        result_streamer_invalid_data_reporting_test,
         result_stream_conclusion_with_already_deregistered_streamers_test,
         result_stream_conclusion_with_still_registered_streamers_test,
         result_stream_conclusion_mixed_test,
@@ -100,19 +99,8 @@ all() -> [
 -define(rpc(Expr), ?rpc(?PROVIDER_SELECTOR, Expr)).
 -define(erpc(Expr), ?erpc(?PROVIDER_SELECTOR, Expr)).
 
--define(STREAM_CHUNK_ALPHA, #{<<"a">> => [1, 2, 3], <<"b">> => [<<"a">>, <<"b">>, <<"c">>]}).
+-define(STREAM_CHUNK_ALPHA, #{<<"a">> => [1, 2, 3], <<"b">> => [<<"a">>, <<"b">>, <<0, 1, 2, 3, 4, 5>>]}).
 -define(STREAM_CHUNK_BETA, #{<<"c">> => [9, 8, 7], <<"d">> => [<<"x">>, <<"y">>, <<"z">>]}).
-
--define(INVALID_DATA_B64_PRIM, base64:encode(<<"&$*#$%">>)).
--define(INVALID_DATA_B64_BIS, base64:encode(<<"{}';././<">>)).
--define(EXP_INVALID_DATA_ERROR(ResultName, Base64EncodedData), ?ERROR_BAD_DATA(
-    <<"filePipeResult.", ResultName/binary>>,
-    str_utils:format_bin(
-        "Received invalid data for filePipe result with name '~s'.~n"
-        "Base64 encoded data: ~s",
-        [ResultName, Base64EncodedData]
-    )
-)).
 
 % @TODO VFS-8002 test if the activity registry is correctly created alongside a
 % workflow execution and clean up during its deletion.
@@ -177,6 +165,11 @@ pod_status_monitor_lifecycle_test(_Config) ->
     {ok, PodStatusRegistry} = ?assertMatch({ok, _}, get_function_pod_status_registry(FunctionPodStatusRegistryId)),
     ?assertEqual(ok, delete_function_pod_status_registry(FunctionPodStatusRegistryId)),
     ?assertEqual({error, not_found}, get_function_pod_status_registry(FunctionPodStatusRegistryId)),
+    % the deleted registry doc should be retained for some time
+    ?assertMatch({ok, _}, ?rpc(datastore_model:get(#{
+        model => atm_openfaas_function_pod_status_registry,
+        include_deleted => true
+    }, FunctionPodStatusRegistryId))),
 
     atm_openfaas_function_pod_status_registry:foreach_summary(fun(_PodId, #atm_openfaas_function_pod_status_summary{
         event_log_id = PodEventLogId
@@ -253,34 +246,6 @@ result_streamer_chunk_reporting_test(_Config) ->
         {chunk, ?STREAM_CHUNK_BETA},
         {chunk, ?STREAM_CHUNK_ALPHA},
         {chunk, ?STREAM_CHUNK_ALPHA}
-    ])).
-
-
-result_streamer_invalid_data_reporting_test(_Config) ->
-    Client = connect(result_streamer),
-    {WorkflowExecutionId, TaskExecutionId, ResultStreamerId} = {?RAND_STR(), ?RAND_STR(), ?RAND_STR()},
-
-    atm_openfaas_result_streamer_mock:deliver_registration_report(Client, WorkflowExecutionId, TaskExecutionId, ResultStreamerId),
-
-    atm_openfaas_result_streamer_mock:deliver_invalid_data_report(Client, <<"prim">>, ?INVALID_DATA_B64_PRIM),
-    ?await(compare_streamed_reports(WorkflowExecutionId, TaskExecutionId, [
-        ?EXP_INVALID_DATA_ERROR(<<"prim">>, ?INVALID_DATA_B64_PRIM)
-    ])),
-
-    atm_openfaas_result_streamer_mock:deliver_invalid_data_report(Client, <<"bis">>, ?INVALID_DATA_B64_BIS),
-    atm_openfaas_result_streamer_mock:deliver_invalid_data_report(Client, <<"prim">>, ?INVALID_DATA_B64_PRIM),
-    ?await(compare_streamed_reports(WorkflowExecutionId, TaskExecutionId, [
-        ?EXP_INVALID_DATA_ERROR(<<"prim">>, ?INVALID_DATA_B64_PRIM),
-        ?EXP_INVALID_DATA_ERROR(<<"bis">>, ?INVALID_DATA_B64_BIS),
-        ?EXP_INVALID_DATA_ERROR(<<"prim">>, ?INVALID_DATA_B64_PRIM)
-    ])),
-
-    atm_openfaas_result_streamer_mock:deliver_invalid_data_report(Client, <<"prim">>, ?INVALID_DATA_B64_PRIM),
-    ?await(compare_streamed_reports(WorkflowExecutionId, TaskExecutionId, [
-        ?EXP_INVALID_DATA_ERROR(<<"prim">>, ?INVALID_DATA_B64_PRIM),
-        ?EXP_INVALID_DATA_ERROR(<<"bis">>, ?INVALID_DATA_B64_BIS),
-        ?EXP_INVALID_DATA_ERROR(<<"prim">>, ?INVALID_DATA_B64_PRIM),
-        ?EXP_INVALID_DATA_ERROR(<<"prim">>, ?INVALID_DATA_B64_PRIM)
     ])).
 
 
@@ -471,8 +436,6 @@ result_streamer_stale_report_ignoring_test(_Config) ->
     % in both cases, their reports should be ignored
     atm_openfaas_result_streamer_mock:deliver_chunk_report(ClientAlpha, ?STREAM_CHUNK_ALPHA),
     atm_openfaas_result_streamer_mock:deliver_chunk_report(ClientGamma, ?STREAM_CHUNK_BETA),
-    atm_openfaas_result_streamer_mock:deliver_invalid_data_report(ClientAlpha, <<"a">>, ?INVALID_DATA_B64_PRIM),
-    atm_openfaas_result_streamer_mock:deliver_invalid_data_report(ClientGamma, <<"b">>, ?INVALID_DATA_B64_BIS),
     ?assert(compare_streamed_reports(WorkflowExecutionId, TaskExecutionId, [])),
 
     % report from active ClientBeta should be accepted
@@ -495,10 +458,6 @@ result_streamer_batch_handling_test(_Config) ->
             workflow_execution_id = WorkflowExecutionId,
             task_execution_id = TaskExecutionId,
             result_streamer_id = ResultStreamerId
-        },
-        #atm_openfaas_result_streamer_invalid_data_report{
-            result_name = <<"prim">>,
-            base_64_encoded_data = ?INVALID_DATA_B64_PRIM
         }
     ]),
     ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, [ResultStreamerId])),
@@ -507,10 +466,6 @@ result_streamer_batch_handling_test(_Config) ->
     atm_openfaas_result_streamer_mock:deliver_reports_with_bodies(Client, [
         #atm_openfaas_result_streamer_chunk_report{chunk = ?STREAM_CHUNK_ALPHA},
         #atm_openfaas_result_streamer_chunk_report{chunk = ?STREAM_CHUNK_BETA},
-        #atm_openfaas_result_streamer_invalid_data_report{
-            result_name = <<"bis">>,
-            base_64_encoded_data = ?INVALID_DATA_B64_BIS
-        },
         #atm_openfaas_result_streamer_chunk_report{chunk = ?STREAM_CHUNK_ALPHA},
         #atm_openfaas_result_streamer_chunk_report{chunk = ?STREAM_CHUNK_BETA},
         #atm_openfaas_result_streamer_deregistration_report{}
@@ -518,10 +473,8 @@ result_streamer_batch_handling_test(_Config) ->
     ?await(compare_result_streamer_registry(WorkflowExecutionId, TaskExecutionId, [])),
     ?await(compare_streamed_reports(WorkflowExecutionId, TaskExecutionId, [
         {chunk, ?STREAM_CHUNK_ALPHA},
-        ?EXP_INVALID_DATA_ERROR(<<"prim">>, ?INVALID_DATA_B64_PRIM),
         {chunk, ?STREAM_CHUNK_ALPHA},
         {chunk, ?STREAM_CHUNK_BETA},
-        ?EXP_INVALID_DATA_ERROR(<<"bis">>, ?INVALID_DATA_B64_BIS),
         {chunk, ?STREAM_CHUNK_ALPHA},
         {chunk, ?STREAM_CHUNK_BETA}
     ])),
@@ -734,6 +687,10 @@ verify_recorded_pod_status_changes(RegistryId, SubmittedReports) ->
     }, LogsByPodAcc) ->
         EventData = #{
             <<"timestamp">> => EventTimestamp,
+            <<"severity">> => case EventType of
+                <<"warning">> -> ?WARNING_AUDIT_LOG_SEVERITY;
+                _ -> ?INFO_AUDIT_LOG_SEVERITY
+            end,
             <<"content">> => #{
                 <<"type">> => EventType,
                 <<"reason">> => EventReason,

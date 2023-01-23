@@ -4,6 +4,74 @@ Release notes for project op-worker
 CHANGELOG
 ---------
 
+### 21.02.0-alpha28
+
+-   **VFS-9902** Web GUI: Fixed GUI crash when very long file path is
+    shortened.
+-   **VFS-9801** Web GUI: Added more detailed file counters in transfers
+    view.
+-   **VFS-9800** Web GUI: Fixed missing owner name in file details and
+    added \"Owner\" column in file browser (on wide screens).
+-   **VFS-9781** Web GUI: Storage locations are no longer shown in
+    shared file info.
+-   **VFS-9723** Web GUI: Fixed error message when removing dataset.
+-   **VFS-9709** Web GUI: Added Open Data tag to items on file list if
+    file is published as Open Data.
+-   **VFS-9671** Improved monitoring of OpenFaaS cluster health for
+    workflow execution purposes.
+-   **VFS-9626** Web GUI: Improved UX of file info tabs.
+-   **VFS-9614** Web GUI: Added archivisation audit log view.
+-   **VFS-9611** Web GUI: Added showing current directory statistics
+    above historical data charts.
+-   **VFS-9606** Web GUI: Moved file QoS settings from separate modal to
+    file info panel.
+-   **VFS-9603** Web GUI: Moved file shares settings from separate modal
+    to file info panel.
+-   **VFS-9602** Web GUI: Moved file permissions settings from separate
+    modal to file info panel.
+-   **VFS-9531** Web GUI: Improved UX of the automation stores browser.
+-   **VFS-9513** Web GUI: Added file path tooltip to file event in QoS
+    audit log.
+-   **VFS-9473** Web GUI: Moved file distribution settings from separate
+    modal to file info panel.
+-   **VFS-9339** Web GUI: Added a new file info tab with REST API
+    samples.
+-   **VFS-9104** It is now possible to list extended attributes along
+    with file attributes in REST API.
+-   **VFS-8033** Introduced the possibility to pause and resume
+    executions. Refined the phases of workflow execution and granularity
+    of statuses on lane/parallel box/task levels.
+-   **VFS-10037** Web GUI: Added \"rate\" and \"timeDerivative\" time
+    series chart functions.
+
+### 21.02.0-alpha27
+
+-   **VFS-9655** Web GUI: Added presentation of directories data
+    distribution.
+-   **VFS-9637** Web GUI: Improved and unified look of audit log
+    browsers.
+-   **VFS-9604** Web GUI: Moved file metadata settings from separate
+    modal to file info panel.
+-   **VFS-9534** Added Content-Disposition headers to the file download
+    REST endpoint.
+-   **VFS-9471** Added endpoint for retrievieng regular file location on
+    storages.
+-   **VFS-9420** Directory statistics and file/directory data
+    distribution is now presented in GUI from the point of view of each
+    supporting provider.
+-   **VFS-9418** Added accountingEnabled and dirStatsServiceEnabled
+    settings for space support.
+-   **VFS-9164** Web GUI: Added support for cancelling archive creation.
+-   **VFS-8948** Introduced the concept of time series dashboard specs -
+    structured recipes for transforming and displaying measurements in
+    charts, which can be organized into sections. Each time series
+    collection has a linked dashboard spec that will be used for
+    rendering the dashboard in GUI.
+-   **VFS-8903** Web GUI: Upgraded EmberJS to v3.4.
+-   **VFS-8836** It is now possible to cancel ongoing archivisation.
+-   **VFS-8716** Web GUI: Added complex data types editor to the
+    automation views.
+
 ### 21.02.0-alpha26
 
 -   **VFS-9342** Added automation task execution Id annotation to
@@ -345,6 +413,18 @@ CHANGELOG
 -   **VFS-9415** Improved display of sensitive storage config details in
     Onepanel GUI to show censored values instead of hiding them
     completely.
+
+### 20.02.19
+
+-   **VFS-9926** Web GUI: Opening Oneprovider view in Onezone GUI when
+    entering Oneprovider domain.
+-   **VFS-9730** Improve handling of api caveats related to API
+    operations concerning other components than Onezone - in some cases,
+    tokens with such caveats could be treated as invalid.
+-   **VFS-10012** Web GUI: Fixed hanging file upload bug when multiple
+    uploads have been scheduled.
+
+### 20.02.18
 
 ### 20.02.17
 

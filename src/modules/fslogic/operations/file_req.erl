@@ -21,7 +21,7 @@
 -export([create_file/5, storage_file_created/2, make_file/4, make_link/4, make_symlink/4,
     get_file_location/2, open_file/3, open_file/4, open_file_insecure/4,
     open_file_with_extended_info/3, storage_file_created_insecure/2,
-    fsync/4, release/3, flush_event_queue/2]).
+    fsync/4, report_file_written/4, report_file_read/4, release/3, flush_event_queue/2]).
 
 %% Export for RPC
 -export([open_on_storage/5]).
@@ -185,6 +185,33 @@ open_file_with_extended_info(UserCtx, FileCtx, rdwr) ->
     open_file_with_extended_info_for_rdwr(UserCtx, FileCtx).
 
 
+% NOTE: this function is computationally expensive as it forces all queued events flush.
+% Use only in case of sporadic writing.
+-spec report_file_written(user_ctx:ctx(), file_ctx:ctx(), non_neg_integer(), integer()) ->
+    fslogic_worker:fuse_response().
+report_file_written(UserCtx, FileCtx, Offset, Size) ->
+    ok = lfm_event_emitter:emit_file_written(
+        file_ctx:get_logical_guid_const(FileCtx),
+        [#file_block{offset = Offset, size = Size}],
+        undefined,
+        user_ctx:get_session_id(UserCtx)
+    ),
+    flush_event_queue(UserCtx, FileCtx).
+
+
+% NOTE: this function is computationally expensive as it forces all queued events flush.
+% Use only in case of sporadic reading.
+-spec report_file_read(user_ctx:ctx(), file_ctx:ctx(), non_neg_integer(), integer()) ->
+    fslogic_worker:fuse_response().
+report_file_read(UserCtx, FileCtx, Offset, Size) ->
+    ok = lfm_event_emitter:emit_file_read(
+        file_ctx:get_logical_guid_const(FileCtx),
+        [#file_block{offset = Offset, size = Size}],
+        user_ctx:get_session_id(UserCtx)
+    ),
+    flush_event_queue(UserCtx, FileCtx).
+
+
 %%--------------------------------------------------------------------
 %% @equiv fsync_insecure(UserCtx, FileCtx, DataOnly) with permission check
 %% @end
@@ -261,7 +288,6 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, Flag) ->
 
         #fuse_response{fuse_response = FileAttr} = attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
             allow_deleted_files => false,
-            include_size => false,
             name_conflicts_resolution_policy => allow_name_conflicts
         }),
         FileAttr2 = FileAttr#file_attr{size = 0, fully_replicated = true},
@@ -280,7 +306,7 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, Flag) ->
             ?error_stacktrace("create_file_insecure error: ~p:~p", [Error, Reason], Stacktrace),
             sd_utils:unlink(FileCtx, UserCtx),
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
-            fslogic_location_cache:delete_local_location(FileUuid),
+            file_location:delete_and_update_quota(file_location:local_id(FileUuid)),
             file_meta:delete(FileUuid),
             times:delete(FileUuid),
             case Reason of
@@ -301,11 +327,17 @@ create_file_insecure(UserCtx, ParentFileCtx, Name, Mode, Flag) ->
 storage_file_created_insecure(_UserCtx, FileCtx) ->
     {#document{
         key = FileLocationId,
-        value = #file_location{storage_file_created = StorageFileCreated}
+        value = #file_location{storage_file_created = StorageFileCreated},
+        deleted = Deleted
     }, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx, false),
 
-    case StorageFileCreated of
-        false ->
+    case {Deleted, StorageFileCreated} of
+        {true, _}  ->
+            #fuse_response{
+                status = #status{code = ?EAGAIN,
+                    description = <<"Location_update_error">>}
+            };
+        {false, false} ->
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
             UpdateAns = fslogic_location_cache:update_location(FileUuid, FileLocationId, fun
                 (#file_location{storage_file_created = true}) ->
@@ -327,7 +359,7 @@ storage_file_created_insecure(_UserCtx, FileCtx) ->
                 _ ->
                     FileCtx2
             end;
-        true ->
+        {false, true} ->
             #fuse_response{
                 status = #status{code = ?OK}
             }
@@ -351,7 +383,6 @@ make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
         fslogic_times:update_mtime_ctime(ParentFileCtx3),
         #fuse_response{fuse_response = FileAttr} = Ans = attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
             allow_deleted_files => false,
-            include_size => false,
             name_conflicts_resolution_policy => allow_name_conflicts
         }),
         FileAttr2 = FileAttr#file_attr{size = 0, fully_replicated = true},
@@ -361,7 +392,7 @@ make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     catch
         Error:Reason ->
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
-            fslogic_location_cache:delete_local_location(FileUuid),
+            file_location:delete_and_update_quota(file_location:local_id(FileUuid)),
             file_meta:delete(FileUuid),
             times:delete(FileUuid),
             erlang:Error(Reason)
@@ -394,13 +425,12 @@ make_link_insecure(UserCtx, TargetFileCtx, TargetParentFileCtx, Name) ->
                 fslogic_times:update_mtime_ctime(TargetParentFileCtx3),
                 #fuse_response{fuse_response = FileAttr} = Ans = attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
                     allow_deleted_files => false,
-                    include_size => true,
-                    include_replication_status => true,
-                    name_conflicts_resolution_policy => allow_name_conflicts
+                    name_conflicts_resolution_policy => allow_name_conflicts,
+                    include_optional_attrs => [size, replication_status]
                 }),
                 ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, FileAttr, [user_ctx:get_session_id(UserCtx)]),
-                ok = qos_hooks:invalidate_cache_and_reconcile(FileCtx),
                 dir_size_stats:report_file_created(?LINK_TYPE, file_ctx:get_logical_guid_const(TargetParentFileCtx3)),
+                ok = qos_logic:invalidate_cache_and_reconcile(FileCtx),
                 Ans#fuse_response{fuse_response = FileAttr}
             catch
                 Error:Reason ->
@@ -434,9 +464,8 @@ make_symlink_insecure(UserCtx, ParentFileCtx, Name, Link) ->
                 FileCtx = file_ctx:new_by_uuid(SymlinkUuid, SpaceId),
                 #fuse_response{fuse_response = FileAttr} = Ans = attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
                     allow_deleted_files => false,
-                    include_size => true,
-                    include_replication_status => true,
-                    name_conflicts_resolution_policy => allow_name_conflicts
+                    name_conflicts_resolution_policy => allow_name_conflicts,
+                    include_optional_attrs => [size, replication_status]
                 }),
                 ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, FileAttr, [user_ctx:get_session_id(UserCtx)]),
                 dir_size_stats:report_file_created(?SYMLINK_TYPE, file_ctx:get_logical_guid_const(ParentFileCtx)),

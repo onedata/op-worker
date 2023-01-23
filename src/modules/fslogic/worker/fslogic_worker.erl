@@ -58,7 +58,6 @@
 
 % requests
 -define(PERIODICAL_SPACES_AUTOCLEANING_CHECK, periodical_spaces_autocleaning_check).
--define(TERMINATE_STALE_ATM_WORKFLOW_EXECUTIONS, terminate_stale_atm_workflow_executions).
 -define(RERUN_TRANSFERS, rerun_transfers).
 -define(RESTART_AUTOCLEANING_RUNS, restart_autocleaning_runs).
 -define(INIT_EFFECTIVE_CACHES(Space), {init_effective_caches, Space}).
@@ -69,8 +68,6 @@
 % delays and intervals
 -define(AUTOCLEANING_PERIODICAL_SPACES_CHECK_INTERVAL,
     op_worker:get_env(autocleaning_periodical_spaces_check_interval, timer:minutes(1))).
--define(TERMINATE_STALE_ATM_WORKFLOW_EXECUTIONS_DELAY,
-    op_worker:get_env(terminate_stale_atm_workflow_executions_delay, 10000)).
 -define(RERUN_TRANSFERS_DELAY,
     op_worker:get_env(rerun_transfers_delay, 10000)).
 -define(RESTART_AUTOCLEANING_RUNS_DELAY,
@@ -104,7 +101,6 @@
 
     list_xattr,
     get_xattr,
-    get_metadata,
 
     % Opening file is available but only in 'read' mode
     open_file,
@@ -143,7 +139,7 @@
 %%--------------------------------------------------------------------
 -spec supervisor_flags() -> supervisor:sup_flags().
 supervisor_flags() ->
-    #{strategy => one_for_one, intensity => 1000, period => 3600}.
+    #{strategy => one_for_one, intensity => 10, period => 3600}.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -184,8 +180,6 @@ init(_Args) ->
     permissions_cache:init(),
     init_effective_caches(),
     transfer:init(),
-    file_upload_manager_watcher_service:setup_internal_service(),
-    atm_workflow_execution_api:init_engine(),
     replica_deletion_master:init_workers_pool(),
     file_registration:init_pool(),
     autocleaning_view_traverse:init_pool(),
@@ -195,7 +189,6 @@ init(_Args) ->
     archivisation_traverse:init_pool(),
 
     schedule_rerun_transfers(),
-    schedule_stale_atm_workflow_executions_termination(),
     schedule_restart_autocleaning_runs(),
     schedule_periodical_spaces_autocleaning_check(),
 
@@ -232,10 +225,6 @@ init(_Args) ->
 handle(ping) ->
     pong;
 handle(healthcheck) ->
-    ok;
-handle(?TERMINATE_STALE_ATM_WORKFLOW_EXECUTIONS) ->
-    ?debug("Terminating stale atm workflow executions"),
-    terminate_stale_atm_workflow_executions(),
     ok;
 handle(?RERUN_TRANSFERS) ->
     ?debug("Rerunning unfinished transfers"),
@@ -274,7 +263,7 @@ handle(?INIT_EFFECTIVE_CACHES(Space)) ->
     paths_cache:init(Space),
     dataset_eff_cache:init(Space),
     archive_recall_cache:init(Space),
-    file_meta_links_sync_status_cache:init(Space);
+    file_meta_sync_status_cache:init(Space);
 handle(_Request) ->
     ?log_bad_request(_Request),
     {error, wrong_request}.
@@ -344,7 +333,7 @@ init_effective_caches() ->
     % TODO VFS-7412 refactor effective_value cache
     paths_cache:init_group(),
     dataset_eff_cache:init_group(),
-    file_meta_links_sync_status_cache:init_group(),
+    file_meta_sync_status_cache:init_group(),
     archive_recall_cache:init_group(),
     schedule_init_effective_caches(all).
 
@@ -459,13 +448,18 @@ get_operation(#proxyio_request{proxyio_request = Req}) ->
 %%--------------------------------------------------------------------
 -spec handle_request_locally(user_ctx:ctx(), request(), file_ctx:ctx() | undefined) -> response().
 handle_request_locally(UserCtx, #fuse_request{fuse_request = #file_request{
-    file_request = Req}}, FileCtx) ->
+    file_request = Req
+}}, FileCtx) ->
     [ReqName | _] = tuple_to_list(Req),
     ?update_counter(?EXOMETER_NAME(ReqName)),
     Stopwatch = stopwatch:start(),
     Ans = handle_file_request(UserCtx, Req, FileCtx),
     ?update_counter(?EXOMETER_TIME_NAME(ReqName), stopwatch:read_micros(Stopwatch)),
     Ans;
+handle_request_locally(UserCtx, #fuse_request{fuse_request = #multipart_upload_request{
+    multipart_request = Req
+}}, _FileCtx) ->
+    handle_multipart_upload_request(UserCtx, Req);
 handle_request_locally(UserCtx, #fuse_request{fuse_request = Req}, FileCtx) ->
     handle_fuse_request(UserCtx, Req, FileCtx);
 handle_request_locally(UserCtx, #provider_request{provider_request = Req}, FileCtx) ->
@@ -541,6 +535,8 @@ handle_fuse_request(UserCtx, #verify_storage_test_file{
 handle_fuse_request(UserCtx, #get_fs_stats{}, FileCtx) ->
     attr_req:get_fs_stats(UserCtx, FileCtx).
 
+
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -549,16 +545,14 @@ handle_fuse_request(UserCtx, #get_fs_stats{}, FileCtx) ->
 %%--------------------------------------------------------------------
 -spec handle_file_request(user_ctx:ctx(), file_request_type(), file_ctx:ctx()) ->
     fuse_response().
-handle_file_request(UserCtx, #get_file_attr{include_replication_status = IncludeReplicationStatus,
-    include_link_count = IncludeLinkCount}, FileCtx) ->
-    attr_req:get_file_attr(UserCtx, FileCtx, IncludeReplicationStatus, IncludeLinkCount);
+handle_file_request(UserCtx, #get_file_attr{optional_attrs = OptionalAttrs}, FileCtx) ->
+    attr_req:get_file_attr(UserCtx, FileCtx, OptionalAttrs);
 handle_file_request(UserCtx, #get_file_references{}, FileCtx) ->
     attr_req:get_file_references(UserCtx, FileCtx);
 handle_file_request(UserCtx, #get_file_details{}, FileCtx) ->
     attr_req:get_file_details(UserCtx, FileCtx);
-handle_file_request(UserCtx, #get_child_attr{name = Name,
-    include_replication_status = IncludeReplicationStatus, include_link_count = IncludeLinkCount}, ParentFileCtx) ->
-    attr_req:get_child_attr(UserCtx, ParentFileCtx, Name, IncludeReplicationStatus, IncludeLinkCount);
+handle_file_request(UserCtx, #get_child_attr{name = Name, optional_attrs = OptionalAttrs}, ParentFileCtx) ->
+    attr_req:get_child_attr(UserCtx, ParentFileCtx, Name, OptionalAttrs);
 handle_file_request(UserCtx, #change_mode{mode = Mode}, FileCtx) ->
     attr_req:chmod(UserCtx, FileCtx, Mode);
 handle_file_request(UserCtx, #update_times{atime = ATime, mtime = MTime, ctime = CTime}, FileCtx) ->
@@ -571,13 +565,13 @@ handle_file_request(UserCtx, #create_dir{name = Name, mode = Mode}, ParentFileCt
     dir_req:mkdir(UserCtx, ParentFileCtx, Name, Mode);
 handle_file_request(UserCtx, #get_file_children{listing_options = ListingOpts}, FileCtx) ->
     dir_req:get_children(UserCtx, FileCtx, ListingOpts);
-handle_file_request(UserCtx, #get_file_children_attrs{listing_options = ListingOpts, 
-    include_replication_status = IncludeReplicationStatus, include_link_count = IncludeLinkCount}, FileCtx) ->
-    dir_req:get_children_attrs(UserCtx, FileCtx, ListingOpts, IncludeReplicationStatus, IncludeLinkCount);
+handle_file_request(UserCtx, #get_file_children_attrs{
+    listing_options = ListingOpts, 
+    optional_attrs = OptionalAttrs
+}, FileCtx) ->
+    dir_req:get_children_attrs(UserCtx, FileCtx, ListingOpts, OptionalAttrs);
 handle_file_request(UserCtx, #get_file_children_details{listing_options = ListingOpts}, FileCtx) ->
     dir_req:get_children_details(UserCtx, FileCtx, ListingOpts);
-handle_file_request(UserCtx, #get_recursive_file_list{listing_options = Options}, FileCtx) ->
-    recursive_file_listing:list(UserCtx, FileCtx, Options);
 handle_file_request(UserCtx, #rename{
     target_parent_guid = TargetParentGuid,
     target_name = TargetName
@@ -640,7 +634,20 @@ handle_file_request(UserCtx, #fsync{
     data_only = DataOnly,
     handle_id = HandleId
 }, FileCtx) ->
-    file_req:fsync(UserCtx, FileCtx, DataOnly, HandleId).
+    file_req:fsync(UserCtx, FileCtx, DataOnly, HandleId);
+handle_file_request(UserCtx, #report_file_written{offset = Offset, size = Size}, FileCtx) ->
+    file_req:report_file_written(UserCtx, FileCtx, Offset, Size);
+handle_file_request(UserCtx, #report_file_read{offset = Offset, size = Size}, FileCtx) ->
+    file_req:report_file_read(UserCtx, FileCtx, Offset, Size);
+handle_file_request(UserCtx, #get_recursive_file_list{
+    listing_options = Options,
+    optional_attrs = OptionalAttrs
+}, FileCtx) ->
+    dir_req:list_recursively(UserCtx, FileCtx, Options, OptionalAttrs);
+handle_file_request(UserCtx, #get_file_attr_by_path{path = RelativePath, optional_attrs = OptionalAttrs}, RootFileCtx) ->
+    attr_req:get_file_attr_by_path(UserCtx, RootFileCtx, RelativePath, OptionalAttrs);
+handle_file_request(UserCtx, #create_path{path = Path}, RootFileCtx) ->
+    dir_req:create_dir_at_path(UserCtx, RootFileCtx, Path).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -660,19 +667,6 @@ handle_provider_request(UserCtx, #set_acl{acl = #acl{value = Acl}}, FileCtx) ->
     acl_req:set_acl(UserCtx, FileCtx, Acl);
 handle_provider_request(UserCtx, #remove_acl{}, FileCtx) ->
     acl_req:remove_acl(UserCtx, FileCtx);
-handle_provider_request(UserCtx, #get_metadata{
-    type = Type,
-    query = Query,
-    inherited = Inherited
-}, FileCtx) ->
-    metadata_req:get_metadata(UserCtx, FileCtx, Type, Query, Inherited);
-handle_provider_request(UserCtx, #set_metadata{
-    metadata = #metadata{type = Type, value = Value},
-    query = Query
-}, FileCtx) ->
-    metadata_req:set_metadata(UserCtx, FileCtx, Type, Value, Query, false, false);
-handle_provider_request(UserCtx, #remove_metadata{type = Type}, FileCtx) ->
-    metadata_req:remove_metadata(UserCtx, FileCtx, Type);
 handle_provider_request(UserCtx, #check_perms{flag = Flag}, FileCtx) ->
     permission_req:check_perms(UserCtx, FileCtx, Flag).
 
@@ -693,9 +687,32 @@ handle_proxyio_request(UserCtx, #remote_read{offset = Offset, size = Size}, File
     read_write_req:read(UserCtx, FileCtx, HandleId, Offset, Size).
 
 
--spec schedule_stale_atm_workflow_executions_termination() -> ok.
-schedule_stale_atm_workflow_executions_termination() ->
-    schedule(?TERMINATE_STALE_ATM_WORKFLOW_EXECUTIONS, ?TERMINATE_STALE_ATM_WORKFLOW_EXECUTIONS_DELAY).
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Processes a multipart upload request and returns a response.
+%% @end
+%%--------------------------------------------------------------------
+handle_multipart_upload_request(UserCtx, #create_multipart_upload{space_id = SpaceId, path = Path}) ->
+    multipart_upload_req:create(UserCtx, SpaceId, Path);
+handle_multipart_upload_request(_UserCtx, #upload_multipart_part{multipart_upload_id = UploadId, part = Part}) ->
+    multipart_upload_req:upload_part(UploadId, Part);
+handle_multipart_upload_request(_UserCtx, #list_multipart_parts{
+    multipart_upload_id = UploadId,
+    limit = Limit,
+    part_marker = PartMarker
+}) ->
+    multipart_upload_req:list_parts(UploadId, Limit, PartMarker);
+handle_multipart_upload_request(UserCtx, #abort_multipart_upload{multipart_upload_id = UploadId}) ->
+    multipart_upload_req:abort(UserCtx, UploadId);
+handle_multipart_upload_request(UserCtx, #complete_multipart_upload{multipart_upload_id = UploadId}) ->
+    multipart_upload_req:complete(UserCtx, UploadId);
+handle_multipart_upload_request(UserCtx, #list_multipart_uploads{
+    space_id = SpaceId,
+    limit = Limit,
+    index_token = IndexToken
+}) ->
+    multipart_upload_req:list(UserCtx, SpaceId, Limit, IndexToken).
 
 -spec schedule_rerun_transfers() -> ok.
 schedule_rerun_transfers() ->
@@ -738,25 +755,6 @@ periodical_spaces_autocleaning_check() ->
     catch
         Error2:Reason:Stacktrace ->
             ?error_stacktrace("Unable to trigger spaces auto-cleaning check due to: ~p", [{Error2, Reason}], Stacktrace)
-    end.
-
--spec terminate_stale_atm_workflow_executions() -> ok.
-terminate_stale_atm_workflow_executions() ->
-    try provider_logic:get_spaces() of
-        {ok, SpaceIds} ->
-            lists:foreach(fun atm_workflow_execution_api:terminate_not_ended/1, SpaceIds);
-        ?ERROR_UNREGISTERED_ONEPROVIDER ->
-            schedule_stale_atm_workflow_executions_termination();
-        ?ERROR_NO_CONNECTION_TO_ONEZONE ->
-            schedule_stale_atm_workflow_executions_termination();
-        Error = {error, _} ->
-            ?error("Unable to terminate stale atm workflow executions due to: ~p", [Error])
-    catch Class:Reason:Stacktrace ->
-        ?error_stacktrace(
-            "Unable to terminate stale atm workflow executions due to: ~p",
-            [{Class, Reason}],
-            Stacktrace
-        )
     end.
 
 -spec rerun_transfers() -> ok.

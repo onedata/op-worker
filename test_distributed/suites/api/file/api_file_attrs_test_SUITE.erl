@@ -34,6 +34,7 @@
 
 -export([
     get_file_attrs_test/1,
+    get_file_attrs_with_xattrs_test/1,
     get_shared_file_attrs_test/1,
     get_attrs_on_provider_not_supporting_space_test/1,
 
@@ -47,9 +48,13 @@
     get_dir_distribution_2_test/1,
     get_dir_distribution_3_test/1,
     get_symlink_distribution_test/1,
+    
+    get_reg_file_storage_locations_test_posix/1,
+    get_reg_file_storage_locations_test_s3/1,
 
     test_for_hardlink_between_files_test/1,
     
+    get_historical_dir_size_stats_schema_test/1,
     gather_historical_dir_size_stats_layout_test/1,
     gather_historical_dir_size_stats_slice_test/1
 ]).
@@ -57,6 +62,7 @@
 groups() -> [
     {parallel_tests, [parallel], [
         get_file_attrs_test,
+        get_file_attrs_with_xattrs_test,
         get_shared_file_attrs_test,
         get_attrs_on_provider_not_supporting_space_test,
 
@@ -67,6 +73,9 @@ groups() -> [
 
         get_symlink_distribution_test,
         get_reg_file_distribution_test,
+    
+        get_reg_file_storage_locations_test_posix,
+        get_reg_file_storage_locations_test_s3,
 
         test_for_hardlink_between_files_test
     ]},
@@ -74,6 +83,7 @@ groups() -> [
         get_dir_distribution_1_test,
         get_dir_distribution_2_test,
         get_dir_distribution_3_test,
+        get_historical_dir_size_stats_schema_test,
         gather_historical_dir_size_stats_layout_test,
         gather_historical_dir_size_stats_slice_test
     ]}
@@ -93,16 +103,41 @@ all() -> [
 %%% Get attrs test functions
 %%%===================================================================
 
-
 get_file_attrs_test(Config) ->
-    [P1Node] = oct_background:get_provider_nodes(krakow),
     [P2Node] = oct_background:get_provider_nodes(paris),
-
+    
     {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(8#707),
-    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
-
+    
     {ok, FileAttrs} = file_test_utils:get_attrs(P2Node, FileGuid),
     JsonAttrs = api_test_utils:file_attrs_to_json(undefined, FileAttrs),
+    DataSpec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
+        FileGuid, undefined, get_attrs_data_spec(normal_mode)
+    ),
+    get_file_attrs_test_base(Config, DataSpec, FileType, FileGuid, JsonAttrs).
+
+
+get_file_attrs_with_xattrs_test(Config) ->
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
+    
+    {FileType, _FilePath, FileGuid, _ShareId} = api_test_utils:create_and_sync_shared_file_in_space_krk_par(?DEFAULT_FILE_MODE),
+    ok = file_test_utils:set_xattr(P1Node, FileGuid, <<"xattr_name">>, <<"xattr_value">>),
+    ok = file_test_utils:set_xattr(P1Node, FileGuid, <<"xattr_name2">>, <<"xattr_value2">>),
+    file_test_utils:await_xattr(P2Node, FileGuid, [<<"xattr_name">>, <<"xattr_name2">>], ?ATTEMPTS),
+    
+    {ok, FileAttrs} = file_test_utils:get_attrs(P2Node, ?ROOT_SESS_ID, FileGuid, [<<"xattr_name">>]),
+    JsonAttrs = api_test_utils:file_attrs_to_json(undefined, FileAttrs),
+    DataSpec = #data_spec{
+        optional = [<<"attribute">>],
+        correct_values = #{<<"attribute">> => [<<"xattr.xattr_name">>]}
+    },
+    get_file_attrs_test_base(Config, DataSpec, FileType, FileGuid, JsonAttrs).
+
+
+get_file_attrs_test_base(Config, DataSpec, FileType, FileGuid, JsonAttrs) ->
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    [P2Node] = oct_background:get_provider_nodes(paris),
+    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
     ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
@@ -132,9 +167,7 @@ get_file_attrs_test(Config) ->
                 }
             ],
             randomly_select_scenarios = true,
-            data_spec = api_test_utils:add_file_id_errors_for_operations_available_in_share_mode(
-                FileGuid, undefined, get_attrs_data_spec(normal_mode)
-            )
+            data_spec = DataSpec
         },
         #suite_spec{
             target_nodes = ?config(op_worker_nodes, Config),
@@ -337,9 +370,9 @@ get_attrs_data_spec(normal_mode) ->
         optional = [<<"attribute">>],
         correct_values = #{<<"attribute">> => ?PRIVATE_BASIC_ATTRIBUTES},
         bad_values = [
-            {<<"attribute">>, true, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PRIVATE_BASIC_ATTRIBUTES)},
-            {<<"attribute">>, 10, {gs, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PRIVATE_BASIC_ATTRIBUTES)}},
-            {<<"attribute">>, <<"NaN">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PRIVATE_BASIC_ATTRIBUTES)}
+            {<<"attribute">>, true, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PRIVATE_BASIC_ATTRIBUTES ++ [<<"xattr.*">>])},
+            {<<"attribute">>, 10, {gs, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PRIVATE_BASIC_ATTRIBUTES ++ [<<"xattr.*">>])}},
+            {<<"attribute">>, <<"NaN">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PRIVATE_BASIC_ATTRIBUTES ++ [<<"xattr.*">>])}
         ]
     };
 get_attrs_data_spec(share_mode) ->
@@ -347,10 +380,10 @@ get_attrs_data_spec(share_mode) ->
         optional = [<<"attribute">>],
         correct_values = #{<<"attribute">> => ?PUBLIC_BASIC_ATTRIBUTES},
         bad_values = [
-            {<<"attribute">>, true, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PUBLIC_BASIC_ATTRIBUTES)},
-            {<<"attribute">>, 10, {gs, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PUBLIC_BASIC_ATTRIBUTES)}},
-            {<<"attribute">>, <<"NaN">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PUBLIC_BASIC_ATTRIBUTES)},
-            {<<"attribute">>, <<"owner_id">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PUBLIC_BASIC_ATTRIBUTES)}
+            {<<"attribute">>, true, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PUBLIC_BASIC_ATTRIBUTES ++ [<<"xattr.*">>])},
+            {<<"attribute">>, 10, {gs, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PUBLIC_BASIC_ATTRIBUTES ++ [<<"xattr.*">>])}},
+            {<<"attribute">>, <<"NaN">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PUBLIC_BASIC_ATTRIBUTES ++ [<<"xattr.*">>])},
+            {<<"attribute">>, <<"owner_id">>, ?ERROR_BAD_VALUE_NOT_ALLOWED(<<"attribute">>, ?PUBLIC_BASIC_ATTRIBUTES ++ [<<"xattr.*">>])}
         ]
     }.
 
@@ -1005,7 +1038,9 @@ get_symlink_distribution_test(Config) ->
     ok.
 enable_dir_stats_collecting_for_space(ProviderPlaceholder, SpacePlaceholder) ->
     SpaceId = oct_background:get_space_id(SpacePlaceholder),
-    ?rpc(ProviderPlaceholder,  dir_stats_service_state:enable(SpaceId)),
+    ?rpc(ProviderPlaceholder, space_logic:update_support_parameters(SpaceId, #support_parameters{
+        dir_stats_service_enabled = true
+    })),
     await_dir_stats_collecting_status(ProviderPlaceholder, SpaceId, enabled).
 
 
@@ -1017,7 +1052,9 @@ enable_dir_stats_collecting_for_space(ProviderPlaceholder, SpacePlaceholder) ->
     ok.
 disable_dir_stats_collecting_for_space(ProviderPlaceholder, SpacePlaceholder) ->
     SpaceId = oct_background:get_space_id(SpacePlaceholder),
-    ?rpc(ProviderPlaceholder, dir_stats_service_state:disable(SpaceId)),
+    ?rpc(ProviderPlaceholder, space_logic:update_support_parameters(SpaceId, #support_parameters{
+        dir_stats_service_enabled = false
+    })),
     await_dir_stats_collecting_status(ProviderPlaceholder, SpaceId, disabled).
 
 
@@ -1034,6 +1071,14 @@ await_dir_stats_collecting_status(ProviderPlaceholder, SpaceId, Status) ->
         ?rpc(ProviderPlaceholder, dir_stats_service_state:get_extended_status(SpaceId)),
         ?ATTEMPTS
     ).
+
+
+-spec await_file_size_sync(oct_background:entity_selector(), file_meta:size(), file_id:file_guid()) -> ok.
+await_file_size_sync(ProviderPlaceholder, ExpectedSize, Guid) ->
+    Node = oct_background:get_random_provider_node(ProviderPlaceholder),
+    SessId = oct_background:get_user_session_id(user3, ProviderPlaceholder),
+    ?assertMatch({ok, #file_attr{size = ExpectedSize}}, lfm_proxy:stat(Node, SessId, ?FILE_REF(Guid)), ?ATTEMPTS),
+    ok.
 
 
 %% @private
@@ -1062,12 +1107,12 @@ get_distribution_test_base(FileType, FileGuid, ShareId, ExpDistribution, Config)
 get_distribution_test_base(FileType, FileGuid, ShareId, ExpDistribution, Config, ClientSpec) ->
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
-    ExpRestDistribution = opw_test_rpc:call(krakow, file_distribution_gather_result, to_json, [rest, ExpDistribution, FileGuid]),
+    ExpRestDistribution = opw_test_rpc:call(krakow, file_distribution_translator, gather_result_to_json, [rest, ExpDistribution, FileGuid]),
     ValidateRestSuccessfulCallFun = fun(_TestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
         ?assertEqual({?HTTP_200_OK, ExpRestDistribution}, {RespCode, RespBody})
     end,
     
-    ExpGsDistribution = opw_test_rpc:call(krakow, file_distribution_gather_result, to_json, [gs, ExpDistribution, FileGuid]),
+    ExpGsDistribution = opw_test_rpc:call(krakow, file_distribution_translator, gather_result_to_json, [gs, ExpDistribution, FileGuid]),
     CreateValidateGsSuccessfulCallFun = fun(Type) ->
         ExpGsResponse = ExpGsDistribution#{
             <<"gri">> => gri:serialize(#gri{
@@ -1138,18 +1183,49 @@ build_get_distribution_prepare_gs_args_fun(FileGuid, Scope) ->
 %%% Gather historical dir size stats test functions
 %%%===================================================================
 
+get_historical_dir_size_stats_schema_test(Config) ->
+    ?assert(onenv_api_test_runner:run_tests([
+        #suite_spec{
+            target_nodes = ?config(op_worker_nodes, Config),
+            client_spec = ?CLIENT_SPEC_FOR_PUBLIC_ACCESS_SCENARIOS,
+            scenario_templates = [
+                #scenario_template{
+                    name = <<"Get dir size stats collection schema using op_file gs api">>,
+                    type = gs,
+                    prepare_args_fun = fun(_) ->
+                        #gs_args{
+                            operation = get,
+                            gri = #gri{type = op_file, id = undefined, aspect = dir_size_stats_collection_schema, scope = public}
+                        }
+                    end,
+                    validate_result_fun = fun(_TestCtx, {ok, Result}) ->
+                        ?assertEqual(
+                            jsonable_record:from_json(Result, time_series_collection_schema),
+                            ?DIR_SIZE_STATS_COLLECTION_SCHEMA
+                        )
+                    end
+                }
+            ]
+        }
+    ])).
+
+
 gather_historical_dir_size_stats_layout_test(Config) ->
     enable_dir_stats_collecting_for_space(krakow, space_krk_par),
     enable_dir_stats_collecting_for_space(paris, space_krk_par),
-    
+
     SpaceId = oct_background:get_space_id(space_krk_par),
     P1Id = oct_background:get_provider_id(krakow),
     P1StorageId = get_storage_id(SpaceId, P1Id),
     P2Id = oct_background:get_provider_id(paris),
     P2StorageId = get_storage_id(SpaceId, P2Id),
-    
+
     #object{guid = DirGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
-        user3, space_krk_par, #dir_spec{mode = 8#707, shares = [#share_spec{}]}
+        user3, space_krk_par, #dir_spec{
+            mode = 8#707, 
+            shares = [#share_spec{}], 
+            children = [#file_spec{content = crypto:strong_rand_bytes(8)}]
+        }
     ),
     Metrics = [?DAY_METRIC, ?HOUR_METRIC, ?MINUTE_METRIC, ?MONTH_METRIC],
     ExpLayout = #{
@@ -1157,13 +1233,17 @@ gather_historical_dir_size_stats_layout_test(Config) ->
         ?REG_FILE_AND_LINK_COUNT => Metrics,
         ?TOTAL_SIZE => Metrics,
         ?SIZE_ON_STORAGE(P1StorageId) => Metrics,
-        ?SIZE_ON_STORAGE(P2StorageId) => Metrics
+        ?SIZE_ON_STORAGE(P2StorageId) => Metrics,
+        ?FILE_ERRORS_COUNT => Metrics,
+        ?DIR_ERRORS_COUNT => Metrics
     },
     await_dir_stats_collecting_status(krakow, SpaceId, enabled),
     await_dir_stats_collecting_status(paris, SpaceId, enabled),
-    
+    await_file_size_sync(krakow, 8, DirGuid),
+    await_file_size_sync(paris, 8, DirGuid),
+
     ValidateGsSuccessfulCallFun = fun(_TestCtx, Result) ->
-        ?assertEqual({ok, ExpLayout}, Result)
+        ?assertEqual({ok, #{<<"layout">> => ExpLayout}}, Result)
     end,
     DataSpec = #data_spec{
         optional = [<<"mode">>],
@@ -1215,11 +1295,13 @@ gather_historical_dir_size_stats_slice_test(Config) ->
     }),
     await_dir_stats_collecting_status(krakow, SpaceId, enabled),
     await_dir_stats_collecting_status(paris, SpaceId, enabled),
+    await_file_size_sync(krakow, 24, DirGuid),
+    await_file_size_sync(paris, 24, DirGuid),
     ValidateGsSuccessfulCallFun = fun(_TestCtx, Result) ->
-        {ok, ResultWindows} = ?assertMatch({ok, #{<<"windows">> := _}}, Result),
+        {ok, ResultData} = ?assertMatch({ok, #{<<"slice">> := _}}, Result),
         ResultWithoutTimestamps = tsc_structure:map(fun(_TimeSeriesName, _MetricsName, Windows) ->
             lists:map(fun(Map) -> maps:remove(<<"timestamp">>, Map) end, Windows)
-        end, maps:get(<<"windows">> , ResultWindows)),
+        end, maps:get(<<"slice">> , ResultData)),
         ?assertEqual(ExpSlice, ResultWithoutTimestamps)
     end,
     DataSpec = #data_spec{
@@ -1274,20 +1356,185 @@ gather_historical_dir_size_stats_test_base(FileGuid, ShareId, ValidateGsSuccessf
     ])).
 
 
-
 %% @private
 -spec build_gather_historical_dir_size_stats_prepare_gs_args_fun(file_id:file_guid(), map()) ->
     onenv_api_test_runner:prepare_args_fun().
 build_gather_historical_dir_size_stats_prepare_gs_args_fun(FileGuid, DefaultData) ->
     fun(#api_test_ctx{data = Data}) ->
         {GriId, Data2} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data),
-        
+
         #gs_args{
             operation = get,
-            gri = #gri{type = op_file, id = GriId, aspect = dir_size_stats},
+            gri = #gri{type = op_file, id = GriId, aspect = dir_size_stats_collection},
             data = maps:merge(DefaultData, Data2)
         }
     end.
+
+
+%%%===================================================================
+%%% Get file storage locations test functions
+%%%===================================================================
+
+get_reg_file_storage_locations_test_posix(Config) ->
+    get_reg_file_storage_locations_test(Config, posix).
+
+
+get_reg_file_storage_locations_test_s3(Config) ->
+    get_reg_file_storage_locations_test(Config, s3).
+
+
+get_reg_file_storage_locations_test(Config, StorageType) ->
+    P1Id = oct_background:get_provider_id(krakow),
+    [P1Node] = oct_background:get_provider_nodes(krakow),
+    
+    P2Id = oct_background:get_provider_id(paris),
+    [P2Node] = oct_background:get_provider_nodes(paris),
+    
+    SpaceId = case StorageType of
+        posix -> oct_background:get_space_id(space_krk_par);
+        s3 -> oct_background:get_space_id(space_s3)
+    end,
+    P1StorageId = get_storage_id(SpaceId, P1Id),
+    P2StorageId = get_storage_id(SpaceId, P2Id),
+    
+    UserSessIdP1 = oct_background:get_user_session_id(user3, krakow),
+    UserSessIdP2 = oct_background:get_user_session_id(user3, paris),
+    
+    #object{guid = FileGuid, shares = [ShareId]} = onenv_file_test_utils:create_and_sync_file_tree(
+        user3, fslogic_file_id:spaceid_to_space_dir_guid(SpaceId), #file_spec{
+            shares = [#share_spec{}],
+            mode = 8#707,
+            content = crypto:strong_rand_bytes(20)
+        }, krakow
+    ),
+    FileUuid = file_id:guid_to_uuid(FileGuid),
+    
+    {ok, FilePath} = lfm_proxy:get_file_path(P1Node, UserSessIdP1, FileGuid),
+    [_Sep, _SpaceName | PathTokens] = filename:split(FilePath),
+    FileStoragePath = case StorageType of
+        posix -> 
+            filename:join([<<"/">>, SpaceId | PathTokens]);
+        s3 -> 
+            <<A:1/binary, B:1/binary, C:1/binary, _/binary>> = FileUuid,
+            filename:join([<<"/">>, SpaceId, A, B, C, FileUuid])
+    end,
+    ExpResult1 = #{
+        <<"locationsPerProvider">> => #{
+            P1Id => #{
+                <<"locationsPerStorage">> => #{
+                    P1StorageId => FileStoragePath
+                }           
+            },
+            P2Id => #{
+                <<"locationsPerStorage">> => #{
+                    P2StorageId => null
+                }
+            }
+        }
+    },
+    assert_file_location_created(P2Node, FileUuid, P1Id),
+    get_storage_locations_test_base(FileGuid, ShareId, ExpResult1, Config),
+    
+    % Read file on the other provider and check file storage locations again.
+    
+    lfm_test_utils:read_file(P2Node, UserSessIdP2, FileGuid, 20),
+    assert_file_location_created(P1Node, FileUuid, P2Id),
+    ExpResult2 = #{
+        <<"locationsPerProvider">> => #{
+            P1Id => #{
+                <<"locationsPerStorage">> => #{
+                    P1StorageId => FileStoragePath
+                }
+            },
+            P2Id => #{
+                <<"locationsPerStorage">> => #{
+                    P2StorageId => FileStoragePath
+                }
+            }
+        }
+    },
+    get_storage_locations_test_base(FileGuid, ShareId, ExpResult2, Config).
+
+
+get_storage_locations_test_base(FileGuid, ShareId, ExpResult, Config) ->
+    {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
+    
+    ValidateRestSuccessfulCallFun = fun(_TestCtx, {ok, RespCode, _RespHeaders, RespBody}) ->
+        ?assertEqual({?HTTP_200_OK, ExpResult}, {RespCode, RespBody})
+    end,
+    
+    ValidateGsSuccessfulCallFun = fun(_TestCtx, Result) ->
+        ExpGsResponse = ExpResult#{
+            <<"gri">> => gri:serialize(#gri{
+                type = op_file, id = FileGuid, aspect = storage_locations, scope = private
+            }),
+            <<"revision">> => 1
+        },
+        ?assertEqual({ok, ExpGsResponse}, Result)
+    end,
+    
+    ?assert(onenv_api_test_runner:run_tests([
+        #suite_spec{
+            target_nodes = ?config(op_worker_nodes, Config),
+            client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR,
+            scenario_templates = [
+                #scenario_template{
+                    name = <<"Get file storage locations using /data/FileId/storage_locations rest endpoint">>,
+                    type = rest,
+                    prepare_args_fun = build_get_storage_locations_prepare_rest_args_fun(FileObjectId),
+                    validate_result_fun = ValidateRestSuccessfulCallFun
+                },
+                #scenario_template{
+                    name = <<"Get file storage locations using op_file gs api">>,
+                    type = gs,
+                    prepare_args_fun = build_get_storage_locations_prepare_gs_args_fun(FileGuid, private),
+                    validate_result_fun = ValidateGsSuccessfulCallFun
+                }
+            ],
+            data_spec = api_test_utils:replace_enoent_with_error_not_found_in_error_expectations(
+                api_test_utils:add_file_id_errors_for_operations_not_available_in_share_mode(
+                    FileGuid, ShareId, undefined
+                )
+            )
+        }
+    ])).
+
+
+%% @private
+-spec build_get_storage_locations_prepare_rest_args_fun(file_id:objectid()) ->
+    onenv_api_test_runner:prepare_args_fun().
+build_get_storage_locations_prepare_rest_args_fun(FileObjectId) ->
+    fun(#api_test_ctx{data = Data}) ->
+        {Id, _} = api_test_utils:maybe_substitute_bad_id(FileObjectId, Data),
+        
+        #rest_args{
+            method = get,
+            path = <<"data/", Id/binary, "/storage_locations">>
+        }
+    end.
+
+
+%% @private
+-spec build_get_storage_locations_prepare_gs_args_fun(file_id:file_guid(), gri:scope()) ->
+    onenv_api_test_runner:prepare_args_fun().
+build_get_storage_locations_prepare_gs_args_fun(FileGuid, Scope) ->
+    fun(#api_test_ctx{data = Data}) ->
+        {GriId, _} = api_test_utils:maybe_substitute_bad_id(FileGuid, Data),
+        
+        #gs_args{
+            operation = get,
+            gri = #gri{type = op_file, id = GriId, aspect = storage_locations, scope = Scope}
+        }
+    end.
+
+
+%% @private
+-spec assert_file_location_created(node(), file_id:file_meta_uuid(), oneprovider:id()) -> 
+    {ok, file_location:doc()} | no_return().
+assert_file_location_created(Node, FileUuid, LocationProviderId) ->
+    ?assertMatch({ok, _}, opw_test_rpc:call(Node, fslogic_location_cache, get_location, [
+        file_location:id(FileUuid, LocationProviderId), FileUuid, false
+    ]), ?ATTEMPTS).
 
 
 %%%===================================================================
@@ -1301,10 +1548,12 @@ init_per_suite(Config) ->
         envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}],
         posthook = fun(NewConfig) ->
             User3Id = oct_background:get_user_id(user3),
-            SpaceId = oct_background:get_space_id(space_krk_par),
-            ozw_test_rpc:space_set_user_privileges(SpaceId, User3Id, [
-                ?SPACE_MANAGE_SHARES | privileges:space_member()
-            ]),
+            lists:foreach(fun(SpacePlaceholder) ->
+                SpaceId = oct_background:get_space_id(SpacePlaceholder),
+                ozw_test_rpc:space_set_user_privileges(SpaceId, User3Id, [
+                    ?SPACE_MANAGE_SHARES | privileges:space_member()
+                ])
+            end, [space_krk_par, space_s3]),
             NewConfig
         end
     }).

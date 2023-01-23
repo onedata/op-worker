@@ -23,7 +23,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([start_link/3]).
+-export([start_link/3, try_terminate/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -49,7 +49,8 @@
     filter :: filter(),
     handler :: handler(),
     handling_ref :: undefined | reference(),
-    handling_interval :: non_neg_integer()
+    handling_interval :: non_neg_integer(),
+    stream_pid :: pid() | undefined
 }).
 
 -type state() :: #state{}.
@@ -68,6 +69,19 @@
     {ok, pid()} | {error, Reason :: term()}.
 start_link(Name, SpaceId, Opts) ->
     gen_server2:start_link({global, {?MODULE, Name}}, ?MODULE, [SpaceId, Opts], []).
+
+
+-spec try_terminate(binary(), couchbase_changes:since()) -> ok | ignore.
+try_terminate(Name, SinceToIgnoreTerminate) ->
+    try
+        gen_server2:call({global, {?MODULE, Name}}, {terminate, SinceToIgnoreTerminate}, infinity)
+    catch
+        _:{noproc, _} ->
+            ok; % Ignore terminated process
+        exit:{normal, _} ->
+            ok  % Ignore terminated process
+    end.
+
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -88,16 +102,18 @@ init([SpaceId, Opts]) ->
     Since = dbsync_state:get_seq(SpaceId, oneprovider:get_id()),
     Callback = fun(Change) -> gen_server:cast(Stream, {change, Change}) end,
 
-    {ok, _} = case proplists:get_value(main_stream, Opts, false) of
+    StreamPid = case proplists:get_value(main_stream, Opts, false) of
         true ->
-            couchbase_changes_worker:start_link(Bucket, SpaceId, Callback,
-                proplists:get_value(since, Opts, Since));
+            {ok, _} = couchbase_changes_worker:start_link(Bucket, SpaceId, Callback,
+                proplists:get_value(since, Opts, Since)),
+            undefined;
         false ->
-            couchbase_changes_stream:start_link(Bucket, SpaceId, Callback, [
+            {ok, Pid} = couchbase_changes_stream:start_link(Bucket, SpaceId, Callback, [
                 {since, proplists:get_value(since, Opts, Since)},
                 {until, proplists:get_value(until, Opts, infinity)},
                 {except_mutator, proplists:get_value(except_mutator, Opts, <<>>)}
-            ], [])
+            ], []),
+            Pid
     end,
 
     {ok, schedule_docs_handling(#state{
@@ -106,7 +122,8 @@ init([SpaceId, Opts]) ->
         changes = [],
         filter = proplists:get_value(filter, Opts, fun(_) -> true end),
         handler = proplists:get_value(handler, Opts, fun(_, _, _) -> ok end),
-        handling_interval = proplists:get_value(handling_interval, Opts, 5000)
+        handling_interval = proplists:get_value(handling_interval, Opts, 5000),
+        stream_pid = StreamPid
     })}.
 
 %%--------------------------------------------------------------------
@@ -123,6 +140,13 @@ init([SpaceId, Opts]) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: state()} |
     {stop, Reason :: term(), NewState :: state()}.
+handle_call({terminate, SinceToIgnoreTerminate}, _From, #state{since = SinceToIgnoreTerminate} = State) ->
+    {reply, ignore, State};
+handle_call({terminate, _}, _From, #state{stream_pid = undefined} = State) ->
+    {stop, normal, ok, State};
+handle_call({terminate, _}, _From, #state{stream_pid = Pid} = State) ->
+    couchbase_changes_stream:stop_async(Pid),
+    {stop, normal, ok, State};
 handle_call(Request, _From, #state{} = State) ->
     ?log_bad_request(Request),
     {noreply, State}.
@@ -294,16 +318,14 @@ schedule_docs_handling(State = #state{handling_ref = Ref}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_doc_change(datastore:doc(), filter(), state()) -> state().
-handle_doc_change(#document{seq = Seq} = Doc, Filter,
-    State = #state{until = Until}) when Seq >= Until ->
+handle_doc_change(#document{seq = Seq} = Doc, Filter, State = #state{until = Until}) when Seq >= Until ->
     case Filter(Doc) of
         true -> aggregate_change(Doc, State);
         false -> State#state{until = Seq + 1}
     end;
-handle_doc_change(#document{seq = Seq} = Doc, _Filter,
-    State = #state{until = Until}) ->
+handle_doc_change(#document{seq = Seq} = Doc, _Filter, State = #state{until = Until}) ->
     ?error("Received change with old sequence ~p. Expected sequences"
-    " greater than or equal to ~p~n~p", [Seq, Until, Doc]),
+    " greater than or equal to ~p~nDoc: ~p~nLast change: ~p", [Seq, Until, Doc, get_last_change(State)]),
     State.
 
 %% @private
@@ -314,3 +336,10 @@ get_batch_timestamp([#document{timestamp = null} | _]) ->
     undefined;
 get_batch_timestamp([#document{timestamp = Timestamp} | _]) ->
     Timestamp.
+
+%% @private
+-spec get_last_change(state()) -> datastore:doc() | undefined.
+get_last_change(#state{changes = [LastChange | _]}) ->
+    LastChange;
+get_last_change(_) ->
+    undefined.

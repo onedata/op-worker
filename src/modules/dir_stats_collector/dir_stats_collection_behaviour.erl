@@ -67,6 +67,10 @@
     Update :: dir_stats_collection:stat_value()) -> dir_stats_collection:stat_value().
 
 
+-callback on_collection_move(dir_stats_collection:stat_name(), dir_stats_collection:stat_value()) ->
+    {update_source_parent, dir_stats_collection:stat_value()} | ignore.
+
+
 %%%===================================================================
 %%% Callbacks - collections initialization
 %%%

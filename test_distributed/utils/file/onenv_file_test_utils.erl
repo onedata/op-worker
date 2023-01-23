@@ -197,7 +197,7 @@ create_and_sync_file_tree(UserSelector, ParentSelector, FilesDesc, CreationProvi
         {Object, NewIdsMap} = create_and_sync_file_tree(UserSelector, ParentSelector, FileDesc, CreationProviderSelector, sequential, TmpCustomLabelsMap),
         {[Object | Acc], NewIdsMap}
     end, {[], #{}}, FilesDesc),
-    Res;
+    lists:reverse(Res);
 
 create_and_sync_file_tree(UserSelector, ParentSelector, FilesDesc, CreationProviderSelector, Mode) ->
     {Res, _} = create_and_sync_file_tree(UserSelector, ParentSelector, FilesDesc, CreationProviderSelector, Mode, #{}),
@@ -306,6 +306,40 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #symlink_spec{
         symlink_value = SymlinkValue
     }, insert_custom_label(CustomLabel, SymlinkGuid, CustomLabelsMap)};
 
+create_file_tree(UserId, ParentGuid, CreationProvider, #hardlink_spec{
+    name = NameOrUndefined,
+    shares = ShareSpecs,
+    target = Target,
+    dataset = DatasetSpec,
+    custom_label = CustomLabel
+}, _Mode, CustomLabelsMap) ->
+    FileName = utils:ensure_defined(NameOrUndefined, str_utils:rand_hex(20)),
+    UserSessId = oct_background:get_user_session_id(UserId, CreationProvider),
+    CreationNode = lists_utils:random_element(oct_background:get_provider_nodes(CreationProvider)),
+    
+    FinalTarget = case Target of
+        {custom_label, TargetCustomLabel} ->
+            maps:get(TargetCustomLabel, CustomLabelsMap);
+        _ ->
+            Target
+    end,
+    {ok, #file_attr{guid = HardlinkGuid}} = create_hardlink(CreationNode, UserSessId, ParentGuid, FileName, FinalTarget),
+    
+    DatasetObj = onenv_dataset_test_utils:set_up_dataset(
+        CreationProvider, UserId, HardlinkGuid, DatasetSpec
+    ),
+    
+    {#object{
+        guid = HardlinkGuid,
+        name = FileName,
+        type = ?REGULAR_FILE_TYPE,
+        shares = create_shares(CreationProvider, UserSessId, HardlinkGuid, ShareSpecs),
+        children = undefined,
+        content = undefined,
+        dataset = DatasetObj,
+        mode = ?DEFAULT_FILE_MODE
+    }, insert_custom_label(CustomLabel, HardlinkGuid, CustomLabelsMap)};
+
 create_file_tree(UserId, ParentGuid, CreationProvider, #dir_spec{
     name = NameOrUndefined,
     mode = DirMode,
@@ -328,10 +362,11 @@ create_file_tree(UserId, ParentGuid, CreationProvider, #dir_spec{
                 Res
             end, ChildrenSpec), CustomLabelsMap};
         sequential ->
-            lists:foldl(fun(File, {Acc, TmpCustomLabelsMap}) ->
+            {ResList, LabelsMap} = lists:foldl(fun(File, {Acc, TmpCustomLabelsMap}) ->
                 {Object, NewIdsMap} = create_file_tree(UserId, DirGuid, CreationProvider, File, Mode, TmpCustomLabelsMap),
                 {[Object | Acc], NewIdsMap}
-            end, {[], CustomLabelsMap}, ChildrenSpec)
+            end, {[], CustomLabelsMap}, ChildrenSpec),
+            {lists:reverse(ResList), LabelsMap}
     end,
     MetadataObj = create_metadata(CreationNode, UserSessId, DirGuid, MetadataSpec),
     
@@ -456,7 +491,7 @@ await_file_metadata_sync(SyncProviders, UserId, #object{guid = Guid, metadata = 
 await_json_metadata_sync(_SyncNode, _SessId, _FileGuid, undefined) ->
     ok;
 await_json_metadata_sync(SyncNode, SessId, FileGuid, ExpJson) ->
-    ?assertEqual({ok, ExpJson}, lfm_proxy:get_metadata(SyncNode, SessId, ?FILE_REF(FileGuid), json, [], false), ?ATTEMPTS),
+    ?assertEqual({ok, ExpJson}, opt_file_metadata:get_custom_metadata(SyncNode, SessId, ?FILE_REF(FileGuid), json, [], false), ?ATTEMPTS),
     ok.
 
 
@@ -465,7 +500,7 @@ await_json_metadata_sync(SyncNode, SessId, FileGuid, ExpJson) ->
 await_rdf_metadata_sync(_SyncNode, _SessId, _FileGuid, undefined) ->
     ok;
 await_rdf_metadata_sync(SyncNode, SessId, FileGuid, ExpRdf) ->
-    ?assertEqual({ok, ExpRdf}, lfm_proxy:get_metadata(SyncNode, SessId, ?FILE_REF(FileGuid), rdf, [], false), ?ATTEMPTS),
+    ?assertEqual({ok, ExpRdf}, opt_file_metadata:get_custom_metadata(SyncNode, SessId, ?FILE_REF(FileGuid), rdf, [], false), ?ATTEMPTS),
     ok.
 
 
@@ -503,15 +538,20 @@ await_file_distribution_sync(_, _, _, #object{type = ?DIRECTORY_TYPE}) ->
 await_file_distribution_sync(CreationProvider, SyncProviders, UserId, #object{
     type = ?REGULAR_FILE_TYPE, guid = Guid, content = Content
 }) ->
-    lists:foreach(fun(SyncProvider) ->
-        SessId = oct_background:get_user_session_id(UserId, SyncProvider),
-        SyncNode = ?OCT_RAND_OP_NODE(SyncProvider),
-        ?assertDistribution(SyncNode, SessId, 
-            ?DISTS(
-                [CreationProvider | SyncProviders], 
-                [byte_size(Content) | lists:duplicate(length(SyncProviders), 0)]
-            ), Guid, ?ATTEMPTS)
-    end, SyncProviders).
+    case fslogic_file_id:is_link_uuid(file_id:guid_to_uuid(Guid)) of
+        true ->
+            ok;
+        false ->
+            lists:foreach(fun(SyncProvider) ->
+                SessId = oct_background:get_user_session_id(UserId, SyncProvider),
+                SyncNode = ?OCT_RAND_OP_NODE(SyncProvider),
+                ?assertDistribution(SyncNode, SessId,
+                    ?DISTS(
+                        [CreationProvider | SyncProviders],
+                        [byte_size(Content) | lists:duplicate(length(SyncProviders), 0)]
+                    ), Guid, ?ATTEMPTS)
+            end, SyncProviders)
+    end.
 
 
 %% @private
@@ -610,6 +650,14 @@ create_symlink(Node, SessId, ParentGuid, FileName, SymlinkValue) ->
 
 
 %% @private
+-spec create_hardlink(node(), session:id(), file_id:file_guid(), file_meta:name(), file_id:file_guid()) ->
+    {ok, #file_attr{}} | no_return().
+create_hardlink(Node, SessId, ParentGuid, FileName, TargetGuid) ->
+    {ok, ParentPath} = lfm_proxy:get_file_path(Node, SessId, ParentGuid),
+    ?assertMatch({ok, _}, lfm_proxy:make_link(Node, SessId, filename:join(ParentPath, FileName), TargetGuid)).
+
+
+%% @private
 -spec write_file(node(), session:id(), file_id:file_guid(), binary()) ->
     ok | no_return().
 write_file(Node, SessId, FileGuid, Content) ->
@@ -640,13 +688,13 @@ create_metadata(Node, SessId, FileGuid, #metadata_spec{
 %% @private
 -spec create_json_metadata(node(), session:id(), file_id:file_guid(), json_utils:json_term()) -> ok.
 create_json_metadata(Node, SessionId, FileGuid, Json) ->
-    ?assertEqual(ok, lfm_proxy:set_metadata(Node, SessionId, ?FILE_REF(FileGuid), json, Json, [])).
+    ?assertEqual(ok, opt_file_metadata:set_custom_metadata(Node, SessionId, ?FILE_REF(FileGuid), json, Json, [])).
 
 
 %% @private
 -spec create_rdf_metadata(node(), session:id(), file_id:file_guid(), binary()) -> ok.
 create_rdf_metadata(Node, SessionId, FileGuid, Rdf) ->
-    ?assertEqual(ok, lfm_proxy:set_metadata(Node, SessionId, ?FILE_REF(FileGuid), rdf, Rdf, [])).
+    ?assertEqual(ok, opt_file_metadata:set_custom_metadata(Node, SessionId, ?FILE_REF(FileGuid), rdf, Rdf, [])).
 
 
 %% @private

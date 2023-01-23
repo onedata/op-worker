@@ -177,7 +177,7 @@ create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, 
             lfm_test_utils:write_file(P1Node, SpaceOwnerSessIdP1, FileGuid, {rand_content, RandSize}),
             RandSize;
         <<"dir">> ->
-            undefined
+            0
     end,
     {ok, FileAttrs} = ?assertMatch(
         {ok, #file_attr{size = Size, shares = FileShares}},
@@ -191,12 +191,12 @@ create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, 
 
     FileDetails = #file_details{
         file_attr = FileAttrs,
-        index_startid = file_listing:build_index(FileName, FileAttrs#file_attr.provider_id),
         active_permissions_type = case HasAcl of
             true -> acl;
             false -> posix
         end,
         eff_protection_flags = ?no_flags_mask,
+        eff_dataset_protection_flags = ?no_flags_mask,
         eff_qos_membership = case {HasDirectQos, HasParentQos} of
             {true, true} -> ?DIRECT_AND_ANCESTOR_MEMBERSHIP;
             {true, _} -> ?DIRECT_MEMBERSHIP;
@@ -253,18 +253,18 @@ set_and_sync_metadata(Nodes, FileGuid, MetadataType, Metadata) ->
 
 -spec set_metadata(node(), file_id:file_guid(), metadata_type(), term()) -> ok.
 set_metadata(Node, FileGuid, <<"rdf">>, Metadata) ->
-    lfm_proxy:set_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), rdf, Metadata, []);
+    opt_file_metadata:set_custom_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), rdf, Metadata, []);
 set_metadata(Node, FileGuid, <<"json">>, Metadata) ->
-    lfm_proxy:set_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), json, Metadata, []);
+    opt_file_metadata:set_custom_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), json, Metadata, []);
 set_metadata(Node, FileGuid, <<"xattrs">>, Metadata) ->
     set_xattrs(Node, FileGuid, Metadata).
 
 
 -spec get_metadata(node(), file_id:file_guid(), metadata_type()) -> {ok, term()}.
 get_metadata(Node, FileGuid, <<"rdf">>) ->
-    lfm_proxy:get_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), rdf, [], false);
+    opt_file_metadata:get_custom_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), rdf, [], false);
 get_metadata(Node, FileGuid, <<"json">>) ->
-    lfm_proxy:get_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), json, [], false);
+    opt_file_metadata:get_custom_metadata(Node, ?ROOT_SESS_ID, ?FILE_REF(FileGuid), json, [], false);
 get_metadata(Node, FileGuid, <<"xattrs">>) ->
     get_xattrs(Node, FileGuid).
 
@@ -323,13 +323,13 @@ randomly_set_metadata(Nodes, FileGuid) ->
         1 ->
             FileKey = ?FILE_REF(FileGuid),
             RandNode = lists_utils:random_element(Nodes),
-            ?assertMatch(ok, lfm_proxy:set_metadata(
+            ?assertMatch(ok, opt_file_metadata:set_custom_metadata(
                 RandNode, ?ROOT_SESS_ID, FileKey, rdf, ?RDF_METADATA_1, []
             ), ?ATTEMPTS),
             lists:foreach(fun(Node) ->
                 ?assertMatch(
                     {ok, _},
-                    lfm_proxy:get_metadata(Node, ?ROOT_SESS_ID, FileKey, rdf, [], false),
+                    opt_file_metadata:get_custom_metadata(Node, ?ROOT_SESS_ID, FileKey, rdf, [], false),
                     ?ATTEMPTS
                 )
             end, Nodes),
@@ -392,28 +392,25 @@ file_details_to_gs_json(undefined, #file_details{
         shares = Shares,
         owner_id = OwnerId,
         provider_id = ProviderId,
-        nlink = LinksCount
+        nlink = LinksCount,
+        index = Index
     },
-    index_startid = Index,
     active_permissions_type = ActivePermissionsType,
-    eff_protection_flags = EffFileProtectionFlags,
+    eff_protection_flags = EffProtectionFlags,
+    eff_dataset_protection_flags = EffDatasetProtectionFlags,
     eff_qos_membership = EffQosMembership,
     eff_dataset_membership = EffDatasetMembership,
     has_metadata = HasMetadata,
     recall_root_id = RecallRootId
 }) ->
-    DisplayedSize = case Type of
-        ?DIRECTORY_TYPE -> null;
-        _ -> Size
-    end,
-
     #{
         <<"hasMetadata">> => HasMetadata,
         <<"guid">> => FileGuid,
         <<"name">> => FileName,
         <<"index">> => file_listing:encode_index(Index),
         <<"posixPermissions">> => list_to_binary(string:right(integer_to_list(Mode, 8), 3, $0)),
-        <<"effProtectionFlags">> => file_meta:protection_flags_to_json(EffFileProtectionFlags),
+        <<"effProtectionFlags">> => file_meta:protection_flags_to_json(EffProtectionFlags),
+        <<"effDatasetProtectionFlags">> => file_meta:protection_flags_to_json(EffDatasetProtectionFlags),
         % For space dir gs returns null as parentId instead of user root dir
         % (gui doesn't know about user root dir)
         <<"parentId">> => case fslogic_file_id:is_space_dir_guid(FileGuid) of
@@ -422,7 +419,7 @@ file_details_to_gs_json(undefined, #file_details{
         end,
         <<"mtime">> => MTime,
         <<"type">> => str_utils:to_binary(Type),
-        <<"size">> => DisplayedSize,
+        <<"size">> => utils:undefined_to_null(Size),
         <<"shares">> => Shares,
         <<"activePermissionsType">> => atom_to_binary(ActivePermissionsType, utf8),
         <<"providerId">> => ProviderId,
@@ -441,16 +438,12 @@ file_details_to_gs_json(ShareId, #file_details{
         mode = Mode,
         size = Size,
         mtime = MTime,
-        shares = Shares
+        shares = Shares,
+        index = Index
     },
-    index_startid = Index,
     active_permissions_type = ActivePermissionsType,
     has_metadata = HasMetadata
 }) ->
-    DisplayedSize = case Type of
-        ?DIRECTORY_TYPE -> null;
-        _ -> Size
-    end,
     IsShareRoot = lists:member(ShareId, Shares),
 
     #{
@@ -465,7 +458,7 @@ file_details_to_gs_json(ShareId, #file_details{
         end,
         <<"mtime">> => MTime,
         <<"type">> => str_utils:to_binary(Type),
-        <<"size">> => DisplayedSize,
+        <<"size">> => utils:undefined_to_null(Size),
         <<"shares">> => case IsShareRoot of
             true -> [ShareId];
             false -> []
@@ -490,11 +483,13 @@ file_attrs_to_json(undefined, #file_attr{
     shares = Shares,
     provider_id = ProviderId,
     owner_id = OwnerId,
-    nlink = HardlinksCount
+    nlink = HardlinksCount,
+    index = Index,
+    xattrs = Xattrs
 }) ->
     {ok, ObjectId} = file_id:guid_to_objectid(Guid),
     
-    #{
+    BaseJson = #{
         <<"file_id">> => ObjectId,
         <<"name">> => Name,
         <<"mode">> => list_to_binary(string:right(integer_to_list(Mode, 8), 3, $0)),
@@ -511,15 +506,16 @@ file_attrs_to_json(undefined, #file_attr{
         <<"mtime">> => Mtime,
         <<"ctime">> => Ctime,
         <<"type">> => str_utils:to_binary(Type),
-        <<"size">> => case Type of
-            ?DIRECTORY_TYPE -> null;
-            _ -> utils:undefined_to_null(Size)
-        end,
+        <<"size">> => utils:undefined_to_null(Size),
         <<"shares">> => Shares,
         <<"provider_id">> => ProviderId,
         <<"owner_id">> => OwnerId,
-        <<"hardlinks_count">> => utils:undefined_to_null(HardlinksCount)
-    };
+        <<"hardlinks_count">> => utils:undefined_to_null(HardlinksCount),
+        <<"index">> => file_listing:encode_index(Index)
+    },
+    maps:fold(fun(XattrName, XattrValue, Acc) ->
+        Acc#{<<"xattr.", XattrName/binary>> => utils:undefined_to_null(XattrValue)}
+    end, BaseJson, Xattrs);
 file_attrs_to_json(ShareId, #file_attr{
     guid = FileGuid,
     parent_guid = ParentGuid,
@@ -530,12 +526,14 @@ file_attrs_to_json(ShareId, #file_attr{
     mtime = Mtime,
     atime = Atime,
     ctime = Ctime,
-    shares = Shares
+    shares = Shares,
+    index = Index,
+    xattrs = Xattrs
 }) ->
     {ok, ObjectId} = file_id:guid_to_objectid(file_id:guid_to_share_guid(FileGuid, ShareId)),
     IsShareRoot = lists:member(ShareId, Shares),
     
-    #{
+    BaseJson = #{
         <<"file_id">> => ObjectId,
         <<"name">> => Name,
         <<"mode">> => list_to_binary(string:right(integer_to_list(Mode band 2#111, 8), 3, $0)),
@@ -549,15 +547,16 @@ file_attrs_to_json(ShareId, #file_attr{
         <<"mtime">> => Mtime,
         <<"ctime">> => Ctime,
         <<"type">> => str_utils:to_binary(Type),
-        <<"size">> => case Type of
-            ?DIRECTORY_TYPE -> null;
-            _ -> utils:undefined_to_null(Size)
-        end,
+        <<"size">> => utils:undefined_to_null(Size),
         <<"shares">> => case IsShareRoot of
             true -> [ShareId];
             false -> []
-        end
-    }.
+        end,
+        <<"index">> => file_listing:encode_index(Index)
+    },
+    maps:fold(fun(XattrName, XattrValue, Acc) ->
+        Acc#{<<"xattr.", XattrName/binary>> => utils:undefined_to_null(XattrValue)}
+    end, BaseJson, Xattrs).
 
 %%--------------------------------------------------------------------
 %% @doc

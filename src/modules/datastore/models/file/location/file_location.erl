@@ -21,12 +21,12 @@
 % API
 -export([local_id/1, id/2]).
 -export([
-    get/1, get/2, get_local/1,
+    get/1, get/2, get_including_deleted/1, get_local/1,
     get_version_vector/1, get_owner_id/1, get_synced_gid/1,
     get_last_replication_timestamp/1, is_storage_file_created/1
 ]).
 -export([
-    create/2, create_and_update_quota/2,
+    create/2,
     save/1, save_and_bump_version/2, save_and_update_quota/2,
     update/2, set_last_replication_timestamp/2,
     delete/1, delete_and_update_quota/1
@@ -42,8 +42,9 @@
 -type record() :: #file_location{}.
 -type doc() :: datastore_doc:doc(record()).
 -type diff() :: datastore_doc:diff(record()).
+-type storage_file_id() :: helpers:file_id().
 
--export_type([id/0, doc/0, diff/0, record/0]).
+-export_type([id/0, doc/0, diff/0, record/0, storage_file_id/0]).
 
 -define(CTX, #{
     model => ?MODULE,
@@ -82,31 +83,6 @@ create(Doc = #document{value = #file_location{space_id = SpaceId}}, true) ->
         Doc#document{scope = SpaceId});
 create(Doc = #document{value = #file_location{space_id = SpaceId}}, _) ->
     datastore_model:create(?CTX, Doc#document{scope = SpaceId}).
-
-
--spec create_and_update_quota(doc(), boolean()) -> {ok, doc()} | {error, term()}.
-create_and_update_quota(Doc = #document{value = #file_location{
-    uuid = FileUuid,
-    space_id = SpaceId
-} = Record}, GeneratedKey) ->
-    NewSize = count_bytes(Doc),
-    space_quota:apply_size_change_and_maybe_emit(SpaceId, NewSize),
-    report_size_changed(on_storage, Record, NewSize),
-    case get_owner_id(FileUuid) of
-        {ok, UserId} ->
-            monitoring_event_emitter:emit_storage_used_updated(
-                SpaceId, UserId, NewSize);
-        {error, not_found} ->
-            ok
-    end,
-    case GeneratedKey of
-        true ->
-            datastore_model:save(?CTX#{generated_key => GeneratedKey},
-                Doc#document{scope = SpaceId});
-        _ ->
-            datastore_model:create(?CTX,
-                Doc#document{scope = SpaceId})
-    end.
 
 
 -spec save_and_bump_version(doc(), od_user:id()) -> {ok, file_location:id()} | {error, term()}.
@@ -172,6 +148,12 @@ get(Key) ->
 -spec get(file_meta:uuid(), od_provider:id()) -> {ok, doc()} | {error, term()}.
 get(FileUuid, ProviderId) ->
     ?MODULE:get(?MODULE:id(FileUuid, ProviderId)).
+
+
+-spec get_including_deleted(id()) -> {ok, doc()} | {error, term()}.
+get_including_deleted(Key) ->
+    datastore_model:get(?CTX#{include_deleted => true}, Key).
+
 
 %%--------------------------------------------------------------------
 %% @doc

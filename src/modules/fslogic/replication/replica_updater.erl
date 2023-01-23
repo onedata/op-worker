@@ -99,6 +99,7 @@ update(FileCtx, Blocks, FileSize, BumpVersion) ->
 %% @doc
 %% Renames file's local location.
 %% This function in synchronized on the file.
+%% Warning: In case of race with file_location deletion, deleted file_location will be updated.
 %% @end
 %%--------------------------------------------------------------------
 -spec rename(file_ctx:ctx(), TargetFileId :: helpers:file_id()) ->

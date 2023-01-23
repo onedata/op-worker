@@ -16,6 +16,7 @@
 -behaviour(gen_server).
 
 -include("global_definitions.hrl").
+-include("modules/dbsync/dbsync.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
@@ -88,6 +89,9 @@ init([SpaceId, ProviderId]) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: state()} |
     {stop, Reason :: term(), NewState :: state()}.
+handle_call(terminate, From, State) ->
+    gen_server:reply(From, ok),
+    {stop, normal, State};
 handle_call(Request, _From, #state{} = State) ->
     ?log_bad_request(Request),
     {noreply, State}.
@@ -163,16 +167,24 @@ handle_info(request_changes, State = #state{
             MaxSize = application:get_env(?APP_NAME,
                 dbsync_changes_max_request_size, 1000000),
             Until2 = min(Until, Seq + MaxSize),
+            {FinalUntil, IncludedMutators} = case dbsync_state:maybe_set_initial_sync(SpaceId, ProviderId, Until) of
+                undefined ->
+                    {Until2, ?ALL_MUTATORS_EXCEPT_SENDER};
+                #synchronization_params{target_seq = TargetSeq, included_mutators = Mutators} ->
+                    {min(TargetSeq, Until2), Mutators}
+            end,
             dbsync_communicator:request_changes(
-                ProviderId, SpaceId, Seq, Until2
+                ProviderId, SpaceId, Seq, FinalUntil, IncludedMutators
             ),
             {noreply, schedule_changes_request(State#state{
                 changes_request_ref = undefined
             })}
     end;
 handle_info({batch_applied, {Since, Until}, Timestamp, Ans}, #state{} = State) ->
-    State2 = change_applied(Since, Until, Timestamp, Ans, State),
-    {noreply, State2};
+    case change_applied(Since, Until, Timestamp, Ans, State) of
+        {continue, State2} -> {noreply, State2};
+        {reset, State2} -> {stop, normal, State2}
+    end;
 handle_info(Info, #state{} = State) ->
     ?log_bad_request(Info),
     {noreply, State}.
@@ -230,29 +242,37 @@ handle_changes_batch(Since, Until, Timestamp, Docs,
             State2 = stash_changes_batch(Since, Until, Timestamp, Docs, State),
             schedule_changes_request(State2);
         {Lower, _} when Lower < Seq ->
-            case FBP of
+            case op_worker:get_env(reset_dbsync_changes_when_lower_seq_appears, false) of
                 true ->
-                    MaxLowerChanges = application:get_env(?APP_NAME,
-                        lower_changes_before_reset, 10),
-                    case {LCC < MaxLowerChanges, LCC, MaxLowerChanges} of
-                        {true, 0, _} ->
-                            State#state{lower_changes_count = 1,
-                                first_lower_seq = Lower};
-                        {true, _, _} ->
-                            State#state{lower_changes_count = LCC + 1};
-                        {_, _, 0} ->
-                            ?info("Reset changes seq for space ~p,"
-                            " old ~p, new ~p", [SpaceID, Seq, Lower]),
-                            State#state{seq = Lower};
+                    % Lower sequence can appear after source provider crash (some changes and counter have not been
+                    % persisted) or when a batch had been lost and than applied with other batches from stash
+                    case FBP of
+                        true ->
+                            % TODO VFS-10189 - do not reset after application of lost batch together with stashed changes
+                            MaxLowerChanges = application:get_env(?APP_NAME,
+                                lower_changes_before_reset, 10),
+                            case {LCC < MaxLowerChanges, LCC, MaxLowerChanges} of
+                                {true, 0, _} ->
+                                    State#state{lower_changes_count = 1,
+                                        first_lower_seq = Lower};
+                                {true, _, _} ->
+                                    State#state{lower_changes_count = LCC + 1};
+                                {_, _, 0} ->
+                                    ?info("Reset changes seq for space ~p,"
+                                    " old ~p, new ~p", [SpaceID, Seq, Lower]),
+                                    State#state{seq = Lower};
+                                _ ->
+                                    ?info("Reset changes seq for space ~p,"
+                                    " old ~p, new ~p", [SpaceID, Seq, FLS]),
+                                    State#state{seq = FLS}
+                            end;
                         _ ->
-                            ?info("Reset changes seq for space ~p,"
-                            " old ~p, new ~p", [SpaceID, Seq, FLS]),
-                            State#state{seq = FLS}
+                            ?info("Reset changes seq with first batch for space ~p,"
+                            " old ~p, new ~p", [SpaceID, Seq, Lower]),
+                            State#state{seq = Lower}
                     end;
-                _ ->
-                    ?info("Reset changes seq with first batch for space ~p,"
-                    " old ~p, new ~p", [SpaceID, Seq, Lower]),
-                    State#state{seq = Lower}
+                false ->
+                    State
             end;
         _ ->
             State
@@ -296,10 +316,10 @@ stash_changes_batch(Since, Until, Timestamp, Docs, State = #state{
 %%--------------------------------------------------------------------
 -spec apply_changes_batch(couchbase_changes:since(), couchbase_changes:until(),
     dbsync_changes:timestamp(), [datastore:doc()], state()) -> state().
-apply_changes_batch(Since, Until, Timestamp, Docs, State) ->
+apply_changes_batch(Since, Until, Timestamp, Docs, #state{space_id = SpaceId, provider_id = ProviderId} = State) ->
     State2 = cancel_changes_request(State),
     {Docs2, Timestamp2, Until2, State3} = prepare_batch(Docs, Timestamp, Until, State2),
-    dbsync_changes:apply_batch(Docs2, {Since, Until2}, Timestamp2),
+    dbsync_changes:apply_batch(Docs2, {Since, Until2}, Timestamp2, SpaceId, ProviderId),
 
     case op_worker:get_env(dbsync_in_stream_worker_gc, on) of
         on ->
@@ -317,7 +337,7 @@ apply_changes_batch(Since, Until, Timestamp, Docs, State) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec change_applied(couchbase_changes:since(), couchbase_changes:until(), dbsync_changes:timestamp(),
-    ok | timeout | {error, datastore_doc:seq(), term()}, state()) -> state().
+    ok | timeout | {error, datastore_doc:seq(), term()}, state()) -> {continue | reset, state()}.
 change_applied(_Since, Until, Timestamp, Ans, State) ->
     State2 = State#state{apply_batch = undefined},
     case Ans of
@@ -325,10 +345,10 @@ change_applied(_Since, Until, Timestamp, Ans, State) ->
             gen_server2:cast(self(), check_batch_stash),
             update_seq(Until, Timestamp, State2);
         {error, Seq, _} ->
-            State3 = update_seq(Seq - 1, undefined, State2),
-            schedule_changes_request(State3);
+            {UpdateAns, State3} = update_seq(Seq - 1, undefined, State2),
+            {UpdateAns, schedule_changes_request(State3)};
         timeout ->
-            schedule_changes_request(State2)
+            {continue, schedule_changes_request(State2)}
     end.
 
 %%--------------------------------------------------------------------
@@ -372,12 +392,13 @@ prepare_batch(Docs, Timestamp, Until, State = #state{
 %% Updates sequence number of the beginning of expected changes range.
 %% @end
 %%--------------------------------------------------------------------
--spec update_seq(couchbase_changes:seq(), dbsync_changes:timestamp() | undefined, state()) -> state().
+-spec update_seq(couchbase_changes:seq(), dbsync_changes:timestamp() | undefined, state()) ->
+    {continue | reset, state()}.
 update_seq(Seq, _Timestamp, State = #state{seq = Seq}) ->
-    State;
+    {continue, State};
 update_seq(Seq, Timestamp, State = #state{space_id = SpaceId, provider_id = ProviderId}) ->
-    dbsync_state:set_seq_and_timestamp(SpaceId, ProviderId, Seq, Timestamp),
-    State#state{seq = Seq}.
+    Ans = dbsync_state:set_seq_and_timestamp(SpaceId, ProviderId, Seq, Timestamp),
+    {Ans, State#state{seq = Seq}}.
 
 %%--------------------------------------------------------------------
 %% @private

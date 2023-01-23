@@ -16,6 +16,7 @@
 -include("modules/dataset/archive.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("onenv_test_utils.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_time_series.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
@@ -650,16 +651,16 @@ recall_details_test_base(Spec, TotalFileCount, TotalByteSize) ->
     },
     ?assertMatch({ok, #{
         <<"bytesCopied">> := #{
-            <<"hour">> := [{_,{_, TotalByteSize}}],
-            <<"minute">> := [{_,{_, TotalByteSize}}],
-            <<"day">> := [{_,{_, TotalByteSize}}],
-            <<"total">> := [{_,{_, TotalByteSize}}]
+            <<"hour">> := [#window_info{value = TotalByteSize}],
+            <<"minute">> := [#window_info{value = TotalByteSize}],
+            <<"day">> := [#window_info{value = TotalByteSize}],
+            <<"total">> := [#window_info{value = TotalByteSize}]
         },
         <<"filesCopied">> := #{
-            <<"hour">> := [{_,{TotalFileCount, TotalFileCount}}],
-            <<"minute">> := [{_,{TotalFileCount, TotalFileCount}}],
-            <<"day">> := [{_,{TotalFileCount, TotalFileCount}}],
-            <<"total">> := [{_,{TotalFileCount, TotalFileCount}}]
+            <<"hour">> := [#window_info{value = TotalFileCount}],
+            <<"minute">> := [#window_info{value = TotalFileCount}],
+            <<"day">> := [#window_info{value = TotalFileCount}],
+            <<"total">> := [#window_info{value = TotalFileCount}]
         },
         <<"filesFailed">> := #{
             <<"total">> := []
@@ -774,7 +775,7 @@ cancel_recall_test_base(CancellingProvider) ->
     time_test_utils:simulate_millis_passing(1),
     FinishTimestamp = time_test_utils:get_frozen_time_millis(),
     
-    check_mocked_slave_jobs_cancelled(3),
+    check_mocked_slave_jobs_cancelled(3, ?ATTEMPTS),
     
     lists:foreach(fun(Provider) ->
         ?assertMatch({ok, #archive_recall_details{
@@ -855,35 +856,6 @@ mock_recall_traverse_finished() ->
     end).
 
 
-mock_cancel_test_slave_job() ->
-    Nodes = oct_background:get_all_providers_nodes(),
-    test_utils:mock_new(Nodes, archive_recall_traverse),
-    TestProcess = self(),
-    test_utils:mock_expect(Nodes, archive_recall_traverse, do_slave_job_unsafe, fun(_, TaskId) ->
-        TestProcess ! {slave_job, self()},
-        receive check_cancel ->
-            TestProcess ! {result, traverse:is_job_cancelled(TaskId)}
-        end,
-        ok
-    end).
-
-
-check_mocked_slave_jobs_cancelled(0) ->
-    ok;
-check_mocked_slave_jobs_cancelled(SlaveJobsLeft) ->
-    receive {slave_job, Pid} ->
-        Pid ! check_cancel,
-        receive {result, Res} ->
-            ?assertEqual(true, Res)
-        after 1000 ->
-            throw(cancel_result_not_received)
-        end
-    after timer:seconds(?ATTEMPTS) ->
-        throw(slave_job_not_started)
-    end,
-    check_mocked_slave_jobs_cancelled(SlaveJobsLeft - 1).
-
-
 %% below functions require calling mock_recall_traverse_finished/0 function beforehand.
 wait_for_recall_traverse_finish() ->
     receive
@@ -895,6 +867,36 @@ wait_for_recall_traverse_finish() ->
 
 finish_recall(Pid) ->
     Pid ! continue.
+
+
+mock_cancel_test_slave_job(TraverseModule) ->
+    Nodes = oct_background:get_all_providers_nodes(),
+    test_utils:mock_new(Nodes, TraverseModule),
+    TestProcess = self(),
+    test_utils:mock_expect(Nodes, TraverseModule, do_slave_job_unsafe, fun(_, TaskId) ->
+        TestProcess ! {slave_job, self()},
+        receive check_cancel ->
+            TestProcess ! {result, traverse:is_job_cancelled(TaskId)}
+        end,
+        ok
+    end).
+
+
+% this function require calling mock_cancel_test_slave_job/1 beforehand
+check_mocked_slave_jobs_cancelled(0 = _JobsToCheck, _TimeoutSeconds) ->
+    ok;
+check_mocked_slave_jobs_cancelled(SlaveJobsLeft, TimeoutSeconds) ->
+    receive {slave_job, Pid} ->
+        Pid ! check_cancel,
+        receive {result, Res} ->
+            ?assertEqual(true, Res)
+        after 1000 ->
+            throw(cancel_result_not_received)
+        end
+    after timer:seconds(TimeoutSeconds) ->
+        throw(slave_job_not_started)
+    end,
+    check_mocked_slave_jobs_cancelled(SlaveJobsLeft - 1, TimeoutSeconds).
 
 
 %===================================================================
@@ -939,7 +941,7 @@ init_per_testcase(Case, Config) when
     Case =:= cancel_local_recall_test;
     Case =:= cancel_remote_recall_test
     ->
-    mock_cancel_test_slave_job(),
+    mock_cancel_test_slave_job(archive_recall_traverse),
     time_test_utils:freeze_time(Config),
     Config;
 init_per_testcase(_Case, Config) ->

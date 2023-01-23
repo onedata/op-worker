@@ -52,8 +52,8 @@ emit_file_attr_changed(FileCtx, ExcludedSessions) ->
                 fuse_response = #file_attr{} = FileAttr
             }, ConflictingFiles, _} = attr_req:get_file_attr_and_conflicts_insecure(RootUserCtx, FileCtx2, #{
                 allow_deleted_files => true,
-                include_size => true,
-                name_conflicts_resolution_policy => resolve_name_conflicts
+                name_conflicts_resolution_policy => resolve_name_conflicts,
+                include_optional_attrs => [size]
             }),
             emit_suffixes(ConflictingFiles, {ctx, FileCtx2}),
             emit_file_attr_changed(FileCtx2, FileAttr, ExcludedSessions);
@@ -150,7 +150,6 @@ emit_sizeless_file_attrs_changed(FileCtx) ->
                 fuse_response = #file_attr{} = FileAttr
             } = attr_req:get_file_attr_insecure(RootUserCtx, FileCtx2, #{
                 allow_deleted_files => true,
-                include_size => false,
                 name_conflicts_resolution_policy => resolve_name_conflicts
             }),
             event:emit_to_filtered_subscribers(#file_attr_changed_event{
@@ -181,9 +180,13 @@ emit_file_location_changed(FileCtx, ExcludedSessions) ->
     fslogic_blocks:blocks() | fslogic_blocks:block() | undefined) ->
     ok | {error, Reason :: term()}.
 emit_file_location_changed(FileCtx, ExcludedSessions, Range) ->
-    {Location, _FileCtx2} = file_ctx:get_file_location_with_filled_gaps(FileCtx, Range),
-    {Offset, Size} = fslogic_location_cache:get_blocks_range(Location, Range),
-    emit_file_location_changed(Location, ExcludedSessions, Offset, Size).
+    case file_ctx:get_file_location_with_filled_gaps(FileCtx, Range) of
+        {undefined, _} ->
+            ok;
+        {Location, _FileCtx2} ->
+            {Offset, Size} = fslogic_location_cache:get_blocks_range(Location, Range),
+            emit_file_location_changed(Location, ExcludedSessions, Offset, Size)
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -344,12 +347,15 @@ emit_file_attr_changed_with_replication_status_internal(_FileCtx, [], []) ->
     ok;
 emit_file_attr_changed_with_replication_status_internal(FileCtx, WithoutStatusSessIds, WithStatusSessIds) ->
     RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
+    OptionalAttrs = case WithStatusSessIds of
+        [] -> [size];
+        _ -> [size, replication_status]
+    end,
     {#fuse_response{fuse_response = #file_attr{} = FileAttr}, ConflictingFiles, _} =
         attr_req:get_file_attr_and_conflicts_insecure(RootUserCtx, FileCtx, #{
             allow_deleted_files => true,
-            include_size => true,
             name_conflicts_resolution_policy => resolve_name_conflicts,
-            include_replication_status => WithStatusSessIds =/= []
+            include_optional_attrs => OptionalAttrs
         }),
     emit_suffixes(ConflictingFiles, {ctx, FileCtx}),
     event:emit(#file_attr_changed_event{file_attr = FileAttr}, WithStatusSessIds),

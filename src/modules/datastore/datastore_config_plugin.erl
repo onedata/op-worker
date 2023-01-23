@@ -89,7 +89,7 @@ get_models() -> [
     deletion_marker,
     tree_traverse_progress,
     dir_size_stats,
-    dir_update_time_stats,
+    dir_stats_collector_metadata,
     restart_hooks,
     dataset,
     bulk_download_task,
@@ -98,6 +98,7 @@ get_models() -> [
     archive_recall_progress,
     workflow_engine_state,
     workflow_execution_state,
+    workflow_execution_state_dump,
     workflow_cached_item,
     workflow_cached_async_result,
     workflow_cached_task_data,
@@ -110,15 +111,19 @@ get_models() -> [
     atm_workflow_schema_snapshot,
     atm_lambda_snapshot,
     atm_workflow_execution,
-    atm_tree_forest_iterator_queue,
     atm_openfaas_function_pod_status_registry,
     atm_openfaas_result_streamer_registry,
+    atm_openfaas_status_cache,
     atm_time_series_store_container,
+    
+    % multitpart upload models
+    multipart_upload,
+    multipart_upload_part,
 
     %% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 21.02.*.
     space_strategies,
     storage_sync_monitoring,
-    space_support_state
+    dir_stats_service_state
 ].
 
 %%--------------------------------------------------------------------

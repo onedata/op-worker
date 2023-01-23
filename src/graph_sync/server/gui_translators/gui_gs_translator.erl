@@ -50,7 +50,7 @@ handshake_attributes(_Client) ->
         <<"serviceVersion">> => op_worker:get_release_version(),
         <<"onezoneUrl">> => oneprovider:get_oz_url(),
         <<"transfersHistoryLimitPerFile">> => transferred_file:get_history_limit(),
-        <<"openfaasAvailable">> => atm_openfaas_task_executor:is_openfaas_available(),
+        <<"openfaasAvailable">> => atm_openfaas_monitor:is_openfaas_healthy(),
         <<"bagitUploaderWorkflowSchemaId">> => utils:undefined_to_null(BagitUploaderWorkflowSchemaId),
         <<"qosTransferStatsConfig">> => #{
             <<"totalTimeSeriesId">> => ?QOS_TOTAL_TIME_SERIES_NAME,
@@ -73,6 +73,8 @@ translate_value(_, #gri{type = op_archive} = GRI, Value) ->
     archive_gui_gs_translator:translate_value(GRI, Value);
 translate_value(_, #gri{type = op_atm_store} = GRI, Data) ->
     atm_store_gui_gs_translator:translate_value(GRI, Data);
+translate_value(_, #gri{type = op_atm_workflow_execution} = GRI, Data) ->
+    atm_workflow_execution_gui_gs_translator:translate_value(GRI, Data);
 translate_value(_, #gri{type = op_dataset} = GRI, Value) ->
     dataset_gui_gs_translator:translate_value(GRI, Value);
 translate_value(_, #gri{type = op_file} = GRI, Value) ->

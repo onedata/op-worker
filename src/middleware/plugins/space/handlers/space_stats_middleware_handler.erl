@@ -35,13 +35,7 @@
 %%--------------------------------------------------------------------
 -spec data_spec(middleware:req()) -> undefined | middleware_sanitizer:data_spec().
 data_spec(#op_req{operation = get, gri = #gri{aspect = dir_stats_service_state}}) ->
-    undefined;
-
-data_spec(#op_req{operation = update, gri = #gri{aspect = dir_stats_service_state}}) -> #{
-    required => #{
-        <<"enabled">> => {boolean, any}
-    }
-}.
+    undefined.
 
 
 %%--------------------------------------------------------------------
@@ -67,13 +61,7 @@ authorize(#op_req{operation = get, auth = ?USER(UserId, SessionId), gri = #gri{
     id = SpaceId,
     aspect = dir_stats_service_state
 }}, _) ->
-    space_logic:has_eff_user(SessionId, SpaceId, UserId);
-
-authorize(#op_req{operation = update, auth = ?USER(UserId), gri = #gri{
-    id = SpaceId,
-    aspect = dir_stats_service_state
-}}, _) ->
-    space_logic:has_eff_privilege(SpaceId, UserId, ?SPACE_UPDATE).
+    space_logic:has_eff_user(SessionId, SpaceId, UserId).
 
 
 %%--------------------------------------------------------------------
@@ -86,12 +74,6 @@ validate(#op_req{operation = get, gri = #gri{
     id = SpaceId,
     aspect = dir_stats_service_state
 }}, _QosEntry) ->
-    middleware_utils:assert_space_supported_locally(SpaceId);
-
-validate(#op_req{operation = update, gri = #gri{
-    id = SpaceId,
-    aspect = dir_stats_service_state
-}}, _) ->
     middleware_utils:assert_space_supported_locally(SpaceId).
 
 
@@ -112,20 +94,12 @@ create(_) ->
 %%--------------------------------------------------------------------
 -spec get(middleware:req(), middleware:entity()) -> middleware:get_result().
 get(#op_req{gri = #gri{id = SpaceId, aspect = dir_stats_service_state}}, _) ->
-    {ok, SpaceSupportState} = space_support_state_api:get_support_state(SpaceId),
-    {ok, SpaceSupportOpts} = space_support_state_api:get_support_opts(SpaceSupportState),
-    {Status, Since} = case dir_stats_service_state:get_last_status_change_timestamp_if_in_enabled_status(
-        SpaceSupportState#space_support_state.dir_stats_service_state
-    ) of
-        {ok, Timestamp} -> {<<"enabled">>, Timestamp};
-        ?ERROR_DIR_STATS_DISABLED_FOR_SPACE -> {<<"disabled">>, undefined};
-        ?ERROR_DIR_STATS_NOT_READY-> {<<"initializing">>, undefined}
-    end,
-    {ok, value, maps_utils:remove_undefined(#{
-        <<"enforcedByAccounting">> => maps:get(accounting_enabled, SpaceSupportOpts),
-        <<"status">> => Status,
-        <<"since">> => Since
-    })}.
+    {ok, value, case dir_stats_service_state:get(SpaceId) of
+        {ok, DirStatsServiceState} ->
+            translate_dir_stats_service_state(DirStatsServiceState);
+        ?ERROR_NOT_FOUND ->
+            #{<<"status">> => disabled}
+    end}.
 
 
 %%--------------------------------------------------------------------
@@ -134,11 +108,8 @@ get(#op_req{gri = #gri{id = SpaceId, aspect = dir_stats_service_state}}, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec update(middleware:req()) -> middleware:update_result().
-update(#op_req{gri = #gri{id = SpaceId, aspect = dir_stats_service_state}, data = Data}) ->
-    case maps:get(<<"enabled">>, Data) of
-        true -> dir_stats_service_state:enable(SpaceId);
-        false -> dir_stats_service_state:disable(SpaceId)
-    end.
+update(_) ->
+    ?ERROR_NOT_SUPPORTED.
 
 
 %%--------------------------------------------------------------------
@@ -149,3 +120,23 @@ update(#op_req{gri = #gri{id = SpaceId, aspect = dir_stats_service_state}, data 
 -spec delete(middleware:req()) -> middleware:delete_result().
 delete(_) ->
     ?ERROR_NOT_SUPPORTED.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec translate_dir_stats_service_state(dir_stats_service_state:record()) ->
+    json_utils:json_map().
+translate_dir_stats_service_state(DirStatsServiceState) ->
+    Json = #{<<"status">> => dir_stats_service_state:get_status(DirStatsServiceState)},
+
+    case dir_stats_service_state:get_last_initialization_timestamp_if_in_enabled_status(
+        DirStatsServiceState
+    ) of
+        {ok, Timestamp} -> Json#{<<"since">> => Timestamp};
+        ?ERROR_DIR_STATS_DISABLED_FOR_SPACE -> Json;
+        ?ERROR_DIR_STATS_NOT_READY-> Json
+    end.

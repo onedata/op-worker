@@ -26,7 +26,7 @@
 -export([mkdir/2, mkdir/3, mv/2, chmod/2, chown/3, link/2, readdir/3,
     get_child_handle/2, listobjects/4, flushbuffer/2,
     blocksize_for_path/1]).
--export([stat/1, read/3, write/3, create/2, create/3, open/2, release/1,
+-export([stat/1, read/3, write/3, create/2, create/3, open/2, open_for_write_insecure/1, release/1,
     truncate/3, unlink/2, fsync/2, rmdir/1, exists/1]).
 -export([setxattr/5, getxattr/2, removexattr/2, listxattr/1]).
 -export([open_at_creation/1]).
@@ -170,6 +170,11 @@ open(SDHandle, write) ->
     open_for_write(SDHandle);
 open(SDHandle, rdwr) ->
     open_for_rdwr(SDHandle).
+
+
+-spec open_for_write_insecure(handle()) -> {ok, handle()} | error_reply().
+open_for_write_insecure(SDHandle) ->
+    open_insecure(SDHandle#sd_handle{session_id = ?ROOT_SESS_ID}, write).
 
 
 %%--------------------------------------------------------------------

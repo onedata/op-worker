@@ -25,6 +25,7 @@
 -include_lib("ctool/include/privileges.hrl").
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/performance.hrl").
+-include_lib("cluster_worker/include/time_series/browsing.hrl").
 
 -export([
     init_per_suite/1, end_per_suite/1,
@@ -60,6 +61,8 @@
     get_file_attr_test/1,
     get_file_details_test/1,
     get_file_distribution_test/1,
+    gather_historical_dir_size_stats_test/1,
+    get_file_storage_locations_test/1,
 
     set_perms_test/1,
     check_read_perms_test/1,
@@ -648,6 +651,7 @@ mkdir_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
+        available_in_open_handle_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             ?FILE_REF(ParentDirGuid) = maps:get(ParentDirPath, ExtraData),
@@ -678,6 +682,7 @@ get_children_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
+        available_in_open_handle_mode = true,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             DirKey = maps:get(DirPath, ExtraData),
@@ -703,6 +708,7 @@ get_children_attrs_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
+        available_in_open_handle_mode = true,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             DirKey = maps:get(DirPath, ExtraData),
@@ -728,6 +734,7 @@ get_children_details_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
+        available_in_open_handle_mode = true,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             DirKey = maps:get(DirPath, ExtraData),
@@ -752,6 +759,7 @@ get_child_attr_test(Config) ->
         }],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
+        available_in_open_handle_mode = true,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             ?FILE_REF(ParentDirGuid) = maps:get(ParentDirPath, ExtraData),
@@ -789,6 +797,7 @@ mv_dir_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
+        available_in_open_handle_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             SrcDirPath = <<TestCaseRootDirPath/binary, "/dir1/dir11">>,
             SrcDirKey = maps:get(SrcDirPath, ExtraData),
@@ -824,6 +833,7 @@ rm_dir_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
+        available_in_open_handle_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1/dir2">>,
             DirKey = maps:get(DirPath, ExtraData),
@@ -846,6 +856,7 @@ create_file_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
+        available_in_open_handle_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             ?FILE_REF(ParentDirGuid) = maps:get(ParentDirPath, ExtraData),
@@ -882,6 +893,7 @@ open_for_read_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
+        available_in_open_handle_mode = true,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
@@ -913,6 +925,7 @@ open_for_write_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
+        available_in_open_handle_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
@@ -944,6 +957,7 @@ open_for_rdwr_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
+        available_in_open_handle_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
@@ -975,6 +989,7 @@ create_and_open_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
+        available_in_open_handle_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             ParentDirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             ?FILE_REF(ParentDirGuid) = maps:get(ParentDirPath, ExtraData),
@@ -1000,6 +1015,7 @@ truncate_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
+        available_in_open_handle_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
@@ -1037,6 +1053,7 @@ mv_file_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
+        available_in_open_handle_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             SrcFilePath = <<TestCaseRootDirPath/binary, "/dir1/file11">>,
             SrcFileKey = maps:get(SrcFilePath, ExtraData),
@@ -1072,6 +1089,7 @@ rm_file_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
+        available_in_open_handle_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/dir1/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
@@ -1089,6 +1107,7 @@ get_parent_test(Config) ->
         files = [#file{name = <<"file1">>}],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
+        available_in_open_handle_mode = true,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
@@ -1109,6 +1128,7 @@ get_file_path_test(Config) ->
         files = [#file{name = <<"file1">>}],
         available_in_readonly_mode = true,
         available_in_share_mode = false, % TODO VFS-6057
+        available_in_open_handle_mode = false, % TODO VFS-6057
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             ?FILE_REF(FileGuid) = maps:get(FilePath, ExtraData),
@@ -1129,6 +1149,7 @@ get_file_guid_test(Config) ->
         files = [#file{name = <<"file1">>}],
         available_in_readonly_mode = true,
         available_in_share_mode = inapplicable,
+        available_in_open_handle_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, _ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             extract_ok(lfm_proxy:resolve_guid(W, SessId, FilePath))
@@ -1148,6 +1169,7 @@ get_file_attr_test(Config) ->
         files = [#file{name = <<"file1">>}],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
+        available_in_open_handle_mode = true,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
@@ -1168,6 +1190,7 @@ get_file_details_test(Config) ->
         files = [#file{name = <<"file1">>}],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
+        available_in_open_handle_mode = true,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
@@ -1193,10 +1216,72 @@ get_file_distribution_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = false,
+        available_in_open_handle_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
             extract_ok(opt_file_metadata:get_distribution_deprecated(W, SessId, FileKey))
+        end,
+        returned_errors = api_errors,
+        final_ownership_check = fun(TestCaseRootDirPath) ->
+            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
+        end
+    }, Config).
+
+
+gather_historical_dir_size_stats_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    
+    permissions_test_runner:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir_name = ?SCENARIO_NAME,
+        files = [#dir{
+            name = <<"dir1">>,
+            perms = [?read_metadata],
+            children = [
+                #file{
+                    name = <<"file1">>,
+                    perms = []
+                }
+            ]
+        }],
+        posix_requires_space_privs = [?SPACE_READ_DATA],
+        acl_requires_space_privs = [?SPACE_READ_DATA],
+        available_in_readonly_mode = true,
+        available_in_share_mode = false,
+        available_in_open_handle_mode = false,
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/dir1">>,
+            FileKey = maps:get(FilePath, ExtraData),
+            extract_ok(opt_file_metadata:gather_historical_dir_size_stats(
+                W, SessId, FileKey, #time_series_layout_get_request{}))
+        end,
+        returned_errors = api_errors,
+        final_ownership_check = fun(TestCaseRootDirPath) ->
+            {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/dir1">>}
+        end
+    }, Config).
+
+
+get_file_storage_locations_test(Config) ->
+    [W | _] = ?config(op_worker_nodes, Config),
+    
+    permissions_test_runner:run_scenarios(#perms_test_spec{
+        test_node = W,
+        root_dir_name = ?SCENARIO_NAME,
+        files = [#file{
+            name = <<"file1">>,
+            perms = [?read_metadata]
+        }],
+        posix_requires_space_privs = [?SPACE_READ_DATA],
+        acl_requires_space_privs = [?SPACE_READ_DATA],
+        available_in_readonly_mode = true,
+        available_in_share_mode = false,
+        available_in_open_handle_mode = false,
+        operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
+            FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
+            FileKey = maps:get(FilePath, ExtraData),
+            extract_ok(opt_file_metadata:get_storage_locations(W, SessId, FileKey))
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
@@ -1368,6 +1453,7 @@ check_read_perms_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
+        available_in_open_handle_mode = true,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
@@ -1393,6 +1479,7 @@ check_write_perms_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
+        available_in_open_handle_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
@@ -1418,6 +1505,7 @@ check_rdwr_perms_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA, ?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
+        available_in_open_handle_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
@@ -1440,6 +1528,7 @@ create_share_test(Config) ->
         acl_requires_space_privs = [?SPACE_MANAGE_SHARES],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
+        available_in_open_handle_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             DirKey = maps:get(DirPath, ExtraData),
@@ -1471,6 +1560,7 @@ remove_share_test(Config) ->
         acl_requires_space_privs = [?SPACE_MANAGE_SHARES],
         available_in_readonly_mode = false,
         available_in_share_mode = inapplicable,
+        available_in_open_handle_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             DirPath = <<TestCaseRootDirPath/binary, "/dir1">>,
             ShareId = maps:get(DirPath, ExtraData),
@@ -1538,6 +1628,7 @@ get_acl_test(Config) ->
         }],
         available_in_readonly_mode = true,
         available_in_share_mode = false,
+        available_in_open_handle_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
@@ -1563,6 +1654,7 @@ set_acl_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
+        available_in_open_handle_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
@@ -1594,6 +1686,7 @@ remove_acl_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
+        available_in_open_handle_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
@@ -1621,6 +1714,7 @@ get_transfer_encoding_test(Config) ->
         }],
         available_in_readonly_mode = true,
         available_in_share_mode = false,
+        available_in_open_handle_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
@@ -1647,6 +1741,7 @@ set_transfer_encoding_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
+        available_in_open_handle_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
@@ -1675,6 +1770,7 @@ get_cdmi_completion_status_test(Config) ->
         }],
         available_in_readonly_mode = true,
         available_in_share_mode = false,
+        available_in_open_handle_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
@@ -1701,6 +1797,7 @@ set_cdmi_completion_status_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
+        available_in_open_handle_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
@@ -1729,6 +1826,7 @@ get_mimetype_test(Config) ->
         }],
         available_in_readonly_mode = true,
         available_in_share_mode = false,
+        available_in_open_handle_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
@@ -1755,6 +1853,7 @@ set_mimetype_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
+        available_in_open_handle_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
@@ -1777,7 +1876,7 @@ get_metadata_test(Config) ->
             name = <<"file1">>,
             perms = [?read_metadata],
             on_create = fun(FileOwnerSessId, Guid) ->
-                lfm_proxy:set_metadata(W, FileOwnerSessId, ?FILE_REF(Guid), json, <<"VAL">>, []),
+                opt_file_metadata:set_custom_metadata(W, FileOwnerSessId, ?FILE_REF(Guid), json, <<"VAL">>, []),
                 ?FILE_REF(Guid)
             end
         }],
@@ -1785,11 +1884,13 @@ get_metadata_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
+        available_in_open_handle_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:get_metadata(W, SessId, FileKey, json, [], false))
+            extract_ok(opt_file_metadata:get_custom_metadata(W, SessId, FileKey, json, [], false))
         end,
+        returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end
@@ -1810,11 +1911,13 @@ set_metadata_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
+        available_in_open_handle_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:set_metadata(W, SessId, FileKey, json, <<"VAL">>, []))
+            extract_ok(opt_file_metadata:set_custom_metadata(W, SessId, FileKey, json, <<"VAL">>, []))
         end,
+        returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end
@@ -1831,7 +1934,7 @@ remove_metadata_test(Config) ->
             name = <<"file1">>,
             perms = [?write_metadata],
             on_create = fun(FileOwnerSessId, Guid) ->
-                lfm_proxy:set_metadata(W, FileOwnerSessId, ?FILE_REF(Guid), json, <<"VAL">>, []),
+                opt_file_metadata:set_custom_metadata(W, FileOwnerSessId, ?FILE_REF(Guid), json, <<"VAL">>, []),
                 ?FILE_REF(Guid)
             end
         }],
@@ -1839,11 +1942,13 @@ remove_metadata_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
+        available_in_open_handle_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(lfm_proxy:remove_metadata(W, SessId, FileKey, json))
+            extract_ok(opt_file_metadata:remove_custom_metadata(W, SessId, FileKey, json))
         end,
+        returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
             {should_preserve_ownership, <<TestCaseRootDirPath/binary, "/file1">>}
         end
@@ -1869,6 +1974,7 @@ get_xattr_test(Config) ->
         acl_requires_space_privs = [?SPACE_READ_DATA],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
+        available_in_open_handle_mode = true,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
@@ -1896,6 +2002,7 @@ list_xattr_test(Config) ->
         }],
         available_in_readonly_mode = true,
         available_in_share_mode = true,
+        available_in_open_handle_mode = true,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
@@ -1921,6 +2028,7 @@ set_xattr_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
+        available_in_open_handle_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
@@ -1953,6 +2061,7 @@ remove_xattr_test(Config) ->
         acl_requires_space_privs = [?SPACE_WRITE_DATA],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
+        available_in_open_handle_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
@@ -1973,6 +2082,7 @@ add_qos_entry_test(Config) ->
         files = [#file{name = <<"file1">>}],
         available_in_readonly_mode = false,
         available_in_share_mode = false,
+        available_in_open_handle_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
@@ -2002,6 +2112,7 @@ get_qos_entry_test(Config) ->
         }],
         available_in_readonly_mode = true,
         available_in_share_mode = inapplicable,
+        available_in_open_handle_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             QosEntryId = maps:get(FilePath, ExtraData),
@@ -2031,6 +2142,7 @@ remove_qos_entry_test(Config) ->
         }],
         available_in_readonly_mode = false,
         available_in_share_mode = inapplicable,
+        available_in_open_handle_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             QosEntryId = maps:get(FilePath, ExtraData),
@@ -2060,6 +2172,7 @@ get_effective_file_qos_test(Config) ->
         }],
         available_in_readonly_mode = true,
         available_in_share_mode = inapplicable,
+        available_in_open_handle_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             FileKey = maps:get(FilePath, ExtraData),
@@ -2089,6 +2202,7 @@ check_qos_fulfillment_test(Config) ->
         }],
         available_in_readonly_mode = true,
         available_in_share_mode = inapplicable,
+        available_in_open_handle_mode = false,
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/file1">>,
             QosEntryId = maps:get(FilePath, ExtraData),
