@@ -1114,6 +1114,8 @@
 
     %% @see atm_task_executor.erl
     executor :: atm_task_executor:record(),
+    %% @see atm_lambda_execution_config.erl
+    lambda_config :: [atm_lambda_execution_config_spec:record()],
     %% @see atm_task_execution_arguments.erl
     argument_specs :: [atm_task_execution_argument_spec:record()],
     %% @see atm_task_execution_results.erl

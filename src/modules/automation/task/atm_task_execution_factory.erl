@@ -308,11 +308,13 @@ create_task_execution_doc(#creation_ctx{
             }
         },
         lambda_revision = #atm_lambda_revision{
+            config_spec = AtmLambdaConfigSpecs,
             argument_specs = AtmLambdaArgSpecs,
             result_specs = AtmLambdaResultSpecs
         },
         task_schema = #atm_task_schema{
             id = AtmTaskSchemaId,
+            lambda_config = AtmLambdaConfigAssignments,
             argument_mappings = AtmTaskSchemaArgMappers,
             result_mappings = AtmTaskSchemaResultMappers
         }
@@ -340,6 +342,9 @@ create_task_execution_doc(#creation_ctx{
         schema_id = AtmTaskSchemaId,
 
         executor = Executor,
+        lambda_config = atm_lambda_execution_config:build_specs(
+            AtmLambdaConfigSpecs, AtmLambdaConfigAssignments
+        ),
         argument_specs = atm_task_execution_arguments:build_specs(
             AtmLambdaArgSpecs,
             AtmTaskSchemaArgMappers
