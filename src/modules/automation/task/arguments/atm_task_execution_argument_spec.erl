@@ -43,12 +43,12 @@
 
 
 -spec build(
-    atm_lambda_argument_spec:record(),
+    atm_parameter_spec:record(),
     undefined | atm_task_schema_argument_mapper:record()
 ) ->
     record().
 build(
-    #atm_lambda_argument_spec{name = Name, data_spec = AtmDataSpec, default_value = DefaultValue},
+    #atm_parameter_spec{name = Name, data_spec = AtmDataSpec, default_value = DefaultValue},
     undefined
 ) ->
     #atm_task_execution_argument_spec{
@@ -58,7 +58,7 @@ build(
     };
 
 build(
-    #atm_lambda_argument_spec{name = Name, data_spec = AtmDataSpec},
+    #atm_parameter_spec{name = Name, data_spec = AtmDataSpec},
     #atm_task_schema_argument_mapper{value_builder = ValueBuilder}
 ) ->
     #atm_task_execution_argument_spec{

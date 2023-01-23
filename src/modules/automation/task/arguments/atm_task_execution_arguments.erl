@@ -24,7 +24,7 @@
 
 
 -spec build_specs(
-    [atm_lambda_argument_spec:record()],
+    [atm_parameter_spec:record()],
     [atm_task_schema_argument_mapper:record()]
 ) ->
     [atm_task_execution_argument_spec:record()] | no_return().
@@ -63,13 +63,13 @@ construct_args(Item, AtmRunJobBatchCtx, AtmTaskExecutionArgSpecs) ->
 
 %% @private
 -spec order_atm_lambda_arg_specs_by_name(
-    atm_lambda_argument_spec:record(),
-    atm_lambda_argument_spec:record()
+    atm_parameter_spec:record(),
+    atm_parameter_spec:record()
 ) ->
     boolean().
 order_atm_lambda_arg_specs_by_name(
-    #atm_lambda_argument_spec{name = Name1},
-    #atm_lambda_argument_spec{name = Name2}
+    #atm_parameter_spec{name = Name1},
+    #atm_parameter_spec{name = Name2}
 ) ->
     Name1 =< Name2.
 
@@ -89,7 +89,7 @@ order_atm_task_schema_arg_mappers_by_name(
 
 %% @private
 -spec build_specs(
-    OrderedUniqueAtmLambdaArgSpecs :: [atm_lambda_argument_spec:record()],
+    OrderedUniqueAtmLambdaArgSpecs :: [atm_parameter_spec:record()],
     OrderedUniqueAtmTaskSchemaArgMappers :: [atm_task_schema_argument_mapper:record()],
     AtmTaskExecutionArgSpecs :: [atm_task_execution_argument_spec:record()]
 ) ->
@@ -98,7 +98,7 @@ build_specs([], [], AtmTaskExecutionArgSpecs) ->
     AtmTaskExecutionArgSpecs;
 
 build_specs(
-    [#atm_lambda_argument_spec{name = Name} = AtmLambdaArgSpec | RestAtmLambdaArgSpecs],
+    [#atm_parameter_spec{name = Name} = AtmLambdaArgSpec | RestAtmLambdaArgSpecs],
     [#atm_task_schema_argument_mapper{argument_name = Name} = AtmTaskSchemaArgMapper | RestAtmTaskSchemaArgMappers],
     AtmTaskExecutionArgSpecs
 ) ->
@@ -108,7 +108,7 @@ build_specs(
     ]);
 
 build_specs(
-    [#atm_lambda_argument_spec{default_value = Default} = AtmLambdaArgSpec | RestAtmLambdaArgSpecs],
+    [#atm_parameter_spec{default_value = Default} = AtmLambdaArgSpec | RestAtmLambdaArgSpecs],
     AtmTaskSchemaArgMappers,
     AtmTaskExecutionArgSpecs
 ) when Default /= undefined ->
@@ -118,14 +118,14 @@ build_specs(
     ]);
 
 build_specs(
-    [#atm_lambda_argument_spec{is_optional = true} | RestAtmLambdaArgSpecs],
+    [#atm_parameter_spec{is_optional = true} | RestAtmLambdaArgSpecs],
     AtmTaskSchemaArgMappers,
     AtmTaskExecutionArgSpecs
 ) ->
     build_specs(RestAtmLambdaArgSpecs, AtmTaskSchemaArgMappers, AtmTaskExecutionArgSpecs);
 
 build_specs(
-    [#atm_lambda_argument_spec{name = Name} | _],
+    [#atm_parameter_spec{name = Name} | _],
     _AtmTaskSchemaArgMappers,
     _AtmTaskExecutionArgSpecs
 ) ->

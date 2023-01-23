@@ -91,7 +91,7 @@ filterexpand_list(AtmWorkflowExecutionAuth, CompressedItems, AtmDataSpec) ->
 get_callback_module(atm_array_type) -> atm_array_value;
 get_callback_module(atm_dataset_type) -> atm_dataset_value;
 get_callback_module(atm_file_type) -> atm_file_value;
-get_callback_module(atm_integer_type) -> atm_integer_value;
+get_callback_module(atm_number_type) -> atm_number_value;
 get_callback_module(atm_object_type) -> atm_object_value;
 get_callback_module(atm_range_type) -> atm_range_value;
 get_callback_module(atm_string_type) -> atm_string_value;
