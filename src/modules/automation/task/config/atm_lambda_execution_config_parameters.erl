@@ -31,12 +31,17 @@
     [atm_lambda_execution_config_parameter_spec:record()] | no_return().
 build_specs(AtmWorkflowExecutionAuth, AtmLambdaConfigParameterSpecs, AtmLambdaConfigValues) ->
     lists:foldl(fun(AtmParameterSpec = #atm_parameter_spec{name = ParameterName}, Acc) ->
-        AtmLambdaExecutionConfigParameterSpec = atm_lambda_execution_config_parameter_spec:build(
-            AtmWorkflowExecutionAuth,
-            AtmParameterSpec,
-            maps:get(ParameterName, AtmLambdaConfigValues, undefined)
-        ),
-        [AtmLambdaExecutionConfigParameterSpec | Acc]
+        try
+            AtmLambdaExecutionConfigParameterSpec = atm_lambda_execution_config_parameter_spec:build(
+                AtmWorkflowExecutionAuth,
+                AtmParameterSpec,
+                maps:get(ParameterName, AtmLambdaConfigValues, undefined)
+            ),
+            [AtmLambdaExecutionConfigParameterSpec | Acc]
+        catch Type:Reason:Stacktrace ->
+            Error = ?examine_exception(Type, Reason, Stacktrace),
+            throw(?ERROR_ATM_LAMBDA_CONFIG_BAD_VALUE(ParameterName, Error))
+        end
     end, [], AtmLambdaConfigParameterSpecs).
 
 

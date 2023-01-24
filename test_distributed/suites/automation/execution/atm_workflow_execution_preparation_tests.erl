@@ -16,6 +16,8 @@
 -include("modules/automation/atm_execution.hrl").
 
 -export([
+    first_lane_run_preparation_failure_due_to_lambda_config_acquisition/0,
+
     first_lane_run_preparation_failure_before_run_was_created/0,
     first_lane_run_preparation_failure_after_run_was_created/0,
     first_lane_run_preparation_interruption_due_to_openfaas_error/0,
@@ -42,11 +44,12 @@
 -define(ITERATED_STORE_ID, <<"iterated_store">>).
 -define(TARGET_STORE_ID, <<"target_store">>).
 
--define(ECHO_ATM_LANE_SCHEMA_DRAFT, #atm_lane_schema_draft{
+-define(ECHO_ATM_LANE_SCHEMA_DRAFT(__LAMBDA_CONFIG), #atm_lane_schema_draft{
     parallel_boxes = [#atm_parallel_box_schema_draft{tasks = [
         #atm_task_schema_draft{
             lambda_id = ?ECHO_LAMBDA_ID,
             lambda_revision_number = ?ECHO_LAMBDA_REVISION_NUM,
+            lambda_config = __LAMBDA_CONFIG,
             argument_mappings = [?ITERATED_ITEM_ARG_MAPPER(?ECHO_ARG_NAME)],
             result_mappings = [#atm_task_schema_result_mapper{
                 result_name = ?ECHO_ARG_NAME,
@@ -69,7 +72,7 @@
             ?INTEGER_ATM_LIST_STORE_SCHEMA_DRAFT(?ITERATED_STORE_ID, [3, 9, 27]),
             ?INTEGER_ATM_LIST_STORE_SCHEMA_DRAFT(?TARGET_STORE_ID)
         ],
-        lanes = [?ECHO_ATM_LANE_SCHEMA_DRAFT]
+        lanes = [?ECHO_ATM_LANE_SCHEMA_DRAFT(#{})]
     },
     supplementary_lambdas = #{?ECHO_LAMBDA_ID => #{
         ?ECHO_LAMBDA_REVISION_NUM => ?NUMBER_ECHO_LAMBDA_DRAFT
@@ -85,8 +88,8 @@
             ?INTEGER_ATM_LIST_STORE_SCHEMA_DRAFT(?TARGET_STORE_ID)
         ],
         lanes = [
-            ?ECHO_ATM_LANE_SCHEMA_DRAFT,
-            ?ECHO_ATM_LANE_SCHEMA_DRAFT
+            ?ECHO_ATM_LANE_SCHEMA_DRAFT(#{}),
+            ?ECHO_ATM_LANE_SCHEMA_DRAFT(#{})
         ]
     },
     supplementary_lambdas = #{?ECHO_LAMBDA_ID => #{
@@ -98,6 +101,75 @@
 %%%===================================================================
 %%% Tests
 %%%===================================================================
+
+
+first_lane_run_preparation_failure_due_to_lambda_config_acquisition() ->
+    atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
+        workflow_schema_dump_or_draft = #atm_workflow_schema_dump_draft{
+            name = str_utils:to_binary(?FUNCTION_NAME),
+            revision_num = 1,
+            revision = #atm_workflow_schema_revision_draft{
+                stores = [
+                    ?INTEGER_ATM_LIST_STORE_SCHEMA_DRAFT(?ITERATED_STORE_ID, [3, 9, 27]),
+                    ?INTEGER_ATM_LIST_STORE_SCHEMA_DRAFT(?TARGET_STORE_ID)
+                ],
+                lanes = [?ECHO_ATM_LANE_SCHEMA_DRAFT(#{?ECHO_ARG_NAME => 0.1})]
+            },
+            supplementary_lambdas = #{?ECHO_LAMBDA_ID => #{
+                ?ECHO_LAMBDA_REVISION_NUM => ?NUMBER_ECHO_LAMBDA_DRAFT
+            }}
+        },
+        incarnations = [#atm_workflow_execution_incarnation_test_spec{
+            incarnation_num = 1,
+            lane_runs = [#atm_lane_run_execution_test_spec{
+                selector = {1, 1},
+                prepare_lane = #atm_step_mock_spec{
+                    % Due to lane preparation failure 'handle_lane_execution_stopped' was called
+                    % from within lane preparation
+                    after_step_exp_state_diff = no_diff
+                },
+                handle_lane_execution_stopped = #atm_step_mock_spec{
+                    before_step_exp_state_diff = [
+                        {lane_run, {1, 1}, stopping},
+                        workflow_stopping
+                    ],
+                    after_step_exp_state_diff = [{lane_run, {1, 1}, failed}]
+                }
+            }],
+            handle_workflow_execution_stopped = #atm_step_mock_spec{
+                after_step_exp_state_diff = [
+                    {lane_runs, [{1, 1}], rerunable},
+                    workflow_failed
+                ],
+                % Assert not all items were processed by tasks
+                before_step_hook = fun(AtmMockCallCtx) ->
+                    #{<<"logEntries">> := [#{<<"content">> := #{<<"reason">> := LogContent}}]} = ?assertMatch(
+                        #{<<"isLast">> := true, <<"logEntries">> := [#{<<"content">> := #{
+                            <<"description">> := <<"Failed to prepare next run of lane number 1.">>
+                        }}]},
+                        atm_workflow_execution_test_utils:browse_store(
+                            ?WORKFLOW_SYSTEM_AUDIT_LOG_STORE_SCHEMA_ID, AtmMockCallCtx
+                        )
+                    ),
+
+                    ?assertMatch(
+                        ?ERROR_ATM_LANE_EXECUTION_CREATION_FAILED(
+                            _, ?ERROR_ATM_PARALLEL_BOX_EXECUTION_CREATION_FAILED(
+                                _, ?ERROR_ATM_TASK_EXECUTION_CREATION_FAILED(
+                                    _, ?ERROR_ATM_LAMBDA_CONFIG_BAD_VALUE(
+                                        ?ECHO_ARG_NAME, ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+                                            0.1, atm_number_type, #{<<"integersOnly">> := true}
+                                        )
+                                    )
+                                )
+                            )
+                        ),
+                        errors:from_json(LogContent)
+                    )
+                end
+            }
+        }]
+    }).
 
 
 first_lane_run_preparation_failure_before_run_was_created() ->

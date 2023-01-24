@@ -33,6 +33,8 @@
 
     schedule_atm_workflow_with_invalid_initial_store_content/1,
 
+    first_lane_run_preparation_failure_due_to_lambda_config_acquisition/1,
+
     first_lane_run_preparation_failure_before_run_was_created/1,
     first_lane_run_preparation_failure_after_run_was_created/1,
     first_lane_run_preparation_interruption_due_to_openfaas_error/1,
@@ -208,6 +210,8 @@ groups() -> [
     ]},
 
     {preparation_tests, [], [
+        first_lane_run_preparation_failure_due_to_lambda_config_acquisition,
+
         first_lane_run_preparation_failure_before_run_was_created,
         first_lane_run_preparation_failure_after_run_was_created,
         first_lane_run_preparation_interruption_due_to_openfaas_error,
@@ -487,6 +491,10 @@ schedule_atm_workflow_with_openfaas_not_configured(_Config) ->
 
 schedule_atm_workflow_with_invalid_initial_store_content(_Config) ->
     ?RUN_SCHEDULING_TEST().
+
+
+first_lane_run_preparation_failure_due_to_lambda_config_acquisition(_Config) ->
+    ?RUN_PREPARATION_TEST().
 
 
 first_lane_run_preparation_failure_before_run_was_created(_Config) ->

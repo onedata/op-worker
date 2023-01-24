@@ -41,6 +41,15 @@
     operation_spec = #atm_openfaas_operation_spec_draft{
         docker_image = ?ECHO_DOCKER_IMAGE_ID
     },
+    config_parameter_specs = [#atm_parameter_spec{
+        name = ?ECHO_ARG_NAME,
+        data_spec = #atm_data_spec{
+            type = atm_number_type,
+            value_constraints = #{integers_only => true}
+        },
+        is_optional = true,
+        default_value = 0
+    }],
     argument_specs = [#atm_parameter_spec{
         name = ?ECHO_ARG_NAME,
         data_spec = __DATA_SPEC,
