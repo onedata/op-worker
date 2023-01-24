@@ -39,8 +39,8 @@
     atm_file_value_validation_test/1,
     atm_file_value_compress_expand_test/1,
 
-    atm_integer_value_validation_test/1,
-    atm_integer_value_compress_expand_test/1,
+    atm_number_value_validation_test/1,
+    atm_number_value_compress_expand_test/1,
 
     atm_object_value_validation_test/1,
     atm_object_value_compress_expand_test/1,
@@ -66,8 +66,8 @@ groups() -> [
         atm_file_value_validation_test,
         atm_file_value_compress_expand_test,
 
-        atm_integer_value_validation_test,
-        atm_integer_value_compress_expand_test,
+        atm_number_value_validation_test,
+        atm_number_value_compress_expand_test,
 
         atm_object_value_validation_test,
         atm_object_value_compress_expand_test,
@@ -120,7 +120,7 @@ atm_array_value_validation_test(_Config) ->
             type = atm_array_type,
             value_constraints = #{item_data_spec => #atm_data_spec{
                 type = atm_array_type,
-                value_constraints = #{item_data_spec => #atm_data_spec{type = atm_integer_type}}
+                value_constraints = #{item_data_spec => #atm_data_spec{type = atm_number_type}}
             }}
         },
         valid_values = [
@@ -146,7 +146,7 @@ atm_array_value_validation_test(_Config) ->
                 {[[1, 2, 3, <<"NaN">>], [4, 5]], #{<<"$[0]">> => errors:to_json(
                     ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED([1, 2, 3, <<"NaN">>], atm_array_type, #{
                         <<"$[3]">> => errors:to_json(
-                            ?ERROR_ATM_DATA_TYPE_UNVERIFIED(<<"NaN">>, atm_integer_type)
+                            ?ERROR_ATM_DATA_TYPE_UNVERIFIED(<<"NaN">>, atm_number_type)
                         )
                     })
                 )}}
@@ -423,21 +423,51 @@ atm_file_value_compress_expand_test(_Config) ->
     }).
 
 
-atm_integer_value_validation_test(_Config) ->
+atm_number_value_validation_test(_Config) ->
     atm_value_validation_test_base(#atm_value_validation_testcase{
-        data_spec = #atm_data_spec{type = atm_integer_type},
-        valid_values = [-10, 0, 10],
+        data_spec = #atm_data_spec{
+            type = atm_number_type,
+            value_constraints = ?RAND_ELEMENT([#{}, #{integers_only => false}])
+        },
+        valid_values = [-10, 0, 5.5, 10],
         invalid_values_with_exp_errors = lists:map(fun(Value) ->
-            {Value, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_integer_type)} end,
-            [5.5, [5], #{<<"key">> => 5}]
+            {Value, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_number_type)} end,
+            [<<"5.5">>, [5], #{<<"key">> => 5}]
         )
+    }),
+
+    atm_value_validation_test_base(#atm_value_validation_testcase{
+        data_spec = #atm_data_spec{
+            type = atm_number_type,
+            value_constraints = #{integers_only => true}
+        },
+        valid_values = [-10, 0, 10],
+        invalid_values_with_exp_errors = [
+            {5.5, ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+                5.5, atm_number_type, #{<<"integersOnly">> => true}
+            )}
+        ]
+    }),
+
+    AllowedValues = ?RAND_ELEMENT([[], [-4, 0, 5.6, 10]]),
+    atm_value_validation_test_base(#atm_value_validation_testcase{
+        data_spec = #atm_data_spec{
+            type = atm_number_type,
+            value_constraints = #{allowed_values => AllowedValues}
+        },
+        valid_values = AllowedValues,
+        invalid_values_with_exp_errors = lists:map(fun(Num) ->
+            {Num, ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+                Num, atm_number_type, #{<<"allowedValues">> => AllowedValues}
+            )}
+        end, [-10, 0.1, 5.5, 7])
     }).
 
 
-atm_integer_value_compress_expand_test(_Config) ->
+atm_number_value_compress_expand_test(_Config) ->
     atm_value_compress_expand_test_base(#atm_value_compress_expand_testcase{
-        data_spec = #atm_data_spec{type = atm_integer_type},
-        values = [-10, 0, 10]
+        data_spec = #atm_data_spec{type = atm_number_type},
+        values = [-10, 0, 5.5, 10]
     }).
 
 
