@@ -875,7 +875,10 @@ handle_error(Ref, ErrorStatus, State) ->
 
     %% Cancel TransferIds that are still left (i.e. the failed ref was only a part of the transfer)
     [gen_server2:reply(From, ErrorStatus) || From <- FinishedFroms],
-    State3 = cancel_froms(AffectedFroms, State2, ErrorStatus),
+
+    FromsToCancel = maps:keys(maps:with(AffectedFroms, State2#state.from_to_transfer_id)),
+    State3 = cancel_froms(FromsToCancel, State2, ErrorStatus),
+
     associate_ref_with_tids(Ref, FailedTransfers, State3).
 
 %% @private
