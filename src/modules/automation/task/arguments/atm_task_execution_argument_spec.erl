@@ -21,7 +21,7 @@
 -include("modules/automation/atm_execution.hrl").
 
 %% API
--export([build/2, get_name/1, construct_arg/3]).
+-export([build/2, get_name/1, acquire_arg/3]).
 
 %% persistent_record callbacks
 -export([version/0, db_encode/2, db_decode/2]).
@@ -73,9 +73,9 @@ get_name(#atm_task_execution_argument_spec{name = ArgName}) ->
     ArgName.
 
 
--spec construct_arg(automation:item(), atm_run_job_batch_ctx:record(), record()) ->
+-spec acquire_arg(automation:item(), atm_run_job_batch_ctx:record(), record()) ->
     json_utils:json_term() | no_return().
-construct_arg(Item, AtmRunJobBatchCtx, #atm_task_execution_argument_spec{
+acquire_arg(Item, AtmRunJobBatchCtx, #atm_task_execution_argument_spec{
     value_builder = ArgValueBuilder,
     data_spec = AtmDataSpec
 }) ->

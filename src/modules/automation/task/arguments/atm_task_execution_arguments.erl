@@ -15,7 +15,7 @@
 -include("modules/automation/atm_execution.hrl").
 
 %% API
--export([build_specs/2, construct_args/3]).
+-export([build_specs/2, acquire_args/3]).
 
 
 %%%===================================================================
@@ -36,17 +36,17 @@ build_specs(AtmLambdaArgSpecs, AtmTaskSchemaArgMappers) ->
     ).
 
 
--spec construct_args(
+-spec acquire_args(
     automation:item(),
     atm_run_job_batch_ctx:record(),
     [atm_task_execution_argument_spec:record()]
 ) ->
     json_utils:json_map() | no_return().
-construct_args(Item, AtmRunJobBatchCtx, AtmTaskExecutionArgSpecs) ->
+acquire_args(Item, AtmRunJobBatchCtx, AtmTaskExecutionArgSpecs) ->
     lists:foldl(fun(AtmTaskExecutionArgSpec, Args) ->
         ArgName = atm_task_execution_argument_spec:get_name(AtmTaskExecutionArgSpec),
         try
-            Args#{ArgName => atm_task_execution_argument_spec:construct_arg(
+            Args#{ArgName => atm_task_execution_argument_spec:acquire_arg(
                 Item, AtmRunJobBatchCtx, AtmTaskExecutionArgSpec
             )}
         catch Type:Reason:Stacktrace ->
