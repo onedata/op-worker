@@ -33,6 +33,9 @@
     atm_array_value_validation_test/1,
     atm_array_value_compress_expand_test/1,
 
+    atm_boolean_value_validation_test/1,
+    atm_boolean_value_compress_expand_test/1,
+
     atm_dataset_value_validation_test/1,
     atm_dataset_value_compress_expand_test/1,
 
@@ -59,6 +62,9 @@ groups() -> [
     {all_tests, [parallel], [
         atm_array_value_validation_test,
         atm_array_value_compress_expand_test,
+
+        atm_boolean_value_validation_test,
+        atm_boolean_value_compress_expand_test,
 
         atm_dataset_value_validation_test,
         atm_dataset_value_compress_expand_test,
@@ -189,6 +195,24 @@ atm_array_value_compress_expand_test(_Config) ->
                 ]
             }
         ]
+    }).
+
+
+atm_boolean_value_validation_test(_Config) ->
+    atm_value_validation_test_base(#atm_value_validation_testcase{
+        data_spec = #atm_data_spec{type = atm_boolean_type},
+        valid_values = [false, true],
+        invalid_values_with_exp_errors = lists:map(fun(Value) ->
+            {Value, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_boolean_type)} end,
+            [5, <<"true">>, [5], #{<<"key">> => 5}]
+        )
+    }).
+
+
+atm_boolean_value_compress_expand_test(_Config) ->
+    atm_value_compress_expand_test_base(#atm_value_compress_expand_testcase{
+        data_spec = #atm_data_spec{type = atm_boolean_type},
+        values = [false, true]
     }).
 
 
