@@ -36,20 +36,18 @@
 -define(ITERATED_STORE_SCHEMA_ID, <<"iterated_store_id">>).
 -define(TARGET_STORE_SCHEMA_ID, <<"target_store_id">>).
 
--define(INTEGER_DATA_SPEC, #atm_data_spec{type = atm_integer_type}).
-
 -define(LAMBDA_DRAFT(__DOCKER_IMAGE, __RELAY_METHOD), #atm_lambda_revision_draft{
     operation_spec = #atm_openfaas_operation_spec_draft{
         docker_image = __DOCKER_IMAGE
     },
-    argument_specs = [#atm_lambda_argument_spec{
+    argument_specs = [#atm_parameter_spec{
         name = ?ECHO_ARG_NAME,
-        data_spec = ?INTEGER_DATA_SPEC,
+        data_spec = ?ATM_NUMBER_DATA_SPEC,
         is_optional = false
     }],
     result_specs = [#atm_lambda_result_spec{
         name = ?ECHO_ARG_NAME,
-        data_spec = ?INTEGER_DATA_SPEC,
+        data_spec = ?ATM_NUMBER_DATA_SPEC,
         relay_method = __RELAY_METHOD
     }]
 }).

@@ -41,7 +41,7 @@
     operation_spec = #atm_openfaas_operation_spec_draft{
         docker_image = ?ECHO_DOCKER_IMAGE_ID
     },
-    argument_specs = [#atm_lambda_argument_spec{
+    argument_specs = [#atm_parameter_spec{
         name = ?ECHO_ARG_NAME,
         data_spec = __DATA_SPEC,
         is_optional = false
@@ -53,7 +53,7 @@
     }]
 }).
 -define(ECHO_LAMBDA_DRAFT(__DATA_SPEC), ?ECHO_LAMBDA_DRAFT(__DATA_SPEC, return_value)).
--define(INTEGER_ECHO_LAMBDA_DRAFT, ?ECHO_LAMBDA_DRAFT(#atm_data_spec{type = atm_integer_type})).
+-define(NUMBER_ECHO_LAMBDA_DRAFT, ?ECHO_LAMBDA_DRAFT(#atm_data_spec{type = atm_number_type})).
 
 -define(ECHO_LAMBDA_ID, <<"echo">>).
 -define(ECHO_LAMBDA_REVISION_NUM, 1).

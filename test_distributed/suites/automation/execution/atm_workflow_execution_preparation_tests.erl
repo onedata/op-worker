@@ -72,7 +72,7 @@
         lanes = [?ECHO_ATM_LANE_SCHEMA_DRAFT]
     },
     supplementary_lambdas = #{?ECHO_LAMBDA_ID => #{
-        ?ECHO_LAMBDA_REVISION_NUM => ?INTEGER_ECHO_LAMBDA_DRAFT
+        ?ECHO_LAMBDA_REVISION_NUM => ?NUMBER_ECHO_LAMBDA_DRAFT
     }}
 }).
 
@@ -90,7 +90,7 @@
         ]
     },
     supplementary_lambdas = #{?ECHO_LAMBDA_ID => #{
-        ?ECHO_LAMBDA_REVISION_NUM => ?INTEGER_ECHO_LAMBDA_DRAFT
+        ?ECHO_LAMBDA_REVISION_NUM => ?NUMBER_ECHO_LAMBDA_DRAFT
     }}
 }).
 

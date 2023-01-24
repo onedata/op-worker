@@ -217,7 +217,7 @@ end).
 % Mocked atm_lambda data
 -define(ATM_LAMBDA_DATA_SPEC,
     #atm_data_spec{
-        type = atm_integer_type,
+        type = atm_number_type,
         value_constraints = #{}
     }
 ).
@@ -234,7 +234,7 @@ end).
             oneclient_options = <<"--a --b">>
         }
     },
-    argument_specs = [#atm_lambda_argument_spec{
+    argument_specs = [#atm_parameter_spec{
         name = <<"arg">>,
         data_spec = ?ATM_LAMBDA_DATA_SPEC,
         is_optional = true,
@@ -289,7 +289,7 @@ end).
             description = <<"store2Desc">>,
             type = single_value,
             config = #atm_single_value_store_config{item_data_spec = #atm_data_spec{
-                type = atm_integer_type,
+                type = atm_number_type,
                 value_constraints = #{}
             }},
             requires_initial_content = false

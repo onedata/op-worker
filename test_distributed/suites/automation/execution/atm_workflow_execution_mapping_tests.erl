@@ -184,7 +184,7 @@ map_arguments() ->
 
 
 map_results_to_audit_log_store() ->
-    IteratedItemDataSpec = #atm_data_spec{type = atm_integer_type},
+    IteratedItemDataSpec = #atm_data_spec{type = atm_number_type},
 
     map_results_to_global_store_test_base(#map_results_to_global_store_test_spec{
         testcase = ?FUNCTION_NAME,

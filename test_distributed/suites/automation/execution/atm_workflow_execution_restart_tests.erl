@@ -28,7 +28,7 @@
     revision_num = 1,
     revision = #atm_workflow_schema_revision_draft{
         stores = [
-            ?ATM_SV_STORE_SCHEMA_DRAFT(?ITERATED_STORE_SCHEMA_ID, ?ATM_INTEGER_DATA_SPEC, ?RAND_INT(100))
+            ?ATM_SV_STORE_SCHEMA_DRAFT(?ITERATED_STORE_SCHEMA_ID, ?ATM_NUMBER_DATA_SPEC, ?RAND_INT(100))
         ],
         lanes = [#atm_lane_schema_draft{
             parallel_boxes = [#atm_parallel_box_schema_draft{
@@ -52,14 +52,14 @@
             operation_spec = #atm_openfaas_operation_spec_draft{
                 docker_image = ?ECHO_WITH_SLEEP_DOCKER_IMAGE_ID
             },
-            argument_specs = [#atm_lambda_argument_spec{
+            argument_specs = [#atm_parameter_spec{
                 name = ?ECHO_ARG_NAME,
-                data_spec = ?ATM_INTEGER_DATA_SPEC,
+                data_spec = ?ATM_NUMBER_DATA_SPEC,
                 is_optional = false
             }],
             result_specs = [#atm_lambda_result_spec{
                 name = ?ECHO_ARG_NAME,
-                data_spec = ?ATM_INTEGER_DATA_SPEC,
+                data_spec = ?ATM_NUMBER_DATA_SPEC,
                 relay_method = __RELAY_METHOD
             }]
         }}

@@ -135,7 +135,7 @@
             operation_spec = #atm_openfaas_operation_spec_draft{
                 docker_image = __FAILING_DOCKER_IMAGE_ID
             },
-            argument_specs = [#atm_lambda_argument_spec{
+            argument_specs = [#atm_parameter_spec{
                 name = ?ECHO_ARG_NAME,
                 data_spec = ?ANY_MEASUREMENT_DATA_SPEC,
                 is_optional = false
