@@ -308,7 +308,7 @@ create_task_execution_doc(#creation_ctx{
             }
         },
         lambda_revision = #atm_lambda_revision{
-            config_spec = AtmLambdaConfigParameterSpecs,
+            config_parameter_specs = AtmLambdaConfigParameterSpecs,
             argument_specs = AtmLambdaArgSpecs,
             result_specs = AtmLambdaResultSpecs
         },

@@ -115,7 +115,7 @@ create_from_draft(#atm_lambda_revision_draft{
             ?ATM_AUTOGENERATE -> atm_test_utils:example_operation_spec();
             _ -> create_from_draft(PlaceholderOrOperationSpec)
         end,
-        config_spec = AtmLambdaConfigParameterSpecs,
+        config_parameter_specs = AtmLambdaConfigParameterSpecs,
         argument_specs = ArgSpecs,
         result_specs = ResultSpecs,
 
