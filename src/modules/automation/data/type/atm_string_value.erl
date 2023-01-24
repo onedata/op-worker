@@ -43,7 +43,7 @@ assert_meets_constraints(_AtmWorkflowExecutionAuth, Value, ValueConstraints) ->
             (ConstraintRule) -> assert_meets_constraint(ConstraintRule, Value)
         end, maps:to_list(ValueConstraints))
     catch throw:{unverified_constraints, UnverifiedConstraints} ->
-        throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(Value, atm_number_type, UnverifiedConstraints))
+        throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(Value, atm_string_type, UnverifiedConstraints))
     end.
 
 

@@ -584,6 +584,20 @@ atm_string_value_validation_test(_Config) ->
             {Value, ?ERROR_ATM_DATA_TYPE_UNVERIFIED(Value, atm_string_type)} end,
             [5, [5], #{<<"key">> => 5}]
         )
+    }),
+
+    AllowedValues = ?RAND_ELEMENT([[], [<<"NaN">>, <<"!@#$%^&*()">>]]),
+    atm_value_validation_test_base(#atm_value_validation_testcase{
+        data_spec = #atm_data_spec{
+            type = atm_string_type,
+            value_constraints = #{allowed_values => AllowedValues}
+        },
+        valid_values = AllowedValues,
+        invalid_values_with_exp_errors = lists:map(fun(Num) ->
+            {Num, ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
+                Num, atm_string_type, #{<<"allowedValues">> => AllowedValues}
+            )}
+        end, [<<"-10">>, <<"">>, <<"asd">>])
     }).
 
 
