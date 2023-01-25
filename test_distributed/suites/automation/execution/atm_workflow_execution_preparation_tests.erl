@@ -104,6 +104,8 @@
 
 
 first_lane_run_preparation_failure_due_to_lambda_config_acquisition() ->
+    EchoConfigParameterValue = 0.1,
+
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
         workflow_schema_dump_or_draft = #atm_workflow_schema_dump_draft{
             name = str_utils:to_binary(?FUNCTION_NAME),
@@ -113,7 +115,7 @@ first_lane_run_preparation_failure_due_to_lambda_config_acquisition() ->
                     ?INTEGER_ATM_LIST_STORE_SCHEMA_DRAFT(?ITERATED_STORE_ID, [3, 9, 27]),
                     ?INTEGER_ATM_LIST_STORE_SCHEMA_DRAFT(?TARGET_STORE_ID)
                 ],
-                lanes = [?ECHO_ATM_LANE_SCHEMA_DRAFT(#{?ECHO_ARG_NAME => 0.1})]
+                lanes = [?ECHO_ATM_LANE_SCHEMA_DRAFT(#{?ECHO_ARG_NAME => EchoConfigParameterValue})]
             },
             supplementary_lambdas = #{?ECHO_LAMBDA_ID => #{
                 ?ECHO_LAMBDA_REVISION_NUM => ?NUMBER_ECHO_LAMBDA_DRAFT
@@ -158,7 +160,7 @@ first_lane_run_preparation_failure_due_to_lambda_config_acquisition() ->
                                 _, ?ERROR_ATM_TASK_EXECUTION_CREATION_FAILED(
                                     _, ?ERROR_ATM_LAMBDA_CONFIG_BAD_VALUE(
                                         ?ECHO_ARG_NAME, ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(
-                                            0.1, atm_number_type, #{<<"integersOnly">> := true}
+                                            EchoConfigParameterValue, atm_number_type, #{<<"integersOnly">> := true}
                                         )
                                     )
                                 )
