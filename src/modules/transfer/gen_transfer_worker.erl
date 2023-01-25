@@ -51,6 +51,9 @@
 
 -define(LIST_BATCH_SIZE, 100).
 -define(FILES_TO_PROCESS_THRESHOLD, 10 * ?LIST_BATCH_SIZE).
+-define(MAX_RETRY_INTERVAL_SEC, op_worker:get_env(
+    max_file_transfer_retry_interval_sec, 18000
+)).
 
 %%%===================================================================
 %%% Callbacks
@@ -366,7 +369,7 @@ next_retry(#state{mod = Mod}, RetriesLeft) ->
 %%-------------------------------------------------------------------
 -spec backoff(non_neg_integer(), non_neg_integer()) -> non_neg_integer().
 backoff(RetryNum, MaxRetries) ->
-    rand:uniform(round(math:pow(2, min(RetryNum, MaxRetries)))).
+    min(rand:uniform(round(math:pow(2, min(RetryNum, MaxRetries)))), ?MAX_RETRY_INTERVAL_SEC).
 
 
 %%--------------------------------------------------------------------

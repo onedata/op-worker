@@ -182,10 +182,12 @@ get(
             ?ERROR_NOT_FOUND;
         {ok, #atm_openfaas_function_pod_status_summary{event_log_id = EventLogId}} ->
             BrowseOpts = audit_log_browse_opts:from_json(Data),
-            {ok, BrowseResult} = atm_openfaas_function_pod_status_registry:browse_pod_event_log(
-                EventLogId, BrowseOpts
-            ),
-            {ok, value, BrowseResult}
+            case atm_openfaas_function_pod_status_registry:browse_pod_event_log(EventLogId, BrowseOpts) of
+                {ok, BrowseResult} ->
+                    {ok, value, BrowseResult};
+                {error, _} = Error ->
+                    Error
+            end
     end.
 
 

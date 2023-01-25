@@ -68,8 +68,10 @@
 
 -define(NOW(), global_clock:timestamp_seconds()).
 
--define(LOG_MAX_SIZE, op_worker:get_env(archive_recall_error_log_max_size, 10000)).
--define(LOG_EXPIRATION, op_worker:get_env(archive_recall_error_log_expiration_seconds, 1209600)). % 14 days
+-define(LOG_OPTS, #{
+    size_pruning_threshold => op_worker:get_env(archive_recall_error_log_expiration_seconds, 10000)
+    %% defaults are used for age pruning and expiration; @see audit_log.erl
+}).
 
 %%%===================================================================
 %%% API functions
@@ -78,7 +80,6 @@
 -spec create(id()) -> ok | {error, term()}.
 create(Id) ->
     try
-        ok = audit_log:create(?ERROR_LOG_ID(Id), #{}),
         ok = create_tsc(Id)
     catch _:{badmatch, Error} ->
         delete(Id),
@@ -112,7 +113,7 @@ report_file_finished(Id) ->
 
 -spec report_error(id(), json_utils:json_term()) -> ok | {error, term()}.
 report_error(Id, ErrorJson) ->
-    audit_log:append(?ERROR_LOG_ID(Id), #audit_log_append_request{
+    audit_log:append(?ERROR_LOG_ID(Id), ?LOG_OPTS, #audit_log_append_request{
         severity = ?ERROR_AUDIT_LOG_SEVERITY,
         content = ErrorJson
     }),

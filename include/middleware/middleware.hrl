@@ -19,6 +19,7 @@
 -include("modules/fslogic/acl.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
 -include_lib("ctool/include/aai/aai.hrl").
+-include_lib("ctool/include/logging.hrl").
 -include_lib("cluster_worker/include/graph_sync/graph_sync.hrl").
 
 
@@ -32,10 +33,6 @@
     % applicable for create/get requests - returns the revision of resource
     return_revision = false :: boolean()
 }).
-
-
--define(throw_on_error(__EXPR), middleware_utils:throw_if_error(__EXPR)).
--define(check(__EXPR), middleware_utils:check_result(__EXPR)).
 
 
 %%%===================================================================

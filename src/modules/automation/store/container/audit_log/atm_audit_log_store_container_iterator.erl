@@ -63,6 +63,9 @@ get_next_batch(_AtmWorkflowExecutionAuth, BatchSize, Record = #atm_audit_log_sto
     audit_log_iterator = AuditLogIterator
 }) ->
     case audit_log:next_batch(BatchSize, BackendId, AuditLogIterator) of
+        ?ERROR_NOT_FOUND ->
+            % audit logs that have been deleted (or expired) will appear as having zero entries during iteration
+            stop;
         stop ->
             stop;
         {ok, Entries, NewAuditLogIterator} ->

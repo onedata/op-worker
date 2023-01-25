@@ -36,7 +36,8 @@
     iterator_test/1,
     browse_by_index_test/1,
     browse_by_offset_test/1,
-    browse_by_timestamp_test/1
+    browse_by_timestamp_test/1,
+    expiration_test/1
 ]).
 
 groups() -> [
@@ -48,7 +49,8 @@ groups() -> [
         browse_by_offset_test
     ]},
     {audit_log_specific_tests, [sequential], [
-        browse_by_timestamp_test
+        browse_by_timestamp_test,
+        expiration_test
     ]}
 ].
 
@@ -59,6 +61,7 @@ all() -> [
 
 -define(PROVIDER_SELECTOR, krakow).
 -define(rpc(Expr), ?rpc(?PROVIDER_SELECTOR, Expr)).
+-define(erpc(Expr), ?erpc(?PROVIDER_SELECTOR, Expr)).
 
 
 %%%===================================================================
@@ -133,7 +136,7 @@ browse_by_timestamp_test(_Config) ->
         AtmWorkflowExecutionAuth, undefined, AtmStoreSchema
     ))),
 
-%%    ItemsNum = rand:uniform(1000),
+%%    ItemsNum = rand:uniform(1000),  @TODO VFS-10429
     ItemsNum = rand:uniform(10),
     ContentUpdateOpts = build_content_update_options(append),
     [FirstTimestamp | _] = lists:map(fun(Index) ->
@@ -182,6 +185,43 @@ browse_by_timestamp_test(_Config) ->
             ?rpc(atm_store_api:browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId))
         )
     end, lists:seq(1, 8)).
+
+
+expiration_test(_Config) ->
+    ok = time_test_utils:set_current_time_millis(123),
+
+    AtmWorkflowExecutionAuth = atm_store_test_utils:create_workflow_execution_auth(
+        ?PROVIDER_SELECTOR, user1, space_krk
+    ),
+
+    AtmStoreSchema = atm_store_test_utils:build_store_schema(#atm_audit_log_store_config{
+        log_content_data_spec = #atm_data_spec{type = atm_object_type}
+    }),
+    {ok, AtmStoreId} = ?extract_key(?rpc(atm_store_api:create(
+        AtmWorkflowExecutionAuth, undefined, AtmStoreSchema
+    ))),
+
+    CallBrowseContent = fun() ->
+        catch ?erpc(atm_store_api:browse_content(
+            AtmWorkflowExecutionAuth, build_content_browse_options(#{}), AtmStoreId
+        ))
+    end,
+
+    % the underlying log should not be created until the first log is appended
+    ?assertEqual(?ERROR_NOT_FOUND, CallBrowseContent()),
+    ?assertEqual(ok, ?rpc(atm_store_api:update_content(
+        AtmWorkflowExecutionAuth, #{<<"value">> => ?RAND_STR()}, build_content_update_options(append), AtmStoreId
+    ))),
+    ?assertMatch(#atm_audit_log_store_content_browse_result{}, CallBrowseContent()),
+    % simulate expiration of the audit log
+    {ok, #atm_store{container = {_, _, BackendId}}} = ?rpc(atm_store_api:get(AtmStoreId)),
+    ?rpc(audit_log:delete(BackendId)),
+    ?assertEqual(?ERROR_NOT_FOUND, CallBrowseContent()),
+    % any append should cause log recreation
+    ?assertEqual(ok, ?rpc(atm_store_api:update_content(
+        AtmWorkflowExecutionAuth, #{<<"value">> => ?RAND_STR()}, build_content_update_options(append), AtmStoreId
+    ))),
+    ?assertMatch(#atm_audit_log_store_content_browse_result{}, CallBrowseContent()).
 
 
 %===================================================================
@@ -301,13 +341,16 @@ build_content_update_options(UpdateFun) ->
     [atm_value:expanded()].
 get_content(AtmWorkflowExecutionAuth, AtmStoreId) ->
     BrowseOpts = build_content_browse_options(#{<<"limit">> => 1000}),
-    #atm_audit_log_store_content_browse_result{result = #{
-        <<"logEntries">> := Logs,
-        <<"isLast">> := true
-    }} = ?rpc(?PROVIDER_SELECTOR, atm_store_api:browse_content(
-        AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId
-    )),
-    Logs.
+    try
+        #atm_audit_log_store_content_browse_result{result = #{
+            <<"logEntries">> := Logs,
+            <<"isLast">> := true
+        }} = ?erpc(atm_store_api:browse_content(AtmWorkflowExecutionAuth, BrowseOpts, AtmStoreId)),
+        Logs
+    catch throw:?ERROR_NOT_FOUND ->
+        % possible when the underlying log hasn't been created yet (no appends were done)
+        []
+    end.
 
 
 %% @private

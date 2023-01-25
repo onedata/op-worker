@@ -45,7 +45,7 @@ handle(<<"GET">>, Req) ->
         PeerIdentityToken ->
             case token_logic:verify_provider_identity_token(PeerIdentityToken) of
                 {ok, ?SUB(?ONEPROVIDER, _PeerProviderId) = Consumer} ->
-                    {ok, IdentityToken} = ?throw_on_error(provider_auth:acquire_identity_token_for_consumer(Consumer)),
+                    IdentityToken = ?check(provider_auth:acquire_identity_token_for_consumer(Consumer)),
                     cowboy_req:reply(
                         ?HTTP_200_OK,
                         #{?HDR_CONTENT_TYPE => <<"text/plain">>},

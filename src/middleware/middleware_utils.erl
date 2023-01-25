@@ -19,8 +19,6 @@
 -include_lib("ctool/include/errors.hrl").
 
 -export([
-    throw_if_error/1,
-    check_result/1,
     is_file_access_error/1
 ]).
 -export([
@@ -43,20 +41,6 @@
 %%%===================================================================
 %%% API
 %%%===================================================================
-
-
--spec throw_if_error(Value) -> Value | no_return() when Value :: term().
-throw_if_error({error, _} = Error) -> throw(Error);
-throw_if_error(Value) -> Value.
-
-
--spec check_result
-    (ok) -> ok;
-    ({ok, Value}) -> Value;
-    (errors:error()) -> no_return().
-check_result(ok) -> ok;
-check_result({ok, Value}) -> Value;
-check_result({error, _} = Error) -> throw(Error).
 
 
 -spec is_file_access_error(errors:error()) -> boolean().
