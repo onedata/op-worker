@@ -47,7 +47,7 @@ create_doc(FileCtx, StorageFileCreated, GeneratedKey) ->
     },
     storage_sync_info:maybe_set_guid(StorageFileId, SpaceId, StorageId, FileGuid),
     LocId = file_location:local_id(FileUuid),
-    case fslogic_location_cache:create_location(#document{
+    case fslogic_location_cache:create_location(FileCtx4, #document{
         key = LocId,
         value = Location
     }, GeneratedKey) of

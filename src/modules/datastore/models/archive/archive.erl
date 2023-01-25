@@ -182,14 +182,8 @@ create_dip_archive(#document{
 
 
 -spec create(doc()) -> {ok, doc()} | {error, term()}.
-create(DocToCreate) ->
-    case datastore_model:create(?CTX, DocToCreate) of
-        {ok, #document{key = ArchiveId} = Doc} ->
-            archivisation_audit_log:create(ArchiveId),
-            {ok, Doc};
-        {error, _} = Error ->
-            Error
-    end.
+create(Doc) ->
+    datastore_model:create(?CTX, Doc).
     
 
 -spec get(id()) -> {ok, doc()} | error().
@@ -450,6 +444,7 @@ is_building(#document{value = Archive}) ->
 -spec mark_deleting(id(), callback()) -> {ok, doc()} | error().
 mark_deleting(ArchiveId, Callback) ->
     update(ArchiveId, fun(Archive = #archive{
+        state = State,
         modifiable_fields = ModifiableFields = #modifiable_fields{
             deleted_callback = PrevDeletedCallback
         },
@@ -464,10 +459,10 @@ mark_deleting(ArchiveId, Callback) ->
                     }
                 }};
             {false, undefined} ->
-                ?ERROR_ARCHIVE_IN_DISALLOWED_STATE(?ARCHIVE_FINISHED_STATES);
+                ?ERROR_FORBIDDEN_FOR_CURRENT_ARCHIVE_STATE(State, ?ARCHIVE_FINISHED_STATES);
             {_, Parent} ->
                 % nested archive cannot be deleted as it would destroy parent archive
-                ?ERROR_DELETING_NESTED_ARCHIVE(Parent)
+                ?ERROR_NESTED_ARCHIVE_DELETION_FORBIDDEN(Parent)
         end
     end).
 

@@ -247,5 +247,5 @@ build_verification_payload(AccessToken, ConsumerToken, PeerIp, Interface, DataAc
 %% @private
 -spec op_worker_identity_token() -> tokens:serialized().
 op_worker_identity_token() ->
-    {ok, IdentityToken} = ?throw_on_error(provider_auth:acquire_identity_token()),
+    IdentityToken = ?check(provider_auth:acquire_identity_token()),
     tokens:add_oneprovider_service_indication(?OP_WORKER, IdentityToken).

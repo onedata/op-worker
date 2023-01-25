@@ -133,8 +133,8 @@ recall(ArchiveId, UserCtx, ParentGuid, TargetRootName) ->
     case archive:get(ArchiveId) of
         {ok, #document{value = #archive{state = ?ARCHIVE_PRESERVED}} = ArchiveDoc} ->
             archive_recall_traverse:start(ArchiveDoc, UserCtx, ParentGuid, TargetRootName);
-        {ok, _} ->
-            ?ERROR_ARCHIVE_IN_DISALLOWED_STATE([?ARCHIVE_PRESERVED]);
+        {ok, #document{value = #archive{state = State}}} ->
+            ?ERROR_FORBIDDEN_FOR_CURRENT_ARCHIVE_STATE(State, [?ARCHIVE_PRESERVED]);
         {error, _} = Error ->
             Error
     end.

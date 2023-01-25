@@ -15,7 +15,7 @@
 -author("Michal Stanisz").
 
 -include("modules/fslogic/fslogic_common.hrl").
--include("modules/fslogic/file_distribution.hrl").
+-include("modules/fslogic/data_distribution.hrl").
 -include("proto/oneprovider/provider_rpc_messages.hrl").
 -include("proto/oneclient/client_messages.hrl").
 -include("proto/oneclient/server_messages.hrl").

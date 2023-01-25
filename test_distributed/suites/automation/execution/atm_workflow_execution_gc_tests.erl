@@ -24,8 +24,8 @@
 -define(ITERATED_STORE_SCHEMA_ID, <<"iterated_store_id">>).
 -define(TARGET_STORE_SCHEMA_ID, <<"target_store_id">>).
 
--define(ATM_WORKFLOW_SCHEMA_DRAFT, #atm_workflow_schema_dump_draft{
-    name = str_utils:to_binary(?FUNCTION_NAME),
+-define(ATM_WORKFLOW_SCHEMA_DRAFT(__TESTCASE), #atm_workflow_schema_dump_draft{
+    name = str_utils:to_binary(__TESTCASE),
     revision_num = 1,
     revision = #atm_workflow_schema_revision_draft{
         stores = [
@@ -67,17 +67,17 @@ garbage_collect_atm_workflow_executions() ->
     % during following test setup
     run_gc(),
 
-    Timestamp = global_clock:timestamp_seconds(),
+    Timestamp = time_test_utils:get_frozen_time_seconds(),
 
-    ExpAtmWorkflowExecutionState1 = run_atm_workflow_execution(paused),
+    ExpAtmWorkflowExecutionState1 = run_atm_workflow_execution(?FUNCTION_NAME, paused),
 
     time_test_utils:set_current_time_seconds(Timestamp + 2),
-    ExpAtmWorkflowExecutionState2 = run_atm_workflow_execution(paused),
-    ExpAtmWorkflowExecutionState3 = run_atm_workflow_execution(finished),
+    ExpAtmWorkflowExecutionState2 = run_atm_workflow_execution(?FUNCTION_NAME, paused),
+    ExpAtmWorkflowExecutionState3 = run_atm_workflow_execution(?FUNCTION_NAME, finished),
 
     time_test_utils:set_current_time_seconds(Timestamp + 6),
-    ExpAtmWorkflowExecutionState4 = run_atm_workflow_execution(finished),
-    ExpAtmWorkflowExecutionState5 = run_atm_workflow_execution(finished),
+    ExpAtmWorkflowExecutionState4 = run_atm_workflow_execution(?FUNCTION_NAME, finished),
+    ExpAtmWorkflowExecutionState5 = run_atm_workflow_execution(?FUNCTION_NAME, finished),
 
     AllExpAtmWorkflowExecutionStates = [
         ExpAtmWorkflowExecutionState1,
@@ -121,11 +121,12 @@ set_env(EnvVar, EnvValue) ->
 
 
 %% @private
--spec run_atm_workflow_execution(paused | finished) ->
+-spec run_atm_workflow_execution(term(), paused | finished) ->
     atm_workflow_execution_exp_state_builder:exp_state().
-run_atm_workflow_execution(paused) ->
+run_atm_workflow_execution(Testcase, paused) ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
-        workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT,
+        clock_status = frozen,
+        workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(Testcase),
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,
             lane_runs = [#atm_lane_run_execution_test_spec{
@@ -146,9 +147,10 @@ run_atm_workflow_execution(paused) ->
         test_gc = false
     });
 
-run_atm_workflow_execution(finished) ->
+run_atm_workflow_execution(Testcase, finished) ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
-        workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT,
+        clock_status = frozen,
+        workflow_schema_dump_or_draft = ?ATM_WORKFLOW_SCHEMA_DRAFT(Testcase),
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,
             lane_runs = [#atm_lane_run_execution_test_spec{selector = {1, 1}}],

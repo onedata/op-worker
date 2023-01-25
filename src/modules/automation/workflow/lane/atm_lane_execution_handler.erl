@@ -198,7 +198,8 @@ prepare_lane_run(AtmLaneRunSelector, AtmWorkflowExecutionDoc0, AtmWorkflowExecut
             atm_workflow_execution_logger:workflow_critical(LogContent, Logger),
 
             handle_setup_exception(
-                setup_failure, AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
+                infer_setup_exception(Reason),
+                AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
             )
     end.
 
@@ -247,7 +248,8 @@ resume_lane_run(AtmLaneRunSelector, AtmWorkflowExecutionDoc0, AtmWorkflowExecuti
             atm_workflow_execution_logger:workflow_critical(LogContent, Logger),
 
             handle_setup_exception(
-                setup_failure, AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
+                infer_setup_exception(Reason),
+                AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx
             )
     end.
 
@@ -305,6 +307,30 @@ initiate_lane_run(
                 ?examine_exception(Type, Reason, Stacktrace)
             ))
     end.
+
+
+%% @private
+-spec infer_setup_exception(errors:error()) -> setup_failure | setup_interruption.
+infer_setup_exception(?ERROR_ATM_LANE_EXECUTION_INITIATION_FAILED(_, Error)) ->
+    infer_setup_exception(Error);
+
+infer_setup_exception(?ERROR_ATM_PARALLEL_BOX_EXECUTION_INITIATION_FAILED(_, Error)) ->
+    infer_setup_exception(Error);
+
+infer_setup_exception(?ERROR_ATM_TASK_EXECUTION_INITIATION_FAILED(_, Error)) ->
+    infer_setup_exception(Error);
+
+infer_setup_exception(?ERROR_ATM_OPENFAAS_QUERY_FAILED) ->
+    setup_interruption;
+
+infer_setup_exception(?ERROR_ATM_OPENFAAS_QUERY_FAILED(_)) ->
+    setup_interruption;
+
+infer_setup_exception(?ERROR_ATM_OPENFAAS_FUNCTION_REGISTRATION_FAILED) ->
+    setup_interruption;
+
+infer_setup_exception(_) ->
+    setup_failure.
 
 
 %% @private

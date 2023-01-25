@@ -196,6 +196,7 @@ create_file_in_space_krk_par_with_additional_metadata(ParentPath, HasParentQos, 
             false -> posix
         end,
         eff_protection_flags = ?no_flags_mask,
+        eff_dataset_protection_flags = ?no_flags_mask,
         eff_qos_membership = case {HasDirectQos, HasParentQos} of
             {true, true} -> ?DIRECT_AND_ANCESTOR_MEMBERSHIP;
             {true, _} -> ?DIRECT_MEMBERSHIP;
@@ -395,7 +396,8 @@ file_details_to_gs_json(undefined, #file_details{
         index = Index
     },
     active_permissions_type = ActivePermissionsType,
-    eff_protection_flags = EffFileProtectionFlags,
+    eff_protection_flags = EffProtectionFlags,
+    eff_dataset_protection_flags = EffDatasetProtectionFlags,
     eff_qos_membership = EffQosMembership,
     eff_dataset_membership = EffDatasetMembership,
     has_metadata = HasMetadata,
@@ -407,7 +409,8 @@ file_details_to_gs_json(undefined, #file_details{
         <<"name">> => FileName,
         <<"index">> => file_listing:encode_index(Index),
         <<"posixPermissions">> => list_to_binary(string:right(integer_to_list(Mode, 8), 3, $0)),
-        <<"effProtectionFlags">> => file_meta:protection_flags_to_json(EffFileProtectionFlags),
+        <<"effProtectionFlags">> => file_meta:protection_flags_to_json(EffProtectionFlags),
+        <<"effDatasetProtectionFlags">> => file_meta:protection_flags_to_json(EffDatasetProtectionFlags),
         % For space dir gs returns null as parentId instead of user root dir
         % (gui doesn't know about user root dir)
         <<"parentId">> => case fslogic_file_id:is_space_dir_guid(FileGuid) of

@@ -218,7 +218,7 @@ ensure_recall_allowed(SpaceId, UserCtx, TargetParentGuid) ->
 can_start_recall(SpaceId, Guid) ->
     case archive_recall_cache:get(SpaceId, file_id:guid_to_uuid(Guid)) of
         {ok, {ongoing, _}} ->
-            ?ERROR_RECALL_TARGET_IN_ONGOING_RECALL;
+            ?ERROR_RECALL_TARGET_CONFLICT;
         _ ->
             ok
     end.

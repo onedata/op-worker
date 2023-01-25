@@ -141,7 +141,6 @@ create(SpaceId, FileUuid, Expression, ReplicasNum, EntryType, Possible, Traverse
         }
     })) of
         {ok, QosEntryId} -> 
-            ok = qos_entry_audit_log:create(QosEntryId),
             ok = qos_transfer_stats:ensure_exists(QosEntryId),
             {ok, QosEntryId};
         {error, _} = Error -> 

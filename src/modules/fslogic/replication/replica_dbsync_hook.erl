@@ -46,8 +46,8 @@ on_file_location_change(FileCtx, ChangedLocationDoc = #document{
                 % computing it requires parent links which may be not here yet.
                 FileCtx2 = file_ctx:set_file_id(file_ctx:reset(FileCtx), FileId),
                 FileCtx3 = file_ctx:set_is_dir(FileCtx2, false),
-                case file_ctx:get_local_file_location_doc(FileCtx3) of
-                    {undefined, FileCtx4} ->
+                case fslogic_cache:get_doc_including_deleted(file_location:local_id(file_ctx:get_logical_uuid_const(FileCtx3))) of
+                    {error, not_found} ->
                         % If stats are enabled, force creation of local file_location doc
                         % and call the procedure again so that it triggers update_local_location_replica
                         % that internally emits events and reconciles QoS. Otherwise, do not create the
@@ -57,7 +57,7 @@ on_file_location_change(FileCtx, ChangedLocationDoc = #document{
                         case dir_stats_service_state:is_active(SpaceId) of
                             true ->
                                 try
-                                    case fslogic_location:create_doc(FileCtx4, false, false) of
+                                    case fslogic_location:create_doc(FileCtx3, false, false) of
                                         {{ok, _}, FileCtx5} ->
                                             fslogic_event_emitter:emit_file_attr_changed_with_replication_status(
                                                 FileCtx5, true, []),
@@ -74,13 +74,13 @@ on_file_location_change(FileCtx, ChangedLocationDoc = #document{
                                             ?MODULE, ?FUNCTION_NAME, [file_ctx:reset(FileCtx), ChangedLocationDoc])
                                 end;
                             false ->
-                                ok = fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx4, true, []),
-                                ok = qos_logic:reconcile_qos(FileCtx4)
+                                ok = fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx3, true, []),
+                                ok = qos_logic:reconcile_qos(FileCtx3)
                         end;
-                    {#document{deleted = true}, _FileCtx4} ->
+                    #document{deleted = true} ->
                         ok;
-                    {LocalLocation, FileCtx4} ->
-                        update_local_location_replica(FileCtx4, LocalLocation, ChangedLocationDoc)
+                    LocalLocation ->
+                        update_local_location_replica(FileCtx3, LocalLocation, ChangedLocationDoc)
                 end;
             true ->
                 ok
@@ -146,10 +146,14 @@ update_outdated_local_location_replica(FileCtx,
             ok;
         {NewDoc, FileCtx2, ChangedBlocks} ->
             {ok, FileCtx3} = maybe_truncate_file_on_storage(FileCtx2, OldSize, NewSize),
-            {Location, FileCtx4} = file_ctx:get_file_location_with_filled_gaps(FileCtx3, ChangedBlocks),
-            {Offset, Size} = fslogic_location_cache:get_blocks_range(Location, ChangedBlocks),
-            ok = fslogic_cache:cache_location_change([], {Location, Offset, Size}), % to use notify_block_change_if_necessary when ready
-            notify_attrs_change_if_necessary(FileCtx4, LocationDocWithNewVersion, NewDoc, FirstLocalBlocks)
+            case file_ctx:get_file_location_with_filled_gaps(FileCtx3, ChangedBlocks) of
+                {undefined, _} ->
+                    ok;
+                {Location, FileCtx4} ->
+                    {Offset, Size} = fslogic_location_cache:get_blocks_range(Location, ChangedBlocks),
+                    ok = fslogic_cache:cache_location_change([], {Location, Offset, Size}), % to use notify_block_change_if_necessary when ready
+                    notify_attrs_change_if_necessary(FileCtx4, LocationDocWithNewVersion, NewDoc, FirstLocalBlocks)
+            end
     end.
 
 %%--------------------------------------------------------------------
@@ -293,9 +297,13 @@ reconcile_replicas(FileCtx,
 %%    #document{value = #file_location{blocks = SameBlocks}}) ->
 %%    ok;
 notify_block_change_if_necessary(FileCtx, _, _) ->
-    {Location, _FileCtx2} = file_ctx:get_file_location_with_filled_gaps(FileCtx),
-    {Offset, Size} = fslogic_location_cache:get_blocks_range(Location),
-    ok = fslogic_cache:cache_location_change([], {Location, Offset, Size}).
+    case file_ctx:get_file_location_with_filled_gaps(FileCtx) of
+        {undefined, _} ->
+            ok;
+        {Location, _FileCtx2} ->
+            {Offset, Size} = fslogic_location_cache:get_blocks_range(Location),
+            ok = fslogic_cache:cache_location_change([], {Location, Offset, Size})
+    end.
 
 %%--------------------------------------------------------------------
 %% @private

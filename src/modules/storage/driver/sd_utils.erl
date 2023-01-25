@@ -170,11 +170,14 @@ create_deferred(FileCtx, UserCtx, CheckLocationExists) ->
     FileCtx2 = share_to_standard_file_ctx(FileCtx),
     {#document{
         key = FileLocationId,
-        value = #file_location{storage_file_created = StorageFileCreated}
+        value = #file_location{storage_file_created = StorageFileCreated},
+        deleted = Deleted
     }, FileCtx3} = Ans = file_ctx:get_or_create_local_regular_file_location_doc(FileCtx2, false, CheckLocationExists),
 
-    case StorageFileCreated of
-        false ->
+    case {Deleted, StorageFileCreated} of
+        {true, _} ->
+            {error, cancelled};
+        {false, false} ->
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx3),
             % TODO VFS-5270
             replica_synchronizer:apply(FileCtx3, fun() ->
@@ -196,7 +199,7 @@ create_deferred(FileCtx, UserCtx, CheckLocationExists) ->
                         {error, Reason}
                 end
             end);
-        true ->
+        {false, true} ->
             Ans
     end.
 
