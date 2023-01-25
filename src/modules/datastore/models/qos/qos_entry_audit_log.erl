@@ -20,7 +20,6 @@
 
 %% API
 -export([
-    create/1,
     report_synchronization_started/3,
     report_file_synchronized/3,
     report_file_synchronization_skipped/4,
@@ -34,25 +33,19 @@
 
 -export_type([id/0]).
 
--define(LOG_MAX_SIZE, op_worker:get_env(qos_entry_audit_log_max_size, 10000)).
--define(LOG_EXPIRATION, op_worker:get_env(qos_entry_audit_log_expiration_seconds, 1209600)). % 14 days
+-define(LOG_OPTS, #{
+    size_pruning_threshold => op_worker:get_env(qos_entry_audit_log_max_size, 10000)
+    %% defaults are used for age pruning and expiration; @see audit_log.erl
+}).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
--spec create(id()) -> ok | {error, term()}.
-create(Id) ->
-    audit_log:create(Id, #{
-        size_pruning_threshold => ?LOG_MAX_SIZE,
-        age_pruning_threshold => ?LOG_EXPIRATION
-    }).
-
-
--spec report_synchronization_started(id(), file_id:file_guid(), file_meta:path()) -> 
+-spec report_synchronization_started(id(), file_id:file_guid(), file_meta:path()) ->
     ok | {error, term()}.
 report_synchronization_started(Id, FileGuid, FilePath) ->
-    audit_log:append(Id, #audit_log_append_request{
+    audit_log:append(Id, ?LOG_OPTS, #audit_log_append_request{
         severity = ?INFO_AUDIT_LOG_SEVERITY,
         content = #{
             <<"status">> => <<"scheduled">>,
@@ -66,7 +59,7 @@ report_synchronization_started(Id, FileGuid, FilePath) ->
 -spec report_file_synchronized(id(), file_id:file_guid(), file_meta:path()) -> 
     ok | {error, term()}.
 report_file_synchronized(Id, FileGuid, FilePath) ->
-    audit_log:append(Id, #audit_log_append_request{
+    audit_log:append(Id, ?LOG_OPTS, #audit_log_append_request{
         severity = ?INFO_AUDIT_LOG_SEVERITY,
         content = #{
             <<"status">> => <<"completed">>,
@@ -80,7 +73,7 @@ report_file_synchronized(Id, FileGuid, FilePath) ->
 -spec report_file_synchronization_skipped(id(), file_id:file_guid(), file_meta:path(), skip_reason()) ->
     ok | {error, term()}.
 report_file_synchronization_skipped(Id, FileGuid, FilePath, Reason) ->
-    audit_log:append(Id, #audit_log_append_request{
+    audit_log:append(Id, ?LOG_OPTS, #audit_log_append_request{
         severity = ?INFO_AUDIT_LOG_SEVERITY,
         content = #{
             <<"status">> => <<"skipped">>,
@@ -96,7 +89,7 @@ report_file_synchronization_skipped(Id, FileGuid, FilePath, Reason) ->
 report_file_synchronization_failed(Id, FileGuid, FilePath, Error) ->
     ErrorJson = errors:to_json(Error),
 
-    audit_log:append(Id, #audit_log_append_request{
+    audit_log:append(Id, ?LOG_OPTS, #audit_log_append_request{
         severity = ?ERROR_AUDIT_LOG_SEVERITY,
         content = #{
             <<"status">> => <<"failed">>,

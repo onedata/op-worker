@@ -66,6 +66,9 @@
     record/0
 ]).
 
+%% defaults are used; @see audit_log.erl
+-define(LOG_OPTS, #{}).
+
 
 %%%===================================================================
 %%% atm_store_container callbacks
@@ -114,10 +117,10 @@ acquire_iterator(#atm_audit_log_store_container{backend_id = BackendId}) ->
 browse_content(Record, #atm_store_content_browse_req{
     options = #atm_audit_log_store_content_browse_options{browse_opts = BrowseOpts}
 }) ->
-    {ok, BrowseResult} = audit_log:browse(
+    BrowseResult = ?check(audit_log:browse(
         Record#atm_audit_log_store_container.backend_id,
         BrowseOpts
-    ),
+    )),
     #atm_audit_log_store_content_browse_result{result = BrowseResult}.
 
 
@@ -194,11 +197,10 @@ db_decode(
 %% @private
 -spec create_container(atm_audit_log_store_config:record()) -> record().
 create_container(AtmStoreConfig) ->
-    {ok, Id} = audit_log:create(#{}),
-
     #atm_audit_log_store_container{
         config = AtmStoreConfig,
-        backend_id = Id
+        % the underlying audit_log will be created upon the first append
+        backend_id = datastore_key:new()
     }.
 
 
@@ -292,5 +294,5 @@ extend_audit_log(AppendRequests, Record) ->
 append_to_audit_log(AppendRequest, Record = #atm_audit_log_store_container{
     backend_id = BackendId
 }) ->
-    ok = audit_log:append(BackendId, AppendRequest),
+    ok = audit_log:append(BackendId, ?LOG_OPTS, AppendRequest),
     Record.

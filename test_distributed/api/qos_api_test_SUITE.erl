@@ -325,35 +325,40 @@ get_qos_entry_audit_log(Config) ->
 
     MemRef = api_test_memory:init(),
 
-    ?assert(api_test_runner:run_tests(Config, [
-        #suite_spec{
-            target_nodes = [P1],
-            client_spec = ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config),
-            setup_fun = fun() ->
-                api_test_memory:set(MemRef, qos_entry_id, QosEntryId)
-            end,
-            scenario_templates = [
-                #scenario_template{
-                    name = <<"Get QoS audit log using rest endpoint">>,
-                    type = rest,
-                    prepare_args_fun = prepare_args_fun_rest(MemRef, qos_audit_log),
-                    validate_result_fun = validate_result_fun_rest(MemRef, qos_audit_log)
-                }
-            ],
-            data_spec = #data_spec{
-                optional = [<<"timestamp">>, <<"offset">>],
-                correct_values = #{
-                    <<"timestamp">> => [7967656156000], % some time in the future
-                    <<"offset">> => [0]
-                },
-                bad_values = [
-                    {<<"timestamp">>, <<"aaa">>, ?ERROR_BAD_VALUE_INTEGER(<<"timestamp">>)},
-                    {<<"timestamp">>, -8, ?ERROR_BAD_VALUE_TOO_LOW(<<"timestamp">>, 0)},
-                    {<<"offset">>, <<"aaa">>, ?ERROR_BAD_VALUE_INTEGER(<<"offset">>)}
-                ]
+    SuiteSpec = #suite_spec{
+        target_nodes = [P1],
+        client_spec = ?CLIENT_SPEC_FOR_SPACE_2_SCENARIOS(Config),
+        setup_fun = fun() ->
+            api_test_memory:set(MemRef, qos_entry_id, QosEntryId)
+        end,
+        scenario_templates = [
+            #scenario_template{
+                name = <<"Get QoS audit log using rest endpoint">>,
+                type = rest,
+                prepare_args_fun = prepare_args_fun_rest(MemRef, qos_audit_log),
+                validate_result_fun = validate_result_fun_rest(MemRef, qos_audit_log)
             }
+        ],
+        data_spec = #data_spec{
+            optional = [<<"timestamp">>, <<"offset">>],
+            correct_values = #{
+                <<"timestamp">> => [7967656156000], % some time in the future
+                <<"offset">> => [0]
+            },
+            bad_values = [
+                {<<"timestamp">>, <<"aaa">>, ?ERROR_BAD_VALUE_INTEGER(<<"timestamp">>)},
+                {<<"timestamp">>, -8, ?ERROR_BAD_VALUE_TOO_LOW(<<"timestamp">>, 0)},
+                {<<"offset">>, <<"aaa">>, ?ERROR_BAD_VALUE_INTEGER(<<"offset">>)}
+            ]
         }
-    ])).
+    },
+    api_test_memory:set(MemRef, audit_log_deleted, false),
+    ?assert(api_test_runner:run_tests(Config, [SuiteSpec])),
+
+    % simulate expiration of the audit log
+    opw_test_rpc:call(P1, audit_log, delete, [QosEntryId]),
+    api_test_memory:set(MemRef, audit_log_deleted, true),
+    ?assert(api_test_runner:run_tests(Config, [SuiteSpec])).
 
 
 get_qos_transfer_stats_collection_schema(Config) ->
@@ -702,35 +707,40 @@ validate_result_fun_rest(MemRef, evaluate_qos_expression) ->
         check_evaluate_expression_result_storages(Node, SpaceId, Expression, maps:get(<<"matchingStorages">>, Result))
     end;
 
-validate_result_fun_rest(_MemRef, qos_audit_log) ->
+validate_result_fun_rest(MemRef, qos_audit_log) ->
     fun(_, {ok, RespCode, _RespHeaders, RespBody}) ->
-
-        ?assertEqual(?HTTP_200_OK, RespCode),
-        ?assertMatch(#{
-            <<"isLast">> := true,
-            <<"logEntries">> := [
-                #{
-                    <<"index">> := _,
-                    <<"timestamp">> := _,
-                    <<"severity">> := <<"info">>,
-                    <<"content">> := #{
-                        <<"status">> := <<"completed">>,
-                        <<"fileId">> := _,
-                        <<"description">> := <<"Local replica reconciled.">>
-                    }
-                },
-                #{
-                    <<"index">> := _,
-                    <<"timestamp">> := _,
-                    <<"severity">> := <<"info">>,
-                    <<"content">> := #{
-                        <<"status">> := <<"scheduled">>,
-                        <<"fileId">> := _,
-                        <<"description">> := <<"Remote replica differs, reconciliation started.">>
-                    }
-                }
-            ]
-        }, RespBody),
+        case api_test_memory:get(MemRef, audit_log_deleted) of
+            true ->
+                ?assertEqual(?HTTP_404_NOT_FOUND, RespCode),
+                ?assertEqual(?ERROR_NOT_FOUND, errors:from_json(maps:get(<<"error">>, RespBody)));
+            false ->
+                ?assertEqual(?HTTP_200_OK, RespCode),
+                ?assertMatch(#{
+                    <<"isLast">> := true,
+                    <<"logEntries">> := [
+                        #{
+                            <<"index">> := _,
+                            <<"timestamp">> := _,
+                            <<"severity">> := <<"info">>,
+                            <<"content">> := #{
+                                <<"status">> := <<"completed">>,
+                                <<"fileId">> := _,
+                                <<"description">> := <<"Local replica reconciled.">>
+                            }
+                        },
+                        #{
+                            <<"index">> := _,
+                            <<"timestamp">> := _,
+                            <<"severity">> := <<"info">>,
+                            <<"content">> := #{
+                                <<"status">> := <<"scheduled">>,
+                                <<"fileId">> := _,
+                                <<"description">> := <<"Remote replica differs, reconciliation started.">>
+                            }
+                        }
+                    ]
+                }, RespBody)
+        end,
         ok
     end.
 
@@ -955,7 +965,7 @@ setup_preexisting_fulfilled_qos_causing_file_transfer(Config, SpaceId, FileCreat
                 ?QOS_TOTAL_TIME_SERIES_NAME := #{
                     ?QOS_MINUTE_METRIC_NAME := [{_, _}]}
             }
-        } },
+        }},
         opw_test_rpc:call(TransferringProvider, qos_transfer_stats, browse, [
             QosEntryId, ?BYTES_STATS, #time_series_slice_get_request{
                 layout = #{?QOS_TOTAL_TIME_SERIES_NAME => [?QOS_MINUTE_METRIC_NAME]}
@@ -988,7 +998,7 @@ expected_transfer_stats_layout(MemRef, Node, SpaceId, CollectionType) ->
     end,
     maps_utils:generate_from_list(fun(TimeSeriesName) ->
         {TimeSeriesName, maps:keys(?QOS_STATS_METRICS)}
-    end, [?QOS_TOTAL_TIME_SERIES_NAME | PerStorageTSNames]) .
+    end, [?QOS_TOTAL_TIME_SERIES_NAME | PerStorageTSNames]).
 
 %%%===================================================================
 %%% SetUp and TearDown functions
