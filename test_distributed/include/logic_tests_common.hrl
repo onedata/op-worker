@@ -234,6 +234,12 @@ end).
             oneclient_options = <<"--a --b">>
         }
     },
+    config_parameter_specs = [#atm_parameter_spec{
+        name = <<"param">>,
+        data_spec = ?ATM_LAMBDA_DATA_SPEC,
+        is_optional = true,
+        default_value = 0
+    }],
     argument_specs = [#atm_parameter_spec{
         name = <<"arg">>,
         data_spec = ?ATM_LAMBDA_DATA_SPEC,
@@ -251,7 +257,7 @@ end).
         memory_requested = 1000000000, memory_limit = 5000000000,
         ephemeral_storage_requested = 1000000000, ephemeral_storage_limit = 5000000000
     },
-    checksum = <<"d2b23c06fcc8e5e6bee32016503bd71f">>,
+    checksum = <<"e91be926c7790bb779fa59dced79c635">>,
     state = stable
 }).
 -define(ATM_LAMBDA_REVISION_REGISTRY_VALUE(__AtmLambda), #atm_lambda_revision_registry{
@@ -312,6 +318,7 @@ end).
                             id = <<"task1Id">>,
                             name = <<"task1Name">>,
                             lambda_id = <<"task1Lambda">>,
+                            lambda_config = #{},
                             argument_mappings = [
                                 #atm_task_schema_argument_mapper{
                                     argument_name = <<"lambda1ArgName">>,
@@ -340,6 +347,7 @@ end).
                             id = <<"task2Id">>,
                             name = <<"task2Name">>,
                             lambda_id = <<"task2Lambda">>,
+                            lambda_config = #{},
                             argument_mappings = [
                                 #atm_task_schema_argument_mapper{
                                     argument_name = <<"lambda2ArgName">>,
@@ -377,6 +385,7 @@ end).
                             id = <<"task3Id">>,
                             name = <<"task3Name">>,
                             lambda_id = <<"task3Lambda">>,
+                            lambda_config = #{},
                             argument_mappings = [
                                 #atm_task_schema_argument_mapper{
                                     argument_name = <<"lambda3ArgName">>,
@@ -397,6 +406,7 @@ end).
                             id = <<"task4Id">>,
                             name = <<"task4Name">>,
                             lambda_id = <<"task4Lambda">>,
+                            lambda_config = #{},
                             argument_mappings = [
                                 #atm_task_schema_argument_mapper{
                                     argument_name = <<"lambda4ArgName">>,
