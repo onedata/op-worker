@@ -668,7 +668,7 @@ handle_protocol_upgrade_response(#state{session_id = SessId} = State, Data) ->
                 peer_id = ProviderId
             } = State,
             {ok, MsgId} = clproto_message_id:generate(self()),
-            {ok, Token} = ?throw_on_error(provider_auth:acquire_identity_token_for_consumer(
+            Token = ?check(provider_auth:acquire_identity_token_for_consumer(
                 ?SUB(?ONEPROVIDER, ProviderId)
             )),
             ClientMsg = #client_message{

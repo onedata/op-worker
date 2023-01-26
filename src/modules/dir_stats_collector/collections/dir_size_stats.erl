@@ -52,7 +52,7 @@
     delete_stats/1]).
 
 %% dir_stats_collection_behaviour callbacks
--export([acquire/1, consolidate/3, on_collection_move/2, save/3, delete/1, init_dir/1, init_child/1]).
+-export([acquire/1, consolidate/3, on_collection_move/2, save/3, delete/1, init_dir/1, init_child/2]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -213,53 +213,20 @@ init_dir(Guid) ->
     gen_empty_current_stats(Guid).
 
 
--spec init_child(file_id:file_guid()) -> dir_stats_collection:collection().
-init_child(Guid) ->
-    % Use get_including_deleted to handle races between mv and delete (handling mv when file_meta is deleted)
+-spec init_child(file_id:file_guid(), boolean()) -> dir_stats_collection:collection().
+init_child(Guid, IncludeDeleted) ->
     case file_meta:get_including_deleted(file_id:guid_to_uuid(Guid)) of
         {ok, Doc} ->
-            case file_meta:get_type(Doc) of
-                ?DIRECTORY_TYPE ->
-                    try
-                        EmptyCurrentStats = gen_empty_current_stats(Guid), % TODO VFS-9204 - maybe refactor as gen_empty_current_stats
-                                                                           % gets storage_id that is also used by prepare_file_size_summary
-                        EmptyCurrentStats#{?DIR_COUNT => 1}
-                    catch
-                        Error:Reason:Stacktrace ->
-                            handle_init_error(Guid, Error, Reason, Stacktrace),
-                            #{?DIR_COUNT => 1, ?DIR_ERRORS_COUNT => 1}
-                    end;
-                Type ->
-                    try
-                        EmptyCurrentStats = gen_empty_current_stats(Guid),
-
-                        case Type of
-                            ?REGULAR_FILE_TYPE ->
-                                % gets storage_id that is also used by prepare_file_size_summary
-                                {FileSizes, _} = file_ctx:prepare_file_size_summary(file_ctx:new_by_guid(Guid)),
-                                lists:foldl(fun
-                                    ({total, Size}, Acc) -> Acc#{?TOTAL_SIZE => Size};
-                                    ({StorageId, Size}, Acc) -> Acc#{?SIZE_ON_STORAGE(StorageId) => Size}
-                                end, EmptyCurrentStats#{?REG_FILE_AND_LINK_COUNT => 1}, FileSizes);
-                            _ ->
-                                % Links are counted with size 0
-                                EmptyCurrentStats#{?REG_FILE_AND_LINK_COUNT => 1}
-                        end
-                    catch
-                        Error:Reason:Stacktrace ->
-                            handle_init_error(Guid, Error, Reason, Stacktrace),
-                            #{?REG_FILE_AND_LINK_COUNT => 1, ?FILE_ERRORS_COUNT => 1}
-                    end
+            case file_meta:is_deleted(Doc) andalso not IncludeDeleted of
+                true ->
+                    % Race with file deletion - stats will be invalidated by next update
+                    gen_empty_current_stats_and_handle_errors(Guid);
+                false ->
+                    init_existing_child(Guid, Doc)
             end;
         ?ERROR_NOT_FOUND ->
             % Race with file deletion - stats will be invalidated by next update
-            try
-                gen_empty_current_stats(Guid)
-            catch
-                Error:Reason:Stacktrace ->
-                    handle_init_error(Guid, Error, Reason, Stacktrace),
-                    #{}
-            end
+            gen_empty_current_stats_and_handle_errors(Guid)
     end.
 
 
@@ -275,6 +242,43 @@ get_ctx() ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+-spec init_existing_child(file_id:file_guid(), file_meta:doc()) -> dir_stats_collection:collection().
+init_existing_child(Guid, Doc) ->
+    case file_meta:get_type(Doc) of
+        ?DIRECTORY_TYPE ->
+            try
+                EmptyCurrentStats = gen_empty_current_stats(Guid), % TODO VFS-9204 - maybe refactor as gen_empty_current_stats
+                % gets storage_id that is also used by prepare_file_size_summary
+                EmptyCurrentStats#{?DIR_COUNT => 1}
+            catch
+                Error:Reason:Stacktrace ->
+                    handle_init_error(Guid, Error, Reason, Stacktrace),
+                    #{?DIR_COUNT => 1, ?DIR_ERRORS_COUNT => 1}
+            end;
+        Type ->
+            try
+                EmptyCurrentStats = gen_empty_current_stats(Guid),
+
+                case Type of
+                    ?REGULAR_FILE_TYPE ->
+                        % gets storage_id that is also used by prepare_file_size_summary
+                        {FileSizes, _} = file_ctx:prepare_file_size_summary(file_ctx:new_by_guid(Guid)),
+                        lists:foldl(fun
+                            ({total, Size}, Acc) -> Acc#{?TOTAL_SIZE => Size};
+                            ({StorageId, Size}, Acc) -> Acc#{?SIZE_ON_STORAGE(StorageId) => Size}
+                        end, EmptyCurrentStats#{?REG_FILE_AND_LINK_COUNT => 1}, FileSizes);
+                    _ ->
+                        % Links are counted with size 0
+                        EmptyCurrentStats#{?REG_FILE_AND_LINK_COUNT => 1}
+                end
+            catch
+                Error:Reason:Stacktrace ->
+                    handle_init_error(Guid, Error, Reason, Stacktrace),
+                    #{?REG_FILE_AND_LINK_COUNT => 1, ?FILE_ERRORS_COUNT => 1}
+            end
+    end.
+
 
 %% @private
 -spec update_stats(file_id:file_guid(), dir_stats_collection:collection()) -> ok.
@@ -374,6 +378,18 @@ gen_empty_historical_stats_browse_result(#time_series_slice_get_request{}, Guid)
 -spec gen_empty_current_stats(file_id:file_guid()) -> current_stats().
 gen_empty_current_stats(Guid) ->
     maps_utils:generate_from_list(fun(StatName) -> {StatName, 0} end, stat_names(Guid)).
+
+
+%% @private
+-spec gen_empty_current_stats_and_handle_errors(file_id:file_guid()) -> current_stats().
+gen_empty_current_stats_and_handle_errors(Guid) ->
+    try
+        gen_empty_current_stats(Guid)
+    catch
+        Error:Reason:Stacktrace ->
+            handle_init_error(Guid, Error, Reason, Stacktrace),
+            #{}
+    end.
 
 
 %% @private

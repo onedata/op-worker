@@ -164,27 +164,30 @@ transfers_should_be_ordered_by_timestamps(Config) ->
     StorageP1 = initializer:get_supporting_storage_id(WorkerP1, SpaceId),
     StorageP2 = initializer:get_supporting_storage_id(WorkerP2, SpaceId),
 
-    File = ?absPath(SpaceId, <<"file_sorted">>),
+    FilePath = ?absPath(SpaceId, <<"file_sorted">>),
     Size = 1,
-    FileGuid = create_test_file(WorkerP1, SessionId, File, crypto:strong_rand_bytes(Size)),
+    FileGuid = create_test_file(WorkerP1, SessionId, FilePath, crypto:strong_rand_bytes(Size)),
     {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
 
-    File2 = ?absPath(SpaceId, <<"file_sorted2">>),
+    FilePath2 = ?absPath(SpaceId, <<"file_sorted2">>),
     Size2 = 3 * 1024 * 1024 * 1024,
-    FileGuid2 = create_test_file_by_size(WorkerP1, SessionId, File2, Size2),
+    FileGuid2 = create_test_file_by_size(WorkerP1, SessionId, FilePath2, Size2),
     {ok, FileObjectId2} = file_id:guid_to_objectid(FileGuid2),
 
     % when
-    ?assertMatch({ok, #file_attr{size = Size}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File}), ?ATTEMPTS),
-    ?assertMatch({ok, #file_attr{size = Size2}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, File2}), ?ATTEMPTS),
-    ExpectedDistributionFun = fun(S) -> #{
+    ?assertMatch({ok, #file_attr{size = Size}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, FilePath}), ?ATTEMPTS),
+    ?assertMatch({ok, #file_attr{size = Size2}}, lfm_proxy:stat(WorkerP2, SessionId2, {path, FilePath2}), ?ATTEMPTS),
+    ExpectedDistributionFun = fun(S, StoragePath) -> #{
         <<"distributionPerProvider">> => #{
             DomainP1 => #{
                 <<"distributionPerStorage">> => #{
                     StorageP1 =>
                         #{<<"blocks">> => [[0, S]], <<"physicalSize">> => S}
                 },
-                <<"logicalSize">> => S, 
+                <<"locationsPerStorage">> => #{
+                    StorageP1 => StoragePath
+                },
+                <<"logicalSize">> => S,
                 <<"success">> => true
             }, 
             DomainP2 => #{
@@ -192,14 +195,17 @@ transfers_should_be_ordered_by_timestamps(Config) ->
                     StorageP2 =>
                         #{<<"blocks">> => [],  <<"physicalSize">> => 0}
                 },
+                <<"locationsPerStorage">> => #{
+                    StorageP2 => null
+                },
                 <<"logicalSize">> => S,
                 <<"success">> => true
             }
         },
         <<"type">> => atom_to_binary(?REGULAR_FILE_TYPE)
     } end,
-    ExpectedDistribution = ExpectedDistributionFun(Size),
-    ExpectedDistribution2 = ExpectedDistributionFun(Size2),
+    ExpectedDistribution = ExpectedDistributionFun(Size, FilePath),
+    ExpectedDistribution2 = ExpectedDistributionFun(Size2, FilePath2),
     ?assertDistribution(WorkerP2, ExpectedDistribution, Config, FileGuid),
     ?assertDistribution(WorkerP2, ExpectedDistribution2, Config, FileGuid2),
 
@@ -216,7 +222,7 @@ transfers_should_be_ordered_by_timestamps(Config) ->
     ?assertTransferStatus(#{
         <<"replicationStatus">> := <<"completed">>,
         <<"replicatingProviderId">> := DomainP2,
-        <<"filePath">> := File,
+        <<"filePath">> := FilePath,
         <<"evictionStatus">> := <<"skipped">>,
         <<"fileId">> := FileObjectId,
         <<"callback">> := null,
@@ -232,7 +238,7 @@ transfers_should_be_ordered_by_timestamps(Config) ->
     ?assertTransferStatus(#{
         <<"replicationStatus">> := <<"completed">>,
         <<"replicatingProviderId">> := DomainP2,
-        <<"filePath">> := File2,
+        <<"filePath">> := FilePath2,
         <<"evictionStatus">> := <<"skipped">>,
         <<"fileId">> := FileObjectId2,
         <<"callback">> := null,

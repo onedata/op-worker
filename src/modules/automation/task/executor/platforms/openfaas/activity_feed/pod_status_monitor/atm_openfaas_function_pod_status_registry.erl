@@ -60,6 +60,9 @@
 % never existed and those that were recently deleted (when a report comes and there is no matching registry).
 -define(DELETED_REGISTRY_EXPIRY_SECONDS, 604800).  % a week
 
+%% defaults are used; @see audit_log.erl
+-define(LOG_OPTS, #{}).
+
 %%%===================================================================
 %%% API functions
 %%%===================================================================
@@ -221,15 +224,6 @@ gen_pod_event_log_id(RegistryId, PodId) ->
 
 
 %% @private
--spec ensure_pod_event_log_created(infinite_log:log_id()) -> ok.
-ensure_pod_event_log_created(LogId) ->
-    case audit_log:create(LogId, #{}) of
-        ok -> ok;
-        {error, already_exists} -> ok
-    end.
-
-
-%% @private
 -spec consume_pod_status_report(atm_openfaas_function_pod_status_report:record()) -> ok.
 consume_pod_status_report(#atm_openfaas_function_pod_status_report{
     function_id = FunctionId,
@@ -249,22 +243,7 @@ consume_pod_status_report(#atm_openfaas_function_pod_status_report{
         {ok, _} ->
             PodEventLogId = gen_pod_event_log_id(PodStatusRegistryId, PodId),
             AppendRequest = build_append_request(EventTimestamp, EventType, EventReason, EventMessage),
-            case audit_log:append(PodEventLogId, AppendRequest) of
-                ok ->
-                    ok;
-                {error, not_found} ->
-                    % If there is no audit log, it means that either it has not been created yet
-                    % ot it has been deleted by a parallel process performing cleaning of the
-                    % registry and logs. The latter can be determined depending if the registry
-                    % has been deleted too - in such case, the log is ignored.
-                    case ?MODULE:get(PodStatusRegistryId) of
-                        {ok, _} ->
-                            ensure_pod_event_log_created(PodEventLogId),
-                            ok = audit_log:append(PodEventLogId, AppendRequest);
-                        {error, not_found} ->
-                            ok
-                    end
-            end;
+            audit_log:append(PodEventLogId, ?LOG_OPTS, AppendRequest);
         {error, not_found} ->
             case datastore_model:get(?CTX#{include_deleted => true}, PodStatusRegistryId) of
                 {ok, _} ->

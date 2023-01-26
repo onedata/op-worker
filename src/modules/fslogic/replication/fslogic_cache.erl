@@ -494,7 +494,7 @@ get_blocks_tree(Key) ->
                 #document{} ->
                     get_blocks_tree(Key);
                 _ ->
-                    ?warning("Get blocks for not existing key ~p", [Key]),
+                    % Possible when flushing events for deleted file
                     gb_sets:new()
             end;
         Blocks ->

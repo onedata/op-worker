@@ -51,14 +51,7 @@ handshake_attributes(_Client) ->
         <<"onezoneUrl">> => oneprovider:get_oz_url(),
         <<"transfersHistoryLimitPerFile">> => transferred_file:get_history_limit(),
         <<"openfaasAvailable">> => atm_openfaas_monitor:is_openfaas_healthy(),
-        <<"bagitUploaderWorkflowSchemaId">> => utils:undefined_to_null(BagitUploaderWorkflowSchemaId),
-        <<"qosTransferStatsConfig">> => #{
-            <<"totalTimeSeriesId">> => ?QOS_TOTAL_TIME_SERIES_NAME,
-            <<"minuteMetricId">> => ?QOS_MINUTE_METRIC_NAME,
-            <<"hourMetricId">> => ?QOS_HOUR_METRIC_NAME,
-            <<"dayMetricId">> => ?QOS_DAY_METRIC_NAME,
-            <<"monthMetricId">> => ?QOS_MONTH_METRIC_NAME
-        }
+        <<"bagitUploaderWorkflowSchemaId">> => utils:undefined_to_null(BagitUploaderWorkflowSchemaId)
     }.
 
 

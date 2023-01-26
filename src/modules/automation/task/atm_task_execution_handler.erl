@@ -356,11 +356,16 @@ gen_atm_workflow_execution_env_diff(#document{
 ) ->
     atm_task_executor:lambda_input().
 build_lambda_input(AtmJobBatchId, AtmRunJobBatchCtx, ItemBatch, #atm_task_execution{
+    lambda_execution_config_entries = AtmLambdaExecutionConfigEntries,
     argument_specs = AtmTaskExecutionArgSpecs
 }) ->
+    AtmLambdaExecutionConfig = atm_lambda_execution_config_entries:acquire_config(
+        AtmRunJobBatchCtx, AtmLambdaExecutionConfigEntries
+    ),
+
     %% TODO VFS-8668 optimize argsBatch creation
     ArgsBatch = atm_parallel_runner:map(fun(Item) ->
-        atm_task_execution_arguments:construct_args(
+        atm_task_execution_arguments:acquire_args(
             Item, AtmRunJobBatchCtx, AtmTaskExecutionArgSpecs
         )
     end, ItemBatch),
@@ -368,6 +373,7 @@ build_lambda_input(AtmJobBatchId, AtmRunJobBatchCtx, ItemBatch, #atm_task_execut
     #atm_lambda_input{
         workflow_execution_id = atm_run_job_batch_ctx:get_workflow_execution_id(AtmRunJobBatchCtx),
         job_batch_id = AtmJobBatchId,
+        config = AtmLambdaExecutionConfig,
         args_batch = ArgsBatch
     }.
 

@@ -71,15 +71,9 @@ rest_api_endpoints(?REGULAR_FILE_TYPE, FileId) ->
         update_file_content_endpoint(FileId),
         get_hardlinks_endpoint(FileId)
     ] ++ rest_api_endpoints(file_and_dir, FileId);
-rest_api_endpoints(?SYMLINK_TYPE, FileId) ->
-    [
-        get_symlink_value_endpoint(FileId),
-        get_hardlinks_endpoint(FileId),
-        remove_file_endpoint(FileId),
-        get_attrs_endpoint(FileId)
-    ];
 rest_api_endpoints(file_and_dir, FileId) ->
     [
+        get_data_distribution_endpoint(FileId),
         remove_file_endpoint(FileId),
         get_attrs_endpoint(FileId),
         get_json_metadata_endpoint(FileId),
@@ -91,6 +85,14 @@ rest_api_endpoints(file_and_dir, FileId) ->
         get_xattrs_metadata_endpoint(FileId),
         set_xattr_metadata_endpoint(FileId),
         remove_xattrs_metadata_endpoint(FileId)
+    ];
+rest_api_endpoints(?SYMLINK_TYPE, FileId) ->
+    [
+        get_symlink_value_endpoint(FileId),
+        get_hardlinks_endpoint(FileId),
+        get_data_distribution_endpoint(FileId),
+        remove_file_endpoint(FileId),
+        get_attrs_endpoint(FileId)
     ].
 
 
@@ -165,6 +167,18 @@ update_file_content_endpoint(FileId) ->
         },
         optional_parameters = [<<"offset">>],
         swagger_operation_id = <<"update_file_content">>
+    }.
+
+
+%% @private
+-spec get_data_distribution_endpoint(file_id:objectid()) -> rest_api_request_sample:record().
+get_data_distribution_endpoint(FileId) ->
+    #rest_api_request_sample{
+        name = <<"Get data distribution">>,
+        description = <<"Returns information about data distribution of the file or directory.">>,
+        method = 'GET',
+        path = str_utils:format_bin("/data/~s/distribution", [FileId]),
+        swagger_operation_id = <<"get_file_distribution">>  % @TODO VFS-10232 rename to get_data_distribution
     }.
 
 

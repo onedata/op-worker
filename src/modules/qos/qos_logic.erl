@@ -62,7 +62,6 @@ handle_qos_entry_change(_SpaceId, #document{deleted = true} = QosEntryDoc) ->
     handle_entry_delete(QosEntryDoc);
 handle_qos_entry_change(SpaceId, #document{key = QosEntryId, value = QosEntry} = QosEntryDoc) ->
     {ok, FileUuid} = qos_entry:get_file_uuid(QosEntry),
-    ok = ?ok_if_exists(qos_entry_audit_log:create(QosEntryId)),
     ok = file_qos:add_qos_entry_id(SpaceId, FileUuid, QosEntryId),
     ok = qos_transfer_stats:ensure_exists(QosEntryId),
     case qos_entry:is_possible(QosEntry) of
@@ -240,7 +239,9 @@ handle_missing_file_meta(FileCtx, {file_meta_missing, MissingUuid} = MissingElem
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     add_missing_file_meta_posthook(SpaceId, MissingElementFileMeta),
     MissingUuid =/= Uuid andalso
-        case file_meta_sync_status_cache:get(SpaceId, Uuid, #{calculation_root_parent => MissingUuid}) of
+        case file_meta_sync_status_cache:get(
+            SpaceId, Uuid, #{calculation_root_parent => MissingUuid, should_cache => false}
+        ) of
             {ok, synced} -> ok;
             {error, MissingElementLink} -> add_missing_link_posthook(SpaceId, MissingElementLink)
         end,

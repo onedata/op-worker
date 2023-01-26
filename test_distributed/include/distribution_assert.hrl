@@ -41,8 +41,8 @@ end, __Distributions))).
         {ok, __FileBlocks} = opt_file_metadata:get_distribution_deprecated(Worker, SessionId, ?FILE_REF(FileGuid)),
         lists:sort(__FileBlocks)
     catch
-        _:_ ->
-            error
+        E:R:S ->
+            {E, R, S}
     end, Attempts)).
 
 

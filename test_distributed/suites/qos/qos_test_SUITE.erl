@@ -230,34 +230,34 @@ qos_cleanup_test(_Config) ->
 %%%===================================================================
 
 qos_audit_log_successful_synchronization(_Config) ->
-    qos_audit_log_base_test(<<"completed">>, single_file).
+    qos_audit_log_test_base(<<"completed">>, single_file).
 
 
 qos_audit_log_transfer_error(_Config) ->
     % error mocked in init_per_testcase
-    qos_audit_log_base_test(<<"failed">>, single_file).
+    qos_audit_log_test_base(<<"failed">>, single_file).
 
 
 qos_audit_log_failure(_Config) ->
     % error mocked in init_per_testcase
-    qos_audit_log_base_test(<<"failed">>, single_file).
+    qos_audit_log_test_base(<<"failed">>, single_file).
 
 
 effective_qos_audit_log_successful_synchronization(_Config) ->
-    qos_audit_log_base_test(<<"completed">>, effective).
+    qos_audit_log_test_base(<<"completed">>, effective).
 
 
 effective_qos_audit_log_transfer_error(_Config) ->
     % error mocked in init_per_testcase
-    qos_audit_log_base_test(<<"failed">>, effective).
+    qos_audit_log_test_base(<<"failed">>, effective).
 
 
 effective_qos_audit_log_failure(_Config) ->
     % error mocked in init_per_testcase
-    qos_audit_log_base_test(<<"failed">>, effective).
+    qos_audit_log_test_base(<<"failed">>, effective).
 
 
-qos_audit_log_base_test(ExpectedStatus, Type) ->
+qos_audit_log_test_base(ExpectedStatus, Type) ->
     ok = clock_freezer_mock:set_current_time_millis(123),
     [ProviderId] = oct_background:get_provider_ids(),
     Node = oct_background:get_random_provider_node(ProviderId),
@@ -319,7 +319,19 @@ qos_audit_log_base_test(ExpectedStatus, Type) ->
                 Error
         end
     end,
-    ?assertMatch({ok, {true, Expected}}, GetAuditLogFun(), 10).
+    ?assertMatch({ok, {true, Expected}}, GetAuditLogFun(), 10),
+
+    % simulate expiration of the audit log
+    opw_test_rpc:call(Node, audit_log, delete, [QosEntryId]),
+    % browsing should return a proper error
+    ?assertEqual(?ERROR_NOT_FOUND, opw_test_rpc:call(Node, qos_entry_audit_log, browse_content, [QosEntryId, #{}])),
+    % the log should be recreated upon new activity; simulate a new log being appended
+    % NOTE: it would be useful to create multi provider qos audit log tests that would check
+    % this without simulation (but simply modifying a remote replica)
+    ?assertEqual(ok, opw_test_rpc:call(Node, qos_entry_audit_log, report_synchronization_started, [
+        QosEntryId, RootGuid, FilePath
+    ])),
+    ?assertMatch({ok, _}, opw_test_rpc:call(Node, qos_entry_audit_log, browse_content, [QosEntryId, #{}])).
 
 
 prepare_audit_log_test_env(single_file, Node, SessId, RootFilePath) ->
