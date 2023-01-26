@@ -89,7 +89,7 @@
         ]
     },
     supplementary_lambdas = #{?ECHO_LAMBDA_ID => #{
-        ?ECHO_LAMBDA_REVISION_NUM => ?ECHO_LAMBDA_DRAFT(#atm_data_spec{type = atm_integer_type}, __RELAY_METHOD)
+        ?ECHO_LAMBDA_REVISION_NUM => ?ECHO_LAMBDA_DRAFT(#atm_data_spec{type = atm_number_type}, __RELAY_METHOD)
     }}
 }).
 -define(ECHO_ATM_WORKFLOW_SCHEMA_DRAFT, ?ECHO_ATM_WORKFLOW_SCHEMA_DRAFT(

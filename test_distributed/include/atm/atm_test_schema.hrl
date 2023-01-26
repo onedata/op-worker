@@ -48,7 +48,8 @@
 
     operation_spec = ?ATM_AUTOGENERATE ::
         ?ATM_AUTOGENERATE | atm_test_schema_factory:atm_openfaas_operation_spec_draft(),
-    argument_specs :: [atm_lambda_argument_spec:record()],
+    config_parameter_specs = [] :: [atm_parameter_spec:record()],
+    argument_specs :: [atm_parameter_spec:record()],
     result_specs :: [atm_lambda_result_spec:record()],
 
     preferred_batch_size = ?ATM_AUTOGENERATE :: ?ATM_AUTOGENERATE | pos_integer(),
@@ -101,6 +102,7 @@
     lambda_id :: automation:id(),
     lambda_revision_number :: atm_lambda_revision:revision_number(),
 
+    lambda_config = #{} :: #{atm_parameter_spec:name() => json_utils:json_term()},
     argument_mappings :: [atm_task_schema_argument_mapper:record()],
     result_mappings :: [atm_task_schema_result_mapper:record()],
 
