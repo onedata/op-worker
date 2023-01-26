@@ -379,15 +379,19 @@ traverse_cancel_test_base(Config, StartTaskWorker, CancelWorker, DirName) ->
     get_slave_ans(),
 
     lists:foreach(fun(W) ->
-        ?assertMatch({ok, #document{value = #traverse_task{enqueued = false,
-            canceled = true, status = canceled}}}, rpc:call(W, tree_traverse, get_task, [?MODULE, TaskId]), 30),
+        verify_finished_tash(W, TaskId, true),
         ?assertMatch({ok, [], _}, rpc:call(W, traverse_task_list, list, [atom_to_binary(?MODULE, utf8), ongoing]), 30),
         ?assertMatch({ok, [], _}, rpc:call(W, traverse_task_list, list, [atom_to_binary(?MODULE, utf8), scheduled]), 30),
         check_ended(Worker, [TaskId]),
 
         case W of
-            Worker -> check_callbacks(W, 1, 1, 0);
-            _ -> check_callbacks(W, 0, 0, 0)
+            Worker ->
+                ?assertEqual(1, length(
+                    rpc:call(W, application, get_env, [?APP_NAME, task_canceled, []]) ++
+                    rpc:call(W, application, get_env, [?APP_NAME, task_finished, []])
+                ));
+            _ ->
+                check_callbacks(W, 0, 0, 0)
         end
     end, Workers).
 
@@ -440,14 +444,17 @@ queued_traverse_cancel_test_base(Config, CancelWorker, DirName) ->
     lists:foreach(fun(W) ->
         ?assertMatch({ok, #document{value = #traverse_task{enqueued = false,
             canceled = false, status = finished}}}, rpc:call(W, tree_traverse, get_task, [?MODULE, TaskId0]), 30),
-        ?assertMatch({ok, #document{value = #traverse_task{enqueued = false,
-            canceled = true, status = canceled}}}, rpc:call(W, tree_traverse, get_task, [?MODULE, TaskId]), 30),
+        verify_finished_tash(W, TaskId, true),
         ?assertMatch({ok, [], _}, rpc:call(W, traverse_task_list, list, [atom_to_binary(?MODULE, utf8), ongoing]), 30),
         ?assertMatch({ok, [], _}, rpc:call(W, traverse_task_list, list, [atom_to_binary(?MODULE, utf8), scheduled]), 30),
         check_ended(Worker, [TaskId0, TaskId]),
 
         case W of
-            Worker -> check_callbacks(W, 1, 1, 1);
+            Worker ->
+                ?assertEqual(2, length(
+                    rpc:call(W, application, get_env, [?APP_NAME, task_canceled, []]) ++
+                    rpc:call(W, application, get_env, [?APP_NAME, task_finished, []])
+                ));
             _ -> check_callbacks(W, 0, 0, 0)
         end
     end, Workers).
@@ -502,10 +509,8 @@ traverse_restart_test(Config) ->
     get_slave_ans(),
 
     lists:foreach(fun(W) ->
-        ?assertMatch({ok, #document{value = #traverse_task{enqueued = false,
-            canceled = false, status = finished}}}, rpc:call(W, tree_traverse, get_task, [?MODULE, TaskId]), 30),
-        ?assertMatch({ok, #document{value = #traverse_task{enqueued = false,
-            canceled = false, status = finished}}}, rpc:call(W, tree_traverse, get_task, [?MODULE, TaskId2]), 30),
+        verify_finished_tash(W, TaskId, false),
+        verify_finished_tash(W, TaskId2, false),
         ?assertMatch({ok, [], _}, rpc:call(W, traverse_task_list, list, [PoolName, ongoing]), 30),
         ?assertMatch({ok, [], _}, rpc:call(W, traverse_task_list, list, [PoolName, scheduled]), 30),
         check_ended(Worker, [TaskId, TaskId2])
@@ -1003,3 +1008,24 @@ verify_posthooks_called(ExpectedPosthooks) ->
         timer:seconds(5) ->
             ?assertEqual([], ExpectedPosthooks)
     end.
+
+
+verify_finished_tash(Worker, TaskId, IsCanceled) ->
+    CheckTask = fun() ->
+        try
+            {ok, #document{value = #traverse_task{enqueued = Enqueued, canceled = Canceled, status = Status}}} =
+                rpc:call(Worker, tree_traverse, get_task, [?MODULE, TaskId]),
+            % Status can be finished for canceled task if task was finished before cancel was processed
+            % (possible for remote cancellations).
+            % Status can ba canceled even if job was not expected to be canceled in case of node restart.
+            IsFinished = case (Status =:= canceled) orelse (Status =:= finished) of
+                true -> true;
+                false -> {false, Status}
+            end,
+            {Enqueued, Canceled, IsFinished}
+        catch
+            Error:Reason ->
+                {Error, Reason}
+        end
+    end,
+    ?assertEqual({false, IsCanceled, true}, CheckTask(), 30).

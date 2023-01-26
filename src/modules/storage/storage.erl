@@ -525,7 +525,10 @@ on_space_supported(SpaceId, StorageId, SupportParameters) ->
     case SupportParameters of
         #support_parameters{dir_stats_service_enabled = true} ->
             % NOTE: MUST be called before storage import is started
-            dir_stats_service_state:enable_for_new_support(SpaceId);
+            case dir_stats_service_state:enable_for_new_support(SpaceId) of
+                ok -> ok;
+                Error -> ?warning("Error enabling statistics for new space ~p: ~p", [SpaceId, Error])
+            end;
         _ ->
             ok
     end,
