@@ -344,7 +344,7 @@ create_task_execution_doc(#creation_ctx{
         schema_id = AtmTaskSchemaId,
 
         executor = Executor,
-        lambda_execution_config_parameter_specs = atm_lambda_execution_config_parameters:build_specs(
+        lambda_execution_config_entries = atm_lambda_execution_config_entries:build_entries(
             AtmWorkflowExecutionAuth, AtmLambdaConfigParameterSpecs, AtmLambdaConfigValues
         ),
         argument_specs = atm_task_execution_arguments:build_specs(

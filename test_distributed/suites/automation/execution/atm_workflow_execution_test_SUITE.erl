@@ -154,7 +154,7 @@
     iterate_over_tree_forest_store_with_all_items_inaccessible/1,
     iterate_over_empty_tree_forest_store/1,
 
-    map_config_parameters/1,
+    acquire_lambda_config/1,
 
     map_arguments/1,
 
@@ -351,7 +351,7 @@ groups() -> [
     ]},
 
     {mapping_tests, [], [
-        map_config_parameters,
+        acquire_lambda_config,
 
         map_arguments,
 
@@ -841,7 +841,7 @@ iterate_over_empty_tree_forest_store(_Config) ->
     ?RUN_ITERATION_TEST().
 
 
-map_config_parameters(_Config) ->
+acquire_lambda_config(_Config) ->
     ?RUN_MAPPING_TEST().
 
 

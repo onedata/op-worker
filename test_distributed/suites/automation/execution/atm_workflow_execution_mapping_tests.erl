@@ -18,7 +18,7 @@
 -include("atm_workflow_execution_test.hrl").
 
 -export([
-    map_config_parameters/0,
+    acquire_lambda_config/0,
 
     map_arguments/0,
 
@@ -148,7 +148,7 @@
 %%%===================================================================
 
 
-map_config_parameters() ->
+acquire_lambda_config() ->
     IteratedItems = lists:map(fun(Num) -> #{<<"num">> => Num} end, lists:seq(1, 40)),
     TargetStoreSchemaId = <<"target_st">>,
 
@@ -170,6 +170,10 @@ map_config_parameters() ->
         ?ATM_LAMBDA_CONFIG_PARAMETER_INT => ?RAND_INT(1000000),
         ?ATM_LAMBDA_CONFIG_PARAMETER_STR => ?RAND_STR()
     },
+    % Atm lambda execution config is returned as lambda result
+    % by ?ECHO_CONFIG_DOCKER_ID (see atm_openfaas_docker_mock.erl)
+    % and then mapped to target store (by checking target store content
+    % it is possible to check what config lambda received)
     ExpTargetStoreFinalContent = lists:map(fun(_) ->
         % Ensure default values are also supplemented
         AtmLambdaExecutionConfigValues#{?ATM_LAMBDA_CONFIG_PARAMETER_BOOL => false}

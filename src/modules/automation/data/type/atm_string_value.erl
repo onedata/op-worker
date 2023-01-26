@@ -73,5 +73,5 @@ expand(_AtmWorkflowExecutionAuth, Value, _ValueConstraints) ->
 assert_meets_constraint({allowed_values, AllowedValues}, Number) ->
     case lists:member(Number, AllowedValues) of
         true -> ok;
-        false -> throw(throw({unverified_constraints, #{<<"allowedValues">> => AllowedValues}}))
+        false -> throw({unverified_constraints, #{<<"allowedValues">> => AllowedValues}})
     end.

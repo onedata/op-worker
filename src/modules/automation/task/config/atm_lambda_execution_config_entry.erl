@@ -6,18 +6,17 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% Module responsible for operating on lambda execution config spec which is
-%%% 'atm_parameter_spec' and it's value merged into one record. It is done
+%%% Module responsible for operating on lambda execution config entry which is
+%%% 'atm_parameter_spec' and its value merged into one record. It is done
 %%% for performance reasons so as to not reference several more documents
 %%% (workflow schema and lambda doc) when executing task for each item.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_lambda_execution_config_parameter_spec).
+-module(atm_lambda_execution_config_entry).
 -author("Bartosz Walkowicz").
 
 -behaviour(persistent_record).
 
--include("middleware/middleware.hrl").
 -include("modules/automation/atm_execution.hrl").
 
 %% API
@@ -27,12 +26,12 @@
 -export([version/0, db_encode/2, db_decode/2]).
 
 
--record(atm_lambda_execution_config_parameter_spec, {
+-record(atm_lambda_execution_config_entry, {
     name :: automation:name(),
     compressed_value :: automation:item(),
     data_spec :: atm_data_spec:record()
 }).
--type record() :: #atm_lambda_execution_config_parameter_spec{}.
+-type record() :: #atm_lambda_execution_config_entry{}.
 
 -export_type([record/0]).
 
@@ -56,7 +55,7 @@ build(
     Value = utils:ensure_defined(UndefinedOrValue, DefaultValue),
     atm_value:validate(AtmWorkflowExecutionAuth, Value, AtmDataSpec),
 
-    #atm_lambda_execution_config_parameter_spec{
+    #atm_lambda_execution_config_entry{
         name = Name,
         compressed_value = atm_value:compress(Value, AtmDataSpec),
         data_spec = AtmDataSpec
@@ -64,16 +63,15 @@ build(
 
 
 -spec get_name(record()) -> automation:name().
-get_name(#atm_lambda_execution_config_parameter_spec{name = Name}) -> Name.
+get_name(#atm_lambda_execution_config_entry{name = Name}) -> Name.
 
 
 -spec acquire_value(atm_run_job_batch_ctx:record(), record()) ->
     json_utils:json_term() | no_return().
-acquire_value(AtmRunJobBatchCtx, #atm_lambda_execution_config_parameter_spec{
+acquire_value(AtmRunJobBatchCtx, #atm_lambda_execution_config_entry{
     compressed_value = CompressedValue,
     data_spec = AtmDataSpec
 }) ->
-    %% TODO validate here also? To handle constraint changing for files (e.g. size?)
     AtmWorkflowExecutionAuth = atm_run_job_batch_ctx:get_workflow_execution_auth(AtmRunJobBatchCtx),
     ?check(atm_value:expand(AtmWorkflowExecutionAuth, CompressedValue, AtmDataSpec)).
 
@@ -90,7 +88,7 @@ version() ->
 
 -spec db_encode(record(), persistent_record:nested_record_encoder()) ->
     json_utils:json_term().
-db_encode(#atm_lambda_execution_config_parameter_spec{
+db_encode(#atm_lambda_execution_config_entry{
     name = Name,
     compressed_value = Value,
     data_spec = AtmDataSpec
@@ -109,7 +107,7 @@ db_decode(#{
     <<"compressedValue">> := Value,
     <<"dataSpec">> := AtmDataSpecJson
 }, NestedRecordDecoder) ->
-    #atm_lambda_execution_config_parameter_spec{
+    #atm_lambda_execution_config_entry{
         name = Name,
         compressed_value = Value,
         data_spec = NestedRecordDecoder(AtmDataSpecJson, atm_data_spec)
