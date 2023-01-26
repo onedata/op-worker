@@ -704,7 +704,7 @@ zone_get_offline_access_idps() ->
 -spec verify_provider_identity(od_provider:id()) -> ok | {error, term()}.
 verify_provider_identity(TheirProviderId) ->
     try
-        {ok, OurIdentityToken} = ?throw_on_error(provider_auth:acquire_identity_token_for_consumer(
+        OurIdentityToken = ?check(provider_auth:acquire_identity_token_for_consumer(
             ?SUB(?ONEPROVIDER, TheirProviderId)
         )),
         {ok, Domain} = get_domain(TheirProviderId),

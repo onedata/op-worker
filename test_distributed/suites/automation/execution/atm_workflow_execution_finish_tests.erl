@@ -57,7 +57,7 @@
     },
     supplementary_lambdas = #{
         ?ECHO_LAMBDA_ID => #{?ECHO_LAMBDA_REVISION_NUM => ?ECHO_LAMBDA_DRAFT(
-            ?ATM_INTEGER_DATA_SPEC, ?RAND_ELEMENT([return_value, file_pipe])
+            ?ATM_NUMBER_DATA_SPEC, ?RAND_ELEMENT([return_value, file_pipe])
         )}
     }
 }).

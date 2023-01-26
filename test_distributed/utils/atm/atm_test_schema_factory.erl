@@ -98,6 +98,7 @@ create_from_draft(#atm_lambda_revision_draft{
     description = PlaceholderOrDescription,
 
     operation_spec = PlaceholderOrOperationSpec,
+    config_parameter_specs = AtmLambdaConfigParameterSpecs,
     argument_specs = ArgSpecs,
     result_specs = ResultSpecs,
 
@@ -114,6 +115,7 @@ create_from_draft(#atm_lambda_revision_draft{
             ?ATM_AUTOGENERATE -> atm_test_utils:example_operation_spec();
             _ -> create_from_draft(PlaceholderOrOperationSpec)
         end,
+        config_parameter_specs = AtmLambdaConfigParameterSpecs,
         argument_specs = ArgSpecs,
         result_specs = ResultSpecs,
 
@@ -211,6 +213,7 @@ create_from_draft(#atm_task_schema_draft{
     lambda_id = AtmLambdaId,
     lambda_revision_number = AtmLambdaRevisionNum,
 
+    lambda_config = AtmLambdaConfigValues,
     argument_mappings = ArgMappings,
     result_mappings = ResultMappings,
 
@@ -223,6 +226,7 @@ create_from_draft(#atm_task_schema_draft{
         lambda_id = AtmLambdaId,
         lambda_revision_number = AtmLambdaRevisionNum,
 
+        lambda_config = AtmLambdaConfigValues,
         argument_mappings = ArgMappings,
         result_mappings = ResultMappings,
 

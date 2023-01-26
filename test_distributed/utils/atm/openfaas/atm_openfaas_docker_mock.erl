@@ -46,6 +46,13 @@ exec(?ECHO_WITH_EXCEPTION_ON_EVEN_NUMBERS, #{<<"argsBatch">> := ArgsBatch}) ->
             #{<<"exception">> => <<"even number">>}
     end, ArgsBatch)};
 
+exec(?ECHO_CONFIG_DOCKER_ID, #{<<"argsBatch">> := ArgsBatch, <<"ctx">> := #{
+    <<"config">> := AtmLambdaExecutionConfig
+}}) ->
+    #{<<"resultsBatch">> => lists:map(fun(_) ->
+        #{?ECHO_ARG_NAME => AtmLambdaExecutionConfig}
+    end, ArgsBatch)};
+
 exec(?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_1, #{<<"argsBatch">> := ArgsBatch}) ->
     #{<<"resultsBatch">> => lists:map(fun
         (#{<<"value">> := #{<<"tsName">> := <<"size">>}}) -> #{};

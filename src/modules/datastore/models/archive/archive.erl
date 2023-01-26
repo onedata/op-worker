@@ -180,14 +180,8 @@ create_dip_archive(#document{
 
 
 -spec create(doc()) -> {ok, doc()} | {error, term()}.
-create(DocToCreate) ->
-    case datastore_model:create(?CTX, DocToCreate) of
-        {ok, #document{key = ArchiveId} = Doc} ->
-            archivisation_audit_log:create(ArchiveId),
-            {ok, Doc};
-        {error, _} = Error ->
-            Error
-    end.
+create(Doc) ->
+    datastore_model:create(?CTX, Doc).
     
 
 -spec get(id()) -> {ok, doc()} | error().

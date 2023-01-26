@@ -16,7 +16,7 @@
 
 -include("middleware/middleware.hrl").
 -include("modules/fslogic/file_details.hrl").
--include("modules/fslogic/file_distribution.hrl").
+-include("modules/fslogic/data_distribution.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -79,10 +79,10 @@ translate_resource(#gri{aspect = instance, scope = Scope}, FileDetails) ->
     translate_file_details(FileDetails, Scope);
 
 translate_resource(#gri{aspect = distribution, scope = private, id = Guid}, Distribution) ->
-    file_distribution_translator:gather_result_to_json(gs, Distribution, Guid);
+    data_distribution_translator:gather_result_to_json(gs, Distribution, Guid);
 
 translate_resource(#gri{aspect = storage_locations, scope = private}, StorageLocations) ->
-    file_distribution_translator:storage_locations_to_json(StorageLocations);
+    data_distribution_translator:storage_locations_to_json(StorageLocations);
 
 translate_resource(#gri{aspect = acl, scope = private}, Acl) ->
     try

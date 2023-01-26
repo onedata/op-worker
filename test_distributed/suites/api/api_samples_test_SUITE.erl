@@ -288,6 +288,7 @@ exp_operation_list(private, ?DIRECTORY_TYPE) -> [
     {'GET', <<"download_file_content">>, <<"Download directory (tar)">>},
     {'GET', <<"list_children">>, <<"List directory files and subdirectories">>},
     {'POST', <<"create_file">>, <<"Create file in directory">>},
+    {'GET', <<"get_file_distribution">>, <<"Get data distribution">>},
     {'DELETE', <<"remove_file">>, <<"Remove file">>},
     {'GET', <<"get_attrs">>, <<"Get attributes">>},
     {'GET', <<"get_json_metadata">>, <<"Get JSON metadata">>},
@@ -304,6 +305,7 @@ exp_operation_list(private, ?REGULAR_FILE_TYPE) -> [
     {'GET', <<"download_file_content">>, <<"Download file content">>},
     {'PUT', <<"update_file_content">>, <<"Update file content">>},
     {'GET', <<"get_file_hardlinks">>, <<"Get file hard links">>},
+    {'GET', <<"get_file_distribution">>, <<"Get data distribution">>},
     {'DELETE', <<"remove_file">>, <<"Remove file">>},
     {'GET', <<"get_attrs">>, <<"Get attributes">>},
     {'GET', <<"get_json_metadata">>, <<"Get JSON metadata">>},
@@ -319,6 +321,7 @@ exp_operation_list(private, ?REGULAR_FILE_TYPE) -> [
 exp_operation_list(private, ?SYMLINK_TYPE) -> [
     {'GET', <<"get_symlink_value">>, <<"Get symbolic link value">>},
     {'GET', <<"get_file_hardlinks">>, <<"Get file hard links">>},
+    {'GET', <<"get_file_distribution">>, <<"Get data distribution">>},
     {'DELETE', <<"remove_file">>, <<"Remove file">>},
     {'GET', <<"get_attrs">>, <<"Get attributes">>}
 ].
@@ -364,16 +367,21 @@ build_sample_test_spec(<<"Update file content">>) -> #sample_test_spec{
         ?assertEqual(<<"file_content_set_in_test">>, lfm_test_utils:read_file(?RAND_NODE(), ?USER_2_SESS(), Guid, 1000))
     end
 };
-build_sample_test_spec(<<"Remove file">>) -> #sample_test_spec{
-    testing_priority = 20,
-    verify_fun = fun(Guid, _ResultBody) ->
-        ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(?RAND_NODE(), ?USER_2_SESS(), ?FILE_REF(Guid)), ?ATTEMPTS)
-    end
-};
 build_sample_test_spec(<<"Get file hard links">>) -> #sample_test_spec{
     verify_fun = fun(Guid, ResultBody) ->
         {ok, ObjectId} = file_id:guid_to_objectid(Guid),
         ?assertEqual([ObjectId], json_utils:decode(ResultBody))
+    end
+};
+build_sample_test_spec(<<"Get data distribution">>) -> #sample_test_spec{
+    verify_fun = fun(_Guid, ResultBody) ->
+        ?assertMatch(#{<<"type">> := _, <<"distributionPerProvider">> := _}, json_utils:decode(ResultBody))
+    end
+};
+build_sample_test_spec(<<"Remove file">>) -> #sample_test_spec{
+    testing_priority = 20,
+    verify_fun = fun(Guid, _ResultBody) ->
+        ?assertEqual({error, ?ENOENT}, lfm_proxy:stat(?RAND_NODE(), ?USER_2_SESS(), ?FILE_REF(Guid)), ?ATTEMPTS)
     end
 };
 build_sample_test_spec(<<"Get attributes">>) -> #sample_test_spec{

@@ -18,7 +18,7 @@
 
 -include("global_definitions.hrl").
 -include("middleware/middleware.hrl").
--include("modules/fslogic/file_distribution.hrl").
+-include("modules/fslogic/data_distribution.hrl").
 -include("proto/oneprovider/provider_rpc_messages.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
@@ -34,12 +34,14 @@
 -type request() ::
     #provider_reg_distribution_get_request{} |
     #provider_current_dir_size_stats_browse_request{} |
-    #provider_historical_dir_size_stats_browse_request{}.
+    #provider_historical_dir_size_stats_browse_request{} |
+    #provider_reg_storage_locations_get_request{}.
 
 -type result() ::
     #provider_reg_distribution_get_result{} |
     #provider_current_dir_size_stats_browse_result{} |
-    #time_series_layout_get_result{} | #time_series_slice_get_result{}.
+    #time_series_layout_get_result{} | #time_series_slice_get_result{} |
+    #provider_reg_storage_locations_result{}.
 
 -export_type([request/0, result/0]).
 

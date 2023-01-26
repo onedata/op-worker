@@ -113,7 +113,7 @@ get_helper(#document{value = StorageConfig}) ->
 get_helper(#storage_config{helper = Helper}) ->
     Helper;
 get_helper(StorageId) ->
-    {ok, StorageDoc} = storage_config:get(StorageId),
+    {ok, StorageDoc} = ?MODULE:get(StorageId),
     get_helper(StorageDoc).
 
 -spec get_luma_feed(storage:id() | doc() | record()) -> storage:luma_feed().

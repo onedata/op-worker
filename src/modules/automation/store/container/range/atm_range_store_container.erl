@@ -99,7 +99,7 @@ get_config(#atm_range_store_container{config = AtmStoreConfig}) ->
 
 -spec get_iterated_item_data_spec(record()) -> atm_data_spec:record().
 get_iterated_item_data_spec(_) ->
-    #atm_data_spec{type = atm_integer_type}.
+    #atm_data_spec{type = atm_number_type, value_constraints = #{integers_only => true}}.
 
 
 -spec acquire_iterator(record()) -> atm_range_store_container_iterator:record().

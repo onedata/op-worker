@@ -272,33 +272,27 @@ get_luma_config(StorageData) ->
 
 -spec fetch_shared_data(id(), od_space:id()) -> od_storage:doc().
 fetch_shared_data(StorageId, SpaceId) when is_binary(StorageId) ->
-    {ok, Data} = ?throw_on_error(storage_logic:get_shared_data(StorageId, SpaceId)),
-    Data.
+    ?check(storage_logic:get_shared_data(StorageId, SpaceId)).
 
 
 -spec fetch_name_of_local_storage(id()) -> name().
 fetch_name_of_local_storage(StorageId) when is_binary(StorageId) ->
-    {ok, Name} = ?throw_on_error(storage_logic:get_name_of_local_storage(StorageId)),
-    Name.
+    ?check(storage_logic:get_name_of_local_storage(StorageId)).
 
 
 -spec fetch_name_of_remote_storage(id(), od_space:id()) -> name().
 fetch_name_of_remote_storage(StorageId, SpaceId) when is_binary(StorageId) ->
-    {ok, Name} = ?throw_on_error(storage_logic:get_name_of_remote_storage(StorageId, SpaceId)),
-    Name.
+    ?check(storage_logic:get_name_of_remote_storage(StorageId, SpaceId)).
 
 
 -spec fetch_provider_id_of_remote_storage(id(), od_space:id()) -> od_provider:id().
 fetch_provider_id_of_remote_storage(StorageId, SpaceId) ->
-    {ok, ProviderId} = ?throw_on_error(storage_logic:get_provider(StorageId, SpaceId)),
-    ProviderId.
+    ?check(storage_logic:get_provider(StorageId, SpaceId)).
 
 
 -spec fetch_qos_parameters_of_local_storage(id()) -> qos_parameters().
 fetch_qos_parameters_of_local_storage(StorageId) when is_binary(StorageId) ->
-    {ok, QosParameters} =
-        ?throw_on_error(storage_logic:get_qos_parameters_of_local_storage(StorageId)),
-    QosParameters.
+    ?check(storage_logic:get_qos_parameters_of_local_storage(StorageId)).
 
 
 %%--------------------------------------------------------------------
@@ -309,9 +303,7 @@ fetch_qos_parameters_of_local_storage(StorageId) when is_binary(StorageId) ->
 %%--------------------------------------------------------------------
 -spec fetch_qos_parameters_of_remote_storage(id(), od_space:id()) -> qos_parameters().
 fetch_qos_parameters_of_remote_storage(StorageId, SpaceId) when is_binary(StorageId) ->
-    {ok, QosParameters} =
-        ?throw_on_error(storage_logic:get_qos_parameters_of_remote_storage(StorageId, SpaceId)),
-    QosParameters.
+    ?check(storage_logic:get_qos_parameters_of_remote_storage(StorageId, SpaceId)).
 
 
 -spec should_skip_storage_detection(data() | id()) -> boolean().
@@ -321,20 +313,17 @@ should_skip_storage_detection(StorageDataOrId) ->
 
 -spec is_imported(id() | data()) -> boolean().
 is_imported(StorageId) when is_binary(StorageId) ->
-    {ok, Imported} = ?throw_on_error(storage_logic:is_imported(StorageId)),
-    Imported;
+    ?check(storage_logic:is_imported(StorageId));
 is_imported(StorageData) ->
     is_imported(storage:get_id(StorageData)).
 
 -spec is_local_storage_readonly(id()) -> boolean().
 is_local_storage_readonly(StorageId) when is_binary(StorageId) ->
-    {ok, Readonly} = ?throw_on_error(storage_logic:is_local_storage_readonly(StorageId)),
-    Readonly.
+    ?check(storage_logic:is_local_storage_readonly(StorageId)).
 
 -spec is_storage_readonly(id() | data(), od_space:id()) -> boolean().
 is_storage_readonly(StorageId, SpaceId) when is_binary(StorageId) ->
-    {ok, Readonly} = ?throw_on_error(storage_logic:is_storage_readonly(StorageId, SpaceId)),
-    Readonly;
+    ?check(storage_logic:is_storage_readonly(StorageId, SpaceId));
 is_storage_readonly(StorageData, SpaceId) ->
     is_storage_readonly(storage:get_id(StorageData), SpaceId).
 
