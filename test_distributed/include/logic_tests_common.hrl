@@ -217,7 +217,7 @@ end).
 % Mocked atm_lambda data
 -define(ATM_LAMBDA_DATA_SPEC,
     #atm_data_spec{
-        type = atm_number_type,
+        type = atm_boolean_type,
         value_constraints = #{}
     }
 ).
@@ -238,13 +238,13 @@ end).
         name = <<"param">>,
         data_spec = ?ATM_LAMBDA_DATA_SPEC,
         is_optional = true,
-        default_value = 0
+        default_value = true
     }],
     argument_specs = [#atm_parameter_spec{
         name = <<"arg">>,
         data_spec = ?ATM_LAMBDA_DATA_SPEC,
         is_optional = true,
-        default_value = 8
+        default_value = false
     }],
     result_specs = [#atm_lambda_result_spec{
         name = <<"res">>,
@@ -257,7 +257,7 @@ end).
         memory_requested = 1000000000, memory_limit = 5000000000,
         ephemeral_storage_requested = 1000000000, ephemeral_storage_limit = 5000000000
     },
-    checksum = <<"e91be926c7790bb779fa59dced79c635">>,
+    checksum = <<"a06c117ddf442593109efbb7fd196a80">>,
     state = stable
 }).
 -define(ATM_LAMBDA_REVISION_REGISTRY_VALUE(__AtmLambda), #atm_lambda_revision_registry{
