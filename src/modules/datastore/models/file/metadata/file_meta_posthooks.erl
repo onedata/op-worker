@@ -57,72 +57,74 @@
 -spec add_hook(missing_element(), hook_identifier(), od_space:id(), module(), atom(), [term()]) ->
     ok | ?ERROR_INTERNAL_SERVER_ERROR.
 add_hook(MissingElement, Identifier, SpaceId, Module, Function, Args) ->
-    FileUuid = get_hook_uuid(MissingElement),
-    UniqueIdentifier = generate_hook_id(Identifier),
-    EncodedArgs = term_to_binary(Args),
-    Hook = #hook{
-        module = Module,
-        function = Function,
-        args = EncodedArgs
-    },
-
-    AddAns = datastore_model:update(?CTX, FileUuid, fun(#file_meta_posthooks{hooks = Hooks} = FileMetaPosthooks) ->
-        case maps:size(Hooks) >= ?MAX_POSTHOOKS of
-            true -> {error, too_many_posthooks};
-            false -> {ok, FileMetaPosthooks#file_meta_posthooks{hooks = Hooks#{UniqueIdentifier => Hook}}}
-        end
-    end, #file_meta_posthooks{hooks = #{UniqueIdentifier => Hook}}),
-
-    case AddAns of
-        {ok, _} ->
-            % Check race with file_meta document and links synchronization. Hook is added when something fails because
-            % of missing file_meta document or link. If missing element appears before hook adding to datastore,
-            % execution of hook is not triggered by dbsync. Thus, check if missing element exists and trigger hook
-            % execution if it exists.
-            case has_missing_element_appeared(MissingElement) of
-                true ->
-                    % Spawn to prevent deadlocks when hook is added from the inside of already existing hook
-                    spawn(fun() -> execute_hooks(FileUuid) end),
-                    ok;
-                false ->
-                    ok
-            end;
-        {error, too_many_posthooks} ->
-            case dbsync_state:set_initial_sync_repeat(SpaceId) of
-                ok ->
-                    ok;
-                {error, initial_sync_does_not_exist} ->
-                    ?error("~p:~p error for file ~p (identifier ~p, hook module ~p, hook fun ~p, hook args ~p):"
-                        " too many posthooks", [?MODULE, ?FUNCTION_NAME, FileUuid, Identifier, Module, Function, Args])
-            end;
-        Error ->
-            ?error("~p:~p error for file ~p (identifier ~p, hook module ~p, hook fun ~p, hook args ~p): ~p",
-                [?MODULE, ?FUNCTION_NAME, FileUuid, Identifier, Module, Function, Args, Error]),
-            ?ERROR_INTERNAL_SERVER_ERROR
-    end.
+    ok.
+%%    FileUuid = get_hook_uuid(MissingElement),
+%%    UniqueIdentifier = generate_hook_id(Identifier),
+%%    EncodedArgs = term_to_binary(Args),
+%%    Hook = #hook{
+%%        module = Module,
+%%        function = Function,
+%%        args = EncodedArgs
+%%    },
+%%
+%%    AddAns = datastore_model:update(?CTX, FileUuid, fun(#file_meta_posthooks{hooks = Hooks} = FileMetaPosthooks) ->
+%%        case maps:size(Hooks) >= ?MAX_POSTHOOKS of
+%%            true -> {error, too_many_posthooks};
+%%            false -> {ok, FileMetaPosthooks#file_meta_posthooks{hooks = Hooks#{UniqueIdentifier => Hook}}}
+%%        end
+%%    end, #file_meta_posthooks{hooks = #{UniqueIdentifier => Hook}}),
+%%
+%%    case AddAns of
+%%        {ok, _} ->
+%%            % Check race with file_meta document and links synchronization. Hook is added when something fails because
+%%            % of missing file_meta document or link. If missing element appears before hook adding to datastore,
+%%            % execution of hook is not triggered by dbsync. Thus, check if missing element exists and trigger hook
+%%            % execution if it exists.
+%%            case has_missing_element_appeared(MissingElement) of
+%%                true ->
+%%                    % Spawn to prevent deadlocks when hook is added from the inside of already existing hook
+%%                    spawn(fun() -> execute_hooks(FileUuid) end),
+%%                    ok;
+%%                false ->
+%%                    ok
+%%            end;
+%%        {error, too_many_posthooks} ->
+%%            case dbsync_state:set_initial_sync_repeat(SpaceId) of
+%%                ok ->
+%%                    ok;
+%%                {error, initial_sync_does_not_exist} ->
+%%                    ?error("~p:~p error for file ~p (identifier ~p, hook module ~p, hook fun ~p, hook args ~p):"
+%%                        " too many posthooks", [?MODULE, ?FUNCTION_NAME, FileUuid, Identifier, Module, Function, Args])
+%%            end;
+%%        Error ->
+%%            ?error("~p:~p error for file ~p (identifier ~p, hook module ~p, hook fun ~p, hook args ~p): ~p",
+%%                [?MODULE, ?FUNCTION_NAME, FileUuid, Identifier, Module, Function, Args, Error]),
+%%            ?ERROR_INTERNAL_SERVER_ERROR
+%%    end.
 
 
 -spec execute_hooks(file_meta:uuid()) -> ok | {error, term()}.
 execute_hooks(FileUuid) ->
-    case datastore_model:get(?CTX, FileUuid) of
-        {ok, #document{value = #file_meta_posthooks{hooks = Hooks}}} ->
-            case maps:size(Hooks) of
-                0 ->
-                    ok;
-                _ ->
-                    critical_section:run(FileUuid, fun() ->
-                        % Get document once more as hooks might have changed before entering to critical section
-                        case datastore_model:get(?CTX, FileUuid) of
-                            {ok, #document{value = #file_meta_posthooks{hooks = Hooks}}} ->
-                                execute_hooks(FileUuid, Hooks);
-                            _ ->
-                                ok
-                        end
-                    end)
-            end;
-        _ ->
-            ok
-    end.
+    ok.
+%%    case datastore_model:get(?CTX, FileUuid) of
+%%        {ok, #document{value = #file_meta_posthooks{hooks = Hooks}}} ->
+%%            case maps:size(Hooks) of
+%%                0 ->
+%%                    ok;
+%%                _ ->
+%%                    critical_section:run(FileUuid, fun() ->
+%%                        % Get document once more as hooks might have changed before entering to critical section
+%%                        case datastore_model:get(?CTX, FileUuid) of
+%%                            {ok, #document{value = #file_meta_posthooks{hooks = Hooks}}} ->
+%%                                execute_hooks(FileUuid, Hooks);
+%%                            _ ->
+%%                                ok
+%%                        end
+%%                    end)
+%%            end;
+%%        _ ->
+%%            ok
+%%    end.
 
 
 %% @private

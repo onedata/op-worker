@@ -31,7 +31,7 @@
 -define(PREFETCH_SIZE, op_worker:get_env(prefetch_size, 104857600)).
 
 %% The process is supposed to die after ?DIE_AFTER time of idling (no requests in flight)
--define(DIE_AFTER, 60000).
+-define(DIE_AFTER, 10000).
 
 %% How long transfer stats are aggregated before updating transfer document
 -define(STATS_AGGREGATION_TIME, application:get_env(
