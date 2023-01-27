@@ -117,7 +117,7 @@
 % (currently the only possible type of OpenFaaS function activity report), used
 % to build atm_openfaas_function_pod_status_summary
 -record(atm_openfaas_function_pod_status_report, {
-    function_name :: atm_openfaas_task_executor:function_name(),
+    function_id :: atm_openfaas_task_executor:function_id(),
     pod_id :: atm_openfaas_function_pod_status_registry:pod_id(),
 
     pod_status :: atm_openfaas_function_pod_status_report:pod_status(),
