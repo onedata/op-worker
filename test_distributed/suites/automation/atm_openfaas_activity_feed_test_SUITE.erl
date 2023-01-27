@@ -169,7 +169,7 @@ pod_status_monitor_lifecycle_test(_Config) ->
         % browsing should return a proper error
         ?assertEqual(?ERROR_NOT_FOUND, ?rpc(atm_openfaas_function_pod_status_registry:browse_pod_event_log(LogId, #{}))),
         % the log should be recreated upon new activity
-        submit_pod_status_reports(Client, [gen_pod_status_report(FunctionName, PodId)]),
+        submit_pod_status_reports(Client, [gen_pod_status_report(FunctionId, PodId)]),
         ?assertMatch({ok, _}, ?rpc(atm_openfaas_function_pod_status_registry:browse_pod_event_log(LogId, #{})), ?ATTEMPTS)
     end, PodStatusRegistry),
 
