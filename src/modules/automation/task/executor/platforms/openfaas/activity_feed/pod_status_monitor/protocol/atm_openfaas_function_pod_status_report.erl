@@ -53,7 +53,7 @@
 -spec to_json(record()) -> json_utils:json_term().
 to_json(Record) ->
     #{
-        <<"functionName">> => Record#atm_openfaas_function_pod_status_report.function_name,
+        <<"functionId">> => Record#atm_openfaas_function_pod_status_report.function_id,
         <<"podId">> => Record#atm_openfaas_function_pod_status_report.pod_id,
 
         <<"podStatus">> => Record#atm_openfaas_function_pod_status_report.pod_status,
@@ -69,7 +69,7 @@ to_json(Record) ->
 -spec from_json(json_utils:json_term()) -> record().
 from_json(RecordJson) ->
     #atm_openfaas_function_pod_status_report{
-        function_name = maps:get(<<"functionName">>, RecordJson),
+        function_id = maps:get(<<"functionId">>, RecordJson),
         pod_id = maps:get(<<"podId">>, RecordJson),
 
         pod_status = maps:get(<<"podStatus">>, RecordJson),

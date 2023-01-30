@@ -97,6 +97,7 @@
 -record(atm_lambda_input, {
     workflow_execution_id :: atm_workflow_execution:id(),
     job_batch_id :: atm_task_executor:job_batch_id(),
+    config :: json_utils:json_map(),
     args_batch :: [atm_task_executor:job_args()]
 }).
 
@@ -116,7 +117,7 @@
 % (currently the only possible type of OpenFaaS function activity report), used
 % to build atm_openfaas_function_pod_status_summary
 -record(atm_openfaas_function_pod_status_report, {
-    function_name :: atm_openfaas_task_executor:function_name(),
+    function_id :: atm_openfaas_task_executor:function_id(),
     pod_id :: atm_openfaas_function_pod_status_registry:pod_id(),
 
     pod_status :: atm_openfaas_function_pod_status_report:pod_status(),

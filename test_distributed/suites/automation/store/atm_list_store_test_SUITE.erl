@@ -125,9 +125,10 @@ example_configs() ->
         )}
     end, [
         atm_array_type,
+        atm_boolean_type,
         atm_dataset_type,
         atm_file_type,
-        atm_integer_type,
+        atm_number_type,
         atm_object_type,
         atm_range_type,
         atm_string_type,

@@ -233,7 +233,8 @@ expiration_test(_Config) ->
 -spec example_configs() -> [atm_single_value_store_config:record()].
 example_configs() ->
     SupportedStaticBasicTypes = [
-        atm_integer_type,
+        atm_boolean_type,
+        atm_number_type,
         atm_string_type,
         atm_object_type,
         atm_range_type,
