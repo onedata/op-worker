@@ -190,7 +190,7 @@ list_recursively(SpaceId, DatasetId, Opts, UserCtx) ->
 ) ->
     {ok, archive_api:info()} | error().
 create_archive(SpaceDirCtx, DatasetId, Config, PreservedCallback, DeletedCallback, Description, UserCtx) ->
-    assert_has_eff_privileges(SpaceDirCtx, UserCtx, [?SPACE_MANAGE_DATASETS, ?SPACE_CREATE_ARCHIVES]),
+    assert_has_eff_privileges(SpaceDirCtx, UserCtx, [?SPACE_CREATE_ARCHIVES]),
 
     archive_api:start_archivisation(
         DatasetId, Config, PreservedCallback, DeletedCallback, Description, UserCtx
@@ -205,7 +205,7 @@ cancel_archivisation(SpaceDirCtx, ArchiveId, PreservationPolicy, UserCtx) ->
             case is_archive_owner(UserCtx, ArchiveDoc) of
                 true -> ok;
                 false -> assert_has_eff_privileges(
-                    SpaceDirCtx, UserCtx, [?SPACE_MANAGE_DATASETS, ?SPACE_MANAGE_ARCHIVES])
+                    SpaceDirCtx, UserCtx, [?SPACE_MANAGE_ARCHIVES])
             end,
             archive_api:cancel_archivisation(ArchiveDoc, PreservationPolicy, UserCtx);
         ?ERROR_NOT_FOUND ->
@@ -223,7 +223,7 @@ update_archive(SpaceDirCtx, ArchiveId, Diff, UserCtx) ->
             case is_archive_owner(UserCtx, ArchiveDoc) of
                 true -> ok;
                 false -> assert_has_eff_privileges(
-                    SpaceDirCtx, UserCtx, [?SPACE_MANAGE_DATASETS, ?SPACE_MANAGE_ARCHIVES])
+                    SpaceDirCtx, UserCtx, [?SPACE_MANAGE_ARCHIVES])
             end,
             archive_api:update_archive(ArchiveId, Diff);
         {error, _} = Error ->
@@ -254,7 +254,7 @@ list_archives(SpaceDirCtx, DatasetId, Opts, ListingMode, UserCtx) ->
 -spec init_archive_delete(file_ctx:ctx(), archive:id(), archive:callback(), user_ctx:ctx()) ->
     ok | error().
 init_archive_delete(SpaceDirCtx, ArchiveId, CallbackUrl, UserCtx) ->
-    assert_has_eff_privileges(SpaceDirCtx, UserCtx, [?SPACE_MANAGE_DATASETS, ?SPACE_REMOVE_ARCHIVES]),
+    assert_has_eff_privileges(SpaceDirCtx, UserCtx, [?SPACE_REMOVE_ARCHIVES]),
 
     archive_api:delete(ArchiveId, CallbackUrl).
 
