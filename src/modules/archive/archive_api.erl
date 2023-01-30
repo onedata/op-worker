@@ -359,12 +359,7 @@ delete_archives(Archive, RelatedArchive) ->
 %% @private
 -spec unblock_archive(archive:doc() | archive:id() | undefined) -> ok.
 unblock_archive(#document{} = ArchiveDoc) ->
-    archive_verification_traverse:unblock_archive_modification(ArchiveDoc);
-unblock_archive(ArchiveId) ->
-    case archive:get(ArchiveId) of
-        {ok, ArchiveDoc} -> unblock_archive(ArchiveDoc);
-        ?ERROR_NOT_FOUND -> ok
-    end.
+    archive_verification_traverse:unblock_archive_modification(ArchiveDoc).
 
 
 %% @private

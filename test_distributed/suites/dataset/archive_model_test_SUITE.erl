@@ -74,7 +74,7 @@ groups() -> [
         % NOTE: this test should be run first, as any failure in space cleanup will fail it
         archive_dataset_attached_to_space_dir, 
         time_warp_test,
-        create_archive_privileges_test,
+        create_and_modify_archive_privileges_test,
         view_archive_privileges_test,
         remove_archive_privileges_test,
         archive_dataset_many_times
@@ -398,7 +398,7 @@ create_and_modify_archive_privileges_test(_Config) ->
         }
     } = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{archives = 1}}),
 
-    CreateRequiredPrivileges = privileges:from_list([?SPACE_MANAGE_DATASETS, ?SPACE_CREATE_ARCHIVES]),
+    CreateRequiredPrivileges = privileges:from_list([?SPACE_CREATE_ARCHIVES]),
     AllCreatePrivileges = privileges:from_list(CreateRequiredPrivileges ++ privileges:space_member()),
 
     ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED, config = ArchiveConfig}},
@@ -423,7 +423,7 @@ create_and_modify_archive_privileges_test(_Config) ->
             opt_archives:update(P1Node, User2SessIdP1, ArchiveId2, #{<<"description">> => ?TEST_DESCRIPTION2}))
     end, CreateRequiredPrivileges),
     
-    ModifyRequiredPrivileges = privileges:from_list([?SPACE_MANAGE_DATASETS, ?SPACE_MANAGE_ARCHIVES]),
+    ModifyRequiredPrivileges = privileges:from_list([?SPACE_MANAGE_ARCHIVES]),
     AllModifyPrivileges = privileges:from_list(ModifyRequiredPrivileges ++ privileges:space_member()),
 
     lists:foreach(fun(Privilege) ->
@@ -500,7 +500,7 @@ remove_archive_privileges_test(_Config) ->
     ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED, config = ArchiveConfig2}},
         opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId2), ?ATTEMPTS),
 
-    RequiredPrivileges = privileges:from_list([?SPACE_MANAGE_DATASETS, ?SPACE_REMOVE_ARCHIVES]),
+    RequiredPrivileges = privileges:from_list([?SPACE_REMOVE_ARCHIVES]),
     AllPrivileges = privileges:from_list(RequiredPrivileges ++ privileges:space_member()),
 
     lists:foreach(fun({Privilege, ArchiveId}) ->
