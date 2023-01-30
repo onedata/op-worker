@@ -488,9 +488,7 @@ mark_creation_finished(ArchiveDocOrId, NestedArchivesStats) ->
                 end,
                 stats = AggregatedStats
             }};
-        (#archive{state = ?ARCHIVE_CANCELLING(delete), related_aip = undefined}) ->
-            % AIP archive (RelatedAip == undefined) deletion is sufficient, as it will automatically
-            % result in DIP archive deletion.
+        (#archive{state = ?ARCHIVE_CANCELLING(delete)}) ->
             {error, marked_to_delete};
         (Archive = #archive{state = ?ARCHIVE_CANCELLING(_)}) ->
             {ok, Archive#archive{state = ?ARCHIVE_CANCELLED}}
@@ -534,13 +532,11 @@ mark_cancelling(ArchiveDocOrId, PreservationPolicy) ->
 -spec mark_cancelled(id() | doc()) -> ok | {error, marked_to_delete} | error().
 mark_cancelled(ArchiveDocOrId) ->
     UpdateResult = ?extract_ok(update(ArchiveDocOrId, fun
-        (#archive{state = State, related_aip = RelatedAip} = Archive) ->
-            case {is_finished(Archive), State, RelatedAip} of
-                {true, _, _} ->
+        (#archive{state = State} = Archive) ->
+            case {is_finished(Archive), State} of
+                {true, _} ->
                     {error, no_change};
-                {false, ?ARCHIVE_CANCELLING(delete), undefined} ->
-                    % AIP archive (RelatedAip == undefined) deletion is sufficient, as it will automatically
-                    % result in DIP archive deletion.
+                {false, ?ARCHIVE_CANCELLING(delete)} ->
                     {error, marked_to_delete};
                 _ ->
                     {ok, Archive#archive{state = ?ARCHIVE_CANCELLED}}
