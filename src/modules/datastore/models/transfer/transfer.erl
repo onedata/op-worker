@@ -42,6 +42,9 @@
 
     replication_status/1, eviction_status/1, status/1,
 
+    mark_replication_traverse_finished/1,
+    mark_eviction_traverse_finished/1,
+
     increment_files_to_process_counter/2, increment_files_processed_counter/1,
     increment_files_evicted_and_processed_counters/1,
     increment_files_failed_and_processed_counters/1,
@@ -500,6 +503,20 @@ status(#transfer{replication_status = Status}) ->
     Status.
 
 
+-spec mark_replication_traverse_finished(id()) -> {ok, doc()} | {error, term()}.
+mark_replication_traverse_finished(TransferId) ->
+    update(TransferId, fun(Transfer) ->
+        {ok, Transfer#transfer{replication_traverse_finished = true}}
+    end).
+
+
+-spec mark_eviction_traverse_finished(id()) -> {ok, doc()} | {error, term()}.
+mark_eviction_traverse_finished(TransferId) ->
+    update(TransferId, fun(Transfer) ->
+        {ok, Transfer#transfer{eviction_traverse_finished = true}}
+    end).
+
+
 -spec increment_files_to_process_counter(undefined | id(), non_neg_integer()) ->
     {ok, undefined | doc()} | {error, term()}.
 increment_files_to_process_counter(undefined, _FilesNum) ->
@@ -876,7 +893,7 @@ start_pools() ->
     {ok, _} = worker_pool:start_sup_pool(?REPLICATION_WORKERS_POOL, [
         {workers, ?REPLICATION_WORKERS_NUM},
         {worker, {gen_transfer_worker, [?REPLICATION_WORKER]}},
-        {queue_type, lifo}
+        {queue_type, fifo}
     ]),
     {ok, _} = worker_pool:start_sup_pool(?REPLICATION_CONTROLLERS_POOL, [
         {workers, ?REPLICATION_CONTROLLERS_NUM},
@@ -885,7 +902,7 @@ start_pools() ->
     {ok, _} = worker_pool:start_sup_pool(?REPLICA_EVICTION_WORKERS_POOL, [
         {workers, ?REPLICA_EVICTION_WORKERS_NUM},
         {worker, {gen_transfer_worker, [?REPLICA_EVICTION_WORKER]}},
-        {queue_type, lifo}
+        {queue_type, fifo}
     ]),
     ok.
 
@@ -937,7 +954,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    10.
+    11.
 
 %%--------------------------------------------------------------------
 %% @doc

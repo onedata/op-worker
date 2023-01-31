@@ -100,8 +100,8 @@ handle(Doc = #document{
     }
 }) when ReplicationStatus =/= ?SKIPPED_STATUS andalso
     (EvictionStatus =:= ?COMPLETED_STATUS orelse
-     EvictionStatus =:= ?FAILED_STATUS orelse
-     EvictionStatus =:= ?CANCELLED_STATUS)
+    EvictionStatus =:= ?FAILED_STATUS orelse
+    EvictionStatus =:= ?CANCELLED_STATUS)
 ->
     handle_finished_migration(Doc);
 
@@ -157,6 +157,7 @@ handle_enqueued_replication(Doc = #document{key = TransferId, value = #transfer{
     replication_status = ?ENQUEUED_STATUS,
     replicating_provider = ReplicatingProviderId,
     cancel = Cancel,
+    replication_traverse_finished = TraverseFinished,
     files_processed = FilesProcessed,
     bytes_replicated = BytesReplicated,
     pid = Pid
@@ -166,7 +167,7 @@ handle_enqueued_replication(Doc = #document{key = TransferId, value = #transfer{
             true ->
                 abort_replication(Doc, cancellation);
             false ->
-                case {FilesProcessed, BytesReplicated} > {0, 0} of
+                case {FilesProcessed, BytesReplicated} > {0, 0} orelse TraverseFinished of
                     true ->
                         replication_controller:mark_active(?decode_pid(Pid), TransferId);
                     false ->
@@ -195,6 +196,7 @@ handle_active_replication(Doc = #document{value = #transfer{
 handle_active_replication(#document{key = TransferId, value = #transfer{
     files_to_process = FilesToProcess,
     files_processed = FilesToProcess,
+    replication_traverse_finished = true,
     failed_files = 0,
     replicating_provider = ReplicatingProviderId,
     pid = Pid
@@ -206,6 +208,7 @@ handle_active_replication(#document{key = TransferId, value = #transfer{
 handle_active_replication(#document{key = TransferId, value = #transfer{
     files_to_process = FilesToProcess,
     files_processed = FilesToProcess,
+    replication_traverse_finished = true,
     replicating_provider = ReplicatingProviderId,
     pid = Pid
 }}) ->
@@ -224,7 +227,7 @@ handle_active_replication(#document{key = TransferId, value = #transfer{
             ?run_if_is_self(ReplicatingProviderId, fun() ->
                 replication_controller:mark_aborting(
                     ?decode_pid(Pid), TransferId, exceeded_number_of_failed_files)
-                end);
+            end);
         false ->
             ok
     end.
@@ -263,6 +266,7 @@ handle_aborting_replication(#document{key = TransferId, value = #transfer{
     cancel = Cancel,
     files_to_process = FilesToProcess,
     files_processed = FilesProcessed,
+    replication_traverse_finished = true,
     replicating_provider = ReplicatingProviderId,
     pid = Pid
 }}) when FilesProcessed >= FilesToProcess ->
@@ -369,6 +373,7 @@ handle_active_replica_eviction(#document{key = TransferId, value = #transfer{
 handle_active_replica_eviction(#document{key = TransferId, value = #transfer{
     files_to_process = FilesToProcess,
     files_processed = FilesToProcess,
+    eviction_traverse_finished = true,
     failed_files = 0,
     evicting_provider = EvictingProviderId,
     pid = Pid
@@ -380,6 +385,7 @@ handle_active_replica_eviction(#document{key = TransferId, value = #transfer{
 handle_active_replica_eviction(#document{key = TransferId, value = #transfer{
     files_to_process = FilesToProcess,
     files_processed = FilesToProcess,
+    eviction_traverse_finished = true,
     evicting_provider = EvictingProviderId,
     pid = Pid
 }}) ->
@@ -418,6 +424,7 @@ handle_aborting_replica_eviction(#document{key = TransferId, value = #transfer{
     cancel = Cancel,
     files_to_process = FilesToProcess,
     files_processed = FilesProcessed,
+    eviction_traverse_finished = true,
     evicting_provider = EvictingProviderId,
     pid = Pid
 }}) when FilesProcessed >= FilesToProcess ->
@@ -487,9 +494,7 @@ new_replication_or_migration(#document{
     value = Transfer = #transfer{
         file_uuid = FileUuid,
         space_id = SpaceId,
-        callback = Callback,
-        index_name = ViewName,
-        query_view_params = QueryViewParams
+        callback = Callback
     }
 }) ->
     FileGuid = file_id:pack_guid(FileUuid, SpaceId),
@@ -499,9 +504,7 @@ new_replication_or_migration(#document{
         TransferId,
         FileGuid,
         Callback,
-        transfer:is_migration(Transfer),
-        ViewName,
-        QueryViewParams
+        transfer:is_migration(Transfer)
     }).
 
 

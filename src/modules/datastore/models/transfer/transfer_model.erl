@@ -312,6 +312,41 @@ get_record_struct(10) ->
         {mth_hist, #{string => [integer]}},
         {index_name, string},
         {query_view_params, [{term, term}]}
+    ]};
+get_record_struct(11) ->
+    {record, [
+        {file_uuid, string},
+        {space_id, string},
+        {user_id, string},
+        {rerun_id, string},
+        {path, string},
+        {callback, string},
+        {enqueued, atom},
+        {cancel, atom},
+        {replication_status, atom},
+        {eviction_status, atom},
+        {scheduling_provider, string},
+        {replicating_provider, string},
+        {evicting_provider, string},
+        {pid, string}, %todo VFS-3657
+        {replication_traverse_finished, boolean},  %% new field
+        {eviction_traverse_finished, boolean},  %% new field
+        {files_to_process, integer},
+        {files_processed, integer},
+        {failed_files, integer},
+        {files_replicated, integer},
+        {bytes_replicated, integer},
+        {files_evicted, integer},
+        {schedule_time, integer},
+        {start_time, integer},
+        {finish_time, integer},
+        {last_update, #{string => integer}},
+        {min_hist, #{string => [integer]}},
+        {hr_hist, #{string => [integer]}},
+        {dy_hist, #{string => [integer]}},
+        {mth_hist, #{string => [integer]}},
+        {index_name, string},
+        {query_view_params, [{term, term}]}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -458,4 +493,26 @@ upgrade_record(9, {?TRANSFER_MODEL, FileUuid, SpaceId, UserId, RerunId, Path, Ca
         FilesProcessed, FailedFiles, FilesReplicated, BytesReplicated,
         FilesEvicted, ScheduleTime, StartTime, FinishTime,
         LastUpdate, MinHist, HrHist, DyHist, MthHist, undefined, []
+    }};
+upgrade_record(10, {?TRANSFER_MODEL, FileUuid, SpaceId, UserId, RerunId, Path, CallBack, Enqueued,
+    Cancel, ReplicationStatus, EvictionStatus, SchedulingProvider,
+    ReplicatingProvider, EvictingProvider, Pid, FilesToProcess,
+    FilesProcessed, FailedFiles, FilesReplicated, BytesReplicated,
+    FilesEvicted, ScheduleTime, StartTime, FinishTime,
+    LastUpdate, MinHist, HrHist, DyHist, MthHist, ViewName, QueryViewParams
+}) ->
+    % It is not possible to correctly infer if replication traverse, eviction traverse or both
+    % were finished and it is only feasible to approximate it. This should not cause any problems
+    % as after provider restart transfers can only:
+    % - be ended - in such case value of these flags does not matter
+    % - be running without processes - the will be forcibly ended and as such
+    %                                  values of these fields should not matter
+    TraverseFinished = FilesToProcess == FilesProcessed,
+
+    {11, {?TRANSFER_MODEL, FileUuid, SpaceId, UserId, RerunId, Path, CallBack, Enqueued,
+        Cancel, ReplicationStatus, EvictionStatus, SchedulingProvider,
+        ReplicatingProvider, EvictingProvider, Pid, TraverseFinished, TraverseFinished,
+        FilesToProcess, FilesProcessed, FailedFiles, FilesReplicated, BytesReplicated,
+        FilesEvicted, ScheduleTime, StartTime, FinishTime,
+        LastUpdate, MinHist, HrHist, DyHist, MthHist, ViewName, QueryViewParams
     }}.
