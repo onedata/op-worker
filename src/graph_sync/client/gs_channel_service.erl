@@ -27,9 +27,10 @@
 
 %% API
 -export([setup_internal_service/0]).
+-export([terminate_internal_service/0]).
 -export([is_connected/0]).
 -export([force_start_connection/0, force_terminate_connection/0, force_restart_connection/0]).
--export([on_db_and_workers_ready/0]).
+-export([trigger_pending_on_connect_to_oz_procedures/0]).
 
 %% Internal Service callbacks
 -export([start_service/0, stop_service/0, takeover_service/0, healthcheck/1]).
@@ -62,6 +63,11 @@ setup_internal_service() ->
         healthcheck_interval => ?GS_RECONNECT_BASE_INTERVAL,
         async_start => true
     }).
+
+
+-spec terminate_internal_service() -> ok.
+terminate_internal_service() ->
+    internal_services_manager:stop_service(?MODULE, ?GS_CHANNEL_SERVICE_NAME, ?GS_CHANNEL_SERVICE_NAME).
 
 
 %%--------------------------------------------------------------------
@@ -136,14 +142,14 @@ force_restart_connection() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Callback for when the cluster's DB and workers are initialized and it is
-%% possible to run the deferred on-connect procedures. They are not run during
-%% the first Onezone connection as it is established before the upgrade_cluster
-%% step and initialization of all workers (which are required in the process).
+%% Callback for when the cluster is initialized and it is possible to run the
+%% deferred on-connect procedures. They are not run during the first Onezone
+%% connection as it is established before the upgrade_cluster step and
+%% initialization of all workers (which are required for them to work).
 %% @end
 %%--------------------------------------------------------------------
--spec on_db_and_workers_ready() -> ok.
-on_db_and_workers_ready() ->
+-spec trigger_pending_on_connect_to_oz_procedures() -> ok.
+trigger_pending_on_connect_to_oz_procedures() ->
     node() =:= responsible_node() andalso is_connected() andalso run_on_connect_to_oz_procedures(),
     ok.
 

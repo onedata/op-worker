@@ -29,7 +29,7 @@ repositories:
   - op-worker:
       scope: global
 branches:
-  create: manually
+  create: for-new-branch
   delete:
     after-deleted-days: 0
     after-inactive-days: 30
