@@ -56,6 +56,17 @@
 -define(BACKOFF_RATE, op_worker:get_env(synchronizer_backoff_rate, 1.5)).
 -define(MAX_BACKOFF, op_worker:get_env(synchronizer_max_backoff, timer:minutes(5))).
 
+-define(MAX_JOB_RESTARTS, op_worker:get_env(synchronizer_max_job_restarts, 5)).
+-define(MAX_JOB_INACTIVITY_PERIOD_SEC, op_worker:get_env(
+    synchronizer_max_job_inactivity_period_sec, 3600
+)).
+-define(JOBS_INACTIVITY_CHECK_INTERVAL_SEC, op_worker:get_env(
+    synchronizer_jobs_inactivity_check_interval_sec, 1800
+)).
+-define(JOBS_INACTIVITY_CHECK_MSG, check_inactive_jobs).
+
+-define(NOW_SECONDS(), global_clock:timestamp_seconds()).
+
 -define(FLUSH_STATS, flush_stats).
 -define(FLUSH_BLOCKS, flush_blocks).
 -define(FLUSH_EVENTS, flush_events).
@@ -65,6 +76,17 @@
 -type priority() :: non_neg_integer().
 -type from() :: {pid(), any()}. %% `From` argument to gen_server:call callback
 -type request_type() :: sync | async.
+-type last_activity() :: time:seconds().
+-type restarts_left() :: non_neg_integer().
+
+-record(job, {
+    block :: block(),
+    ref :: fetch_ref(),
+    priority :: priority(),
+    last_activity :: last_activity(),
+    restarts_left :: restarts_left()
+}).
+-type job() :: #job{}.
 
 % module implementing transfer_stats_callback_behaviour
 -type stats_callback_module() :: module().
@@ -76,7 +98,7 @@
     dest_storage_id :: storage:id() | undefined,
     dest_file_id :: helpers:file_id() | undefined,
     last_transfer :: undefined | block(),
-    in_progress :: ordsets:ordset({block(), fetch_ref(), priority()}),
+    in_progress :: ordsets:ordset(job()),
     in_sequence_hits = 0 :: non_neg_integer(),
     from_to_refs = #{} :: #{from() => [fetch_ref()]},
     ref_to_froms = #{} :: #{fetch_ref() => [from()]},
@@ -577,10 +599,13 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priorit
 
         TransferId =/= undefined andalso (catch gproc:add_local_counter(TransferId, 1)),
         OverlappingInProgress = find_overlapping(Block, Priority, State#state.in_progress),
-        {OverlappingBlocks, ExistingRefs, _Priorities} = lists:unzip3(OverlappingInProgress),
+        {OverlappingBlocks, ExistingRefs} = unzip_blocks_adn_refs(OverlappingInProgress),
         Holes = get_holes(Block, OverlappingBlocks),
+
         NewTransfers = start_transfers(Holes, TransferId, State, Priority),
-        {_, NewRefs, _} = lists:unzip3(NewTransfers),
+        schedule_jobs_inactivity_check(),
+
+        NewRefs = unzip_refs(NewTransfers),
         case ExistingRefs ++ NewRefs of
             [] ->
                 FileLocation = fslogic_location:get_local_blocks_and_fill_location_gaps([Block],
@@ -675,6 +700,7 @@ handle_info(?REF_TO_TIDS_CLEARING_MSG(Ref), State) ->
 
 handle_info({Ref, active, ProviderId, Block}, #state{
     file_ctx = FileCtx,
+    in_progress = InProgress,
     ref_to_froms = RefToFroms,
     ref_to_transfer_ids = RefToTransferIds,
     from_to_transfer_id = FromToTransferId
@@ -682,6 +708,11 @@ handle_info({Ref, active, ProviderId, Block}, #state{
     fslogic_cache:set_local_change(true),
     {ok, _} = replica_updater:update(FileCtx, [Block], undefined, false),
     fslogic_cache:set_local_change(false),
+
+    InProgress2 = lists:map(fun
+        (Job = #job{ref = FetchRef}) when FetchRef == Ref -> Job#job{last_activity = ?NOW_SECONDS()};
+        (Job) -> Job
+    end, InProgress),
 
     % Race where `complete` msg is send before `active` one is possible because
     % of rtransfer. That's why association from ref to transfer ids is created
@@ -695,7 +726,8 @@ handle_info({Ref, active, ProviderId, Block}, #state{
         Values ->
             lists:usort(Values)
     end,
-    {noreply, cache_stats_and_blocks(TransferIds, ProviderId, Block, State), ?DIE_AFTER};
+    State2 = State#state{in_progress = InProgress2},
+    {noreply, cache_stats_and_blocks(TransferIds, ProviderId, Block, State2), ?DIE_AFTER};
 
 handle_info(?FLUSH_STATS, State) ->
     {noreply, flush_stats(State, true), ?DIE_AFTER};
@@ -758,7 +790,7 @@ handle_info({replace_failed_transfer, FailedRef}, #state{retries_number = Retrie
                 ?warning("Replaced failed transfer ~p (~p) with new transfers ~p", [
                     FailedRef, Block, NewTransfers
                 ]),
-                {_, NewRefs, _} = lists:unzip3(NewTransfers),
+                NewRefs = unzip_refs(NewTransfers),
                 State2 = associate_froms_with_refs(AffectedFroms, NewRefs, State1),
                 State3 = add_in_progress(NewTransfers, State2),
 
@@ -845,6 +877,26 @@ handle_info({file_truncated, Ans, EmitEvents, RequestedBy}, State) ->
     gen_server2:reply(RequestedBy, FinalAns),
     {noreply, State2, ?DIE_AFTER};
 
+handle_info(?JOBS_INACTIVITY_CHECK_MSG, State0 = #state{in_progress = InProgress}) ->
+    Now = ?NOW_SECONDS(),
+
+    {StaleJobs, InactiveJobs} = lists:foldl(fun(Job, Acc = {StaleAcc, InactiveAcc}) ->
+        case Job#job.last_activity + ?JOBS_INACTIVITY_CHECK_INTERVAL_SEC < Now of
+            true when Job#job.restarts_left == 0 -> {[Job | StaleAcc], InactiveAcc};
+            true -> {StaleAcc, [Job | InactiveAcc]};
+            false -> Acc
+        end
+    end, {[], []}, InProgress),
+
+    State1 = lists:foldl(fun restart_inactive_job/2, State0, InactiveJobs),
+    State2 = lists:foldl(fun cancel_stale_job/2, State1, StaleJobs),
+
+    case State2#state.in_progress of
+        [] -> ok;
+        _ -> schedule_jobs_inactivity_check()
+    end,
+    {noreply, State2, ?DIE_AFTER};
+
 handle_info(Msg, State) ->
     ?log_bad_request(Msg),
     {noreply, State, ?DIE_AFTER}.
@@ -863,6 +915,42 @@ terminate(_Reason, State) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%% @private
+-spec restart_inactive_job(job(), #state{}) -> #state{}.
+restart_inactive_job(#job{ref = InactiveRef, restarts_left = RestartsLeft}, State) ->
+    {Block, Priority, AffectedFroms, _FinishedFroms, State1} = disassociate_ref(
+        InactiveRef, State
+    ),
+    NewTransfers = start_transfers([Block], undefined, State1, Priority, RestartsLeft - 1),
+    ?warning("Replaced inactive transfer ~p (~p) with new transfers ~p", [
+        InactiveRef, Block, NewTransfers
+    ]),
+    NewRefs = unzip_refs(NewTransfers),
+    State2 = associate_froms_with_refs(AffectedFroms, NewRefs, State1),
+    add_in_progress(NewTransfers, State2).
+
+
+%% @private
+-spec cancel_stale_job(job(), #state{}) -> #state{}.
+cancel_stale_job(#job{ref = StaleRef}, State) ->
+    ErrorStatus = {error, stale_job},
+    ?error("Cancelling stale transfer ~p", [StaleRef]),
+
+    {_Block, _Priority, AffectedFroms, FinishedFroms, State1} = disassociate_ref(
+        StaleRef, State
+    ),
+    {_FailedBlocks, _ExcludeSessions, FailedTransfers, State2} = disassociate_froms(
+        FinishedFroms, State1
+    ),
+
+    %% Cancel TransferIds that are still left (i.e. the failed ref was only a part of the transfer)
+    [gen_server2:reply(From, ErrorStatus) || From <- FinishedFroms],
+
+    FromsToCancel = maps:keys(maps:with(AffectedFroms, State2#state.from_to_transfer_id)),
+    State3 = cancel_froms(FromsToCancel, State2, ErrorStatus),
+
+    associate_ref_with_tids(StaleRef, FailedTransfers, State3).
 
 %% @private
 -spec handle_error(fetch_ref(), Error :: term(), #state{}) -> #state{}.
@@ -912,8 +1000,8 @@ disassociate_ref(Ref, State = #state{
     ref_to_froms = RTFs,
     from_to_refs = FTRs
 }) ->
-    {Block, Priority, InProgress2} = case lists:keytake(Ref, 2, InProgress) of
-        {value, {B, _, P}, IP} ->
+    {Block, Priority, InProgress2} = case take_ref(Ref, InProgress, []) of
+        {value, #job{block = B, priority = P}, IP} ->
             {B, P, IP};
         false ->
             {undefined, undefined, InProgress}
@@ -1074,7 +1162,7 @@ cancel_froms(Froms, State = #state{
         gen_server2:reply(From, Response)
     end, Froms),
 
-    InProgress2 = lists:filter(fun({_Block, Ref, _Priority}) ->
+    InProgress2 = lists:filter(fun(#job{ref = Ref}) ->
         not sets:is_element(Ref, OrphanedRefs)
     end, InProgress),
 
@@ -1118,7 +1206,7 @@ cancel_ref(Ref, RetryNum) ->
 
 -spec cancel_all_transfers(#state{}) -> ok.
 cancel_all_transfers(#state{in_progress = InProgress, from_to_refs = Froms}) ->
-    lists:foreach(fun({_, FetchRef, _}) ->
+    lists:foreach(fun(#job{ref = FetchRef}) ->
         cancel_ref(FetchRef, 3)
     end, ordsets:to_list(InProgress)),
 
@@ -1206,9 +1294,31 @@ associate_from_with_session(From, SessionId, State = #state{
         session_to_froms = STFs#{SessionId => sets:add_element(From, Froms)}
     }.
 
--spec add_in_progress([{block(), fetch_ref(), priority()}], #state{}) -> #state{}.
-add_in_progress(NewTransfers, State) ->
-    InProgress = ordsets:union(State#state.in_progress, ordsets:from_list(NewTransfers)),
+%% @private
+-spec unzip_blocks_adn_refs(ordsets:ordset(job())) -> {[block()], [fetch_ref()]}.
+unzip_blocks_adn_refs(InProgress) ->
+    lists:foldr(fun(#job{block = Block, ref = FetchRef}, {BlockAcc, RefAcc}) ->
+        {[Block | BlockAcc], [FetchRef | RefAcc]}
+    end, {[], []}, ordsets:to_list(InProgress)).
+
+%% @private
+-spec unzip_refs(ordsets:ordset(job())) -> [fetch_ref()].
+unzip_refs(InProgress) ->
+    lists:map(fun(#job{ref = FetchRef}) -> FetchRef end, ordsets:to_list(InProgress)).
+
+%% @private
+-spec take_ref(fetch_ref(), [job()], [job()]) ->
+    {value, job(), [job()]} | false.
+take_ref(Ref, [Job | InProgress], Acc) when Job#job.ref == Ref ->
+    {value, Job, lists:reverse(Acc, InProgress)};
+take_ref(Ref, [Job | InProgress], Acc) ->
+    take_ref(Ref, InProgress, [Job | Acc]);
+take_ref(_Ref, [], _Acc) ->
+    false.
+
+-spec add_in_progress([job()], #state{}) -> #state{}.
+add_in_progress(NewJobs, State) ->
+    InProgress = ordsets:union(State#state.in_progress, ordsets:from_list(NewJobs)),
     State#state{in_progress = InProgress}.
 
 %%--------------------------------------------------------------------
@@ -1244,16 +1354,22 @@ is_sequential(#file_block{offset = NextOffset, size = NewSize},
 is_sequential(_, _State) ->
     false.
 
+%% @private
+-spec start_transfers([block()], transfer:id() | undefined, #state{}, priority()) ->
+    NewRequests :: [job()].
+start_transfers(InitialBlocks, TransferId, State, Priority) ->
+    start_transfers(InitialBlocks, TransferId, State, Priority, ?MAX_JOB_RESTARTS).
+
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
 %% Starts new rtransfer transfers.
 %% @end
 %%--------------------------------------------------------------------
--spec start_transfers([block()], transfer:id() | undefined,
-    #state{}, priority()) ->
-    NewRequests :: [{block(), fetch_ref(), priority()}].
-start_transfers(InitialBlocks, TransferId, State, Priority) ->
+-spec start_transfers([block()], transfer:id() | undefined, #state{}, priority(), restarts_left()) ->
+    NewRequests :: [job()].
+start_transfers(InitialBlocks, TransferId, State, Priority, MaxJobRestarts) ->
     LocationDocs = fslogic_cache:get_all_locations(),
     ProvidersAndBlocks = replica_finder:get_blocks_for_sync(LocationDocs, InitialBlocks),
     TotalSize = lists:foldl(fun({_P, Blocks, _SD}, Acc) ->
@@ -1287,7 +1403,13 @@ start_transfers(InitialBlocks, TransferId, State, Priority) ->
                     CompleteFun = make_complete_fun(Self),
                     {ok, NewRef} = rtransfer_config:fetch(Request, NotifyFun, CompleteFun,
                         TransferId, SpaceId, FileGuid),
-                    {FetchedBlock, NewRef, Priority}
+                    #job{
+                        block = FetchedBlock,
+                        ref = NewRef,
+                        priority = Priority,
+                        last_activity = ?NOW_SECONDS(),
+                        restarts_left = MaxJobRestarts
+                    }
                 end, Blocks)
         end, ProvidersAndBlocks).
 
@@ -1362,12 +1484,12 @@ enlarge_block(Block, _Prefetch) ->
 %%--------------------------------------------------------------------
 -spec find_overlapping(block(), priority(), Blocks) -> Overlapping when
     Blocks :: ordsets:ordset([{block(), fetch_ref(), priority()}]),
-    Overlapping :: [{block(), fetch_ref(), priority()}].
-find_overlapping(#file_block{offset = Begin, size = Size}, Priority, Blocks) ->
+    Overlapping :: [job()].
+find_overlapping(#file_block{offset = Begin, size = Size}, Priority, InProgress) ->
     End = Begin + Size,
-    lists:filter(fun({#file_block{offset = O, size = S}, _Ref, P}) ->
+    lists:filter(fun(#job{block = #file_block{offset = O, size = S}, priority = P}) ->
         P =< Priority andalso O < End andalso O + S > Begin
-    end, ordsets:to_list(Blocks)).
+    end, ordsets:to_list(InProgress)).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -1835,3 +1957,12 @@ flush_archive_helper_buffer_if_applicable(FileCtx) ->
         false ->
             ok
     end.
+
+
+%% @private
+-spec schedule_jobs_inactivity_check() -> ok.
+schedule_jobs_inactivity_check() ->
+    erlang:send_after(
+        timer:seconds(?JOBS_INACTIVITY_CHECK_INTERVAL_SEC), self(), ?JOBS_INACTIVITY_CHECK_MSG
+    ),
+    ok.
