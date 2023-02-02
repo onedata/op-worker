@@ -67,7 +67,16 @@ setup_internal_service() ->
 
 -spec terminate_internal_service() -> ok.
 terminate_internal_service() ->
-    internal_services_manager:stop_service(?MODULE, ?GS_CHANNEL_SERVICE_NAME, ?GS_CHANNEL_SERVICE_NAME).
+    case node() =:= responsible_node() of
+        true ->
+            try
+                ok = internal_services_manager:stop_service(?MODULE, ?GS_CHANNEL_SERVICE_NAME, ?GS_CHANNEL_SERVICE_NAME)
+            catch Class:Reason ->
+                ?error_stacktrace("Error terminating the GS channel service~nCaught: ~w:~p", [Class, Reason])
+            end;
+        false ->
+            ok
+    end.
 
 
 %%--------------------------------------------------------------------
