@@ -119,8 +119,8 @@ execute_hooks(FileUuid, HookType) ->
                     critical_section:run(FileUuid, fun() ->
                         % Get document once more as hooks might have changed before entering to critical section
                         case datastore_model:get(?CTX, Key) of
-                            {ok, #document{value = #file_meta_posthooks{hooks = Hooks}}} ->
-                                execute_hooks_unsafe(Key, Hooks);
+                            {ok, #document{value = #file_meta_posthooks{hooks = HooksToExecute}}} ->
+                                execute_hooks_unsafe(Key, HooksToExecute);
                             _ ->
                                 ok
                         end
@@ -160,7 +160,11 @@ execute_hooks_unsafe(Key, HooksToExecute) ->
             end,
             case datastore_model:update(?CTX, Key, UpdateFun) of
                 {ok, #document{value = #file_meta_posthooks{hooks = Hooks}}} when map_size(Hooks) == 0 ->
-                    datastore_model:delete(?CTX, Key, fun(#file_meta_posthooks{hooks = H}) -> map_size(H) == 0 end);
+                    case datastore_model:delete(?CTX, Key, fun(#file_meta_posthooks{hooks = H}) -> map_size(H) == 0 end) of
+                        ok -> ok;
+                        {error, {not_satisfied, _}} -> ok;
+                        {error, Reason} -> {error, Reason}
+                    end;
                 {ok, _} ->
                     ok;
                 {error, _} = Error ->
@@ -232,4 +236,3 @@ get_record_struct(1) ->
             {args, binary}
         ]}}}
     ]}.
-

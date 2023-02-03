@@ -379,7 +379,7 @@ traverse_cancel_test_base(Config, StartTaskWorker, CancelWorker, DirName) ->
     get_slave_ans(),
 
     lists:foreach(fun(W) ->
-        verify_finished_tash(W, TaskId, true),
+        verify_finished_task(W, TaskId, true),
         ?assertMatch({ok, [], _}, rpc:call(W, traverse_task_list, list, [atom_to_binary(?MODULE, utf8), ongoing]), 30),
         ?assertMatch({ok, [], _}, rpc:call(W, traverse_task_list, list, [atom_to_binary(?MODULE, utf8), scheduled]), 30),
         check_ended(Worker, [TaskId]),
@@ -444,7 +444,7 @@ queued_traverse_cancel_test_base(Config, CancelWorker, DirName) ->
     lists:foreach(fun(W) ->
         ?assertMatch({ok, #document{value = #traverse_task{enqueued = false,
             canceled = false, status = finished}}}, rpc:call(W, tree_traverse, get_task, [?MODULE, TaskId0]), 30),
-        verify_finished_tash(W, TaskId, true),
+        verify_finished_task(W, TaskId, true),
         ?assertMatch({ok, [], _}, rpc:call(W, traverse_task_list, list, [atom_to_binary(?MODULE, utf8), ongoing]), 30),
         ?assertMatch({ok, [], _}, rpc:call(W, traverse_task_list, list, [atom_to_binary(?MODULE, utf8), scheduled]), 30),
         check_ended(Worker, [TaskId0, TaskId]),
@@ -509,8 +509,8 @@ traverse_restart_test(Config) ->
     get_slave_ans(),
 
     lists:foreach(fun(W) ->
-        verify_finished_tash(W, TaskId, false),
-        verify_finished_tash(W, TaskId2, false),
+        verify_finished_task(W, TaskId, false),
+        verify_finished_task(W, TaskId2, false),
         ?assertMatch({ok, [], _}, rpc:call(W, traverse_task_list, list, [PoolName, ongoing]), 30),
         ?assertMatch({ok, [], _}, rpc:call(W, traverse_task_list, list, [PoolName, scheduled]), 30),
         check_ended(Worker, [TaskId, TaskId2])
@@ -1010,7 +1010,7 @@ verify_posthooks_called(ExpectedPosthooks) ->
     end.
 
 
-verify_finished_tash(Worker, TaskId, IsCanceled) ->
+verify_finished_task(Worker, TaskId, IsCanceled) ->
     CheckTask = fun() ->
         try
             {ok, #document{value = #traverse_task{enqueued = Enqueued, canceled = Canceled, status = Status}}} =

@@ -1066,8 +1066,8 @@ acquire_space_collecting_status(SpaceId, #state{space_collecting_statuses = Coll
 -spec add_hook_for_missing_doc(file_id:file_guid(), dir_stats_collection:type(), dir_stats_collection:collection()) ->
     ok | ?ERROR_INTERNAL_SERVER_ERROR.
 add_hook_for_missing_doc(Guid, CollectionType, CollectionUpdate) ->
-    file_meta_posthooks:add_hook({file_meta_missing, file_id:guid_to_uuid(Guid)},
-        generator:gen_name(), file_id:guid_to_space_id(Guid),
+    {FileUuid, SpaceId} = file_id:unpack_guid(Guid),
+    file_meta_posthooks:add_hook({file_meta_missing, FileUuid}, generator:gen_name(), SpaceId,
         ?MODULE, update_stats_of_parent, [Guid, CollectionType, CollectionUpdate, return_error]).
 
 
