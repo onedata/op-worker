@@ -607,10 +607,10 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priorit
                 end
         end
     catch
-        E1:E2 ->
-            ?error_stacktrace("Unable to start transfer due to error ~p:~p",
-                [E1, E2]),
-            {reply, {error, E2}, State0, ?DIE_AFTER}
+        Class:Reason ->
+            ?error_stacktrace("Unable to start transfer ~p~nCaught: ~w:~p",
+                [TransferId, Class, Reason]),
+            {reply, {error, Reason}, State0, ?DIE_AFTER}
     end;
 
 handle_call(?FLUSH_EVENTS, _From, State) ->
@@ -635,8 +635,8 @@ handle_cast({cancel, TransferId}, State) ->
         NewState = cancel_transfer_id(TransferId, State),
         {noreply, NewState, ?DIE_AFTER}
     catch
-        _:Reason ->
-            ?error_stacktrace("Unable to cancel ~p: ~p", [TransferId, Reason]),
+        Class:Reason ->
+            ?error_stacktrace("Unable to cancel transfer ~p~nCaught: ~w:~p", [TransferId, Class, Reason]),
             {noreply, State, ?DIE_AFTER}
     end;
 
@@ -776,9 +776,9 @@ handle_info({Ref, complete, {error, {connection, <<"canceled">>}}}, #state{
             % replications should be also cancelled and registry/state cleared.
             try
                 cancel_froms(AffectedFroms, State)
-            catch _:Reason ->
-                ?error_stacktrace("Unable to cancel transfers associated with ~p due to ~p", [
-                    Ref, Reason
+            catch Class:Reason ->
+                ?error_stacktrace("Unable to cancel transfers associated with ~p~nCaught: ~w:~p", [
+                    Ref, Class, Reason
                 ]),
                 State
             end
@@ -1010,9 +1010,9 @@ cancel_session(SessionId, State) ->
                 })
         end
     catch
-        _:Reason ->
-            ?error_stacktrace("Unable to cancel transfers of ~p: ~p", [
-                SessionId, Reason
+        Class:Reason ->
+            ?error_stacktrace("Unable to cancel transfers of session~p~nCaught: ~w:~p", [
+                SessionId, Class, Reason
             ]),
             State
     end.
@@ -1742,10 +1742,12 @@ spawn_block_clearing(FileCtx, EmitEvents, RequestedBy) ->
             #fuse_response{status = #status{code = ?OK}} = truncate_req:truncate_insecure(UserCtx, FileCtx, 0, false),
             ok
         catch
-            E:R ->
+            Class:Reason ->
                 FileUuid = file_ctx:get_uuid_const(FileCtx),
-                ?error_stacktrace("Unexpected error ~p:~p when truncating file ~p.", [E, R, FileUuid]),
-                {error, {E, R}}
+                ?error_stacktrace("Unexpected error when truncating file ~p~nCaught: ~w:~p", [
+                    FileUuid, Class, Reason
+                ]),
+                {error, {Class, Reason}}
         end,
         Master ! {file_truncated, Ans, EmitEvents, RequestedBy}
     end),

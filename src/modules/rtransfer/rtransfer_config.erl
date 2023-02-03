@@ -57,16 +57,11 @@ start_rtransfer() ->
 %% but then resumed.
 %% @end
 %%--------------------------------------------------------------------
--spec restart_link() -> ok | {error, not_running}.
+-spec restart_link() -> ok.
 restart_link() ->
-    case whereis(rtransfer_link_port) of
-        undefined -> {error, not_running};
-        Pid ->
-            prepare_ssl_opts(),
-            prepare_graphite_opts(),
-            erlang:exit(Pid, restarting),
-            ok
-    end.
+    prepare_ssl_opts(),
+    prepare_graphite_opts(),
+    rtransfer_link_port:restart().
 
 %%--------------------------------------------------------------------
 %% @doc
