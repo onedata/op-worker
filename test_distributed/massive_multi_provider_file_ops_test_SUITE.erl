@@ -1017,7 +1017,7 @@ verify_finished_task(Worker, TaskId, IsCanceled) ->
                 rpc:call(Worker, tree_traverse, get_task, [?MODULE, TaskId]),
             % Status can be finished for canceled task if task was finished before cancel was processed
             % (possible for remote cancellations).
-            % Status can ba canceled even if job was not expected to be canceled in case of node restart.
+            % Status can be canceled even if job was not expected to be canceled in case of restart.
             IsFinished = case (Status =:= canceled) orelse (Status =:= finished) of
                 true -> true;
                 false -> {false, Status}
