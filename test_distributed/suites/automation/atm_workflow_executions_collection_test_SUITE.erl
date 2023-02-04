@@ -585,7 +585,10 @@ update_listing_opts(start_index, ListingOpts, ListedLinks) ->
 init_per_suite(Config) ->
     oct_background:init_per_suite(Config, #onenv_test_config{
         onenv_scenario = "2op",
-        envs = [{op_worker, op_worker, [{fuse_session_grace_period_seconds, 24 * 60 * 60}]}]
+        envs = [{op_worker, op_worker, [
+            {fuse_session_grace_period_seconds, 24 * 60 * 60},
+            {atm_workflow_executions_graceful_stop_timeout_sec, 0}
+        ]}]
     }).
 
 

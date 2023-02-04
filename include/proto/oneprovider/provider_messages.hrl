@@ -78,6 +78,7 @@
     id :: archive:id(),
     dataset_id :: dataset:id(),
     archiving_provider :: oneprovider:id(),
+    creator :: od_user:id(),
     state :: archive:state(),
     root_dir_guid :: undefined | file_id:file_guid(),
     data_dir_guid :: undefined | file_id:file_guid(),

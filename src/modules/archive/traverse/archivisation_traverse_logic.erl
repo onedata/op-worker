@@ -340,8 +340,7 @@ mark_finished(ArchiveDoc, UserCtx, NestedArchiveStats) ->
         ok -> 
             ok;
         {error, marked_to_delete} ->
-            {ok, ArchiveId} = archive:get_id(ArchiveDoc),
-            archive_api:delete(ArchiveId, undefined)
+            ok = archive_api:delete_archive_recursive(ArchiveDoc)
     end.
 
 

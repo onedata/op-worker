@@ -108,6 +108,8 @@
     error_during_archivisation_master_job/1,
     error_during_verification_slave_job/1,
     error_during_verification_master_job/1,
+    delete_nested_archive_error/1,
+    delete_not_finished_archive_error/1,
     
     audit_log_test/1,
     audit_log_failed_file_test/1,
@@ -196,7 +198,9 @@ groups() -> [
         error_during_archivisation_slave_job,
         error_during_archivisation_master_job,
         error_during_verification_slave_job,
-        error_during_verification_master_job
+        error_during_verification_master_job,
+        delete_nested_archive_error,
+        delete_not_finished_archive_error
     ]},
     {audit_log_tests, [
         audit_log_test,
@@ -500,6 +504,55 @@ error_during_verification_slave_job(_Config) ->
 
 error_during_verification_master_job(_Config) ->
     errors_test_base(verification, master_job).
+
+
+delete_nested_archive_error(_Config) ->
+    Node = oct_background:get_random_provider_node(krakow),
+    SessionId = oct_background:get_user_session_id(?USER1, krakow),
+    #object{
+        dataset = #dataset_object{archives = [#archive_object{id = ParentArchiveId}]},
+        children = [
+            #object{
+                guid = FileGuid,
+                dataset = #dataset_object{id = DatasetId}
+            }
+        ]
+    } = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
+        #dir_spec{
+            dataset = #dataset_spec{archives = [#archive_spec{
+                config = #archive_config{create_nested_archives = true, layout = ?ARCHIVE_PLAIN_LAYOUT}
+            }]},
+            children = [
+                #file_spec{dataset = #dataset_spec{}}
+            ]
+        }
+    ),
+    {ok, {[{_, ArchiveId}], _}} = ?assertMatch({ok, {[_], true}},
+        opt_archives:list(Node, SessionId, DatasetId, #{offset => 0, limit => 10}), ?ATTEMPTS),
+    
+    archive_tests_utils:assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, FileGuid, 1, 0, ?ATTEMPTS),
+    ?assertEqual(?ERROR_NESTED_ARCHIVE_DELETION_FORBIDDEN(ParentArchiveId), opt_archives:delete(Node, SessionId, ArchiveId)),
+    ?assertEqual(ok, opt_archives:delete(Node, SessionId, ParentArchiveId)).
+
+
+delete_not_finished_archive_error(_Config) ->
+    Node = oct_background:get_random_provider_node(krakow),
+    SessionId = oct_background:get_user_session_id(?USER1, krakow),
+    #object{
+        guid = Guid,
+        dataset = #dataset_object{id = DatasetId, archives = [#archive_object{id = ArchiveId}]}
+    } = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE,
+        #dir_spec{
+            dataset = #dataset_spec{archives = [#archive_spec{config = #archive_config{layout = ?ARCHIVE_PLAIN_LAYOUT}}]}
+        }
+    ),
+    
+    % archive staying in pending state is mocked in init_per_test
+    ?assertEqual(?ERROR_FORBIDDEN_FOR_CURRENT_ARCHIVE_STATE(?ARCHIVE_PENDING, [?ARCHIVE_PRESERVED, ?ARCHIVE_FAILED, ?ARCHIVE_DELETING,
+        ?ARCHIVE_VERIFICATION_FAILED, ?ARCHIVE_CANCELLED]), opt_archives:delete(Node, SessionId, ArchiveId)),
+    finalize_archive_creation(?FUNCTION_NAME),
+    archive_tests_utils:assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, Guid, 0, 0, ?ATTEMPTS),
+    ?assertEqual(ok, opt_archives:delete(Node, SessionId, ArchiveId)).
 
 
 %===================================================================
@@ -1176,6 +1229,27 @@ mock_job_function_error(Module, FunctionName) ->
     end,
     test_utils:mock_expect(Nodes, Module, FunctionName, MockFun).
 
+
+mock_archive_creation_pending(FunctionName) ->
+    Nodes = oct_background:get_all_providers_nodes(),
+    test_utils:mock_new(Nodes, archivisation_traverse),
+    Self = self(),
+    test_utils:mock_expect(Nodes, archivisation_traverse, do_master_job, fun(Job, Args) ->
+        Self ! {FunctionName, self()},
+        receive continue ->
+            meck:passthrough([Job, Args])
+        end
+    end).
+
+
+% this function requires earlier call to mock_archive_creation_pending/1
+finalize_archive_creation(FunctionName) ->
+    receive {FunctionName, Pid} ->
+        Pid ! continue
+    after timer:seconds(?ATTEMPTS) ->
+        throw({error, archivisation_not_started})
+    end.
+
 %===================================================================
 % SetUp and TearDown functions
 %===================================================================
@@ -1194,7 +1268,6 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     oct_background:end_per_suite(),
     dir_stats_test_utils:enable_stats_counting(Config).
-
 init_per_group(audit_log_tests, Config) ->
     ok = clock_freezer_mock:setup_for_ct(oct_background:get_all_providers_nodes(), [global_clock]),
     init_per_group(default, Config);
@@ -1206,6 +1279,9 @@ end_per_group(_Group, Config) ->
     clock_freezer_mock:teardown_for_ct(oct_background:get_all_providers_nodes()),
     lfm_proxy:teardown(Config).
 
+init_per_testcase(delete_not_finished_archive_error, Config) ->
+    mock_archive_creation_pending(delete_not_finished_archive_error),
+    init_per_testcase(default, Config);
 init_per_testcase(_Case, Config) ->
     Config.
 
