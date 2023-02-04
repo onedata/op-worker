@@ -121,13 +121,17 @@ execute_hooks(FileUuid, HookType) ->
                         case datastore_model:get(?CTX, Key) of
                             {ok, #document{value = #file_meta_posthooks{hooks = HooksToExecute}}} ->
                                 execute_hooks_unsafe(Key, HooksToExecute);
-                            _ ->
-                                ok
+                            {error, not_found} ->
+                                ok;
+                            Error ->
+                                ?error("Cannot execute hooks ~p for ~p because of ~p", [HookType, FileUuid, Error])
                         end
                     end)
             end;
-        _ ->
-            ok
+        {error, not_found} ->
+            ok;
+        Error ->
+            ?error("Cannot execute hooks ~p for ~p because of ~p", [HookType, FileUuid, Error])
     end.
 
 
