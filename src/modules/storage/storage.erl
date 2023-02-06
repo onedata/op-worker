@@ -426,21 +426,26 @@ update_helper(StorageId, UpdateFun) ->
     {ok, od_space:id()} | errors:error().
 support_space(StorageId, SerializedToken, SupportSize, SupportParameters) ->
     case validate_support_request(SerializedToken) of
-        ok ->
+        {ok, SpaceId} ->
+            case dir_stats_service_state:enable_for_new_support(SpaceId) of
+                ok -> ok;
+                StatsError -> ?warning("Error enabling statistics for new space ~p~nGot: ~p", [SpaceId, StatsError])
+            end,
             case storage_logic:support_space(StorageId, SerializedToken, SupportSize, SupportParameters) of
                 {ok, SpaceId} ->
-                    on_space_supported(SpaceId, StorageId, SupportParameters),
+                    on_space_supported(SpaceId, StorageId),
                     {ok, SpaceName} = space_logic:get_name(?ROOT_SESS_ID, SpaceId),
                     {ok, StorageName} = storage_logic:get_name_of_local_storage(StorageId),
                     ?notice("New space has been supported: '~s' (~s) with ~s quota on storage '~s' (~s)", [
                         SpaceName, SpaceId, str_utils:format_byte_size(SupportSize), StorageName, StorageId
                     ]),
                     {ok, SpaceId};
-                {error, _} = Error ->
-                    Error
+                {error, _} = SupportError ->
+                    ok = dir_stats_service_state:clean(SpaceId),
+                    SupportError
             end;
-        Error ->
-            Error
+        ValidateError ->
+            ValidateError
     end.
 
 
@@ -452,7 +457,7 @@ support_space(StorageId, SerializedToken, SupportSize, SupportParameters) ->
 %% @TODO VFS-5497 This check will not be needed when multisupport is implemented
 %% @end
 %%--------------------------------------------------------------------
--spec validate_support_request(tokens:serialized()) -> ok | errors:error().
+-spec validate_support_request(tokens:serialized()) -> {ok, od_space:id()} | errors:error().
 validate_support_request(SerializedToken) ->
     case tokens:deserialize(SerializedToken) of
         {ok, #token{type = ?INVITE_TOKEN(?SUPPORT_SPACE, SpaceId)}} ->
@@ -461,7 +466,8 @@ validate_support_request(SerializedToken) ->
                     ?ERROR_RELATION_ALREADY_EXISTS(
                         od_space, SpaceId, od_provider, oneprovider:get_id()
                     );
-                false -> ok
+                false ->
+                    {ok, SpaceId}
             end;
         {ok, #token{type = ReceivedType}} ->
             ?ERROR_BAD_VALUE_TOKEN(<<"token">>,
@@ -511,18 +517,11 @@ on_storage_created(StorageId) ->
 
 
 %% @private
--spec on_space_supported(od_space:id(), id(), support_parameters:record()) -> ok.
-on_space_supported(SpaceId, StorageId, SupportParameters) ->
+-spec on_space_supported(od_space:id(), id()) -> ok.
+on_space_supported(SpaceId, StorageId) ->
     % remove possible remnants of previous support 
     % (when space was unsupported in Onezone without provider knowledge)
     space_unsupport:cleanup_local_documents(SpaceId, StorageId),
-    case SupportParameters of
-        #support_parameters{dir_stats_service_enabled = true} ->
-            % NOTE: MUST be called before storage import is started
-            dir_stats_service_state:enable_for_new_support(SpaceId);
-        _ ->
-            ok
-    end,
     space_logic:on_space_supported(SpaceId).
 
 
