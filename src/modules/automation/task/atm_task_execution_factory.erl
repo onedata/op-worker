@@ -308,11 +308,13 @@ create_task_execution_doc(#creation_ctx{
             }
         },
         lambda_revision = #atm_lambda_revision{
+            config_parameter_specs = AtmLambdaConfigParameterSpecs,
             argument_specs = AtmLambdaArgSpecs,
             result_specs = AtmLambdaResultSpecs
         },
         task_schema = #atm_task_schema{
             id = AtmTaskSchemaId,
+            lambda_config = AtmLambdaConfigValues,
             argument_mappings = AtmTaskSchemaArgMappers,
             result_mappings = AtmTaskSchemaResultMappers
         }
@@ -326,6 +328,8 @@ create_task_execution_doc(#creation_ctx{
     AtmWorkflowExecutionId = atm_workflow_execution_ctx:get_workflow_execution_id(
         AtmWorkflowExecutionCtx
     ),
+    AtmWorkflowExecutionAuth = atm_workflow_execution_ctx:get_auth(AtmWorkflowExecutionCtx),
+
     {ItemRelatedResultSpecs, UncorrelatedResultSpecs} = atm_task_execution_results:build_specs(
         AtmLambdaResultSpecs,
         AtmTaskSchemaResultMappers
@@ -340,6 +344,9 @@ create_task_execution_doc(#creation_ctx{
         schema_id = AtmTaskSchemaId,
 
         executor = Executor,
+        lambda_execution_config_entries = atm_lambda_execution_config_entries:build_entries(
+            AtmWorkflowExecutionAuth, AtmLambdaConfigParameterSpecs, AtmLambdaConfigValues
+        ),
         argument_specs = atm_task_execution_arguments:build_specs(
             AtmLambdaArgSpecs,
             AtmTaskSchemaArgMappers

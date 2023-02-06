@@ -233,7 +233,7 @@ build_create_archive_validate_rest_call_result_fun(MemRef) ->
 -spec build_create_archive_validate_gs_call_result_fun(api_test_memory:mem_ref()) ->
     onenv_api_test_runner:validate_call_result_fun().
 build_create_archive_validate_gs_call_result_fun(MemRef) ->
-    fun(#api_test_ctx{data = Data, node = Node}, Result) ->
+    fun(#api_test_ctx{data = Data, node = Node, client = ?USER(Creator)}, Result) ->
         DatasetId = maps:get(<<"datasetId">>, Data),
 
         {ok, #{<<"gri">> := ArchiveGri} = ArchiveData} = ?assertMatch({ok, _}, Result),
@@ -249,7 +249,7 @@ build_create_archive_validate_gs_call_result_fun(MemRef) ->
         PreservedCallback = maps:get(<<"preservedCallback">>, Data, undefined),
         DeletedCallback = maps:get(<<"deletedCallback">>, Data, undefined),
 
-        ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId, ?ARCHIVE_BUILDING, Config,
+        ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId, Creator, ?ARCHIVE_BUILDING, Config,
             Description, PreservedCallback, DeletedCallback, undefined, opw_test_rpc:get_provider_id(Node)),
         % state is removed from the map as it may be in pending, building or even preserved state when request is handled
         IgnoredKeys = [<<"state">>, <<"stats">>, <<"rootDir">>, <<"creationTime">>, <<"index">>, <<"baseArchive">>, <<"relatedDip">>],
@@ -368,6 +368,7 @@ get_archive_info(_Config) ->
                         ExpArchiveData = #{
                             <<"archiveId">> => ArchiveId,
                             <<"datasetId">> => DatasetId,
+                            <<"creator">> => oct_background:get_user_id(user3),
                             <<"state">> => atom_to_binary(?ARCHIVE_PRESERVED, utf8),
                             <<"rootDirectoryId">> => DirObjectId,
                             <<"description">> => Description,
@@ -393,7 +394,7 @@ get_archive_info(_Config) ->
                     prepare_args_fun = build_get_archive_prepare_gs_args_fun(ArchiveId),
                     validate_result_fun = fun(#api_test_ctx{}, {ok, Result}) ->
                         DirGuid = get_root_dir_guid(ArchiveId),
-                        ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId, ?ARCHIVE_PRESERVED,
+                        ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId, oct_background:get_user_id(user3), ?ARCHIVE_PRESERVED,
                             Config, Description, undefined, undefined, DirGuid, oct_background:get_provider_id(krakow)),
                         ?assertEqual(ExpArchiveData, maps:without([<<"creationTime">>, <<"index">>, <<"relatedDip">>], Result)),
                         ?assertEqual(archive_config:should_include_dip(Config), maps:get(<<"relatedDip">>, Result) =/= null)
@@ -1275,6 +1276,7 @@ verify_archive(
         ExpArchiveInfo = #archive_info{
             id = ArchiveId,
             dataset_id = DatasetId,
+            creator = UserId,
             archiving_provider = ProviderId,
             state = ?ARCHIVE_PRESERVED,
             root_dir_guid = RootDirGuid,
@@ -1315,16 +1317,17 @@ list_archive_ids(Node, UserSessId, DatasetId, ListOpts) ->
 
 
 %% @private
--spec build_archive_gs_instance(archive:id(), dataset:id(), archive:state(), archive:config(),
+-spec build_archive_gs_instance(archive:id(), dataset:id(), od_user:id(), archive:state(), archive:config(),
     archive:description(), archive:callback(), archive:callback(), file_id:file_guid(), oneprovider:id()) ->
     json_utils:json_term().
-build_archive_gs_instance(ArchiveId, DatasetId, State, Config, Description, PreservedCallback, DeletedCallback,
+build_archive_gs_instance(ArchiveId, DatasetId, Creator, State, Config, Description, PreservedCallback, DeletedCallback,
     RootDirGuid, ProviderId
 ) ->
     BasicInfo = archive_gui_gs_translator:translate_archive_info(#archive_info{
         id = ArchiveId,
         dataset_id = DatasetId,
         archiving_provider = ProviderId,
+        creator = Creator,
         state = str_utils:to_binary(State),
         root_dir_guid = RootDirGuid,
         config = Config,

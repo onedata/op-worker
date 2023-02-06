@@ -33,6 +33,8 @@
 
     schedule_atm_workflow_with_invalid_initial_store_content/1,
 
+    first_lane_run_preparation_failure_due_to_lambda_config_acquisition/1,
+
     first_lane_run_preparation_failure_before_run_was_created/1,
     first_lane_run_preparation_failure_after_run_was_created/1,
     first_lane_run_preparation_interruption_due_to_openfaas_error/1,
@@ -152,6 +154,8 @@
     iterate_over_tree_forest_store_with_all_items_inaccessible/1,
     iterate_over_empty_tree_forest_store/1,
 
+    acquire_lambda_config/1,
+
     map_arguments/1,
 
     map_results_to_audit_log_store/1,
@@ -208,6 +212,8 @@ groups() -> [
     ]},
 
     {preparation_tests, [], [
+        first_lane_run_preparation_failure_due_to_lambda_config_acquisition,
+
         first_lane_run_preparation_failure_before_run_was_created,
         first_lane_run_preparation_failure_after_run_was_created,
         first_lane_run_preparation_interruption_due_to_openfaas_error,
@@ -345,6 +351,8 @@ groups() -> [
     ]},
 
     {mapping_tests, [], [
+        acquire_lambda_config,
+
         map_arguments,
 
         map_results_to_audit_log_store,
@@ -487,6 +495,10 @@ schedule_atm_workflow_with_openfaas_not_configured(_Config) ->
 
 schedule_atm_workflow_with_invalid_initial_store_content(_Config) ->
     ?RUN_SCHEDULING_TEST().
+
+
+first_lane_run_preparation_failure_due_to_lambda_config_acquisition(_Config) ->
+    ?RUN_PREPARATION_TEST().
 
 
 first_lane_run_preparation_failure_before_run_was_created(_Config) ->
@@ -827,6 +839,10 @@ iterate_over_tree_forest_store_with_all_items_inaccessible(_Config) ->
 
 iterate_over_empty_tree_forest_store(_Config) ->
     ?RUN_ITERATION_TEST().
+
+
+acquire_lambda_config(_Config) ->
+    ?RUN_MAPPING_TEST().
 
 
 map_arguments(_Config) ->

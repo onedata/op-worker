@@ -26,6 +26,9 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 
 
+% TODO VFS-7619 Test operations performed on own archives (modify/cancel should be always allowed)
+% TODO VFS-7619 Test cancelation privileges
+
 %% exported for CT
 -export([
     all/0, groups/0,
@@ -61,7 +64,7 @@
     archive_dataset_attached_to_space_dir/1,
     archive_dataset_many_times/1,
     time_warp_test/1,
-    create_archive_privileges_test/1,
+    create_and_modify_archive_privileges_test/1,
     view_archive_privileges_test/1,
     remove_archive_privileges_test/1
 ]).
@@ -71,7 +74,7 @@ groups() -> [
         % NOTE: this test should be run first, as any failure in space cleanup will fail it
         archive_dataset_attached_to_space_dir, 
         time_warp_test,
-        create_archive_privileges_test,
+        create_and_modify_archive_privileges_test,
         view_archive_privileges_test,
         remove_archive_privileges_test,
         archive_dataset_many_times
@@ -380,7 +383,8 @@ time_warp_test(_Config) ->
     ?assertMatch({ok, {[{_, ArchiveId}, {_, ArchiveId2}], true}},
         opt_archives:list(P1Node, UserSessIdP1, DatasetId, #{offset => 0, limit => 10})).
 
-create_archive_privileges_test(_Config) ->
+
+create_and_modify_archive_privileges_test(_Config) ->
     [P1Node] = oct_background:get_provider_nodes(krakow),
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     User2SessIdP1 = oct_background:get_user_session_id(user2, krakow),
@@ -394,35 +398,46 @@ create_archive_privileges_test(_Config) ->
         }
     } = onenv_file_test_utils:create_and_sync_file_tree(user1, ?SPACE, #file_spec{dataset = #dataset_spec{archives = 1}}),
 
-    RequiredPrivileges = privileges:from_list([?SPACE_MANAGE_DATASETS, ?SPACE_CREATE_ARCHIVES]),
-    AllPrivileges = privileges:from_list(RequiredPrivileges ++ privileges:space_member()),
+    CreateRequiredPrivileges = privileges:from_list([?SPACE_CREATE_ARCHIVES]),
+    AllCreatePrivileges = privileges:from_list(CreateRequiredPrivileges ++ privileges:space_member()),
 
     ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED, config = ArchiveConfig}},
         opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId), ?ATTEMPTS),
 
     lists:foreach(fun(Privilege) ->
-    
-        ozt_spaces:set_privileges(SpaceId, UserId2, AllPrivileges -- [Privilege]),
+        ozt_spaces:set_privileges(SpaceId, UserId2, AllCreatePrivileges -- [Privilege]),
         % user2 cannot create archive
         ?assertEqual(?ERROR_POSIX(?EPERM),
             opt_archives:archive_dataset(P1Node, User2SessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
-        % user2 cannot modify an existing archive either
-        ?assertEqual(?ERROR_POSIX(?EPERM),
-            opt_archives:update(P1Node, User2SessIdP1, ArchiveId, #{<<"description">> => ?TEST_DESCRIPTION2})),
     
-        ozt_spaces:set_privileges(SpaceId, UserId2, AllPrivileges),
+        ozt_spaces:set_privileges(SpaceId, UserId2, AllCreatePrivileges),
         % user2 can now create archive
 
         {ok, ArchiveId2} = ?assertMatch({ok, _},
             opt_archives:archive_dataset(P1Node, User2SessIdP1, DatasetId, ?TEST_ARCHIVE_CONFIG, ?TEST_DESCRIPTION1)),
-
         ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
             opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId2), ?ATTEMPTS),
 
-        % as well as modify an existing one
+        % as well as modify his own archive
+        ?assertMatch(ok,
+            opt_archives:update(P1Node, User2SessIdP1, ArchiveId2, #{<<"description">> => ?TEST_DESCRIPTION2}))
+    end, CreateRequiredPrivileges),
+    
+    ModifyRequiredPrivileges = privileges:from_list([?SPACE_MANAGE_ARCHIVES]),
+    AllModifyPrivileges = privileges:from_list(ModifyRequiredPrivileges ++ privileges:space_member()),
+
+    lists:foreach(fun(Privilege) ->
+        ozt_spaces:set_privileges(SpaceId, UserId2, AllModifyPrivileges -- [Privilege]),
+        % user2 cannot modify an existing archive either
+        ?assertEqual(?ERROR_POSIX(?EPERM),
+            opt_archives:update(P1Node, User2SessIdP1, ArchiveId, #{<<"description">> => ?TEST_DESCRIPTION2})),
+        
+        ozt_spaces:set_privileges(SpaceId, UserId2, AllModifyPrivileges ),
+        
+        % user2 can now modify an existing archive
         ?assertMatch(ok,
             opt_archives:update(P1Node, User2SessIdP1, ArchiveId, #{<<"description">> => ?TEST_DESCRIPTION2}))
-    end, RequiredPrivileges).
+    end, ModifyRequiredPrivileges).
 
 
 view_archive_privileges_test(_Config) ->
@@ -485,7 +500,7 @@ remove_archive_privileges_test(_Config) ->
     ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED, config = ArchiveConfig2}},
         opt_archives:get_info(P1Node, UserSessIdP1, ArchiveId2), ?ATTEMPTS),
 
-    RequiredPrivileges = privileges:from_list([?SPACE_MANAGE_DATASETS, ?SPACE_REMOVE_ARCHIVES]),
+    RequiredPrivileges = privileges:from_list([?SPACE_REMOVE_ARCHIVES]),
     AllPrivileges = privileges:from_list(RequiredPrivileges ++ privileges:space_member()),
 
     lists:foreach(fun({Privilege, ArchiveId}) ->
@@ -533,6 +548,7 @@ simple_archive_crud_test_base(DatasetId, RootFileType, ExpSize) ->
     ExpArchiveInfo = #archive_info{
         id = ArchiveId,
         dataset_id = DatasetId,
+        creator = oct_background:get_user_id(user1),
         archiving_provider = oct_background:get_provider_id(krakow),
         state = ?ARCHIVE_PRESERVED,
         root_dir_guid = ArchiveRootDirGuid,

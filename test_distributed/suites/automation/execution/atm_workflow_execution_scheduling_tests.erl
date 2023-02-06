@@ -51,7 +51,7 @@
         }]
     },
     supplementary_lambdas = #{?ECHO_LAMBDA_ID => #{
-        ?ECHO_LAMBDA_REVISION_NUM => ?INTEGER_ECHO_LAMBDA_DRAFT
+        ?ECHO_LAMBDA_REVISION_NUM => ?NUMBER_ECHO_LAMBDA_DRAFT
     }}
 }).
 
@@ -172,7 +172,7 @@ schedule_atm_workflow_with_invalid_initial_store_content() ->
         <<"st_src">>,
         ?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED([InvalidInitialItem], atm_array_type, #{
             <<"$[0]">> => errors:to_json(?ERROR_ATM_DATA_TYPE_UNVERIFIED(
-                InvalidInitialItem, atm_integer_type
+                InvalidInitialItem, atm_number_type
             ))
         })
     ),

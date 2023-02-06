@@ -1,16 +1,16 @@
 %%%-------------------------------------------------------------------
 %%% @author Bartosz Walkowicz
-%%% @copyright (C) 2021 ACK CYFRONET AGH
+%%% @copyright (C) 2023 ACK CYFRONET AGH
 %%% This software is released under the MIT license
 %%% cited in 'LICENSE.txt'.
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements `atm_data_validator` and `atm_data_compressor` 
-%%% functionality for `atm_integer_type`.
+%%% functionality for `atm_boolean_type`.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_integer_value).
+-module(atm_boolean_value).
 -author("Bartosz Walkowicz").
 
 -behaviour(atm_data_validator).
@@ -43,11 +43,11 @@ assert_meets_constraints(_AtmWorkflowExecutionAuth, _Value, _ValueConstraints) -
 %%%===================================================================
 
 
--spec compress(atm_value:expanded(), atm_data_type:value_constraints()) -> integer().
+-spec compress(atm_value:expanded(), atm_data_type:value_constraints()) -> boolean().
 compress(Value, _ValueConstraints) -> Value.
 
 
--spec expand(atm_workflow_execution_auth:record(), integer(), atm_data_type:value_constraints()) ->
+-spec expand(atm_workflow_execution_auth:record(), boolean(), atm_data_type:value_constraints()) ->
     {ok, atm_value:expanded()}.
 expand(_AtmWorkflowExecutionAuth, Value, _ValueConstraints) ->
     {ok, Value}.
