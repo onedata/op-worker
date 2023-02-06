@@ -58,31 +58,28 @@ start_rtransfer() ->
 %% gen servers are up and running.
 %% @end
 %%--------------------------------------------------------------------
--spec restart_link() -> ok | {error, not_running}.
+-spec restart_link() -> ok.
 restart_link() ->
-    case whereis(rtransfer_link_port) of
-        undefined ->
-            {error, not_running};
-        CurrentPortPid ->
-            prepare_ssl_opts(),
-            prepare_graphite_opts(),
-            erlang:exit(CurrentPortPid, restarting),
-            utils:wait_until(fun() ->
-                case whereis(rtransfer_link_port) of
-                    undefined ->
-                        false;
-                    CurrentPortPid ->
-                        false;
-                    OtherPid when is_pid(OtherPid) ->
-                        case whereis(rtransfer_link) of
-                            LinkPid when is_pid(LinkPid) ->
-                                true;
-                            _ ->
-                                false
-                        end
+    %@fixme refactor, backport
+    CurrentPortPid = whereis(rtransfer_link_port),
+    prepare_ssl_opts(),
+    prepare_graphite_opts(),
+    rtransfer_link_port:restart(),
+    utils:wait_until(fun() ->
+        case whereis(rtransfer_link_port) of
+            undefined ->
+                false;
+            CurrentPortPid ->
+                false;
+            OtherPid when is_pid(OtherPid) ->
+                case whereis(rtransfer_link) of
+                    LinkPid when is_pid(LinkPid) ->
+                        true;
+                    _ ->
+                        false
                 end
-            end, 100)
-    end.
+        end
+    end, 100).
 
 %%--------------------------------------------------------------------
 %% @doc

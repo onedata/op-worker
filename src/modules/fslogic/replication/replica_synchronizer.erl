@@ -621,10 +621,9 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priorit
                 end
         end
     catch
-        E1:E2:Stacktrace ->
-            ?error_stacktrace("Unable to start transfer due to error ~p:~p",
-                [E1, E2], Stacktrace),
-            {reply, {error, E2}, State0, ?DIE_AFTER}
+        Class:Reason:Stacktrace ->
+            ?error_stacktrace("Unable to start transfer ~p", [TransferId], Class, Reason, Stacktrace),
+            {reply, {error, Reason}, State0, ?DIE_AFTER}
     end;
 
 handle_call(?FLUSH_EVENTS, _From, State) ->
@@ -649,8 +648,8 @@ handle_cast({cancel, TransferId}, State) ->
         NewState = cancel_transfer_id(TransferId, State),
         {noreply, NewState, ?DIE_AFTER}
     catch
-        _:Reason:Stacktrace ->
-            ?error_stacktrace("Unable to cancel ~p: ~p", [TransferId, Reason], Stacktrace),
+        Class:Reason:Stacktrace ->
+            ?error_stacktrace("Unable to cancel transfer ~p", [TransferId], Class, Reason, Stacktrace),
             {noreply, State, ?DIE_AFTER}
     end;
 
@@ -770,9 +769,8 @@ handle_info({replace_failed_transfer, FailedRef}, #state{retries_number = Retrie
                 {noreply, State3#state{retries_number = NewRetriesMap}, ?DIE_AFTER}
         end
     catch
-        E1:E2:Stacktrace ->
-            ?error_stacktrace("Unable to restart transfer due to error ~p:~p",
-                [E1, E2], Stacktrace),
+        Class:Reason:Stacktrace ->
+            ?error_stacktrace("Unable to restart transfers associated with ~p", [FailedRef], Class, Reason, Stacktrace),
             handle_info({FailedRef, complete, {error, restart_failed}}, State)
     end;
 
@@ -792,10 +790,8 @@ handle_info({Ref, complete, {error, {connection, <<"canceled">>}}}, #state{
             % replications should be also cancelled and registry/state cleared.
             try
                 cancel_froms(AffectedFroms, State)
-            catch _:Reason:Stacktrace ->
-                ?error_stacktrace("Unable to cancel transfers associated with ~p due to ~p", [
-                    Ref, Reason
-                ], Stacktrace),
+            catch Class:Reason:Stacktrace ->
+                ?error_stacktrace("Unable to cancel transfers associated with ~p", [Ref], Class, Reason, Stacktrace),
                 State
             end
     end,
@@ -1027,10 +1023,8 @@ cancel_session(SessionId, State) ->
                 })
         end
     catch
-        _:Reason:Stacktrace ->
-            ?error_stacktrace("Unable to cancel transfers of ~p: ~p", [
-                SessionId, Reason
-            ], Stacktrace),
+        Class:Reason:Stacktrace ->
+            ?error_stacktrace("Unable to cancel transfers of session ~p", [SessionId], Class, Reason, Stacktrace),
             State
     end.
 
@@ -1790,10 +1784,10 @@ spawn_block_clearing(FileCtx, EmitEvents, RequestedBy) ->
             #fuse_response{status = #status{code = ?OK}} = truncate_req:truncate_insecure(UserCtx, FileCtx, 0, false),
             ok
         catch
-            E:R:Stacktrace ->
+            Class:Reason:Stacktrace ->
                 FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
-                ?error_stacktrace("Unexpected error ~p:~p when truncating file ~p.", [E, R, FileUuid], Stacktrace),
-                {error, {E, R}}
+                ?error_stacktrace("Unexpected error when truncating file ~p", [FileUuid], Class, Reason, Stacktrace),
+                {error, {Class, Reason}}
         end,
         Master ! {file_truncated, Ans, EmitEvents, RequestedBy}
     end),
