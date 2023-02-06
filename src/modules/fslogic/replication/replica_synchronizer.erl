@@ -599,13 +599,13 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priorit
 
         TransferId =/= undefined andalso (catch gproc:add_local_counter(TransferId, 1)),
         OverlappingInProgress = find_overlapping(Block, Priority, State#state.in_progress),
-        {OverlappingBlocks, ExistingRefs} = unzip_blocks_adn_refs(OverlappingInProgress),
+        {OverlappingBlocks, ExistingRefs} = jobs_to_blocks_and_refs(OverlappingInProgress),
         Holes = get_holes(Block, OverlappingBlocks),
 
         NewTransfers = start_transfers(Holes, TransferId, State, Priority),
         schedule_jobs_inactivity_check(),
 
-        NewRefs = unzip_refs(NewTransfers),
+        NewRefs = jobs_to_refs(NewTransfers),
         case ExistingRefs ++ NewRefs of
             [] ->
                 FileLocation = fslogic_location:get_local_blocks_and_fill_location_gaps([Block],
@@ -790,7 +790,7 @@ handle_info({replace_failed_transfer, FailedRef}, #state{retries_number = Retrie
                 ?warning("Replaced failed transfer ~p (~p) with new transfers ~p", [
                     FailedRef, Block, NewTransfers
                 ]),
-                NewRefs = unzip_refs(NewTransfers),
+                NewRefs = jobs_to_refs(NewTransfers),
                 State2 = associate_froms_with_refs(AffectedFroms, NewRefs, State1),
                 State3 = add_in_progress(NewTransfers, State2),
 
@@ -926,7 +926,7 @@ restart_inactive_job(#job{ref = InactiveRef, restarts_left = RestartsLeft}, Stat
     ?warning("Replaced inactive transfer ~p (~p) with new transfers ~p", [
         InactiveRef, Block, NewTransfers
     ]),
-    NewRefs = unzip_refs(NewTransfers),
+    NewRefs = jobs_to_refs(NewTransfers),
     State2 = associate_froms_with_refs(AffectedFroms, NewRefs, State1),
     add_in_progress(NewTransfers, State2).
 
@@ -1295,15 +1295,15 @@ associate_from_with_session(From, SessionId, State = #state{
     }.
 
 %% @private
--spec unzip_blocks_adn_refs(ordsets:ordset(job())) -> {[block()], [fetch_ref()]}.
-unzip_blocks_adn_refs(InProgress) ->
+-spec jobs_to_blocks_and_refs(ordsets:ordset(job())) -> {[block()], [fetch_ref()]}.
+jobs_to_blocks_and_refs(InProgress) ->
     lists:foldr(fun(#job{block = Block, ref = FetchRef}, {BlockAcc, RefAcc}) ->
         {[Block | BlockAcc], [FetchRef | RefAcc]}
     end, {[], []}, ordsets:to_list(InProgress)).
 
 %% @private
--spec unzip_refs(ordsets:ordset(job())) -> [fetch_ref()].
-unzip_refs(InProgress) ->
+-spec jobs_to_refs(ordsets:ordset(job())) -> [fetch_ref()].
+jobs_to_refs(InProgress) ->
     lists:map(fun(#job{ref = FetchRef}) -> FetchRef end, ordsets:to_list(InProgress)).
 
 %% @private
