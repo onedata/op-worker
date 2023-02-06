@@ -262,11 +262,11 @@ transfer_data(State = #state{mod = Mod}, FileCtx0, Params, RetriesLeft) ->
             {error, already_ended};
         error:{badmatch, Error = {error, not_found}} ->
             maybe_retry(FileCtx0, Params, RetriesLeft, Error);
-        Error:Reason ->
-            ?error_stacktrace("Unexpected error ~p:~p during transfer ~p", [
-                Error, Reason, Params#transfer_params.transfer_id
+        Class:Reason ->
+            ?error_stacktrace("Unexpected error during transfer ~p~nCaught: ~w:~p", [
+                Params#transfer_params.transfer_id, Class, Reason
             ]),
-            maybe_retry(FileCtx0, Params, RetriesLeft, {Error, Reason})
+            maybe_retry(FileCtx0, Params, RetriesLeft, {Class, Reason})
     end.
 
 
@@ -281,13 +281,13 @@ transfer_data(State = #state{mod = Mod}, FileCtx0, Params, RetriesLeft) ->
     {retry, file_ctx:ctx()} | {error, term()}.
 maybe_retry(_FileCtx, Params, 0, Error = {error, not_found}) ->
     ?error(
-        "Data transfer in scope of transfer ~p failed due to ~p~n"
+        "Data transfer in scope of transfer ~p failed due to ~w~n"
         "No retries left", [Params#transfer_params.transfer_id, Error]
     ),
     Error;
 maybe_retry(FileCtx, Params, Retries, Error = {error, not_found}) ->
     ?warning(
-        "Data transfer in scope of transfer ~p failed due to ~p~n"
+        "Data transfer in scope of transfer ~p failed due to ~w~n"
         "File transfer will be retried (attempts left: ~p)",
         [Params#transfer_params.transfer_id, Error, Retries - 1]
     ),
@@ -297,7 +297,8 @@ maybe_retry(FileCtx, Params, 0, Error) ->
     {Path, _FileCtx2} = file_ctx:get_canonical_path(FileCtx),
 
     ?error(
-        "Transfer of file ~p in scope of transfer ~p failed due to ~p~n"
+        "Transfer of file ~p in scope of transfer ~p failed~n"
+        "Error was: ~p~n"
         "No retries left", [Path, TransferId, Error]
     ),
     {error, retries_per_file_transfer_exceeded};
@@ -306,7 +307,8 @@ maybe_retry(FileCtx, Params, Retries, Error) ->
     {Path, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
 
     ?warning(
-        "Transfer of file ~p in scope of transfer ~p failed due to ~p~n"
+        "Transfer of file ~p in scope of transfer ~p failed~n"
+        "Error was: ~p~n"
         "File transfer will be retried (attempts left: ~p)",
         [Path, TransferId, Error, Retries - 1]
     ),

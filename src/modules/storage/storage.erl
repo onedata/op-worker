@@ -421,6 +421,11 @@ support_space(StorageId, SerializedToken, SupportSize) ->
             case storage_logic:support_space(StorageId, SerializedToken, SupportSize) of
                 {ok, SpaceId} ->
                     on_space_supported(SpaceId, StorageId),
+                    {ok, SpaceName} = space_logic:get_name(?ROOT_SESS_ID, SpaceId),
+                    {ok, StorageName} = storage_logic:get_name_of_local_storage(StorageId),
+                    ?notice("New space has been supported: '~s' (~s) with ~s quota on storage '~s' (~s)", [
+                        SpaceName, SpaceId, str_utils:format_byte_size(SupportSize), StorageName, StorageId
+                    ]),
                     {ok, SpaceId};
                 {error, _} = Error ->
                     Error

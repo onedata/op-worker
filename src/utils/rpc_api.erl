@@ -648,7 +648,7 @@ storage_import_get_manual_example(SpaceId) ->
     storage_import:get_manual_example(SpaceId).
 
 
--spec restart_rtransfer_link() -> ok | {error, not_running}.
+-spec restart_rtransfer_link() -> ok.
 restart_rtransfer_link() ->
     rtransfer_config:restart_link().
 
