@@ -115,7 +115,9 @@
     caching_blocks_timer :: undefined | reference(),
     caching_events_timer :: undefined | reference(),
     retries_number = #{} :: #{fetch_ref() => non_neg_integer()},
-    transfer_id_to_stats_callback_module = #{} :: #{transfer:id() => stats_callback_module()}
+    transfer_id_to_stats_callback_module = #{} :: #{transfer:id() => stats_callback_module()},
+
+    inactivity_check_timer = undefined :: undefined | reference()
 }).
 
 -define(BLOCK(__Offset, __Size), #file_block{offset = __Offset, size = __Size}).
@@ -603,7 +605,6 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priorit
         Holes = get_holes(Block, OverlappingBlocks),
 
         NewTransfers = start_transfers(Holes, TransferId, State, Priority),
-        schedule_jobs_inactivity_check(),
 
         NewRefs = jobs_to_refs(NewTransfers),
         case ExistingRefs ++ NewRefs of
@@ -635,14 +636,14 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priorit
                 end,
                 State6 = associate_from_with_session(From, Session, State5),
                 State7 = State6#state{requested_blocks = maps:put(From, Block, RB)},
-                State8 = State7#state{from_requests_types =
-                maps:put(From, Type, RequestTypesMap)},
+                State8 = State7#state{from_requests_types = maps:put(From, Type, RequestTypesMap)},
+                State9 = schedule_jobs_inactivity_check(State8),
 
                 case Type of
                     sync ->
-                        {noreply, State8, ?DIE_AFTER};
+                        {noreply, State9, ?DIE_AFTER};
                     async ->
-                        {reply, ok, State8, ?DIE_AFTER}
+                        {reply, ok, State9, ?DIE_AFTER}
                 end
         end
     catch
@@ -890,12 +891,9 @@ handle_info(?JOBS_INACTIVITY_CHECK_MSG, State0 = #state{in_progress = InProgress
 
     State1 = lists:foldl(fun restart_inactive_job/2, State0, InactiveJobs),
     State2 = lists:foldl(fun cancel_stale_job/2, State1, StaleJobs),
+    State3 = schedule_jobs_inactivity_check(State2#state{inactivity_check_timer = undefined}),
 
-    case State2#state.in_progress of
-        [] -> ok;
-        _ -> schedule_jobs_inactivity_check()
-    end,
-    {noreply, State2, ?DIE_AFTER};
+    {noreply, State3, ?DIE_AFTER};
 
 handle_info(Msg, State) ->
     ?log_bad_request(Msg),
@@ -1960,9 +1958,13 @@ flush_archive_helper_buffer_if_applicable(FileCtx) ->
 
 
 %% @private
--spec schedule_jobs_inactivity_check() -> ok.
-schedule_jobs_inactivity_check() ->
-    erlang:send_after(
+-spec schedule_jobs_inactivity_check(#state{}) -> #state{}.
+schedule_jobs_inactivity_check(State = #state{
+    in_progress = [_ | _],
+    inactivity_check_timer = undefined
+}) ->
+    State#state{caching_events_timer = erlang:send_after(
         timer:seconds(?JOBS_INACTIVITY_CHECK_INTERVAL_SEC), self(), ?JOBS_INACTIVITY_CHECK_MSG
-    ),
-    ok.
+    )};
+schedule_jobs_inactivity_check(State) ->
+    State.
