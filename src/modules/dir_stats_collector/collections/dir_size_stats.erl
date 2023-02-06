@@ -48,7 +48,7 @@
     get_stats/1, get_stats/2, 
     browse_historical_stats_collection/2,
     report_reg_file_size_changed/3,
-    report_file_created/2, report_file_deleted/2,
+    report_file_created/2, report_file_deleted/2, report_remote_links_change/2,
     delete_stats/1]).
 
 %% dir_stats_collection_behaviour callbacks
@@ -142,6 +142,29 @@ report_file_deleted(?DIRECTORY_TYPE, Guid) ->
     update_stats(Guid, #{?DIR_COUNT => -1});
 report_file_deleted(_, Guid) ->
     update_stats(Guid, #{?REG_FILE_AND_LINK_COUNT => -1}).
+
+
+-spec report_remote_links_change(file_meta:uuid(), od_space:id()) -> ok.
+report_remote_links_change(Uuid, SpaceId) ->
+    % Check is uuid is dir space uuid to prevent its creation by file_meta:get_including_deleted/1
+    case fslogic_file_id:is_space_dir_uuid(Uuid) of
+        true ->
+            % Send empty update to prevent race between links sync and initialization
+            update_stats(file_id:pack_guid(Uuid, SpaceId), #{});
+        false ->
+            case file_meta:get_including_deleted(Uuid) of
+                {ok, Doc} ->
+                    case file_meta:get_type(Doc) of
+                        ?DIRECTORY_TYPE ->
+                            % Send empty update to prevent race between links sync and initialization
+                            update_stats(file_id:pack_guid(Uuid, SpaceId), #{});
+                        _ ->
+                            ok
+                    end;
+                ?ERROR_NOT_FOUND ->
+                    ok
+            end
+    end.
 
 
 -spec delete_stats(file_id:file_guid()) -> ok.
@@ -263,7 +286,15 @@ init_existing_child(Guid, Doc) ->
                 case Type of
                     ?REGULAR_FILE_TYPE ->
                         % gets storage_id that is also used by prepare_file_size_summary
-                        {FileSizes, _} = file_ctx:prepare_file_size_summary(file_ctx:new_by_guid(Guid)),
+                        FileCtx = file_ctx:new_by_guid(Guid),
+                        {FileSizes, _} = try
+                            file_ctx:prepare_file_size_summary(FileCtx)
+                        catch
+                            throw:{error, {file_meta_missing, _}} ->
+                                % It is impossible to create file_location because of missing ancestor's file_meta.
+                                % Sizes will be counted on location creation.
+                                {[], FileCtx}
+                        end,
                         lists:foldl(fun
                             ({total, Size}, Acc) -> Acc#{?TOTAL_SIZE => Size};
                             ({StorageId, Size}, Acc) -> Acc#{?SIZE_ON_STORAGE(StorageId) => Size}

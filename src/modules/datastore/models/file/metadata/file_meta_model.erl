@@ -374,7 +374,7 @@ upgrade_record(11, {?FILE_META_MODEL, Name, Type, Mode, ProtectionFlags, ACL, Ow
 %% TODO - VFS-5962 - delete when event emission is possible in dbsync_events.
 %% @end
 %%--------------------------------------------------------------------
--spec resolve_conflict(datastore_model:ctx(), file_meta:doc(), file_meta:doc()) -> 
+-spec resolve_conflict(datastore_model:ctx(), file_meta:doc(), file_meta:doc()) ->
     default | {true, file_meta:doc()}.
 resolve_conflict(_Ctx,
     NewDoc = #document{
@@ -474,9 +474,15 @@ on_remote_doc_created(_Ctx, #document{value = #file_meta{deleted = true}}) ->
     ok;
 on_remote_doc_created(_Ctx, #document{deleted = true}) ->
     ok;
-on_remote_doc_created(_Ctx, #document{value = #file_meta{type = Type, parent_uuid = ParentUuid}, scope = SpaceId}) ->
+on_remote_doc_created(_Ctx, #document{
+    key = Key,
+    value = #file_meta{type = Type, parent_uuid = ParentUuid}, scope = SpaceId
+}) ->
     spawn(fun() ->
-        dir_size_stats:report_file_created(Type, file_id:pack_guid(ParentUuid, SpaceId))
+        case fslogic_file_id:is_space_dir_uuid(Key) orelse fslogic_file_id:is_trash_dir_uuid(Key) of
+            true -> ok;
+            false -> dir_size_stats:report_file_created(Type, file_id:pack_guid(ParentUuid, SpaceId))
+        end
     end).
 
 
@@ -539,7 +545,7 @@ invalidate_effective_caches_if_moved(
 ) ->
     case NewName =/= OldName orelse PrevParentUuid =/= NewParentUuid of
         true ->
-            spawn(fun() -> 
+            spawn(fun() ->
                 paths_cache:invalidate_on_all_nodes(SpaceId),
                 archive_recall_cache:invalidate_on_all_nodes(SpaceId),
                 file_meta_sync_status_cache:invalidate_on_all_nodes(SpaceId)

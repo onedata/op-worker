@@ -245,14 +245,14 @@ generate_secret(ProviderId, PeerSecret) ->
                                   rtransfer_link, allow_connection,
                                   [ProviderId, MySecret, PeerSecret, 60000]),
     BadNodes =/= [] andalso
-        ?error("Failed to allow rtransfer connection from ~p on nodes ~p",
+        ?error("Failed to allow rtransfer connection from ~p on nodes ~w",
                [ProviderId, BadNodes]),
     FilteredNodesAns = lists:filter(fun
         (#{<<"done">> := true}) -> false;
         (_) -> true
     end, NodesAns),
     FilteredNodesAns =/= [] andalso
-        ?error("Failed to allow rtransfer connection from ~p, rpc answer: ~p", [ProviderId, NodesAns]),
+        ?error("Failed to allow rtransfer connection from ~p~nrpc answer: ~p", [ProviderId, NodesAns]),
     MySecret.
 
 %%--------------------------------------------------------------------
