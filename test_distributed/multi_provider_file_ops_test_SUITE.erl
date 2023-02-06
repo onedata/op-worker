@@ -1194,7 +1194,7 @@ recreate_file_on_storage(Config0) ->
 detect_stale_replica_synchronizer_jobs_test(Config0) ->
     User = <<"user1">>,
     Config = multi_provider_file_ops_test_base:extend_config(Config0, User, {4,0,0,2}, 60),
-    Worker1 = ?config(worker1, Config),
+    [Worker1 | _] = Workers1 = ?config(workers1, Config),
     [Worker2 | _] = ?config(workers2, Config),
     Workers = ?config(op_worker_nodes, Config),
     SessId = ?config(session, Config),
@@ -1208,6 +1208,7 @@ detect_stale_replica_synchronizer_jobs_test(Config0) ->
         {ok, make_ref()}
     end)),
 
+    % Mock to prevent storage file creation (only metadata will be set)
     mock_storage_driver_to_prevent_file_creation(Workers),
 
     % Create file on worker1
@@ -1240,13 +1241,16 @@ detect_stale_replica_synchronizer_jobs_test(Config0) ->
     ),
 
     % Assert replica_synchronized tried to restart transfer 5 times
-    test_utils:mock_assert_num_calls(
-        Worker1,
+    FetchFunSignature = [
         rtransfer_config,
         fetch,
-        [#{file_guid => Guid, space_id => SpaceId, offset => 0, size => FileSize}, '_', '_', '_', '_', '_'],
-        6
-    ).
+        [#{file_guid => Guid, space_id => SpaceId, offset => 0, size => FileSize}, '_', '_', '_', '_', '_']
+    ],
+    FetchCallsNum = lists:sum(lists:map(fun(Worker) ->
+        rpc:call(Worker, meck, num_calls, FetchFunSignature, timer:seconds(1))
+    end, Workers1)),
+
+    ?assertEqual(6, FetchCallsNum).
 
 
 dir_stats_collector_test(Config0) ->
@@ -1468,17 +1472,22 @@ init_per_testcase(Case, Config) when
 init_per_testcase(transfer_after_enabling_stats_test = Case, Config) ->
     dir_stats_collector_test_base:init(init_per_testcase(?DEFAULT_CASE(Case), Config));
 init_per_testcase(detect_stale_replica_synchronizer_jobs_test = Case, Config) ->
-    Nodes = ?config(op_worker_nodes, Config),
+    Config2 = init_per_testcase(?DEFAULT_CASE(Case), Config),
+
+    Nodes = ?config(op_worker_nodes, Config2),
     lists:foreach(fun({EnvVar, Value}) ->
         utils:rpc_multicall(Nodes, application, set_env, [
             ?APP_NAME, EnvVar, Value
         ])
     end, [
         {max_file_replication_retries_per_file, 0},
+        {max_file_transfer_retry_interval_sec, 0},
+        {minimal_sync_request, 1},
+        {synchronizer_max_job_restarts, 5},
         {synchronizer_max_job_inactivity_period_sec, 1},
         {synchronizer_jobs_inactivity_check_interval_sec, 1}
     ]),
-    init_per_testcase(?DEFAULT_CASE(Case), Config);
+    Config2;
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 60}),
     lfm_proxy:init(Config).
@@ -1532,6 +1541,9 @@ end_per_testcase(Case = detect_stale_replica_synchronizer_jobs_test, Config) ->
         ])
     end, [
         max_file_replication_retries_per_file,
+        max_file_transfer_retry_interval_sec,
+        minimal_sync_request,
+        synchronizer_max_job_restarts,
         synchronizer_max_job_inactivity_period_sec,
         synchronizer_jobs_inactivity_check_interval_sec
     ]),

@@ -1963,7 +1963,7 @@ schedule_jobs_inactivity_check(State = #state{
     in_progress = [_ | _],
     inactivity_check_timer = undefined
 }) ->
-    State#state{caching_events_timer = erlang:send_after(
+    State#state{inactivity_check_timer = erlang:send_after(
         timer:seconds(?JOBS_INACTIVITY_CHECK_INTERVAL_SEC), self(), ?JOBS_INACTIVITY_CHECK_MSG
     )};
 schedule_jobs_inactivity_check(State) ->
