@@ -286,9 +286,11 @@ transfer_data(State = #state{mod = Mod}, FileCtx0, TransferJobCtx, RetriesLeft) 
         error:{badmatch, Error = {error, not_found}} ->
             maybe_retry(FileCtx0, TransferJobCtx, RetriesLeft, Error);
         Class:Reason:Stacktrace   ->
-            ?error_stacktrace("Unexpected error during transfer ~p~nCaught: ~w:~p", [
-                TransferJobCtx#transfer_job_ctx.transfer_id, Class, Reason
-            ], Stacktrace),
+            ?log_exception(
+                "Unexpected error during transfer ~p",
+                [TransferJobCtx#transfer_job_ctx.transfer_id],
+                Class, Reason, Stacktrace
+            ),
             maybe_retry(FileCtx0, TransferJobCtx, RetriesLeft, {Class, Reason})
     end.
 

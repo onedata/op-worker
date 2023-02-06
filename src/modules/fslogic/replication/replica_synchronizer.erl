@@ -622,7 +622,7 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priorit
         end
     catch
         Class:Reason:Stacktrace ->
-            ?error_stacktrace("Unable to start transfer ~p", [TransferId], Class, Reason, Stacktrace),
+            ?log_exception("Unable to start transfer ~p", [TransferId], Class, Reason, Stacktrace),
             {reply, {error, Reason}, State0, ?DIE_AFTER}
     end;
 
@@ -649,7 +649,7 @@ handle_cast({cancel, TransferId}, State) ->
         {noreply, NewState, ?DIE_AFTER}
     catch
         Class:Reason:Stacktrace ->
-            ?error_stacktrace("Unable to cancel transfer ~p", [TransferId], Class, Reason, Stacktrace),
+            ?log_exception("Unable to cancel transfer ~p", [TransferId], Class, Reason, Stacktrace),
             {noreply, State, ?DIE_AFTER}
     end;
 
@@ -770,7 +770,7 @@ handle_info({replace_failed_transfer, FailedRef}, #state{retries_number = Retrie
         end
     catch
         Class:Reason:Stacktrace ->
-            ?error_stacktrace("Unable to restart transfers associated with ~p", [FailedRef], Class, Reason, Stacktrace),
+            ?log_exception("Unable to restart transfers associated with ~p", [FailedRef], Class, Reason, Stacktrace),
             handle_info({FailedRef, complete, {error, restart_failed}}, State)
     end;
 
@@ -791,7 +791,7 @@ handle_info({Ref, complete, {error, {connection, <<"canceled">>}}}, #state{
             try
                 cancel_froms(AffectedFroms, State)
             catch Class:Reason:Stacktrace ->
-                ?error_stacktrace("Unable to cancel transfers associated with ~p", [Ref], Class, Reason, Stacktrace),
+                ?log_exception("Unable to cancel transfers associated with ~p", [Ref], Class, Reason, Stacktrace),
                 State
             end
     end,
@@ -1024,7 +1024,7 @@ cancel_session(SessionId, State) ->
         end
     catch
         Class:Reason:Stacktrace ->
-            ?error_stacktrace("Unable to cancel transfers of session ~p", [SessionId], Class, Reason, Stacktrace),
+            ?log_exception("Unable to cancel transfers of session ~p", [SessionId], Class, Reason, Stacktrace),
             State
     end.
 
@@ -1786,7 +1786,7 @@ spawn_block_clearing(FileCtx, EmitEvents, RequestedBy) ->
         catch
             Class:Reason:Stacktrace ->
                 FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
-                ?error_stacktrace("Unexpected error when truncating file ~p", [FileUuid], Class, Reason, Stacktrace),
+                ?log_exception("Unexpected error when truncating file ~p", [FileUuid], Class, Reason, Stacktrace),
                 {error, {Class, Reason}}
         end,
         Master ! {file_truncated, Ans, EmitEvents, RequestedBy}

@@ -200,6 +200,7 @@ custom_workers() -> filter_disabled_workers([
 %%--------------------------------------------------------------------
 %% @doc
 %% Overrides {@link node_manager_plugin_default:before_listeners_start/0}.
+%%
 %% NOTE: this callback blocks the application supervisor and must not be used to
 %% interact with the main supervision tree.
 %%
@@ -218,6 +219,7 @@ before_listeners_start() ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Overrides {@link node_manager_plugin_default:after_listeners_stop/0}.
+%%
 %% NOTE: this callback blocks the application supervisor and must not be used to
 %% interact with the main supervision tree.
 %%
@@ -225,6 +227,9 @@ before_listeners_start() ->
 %% @end
 %%--------------------------------------------------------------------
 after_listeners_stop() ->
+    atm_supervision_worker:try_to_gracefully_stop_atm_workflow_executions(),
+    file_upload_manager_watcher_service:terminate_internal_service(),
+    atm_warden_service:terminate_internal_service(),
     gs_channel_service:terminate_internal_service().
 
 %%--------------------------------------------------------------------

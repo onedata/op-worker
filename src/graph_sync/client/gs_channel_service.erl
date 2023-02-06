@@ -71,8 +71,8 @@ terminate_internal_service() ->
         true ->
             try
                 ok = internal_services_manager:stop_service(?MODULE, ?GS_CHANNEL_SERVICE_NAME, ?GS_CHANNEL_SERVICE_NAME)
-            catch Class:Reason ->
-                ?error_stacktrace("Error terminating the GS channel service~nCaught: ~w:~p", [Class, Reason])
+            catch Class:Reason:Stacktrace ->
+                ?log_exception(Class, Reason, Stacktrace)
             end;
         false ->
             ok

@@ -60,26 +60,9 @@ start_rtransfer() ->
 %%--------------------------------------------------------------------
 -spec restart_link() -> ok.
 restart_link() ->
-    %@fixme refactor, backport
-    CurrentPortPid = whereis(rtransfer_link_port),
     prepare_ssl_opts(),
     prepare_graphite_opts(),
-    rtransfer_link_port:restart(),
-    utils:wait_until(fun() ->
-        case whereis(rtransfer_link_port) of
-            undefined ->
-                false;
-            CurrentPortPid ->
-                false;
-            OtherPid when is_pid(OtherPid) ->
-                case whereis(rtransfer_link) of
-                    LinkPid when is_pid(LinkPid) ->
-                        true;
-                    _ ->
-                        false
-                end
-        end
-    end, 100).
+    rtransfer_link_port:restart().
 
 %%--------------------------------------------------------------------
 %% @doc
