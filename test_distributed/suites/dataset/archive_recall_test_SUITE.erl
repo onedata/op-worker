@@ -15,6 +15,7 @@
 
 -include("modules/dataset/archive.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 -include("onenv_test_utils.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_time_series.hrl").
 -include_lib("ctool/include/errors.hrl").
@@ -615,6 +616,7 @@ recall_test_setup(StructureSpec, RootFileName) ->
             Acc
     end, undefined, utils:ensure_list(CreatedTreeObject)),
     #object{guid = TargetParentGuid} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{}),
+    ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}}, opt_archives:get_info(krakow, SessId, ArchiveId), ?ATTEMPTS),
     {ok, RecallRootFileGuid} = opt_archives:recall(krakow, SessId, ArchiveId, TargetParentGuid, RootFileName),
     FinalArchiveId = case opw_test_rpc:call(krakow, archive, get_related_dip_id, [ArchiveId]) of
         {ok, undefined} -> ArchiveId;

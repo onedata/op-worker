@@ -96,7 +96,7 @@ start_archivisation(
         ?ATTACHED_DATASET ->
             {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
             UserId = user_ctx:get_user_id(UserCtx),
-            BaseArchiveId = ensure_base_archive_is_set_if_applicable(Config, DatasetId),
+            BaseArchiveId = ensure_base_archive_is_set_if_applicable(Config),
             case archive:create(DatasetId, SpaceId, UserId, Config,
                 PreservedCallback, DeletedCallback, Description, BaseArchiveId)
             of
@@ -412,14 +412,18 @@ get_state(ArchiveDoc = #document{}) ->
 
 
 %% @private
--spec ensure_base_archive_is_set_if_applicable(archive:config(), dataset:id()) -> 
+-spec ensure_base_archive_is_set_if_applicable(archive:config()) ->
     archive:id() | undefined.
-ensure_base_archive_is_set_if_applicable(Config, DatasetId) ->
+ensure_base_archive_is_set_if_applicable(Config) ->
     case archive_config:is_incremental(Config) of
         true ->
             case archive_config:get_incremental_based_on(Config) of
-                undefined -> incremental_archive:find_base_archive_id(DatasetId);
-                BaseArchiveId -> BaseArchiveId
+                undefined -> throw(?ERROR_MISSING_REQUIRED_VALUE(<<"basedOn">>));
+                BaseArchiveId ->
+                    case archive:get(BaseArchiveId) of
+                        {ok, _} -> BaseArchiveId;
+                        {error, not_found} -> throw(?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"basedOn">>))
+                    end
             end;
         false ->
             undefined
