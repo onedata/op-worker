@@ -61,7 +61,8 @@
     guest_user_opens_remotely_created_file_test/1,
     guest_user_opens_remotely_created_share_test/1,
     truncate_on_storage_does_not_block_synchronizer/1,
-    recreate_file_on_storage/1
+    recreate_file_on_storage/1,
+    recreate_dir_on_storage/1
 ]).
 
 -define(TEST_CASES, [
@@ -97,7 +98,8 @@
     guest_user_opens_remotely_created_file_test,
     guest_user_opens_remotely_created_share_test,
     truncate_on_storage_does_not_block_synchronizer,
-    recreate_file_on_storage
+    recreate_file_on_storage,
+    recreate_dir_on_storage
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -1185,6 +1187,58 @@ recreate_file_on_storage(Config0) ->
     ok = lfm_proxy:close(Worker2, Handle),
 
     % Wait for metadata sync and replicate file (replication should succeed even though file on storage is missing)
+    ?assertMatch({ok, #file_attr{size = FileSize}}, lfm_proxy:stat(Worker1, SessId(Worker1), ?FILE_REF(Guid)), 60),
+    ProviderId = rpc:call(Worker1, oneprovider, get_id_or_undefined, []),
+    {ok, TransferID} = ?assertMatch({ok, _}, opt_transfers:schedule_file_replication(Worker1, SessId(Worker1),
+        ?FILE_REF(Guid), ProviderId)),
+    multi_provider_file_ops_test_base:await_replication_end(Worker1 ,TransferID, 60).
+
+
+recreate_dir_on_storage(Config0) ->
+    User = <<"user1">>,
+    Config = multi_provider_file_ops_test_base:extend_config(Config0, User, {4,0,0,2}, 60),
+    Worker1 = ?config(worker1, Config),
+    [Worker2 | _] = ?config(workers2, Config),
+    Workers = ?config(op_worker_nodes, Config),
+    SessId = ?config(session, Config),
+    SpaceId = <<"space1">>,
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+    FileContent = <<"xxx">>,
+    FileSize = byte_size(FileContent),
+
+    % Mock to prevent storage file creation (only metadata will be set)
+    ?assertEqual(ok, test_utils:mock_new(Workers, storage_driver)),
+    ?assertEqual(ok, test_utils:mock_expect(Workers, storage_driver, mkdir, fun(_SDHandle, _Mode, _Recursive) -> ok end)),
+
+    % Create dirs and file on worker1
+    % Init test
+    {ok, DirGuid} = ?assertMatch({ok, _},
+        lfm_proxy:mkdir(Worker1, SessId(Worker1), SpaceGuid, generator:gen_name(), undefined)),
+    {ok, Level2DirGuid} = ?assertMatch({ok, _},
+        lfm_proxy:mkdir(Worker1, SessId(Worker1), DirGuid, generator:gen_name(), undefined)),
+    {ok, Guid} = ?assertMatch({ok, _},
+        lfm_proxy:create(Worker1, SessId(Worker1), Level2DirGuid, generator:gen_name(), undefined)),
+    ?assertEqual({error, enoent}, lfm_proxy:open(Worker1, SessId(Worker1), ?FILE_REF(Guid), read)),
+
+    % Check if dir location exists according to metadata
+    {ok, DirLocation} = ?assertMatch({ok, _}, rpc:call(Worker1, dir_location, get, [file_id:guid_to_uuid(DirGuid)])),
+    ?assert(dir_location:is_storage_file_created(DirLocation)),
+    {ok, Level2DirLocation} = ?assertMatch({ok, _},
+        rpc:call(Worker1, dir_location, get, [file_id:guid_to_uuid(Level2DirGuid)])),
+    ?assert(dir_location:is_storage_file_created(Level2DirLocation)),
+
+    % Unload mock - dirs are created according to metadata but they have not been created on storage
+    ?assertEqual(ok, test_utils:mock_unload(Workers, storage_driver)),
+
+    % Wait for file sync
+    ?assertMatch({ok, #file_attr{size = 0}}, lfm_proxy:stat(Worker2, SessId(Worker2), ?FILE_REF(Guid)), 60),
+
+    % Add data to file
+    {ok, Handle} = lfm_proxy:open(Worker2, SessId(Worker2), ?FILE_REF(Guid), write),
+    {ok, _} = lfm_proxy:write(Worker2, Handle, 0, FileContent),
+    ok = lfm_proxy:close(Worker2, Handle),
+
+    % Wait for metadata sync and replicate file (replication should succeed even though dirs on storage are missing)
     ?assertMatch({ok, #file_attr{size = FileSize}}, lfm_proxy:stat(Worker1, SessId(Worker1), ?FILE_REF(Guid)), 60),
     ProviderId = rpc:call(Worker1, oneprovider, get_id_or_undefined, []),
     {ok, TransferID} = ?assertMatch({ok, _}, opt_transfers:schedule_file_replication(Worker1, SessId(Worker1),
