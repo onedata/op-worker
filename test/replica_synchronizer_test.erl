@@ -20,7 +20,7 @@
 -define(BLOCK(Offset, Size), #file_block{offset = Offset, size = Size}).
 
 -define(IN_PROGRESS(Offset, Size, Priority),
-    {?BLOCK(Offset, Size), undefined, Priority}).
+    {job, ?BLOCK(Offset, Size), undefined, Priority, _LastActivity = 0, _RetriesLeft = 0}).
 
 
 %%%===================================================================
