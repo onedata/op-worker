@@ -1210,9 +1210,9 @@ recreate_dir_on_storage(Config0) ->
     ?assertEqual(ok, test_utils:mock_expect(Workers, storage_driver, mkdir, fun(_SDHandle, _Mode, _Recursive) -> ok end)),
 
     % Create dirs and file on worker1
-    % Init test
+    DirName = generator:gen_name(),
     {ok, DirGuid} = ?assertMatch({ok, _},
-        lfm_proxy:mkdir(Worker1, SessId(Worker1), SpaceGuid, generator:gen_name(), undefined)),
+        lfm_proxy:mkdir(Worker1, SessId(Worker1), SpaceGuid, DirName, undefined)),
     {ok, Level2DirGuid} = ?assertMatch({ok, _},
         lfm_proxy:mkdir(Worker1, SessId(Worker1), DirGuid, generator:gen_name(), undefined)),
     {ok, Guid} = ?assertMatch({ok, _},
@@ -1225,6 +1225,9 @@ recreate_dir_on_storage(Config0) ->
     {ok, Level2DirLocation} = ?assertMatch({ok, _},
         rpc:call(Worker1, dir_location, get, [file_id:guid_to_uuid(Level2DirGuid)])),
     ?assert(dir_location:is_storage_file_created(Level2DirLocation)),
+    % Check that dirs do not exist on storage (checking highest level dir is enough)
+    ?assertEqual({error, enoent},
+        storage_test_utils:read_file_info(Worker1, storage_test_utils:file_path(Worker1, SpaceId, DirName))),
 
     % Unload mock - dirs are created according to metadata but they have not been created on storage
     ?assertEqual(ok, test_utils:mock_unload(Workers, storage_driver)),
@@ -1601,6 +1604,13 @@ end_per_testcase(Case = detect_stale_replica_synchronizer_jobs_test, Config) ->
         synchronizer_max_job_inactivity_period_sec,
         synchronizer_jobs_inactivity_check_interval_sec
     ]),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+end_per_testcase(Case, Config) when
+    Case =:= recreate_file_on_storage;
+    Case =:= recreate_dir_on_storage
+->
+    Nodes = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Nodes, storage_driver),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).
