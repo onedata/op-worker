@@ -228,8 +228,11 @@ before_listeners_start() ->
 %%--------------------------------------------------------------------
 after_listeners_stop() ->
     atm_supervision_worker:try_to_gracefully_stop_atm_workflow_executions(),
-    file_upload_manager_watcher_service:terminate_internal_service(),
     atm_warden_service:terminate_internal_service(),
+    file_upload_manager_watcher_service:terminate_internal_service(),
+    % GS connection should be closed at the end as other services
+    % may still require access to synced documents
+    % (though a working connection cannot be guaranteed here).
     gs_channel_service:terminate_internal_service().
 
 %%--------------------------------------------------------------------
