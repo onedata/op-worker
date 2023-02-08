@@ -86,8 +86,9 @@ add_hook(MissingElement, Identifier, Module, Function, PosthookArgs) ->
     byte_size(EncodedArgs) =< ?MAX_ENCODED_ARGS_SIZE orelse
         error({file_meta_posthooks_too_large_args, Key, Identifier, byte_size(EncodedArgs)}),
     
-    case add_links(Key, {Identifier, encode_hook(Module, Function, EncodedArgs)}) of
-        {ok, _} ->
+    Link = {Identifier, encode_hook(Module, Function, EncodedArgs)},
+    case ?extract_ok(?ok_if_exists(add_links(Key, Link))) of
+        ok ->
             % Check race with file_meta document and links synchronization. Hook is added when something fails because
             % of missing file_meta document or link. If missing element appears before hook adding to datastore,
             % execution of hook is not triggered by dbsync. Thus, check if missing element exists and trigger hook
@@ -96,10 +97,17 @@ add_hook(MissingElement, Identifier, Module, Function, PosthookArgs) ->
                 true ->
                     % Spawn to prevent deadlocks when hook is added from the inside of already existing hook
                     spawn(fun() ->
-                        case execute_hook(Key, Identifier, Module, Function, EncodedArgs) of
-                            ok -> delete_links(Key, Identifier);
-                            error -> ok % hook execution failed, do not remove the hook
-                        end
+                        critical_section:run(FileUuid, fun() ->
+                            case get_link(Key, Identifier) of
+                                {ok, _} ->
+                                    case execute_hook(Key, Identifier, Module, Function, EncodedArgs) of
+                                        ok -> delete_links(Key, Identifier);
+                                        error -> ok % hook execution failed, do not remove the hook
+                                    end;
+                                {error, not_found} ->
+                                    ok
+                            end
+                        end)
                     end),
                     ok;
                 false ->
@@ -116,7 +124,7 @@ add_hook(MissingElement, Identifier, Module, Function, PosthookArgs) ->
 execute_hooks(FileUuid, HookType) ->
     Key = gen_datastore_key(FileUuid, HookType),
     critical_section:run(FileUuid, fun() ->
-        execute_hooks_unsafe(Key, #{token => #link_token{}, limit => ?FOLD_LINKS_LIMIT})
+        execute_hooks_unsafe(Key, #{token => #link_token{}})
     end).
 
 
@@ -124,7 +132,7 @@ execute_hooks(FileUuid, HookType) ->
 cleanup(FileUuid) ->
     lists:foreach(fun(Key) ->
         cleanup_deprecated(Key),
-        cleanup_links(Key, #{token => #link_token{}, limit => ?FOLD_LINKS_LIMIT})
+        cleanup_links(Key, #{token => #link_token{}})
     end, [FileUuid, ?LINK_KEY(FileUuid)]).
 
 
@@ -242,10 +250,16 @@ delete_links(Key, Links) ->
 
 
 %% @private
+-spec get_link(datastore:key(), hook_identifier()) -> {ok, datastore_model:link()} | {error, term()}.
+get_link(Key, Link) ->
+    datastore_model:get_links(?CTX, Key, oneprovider:get_id(), Link).
+
+
+%% @private
 -spec fold_links(datastore:key(), datastore:fold_fun(datastore:link()), datastore:fold_opts()) ->
     {ok, datastore:fold_acc()} | {{ok, datastore:fold_acc()}, datastore_links_iter:token()} | {error, term()}.
 fold_links(Key, FoldFun, Opts) ->
-    datastore_model:fold_links(?CTX, Key, all, FoldFun, [], Opts).
+    datastore_model:fold_links(?CTX, Key, all, FoldFun, [], Opts#{size => ?FOLD_LINKS_LIMIT}).
 
 
 %%%===================================================================
