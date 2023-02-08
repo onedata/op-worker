@@ -16,6 +16,7 @@
 %%% and retained when returns `repeat` (useful with link hooks, as it
 %%% can be triggered by any link document).
 %%% Any exported function can be used as a hook.
+%%% Any module using file_meta_posthooks must implement `file_meta_posthooks_behaviour`.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_meta_posthooks).
@@ -32,20 +33,21 @@
 %% deprecated functions
 -export([execute_hooks_deprecated/2]).
 
-%% datastore_model callbacks (deprecated)
+%% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
 
 -type hook_type() :: doc | link.
 -type missing_element() :: {file_meta_missing, MissingUuid :: file_meta:uuid()} |
     {link_missing, Uuid :: file_meta:uuid(), MissingName :: file_meta:name()}.
 -type hook_identifier() :: binary().
-% Posthook args encoded with term_to_binary/1 function.
+-type function_name() :: atom().
+% Posthook args encoded with Module:encode_file_meta_posthook_args/2 function.
 % Maximum size of resulting binary is ?MAX_ENCODED_ARGS_SIZE bytes.
 % Args are encoded by caller so it is aware of this limitation.
 -type encoded_args() :: binary().
 -type one_or_many(Type) :: Type | [Type].
 
--export_type([missing_element/0]).
+-export_type([missing_element/0,function_name/0, encoded_args/0]).
 
 %% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 21.02.*.
 -define(CTX, #{
@@ -62,7 +64,6 @@
 -type hooks() :: #{hook_identifier() => hook()}.
 -export_type([hooks/0]).
 
--define(MAX_POSTHOOKS,  op_worker:get_env(max_file_meta_posthooks, 256)).
 -define(LINK_KEY(FileUuid), <<"link_hooks_", FileUuid/binary>>).
 
 -define(SEPARATOR, "#").
@@ -73,12 +74,14 @@
 %%% Functions operating on record using datastore_model API
 %%%===================================================================
 
--spec add_hook(missing_element(), hook_identifier(), module(), atom(), encoded_args()) ->
+-spec add_hook(missing_element(), hook_identifier(), module(), atom(), [term()]) ->
     ok | ?ERROR_INTERNAL_SERVER_ERROR.
-add_hook(MissingElement, Identifier, Module, Function, EncodedArgs) ->
+add_hook(MissingElement, Identifier, Module, Function, PosthookArgs) ->
     FileUuid = get_hook_uuid(MissingElement),
     HookType = missing_element_to_hook_type(MissingElement),
     Key = gen_datastore_key(FileUuid, HookType),
+    
+    EncodedArgs = Module:encode_file_meta_posthook_args(Function, PosthookArgs),
     
     byte_size(EncodedArgs) =< ?MAX_ENCODED_ARGS_SIZE orelse
         error({file_meta_posthooks_too_large_args, Key, Identifier, byte_size(EncodedArgs)}),
@@ -112,7 +115,9 @@ add_hook(MissingElement, Identifier, Module, Function, EncodedArgs) ->
 -spec execute_hooks(file_meta:uuid(), hook_type()) -> ok.
 execute_hooks(FileUuid, HookType) ->
     Key = gen_datastore_key(FileUuid, HookType),
-    execute_hooks_internal(Key, #{token => #link_token{}, limit => ?FOLD_LINKS_LIMIT}).
+    critical_section:run(FileUuid, fun() ->
+        execute_hooks_unsafe(Key, #{token => #link_token{}, limit => ?FOLD_LINKS_LIMIT})
+    end).
 
 
 -spec cleanup(file_meta:uuid()) -> ok.
@@ -128,8 +133,8 @@ cleanup(FileUuid) ->
 %%%===================================================================
 
 %% @private
--spec execute_hooks_internal(datastore:key(), datastore:fold_opts()) -> ok.
-execute_hooks_internal(Key, Opts) ->
+-spec execute_hooks_unsafe(datastore:key(), datastore:fold_opts()) -> ok.
+execute_hooks_unsafe(Key, Opts) ->
     FoldFun = fun(#link{name = Name, target = Target}, Acc) ->
         {ok, [{Name, Target} | Acc]}
     end,
@@ -144,7 +149,7 @@ execute_hooks_internal(Key, Opts) ->
     delete_links(Key, SuccessfulHooks),
     case NextToken#link_token.is_last of
         true -> ok;
-        false -> execute_hooks_internal(Key, Opts#{token => NextToken})
+        false -> execute_hooks_unsafe(Key, Opts#{token => NextToken})
     end.
 
 
@@ -152,7 +157,7 @@ execute_hooks_internal(Key, Opts) ->
 -spec execute_hook(datastore:key(), hook_identifier(), module(), atom(), encoded_args()) -> ok | error.
 execute_hook(Key, Identifier, Module, Function, EncodedArgs) ->
     try
-        case erlang:apply(Module, Function, binary_to_term(EncodedArgs)) of
+        case erlang:apply(Module, Function, Module:decode_file_meta_posthook_args(Function, EncodedArgs)) of
             ok -> ok;
             %% @TODO VFS-10296 - handle not fully synced links in this module
             repeat -> error
@@ -293,17 +298,18 @@ cleanup_deprecated(Key) ->
 
 %%%===================================================================
 %%% datastore_model callbacks
-%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 21.02.*.
 %%%===================================================================
 
 -spec get_ctx() -> datastore:ctx().
 get_ctx() ->
     ?CTX.
 
+%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 21.02.*.
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
     1.
 
+%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 21.02.*.
 -spec get_record_struct(datastore_model:record_version()) ->
     datastore_model:record_struct().
 get_record_struct(1) ->
