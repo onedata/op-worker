@@ -63,6 +63,7 @@
     truncate_on_storage_does_not_block_synchronizer/1,
     recreate_file_on_storage/1,
     recreate_dir_on_storage/1,
+    transfer_with_missing_documents/1,
     detect_stale_replica_synchronizer_jobs_test/1
 ]).
 
@@ -101,6 +102,7 @@
     truncate_on_storage_does_not_block_synchronizer,
     recreate_file_on_storage,
     recreate_dir_on_storage,
+    transfer_with_missing_documents,
     detect_stale_replica_synchronizer_jobs_test
 ]).
 
@@ -1129,7 +1131,6 @@ truncate_on_storage_does_not_block_synchronizer(Config0) ->
     ok = lfm_proxy:close(Worker2, Handle2),
 
     % Mock hanging of storage truncate operation
-    test_utils:mock_new(Workers, storage_driver),
     test_utils:mock_expect(Workers, storage_driver, truncate,
         fun(Handle, Size, CurrentSize) ->
             timer:sleep(timer:hours(1)),
@@ -1246,6 +1247,76 @@ recreate_dir_on_storage(Config0) ->
     {ok, TransferID} = ?assertMatch({ok, _}, opt_transfers:schedule_file_replication(Worker1, SessId(Worker1),
         ?FILE_REF(Guid), ProviderId)),
     multi_provider_file_ops_test_base:await_replication_end(Worker1 ,TransferID, 60).
+
+
+transfer_with_missing_documents(Config) ->
+    Worker1 = ?config(worker1, Config),
+    [Worker2 | _] = Workers2 = ?config(workers2, Config),
+    SessId = ?config(session, Config),
+    SpaceId = <<"space1">>,
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+    FileContent = <<"xxx">>,
+    % Create dir and files on worker1
+    {ok, DirGuid} = ?assertMatch({ok, _},
+        lfm_proxy:mkdir(Worker1, SessId(Worker1), SpaceGuid, generator:gen_name(), undefined)),
+    [_FileWithoutLocationGuid, DeletedFileWithoutLocationGuid] = lists_utils:generate(fun() ->
+        {ok, GuidWithoutLocation} = ?assertMatch({ok, _},
+            lfm_proxy:create(Worker1, SessId(Worker1), DirGuid, generator:gen_name(), undefined)),
+        GuidWithoutLocation
+    end, 2),
+    [FileWithNotSyncedLocationGuid, FileWithNotSyncedFileMetaAndTimesGuid, DeletedFileGuid] = lists_utils:generate(fun() ->
+        {ok, {GuidWithLocation, Handle}} = ?assertMatch({ok, _},
+            lfm_proxy:create_and_open(Worker1, SessId(Worker1), DirGuid, generator:gen_name(), undefined)),
+        lfm_proxy:write(Worker1, Handle, 0, FileContent),
+        ?assertEqual(ok, lfm_proxy:close(Worker1, Handle)),
+        GuidWithLocation
+    end, 3),
+    lists:foreach(fun(GuidToDel) ->
+        ?assertEqual(ok, lfm_proxy:unlink(Worker1, SessId(Worker1), ?FILE_REF(GuidToDel)))
+    end, [DeletedFileWithoutLocationGuid, DeletedFileGuid]),
+
+    % Allow dbsync send metadata
+    timer:sleep(timer:seconds(10)),
+
+    % Resync all without chosen documents (dbsync was mocked and has not synced anything)
+    FileWithNotSyncedLocationUuid = file_id:guid_to_uuid(FileWithNotSyncedLocationGuid),
+    FileWithNotSyncedFileMetaAndTimesUuid = file_id:guid_to_uuid(FileWithNotSyncedFileMetaAndTimesGuid),
+    test_utils:mock_expect(Workers2, dbsync_changes, apply, fun
+        (#document{value = #file_location{uuid = Uuid}}) when Uuid =:= FileWithNotSyncedLocationUuid -> ok;
+        (#document{key = Uuid, value = #file_meta{}}) when Uuid =:= FileWithNotSyncedFileMetaAndTimesUuid -> ok;
+        (Doc) -> meck:passthrough([Doc])
+    end),
+    Provider1Id = rpc:call(Worker1, oneprovider, get_id_or_undefined, []),
+    ?assertEqual(ok, rpc:call(Worker2, dbsync_worker, resynchronize_all, [SpaceId, Provider1Id])),
+    ?assertEqual(rpc:call(Worker1, dbsync_state, get_seq, [SpaceId, Provider1Id]),
+        rpc:call(Worker2, dbsync_state, get_seq, [SpaceId, Provider1Id]), 30),
+
+    % Replicate dir - files should be processed but not replicated
+    Provider2Id = rpc:call(Worker2, oneprovider, get_id_or_undefined, []),
+    {ok, TransferId} = ?assertMatch({ok, _}, opt_transfers:schedule_file_replication(Worker2, SessId(Worker2),
+        ?FILE_REF(DirGuid), Provider2Id)),
+    ?assertMatch({ok, #document{value = #transfer{
+        replication_status = completed,
+        files_to_process = 2,
+        files_processed = 2
+    }}}, rpc:call(Worker2, transfer, get, [TransferId]), 30),
+
+    % Unload mock and resync all
+    ?assertEqual(ok, test_utils:mock_unload(Workers2, dbsync_changes)),
+    ?assertEqual(ok, rpc:call(Worker2, dbsync_worker, resynchronize_all, [SpaceId, Provider1Id])),
+    ?assertEqual(rpc:call(Worker1, dbsync_state, get_seq, [SpaceId, Provider1Id]),
+        rpc:call(Worker2, dbsync_state, get_seq, [SpaceId, Provider1Id]), 30),
+
+    % Replicate dir - files should replicated
+    {ok, Transfer2Id} = ?assertMatch({ok, _}, opt_transfers:schedule_file_replication(Worker2, SessId(Worker2),
+        ?FILE_REF(DirGuid), Provider2Id)),
+    ?assertMatch({ok, #document{value = #transfer{
+        replication_status = completed,
+        files_to_process = 3,
+        files_processed = 3,
+        files_replicated = 2,
+        bytes_replicated = 6
+    }}}, rpc:call(Worker2, transfer, get, [Transfer2Id]), 30).
 
 
 detect_stale_replica_synchronizer_jobs_test(Config0) ->
@@ -1453,7 +1524,6 @@ meck_get_num_calls(Nodes, Module, Fun, Args) ->
     end, Nodes).
 
 mock_storage_driver_to_prevent_file_creation(Workers) ->
-    ?assertEqual(ok, test_utils:mock_new(Workers, storage_driver)),
     ?assertEqual(ok, test_utils:mock_expect(Workers, storage_driver, create, fun(_SDHandle, _Mode) -> ok end)),
     ?assertEqual(ok, test_utils:mock_expect(Workers, storage_driver, open, fun(SDHandle, _Flag) -> {ok, SDHandle} end)),
     ?assertEqual(ok, test_utils:mock_expect(Workers, storage_driver, release, fun(_SDHandle) -> ok end)).
@@ -1511,7 +1581,11 @@ init_per_testcase(Case, Config) when
 ->
     initializer:mock_share_logic(Config),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
-init_per_testcase(truncate_on_storage_does_not_block_synchronizer = Case, Config) ->
+init_per_testcase(Case, Config)when
+    Case =:= recreate_file_on_storage;
+    Case =:= recreate_dir_on_storage;
+    Case =:= truncate_on_storage_does_not_block_synchronizer
+->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, storage_driver),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
@@ -1544,7 +1618,27 @@ init_per_testcase(detect_stale_replica_synchronizer_jobs_test = Case, Config) ->
         {synchronizer_max_job_inactivity_period_sec, 1},
         {synchronizer_jobs_inactivity_check_interval_sec, 1}
     ]),
+    ?assertEqual(ok, test_utils:mock_new(Nodes, storage_driver)),
     Config2;
+init_per_testcase(transfer_with_missing_documents = Case, Config0) ->
+    User = <<"user1">>,
+    Config = multi_provider_file_ops_test_base:extend_config(Config0, User, {4,0,0,2}, 60),
+
+    % Mock to prevent sync of metadata
+    Workers2 = ?config(workers2, Config),
+    ?assertEqual(ok, test_utils:mock_new(Workers2, dbsync_changes)),
+    test_utils:mock_expect(Workers2, dbsync_changes, apply, fun(_Doc) -> ok end),
+
+    % Disable stats to prevent file_location creation before file opening
+    Worker1 = ?config(worker1, Config),
+    SpaceId = <<"space1">>,
+    StatsState = rpc:call(Worker1, dir_stats_service_state, get_status, [SpaceId]),
+    case StatsState of
+        disabled -> ok;
+        _ -> rpc:call(Worker1, dir_stats_service_state, disable, [SpaceId])
+    end,
+
+    init_per_testcase(?DEFAULT_CASE(Case), [{stats_state_before_test, StatsState} | Config]);
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 60}),
     lfm_proxy:init(Config).
@@ -1576,10 +1670,6 @@ end_per_testcase(Case, Config) when
 ->
     initializer:unmock_share_logic(Config),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
-end_per_testcase(truncate_on_storage_does_not_block_synchronizer = Case, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, storage_driver),
-    end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(Case, Config) when
     Case =:= dir_stats_collector_test;
     Case =:= dir_stats_collector_trash_test;
@@ -1604,13 +1694,28 @@ end_per_testcase(Case = detect_stale_replica_synchronizer_jobs_test, Config) ->
         synchronizer_max_job_inactivity_period_sec,
         synchronizer_jobs_inactivity_check_interval_sec
     ]),
+    ?assertEqual(ok, test_utils:mock_unload(Nodes, storage_driver)),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(Case, Config) when
     Case =:= recreate_file_on_storage;
-    Case =:= recreate_dir_on_storage
+    Case =:= recreate_dir_on_storage;
+    Case =:= truncate_on_storage_does_not_block_synchronizer
 ->
     Nodes = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Nodes, storage_driver),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+end_per_testcase(transfer_with_missing_documents = Case, Config) ->
+    Nodes = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Nodes, dbsync_changes),
+
+    case ?config(stats_state_before_test, Config) of
+        enabled ->
+            Worker1 = ?config(worker1, Config),
+            rpc:call(Worker1, dir_stats_service_state, disable, [<<"space1">>]);
+        _ ->
+            ok
+    end,
+
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).
