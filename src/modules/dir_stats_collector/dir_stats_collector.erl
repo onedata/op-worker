@@ -249,9 +249,9 @@ update_stats_of_parent(Guid, CollectionType, CollectionUpdate, ParentErrorHandli
 -spec update_stats_of_nearest_dir(file_id:file_guid(), dir_stats_collection:type(), dir_stats_collection:collection()) ->
     ok | ?ERROR_INTERNAL_SERVER_ERROR.
 update_stats_of_nearest_dir(Guid, CollectionType, CollectionUpdate) ->
-    case dir_stats_service_state:is_active(file_id:guid_to_space_id(Guid)) of
+    {FileUuid, SpaceId} = file_id:unpack_guid(Guid),
+    case dir_stats_service_state:is_active(SpaceId) of
         true ->
-            {FileUuid, SpaceId} = file_id:unpack_guid(Guid),
             case file_meta:get_including_deleted(FileUuid) of
                 {ok, Doc} ->
                     case file_meta:get_type(Doc) of

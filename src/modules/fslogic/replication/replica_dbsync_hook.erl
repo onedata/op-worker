@@ -42,7 +42,6 @@
 on_file_location_change(_FileCtx, undefined) ->
     ok;
 on_file_location_change(FileCtx, ChangedLocationDoc = #document{
-    key = LocId,
     value = #file_location{
         provider_id = ProviderId,
         file_id = FileId,
@@ -80,7 +79,7 @@ on_file_location_change(FileCtx, ChangedLocationDoc = #document{
                                 catch
                                     throw:{error, {file_meta_missing, MissingUuid}}  ->
                                         ?debug("~p file_meta_missing: ~p", [?FUNCTION_NAME, MissingUuid]),
-                                        file_meta_posthooks:add_hook({file_meta_missing, MissingUuid}, LocId, ?MODULE,
+                                        file_meta_posthooks:add_hook({file_meta_missing, MissingUuid}, generator:gen_name(), ?MODULE,
                                             ?FUNCTION_NAME, [FileCtx, ChangedLocationDoc])
                                 end;
                             false ->
