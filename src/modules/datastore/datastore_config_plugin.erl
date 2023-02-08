@@ -78,6 +78,7 @@ get_models() -> [
     qos_entry_audit_log,
     qos_status,
     qos_transfer_stats,
+    file_meta_posthooks,
     storage_sync_links,
     storage_traverse_job,
     space_unsupport_job,
@@ -122,8 +123,7 @@ get_models() -> [
     %% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 21.02.*.
     space_strategies,
     storage_sync_monitoring,
-    dir_stats_service_state,
-    file_meta_posthooks
+    dir_stats_service_state
 ].
 
 %%--------------------------------------------------------------------

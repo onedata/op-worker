@@ -54,6 +54,7 @@
 
 
 -behavior(pes_plugin_behaviour).
+-behaviour(file_meta_posthooks_behaviour).
 
 
 -include("modules/datastore/datastore_models.hrl").
@@ -76,6 +77,11 @@
     init/0, graceful_terminate/1, forced_terminate/2,
     handle_call/2, handle_cast/2]).
 
+%% file_meta_posthooks_behaviour callbacks
+-export([
+    encode_file_meta_posthook_args/2,
+    decode_file_meta_posthook_args/2
+]).
 
 % Executor's state holds recently used (updated or read) statistics for different
 % directories and collection types, which are cached in the state until flushed
@@ -256,7 +262,7 @@ update_stats_of_nearest_dir(Guid, CollectionType, CollectionUpdate) ->
                     end;
                 ?ERROR_NOT_FOUND ->
                     file_meta_posthooks:add_hook({file_meta_missing, FileUuid}, generator:gen_name(),
-                        ?MODULE, ?FUNCTION_NAME, term_to_binary([Guid, CollectionType, CollectionUpdate]))
+                        ?MODULE, ?FUNCTION_NAME, [Guid, CollectionType, CollectionUpdate])
             end;
         false ->
             ok
@@ -527,6 +533,25 @@ handle_cast(Info, State) ->
     ?log_bad_request(Info),
     State.
 
+
+%%%===================================================================
+%%% file_meta_posthooks_behaviour callbacks
+%%%===================================================================
+
+-spec encode_file_meta_posthook_args(file_meta_posthooks:function_name(), [term()]) ->
+    file_meta_posthooks:encoded_args().
+encode_file_meta_posthook_args(update_stats_of_parent, [Guid, CollectionType, CollectionUpdate, return_error]) ->
+    encode_collection_details(Guid, CollectionType, CollectionUpdate);
+encode_file_meta_posthook_args(update_stats_of_nearest_dir, [Guid, CollectionType, CollectionUpdate]) ->
+    encode_collection_details(Guid, CollectionType, CollectionUpdate).
+
+
+-spec decode_file_meta_posthook_args(file_meta_posthooks:function_name(), file_meta_posthooks:encoded_args()) ->
+    [term()].
+decode_file_meta_posthook_args(update_stats_of_parent, EncodedArgs) ->
+    decode_collection_details(EncodedArgs ++ [return_error]);
+decode_file_meta_posthook_args(update_stats_of_nearest_dir, EncodedArgs) ->
+    decode_collection_details(EncodedArgs).
 
 %%%===================================================================
 %%% Internal functions
@@ -1068,7 +1093,7 @@ acquire_space_collecting_status(SpaceId, #state{space_collecting_statuses = Coll
 add_hook_for_missing_doc(Guid, CollectionType, CollectionUpdate) ->
     file_meta_posthooks:add_hook({file_meta_missing, file_id:guid_to_uuid(Guid)},
         generator:gen_name(), ?MODULE, update_stats_of_parent,
-            term_to_binary([Guid, CollectionType, CollectionUpdate, return_error])).
+            [Guid, CollectionType, CollectionUpdate, return_error]).
 
 
 %% @private
@@ -1153,3 +1178,19 @@ collection_moved(Guid, CollectionType, TargetParentGuid, State) ->
         } ->
             UpdatedState
     end.
+
+
+%% @private
+-spec encode_collection_details(file_id:file_guid(), dir_stats_collection:type(), dir_stats_collection:collection()) ->
+    binary().
+encode_collection_details(Guid, CollectionType, Collection) ->
+    EncodedCollectionType = dir_stats_collection:encode_type(CollectionType),
+    term_to_binary([Guid, EncodedCollectionType, CollectionType:encode(Collection)]).
+
+
+%% @private
+-spec decode_collection_details(binary()) -> [term()].
+decode_collection_details(EncodedCollectionDetails) ->
+    [Guid, EncodedCollectionType, EncodedCollection] = binary_to_term(EncodedCollectionDetails),
+    CollectionType = dir_stats_collection:decode_type(EncodedCollectionType),
+    [Guid, CollectionType, CollectionType:decode(EncodedCollection)].

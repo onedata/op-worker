@@ -31,7 +31,7 @@
 
 -type id() :: od_space:id().
 
--define(POOL_NAME, atom_to_binary(qos_traverse:pool_name(), utf8)).
+-define(POOL_NAME, qos_traverse:pool_name()).
 -define(TRAVERSE_BATCH_SIZE, op_worker:get_env(qos_traverse_batch_size, 40)).
 
 %%%===================================================================

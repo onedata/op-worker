@@ -52,7 +52,10 @@
     delete_stats/1]).
 
 %% dir_stats_collection_behaviour callbacks
--export([acquire/1, consolidate/3, on_collection_move/2, save/3, delete/1, init_dir/1, init_child/2]).
+-export([
+    acquire/1, consolidate/3, on_collection_move/2, save/3, delete/1, init_dir/1, init_child/2,
+    encode/1, decode/1
+]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -228,6 +231,19 @@ init_child(Guid, IncludeDeleted) ->
             % Race with file deletion - stats will be invalidated by next update
             gen_empty_current_stats_and_handle_errors(Guid)
     end.
+
+
+-spec encode(dir_stats_collection:collection()) -> term().
+encode(Collection) ->
+    maps:fold(fun(StatName, Values, Acc) ->
+        Acc#{encode_stat_name(StatName) => Values}
+    end, #{}, Collection).
+
+-spec decode(term()) -> dir_stats_collection:collection().
+decode(EncodedCollection) ->
+    maps:fold(fun(StatName, Values, Acc) ->
+        Acc#{decode_stat_name(StatName) => Values}
+    end, #{}, EncodedCollection).
 
 
 %%%===================================================================
@@ -436,3 +452,23 @@ handle_init_error(Guid, Error, Reason, Stacktrace) ->
                         [Guid, Error, Reason], Stacktrace)
             end
     end.
+
+
+%% @private
+-spec encode_stat_name(dir_stats_collection:stat_name()) -> non_neg_integer() | {non_neg_integer(), binary()}.
+encode_stat_name(?REG_FILE_AND_LINK_COUNT) -> 0;
+encode_stat_name(?DIR_COUNT) -> 1;
+encode_stat_name(?FILE_ERRORS_COUNT) -> 2;
+encode_stat_name(?DIR_ERRORS_COUNT) -> 3;
+encode_stat_name(?TOTAL_SIZE) -> 4;
+encode_stat_name(?SIZE_ON_STORAGE(StorageId)) -> {5, StorageId}.
+
+
+%% @private
+-spec decode_stat_name(non_neg_integer() | {non_neg_integer(), binary()}) -> dir_stats_collection:stat_name().
+decode_stat_name(0) -> ?REG_FILE_AND_LINK_COUNT;
+decode_stat_name(1) -> ?DIR_COUNT;
+decode_stat_name(2) -> ?FILE_ERRORS_COUNT;
+decode_stat_name(3) -> ?DIR_ERRORS_COUNT;
+decode_stat_name(4) -> ?TOTAL_SIZE;
+decode_stat_name({5, StorageId}) -> ?SIZE_ON_STORAGE(StorageId).

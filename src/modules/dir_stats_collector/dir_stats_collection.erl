@@ -22,7 +22,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 
--export([consolidate/3, on_collection_move/2, with_all/2, list_types/0]).
+-export([consolidate/3, on_collection_move/2, with_all/2, list_types/0, encode_type/1, decode_type/1]).
 
 
 -type type() :: module().
@@ -80,3 +80,13 @@ with_all(StatNames, Collection) ->
 -spec list_types() -> [type()].
 list_types() ->
     ?ALL_COLLECTION_TYPES.
+
+
+-spec encode_type(type()) -> non_neg_integer().
+encode_type(dir_size_stats) -> 0;
+encode_type(dir_update_time_stats) -> 1.
+
+
+-spec decode_type(non_neg_integer()) -> type().
+decode_type(0) -> dir_size_stats;
+decode_type(1) -> dir_update_time_stats.
