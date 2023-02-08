@@ -1185,7 +1185,7 @@ collection_moved(Guid, CollectionType, TargetParentGuid, State) ->
     binary().
 encode_collection_details(Guid, CollectionType, Collection) ->
     EncodedCollectionType = dir_stats_collection:encode_type(CollectionType),
-    term_to_binary([Guid, EncodedCollectionType, CollectionType:encode(Collection)]).
+    term_to_binary([Guid, EncodedCollectionType, CollectionType:compress(Collection)]).
 
 
 %% @private
@@ -1193,4 +1193,4 @@ encode_collection_details(Guid, CollectionType, Collection) ->
 decode_collection_details(EncodedCollectionDetails) ->
     [Guid, EncodedCollectionType, EncodedCollection] = binary_to_term(EncodedCollectionDetails),
     CollectionType = dir_stats_collection:decode_type(EncodedCollectionType),
-    [Guid, CollectionType, CollectionType:decode(EncodedCollection)].
+    [Guid, CollectionType, CollectionType:decompress(EncodedCollection)].

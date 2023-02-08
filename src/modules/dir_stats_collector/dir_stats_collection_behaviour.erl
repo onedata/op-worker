@@ -111,6 +111,6 @@
 %%% passing collection as an argument to file_meta posthook function.
 %%%===================================================================
 
--callback encode(dir_stats_collection:collection()) -> term().
+-callback compress(dir_stats_collection:collection()) -> term().
 
--callback decode(term()) -> dir_stats_collection:collection().
+-callback decompress(term()) -> dir_stats_collection:collection().

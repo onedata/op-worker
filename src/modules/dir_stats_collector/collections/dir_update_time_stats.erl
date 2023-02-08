@@ -29,7 +29,7 @@
 %% dir_stats_collection_behaviour callbacks
 -export([
     acquire/1, consolidate/3, on_collection_move/2, save/3, delete/1, init_dir/1, init_child/2,
-    encode/1, decode/1
+    compress/1, decompress/1
 ]).
 
 %% datastore_model callbacks
@@ -141,13 +141,13 @@ init_child(Guid, _) ->
     init(Guid).
 
 
--spec encode(dir_stats_collection:collection()) -> term().
-encode(#{?STAT_NAME := StatValue}) ->
+-spec compress(dir_stats_collection:collection()) -> term().
+compress(#{?STAT_NAME := StatValue}) ->
     #{0 => StatValue}.
 
 
--spec decode(term()) -> dir_stats_collection:collection().
-decode(#{0 := StatValue}) ->
+-spec decompress(term()) -> dir_stats_collection:collection().
+decompress(#{0 := StatValue}) ->
     #{?STAT_NAME => StatValue}.
 
 %%%===================================================================

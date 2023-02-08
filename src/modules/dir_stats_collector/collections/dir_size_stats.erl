@@ -54,7 +54,7 @@
 %% dir_stats_collection_behaviour callbacks
 -export([
     acquire/1, consolidate/3, on_collection_move/2, save/3, delete/1, init_dir/1, init_child/2,
-    encode/1, decode/1
+    compress/1, decompress/1
 ]).
 
 %% datastore_model callbacks
@@ -256,14 +256,14 @@ init_child(Guid, IncludeDeleted) ->
     end.
 
 
--spec encode(dir_stats_collection:collection()) -> term().
-encode(Collection) ->
+-spec compress(dir_stats_collection:collection()) -> term().
+compress(Collection) ->
     maps:fold(fun(StatName, Values, Acc) ->
         Acc#{encode_stat_name(StatName) => Values}
     end, #{}, Collection).
 
--spec decode(term()) -> dir_stats_collection:collection().
-decode(EncodedCollection) ->
+-spec decompress(term()) -> dir_stats_collection:collection().
+decompress(EncodedCollection) ->
     maps:fold(fun(StatName, Values, Acc) ->
         Acc#{decode_stat_name(StatName) => Values}
     end, #{}, EncodedCollection).
