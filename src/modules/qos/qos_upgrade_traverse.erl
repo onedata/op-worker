@@ -43,7 +43,19 @@ start() ->
     {ok, Spaces} = provider_logic:get_spaces(),
     lists:foreach(fun(SpaceId) ->
         FileCtx = file_ctx:new_by_guid(fslogic_file_id:spaceid_to_space_dir_guid(SpaceId)),
-        {ok, _} = tree_traverse:run(?POOL_NAME, FileCtx, #{batch_size => ?TRAVERSE_BATCH_SIZE, task_id => SpaceId})
+        case traverse_task:get(?POOL_NAME, SpaceId) of
+            {ok, _} ->
+                % traverse already started in previous upgrade procedure run
+                ok;
+            _ ->
+                % sleep needed to ensure traverse_task has different timestamps for its links
+                timer:sleep(timer:seconds(1)),
+                {ok, _} = tree_traverse:run(?POOL_NAME, FileCtx, #{
+                    batch_size => ?TRAVERSE_BATCH_SIZE,
+                    task_id => SpaceId,
+                    callback_module => ?MODULE
+                })
+        end
     end, Spaces).
 
 

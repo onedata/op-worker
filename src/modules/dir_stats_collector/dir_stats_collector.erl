@@ -549,7 +549,7 @@ encode_file_meta_posthook_args(update_stats_of_nearest_dir, [Guid, CollectionTyp
 -spec decode_file_meta_posthook_args(file_meta_posthooks:function_name(), file_meta_posthooks:encoded_args()) ->
     [term()].
 decode_file_meta_posthook_args(update_stats_of_parent, EncodedArgs) ->
-    decode_collection_details(EncodedArgs ++ [return_error]);
+    decode_collection_details(EncodedArgs) ++ [return_error];
 decode_file_meta_posthook_args(update_stats_of_nearest_dir, EncodedArgs) ->
     decode_collection_details(EncodedArgs).
 
