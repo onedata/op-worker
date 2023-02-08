@@ -58,31 +58,11 @@ start_rtransfer() ->
 %% gen servers are up and running.
 %% @end
 %%--------------------------------------------------------------------
--spec restart_link() -> ok | {error, not_running}.
+-spec restart_link() -> ok.
 restart_link() ->
-    case whereis(rtransfer_link_port) of
-        undefined ->
-            {error, not_running};
-        CurrentPortPid ->
-            prepare_ssl_opts(),
-            prepare_graphite_opts(),
-            erlang:exit(CurrentPortPid, restarting),
-            utils:wait_until(fun() ->
-                case whereis(rtransfer_link_port) of
-                    undefined ->
-                        false;
-                    CurrentPortPid ->
-                        false;
-                    OtherPid when is_pid(OtherPid) ->
-                        case whereis(rtransfer_link) of
-                            LinkPid when is_pid(LinkPid) ->
-                                true;
-                            _ ->
-                                false
-                        end
-                end
-            end, 100)
-    end.
+    prepare_ssl_opts(),
+    prepare_graphite_opts(),
+    rtransfer_link_port:restart().
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -265,14 +245,14 @@ generate_secret(ProviderId, PeerSecret) ->
                                   rtransfer_link, allow_connection,
                                   [ProviderId, MySecret, PeerSecret, 60000]),
     BadNodes =/= [] andalso
-        ?error("Failed to allow rtransfer connection from ~p on nodes ~p",
+        ?error("Failed to allow rtransfer connection from ~p on nodes ~w",
                [ProviderId, BadNodes]),
     FilteredNodesAns = lists:filter(fun
         (#{<<"done">> := true}) -> false;
         (_) -> true
     end, NodesAns),
     FilteredNodesAns =/= [] andalso
-        ?error("Failed to allow rtransfer connection from ~p, rpc answer: ~p", [ProviderId, NodesAns]),
+        ?error("Failed to allow rtransfer connection from ~p~nrpc answer: ~p", [ProviderId, NodesAns]),
     MySecret.
 
 %%--------------------------------------------------------------------

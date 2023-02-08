@@ -6,7 +6,6 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% TODO VFS-9402 Move graceful stopping to on_provider_stopping callback
 %%% This module handles atm workflow executions restart and graceful pause
 %%% when stopping Oneprovider.
 %%% @end
@@ -23,6 +22,7 @@
 
 %% API
 -export([supervisor_flags/0, supervisor_children_spec/0]).
+-export([try_to_gracefully_stop_atm_workflow_executions/0]).
 
 %% worker_plugin_behaviour callbacks
 -export([init/1, handle/1, cleanup/0]).
@@ -55,6 +55,45 @@ supervisor_flags() ->
 -spec supervisor_children_spec() -> [supervisor:child_spec()].
 supervisor_children_spec() ->
     [].
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% This function should be called only when provider is stopping to gracefully
+%% stop all running atm workflow executions. Executions that will fail to stop
+%% within configured time interval will be abruptly interrupted by provider
+%% shutdown.
+%% @end
+%%--------------------------------------------------------------------
+-spec try_to_gracefully_stop_atm_workflow_executions() -> ok.
+try_to_gracefully_stop_atm_workflow_executions() ->
+    case provider_logic:get_spaces() of
+        {ok, SpaceIds} ->
+            ?info("Starting automation workflow executions graceful stop procedure..."),
+
+            RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
+            CountdownTimer = countdown_timer:start_seconds(
+                ?ATM_WORKFLOW_EXECUTIONS_GRACEFUL_STOP_TIMEOUT_SEC
+            ),
+            case try_to_gracefully_stop_atm_workflow_executions(
+                RootUserCtx, SpaceIds, CountdownTimer, ?GRACEFUL_STOP_BACKOFF_INITIAL_SEC
+            ) of
+                ok ->
+                    ?info("automation workflow executions graceful stop procedure finished succesfully.");
+                timeout ->
+                    ?warning(
+                        "Automation workflow executions graceful stop procedure finished "
+                        "due to timeout while not all executions were cleanly stopped. "
+                        "Leftover ones will be abruptly interrupted."
+                    ),
+                    stop_atm_workflow_executions(RootUserCtx, SpaceIds, interrupt)
+            end;
+        {error, _} = Error ->
+            ?warning(
+                "Skipping automation workflow executions graceful stop procedure due to: ~p",
+                [Error]
+            )
+    end.
 
 
 %%%===================================================================
@@ -103,7 +142,8 @@ handle(Request) ->
 %%--------------------------------------------------------------------
 -spec cleanup() -> ok.
 cleanup() ->
-    try_to_gracefully_stop_atm_workflow_executions().
+    % graceful stopping of executions is triggered in node_manager_plugin:after_listeners_stop/0 callback
+    ok.
 
 
 %%%===================================================================
@@ -163,46 +203,6 @@ restart_atm_workflow_executions(SpaceId) ->
     atm_workflow_execution_api:foreach(SpaceId, ?WAITING_PHASE, CallbackFun),
     atm_workflow_execution_api:foreach(SpaceId, ?ONGOING_PHASE, CallbackFun),
     atm_workflow_execution_api:foreach(SpaceId, ?SUSPENDED_PHASE, CallbackFun).
-
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function should be called only when provider is stopping to gracefully
-%% stop all running atm workflow executions. Executions that will fail to stop
-%% within configured time interval will be abruptly interrupted by provider
-%% shutdown.
-%% @end
-%%--------------------------------------------------------------------
--spec try_to_gracefully_stop_atm_workflow_executions() -> ok.
-try_to_gracefully_stop_atm_workflow_executions() ->
-    case provider_logic:get_spaces() of
-        {ok, SpaceIds} ->
-            ?info("Starting automation workflow executions graceful stop procedure..."),
-
-            RootUserCtx = user_ctx:new(?ROOT_SESS_ID),
-            CountdownTimer = countdown_timer:start_seconds(
-                ?ATM_WORKFLOW_EXECUTIONS_GRACEFUL_STOP_TIMEOUT_SEC
-            ),
-            case try_to_gracefully_stop_atm_workflow_executions(
-                RootUserCtx, SpaceIds, CountdownTimer, ?GRACEFUL_STOP_BACKOFF_INITIAL_SEC
-            ) of
-                ok ->
-                    ?info("automation workflow executions graceful stop procedure finished succesfully.");
-                timeout ->
-                    ?warning(
-                        "Automation workflow executions graceful stop procedure finished "
-                        "due to timeout while not all executions were cleanly stopped. "
-                        "Leftover ones will be abruptly interrupted."
-                    ),
-                    stop_atm_workflow_executions(RootUserCtx, SpaceIds, interrupt)
-            end;
-        {error, _} = Error ->
-            ?warning(
-                "Skipping automation workflow executions graceful stop procedure due to: ~p",
-                [Error]
-            )
-    end.
 
 
 %% @private
