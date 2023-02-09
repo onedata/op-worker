@@ -28,7 +28,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% functions operating on record using datastore model API
--export([add_hook/5, execute_hooks/2, cleanup/1]).
+-export([add_hook/6, execute_hooks/2, cleanup/1]).
 
 %% deprecated functions
 -export([execute_hooks_deprecated/2]).
@@ -70,13 +70,47 @@
 -define(FOLD_LINKS_LIMIT, 1000).
 -define(MAX_ENCODED_ARGS_SIZE, 512).
 
+-define(SHOULD_IGNORE_ON_INITIAL_SYNC, op_worker:get_env(ignore_file_meta_posthooks_on_initial_sync, false)).
+
 %%%===================================================================
 %%% Functions operating on record using datastore_model API
 %%%===================================================================
 
--spec add_hook(missing_element(), hook_identifier(), module(), atom(), [term()]) ->
+-spec add_hook(missing_element(), hook_identifier(), od_space:id(), module(), atom(), [term()]) ->
     ok | ?ERROR_INTERNAL_SERVER_ERROR.
-add_hook(MissingElement, Identifier, Module, Function, PosthookArgs) ->
+add_hook(MissingElement, Identifier, SpaceId, Module, Function, PosthookArgs) ->
+    case ?SHOULD_IGNORE_ON_INITIAL_SYNC andalso dbsync_state:set_initial_sync_repeat(SpaceId) of
+        ok ->
+            ok;
+        _ ->
+            add_hook_internal(MissingElement, Identifier, Module, Function, PosthookArgs)
+    end.
+
+
+-spec execute_hooks(file_meta:uuid(), hook_type()) -> ok.
+execute_hooks(FileUuid, HookType) ->
+    Key = gen_datastore_key(FileUuid, HookType),
+    run_in_critical_section(FileUuid, fun() ->
+        execute_hooks_unsafe(Key, #{token => #link_token{}})
+    end).
+
+
+-spec cleanup(file_meta:uuid()) -> ok.
+cleanup(FileUuid) ->
+    lists:foreach(fun(Key) ->
+        cleanup_deprecated(Key),
+        cleanup_links(Key, #{token => #link_token{}})
+    end, [FileUuid, ?LINK_KEY(FileUuid)]).
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%% @private
+-spec add_hook_internal(missing_element(), hook_identifier(), module(), atom(), [term()]) ->
+    ok | ?ERROR_INTERNAL_SERVER_ERROR.
+add_hook_internal(MissingElement, Identifier, Module, Function, PosthookArgs) ->
     FileUuid = get_hook_uuid(MissingElement),
     HookType = missing_element_to_hook_type(MissingElement),
     Key = gen_datastore_key(FileUuid, HookType),
@@ -119,26 +153,6 @@ add_hook(MissingElement, Identifier, Module, Function, PosthookArgs) ->
             ?ERROR_INTERNAL_SERVER_ERROR
     end.
 
-
--spec execute_hooks(file_meta:uuid(), hook_type()) -> ok.
-execute_hooks(FileUuid, HookType) ->
-    Key = gen_datastore_key(FileUuid, HookType),
-    run_in_critical_section(FileUuid, fun() ->
-        execute_hooks_unsafe(Key, #{token => #link_token{}})
-    end).
-
-
--spec cleanup(file_meta:uuid()) -> ok.
-cleanup(FileUuid) ->
-    lists:foreach(fun(Key) ->
-        cleanup_deprecated(Key),
-        cleanup_links(Key, #{token => #link_token{}})
-    end, [FileUuid, ?LINK_KEY(FileUuid)]).
-
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
 
 %% @private
 -spec execute_hooks_unsafe(datastore:key(), datastore:fold_opts()) -> ok.
