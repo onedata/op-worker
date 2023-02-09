@@ -18,6 +18,7 @@
 
 %% API
 -export([setup_internal_service/0]).
+-export([terminate_internal_service/0]).
 
 %% Internal Service callbacks
 -export([start_service/0, stop_service/0]).
@@ -42,6 +43,20 @@ setup_internal_service() ->
             stop_function => stop_service
         }
     ).
+
+
+-spec terminate_internal_service() -> ok.
+terminate_internal_service() ->
+    case node() =:= internal_services_manager:get_processing_node(?ATM_WARDEN_SERVICE_ID) of
+        true ->
+            try
+                ok = internal_services_manager:stop_service(?MODULE, ?ATM_WARDEN_SERVICE_NAME, ?ATM_WARDEN_SERVICE_ID)
+            catch Class:Reason:Stacktrace ->
+                ?log_exception(Class, Reason, Stacktrace)
+            end;
+        false ->
+            ok
+    end.
 
 
 %%%===================================================================

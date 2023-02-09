@@ -429,18 +429,23 @@ support_space(StorageId, SerializedToken, SupportSize, SupportParameters) ->
         {ok, SpaceId} ->
             case dir_stats_service_state:enable_for_new_support(SpaceId) of
                 ok -> ok;
-                Error1 -> ?warning("Error enabling statistics for new space ~p: ~p", [SpaceId, Error1])
+                StatsError -> ?warning("Error enabling statistics for new space ~p~nGot: ~p", [SpaceId, StatsError])
             end,
             case storage_logic:support_space(StorageId, SerializedToken, SupportSize, SupportParameters) of
                 {ok, SpaceId} ->
                     on_space_supported(SpaceId, StorageId),
+                    {ok, SpaceName} = space_logic:get_name(?ROOT_SESS_ID, SpaceId),
+                    {ok, StorageName} = storage_logic:get_name_of_local_storage(StorageId),
+                    ?notice("New space has been supported: '~s' (~s) with ~s quota on storage '~s' (~s)", [
+                        SpaceName, SpaceId, str_utils:format_byte_size(SupportSize), StorageName, StorageId
+                    ]),
                     {ok, SpaceId};
-                {error, _} = Error2 ->
+                {error, _} = SupportError ->
                     ok = dir_stats_service_state:clean(SpaceId),
-                    Error2
+                    SupportError
             end;
-        Error ->
-            Error
+        ValidateError ->
+            ValidateError
     end.
 
 

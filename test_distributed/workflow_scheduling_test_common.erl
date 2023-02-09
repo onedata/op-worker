@@ -454,7 +454,7 @@ mock_handlers(Workers, Manager) ->
         end),
 
     test_utils:mock_expect(Workers, workflow_test_handler, handle_lane_execution_stopped,
-        fun(ExecutionId, #{lane_index := LaneIndex} = Context, LaneId) ->
+        fun(ExecutionId, Context, LaneId) ->
             op_worker:set_env({lane_finished, ExecutionId, LaneId}, true),
             MockTemplate(
                 #handler_call{
