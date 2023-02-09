@@ -264,7 +264,7 @@ delete_links(Key, Links) ->
 
 
 %% @private
--spec get_link(datastore:key(), hook_identifier()) -> {ok, datastore:link()} | {error, term()}.
+-spec get_link(datastore:key(), hook_identifier()) -> {ok, [datastore:link()]} | {error, term()}.
 get_link(Key, Identifier) ->
     datastore_model:get_links(?CTX, Key, oneprovider:get_id(), Identifier).
 
