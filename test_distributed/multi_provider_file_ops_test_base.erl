@@ -1870,7 +1870,7 @@ mock_sync_and_rtransfer_errors(Config) ->
 
     test_utils:mock_expect(Workers, dbsync_changes, apply,
         fun(#document{seq = Seq} = Doc) ->
-            case crypto:rand_uniform(1, 10) > 7 of
+            case ?RAND_INT(1, 10) > 7 of
                 true -> {error, Seq, test_error};
                 false -> meck:passthrough([Doc])
             end
