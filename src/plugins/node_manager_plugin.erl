@@ -150,7 +150,6 @@ before_cluster_upgrade() ->
 upgrade_cluster(3) ->
     await_zone_connection_and_run(fun storage_import:migrate_space_strategies/0),
     await_zone_connection_and_run(fun storage_import:migrate_storage_sync_monitoring/0),
-    await_zone_connection_and_run(fun qos_upgrade_traverse:start/0),
     {ok, 4}.
 
 %%--------------------------------------------------------------------
