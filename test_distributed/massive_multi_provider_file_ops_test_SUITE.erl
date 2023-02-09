@@ -686,7 +686,7 @@ initial_sync_repeat_test(Config) ->
 
     add_posthooks_on_file_sync(Worker1, SpaceId, Provider2Id, initial_sync, [<<"1">>, <<"2">>]),
     add_posthooks_on_file_sync(Worker1, SpaceId, Provider2Id, resynchronization, [<<"3">>]),
-    verify_posthooks_called([<<"1">>, <<"3">>]),
+    verify_posthooks_called([<<"3">>]),
 
     lists:foreach(fun(Guid) ->
         ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessId1, ?FILE_REF(Guid)), 60)
@@ -790,7 +790,7 @@ init_per_testcase(initial_sync_repeat_test = Case, Config) ->
     test_utils:mock_expect(Worker, qos_logic, reconcile_qos, fun(_) ->
         ok
     end),
-    test_utils:set_env(Worker, ?APP_NAME, max_file_meta_posthooks, 1),
+    test_utils:set_env(Worker, ?APP_NAME, ignore_file_meta_posthooks_on_initial_sync, true),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 60}),
@@ -822,7 +822,7 @@ end_per_testcase(Case, Config) when
 end_per_testcase(initial_sync_repeat_test = Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Worker, [dbsync_changes, dbsync_utils, qos_logic]),
-    ?assertEqual(ok, rpc:call(Worker, application, unset_env, [?APP_NAME, max_file_meta_posthooks])),
+    ?assertEqual(ok, rpc:call(Worker, application, unset_env, [?APP_NAME, ignore_file_meta_posthooks_on_initial_sync])),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).
@@ -977,7 +977,7 @@ add_posthooks_on_file_sync(Worker, SpaceId, ProviderId, ExpectedSyncMode, Postho
             }, rpc:call(Worker, dbsync_state, get_synchronization_params, [SpaceId, ProviderId])),
             lists:foreach(fun(PosthookName) ->
                 ?assertEqual(ok, rpc:call(Worker, file_meta_posthooks, add_hook,
-                    [{file_meta_missing, Uuid}, PosthookName, ?MODULE, test_posthook, [Master, Uuid, PosthookName]]
+                    [{file_meta_missing, Uuid}, PosthookName, SpaceId, ?MODULE, test_posthook, [Master, Uuid, PosthookName]]
                 ))
             end, Posthooks),    
             DbsyncProc ! proceed,

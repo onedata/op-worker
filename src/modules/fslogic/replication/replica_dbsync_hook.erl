@@ -40,6 +40,7 @@
 -spec on_file_location_change(file_ctx:ctx(), file_location:doc() | undefined) ->
     ok | {error, term()}.
 on_file_location_change(_FileCtx, undefined) ->
+    % can happen, when called as file_meta posthook and file location document was deleted in the meantime
     ok;
 on_file_location_change(FileCtx, ChangedLocationDoc = #document{
     value = #file_location{
@@ -79,8 +80,8 @@ on_file_location_change(FileCtx, ChangedLocationDoc = #document{
                                 catch
                                     throw:{error, {file_meta_missing, MissingUuid}}  ->
                                         ?debug("~p file_meta_missing: ~p", [?FUNCTION_NAME, MissingUuid]),
-                                        file_meta_posthooks:add_hook({file_meta_missing, MissingUuid}, generator:gen_name(), ?MODULE,
-                                            ?FUNCTION_NAME, [FileCtx, ChangedLocationDoc])
+                                        file_meta_posthooks:add_hook({file_meta_missing, MissingUuid}, generator:gen_name(),
+                                            SpaceId, ?MODULE, ?FUNCTION_NAME, [FileCtx, ChangedLocationDoc])
                                 end;
                             false ->
                                 ok = fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx3, true, []),
