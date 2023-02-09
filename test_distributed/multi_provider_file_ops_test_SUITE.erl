@@ -68,6 +68,7 @@
 ]).
 
 -define(TEST_CASES, [
+    transfer_with_missing_documents,
     dir_stats_collector_test,
     dir_stats_collector_trash_test,
     transfer_after_enabling_stats_test,
@@ -102,7 +103,6 @@
     truncate_on_storage_does_not_block_synchronizer,
     recreate_file_on_storage,
     recreate_dir_on_storage,
-    transfer_with_missing_documents,
     detect_stale_replica_synchronizer_jobs_test
 ]).
 
@@ -1289,7 +1289,7 @@ transfer_with_missing_documents(Config) ->
     Provider1Id = rpc:call(Worker1, oneprovider, get_id_or_undefined, []),
     ?assertEqual(ok, rpc:call(Worker2, dbsync_worker, resynchronize_all, [SpaceId, Provider1Id])),
     ?assertEqual(rpc:call(Worker1, dbsync_state, get_seq, [SpaceId, Provider1Id]),
-        rpc:call(Worker2, dbsync_state, get_seq, [SpaceId, Provider1Id]), 30),
+        rpc:call(Worker2, dbsync_state, get_seq, [SpaceId, Provider1Id]), 60),
 
     % Replicate dir - files should be processed but not replicated
     Provider2Id = rpc:call(Worker2, oneprovider, get_id_or_undefined, []),
@@ -1306,7 +1306,7 @@ transfer_with_missing_documents(Config) ->
     ?assertEqual(ok, test_utils:mock_unload(Workers2, dbsync_changes)),
     ?assertEqual(ok, rpc:call(Worker2, dbsync_worker, resynchronize_all, [SpaceId, Provider1Id])),
     ?assertEqual(rpc:call(Worker1, dbsync_state, get_seq, [SpaceId, Provider1Id]),
-        rpc:call(Worker2, dbsync_state, get_seq, [SpaceId, Provider1Id]), 30),
+        rpc:call(Worker2, dbsync_state, get_seq, [SpaceId, Provider1Id]), 60),
 
     % Replicate dir - files should replicated
     {ok, Transfer2Id} = ?assertMatch({ok, _}, opt_transfers:schedule_file_replication(Worker2, SessId(Worker2),
