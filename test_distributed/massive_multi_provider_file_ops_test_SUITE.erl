@@ -46,7 +46,7 @@
     on_cancel_init/2, task_canceled/2, task_finished/2]).
 
 %% File_meta posthooks used during tests
--export([test_posthook/3]).
+-export([test_posthook/3, encode_file_meta_posthook_args/2, decode_file_meta_posthook_args/2]).
 
 -define(TEST_CASES, [
     initial_sync_repeat_test, resynchronization_test, range_resynchronization_test,
@@ -977,7 +977,7 @@ add_posthooks_on_file_sync(Worker, SpaceId, ProviderId, ExpectedSyncMode, Postho
             }, rpc:call(Worker, dbsync_state, get_synchronization_params, [SpaceId, ProviderId])),
             lists:foreach(fun(PosthookName) ->
                 ?assertEqual(ok, rpc:call(Worker, file_meta_posthooks, add_hook,
-                    [{file_meta_missing, Uuid}, PosthookName, SpaceId, ?MODULE, test_posthook, [Master, Uuid, PosthookName]]
+                    [{file_meta_missing, Uuid}, PosthookName, ?MODULE, test_posthook, [Master, Uuid, PosthookName]]
                 ))
             end, Posthooks),    
             DbsyncProc ! proceed,
@@ -997,6 +997,14 @@ test_posthook(Master, Uuid, PosthookName) ->
         false ->
             {error, not_found}
     end.
+
+
+encode_file_meta_posthook_args(_, Args) ->
+    term_to_binary(Args).
+
+
+decode_file_meta_posthook_args(_, EncodedArgs) ->
+    binary_to_term(EncodedArgs).
 
 
 verify_posthooks_called(ExpectedPosthooks) ->
