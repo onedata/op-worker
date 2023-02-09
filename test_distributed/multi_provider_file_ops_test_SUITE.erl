@@ -1298,7 +1298,8 @@ transfer_with_missing_documents(Config) ->
     ?assertMatch({ok, #document{value = #transfer{
         replication_status = completed,
         files_to_process = 2,
-        files_processed = 2
+        files_processed = 2,
+        files_replicated = 0
     }}}, rpc:call(Worker2, transfer, get, [TransferId]), 30),
 
     % Unload mock and resync all
@@ -1711,7 +1712,7 @@ end_per_testcase(transfer_with_missing_documents = Case, Config) ->
     case ?config(stats_state_before_test, Config) of
         enabled ->
             Worker1 = ?config(worker1, Config),
-            rpc:call(Worker1, dir_stats_service_state, disable, [<<"space1">>]);
+            rpc:call(Worker1, dir_stats_service_state, enable, [<<"space1">>]);
         _ ->
             ok
     end,
