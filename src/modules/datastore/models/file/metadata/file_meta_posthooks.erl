@@ -97,7 +97,7 @@ add_hook(MissingElement, Identifier, Module, Function, PosthookArgs) ->
                 true ->
                     % Spawn to prevent deadlocks when hook is added from the inside of already existing hook
                     spawn(fun() ->
-                        critical_section:run(FileUuid, fun() ->
+                        run_in_critical_section(FileUuid, fun() ->
                             case get_link(Key, Identifier) of
                                 {ok, _} ->
                                     case execute_hook(Key, Identifier, Module, Function, EncodedArgs) of
@@ -123,7 +123,7 @@ add_hook(MissingElement, Identifier, Module, Function, PosthookArgs) ->
 -spec execute_hooks(file_meta:uuid(), hook_type()) -> ok.
 execute_hooks(FileUuid, HookType) ->
     Key = gen_datastore_key(FileUuid, HookType),
-    critical_section:run(FileUuid, fun() ->
+    run_in_critical_section(FileUuid, fun() ->
         execute_hooks_unsafe(Key, #{token => #link_token{}})
     end).
 
@@ -250,7 +250,7 @@ delete_links(Key, Links) ->
 
 
 %% @private
--spec get_link(datastore:key(), hook_identifier()) -> {ok, datastore_model:link()} | {error, term()}.
+-spec get_link(datastore:key(), hook_identifier()) -> {ok, datastore:link()} | {error, term()}.
 get_link(Key, Link) ->
     datastore_model:get_links(?CTX, Key, oneprovider:get_id(), Link).
 
@@ -308,6 +308,12 @@ cleanup_deprecated(Key) ->
         {error, not_found} -> ok;
         {error, _} = Error -> Error
     end.
+
+
+%% @private
+-spec run_in_critical_section(file_meta:uuid(), fun (() -> Result)) -> Result.
+run_in_critical_section(FileUuid, Fun) ->
+    critical_section:run({?MODULE, FileUuid}, Fun).
 
 
 %%%===================================================================
