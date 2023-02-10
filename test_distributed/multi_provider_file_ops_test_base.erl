@@ -1819,7 +1819,7 @@ mock_sync_and_rtransfer_errors(Config) ->
     [Worker | _] = Workers = ?config(op_worker_nodes, Config),
 
     RequestDelay = test_utils:get_env(Worker, ?APP_NAME, dbsync_changes_request_delay),
-    test_utils:set_env(Workers, ?APP_NAME, dbsync_changes_request_delay, timer:seconds(2)),
+    test_utils:set_env(Workers, ?APP_NAME, dbsync_changes_request_delay, timer:seconds(3)),
 
     test_utils:mock_new(Workers,
         [dbsync_in_stream_worker, dbsync_communicator, rtransfer_config, dbsync_changes], [passthrough]),
@@ -1849,7 +1849,7 @@ mock_sync_and_rtransfer_errors(Config) ->
 
     test_utils:mock_expect(Workers, dbsync_communicator, send_changes,
         fun(ProviderId, SpaceId, BatchSince, Until, Timestamp, Docs) ->
-            timer:sleep(2000),
+            timer:sleep(1000),
             meck:passthrough([ProviderId, SpaceId, BatchSince, Until, Timestamp, Docs])
         end),
 
