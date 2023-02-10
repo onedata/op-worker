@@ -1259,7 +1259,7 @@ transfer_with_missing_documents(Config) ->
     % Create dir and files on worker1
     {ok, DirGuid} = ?assertMatch({ok, _},
         lfm_proxy:mkdir(Worker1, SessId(Worker1), SpaceGuid, generator:gen_name(), undefined)),
-    [_FileWithoutLocationGuid, DeletedFileWithoutLocationGuid] = lists_utils:generate(fun() ->
+    [FileWithoutLocationGuid, DeletedFileWithoutLocationGuid] = lists_utils:generate(fun() ->
         {ok, GuidWithoutLocation} = ?assertMatch({ok, _},
             lfm_proxy:create(Worker1, SessId(Worker1), DirGuid, generator:gen_name(), undefined)),
         GuidWithoutLocation
@@ -1317,7 +1317,16 @@ transfer_with_missing_documents(Config) ->
         files_processed = 3,
         files_replicated = 2,
         bytes_replicated = 6
-    }}}, rpc:call(Worker2, transfer, get, [Transfer2Id]), 30).
+    }}}, rpc:call(Worker2, transfer, get, [Transfer2Id]), 30),
+
+    FilesToClean = [FileWithoutLocationGuid, FileWithNotSyncedLocationGuid, FileWithNotSyncedFileMetaAndTimesGuid, DirGuid],
+    % Clean space
+    lists:foreach(fun(GuidToDel) ->
+        ?assertEqual(ok, lfm_proxy:unlink(Worker1, SessId(Worker1), ?FILE_REF(GuidToDel)))
+    end, FilesToClean),
+    lists:foreach(fun(DeletedGuid) ->
+        ?assertMatch({error, enoent}, lfm_proxy:stat(Worker2, SessId(Worker2), ?FILE_REF(DeletedGuid)), 60)
+    end, FilesToClean).
 
 
 detect_stale_replica_synchronizer_jobs_test(Config0) ->
