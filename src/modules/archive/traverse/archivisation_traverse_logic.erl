@@ -17,6 +17,7 @@
 -include("tree_traverse.hrl").
 -include("modules/dataset/archive.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 
 %% API
@@ -332,7 +333,12 @@ mark_finished(ArchiveDoc, UserCtx, NestedArchiveStats) ->
                 true -> ok;
                 false ->
                     {ok, ArchiveRootDirCtx} = archive:get_root_dir_ctx(ArchiveDoc),
-                    bagit_archive:finalize(ArchiveRootDirCtx, UserCtx)
+                    try
+                        bagit_archive:finalize(ArchiveRootDirCtx, UserCtx)
+                    catch _Class:Reason:Stacktrace ->
+                        ?error_stacktrace("Unexpected error during bagit archive finalization: ~p", [Reason], Stacktrace),
+                        archive:mark_file_failed(ArchiveDoc)
+                    end
             end;
         false -> ok
     end,

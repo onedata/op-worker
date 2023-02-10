@@ -116,7 +116,8 @@ start_archivisation(
                         ok ->
                             get_archive_info(FinalAipArchiveDoc, undefined);
                         {error, _} = Error ->
-                            Error
+                            archive:mark_archivisation_failed(FinalAipArchiveDoc),
+                            throw(Error)
                     end;
                 {error, _} = Error ->
                     Error

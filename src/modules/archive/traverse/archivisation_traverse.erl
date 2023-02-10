@@ -98,11 +98,16 @@ start(ArchiveDoc, DatasetDoc, UserCtx) ->
     {ok, ArchiveId} = archive:get_id(ArchiveDoc),
     case tree_traverse_session:setup_for_task(UserCtx, ArchiveId) of
         ok ->
+            try
             UserId = user_ctx:get_user_id(UserCtx),
             DatasetRootCtx = dataset_api:get_associated_file_ctx(DatasetDoc),
             {Options, DatasetRootCtx2} = build_traverse_opts(ArchiveDoc, DatasetRootCtx, UserCtx),
             {ok, _} = tree_traverse:run(?POOL_NAME, DatasetRootCtx2, UserId, Options),
-            ok;
+            ok
+            catch Class:Reason:Stacktrace ->
+                ?error_stacktrace("Unexpected error when trying to setup archive: ~p: ~p", [Class, Reason], Stacktrace),
+                {error, datastore_runner:normalize_error(Reason)}
+            end;
         {error, _} = Error ->
             Error
     end.
