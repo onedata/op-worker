@@ -102,3 +102,15 @@
 %% @end
 %%--------------------------------------------------------------------
 -callback init_child(file_id:file_guid(), boolean()) -> dir_stats_collection:collection() | no_return().
+
+
+%%%===================================================================
+%%% Callbacks - file_meta_posthooks related
+%%%
+%%% Following callbacks has to be defined to allow dir_stats_collector
+%%% passing collection as an argument to file_meta posthook function.
+%%%===================================================================
+
+-callback compress(dir_stats_collection:collection()) -> term().
+
+-callback decompress(term()) -> dir_stats_collection:collection().

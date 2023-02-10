@@ -46,7 +46,7 @@
     on_cancel_init/2, task_canceled/2, task_finished/2]).
 
 %% File_meta posthooks used during tests
--export([test_posthook/3]).
+-export([test_posthook/3, encode_file_meta_posthook_args/2, decode_file_meta_posthook_args/2]).
 
 -define(TEST_CASES, [
     initial_sync_repeat_test, resynchronization_test, range_resynchronization_test,
@@ -686,7 +686,7 @@ initial_sync_repeat_test(Config) ->
 
     add_posthooks_on_file_sync(Worker1, SpaceId, Provider2Id, initial_sync, [<<"1">>, <<"2">>]),
     add_posthooks_on_file_sync(Worker1, SpaceId, Provider2Id, resynchronization, [<<"3">>]),
-    verify_posthooks_called([<<"1">>, <<"3">>]),
+    verify_posthooks_called([<<"3">>]),
 
     lists:foreach(fun(Guid) ->
         ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessId1, ?FILE_REF(Guid)), 60)
@@ -790,7 +790,7 @@ init_per_testcase(initial_sync_repeat_test = Case, Config) ->
     test_utils:mock_expect(Worker, qos_logic, reconcile_qos, fun(_) ->
         ok
     end),
-    test_utils:set_env(Worker, ?APP_NAME, max_file_meta_posthooks, 1),
+    test_utils:set_env(Worker, ?APP_NAME, ignore_file_meta_posthooks_on_initial_sync, true),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 60}),
@@ -822,7 +822,7 @@ end_per_testcase(Case, Config) when
 end_per_testcase(initial_sync_repeat_test = Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Worker, [dbsync_changes, dbsync_utils, qos_logic]),
-    ?assertEqual(ok, rpc:call(Worker, application, unset_env, [?APP_NAME, max_file_meta_posthooks])),
+    ?assertEqual(ok, rpc:call(Worker, application, unset_env, [?APP_NAME, ignore_file_meta_posthooks_on_initial_sync])),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).
@@ -997,6 +997,14 @@ test_posthook(Master, Uuid, PosthookName) ->
         false ->
             {error, not_found}
     end.
+
+
+encode_file_meta_posthook_args(_, Args) ->
+    term_to_binary(Args).
+
+
+decode_file_meta_posthook_args(_, EncodedArgs) ->
+    binary_to_term(EncodedArgs).
 
 
 verify_posthooks_called(ExpectedPosthooks) ->
