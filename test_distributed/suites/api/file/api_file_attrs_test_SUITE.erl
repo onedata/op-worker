@@ -1242,8 +1242,6 @@ gather_historical_dir_size_stats_layout_test(Config) ->
         ?FILE_ERRORS_COUNT => Metrics,
         ?DIR_ERRORS_COUNT => Metrics
     },
-    await_dir_stats_collecting_status(krakow, SpaceId, enabled),
-    await_dir_stats_collecting_status(paris, SpaceId, enabled),
     await_file_size_sync(krakow, 8, DirGuid),
     await_file_size_sync(paris, 8, DirGuid),
 
@@ -1298,8 +1296,6 @@ gather_historical_dir_size_stats_slice_test(Config) ->
         ?SIZE_ON_STORAGE(P2StorageId) => lists:foldl(fun(Metric, Acc) -> Acc#{Metric => [#{<<"value">> => 0}]} end, #{}, Metrics),
         ?TOTAL_SIZE => lists:foldl(fun(Metric, Acc) -> Acc#{Metric => [#{<<"value">> => 24}]} end, #{}, Metrics)
     }),
-    await_dir_stats_collecting_status(krakow, SpaceId, enabled),
-    await_dir_stats_collecting_status(paris, SpaceId, enabled),
     await_file_size_sync(krakow, 24, DirGuid),
     await_file_size_sync(paris, 24, DirGuid),
     ValidateGsSuccessfulCallFun = fun(_TestCtx, Result) ->

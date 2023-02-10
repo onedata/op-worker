@@ -30,6 +30,8 @@
 -module(qos_logic).
 -author("Michal Stanisz").
 
+-behaviour(file_meta_posthooks_behaviour).
+
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/datastore/qos.hrl").
@@ -50,8 +52,11 @@
 %% file_meta posthooks
 -export([
     missing_file_meta_posthook/2,
-    missing_link_posthook/3
+    missing_link_posthook/3,
+    encode_file_meta_posthook_args/2,
+    decode_file_meta_posthook_args/2
 ]).
+
 
 %%%===================================================================
 %%% API
@@ -166,6 +171,22 @@ missing_link_posthook(ParentUuid, MissingName, SpaceId) ->
             %% @TODO VFS-10296 - refactor file_meta_posthooks and handle this case there
             repeat
     end.
+
+
+-spec encode_file_meta_posthook_args(file_meta_posthooks:function_name(), [term()]) ->
+    file_meta_posthooks:encoded_args().
+encode_file_meta_posthook_args(missing_file_meta_posthook, [_FileUuid, _SpaceId] = Args) ->
+    term_to_binary(Args);
+encode_file_meta_posthook_args(missing_link_posthook, [_ParentUuid, _MissingName, _SpaceId] = Args) ->
+    % on unix-like filesystems maximum filename size is, by default, 255 bytes, therefore this encoding
+    % should be sufficient for file_meta_posthooks limitation of 512 bytes.
+    term_to_binary(Args).
+
+
+-spec decode_file_meta_posthook_args(file_meta_posthooks:function_name(), file_meta_posthooks:encoded_args()) ->
+    [term()].
+decode_file_meta_posthook_args(_, EncodedArgs) ->
+    binary_to_term(EncodedArgs).
 
 
 %%%===================================================================

@@ -378,24 +378,6 @@ init_per_suite(Config) ->
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer]} | Config].
 
 
-init_per_testcase(Case = upgrade_from_19_02_x_storages, Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-
-    test_utils:mock_new(Worker, storage_logic, [passthrough]),
-    test_utils:mock_expect(Worker, storage_logic, create_in_zone, fun(_, _, _, _, StorageId) -> {ok, StorageId} end),
-    test_utils:mock_expect(Worker, storage_logic, delete_in_zone, fun(_) -> ok end),
-    test_utils:mock_expect(Worker, storage_logic, upgrade_legacy_support, fun(_, _) -> ok end),
-    test_utils:mock_expect(Worker, storage_logic, set_imported, fun(_, _) -> ok end),
-    test_utils:mock_expect(Worker, storage_logic, is_imported, fun(_) -> {ok, <<"unknown">>} end),
-    init_per_testcase(?DEFAULT_CASE(Case), Config);
-
-init_per_testcase(Case = upgrade_from_20_02_0_beta3_storages, Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
-
-    test_utils:mock_new(Worker, storage_logic, [passthrough]),
-    test_utils:mock_expect(Worker, storage_logic, set_imported, fun(_, _) -> ok end),
-    init_per_testcase(?DEFAULT_CASE(Case), Config);
-
 init_per_testcase(Case = upgrade_from_20_02_1_space_strategies, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 

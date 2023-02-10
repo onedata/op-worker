@@ -61,7 +61,10 @@
     guest_user_opens_remotely_created_file_test/1,
     guest_user_opens_remotely_created_share_test/1,
     truncate_on_storage_does_not_block_synchronizer/1,
-    recreate_file_on_storage/1
+    recreate_file_on_storage/1,
+    recreate_dir_on_storage/1,
+    transfer_with_missing_documents/1,
+    detect_stale_replica_synchronizer_jobs_test/1
 ]).
 
 -define(TEST_CASES, [
@@ -72,6 +75,7 @@
     dir_stats_collector_parallel_override_test,
     dir_stats_collector_parallel_write_with_sleep_test,
     dir_stats_collector_parallel_write_to_empty_file_test,
+    transfer_with_missing_documents,
     create_on_different_providers_test,
     file_consistency_test,
     concurrent_create_test,
@@ -97,7 +101,9 @@
     guest_user_opens_remotely_created_file_test,
     guest_user_opens_remotely_created_share_test,
     truncate_on_storage_does_not_block_synchronizer,
-    recreate_file_on_storage
+    recreate_file_on_storage,
+    recreate_dir_on_storage,
+    detect_stale_replica_synchronizer_jobs_test
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -1125,7 +1131,6 @@ truncate_on_storage_does_not_block_synchronizer(Config0) ->
     ok = lfm_proxy:close(Worker2, Handle2),
 
     % Mock hanging of storage truncate operation
-    test_utils:mock_new(Workers, storage_driver),
     test_utils:mock_expect(Workers, storage_driver, truncate,
         fun(Handle, Size, CurrentSize) ->
             timer:sleep(timer:hours(1)),
@@ -1163,10 +1168,7 @@ recreate_file_on_storage(Config0) ->
     FileSize = byte_size(FileContent),
 
     % Mock to prevent storage file creation (only metadata will be set)
-    ?assertEqual(ok, test_utils:mock_new(Workers, storage_driver)),
-    ?assertEqual(ok, test_utils:mock_expect(Workers, storage_driver, create, fun(_SDHandle, _Mode) -> ok end)),
-    ?assertEqual(ok, test_utils:mock_expect(Workers, storage_driver, open, fun(SDHandle, _Flag) -> {ok, SDHandle} end)),
-    ?assertEqual(ok, test_utils:mock_expect(Workers, storage_driver, release, fun(_SDHandle) -> ok end)),
+    mock_storage_driver_to_prevent_file_creation(Workers),
 
     % Create file on worker1
     {ok, {Guid, Handle0}} = ?assertMatch({ok, _},
@@ -1190,6 +1192,203 @@ recreate_file_on_storage(Config0) ->
     {ok, TransferID} = ?assertMatch({ok, _}, opt_transfers:schedule_file_replication(Worker1, SessId(Worker1),
         ?FILE_REF(Guid), ProviderId)),
     multi_provider_file_ops_test_base:await_replication_end(Worker1 ,TransferID, 60).
+
+
+recreate_dir_on_storage(Config0) ->
+    User = <<"user1">>,
+    Config = multi_provider_file_ops_test_base:extend_config(Config0, User, {4,0,0,2}, 60),
+    Worker1 = ?config(worker1, Config),
+    [Worker2 | _] = ?config(workers2, Config),
+    Workers = ?config(op_worker_nodes, Config),
+    SessId = ?config(session, Config),
+    SpaceId = <<"space1">>,
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+    FileContent = <<"xxx">>,
+    FileSize = byte_size(FileContent),
+
+    % Mock to prevent storage file creation (only metadata will be set)
+    ?assertEqual(ok, test_utils:mock_new(Workers, storage_driver)),
+    ?assertEqual(ok, test_utils:mock_expect(Workers, storage_driver, mkdir, fun(_SDHandle, _Mode, _Recursive) -> ok end)),
+
+    % Create dirs and file on worker1
+    DirName = generator:gen_name(),
+    {ok, DirGuid} = ?assertMatch({ok, _},
+        lfm_proxy:mkdir(Worker1, SessId(Worker1), SpaceGuid, DirName, undefined)),
+    {ok, Level2DirGuid} = ?assertMatch({ok, _},
+        lfm_proxy:mkdir(Worker1, SessId(Worker1), DirGuid, generator:gen_name(), undefined)),
+    {ok, Guid} = ?assertMatch({ok, _},
+        lfm_proxy:create(Worker1, SessId(Worker1), Level2DirGuid, generator:gen_name(), undefined)),
+    ?assertEqual({error, enoent}, lfm_proxy:open(Worker1, SessId(Worker1), ?FILE_REF(Guid), read)),
+
+    % Check if dir location exists according to metadata
+    {ok, DirLocation} = ?assertMatch({ok, _}, rpc:call(Worker1, dir_location, get, [file_id:guid_to_uuid(DirGuid)])),
+    ?assert(dir_location:is_storage_file_created(DirLocation)),
+    {ok, Level2DirLocation} = ?assertMatch({ok, _},
+        rpc:call(Worker1, dir_location, get, [file_id:guid_to_uuid(Level2DirGuid)])),
+    ?assert(dir_location:is_storage_file_created(Level2DirLocation)),
+    % Check that dirs do not exist on storage (checking highest level dir is enough)
+    ?assertEqual({error, enoent},
+        storage_test_utils:read_file_info(Worker1, storage_test_utils:file_path(Worker1, SpaceId, DirName))),
+
+    % Unload mock - dirs are created according to metadata but they have not been created on storage
+    ?assertEqual(ok, test_utils:mock_unload(Workers, storage_driver)),
+
+    % Wait for file sync
+    ?assertMatch({ok, #file_attr{size = 0}}, lfm_proxy:stat(Worker2, SessId(Worker2), ?FILE_REF(Guid)), 60),
+
+    % Add data to file
+    {ok, Handle} = lfm_proxy:open(Worker2, SessId(Worker2), ?FILE_REF(Guid), write),
+    {ok, _} = lfm_proxy:write(Worker2, Handle, 0, FileContent),
+    ok = lfm_proxy:close(Worker2, Handle),
+
+    % Wait for metadata sync and replicate file (replication should succeed even though dirs on storage are missing)
+    ?assertMatch({ok, #file_attr{size = FileSize}}, lfm_proxy:stat(Worker1, SessId(Worker1), ?FILE_REF(Guid)), 60),
+    ProviderId = rpc:call(Worker1, oneprovider, get_id_or_undefined, []),
+    {ok, TransferID} = ?assertMatch({ok, _}, opt_transfers:schedule_file_replication(Worker1, SessId(Worker1),
+        ?FILE_REF(Guid), ProviderId)),
+    multi_provider_file_ops_test_base:await_replication_end(Worker1 ,TransferID, 60).
+
+
+transfer_with_missing_documents(Config) ->
+    Worker1 = ?config(worker1, Config),
+    [Worker2 | _] = Workers2 = ?config(workers2, Config),
+    SessId = ?config(session, Config),
+    SpaceId = <<"space1">>,
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+    FileContent = <<"xxx">>,
+    % Create dir and files on worker1
+    {ok, DirGuid} = ?assertMatch({ok, _},
+        lfm_proxy:mkdir(Worker1, SessId(Worker1), SpaceGuid, generator:gen_name(), undefined)),
+    [FileWithoutLocationGuid, DeletedFileWithoutLocationGuid] = lists_utils:generate(fun() ->
+        {ok, GuidWithoutLocation} = ?assertMatch({ok, _},
+            lfm_proxy:create(Worker1, SessId(Worker1), DirGuid, generator:gen_name(), undefined)),
+        GuidWithoutLocation
+    end, 2),
+    [FileWithNotSyncedLocationGuid, FileWithNotSyncedFileMetaAndTimesGuid, DeletedFileGuid] = lists_utils:generate(fun() ->
+        {ok, {GuidWithLocation, Handle}} = ?assertMatch({ok, _},
+            lfm_proxy:create_and_open(Worker1, SessId(Worker1), DirGuid, generator:gen_name(), undefined)),
+        lfm_proxy:write(Worker1, Handle, 0, FileContent),
+        ?assertEqual(ok, lfm_proxy:close(Worker1, Handle)),
+        GuidWithLocation
+    end, 3),
+    lists:foreach(fun(GuidToDel) ->
+        ?assertEqual(ok, lfm_proxy:unlink(Worker1, SessId(Worker1), ?FILE_REF(GuidToDel)))
+    end, [DeletedFileWithoutLocationGuid, DeletedFileGuid]),
+
+    % Allow dbsync send metadata
+    timer:sleep(timer:seconds(10)),
+
+    % Resync all without chosen documents (dbsync was mocked and has not synced anything)
+    FileWithNotSyncedLocationUuid = file_id:guid_to_uuid(FileWithNotSyncedLocationGuid),
+    FileWithNotSyncedFileMetaAndTimesUuid = file_id:guid_to_uuid(FileWithNotSyncedFileMetaAndTimesGuid),
+    test_utils:mock_expect(Workers2, dbsync_changes, apply, fun
+        (#document{value = #file_location{uuid = Uuid}}) when Uuid =:= FileWithNotSyncedLocationUuid -> ok;
+        (#document{key = Uuid, value = #file_meta{}}) when Uuid =:= FileWithNotSyncedFileMetaAndTimesUuid -> ok;
+        (Doc) -> meck:passthrough([Doc])
+    end),
+    Provider1Id = rpc:call(Worker1, oneprovider, get_id_or_undefined, []),
+    ?assertEqual(ok, rpc:call(Worker2, dbsync_worker, resynchronize_all, [SpaceId, Provider1Id])),
+    ?assertEqual(rpc:call(Worker1, dbsync_state, get_seq, [SpaceId, Provider1Id]),
+        rpc:call(Worker2, dbsync_state, get_seq, [SpaceId, Provider1Id]), 60),
+
+    % Replicate dir - files should be processed but not replicated
+    Provider2Id = rpc:call(Worker2, oneprovider, get_id_or_undefined, []),
+    {ok, TransferId} = ?assertMatch({ok, _}, opt_transfers:schedule_file_replication(Worker2, SessId(Worker2),
+        ?FILE_REF(DirGuid), Provider2Id)),
+    ?assertMatch({ok, #document{value = #transfer{
+        replication_status = completed,
+        files_to_process = 2,
+        files_processed = 2,
+        files_replicated = 0
+    }}}, rpc:call(Worker2, transfer, get, [TransferId]), 30),
+
+    % Unload mock and resync all
+    ?assertEqual(ok, test_utils:mock_unload(Workers2, dbsync_changes)),
+    ?assertEqual(ok, rpc:call(Worker2, dbsync_worker, resynchronize_all, [SpaceId, Provider1Id])),
+    ?assertEqual(rpc:call(Worker1, dbsync_state, get_seq, [SpaceId, Provider1Id]),
+        rpc:call(Worker2, dbsync_state, get_seq, [SpaceId, Provider1Id]), 60),
+
+    % Replicate dir - files should replicated
+    {ok, Transfer2Id} = ?assertMatch({ok, _}, opt_transfers:schedule_file_replication(Worker2, SessId(Worker2),
+        ?FILE_REF(DirGuid), Provider2Id)),
+    ?assertMatch({ok, #document{value = #transfer{
+        replication_status = completed,
+        files_to_process = 3,
+        files_processed = 3,
+        files_replicated = 2,
+        bytes_replicated = 6
+    }}}, rpc:call(Worker2, transfer, get, [Transfer2Id]), 30),
+
+    FilesToClean = [FileWithoutLocationGuid, FileWithNotSyncedLocationGuid, FileWithNotSyncedFileMetaAndTimesGuid, DirGuid],
+    % Clean space
+    lists:foreach(fun(GuidToDel) ->
+        ?assertEqual(ok, lfm_proxy:unlink(Worker1, SessId(Worker1), ?FILE_REF(GuidToDel)))
+    end, FilesToClean),
+    lists:foreach(fun(DeletedGuid) ->
+        ?assertMatch({error, enoent}, lfm_proxy:stat(Worker2, SessId(Worker2), ?FILE_REF(DeletedGuid)), 60)
+    end, FilesToClean).
+
+
+detect_stale_replica_synchronizer_jobs_test(Config0) ->
+    User = <<"user1">>,
+    Config = multi_provider_file_ops_test_base:extend_config(Config0, User, {4,0,0,2}, 60),
+    [Worker1 | _] = Workers1 = ?config(workers1, Config),
+    [Worker2 | _] = ?config(workers2, Config),
+    Workers = ?config(op_worker_nodes, Config),
+    SessId = ?config(session, Config),
+    SpaceId = <<"space1">>,
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+    FileContent = <<"xxx">>,
+    FileSize = byte_size(FileContent),
+
+    ?assertEqual(ok, test_utils:mock_new(Workers, rtransfer_config, [passthrough])),
+    ?assertEqual(ok, test_utils:mock_expect(Workers, rtransfer_config, fetch, fun(_, _, _, _, _, _) ->
+        {ok, make_ref()}
+    end)),
+
+    % Mock to prevent storage file creation (only metadata will be set)
+    mock_storage_driver_to_prevent_file_creation(Workers),
+
+    % Create file on worker1
+    {ok, {Guid, Handle0}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(
+        Worker1, SessId(Worker1), SpaceGuid, ?RAND_STR(), undefined
+    )),
+    ?assertEqual(ok, lfm_proxy:close(Worker1, Handle0)),
+
+    % Unload mock - file is created according to metadata but it has not been created on storage
+    ?assertEqual(ok, test_utils:mock_unload(Workers, storage_driver)),
+
+    % Wait for file sync
+    ?assertMatch({ok, #file_attr{size = 0}}, lfm_proxy:stat(Worker2, SessId(Worker2), ?FILE_REF(Guid)), 60),
+
+    % Add data to file
+    {ok, Handle} = lfm_proxy:open(Worker2, SessId(Worker2), ?FILE_REF(Guid), write),
+    {ok, _} = lfm_proxy:write(Worker2, Handle, 0, FileContent),
+    ok = lfm_proxy:close(Worker2, Handle),
+
+    % Wait for metadata sync and replicate file (replication should succeed even though file on storage is missing)
+    ?assertMatch({ok, #file_attr{size = FileSize}}, lfm_proxy:stat(Worker1, SessId(Worker1), ?FILE_REF(Guid)), 60),
+    ProviderId = rpc:call(Worker1, oneprovider, get_id_or_undefined, []),
+    {ok, TransferId} = ?assertMatch({ok, _}, opt_transfers:schedule_file_replication(
+        Worker1, SessId(Worker1), ?FILE_REF(Guid), ProviderId
+    )),
+    ?assertMatch(
+        {ok, #document{value = #transfer{replication_status = failed}}},
+        rpc:call(Worker1, transfer, get, [TransferId]),
+        ?ATTEMPTS
+    ),
+
+    % Assert replica_synchronized tried to restart transfer 5 times
+    FetchFunSignature = [
+        rtransfer_config,
+        fetch,
+        [#{file_guid => Guid, space_id => SpaceId, offset => 0, size => FileSize}, '_', '_', '_', '_', '_']
+    ],
+    FetchCallsNum = lists:sum(lists:map(fun(Worker) ->
+        rpc:call(Worker, meck, num_calls, FetchFunSignature, timer:seconds(1))
+    end, Workers1)),
+
+    ?assertEqual(6, FetchCallsNum).
 
 
 dir_stats_collector_test(Config0) ->
@@ -1334,6 +1533,11 @@ meck_get_num_calls(Nodes, Module, Fun, Args) ->
         rpc:call(Node, meck, num_calls, [Module, Fun, Args], timer:seconds(60))
     end, Nodes).
 
+mock_storage_driver_to_prevent_file_creation(Workers) ->
+    ?assertEqual(ok, test_utils:mock_expect(Workers, storage_driver, create, fun(_SDHandle, _Mode) -> ok end)),
+    ?assertEqual(ok, test_utils:mock_expect(Workers, storage_driver, open, fun(SDHandle, _Flag) -> {ok, SDHandle} end)),
+    ?assertEqual(ok, test_utils:mock_expect(Workers, storage_driver, release, fun(_SDHandle) -> ok end)).
+
 
 %%%===================================================================
 %%% SetUp and TearDown functions
@@ -1387,7 +1591,11 @@ init_per_testcase(Case, Config) when
 ->
     initializer:mock_share_logic(Config),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
-init_per_testcase(truncate_on_storage_does_not_block_synchronizer = Case, Config) ->
+init_per_testcase(Case, Config)when
+    Case =:= recreate_file_on_storage;
+    Case =:= recreate_dir_on_storage;
+    Case =:= truncate_on_storage_does_not_block_synchronizer
+->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, storage_driver),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
@@ -1404,6 +1612,43 @@ init_per_testcase(Case, Config) when
     ));
 init_per_testcase(transfer_after_enabling_stats_test = Case, Config) ->
     dir_stats_collector_test_base:init(init_per_testcase(?DEFAULT_CASE(Case), Config));
+init_per_testcase(detect_stale_replica_synchronizer_jobs_test = Case, Config) ->
+    Config2 = init_per_testcase(?DEFAULT_CASE(Case), Config),
+
+    Nodes = ?config(op_worker_nodes, Config2),
+    lists:foreach(fun({EnvVar, Value}) ->
+        utils:rpc_multicall(Nodes, application, set_env, [
+            ?APP_NAME, EnvVar, Value
+        ])
+    end, [
+        {max_file_replication_retries_per_file, 0},
+        {max_file_transfer_retry_interval_sec, 0},
+        {minimal_sync_request, 1},
+        {synchronizer_max_job_restarts, 5},
+        {synchronizer_max_job_inactivity_period_sec, 1},
+        {synchronizer_jobs_inactivity_check_interval_sec, 1}
+    ]),
+    ?assertEqual(ok, test_utils:mock_new(Nodes, storage_driver)),
+    Config2;
+init_per_testcase(transfer_with_missing_documents = Case, Config0) ->
+    User = <<"user1">>,
+    Config = multi_provider_file_ops_test_base:extend_config(Config0, User, {4,0,0,2}, 60),
+
+    % Mock to prevent sync of metadata
+    Workers2 = ?config(workers2, Config),
+    ?assertEqual(ok, test_utils:mock_new(Workers2, dbsync_changes)),
+    test_utils:mock_expect(Workers2, dbsync_changes, apply, fun(_Doc) -> ok end),
+
+    % Disable stats to prevent file_location creation before file opening
+    Worker1 = ?config(worker1, Config),
+    SpaceId = <<"space1">>,
+    StatsState = rpc:call(Worker1, dir_stats_service_state, get_status, [SpaceId]),
+    case StatsState of
+        disabled -> ok;
+        _ -> rpc:call(Worker1, dir_stats_service_state, disable, [SpaceId])
+    end,
+
+    init_per_testcase(?DEFAULT_CASE(Case), [{stats_state_before_test, StatsState} | Config]);
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 60}),
     lfm_proxy:init(Config).
@@ -1435,10 +1680,6 @@ end_per_testcase(Case, Config) when
 ->
     initializer:unmock_share_logic(Config),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
-end_per_testcase(truncate_on_storage_does_not_block_synchronizer = Case, Config) ->
-    Workers = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Workers, storage_driver),
-    end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(Case, Config) when
     Case =:= dir_stats_collector_test;
     Case =:= dir_stats_collector_trash_test;
@@ -1448,6 +1689,43 @@ end_per_testcase(Case, Config) when
     Case =:= dir_stats_collector_parallel_write_with_sleep_test;
     Case =:= dir_stats_collector_parallel_write_to_empty_file_test ->
     dir_stats_collector_test_base:teardown(Config),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+end_per_testcase(Case = detect_stale_replica_synchronizer_jobs_test, Config) ->
+    Nodes = ?config(op_worker_nodes, Config),
+    lists:foreach(fun(EnvVar) ->
+        utils:rpc_multicall(Nodes, application, unset_env, [
+            ?APP_NAME, EnvVar
+        ])
+    end, [
+        max_file_replication_retries_per_file,
+        max_file_transfer_retry_interval_sec,
+        minimal_sync_request,
+        synchronizer_max_job_restarts,
+        synchronizer_max_job_inactivity_period_sec,
+        synchronizer_jobs_inactivity_check_interval_sec
+    ]),
+    ?assertEqual(ok, test_utils:mock_unload(Nodes, storage_driver)),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+end_per_testcase(Case, Config) when
+    Case =:= recreate_file_on_storage;
+    Case =:= recreate_dir_on_storage;
+    Case =:= truncate_on_storage_does_not_block_synchronizer
+->
+    Nodes = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Nodes, storage_driver),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+end_per_testcase(transfer_with_missing_documents = Case, Config) ->
+    Nodes = ?config(op_worker_nodes, Config),
+    test_utils:mock_unload(Nodes, dbsync_changes),
+
+    case ?config(stats_state_before_test, Config) of
+        enabled ->
+            Worker1 = ?config(worker1, Config),
+            rpc:call(Worker1, dir_stats_service_state, enable, [<<"space1">>]);
+        _ ->
+            ok
+    end,
+
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).

@@ -12,6 +12,8 @@
 -module(replica_dbsync_hook).
 -author("Tomasz Lichon").
 
+-behaviour(file_meta_posthooks_behaviour).
+
 -include("proto/oneclient/common_messages.hrl").
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/fslogic/fslogic_common.hrl").
@@ -19,6 +21,12 @@
 
 %% API
 -export([on_file_location_change/2]).
+
+%% `file_meta_posthooks_behaviour` callbacks
+-export([
+    encode_file_meta_posthook_args/2,
+    decode_file_meta_posthook_args/2
+]).
 
 %%%===================================================================
 %%% API
@@ -29,10 +37,12 @@
 %% Handler for file_location changes which impacts local replicas.
 %% @end
 %%--------------------------------------------------------------------
--spec on_file_location_change(file_ctx:ctx(), file_location:doc()) ->
+-spec on_file_location_change(file_ctx:ctx(), file_location:doc() | undefined) ->
     ok | {error, term()}.
+on_file_location_change(_FileCtx, undefined) ->
+    % can happen, when called as file_meta posthook and file location document was deleted in the meantime
+    ok;
 on_file_location_change(FileCtx, ChangedLocationDoc = #document{
-    key = LocId,
     value = #file_location{
         provider_id = ProviderId,
         file_id = FileId,
@@ -70,8 +80,8 @@ on_file_location_change(FileCtx, ChangedLocationDoc = #document{
                                 catch
                                     throw:{error, {file_meta_missing, MissingUuid}}  ->
                                         ?debug("~p file_meta_missing: ~p", [?FUNCTION_NAME, MissingUuid]),
-                                        file_meta_posthooks:add_hook({file_meta_missing, MissingUuid}, LocId, SpaceId,
-                                            ?MODULE, ?FUNCTION_NAME, [file_ctx:reset(FileCtx), ChangedLocationDoc])
+                                        file_meta_posthooks:add_hook({file_meta_missing, MissingUuid}, generator:gen_name(),
+                                            SpaceId, ?MODULE, ?FUNCTION_NAME, [FileCtx, ChangedLocationDoc])
                                 end;
                             false ->
                                 ok = fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx3, true, []),
@@ -86,6 +96,28 @@ on_file_location_change(FileCtx, ChangedLocationDoc = #document{
                 ok
         end
     end).
+
+%%%===================================================================
+%%% `file_meta_posthooks_behaviour` callbacks
+%%%===================================================================
+
+-spec encode_file_meta_posthook_args(file_meta_posthooks:function_name(), [term()]) ->
+    file_meta_posthooks:encoded_args().
+encode_file_meta_posthook_args(on_file_location_change, [FileCtx, LocationDoc]) ->
+    Guid = file_ctx:get_logical_guid_const(FileCtx),
+    #document{key = LocationId} = LocationDoc,
+    term_to_binary([Guid, LocationId]).
+
+
+-spec decode_file_meta_posthook_args(file_meta_posthooks:function_name(), file_meta_posthooks:encoded_args()) ->
+    [term()].
+decode_file_meta_posthook_args(on_file_location_change, EncodedArgs) ->
+    [Guid, LocationId] = binary_to_term(EncodedArgs),
+    LocationDoc = case fslogic_location_cache:get_location(LocationId, file_id:guid_to_uuid(Guid)) of
+        {ok, Doc} -> Doc;
+        {error, not_found} -> undefined
+    end,
+    [Guid, LocationDoc].
 
 %%%===================================================================
 %%% Internal functions

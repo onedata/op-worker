@@ -27,7 +27,7 @@
 -export([before_cluster_upgrade/0]).
 -export([upgrade_cluster/1]).
 -export([custom_workers/0]).
--export([on_db_and_workers_ready/0]).
+-export([before_listeners_start/0, after_listeners_stop/0]).
 -export([listeners/0]).
 -export([renamed_models/0]).
 -export([modules_with_exometer/0, exometer_reporters/0]).
@@ -199,18 +199,41 @@ custom_workers() -> filter_disabled_workers([
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Overrides {@link node_manager_plugin_default:on_db_and_workers_ready/1}.
+%% Overrides {@link node_manager_plugin_default:before_listeners_start/0}.
+%%
+%% NOTE: this callback blocks the application supervisor and must not be used to
+%% interact with the main supervision tree.
+%%
 %% This callback is executed on all cluster nodes.
 %% @end
 %%--------------------------------------------------------------------
-on_db_and_workers_ready() ->
+before_listeners_start() ->
     middleware:load_known_atoms(),
     fslogic_delete:cleanup_opened_files(),
     space_unsupport:init_pools(),
     file_upload_manager_watcher_service:setup_internal_service(),
     atm_warden_service:setup_internal_service(),
     atm_workflow_execution_api:init_engine(),
-    gs_channel_service:on_db_and_workers_ready().
+    gs_channel_service:trigger_pending_on_connect_to_oz_procedures().
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Overrides {@link node_manager_plugin_default:after_listeners_stop/0}.
+%%
+%% NOTE: this callback blocks the application supervisor and must not be used to
+%% interact with the main supervision tree.
+%%
+%% This callback is executed on all cluster nodes.
+%% @end
+%%--------------------------------------------------------------------
+after_listeners_stop() ->
+    atm_supervision_worker:try_to_gracefully_stop_atm_workflow_executions(),
+    atm_warden_service:terminate_internal_service(),
+    file_upload_manager_watcher_service:terminate_internal_service(),
+    % GS connection should be closed at the end as other services
+    % may still require access to synced documents
+    % (though a working connection cannot be guaranteed here).
+    gs_channel_service:terminate_internal_service().
 
 %%--------------------------------------------------------------------
 %% @doc

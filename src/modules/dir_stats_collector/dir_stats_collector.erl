@@ -54,6 +54,7 @@
 
 
 -behavior(pes_plugin_behaviour).
+-behaviour(file_meta_posthooks_behaviour).
 
 
 -include("modules/datastore/datastore_models.hrl").
@@ -76,6 +77,11 @@
     init/0, graceful_terminate/1, forced_terminate/2,
     handle_call/2, handle_cast/2]).
 
+%% file_meta_posthooks_behaviour callbacks
+-export([
+    encode_file_meta_posthook_args/2,
+    decode_file_meta_posthook_args/2
+]).
 
 % Executor's state holds recently used (updated or read) statistics for different
 % directories and collection types, which are cached in the state until flushed
@@ -243,9 +249,9 @@ update_stats_of_parent(Guid, CollectionType, CollectionUpdate, ParentErrorHandli
 -spec update_stats_of_nearest_dir(file_id:file_guid(), dir_stats_collection:type(), dir_stats_collection:collection()) ->
     ok | ?ERROR_INTERNAL_SERVER_ERROR.
 update_stats_of_nearest_dir(Guid, CollectionType, CollectionUpdate) ->
-    case dir_stats_service_state:is_active(file_id:guid_to_space_id(Guid)) of
+    {FileUuid, SpaceId} = file_id:unpack_guid(Guid),
+    case dir_stats_service_state:is_active(SpaceId) of
         true ->
-            {FileUuid, SpaceId} = file_id:unpack_guid(Guid),
             case file_meta:get_including_deleted(FileUuid) of
                 {ok, Doc} ->
                     case file_meta:get_type(Doc) of
@@ -255,8 +261,8 @@ update_stats_of_nearest_dir(Guid, CollectionType, CollectionUpdate) ->
                             update_stats_of_parent_internal(get_parent(Doc, SpaceId), CollectionType, CollectionUpdate)
                     end;
                 ?ERROR_NOT_FOUND ->
-                    file_meta_posthooks:add_hook({file_meta_missing, FileUuid}, generator:gen_name(), SpaceId,
-                        ?MODULE, ?FUNCTION_NAME, [Guid, CollectionType, CollectionUpdate])
+                    file_meta_posthooks:add_hook({file_meta_missing, FileUuid}, generator:gen_name(),
+                        SpaceId, ?MODULE, ?FUNCTION_NAME, [Guid, CollectionType, CollectionUpdate])
             end;
         false ->
             ok
@@ -527,6 +533,25 @@ handle_cast(Info, State) ->
     ?log_bad_request(Info),
     State.
 
+
+%%%===================================================================
+%%% file_meta_posthooks_behaviour callbacks
+%%%===================================================================
+
+-spec encode_file_meta_posthook_args(file_meta_posthooks:function_name(), [term()]) ->
+    file_meta_posthooks:encoded_args().
+encode_file_meta_posthook_args(update_stats_of_parent, [Guid, CollectionType, CollectionUpdate, return_error]) ->
+    encode_collection_details(Guid, CollectionType, CollectionUpdate);
+encode_file_meta_posthook_args(update_stats_of_nearest_dir, [Guid, CollectionType, CollectionUpdate]) ->
+    encode_collection_details(Guid, CollectionType, CollectionUpdate).
+
+
+-spec decode_file_meta_posthook_args(file_meta_posthooks:function_name(), file_meta_posthooks:encoded_args()) ->
+    [term()].
+decode_file_meta_posthook_args(update_stats_of_parent, EncodedArgs) ->
+    decode_collection_details(EncodedArgs) ++ [return_error];
+decode_file_meta_posthook_args(update_stats_of_nearest_dir, EncodedArgs) ->
+    decode_collection_details(EncodedArgs).
 
 %%%===================================================================
 %%% Internal functions
@@ -846,7 +871,7 @@ set_collecting_enabled(#cached_dir_stats{initialization_data = InitializationDat
 save_and_propagate_cached_dir_stats({Guid, CollectionType} = _CachedDirStatsKey,
     #cached_dir_stats{current_stats = CurrentStats} = CachedDirStats, State
 ) ->
-    {CollectingStatus, State2} = acquire_space_collecting_status(file_id:guid_to_space_id(Guid), State),
+    {_, CollectingStatus, State2} = acquire_space_collecting_status(file_id:guid_to_space_id(Guid), State),
     try
         case CollectingStatus of
             {initializing, Incarnation} ->
@@ -907,19 +932,19 @@ update_in_cache(Guid, CollectionType, Diff, #state{dir_stats_cache = DirStatsCac
         error ->
             {Stats, Incarnation} = CollectionType:acquire(Guid),
             case acquire_space_collecting_status(file_id:guid_to_space_id(Guid), State) of
-                {enabled, State2} ->
+                {enabled, _, State2} ->
                     {#cached_dir_stats{
                         collecting_status = enabled,
                         current_stats = Stats
                     }, State2};
-                {{initializing, Incarnation}, State2} ->
+                {{initializing, Incarnation}, _, State2} ->
                     {#cached_dir_stats{
                         collecting_status = enabled,
                         current_stats = Stats
                     }, State2};
                 % Collection incarnation is not equal to current incarnation - collection
                 % is outdated - initialize it once more
-                {{initializing, _}, State2} ->
+                {{initializing, _}, _, State2} ->
                     {
                         #cached_dir_stats{
                             collecting_status = initializing,
@@ -929,7 +954,7 @@ update_in_cache(Guid, CollectionType, Diff, #state{dir_stats_cache = DirStatsCac
                             State2#state{has_unflushed_changes = true}
                         ))
                     };
-                {_, State2} ->
+                {_, _, State2} ->
                     {?ERROR_DIR_STATS_DISABLED_FOR_SPACE, State2}
             end
     end,
@@ -1044,21 +1069,26 @@ get_parent(Doc, SpaceId) ->
 
 
 %% @private
--spec acquire_space_collecting_status(od_space:id(), state()) ->
-    {dir_stats_service_state:extended_status(), state()}.
+-spec acquire_space_collecting_status(od_space:id(), state()) -> {
+    NewCollectionStatus :: dir_stats_service_state:extended_status(),
+    ExistingCollectionStatus :: dir_stats_service_state:extended_status(),
+    state()
+}.
 acquire_space_collecting_status(SpaceId, #state{space_collecting_statuses = CollectingStatuses} = State) ->
     case maps:get(SpaceId, CollectingStatuses, undefined) of
         undefined ->
             case dir_stats_service_state:get_extended_status(SpaceId) of
                 enabled ->
-                    {enabled, State#state{space_collecting_statuses = CollectingStatuses#{SpaceId => enabled}}};
+                    {enabled, enabled, State#state{space_collecting_statuses = CollectingStatuses#{SpaceId => enabled}}};
                 {initializing, _} = Status ->
-                    {Status, State#state{space_collecting_statuses = CollectingStatuses#{SpaceId => Status}}};
+                    {Status, Status, State#state{space_collecting_statuses = CollectingStatuses#{SpaceId => Status}}};
                 Status ->
-                    {Status, State} % race with status changing - do not cache
+                    {Status, Status, State} % race with status changing - do not cache
             end;
-        CachedStatus ->
-            {CachedStatus, State}
+        enabled ->
+            {enabled, enabled, State};
+        {initializing, _} = CachedStatus ->
+            {dir_stats_service_state:get_extended_status(SpaceId), CachedStatus, State}
     end.
 
 
@@ -1066,8 +1096,8 @@ acquire_space_collecting_status(SpaceId, #state{space_collecting_statuses = Coll
 -spec add_hook_for_missing_doc(file_id:file_guid(), dir_stats_collection:type(), dir_stats_collection:collection()) ->
     ok | ?ERROR_INTERNAL_SERVER_ERROR.
 add_hook_for_missing_doc(Guid, CollectionType, CollectionUpdate) ->
-    file_meta_posthooks:add_hook({file_meta_missing, file_id:guid_to_uuid(Guid)},
-        generator:gen_name(), file_id:guid_to_space_id(Guid),
+    {FileUuid, SpaceId} = file_id:unpack_guid(Guid),
+    file_meta_posthooks:add_hook({file_meta_missing, FileUuid}, generator:gen_name(), SpaceId,
         ?MODULE, update_stats_of_parent, [Guid, CollectionType, CollectionUpdate, return_error]).
 
 
@@ -1153,3 +1183,19 @@ collection_moved(Guid, CollectionType, TargetParentGuid, State) ->
         } ->
             UpdatedState
     end.
+
+
+%% @private
+-spec encode_collection_details(file_id:file_guid(), dir_stats_collection:type(), dir_stats_collection:collection()) ->
+    binary().
+encode_collection_details(Guid, CollectionType, Collection) ->
+    EncodedCollectionType = dir_stats_collection:encode_type(CollectionType),
+    term_to_binary([Guid, EncodedCollectionType, CollectionType:compress(Collection)]).
+
+
+%% @private
+-spec decode_collection_details(binary()) -> [term()].
+decode_collection_details(EncodedCollectionDetails) ->
+    [Guid, EncodedCollectionType, EncodedCollection] = binary_to_term(EncodedCollectionDetails),
+    CollectionType = dir_stats_collection:decode_type(EncodedCollectionType),
+    [Guid, CollectionType, CollectionType:decompress(EncodedCollection)].

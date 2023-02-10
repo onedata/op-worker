@@ -243,8 +243,15 @@ generic_create_deferred(UserCtx, FileCtx, IgnoreEexist) ->
     {SDHandle, FileCtx3} = storage_driver:new_handle(SessId, FileCtx2),
     FinalResult = case create_storage_file(SDHandle, FileCtx3) of
         {error, ?ENOENT} ->
-            FileCtx4 = create_missing_parent_dirs(UserCtx, FileCtx3),
-            create_storage_file(SDHandle, FileCtx4);
+            FileCtx4 = create_missing_parent_dirs(UserCtx, FileCtx3, false),
+            case create_storage_file(SDHandle, FileCtx4) of
+                {error, ?ENOENT} ->
+                    ?warning("Missing dirs on storage path to file ~p", [file_ctx:get_logical_guid_const(FileCtx4)]),
+                    FileCtx5 = create_missing_parent_dirs(UserCtx, FileCtx4, true),
+                    create_storage_file(SDHandle, FileCtx5);
+                Other ->
+                    Other
+            end;
         {error, ?EEXIST} ->
             handle_eexists(IgnoreEexist, SDHandle, FileCtx3);
         {error, Errno} when Errno == ?EACCES orelse Errno == ?EPERM ->
@@ -423,8 +430,8 @@ truncate_created_file(FileCtx) ->
 %% Creates missing parent directories on storage
 %% @end
 %%--------------------------------------------------------------------
--spec create_missing_parent_dirs(user_ctx:ctx(), file_ctx:ctx()) -> file_ctx:ctx().
-create_missing_parent_dirs(UserCtx, FileCtx) ->
+-spec create_missing_parent_dirs(user_ctx:ctx(), file_ctx:ctx(), boolean()) -> file_ctx:ctx().
+create_missing_parent_dirs(UserCtx, FileCtx, TryRecreateExistingDirs) ->
     case file_ctx:is_root_dir_const(FileCtx) of
         true ->
             FileCtx;
@@ -433,11 +440,11 @@ create_missing_parent_dirs(UserCtx, FileCtx) ->
             case file_ctx:equals(FileCtx, ReferencedUuidBasedFileCtx) of
                 true -> % regular file - use provided ctx
                     {ParentCtx, FileCtx2} = file_tree:get_parent(FileCtx, undefined),
-                    create_missing_parent_dirs(UserCtx, ParentCtx, []),
+                    create_missing_parent_dirs(UserCtx, ParentCtx, [], TryRecreateExistingDirs),
                     FileCtx2;
                 false -> % hardlink - use effective ctx and do not return changes on ctx
                     {ParentCtx, _} = file_tree:get_parent(ReferencedUuidBasedFileCtx, undefined),
-                    create_missing_parent_dirs(UserCtx, ParentCtx, []),
+                    create_missing_parent_dirs(UserCtx, ParentCtx, [], TryRecreateExistingDirs),
                     FileCtx
             end
     end.
@@ -445,18 +452,19 @@ create_missing_parent_dirs(UserCtx, FileCtx) ->
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Tail recursive helper function of ?MODULE:create_missing_parent_dirs/1
+%% Tail recursive helper function of ?MODULE:create_missing_parent_dirs/2
 %% @end
 %%-------------------------------------------------------------------
--spec create_missing_parent_dirs(user_ctx:ctx(), file_ctx:ctx(), [file_ctx:ctx()]) -> ok.
-create_missing_parent_dirs(UserCtx, FileCtx, ParentCtxsToCreate) ->
+-spec create_missing_parent_dirs(user_ctx:ctx(), file_ctx:ctx(), [file_ctx:ctx()], boolean()) -> ok.
+create_missing_parent_dirs(UserCtx, FileCtx, ParentCtxsToCreate, TryRecreateExistingDirs) ->
     IsSpaceDir = file_ctx:is_space_dir_const(FileCtx),
     {IsStorageFileCreated, FileCtx2} = file_ctx:is_storage_file_created(FileCtx),
-    case IsStorageFileCreated or IsSpaceDir of
+    ShouldCreateDir = not IsStorageFileCreated or TryRecreateExistingDirs,
+    case (not ShouldCreateDir) or IsSpaceDir of
         true ->
-            ParentCtxsToCreate2 = case IsStorageFileCreated of
-                true -> ParentCtxsToCreate;
-                false -> [FileCtx2 | ParentCtxsToCreate]
+            ParentCtxsToCreate2 = case ShouldCreateDir of
+                true -> [FileCtx2 | ParentCtxsToCreate];
+                false -> ParentCtxsToCreate
             end,
             lists:foreach(fun(Ctx) ->
                 % create missing directories going down the file tree
@@ -480,7 +488,7 @@ create_missing_parent_dirs(UserCtx, FileCtx, ParentCtxsToCreate) ->
                         end
                     end, [FileCtx | ParentCtxsToCreate]);
                 false ->
-                    create_missing_parent_dirs(UserCtx, ParentCtx, [FileCtx3 | ParentCtxsToCreate])
+                    create_missing_parent_dirs(UserCtx, ParentCtx, [FileCtx3 | ParentCtxsToCreate], TryRecreateExistingDirs)
             end
     end.
 
