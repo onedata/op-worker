@@ -68,7 +68,6 @@
 ]).
 
 -define(TEST_CASES, [
-    transfer_with_missing_documents,
     dir_stats_collector_test,
     dir_stats_collector_trash_test,
     transfer_after_enabling_stats_test,
@@ -76,6 +75,7 @@
     dir_stats_collector_parallel_override_test,
     dir_stats_collector_parallel_write_with_sleep_test,
     dir_stats_collector_parallel_write_to_empty_file_test,
+    transfer_with_missing_documents,
     create_on_different_providers_test,
     file_consistency_test,
     concurrent_create_test,
