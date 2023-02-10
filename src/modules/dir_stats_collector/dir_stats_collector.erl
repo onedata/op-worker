@@ -871,7 +871,7 @@ set_collecting_enabled(#cached_dir_stats{initialization_data = InitializationDat
 save_and_propagate_cached_dir_stats({Guid, CollectionType} = _CachedDirStatsKey,
     #cached_dir_stats{current_stats = CurrentStats} = CachedDirStats, State
 ) ->
-    {CollectingStatus, State2} = acquire_space_collecting_status(file_id:guid_to_space_id(Guid), State),
+    {_, CollectingStatus, State2} = acquire_space_collecting_status(file_id:guid_to_space_id(Guid), State),
     try
         case CollectingStatus of
             {initializing, Incarnation} ->
@@ -932,19 +932,19 @@ update_in_cache(Guid, CollectionType, Diff, #state{dir_stats_cache = DirStatsCac
         error ->
             {Stats, Incarnation} = CollectionType:acquire(Guid),
             case acquire_space_collecting_status(file_id:guid_to_space_id(Guid), State) of
-                {enabled, State2} ->
+                {enabled, _, State2} ->
                     {#cached_dir_stats{
                         collecting_status = enabled,
                         current_stats = Stats
                     }, State2};
-                {{initializing, Incarnation}, State2} ->
+                {{initializing, Incarnation}, _, State2} ->
                     {#cached_dir_stats{
                         collecting_status = enabled,
                         current_stats = Stats
                     }, State2};
                 % Collection incarnation is not equal to current incarnation - collection
                 % is outdated - initialize it once more
-                {{initializing, _}, State2} ->
+                {{initializing, _}, _, State2} ->
                     {
                         #cached_dir_stats{
                             collecting_status = initializing,
@@ -954,7 +954,7 @@ update_in_cache(Guid, CollectionType, Diff, #state{dir_stats_cache = DirStatsCac
                             State2#state{has_unflushed_changes = true}
                         ))
                     };
-                {_, State2} ->
+                {_, _, State2} ->
                     {?ERROR_DIR_STATS_DISABLED_FOR_SPACE, State2}
             end
     end,
@@ -1069,21 +1069,26 @@ get_parent(Doc, SpaceId) ->
 
 
 %% @private
--spec acquire_space_collecting_status(od_space:id(), state()) ->
-    {dir_stats_service_state:extended_status(), state()}.
+-spec acquire_space_collecting_status(od_space:id(), state()) -> {
+    NewCollectionStatus :: dir_stats_service_state:extended_status(),
+    ExistingCollectionStatus :: dir_stats_service_state:extended_status(),
+    state()
+}.
 acquire_space_collecting_status(SpaceId, #state{space_collecting_statuses = CollectingStatuses} = State) ->
     case maps:get(SpaceId, CollectingStatuses, undefined) of
         undefined ->
             case dir_stats_service_state:get_extended_status(SpaceId) of
                 enabled ->
-                    {enabled, State#state{space_collecting_statuses = CollectingStatuses#{SpaceId => enabled}}};
+                    {enabled, enabled, State#state{space_collecting_statuses = CollectingStatuses#{SpaceId => enabled}}};
                 {initializing, _} = Status ->
-                    {Status, State#state{space_collecting_statuses = CollectingStatuses#{SpaceId => Status}}};
+                    {Status, Status, State#state{space_collecting_statuses = CollectingStatuses#{SpaceId => Status}}};
                 Status ->
-                    {Status, State} % race with status changing - do not cache
+                    {Status, Status, State} % race with status changing - do not cache
             end;
-        CachedStatus ->
-            {CachedStatus, State}
+        enabled ->
+            {enabled, enabled, State};
+        {initializing, _} = CachedStatus ->
+            {dir_stats_service_state:get_extended_status(SpaceId), CachedStatus, State}
     end.
 
 
