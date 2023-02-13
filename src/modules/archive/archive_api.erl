@@ -117,13 +117,13 @@ start_archivisation(
                             get_archive_info(FinalAipArchiveDoc, undefined);
                         {error, _} = Error ->
                             archive:mark_archivisation_failed(FinalAipArchiveDoc),
-                            throw(Error)
+                            Error
                     end;
                 {error, _} = Error ->
                     Error
             end;
         ?DETACHED_DATASET ->
-            throw(?ERROR_BAD_DATA(<<"datasetId">>, <<"Detached dataset cannot be modified.">>))
+            ?ERROR_BAD_DATA(<<"datasetId">>, <<"Detached dataset cannot be modified.">>)
     end.
 
 

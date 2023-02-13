@@ -17,7 +17,6 @@
 -include("modules/fslogic/data_access_control.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("ctool/include/privileges.hrl").
--include_lib("ctool/include/logging.hrl").
 
 
 %% Datasets API

@@ -15,7 +15,6 @@
 
 -include("modules/dataset/archive.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
--include("proto/oneprovider/provider_messages.hrl").
 -include("onenv_test_utils.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_time_series.hrl").

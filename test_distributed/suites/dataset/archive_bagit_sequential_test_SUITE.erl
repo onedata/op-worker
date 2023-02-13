@@ -24,21 +24,49 @@
 
 %% exported for CT
 -export([
-    all/0,
+    all/0, groups/0,
     init_per_suite/1, end_per_suite/1,
+    init_per_group/2, end_per_group/2,
     init_per_testcase/2, end_per_testcase/2
 ]).
 
 %% tests
 -export([
     archive_big_tree_bagit_layout/1,
-    archive_directory_with_number_of_files_exceeding_batch_size_bagit_layout/1
+    archive_directory_with_number_of_files_exceeding_batch_size_bagit_layout/1,
+    
+    verification_bagit_modify_file/1,
+    verification_bagit_modify_file_metadata/1,
+    verification_bagit_modify_dir_metadata/1,
+    verification_bagit_create_file/1,
+    verification_bagit_remove_file/1,
+    verification_bagit_recreate_file/1,
+    dip_verification_bagit/1,
+    nested_verification_bagit/1
 ]).
 
 
+groups() -> [
+    {archivisation_tests, [
+        archive_big_tree_bagit_layout,
+        archive_directory_with_number_of_files_exceeding_batch_size_bagit_layout
+    ]},
+    {verification_tests, [
+        verification_bagit_modify_file,
+        verification_bagit_modify_file_metadata,
+        verification_bagit_modify_dir_metadata,
+        verification_bagit_create_file,
+        verification_bagit_remove_file,
+        verification_bagit_recreate_file,
+        dip_verification_bagit,
+        nested_verification_bagit
+    ]}
+].
+
+
 all() -> [
-    archive_big_tree_bagit_layout,
-    archive_directory_with_number_of_files_exceeding_batch_size_bagit_layout
+    {group, archivisation_tests},
+    {group, verification_tests}
 ].
 
 
@@ -52,6 +80,35 @@ archive_big_tree_bagit_layout(_Config) ->
 
 archive_directory_with_number_of_files_exceeding_batch_size_bagit_layout(_Config) ->
     archive_sequential_test_base:archive_directory_with_number_of_files_exceeding_batch_size_test(?ARCHIVE_BAGIT_LAYOUT).
+
+
+%===================================================================
+% Verification tests - can not be run in parallel as they use mocks.
+%===================================================================
+
+verification_bagit_modify_file(_Config) ->
+    archive_sequential_test_base:verification_modify_file_base(?ARCHIVE_BAGIT_LAYOUT).
+
+verification_bagit_modify_file_metadata(_Config) ->
+    archive_sequential_test_base:verification_modify_file_metadata_base(?ARCHIVE_BAGIT_LAYOUT).
+
+verification_bagit_modify_dir_metadata(_Config) ->
+    archive_sequential_test_base:verification_modify_dir_metadata_base(?ARCHIVE_BAGIT_LAYOUT).
+
+verification_bagit_create_file(_Config) ->
+    archive_sequential_test_base:verification_create_file_base(?ARCHIVE_BAGIT_LAYOUT).
+
+verification_bagit_remove_file(_Config) ->
+    archive_sequential_test_base:verification_remove_file_base(?ARCHIVE_BAGIT_LAYOUT).
+
+verification_bagit_recreate_file(_Config) ->
+    archive_sequential_test_base:verification_recreate_file_base(?ARCHIVE_BAGIT_LAYOUT).
+
+dip_verification_bagit(_Config) ->
+    archive_sequential_test_base:dip_verification_test_base(?ARCHIVE_BAGIT_LAYOUT).
+
+nested_verification_bagit(_Config) ->
+    archive_sequential_test_base:nested_verification_test_base(?ARCHIVE_BAGIT_LAYOUT).
 
 
 %===================================================================
@@ -70,8 +127,17 @@ init_per_suite(Config) ->
 end_per_suite(_Config) ->
     oct_background:end_per_suite().
 
-init_per_testcase(_Case, Config) ->
-    lfm_proxy:init(Config, false).
 
-end_per_testcase(_Case, Config) ->
+init_per_group(_Group, Config) ->
+    Config2 = oct_background:update_background_config(Config),
+    lfm_proxy:init(Config2, false).
+
+end_per_group(_Group, Config) ->
+    clock_freezer_mock:teardown_for_ct(oct_background:get_all_providers_nodes()),
     lfm_proxy:teardown(Config).
+
+init_per_testcase(_Case, Config) ->
+    Config.
+
+end_per_testcase(_Case, _Config) ->
+    ok.

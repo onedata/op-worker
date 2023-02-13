@@ -337,7 +337,7 @@ mark_finished(ArchiveDoc, UserCtx, NestedArchiveStats) ->
                         bagit_archive:finalize(ArchiveRootDirCtx, UserCtx)
                     catch _Class:Reason:Stacktrace ->
                         ?error_stacktrace("Unexpected error during bagit archive finalization: ~p", [Reason], Stacktrace),
-                        archive:mark_file_failed(ArchiveDoc)
+                        archive:mark_archivisation_failed(ArchiveDoc)
                     end
             end;
         false -> ok
