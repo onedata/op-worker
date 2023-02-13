@@ -191,17 +191,17 @@ get_nested_dataset_id_if_attached(FileCtx, ParentArchiveDoc) ->
 initialize_nested_archive(NestedDatasetId, UserCtx, #{
     aip_ctx := AipArchiveCtx,
     dip_ctx := DipArchiveCtx,
-    scheduled_dataset_base_archive_doc := ScheduledDatasetBaseArchiveDoc
+    base_archive_doc := ParentBaseArchiveDoc
 }) ->
     AipNestedArchiveCtx = create_and_prepare_nested_archive_dir(
         NestedDatasetId, AipArchiveCtx, UserCtx, aip),
     DipNestedArchiveCtx = create_and_prepare_nested_archive_dir(
         NestedDatasetId, DipArchiveCtx, UserCtx, dip),
     
-    NestedBaseArchiveDoc = case ScheduledDatasetBaseArchiveDoc /= undefined of
+    NestedBaseArchiveDoc = case ParentBaseArchiveDoc /= undefined of
         true ->
             incremental_archive:find_base_for_nested_archive(
-                archivisation_traverse_ctx:get_archive_doc(AipNestedArchiveCtx), ScheduledDatasetBaseArchiveDoc, UserCtx);
+                archivisation_traverse_ctx:get_archive_doc(AipNestedArchiveCtx), ParentBaseArchiveDoc, UserCtx);
         false ->
             undefined
     end,

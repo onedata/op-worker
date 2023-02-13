@@ -61,8 +61,6 @@
 -type info() :: #{
     % incremental archive base for current_archive_doc 
     base_archive_doc := archive:doc() | undefined,
-    % incremental archive base for top archive, the one created from dataset on which archivisation was scheduled
-    scheduled_dataset_base_archive_doc := archive:doc() | undefined,
     scheduled_dataset_root_guid := file_id:file_guid(),
     initial_archive_docs := docs_map(), 
     aip_ctx := archivisation_traverse_ctx:ctx(),
@@ -345,7 +343,6 @@ build_initial_traverse_info(ArchiveDoc, Config, StartFileGuid, UserCtx) ->
     DipCtx = init_archive(DipArchiveId, UserCtx),
     #{
         base_archive_doc => BaseArchiveDoc,
-        scheduled_dataset_base_archive_doc => BaseArchiveDoc,
         scheduled_dataset_root_guid => StartFileGuid,
         initial_archive_docs => #{
             aip => archivisation_traverse_ctx:get_archive_doc(AipCtx),

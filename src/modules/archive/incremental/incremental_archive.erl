@@ -42,7 +42,7 @@
 %% See `archivisation_tree.erl` for nested archives description.
 %% @end
 %%--------------------------------------------------------------------
--spec find_base_for_nested_archive(archive:doc(), archive:doc(), user_ctx:ctx()) -> archive:id() | undefined.
+-spec find_base_for_nested_archive(archive:doc(), archive:doc(), user_ctx:ctx()) -> archive:doc() | undefined.
 find_base_for_nested_archive(NestedArchiveDoc, ParentBaseArchiveDoc, UserCtx) ->
     {ok, ParentDatasetRootFileCtx} = archive:get_dataset_root_file_ctx(ParentBaseArchiveDoc),
     {ParentDatasetRootPath, _} = file_ctx:get_logical_path(ParentDatasetRootFileCtx, UserCtx),
@@ -56,8 +56,14 @@ find_base_for_nested_archive(NestedArchiveDoc, ParentBaseArchiveDoc, UserCtx) ->
             {CanonicalPath, _} = file_ctx:get_canonical_path(NestedDatasetRootInBaseArchiveFileCtx),
             case archivisation_tree:extract_archive_id(CanonicalPath) of
                 {ok, ArchiveId} ->
-                    {ok, Doc} = archive:get(ArchiveId),
-                    Doc;
+                    #document{value = #archive{dataset_id = ExpectedDatasetId}} = NestedArchiveDoc,
+                    {ok, #document{value = #archive{dataset_id = FoundDatasetId}} = Doc} = archive:get(ArchiveId),
+                    case ExpectedDatasetId == FoundDatasetId of
+                        true ->
+                            Doc;
+                        false ->
+                            undefined
+                    end;
                 ?ERROR_NOT_FOUND ->
                     undefined
             end;

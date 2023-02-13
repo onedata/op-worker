@@ -176,7 +176,7 @@ groups() -> [
         modify_preserved_plain_archive_test,
         modify_preserved_bagit_archive_test
     ]},
-    {verification_tests, [
+    {verification_tests, [ % fixme move to sequential tests
         verification_plain_modify_file, 
         verification_plain_modify_file_metadata,
         verification_plain_modify_dir_metadata,
