@@ -392,6 +392,8 @@ translate_arg_name(<<"simulated_filesystem_parameters">>) ->
     <<"simulatedFilesystemParameters">>;
 translate_arg_name(<<"simulated_filesystem_grow_speed">>) ->
     <<"simulatedFilesystemGrowSpeed">>;
+translate_arg_name(<<"enable_data_verification">>) ->
+    <<"enableDataVerification">>;
 translate_arg_name(<<"storage_path_type">>) -> <<"storagePathType">>;
 translate_arg_name(Name) -> Name.
 
