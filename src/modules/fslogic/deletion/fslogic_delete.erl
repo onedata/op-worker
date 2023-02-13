@@ -198,7 +198,7 @@ cleanup_opened_files() ->
                     ok = remove_file(FileCtx, UserCtx, true, ?SPEC(?TWO_STEP_DEL_FIN, ?ALL_DOCS))
                 catch
                     Class:Reason:Stacktrace ->
-                        ?warning_exception(autoformat, [Doc], Class, Reason, Stacktrace)
+                        ?warning_exception(?autoformat([Doc]), Class, Reason, Stacktrace)
                 end
             end, RemovedFiles),
 
