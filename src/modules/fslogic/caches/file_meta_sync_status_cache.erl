@@ -70,8 +70,8 @@ init(all) ->
         Error = {error, _} ->
             ?critical("Unable to initialize file_meta links caches due to: ~p", [Error])
     catch
-        Error2:Reason:Stacktrace ->
-            ?critical_stacktrace("Unable to initialize file_meta links caches due to: ~p", [{Error2, Reason}], Stacktrace)
+        Class:Reason:Stacktrace ->
+            ?critical_exception("Unable to initialize file_meta link caches", Class, Reason, Stacktrace)
     end;
 init(SpaceId) ->
     CacheName = ?CACHE_NAME(SpaceId),
@@ -89,9 +89,11 @@ init(SpaceId) ->
                 end
         end
     catch
-        Error2:Reason:Stacktrace ->
-            ?critical_stacktrace("Unable to initialize file_meta links effective cache for space ~p due to: ~p",
-                [SpaceId, {Error2, Reason}], Stacktrace)
+        Class:Reason:Stacktrace ->
+            ?critical_exception(
+                "Unable to initialize file_meta links effective cache for space ~p", [SpaceId],
+                Class, Reason, Stacktrace
+            )
     end.
 
 

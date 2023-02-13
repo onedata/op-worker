@@ -197,8 +197,8 @@ cleanup_opened_files() ->
                     FileCtx = file_ctx:new_by_guid(FileGuid),
                     ok = remove_file(FileCtx, UserCtx, true, ?SPEC(?TWO_STEP_DEL_FIN, ?ALL_DOCS))
                 catch
-                    E1:E2:Stacktrace ->
-                        ?warning_stacktrace("Cannot remove old opened file ~p: ~p:~p", [Doc, E1, E2], Stacktrace)
+                    Class:Reason:Stacktrace ->
+                        ?warning_exception(autoformat, [Doc], Class, Reason, Stacktrace)
                 end
             end, RemovedFiles),
 

@@ -105,9 +105,11 @@ invalidate_cache_and_reconcile(FileCtx) ->
 reconcile_qos(FileCtx) ->
     try
         reconcile_qos_insecure(FileCtx)
-    catch Class:Error:Stacktrace ->
-        ?critical_stacktrace("Unexpected error during qos reconciliation for file ~p: ~p",
-            [file_ctx:get_logical_uuid_const(FileCtx), {Class, Error}], Stacktrace)
+    catch Class:Reason:Stacktrace ->
+        ?critical_exception(
+            "Unexpected error during qos reconciliation for file ~p", [file_ctx:get_logical_uuid_const(FileCtx)],
+            Class, Reason, Stacktrace
+        )
     end.
 
 

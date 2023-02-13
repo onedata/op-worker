@@ -31,7 +31,7 @@
 %% @end
 %%--------------------------------------------------------------------
 -spec run_and_normalize_error(function(), module()) -> term().
-run_and_normalize_error(Fun, Module) ->
+run_and_normalize_error(Fun, _Module) ->
     try Fun() of
         Other -> Other
     catch
@@ -39,9 +39,9 @@ run_and_normalize_error(Fun, Module) ->
             Reason2 = normalize_error(Reason),
             case Reason2 of
                 not_found ->
-                    ?debug_stacktrace("~p error: ~p", [Module, Reason2], Stacktrace);
+                    ?debug_exception(error, Reason2, Stacktrace);
                 _ ->
-                    ?error_stacktrace("~p error: ~p", [Module, Reason2], Stacktrace)
+                    ?error_exception(error, Reason2, Stacktrace)
             end,
             {error, Reason2}
     end.

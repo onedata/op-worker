@@ -609,7 +609,10 @@ open_file_internal(UserCtx, FileCtx0, Flag, HandleId0, NewFile, CheckLocationExi
             throw(?EROFS);
         throw:?ENOENT:Stacktrace ->
             % this error is thrown on race between opening the file and deleting it on storage
-            ?debug_stacktrace("Open file error: ENOENT for uuid ~p", [file_ctx:get_logical_uuid_const(FileCtx2)], Stacktrace),
+            ?debug_exception(
+                "Open file error: ENOENT for uuid ~p", [file_ctx:get_logical_uuid_const(FileCtx2)],
+                throw, ?ENOENT, Stacktrace
+            ),
             check_and_register_release(FileCtx2, SessId, HandleId0),
             throw(?ENOENT);
         Error:Reason:Stacktrace2 ->

@@ -790,14 +790,11 @@ get_attr_including_deleted(FileCtx) ->
             }),
         {ok, FileAttr, IsDeleted}
     catch
-        _:Reason:Stacktrace ->
+        Class:Reason:Stacktrace ->
             #status{code = Error} = fslogic_errors:gen_status_message(Reason),
             FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
             SpaceId = file_ctx:get_space_id_const(FileCtx),
-            ?debug_stacktrace(
-                "Error {error, ~p} occured when getting attr of file: ~p during auto storage import procedure in space: ~p.",
-                [Error, FileUuid, SpaceId], Stacktrace
-            ),
+            ?debug_exception(autoformat, [FileUuid, SpaceId, Error], Class, Reason, Stacktrace),
             {error, Error}
     end.
 
