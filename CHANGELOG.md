@@ -28,7 +28,7 @@ CHANGELOG
     deleted after cancelation.
 -   **VFS-9589** Extend time series with information about measurements
     ranges.
--   **VFS-9162** Web GUI: Added api samples modal for space.
+-   **VFS-9162** Web GUI: Added API samples modal for space.
 -   **VFS-9129** Web GUI: Upgraded EmberJS to v3.8.
 -   **VFS-7863** Web GUI: Fixed file download in iOS Safari.
 -   **VFS-7692** Added stopped automation workflow execution discard
