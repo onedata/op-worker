@@ -56,7 +56,6 @@ all() -> [
 -define(PROTECTION_FLAGS_COMBINATIONS, [
     [],
     [?DATA_PROTECTION_BIN],
-    [?METADATA_PROTECTION_BIN],
     [?DATA_PROTECTION_BIN, ?METADATA_PROTECTION_BIN]
 ]).
 
@@ -116,6 +115,10 @@ establish_dataset_test(Config) ->
                         bad_values = [
                             {<<"rootFileId">>, FileObjectId, ?ERROR_ALREADY_EXISTS},
                             {<<"protectionFlags">>, 100, ?ERROR_BAD_VALUE_LIST_OF_BINARIES(<<"protectionFlags">>)},
+                            {<<"protectionFlags">>, [?METADATA_PROTECTION_BIN], ?ERROR_BAD_DATA(
+                                <<"protectionFLags">>,
+                                <<"Can not set metadata_protection without data_protection">>
+                            )},
                             {<<"protectionFlags">>, [<<"dummyFlag">>], ?ERROR_BAD_VALUE_LIST_NOT_ALLOWED(
                                 <<"protectionFlags">>, [?DATA_PROTECTION_BIN, ?METADATA_PROTECTION_BIN]
                             )}

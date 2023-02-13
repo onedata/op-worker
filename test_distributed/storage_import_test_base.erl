@@ -101,7 +101,6 @@
     create_file_in_dir_exceed_batch_update_test/1,
     force_start_test/1,
     force_stop_test/1,
-    file_with_metadata_protection_should_not_be_updated_test/2,
     file_with_data_protection_should_not_be_updated_test/2,
     file_with_data_and_metadata_protection_should_not_be_updated_test/2,
     file_with_metadata_protection_should_not_be_deleted_test/2,
@@ -2955,9 +2954,6 @@ force_stop_test(Config) ->
         <<"queueLengthDayHist">> => 0
     }, ?SPACE_ID),
     parallel_assert(?MODULE, verify_file, [W1, SessId, Timeout], Files, Timeout).
-
-file_with_metadata_protection_should_not_be_updated_test(Config, StorageType) ->
-    file_with_protection_flag_should_not_be_updated_test_base(Config, ?METADATA_PROTECTION, StorageType).
 
 file_with_data_protection_should_not_be_updated_test(Config, StorageType) ->
     file_with_protection_flag_should_not_be_updated_test_base(Config, ?DATA_PROTECTION, StorageType).
