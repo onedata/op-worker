@@ -31,15 +31,20 @@
 
 -spec establish(file_meta:uuid(), data_access_control:bitmask()) -> ok | {error, term()}.
 establish(Uuid, ProtectionFlags) ->
-    ?extract_ok(file_meta:update(Uuid, fun
-        (FileMeta = #file_meta{dataset_state = undefined}) ->
-            {ok, FileMeta#file_meta{
-                dataset_state = ?ATTACHED_DATASET,
-                protection_flags = ProtectionFlags
-            }};
-        (_) ->
-            ?ERROR_ALREADY_EXISTS
-    end)).
+    case file_meta:validate_protection_flags(ProtectionFlags) of
+        ok ->
+            ?extract_ok(file_meta:update(Uuid, fun
+                (FileMeta = #file_meta{dataset_state = undefined}) ->
+                    {ok, FileMeta#file_meta{
+                        dataset_state = ?ATTACHED_DATASET,
+                        protection_flags = ProtectionFlags
+                    }};
+                (_) ->
+                    ?ERROR_ALREADY_EXISTS
+            end));
+        {error, _} = Error ->
+            Error
+    end.
 
 
 -spec reattach(file_meta:uuid(), data_access_control:bitmask(), data_access_control:bitmask()) ->
@@ -50,10 +55,17 @@ reattach(Uuid, FlagsToSet, FlagsToUnset) ->
             dataset_state = ?DETACHED_DATASET,
             protection_flags = CurrFlags
         }) ->
-            {ok, FileMeta#file_meta{
-                dataset_state = ?ATTACHED_DATASET,
-                protection_flags = ?set_flags(?reset_flags(CurrFlags, FlagsToUnset), FlagsToSet)
-            }};
+            NewFlags = ?set_flags(?reset_flags(CurrFlags, FlagsToUnset), FlagsToSet),
+
+            case file_meta:validate_protection_flags(NewFlags) of
+                ok ->
+                    {ok, FileMeta#file_meta{
+                        dataset_state = ?ATTACHED_DATASET,
+                        protection_flags = NewFlags
+                    }};
+                {error, _} = Error ->
+                    Error
+            end;
         (#file_meta{dataset_state = undefined}) ->
             ?ERROR_NOT_FOUND;
         (#file_meta{dataset_state = ?ATTACHED_DATASET}) ->

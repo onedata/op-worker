@@ -36,7 +36,8 @@
 -export([get_name/1, set_name/2]).
 -export([
     get_active_perms_type/1, update_mode/2,  update_acl/2,
-    update_protection_flags/3, protection_flags_to_json/1, protection_flags_from_json/1
+    update_protection_flags/3, validate_protection_flags/1,
+    protection_flags_to_json/1, protection_flags_from_json/1
 ]).
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
     make_space_exist/1, new_doc/6, new_doc/7, new_share_root_dir_doc/2, get_ancestors/1,
@@ -907,11 +908,29 @@ update_acl(FileUuid, NewAcl) ->
 update_protection_flags(FileUuid, FlagsToSet, FlagsToUnset) ->
     ?extract_ok(update({uuid, FileUuid}, fun(#file_meta{protection_flags = CurrFlags} = FileMeta) ->
         NewFlags = ?set_flags(?reset_flags(CurrFlags, FlagsToUnset), FlagsToSet),
-        case NewFlags =:= CurrFlags of
-            true -> {error, nothing_changed};
-            false -> {ok, FileMeta#file_meta{protection_flags = NewFlags}}
+        case {validate_protection_flags(NewFlags), NewFlags =:= CurrFlags} of
+            {ok, false} ->
+                {ok, FileMeta#file_meta{protection_flags = NewFlags}};
+            {ok, true} ->
+                {error, nothing_changed};
+            {Error = {error, _}, _} ->
+                Error
         end
     end)).
+
+
+-spec validate_protection_flags(data_access_control:bitmask()) ->
+    ok | errors:error().
+validate_protection_flags(ProtectionFlags) when
+    ?has_all_flags(ProtectionFlags, ?METADATA_PROTECTION),
+    ?has_no_flags(ProtectionFlags, ?DATA_PROTECTION)
+->
+    ?ERROR_BAD_DATA(
+        <<"protectionFLags">>,
+        <<"Can not set metadata_protection without data_protection">>
+    );
+validate_protection_flags(_) ->
+    ok.
 
 
 -spec protection_flags_to_json(data_access_control:bitmask()) -> [binary()].
