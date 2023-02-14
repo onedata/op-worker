@@ -318,7 +318,7 @@ autocleaning_should_evict_file_replica_replicated_by_job(Config) ->
         threshold => Size - 1
     }),
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [0, Size]), Guid),
-    schedule_file_replication(W1, SessId, Guid, ProviderId1),
+    schedule_file_replication(W1, SessId, Guid, ProviderId1, Size),
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [Size, Size]), Guid),
     ?assertEqual(Size, current_size(W1, ?SPACE_ID), ?ATTEMPTS),
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [0, Size]), Guid),
@@ -386,7 +386,7 @@ autocleaning_should_evict_file_replicas_until_it_reaches_configured_target(Confi
     enable_file_popularity(W1, ?SPACE_ID),
     lists:foreach(fun(G) ->
         ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [0, FileSize]), G),
-        schedule_file_replication(W1, SessId, G, DomainP1)
+        schedule_file_replication(W1, SessId, G, DomainP1, FileSize)
     end, Guids),
 
     lists:foreach(fun(G) ->
@@ -584,7 +584,7 @@ restart_autocleaning_run_test(Config) ->
 
     % replicate file to W2
     ?assertDistribution(W2, SessId2, ?DISTS([DomainP1, DomainP2], [Size, 0]), Guid),
-    schedule_file_replication(W2, SessId2, Guid, DomainP2),
+    schedule_file_replication(W2, SessId2, Guid, DomainP2, Size),
 
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [Size, Size]), Guid),
     % Ensure that evicting provider has knowledge of remote provider blocks (through dbsync), 
@@ -651,7 +651,7 @@ autocleaning_should_evict_file_when_it_is_old_enough(Config) ->
     }},
     ok = configure_autocleaning(W1, ?SPACE_ID, ACConfig),
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [0, Size]), Guid),
-    schedule_file_replication(W1, SessId, Guid, DomainP1),
+    schedule_file_replication(W1, SessId, Guid, DomainP1, Size),
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [Size, Size]), Guid),
     ?assertOneOfReports({ok, #{
         released_bytes := 0,
@@ -698,7 +698,7 @@ autocleaning_should_not_evict_opened_file_replica(Config) ->
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [0, Size]), Guid),
     % read file to be replicated and leave it opened
     {ok, H} = ?assertMatch({ok, _}, lfm_proxy:open(W1, SessId, ?FILE_REF(Guid), read), ?ATTEMPTS),
-    {ok, _} = ?assertMatch({ok, _}, lfm_proxy:read(W1, H, 0, Size), ?ATTEMPTS),
+    read_opened_file(W1, SessId, Guid, H, Size),
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [Size, Size]), Guid),
     ?assertOneOfReports({ok, #{
         released_bytes := 0,
@@ -736,7 +736,7 @@ cancel_autocleaning_run(Config) ->
     enable_file_popularity(W1, ?SPACE_ID),
     lists:foreach(fun(G) ->
         ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [0, FileSize]), G),
-        schedule_file_replication(W1, SessId, G, DomainP1)
+        schedule_file_replication(W1, SessId, G, DomainP1, FileSize)
     end, Guids),
 
     lists:foreach(fun(G) ->
@@ -813,7 +813,7 @@ time_warp_test(Config) ->
     enable_file_popularity(W1, ?SPACE_ID),
     lists:foreach(fun(G) ->
         ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [0, FileSize]), G),
-        schedule_file_replication(W1, SessId, G, DomainP1)
+        schedule_file_replication(W1, SessId, G, DomainP1, FileSize)
     end, Guids),
 
     lists:foreach(fun(G) ->
@@ -954,7 +954,7 @@ autocleaning_should_not_evict_file_replica_when_it_does_not_satisfy_one_rule_tes
     ok = configure_autocleaning(W1, ?SPACE_ID, ACConfig),
     Guid = write_file(W2, SessId2, ?FILE_PATH(FileName), Size),
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [0, Size]), Guid),
-    schedule_file_replication(W1, SessId, Guid, DomainP1),
+    schedule_file_replication(W1, SessId, Guid, DomainP1, Size),
     ?assertDistribution(W1, SessId, ?DISTS([DomainP1, DomainP2], [Size, Size]), Guid),
     ?assertOneOfReports({ok, #{
         released_bytes := 0,
@@ -987,18 +987,30 @@ write_files(Worker, SessId, DirPath, FilePrefix, Size, Num) ->
     end, lists:seq(1, Num)).
 
 read_file(Worker, SessId, Guid, Size) ->
+    ?assertMatch({ok, #file_attr{size = Size}}, lfm_proxy:stat(Worker, SessId, ?FILE_REF(Guid)), ?ATTEMPTS),
     ?assertEqual(Size, try
         {ok, H} = lfm_proxy:open(Worker, SessId, ?FILE_REF(Guid), read),
         {ok, Data} = lfm_proxy:read(Worker, H, 0, Size),
         ok = lfm_proxy:close(Worker, H),
         byte_size(Data)
     catch
-        _:_ ->
-            error
-    end, ?ATTEMPTS).
+        Class:Reason ->
+            {Class, Reason}
+    end).
 
-schedule_file_replication(Worker, SessId, Guid, ProviderId) ->
-    ?assertMatch({ok, _}, lfm_proxy:stat(Worker, SessId, ?FILE_REF(Guid)), ?ATTEMPTS),
+read_opened_file(Worker, SessId, Guid, Handle, Size) ->
+    ?assertMatch({ok, #file_attr{size = Size}}, lfm_proxy:stat(Worker, SessId, ?FILE_REF(Guid)), ?ATTEMPTS),
+    ?assertEqual(Size, try
+        {ok, Data} = lfm_proxy:read(Worker, Handle, 0, Size),
+        byte_size(Data)
+    catch
+        Class:Reason ->
+            {Class, Reason}
+    end).
+
+
+schedule_file_replication(Worker, SessId, Guid, ProviderId, ExpectedSize) ->
+    ?assertMatch({ok, #file_attr{size = ExpectedSize}}, lfm_proxy:stat(Worker, SessId, ?FILE_REF(Guid)), ?ATTEMPTS),
     {ok, _} = opt_transfers:schedule_file_replication(Worker, SessId, ?FILE_REF(Guid), ProviderId).
 
 enable_file_popularity(Worker, SpaceId) ->
