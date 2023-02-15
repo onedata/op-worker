@@ -38,7 +38,7 @@
 
 -type hook_type() :: doc | link.
 -type missing_element() :: {file_meta_missing, MissingUuid :: file_meta:uuid()} |
-{link_missing, Uuid :: file_meta:uuid(), MissingName :: file_meta:name()}.
+    {link_missing, Uuid :: file_meta:uuid(), MissingName :: file_meta:name()}.
 -type hook_identifier() :: binary().
 -type function_name() :: atom().
 % Posthook args encoded with Module:encode_file_meta_posthook_args/2 function.

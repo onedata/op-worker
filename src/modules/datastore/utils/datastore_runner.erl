@@ -15,7 +15,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([run_and_normalize_error/2]).
+-export([run_and_normalize_error/1]).
 -export([extract_ok/1, extract_key/1, ok_if_not_found/1, ok_if_exists/1, ok_if_no_change/1]).
 -export([get_field/3]).
 -export([normalize_error/1]).
@@ -30,8 +30,8 @@
 %% {error, Reason :: term()}
 %% @end
 %%--------------------------------------------------------------------
--spec run_and_normalize_error(function(), module()) -> term().
-run_and_normalize_error(Fun, _Module) ->
+-spec run_and_normalize_error(function()) -> term().
+run_and_normalize_error(Fun) ->
     try Fun() of
         Other -> Other
     catch
