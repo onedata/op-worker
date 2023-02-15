@@ -247,6 +247,8 @@ generic_create_deferred(UserCtx, FileCtx, IgnoreEexist) ->
             case create_storage_file(SDHandle, FileCtx4) of
                 {error, ?ENOENT} ->
                     ?warning("Missing dirs on storage path to file ~p", [file_ctx:get_logical_guid_const(FileCtx4)]),
+                    % Fallback because of inconsistencies in metadata caused by rename.
+                    % This function cannot be used by default, as it does not chown created directories.
                     FileCtx5 = create_missing_parent_dirs_by_location(UserCtx, FileCtx4),
                     create_storage_file(SDHandle, FileCtx5);
                 Other ->
