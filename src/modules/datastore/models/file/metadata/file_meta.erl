@@ -925,10 +925,9 @@ validate_protection_flags(ProtectionFlags) when
     ?has_all_flags(ProtectionFlags, ?METADATA_PROTECTION),
     ?has_no_flags(ProtectionFlags, ?DATA_PROTECTION)
 ->
-    ?ERROR_BAD_DATA(
-        <<"protectionFLags">>,
-        <<"Can not set metadata_protection without data_protection">>
-    );
+    ?ERROR_BAD_DATA(<<"protectionFLags">>, str_utils:format_bin("Cannot set ~s without ~s", [
+        ?METADATA_PROTECTION_BIN, ?DATA_PROTECTION_BIN
+    ]));
 validate_protection_flags(_) ->
     ok.
 
