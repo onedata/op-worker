@@ -168,11 +168,11 @@
         end)
     end
 ).
--define(THROTTLE_ERROR_STACKTRACE(__SESSION_ID, __FORMAT, __ARGS, __STACKTRACE),
+-define(THROTTLE_ERROR_EXCEPTION(__SESSION_ID, __FORMAT, __ARGS, __CLASS, __REASON, __STACKTRACE),
     begin
-        ?debug_stacktrace(__FORMAT, __ARGS, __STACKTRACE),
+        ?debug_exception(__FORMAT, __ARGS, __CLASS, __REASON, __STACKTRACE),
         utils:throttle({?MODULE, __SESSION_ID, ?LINE}, ?CONNECTION_AWAIT_LOG_INTERVAL, fun() ->
-            ?error_stacktrace(__FORMAT, __ARGS, __STACKTRACE)
+            ?error_exception(__FORMAT, __ARGS, __CLASS, __REASON, __STACKTRACE)
         end)
     end
 ).
@@ -377,10 +377,12 @@ handle_info({Ok, Socket, Data}, #state{
         throw:{error, _} = Error ->
             ?THROTTLE_ERROR(SessId, "Protocol upgrade failed due to ~p", [Error]),
             {stop, normal, State};
-        Type:Reason:Stacktrace ->
-            ?THROTTLE_ERROR_STACKTRACE(SessId, "Unexpected error during protocol upgrade: ~p:~p", [
-                Type, Reason
-            ], Stacktrace),
+        Class:Reason:Stacktrace ->
+            ?THROTTLE_ERROR_EXCEPTION(
+                SessId,
+                "Unexpected error during protocol upgrade", [],
+                Class, Reason, Stacktrace
+            ),
             {stop, normal, State}
     end;
 
@@ -402,12 +404,11 @@ handle_info({Ok, Socket, Data}, #state{
             % Concrete errors were already logged in 'handle_handshake' so
             % terminate gracefully as to not spam more error logs
             {stop, normal, State}
-    catch Type:Reason:Stacktrace ->
-        ?THROTTLE_ERROR_STACKTRACE(
+    catch Class:Reason:Stacktrace ->
+        ?THROTTLE_ERROR_EXCEPTION(
             OutgoingSessIdOrUndefined,
-            "Unexpected error while performing handshake: ~p:~p",
-            [Type, Reason],
-            Stacktrace
+            "Unexpected error while performing handshake", [],
+            Class, Reason, Stacktrace
         ),
         {stop, normal, State}
     end;
@@ -885,10 +886,12 @@ send_client_message(#state{
             ClientMsg, VerifyMsg
         ),
         socket_send(State, Data)
-    catch _:Reason:Stacktrace ->
-        ?THROTTLE_ERROR_STACKTRACE(SessId, "Unable to serialize client_message ~s due to: ~p", [
-            clproto_utils:msg_to_string(ClientMsg), Reason
-        ], Stacktrace),
+    catch Class:Reason:Stacktrace ->
+        ?THROTTLE_ERROR_EXCEPTION(
+            SessId,
+            "Unable to serialize client_message ~s", [clproto_utils:msg_to_string(ClientMsg)],
+            Class, Reason, Stacktrace
+        ),
         {error, serialization_failed}
     end.
 
@@ -905,10 +908,12 @@ send_server_message(#state{
             ServerMsg, VerifyMsg
         ),
         socket_send(State, Data)
-    catch _:Reason:Stacktrace ->
-        ?THROTTLE_ERROR_STACKTRACE(SessId, "Unable to serialize server_message ~s due to: ~p", [
-            clproto_utils:msg_to_string(ServerMsg), Reason
-        ], Stacktrace),
+    catch Class:Reason:Stacktrace ->
+        ?THROTTLE_ERROR_EXCEPTION(
+            SessId,
+            "Unable to serialize server_message ~s", [clproto_utils:msg_to_string(ServerMsg)],
+            Class, Reason, Stacktrace
+        ),
         {error, serialization_failed}
     end.
 

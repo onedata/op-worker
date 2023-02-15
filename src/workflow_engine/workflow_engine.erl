@@ -345,34 +345,32 @@ call_handlers_for_cancelled_lane(ExecutionId, Handler, Context, LaneId, TaskIds)
 
 -spec handle_exception(execution_id(), workflow_handler:handler(), execution_context(),
     string(), list(), throw | error | exit, term(), list()) -> ok.
-handle_exception(ExecutionId, Handler, Context, Message, MessageArgs, ErrorType, Reason, Stacktrace) ->
+handle_exception(ExecutionId, Handler, Context, Message, MessageArgs, Class, Reason, Stacktrace) ->
     try
-        ?error_stacktrace(
-            "workflow_handler ~w, execution ~s: " ++ Message ++ ": ~w:~p",
-            [Handler, ExecutionId | MessageArgs] ++ [ErrorType, Reason],
-            Stacktrace
+        ?error_exception(
+            "workflow_handler ~w, execution ~s: " ++ Message,
+            [Handler, ExecutionId | MessageArgs],
+            Class, Reason, Stacktrace
         ),
-        workflow_execution_state:handle_exception(ExecutionId, Context, ErrorType, Reason, Stacktrace)
+        workflow_execution_state:handle_exception(ExecutionId, Context, Class, Reason, Stacktrace)
     catch
-        ErrorType2:Reason2:Stacktrace2  ->
-            ?critical_stacktrace(
-                "Unexpected error handling exception for workflow_handler ~w (execution ~s): ~w:~p",
-                [Handler, ExecutionId, ErrorType2, Reason2],
-                Stacktrace2
+        Class2:Reason2:Stacktrace2  ->
+            ?critical_exception(
+                "Unexpected error handling exception for workflow_handler ~w (execution ~s)", [Handler, ExecutionId],
+                Class2, Reason2, Stacktrace2
             )
     end.
 
 -spec execute_exception_handler(execution_id(), execution_context(), workflow_handler:handler(),
     throw | error | exit, term(), list()) -> workflow_handler:abrupt_stop_reason() | undefined.
-execute_exception_handler(ExecutionId, Context, Handler, ErrorType, Reason, Stacktrace) ->
+execute_exception_handler(ExecutionId, Context, Handler, Class, Reason, Stacktrace) ->
     try
-        apply(Handler, handle_exception, [ExecutionId, Context, ErrorType, Reason, Stacktrace])
+        apply(Handler, handle_exception, [ExecutionId, Context, Class, Reason, Stacktrace])
     catch
-        ErrorType2:Reason2:Stacktrace2  ->
-            ?critical_stacktrace(
-                "Unexpected error handling exception for workflow_handler ~w (execution ~s): ~w:~p",
-                [Handler, ExecutionId, ErrorType2, Reason2],
-                Stacktrace2
+        Class2:Reason2:Stacktrace2  ->
+            ?critical_exception(
+                "Unexpected error handling exception for workflow_handler ~w (execution ~s)", [Handler, ExecutionId],
+                Class2, Reason2, Stacktrace2
             ),
             undefined
     end.

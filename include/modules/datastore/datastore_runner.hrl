@@ -13,7 +13,7 @@
 
 %% Runs given codeblock and converts any badmatch/case_clause to {error, Reason :: term()}
 -define(run(Fun), datastore_runner:run_and_normalize_error(
-    fun() -> Fun end, ?MODULE
+    fun() -> Fun end
 )).
 
 -define(extract_ok(Result), datastore_runner:extract_ok(Result)).

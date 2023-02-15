@@ -216,5 +216,5 @@ link_replicated(file_meta, LinkKey, SpaceId) ->
         GenericKey ->
             file_meta_posthooks:execute_hooks(GenericKey, link)
     end;
-link_replicated(_Model, _LinkKey_, SpaceId) ->
+link_replicated(_Model, _LinkKey_, _SpaceId) ->
     ok.
