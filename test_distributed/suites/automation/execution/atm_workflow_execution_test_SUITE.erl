@@ -194,6 +194,7 @@
     resume_atm_workflow_execution_interrupted_after_all_tasks_finished/1,
 
     garbage_collect_atm_workflow_executions/1,
+    massive_garbage_collect_atm_workflow_executions/1,
 
     restart_op_worker_after_graceful_stop/1
 ]).
@@ -396,7 +397,8 @@ groups() -> [
     ]},
 
     {gc_tests, [], [
-        garbage_collect_atm_workflow_executions
+        garbage_collect_atm_workflow_executions,
+        massive_garbage_collect_atm_workflow_executions
     ]},
 
     {restarts_tests, [], [
@@ -954,6 +956,10 @@ resume_atm_workflow_execution_interrupted_after_all_tasks_finished(_Config) ->
 
 
 garbage_collect_atm_workflow_executions(_Config) ->
+    ?RUN_GC_TEST().
+
+
+massive_garbage_collect_atm_workflow_executions(_Config) ->
     ?RUN_GC_TEST().
 
 
