@@ -32,6 +32,8 @@
 -define(FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_4_ERROR_MSG, <<"signal: illegal instruction (core dumped)\n">>).
 
 -define(ECHO_WITH_SLEEP_DOCKER_IMAGE_ID, <<"test/echo_with_sleep">>).
+-define(ECHO_WITH_PAUSE_DOCKER_IMAGE_ID, <<"test/echo_with_pause">>).
+
 -define(ECHO_WITH_EXCEPTION_ON_EVEN_NUMBERS, <<"test/echo_with_exception_on_even_numbers">>).
 -define(ECHO_CONFIG_DOCKER_ID, <<"test/echo_config">>).
 
