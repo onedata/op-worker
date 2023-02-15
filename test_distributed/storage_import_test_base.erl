@@ -103,19 +103,14 @@
     force_stop_test/1,
     file_with_data_protection_should_not_be_updated_test/2,
     file_with_data_and_metadata_protection_should_not_be_updated_test/2,
-    file_with_metadata_protection_should_not_be_deleted_test/2,
     file_with_data_protection_should_not_be_deleted_test/2,
     file_with_data_and_metadata_protection_should_not_be_deleted_test/2,
-    empty_dir_with_metadata_protection_should_not_be_updated_test/1,
     empty_dir_with_data_protection_should_not_be_updated_test/1,
     empty_dir_with_data_and_metadata_protection_should_not_be_updated_test/1,
-    empty_dir_with_metadata_protection_should_not_be_deleted_test/1,
     empty_dir_with_data_protection_should_not_be_deleted_test/1,
     empty_dir_with_data_and_metadata_protection_should_not_be_deleted_test/1,
-    dir_and_its_child_with_metadata_protection_should_not_be_updated_test/2,
     dir_and_its_child_with_data_protection_should_not_be_updated_test/2,
     dir_and_its_child_with_data_and_metadata_protection_should_not_be_updated_test/2,
-    dir_and_its_child_with_metadata_protection_should_not_be_deleted_test/1,
     dir_and_its_child_with_data_protection_should_not_be_deleted_test/1,
     dir_and_its_child_with_data_and_metadata_protection_should_not_be_deleted_test/1,
 
@@ -3018,9 +3013,6 @@ file_with_protection_flag_should_not_be_updated_test_base(Config, ProtectionFlag
     ?assertMatch({ok, AppendedData}, lfm_proxy:check_size_and_read(W1, Handle4, 0, 100)),
     lfm_proxy:close(W1, Handle4).
 
-file_with_metadata_protection_should_not_be_deleted_test(Config, StorageType) ->
-    file_with_protection_flag_should_not_be_deleted_test_base(Config, ?METADATA_PROTECTION, StorageType).
-
 file_with_data_protection_should_not_be_deleted_test(Config, StorageType) ->
     file_with_protection_flag_should_not_be_deleted_test_base(Config, ?DATA_PROTECTION, StorageType).
 
@@ -3079,9 +3071,6 @@ file_with_protection_flag_should_not_be_deleted_test_base(Config, ProtectionFlag
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1})),
     ?assertMatch({error, ?ENOENT}, lfm_proxy:open(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}, read)).
 
-empty_dir_with_metadata_protection_should_not_be_updated_test(Config) ->
-    empty_dir_with_protection_flag_should_not_be_updated_test_base(Config, ?METADATA_PROTECTION).
-
 empty_dir_with_data_protection_should_not_be_updated_test(Config) ->
     empty_dir_with_protection_flag_should_not_be_updated_test_base(Config, ?DATA_PROTECTION).
 
@@ -3127,9 +3116,6 @@ empty_dir_with_protection_flag_should_not_be_updated_test_base(Config, Protectio
     % dir should have been updated
     ?assertMatch({ok, #file_attr{mode = NewMode}}, lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH})).
 
-empty_dir_with_metadata_protection_should_not_be_deleted_test(Config) ->
-    empty_dir_with_protection_flag_should_not_be_deleted_test_base(Config, ?METADATA_PROTECTION).
-
 empty_dir_with_data_protection_should_not_be_deleted_test(Config) ->
     empty_dir_with_protection_flag_should_not_be_deleted_test_base(Config, ?DATA_PROTECTION).
 
@@ -3173,9 +3159,6 @@ empty_dir_with_protection_flag_should_not_be_deleted_test_base(Config, Protectio
 
     % empty_dir should have been deleted
     ?assertMatch({error, ?ENOENT}, lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH})).
-
-dir_and_its_child_with_metadata_protection_should_not_be_updated_test(Config, StorageType) ->
-    dir_and_its_child_with_protection_flag_should_not_be_updated_test_base(Config, ?METADATA_PROTECTION, StorageType).
 
 dir_and_its_child_with_data_protection_should_not_be_updated_test(Config, StorageType) ->
     dir_and_its_child_with_protection_flag_should_not_be_updated_test_base(Config, ?DATA_PROTECTION, StorageType).
@@ -3254,9 +3237,6 @@ dir_and_its_child_with_protection_flag_should_not_be_updated_test_base(Config, P
     ?assertMatch({ok, AppendedData}, lfm_proxy:check_size_and_read(W1, Handle4, 0, 100)),
     lfm_proxy:close(W1, Handle4).
 
-
-dir_and_its_child_with_metadata_protection_should_not_be_deleted_test(Config) ->
-    dir_and_its_child_with_protection_flag_should_not_be_deleted_test_base(Config, ?METADATA_PROTECTION).
 
 dir_and_its_child_with_data_protection_should_not_be_deleted_test(Config) ->
     dir_and_its_child_with_protection_flag_should_not_be_deleted_test_base(Config, ?DATA_PROTECTION).
@@ -6916,22 +6896,16 @@ init_per_testcase(Case, Config)
     orelse Case =:= create_delete_import2_test
     orelse Case =:= recreate_file_deleted_by_sync_test
     orelse Case =:= create_delete_race_test
-    orelse Case =:= file_with_metadata_protection_should_not_be_updated_test
     orelse Case =:= file_with_data_protection_should_not_be_updated_test
     orelse Case =:= file_with_data_and_metadata_protection_should_not_be_updated_test
-    orelse Case =:= file_with_metadata_protection_should_not_be_deleted_test
     orelse Case =:= file_with_data_protection_should_not_be_deleted_test
     orelse Case =:= file_with_data_and_metadata_protection_should_not_be_deleted_test
-    orelse Case =:= empty_dir_with_metadata_protection_should_not_be_updated_test
     orelse Case =:= empty_dir_with_data_protection_should_not_be_updated_test
     orelse Case =:= empty_dir_with_data_and_metadata_protection_should_not_be_updated_test
-    orelse Case =:= empty_dir_with_metadata_protection_should_not_be_deleted_test
     orelse Case =:= empty_dir_with_data_protection_should_not_be_deleted_test
     orelse Case =:= empty_dir_with_data_and_metadata_protection_should_not_be_deleted_test
-    orelse Case =:= dir_and_its_child_with_metadata_protection_should_not_be_updated_test
     orelse Case =:= dir_and_its_child_with_data_protection_should_not_be_updated_test
     orelse Case =:= dir_and_its_child_with_data_and_metadata_protection_should_not_be_updated_test
-    orelse Case =:= dir_and_its_child_with_metadata_protection_should_not_be_deleted_test
     orelse Case =:= dir_and_its_child_with_data_protection_should_not_be_deleted_test
     orelse Case =:= dir_and_its_child_with_data_and_metadata_protection_should_not_be_deleted_test
     orelse Case =:= sync_should_not_delete_not_replicated_file_created_in_remote_provider
