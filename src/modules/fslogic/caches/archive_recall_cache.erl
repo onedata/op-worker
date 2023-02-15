@@ -64,7 +64,7 @@ init(all) ->
             ?critical("Unable to initialize archive recall caches due to: ~p", [Error])
     catch
         Class:Reason:Stacktrace ->
-            ?critical_exception("Unable to initialize file_meta link caches", Class, Reason, Stacktrace)
+            ?critical_exception("Unable to initialize archive recall caches", Class, Reason, Stacktrace)
     end;
 init(SpaceId) ->
     CacheName = ?CACHE_NAME(SpaceId),

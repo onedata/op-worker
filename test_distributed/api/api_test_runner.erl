@@ -717,8 +717,21 @@ is_client_supported_by_node(Client, Node, SupportedClientsPerNode) ->
 make_request(Config, Node, Client, #rest_args{} = Args) ->
     make_rest_request(Config, Node, Client, Args);
 make_request(Config, Node, Client, #gs_args{} = Args) ->
-    make_gs_request(Config, Node, Client, Args).
+    make_gs_request_with_repeats(Config, Node, Client, Args, 5).
 
+
+%% @private
+-spec make_gs_request_with_repeats(config(), node(), aai:auth(), onenv_api_test_runner:gs_args(), non_neg_integer()) ->
+    {ok, Result :: map()} | {error, term()}.
+make_gs_request_with_repeats(Config, Node, Client, Args, 0) ->
+    make_gs_request(Config, Node, Client, Args);
+make_gs_request_with_repeats(Config, Node, Client, Args, RepeatsLeft) ->
+    case make_gs_request(Config, Node, Client, Args) of
+        % this error happens when running tests on machines under high load
+        {error, closed} -> make_gs_request_with_repeats(Config, Node, Client, Args, RepeatsLeft - 1);
+        Result -> Result
+    end.
+    
 
 %% @private
 -spec make_gs_request(config(), node(), aai:auth(), onenv_api_test_runner:gs_args()) ->
