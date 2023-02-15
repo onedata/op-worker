@@ -79,7 +79,8 @@ init_engine() ->
         workflow_async_call_pools_to_use => [{?DEFAULT_ASYNC_CALL_POOL_ID, ?ENGINE_ASYNC_CALLS_LIMIT}],
         slots_limit => ?ENGINE_SLOTS_COUNT,
         default_keepalive_timeout => ?JOB_TIMEOUT_SEC,
-        init_workflow_timeout_server => {true, ?JOB_TIMEOUT_CHECK_PERIOD_SEC}
+        init_workflow_timeout_server => {true, ?JOB_TIMEOUT_CHECK_PERIOD_SEC},
+        enqueuing_timeout => infinity
     },
     workflow_engine:init(?ATM_WORKFLOW_EXECUTION_ENGINE, Options).
 
