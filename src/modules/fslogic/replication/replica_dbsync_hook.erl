@@ -117,7 +117,7 @@ decode_file_meta_posthook_args(on_file_location_change, EncodedArgs) ->
         {ok, Doc} -> Doc;
         {error, not_found} -> undefined
     end,
-    [Guid, LocationDoc].
+    [file_ctx:new_by_guid(Guid), LocationDoc].
 
 %%%===================================================================
 %%% Internal functions

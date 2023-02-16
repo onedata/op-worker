@@ -52,7 +52,7 @@ terminate_internal_service() ->
             try
                 ok = internal_services_manager:stop_service(?MODULE, ?ATM_WARDEN_SERVICE_NAME, ?ATM_WARDEN_SERVICE_ID)
             catch Class:Reason:Stacktrace ->
-                ?log_exception(Class, Reason, Stacktrace)
+                ?error_exception(Class, Reason, Stacktrace)
             end;
         false ->
             ok
