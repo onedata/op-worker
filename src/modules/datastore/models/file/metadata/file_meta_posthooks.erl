@@ -211,7 +211,9 @@ encode_hook(Module, Function, EncodedArgs) ->
 %% @private
 -spec decode_hook(binary()) -> {module(), atom(), encoded_args()}.
 decode_hook(EncodedHook) ->
-    [ModuleBin, FunctionBin, EncodedArgs] = binary:split(base64url:decode(EncodedHook), <<?SEPARATOR>>, [global]),
+    DecodedHook = base64url:decode(EncodedHook),
+    [ModuleBin, DecodedHookTail] = binary:split(DecodedHook, <<?SEPARATOR>>),
+    [FunctionBin, EncodedArgs] = binary:split(DecodedHookTail, <<?SEPARATOR>>),
     {binary_to_existing_atom(ModuleBin), binary_to_existing_atom(FunctionBin), EncodedArgs}.
 
 
