@@ -63,8 +63,7 @@ all() -> [
     #dir_spec{
         name = <<"get_child_datasets_test">>,
         dataset = #dataset_spec{
-            state = ?ATTACHED_DATASET,
-            protection_flags = [?METADATA_PROTECTION_BIN]
+            state = ?ATTACHED_DATASET
         },
         children = [#dir_spec{
             dataset = #dataset_spec{
@@ -91,7 +90,7 @@ all() -> [
                         #file_spec{dataset = #dataset_spec{state = ?DETACHED_DATASET}},
                         #file_spec{dataset = #dataset_spec{
                             state = ?DETACHED_DATASET,
-                            protection_flags = [?METADATA_PROTECTION_BIN]
+                            protection_flags = [?DATA_PROTECTION_BIN, ?METADATA_PROTECTION_BIN]
                         }}
                     ]
                 }]
@@ -102,7 +101,7 @@ all() -> [
         name = <<"get_file_dataset_summary_test">>,
         dataset = #dataset_spec{
             state = ?ATTACHED_DATASET,
-            protection_flags = [?METADATA_PROTECTION_BIN]
+            protection_flags = [?DATA_PROTECTION_BIN, ?METADATA_PROTECTION_BIN]
         },
         children = [#dir_spec{
             dataset = #dataset_spec{

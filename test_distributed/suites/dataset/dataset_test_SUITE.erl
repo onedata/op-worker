@@ -170,11 +170,10 @@ all() -> ?ALL([
 end).
 
 -define(RAND_PROTECTION_FLAGS(), begin
-    case rand:uniform(4) of
+    case rand:uniform(3) of
         1 -> ?no_flags_mask;
-        2 -> ?METADATA_PROTECTION;
-        3 -> ?DATA_PROTECTION;
-        4 -> ?set_flags(?METADATA_PROTECTION, ?DATA_PROTECTION)
+        2 -> ?DATA_PROTECTION;
+        3 -> ?ALL_PROTECTION
     end
 end).
 
@@ -396,7 +395,7 @@ remove_file_should_detach_dataset(_Config) ->
     SpaceId = oct_background:get_space_id(space1),
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     DirName = ?DIR_NAME(),
-    ProtectionFlags = ?METADATA_PROTECTION,
+    ProtectionFlags = ?no_flags_mask,
     {ok, Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, SpaceGuid, DirName, ?DEFAULT_DIR_PERMS),
     {ok, Path} = lfm_proxy:get_file_path(P1Node, UserSessIdP1, Guid),
     {ok, DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(Guid), ProtectionFlags)),
@@ -420,7 +419,7 @@ remove_hardlink_should_detach_dataset(_Config) ->
     SpaceId = oct_background:get_space_id(space1),
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     FileName = ?FILE_NAME(),
-    ProtectionFlags = ?METADATA_PROTECTION,
+    ProtectionFlags = ?no_flags_mask,
     {ok, FileGuid} = lfm_proxy:create(P1Node, UserSessIdP1, SpaceGuid, FileName, ?DEFAULT_DIR_PERMS),
     HardLinkName = <<FileName/binary, <<"_hard_link">>/binary>>,
     LinkPath = filename:join(["/", oct_background:get_space_name(space1), HardLinkName]),
@@ -445,7 +444,7 @@ remove_file_symlink_should_detach_dataset(_Config) ->
     SpaceId = oct_background:get_space_id(space1),
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     FileName = ?FILE_NAME(),
-    ProtectionFlags = ?METADATA_PROTECTION,
+    ProtectionFlags = ?no_flags_mask,
     {ok, FileGuid} = lfm_proxy:create(P1Node, UserSessIdP1, SpaceGuid, FileName, ?DEFAULT_DIR_PERMS),
     SymLinkName = <<FileName/binary, <<"_sym_link">>/binary>>,
     LinkPath = filename:join(["/", oct_background:get_space_name(space1), SymLinkName]),
@@ -472,7 +471,7 @@ remove_dir_symlink_should_detach_dataset(_Config) ->
     SpaceId = oct_background:get_space_id(space1),
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     DirName = ?DIR_NAME(),
-    ProtectionFlags = ?METADATA_PROTECTION,
+    ProtectionFlags = ?no_flags_mask,
     {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, SpaceGuid, DirName, ?DEFAULT_DIR_PERMS),
     SymLinkName = <<DirName/binary, <<"_sym_link">>/binary>>,
     LinkPath = filename:join(["/", oct_background:get_space_name(space1), SymLinkName]),
@@ -499,7 +498,7 @@ remove_file_pointed_by_hardlink(_Config) ->
     SpaceId = oct_background:get_space_id(space1),
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     FileName = ?FILE_NAME(),
-    ProtectionFlags = ?METADATA_PROTECTION,
+    ProtectionFlags = ?no_flags_mask,
     {ok, FileGuid} = lfm_proxy:create(P1Node, UserSessIdP1, SpaceGuid, FileName, ?DEFAULT_DIR_PERMS),
     HardLinkName = <<FileName/binary, <<"_hard_link">>/binary>>,
     LinkPath = filename:join(["/", oct_background:get_space_name(space1), HardLinkName]),
@@ -523,7 +522,7 @@ remove_file_pointed_by_symlink(_Config) ->
     SpaceId = oct_background:get_space_id(space1),
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     FileName = ?FILE_NAME(),
-    ProtectionFlags = ?METADATA_PROTECTION,
+    ProtectionFlags = ?no_flags_mask,
     {ok, FileGuid} = lfm_proxy:create(P1Node, UserSessIdP1, SpaceGuid, FileName, ?DEFAULT_DIR_PERMS),
     SymLinkName = <<FileName/binary, <<"_sym_link">>/binary>>,
     LinkPath = filename:join(["/", oct_background:get_space_name(space1), SymLinkName]),
@@ -549,7 +548,7 @@ remove_dir_pointed_by_symlink(_Config) ->
     SpaceId = oct_background:get_space_id(space1),
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     DirName = ?DIR_NAME(),
-    ProtectionFlags = ?METADATA_PROTECTION,
+    ProtectionFlags = ?no_flags_mask,
     {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, SpaceGuid, DirName, ?DEFAULT_DIR_PERMS),
     SymLinkName = <<DirName/binary, <<"_sym_link">>/binary>>,
     LinkPath = filename:join(["/", oct_background:get_space_name(space1), SymLinkName]),
@@ -574,7 +573,7 @@ reattach_if_root_file_is_deleted_should_fail(_Config) ->
     SpaceId = oct_background:get_space_id(space1),
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     DirName = ?DIR_NAME(),
-    ProtectionFlags = ?METADATA_PROTECTION,
+    ProtectionFlags = ?no_flags_mask,
     {ok, Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, SpaceGuid, DirName, ?DEFAULT_DIR_PERMS),
     {ok, Path} = lfm_proxy:get_file_path(P1Node, UserSessIdP1, Guid),
     {ok, DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(Guid), ProtectionFlags)),
@@ -600,7 +599,7 @@ reattach_if_hardlink_is_deleted_should_fail(_Config) ->
     SpaceId = oct_background:get_space_id(space1),
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     FileName = ?FILE_NAME(),
-    ProtectionFlags = ?METADATA_PROTECTION,
+    ProtectionFlags = ?no_flags_mask,
     {ok, FileGuid} = lfm_proxy:create(P1Node, UserSessIdP1, SpaceGuid, FileName, ?DEFAULT_DIR_PERMS),
     HardLinkName = <<FileName/binary, <<"_hard_link">>/binary>>,
     LinkPath = filename:join(["/", oct_background:get_space_name(space1), HardLinkName]),
@@ -629,7 +628,7 @@ reattach_if_file_symlink_is_deleted_should_fail(_Config) ->
     SpaceId = oct_background:get_space_id(space1),
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     FileName = ?FILE_NAME(),
-    ProtectionFlags = ?METADATA_PROTECTION,
+    ProtectionFlags = ?no_flags_mask,
     {ok, FileGuid} = lfm_proxy:create(P1Node, UserSessIdP1, SpaceGuid, FileName, ?DEFAULT_DIR_PERMS),
     SymLinkName = <<FileName/binary, <<"_sym_link">>/binary>>,
     LinkPath = filename:join(["/", oct_background:get_space_name(space1), SymLinkName]),
@@ -659,7 +658,7 @@ reattach_if_dir_symlink_is_deleted_should_fail(_Config) ->
     SpaceId = oct_background:get_space_id(space1),
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     DirName = ?DIR_NAME(),
-    ProtectionFlags = ?METADATA_PROTECTION,
+    ProtectionFlags = ?no_flags_mask,
     {ok, DirGuid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, SpaceGuid, DirName, ?DEFAULT_DIR_PERMS),
     SymLinkName = <<DirName/binary, <<"_sym_link">>/binary>>,
     LinkPath = filename:join(["/", oct_background:get_space_name(space1), SymLinkName]),
@@ -688,7 +687,7 @@ remove_detached_dataset_if_root_file_has_already_been_deleted(_Config) ->
     SpaceId = oct_background:get_space_id(space1),
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     DirName = ?DIR_NAME(),
-    ProtectionFlags = ?METADATA_PROTECTION,
+    ProtectionFlags = ?no_flags_mask,
     {ok, Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, SpaceGuid, DirName, ?DEFAULT_DIR_PERMS),
     {ok, Path} = lfm_proxy:get_file_path(P1Node, UserSessIdP1, Guid),
     {ok, DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(Guid), ProtectionFlags)),
@@ -747,7 +746,7 @@ establish_nested_datasets_structure(_Config) ->
     SpaceName = oct_background:get_space_name(space1),
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     DirNamePrefix = ?DIR_NAME(),
-    ProtectionFlags = ?METADATA_PROTECTION,
+    ProtectionFlags = ?no_flags_mask,
     {ok, SpaceDatasetId} = opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(SpaceGuid), ProtectionFlags),
 
     GuidsAndDatasetsReversed = lists:foldl(fun(N, AccIn = [{ParentGuid, _, _} | _]) ->
@@ -813,7 +812,7 @@ all_files_in_dataset_should_have_ancestor_dataset_membership(_Config) ->
     UserSessIdP1 = oct_background:get_user_session_id(user1, krakow),
     SpaceId = oct_background:get_space_id(space1),
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
-    ProtectionFlags = ?METADATA_PROTECTION,
+    ProtectionFlags = ?no_flags_mask,
     {ok, SpaceDatasetId} = opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(SpaceGuid), ProtectionFlags),
     {DirGuids, FileGuids} = lfm_test_utils:create_files_tree(P1Node, UserSessIdP1, [{10, 10}, {10, 10}], SpaceGuid),
 
@@ -834,7 +833,7 @@ rename_file_should_rename_attached_dataset(_Config) ->
     SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
     DirName = ?DIR_NAME(),
     NewDirName = ?DIR_NAME(),
-    ProtectionFlags = ?METADATA_PROTECTION,
+    ProtectionFlags = ?no_flags_mask,
 
     {ok, Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, SpaceGuid, DirName, ?DEFAULT_DIR_PERMS),
     {ok, DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(Guid), ProtectionFlags)),
@@ -880,7 +879,7 @@ move_file_should_move_attached_dataset(_Config) ->
     DirName = ?DIR_NAME(),
     TargetParentName = ?DIR_NAME(),
     NewDirName = ?DIR_NAME(),
-    ProtectionFlags = ?METADATA_PROTECTION,
+    ProtectionFlags = ?no_flags_mask,
 
     {ok, Guid} = lfm_proxy:mkdir(P1Node, UserSessIdP1, SpaceGuid, DirName, ?DEFAULT_DIR_PERMS),
     {ok, DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(Guid), ProtectionFlags)),
@@ -1053,12 +1052,12 @@ establish_nested_datasets_filetree_structure_with_hardlinks(_Config) ->
 
     % establish datasets on choosen dirs
     {ok, DirLvl2DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(DirLvl2Guid), ?no_flags_mask)),
-    {ok, DirLvl3DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(DirLvl3Guid), ?METADATA_PROTECTION)),
+    {ok, DirLvl3DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(DirLvl3Guid), ?ALL_PROTECTION)),
     {ok, DirLvl4DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(DirLvl4Guid), ?DATA_PROTECTION)),
 
     % establish datasets on choosen hardlinks
     {ok, Link1DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(Link1Guid), ?no_flags_mask)),
-    {ok, Link3DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(Link3Guid), ?METADATA_PROTECTION)),
+    {ok, Link3DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(Link3Guid), ?ALL_PROTECTION)),
     {ok, Link4DatasetId} = ?assertMatch({ok, _}, opt_datasets:establish(P1Node, UserSessIdP1, ?FILE_REF(Link4Guid), ?DATA_PROTECTION)),
 
     %%===================================================================
@@ -1067,23 +1066,23 @@ establish_nested_datasets_filetree_structure_with_hardlinks(_Config) ->
     %%    Dataset| Flags |     EffFlags
     %%    -------+-------+--------------------
     %%    Dir2/D |  ---  |        ---
-    %%    Dir3/D |   M   |         M
+    %%    Dir3/D |  M+D  |        M+D
     %%    Dir4/D |   D   |        M+D
     %%    Link1/D|  ---  |        ---
-    %%    Link3/D|   M   |         M
+    %%    Link3/D|  M+D  |        M+D
     %%    Link4/D|   D   |        M+D
     %%    File/D |  ---  |        M+D
     %%
     %%    File   | EffFlagsSinglePath | FinalEffFlags
     %%    -------+--------------------+--------------
     %%    Dir2/D |        ---         |      ---
-    %%    Dir3/D |         M          |       M
+    %%    Dir3/D |        M+D         |      M+D
     %%    Dir4/D |        M+D         |      M+D
     %%    DirA5  |        M+D         |      M+D
     %%    DirB5  |        M+D         |      M+D
     %%    Link1/D|        ---         |      M+D
     %%    Link2  |        ---         |      M+D
-    %%    Link3/D|         M          |      M+D
+    %%    Link3/D|        M+D         |      M+D
     %%    Link4/D|        M+D         |      M+D
     %%    Link5  |        M+D         |      M+D
     %%    File/D |        M+D         |      M+D
@@ -1097,8 +1096,8 @@ establish_nested_datasets_filetree_structure_with_hardlinks(_Config) ->
     ?assertAttachedDataset(P1Node, UserSessIdP1, DirLvl4DatasetId, DirLvl4Guid, DirLvl3DatasetId, ?DATA_PROTECTION, ?ALL_PROTECTION),
     ?assertFileEffDatasetSummaryAndMembership(P1Node, UserSessIdP1, DirLvl4Guid, DirLvl4DatasetId, [DirLvl3DatasetId, DirLvl2DatasetId], ?DIRECT_AND_ANCESTOR_MEMBERSHIP, ?ALL_PROTECTION),
 
-    ?assertAttachedDataset(P1Node, UserSessIdP1, DirLvl3DatasetId, DirLvl3Guid, DirLvl2DatasetId, ?METADATA_PROTECTION, ?METADATA_PROTECTION),
-    ?assertFileEffDatasetSummaryAndMembership(P1Node, UserSessIdP1, DirLvl3Guid, DirLvl3DatasetId, [DirLvl2DatasetId], ?DIRECT_AND_ANCESTOR_MEMBERSHIP, ?METADATA_PROTECTION),
+    ?assertAttachedDataset(P1Node, UserSessIdP1, DirLvl3DatasetId, DirLvl3Guid, DirLvl2DatasetId, ?ALL_PROTECTION, ?ALL_PROTECTION),
+    ?assertFileEffDatasetSummaryAndMembership(P1Node, UserSessIdP1, DirLvl3Guid, DirLvl3DatasetId, [DirLvl2DatasetId], ?DIRECT_AND_ANCESTOR_MEMBERSHIP, ?ALL_PROTECTION),
 
     ?assertAttachedDataset(P1Node, UserSessIdP1, DirLvl2DatasetId, DirLvl2Guid, undefined, ?no_flags_mask, ?no_flags_mask),
     ?assertFileEffDatasetSummaryAndMembership(P1Node, UserSessIdP1, DirLvl2Guid, DirLvl2DatasetId, [], ?DIRECT_MEMBERSHIP, ?no_flags_mask),
@@ -1107,7 +1106,7 @@ establish_nested_datasets_filetree_structure_with_hardlinks(_Config) ->
     ?assertAttachedDataset(P1Node, UserSessIdP1, Link4DatasetId, Link4Guid, DirLvl4DatasetId, ?DATA_PROTECTION, ?ALL_PROTECTION),
     ?assertFileEffDatasetSummaryAndMembership(P1Node, UserSessIdP1, Link4Guid, Link4DatasetId, [DirLvl4DatasetId, DirLvl3DatasetId, DirLvl2DatasetId], ?DIRECT_AND_ANCESTOR_MEMBERSHIP, ?ALL_PROTECTION),
 
-    ?assertAttachedDataset(P1Node, UserSessIdP1, Link3DatasetId, Link3Guid, DirLvl3DatasetId, ?METADATA_PROTECTION, ?METADATA_PROTECTION),
+    ?assertAttachedDataset(P1Node, UserSessIdP1, Link3DatasetId, Link3Guid, DirLvl3DatasetId, ?ALL_PROTECTION, ?ALL_PROTECTION),
     ?assertFileEffDatasetSummaryAndMembership(P1Node, UserSessIdP1, Link3Guid, Link3DatasetId, [DirLvl3DatasetId, DirLvl2DatasetId], ?DIRECT_AND_ANCESTOR_MEMBERSHIP, ?ALL_PROTECTION),
 
     ?assertAttachedDataset(P1Node, UserSessIdP1, Link1DatasetId, Link1Guid, undefined, ?no_flags_mask, ?no_flags_mask),
