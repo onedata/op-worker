@@ -454,14 +454,14 @@ create_missing_parent_dirs(UserCtx, FileCtx) ->
 -spec create_missing_parent_dirs_by_location(user_ctx:ctx(), file_ctx:ctx()) -> file_ctx:ctx().
 create_missing_parent_dirs_by_location(UserCtx, FileCtx) ->
     ReferencedUuidBasedFileCtx = file_ctx:ensure_based_on_referenced_guid(FileCtx),
-    {StorageFileId, FileCtx2} = file_ctx:get_storage_file_id(ReferencedUuidBasedFileCtx),
-    {StorageId, FileCtx3} = file_ctx:get_storage_id(FileCtx2),
+    {StorageFileId, ReferencedUuidBasedFileCtx2} = file_ctx:get_storage_file_id(ReferencedUuidBasedFileCtx),
+    {StorageId, ReferencedUuidBasedFileCtx3} = file_ctx:get_storage_id(ReferencedUuidBasedFileCtx2),
     [<<"/">>, SpaceId | PathTokens] = filepath_utils:split(filepath_utils:parent_dir(StorageFileId)),
     % Use uuid of given file as we do not know uuid of parent - this function is called if there is some inconsistency
     % in metadata and file_location is pointing to another path than it is resolved based on file meta, this can happen
     % when ancestor directory was moved on other provider and local file location was created without file being created on storage.
     % This uuid is only used to check if this is the space dir, which it is not, so we can safely do it.
-    DummyUuid = file_ctx:get_logical_uuid_const(FileCtx3),
+    DummyUuid = datastore_key:new(),
     lists:foldl(fun(PathToken, ParentPath) ->
         Path = filepath_utils:join([ParentPath, PathToken]),
         SDHandle = storage_driver:new_handle(user_ctx:get_session_id(UserCtx), SpaceId, DummyUuid, StorageId, Path),
@@ -475,7 +475,7 @@ create_missing_parent_dirs_by_location(UserCtx, FileCtx) ->
     end, filepath_utils:join([<<"/">>, SpaceId]), PathTokens),
     case file_ctx:equals(FileCtx, ReferencedUuidBasedFileCtx) of
         true -> % regular file - use provided ctx
-            FileCtx3;
+            ReferencedUuidBasedFileCtx3;
         false -> % hardlink - use effective ctx and do not return changes on ctx
             FileCtx
     end.
