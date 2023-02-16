@@ -33,6 +33,9 @@
 
 -export_type([instance/0]).
 
+% List of files and directories directly in transfer root directory that will be ignored during transfer.
+-define(IGNORED_TOP_FILES, op_worker:get_env(ignored_top_files, [])).
+
 
 %%%===================================================================
 %%% API
@@ -75,8 +78,16 @@ get_next_batch(UserCtx, Limit, Iterator = #transfer_file_tree_iterator{
             _ -> more
         end,
 
-        Results = lists:map(fun({_Path, #file_attr{guid = FileGuid}}) ->
-            {ok, file_ctx:new_by_guid(FileGuid)}
+        Results = lists:filtermap(fun({Path, #file_attr{guid = FileGuid}}) ->
+            case filepath_utils:split(Path) of
+                [PathToken | _] ->
+                    case lists:member(PathToken, ?IGNORED_TOP_FILES) of
+                        true -> false;
+                        false -> {true, {ok, file_ctx:new_by_guid(FileGuid)}}
+                    end;
+                _ ->
+                    {true, {ok, file_ctx:new_by_guid(FileGuid)}}
+            end
         end, Entries),
 
         NewIterator = Iterator#transfer_file_tree_iterator{
