@@ -103,7 +103,7 @@ start(ArchiveDoc, DatasetDoc, UserCtx) ->
                 {ok, _} = tree_traverse:run(?POOL_NAME, DatasetRootCtx2, UserId, Options),
                 ok
             catch Class:Reason:Stacktrace ->
-                ?error_stacktrace("Unexpected error when trying to setup archive: ~p: ~p", [Class, Reason], Stacktrace),
+                ?error_exception(Class, Reason, Stacktrace),
                 {error, datastore_runner:normalize_error(Reason)}
             end;
         {error, _} = Error ->

@@ -41,11 +41,11 @@
 -define(RAND_NAME(), str_utils:rand_hex(20)).
 -define(RAND_SIZE(), rand:uniform(50)).
 -define(RAND_CONTENT(), crypto:strong_rand_bytes(?RAND_SIZE())).
--define(RAND_JSON_METADATA(), begin
+-define(RAND_JSON_METADATA(),
     lists:foldl(fun(_, AccIn) ->
         AccIn#{?RAND_NAME() => ?RAND_NAME()}
     end, #{}, lists:seq(1, rand:uniform(10)))
-end).
+).
 
 -define(SPACE, space_krk_par_p).
 -define(USER1, user1).
@@ -104,9 +104,7 @@ archive_simple_dataset_test(Guid, DatasetId, ArchiveId) ->
 
 verification_modify_file_base(Layout) ->
     ModificationFun = fun(Node, _DirGuid, FileGuid, _FileName, _Content, _Metadata) ->
-        {ok, H} = lfm_proxy:open(Node, ?ROOT_SESS_ID, #file_ref{guid = FileGuid}, write),
-        {ok, _} = lfm_proxy:write(Node, H, 0, ?RAND_CONTENT()),
-        ok = lfm_proxy:close(Node, H)
+        ok = lfm_test_utils:write_file(Node, ?ROOT_SESS_ID, FileGuid, ?RAND_CONTENT())
     end,
     simple_verification_test_base(Layout, ModificationFun).
 
@@ -142,10 +140,7 @@ verification_create_file_base(Layout) ->
 verification_recreate_file_base(Layout) ->
     ModificationFun = fun(Node, DirGuid, FileGuid, FileName, Content, Metadata) ->
         ok = lfm_proxy:unlink(Node, ?ROOT_SESS_ID, #file_ref{guid = FileGuid}),
-        {ok, NewFileGuid} = lfm_proxy:create(Node, ?ROOT_SESS_ID, DirGuid, FileName, ?DEFAULT_FILE_MODE),
-        {ok, H} = lfm_proxy:open(Node, ?ROOT_SESS_ID, #file_ref{guid = NewFileGuid}, write),
-        {ok, _} = lfm_proxy:write(Node, H, 0, Content),
-        ok = lfm_proxy:close(Node, H),
+        {ok, NewFileGuid} = lfm_test_utils:create_and_write_file(Node, ?ROOT_SESS_ID, DirGuid, FileName, 0, Content),
         ok = opt_file_metadata:set_custom_metadata(Node, ?ROOT_SESS_ID, #file_ref{guid = NewFileGuid}, json, Metadata, [])
     end,
     simple_verification_test_base(Layout, ModificationFun).
@@ -170,9 +165,9 @@ simple_verification_test_base(Layout, ModificationFun) ->
     [Provider | _] = oct_background:get_space_supporting_providers(?SPACE),
     Node = oct_background:get_random_provider_node(Provider),
     SessionId = oct_background:get_user_session_id(?USER1, Provider),
-    ?assertMatch({ok, #document{value = #archive{state = ?ARCHIVE_VERIFYING}}}, rpc:call(Node, archive, get, [ArchiveId]), ?SMALL_ATTEMPTS),
+    ?assertMatch({ok, #document{value = #archive{state = ?ARCHIVE_VERIFYING}}}, ?rpc(Provider, archive:get(ArchiveId)), ?SMALL_ATTEMPTS),
     
-    {ok, ArchiveDataDirGuid} = rpc:call(Node, archive, get_data_dir_guid, [ArchiveId]),
+    {ok, ArchiveDataDirGuid} = ?rpc(Provider, archive:get_data_dir_guid(ArchiveId)),
     {ok, [{ArchivedDirGuid, _}]} = lfm_proxy:get_children(Node, SessionId, #file_ref{guid = ArchiveDataDirGuid}, 0, 1),
     {ok, [{ArchivedFileGuid, ArchivedFileName}]} = lfm_proxy:get_children(Node, SessionId, #file_ref{guid = ArchivedDirGuid}, 0, 1),
     
@@ -180,7 +175,7 @@ simple_verification_test_base(Layout, ModificationFun) ->
     
     archive_tests_utils:start_verification_traverse(Pid, ArchiveId),
     
-    ?assertMatch({ok, #document{value = #archive{state = ?ARCHIVE_VERIFICATION_FAILED}}}, rpc:call(Node, archive, get, [ArchiveId]), ?SMALL_ATTEMPTS).
+    ?assertMatch({ok, #document{value = #archive{state = ?ARCHIVE_VERIFICATION_FAILED}}}, ?rpc(Provider, archive:get(ArchiveId)), ?SMALL_ATTEMPTS).
 
 
 dip_verification_test_base(Layout) ->
@@ -196,14 +191,13 @@ dip_verification_test_base(Layout) ->
         }),
     
     [Provider | _] = oct_background:get_space_supporting_providers(?SPACE),
-    Node = oct_background:get_random_provider_node(Provider),
     
-    {ok, #document{value = #archive{related_dip = DipArchiveId}}} = rpc:call(Node, archive, get, [AipArchiveId]),
+    {ok, #document{value = #archive{related_dip = DipArchiveId}}} = ?rpc(Provider, archive:get(AipArchiveId)),
     
     lists:foreach(fun(ArchiveId) ->
         {ok, Pid} = archive_tests_utils:wait_for_archive_verification_traverse(ArchiveId, ?SMALL_ATTEMPTS),
         archive_tests_utils:start_verification_traverse(Pid, ArchiveId),
-        ?assertMatch({ok, #document{value = #archive{state = ?ARCHIVE_PRESERVED}}}, rpc:call(Node, archive, get, [ArchiveId]), ?SMALL_ATTEMPTS)
+        ?assertMatch({ok, #document{value = #archive{state = ?ARCHIVE_PRESERVED}}}, ?rpc(Provider, archive:get(ArchiveId)), ?SMALL_ATTEMPTS)
     end, [AipArchiveId, DipArchiveId]).
 
 
@@ -227,13 +221,12 @@ nested_verification_test_base(Layout) ->
         }),
     
     [Provider | _] = oct_background:get_space_supporting_providers(?SPACE),
-    Node = oct_background:get_random_provider_node(Provider),
     
-    {ok, {[{_, NestedArchiveId1} | _], _}} = opt_archives:list(Node, ?ROOT_SESS_ID, NestedDatasetId1, #{offset => 0, limit => 1}),
-    {ok, {[{_, NestedArchiveId2} | _], _}} = opt_archives:list(Node, ?ROOT_SESS_ID, NestedDatasetId2, #{offset => 0, limit => 1}),
+    {ok, {[{_, NestedArchiveId1} | _], _}} = opt_archives:list(Provider, ?ROOT_SESS_ID, NestedDatasetId1, #{offset => 0, limit => 1}),
+    {ok, {[{_, NestedArchiveId2} | _], _}} = opt_archives:list(Provider, ?ROOT_SESS_ID, NestedDatasetId2, #{offset => 0, limit => 1}),
     
     lists:foreach(fun(Id) ->
         {ok, Pid} = archive_tests_utils:wait_for_archive_verification_traverse(Id, ?SMALL_ATTEMPTS),
         archive_tests_utils:start_verification_traverse(Pid, Id),
-        ?assertMatch({ok, #document{value = #archive{state = ?ARCHIVE_PRESERVED}}}, rpc:call(Node, archive, get, [Id]), ?SMALL_ATTEMPTS)
+        ?assertMatch({ok, #document{value = #archive{state = ?ARCHIVE_PRESERVED}}}, ?rpc(Provider, archive:get(Id)), ?SMALL_ATTEMPTS)
     end, [NestedArchiveId1, NestedArchiveId2, ArchiveId]).

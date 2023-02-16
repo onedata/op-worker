@@ -18,6 +18,7 @@
 -include("modules/dataset/archive.hrl").
 -include("modules/dataset/archivisation_tree.hrl").
 -include("proto/oneprovider/provider_messages.hrl").
+-include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("onenv_ct/include/oct_background.hrl").
 
@@ -265,7 +266,7 @@ errors_test_base(TraverseType, JobType) ->
 
 
 audit_log_test_base(ExpectedState, FailedFileType) ->
-    Timestamp = opw_test_rpc:call(oct_background:get_random_provider_node(krakow), global_clock, timestamp_millis, []),
+    Timestamp = time_test_utils:get_frozen_time_millis(),
     #object{
         name = DirName,
         dataset = #dataset_object{archives = [#archive_object{id = ArchiveId}]},
@@ -285,11 +286,7 @@ audit_log_test_base(ExpectedState, FailedFileType) ->
     end,
     
     % error mocked in mock_job_function_error/2
-    ErrorReasonJson = #{
-        <<"description">> => <<"Operation failed with POSIX error: enoent.">>,
-        <<"details">> => #{<<"errno">> => <<"enoent">>},
-        <<"id">> => <<"posix">>
-    },
+    ErrorReasonJson = errors:to_json(?ERROR_POSIX(?ENOENT)),
     
     ExpectedLogsTemplates = case {ExpectedState, FailedFileType} of
         {?ARCHIVE_PRESERVED, _} -> [
@@ -425,27 +422,30 @@ finalize_archive_creation(FunctionName) ->
 %===================================================================
 
 init_per_suite(Config) ->
-    oct_background:init_per_suite(Config, #onenv_test_config{
-        onenv_scenario = "2op-archive",
-        envs = [{op_worker, op_worker, [
-            {fuse_session_grace_period_seconds, 24 * 60 * 60},
-            {provider_token_ttl_sec, 24 * 60 * 60}
-        ]}]
-    }).
+    oct_background:init_per_suite(
+        [{?LOAD_MODULES, [?MODULE, archive_tests_utils, dir_stats_test_utils, archive_sequential_test_base]} | Config],
+        #onenv_test_config{
+            onenv_scenario = "2op-archive",
+            envs = [{op_worker, op_worker, [
+                {fuse_session_grace_period_seconds, 24 * 60 * 60},
+                {provider_token_ttl_sec, 24 * 60 * 60}
+            ]}]
+        }
+    ).
 
 end_per_suite(_Config) ->
     oct_background:end_per_suite().
 
 
 init_per_group(audit_log_tests, Config) ->
-    ok = clock_freezer_mock:setup_for_ct(oct_background:get_all_providers_nodes(), [global_clock]),
+    time_test_utils:freeze_time(Config),
     init_per_group(default, Config);
 init_per_group(_Group, Config) ->
     Config2 = oct_background:update_background_config(Config),
     lfm_proxy:init(Config2, false).
 
 end_per_group(_Group, Config) ->
-    clock_freezer_mock:teardown_for_ct(oct_background:get_all_providers_nodes()),
+    time_test_utils:unfreeze_time(Config),
     lfm_proxy:teardown(Config).
 
 init_per_testcase(delete_not_finished_archive_error, Config) ->

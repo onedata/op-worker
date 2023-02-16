@@ -182,11 +182,11 @@ all() -> [
 -define(ARCHIVE_ID(), ?RAND_NAME(<<"archiveId">>)).
 -define(USER_ID(), ?RAND_NAME(<<"userId">>)).
 
--define(RAND_JSON_METADATA(), begin
+-define(RAND_JSON_METADATA(),
     lists:foldl(fun(_, AccIn) ->
         AccIn#{?RAND_NAME() => ?RAND_NAME()}
     end, #{}, lists:seq(1, rand:uniform(10)))
-end).
+).
 
 %===================================================================
 % Parallel tests - tests which can be safely run in parallel
