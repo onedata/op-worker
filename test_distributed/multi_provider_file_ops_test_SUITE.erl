@@ -1208,6 +1208,7 @@ recreate_dir_on_storage(Config0) ->
 
     % Mock to prevent storage file creation (only metadata will be set)
     ?assertEqual(ok, test_utils:mock_new(Workers, storage_driver)),
+    ?assertEqual(ok, test_utils:mock_expect(Workers, storage_driver, mkdir, fun(_SDHandle, _Mode) -> ok end)),
     ?assertEqual(ok, test_utils:mock_expect(Workers, storage_driver, mkdir, fun(_SDHandle, _Mode, _Recursive) -> ok end)),
 
     % Create dirs and file on worker1
