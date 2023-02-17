@@ -215,8 +215,8 @@ handle_cast({flush, NotifyFun}, #state{ctx = Ctx} = State) ->
     ),
     {noreply, NewState#state{ctx = maps:remove(notify, NewCtx)}};
 
-handle_cast(_Request, State) ->
-    ?log_bad_request(_Request),
+handle_cast(Request, State) ->
+    ?log_bad_request(Request),
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -249,8 +249,8 @@ handle_info({periodic_emission, Ref}, #state{emission_ref = Ref} = State) ->
 handle_info({periodic_emission, _}, State) ->
     {noreply, State};
 
-handle_info(_Info, State) ->
-    ?log_bad_request(_Info),
+handle_info(Info, State) ->
+    ?log_bad_request(Info),
     {noreply, State}.
 
 %%--------------------------------------------------------------------

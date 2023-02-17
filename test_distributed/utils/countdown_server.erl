@@ -219,8 +219,8 @@ handle_call(?INIT(0, IdOrUndefined), _From, State = #state{
 handle_call(?INIT(ToVerify, IdOrUndefined), _From, State = #state{counters = Tasks}) ->
     Id = ensure_id(IdOrUndefined),
     {reply, Id, State#state{counters = Tasks#{Id => #counter{value = ToVerify}}}};
-handle_call(_Request, _From, State) ->
-    ?log_bad_request(_Request),
+handle_call(Request, _From, State) ->
+    ?log_bad_request(Request),
     {reply, {error, wrong_request}, State}.
 
 
@@ -264,14 +264,14 @@ handle_cast(?DECREASE(Data, CounterId), State = #state{
                     {noreply, State#state{counters = maps:update(CounterId, Counter2, Counters)}}
             end
     end;
-handle_cast(_Request, State) ->
-    ?log_bad_request(_Request),
+handle_cast(Request, State) ->
+    ?log_bad_request(Request),
     {noreply, State}.
 
 -spec handle_info(Info :: timeout() | term(), State :: #state{}) ->
     {noreply, NewState :: #state{}}.
-handle_info(_Info, State) ->
-    ?log_bad_request(_Info),
+handle_info(Info, State) ->
+    ?log_bad_request(Info),
     {noreply, State}.
 
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
