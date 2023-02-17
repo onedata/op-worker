@@ -34,6 +34,8 @@ exec(?ECHO_WITH_SLEEP_DOCKER_IMAGE_ID, #{
     <<"ctx">> := #{<<"heartbeatUrl">> := HeartbeatUrl},
     <<"argsBatch">> := ArgsBatch
 }) ->
+    %% TODO VFS-10550 rm after fixing race when first heartbeat comes before job is registered
+    timer:sleep(timer:seconds(1)),
     % Send heartbeat to inform op about job processing start
     http_client:post(HeartbeatUrl),
 

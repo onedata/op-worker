@@ -76,7 +76,7 @@
 
 -define(TASK1_SELECTOR(__ATM_LANE_RUN_SELECTOR), {__ATM_LANE_RUN_SELECTOR, <<"pb1">>, <<"task1">>}).
 
--define(ATTEMPTS, 180).
+-define(ATTEMPTS, 300).  %% large num for slow bamboo -.-
 
 
 %%%===================================================================

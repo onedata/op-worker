@@ -476,6 +476,7 @@ job_failure_atm_workflow_execution_test_base(JobFailureTestSpec = #fail_atm_work
     atm_workflow_schema_draft = AtmWorkflowSchemaDraft
 }) ->
     atm_workflow_execution_test_runner:run(#atm_workflow_execution_test_spec{
+        test_gc = false,
         workflow_schema_dump_or_draft = AtmWorkflowSchemaDraft,
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,
