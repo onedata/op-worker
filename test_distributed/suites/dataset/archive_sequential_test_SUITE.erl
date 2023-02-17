@@ -200,7 +200,9 @@ delete_nested_archive_error(_Config) ->
     
     archive_tests_utils:assert_archive_is_preserved(Node, SessionId, ArchiveId, DatasetId, FileGuid, 1, 0, ?ATTEMPTS),
     ?assertEqual(?ERROR_NESTED_ARCHIVE_DELETION_FORBIDDEN(ParentArchiveId), opt_archives:delete(Node, SessionId, ArchiveId)),
-    ?assertEqual(ok, opt_archives:delete(Node, SessionId, ParentArchiveId)).
+    ?assertEqual(ok, opt_archives:delete(Node, SessionId, ParentArchiveId)),
+    ?assertEqual(?ERROR_NOT_FOUND, opt_archives:get_info(Node, SessionId, ArchiveId)),
+    ?assertEqual(?ERROR_NOT_FOUND, opt_archives:get_info(Node, SessionId, ParentArchiveId)).
 
 
 delete_not_finished_archive_error(_Config) ->

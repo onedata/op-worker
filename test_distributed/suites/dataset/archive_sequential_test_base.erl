@@ -175,7 +175,8 @@ simple_verification_test_base(Layout, ModificationFun) ->
     
     archive_tests_utils:start_verification_traverse(Pid, ArchiveId),
     
-    ?assertMatch({ok, #document{value = #archive{state = ?ARCHIVE_VERIFICATION_FAILED}}}, ?rpc(Provider, archive:get(ArchiveId)), ?SMALL_ATTEMPTS).
+    SessId = oct_background:get_user_session_id(?USER1, Provider),
+    ?assertMatch({ok, #archive_info{state = ?ARCHIVE_VERIFICATION_FAILED}}, opt_archives:get_info(Provider, SessId, ArchiveId), ?SMALL_ATTEMPTS).
 
 
 dip_verification_test_base(Layout) ->
@@ -194,10 +195,11 @@ dip_verification_test_base(Layout) ->
     
     {ok, #document{value = #archive{related_dip = DipArchiveId}}} = ?rpc(Provider, archive:get(AipArchiveId)),
     
+    SessId = oct_background:get_user_session_id(?USER1, Provider),
     lists:foreach(fun(ArchiveId) ->
         {ok, Pid} = archive_tests_utils:wait_for_archive_verification_traverse(ArchiveId, ?SMALL_ATTEMPTS),
         archive_tests_utils:start_verification_traverse(Pid, ArchiveId),
-        ?assertMatch({ok, #document{value = #archive{state = ?ARCHIVE_PRESERVED}}}, ?rpc(Provider, archive:get(ArchiveId)), ?SMALL_ATTEMPTS)
+        ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}}, opt_archives:get_info(Provider, SessId, ArchiveId), ?SMALL_ATTEMPTS)
     end, [AipArchiveId, DipArchiveId]).
 
 
@@ -225,8 +227,9 @@ nested_verification_test_base(Layout) ->
     {ok, {[{_, NestedArchiveId1} | _], _}} = opt_archives:list(Provider, ?ROOT_SESS_ID, NestedDatasetId1, #{offset => 0, limit => 1}),
     {ok, {[{_, NestedArchiveId2} | _], _}} = opt_archives:list(Provider, ?ROOT_SESS_ID, NestedDatasetId2, #{offset => 0, limit => 1}),
     
+    SessId = oct_background:get_user_session_id(?USER1, Provider),
     lists:foreach(fun(Id) ->
         {ok, Pid} = archive_tests_utils:wait_for_archive_verification_traverse(Id, ?SMALL_ATTEMPTS),
         archive_tests_utils:start_verification_traverse(Pid, Id),
-        ?assertMatch({ok, #document{value = #archive{state = ?ARCHIVE_PRESERVED}}}, ?rpc(Provider, archive:get(Id)), ?SMALL_ATTEMPTS)
+        ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}}, opt_archives:get_info(Provider, SessId, Id), ?SMALL_ATTEMPTS)
     end, [NestedArchiveId1, NestedArchiveId2, ArchiveId]).
