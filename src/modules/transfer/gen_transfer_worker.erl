@@ -285,7 +285,7 @@ transfer_data(State = #state{mod = Mod}, FileCtx0, TransferJobCtx, RetriesLeft) 
             {error, already_ended};
         error:{badmatch, Error = {error, not_found}} ->
             maybe_retry(FileCtx0, TransferJobCtx, RetriesLeft, Error);
-        Class:Reason:Stacktrace   ->
+        Class:Reason:Stacktrace ->
             ?error_exception(
                 "Unexpected error during transfer ~p", [TransferJobCtx#transfer_job_ctx.transfer_id],
                 Class, Reason, Stacktrace
@@ -331,8 +331,13 @@ maybe_retry(FileCtx, TransferJobCtx, 0, Error) ->
 
     ?error(
         "Transfer of file ~p in scope of transfer ~p failed~n"
+        "FilePath: ~ts~n"
         "Error was: ~p~n"
-        "No retries left", [Path, TransferId, Error]
+        "No retries left", [
+            file_ctx:get_logical_guid_const(FileCtx), TransferId,
+            Path,
+            Error
+        ]
     ),
     {error, retries_per_file_transfer_exceeded};
 maybe_retry(FileCtx, TransferJobCtx, Retries, Error) ->
@@ -341,9 +346,14 @@ maybe_retry(FileCtx, TransferJobCtx, Retries, Error) ->
 
     ?warning(
         "Transfer of file ~p in scope of transfer ~p failed~n"
+        "FilePath: ~ts~n"
         "Error was: ~p~n"
-        "File transfer will be retried (attempts left: ~p)",
-        [Path, TransferId, Error, Retries - 1]
+        "File transfer will be retried (attempts left: ~p)", [
+            file_ctx:get_logical_guid_const(FileCtx), TransferId,
+            Path,
+            Error,
+            Retries - 1
+        ]
     ),
     {retry, FileCtx2}.
 
