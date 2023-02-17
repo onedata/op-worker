@@ -176,7 +176,7 @@ simple_verification_test_base(Layout, ModificationFun) ->
     archive_tests_utils:start_verification_traverse(Pid, ArchiveId),
     
     SessId = oct_background:get_user_session_id(?USER1, Provider),
-    ?assertMatch({ok, #archive_info{state = ?ARCHIVE_VERIFICATION_FAILED}}, opt_archives:get_info(Provider, SessId, ArchiveId), ?SMALL_ATTEMPTS).
+    ?assertMatch({ok, ?ARCHIVE_VERIFICATION_FAILED}, opt_archives:lookup_state(Provider, SessId, ArchiveId), ?SMALL_ATTEMPTS).
 
 
 dip_verification_test_base(Layout) ->
@@ -199,7 +199,7 @@ dip_verification_test_base(Layout) ->
     lists:foreach(fun(ArchiveId) ->
         {ok, Pid} = archive_tests_utils:wait_for_archive_verification_traverse(ArchiveId, ?SMALL_ATTEMPTS),
         archive_tests_utils:start_verification_traverse(Pid, ArchiveId),
-        ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}}, opt_archives:get_info(Provider, SessId, ArchiveId), ?SMALL_ATTEMPTS)
+        ?assertMatch({ok, ?ARCHIVE_PRESERVED}, opt_archives:lookup_state(Provider, SessId, ArchiveId), ?SMALL_ATTEMPTS)
     end, [AipArchiveId, DipArchiveId]).
 
 
@@ -231,5 +231,5 @@ nested_verification_test_base(Layout) ->
     lists:foreach(fun(Id) ->
         {ok, Pid} = archive_tests_utils:wait_for_archive_verification_traverse(Id, ?SMALL_ATTEMPTS),
         archive_tests_utils:start_verification_traverse(Pid, Id),
-        ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}}, opt_archives:get_info(Provider, SessId, Id), ?SMALL_ATTEMPTS)
+        ?assertMatch({ok, ?ARCHIVE_PRESERVED}, opt_archives:lookup_state(Provider, SessId, Id), ?SMALL_ATTEMPTS)
     end, [NestedArchiveId1, NestedArchiveId2, ArchiveId]).
