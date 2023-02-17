@@ -51,6 +51,9 @@
 -define(SEPARATOR, <<"#">>).
 -define(QOS_TRANSFER_ID(TaskId, FileUuid), <<TaskId/binary, (?SEPARATOR)/binary, FileUuid/binary>>).
 
+% List of files and directories names that will be ignored.
+-define(IGNORED_FILES, op_worker:get_env(ignored_top_files, [])).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -72,8 +75,20 @@ start(FileCtx, QosEntries, TaskId) ->
             <<"uuid">> => file_ctx:get_referenced_uuid_const(FileCtx)
         }
     },
-    FileCtx2 = update_status_on_start(FileCtx, QosEntries, TaskId),
-    {ok, _} = tree_traverse:run(?POOL_NAME, FileCtx2, Options),
+    case get_logical_path(FileCtx) of
+        not_synced ->
+            FileCtx2 = update_status_on_start(FileCtx, QosEntries, TaskId),
+            {ok, _} = tree_traverse:run(?POOL_NAME, FileCtx2, Options);
+        LogicalPath ->
+            Tokens = filepath_utils:split(LogicalPath),
+            case lists_utils:intersect(?IGNORED_FILES, Tokens) of
+                [] ->
+                    FileCtx2 = update_status_on_start(FileCtx, QosEntries, TaskId),
+                    {ok, _} = tree_traverse:run(?POOL_NAME, FileCtx2, Options);
+                _ ->
+                    ok
+            end
+    end,
     ok.
     
 
@@ -169,7 +184,13 @@ do_master_job(Job = #tree_traverse{file_ctx = FileCtx}, MasterJobArgs = #{task_i
 %%                    {ok, #{}}
 %%            end
 %%    end.
-    tree_traverse:do_master_job(Job, MasterJobArgs, BatchProcessingPrehook).
+    {Filename, _} = file_ctx:get_aliased_name(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
+    case lists:member(Filename, ?IGNORED_FILES) of
+        true ->
+            {ok, #{}};
+        false ->
+            tree_traverse:do_master_job(Job, MasterJobArgs, BatchProcessingPrehook)
+    end.
 
 
 -spec do_slave_job(tree_traverse:slave_job(), id()) -> ok.
@@ -425,3 +446,14 @@ get_traverse_qos_entries(#{<<"qos_entry_id">> := QosEntryId}) ->
 get_traverse_qos_entries(_) ->
     % can happen when traverse was started before upgrade
     [].
+
+
+%% @private
+-spec get_logical_path(file_ctx:ctx()) -> file_meta:path() | not_synced.
+get_logical_path(FileCtx) ->
+    try
+        {LogicalPath, _} = file_ctx:get_logical_path(FileCtx, user_ctx:new(?ROOT_SESS_ID)),
+        LogicalPath
+    catch throw:{error, {file_meta_missing, _}} ->
+        not_synced
+    end.
