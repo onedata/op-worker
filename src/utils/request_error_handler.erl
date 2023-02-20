@@ -65,6 +65,9 @@ handle(Class, Reason, Stacktrace, SessionId, Request) ->
 infer_error({badmatch, Error}) ->
     infer_error(Error);
 
+infer_error({case_clause, Error}) ->
+    infer_error(Error);
+
 infer_error({error, Reason} = Error) ->
     case ordsets:is_element(Reason, ?ERROR_CODES) of
         true -> ?ERROR_POSIX(Reason);

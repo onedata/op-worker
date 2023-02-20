@@ -352,7 +352,7 @@ process_current_branching_node_in_batches(UserCtx, NodeIterator, State, ResultAc
     case ResultLength > Limit of
         true -> 
             ?critical("Listed more entries than requested in recursive listing~s", [
-                ?autoformat([NodeIterator, State, Limit, ResultLength])
+                ?autoformat([Limit, ResultLength, NodeIterator, State])
             ]),
             throw(?ERROR_INTERNAL_SERVER_ERROR);
         _ -> 

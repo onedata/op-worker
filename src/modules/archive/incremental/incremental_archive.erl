@@ -26,24 +26,12 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([find_base_archive_id/1, has_file_changed/3, find_base_for_nested_archive/3]).
+-export([has_file_changed/3, find_base_for_nested_archive/3]).
 
 
 %%%===================================================================
 %%% API functions
 %%%===================================================================
-
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns base archive for creating an incremental archive from the
-%% dataset. The base archive will be the most recent successfully
-%% preserved archive of the dataset.
-%% @end
-%%--------------------------------------------------------------------
--spec find_base_archive_id(dataset:id()) -> archive:id() | undefined.
-find_base_archive_id(DatasetId) ->
-    find_most_recent_preserved_archive(DatasetId, <<>>).
-
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -54,7 +42,7 @@ find_base_archive_id(DatasetId) ->
 %% See `archivisation_tree.erl` for nested archives description.
 %% @end
 %%--------------------------------------------------------------------
--spec find_base_for_nested_archive(archive:doc(), archive:doc(), user_ctx:ctx()) -> archive:id() | undefined.
+-spec find_base_for_nested_archive(archive:doc(), archive:doc(), user_ctx:ctx()) -> archive:doc() | undefined.
 find_base_for_nested_archive(NestedArchiveDoc, ParentBaseArchiveDoc, UserCtx) ->
     {ok, ParentDatasetRootFileCtx} = archive:get_dataset_root_file_ctx(ParentBaseArchiveDoc),
     {ParentDatasetRootPath, _} = file_ctx:get_logical_path(ParentDatasetRootFileCtx, UserCtx),
@@ -68,8 +56,14 @@ find_base_for_nested_archive(NestedArchiveDoc, ParentBaseArchiveDoc, UserCtx) ->
             {CanonicalPath, _} = file_ctx:get_canonical_path(NestedDatasetRootInBaseArchiveFileCtx),
             case archivisation_tree:extract_archive_id(CanonicalPath) of
                 {ok, ArchiveId} ->
-                    {ok, Doc} = archive:get(ArchiveId),
-                    Doc;
+                    #document{value = #archive{dataset_id = ExpectedDatasetId}} = NestedArchiveDoc,
+                    {ok, #document{value = #archive{dataset_id = FoundDatasetId}} = Doc} = archive:get(ArchiveId),
+                    case ExpectedDatasetId == FoundDatasetId of
+                        true ->
+                            Doc;
+                        false ->
+                            undefined
+                    end;
                 ?ERROR_NOT_FOUND ->
                     undefined
             end;
@@ -92,26 +86,4 @@ has_file_changed(BaseArchiveFileCtx, CurrentFileCtx, UserCtx) ->
                 Stacktrace
             ),
             true
-    end.
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
--spec find_most_recent_preserved_archive(dataset:id(), archive_api:index()) -> archive:id() | undefined.
-find_most_recent_preserved_archive(DatasetId, StartIndex) ->
-    ListingOpts = #{start_index => StartIndex, limit => 1000},
-    {ok, {Archives, IsLast}} = archive_api:list_archives(DatasetId, ListingOpts, ?EXTENDED_INFO),
-
-    {BaseArchiveOrUndefined, LastArchiveIndex} = lists_utils:foldl_while(fun
-        (#archive_info{state = ?ARCHIVE_PRESERVED, id = Id, index = Index}, {undefined, _}) ->
-            {halt, {Id, Index}};
-        (#archive_info{index = Index}, {undefined, _}) ->
-            {cont, {undefined, Index}}
-    end, {undefined, StartIndex}, Archives),
-
-    case {BaseArchiveOrUndefined, IsLast} of
-        {undefined, true} -> undefined;
-        {undefined, false} -> find_most_recent_preserved_archive(DatasetId, LastArchiveIndex);
-        {BaseArchiveId, _} -> BaseArchiveId
     end.

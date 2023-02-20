@@ -19,6 +19,7 @@
     archive_dataset/5, archive_dataset/7,
     cancel_archivisation/4,
     get_info/3,
+    lookup_state/3,
     update/4,
     delete/3, delete/4,
     recall/5,
@@ -108,6 +109,15 @@ cancel_archivisation(NodeSelector, SessionId, ArchiveId, PreservationPolicy) ->
     {ok, archive_api:info()} | errors:error().
 get_info(NodeSelector, SessionId, ArchiveId) ->
     ?CALL(NodeSelector, [SessionId, ArchiveId]).
+
+
+-spec lookup_state(oct_background:node_selector(), session:id(), archive:id()) ->
+    {ok, archive:state()} | errors:error().
+lookup_state(NodeSelector, SessionId, ArchiveId) ->
+    case get_info(NodeSelector, SessionId, ArchiveId) of
+        {ok, #archive_info{state = State}} -> {ok, State};
+        {error, _} = Error -> Error
+    end.
 
 
 -spec update(oct_background:node_selector(), session:id(), archive:id(), archive:diff()) ->

@@ -37,7 +37,8 @@
 % setters
 -export([mark_building/1, mark_deleting/2,
     mark_file_archived/2, mark_file_failed/1, mark_creation_finished/2,
-    mark_preserved/1, mark_verification_failed/1, mark_cancelling/2, mark_cancelled/1,
+    mark_preserved/1, mark_archivisation_failed/1, mark_verification_failed/1,
+    mark_cancelling/2, mark_cancelled/1,
     set_root_dir_guid/2, set_data_dir_guid/2, set_base_archive_id/2,
     set_related_dip/2, set_related_aip/2
 ]).
@@ -491,7 +492,9 @@ mark_creation_finished(ArchiveDocOrId, NestedArchivesStats) ->
         (#archive{state = ?ARCHIVE_CANCELLING(delete)}) ->
             {error, marked_to_delete};
         (Archive = #archive{state = ?ARCHIVE_CANCELLING(_)}) ->
-            {ok, Archive#archive{state = ?ARCHIVE_CANCELLED}}
+            {ok, Archive#archive{state = ?ARCHIVE_CANCELLED}};
+        (#archive{state = ?ARCHIVE_FAILED}) ->
+            {error, no_change}
     end),
     case UpdateResult of
         {ok, #document{value = #archive{state = ?ARCHIVE_VERIFYING}} = Doc} ->
@@ -500,6 +503,8 @@ mark_creation_finished(ArchiveDocOrId, NestedArchivesStats) ->
         {ok, #document{value = #archive{}}} ->
             ok;
         {error, not_found} -> 
+            ok;
+        {error, no_change} ->
             ok;
         {error, marked_to_delete} = Error ->
             Error
@@ -548,6 +553,15 @@ mark_cancelled(ArchiveDocOrId) ->
         {error, no_change} -> ok;
         {error, marked_to_delete} = Error -> Error
     end.
+
+
+-spec mark_archivisation_failed(id() | doc()) -> ok | error().
+mark_archivisation_failed(ArchiveDocOrId) ->
+    ?extract_ok(update(ArchiveDocOrId, fun(Archive) ->
+        {ok, Archive#archive{
+            state = ?ARCHIVE_FAILED
+        }}
+    end)).
 
 
 -spec mark_verification_failed(id() | doc()) -> ok | error().

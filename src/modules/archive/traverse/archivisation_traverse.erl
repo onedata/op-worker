@@ -61,8 +61,6 @@
 -type info() :: #{
     % incremental archive base for current_archive_doc 
     base_archive_doc := archive:doc() | undefined,
-    % incremental archive base for top archive, the one created from dataset on which archivisation was scheduled
-    scheduled_dataset_base_archive_doc := archive:doc() | undefined,
     scheduled_dataset_root_guid := file_id:file_guid(),
     initial_archive_docs := docs_map(), 
     aip_ctx := archivisation_traverse_ctx:ctx(),
@@ -98,11 +96,16 @@ start(ArchiveDoc, DatasetDoc, UserCtx) ->
     {ok, ArchiveId} = archive:get_id(ArchiveDoc),
     case tree_traverse_session:setup_for_task(UserCtx, ArchiveId) of
         ok ->
-            UserId = user_ctx:get_user_id(UserCtx),
-            DatasetRootCtx = dataset_api:get_associated_file_ctx(DatasetDoc),
-            {Options, DatasetRootCtx2} = build_traverse_opts(ArchiveDoc, DatasetRootCtx, UserCtx),
-            {ok, _} = tree_traverse:run(?POOL_NAME, DatasetRootCtx2, UserId, Options),
-            ok;
+            try
+                UserId = user_ctx:get_user_id(UserCtx),
+                DatasetRootCtx = dataset_api:get_associated_file_ctx(DatasetDoc),
+                {Options, DatasetRootCtx2} = build_traverse_opts(ArchiveDoc, DatasetRootCtx, UserCtx),
+                {ok, _} = tree_traverse:run(?POOL_NAME, DatasetRootCtx2, UserId, Options),
+                ok
+            catch Class:Reason:Stacktrace ->
+                ?error_exception(Class, Reason, Stacktrace),
+                {error, datastore_runner:normalize_error(Reason)}
+            end;
         {error, _} = Error ->
             Error
     end.
@@ -340,7 +343,6 @@ build_initial_traverse_info(ArchiveDoc, Config, StartFileGuid, UserCtx) ->
     DipCtx = init_archive(DipArchiveId, UserCtx),
     #{
         base_archive_doc => BaseArchiveDoc,
-        scheduled_dataset_base_archive_doc => BaseArchiveDoc,
         scheduled_dataset_root_guid => StartFileGuid,
         initial_archive_docs => #{
             aip => archivisation_traverse_ctx:get_archive_doc(AipCtx),
