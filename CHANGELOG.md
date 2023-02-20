@@ -6,33 +6,10 @@ CHANGELOG
 
 ### 21.02.0-rc2
 
--   **VFS-9999** Web GUI: Added space details popovers with space
-    information in various views.
--   **VFS-9985** Added garbage collector periodically removing old
-    automation workflow executions.
--   **VFS-9946** Web GUI: Added filename hashes for distinguishing files
-    in audit logs.
--   **VFS-9905** Web GUI: Showing error reason when transfer progress
-    cannot be loaded.
--   **VFS-9849** Changed stopped status of interrupted automation
-    workflow execution with uncorrelated results to `failed` instead of
-    `interrupted`.
--   **VFS-9846** Added automation workflow executions graceful stopping
-    (pausing all running executions) procedure to Oneprovider stopping
-    mechanism.
--   **VFS-9843** Web GUI: Improved UX of action button in file info
-    views.
--   **VFS-9786** Web GUI: Improved UX of file info permissions tab by
-    adding hints and disabling modifications when it is not permitted.
--   **VFS-9710** It is now possible to specify that archive should be
-    deleted after cancelation.
--   **VFS-9589** Extend time series with information about measurements
-    ranges.
--   **VFS-9162** Web GUI: Added API samples modal for space.
--   **VFS-9129** Web GUI: Upgraded EmberJS to v3.8.
--   **VFS-7863** Web GUI: Fixed file download in iOS Safari.
--   **VFS-7692** Added stopped automation workflow execution discard
-    functionality.
+-   **VFS-10502** Added option to null device enabling verification of
+    whether read data matches written data based on offset and size of
+    request, which can be used to test for instance transfer data
+    consistency.
 -   **VFS-10414** Web GUI: Fixed displaying wrong names of spaces in
     shares sidebar.
 -   **VFS-10397** Fixed rtransfer link error propagation issues, which
@@ -67,6 +44,33 @@ CHANGELOG
     many stores in an automation task definition.
 -   **VFS-10046** Web GUI: Added user details popovers with user
     information in various views.
+-   **VFS-9999** Web GUI: Added space details popovers with space
+    information in various views.
+-   **VFS-9985** Added garbage collector periodically removing old
+    automation workflow executions.
+-   **VFS-9946** Web GUI: Added filename hashes for distinguishing files
+    in audit logs.
+-   **VFS-9905** Web GUI: Showing error reason when transfer progress
+    cannot be loaded.
+-   **VFS-9849** Changed stopped status of interrupted automation
+    workflow execution with uncorrelated results to `failed` instead of
+    `interrupted`.
+-   **VFS-9846** Added automation workflow executions graceful stopping
+    (pausing all running executions) procedure to Oneprovider stopping
+    mechanism.
+-   **VFS-9843** Web GUI: Improved UX of action button in file info
+    views.
+-   **VFS-9786** Web GUI: Improved UX of file info permissions tab by
+    adding hints and disabling modifications when it is not permitted.
+-   **VFS-9710** It is now possible to specify that archive should be
+    deleted after cancelation.
+-   **VFS-9589** Extend time series with information about measurements
+    ranges.
+-   **VFS-9162** Web GUI: Added API samples modal for space.
+-   **VFS-9129** Web GUI: Upgraded EmberJS to v3.8.
+-   **VFS-7863** Web GUI: Fixed file download in iOS Safari.
+-   **VFS-7692** Added stopped automation workflow execution discard
+    functionality.
 
 ### 21.02.0-alpha28
 
