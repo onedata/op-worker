@@ -578,7 +578,8 @@ get_dataset_archives(_Config) ->
     UserSessId = oct_background:get_user_session_id(user3, RandomProvider),
 
     ArchiveInfos = lists:map(fun(#archive_object{id = ArchiveId}) ->
-        {ok, ArchiveInfo} = opt_archives:get_info(RandomProviderNode, UserSessId, ArchiveId),
+        {ok, ArchiveInfo} = ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
+            opt_archives:get_info(RandomProviderNode, UserSessId, ArchiveId), ?ATTEMPTS),
         ArchiveInfo
     end, ArchiveObjects),
 

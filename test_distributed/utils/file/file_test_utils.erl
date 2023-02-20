@@ -38,7 +38,7 @@
 -export_type([offset/0]).
 
 
--define(DEFAULT_ATTEMPTS, 30).
+-define(DEFAULT_ATTEMPTS, 60).
 
 
 %%%===================================================================

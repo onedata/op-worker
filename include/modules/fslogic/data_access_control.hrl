@@ -21,6 +21,7 @@
 
 -define(has_all_flags(Bitmask, Flags), (((Bitmask) band (Flags)) =:= (Flags))).
 -define(has_any_flags(Bitmask, Flags), (((Bitmask) band (Flags)) > 0)).
+-define(has_no_flags(Bitmask, Flags), (((Bitmask) band (Flags)) =:= 0)).
 -define(set_flags(Bitmask, Flags), ((Bitmask) bor (Flags))).
 -define(reset_flags(Bitmask, Flags), ((Bitmask) band (bnot (Flags)))).
 -define(common_flags(Bitmask1, Bitmask2), ((Bitmask1) band (Bitmask2))).

@@ -464,7 +464,7 @@ assert_matches_with_backend(ExpStateCtx, Retries) ->
     end.
 
 
--spec assert_deleted(ctx()) -> boolean().
+-spec assert_deleted(ctx()) -> ok | no_return().
 assert_deleted(ExpStateCtx) ->
     assert_workflow_related_docs_deleted(ExpStateCtx),
     assert_global_store_related_docs_deleted(ExpStateCtx),

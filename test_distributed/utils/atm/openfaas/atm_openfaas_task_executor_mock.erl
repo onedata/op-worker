@@ -305,6 +305,7 @@ prepare_job_input_data(AtmRunJobBatchCtx, #atm_lambda_input{
             <<"heartbeatUrl">> => HeartbeatUrl,
             <<"oneproviderDomain">> => oneprovider:get_domain(),
             <<"accessToken">> => atm_run_job_batch_ctx:get_access_token(AtmRunJobBatchCtx),
+            <<"atmWorkflowExecutionId">> => AtmWorkflowExecutionId,
             <<"config">> => Config
         },
         <<"argsBatch">> => ArgsBatch

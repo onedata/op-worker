@@ -365,10 +365,13 @@ init_per_testcase(session_supervisor_child_crash_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
 
     initializer:communicator_mock(Worker),
-    test_utils:mock_new(Worker, onedata_logger),
-    test_utils:mock_expect(Worker, onedata_logger, dispatch_log, fun
-        (_, _, _, [_, _, kill], _) -> meck:exception(throw, crash);
-        (A, B, C, D, E) -> meck:passthrough([A, B, C, D, E])
+    test_utils:mock_new(Worker, onedata_logger, [passthrough]),
+    test_utils:mock_expect(Worker, onedata_logger, log, fun
+        (Loglevel, Metadata, FormattedLog) ->
+            case string:find(FormattedLog, "bad request kill") of
+                nomatch -> meck:passthrough([Loglevel, Metadata, FormattedLog]);
+                _ -> meck:exception(throw, crash)
+            end
     end),
 
     Config;

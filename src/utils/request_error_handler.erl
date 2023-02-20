@@ -41,21 +41,21 @@
 handle(throw, Reason, _Stacktrace, _SessionId, _Request) ->
     infer_error(Reason);
 
-handle(_Type, Reason, Stacktrace, SessionId, Request) ->
+handle(Class, Reason, Stacktrace, SessionId, Request) ->
     Error = infer_error(Reason),
 
     {LogFormat, LogFormatArgs} = case ?SHOULD_LOG_REQUESTS_ON_ERROR of
         true ->
-            MF = "Cannot process request:~n~p~nfor session: ~p~ndue to: ~p~ncaused by ~p",
-            FA = [lager:pr(Request, ?MODULE), SessionId, Error, Reason],
+            MF = "Cannot process request:~n~p~nfor session: ~p~ndue to: ~p",
+            FA = [lager:pr(Request, ?MODULE), SessionId, Error],
             {MF, FA};
         false ->
-            MF = "Cannot process request for session: ~p~ndue to: ~p~ncaused by ~p",
-            FA = [SessionId, Error, Reason],
+            MF = "Cannot process request for session: ~p~ndue to: ~p",
+            FA = [SessionId, Error],
             {MF, FA}
     end,
 
-    ?debug_stacktrace(LogFormat, LogFormatArgs, Stacktrace),
+    ?debug_exception(LogFormat, LogFormatArgs, Class, Reason, Stacktrace),
 
     Error.
 
@@ -63,6 +63,9 @@ handle(_Type, Reason, Stacktrace, SessionId, Request) ->
 %% @private
 -spec infer_error(term()) -> errors:error().
 infer_error({badmatch, Error}) ->
+    infer_error(Error);
+
+infer_error({case_clause, Error}) ->
     infer_error(Error);
 
 infer_error({error, Reason} = Error) ->

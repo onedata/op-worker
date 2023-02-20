@@ -72,7 +72,7 @@ terminate_internal_service() ->
             try
                 ok = internal_services_manager:stop_service(?MODULE, ?GS_CHANNEL_SERVICE_NAME, ?GS_CHANNEL_SERVICE_NAME)
             catch Class:Reason:Stacktrace ->
-                ?log_exception(Class, Reason, Stacktrace)
+                ?error_exception(Class, Reason, Stacktrace)
             end;
         false ->
             ok

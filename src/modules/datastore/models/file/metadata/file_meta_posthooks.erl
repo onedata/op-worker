@@ -114,12 +114,12 @@ add_hook_internal(MissingElement, Identifier, Module, Function, PosthookArgs) ->
     FileUuid = get_hook_uuid(MissingElement),
     HookType = missing_element_to_hook_type(MissingElement),
     Key = gen_datastore_key(FileUuid, HookType),
-    
+
     EncodedArgs = Module:encode_file_meta_posthook_args(Function, PosthookArgs),
-    
+
     byte_size(EncodedArgs) =< ?MAX_ENCODED_ARGS_SIZE orelse
         error({file_meta_posthooks_too_large_args, Key, Identifier, byte_size(EncodedArgs)}),
-    
+
     Link = {Identifier, encode_hook(Module, Function, EncodedArgs)},
     case ?extract_ok(?ok_if_exists(add_links(Key, Link))) of
         ok ->
@@ -184,12 +184,8 @@ execute_hook(Key, Identifier, Module, Function, EncodedArgs) ->
             %% @TODO VFS-10296 - handle not fully synced links in this module
             repeat -> error
         end
-    catch Error:Type:Stacktrace  ->
-        ?debug_stacktrace(
-            "Error during execution of file meta posthook (~p) for file ~p ~p:~p",
-            [Identifier, Key, Error, Type],
-            Stacktrace
-        ),
+    catch Class:Reason:Stacktrace ->
+        ?debug_exception(?autoformat([Identifier, Key]), Class, Reason, Stacktrace),
         error
     end.
 
@@ -215,7 +211,9 @@ encode_hook(Module, Function, EncodedArgs) ->
 %% @private
 -spec decode_hook(binary()) -> {module(), atom(), encoded_args()}.
 decode_hook(EncodedHook) ->
-    [ModuleBin, FunctionBin, EncodedArgs] = binary:split(base64url:decode(EncodedHook), <<?SEPARATOR>>, [global]),
+    DecodedHook = base64url:decode(EncodedHook),
+    [ModuleBin, DecodedHookTail] = binary:split(DecodedHook, <<?SEPARATOR>>),
+    [FunctionBin, EncodedArgs] = binary:split(DecodedHookTail, <<?SEPARATOR>>),
     {binary_to_existing_atom(ModuleBin), binary_to_existing_atom(FunctionBin), EncodedArgs}.
 
 
@@ -306,7 +304,7 @@ execute_hooks_deprecated_internal(Key, HooksToExecute) ->
             error -> [{Identifier, encode_hook(Module, Function, Args)} | Acc]
         end
     end, [], HooksToExecute),
-    
+
     case FailedHooks of
         [] -> ok;
         _ -> add_links(Key, FailedHooks)
@@ -354,4 +352,3 @@ get_record_struct(1) ->
             {args, binary}
         ]}}}
     ]}.
-

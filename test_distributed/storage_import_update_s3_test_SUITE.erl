@@ -41,16 +41,12 @@
     create_file_in_dir_exceed_batch_update_test/1,
     force_start_test/1,
     force_stop_test/1,
-    file_with_metadata_protection_should_not_be_updated_test/1,
     file_with_data_protection_should_not_be_updated_test/1,
     file_with_data_and_metadata_protection_should_not_be_updated_test/1,
-    file_with_metadata_protection_should_not_be_deleted_test/1,
     file_with_data_protection_should_not_be_deleted_test/1,
     file_with_data_and_metadata_protection_should_not_be_deleted_test/1,
-    dir_and_its_child_with_metadata_protection_should_not_be_updated_test/1,
     dir_and_its_child_with_data_protection_should_not_be_updated_test/1,
     dir_and_its_child_with_data_and_metadata_protection_should_not_be_updated_test/1,
-    dir_and_its_child_with_metadata_protection_should_not_be_deleted_test/1,
     dir_and_its_child_with_data_protection_should_not_be_deleted_test/1,
     dir_and_its_child_with_data_and_metadata_protection_should_not_be_deleted_test/1
 ]).
@@ -72,16 +68,12 @@
     create_file_in_dir_exceed_batch_update_test,
     force_start_test,
     force_stop_test,
-    file_with_metadata_protection_should_not_be_updated_test,
     file_with_data_protection_should_not_be_updated_test,
     file_with_data_and_metadata_protection_should_not_be_updated_test,
-    file_with_metadata_protection_should_not_be_deleted_test,
     file_with_data_protection_should_not_be_deleted_test,
     file_with_data_and_metadata_protection_should_not_be_deleted_test,
-    dir_and_its_child_with_metadata_protection_should_not_be_updated_test,
     dir_and_its_child_with_data_protection_should_not_be_updated_test,
     dir_and_its_child_with_data_and_metadata_protection_should_not_be_updated_test,
-    dir_and_its_child_with_metadata_protection_should_not_be_deleted_test,
     dir_and_its_child_with_data_protection_should_not_be_deleted_test,
     dir_and_its_child_with_data_and_metadata_protection_should_not_be_deleted_test
 ]).
@@ -140,17 +132,11 @@ force_start_test(Config) ->
 force_stop_test(Config) ->
     storage_import_s3_test_base:force_stop_test(Config).
 
-file_with_metadata_protection_should_not_be_updated_test(Config) ->
-    storage_import_test_base:file_with_metadata_protection_should_not_be_updated_test(Config, ?S3_HELPER_NAME).
-
 file_with_data_protection_should_not_be_updated_test(Config) ->
     storage_import_test_base:file_with_data_protection_should_not_be_updated_test(Config, ?S3_HELPER_NAME).
 
 file_with_data_and_metadata_protection_should_not_be_updated_test(Config) ->
     storage_import_test_base:file_with_data_and_metadata_protection_should_not_be_updated_test(Config, ?S3_HELPER_NAME).
-
-file_with_metadata_protection_should_not_be_deleted_test(Config) ->
-    storage_import_test_base:file_with_metadata_protection_should_not_be_deleted_test(Config, ?S3_HELPER_NAME).
 
 file_with_data_protection_should_not_be_deleted_test(Config) ->
     storage_import_test_base:file_with_data_protection_should_not_be_deleted_test(Config, ?S3_HELPER_NAME).
@@ -158,17 +144,11 @@ file_with_data_protection_should_not_be_deleted_test(Config) ->
 file_with_data_and_metadata_protection_should_not_be_deleted_test(Config) ->
     storage_import_test_base:file_with_data_and_metadata_protection_should_not_be_deleted_test(Config, ?S3_HELPER_NAME).
 
-dir_and_its_child_with_metadata_protection_should_not_be_updated_test(Config) ->
-    storage_import_test_base:dir_and_its_child_with_metadata_protection_should_not_be_updated_test(Config, ?S3_HELPER_NAME).
-
 dir_and_its_child_with_data_protection_should_not_be_updated_test(Config) ->
     storage_import_test_base:dir_and_its_child_with_data_protection_should_not_be_updated_test(Config, ?S3_HELPER_NAME).
 
 dir_and_its_child_with_data_and_metadata_protection_should_not_be_updated_test(Config) ->
     storage_import_test_base:dir_and_its_child_with_data_and_metadata_protection_should_not_be_updated_test(Config, ?S3_HELPER_NAME).
-
-dir_and_its_child_with_metadata_protection_should_not_be_deleted_test(Config) ->
-    storage_import_test_base:dir_and_its_child_with_metadata_protection_should_not_be_deleted_test(Config).
 
 dir_and_its_child_with_data_protection_should_not_be_deleted_test(Config) ->
     storage_import_test_base:dir_and_its_child_with_data_protection_should_not_be_deleted_test(Config).
