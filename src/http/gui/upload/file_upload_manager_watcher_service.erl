@@ -56,7 +56,7 @@ terminate_internal_service() ->
             try
                 ok = internal_services_manager:stop_service(?MODULE, ?SERVICE_NAME, ?SERVICE_NAME)
             catch Class:Reason:Stacktrace ->
-                ?log_exception(Class, Reason, Stacktrace)
+                ?error_exception(Class, Reason, Stacktrace)
             end;
         false ->
             ok

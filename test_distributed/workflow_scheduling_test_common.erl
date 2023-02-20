@@ -770,7 +770,7 @@ verify_prepare_lane_handler_calls_history(Gathered, LaneElementsCount, #{
     is_lane_prepared := IsLanePrepared,
     should_prepare_next_lane := ShouldPrepareNextLane,
     lane_id_to_be_prepared_in_advance := NextLaneId
-}) ->
+} = Context) ->
     GatheredForLane = lists:sublist(Gathered, LaneElementsCount),
 
     {PrepareForLane, PrepareNextLane} = lists:foldl(fun
@@ -788,7 +788,10 @@ verify_prepare_lane_handler_calls_history(Gathered, LaneElementsCount, #{
 
     case ShouldPrepareNextLane of
         true ->
-            ?assertNotEqual(undefined, PrepareNextLane);
+            case maps:get(fail_iteration, Context, undefined) of
+                1 -> ok; % Fail of iteration may prevent prepare in advance
+                _ -> ?assertNotEqual(undefined, PrepareNextLane)
+            end;
         false ->
             ?assertEqual(undefined, PrepareNextLane)
     end,

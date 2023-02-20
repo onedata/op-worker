@@ -117,7 +117,7 @@ establish_dataset_test(Config) ->
                             {<<"protectionFlags">>, 100, ?ERROR_BAD_VALUE_LIST_OF_BINARIES(<<"protectionFlags">>)},
                             {<<"protectionFlags">>, [?METADATA_PROTECTION_BIN], ?ERROR_BAD_DATA(
                                 <<"protectionFLags">>,
-                                <<"Can not set metadata_protection without data_protection">>
+                                <<"Cannot set metadata_protection without data_protection">>
                             )},
                             {<<"protectionFlags">>, [<<"dummyFlag">>], ?ERROR_BAD_VALUE_LIST_NOT_ALLOWED(
                                 <<"protectionFlags">>, [?DATA_PROTECTION_BIN, ?METADATA_PROTECTION_BIN]

@@ -722,11 +722,10 @@ verify_provider_identity(TheirProviderId) ->
     catch
         throw:{error, _} = Error2 ->
             Error2;
-        Type:Reason:Stacktrace ->
-            ?debug_stacktrace("Failed to verify provider ~ts identity due to ~p:~p", [
-                provider_logic:to_printable(TheirProviderId),
-                Type, Reason
-            ], Stacktrace),
+        Class:Reason:Stacktrace ->
+            ?debug_exception("Failed to verify provider ~ts identity", [
+                provider_logic:to_printable(TheirProviderId)
+            ], Class, Reason, Stacktrace),
             {error, Reason}
     end.
 

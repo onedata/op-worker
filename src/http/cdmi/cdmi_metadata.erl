@@ -115,8 +115,8 @@ update_user_metadata(SessionId, FileRef, UserMetadata, AllURIMetadataNames) ->
         ({?ACL_XATTR_NAME, Value}) ->
             ACL = try
                 acl:from_json(Value, cdmi)
-            catch _:Error:Stacktrace ->
-                ?debug_stacktrace("Acl conversion error ~p", [Error], Stacktrace),
+            catch Class:Reason:Stacktrace ->
+                ?debug_exception("Acl conversion error", Class, Reason, Stacktrace),
                 throw(?ERROR_BAD_DATA(<<"acl">>))
             end,
             ?lfm_check(lfm:set_acl(SessionId, FileRef, ACL));

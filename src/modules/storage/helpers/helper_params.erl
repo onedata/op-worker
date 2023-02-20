@@ -261,7 +261,8 @@ expected_custom_helper_args(?NULL_DEVICE_HELPER_NAME) -> [
     {optional, <<"timeoutProbability">>},
     {optional, <<"filter">>},
     {optional, <<"simulatedFilesystemParameters">>},
-    {optional, <<"simulatedFilesystemGrowSpeed">>}].
+    {optional, <<"simulatedFilesystemGrowSpeed">>},
+    {optional, <<"enableDataVerification">>}].
 
 
 -spec expected_generic_helper_args() -> [field() | optional_field()].

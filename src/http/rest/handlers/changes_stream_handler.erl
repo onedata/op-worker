@@ -540,11 +540,9 @@ stream_loop(Req, State = #{
             lists:foreach(fun(ChangedDoc) ->
                 try
                     send_change(Req, ChangedDoc, State)
-                catch Type:Reason:Stacktrace ->
+                catch Class:Reason:Stacktrace ->
                     % Can appear when document connected with deleted file_meta appears
-                    ?debug_stacktrace("Cannot stream change of ~p due to ~p:~p", [
-                        ChangedDoc, Type, Reason
-                    ], Stacktrace)
+                    ?debug_exception("Cannot stream change of ~p", [ChangedDoc], Class, Reason, Stacktrace)
                 end
             end, ChangedDocs),
             stream_loop(Req, State);

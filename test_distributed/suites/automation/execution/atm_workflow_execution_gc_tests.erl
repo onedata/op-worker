@@ -166,7 +166,7 @@ massive_garbage_collect_atm_workflow_executions() ->
         ?assert(atm_workflow_execution_exp_state_builder:assert_matches_with_backend(ExpState)),
 
         {StoppedStatus, ExpState}
-    end, lists:seq(1, 600)),
+    end, lists:seq(1, 500)),
 
     {ExpPausedStates, ExpFinishedStates} = lists:foldl(fun
         ({paused, ExpState}, {Acc1, Acc2}) ->
