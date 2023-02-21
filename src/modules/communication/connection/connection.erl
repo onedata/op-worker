@@ -309,8 +309,8 @@ handle_call({send_msg, _Msg}, _From, #state{status = Status, socket = Socket} = 
     {reply, {error, Status}, State, ?PROTO_CONNECTION_TIMEOUT};
 handle_call(?REBUILD_RIB_MSG, _From, #state{session_id = SessId} = State) ->
     {reply, ok, State#state{rib = router:build_rib(SessId)}, ?PROTO_CONNECTION_TIMEOUT};
-handle_call(_Request, _From, State) ->
-    ?log_bad_request(_Request),
+handle_call(Request, _From, State) ->
+    ?log_bad_request(Request),
     {reply, {error, wrong_request}, State, ?PROTO_CONNECTION_TIMEOUT}.
 
 
@@ -333,8 +333,8 @@ handle_cast(send_keepalive, State) ->
     end;
 handle_cast(disconnect, State) ->
     {stop, normal, State};
-handle_cast(_Request, State) ->
-    ?log_bad_request(_Request),
+handle_cast(Request, State) ->
+    ?log_bad_request(Request),
     {noreply, State, ?PROTO_CONNECTION_TIMEOUT}.
 
 
