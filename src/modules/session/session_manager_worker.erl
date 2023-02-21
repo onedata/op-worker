@@ -53,8 +53,8 @@ handle(ping) ->
 handle(healthcheck) ->
     ok;
 
-handle(_Request) ->
-    ?log_bad_request(_Request).
+handle(Request) ->
+    ?log_bad_request(Request).
 
 %%--------------------------------------------------------------------
 %% @doc

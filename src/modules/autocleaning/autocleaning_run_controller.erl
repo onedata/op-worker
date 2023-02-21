@@ -472,8 +472,8 @@ handle_call(#message{type = ?SHOULD_CONTINUE, run_id = _OtherAutocleaningRunId},
 ) ->
     % message is associated with an old autocleaning run
     {reply, false, State};
-handle_call(_Request, _From, State) ->
-    ?log_bad_request(_Request),
+handle_call(Request, _From, State) ->
+    ?log_bad_request(Request),
     {reply, wrong_request, State}.
 
 %%--------------------------------------------------------------------
@@ -509,8 +509,8 @@ handle_cast(#message{type = _MessageType, run_id = _OtherAutocleaningRunId},
 ) ->
     % message is associated with an old autocleaning run, it can be safely ignored
     {noreply, State};
-handle_cast(_Request, State) ->
-    ?log_bad_request(_Request),
+handle_cast(Request, State) ->
+    ?log_bad_request(Request),
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -521,8 +521,8 @@ handle_cast(_Request, State) ->
 %%--------------------------------------------------------------------
 -spec handle_info(Info :: timeout() | term(), State :: #state{}) ->
     {noreply, NewState :: #state{}}.
-handle_info(_Info, State) ->
-    ?log_bad_request(_Info),
+handle_info(Info, State) ->
+    ?log_bad_request(Info),
     {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -605,8 +605,8 @@ handle_cast_internal(?TRAVERSE_FINISHED, State) ->
     {noreply, process_updated_state(State2)};
 handle_cast_internal(?STOP_CLEANING, State) ->
     {stop, normal, State};
-handle_cast_internal(_Request, State) ->
-    ?log_bad_request(_Request),
+handle_cast_internal(Request, State) ->
+    ?log_bad_request(Request),
     {noreply, State}.
 
 

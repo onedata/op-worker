@@ -949,7 +949,7 @@ cancel_stale_job(#job{ref = StaleRef}, State) ->
 %% @private
 -spec handle_error(fetch_ref(), Error :: term(), #state{}) -> #state{}.
 handle_error(Ref, ErrorStatus, State) ->
-    ?error("Transfer ~p failed: ~p", [Ref, ErrorStatus]),
+    ?error("Transfer ~p failed:~s", [Ref, ?autoformat([ErrorStatus])]),
     {_Block, _Priority, AffectedFroms, FinishedFroms, State1} =
         disassociate_ref(Ref, State),
     {_FailedBlocks, _ExcludeSessions, FailedTransfers, State2} =
