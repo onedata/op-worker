@@ -293,6 +293,7 @@ mock_run(Workers, ModuleWithOpenfaasDockerMock) ->
 prepare_job_input_data(AtmRunJobBatchCtx, #atm_lambda_input{
     workflow_execution_id = AtmWorkflowExecutionId,
     job_batch_id = AtmJobBatchId,
+    config = Config,
     args_batch = ArgsBatch
 }) ->
     HeartbeatUrl = atm_openfaas_task_callback_handler:build_job_batch_heartbeat_url(
@@ -303,7 +304,9 @@ prepare_job_input_data(AtmRunJobBatchCtx, #atm_lambda_input{
         <<"ctx">> => #{
             <<"heartbeatUrl">> => HeartbeatUrl,
             <<"oneproviderDomain">> => oneprovider:get_domain(),
-            <<"accessToken">> => atm_run_job_batch_ctx:get_access_token(AtmRunJobBatchCtx)
+            <<"accessToken">> => atm_run_job_batch_ctx:get_access_token(AtmRunJobBatchCtx),
+            <<"atmWorkflowExecutionId">> => AtmWorkflowExecutionId,
+            <<"config">> => Config
         },
         <<"argsBatch">> => ArgsBatch
     }.

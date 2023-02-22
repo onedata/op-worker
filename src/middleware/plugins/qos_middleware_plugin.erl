@@ -93,7 +93,8 @@ data_spec(#op_req{operation = get, gri = #gri{aspect = {transfer_stats_collectio
         <<"mode">> => {any, any},
         <<"layout">> => {any, any},
         <<"startTimestamp">> => {any, any},
-        <<"windowLimit">> => {any, any}
+        <<"windowLimit">> => {any, any},
+        <<"extendedInfo">> => {any, any}
     }
 };
 
@@ -245,8 +246,10 @@ get(#op_req{auth = Auth, gri = #gri{id = QosEntryId, aspect = instance}}, QosEnt
 
 get(#op_req{gri = #gri{id = QosEntryId, aspect = audit_log}, data = Data}, _QosEntry) ->
     BrowseOpts = audit_log_browse_opts:from_json(Data),
-    {ok, BrowseResult} = qos_entry_audit_log:browse_content(QosEntryId, BrowseOpts),
-    {ok, value, BrowseResult};
+    case qos_entry_audit_log:browse_content(QosEntryId, BrowseOpts) of
+        {ok, BrowseResult} -> {ok, value, BrowseResult};
+        {error, _} = Error -> Error
+    end;
 
 get(#op_req{gri = #gri{id = undefined, aspect = {transfer_stats_collection_schema, Type}}}, _QosEntry) ->
     {ok, value, qos_transfer_stats:get_collection_schema(Type)};

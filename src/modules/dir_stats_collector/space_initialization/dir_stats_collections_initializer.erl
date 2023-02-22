@@ -60,8 +60,8 @@
 -export_type([initialization_data/0, initialization_progress/0, initialization_data_map/0, collections_map/0]).
 
 
--define(RACE_PREVENTING_TIME, 5000). % If update appears in less than ?RACE_PREVENTING_TIME from initialization
-                                     % finish it is considered as possible race and initialization is repeated
+-define(RACE_PREVENTING_TIME, 30000). % If update appears in less than ?RACE_PREVENTING_TIME from initialization
+                                      % finish it is considered as possible race and initialization is repeated
 -define(BATCH_SIZE, 100).
 
 %%%===================================================================
@@ -210,10 +210,10 @@ init_batch(SpaceId, Links, CollectionsMap) ->
 init_batch_for_collection_type(SpaceId, Links, CollectionType, InitialStats) ->
     lists:foldl(fun
         ({_, ChildUuid}, undefined) ->
-            CollectionType:init_child(file_id:pack_guid(ChildUuid, SpaceId));
+            CollectionType:init_child(file_id:pack_guid(ChildUuid, SpaceId), false);
         ({_, ChildUuid}, Stats) ->
             dir_stats_collection:consolidate(CollectionType, Stats,
-                CollectionType:init_child(file_id:pack_guid(ChildUuid, SpaceId)))
+                CollectionType:init_child(file_id:pack_guid(ChildUuid, SpaceId), false))
     end, InitialStats, Links).
 
 

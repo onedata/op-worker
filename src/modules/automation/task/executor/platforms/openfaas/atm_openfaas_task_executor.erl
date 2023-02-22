@@ -42,6 +42,10 @@
 -export([version/0, db_encode/2, db_decode/2]).
 
 
+-type function_id() :: binary().  % <<_:23>>
+% function name submitted to OpenFaaS
+-type function_name() :: binary().
+
 -record(atm_openfaas_task_executor, {
     function_name :: function_name(),
     operation_spec :: atm_openfaas_operation_spec:record(),
@@ -57,12 +61,7 @@
 }).
 -type initiation_ctx() :: #initiation_ctx{}.
 
--export_type([record/0]).
-
-
-% function name submitted to OpenFaaS, used also as function's unique identifier
--type function_name() :: binary().
--export_type([function_name/0]).
+-export_type([function_id/0, record/0]).
 
 
 -define(AWAIT_RETRIES, 300).
@@ -94,8 +93,9 @@ get_pod_status_registry_id(#atm_openfaas_task_executor{pod_status_registry_id = 
 create(AtmWorkflowExecutionCtx, _AtmLaneIndex, _AtmTaskSchema, AtmLambdaRevision) ->
     atm_openfaas_monitor:assert_openfaas_healthy(),
 
-    FunctionName = build_function_name(AtmWorkflowExecutionCtx, AtmLambdaRevision),
-    {ok, PodStatusRegistryId} = atm_openfaas_function_pod_status_registry:create_for_function(FunctionName),
+    FunctionId = build_function_id(AtmWorkflowExecutionCtx),
+    FunctionName = build_function_name(FunctionId, AtmLambdaRevision),
+    {ok, PodStatusRegistryId} = atm_openfaas_function_pod_status_registry:create_for_function(FunctionId),
 
     #atm_openfaas_task_executor{
         function_name = FunctionName,
@@ -217,6 +217,20 @@ select_resource_spec(#atm_task_schema{resource_spec_override = ResourceSpec}, _A
     ResourceSpec.
 
 
+%% @private
+-spec build_function_id(atm_workflow_execution_ctx:record()) -> function_id().
+build_function_id(AtmWorkflowExecutionCtx) ->
+    AtmWorkflowExecutionId = atm_workflow_execution_ctx:get_workflow_execution_id(
+        AtmWorkflowExecutionCtx
+    ),
+    sanitize_binary(str_utils:format_bin("w~s-s~s", [
+        binary:part(AtmWorkflowExecutionId, 0, 10),
+        % Generate random substring to ensure functions are unique for each task
+        % despite e.g. using the same lambda
+        str_utils:rand_hex(5)
+    ])).
+
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -227,23 +241,19 @@ select_resource_spec(#atm_task_schema{resource_spec_override = ResourceSpec}, _A
 %% OpenFaaS service is '[a-z]([-a-z0-9]{0,61}[a-z0-9])?').
 %% @end
 %%--------------------------------------------------------------------
--spec build_function_name(atm_workflow_execution_ctx:record(), atm_lambda_revision:record()) ->
-    binary().
-build_function_name(AtmWorkflowExecutionCtx, #atm_lambda_revision{name = AtmLambdaRevisionName}) ->
-    AtmWorkflowExecutionId = atm_workflow_execution_ctx:get_workflow_execution_id(
-        AtmWorkflowExecutionCtx
-    ),
-    % NOTE: end name with '-l' (for lambda) as a function name end marker.
-    % It is used by openfaas-pod-monitor when inferring function name from pod name
-    % (k8s adds its own suffix when generating pod name).
-    Name = str_utils:format_bin("w~s-s~s-~s-l", [
-        binary:part(AtmWorkflowExecutionId, 0, 10),
-        % Generate random substring to ensure functions registered in OpenFaaS
-        % are unique for each task despite e.g. using the same lambda
-        str_utils:rand_hex(5),
-        binary:part(AtmLambdaRevisionName, 0, min(size(AtmLambdaRevisionName), 37))
-    ]),
-    << <<(sanitize_character(Char))/integer>> || <<Char>> <= Name>>.
+-spec build_function_name(function_id(), atm_lambda_revision:record()) ->
+    function_name().
+build_function_name(FunctionId, #atm_lambda_revision{name = AtmLambdaRevisionName}) ->
+    str_utils:format_bin("~s-~s", [
+        FunctionId,
+        sanitize_binary(binary:part(AtmLambdaRevisionName, 0, min(size(AtmLambdaRevisionName), 39)))
+    ]).
+
+
+%% @private
+-spec sanitize_binary(binary()) -> binary().
+sanitize_binary(Bin) ->
+    << <<(sanitize_character(Char))/integer>> || <<Char>> <= Bin>>.
 
 
 %% @private
@@ -629,7 +639,8 @@ schedule_function_execution(AtmRunJobBatchCtx, LambdaInput, #atm_openfaas_task_e
             <<"heartbeatUrl">> => build_job_heartbeat_url(LambdaInput),
             <<"timeoutSeconds">> => op_worker:get_env(atm_workflow_job_timeout_sec, 1800),
             <<"oneproviderDomain">> => oneprovider:get_domain(),
-            <<"accessToken">> => atm_run_job_batch_ctx:get_access_token(AtmRunJobBatchCtx)
+            <<"accessToken">> => atm_run_job_batch_ctx:get_access_token(AtmRunJobBatchCtx),
+            <<"config">> => LambdaInput#atm_lambda_input.config
         },
         <<"argsBatch">> => LambdaInput#atm_lambda_input.args_batch
     }),

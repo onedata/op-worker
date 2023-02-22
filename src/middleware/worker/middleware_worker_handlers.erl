@@ -199,14 +199,14 @@ execute(UserCtx, FileCtx, #custom_metadata_set_request{
 execute(UserCtx, FileCtx, #custom_metadata_remove_request{type = Type}) ->
     metadata_req:remove_metadata(UserCtx, FileCtx, Type);
 
-execute(UserCtx, FileCtx, #file_distribution_gather_request{}) ->
-    file_distribution:gather(UserCtx, FileCtx);
+execute(UserCtx, FileCtx, #data_distribution_gather_request{}) ->
+    data_distribution:gather(UserCtx, FileCtx);
 
 execute(UserCtx, FileCtx, #historical_dir_size_stats_gather_request{request = Request}) ->
     {ok, dir_size_stats_req:gather_historical(UserCtx, FileCtx, Request)};
 
 execute(UserCtx, FileCtx, #file_storage_locations_get_request{}) ->
-    file_distribution:get_storage_locations(UserCtx, FileCtx);
+    data_distribution:gather_storage_locations(UserCtx, FileCtx);
 
 
 %% QoS

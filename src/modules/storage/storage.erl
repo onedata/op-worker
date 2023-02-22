@@ -272,33 +272,27 @@ get_luma_config(StorageData) ->
 
 -spec fetch_shared_data(id(), od_space:id()) -> od_storage:doc().
 fetch_shared_data(StorageId, SpaceId) when is_binary(StorageId) ->
-    {ok, Data} = ?throw_on_error(storage_logic:get_shared_data(StorageId, SpaceId)),
-    Data.
+    ?check(storage_logic:get_shared_data(StorageId, SpaceId)).
 
 
 -spec fetch_name_of_local_storage(id()) -> name().
 fetch_name_of_local_storage(StorageId) when is_binary(StorageId) ->
-    {ok, Name} = ?throw_on_error(storage_logic:get_name_of_local_storage(StorageId)),
-    Name.
+    ?check(storage_logic:get_name_of_local_storage(StorageId)).
 
 
 -spec fetch_name_of_remote_storage(id(), od_space:id()) -> name().
 fetch_name_of_remote_storage(StorageId, SpaceId) when is_binary(StorageId) ->
-    {ok, Name} = ?throw_on_error(storage_logic:get_name_of_remote_storage(StorageId, SpaceId)),
-    Name.
+    ?check(storage_logic:get_name_of_remote_storage(StorageId, SpaceId)).
 
 
 -spec fetch_provider_id_of_remote_storage(id(), od_space:id()) -> od_provider:id().
 fetch_provider_id_of_remote_storage(StorageId, SpaceId) ->
-    {ok, ProviderId} = ?throw_on_error(storage_logic:get_provider(StorageId, SpaceId)),
-    ProviderId.
+    ?check(storage_logic:get_provider(StorageId, SpaceId)).
 
 
 -spec fetch_qos_parameters_of_local_storage(id()) -> qos_parameters().
 fetch_qos_parameters_of_local_storage(StorageId) when is_binary(StorageId) ->
-    {ok, QosParameters} =
-        ?throw_on_error(storage_logic:get_qos_parameters_of_local_storage(StorageId)),
-    QosParameters.
+    ?check(storage_logic:get_qos_parameters_of_local_storage(StorageId)).
 
 
 %%--------------------------------------------------------------------
@@ -309,9 +303,7 @@ fetch_qos_parameters_of_local_storage(StorageId) when is_binary(StorageId) ->
 %%--------------------------------------------------------------------
 -spec fetch_qos_parameters_of_remote_storage(id(), od_space:id()) -> qos_parameters().
 fetch_qos_parameters_of_remote_storage(StorageId, SpaceId) when is_binary(StorageId) ->
-    {ok, QosParameters} =
-        ?throw_on_error(storage_logic:get_qos_parameters_of_remote_storage(StorageId, SpaceId)),
-    QosParameters.
+    ?check(storage_logic:get_qos_parameters_of_remote_storage(StorageId, SpaceId)).
 
 
 -spec should_skip_storage_detection(data() | id()) -> boolean().
@@ -321,20 +313,17 @@ should_skip_storage_detection(StorageDataOrId) ->
 
 -spec is_imported(id() | data()) -> boolean().
 is_imported(StorageId) when is_binary(StorageId) ->
-    {ok, Imported} = ?throw_on_error(storage_logic:is_imported(StorageId)),
-    Imported;
+    ?check(storage_logic:is_imported(StorageId));
 is_imported(StorageData) ->
     is_imported(storage:get_id(StorageData)).
 
 -spec is_local_storage_readonly(id()) -> boolean().
 is_local_storage_readonly(StorageId) when is_binary(StorageId) ->
-    {ok, Readonly} = ?throw_on_error(storage_logic:is_local_storage_readonly(StorageId)),
-    Readonly.
+    ?check(storage_logic:is_local_storage_readonly(StorageId)).
 
 -spec is_storage_readonly(id() | data(), od_space:id()) -> boolean().
 is_storage_readonly(StorageId, SpaceId) when is_binary(StorageId) ->
-    {ok, Readonly} = ?throw_on_error(storage_logic:is_storage_readonly(StorageId, SpaceId)),
-    Readonly;
+    ?check(storage_logic:is_storage_readonly(StorageId, SpaceId));
 is_storage_readonly(StorageData, SpaceId) ->
     is_storage_readonly(storage:get_id(StorageData), SpaceId).
 
@@ -437,16 +426,26 @@ update_helper(StorageId, UpdateFun) ->
     {ok, od_space:id()} | errors:error().
 support_space(StorageId, SerializedToken, SupportSize, SupportParameters) ->
     case validate_support_request(SerializedToken) of
-        ok ->
+        {ok, SpaceId} ->
+            case dir_stats_service_state:enable_for_new_support(SpaceId) of
+                ok -> ok;
+                StatsError -> ?warning("Error enabling statistics for new space ~p~nGot: ~p", [SpaceId, StatsError])
+            end,
             case storage_logic:support_space(StorageId, SerializedToken, SupportSize, SupportParameters) of
                 {ok, SpaceId} ->
-                    on_space_supported(SpaceId, StorageId, SupportParameters),
+                    on_space_supported(SpaceId, StorageId),
+                    {ok, SpaceName} = space_logic:get_name(?ROOT_SESS_ID, SpaceId),
+                    {ok, StorageName} = storage_logic:get_name_of_local_storage(StorageId),
+                    ?notice("New space has been supported: '~s' (~s) with ~s quota on storage '~s' (~s)", [
+                        SpaceName, SpaceId, str_utils:format_byte_size(SupportSize), StorageName, StorageId
+                    ]),
                     {ok, SpaceId};
-                {error, _} = Error ->
-                    Error
+                {error, _} = SupportError ->
+                    ok = dir_stats_service_state:clean(SpaceId),
+                    SupportError
             end;
-        Error ->
-            Error
+        ValidateError ->
+            ValidateError
     end.
 
 
@@ -458,7 +457,7 @@ support_space(StorageId, SerializedToken, SupportSize, SupportParameters) ->
 %% @TODO VFS-5497 This check will not be needed when multisupport is implemented
 %% @end
 %%--------------------------------------------------------------------
--spec validate_support_request(tokens:serialized()) -> ok | errors:error().
+-spec validate_support_request(tokens:serialized()) -> {ok, od_space:id()} | errors:error().
 validate_support_request(SerializedToken) ->
     case tokens:deserialize(SerializedToken) of
         {ok, #token{type = ?INVITE_TOKEN(?SUPPORT_SPACE, SpaceId)}} ->
@@ -467,7 +466,8 @@ validate_support_request(SerializedToken) ->
                     ?ERROR_RELATION_ALREADY_EXISTS(
                         od_space, SpaceId, od_provider, oneprovider:get_id()
                     );
-                false -> ok
+                false ->
+                    {ok, SpaceId}
             end;
         {ok, #token{type = ReceivedType}} ->
             ?ERROR_BAD_VALUE_TOKEN(<<"token">>,
@@ -517,18 +517,11 @@ on_storage_created(StorageId) ->
 
 
 %% @private
--spec on_space_supported(od_space:id(), id(), support_parameters:record()) -> ok.
-on_space_supported(SpaceId, StorageId, SupportParameters) ->
+-spec on_space_supported(od_space:id(), id()) -> ok.
+on_space_supported(SpaceId, StorageId) ->
     % remove possible remnants of previous support 
     % (when space was unsupported in Onezone without provider knowledge)
     space_unsupport:cleanup_local_documents(SpaceId, StorageId),
-    case SupportParameters of
-        #support_parameters{dir_stats_service_enabled = true} ->
-            % NOTE: MUST be called before storage import is started
-            dir_stats_service_state:enable_for_new_support(SpaceId);
-        _ ->
-            ok
-    end,
     space_logic:on_space_supported(SpaceId).
 
 

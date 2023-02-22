@@ -16,6 +16,7 @@
 -include("modules/dataset/archive.hrl").
 -include("modules/logical_file_manager/lfm.hrl").
 -include("onenv_test_utils.hrl").
+-include("proto/oneprovider/provider_messages.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_time_series.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
@@ -117,7 +118,7 @@ groups() -> [
 %%        recall_plain_containing_invalid_symlink_archive_dip_test,
 %%        recall_bagit_containing_invalid_symlink_archive_test,
 %%        recall_bagit_containing_invalid_symlink_archive_dip_test,
-        
+
         recall_plain_archive_containing_internal_symlink_test,
         recall_bagit_archive_containing_internal_symlink_test,
         recall_plain_archive_containing_internal_symlink_dip_test,
@@ -142,7 +143,7 @@ groups() -> [
         recall_bagit_archive_containing_nested_child_symlink_test,
         recall_plain_archive_containing_nested_child_symlink_dip_test,
         recall_bagit_archive_containing_nested_child_symlink_dip_test,
-        
+
         recall_custom_name_test
     ]},
     {sequential_tests, [
@@ -615,6 +616,7 @@ recall_test_setup(StructureSpec, RootFileName) ->
             Acc
     end, undefined, utils:ensure_list(CreatedTreeObject)),
     #object{guid = TargetParentGuid} = onenv_file_test_utils:create_and_sync_file_tree(?USER1, ?SPACE, #dir_spec{}),
+    ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}}, opt_archives:get_info(krakow, SessId, ArchiveId), ?ATTEMPTS),
     {ok, RecallRootFileGuid} = opt_archives:recall(krakow, SessId, ArchiveId, TargetParentGuid, RootFileName),
     FinalArchiveId = case opw_test_rpc:call(krakow, archive, get_related_dip_id, [ArchiveId]) of
         {ok, undefined} -> ArchiveId;
@@ -712,7 +714,7 @@ recall_to_recalling_dir_test_base(Method) ->
             G
     end,
     
-    ?assertEqual(?ERROR_POSIX(?EBUSY), opt_archives:recall(krakow, SessId, ArchiveId, NewTargetParentGuid, default)),
+    ?assertEqual(?ERROR_RECALL_TARGET_CONFLICT, opt_archives:recall(krakow, SessId, ArchiveId, NewTargetParentGuid, default)),
     
     finish_recall(Pid),
     
@@ -741,7 +743,11 @@ recall_error_test_base(Spec, FunName) ->
             <<"logEntries">> := [
                 #{<<"content">> := #{<<"reason">> := ExpectedReason}}
             ]
-        }}, opt_archives:browse_recall_log(krakow, SessId(krakow), RecallRootFileGuid, #{}), ?ATTEMPTS)
+        }}, opt_archives:browse_recall_log(krakow, SessId(krakow), RecallRootFileGuid, #{}), ?ATTEMPTS),
+        % simulate expiration of the audit log
+        opw_test_rpc:call(krakow, audit_log, delete, [<<(file_id:guid_to_uuid(RecallRootFileGuid))/binary, "el">>]),
+        % browsing should return a proper error
+        ?assertEqual(?ERROR_NOT_FOUND, opt_archives:browse_recall_log(krakow, SessId(krakow), RecallRootFileGuid, #{}))
     end, Errors).
 
 

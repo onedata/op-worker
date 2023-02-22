@@ -94,14 +94,15 @@ write_file(Worker, SessId, FileGuid, Offset, Data) when is_binary(Data) ->
 
 
 -spec create_and_write_file(node(), session:id(), fslogic_worker:file_guid(), file_meta:name(), non_neg_integer(),
-    binary() | {rand_content, non_neg_integer()}) -> ok.
+    binary() | {rand_content, non_neg_integer()}) -> {ok, fslogic_worker:file_guid()}.
 create_and_write_file(Worker, SessId, ParentGuid, ChildFileName, Offset, {rand_content, Size}) ->
     create_and_write_file(Worker, SessId, ParentGuid, ChildFileName, Offset, crypto:strong_rand_bytes(Size));
 create_and_write_file(Worker, SessId, ParentGuid, ChildFileName, Offset, Data) when is_binary(Data) ->
-    {ok, {_, Handle}} = ?assertMatch({ok, _},
+    {ok, {Guid, Handle}} = ?assertMatch({ok, _},
         lfm_proxy:create_and_open(Worker, SessId, ParentGuid, ChildFileName, ?DEFAULT_FILE_MODE)),
     ?assertMatch({ok, _}, lfm_proxy:write(Worker, Handle, Offset, Data)),
-    ?assertEqual(ok, lfm_proxy:close(Worker, Handle)).
+    ?assertEqual(ok, lfm_proxy:close(Worker, Handle)),
+    {ok, Guid}.
 
 
 -spec read_file(node(), session:id(), file_id:file_guid(), Size :: non_neg_integer()) ->

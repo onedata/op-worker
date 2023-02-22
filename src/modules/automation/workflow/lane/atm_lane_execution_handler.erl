@@ -342,10 +342,20 @@ infer_setup_exception(_) ->
 ) ->
     error.
 handle_setup_exception(execution_stopping, AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx) ->
-    {ok, #document{value = AtmWorkflowExecution}} = atm_workflow_execution:get(AtmWorkflowExecutionId),
+    {ok, AtmWorkflowExecutionDoc} = atm_workflow_execution:get(AtmWorkflowExecutionId),
+    AtmWorkflowExecution = AtmWorkflowExecutionDoc#document.value,
 
     case atm_lane_execution:is_current_lane_run(AtmLaneRunSelector, AtmWorkflowExecution) of
         true ->
+            % repeat stopping procedure just in case if it wasn't finished
+            % (e.g. concurrent user and lane preparing process stopping)
+            {ok, #atm_lane_execution_run{stopping_reason = StoppingReason}} = atm_lane_execution:get_run(
+                AtmLaneRunSelector, AtmWorkflowExecution
+            ),
+            handle_lane_run_stopping(
+                AtmLaneRunSelector, StoppingReason, AtmWorkflowExecutionCtx, AtmWorkflowExecutionDoc
+            ),
+
             % Call via ?MODULE: to allow mocking in tests
             ?MODULE:handle_stopped(AtmLaneRunSelector, AtmWorkflowExecutionId, AtmWorkflowExecutionCtx),
             error;

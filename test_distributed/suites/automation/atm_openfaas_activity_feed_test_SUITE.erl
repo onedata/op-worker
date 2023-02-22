@@ -134,8 +134,8 @@ connectivity_test_base(ClientType) ->
 
 pod_status_monitor_lifecycle_test(_Config) ->
     Client = connect(pod_status_monitor),
-    FunctionName = str_utils:rand_hex(10),
-    {ok, FunctionPodStatusRegistryId} = create_function_pod_status_registry(FunctionName),
+    FunctionId = str_utils:rand_hex(10),
+    {ok, FunctionPodStatusRegistryId} = create_function_pod_status_registry(FunctionId),
 
     PodAlpha = str_utils:rand_hex(10),
     PodBeta = str_utils:rand_hex(10),
@@ -143,17 +143,17 @@ pod_status_monitor_lifecycle_test(_Config) ->
 
     verify_recorded_pod_status_changes(FunctionPodStatusRegistryId, []),
 
-    FirstStatusReport = gen_pod_status_report(FunctionName, PodAlpha),
+    FirstStatusReport = gen_pod_status_report(FunctionId, PodAlpha),
     submit_pod_status_reports(Client, [FirstStatusReport]),
     verify_recorded_pod_status_changes(FunctionPodStatusRegistryId, [FirstStatusReport]),
 
-    SecondStatusReport = gen_pod_status_report(FunctionName, PodAlpha),
-    ThirdStatusReport = gen_pod_status_report(FunctionName, PodAlpha),
+    SecondStatusReport = gen_pod_status_report(FunctionId, PodBeta),
+    ThirdStatusReport = gen_pod_status_report(FunctionId, PodGamma),
     submit_pod_status_reports(Client, [SecondStatusReport, ThirdStatusReport]),
     verify_recorded_pod_status_changes(FunctionPodStatusRegistryId, [FirstStatusReport, SecondStatusReport, ThirdStatusReport]),
 
     FollowingReports = lists_utils:generate(fun() ->
-        gen_pod_status_report(FunctionName, lists_utils:random_element([PodAlpha, PodBeta, PodGamma]))
+        gen_pod_status_report(FunctionId, lists_utils:random_element([PodAlpha, PodBeta, PodGamma]))
     end, 200 + rand:uniform(500)),
 
     submit_pod_status_reports(Client, FollowingReports),
@@ -161,8 +161,19 @@ pod_status_monitor_lifecycle_test(_Config) ->
         FirstStatusReport, SecondStatusReport, ThirdStatusReport | FollowingReports
     ]),
 
-    % delete the registry and verify if everything is cleaned up
+    % simulate expiration of the pod event logs
     {ok, PodStatusRegistry} = ?assertMatch({ok, _}, get_function_pod_status_registry(FunctionPodStatusRegistryId)),
+    atm_openfaas_function_pod_status_registry:foreach_summary(fun(PodId, Summary) ->
+        LogId = Summary#atm_openfaas_function_pod_status_summary.event_log_id,
+        ?rpc(audit_log:delete(LogId)),
+        % browsing should return a proper error
+        ?assertEqual(?ERROR_NOT_FOUND, ?rpc(atm_openfaas_function_pod_status_registry:browse_pod_event_log(LogId, #{}))),
+        % the log should be recreated upon new activity
+        submit_pod_status_reports(Client, [gen_pod_status_report(FunctionId, PodId)]),
+        ?assertMatch({ok, _}, ?rpc(atm_openfaas_function_pod_status_registry:browse_pod_event_log(LogId, #{})), ?ATTEMPTS)
+    end, PodStatusRegistry),
+
+    % delete the registry and verify if everything is cleaned up
     ?assertEqual(ok, delete_function_pod_status_registry(FunctionPodStatusRegistryId)),
     ?assertEqual({error, not_found}, get_function_pod_status_registry(FunctionPodStatusRegistryId)),
     % the deleted registry doc should be retained for some time
@@ -175,7 +186,7 @@ pod_status_monitor_lifecycle_test(_Config) ->
         event_log_id = PodEventLogId
     }) ->
         ?assertEqual(
-            {error, not_found},
+            ?ERROR_NOT_FOUND,
             ?rpc(atm_openfaas_function_pod_status_registry:browse_pod_event_log(PodEventLogId, #{}))
         )
     end, PodStatusRegistry).
@@ -606,10 +617,10 @@ try_connect(result_streamer, BasicAuthorization) ->
 %%%===================================================================
 
 %% @private
--spec create_function_pod_status_registry(atm_openfaas_task_executor:function_name()) ->
+-spec create_function_pod_status_registry(atm_openfaas_task_executor:function_id()) ->
     {ok, atm_openfaas_function_pod_status_registry:id()} | {error, term()}.
-create_function_pod_status_registry(FunctionName) ->
-    ?rpc(atm_openfaas_function_pod_status_registry:create_for_function(FunctionName)).
+create_function_pod_status_registry(FunctionId) ->
+    ?rpc(atm_openfaas_function_pod_status_registry:create_for_function(FunctionId)).
 
 
 %% @private
@@ -743,11 +754,11 @@ get_pod_status_summary(RegistryId, PodId) ->
 
 %% @private
 -spec gen_pod_status_report(
-    atm_openfaas_task_executor:function_name(),
+    atm_openfaas_task_executor:function_id(),
     atm_openfaas_function_pod_status_registry:pod_id()
 ) ->
     atm_openfaas_function_pod_status_report:record().
-gen_pod_status_report(FunctionName, PodId) ->
+gen_pod_status_report(FunctionId, PodId) ->
     RandContainersCount = rand:uniform(10),
     RandReadyContainersCount = rand:uniform(RandContainersCount),
 
@@ -755,7 +766,7 @@ gen_pod_status_report(FunctionName, PodId) ->
         % Simulate the fact that reports may not arrive in order.
         % Still, the original timestamps from the reports should be returned
         % during listing (which is checked in verify_recorded_pod_status_changes/2).
-        function_name = FunctionName,
+        function_id = FunctionId,
         pod_id = PodId,
 
         pod_status = lists_utils:random_element([

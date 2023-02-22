@@ -18,7 +18,7 @@
 
 -include("global_definitions.hrl").
 -include("middleware/middleware.hrl").
--include("modules/fslogic/file_distribution.hrl").
+-include("modules/fslogic/data_distribution.hrl").
 -include_lib("ctool/include/errors.hrl").
 -include_lib("ctool/include/logging.hrl").
 -include_lib("cluster_worker/include/time_series/browsing.hrl").
@@ -71,7 +71,7 @@
     #custom_metadata_get_request{} |
     #custom_metadata_set_request{} |
     #custom_metadata_remove_request{} |
-    #file_distribution_gather_request{} |
+    #data_distribution_gather_request{} |
     #historical_dir_size_stats_gather_request{} |
     #file_storage_locations_get_request{}.
 
@@ -187,8 +187,6 @@ handle(Request) ->
 %%--------------------------------------------------------------------
 -spec cleanup() -> ok.
 cleanup() ->
-    % @TODO VFS-9402 move this to the node manager plugin callback before default workers stop
-    gs_channel_service:terminate_internal_service(),
     ok.
 
 

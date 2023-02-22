@@ -91,8 +91,8 @@ handle(?RETRY_FAILED_FILES) ->
     end,
     erlang:send_after(timer:seconds(?RETRY_FAILED_FILES_INTERVAL_SECONDS),
         ?MODULE, {sync_timer, ?RETRY_FAILED_FILES});
-handle(_Request) ->
-    ?log_bad_request(_Request),
+handle(Request) ->
+    ?log_bad_request(Request),
     {error, wrong_request}.
 
 

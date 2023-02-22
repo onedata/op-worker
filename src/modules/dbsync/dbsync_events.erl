@@ -123,15 +123,15 @@ change_replicated_internal(SpaceId, ArchiveRecallDetails = #document{
 }) ->
     ?debug("change_replicated_internal: archive_recall_details ~p", [RecallId]),
     archive_recall_details:handle_remote_change(SpaceId, ArchiveRecallDetails);
-change_replicated_internal(_SpaceId, #document{value = #links_forest{key = LinkKey, model = Model}}) ->
+change_replicated_internal(SpaceId, #document{value = #links_forest{key = LinkKey, model = Model}}) ->
     ?debug("change_replicated_internal: links_forest ~p", [LinkKey]),
-   link_replicated(Model, LinkKey);
-change_replicated_internal(_SpaceId, #document{value = #links_node{key = LinkKey, model = Model}}) ->
+   link_replicated(Model, LinkKey, SpaceId);
+change_replicated_internal(SpaceId, #document{value = #links_node{key = LinkKey, model = Model}}) ->
     ?debug("change_replicated_internal: links_node ~p", [LinkKey]),
-   link_replicated(Model, LinkKey);
-change_replicated_internal(_SpaceId, #document{value = #links_mask{key = LinkKey, model = Model}}) ->
+   link_replicated(Model, LinkKey, SpaceId);
+change_replicated_internal(SpaceId, #document{value = #links_mask{key = LinkKey, model = Model}}) ->
     ?debug("change_replicated_internal: links_mask ~p", [LinkKey]),
-   link_replicated(Model, LinkKey);
+   link_replicated(Model, LinkKey, SpaceId);
 change_replicated_internal(_SpaceId, _Change) ->
     ok.
 
@@ -205,9 +205,10 @@ file_meta_change_replicated(SpaceId, #document{
 
 
 %% @private
--spec link_replicated(module(), datastore:key()) ->
+-spec link_replicated(module(), datastore:key(), od_space:id()) ->
     any() | no_return().
-link_replicated(file_meta, LinkKey) ->
+link_replicated(file_meta, LinkKey, SpaceId) ->
+    dir_size_stats:report_remote_links_change(LinkKey, SpaceId),
     case datastore_model:get_generic_key(file_meta, LinkKey) of
         undefined -> 
             % Legacy keys are not supported as it is impossible to retrieve GenericKey
@@ -215,5 +216,5 @@ link_replicated(file_meta, LinkKey) ->
         GenericKey ->
             file_meta_posthooks:execute_hooks(GenericKey, link)
     end;
-link_replicated(_Model, _LinkKey) ->
+link_replicated(_Model, _LinkKey_, _SpaceId) ->
     ok.

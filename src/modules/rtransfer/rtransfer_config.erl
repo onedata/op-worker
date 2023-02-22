@@ -58,31 +58,11 @@ start_rtransfer() ->
 %% gen servers are up and running.
 %% @end
 %%--------------------------------------------------------------------
--spec restart_link() -> ok | {error, not_running}.
+-spec restart_link() -> ok.
 restart_link() ->
-    case whereis(rtransfer_link_port) of
-        undefined ->
-            {error, not_running};
-        CurrentPortPid ->
-            prepare_ssl_opts(),
-            prepare_graphite_opts(),
-            erlang:exit(CurrentPortPid, restarting),
-            utils:wait_until(fun() ->
-                case whereis(rtransfer_link_port) of
-                    undefined ->
-                        false;
-                    CurrentPortPid ->
-                        false;
-                    OtherPid when is_pid(OtherPid) ->
-                        case whereis(rtransfer_link) of
-                            LinkPid when is_pid(LinkPid) ->
-                                true;
-                            _ ->
-                                false
-                        end
-                end
-            end, 100)
-    end.
+    prepare_ssl_opts(),
+    prepare_graphite_opts(),
+    rtransfer_link_port:restart().
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -249,7 +229,7 @@ add_storage(StorageId) ->
 %%--------------------------------------------------------------------
 -spec add_storages() -> ok.
 add_storages() ->
-    StorageIds = get_storages(10),
+    {ok, StorageIds} = get_storages(10),
     lists:foreach(fun add_storage/1, StorageIds).
 
 %%--------------------------------------------------------------------
@@ -265,14 +245,14 @@ generate_secret(ProviderId, PeerSecret) ->
                                   rtransfer_link, allow_connection,
                                   [ProviderId, MySecret, PeerSecret, 60000]),
     BadNodes =/= [] andalso
-        ?error("Failed to allow rtransfer connection from ~p on nodes ~p",
+        ?error("Failed to allow rtransfer connection from ~p on nodes ~w",
                [ProviderId, BadNodes]),
     FilteredNodesAns = lists:filter(fun
         (#{<<"done">> := true}) -> false;
         (_) -> true
     end, NodesAns),
     FilteredNodesAns =/= [] andalso
-        ?error("Failed to allow rtransfer connection from ~p, rpc answer: ~p", [ProviderId, NodesAns]),
+        ?error("Failed to allow rtransfer connection from ~p~nrpc answer: ~p", [ProviderId, NodesAns]),
     MySecret.
 
 %%--------------------------------------------------------------------
@@ -441,18 +421,36 @@ fetch(Request, TransferData, NotifyFun, CompleteFun, RetryNum) ->
 %% Get storages list. Retry if needed.
 %% @end
 %%--------------------------------------------------------------------
--spec get_storages(non_neg_integer()) -> [storage:id()] | {error, term()}.
+-spec get_storages(non_neg_integer()) -> {ok, [storage:id()]} | {error, term()}.
 get_storages(Retries) ->
-    case {provider_logic:get_storages(), Retries} of
+    Result = case {provider_logic:get_storages(), Retries} of
         {{ok, StorageIds}, _} ->
-            StorageIds;
+            % Mitigation of a race condition; if this function is called when
+            % a storage is being added, for some time it may be already
+            % created in Onezone but its local counterpart not yet set up.
+            case lists:dropwhile(fun storage:exists/1, StorageIds) of
+                [] ->
+                    {ok, StorageIds};
+                _ when Retries > 0 ->
+                    retry;
+                [FirstBadStorage | _] ->
+                    ?critical("Cannot find local configuration for storage ~s", [FirstBadStorage]),
+                    ?ERROR_INTERNAL_SERVER_ERROR
+            end;
         {?ERROR_UNREGISTERED_ONEPROVIDER, 0} ->
-            [];
+            {ok, []};
         {?ERROR_NO_CONNECTION_TO_ONEZONE, 0} ->
-            []; % will be called again when connection is established
-        {Error, 0} ->
+            {ok, []}; % will be called again when connection is established
+        {{error, _} = Error, 0} ->
+            ?critical("Unexpected error when fetching the list of storages: ~p", [Error]),
             Error;
         _ ->
+            retry
+    end,
+    case Result of
+        retry ->
             timer:sleep(500),
-            get_storages(Retries - 1)
+            get_storages(Retries - 1);
+        FinalResult ->
+            FinalResult
     end.

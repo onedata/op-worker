@@ -244,7 +244,16 @@ generic_create_deferred(UserCtx, FileCtx, IgnoreEexist) ->
     FinalResult = case create_storage_file(SDHandle, FileCtx3) of
         {error, ?ENOENT} ->
             FileCtx4 = create_missing_parent_dirs(UserCtx, FileCtx3),
-            create_storage_file(SDHandle, FileCtx4);
+            case create_storage_file(SDHandle, FileCtx4) of
+                {error, ?ENOENT} ->
+                    ?warning("Missing dirs on storage path to file ~p", [file_ctx:get_logical_guid_const(FileCtx4)]),
+                    % Fallback because of inconsistencies in metadata caused by rename.
+                    % This function cannot be used by default, as it does not chown created directories.
+                    FileCtx5 = create_missing_parent_dirs_by_location(UserCtx, FileCtx4),
+                    create_storage_file(SDHandle, FileCtx5);
+                Other ->
+                    Other
+            end;
         {error, ?EEXIST} ->
             handle_eexists(IgnoreEexist, SDHandle, FileCtx3);
         {error, Errno} when Errno == ?EACCES orelse Errno == ?EPERM ->
@@ -411,9 +420,9 @@ truncate_created_file(FileCtx) ->
                 {ok, FileCtx3}
         end
     catch
-        Error:Reason:Stacktrace ->
-            ?warning_stacktrace("Error truncating newly created storage file ~p: ~p:~p",
-                [file_ctx:get_logical_guid_const(FileCtx), Error, Reason], Stacktrace),
+        Class:Reason:Stacktrace ->
+            ?warning_exception("Error truncating newly created storage file ~p",
+                [file_ctx:get_logical_guid_const(FileCtx)], Class, Reason, Stacktrace),
             {ok, FileCtx}
     end.
 
@@ -442,10 +451,39 @@ create_missing_parent_dirs(UserCtx, FileCtx) ->
             end
     end.
 
+-spec create_missing_parent_dirs_by_location(user_ctx:ctx(), file_ctx:ctx()) -> file_ctx:ctx().
+create_missing_parent_dirs_by_location(UserCtx, FileCtx) ->
+    ReferencedUuidBasedFileCtx = file_ctx:ensure_based_on_referenced_guid(FileCtx),
+    {StorageFileId, ReferencedUuidBasedFileCtx2} = file_ctx:get_storage_file_id(ReferencedUuidBasedFileCtx),
+    {StorageId, ReferencedUuidBasedFileCtx3} = file_ctx:get_storage_id(ReferencedUuidBasedFileCtx2),
+    [<<"/">>, SpaceId | PathTokens] = filepath_utils:split(filepath_utils:parent_dir(StorageFileId)),
+    % Use uuid of given file as we do not know uuid of parent - this function is called if there is some inconsistency
+    % in metadata and file_location is pointing to another path than it is resolved based on file meta, this can happen
+    % when ancestor directory was moved on other provider and local file location was created without file being created on storage.
+    % This uuid is only used to check if this is the space dir, which it is not, so we can safely do it.
+    DummyUuid = datastore_key:new(),
+    lists:foldl(fun(PathToken, ParentPath) ->
+        Path = filepath_utils:join([ParentPath, PathToken]),
+        SDHandle = storage_driver:new_handle(user_ctx:get_session_id(UserCtx), SpaceId, DummyUuid, StorageId, Path),
+        case storage_driver:mkdir(SDHandle, ?DEFAULT_DIR_MODE) of
+            ok -> ok;
+            {error, already_exists} -> ok;
+            Error ->
+                ?error("Error when recreating missing storage directory ~p: ~p", [Path, Error])
+        end,
+        Path
+    end, filepath_utils:join([<<"/">>, SpaceId]), PathTokens),
+    case file_ctx:equals(FileCtx, ReferencedUuidBasedFileCtx) of
+        true -> % regular file - use provided ctx
+            ReferencedUuidBasedFileCtx3;
+        false -> % hardlink - use effective ctx and do not return changes on ctx
+            FileCtx
+    end.
+
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
-%% Tail recursive helper function of ?MODULE:create_missing_parent_dirs/1
+%% Tail recursive helper function of ?MODULE:create_missing_parent_dirs/2
 %% @end
 %%-------------------------------------------------------------------
 -spec create_missing_parent_dirs(user_ctx:ctx(), file_ctx:ctx(), [file_ctx:ctx()]) -> ok.
@@ -455,8 +493,8 @@ create_missing_parent_dirs(UserCtx, FileCtx, ParentCtxsToCreate) ->
     case IsStorageFileCreated or IsSpaceDir of
         true ->
             ParentCtxsToCreate2 = case IsStorageFileCreated of
-                true -> ParentCtxsToCreate;
-                false -> [FileCtx2 | ParentCtxsToCreate]
+                false -> [FileCtx2 | ParentCtxsToCreate];
+                true -> ParentCtxsToCreate
             end,
             lists:foreach(fun(Ctx) ->
                 % create missing directories going down the file tree

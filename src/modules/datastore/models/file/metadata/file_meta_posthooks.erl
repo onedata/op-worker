@@ -16,6 +16,7 @@
 %%% and retained when returns `repeat` (useful with link hooks, as it
 %%% can be triggered by any link document).
 %%% Any exported function can be used as a hook.
+%%% Any module using file_meta_posthooks must implement `file_meta_posthooks_behaviour`.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(file_meta_posthooks).
@@ -29,8 +30,29 @@
 %% functions operating on record using datastore model API
 -export([add_hook/6, execute_hooks/2, cleanup/1]).
 
+%% deprecated functions
+-export([execute_hooks_deprecated/2]).
+
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1, get_record_version/0]).
+
+-type hook_type() :: doc | link.
+-type missing_element() :: {file_meta_missing, MissingUuid :: file_meta:uuid()} |
+    {link_missing, Uuid :: file_meta:uuid(), MissingName :: file_meta:name()}.
+-type hook_identifier() :: binary().
+-type function_name() :: atom().
+% Posthook args encoded with Module:encode_file_meta_posthook_args/2 function.
+% Maximum size of resulting binary is ?MAX_ENCODED_ARGS_SIZE bytes.
+% Args are encoded by caller so it is aware of this limitation.
+-type encoded_args() :: binary().
+-type one_or_many(Type) :: Type | [Type].
+
+-export_type([missing_element/0,function_name/0, encoded_args/0]).
+
+%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 21.02.*.
+-define(CTX, #{
+    model => ?MODULE
+}).
 
 -record(hook, {
     module :: module(),
@@ -38,22 +60,17 @@
     % list of arbitrary args encoded using term_to_binary/1
     args :: binary()
 }).
-
 -type hook() :: #hook{}.
--type hook_type() :: doc | link.
--type missing_element() :: {file_meta_missing, MissingUuid :: file_meta:uuid()} |
-    {link_missing, Uuid :: file_meta:uuid(), MissingName :: file_meta:name()}.
--type hook_identifier() :: binary().
 -type hooks() :: #{hook_identifier() => hook()}.
+-export_type([hooks/0]).
 
--export_type([hooks/0, missing_element/0]).
-
--define(CTX, #{
-    model => ?MODULE
-}).
-
--define(MAX_POSTHOOKS,  op_worker:get_env(max_file_meta_posthooks, 256)).
 -define(LINK_KEY(FileUuid), <<"link_hooks_", FileUuid/binary>>).
+
+-define(SEPARATOR, "#").
+-define(FOLD_LINKS_LIMIT, 1000).
+-define(MAX_ENCODED_ARGS_SIZE, 512).
+
+-define(SHOULD_IGNORE_ON_INITIAL_SYNC, op_worker:get_env(ignore_file_meta_posthooks_on_initial_sync, false)).
 
 %%%===================================================================
 %%% Functions operating on record using datastore_model API
@@ -61,25 +78,51 @@
 
 -spec add_hook(missing_element(), hook_identifier(), od_space:id(), module(), atom(), [term()]) ->
     ok | ?ERROR_INTERNAL_SERVER_ERROR.
-add_hook(MissingElement, Identifier, SpaceId, Module, Function, Args) ->
+add_hook(MissingElement, Identifier, SpaceId, Module, Function, PosthookArgs) ->
+    case ?SHOULD_IGNORE_ON_INITIAL_SYNC andalso dbsync_state:set_initial_sync_repeat(SpaceId) of
+        ok ->
+            ok;
+        _ ->
+            add_hook_internal(MissingElement, Identifier, Module, Function, PosthookArgs)
+    end.
+
+
+-spec execute_hooks(file_meta:uuid(), hook_type()) -> ok.
+execute_hooks(FileUuid, HookType) ->
+    Key = gen_datastore_key(FileUuid, HookType),
+    run_in_critical_section(FileUuid, fun() ->
+        execute_hooks_unsafe(Key, #{token => #link_token{}})
+    end).
+
+
+-spec cleanup(file_meta:uuid()) -> ok.
+cleanup(FileUuid) ->
+    lists:foreach(fun(Key) ->
+        cleanup_deprecated(Key),
+        cleanup_links(Key, #{token => #link_token{}})
+    end, [FileUuid, ?LINK_KEY(FileUuid)]).
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%% @private
+-spec add_hook_internal(missing_element(), hook_identifier(), module(), atom(), [term()]) ->
+    ok | ?ERROR_INTERNAL_SERVER_ERROR.
+add_hook_internal(MissingElement, Identifier, Module, Function, PosthookArgs) ->
     FileUuid = get_hook_uuid(MissingElement),
-    EncodedArgs = term_to_binary(Args),
-    Hook = #hook{
-        module = Module,
-        function = Function,
-        args = EncodedArgs
-    },
-
     HookType = missing_element_to_hook_type(MissingElement),
-    AddAns = datastore_model:update(?CTX, gen_datastore_key(FileUuid, HookType), fun(#file_meta_posthooks{hooks = Hooks} = FileMetaPosthooks) ->
-        case maps:size(Hooks) >= ?MAX_POSTHOOKS of
-            true -> {error, too_many_posthooks};
-            false -> {ok, FileMetaPosthooks#file_meta_posthooks{hooks = Hooks#{Identifier => Hook}}}
-        end
-    end, #file_meta_posthooks{hooks = #{Identifier => Hook}}),
+    Key = gen_datastore_key(FileUuid, HookType),
 
-    case AddAns of
-        {ok, _} ->
+    EncodedArgs = Module:encode_file_meta_posthook_args(Function, PosthookArgs),
+
+    byte_size(EncodedArgs) =< ?MAX_ENCODED_ARGS_SIZE orelse
+        error({file_meta_posthooks_too_large_args, Key, Identifier, byte_size(EncodedArgs)}),
+
+    Link = {Identifier, encode_hook(Module, Function, EncodedArgs)},
+    case ?extract_ok(?ok_if_exists(add_links(Key, Link))) of
+        ok ->
             % Check race with file_meta document and links synchronization. Hook is added when something fails because
             % of missing file_meta document or link. If missing element appears before hook adding to datastore,
             % execution of hook is not triggered by dbsync. Thus, check if missing element exists and trigger hook
@@ -87,100 +130,92 @@ add_hook(MissingElement, Identifier, SpaceId, Module, Function, Args) ->
             case has_missing_element_appeared(MissingElement) of
                 true ->
                     % Spawn to prevent deadlocks when hook is added from the inside of already existing hook
-                    spawn(fun() -> execute_hooks(FileUuid, missing_element_to_hook_type(MissingElement)) end),
+                    spawn(fun() ->
+                        run_in_critical_section(FileUuid, fun() ->
+                            case get_link(Key, Identifier) of
+                                {ok, _} ->
+                                    case execute_hook(Key, Identifier, Module, Function, EncodedArgs) of
+                                        ok -> delete_links(Key, Identifier);
+                                        error -> ok % hook execution failed, do not remove the hook
+                                    end;
+                                {error, not_found} ->
+                                    ok
+                            end
+                        end)
+                    end),
                     ok;
                 false ->
                     ok
             end;
-        {error, too_many_posthooks} ->
-            case dbsync_state:set_initial_sync_repeat(SpaceId) of
-                ok ->
-                    ok;
-                {error, initial_sync_does_not_exist} ->
-                    ?error("~p:~p error for file ~p (identifier ~p, hook module ~p, hook fun ~p, hook args ~p):"
-                        " too many posthooks", [?MODULE, ?FUNCTION_NAME, FileUuid, Identifier, Module, Function, Args])
-            end;
         Error ->
-            ?error("~p:~p error for file ~p (identifier ~p, hook module ~p, hook fun ~p, hook args ~p): ~p",
-                [?MODULE, ?FUNCTION_NAME, FileUuid, Identifier, Module, Function, Args, Error]),
+            ?error("~p:~p error adding file meta posthook for file ~p (identifier ~p, hook module ~p, hook fun ~p): ~p",
+                [?MODULE, ?FUNCTION_NAME, FileUuid, Identifier, Module, Function, Error]),
             ?ERROR_INTERNAL_SERVER_ERROR
     end.
 
 
--spec execute_hooks(file_meta:uuid(), hook_type()) -> ok | {error, term()}.
-execute_hooks(FileUuid, HookType) ->
-    Key = gen_datastore_key(FileUuid, HookType),
-    case datastore_model:get(?CTX, Key) of
-        {ok, #document{value = #file_meta_posthooks{hooks = Hooks}}} ->
-            case maps:size(Hooks) of
-                0 ->
-                    ok;
-                _ ->
-                    critical_section:run(FileUuid, fun() ->
-                        % Get document once more as hooks might have changed before entering to critical section
-                        case datastore_model:get(?CTX, Key) of
-                            {ok, #document{value = #file_meta_posthooks{hooks = Hooks}}} ->
-                                execute_hooks_unsafe(Key, Hooks);
-                            _ ->
-                                ok
-                        end
-                    end)
-            end;
-        _ ->
-            ok
+%% @private
+-spec execute_hooks_unsafe(datastore:key(), datastore:fold_opts()) -> ok.
+execute_hooks_unsafe(Key, Opts) ->
+    FoldFun = fun(#link{name = Name, target = Target}, Acc) ->
+        {ok, [{Name, Target} | Acc]}
+    end,
+    {{ok, Links}, NextToken} = fold_links(Key, FoldFun, Opts),
+    SuccessfulHooks = lists:filtermap(fun({Identifier, EncodedHook}) ->
+        {Module, Function, EncodedArgs} = decode_hook(EncodedHook),
+        case execute_hook(Key, Identifier, Module, Function, EncodedArgs) of
+            ok -> {true, Identifier};
+            error -> false
+        end
+    end, Links),
+    delete_links(Key, SuccessfulHooks),
+    case NextToken#link_token.is_last of
+        true -> ok;
+        false -> execute_hooks_unsafe(Key, Opts#{token => NextToken})
     end.
 
 
 %% @private
--spec execute_hooks_unsafe(datastore:key(), hooks()) -> ok | {error, term()}.
-execute_hooks_unsafe(Key, HooksToExecute) ->
-    SuccessfulHooks = maps:fold(fun(Identifier, #hook{module = Module, function = Function, args = Args}, Acc) ->
-        try
-            case erlang:apply(Module, Function, binary_to_term(Args)) of
-                ok -> [Identifier | Acc];
-                %% @TODO VFS-10296 - handle not fully synced links in this module
-                repeat -> Acc
-            end
-        catch Error:Type:Stacktrace  ->
-            ?debug_stacktrace(
-                "Error during execution of file meta posthook (~p) for file ~p ~p:~p",
-                [Identifier, Key, Error, Type],
-                Stacktrace
-            ),
-            Acc
+-spec execute_hook(datastore:key(), hook_identifier(), module(), atom(), encoded_args()) -> ok | error.
+execute_hook(Key, Identifier, Module, Function, EncodedArgs) ->
+    try
+        case erlang:apply(Module, Function, Module:decode_file_meta_posthook_args(Function, EncodedArgs)) of
+            ok -> ok;
+            %% @TODO VFS-10296 - handle not fully synced links in this module
+            repeat -> error
         end
-    end, [], HooksToExecute),
-
-    case SuccessfulHooks of
-        [] ->
-            ok;
-        _ ->
-            UpdateFun = fun(#file_meta_posthooks{hooks = PreviousHooks} = FileMetaPosthooks) ->
-                {ok, FileMetaPosthooks#file_meta_posthooks{hooks = maps:without(SuccessfulHooks, PreviousHooks)}}
-            end,
-            case datastore_model:update(?CTX, Key, UpdateFun) of
-                {ok, #document{value = #file_meta_posthooks{hooks = Hooks}}} when map_size(Hooks) == 0 ->
-                    datastore_model:delete(?CTX, Key, fun(#file_meta_posthooks{hooks = H}) -> map_size(H) == 0 end);
-                {ok, _} ->
-                    ok;
-                {error, _} = Error ->
-                    Error
-            end
+    catch Class:Reason:Stacktrace ->
+        ?debug_exception(?autoformat([Identifier, Key]), Class, Reason, Stacktrace),
+        error
     end.
 
 
--spec cleanup(file_meta:uuid()) -> ok | {error, term()}.
-cleanup(Key) ->
-    case datastore_model:delete(?CTX, Key) of
-        ok -> ok;
-        {error, not_found} -> ok;
-        {error, _} = Error -> Error
+%% @private
+-spec cleanup_links(datastore:key(), datastore:fold_opts()) -> ok.
+cleanup_links(Key, Opts) ->
+    FoldFun = fun(#link{name = Name}, Acc) -> {ok, [Name | Acc]} end,
+    {{ok, Links}, NextToken} = fold_links(Key, FoldFun, Opts),
+    delete_links(Key, Links),
+    case NextToken#link_token.is_last of
+        true -> ok;
+        false -> cleanup_links(Key, Opts#{token => NextToken})
     end.
 
 
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
+%% @private
+-spec encode_hook(module(), atom(), encoded_args()) -> binary().
+encode_hook(Module, Function, EncodedArgs) ->
+    base64url:encode(<<(atom_to_binary(Module))/binary, ?SEPARATOR, (atom_to_binary(Function))/binary, ?SEPARATOR, EncodedArgs/binary>>).
+
+
+%% @private
+-spec decode_hook(binary()) -> {module(), atom(), encoded_args()}.
+decode_hook(EncodedHook) ->
+    DecodedHook = base64url:decode(EncodedHook),
+    [ModuleBin, DecodedHookTail] = binary:split(DecodedHook, <<?SEPARATOR>>),
+    [FunctionBin, EncodedArgs] = binary:split(DecodedHookTail, <<?SEPARATOR>>),
+    {binary_to_existing_atom(ModuleBin), binary_to_existing_atom(FunctionBin), EncodedArgs}.
+
 
 %% @private
 -spec get_hook_uuid(missing_element()) -> file_meta:uuid().
@@ -207,8 +242,91 @@ missing_element_to_hook_type({file_meta_missing, _}) -> doc;
 missing_element_to_hook_type({link_missing, _, _}) -> link.
 
 
+%% @private
+-spec gen_datastore_key(file_meta:uuid(), doc | link) -> datastore:key().
 gen_datastore_key(FileUuid, doc) -> FileUuid;
 gen_datastore_key(FileUuid, link) -> ?LINK_KEY(FileUuid).
+
+
+%% @private
+-spec add_links(datastore:key(), one_or_many({datastore:link_name(), datastore:link_target()})) ->
+    one_or_many({ok, datastore:link()} | {error, term()}).
+add_links(Key, Link) ->
+    datastore_model:add_links(?CTX, Key, oneprovider:get_id(), Link).
+
+
+%% @private
+-spec delete_links(datastore:key(), one_or_many(datastore:link_name())) -> one_or_many(ok | {error, term()}).
+delete_links(Key, Links) ->
+    datastore_model:delete_links(?CTX, Key, oneprovider:get_id(), Links).
+
+
+%% @private
+-spec get_link(datastore:key(), hook_identifier()) -> {ok, [datastore:link()]} | {error, term()}.
+get_link(Key, Identifier) ->
+    datastore_model:get_links(?CTX, Key, oneprovider:get_id(), Identifier).
+
+
+%% @private
+-spec fold_links(datastore:key(), datastore:fold_fun(datastore:link()), datastore:fold_opts()) ->
+    {ok, datastore:fold_acc()} | {{ok, datastore:fold_acc()}, datastore_links_iter:token()} | {error, term()}.
+fold_links(Key, FoldFun, Opts) ->
+    datastore_model:fold_links(?CTX, Key, all, FoldFun, [], Opts#{size => ?FOLD_LINKS_LIMIT}).
+
+
+%%%===================================================================
+%%% Deprecated functions
+%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 21.02.*.
+%%%===================================================================
+
+-spec execute_hooks_deprecated(file_meta:uuid(), hook_type()) -> ok | {error, term()}.
+execute_hooks_deprecated(FileUuid, HookType) ->
+    Key = gen_datastore_key(FileUuid, HookType),
+    case datastore_model:get(?CTX, Key) of
+        {ok, #document{value = #file_meta_posthooks{hooks = Hooks}}} ->
+            case maps:size(Hooks) of
+                0 ->
+                    cleanup_deprecated(Key);
+                _ ->
+                    execute_hooks_deprecated_internal(Key, Hooks)
+            end;
+        _ ->
+            ok
+    end.
+
+
+%% @private
+-spec execute_hooks_deprecated_internal(datastore:key(), hooks()) -> ok | {error, term()}.
+execute_hooks_deprecated_internal(Key, HooksToExecute) ->
+    FailedHooks = maps:fold(fun(Identifier, #hook{module = Module, function = Function, args = Args}, Acc) ->
+        case execute_hook(Key, Identifier, Module, Function, term_to_binary(Args)) of
+            ok -> Acc;
+            error -> [{Identifier, encode_hook(Module, Function, Args)} | Acc]
+        end
+    end, [], HooksToExecute),
+
+    case FailedHooks of
+        [] -> ok;
+        _ -> add_links(Key, FailedHooks)
+    end,
+    cleanup_deprecated(Key).
+
+
+%% @private
+-spec cleanup_deprecated(file_meta:uuid()) -> ok | {error, term()}.
+cleanup_deprecated(Key) ->
+    case datastore_model:delete(?CTX, Key) of
+        ok -> ok;
+        {error, not_found} -> ok;
+        {error, _} = Error -> Error
+    end.
+
+
+%% @private
+-spec run_in_critical_section(file_meta:uuid(), fun (() -> Result)) -> Result.
+run_in_critical_section(FileUuid, Fun) ->
+    critical_section:run({?MODULE, FileUuid}, Fun).
+
 
 %%%===================================================================
 %%% datastore_model callbacks
@@ -218,10 +336,12 @@ gen_datastore_key(FileUuid, link) -> ?LINK_KEY(FileUuid).
 get_ctx() ->
     ?CTX.
 
+%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 21.02.*.
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
     1.
 
+%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 21.02.*.
 -spec get_record_struct(datastore_model:record_version()) ->
     datastore_model:record_struct().
 get_record_struct(1) ->
@@ -232,4 +352,3 @@ get_record_struct(1) ->
             {args, binary}
         ]}}}
     ]}.
-

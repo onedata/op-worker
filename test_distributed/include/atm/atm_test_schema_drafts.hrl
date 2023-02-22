@@ -32,7 +32,10 @@
 -define(FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_4_ERROR_MSG, <<"signal: illegal instruction (core dumped)\n">>).
 
 -define(ECHO_WITH_SLEEP_DOCKER_IMAGE_ID, <<"test/echo_with_sleep">>).
+-define(ECHO_WITH_PAUSE_DOCKER_IMAGE_ID, <<"test/echo_with_pause">>).
+
 -define(ECHO_WITH_EXCEPTION_ON_EVEN_NUMBERS, <<"test/echo_with_exception_on_even_numbers">>).
+-define(ECHO_CONFIG_DOCKER_ID, <<"test/echo_config">>).
 
 
 -define(ECHO_ARG_NAME, <<"value">>).
@@ -41,7 +44,16 @@
     operation_spec = #atm_openfaas_operation_spec_draft{
         docker_image = ?ECHO_DOCKER_IMAGE_ID
     },
-    argument_specs = [#atm_lambda_argument_spec{
+    config_parameter_specs = [#atm_parameter_spec{
+        name = ?ECHO_ARG_NAME,
+        data_spec = #atm_data_spec{
+            type = atm_number_type,
+            value_constraints = #{integers_only => true}
+        },
+        is_optional = true,
+        default_value = 0
+    }],
+    argument_specs = [#atm_parameter_spec{
         name = ?ECHO_ARG_NAME,
         data_spec = __DATA_SPEC,
         is_optional = false
@@ -53,7 +65,7 @@
     }]
 }).
 -define(ECHO_LAMBDA_DRAFT(__DATA_SPEC), ?ECHO_LAMBDA_DRAFT(__DATA_SPEC, return_value)).
--define(INTEGER_ECHO_LAMBDA_DRAFT, ?ECHO_LAMBDA_DRAFT(#atm_data_spec{type = atm_integer_type})).
+-define(NUMBER_ECHO_LAMBDA_DRAFT, ?ECHO_LAMBDA_DRAFT(#atm_data_spec{type = atm_number_type})).
 
 -define(ECHO_LAMBDA_ID, <<"echo">>).
 -define(ECHO_LAMBDA_REVISION_NUM, 1).

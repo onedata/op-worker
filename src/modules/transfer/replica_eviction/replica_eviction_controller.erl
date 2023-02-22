@@ -127,8 +127,8 @@ init([SessionId, TransferId, FileGuid, Callback, SupportingProviderId,
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_call(_Request, _From, State) ->
-    ?log_bad_request(_Request),
+handle_call(Request, _From, State) ->
+    ?log_bad_request(Request),
     {reply, wrong_request, State}.
 
 %%--------------------------------------------------------------------
@@ -240,8 +240,8 @@ handle_cast(Request, State = #state{status = Status}) ->
     {noreply, NewState :: #state{}} |
     {noreply, NewState :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term(), NewState :: #state{}}.
-handle_info(_Info, State) ->
-    ?log_bad_request(_Info),
+handle_info(Info, State) ->
+    ?log_bad_request(Info),
     {noreply, State}.
 
 %%--------------------------------------------------------------------

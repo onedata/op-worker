@@ -60,14 +60,17 @@
 % never existed and those that were recently deleted (when a report comes and there is no matching registry).
 -define(DELETED_REGISTRY_EXPIRY_SECONDS, 604800).  % a week
 
+%% defaults are used; @see audit_log.erl
+-define(LOG_OPTS, #{}).
+
 %%%===================================================================
 %%% API functions
 %%%===================================================================
 
--spec create_for_function(atm_openfaas_task_executor:function_name()) ->
+-spec create_for_function(atm_openfaas_task_executor:function_id()) ->
     {ok, id()} | {error, term()}.
-create_for_function(FunctionName) ->
-    RegistryId = gen_registry_id(FunctionName),
+create_for_function(FunctionId) ->
+    RegistryId = gen_registry_id(FunctionId),
     Doc = #document{
         key = RegistryId,
         value = #atm_openfaas_function_pod_status_registry{}
@@ -209,9 +212,9 @@ get_record_struct(1) ->
 %%%===================================================================
 
 %% @private
--spec gen_registry_id(atm_openfaas_task_executor:function_name()) -> id().
-gen_registry_id(FunctionName) ->
-    datastore_key:new_from_digest([FunctionName]).
+-spec gen_registry_id(atm_openfaas_task_executor:function_id()) -> id().
+gen_registry_id(FunctionId) ->
+    datastore_key:new_from_digest([FunctionId]).
 
 
 %% @private
@@ -221,18 +224,9 @@ gen_pod_event_log_id(RegistryId, PodId) ->
 
 
 %% @private
--spec ensure_pod_event_log_created(infinite_log:log_id()) -> ok.
-ensure_pod_event_log_created(LogId) ->
-    case audit_log:create(LogId, #{}) of
-        ok -> ok;
-        {error, already_exists} -> ok
-    end.
-
-
-%% @private
 -spec consume_pod_status_report(atm_openfaas_function_pod_status_report:record()) -> ok.
 consume_pod_status_report(#atm_openfaas_function_pod_status_report{
-    function_name = FunctionName,
+    function_id = FunctionId,
     pod_id = PodId,
 
     event_timestamp = EventTimestamp,
@@ -240,7 +234,7 @@ consume_pod_status_report(#atm_openfaas_function_pod_status_report{
     event_reason = EventReason,
     event_message = EventMessage
 } = PodStatusReport) ->
-    PodStatusRegistryId = gen_registry_id(FunctionName),
+    PodStatusRegistryId = gen_registry_id(FunctionId),
 
     Diff = fun(PodStatusRegistry) ->
         {ok, apply_report_to_corresponding_summary(PodStatusReport, PodStatusRegistry)}
@@ -249,30 +243,15 @@ consume_pod_status_report(#atm_openfaas_function_pod_status_report{
         {ok, _} ->
             PodEventLogId = gen_pod_event_log_id(PodStatusRegistryId, PodId),
             AppendRequest = build_append_request(EventTimestamp, EventType, EventReason, EventMessage),
-            case audit_log:append(PodEventLogId, AppendRequest) of
-                ok ->
-                    ok;
-                {error, not_found} ->
-                    % If there is no audit log, it means that either it has not been created yet
-                    % ot it has been deleted by a parallel process performing cleaning of the
-                    % registry and logs. The latter can be determined depending if the registry
-                    % has been deleted too - in such case, the log is ignored.
-                    case ?MODULE:get(PodStatusRegistryId) of
-                        {ok, _} ->
-                            ensure_pod_event_log_created(PodEventLogId),
-                            ok = audit_log:append(PodEventLogId, AppendRequest);
-                        {error, not_found} ->
-                            ok
-                    end
-            end;
+            audit_log:append(PodEventLogId, ?LOG_OPTS, AppendRequest);
         {error, not_found} ->
             case datastore_model:get(?CTX#{include_deleted => true}, PodStatusRegistryId) of
                 {ok, _} ->
                     % the registry has been recently deleted, the report can be silently ignored
                     ok;
                 {error, not_found} ->
-                    ?warning("Ignoring a pod status report received for inexistent registry (function name: '~s')", [
-                        FunctionName
+                    ?warning("Ignoring a pod status report received for inexistent registry (function id: '~s')", [
+                        FunctionId
                     ])
             end
     end.
@@ -282,7 +261,7 @@ consume_pod_status_report(#atm_openfaas_function_pod_status_report{
 -spec apply_report_to_corresponding_summary(atm_openfaas_function_pod_status_report:record(), record()) ->
     record().
 apply_report_to_corresponding_summary(#atm_openfaas_function_pod_status_report{
-    function_name = FunctionName,
+    function_id = FunctionId,
     pod_id = PodId,
 
     pod_status = NewPodStatus,
@@ -290,7 +269,7 @@ apply_report_to_corresponding_summary(#atm_openfaas_function_pod_status_report{
 
     event_timestamp = EventTimestamp
 }, PodStatusRegistry) ->
-    PodStatusId = gen_registry_id(FunctionName),
+    PodStatusId = gen_registry_id(FunctionId),
     PodEventLogId = gen_pod_event_log_id(PodStatusId, PodId),
     Default = #atm_openfaas_function_pod_status_summary{
         current_status = NewPodStatus,

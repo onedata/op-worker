@@ -27,7 +27,10 @@
 -export([report_update_of_dir/2, report_update_of_nearest_dir/2, get_update_time/1]).
 
 %% dir_stats_collection_behaviour callbacks
--export([acquire/1, consolidate/3, on_collection_move/2, save/3, delete/1, init_dir/1, init_child/1]).
+-export([
+    acquire/1, consolidate/3, on_collection_move/2, save/3, delete/1, init_dir/1, init_child/2,
+    compress/1, decompress/1
+]).
 
 %% datastore_model callbacks
 -export([get_record_struct/1]).
@@ -133,10 +136,19 @@ init_dir(Guid) ->
     init(Guid).
 
 
--spec init_child(file_id:file_guid()) -> dir_stats_collection:collection().
-init_child(Guid) ->
+-spec init_child(file_id:file_guid(), boolean()) -> dir_stats_collection:collection().
+init_child(Guid, _) ->
     init(Guid).
 
+
+-spec compress(dir_stats_collection:collection()) -> term().
+compress(#{?STAT_NAME := StatValue}) ->
+    #{0 => StatValue}.
+
+
+-spec decompress(term()) -> dir_stats_collection:collection().
+decompress(#{0 := StatValue}) ->
+    #{?STAT_NAME => StatValue}.
 
 %%%===================================================================
 %%% datastore_model callbacks

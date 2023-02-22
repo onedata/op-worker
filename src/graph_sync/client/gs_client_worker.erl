@@ -286,10 +286,14 @@ init([]) ->
             {stop, normal};
         {error, _} = Error ->
             ?debug("Failed to establish Onezone connection: ~w", [Error]),
-            utils:throttle(?OZ_CONNECTION_AWAIT_LOG_INTERVAL, fun() ->
+            utils:throttle({?MODULE, ?FUNCTION_NAME, Error}, ?OZ_CONNECTION_AWAIT_LOG_INTERVAL, fun() ->
                 ?warning(
-                    "Onezone connection cannot be established, is the service online (~ts)? "
-                    "Last error was: ~w. Retrying as long as it takes...", [oneprovider:get_oz_domain(), Error]
+                    "Onezone connection cannot be established, is the service online (~ts)?~n"
+                    "Last error was: ~p~n"
+                    "Retrying as long as it takes...", [
+                        oneprovider:get_oz_domain(),
+                        Error
+                    ]
                 )
             end),
             {stop, normal}

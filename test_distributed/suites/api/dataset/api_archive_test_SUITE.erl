@@ -53,7 +53,7 @@
 groups() -> [
     % TODO VFS-8199 - Execute in parallel after fixing problems with timeouts
     {all_tests, [
-        create_archive, 
+        create_archive,
         get_archive_info,
         modify_archive_description,
         get_dataset_archives,
@@ -96,6 +96,7 @@ end).
 %%%===================================================================
 %%% Archive dataset test functions
 %%%===================================================================
+
 create_archive(_Config) ->
     Providers = [krakow, paris],
 
@@ -116,7 +117,7 @@ create_archive(_Config) ->
             target_nodes = Providers,
             client_spec = ?CLIENT_SPEC_FOR_SPACE_KRK_PAR(?EPERM),
             randomly_select_scenarios = true,
-            verify_fun = build_verify_archive_created_fun(MemRef, Providers, 
+            verify_fun = build_verify_archive_created_fun(MemRef, Providers,
                 get_datasets(attached), get_datasets(detached)),
             scenario_templates = [
                 #scenario_template{
@@ -130,7 +131,7 @@ create_archive(_Config) ->
                     type = gs,
                     prepare_args_fun = fun create_archive_prepare_gs_args_fun/1,
                     validate_result_fun = build_create_archive_validate_gs_call_result_fun(MemRef)
-                } 
+                }
             ],
             data_spec = #data_spec{
                 required = [<<"datasetId">>],
@@ -232,7 +233,7 @@ build_create_archive_validate_rest_call_result_fun(MemRef) ->
 -spec build_create_archive_validate_gs_call_result_fun(api_test_memory:mem_ref()) ->
     onenv_api_test_runner:validate_call_result_fun().
 build_create_archive_validate_gs_call_result_fun(MemRef) ->
-    fun(#api_test_ctx{data = Data, node = Node}, Result) ->
+    fun(#api_test_ctx{data = Data, node = Node, client = ?USER(Creator)}, Result) ->
         DatasetId = maps:get(<<"datasetId">>, Data),
 
         {ok, #{<<"gri">> := ArchiveGri} = ArchiveData} = ?assertMatch({ok, _}, Result),
@@ -248,7 +249,7 @@ build_create_archive_validate_gs_call_result_fun(MemRef) ->
         PreservedCallback = maps:get(<<"preservedCallback">>, Data, undefined),
         DeletedCallback = maps:get(<<"deletedCallback">>, Data, undefined),
 
-        ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId, ?ARCHIVE_BUILDING, Config,
+        ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId, Creator, ?ARCHIVE_BUILDING, Config,
             Description, PreservedCallback, DeletedCallback, undefined, opw_test_rpc:get_provider_id(Node)),
         % state is removed from the map as it may be in pending, building or even preserved state when request is handled
         IgnoredKeys = [<<"state">>, <<"stats">>, <<"rootDir">>, <<"creationTime">>, <<"index">>, <<"baseArchive">>, <<"relatedDip">>],
@@ -305,7 +306,7 @@ build_verify_archive_created_fun(MemRef, Providers, AttachedDatasets, DetachedDa
 assert_dataset_lists(AttachedDatasets, DetachedDatasets) ->
     assert_dataset_list(attached, AttachedDatasets),
     assert_dataset_list(detached, DetachedDatasets).
-    
+
 
 assert_dataset_list(State, ExpectedDatasets) ->
     ExistingDatasets = get_datasets(State),
@@ -367,6 +368,7 @@ get_archive_info(_Config) ->
                         ExpArchiveData = #{
                             <<"archiveId">> => ArchiveId,
                             <<"datasetId">> => DatasetId,
+                            <<"creator">> => oct_background:get_user_id(user3),
                             <<"state">> => atom_to_binary(?ARCHIVE_PRESERVED, utf8),
                             <<"rootDirectoryId">> => DirObjectId,
                             <<"description">> => Description,
@@ -392,7 +394,7 @@ get_archive_info(_Config) ->
                     prepare_args_fun = build_get_archive_prepare_gs_args_fun(ArchiveId),
                     validate_result_fun = fun(#api_test_ctx{}, {ok, Result}) ->
                         DirGuid = get_root_dir_guid(ArchiveId),
-                        ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId, ?ARCHIVE_PRESERVED,
+                        ExpArchiveData = build_archive_gs_instance(ArchiveId, DatasetId, oct_background:get_user_id(user3), ?ARCHIVE_PRESERVED,
                             Config, Description, undefined, undefined, DirGuid, oct_background:get_provider_id(krakow)),
                         ?assertEqual(ExpArchiveData, maps:without([<<"creationTime">>, <<"index">>, <<"relatedDip">>], Result)),
                         ?assertEqual(archive_config:should_include_dip(Config), maps:get(<<"relatedDip">>, Result) =/= null)
@@ -576,7 +578,8 @@ get_dataset_archives(_Config) ->
     UserSessId = oct_background:get_user_session_id(user3, RandomProvider),
 
     ArchiveInfos = lists:map(fun(#archive_object{id = ArchiveId}) ->
-        {ok, ArchiveInfo} = opt_archives:get_info(RandomProviderNode, UserSessId, ArchiveId),
+        {ok, ArchiveInfo} = ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
+            opt_archives:get_info(RandomProviderNode, UserSessId, ArchiveId), ?ATTEMPTS),
         ArchiveInfo
     end, ArchiveObjects),
 
@@ -882,19 +885,19 @@ await_archive_deleted_callback_called(ArchiveId, DatasetId) ->
 
 init_archive_recall_test(_Config) ->
     Providers = [krakow, paris],
-    
+
     #object{dataset = #dataset_object{
         id = DatasetId,
         archives = [ArchiveObject]
     }} = onenv_file_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{dataset = #dataset_spec{
         archives = 1
     }}),
-    
+
     MemRef = api_test_memory:init(),
     api_test_memory:set(MemRef, archive_object, ArchiveObject),
-    
+
     maybe_detach_dataset(Providers, DatasetId),
-    
+
     ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = Providers,
@@ -905,7 +908,7 @@ init_archive_recall_test(_Config) ->
                     type = rest,
                     prepare_args_fun = build_init_recall_archive_prepare_rest_args_fun(MemRef),
                     validate_result_fun = fun(_, {ok, RespCode, _, RespBody}) ->
-                        {_, #{<<"rootFileId">> := RootFileId}} = 
+                        {_, #{<<"rootFileId">> := RootFileId}} =
                             ?assertMatch({?HTTP_201_CREATED, #{<<"rootFileId">> := _}}, {RespCode, RespBody}),
                         {ok, RootFileGuid} = file_id:objectid_to_guid(RootFileId),
                         validate_recall_result(Providers, RootFileGuid)
@@ -915,7 +918,7 @@ init_archive_recall_test(_Config) ->
                     name = <<"Init archive recall using GS API">>,
                     type = gs,
                     prepare_args_fun = build_init_recall_archive_prepare_gs_args_fun(MemRef),
-                    validate_result_fun = fun(_, Result) -> 
+                    validate_result_fun = fun(_, Result) ->
                         {ok, #{<<"rootFileId">> := RootFileGuid}} = ?assertMatch({ok, #{<<"rootFileId">> := _}}, Result),
                         validate_recall_result(Providers, RootFileGuid)
                     end
@@ -956,7 +959,7 @@ build_init_recall_archive_prepare_rest_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data0}) ->
         #archive_object{id = ArchiveId} = api_test_memory:get(MemRef, archive_object),
         {Id, Data} = api_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
-        
+
         #rest_args{
             method = post,
             headers = #{?HDR_CONTENT_TYPE => <<"application/json">>},
@@ -973,7 +976,7 @@ build_init_recall_archive_prepare_gs_args_fun(MemRef) ->
     fun(#api_test_ctx{data = Data0}) ->
         #archive_object{id = ArchiveId} = api_test_memory:get(MemRef, archive_object),
         {Id, Data} = api_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
-        
+
         #gs_args{
             operation = create,
             gri = #gri{type = op_archive, id = Id, aspect = recall, scope = private},
@@ -1019,15 +1022,15 @@ get_archive_recall_test_base(Providers, Aspect) ->
         content = crypto:strong_rand_bytes(20),
         dataset = #dataset_spec{archives = 1}
     }),
-    
+
     SessId = fun(P) -> oct_background:get_user_session_id(user2, P) end,
     SpaceDirGuid = fslogic_file_id:spaceid_to_space_dir_guid(oct_background:get_space_id(?SPACE)),
     {ok, RootFileGuid} = opt_archives:recall(krakow, SessId(krakow), ArchiveId, SpaceDirGuid, str_utils:rand_hex(16)),
     ?assertMatch({ok, _}, opt_archives:get_recall_details(paris, SessId(paris), RootFileGuid), ?ATTEMPTS),
     {ok, RootFileObjectId} = file_id:guid_to_objectid(RootFileGuid),
-    
+
     maybe_detach_dataset(Providers, DatasetId),
-    
+
     ?assert(onenv_api_test_runner:run_tests([
         #suite_spec{
             target_nodes = Providers,
@@ -1064,7 +1067,7 @@ get_archive_recall_test_base(Providers, Aspect) ->
 
 
 %% @private
--spec get_recall_validate_result(details | progress, gs | rest, archive:id(), dataset:id(), Res) -> 
+-spec get_recall_validate_result(details | progress, gs | rest, archive:id(), dataset:id(), Res) ->
     Res.
 get_recall_validate_result(details, gs, ArchiveId, DatasetId, Result) ->
     SourceArchiveGri = gri:serialize(#gri{
@@ -1106,7 +1109,7 @@ get_recall_validate_result(progress, rest, _ArchiveId, _DatasetId, RespBody) ->
 build_get_recall_archive_details_prepare_rest_args_fun(RootFileObjectId, Aspect) ->
     fun(#api_test_ctx{data = Data0}) ->
         {Id, Data} = api_test_utils:maybe_substitute_bad_id(RootFileObjectId, Data0),
-        
+
         #rest_args{
             method = get,
             headers = #{?HDR_CONTENT_TYPE => <<"application/json">>},
@@ -1122,7 +1125,7 @@ build_get_recall_archive_details_prepare_rest_args_fun(RootFileObjectId, Aspect)
 build_get_recall_archive_details_prepare_gs_args_fun(RootFileObjectId, Aspect) ->
     fun(#api_test_ctx{data = Data0}) ->
         {Id, Data} = api_test_utils:maybe_substitute_bad_id(RootFileObjectId, Data0),
-        
+
         #gs_args{
             operation = get,
             gri = #gri{type = op_file, id = Id, aspect = gs_recall_get_aspect(Aspect), scope = private},
@@ -1153,42 +1156,49 @@ get_archivisation_audit_log(_Config) ->
     }} = onenv_file_test_utils:create_and_sync_file_tree(user3, ?SPACE, #file_spec{dataset = #dataset_spec{
         archives = 1
     }}, krakow),
-    
-    ?assert(onenv_api_test_runner:run_tests([
-        #suite_spec{
-            target_nodes = [krakow], % audit log is only available on provider performing archivisation
-            client_spec = #client_spec{
-                correct = [
-                    user2,  % space owner - doesn't need any perms
-                    user3,  % files owner
-                    user4   % space member - should succeed as getting audit log doesn't require any space perms
-                ],
-                unauthorized = [nobody],
-                forbidden_not_in_space = [user1]
-            },
-            randomly_select_scenarios = true,
-            scenario_templates = [
-                #scenario_template{
-                    name = <<"Get archivisation audit log using GS API">>,
-                    type = gs,
-                    prepare_args_fun = build_get_archivisation_audit_log_prepare_gs_args_fun(ArchiveId),
-                    validate_result_fun = validate_archivisation_audit_log_fun_gs()
-                }
+
+    MemRef = api_test_memory:init(),
+
+    SuiteSpec = #suite_spec{
+        target_nodes = [krakow], % audit log is only available on provider performing archivisation
+        client_spec = #client_spec{
+            correct = [
+                user2,  % space owner - doesn't need any perms
+                user3,  % files owner
+                user4   % space member - should succeed as getting audit log doesn't require any space perms
             ],
-            data_spec = #data_spec{
-                optional = [<<"timestamp">>, <<"offset">>],
-                correct_values = #{
-                    <<"timestamp">> => [7967656156000], % some time in the future
-                    <<"offset">> => [0]
-                },
-                bad_values = [
-                    {<<"timestamp">>, <<"aaa">>, ?ERROR_BAD_VALUE_INTEGER(<<"timestamp">>)},
-                    {<<"timestamp">>, -8, ?ERROR_BAD_VALUE_TOO_LOW(<<"timestamp">>, 0)},
-                    {<<"offset">>, <<"aaa">>, ?ERROR_BAD_VALUE_INTEGER(<<"offset">>)}
-                ]
+            unauthorized = [nobody],
+            forbidden_not_in_space = [user1]
+        },
+        randomly_select_scenarios = true,
+        scenario_templates = [
+            #scenario_template{
+                name = <<"Get archivisation audit log using GS API">>,
+                type = gs,
+                prepare_args_fun = build_get_archivisation_audit_log_prepare_gs_args_fun(ArchiveId),
+                validate_result_fun = validate_archivisation_audit_log_fun_gs(MemRef)
             }
+        ],
+        data_spec = #data_spec{
+            optional = [<<"timestamp">>, <<"offset">>],
+            correct_values = #{
+                <<"timestamp">> => [7967656156000], % some time in the future
+                <<"offset">> => [0]
+            },
+            bad_values = [
+                {<<"timestamp">>, <<"aaa">>, ?ERROR_BAD_VALUE_INTEGER(<<"timestamp">>)},
+                {<<"timestamp">>, -8, ?ERROR_BAD_VALUE_TOO_LOW(<<"timestamp">>, 0)},
+                {<<"offset">>, <<"aaa">>, ?ERROR_BAD_VALUE_INTEGER(<<"offset">>)}
+            ]
         }
-    ])).
+    },
+    api_test_memory:set(MemRef, audit_log_deleted, false),
+    ?assert(onenv_api_test_runner:run_tests([SuiteSpec])),
+
+    % simulate expiration of the audit log
+    opw_test_rpc:call(krakow, audit_log, delete, [ArchiveId]),
+    api_test_memory:set(MemRef, audit_log_deleted, true),
+    ?assert(onenv_api_test_runner:run_tests([SuiteSpec])).
 
 %% @private
 -spec build_get_archivisation_audit_log_prepare_gs_args_fun(dataset:id()) ->
@@ -1196,7 +1206,7 @@ get_archivisation_audit_log(_Config) ->
 build_get_archivisation_audit_log_prepare_gs_args_fun(ArchiveId) ->
     fun(#api_test_ctx{data = Data0}) ->
         {GriId, Data1} = api_test_utils:maybe_substitute_bad_id(ArchiveId, Data0),
-        
+
         #gs_args{
             operation = get,
             gri = #gri{type = op_archive, id = GriId, aspect = audit_log, scope = private},
@@ -1206,15 +1216,19 @@ build_get_archivisation_audit_log_prepare_gs_args_fun(ArchiveId) ->
 
 
 %% @private
--spec validate_archivisation_audit_log_fun_gs() ->
+-spec validate_archivisation_audit_log_fun_gs(api_test_memory:mem_ref()) ->
     ok | no_return().
-validate_archivisation_audit_log_fun_gs() ->
+validate_archivisation_audit_log_fun_gs(MemRef) ->
     fun(_, RespBody) ->
-        
-        ?assertMatch({ok, #{
-            <<"isLast">> := true,
-            <<"logEntries">> := [_]
-        }}, RespBody),
+        case api_test_memory:get(MemRef, audit_log_deleted) of
+            true ->
+                ?assertMatch(?ERROR_NOT_FOUND, RespBody);
+            false ->
+                ?assertMatch({ok, #{
+                    <<"isLast">> := true,
+                    <<"logEntries">> := [_]
+                }}, RespBody)
+        end,
         ok
     end.
 
@@ -1228,9 +1242,9 @@ get_datasets_summary_for_archive_test(_Config) ->
     StructureSpec = #file_spec{
         dataset = #dataset_spec{archives = 1}
     },
-    #object{dataset = #dataset_object{archives = [#archive_object{id = ArchiveId}]}} = 
+    #object{dataset = #dataset_object{archives = [#archive_object{id = ArchiveId}]}} =
         onenv_file_test_utils:create_and_sync_file_tree(user2, ?SPACE, StructureSpec, krakow),
-    {ok, #archive_info{root_dir_guid = RootDirGuid}} = ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}}, 
+    {ok, #archive_info{root_dir_guid = RootDirGuid}} = ?assertMatch({ok, #archive_info{state = ?ARCHIVE_PRESERVED}},
         opw_test_rpc:call(krakow, archive_api, get_archive_info, [ArchiveId])),
     ?assertEqual({ok, #file_eff_dataset_summary{
         direct_dataset = undefined,
@@ -1263,6 +1277,7 @@ verify_archive(
         ExpArchiveInfo = #archive_info{
             id = ArchiveId,
             dataset_id = DatasetId,
+            creator = UserId,
             archiving_provider = ProviderId,
             state = ?ARCHIVE_PRESERVED,
             root_dir_guid = RootDirGuid,
@@ -1303,16 +1318,17 @@ list_archive_ids(Node, UserSessId, DatasetId, ListOpts) ->
 
 
 %% @private
--spec build_archive_gs_instance(archive:id(), dataset:id(), archive:state(), archive:config(),
+-spec build_archive_gs_instance(archive:id(), dataset:id(), od_user:id(), archive:state(), archive:config(),
     archive:description(), archive:callback(), archive:callback(), file_id:file_guid(), oneprovider:id()) ->
     json_utils:json_term().
-build_archive_gs_instance(ArchiveId, DatasetId, State, Config, Description, PreservedCallback, DeletedCallback,
+build_archive_gs_instance(ArchiveId, DatasetId, Creator, State, Config, Description, PreservedCallback, DeletedCallback,
     RootDirGuid, ProviderId
 ) ->
     BasicInfo = archive_gui_gs_translator:translate_archive_info(#archive_info{
         id = ArchiveId,
         dataset_id = DatasetId,
         archiving_provider = ProviderId,
+        creator = Creator,
         state = str_utils:to_binary(State),
         root_dir_guid = RootDirGuid,
         config = Config,
@@ -1359,7 +1375,7 @@ init_per_suite(Config) ->
             ozt_spaces:set_privileges(
                 SpaceId, ?OCT_USER_ID(user4), privileges:space_member() -- [?SPACE_VIEW]
             ),
-            
+
             start_http_server(),
             NewConfig
         end

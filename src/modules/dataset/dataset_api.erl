@@ -65,6 +65,7 @@ establish(FileCtx, ProtectionFlags) ->
 
 -spec establish(file_ctx:ctx(), data_access_control:bitmask(), dataset_type()) -> {ok, dataset:id()}.
 establish(FileCtx, ProtectionFlags, DatasetType) ->
+    ok = file_meta:validate_protection_flags(ProtectionFlags),
     ?CRITICAL_SECTION(file_ctx:get_logical_uuid_const(FileCtx), fun() ->
         SpaceId = file_ctx:get_space_id_const(FileCtx),
         Uuid = file_ctx:get_logical_uuid_const(FileCtx),

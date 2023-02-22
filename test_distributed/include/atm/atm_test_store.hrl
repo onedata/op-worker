@@ -19,7 +19,7 @@
 -include_lib("ctool/include/time_series/common.hrl").
 
 
--define(ATM_INTEGER_DATA_SPEC, #atm_data_spec{type = atm_integer_type}).
+-define(ATM_NUMBER_DATA_SPEC, #atm_data_spec{type = atm_number_type}).
 -define(ATM_STRING_DATA_SPEC, #atm_data_spec{type = atm_string_type}).
 -define(ATM_OBJECT_DATA_SPEC, #atm_data_spec{type = atm_object_type}).
 
@@ -34,9 +34,7 @@
 
 -define(EXP_WINDOW(__METRIC_CONFIG, __TIMESTAMP, __VALUE), #{
     <<"value">> => __VALUE,
-    <<"timestamp">> => __TIMESTAMP - __TIMESTAMP rem __METRIC_CONFIG#metric_config.resolution,
-    <<"firstMeasurementTimestamp">> => null,
-    <<"lastMeasurementTimestamp">> => null
+    <<"timestamp">> => __TIMESTAMP - __TIMESTAMP rem __METRIC_CONFIG#metric_config.resolution
 }).
 
 -define(MAX_FILE_SIZE_TS_NAME, <<"max_file_size">>).
@@ -147,7 +145,7 @@
 }).
 
 -define(INTEGER_ATM_LIST_STORE_SCHEMA_DRAFT(__ID, __DEFAULT_INITIAL_CONTENT),
-    ?ATM_LIST_STORE_SCHEMA_DRAFT(__ID, ?ATM_INTEGER_DATA_SPEC, __DEFAULT_INITIAL_CONTENT)
+    ?ATM_LIST_STORE_SCHEMA_DRAFT(__ID, ?ATM_NUMBER_DATA_SPEC, __DEFAULT_INITIAL_CONTENT)
 ).
 -define(INTEGER_ATM_LIST_STORE_SCHEMA_DRAFT(__ID), ?INTEGER_ATM_LIST_STORE_SCHEMA_DRAFT(__ID, undefined)).
 

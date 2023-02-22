@@ -90,7 +90,7 @@ subscribe_test(Config) ->
             3 => ?ATM_LAMBDA_FIRST_REVISION(?ATM_LAMBDA_1)
         }
     },
-    
+
     ChangedData1 = AtmLambda1PrivateData#{
         <<"revisionRegistry">> => jsonable_record:to_json(NewRevisionRegistry, atm_lambda_revision_registry),
         <<"revision">> => 6

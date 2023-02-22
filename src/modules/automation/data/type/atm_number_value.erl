@@ -7,10 +7,10 @@
 %%%-------------------------------------------------------------------
 %%% @doc
 %%% This module implements `atm_data_validator` and `atm_data_compressor` 
-%%% functionality for `atm_string_type`.
+%%% functionality for `atm_number_type`.
 %%% @end
 %%%-------------------------------------------------------------------
--module(atm_string_value).
+-module(atm_number_value).
 -author("Bartosz Walkowicz").
 
 -behaviour(atm_data_validator).
@@ -43,7 +43,7 @@ assert_meets_constraints(_AtmWorkflowExecutionAuth, Value, ValueConstraints) ->
             (ConstraintRule) -> assert_meets_constraint(ConstraintRule, Value)
         end, maps:to_list(ValueConstraints))
     catch throw:{unverified_constraints, UnverifiedConstraints} ->
-        throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(Value, atm_string_type, UnverifiedConstraints))
+        throw(?ERROR_ATM_DATA_VALUE_CONSTRAINT_UNVERIFIED(Value, atm_number_type, UnverifiedConstraints))
     end.
 
 
@@ -52,11 +52,11 @@ assert_meets_constraints(_AtmWorkflowExecutionAuth, Value, ValueConstraints) ->
 %%%===================================================================
 
 
--spec compress(atm_value:expanded(), atm_data_type:value_constraints()) -> binary().
+-spec compress(atm_value:expanded(), atm_data_type:value_constraints()) -> number().
 compress(Value, _ValueConstraints) -> Value.
 
 
--spec expand(atm_workflow_execution_auth:record(), binary(), atm_data_type:value_constraints()) ->
+-spec expand(atm_workflow_execution_auth:record(), number(), atm_data_type:value_constraints()) ->
     {ok, atm_value:expanded()}.
 expand(_AtmWorkflowExecutionAuth, Value, _ValueConstraints) ->
     {ok, Value}.
@@ -70,8 +70,17 @@ expand(_AtmWorkflowExecutionAuth, Value, _ValueConstraints) ->
 %% @private
 -spec assert_meets_constraint(ConstraintRule :: {atom(), term()}, number()) ->
     ok | no_return().
+assert_meets_constraint({integers_only, IntegersOnly}, Number) when
+    IntegersOnly =:= false;
+    (IntegersOnly =:= true andalso is_integer(Number))
+->
+    ok;
+
+assert_meets_constraint({integers_only, IntegersOnly}, _Number) ->
+    throw(throw({unverified_constraints, #{<<"integersOnly">> => IntegersOnly}}));
+
 assert_meets_constraint({allowed_values, AllowedValues}, Number) ->
     case lists:member(Number, AllowedValues) of
         true -> ok;
-        false -> throw({unverified_constraints, #{<<"allowedValues">> => AllowedValues}})
+        false -> throw(throw({unverified_constraints, #{<<"allowedValues">> => AllowedValues}}))
     end.

@@ -46,7 +46,7 @@
     on_cancel_init/2, task_canceled/2, task_finished/2]).
 
 %% File_meta posthooks used during tests
--export([test_posthook/3]).
+-export([test_posthook/3, encode_file_meta_posthook_args/2, decode_file_meta_posthook_args/2]).
 
 -define(TEST_CASES, [
     initial_sync_repeat_test, resynchronization_test, range_resynchronization_test,
@@ -216,7 +216,7 @@ db_sync_basic_opts_test(Config) ->
     multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {3,0,0}, 60).
 
 db_sync_basic_opts_with_errors_test(Config) ->
-    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {3,0,0}, 60, false).
+    multi_provider_file_ops_test_base:basic_opts_test_base(Config, <<"user1">>, {3,0,0}, 120, false).
 
 rtransfer_test(Config) ->
     ?PERFORMANCE(Config, ?rtransfer_performance_description("Tests rtransfer")).
@@ -379,15 +379,19 @@ traverse_cancel_test_base(Config, StartTaskWorker, CancelWorker, DirName) ->
     get_slave_ans(),
 
     lists:foreach(fun(W) ->
-        ?assertMatch({ok, #document{value = #traverse_task{enqueued = false,
-            canceled = true, status = canceled}}}, rpc:call(W, tree_traverse, get_task, [?MODULE, TaskId]), 30),
+        verify_finished_task(W, TaskId, true),
         ?assertMatch({ok, [], _}, rpc:call(W, traverse_task_list, list, [atom_to_binary(?MODULE, utf8), ongoing]), 30),
         ?assertMatch({ok, [], _}, rpc:call(W, traverse_task_list, list, [atom_to_binary(?MODULE, utf8), scheduled]), 30),
         check_ended(Worker, [TaskId]),
 
         case W of
-            Worker -> check_callbacks(W, 1, 1, 0);
-            _ -> check_callbacks(W, 0, 0, 0)
+            Worker ->
+                ?assertEqual(1, length(
+                    rpc:call(W, application, get_env, [?APP_NAME, task_canceled, []]) ++
+                    rpc:call(W, application, get_env, [?APP_NAME, task_finished, []])
+                ));
+            _ ->
+                check_callbacks(W, 0, 0, 0)
         end
     end, Workers).
 
@@ -440,14 +444,17 @@ queued_traverse_cancel_test_base(Config, CancelWorker, DirName) ->
     lists:foreach(fun(W) ->
         ?assertMatch({ok, #document{value = #traverse_task{enqueued = false,
             canceled = false, status = finished}}}, rpc:call(W, tree_traverse, get_task, [?MODULE, TaskId0]), 30),
-        ?assertMatch({ok, #document{value = #traverse_task{enqueued = false,
-            canceled = true, status = canceled}}}, rpc:call(W, tree_traverse, get_task, [?MODULE, TaskId]), 30),
+        verify_finished_task(W, TaskId, true),
         ?assertMatch({ok, [], _}, rpc:call(W, traverse_task_list, list, [atom_to_binary(?MODULE, utf8), ongoing]), 30),
         ?assertMatch({ok, [], _}, rpc:call(W, traverse_task_list, list, [atom_to_binary(?MODULE, utf8), scheduled]), 30),
         check_ended(Worker, [TaskId0, TaskId]),
 
         case W of
-            Worker -> check_callbacks(W, 1, 1, 1);
+            Worker ->
+                ?assertEqual(2, length(
+                    rpc:call(W, application, get_env, [?APP_NAME, task_canceled, []]) ++
+                    rpc:call(W, application, get_env, [?APP_NAME, task_finished, []])
+                ));
             _ -> check_callbacks(W, 0, 0, 0)
         end
     end, Workers).
@@ -502,10 +509,8 @@ traverse_restart_test(Config) ->
     get_slave_ans(),
 
     lists:foreach(fun(W) ->
-        ?assertMatch({ok, #document{value = #traverse_task{enqueued = false,
-            canceled = false, status = finished}}}, rpc:call(W, tree_traverse, get_task, [?MODULE, TaskId]), 30),
-        ?assertMatch({ok, #document{value = #traverse_task{enqueued = false,
-            canceled = false, status = finished}}}, rpc:call(W, tree_traverse, get_task, [?MODULE, TaskId2]), 30),
+        verify_finished_task(W, TaskId, false),
+        verify_finished_task(W, TaskId2, false),
         ?assertMatch({ok, [], _}, rpc:call(W, traverse_task_list, list, [PoolName, ongoing]), 30),
         ?assertMatch({ok, [], _}, rpc:call(W, traverse_task_list, list, [PoolName, scheduled]), 30),
         check_ended(Worker, [TaskId, TaskId2])
@@ -681,7 +686,7 @@ initial_sync_repeat_test(Config) ->
 
     add_posthooks_on_file_sync(Worker1, SpaceId, Provider2Id, initial_sync, [<<"1">>, <<"2">>]),
     add_posthooks_on_file_sync(Worker1, SpaceId, Provider2Id, resynchronization, [<<"3">>]),
-    verify_posthooks_called([<<"1">>, <<"3">>]),
+    verify_posthooks_called([<<"3">>]),
 
     lists:foreach(fun(Guid) ->
         ?assertMatch({ok, _}, lfm_proxy:stat(Worker1, SessId1, ?FILE_REF(Guid)), 60)
@@ -785,7 +790,7 @@ init_per_testcase(initial_sync_repeat_test = Case, Config) ->
     test_utils:mock_expect(Worker, qos_logic, reconcile_qos, fun(_) ->
         ok
     end),
-    test_utils:set_env(Worker, ?APP_NAME, max_file_meta_posthooks, 1),
+    test_utils:set_env(Worker, ?APP_NAME, ignore_file_meta_posthooks_on_initial_sync, true),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 60}),
@@ -817,7 +822,7 @@ end_per_testcase(Case, Config) when
 end_per_testcase(initial_sync_repeat_test = Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Worker, [dbsync_changes, dbsync_utils, qos_logic]),
-    ?assertEqual(ok, rpc:call(Worker, application, unset_env, [?APP_NAME, max_file_meta_posthooks])),
+    ?assertEqual(ok, rpc:call(Worker, application, unset_env, [?APP_NAME, ignore_file_meta_posthooks_on_initial_sync])),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).
@@ -994,6 +999,14 @@ test_posthook(Master, Uuid, PosthookName) ->
     end.
 
 
+encode_file_meta_posthook_args(_, Args) ->
+    term_to_binary(Args).
+
+
+decode_file_meta_posthook_args(_, EncodedArgs) ->
+    binary_to_term(EncodedArgs).
+
+
 verify_posthooks_called(ExpectedPosthooks) ->
     receive
         {posthook_executed, PosthookName} ->
@@ -1003,3 +1016,24 @@ verify_posthooks_called(ExpectedPosthooks) ->
         timer:seconds(5) ->
             ?assertEqual([], ExpectedPosthooks)
     end.
+
+
+verify_finished_task(Worker, TaskId, IsCanceled) ->
+    CheckTask = fun() ->
+        try
+            {ok, #document{value = #traverse_task{enqueued = Enqueued, canceled = Canceled, status = Status}}} =
+                rpc:call(Worker, tree_traverse, get_task, [?MODULE, TaskId]),
+            % Status can be finished for canceled task if task was finished before cancel was processed
+            % (possible for remote cancellations).
+            % Status can be canceled even if job was not expected to be canceled in case of restart.
+            IsFinished = case (Status =:= canceled) orelse (Status =:= finished) of
+                true -> true;
+                false -> {false, Status}
+            end,
+            {Enqueued, Canceled, IsFinished}
+        catch
+            Error:Reason ->
+                {Error, Reason}
+        end
+    end,
+    ?assertEqual({false, IsCanceled, true}, CheckTask(), 30).

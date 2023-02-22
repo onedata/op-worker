@@ -51,6 +51,9 @@
 
 -define(LIST_BATCH_SIZE, 100).
 -define(FILES_TO_PROCESS_THRESHOLD, 10 * ?LIST_BATCH_SIZE).
+-define(MAX_RETRY_INTERVAL_SEC, op_worker:get_env(
+    max_file_transfer_retry_interval_sec, 18000
+)).
 
 %%%===================================================================
 %%% Callbacks
@@ -137,8 +140,8 @@ init([CallbackModule]) ->
     {noreply, NewState :: state(), timeout() | hibernate} |
     {stop, Reason :: term(), Reply :: term(), NewState :: state()} |
     {stop, Reason :: term(), NewState :: state()}).
-handle_call(_Request, _From, State) ->
-    ?log_bad_request(_Request),
+handle_call(Request, _From, State) ->
+    ?log_bad_request(Request),
     {reply, wrong_request, State}.
 
 
@@ -282,11 +285,12 @@ transfer_data(State = #state{mod = Mod}, FileCtx0, TransferJobCtx, RetriesLeft) 
             {error, already_ended};
         error:{badmatch, Error = {error, not_found}} ->
             maybe_retry(FileCtx0, TransferJobCtx, RetriesLeft, Error);
-        Error:Reason:Stacktrace   ->
-            ?error_stacktrace("Unexpected error ~p:~p during transfer ~p", [
-                Error, Reason, TransferJobCtx#transfer_job_ctx.transfer_id
-            ], Stacktrace),
-            maybe_retry(FileCtx0, TransferJobCtx, RetriesLeft, {Error, Reason})
+        Class:Reason:Stacktrace ->
+            ?error_exception(
+                "Unexpected error during transfer ~p", [TransferJobCtx#transfer_job_ctx.transfer_id],
+                Class, Reason, Stacktrace
+            ),
+            maybe_retry(FileCtx0, TransferJobCtx, RetriesLeft, {Class, Reason})
     end.
 
 
@@ -310,13 +314,13 @@ assert_transfer_is_ongoing(Transfer) ->
     {retry, file_ctx:ctx()} | {error, term()}.
 maybe_retry(_FileCtx, TransferJobCtx, 0, Error = {error, not_found}) ->
     ?error(
-        "Data transfer in scope of transfer ~p failed due to ~p~n"
+        "Data transfer in scope of transfer ~p failed due to ~w~n"
         "No retries left", [TransferJobCtx#transfer_job_ctx.transfer_id, Error]
     ),
     Error;
 maybe_retry(FileCtx, TransferJobCtx, Retries, Error = {error, not_found}) ->
     ?warning(
-        "Data transfer in scope of transfer ~p failed due to ~p~n"
+        "Data transfer in scope of transfer ~p failed due to ~w~n"
         "File transfer will be retried (attempts left: ~p)",
         [TransferJobCtx#transfer_job_ctx.transfer_id, Error, Retries - 1]
     ),
@@ -326,8 +330,14 @@ maybe_retry(FileCtx, TransferJobCtx, 0, Error) ->
     {Path, _FileCtx2} = file_ctx:get_canonical_path(FileCtx),
 
     ?error(
-        "Transfer of file ~p in scope of transfer ~p failed due to ~p~n"
-        "No retries left", [Path, TransferId, Error]
+        "Transfer of file ~p in scope of transfer ~p failed~n"
+        "FilePath: ~ts~n"
+        "Error was: ~p~n"
+        "No retries left", [
+            file_ctx:get_logical_guid_const(FileCtx), TransferId,
+            Path,
+            Error
+        ]
     ),
     {error, retries_per_file_transfer_exceeded};
 maybe_retry(FileCtx, TransferJobCtx, Retries, Error) ->
@@ -335,9 +345,15 @@ maybe_retry(FileCtx, TransferJobCtx, Retries, Error) ->
     {Path, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
 
     ?warning(
-        "Transfer of file ~p in scope of transfer ~p failed due to ~p~n"
-        "File transfer will be retried (attempts left: ~p)",
-        [Path, TransferId, Error, Retries - 1]
+        "Transfer of file ~p in scope of transfer ~p failed~n"
+        "FilePath: ~ts~n"
+        "Error was: ~p~n"
+        "File transfer will be retried (attempts left: ~p)", [
+            file_ctx:get_logical_guid_const(FileCtx), TransferId,
+            Path,
+            Error,
+            Retries - 1
+        ]
     ),
     {retry, FileCtx2}.
 
@@ -366,7 +382,7 @@ next_retry(#state{mod = Mod}, RetriesLeft) ->
 %%-------------------------------------------------------------------
 -spec backoff(non_neg_integer(), non_neg_integer()) -> non_neg_integer().
 backoff(RetryNum, MaxRetries) ->
-    rand:uniform(round(math:pow(2, min(RetryNum, MaxRetries)))).
+    min(rand:uniform(round(math:pow(2, min(RetryNum, MaxRetries)))), ?MAX_RETRY_INTERVAL_SEC).
 
 
 %%--------------------------------------------------------------------

@@ -123,8 +123,8 @@ handle(?SCAN_FINISHED(SpaceId)) ->
     auto_imported_spaces_registry:mark_inactive(SpaceId);
 handle(?IS_POOL_INITIALIZED) ->
     is_pool_initialized();
-handle(_Request) ->
-    ?log_bad_request(_Request),
+handle(Request) ->
+    ?log_bad_request(Request),
     {error, wrong_request}.
 
 %%--------------------------------------------------------------------

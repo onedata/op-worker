@@ -51,9 +51,8 @@
 %% API
 -export([start_archivisation/6, cancel_archivisation/3, recall/4, cancel_recall/1, update_archive/2, get_archive_info/1,
     list_archives/3, delete/2, get_nested_archives_stats/1, get_aggregated_stats/1]).
-
-%% Exported for use in tests
--export([remove_archive_recursive/1]).
+-export([delete_single_archive/2]).
+-export([delete_archive_recursive/1]).
 
 
 -type info() :: #archive_info{}.
@@ -97,7 +96,7 @@ start_archivisation(
         ?ATTACHED_DATASET ->
             {ok, SpaceId} = dataset:get_space_id(DatasetDoc),
             UserId = user_ctx:get_user_id(UserCtx),
-            BaseArchiveId = ensure_base_archive_is_set_if_applicable(Config, DatasetId),
+            BaseArchiveId = ensure_base_archive_is_set_if_applicable(Config),
             case archive:create(DatasetId, SpaceId, UserId, Config,
                 PreservedCallback, DeletedCallback, Description, BaseArchiveId)
             of
@@ -117,14 +116,23 @@ start_archivisation(
                         ok ->
                             get_archive_info(FinalAipArchiveDoc, undefined);
                         {error, _} = Error ->
+                            archive:mark_archivisation_failed(FinalAipArchiveDoc),
                             Error
                     end;
                 {error, _} = Error ->
                     Error
             end;
         ?DETACHED_DATASET ->
-            throw(?ERROR_BAD_DATA(<<"datasetId">>, <<"Detached dataset cannot be modified.">>))
+            ?ERROR_BAD_DATA(<<"datasetId">>, <<"Detached dataset cannot be modified.">>)
     end.
+
+
+-spec cancel_archivisation(archive:doc(), archive:cancel_preservation_policy(), user_ctx:ctx()) ->
+    ok | {error, term()}.
+cancel_archivisation(ArchiveDoc = #document{value = #archive{related_dip = undefined, related_aip = RelatedAip}}, PP, UserCtx) ->
+    cancel_archivisations(ArchiveDoc, RelatedAip, PP, UserCtx);
+cancel_archivisation(ArchiveDoc = #document{value = #archive{related_aip = undefined, related_dip = RelatedDip}}, PP, UserCtx) ->
+    cancel_archivisations(ArchiveDoc, RelatedDip, PP, UserCtx).
 
 
 -spec recall(archive:id(), user_ctx:ctx(), file_id:file_guid(), file_meta:name() | default) -> 
@@ -133,10 +141,9 @@ recall(ArchiveId, UserCtx, ParentGuid, TargetRootName) ->
     case archive:get(ArchiveId) of
         {ok, #document{value = #archive{state = ?ARCHIVE_PRESERVED}} = ArchiveDoc} ->
             archive_recall_traverse:start(ArchiveDoc, UserCtx, ParentGuid, TargetRootName);
-        {ok, _} ->
-            %% @TODO VFS-8840 - create more descriptive error
-            ?ERROR_FORBIDDEN;
-        {error, _} = Error -> 
+        {ok, #document{value = #archive{state = State}}} ->
+            ?ERROR_FORBIDDEN_FOR_CURRENT_ARCHIVE_STATE(State, [?ARCHIVE_PRESERVED]);
+        {error, _} = Error ->
             Error
     end.
 
@@ -163,6 +170,7 @@ get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
     {ok, ArchiveId} = archive:get_id(ArchiveDoc),
     {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
     {ok, ProviderId} = archive:get_archiving_provider_id(ArchiveDoc),
+    {ok, Creator} = archive:get_creator(ArchiveDoc),
     {ok, Timestamp} = archive:get_creation_time(ArchiveDoc),
     {ok, State} = get_state(ArchiveDoc),
     {ok, Config} = archive:get_config(ArchiveDoc),
@@ -180,6 +188,7 @@ get_archive_info(ArchiveDoc = #document{}, ArchiveIndex) ->
         id = ArchiveId,
         dataset_id = DatasetId,
         archiving_provider = ProviderId,
+        creator = Creator,
         state = State,
         root_dir_guid = ArchiveRootDirGuid,
         data_dir_guid = ArchiveDataDirGuid,
@@ -227,34 +236,49 @@ delete(ArchiveId, CallbackUrl) ->
             {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
             % TODO VFS-7718 removal of archive doc and callback should be executed when deleting from trash is finished
             % (now it's done before archive files are deleted from storage)
-            ok = remove_archive_recursive(ArchiveDoc),
+            ok = delete_archive_recursive(ArchiveDoc),
             archivisation_callback:notify_deleted(ArchiveId, DatasetId, CallbackUrl);
         {error, _} = Error ->
             Error
     end.
 
 
--spec remove_archive_recursive(archive:doc() | archive:id()) -> ok.
-remove_archive_recursive(#document{} = ArchiveDoc) ->
-    remove_archive_recursive(ArchiveDoc, #link_token{});
-remove_archive_recursive(ArchiveId) ->
+-spec delete_archive_recursive(archive:doc() | archive:id()) -> ok.
+delete_archive_recursive(#document{} = ArchiveDoc) ->
+    delete_archive_recursive(ArchiveDoc, #link_token{});
+delete_archive_recursive(ArchiveId) ->
     case archive:get(ArchiveId) of
-        {ok, ArchiveDoc} -> remove_archive_recursive(ArchiveDoc);
+        {ok, ArchiveDoc} -> delete_archive_recursive(ArchiveDoc);
         ?ERROR_NOT_FOUND -> ok
     end.
 
 
--spec cancel_archivisation(archive:doc() | archive:id(), archive:cancel_preservation_policy(), user_ctx:ctx()) ->
-    ok | {error, term()}.
-cancel_archivisation(ArchiveDoc = #document{value = #archive{related_dip = undefined, related_aip = RelatedAip}}, PP, UserCtx) ->
-    cancel_archivisations(ArchiveDoc, RelatedAip, PP, UserCtx);
-cancel_archivisation(ArchiveDoc = #document{value = #archive{related_aip = undefined, related_dip = RelatedDip}}, PP, UserCtx) ->
-    cancel_archivisations(ArchiveDoc, RelatedDip, PP, UserCtx);
-cancel_archivisation(ArchiveId, PreservationPolicy, UserCtx) ->
+-spec delete_single_archive(archive:id() | archive:doc(), user_ctx:ctx()) -> ok | error().
+delete_single_archive(undefined, _UserCtx) ->
+    ok;
+delete_single_archive(ArchiveDoc = #document{}, UserCtx) ->
+    {ok, ArchiveId} = archive:get_id(ArchiveDoc),
+    case archive:delete(ArchiveId) of
+        ok ->
+            ok = unblock_archive(ArchiveDoc),
+            {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
+            ArchiveDocCtx = file_ctx:new_by_uuid(?ARCHIVE_DIR_UUID(ArchiveId), SpaceId),
+            % TODO VFS-7718 Should it be possible to register many callbacks in case of parallel delete requests?
+            delete_req:delete_using_trash(UserCtx, ArchiveDocCtx, true),
+            
+            {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
+            {ok, Timestamp} = archive:get_creation_time(ArchiveDoc),
+            {ok, ParentArchiveId} = archive:get_parent_id(ArchiveDoc),
+            ParentArchiveId =/= undefined andalso archives_forest:delete(ParentArchiveId, SpaceId, ArchiveId),
+            archives_list:delete(DatasetId, SpaceId, ArchiveId, Timestamp);
+        ?ERROR_NOT_FOUND ->
+            % there was race with other process removing the archive
+            ok
+    end;
+delete_single_archive(ArchiveId, UserCtx) ->
     case archive:get(ArchiveId) of
-        {ok, ArchiveDoc} -> cancel_archivisation(ArchiveDoc, PreservationPolicy, UserCtx);
-        ?ERROR_NOT_FOUND -> ok;
-        {error, _} = Error -> Error
+        {ok, ArchiveDoc} -> delete_single_archive(ArchiveDoc, UserCtx);
+        ?ERROR_NOT_FOUND -> ok
     end.
 
 
@@ -298,22 +322,19 @@ get_aggregated_stats(ArchiveId) ->
 %%%===================================================================
 
 %% @private
--spec remove_archive_recursive(archive:doc(), archives_forest:token()) -> ok.
-remove_archive_recursive(ArchiveDoc, Token) ->
-    % parent archives must be unblocked first because otherwise hardlinks in children 
-    % archives would still have effective permission flags protecting them from being deleted.
-    ok = unblock_related_archives(ArchiveDoc),
+-spec delete_archive_recursive(archive:doc(), archives_forest:token()) -> ok.
+delete_archive_recursive(ArchiveDoc, Token) ->
     {ok, ArchiveId} = archive:get_id(ArchiveDoc),
     case archives_forest:list(ArchiveId, Token, ?BATCH_SIZE) of
         {ok, ChildrenArchives, Token2} ->
             lists:foreach(fun(ChildArchiveId) ->
-                remove_archive_recursive(ChildArchiveId)
+                delete_archive_recursive(ChildArchiveId)
             end, ChildrenArchives),
             case Token2#link_token.is_last of
                 true ->
-                    remove_archive(ArchiveDoc);
+                    delete_archive(ArchiveDoc);
                 false ->
-                    remove_archive_recursive(ArchiveDoc, Token2)
+                    delete_archive_recursive(ArchiveDoc, Token2)
             end;
         {error, not_found} ->
             ok
@@ -321,72 +342,25 @@ remove_archive_recursive(ArchiveDoc, Token) ->
     
 
 %% @private
--spec remove_archive(archive:doc()) -> ok | error().
-remove_archive(ArchiveDoc = #document{value = #archive{related_dip = undefined, related_aip = RelatedAip}}) ->
-    remove_archives(ArchiveDoc, RelatedAip);
-remove_archive(ArchiveDoc = #document{value = #archive{related_aip = undefined, related_dip = RelatedDip}}) ->
-    remove_archives(ArchiveDoc, RelatedDip).
+-spec delete_archive(archive:doc()) -> ok | error().
+delete_archive(ArchiveDoc = #document{value = #archive{related_dip = undefined, related_aip = RelatedAip}}) ->
+    delete_archives(ArchiveDoc, RelatedAip);
+delete_archive(ArchiveDoc = #document{value = #archive{related_aip = undefined, related_dip = RelatedDip}}) ->
+    delete_archives(ArchiveDoc, RelatedDip).
 
 
 %% @private
--spec remove_archives(archive:doc(), archive:id() | undefined) -> ok | error().
-remove_archives(Archive, RelatedArchive) ->
+-spec delete_archives(archive:doc(), archive:id() | undefined) -> ok | error().
+delete_archives(Archive, RelatedArchive) ->
     UserCtx = user_ctx:new(?ROOT_SESS_ID),
-    ok = remove_single_archive(Archive, UserCtx),
-    ok = remove_single_archive(RelatedArchive, UserCtx).
-
-
-%% @private
--spec remove_single_archive(archive:id() | archive:doc(), user_ctx:ctx()) -> ok | error().
-remove_single_archive(undefined, _UserCtx) ->
-    ok;
-remove_single_archive(ArchiveDoc = #document{}, UserCtx) ->
-    {ok, ArchiveId} = archive:get_id(ArchiveDoc),
-    case archive:delete(ArchiveId) of
-        ok ->
-            {ok, SpaceId} = archive:get_space_id(ArchiveDoc),
-            ArchiveDocCtx = file_ctx:new_by_uuid(?ARCHIVE_DIR_UUID(ArchiveId), SpaceId),
-            % TODO VFS-7718 Should it be possible to register many callbacks in case of parallel delete requests?
-            delete_req:delete_using_trash(UserCtx, ArchiveDocCtx, true),
-            
-            {ok, DatasetId} = archive:get_dataset_id(ArchiveDoc),
-            {ok, Timestamp} = archive:get_creation_time(ArchiveDoc),
-            {ok, ParentArchiveId} = archive:get_parent_id(ArchiveDoc),
-            ParentArchiveId =/= undefined andalso archives_forest:delete(ParentArchiveId, SpaceId, ArchiveId),
-            archives_list:delete(DatasetId, SpaceId, ArchiveId, Timestamp);
-        ?ERROR_NOT_FOUND ->
-            % there was race with other process removing the archive
-            ok
-    end;
-remove_single_archive(ArchiveId, UserCtx) ->
-    case archive:get(ArchiveId) of
-        {ok, ArchiveDoc} -> remove_single_archive(ArchiveDoc, UserCtx);
-        ?ERROR_NOT_FOUND -> ok
-    end.
-
-
-%% @private
--spec unblock_related_archives(archive:doc()) -> ok.
-unblock_related_archives(#document{value = #archive{
-    related_aip = RelatedAip,
-    related_dip = RelatedDip
-}} = ArchiveDoc) ->
-    ok = unblock_archive(ArchiveDoc),
-    ok = unblock_archive(RelatedAip),
-    ok = unblock_archive(RelatedDip).
+    ok = delete_single_archive(Archive, UserCtx),
+    ok = delete_single_archive(RelatedArchive, UserCtx).
 
 
 %% @private
 -spec unblock_archive(archive:doc() | archive:id() | undefined) -> ok.
-unblock_archive(undefined) ->
-    ok;
 unblock_archive(#document{} = ArchiveDoc) ->
-    archive_verification_traverse:unblock_archive_modification(ArchiveDoc);
-unblock_archive(ArchiveId) ->
-    case archive:get(ArchiveId) of
-        {ok, ArchiveDoc} -> unblock_archive(ArchiveDoc);
-        ?ERROR_NOT_FOUND -> ok
-    end.
+    archive_verification_traverse:unblock_archive_modification(ArchiveDoc).
 
 
 %% @private
@@ -408,7 +382,7 @@ cancel_single_archive(ArchiveDocOrId, PreservationPolicy, UserCtx) ->
         {error, already_cancelled} ->
             case PreservationPolicy of
                 retain -> ok;
-                delete -> remove_single_archive(ArchiveDocOrId, UserCtx)
+                delete -> delete_single_archive(ArchiveDocOrId, UserCtx)
             end;
         {error, already_finished} ->
             ok;
@@ -439,14 +413,18 @@ get_state(ArchiveDoc = #document{}) ->
 
 
 %% @private
--spec ensure_base_archive_is_set_if_applicable(archive:config(), dataset:id()) -> 
+-spec ensure_base_archive_is_set_if_applicable(archive:config()) ->
     archive:id() | undefined.
-ensure_base_archive_is_set_if_applicable(Config, DatasetId) ->
+ensure_base_archive_is_set_if_applicable(Config) ->
     case archive_config:is_incremental(Config) of
         true ->
             case archive_config:get_incremental_based_on(Config) of
-                undefined -> incremental_archive:find_base_archive_id(DatasetId);
-                BaseArchiveId -> BaseArchiveId
+                undefined -> throw(?ERROR_MISSING_REQUIRED_VALUE(<<"basedOn">>));
+                BaseArchiveId ->
+                    case archive:get(BaseArchiveId) of
+                        {ok, _} -> BaseArchiveId;
+                        {error, not_found} -> throw(?ERROR_BAD_VALUE_ID_NOT_FOUND(<<"basedOn">>))
+                    end
             end;
         false ->
             undefined

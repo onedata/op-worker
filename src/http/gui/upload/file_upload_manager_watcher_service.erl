@@ -20,6 +20,7 @@
 
 %% API
 -export([setup_internal_service/0]).
+-export([terminate_internal_service/0]).
 
 %% Internal Service callbacks
 -export([start_service/0, stop_service/0, healthcheck/1]).
@@ -46,6 +47,20 @@ setup_internal_service() ->
         healthcheck_interval => ?HEALTHCHECK_BASE_INTERVAL,
         async_start => true
     }).
+
+
+-spec terminate_internal_service() -> ok.
+terminate_internal_service() ->
+    case node() =:= internal_services_manager:get_processing_node(?SERVICE_NAME) of
+        true ->
+            try
+                ok = internal_services_manager:stop_service(?MODULE, ?SERVICE_NAME, ?SERVICE_NAME)
+            catch Class:Reason:Stacktrace ->
+                ?error_exception(Class, Reason, Stacktrace)
+            end;
+        false ->
+            ok
+    end.
 
 
 %%%===================================================================

@@ -704,7 +704,7 @@ zone_get_offline_access_idps() ->
 -spec verify_provider_identity(od_provider:id()) -> ok | {error, term()}.
 verify_provider_identity(TheirProviderId) ->
     try
-        {ok, OurIdentityToken} = ?throw_on_error(provider_auth:acquire_identity_token_for_consumer(
+        OurIdentityToken = ?check(provider_auth:acquire_identity_token_for_consumer(
             ?SUB(?ONEPROVIDER, TheirProviderId)
         )),
         {ok, Domain} = get_domain(TheirProviderId),
@@ -722,11 +722,10 @@ verify_provider_identity(TheirProviderId) ->
     catch
         throw:{error, _} = Error2 ->
             Error2;
-        Type:Reason:Stacktrace ->
-            ?debug_stacktrace("Failed to verify provider ~ts identity due to ~p:~p", [
-                provider_logic:to_printable(TheirProviderId),
-                Type, Reason
-            ], Stacktrace),
+        Class:Reason:Stacktrace ->
+            ?debug_exception("Failed to verify provider ~ts identity", [
+                provider_logic:to_printable(TheirProviderId)
+            ], Class, Reason, Stacktrace),
             {error, Reason}
     end.
 

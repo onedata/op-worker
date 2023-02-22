@@ -358,6 +358,7 @@
 % For more information see storage_sync_links.erl
 -record(storage_sync_links, {}).
 
+%% @TODO VFS-6767 deprecated, included for upgrade procedure. Remove in next major release after 21.02.*.
 % This model can be associated with file and holds information about hooks
 % for given file. Hooks will be executed on future change of given
 % file's file_meta document.
@@ -1114,6 +1115,8 @@
 
     %% @see atm_task_executor.erl
     executor :: atm_task_executor:record(),
+    %% @see atm_lambda_execution_config_entries.erl
+    lambda_execution_config_entries :: [atm_lambda_execution_config_entry:record()],
     %% @see atm_task_execution_arguments.erl
     argument_specs :: [atm_task_execution_argument_spec:record()],
     %% @see atm_task_execution_results.erl

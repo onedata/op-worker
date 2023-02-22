@@ -33,6 +33,8 @@
 
     schedule_atm_workflow_with_invalid_initial_store_content/1,
 
+    first_lane_run_preparation_failure_due_to_lambda_config_acquisition/1,
+
     first_lane_run_preparation_failure_before_run_was_created/1,
     first_lane_run_preparation_failure_after_run_was_created/1,
     first_lane_run_preparation_interruption_due_to_openfaas_error/1,
@@ -152,6 +154,8 @@
     iterate_over_tree_forest_store_with_all_items_inaccessible/1,
     iterate_over_empty_tree_forest_store/1,
 
+    acquire_lambda_config/1,
+
     map_arguments/1,
 
     map_results_to_audit_log_store/1,
@@ -190,6 +194,7 @@
     resume_atm_workflow_execution_interrupted_after_all_tasks_finished/1,
 
     garbage_collect_atm_workflow_executions/1,
+    massive_garbage_collect_atm_workflow_executions/1,
 
     restart_op_worker_after_graceful_stop/1
 ]).
@@ -208,6 +213,8 @@ groups() -> [
     ]},
 
     {preparation_tests, [], [
+        first_lane_run_preparation_failure_due_to_lambda_config_acquisition,
+
         first_lane_run_preparation_failure_before_run_was_created,
         first_lane_run_preparation_failure_after_run_was_created,
         first_lane_run_preparation_interruption_due_to_openfaas_error,
@@ -345,6 +352,8 @@ groups() -> [
     ]},
 
     {mapping_tests, [], [
+        acquire_lambda_config,
+
         map_arguments,
 
         map_results_to_audit_log_store,
@@ -388,7 +397,8 @@ groups() -> [
     ]},
 
     {gc_tests, [], [
-        garbage_collect_atm_workflow_executions
+        garbage_collect_atm_workflow_executions,
+        massive_garbage_collect_atm_workflow_executions
     ]},
 
     {restarts_tests, [], [
@@ -487,6 +497,10 @@ schedule_atm_workflow_with_openfaas_not_configured(_Config) ->
 
 schedule_atm_workflow_with_invalid_initial_store_content(_Config) ->
     ?RUN_SCHEDULING_TEST().
+
+
+first_lane_run_preparation_failure_due_to_lambda_config_acquisition(_Config) ->
+    ?RUN_PREPARATION_TEST().
 
 
 first_lane_run_preparation_failure_before_run_was_created(_Config) ->
@@ -829,6 +843,10 @@ iterate_over_empty_tree_forest_store(_Config) ->
     ?RUN_ITERATION_TEST().
 
 
+acquire_lambda_config(_Config) ->
+    ?RUN_MAPPING_TEST().
+
+
 map_arguments(_Config) ->
     ?RUN_MAPPING_TEST().
 
@@ -941,6 +959,10 @@ garbage_collect_atm_workflow_executions(_Config) ->
     ?RUN_GC_TEST().
 
 
+massive_garbage_collect_atm_workflow_executions(_Config) ->
+    ?RUN_GC_TEST().
+
+
 restart_op_worker_after_graceful_stop(Config) ->
     ?RUN_RESTART_TEST(Config).
 
@@ -964,7 +986,6 @@ init_per_suite(Config) ->
             onenv_scenario = "1op",
             envs = [{op_worker, op_worker, [
                 {fuse_session_grace_period_seconds, 24 * 60 * 60},
-                {atm_workflow_engine_slots_count, 100000},
                 {atm_workflow_engine_async_calls_limit, 100000},
                 {atm_workflow_job_timeout_sec, 1},
                 {atm_workflow_job_timeout_check_period_sec, 1},

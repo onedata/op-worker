@@ -217,7 +217,7 @@ end).
 % Mocked atm_lambda data
 -define(ATM_LAMBDA_DATA_SPEC,
     #atm_data_spec{
-        type = atm_integer_type,
+        type = atm_boolean_type,
         value_constraints = #{}
     }
 ).
@@ -234,11 +234,17 @@ end).
             oneclient_options = <<"--a --b">>
         }
     },
-    argument_specs = [#atm_lambda_argument_spec{
+    config_parameter_specs = [#atm_parameter_spec{
+        name = <<"param">>,
+        data_spec = ?ATM_LAMBDA_DATA_SPEC,
+        is_optional = true,
+        default_value = true
+    }],
+    argument_specs = [#atm_parameter_spec{
         name = <<"arg">>,
         data_spec = ?ATM_LAMBDA_DATA_SPEC,
         is_optional = true,
-        default_value = 8
+        default_value = false
     }],
     result_specs = [#atm_lambda_result_spec{
         name = <<"res">>,
@@ -251,7 +257,7 @@ end).
         memory_requested = 1000000000, memory_limit = 5000000000,
         ephemeral_storage_requested = 1000000000, ephemeral_storage_limit = 5000000000
     },
-    checksum = <<"d2b23c06fcc8e5e6bee32016503bd71f">>,
+    checksum = <<"a06c117ddf442593109efbb7fd196a80">>,
     state = stable
 }).
 -define(ATM_LAMBDA_REVISION_REGISTRY_VALUE(__AtmLambda), #atm_lambda_revision_registry{
@@ -289,7 +295,7 @@ end).
             description = <<"store2Desc">>,
             type = single_value,
             config = #atm_single_value_store_config{item_data_spec = #atm_data_spec{
-                type = atm_integer_type,
+                type = atm_number_type,
                 value_constraints = #{}
             }},
             requires_initial_content = false
@@ -312,6 +318,7 @@ end).
                             id = <<"task1Id">>,
                             name = <<"task1Name">>,
                             lambda_id = <<"task1Lambda">>,
+                            lambda_config = #{},
                             argument_mappings = [
                                 #atm_task_schema_argument_mapper{
                                     argument_name = <<"lambda1ArgName">>,
@@ -340,6 +347,7 @@ end).
                             id = <<"task2Id">>,
                             name = <<"task2Name">>,
                             lambda_id = <<"task2Lambda">>,
+                            lambda_config = #{},
                             argument_mappings = [
                                 #atm_task_schema_argument_mapper{
                                     argument_name = <<"lambda2ArgName">>,
@@ -377,6 +385,7 @@ end).
                             id = <<"task3Id">>,
                             name = <<"task3Name">>,
                             lambda_id = <<"task3Lambda">>,
+                            lambda_config = #{},
                             argument_mappings = [
                                 #atm_task_schema_argument_mapper{
                                     argument_name = <<"lambda3ArgName">>,
@@ -397,6 +406,7 @@ end).
                             id = <<"task4Id">>,
                             name = <<"task4Name">>,
                             lambda_id = <<"task4Lambda">>,
+                            lambda_config = #{},
                             argument_mappings = [
                                 #atm_task_schema_argument_mapper{
                                     argument_name = <<"lambda4ArgName">>,

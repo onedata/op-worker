@@ -30,6 +30,8 @@
 -module(qos_logic).
 -author("Michal Stanisz").
 
+-behaviour(file_meta_posthooks_behaviour).
+
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/datastore/qos.hrl").
@@ -50,8 +52,11 @@
 %% file_meta posthooks
 -export([
     missing_file_meta_posthook/2,
-    missing_link_posthook/3
+    missing_link_posthook/3,
+    encode_file_meta_posthook_args/2,
+    decode_file_meta_posthook_args/2
 ]).
+
 
 %%%===================================================================
 %%% API
@@ -62,7 +67,6 @@ handle_qos_entry_change(_SpaceId, #document{deleted = true} = QosEntryDoc) ->
     handle_entry_delete(QosEntryDoc);
 handle_qos_entry_change(SpaceId, #document{key = QosEntryId, value = QosEntry} = QosEntryDoc) ->
     {ok, FileUuid} = qos_entry:get_file_uuid(QosEntry),
-    ok = ?ok_if_exists(qos_entry_audit_log:create(QosEntryId)),
     ok = file_qos:add_qos_entry_id(SpaceId, FileUuid, QosEntryId),
     ok = qos_transfer_stats:ensure_exists(QosEntryId),
     case qos_entry:is_possible(QosEntry) of
@@ -101,9 +105,11 @@ invalidate_cache_and_reconcile(FileCtx) ->
 reconcile_qos(FileCtx) ->
     try
         reconcile_qos_insecure(FileCtx)
-    catch Class:Error:Stacktrace ->
-        ?critical_stacktrace("Unexpected error during qos reconciliation for file ~p: ~p",
-            [file_ctx:get_logical_uuid_const(FileCtx), {Class, Error}], Stacktrace)
+    catch Class:Reason:Stacktrace ->
+        ?critical_exception(
+            "Unexpected error during qos reconciliation for file ~p", [file_ctx:get_logical_uuid_const(FileCtx)],
+            Class, Reason, Stacktrace
+        )
     end.
 
 
@@ -167,6 +173,22 @@ missing_link_posthook(ParentUuid, MissingName, SpaceId) ->
             %% @TODO VFS-10296 - refactor file_meta_posthooks and handle this case there
             repeat
     end.
+
+
+-spec encode_file_meta_posthook_args(file_meta_posthooks:function_name(), [term()]) ->
+    file_meta_posthooks:encoded_args().
+encode_file_meta_posthook_args(missing_file_meta_posthook, [_FileUuid, _SpaceId] = Args) ->
+    term_to_binary(Args);
+encode_file_meta_posthook_args(missing_link_posthook, [_ParentUuid, _MissingName, _SpaceId] = Args) ->
+    % on unix-like filesystems maximum filename size is, by default, 255 bytes, therefore this encoding
+    % should be sufficient for file_meta_posthooks limitation of 512 bytes.
+    term_to_binary(Args).
+
+
+-spec decode_file_meta_posthook_args(file_meta_posthooks:function_name(), file_meta_posthooks:encoded_args()) ->
+    [term()].
+decode_file_meta_posthook_args(_, EncodedArgs) ->
+    binary_to_term(EncodedArgs).
 
 
 %%%===================================================================
@@ -240,7 +262,9 @@ handle_missing_file_meta(FileCtx, {file_meta_missing, MissingUuid} = MissingElem
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     add_missing_file_meta_posthook(SpaceId, MissingElementFileMeta),
     MissingUuid =/= Uuid andalso
-        case file_meta_sync_status_cache:get(SpaceId, Uuid, #{calculation_root_parent => MissingUuid}) of
+        case file_meta_sync_status_cache:get(
+            SpaceId, Uuid, #{calculation_root_parent => MissingUuid, should_cache => false}
+        ) of
             {ok, synced} -> ok;
             {error, MissingElementLink} -> add_missing_link_posthook(SpaceId, MissingElementLink)
         end,

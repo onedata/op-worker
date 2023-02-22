@@ -25,11 +25,11 @@
     get_dataset_root_parent_path/2, find_file/3]).
 
 % getters
--export([get_id/1, get_creation_time/1, get_dataset_id/1, get_archiving_provider_id/1, 
-    get_dataset_root_file_guid/1, get_space_id/1,
+-export([get_id/1, get_creator/1, get_creation_time/1, get_dataset_id/1,
+    get_archiving_provider_id/1, get_dataset_root_file_guid/1, get_space_id/1,
     get_state/1, get_config/1, get_preserved_callback/1, get_deleted_callback/1,
-    get_description/1, get_stats/1, get_root_dir_guid/1,
-    get_data_dir_guid/1, get_parent_id/1, get_parent_doc/1, get_base_archive_id/1,
+    get_description/1, get_stats/1, get_root_dir_guid/1, get_data_dir_guid/1,
+    get_parent_id/1, get_parent_doc/1, get_base_archive_id/1,
     get_related_dip_id/1, get_related_aip_id/1, 
     is_finished/1, is_building/1
 ]).
@@ -37,7 +37,8 @@
 % setters
 -export([mark_building/1, mark_deleting/2,
     mark_file_archived/2, mark_file_failed/1, mark_creation_finished/2,
-    mark_preserved/1, mark_verification_failed/1, mark_cancelling/2, mark_cancelled/1,
+    mark_preserved/1, mark_archivisation_failed/1, mark_verification_failed/1,
+    mark_cancelling/2, mark_cancelled/1,
     set_root_dir_guid/2, set_data_dir_guid/2, set_base_archive_id/2,
     set_related_dip/2, set_related_aip/2
 ]).
@@ -104,6 +105,8 @@
 }).
 % @formatter:off
 
+-define(ARCHIVE_FINISHED_STATES, [?ARCHIVE_PRESERVED, ?ARCHIVE_FAILED, ?ARCHIVE_DELETING,
+    ?ARCHIVE_VERIFICATION_FAILED, ?ARCHIVE_CANCELLED]).
 
 %%%===================================================================
 %%% API functions
@@ -180,14 +183,8 @@ create_dip_archive(#document{
 
 
 -spec create(doc()) -> {ok, doc()} | {error, term()}.
-create(DocToCreate) ->
-    case datastore_model:create(?CTX, DocToCreate) of
-        {ok, #document{key = ArchiveId} = Doc} ->
-            archivisation_audit_log:create(ArchiveId),
-            {ok, Doc};
-        {error, _} = Error ->
-            Error
-    end.
+create(Doc) ->
+    datastore_model:create(?CTX, Doc).
     
 
 -spec get(id()) -> {ok, doc()} | error().
@@ -295,6 +292,12 @@ get_id(#document{key = ArchiveId}) ->
     {ok, ArchiveId};
 get_id(ArchiveId) ->
     {ok, ArchiveId}.
+
+-spec get_creator(record() | doc()) -> {ok, od_user:id()}.
+get_creator(#archive{creator = Creator}) ->
+    {ok, Creator};
+get_creator(#document{value = Archive}) ->
+    get_creator(Archive).
 
 -spec get_creation_time(record() | doc()) -> {ok, timestamp()}.
 get_creation_time(#archive{creation_time = CreationTime}) ->
@@ -425,8 +428,7 @@ get_related_aip_id(ArchiveId) ->
 
 -spec is_finished(record() | doc()) -> boolean().
 is_finished(#archive{state = State}) ->
-    lists:member(State, [?ARCHIVE_PRESERVED, ?ARCHIVE_FAILED, ?ARCHIVE_DELETING, 
-        ?ARCHIVE_VERIFICATION_FAILED, ?ARCHIVE_CANCELLED]);
+    lists:member(State, ?ARCHIVE_FINISHED_STATES);
 is_finished(#document{value = Archive}) ->
     is_finished(Archive).
 
@@ -443,26 +445,25 @@ is_building(#document{value = Archive}) ->
 -spec mark_deleting(id(), callback()) -> {ok, doc()} | error().
 mark_deleting(ArchiveId, Callback) ->
     update(ArchiveId, fun(Archive = #archive{
-        state = PrevState,
+        state = State,
         modifiable_fields = ModifiableFields = #modifiable_fields{
             deleted_callback = PrevDeletedCallback
         },
         parent = Parent
     }) ->
-        case PrevState =:= ?ARCHIVE_PENDING
-            orelse PrevState =:= ?ARCHIVE_BUILDING
-            orelse Parent =/= undefined % nested archive cannot be deleted as it would destroy parent archive
-        of
-            true ->
-                %% @TODO VFS-8840 - create more descriptive error (also for nested archives)
-                ?ERROR_POSIX(?EBUSY);
-            false ->
+        case {is_finished(Archive), Parent} of
+            {true, undefined} ->
                 {ok, Archive#archive{
                     state = ?ARCHIVE_DELETING,
                     modifiable_fields = ModifiableFields#modifiable_fields{
                         deleted_callback = utils:ensure_defined(Callback, PrevDeletedCallback)
                     }
-                }}
+                }};
+            {false, undefined} ->
+                ?ERROR_FORBIDDEN_FOR_CURRENT_ARCHIVE_STATE(State, ?ARCHIVE_FINISHED_STATES);
+            {_, Parent} ->
+                % nested archive cannot be deleted as it would destroy parent archive
+                ?ERROR_NESTED_ARCHIVE_DELETION_FORBIDDEN(Parent)
         end
     end).
 
@@ -488,12 +489,12 @@ mark_creation_finished(ArchiveDocOrId, NestedArchivesStats) ->
                 end,
                 stats = AggregatedStats
             }};
-        (#archive{state = ?ARCHIVE_CANCELLING(delete), related_aip = undefined}) ->
-            % AIP archive (RelatedAip == undefined) deletion is sufficient, as it will automatically
-            % result in DIP archive deletion.
+        (#archive{state = ?ARCHIVE_CANCELLING(delete)}) ->
             {error, marked_to_delete};
         (Archive = #archive{state = ?ARCHIVE_CANCELLING(_)}) ->
-            {ok, Archive#archive{state = ?ARCHIVE_CANCELLED}}
+            {ok, Archive#archive{state = ?ARCHIVE_CANCELLED}};
+        (#archive{state = ?ARCHIVE_FAILED}) ->
+            {error, no_change}
     end),
     case UpdateResult of
         {ok, #document{value = #archive{state = ?ARCHIVE_VERIFYING}} = Doc} ->
@@ -502,6 +503,8 @@ mark_creation_finished(ArchiveDocOrId, NestedArchivesStats) ->
         {ok, #document{value = #archive{}}} ->
             ok;
         {error, not_found} -> 
+            ok;
+        {error, no_change} ->
             ok;
         {error, marked_to_delete} = Error ->
             Error
@@ -534,13 +537,11 @@ mark_cancelling(ArchiveDocOrId, PreservationPolicy) ->
 -spec mark_cancelled(id() | doc()) -> ok | {error, marked_to_delete} | error().
 mark_cancelled(ArchiveDocOrId) ->
     UpdateResult = ?extract_ok(update(ArchiveDocOrId, fun
-        (#archive{state = State, related_aip = RelatedAip} = Archive) ->
-            case {is_finished(Archive), State, RelatedAip} of
-                {true, _, _} ->
+        (#archive{state = State} = Archive) ->
+            case {is_finished(Archive), State} of
+                {true, _} ->
                     {error, no_change};
-                {false, ?ARCHIVE_CANCELLING(delete), undefined} ->
-                    % AIP archive (RelatedAip == undefined) deletion is sufficient, as it will automatically
-                    % result in DIP archive deletion.
+                {false, ?ARCHIVE_CANCELLING(delete)} ->
                     {error, marked_to_delete};
                 _ ->
                     {ok, Archive#archive{state = ?ARCHIVE_CANCELLED}}
@@ -552,6 +553,15 @@ mark_cancelled(ArchiveDocOrId) ->
         {error, no_change} -> ok;
         {error, marked_to_delete} = Error -> Error
     end.
+
+
+-spec mark_archivisation_failed(id() | doc()) -> ok | error().
+mark_archivisation_failed(ArchiveDocOrId) ->
+    ?extract_ok(update(ArchiveDocOrId, fun(Archive) ->
+        {ok, Archive#archive{
+            state = ?ARCHIVE_FAILED
+        }}
+    end)).
 
 
 -spec mark_verification_failed(id() | doc()) -> ok | error().

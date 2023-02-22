@@ -153,9 +153,10 @@ example_data_spec(atm_time_series_measurement_type) ->
     };
 
 example_data_spec(AtmDataType) when
+    AtmDataType =:= atm_boolean_type;
     AtmDataType =:= atm_dataset_type;
     AtmDataType =:= atm_file_type;
-    AtmDataType =:= atm_integer_type;
+    AtmDataType =:= atm_number_type;
     AtmDataType =:= atm_object_type;
     AtmDataType =:= atm_range_type;
     AtmDataType =:= atm_string_type
@@ -177,6 +178,11 @@ gen_valid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_data_spec{
         fun(_) -> gen_valid_data(ProviderSelector, AtmWorkflowExecutionAuth, ItemDataSpec) end,
         lists:seq(1, ?RAND_INT(5, 10))
     );
+
+gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_data_spec{
+    type = atm_boolean_type
+}) ->
+    ?RAND_BOOL();
 
 gen_valid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_data_spec{
     type = atm_dataset_type
@@ -210,9 +216,19 @@ gen_valid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_data_spec{
     };
 
 gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_data_spec{
-    type = atm_integer_type
+    type = atm_number_type,
+    value_constraints = ValueConstraints
 }) ->
-    rand:uniform(1000000);
+    case maps:get(allowed_values, ValueConstraints, undefined) of
+        undefined ->
+            case maps:get(integers_only, ValueConstraints, false) of
+                true -> ?RAND_INT(1000000);
+                false -> ?RAND_ELEMENT([?RAND_INT(1000000), ?RAND_FLOAT(0, 1000000)])
+            end;
+
+        AllowedValues ->
+            ?RAND_ELEMENT(AllowedValues)
+    end;
 
 gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_data_spec{
     type = atm_object_type
@@ -242,9 +258,13 @@ gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_data_spec{
     end;
 
 gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_data_spec{
-    type = atm_string_type
+    type = atm_string_type,
+    value_constraints = ValueConstraints
 }) ->
-    ?RAND_STR(32);
+    case maps:get(allowed_values, ValueConstraints, undefined) of
+        undefined -> ?RAND_STR(32);
+        AllowedValues -> ?RAND_ELEMENT(AllowedValues)
+    end;
 
 gen_valid_data(_ProviderSelector, _AtmWorkflowExecutionAuth, #atm_data_spec{
     type = atm_time_series_measurement_type,
@@ -292,7 +312,7 @@ gen_invalid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_data_spec{
     type = atm_object_type
 }) ->
     gen_valid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_data_spec{
-        type = ?RAND_ELEMENT([atm_integer_type, atm_string_type])
+        type = ?RAND_ELEMENT([atm_boolean_type, atm_number_type, atm_string_type])
     });
 
 gen_invalid_data(ProviderSelector, AtmWorkflowExecutionAuth, #atm_data_spec{
@@ -405,9 +425,10 @@ infer_store_type(#atm_tree_forest_store_config{}) -> tree_forest.
 %% @private
 -spec basic_data_types() -> [atm_data_type:type()].
 basic_data_types() -> [
+    atm_boolean_type,
     atm_dataset_type,
     atm_file_type,
-    atm_integer_type,
+    atm_number_type,
     atm_object_type,
     atm_range_type,
     atm_string_type,

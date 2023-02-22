@@ -154,7 +154,7 @@ iterate_over_range_store() ->
         workflow_schema_dump_or_draft = ?FOREACH_WORKFLOW_SCHEMA_DRAFT(
             ?FUNCTION_NAME,
             ?ATM_RANGE_STORE_SCHEMA_DRAFT(?ITERATED_STORE_SCHEMA_ID, Range),
-            ?ATM_INTEGER_DATA_SPEC
+            ?ATM_NUMBER_DATA_SPEC
         ),
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,
@@ -180,7 +180,7 @@ iterate_over_empty_range_store() ->
         workflow_schema_dump_or_draft = ?FOREACH_WORKFLOW_SCHEMA_DRAFT(
             ?FUNCTION_NAME,
             ?ATM_RANGE_STORE_SCHEMA_DRAFT(?ITERATED_STORE_SCHEMA_ID, undefined),
-            ?ATM_INTEGER_DATA_SPEC
+            ?ATM_NUMBER_DATA_SPEC
         ),
         incarnations = [#atm_workflow_execution_incarnation_test_spec{
             incarnation_num = 1,

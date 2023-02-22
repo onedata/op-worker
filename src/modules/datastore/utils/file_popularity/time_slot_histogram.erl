@@ -157,8 +157,13 @@ increment(TSH = #time_slot_histogram{type = Type}, CurrentMonotonicTime, N) ->
 -spec reset_cumulative(histogram(), CurrentMonotonicTime :: monotonic_timestamp()) ->
     histogram().
 reset_cumulative(TSH = #time_slot_histogram{type = cumulative}, CurrentMonotonicTime) ->
-    TSH2 = increment(TSH#time_slot_histogram{type = normal}, CurrentMonotonicTime, 0),
-    TSH2#time_slot_histogram{type = cumulative}.
+    ShiftSize = calc_shift_size(TSH, CurrentMonotonicTime),
+    ShiftedHistogram = shift_values(TSH#time_slot_histogram{type = normal}, ShiftSize),
+    {monotonic, LastUpdate} = CurrentMonotonicTime,
+    TSH#time_slot_histogram{
+        last_update_time = LastUpdate,
+        values = cumulative_histogram:reset(ShiftedHistogram)
+    }.
 
 %%--------------------------------------------------------------------
 %% @equiv decrement(Histogram, CurrentMonotonicTime, 1).

@@ -12,6 +12,8 @@
 -module(atm_openfaas_docker_mock).
 -author("Bartosz Walkowicz").
 
+-include("modules/fslogic/fslogic_common.hrl").
+
 -include("atm/atm_test_schema_drafts.hrl").
 
 %% API
@@ -32,10 +34,19 @@ exec(?ECHO_WITH_SLEEP_DOCKER_IMAGE_ID, #{
     <<"ctx">> := #{<<"heartbeatUrl">> := HeartbeatUrl},
     <<"argsBatch">> := ArgsBatch
 }) ->
+    %% TODO VFS-10550 rm after fixing race when first heartbeat comes before job is registered
+    timer:sleep(timer:seconds(1)),
     % Send heartbeat to inform op about job processing start
     http_client:post(HeartbeatUrl),
 
     timer:sleep(timer:seconds(12)),
+    #{<<"resultsBatch">> => ArgsBatch};
+
+exec(?ECHO_WITH_PAUSE_DOCKER_IMAGE_ID, #{
+    <<"ctx">> := #{<<"atmWorkflowExecutionId">> := AtmWorkflowExecutionId},
+    <<"argsBatch">> := ArgsBatch
+}) ->
+    atm_workflow_execution_api:init_pause(user_ctx:new(?ROOT_SESS_ID), AtmWorkflowExecutionId),
     #{<<"resultsBatch">> => ArgsBatch};
 
 exec(?ECHO_WITH_EXCEPTION_ON_EVEN_NUMBERS, #{<<"argsBatch">> := ArgsBatch}) ->
@@ -44,6 +55,13 @@ exec(?ECHO_WITH_EXCEPTION_ON_EVEN_NUMBERS, #{<<"argsBatch">> := ArgsBatch}) ->
             JobArgs;
         (_) ->
             #{<<"exception">> => <<"even number">>}
+    end, ArgsBatch)};
+
+exec(?ECHO_CONFIG_DOCKER_ID, #{<<"argsBatch">> := ArgsBatch, <<"ctx">> := #{
+    <<"config">> := AtmLambdaExecutionConfig
+}}) ->
+    #{<<"resultsBatch">> => lists:map(fun(_) ->
+        #{?ECHO_ARG_NAME => AtmLambdaExecutionConfig}
     end, ArgsBatch)};
 
 exec(?FAILING_ECHO_MEASUREMENTS_DOCKER_IMAGE_ID_1, #{<<"argsBatch">> := ArgsBatch}) ->
