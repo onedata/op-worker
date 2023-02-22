@@ -28,7 +28,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% functions operating on record using datastore model API
--export([add_hook/6, execute_hooks/2, cleanup/1]).
+-export([add_hook/5, execute_hooks/2, cleanup/1]).
 
 %% deprecated functions
 -export([execute_hooks_deprecated/2]).
@@ -62,7 +62,7 @@
 }).
 -type hook() :: #hook{}.
 -type hooks() :: #{hook_identifier() => hook()}.
--export_type([hooks/0]).
+-export_type([hooks/0, hook_identifier/0, hook/0]).
 
 -define(LINK_KEY(FileUuid), <<"link_hooks_", FileUuid/binary>>).
 
@@ -76,15 +76,10 @@
 %%% Functions operating on record using datastore_model API
 %%%===================================================================
 
--spec add_hook(missing_element(), hook_identifier(), od_space:id(), module(), atom(), [term()]) ->
+-spec add_hook(missing_element(), hook_identifier(), module(), atom(), [term()]) ->
     ok | ?ERROR_INTERNAL_SERVER_ERROR.
-add_hook(MissingElement, Identifier, SpaceId, Module, Function, PosthookArgs) ->
-    case ?SHOULD_IGNORE_ON_INITIAL_SYNC andalso dbsync_state:set_initial_sync_repeat(SpaceId) of
-        ok ->
-            ok;
-        _ ->
-            add_hook_internal(MissingElement, Identifier, Module, Function, PosthookArgs)
-    end.
+add_hook(MissingElement, Identifier, Module, Function, PosthookArgs) ->
+    add_hook_internal(MissingElement, Identifier, Module, Function, PosthookArgs).
 
 
 -spec execute_hooks(file_meta:uuid(), hook_type()) -> ok.
@@ -184,11 +179,10 @@ execute_hook(Key, Identifier, Module, Function, EncodedArgs) ->
             %% @TODO VFS-10296 - handle not fully synced links in this module
             repeat -> error
         end
-    catch Error:Type:Stacktrace  ->
-        ?debug_stacktrace(
+    catch Error:Type  ->
+        ?debug(
             "Error during execution of file meta posthook (~p) for file ~p ~p:~p",
-            [Identifier, Key, Error, Type],
-            Stacktrace
+            [Identifier, Key, Error, Type]
         ),
         error
     end.
@@ -209,14 +203,14 @@ cleanup_links(Key, Opts) ->
 %% @private
 -spec encode_hook(module(), atom(), encoded_args()) -> binary().
 encode_hook(Module, Function, EncodedArgs) ->
-    base64url:encode(<<(atom_to_binary(Module))/binary, ?SEPARATOR, (atom_to_binary(Function))/binary, ?SEPARATOR, EncodedArgs/binary>>).
+    base64url:encode(<<(atom_to_binary(Module, utf8))/binary, ?SEPARATOR, (atom_to_binary(Function, utf8))/binary, ?SEPARATOR, EncodedArgs/binary>>).
 
 
 %% @private
 -spec decode_hook(binary()) -> {module(), atom(), encoded_args()}.
 decode_hook(EncodedHook) ->
     [ModuleBin, FunctionBin, EncodedArgs] = binary:split(base64url:decode(EncodedHook), <<?SEPARATOR>>, [global]),
-    {binary_to_existing_atom(ModuleBin), binary_to_existing_atom(FunctionBin), EncodedArgs}.
+    {binary_to_atom(ModuleBin, utf8), binary_to_atom(FunctionBin, utf8), EncodedArgs}.
 
 
 %% @private
