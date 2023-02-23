@@ -45,7 +45,7 @@
   2},
  {<<"enif_protobuf">>,
   {git,"https://github.com/jg513/enif_protobuf",
-       {ref,"71fcf74294f40ed1f06e57c4de14fa0c1cf3331b"}},
+       {ref,"9c897ea1d0940f16c778523d595cc9009e85e7b0"}},
   0},
  {<<"exometer_core">>,
   {git,"https://github.com/mistanisz/exometer_core",
