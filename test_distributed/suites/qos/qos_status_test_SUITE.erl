@@ -155,8 +155,7 @@ init_per_suite(Config) ->
                 {fuse_session_grace_period_seconds, 24 * 60 * 60},
                 {provider_token_ttl_sec, 24 * 60 * 60},
                 {qos_retry_failed_files_interval_seconds, 5}
-            ]}],
-            posthook = fun dir_stats_test_utils:disable_stats_counting_ct_posthook/1
+            ]}]
         }).
 
 
