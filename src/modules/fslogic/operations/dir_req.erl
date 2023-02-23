@@ -246,14 +246,15 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     SpaceId = file_ctx:get_space_id_const(ParentFileCtx3),
     Owner = user_ctx:get_user_id(UserCtx),
     ParentUuid = file_ctx:get_logical_uuid_const(ParentFileCtx3),
-    File = file_meta:new_doc(Name, ?DIRECTORY_TYPE, Mode, Owner, ParentUuid, SpaceId),
+    {IsTmp, ParentFileCtx4} = file_ctx:is_tmp(ParentFileCtx3),
+    File = file_meta:new_doc(undefined, Name, ?DIRECTORY_TYPE, Mode, Owner, ParentUuid, SpaceId, IsTmp),
     {ok, #document{key = DirUuid}} = file_meta:create({uuid, ParentUuid}, File),
     FileCtx = file_ctx:new_by_uuid(DirUuid, SpaceId),
 
     try
-        {ok, Time} = times:save_with_current_times(DirUuid, SpaceId),
+        {ok, Time} = times:save_with_current_times(DirUuid, SpaceId, IsTmp),
         dir_update_time_stats:report_update_of_dir(file_ctx:get_logical_guid_const(FileCtx), Time),
-        fslogic_times:update_mtime_ctime(ParentFileCtx3),
+        fslogic_times:update_mtime_ctime(ParentFileCtx4),
 
         #fuse_response{fuse_response = FileAttr} =
             attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{

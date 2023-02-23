@@ -67,7 +67,7 @@ on_file_location_change(FileCtx, ChangedLocationDoc = #document{
                         case dir_stats_service_state:is_active(SpaceId) of
                             true ->
                                 try
-                                    case fslogic_location:create_doc(FileCtx3, false, false) of
+                                    case fslogic_location:create_doc(FileCtx3, false, false, false) of
                                         {{ok, _}, FileCtx5} ->
                                             fslogic_event_emitter:emit_file_attr_changed_with_replication_status(
                                                 FileCtx5, true, []),

@@ -44,7 +44,7 @@
 
 %% Location getters/setters
 -export([get_location/2, get_location/3, save_location/1, save_location/2,
-    cache_location/1, update_location/4, create_location/2, create_location/3,
+    cache_location/1, update_location/4, create_location/2, create_location/3, unset_ignore_in_changes/1,
     force_flush/1, get_local_location/1, get_local_location/2, get_local_location_including_deleted/2]).
 %% Blocks getters/setters
 -export([get_blocks/1, get_blocks/2, get_overlapping_blocks_sequence/2,
@@ -212,6 +212,15 @@ create_location(FileCtx, #document{key = Key} = Doc, GeneratedKey) ->
                 end
         end
     end).
+
+
+-spec unset_ignore_in_changes(file_ctx:ctx()) -> ok.
+unset_ignore_in_changes(FileCtx) ->
+    LocId = file_location:local_id(file_ctx:get_logical_uuid_const(FileCtx)),
+    replica_synchronizer:apply(FileCtx, fun() ->
+        fslogic_cache:unset_ignore_in_changes(LocId)
+    end).
+
 
 %%-------------------------------------------------------------------
 %% @doc

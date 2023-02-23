@@ -21,11 +21,13 @@
 -export([root_dir_guid/0, user_root_dir_uuid/1, user_root_dir_guid/1]).
 -export([spaceid_to_space_dir_uuid/1, spaceid_to_space_dir_guid/1, space_dir_uuid_to_spaceid/1]).
 -export([spaceid_to_trash_dir_uuid/1, spaceid_to_trash_dir_guid/1]).
+-export([spaceid_to_tmp_dir_uuid/1]).
 -export([shareid_to_share_root_dir_uuid/1, shareid_to_share_root_dir_guid/2, share_root_dir_uuid_to_shareid/1]).
 -export([is_special_uuid/1, is_special_guid/1]).
 -export([is_root_dir_guid/1, is_root_dir_uuid/1, is_user_root_dir_uuid/1]).
 -export([is_space_dir_uuid/1, is_space_dir_guid/1]).
 -export([is_trash_dir_uuid/1, is_trash_dir_guid/1]).
+-export([is_tmp_dir_uuid/1]).
 -export([is_share_root_dir_uuid/1, is_share_root_dir_guid/1]).
 -export([uuid_to_path/2, uuid_to_guid/1]).
 -export([is_space_owner/1, unpack_space_owner/1]).
@@ -98,6 +100,11 @@ spaceid_to_trash_dir_guid(SpaceId) ->
     file_id:pack_guid(spaceid_to_trash_dir_uuid(SpaceId), SpaceId).
 
 
+-spec spaceid_to_tmp_dir_uuid(od_space:id()) -> file_meta:uuid().
+spaceid_to_tmp_dir_uuid(SpaceId) ->
+    ?TMP_DIR_UUID(SpaceId).
+
+
 -spec shareid_to_share_root_dir_uuid(od_share:id()) -> file_meta:uuid().
 shareid_to_share_root_dir_uuid(ShareId) ->
     <<?SHARE_ROOT_DIR_UUID_PREFIX, ShareId/binary>>.
@@ -167,6 +174,11 @@ is_trash_dir_uuid(_) -> false.
 -spec is_trash_dir_guid(file_id:file_guid()) -> boolean().
 is_trash_dir_guid(FileGuid) ->
     is_trash_dir_uuid(file_id:guid_to_uuid(FileGuid)).
+
+
+-spec is_tmp_dir_uuid(file_meta:uuid()) -> boolean().
+is_tmp_dir_uuid(<<?TMP_DIR_UUID_PREFIX, _SpaceId/binary>>) -> true;
+is_tmp_dir_uuid(_) -> false.
 
 
 -spec is_share_root_dir_uuid(file_meta:uuid()) -> boolean().

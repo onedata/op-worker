@@ -85,7 +85,7 @@
 
 %% Functions modifying context
 -export([
-    get_canonical_path/1, get_uuid_based_path/1, get_file_doc/1,
+    get_canonical_path/1, get_uuid_based_path/1, is_tmp/1, get_file_doc/1, get_ignore_in_changes/1,
     get_file_doc_including_deleted/1, get_and_cache_file_doc_including_deleted/1,
     get_cached_parent_const/1, cache_parent/2,
     get_storage_file_id/1, get_storage_file_id/2,
@@ -329,6 +329,18 @@ get_uuid_based_path(FileCtx = #file_ctx{uuid_based_path = UuidPath}) ->
     {UuidPath, FileCtx}.
 
 
+-spec is_tmp(ctx()) -> {boolean(), ctx()}.
+is_tmp(FileCtx) ->
+    {UuidPath, FileCtx2} = get_uuid_based_path(FileCtx),
+    IsTmp = case filename:split(UuidPath) of
+        ["/", _SpaceId, Uuid | _] ->
+            fslogic_file_id:is_tmp_dir_uuid(Uuid);
+        _ ->
+            false
+    end,
+    {IsTmp, FileCtx2}.
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns file's logical path (starting with "/SpaceName/...").
@@ -366,6 +378,11 @@ get_file_doc(FileCtx = #file_ctx{file_doc = FileDoc}) ->
 -spec set_file_doc(ctx(), file_meta:doc()) -> ctx().
 set_file_doc(FileCtx, NewDoc) ->
     FileCtx#file_ctx{file_doc = NewDoc}.
+
+-spec get_ignore_in_changes(ctx()) -> {boolean(), ctx()}.
+get_ignore_in_changes(FileCtx) ->
+    {#document{ignore_in_changes = Ignore}, FileCtx2} = get_file_doc(FileCtx),
+    {Ignore, FileCtx2}.
 
 -spec list_references_const(ctx()) -> {ok, [file_meta:uuid()]} | {error, term()}.
 list_references_const(FileCtx) ->
@@ -1109,6 +1126,7 @@ assert_not_trash_dir_const(FileCtx) ->
 
 
 -spec assert_not_trash_dir_const(file_ctx:ctx(), file_meta:name()) -> ok.
+% TODO - podobne zabezpiecznie dla tmp albo polaczyc to z ta funkcja
 assert_not_trash_dir_const(ParentCtx, Name) ->
     case is_trash_dir_const(ParentCtx, Name) of
         true -> throw(?EPERM);

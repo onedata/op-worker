@@ -24,7 +24,7 @@
 
 %% API
 -export([get_or_default/1, get/1, create_or_update/2, delete/1,
-    save/1, save/5, save_with_current_times/2]).
+    save/1, save/5, save_with_current_times/3, unset_ignore_in_changes/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -93,11 +93,25 @@ save(#document{key = Key} = Doc) ->
     datastore_model:save(?CTX#{generated_key => true},
         Doc#document{key = fslogic_file_id:ensure_referenced_uuid(Key)}).
 
--spec save_with_current_times(file_meta:uuid(), od_space:id()) -> {ok, time()} | {error, term()}.
-save_with_current_times(FileUuid, SpaceId) ->
+-spec save_with_current_times(file_meta:uuid(), od_space:id(), boolean()) -> {ok, time()} | {error, term()}.
+save_with_current_times(FileUuid, SpaceId, IgnoreInChanges) ->
     Time = global_clock:timestamp_seconds(),
-    case save(FileUuid, SpaceId, Time, Time, Time) of
-        ok -> {ok, Time};
+    SaveAns = datastore_model:save(
+        ?CTX#{generated_key => true},
+        #document{
+            key = fslogic_file_id:ensure_referenced_uuid(FileUuid),
+            value = #times{
+                atime = Time,
+                mtime = Time,
+                ctime = Time
+            },
+            scope = SpaceId,
+            ignore_in_changes = IgnoreInChanges
+        }
+    ),
+
+    case SaveAns of
+        {ok, _} -> {ok, Time};
         Error -> Error
     end.
 
@@ -129,6 +143,14 @@ get(Uuid) ->
 -spec delete(key()) -> ok | {error, term()}.
 delete(FileUuid) ->
     datastore_model:delete(?CTX, fslogic_file_id:ensure_referenced_uuid(FileUuid)).
+
+
+-spec unset_ignore_in_changes(file_meta:uuid()) -> ok.
+unset_ignore_in_changes(Key) ->
+    {ok, _} = datastore_model:update(?CTX#{ignore_in_changes => false}, Key, fun(Record) ->
+        {ok, Record} % Return unchanged record, ignore_in_changes will be unset because of flag in CTX
+    end),
+    ok.
 
 
 %%%===================================================================

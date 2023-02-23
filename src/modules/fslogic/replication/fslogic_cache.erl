@@ -25,7 +25,7 @@
     cache_location_change/2, clear_location_changes/0]).
 % Doc API
 -export([get_doc/1, get_doc_including_deleted/1, save_doc/1, cache_doc/1, delete_doc/1, attach_blocks/1,
-    attach_local_blocks/1, attach_public_blocks/1, merge_local_blocks/1]).
+    attach_local_blocks/1, attach_public_blocks/1, merge_local_blocks/1, unset_ignore_in_changes/1]).
 % Block API
 -export([get_blocks/1, save_blocks/2, cache_blocks/2, check_blocks/1,
     get_blocks_tree/1, use_blocks/2, finish_blocks_usage/1, get_changed_blocks/1,
@@ -53,6 +53,7 @@
 -define(SIZES, fslogic_cache_sizes).
 -define(SIZE_CHANGES, fslogic_cache_size_changes).
 -define(SPACE_IDS, fslogic_cache_space_ids).
+-define(UNSET_IGNORE_IN_CHANGES, unset_ignore_in_changes).
 
 -define(KEYS, fslogic_cache_keys).
 -define(KEYS_MODIFIED, fslogic_cache_modified_keys).
@@ -403,6 +404,7 @@ delete_doc(Key) ->
     erase({?SIZE_CHANGES, Key}),
     erase({?SPACE_IDS, Key}),
     erase({?BLOCKS_IN_USE, Key}),
+    erase({?UNSET_IGNORE_IN_CHANGES, Key}),
 
     Keys = get(?KEYS_MODIFIED),
     put(?KEYS_MODIFIED, Keys -- [Key]),
@@ -447,6 +449,19 @@ attach_local_blocks(#document{value = Location} = LocationDoc) ->
     end,
     LocationDoc#document{value =
     Location#file_location{blocks = Blocks2}}.
+
+-spec unset_ignore_in_changes(file_location:id()) -> ok.
+unset_ignore_in_changes(Key) ->
+    case get_doc(Key) of
+        #document{} ->
+            put({?UNSET_IGNORE_IN_CHANGES, Key}, true),
+            Keys = get(?KEYS_MODIFIED),
+            put(?KEYS_MODIFIED, [Key | (Keys -- [Key])]),
+            init_flush_check(),
+            ok;
+        {error, not_found} ->
+            ok
+    end.
 
 %%%===================================================================
 %%% Block API
@@ -772,9 +787,14 @@ flush_key(Key, Type) ->
                 true ->
                     flush_local_blocks(DocToSave, DelBlocks, AddBlocks, Type);
                 _ ->
-                    case file_location:save(DocToSave) of
+                    UnsetIgnoreInChanges = case get({?UNSET_IGNORE_IN_CHANGES, Key}) of
+                        undefined -> false;
+                        true -> true
+                    end,
+                    case file_location:save(DocToSave, UnsetIgnoreInChanges) of
                         {ok, _} ->
                             put({?FLUSHED_DOCS, Key}, DocToSave),
+                            erase({?UNSET_IGNORE_IN_CHANGES, Key}),
                             flush_local_blocks(DocToSave, DelBlocks, AddBlocks, Type);
                         Error ->
                             ?error("Flush failed for key ~p: ~p", [Key, Error]),

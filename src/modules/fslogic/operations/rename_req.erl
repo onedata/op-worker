@@ -326,6 +326,7 @@ rename_file_on_flat_storage_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx
             ok = lfm:unlink(SessId, ?FILE_REF(TargetGuid), false)
     end,
     ok = file_meta:rename(SourceDoc, SourceParentDoc, ParentDoc, TargetName),
+    maybe_unset_ignore_in_changes(SourceFileCtx3, SourceDoc, ParentDoc),
     on_successful_rename(UserCtx, SourceFileCtx3, SourceParentFileCtx2, TargetParentFileCtx2, TargetName),
     #fuse_response{
         status = #status{code = ?OK},
@@ -512,6 +513,7 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentCtx0, TargetNa
     {SourceParentFileCtx, SourceFileCtx3} = file_tree:get_parent(SourceFileCtx2, UserCtx),
     {SourceParentDoc, SourceParentFileCtx2} = file_ctx:get_file_doc(SourceParentFileCtx),
     file_meta:rename(SourceDoc, SourceParentDoc, ParentDoc, TargetName),
+    maybe_unset_ignore_in_changes(SourceFileCtx3, SourceDoc, ParentDoc),
 
     SpaceId = file_ctx:get_space_id_const(SourceFileCtx3),
     paths_cache:invalidate_on_all_nodes(SpaceId),
@@ -657,3 +659,18 @@ validate_target_name(TargetName) ->
         match -> throw(?EINVAL);
         nomatch -> ok
     end.
+
+
+%% @private
+-spec maybe_unset_ignore_in_changes(file_ctx:ctx(), file_meta:doc(), file_meta:doc()) -> ok.
+maybe_unset_ignore_in_changes(
+    SourceCtx,
+    #document{key = Key, ignore_in_changes = true} = _SourceDoc,
+    #document{ignore_in_changes = false} = _ParentDoc
+) ->
+    % TODO - zablokowac rename w druga strone (od public do local)
+    file_meta:unset_ignore_in_changes(Key),
+    times:unset_ignore_in_changes(Key),
+    fslogic_location_cache:unset_ignore_in_changes(SourceCtx);
+maybe_unset_ignore_in_changes(_, _, _) ->
+    ok.

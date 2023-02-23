@@ -458,7 +458,7 @@ make_symlink_insecure(UserCtx, ParentFileCtx, Name, Link) ->
             {ok, #document{key = SymlinkUuid}} = file_meta:create({uuid, ParentUuid}, Doc),
 
             try
-                {ok, _} = times:save_with_current_times(SymlinkUuid, SpaceId),
+                {ok, _} = times:save_with_current_times(SymlinkUuid, SpaceId, false), % TODO - obsluzyc symlinki i  mv wewnatrz katalogu
                 fslogic_times:update_mtime_ctime(ParentFileCtx3),
 
                 FileCtx = file_ctx:new_by_uuid(SymlinkUuid, SpaceId),
@@ -753,11 +753,14 @@ create_file_doc(UserCtx, ParentFileCtx, Name, Mode)  ->
             Owner = user_ctx:get_user_id(UserCtx),
             ParentUuid = file_ctx:get_logical_uuid_const(ParentFileCtx2),
             SpaceId = file_ctx:get_space_id_const(ParentFileCtx2),
-            File = file_meta:new_doc(Name, ?REGULAR_FILE_TYPE, Mode, Owner, ParentUuid, SpaceId),
-            {ok, #document{key = FileUuid}} = file_meta:create({uuid, ParentUuid}, File),
-            {ok, _} = times:save_with_current_times(FileUuid, SpaceId),
+            {IsTmp, ParentFileCtx3} = file_ctx:is_tmp(ParentFileCtx2),
+            File = file_meta:new_doc(undefined, Name, ?REGULAR_FILE_TYPE, Mode, Owner, ParentUuid, SpaceId, IsTmp),
+            {ok, #document{key = FileUuid} = SavedFileDoc} = file_meta:create({uuid, ParentUuid}, File),
+            % TODO - trzeba ustawiac times i file_location
+            {ok, _} = times:save_with_current_times(FileUuid, SpaceId, IsTmp),
 
-            {file_ctx:new_by_uuid(FileUuid, SpaceId), ParentFileCtx2};
+            FileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
+            {file_ctx:set_file_doc(FileCtx, SavedFileDoc), ParentFileCtx3};
         {false, _} ->
             throw(?ENOTDIR)
     end.
