@@ -64,7 +64,8 @@
     recreate_file_on_storage/1,
     recreate_dir_on_storage/1,
     transfer_with_missing_documents/1,
-    detect_stale_replica_synchronizer_jobs_test/1
+    detect_stale_replica_synchronizer_jobs_test/1,
+    tmp_files_test/1
 ]).
 
 -define(TEST_CASES, [
@@ -103,7 +104,8 @@
     truncate_on_storage_does_not_block_synchronizer,
     recreate_file_on_storage,
     recreate_dir_on_storage,
-    detect_stale_replica_synchronizer_jobs_test
+    detect_stale_replica_synchronizer_jobs_test,
+    tmp_files_test
 ]).
 
 -define(PERFORMANCE_TEST_CASES, [
@@ -1389,6 +1391,65 @@ detect_stale_replica_synchronizer_jobs_test(Config0) ->
     end, Workers1)),
 
     ?assertEqual(6, FetchCallsNum).
+
+
+tmp_files_test(Config0) ->
+    User = <<"user1">>,
+    Config = multi_provider_file_ops_test_base:extend_config(Config0, User, {4,0,0,2}, 60),
+    [Worker1 | _] = ?config(workers1, Config),
+    [Worker2 | _] = ?config(workers2, Config),
+    Workers = ?config(op_worker_nodes, Config),
+    SessId = ?config(session, Config),
+    SpaceId = <<"space1">>,
+    SpaceGuid = fslogic_file_id:spaceid_to_space_dir_guid(SpaceId),
+    TmpDirGuid = fslogic_file_id:spaceid_to_tmp_dir_guid(SpaceId),
+
+    {ok, SyncedDirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), SpaceGuid, ?RAND_STR(), undefined)),
+
+    % Create files and dir directly in tmp_dir on worker1
+    {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), TmpDirGuid, ?RAND_STR(), undefined)),
+    {ok, {FileGuid1, Handle1}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(
+        Worker1, SessId(Worker1), TmpDirGuid, ?RAND_STR(), undefined
+    )),
+    ?assertEqual(ok, lfm_proxy:close(Worker1, Handle1)),
+    {ok, {FileGuid2, Handle2}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(
+        Worker1, SessId(Worker1), DirGuid, ?RAND_STR(), undefined
+    )),
+    ?assertEqual(ok, lfm_proxy:close(Worker1, Handle2)),
+    ?assertMatch({ok, [_, _], _}, lfm_proxy:get_children(
+        Worker1, SessId(Worker1), #file_ref{guid = TmpDirGuid}, #{tune_for_large_continuous_listing => false}
+    )),
+
+    % wait for possible synchronization and check if it has not occurred
+    timer:sleep(timer:seconds(20)),
+
+    ?assertMatch({ok, [], _}, lfm_proxy:get_children(
+        Worker2, SessId(Worker2), #file_ref{guid = TmpDirGuid}, #{tune_for_large_continuous_listing => false}
+    )),
+    TmpFiles = [DirGuid, FileGuid1, FileGuid2],
+    lists:foreach(fun(G) ->
+        ?assertMatch({error, enoent}, lfm_proxy:stat(Worker2, SessId(Worker2), #file_ref{guid = G}))
+    end, TmpFiles),
+
+    ?assertMatch({ok, _}, lfm_proxy:mv(
+        Worker1, SessId(Worker1), #file_ref{guid = FileGuid1}, #file_ref{guid = SyncedDirGuid}, ?RAND_STR()
+    )),
+    ?assertMatch({ok, _}, lfm_proxy:mv(
+        Worker1, SessId(Worker1), #file_ref{guid = DirGuid}, #file_ref{guid = SyncedDirGuid}, ?RAND_STR()
+    )),
+
+    lists:foreach(fun(Worker) ->
+        lists:foreach(fun(G) ->
+            ?assertMatch({ok, _}, lfm_proxy:stat(Worker2, SessId(Worker2), #file_ref{guid = G}), ?ATTEMPTS)
+        end, TmpFiles),
+
+        ?assertMatch({ok, [_, _], _}, lfm_proxy:get_children(
+            Worker, SessId(Worker), #file_ref{guid = SyncedDirGuid}, #{tune_for_large_continuous_listing => false}
+        ), ?ATTEMPTS),
+        ?assertMatch({ok, [_], _}, lfm_proxy:get_children(
+            Worker, SessId(Worker), #file_ref{guid = DirGuid}, #{tune_for_large_continuous_listing => false}
+        ), ?ATTEMPTS)
+    end, Workers).
 
 
 dir_stats_collector_test(Config0) ->

@@ -460,7 +460,7 @@ rename_dir(UserCtx, SourceFileCtx0, TargetParentFileCtx0, TargetName) ->
 -spec rename_file_insecure(user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
     TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) -> no_return() | #fuse_response{}.
 rename_file_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
-    {SourceFileCtx3, TargetFileId} =
+    {SourceFileCtx3, TargetFileId, _} =
         rename_meta_and_storage_file(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName),
     replica_updater:rename(SourceFileCtx, TargetFileId),
     FileGuid = file_ctx:get_logical_guid_const(SourceFileCtx3),
@@ -481,9 +481,9 @@ rename_file_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
 -spec rename_dir_insecure(user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
     TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) -> no_return() | #fuse_response{}.
 rename_dir_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
-    {SourceFileCtx3, TargetFileId} =
+    {SourceFileCtx3, TargetFileId, UnsetAction} =
         rename_meta_and_storage_file(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName),
-    ChildEntries = rename_child_locations(UserCtx, SourceFileCtx3, TargetFileId),
+    ChildEntries = rename_child_locations(UserCtx, SourceFileCtx3, TargetFileId, UnsetAction),
     FileGuid = file_ctx:get_logical_guid_const(SourceFileCtx3),
     #fuse_response{
         status = #status{code = ?OK},
@@ -501,7 +501,7 @@ rename_dir_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
 %%--------------------------------------------------------------------
 -spec rename_meta_and_storage_file(user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
     TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) ->
-    {TargetFileCtx :: file_ctx:ctx(), TargetFileId :: helpers:file_id()}.
+    {TargetFileCtx :: file_ctx:ctx(), TargetFileId :: helpers:file_id(), unset | ignored}.
 rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentCtx0, TargetName) ->
     {SourceFileId, SourceFileCtx} = file_ctx:get_storage_file_id(SourceFileCtx0),
     {TargetParentFileId, TargetParentCtx} = file_ctx:get_storage_file_id(TargetParentCtx0),
@@ -513,7 +513,7 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentCtx0, TargetNa
     {SourceParentFileCtx, SourceFileCtx3} = file_tree:get_parent(SourceFileCtx2, UserCtx),
     {SourceParentDoc, SourceParentFileCtx2} = file_ctx:get_file_doc(SourceParentFileCtx),
     file_meta:rename(SourceDoc, SourceParentDoc, ParentDoc, TargetName),
-    maybe_unset_ignore_in_changes(SourceFileCtx3, SourceDoc, ParentDoc),
+    UnsetAction = maybe_unset_ignore_in_changes(SourceFileCtx3, SourceDoc, ParentDoc),
 
     SpaceId = file_ctx:get_space_id_const(SourceFileCtx3),
     paths_cache:invalidate_on_all_nodes(SpaceId),
@@ -535,7 +535,7 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentCtx0, TargetNa
             ok
     end,
     on_successful_rename(UserCtx, SourceFileCtx6, SourceParentFileCtx2, TargetParentCtx2, TargetName),
-    {SourceFileCtx6, TargetFileId}.
+    {SourceFileCtx6, TargetFileId, UnsetAction}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -544,25 +544,27 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentCtx0, TargetNa
 %% @end
 %%--------------------------------------------------------------------
 -spec rename_child_locations(user_ctx:ctx(), ParentFileCtx :: file_ctx:ctx(),
-    ParentStorageFileId :: helpers:file_id()) -> [#file_renamed_entry{}].
-rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId) ->
+    ParentStorageFileId :: helpers:file_id(), unset | ignored) -> [#file_renamed_entry{}].
+rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId, RootUnsetAction) ->
     ListOpts = #{tune_for_large_continuous_listing => true},
-    rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId, ListOpts, []).
+    rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId, RootUnsetAction, ListOpts, []).
 
 
 -spec rename_child_locations(user_ctx:ctx(), ParentFileCtx :: file_ctx:ctx(),
-    ParentStorageFileId :: helpers:file_id(), file_listing:options(), [#file_renamed_entry{}]) ->
+    ParentStorageFileId :: helpers:file_id(), unset | ignored, file_listing:options(), [#file_renamed_entry{}]) ->
     [#file_renamed_entry{}].
-rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId, ListOpts, ChildEntries) ->
+rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId, RootUnsetAction, ListOpts, ChildEntries) ->
     ParentGuid = file_ctx:get_logical_guid_const(ParentFileCtx),
     {Children, ListingPaginationToken, ParentFileCtx2} = file_tree:list_children(ParentFileCtx, UserCtx, ListOpts),
     NewChildEntries = lists:flatten(lists:map(fun(ChildCtx) ->
         {ChildName, ChildCtx2} = file_ctx:get_aliased_name(ChildCtx, UserCtx),
         ChildStorageFileId = filename:join(ParentStorageFileId, ChildName),
-        case file_ctx:is_dir(ChildCtx2) of
-            {true, ChildCtx3} ->
-                rename_child_locations(UserCtx, ChildCtx3, ChildStorageFileId);
-            {false, ChildCtx3} ->
+        {IsDir, ChildCtx3} = file_ctx:is_dir(ChildCtx2),
+        maybe_unset_child_ignore_in_changes(RootUnsetAction, ChildCtx3),
+        case IsDir of
+            true ->
+                rename_child_locations(UserCtx, ChildCtx3, ChildStorageFileId, RootUnsetAction);
+            false ->
                 ok = replica_updater:rename(ChildCtx3, ChildStorageFileId),
                 ChildGuid = file_ctx:get_logical_guid_const(ChildCtx3),
                 #file_renamed_entry{
@@ -578,7 +580,7 @@ rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId, ListOpts, Ch
         true ->
             AllChildEntries;
         false ->
-            rename_child_locations(UserCtx, ParentFileCtx2, ParentStorageFileId, 
+            rename_child_locations(UserCtx, ParentFileCtx2, ParentStorageFileId, RootUnsetAction,
                 ListOpts#{pagination_token => ListingPaginationToken}, AllChildEntries)
     end.
 
@@ -662,15 +664,32 @@ validate_target_name(TargetName) ->
 
 
 %% @private
--spec maybe_unset_ignore_in_changes(file_ctx:ctx(), file_meta:doc(), file_meta:doc()) -> ok.
+-spec maybe_unset_ignore_in_changes(file_ctx:ctx(), file_meta:doc(), file_meta:doc()) -> unset | ignored.
 maybe_unset_ignore_in_changes(
     SourceCtx,
     #document{key = Key, ignore_in_changes = true} = _SourceDoc,
     #document{ignore_in_changes = false} = _ParentDoc
 ) ->
+    % TODO - trzeba to zrobic rekursywnie na kazdym pliku w katalogu
     % TODO - zablokowac rename w druga strone (od public do local)
     file_meta:unset_ignore_in_changes(Key),
     times:unset_ignore_in_changes(Key),
-    fslogic_location_cache:unset_ignore_in_changes(SourceCtx);
+    fslogic_location_cache:unset_ignore_in_changes(SourceCtx),
+    unset;
 maybe_unset_ignore_in_changes(_, _, _) ->
+    ignored.
+
+
+%% @private
+-spec maybe_unset_child_ignore_in_changes(unset | ignored, file_ctx:ctx()) -> ok.
+maybe_unset_child_ignore_in_changes(unset = _RootUnsetAction, FileCtx) ->
+    Uuid = file_ctx:get_logical_uuid_const(FileCtx),
+    file_meta:unset_ignore_in_changes(Uuid),
+    times:unset_ignore_in_changes(Uuid),
+    case file_ctx:is_dir(FileCtx) of
+        {true, _} -> ok;
+        {false, _} -> fslogic_location_cache:unset_ignore_in_changes(FileCtx)
+    end;
+maybe_unset_child_ignore_in_changes(ignored = _RootUnsetAction, _FileCtx) ->
     ok.
+

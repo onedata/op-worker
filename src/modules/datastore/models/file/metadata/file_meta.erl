@@ -763,11 +763,11 @@ make_space_exist(SpaceId) ->
             trash:create(SpaceId),
 
             SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(SpaceId),
-            TrashDoc = new_doc(fslogic_file_id:spaceid_to_tmp_dir_uuid(SpaceId),
+            TmpDirDoc = new_doc(fslogic_file_id:spaceid_to_tmp_dir_uuid(SpaceId),
                 ?TMP_DIR_NAME, ?DIRECTORY_TYPE, ?DEFAULT_DIR_MODE, ?SPACE_OWNER_ID(SpaceId),
                 SpaceUuid, SpaceId, true
             ),
-            {ok, _} = save(TrashDoc),
+            {ok, _} = save(TmpDirDoc),
 
             emit_space_dir_created(SpaceDirUuid, SpaceId);
         {error, already_exists} ->

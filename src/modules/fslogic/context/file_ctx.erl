@@ -333,7 +333,7 @@ get_uuid_based_path(FileCtx = #file_ctx{uuid_based_path = UuidPath}) ->
 is_tmp(FileCtx) ->
     {UuidPath, FileCtx2} = get_uuid_based_path(FileCtx),
     IsTmp = case filename:split(UuidPath) of
-        ["/", _SpaceId, Uuid | _] ->
+        [<<"/">>, _SpaceId, Uuid | _] ->
             fslogic_file_id:is_tmp_dir_uuid(Uuid);
         _ ->
             false
