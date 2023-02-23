@@ -739,8 +739,8 @@ process_result(EngineId, ExecutionId, #execution_spec{
                 % TODO VFS-7788 - use callbacks to get human readable information about task
                 handle_exception(
                     ExecutionId, Handler, ExecutionContext,
-                    "Unexpected error processing task ~p result ~p (id ~p) for item ~p (id ~p)",
-                    [TaskId, CachedResult, CachedResultId, CachedItem, ItemId],
+                    "Unexpected error processing task result ~s",
+                    [?autoformat([TaskId, CachedResultId, CachedResult, ItemId, CachedItem])],
                     Error, Reason, Stacktrace
                 ),
                 error
