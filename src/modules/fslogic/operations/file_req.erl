@@ -94,6 +94,7 @@ make_file(UserCtx, ParentFileCtx0, Name, Mode) ->
 -spec make_link(user_ctx:ctx(), file_ctx:ctx(), file_ctx:ctx(), file_meta:name()) ->
     fslogic_worker:fuse_response().
 make_link(UserCtx, TargetFileCtx0, TargetParentFileCtx0, Name) ->
+    % TODO - nie pozwalac na hardlinki local bo moze sie rozjechac przy mv do global
     case file_ctx:is_symlink_const(TargetFileCtx0) of
         true ->
             {FileDoc, _} = file_ctx:get_file_doc_including_deleted(TargetFileCtx0),

@@ -41,7 +41,7 @@
 ]).
 -export([get_scope_id/1, setup_onedata_user/2, get_including_deleted/1,
     make_space_exist/1, new_doc/7, new_doc/8, new_share_root_dir_doc/2, get_ancestors/1,
-    get_locations_by_uuid/1, rename/4, unset_ignore_in_changes/1, get_owner/1, get_type/1, get_effective_type/1,
+    get_locations_by_uuid/1, rename/4, unset_ignore_in_changes/2, get_owner/1, get_type/1, get_effective_type/1,
     get_mode/1]).
 -export([check_name_and_get_conflicting_files/1, check_name_and_get_conflicting_files/4, has_suffix/1, is_deleted/1]).
 
@@ -533,12 +533,15 @@ rename(SourceDoc, SourceParentUuid, TargetParentUuid, TargetName) ->
     dataset_api:move_if_applicable(SourceDoc, TargetDoc).
 
 
--spec unset_ignore_in_changes(uuid()) -> ok.
-unset_ignore_in_changes(Key) ->
+-spec unset_ignore_in_changes(uuid(), boolean()) -> ok.
+unset_ignore_in_changes(Key, UnsetLinks) ->
     {ok, _} = datastore_model:update(?CTX#{ignore_in_changes => false}, Key, fun(Record) ->
         {ok, Record} % Return unchanged record, ignore_in_changes will be unset because of flag in CTX
     end),
-    ok.
+    case UnsetLinks of
+        true -> datastore_model:unset_link_ignore_in_changes(?CTX, Key, oneprovider:get_id());
+        false -> ok
+    end.
 
 
 %%--------------------------------------------------------------------

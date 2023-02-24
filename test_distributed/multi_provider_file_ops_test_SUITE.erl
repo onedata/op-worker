@@ -1408,6 +1408,7 @@ tmp_files_test(Config0) ->
 
     % Create files and dir directly in tmp_dir on worker1
     {ok, DirGuid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), TmpDirGuid, ?RAND_STR(), undefined)),
+    {ok, Dir2Guid} = ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), DirGuid, ?RAND_STR(), undefined)),
     {ok, {FileGuid1, Handle1}} = ?assertMatch({ok, _}, lfm_proxy:create_and_open(
         Worker1, SessId(Worker1), TmpDirGuid, ?RAND_STR(), undefined
     )),
@@ -1426,7 +1427,7 @@ tmp_files_test(Config0) ->
     ?assertMatch({ok, [], _}, lfm_proxy:get_children(
         Worker2, SessId(Worker2), #file_ref{guid = TmpDirGuid}, #{tune_for_large_continuous_listing => false}
     )),
-    TmpFiles = [DirGuid, FileGuid1, FileGuid2],
+    TmpFiles = [DirGuid, Dir2Guid, FileGuid1, FileGuid2],
     lists:foreach(fun(G) ->
         ?assertMatch({error, enoent}, lfm_proxy:stat(Worker2, SessId(Worker2), #file_ref{guid = G}))
     end, TmpFiles),
@@ -1446,7 +1447,7 @@ tmp_files_test(Config0) ->
         ?assertMatch({ok, [_, _], _}, lfm_proxy:get_children(
             Worker, SessId(Worker), #file_ref{guid = SyncedDirGuid}, #{tune_for_large_continuous_listing => false}
         ), ?ATTEMPTS),
-        ?assertMatch({ok, [_], _}, lfm_proxy:get_children(
+        ?assertMatch({ok, [_, _], _}, lfm_proxy:get_children(
             Worker, SessId(Worker), #file_ref{guid = DirGuid}, #{tune_for_large_continuous_listing => false}
         ), ?ATTEMPTS)
     end, Workers).

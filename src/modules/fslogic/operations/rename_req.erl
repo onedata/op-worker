@@ -667,14 +667,12 @@ validate_target_name(TargetName) ->
 -spec maybe_unset_ignore_in_changes(file_ctx:ctx(), file_meta:doc(), file_meta:doc()) -> unset | ignored.
 maybe_unset_ignore_in_changes(
     SourceCtx,
-    #document{key = Key, ignore_in_changes = true} = _SourceDoc,
+    #document{ignore_in_changes = true} = _SourceDoc,
     #document{ignore_in_changes = false} = _ParentDoc
 ) ->
     % TODO - trzeba to zrobic rekursywnie na kazdym pliku w katalogu
     % TODO - zablokowac rename w druga strone (od public do local)
-    file_meta:unset_ignore_in_changes(Key),
-    times:unset_ignore_in_changes(Key),
-    fslogic_location_cache:unset_ignore_in_changes(SourceCtx),
+    unset_child_ignore_in_changes(SourceCtx),
     unset;
 maybe_unset_ignore_in_changes(_, _, _) ->
     ignored.
@@ -683,13 +681,19 @@ maybe_unset_ignore_in_changes(_, _, _) ->
 %% @private
 -spec maybe_unset_child_ignore_in_changes(unset | ignored, file_ctx:ctx()) -> ok.
 maybe_unset_child_ignore_in_changes(unset = _RootUnsetAction, FileCtx) ->
-    Uuid = file_ctx:get_logical_uuid_const(FileCtx),
-    file_meta:unset_ignore_in_changes(Uuid),
-    times:unset_ignore_in_changes(Uuid),
-    case file_ctx:is_dir(FileCtx) of
-        {true, _} -> ok;
-        {false, _} -> fslogic_location_cache:unset_ignore_in_changes(FileCtx)
-    end;
+    unset_child_ignore_in_changes(FileCtx);
 maybe_unset_child_ignore_in_changes(ignored = _RootUnsetAction, _FileCtx) ->
     ok.
 
+
+%% @private
+-spec unset_child_ignore_in_changes(file_ctx:ctx()) -> ok.
+unset_child_ignore_in_changes(FileCtx) ->
+    Uuid = file_ctx:get_logical_uuid_const(FileCtx),
+    {IsDir, _} = file_ctx:is_dir(FileCtx),
+    file_meta:unset_ignore_in_changes(Uuid, IsDir),
+    times:unset_ignore_in_changes(Uuid),
+    case IsDir of
+        true -> ok;
+        false -> fslogic_location_cache:unset_ignore_in_changes(FileCtx)
+    end.
