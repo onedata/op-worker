@@ -61,7 +61,7 @@
     get_file_attr_test/1,
     get_file_details_test/1,
     get_file_distribution_test/1,
-    gather_historical_dir_size_stats_test/1,
+    get_historical_dir_size_stats_test/1,
     get_file_storage_locations_test/1,
 
     set_perms_test/1,
@@ -1229,7 +1229,7 @@ get_file_distribution_test(Config) ->
     }, Config).
 
 
-gather_historical_dir_size_stats_test(Config) ->
+get_historical_dir_size_stats_test(Config) ->
     [W | _] = ?config(op_worker_nodes, Config),
     
     permissions_test_runner:run_scenarios(#perms_test_spec{
@@ -1253,8 +1253,8 @@ gather_historical_dir_size_stats_test(Config) ->
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/dir1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(opt_file_metadata:gather_historical_dir_size_stats(
-                W, SessId, FileKey, #time_series_layout_get_request{}))
+            extract_ok(opt_file_metadata:get_historical_dir_size_stats(
+                W, SessId, FileKey, ?GET_DOMAIN_BIN(W), #time_series_layout_get_request{}))
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->

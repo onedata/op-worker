@@ -266,7 +266,7 @@ get_file_distribution_test(Config) ->
 
 
 gather_historical_dir_size_stats_test(Config) ->
-    permissions_test_base:gather_historical_dir_size_stats_test(Config).
+    permissions_test_base:get_historical_dir_size_stats_test(Config).
 
 
 get_file_storage_locations_test(Config) ->

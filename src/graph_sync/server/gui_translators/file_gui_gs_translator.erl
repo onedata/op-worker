@@ -69,7 +69,7 @@ translate_value(#gri{aspect = api_samples, scope = private}, ApiSamples) ->
 translate_value(#gri{aspect = dir_size_stats_collection_schema}, TimeSeriesCollectionSchema) ->
     jsonable_record:to_json(TimeSeriesCollectionSchema);
 
-translate_value(#gri{aspect = dir_size_stats_collection}, TSBrowseResult) ->
+translate_value(#gri{aspect = {dir_size_stats_collection, _}}, TSBrowseResult) ->
     ts_browse_result:to_json(TSBrowseResult).
 
 

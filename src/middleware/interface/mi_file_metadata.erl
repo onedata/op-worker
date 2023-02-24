@@ -22,7 +22,7 @@
     remove_custom_metadata/3,
 
     gather_distribution/2,
-    gather_historical_dir_size_stats/3,
+    gather_historical_dir_size_stats/4,
     get_storage_locations/2
 ]).
 
@@ -86,12 +86,13 @@ gather_distribution(SessionId, FileKey) ->
     middleware_worker:check_exec(SessionId, FileGuid, #data_distribution_gather_request{}).
 
 
--spec gather_historical_dir_size_stats(session:id(), lfm:file_key(), ts_browse_request:record()) ->
+-spec gather_historical_dir_size_stats(session:id(), lfm:file_key(), od_provider:id(), ts_browse_request:record()) ->
     ts_browse_result:record() | no_return().
-gather_historical_dir_size_stats(SessionId, FileKey, Request) ->
+gather_historical_dir_size_stats(SessionId, FileKey, ProviderId, Request) ->
     FileGuid = lfm_file_key:resolve_file_key(SessionId, FileKey, do_not_resolve_symlink),
 
-    middleware_worker:check_exec(SessionId, FileGuid, #historical_dir_size_stats_gather_request{
+    middleware_worker:check_exec(SessionId, FileGuid, #historical_dir_size_stats_get_request{
+        provider_id = ProviderId,
         request = Request
     }).
 

@@ -284,7 +284,8 @@
 
 -record(data_distribution_gather_request, {}).
 
--record(historical_dir_size_stats_gather_request, {
+-record(historical_dir_size_stats_get_request, {
+    provider_id :: od_provider:id(),
     request :: ts_browse_request:record()
 }).
 
