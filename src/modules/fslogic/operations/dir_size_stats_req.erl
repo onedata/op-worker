@@ -45,10 +45,8 @@ get_historical(UserCtx, FileCtx0, ProviderId, BrowseRequest) ->
     ts_browse_result:record().
 get_historical_insecure(FileCtx, ProviderId, BrowseRequest) ->
     Guid = file_ctx:get_logical_guid_const(FileCtx),
-    RpcRequest = #{
-        ProviderId => #provider_historical_dir_size_stats_browse_request{request = BrowseRequest}
-    },
-    case provider_rpc:gather(Guid, RpcRequest) of
-        #{ProviderId := {ok, Result}} -> Result;
-        #{ProviderId := {error, _} = Error} -> Error
+    RpcRequest = #provider_historical_dir_size_stats_browse_request{request = BrowseRequest},
+    case provider_rpc:call(ProviderId, Guid, RpcRequest) of
+        {ok, Result} -> Result;
+        {error, _} = Error -> throw(Error)
     end.
