@@ -73,16 +73,13 @@ handle_entry_delete(#document{key = QosEntryId, scope = SpaceId} = QosEntryDoc) 
 -spec encode_file_meta_posthook_args(file_meta_posthooks:function_name(), [term()]) ->
     file_meta_posthooks:encoded_args().
 encode_file_meta_posthook_args(reconcile_qos, [FileCtx]) ->
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-    FileUuid = file_ctx:get_uuid_const(FileCtx),
-    term_to_binary([FileUuid, SpaceId]).
+    file_ctx:get_guid_const(FileCtx).
 
 
 -spec decode_file_meta_posthook_args(file_meta_posthooks:function_name(), file_meta_posthooks:encoded_args()) ->
     [term()].
-decode_file_meta_posthook_args(reconcile_qos, EncodedArgs) ->
-    [FileUuid, SpaceId] = binary_to_term(EncodedArgs),
-    [file_ctx:new_by_guid(file_id:pack_guid(FileUuid, SpaceId))].
+decode_file_meta_posthook_args(reconcile_qos, Guid) ->
+    [file_ctx:new_by_guid(Guid)].
 
 
 %%--------------------------------------------------------------------
