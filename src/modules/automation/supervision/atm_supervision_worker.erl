@@ -90,8 +90,8 @@ try_to_gracefully_stop_atm_workflow_executions() ->
             end;
         {error, _} = Error ->
             ?warning(
-                "Skipping automation workflow executions graceful stop procedure due to: ~p",
-                [Error]
+                "Skipping automation workflow executions graceful stop procedure:~s",
+                [?autoformat([Error])]
             )
     end.
 
