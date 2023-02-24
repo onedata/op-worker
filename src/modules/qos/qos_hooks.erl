@@ -12,6 +12,8 @@
 -module(qos_hooks).
 -author("Michal Stanisz").
 
+-behaviour(file_meta_posthooks_behaviour).
+
 -include("modules/datastore/datastore_models.hrl").
 -include("modules/datastore/datastore_runner.hrl").
 -include("modules/datastore/qos.hrl").
@@ -23,10 +25,12 @@
 -export([
     handle_qos_entry_change/2,
     handle_entry_delete/1,
-    reconcile_qos/1, reconcile_qos/2,
+    reconcile_qos/1,
     reevaluate_all_impossible_qos_in_space/1,
     retry_failed_files/1
 ]).
+
+-export([encode_file_meta_posthook_args/2, decode_file_meta_posthook_args/2]).
 
 %%%===================================================================
 %%% API
@@ -66,6 +70,18 @@ handle_entry_delete(#document{key = QosEntryId, scope = SpaceId} = QosEntryDoc) 
     ok = qos_status:report_entry_deleted(SpaceId, QosEntryId).
 
 
+-spec encode_file_meta_posthook_args(file_meta_posthooks:function_name(), [term()]) ->
+    file_meta_posthooks:encoded_args().
+encode_file_meta_posthook_args(reconcile_qos, [FileCtx]) ->
+    file_ctx:get_guid_const(FileCtx).
+
+
+-spec decode_file_meta_posthook_args(file_meta_posthooks:function_name(), file_meta_posthooks:encoded_args()) ->
+    [term()].
+decode_file_meta_posthook_args(reconcile_qos, Guid) ->
+    [file_ctx:new_by_guid(Guid)].
+
+
 %%--------------------------------------------------------------------
 %% @doc
 %% @equiv reconcile_qos(file_ctx:new_by_guid(FileCtx, false).
@@ -74,19 +90,6 @@ handle_entry_delete(#document{key = QosEntryId, scope = SpaceId} = QosEntryDoc) 
 -spec reconcile_qos(file_ctx:ctx()) -> ok.
 reconcile_qos(FileCtx) ->
     reconcile_qos_internal(FileCtx, []).
-
-
-%%--------------------------------------------------------------------
-%% @doc
-%% @equiv reconcile_qos(file_ctx:new_by_guid(FileGuid, SpaceId))
-%% This function is used as file_meta_posthook and recreates file_ctx
-%% as previous one could be outdated.
-%% @end
-%%--------------------------------------------------------------------
--spec reconcile_qos(file_meta:uuid(), od_space:id()) -> ok.
-reconcile_qos(FileUuid, SpaceId) ->
-    FileCtx = file_ctx:new_by_guid(file_id:pack_guid(FileUuid, SpaceId)),
-    reconcile_qos(FileCtx).
 
 
 %%--------------------------------------------------------------------
@@ -103,15 +106,14 @@ reconcile_qos(FileUuid, SpaceId) ->
 reconcile_qos_internal(FileCtx, Options) when is_list(Options) ->
     {StorageId, FileCtx1} = file_ctx:get_storage_id(FileCtx),
     FileUuid = file_ctx:get_uuid_const(FileCtx1),
-    SpaceId = file_ctx:get_space_id_const(FileCtx1),
     case file_qos:get_effective(FileUuid) of
-        {error, {file_meta_missing, MissingUuid}} ->
+        {error, {file_meta_missing, _MissingUuid} = MissingElement} ->
             % new file_ctx will be generated when file_meta_posthook
             % will be executed (see function reconcile_qos/2).
-            lists:member(ignore_missing_files, Options) orelse 
+            lists:member(ignore_missing_files, Options) orelse
                 file_meta_posthooks:add_hook(
-                    MissingUuid, <<"check_qos_", FileUuid/binary>>,
-                    ?MODULE, reconcile_qos, [FileUuid, SpaceId]),
+                    MissingElement, <<"check_qos_", FileUuid/binary>>,
+                    ?MODULE, reconcile_qos, [FileCtx1]),
             ok;
         {ok, EffFileQos} ->
             case file_qos:is_in_trash(EffFileQos) of

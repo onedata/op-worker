@@ -561,7 +561,7 @@ remove_local_associated_documents(FileCtx, StorageFileDeleted, StorageFileId) ->
     FileUuid = file_ctx:get_uuid_const(FileCtx),
     StorageFileDeleted andalso maybe_delete_storage_sync_info(FileCtx, StorageFileId),
     ok = file_qos:clean_up(FileCtx),
-    ok = file_meta_posthooks:delete(FileUuid),
+    ok = file_meta_posthooks:cleanup(FileUuid),
     ok = file_popularity:delete(FileUuid).
 
 

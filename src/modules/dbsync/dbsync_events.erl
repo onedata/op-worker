@@ -67,7 +67,7 @@ change_replicated_internal(SpaceId, #document{
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId),
     {ok, FileCtx2} = sd_utils:chmod(FileCtx, CurrentMode),
     ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx2, []),
-    ok = file_meta_posthooks:execute_hooks(FileUuid);
+    ok = file_meta_posthooks:execute_hooks(FileUuid, doc);
 change_replicated_internal(SpaceId, #document{
     key = FileUuid,
     deleted = false,
@@ -77,7 +77,7 @@ change_replicated_internal(SpaceId, #document{
     FileCtx = file_ctx:new_by_doc(FileDoc, SpaceId),
     {ok, FileCtx2} = sd_utils:chmod(FileCtx, CurrentMode),
     ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx2, []),
-    ok = file_meta_posthooks:execute_hooks(FileUuid);
+    ok = file_meta_posthooks:execute_hooks(FileUuid, doc);
 change_replicated_internal(SpaceId, #document{
     deleted = false,
     value = #file_location{uuid = FileUuid}

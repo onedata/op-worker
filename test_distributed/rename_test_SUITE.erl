@@ -765,8 +765,8 @@ rename_file_null_storage_test(Config) ->
     {_, File1Guid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, filename(5, "renamed_file1"))),
     {_, File2Guid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, filename(5, "renamed_file2"))),
     {_, File3Guid} = ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, filename(5, "renamed_file3"))),
-    {_, Handle1} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, ?FILE_REF(File1Guid), write)),
-    {_, Handle2} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, ?FILE_REF(File2Guid), write)),
+    {_, Handle1} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {guid, File1Guid}, write)),
+    {_, Handle2} = ?assertMatch({ok, _}, lfm_proxy:open(W, SessId, {guid, File2Guid}, write)),
     ?assertEqual({ok, 5}, lfm_proxy:write(W, Handle1, 0, <<"test1">>)),
     ?assertEqual({ok, 5}, lfm_proxy:write(W, Handle2, 0, <<"test2">>)),
     ?assertEqual(ok, lfm_proxy:close(W, Handle1)),
@@ -774,17 +774,17 @@ rename_file_null_storage_test(Config) ->
 
     %% with overwrite
     ?assertMatch({ok, _}, lfm_proxy:create(W, SessId, filename(5, "renamed_file1_target"))),
-    ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId, ?FILE_REF(File1Guid), filename(5, "renamed_file1_target"))),
+    ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId, {guid, File1Guid}, filename(5, "renamed_file1_target"))),
 
     %% without overwrite
-    ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId, ?FILE_REF(File2Guid), filename(5, "renamed_file2_target"))),
+    ?assertMatch({ok, _}, lfm_proxy:mv(W, SessId, {guid, File2Guid}, filename(5, "renamed_file2_target"))),
 
     %% with illegal overwrite
     ?assertMatch({ok, _}, lfm_proxy:mkdir(W, SessId, filename(5, "renamed_file3_target"))),
-    ?assertEqual({error, ?EISDIR}, lfm_proxy:mv(W, SessId, ?FILE_REF(File3Guid), filename(5, "renamed_file3_target"))),
+    ?assertEqual({error, ?EISDIR}, lfm_proxy:mv(W, SessId, {guid, File3Guid}, filename(5, "renamed_file3_target"))),
 
     %% with illegal target filename
-    ?assertEqual({error, ?EINVAL}, lfm_proxy:mv(W, SessId, ?FILE_REF(File3Guid), {path, filename(5, "")}, <<"path/with/slash">>)).
+    ?assertEqual({error, ?EINVAL}, lfm_proxy:mv(W, SessId, {guid, File3Guid}, {path, filename(5, "")}, <<"path/with/slash">>)).
 
 
 %%%===================================================================
