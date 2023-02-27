@@ -79,7 +79,7 @@ all() ->
 
 
 token_auth_test(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
     [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     Json = #{<<"fileMeta">> => #{
         <<"fields">> => [<<"mode">>, <<"owner">>, <<"name">>]
@@ -118,7 +118,7 @@ token_auth_test(Config) ->
 
 
 invalid_request_should_fail(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
     [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
 
     lists:foreach(fun({Json, ExpError}) ->
@@ -140,7 +140,7 @@ invalid_request_should_fail(Config) ->
 
 
 unauthorized_request_should_fail(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
     [{SpaceId, _SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     Json = #{<<"fileMeta">> => #{
         <<"fields">> => [<<"mode">>, <<"owner">>, <<"name">>]
@@ -151,7 +151,7 @@ unauthorized_request_should_fail(Config) ->
 
 
 changes_stream_file_meta_create_test(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
     UserId = <<"user1">>,
     SessionId = ?config({session_id, {UserId, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, UserId}, Config),
@@ -190,7 +190,7 @@ changes_stream_file_meta_create_test(Config) ->
 
 
 changes_stream_file_meta_change_test(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
     UserId = <<"user1">>,
     SessionId = ?config({session_id, {UserId, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, UserId}, Config),
@@ -232,7 +232,7 @@ changes_stream_file_meta_change_test(Config) ->
 
 
 changes_stream_xattr_test(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
     UserId = <<"user1">>,
     SessionId = ?config({session_id, {UserId, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, UserId}, Config),
@@ -275,7 +275,7 @@ changes_stream_xattr_test(Config) ->
 
 
 changes_stream_json_metadata_test(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
     UserId = <<"user1">>,
     SessionId = ?config({session_id, {UserId, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
@@ -317,7 +317,7 @@ changes_stream_json_metadata_test(Config) ->
 
 
 changes_stream_times_test(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
     UserId = <<"user1">>,
     SessionId = ?config({session_id, {UserId, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, UserId}, Config),
@@ -362,7 +362,7 @@ changes_stream_times_test(Config) ->
 
 
 changes_stream_file_location_test(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
     UserId = <<"user1">>,
     SessionId = ?config({session_id, {UserId, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, UserId}, Config),
@@ -402,7 +402,7 @@ changes_stream_file_location_test(Config) ->
 
 
 changes_triggers_test(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
     UserId = <<"user1">>,
     SessionId = ?config({session_id, {UserId, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, UserId}, Config),
@@ -456,7 +456,7 @@ changes_triggers_test(Config) ->
 
 
 changes_stream_request_several_records_test(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
     UserId = <<"user1">>,
     SessionId = ?config({session_id, {UserId, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{SpaceId, SpaceName} | _] = ?config({spaces, UserId}, Config),
@@ -532,7 +532,7 @@ changes_stream_request_several_records_test(Config) ->
 
 
 changes_stream_on_multi_provider_test(Config) ->
-    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    [WorkerP1, WorkerP2] = ?config(op_worker_nodes, Config),
     UserId = <<"user1">>,
     SessionIdP2 = ?config({session_id, {UserId, ?GET_DOMAIN(WorkerP2)}}, Config),
     [_, {SpaceId, SpaceName} | _] = ?config({spaces, UserId}, Config),
@@ -572,7 +572,7 @@ changes_stream_on_multi_provider_test(Config) ->
 
 
 changes_stream_closed_on_disconnection(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
     UserId = <<"user1">>,
     [{SpaceId, _SpaceName} | _] = ?config({spaces, UserId}, Config),
 
@@ -667,7 +667,7 @@ init_per_testcase(changes_stream_closed_on_disconnection, Config) ->
     init_per_testcase(all, Config);
 
 init_per_testcase(unauthorized_request_should_fail, Config) ->
-    Workers = [_, Worker] = ?config(op_worker_nodes, Config),
+    Workers = [Worker, _] = ?config(op_worker_nodes, Config),
 
     UserId = <<"user1">>,
     [{SpaceId, _SpaceName} | _] = ?config({spaces, UserId}, Config),
