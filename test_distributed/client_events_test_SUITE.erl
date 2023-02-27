@@ -74,23 +74,23 @@ all() ->
 %%%===================================================================
 
 subscribe_on_dir_test(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
+    [_, Worker] = ?config(op_worker_nodes, Config),
     subscribe_on_dir_test_base(Config, <<"/space_name1">>, async, Worker).
 
 sync_subscribe_on_dir_test(Config) ->
-    [Worker | _] = ?config(op_worker_nodes, Config),
+    [_, Worker] = ?config(op_worker_nodes, Config),
     subscribe_on_dir_test_base(Config, <<"/space_name1">>, sync, Worker).
 
 proxy_subscribe_on_dir_test(Config) ->
-    [_, Worker] = ?config(op_worker_nodes, Config),
+    [Worker, _] = ?config(op_worker_nodes, Config),
     subscribe_on_dir_test_base(Config, <<"/space_name4">>, async, Worker).
 
 sync_proxy_subscribe_on_dir_test(Config) ->
-    [_, Worker] = ?config(op_worker_nodes, Config),
+    [Worker, _] = ?config(op_worker_nodes, Config),
     subscribe_on_dir_test_base(Config, <<"/space_name4">>, sync, Worker).
 
 subscribe_on_dir_test_base(Config, SpaceName, SubscriptionType, EventProducingWorker) ->
-    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    [_, Worker1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
     EventProducingWorkerSessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(EventProducingWorker)}}, Config),
     AccessToken = ?config({access_token, <<"user1">>}, Config),
@@ -154,7 +154,7 @@ subscribe_on_user_root_filter_test(Config) ->
     subscribe_on_user_root_test_base(Config, <<"user2">>, {not_received, file_attr_changed}).
 
 subscribe_on_user_root_test_base(Config, User, ExpectedAns) ->
-    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    [_, Worker1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {User, ?GET_DOMAIN(Worker1)}}, Config),
     AccessToken = ?config({access_token, User}, Config),
     EmitterSessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
@@ -190,7 +190,7 @@ subscribe_on_new_space_filter_test(Config) ->
     subscribe_on_new_space_test_base(Config, <<"user4">>, <<"user3">>, <<"2">>, {not_received, file_attr_changed}).
 
 subscribe_on_new_space_test_base(Config, User, DomainUser, SpaceNum, ExpectedAns) ->
-    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    [_, Worker1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {User, ?GET_DOMAIN(Worker1)}}, Config),
     AccessToken = ?config({access_token, User}, Config),
     EmitterSessionId = ?config({session_id, {DomainUser, ?GET_DOMAIN(Worker1)}}, Config),
@@ -225,7 +225,7 @@ subscribe_on_new_space_test_base(Config, User, DomainUser, SpaceNum, ExpectedAns
 % Create file names' conflict using mocks (see init_per_testcase)
 % Additional events should appear
 events_on_conflicts_test(Config) ->
-    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    [_, Worker1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
     SpaceGuid = client_simulation_test_base:get_guid(Worker1, SessionId, <<"/space_name1">>),
     AccessToken = ?config({access_token, <<"user1">>}, Config),
@@ -280,7 +280,7 @@ events_on_conflicts_test(Config) ->
 
 subscribe_on_replication_info_test(Config) ->
     User = <<"user1">>,
-    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    [_, Worker1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {User, ?GET_DOMAIN(Worker1)}}, Config),
     AccessToken = ?config({access_token, User}, Config),
     EmitterSessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
@@ -358,7 +358,7 @@ subscribe_on_replication_info_test(Config) ->
 subscribe_on_replication_info_multiprovider_test(Config) ->
     User = <<"user1">>,
     User2 = <<"user2">>,
-    [Worker1, Worker2] = ?config(op_worker_nodes, Config),
+    [Worker2, Worker1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {User, ?GET_DOMAIN(Worker1)}}, Config),
     SessionIdUser2 = ?config({session_id, {User2, ?GET_DOMAIN(Worker1)}}, Config),
     SessionIdWorker2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker2)}}, Config),
@@ -445,7 +445,7 @@ subscribe_on_replication_info_multiprovider_test(Config) ->
     ok.
 
 events_for_hardlinks_test(Config) ->
-    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    [_, Worker1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
     AccessToken = ?config({access_token, <<"user1">>}, Config),
     SpaceGuid = client_simulation_test_base:get_guid(Worker1, SessionId, <<"/space_name1">>),
@@ -508,7 +508,7 @@ events_for_hardlinks_test(Config) ->
 
 
 attr_auth_filtering_test(Config) ->
-    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    [_, Worker1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
     AccessToken = ?config({access_token, <<"user1">>}, Config),
     SpaceGuid = client_simulation_test_base:get_guid(Worker1, SessionId, <<"/space_name1">>),
@@ -582,7 +582,7 @@ attr_auth_filtering_test(Config) ->
 
 
 location_auth_filtering_test(Config) ->
-    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    [_, Worker1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
     AccessToken = ?config({access_token, <<"user1">>}, Config),
     SpaceGuid = client_simulation_test_base:get_guid(Worker1, SessionId, <<"/space_name1">>),
@@ -614,7 +614,7 @@ location_auth_filtering_test(Config) ->
 
 
 remove_auth_filtering_test(Config) ->
-    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    [_, Worker1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
     AccessToken = ?config({access_token, <<"user1">>}, Config),
     SpaceGuid = client_simulation_test_base:get_guid(Worker1, SessionId, <<"/space_name1">>),
@@ -648,7 +648,7 @@ remove_auth_filtering_test(Config) ->
     ok.
 
 rename_auth_filtering_test(Config) ->
-    [Worker1 | _] = ?config(op_worker_nodes, Config),
+    [_, Worker1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(Worker1)}}, Config),
     AccessToken = ?config({access_token, <<"user1">>}, Config),
     SpaceGuid = client_simulation_test_base:get_guid(Worker1, SessionId, <<"/space_name1">>),
