@@ -67,7 +67,7 @@ on_file_location_change(FileCtx, ChangedLocationDoc = #document{
                         case dir_stats_service_state:is_active(SpaceId) of
                             true ->
                                 try
-                                    case fslogic_location:create_doc(FileCtx3, false, false) of
+                                    case fslogic_location:create_doc(FileCtx3, false, false, 0) of
                                         {{ok, _}, FileCtx5} ->
                                             fslogic_event_emitter:emit_file_attr_changed_with_replication_status(
                                                 FileCtx5, true, []),
@@ -184,7 +184,7 @@ update_outdated_local_location_replica(FileCtx,
                 {Location, FileCtx4} ->
                     {Offset, Size} = fslogic_location_cache:get_blocks_range(Location, ChangedBlocks),
                     ok = fslogic_cache:cache_location_change([], {Location, Offset, Size}), % to use notify_block_change_if_necessary when ready
-                    notify_attrs_change_if_necessary(FileCtx4, LocalDoc, NewDoc, FirstLocalBlocks)
+                    notify_attrs_change_if_necessary(FileCtx4, LocationDocWithNewVersion, NewDoc, FirstLocalBlocks)
             end
     end.
 
@@ -346,27 +346,22 @@ notify_block_change_if_necessary(FileCtx, _, _) ->
 -spec notify_attrs_change_if_necessary(file_ctx:ctx(), file_location:doc(),
     file_location:doc(), fslogic_blocks:blocks()) -> ok.
 notify_attrs_change_if_necessary(FileCtx,
-    #document{value = #file_location{size = OldSize, version_vector = VV}} = _OldDoc,
+    #document{value = #file_location{size = OldSize}},
     #document{value = #file_location{size = NewSize}} = NewDoc,
     FirstLocalBlocksBeforeUpdate
 ) ->
     FirstLocalBlocks = fslogic_location_cache:get_blocks(NewDoc, #{count => 2}),
     ReplicaStatusChanged = replica_updater:has_replica_status_changed(
         FirstLocalBlocksBeforeUpdate, FirstLocalBlocks, OldSize, NewSize),
-    case {ReplicaStatusChanged, OldSize =/= NewSize, maps:size(VV)} of
-        {true, SizeChanged, _} ->
+    case {ReplicaStatusChanged, OldSize =/= NewSize} of
+        {true, SizeChanged} ->
             ok = fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx, SizeChanged, []),
             ok = qos_logic:reconcile_qos(FileCtx),
             ok = file_popularity:update_size(FileCtx);
-        {false, true, 0} ->
-            ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []),
-            ok = qos_logic:reconcile_qos(FileCtx);
-        {false, true, _} ->
+        {false, true} ->
             ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []),
             ok = qos_logic:report_synchronization_skipped(FileCtx);
-        {false, false, 0} ->
-            ok = qos_logic:reconcile_qos(FileCtx);
-        {false, false, _} ->
+        {false, false} ->
             ok = qos_logic:report_synchronization_skipped(FileCtx)
     end.
 
