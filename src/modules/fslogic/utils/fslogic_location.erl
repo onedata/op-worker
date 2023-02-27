@@ -54,10 +54,6 @@ create_doc(FileCtx, StorageFileCreated, GeneratedKey) ->
         {ok, _LocId} ->
             FileCtx5 = file_ctx:set_file_location(FileCtx4, LocId),
             dir_size_stats:report_reg_file_size_changed(file_ctx:get_referenced_guid_const(FileCtx5), total, Size),
-            case Size of
-                0 -> ok;
-                _ -> ok = qos_logic:reconcile_qos(FileCtx5)
-            end,
             {{ok, Location}, FileCtx5};
         {error, already_exists} = Error ->
             {Error, FileCtx4}
