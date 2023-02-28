@@ -1378,10 +1378,10 @@ get_or_create_local_regular_file_location_doc(FileCtx, GetDocOpts, CheckLocation
 
 -spec get_or_create_local_regular_file_location_doc(ctx(), fslogic_location_cache:get_doc_opts(),
     boolean(), non_neg_integer()) -> {file_location:doc(), ctx()}.
-get_or_create_local_regular_file_location_doc(FileCtx, GetDocOpts, true, _QoSCheckSizeLimit) ->
+get_or_create_local_regular_file_location_doc(FileCtx, GetDocOpts, true, QoSCheckSizeLimit) ->
     case get_local_file_location_doc(FileCtx, GetDocOpts) of
         {undefined, FileCtx2} ->
-            get_or_create_local_regular_file_location_doc(FileCtx2, GetDocOpts, false);
+            get_or_create_local_regular_file_location_doc(FileCtx2, GetDocOpts, false, QoSCheckSizeLimit);
         {Location, FileCtx2} ->
             {Location, FileCtx2}
     end;
