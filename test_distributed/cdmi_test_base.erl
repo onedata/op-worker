@@ -1087,7 +1087,7 @@ capabilities(Config) ->
 
 % tests if cdmi returns 'moved permanently' code when we forget about '/' in path
 moved_permanently(Config) ->
-    [_WorkerP1, WorkerP2] = ?config(op_worker_nodes, Config),
+    [WorkerP2, _WorkerP1] = ?config(op_worker_nodes, Config),
 
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     FileName = filename:join([binary_to_list(SpaceName), "somedir", "somefile.txt"]),
@@ -1540,7 +1540,7 @@ partial_upload(Config) ->
 
 % tests access control lists
 acl(Config) ->
-    [WorkerP1, _WorkerP2] = Workers = ?config(op_worker_nodes, Config),
+    [_WorkerP2, WorkerP1] = Workers = ?config(op_worker_nodes, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     Filename1 = filename:join([binary_to_list(SpaceName), "acl_test_file1"]),
     Dirname1 = filename:join([binary_to_list(SpaceName), "acl_test_dir1"]) ++ "/",
@@ -2062,7 +2062,7 @@ create_test_dir_and_file(Config) ->
     {binary_to_list(SpaceName), TestDirName, FullTestDirName, TestFileName, FullTestFileName, TestFileContent}.
 
 object_exists(Config, Path) ->
-    [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
 
     case lfm_proxy:stat(WorkerP1, SessionId,
@@ -2074,7 +2074,7 @@ object_exists(Config, Path) ->
     end.
 
 create_file(Config, Path) ->
-    [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     lfm_proxy:create(WorkerP1, SessionId, absolute_binary_path(Path)).
 
@@ -2083,14 +2083,14 @@ open_file(Worker, Config, Path, OpenMode) ->
     lfm_proxy:open(Worker, SessionId, {path, absolute_binary_path(Path)}, OpenMode).
 
 write_to_file(Config, Path, Data, Offset) ->
-    [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     {ok, FileHandle} = open_file(WorkerP1, Config, Path, write),
     Result = lfm_proxy:write(WorkerP1, FileHandle, Offset, Data),
     lfm_proxy:close(WorkerP1, FileHandle),
     Result.
 
 get_file_content(Config, Path) ->
-    [_WorkerP1, WorkerP2] = ?config(op_worker_nodes, Config),
+    [WorkerP2, _WorkerP1] = ?config(op_worker_nodes, Config),
     {ok, FileHandle} = open_file(WorkerP2, Config, Path, read),
     Result = case lfm_proxy:read(WorkerP2, FileHandle, ?FILE_BEGINNING, ?INFINITY) of
         {error, Error} -> {error, Error};
@@ -2100,29 +2100,29 @@ get_file_content(Config, Path) ->
     Result.
 
 mkdir(Config, Path) ->
-    [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     lfm_proxy:mkdir(WorkerP1, SessionId, absolute_binary_path(Path)).
 
 set_acl(Config, Path, Acl) ->
-    [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     lfm_proxy:set_acl(WorkerP1, SessionId, {path, absolute_binary_path(Path)}, Acl).
 
 get_acl(Config, Path) ->
-    [_WorkerP1, WorkerP2] = ?config(op_worker_nodes, Config),
+    [WorkerP2, _WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
     lfm_proxy:get_acl(WorkerP2, SessionId, {path, absolute_binary_path(Path)}).
 
 add_xattrs(Config, Path, Xattrs) ->
-    [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
+    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     lists:foreach(fun(Xattr) ->
         ok = lfm_proxy:set_xattr(WorkerP1, SessionId, {path, absolute_binary_path(Path)}, Xattr)
     end, Xattrs).
 
 get_xattrs(Config, Path) ->
-    [_WorkerP1, WorkerP2] = ?config(op_worker_nodes, Config),
+    [WorkerP2, _WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
     {ok, Xattrs} = lfm_proxy:list_xattr(WorkerP2, SessionId, {path, absolute_binary_path(Path)}, false, true),
     lists:filtermap(
@@ -2135,13 +2135,13 @@ get_xattrs(Config, Path) ->
         end, Xattrs).
 
 set_json_metadata(Config, Path, JsonTerm) ->
-    [_WorkerP1, WorkerP2] = ?config(op_worker_nodes, Config),
+    [WorkerP2, _WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
     {ok, FileGuid} = lfm_proxy:resolve_guid(WorkerP2, SessionId, absolute_binary_path(Path)),
     ok = opt_file_metadata:set_custom_metadata(WorkerP2, SessionId, ?FILE_REF(FileGuid), json, JsonTerm, []).
 
 get_json_metadata(Config, Path) ->
-    [_WorkerP1, WorkerP2] = ?config(op_worker_nodes, Config),
+    [WorkerP2, _WorkerP1] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
     {ok, FileGuid} = lfm_proxy:resolve_guid(WorkerP2, SessionId, absolute_binary_path(Path)),
     opt_file_metadata:get_custom_metadata(WorkerP2, SessionId, ?FILE_REF(FileGuid), json, [], false).

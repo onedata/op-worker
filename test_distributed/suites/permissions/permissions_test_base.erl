@@ -118,7 +118,7 @@
 
 
 data_access_caveats_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     FileOwner = <<"user1">>,
     FileOwnerUserSessId = ?config({session_id, {FileOwner, ?GET_DOMAIN(W)}}, Config),
@@ -348,7 +348,7 @@ data_access_caveats_test(Config) ->
 
 
 data_access_caveats_ancestors_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     UserId = <<"user3">>,
     UserSessId = ?config({session_id, {UserId, ?GET_DOMAIN(W)}}, Config),
@@ -447,7 +447,7 @@ data_access_caveats_ancestors_test(Config) ->
 
 
 data_access_caveats_ancestors_test2(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     UserId = <<"user3">>,
     UserSessId = ?config({session_id, {UserId, ?GET_DOMAIN(W)}}, Config),
@@ -525,7 +525,7 @@ data_access_caveats_ancestors_test2(Config) ->
 
 
 data_access_caveats_cache_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     UserId = <<"user3">>,
     UserSessId = ?config({session_id, {UserId, ?GET_DOMAIN(W)}}, Config),
@@ -638,7 +638,7 @@ data_access_caveats_cache_test(Config) ->
 
 
 mkdir_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -669,7 +669,7 @@ mkdir_test(Config) ->
 
 
 get_children_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -695,7 +695,7 @@ get_children_test(Config) ->
 
 
 get_children_attrs_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -721,7 +721,7 @@ get_children_attrs_test(Config) ->
 
 
 get_children_details_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -747,7 +747,7 @@ get_children_details_test(Config) ->
 
 
 get_child_attr_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -772,7 +772,7 @@ get_child_attr_test(Config) ->
 
 
 mv_dir_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -812,7 +812,7 @@ mv_dir_test(Config) ->
 
 
 rm_dir_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -843,7 +843,7 @@ rm_dir_test(Config) ->
 
 
 create_file_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -874,7 +874,7 @@ create_file_test(Config) ->
 
 
 open_for_read_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -906,7 +906,7 @@ open_for_read_test(Config) ->
 
 
 open_for_write_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -938,7 +938,7 @@ open_for_write_test(Config) ->
 
 
 open_for_rdwr_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -970,7 +970,7 @@ open_for_rdwr_test(Config) ->
 
 
 create_and_open_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -1002,7 +1002,7 @@ create_and_open_test(Config) ->
 
 
 truncate_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -1028,7 +1028,7 @@ truncate_test(Config) ->
 
 
 mv_file_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -1068,7 +1068,7 @@ mv_file_test(Config) ->
 
 
 rm_file_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -1099,7 +1099,7 @@ rm_file_test(Config) ->
 
 
 get_parent_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -1120,7 +1120,7 @@ get_parent_test(Config) ->
 
 
 get_file_path_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -1141,7 +1141,7 @@ get_file_path_test(Config) ->
 
 
 get_file_guid_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -1161,7 +1161,7 @@ get_file_guid_test(Config) ->
 
 
 get_file_attr_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -1182,7 +1182,7 @@ get_file_attr_test(Config) ->
 
 
 get_file_details_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -1203,7 +1203,7 @@ get_file_details_test(Config) ->
 
 
 get_file_distribution_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -1230,7 +1230,7 @@ get_file_distribution_test(Config) ->
 
 
 gather_historical_dir_size_stats_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
     
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -1264,7 +1264,7 @@ gather_historical_dir_size_stats_test(Config) ->
 
 
 get_file_storage_locations_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
     
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -1291,7 +1291,7 @@ get_file_storage_locations_test(Config) ->
 
 
 set_perms_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
     FileOwner = <<"user1">>,
 
     FileOwnerUserSessId = ?config({session_id, {FileOwner, ?GET_DOMAIN(W)}}, Config),
@@ -1440,7 +1440,7 @@ set_perms_test(Config) ->
 
 
 check_read_perms_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -1466,7 +1466,7 @@ check_read_perms_test(Config) ->
 
 
 check_write_perms_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -1492,7 +1492,7 @@ check_write_perms_test(Config) ->
 
 
 check_rdwr_perms_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -1518,7 +1518,7 @@ check_rdwr_perms_test(Config) ->
 
 
 create_share_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -1542,7 +1542,7 @@ create_share_test(Config) ->
 
 
 remove_share_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -1574,7 +1574,7 @@ remove_share_test(Config) ->
 
 
 share_perms_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
     FileOwner = <<"user1">>,
 
     FileOwnerUserSessId = ?config({session_id, {FileOwner, ?GET_DOMAIN(W)}}, Config),
@@ -1617,7 +1617,7 @@ share_perms_test(Config) ->
 
 
 get_acl_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -1641,7 +1641,7 @@ get_acl_test(Config) ->
 
 
 set_acl_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -1673,7 +1673,7 @@ set_acl_test(Config) ->
 
 
 remove_acl_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -1699,7 +1699,7 @@ remove_acl_test(Config) ->
 
 
 get_transfer_encoding_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -1728,7 +1728,7 @@ get_transfer_encoding_test(Config) ->
 
 
 set_transfer_encoding_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -1755,7 +1755,7 @@ set_transfer_encoding_test(Config) ->
 
 
 get_cdmi_completion_status_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -1784,7 +1784,7 @@ get_cdmi_completion_status_test(Config) ->
 
 
 set_cdmi_completion_status_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -1811,7 +1811,7 @@ set_cdmi_completion_status_test(Config) ->
 
 
 get_mimetype_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -1840,7 +1840,7 @@ get_mimetype_test(Config) ->
 
 
 set_mimetype_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -1867,7 +1867,7 @@ set_mimetype_test(Config) ->
 
 
 get_metadata_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -1898,7 +1898,7 @@ get_metadata_test(Config) ->
 
 
 set_metadata_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -1925,7 +1925,7 @@ set_metadata_test(Config) ->
 
 
 remove_metadata_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -1956,7 +1956,7 @@ remove_metadata_test(Config) ->
 
 
 get_xattr_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -1987,7 +1987,7 @@ get_xattr_test(Config) ->
 
 
 list_xattr_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -2015,7 +2015,7 @@ list_xattr_test(Config) ->
 
 
 set_xattr_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -2043,7 +2043,7 @@ set_xattr_test(Config) ->
 
 
 remove_xattr_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -2074,7 +2074,7 @@ remove_xattr_test(Config) ->
 
 
 add_qos_entry_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -2096,7 +2096,7 @@ add_qos_entry_test(Config) ->
 
 
 get_qos_entry_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -2126,7 +2126,7 @@ get_qos_entry_test(Config) ->
 
 
 remove_qos_entry_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -2156,7 +2156,7 @@ remove_qos_entry_test(Config) ->
 
 
 get_effective_file_qos_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -2186,7 +2186,7 @@ get_effective_file_qos_test(Config) ->
 
 
 check_qos_fulfillment_test(Config) ->
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
 
     permissions_test_runner:run_scenarios(#perms_test_spec{
         test_node = W,
@@ -2216,7 +2216,7 @@ check_qos_fulfillment_test(Config) ->
 
 
 multi_provider_permission_cache_test(Config) ->
-    [P2, P1W2, P1W1] = ?config(op_worker_nodes, Config),
+    [P1W1, P1W2, P2] = ?config(op_worker_nodes, Config),
     Nodes = [P1W2, P1W1, P2],
 
     User = <<"user1">>,
@@ -2305,7 +2305,7 @@ run_multi_provider_perm_test(Nodes, User, Guid, PermsSet, TestedPerms, ExpResult
 
 expired_session_test(Config) ->
     % Setup
-    [W | _] = ?config(op_worker_nodes, Config),
+    [_, _, W] = ?config(op_worker_nodes, Config),
     SessId1 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(W)}}, Config),
     {_, GUID} = ?assertMatch(
         {ok, _},

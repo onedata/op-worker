@@ -866,7 +866,7 @@ get_times(W, SessId, IdType, Ids) ->
     end, Ids).
 
 sorted_workers(Config) ->
-    [W1, W2] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     [P1Domain | _] = [V || {K, V} <- ?config(domain_mappings, Config), K =:= p1],
     case ?GET_DOMAIN(W1) of
         P1Domain ->
