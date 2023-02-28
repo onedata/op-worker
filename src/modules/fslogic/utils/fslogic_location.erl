@@ -28,7 +28,7 @@
 
 
 -spec create_doc(file_ctx:ctx(), StorageFileCreated :: boolean(), GeneratedKey :: boolean(),
-    QoSCheckSizeLimit :: boolean()) -> {{ok, file_location:record()} | {error, already_exists}, file_ctx:ctx()}.
+    QoSCheckSizeLimit :: non_neg_integer()) -> {{ok, file_location:record()} | {error, already_exists}, file_ctx:ctx()}.
 create_doc(FileCtx, StorageFileCreated, GeneratedKey, QoSCheckSizeLimit) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     FileUuid = file_ctx:get_referenced_uuid_const(FileCtx),
