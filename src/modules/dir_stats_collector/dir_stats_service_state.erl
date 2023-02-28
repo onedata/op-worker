@@ -68,7 +68,7 @@
     handle_space_support_parameters_change/2,
     enable/1, disable/1,
     report_collections_initialization_finished/1, report_collectors_stopped/1,
-    enable_for_new_support/1
+    enable_for_new_support/2
 ]).
 
 %% datastore_model callbacks
@@ -416,13 +416,15 @@ report_collectors_stopped(SpaceId) ->
     end.
 
 
--spec enable_for_new_support(od_space:id()) -> ok | {error, term()}.
-enable_for_new_support(SpaceId) ->
+-spec enable_for_new_support(od_space:id(), support_parameters:record()) -> ok | {error, term()}.
+enable_for_new_support(SpaceId, #support_parameters{dir_stats_service_enabled = true}) ->
     NewRecord = #dir_stats_service_state{
         status = enabled,
         status_change_timestamps = update_timestamps(enabled, [])
     },
-    ?extract_ok(create(SpaceId, NewRecord)).
+    ?extract_ok(create(SpaceId, NewRecord));
+enable_for_new_support(_SpaceId, _SupportParameters) ->
+    ok.
 
 
 %%%===================================================================
