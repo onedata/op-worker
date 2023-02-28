@@ -420,6 +420,8 @@ resolve_conflict(_Ctx,
 
                         case NewParentUuid =/= PrevParentUuid of
                             true ->
+                                qos_bounded_cache:invalidate_on_all_nodes(SpaceId),
+                                qos_logic:reconcile_qos(FileCtx),
                                 dir_stats_collector:report_file_moved(Type, file_ctx:get_logical_guid_const(FileCtx),
                                     OldParentGuid, NewParentGuid);
                             false ->
