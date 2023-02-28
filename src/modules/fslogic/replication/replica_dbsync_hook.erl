@@ -20,7 +20,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([on_file_location_change/2]).
+-export([on_file_location_change/2, on_file_location_change/3]).
 
 %% `file_meta_posthooks_behaviour` callbacks
 -export([
@@ -39,7 +39,13 @@
 %%--------------------------------------------------------------------
 -spec on_file_location_change(file_ctx:ctx(), file_location:doc() | undefined) ->
     ok | {error, term()}.
-on_file_location_change(_FileCtx, undefined) ->
+on_file_location_change(_FileCtx, ChangedLocationDoc) ->
+    on_file_location_change(_FileCtx, ChangedLocationDoc, 0).
+
+
+-spec on_file_location_change(file_ctx:ctx(), file_location:doc() | undefined, non_neg_integer()) ->
+    ok | {error, term()}.
+on_file_location_change(_FileCtx, undefined, _QoSCheckSizeLimit) ->
     % can happen, when called as file_meta posthook and file location document was deleted in the meantime
     ok;
 on_file_location_change(FileCtx, ChangedLocationDoc = #document{
@@ -47,7 +53,8 @@ on_file_location_change(FileCtx, ChangedLocationDoc = #document{
         provider_id = ProviderId,
         file_id = FileId,
         space_id = SpaceId
-    }}
+    }},
+    QoSCheckSizeLimit
 ) ->
     replica_synchronizer:apply(FileCtx, fun() ->
         case oneprovider:is_self(ProviderId) of
@@ -67,15 +74,15 @@ on_file_location_change(FileCtx, ChangedLocationDoc = #document{
                         case dir_stats_service_state:is_active(SpaceId) of
                             true ->
                                 try
-                                    case fslogic_location:create_doc(FileCtx3, false, false, 0) of
-                                        {{ok, _}, FileCtx5} ->
+                                    case fslogic_location:create_doc(FileCtx3, false, false, QoSCheckSizeLimit) of
+                                        {{ok, #file_location{size = CreatedSize}}, FileCtx5} ->
                                             fslogic_event_emitter:emit_file_attr_changed_with_replication_status(
                                                 FileCtx5, true, []),
-                                            on_file_location_change(FileCtx5, ChangedLocationDoc);
+                                            on_file_location_change(FileCtx5, ChangedLocationDoc, CreatedSize);
                                         {{error, already_exists}, FileCtx5} ->
                                             fslogic_event_emitter:emit_file_attr_changed_with_replication_status(
                                                 FileCtx5, true, []),
-                                            on_file_location_change(FileCtx5, ChangedLocationDoc)
+                                            on_file_location_change(FileCtx5, ChangedLocationDoc, 0)
                                     end
                                 catch
                                     throw:{error, {file_meta_missing, MissingUuid}}  ->
@@ -85,12 +92,12 @@ on_file_location_change(FileCtx, ChangedLocationDoc = #document{
                                 end;
                             false ->
                                 ok = fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx3, true, []),
-                                ok = qos_logic:reconcile_qos(FileCtx3)
+                                qos_logic:reconcile_qos(FileCtx)
                         end;
                     #document{deleted = true} ->
                         ok;
                     LocalLocation ->
-                        update_local_location_replica(FileCtx3, LocalLocation, ChangedLocationDoc)
+                        update_local_location_replica(FileCtx3, LocalLocation, ChangedLocationDoc, QoSCheckSizeLimit)
                 end;
             true ->
                 ok
@@ -130,22 +137,23 @@ decode_file_meta_posthook_args(on_file_location_change, EncodedArgs) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec update_local_location_replica(file_ctx:ctx(), file_location:doc(),
-    file_location:doc()) -> ok.
+    file_location:doc(), non_neg_integer()) -> ok.
 update_local_location_replica(FileCtx,
     LocalDoc = #document{value = #file_location{
         version_vector = LocalVV
     }},
     RemoteDoc = #document{value = #file_location{
         version_vector = RemoteVV
-    }}
+    }},
+    QoSCheckSizeLimit
 ) ->
     case version_vector:compare(LocalVV, RemoteVV) of
         identical -> ok;
         greater -> ok;
         lesser ->
-            update_outdated_local_location_replica(FileCtx, LocalDoc, RemoteDoc);
+            update_outdated_local_location_replica(FileCtx, LocalDoc, RemoteDoc, QoSCheckSizeLimit);
         concurrent ->
-            reconcile_replicas(FileCtx, LocalDoc, RemoteDoc)
+            reconcile_replicas(FileCtx, LocalDoc, RemoteDoc, QoSCheckSizeLimit)
     end.
 
 %%--------------------------------------------------------------------
@@ -156,7 +164,7 @@ update_local_location_replica(FileCtx,
 %% @end
 %%--------------------------------------------------------------------
 -spec update_outdated_local_location_replica(file_ctx:ctx(), file_location:doc(),
-    file_location:doc()) -> ok.
+    file_location:doc(), non_neg_integer()) -> ok.
 update_outdated_local_location_replica(FileCtx,
     LocalDoc = #document{value = #file_location{
         size = OldSize,
@@ -165,7 +173,8 @@ update_outdated_local_location_replica(FileCtx,
     ExternalDoc = #document{value = #file_location{
         version_vector = VV2,
         size = NewSize
-    }}
+    }},
+    QoSCheckSizeLimit
 ) ->
     FirstLocalBlocks = fslogic_location_cache:get_blocks(LocalDoc, #{count => 2}),
     FileGuid = file_ctx:get_logical_guid_const(FileCtx),
@@ -184,7 +193,7 @@ update_outdated_local_location_replica(FileCtx,
                 {Location, FileCtx4} ->
                     {Offset, Size} = fslogic_location_cache:get_blocks_range(Location, ChangedBlocks),
                     ok = fslogic_cache:cache_location_change([], {Location, Offset, Size}), % to use notify_block_change_if_necessary when ready
-                    notify_attrs_change_if_necessary(FileCtx4, LocationDocWithNewVersion, NewDoc, FirstLocalBlocks)
+                    notify_attrs_change_if_necessary(FileCtx4, LocationDocWithNewVersion, NewDoc, FirstLocalBlocks, QoSCheckSizeLimit)
             end
     end.
 
@@ -194,7 +203,7 @@ update_outdated_local_location_replica(FileCtx,
 %% Reconcile conflicted local replica according to external changes.
 %% @end
 %%--------------------------------------------------------------------
--spec reconcile_replicas(file_ctx:ctx(), file_location:doc(), file_location:doc()) -> ok.
+-spec reconcile_replicas(file_ctx:ctx(), file_location:doc(), file_location:doc(), non_neg_integer()) -> ok.
 reconcile_replicas(FileCtx,
     LocalDoc = #document{
         value = #file_location{
@@ -206,7 +215,8 @@ reconcile_replicas(FileCtx,
         value = #file_location{
             version_vector = VV2,
             size = ExternalSize
-        }}
+        }},
+    QoSCheckSizeLimit
 ) ->
     LocalBlocks = fslogic_location_cache:get_blocks(LocalDoc),
     FileGuid = file_ctx:get_logical_guid_const(FileCtx),
@@ -307,13 +317,13 @@ reconcile_replicas(FileCtx,
         {skipped, FileCtx2} ->
             {ok, _} = fslogic_location_cache:save_location(NewDoc2),
             notify_block_change_if_necessary(file_ctx:reset(FileCtx2), LocalDoc, NewDoc2),
-            notify_attrs_change_if_necessary(file_ctx:reset(FileCtx2), LocalDoc, NewDoc2, LocalBlocks);
+            notify_attrs_change_if_necessary(file_ctx:reset(FileCtx2), LocalDoc, NewDoc2, LocalBlocks, QoSCheckSizeLimit);
         {{renamed, RenamedDoc, Uuid, TargetSpaceId}, _} ->
             {ok, _} = fslogic_location_cache:save_location(RenamedDoc),
             RenamedFileCtx = file_ctx:new_by_uuid(Uuid, TargetSpaceId),
             files_to_chown:chown_or_defer(RenamedFileCtx),
             notify_block_change_if_necessary(RenamedFileCtx, LocalDoc, RenamedDoc),
-            notify_attrs_change_if_necessary(RenamedFileCtx, LocalDoc, RenamedDoc, LocalBlocks)
+            notify_attrs_change_if_necessary(RenamedFileCtx, LocalDoc, RenamedDoc, LocalBlocks, QoSCheckSizeLimit)
     end.
 
 %%--------------------------------------------------------------------
@@ -344,25 +354,33 @@ notify_block_change_if_necessary(FileCtx, _, _) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec notify_attrs_change_if_necessary(file_ctx:ctx(), file_location:doc(),
-    file_location:doc(), fslogic_blocks:blocks()) -> ok.
+    file_location:doc(), fslogic_blocks:blocks(), non_neg_integer()) -> ok.
 notify_attrs_change_if_necessary(FileCtx,
     #document{value = #file_location{size = OldSize}},
     #document{value = #file_location{size = NewSize}} = NewDoc,
-    FirstLocalBlocksBeforeUpdate
+    FirstLocalBlocksBeforeUpdate,
+    QoSCheckSizeLimit
 ) ->
     FirstLocalBlocks = fslogic_location_cache:get_blocks(NewDoc, #{count => 2}),
+    case replica_updater:is_fully_replicated(FirstLocalBlocks, NewSize) of
+        true ->
+            ok = qos_logic:report_synchronization_skipped(FileCtx);
+        false ->
+            case NewSize > QoSCheckSizeLimit of
+                true -> ok = qos_logic:reconcile_qos(FileCtx);
+                false -> ok
+            end
+    end,
     ReplicaStatusChanged = replica_updater:has_replica_status_changed(
         FirstLocalBlocksBeforeUpdate, FirstLocalBlocks, OldSize, NewSize),
     case {ReplicaStatusChanged, OldSize =/= NewSize} of
         {true, SizeChanged} ->
             ok = fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx, SizeChanged, []),
-            ok = qos_logic:reconcile_qos(FileCtx),
             ok = file_popularity:update_size(FileCtx);
         {false, true} ->
-            ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []),
-            ok = qos_logic:report_synchronization_skipped(FileCtx);
+            ok = fslogic_event_emitter:emit_file_attr_changed(FileCtx, []);
         {false, false} ->
-            ok = qos_logic:report_synchronization_skipped(FileCtx)
+            ok
     end.
 
 %%-------------------------------------------------------------------

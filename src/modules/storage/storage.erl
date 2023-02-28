@@ -427,7 +427,7 @@ update_helper(StorageId, UpdateFun) ->
 support_space(StorageId, SerializedToken, SupportSize, SupportParameters) ->
     case validate_support_request(SerializedToken) of
         {ok, SpaceId} ->
-            case dir_stats_service_state:enable_for_new_support(SpaceId) of
+            case dir_stats_service_state:enable_for_new_support(SpaceId, SupportParameters) of
                 ok -> ok;
                 StatsError -> ?warning("Error enabling statistics for new space ~p~nGot: ~p", [SpaceId, StatsError])
             end,
