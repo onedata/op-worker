@@ -414,6 +414,12 @@ CHANGELOG
     Onepanel GUI to show censored values instead of hiding them
     completely.
 
+### 20.02.20
+
+-   **VFS-10540** Ported rtransfer fixes with better error recovery and
+    handling from develop to stable branch 20.02.
+-   **VFS-7863** Web GUI: Fixed file download in iOS Safari.
+
 ### 20.02.19
 
 -   **VFS-9926** Web GUI: Opening Oneprovider view in Onezone GUI when

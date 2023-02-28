@@ -108,7 +108,7 @@ change_replicated_internal(_SpaceId, #document{key = JobId, value = #tree_traver
         {ok, Job, PoolName, TaskId} ->
             traverse:on_job_change(Job, JobId, PoolName, TaskId, oneprovider:get_id_or_undefined());
         ?ERROR_NOT_FOUND ->
-            % TODO VFS-6391 fix race with file_meta 
+            % TODO VFS-6391 fix race with file_meta
             ok
     end;
 change_replicated_internal(SpaceId, QosEntry = #document{
@@ -210,7 +210,7 @@ file_meta_change_replicated(SpaceId, #document{
 link_replicated(file_meta, LinkKey, SpaceId) ->
     dir_size_stats:report_remote_links_change(LinkKey, SpaceId),
     case datastore_model:get_generic_key(file_meta, LinkKey) of
-        undefined -> 
+        undefined ->
             % Legacy keys are not supported as it is impossible to retrieve GenericKey
             ok;
         GenericKey ->
