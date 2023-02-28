@@ -51,7 +51,6 @@ on_file_location_change(_FileCtx, undefined, _QoSCheckSizeLimit) ->
 on_file_location_change(FileCtx, ChangedLocationDoc = #document{
     value = #file_location{
         provider_id = ProviderId,
-        size = Size,
         file_id = FileId,
         space_id = SpaceId
     }},
@@ -75,7 +74,7 @@ on_file_location_change(FileCtx, ChangedLocationDoc = #document{
                         case dir_stats_service_state:is_active(SpaceId) of
                             true ->
                                 try
-                                    case fslogic_location:create_doc(FileCtx3, false, false, 0) of
+                                    case fslogic_location:create_doc(FileCtx3, false, false, QoSCheckSizeLimit) of
                                         {{ok, #file_location{size = CreatedSize}}, FileCtx5} ->
                                             fslogic_event_emitter:emit_file_attr_changed_with_replication_status(
                                                 FileCtx5, true, []),
@@ -83,8 +82,7 @@ on_file_location_change(FileCtx, ChangedLocationDoc = #document{
                                         {{error, already_exists}, FileCtx5} ->
                                             fslogic_event_emitter:emit_file_attr_changed_with_replication_status(
                                                 FileCtx5, true, []),
-                                            {CreatedSize, FileCtx6} = file_ctx:get_file_size_from_remote_locations(FileCtx5),
-                                            on_file_location_change(FileCtx6, ChangedLocationDoc, CreatedSize)
+                                            on_file_location_change(FileCtx5, ChangedLocationDoc, 0)
                                     end
                                 catch
                                     throw:{error, {file_meta_missing, MissingUuid}}  ->
@@ -94,15 +92,12 @@ on_file_location_change(FileCtx, ChangedLocationDoc = #document{
                                 end;
                             false ->
                                 ok = fslogic_event_emitter:emit_file_attr_changed_with_replication_status(FileCtx3, true, []),
-                                case Size > QoSCheckSizeLimit of
-                                    true -> ok = qos_logic:reconcile_qos(FileCtx);
-                                    false -> ok
-                                end
+                                qos_logic:reconcile_qos(FileCtx)
                         end;
                     #document{deleted = true} ->
                         ok;
                     LocalLocation ->
-                        update_local_location_replica(FileCtx3, LocalLocation, ChangedLocationDoc,QoSCheckSizeLimit)
+                        update_local_location_replica(FileCtx3, LocalLocation, ChangedLocationDoc, QoSCheckSizeLimit)
                 end;
             true ->
                 ok
