@@ -334,7 +334,7 @@ end_per_testcase(_Case, Config) ->
 get_nodes(Config) ->
     case ?config(op_worker_nodes, Config) of
         [WorkerP1] -> {WorkerP1, WorkerP1};
-        [WorkerP2, WorkerP1] -> {WorkerP2, WorkerP1}
+        [WorkerP2, WorkerP1] -> {WorkerP1, WorkerP2}
     end.
 
 mock_event_handler(Workers) ->

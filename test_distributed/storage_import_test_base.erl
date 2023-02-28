@@ -187,7 +187,7 @@
 %%%===================================================================
 
 empty_import_test(Config) ->
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     enable_initial_scan(Config, ?SPACE_ID),
@@ -218,7 +218,7 @@ empty_import_test(Config) ->
     }, ?SPACE_ID).
 
 create_directory_import_test(Config) ->
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     StorageTestDirPath = provider_storage_path(?SPACE_ID, ?TEST_DIR),
@@ -275,7 +275,7 @@ create_directory_import_test(Config) ->
     }, ?SPACE_ID).
 
 create_directory_import_error_test(Config) ->
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     ?assertNotMatch({ok, #file_attr{}}, lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH})),
@@ -322,7 +322,7 @@ create_directory_import_error_test(Config) ->
     }, ?SPACE_ID).
 
 create_directory_import_check_user_id_test(Config) ->
-    [W1, W2| _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     StorageTestDirPath = provider_storage_path(?SPACE_ID, ?TEST_DIR),
@@ -375,7 +375,7 @@ create_directory_import_check_user_id_test(Config) ->
     }, ?SPACE_ID).
 
 create_directory_import_check_user_id_error_test(Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     StorageTestDirPath = provider_storage_path(?SPACE_ID, ?TEST_DIR),
     RDWRStorage = get_rdwr_storage(Config, W1),
@@ -411,7 +411,7 @@ create_directory_import_check_user_id_error_test(Config) ->
     }, ?SPACE_ID).
 
 create_directory_import_without_read_permission_test(Config) ->
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     StorageTestDirPath = provider_storage_path(?SPACE_ID, ?TEST_DIR2),
@@ -450,7 +450,7 @@ create_directory_import_without_read_permission_test(Config) ->
         lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_DIR_PATH2}), 2 * ?ATTEMPTS).
 
 create_directory_import_many_test(Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     DirsNumber = 200,
     RDWRStorage = get_rdwr_storage(Config, W1),
@@ -486,7 +486,7 @@ create_directory_import_many_test(Config) ->
     }, ?SPACE_ID).
 
 create_empty_file_import_test(Config) ->
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
@@ -537,7 +537,7 @@ create_empty_file_import_test(Config) ->
         lfm_proxy:read(W2, Handle2, 0, 100), ?ATTEMPTS).
 
 create_file_import_test(Config) ->
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     StorageTestFilePath = provider_storage_path(?SPACE_ID, ?TEST_FILE1),
@@ -592,7 +592,7 @@ create_file_import_test(Config) ->
 
 
 ignore_fifo_import_test(Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
     StorageTestFilePath = provider_storage_path(?SPACE_ID, ?TEST_FILE1),
@@ -629,7 +629,7 @@ ignore_fifo_import_test(Config) ->
 
 
 create_delete_import_test(Config) ->
-    [W1, W2 | _] = Workers = ?config(op_worker_nodes, Config),
+    [W2, W1] = Workers = ?config(op_worker_nodes, Config),
     Attempts = 60,
 
     StorageTestFilePath = provider_storage_path(?SPACE_ID, ?TEST_FILE1),
@@ -698,7 +698,7 @@ create_delete_import_test(Config) ->
     ok.
 
 create_file_import_check_user_id_test(Config) ->
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
@@ -757,7 +757,7 @@ create_file_import_check_user_id_test(Config) ->
     }, ?SPACE_ID).
 
 create_file_import_check_user_id_error_test(Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
     StorageTestFilePath = provider_storage_path(?SPACE_ID, ?TEST_FILE1),
@@ -796,7 +796,7 @@ create_file_import_check_user_id_error_test(Config) ->
     }, ?SPACE_ID).
 
 create_file_in_dir_import_test(Config) ->
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
@@ -854,7 +854,7 @@ create_file_in_dir_import_test(Config) ->
     }, ?SPACE_ID).
 
 create_subfiles_import_many_test(Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
     %% Create dirs and files on storage
@@ -897,7 +897,7 @@ create_subfiles_import_many_test(Config) ->
     dir_stats_collector_test_base:verify_dir_on_provider_creating_files(Config, op_worker_nodes, get_space_guid()).
 
 create_subfiles_import_many2_test(Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
     %% Create dirs and files on storage
@@ -935,7 +935,7 @@ create_subfiles_import_many2_test(Config) ->
     dir_stats_collector_test_base:verify_dir_on_provider_creating_files(Config, op_worker_nodes, get_space_guid()).
 
 create_remote_file_import_conflict_test(Config) ->
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
@@ -1005,7 +1005,7 @@ create_remote_dir_import_race_test(Config) ->
     % directory is created in remote provider and at the same time, file with the same name is created on storage
     % this tests checks whether we properly handle situation when links are synchronized during scan,
     % but file_meta is not yet synchronized
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     StorageTestDirPath = provider_storage_path(?SPACE_ID, ?TEST_DIR),
@@ -1065,7 +1065,7 @@ create_remote_file_import_race_test(Config) ->
     % file is created in remote provider and at the same time, file with the same name is created on storage
     % this tests checks whether we properly handle situation when links are synchronized during scan,
     % but file_location is not yet synchronized
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
@@ -1126,7 +1126,7 @@ create_remote_file_import_race_test(Config) ->
 
 
 import_nfs_acl_test(Config) ->
-    [W1, _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER2, ?GET_DOMAIN(W1)}}, Config),
     StorageTestFilePath = provider_storage_path(?SPACE_ID, ?TEST_FILE1),
@@ -1182,7 +1182,7 @@ import_nfs_acl_test(Config) ->
     }, ?SPACE_ID).
 
 import_nfs_acl_with_disabled_luma_should_fail_test(Config) ->
-    [W1, _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     StorageTestFilePath = provider_storage_path(?SPACE_ID, ?TEST_FILE1),
     RDWRStorage = get_rdwr_storage(Config, W1),
@@ -1221,7 +1221,7 @@ import_nfs_acl_with_disabled_luma_should_fail_test(Config) ->
 create_file_import_race_test(Config) ->
     % in this test we check whether file is imported with IMPORTED suffix as conflicting file is created
     % via lfm
-    [W1, W2 | _] = Workers = ?config(op_worker_nodes, Config),
+    [W2, W1] = Workers = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
@@ -1307,7 +1307,7 @@ create_file_import_race_test(Config) ->
 close_file_import_race_test(Config, StorageType) ->
     % in this test we check whether file is not reimported when file is fully deleted before checking
     % deletion links
-    [W1 | _] = Workers = ?config(op_worker_nodes, Config),
+    [_, W1] = Workers = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
 
@@ -1369,7 +1369,7 @@ close_file_import_race_test(Config, StorageType) ->
 
 delete_file_reimport_race_test(Config, StorageType) ->
     % in this test, we check whether storage import does not reimport file that is deleted between checking links and file_location
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
@@ -1441,21 +1441,21 @@ remote_delete_file_reimport_race_test(Config, StorageType) ->
     % in this test, we check whether storage import does not reimport file that is deleted
     % by a remote provider and if only deletion of link is synchronized when scan is performed
     % This case tests situation when file was created in the importing provider.
-    [W1, _W2 | _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     remote_delete_file_reimport_race_test_base(Config, StorageType, W1).
 
 remote_delete_file_reimport_race2_test(Config, StorageType) ->
     % in this test, we check whether storage import does not reimport file that is deleted
     % by a remote provider and if only deletion of link is synchronized when scan is performed
     % This case tests situation when file was created in the remote (not-importing) provider.
-    [_W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, _] = ?config(op_worker_nodes, Config),
     remote_delete_file_reimport_race_test_base(Config, StorageType, W2).
 
 
 remote_delete_file_reimport_race_test_base(Config, StorageType, CreatingNode) ->
     % in this test, we check whether storage import does not reimport file that is deleted
     % by a remote provider and if only deletion of link is synchronized when scan is performed
-    [W1, W2 | _] = Workers = ?config(op_worker_nodes, Config),
+    [W2, W1] = Workers = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
@@ -1526,7 +1526,7 @@ remote_delete_file_reimport_race_test_base(Config, StorageType, CreatingNode) ->
 delete_opened_file_reimport_race_test(Config, StorageType) ->
     % in this test, we check whether storage import does not reimport file that is deleted while still opened,
     % between checking links and file_location
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
@@ -1598,7 +1598,7 @@ delete_opened_file_reimport_race_test(Config, StorageType) ->
 %%%===================================================================
 
 update_syncs_files_after_import_failed_test(Config) ->
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     StorageTestFilePath = provider_storage_path(?SPACE_ID, ?TEST_FILE1),
@@ -1670,7 +1670,7 @@ update_syncs_files_after_import_failed_test(Config) ->
         lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS).
 
 update_syncs_files_after_previous_update_failed_test(Config) ->
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     StorageTestFilePath = provider_storage_path(?SPACE_ID, ?TEST_FILE1),
@@ -1759,7 +1759,7 @@ update_syncs_files_after_previous_update_failed_test(Config) ->
         lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS).
 
 sync_should_not_reimport_deleted_but_still_opened_file(Config, StorageType) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
 
     StorageSpacePath = provider_storage_path(?SPACE_ID, <<"">>),
@@ -1811,7 +1811,7 @@ sync_should_not_reimport_deleted_but_still_opened_file(Config, StorageType) ->
     }, ?SPACE_ID).
 
 sync_should_not_reimport_directory_that_was_not_successfully_deleted_from_storage(Config) ->
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
@@ -1900,7 +1900,7 @@ sync_should_not_reimport_directory_that_was_not_successfully_deleted_from_storag
         lfm_proxy:stat(W2, SessId2, {path, SpaceTestDirPath}), ?ATTEMPTS).
 
 sync_should_not_reimport_file_that_was_not_successfully_deleted_from_storage(Config, StorageType) ->
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
@@ -1989,7 +1989,7 @@ sync_should_not_reimport_file_that_was_not_successfully_deleted_from_storage(Con
         lfm_proxy:stat(W2, SessId2, {path, SpaceTestFilePath}), ?ATTEMPTS).
 
 sync_should_not_import_recreated_file_with_suffix_on_storage(Config, StorageType) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER2, ?GET_DOMAIN(W1)}}, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
@@ -2046,7 +2046,7 @@ sync_should_not_import_recreated_file_with_suffix_on_storage(Config, StorageType
     }, ?SPACE_ID).
 
 sync_should_update_blocks_of_recreated_file_with_suffix_on_storage(Config, StorageType) ->
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
@@ -2139,7 +2139,7 @@ sync_should_update_blocks_of_recreated_file_with_suffix_on_storage(Config, Stora
         lfm_proxy:read(W2, H5, 0, ?TEST_DATA_SIZE), ?ATTEMPTS).
 
 sync_should_not_import_replicated_file_with_suffix_on_storage(Config, StorageType) ->
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
@@ -2192,7 +2192,7 @@ sync_should_not_import_replicated_file_with_suffix_on_storage(Config, StorageTyp
     ?assertMatch({ok, [_, _]}, lfm_proxy:get_children(W1, SessId, {path, <<"/", (?SPACE_NAME)/binary>>}, 0, 100)).
 
 sync_should_update_replicated_file_with_suffix_on_storage(Config, StorageType) ->
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     StorageSpacePath = provider_storage_path(?SPACE_ID, <<"">>),
@@ -2277,7 +2277,7 @@ sync_should_update_replicated_file_with_suffix_on_storage(Config, StorageType) -
         lfm_proxy:read(W2, H5, 0, 100), ?ATTEMPTS).
 
 sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed(Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
     StorageTestFilePath = provider_storage_path(?SPACE_ID, ?TEST_FILE1),
     %% Create file on storage
@@ -2335,7 +2335,7 @@ sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed(Config) ->
     }, ?SPACE_ID).
 
 create_delete_import2_test(Config) ->
-    [W1, W2 | _] = Workers = ?config(op_worker_nodes, Config),
+    [W2, W1] = Workers = ?config(op_worker_nodes, Config),
     Attempts = 60,
     StorageTestFilePath = provider_storage_path(?SPACE_ID, ?TEST_FILE1),
     StorageTestFilePath2 = provider_storage_path(?SPACE_ID, ?TEST_FILE1, false),
@@ -2396,7 +2396,7 @@ create_delete_import2_test(Config) ->
     ?assertMatch({error, ?ENOENT}, lfm_proxy:open(W2, SessIdW2, ?FILE_REF(FileGuid), read), ?ATTEMPTS).
 
 create_subfiles_and_delete_before_import_is_finished_test(Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     StorageTestDirPath = provider_storage_path(?SPACE_ID, ?TEST_DIR),
     RDWRStorage = get_rdwr_storage(Config, W1),
@@ -2447,7 +2447,7 @@ create_subfiles_and_delete_before_import_is_finished_test(Config) ->
     disable_continuous_scan(Config).
 
 create_file_in_dir_update_test(Config) ->
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
@@ -2547,7 +2547,7 @@ create_file_in_dir_update_test(Config) ->
 
 
 changing_max_depth_test(Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
 
@@ -2690,7 +2690,7 @@ changing_max_depth_test(Config) ->
 
 create_file_in_dir_exceed_batch_update_test(Config) ->
     % in this test storage_import_dir_batch_size is set in init_per_testcase to 2
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
@@ -2820,7 +2820,7 @@ create_file_in_dir_exceed_batch_update_test(Config) ->
         lfm_proxy:read(W2, Handle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS).
 
 force_start_test(Config) ->
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
@@ -2892,7 +2892,7 @@ force_start_test(Config) ->
 
 
 force_stop_test(Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
     %% Create dirs and files on storage
@@ -2957,7 +2957,7 @@ file_with_data_and_metadata_protection_should_not_be_updated_test(Config, Storag
     file_with_protection_flag_should_not_be_updated_test_base(Config, ?set_flags(?DATA_PROTECTION, ?METADATA_PROTECTION), StorageType).
 
 file_with_protection_flag_should_not_be_updated_test_base(Config, ProtectionFlags, StorageType) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     StorageTestFilePath = provider_storage_path(?SPACE_ID, ?TEST_FILE1),
     RDWRStorage = get_rdwr_storage(Config, W1),
@@ -3020,7 +3020,7 @@ file_with_data_and_metadata_protection_should_not_be_deleted_test(Config, Storag
     file_with_protection_flag_should_not_be_deleted_test_base(Config, ?set_flags(?DATA_PROTECTION, ?METADATA_PROTECTION), StorageType).
 
 file_with_protection_flag_should_not_be_deleted_test_base(Config, ProtectionFlags, StorageType) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     StorageTestFilePath = provider_storage_path(?SPACE_ID, ?TEST_FILE1),
     RDWRStorage = get_rdwr_storage(Config, W1),
@@ -3078,7 +3078,7 @@ empty_dir_with_data_and_metadata_protection_should_not_be_updated_test(Config) -
     empty_dir_with_protection_flag_should_not_be_updated_test_base(Config, ?set_flags(?DATA_PROTECTION, ?METADATA_PROTECTION)).
 
 empty_dir_with_protection_flag_should_not_be_updated_test_base(Config, ProtectionFlags) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     StorageTestFilePath = provider_storage_path(?SPACE_ID, ?TEST_DIR),
     RDWRStorage = get_rdwr_storage(Config, W1),
@@ -3123,7 +3123,7 @@ empty_dir_with_data_and_metadata_protection_should_not_be_deleted_test(Config) -
     empty_dir_with_protection_flag_should_not_be_deleted_test_base(Config, ?set_flags(?DATA_PROTECTION, ?METADATA_PROTECTION)).
 
 empty_dir_with_protection_flag_should_not_be_deleted_test_base(Config, ProtectionFlags) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     StorageTestDirPath = provider_storage_path(?SPACE_ID, ?TEST_DIR),
     RDWRStorage = get_rdwr_storage(Config, W1),
@@ -3167,7 +3167,7 @@ dir_and_its_child_with_data_and_metadata_protection_should_not_be_updated_test(C
     dir_and_its_child_with_protection_flag_should_not_be_updated_test_base(Config, ?set_flags(?DATA_PROTECTION, ?METADATA_PROTECTION), StorageType).
 
 dir_and_its_child_with_protection_flag_should_not_be_updated_test_base(Config, ProtectionFlags, StorageType) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     StorageTestDirPath = provider_storage_path(?SPACE_ID, ?TEST_DIR),
     StorageTestFilePath = provider_storage_path(?SPACE_ID, filename:join(?TEST_DIR, ?TEST_FILE1)),
@@ -3245,7 +3245,7 @@ dir_and_its_child_with_data_and_metadata_protection_should_not_be_deleted_test(C
     dir_and_its_child_with_protection_flag_should_not_be_deleted_test_base(Config, ?set_flags(?DATA_PROTECTION, ?METADATA_PROTECTION)).
 
 dir_and_its_child_with_protection_flag_should_not_be_deleted_test_base(Config, ProtectionFlags) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     StorageTestDirPath = provider_storage_path(?SPACE_ID, ?TEST_DIR),
     StorageTestFilePath = provider_storage_path(?SPACE_ID, filename:join(?TEST_DIR, ?TEST_FILE1)),
@@ -3290,7 +3290,7 @@ dir_and_its_child_with_protection_flag_should_not_be_deleted_test_base(Config, P
 
 
 delete_empty_directory_update_test(Config) ->
-    [W1, _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     StorageTestDirPath = provider_storage_path(?SPACE_ID, ?TEST_DIR),
     %% Create dir on storage
@@ -3333,7 +3333,7 @@ delete_empty_directory_update_test(Config) ->
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS).
 
 delete_non_empty_directory_update_test(Config) ->
-    [W1, _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     StorageTestDirPath = provider_storage_path(?SPACE_ID, ?TEST_DIR),
     StorageTestFileinDirPath1 = provider_storage_path(?SPACE_ID, filename:join([?TEST_DIR, ?TEST_FILE1])),
@@ -3388,7 +3388,7 @@ delete_non_empty_directory_update_test(Config) ->
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS).
 
 sync_works_properly_after_delete_test(Config) ->
-    [W1, _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
     StorageTestDirPath = provider_storage_path(?SPACE_ID, ?TEST_DIR),
@@ -3519,7 +3519,7 @@ sync_works_properly_after_delete_test(Config) ->
     lfm_proxy:close(W1, Handle6).
 
 delete_and_update_files_simultaneously_update_test(Config) ->
-    [W1, _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     StorageTestDirPath = provider_storage_path(?SPACE_ID, ?TEST_DIR),
     StorageTestFileinDirPath1 = provider_storage_path(?SPACE_ID, filename:join([?TEST_DIR, ?TEST_FILE1])),
@@ -3614,7 +3614,7 @@ delete_and_update_files_simultaneously_update_test(Config) ->
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH2}), ?ATTEMPTS).
 
 delete_file_update_test(Config) ->
-    [W1, _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     StorageTestFilePath = provider_storage_path(?SPACE_ID, ?TEST_FILE1),
     RDWRStorage = get_rdwr_storage(Config, W1),
@@ -3674,7 +3674,7 @@ delete_file_update_test(Config) ->
     ?assertMatch({error, not_found}, rpc:call(W1, custom_metadata, get, [FileUuid])).
 
 delete_file_in_dir_update_test(Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
     StorageTestDirPath = provider_storage_path(?SPACE_ID, ?TEST_DIR),
@@ -3782,7 +3782,7 @@ delete_file_in_dir_update_test(Config) ->
 
 
 delete_many_subfiles_test(Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
     %% Create dirs and files on storage
@@ -3852,7 +3852,7 @@ create_delete_race_test(Config, StorageType) ->
     % if the file is created after storage_sync_links tree is built
     % it is necessary to ensure that storage import does not delete the file
     % because it's missing in the file_meta links
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
 
@@ -3925,7 +3925,7 @@ create_list_race_test(Config) ->
     % in the storage_sync_links
     % storage import must not delete such file
     % storage_import_dir_batch_size is set in this test to 2
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
@@ -4083,7 +4083,7 @@ properly_handle_hardlink_when_file_and_hardlink_are_deleted(Config, StorageType)
 properly_handle_hardlink_test_base(Config, StorageType, DeletionMode, LinkDeletionMode) ->
     % DeletionMode: no_delete, delete_opened, delete
     % DeletionMode: no_delete, delete_opened, delete
-    [W1, _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     HardLinkName = <<"hardlink">>,
     HardLinkPath = ?SPACE_TEST_FILE_PATH(HardLinkName),
@@ -4153,7 +4153,7 @@ properly_handle_hardlink_test_base(Config, StorageType, DeletionMode, LinkDeleti
 
 
 symlink_is_ignored_by_initial_scan(Config) ->
-    [W1, _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SymlinkName = <<"symlink">>,
     SymlinkPath = ?SPACE_TEST_FILE_PATH(SymlinkName),
@@ -4169,7 +4169,7 @@ symlink_is_ignored_by_initial_scan(Config) ->
 
 
 symlink_is_ignored_by_continuous_scan(Config, StorageType) ->
-    [W1, _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SymlinkName = <<"symlink">>,
     SymlinkPath = ?SPACE_TEST_FILE_PATH(SymlinkName),
@@ -4197,7 +4197,7 @@ symlink_is_ignored_by_continuous_scan(Config, StorageType) ->
     ?assertMatch({ok, #file_attr{}}, lfm_proxy:stat(W1, SessId, {path, SymlinkPath}), ?ATTEMPTS).
 
 append_file_update_test(Config) ->
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     StorageTestFilePath = provider_storage_path(?SPACE_ID, ?TEST_FILE1),
@@ -4287,7 +4287,7 @@ append_file_update_test(Config) ->
     dir_stats_collector_test_base:verify_dir_on_provider_creating_files(Config, op_worker_nodes, get_space_guid()).
 
 append_file_not_changing_mtime_update_test(Config) ->
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     StorageTestFilePath = provider_storage_path(?SPACE_ID, ?TEST_FILE1),
@@ -4380,7 +4380,7 @@ append_file_not_changing_mtime_update_test(Config) ->
     }, ?SPACE_ID).
 
 append_empty_file_update_test(Config) ->
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     StorageTestFilePath = provider_storage_path(?SPACE_ID, ?TEST_FILE1),
@@ -4468,7 +4468,7 @@ append_empty_file_update_test(Config) ->
     }, ?SPACE_ID).
 
 copy_file_update_test(Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
     W1MountPoint = get_host_mount_point(Config, RDWRStorage),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
@@ -4548,7 +4548,7 @@ copy_file_update_test(Config) ->
     lfm_proxy:close(W1, Handle3).
 
 move_file_update_test(Config) ->
-    [W1, _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
     W1MountPoint = get_host_mount_point(Config, RDWRStorage),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
@@ -4629,7 +4629,7 @@ move_file_update_test(Config) ->
     lfm_proxy:close(W1, Handle2).
 
 truncate_file_update_test(Config) ->
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     StorageTestFilePath = provider_storage_path(?SPACE_ID, ?TEST_FILE1),
@@ -4724,7 +4724,7 @@ truncate_file_update_test(Config) ->
     }, ?SPACE_ID).
 
 change_file_content_constant_size_test(Config) ->
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     StorageTestFilePath = provider_storage_path(?SPACE_ID, ?TEST_FILE1),
@@ -4817,7 +4817,7 @@ change_file_content_constant_size_test(Config) ->
     }, ?SPACE_ID).
 
 change_file_content_update_test(Config) ->
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     StorageTestFilePath = provider_storage_path(?SPACE_ID, ?TEST_FILE1),
@@ -4910,7 +4910,7 @@ change_file_content_update_test(Config) ->
     }, ?SPACE_ID).
 
 change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(Config) ->
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
     W1MountPoint = get_host_mount_point(Config, RDWRStorage),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
@@ -5014,7 +5014,7 @@ change_file_content_the_same_moment_when_sync_performs_stat_on_file_test(Config)
     }, ?SPACE_ID).
 
 chmod_file_update_test(Config) ->
-    [W1, W2] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
@@ -5110,7 +5110,7 @@ chmod_file_update_test(Config) ->
     }, ?SPACE_ID).
 
 chmod_file_update2_test(Config) ->
-    [W1, _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
 
@@ -5210,7 +5210,7 @@ chmod_file_update2_test(Config) ->
 change_file_type_test(Config) ->
     % this test checks whether storage import properly handles
     % deleting file and creating directory with the same name on storage
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
@@ -5313,7 +5313,7 @@ change_file_type_test(Config) ->
 change_file_type2_test(Config) ->
     % this test checks whether storage import properly handles
     % deleting empty directory and creating file with the same name on storage
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
@@ -5402,7 +5402,7 @@ change_file_type2_test(Config) ->
 change_file_type3_test(Config) ->
     % this test checks whether storage import properly handles
     % deleting non-empty directory and creating file with the same name on storage
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
@@ -5499,7 +5499,7 @@ change_file_type3_test(Config) ->
 change_file_type4_test(Config) ->
     % this test checks whether storage import properly handles
     % deleting non-empty directory, created in remote provider and creating file with the same name on storage
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
@@ -5571,7 +5571,7 @@ change_file_type4_test(Config) ->
     ok = lfm_proxy:close(W2, Handle4).
 
 update_timestamps_file_import_test(Config) ->
-    [W1, _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
     W1MountPoint = get_host_mount_point(Config, RDWRStorage),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
@@ -5641,7 +5641,7 @@ update_timestamps_file_import_test(Config) ->
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS).
 
 should_not_detect_timestamp_update_test(Config) ->
-    [W1, _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
     W1MountPoint = get_host_mount_point(Config, RDWRStorage),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
@@ -5703,7 +5703,7 @@ should_not_detect_timestamp_update_test(Config) ->
     }, ?SPACE_ID).
 
 update_nfs_acl_test(Config) ->
-    Workers = [W1, _] = ?config(op_worker_nodes, Config),
+    Workers = [_, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER2, ?GET_DOMAIN(W1)}}, Config),
     StorageTestFilePath = provider_storage_path(?SPACE_ID, ?TEST_FILE1),
@@ -5797,7 +5797,7 @@ update_nfs_acl_test(Config) ->
     }, ?SPACE_ID).
 
 recreate_file_deleted_by_sync_test(Config) ->
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
@@ -5859,7 +5859,7 @@ recreate_file_deleted_by_sync_test(Config) ->
     lfm_proxy:close(W1, Handle2).
 
 sync_should_not_delete_not_replicated_file_created_in_remote_provider(Config) ->
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
@@ -5909,7 +5909,7 @@ sync_should_not_delete_not_replicated_file_created_in_remote_provider(Config) ->
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS).
 
 sync_should_not_delete_dir_created_in_remote_provider(Config) ->
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     enable_initial_scan(Config, ?SPACE_ID),
@@ -5947,7 +5947,7 @@ sync_should_not_delete_dir_created_in_remote_provider(Config) ->
         lfm_proxy:stat(W2, SessId2, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS).
 
 sync_should_not_delete_not_replicated_files_created_in_remote_provider2(Config) ->
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
@@ -6001,7 +6001,7 @@ sync_should_not_delete_not_replicated_files_created_in_remote_provider2(Config) 
 
 should_not_sync_file_during_replication(Config) ->
     % storage import scans are set in init_per_testcase to be executed with interval of 1 seconds
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
 
@@ -6079,7 +6079,7 @@ should_not_sync_file_during_replication(Config) ->
     ?assertMatch({ok, #file_attr{size = FileSize}}, lfm_proxy:stat(W2, SessId2, ?FILE_REF(FileGuid))).
 
 sync_should_not_invalidate_file_after_replication(Config) ->
-    [W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
 
@@ -6140,7 +6140,7 @@ sync_should_not_invalidate_file_after_replication(Config) ->
 
 
 time_warp_between_scans_test(Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     StorageTestFilePath = provider_storage_path(?SPACE_ID, ?TEST_FILE1),
     RDWRStorage = get_rdwr_storage(Config, W1),
@@ -6197,7 +6197,7 @@ time_warp_between_scans_test(Config) ->
 
 
 time_warp_during_scan_test(Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     StorageTestFilePath = provider_storage_path(?SPACE_ID, ?TEST_FILE1),
     RDWRStorage = get_rdwr_storage(Config, W1),
@@ -6272,7 +6272,7 @@ to_storage_file_id(Path, MountPoint) ->
     filename:join(["/" | StorageFileIdSplit]).
 
 create_init_file(Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     SpaceDir = provider_storage_path(?SPACE_ID, <<"">>),
     RDWRStorage = get_rdwr_storage(Config, W1),
     SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, SpaceDir, RDWRStorage),
@@ -6297,7 +6297,7 @@ stop_scan(Worker, SpaceId) ->
     end.
 
 enable_initial_scan(Config, SpaceId) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     ImportConfig = ?config(import_config, Config, #{}),
     MaxDepth = maps:get(max_depth, ImportConfig, ?MAX_DEPTH),
     SyncAcl = maps:get(sync_acl, ImportConfig, ?SYNC_ACL),
@@ -6308,7 +6308,7 @@ enable_continuous_scans(Config, SpaceId) ->
     enable_continuous_scans(Config, SpaceId, #{}).
 
 enable_continuous_scans(Config, SpaceId, Opts) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     UpdateConfig = ?config(update_config, Config, #{}),
     MaxDepth = maps:get(max_depth, UpdateConfig, ?MAX_DEPTH),
     ScanInterval = maps:get(scan_interval, UpdateConfig, ?SCAN_INTERVAL),
@@ -6340,25 +6340,25 @@ get_scan_config(Worker, SpaceId) ->
     {ok, maps:get(auto_storage_import_config, ImportConfig)}.
 
 disable_continuous_scan(Config) ->
-    [W1, _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     rpc:call(W1, storage_import, set_or_configure_auto_mode, [?SPACE_ID, #{continuous_scan => false}]),
     ?assertMatch({ok, #{continuous_scan := false}}, get_scan_config(W1, ?SPACE_ID), ?ATTEMPTS),
     ok.
 
 disable_storage_sync(Config) ->
-    [W1, _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     disable_continuous_scan(Config),
     stop_scan(W1, ?SPACE_ID),
     assertNoScanInProgress(W1, ?SPACE_ID, 600),
     ok = rpc:call(W1, storage_import_config, delete, [?SPACE_ID]).
 
 clean_not_imported_storage(Config) ->
-    [_W1, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, _] = ?config(op_worker_nodes, Config),
     Storage = initializer:get_supporting_storage_id(W2, ?SPACE_ID),
     clean_storage(W2, Storage, false).
 
 clean_synced_storage(Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     Storage = get_rdwr_storage(Config, W1),
     clean_storage(W1, Storage, true).
 
@@ -6368,7 +6368,7 @@ clean_storage(Worker, Storage, ImportedStorage) ->
     ok = sd_test_utils:recursive_rm(Worker, SDHandle, true).
 
 clean_space(Config) ->
-    [W, W2 | _] = ?config(op_worker_nodes, Config),
+    [W2, W] = ?config(op_worker_nodes, Config),
     SpaceGuid = rpc:call(W, fslogic_file_id, spaceid_to_space_dir_guid, [?SPACE_ID]),
     lfm_proxy:close_all(W),
     {ok, Children} = lfm_proxy:get_children(W, ?ROOT_SESS_ID, ?FILE_REF(SpaceGuid), 0, 10000),
@@ -6804,7 +6804,7 @@ init_per_suite(Config) ->
         initializer:mock_provider_ids(NewConfig),
         initializer:mock_auth_manager(NewConfig),
         NewConfig2 = multi_provider_file_ops_test_base:init_env(NewConfig),
-        [W1 | _] = ?config(op_worker_nodes, NewConfig2),
+        [_, W1] = ?config(op_worker_nodes, NewConfig2),
         rpc:call(W1, auto_storage_import_worker, notify_connection_to_oz, []),
         NewConfig2
     end,
@@ -6823,7 +6823,7 @@ init_per_testcase(Case, Config)
     when Case =:= create_directory_import_check_user_id_test
     orelse Case =:= create_file_import_check_user_id_test ->
 
-    [W1 | _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     ok = test_utils:mock_new(W1, [luma]),
     ok = test_utils:mock_expect(W1, luma, map_uid_to_onedata_user, fun(_, _, _) ->
         {ok, ?USER1}
@@ -6845,7 +6845,7 @@ init_per_testcase(Case, Config)
     init_per_testcase(default, Config);
 
 init_per_testcase(force_stop_test, Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     {ok, OldDirBatchSize} = test_utils:get_env(W1, op_worker, storage_import_dir_batch_size),
     test_utils:set_env(W1, op_worker, storage_import_dir_batch_size, 1),
     Config2 = [
@@ -6922,7 +6922,7 @@ init_per_testcase(Case, Config)
     init_per_testcase(default, Config2);
 
 init_per_testcase(create_file_in_dir_exceed_batch_update_test, Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     {ok, OldDirBatchSize} = test_utils:get_env(W1, op_worker, storage_import_dir_batch_size),
     test_utils:set_env(W1, op_worker, storage_import_dir_batch_size, 2),
     Config2 = [
@@ -6935,7 +6935,7 @@ init_per_testcase(create_file_in_dir_exceed_batch_update_test, Config) ->
     init_per_testcase(default, Config2);
 
 init_per_testcase(chmod_file_update2_test, Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     {ok, OldDirBatchSize} = test_utils:get_env(W1, op_worker, storage_import_dir_batch_size),
     test_utils:set_env(W1, op_worker, storage_import_dir_batch_size, 2),
     Config2 = [{old_storage_import_dir_batch_size, OldDirBatchSize} | Config],
@@ -6979,7 +6979,7 @@ init_per_testcase(import_nfs_acl_with_disabled_luma_should_fail_test, Config) ->
     init_per_testcase(default, Config);
 
 init_per_testcase(create_list_race_test, Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     {ok, OldDirBatchSize} = test_utils:get_env(W1, op_worker, storage_import_dir_batch_size),
     test_utils:set_env(W1, op_worker, storage_import_dir_batch_size, 2),
     Config2 = [
@@ -7041,7 +7041,7 @@ init_per_testcase(_Case, Config) ->
     Config3.
 
 end_per_testcase(ignore_fifo_import_test, Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     RDWRStorage = get_rdwr_storage(Config, W1),
     StorageTestFilePath = provider_storage_path(?SPACE_ID, ?TEST_FILE1),
     SDHandle = sd_test_utils:new_handle(W1, ?SPACE_ID, StorageTestFilePath, RDWRStorage),
@@ -7054,7 +7054,7 @@ end_per_testcase(Case, Config)
     orelse Case =:= create_file_in_dir_exceed_batch_update_test
     orelse Case =:= create_list_race_test ->
 
-    [W1 | _] = Workers = ?config(op_worker_nodes, Config),
+    [_, W1] = Workers = ?config(op_worker_nodes, Config),
     OldDirBatchSize = ?config(old_storage_import_dir_batch_size, Config),
     test_utils:mock_unload(Workers, [storage_driver]),
     test_utils:set_env(W1, op_worker, storage_import_dir_batch_size, OldDirBatchSize),
@@ -7084,19 +7084,19 @@ end_per_testcase(import_nfs_acl_with_disabled_luma_should_fail_test, Config) ->
     end_per_testcase(default, Config);
 
 end_per_testcase(force_stop_test, Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     OldDirBatchSize = ?config(old_storage_import_dir_batch_size, Config),
     test_utils:set_env(W1, op_worker, storage_import_dir_batch_size, OldDirBatchSize),
     end_per_testcase(default, Config);
 
 end_per_testcase(create_remote_dir_import_race_test, Config) ->
-    [_W1, W2| _] = ?config(op_worker_nodes, Config),
+    [W2, _] = ?config(op_worker_nodes, Config),
     SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(?SPACE_ID),
     remove_link(W2, SpaceUuid, ?TEST_DIR),
     end_per_testcase(default, Config);
 
 end_per_testcase(create_remote_file_import_race_test, Config) ->
-    [_W1, W2| _] = ?config(op_worker_nodes, Config),
+    [W2, _] = ?config(op_worker_nodes, Config),
     SpaceUuid = fslogic_file_id:spaceid_to_space_dir_uuid(?SPACE_ID),
     remove_link(W2, SpaceUuid, ?TEST_FILE1),
     end_per_testcase(default, Config);
@@ -7105,13 +7105,13 @@ end_per_testcase(Case, Config)
     when Case =:= remote_delete_file_reimport_race_test;
     Case =:= remote_delete_file_reimport_race2_test
 ->
-    [W1| _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     StorageFileId = filepath_utils:join([<<?DIRECTORY_SEPARATOR>>, ?TEST_FILE1]),
     rpc:call(W1, storage_sync_info, delete, [StorageFileId, ?SPACE_ID]),
     end_per_testcase(default, Config);
 
 end_per_testcase(should_not_sync_file_during_replication, Config) ->
-    [W1 | _] = ?config(op_worker_nodes, Config),
+    [_, W1] = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(W1, [rtransfer_config]),
     end_per_testcase(default, Config);
 
@@ -7132,7 +7132,7 @@ end_per_testcase(Case, Config)
     end_per_testcase(default, Config);
 
 end_per_testcase(_Case, Config) ->
-    Workers = [W1 | _] = ?config(op_worker_nodes, Config),
+    Workers = [_, W1] = ?config(op_worker_nodes, Config),
     lists:foreach(fun(W) -> lfm_proxy:close_all(W) end, Workers),
     clean_luma_db(W1),
     disable_storage_sync(Config),

@@ -125,7 +125,7 @@ all() ->
 
 
 lookup_file_objectid(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     [{_SpaceId, SpaceName} | _] = ?config({spaces, <<"user1">>}, Config),
     FilePath = filename:join(["/", SpaceName, "get_file_objectid"]),
@@ -139,7 +139,7 @@ lookup_file_objectid(Config) ->
 
 
 lookup_file_objectid_duplicated_space_name(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
     Fun = fun(SpaceName) ->
         {ok, 200, _, Response} = ?assertMatch({ok, 200, _, _}, rest_test_utils:request(
             WorkerP1, <<"lookup-file-id/", SpaceName/binary>>, post,
@@ -155,7 +155,7 @@ lookup_file_objectid_duplicated_space_name(Config) ->
 
 
 transfers_should_be_ordered_by_timestamps(Config) ->
-    [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    [WorkerP1, WorkerP2] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP1)}}, Config),
     SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(WorkerP2)}}, Config),
     SpaceId = ?config(space_id, Config),
@@ -266,7 +266,7 @@ transfers_should_be_ordered_by_timestamps(Config) ->
     ?assert(get_finish_time(WorkerP2, Tid, Config) =< get_finish_time(WorkerP2, Tid2, Config)).
 
 metric_get(Config) ->
-    Workers = [WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    Workers = [WorkerP1, WorkerP2] = ?config(op_worker_nodes, Config),
     SpaceId = <<"space2">>,
     UserId = <<"user1">>,
 
@@ -318,7 +318,7 @@ metric_get(Config) ->
 
 
 list_spaces(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
 
     % when
     {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
@@ -339,7 +339,7 @@ list_spaces(Config) ->
     ?assertEqual(ExpSpaces, lists:sort(json_utils:decode(Body))).
 
 get_space(Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
 
     % when
     {_, _, _, Body} = ?assertMatch({ok, 200, _, _},
@@ -373,7 +373,7 @@ get_space(Config) ->
 
 list_transfers(Config) ->
     ct:timetrap({hours, 1}),
-    Workers = [P2, P1] = ?config(op_worker_nodes, Config),
+    Workers = [P1, P2] = ?config(op_worker_nodes, Config),
     SessionId = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(P1)}}, Config),
     SessionId2 = ?config({session_id, {<<"user1">>, ?GET_DOMAIN(P2)}}, Config),
     Space = <<"space4">>,
@@ -569,7 +569,7 @@ init_per_testcase(transfers_should_be_ordered_by_timestamps, Config) ->
     init_per_testcase(all, [{space_id, <<"space2">>} | Config]);
 
 init_per_testcase(metric_get, Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
     start_monitoring_worker(WorkerP1),
     test_utils:mock_new(WorkerP1, rrd_utils),
     test_utils:mock_expect(WorkerP1, rrd_utils, export_rrd, fun(_, _, _) ->
@@ -579,7 +579,7 @@ init_per_testcase(metric_get, Config) ->
     init_per_testcase(all, [{old_privs, OldPrivs} | Config]);
 
 init_per_testcase(list_transfers, Config) ->
-    [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
     OldPrivs = rpc:call(WorkerP1, initializer, node_get_mocked_space_user_privileges, [<<"space4">>, <<"user1">>]),
     init_per_testcase(all, [{old_privs, OldPrivs} | Config]);
 
@@ -600,7 +600,7 @@ init_per_testcase(_Case, Config) ->
     lfm_proxy:init(Config2).
 
 end_per_testcase(metric_get = Case, Config) ->
-    Workers = [_WorkerP2, WorkerP1] = ?config(op_worker_nodes, Config),
+    Workers = [WorkerP1, _WorkerP2] = ?config(op_worker_nodes, Config),
     test_utils:mock_validate_and_unload(WorkerP1, rrd_utils),
     OldPrivs = ?config(old_privs, Config),
     initializer:testmaster_mock_space_user_privileges(Workers, <<"space2">>, <<"user1">>, OldPrivs),
