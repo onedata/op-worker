@@ -18,7 +18,7 @@
 -include("proto/oneclient/common_messages.hrl").
 
 %% API
--export([create_doc/3, is_file_created/2, mark_file_created/3]).
+-export([create_doc/4, is_file_created/2, mark_file_created/3]).
 -export([create_imported_file_doc/7, update_imported_file_doc/2]).
 -export([get_local_blocks_and_fill_location_gaps/4, fill_location_gaps/5]).
 
@@ -27,9 +27,9 @@
 %%%===================================================================
 
 
--spec create_doc(file_ctx:ctx(), StorageFileCreated :: boolean(),
-    GeneratedKey :: boolean()) -> {{ok, file_location:record()} | {error, already_exists}, file_ctx:ctx()}.
-create_doc(FileCtx, StorageFileCreated, GeneratedKey) ->
+-spec create_doc(file_ctx:ctx(), StorageFileCreated :: boolean(), GeneratedKey :: boolean(),
+    QoSCheckSizeLimit :: non_neg_integer()) -> {{ok, file_location:record()} | {error, already_exists}, file_ctx:ctx()}.
+create_doc(FileCtx, StorageFileCreated, GeneratedKey, QoSCheckSizeLimit) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     FileUuid = file_ctx:get_referenced_uuid_const(FileCtx),
     FileGuid = file_ctx:get_referenced_guid_const(FileCtx),
@@ -54,9 +54,9 @@ create_doc(FileCtx, StorageFileCreated, GeneratedKey) ->
         {ok, _LocId} ->
             FileCtx5 = file_ctx:set_file_location(FileCtx4, LocId),
             dir_size_stats:report_reg_file_size_changed(file_ctx:get_referenced_guid_const(FileCtx5), total, Size),
-            case Size of
-                0 -> ok;
-                _ -> ok = qos_logic:reconcile_qos(FileCtx5)
+            case Size > QoSCheckSizeLimit of
+                true -> ok = qos_logic:reconcile_qos(FileCtx5);
+                false -> ok
             end,
             {{ok, Location}, FileCtx5};
         {error, already_exists} = Error ->

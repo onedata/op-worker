@@ -379,7 +379,7 @@ make_file_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     % call via module to mock in tests
     {FileCtx, ParentFileCtx3} = file_req:create_file_doc(UserCtx, ParentFileCtx2, Name, Mode),
     try
-        {_, FileCtx2} = fslogic_location:create_doc(FileCtx, false, true),
+        {_, FileCtx2} = fslogic_location:create_doc(FileCtx, false, true, 0),
         fslogic_times:update_mtime_ctime(ParentFileCtx3),
         #fuse_response{fuse_response = FileAttr} = Ans = attr_req:get_file_attr_insecure(UserCtx, FileCtx, #{
             allow_deleted_files => false,

@@ -579,7 +579,12 @@ handle_call({synchronize, FileCtx, Block, Prefetch, TransferId, Session, Priorit
             undefined ->
                 FileGuid = file_ctx:get_logical_guid_const(FileCtx),
                 SpaceId = file_ctx:get_space_id_const(FileCtx),
-                {_LocalDoc, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx),
+                QoSCheckSizeLimit = case Block of
+                    #file_block{offset = 0, size = BlockSize} -> BlockSize;
+                    _ -> 0
+                end,
+                {_LocalDoc, FileCtx2} = file_ctx:get_or_create_local_regular_file_location_doc(
+                    FileCtx, false, true, QoSCheckSizeLimit),
                 {DestStorageId, FileCtx3} = file_ctx:get_storage_id(FileCtx2),
                 {DestFileId, FileCtx4} = file_ctx:get_storage_file_id(FileCtx3),
                 {_LocationDocs, FileCtx5} = file_ctx:get_file_location_docs(FileCtx4),
