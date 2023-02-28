@@ -1373,11 +1373,11 @@ resolve_and_cache_path(FileCtx, PathType) ->
 %%--------------------------------------------------------------------
 -spec get_or_create_local_regular_file_location_doc(ctx(), fslogic_location_cache:get_doc_opts(),
     boolean()) -> {file_location:doc(), ctx()}.
-get_or_create_local_regular_file_location_doc(FileCtx, GetDocOpts, true) ->
-    get_or_create_local_regular_file_location_doc(FileCtx, GetDocOpts, true, 0).
+get_or_create_local_regular_file_location_doc(FileCtx, GetDocOpts, CheckLocationExists) ->
+    get_or_create_local_regular_file_location_doc(FileCtx, GetDocOpts, CheckLocationExists, 0).
 
 -spec get_or_create_local_regular_file_location_doc(ctx(), fslogic_location_cache:get_doc_opts(),
-    boolean(), boolean()) -> {file_location:doc(), ctx()}.
+    boolean(), non_neg_integer()) -> {file_location:doc(), ctx()}.
 get_or_create_local_regular_file_location_doc(FileCtx, GetDocOpts, true, _QoSCheckSizeLimit) ->
     case get_local_file_location_doc(FileCtx, GetDocOpts) of
         {undefined, FileCtx2} ->
