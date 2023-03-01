@@ -1390,7 +1390,7 @@ get_or_create_local_regular_file_location_doc(FileCtx, GetDocOpts, _CheckLocatio
         {{ok, _}, FileCtx2} ->
             {LocationDocs, FileCtx3} = get_file_location_docs(FileCtx2, true, false),
             lists:foreach(fun(ChangedLocation) ->
-                replica_dbsync_hook:on_file_location_change(FileCtx3, ChangedLocation)
+                replica_dbsync_hook:on_file_location_change(FileCtx3, ChangedLocation, QoSCheckSizeLimit)
             end, LocationDocs),
             get_local_file_location_doc(FileCtx3, GetDocOpts);
         {{error, already_exists}, FileCtx2} ->
