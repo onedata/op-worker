@@ -2343,7 +2343,12 @@ init_per_suite(Config) ->
             (#{name := permissions_cache} = Options) -> meck:passthrough([Options#{size := 1000000000}]);
             (Options) -> meck:passthrough([Options])
         end),
-
+        lists:foreach(fun({SpaceId, _}) ->
+            lists:foreach(fun(W) ->
+                ?assertEqual(ok, rpc:call(W, dir_stats_service_state, enable, [SpaceId])),
+                ?assertEqual(enabled, rpc:call(W, dir_stats_service_state, get_extended_status, [SpaceId]), ?ATTEMPTS)
+            end, initializer:get_different_domain_workers(NewConfig2))
+        end, ?config(spaces, NewConfig2)),
         NewConfig2
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, ?MODULE]} | Config].

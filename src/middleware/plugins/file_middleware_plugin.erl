@@ -999,7 +999,7 @@ get(#op_req{gri = #gri{id = undefined, aspect = dir_size_stats_collection_schema
 
 get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = {dir_size_stats_collection, ProviderId}}, data = Data}, _) ->
     BrowseRequest = ts_browse_request:from_json(Data),
-    {ok, value, mi_file_metadata:gather_historical_dir_size_stats(
+    {ok, value, mi_file_metadata:get_historical_dir_size_stats(
         Auth#auth.session_id, ?FILE_REF(FileGuid), ProviderId, BrowseRequest)}.
 
 

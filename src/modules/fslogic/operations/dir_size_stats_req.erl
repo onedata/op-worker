@@ -16,6 +16,7 @@
 -include("modules/dir_stats_collector/dir_size_stats.hrl").
 -include("proto/oneprovider/provider_rpc_messages.hrl").
 -include_lib("cluster_worker/include/time_series/browsing.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([get_historical/4]).
@@ -46,7 +47,4 @@ get_historical(UserCtx, FileCtx0, ProviderId, BrowseRequest) ->
 get_historical_insecure(FileCtx, ProviderId, BrowseRequest) ->
     Guid = file_ctx:get_logical_guid_const(FileCtx),
     RpcRequest = #provider_historical_dir_size_stats_browse_request{request = BrowseRequest},
-    case provider_rpc:call(ProviderId, Guid, RpcRequest) of
-        {ok, Result} -> Result;
-        {error, _} = Error -> throw(Error)
-    end.
+    ?check(provider_rpc:call(ProviderId, Guid, RpcRequest)).
