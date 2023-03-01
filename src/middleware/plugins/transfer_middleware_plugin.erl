@@ -359,10 +359,14 @@ get(#op_req{data = Data, gri = #gri{aspect = throughput_charts}}, Transfer) ->
     StartTime = Transfer#transfer.start_time,
     ChartsType = maps:get(<<"charts_type">>, Data),
 
-    % Return historical statistics of finished transfers intact. As for active
-    % ones, pad them with zeroes to current time and erase recent n-seconds to
-    % avoid fluctuations on charts
-    {Histograms, LastUpdate, TimeWindow} = case transfer:is_ongoing(Transfer) of
+    % Pad charts only for active transfers on replicating provider. Do not do it
+    % in case of finished transfers or ongoing but on remote other providers
+    % (charts may show 0 throughput while in reality it is >0 but no docs were
+    % synced yet)
+    IsReplicatingProvider = Transfer#transfer.replicating_provider == oneprovider:get_id(),
+    PadCharts = IsReplicatingProvider andalso transfer:is_ongoing(Transfer),
+
+    {Histograms, LastUpdate, TimeWindow} = case PadCharts of
         false ->
             RequestedHistograms = transfer_histograms:get(Transfer, ChartsType),
             Window = transfer_histograms:period_to_time_window(ChartsType),

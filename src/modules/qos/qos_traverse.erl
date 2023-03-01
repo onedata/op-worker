@@ -51,6 +51,8 @@
 -define(SEPARATOR, <<"#">>).
 -define(QOS_TRANSFER_ID(TaskId, FileUuid), <<TaskId/binary, (?SEPARATOR)/binary, FileUuid/binary>>).
 
+-define(MAX_REPEATS, 8).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -73,8 +75,7 @@ start(FileCtx, QosEntries, TaskId) ->
         }
     },
     FileCtx2 = update_status_on_start(FileCtx, QosEntries, TaskId),
-    {ok, _} = tree_traverse:run(?POOL_NAME, FileCtx2, Options),
-    ok.
+    start_internal(FileCtx2, Options, ?MAX_REPEATS).
     
 
 -spec report_entry_deleted(qos_entry:id() | qos_entry:doc()) -> ok.
@@ -216,6 +217,20 @@ flush_stats(SpaceId, TransferId, BytesPerProvider) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+%% @private
+-spec start_internal(file_ctx:ctx(), tree_traverse:run_options(), non_neg_integer()) -> ok.
+start_internal(_FileCtx, #{task_id := TaskId}, 0) ->
+    ?error("Reached max repeats on QoS traverse task id conflict: ~p", [TaskId]);
+start_internal(FileCtx, #{task_id := TaskId} = Options, Repeats) ->
+    try tree_traverse:run(?POOL_NAME, FileCtx, Options) of
+        {ok, _} -> ok
+    catch _:{badmatch, [{error,already_exists}]} ->
+        timer:sleep(timer:seconds(1)), % sleep to ensure different timestamp for traverse link
+        ?warning("Conflict on QoS traverse task id ~p. Reapeting...", [TaskId]),
+        start_internal(FileCtx, Options, Repeats - 1)
+    end.
+
 
 %% @private
 -spec update_status_on_start(file_ctx:ctx(), [qos_entry:id()], id()) -> file_ctx:ctx().

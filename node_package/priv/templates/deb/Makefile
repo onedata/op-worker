@@ -12,7 +12,7 @@ default:
 		{{debuild_extra_options}} \
 		-uc -us -S -d
 	mkdir -p ../packages
-	cd .. && sg sbuild -c "sbuild -sd $(DISTRIBUTION) -j$$(nproc) {{package_name}}_$(PKG_VERSION)-$(PKG_BUILD)~$(DISTRIBUTION).dsc"
+	cd .. && sudo sg sbuild -c "sbuild -sd $(DISTRIBUTION) -j$$(nproc) {{package_name}}_$(PKG_VERSION)-$(PKG_BUILD)~$(DISTRIBUTION).dsc"
 	cd .. && cp -L *$(PKG_VERSION).orig.tar.gz packages && rm *$(PKG_VERSION).orig.tar.gz
 	cd .. && mv *$(PKG_VERSION)-$(PKG_BUILD)~$(DISTRIBUTION).dsc packages
 	cd .. && mv *$(PKG_VERSION)-$(PKG_BUILD)~$(DISTRIBUTION).diff.gz packages

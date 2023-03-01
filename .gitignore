@@ -30,6 +30,7 @@ rel/vars.config
 /test_distributed/cover_tmp.spec
 test_coverage
 qos_expression_*.erl
+pkg-list.json
 
 # OS X
 .DS_Store
