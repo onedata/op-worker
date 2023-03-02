@@ -56,7 +56,7 @@
 %%%===================================================================
 
 create_file_in_dir_import_test(Config) ->
-    [W2, W1] = ?config(op_worker_nodes, Config),
+    [W1, W2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     RDWRStorage = storage_import_test_base:get_rdwr_storage(Config, W1),
@@ -114,7 +114,7 @@ create_file_in_dir_import_test(Config) ->
     }, ?SPACE_ID).
 
 create_subfiles_import_many_test(Config) ->
-    [_, W1] = ?config(op_worker_nodes, Config),
+    [W1 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     RDWRStorage = storage_import_test_base:get_rdwr_storage(Config, W1),
     %% Create dirs and files on storage
@@ -158,7 +158,7 @@ create_subfiles_import_many_test(Config) ->
     }, ?SPACE_ID).
 
 create_subfiles_import_many2_test(Config) ->
-    [_, W1] = ?config(op_worker_nodes, Config),
+    [W1 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     RDWRStorage = storage_import_test_base:get_rdwr_storage(Config, W1),
     %% Create dirs and files on storage
@@ -196,7 +196,7 @@ create_subfiles_import_many2_test(Config) ->
 
 
 create_file_in_dir_update_test(Config) ->
-    [W2, W1] = ?config(op_worker_nodes, Config),
+    [W1, W2 | _] = ?config(op_worker_nodes, Config),
     RDWRStorage = storage_import_test_base:get_rdwr_storage(Config, W1),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
@@ -281,7 +281,7 @@ create_file_in_dir_update_test(Config) ->
         lfm_proxy:read(W2, Handle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS).
 
 changing_max_depth_test(Config) ->
-    [_, W1] = ?config(op_worker_nodes, Config),
+    [W1 | _] = ?config(op_worker_nodes, Config),
     RDWRStorage = storage_import_test_base:get_rdwr_storage(Config, W1),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
 
@@ -431,7 +431,7 @@ changing_max_depth_test(Config) ->
 
 create_file_in_dir_exceed_batch_update_test(Config) ->
     % in this test storage_import_dir_batch_size is set in init_per_testcase to 2
-    [W2, W1] = ?config(op_worker_nodes, Config),
+    [W1, W2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     RDWRStorage = storage_import_test_base:get_rdwr_storage(Config, W1),
@@ -546,7 +546,7 @@ create_file_in_dir_exceed_batch_update_test(Config) ->
         lfm_proxy:read(W2, Handle2, 0, byte_size(?TEST_DATA)), ?ATTEMPTS).
 
 update_syncs_files_after_import_failed_test(Config) ->
-    [W2, W1] = ?config(op_worker_nodes, Config),
+    [W1, W2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     StorageTestFilePath = storage_import_test_base:provider_storage_path(?SPACE_ID, ?TEST_FILE1),
@@ -619,7 +619,7 @@ update_syncs_files_after_import_failed_test(Config) ->
 
 
 update_syncs_files_after_previous_update_failed_test(Config) ->
-    [W2, W1] = ?config(op_worker_nodes, Config),
+    [W1, W2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     StorageTestFilePath = storage_import_test_base:provider_storage_path(?SPACE_ID, ?TEST_FILE1),
@@ -709,7 +709,7 @@ update_syncs_files_after_previous_update_failed_test(Config) ->
 
 
 sync_should_not_reimport_deleted_but_still_opened_file(Config, StorageType) ->
-    [_, W1] = ?config(op_worker_nodes, Config),
+    [W1 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
 
     StorageSpacePath = storage_import_test_base:provider_storage_path(?SPACE_ID, <<"">>),
@@ -761,7 +761,7 @@ sync_should_not_reimport_deleted_but_still_opened_file(Config, StorageType) ->
 
 
 sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed(Config) ->
-    [_, W1] = ?config(op_worker_nodes, Config),
+    [W1 | _] = ?config(op_worker_nodes, Config),
     RDWRStorage = storage_import_test_base:get_rdwr_storage(Config, W1),
     StorageTestFilePath = storage_import_test_base:provider_storage_path(?SPACE_ID, ?TEST_FILE1),
     %% Create file on storage
@@ -819,7 +819,7 @@ sync_should_not_process_file_if_hash_of_its_attrs_has_not_changed(Config) ->
     }, ?SPACE_ID).
 
 create_subfiles_and_delete_before_import_is_finished_test(Config) ->
-    [_, W1] = ?config(op_worker_nodes, Config),
+    [W1 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     StorageTestDirPath = storage_import_test_base:provider_storage_path(?SPACE_ID, ?TEST_DIR),
     RDWRStorage = storage_import_test_base:get_rdwr_storage(Config, W1),
@@ -844,7 +844,7 @@ create_subfiles_and_delete_before_import_is_finished_test(Config) ->
 
 force_stop_test(Config) ->
     % storage_import_dir_batch_size is set to 1 in init_per_testcase
-    [_, W1] = ?config(op_worker_nodes, Config),
+    [W1 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     RDWRStorage = storage_import_test_base:get_rdwr_storage(Config, W1),
     %% Create dirs and files on storage
@@ -904,7 +904,7 @@ force_stop_test(Config) ->
 
 
 delete_non_empty_directory_update_test(Config) ->
-    [_, W1] = ?config(op_worker_nodes, Config),
+    [W1, _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     StorageTestDirPath = storage_import_test_base:provider_storage_path(?SPACE_ID, ?TEST_DIR),
     StorageTestFileinDirPath1 = storage_import_test_base:provider_storage_path(?SPACE_ID, filename:join([?TEST_DIR, ?TEST_FILE1])),
@@ -959,7 +959,7 @@ delete_non_empty_directory_update_test(Config) ->
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_DIR_PATH}), ?ATTEMPTS).
 
 sync_works_properly_after_delete_test(Config) ->
-    [_, W1] = ?config(op_worker_nodes, Config),
+    [W1, _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     RDWRStorage = storage_import_test_base:get_rdwr_storage(Config, W1),
     StorageTestDirPath = storage_import_test_base:provider_storage_path(?SPACE_ID, ?TEST_DIR),
@@ -1090,7 +1090,7 @@ sync_works_properly_after_delete_test(Config) ->
     lfm_proxy:close(W1, Handle6).
 
 delete_and_update_files_simultaneously_update_test(Config) ->
-    [_, W1] = ?config(op_worker_nodes, Config),
+    [W1, _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     StorageTestDirPath = storage_import_test_base:provider_storage_path(?SPACE_ID, ?TEST_DIR),
     StorageTestFileinDirPath1 = storage_import_test_base:provider_storage_path(?SPACE_ID, filename:join([?TEST_DIR, ?TEST_FILE1])),
@@ -1180,7 +1180,7 @@ delete_and_update_files_simultaneously_update_test(Config) ->
         lfm_proxy:stat(W1, SessId, {path, ?SPACE_TEST_FILE_IN_DIR_PATH}), ?ATTEMPTS).
 
 delete_file_in_dir_update_test(Config) ->
-    [_, W1] = ?config(op_worker_nodes, Config),
+    [W1 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     RDWRStorage = storage_import_test_base:get_rdwr_storage(Config, W1),
     StorageTestDirPath = storage_import_test_base:provider_storage_path(?SPACE_ID, ?TEST_DIR),
@@ -1299,7 +1299,7 @@ delete_file_in_dir_update_test(Config) ->
 
 
 delete_many_subfiles_test(Config) ->
-    [_, W1] = ?config(op_worker_nodes, Config),
+    [W1 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     RDWRStorage = storage_import_test_base:get_rdwr_storage(Config, W1),
     %% Create dirs and files on storage
@@ -1367,7 +1367,7 @@ create_list_race_test(Config) ->
     % in the storage_sync_links
     % storage import must not delete such file
     % storage_import_dir_batch_size is set in this test to 2
-    [W2, W1] = ?config(op_worker_nodes, Config),
+    [W1, W2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     RDWRStorage = storage_import_test_base:get_rdwr_storage(Config, W1),
@@ -1493,7 +1493,7 @@ create_list_race_test(Config) ->
 change_file_type_test(Config) ->
     % this test checks whether storage import properly handles
     % deleting file and creating directory with the same name on storage
-    [W2, W1] = ?config(op_worker_nodes, Config),
+    [W1, W2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     RDWRStorage = storage_import_test_base:get_rdwr_storage(Config, W1),
@@ -1596,7 +1596,7 @@ change_file_type_test(Config) ->
 change_file_type3_test(Config) ->
     % this test checks whether storage import properly handles
     % deleting non-empty directory and creating file with the same name on storage
-    [W2, W1] = ?config(op_worker_nodes, Config),
+    [W1, W2 | _] = ?config(op_worker_nodes, Config),
     SessId = ?config({session_id, {?USER1, ?GET_DOMAIN(W1)}}, Config),
     SessId2 = ?config({session_id, {?USER1, ?GET_DOMAIN(W2)}}, Config),
     RDWRStorage = storage_import_test_base:get_rdwr_storage(Config, W1),
@@ -1702,7 +1702,7 @@ init_per_suite(Config) ->
         initializer:disable_quota_limit(NewConfig),
         initializer:mock_provider_ids(NewConfig),
         NewConfig2 = multi_provider_file_ops_test_base:init_env(NewConfig),
-        [_, W1] = ?config(op_worker_nodes, NewConfig2),
+        [W1 | _] = ?config(op_worker_nodes, NewConfig2),
         rpc:call(W1, auto_storage_import_worker, notify_connection_to_oz, []),
         NewConfig2
     end,

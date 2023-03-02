@@ -641,6 +641,14 @@ remotely_get_child_type(SessId, ParentGuid, ChildName) ->
     file_meta:name()) -> ok | no_return().
 on_successful_rename(UserCtx, SourceFileCtx, SourceParentFileCtx, TargetParentFileCtx, TargetName) ->
     permissions_cache:invalidate(),
+    case file_ctx:equals(SourceParentFileCtx, TargetParentFileCtx) of
+        true ->
+            ok;
+        false ->
+            {RenamedFileCtx, _} = file_tree:get_child(TargetParentFileCtx, TargetName, UserCtx),
+            qos_bounded_cache:invalidate_on_all_nodes(file_ctx:get_space_id_const(RenamedFileCtx)),
+            qos_logic:reconcile_qos(file_ctx:reset(RenamedFileCtx))
+    end,
     {PrevName, SourceFileCtx2} = file_ctx:get_aliased_name(SourceFileCtx, UserCtx),
     ParentGuid = file_ctx:get_logical_guid_const(TargetParentFileCtx),
     CurrentTime = global_clock:timestamp_seconds(),
