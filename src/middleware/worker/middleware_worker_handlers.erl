@@ -202,8 +202,8 @@ execute(UserCtx, FileCtx, #custom_metadata_remove_request{type = Type}) ->
 execute(UserCtx, FileCtx, #data_distribution_gather_request{}) ->
     data_distribution:gather(UserCtx, FileCtx);
 
-execute(UserCtx, FileCtx, #historical_dir_size_stats_gather_request{request = Request}) ->
-    {ok, dir_size_stats_req:gather_historical(UserCtx, FileCtx, Request)};
+execute(UserCtx, FileCtx, #historical_dir_size_stats_get_request{request = Request, provider_id = ProviderId}) ->
+    {ok, dir_size_stats_req:get_historical(UserCtx, FileCtx, ProviderId, Request)};
 
 execute(UserCtx, FileCtx, #file_storage_locations_get_request{}) ->
     data_distribution:gather_storage_locations(UserCtx, FileCtx);

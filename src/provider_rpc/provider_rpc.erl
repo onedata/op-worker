@@ -24,6 +24,7 @@
 
 %% API
 -export([
+    call/3,
     gather/2,
     gather_from_cosupporting_providers/2
 ]).
@@ -41,29 +42,8 @@
 %%% API
 %%%===================================================================
 
--spec gather_from_cosupporting_providers(file_id:file_guid(), request()) -> 
-    gather_result().
-gather_from_cosupporting_providers(FileGuid, Request) ->
-    SpaceId = file_id:guid_to_space_id(FileGuid),
-    {ok, Providers} = space_logic:get_provider_ids(SpaceId),
-    Requests = maps_utils:generate_from_list(
-        fun(ProviderId) -> {ProviderId, Request} end, Providers),
-    gather(FileGuid, Requests).
 
-
--spec gather(file_id:file_guid(), #{oneprovider:id() => request()}) ->
-    gather_result().
-gather(FileGuid, ProviderRequests) ->
-    ResList = lists_utils:pmap(fun({ProviderId, Request}) ->
-        {ProviderId, call(ProviderId, FileGuid, Request)}
-    end, maps:to_list(ProviderRequests)),
-    maps:from_list(ResList).
-
-%%%===================================================================
-%%% Internal functions
-%%%===================================================================
-
--spec call(oneprovider:id(), file_id:file_guid(), request()) -> 
+-spec call(oneprovider:id(), file_id:file_guid(), request()) ->
     {ok, result()} | errors:error().
 call(ProviderId, FileGuid, Request) ->
     ProviderRpcCall = #provider_rpc_call{
@@ -95,3 +75,22 @@ call(ProviderId, FileGuid, Request) ->
         {error, _} = Error ->
             Error
     end.
+
+
+-spec gather_from_cosupporting_providers(file_id:file_guid(), request()) ->
+    gather_result().
+gather_from_cosupporting_providers(FileGuid, Request) ->
+    SpaceId = file_id:guid_to_space_id(FileGuid),
+    {ok, Providers} = space_logic:get_provider_ids(SpaceId),
+    Requests = maps_utils:generate_from_list(
+        fun(ProviderId) -> {ProviderId, Request} end, Providers),
+    gather(FileGuid, Requests).
+
+
+-spec gather(file_id:file_guid(), #{oneprovider:id() => request()}) ->
+    gather_result().
+gather(FileGuid, ProviderRequests) ->
+    ResList = lists_utils:pmap(fun({ProviderId, Request}) ->
+        {ProviderId, call(ProviderId, FileGuid, Request)}
+    end, maps:to_list(ProviderRequests)),
+    maps:from_list(ResList).

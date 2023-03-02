@@ -21,7 +21,7 @@
     get_custom_metadata/6,
     remove_custom_metadata/4,
     
-    gather_historical_dir_size_stats/4,
+    get_historical_dir_size_stats/5,
     get_storage_locations/3
 ]).
 -export([
@@ -83,12 +83,12 @@ remove_custom_metadata(NodeSelector, SessionId, FileKey, Type) ->
     ?CALL(NodeSelector, [SessionId, FileKey, Type]).
 
 
--spec gather_historical_dir_size_stats(
-    oct_background:node_selector(), session:id(), lfm:file_key(), ts_browse_request:record()
+-spec get_historical_dir_size_stats(
+    oct_background:node_selector(), session:id(), lfm:file_key(), od_provider:id(), ts_browse_request:record()
 ) ->
     ts_browse_result:record() | no_return().
-gather_historical_dir_size_stats(NodeSelector, SessionId, FileKey, Request) ->
-    ?CALL(NodeSelector, [SessionId, FileKey, Request]).
+get_historical_dir_size_stats(NodeSelector, SessionId, FileKey, ProviderId, Request) ->
+    ?CALL(NodeSelector, [SessionId, FileKey, ProviderId, Request]).
 
 
 -spec get_storage_locations(oct_background:node_selector(), session:id(), lfm:file_key()) ->
