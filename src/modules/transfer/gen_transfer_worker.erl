@@ -49,7 +49,9 @@
 -record(state, {mod :: module()}).
 -type state() :: #state{}.
 
--define(LIST_BATCH_SIZE, 100).
+-define(LIST_BATCH_SIZE, op_worker:get_env(
+    file_transfer_list_batch_size, 100
+)).
 -define(FILES_TO_PROCESS_THRESHOLD, 10 * ?LIST_BATCH_SIZE).
 -define(MAX_RETRY_INTERVAL_SEC, op_worker:get_env(
     max_file_transfer_retry_interval_sec, 18000
@@ -408,19 +410,28 @@ transfer_data_insecure(_, FileCtx, State, _Transfer, TransferJobCtx = #transfer_
             {error, not_found}
     end;
 
-transfer_data_insecure(_UserCtx, RootFileCtx, State, #transfer{
+transfer_data_insecure(UserCtx, RootFileCtx, State, #transfer{
     files_to_process = FilesToProcess,
     files_processed = FilesProcessed
-}, TransferJobCtx) when FilesToProcess - FilesProcessed > ?FILES_TO_PROCESS_THRESHOLD ->
-    ?warning(
-        "Postponing next regular file transfer jobs scheduling for transfer ~s "
-        "as jobs threshold have been reached (possible large number of job retries)",
-        [TransferJobCtx#transfer_job_ctx.transfer_id]
-    ),
-    CallbackModule = State#state.mod,
-    CallbackModule:enqueue_data_transfer(RootFileCtx, TransferJobCtx);
+}, TransferJobCtx) ->
+    case FilesToProcess - FilesProcessed > ?FILES_TO_PROCESS_THRESHOLD of
+        true ->
+            ?warning(
+                "Postponing next regular file transfer jobs scheduling for transfer ~s "
+                "as jobs threshold have been reached (possible large number of job retries)",
+                [TransferJobCtx#transfer_job_ctx.transfer_id]
+            ),
+            CallbackModule = State#state.mod,
+            CallbackModule:enqueue_data_transfer(RootFileCtx, TransferJobCtx);
+        false ->
+            process_traverse_job(UserCtx, RootFileCtx, State, TransferJobCtx)
+    end.
 
-transfer_data_insecure(UserCtx, RootFileCtx, State, _Transfer, TransferJobCtx = #transfer_job_ctx{
+
+%% @private
+-spec process_traverse_job(user_ctx:ctx(), file_ctx:ctx(), state(), job_ctx()) ->
+    ok | {error, term()}.
+process_traverse_job(UserCtx, RootFileCtx, State, TransferJobCtx = #transfer_job_ctx{
     transfer_id = TransferId,
     job = TransferTraverseJob = #transfer_traverse_job{iterator = Iterator}
 }) ->
