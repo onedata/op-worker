@@ -362,11 +362,14 @@ process_streamed_task_data(
 ) ->
     ok.
 handle_task_results_processed_for_all_items(
-    AtmWorkflowExecutionId,
-    _AtmWorkflowExecutionEnv,
+    _AtmWorkflowExecutionId,
+    AtmWorkflowExecutionEnv,
     AtmTaskExecutionId
 ) ->
-    atm_openfaas_result_stream_handler:trigger_conclusion(AtmWorkflowExecutionId, AtmTaskExecutionId).
+    atm_task_execution_handler:trigger_stream_conclusion(
+        atm_workflow_execution_ctx:acquire(AtmTaskExecutionId, AtmWorkflowExecutionEnv),
+        AtmTaskExecutionId
+    ).
 
 
 -spec handle_task_execution_stopped(

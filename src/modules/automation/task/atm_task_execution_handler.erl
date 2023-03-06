@@ -27,6 +27,7 @@
     run_job_batch/4,
     process_job_batch_result/4,
     process_streamed_data/3,
+    trigger_stream_conclusion/2,
 
     handle_stopped/1,
     teardown/2
@@ -205,6 +206,18 @@ process_streamed_data(AtmWorkflowExecutionCtx, AtmTaskExecutionId, Error = {erro
         AtmWorkflowExecutionCtx, AtmTaskExecutionId, Error
     ),
     error.
+
+
+-spec trigger_stream_conclusion(
+    atm_workflow_execution_ctx:record(),
+    atm_task_execution:id()
+) ->
+    ok | error.
+trigger_stream_conclusion(AtmWorkflowExecutionCtx, AtmTaskExecutionId) ->
+    {ok, #document{value = AtmTaskExecution}} = atm_task_execution:get(AtmTaskExecutionId),
+    AtmTaskExecutor = AtmTaskExecution#atm_task_execution.executor,
+
+    atm_task_executor:trigger_stream_conclusion(AtmWorkflowExecutionCtx, AtmTaskExecutor).
 
 
 -spec handle_stopped(atm_task_execution:id()) -> ok.

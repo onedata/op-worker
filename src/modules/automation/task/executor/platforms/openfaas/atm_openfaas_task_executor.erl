@@ -35,7 +35,8 @@
     teardown/2,
     delete/1,
     is_in_readonly_mode/1,
-    run/3
+    run/3,
+    trigger_stream_conclusion/2
 ]).
 
 %% persistent_record callbacks
@@ -164,6 +165,15 @@ is_in_readonly_mode(#atm_openfaas_task_executor{operation_spec = #atm_openfaas_o
     ok | no_return().
 run(AtmRunJobBatchCtx, LambdaInput, AtmTaskExecutor) ->
     schedule_function_execution(AtmRunJobBatchCtx, LambdaInput, AtmTaskExecutor).
+
+
+-spec trigger_stream_conclusion(atm_workflow_execution_ctx:record(), record()) ->
+    ok | no_return().
+trigger_stream_conclusion(AtmWorkflowExecutionCtx, _AtmTaskExecutor) ->
+    atm_openfaas_result_stream_handler:trigger_conclusion(
+        atm_workflow_execution_ctx:get_workflow_execution_id(AtmWorkflowExecutionCtx),
+        atm_workflow_execution_ctx:get_task_execution_id(AtmWorkflowExecutionCtx)
+    ).
 
 
 %%%===================================================================
