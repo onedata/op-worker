@@ -124,14 +124,10 @@ run_job_batch(
 ) ->
     ItemCount = length(ItemBatch),
     case atm_task_execution_status:handle_items_in_processing(AtmTaskExecutionId, ItemCount) of
-        {ok, #document{value = AtmTaskExecution}} ->
-            AtmRunJobBatchCtx = atm_run_job_batch_ctx:build(AtmWorkflowExecutionCtx, AtmTaskExecution),
-
+        {ok, AtmTaskExecutionDoc} ->
             try
-                atm_task_executor:run(
-                    AtmRunJobBatchCtx,
-                    build_lambda_input(AtmJobBatchId, AtmRunJobBatchCtx, ItemBatch, AtmTaskExecution),
-                    AtmTaskExecution#atm_task_execution.executor
+                run_job_batch_insecure(
+                    AtmWorkflowExecutionCtx, AtmTaskExecutionDoc, AtmJobBatchId, ItemBatch
                 )
             catch Type:Reason:Stacktrace ->
                 handle_job_batch_processing_error(
@@ -357,6 +353,38 @@ gen_atm_workflow_execution_env_diff(#document{
         atm_workflow_execution_env:add_task_time_series_store_id(
             AtmTaskExecutionId, AtmTaskTSStoreId, Env1
         )
+    end.
+
+
+%% @private
+-spec run_job_batch_insecure(
+    atm_workflow_execution_ctx:record(),
+    atm_task_execution:doc(),
+    atm_task_executor:job_batch_id(),
+    [automation:item()]
+) ->
+    ok | {error, running_item_failed} | {error, task_already_stopping} | {error, task_already_stopped}.
+run_job_batch_insecure(
+    AtmWorkflowExecutionCtx,
+    #document{key = AtmTaskExecutionId, value = AtmTaskExecution = #atm_task_execution{
+        executor = AtmTaskExecutor
+    }},
+    AtmJobBatchId,
+    ItemBatch
+) ->
+    AtmRunJobBatchCtx = atm_run_job_batch_ctx:build(AtmWorkflowExecutionCtx, AtmTaskExecution),
+    AtmLambdaInput = build_lambda_input(AtmJobBatchId, AtmRunJobBatchCtx, ItemBatch, AtmTaskExecution),
+
+    case atm_task_executor:run(AtmRunJobBatchCtx, AtmLambdaInput, AtmTaskExecutor) of
+        ok ->
+            ok;
+        #atm_lambda_output{} = AtmLambdaOutput ->
+            case process_job_batch_result(
+                AtmWorkflowExecutionCtx, AtmTaskExecutionId, ItemBatch, {ok, AtmLambdaOutput}
+            ) of
+                ok -> ok;
+                error -> {error, running_item_failed}
+            end
     end.
 
 

@@ -162,7 +162,8 @@ is_in_readonly_mode(AtmTaskExecutor) ->
     Model:is_in_readonly_mode(AtmTaskExecutor).
 
 
--spec run(atm_run_job_batch_ctx:record(), lambda_input(), record()) -> ok | no_return().
+-spec run(atm_run_job_batch_ctx:record(), lambda_input(), record()) ->
+    ok | lambda_output() | no_return().
 run(AtmRunJobBatchCtx, LambdaInput, AtmTaskExecutor) ->
     Model = utils:record_type(AtmTaskExecutor),
     Model:run(AtmRunJobBatchCtx, LambdaInput, AtmTaskExecutor).
