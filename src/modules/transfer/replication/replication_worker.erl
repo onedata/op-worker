@@ -27,7 +27,6 @@
 -export([
     enqueue_data_transfer/4,
     transfer_regular_file/2,
-    view_querying_chunk_size/0,
     max_transfer_retries/0,
     required_permissions/0
 ]).
@@ -71,15 +70,6 @@ required_permissions() ->
 -spec max_transfer_retries() -> non_neg_integer().
 max_transfer_retries() ->
     op_worker:get_env(max_file_replication_retries_per_file, 5).
-
-%%--------------------------------------------------------------------
-%% @doc
-%% {@link transfer_worker_behaviour} callback view_querying_chunk_size/0.
-%% @end
-%%--------------------------------------------------------------------
--spec view_querying_chunk_size() -> non_neg_integer().
-view_querying_chunk_size() ->
-    op_worker:get_env(replication_by_view_batch, 1000).
 
 %%--------------------------------------------------------------------
 %% @doc

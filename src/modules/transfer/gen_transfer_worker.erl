@@ -78,14 +78,6 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Callback called to get chunk size when querying db view.
-%% @end
-%%--------------------------------------------------------------------
--callback view_querying_chunk_size() -> non_neg_integer().
-
-
-%%--------------------------------------------------------------------
-%% @doc
 %% Callback called to enqueue transfer of specified file with given params,
 %% retries and next retry timestamp.
 %% @end
