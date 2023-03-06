@@ -160,12 +160,16 @@ handle_cast(?TRANSFER_DATA_REQ(FileCtx, TransferJobCtx, Retries, NextRetryTimest
                     Mod:enqueue_data_transfer(NewFileCtx, TransferJobCtx, Retries - 1, NextRetry);
                 {error, not_found} ->
                     % todo VFS-4218 currently we ignore this case
+                    mark_traverse_finished_in_case_of_traverse_job(State#state.mod, TransferJobCtx),
                     {ok, _} = transfer:increment_files_processed_counter(TransferId);
                 {error, cancelled} ->
+                    mark_traverse_finished_in_case_of_traverse_job(State#state.mod, TransferJobCtx),
                     {ok, _} = transfer:increment_files_processed_counter(TransferId);
                 {error, already_ended} ->
+                    mark_traverse_finished_in_case_of_traverse_job(State#state.mod, TransferJobCtx),
                     {ok, _} = transfer:increment_files_processed_counter(TransferId);
                 {error, _Reason} ->
+                    mark_traverse_finished_in_case_of_traverse_job(State#state.mod, TransferJobCtx),
                     {ok, _} = transfer:increment_files_failed_and_processed_counters(TransferId)
             end;
         _ ->
@@ -447,3 +451,23 @@ transfer_data_insecure(UserCtx, RootFileCtx, State, _Transfer, TransferJobCtx = 
                 job = TransferTraverseJob#transfer_traverse_job{iterator = NewIterator}
             })
     end.
+
+
+%% @private
+-spec mark_traverse_finished_in_case_of_traverse_job(module(), job_ctx()) -> ok.
+mark_traverse_finished_in_case_of_traverse_job(replication_worker, #transfer_job_ctx{
+    transfer_id = TransferId,
+    job = #transfer_traverse_job{}
+}) ->
+    transfer:mark_replication_traverse_finished(TransferId),
+    ok;
+
+mark_traverse_finished_in_case_of_traverse_job(replica_eviction_worker, #transfer_job_ctx{
+    transfer_id = TransferId,
+    job = #transfer_traverse_job{}
+}) ->
+    transfer:mark_eviction_traverse_finished(TransferId),
+    ok;
+
+mark_traverse_finished_in_case_of_traverse_job(_, _) ->
+    ok.
