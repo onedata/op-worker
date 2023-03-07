@@ -1351,30 +1351,20 @@ init_per_suite(Config) ->
 
 init_per_testcase(schedule_migration_of_100_regular_files_by_view_with_batch_100, Config) ->
     Nodes = [WorkerP2 | _] = ?config(op_worker_nodes, Config),
-    {ok, OldReplicationBatch} = test_utils:get_env(WorkerP2, op_worker, replication_by_view_batch),
-    test_utils:set_env(Nodes, op_worker, replication_by_view_batch, 100),
-    {ok, OldEvictionBatch} = test_utils:get_env(WorkerP2, op_worker, replica_eviction_by_view_batch),
-    test_utils:set_env(Nodes, op_worker, replica_eviction_by_view_batch, 100),
-    init_per_testcase(all, [
-        {replication_by_view_batch, OldReplicationBatch},
-        {replica_eviction_by_view_batch, OldEvictionBatch} | Config
-    ]);
+    {ok, OldListBatchSize} = test_utils:get_env(WorkerP2, op_worker, transfer_traverse_list_batch_size),
+    test_utils:set_env(Nodes, op_worker, transfer_traverse_list_batch_size, 100),
+    init_per_testcase(all, [{transfer_traverse_list_batch_size, OldListBatchSize} | Config]);
 
 init_per_testcase(schedule_migration_of_100_regular_files_by_view_with_batch_10, Config) ->
     Nodes = [WorkerP2 | _] = ?config(op_worker_nodes, Config),
-    {ok, OldReplicationBatch} = test_utils:get_env(WorkerP2, op_worker, replication_by_view_batch),
-    test_utils:set_env(Nodes, op_worker, replication_by_view_batch, 10),
-    {ok, OldEvictionBatch} = test_utils:get_env(WorkerP2, op_worker, replica_eviction_by_view_batch),
-    test_utils:set_env(Nodes, op_worker, replica_eviction_by_view_batch, 10),
-    init_per_testcase(all, [
-        {replication_by_view_batch, OldReplicationBatch},
-        {replica_eviction_by_view_batch, OldEvictionBatch} | Config
-    ]);
+    {ok, OldListBatchSize} = test_utils:get_env(WorkerP2, op_worker, transfer_traverse_list_batch_size),
+    test_utils:set_env(Nodes, op_worker, transfer_traverse_list_batch_size, 10),
+    init_per_testcase(all, [{transfer_traverse_list_batch_size, OldListBatchSize} | Config]);
 
 init_per_testcase(Case, Config)
     when Case =:= cancel_migration_on_target_nodes_by_other_user
     orelse Case =:= cancel_migration_on_target_nodes_by_scheduling_user
-    ->
+->
     Workers = ?config(op_worker_nodes, Config),
     transfers_test_utils:mock_prolonged_replication(Workers, 1, 10),
     init_per_testcase(all, Config);
@@ -1387,18 +1377,16 @@ init_per_testcase(_Case, Config) ->
 end_per_testcase(Case, Config) when
     Case =:= schedule_migration_of_100_regular_files_by_view_with_batch_100;
     Case =:= schedule_migration_of_100_regular_files_by_view_with_batch_10
-    ->
+->
     Nodes = ?config(op_worker_nodes, Config),
-    OldReplicationBatch = ?config(replication_by_view_batch, Config),
-    OldEvictionBatch = ?config(replica_eviction_by_view_batch, Config),
-    test_utils:set_env(Nodes, op_worker, replication_by_view_batch, OldReplicationBatch),
-    test_utils:set_env(Nodes, op_worker, replica_eviction_by_view_batch, OldEvictionBatch),
+    OldListBatchSize = ?config(transfer_traverse_list_batch_size, Config),
+    test_utils:set_env(Nodes, op_worker, transfer_traverse_list_batch_size, OldListBatchSize),
     end_per_testcase(all, Config);
 
 end_per_testcase(Case, Config)
     when Case =:= cancel_migration_on_target_nodes_by_other_user
     orelse Case =:= cancel_migration_on_target_nodes_by_scheduling_user
-    ->
+->
     Workers = ?config(op_worker_nodes, Config),
     transfers_test_utils:unmock_prolonged_replication(Workers),
     end_per_testcase(all, Config);

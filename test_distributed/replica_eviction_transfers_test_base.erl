@@ -1734,15 +1734,15 @@ init_per_testcase(quota_decreased_after_eviction, Config) ->
 
 init_per_testcase(schedule_replica_eviction_of_100_regular_files_by_view_with_batch_100, Config) ->
     Nodes = [WorkerP2 | _] = ?config(op_worker_nodes, Config),
-    {ok, OldValue} = test_utils:get_env(WorkerP2, op_worker, replica_eviction_by_view_batch),
-    test_utils:set_env(Nodes, op_worker, replica_eviction_by_view_batch, 100),
-    init_per_testcase(all, [{replica_eviction_by_view_batch, OldValue} | Config]);
+    {ok, OldValue} = test_utils:get_env(WorkerP2, op_worker, transfer_traverse_list_batch_size),
+    test_utils:set_env(Nodes, op_worker, transfer_traverse_list_batch_size, 100),
+    init_per_testcase(all, [{transfer_traverse_list_batch_size, OldValue} | Config]);
 
 init_per_testcase(schedule_replica_eviction_of_100_regular_files_by_view_with_batch_10, Config) ->
     Nodes = [WorkerP2 | _] = ?config(op_worker_nodes, Config),
-    {ok, OldValue} = test_utils:get_env(WorkerP2, op_worker, replica_eviction_by_view_batch),
-    test_utils:set_env(Nodes, op_worker, replica_eviction_by_view_batch, 10),
-    init_per_testcase(all, [{replica_eviction_by_view_batch, OldValue} | Config]);
+    {ok, OldValue} = test_utils:get_env(WorkerP2, op_worker, transfer_traverse_list_batch_size),
+    test_utils:set_env(Nodes, op_worker, transfer_traverse_list_batch_size, 10),
+    init_per_testcase(all, [{transfer_traverse_list_batch_size, OldValue} | Config]);
 
 init_per_testcase(_Case, Config) ->
     ct:timetrap(timer:minutes(60)),
@@ -1772,8 +1772,8 @@ end_per_testcase(Case, Config) when
     Case =:= schedule_replica_eviction_of_100_regular_files_by_view_with_batch_10
     ->
     Nodes = ?config(op_worker_nodes, Config),
-    OldValue = ?config(replica_eviction_by_view_batch, Config),
-    test_utils:set_env(Nodes, op_worker, replica_eviction_by_view_batch, OldValue),
+    OldValue = ?config(transfer_traverse_list_batch_size, Config),
+    test_utils:set_env(Nodes, op_worker, transfer_traverse_list_batch_size, OldValue),
     end_per_testcase(all, Config);
 
 end_per_testcase(_Case, Config) ->

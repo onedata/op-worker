@@ -2240,15 +2240,15 @@ init_per_testcase(not_synced_file_should_not_be_replicated = Case, Config) ->
 
 init_per_testcase(schedule_replication_of_100_regular_files_by_view_with_batch_100 = Case, Config) ->
     Nodes = [WorkerP2 | _] = ?config(op_worker_nodes, Config),
-    {ok, OldValue} = test_utils:get_env(WorkerP2, op_worker, replication_by_view_batch),
-    test_utils:set_env(Nodes, op_worker, replication_by_view_batch, 100),
-    init_per_testcase(?DEFAULT_CASE(Case), [{replication_by_view_batch, OldValue} | Config]);
+    {ok, OldValue} = test_utils:get_env(WorkerP2, op_worker, transfer_traverse_list_batch_size),
+    test_utils:set_env(Nodes, op_worker, transfer_traverse_list_batch_size, 100),
+    init_per_testcase(?DEFAULT_CASE(Case), [{transfer_traverse_list_batch_size, OldValue} | Config]);
 
 init_per_testcase(schedule_replication_of_100_regular_files_by_view_with_batch_10 = Case, Config) ->
     Nodes = [WorkerP2 | _] = ?config(op_worker_nodes, Config),
-    {ok, OldValue} = test_utils:get_env(WorkerP2, op_worker, replication_by_view_batch),
-    test_utils:set_env(Nodes, op_worker, replication_by_view_batch, 10),
-    init_per_testcase(?DEFAULT_CASE(Case), [{replication_by_view_batch, OldValue} | Config]);
+    {ok, OldValue} = test_utils:get_env(WorkerP2, op_worker, transfer_traverse_list_batch_size),
+    test_utils:set_env(Nodes, op_worker, transfer_traverse_list_batch_size, 10),
+    init_per_testcase(?DEFAULT_CASE(Case), [{transfer_traverse_list_batch_size, OldValue} | Config]);
 
 init_per_testcase(file_removed_during_replication, Config) ->
     ct:timetrap(timer:minutes(60)),
@@ -2305,8 +2305,8 @@ end_per_testcase(Case, Config) when
     Case =:= schedule_replication_of_100_regular_files_by_view_with_batch_10
 ->
     Nodes = ?config(op_worker_nodes, Config),
-    OldValue = ?config(replication_by_view_batch, Config),
-    test_utils:set_env(Nodes, op_worker, replication_by_view_batch, OldValue),
+    OldValue = ?config(transfer_traverse_list_batch_size, Config),
+    test_utils:set_env(Nodes, op_worker, transfer_traverse_list_batch_size, OldValue),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(Case, Config)

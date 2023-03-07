@@ -50,7 +50,7 @@
 -type state() :: #state{}.
 
 -define(LIST_BATCH_SIZE, op_worker:get_env(
-    file_transfer_list_batch_size, 1000
+    transfer_traverse_list_batch_size, 1000
 )).
 -define(FILES_TO_PROCESS_THRESHOLD, 10 * ?LIST_BATCH_SIZE).
 -define(MAX_RETRY_INTERVAL_SEC, op_worker:get_env(
