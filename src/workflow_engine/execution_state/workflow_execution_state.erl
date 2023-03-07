@@ -26,7 +26,7 @@
 %% API
 -export([init/7, resume_from_snapshot/7, init_cancel/2, finish_cancel/1, wait_for_pending_callbacks/1,
     handle_exception/5, execute_exception_handler_if_waiting/1, abandon/2, cleanup/1, prepare_next_job/1,
-    report_execution_status_update/4, report_lane_execution_prepared/6, pause_job/2,
+    report_execution_status_update/4, report_lane_execution_prepared/6, pause_job/2, pause_job_after_cancel/2,
     report_new_streamed_task_data/3, report_streamed_task_data_processed/4, mark_all_streamed_task_data_received/3,
     check_timeouts/1, reset_keepalive_timer/2, get_result_processing_data/2, get/1, save/1, get_boxes_map/1]).
 %% Test API
@@ -482,15 +482,31 @@ report_lane_execution_prepared(_Handler, ExecutionId, LaneId, ?PREPARE_IN_ADVANC
         ?WF_ERROR_UNKNOWN_LANE -> ok
     end.
 
--spec pause_job(workflow_engine:execution_id(), workflow_jobs:job_identifier()) ->
-    {ok, workflow_engine:id(), workflow_engine:task_spec()}.
+-spec pause_job(workflow_engine:execution_id(), workflow_jobs:job_identifier()) -> ok.
 pause_job(ExecutionId, JobIdentifier) ->
-    {ok, #document{value = #workflow_execution_state{
-        engine_id = EngineId,
-        current_lane = #current_lane{parallel_box_specs = BoxSpecs}
-    }}} = update(ExecutionId, fun(State) -> pause_job_internal(State, JobIdentifier) end),
-    {_TaskId, PausedTaskSpec} = workflow_jobs:get_task_details(JobIdentifier, BoxSpecs),
-    {ok, EngineId, PausedTaskSpec}.
+    {ok, _} = update(ExecutionId, fun(State) -> pause_job_internal(State, JobIdentifier) end),
+    ok.
+
+-spec pause_job_after_cancel(workflow_engine:execution_id(), workflow_jobs:job_identifier()) ->
+    {ok, workflow_engine:id(), workflow_engine:task_spec()} | ?WF_ERROR_WRONG_EXECUTION_STATUS.
+pause_job_after_cancel(ExecutionId, JobIdentifier) ->
+    UpdateAns = update(ExecutionId, fun
+        (#workflow_execution_state{execution_status = #execution_cancelled{}} = State) ->
+            pause_job_internal(State, JobIdentifier);
+        (_) ->
+            ?WF_ERROR_WRONG_EXECUTION_STATUS
+    end),
+
+    case UpdateAns of
+        {ok, #document{value = #workflow_execution_state{
+            engine_id = EngineId,
+            current_lane = #current_lane{parallel_box_specs = BoxSpecs}
+        }}} ->
+            {_TaskId, PausedTaskSpec} = workflow_jobs:get_task_details(JobIdentifier, BoxSpecs),
+            {ok, EngineId, PausedTaskSpec};
+        ?WF_ERROR_WRONG_EXECUTION_STATUS ->
+            ?WF_ERROR_WRONG_EXECUTION_STATUS
+    end.
 
 
 -spec report_new_streamed_task_data(workflow_engine:execution_id(), workflow_engine:task_id(),
@@ -870,6 +886,10 @@ handle_state_update_after_job_preparation(ExecutionId, #document{value = #workfl
         ?CONTINUE(NextLaneId, LaneIdToBePreparedInAdvance) ->
             case update(ExecutionId, fun(State) -> set_current_lane(State, NextLaneId, LaneIdToBePreparedInAdvance) end) of
                 {ok, #document{value = #workflow_execution_state{
+                    execution_status = #execution_cancelled{}
+                }}} ->
+                    prepare_next_job_for_current_lane(ExecutionId);
+                {ok, #document{value = #workflow_execution_state{
                     execution_status = ?PREPARED_IN_ADVANCE,
                     update_report = ?LANE_PREPARED_REPORT(#next_lane{
                         id = LaneId,
@@ -1135,14 +1155,17 @@ maybe_delete_prefetched_iteration_step({ItemId, _}) ->
 
 -spec set_current_lane(state(), workflow_engine:lane_id(), workflow_engine:lane_id() | undefined) -> {ok, state()}.
 set_current_lane(#workflow_execution_state{
+    execution_status = Status,
     current_lane = CurrentLane,
     next_lane = #next_lane{id = NextLaneId} = NextLane,
     next_lane_preparation_status = NextLaneStatus
 } = State, NewLaneId, LaneIdToBePreparedInAdvance) ->
-    {NewExecutionStatus, NewUpdateReport} = case NewLaneId of
-        NextLaneId when NextLaneStatus == ?PREPARED_IN_ADVANCE ->
+    {NewExecutionStatus, NewUpdateReport} = case {Status, NewLaneId} of
+        {#execution_cancelled{}, _} ->
+            {Status, undefined};
+        {_, NextLaneId} when NextLaneStatus == ?PREPARED_IN_ADVANCE ->
             {NextLaneStatus, ?LANE_PREPARED_REPORT(NextLane)};
-        NextLaneId when NextLaneStatus =/= ?NOT_PREPARED ->
+        {_, NextLaneId} when NextLaneStatus =/= ?NOT_PREPARED ->
             {NextLaneStatus, undefined};
         _ ->
             {?PREPARING, ?LANE_DESIGNATED_FOR_INIT(prepare)}

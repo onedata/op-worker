@@ -458,7 +458,7 @@ resolve_get_operation_handler(archive_recall_log, private) -> ?MODULE;
 resolve_get_operation_handler(api_samples, public) -> ?MODULE;
 resolve_get_operation_handler(api_samples, private) -> ?MODULE;
 resolve_get_operation_handler(dir_size_stats_collection_schema, public) -> ?MODULE;
-resolve_get_operation_handler(dir_size_stats_collection, private) -> ?MODULE;
+resolve_get_operation_handler({dir_size_stats_collection, _}, private) -> ?MODULE;
 resolve_get_operation_handler(_, _) -> throw(?ERROR_NOT_SUPPORTED).
 
 
@@ -612,7 +612,7 @@ data_spec_get(#gri{aspect = archive_recall_log}) ->
 
 data_spec_get(#gri{aspect = dir_size_stats_collection_schema}) -> #{};
 
-data_spec_get(#gri{aspect = dir_size_stats_collection}) -> #{
+data_spec_get(#gri{aspect = {dir_size_stats_collection, _}}) -> #{
     required => #{
         id => {binary, guid}
     },
@@ -667,7 +667,7 @@ authorize_get(#op_req{auth = Auth, gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= archive_recall_details;
     As =:= archive_recall_progress;
     As =:= archive_recall_log;
-    As =:= dir_size_stats_collection;
+    element(1, As) =:= dir_size_stats_collection;
     As =:= api_samples
 ->
     middleware_utils:has_access_to_file_space(Auth, Guid);
@@ -725,7 +725,7 @@ validate_get(#op_req{gri = #gri{id = Guid, aspect = As}}, _) when
     As =:= archive_recall_progress;
     As =:= archive_recall_log;
     As =:= api_samples;
-    As =:= dir_size_stats_collection
+    element(1, As) =:= dir_size_stats_collection
 ->
     middleware_utils:assert_file_managed_locally(Guid);
 
@@ -997,10 +997,10 @@ get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = api_samples, scope =
 get(#op_req{gri = #gri{id = undefined, aspect = dir_size_stats_collection_schema}}, _) ->
     {ok, value, ?DIR_SIZE_STATS_COLLECTION_SCHEMA};
 
-get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = dir_size_stats_collection}, data = Data}, _) ->
+get(#op_req{auth = Auth, gri = #gri{id = FileGuid, aspect = {dir_size_stats_collection, ProviderId}}, data = Data}, _) ->
     BrowseRequest = ts_browse_request:from_json(Data),
-    {ok, value, mi_file_metadata:gather_historical_dir_size_stats(
-        Auth#auth.session_id, ?FILE_REF(FileGuid), BrowseRequest)}.
+    {ok, value, mi_file_metadata:get_historical_dir_size_stats(
+        Auth#auth.session_id, ?FILE_REF(FileGuid), ProviderId, BrowseRequest)}.
 
 
 

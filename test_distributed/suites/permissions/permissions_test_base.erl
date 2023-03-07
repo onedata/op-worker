@@ -61,7 +61,7 @@
     get_file_attr_test/1,
     get_file_details_test/1,
     get_file_distribution_test/1,
-    gather_historical_dir_size_stats_test/1,
+    get_historical_dir_size_stats_test/1,
     get_file_storage_locations_test/1,
 
     set_perms_test/1,
@@ -1229,7 +1229,7 @@ get_file_distribution_test(Config) ->
     }, Config).
 
 
-gather_historical_dir_size_stats_test(Config) ->
+get_historical_dir_size_stats_test(Config) ->
     [_, _, W] = ?config(op_worker_nodes, Config),
     
     permissions_test_runner:run_scenarios(#perms_test_spec{
@@ -1253,8 +1253,8 @@ gather_historical_dir_size_stats_test(Config) ->
         operation = fun(SessId, TestCaseRootDirPath, ExtraData) ->
             FilePath = <<TestCaseRootDirPath/binary, "/dir1">>,
             FileKey = maps:get(FilePath, ExtraData),
-            extract_ok(opt_file_metadata:gather_historical_dir_size_stats(
-                W, SessId, FileKey, #time_series_layout_get_request{}))
+            extract_ok(opt_file_metadata:get_historical_dir_size_stats(
+                W, SessId, FileKey, ?GET_DOMAIN_BIN(W), #time_series_layout_get_request{}))
         end,
         returned_errors = api_errors,
         final_ownership_check = fun(TestCaseRootDirPath) ->
@@ -2343,7 +2343,12 @@ init_per_suite(Config) ->
             (#{name := permissions_cache} = Options) -> meck:passthrough([Options#{size := 1000000000}]);
             (Options) -> meck:passthrough([Options])
         end),
-
+        lists:foreach(fun({SpaceId, _}) ->
+            lists:foreach(fun(W) ->
+                ?assertEqual(ok, rpc:call(W, dir_stats_service_state, enable, [SpaceId])),
+                ?assertEqual(enabled, rpc:call(W, dir_stats_service_state, get_extended_status, [SpaceId]), ?ATTEMPTS)
+            end, initializer:get_different_domain_workers(NewConfig2))
+        end, ?config(spaces, NewConfig2)),
         NewConfig2
     end,
     [{?ENV_UP_POSTHOOK, Posthook}, {?LOAD_MODULES, [initializer, ?MODULE]} | Config].

@@ -147,6 +147,7 @@
     {error, {item_processing_ended, Item, SuccessOrFailure}}).
 -define(WF_ERROR_CANCEL_NOT_INITIALIZED, {error, cancel_not_initialized}).
 -define(WF_ERROR_PRED_NOT_MEET, {error, pred_not_meet}).
+-define(WF_ERROR_WRONG_EXECUTION_STATUS, {error, wrong_execution_status}).
 
 % errors returned by workflow_async_call_pool to control workflow_engine
 -define(WF_ERROR_LIMIT_REACHED, {error, limit_reached}).
