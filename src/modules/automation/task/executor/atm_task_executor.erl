@@ -119,11 +119,8 @@
     atm_lambda_revision:record()
 ) ->
     record() | no_return().
-create(AtmWorkflowExecutionCtx, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision = #atm_lambda_revision{
-    operation_spec = AtmLambadaOperationSpec
-}) ->
-    Engine = atm_lambda_operation_spec:get_engine(AtmLambadaOperationSpec),
-    Model = engine_to_executor_model(Engine),
+create(AtmWorkflowExecutionCtx, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision) ->
+    Model = get_executor_model(AtmLambdaRevision#atm_lambda_revision.operation_spec),
     Model:create(AtmWorkflowExecutionCtx, AtmLaneIndex, AtmTaskSchema, AtmLambdaRevision).
 
 
@@ -190,21 +187,17 @@ version() ->
     json_utils:json_term().
 db_encode(AtmTaskExecutor, NestedRecordEncoder) ->
     Model = utils:record_type(AtmTaskExecutor),
-    Engine = executor_model_to_engine(Model),
 
     maps:merge(
-        #{<<"engine">> => atm_lambda_operation_spec:engine_to_json(Engine)},
+        #{<<"_model">> => atom_to_binary(Model, utf8)},
         NestedRecordEncoder(AtmTaskExecutor, Model)
     ).
 
 
 -spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) ->
     record().
-db_decode(#{<<"engine">> := EngineJson} = AtmTaskExecutorJson, NestedRecordDecoder) ->
-    Engine = atm_lambda_operation_spec:engine_from_json(EngineJson),
-    Model = engine_to_executor_model(Engine),
-
-    NestedRecordDecoder(AtmTaskExecutorJson, Model).
+db_decode(#{<<"_model">> := ModelJson} = AtmTaskExecutorJson, NestedRecordDecoder) ->
+    NestedRecordDecoder(AtmTaskExecutorJson, binary_to_existing_atom(ModelJson, utf8)).
 
 
 %%%===================================================================
@@ -213,10 +206,7 @@ db_decode(#{<<"engine">> := EngineJson} = AtmTaskExecutorJson, NestedRecordDecod
 
 
 %% @private
--spec engine_to_executor_model(atm_lambda_operation_spec:engine()) -> model().
-engine_to_executor_model(openfaas) -> atm_openfaas_task_executor.
-
-
-%% @private
--spec executor_model_to_engine(model()) -> atm_lambda_operation_spec:engine().
-executor_model_to_engine(atm_openfaas_task_executor) -> openfaas.
+-spec get_executor_model(atm_lambda_operation_spec:record()) ->
+    module().
+get_executor_model(#atm_openfaas_operation_spec{}) ->
+    atm_openfaas_task_executor.
