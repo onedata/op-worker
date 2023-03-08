@@ -111,15 +111,13 @@ apply(Doc = #document{value = Value, scope = SpaceId, seq = Seq}) ->
         try
             dbsync_events:change_replicated(SpaceId, DocToHandle)
         catch
-            _:Reason_:Stacktrace ->
-                ?error_stacktrace("Change ~p post-processing failed due "
-                "to: ~p", [Doc, Reason_], Stacktrace)
+            Class:Reason:Stacktrace ->
+                ?error_exception("when post-processing change:~s", [?autoformat([Doc])], Class, Reason, Stacktrace)
         end,
         ok
     catch
-        _:Reason:Stacktrace2 ->
-            ?error_stacktrace("Unable to apply change ~p due to: ~p",
-                [Doc, Reason], Stacktrace2),
+        Class2:Reason2:Stacktrace2 ->
+            ?error_exception(?autoformat([Doc]), Class2, Reason2, Stacktrace2),
             {error, Seq, Reason}
     end.
 
