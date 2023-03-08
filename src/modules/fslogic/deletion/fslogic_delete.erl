@@ -269,6 +269,9 @@ delete_storage_file(FileCtx, UserCtx) ->
                 OtherError
         end
     catch
+        _:{error, {file_meta_missing, _}} ->
+            % File has not been created on storage (missing path to space dir)
+            {ok, FileCtx};
         Class:Reason ->
             log_storage_file_deletion_error(FileCtx, {Class, Reason}, true),
             {error, Reason}
