@@ -453,25 +453,79 @@ echo_and_delete_file_loop_test_base(Config) ->
     multi_provider_file_ops_test_base:echo_and_delete_file_loop_test_base(Config, IterationsNum, <<"user1">>).
 
 remote_driver_test(Config) ->
+    ct:print("remote_driver_test - get_links"),
+    remote_driver_test_base(Config, get_links),
+    ct:print("remote_driver_test - fold_links"),
+    remote_driver_test_base(Config, fold_links).
+
+remote_driver_test_base(Config, TestFun) ->
     Config2 = multi_provider_file_ops_test_base:extend_config(Config, <<"user1">>, {0, 0, 0, 0}, 0),
-    [Worker1 | _] = ?config(workers1, Config2),
+    [Worker1 | _] = Workers1 = ?config(workers1, Config2),
     [Worker2 | _] = ?config(workers_not1, Config2),
-    Key = <<"someKey">>,
+
+    Key = generator:gen_name(),
     LinkName = <<"someName">>,
     LinkTarget = <<"someTarget">>,
     Link = {LinkName, LinkTarget},
     TreeId1 = rpc:call(Worker1, oneprovider, get_id, []),
     Ctx1 = rpc:call(Worker1, datastore_model_default, get_ctx, [file_meta]),
     Ctx2 = rpc:call(Worker2, datastore_model_default, get_ctx, [file_meta]),
+
+    Master = self(),
+    test_utils:mock_expect(Workers1, links_tree, update_node, fun(NodeId, Node, State) ->
+        Master ! {link_node_id, NodeId},
+        meck:passthrough([NodeId, Node, State])
+    end),
+
     ?assertMatch({ok, #link{}}, rpc:call(Worker1, datastore_model, add_links, [
         Ctx1, Key, TreeId1, Link
     ])),
+    LinkNodeId = receive
+        {link_node_id, Id} -> Id
+    after
+        1000 -> timeout
+    end,
+    ?assertNotEqual(timeout, LinkNodeId),
+
+    test_utils:mock_expect(Workers1, links_tree, update_node, fun(NodeId, Node, State) ->
+        timer:sleep(timer:seconds(30)),
+        meck:passthrough([NodeId, Node, State])
+    end),
+
+    spawn(fun() ->
+        Master ! {add_links_ans, rpc:call(Worker1, datastore_model, add_links, [
+            Ctx1, Key, TreeId1, {<<"l1">>, <<"v2">>}
+        ])}
+    end),
+
+    spawn(fun() ->
+        Args = case TestFun of
+            get_links -> [LinkName];
+            fold_links -> [fun(Link, Acc) -> {ok, [Link | Acc]} end, [], #{}]
+        end,
+        Master ! {test_ans, rpc:call(Worker2, datastore_model, TestFun, [Ctx2, Key, TreeId1] ++ Args)}
+    end),
+    % Use timeout smaller than 30s to check if TestFun is not blocked by sleep in update_node
     ?assertMatch({ok, [#link{
         name = LinkName,
         target = LinkTarget
-    }]}, rpc:call(Worker2, datastore_model, get_links, [
-        Ctx2, Key, TreeId1, LinkName
-    ])).
+    }]}, receive
+        {test_ans, TestAns} -> TestAns
+    after
+        timer:seconds(15) -> timeout
+    end),
+
+    ?assertMatch({ok, #link{}}, receive
+        {add_links_ans, AddLinksAns} -> AddLinksAns
+    after
+        timer:seconds(60) -> timeout
+    end),
+
+    ?assertMatch({ok, _, #document{}},
+        rpc:call(Worker2, couchbase_driver, get, [
+            #{bucket => <<"onedata">>}, LinkNodeId
+        ]), 30
+    ).
 
 rtransfer_fetch_test(Config) ->
     [Worker1a, Worker1b, Worker2 | _] = ?config(op_worker_nodes, Config),
@@ -1269,6 +1323,10 @@ init_per_testcase(truncate_on_storage_does_not_block_synchronizer = Case, Config
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, storage_driver),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
+init_per_testcase(remote_driver_test = Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    ?assertEqual(ok, test_utils:mock_new(Workers, links_tree)),
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
 init_per_testcase(_Case, Config) ->
     ct:timetrap({minutes, 60}),
     lfm_proxy:init(Config).
@@ -1303,6 +1361,10 @@ end_per_testcase(Case, Config) when
 end_per_testcase(truncate_on_storage_does_not_block_synchronizer = Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, storage_driver),
+    end_per_testcase(?DEFAULT_CASE(Case), Config);
+end_per_testcase(remote_driver_test = Case, Config) ->
+    Workers = ?config(op_worker_nodes, Config),
+    ?assertEqual(ok, test_utils:mock_unload(Workers, links_tree)),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 end_per_testcase(_Case, Config) ->
     lfm_proxy:teardown(Config).
