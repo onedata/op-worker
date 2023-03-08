@@ -19,6 +19,8 @@
 -include_lib("ctool/include/test/test_utils.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/performance.hrl").
+-include_lib("cluster_worker/include/modules/datastore/datastore_links.hrl").
+-include_lib("bp_tree/include/bp_tree.hrl").
 
 %% API
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
@@ -496,10 +498,12 @@ remote_driver_test_base(Config, TestFun) ->
     TreeId1 = rpc:call(Worker1, oneprovider, get_id, []),
     Ctx1 = rpc:call(Worker1, datastore_model_default, get_ctx, [file_meta]),
     Ctx2 = rpc:call(Worker2, datastore_model_default, get_ctx, [file_meta]),
+    #{memory_driver_ctx := MemoryCtx} = datastore_model_default:set_defaults(
+        datastore_model:get_unique_key(file_meta, Key), Ctx1),
 
     Master = self(),
     test_utils:mock_expect(Workers1, links_tree, update_node, fun(NodeId, Node, State) ->
-        Master ! {link_node_id, NodeId},
+        Master ! {link_node_id, Key, NodeId},
         meck:passthrough([NodeId, Node, State])
     end),
 
@@ -507,13 +511,23 @@ remote_driver_test_base(Config, TestFun) ->
         Ctx1, Key, TreeId1, Link
     ])),
     LinkNodeId = receive
-        {link_node_id, Id} -> Id
+        {link_node_id, Key, Id} -> Id
     after
         1000 -> timeout
     end,
     ?assertNotEqual(timeout, LinkNodeId),
+    GetLinksCount = fun() ->
+        case rpc:call(Worker1, couchbase_driver, get, [#{bucket => <<"onedata">>}, LinkNodeId]) of
+            {ok, _, #document{value = #links_node{node = #bp_tree_node{children = {bp_tree_children, _, Data, _}}}}} ->
+                gb_trees:size(Data);
+            _ ->
+                0
+        end
+    end,
+    ?assertMatch(1, GetLinksCount(), 20),
 
     test_utils:mock_expect(Workers1, links_tree, update_node, fun(NodeId, Node, State) ->
+        ets_driver:delete(MemoryCtx, NodeId),
         timer:sleep(timer:seconds(30)),
         meck:passthrough([NodeId, Node, State])
     end),
@@ -524,6 +538,7 @@ remote_driver_test_base(Config, TestFun) ->
         ])}
     end),
 
+    timer:sleep(1000),
     spawn(fun() ->
         Args = case TestFun of
             get_links -> [LinkName];
@@ -550,7 +565,7 @@ remote_driver_test_base(Config, TestFun) ->
     ?assertMatch({ok, _, #document{}},
         rpc:call(Worker2, couchbase_driver, get, [
             #{bucket => <<"onedata">>}, LinkNodeId
-        ]), 30
+        ]), 20
     ).
 
 rtransfer_fetch_test(Config) ->
