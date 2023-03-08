@@ -49,7 +49,12 @@ handle(#get_remote_document{
 }) ->
     Ctx = datastore_model_default:get_ctx(Model),
     Ctx2 = datastore_multiplier:extend_name(RoutingKey, Ctx),
-    Ctx3 = Ctx2#{include_deleted => true, remote_driver => undefined, routing_key => RoutingKey},
+    Ctx3 = maps:remove(memory_copies, Ctx2#{
+        direct_disc_fallback => true,
+        include_deleted => true,
+        remote_driver => undefined,
+        routing_key => RoutingKey
+    }),
     case datastore_router:route(get, [Ctx3, Key]) of
         {ok, Doc} ->
             Data = zlib:compress(jiffy:encode(datastore_json:encode(Doc))),
