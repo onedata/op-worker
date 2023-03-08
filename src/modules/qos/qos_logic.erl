@@ -249,8 +249,10 @@ get_eff_qos(FileCtx) ->
         _ ->
             % This reference has a missing ancestor. Calculate effective value only for this reference up to missing ancestor;
             % all other references trigger reconciliation when they synchronize.
-            {FileDoc, _} = file_ctx:get_file_doc(FileCtx),
-            file_qos:get_effective_for_single_reference(FileDoc, HighestSyncedAncestorUuid)
+            case file_ctx:get_file_doc(FileCtx) of
+                {FileDoc, _} -> file_qos:get_effective_for_single_reference(FileDoc, HighestSyncedAncestorUuid);
+                {error, not_found} -> undefined % race with file deletion
+            end
     end.
 
 
