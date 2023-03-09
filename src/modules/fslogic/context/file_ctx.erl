@@ -89,7 +89,7 @@
 -export([
     get_canonical_path/1, get_uuid_based_path/1, get_file_doc/1, is_synchronization_enabled/1,
     get_file_doc_including_deleted/1, get_and_cache_file_doc_including_deleted/1,
-    get_cached_parent_const/1, cache_parent/2,
+    get_cached_parent_const/1, cache_parent/2, cache_name/2,
     get_storage_file_id/1, get_storage_file_id/2,
     get_new_storage_file_id/1, get_aliased_name/2,
     get_display_credentials/1, get_times/1,
@@ -488,6 +488,11 @@ get_cached_parent_const(#file_ctx{parent = Parent}) ->
 -spec cache_parent(ctx(), ctx()) -> ctx().
 cache_parent(ParentCtx, FileCtx) ->
     FileCtx#file_ctx{parent = ParentCtx}.
+
+
+-spec cache_name(ctx(), ctx()) -> ctx().
+cache_name(FileName, FileCtx) ->
+    FileCtx#file_ctx{file_name = FileName}.
 
 
 %%--------------------------------------------------------------------
