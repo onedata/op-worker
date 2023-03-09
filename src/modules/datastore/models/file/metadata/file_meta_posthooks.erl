@@ -214,7 +214,7 @@ decode_hook(EncodedHook) ->
     DecodedHook = base64url:decode(EncodedHook),
     [ModuleBin, DecodedHookTail] = binary:split(DecodedHook, <<?SEPARATOR>>),
     [FunctionBin, EncodedArgs] = binary:split(DecodedHookTail, <<?SEPARATOR>>),
-    {binary_to_existing_atom(ModuleBin), binary_to_existing_atom(FunctionBin), EncodedArgs}.
+    {binary_to_atom(ModuleBin), binary_to_atom(FunctionBin), EncodedArgs}.
 
 
 %% @private
