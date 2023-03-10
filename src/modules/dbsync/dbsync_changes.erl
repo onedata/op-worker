@@ -118,7 +118,7 @@ apply(Doc = #document{value = Value, scope = SpaceId, seq = Seq}) ->
     catch
         Class2:Reason2:Stacktrace2 ->
             ?error_exception(?autoformat([Doc]), Class2, Reason2, Stacktrace2),
-            {error, Seq, Reason}
+            {error, Seq, Reason2}
     end.
 
 %%%===================================================================
