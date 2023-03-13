@@ -270,7 +270,9 @@ Qnthack - copy quarantine:
         conditions: &quarantine-hack-cond-build3
           - variable:
               matches:
-                bamboo.buildNumber: '3'
+                # copy quarantine is run on build 3,4,5 just in case the expected numbering has been
+                # disturbed by early branch pushing or manual plan branch running 
+                bamboo.buildNumber: '[3-5]'
     - script: &always-successful
         interpreter: BINSH_OR_CMDEXE
         description: Always successful
