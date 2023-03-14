@@ -377,7 +377,8 @@ list_children(#tree_traverse{
                     size => BatchSize,
                     token => Token,
                     last_name => LastName,
-                    last_tree => LastTree
+                    last_tree => LastTree,
+                    handle_interrupted_call => false
                 })}
             catch
                 throw:?EACCES ->

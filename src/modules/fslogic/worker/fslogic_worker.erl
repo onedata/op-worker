@@ -175,6 +175,7 @@ init(_Args) ->
     file_registration:init_pool(),
     autocleaning_view_traverse:init_pool(),
     tree_deletion_traverse:init_pool(),
+    space_upgrade_traverse:init_pool(),
     clproto_serializer:load_msg_defs(),
 
     schedule_invalidate_permissions_cache(),
@@ -273,6 +274,7 @@ cleanup() ->
     file_registration:stop_pool(),
     replica_deletion_master:stop_workers_pool(),
     tree_deletion_traverse:stop_pool(),
+    space_upgrade_traverse:stop_pool(),
     replica_synchronizer:terminate_all(),
     ok.
 
