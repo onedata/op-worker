@@ -44,6 +44,7 @@
 
     mark_replication_traverse_finished/1,
     mark_eviction_traverse_finished/1,
+    mark_traverse_finished/1,
 
     increment_files_to_process_counter/2, increment_files_processed_counter/1,
     increment_files_evicted_and_processed_counters/1,
@@ -501,6 +502,18 @@ status(#transfer{replication_status = ?ACTIVE_STATUS}) ->
     ?REPLICATING_STATUS;
 status(#transfer{replication_status = Status}) ->
     Status.
+
+
+-spec mark_traverse_finished(id()) -> {ok, doc()} | {error, term()}.
+mark_traverse_finished(TransferId) ->
+    ThisProviderId = oneprovider:get_id(),
+
+    update(TransferId, fun
+        (Transfer = #transfer{replicating_provider = Id}) when Id == ThisProviderId ->
+            {ok, Transfer#transfer{replication_traverse_finished = true}};
+        (Transfer = #transfer{evicting_provider = Id}) when Id == ThisProviderId ->
+            {ok, Transfer#transfer{eviction_traverse_finished = true}}
+    end).
 
 
 -spec mark_replication_traverse_finished(id()) -> {ok, doc()} | {error, term()}.

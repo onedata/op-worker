@@ -491,21 +491,12 @@ handle_finished_migration(Doc = #document{value = #transfer{
 -spec new_replication_or_migration(transfer:doc()) -> ok.
 new_replication_or_migration(#document{
     key = TransferId,
-    value = Transfer = #transfer{
-        file_uuid = FileUuid,
-        space_id = SpaceId,
-        callback = Callback
-    }
+    value = Transfer = #transfer{callback = Callback}
 }) ->
-    FileGuid = file_id:pack_guid(FileUuid, SpaceId),
-    worker_pool:cast(?REPLICATION_CONTROLLERS_POOL, {
-        start_replication,
-        session_utils:root_session_id(),
-        TransferId,
-        FileGuid,
-        Callback,
-        transfer:is_migration(Transfer)
-    }).
+    worker_pool:cast(
+        ?REPLICATION_CONTROLLERS_POOL,
+        {start_replication, TransferId, Callback, transfer:is_migration(Transfer)}
+    ).
 
 
 %%--------------------------------------------------------------------

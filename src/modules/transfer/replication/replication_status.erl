@@ -119,6 +119,7 @@ handle_active(TransferId) ->
 -spec handle_aborting(transfer:id()) -> {ok, transfer:doc()} | error().
 handle_aborting(TransferId) ->
     OnSuccessfulUpdate = fun(Doc) ->
+        replication_traverse:cancel(Doc),
         replica_synchronizer:cancel(TransferId),
         transfer_links:add_ongoing(Doc)
     end,
