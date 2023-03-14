@@ -11,7 +11,7 @@
 %%% can be fetched and properly saved in datastore.
 %%% @end
 %%%--------------------------------------------------------------------
--module(space_upgrade_traverse).
+-module(file_links_reconciliation_traverse).
 -author("Michal Stanisz").
 
 -behavior(traverse_behaviour).
@@ -34,7 +34,7 @@
 -type id() :: od_space:id().
 
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
--define(TRAVERSE_BATCH_SIZE, op_worker:get_env(space_upgrade_traverse_batch_size, 40)).
+-define(TRAVERSE_BATCH_SIZE, op_worker:get_env(file_links_reconciliation_traverse_batch_size, 40)).
 
 -define(LISTING_ERROR_RETRY_INITIAL_SLEEP, timer:seconds(2)).
 -define(LISTING_ERROR_RETRY_MAX_SLEEP, timer:hours(2)).
@@ -53,7 +53,7 @@ start() ->
             _ ->
                 FileCtx = file_ctx:new_by_guid(fslogic_uuid:spaceid_to_space_dir_guid(SpaceId)),
                 try
-                    ?extract_ok(tree_traverse:run(?POOL_NAME, FileCtx, #{
+                    ok = ?extract_ok(tree_traverse:run(?POOL_NAME, FileCtx, #{
                         task_id => SpaceId,
                         batch_size => ?TRAVERSE_BATCH_SIZE
                     }))
@@ -61,7 +61,7 @@ start() ->
                     case datastore_runner:normalize_error(Reason) of
                         already_exists -> ok;
                         _ ->
-                            ?error_stacktrace("Unexpected error in space_upgrade_traverse:~n~p", [{Class, Reason}]),
+                            ?error_stacktrace("Unexpected error in file_links_reconciliation_traverse", Class, Reason),
                             erlang:apply(erlang, Class, [Reason])
                     end
                 end
@@ -72,9 +72,9 @@ start() ->
 -spec init_pool() -> ok  | no_return().
 init_pool() ->
     % Get pool limits from app.config
-    MasterJobsLimit = op_worker:get_env(space_upgrade_traverse_master_jobs_limit, 10),
-    SlaveJobsLimit = op_worker:get_env(space_upgrade_traverse_slave_jobs_limit, 20),
-    ParallelismLimit = op_worker:get_env(space_upgrade_traverse_parallelism_limit, 20),
+    MasterJobsLimit = op_worker:get_env(file_links_reconciliation_traverse_master_jobs_limit, 10),
+    SlaveJobsLimit = op_worker:get_env(file_links_reconciliation_traverse_slave_jobs_limit, 20),
+    ParallelismLimit = op_worker:get_env(file_links_reconciliation_traverse_parallelism_limit, 20),
     
     tree_traverse:init(?MODULE, MasterJobsLimit, SlaveJobsLimit, ParallelismLimit).
 
@@ -101,12 +101,12 @@ get_job(DocOrID) ->
 
 -spec task_started(id(), traverse:pool()) -> ok.
 task_started(TaskId, _PoolName) ->
-    ?notice("Upgrade traverse in space ~p started.", [TaskId]).
+    ?notice("File tree links reconciliation traverse started for space ~p.", [TaskId]).
 
 
 -spec task_finished(id(), traverse:pool()) -> ok.
 task_finished(TaskId, _PoolName) ->
-    ?notice("Upgrade traverse in space ~p finished.", [TaskId]).
+    ?notice("File tree links reconciliation traverse finished for space ~p.", [TaskId]).
 
 
 -spec update_job_progress(undefined | main_job | traverse:job_id(),
@@ -128,7 +128,7 @@ do_master_job_internal(Job, MasterJobArgs, Sleep) ->
     try
         tree_traverse:do_master_job(Job, MasterJobArgs)
     catch Class:Reason ->
-        ?error_stacktrace("Error when listing children in space_upgrade_traverse:~n~p", [{Class, Reason}]),
+        ?error_stacktrace("Error when listing children in file_links_reconciliation_traverse", Class, Reason),
         timer:sleep(Sleep),
         do_master_job_internal(Job, MasterJobArgs, min(Sleep * 2, ?LISTING_ERROR_RETRY_MAX_SLEEP))
     end.

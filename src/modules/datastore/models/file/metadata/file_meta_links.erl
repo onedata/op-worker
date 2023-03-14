@@ -469,7 +469,7 @@ sanitize_last_tree(Opts) ->
     sanitize_binary(last_tree, Opts).
 
 
--spec sanitize_boolean(atom(), list_opts()) -> boolean() | no_return().
+-spec sanitize_boolean(atom(), list_opts()) -> boolean() | undefined | no_return().
 sanitize_boolean(Key, Opts) ->
     case maps:get(Key, Opts, undefined) of
         Boolean when is_boolean(Boolean) -> Boolean;
