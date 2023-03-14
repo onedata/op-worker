@@ -1,0 +1,200 @@
+%%%--------------------------------------------------------------------
+%%% @author Bartosz Walkowicz
+%%% @copyright (C) 2023 ACK CYFRONET AGH
+%%% This software is released under the MIT license
+%%% cited in 'LICENSE.txt'.
+%%% @end
+%%%--------------------------------------------------------------------
+%%% @doc
+%%% This module contains functions responsible for traversing file tree and
+%%% transferring regular files.
+%%% @end
+%%%--------------------------------------------------------------------
+-module(transfer_traverse_worker).
+-author("Bartosz Walkowicz").
+
+-include("tree_traverse.hrl").
+-include_lib("ctool/include/logging.hrl").
+
+
+%% API
+-export([run_job/2]).
+
+-type traverse_info() :: #{
+    transfer_id := transfer:id(),
+    user_ctx := user_ctx:ctx(),
+    worker_module := module()
+}.
+-export_type([traverse_info/0]).
+
+
+-define(TRANSFER_RETRIES, 2).  %% TODO app.config??
+
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+
+-spec run_job(tree_traverse:slave_job(), transfer:id()) -> ok.
+run_job(#tree_traverse_slave{
+    file_ctx = FileCtx,
+    traverse_info = TraverseInfo
+}, TransferId) ->
+    case run_job(TransferId, TraverseInfo, FileCtx, ?TRANSFER_RETRIES) of
+        ok ->
+            ok;
+        {error, not_found} ->
+            % todo VFS-4218 currently we ignore this case
+            {ok, _} = transfer:increment_files_processed_counter(TransferId);
+        {error, cancelled} ->
+            {ok, _} = transfer:increment_files_processed_counter(TransferId);
+        {error, already_ended} ->
+            {ok, _} = transfer:increment_files_processed_counter(TransferId);
+        {error, _Reason} ->
+            {ok, _} = transfer:increment_files_failed_and_processed_counters(TransferId)
+    end.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec run_job(transfer:id(), traverse_info(), file_ctx:ctx(), non_neg_integer()) ->
+    ok | {error, term()}.
+run_job(TransferId, TraverseInfo, FileCtx0, RetriesLeft) ->
+    case process_result(TransferId, FileCtx0, RetriesLeft, transfer_data(
+        TransferId, TraverseInfo, FileCtx0
+    )) of
+        ok ->
+            ok;
+        {retry, FileCtx1} ->
+            run_job(TransferId, TraverseInfo, FileCtx1, RetriesLeft - 1);
+        {error, _} = Error ->
+            Error
+    end.
+
+
+%% @private
+-spec process_result(transfer:id(), file_ctx:ctx(), non_neg_integer(), term()) ->
+    ok | {retry, file_ctx:ctx()} | {error, term()}.
+process_result(_TransferId, _FileCtx, _RetriesLeft, ok) ->
+    ok;
+
+process_result(_TransferId, _FileCtx, _RetriesLeft, Error = {error, Reason}) when
+    Reason =:= cancelled;
+    Reason =:= already_ended
+->
+    Error;
+
+process_result(TransferId, _FileCtx, 0, Error = {error, not_found}) ->
+    ?error(
+        "Data transfer in scope of transfer ~p failed due to ~w~n"
+        "No retries left", [TransferId, Error]
+    ),
+    Error;
+
+process_result(TransferId, FileCtx, Retries, Error = {error, not_found}) ->
+    ?warning(
+        "Data transfer in scope of transfer ~p failed due to ~w~n"
+        "File transfer will be retried (attempts left: ~p)",
+        [TransferId, Error, Retries - 1]
+    ),
+    {retry, FileCtx};
+
+process_result(TransferId, FileCtx, 0, Error) ->
+    {Path, _FileCtx2} = file_ctx:get_canonical_path(FileCtx),
+
+    ?error(
+        "Transfer of file ~p in scope of transfer ~p failed~n"
+        "FilePath: ~ts~n"
+        "Error was: ~p~n"
+        "No retries left", [
+            file_ctx:get_logical_guid_const(FileCtx), TransferId,
+            Path,
+            Error
+        ]
+    ),
+    {error, retries_per_file_transfer_exceeded};
+
+process_result(TransferId, FileCtx, Retries, Error) ->
+    {Path, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
+
+    ?warning(
+        "Transfer of file ~p in scope of transfer ~p failed~n"
+        "FilePath: ~ts~n"
+        "Error was: ~p~n"
+        "File transfer will be retried (attempts left: ~p)", [
+            file_ctx:get_logical_guid_const(FileCtx), TransferId,
+            Path,
+            Error,
+            Retries - 1
+        ]
+    ),
+    {retry, FileCtx2}.
+
+
+%%-------------------------------------------------------------------
+%% @private
+%% @doc
+%% Applies permissions check and if passed transfers data.
+%% In case of error checks if transfer should be retried and if so returns
+%% retry request and caught error otherwise.
+%% @end
+%%-------------------------------------------------------------------
+-spec transfer_data(transfer:id(), traverse_info(), file_ctx:ctx()) ->
+    ok | {error, term()}.
+transfer_data(TransferId, TraverseInfo, FileCtx0) ->
+    UserCtx = maps:get(user_ctx, TraverseInfo),
+    WorkerModule = maps:get(worker_module, TraverseInfo),
+    AccessDefinitions = WorkerModule:required_permissions(),
+
+    try
+        assert_transfer_is_ongoing(TransferId),
+
+        assert_file_exists(FileCtx0),
+        FileCtx1 = fslogic_authz:ensure_authorized(UserCtx, FileCtx0, AccessDefinitions),
+
+        case fslogic_file_id:is_symlink_uuid(file_ctx:get_logical_uuid_const(FileCtx1)) of
+            true -> ok;
+            false -> WorkerModule:transfer_regular_file(FileCtx1, TraverseInfo)
+        end
+    of
+        ok ->
+            ok;
+        {error, _Reason} = Error ->
+            Error
+    catch
+        throw:{error, _} = Error ->
+            Error;
+        throw:Reason ->
+            {error, Reason};
+        error:{badmatch, Error = {error, not_found}} ->
+            Error;
+        Class:Reason:Stacktrace ->
+            ?error_exception(
+                "Unexpected error during transfer ~p", [TransferId],
+                Class, Reason, Stacktrace
+            ),
+            {Class, Reason}
+    end.
+
+
+%% @private
+-spec assert_transfer_is_ongoing(transfer:id()) -> ok | no_return().
+assert_transfer_is_ongoing(TransferId) ->
+    case transfer:is_ongoing(TransferId) of
+        true -> ok;
+        false -> throw({error, already_ended})
+    end.
+
+
+%% @private
+-spec assert_file_exists(file_ctx:ctx()) -> ok | no_return().
+assert_file_exists(FileCtx) ->
+    case file_ctx:file_exists_const(FileCtx) of
+        true -> ok;
+        false -> throw(not_found)
+    end.

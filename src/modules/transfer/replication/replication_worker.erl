@@ -96,7 +96,7 @@ enqueue_data_transfer(FileCtx, TransferJobCtx = #transfer_job_ctx{transfer_id = 
 %% {@link transfer_worker_behaviour} callback transfer_regular_file/2.
 %% @end
 %%--------------------------------------------------------------------
--spec transfer_regular_file(file_ctx:ctx(), transfer_file_tree_traverse:traverse_info()) ->
+-spec transfer_regular_file(file_ctx:ctx(), transfer_traverse_worker:traverse_info()) ->
     ok | {error, term()}.
 transfer_regular_file(FileCtx, #{
     transfer_id := TransferId,
