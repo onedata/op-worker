@@ -39,7 +39,8 @@
     echo_and_delete_file_loop_test/1,
     echo_and_delete_file_loop_test_base/1,
     distributed_delete_test/1,
-    remote_driver_test/1,
+    remote_driver_get_test/1,
+    remote_driver_fold_test/1,
     rtransfer_fetch_test/1,
     rtransfer_cancel_for_session_test/1,
     remove_file_during_transfers_test/1,
@@ -66,7 +67,8 @@
     create_and_delete_file_loop_test,
     echo_and_delete_file_loop_test,
     distributed_delete_test,
-    remote_driver_test,
+    remote_driver_get_test,
+    remote_driver_fold_test,
     rtransfer_fetch_test,
     rtransfer_cancel_for_session_test,
     % TODO VFS-6618 Fix handling of file being removed during transfer and uncomment this test
@@ -454,10 +456,10 @@ echo_and_delete_file_loop_test_base(Config) ->
     IterationsNum = ?config(iterations, Config),
     multi_provider_file_ops_test_base:echo_and_delete_file_loop_test_base(Config, IterationsNum, <<"user1">>).
 
-remote_driver_test(Config) ->
-    ct:print("remote_driver_test - get_links"),
-    remote_driver_test_base(Config, get_links),
-    ct:print("remote_driver_test - fold_links"),
+remote_driver_get_test(Config) ->
+    remote_driver_test_base(Config, get_links).
+
+remote_driver_fold_test(Config) ->
     remote_driver_test_base(Config, fold_links).
 
 remote_driver_test_base(Config, TestFun) ->
@@ -1338,7 +1340,9 @@ init_per_testcase(truncate_on_storage_does_not_block_synchronizer = Case, Config
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Workers, storage_driver),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
-init_per_testcase(remote_driver_test = Case, Config) ->
+init_per_testcase(Case, Config) when
+    Case =:= remote_driver_get_test orelse Case =:= remote_driver_fold_test
+->
     Workers = ?config(op_worker_nodes, Config),
     ?assertEqual(ok, test_utils:mock_new(Workers, links_tree)),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
@@ -1377,7 +1381,9 @@ end_per_testcase(truncate_on_storage_does_not_block_synchronizer = Case, Config)
     Workers = ?config(op_worker_nodes, Config),
     test_utils:mock_unload(Workers, storage_driver),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
-end_per_testcase(remote_driver_test = Case, Config) ->
+end_per_testcase(Case, Config) when
+    Case =:= remote_driver_get_test orelse Case =:= remote_driver_fold_test
+->
     Workers = ?config(op_worker_nodes, Config),
     ?assertEqual(ok, test_utils:mock_unload(Workers, links_tree)),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
