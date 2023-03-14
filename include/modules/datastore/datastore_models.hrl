@@ -455,8 +455,8 @@
     stats = archive_stats:empty() :: archive_stats:record(),
 
     % Related archives
-    % NOTE: all archive relations are optional and depend on options provided in config. 
-    % Additionally related_aip and related_dip cannot be simultaneously set (not undefined), 
+    % NOTE: all archive relations are optional and depend on options provided in config.
+    % Additionally related_aip and related_dip cannot be simultaneously set (not undefined),
     % as one archive cannot be AIP and DIP at the same time.
 
     % if archive has been created directly it has no parent archive
@@ -465,7 +465,7 @@
     % id of archive that current one is based on if it is incremental
     base_archive_id :: undefined | archive:id(),
 
-    % Relations between dissemination information package (DIP) 
+    % Relations between dissemination information package (DIP)
     % and archival information package (AIP) archives.
     related_aip = undefined :: undefined | archive:id(),
     related_dip = undefined :: undefined | archive:id()
@@ -1036,7 +1036,7 @@
     resolved_root_uuids :: [file_meta:uuid()],
     % relative path of the processed file to the traverse root
     relative_path = <<>> :: file_meta:path(),
-    % Set of encountered files on the path from the traverse root to the currently processed one. 
+    % Set of encountered files on the path from the traverse root to the currently processed one.
     % It is required to efficiently prevent loops when resolving symlinks
     encountered_files :: tree_traverse:encountered_files_set()
 }).
@@ -1306,6 +1306,11 @@
     size :: non_neg_integer(),
     etag :: binary(),
     last_modified :: non_neg_integer()
+}).
+
+%% Model that holds information whether file_links_reconciliation_traverse is finished.
+-record(file_links_reconciliation_traverse, {
+    is_finished = false :: boolean()
 }).
 
 -endif.
