@@ -16,6 +16,7 @@
 -behavior(traverse_behaviour).
 
 -include("tree_traverse.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 
 %% Traverse behaviour callbacks
@@ -60,21 +61,25 @@ update_job_progress(Id, Job, Pool, TransferId, Status) ->
     tree_traverse:update_job_progress(Id, Job, Pool, TransferId, Status, ?MODULE).
 
 
--spec do_master_job(
-    tree_traverse:master_job() | tree_traverse:slave_job(),
-    traverse:master_job_extended_args()
-) ->
+-spec do_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()}.
-do_master_job(Job = #tree_traverse_slave{}, #{task_id := TransferId}) ->
-    % Handle transfer root file being regular file
-    transfer:increment_files_to_process_counter(TransferId, 1),
-    do_slave_job(Job, TransferId);
-do_master_job(Job = #tree_traverse{}, MasterJobArgs = #{task_id := TransferId}) ->
+do_master_job(
+    Job0 = #tree_traverse{file_ctx = FileCtx0},
+    MasterJobArgs = #{task_id := TransferId}
+) ->
+    Job1 = case file_ctx:get_effective_type(FileCtx0) of
+        {?REGULAR_FILE_TYPE, FileCtx1} ->
+            % Handle transfer root file being regular file
+            transfer:increment_files_to_process_counter(TransferId, 1),
+            Job0#tree_traverse{file_ctx = FileCtx1};
+        _ ->
+            Job0
+    end,
     BatchProcessingPreHook = fun(SlaveJobs, _MasterJobs, _ListingToken, _SubtreeProcessingStatus) ->
         transfer:increment_files_to_process_counter(TransferId, length(SlaveJobs)),
         ok
     end,
-    tree_traverse:do_master_job(Job, MasterJobArgs, BatchProcessingPreHook).
+    tree_traverse:do_master_job(Job1, MasterJobArgs, BatchProcessingPreHook).
 
 
 -spec do_slave_job(tree_traverse:slave_job(), transfer:id()) -> ok.

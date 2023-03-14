@@ -96,12 +96,31 @@ enqueue_data_transfer(FileCtx, TransferJobCtx = #transfer_job_ctx{transfer_id = 
 %% {@link transfer_worker_behaviour} callback transfer_regular_file/2.
 %% @end
 %%--------------------------------------------------------------------
--spec transfer_regular_file(file_ctx:ctx(), transfer_traverse_worker:traverse_info()) ->
+-spec transfer_regular_file(
+    file_ctx:ctx(),
+    gen_transfer_worker:job_ctx() | transfer_traverse_worker:traverse_info()
+) ->
     ok | {error, term()}.
+transfer_regular_file(FileCtx, #transfer_job_ctx{
+    transfer_id = TransferId,
+    user_ctx = UserCtx
+}) ->
+    transfer_regular_file(TransferId, UserCtx, FileCtx);
+
 transfer_regular_file(FileCtx, #{
     transfer_id := TransferId,
     user_ctx := UserCtx
 }) ->
+    transfer_regular_file(TransferId, UserCtx, FileCtx).
+
+%%%===================================================================
+%%% gen_transfer_worker callbacks
+%%%===================================================================
+
+%% @private
+-spec transfer_regular_file(transfer:id(), user_ctx:ctx(), file_ctx:ctx()) ->
+    ok | {error, term()}.
+transfer_regular_file(TransferId, UserCtx, FileCtx) ->
     #fuse_response{status = #status{code = ?OK}} = sync_req:synchronize_block(
         UserCtx, FileCtx, undefined, false, TransferId, ?DEFAULT_REPLICATION_PRIORITY
     ),
