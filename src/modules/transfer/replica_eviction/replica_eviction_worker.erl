@@ -40,6 +40,7 @@
 %%% API
 %%%===================================================================
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% @equiv enqueue_data_transfer(FileCtx, TransferJobCtx, undefined, undefined).
@@ -48,6 +49,7 @@
 -spec enqueue_data_transfer(file_ctx:ctx(), gen_transfer_worker:job_ctx()) -> ok.
 enqueue_data_transfer(FileCtx, TransferJobCtx) ->
     enqueue_data_transfer(FileCtx, TransferJobCtx, undefined, undefined).
+
 
 %%-------------------------------------------------------------------
 %% @doc
@@ -79,9 +81,11 @@ process_replica_deletion_result(Error, SpaceId, FileUuid, TransferId) ->
     {ok, _} = transfer:increment_files_failed_and_processed_counters(TransferId),
     ok.
 
+
 %%%===================================================================
 %%% gen_transfer_worker callbacks
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -93,6 +97,7 @@ required_permissions() ->
     % TODO VFS-10259 use offline session in transfer
     [?TRAVERSE_ANCESTORS].
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link transfer_worker_behaviour} callback max_transfer_retries/0.
@@ -101,6 +106,7 @@ required_permissions() ->
 -spec max_transfer_retries() -> non_neg_integer().
 max_transfer_retries() ->
     op_worker:get_env(max_eviction_retries_per_file_replica, 5).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -124,6 +130,7 @@ enqueue_data_transfer(FileCtx, TransferJobCtx = #transfer_job_ctx{transfer_id = 
     end,
     ok.
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link transfer_worker_behaviour} callback transfer_regular_file/2.
@@ -133,29 +140,22 @@ enqueue_data_transfer(FileCtx, TransferJobCtx = #transfer_job_ctx{transfer_id = 
 %% providers who have given file replicated.
 %% @end
 %%--------------------------------------------------------------------
--spec transfer_regular_file(file_ctx:ctx(), gen_transfer_worker:job_ctx()) -> ok | {error, term()}.
-transfer_regular_file(FileCtx, TransferJobCtx = #transfer_job_ctx{supporting_provider = undefined}) ->
-    SpaceId = file_ctx:get_space_id_const(FileCtx),
-    TransferId = TransferJobCtx#transfer_job_ctx.transfer_id,
-    case replica_deletion_master:find_supporter_and_prepare_deletion_request(FileCtx) of
-        undefined ->
-            transfer:increment_files_processed_counter(TransferId);
-        DeletionRequest ->
-            replica_deletion_master:request_deletion(SpaceId, DeletionRequest, TransferId, ?EVICTION_JOB)
-    end,
-    ok;
+-spec transfer_regular_file(
+    file_ctx:ctx(),
+    gen_transfer_worker:job_ctx() | transfer_traverse_worker:traverse_info()
+) ->
+    ok | {error, term()}.
 transfer_regular_file(FileCtx, #transfer_job_ctx{
     transfer_id = TransferId,
-    supporting_provider = SupportingProvider
+    supporting_provider = SupportingProviderId
 }) ->
-    {LocalFileLocationDoc, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx),
-    FileUuid = file_ctx:get_logical_uuid_const(FileCtx2),
-    SpaceId = file_ctx:get_space_id_const(FileCtx2),
-    {Size, _FileCtx3} = file_ctx:get_file_size(FileCtx2),
-    VV = file_location:get_version_vector(LocalFileLocationDoc),
-    Blocks = [#file_block{offset = 0, size = Size}],
-    DeletionRequest = replica_deletion_master:prepare_deletion_request(FileUuid, SupportingProvider, Blocks, VV),
-    replica_deletion_master:request_deletion(SpaceId, DeletionRequest, TransferId, ?EVICTION_JOB).
+    transfer_regular_file(TransferId, FileCtx, SupportingProviderId);
+
+transfer_regular_file(FileCtx, #{
+    transfer_id := TransferId,
+    supporting_provider := SupportingProviderId
+}) ->
+    transfer_regular_file(TransferId, FileCtx, SupportingProviderId).
 
 
 -spec is_migration(gen_transfer_worker:job_ctx()) -> boolean().
@@ -163,3 +163,32 @@ is_migration(#transfer_job_ctx{supporting_provider = undefined}) ->
     false;
 is_migration(#transfer_job_ctx{supporting_provider = SupportingProvider}) when is_binary(SupportingProvider) ->
     true.
+
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+
+%% @private
+-spec transfer_regular_file(transfer:id(), file_ctx:ctx(), undefined | od_provider:id()) ->
+    ok | {error, term()}.
+transfer_regular_file(TransferId, FileCtx, undefined) ->
+    SpaceId = file_ctx:get_space_id_const(FileCtx),
+    case replica_deletion_master:find_supporter_and_prepare_deletion_request(FileCtx) of
+        undefined ->
+            transfer:increment_files_processed_counter(TransferId);
+        DeletionRequest ->
+            replica_deletion_master:request_deletion(SpaceId, DeletionRequest, TransferId, ?EVICTION_JOB)
+    end,
+    ok;
+
+transfer_regular_file(TransferId, FileCtx, SupportingProviderId) ->
+    {LocalFileLocationDoc, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx),
+    FileUuid = file_ctx:get_logical_uuid_const(FileCtx2),
+    SpaceId = file_ctx:get_space_id_const(FileCtx2),
+    {Size, _FileCtx3} = file_ctx:get_file_size(FileCtx2),
+    VV = file_location:get_version_vector(LocalFileLocationDoc),
+    Blocks = [#file_block{offset = 0, size = Size}],
+    DeletionRequest = replica_deletion_master:prepare_deletion_request(FileUuid, SupportingProviderId, Blocks, VV),
+    replica_deletion_master:request_deletion(SpaceId, DeletionRequest, TransferId, ?EVICTION_JOB).

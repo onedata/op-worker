@@ -39,6 +39,7 @@
 %%% API
 %%%===================================================================
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% @equiv enqueue_data_transfer(FileCtx, TransferParams, undefined, undefined).
@@ -48,9 +49,11 @@
 enqueue_data_transfer(FileCtx, TransferParams) ->
     enqueue_data_transfer(FileCtx, TransferParams, undefined, undefined).
 
+
 %%%===================================================================
 %%% gen_transfer_worker callbacks
 %%%===================================================================
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -62,6 +65,7 @@ required_permissions() ->
     % TODO VFS-10259 use offline session in transfer
     [?TRAVERSE_ANCESTORS].
 
+
 %%--------------------------------------------------------------------
 %% @doc
 %% {@link transfer_worker_behaviour} callback max_transfer_retries/0.
@@ -70,6 +74,7 @@ required_permissions() ->
 -spec max_transfer_retries() -> non_neg_integer().
 max_transfer_retries() ->
     op_worker:get_env(max_file_replication_retries_per_file, 5).
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -90,6 +95,7 @@ enqueue_data_transfer(FileCtx, TransferJobCtx = #transfer_job_ctx{transfer_id = 
             ))
     end,
     ok.
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -113,9 +119,11 @@ transfer_regular_file(FileCtx, #{
 }) ->
     transfer_regular_file(TransferId, UserCtx, FileCtx).
 
+
 %%%===================================================================
-%%% gen_transfer_worker callbacks
+%%% Internal functions
 %%%===================================================================
+
 
 %% @private
 -spec transfer_regular_file(transfer:id(), user_ctx:ctx(), file_ctx:ctx()) ->

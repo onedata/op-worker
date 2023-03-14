@@ -122,7 +122,8 @@ handle_active(TransferId) ->
 
 -spec handle_aborting(transfer:id()) -> {ok, transfer:doc()} | error().
 handle_aborting(TransferId) ->
-    OnSuccessfulUpdate = fun(#document{value = #transfer{space_id = SpaceId}}) ->
+    OnSuccessfulUpdate = fun(Doc = #document{value = #transfer{space_id = SpaceId}}) ->
+        replica_eviction_traverse:cancel(Doc),
         replica_deletion_master:cancel_request(SpaceId, TransferId, ?EVICTION_JOB)
     end,
 

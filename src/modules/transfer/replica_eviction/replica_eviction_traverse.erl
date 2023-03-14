@@ -6,10 +6,10 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module manages pools of processes responsible for replication.
+%%% This module manages pools of processes responsible for replica eviction.
 %%% @end
 %%%--------------------------------------------------------------------
--module(replication_traverse).
+-module(replica_eviction_traverse).
 -author("Bartosz Walkowicz").
 
 -include("modules/datastore/transfer.hrl").
@@ -18,7 +18,7 @@
 
 %% API
 -export([init_pool/0, stop_pool/0, pool_name/0]).
--export([start/1, cancel/1]).
+-export([start/2, cancel/1]).
 
 
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
@@ -33,8 +33,8 @@
 -spec init_pool() -> ok  | no_return().
 init_pool() ->
     % Get pool limits from app.config
-    MasterJobsLimit = op_worker:get_env(replication_master_jobs_limit, 10),
-    SlaveJobsLimit = op_worker:get_env(replication_slave_jobs_limit, 20),
+    MasterJobsLimit = op_worker:get_env(replica_eviction_master_jobs_limit, 10),
+    SlaveJobsLimit = op_worker:get_env(replica_eviction_slave_jobs_limit, 20),
 
     % set parallelism limit equal to master jobs limit
     tree_traverse:init(?MODULE, MasterJobsLimit, SlaveJobsLimit, MasterJobsLimit).
@@ -50,11 +50,13 @@ pool_name() ->
     ?POOL_NAME.
 
 
--spec start(transfer:doc()) -> ok.
-start(TransferDoc = #document{value = Transfer}) ->
+-spec start(undefined | od_provider:id(), transfer:doc()) -> ok.
+start(SupportingProviderId, TransferDoc = #document{value = Transfer}) ->
     case transfer:data_source_type(Transfer) of
-        file -> start_replication_file_tree_traverse(TransferDoc);
-        view -> start_replication_view_traverse(TransferDoc)
+        file ->
+            start_replica_eviction_file_tree_traverse(SupportingProviderId, TransferDoc);
+        view ->
+            start_replica_eviction_view_traverse(SupportingProviderId, TransferDoc)
     end.
 
 
@@ -72,11 +74,18 @@ cancel(#document{key = TransferId, value = Transfer}) ->
 
 
 %% @private
--spec start_replication_file_tree_traverse(transfer:doc()) -> ok.
-start_replication_file_tree_traverse(#document{key = TransferId, value = #transfer{
-    file_uuid = FileUuid,
-    space_id = SpaceId
-}}) ->
+-spec start_replica_eviction_file_tree_traverse(
+    undefined | od_provider:id(),
+    transfer:doc()
+) ->
+    ok.
+start_replica_eviction_file_tree_traverse(SupportingProviderId, #document{
+    key = TransferId,
+    value = #transfer{
+        file_uuid = FileUuid,
+        space_id = SpaceId
+    }
+}) ->
     % TODO VFS-7443 - maybe use referenced guid?
     RootFileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
 
@@ -88,24 +97,30 @@ start_replication_file_tree_traverse(#document{key = TransferId, value = #transf
         traverse_info => #{
             transfer_id => TransferId,
             user_ctx => user_ctx:new(?ROOT_SESS_ID),
-            worker_module => replication_worker
+            worker_module => replica_eviction_worker,
+            supporting_provider => SupportingProviderId
         }
     }),
     ok.
 
 
 %% @private
--spec start_replication_view_traverse(transfer:doc()) -> ok.
-start_replication_view_traverse(TransferDoc = #document{key = TransferId, value = #transfer{
-    file_uuid = FileUuid,
-    space_id = SpaceId
-}}) ->
+-spec start_replica_eviction_view_traverse(undefined | od_provider:id(), transfer:doc()) ->
+    ok.
+start_replica_eviction_view_traverse(SupportingProviderId, TransferDoc = #document{
+    key = TransferId,
+    value = #transfer{
+        file_uuid = FileUuid,
+        space_id = SpaceId
+    }
+}) ->
     % TODO VFS-7443 - maybe use referenced guid?
     RootFileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
 
-    replication_worker:enqueue_data_transfer(RootFileCtx, #transfer_job_ctx{
+    replica_eviction_worker:enqueue_data_transfer(RootFileCtx, #transfer_job_ctx{
         transfer_id = TransferId,
         user_ctx = user_ctx:new(?ROOT_SESS_ID),
-        job = #transfer_traverse_job{iterator = transfer_iterator:new(TransferDoc)}
+        job = #transfer_traverse_job{iterator = transfer_iterator:new(TransferDoc)},
+        supporting_provider = SupportingProviderId
     }),
     ok.

@@ -23,7 +23,8 @@
 -type traverse_info() :: #{
     transfer_id := transfer:id(),
     user_ctx := user_ctx:ctx(),
-    worker_module := module()
+    worker_module := module(),
+    supporting_provider => undefined | od_provider:id()
 }.
 -export_type([traverse_info/0]).
 
