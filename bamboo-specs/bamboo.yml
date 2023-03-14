@@ -42,7 +42,7 @@ dependencies:
   block-strategy: none
   plans: [ ]
 other:
-  concurrent-build-plugin: system-default
+  concurrent-build-plugin: 1
   all-other-apps:
     custom:
       com.atlassian.bamboo.plugin.hungbuildkiller.stopped.enabled: 'true'
