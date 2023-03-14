@@ -185,7 +185,7 @@ init(_Args) ->
     autocleaning_view_traverse:init_pool(),
     tree_deletion_traverse:init_pool(),
     bulk_download_traverse:init_pool(),
-    space_upgrade_traverse:init_pool(),
+    file_links_reconciliation_traverse:init_pool(),
     clproto_serializer:load_msg_defs(),
     archivisation_traverse:init_pool(),
 
@@ -284,7 +284,7 @@ cleanup() ->
     replica_deletion_master:stop_workers_pool(),
     tree_deletion_traverse:stop_pool(),
     bulk_download_traverse:stop_pool(),
-    space_upgrade_traverse:stop_pool(),
+    file_links_reconciliation_traverse:stop_pool(),
     replica_synchronizer:terminate_all(),
     archivisation_traverse:stop_pool(),
     permissions_cache:terminate(),

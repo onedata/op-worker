@@ -30,7 +30,8 @@
 ]).
 -export([
     upgrade_from_20_02_1_space_strategies/1,
-    upgrade_from_20_02_1_storage_sync_monitoring/1
+    upgrade_from_20_02_1_storage_sync_monitoring/1,
+    file_links_reconciliation_traverse_test/1
 ]).
 
 -define(SPACE1_ID, <<"space_id1">>).
@@ -42,7 +43,8 @@
 
 all() -> ?ALL([
     upgrade_from_20_02_1_space_strategies,
-    upgrade_from_20_02_1_storage_sync_monitoring
+    upgrade_from_20_02_1_storage_sync_monitoring,
+    file_links_reconciliation_traverse_test
 ]).
 
 %%%===================================================================
@@ -366,6 +368,13 @@ upgrade_from_20_02_1_storage_sync_monitoring(Config) ->
     ?assertMatch({ok, SIMDoc5}, rpc:call(Worker, storage_import_monitoring, get, [SpaceId5])).
 
 
+file_links_reconciliation_traverse_test(Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    ?assertEqual({ok, 5}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [4])),
+    
+    test_utils:mock_assert_num_calls_sum(Worker, file_links_reconciliation_traverse, start, [], 1).
+
+
 %%%===================================================================
 %%% Setup/teardown functions
 %%%===================================================================
@@ -388,6 +397,13 @@ init_per_testcase(Case = upgrade_from_20_02_1_space_strategies, Config) ->
 
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
+init_per_testcase(Case = file_links_reconciliation_traverse_test, Config) ->
+    [Worker | _] = ?config(op_worker_nodes, Config),
+    
+    test_utils:mock_new(Worker, file_links_reconciliation_traverse, [passthrough]),
+    test_utils:mock_expect(Worker, file_links_reconciliation_traverse, start, fun() -> ok end),
+    init_per_testcase(?DEFAULT_CASE(Case), Config);
+
 init_per_testcase(_Case, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     test_utils:mock_new(Worker, gs_channel_service, [passthrough]),
@@ -396,7 +412,7 @@ init_per_testcase(_Case, Config) ->
 
 end_per_testcase(_, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(Worker, [storage_logic, gs_channel_service]),
+    test_utils:mock_unload(Worker, [storage_logic, gs_channel_service, file_links_reconciliation_traverse]),
     ok.
 
 
