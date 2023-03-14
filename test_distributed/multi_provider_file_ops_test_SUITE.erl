@@ -475,7 +475,7 @@ remote_driver_test_base(Config, TestFun) ->
     Ctx1 = rpc:call(Worker1, datastore_model_default, get_ctx, [file_meta]),
     Ctx2 = rpc:call(Worker2, datastore_model_default, get_ctx, [file_meta]),
     #{memory_driver_ctx := MemoryCtx} = datastore_model_default:set_defaults(
-        datastore_model:get_unique_key(file_meta, Key), Ctx1),
+        datastore_model:get_unique_key(Ctx1, Key), Ctx1),
 
     Master = self(),
     test_utils:mock_expect(Workers1, links_tree, update_node, fun(NodeId, Node, State) ->
