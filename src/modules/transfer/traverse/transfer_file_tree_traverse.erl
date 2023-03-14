@@ -73,6 +73,8 @@ update_job_progress(Id, Job, Pool, TransferId, Status) ->
 -spec do_master_job(tree_traverse:master_job() | tree_traverse:slave_job(), traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()}.
 do_master_job(Job = #tree_traverse_slave{}, #{task_id := TransferId}) ->
+    % Transfer root file is regular file
+    transfer:increment_files_to_process_counter(TransferId, 1),
     do_slave_job(Job, TransferId);
 do_master_job(Job = #tree_traverse{}, MasterJobArgs = #{task_id := TransferId}) ->
     BatchProcessingPreHook = fun(SlaveJobs, _MasterJobs, _ListingToken, _SubtreeProcessingStatus) ->
