@@ -151,9 +151,15 @@ delete_remote(ParentUuid, Scope, TreeId, FileName, Revision) ->
 list(ParentUuid, Opts) ->
     InternalOpts = sanitize_opts(Opts),
     ExpectedSize = maps:get(size, InternalOpts),
-    Ctx = ?CTX#{
-        handle_interrupted_call => maps:get(handle_interrupted_call, InternalOpts, true)
-    },
+    Ctx = case maps:get(handle_interrupted_call, InternalOpts, true) of
+        true ->
+            ?CTX;
+        false ->
+            ?CTX#{
+                handle_interrupted_call => false,
+                writer_interrupted_call_retries => 0
+            }
+    end,
     Result = fold(Ctx, ParentUuid, fun(Link = #link{name = Name}, {ListAcc, ListedLinksCount}) ->
         case not (file_meta:is_hidden(Name) orelse file_meta:is_deletion_link(Name)) of
             true -> {ok, {[Link | ListAcc], ListedLinksCount + 1}};

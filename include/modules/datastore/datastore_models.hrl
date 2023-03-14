@@ -966,4 +966,9 @@
     all_batches_listed = false :: boolean()
 }).
 
+%% Model that holds information whether file_links_reconciliation_traverse is finished.
+-record(file_links_reconciliation_traverse, {
+    is_finished = false :: boolean()
+}).
+
 -endif.

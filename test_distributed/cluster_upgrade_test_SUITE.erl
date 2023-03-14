@@ -444,7 +444,9 @@ file_links_reconciliation_traverse_test(Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     ?assertEqual({ok, 5}, rpc:call(Worker, node_manager_plugin, upgrade_cluster, [4])),
     
-    test_utils:mock_assert_num_calls_sum(Worker, file_links_reconciliation_traverse, start, [], 1).
+    test_utils:mock_assert_num_calls_sum(Worker, file_links_reconciliation_traverse, start, [], 1),
+    
+    ?assertEqual(ok, rpc:call(Worker, file_links_reconciliation_traverse, start, [])).
 
 
 %%%===================================================================
@@ -491,7 +493,7 @@ init_per_testcase(Case = file_links_reconciliation_traverse_test, Config) ->
     [Worker | _] = ?config(op_worker_nodes, Config),
     
     test_utils:mock_new(Worker, file_links_reconciliation_traverse, [passthrough]),
-    test_utils:mock_expect(Worker, file_links_reconciliation_traverse, start, fun() -> ok end),
+    test_utils:mock_expect(Worker, file_links_reconciliation_traverse, start, fun() -> meck:passthrough([]) end),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
 init_per_testcase(_Case, Config) ->

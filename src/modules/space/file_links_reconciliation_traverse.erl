@@ -31,13 +31,25 @@
 -export([do_master_job/2, do_slave_job/2, task_started/2, task_finished/2,
     get_job/1, update_job_progress/5]).
 
+%% datastore_model callbacks
+-export([get_ctx/0, get_record_struct/1, get_record_version/0]).
+
 -type id() :: od_space:id().
 
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
 -define(TRAVERSE_BATCH_SIZE, op_worker:get_env(file_links_reconciliation_traverse_batch_size, 40)).
+-define(MASTER_JOBS_LIMIT, op_worker:get_env(file_links_reconciliation_traverse_master_jobs_limit, 10)).
+-define(SLAVE_JOBS_LIMIT, op_worker:get_env(file_links_reconciliation_traverse_slave_jobs_limit, 20)).
+-define(PARALLELISM_LIMIT, op_worker:get_env(file_links_reconciliation_traverse_parallelism_limit, 20)).
 
 -define(LISTING_ERROR_RETRY_INITIAL_SLEEP, timer:seconds(2)).
 -define(LISTING_ERROR_RETRY_MAX_SLEEP, timer:hours(2)).
+
+-define(STATUS_DOCUMENT_KEY, <<"file_links_reconciliation_traverse_doc">>).
+
+-define(CTX, #{
+    model => ?MODULE
+}).
 
 %%%===================================================================
 %%% API
@@ -60,6 +72,7 @@ start() ->
                 catch Class:Reason ->
                     case datastore_runner:normalize_error(Reason) of
                         already_exists -> ok;
+                        [{error, already_exists}] -> ok;
                         _ ->
                             ?error_stacktrace("Unexpected error in file_links_reconciliation_traverse", Class, Reason),
                             erlang:apply(erlang, Class, [Reason])
@@ -71,12 +84,12 @@ start() ->
 
 -spec init_pool() -> ok  | no_return().
 init_pool() ->
-    % Get pool limits from app.config
-    MasterJobsLimit = op_worker:get_env(file_links_reconciliation_traverse_master_jobs_limit, 10),
-    SlaveJobsLimit = op_worker:get_env(file_links_reconciliation_traverse_slave_jobs_limit, 20),
-    ParallelismLimit = op_worker:get_env(file_links_reconciliation_traverse_parallelism_limit, 20),
-    
-    tree_traverse:init(?MODULE, MasterJobsLimit, SlaveJobsLimit, ParallelismLimit).
+    case datastore_model:get(?CTX, ?STATUS_DOCUMENT_KEY) of
+        {ok, _} ->
+            ok;
+        {error, not_found} ->
+            tree_traverse:init(?MODULE, ?MASTER_JOBS_LIMIT, ?SLAVE_JOBS_LIMIT, ?PARALLELISM_LIMIT)
+    end.
 
 
 -spec stop_pool() -> ok.
@@ -106,6 +119,10 @@ task_started(TaskId, _PoolName) ->
 
 -spec task_finished(id(), traverse:pool()) -> ok.
 task_finished(TaskId, _PoolName) ->
+    ok = ?extract_ok(datastore_model:save(?CTX, #document{
+        key = ?STATUS_DOCUMENT_KEY,
+        value = #file_links_reconciliation_traverse{is_finished = true}
+    })),
     ?notice("File tree links reconciliation traverse finished for space ~p.", [TaskId]).
 
 
@@ -137,3 +154,25 @@ do_master_job_internal(Job, MasterJobArgs, Sleep) ->
 -spec do_slave_job(tree_traverse:slave_job(), id()) -> ok.
 do_slave_job(#tree_traverse_slave{}, _TaskId) ->
     ok.
+
+
+%%%===================================================================
+%%% Datastore model callbacks
+%%%===================================================================
+
+-spec get_ctx() -> datastore:ctx().
+get_ctx() ->
+    ?CTX.
+
+
+-spec get_record_version() -> datastore_model:record_version().
+get_record_version() ->
+    1.
+
+
+-spec get_record_struct(datastore_model:record_version()) ->
+    datastore_model:record_struct().
+get_record_struct(1) ->
+    {record, [
+        {is_finished, boolean}
+    ]}.
