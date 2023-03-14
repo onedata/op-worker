@@ -87,6 +87,9 @@
     child_dirs_job_generation_policy => child_dirs_job_generation_policy(), 
     % Flag determining whether optimization will be used for iterating over files list (see file_listing for more details).
     tune_for_large_continuous_listing => boolean(),
+    % Flag determining whether interrupted call errors should be handled internally in datastore.
+    % Internal handling results in omission of missing file subtrees.
+    handle_interrupted_call => boolean(),
     % flag determining whether children master jobs are scheduled before slave jobs are processed
     children_master_jobs_mode => children_master_jobs_mode(),
     % With this option enabled, tree_traverse_status will be
@@ -200,7 +203,8 @@ run(Pool, FileCtx, UserId, Opts) ->
     Job = #tree_traverse{
         file_ctx = FileCtx3,
         user_id = UserId,
-        tune_for_large_continuous_listing = maps:get(tune_for_large_continuous_listing , Opts, true),
+        tune_for_large_continuous_listing = maps:get(tune_for_large_continuous_listing, Opts, true),
+        handle_interrupted_call = maps:get(handle_interrupted_call, Opts, true),
         pagination_token = undefined,
         child_dirs_job_generation_policy = ChildDirsJobGenerationPolicy,
         children_master_jobs_mode = ChildrenMasterJobsMode,
@@ -446,14 +450,18 @@ list_children(#tree_traverse{
     file_ctx = FileCtx,
     pagination_token = PaginationToken,
     tune_for_large_continuous_listing = TuneForLargeContinuousListing,
-    batch_size = BatchSize
+    batch_size = BatchSize,
+    handle_interrupted_call = HandleInterruptedCall
 }, UserCtx) ->
     BaseListingOpts = case PaginationToken of
         undefined -> #{tune_for_large_continuous_listing => TuneForLargeContinuousListing};
         _ -> #{pagination_token => PaginationToken}
     end,
     try
-        {ok, dir_req:get_children_ctxs(UserCtx, FileCtx, BaseListingOpts#{limit => BatchSize})}
+        {ok, dir_req:get_children_ctxs(UserCtx, FileCtx, BaseListingOpts#{
+            limit => BatchSize,
+            handle_interrupted_call => HandleInterruptedCall
+        })}
     catch
         throw:?EACCES ->
             {error, ?EACCES}

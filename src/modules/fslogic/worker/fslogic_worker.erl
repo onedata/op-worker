@@ -185,6 +185,7 @@ init(_Args) ->
     autocleaning_view_traverse:init_pool(),
     tree_deletion_traverse:init_pool(),
     bulk_download_traverse:init_pool(),
+    space_upgrade_traverse:init_pool(),
     clproto_serializer:load_msg_defs(),
     archivisation_traverse:init_pool(),
 
@@ -283,6 +284,7 @@ cleanup() ->
     replica_deletion_master:stop_workers_pool(),
     tree_deletion_traverse:stop_pool(),
     bulk_download_traverse:stop_pool(),
+    space_upgrade_traverse:stop_pool(),
     replica_synchronizer:terminate_all(),
     archivisation_traverse:stop_pool(),
     permissions_cache:terminate(),
@@ -566,7 +568,7 @@ handle_file_request(UserCtx, #create_dir{name = Name, mode = Mode}, ParentFileCt
 handle_file_request(UserCtx, #get_file_children{listing_options = ListingOpts}, FileCtx) ->
     dir_req:get_children(UserCtx, FileCtx, ListingOpts);
 handle_file_request(UserCtx, #get_file_children_attrs{
-    listing_options = ListingOpts, 
+    listing_options = ListingOpts,
     optional_attrs = OptionalAttrs
 }, FileCtx) ->
     dir_req:get_children_attrs(UserCtx, FileCtx, ListingOpts, OptionalAttrs);
