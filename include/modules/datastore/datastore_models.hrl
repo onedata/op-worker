@@ -1308,9 +1308,4 @@
     last_modified :: non_neg_integer()
 }).
 
-%% Model that holds information of spaces where file_links_reconciliation_traverse is ongoing.
--record(file_links_reconciliation_traverse, {
-    ongoing_spaces = [] :: [od_space:id()]
-}).
-
 -endif.

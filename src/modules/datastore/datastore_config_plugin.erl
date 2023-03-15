@@ -104,7 +104,6 @@ get_models() -> [
     workflow_cached_task_data,
     workflow_iterator_snapshot,
     workflow_async_call_pool,
-    file_links_reconciliation_traverse,
 
     % automation related models
     atm_store,
