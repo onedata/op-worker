@@ -374,6 +374,7 @@ file_links_reconciliation_traverse_test(Config) ->
     
     test_utils:mock_assert_num_calls_sum(Worker, file_links_reconciliation_traverse, start, [], 1),
     
+    % test, that this function is idempotent
     ?assertEqual(ok, rpc:call(Worker, file_links_reconciliation_traverse, start, [])).
 
 

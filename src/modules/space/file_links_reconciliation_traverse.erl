@@ -58,29 +58,36 @@
 -spec start() -> ok.
 start() ->
     {ok, Spaces} = provider_logic:get_spaces(),
-    lists:foreach(fun(SpaceId) ->
+    SpacesToStart = lists:filter(fun(SpaceId) ->
         case space_logic:get_provider_ids(SpaceId) of
             {ok, [_]} ->
-                ok; % no need to execute on spaces supported by just one provider
+                false; % no need to execute on spaces supported by just one provider
             {ok, _} ->
-                FileCtx = file_ctx:new_by_guid(fslogic_file_id:spaceid_to_space_dir_guid(SpaceId)),
-                try
-                    ok = ?extract_ok(tree_traverse:run(?POOL_NAME, FileCtx, #{
-                        task_id => SpaceId,
-                        batch_size => ?TRAVERSE_BATCH_SIZE,
-                        handle_interrupted_call => false
-                    }))
-                catch Class:Reason ->
-                    case datastore_runner:normalize_error(Reason) of
-                        already_exists -> ok;
-                        [{error, already_exists}] -> ok;
-                        _ ->
-                            ?error_stacktrace("Unexpected error in file_links_reconciliation_traverse", Class, Reason),
-                            erlang:apply(erlang, Class, [Reason])
-                    end
-                end
+                true
         end
-    end, Spaces).
+    end, Spaces),
+    ok = ?extract_ok(?ok_if_exists(datastore_model:create(?CTX, #document{
+        key = ?STATUS_DOCUMENT_KEY,
+        value = #file_links_reconciliation_traverse{ongoing_spaces = SpacesToStart}
+    }))),
+    lists:foreach(fun(SpaceId) ->
+        FileCtx = file_ctx:new_by_guid(fslogic_file_id:spaceid_to_space_dir_guid(SpaceId)),
+        try
+            ok = ?extract_ok(tree_traverse:run(?POOL_NAME, FileCtx, #{
+                task_id => SpaceId,
+                batch_size => ?TRAVERSE_BATCH_SIZE,
+                handle_interrupted_call => false
+            }))
+        catch Class:Reason ->
+            case datastore_runner:normalize_error(Reason) of
+                already_exists -> ok;
+                [{error, already_exists}] -> ok;
+                _ ->
+                    ?error_stacktrace("Unexpected error in file_links_reconciliation_traverse", Class, Reason),
+                    erlang:apply(erlang, Class, [Reason])
+            end
+        end
+    end, SpacesToStart).
 
 
 -spec init_pool() -> ok  | no_return().
@@ -120,15 +127,21 @@ task_started(TaskId, _PoolName) ->
 
 -spec task_finished(id(), traverse:pool()) -> ok.
 task_finished(TaskId, _PoolName) ->
-    ok = ?extract_ok(datastore_model:save(?CTX, #document{
-        key = ?STATUS_DOCUMENT_KEY,
-        value = #file_links_reconciliation_traverse{is_finished = true}
-    })),
-    spawn(fun() ->
-        % sleep to ensure that task_finished function has time to finish,
-        timer:sleep(timer:seconds(10)),
-        stop_pool()
-    end),
+    Res = datastore_model:update(?CTX, ?STATUS_DOCUMENT_KEY,
+        fun(#file_links_reconciliation_traverse{ongoing_spaces = OngoingSpaces} = Record) ->
+            {ok, Record#file_links_reconciliation_traverse{ongoing_spaces = OngoingSpaces -- [TaskId]}}
+        end
+    ),
+    case Res of
+        {ok, #document{value = #file_links_reconciliation_traverse{ongoing_spaces = []}}} ->
+            spawn(fun() ->
+                % sleep to ensure that task_finished function has time to finish,
+                timer:sleep(timer:seconds(10)),
+                stop_pool()
+            end);
+        _ ->
+            ok
+    end,
     ?notice("File tree links reconciliation traverse finished for space ~p.", [TaskId]).
 
 
@@ -180,5 +193,5 @@ get_record_version() ->
     datastore_model:record_struct().
 get_record_struct(1) ->
     {record, [
-        {is_finished, boolean}
+        {ongoing_spaces, [string]}
     ]}.
