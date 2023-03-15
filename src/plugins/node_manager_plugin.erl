@@ -178,6 +178,7 @@ custom_workers() -> filter_disabled_workers([
         {supervisor_flags, fslogic_worker:supervisor_flags()},
         {supervisor_children_spec, fslogic_worker:supervisor_children_spec()}
     ]},
+    {qos_worker, []},
     {dbsync_worker, [
         {supervisor_flags, dbsync_worker:supervisor_flags()}
     ]},
@@ -193,8 +194,7 @@ custom_workers() -> filter_disabled_workers([
     {harvesting_worker, [
         {supervisor_flags, harvesting_worker:supervisor_flags()},
         {supervisor_children_spec, harvesting_worker:supervisor_children_spec()}
-    ]},
-    {qos_worker, []}
+    ]}
 ]).
 
 %%--------------------------------------------------------------------

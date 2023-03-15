@@ -23,33 +23,22 @@
 
 
 %% API
--export([start/0]).
--export([init_pool/0, stop_pool/0]).
--export([pool_name/0]).
+-export([start/0, start_for_space/1]).
 
 %% Traverse behaviour callbacks
 -export([do_master_job/2, do_slave_job/2, task_started/2, task_finished/2,
     get_job/1, update_job_progress/5]).
 
-%% datastore_model callbacks
--export([get_ctx/0, get_record_struct/1, get_record_version/0]).
 
 -type id() :: od_space:id().
 
--define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
+% Use QoS pool, as this traverse is only executed once after upgrade and there is no need to keep separate pool for it.
+-define(POOL_NAME, qos_traverse:pool_name()).
 -define(TRAVERSE_BATCH_SIZE, op_worker:get_env(file_links_reconciliation_traverse_batch_size, 40)).
--define(MASTER_JOBS_LIMIT, op_worker:get_env(file_links_reconciliation_traverse_master_jobs_limit, 10)).
--define(SLAVE_JOBS_LIMIT, op_worker:get_env(file_links_reconciliation_traverse_slave_jobs_limit, 20)).
--define(PARALLELISM_LIMIT, op_worker:get_env(file_links_reconciliation_traverse_parallelism_limit, 20)).
 
 -define(LISTING_ERROR_RETRY_INITIAL_SLEEP, timer:seconds(2)).
--define(LISTING_ERROR_RETRY_MAX_SLEEP, timer:hours(2)).
+-define(LISTING_ERROR_RETRY_MAX_SLEEP, op_worker:get_env(file_links_reconciliation_traverse_max_retry_sleep, timer:hours(2))).
 
--define(STATUS_DOCUMENT_KEY, <<"file_links_reconciliation_traverse_doc">>).
-
--define(CTX, #{
-    model => ?MODULE
-}).
 
 %%%===================================================================
 %%% API
@@ -66,47 +55,27 @@ start() ->
                 true
         end
     end, Spaces),
-    ok = ?extract_ok(?ok_if_exists(datastore_model:create(?CTX, #document{
-        key = ?STATUS_DOCUMENT_KEY,
-        value = #file_links_reconciliation_traverse{ongoing_spaces = SpacesToStart}
-    }))),
-    lists:foreach(fun(SpaceId) ->
-        FileCtx = file_ctx:new_by_guid(fslogic_uuid:spaceid_to_space_dir_guid(SpaceId)),
-        try
-            ok = ?extract_ok(tree_traverse:run(?POOL_NAME, FileCtx, #{
-                task_id => SpaceId,
-                batch_size => ?TRAVERSE_BATCH_SIZE
-            }))
-        catch Class:Reason ->
-            case datastore_runner:normalize_error(Reason) of
-                already_exists -> ok;
-                [{error, already_exists}] -> ok;
-                _ ->
-                    ?error_stacktrace("Unexpected error in file_links_reconciliation_traverse", Class, Reason),
-                    erlang:apply(erlang, Class, [Reason])
-            end
+    lists:foreach(fun start_for_space/1, SpacesToStart).
+
+
+-spec start_for_space(od_space:id()) -> ok.
+start_for_space(SpaceId) ->
+    FileCtx = file_ctx:new_by_guid(fslogic_uuid:spaceid_to_space_dir_guid(SpaceId)),
+    try
+        ok = ?extract_ok(tree_traverse:run(?POOL_NAME, FileCtx, #{
+            callback_module => ?MODULE,
+            task_id => SpaceId,
+            batch_size => ?TRAVERSE_BATCH_SIZE
+        }))
+    catch Class:Reason ->
+        case datastore_runner:normalize_error(Reason) of
+            already_exists -> ok;
+            [{error, already_exists}] -> ok;
+            _ ->
+                ?error_stacktrace("Unexpected error in file_links_reconciliation_traverse", Class, Reason),
+                erlang:apply(erlang, Class, [Reason])
         end
-    end, SpacesToStart).
-
-
--spec init_pool() -> ok  | no_return().
-init_pool() ->
-    case datastore_model:get(?CTX, ?STATUS_DOCUMENT_KEY) of
-        {ok, _} ->
-            ok;
-        {error, not_found} ->
-            tree_traverse:init(?MODULE, ?MASTER_JOBS_LIMIT, ?SLAVE_JOBS_LIMIT, ?PARALLELISM_LIMIT)
     end.
-
-
--spec stop_pool() -> ok.
-stop_pool() ->
-    tree_traverse:stop(?POOL_NAME).
-
-
--spec pool_name() -> traverse:pool().
-pool_name() ->
-    ?POOL_NAME.
 
 
 %%%===================================================================
@@ -126,21 +95,6 @@ task_started(TaskId, _PoolName) ->
 
 -spec task_finished(id(), traverse:pool()) -> ok.
 task_finished(TaskId, _PoolName) ->
-    Res = datastore_model:update(?CTX, ?STATUS_DOCUMENT_KEY,
-        fun(#file_links_reconciliation_traverse{ongoing_spaces = OngoingSpaces} = Record) ->
-            {ok, Record#file_links_reconciliation_traverse{ongoing_spaces = OngoingSpaces -- [TaskId]}}
-        end
-    ),
-    case Res of
-        {ok, #document{value = #file_links_reconciliation_traverse{ongoing_spaces = []}}} ->
-            spawn(fun() ->
-                % sleep to ensure that task_finished function has time to finish,
-                timer:sleep(timer:seconds(10)),
-                stop_pool()
-            end);
-        _ ->
-            ok
-    end,
     ?notice("File tree links reconciliation traverse finished for space ~p.", [TaskId]).
 
 
@@ -172,25 +126,3 @@ do_master_job_internal(Job, MasterJobArgs, Sleep) ->
 -spec do_slave_job(tree_traverse:slave_job(), id()) -> ok.
 do_slave_job(#tree_traverse_slave{}, _TaskId) ->
     ok.
-
-
-%%%===================================================================
-%%% Datastore model callbacks
-%%%===================================================================
-
--spec get_ctx() -> datastore:ctx().
-get_ctx() ->
-    ?CTX.
-
-
--spec get_record_version() -> datastore_model:record_version().
-get_record_version() ->
-    1.
-
-
--spec get_record_struct(datastore_model:record_version()) ->
-    datastore_model:record_struct().
-get_record_struct(1) ->
-    {record, [
-        {ongoing_spaces, [string]}
-    ]}.
