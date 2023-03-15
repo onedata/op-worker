@@ -29,7 +29,7 @@
 -export_type([traverse_info/0]).
 
 
--define(TRANSFER_RETRIES, 2).  %% TODO app.config??
+-define(MAX_TRANSFER_RETRIES, op_worker:get_env(max_transfer_retries_per_file, 3)).
 
 
 %%%===================================================================
@@ -42,7 +42,7 @@ run_job(#tree_traverse_slave{
     file_ctx = FileCtx,
     traverse_info = TraverseInfo
 }, TransferId) ->
-    case run_job(TransferId, TraverseInfo, FileCtx, ?TRANSFER_RETRIES) of
+    case run_job(TransferId, TraverseInfo, FileCtx, ?MAX_TRANSFER_RETRIES) of
         ok ->
             ok;
         {error, not_found} ->
