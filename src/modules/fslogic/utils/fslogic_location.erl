@@ -31,7 +31,7 @@
     QoSCheckSizeLimit :: non_neg_integer()) -> {{ok, file_location:record()} | {error, already_exists}, file_ctx:ctx()}.
 create_doc(FileCtx, StorageFileCreated, GeneratedKey, QoSCheckSizeLimit) ->
     {IgnoreInChanges, FileCtx2} = file_ctx:get_ignore_in_changes(FileCtx),
-    create_doc(FileCtx2, StorageFileCreated, GeneratedKey, IgnoreInChanges).
+    create_doc(FileCtx2, StorageFileCreated, GeneratedKey, QoSCheckSizeLimit, IgnoreInChanges).
 
 
 -spec create_doc(file_ctx:ctx(), StorageFileCreated :: boolean(), GeneratedKey :: boolean(),
