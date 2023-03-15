@@ -42,7 +42,7 @@ dependencies:
   block-strategy: none
   plans: [ ]
 other:
-  concurrent-build-plugin: system-default
+  concurrent-build-plugin: 1
   all-other-apps:
     custom:
       com.atlassian.bamboo.plugin.hungbuildkiller.stopped.enabled: 'true'
@@ -267,10 +267,12 @@ Qnthack - copy quarantine:
             echo curl 10.87.23.72:3080/cgi-bin/quarantine-copy?${bamboo_planSrc}+${bamboo_planKey}
             curl 10.87.23.72:3080/cgi-bin/quarantine-copy?${bamboo_planSrc}+${bamboo_planKey}
         description: Copy quarantined test cases
-        conditions: &quarantine-hack-cond-build3
+        conditions:
           - variable:
               matches:
-                bamboo.buildNumber: '3'
+                # copy quarantine is run on build 3,4,5 just in case the expected numbering has been
+                # disturbed by early branch pushing or manual plan branch running 
+                bamboo.buildNumber: '[3-5]'
     - script: &always-successful
         interpreter: BINSH_OR_CMDEXE
         description: Always successful
@@ -290,7 +292,13 @@ Qnthack - terminate build:
             echo Terminating build...
             false
         description: Terminate build
-        conditions: *quarantine-hack-cond-build3
+        conditions:
+          - variable:
+              matches:
+                # Terminate build for build number 3.
+                # When normal undisturbed flow takes place there is no sense in
+                # further building and testing as the code has not changed yet
+                bamboo.buildNumber: '3'
 
 Build:
   key: BUILD
