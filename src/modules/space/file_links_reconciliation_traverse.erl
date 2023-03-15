@@ -60,9 +60,9 @@ start() ->
     {ok, Spaces} = provider_logic:get_spaces(),
     lists:foreach(fun(SpaceId) ->
         case space_logic:get_provider_ids(SpaceId) of
-            [_] ->
+            {ok, [_]} ->
                 ok; % no need to execute on spaces supported by just one provider
-            _ ->
+            {ok, _} ->
                 FileCtx = file_ctx:new_by_guid(fslogic_file_id:spaceid_to_space_dir_guid(SpaceId)),
                 try
                     ok = ?extract_ok(tree_traverse:run(?POOL_NAME, FileCtx, #{
@@ -124,6 +124,11 @@ task_finished(TaskId, _PoolName) ->
         key = ?STATUS_DOCUMENT_KEY,
         value = #file_links_reconciliation_traverse{is_finished = true}
     })),
+    spawn(fun() ->
+        % sleep to ensure that task_finished function has time to finish,
+        timer:sleep(timer:seconds(10)),
+        stop_pool()
+    end),
     ?notice("File tree links reconciliation traverse finished for space ~p.", [TaskId]).
 
 
