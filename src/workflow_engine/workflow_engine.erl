@@ -202,8 +202,11 @@ wait_for_pending_callbacks(ExecutionId) ->
 -spec finish_cancel_procedure(execution_id()) -> ok.
 finish_cancel_procedure(ExecutionId) ->
     case workflow_execution_state:finish_cancel(ExecutionId) of
-        {ok, EngineId} -> trigger_job_scheduling(EngineId);
-        ?WF_ERROR_CANCEL_NOT_INITIALIZED -> ok
+        {ok, EngineId} ->
+            trigger_job_scheduling(EngineId);
+        ?WF_ERROR_CANCEL_NOT_INITIALIZED ->
+            ?warning("Finishing not initialized cancel procedure for execution ~s", [ExecutionId]),
+            ok
     end.
 
 
@@ -245,7 +248,7 @@ report_task_data_streaming_concluded(ExecutionId, TaskId, Result) ->
     workflow_jobs:job_identifier(), processing_result()) -> ok.
 report_execution_status_update(ExecutionId, ReportType, JobIdentifier, Ans) ->
     StatusUpdateAns = case Ans of
-        pause_job -> workflow_execution_state:pause_job(ExecutionId, JobIdentifier);
+        pause_job -> workflow_execution_state:pause_job_after_cancel(ExecutionId, JobIdentifier);
         _ -> workflow_execution_state:report_execution_status_update(ExecutionId, JobIdentifier, ReportType, Ans)
     end,
 
@@ -276,6 +279,8 @@ report_execution_status_update(ExecutionId, ReportType, JobIdentifier, Ans) ->
                 _ ->
                     trigger_job_scheduling(EngineId, ?FOR_CURRENT_SLOT_FIRST)
             end;
+        ?WF_ERROR_WRONG_EXECUTION_STATUS ->
+            report_execution_status_update(ExecutionId, ReportType, JobIdentifier, error);
         ?WF_ERROR_JOB_NOT_FOUND ->
             ok
     end.
@@ -739,8 +744,8 @@ process_result(EngineId, ExecutionId, #execution_spec{
                 % TODO VFS-7788 - use callbacks to get human readable information about task
                 handle_exception(
                     ExecutionId, Handler, ExecutionContext,
-                    "Unexpected error processing task ~p result ~p (id ~p) for item ~p (id ~p)",
-                    [TaskId, CachedResult, CachedResultId, CachedItem, ItemId],
+                    "Unexpected error processing task result ~s",
+                    [?autoformat([TaskId, CachedResultId, CachedResult, ItemId, CachedItem])],
                     Error, Reason, Stacktrace
                 ),
                 error

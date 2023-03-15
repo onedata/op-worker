@@ -42,7 +42,7 @@ dependencies:
   block-strategy: none
   plans: [ ]
 other:
-  concurrent-build-plugin: system-default
+  concurrent-build-plugin: 1
   all-other-apps:
     custom:
       com.atlassian.bamboo.plugin.hungbuildkiller.stopped.enabled: 'true'
@@ -172,7 +172,7 @@ stages:
         - multi_provider_view_rest
         - multipart_upload
         - multiple_workflow_scheduling
-        - nfs_helper
+#        - nfs_helper # uncomment after fixing helper
         - node_failure
         - nulldevice_helper
         - performance_2_provider
@@ -267,10 +267,12 @@ Qnthack - copy quarantine:
             echo curl 10.87.23.72:3080/cgi-bin/quarantine-copy?${bamboo_planSrc}+${bamboo_planKey}
             curl 10.87.23.72:3080/cgi-bin/quarantine-copy?${bamboo_planSrc}+${bamboo_planKey}
         description: Copy quarantined test cases
-        conditions: &quarantine-hack-cond-build3
+        conditions:
           - variable:
               matches:
-                bamboo.buildNumber: '3'
+                # copy quarantine is run on build 3,4,5 just in case the expected numbering has been
+                # disturbed by early branch pushing or manual plan branch running 
+                bamboo.buildNumber: '[3-5]'
     - script: &always-successful
         interpreter: BINSH_OR_CMDEXE
         description: Always successful
@@ -290,7 +292,13 @@ Qnthack - terminate build:
             echo Terminating build...
             false
         description: Terminate build
-        conditions: *quarantine-hack-cond-build3
+        conditions:
+          - variable:
+              matches:
+                # Terminate build for build number 3.
+                # When normal undisturbed flow takes place there is no sense in
+                # further building and testing as the code has not changed yet
+                bamboo.buildNumber: '3'
 
 Build:
   key: BUILD
@@ -1416,14 +1424,15 @@ multiple_workflow_scheduling:
     - <<: *cover_ct
       name: cover_ct_multiple_workflow_scheduling.tar.gz
 
-nfs_helper:
-  <<: *ct-job
-  key: NFSHEL
-  description: NFS helper test
-  artifacts:
-    - *ct_logs
-    - <<: *cover_ct
-      name: cover_ct_nfs_helper.tar.gz
+# uncomment after fixing helper
+#nfs_helper:
+#  <<: *ct-job
+#  key: NFSHEL
+#  description: NFS helper test
+#  artifacts:
+#    - *ct_logs
+#    - <<: *cover_ct
+#      name: cover_ct_nfs_helper.tar.gz
 
 node_failure:
   <<: *ct-onenv-job
@@ -2071,7 +2080,7 @@ Coverage report:
     - artifact: cover_ct_multi_provider_view_rest.tar.gz
     - artifact: cover_ct_multipart_upload.tar.gz
     - artifact: cover_ct_multiple_workflow_scheduling.tar.gz
-    - artifact: cover_ct_nfs_helper.tar.gz
+#    - artifact: cover_ct_nfs_helper.tar.gz # uncomment after fixing helper
     - artifact: cover_ct_node_failure.tar.gz
     - artifact: cover_ct_nulldevice_helper.tar.gz
     - artifact: cover_ct_performance_2_provider.tar.gz

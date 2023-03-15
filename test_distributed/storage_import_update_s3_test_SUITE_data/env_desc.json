@@ -12,16 +12,6 @@
     "os_configs": {
         "cfg1": {
             "storages": [
-                {
-                    "type": "posix",
-                    "name": "/mnt/st1"
-                }
-            ],
-            "users": [],
-            "groups": {}
-        },
-        "cfg2": {
-            "storages": [
 
                 {
                     "type": "s3",
@@ -31,6 +21,16 @@
                     "storage_path_type": "canonical"
                 }
 
+            ],
+            "users": [],
+            "groups": {}
+        },
+        "cfg2": {
+            "storages": [
+                {
+                    "type": "posix",
+                    "name": "/mnt/st2"
+                }
             ],
             "users": [],
             "groups": {}
@@ -132,18 +132,18 @@
                 ],
                 "providers": {
                     "p1": {
-                        "storage": "/mnt/st1",
+                        "storage": "synced_storage",
                         "supported_size": 10000000000
                     },
                     "p2": {
-                        "storage": "synced_storage",
+                        "storage": "/mnt/st2",
                         "supported_size": 10000000000
                     }
                 }
             }
         },
         "storages": {
-            "p2": {
+            "p1": {
                 "synced_storage": {
                     "imported_storage": true
                 }

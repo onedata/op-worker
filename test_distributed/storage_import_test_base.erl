@@ -2377,7 +2377,7 @@ create_delete_import2_test(Config) ->
 
     {ok, #file_attr{guid = Guid}} = ?assertMatch({ok, #file_attr{}},
         lfm_proxy:stat(W2, SessIdW2, {path, ?SPACE_TEST_FILE_PATH1}), ?ATTEMPTS),
-    
+
     ?assertMatch(ok, lfm_proxy:unlink(W2, <<"0">>, ?FILE_REF(Guid))),
 
     ?assertEqual({error, ?ENOENT}, sd_test_utils:read_file(W1, SDHandle, 0, ?TEST_DATA_SIZE), Attempts),
@@ -6028,10 +6028,10 @@ should_not_sync_file_during_replication(Config) ->
             <<"totalBlocksSize">> => ?TEST_DATA_SIZE
         }
     ], FileGuid),
-    
+
     % @TODO VFS-VFS-9498 not needed after file replication uses fetched file location instead of dbsynced
     TestDataSize = ?TEST_DATA_SIZE,
-    ?assertMatch({ok, [[0, TestDataSize]]}, 
+    ?assertMatch({ok, [[0, TestDataSize]]},
         opt_file_metadata:get_local_knowledge_of_remote_provider_blocks(W1, FileGuid, ?GET_DOMAIN_BIN(W2)), ?ATTEMPTS),
 
     enable_initial_scan(Config, ?SPACE_ID),
@@ -6185,12 +6185,12 @@ time_warp_between_scans_test(Config) ->
 
     time_test_utils:simulate_seconds_passing(4 * ?SCAN_INTERVAL - 1),
     timer:sleep(timer:seconds(2 * ?SCAN_INTERVAL)),
-    
+
     % still no scan should have started
     assertNoScanInProgress(W1, ?SPACE_ID, ?ATTEMPTS),
     ?assertMonitoring(W1, #{<<"scans">> => 1}, ?SPACE_ID),
-    
-    
+
+
     time_test_utils:simulate_seconds_passing(2),
     % scan should have started now
     assertScanFinished(W1, ?SPACE_ID, 2, ?ATTEMPTS).
@@ -7104,7 +7104,7 @@ end_per_testcase(create_remote_file_import_race_test, Config) ->
 end_per_testcase(Case, Config)
     when Case =:= remote_delete_file_reimport_race_test;
     Case =:= remote_delete_file_reimport_race2_test
-->
+    ->
     [W1| _] = ?config(op_worker_nodes, Config),
     StorageFileId = filepath_utils:join([<<?DIRECTORY_SEPARATOR>>, ?TEST_FILE1]),
     rpc:call(W1, storage_sync_info, delete, [StorageFileId, ?SPACE_ID]),
@@ -7118,7 +7118,7 @@ end_per_testcase(should_not_sync_file_during_replication, Config) ->
 end_per_testcase(Case, Config)
     when Case =:= time_warp_between_scans_test
     orelse Case =:= time_warp_during_scan_test
-->
+    ->
     time_test_utils:unfreeze_time(Config),
     end_per_testcase(default, Config);
 

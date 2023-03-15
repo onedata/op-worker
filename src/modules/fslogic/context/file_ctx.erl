@@ -95,7 +95,7 @@
     get_storage_id/1, get_storage/1, get_file_location_with_filled_gaps/1,
     get_file_location_with_filled_gaps/2,
     get_or_create_local_file_location_doc/1, get_or_create_local_file_location_doc/2,
-    get_or_create_local_regular_file_location_doc/3,
+    get_or_create_local_regular_file_location_doc/3, get_or_create_local_regular_file_location_doc/4,
     get_file_location_ids/1, get_file_location_docs/1, get_file_location_docs/2,
     get_active_perms_type/2, get_acl/1, get_mode/1, get_file_size/1, prepare_file_size_summary/1,
     get_replication_status_and_size/1, get_file_size_from_remote_locations/1, get_owner/1,
@@ -1391,19 +1391,24 @@ resolve_and_cache_path(FileCtx, PathType) ->
 %%--------------------------------------------------------------------
 -spec get_or_create_local_regular_file_location_doc(ctx(), fslogic_location_cache:get_doc_opts(),
     boolean()) -> {file_location:doc(), ctx()}.
-get_or_create_local_regular_file_location_doc(FileCtx, GetDocOpts, true) ->
+get_or_create_local_regular_file_location_doc(FileCtx, GetDocOpts, CheckLocationExists) ->
+    get_or_create_local_regular_file_location_doc(FileCtx, GetDocOpts, CheckLocationExists, 0).
+
+-spec get_or_create_local_regular_file_location_doc(ctx(), fslogic_location_cache:get_doc_opts(),
+    boolean(), non_neg_integer()) -> {file_location:doc(), ctx()}.
+get_or_create_local_regular_file_location_doc(FileCtx, GetDocOpts, true, QoSCheckSizeLimit) ->
     case get_local_file_location_doc(FileCtx, GetDocOpts) of
         {undefined, FileCtx2} ->
-            get_or_create_local_regular_file_location_doc(FileCtx2, GetDocOpts, false);
+            get_or_create_local_regular_file_location_doc(FileCtx2, GetDocOpts, false, QoSCheckSizeLimit);
         {Location, FileCtx2} ->
             {Location, FileCtx2}
     end;
-get_or_create_local_regular_file_location_doc(FileCtx, GetDocOpts, _CheckLocationExists) ->
-    case fslogic_location:create_doc(FileCtx, false, false) of
+get_or_create_local_regular_file_location_doc(FileCtx, GetDocOpts, _CheckLocationExists, QoSCheckSizeLimit) ->
+    case fslogic_location:create_doc(FileCtx, false, false, QoSCheckSizeLimit) of
         {{ok, _}, FileCtx2} ->
             {LocationDocs, FileCtx3} = get_file_location_docs(FileCtx2, true, false),
             lists:foreach(fun(ChangedLocation) ->
-                replica_dbsync_hook:on_file_location_change(FileCtx3, ChangedLocation)
+                replica_dbsync_hook:on_file_location_change(FileCtx3, ChangedLocation, QoSCheckSizeLimit)
             end, LocationDocs),
             get_local_file_location_doc(FileCtx3, GetDocOpts);
         {{error, already_exists}, FileCtx2} ->

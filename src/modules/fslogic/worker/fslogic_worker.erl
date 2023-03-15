@@ -264,8 +264,8 @@ handle(?INIT_EFFECTIVE_CACHES(Space)) ->
     dataset_eff_cache:init(Space),
     archive_recall_cache:init(Space),
     file_meta_sync_status_cache:init(Space);
-handle(_Request) ->
-    ?log_bad_request(_Request),
+handle(Request) ->
+    ?log_bad_request(Request),
     {error, wrong_request}.
 
 %%--------------------------------------------------------------------

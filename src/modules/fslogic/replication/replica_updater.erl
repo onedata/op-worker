@@ -19,7 +19,7 @@
 %% API - file location updates
 -export([update/4, rename/2]).
 %% API - blocks analysis
--export([has_replica_status_changed/4]).
+-export([has_replica_status_changed/4, is_fully_replicated/2]).
 %% API - replica update result analysis
 -export([get_location_changes/1, has_size_changed/1, has_replica_status_changed/1]).
 
@@ -129,6 +129,14 @@ rename(FileCtx, TargetFileId) ->
 has_replica_status_changed(FirstLocalBlocksBeforeUpdate, FirstLocalBlocks, OldSize, NewSize) ->
     is_fully_replicated(FirstLocalBlocksBeforeUpdate, OldSize) =/= is_fully_replicated(FirstLocalBlocks, NewSize).
 
+-spec is_fully_replicated(fslogic_blocks:blocks(), non_neg_integer()) -> boolean().
+is_fully_replicated([], 0) ->
+    true;
+is_fully_replicated([#file_block{offset = 0, size = Size}], Size) ->
+    true;
+is_fully_replicated(_, _) ->
+    false.
+
 %%%===================================================================
 %%% API - replica update result analysis
 %%%===================================================================
@@ -215,15 +223,6 @@ shrink(Doc = #document{key = Key, value = Loc}, Blocks, NewSize) ->
     #document{value = FinalRecord} = BumpedFinalDoc =
         version_vector:bump_version(replica_changes:add_change(FinalDoc, {shrink, NewSize})),
     {BumpedFinalDoc, blocks_changes_to_location_changes_description(FinalRecord, lists:reverse(BlocksChanges))}.
-
-%% @private
--spec is_fully_replicated(fslogic_blocks:blocks(), non_neg_integer()) -> boolean().
-is_fully_replicated([], 0) ->
-    true;
-is_fully_replicated([#file_block{offset = 0, size = Size}], Size) ->
-    true;
-is_fully_replicated(_, _) ->
-    false.
 
 %% @private
 -spec blocks_changes_to_location_changes_description(file_location:record(), blocks_changes_description()) ->
