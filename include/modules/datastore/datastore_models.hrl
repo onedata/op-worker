@@ -966,9 +966,9 @@
     all_batches_listed = false :: boolean()
 }).
 
-%% Model that holds information whether file_links_reconciliation_traverse is finished.
+%% Model that holds information of spaces where file_links_reconciliation_traverse is ongoing.
 -record(file_links_reconciliation_traverse, {
-    is_finished = false :: boolean()
+    ongoing_spaces = [] :: [od_space:id()]
 }).
 
 -endif.
