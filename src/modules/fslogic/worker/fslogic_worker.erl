@@ -180,8 +180,6 @@ init(_Args) ->
     permissions_cache:init(),
     init_effective_caches(),
     transfer:init(),
-    replication_traverse:init_pool(),
-    replica_eviction_traverse:init_pool(),
     replica_deletion_master:init_workers_pool(),
     file_registration:init_pool(),
     autocleaning_view_traverse:init_pool(),
@@ -280,8 +278,6 @@ handle(Request) ->
     Error :: timeout | term().
 cleanup() ->
     transfer:cleanup(),
-    replication_traverse:stop_pool(),
-    replica_eviction_traverse:stop_pool(),
     autocleaning_view_traverse:stop_pool(),
     file_registration:stop_pool(),
     replica_deletion_master:stop_workers_pool(),

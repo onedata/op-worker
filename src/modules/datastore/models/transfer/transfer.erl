@@ -903,19 +903,11 @@ maybe_rerun(TransferId) ->
 %%-------------------------------------------------------------------
 -spec start_pools() -> ok.
 start_pools() ->
-    {ok, _} = worker_pool:start_sup_pool(?REPLICATION_WORKERS_POOL, [
-        {workers, ?REPLICATION_WORKERS_NUM},
-        {worker, {gen_transfer_worker, [?REPLICATION_WORKER]}},
-        {queue_type, fifo}
-    ]),
+    ok = replica_eviction_traverse:init_pool(),
+    ok = replication_traverse:init_pool(),
     {ok, _} = worker_pool:start_sup_pool(?REPLICATION_CONTROLLERS_POOL, [
         {workers, ?REPLICATION_CONTROLLERS_NUM},
         {worker, {?REPLICATION_CONTROLLER, []}}
-    ]),
-    {ok, _} = worker_pool:start_sup_pool(?REPLICA_EVICTION_WORKERS_POOL, [
-        {workers, ?REPLICA_EVICTION_WORKERS_NUM},
-        {worker, {gen_transfer_worker, [?REPLICA_EVICTION_WORKER]}},
-        {queue_type, fifo}
     ]),
     ok.
 
@@ -928,9 +920,9 @@ start_pools() ->
 %%-------------------------------------------------------------------
 -spec stop_pools() -> ok.
 stop_pools() ->
-    ok = wpool:stop_sup_pool(?REPLICATION_WORKERS_POOL),
     ok = wpool:stop_sup_pool(?REPLICATION_CONTROLLERS_POOL),
-    ok = wpool:stop_sup_pool(?REPLICA_EVICTION_WORKERS_POOL).
+    ok = replication_traverse:stop_pool(),
+    ok = replica_eviction_traverse:stop_pool().
 
 %%-------------------------------------------------------------------
 %% @private

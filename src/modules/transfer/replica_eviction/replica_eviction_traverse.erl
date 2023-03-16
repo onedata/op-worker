@@ -117,7 +117,7 @@ start_replica_eviction_view_traverse(SupportingProviderId, #document{
 }) ->
     {ok, ViewId} = view_links:get_view_id(ViewName, SpaceId),
 
-    view_traverse:run(?POOL_NAME, transfer_view_traverse, ViewId, TransferId, #{
+    {ok, _} = view_traverse:run(?POOL_NAME, transfer_view_traverse, ViewId, TransferId, #{
         query_opts => maps:merge(
             maps:from_list(QueryViewParams),
             #{limit => ?TRAVERSE_BATCH_SIZE}
@@ -131,4 +131,5 @@ start_replica_eviction_view_traverse(SupportingProviderId, #document{
             worker_module => replica_eviction_worker,
             supporting_provider => SupportingProviderId
         }
-    }).
+    }),
+    ok.

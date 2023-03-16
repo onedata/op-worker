@@ -20,6 +20,7 @@
 %% API
 -export([run_job/3]).
 
+
 -type traverse_info() :: #{
     space_id := od_space:id(),
     transfer_id := transfer:id(),
@@ -32,6 +33,28 @@
 
 
 -define(MAX_TRANSFER_RETRIES, op_worker:get_env(max_transfer_retries_per_file, 3)).
+
+
+%%%===================================================================
+%%% Callbacks
+%%%===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Callback called to get permissions required to check before starting transfer.
+%% @end
+%%--------------------------------------------------------------------
+-callback required_permissions() -> [data_access_control:requirement()].
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Callback called when transferring regular file.
+%% @end
+%%--------------------------------------------------------------------
+-callback transfer_regular_file(file_ctx:ctx(), traverse_info()) ->
+    ok | {error, term()}.
 
 
 %%%===================================================================

@@ -104,7 +104,7 @@ start_replication_view_traverse(#document{key = TransferId, value = #transfer{
 }}) ->
     {ok, ViewId} = view_links:get_view_id(ViewName, SpaceId),
 
-    view_traverse:run(?POOL_NAME, transfer_view_traverse, ViewId, TransferId, #{
+    {ok, _} = view_traverse:run(?POOL_NAME, transfer_view_traverse, ViewId, TransferId, #{
         query_opts => maps:merge(
             maps:from_list(QueryViewParams),
             #{limit => ?TRAVERSE_BATCH_SIZE}
@@ -117,4 +117,5 @@ start_replication_view_traverse(#document{key = TransferId, value = #transfer{
             user_ctx => user_ctx:new(?ROOT_SESS_ID),
             worker_module => replication_worker
         }
-    }).
+    }),
+    ok.
