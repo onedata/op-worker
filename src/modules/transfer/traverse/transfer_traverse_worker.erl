@@ -18,12 +18,14 @@
 
 
 %% API
--export([run_job/2]).
+-export([run_job/3]).
 
 -type traverse_info() :: #{
+    space_id := od_space:id(),
     transfer_id := transfer:id(),
     user_ctx := user_ctx:ctx(),
     worker_module := module(),
+    view_name => transfer:view_name(),
     supporting_provider => undefined | od_provider:id()
 }.
 -export_type([traverse_info/0]).
@@ -37,11 +39,8 @@
 %%%===================================================================
 
 
--spec run_job(tree_traverse:slave_job(), transfer:id()) -> ok.
-run_job(#tree_traverse_slave{
-    file_ctx = FileCtx,
-    traverse_info = TraverseInfo
-}, TransferId) ->
+-spec run_job(transfer:id(), traverse_info(), file_ctx:ctx()) -> ok.
+run_job(TransferId, TraverseInfo, FileCtx) ->
     case run_job(TransferId, TraverseInfo, FileCtx, ?MAX_TRANSFER_RETRIES) of
         ok ->
             ok;

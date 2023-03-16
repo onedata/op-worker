@@ -63,25 +63,14 @@ update_job_progress(Id, Job, Pool, TransferId, Status) ->
 
 -spec do_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()}.
-do_master_job(
-    Job0 = #tree_traverse{file_ctx = FileCtx0},
-    MasterJobArgs = #{task_id := TransferId}
-) ->
-    Job1 = case file_ctx:get_effective_type(FileCtx0) of
-        {?REGULAR_FILE_TYPE, FileCtx1} ->
-            % Handle transfer root file being regular file
-            transfer:increment_files_to_process_counter(TransferId, 1),
-            Job0#tree_traverse{file_ctx = FileCtx1};
-        _ ->
-            Job0
-    end,
-    BatchProcessingPreHook = fun(SlaveJobs, _MasterJobs, _ListingToken, _SubtreeProcessingStatus) ->
-        transfer:increment_files_to_process_counter(TransferId, length(SlaveJobs)),
-        ok
-    end,
-    tree_traverse:do_master_job(Job1, MasterJobArgs, BatchProcessingPreHook).
+do_master_job(Job, MasterJobArgs) ->
+    tree_traverse:do_master_job(Job, MasterJobArgs).
 
 
 -spec do_slave_job(tree_traverse:slave_job(), transfer:id()) -> ok.
-do_slave_job(Job, TransferId) ->
-    transfer_traverse_worker:run_job(Job, TransferId).
+do_slave_job(#tree_traverse_slave{
+    file_ctx = FileCtx,
+    traverse_info = TraverseInfo
+}, TransferId) ->
+    transfer:increment_files_to_process_counter(TransferId, 1),
+    transfer_traverse_worker:run_job(TransferId, TraverseInfo, FileCtx).
