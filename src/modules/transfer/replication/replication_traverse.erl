@@ -100,10 +100,15 @@ start_replication_file_tree_traverse(#document{key = TransferId, value = #transf
 start_replication_view_traverse(#document{key = TransferId, value = #transfer{
     space_id = SpaceId,
     index_name = ViewName,
-    query_view_params = QueryViewParams  %% TODO
+    query_view_params = QueryViewParams
 }}) ->
-    view_traverse:run(?POOL_NAME, transfer_view_traverse, ViewName, TransferId, #{
-        query_opts => #{limit => ?TRAVERSE_BATCH_SIZE},
+    {ok, ViewId} = view_links:get_view_id(ViewName, SpaceId),
+
+    view_traverse:run(?POOL_NAME, transfer_view_traverse, ViewId, TransferId, #{
+        query_opts => maps:merge(
+            maps:from_list(QueryViewParams),
+            #{limit => ?TRAVERSE_BATCH_SIZE}
+        ),
         async_next_batch_job => true,
         info => #{
             space_id => SpaceId,

@@ -64,7 +64,7 @@ start(SupportingProviderId, TransferDoc = #document{value = Transfer}) ->
 cancel(#document{key = TransferId, value = Transfer}) ->
     case transfer:data_source_type(Transfer) of
         file -> tree_traverse:cancel(?POOL_NAME, TransferId);
-        view -> ok  %% TODO view traverse ??
+        view -> view_traverse:cancel(?POOL_NAME, TransferId)
     end.
 
 
@@ -107,20 +107,28 @@ start_replica_eviction_file_tree_traverse(SupportingProviderId, #document{
 %% @private
 -spec start_replica_eviction_view_traverse(undefined | od_provider:id(), transfer:doc()) ->
     ok.
-start_replica_eviction_view_traverse(SupportingProviderId, TransferDoc = #document{
+start_replica_eviction_view_traverse(SupportingProviderId, #document{
     key = TransferId,
     value = #transfer{
-        file_uuid = FileUuid,
-        space_id = SpaceId
+        space_id = SpaceId,
+        index_name = ViewName,
+        query_view_params = QueryViewParams
     }
 }) ->
-    % TODO VFS-7443 - maybe use referenced guid?
-    RootFileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
+    {ok, ViewId} = view_links:get_view_id(ViewName, SpaceId),
 
-    replica_eviction_worker:enqueue_data_transfer(RootFileCtx, #transfer_job_ctx{
-        transfer_id = TransferId,
-        user_ctx = user_ctx:new(?ROOT_SESS_ID),
-        job = #transfer_traverse_job{iterator = transfer_iterator:new(TransferDoc)},
-        supporting_provider = SupportingProviderId
-    }),
-    ok.
+    view_traverse:run(?POOL_NAME, transfer_view_traverse, ViewId, TransferId, #{
+        query_opts => maps:merge(
+            maps:from_list(QueryViewParams),
+            #{limit => ?TRAVERSE_BATCH_SIZE}
+        ),
+        async_next_batch_job => true,
+        info => #{
+            space_id => SpaceId,
+            transfer_id => TransferId,
+            view_name => ViewName,
+            user_ctx => user_ctx:new(?ROOT_SESS_ID),
+            worker_module => replica_eviction_worker,
+            supporting_provider => SupportingProviderId
+        }
+    }).
