@@ -355,12 +355,15 @@ delete_storage_file(FileCtx, UserCtx) ->
                 % child that is still opened or in case of race on remote deletion
                 Error;
             {error, _} = OtherError ->
-                log_storage_file_deletion_error(FileCtx, OtherError, false),
+                log_storage_file_deletion_error(FileCtx, OtherError),
                 OtherError
         end
     catch
+        _:{error, {file_meta_missing, _}} ->
+            % File has not been created on storage (missing path to space dir)
+            {ok, FileCtx};
         Class:Reason:Stacktrace ->
-            log_storage_file_deletion_error(FileCtx, {Class, Reason}, {true, Stacktrace}),
+            log_storage_file_deletion_error(FileCtx, {Class, Reason, Stacktrace}),
             {error, Reason}
     end.
 
@@ -715,16 +718,18 @@ delete_location(FileCtx) ->
     FileCtx2.
 
 
--spec log_storage_file_deletion_error(file_ctx:ctx(), term(), false | {true, list()}) -> ok.
-log_storage_file_deletion_error(FileCtx, Error, IncludeStacktrace) ->
+-spec log_storage_file_deletion_error(file_ctx:ctx(), {error, term()} | {atom(), term(), list()}) -> ok.
+log_storage_file_deletion_error(FileCtx, ErrorDetails) ->
     {StorageFileId, FileCtx2} = get_storage_file_id(FileCtx),
     {StorageId, FileCtx3} = file_ctx:get_storage_id(FileCtx2),
     FileGuid = file_ctx:get_logical_guid_const(FileCtx3),
-    Format = "Deleting file ~p on storage ~s with guid ~s failed due to ~p.",
-    Args = [StorageFileId, StorageId, FileGuid, Error],
-    case IncludeStacktrace of
-        {true, Stacktrace} -> ?error_stacktrace(Format, Args, Stacktrace);
-        false -> ?error(Format, Args)
+    Format = "Deleting file ~p on storage ~s with guid ~s",
+    Args = [StorageFileId, StorageId, FileGuid],
+    case ErrorDetails of
+        {error, _} ->
+            ?error(Format ++ "~s", Args ++ [?autoformat([ErrorDetails])]);
+        {Class, Reason, Stacktrace} ->
+            ?error_exception(Format, Args, Class, Reason, Stacktrace)
     end.
 
 

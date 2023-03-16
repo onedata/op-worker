@@ -922,8 +922,8 @@ restart_inactive_job(#job{ref = InactiveRef, restarts_left = RestartsLeft}, Stat
         InactiveRef, State
     ),
     NewTransfers = start_transfers([Block], undefined, State1, Priority, RestartsLeft - 1),
-    ?warning("Replaced inactive transfer ~p (~p) with new transfers ~p", [
-        InactiveRef, Block, NewTransfers
+    ?warning("Replaced inactive transfer with new transfers~s", [
+        ?autoformat([InactiveRef, Block, NewTransfers])
     ]),
     NewRefs = jobs_to_refs(NewTransfers),
     State2 = associate_froms_with_refs(AffectedFroms, NewRefs, State1),
