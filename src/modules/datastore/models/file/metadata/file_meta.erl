@@ -511,7 +511,6 @@ rename(SourceDoc, SourceParentUuid, TargetParentUuid, TargetName) ->
         value = #file_meta{name = FileName, type = Type},
         scope = Scope
     } = SourceDoc,
-    % TODO - byc moze zmienic is_local (nie tylko na file_meta, ale tez na lokacji i times)
     ok = file_meta_forest:add(TargetParentUuid, Scope, TargetName, FileUuid),
     ok = file_meta_forest:delete(SourceParentUuid, Scope, FileName, FileUuid),
     {ok, TargetDoc} = file_meta:update(FileUuid, fun(FileMeta = #file_meta{}) ->

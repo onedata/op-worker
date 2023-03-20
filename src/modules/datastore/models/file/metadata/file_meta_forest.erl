@@ -88,9 +88,7 @@ get(ParentUuid, TreeIds, FileNames) ->
 add(ParentUuid, Scope, FileName, FileUuid) ->
     ?extract_ok(datastore_model:add_links(?CTX(Scope), ParentUuid, ?LOCAL_TREE_ID, ?LINK(FileName, FileUuid))).
 
-%%- zabezpiecznie mv, archiwow, schare'ow, itp
-%%- jak robimy mv do trasha to nie zmieniamy flagi local
-%%- .__onedata__tmp
+
 -spec check_and_add(forest(), scope(), boolean(), tree_ids(), link_name(), link_target()) -> ok | {error, term()}.
 check_and_add(ParentUuid, Scope, IgnoreInChanges, TreesToCheck, FileName, FileUuid) ->
     ?extract_ok(datastore_model:check_and_add_links(?CTX(Scope, IgnoreInChanges), ParentUuid, ?LOCAL_TREE_ID, TreesToCheck,
@@ -106,7 +104,6 @@ delete(ParentUuid, Scope, FileName, FileUuid) ->
                     % pass Rev to ensure that link with the same Rev is deleted
                     case oneprovider:is_self(TreeId) of
                         true ->
-                            % TODO - ustawic is_local albo obsluzyc w datastore
                             ok = delete_local(ParentUuid, Scope, FileName, Rev);
                         false ->
                             ok = delete_remote(ParentUuid, Scope, TreeId, FileName, Rev)

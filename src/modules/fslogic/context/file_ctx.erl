@@ -71,11 +71,12 @@
     get_logical_guid_const/1, get_referenced_guid_const/1, get_logical_uuid_const/1, get_referenced_uuid_const/1,
     is_link_const/1, get_dir_location_doc_const/1, list_references_const/1, list_references_ctx_const/1, count_references_const/1
 ]).
--export([is_file_ctx_const/1, is_space_dir_const/1, is_trash_dir_const/1, is_trash_dir_const/2,
+-export([is_file_ctx_const/1, is_space_dir_const/1, is_trash_dir_const/1, is_trash_dir_const/2, is_tmp_dir_const/2,
     is_share_root_dir_const/1, is_symlink_const/1, is_special_const/1,
     is_user_root_dir_const/2, is_root_dir_const/1, file_exists_const/1, file_exists_or_is_deleted/1,
     is_in_user_space_const/2, assert_not_special_const/1, assert_is_dir/1, assert_not_dir/1, get_type/1, 
-    get_effective_type/1, assert_not_trash_dir_const/1, assert_not_trash_dir_const/2]).
+    get_effective_type/1, assert_not_trash_dir_const/1, assert_not_trash_dir_const/2,
+    assert_not_trash_or_tmp_dir_const/2, assert_not_ignored_in_changes/1]).
 -export([equals/2]).
 -export([assert_not_readonly_target_storage_const/2]).
 
@@ -85,7 +86,7 @@
 
 %% Functions modifying context
 -export([
-    get_canonical_path/1, get_uuid_based_path/1, is_tmp/1, get_file_doc/1, get_ignore_in_changes/1,
+    get_canonical_path/1, get_uuid_based_path/1, get_file_doc/1, is_ignored_in_changes/1,
     get_file_doc_including_deleted/1, get_and_cache_file_doc_including_deleted/1,
     get_cached_parent_const/1, cache_parent/2,
     get_storage_file_id/1, get_storage_file_id/2,
@@ -329,18 +330,6 @@ get_uuid_based_path(FileCtx = #file_ctx{uuid_based_path = UuidPath}) ->
     {UuidPath, FileCtx}.
 
 
--spec is_tmp(ctx()) -> {boolean(), ctx()}.
-is_tmp(FileCtx) ->
-    {UuidPath, FileCtx2} = get_uuid_based_path(FileCtx),
-    IsTmp = case filename:split(UuidPath) of
-        [<<"/">>, _SpaceId, Uuid | _] ->
-            fslogic_file_id:is_tmp_dir_uuid(Uuid);
-        _ ->
-            false
-    end,
-    {IsTmp, FileCtx2}.
-
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Returns file's logical path (starting with "/SpaceName/...").
@@ -379,8 +368,8 @@ get_file_doc(FileCtx = #file_ctx{file_doc = FileDoc}) ->
 set_file_doc(FileCtx, NewDoc) ->
     FileCtx#file_ctx{file_doc = NewDoc}.
 
--spec get_ignore_in_changes(ctx()) -> {boolean(), ctx()}.
-get_ignore_in_changes(FileCtx) ->
+-spec is_ignored_in_changes(ctx()) -> {boolean(), ctx()}.
+is_ignored_in_changes(FileCtx) ->
     {#document{ignore_in_changes = Ignore}, FileCtx2} = get_file_doc(FileCtx),
     {Ignore, FileCtx2}.
 
@@ -1094,6 +1083,12 @@ is_trash_dir_const(ParentCtx, Name) ->
         andalso (Name =:= ?TRASH_DIR_NAME).
 
 
+-spec is_tmp_dir_const(ctx(), file_meta:name()) -> boolean().
+is_tmp_dir_const(ParentCtx, Name) ->
+    file_ctx:is_space_dir_const(ParentCtx)
+        andalso (Name =:= ?TMP_DIR_NAME).
+
+
 -spec is_share_root_dir_const(ctx()) -> boolean().
 is_share_root_dir_const(#file_ctx{guid = Guid}) ->
     fslogic_file_id:is_share_root_dir_guid(Guid).
@@ -1126,12 +1121,28 @@ assert_not_trash_dir_const(FileCtx) ->
 
 
 -spec assert_not_trash_dir_const(file_ctx:ctx(), file_meta:name()) -> ok.
-% TODO - podobne zabezpiecznie dla tmp albo polaczyc to z ta funkcja
 assert_not_trash_dir_const(ParentCtx, Name) ->
     case is_trash_dir_const(ParentCtx, Name) of
         true -> throw(?EPERM);
         false -> ok
     end.
+
+
+-spec assert_not_trash_or_tmp_dir_const(file_ctx:ctx(), file_meta:name()) -> ok.
+assert_not_trash_or_tmp_dir_const(ParentCtx, Name) ->
+    case is_trash_dir_const(ParentCtx, Name) orelse is_tmp_dir_const(ParentCtx, Name) of
+        true -> throw(?EPERM);
+        false -> ok
+    end.
+
+
+-spec assert_not_ignored_in_changes(ctx()) -> ctx().
+assert_not_ignored_in_changes(FileCtx) ->
+    case is_ignored_in_changes(FileCtx) of
+        {true, _} -> throw(?EPERM);
+        {false, FileCtx2} -> FileCtx2
+    end.
+
 
 %%--------------------------------------------------------------------
 %% @doc

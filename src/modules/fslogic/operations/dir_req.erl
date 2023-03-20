@@ -59,7 +59,7 @@
     fslogic_worker:fuse_response().
 mkdir(UserCtx, ParentFileCtx0, Name, Mode) ->
     % TODO VFS-7064 this assert won't be needed after adding link from space to trash directory
-    file_ctx:assert_not_trash_dir_const(ParentFileCtx0, Name),
+    file_ctx:assert_not_trash_or_tmp_dir_const(ParentFileCtx0, Name),
     ParentFileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, ParentFileCtx0,
         [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?add_subcontainer_mask)]
@@ -246,13 +246,13 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     SpaceId = file_ctx:get_space_id_const(ParentFileCtx3),
     Owner = user_ctx:get_user_id(UserCtx),
     ParentUuid = file_ctx:get_logical_uuid_const(ParentFileCtx3),
-    {IsTmp, ParentFileCtx4} = file_ctx:is_tmp(ParentFileCtx3),
-    File = file_meta:new_doc(undefined, Name, ?DIRECTORY_TYPE, Mode, Owner, ParentUuid, SpaceId, IsTmp),
+    {IsIgnoredInChanges, ParentFileCtx4} = file_ctx:is_ignored_in_changes(ParentFileCtx3),
+    File = file_meta:new_doc(undefined, Name, ?DIRECTORY_TYPE, Mode, Owner, ParentUuid, SpaceId, IsIgnoredInChanges),
     {ok, #document{key = DirUuid}} = file_meta:create({uuid, ParentUuid}, File),
     FileCtx = file_ctx:new_by_uuid(DirUuid, SpaceId),
 
     try
-        {ok, Time} = times:save_with_current_times(DirUuid, SpaceId, IsTmp),
+        {ok, Time} = times:save_with_current_times(DirUuid, SpaceId, IsIgnoredInChanges),
         dir_update_time_stats:report_update_of_dir(file_ctx:get_logical_guid_const(FileCtx), Time),
         fslogic_times:update_mtime_ctime(ParentFileCtx4),
 

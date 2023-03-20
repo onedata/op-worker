@@ -122,15 +122,20 @@ view_querying_chunk_size() ->
 enqueue_data_transfer(FileCtx, TransferJobCtx = #transfer_job_ctx{transfer_id = TransferId},
     RetriesLeft, NextRetry
 ) ->
-    case file_ctx:is_trash_dir_const(FileCtx) andalso is_migration(TransferJobCtx) of
+    case file_ctx:is_tmp_dir_const(FileCtx) of
         true ->
-            % ignore trash directory in case of migration
             transfer:increment_files_processed_counter(TransferId);
         false ->
-            RetriesLeft2 = utils:ensure_defined(RetriesLeft, max_transfer_retries()),
-            worker_pool:cast(?REPLICA_EVICTION_WORKERS_POOL, ?TRANSFER_DATA_REQ(
-                FileCtx, TransferJobCtx, RetriesLeft2, NextRetry
-            ))
+            case file_ctx:is_trash_dir_const(FileCtx) andalso is_migration(TransferJobCtx) of
+                true ->
+                    % ignore trash directory in case of migration
+                    transfer:increment_files_processed_counter(TransferId);
+                false ->
+                    RetriesLeft2 = utils:ensure_defined(RetriesLeft, max_transfer_retries()),
+                    worker_pool:cast(?REPLICA_EVICTION_WORKERS_POOL, ?TRANSFER_DATA_REQ(
+                        FileCtx, TransferJobCtx, RetriesLeft2, NextRetry
+                    ))
+            end
     end,
     ok.
 

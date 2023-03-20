@@ -118,6 +118,7 @@ assert_replication_possible(undefined, FileCtx0) ->
     % if ReplicatingProvider is undefined the transfer is a eviction
     FileCtx0;
 assert_replication_possible(ReplicatingProviderId, FileCtx0) ->
-    file_ctx:assert_not_trash_dir_const(FileCtx0),
+    file_ctx:assert_not_trash_or_tmp_dir_const(FileCtx0),
     file_ctx:assert_not_readonly_target_storage_const(FileCtx0, ReplicatingProviderId),
-    file_ctx:assert_smaller_than_provider_support_size(FileCtx0, ReplicatingProviderId).
+    FileCtx = file_ctx:assert_not_ignored_in_changes(FileCtx0),
+    file_ctx:assert_smaller_than_provider_support_size(FileCtx, ReplicatingProviderId).

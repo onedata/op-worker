@@ -40,18 +40,26 @@
 rename(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     validate_target_name(TargetName),
     file_ctx:assert_not_special_const(SourceFileCtx),
-    file_ctx:assert_not_trash_dir_const(TargetParentFileCtx, TargetName),
-    SourceSpaceId = file_ctx:get_space_id_const(SourceFileCtx),
-    TargetSpaceId = file_ctx:get_space_id_const(TargetParentFileCtx),
+    file_ctx:assert_not_trash_or_tmp_dir_const(TargetParentFileCtx, TargetName),
+
+    {SourceFileCtx2, TargetParentFileCtx2} = case file_ctx:is_ignored_in_changes(TargetParentFileCtx) of
+        {true, UpdatedTargetParentFileCtx} ->
+            {file_ctx:assert_not_ignored_in_changes(SourceFileCtx), UpdatedTargetParentFileCtx};
+        {false, UpdatedTargetParentFileCtx} ->
+            {SourceFileCtx, UpdatedTargetParentFileCtx}
+    end,
+
+    SourceSpaceId = file_ctx:get_space_id_const(SourceFileCtx2),
+    TargetSpaceId = file_ctx:get_space_id_const(TargetParentFileCtx2),
     case SourceSpaceId =:= TargetSpaceId of
         false ->
             % TODO VFS-6627 Handle interprovider move to RO storage
             rename_between_spaces(
-                UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName);
+                UserCtx, SourceFileCtx2, TargetParentFileCtx2, TargetName);
         true ->
-            TargetParentFileCtx2 = file_ctx:assert_not_readonly_storage(TargetParentFileCtx),
+            TargetParentFileCtx3 = file_ctx:assert_not_readonly_storage(TargetParentFileCtx2),
             rename_within_space(
-                UserCtx, SourceFileCtx, TargetParentFileCtx2, TargetName)
+                UserCtx, SourceFileCtx2, TargetParentFileCtx3, TargetName)
     end.
 
 %%%===================================================================
@@ -326,7 +334,8 @@ rename_file_on_flat_storage_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx
             ok = lfm:unlink(SessId, ?FILE_REF(TargetGuid), false)
     end,
     ok = file_meta:rename(SourceDoc, SourceParentDoc, ParentDoc, TargetName),
-    maybe_unset_ignore_in_changes(SourceFileCtx3, SourceDoc, ParentDoc),
+    UnsetAction = maybe_unset_ignore_in_changes(SourceFileCtx3, SourceDoc, ParentDoc),
+    maybe_unset_ignore_in_changes_on_subtree(UserCtx, SourceFileCtx3, UnsetAction),
     on_successful_rename(UserCtx, SourceFileCtx3, SourceParentFileCtx2, TargetParentFileCtx2, TargetName),
     #fuse_response{
         status = #status{code = ?OK},
@@ -584,6 +593,35 @@ rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId, RootUnsetAct
                 ListOpts#{pagination_token => ListingPaginationToken}, AllChildEntries)
     end.
 
+
+-spec maybe_unset_ignore_in_changes_on_subtree(user_ctx:ctx(), file_ctx:ctx(), unset | ignored) -> ok.
+maybe_unset_ignore_in_changes_on_subtree(_UserCtx, _FileCtx, ignored) ->
+    ok;
+maybe_unset_ignore_in_changes_on_subtree(UserCtx, FileCtx, unset) ->
+    unset_ignore_in_changes_on_tree(UserCtx, FileCtx, #{tune_for_large_continuous_listing => true}).
+
+
+-spec unset_ignore_in_changes_on_tree(user_ctx:ctx(), file_ctx:ctx(), file_listing:options()) -> ok.
+unset_ignore_in_changes_on_tree(UserCtx, FileCtx, ListOpts) ->
+    {Children, ListingPaginationToken, FileCtx2} = file_tree:list_children(FileCtx, UserCtx, ListOpts),
+    lists:foreach(fun(ChildCtx) ->
+        {IsDir, ChildCtx2} = file_ctx:is_dir(ChildCtx),
+        unset_child_ignore_in_changes(ChildCtx2),
+        case IsDir of
+            true ->
+                unset_ignore_in_changes_on_tree(UserCtx, FileCtx, #{tune_for_large_continuous_listing => true});
+            false ->
+                ok
+        end
+    end, Children),
+    case file_listing:is_finished(ListingPaginationToken) of
+        true ->
+            ok;
+        false ->
+            unset_ignore_in_changes_on_tree(UserCtx, FileCtx2, ListOpts#{pagination_token => ListingPaginationToken})
+    end.
+
+
 %%--------------------------------------------------------------------
 %% @private
 %% @doc
@@ -676,12 +714,15 @@ validate_target_name(TargetName) ->
 maybe_unset_ignore_in_changes(
     SourceCtx,
     #document{ignore_in_changes = true} = _SourceDoc,
-    #document{ignore_in_changes = false} = _ParentDoc
+    #document{key = ParentKey, ignore_in_changes = false} = _ParentDoc
 ) ->
-    % TODO - trzeba to zrobic rekursywnie na kazdym pliku w katalogu
-    % TODO - zablokowac rename w druga strone (od public do local)
-    unset_child_ignore_in_changes(SourceCtx),
-    unset;
+    case fslogic_file_id:is_trash_dir_uuid(ParentKey) of
+        true ->
+            ignored;
+        false ->
+            unset_child_ignore_in_changes(SourceCtx),
+            unset
+    end;
 maybe_unset_ignore_in_changes(_, _, _) ->
     ignored.
 

@@ -89,7 +89,7 @@ view_querying_chunk_size() ->
 -spec enqueue_data_transfer(file_ctx:ctx(), gen_transfer_worker:job_ctx(),
     undefined | non_neg_integer(), undefined | non_neg_integer()) -> ok.
 enqueue_data_transfer(FileCtx, TransferJobCtx = #transfer_job_ctx{transfer_id = TransferId}, RetriesLeft, NextRetry) ->
-    case file_ctx:is_trash_dir_const(FileCtx) of
+    case file_ctx:is_trash_dir_const(FileCtx) orelse file_ctx:is_tmp_dir_const(FileCtx) of
         true ->
             % ignore trash directory
             transfer:increment_files_processed_counter(TransferId);

@@ -48,7 +48,7 @@
     fslogic_worker:fuse_response().
 create_file(UserCtx, ParentFileCtx0, Name, Mode, Flag) ->
     % TODO VFS-7064 this assert won't be needed after adding link from space to trash directory
-    file_ctx:assert_not_trash_dir_const(ParentFileCtx0, Name),
+    file_ctx:assert_not_trash_or_tmp_dir_const(ParentFileCtx0, Name),
     ParentFileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, ParentFileCtx0,
         [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?add_object_mask)]
@@ -78,7 +78,7 @@ storage_file_created(UserCtx, FileCtx0) ->
     Mode :: file_meta:posix_permissions()) -> fslogic_worker:fuse_response().
 make_file(UserCtx, ParentFileCtx0, Name, Mode) ->
     % TODO VFS-7064 this assert won't be needed after adding link from space to trash directory
-    file_ctx:assert_not_trash_dir_const(ParentFileCtx0, Name),
+    file_ctx:assert_not_trash_or_tmp_dir_const(ParentFileCtx0, Name),
     ParentFileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, ParentFileCtx0,
         [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?add_object_mask)]
@@ -94,7 +94,6 @@ make_file(UserCtx, ParentFileCtx0, Name, Mode) ->
 -spec make_link(user_ctx:ctx(), file_ctx:ctx(), file_ctx:ctx(), file_meta:name()) ->
     fslogic_worker:fuse_response().
 make_link(UserCtx, TargetFileCtx0, TargetParentFileCtx0, Name) ->
-    % TODO - nie pozwalac na hardlinki local bo moze sie rozjechac przy mv do global
     case file_ctx:is_symlink_const(TargetFileCtx0) of
         true ->
             {FileDoc, _} = file_ctx:get_file_doc_including_deleted(TargetFileCtx0),
@@ -102,20 +101,22 @@ make_link(UserCtx, TargetFileCtx0, TargetParentFileCtx0, Name) ->
             make_symlink(UserCtx, TargetParentFileCtx0, Name, SymLink);
         false ->
             % TODO VFS-7064 this assert won't be needed after adding link from space to trash directory
-            file_ctx:assert_not_trash_dir_const(TargetFileCtx0, Name),
+            file_ctx:assert_not_trash_or_tmp_dir_const(TargetParentFileCtx0, Name),
+            TargetParentFileCtx1 = file_ctx:assert_not_ignored_in_changes(TargetParentFileCtx0),
+            TargetFileCtx1 = file_ctx:assert_not_ignored_in_changes(TargetFileCtx0),
             % TODO VFS-7439 - Investigate eaccess error when creating hardlink to hardlink if next line is deletred
             % Check permissions on original target
-            TargetFileCtx1 = file_ctx:ensure_based_on_referenced_guid(TargetFileCtx0),
+            TargetFileCtx2 = file_ctx:ensure_based_on_referenced_guid(TargetFileCtx1),
 
-            TargetFileCtx2 = fslogic_authz:ensure_authorized(
-                UserCtx, TargetFileCtx1,
+            TargetFileCtx3 = fslogic_authz:ensure_authorized(
+                UserCtx, TargetFileCtx2,
                 [?TRAVERSE_ANCESTORS]
             ),
-            TargetParentFileCtx1 = fslogic_authz:ensure_authorized(
-                UserCtx, TargetParentFileCtx0,
+            TargetParentFileCtx2 = fslogic_authz:ensure_authorized(
+                UserCtx, TargetParentFileCtx1,
                 [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?add_object_mask)]
             ),
-            make_link_insecure(UserCtx, TargetFileCtx2, TargetParentFileCtx1, Name)
+            make_link_insecure(UserCtx, TargetFileCtx3, TargetParentFileCtx2, Name)
     end.
 
 
@@ -123,7 +124,7 @@ make_link(UserCtx, TargetFileCtx0, TargetParentFileCtx0, Name) ->
     fslogic_worker:fuse_response().
 make_symlink(UserCtx, ParentFileCtx0, Name, Link) ->
     % TODO VFS-7064 this assert won't be needed after adding link from space to trash directory
-    file_ctx:assert_not_trash_dir_const(ParentFileCtx0, Name),
+    file_ctx:assert_not_trash_or_tmp_dir_const(ParentFileCtx0, Name),
     ParentFileCtx1 = fslogic_authz:ensure_authorized(
         UserCtx, ParentFileCtx0,
         [?TRAVERSE_ANCESTORS, ?OPERATIONS(?traverse_container_mask, ?add_object_mask)]
@@ -459,7 +460,7 @@ make_symlink_insecure(UserCtx, ParentFileCtx, Name, Link) ->
             {ok, #document{key = SymlinkUuid}} = file_meta:create({uuid, ParentUuid}, Doc),
 
             try
-                {ok, _} = times:save_with_current_times(SymlinkUuid, SpaceId, false), % TODO - obsluzyc symlinki i  mv wewnatrz katalogu
+                {ok, _} = times:save_with_current_times(SymlinkUuid, SpaceId, false),
                 fslogic_times:update_mtime_ctime(ParentFileCtx3),
 
                 FileCtx = file_ctx:new_by_uuid(SymlinkUuid, SpaceId),
@@ -754,11 +755,10 @@ create_file_doc(UserCtx, ParentFileCtx, Name, Mode)  ->
             Owner = user_ctx:get_user_id(UserCtx),
             ParentUuid = file_ctx:get_logical_uuid_const(ParentFileCtx2),
             SpaceId = file_ctx:get_space_id_const(ParentFileCtx2),
-            {IsTmp, ParentFileCtx3} = file_ctx:is_tmp(ParentFileCtx2),
-            File = file_meta:new_doc(undefined, Name, ?REGULAR_FILE_TYPE, Mode, Owner, ParentUuid, SpaceId, IsTmp),
+            {IsIgnoredInChanges, ParentFileCtx3} = file_ctx:is_ignored_in_changes(ParentFileCtx2),
+            File = file_meta:new_doc(undefined, Name, ?REGULAR_FILE_TYPE, Mode, Owner, ParentUuid, SpaceId, IsIgnoredInChanges),
             {ok, #document{key = FileUuid} = SavedFileDoc} = file_meta:create({uuid, ParentUuid}, File),
-            % TODO - trzeba ustawiac times i file_location
-            {ok, _} = times:save_with_current_times(FileUuid, SpaceId, IsTmp),
+            {ok, _} = times:save_with_current_times(FileUuid, SpaceId, IsIgnoredInChanges),
 
             FileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
             {file_ctx:set_file_doc(FileCtx, SavedFileDoc), ParentFileCtx3};
