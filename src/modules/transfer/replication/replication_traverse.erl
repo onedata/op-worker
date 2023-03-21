@@ -22,7 +22,7 @@
 
 
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
--define(TRAVERSE_BATCH_SIZE, op_worker:get_env(qos_traverse_batch_size, 40)).  %% TODO
+-define(TRAVERSE_BATCH_SIZE, op_worker:get_env(transfer_traverse_list_batch_size, 100)).
 
 
 %%%===================================================================
@@ -33,8 +33,8 @@
 -spec init_pool() -> ok  | no_return().
 init_pool() ->
     % Get pool limits from app.config
-    MasterJobsLimit = op_worker:get_env(replication_master_jobs_limit, 10),
-    SlaveJobsLimit = op_worker:get_env(replication_slave_jobs_limit, 20),
+    MasterJobsLimit = op_worker:get_env(replication_master_jobs_limit, 20),
+    SlaveJobsLimit = op_worker:get_env(replication_slave_jobs_limit, 40),
 
     % set parallelism limit equal to master jobs limit
     tree_traverse:init(?MODULE, MasterJobsLimit, SlaveJobsLimit, MasterJobsLimit).

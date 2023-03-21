@@ -21,8 +21,9 @@
 
 %% Traverse behaviour callbacks
 -export([
-    do_master_job/2, do_slave_job/2, task_finished/2, task_canceled/2,
-    get_job/1, update_job_progress/5
+    get_job/1, update_job_progress/5,
+    do_master_job/2, do_slave_job/2,
+    task_finished/2, task_canceled/2
 ]).
 
 
@@ -36,17 +37,6 @@
     {error, term()}.
 get_job(DocOrID) ->
     tree_traverse:get_job(DocOrID).
-
-
--spec task_finished(transfer:id(), traverse:pool()) -> ok.
-task_finished(TransferId, _PoolName) ->
-    transfer:mark_traverse_finished(TransferId),
-    ok.
-
-
--spec task_canceled(transfer:id(), traverse:pool()) -> ok.
-task_canceled(TransferId, PoolName) ->
-    task_finished(TransferId, PoolName).
 
 
 -spec update_job_progress(
@@ -64,6 +54,7 @@ update_job_progress(Id, Job, Pool, TransferId, Status) ->
 -spec do_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()}.
 do_master_job(Job, MasterJobArgs) ->
+    %% TODO try cache and update failed files ??
     tree_traverse:do_master_job(Job, MasterJobArgs).
 
 
@@ -74,3 +65,14 @@ do_slave_job(#tree_traverse_slave{
 }, TransferId) ->
     transfer:increment_files_to_process_counter(TransferId, 1),
     transfer_traverse_worker:run_job(TransferId, TraverseInfo, FileCtx).
+
+
+-spec task_finished(transfer:id(), traverse:pool()) -> ok.
+task_finished(TransferId, _PoolName) ->
+    transfer:mark_traverse_finished(TransferId),
+    ok.
+
+
+-spec task_canceled(transfer:id(), traverse:pool()) -> ok.
+task_canceled(TransferId, PoolName) ->
+    task_finished(TransferId, PoolName).

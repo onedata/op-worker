@@ -42,8 +42,6 @@
 
     replication_status/1, eviction_status/1, status/1,
 
-    mark_replication_traverse_finished/1,
-    mark_eviction_traverse_finished/1,
     mark_traverse_finished/1,
 
     increment_files_to_process_counter/2, increment_files_processed_counter/1,
@@ -516,20 +514,6 @@ mark_traverse_finished(TransferId) ->
     end).
 
 
--spec mark_replication_traverse_finished(id()) -> {ok, doc()} | {error, term()}.
-mark_replication_traverse_finished(TransferId) ->
-    update(TransferId, fun(Transfer) ->
-        {ok, Transfer#transfer{replication_traverse_finished = true}}
-    end).
-
-
--spec mark_eviction_traverse_finished(id()) -> {ok, doc()} | {error, term()}.
-mark_eviction_traverse_finished(TransferId) ->
-    update(TransferId, fun(Transfer) ->
-        {ok, Transfer#transfer{eviction_traverse_finished = true}}
-    end).
-
-
 -spec increment_files_to_process_counter(undefined | id(), non_neg_integer()) ->
     {ok, undefined | doc()} | {error, term()}.
 increment_files_to_process_counter(undefined, _FilesNum) ->
@@ -814,6 +798,7 @@ update_and_run(TransferId, UpdateFun, OnSuccessfulUpdate) ->
             {error, Error}
     end.
 
+%% TODO restarts??
 %%-------------------------------------------------------------------
 %% @private
 %% @doc

@@ -6,7 +6,8 @@
 %%% @end
 %%%-------------------------------------------------------------------
 %%% @doc
-%%% TODO WRITEME
+%%% This module contains functions responsible for traversing view and
+%%% transferring regular files.
 %%% @end
 %%%-------------------------------------------------------------------
 -module(transfer_view_traverse).

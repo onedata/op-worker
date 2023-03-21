@@ -76,7 +76,9 @@ run_job(TransferId, TraverseInfo, FileCtx) ->
             {ok, _} = transfer:increment_files_processed_counter(TransferId);
         {error, _Reason} ->
             {ok, _} = transfer:increment_files_failed_and_processed_counters(TransferId)
-    end.
+    end,
+
+    ok.
 
 
 %%%===================================================================
