@@ -22,8 +22,9 @@
 
 %% API
 -export([
-    mark_active/2, mark_aborting/3,
-    mark_completed/2, mark_failed/2, mark_cancelled/2
+    is_alive/1,
+    mark_active/1, mark_aborting/2,
+    mark_completed/1, mark_failed/1, mark_cancelled/1
 ]).
 %% gen_server callbacks
 -export([
@@ -35,6 +36,14 @@
 -record(state, {}).
 
 -type state() :: #state{}.
+
+-define(whereis(__TRANSFER_ID), global:whereis_name(TransferId)).
+
+-define(with_controller_registered(__TRANSFER_ID, __EXPRESSION), begin
+    register_controller_process(__TRANSFER_ID),
+    __EXPRESSION,
+    unregister_controller_process(__TRANSFER_ID)
+end).
 
 -define(log_bad_replication_msg(__Req, __Status, __TransferId),
     ?debug("~p:~p - bad request ~p while in status ~p, transfer: ~p", [
@@ -48,14 +57,19 @@
 %%%===================================================================
 
 
+-spec is_alive(transfer:id()) -> boolean().
+is_alive(TransferId) ->
+    ?whereis(TransferId) /= undefined.
+
+
 %%-------------------------------------------------------------------
 %% @doc
 %% Informs replication_controller about transition to active state.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_active(pid(), transfer:id()) -> ok.
-mark_active(Pid, TransferId) ->
-    Pid ! {replication_active, TransferId},
+-spec mark_active(transfer:id()) -> ok.
+mark_active(TransferId) ->
+    ?whereis(TransferId) ! {replication_active, TransferId},
     ok.
 
 
@@ -64,9 +78,9 @@ mark_active(Pid, TransferId) ->
 %% Informs replication_controller about aborting transfer.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_aborting(pid(), transfer:id(), term()) -> ok.
-mark_aborting(Pid, TransferId, Reason) ->
-    Pid ! {replication_aborting, TransferId, Reason},
+-spec mark_aborting(transfer:id(), term()) -> ok.
+mark_aborting(TransferId, Reason) ->
+    ?whereis(TransferId) ! {replication_aborting, TransferId, Reason},
     ok.
 
 %%-------------------------------------------------------------------
@@ -74,9 +88,9 @@ mark_aborting(Pid, TransferId, Reason) ->
 %% Stops replication_controller process and marks transfer as failed.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_failed(pid(), transfer:id()) -> ok.
-mark_failed(Pid, TransferId) ->
-    Pid ! {replication_failed, TransferId},
+-spec mark_failed(transfer:id()) -> ok.
+mark_failed(TransferId) ->
+    ?whereis(TransferId) ! {replication_failed, TransferId},
     ok.
 
 
@@ -85,9 +99,9 @@ mark_failed(Pid, TransferId) ->
 %% Stops replication_controller process and marks transfer as cancelled.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_cancelled(pid(), transfer:id()) -> ok.
-mark_cancelled(Pid, TransferId) ->
-    Pid ! {replication_cancelled, TransferId},
+-spec mark_cancelled(transfer:id()) -> ok.
+mark_cancelled(TransferId) ->
+    ?whereis(TransferId) ! {replication_cancelled, TransferId},
     ok.
 
 
@@ -96,9 +110,9 @@ mark_cancelled(Pid, TransferId) ->
 %% Stops replication_controller process and marks transfer as completed.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_completed(pid(), transfer:id()) -> ok.
-mark_completed(Pid, TransferId) ->
-    Pid ! {replication_completed, TransferId},
+-spec mark_completed(transfer:id()) -> ok.
+mark_completed(TransferId) ->
+    ?whereis(TransferId) ! {replication_completed, TransferId},
     ok.
 
 
@@ -152,18 +166,22 @@ handle_call(Request, _From, State) ->
 handle_cast({start_replication, TransferId, Callback, EvictSourceReplica}, State) ->
     case replication_status:handle_enqueued(TransferId) of
         {ok, TransferDoc} ->
-            replication_traverse:start(TransferDoc),
-            handle_enqueued(TransferId, Callback, EvictSourceReplica);
+            ?with_controller_registered(TransferId, begin
+                replication_traverse:start(TransferDoc),
+                handle_enqueued(TransferId, Callback, EvictSourceReplica)
+            end);
         {error, ?ENQUEUED_STATUS} ->
-            {ok, _} = transfer:set_controller_process(TransferId),
-            handle_enqueued(TransferId, Callback, EvictSourceReplica);
+            ?with_controller_registered(TransferId, handle_enqueued(
+                TransferId, Callback, EvictSourceReplica
+            ));
         {error, ?ACTIVE_STATUS} ->
-            {ok, _} = transfer:set_controller_process(TransferId),
-            handle_active(TransferId, Callback, EvictSourceReplica);
+            ?with_controller_registered(TransferId, handle_active(
+                TransferId, Callback, EvictSourceReplica
+            ));
         {error, ?ABORTING_STATUS} ->
-            {ok, _} = transfer:set_controller_process(TransferId),
-            handle_aborting(TransferId);
+            ?with_controller_registered(TransferId, handle_aborting(TransferId));
         {error, S} when S == ?COMPLETED_STATUS orelse S == ?CANCELLED_STATUS orelse S == ?FAILED_STATUS ->
+            ?error("~p", [{?MODULE, ?FUNCTION_NAME, ?LINE}]),
             ok
     end,
     {noreply, State, hibernate};
@@ -230,6 +248,19 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec register_controller_process(transfer:id()) -> ok.
+register_controller_process(TransferId) ->
+    yes = global:register_name(TransferId, self()),
+    ok.
+
+
+%% @private
+-spec unregister_controller_process(transfer:id()) -> ok.
+unregister_controller_process(TransferId) ->
+    global:unregister_name(TransferId).
 
 
 -spec handle_enqueued(transfer:id(), transfer:callback(), boolean()) -> ok.

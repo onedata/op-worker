@@ -22,7 +22,10 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([mark_aborting/3, mark_completed/2, mark_failed/2, mark_cancelled/2]).
+-export([
+    is_alive/1,
+    mark_aborting/2, mark_completed/1, mark_failed/1, mark_cancelled/1
+]).
 
 %% gen_server callbacks
 -export([
@@ -43,45 +46,51 @@
     query_view_params :: transfer:query_view_params()
 }).
 
+-define(whereis(__TRANSFER_ID), global:whereis_name(TransferId)).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+-spec is_alive(transfer:id()) -> boolean().
+is_alive(TransferId) ->
+    ?whereis(TransferId) /= undefined.
 
 %%-------------------------------------------------------------------
 %% @doc
 %% Informs replica_eviction_controller process about aborting replica eviction.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_aborting(pid(), transfer:id(), term()) -> ok.
-mark_aborting(Pid, TransferId, Reason) ->
-    gen_server2:cast(Pid, {replica_eviction_aborting, TransferId, Reason}).
+-spec mark_aborting(transfer:id(), term()) -> ok.
+mark_aborting(TransferId, Reason) ->
+    gen_server2:cast(?whereis(TransferId), {replica_eviction_aborting, TransferId, Reason}).
 
 %%-------------------------------------------------------------------
 %% @doc
 %% Stops replica_eviction_controller process and marks replica eviction as completed.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_completed(pid(), transfer:id()) -> ok.
-mark_completed(Pid, TransferId) ->
-    gen_server2:cast(Pid, {replica_eviction_completed, TransferId}).
+-spec mark_completed(transfer:id()) -> ok.
+mark_completed(TransferId) ->
+    gen_server2:cast(?whereis(TransferId), {replica_eviction_completed, TransferId}).
 
 %%-------------------------------------------------------------------
 %% @doc
 %% Stops replica_eviction_controller process and marks transfer as failed.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_failed(pid(), transfer:id()) -> ok.
-mark_failed(Pid, TransferId) ->
-    gen_server2:cast(Pid, {replica_eviction_failed, TransferId}).
+-spec mark_failed(transfer:id()) -> ok.
+mark_failed(TransferId) ->
+    gen_server2:cast(?whereis(TransferId), {replica_eviction_failed, TransferId}).
 
 %%-------------------------------------------------------------------
 %% @doc
 %% Stops replica_eviction_controller process and marks transfer as cancelled.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_cancelled(pid(), transfer:id()) -> ok.
-mark_cancelled(Pid, TransferId) ->
-    gen_server2:cast(Pid, {replica_eviction_cancelled, TransferId}).
+-spec mark_cancelled(transfer:id()) -> ok.
+mark_cancelled(TransferId) ->
+    gen_server2:cast(?whereis(TransferId), {replica_eviction_cancelled, TransferId}).
 
 
 %%%===================================================================
@@ -148,13 +157,14 @@ handle_cast(start_replica_eviction, State = #state{
     flush(),
     case replica_eviction_status:handle_active(TransferId) of
         {ok, TransferDoc} ->
+            register_controller_process(TransferId),
             replica_eviction_traverse:start(SupportingProviderId, TransferDoc),
             {noreply, State#state{status = ?ACTIVE_STATUS}};
         {error, ?ACTIVE_STATUS} ->
-            {ok, _} = transfer:set_controller_process(TransferId),
+            register_controller_process(TransferId),
             {noreply, State#state{status = ?ACTIVE_STATUS}};
         {error, ?ABORTING_STATUS} ->
-            {ok, _} = transfer:set_controller_process(TransferId),
+            register_controller_process(TransferId),
             {noreply, State#state{status = ?ABORTING_STATUS}};
         {error, S} when S == ?COMPLETED_STATUS orelse S == ?CANCELLED_STATUS orelse S == ?FAILED_STATUS ->
             {stop, normal, S}
@@ -243,7 +253,8 @@ handle_info(Info, State) ->
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> term().
-terminate(_Reason, _State) ->
+terminate(_Reason, #state{transfer_id = TransferId}) ->
+    unregister_controller_process(TransferId),
     ok.
 
 %%--------------------------------------------------------------------
@@ -260,6 +271,19 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec register_controller_process(transfer:id()) -> ok.
+register_controller_process(TransferId) ->
+    yes = global:register_name(TransferId, self()),
+    ok.
+
+
+%% @private
+-spec unregister_controller_process(transfer:id()) -> ok.
+unregister_controller_process(TransferId) ->
+    global:unregister_name(TransferId).
 
 
 %%--------------------------------------------------------------------

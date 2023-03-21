@@ -33,7 +33,7 @@
 ]).
 
 -export([
-    mark_dequeued/1, set_controller_process/1, set_rerun_id/2,
+    mark_dequeued/1, set_rerun_id/2,
 
     is_replication/1, is_eviction/1, is_migration/1,
     type/1, data_source_type/1,
@@ -365,14 +365,6 @@ mark_dequeued(TransferId) ->
         fun(Transfer) -> {ok, Transfer#transfer{enqueued = false}} end,
         fun transfer_links:delete_waiting/1
     ).
-
-
--spec set_controller_process(id()) -> {ok, doc()} | {error, term()}.
-set_controller_process(TransferId) ->
-    EncodedPid = utils:encode_pid(self()),
-    update(TransferId, fun(Transfer) ->
-        {ok, Transfer#transfer{pid = EncodedPid}}
-    end).
 
 
 -spec set_rerun_id(transfer:id(), transfer:id()) -> {ok, transfer:doc()} | {error, term()}.

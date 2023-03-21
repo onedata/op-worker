@@ -93,14 +93,12 @@ handle_enqueued(TransferId) ->
 
 -spec handle_active(transfer:id()) -> {ok, transfer:doc()} | error().
 handle_active(TransferId) ->
-    EncodedPid = utils:encode_pid(self()),
     UpdateFun = fun(Transfer) ->
         case Transfer#transfer.eviction_status of
             ?ENQUEUED_STATUS ->
                 {ok, Transfer#transfer{
                     eviction_status = ?ACTIVE_STATUS,
-                    eviction_traverse_finished = false,
-                    pid = EncodedPid
+                    eviction_traverse_finished = false
                 }};
             Status ->
                 {error, Status}

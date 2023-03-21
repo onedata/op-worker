@@ -91,15 +91,13 @@
 
 -spec handle_enqueued(transfer:id()) -> {ok, transfer:doc()} | error().
 handle_enqueued(TransferId) ->
-    EncodedPid = utils:encode_pid(self()),
     transfer:update(TransferId, fun(Transfer) ->
         case Transfer#transfer.replication_status of
             ?SCHEDULED_STATUS ->
                 {ok, Transfer#transfer{
                     replication_status = ?ENQUEUED_STATUS,
                     start_time = global_clock:monotonic_timestamp_seconds(Transfer#transfer.schedule_time),
-                    replication_traverse_finished = false,
-                    pid = EncodedPid
+                    replication_traverse_finished = false
                 }};
             Status ->
                 {error, Status}
