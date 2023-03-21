@@ -42,21 +42,23 @@ rename(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     file_ctx:assert_not_special_const(SourceFileCtx),
     file_ctx:assert_not_trash_or_tmp_dir_const(TargetParentFileCtx, TargetName),
 
-    {SourceFileCtx2, TargetParentFileCtx2} = case file_ctx:is_ignored_in_changes(TargetParentFileCtx) of
-        {true, UpdatedTargetParentFileCtx} ->
-            {file_ctx:assert_not_ignored_in_changes(SourceFileCtx), UpdatedTargetParentFileCtx};
-        {false, UpdatedTargetParentFileCtx} ->
-            {SourceFileCtx, UpdatedTargetParentFileCtx}
-    end,
+    SourceSpaceId = file_ctx:get_space_id_const(SourceFileCtx),
+    TargetSpaceId = file_ctx:get_space_id_const(TargetParentFileCtx),
 
-    SourceSpaceId = file_ctx:get_space_id_const(SourceFileCtx2),
-    TargetSpaceId = file_ctx:get_space_id_const(TargetParentFileCtx2),
     case SourceSpaceId =:= TargetSpaceId of
         false ->
             % TODO VFS-6627 Handle interprovider move to RO storage
+            % NOTE: rename between spaces is copy/remove so ignored_in_changes does not need to be checked
             rename_between_spaces(
-                UserCtx, SourceFileCtx2, TargetParentFileCtx2, TargetName);
+                UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName);
         true ->
+            {SourceFileCtx2, TargetParentFileCtx2} = case file_ctx:is_ignored_in_changes(TargetParentFileCtx) of
+                {true, UpdatedTargetParentFileCtx} ->
+                    {file_ctx:assert_not_ignored_in_changes(SourceFileCtx), UpdatedTargetParentFileCtx};
+                {false, UpdatedTargetParentFileCtx} ->
+                    {SourceFileCtx, UpdatedTargetParentFileCtx}
+            end,
+
             TargetParentFileCtx3 = file_ctx:assert_not_readonly_storage(TargetParentFileCtx2),
             rename_within_space(
                 UserCtx, SourceFileCtx2, TargetParentFileCtx3, TargetName)
