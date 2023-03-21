@@ -71,12 +71,12 @@
     get_logical_guid_const/1, get_referenced_guid_const/1, get_logical_uuid_const/1, get_referenced_uuid_const/1,
     is_link_const/1, get_dir_location_doc_const/1, list_references_const/1, list_references_ctx_const/1, count_references_const/1
 ]).
--export([is_file_ctx_const/1, is_space_dir_const/1, is_trash_dir_const/1, is_trash_dir_const/2, is_tmp_dir_const/2,
-    is_share_root_dir_const/1, is_symlink_const/1, is_special_const/1,
+-export([is_file_ctx_const/1, is_space_dir_const/1, is_trash_dir_const/1, is_trash_dir_const/2,
+    is_tmp_dir_const/1, is_tmp_dir_const/2, is_share_root_dir_const/1, is_symlink_const/1, is_special_const/1,
     is_user_root_dir_const/2, is_root_dir_const/1, file_exists_const/1, file_exists_or_is_deleted/1,
     is_in_user_space_const/2, assert_not_special_const/1, assert_is_dir/1, assert_not_dir/1, get_type/1, 
     get_effective_type/1, assert_not_trash_dir_const/1, assert_not_trash_dir_const/2,
-    assert_not_trash_or_tmp_dir_const/2, assert_not_ignored_in_changes/1]).
+    assert_not_trash_or_tmp_dir_const/1, assert_not_trash_or_tmp_dir_const/2, assert_not_ignored_in_changes/1]).
 -export([equals/2]).
 -export([assert_not_readonly_target_storage_const/2]).
 
@@ -1083,6 +1083,11 @@ is_trash_dir_const(ParentCtx, Name) ->
         andalso (Name =:= ?TRASH_DIR_NAME).
 
 
+-spec is_tmp_dir_const(ctx()) -> boolean().
+is_tmp_dir_const(#file_ctx{guid = Guid}) ->
+    fslogic_file_id:is_tmp_dir_guid(Guid).
+
+
 -spec is_tmp_dir_const(ctx(), file_meta:name()) -> boolean().
 is_tmp_dir_const(ParentCtx, Name) ->
     file_ctx:is_space_dir_const(ParentCtx)
@@ -1123,6 +1128,14 @@ assert_not_trash_dir_const(FileCtx) ->
 -spec assert_not_trash_dir_const(file_ctx:ctx(), file_meta:name()) -> ok.
 assert_not_trash_dir_const(ParentCtx, Name) ->
     case is_trash_dir_const(ParentCtx, Name) of
+        true -> throw(?EPERM);
+        false -> ok
+    end.
+
+
+-spec assert_not_trash_or_tmp_dir_const(file_ctx:ctx()) -> ok.
+assert_not_trash_or_tmp_dir_const(FileCtx) ->
+    case is_trash_dir_const(FileCtx) orelse is_tmp_dir_const(FileCtx) of
         true -> throw(?EPERM);
         false -> ok
     end.

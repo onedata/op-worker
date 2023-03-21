@@ -27,7 +27,7 @@
 -export([is_root_dir_guid/1, is_root_dir_uuid/1, is_user_root_dir_uuid/1]).
 -export([is_space_dir_uuid/1, is_space_dir_guid/1]).
 -export([is_trash_dir_uuid/1, is_trash_dir_guid/1]).
--export([is_tmp_dir_uuid/1]).
+-export([is_tmp_dir_uuid/1, is_tmp_dir_guid/1]).
 -export([is_share_root_dir_uuid/1, is_share_root_dir_guid/1]).
 -export([uuid_to_path/2, uuid_to_guid/1]).
 -export([is_space_owner/1, unpack_space_owner/1]).
@@ -184,6 +184,11 @@ is_trash_dir_guid(FileGuid) ->
 -spec is_tmp_dir_uuid(file_meta:uuid()) -> boolean().
 is_tmp_dir_uuid(<<?TMP_DIR_UUID_PREFIX, _SpaceId/binary>>) -> true;
 is_tmp_dir_uuid(_) -> false.
+
+
+-spec is_tmp_dir_guid(file_id:file_guid()) -> boolean().
+is_tmp_dir_guid(FileGuid) ->
+    is_tmp_dir_uuid(file_id:guid_to_uuid(FileGuid)).
 
 
 -spec is_share_root_dir_uuid(file_meta:uuid()) -> boolean().
