@@ -611,7 +611,7 @@ unset_ignore_in_changes_on_tree(UserCtx, FileCtx, ListOpts) ->
         unset_child_ignore_in_changes(ChildCtx2),
         case IsDir of
             true ->
-                unset_ignore_in_changes_on_tree(UserCtx, FileCtx, #{tune_for_large_continuous_listing => true});
+                unset_ignore_in_changes_on_tree(UserCtx, ChildCtx2, #{tune_for_large_continuous_listing => true});
             false ->
                 ok
         end
