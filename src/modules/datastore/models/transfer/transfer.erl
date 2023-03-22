@@ -993,11 +993,15 @@ resolve_conflict(_Ctx, NewDoc, PreviousDoc) ->
     #document{value = NewTransfer} = NewDoc,
 
     PrevDocVec = {
+        PrevTransfer#transfer.replication_traverse_finished,
+        PrevTransfer#transfer.eviction_traverse_finished,
         PrevTransfer#transfer.cancel,
         PrevTransfer#transfer.enqueued,
         PrevTransfer#transfer.rerun_id
     },
     NewDocVec = {
+        NewTransfer#transfer.replication_traverse_finished,
+        NewTransfer#transfer.eviction_traverse_finished,
         NewTransfer#transfer.cancel,
         NewTransfer#transfer.enqueued,
         NewTransfer#transfer.rerun_id
@@ -1019,7 +1023,11 @@ resolve_conflict(_Ctx, NewDoc, PreviousDoc) ->
                 end,
                 rerun_id = utils:ensure_defined(
                     T1#transfer.rerun_id, undefined, T2#transfer.rerun_id
-                )
+                ),
+                replication_traverse_finished =
+                    T1#transfer.replication_traverse_finished or T2#transfer.replication_traverse_finished,
+                eviction_traverse_finished =
+                    T1#transfer.eviction_traverse_finished or T2#transfer.eviction_traverse_finished
             },
             {true, D1#document{value = EmergingTransfer}}
     end.

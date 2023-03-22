@@ -290,7 +290,7 @@ handle_active(TransferId, Callback, EvictSourceReplica) ->
             handle_active(TransferId, Callback, EvictSourceReplica);
         {replication_completed, TransferId} ->
             {ok, _} = replication_status:handle_completed(TransferId),
-            notify_callback(Callback, EvictSourceReplica, TransferId);
+            catch notify_callback(Callback, EvictSourceReplica, TransferId);
         {replication_aborting, TransferId, Reason} ->
             {ok, _} = replication_status:handle_aborting(TransferId),
             ?error("Replication ~p aborting due to ~p", [TransferId, Reason]),
