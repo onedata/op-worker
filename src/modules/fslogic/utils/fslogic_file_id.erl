@@ -130,6 +130,7 @@ is_special_uuid(FileUuid) ->
     is_root_dir_uuid(FileUuid)
         orelse is_space_dir_uuid(FileUuid)
         orelse is_trash_dir_uuid(FileUuid)
+        orelse is_tmp_dir_uuid(FileUuid)
         orelse is_share_root_dir_uuid(FileUuid)
         orelse archivisation_tree:is_special_uuid(FileUuid).
 
