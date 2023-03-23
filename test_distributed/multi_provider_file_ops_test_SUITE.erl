@@ -1470,15 +1470,14 @@ detect_stale_replica_synchronizer_jobs_test(Config0) ->
 
 
 tmp_files_posix_test(Config) ->
-    tmp_files_test_base(Config, <<"space1">>).
+    tmp_files_test_base(Config, <<"user1">>, <<"space1">>).
 
 
 tmp_files_flat_storage_test(Config) ->
-    tmp_files_test_base(Config, <<"space10">>).
+    tmp_files_test_base(Config, <<"user5">>, <<"space10">>).
 
 
-tmp_files_test_base(Config0, SpaceId) ->
-    User = <<"user1">>,
+tmp_files_test_base(Config0, User, SpaceId) ->
     Config = multi_provider_file_ops_test_base:extend_config(Config0, User, {4,0,0,2}, 60),
     [Worker1 | _] = ?config(workers1, Config),
     [Worker2 | _] = ?config(workers2, Config),
