@@ -14,6 +14,7 @@
 
 -include("modules/datastore/transfer.hrl").
 -include("tree_traverse.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 
 %% API
@@ -89,18 +90,30 @@ start_replica_eviction_file_tree_traverse(SupportingProviderId, #document{
     % TODO VFS-7443 - maybe use referenced guid?
     RootFileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
 
-    {ok, _} = tree_traverse:run(?POOL_NAME, RootFileCtx, #{
-        task_id => TransferId,
-        callback_module => transfer_file_tree_traverse,
-        batch_size => ?TRAVERSE_BATCH_SIZE,
-        children_master_jobs_mode => sync,
-        traverse_info => #{
-            transfer_id => TransferId,
-            user_ctx => user_ctx:new(?ROOT_SESS_ID),
-            worker_module => replica_eviction_worker,
-            supporting_provider => SupportingProviderId
-        }
-    }),
+    try
+        {ok, _} = tree_traverse:run(?POOL_NAME, RootFileCtx, #{
+            task_id => TransferId,
+            callback_module => transfer_file_tree_traverse,
+            batch_size => ?TRAVERSE_BATCH_SIZE,
+            children_master_jobs_mode => sync,
+            traverse_info => #{
+                transfer_id => TransferId,
+                user_ctx => user_ctx:new(?ROOT_SESS_ID),
+                worker_module => replica_eviction_worker,
+                supporting_provider => SupportingProviderId
+            }
+        })
+    catch
+        error:{badmatch, {error, not_found}} ->
+            % New file that has not been synchronized yet
+            transfer:mark_traverse_finished(TransferId);
+        Class:Reason:Stacktrace ->
+            ?error_exception(
+                "Failed to start transfer file tree traverse ~p", [TransferId],
+                Class, Reason, Stacktrace
+            ),
+            replica_eviction_status:handle_aborting(TransferId)
+    end,
     ok.
 
 
@@ -115,21 +128,32 @@ start_replica_eviction_view_traverse(SupportingProviderId, #document{
         query_view_params = QueryViewParams
     }
 }) ->
-    {ok, ViewId} = view_links:get_view_id(ViewName, SpaceId),
-
-    {ok, _} = view_traverse:run(?POOL_NAME, transfer_view_traverse, ViewId, TransferId, #{
-        query_opts => maps:merge(
-            maps:from_list(QueryViewParams),
-            #{limit => ?TRAVERSE_BATCH_SIZE}
-        ),
-        async_next_batch_job => true,
-        info => #{
-            space_id => SpaceId,
-            transfer_id => TransferId,
-            view_name => ViewName,
-            user_ctx => user_ctx:new(?ROOT_SESS_ID),
-            worker_module => replica_eviction_worker,
-            supporting_provider => SupportingProviderId
-        }
-    }),
+    try
+        {ok, ViewId} = view_links:get_view_id(ViewName, SpaceId),
+        {ok, _} = view_traverse:run(?POOL_NAME, transfer_view_traverse, ViewId, TransferId, #{
+            query_opts => maps:merge(
+                maps:from_list(QueryViewParams),
+                #{limit => ?TRAVERSE_BATCH_SIZE}
+            ),
+            async_next_batch_job => true,
+            info => #{
+                space_id => SpaceId,
+                transfer_id => TransferId,
+                view_name => ViewName,
+                user_ctx => user_ctx:new(?ROOT_SESS_ID),
+                worker_module => replica_eviction_worker,
+                supporting_provider => SupportingProviderId
+            }
+        })
+    catch
+        error:{badmatch, {error, not_found}} ->
+            % New view has not been synchronized yet
+            transfer:mark_traverse_finished(TransferId);
+        Class:Reason:Stacktrace ->
+            ?error_exception(
+                "Failed to start transfer view traverse ~p", [TransferId],
+                Class, Reason, Stacktrace
+            ),
+            replica_eviction_status:handle_aborting(TransferId)
+    end,
     ok.

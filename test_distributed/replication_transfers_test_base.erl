@@ -410,8 +410,8 @@ not_synced_file_should_not_be_replicated(Config, Type, FileKeyType) ->
                 expected_transfer = #{
                     replication_status => completed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
-                    files_to_process => 1,
-                    files_processed => 1,
+                    files_to_process => 0,
+                    files_processed => 0,
                     files_replicated => 0,
                     bytes_replicated => 0,
                     min_hist => ?MIN_HIST(#{ProviderId1 => 0}),
@@ -2232,8 +2232,8 @@ init_per_suite(Config) ->
 
 init_per_testcase(not_synced_file_should_not_be_replicated = Case, Config) ->
     [WorkerP2 | _] = ?config(op_worker_nodes, Config),
-    ok = test_utils:mock_new(WorkerP2, replication_worker),
-    ok = test_utils:mock_expect(WorkerP2, replication_worker, transfer_regular_file, fun(_, _) ->
+    ok = test_utils:mock_new(WorkerP2, tree_traverse),
+    ok = test_utils:mock_expect(WorkerP2, tree_traverse, run, fun(_, _, _) ->
         {error, not_found}
     end),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
@@ -2289,7 +2289,7 @@ init_per_testcase(_Case, Config) ->
 
 end_per_testcase(not_synced_file_should_not_be_replicated = Case, Config) ->
     [WorkerP2 | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(WorkerP2, replication_worker),
+    test_utils:mock_unload(WorkerP2, tree_traverse),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(Case, Config) when
