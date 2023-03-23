@@ -790,7 +790,6 @@ update_and_run(TransferId, UpdateFun, OnSuccessfulUpdate) ->
             {error, Error}
     end.
 
-%% TODO restarts??
 %%-------------------------------------------------------------------
 %% @private
 %% @doc
@@ -819,9 +818,11 @@ maybe_rerun(Doc = #document{key = TransferId, value = Transfer}) ->
     } of
         {true, _, _, _, TargetProviderId} ->
             % it is replication or first step of migration
+            replication_traverse:cancel(Doc),
             rerun_ended(undefined, Doc, true);
         {_, true, _, _, TargetProviderId} ->
             % replication being aborted
+            replication_traverse:cancel(Doc),
             replication_status:handle_failed(TransferId, true),
             skip;
         {true, _, true, _, SourceProviderId} ->
@@ -832,9 +833,11 @@ maybe_rerun(Doc = #document{key = TransferId, value = Transfer}) ->
             skip;
         {_, _, true, _, SourceProviderId} ->
             % it is eviction or second step of migration
+            replica_eviction_traverse:cancel(Doc),
             rerun_ended(undefined, Doc, true);
         {_, _, _, true, SourceProviderId} ->
             % eviction being aborted
+            replica_eviction_traverse:cancel(Doc),
             replica_eviction_status:handle_failed(TransferId, true),
             skip;
         {false, false, false, false, _} ->

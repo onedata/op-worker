@@ -54,7 +54,6 @@ update_job_progress(Id, Job, Pool, TransferId, Status) ->
 -spec do_master_job(tree_traverse:master_job(), traverse:master_job_extended_args()) ->
     {ok, traverse:master_job_map()}.
 do_master_job(Job, MasterJobArgs) ->
-    %% TODO try cache and update failed files ??
     tree_traverse:do_master_job(Job, MasterJobArgs).
 
 
