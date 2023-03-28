@@ -26,7 +26,7 @@
     user_ctx := user_ctx:ctx(),
     worker_module := module(),
     view_name => transfer:view_name(),
-    supporting_provider => undefined | od_provider:id()
+    replica_holder_provider_id => undefined | od_provider:id()
 }.
 -export_type([traverse_info/0]).
 
@@ -113,15 +113,15 @@ process_result(_TransferId, _FileCtx, _RetriesLeft, Error = {error, Reason}) whe
 ->
     Error;
 
-process_result(TransferId, _FileCtx, 0, Error = {error, not_found}) ->
-    ?error(
+process_result(TransferId, FileCtx, 0, Error = {error, not_found}) ->
+    if_file_deleted(FileCtx) orelse ?error(
         "Data transfer in scope of transfer ~p failed due to ~w~n"
         "No retries left", [TransferId, Error]
     ),
     Error;
 
 process_result(TransferId, FileCtx, Retries, Error = {error, not_found}) ->
-    ?warning(
+    if_file_deleted(FileCtx) orelse ?warning(
         "Data transfer in scope of transfer ~p failed due to ~w~n"
         "File transfer will be retried (attempts left: ~p)",
         [TransferId, Error, Retries - 1]
@@ -129,7 +129,7 @@ process_result(TransferId, FileCtx, Retries, Error = {error, not_found}) ->
     {retry, FileCtx};
 
 process_result(TransferId, FileCtx, 0, Error) ->
-    {Path, _FileCtx2} = file_ctx:get_canonical_path(FileCtx),
+    {Path, _FileCtx2} = get_file_path(FileCtx),
 
     ?error(
         "Transfer of file ~p in scope of transfer ~p failed~n"
@@ -144,7 +144,7 @@ process_result(TransferId, FileCtx, 0, Error) ->
     {error, retries_per_file_transfer_exceeded};
 
 process_result(TransferId, FileCtx, Retries, Error) ->
-    {Path, FileCtx2} = file_ctx:get_canonical_path(FileCtx),
+    {Path, FileCtx2} = get_file_path(FileCtx),
 
     ?warning(
         "Transfer of file ~p in scope of transfer ~p failed~n"
@@ -158,6 +158,25 @@ process_result(TransferId, FileCtx, Retries, Error) ->
         ]
     ),
     {retry, FileCtx2}.
+
+
+%% @private
+-spec if_file_deleted(file_ctx:ctx()) -> boolean().
+if_file_deleted(FileCtx) ->
+    case file_ctx:file_exists_or_is_deleted(FileCtx) of
+        {?FILE_DELETED, _} -> true;
+        _ -> false
+    end.
+
+
+%% @private
+-spec get_file_path(file_ctx:ctx()) -> {file_meta:path(), file_ctx:ctx()}.
+get_file_path(FileCtx) ->
+    try
+        file_ctx:get_canonical_path(FileCtx)
+    catch _:_ ->
+        {<<"unknown">>, FileCtx}
+    end.
 
 
 %%-------------------------------------------------------------------

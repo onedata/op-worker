@@ -41,7 +41,7 @@
     callback :: transfer:callback(),
     space_id :: od_space:id(),
     status :: transfer:subtask_status(),
-    supporting_provider_id :: od_provider:id(),
+    replica_holder_provider_id :: od_provider:id(),
     view_name :: transfer:view_name(),
     query_view_params :: transfer:query_view_params()
 }).
@@ -106,7 +106,7 @@ mark_cancelled(TransferId) ->
 -spec init(Args :: term()) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
-init([SessionId, TransferId, FileGuid, Callback, SupportingProviderId,
+init([SessionId, TransferId, FileGuid, Callback, ReplicaHolderProviderId,
     ViewName, QueryViewParams
 ]) ->
     ok = gen_server2:cast(self(), start_replica_eviction),
@@ -117,7 +117,7 @@ init([SessionId, TransferId, FileGuid, Callback, SupportingProviderId,
         callback = Callback,
         space_id = file_id:guid_to_space_id(FileGuid),
         status = ?ENQUEUED_STATUS,
-        supporting_provider_id = SupportingProviderId,
+        replica_holder_provider_id = ReplicaHolderProviderId,
         view_name = ViewName,
         query_view_params = QueryViewParams
     }}.
@@ -152,13 +152,13 @@ handle_call(Request, _From, State) ->
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_cast(start_replica_eviction, State = #state{
     transfer_id = TransferId,
-    supporting_provider_id = SupportingProviderId
+    replica_holder_provider_id = ReplicaHolderProviderId
 }) ->
     flush(),
     case replica_eviction_status:handle_active(TransferId) of
         {ok, TransferDoc} ->
             register_controller_process(TransferId),
-            replica_eviction_traverse:start(SupportingProviderId, TransferDoc),
+            replica_eviction_traverse:start(ReplicaHolderProviderId, TransferDoc),
             {noreply, State#state{status = ?ACTIVE_STATUS}};
         {error, ?ACTIVE_STATUS} ->
             register_controller_process(TransferId),

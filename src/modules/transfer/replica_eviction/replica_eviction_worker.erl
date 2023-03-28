@@ -58,9 +58,9 @@ process_replica_deletion_result({error, file_opened}, SpaceId, FileUuid, Transfe
     {ok, _} = transfer:increment_files_processed_counter(TransferId),
     ok;
 process_replica_deletion_result(Error, SpaceId, FileUuid, TransferId) ->
-    ?error("Error ~p occurred during replica eviction of file ~p in transfer ~p in space ~p", [
+    ?error("Error during replica eviction ~s", [?autoformat([
         Error, FileUuid, TransferId, SpaceId
-    ]),
+    ])]),
     {ok, _} = transfer:increment_files_failed_and_processed_counters(TransferId),
     ok.
 
@@ -94,7 +94,7 @@ required_permissions() ->
     ok | {error, term()}.
 transfer_regular_file(FileCtx, #{
     transfer_id := TransferId,
-    supporting_provider := undefined
+    replica_holder_provider_id := undefined
 }) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     case replica_deletion_master:find_supporter_and_prepare_deletion_request(FileCtx) of
@@ -107,7 +107,7 @@ transfer_regular_file(FileCtx, #{
 
 transfer_regular_file(FileCtx, #{
     transfer_id := TransferId,
-    supporting_provider := SupportingProviderId
+    replica_holder_provider_id := ReplicaHolderProviderId
 }) ->
     {LocalFileLocationDoc, FileCtx2} = file_ctx:get_or_create_local_file_location_doc(FileCtx),
     FileUuid = file_ctx:get_logical_uuid_const(FileCtx2),
@@ -115,5 +115,5 @@ transfer_regular_file(FileCtx, #{
     {Size, _FileCtx3} = file_ctx:get_file_size(FileCtx2),
     VV = file_location:get_version_vector(LocalFileLocationDoc),
     Blocks = [#file_block{offset = 0, size = Size}],
-    DeletionRequest = replica_deletion_master:prepare_deletion_request(FileUuid, SupportingProviderId, Blocks, VV),
+    DeletionRequest = replica_deletion_master:prepare_deletion_request(FileUuid, ReplicaHolderProviderId, Blocks, VV),
     replica_deletion_master:request_deletion(SpaceId, DeletionRequest, TransferId, ?EVICTION_JOB).

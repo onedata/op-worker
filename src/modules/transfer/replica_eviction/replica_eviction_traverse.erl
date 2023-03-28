@@ -53,12 +53,12 @@ pool_name() ->
 
 
 -spec start(undefined | od_provider:id(), transfer:doc()) -> ok.
-start(SupportingProviderId, TransferDoc = #document{value = Transfer}) ->
+start(ReplicaHolderProviderId, TransferDoc = #document{value = Transfer}) ->
     case transfer:data_source_type(Transfer) of
         file ->
-            start_replica_eviction_file_tree_traverse(SupportingProviderId, TransferDoc);
+            start_replica_eviction_file_tree_traverse(ReplicaHolderProviderId, TransferDoc);
         view ->
-            start_replica_eviction_view_traverse(SupportingProviderId, TransferDoc)
+            start_replica_eviction_view_traverse(ReplicaHolderProviderId, TransferDoc)
     end.
 
 
@@ -81,7 +81,7 @@ cancel(#document{key = TransferId, value = Transfer}) ->
     transfer:doc()
 ) ->
     ok.
-start_replica_eviction_file_tree_traverse(SupportingProviderId, #document{
+start_replica_eviction_file_tree_traverse(ReplicaHolderProviderId, #document{
     key = TransferId,
     value = #transfer{
         file_uuid = FileUuid,
@@ -101,7 +101,7 @@ start_replica_eviction_file_tree_traverse(SupportingProviderId, #document{
                 transfer_id => TransferId,
                 user_ctx => user_ctx:new(?ROOT_SESS_ID),
                 worker_module => replica_eviction_worker,
-                supporting_provider => SupportingProviderId
+                replica_holder_provider_id => ReplicaHolderProviderId
             }
         })
     catch
@@ -121,7 +121,7 @@ start_replica_eviction_file_tree_traverse(SupportingProviderId, #document{
 %% @private
 -spec start_replica_eviction_view_traverse(undefined | od_provider:id(), transfer:doc()) ->
     ok.
-start_replica_eviction_view_traverse(SupportingProviderId, #document{
+start_replica_eviction_view_traverse(ReplicaHolderProviderId, #document{
     key = TransferId,
     value = #transfer{
         space_id = SpaceId,
@@ -143,7 +143,7 @@ start_replica_eviction_view_traverse(SupportingProviderId, #document{
                 view_name => ViewName,
                 user_ctx => user_ctx:new(?ROOT_SESS_ID),
                 worker_module => replica_eviction_worker,
-                supporting_provider => SupportingProviderId
+                replica_holder_provider_id => ReplicaHolderProviderId
             }
         })
     catch
