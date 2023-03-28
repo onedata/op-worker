@@ -349,6 +349,7 @@ get_record_struct(11) ->
         {query_view_params, [{term, term}]}
     ]};
 get_record_struct(12) ->
+    % Removed fields: pid
     {record, [
         {file_uuid, string},
         {space_id, string},
@@ -552,7 +553,7 @@ upgrade_record(10, {?TRANSFER_MODEL, FileUuid, SpaceId, UserId, RerunId, Path, C
     }};
 upgrade_record(11, {?TRANSFER_MODEL, FileUuid, SpaceId, UserId, RerunId, Path, CallBack, Enqueued,
     Cancel, ReplicationStatus, EvictionStatus, SchedulingProvider,
-    ReplicatingProvider, EvictingProvider, ReplicationTraverseFinished, EvictionTraverseFinished,
+    ReplicatingProvider, EvictingProvider, _Pid, ReplicationTraverseFinished, EvictionTraverseFinished,
     FilesToProcess, FilesProcessed, FailedFiles, FilesReplicated, BytesReplicated,
     FilesEvicted, ScheduleTime, StartTime, FinishTime,
     LastUpdate, MinHist, HrHist, DyHist, MthHist, ViewName, QueryViewParams

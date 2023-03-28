@@ -6,8 +6,7 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module contains functions responsible for traversing file tree and
-%%% transferring regular files.
+%%% This module contains functions responsible for transferring regular files.
 %%% @end
 %%%--------------------------------------------------------------------
 -module(transfer_traverse_worker).
@@ -18,7 +17,7 @@
 
 
 %% API
--export([run_job/3]).
+-export([process_file/3]).
 
 
 -type traverse_info() :: #{
@@ -62,9 +61,9 @@
 %%%===================================================================
 
 
--spec run_job(transfer:id(), traverse_info(), file_ctx:ctx()) -> ok.
-run_job(TransferId, TraverseInfo, FileCtx) ->
-    case run_job(TransferId, TraverseInfo, FileCtx, ?MAX_TRANSFER_RETRIES) of
+-spec process_file(transfer:id(), traverse_info(), file_ctx:ctx()) -> ok.
+process_file(TransferId, TraverseInfo, FileCtx) ->
+    case process_file(TransferId, TraverseInfo, FileCtx, ?MAX_TRANSFER_RETRIES) of
         ok ->
             ok;
         {error, not_found} ->
@@ -87,16 +86,16 @@ run_job(TransferId, TraverseInfo, FileCtx) ->
 
 
 %% @private
--spec run_job(transfer:id(), traverse_info(), file_ctx:ctx(), non_neg_integer()) ->
+-spec process_file(transfer:id(), traverse_info(), file_ctx:ctx(), non_neg_integer()) ->
     ok | {error, term()}.
-run_job(TransferId, TraverseInfo, FileCtx0, RetriesLeft) ->
+process_file(TransferId, TraverseInfo, FileCtx0, RetriesLeft) ->
     case process_result(TransferId, FileCtx0, RetriesLeft, transfer_data(
         TransferId, TraverseInfo, FileCtx0
     )) of
         ok ->
             ok;
         {retry, FileCtx1} ->
-            run_job(TransferId, TraverseInfo, FileCtx1, RetriesLeft - 1);
+            process_file(TransferId, TraverseInfo, FileCtx1, RetriesLeft - 1);
         {error, _} = Error ->
             Error
     end.

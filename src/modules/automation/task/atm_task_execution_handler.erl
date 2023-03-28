@@ -569,7 +569,13 @@ handle_uncorrelated_results_processing_error(AtmWorkflowExecutionCtx, AtmTaskExe
     case atm_task_execution_status:handle_stopping(
         AtmTaskExecutionId, failure, get_incarnation(AtmWorkflowExecutionCtx)
     ) of
-        {ok, #document{value = #atm_task_execution{lane_index = AtmLaneIndex, run_num = RunNum}}} ->
+        {ok, #document{value = #atm_task_execution{
+            lane_index = AtmLaneIndex,
+            run_num = RunNum,
+            executor = AtmTaskExecutor
+        }}} ->
+            atm_task_executor:abort(AtmWorkflowExecutionCtx, AtmTaskExecutor),
+
             log_uncorrelated_results_processing_error(
                 AtmWorkflowExecutionCtx, AtmTaskExecutionId, Error
             ),

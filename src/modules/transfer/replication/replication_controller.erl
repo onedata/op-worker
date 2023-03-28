@@ -181,7 +181,6 @@ handle_cast({start_replication, TransferId, Callback, EvictSourceReplica}, State
         {error, ?ABORTING_STATUS} ->
             ?with_controller_registered(TransferId, handle_aborting(TransferId));
         {error, S} when S == ?COMPLETED_STATUS orelse S == ?CANCELLED_STATUS orelse S == ?FAILED_STATUS ->
-            ?error("~p", [{?MODULE, ?FUNCTION_NAME, ?LINE}]),
             ok
     end,
     {noreply, State, hibernate};
@@ -290,7 +289,7 @@ handle_active(TransferId, Callback, EvictSourceReplica) ->
             handle_active(TransferId, Callback, EvictSourceReplica);
         {replication_completed, TransferId} ->
             {ok, _} = replication_status:handle_completed(TransferId),
-            catch notify_callback(Callback, EvictSourceReplica, TransferId);
+            ?catch_exceptions(notify_callback(Callback, EvictSourceReplica, TransferId));
         {replication_aborting, TransferId, Reason} ->
             {ok, _} = replication_status:handle_aborting(TransferId),
             ?error("Replication ~p aborting due to ~p", [TransferId, Reason]),

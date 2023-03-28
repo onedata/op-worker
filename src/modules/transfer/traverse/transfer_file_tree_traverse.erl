@@ -63,7 +63,7 @@ do_slave_job(#tree_traverse_slave{
     traverse_info = TraverseInfo
 }, TransferId) ->
     transfer:increment_files_to_process_counter(TransferId, 1),
-    transfer_traverse_worker:run_job(TransferId, TraverseInfo, FileCtx).
+    transfer_traverse_worker:process_file(TransferId, TraverseInfo, FileCtx).
 
 
 -spec task_finished(transfer:id(), traverse:pool()) -> ok.

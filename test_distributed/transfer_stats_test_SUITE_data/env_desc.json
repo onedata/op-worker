@@ -19,7 +19,7 @@
                     "latencyMax": "0",
                     "timeoutProbability": "0.0",
                     "filter": "*",
-                    "simulatedFilesystemParameters": "",
+                    "simulatedFilesystemParameters": "0-1:1048576000000",
                     "simulatedFilesystemGrowSpeed": "0.0"
                 }
             ],
@@ -132,6 +132,13 @@
                         "storage": "nulldevice2",
                         "supported_size": 10000000000000
                     }
+                }
+            }
+        },
+        "storages": {
+            "p1": {
+                "nulldevice1": {
+                    "imported_storage": true
                 }
             }
         }

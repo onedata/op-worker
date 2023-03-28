@@ -6,7 +6,8 @@
 %%% @end
 %%%--------------------------------------------------------------------
 %%% @doc
-%%% This module manages pools of processes responsible for replication.
+%%% This module manages pools of processes responsible for replication
+%%% (either by view or file tree).
 %%% @end
 %%%--------------------------------------------------------------------
 -module(replication_traverse).
@@ -22,7 +23,9 @@
 
 
 -define(POOL_NAME, atom_to_binary(?MODULE, utf8)).
--define(TRAVERSE_BATCH_SIZE, op_worker:get_env(transfer_traverse_list_batch_size, 100)).
+-define(MASTER_JOBS_LIMIT, op_worker:get_env(replication_master_jobs_limit, 20)).
+-define(SLAVE_JOBS_LIMIT, op_worker:get_env(replication_slave_jobs_limit, 60)).
+-define(TRAVERSE_BATCH_SIZE, op_worker:get_env(transfer_traverse_list_batch_size, 1000)).
 
 
 %%%===================================================================
@@ -32,12 +35,10 @@
 
 -spec init_pool() -> ok  | no_return().
 init_pool() ->
-    % Get pool limits from app.config
-    MasterJobsLimit = op_worker:get_env(replication_master_jobs_limit, 20),
-    SlaveJobsLimit = op_worker:get_env(replication_slave_jobs_limit, 40),
+    MasterJobsLimit = ?MASTER_JOBS_LIMIT,
 
     % set parallelism limit equal to master jobs limit
-    tree_traverse:init(?MODULE, MasterJobsLimit, SlaveJobsLimit, MasterJobsLimit).
+    tree_traverse:init(?MODULE, MasterJobsLimit, ?SLAVE_JOBS_LIMIT, MasterJobsLimit).
 
 
 -spec stop_pool() -> ok.

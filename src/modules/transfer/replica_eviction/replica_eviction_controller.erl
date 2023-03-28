@@ -176,7 +176,7 @@ handle_cast({replica_eviction_completed, TransferId}, State = #state{
     status = ?ACTIVE_STATUS
 }) ->
     {ok, _} = replica_eviction_status:handle_completed(TransferId),
-    catch notify_callback(Callback, TransferId),
+    ?catch_exceptions(notify_callback(Callback, TransferId)),
     {stop, normal, State};
 
 handle_cast({replica_eviction_aborting, TransferId, Reason}, State = #state{

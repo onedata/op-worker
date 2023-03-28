@@ -49,7 +49,7 @@ process_row(Row, TraverseInfo = #{
 
     lists:foreach(fun
         ({ok, FileCtx}) ->
-            transfer_traverse_worker:run_job(TransferId, TraverseInfo, FileCtx);
+            transfer_traverse_worker:process_file(TransferId, TraverseInfo, FileCtx);
         (error) ->
             transfer:increment_files_failed_and_processed_counters(TransferId)
     end, FileCtxsOrErrors).
