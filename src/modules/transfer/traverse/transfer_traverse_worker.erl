@@ -114,14 +114,14 @@ process_result(_TransferId, _FileCtx, _RetriesLeft, Error = {error, Reason}) whe
     Error;
 
 process_result(TransferId, FileCtx, 0, Error = {error, not_found}) ->
-    if_file_deleted(FileCtx) orelse ?error(
+    is_file_deleted(FileCtx) orelse ?error(
         "Data transfer in scope of transfer ~p failed due to ~w~n"
         "No retries left", [TransferId, Error]
     ),
     Error;
 
 process_result(TransferId, FileCtx, Retries, Error = {error, not_found}) ->
-    if_file_deleted(FileCtx) orelse ?warning(
+    is_file_deleted(FileCtx) orelse ?warning(
         "Data transfer in scope of transfer ~p failed due to ~w~n"
         "File transfer will be retried (attempts left: ~p)",
         [TransferId, Error, Retries - 1]
@@ -161,8 +161,8 @@ process_result(TransferId, FileCtx, Retries, Error) ->
 
 
 %% @private
--spec if_file_deleted(file_ctx:ctx()) -> boolean().
-if_file_deleted(FileCtx) ->
+-spec is_file_deleted(file_ctx:ctx()) -> boolean().
+is_file_deleted(FileCtx) ->
     case file_ctx:file_exists_or_is_deleted(FileCtx) of
         {?FILE_DELETED, _} -> true;
         _ -> false

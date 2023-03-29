@@ -86,6 +86,7 @@ init(ProviderSelectors, ModuleWithOpenfaasDockerMock) ->
 
     mock_create(Workers),
     mock_initiate(Workers),
+    mock_abort(Workers),
     mock_teardown(Workers),
     mock_delete(Workers),
     mock_is_in_readonly_mode(Workers),
@@ -226,6 +227,13 @@ init_result_streamer_if_task_has_any_uncorrelated_results(
         ResultStreamerRef, AtmWorkflowExecutionId, AtmTaskExecutionId, ?STREAMER_ID
     ),
     save_result_streamer_ref(ResultStreamerRef, AtmTaskExecutor).
+
+
+%% @private
+-spec mock_abort([node()]) -> ok.
+mock_abort(Workers) ->
+    MockFun = fun(_AtmWorkflowExecutionCtx, _AtmTaskExecutor) -> ok end,
+    test_utils:mock_expect(Workers, ?MOCKED_MODULE, abort, MockFun).
 
 
 %% @private
