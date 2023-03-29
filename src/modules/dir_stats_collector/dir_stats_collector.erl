@@ -183,7 +183,8 @@
 -define(STOP_COLLECTING(SpaceId), {stop_collecting, SpaceId}).
 -define(FILE_MOVED(Guid, TargetParentGuid), {file_moved, Guid, TargetParentGuid}).
 
--define(THROTTLE_LOG(Log), utils:throttle(300, fun() -> Log end)). % Log not more often than once every 5 min
+% Log not more often than once every 5 min
+-define(THROTTLE_LOG(SpaceId, Log), utils:throttle({?MODULE, ?FUNCTION_NAME, SpaceId}, 300, fun() -> Log end)).
 
 %%%===================================================================
 %%% API - single directory
@@ -885,8 +886,9 @@ save_and_propagate_cached_dir_stats({Guid, CollectionType} = _CachedDirStatsKey,
     catch
         _:space_unsupported ->
             % There can be a lot of files to save if space has been incorrectly unsupported - log must be throttled
-            ?THROTTLE_LOG(?warning("Cannot save or propagate cache dir stats for collection type: ~p and guid ~p"
-                " due to space unsupport", [CollectionType, Guid])),
+            SpaceId = file_id:guid_to_space_id(Guid),
+            ?THROTTLE_LOG(SpaceId, ?warning("Cannot save or propagate cache dir stats for collection type:"
+                " ~p and guid ~p due to space unsupport", [CollectionType, Guid])),
             {CachedDirStats#cached_dir_stats{stat_updates_acc_for_parent = #{}}, State2};
         Error:Reason:Stacktrace ->
             ?error_stacktrace("Dir stats collector save and propagate error for collection type: ~p and guid ~p:~n~p:~p",
