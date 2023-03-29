@@ -881,6 +881,10 @@ save_and_propagate_cached_dir_stats({Guid, CollectionType} = _CachedDirStatsKey,
         end,
         {propagate_to_parent(Guid, CollectionType, CachedDirStats), State2}
     catch
+        _:space_unsupported ->
+            ?warning("Cannot save or propagate cache dir stats for collection type: ~p and guid ~p due to space unsupport",
+                [CollectionType, Guid]),
+            {CachedDirStats#cached_dir_stats{stat_updates_acc_for_parent = #{}}, State2};
         Error:Reason:Stacktrace ->
             ?error_stacktrace("Dir stats collector save and propagate error for collection type: ~p and guid ~p:~n~p:~p",
                 [CollectionType, Guid, Error, Reason], Stacktrace),

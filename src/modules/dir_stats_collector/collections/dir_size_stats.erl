@@ -36,6 +36,7 @@
 
 -include("modules/dir_stats_collector/dir_size_stats.hrl").
 -include("modules/datastore/datastore_models.hrl").
+-include("modules/fslogic/fslogic_common.hrl").
 -include_lib("cluster_worker/include/modules/datastore/datastore_time_series.hrl").
 -include_lib("cluster_worker/include/time_series/browsing.hrl").
 -include_lib("ctool/include/time_series/common.hrl").
@@ -351,8 +352,18 @@ internal_stats_config(Guid) ->
 %% @private
 -spec stat_names(file_id:file_guid()) -> [dir_stats_collection:stat_name()].
 stat_names(Guid) ->
-    {ok, StorageId} = space_logic:get_local_supporting_storage(file_id:guid_to_space_id(Guid)),
-    [?REG_FILE_AND_LINK_COUNT, ?DIR_COUNT, ?FILE_ERRORS_COUNT, ?DIR_ERRORS_COUNT, ?TOTAL_SIZE, ?SIZE_ON_STORAGE(StorageId)].
+    case space_logic:get_local_supporting_storage(file_id:guid_to_space_id(Guid)) of
+        {ok, StorageId} ->
+            [?REG_FILE_AND_LINK_COUNT, ?DIR_COUNT, ?FILE_ERRORS_COUNT, ?DIR_ERRORS_COUNT,
+                ?TOTAL_SIZE, ?SIZE_ON_STORAGE(StorageId)];
+        {error, not_found} ->
+            case space_logic:is_supported(
+                ?ROOT_SESS_ID, file_ctx:get_space_id_const(Guid), oneprovider:get_id_or_undefined()
+            ) of
+                true -> throw({error, not_found});
+                false -> throw(space_unsupported)
+            end
+    end.
 
 
 %% @private
