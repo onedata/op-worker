@@ -204,6 +204,8 @@ finish_cancel_procedure(ExecutionId) ->
     case workflow_execution_state:finish_cancel(ExecutionId) of
         {ok, EngineId} ->
             trigger_job_scheduling(EngineId);
+        ?WF_ERROR_WORKFLOW_INTERRUPTED ->
+            ok;
         ?WF_ERROR_CANCEL_NOT_INITIALIZED ->
             ?warning("Finishing not initialized cancel procedure for execution ~s", [ExecutionId]),
             ok
