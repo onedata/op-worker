@@ -146,6 +146,7 @@
 -define(WF_ERROR_ITEM_PROCESSING_ENDED(Item, SuccessOrFailure),
     {error, {item_processing_ended, Item, SuccessOrFailure}}).
 -define(WF_ERROR_CANCEL_NOT_INITIALIZED, {error, cancel_not_initialized}).
+-define(WF_ERROR_WORKFLOW_INTERRUPTED(EngineId), {error, {workflow_interrupted, EngineId}}).
 -define(WF_ERROR_PRED_NOT_MEET, {error, pred_not_meet}).
 -define(WF_ERROR_WRONG_EXECUTION_STATUS, {error, wrong_execution_status}).
 

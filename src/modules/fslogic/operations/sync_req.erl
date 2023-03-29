@@ -53,17 +53,23 @@
     Prefetch :: boolean(), transfer_id(), non_neg_integer()) -> fuse_response().
 synchronize_block(UserCtx, FileCtx, undefined, Prefetch, TransferId, Priority) ->
     % trigger file_location creation
-    {#document{value = #file_location{size = Size} = FL, deleted = false} = FLDoc, FileCtx2} =
-        file_ctx:get_or_create_local_file_location_doc(FileCtx, skip_local_blocks),
-    case fslogic_location_cache:get_blocks(FLDoc, #{count => 2}) of
-        [#file_block{offset = 0, size = Size}] ->
+    case file_ctx:get_or_create_local_file_location_doc(FileCtx, skip_local_blocks) of
+        {#document{value = #file_location{size = 0} = FL}, FileCtx2} ->
             LogicalUuid = file_ctx:get_logical_uuid_const(FileCtx2),
             FLC = #file_location_changed{file_location = FL#file_location{uuid = LogicalUuid},
-                change_beg_offset = 0, change_end_offset = Size},
+                change_beg_offset = 0, change_end_offset = 0},
             #fuse_response{status = #status{code = ?OK}, fuse_response = FLC};
-        _ ->
-            synchronize_block(UserCtx, FileCtx2, #file_block{offset = 0, size = Size},
-                Prefetch, TransferId, Priority)
+        {#document{value = #file_location{size = Size} = FL, deleted = false} = FLDoc, FileCtx2} ->
+            case fslogic_location_cache:get_blocks(FLDoc, #{count => 2}) of
+                [#file_block{offset = 0, size = Size}] ->
+                    LogicalUuid = file_ctx:get_logical_uuid_const(FileCtx2),
+                    FLC = #file_location_changed{file_location = FL#file_location{uuid = LogicalUuid},
+                        change_beg_offset = 0, change_end_offset = Size},
+                    #fuse_response{status = #status{code = ?OK}, fuse_response = FLC};
+                _ ->
+                    synchronize_block(UserCtx, FileCtx2, #file_block{offset = 0, size = Size},
+                        Prefetch, TransferId, Priority)
+            end
     end;
 synchronize_block(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
     case replica_synchronizer:synchronize(UserCtx, FileCtx, Block,
@@ -87,14 +93,17 @@ synchronize_block(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
     Prefetch :: boolean(), transfer_id(), non_neg_integer()) -> fuse_response().
 request_block_synchronization(UserCtx, FileCtx, undefined, Prefetch, TransferId, Priority) ->
     % trigger file_location creation
-    {#document{value = #file_location{size = Size}, deleted = false} = FLDoc, FileCtx2} =
-        file_ctx:get_or_create_local_file_location_doc(FileCtx, skip_local_blocks),
-    case fslogic_location_cache:get_blocks(FLDoc, #{count => 2}) of
-        [#file_block{offset = 0, size = Size}] ->
+    case file_ctx:get_or_create_local_file_location_doc(FileCtx, skip_local_blocks) of
+        {#document{value = #file_location{size = 0}}, _FileCtx2} ->
             #fuse_response{status = #status{code = ?OK}};
-        _ ->
-            request_block_synchronization(UserCtx, FileCtx2, #file_block{offset = 0, size = Size},
-                Prefetch, TransferId, Priority)
+        {#document{value = #file_location{size = Size}, deleted = false} = FLDoc, FileCtx2} ->
+            case fslogic_location_cache:get_blocks(FLDoc, #{count => 2}) of
+                [#file_block{offset = 0, size = Size}] ->
+                    #fuse_response{status = #status{code = ?OK}};
+                _ ->
+                    request_block_synchronization(UserCtx, FileCtx2, #file_block{offset = 0, size = Size},
+                        Prefetch, TransferId, Priority)
+            end
     end;
 request_block_synchronization(UserCtx, FileCtx, Block, Prefetch, TransferId, Priority) ->
     case replica_synchronizer:request_synchronization(UserCtx, FileCtx, Block,

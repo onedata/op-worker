@@ -222,7 +222,11 @@ save(Guid, Collection, Incarnation) ->
             % NOTE: single pes process is dedicated for each guid so race resulting in
             % {error, already_exists} is impossible - match create answer to ok
             ok = datastore_time_series_collection:create(?CTX, Uuid, Config),
-            save(Guid, Collection, Incarnation)
+            save(Guid, Collection, Incarnation);
+        ?ERROR_TSC_MISSING_LAYOUT(MissingLayout) ->
+            MissingConfig = maps:with(maps:keys(MissingLayout), internal_stats_config(Guid)),
+            ok = datastore_time_series_collection:incorporate_config(?CTX, Uuid, MissingConfig),
+            ok = datastore_time_series_collection:consume_measurements(?CTX, Uuid, ConsumeSpec)
     end.
 
 

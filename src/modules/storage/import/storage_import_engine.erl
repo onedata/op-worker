@@ -135,7 +135,10 @@ sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
                                                 {undefined, _} ->
                                                     maybe_import_file(StorageFileCtx, Info);
                                                 {_Guid, not_found} ->
-                                                    {?FILE_UNMODIFIED, undefined, StorageFileCtx};
+                                                    case Info of
+                                                        #{scan_num := 1} -> maybe_import_file(StorageFileCtx, Info);
+                                                        _ -> {?FILE_UNMODIFIED, undefined, StorageFileCtx}
+                                                    end;
                                                 {Guid, {conflicting_uuids, ConflictingUuids}} ->
                                                     % Check if storage_sync_info points to other conflicting file
                                                     case lists:member(file_id:guid_to_uuid(Guid), ConflictingUuids) of

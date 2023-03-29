@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([apply_batch/5, apply/1]).
+-export([apply_batch/5, apply/1, get_ctx/1]).
 
 -type ctx() :: datastore_cache:ctx().
 -type key() :: datastore:key().

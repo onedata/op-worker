@@ -269,6 +269,7 @@ init_cancel(ExecutionId, Pred) ->
 finish_cancel(ExecutionId) ->
     case update(ExecutionId, fun handle_execution_cancel_finish/1) of
         {ok, #document{value = #workflow_execution_state{engine_id = EngineId}}} -> {ok, EngineId};
+        ?WF_ERROR_WORKFLOW_INTERRUPTED(EngineId) -> {ok, EngineId};
         ?ERROR_NOT_FOUND -> ?WF_ERROR_CANCEL_NOT_INITIALIZED;
         ?WF_ERROR_CANCEL_NOT_INITIALIZED -> ?WF_ERROR_CANCEL_NOT_INITIALIZED
     end.
@@ -1204,10 +1205,15 @@ handle_execution_cancel_init(#workflow_execution_state{execution_status = ?EXECU
 handle_execution_cancel_init(State, _) ->
     {ok, State#workflow_execution_state{execution_status = ?EXECUTION_CANCELLED(1)}}.
 
--spec handle_execution_cancel_finish(state()) -> {ok, state()} | ?WF_ERROR_CANCEL_NOT_INITIALIZED.
+-spec handle_execution_cancel_finish(state()) ->
+    {ok, state()} | ?WF_ERROR_CANCEL_NOT_INITIALIZED | ?WF_ERROR_WORKFLOW_INTERRUPTED(workflow_engine:id()).
 handle_execution_cancel_finish(#workflow_execution_state{execution_status = ?EXECUTION_CANCELLED(Counter) = Status} = State)
     when Counter > 0 ->
     {ok, State#workflow_execution_state{execution_status = Status#execution_cancelled{call_count = Counter - 1}}};
+handle_execution_cancel_finish(#workflow_execution_state{
+    execution_status = #execution_cancelled{is_interrupted = true}, engine_id = EngineId
+}) ->
+    ?WF_ERROR_WORKFLOW_INTERRUPTED(EngineId);
 handle_execution_cancel_finish(_State) ->
     ?WF_ERROR_CANCEL_NOT_INITIALIZED.
 

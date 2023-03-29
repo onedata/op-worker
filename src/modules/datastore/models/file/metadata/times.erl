@@ -109,8 +109,9 @@ save_with_current_times(FileUuid, SpaceId) ->
 %%--------------------------------------------------------------------
 -spec create_or_update(doc(), diff()) ->
     {ok, doc()} | {error, term()}.
-create_or_update(#document{key = Key, value = Default}, Diff) ->
-    datastore_model:update(?CTX, fslogic_file_id:ensure_referenced_uuid(Key), Diff, Default).
+create_or_update(#document{key = Key} = Doc, Diff) ->
+    ReferencedUuid = fslogic_file_id:ensure_referenced_uuid(Key),
+    datastore_model:update(?CTX, ReferencedUuid, Diff, Doc#document{key = ReferencedUuid}).
 
 %%--------------------------------------------------------------------
 %% @doc

@@ -302,7 +302,7 @@ call_handler(ExecutionId, Context, Handler, Function, Args) ->
         Error:Reason:Stacktrace  ->
             handle_exception(
                 ExecutionId, Handler, Context,
-                "Unexpected error in ~w (args: ~p)", [Function, Args],
+                "~s", [?autoformat([Function, Args])],
                 Error, Reason, Stacktrace
             ),
             error
