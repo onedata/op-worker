@@ -591,6 +591,8 @@ check_timeouts(ExecutionId) ->
             end, maps:to_list(AsyncPoolsSlotsToFree)),
             maps:size(AsyncPoolsSlotsToFree) =/= 0;
         ?WF_ERROR_NOTHING_CHANGED  ->
+            false;
+        ?ERROR_NOT_FOUND ->
             false
     end.
 

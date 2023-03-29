@@ -84,8 +84,10 @@
 -export_type([run_opts/0, info/0, master_job/0, slave_job/0, children_batch/0, next_batch_job_prehook/0, fold_children_fun/0,
     children_master_job_prehook/0, iterator_type/0, fold_children_init/0, fold_children_result/0, callback_module/0]).
 
--define(ASYNC_CHILDREN_MASTER_JOBS(TaskId, Default), op_worker:get_env({async_children_master_jobs_override, TaskId}, Default)).
--define(ASYNC_NEXT_BATCH_JOB(TaskId, Default), op_worker:get_env({async_next_batch_job_override, TaskId}, Default)).
+-define(ASYNC_CHILDREN_MASTER_JOBS(TaskId, Default),
+    proplists:get_value(TaskId, op_worker:get_env(async_children_master_jobs_override, []), Default)).
+-define(ASYNC_NEXT_BATCH_JOB(TaskId, Default),
+    proplists:get_value(TaskId, op_worker:get_env(async_next_batch_job_override, []), Default)).
 
 %%%===================================================================
 %%% Definitions of optional storage_traverse behaviour callbacks

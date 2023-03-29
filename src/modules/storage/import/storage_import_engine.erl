@@ -48,6 +48,7 @@
 
 -define(CREATE_MISSING_PARENT_CRITICAL_SECTION(ParentUUid, MissingParentName, Function),
     critical_section:run({create_missing_parent, ParentUuid, MissingParentName}, Function)).
+-define(REIMPORT_WITH_MISSING_LINK, op_worker:get_env(reimport_with_missing_link, first_scan_only)).
 
 %%%===================================================================
 %%% API functions
@@ -135,9 +136,13 @@ sync_file(StorageFileCtx, Info = #{parent_ctx := ParentCtx}) ->
                                                 {undefined, _} ->
                                                     maybe_import_file(StorageFileCtx, Info);
                                                 {_Guid, not_found} ->
-                                                    case Info of
-                                                        #{scan_num := 1} -> maybe_import_file(StorageFileCtx, Info);
-                                                        _ -> {?FILE_UNMODIFIED, undefined, StorageFileCtx}
+                                                    case {?REIMPORT_WITH_MISSING_LINK, Info} of
+                                                        {true, _} ->
+                                                            maybe_import_file(StorageFileCtx, Info);
+                                                        {first_scan_only, #{scan_num := 1}} ->
+                                                            maybe_import_file(StorageFileCtx, Info);
+                                                        _ ->
+                                                            {?FILE_UNMODIFIED, undefined, StorageFileCtx}
                                                     end;
                                                 {Guid, {conflicting_uuids, ConflictingUuids}} ->
                                                     % Check if storage_sync_info points to other conflicting file
