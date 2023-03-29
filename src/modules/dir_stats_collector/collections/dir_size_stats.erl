@@ -352,14 +352,13 @@ internal_stats_config(Guid) ->
 %% @private
 -spec stat_names(file_id:file_guid()) -> [dir_stats_collection:stat_name()].
 stat_names(Guid) ->
-    case space_logic:get_local_supporting_storage(file_id:guid_to_space_id(Guid)) of
+    SpaceId = file_id:guid_to_space_id(Guid),
+    case space_logic:get_local_supporting_storage(SpaceId) of
         {ok, StorageId} ->
             [?REG_FILE_AND_LINK_COUNT, ?DIR_COUNT, ?FILE_ERRORS_COUNT, ?DIR_ERRORS_COUNT,
                 ?TOTAL_SIZE, ?SIZE_ON_STORAGE(StorageId)];
         {error, not_found} ->
-            case space_logic:is_supported(
-                ?ROOT_SESS_ID, file_ctx:get_space_id_const(Guid), oneprovider:get_id_or_undefined()
-            ) of
+            case space_logic:is_supported(?ROOT_SESS_ID, SpaceId, oneprovider:get_id_or_undefined()) of
                 true -> throw({error, not_found});
                 false -> throw(space_unsupported)
             end
