@@ -76,7 +76,6 @@ stages:
         - api_dataset_crud
         - api_dataset_tree
         - api_file_attrs
-        - api_file_attrs_mytest
         - api_file_crud
         - api_file_ls
         - api_file_metadata_delete
@@ -641,15 +640,6 @@ api_file_attrs:
     - *ct_logs
     - <<: *cover_ct
       name: cover_ct_api_file_attrs.tar.gz
-
-# TODO Remove after testing  
-api_file_attrs_mytest:
-  <<: *ct-onenv-job
-  key: FILDAPIT
-  artifacts:
-    - *ct_logs
-    - <<: *cover_ct
-      name: cover_ct_api_file_attrs_mytest.tar.gz
 
 api_file_crud:
   <<: *ct-onenv-job
