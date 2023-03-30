@@ -645,7 +645,7 @@ api_file_attrs:
 # TODO Remove after testing  
 api_file_attrs_mytest:
   <<: *ct-onenv-job
-  key: FILDAPI
+  key: FILDAPIT
   artifacts:
     - *ct_logs
     - <<: *cover_ct
