@@ -374,7 +374,7 @@ update_doc_seq(#document{value = #links_mask{model = Model, key = RoutingKey}} =
 update_doc_seq(#document{key = Key, value = Value}) ->
     Model = element(1, Value),
     Ctx = dbsync_changes:get_ctx(Model),
-    Ctx2 = Ctx#{sync_change => true, hooks_disabled => true},
+    Ctx2 = Ctx#{sync_change => true, hooks_disabled => true, include_deleted => true},
     case datastore_model:update(Ctx2, Key, fun(Record) -> {ok, Record} end) of
         {ok, _} -> ok;
         {error, not_found} -> ok
@@ -387,7 +387,8 @@ update_link_doc_seq(Model, RoutingKey, #document{key = Key}) ->
     Ctx = dbsync_changes:get_ctx(Model),
     Ctx2 = Ctx#{
         local_links_tree_id => oneprovider:get_id(),
-        routing_key => RoutingKey
+        routing_key => RoutingKey,
+        include_deleted => true
     },
     Ctx3 = datastore_multiplier:extend_name(RoutingKey, Ctx2),
     case datastore_router:route(update, [Ctx3, Key, fun(Record) -> {ok, Record} end]) of
