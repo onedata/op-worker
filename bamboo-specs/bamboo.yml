@@ -544,7 +544,7 @@ api_archive: &ct-onenv-job
                 --username ${bamboo.artifactRepoUsername} --branch ${bamboo.branchSrc} --plan ${bamboo.planRepository.name} \
                 --artifact-name ${ARTIFACT}
               tar zxf ${ARTIFACT}
-              if [[ -f test_distributed/logs/*/surefire.xml ]]; then
+              if [ -f test_distributed/logs/*/surefire.xml ]; then
                 break
               else
                 let c=$c-1
