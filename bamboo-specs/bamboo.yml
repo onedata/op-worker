@@ -641,6 +641,15 @@ api_file_attrs:
     - <<: *cover_ct
       name: cover_ct_api_file_attrs.tar.gz
 
+# TODO Remove after testing  
+api_file_attrs_mytest:
+  <<: *ct-onenv-job
+  key: FILDAPI
+  artifacts:
+    - *ct_logs
+    - <<: *cover_ct
+      name: cover_ct_api_file_attrs_mytest.tar.gz
+
 api_file_crud:
   <<: *ct-onenv-job
   key: FILCRUDAPI
