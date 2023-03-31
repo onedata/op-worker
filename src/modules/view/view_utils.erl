@@ -94,7 +94,7 @@ sanitize_query_options([{<<"endkey">>, undefined} | Rest], Options) ->
     sanitize_query_options(Rest, Options);
 sanitize_query_options([{<<"endkey">>, Endkey} | Rest], Options) ->
     try
-        sanitize_query_options(Rest, [{endkey, jiffy:decode(Endkey)} | Options])
+        sanitize_query_options(Rest, [{endkey, jiffy:decode(Endkey, [copy_strings])} | Options])
     catch _:_ ->
         throw(?ERROR_BAD_VALUE_JSON(<<"endkey">>))
     end;
@@ -103,7 +103,7 @@ sanitize_query_options([{<<"startkey">>, undefined} | Rest], Options) ->
     sanitize_query_options(Rest, Options);
 sanitize_query_options([{<<"startkey">>, StartKey} | Rest], Options) ->
     try
-        sanitize_query_options(Rest, [{startkey, jiffy:decode(StartKey)} | Options])
+        sanitize_query_options(Rest, [{startkey, jiffy:decode(StartKey, [copy_strings])} | Options])
     catch _:_ ->
         throw(?ERROR_BAD_VALUE_JSON(<<"startkey">>))
     end;
@@ -129,7 +129,7 @@ sanitize_query_options([{<<"key">>, undefined} | Rest], Options) ->
     sanitize_query_options(Rest, Options);
 sanitize_query_options([{<<"key">>, Key} | Rest], Options) ->
     try
-        sanitize_query_options(Rest, [{key, jiffy:decode(Key)} | Options])
+        sanitize_query_options(Rest, [{key, jiffy:decode(Key, [copy_strings])} | Options])
     catch _:_ ->
         throw(?ERROR_BAD_VALUE_JSON(<<"key">>))
     end;
@@ -138,7 +138,7 @@ sanitize_query_options([{<<"keys">>, undefined} | Rest], Options) ->
     sanitize_query_options(Rest, Options);
 sanitize_query_options([{<<"keys">>, Keys} | Rest], Options) ->
     try
-        DecodedKeys = jiffy:decode(Keys),
+        DecodedKeys = jiffy:decode(Keys, [copy_strings]),
         true = is_list(DecodedKeys),
         sanitize_query_options(Rest, [{keys, DecodedKeys} | Options])
     catch _:_ ->
@@ -177,7 +177,7 @@ sanitize_query_options([{<<"start_range">>, undefined} | Rest], Options) ->
     sanitize_query_options(Rest, Options);
 sanitize_query_options([{<<"start_range">>, Endkey} | Rest], Options) ->
     StartRange = try
-        {start_range, jiffy:decode(Endkey)}
+        {start_range, jiffy:decode(Endkey, [copy_strings])}
     catch _:_ ->
         throw(?ERROR_BAD_VALUE_JSON(<<"start_range">>))
     end,
@@ -187,7 +187,7 @@ sanitize_query_options([{<<"end_range">>, undefined} | Rest], Options) ->
     sanitize_query_options(Rest, Options);
 sanitize_query_options([{<<"end_range">>, Endkey} | Rest], Options) ->
     EndRange = try
-        {end_range, jiffy:decode(Endkey)}
+        {end_range, jiffy:decode(Endkey, [copy_strings])}
     catch _:_ ->
         throw(?ERROR_BAD_VALUE_JSON(<<"end_range">>))
     end,

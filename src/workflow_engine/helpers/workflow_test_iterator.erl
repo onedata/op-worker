@@ -72,7 +72,7 @@ db_encode(#workflow_test_iterator{item_number = ItemNumber, item_count = ItemCou
 -spec db_decode(json_utils:json_term(), persistent_record:nested_record_decoder()) -> jsonable_record:record().
 db_decode(Term, _) ->
     #{<<"item_number">> := ItemNumber, <<"item_count">> := ItemCount, <<"fail_on_item">> := FailOnItem} =
-        jiffy:decode(Term, [return_maps]),
+        json_utils:decode(Term),
     #workflow_test_iterator{item_number = ItemNumber, item_count = ItemCount, fail_on_item = FailOnItem}.
 
 -spec version() -> persistent_record:record_version().
