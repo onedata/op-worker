@@ -360,7 +360,7 @@ stat_names(Guid) ->
         {error, not_found} ->
             case space_logic:is_supported(?ROOT_SESS_ID, SpaceId, oneprovider:get_id_or_undefined()) of
                 true -> throw({error, not_found});
-                false -> throw(space_unsupported)
+                false -> throw({error, space_unsupported})
             end
     end.
 

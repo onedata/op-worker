@@ -265,19 +265,19 @@ aggregate_change(Doc = #document{seq = Seq}, State = #state{changes = Docs}) ->
 handle_changes(State = #state{
     since = Since,
     until = Until,
-    changes = Docs,
+    changes = ReversedDocs,
     last_handled_change = LastHandledChange,
     handler = Handler
 }) ->
     MinSize = op_worker:get_env(dbsync_handler_spawn_size, 10),
-    case length(Docs) >= MinSize of
+    case length(ReversedDocs) >= MinSize of
         true ->
             spawn(fun() ->
-                Handler(Since, Until, get_batch_timestamp(Docs), lists:reverse(Docs))
+                Handler(Since, Until, get_batch_timestamp(ReversedDocs), lists:reverse(ReversedDocs))
             end);
         _ ->
             try
-                Handler(Since, Until, get_batch_timestamp(Docs), lists:reverse(Docs))
+                Handler(Since, Until, get_batch_timestamp(ReversedDocs), lists:reverse(ReversedDocs))
             catch
                 _:_ ->
                     % Handle should catch own errors
@@ -293,7 +293,7 @@ handle_changes(State = #state{
             ok
     end,
 
-    NewLastHandledChange = case Docs of
+    NewLastHandledChange = case ReversedDocs of
         [LastDoc | _] -> LastDoc;
         _ -> LastHandledChange
     end,
@@ -371,9 +371,9 @@ update_doc_seq(#document{value = #links_node{model = Model, key = RoutingKey}} =
     update_link_doc_seq(Model, RoutingKey, Doc);
 update_doc_seq(#document{value = #links_mask{model = Model, key = RoutingKey}} = Doc) ->
     update_link_doc_seq(Model, RoutingKey, Doc);
-update_doc_seq(#document{key = Key, value = Value}) ->
+update_doc_seq(#document{key = Key, value = Value} = Doc) ->
     Model = element(1, Value),
-    Ctx = dbsync_changes:get_ctx(Model),
+    Ctx = dbsync_changes:get_ctx(Model, Doc),
     Ctx2 = Ctx#{sync_change => true, hooks_disabled => true, include_deleted => true},
     case datastore_model:update(Ctx2, Key, fun(Record) -> {ok, Record} end) of
         {ok, _} -> ok;
@@ -383,8 +383,8 @@ update_doc_seq(#document{key = Key, value = Value}) ->
 
 %% @private
 -spec update_link_doc_seq(datastore_model:model(), datastore:key(), datastore:doc()) -> ok.
-update_link_doc_seq(Model, RoutingKey, #document{key = Key}) ->
-    Ctx = dbsync_changes:get_ctx(Model),
+update_link_doc_seq(Model, RoutingKey, #document{key = Key} = Doc) ->
+    Ctx = dbsync_changes:get_ctx(Model, Doc),
     Ctx2 = Ctx#{
         local_links_tree_id => oneprovider:get_id(),
         routing_key => RoutingKey,
