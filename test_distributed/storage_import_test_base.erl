@@ -7030,6 +7030,14 @@ init_per_testcase(delete_many_subfiles_test, Config) ->
     ],
     init_per_testcase(default, dir_stats_collector_test_base:init_and_enable_for_new_space(Config2));
 
+init_per_testcase(Case, Config)
+    when Case =:= remote_delete_file_reimport_race_test;
+    Case =:= remote_delete_file_reimport_race2_test
+    ->
+    Workers = ?config(op_worker_nodes, Config),
+    test_utils:set_env(Workers, op_worker, reimport_with_missing_link, false),
+    init_per_testcase(default, Config);
+
 init_per_testcase(_Case, Config) ->
     Workers = ?config(op_worker_nodes, Config),
     ct:timetrap({minutes, 20}),
@@ -7105,9 +7113,10 @@ end_per_testcase(Case, Config)
     when Case =:= remote_delete_file_reimport_race_test;
     Case =:= remote_delete_file_reimport_race2_test
     ->
-    [W1| _] = ?config(op_worker_nodes, Config),
+    [W1| _] = Workers = ?config(op_worker_nodes, Config),
     StorageFileId = filepath_utils:join([<<?DIRECTORY_SEPARATOR>>, ?TEST_FILE1]),
     rpc:call(W1, storage_sync_info, delete, [StorageFileId, ?SPACE_ID]),
+    test_utils:set_env(Workers, op_worker, reimport_with_missing_link, first_scan_only),
     end_per_testcase(default, Config);
 
 end_per_testcase(should_not_sync_file_during_replication, Config) ->

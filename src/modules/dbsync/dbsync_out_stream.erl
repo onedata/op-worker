@@ -46,6 +46,7 @@
     since :: couchbase_changes:since(),
     until :: couchbase_changes:until(),
     changes :: [datastore:doc()],
+    last_handled_change :: datastore:doc() | undefined,
     filter :: filter(),
     handler :: handler(),
     handling_ref :: undefined | reference(),
@@ -264,18 +265,19 @@ aggregate_change(Doc = #document{seq = Seq}, State = #state{changes = Docs}) ->
 handle_changes(State = #state{
     since = Since,
     until = Until,
-    changes = Docs,
+    changes = ReversedDocs,
+    last_handled_change = LastHandledChange,
     handler = Handler
 }) ->
     MinSize = op_worker:get_env(dbsync_handler_spawn_size, 10),
-    case length(Docs) >= MinSize of
+    case length(ReversedDocs) >= MinSize of
         true ->
             spawn(fun() ->
-                Handler(Since, Until, get_batch_timestamp(Docs), lists:reverse(Docs))
+                Handler(Since, Until, get_batch_timestamp(ReversedDocs), lists:reverse(ReversedDocs))
             end);
         _ ->
             try
-                Handler(Since, Until, get_batch_timestamp(Docs), lists:reverse(Docs))
+                Handler(Since, Until, get_batch_timestamp(ReversedDocs), lists:reverse(ReversedDocs))
             catch
                 _:_ ->
                     % Handle should catch own errors
@@ -291,7 +293,12 @@ handle_changes(State = #state{
             ok
     end,
 
-    schedule_docs_handling(State#state{since = Until, changes = []}).
+    NewLastHandledChange = case ReversedDocs of
+        [LastDoc | _] -> LastDoc;
+        _ -> LastHandledChange
+    end,
+
+    schedule_docs_handling(State#state{since = Until, changes = [], last_handled_change = NewLastHandledChange}).
 
 %%--------------------------------------------------------------------
 %% @private
@@ -324,8 +331,19 @@ handle_doc_change(#document{seq = Seq} = Doc, Filter, State = #state{until = Unt
         false -> State#state{until = Seq + 1}
     end;
 handle_doc_change(#document{seq = Seq} = Doc, _Filter, State = #state{until = Until}) ->
-    ?error("Received change with old sequence ~p. Expected sequences"
-    " greater than or equal to ~p~nDoc: ~p~nLast change: ~p", [Seq, Until, Doc, get_last_change(State)]),
+    case get_last_change(State) of
+        undefined ->
+            % couchbase_changes_worker can be initialized with lower sequence if some sequence documents have
+            % not been cleaned before restart - ignore errors until first document is handled
+            ok;
+        LastChange ->
+            ?error("Received change with old sequence ~p. Expected sequences"
+            " greater than or equal to ~p~nDoc: ~p~nLast change: ~p", [Seq, Until, Doc, LastChange]),
+            case LastChange of
+                #document{seq = Seq} -> update_doc_seq(Doc);
+                _ -> ok
+            end
+    end,
     State.
 
 %% @private
@@ -341,5 +359,39 @@ get_batch_timestamp([#document{timestamp = Timestamp} | _]) ->
 -spec get_last_change(state()) -> datastore:doc() | undefined.
 get_last_change(#state{changes = [LastChange | _]}) ->
     LastChange;
-get_last_change(_) ->
-    undefined.
+get_last_change(#state{last_handled_change = LastHandledChange}) ->
+    LastHandledChange.
+
+
+%% @private
+-spec update_doc_seq(datastore:doc()) -> ok.
+update_doc_seq(#document{value = #links_forest{model = Model, key = RoutingKey}} = Doc) ->
+    update_link_doc_seq(Model, RoutingKey, Doc);
+update_doc_seq(#document{value = #links_node{model = Model, key = RoutingKey}} = Doc) ->
+    update_link_doc_seq(Model, RoutingKey, Doc);
+update_doc_seq(#document{value = #links_mask{model = Model, key = RoutingKey}} = Doc) ->
+    update_link_doc_seq(Model, RoutingKey, Doc);
+update_doc_seq(#document{key = Key, value = Value} = Doc) ->
+    Model = element(1, Value),
+    Ctx = dbsync_changes:get_ctx(Model, Doc),
+    Ctx2 = Ctx#{sync_change => true, hooks_disabled => true, include_deleted => true},
+    case datastore_model:update(Ctx2, Key, fun(Record) -> {ok, Record} end) of
+        {ok, _} -> ok;
+        {error, not_found} -> ok
+    end.
+
+
+%% @private
+-spec update_link_doc_seq(datastore_model:model(), datastore:key(), datastore:doc()) -> ok.
+update_link_doc_seq(Model, RoutingKey, #document{key = Key} = Doc) ->
+    Ctx = dbsync_changes:get_ctx(Model, Doc),
+    Ctx2 = Ctx#{
+        local_links_tree_id => oneprovider:get_id(),
+        routing_key => RoutingKey,
+        include_deleted => true
+    },
+    Ctx3 = datastore_multiplier:extend_name(RoutingKey, Ctx2),
+    case datastore_router:route(update, [Ctx3, Key, fun(Record) -> {ok, Record} end]) of
+        {ok, _} -> ok;
+        {error, not_found} -> ok
+    end.

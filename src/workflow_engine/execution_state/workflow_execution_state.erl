@@ -265,12 +265,14 @@ init_cancel(ExecutionId, Pred) ->
         ?WF_ERROR_PRED_NOT_MEET -> ?WF_ERROR_PRED_NOT_MEET
     end.
 
--spec finish_cancel(workflow_engine:execution_id()) -> {ok, workflow_engine:id()} | ?WF_ERROR_CANCEL_NOT_INITIALIZED.
+-spec finish_cancel(workflow_engine:execution_id()) ->
+    {ok, workflow_engine:id()} | ?WF_ERROR_CANCEL_NOT_INITIALIZED | ?WF_ERROR_WORKFLOW_INTERRUPTED.
 finish_cancel(ExecutionId) ->
     case update(ExecutionId, fun handle_execution_cancel_finish/1) of
         {ok, #document{value = #workflow_execution_state{engine_id = EngineId}}} -> {ok, EngineId};
         ?ERROR_NOT_FOUND -> ?WF_ERROR_CANCEL_NOT_INITIALIZED;
-        ?WF_ERROR_CANCEL_NOT_INITIALIZED -> ?WF_ERROR_CANCEL_NOT_INITIALIZED
+        ?WF_ERROR_CANCEL_NOT_INITIALIZED -> ?WF_ERROR_CANCEL_NOT_INITIALIZED;
+        ?WF_ERROR_WORKFLOW_INTERRUPTED -> ?WF_ERROR_WORKFLOW_INTERRUPTED
     end.
 
 -spec wait_for_pending_callbacks(workflow_engine:execution_id()) -> ok.
@@ -590,6 +592,8 @@ check_timeouts(ExecutionId) ->
             end, maps:to_list(AsyncPoolsSlotsToFree)),
             maps:size(AsyncPoolsSlotsToFree) =/= 0;
         ?WF_ERROR_NOTHING_CHANGED  ->
+            false;
+        ?ERROR_NOT_FOUND ->
             false
     end.
 
@@ -1204,10 +1208,13 @@ handle_execution_cancel_init(#workflow_execution_state{execution_status = ?EXECU
 handle_execution_cancel_init(State, _) ->
     {ok, State#workflow_execution_state{execution_status = ?EXECUTION_CANCELLED(1)}}.
 
--spec handle_execution_cancel_finish(state()) -> {ok, state()} | ?WF_ERROR_CANCEL_NOT_INITIALIZED.
+-spec handle_execution_cancel_finish(state()) ->
+    {ok, state()} | ?WF_ERROR_CANCEL_NOT_INITIALIZED | ?WF_ERROR_WORKFLOW_INTERRUPTED.
 handle_execution_cancel_finish(#workflow_execution_state{execution_status = ?EXECUTION_CANCELLED(Counter) = Status} = State)
     when Counter > 0 ->
     {ok, State#workflow_execution_state{execution_status = Status#execution_cancelled{call_count = Counter - 1}}};
+handle_execution_cancel_finish(#workflow_execution_state{execution_status = #execution_cancelled{is_interrupted = true}}) ->
+    ?WF_ERROR_WORKFLOW_INTERRUPTED;
 handle_execution_cancel_finish(_State) ->
     ?WF_ERROR_CANCEL_NOT_INITIALIZED.
 

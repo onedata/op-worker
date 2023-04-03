@@ -23,7 +23,7 @@
 -include_lib("ctool/include/errors.hrl").
 
 %% API
--export([get_or_default/1, get/1, create_or_update/2, delete/1,
+-export([get_or_default/1, get/1, create_or_update/3, delete/1,
     save/1, save/5, save_with_current_times/3, ensure_synced/1]).
 
 %% datastore_model callbacks
@@ -121,10 +121,10 @@ save_with_current_times(FileUuid, SpaceId, IgnoreInChanges) ->
 %% it initialises the object with the document.
 %% @end
 %%--------------------------------------------------------------------
--spec create_or_update(doc(), diff()) ->
-    {ok, doc()} | {error, term()}.
-create_or_update(#document{key = Key, value = Default}, Diff) ->
-    datastore_model:update(?CTX, fslogic_file_id:ensure_referenced_uuid(Key), Diff, Default).
+-spec create_or_update(doc(), diff(), od_space:id()) -> {ok, doc()} | {error, term()}.
+create_or_update(#document{key = Key} = Doc, Diff, Scope) ->
+    ReferencedUuid = fslogic_file_id:ensure_referenced_uuid(Key),
+    datastore_model:update(?CTX, ReferencedUuid, Diff, Doc#document{key = ReferencedUuid, scope = Scope}).
 
 %%--------------------------------------------------------------------
 %% @doc
