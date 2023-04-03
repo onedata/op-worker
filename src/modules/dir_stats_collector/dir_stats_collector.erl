@@ -888,7 +888,7 @@ save_and_propagate_cached_dir_stats({Guid, CollectionType} = _CachedDirStatsKey,
             % There can be a lot of files to save if space has been incorrectly unsupported - log must be throttled
             SpaceId = file_id:guid_to_space_id(Guid),
             ?THROTTLE_LOG(SpaceId, ?warning("Cannot save or propagate cache dir stats for collection type:"
-                " ~p and guid ~p due to space ~p unsupport", [CollectionType, SpaceId, Guid])),
+                " ~p and guid ~p due to space ~p unsupport", [CollectionType, Guid, SpaceId])),
             {CachedDirStats#cached_dir_stats{stat_updates_acc_for_parent = #{}}, State2};
         Error:Reason:Stacktrace ->
             ?error_stacktrace("Dir stats collector save and propagate error for collection type: ~p and guid ~p:~n~p:~p",
