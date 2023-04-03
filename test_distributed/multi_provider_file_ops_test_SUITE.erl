@@ -1662,7 +1662,7 @@ wait_for_possible_sync(Config, SpaceId, Guids, AreDeleted) ->
         rpc:call(Worker1, dbsync_state, get_seq, [SpaceId, Provider1Id]) =:=
             rpc:call(Worker2, dbsync_state, get_seq, [SpaceId, Provider1Id])
     end,
-    ?assertEqual(true, AreSeqsEqual, 60).
+    ?assertEqual(true, AreSeqsEqual(), 60).
 
 get_file_meta_unique_key(#document{value = #links_forest{key = Key}}) ->
     Key;
