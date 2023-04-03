@@ -462,28 +462,39 @@ rtransfer_test_base(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, N
 % updates per second and file location updates per second is checked.
 % For this test, environment with 2 1-node providers is assumed.
 rtransfer_test_base2(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten},
-    Attempts, TransferTimeout, TransferFileParts) ->
+    Attempts, TransferTimeout, ImportedFileSize) ->
     rtransfer_test_base2(Config, User, {SyncNodes, ProxyNodes, ProxyNodesWritten, 1},
-        Attempts, TransferTimeout, TransferFileParts);
+        Attempts, TransferTimeout, ImportedFileSize);
 rtransfer_test_base2(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider},
-    Attempts, TransferTimeout, TransferFileParts) ->
+    Attempts, TransferTimeout, ImportedFileSize) ->
     Config = extend_config(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, NodesOfProvider}, Attempts),
     SessId = ?config(session, Config),
-    SpaceName = ?config(space_name, Config),
+    [{SpaceId, SpaceName} | _] = ?config({spaces, User}, Config),
     Worker1 = ?config(worker1, Config),
     Workers2 = ?config(workers2, Config),
 
-    Dir = <<"/", SpaceName/binary, "/",  (generator:gen_name())/binary>>,
-    ?assertMatch({ok, _}, lfm_proxy:mkdir(Worker1, SessId(Worker1), Dir)),
-    verify_stats(Config, Dir, true),
-    ct:pal("Dir created"),
+    ?assertMatch(ok, rpc:call(Worker1, storage_import, set_or_configure_auto_mode, [
+        SpaceId, #{max_depth => 5, sync_acl => false}
+    ])),
+    rpc:call(Worker1, auto_storage_import_worker, notify_connection_to_oz, []),
+    ?assertEqual(true, rpc:call(Worker1, storage_import_monitoring, is_initial_scan_finished, [SpaceId]), Attempts),
 
-    ChunkSize = 10240,
-    ChunkNum = 1024,
-    FileSize = ChunkSize * ChunkNum * TransferFileParts,
-    Level2File = <<Dir/binary, "/", (generator:gen_name())/binary>>,
-    create_big_file(Config, ChunkSize, ChunkNum, TransferFileParts, Level2File, Worker1),
-    ct:pal("File created"),
+    {ok, [#file_attr{name = FileName}], _} = lfm_proxy:get_children_attrs(
+        Worker1, SessId(Worker1), {path, <<"/", SpaceName/binary>>}, #{
+            limit => 10, tune_for_large_continuous_listing => false
+        }
+    ),
+    FilePath = <<"/", SpaceName/binary, "/", FileName/binary>>,
+
+    lists:foreach(fun(Worker2) ->
+        ?assertMatch(
+            {ok, #file_attr{size = ImportedFileSize}},
+            lfm_proxy:stat(Worker2, SessId(Worker2), {path, FilePath}),
+            Attempts
+        )
+    end, Workers2),
+
+    ct:pal("File imported"),
 
     ok = test_utils:mock_new(Workers2, transfer, [passthrough]),
     ok = test_utils:mock_new(Workers2, replica_updater, [passthrough]),
@@ -491,7 +502,7 @@ rtransfer_test_base2(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
     Stopwatch = stopwatch:start(),
     Result = try
         verify_workers(Workers2, fun(W) ->
-            read_big_file(Config, FileSize, Level2File, W, TransferTimeout, true)
+            read_big_file(Config, ImportedFileSize, FilePath, W, TransferTimeout, true)
         end, timer:seconds(TransferTimeout)),
         ok
     catch
@@ -501,7 +512,7 @@ rtransfer_test_base2(Config0, User, {SyncNodes, ProxyNodes, ProxyNodesWritten0, 
 
     Duration = stopwatch:read_seconds(Stopwatch),
     TransferUpdates = lists:sum(mock_get_num_calls(
-        Workers2, transfer, mark_data_transfer_finished, '_')),
+        Workers2, transfer, flush_stats, '_')),
     TUPS = TransferUpdates / Duration,
     FileLocationUpdates = lists:sum(mock_get_num_calls(
         Workers2, replica_updater, update, '_')),
@@ -2439,11 +2450,20 @@ await_replication_end(Node, TransferId, Attempts, GetFun) ->
             ct:pal("Replication failed, id ~p, doc id ~p, method ~p~nrecord: ~p",
                 [TransferId, Key, GetFun, Transfer]),
             throw(replication_failed);
-        _ ->
+        Result ->
+            % Log transfer statistics every 5 minutes
+            Attempts rem 300 == 0 andalso log_replication_stats(TransferId, Result),
+
             timer:sleep(timer:seconds(1)),
             await_replication_end(Node, TransferId, Attempts - 1, GetFun)
     end.
 
+log_replication_stats(TransferId, {ok, #document{value = #transfer{
+    bytes_replicated = BytesReplicated
+}}}) ->
+    ct:pal("[Transfer ~p] Bytes replicated: ~p", [TransferId, BytesReplicated]);
+log_replication_stats(TransferId, Error = {error, _}) ->
+    ct:pal("[Transfer ~p] Failed to fetch transfer stats due to: ~p", [TransferId, Error]).
 
 %% @private
 -spec get_session_client_tokens(node(), session:id()) ->

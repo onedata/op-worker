@@ -410,8 +410,8 @@ not_synced_file_should_not_be_replicated(Config, Type, FileKeyType) ->
                 expected_transfer = #{
                     replication_status => completed,
                     scheduling_provider => transfers_test_utils:provider_id(WorkerP1),
-                    files_to_process => 1,
-                    files_processed => 1,
+                    files_to_process => 0,
+                    files_processed => 0,
                     files_replicated => 0,
                     bytes_replicated => 0,
                     min_hist => ?MIN_HIST(#{ProviderId1 => 0}),
@@ -2232,23 +2232,23 @@ init_per_suite(Config) ->
 
 init_per_testcase(not_synced_file_should_not_be_replicated = Case, Config) ->
     [WorkerP2 | _] = ?config(op_worker_nodes, Config),
-    ok = test_utils:mock_new(WorkerP2, replication_worker),
-    ok = test_utils:mock_expect(WorkerP2, replication_worker, transfer_regular_file, fun(_, _) ->
+    ok = test_utils:mock_new(WorkerP2, tree_traverse),
+    ok = test_utils:mock_expect(WorkerP2, tree_traverse, run, fun(_, _, _) ->
         {error, not_found}
     end),
     init_per_testcase(?DEFAULT_CASE(Case), Config);
 
 init_per_testcase(schedule_replication_of_100_regular_files_by_view_with_batch_100 = Case, Config) ->
     Nodes = [WorkerP2 | _] = ?config(op_worker_nodes, Config),
-    {ok, OldValue} = test_utils:get_env(WorkerP2, op_worker, replication_by_view_batch),
-    test_utils:set_env(Nodes, op_worker, replication_by_view_batch, 100),
-    init_per_testcase(?DEFAULT_CASE(Case), [{replication_by_view_batch, OldValue} | Config]);
+    {ok, OldValue} = test_utils:get_env(WorkerP2, op_worker, transfer_traverse_list_batch_size),
+    test_utils:set_env(Nodes, op_worker, transfer_traverse_list_batch_size, 100),
+    init_per_testcase(?DEFAULT_CASE(Case), [{transfer_traverse_list_batch_size, OldValue} | Config]);
 
 init_per_testcase(schedule_replication_of_100_regular_files_by_view_with_batch_10 = Case, Config) ->
     Nodes = [WorkerP2 | _] = ?config(op_worker_nodes, Config),
-    {ok, OldValue} = test_utils:get_env(WorkerP2, op_worker, replication_by_view_batch),
-    test_utils:set_env(Nodes, op_worker, replication_by_view_batch, 10),
-    init_per_testcase(?DEFAULT_CASE(Case), [{replication_by_view_batch, OldValue} | Config]);
+    {ok, OldValue} = test_utils:get_env(WorkerP2, op_worker, transfer_traverse_list_batch_size),
+    test_utils:set_env(Nodes, op_worker, transfer_traverse_list_batch_size, 10),
+    init_per_testcase(?DEFAULT_CASE(Case), [{transfer_traverse_list_batch_size, OldValue} | Config]);
 
 init_per_testcase(file_removed_during_replication, Config) ->
     ct:timetrap(timer:minutes(60)),
@@ -2289,7 +2289,7 @@ init_per_testcase(_Case, Config) ->
 
 end_per_testcase(not_synced_file_should_not_be_replicated = Case, Config) ->
     [WorkerP2 | _] = ?config(op_worker_nodes, Config),
-    test_utils:mock_unload(WorkerP2, replication_worker),
+    test_utils:mock_unload(WorkerP2, tree_traverse),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(Case, Config) when
@@ -2305,8 +2305,8 @@ end_per_testcase(Case, Config) when
     Case =:= schedule_replication_of_100_regular_files_by_view_with_batch_10
 ->
     Nodes = ?config(op_worker_nodes, Config),
-    OldValue = ?config(replication_by_view_batch, Config),
-    test_utils:set_env(Nodes, op_worker, replication_by_view_batch, OldValue),
+    OldValue = ?config(transfer_traverse_list_batch_size, Config),
+    test_utils:set_env(Nodes, op_worker, transfer_traverse_list_batch_size, OldValue),
     end_per_testcase(?DEFAULT_CASE(Case), Config);
 
 end_per_testcase(Case, Config)

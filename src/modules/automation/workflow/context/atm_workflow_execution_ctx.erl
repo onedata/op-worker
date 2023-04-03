@@ -30,6 +30,7 @@
 
     is_global_store/2,
     get_global_store_id/2,
+    get_task_execution_id/1,
     get_task_time_series_store_id/1
 ]).
 
@@ -136,6 +137,11 @@ get_global_store_id(AtmStoreSchemaId, #atm_workflow_execution_ctx{
     workflow_execution_env = AtmWorkflowExecutionEnv
 }) ->
     atm_workflow_execution_env:get_global_store_id(AtmStoreSchemaId, AtmWorkflowExecutionEnv).
+
+
+-spec get_task_execution_id(record()) -> undefined | atm_task_execution:id().
+get_task_execution_id(#atm_workflow_execution_ctx{processed_task_id = AtmTaskExecutionId}) ->
+    AtmTaskExecutionId.
 
 
 -spec get_task_time_series_store_id(record()) -> undefined | atm_store:id().
