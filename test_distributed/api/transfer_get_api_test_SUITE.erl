@@ -63,15 +63,6 @@ all() ->
 
 -define(TRANSFER_PROLONGATION_TIME, 2).
 
--define(RUN_TEST_BASE(__EXPRESSION),
-    try
-        __EXPRESSION
-    catch __TYPE:__REASON:__STACKTRACE ->
-        ct:pal("Test failed due to ~p:~p.~nStacktrace: ~p", [__TYPE, __REASON, __STACKTRACE]),
-        error(test_failed)
-    end
-).
-
 
 %%%===================================================================
 %%% Test functions
@@ -79,27 +70,27 @@ all() ->
 
 
 get_file_replication_status(Config) ->
-    ?RUN_TEST_BASE(get_transfer_status_test_base(Config, replication, file)).
+    ?ct_catch_exceptions(get_transfer_status_test_base(Config, replication, file)).
 
 
 get_file_eviction_status(Config) ->
-    ?RUN_TEST_BASE(get_transfer_status_test_base(Config, eviction, file)).
+    ?ct_catch_exceptions(get_transfer_status_test_base(Config, eviction, file)).
 
 
 get_file_migration_status(Config) ->
-    ?RUN_TEST_BASE(get_transfer_status_test_base(Config, migration, file)).
+    ?ct_catch_exceptions(get_transfer_status_test_base(Config, migration, file)).
 
 
 get_view_replication_status(Config) ->
-    ?RUN_TEST_BASE(get_transfer_status_test_base(Config, replication, view)).
+    ?ct_catch_exceptions(get_transfer_status_test_base(Config, replication, view)).
 
 
 get_view_eviction_status(Config) ->
-    ?RUN_TEST_BASE(get_transfer_status_test_base(Config, eviction, view)).
+    ?ct_catch_exceptions(get_transfer_status_test_base(Config, eviction, view)).
 
 
 get_view_migration_status(Config) ->
-    ?RUN_TEST_BASE(get_transfer_status_test_base(Config, migration, view)).
+    ?ct_catch_exceptions(get_transfer_status_test_base(Config, migration, view)).
 
 
 %% @private
@@ -448,7 +439,7 @@ build_get_transfer_status_validate_gs_call_result_fun(DataSourceType, ExpState, 
 
 
 get_rerun_transfer_status(Config) ->
-    ?RUN_TEST_BASE(get_rerun_transfer_status_test_base(Config)).
+    ?ct_catch_exceptions(get_rerun_transfer_status_test_base(Config)).
 
 
 %% @private
