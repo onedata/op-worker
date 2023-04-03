@@ -222,7 +222,6 @@ stages:
         - tmp_db_error
         - transfer_create_api
         - transfer_get_api
-        - transfer_stats
         - transfers_restart
         - trash
         - tree_deletion_traverse
@@ -1846,14 +1845,6 @@ transfer_get_api:
     - <<: *cover_ct
       name: cover_ct_transfer_get_api.tar.gz
 
-transfer_stats:
-  <<: *ct-job
-  key: TRAN
-  artifacts:
-    - *ct_logs
-    - <<: *cover_ct
-      name: cover_ct_transfer_stats.tar.gz
-
 transfers_restart:
   <<: *ct-onenv-job
   key: TRRST
@@ -2145,7 +2136,6 @@ Coverage report:
     - artifact: cover_ct_tmp_db_error.tar.gz
     - artifact: cover_ct_transfer_create_api.tar.gz
     - artifact: cover_ct_transfer_get_api.tar.gz
-    - artifact: cover_ct_transfer_stats.tar.gz
     - artifact: cover_ct_transfers_restart.tar.gz
     - artifact: cover_ct_trash.tar.gz
     - artifact: cover_ct_tree_deletion_traverse.tar.gz

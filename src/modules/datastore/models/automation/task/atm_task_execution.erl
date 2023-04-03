@@ -108,7 +108,7 @@ get_record_struct(1) ->
 
         {executor, {custom, string, {persistent_record, encode, decode, atm_task_executor}}},
         {lambda_execution_config_entries, [{custom, string, {
-            persistent_record, encode, decode, lambda_execution_config_entry
+            persistent_record, encode, decode, atm_lambda_execution_config_entry
         }}]},
         {argument_specs, [{custom, string, {
             persistent_record, encode, decode, atm_task_execution_argument_spec

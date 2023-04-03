@@ -890,9 +890,6 @@
     scheduling_provider :: od_provider:id(),
     replicating_provider :: undefined | od_provider:id(),
     evicting_provider :: undefined | od_provider:id(),
-    % pid of replication or replica_eviction controller, as both cannot execute
-    % simultaneously for given TransferId
-    pid :: undefined | binary(), %todo VFS-3657
 
     % flags used for transfer management
     replication_traverse_finished = false :: boolean(),

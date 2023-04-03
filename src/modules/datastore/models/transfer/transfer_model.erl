@@ -347,6 +347,41 @@ get_record_struct(11) ->
         {mth_hist, #{string => [integer]}},
         {index_name, string},
         {query_view_params, [{term, term}]}
+    ]};
+get_record_struct(12) ->
+    % Removed fields: pid
+    {record, [
+        {file_uuid, string},
+        {space_id, string},
+        {user_id, string},
+        {rerun_id, string},
+        {path, string},
+        {callback, string},
+        {enqueued, atom},
+        {cancel, atom},
+        {replication_status, atom},
+        {eviction_status, atom},
+        {scheduling_provider, string},
+        {replicating_provider, string},
+        {evicting_provider, string},
+        {replication_traverse_finished, boolean},
+        {eviction_traverse_finished, boolean},
+        {files_to_process, integer},
+        {files_processed, integer},
+        {failed_files, integer},
+        {files_replicated, integer},
+        {bytes_replicated, integer},
+        {files_evicted, integer},
+        {schedule_time, integer},
+        {start_time, integer},
+        {finish_time, integer},
+        {last_update, #{string => integer}},
+        {min_hist, #{string => [integer]}},
+        {hr_hist, #{string => [integer]}},
+        {dy_hist, #{string => [integer]}},
+        {mth_hist, #{string => [integer]}},
+        {index_name, string},
+        {query_view_params, [{term, term}]}
     ]}.
 
 %%--------------------------------------------------------------------
@@ -512,6 +547,21 @@ upgrade_record(10, {?TRANSFER_MODEL, FileUuid, SpaceId, UserId, RerunId, Path, C
     {11, {?TRANSFER_MODEL, FileUuid, SpaceId, UserId, RerunId, Path, CallBack, Enqueued,
         Cancel, ReplicationStatus, EvictionStatus, SchedulingProvider,
         ReplicatingProvider, EvictingProvider, Pid, TraverseFinished, TraverseFinished,
+        FilesToProcess, FilesProcessed, FailedFiles, FilesReplicated, BytesReplicated,
+        FilesEvicted, ScheduleTime, StartTime, FinishTime,
+        LastUpdate, MinHist, HrHist, DyHist, MthHist, ViewName, QueryViewParams
+    }};
+upgrade_record(11, {?TRANSFER_MODEL, FileUuid, SpaceId, UserId, RerunId, Path, CallBack, Enqueued,
+    Cancel, ReplicationStatus, EvictionStatus, SchedulingProvider,
+    ReplicatingProvider, EvictingProvider, _Pid, ReplicationTraverseFinished, EvictionTraverseFinished,
+    FilesToProcess, FilesProcessed, FailedFiles, FilesReplicated, BytesReplicated,
+    FilesEvicted, ScheduleTime, StartTime, FinishTime,
+    LastUpdate, MinHist, HrHist, DyHist, MthHist, ViewName, QueryViewParams
+}) ->
+    % Removed fields: pid
+    {12, {?TRANSFER_MODEL, FileUuid, SpaceId, UserId, RerunId, Path, CallBack, Enqueued,
+        Cancel, ReplicationStatus, EvictionStatus, SchedulingProvider,
+        ReplicatingProvider, EvictingProvider, ReplicationTraverseFinished, EvictionTraverseFinished,
         FilesToProcess, FilesProcessed, FailedFiles, FilesReplicated, BytesReplicated,
         FilesEvicted, ScheduleTime, StartTime, FinishTime,
         LastUpdate, MinHist, HrHist, DyHist, MthHist, ViewName, QueryViewParams

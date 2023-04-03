@@ -70,27 +70,27 @@ all() ->
 
 
 get_file_replication_status(Config) ->
-    get_transfer_status_test_base(Config, replication, file).
+    ?ct_catch_exceptions(get_transfer_status_test_base(Config, replication, file)).
 
 
 get_file_eviction_status(Config) ->
-    get_transfer_status_test_base(Config, eviction, file).
+    ?ct_catch_exceptions(get_transfer_status_test_base(Config, eviction, file)).
 
 
 get_file_migration_status(Config) ->
-    get_transfer_status_test_base(Config, migration, file).
+    ?ct_catch_exceptions(get_transfer_status_test_base(Config, migration, file)).
 
 
 get_view_replication_status(Config) ->
-    get_transfer_status_test_base(Config, replication, view).
+    ?ct_catch_exceptions(get_transfer_status_test_base(Config, replication, view)).
 
 
 get_view_eviction_status(Config) ->
-    get_transfer_status_test_base(Config, eviction, view).
+    ?ct_catch_exceptions(get_transfer_status_test_base(Config, eviction, view)).
 
 
 get_view_migration_status(Config) ->
-    get_transfer_status_test_base(Config, migration, view).
+    ?ct_catch_exceptions(get_transfer_status_test_base(Config, migration, view)).
 
 
 %% @private
@@ -439,6 +439,11 @@ build_get_transfer_status_validate_gs_call_result_fun(DataSourceType, ExpState, 
 
 
 get_rerun_transfer_status(Config) ->
+    ?ct_catch_exceptions(get_rerun_transfer_status_test_base(Config)).
+
+
+%% @private
+get_rerun_transfer_status_test_base(Config) ->
     [P2, P1] = Providers = ?config(op_worker_nodes, Config),
 
     TransferType = replication,

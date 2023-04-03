@@ -22,7 +22,10 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([mark_aborting/3, mark_completed/2, mark_failed/2, mark_cancelled/2]).
+-export([
+    is_alive/1,
+    mark_aborting/2, mark_completed/1, mark_failed/1, mark_cancelled/1
+]).
 
 %% gen_server callbacks
 -export([
@@ -38,50 +41,56 @@
     callback :: transfer:callback(),
     space_id :: od_space:id(),
     status :: transfer:subtask_status(),
-    supporting_provider_id :: od_provider:id(),
+    replica_holder_provider_id :: od_provider:id(),
     view_name :: transfer:view_name(),
     query_view_params :: transfer:query_view_params()
 }).
 
+-define(whereis(__TRANSFER_ID), global:whereis_name(TransferId)).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
+
+-spec is_alive(transfer:id()) -> boolean().
+is_alive(TransferId) ->
+    ?whereis(TransferId) /= undefined.
 
 %%-------------------------------------------------------------------
 %% @doc
 %% Informs replica_eviction_controller process about aborting replica eviction.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_aborting(pid(), transfer:id(), term()) -> ok.
-mark_aborting(Pid, TransferId, Reason) ->
-    gen_server2:cast(Pid, {replica_eviction_aborting, TransferId, Reason}).
+-spec mark_aborting(transfer:id(), term()) -> ok.
+mark_aborting(TransferId, Reason) ->
+    gen_server2:cast(?whereis(TransferId), {replica_eviction_aborting, TransferId, Reason}).
 
 %%-------------------------------------------------------------------
 %% @doc
 %% Stops replica_eviction_controller process and marks replica eviction as completed.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_completed(pid(), transfer:id()) -> ok.
-mark_completed(Pid, TransferId) ->
-    gen_server2:cast(Pid, {replica_eviction_completed, TransferId}).
+-spec mark_completed(transfer:id()) -> ok.
+mark_completed(TransferId) ->
+    gen_server2:cast(?whereis(TransferId), {replica_eviction_completed, TransferId}).
 
 %%-------------------------------------------------------------------
 %% @doc
 %% Stops replica_eviction_controller process and marks transfer as failed.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_failed(pid(), transfer:id()) -> ok.
-mark_failed(Pid, TransferId) ->
-    gen_server2:cast(Pid, {replica_eviction_failed, TransferId}).
+-spec mark_failed(transfer:id()) -> ok.
+mark_failed(TransferId) ->
+    gen_server2:cast(?whereis(TransferId), {replica_eviction_failed, TransferId}).
 
 %%-------------------------------------------------------------------
 %% @doc
 %% Stops replica_eviction_controller process and marks transfer as cancelled.
 %% @end
 %%-------------------------------------------------------------------
--spec mark_cancelled(pid(), transfer:id()) -> ok.
-mark_cancelled(Pid, TransferId) ->
-    gen_server2:cast(Pid, {replica_eviction_cancelled, TransferId}).
+-spec mark_cancelled(transfer:id()) -> ok.
+mark_cancelled(TransferId) ->
+    gen_server2:cast(?whereis(TransferId), {replica_eviction_cancelled, TransferId}).
 
 
 %%%===================================================================
@@ -97,7 +106,7 @@ mark_cancelled(Pid, TransferId) ->
 -spec init(Args :: term()) ->
     {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
     {stop, Reason :: term()} | ignore.
-init([SessionId, TransferId, FileGuid, Callback, SupportingProviderId,
+init([SessionId, TransferId, FileGuid, Callback, ReplicaHolderProviderId,
     ViewName, QueryViewParams
 ]) ->
     ok = gen_server2:cast(self(), start_replica_eviction),
@@ -108,7 +117,7 @@ init([SessionId, TransferId, FileGuid, Callback, SupportingProviderId,
         callback = Callback,
         space_id = file_id:guid_to_space_id(FileGuid),
         status = ?ENQUEUED_STATUS,
-        supporting_provider_id = SupportingProviderId,
+        replica_holder_provider_id = ReplicaHolderProviderId,
         view_name = ViewName,
         query_view_params = QueryViewParams
     }}.
@@ -143,30 +152,19 @@ handle_call(Request, _From, State) ->
     {stop, Reason :: term(), NewState :: #state{}}.
 handle_cast(start_replica_eviction, State = #state{
     transfer_id = TransferId,
-    session_id = SessionId,
-    file_guid = FileGuid,
-    supporting_provider_id = SupportingProviderId
+    replica_holder_provider_id = ReplicaHolderProviderId
 }) ->
     flush(),
     case replica_eviction_status:handle_active(TransferId) of
         {ok, TransferDoc} ->
-            % TODO VFS-7443 - maybe use referenced guid?
-            RootFileCtx = file_ctx:new_by_guid(FileGuid),
-
-            replica_eviction_worker:enqueue_data_transfer(RootFileCtx, #transfer_job_ctx{
-                transfer_id = TransferId,
-                user_ctx = user_ctx:new(SessionId),
-                job = #transfer_traverse_job{
-                    iterator = transfer_iterator:new(TransferDoc)
-                },
-                supporting_provider = SupportingProviderId
-            }),
+            register_controller_process(TransferId),
+            replica_eviction_traverse:start(ReplicaHolderProviderId, TransferDoc),
             {noreply, State#state{status = ?ACTIVE_STATUS}};
         {error, ?ACTIVE_STATUS} ->
-            {ok, _} = transfer:set_controller_process(TransferId),
+            register_controller_process(TransferId),
             {noreply, State#state{status = ?ACTIVE_STATUS}};
         {error, ?ABORTING_STATUS} ->
-            {ok, _} = transfer:set_controller_process(TransferId),
+            register_controller_process(TransferId),
             {noreply, State#state{status = ?ABORTING_STATUS}};
         {error, S} when S == ?COMPLETED_STATUS orelse S == ?CANCELLED_STATUS orelse S == ?FAILED_STATUS ->
             {stop, normal, S}
@@ -178,7 +176,7 @@ handle_cast({replica_eviction_completed, TransferId}, State = #state{
     status = ?ACTIVE_STATUS
 }) ->
     {ok, _} = replica_eviction_status:handle_completed(TransferId),
-    notify_callback(Callback, TransferId),
+    ?catch_exceptions(notify_callback(Callback, TransferId)),
     {stop, normal, State};
 
 handle_cast({replica_eviction_aborting, TransferId, Reason}, State = #state{
@@ -255,7 +253,8 @@ handle_info(Info, State) ->
 %%--------------------------------------------------------------------
 -spec terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #state{}) -> term().
-terminate(_Reason, _State) ->
+terminate(_Reason, #state{transfer_id = TransferId}) ->
+    unregister_controller_process(TransferId),
     ok.
 
 %%--------------------------------------------------------------------
@@ -272,6 +271,19 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+%% @private
+-spec register_controller_process(transfer:id()) -> ok.
+register_controller_process(TransferId) ->
+    yes = global:register_name(TransferId, self()),
+    ok.
+
+
+%% @private
+-spec unregister_controller_process(transfer:id()) -> ok.
+unregister_controller_process(TransferId) ->
+    global:unregister_name(TransferId).
 
 
 %%--------------------------------------------------------------------

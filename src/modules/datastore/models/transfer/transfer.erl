@@ -33,7 +33,7 @@
 ]).
 
 -export([
-    mark_dequeued/1, set_controller_process/1, set_rerun_id/2,
+    mark_dequeued/1, set_rerun_id/2,
 
     is_replication/1, is_eviction/1, is_migration/1,
     type/1, data_source_type/1,
@@ -42,8 +42,7 @@
 
     replication_status/1, eviction_status/1, status/1,
 
-    mark_replication_traverse_finished/1,
-    mark_eviction_traverse_finished/1,
+    mark_traverse_finished/1,
 
     increment_files_to_process_counter/2, increment_files_processed_counter/1,
     increment_files_evicted_and_processed_counters/1,
@@ -368,14 +367,6 @@ mark_dequeued(TransferId) ->
     ).
 
 
--spec set_controller_process(id()) -> {ok, doc()} | {error, term()}.
-set_controller_process(TransferId) ->
-    EncodedPid = utils:encode_pid(self()),
-    update(TransferId, fun(Transfer) ->
-        {ok, Transfer#transfer{pid = EncodedPid}}
-    end).
-
-
 -spec set_rerun_id(transfer:id(), transfer:id()) -> {ok, transfer:doc()} | {error, term()}.
 set_rerun_id(TransferId, NewTransferId) ->
     transfer:update(TransferId, fun(OldTransfer) ->
@@ -503,17 +494,15 @@ status(#transfer{replication_status = Status}) ->
     Status.
 
 
--spec mark_replication_traverse_finished(id()) -> {ok, doc()} | {error, term()}.
-mark_replication_traverse_finished(TransferId) ->
-    update(TransferId, fun(Transfer) ->
-        {ok, Transfer#transfer{replication_traverse_finished = true}}
-    end).
+-spec mark_traverse_finished(id()) -> {ok, doc()} | {error, term()}.
+mark_traverse_finished(TransferId) ->
+    ThisProviderId = oneprovider:get_id(),
 
-
--spec mark_eviction_traverse_finished(id()) -> {ok, doc()} | {error, term()}.
-mark_eviction_traverse_finished(TransferId) ->
-    update(TransferId, fun(Transfer) ->
-        {ok, Transfer#transfer{eviction_traverse_finished = true}}
+    update(TransferId, fun
+        (Transfer = #transfer{replicating_provider = Id}) when Id == ThisProviderId ->
+            {ok, Transfer#transfer{replication_traverse_finished = true}};
+        (Transfer = #transfer{evicting_provider = Id}) when Id == ThisProviderId ->
+            {ok, Transfer#transfer{eviction_traverse_finished = true}}
     end).
 
 
@@ -829,9 +818,11 @@ maybe_rerun(Doc = #document{key = TransferId, value = Transfer}) ->
     } of
         {true, _, _, _, TargetProviderId} ->
             % it is replication or first step of migration
+            replication_traverse:cancel(Doc),
             rerun_ended(undefined, Doc, true);
         {_, true, _, _, TargetProviderId} ->
             % replication being aborted
+            replication_traverse:cancel(Doc),
             replication_status:handle_failed(TransferId, true),
             skip;
         {true, _, true, _, SourceProviderId} ->
@@ -842,9 +833,11 @@ maybe_rerun(Doc = #document{key = TransferId, value = Transfer}) ->
             skip;
         {_, _, true, _, SourceProviderId} ->
             % it is eviction or second step of migration
+            replica_eviction_traverse:cancel(Doc),
             rerun_ended(undefined, Doc, true);
         {_, _, _, true, SourceProviderId} ->
             % eviction being aborted
+            replica_eviction_traverse:cancel(Doc),
             replica_eviction_status:handle_failed(TransferId, true),
             skip;
         {false, false, false, false, _} ->
@@ -890,19 +883,11 @@ maybe_rerun(TransferId) ->
 %%-------------------------------------------------------------------
 -spec start_pools() -> ok.
 start_pools() ->
-    {ok, _} = worker_pool:start_sup_pool(?REPLICATION_WORKERS_POOL, [
-        {workers, ?REPLICATION_WORKERS_NUM},
-        {worker, {gen_transfer_worker, [?REPLICATION_WORKER]}},
-        {queue_type, fifo}
-    ]),
+    ok = replica_eviction_traverse:init_pool(),
+    ok = replication_traverse:init_pool(),
     {ok, _} = worker_pool:start_sup_pool(?REPLICATION_CONTROLLERS_POOL, [
         {workers, ?REPLICATION_CONTROLLERS_NUM},
         {worker, {?REPLICATION_CONTROLLER, []}}
-    ]),
-    {ok, _} = worker_pool:start_sup_pool(?REPLICA_EVICTION_WORKERS_POOL, [
-        {workers, ?REPLICA_EVICTION_WORKERS_NUM},
-        {worker, {gen_transfer_worker, [?REPLICA_EVICTION_WORKER]}},
-        {queue_type, fifo}
     ]),
     ok.
 
@@ -915,9 +900,9 @@ start_pools() ->
 %%-------------------------------------------------------------------
 -spec stop_pools() -> ok.
 stop_pools() ->
-    ok = wpool:stop_sup_pool(?REPLICATION_WORKERS_POOL),
     ok = wpool:stop_sup_pool(?REPLICATION_CONTROLLERS_POOL),
-    ok = wpool:stop_sup_pool(?REPLICA_EVICTION_WORKERS_POOL).
+    ok = replication_traverse:stop_pool(),
+    ok = replica_eviction_traverse:stop_pool().
 
 %%-------------------------------------------------------------------
 %% @private
@@ -954,7 +939,7 @@ get_ctx() ->
 %%--------------------------------------------------------------------
 -spec get_record_version() -> datastore_model:record_version().
 get_record_version() ->
-    11.
+    12.
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -1011,11 +996,15 @@ resolve_conflict(_Ctx, NewDoc, PreviousDoc) ->
     #document{value = NewTransfer} = NewDoc,
 
     PrevDocVec = {
+        PrevTransfer#transfer.replication_traverse_finished,
+        PrevTransfer#transfer.eviction_traverse_finished,
         PrevTransfer#transfer.cancel,
         PrevTransfer#transfer.enqueued,
         PrevTransfer#transfer.rerun_id
     },
     NewDocVec = {
+        NewTransfer#transfer.replication_traverse_finished,
+        NewTransfer#transfer.eviction_traverse_finished,
         NewTransfer#transfer.cancel,
         NewTransfer#transfer.enqueued,
         NewTransfer#transfer.rerun_id
@@ -1037,7 +1026,11 @@ resolve_conflict(_Ctx, NewDoc, PreviousDoc) ->
                 end,
                 rerun_id = utils:ensure_defined(
                     T1#transfer.rerun_id, undefined, T2#transfer.rerun_id
-                )
+                ),
+                replication_traverse_finished =
+                    T1#transfer.replication_traverse_finished or T2#transfer.replication_traverse_finished,
+                eviction_traverse_finished =
+                    T1#transfer.eviction_traverse_finished or T2#transfer.eviction_traverse_finished
             },
             {true, D1#document{value = EmergingTransfer}}
     end.

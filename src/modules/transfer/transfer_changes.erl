@@ -48,11 +48,21 @@
 handle(#document{deleted = true}) ->
     ok;
 
-handle(Doc = #document{value = #transfer{replication_status = ?SCHEDULED_STATUS}}) ->
-    handle_scheduled_replication(Doc);
+handle(Doc = #document{value = #transfer{
+    replication_status = ?SCHEDULED_STATUS,
+    replicating_provider = ReplicatingProviderId
+}}) ->
+    ?run_if_is_self(ReplicatingProviderId, fun() ->
+        handle_scheduled_replication(Doc)
+    end);
 
-handle(Doc = #document{value = #transfer{replication_status = ?ENQUEUED_STATUS}}) ->
-    handle_enqueued_replication(Doc);
+handle(Doc = #document{value = #transfer{
+    replication_status = ?ENQUEUED_STATUS,
+    replicating_provider = ReplicatingProviderId
+}}) ->
+    ?run_if_is_self(ReplicatingProviderId, fun() ->
+        handle_enqueued_replication(Doc)
+    end);
 
 handle(Doc = #document{
     value = #transfer{
@@ -62,22 +72,43 @@ handle(Doc = #document{
 }) when Status =/= ?SKIPPED_STATUS ->
     handle_dequeued_transfer(Doc);
 
-handle(Doc = #document{value = #transfer{replication_status = ?ACTIVE_STATUS}}) ->
-    handle_active_replication(Doc);
+handle(Doc = #document{value = #transfer{
+    replication_status = ?ACTIVE_STATUS,
+    replicating_provider = ReplicatingProviderId
+}}) ->
+    ?run_if_is_self(ReplicatingProviderId, fun() ->
+        handle_active_replication(Doc)
+    end);
 
-handle(Doc = #document{value = #transfer{replication_status = ?ABORTING_STATUS}}) ->
-    handle_aborting_replication(Doc);
+handle(Doc = #document{value = #transfer{
+    replication_status = ?ABORTING_STATUS,
+    replicating_provider = ReplicatingProviderId
+}}) ->
+    ?run_if_is_self(ReplicatingProviderId, fun() ->
+        handle_aborting_replication(Doc)
+    end);
 
 handle(Doc = #document{
     value = #transfer{
         replication_status = ReplicationStatus,
-        eviction_status = ?SCHEDULED_STATUS
+        eviction_status = ?SCHEDULED_STATUS,
+        evicting_provider = EvictingProviderId
     }
-}) when ReplicationStatus == ?COMPLETED_STATUS orelse ReplicationStatus == ?SKIPPED_STATUS ->
-    handle_scheduled_replica_eviction(Doc);
+}) when
+    ReplicationStatus == ?COMPLETED_STATUS;
+    ReplicationStatus == ?SKIPPED_STATUS
+->
+    ?run_if_is_self(EvictingProviderId, fun() ->
+        handle_scheduled_replica_eviction(Doc)
+    end);
 
-handle(Doc = #document{value = #transfer{eviction_status = ?ENQUEUED_STATUS}}) ->
-    handle_enqueued_replica_eviction(Doc);
+handle(Doc = #document{value = #transfer{
+    eviction_status = ?ENQUEUED_STATUS,
+    evicting_provider = EvictingProviderId
+}}) ->
+    ?run_if_is_self(EvictingProviderId, fun() ->
+        handle_enqueued_replica_eviction(Doc)
+    end);
 
 handle(Doc = #document{
     value = #transfer{
@@ -87,11 +118,21 @@ handle(Doc = #document{
 }) ->
     handle_dequeued_transfer(Doc);
 
-handle(Doc = #document{value = #transfer{eviction_status = ?ACTIVE_STATUS}}) ->
-    handle_active_replica_eviction(Doc);
+handle(Doc = #document{value = #transfer{
+    eviction_status = ?ACTIVE_STATUS,
+    evicting_provider = EvictingProviderId
+}}) ->
+    ?run_if_is_self(EvictingProviderId, fun() ->
+        handle_active_replica_eviction(Doc)
+    end);
 
-handle(Doc = #document{value = #transfer{eviction_status = ?ABORTING_STATUS}}) ->
-    handle_aborting_replica_eviction(Doc);
+handle(Doc = #document{value = #transfer{
+    eviction_status = ?ABORTING_STATUS,
+    evicting_provider = EvictingProviderId
+}}) ->
+    ?run_if_is_self(EvictingProviderId, fun() ->
+        handle_aborting_replica_eviction(Doc)
+    end);
 
 handle(Doc = #document{
     value = #transfer{
@@ -124,22 +165,14 @@ handle(_Doc) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_scheduled_replication(transfer:doc()) -> ok.
-handle_scheduled_replication(Doc = #document{
-    key = TransferId,
-    value = #transfer{
-        replication_status = ?SCHEDULED_STATUS,
-        replicating_provider = ReplicatingProviderId,
-        cancel = Cancel
-    }
-}) ->
-    ?run_if_is_self(ReplicatingProviderId, fun() ->
-        case Cancel of
-            true ->
-                replication_status:handle_cancelled(TransferId);
-            false ->
-                new_replication_or_migration(Doc)
-        end
-    end).
+handle_scheduled_replication(#document{key = TransferId, value = #transfer{
+    cancel = true
+}}) ->
+    replication_status:handle_cancelled(TransferId),
+    ok;
+
+handle_scheduled_replication(Doc) ->
+    new_replication_or_migration(Doc).
 
 
 %%--------------------------------------------------------------------
@@ -153,28 +186,22 @@ handle_scheduled_replication(Doc = #document{
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_enqueued_replication(transfer:doc()) -> ok.
-handle_enqueued_replication(Doc = #document{key = TransferId, value = #transfer{
-    replication_status = ?ENQUEUED_STATUS,
-    replicating_provider = ReplicatingProviderId,
-    cancel = Cancel,
+handle_enqueued_replication(Doc = #document{value = #transfer{cancel = true}}) ->
+    abort_replication(Doc, cancellation);
+
+handle_enqueued_replication(#document{key = TransferId, value = #transfer{
     replication_traverse_finished = TraverseFinished,
     files_processed = FilesProcessed,
-    bytes_replicated = BytesReplicated,
-    pid = Pid
-}}) ->
-    ?run_if_is_self(ReplicatingProviderId, fun() ->
-        case Cancel of
-            true ->
-                abort_replication(Doc, cancellation);
-            false ->
-                case {FilesProcessed, BytesReplicated} > {0, 0} orelse TraverseFinished of
-                    true ->
-                        replication_controller:mark_active(?decode_pid(Pid), TransferId);
-                    false ->
-                        ok
-                end
-        end
-    end).
+    bytes_replicated = BytesReplicated
+}}) when
+    TraverseFinished;
+    FilesProcessed > 0;
+    BytesReplicated > 0
+->
+    replication_controller:mark_active(TransferId);
+
+handle_enqueued_replication(_) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -185,49 +212,32 @@ handle_enqueued_replication(Doc = #document{key = TransferId, value = #transfer{
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_active_replication(transfer:doc()) -> ok.
-handle_active_replication(Doc = #document{value = #transfer{
-    cancel = true,
-    replicating_provider = ReplicatingProviderId
-}}) ->
-    ?run_if_is_self(ReplicatingProviderId, fun() ->
-        abort_replication(Doc, cancellation)
-    end);
+handle_active_replication(Doc = #document{value = #transfer{cancel = true}}) ->
+    abort_replication(Doc, cancellation);
 
 handle_active_replication(#document{key = TransferId, value = #transfer{
     files_to_process = FilesToProcess,
-    files_processed = FilesToProcess,
+    files_processed = FilesProcessed,
     replication_traverse_finished = true,
-    failed_files = 0,
-    replicating_provider = ReplicatingProviderId,
-    pid = Pid
-}}) ->
-    ?run_if_is_self(ReplicatingProviderId, fun() ->
-        replication_controller:mark_completed(?decode_pid(Pid), TransferId)
-    end);
+    failed_files = 0
+}}) when FilesProcessed >= FilesToProcess ->
+    replication_controller:mark_completed(TransferId);
 
 handle_active_replication(#document{key = TransferId, value = #transfer{
     files_to_process = FilesToProcess,
-    files_processed = FilesToProcess,
-    replication_traverse_finished = true,
-    replicating_provider = ReplicatingProviderId,
-    pid = Pid
-}}) ->
-    ?run_if_is_self(ReplicatingProviderId, fun() ->
-        replication_controller:mark_aborting(
-            ?decode_pid(Pid), TransferId, exceeded_number_of_failed_files)
-    end);
+    files_processed = FilesProcessed,
+    replication_traverse_finished = true
+}}) when FilesProcessed >= FilesToProcess ->
+    replication_controller:mark_aborting(TransferId, exceeded_number_of_failed_files);
 
 handle_active_replication(#document{key = TransferId, value = #transfer{
-    failed_files = FailedFiles,
-    replicating_provider = ReplicatingProviderId,
-    pid = Pid
+    failed_files = FailedFiles
 }}) ->
     case FailedFiles > ?MAX_FILE_TRANSFER_FAILURES_PER_TRANSFER of
         true ->
-            ?run_if_is_self(ReplicatingProviderId, fun() ->
-                replication_controller:mark_aborting(
-                    ?decode_pid(Pid), TransferId, exceeded_number_of_failed_files)
-                end);
+            replication_controller:mark_aborting(
+                TransferId, exceeded_number_of_failed_files
+            );
         false ->
             ok
     end.
@@ -241,13 +251,10 @@ handle_active_replication(#document{key = TransferId, value = #transfer{
 %% @end
 %%--------------------------------------------------------------------
 -spec abort_replication(transfer:doc(), Reason :: term()) -> ok.
-abort_replication(#document{key = TransferId, value = Transfer}, Reason) ->
-    DecodedPid = ?decode_pid(Transfer#transfer.pid),
-    case is_process_alive(DecodedPid) of
-        true ->
-            replication_controller:mark_aborting(DecodedPid, TransferId, Reason);
-        false ->
-            replication_status:handle_aborting(TransferId)
+abort_replication(#document{key = TransferId}, Reason) ->
+    case replication_controller:is_alive(TransferId) of
+        true -> replication_controller:mark_aborting(TransferId, Reason);
+        false -> replication_status:handle_aborting(TransferId)
     end,
     ok.
 
@@ -266,23 +273,19 @@ handle_aborting_replication(#document{key = TransferId, value = #transfer{
     cancel = Cancel,
     files_to_process = FilesToProcess,
     files_processed = FilesProcessed,
-    replication_traverse_finished = true,
-    replicating_provider = ReplicatingProviderId,
-    pid = Pid
+    replication_traverse_finished = true
 }}) when FilesProcessed >= FilesToProcess ->
-    ?run_if_is_self(ReplicatingProviderId, fun() ->
-        DecodedPid = ?decode_pid(Pid),
-        case {Cancel, is_process_alive(DecodedPid)} of
-            {true, true} ->
-                replication_controller:mark_cancelled(DecodedPid, TransferId);
-            {true, false} ->
-                replication_status:handle_cancelled(TransferId);
-            {false, true} ->
-                replication_controller:mark_failed(DecodedPid, TransferId);
-            {false, false} ->
-                replication_status:handle_failed(TransferId, false)
-        end
-    end);
+    case {Cancel, replication_controller:is_alive(TransferId)} of
+        {true, true} ->
+            replication_controller:mark_cancelled(TransferId);
+        {true, false} ->
+            replication_status:handle_cancelled(TransferId);
+        {false, true} ->
+            replication_controller:mark_failed(TransferId);
+        {false, false} ->
+            replication_status:handle_failed(TransferId, false)
+    end,
+    ok;
 
 handle_aborting_replication(_) ->
     ok.
@@ -300,27 +303,19 @@ handle_aborting_replication(_) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_scheduled_replica_eviction(transfer:doc()) -> ok.
-handle_scheduled_replica_eviction(Doc = #document{
-    key = TransferId,
-    value = #transfer{
-        eviction_status = ?SCHEDULED_STATUS,
-        evicting_provider = EvictingProviderId,
-        cancel = Cancel
-    }
-}) ->
-    ?run_if_is_self(EvictingProviderId, fun() ->
-        case Cancel of
-            true ->
-                replica_eviction_status:handle_cancelled(TransferId);
-            false ->
-                case replica_eviction_status:handle_enqueued(TransferId) of
-                    {ok, _} ->
-                        new_replica_eviction(Doc);
-                    {error, _Error} ->
-                        ok
-                end
-        end
-    end).
+handle_scheduled_replica_eviction(#document{key = TransferId, value = #transfer{
+    cancel = true
+}}) ->
+    replica_eviction_status:handle_cancelled(TransferId),
+    ok;
+
+handle_scheduled_replica_eviction(Doc = #document{key = TransferId}) ->
+    case replica_eviction_status:handle_enqueued(TransferId) of
+        {ok, _} ->
+            new_replica_eviction(Doc);
+        {error, _Error} ->
+            ok
+    end.
 
 
 %%--------------------------------------------------------------------
@@ -331,20 +326,14 @@ handle_scheduled_replica_eviction(Doc = #document{
 %% @end
 %%--------------------------------------------------------------------
 -spec handle_enqueued_replica_eviction(transfer:doc()) -> ok.
-handle_enqueued_replica_eviction(#document{
-    key = TransferId,
-    value = #transfer{
-        eviction_status = ?ENQUEUED_STATUS,
-        evicting_provider = EvictingProviderId,
-        cancel = Cancel
-    }
-}) ->
-    ?run_if_is_self(EvictingProviderId, fun() ->
-        case Cancel of
-            true -> replica_eviction_status:handle_cancelled(TransferId);
-            false -> ok
-        end
-    end).
+handle_enqueued_replica_eviction(#document{key = TransferId, value = #transfer{
+    cancel = true
+}}) ->
+    replica_eviction_status:handle_cancelled(TransferId),
+    ok;
+
+handle_enqueued_replica_eviction(_) ->
+    ok.
 
 
 %%--------------------------------------------------------------------
@@ -356,55 +345,39 @@ handle_enqueued_replica_eviction(#document{
 %%--------------------------------------------------------------------
 -spec handle_active_replica_eviction(transfer:doc()) -> ok.
 handle_active_replica_eviction(#document{key = TransferId, value = #transfer{
-    cancel = true,
-    evicting_provider = EvictingProviderId,
-    pid = Pid
+    cancel = true
 }}) ->
-    ?run_if_is_self(EvictingProviderId, fun() ->
-        DecodedPid = ?decode_pid(Pid),
-        case is_process_alive(DecodedPid) of
-            true ->
-                replica_eviction_controller:mark_aborting(DecodedPid, TransferId, cancellation);
-            false ->
-                replica_eviction_status:handle_aborting(TransferId)
-        end
-    end);
+    case replica_eviction_controller:is_alive(TransferId) of
+        true ->
+            replica_eviction_controller:mark_aborting(TransferId, cancellation);
+        false ->
+            replica_eviction_status:handle_aborting(TransferId)
+    end,
+    ok;
 
 handle_active_replica_eviction(#document{key = TransferId, value = #transfer{
     files_to_process = FilesToProcess,
-    files_processed = FilesToProcess,
+    files_processed = FilesProcessed,
     eviction_traverse_finished = true,
-    failed_files = 0,
-    evicting_provider = EvictingProviderId,
-    pid = Pid
-}}) ->
-    ?run_if_is_self(EvictingProviderId, fun() ->
-        replica_eviction_controller:mark_completed(?decode_pid(Pid), TransferId)
-    end);
+    failed_files = 0
+}}) when FilesProcessed >= FilesToProcess ->
+    replica_eviction_controller:mark_completed(TransferId);
 
 handle_active_replica_eviction(#document{key = TransferId, value = #transfer{
     files_to_process = FilesToProcess,
-    files_processed = FilesToProcess,
-    eviction_traverse_finished = true,
-    evicting_provider = EvictingProviderId,
-    pid = Pid
-}}) ->
-    ?run_if_is_self(EvictingProviderId, fun() ->
-        replica_eviction_controller:mark_aborting(
-            ?decode_pid(Pid), TransferId, exceeded_number_of_failed_files)
-    end);
+    files_processed = FilesProcessed,
+    eviction_traverse_finished = true
+}}) when FilesProcessed >= FilesToProcess ->
+    replica_eviction_controller:mark_aborting(TransferId, exceeded_number_of_failed_files);
 
 handle_active_replica_eviction(#document{key = TransferId, value = #transfer{
-    failed_files = FailedFiles,
-    evicting_provider = EvictingProviderId,
-    pid = Pid
+    failed_files = FailedFiles
 }}) ->
     case FailedFiles > ?MAX_FILE_TRANSFER_FAILURES_PER_TRANSFER of
         true ->
-            ?run_if_is_self(EvictingProviderId, fun() ->
-                replica_eviction_controller:mark_aborting(
-                    ?decode_pid(Pid), TransferId, exceeded_number_of_failed_files)
-            end);
+            replica_eviction_controller:mark_aborting(
+                TransferId, exceeded_number_of_failed_files
+            );
         false ->
             ok
     end.
@@ -424,23 +397,19 @@ handle_aborting_replica_eviction(#document{key = TransferId, value = #transfer{
     cancel = Cancel,
     files_to_process = FilesToProcess,
     files_processed = FilesProcessed,
-    eviction_traverse_finished = true,
-    evicting_provider = EvictingProviderId,
-    pid = Pid
+    eviction_traverse_finished = true
 }}) when FilesProcessed >= FilesToProcess ->
-    ?run_if_is_self(EvictingProviderId, fun() ->
-        DecodedPid = ?decode_pid(Pid),
-        case {Cancel, is_process_alive(DecodedPid)} of
-            {true, true} ->
-                replica_eviction_controller:mark_cancelled(DecodedPid, TransferId);
-            {false, true} ->
-                replica_eviction_controller:mark_failed(DecodedPid, TransferId);
-            {true, false} ->
-                replica_eviction_status:handle_cancelled(TransferId);
-            {false, false} ->
-                replica_eviction_status:handle_failed(TransferId, false)
-        end
-    end);
+    case {Cancel, replica_eviction_controller:is_alive(TransferId)} of
+        {true, true} ->
+            replica_eviction_controller:mark_cancelled(TransferId);
+        {false, true} ->
+            replica_eviction_controller:mark_failed(TransferId);
+        {true, false} ->
+            replica_eviction_status:handle_cancelled(TransferId);
+        {false, false} ->
+            replica_eviction_status:handle_failed(TransferId, false)
+    end,
+    ok;
 
 handle_aborting_replica_eviction(_) ->
     ok.
@@ -491,21 +460,12 @@ handle_finished_migration(Doc = #document{value = #transfer{
 -spec new_replication_or_migration(transfer:doc()) -> ok.
 new_replication_or_migration(#document{
     key = TransferId,
-    value = Transfer = #transfer{
-        file_uuid = FileUuid,
-        space_id = SpaceId,
-        callback = Callback
-    }
+    value = Transfer = #transfer{callback = Callback}
 }) ->
-    FileGuid = file_id:pack_guid(FileUuid, SpaceId),
-    worker_pool:cast(?REPLICATION_CONTROLLERS_POOL, {
-        start_replication,
-        session_utils:root_session_id(),
-        TransferId,
-        FileGuid,
-        Callback,
-        transfer:is_migration(Transfer)
-    }).
+    worker_pool:cast(
+        ?REPLICATION_CONTROLLERS_POOL,
+        {start_replication, TransferId, Callback, transfer:is_migration(Transfer)}
+    ).
 
 
 %%--------------------------------------------------------------------

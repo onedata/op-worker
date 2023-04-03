@@ -1869,8 +1869,7 @@ init_per_testcase(detect_stale_replica_synchronizer_jobs_test = Case, Config) ->
             ?APP_NAME, EnvVar, Value
         ])
     end, [
-        {max_file_replication_retries_per_file, 0},
-        {max_file_transfer_retry_interval_sec, 0},
+        {max_transfer_retries_per_file, 0},
         {minimal_sync_request, 1},
         {synchronizer_max_job_restarts, 5},
         {synchronizer_max_job_inactivity_period_sec, 1},
@@ -1955,8 +1954,7 @@ end_per_testcase(Case = detect_stale_replica_synchronizer_jobs_test, Config) ->
             ?APP_NAME, EnvVar
         ])
     end, [
-        max_file_replication_retries_per_file,
-        max_file_transfer_retry_interval_sec,
+        max_transfer_retries_per_file,
         minimal_sync_request,
         synchronizer_max_job_restarts,
         synchronizer_max_job_inactivity_period_sec,
