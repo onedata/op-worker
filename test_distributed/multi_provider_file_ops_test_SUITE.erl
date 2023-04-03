@@ -1501,8 +1501,7 @@ tmp_files_test_base(Config0, User, SpaceId) ->
     ?assertMatch({true, _}, rpc:call(Worker1, file_ctx, is_ignored_in_changes, [file_ctx:new_by_guid(TmpDirGuid)])),
     ?assertMatch({true, _}, rpc:call(Worker1, file_ctx, is_ignored_in_changes, [file_ctx:new_by_guid(DirGuid)])),
 
-    % wait for possible synchronization and check if it has not occurred
-    timer:sleep(timer:seconds(20)),
+    wait_for_possible_sync(Config, SpaceId, TmpFiles, false),
 
     ?assertMatch({ok, [], _}, lfm_proxy:get_children(
         Worker2, SessId(Worker2), #file_ref{guid = TmpDirGuid}, #{tune_for_large_continuous_listing => false}
@@ -1534,7 +1533,6 @@ tmp_files_test_base(Config0, User, SpaceId) ->
         ), ?ATTEMPTS)
     end, Workers).
 
-
 tmp_files_delete_test(Config0) ->
     User = <<"user1">>,
     SpaceId = <<"space1">>,
@@ -1555,8 +1553,7 @@ tmp_files_delete_test(Config0) ->
     {[DirGuid | _] = TmpDirs, [FileGuid1 | _] = TmpRegFiles} = create_tmp_files(Config, SpaceId),
     TmpFiles = TmpDirs ++ TmpRegFiles,
 
-    % wait for possible synchronization and check if it has not occurred
-    timer:sleep(timer:seconds(20)),
+    wait_for_possible_sync(Config, SpaceId, TmpFiles, false),
 
     ?assertMatch({ok, [], _}, lfm_proxy:get_children(
         Worker2, SessId(Worker2), #file_ref{guid = TmpDirGuid}, #{tune_for_large_continuous_listing => false}
@@ -1568,8 +1565,7 @@ tmp_files_delete_test(Config0) ->
     ?assertEqual(ok, lfm_proxy:unlink(Worker1, SessId(Worker1), #file_ref{guid = FileGuid1})),
     ?assertEqual(ok, lfm_proxy:rm_recursive(Worker1, SessId(Worker1), #file_ref{guid = DirGuid})),
 
-    % wait for possible synchronization and check if it has not occurred
-    timer:sleep(timer:seconds(20)),
+    wait_for_possible_sync(Config, SpaceId, TmpFiles, true),
 
     DbsyncChangesKeys = gather_dbsync_changes_keys(),
     lists:foreach(fun(Guid) ->
@@ -1648,6 +1644,25 @@ create_tmp_files(Config, SpaceId) ->
     )),
 
     {[DirGuid, Dir2Guid], [FileGuid1, FileGuid2, FileGuid3]}.
+
+wait_for_possible_sync(Config, SpaceId, Guids, AreDeleted) ->
+    [Worker1 | _] = ?config(workers1, Config),
+    [Worker2 | _] = ?config(workers2, Config),
+    Provider1Id = rpc:call(Worker1, oneprovider, get_id_or_undefined, []),
+
+    % Wait for disc save
+    lists:foreach(fun(Guid) ->
+        Key = datastore_model:get_unique_key(file_meta, file_id:guid_to_uuid(Guid)),
+        ?assertMatch({ok, _, #document{deleted = AreDeleted}},
+            rpc:call(Worker1, couchbase_driver, get, [#{bucket => <<"onedata">>}, Key]), 30)
+    end, Guids),
+
+    % Wait for sequences sync
+    AreSeqsEqual = fun() ->
+        rpc:call(Worker1, dbsync_state, get_seq, [SpaceId, Provider1Id]) =:=
+            rpc:call(Worker2, dbsync_state, get_seq, [SpaceId, Provider1Id])
+    end,
+    ?assertEqual(true, AreSeqsEqual, 60).
 
 get_file_meta_unique_key(#document{value = #links_forest{key = Key}}) ->
     Key;

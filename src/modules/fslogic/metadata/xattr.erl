@@ -83,10 +83,11 @@ set(UserCtx, FileCtx0, XattrName, XattrValue, Create, Replace) ->
         UserCtx, FileCtx0,
         [?TRAVERSE_ANCESTORS, ?OPERATIONS(?write_metadata_mask)]
     ),
+    {IsIgnoredInChanges, _FileCtx2} = file_ctx:is_ignored_in_changes(FileCtx1),
     custom_metadata:set_xattr(
         file_ctx:get_logical_uuid_const(FileCtx1),
         file_ctx:get_space_id_const(FileCtx1),
-        XattrName, XattrValue, Create, Replace
+        XattrName, XattrValue, Create, Replace, IsIgnoredInChanges
     ).
 
 

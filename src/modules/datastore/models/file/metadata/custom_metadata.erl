@@ -25,7 +25,8 @@
 
 %% API
 -export([get/1, update/2, delete/1, create_or_update/2]).
--export([list_xattrs/1, get_xattr/2, get_all_xattrs/1, set_xattr/6, remove_xattr/2]).
+-export([list_xattrs/1, get_xattr/2, get_all_xattrs/1, set_xattr/7, remove_xattr/2]).
+-export([ensure_synced/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0]).
@@ -144,10 +145,11 @@ get_all_xattrs(FileUuid) ->
     name(),
     value(),
     Create :: boolean(),
-    Replace :: boolean()
+    Replace :: boolean(),
+    IsIgnoredInChanges :: boolean()
 ) ->
     {ok, file_meta:uuid()} | {error, term()}.
-set_xattr(FileUuid, SpaceId, Name, Value, Create, Replace) ->
+set_xattr(FileUuid, SpaceId, Name, Value, Create, Replace, IsIgnoredInChanges) ->
     EffectiveFileUuid = fslogic_file_id:ensure_referenced_uuid(FileUuid),
     Diff = fun(Meta = #custom_metadata{value = MetaValue}) ->
         case {maps:is_key(Name, MetaValue), Create, Replace} of
@@ -171,10 +173,14 @@ set_xattr(FileUuid, SpaceId, Name, Value, Create, Replace) ->
         false ->
             FileGuid = file_id:pack_guid(EffectiveFileUuid, SpaceId),
             {ok, FileObjectId} = file_id:guid_to_objectid(FileGuid),
-            Default = #custom_metadata{
-                space_id = SpaceId,
-                file_objectid = FileObjectId,
-                value = #{Name => Value}
+            Default = #document{
+                key = EffectiveFileUuid,
+                value = #custom_metadata{
+                    space_id = SpaceId,
+                    file_objectid = FileObjectId,
+                    value = #{Name => Value}
+                },
+                ignore_in_changes = IsIgnoredInChanges
             },
             ?extract_key(datastore_model:update(
                 ?CTX#{scope => SpaceId}, EffectiveFileUuid, Diff, Default
@@ -194,6 +200,17 @@ remove_xattr(FileUuid, Name) ->
     end,
     ?ok_if_not_found(?extract_ok(datastore_model:update(?CTX,
         fslogic_file_id:ensure_referenced_uuid(FileUuid), Diff))).
+
+
+-spec ensure_synced(file_meta:uuid()) -> ok.
+ensure_synced(Key) ->
+    UpdateAns = datastore_model:update(?CTX#{ignore_in_changes => false}, Key, fun(Record) ->
+        {ok, Record} % Return unchanged record, ignore_in_changes will be unset because of flag in CTX
+    end),
+    case UpdateAns of
+        {ok, _} -> ok;
+        {error, not_found} -> ok
+    end.
 
 
 %%%===================================================================

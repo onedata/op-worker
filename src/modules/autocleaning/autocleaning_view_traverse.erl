@@ -109,7 +109,10 @@ process_row(Row, #{
         autocleaning_rules:are_all_rules_satisfied(FileCtx, AutocleaningRules) andalso
         autocleaning_run:is_active(AutocleaningRunId) of
         true ->
-            maybe_schedule_replica_deletion_task(FileCtx, AutocleaningRunId, SpaceId, BatchNo);
+            case file_ctx:is_ignored_in_changes(FileCtx) of
+                {true, FileCtx2} -> autocleaning_run_controller:notify_processed_file(SpaceId, AutocleaningRunId, BatchNo);
+                {false, FileCtx2} -> maybe_schedule_replica_deletion_task(FileCtx2, AutocleaningRunId, SpaceId, BatchNo)
+            end;
         _ ->
             autocleaning_run_controller:notify_processed_file(SpaceId, AutocleaningRunId, BatchNo)
     catch

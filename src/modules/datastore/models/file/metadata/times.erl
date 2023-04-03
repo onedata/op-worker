@@ -24,7 +24,7 @@
 
 %% API
 -export([get_or_default/1, get/1, create_or_update/2, delete/1,
-    save/1, save/5, save_with_current_times/3, unset_ignore_in_changes/1]).
+    save/1, save/5, save_with_current_times/3, ensure_synced/1]).
 
 %% datastore_model callbacks
 -export([get_ctx/0, get_record_struct/1]).
@@ -145,12 +145,15 @@ delete(FileUuid) ->
     datastore_model:delete(?CTX, fslogic_file_id:ensure_referenced_uuid(FileUuid)).
 
 
--spec unset_ignore_in_changes(file_meta:uuid()) -> ok.
-unset_ignore_in_changes(Key) ->
-    {ok, _} = datastore_model:update(?CTX#{ignore_in_changes => false}, Key, fun(Record) ->
+-spec ensure_synced(file_meta:uuid()) -> ok.
+ensure_synced(Key) ->
+    UpdateAns = datastore_model:update(?CTX#{ignore_in_changes => false}, Key, fun(Record) ->
         {ok, Record} % Return unchanged record, ignore_in_changes will be unset because of flag in CTX
     end),
-    ok.
+    case UpdateAns of
+        {ok, _} -> ok;
+        {error, not_found} -> ok
+    end.
 
 
 %%%===================================================================

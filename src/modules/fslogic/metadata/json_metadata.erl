@@ -148,11 +148,12 @@ get_direct_json_metadata(UserCtx, FileCtx0) ->
     {ok, file_meta:uuid()} | {error, term()}.
 set_insecure(FileCtx, JsonToInsert, Query, Create, Replace) ->
     FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
+    {IsIgnoredInChanges, FileCtx2} = file_ctx:is_ignored_in_changes(FileCtx),
     {ok, FileObjectId} = file_id:guid_to_objectid(file_ctx:get_referenced_guid_const(FileCtx)),
     ToCreate = #document{
         key = FileUuid,
         value = #custom_metadata{
-            space_id = file_ctx:get_space_id_const(FileCtx),
+            space_id = file_ctx:get_space_id_const(FileCtx2),
             file_objectid = FileObjectId,
             value = #{
                 ?JSON_METADATA_KEY => case json_utils:insert(undefined, JsonToInsert, Query) of
@@ -161,7 +162,8 @@ set_insecure(FileCtx, JsonToInsert, Query, Create, Replace) ->
                 end
             }
         },
-        scope = file_ctx:get_space_id_const(FileCtx)
+        scope = file_ctx:get_space_id_const(FileCtx2),
+        ignore_in_changes = IsIgnoredInChanges
     },
     Diff = fun(Meta = #custom_metadata{value = MetaValue}) ->
         case {maps:is_key(?JSON_METADATA_KEY, MetaValue), Create, Replace} of
