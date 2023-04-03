@@ -34,7 +34,7 @@
     {ok, od_share:id()} | no_return().
 create_share(UserCtx, FileCtx0, Name, Description) ->
     file_ctx:assert_not_trash_or_tmp_dir_const(FileCtx0),
-    FileCtx1 = file_ctx:assert_not_ignored_in_changes(FileCtx0),
+    FileCtx1 = file_ctx:assert_synchronization_enabled(FileCtx0),
     data_constraints:assert_not_readonly_mode(UserCtx),
 
     FileCtx2 = fslogic_authz:ensure_authorized(

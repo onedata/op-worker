@@ -287,9 +287,12 @@ get_cdmi_metadata(FileCtx, CdmiAttrName) ->
     {ok, file_meta:uuid()} | {error, term()}.
 set_cdmi_metadata(FileCtx, CdmiAttrName, CdmiAttrValue, Create, Replace) ->
     file_ctx:assert_not_trash_dir_const(FileCtx),
-    {IsIgnoredInChanges, _FileCtx2} = file_ctx:is_ignored_in_changes(FileCtx),
+    SyncPolicy = case file_ctx:is_synchronization_enabled(FileCtx) of
+        {true, _} -> synchronization_enabled;
+        {false, _} -> synchronization_disabled
+    end,
     custom_metadata:set_xattr(
         file_ctx:get_logical_uuid_const(FileCtx),
         file_ctx:get_space_id_const(FileCtx),
-        CdmiAttrName, CdmiAttrValue, Create, Replace, IsIgnoredInChanges
+        CdmiAttrName, CdmiAttrValue, Create, Replace, SyncPolicy
     ).

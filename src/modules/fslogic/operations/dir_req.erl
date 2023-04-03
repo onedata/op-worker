@@ -246,13 +246,13 @@ mkdir_insecure(UserCtx, ParentFileCtx, Name, Mode) ->
     SpaceId = file_ctx:get_space_id_const(ParentFileCtx3),
     Owner = user_ctx:get_user_id(UserCtx),
     ParentUuid = file_ctx:get_logical_uuid_const(ParentFileCtx3),
-    {IsIgnoredInChanges, ParentFileCtx4} = file_ctx:is_ignored_in_changes(ParentFileCtx3),
-    File = file_meta:new_doc(undefined, Name, ?DIRECTORY_TYPE, Mode, Owner, ParentUuid, SpaceId, IsIgnoredInChanges),
+    {IsSyncEnabled, ParentFileCtx4} = file_ctx:is_synchronization_enabled(ParentFileCtx3),
+    File = file_meta:new_doc(undefined, Name, ?DIRECTORY_TYPE, Mode, Owner, ParentUuid, SpaceId, not IsSyncEnabled),
     {ok, #document{key = DirUuid}} = file_meta:create({uuid, ParentUuid}, File),
     FileCtx = file_ctx:new_by_uuid(DirUuid, SpaceId),
 
     try
-        {ok, Time} = times:save_with_current_times(DirUuid, SpaceId, IsIgnoredInChanges),
+        {ok, Time} = times:save_with_current_times(DirUuid, SpaceId, not IsSyncEnabled),
         dir_update_time_stats:report_update_of_dir(file_ctx:get_logical_guid_const(FileCtx), Time),
         fslogic_times:update_mtime_ctime(ParentFileCtx4),
 

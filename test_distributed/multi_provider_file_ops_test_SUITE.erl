@@ -1497,9 +1497,9 @@ tmp_files_test_base(Config0, User, SpaceId) ->
     ?assert(file_ctx:is_tmp_dir_const(file_ctx:new_by_guid(TmpDirGuid))),
     ?assertNot(file_ctx:is_tmp_dir_const(file_ctx:new_by_guid(SpaceGuid), <<"file_name">>)),
     ?assert(file_ctx:is_tmp_dir_const(file_ctx:new_by_guid(SpaceGuid), ?TMP_DIR_NAME)),
-    ?assertMatch({false, _}, rpc:call(Worker1, file_ctx, is_ignored_in_changes, [file_ctx:new_by_guid(SyncedDirGuid)])),
-    ?assertMatch({true, _}, rpc:call(Worker1, file_ctx, is_ignored_in_changes, [file_ctx:new_by_guid(TmpDirGuid)])),
-    ?assertMatch({true, _}, rpc:call(Worker1, file_ctx, is_ignored_in_changes, [file_ctx:new_by_guid(DirGuid)])),
+    ?assertMatch({true, _}, rpc:call(Worker1, file_ctx, is_synchronization_enabled, [file_ctx:new_by_guid(SyncedDirGuid)])),
+    ?assertMatch({false, _}, rpc:call(Worker1, file_ctx, is_synchronization_enabled, [file_ctx:new_by_guid(TmpDirGuid)])),
+    ?assertMatch({false, _}, rpc:call(Worker1, file_ctx, is_synchronization_enabled, [file_ctx:new_by_guid(DirGuid)])),
 
     wait_for_possible_sync(Config, SpaceId, TmpFiles, false),
 

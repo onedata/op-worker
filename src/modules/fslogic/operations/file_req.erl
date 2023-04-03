@@ -102,8 +102,8 @@ make_link(UserCtx, TargetFileCtx0, TargetParentFileCtx0, Name) ->
         false ->
             % TODO VFS-7064 this assert won't be needed after adding link from space to trash directory
             file_ctx:assert_not_trash_or_tmp_dir_const(TargetParentFileCtx0, Name),
-            TargetParentFileCtx1 = file_ctx:assert_not_ignored_in_changes(TargetParentFileCtx0),
-            TargetFileCtx1 = file_ctx:assert_not_ignored_in_changes(TargetFileCtx0),
+            TargetParentFileCtx1 = file_ctx:assert_synchronization_enabled(TargetParentFileCtx0),
+            TargetFileCtx1 = file_ctx:assert_synchronization_enabled(TargetFileCtx0),
             % TODO VFS-7439 - Investigate eaccess error when creating hardlink to hardlink if next line is deletred
             % Check permissions on original target
             TargetFileCtx2 = file_ctx:ensure_based_on_referenced_guid(TargetFileCtx1),
@@ -755,10 +755,10 @@ create_file_doc(UserCtx, ParentFileCtx, Name, Mode)  ->
             Owner = user_ctx:get_user_id(UserCtx),
             ParentUuid = file_ctx:get_logical_uuid_const(ParentFileCtx2),
             SpaceId = file_ctx:get_space_id_const(ParentFileCtx2),
-            {IsIgnoredInChanges, ParentFileCtx3} = file_ctx:is_ignored_in_changes(ParentFileCtx2),
-            File = file_meta:new_doc(undefined, Name, ?REGULAR_FILE_TYPE, Mode, Owner, ParentUuid, SpaceId, IsIgnoredInChanges),
+            {IsSyncEnabled, ParentFileCtx3} = file_ctx:is_synchronization_enabled(ParentFileCtx2),
+            File = file_meta:new_doc(undefined, Name, ?REGULAR_FILE_TYPE, Mode, Owner, ParentUuid, SpaceId, not IsSyncEnabled),
             {ok, #document{key = FileUuid} = SavedFileDoc} = file_meta:create({uuid, ParentUuid}, File),
-            {ok, _} = times:save_with_current_times(FileUuid, SpaceId, IsIgnoredInChanges),
+            {ok, _} = times:save_with_current_times(FileUuid, SpaceId, not IsSyncEnabled),
 
             FileCtx = file_ctx:new_by_uuid(FileUuid, SpaceId),
             {file_ctx:set_file_doc(FileCtx, SavedFileDoc), ParentFileCtx3};

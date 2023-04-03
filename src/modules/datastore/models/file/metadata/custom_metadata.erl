@@ -146,10 +146,10 @@ get_all_xattrs(FileUuid) ->
     value(),
     Create :: boolean(),
     Replace :: boolean(),
-    IsIgnoredInChanges :: boolean()
+    SyncPolicy :: synchronization_enabled | synchronization_disabled
 ) ->
     {ok, file_meta:uuid()} | {error, term()}.
-set_xattr(FileUuid, SpaceId, Name, Value, Create, Replace, IsIgnoredInChanges) ->
+set_xattr(FileUuid, SpaceId, Name, Value, Create, Replace, SyncPolicy) ->
     EffectiveFileUuid = fslogic_file_id:ensure_referenced_uuid(FileUuid),
     Diff = fun(Meta = #custom_metadata{value = MetaValue}) ->
         case {maps:is_key(Name, MetaValue), Create, Replace} of
@@ -180,7 +180,7 @@ set_xattr(FileUuid, SpaceId, Name, Value, Create, Replace, IsIgnoredInChanges) -
                     file_objectid = FileObjectId,
                     value = #{Name => Value}
                 },
-                ignore_in_changes = IsIgnoredInChanges
+                ignore_in_changes = SyncPolicy =:= synchronization_disabled
             },
             ?extract_key(datastore_model:update(
                 ?CTX#{scope => SpaceId}, EffectiveFileUuid, Diff, Default

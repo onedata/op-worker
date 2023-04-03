@@ -148,7 +148,7 @@ get_direct_json_metadata(UserCtx, FileCtx0) ->
     {ok, file_meta:uuid()} | {error, term()}.
 set_insecure(FileCtx, JsonToInsert, Query, Create, Replace) ->
     FileUuid = file_ctx:get_logical_uuid_const(FileCtx),
-    {IsIgnoredInChanges, FileCtx2} = file_ctx:is_ignored_in_changes(FileCtx),
+    {IsSyncEnabled, FileCtx2} = file_ctx:is_synchronization_enabled(FileCtx),
     {ok, FileObjectId} = file_id:guid_to_objectid(file_ctx:get_referenced_guid_const(FileCtx)),
     ToCreate = #document{
         key = FileUuid,
@@ -163,7 +163,7 @@ set_insecure(FileCtx, JsonToInsert, Query, Create, Replace) ->
             }
         },
         scope = file_ctx:get_space_id_const(FileCtx2),
-        ignore_in_changes = IsIgnoredInChanges
+        ignore_in_changes = not IsSyncEnabled
     },
     Diff = fun(Meta = #custom_metadata{value = MetaValue}) ->
         case {maps:is_key(?JSON_METADATA_KEY, MetaValue), Create, Replace} of

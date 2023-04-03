@@ -48,15 +48,15 @@ rename(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
     case SourceSpaceId =:= TargetSpaceId of
         false ->
             % TODO VFS-6627 Handle interprovider move to RO storage
-            % NOTE: rename between spaces is copy/remove so ignored_in_changes does not need to be checked
+            % NOTE: rename between spaces is copy/remove so synchronization settings does not need to be checked
             rename_between_spaces(
                 UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName);
         true ->
-            {SourceFileCtx2, TargetParentFileCtx2} = case file_ctx:is_ignored_in_changes(TargetParentFileCtx) of
+            {SourceFileCtx2, TargetParentFileCtx2} = case file_ctx:is_synchronization_enabled(TargetParentFileCtx) of
                 {true, UpdatedTargetParentFileCtx} ->
-                    {file_ctx:assert_not_ignored_in_changes(SourceFileCtx), UpdatedTargetParentFileCtx};
+                    {SourceFileCtx, UpdatedTargetParentFileCtx};
                 {false, UpdatedTargetParentFileCtx} ->
-                    {SourceFileCtx, UpdatedTargetParentFileCtx}
+                    {file_ctx:assert_synchronization_enabled(SourceFileCtx), UpdatedTargetParentFileCtx}
             end,
 
             TargetParentFileCtx3 = file_ctx:assert_not_readonly_storage(TargetParentFileCtx2),
@@ -336,7 +336,8 @@ rename_file_on_flat_storage_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx
             ok = lfm:unlink(SessId, ?FILE_REF(TargetGuid), false)
     end,
     ok = file_meta:rename(SourceDoc, SourceParentDoc, ParentDoc, TargetName),
-    SyncAction = maybe_ensure_synced(SourceFileCtx3, SourceDoc, ParentDoc),
+    SyncAction = should_ensure_sync(SourceDoc, ParentDoc),
+    maybe_ensure_synced(SyncAction, SourceFileCtx3),
     maybe_ensure_subtree_synced(UserCtx, SourceFileCtx3, SyncAction),
     on_successful_rename(UserCtx, SourceFileCtx3, SourceParentFileCtx2, TargetParentFileCtx2, TargetName),
     #fuse_response{
@@ -512,7 +513,7 @@ rename_dir_insecure(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
 %%--------------------------------------------------------------------
 -spec rename_meta_and_storage_file(user_ctx:ctx(), SourceFileCtx :: file_ctx:ctx(),
     TargetParentFileCtx :: file_ctx:ctx(), TargetName :: file_meta:name()) ->
-    {TargetFileCtx :: file_ctx:ctx(), TargetFileId :: helpers:file_id(), ensure | ignored}.
+    {TargetFileCtx :: file_ctx:ctx(), TargetFileId :: helpers:file_id(), ensure | ignore}.
 rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentCtx0, TargetName) ->
     {SourceFileId, SourceFileCtx} = file_ctx:get_storage_file_id(SourceFileCtx0),
     {TargetParentFileId, TargetParentCtx} = file_ctx:get_storage_file_id(TargetParentCtx0),
@@ -524,7 +525,8 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentCtx0, TargetNa
     {SourceParentFileCtx, SourceFileCtx3} = file_tree:get_parent(SourceFileCtx2, UserCtx),
     {SourceParentDoc, SourceParentFileCtx2} = file_ctx:get_file_doc(SourceParentFileCtx),
     file_meta:rename(SourceDoc, SourceParentDoc, ParentDoc, TargetName),
-    SyncAction = maybe_ensure_synced(SourceFileCtx3, SourceDoc, ParentDoc),
+    SyncAction = should_ensure_sync(SourceDoc, ParentDoc),
+    maybe_ensure_synced(SyncAction, SourceFileCtx3),
 
     SpaceId = file_ctx:get_space_id_const(SourceFileCtx3),
     paths_cache:invalidate_on_all_nodes(SpaceId),
@@ -555,14 +557,14 @@ rename_meta_and_storage_file(UserCtx, SourceFileCtx0, TargetParentCtx0, TargetNa
 %% @end
 %%--------------------------------------------------------------------
 -spec rename_child_locations(user_ctx:ctx(), ParentFileCtx :: file_ctx:ctx(),
-    ParentStorageFileId :: helpers:file_id(), ensure | ignored) -> [#file_renamed_entry{}].
+    ParentStorageFileId :: helpers:file_id(), ensure | ignore) -> [#file_renamed_entry{}].
 rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId, RootSyncAction) ->
     ListOpts = #{tune_for_large_continuous_listing => true},
     rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId, RootSyncAction, ListOpts, []).
 
 
 -spec rename_child_locations(user_ctx:ctx(), ParentFileCtx :: file_ctx:ctx(),
-    ParentStorageFileId :: helpers:file_id(), ensure | ignored, file_listing:options(), [#file_renamed_entry{}]) ->
+    ParentStorageFileId :: helpers:file_id(), ensure | ignore, file_listing:options(), [#file_renamed_entry{}]) ->
     [#file_renamed_entry{}].
 rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId, RootSyncAction, ListOpts, ChildEntries) ->
     ParentGuid = file_ctx:get_logical_guid_const(ParentFileCtx),
@@ -596,8 +598,8 @@ rename_child_locations(UserCtx, ParentFileCtx, ParentStorageFileId, RootSyncActi
     end.
 
 
--spec maybe_ensure_subtree_synced(user_ctx:ctx(), file_ctx:ctx(), ensure | ignored) -> ok.
-maybe_ensure_subtree_synced(_UserCtx, _FileCtx, ignored) ->
+-spec maybe_ensure_subtree_synced(user_ctx:ctx(), file_ctx:ctx(), ensure | ignore) -> ok.
+maybe_ensure_subtree_synced(_UserCtx, _FileCtx, ignore) ->
     ok;
 maybe_ensure_subtree_synced(UserCtx, FileCtx, ensure) ->
     ensure_subtree_synced(UserCtx, FileCtx, #{tune_for_large_continuous_listing => true}).
@@ -608,7 +610,7 @@ ensure_subtree_synced(UserCtx, FileCtx, ListOpts) ->
     {Children, ListingPaginationToken, FileCtx2} = file_tree:list_children(FileCtx, UserCtx, ListOpts),
     lists:foreach(fun(ChildCtx) ->
         {IsDir, ChildCtx2} = file_ctx:is_dir(ChildCtx),
-        ensure_synced(ChildCtx2),
+        file_ctx:ensure_synced(ChildCtx2),
         case IsDir of
             true ->
                 ensure_subtree_synced(UserCtx, ChildCtx2, #{tune_for_large_continuous_listing => true});
@@ -712,39 +714,22 @@ validate_target_name(TargetName) ->
 
 
 %% @private
--spec maybe_ensure_synced(file_ctx:ctx(), file_meta:doc(), file_meta:doc()) -> ensure | ignored.
-maybe_ensure_synced(
-    SourceCtx,
+-spec should_ensure_sync(file_meta:doc(), file_meta:doc()) -> ensure | ignore.
+should_ensure_sync(
     #document{ignore_in_changes = true} = _SourceDoc,
     #document{key = ParentKey, ignore_in_changes = false} = _ParentDoc
 ) ->
     case fslogic_file_id:is_trash_dir_uuid(ParentKey) of
-        true ->
-            ignored;
-        false ->
-            ensure_synced(SourceCtx),
-            ensure
+        true -> ignore;
+        false -> ensure
     end;
-maybe_ensure_synced(_, _, _) ->
-    ignored.
+should_ensure_sync(_, _) ->
+    ignore.
 
 
 %% @private
--spec maybe_ensure_synced(ensure | ignored, file_ctx:ctx()) -> ok.
-maybe_ensure_synced(ensure = _RootAction, FileCtx) ->
-    ensure_synced(FileCtx);
-maybe_ensure_synced(ignored = _RootAction, _FileCtx) ->
+-spec maybe_ensure_synced(ensure | ignore, file_ctx:ctx()) -> ok.
+maybe_ensure_synced(ensure, FileCtx) ->
+    file_ctx:ensure_synced(FileCtx);
+maybe_ensure_synced(ignore, _FileCtx) ->
     ok.
-
-
-%% @private
--spec ensure_synced(file_ctx:ctx()) -> ok.
-ensure_synced(FileCtx) ->
-    Uuid = file_ctx:get_logical_uuid_const(FileCtx),
-    times:ensure_synced(Uuid),
-    custom_metadata:ensure_synced(Uuid),
-    case file_meta:ensure_synced(Uuid) of
-        {ok, reg_file_synced} -> fslogic_location_cache:ensure_synced(FileCtx);
-        {ok, _} -> ok;
-        {error, not_found} -> ok
-    end.

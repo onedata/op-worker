@@ -77,6 +77,7 @@
 
 -define(CTX, #{
     model => ?MODULE,
+    % TODO VFS-10728 - this flag name conflicts with higher level function names - change it
     sync_enabled => true,
     remote_driver => datastore_remote_driver,
     mutator => oneprovider:get_id_or_undefined(),
@@ -532,22 +533,19 @@ rename(SourceDoc, SourceParentUuid, TargetParentUuid, TargetName) ->
     dataset_api:move_if_applicable(SourceDoc, TargetDoc).
 
 
--spec ensure_synced(uuid()) -> {ok, dir_synced | symlink_synced | reg_file_synced} | {error, term()}.
+-spec ensure_synced(uuid()) -> {ok, doc()} | {error, term()}.
 ensure_synced(Key) ->
     UpdateAns = datastore_model:update(?CTX#{ignore_in_changes => false}, Key, fun(Record) ->
         {ok, Record} % Return unchanged record, ignore_in_changes will be unset because of flag in CTX
     end),
     case UpdateAns of
-        {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}}} ->
+        {ok, #document{value = #file_meta{type = ?DIRECTORY_TYPE}} = Doc} ->
             case datastore_model:ensure_forest_in_changes(?CTX, Key, oneprovider:get_id()) of
-                ok -> {ok, dir_synced};
+                ok -> {ok, Doc};
                 LinkError -> LinkError
             end;
-        {ok, #document{value = #file_meta{type = ?SYMLINK_TYPE}}} ->
-            {ok, symlink_synced};
-        {ok, #document{value = #file_meta{type = ?REGULAR_FILE_TYPE}}} ->
-            {ok, reg_file_synced};
-        % Note: cannot execute ensure_synced for hardlinks
+        {ok, Doc} ->
+            {ok, Doc};
         {error, _} = Error ->
             Error
     end.

@@ -30,14 +30,14 @@
 -spec create_doc(file_ctx:ctx(), StorageFileCreated :: boolean(), GeneratedKey :: boolean(),
     QoSCheckSizeLimit :: non_neg_integer()) -> {{ok, file_location:record()} | {error, already_exists}, file_ctx:ctx()}.
 create_doc(FileCtx, StorageFileCreated, GeneratedKey, QoSCheckSizeLimit) ->
-    {IgnoreInChanges, FileCtx2} = file_ctx:is_ignored_in_changes(FileCtx),
-    create_doc(FileCtx2, StorageFileCreated, GeneratedKey, QoSCheckSizeLimit, IgnoreInChanges).
+    {IsSyncEnabled, FileCtx2} = file_ctx:is_synchronization_enabled(FileCtx),
+    create_doc(FileCtx2, StorageFileCreated, GeneratedKey, QoSCheckSizeLimit, IsSyncEnabled).
 
 
 -spec create_doc(file_ctx:ctx(), StorageFileCreated :: boolean(), GeneratedKey :: boolean(),
     QoSCheckSizeLimit :: non_neg_integer(), boolean()) ->
     {{ok, file_location:record()} | {error, already_exists}, file_ctx:ctx()}.
-create_doc(FileCtx, StorageFileCreated, GeneratedKey, QoSCheckSizeLimit, IgnoreInChanges) ->
+create_doc(FileCtx, StorageFileCreated, GeneratedKey, QoSCheckSizeLimit, IsSyncEnabled) ->
     SpaceId = file_ctx:get_space_id_const(FileCtx),
     FileUuid = file_ctx:get_referenced_uuid_const(FileCtx),
     FileGuid = file_ctx:get_referenced_guid_const(FileCtx),
@@ -58,7 +58,7 @@ create_doc(FileCtx, StorageFileCreated, GeneratedKey, QoSCheckSizeLimit, IgnoreI
     case fslogic_location_cache:create_location(FileCtx4, #document{
         key = LocId,
         value = Location,
-        ignore_in_changes = IgnoreInChanges
+        ignore_in_changes = not IsSyncEnabled
     }, GeneratedKey) of
         {ok, _LocId} ->
             FileCtx5 = file_ctx:set_file_location(FileCtx4, LocId),
