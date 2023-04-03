@@ -130,7 +130,7 @@ wait({{ok, MsgId}, _} = Future) ->
                 status = #status{code = ?OK},
                 compressed_data = Data
             }
-        } -> {ok, datastore_json:decode(jiffy:decode(zlib:uncompress(Data)))};
+        } -> {ok, datastore_json:decode(jiffy:decode(zlib:uncompress(Data), [copy_strings]))};
         #server_message{
             message_id = MsgId,
             message_body = #remote_document{

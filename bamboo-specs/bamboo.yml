@@ -530,6 +530,7 @@ api_archive: &ct-onenv-job
         <<: *run-script
         scripts:
           - |-
+            #!/bin/bash
             tar -xzmf op_worker.tar.gz
             cd op_worker
             make submodules
@@ -537,10 +538,24 @@ api_archive: &ct-onenv-job
             echo ./bamboos/artifacts/pull_artifact.py --hostname ${bamboo.artifactRepoHostname} --port ${bamboo.artifactRepoPort} \
                 --username ${bamboo.artifactRepoUsername} --branch ${bamboo.branchSrc} --plan ${bamboo.planRepository.name} \
                 --artifact-name surefire_${bamboo.shortJobName}.tar.gz
-            ./bamboos/artifacts/pull_artifact.py --hostname ${bamboo.artifactRepoHostname} --port ${bamboo.artifactRepoPort} \
-                --username ${bamboo.artifactRepoUsername} --branch ${bamboo.branchSrc} --plan ${bamboo.planRepository.name} \
-                --artifact-name ${ARTIFACT}
-            tar zxf ${ARTIFACT}
+            let c=3
+            while : ; do
+                ./bamboos/artifacts/pull_artifact.py --hostname ${bamboo.artifactRepoHostname} --port ${bamboo.artifactRepoPort} \
+                    --username ${bamboo.artifactRepoUsername} --branch ${bamboo.branchSrc} --plan ${bamboo.planRepository.name} \
+                    --artifact-name ${ARTIFACT}
+                tar zxf ${ARTIFACT}
+                if [ -f test_distributed/logs/*/surefire.xml ]; then
+                    break
+                else
+                    let c=$c-1
+                    if [[ $c < 0 ]]; then
+                        echo "Giving up... The surefire.xml could not be pulled. Does it exist in the develop?" >&2
+                        break
+                    fi
+                    echo "The surefire.xml could not be pulled, retrying in 30 seconds..." >&2
+                    sleep 30
+                fi
+            done
             touch test_distributed/logs/*/surefire.xml
         description: Pull surefire artifact and unpack it
         conditions: *quarantine-hack-cond-build2-3
