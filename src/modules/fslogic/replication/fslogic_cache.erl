@@ -787,11 +787,11 @@ flush_key(Key, Type) ->
                 true ->
                     flush_local_blocks(DocToSave, DelBlocks, AddBlocks, Type);
                 _ ->
-                    UnsetIgnoreInChanges = case get({?ENSURE_SYNCED, Key}) of
+                    EnsureSynced = case get({?ENSURE_SYNCED, Key}) of
                         undefined -> false;
                         true -> true
                     end,
-                    case file_location:save(DocToSave, UnsetIgnoreInChanges) of
+                    case file_location:save(DocToSave, EnsureSynced) of
                         {ok, _} ->
                             put({?FLUSHED_DOCS, Key}, DocToSave),
                             erase({?ENSURE_SYNCED, Key}),

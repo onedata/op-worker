@@ -92,9 +92,9 @@ save_and_bump_version(FileLocationDoc, UserId) ->
 
 
 -spec save(doc(), boolean()) -> {ok, id()} | {error, term()}.
-save(Doc = #document{value = #file_location{space_id = SpaceId}}, false = _UnsetIgnoreInChanges) ->
+save(Doc = #document{value = #file_location{space_id = SpaceId}}, false = _EnsureSynced) ->
     ?extract_key(datastore_model:save(?CTX, Doc#document{scope = SpaceId}));
-save(Doc = #document{value = #file_location{space_id = SpaceId}}, true = _UnsetIgnoreInChanges) ->
+save(Doc = #document{value = #file_location{space_id = SpaceId}}, true = _EnsureSynced) ->
     ?extract_key(datastore_model:save(?CTX#{ignore_in_changes => false}, Doc#document{scope = SpaceId})).
 
 

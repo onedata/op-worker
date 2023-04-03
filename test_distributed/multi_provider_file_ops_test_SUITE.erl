@@ -1510,6 +1510,9 @@ tmp_files_test_base(Config0, User, SpaceId) ->
         ?assertMatch({error, enoent}, lfm_proxy:stat(Worker2, SessId(Worker2), #file_ref{guid = G}))
     end, TmpFiles),
 
+    ?assertMatch({error, ?EINVAL}, lfm_proxy:mv(
+        Worker1, SessId(Worker1), #file_ref{guid = SyncedDirGuid}, #file_ref{guid = TmpDirGuid}, ?RAND_STR()
+    )),
     ?assertMatch({ok, _}, lfm_proxy:mv(
         Worker1, SessId(Worker1), #file_ref{guid = FileGuid1}, #file_ref{guid = SyncedDirGuid}, ?RAND_STR()
     )),

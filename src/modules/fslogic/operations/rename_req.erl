@@ -56,7 +56,7 @@ rename(UserCtx, SourceFileCtx, TargetParentFileCtx, TargetName) ->
                 {true, UpdatedTargetParentFileCtx} ->
                     {SourceFileCtx, UpdatedTargetParentFileCtx};
                 {false, UpdatedTargetParentFileCtx} ->
-                    {file_ctx:assert_synchronization_enabled(SourceFileCtx), UpdatedTargetParentFileCtx}
+                    {file_ctx:assert_synchronization_disabled(SourceFileCtx), UpdatedTargetParentFileCtx}
             end,
 
             TargetParentFileCtx3 = file_ctx:assert_not_readonly_storage(TargetParentFileCtx2),

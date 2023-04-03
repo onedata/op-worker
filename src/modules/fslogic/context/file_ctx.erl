@@ -76,7 +76,8 @@
     is_user_root_dir_const/2, is_root_dir_const/1, file_exists_const/1, file_exists_or_is_deleted/1,
     is_in_user_space_const/2, assert_not_special_const/1, assert_is_dir/1, assert_not_dir/1, get_type/1, 
     get_effective_type/1, assert_not_trash_dir_const/1, assert_not_trash_dir_const/2,
-    assert_not_trash_or_tmp_dir_const/1, assert_not_trash_or_tmp_dir_const/2, assert_synchronization_enabled/1]).
+    assert_not_trash_or_tmp_dir_const/1, assert_not_trash_or_tmp_dir_const/2,
+    assert_synchronization_enabled/1, assert_synchronization_disabled/1]).
 -export([equals/2]).
 -export([assert_not_readonly_target_storage_const/2]).
 
@@ -1154,6 +1155,14 @@ assert_synchronization_enabled(FileCtx) ->
     case is_synchronization_enabled(FileCtx) of
         {false, _} -> throw(?EINVAL);
         {true, FileCtx2} -> FileCtx2
+    end.
+
+
+-spec assert_synchronization_disabled(ctx()) -> ctx().
+assert_synchronization_disabled(FileCtx) ->
+    case is_synchronization_enabled(FileCtx) of
+        {true, _} -> throw(?EINVAL);
+        {false, FileCtx2} -> FileCtx2
     end.
 
 
