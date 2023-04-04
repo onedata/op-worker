@@ -1092,8 +1092,10 @@ disassociate_froms(Froms, State = #state{
 %%--------------------------------------------------------------------
 -spec cancel_transfer_id(transfer:id(), #state{}) -> #state{}.
 cancel_transfer_id(TransferId, State) ->
-    From = maps:get(TransferId, State#state.transfer_id_to_from),
-    cancel_froms([From], State).
+    case maps:get(TransferId, State#state.transfer_id_to_from, undefined) of
+        undefined -> State;
+        From -> cancel_froms([From], State)
+    end.
 
 
 %%--------------------------------------------------------------------
