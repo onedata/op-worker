@@ -36,6 +36,10 @@
 -export_type([changes_batch/0, changes_request/0, tree_broadcast/0]).
 -export_type([msg_id/0, msg/0]).
 
+-define(SHOULD_COMPRESS_DOCS, op_worker:get_env(
+    dbsync_changes_batch_compress_docs, false
+)).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -153,12 +157,15 @@ request_changes(ProviderId, SpaceId, Since, Until, IncludedMutators) ->
     couchbase_changes:until(), dbsync_changes:timestamp(), [datastore:doc()]) ->
     ok | {error, Reason :: term()}.
 send_changes(ProviderId, SpaceId, Since, Until, Timestamp, Docs) ->
+    Compress = ?SHOULD_COMPRESS_DOCS,
+
     dbsync_communicator:send(ProviderId, #changes_batch{
         space_id = SpaceId,
         since = Since,
         until = Until,
         timestamp = Timestamp,
-        compressed_docs = dbsync_utils:compress(Docs)
+        compressed = Compress,
+        docs = dbsync_utils:encode_batch(Docs, Compress)
     }).
 
 %%--------------------------------------------------------------------
@@ -170,13 +177,15 @@ send_changes(ProviderId, SpaceId, Since, Until, Timestamp, Docs) ->
 -spec broadcast_changes(od_space:id(), couchbase_changes:since(),
     couchbase_changes:until(), dbsync_changes:timestamp(), [datastore:doc()]) -> ok.
 broadcast_changes(SpaceId, Since, Until, Timestamp, Docs) ->
+    Compress = ?SHOULD_COMPRESS_DOCS,
     MsgId = dbsync_utils:gen_request_id(),
     Msg = #changes_batch{
         space_id = SpaceId,
         since = Since,
         until = Until,
         timestamp = Timestamp,
-        compressed_docs = dbsync_utils:compress(Docs)
+        compressed = Compress,
+        docs = dbsync_utils:encode_batch(Docs, Compress)
     },
     case broadcast(SpaceId, MsgId, Msg, []) of
         true ->

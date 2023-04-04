@@ -261,9 +261,10 @@ handle_changes_batch(ProviderId, MsgId, #changes_batch{
     since = Since,
     until = Until,
     timestamp = Timestamp,
-    compressed_docs = CompressedDocs
+    compressed = Compressed,
+    docs = EncodedDocs
 }) ->
-    Docs = dbsync_utils:uncompress(CompressedDocs),
+    Docs = dbsync_utils:decode_batch(EncodedDocs, Compressed),
     gen_server:cast(
         {global, ?IN_STREAM_ID(SpaceId)}, {changes_batch, MsgId, ProviderId, Since, Until, Timestamp, Docs}
     ).
