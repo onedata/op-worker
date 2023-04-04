@@ -80,15 +80,10 @@ start(FileCtx, QosEntries, TaskId) ->
 
 -spec report_entry_deleted(qos_entry:id() | qos_entry:doc()) -> ok.
 report_entry_deleted(QosEntryId) when is_binary(QosEntryId) ->
-    case qos_entry:get(QosEntryId) of
-        {ok, QosDoc} -> report_entry_deleted(QosDoc);
-        ?ERROR_NOT_FOUND -> ok;
-        {error, _} = Error -> 
-            ?error("Error in qos_traverse:report_entry_deleted: ~p", [Error])
-    end;
-report_entry_deleted(#document{key = QosEntryId} = QosEntryDoc) ->
-    ok = cancel_local_traverses(QosEntryDoc),
-    ok = qos_entry:apply_to_all_transfers(QosEntryId, fun replica_synchronizer:cancel/1).
+    ok = cancel_traverses(QosEntryId),
+    ok = qos_entry:apply_to_all_transfers(QosEntryId, fun replica_synchronizer:cancel/1);
+report_entry_deleted(#document{key = QosEntryId}) ->
+    report_entry_deleted(QosEntryId).
 
 
 -spec init_pool() -> ok  | no_return().
@@ -402,16 +397,14 @@ report_transfer_stats(QosEntries, Type, ValuesPerStorage) ->
 
 
 %% @private
--spec cancel_local_traverses(qos_entry:doc()) -> ok.
-cancel_local_traverses(QosEntryDoc) ->
-    {ok, TraverseReqs} = qos_entry:get_traverse_reqs(QosEntryDoc),
-    {LocalTraverseIds, _} = qos_traverse_req:split_local_and_remote(TraverseReqs),
-    lists:foreach(fun(TaskId) ->
-        case tree_traverse:cancel(?POOL_NAME, TaskId) of
+-spec cancel_traverses(qos_entry:id()) -> ok.
+cancel_traverses(QosEntryId) ->
+    qos_entry:fold_traverses(QosEntryId, fun({TaskId, _TraverseRootUuid}, _Acc) ->
+        case ?ok_if_not_found(tree_traverse:cancel(?POOL_NAME, TaskId)) of
             ok -> ok;
             Error -> ?error("Error when cancelling traverse: ~p", [Error])
         end
-    end, LocalTraverseIds).
+    end, ok).
 
 
 %% @private
