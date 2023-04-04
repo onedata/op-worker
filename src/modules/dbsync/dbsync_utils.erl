@@ -23,7 +23,7 @@
 -export([get_bucket/0]).
 -export([get_spaces/0, get_provider/1, get_providers/1, is_supported/2]).
 -export([gen_request_id/0]).
--export([compress/1, uncompress/1]).
+-export([encode/2, decode/2]).
 
 %%%===================================================================
 %%% API
@@ -117,20 +117,28 @@ gen_request_id() ->
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns a compressed datastore documents binary.
+%% Returns a encoded datastore documents.
 %% @end
 %%--------------------------------------------------------------------
--spec compress([datastore:doc()]) -> binary().
-compress(Docs) ->
-    Docs2 = [datastore_json:encode(Doc) || Doc <- Docs],
-    zlib:compress(jiffy:encode(Docs2)).
+-spec encode([datastore:doc()], boolean()) -> binary().
+encode(Docs, Compress) ->
+    EncodedDocs = jiffy:encode([datastore_json:encode(Doc) || Doc <- Docs]),
+
+    case Compress of
+        true -> zlib:compress(EncodedDocs);
+        false -> EncodedDocs
+    end.
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Returns a list of uncompressed datastore documents.
+%% Returns a list of decoded datastore documents.
 %% @end
 %%--------------------------------------------------------------------
--spec uncompress(binary()) -> [datastore:doc()].
-uncompress(CompressedDocs) ->
-    Docs = jiffy:decode(zlib:uncompress(CompressedDocs), [copy_strings]),
+-spec decode(binary(), boolean()) -> [datastore:doc()].
+decode(EncodedDocs0, Compressed) ->
+    EncodedDocs1 = case Compressed of
+        true -> zlib:uncompress(EncodedDocs0);
+        false -> EncodedDocs0
+    end,
+    Docs = jiffy:decode(EncodedDocs1, [copy_strings]),
     [datastore_json:decode(Doc) || Doc <- Docs].

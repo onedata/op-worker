@@ -133,7 +133,8 @@ status_should_be_broadcast_periodically(Config) ->
                 space_id = SpaceId,
                 since = 1,
                 until = 1,
-                compressed_docs = []
+                compressed = false,
+                docs = []
             }
         }}, ?TIMEOUT)
     end, ?config(spaces, Config)).
@@ -164,7 +165,7 @@ remote_changes_should_not_be_broadcast(Config) ->
             gen_server:cast(Pid, {change, {ok, Doc}})
         end, lists:delete(<<"p1">>, get_providers(SpaceId))),
         ?assertNotReceivedMatch({send, _, #tree_broadcast2{
-            message_body = #changes_batch{compressed_docs = [_ | _]}
+            message_body = #changes_batch{docs = [_ | _]}
         }}, 500)
     end, ?config(spaces, Config)).
 
@@ -183,7 +184,8 @@ remote_changes_should_be_applied(Config) ->
                         space_id = SpaceId,
                         since = N,
                         until = N + 1,
-                        compressed_docs = [Doc]
+                        compressed = false,
+                        docs = [Doc]
                     }
                 }),
                 Doc
@@ -209,14 +211,16 @@ resent_changes_should_be_applied(Config) ->
                     space_id = SpaceId,
                     since = 2,
                     until = 3,
-                    compressed_docs = [Doc2]
+                    compressed = false,
+                    docs = [Doc2]
                 }
             }),
             ?call(Worker, ProviderId, #changes_batch{
                 space_id = SpaceId,
                 since = 1,
                 until = 2,
-                compressed_docs = [Doc]
+                compressed = false,
+                docs = [Doc]
             }),
             ?assertReceivedMatch({apply, Doc}, ?TIMEOUT),
             ?assertReceivedMatch({apply, Doc2}, ?TIMEOUT)
@@ -237,7 +241,8 @@ remote_changes_duplicates_should_be_ignored(Config) ->
                     space_id = SpaceId,
                     since = 1,
                     until = 2,
-                    compressed_docs = [Doc]
+                    compressed = false,
+                    docs = [Doc]
                 }
             },
             ?call(Worker, ProviderId, Request),
@@ -264,7 +269,8 @@ remote_changes_should_be_forwarded(Config) ->
                         space_id = SpaceId,
                         since = N,
                         until = N + 1,
-                        compressed_docs = [Doc]
+                        compressed = false,
+                        docs = [Doc]
                     }
                 },
                 ?call(Worker, SrcProviderId, Request),
@@ -290,7 +296,8 @@ missing_changes_should_be_requested(Config) ->
                     space_id = SpaceId,
                     since = 10,
                     until = 11,
-                    compressed_docs = [Doc]
+                    compressed = false,
+                    docs = [Doc]
                 }
             },
             ?call(Worker, SrcProviderId, Request),
@@ -321,7 +328,8 @@ future_changes_should_be_stashed(Config) ->
                         space_id = SpaceId,
                         since = N,
                         until = N + 1,
-                        compressed_docs = [Doc]
+                        compressed = false,
+                        docs = [Doc]
                     }
                 },
                 ?call(Worker, SrcProviderId, Request),
@@ -372,7 +380,8 @@ changes_request_should_be_handled(Config) ->
                 space_id = SpaceId,
                 since = 1,
                 until = 2,
-                compressed_docs = [Doc]
+                compressed = false,
+                docs = [Doc]
             }}, ?TIMEOUT)
         end, ProviderIds2)
     end, ?config(spaces, Config)).
@@ -410,11 +419,11 @@ init_per_testcase(_Case, Config) ->
     test_utils:mock_expect(Worker, dbsync_utils, get_providers, fun
         (SpaceId) -> get_providers(SpaceId)
     end),
-    test_utils:mock_expect(Worker, dbsync_utils, compress, fun
-        (Docs) -> Docs
+    test_utils:mock_expect(Worker, dbsync_utils, encode, fun
+        (Docs, _) -> Docs
     end),
-    test_utils:mock_expect(Worker, dbsync_utils, uncompress, fun
-        (CompressedDocs) -> CompressedDocs
+    test_utils:mock_expect(Worker, dbsync_utils, decode, fun
+        (CompressedDocs, _) -> CompressedDocs
     end),
     test_utils:mock_expect(Worker, dbsync_communicator, send, fun
         (ProviderId, Msg) -> Self ! {send, ProviderId, Msg}, ok
@@ -493,11 +502,11 @@ assert_broadcast(SrcProviderId, RecvProviders) ->
         low_provider_id = LowProviderId,
         high_provider_id = HighProviderId,
         message_body = #changes_batch{
-            compressed_docs = RecvDocs
+            docs = RecvDocs
         }
     }} = ?assertReceivedMatch({send, _, #tree_broadcast2{
         src_provider_id = SrcProviderId,
-        message_body = #changes_batch{compressed_docs = [_ | _]}
+        message_body = #changes_batch{docs = [_ | _]}
     }}, ?TIMEOUT),
 
     ?assertEqual(true, RecvProviderId =:= LowProviderId orelse
