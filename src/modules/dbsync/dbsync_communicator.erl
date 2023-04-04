@@ -165,7 +165,7 @@ send_changes(ProviderId, SpaceId, Since, Until, Timestamp, Docs) ->
         until = Until,
         timestamp = Timestamp,
         compressed = Compress,
-        docs = dbsync_utils:encode(Docs, Compress)
+        docs = dbsync_utils:encode_batch(Docs, Compress)
     }).
 
 %%--------------------------------------------------------------------
@@ -185,7 +185,7 @@ broadcast_changes(SpaceId, Since, Until, Timestamp, Docs) ->
         until = Until,
         timestamp = Timestamp,
         compressed = Compress,
-        docs = dbsync_utils:encode(Docs, Compress)
+        docs = dbsync_utils:encode_batch(Docs, Compress)
     },
     case broadcast(SpaceId, MsgId, Msg, []) of
         true ->

@@ -23,7 +23,7 @@
 -export([get_bucket/0]).
 -export([get_spaces/0, get_provider/1, get_providers/1, is_supported/2]).
 -export([gen_request_id/0]).
--export([encode/2, decode/2]).
+-export([encode_batch/2, decode_batch/2]).
 
 %%%===================================================================
 %%% API
@@ -115,13 +115,8 @@ is_supported(SpaceId, ProviderIds) ->
 gen_request_id() ->
     base64:encode(crypto:strong_rand_bytes(16)).
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns a encoded datastore documents.
-%% @end
-%%--------------------------------------------------------------------
--spec encode([datastore:doc()], boolean()) -> binary().
-encode(Docs, Compress) ->
+-spec encode_batch([datastore:doc()], boolean()) -> binary().
+encode_batch(Docs, Compress) ->
     EncodedDocs = jiffy:encode([datastore_json:encode(Doc) || Doc <- Docs]),
 
     case Compress of
@@ -129,13 +124,8 @@ encode(Docs, Compress) ->
         false -> EncodedDocs
     end.
 
-%%--------------------------------------------------------------------
-%% @doc
-%% Returns a list of decoded datastore documents.
-%% @end
-%%--------------------------------------------------------------------
--spec decode(binary(), boolean()) -> [datastore:doc()].
-decode(EncodedDocs0, Compressed) ->
+-spec decode_batch(binary(), boolean()) -> [datastore:doc()].
+decode_batch(EncodedDocs0, Compressed) ->
     EncodedDocs1 = case Compressed of
         true -> zlib:uncompress(EncodedDocs0);
         false -> EncodedDocs0

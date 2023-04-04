@@ -419,10 +419,10 @@ init_per_testcase(_Case, Config) ->
     test_utils:mock_expect(Worker, dbsync_utils, get_providers, fun
         (SpaceId) -> get_providers(SpaceId)
     end),
-    test_utils:mock_expect(Worker, dbsync_utils, encode, fun
+    test_utils:mock_expect(Worker, dbsync_utils, encode_batch, fun
         (Docs, _) -> Docs
     end),
-    test_utils:mock_expect(Worker, dbsync_utils, decode, fun
+    test_utils:mock_expect(Worker, dbsync_utils, decode_batch, fun
         (CompressedDocs, _) -> CompressedDocs
     end),
     test_utils:mock_expect(Worker, dbsync_communicator, send, fun
